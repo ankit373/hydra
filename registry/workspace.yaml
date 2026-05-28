@@ -1,0 +1,85 @@
+# Hydra Workspace Registry
+# ─────────────────────────────────────────────────────────────────────────────
+# Defines where Hydra agents are allowed to read/edit files. Workspace scoping
+# is enforced by dispatch/scope.sh before every file edit. An attempted edit
+# outside any defined workspace is rejected, logged, and surfaced to the
+# orchestrator.
+#
+# Each workspace declares:
+#   root          — absolute path the workspace covers
+#   allowed_globs — paths inside root that may be edited (relative to root)
+#   denied_globs  — paths inside root that must NEVER be edited (wins over allowed)
+#   git           — auto | true | false
+#                   auto: scope.sh walks up from target file to find .git
+#                   true: workspace root itself is a git repo
+#                   false: no git, edit.sh falls back to .hydra-bak file backup
+#
+# Default workspace is selected by:
+#   1. HYDRA_WORKSPACE env var
+#   2. The first workspace whose root contains the target file
+#   3. Reject if no match
+# ─────────────────────────────────────────────────────────────────────────────
+
+version: "1.0"
+
+workspaces:
+
+  apphire:
+    root: /Users/ankitjha/apphire
+    git: auto                   # each sub-package is its own git repo
+    allowed_globs:
+      - "core/**"
+      - "cortex/**"
+      - "forge/**"
+      - "prism/**"
+      - "sentinel/**"
+      - "vault/**"
+      - "vector/**"
+      - "scripts/**"
+    denied_globs:
+      - "**/.env*"
+      - "**/node_modules/**"
+      - "**/.next/**"
+      - "**/dist/**"
+      - "**/build/**"
+      - "**/.git/**"
+      - "**/firebase-admin-*.json"
+      - "**/*-credentials*.json"
+      - "**/secrets/**"
+      - "**/.wrangler/**"
+
+  hydra-self:
+    root: /Users/ankitjha/hydra
+    git: false                  # not a git repo; uses .hydra-bak backups
+    allowed_globs:
+      - "dispatch/**"
+      - "registry/**"
+      - "scripts/**"
+      - "skills/**"
+      - "domains/**"
+      - "heads/**"
+      - "context/**"
+    denied_globs:
+      - "**/logs/**"
+      - "**/.git/**"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Validators — per-extension safety check run after every edit.
+# If the validator exits non-zero, edit.sh auto-rolls back and escalates.
+# Set to null to skip validation for that extension.
+# Override with HYDRA_VALIDATE=off to disable globally.
+# ─────────────────────────────────────────────────────────────────────────────
+
+validators:
+  js:   "node --check {file}"
+  mjs:  "node --check {file}"
+  cjs:  "node --check {file}"
+  json: "jq empty {file}"
+  py:   "python3 -m py_compile {file}"
+  yaml: "python3 -c \"import yaml,sys; yaml.safe_load(open(sys.argv[1]))\" {file}"
+  yml:  "python3 -c \"import yaml,sys; yaml.safe_load(open(sys.argv[1]))\" {file}"
+  sh:   "bash -n {file}"
+  # ts/tsx: prefer workspace-local tsc; edit.sh tries `npx --no-install tsc --noEmit {file}` first,
+  # falls back to a marker-leakage check only. Declared null here so edit.sh uses its built-in path.
+  ts:   null
+  tsx:  null

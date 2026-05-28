@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Launch Hydra TUI — run this directly in your terminal (not inside Claude Code)
+exec bun "$(dirname "$0")/ui/src/index.tsx"

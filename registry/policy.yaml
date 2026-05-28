@@ -1,0 +1,283 @@
+# Hydra Execution Policy
+# ─────────────────────────────────────────────────────────────────────────────
+# Declarative rules that map task characteristics → execution strategy.
+#
+# dispatch/decide.sh evaluates rules in order, starting from `defaults` and
+# merging each matching rule's `apply` block on top. Later rules override
+# earlier ones — order matters.
+#
+# Match operators (suffix on the field name in `when`):
+#   *_eq        exact equal       file_extension_eq: ts
+#   *_ne        not equal         workspace_ne: hydra-self
+#   *_gt        numeric >         file_lines_gt: 500
+#   *_lt        numeric <         file_lines_lt: 50
+#   *_gte       numeric >=        context_pct_gte: 75
+#   *_lte       numeric <=        enum_tier_lte: 4
+#   *_in        in JSON list      stage_name_in: [build, ship]
+#   *_contains  substring match   prompt_contains: rename
+#   *_present   not null/empty    file_present: true
+#   (no suffix) implicit _eq      in_playbook: true
+#
+# Output flags (consumed by edit.sh / parallel.sh / future tools):
+#
+#   ── Edit format ──────────────────────────────────────────────
+#   edit_mode               rewrite | sr_blocks | udiff | agentic
+#   ── Isolation ────────────────────────────────────────────────
+#   atomic                  bool — group rollback on any failure
+#   use_worktree            bool — run in isolated git worktree
+#   ── Commits ──────────────────────────────────────────────────
+#   auto_commit             bool — drop a git commit per approved edit
+#   ── Observability ────────────────────────────────────────────
+#   track_tokens            bool — log token cost to logs/cost.jsonl
+#   ── Validation ───────────────────────────────────────────────
+#   validators              list — [syntax, tsc, lint, test, test_impact]
+#   validate_strict         bool — fail on any validator output (vs warn)
+#   test_loop               bool — re-dispatch with errors until tests pass
+#   lint_loop               bool — re-dispatch with errors until linter clean
+#   ── Routing/retries ──────────────────────────────────────────
+#   max_retries             int  — retry count before escalating tier
+#   escalate_on_fail        bool — bump enum tier on failure (vs hard fail)
+#   rubber_duck             bool — post-edit review by a different tier
+#   confidence_threshold    float (0–1) — escalate if model confidence below
+#   ── Safety caps ──────────────────────────────────────────────
+#   diff_size_cap_pct       int  — reject edits changing > N% of file
+#   max_cost_usd            float — abort task if accumulated spend > N
+#   max_wall_seconds        int  — abort task if wall time > N
+#   ── Context ──────────────────────────────────────────────────
+#   use_repo_map            bool — inject compressed repo summary in prompt
+#   dedup_file_reads        bool — replace duplicate file reads with marker
+#   prompt_cache            bool — enable Anthropic prompt caching (SDK tiers)
+#   ── Mode hints ───────────────────────────────────────────────
+#   defensive               bool — read more context before editing (risky tasks)
+# ─────────────────────────────────────────────────────────────────────────────
+
+version: "1.0"
+
+# ── Defaults applied first; rules override ───────────────────────────────────
+defaults:
+  # Edit format
+  edit_mode: rewrite
+  # Isolation
+  atomic: false
+  use_worktree: false
+  # Commits
+  auto_commit: false
+  # Observability
+  track_tokens: true
+  # Validation
+  validators: []
+  validate_strict: false
+  test_loop: false
+  lint_loop: false
+  # Routing/retries
+  max_retries: 1
+  escalate_on_fail: true
+  rubber_duck: false
+  confidence_threshold: 0.0
+  # Safety caps
+  diff_size_cap_pct: 90
+  max_cost_usd: 0.0          # 0 = unlimited; set in rules per scenario
+  max_wall_seconds: 600
+  # Context
+  use_repo_map: false
+  dedup_file_reads: true     # cheap free win; always on by default
+  prompt_cache: true         # always on (no-op until SDK tier ships)
+  # Mode hints
+  defensive: false
+
+# ── Rules (applied in order; later override earlier) ─────────────────────────
+rules:
+
+  # ── Edit-mode selection ────────────────────────────────────────────────────
+
+  - name: large_file_use_sr_blocks
+    when:
+      file_lines_gt: 500
+    apply:
+      edit_mode: sr_blocks
+
+  - name: cross_file_use_agentic
+    when:
+      file_count_gt: 2
+    apply:
+      edit_mode: agentic
+
+  # ── Atomic safety for risky multi-file work ────────────────────────────────
+
+  - name: multi_file_rename_atomic
+    when:
+      task_type_eq: rename
+      file_count_gt: 1
+    apply:
+      atomic: true
+      validate_strict: true
+
+  - name: migration_atomic
+    when:
+      task_type_in: [migration, refactor_global]
+    apply:
+      atomic: true
+      validate_strict: true
+      rubber_duck: true
+
+  # ── Playbook-aware defaults ────────────────────────────────────────────────
+
+  - name: playbook_build_or_ship_commits
+    when:
+      in_playbook_eq: true
+      stage_name_in: [build, ship, deploy]
+    apply:
+      auto_commit: true
+      validate_strict: true
+
+  - name: playbook_security_stage
+    when:
+      stage_name_eq: security_audit
+    apply:
+      rubber_duck: true
+      validate_strict: true
+
+  # ── Context-pressure adjustments ───────────────────────────────────────────
+
+  - name: high_context_skip_rubber_duck
+    when:
+      context_pct_gte: 75
+    apply:
+      rubber_duck: false
+      max_retries: 0
+
+  - name: emergency_context_force_rewrite
+    when:
+      context_pct_gte: 90
+    apply:
+      edit_mode: rewrite     # no SR-block parsing surface in emergency
+      rubber_duck: false
+      max_retries: 0          # one shot, no escalation churn
+
+  # ── Validator escalation by tier confidence ───────────────────────────────
+  # Higher tiers (cheaper, weaker models) need more validation.
+
+  - name: weak_tier_extra_validation
+    when:
+      enum_tier_gte: 8
+    apply:
+      validators: [syntax, lint]
+      rubber_duck: true
+
+  - name: ts_files_typecheck
+    when:
+      file_extension_in: [ts, tsx]
+    apply:
+      validators: [tsc]
+
+  - name: py_files_validators
+    when:
+      file_extension_eq: py
+    apply:
+      validators: [syntax, lint]
+
+  # ── Safety caps ────────────────────────────────────────────────────────────
+
+  - name: small_file_no_huge_diff
+    when:
+      file_lines_lt: 50
+    apply:
+      diff_size_cap_pct: 200   # small files often double in size on legit edits
+
+  - name: large_file_strict_diff_cap
+    when:
+      file_lines_gt: 1000
+    apply:
+      diff_size_cap_pct: 30    # big files rarely change > 30% in one edit
+
+  # ── Workspace-specific overrides ───────────────────────────────────────────
+
+  - name: hydra_self_no_autocommit
+    when:
+      workspace_eq: hydra-self
+    apply:
+      auto_commit: false       # hydra-self has no git, so meaningless
+
+  # ── Edit format per tier capability ────────────────────────────────────────
+  # Weak models (Qwen/Flash low) drop SR markers; force rewrite for them.
+  # Strong models (Sonnet/Opus) can do SR-blocks safely.
+
+  - name: strong_tier_prefer_sr_blocks
+    when:
+      enum_tier_lte: 3
+      file_lines_gt: 200
+      file_count_lte: 2          # single-file only; agentic wins for multi-file
+    apply:
+      edit_mode: sr_blocks
+
+  - name: weak_tier_force_rewrite
+    when:
+      enum_tier_gte: 9
+    apply:
+      edit_mode: rewrite       # weak models drop markers in SR/diff formats
+
+  # ── Test/lint loops for risky work ─────────────────────────────────────────
+
+  - name: ts_strict_uses_test_loop
+    when:
+      file_extension_in: [ts, tsx]
+      task_type_in: [feature, fix, refactor]
+    apply:
+      lint_loop: true
+
+  - name: migration_uses_test_loop
+    when:
+      task_type_eq: migration
+    apply:
+      test_loop: true
+      lint_loop: true
+      max_retries: 3
+
+  # ── Worktree isolation for risky parallel work ─────────────────────────────
+
+  - name: parallel_in_git_use_worktrees
+    when:
+      file_count_gt: 3
+      has_git_eq: true
+    apply:
+      use_worktree: true       # each subtask gets its own worktree, merged at end
+
+  # ── Repo map for big multi-file tasks ──────────────────────────────────────
+
+  - name: cross_file_use_repo_map
+    when:
+      file_count_gt: 2
+    apply:
+      use_repo_map: true       # inject compressed repo summary
+
+  - name: defensive_for_security_or_migration
+    when:
+      task_type_in: [migration, security_fix, refactor_global]
+    apply:
+      defensive: true          # gather more context before editing
+      use_repo_map: true
+
+  # ── Cost + wall-clock ceilings ─────────────────────────────────────────────
+
+  - name: loop_modes_need_cost_ceiling
+    when:
+      task_type_in: [migration, refactor_global]  # tasks that trigger loops
+    apply:
+      max_cost_usd: 2.00       # bound runaway test loops
+      max_wall_seconds: 1800   # 30 min
+
+  - name: playbook_ship_higher_budget
+    when:
+      in_playbook_eq: true
+      stage_name_in: [build, ship, deploy]
+    apply:
+      max_cost_usd: 5.00
+      max_wall_seconds: 3600
+
+  # ── Always-on tail rule ────────────────────────────────────────────────────
+
+  - name: always_track_tokens
+    when:
+      always: true
+    apply:
+      track_tokens: true

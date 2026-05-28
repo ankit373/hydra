@@ -1,0 +1,3 @@
+{"ts":"2026-05-27T07:08:31Z","tier":10,"enum":"GRUNT","model":"Qwen2.5-Coder 7b","executor":"ollama","pool":"local_ollama","prompt_tokens":35,"response_tokens":10,"est_cost_usd":0.000000,"wall_ms":16016,"source":"real","task_id":"","run_id":""}
+{"ts":"2026-05-27T07:14:51Z","tier":10,"enum":"GRUNT","model":"Qwen2.5-Coder 7b","executor":"ollama","pool":"local_ollama","prompt_tokens":33,"response_tokens":2,"est_cost_usd":0.000000,"wall_ms":19126,"source":"real","task_id":"","run_id":""}
+{"ts":"2026-05-27T07:16:43Z","tier":10,"enum":"GRUNT","model":"Qwen2.5-Coder 7b","executor":"ollama","pool":"local_ollama","prompt_tokens":34,"response_tokens":3,"est_cost_usd":0.000000,"wall_ms":111653,"source":"real","task_id":"","run_id":""}

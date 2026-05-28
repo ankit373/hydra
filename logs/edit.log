@@ -1,0 +1,72 @@
+[2026-05-26T21:23:48Z] edit: ERROR: --file must be absolute: relative.ts
+[2026-05-26T21:23:48Z] edit: ERROR: CORE tier: use Claude's native Edit/Write directly, not edit.sh
+[2026-05-26T21:26:28Z] edit: INFO: target=/Users/ankitjha/hydra/context/edit_test.txt workspace=hydra-self enum=GRUNT existed=1 orig_lines=3
+[2026-05-26T21:26:28Z] edit: INFO: dispatching to enum=GRUNT
+🐍 Tier 10: Qwen2.5-Coder 7b (pool: local_ollama)
+[2026-05-26T21:26:43Z] edit: INFO: wrote new content (4 lines)
+[2026-05-26T21:27:26Z] edit: INFO: target=/Users/ankitjha/hydra/context/edit_test.txt workspace=hydra-self enum=GRUNT existed=1 orig_lines=3
+[2026-05-26T21:27:26Z] edit: INFO: dispatching to enum=GRUNT
+🐍 Tier 10: Qwen2.5-Coder 7b (pool: local_ollama)
+[2026-05-26T21:27:31Z] edit: INFO: wrote new content (4 lines)
+[2026-05-26T21:27:31Z] edit: INFO: ✓ edited edit_test.txt (+1 -0)
+[2026-05-26T21:27:49Z] edit: INFO: target=/Users/ankitjha/hydra/context/edit_test.txt workspace=hydra-self enum=GRUNT existed=1 orig_lines=2
+[2026-05-26T21:27:49Z] edit: INFO: dispatching to enum=GRUNT
+🐍 Tier 10: Qwen2.5-Coder 7b (pool: local_ollama)
+[2026-05-26T21:27:53Z] edit: ERROR: marker parse failed — agent did not return content between HYDRA_FILE_START/END
+[2026-05-26T21:27:53Z] edit: raw response (first 500 chars): alpha
+gamma
+<<<HYDRA_FILE_END>>>
+[2026-05-26T21:28:29Z] edit: INFO: target=/Users/ankitjha/hydra/context/edit_test.txt workspace=hydra-self enum=GRUNT existed=1 orig_lines=2
+[2026-05-26T21:28:29Z] edit: INFO: dispatching to enum=GRUNT
+🐍 Tier 10: Qwen2.5-Coder 7b (pool: local_ollama)
+[2026-05-26T21:28:32Z] edit: INFO: wrote new content (2 lines)
+[2026-05-26T21:28:32Z] edit: INFO: ✓ edited edit_test.txt (+1 -1)
+[2026-05-26T21:29:35Z] edit: INFO: target=/Users/ankitjha/hydra/context/review_test.txt workspace=hydra-self enum=GRUNT existed=1 orig_lines=3
+[2026-05-26T21:29:35Z] edit: INFO: dispatching to enum=GRUNT
+🐍 Tier 10: Qwen2.5-Coder 7b (pool: local_ollama)
+[2026-05-26T21:29:39Z] edit: ERROR: marker parse failed — agent did not return content between HYDRA_FILE_START/END
+[2026-05-26T21:29:39Z] edit: raw response (first 500 chars): one
+TWO
+three
+[2026-05-26T21:31:51Z] edit: INFO: target=/Users/ankitjha/hydra/context/review_test.txt workspace=hydra-self enum=GRUNT existed=1 orig_lines=3
+[2026-05-26T21:31:51Z] edit: INFO: dispatching to enum=GRUNT
+🐍 Tier 10: Qwen2.5-Coder 7b (pool: local_ollama)
+[2026-05-26T21:31:55Z] edit: INFO: wrote new content (3 lines)
+[2026-05-26T21:31:55Z] edit: INFO: ✓ edited review_test.txt (+1 -1)
+[2026-05-26T21:32:17Z] edit: INFO: target=/Users/ankitjha/hydra/context/review_test.txt workspace=hydra-self enum=GRUNT existed=1 orig_lines=3
+[2026-05-26T21:32:17Z] edit: INFO: dispatching to enum=GRUNT
+🐍 Tier 10: Qwen2.5-Coder 7b (pool: local_ollama)
+[2026-05-26T21:32:21Z] edit: INFO: wrote new content (3 lines)
+[2026-05-26T21:32:21Z] edit: INFO: ✓ edited review_test.txt (+1 -1)
+[2026-05-26T21:34:19Z] edit: INFO: target=/Users/ankitjha/hydra/context/par_b.txt workspace=hydra-self enum=GRUNT existed=1 orig_lines=2
+[2026-05-26T21:34:19Z] edit: INFO: target=/Users/ankitjha/hydra/context/par_a.txt workspace=hydra-self enum=GRUNT existed=1 orig_lines=2
+[2026-05-26T21:34:19Z] edit: INFO: dispatching to enum=GRUNT
+[2026-05-26T21:34:19Z] edit: INFO: dispatching to enum=GRUNT
+🐍 Tier 10: Qwen2.5-Coder 7b (pool: local_ollama)
+🐍 Tier 10: Qwen2.5-Coder 7b (pool: local_ollama)
+[2026-05-26T21:34:23Z] edit: INFO: wrote new content (2 lines)
+[2026-05-26T21:34:23Z] edit: INFO: no validator for .txt — skipping
+[2026-05-26T21:34:23Z] edit: INFO: ✓ edited par_b.txt (+1 -1)
+[2026-05-26T21:34:25Z] edit: INFO: wrote new content (2 lines)
+[2026-05-26T21:34:26Z] edit: INFO: no validator for .txt — skipping
+[2026-05-26T21:34:26Z] edit: INFO: ✓ edited par_a.txt (+1 -1)
+[2026-05-27T06:37:38Z] edit: INFO: policy loaded: mode=rewrite atomic=false commit=false validate_strict=false rules=weak_tier_extra_validation,small_file_no_huge_diff,hydra_self_no_autocommit,always_track_tokens
+[2026-05-27T06:37:38Z] edit: INFO: target=/Users/ankitjha/hydra/context/policy_test.txt workspace=hydra-self enum=GRUNT existed=1 orig_lines=2
+[2026-05-27T06:37:38Z] edit: INFO: dispatching to enum=GRUNT
+🐍 Tier 10: Qwen2.5-Coder 7b (pool: local_ollama)
+[2026-05-27T06:37:57Z] edit: INFO: wrote new content (2 lines)
+[2026-05-27T06:37:57Z] edit: INFO: ✓ edited policy_test.txt (+1 -1)
+[2026-05-27T06:41:01Z] edit: INFO: policy loaded: mode=rewrite atomic=false commit=false validate_strict=false rules=weak_tier_extra_validation,small_file_no_huge_diff,hydra_self_no_autocommit,always_track_tokens
+[2026-05-27T06:41:01Z] edit: INFO: target=/Users/ankitjha/hydra/context/par_x.txt workspace=hydra-self enum=GRUNT existed=1 orig_lines=2
+[2026-05-27T06:41:01Z] edit: INFO: dispatching to enum=GRUNT
+🐍 Tier 10: Qwen2.5-Coder 7b (pool: local_ollama)
+[2026-05-27T06:41:03Z] edit: INFO: policy loaded: mode=rewrite atomic=false commit=false validate_strict=false rules=weak_tier_extra_validation,small_file_no_huge_diff,hydra_self_no_autocommit,always_track_tokens
+[2026-05-27T06:41:03Z] edit: INFO: target=/Users/ankitjha/hydra/context/par_y.txt workspace=hydra-self enum=GRUNT existed=1 orig_lines=2
+[2026-05-27T06:41:03Z] edit: INFO: dispatching to enum=GRUNT
+🐍 Tier 10: Qwen2.5-Coder 7b (pool: local_ollama)
+[2026-05-27T06:41:10Z] edit: INFO: wrote new content (2 lines)
+[2026-05-27T06:41:11Z] edit: INFO: no validator for .txt — skipping
+[2026-05-27T06:41:11Z] edit: INFO: ✓ edited par_x.txt (+1 -1)
+[2026-05-27T06:41:19Z] edit: INFO: wrote new content (2 lines)
+[2026-05-27T06:41:19Z] edit: INFO: no validator for .txt — skipping
+[2026-05-27T06:41:19Z] edit: INFO: ✓ edited par_y.txt (+1 -1)

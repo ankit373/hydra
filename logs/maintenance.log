@@ -1,0 +1,16 @@
+[2026-05-27T06:27:35Z] maintenance: ===== run start (dry-run=true) =====
+[2026-05-27T06:27:35Z] maintenance: prune workspace: /Users/ankitjha/apphire
+(no runs dir)
+[2026-05-27T06:27:35Z] maintenance: prune workspace: /Users/ankitjha/hydra
+(no runs dir)
+[2026-05-27T06:27:35Z] maintenance: rotate logs
+[2026-05-27T06:27:35Z] maintenance: (dry-run: would rotate any *.log > 5M)
+[2026-05-27T06:27:35Z] maintenance: ===== run end =====
+[2026-05-27T06:30:53Z] maintenance: ===== run start (dry-run=false) =====
+[2026-05-27T06:30:53Z] maintenance: prune workspace: /Users/ankitjha/apphire
+(no runs dir)
+[2026-05-27T06:30:53Z] maintenance: prune workspace: /Users/ankitjha/hydra
+(no runs dir)
+[2026-05-27T06:30:53Z] maintenance: rotate logs
+Rotated 0 log files (>5M, keep 5).
+[2026-05-27T06:30:53Z] maintenance: ===== run end =====

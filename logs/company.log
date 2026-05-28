@@ -1,0 +1,60 @@
+[2026-05-27T05:56:02Z] company: started run 20260527-1126-ship-a-featu-fayg (playbook=ship_a_feature, workspace=/tmp/hydra-smoke)
+[2026-05-27T05:56:13Z] company: ERROR: run 20260527-1126-ship-a-featu-fayg not found
+[2026-05-27T05:56:13Z] company: ERROR: run 20260527-1126-ship-a-featu-fayg not found
+[2026-05-27T05:57:14Z] company: run 20260527-1126-ship-a-featu-fayg stage draft_plan complete (status=ok)
+[2026-05-27T05:57:28Z] company: started run 20260527-1127-ship-a-featu-mqbg (playbook=ship_a_feature, workspace=/tmp/hydra-smoke)
+[2026-05-27T05:57:29Z] company: run 20260527-1127-ship-a-featu-mqbg BLOCKED at security_audit with findings: ["critical","high"]
+[2026-05-27T06:05:23Z] company: ledger updated: /tmp/hydra-smoke/HYDRA.md
+[2026-05-27T06:05:23Z] company: started run 20260527-1135-ship-a-featu-mc7x (playbook=ship_a_feature, workspace=/tmp/hydra-smoke)
+[2026-05-27T06:05:23Z] company: ledger updated: /tmp/hydra-smoke/HYDRA.md
+[2026-05-27T06:05:23Z] company: run 20260527-1135-ship-a-featu-mc7x stage draft_plan complete (status=ok)
+[2026-05-27T06:05:23Z] company: ledger updated: /tmp/hydra-smoke/HYDRA.md
+[2026-05-27T06:05:23Z] company: run 20260527-1135-ship-a-featu-mc7x stage plan_review_board complete (status=ok)
+[2026-05-27T06:05:24Z] company: ledger updated: /tmp/hydra-smoke/HYDRA.md
+[2026-05-27T06:05:24Z] company: started run 20260527-1135-ship-a-featu-dtwz (playbook=ship_a_feature, workspace=/tmp/hydra-smoke)
+[2026-05-27T06:05:25Z] company: ledger updated: /tmp/hydra-smoke/HYDRA.md
+[2026-05-27T06:05:25Z] company: run 20260527-1135-ship-a-featu-dtwz BLOCKED at security_audit with findings: ["critical"]
+[2026-05-27T06:06:28Z] company: ledger updated: /tmp/hydra-smoke/HYDRA.md
+[2026-05-27T06:06:28Z] company: run 20260527-1135-ship-a-featu-dtwz ticket set: https://github.com/foo/bar/issues/42 (github)
+[2026-05-27T06:15:06Z] company: ERROR: playbook 'ship_a_feature' requires an explicit ticket choice.
+[2026-05-27T06:15:06Z] company: ERROR: Ask the user about a tracking ticket, then pass one of:
+[2026-05-27T06:15:06Z] company: ERROR:   --ticket-ref <url|key>           (link existing GitHub/Jira ticket)
+[2026-05-27T06:15:06Z] company: ERROR:   --ticket-mode create_after_plan  (draft one after finalize_plan)
+[2026-05-27T06:15:06Z] company: ERROR:   --ticket-mode none               (user explicitly chose to skip)
+[2026-05-27T06:15:36Z] company: ledger updated: /tmp/hydra-smoke/HYDRA.md
+[2026-05-27T06:15:36Z] company: started run 20260527-1145-ship-a-featu-cwp9 (playbook=ship_a_feature, workspace=/tmp/hydra-smoke)
+[2026-05-27T06:15:36Z] company: ledger updated: /tmp/hydra-smoke/HYDRA.md
+[2026-05-27T06:15:36Z] company: run 20260527-1145-ship-a-featu-cwp9 ticket set: PROJ-99 (jira)
+[2026-05-27T06:15:37Z] company: ledger updated: /tmp/hydra-smoke/HYDRA.md
+[2026-05-27T06:15:37Z] company: run 20260527-1145-ship-a-featu-cwp9 ticket set: https://github.com/foo/bar/issues/42 (github)
+[2026-05-27T06:15:47Z] company: ledger updated: /tmp/hydra-smoke/HYDRA.md
+[2026-05-27T06:15:47Z] company: started run 20260527-1145-ship-a-featu-5tg2 (playbook=ship_a_feature, workspace=/tmp/hydra-smoke)
+[2026-05-27T06:15:47Z] company: pruned run 20260527-1145-ship-a-featu-5tg2
+[2026-05-27T06:15:47Z] company: ledger updated: /tmp/hydra-smoke/HYDRA.md
+[2026-05-27T06:16:12Z] company: rotated /Users/ankitjha/hydra/logs/test-rotate.log
+[2026-05-27T06:37:32Z] company: ledger updated: /tmp/hydra-smoke/HYDRA.md
+[2026-05-27T06:37:32Z] company: started run 20260527-1207-business-to--o4og (playbook=business_to_design, workspace=/tmp/hydra-smoke)
+[2026-05-27T06:37:33Z] company: ledger updated: /tmp/hydra-smoke/HYDRA.md
+[2026-05-27T06:37:33Z] company: started run 20260527-1207-ship-a-featu-mnx6 (playbook=ship_a_feature, workspace=/tmp/hydra-smoke)
+[2026-05-27T06:40:34Z] company: ledger updated: /tmp/hydra-smoke/HYDRA.md
+[2026-05-27T06:40:34Z] company: started run 20260527-1210-business-to--4fjg (playbook=business_to_design, workspace=/tmp/hydra-smoke)
+[2026-05-27T06:41:21Z] company: ledger updated: /tmp/hydra-smoke/HYDRA.md
+[2026-05-27T06:41:21Z] company: started run 20260527-1211-ship-a-featu-fxre (playbook=ship_a_feature, workspace=/tmp/hydra-smoke)
+[2026-05-27T06:42:50Z] company: ledger updated: /tmp/hydra-smoke/HYDRA.md
+[2026-05-27T06:42:50Z] company: started run 20260527-1212-ship-a-featu-y7st (playbook=ship_a_feature, workspace=/tmp/hydra-smoke)
+[2026-05-27T06:42:55Z] company: ledger updated: /tmp/hydra-smoke/HYDRA.md
+[2026-05-27T06:42:55Z] company: started run 20260527-1212-ship-a-featu-zi2w (playbook=ship_a_feature, workspace=/tmp/hydra-smoke)
+[2026-05-27T06:48:17Z] company: ledger updated: /Users/ankitjha/apphire/HYDRA.md
+[2026-05-27T06:48:17Z] company: started run 20260527-1218-business-to--07aj (playbook=business_to_design, workspace=/Users/ankitjha/apphire)
+[2026-05-27T06:50:49Z] company: ledger updated: /Users/ankitjha/apphire/HYDRA.md
+[2026-05-27T06:50:49Z] company: run 20260527-1218-business-to--07aj stage market_research complete (status=ok)
+[2026-05-27T06:52:37Z] company: ledger updated: /Users/ankitjha/apphire/HYDRA.md
+[2026-05-27T06:52:37Z] company: run 20260527-1218-business-to--07aj stage competitive_landscape complete (status=ok)
+[2026-05-27T06:54:30Z] company: ledger updated: /Users/ankitjha/apphire/HYDRA.md
+[2026-05-27T06:54:30Z] company: run 20260527-1218-business-to--07aj stage gap_analysis complete (status=ok)
+[2026-05-27T07:08:52Z] company: ledger updated: /Users/ankitjha/apphire/HYDRA.md
+[2026-05-27T07:08:52Z] company: run 20260527-1218-business-to--07aj stage business_validation_board complete (status=ok)
+[2026-05-27T07:10:40Z] company: ledger updated: /Users/ankitjha/apphire/HYDRA.md
+[2026-05-27T07:10:40Z] company: run 20260527-1218-business-to--07aj stage business_decision complete (status=ok)
+[2026-05-27T07:13:57Z] company: ledger updated: /Users/ankitjha/apphire/HYDRA.md
+[2026-05-27T07:13:57Z] company: run 20260527-1218-business-to--07aj stage product_spec complete (status=ok)

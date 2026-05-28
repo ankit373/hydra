@@ -1,0 +1,10 @@
+[2026-05-26T21:29:40Z] review: ERROR: no diff available for /Users/ankitjha/hydra/context/review_test.txt (no git, no backup)
+[2026-05-26T21:29:40Z] review: ERROR: nothing to roll back for /Users/ankitjha/hydra/context/review_test.txt
+[2026-05-26T21:31:55Z] review: ERROR: no diff available for /Users/ankitjha/hydra/context/review_test.txt (no git, no backup)
+[2026-05-26T21:31:55Z] review: ERROR: nothing to roll back for /Users/ankitjha/hydra/context/review_test.txt
+[2026-05-26T21:32:22Z] review: INFO: rejected (backup_restore): /Users/ankitjha/hydra/context/review_test.txt
+[2026-05-26T21:34:28Z] review: INFO: rejected (backup_restore): /Users/ankitjha/hydra/context/par_a.txt
+[2026-05-26T21:34:29Z] review: INFO: rejected (backup_restore): /Users/ankitjha/hydra/context/par_b.txt
+[2026-05-27T06:38:03Z] review: INFO: rejected (backup_restore): /Users/ankitjha/hydra/context/policy_test.txt
+[2026-05-27T06:41:19Z] review: INFO: rejected (backup_restore): /Users/ankitjha/hydra/context/par_x.txt
+[2026-05-27T06:41:20Z] review: INFO: rejected (backup_restore): /Users/ankitjha/hydra/context/par_y.txt
