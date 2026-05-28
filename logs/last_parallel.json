@@ -1,0 +1,32 @@
+[
+  {
+    "status": "ok",
+    "file": "/Users/ankitjha/hydra/context/par_x.txt",
+    "workspace": "hydra-self",
+    "git_root": "",
+    "enum": "GRUNT",
+    "lines_added": 1,
+    "lines_removed": 1,
+    "validator_passed": true,
+    "rolled_back": false,
+    "error": "",
+    "label": "x",
+    "mode": "edit",
+    "stderr": "🧷 edit: policy loaded: mode=rewrite atomic=false commit=false validate_strict=false rules=weak_tier_extra_validation,small_file_no_huge_diff,hydra_self_no_autocommit,always_track_tokens\n🧷 edit: target=/Users/ankitjha/hydra/context/par_x.txt workspace=hydra-self enum=GRUNT existed=1 orig_lines=2\n🧷 edit: dispatching to enum=GRUNT\n🧷 edit: wrote new content (2 lines)\n🧷 edit: no validator for .txt — skipping\n🧷 edit: ✓ edited par_x.txt (+1 -1)"
+  },
+  {
+    "status": "ok",
+    "file": "/Users/ankitjha/hydra/context/par_y.txt",
+    "workspace": "hydra-self",
+    "git_root": "",
+    "enum": "GRUNT",
+    "lines_added": 1,
+    "lines_removed": 1,
+    "validator_passed": true,
+    "rolled_back": false,
+    "error": "",
+    "label": "y",
+    "mode": "edit",
+    "stderr": "🧷 edit: policy loaded: mode=rewrite atomic=false commit=false validate_strict=false rules=weak_tier_extra_validation,small_file_no_huge_diff,hydra_self_no_autocommit,always_track_tokens\n🧷 edit: target=/Users/ankitjha/hydra/context/par_y.txt workspace=hydra-self enum=GRUNT existed=1 orig_lines=2\n🧷 edit: dispatching to enum=GRUNT\n🧷 edit: wrote new content (2 lines)\n🧷 edit: no validator for .txt — skipping\n🧷 edit: ✓ edited par_y.txt (+1 -1)"
+  }
+]

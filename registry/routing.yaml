@@ -1,0 +1,186 @@
+# Hydra Routing Map — THE ENUM FILE
+# ─────────────────────────────────────────────────────────────────────────────
+# This is your single enum. Change a value here → every domain updates.
+# Domains and skills reference keys (e.g. SIMPLE), never tier numbers directly.
+#
+# Example: change SIMPLE from 8 to 7 → all DTO/schema tasks now go to Flash High
+# Example: change GRUNT from 10 to 9 → boilerplate now goes to Flash Low not Qwen
+#
+# Keys map to tier numbers defined in models.yaml
+# ─────────────────────────────────────────────────────────────────────────────
+
+version: "1.0"
+
+routing_map:
+
+  # Pure mechanical work — local, free, slow, no accuracy needed
+  GRUNT:      10   # → Qwen2.5-Coder:7b (Ollama, local)
+
+  # Trivial agy work — enums, constants, simple types
+  TRIVIAL:    9    # → Gemini 3.5 Flash (Low)
+
+  # Simple structured code — DTOs, schemas, interfaces
+  SIMPLE:     8    # → Gemini 3.5 Flash (Medium)
+
+  # Standard patterns — controllers, handlers, basic CRUD
+  STANDARD:   7    # → Gemini 3.5 Flash (High)
+
+  # Moderate logic — services, repos, validators
+  MODERATE:   6    # → Gemini 3.1 Pro (Low)
+
+  # Complex implementations — middleware, auth, ML pipelines
+  COMPLEX:    5    # → Gemini 3.1 Pro (High)
+
+  # Hard cross-cutting — tradeoff review, non-trivial algorithms (also rubber duck for Claude)
+  HARD:       4    # → GPT-OSS 120B (Medium)
+
+  # Very hard — multi-step reasoning, complex refactors
+  VERY_HARD:  3    # → Claude Sonnet 4.6 (Thinking)
+
+  # Expert level — architecture decisions, distributed systems
+  EXPERT:     2    # → Claude Opus 4.6 (Thinking)
+
+  # Core — handled directly by Claude Code orchestrator, never dispatched
+  CORE:       1    # → Claude Code
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Rubber Duck map — which model reviews output from which executor
+# Cross-family reviewing avoids shared blind spots.
+# ─────────────────────────────────────────────────────────────────────────────
+
+rubber_duck_map:
+  claude:         4    # Claude output → reviewed by GPT-OSS 120B (different family)
+  antigravity:    1    # agy output → reviewed by Claude Code (orchestrator)
+  ollama:         8    # Qwen output → reviewed by Flash Med (fast sanity check)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# FALLBACK CHAINS — per tier, in order of preference
+# If a model fails (error/timeout/unavailable) → try next in chain
+# If a pool is quota-exhausted → skip ALL tiers in that pool
+#
+# Format: [primary_tier, first_fallback, second_fallback, last_resort]
+# ─────────────────────────────────────────────────────────────────────────────
+
+fallback_chains:
+  # Rule: Qwen (tier 10) is ALWAYS the last resort in every chain — it runs locally so always available.
+  # Rule: Never go above 70% context on any model. At 75% hard switch to next fallback.
+  # Rule: Max 80% — absolute hard limit. Use /compact before that point.
+  1:  [1, 10]              # Claude Core → Qwen (if Claude emergency, Qwen does the grunt output)
+  2:  [2, 3, 4, 5, 6, 10] # Opus → Sonnet → GPT-OSS → Pro High → Pro Low → Qwen
+  3:  [3, 4, 5, 6, 7, 10] # Sonnet → GPT-OSS → Pro High → Pro Low → Flash High → Qwen
+  4:  [4, 5, 6, 7, 8, 10] # GPT-OSS → Pro High → Pro Low → Flash High → Flash Med → Qwen
+  5:  [5, 6, 7, 8, 9, 10] # Pro High → Pro Low → Flash High → Flash Med → Flash Low → Qwen
+  6:  [6, 5, 7, 8, 9, 10] # Pro Low → Pro High → Flash High → Flash Med → Flash Low → Qwen
+  7:  [7, 8, 9, 10]        # Flash High → Flash Med → Flash Low → Qwen
+  8:  [8, 9, 7, 10]        # Flash Med → Flash Low → Flash High → Qwen
+  9:  [9, 8, 10]            # Flash Low → Flash Med → Qwen
+  10: [10]                  # Qwen — no fallback, runs locally, always available
+
+# Pool-level fallbacks: if entire pool is quota-exhausted
+# Qwen (tier 10) is always the terminal fallback in every pool chain.
+pool_fallback_chains:
+  agy_claude:      [4, 5, 6, 7, 10]  # Claude pool exhausted → GPT-OSS → Pro → Flash → Qwen
+  agy_gemini_pro:  [7, 8, 9, 10]     # Pro pool exhausted → Flash High → Med → Low → Qwen
+  agy_flash:       [10]               # Flash pool exhausted → Qwen only (last resort)
+  agy_gpt:         [5, 6, 7, 10]     # GPT-OSS exhausted → Pro High → Pro Low → Flash → Qwen
+  local_ollama:    [9, 8, 7]         # Ollama down → Flash Low → Med → High (Qwen is down if here)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CLAUDE TOKEN PRESERVATION
+# Claude Code IS the orchestrator — if it runs out, everything stops.
+# These thresholds trigger progressive restrictions.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ─────────────────────────────────────────────────────────────────────────────
+# GLOBAL TOKEN THRESHOLD RULES (applies to ALL models, not just Claude)
+# ─────────────────────────────────────────────────────────────────────────────
+
+model_token_thresholds:
+  # At 70% of any model's context → trigger fallback to next in chain
+  warn_at_percent: 70
+  # At 75% → hard switch, do not try to continue with current model
+  fallback_at_percent: 75
+  # 80% → absolute hard limit. Use /compact before reaching this.
+  hard_limit_percent: 80
+  # Action when approaching hard limit: run /compact first, then continue
+  compact_at_percent: 65
+  # Never go above this under any circumstances
+  emergency_cutoff_percent: 80
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CLAUDE ORCHESTRATOR PRESERVATION
+# Claude Code IS the orchestrator. Stricter thresholds because losing it = everything stops.
+# ─────────────────────────────────────────────────────────────────────────────
+
+claude_preservation:
+
+  # Normal mode — full orchestration
+  threshold_normal:
+    at_percent: 0
+    mode: normal
+    compact_recommended: false
+    rubber_duck_reviewer: 4    # use GPT-OSS for rubber duck (saves Claude tokens)
+    allow_core_tasks: true
+    allow_review: true
+    allow_orchestration: true
+
+  # Compact window — run /compact to free context
+  threshold_compact:
+    at_percent: 50
+    mode: compact
+    compact_recommended: true  # run: claude /compact
+    rubber_duck_reviewer: 4
+    allow_core_tasks: true
+    allow_review: true
+    allow_orchestration: true
+    note: "Run /compact now to compress context. Don't wait — at 65% it becomes urgent."
+
+  # Caution — stop non-essential Claude usage, compact urgently
+  threshold_caution:
+    at_percent: 65
+    mode: caution
+    compact_recommended: true  # URGENT — run /compact immediately
+    rubber_duck_reviewer: 4
+    allow_core_tasks: true
+    allow_review: false        # stop Claude self-reviewing agy output
+    allow_orchestration: true
+    note: "Run /compact immediately. Delegate more aggressively to tiers 3-6."
+
+  # Warning — 70% hit → hard switch for most tasks
+  threshold_warning:
+    at_percent: 70
+    mode: warning
+    compact_recommended: true
+    rubber_duck_reviewer: 5    # downgrade reviews to Pro High
+    allow_core_tasks: true
+    allow_review: false
+    allow_orchestration: true
+    escalation_freeze: true    # stop escalating tasks UP to Claude
+    auto_downgrade_tiers: 1
+    note: "70% threshold hit. Freeze escalations. Force /compact. One tier cheaper on everything."
+
+  # Critical — 75% = hard switch, orchestrator-only mode
+  threshold_critical:
+    at_percent: 75
+    mode: critical
+    compact_recommended: true  # last chance to compact
+    rubber_duck_reviewer: null # disable rubber duck entirely
+    allow_core_tasks: true     # only explicit CORE domain tasks
+    allow_review: false
+    allow_orchestration: true  # orchestration cannot stop
+    escalation_freeze: true
+    auto_downgrade_tiers: 2
+    note: "75% HARD LIMIT. Claude routes only. All tasks 2 tiers cheaper. CORE only if truly needed."
+
+  # Emergency — 80% absolute ceiling
+  threshold_emergency:
+    at_percent: 80
+    mode: emergency
+    compact_recommended: false # too late for compact to help
+    rubber_duck_reviewer: null
+    allow_core_tasks: false    # even CORE stops — context window at risk
+    allow_review: false
+    allow_orchestration: true  # minimal routing only — no generation
+    escalation_freeze: true
+    auto_downgrade_tiers: 3
+    note: "80% ABSOLUTE LIMIT. STOP all Claude generation. Warn user loudly. Route to Qwen for everything."

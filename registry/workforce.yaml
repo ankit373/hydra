@@ -1,0 +1,300 @@
+# Hydra Workforce Registry — the "org chart"
+# ─────────────────────────────────────────────────────────────────────────────
+# Maps each skill to a department, role, tier preference, and constraints.
+# Read by company.sh when emitting playbook manifests, and by the brain
+# (Claude Code) when picking which skill to invoke for a task.
+#
+# Each entry:
+#   department         — which org function this skill serves
+#   role               — what title the skill plays
+#   invokes_as         — Claude Code Skill tool invocation (slash command)
+#   modes              — optional list of mode flags the skill accepts
+#   inputs             — what artifacts the skill expects (informational)
+#   outputs            — what artifacts the skill produces (informational)
+#   tier_preference    — enum key from routing.yaml when the skill itself
+#                        delegates internally (informational hint only —
+#                        most skills run as Claude directly)
+#   parallel_safe      — true if multiple instances or co-running with siblings
+#                        is safe (no shared-state mutation)
+#   mutates_filesystem — writes files outside its own artifacts dir
+#   mutates_git        — runs git operations (commit, push, merge)
+#   budget_minutes     — soft budget; brain warns if exceeded
+#
+# To add a skill: append a block. To change routing: edit tier_preference.
+# This file is reference data — no behavior changes from edits until a
+# playbook references the skill.
+# ─────────────────────────────────────────────────────────────────────────────
+
+version: "1.0"
+
+skills:
+
+  # ── Executive / Strategy ────────────────────────────────────────────────────
+
+  plan-ceo-review:
+    department: executive
+    role: CEO
+    invokes_as: "/plan-ceo-review"
+    inputs: [plan.md]
+    outputs: [ceo-review.md]
+    tier_preference: EXPERT
+    parallel_safe: true
+    mutates_filesystem: false
+    mutates_git: false
+    budget_minutes: 8
+
+  office-hours:
+    department: executive
+    role: YC partner / PM
+    invokes_as: "/office-hours"
+    modes: [startup, builder]
+    inputs: [intent]
+    outputs: [design-doc.md]
+    tier_preference: EXPERT
+    parallel_safe: true
+    mutates_filesystem: true
+    mutates_git: false
+    budget_minutes: 10
+
+  # ── Engineering management ──────────────────────────────────────────────────
+
+  plan-eng-review:
+    department: engineering
+    role: Eng Manager
+    invokes_as: "/plan-eng-review"
+    inputs: [plan.md]
+    outputs: [eng-review.md]
+    tier_preference: EXPERT
+    parallel_safe: true
+    mutates_filesystem: false
+    mutates_git: false
+    budget_minutes: 8
+
+  # ── Design ──────────────────────────────────────────────────────────────────
+
+  plan-design-review:
+    department: design
+    role: Design Director
+    invokes_as: "/plan-design-review"
+    inputs: [plan.md]
+    outputs: [design-review.md]
+    tier_preference: EXPERT
+    parallel_safe: true
+    mutates_filesystem: false
+    mutates_git: false
+    budget_minutes: 8
+
+  design-review:
+    department: design
+    role: Design QA
+    invokes_as: "/design-review"
+    inputs: [running_site_url]
+    outputs: [design-audit.md, screenshots/]
+    tier_preference: COMPLEX
+    parallel_safe: false
+    mutates_filesystem: true
+    mutates_git: true
+    budget_minutes: 20
+
+  design-consultation:
+    department: design
+    role: Design System Architect
+    invokes_as: "/design-consultation"
+    inputs: [product_spec]
+    outputs: [DESIGN.md, font-preview.html, color-preview.html]
+    tier_preference: EXPERT
+    parallel_safe: false
+    mutates_filesystem: true
+    mutates_git: true
+    budget_minutes: 25
+
+  design-shotgun:
+    department: design
+    role: Designer (variants)
+    invokes_as: "/design-shotgun"
+    inputs: [product_spec, design_system]
+    outputs: [variants/, comparison-board.md]
+    tier_preference: COMPLEX
+    parallel_safe: false
+    mutates_filesystem: true
+    mutates_git: false
+    budget_minutes: 30
+
+  # ── DX ──────────────────────────────────────────────────────────────────────
+
+  plan-devex-review:
+    department: dx
+    role: DX Lead
+    invokes_as: "/plan-devex-review"
+    inputs: [plan.md]
+    outputs: [devex-review.md]
+    tier_preference: EXPERT
+    parallel_safe: true
+    mutates_filesystem: false
+    mutates_git: false
+    budget_minutes: 8
+
+  # ── Security ────────────────────────────────────────────────────────────────
+
+  cso:
+    department: security
+    role: CISO
+    invokes_as: "/cso"
+    modes: [daily, comprehensive, threat-model]
+    inputs: [plan.md OR git-diff]
+    outputs: [security-report.md, findings.json]
+    tier_preference: EXPERT
+    parallel_safe: false
+    mutates_filesystem: true
+    mutates_git: false
+    budget_minutes: 15
+    blocking_findings: [critical, high]
+
+  security-review:
+    department: security
+    role: AppSec
+    invokes_as: "/security-review"
+    inputs: [git-diff]
+    outputs: [appsec-review.md]
+    tier_preference: VERY_HARD
+    parallel_safe: true
+    mutates_filesystem: false
+    mutates_git: false
+    budget_minutes: 10
+
+  # ── Code review ─────────────────────────────────────────────────────────────
+
+  review:
+    department: engineering
+    role: Senior reviewer
+    invokes_as: "/review"
+    inputs: [git-diff]
+    outputs: [review.md]
+    tier_preference: VERY_HARD
+    parallel_safe: true
+    mutates_filesystem: false
+    mutates_git: false
+    budget_minutes: 10
+
+  simplify:
+    department: engineering
+    role: Quality pass
+    invokes_as: "/simplify"
+    inputs: [git-diff]
+    outputs: [simplifications.md, edits/]
+    tier_preference: VERY_HARD
+    parallel_safe: false
+    mutates_filesystem: true
+    mutates_git: true
+    budget_minutes: 10
+
+  # ── QA ──────────────────────────────────────────────────────────────────────
+
+  qa:
+    department: qa
+    role: QA Lead
+    invokes_as: "/qa"
+    modes: [quick, standard, exhaustive]
+    inputs: [running_site_url]
+    outputs: [qa-report.md, fixes/]
+    tier_preference: COMPLEX
+    parallel_safe: false
+    mutates_filesystem: true
+    mutates_git: true
+    budget_minutes: 30
+
+  # ── Performance ─────────────────────────────────────────────────────────────
+
+  benchmark:
+    department: sre
+    role: Perf
+    invokes_as: "/benchmark"
+    inputs: [running_site_url, baseline]
+    outputs: [benchmark.json, regression-report.md]
+    tier_preference: MODERATE
+    parallel_safe: true
+    mutates_filesystem: true
+    mutates_git: false
+    budget_minutes: 10
+
+  # ── Release / SRE ───────────────────────────────────────────────────────────
+
+  ship:
+    department: release
+    role: Release Engineer
+    invokes_as: "/ship"
+    inputs: [clean_branch]
+    outputs: [PR_url]
+    tier_preference: STANDARD
+    parallel_safe: false
+    mutates_filesystem: true
+    mutates_git: true
+    budget_minutes: 10
+
+  land-and-deploy:
+    department: release
+    role: Deploy
+    invokes_as: "/land-and-deploy"
+    inputs: [PR_url]
+    outputs: [deploy_status]
+    tier_preference: STANDARD
+    parallel_safe: false
+    mutates_filesystem: false
+    mutates_git: true
+    budget_minutes: 30
+
+  canary:
+    department: sre
+    role: SRE
+    invokes_as: "/canary"
+    inputs: [production_url, baseline]
+    outputs: [canary-report.md]
+    tier_preference: MODERATE
+    parallel_safe: true
+    mutates_filesystem: true
+    mutates_git: false
+    budget_minutes: 45
+
+  # ── Docs & memory ───────────────────────────────────────────────────────────
+
+  document-release:
+    department: docs
+    role: Tech Writer
+    invokes_as: "/document-release"
+    inputs: [git-diff, existing_docs]
+    outputs: [updated_docs/]
+    tier_preference: STANDARD
+    parallel_safe: false
+    mutates_filesystem: true
+    mutates_git: true
+    budget_minutes: 15
+
+  learn:
+    department: people_ops
+    role: Memory Keeper
+    invokes_as: "/learn"
+    inputs: [run_artifacts]
+    outputs: [learnings.md]
+    tier_preference: MODERATE
+    parallel_safe: false
+    mutates_filesystem: true
+    mutates_git: false
+    budget_minutes: 5
+
+  # ── Pseudo-skills (handled by the brain, not via Skill tool) ────────────────
+  # These exist so playbook stages can declare invocation: { type: brain } or
+  # { type: tier_dispatch } and the runner knows the contract.
+
+  __brain:
+    department: orchestration
+    role: Claude Code (you)
+    invokes_as: null
+    notes: "Stage is performed directly by the brain — synthesis, merge, decomposition."
+    parallel_safe: false
+
+  __tier_dispatch:
+    department: engineering
+    role: IC workforce
+    invokes_as: null
+    notes: "Stage is performed by route.sh / parallel.sh / edit.sh under brain coordination."
+    parallel_safe: true

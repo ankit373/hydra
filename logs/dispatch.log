@@ -1,0 +1,167 @@
+[2026-05-26T20:23:33Z] INFO: Tier 2: Claude Opus 4.6 (Thinking) (pool: agy_claude)
+[2026-05-26T20:23:33Z] dispatch tier=2 model="Claude Opus 4.6 (Thinking)" executor=agy pool=agy_claude mode=normal prompt_len=43058
+[2026-05-26T20:23:34Z] WARN: Tier 2 failed (exit 2). Trying next fallback.
+[2026-05-26T20:23:34Z] fail tier=2 exit=2 error=flags provided but not defined: -m
+[2026-05-26T20:23:34Z] INFO: Tier 3: Claude Sonnet 4.6 (Thinking) (pool: agy_claude)
+[2026-05-26T20:23:34Z] dispatch tier=3 model="Claude Sonnet 4.6 (Thinking)" executor=agy pool=agy_claude mode=normal prompt_len=43058
+[2026-05-26T20:23:34Z] WARN: Tier 3 failed (exit 2). Trying next fallback.
+[2026-05-26T20:23:34Z] fail tier=3 exit=2 error=flags provided but not defined: -m
+[2026-05-26T20:23:34Z] INFO: Tier 4: GPT-OSS 120B (Medium) (pool: agy_gpt)
+[2026-05-26T20:23:34Z] dispatch tier=4 model="GPT-OSS 120B (Medium)" executor=agy pool=agy_gpt mode=normal prompt_len=43058
+[2026-05-26T20:23:34Z] WARN: Tier 4 failed (exit 2). Trying next fallback.
+[2026-05-26T20:23:34Z] fail tier=4 exit=2 error=flags provided but not defined: -m
+[2026-05-26T20:23:34Z] INFO: Tier 5: Gemini 3.1 Pro (High) (pool: agy_gemini_pro)
+[2026-05-26T20:23:34Z] dispatch tier=5 model="Gemini 3.1 Pro (High)" executor=agy pool=agy_gemini_pro mode=normal prompt_len=43058
+[2026-05-26T20:23:34Z] WARN: Tier 5 failed (exit 2). Trying next fallback.
+[2026-05-26T20:23:34Z] fail tier=5 exit=2 error=flags provided but not defined: -m
+[2026-05-26T20:23:34Z] INFO: Tier 6: Gemini 3.1 Pro (Low) (pool: agy_gemini_pro)
+[2026-05-26T20:23:34Z] dispatch tier=6 model="Gemini 3.1 Pro (Low)" executor=agy pool=agy_gemini_pro mode=normal prompt_len=43058
+[2026-05-26T20:23:34Z] WARN: Tier 6 failed (exit 2). Trying next fallback.
+[2026-05-26T20:23:34Z] fail tier=6 exit=2 error=flags provided but not defined: -m
+[2026-05-26T20:23:34Z] INFO: Tier 10: Qwen2.5-Coder 7b (pool: local_ollama)
+[2026-05-26T20:23:34Z] dispatch tier=10 model="Qwen2.5-Coder 7b" executor=ollama pool=local_ollama mode=normal prompt_len=43058
+[2026-05-26T20:25:35Z] INFO: Tier 2: Claude Opus 4.6 (Thinking) (pool: agy_claude)
+[2026-05-26T20:25:35Z] dispatch tier=2 model="Claude Opus 4.6 (Thinking)" executor=agy pool=agy_claude mode=normal prompt_len=20179
+[2026-05-26T20:25:35Z] WARN: Tier 2 failed (exit 2). Trying next fallback.
+[2026-05-26T20:25:35Z] fail tier=2 exit=2 error=flags provided but not defined: -m
+[2026-05-26T20:25:36Z] INFO: Tier 3: Claude Sonnet 4.6 (Thinking) (pool: agy_claude)
+[2026-05-26T20:25:36Z] dispatch tier=3 model="Claude Sonnet 4.6 (Thinking)" executor=agy pool=agy_claude mode=normal prompt_len=20179
+[2026-05-26T20:25:36Z] WARN: Tier 3 failed (exit 2). Trying next fallback.
+[2026-05-26T20:25:36Z] fail tier=3 exit=2 error=flags provided but not defined: -m
+[2026-05-26T20:25:36Z] INFO: Tier 4: GPT-OSS 120B (Medium) (pool: agy_gpt)
+[2026-05-26T20:25:36Z] dispatch tier=4 model="GPT-OSS 120B (Medium)" executor=agy pool=agy_gpt mode=normal prompt_len=20179
+[2026-05-26T20:25:36Z] WARN: Tier 4 failed (exit 2). Trying next fallback.
+[2026-05-26T20:25:36Z] fail tier=4 exit=2 error=flags provided but not defined: -m
+[2026-05-26T20:25:36Z] INFO: Tier 5: Gemini 3.1 Pro (High) (pool: agy_gemini_pro)
+[2026-05-26T20:25:36Z] dispatch tier=5 model="Gemini 3.1 Pro (High)" executor=agy pool=agy_gemini_pro mode=normal prompt_len=20179
+[2026-05-26T20:25:37Z] WARN: Tier 5 failed (exit 2). Trying next fallback.
+[2026-05-26T20:25:37Z] fail tier=5 exit=2 error=flags provided but not defined: -m
+[2026-05-26T20:25:37Z] INFO: Tier 6: Gemini 3.1 Pro (Low) (pool: agy_gemini_pro)
+[2026-05-26T20:25:37Z] dispatch tier=6 model="Gemini 3.1 Pro (Low)" executor=agy pool=agy_gemini_pro mode=normal prompt_len=20179
+[2026-05-26T20:25:38Z] WARN: Tier 6 failed (exit 2). Trying next fallback.
+[2026-05-26T20:25:38Z] fail tier=6 exit=2 error=flags provided but not defined: -m
+[2026-05-26T20:25:38Z] INFO: Tier 10: Qwen2.5-Coder 7b (pool: local_ollama)
+[2026-05-26T20:25:38Z] dispatch tier=10 model="Qwen2.5-Coder 7b" executor=ollama pool=local_ollama mode=normal prompt_len=20179
+[2026-05-26T20:26:07Z] INFO: Tier 7: Gemini 3.5 Flash (High) (pool: agy_flash)
+[2026-05-26T20:26:07Z] dispatch tier=7 model="Gemini 3.5 Flash (High)" executor=agy pool=agy_flash mode=normal prompt_len=29
+[2026-05-26T20:26:08Z] WARN: Tier 7 failed (exit 2). Trying next fallback.
+[2026-05-26T20:26:08Z] fail tier=7 exit=2 error=flags provided but not defined: -m
+[2026-05-26T20:26:08Z] INFO: Tier 8: Gemini 3.5 Flash (Medium) (pool: agy_flash)
+[2026-05-26T20:26:08Z] dispatch tier=8 model="Gemini 3.5 Flash (Medium)" executor=agy pool=agy_flash mode=normal prompt_len=29
+[2026-05-26T20:26:09Z] WARN: Tier 8 failed (exit 2). Trying next fallback.
+[2026-05-26T20:26:09Z] fail tier=8 exit=2 error=flags provided but not defined: -m
+[2026-05-26T20:26:09Z] INFO: Tier 9: Gemini 3.5 Flash (Low) (pool: agy_flash)
+[2026-05-26T20:26:09Z] dispatch tier=9 model="Gemini 3.5 Flash (Low)" executor=agy pool=agy_flash mode=normal prompt_len=29
+[2026-05-26T20:26:09Z] WARN: Tier 9 failed (exit 2). Trying next fallback.
+[2026-05-26T20:26:09Z] fail tier=9 exit=2 error=flags provided but not defined: -m
+[2026-05-26T20:26:09Z] INFO: Tier 10: Qwen2.5-Coder 7b (pool: local_ollama)
+[2026-05-26T20:26:09Z] dispatch tier=10 model="Qwen2.5-Coder 7b" executor=ollama pool=local_ollama mode=normal prompt_len=29
+[2026-05-26T20:26:33Z] success tier=10 model="Qwen2.5-Coder 7b"
+[2026-05-26T20:27:27Z] success tier=10 model="Qwen2.5-Coder 7b"
+[2026-05-26T20:31:38Z] INFO: Tier 8: Gemini 3.5 Flash (Medium) (pool: agy_flash)
+[2026-05-26T20:31:38Z] dispatch tier=8 model="Gemini 3.5 Flash (Medium)" executor=agy pool=agy_flash mode=normal prompt_len=28
+[2026-05-26T20:31:50Z] success tier=8 model="Gemini 3.5 Flash (Medium)"
+[2026-05-26T20:32:36Z] INFO: Tier 7: Gemini 3.5 Flash (High) (pool: agy_flash)
+[2026-05-26T20:32:36Z] dispatch tier=7 model="Gemini 3.5 Flash (High)" executor=agy pool=agy_flash mode=normal prompt_len=20
+[2026-05-26T20:37:16Z] INFO: Tier 2: Claude Opus 4.6 (Thinking) (pool: agy_claude)
+[2026-05-26T20:37:16Z] dispatch tier=2 model="Claude Opus 4.6 (Thinking)" executor=agy pool=agy_claude mode=normal prompt_len=42667
+[2026-05-26T20:38:11Z] success tier=2 model="Claude Opus 4.6 (Thinking)"
+[2026-05-26T20:38:11Z] INFO: Tier 2: Claude Opus 4.6 (Thinking) (pool: agy_claude)
+[2026-05-26T20:38:11Z] dispatch tier=2 model="Claude Opus 4.6 (Thinking)" executor=agy pool=agy_claude mode=normal prompt_len=20021
+[2026-05-26T20:39:26Z] INFO: Tier 2: Claude Opus 4.6 (Thinking) (pool: agy_claude)
+[2026-05-26T20:39:26Z] dispatch tier=2 model="Claude Opus 4.6 (Thinking)" executor=agy pool=agy_claude mode=normal prompt_len=19858
+[2026-05-26T20:40:13Z] success tier=2 model="Claude Opus 4.6 (Thinking)"
+[2026-05-26T20:40:21Z] INFO: Tier 6: Gemini 3.1 Pro (Low) (pool: agy_gemini_pro)
+[2026-05-26T20:40:21Z] dispatch tier=6 model="Gemini 3.1 Pro (Low)" executor=agy pool=agy_gemini_pro mode=normal prompt_len=3358
+[2026-05-26T20:42:20Z] success tier=6 model="Gemini 3.1 Pro (Low)"
+[2026-05-26T20:42:30Z] INFO: Tier 6: Gemini 3.1 Pro (Low) (pool: agy_gemini_pro)
+[2026-05-26T20:42:30Z] dispatch tier=6 model="Gemini 3.1 Pro (Low)" executor=agy pool=agy_gemini_pro mode=normal prompt_len=4420
+[2026-05-26T20:43:20Z] success tier=6 model="Gemini 3.1 Pro (Low)"
+[2026-05-26T20:43:32Z] INFO: Tier 5: Gemini 3.1 Pro (High) (pool: agy_gemini_pro)
+[2026-05-26T20:43:32Z] dispatch tier=5 model="Gemini 3.1 Pro (High)" executor=agy pool=agy_gemini_pro mode=normal prompt_len=145672
+[2026-05-26T20:45:26Z] success tier=5 model="Gemini 3.1 Pro (High)"
+[2026-05-26T20:45:35Z] INFO: Tier 7: Gemini 3.5 Flash (High) (pool: agy_flash)
+[2026-05-26T20:45:35Z] dispatch tier=7 model="Gemini 3.5 Flash (High)" executor=agy pool=agy_flash mode=normal prompt_len=982
+[2026-05-26T20:49:29Z] success tier=7 model="Gemini 3.5 Flash (High)"
+[2026-05-26T20:55:29Z] INFO: Tier 5: Gemini 3.1 Pro (High) (pool: agy_gemini_pro)
+[2026-05-26T20:55:29Z] dispatch tier=5 model="Gemini 3.1 Pro (High)" executor=agy pool=agy_gemini_pro mode=normal prompt_len=43271
+[2026-05-26T20:56:30Z] WARN: 🔐 AUTH REQUIRED for pool 'agy_gemini_pro' — authenticate then retry
+[2026-05-26T20:56:30Z] WARN:    URL: https://securetoken.google.com/'
+[2026-05-26T20:56:30Z] auth_required tier=5 pool=agy_gemini_pro
+[2026-05-26T20:56:30Z] INFO: Tier 6: Gemini 3.1 Pro (Low) (pool: agy_gemini_pro)
+[2026-05-26T20:56:30Z] dispatch tier=6 model="Gemini 3.1 Pro (Low)" executor=agy pool=agy_gemini_pro mode=normal prompt_len=43271
+[2026-05-26T20:57:35Z] WARN: 🔐 AUTH REQUIRED for pool 'agy_gemini_pro' — authenticate then retry
+[2026-05-26T20:57:35Z] WARN:    URL: https://securetoken.google.com/'
+[2026-05-26T20:57:35Z] auth_required tier=6 pool=agy_gemini_pro
+[2026-05-26T20:57:35Z] INFO: Tier 7: Gemini 3.5 Flash (High) (pool: agy_flash)
+[2026-05-26T20:57:35Z] dispatch tier=7 model="Gemini 3.5 Flash (High)" executor=agy pool=agy_flash mode=normal prompt_len=43271
+[2026-05-26T20:57:43Z] INFO: Tier 5: Gemini 3.1 Pro (High) (pool: agy_gemini_pro)
+[2026-05-26T20:57:43Z] dispatch tier=5 model="Gemini 3.1 Pro (High)" executor=agy pool=agy_gemini_pro mode=normal prompt_len=20311
+[2026-05-26T20:58:20Z] success tier=5 model="Gemini 3.1 Pro (High)"
+[2026-05-26T20:58:42Z] WARN: 🔐 AUTH REQUIRED for pool 'agy_flash' — authenticate then retry
+[2026-05-26T20:58:42Z] WARN:    URL: https://securetoken.google.com/'
+[2026-05-26T20:58:42Z] auth_required tier=7 pool=agy_flash
+[2026-05-26T20:58:42Z] INFO: Tier 8: Gemini 3.5 Flash (Medium) (pool: agy_flash)
+[2026-05-26T20:58:42Z] dispatch tier=8 model="Gemini 3.5 Flash (Medium)" executor=agy pool=agy_flash mode=normal prompt_len=43271
+[2026-05-26T20:59:55Z] WARN: 🔐 AUTH REQUIRED for pool 'agy_flash' — authenticate then retry
+[2026-05-26T20:59:55Z] WARN:    URL: https://securetoken.google.com/'
+[2026-05-26T20:59:55Z] auth_required tier=8 pool=agy_flash
+[2026-05-26T20:59:55Z] INFO: Tier 9: Gemini 3.5 Flash (Low) (pool: agy_flash)
+[2026-05-26T20:59:55Z] dispatch tier=9 model="Gemini 3.5 Flash (Low)" executor=agy pool=agy_flash mode=normal prompt_len=43271
+[2026-05-26T21:01:00Z] WARN: 🔐 AUTH REQUIRED for pool 'agy_flash' — authenticate then retry
+[2026-05-26T21:01:00Z] WARN:    URL: https://securetoken.google.com/'
+[2026-05-26T21:01:00Z] auth_required tier=9 pool=agy_flash
+[2026-05-26T21:01:00Z] INFO: Tier 10: Qwen2.5-Coder 7b (pool: local_ollama)
+[2026-05-26T21:01:00Z] dispatch tier=10 model="Qwen2.5-Coder 7b" executor=ollama pool=local_ollama mode=normal prompt_len=43271
+[2026-05-26T21:04:08Z] success tier=10 model="Qwen2.5-Coder 7b"
+[2026-05-26T21:09:05Z] INFO: Tier 5: Gemini 3.1 Pro (High) (pool: agy_gemini_pro)
+[2026-05-26T21:09:05Z] dispatch tier=5 model="Gemini 3.1 Pro (High)" executor=agy pool=agy_gemini_pro mode=normal prompt_len=42708
+[2026-05-26T21:10:04Z] success tier=5 model="Gemini 3.1 Pro (High)"
+[2026-05-26T21:26:28Z] INFO: Tier 10: Qwen2.5-Coder 7b (pool: local_ollama)
+[2026-05-26T21:26:28Z] dispatch tier=10 model="Qwen2.5-Coder 7b" executor=ollama pool=local_ollama mode=normal prompt_len=623
+[2026-05-26T21:26:43Z] success tier=10 model="Qwen2.5-Coder 7b"
+[2026-05-26T21:27:26Z] INFO: Tier 10: Qwen2.5-Coder 7b (pool: local_ollama)
+[2026-05-26T21:27:26Z] dispatch tier=10 model="Qwen2.5-Coder 7b" executor=ollama pool=local_ollama mode=normal prompt_len=623
+[2026-05-26T21:27:30Z] success tier=10 model="Qwen2.5-Coder 7b"
+[2026-05-26T21:27:49Z] INFO: Tier 10: Qwen2.5-Coder 7b (pool: local_ollama)
+[2026-05-26T21:27:49Z] dispatch tier=10 model="Qwen2.5-Coder 7b" executor=ollama pool=local_ollama mode=normal prompt_len=594
+[2026-05-26T21:27:53Z] success tier=10 model="Qwen2.5-Coder 7b"
+[2026-05-26T21:28:29Z] INFO: Tier 10: Qwen2.5-Coder 7b (pool: local_ollama)
+[2026-05-26T21:28:29Z] dispatch tier=10 model="Qwen2.5-Coder 7b" executor=ollama pool=local_ollama mode=normal prompt_len=594
+[2026-05-26T21:28:32Z] success tier=10 model="Qwen2.5-Coder 7b"
+[2026-05-26T21:29:35Z] INFO: Tier 10: Qwen2.5-Coder 7b (pool: local_ollama)
+[2026-05-26T21:29:35Z] dispatch tier=10 model="Qwen2.5-Coder 7b" executor=ollama pool=local_ollama mode=normal prompt_len=600
+[2026-05-26T21:29:39Z] success tier=10 model="Qwen2.5-Coder 7b"
+[2026-05-26T21:31:51Z] INFO: Tier 10: Qwen2.5-Coder 7b (pool: local_ollama)
+[2026-05-26T21:31:51Z] dispatch tier=10 model="Qwen2.5-Coder 7b" executor=ollama pool=local_ollama mode=normal prompt_len=682
+[2026-05-26T21:31:55Z] success tier=10 model="Qwen2.5-Coder 7b"
+[2026-05-26T21:32:17Z] INFO: Tier 10: Qwen2.5-Coder 7b (pool: local_ollama)
+[2026-05-26T21:32:17Z] dispatch tier=10 model="Qwen2.5-Coder 7b" executor=ollama pool=local_ollama mode=normal prompt_len=630
+[2026-05-26T21:32:21Z] success tier=10 model="Qwen2.5-Coder 7b"
+[2026-05-26T21:34:19Z] INFO: Tier 10: Qwen2.5-Coder 7b (pool: local_ollama)
+[2026-05-26T21:34:19Z] dispatch tier=10 model="Qwen2.5-Coder 7b" executor=ollama pool=local_ollama mode=normal prompt_len=58
+[2026-05-26T21:34:19Z] INFO: Tier 10: Qwen2.5-Coder 7b (pool: local_ollama)
+[2026-05-26T21:34:19Z] INFO: Tier 10: Qwen2.5-Coder 7b (pool: local_ollama)
+[2026-05-26T21:34:19Z] dispatch tier=10 model="Qwen2.5-Coder 7b" executor=ollama pool=local_ollama mode=normal prompt_len=598
+[2026-05-26T21:34:19Z] dispatch tier=10 model="Qwen2.5-Coder 7b" executor=ollama pool=local_ollama mode=normal prompt_len=604
+[2026-05-26T21:34:23Z] success tier=10 model="Qwen2.5-Coder 7b"
+[2026-05-26T21:34:25Z] success tier=10 model="Qwen2.5-Coder 7b"
+[2026-05-26T21:34:27Z] success tier=10 model="Qwen2.5-Coder 7b"
+[2026-05-27T06:37:38Z] INFO: Tier 10: Qwen2.5-Coder 7b (pool: local_ollama)
+[2026-05-27T06:37:38Z] dispatch tier=10 model="Qwen2.5-Coder 7b" executor=ollama pool=local_ollama mode=normal prompt_len=598
+[2026-05-27T06:37:57Z] success tier=10 model="Qwen2.5-Coder 7b"
+[2026-05-27T06:41:02Z] INFO: Tier 10: Qwen2.5-Coder 7b (pool: local_ollama)
+[2026-05-27T06:41:02Z] dispatch tier=10 model="Qwen2.5-Coder 7b" executor=ollama pool=local_ollama mode=normal prompt_len=590
+[2026-05-27T06:41:03Z] INFO: Tier 10: Qwen2.5-Coder 7b (pool: local_ollama)
+[2026-05-27T06:41:03Z] dispatch tier=10 model="Qwen2.5-Coder 7b" executor=ollama pool=local_ollama mode=normal prompt_len=580
+[2026-05-27T06:41:10Z] success tier=10 model="Qwen2.5-Coder 7b"
+[2026-05-27T06:41:19Z] success tier=10 model="Qwen2.5-Coder 7b"
+[2026-05-27T07:08:15Z] INFO: Tier 10: Qwen2.5-Coder 7b (pool: local_ollama)
+[2026-05-27T07:08:15Z] dispatch tier=10 model="Qwen2.5-Coder 7b" executor=ollama pool=local_ollama mode=normal prompt_len=26
+[2026-05-27T07:08:31Z] success tier=10 model="Qwen2.5-Coder 7b"
+[2026-05-27T07:14:32Z] INFO: Tier 10: Qwen2.5-Coder 7b (pool: local_ollama)
+[2026-05-27T07:14:32Z] dispatch tier=10 model="Qwen2.5-Coder 7b" executor=ollama pool=local_ollama mode=normal prompt_len=15
+[2026-05-27T07:14:51Z] success tier=10 model="Qwen2.5-Coder 7b"
+[2026-05-27T07:14:51Z] INFO: Tier 10: Qwen2.5-Coder 7b (pool: local_ollama)
+[2026-05-27T07:14:51Z] dispatch tier=10 model="Qwen2.5-Coder 7b" executor=ollama pool=local_ollama mode=normal prompt_len=19
+[2026-05-27T07:16:44Z] success tier=10 model="Qwen2.5-Coder 7b"
