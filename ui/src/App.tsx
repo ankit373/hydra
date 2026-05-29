@@ -168,13 +168,13 @@ export default function App() {
     <Box flexDirection="column" height={process.stdout.rows ?? 40}>
       {/* Header */}
       <Box borderStyle="single" borderColor="cyan" paddingX={1} justifyContent="space-between">
-        <Text bold color="cyan">🐍  HYDRA</Text>
-        <Text dimColor>multi-model orchestrator</Text>
-        <Box>
-          <Text color={modeColor[state.mode] ?? 'white'}>{state.mode.toUpperCase()}</Text>
-          <Text dimColor>  │  Claude: </Text>
-          <Text color={state.claudePct >= 70 ? 'red' : 'green'}>{state.claudePct}%</Text>
-          <Text dimColor>  │  Esc: quit  Tab: cycle tier</Text>
+        <Text bold color="cyan">🐍 HYDRA</Text>
+        <Box gap={1}>
+          <Text color={modeColor[state.mode] ?? 'white'} bold>{state.mode.toUpperCase()}</Text>
+          <Text dimColor>│</Text>
+          <Text dimColor>Claude </Text>
+          <Text color={state.claudePct >= 70 ? 'red' : 'green'} bold>{state.claudePct}%</Text>
+          <Text dimColor>│ Tab:tier  Esc:quit</Text>
         </Box>
       </Box>
 
