@@ -1,0 +1,53 @@
+# ── Runtime / mutable state ────────────────────────────────────────────────
+logs/
+!logs/.gitkeep
+*.log
+*.jsonl
+state.json
+auth_required.json
+
+# ── Secrets & local config ─────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+*.local
+.claude/settings.local.json
+
+# ── Tool caches ────────────────────────────────────────────────────────────
+.antigravitycli/
+
+# ── Node / Bun ─────────────────────────────────────────────────────────────
+node_modules/
+ui/node_modules/
+dist/
+build/
+out/
+.cache/
+.eslintcache
+*.tsbuildinfo
+
+# ── IDE / editor ───────────────────────────────────────────────────────────
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*~
+
+# ── macOS ──────────────────────────────────────────────────────────────────
+.DS_Store
+__MACOSX/
+Thumbs.db
+
+# ── Temporary / backup files created by edit.sh ────────────────────────────
+*.bak
+*.orig
+*.tmp
+/context/edit_test.txt
+
+# ── Lock files (keep bun.lock, ignore others) ──────────────────────────────
+package-lock.json
+yarn.lock
+pnpm-lock.yaml

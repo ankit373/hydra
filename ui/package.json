@@ -6,7 +6,8 @@
   "bin": { "hydra-ui": "./src/index.tsx" },
   "scripts": {
     "start": "bun src/index.tsx",
-    "dev":   "bun --watch src/index.tsx"
+    "dev":   "bun --watch src/index.tsx",
+    "typecheck": "bun tsc --noEmit"
   },
   "devDependencies": {
     "@types/bun": "latest",

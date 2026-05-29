@@ -1,8 +1,0 @@
-{
-  "from": "hydra-edit-GRUNT",
-  "file": "/Users/ankitjha/hydra/context/par_y.txt",
-  "enum": "GRUNT",
-  "workspace": "hydra-self",
-  "lines_added": 1,
-  "lines_removed": 1
-}
