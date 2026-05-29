@@ -49,7 +49,7 @@ routing_map:
 # ─────────────────────────────────────────────────────────────────────────────
 
 rubber_duck_map:
-  claude:         4    # Claude output → reviewed by GPT-OSS 120B (different family)
+  claude:         4    # Claude output → reviewed by Gemini Flash Thinking (different family)
   antigravity:    1    # agy output → reviewed by Claude Code (orchestrator)
   ollama:         8    # Qwen output → reviewed by Flash Med (fast sanity check)
 
@@ -79,11 +79,11 @@ fallback_chains:
 # Pool-level fallbacks: if entire pool is quota-exhausted
 # Qwen (tier 10) is always the terminal fallback in every pool chain.
 pool_fallback_chains:
-  agy_claude:      [4, 5, 6, 7, 10]  # Claude pool exhausted → GPT-OSS → Pro → Flash → Qwen
-  agy_gemini_pro:  [7, 8, 9, 10]     # Pro pool exhausted → Flash High → Med → Low → Qwen
-  agy_flash:       [10]               # Flash pool exhausted → Qwen only (last resort)
-  agy_gpt:         [5, 6, 7, 10]     # GPT-OSS exhausted → Pro High → Pro Low → Flash → Qwen
-  local_ollama:    [9, 8, 7]         # Ollama down → Flash Low → Med → High (Qwen is down if here)
+  agy_claude:           [4, 5, 6, 7, 10]  # Claude pool exhausted → Flash Thinking → Pro → Flash → Qwen
+  agy_gemini_pro:       [7, 8, 9, 10]     # Pro pool exhausted → Flash High → Med → Low → Qwen
+  agy_flash:            [10]               # Flash pool exhausted → Qwen only (last resort)
+  agy_flash_thinking:   [5, 6, 7, 10]     # Flash Thinking exhausted → Pro High → Pro Low → Flash → Qwen
+  local_ollama:         [9, 8, 7]         # Ollama down → Flash Low → Med → High (Qwen is down if here)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CLAUDE TOKEN PRESERVATION

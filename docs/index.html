@@ -1951,7 +1951,7 @@
               <span class="tui-pool-ok" id="pool-status-2">✓ ok</span>
             </div>
             <div class="tui-pool-row">
-              <span style="color: var(--text-muted);">• GPT-OSS</span>
+              <span style="color: var(--text-muted);">• Gemini Flash Thinking</span>
               <span class="tui-pool-ok" id="pool-status-3">✓ ok</span>
             </div>
             <div class="tui-pool-row">
@@ -2072,7 +2072,7 @@
           <tr>
             <td><span class="tier-badge">4</span></td>
             <td><span class="enum-pill">HARD</span></td>
-            <td style="font-weight: 600; color: var(--text-bright)">GPT-OSS 120B (Medium)</td>
+            <td style="font-weight: 600; color: var(--text-bright)">Gemini 2.0 Flash Thinking</td>
             <td>Antigravity</td>
             <td>
               <div class="accuracy-dots">
@@ -2417,8 +2417,8 @@
       },
       'heads-hard': {
         title: '<span style="color: var(--accent-warning)">●</span> Review Tier (T4)',
-        desc: 'Utilizes GPT-OSS 120B at medium reasoning depth. Dedicated to cross-family rubber duck reviews of Claude output — deliberate use of a different model family to surface blind spots that Claude-family models share.',
-        exec: 'Antigravity CLI (GPT-OSS)',
+        desc: 'Utilizes Gemini 2.0 Flash Thinking at medium reasoning depth. Dedicated to cross-family rubber duck reviews of Claude output — deliberate use of a different model family to surface blind spots that Claude-family models share.',
+        exec: 'Antigravity CLI (Gemini Flash Thinking)',
         cost: 'Moderate ($0.004 - $0.012 / 1k)'
       },
       'heads-std': {
@@ -2757,7 +2757,7 @@ agg_by_field() {
         desc: 'The routing map definition. Links complexity keys to target numerical tiers and configures cascading model chains.',
         features: [
           'Maps GRUNT...CORE enum definitions to Tiers 1-10.',
-          'Specifies review mappings (e.g., Claude output reviewed by GPT-OSS).'
+          'Specifies review mappings (e.g., Claude output reviewed by Gemini Flash Thinking).'
         ],
         code: `routing_map:
   GRUNT:      10   # → Qwen2.5-Coder:7b (Ollama, local)
@@ -2973,7 +2973,7 @@ export const STATE_FILE = join(resolveHydraData(), 'logs/state.json');`
       'CORE':      { tier: 1,  model: 'Claude Core',          color: 'magenta' },
       'EXPERT':    { tier: 2,  model: 'Opus Thinking',         color: 'red'     },
       'VERY_HARD': { tier: 3,  model: 'Sonnet Thinking',       color: 'red'     },
-      'HARD':      { tier: 4,  model: 'GPT-OSS 120B',          color: 'yellow'  },
+      'HARD':      { tier: 4,  model: 'Gemini 2.0 Flash Thinking',          color: 'yellow'  },
       'COMPLEX':    { tier: 5,  model: 'Gemini 3.1 Pro (High)', color: 'blue'    },
       'MODERATE':  { tier: 6,  model: 'Gemini 3.1 Pro (Low)',  color: 'blue'    },
       'STANDARD':  { tier: 7,  model: 'Gemini 3.5 Flash (High)',color: 'green'   },
@@ -3043,7 +3043,7 @@ export const STATE_FILE = join(resolveHydraData(), 'logs/state.json');`
         if (subcommand === 'help') {
           addTuiMessage('log', 'Commands: /status /tiers /set-pct <n> /reset-pools /clear');
         } else if (subcommand === 'status') {
-          addTuiMessage('log', `Claude: ${tuiClaudePct}% [${getClaudeMode(tuiClaudePct)}] | Pools: Claude(agy):ok, GeminiPro:ok, Flash:ok, GPT-OSS:ok, Qwen(local):ok`);
+          addTuiMessage('log', `Claude: ${tuiClaudePct}% [${getClaudeMode(tuiClaudePct)}] | Pools: Claude(agy):ok, GeminiPro:ok, Flash:ok, Gemini Flash Thinking:ok, Qwen(local):ok`);
         } else if (subcommand === 'tiers') {
           const list = Object.entries(tuiModelInfo).map(([k, v]) => `T${v.tier} ${v.model}`).join(' | ');
           addTuiMessage('log', list);

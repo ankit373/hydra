@@ -108,7 +108,7 @@ Tasks are classified and dispatched to one of the following ten tiers:
 | **1** | `CORE` | Claude Code | Direct CLI | Brain (Orchestrator, does not route) |
 | **2** | `EXPERT` | Claude Opus 4.6 (Thinking) | Antigravity | Architecture decisions, systems design |
 | **3** | `VERY_HARD` | Claude Sonnet 4.6 (Thinking) | Antigravity | Complex refactors, multi-step logic |
-| **4** | `HARD` | GPT-OSS 120B (Medium) | Antigravity | Tradeoff reviews, Rubber Duck evaluations |
+| **4** | `HARD` | Gemini 2.0 Flash Thinking | Antigravity | Tradeoff reviews, Rubber Duck evaluations |
 | **5** | `COMPLEX` | Gemini 3.1 Pro (High) | Antigravity | Middleware, security, APIs |
 | **6** | `MODERATE` | Gemini 3.1 Pro (Low) | Antigravity | Service components, validation code |
 | **7** | `STANDARD` | Gemini 3.5 Flash (High) | Antigravity | Controllers, basic CRUD, handlers |

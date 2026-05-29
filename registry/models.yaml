@@ -52,11 +52,11 @@ token_pools:
       Freely usable for standard and simple tasks.
       Lower accuracy ceiling — do not use for complex logic.
 
-  agy_gpt:
-    members: [gpt-oss-120b]
-    quota: "Antigravity GPT-OSS allocation"
+  agy_flash_thinking:
+    members: [flash-thinking]
+    quota: "Antigravity Gemini Flash Thinking allocation"
     shared: false
-    note: "Use primarily as rubber duck reviewer for Claude output."
+    note: "Use as rubber duck reviewer for Claude output. Thinking-mode Gemini — different family from Claude avoids shared blind spots."
 
   local_ollama:
     members: [qwen-grunt]
@@ -138,25 +138,25 @@ models:
     notes: "Prefer over Opus for tasks that need reasoning but not extreme depth. Same token pool."
 
   - tier: 4
-    id: gpt-oss-120b
-    name: "GPT-OSS 120B (Medium)"
+    id: flash-thinking
+    name: "Gemini 2.0 Flash Thinking"
     provider: antigravity
     executor: agy
-    model_flag: "gpt-oss-120b"
-    token_pool: agy_gpt
+    model_flag: "gemini-2.0-flash-thinking-exp"
+    token_pool: agy_flash_thinking
     enabled: true
-    tokens_per_call: high
-    speed: medium
+    tokens_per_call: medium
+    speed: fast
     accuracy: high
     frequency: moderate
     strengths:
       - cross-model rubber duck reviewing
-      - different perspective from Claude blind spots
-      - broad general reasoning
-      - code review with fresh eyes
+      - thinking-mode reasoning on tradeoffs
+      - different model family from Claude avoids shared blind spots
+      - fast enough for review loops
     complexity_min: 5
     complexity_max: 6
-    notes: "Primary use: rubber duck reviewer for Claude Code output (different model family)."
+    notes: "Primary use: rubber duck reviewer for Claude Code output. Gemini family ensures fresh perspective."
 
   - tier: 5
     id: pro-high
