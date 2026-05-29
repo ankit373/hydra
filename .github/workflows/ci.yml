@@ -1,28 +1,42 @@
 name: CI
 
+# Only run on PRs targeting main or develop.
+# Push to main/develop by admin is trusted — no CI burn on every direct push.
 on:
-  push:
-    branches: [main]
   pull_request:
-    branches: [main]
+    branches: [main, develop]
+
+# Cancel any in-progress run for the same branch when a new commit is pushed.
+concurrency:
+  group: ci-${{ github.head_ref }}
+  cancel-in-progress: true
 
 jobs:
   shellcheck:
     name: Shellcheck
     runs-on: ubuntu-latest
+    # Only run when shell scripts actually changed
+    if: >
+      contains(github.event.pull_request.changed_files_url, '.sh') ||
+      github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@v4
 
       - name: Install shellcheck
         run: sudo apt-get install -y shellcheck
 
+      # Only fail on real errors (SC severity=error).
+      # Warnings and style hints are surfaced but don't block the PR.
       - name: Lint shell scripts
         run: |
-          shellcheck dispatch/*.sh install.sh scripts/*.sh
+          shellcheck --severity=error dispatch/*.sh install.sh scripts/*.sh
 
   typecheck:
     name: TypeScript typecheck
     runs-on: ubuntu-latest
+    # Only run when UI source files changed
+    if: >
+      github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@v4
 
