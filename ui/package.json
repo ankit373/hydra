@@ -17,7 +17,7 @@
     "typescript": "^5"
   },
   "dependencies": {
-    "chalk": "4",
+    "chalk": "5",
     "ink": "^7.0.4",
     "ink-spinner": "^5.0.0",
     "ink-text-input": "^6.0.0",
