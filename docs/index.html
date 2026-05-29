@@ -110,6 +110,8 @@
       box-sizing: border-box;
       margin: 0;
       padding: 0;
+      /* Remove default tap highlight on mobile — custom :active states handle it */
+      -webkit-tap-highlight-color: transparent;
     }
 
     body {
@@ -1390,7 +1392,44 @@
       color: var(--text-bright);
     }
 
-    /* Responsive */
+    /* Responsive & Mobile Optimizations */
+    .mobile-menu-toggle {
+      display: none;
+      background: none;
+      border: none;
+      color: var(--text-bright);
+      cursor: pointer;
+      padding: 8px;
+      z-index: 110;
+      transition: color 0.2s ease;
+    }
+    .mobile-menu-toggle:hover {
+      color: var(--accent-secondary);
+    }
+    .mobile-menu-toggle svg {
+      width: 24px;
+      height: 24px;
+      display: block;
+    }
+
+    /* Horizontal scroll for setup tabs */
+    .setup-tabs {
+      display: flex;
+      overflow-x: auto;
+      white-space: nowrap;
+      gap: 8px;
+      scrollbar-width: none; /* Firefox */
+      -ms-overflow-style: none;  /* IE and Edge */
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 12px;
+    }
+    .setup-tabs::-webkit-scrollbar {
+      display: none; /* Chrome, Safari and Opera */
+    }
+    .setup-tab {
+      flex-shrink: 0;
+    }
+
     @media (max-width: 992px) {
       .archi-grid, .explorer-grid, .builder-grid {
         grid-template-columns: 1fr;
@@ -1406,10 +1445,66 @@
         grid-template-columns: repeat(2, 1fr);
       }
       h1 {
-        font-size: 48px;
+        font-size: 44px;
       }
     }
+
     @media (max-width: 768px) {
+      /* General layout spacing & text centering */
+      section, .setup-section, .tiers-section, .explorer-section, .builder-section, .tui-section, .community-section {
+        margin-bottom: 50px !important;
+      }
+      .hero {
+        padding: 60px 0 40px 0;
+      }
+      .container {
+        padding: 0 16px;
+      }
+      .section-title {
+        text-align: center !important;
+        font-size: 28px !important;
+      }
+      .section-desc {
+        text-align: center !important;
+        margin: 0 auto 30px auto !important;
+        font-size: 14px !important;
+      }
+
+      /* Navigation Menu */
+      .mobile-menu-toggle {
+        display: block;
+      }
+      .nav-links {
+        display: none;
+        flex-direction: column;
+        position: absolute;
+        top: 80px;
+        left: 0;
+        right: 0;
+        background: rgba(6, 9, 19, 0.98);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border-bottom: 1px solid var(--border-color);
+        padding: 24px;
+        gap: 16px;
+        z-index: 99;
+      }
+      .nav-links.open {
+        display: flex;
+        animation: fadeInDown 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      }
+      .nav-link {
+        padding: 8px 0;
+        font-size: 16px;
+        width: 100%;
+      }
+      .nav-link.active::after {
+        bottom: 0;
+        height: 2px;
+        width: 100%;
+      }
+
+      /* TUI Simulator responsive */
       .tui-main {
         flex-direction: column;
       }
@@ -1417,25 +1512,285 @@
         width: 100%;
         border-right: none;
         border-bottom: 1px solid var(--border-color);
+        padding: 16px;
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 16px;
+        align-items: start;
+      }
+      .tui-sidebar-title {
+        grid-column: span 2;
+        margin-bottom: 0;
+      }
+      .tui-chat-view {
+        padding: 16px;
+        height: 300px;
+      }
+
+      /* File Explorer responsive */
+      .explorer-grid {
+        padding: 16px;
+        gap: 20px;
+      }
+      .file-content-pane {
+        padding-top: 10px;
+      }
+      .file-title-bar {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+      }
+
+      /* Command Builder responsive */
+      .builder-grid {
+        padding: 20px;
+        gap: 24px;
+      }
+      .tier-select-grid {
+        grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)) !important;
+        gap: 8px !important;
+        margin-bottom: 16px;
+      }
+
+      /* Setup responsive & separated steps */
+      .setup-content {
+        padding: 20px;
+      }
+      .step-cmd {
+        margin-left: 0;
+      }
+      .step-text {
+        padding-left: 0;
+      }
+      .setup-step {
+        margin-bottom: 24px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        padding-bottom: 20px;
+      }
+      .setup-step:last-child {
+        margin-bottom: 0;
+        border-bottom: none;
+        padding-bottom: 0;
+      }
+
+      /* Model Tiers Table scroll */
+      .tiers-table-container {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+      }
+      .tiers-table-container table {
+        min-width: 650px;
+      }
+      th, td {
+        padding: 12px 14px;
       }
     }
+
     @media (max-width: 576px) {
       .stats-bar {
         grid-template-columns: 1fr;
+        gap: 12px;
+        margin-bottom: 40px;
+      }
+      .stat-card {
+        padding: 16px;
+      }
+      .stat-num {
+        font-size: 28px;
       }
       h1 {
-        font-size: 36px;
+        font-size: 30px;
+        line-height: 1.2;
       }
-      .nav-links {
-        display: none;
+      .hero-badge {
+        font-size: 11px;
+        padding: 4px 12px;
+        margin-bottom: 16px;
+      }
+      .hero-desc {
+        font-size: 14px;
+        margin-bottom: 24px;
+      }
+
+      /* Stacking CTA buttons vertically */
+      .hero-ctas {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+        max-width: 320px;
+        margin: 0 auto 40px auto;
+      }
+      .hero-ctas .btn {
+        justify-content: center;
+        width: 100%;
+        padding: 12px 20px;
+      }
+
+      /* Diagram node styling for mobile */
+      .diagram-heads-subgrid {
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 8px;
+      }
+      .diagram-layer {
+        padding: 12px;
+      }
+      .diagram-layer-title {
+        font-size: 12px;
+      }
+      .diagram-layer-badge {
+        font-size: 9px;
+      }
+      .archi-detail-box {
+        padding: 20px;
+      }
+      .archi-detail-title {
+        font-size: 20px;
+      }
+      .archi-detail-desc {
+        font-size: 14px;
+      }
+
+      /* Scale down ASCII art in TUI console */
+      .tui-logo-ascii {
+        font-size: 8px !important;
+        line-height: 1.15 !important;
+      }
+      .tui-prompt-prefix {
+        font-size: 12px;
+      }
+      .tui-input {
+        font-size: 12px;
+      }
+      .tui-cycle-btn {
+        font-size: 10px;
+        padding: 2px 6px;
+      }
+
+      /* Hide floating star widget on narrow viewports */
+      .star-widget {
+        display: none !important;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .tui-sidebar {
+        grid-template-columns: 1fr;
+      }
+      .tui-sidebar-title {
+        grid-column: span 1;
+      }
+      .diagram-layer {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+      }
+      .diagram-heads-subgrid {
+        grid-template-columns: 1fr !important;
+      }
+    }
+
+    /* ── Mobile & touch refinement pass ── */
+
+    /* iOS Safari: fixed background-attachment causes compositing glitches */
+    @media (max-width: 768px) {
+      body { background-attachment: scroll; }
+
+      /* Hide forced <br> in h1 — reflows cleanly on narrow screens */
+      h1 br { display: none; }
+
+      /* Intermediate hero description size between desktop (19px) and 576px (14px) */
+      .hero-desc { font-size: 15px; }
+
+      /* Code blocks: wrap instead of horizontal overflow on phones */
+      .code-snippet-box pre {
+        white-space: pre-wrap;
+        word-break: break-all;
+      }
+
+      /* Footer links overflow without flex-wrap */
+      .footer-links { flex-wrap: wrap; gap: 10px 18px; }
+
+      /* Center stat cards when stacked single-column */
+      .stat-card { text-align: center; }
+
+      /* Tighter community grid */
+      .community-grid { margin-top: 24px; gap: 12px; }
+
+      /* Compress arch diagram container padding */
+      .archi-diagram-container { padding: 20px; gap: 12px; }
+      .archi-detail-box { padding: 20px; }
+    }
+
+    /* Touch devices: cursor-glow is meaningless without a pointer */
+    @media (pointer: coarse) {
+      #cursor-glow { display: none !important; }
+      /* Disable hover lift transforms that feel sticky on tap */
+      .btn:hover, .community-card:hover, .stat-card:hover {
+        transform: none;
+      }
+    }
+
+    @media (max-width: 576px) {
+      /* Tighter hero padding */
+      .hero { padding: 36px 0 20px; }
+
+      /* Compact setup tabs so all four fit without scrolling on most phones */
+      .setup-tab { font-size: 13px; padding: 6px 10px; }
+
+      /* Tighter setup content box */
+      .setup-content { padding: 16px; }
+
+      /* Community cards — smaller internal padding */
+      .community-card { padding: 18px 14px; gap: 8px; }
+
+      /* Footer: smaller text, tighter wrap */
+      .footer-links { font-size: 12px; gap: 8px 14px; }
+      footer { padding: 28px 0; }
+    }
+
+    @media (max-width: 480px) {
+      /* Even tighter setup at smallest phones */
+      .setup-content { padding: 12px; }
+      .setup-tab { font-size: 11px; padding: 5px 8px; }
+
+      /* Setup steps: tighter vertical rhythm */
+      .setup-step { margin-bottom: 16px; padding-bottom: 12px; }
+      .step-title { font-size: 15px; }
+
+      /* Community grid: full single column */
+      .community-grid { grid-template-columns: 1fr; }
+    }
+
+    /* Accessibility: honor user's reduced-motion preference */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+      .scroll-reveal { opacity: 1 !important; transform: none !important; }
+    }
+
+    @keyframes fadeInDown {
+      from {
+        opacity: 0;
+        transform: translateY(-10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
       }
     }
   </style>
   <link rel="icon" type="image/png" href="logo.png">
 
   <style>
-    /* ── Smooth scroll ── */
-    html { scroll-behavior: smooth; }
+    /* ── Smooth scroll & horizontal scroll prevention ── */
+    html, body {
+      scroll-behavior: smooth;
+      overflow-x: hidden;
+      max-width: 100%;
+    }
 
     /* ── Particle canvas ── */
     #particle-canvas {
@@ -1623,6 +1978,89 @@
       transition: opacity 0.3s ease;
     }
     tbody tr:hover::after { opacity: 1; }
+
+    /* ── Mobile-native touch effects (pointer: coarse only) ── */
+
+    /* Tap press: scale-down feedback instead of translateY lift */
+    @media (pointer: coarse) {
+      .btn:active {
+        transform: scale(0.96);
+        transition: transform 0.1s ease;
+      }
+      .community-card:active {
+        transform: scale(0.98);
+        transition: transform 0.12s ease;
+      }
+      .diagram-layer:active {
+        background: rgba(255, 255, 255, 0.08);
+        transition: background 0.1s ease;
+      }
+      .tier-select-btn:active {
+        transform: scale(0.95);
+        transition: transform 0.1s ease;
+      }
+      .setup-tab:active {
+        color: var(--text-bright);
+      }
+      /* Tier table rows: replace hover-glow with active-tap glow */
+      tbody tr:active::after { opacity: 1; }
+    }
+
+    /* Scroll-snap on stats bar for swipe-through on mobile */
+    @media (max-width: 576px) {
+      .stats-bar {
+        display: flex;
+        overflow-x: auto;
+        scroll-snap-type: x mandatory;
+        scroll-padding: 0 16px;
+        padding-bottom: 12px;
+        gap: 12px;
+        scrollbar-width: none;
+      }
+      .stats-bar::-webkit-scrollbar { display: none; }
+      .stat-card {
+        flex: 0 0 72vw;
+        max-width: 280px;
+        scroll-snap-align: center;
+      }
+    }
+
+    /* Pulsing touch-active highlight on nav links */
+    @keyframes tapGlow {
+      0%   { box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.5); }
+      70%  { box-shadow: 0 0 0 8px rgba(139, 92, 246, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(139, 92, 246, 0); }
+    }
+    @media (pointer: coarse) {
+      .btn-primary:active { animation: tapGlow 0.4s ease forwards; }
+    }
+
+    /* Right-edge fade on tier table to hint horizontal scrollability on mobile */
+    @media (max-width: 768px) {
+      .tiers-section {
+        position: relative;
+      }
+      .tiers-section::after {
+        content: '';
+        position: absolute;
+        top: 80px;
+        right: 0;
+        width: 48px;
+        height: calc(100% - 80px);
+        background: linear-gradient(to right, transparent, rgba(6, 9, 19, 0.85));
+        pointer-events: none;
+        border-radius: 0 16px 16px 0;
+        z-index: 2;
+      }
+    }
+
+    /* Mobile: faster scroll-reveal entrance (mobile users scroll faster) */
+    @media (max-width: 768px) {
+      .scroll-reveal {
+        transition-duration: 0.45s;
+        transform: translateY(20px);
+      }
+    }
   </style>
 </head>
 <body>
@@ -1644,7 +2082,14 @@
         <a href="#get-started" class="nav-link" id="nav-setup">Get Started</a>
         <a href="#community" class="nav-link" id="nav-community">Community</a>
       </nav>
-      <a href="https://github.com/ankit373/hydra" target="_blank" rel="noopener" class="btn btn-secondary" style="padding: 8px 16px; font-size: 13px;" id="repo-btn">GitHub</a>
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <a href="https://github.com/ankit373/hydra" target="_blank" rel="noopener" class="btn btn-secondary" style="padding: 8px 16px; font-size: 13px;" id="repo-btn">GitHub</a>
+        <button class="mobile-menu-toggle" id="mobile-menu-toggle" aria-label="Toggle Navigation Menu">
+          <svg viewBox="0 0 24 24" width="24" height="24">
+            <path class="menu-icon-bars" fill="currentColor" d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/>
+          </svg>
+        </button>
+      </div>
     </div>
   </header>
 
@@ -2043,7 +2488,7 @@
         <!-- Console chat view -->
         <div class="tui-console">
           <div class="tui-chat-view" id="tui-chat-view">
-            <div style="font-family: var(--font-mono); font-size: 11px; line-height: 1.25; margin-bottom: 12px; white-space: pre;">
+            <div class="tui-logo-ascii" style="font-family: var(--font-mono); font-size: 11px; line-height: 1.25; margin-bottom: 12px; white-space: pre;">
 <span style="color: var(--accent-secondary); font-weight: bold;">  o__o__o   o__o__o   o__o__o</span>
 <span style="color: var(--accent-secondary);">   \   /     \   /     \   /</span>
 <span style="color: var(--accent-secondary);">    \ /       \ /       \ /</span>
@@ -3527,8 +3972,44 @@ export const STATE_FILE = join(resolveHydraData(), 'logs/state.json');`
           const container = document.getElementById('contributors-list');
           if (container) container.innerHTML = '<span class="contributors-loading">Could not load contributors.</span>';
         });
-    })();
+      })();
 
-  </script>
+      // Mobile navigation menu toggle
+      const menuToggle = document.getElementById('mobile-menu-toggle');
+      const navLinksContainer = document.querySelector('.nav-links');
+      
+      if (menuToggle && navLinksContainer) {
+        menuToggle.addEventListener('click', (e) => {
+          e.stopPropagation();
+          navLinksContainer.classList.toggle('open');
+          const bars = menuToggle.querySelector('.menu-icon-bars');
+          if (navLinksContainer.classList.contains('open')) {
+            bars.setAttribute('d', 'M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z');
+          } else {
+            bars.setAttribute('d', 'M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z');
+          }
+        });
+
+        // Close menu when clicking outside
+        document.addEventListener('click', (e) => {
+          if (!navLinksContainer.contains(e.target) && !menuToggle.contains(e.target)) {
+            if (navLinksContainer.classList.contains('open')) {
+              navLinksContainer.classList.remove('open');
+              const bars = menuToggle.querySelector('.menu-icon-bars');
+              bars.setAttribute('d', 'M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z');
+            }
+          }
+        });
+
+        // Close menu when clicking a link
+        navLinksContainer.querySelectorAll('.nav-link').forEach(link => {
+          link.addEventListener('click', () => {
+            navLinksContainer.classList.remove('open');
+            const bars = menuToggle.querySelector('.menu-icon-bars');
+            bars.setAttribute('d', 'M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z');
+          });
+        });
+      }
+    </script>
 </body>
 </html>
