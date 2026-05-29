@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Ask a question / start a discussion
+    url: https://github.com/ankit373/hydra/discussions
+    about: Use GitHub Discussions for questions, ideas, and general conversation.

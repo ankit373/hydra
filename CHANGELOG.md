@@ -1,0 +1,57 @@
+# Changelog
+
+All notable changes to Hydra are documented here.
+
+Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).  
+Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+---
+
+## [Unreleased]
+
+### Added
+- MIT License, `.gitignore`, `SECURITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`
+- GitHub issue templates and pull request template
+- CI workflow (shellcheck + TypeScript typecheck)
+
+---
+
+## [0.2.0] — 2025-05-26
+
+### Added
+- Homebrew formula (`Formula/hydra.rb`) for `brew install --HEAD`
+- `install.sh` standalone installer — copies scripts to `~/.hydra`, patches shell RC
+- `HYDRA_HOME` / `HYDRA_DATA` path separation so Homebrew cellar installs work correctly
+- `dispatch/cost.sh` — aggregates `logs/cost.jsonl` into cost tables grouped by tier, day, or run
+
+### Fixed
+- Canvas z-index set to `-1` to prevent sticky header override in the TUI
+- `hydra-ui` launcher now validates system requirements and resolves `~` in home paths
+
+---
+
+## [0.1.0] — 2025-05-20
+
+### Added
+- Initial multi-model orchestration system
+- `dispatch/route.sh` — core router: enum → tier → model, cascading fallbacks, pool quota tracking, Claude token preservation thresholds
+- `dispatch/agy.sh` — Antigravity CLI wrapper with dynamic model swapping and token-estimation sidecar
+- `dispatch/ollama.sh` — local Ollama API wrapper (Tier 10 / `GRUNT`)
+- `dispatch/hydra.sh` — developer CLI (`hydra do`, `hydra status`, `hydra list`, `hydra duck`)
+- `dispatch/edit.sh` — atomic file writer with backup, apply, validate, and auto-rollback
+- `dispatch/review.sh` — git-and-backup diff review harness
+- `dispatch/parallel.sh` — concurrent fan-out for independent tasks
+- `dispatch/company.sh` — multi-stage playbook executor with GitHub/Jira integration
+- `dispatch/scope.sh` — workspace boundary enforcement
+- `dispatch/decide.sh` — policy-driven task metadata evaluator
+- `dispatch/repo-map.sh` — compressed code-signature context builder
+- `registry/routing.yaml`, `registry/models.yaml`, `registry/domains.yaml` — tier/model/domain configuration
+- `registry/policy.yaml`, `registry/playbooks.yaml`, `registry/pricing.yaml` — operational policy
+- `skills/delegate.md`, `skills/escalate.md`, `skills/rubber-duck.md` — agent skill prompts
+- Ink/React Terminal UI (`ui/`) with status panel, chat view, and input bar
+- `CLAUDE.md` — orchestrator protocol and token preservation rules
+- `AGENTS.md` — delegated head execution rules
+
+[Unreleased]: https://github.com/ankit373/hydra/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/ankit373/hydra/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/ankit373/hydra/releases/tag/v0.1.0

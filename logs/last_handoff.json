@@ -1,7 +1,0 @@
-{
-  "from": "hydra-tier-10",
-  "model": "Qwen2.5-Coder 7b",
-  "task": "Reply with: two two",
-  "prior_output": "two two",
-  "pool": "local_ollama"
-}
