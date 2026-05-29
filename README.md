@@ -125,9 +125,14 @@ Tasks are classified and dispatched to one of the following ten tiers:
 Hydra supports three installation methods depending on your environment.
 
 #### Option A: Homebrew (Recommended)
-Install directly using the Homebrew formula (installs the latest main branch commit under `--HEAD`):
+Install locally from the cloned repository (installs the latest main branch commit under `--HEAD`):
 ```bash
 brew install --HEAD Formula/hydra.rb
+```
+
+Or tap and install the published package:
+```bash
+brew tap ankit373/hydra && brew install hydra
 ```
 
 To switch from the `--HEAD` release to a versioned release, read the comments inside the Homebrew formula file: [hydra.rb](Formula/hydra.rb).
