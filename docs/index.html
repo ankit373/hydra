@@ -1243,9 +1243,8 @@
       top: 0; left: 0;
       width: 100%; height: 100%;
       pointer-events: none;
-      z-index: 0;
+      z-index: -1;
     }
-    body > *:not(#particle-canvas) { position: relative; z-index: 1; }
 
     /* ── Custom cursor glow ── */
     #cursor-glow {
@@ -1256,8 +1255,8 @@
       background: radial-gradient(circle, rgba(139, 92, 246, 0.07) 0%, transparent 70%);
       pointer-events: none;
       transform: translate(-50%, -50%);
-      transition: transform 0.12s ease-out, opacity 0.3s ease;
-      z-index: 0;
+      transition: left 0.1s ease-out, top 0.1s ease-out;
+      z-index: -1;
     }
 
     /* ── Scroll-triggered reveals ── */
@@ -1443,6 +1442,7 @@
         <a href="#architecture" class="nav-link" id="nav-archi">Architecture</a>
         <a href="#builder" class="nav-link" id="nav-builder">Interactive Builder</a>
         <a href="#explorer" class="nav-link" id="nav-explorer">File Explorer</a>
+        <a href="#tui-sim" class="nav-link" id="nav-tui-sim">TUI Simulator</a>
         <a href="#tiers" class="nav-link" id="nav-tiers">Model Tiers</a>
         <a href="#get-started" class="nav-link" id="nav-setup">Get Started</a>
       </nav>
@@ -1756,6 +1756,101 @@
 <span class="code-comment"># Launch Hydra TUI — run this directly in your terminal</span>
 <span class="code-keyword">exec</span> bun <span class="code-string">"$(dirname "$0")/ui/src/index.tsx"</span>
           </pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Interactive TUI Simulator Section -->
+  <section class="container tui-section" id="tui-sim">
+    <h2 class="section-title">Interactive TUI Simulator</h2>
+    <p class="section-desc">Experience the React/Ink console dashboard interface directly. Cycle model tiers and submit queries to run a simulated dispatch.</p>
+    
+    <div class="tui-window">
+      <!-- Top Bar -->
+      <div class="tui-topbar">
+        <span class="tui-topbar-title">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M12,4A8,8 0 0,1 20,12A8,8 0 0,1 12,20A8,8 0 0,1 4,12A8,8 0 0,1 12,4M12,6A6,6 0 0,0 6,12A6,6 0 0,0 12,18A6,6 0 0,0 18,12A6,6 0 0,0 12,6M12,8A4,4 0 0,1 16,12A4,4 0 0,1 12,16A4,4 0 0,1 8,12A4,4 0 0,1 12,8Z"/></svg>
+          🐍 HYDRA
+        </span>
+        <span style="color: var(--text-muted); font-size: 11px;">multi-model orchestrator</span>
+        <span style="color: var(--text-muted);">
+          <span style="color: var(--accent-tertiary);" id="tui-topbar-mode">NORMAL</span> │ Claude: <span style="color: var(--accent-tertiary);" id="tui-topbar-pct">52%</span> │ Tab: Cycle Tier
+        </span>
+      </div>
+      
+      <!-- Main Content -->
+      <div class="tui-main">
+        <!-- Sidebar -->
+        <div class="tui-sidebar">
+          <div class="tui-sidebar-block">
+            <span class="tui-sidebar-title">SYSTEM</span>
+            <span style="color: var(--text-muted); margin-top: 4px;">Claude context</span>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <span style="color: var(--accent-tertiary);" id="tui-sidebar-bar">█████░░░░░</span>
+              <span id="tui-sidebar-pct">52%</span>
+            </div>
+            <span style="color: var(--accent-secondary); font-weight: bold; margin-top: 2px;" id="tui-sidebar-mode">[COMPACT]</span>
+          </div>
+          
+          <div class="tui-sidebar-block">
+            <span class="tui-sidebar-title">TOKEN POOLS</span>
+            <div class="tui-pool-row">
+              <span style="color: var(--text-muted);">• Claude (agy)</span>
+              <span class="tui-pool-ok" id="pool-status-0">✓ ok</span>
+            </div>
+            <div class="tui-pool-row">
+              <span style="color: var(--text-muted);">• Gemini Pro</span>
+              <span class="tui-pool-ok" id="pool-status-1">✓ ok</span>
+            </div>
+            <div class="tui-pool-row">
+              <span style="color: var(--text-muted);">• Flash</span>
+              <span class="tui-pool-ok" id="pool-status-2">✓ ok</span>
+            </div>
+            <div class="tui-pool-row">
+              <span style="color: var(--text-muted);">• GPT-OSS</span>
+              <span class="tui-pool-ok" id="pool-status-3">✓ ok</span>
+            </div>
+            <div class="tui-pool-row">
+              <span style="color: var(--text-muted);">• Qwen (local)</span>
+              <span class="tui-pool-ok" id="pool-status-4">✓ ok</span>
+            </div>
+          </div>
+          
+          <div class="tui-sidebar-block" id="tui-sidebar-last" style="display: none;">
+            <span class="tui-sidebar-title">LAST DISPATCH</span>
+            <div style="display: flex; flex-direction: column; gap: 2px;">
+              <span id="tui-last-tier-text">T7 STANDARD</span>
+              <span style="color: var(--text-muted); font-size: 11px;" id="tui-last-model-text">Gemini 3.5 Flash (High)</span>
+              <span style="color: var(--accent-tertiary);" id="tui-last-status-text">✓ done</span>
+            </div>
+          </div>
+          
+          <div class="tui-sidebar-block" style="margin-top: auto;">
+            <span class="tui-sidebar-title">TIERS</span>
+            <div style="display: flex; flex-direction: column; gap: 2px; color: var(--text-muted);">
+              <div><span style="color: var(--accent-primary);">T1</span> Claude Core</div>
+              <div><span style="color: var(--accent-primary);">T2</span> Opus Think</div>
+              <div><span style="color: var(--accent-primary);">T3</span> Sonnet Think</div>
+              <div><span style="color: var(--accent-secondary);">T5</span> Pro High</div>
+              <div><span style="color: var(--accent-tertiary);">T7</span> Flash High</div>
+              <div><span style="color: var(--accent-tertiary);">T10</span> Qwen (local)</div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Console chat view -->
+        <div class="tui-console">
+          <div class="tui-chat-view" id="tui-chat-view">
+            <div class="tui-msg-log">🐍 System: Hydra multi-model TUI initialized.</div>
+            <div class="tui-msg-log">🐍 System: Press Tab to cycle tiers. Try typing a query or /help.</div>
+          </div>
+          
+          <div class="tui-prompt-bar">
+            <span class="tui-prompt-prefix" id="tui-prompt-prefix">STANDARD ❯</span>
+            <input class="tui-input" id="tui-console-input" type="text" placeholder="Type a task or command..." onkeydown="handleTuiInput(event)" autocomplete="off">
+            <button class="tui-cycle-btn" onclick="cycleTuiTier()">Cycle [Tab]</button>
+          </div>
         </div>
       </div>
     </div>
