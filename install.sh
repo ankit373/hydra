@@ -54,7 +54,7 @@ export HYDRA_HOME="$DEST"
 export HYDRA_DATA="\${HYDRA_DATA:-\$HOME/.hydra}"
 mkdir -p "\$HYDRA_DATA/logs"
 [[ -f "\$HYDRA_DATA/logs/state.json" ]] || echo '{"claude_pct":0,"exhausted_pools":[]}' > "\$HYDRA_DATA/logs/state.json"
-exec bun "$DEST/ui/src/index.tsx" "\$@"
+exec env NODE_ENV=production bun "$DEST/ui/src/index.tsx" "\$@"
 SH
 chmod +x "$LAUNCHER"
 

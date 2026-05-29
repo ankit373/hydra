@@ -41,4 +41,4 @@ if [[ ${#missing[@]} -gt 0 ]]; then
   exit 1
 fi
 
-exec bun "$HYDRA_HOME/ui/src/index.tsx"
+exec env NODE_ENV=production bun "$HYDRA_HOME/ui/src/index.tsx"

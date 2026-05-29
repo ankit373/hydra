@@ -46,7 +46,7 @@ class Hydra < Formula
       if [[ ! -f "$HYDRA_DATA/logs/state.json" ]]; then
         echo '{"claude_pct":0,"exhausted_pools":[]}' > "$HYDRA_DATA/logs/state.json"
       fi
-      exec bun "#{libexec}/ui/src/index.tsx" "$@"
+      exec env NODE_ENV=production bun "#{libexec}/ui/src/index.tsx" "$@"
     SH
     chmod 0755, bin/"hydra"
   end
