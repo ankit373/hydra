@@ -5,6 +5,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Hydra — Multi-Model AI Orchestration System</title>
   <meta name="description" content="A multi-model AI orchestration system utilizing Claude Code as the brain and specialized LLM tiers as heads for surgical, cost-effective development.">
+
+  <!-- Open Graph / Social sharing -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://ankit373.github.io/hydra/">
+  <meta property="og:title" content="Hydra — Multi-Model AI Orchestration System">
+  <meta property="og:description" content="Route every developer task to the right AI model. Claude Code reasons, Gemini Flash executes, Qwen handles grunt work. Ten tiers, automatic fallbacks, open source.">
+  <meta property="og:image" content="https://ankit373.github.io/hydra/logo.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Hydra — Multi-Model AI Orchestration System">
+  <meta name="twitter:description" content="Route every developer task to the right AI model. Open source multi-model orchestration CLI.">
+  <meta name="twitter:image" content="https://ankit373.github.io/hydra/logo.png">
   
   <!-- Modern Typography -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -809,6 +820,137 @@
       color: var(--text-bright);
     }
 
+    /* ── Community Section ── */
+    .community-section {
+      margin-bottom: 100px;
+    }
+    .community-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 20px;
+      margin-top: 48px;
+    }
+    .community-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      padding: 28px 24px;
+      text-decoration: none;
+      color: var(--text-main);
+      transition: border-color 0.25s ease, transform 0.25s ease, background 0.25s ease;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .community-card:hover {
+      border-color: var(--border-glow);
+      background: var(--bg-card-hover);
+      transform: translateY(-4px);
+    }
+    .community-card-icon {
+      font-size: 28px;
+      line-height: 1;
+    }
+    .community-card-title {
+      font-family: var(--font-outfit);
+      font-size: 17px;
+      font-weight: 600;
+      color: var(--text-bright);
+    }
+    .community-card-desc {
+      font-size: 14px;
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
+    .community-card-action {
+      font-size: 13px;
+      font-weight: 500;
+      margin-top: auto;
+      padding-top: 8px;
+    }
+    .community-card.discussions .community-card-action { color: var(--accent-primary); }
+    .community-card.bug .community-card-action        { color: #f87171; }
+    .community-card.feature .community-card-action    { color: var(--accent-warning); }
+    .community-card.contrib .community-card-action    { color: var(--accent-tertiary); }
+    .community-card.security .community-card-action   { color: var(--accent-secondary); }
+
+    /* Contributors wall */
+    .contributors-wall {
+      margin-top: 64px;
+    }
+    .contributors-wall h3 {
+      font-family: var(--font-outfit);
+      font-size: 20px;
+      font-weight: 600;
+      color: var(--text-bright);
+      margin-bottom: 20px;
+      text-align: center;
+    }
+    .contributors-avatars {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      justify-content: center;
+    }
+    .contributor-avatar {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      border: 2px solid var(--border-color);
+      transition: border-color 0.2s ease, transform 0.2s ease;
+      overflow: hidden;
+    }
+    .contributor-avatar:hover {
+      border-color: var(--accent-primary);
+      transform: scale(1.12);
+    }
+    .contributor-avatar img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .contributors-loading {
+      color: var(--text-muted);
+      font-size: 14px;
+      text-align: center;
+    }
+
+    /* Floating star widget */
+    .star-widget {
+      position: fixed;
+      bottom: 28px;
+      right: 28px;
+      z-index: 999;
+      display: none;
+    }
+    .star-widget a {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(13, 20, 38, 0.92);
+      border: 1px solid rgba(139, 92, 246, 0.5);
+      border-radius: 50px;
+      padding: 10px 18px;
+      text-decoration: none;
+      color: var(--text-bright);
+      font-size: 14px;
+      font-weight: 500;
+      backdrop-filter: blur(12px);
+      box-shadow: 0 4px 24px rgba(139, 92, 246, 0.2);
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+    .star-widget a:hover {
+      border-color: rgba(139, 92, 246, 0.9);
+      box-shadow: 0 4px 32px rgba(139, 92, 246, 0.4);
+    }
+    .star-widget-count {
+      background: rgba(139, 92, 246, 0.25);
+      border-radius: 20px;
+      padding: 2px 8px;
+      font-size: 12px;
+      color: var(--accent-primary);
+    }
+
     /* Animations & Advanced Cyberpunk Effects */
     @keyframes pulse {
       0% { box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.4); }
@@ -1440,13 +1582,11 @@
       <nav class="nav-links">
         <a href="#overview" class="nav-link active" id="nav-overview">Overview</a>
         <a href="#architecture" class="nav-link" id="nav-archi">Architecture</a>
-        <a href="#builder" class="nav-link" id="nav-builder">Interactive Builder</a>
-        <a href="#explorer" class="nav-link" id="nav-explorer">File Explorer</a>
-        <a href="#tui-sim" class="nav-link" id="nav-tui-sim">TUI Simulator</a>
         <a href="#tiers" class="nav-link" id="nav-tiers">Model Tiers</a>
         <a href="#get-started" class="nav-link" id="nav-setup">Get Started</a>
+        <a href="#community" class="nav-link" id="nav-community">Community</a>
       </nav>
-      <a href="https://github.com/ankit373/hydra" class="btn btn-secondary" style="padding: 8px 16px; font-size: 13px;" id="repo-btn">Repository</a>
+      <a href="https://github.com/ankit373/hydra" target="_blank" rel="noopener" class="btn btn-secondary" style="padding: 8px 16px; font-size: 13px;" id="repo-btn">GitHub</a>
     </div>
   </header>
 
@@ -1464,6 +1604,7 @@
       <div class="hero-ctas animate-on-load delay-3">
         <a href="#get-started" class="btn btn-primary" id="cta-get-started">Get Started →</a>
         <a href="#architecture" class="btn btn-secondary" id="cta-learn">See How it Works</a>
+        <a href="#community" class="btn btn-secondary" id="cta-community" style="border-color: rgba(16,185,129,0.4); color: var(--accent-tertiary);">Join Community</a>
       </div>
       
       <!-- Quick Stats -->
@@ -2034,9 +2175,12 @@
       <div class="setup-step">
         <span class="step-num">A</span>
         <span class="step-title">Option A: Homebrew Tap (Recommended)</span>
-        <p class="step-text">Installs Hydra directly to your system PATH using the Homebrew tap. This builds the isolated launcher, resolves cellar dependencies, and adds the command seamlessly.</p>
+        <p class="step-text">Install locally from the cloned repository:
+          <br><code>brew install --HEAD Formula/hydra.rb</code>
+          <br><br>Or tap and install the published package:
+        </p>
         <div class="code-snippet-box step-cmd">
-          <pre>brew install --HEAD Formula/hydra.rb</pre>
+          <pre>brew tap ankit373/hydra && brew install hydra</pre>
         </div>
       </div>
       <div class="setup-step">
@@ -2138,17 +2282,87 @@
     </div>
   </section>
 
+  <!-- Community Section -->
+  <section class="container community-section" id="community">
+    <h2 class="section-title">Open Source Community</h2>
+    <p class="section-desc">Hydra is MIT licensed and built in the open. Ask questions, report bugs, request features, or send a pull request — all from here.</p>
+
+    <div class="community-grid">
+      <a href="https://github.com/ankit373/hydra/discussions" target="_blank" rel="noopener" class="community-card discussions">
+        <div class="community-card-icon">💬</div>
+        <div class="community-card-title">Discussions</div>
+        <div class="community-card-desc">Ask questions, share ideas, show off what you built with Hydra, or start a conversation with the community.</div>
+        <div class="community-card-action">Open Discussions →</div>
+      </a>
+
+      <a href="https://github.com/ankit373/hydra/issues/new?template=bug_report.md" target="_blank" rel="noopener" class="community-card bug">
+        <div class="community-card-icon">🐛</div>
+        <div class="community-card-title">Report a Bug</div>
+        <div class="community-card-desc">Found something broken? Open a bug report with steps to reproduce and we'll get it fixed.</div>
+        <div class="community-card-action">File a Bug Report →</div>
+      </a>
+
+      <a href="https://github.com/ankit373/hydra/issues/new?template=feature_request.md" target="_blank" rel="noopener" class="community-card feature">
+        <div class="community-card-icon">✨</div>
+        <div class="community-card-title">Request a Feature</div>
+        <div class="community-card-desc">Have an idea for a new model tier, routing behaviour, or TUI improvement? We want to hear it.</div>
+        <div class="community-card-action">Submit Feature Request →</div>
+      </a>
+
+      <a href="https://github.com/ankit373/hydra/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener" class="community-card contrib">
+        <div class="community-card-icon">🤝</div>
+        <div class="community-card-title">Contributing Guide</div>
+        <div class="community-card-desc">Read the dev setup, commit style, shell script standards, and PR process before sending your first contribution.</div>
+        <div class="community-card-action">Read Contributing Guide →</div>
+      </a>
+
+      <a href="https://github.com/ankit373/hydra/blob/main/SECURITY.md" target="_blank" rel="noopener" class="community-card security">
+        <div class="community-card-icon">🔒</div>
+        <div class="community-card-title">Security Policy</div>
+        <div class="community-card-desc">Found a security vulnerability? Please do not open a public issue — follow our responsible disclosure process.</div>
+        <div class="community-card-action">View Security Policy →</div>
+      </a>
+
+      <a href="https://github.com/ankit373/hydra/blob/main/CHANGELOG.md" target="_blank" rel="noopener" class="community-card" style="--card-action-color: #94a3b8;">
+        <div class="community-card-icon">📋</div>
+        <div class="community-card-title">Changelog</div>
+        <div class="community-card-desc">See what's changed across every release — new features, bug fixes, and breaking changes all documented.</div>
+        <div class="community-card-action" style="color: var(--text-muted);">View Changelog →</div>
+      </a>
+    </div>
+
+    <!-- Contributors Wall -->
+    <div class="contributors-wall">
+      <h3>Contributors</h3>
+      <div class="contributors-avatars" id="contributors-list">
+        <span class="contributors-loading">Loading contributors…</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Floating Star Widget — shown only when stars ≥ 100 -->
+  <div class="star-widget" id="star-widget">
+    <a href="https://github.com/ankit373/hydra" target="_blank" rel="noopener">
+      ⭐ Star on GitHub
+      <span class="star-widget-count" id="star-widget-count"></span>
+    </a>
+  </div>
+
   <!-- Footer -->
   <footer>
     <div class="container">
       <div class="footer-links">
         <a href="#overview" class="footer-link">Overview</a>
         <a href="#architecture" class="footer-link">Architecture</a>
-        <a href="#explorer" class="footer-link">File Explorer</a>
         <a href="#tiers" class="footer-link">Model Tiers</a>
-        <a href="https://github.com/ankit373/hydra" class="footer-link">GitHub</a>
+        <a href="#get-started" class="footer-link">Get Started</a>
+        <a href="#community" class="footer-link">Community</a>
+        <a href="https://github.com/ankit373/hydra/discussions" target="_blank" rel="noopener" class="footer-link">Discussions</a>
+        <a href="https://github.com/ankit373/hydra/blob/main/CHANGELOG.md" target="_blank" rel="noopener" class="footer-link">Changelog</a>
+        <a href="https://github.com/ankit373/hydra/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener" class="footer-link">Contributing</a>
+        <a href="https://github.com/ankit373/hydra" target="_blank" rel="noopener" class="footer-link">GitHub</a>
       </div>
-      <p>© 2026 Hydra System. Released under the MIT License.</p>
+      <p>© 2025 Ankit Jha. Released under the <a href="https://github.com/ankit373/hydra/blob/main/LICENSE" target="_blank" rel="noopener" style="color: var(--accent-primary); text-decoration: none;">MIT License</a>.</p>
     </div>
   </footer>
 
@@ -3214,6 +3428,48 @@ export const STATE_FILE = join(resolveHydraData(), 'logs/state.json');`
     document.querySelectorAll(
       '.archi-diagram-container, .archi-detail-box, .explorer-grid, .builder-terminal, .tiers-table-container'
     ).forEach(el => el.classList.add('glow-border'));
+
+    // 11. GitHub API — star count + contributors
+    (function() {
+      const REPO = 'ankit373/hydra';
+      const API  = 'https://api.github.com/repos/' + REPO;
+
+      // Star count — only show widget when stars >= 100
+      fetch(API)
+        .then(r => r.json())
+        .then(data => {
+          const stars = data.stargazers_count || 0;
+          if (stars >= 100) {
+            const widget = document.getElementById('star-widget');
+            const count  = document.getElementById('star-widget-count');
+            if (widget && count) {
+              count.textContent = stars >= 1000
+                ? (stars / 1000).toFixed(1) + 'k'
+                : stars;
+              widget.style.display = 'block';
+            }
+          }
+        })
+        .catch(() => {}); // silently fail — widget stays hidden
+
+      // Contributors wall
+      fetch(API + '/contributors?per_page=30&anon=false')
+        .then(r => r.json())
+        .then(list => {
+          const container = document.getElementById('contributors-list');
+          if (!container || !Array.isArray(list) || list.length === 0) return;
+          container.innerHTML = list.map(user => `
+            <a href="${user.html_url}" target="_blank" rel="noopener"
+               class="contributor-avatar" title="${user.login}">
+              <img src="${user.avatar_url}&s=96" alt="${user.login}" loading="lazy">
+            </a>
+          `).join('');
+        })
+        .catch(() => {
+          const container = document.getElementById('contributors-list');
+          if (container) container.innerHTML = '<span class="contributors-loading">Could not load contributors.</span>';
+        });
+    })();
 
   </script>
 </body>
