@@ -1,0 +1,2833 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hydra — Multi-Model AI Orchestration System</title>
+  <meta name="description" content="A multi-model AI orchestration system utilizing Claude Code as the brain and specialized LLM tiers as heads for surgical, cost-effective development.">
+  
+  <!-- Modern Typography -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  
+  <style>
+    /* Premium Modern Dark System CSS Variables */
+    :root {
+      --bg-main: #060913;
+      --bg-card: rgba(13, 20, 38, 0.45);
+      --bg-card-hover: rgba(20, 30, 58, 0.65);
+      --border-color: rgba(255, 255, 255, 0.08);
+      --border-glow: rgba(139, 92, 246, 0.35);
+      
+      /* Glowing Accent Gradients */
+      --accent-primary: #8b5cf6;
+      --accent-secondary: #06b6d4;
+      --accent-tertiary: #10b981;
+      --accent-warning: #f59e0b;
+      --text-main: #e2e8f0;
+      --text-muted: #94a3b8;
+      --text-bright: #ffffff;
+      
+      --font-outfit: 'Outfit', sans-serif;
+      --font-inter: 'Inter', sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+      
+      --shadow-glow: 0 0 30px rgba(139, 92, 246, 0.15);
+      --shadow-glow-cyan: 0 0 30px rgba(6, 182, 212, 0.15);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-main);
+      color: var(--text-main);
+      font-family: var(--font-inter);
+      line-height: 1.6;
+      overflow-x: hidden;
+      background-image: 
+        radial-gradient(circle at 10% 20%, rgba(139, 92, 246, 0.08) 0%, transparent 40%),
+        radial-gradient(circle at 90% 80%, rgba(6, 182, 212, 0.08) 0%, transparent 40%);
+      background-attachment: fixed;
+    }
+
+    /* Scrollbar Styling */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: var(--bg-main);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    /* Container */
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    /* Header & Navigation */
+    header {
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      background: rgba(6, 9, 19, 0.7);
+      border-bottom: 1px solid var(--border-color);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      transition: all 0.3s ease;
+    }
+    .header-content {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      height: 80px;
+    }
+    .logo-container {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+    }
+    .logo-icon {
+      width: 32px;
+      height: 32px;
+      background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: var(--shadow-glow);
+    }
+    .logo-icon svg {
+      width: 18px;
+      height: 18px;
+      fill: #fff;
+    }
+    .logo-text {
+      font-family: var(--font-outfit);
+      font-size: 24px;
+      font-weight: 800;
+      color: var(--text-bright);
+      letter-spacing: 0.5px;
+      background: linear-gradient(135deg, #fff 60%, var(--text-muted));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .nav-links {
+      display: flex;
+      gap: 32px;
+    }
+    .nav-link {
+      color: var(--text-muted);
+      text-decoration: none;
+      font-weight: 500;
+      font-size: 15px;
+      transition: color 0.2s ease;
+      position: relative;
+      padding: 8px 0;
+    }
+    .nav-link:hover, .nav-link.active {
+      color: var(--text-bright);
+    }
+    .nav-link.active::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      height: 2px;
+      background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary));
+      border-radius: 2px;
+    }
+
+    /* Hero Section */
+    .hero {
+      padding: 100px 0 60px 0;
+      text-align: center;
+      position: relative;
+    }
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(139, 92, 246, 0.1);
+      border: 1px solid rgba(139, 92, 246, 0.2);
+      border-radius: 99px;
+      padding: 6px 16px;
+      font-size: 13px;
+      font-weight: 600;
+      color: #a78bfa;
+      margin-bottom: 24px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    .hero-badge-pulse {
+      width: 8px;
+      height: 8px;
+      background-color: var(--accent-primary);
+      border-radius: 50%;
+      box-shadow: 0 0 8px var(--accent-primary);
+      animation: pulse 1.8s infinite;
+    }
+    h1 {
+      font-family: var(--font-outfit);
+      font-size: 64px;
+      font-weight: 800;
+      line-height: 1.15;
+      letter-spacing: -1px;
+      margin-bottom: 24px;
+      color: var(--text-bright);
+    }
+    .gradient-text {
+      background: linear-gradient(135deg, #ffffff 20%, var(--accent-primary) 60%, var(--accent-secondary) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .hero-desc {
+      font-size: 19px;
+      color: var(--text-muted);
+      max-width: 760px;
+      margin: 0 auto 40px auto;
+      font-weight: 300;
+    }
+    .hero-ctas {
+      display: flex;
+      justify-content: center;
+      gap: 16px;
+      margin-bottom: 60px;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 28px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 15px;
+      text-decoration: none;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      font-family: var(--font-inter);
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent-primary), rgba(139, 92, 246, 0.8));
+      color: #fff;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: var(--shadow-glow);
+    }
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 0 40px rgba(139, 92, 246, 0.35);
+    }
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text-bright);
+      border: 1px solid var(--border-color);
+    }
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.1);
+      border-color: rgba(255, 255, 255, 0.2);
+      transform: translateY(-2px);
+    }
+
+    /* Key Stats */
+    .stats-bar {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 20px;
+      margin: 20px 0 80px 0;
+    }
+    .stat-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 24px;
+      text-align: left;
+      backdrop-filter: blur(8px);
+      transition: all 0.3s ease;
+    }
+    .stat-card:hover {
+      border-color: rgba(255, 255, 255, 0.15);
+      transform: translateY(-4px);
+    }
+    .stat-num {
+      font-family: var(--font-outfit);
+      font-size: 36px;
+      font-weight: 800;
+      color: var(--text-bright);
+      line-height: 1;
+      margin-bottom: 8px;
+      background: linear-gradient(135deg, #fff, var(--text-muted));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .stat-card:nth-child(2) .stat-num {
+      background: linear-gradient(135deg, var(--accent-secondary), #fff);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .stat-card:nth-child(3) .stat-num {
+      background: linear-gradient(135deg, var(--accent-primary), #fff);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .stat-label {
+      font-size: 13px;
+      color: var(--text-muted);
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    /* Main Grid Sections */
+    .section-title {
+      font-family: var(--font-outfit);
+      font-size: 32px;
+      font-weight: 700;
+      color: var(--text-bright);
+      margin-bottom: 12px;
+      text-align: left;
+    }
+    .section-desc {
+      color: var(--text-muted);
+      font-size: 16px;
+      margin-bottom: 40px;
+      max-width: 600px;
+      text-align: left;
+    }
+
+    /* Interactive Architecture Section */
+    .archi-grid {
+      display: grid;
+      grid-template-columns: 1fr 1.2fr;
+      gap: 40px;
+      align-items: center;
+      margin-bottom: 100px;
+    }
+    .archi-diagram-container {
+      background: rgba(10, 15, 30, 0.6);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      padding: 30px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      position: relative;
+      box-shadow: var(--shadow-glow);
+    }
+    .diagram-layer {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: relative;
+      transition: all 0.3s ease;
+    }
+    .diagram-layer:hover {
+      background: rgba(255, 255, 255, 0.06);
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+    .diagram-layer-title {
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--text-bright);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .diagram-layer-badge {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-weight: 600;
+    }
+    .badge-brain { background: rgba(139, 92, 246, 0.2); color: #c084fc; border: 1px solid rgba(139, 92, 246, 0.3); }
+    .badge-router { background: rgba(6, 182, 212, 0.2); color: #22d3ee; border: 1px solid rgba(6, 182, 212, 0.3); }
+    .badge-heads { background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }
+    
+    .diagram-connect {
+      width: 2px;
+      height: 20px;
+      background: linear-gradient(180deg, var(--accent-primary), var(--accent-secondary));
+      margin: 0 auto;
+      opacity: 0.5;
+    }
+    .diagram-connect-horizontal {
+      height: 2px;
+      background: linear-gradient(90deg, var(--accent-secondary), var(--accent-tertiary));
+      flex-grow: 1;
+      margin: 0 16px;
+      opacity: 0.5;
+    }
+    .diagram-heads-subgrid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-top: 8px;
+    }
+    .diagram-head-node {
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 10px;
+      text-align: center;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .diagram-head-node:hover, .diagram-head-node.active {
+      background: rgba(16, 185, 129, 0.08);
+      border-color: var(--accent-tertiary);
+      color: var(--text-bright);
+      box-shadow: 0 0 15px rgba(16, 185, 129, 0.2);
+    }
+    
+    .archi-detail-box {
+      background: var(--bg-card);
+      border: 1px solid var(--border-glow);
+      border-radius: 16px;
+      padding: 36px;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      box-shadow: var(--shadow-glow);
+      transition: all 0.3s ease;
+    }
+    .archi-detail-title {
+      font-family: var(--font-outfit);
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--text-bright);
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .archi-detail-desc {
+      color: var(--text-muted);
+      font-size: 16px;
+      margin-bottom: 24px;
+      min-height: 80px;
+    }
+    .archi-detail-meta {
+      display: flex;
+      gap: 16px;
+      border-top: 1px solid var(--border-color);
+      padding-top: 20px;
+      font-size: 13px;
+    }
+    .archi-detail-meta-item {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .archi-detail-meta-label {
+      color: var(--text-muted);
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      font-size: 11px;
+    }
+    .archi-detail-meta-val {
+      color: var(--text-bright);
+      font-weight: 600;
+    }
+
+    /* Interactive File Explorer */
+    .explorer-section {
+      margin-bottom: 100px;
+    }
+    .explorer-grid {
+      display: grid;
+      grid-template-columns: 1fr 1.8fr;
+      gap: 30px;
+      background: rgba(10, 15, 30, 0.4);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      padding: 30px;
+      backdrop-filter: blur(12px);
+    }
+    .file-tree-sidebar {
+      border-right: 1px solid var(--border-color);
+      padding-right: 20px;
+      max-height: 520px;
+      overflow-y: auto;
+    }
+    .tree-folder {
+      margin-bottom: 16px;
+    }
+    .tree-folder-title {
+      font-family: var(--font-outfit);
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text-bright);
+      text-transform: uppercase;
+      letter-spacing: 0.75px;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .tree-folder-icon {
+      width: 14px;
+      height: 14px;
+      color: var(--accent-primary);
+    }
+    .tree-files-list {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      padding-left: 12px;
+    }
+    .tree-file-item {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 6px 12px;
+      border-radius: 4px;
+      transition: all 0.2s ease;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .tree-file-item:hover {
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--text-bright);
+    }
+    .tree-file-item.active {
+      background: rgba(139, 92, 246, 0.1);
+      border-left: 2px solid var(--accent-primary);
+      color: var(--text-bright);
+    }
+    .file-badge {
+      font-size: 10px;
+      font-weight: 600;
+      padding: 1px 6px;
+      border-radius: 3px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-color);
+    }
+    .file-content-pane {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      min-height: 400px;
+    }
+    .file-title-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 16px;
+    }
+    .file-name-display {
+      font-family: var(--font-mono);
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--text-bright);
+    }
+    .file-path-display {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+    .file-desc-text {
+      font-size: 15px;
+      color: var(--text-main);
+      line-height: 1.7;
+    }
+    .file-features-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin: 10px 0;
+    }
+    .file-feature-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      font-size: 14px;
+    }
+    .file-feature-icon {
+      color: var(--accent-tertiary);
+      margin-top: 4px;
+      font-weight: bold;
+    }
+    .code-snippet-box {
+      background: #02040a;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 16px;
+      font-family: var(--font-mono);
+      font-size: 13px;
+      overflow-x: auto;
+      color: #8b949e;
+      position: relative;
+    }
+    .code-comment { color: #8b949e; }
+    .code-keyword { color: #ff7b72; }
+    .code-string { color: #a5d6ff; }
+    .code-function { color: #d2a6ff; }
+    .code-variable { color: #ffa657; }
+    
+    .code-copy-btn {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      padding: 4px 8px;
+      font-size: 11px;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .code-copy-btn:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: var(--text-bright);
+    }
+
+    /* Model Tiers Interactive Grid */
+    .tiers-section {
+      margin-bottom: 100px;
+    }
+    .tiers-table-container {
+      background: rgba(10, 15, 30, 0.4);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: var(--shadow-glow-cyan);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+    }
+    th {
+      font-family: var(--font-outfit);
+      font-weight: 700;
+      color: var(--text-bright);
+      background: rgba(255, 255, 255, 0.02);
+      border-bottom: 1px solid var(--border-color);
+      padding: 16px 24px;
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    td {
+      padding: 16px 24px;
+      border-bottom: 1px solid var(--border-color);
+      font-size: 14px;
+      vertical-align: middle;
+    }
+    tr:last-child td {
+      border-bottom: none;
+    }
+    tr {
+      transition: background 0.2s ease;
+    }
+    tr:hover {
+      background: rgba(255, 255, 255, 0.02);
+    }
+    .tier-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-color);
+      font-weight: 700;
+      font-family: var(--font-mono);
+      color: var(--text-bright);
+    }
+    tr:nth-child(1) .tier-badge { background: rgba(139, 92, 246, 0.2); border-color: var(--accent-primary); color: #c084fc; }
+    tr:nth-child(2) .tier-badge, tr:nth-child(3) .tier-badge { background: rgba(6, 182, 212, 0.2); border-color: var(--accent-secondary); color: #22d3ee; }
+    
+    .accuracy-dots {
+      display: flex;
+      gap: 4px;
+    }
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.1);
+    }
+    .dot.filled {
+      background-color: var(--accent-tertiary);
+    }
+    .cost-level {
+      font-family: var(--font-mono);
+      font-weight: 600;
+    }
+    .cost-high { color: #f87171; }
+    .cost-med { color: #fbbf24; }
+    .cost-low { color: #34d399; }
+    
+    .enum-pill {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 600;
+      padding: 4px 8px;
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-color);
+      color: var(--text-bright);
+    }
+
+    /* Getting Started Tabs */
+    .setup-section {
+      margin-bottom: 100px;
+    }
+    .setup-tabs {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 24px;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 12px;
+    }
+    .setup-tab {
+      background: none;
+      border: none;
+      font-family: var(--font-outfit);
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 8px 16px;
+      transition: all 0.2s ease;
+      position: relative;
+    }
+    .setup-tab:hover {
+      color: var(--text-bright);
+    }
+    .setup-tab.active {
+      color: var(--text-bright);
+    }
+    .setup-tab.active::after {
+      content: '';
+      position: absolute;
+      bottom: -13px;
+      left: 0;
+      width: 100%;
+      height: 2px;
+      background: var(--accent-primary);
+    }
+    
+    .setup-content {
+      background: rgba(10, 15, 30, 0.4);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      padding: 36px;
+      display: none;
+      animation: fadeIn 0.4s ease forwards;
+    }
+    .setup-content.active {
+      display: block;
+    }
+    .setup-step {
+      margin-bottom: 24px;
+    }
+    .setup-step:last-child {
+      margin-bottom: 0;
+    }
+    .step-num {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: var(--accent-primary);
+      color: #fff;
+      font-size: 12px;
+      font-weight: 700;
+      margin-right: 8px;
+    }
+    .step-title {
+      font-family: var(--font-outfit);
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text-bright);
+      margin-bottom: 10px;
+      display: inline-block;
+    }
+    .step-text {
+      color: var(--text-muted);
+      font-size: 14px;
+      margin-bottom: 12px;
+      padding-left: 32px;
+    }
+    .step-cmd {
+      margin-left: 32px;
+      margin-bottom: 8px;
+    }
+
+    /* Footer */
+    footer {
+      border-top: 1px solid var(--border-color);
+      padding: 40px 0;
+      background: rgba(3, 5, 10, 0.8);
+      text-align: center;
+      font-size: 14px;
+      color: var(--text-muted);
+    }
+    .footer-links {
+      display: flex;
+      justify-content: center;
+      gap: 24px;
+      margin-bottom: 16px;
+    }
+    .footer-link {
+      color: var(--text-muted);
+      text-decoration: none;
+      transition: color 0.2s ease;
+    }
+    .footer-link:hover {
+      color: var(--text-bright);
+    }
+
+    /* Animations & Advanced Cyberpunk Effects */
+    @keyframes pulse {
+      0% { box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.4); }
+      70% { box-shadow: 0 0 0 10px rgba(139, 92, 246, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(139, 92, 246, 0); }
+    }
+    
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes fadeInUp {
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .animate-on-load {
+      opacity: 0;
+      transform: translateY(20px);
+      animation: fadeInUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+    .delay-1 { animation-delay: 0.15s; }
+    .delay-2 { animation-delay: 0.3s; }
+    .delay-3 { animation-delay: 0.45s; }
+
+    /* Moving Laser Flow Effect for Diagram Connectors */
+    .diagram-connect {
+      position: relative;
+      overflow: hidden;
+    }
+    .diagram-connect::after {
+      content: '';
+      position: absolute;
+      top: -100%;
+      left: 0;
+      width: 100%;
+      height: 40px;
+      background: linear-gradient(180deg, transparent, var(--accent-secondary), transparent);
+      animation: flowDown 2s infinite linear;
+    }
+    
+    @keyframes flowDown {
+      0% { top: -100%; }
+      100% { top: 200%; }
+    }
+
+    .diagram-connect-horizontal {
+      position: relative;
+      overflow: hidden;
+    }
+    .diagram-connect-horizontal::after {
+      content: '';
+      position: absolute;
+      left: -100%;
+      top: 0;
+      height: 100%;
+      width: 40px;
+      background: linear-gradient(90deg, transparent, var(--accent-tertiary), transparent);
+      animation: flowRight 2s infinite linear;
+    }
+    
+    @keyframes flowRight {
+      0% { left: -100%; }
+      100% { left: 200%; }
+    }
+
+    /* Glow breathing animation for active cards */
+    @keyframes glowBreathe {
+      0%, 100% { box-shadow: 0 0 20px rgba(139, 92, 246, 0.15); }
+      50% { box-shadow: 0 0 35px rgba(139, 92, 246, 0.3); border-color: rgba(139, 92, 246, 0.4); }
+    }
+    .diagram-layer.active, .archi-detail-box {
+      animation: glowBreathe 3s infinite ease-in-out;
+    }
+
+    /* Command Builder Section */
+    .builder-section {
+      margin-bottom: 100px;
+    }
+    .builder-grid {
+      display: grid;
+      grid-template-columns: 1.2fr 1fr;
+      gap: 30px;
+      background: rgba(10, 15, 30, 0.4);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      padding: 36px;
+      backdrop-filter: blur(12px);
+    }
+    .tier-select-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+    .tier-select-btn {
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 12px;
+      cursor: pointer;
+      text-align: left;
+      transition: all 0.2s ease;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .tier-select-btn:hover {
+      background: rgba(255, 255, 255, 0.05);
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+    .tier-select-btn.active {
+      background: rgba(139, 92, 246, 0.08);
+      border-color: var(--accent-primary);
+      box-shadow: 0 0 15px rgba(139, 92, 246, 0.15);
+    }
+    .tier-btn-name {
+      font-family: var(--font-outfit);
+      font-weight: 700;
+      font-size: 14px;
+      color: var(--text-bright);
+    }
+    .tier-btn-desc {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+    .prompt-input-wrapper {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .prompt-label {
+      font-family: var(--font-outfit);
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-bright);
+      margin-bottom: 4px;
+    }
+    .prompt-textarea {
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 12px;
+      color: var(--text-bright);
+      font-family: var(--font-inter);
+      font-size: 14px;
+      resize: vertical;
+      min-height: 80px;
+      transition: border-color 0.2s ease;
+    }
+    .prompt-textarea:focus {
+      outline: none;
+      border-color: var(--accent-secondary);
+    }
+    .builder-terminal {
+      background: #02040a;
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      box-shadow: var(--shadow-glow-cyan);
+    }
+    .terminal-header {
+      background: rgba(255, 255, 255, 0.03);
+      border-bottom: 1px solid var(--border-color);
+      padding: 10px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .terminal-dots {
+      display: flex;
+      gap: 6px;
+    }
+    .terminal-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+    }
+    .td-red { background-color: #ff5f56; }
+    .td-yellow { background-color: #ffbd2e; }
+    .td-green { background-color: #27c93f; }
+    .terminal-title {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+    .terminal-body {
+      padding: 24px;
+      flex-grow: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 20px;
+    }
+    .terminal-output {
+      font-family: var(--font-mono);
+      font-size: 14px;
+      color: #38bdf8;
+      word-break: break-all;
+      line-height: 1.5;
+    }
+    .terminal-steps {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      border-top: 1px solid var(--border-color);
+      padding-top: 20px;
+    }
+    .terminal-step {
+      display: flex;
+      gap: 10px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    .terminal-step-bullet {
+      color: var(--accent-tertiary);
+      font-weight: bold;
+    }
+
+    /* Interactive TUI Simulator */
+    .tui-section {
+      margin-bottom: 100px;
+    }
+    .tui-window {
+      background: #060913;
+      border: 2px solid var(--accent-primary);
+      border-radius: 12px;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 0 35px rgba(139, 92, 246, 0.25);
+      overflow: hidden;
+      font-family: var(--font-mono);
+    }
+    .tui-topbar {
+      background: rgba(255, 255, 255, 0.02);
+      border-bottom: 1px solid var(--border-color);
+      padding: 12px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 13px;
+    }
+    .tui-topbar-title {
+      font-weight: 700;
+      color: var(--accent-secondary);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .tui-main {
+      display: flex;
+      flex-direction: row;
+      min-height: 420px;
+    }
+    .tui-sidebar {
+      width: 250px;
+      border-right: 1px solid var(--border-color);
+      padding: 20px;
+      background: rgba(255, 255, 255, 0.01);
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      font-size: 12px;
+    }
+    .tui-sidebar-title {
+      font-weight: 800;
+      color: var(--accent-primary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 6px;
+      font-family: var(--font-outfit);
+    }
+    .tui-claude-progress-bg {
+      height: 12px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 6px;
+      overflow: hidden;
+      margin-top: 4px;
+      position: relative;
+    }
+    .tui-claude-progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary));
+      width: 52%;
+      border-radius: 6px;
+      transition: width 0.5s ease;
+    }
+    .tui-sidebar-block {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .tui-pool-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .tui-pool-ok { color: var(--accent-tertiary); }
+    
+    .tui-console {
+      flex-grow: 1;
+      display: flex;
+      flex-direction: column;
+      background: #020408;
+    }
+    .tui-chat-view {
+      flex-grow: 1;
+      padding: 24px;
+      overflow-y: auto;
+      height: 350px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .tui-prompt-bar {
+      border-top: 1px solid var(--border-color);
+      background: rgba(255, 255, 255, 0.02);
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .tui-prompt-prefix {
+      color: var(--accent-secondary);
+      font-weight: bold;
+      font-size: 14px;
+      white-space: nowrap;
+    }
+    .tui-input {
+      background: transparent;
+      border: none;
+      color: var(--text-bright);
+      font-family: var(--font-mono);
+      font-size: 14px;
+      flex-grow: 1;
+    }
+    .tui-input:focus {
+      outline: none;
+    }
+    
+    .tui-msg-log {
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+    .tui-msg-user {
+      color: var(--text-bright);
+      font-size: 13px;
+    }
+    .tui-msg-ai {
+      color: #38bdf8;
+      font-size: 13px;
+      border-left: 2px solid var(--accent-secondary);
+      padding-left: 12px;
+      white-space: pre-wrap;
+    }
+    .tui-msg-sys-alert {
+      color: #fbbf24;
+      font-size: 13px;
+    }
+    
+    .tui-cycle-btn {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      color: var(--text-muted);
+      font-size: 11px;
+      padding: 2px 8px;
+      cursor: pointer;
+      font-family: var(--font-inter);
+    }
+    .tui-cycle-btn:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: var(--text-bright);
+    }
+
+    /* Responsive */
+    @media (max-width: 992px) {
+      .archi-grid, .explorer-grid, .builder-grid {
+        grid-template-columns: 1fr;
+      }
+      .file-tree-sidebar {
+        border-right: none;
+        border-bottom: 1px solid var(--border-color);
+        padding-right: 0;
+        padding-bottom: 20px;
+        max-height: 250px;
+      }
+      .stats-bar {
+        grid-template-columns: repeat(2, 1fr);
+      }
+      h1 {
+        font-size: 48px;
+      }
+    }
+    @media (max-width: 768px) {
+      .tui-main {
+        flex-direction: column;
+      }
+      .tui-sidebar {
+        width: 100%;
+        border-right: none;
+        border-bottom: 1px solid var(--border-color);
+      }
+    }
+    @media (max-width: 576px) {
+      .stats-bar {
+        grid-template-columns: 1fr;
+      }
+      h1 {
+        font-size: 36px;
+      }
+      .nav-links {
+        display: none;
+      }
+    }
+  </style>
+  <link rel="icon" type="image/png" href="logo.png">
+
+  <style>
+    /* ── Smooth scroll ── */
+    html { scroll-behavior: smooth; }
+
+    /* ── Particle canvas ── */
+    #particle-canvas {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      pointer-events: none;
+      z-index: 0;
+    }
+    body > *:not(#particle-canvas) { position: relative; z-index: 1; }
+
+    /* ── Custom cursor glow ── */
+    #cursor-glow {
+      position: fixed;
+      width: 400px;
+      height: 400px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(139, 92, 246, 0.07) 0%, transparent 70%);
+      pointer-events: none;
+      transform: translate(-50%, -50%);
+      transition: transform 0.12s ease-out, opacity 0.3s ease;
+      z-index: 0;
+    }
+
+    /* ── Scroll-triggered reveals ── */
+    .scroll-reveal {
+      opacity: 0;
+      transform: translateY(32px);
+      transition: opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1),
+                  transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .scroll-reveal.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .scroll-reveal.delay-100 { transition-delay: 0.1s; }
+    .scroll-reveal.delay-200 { transition-delay: 0.2s; }
+    .scroll-reveal.delay-300 { transition-delay: 0.3s; }
+    .scroll-reveal.delay-400 { transition-delay: 0.4s; }
+
+    /* ── Animated gradient border on section wrappers ── */
+    @keyframes borderSpin {
+      0%   { background-position: 0% 50%; }
+      50%  { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+    .glow-border {
+      position: relative;
+    }
+    .glow-border::before {
+      content: '';
+      position: absolute;
+      inset: -1px;
+      border-radius: inherit;
+      padding: 1px;
+      background: linear-gradient(270deg,
+        var(--accent-primary), var(--accent-secondary),
+        var(--accent-tertiary), var(--accent-primary));
+      background-size: 400% 400%;
+      -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      animation: borderSpin 5s ease infinite;
+      opacity: 0;
+      transition: opacity 0.4s ease;
+      pointer-events: none;
+    }
+    .glow-border:hover::before { opacity: 1; }
+
+    /* ── Hero floating badge ── */
+    @keyframes floatBadge {
+      0%, 100% { transform: translateY(0px); }
+      50%       { transform: translateY(-6px); }
+    }
+    .hero-badge { animation: floatBadge 3.5s ease-in-out infinite; }
+
+    /* ── Gradient text shimmer for h1 ── */
+    @keyframes gradientShift {
+      0%   { background-position: 0% 50%; }
+      50%  { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+    .gradient-text {
+      background-size: 200% 200%;
+      animation: gradientShift 4s ease infinite;
+    }
+
+    /* ── Terminal cursor blink ── */
+    @keyframes termBlink {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0; }
+    }
+    .term-cursor {
+      display: inline-block;
+      width: 2px;
+      height: 1em;
+      background: #38bdf8;
+      margin-left: 2px;
+      vertical-align: text-bottom;
+      animation: termBlink 1s step-end infinite;
+    }
+
+    /* ── Scanline sweep on tier table hover ── */
+    .tiers-table-container { overflow: hidden; position: relative; }
+    @keyframes scanSweep {
+      0%   { top: -4px; opacity: 0; }
+      5%   { opacity: 0.6; }
+      95%  { opacity: 0.6; }
+      100% { top: 100%; opacity: 0; }
+    }
+    .tiers-table-container::after {
+      content: '';
+      position: absolute;
+      left: 0; right: 0;
+      top: -4px;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, var(--accent-secondary), transparent);
+      animation: scanSweep 4s linear infinite;
+      pointer-events: none;
+    }
+
+    /* ── Magnetic button ripple ── */
+    @keyframes ripple {
+      0%   { transform: scale(0); opacity: 0.4; }
+      100% { transform: scale(4); opacity: 0; }
+    }
+    .btn { overflow: hidden; }
+    .btn .ripple-effect {
+      position: absolute;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.25);
+      width: 60px; height: 60px;
+      margin-top: -30px; margin-left: -30px;
+      animation: ripple 0.6s linear;
+      pointer-events: none;
+    }
+
+    /* ── Stat counter glow on reveal ── */
+    @keyframes statPop {
+      0%   { transform: scale(0.8); opacity: 0; }
+      60%  { transform: scale(1.08); }
+      100% { transform: scale(1); opacity: 1; }
+    }
+    .stat-card.visible .stat-num {
+      animation: statPop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+    }
+
+    /* ── Neon glow on nav logo hover ── */
+    .logo-container:hover .logo-text {
+      text-shadow: 0 0 20px rgba(139,92,246,0.6);
+      transition: text-shadow 0.3s ease;
+    }
+
+    /* ── File tree item slide in ── */
+    @keyframes slideInLeft {
+      from { opacity: 0; transform: translateX(-12px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+    .tree-file-item.animating {
+      animation: slideInLeft 0.25s ease forwards;
+    }
+
+    /* ── Progress bar for token pct in arch detail ── */
+    .token-bar-wrap {
+      margin-top: 12px;
+      background: rgba(255,255,255,0.05);
+      border-radius: 4px;
+      height: 4px;
+      overflow: hidden;
+    }
+    .token-bar-fill {
+      height: 100%;
+      border-radius: 4px;
+      background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary));
+      transition: width 1s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    /* ── Tier row highlight pulse on hover ── */
+    tbody tr { position: relative; }
+    tbody tr::after {
+      content: '';
+      position: absolute;
+      left: 0; top: 0; right: 0; bottom: 0;
+      background: linear-gradient(90deg, transparent, rgba(6,182,212,0.04), transparent);
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+    tbody tr:hover::after { opacity: 1; }
+  </style>
+</head>
+<body>
+
+  <canvas id="particle-canvas"></canvas>
+  <div id="cursor-glow"></div>
+
+  <!-- Header -->
+  <header>
+    <div class="container header-content">
+      <a href="#" class="logo-container" id="logo-link">
+        <img src="logo.png" alt="Hydra Logo" style="height: 36px; width: 36px; border-radius: 8px; box-shadow: var(--shadow-glow);">
+        <span class="logo-text">HYDRA</span>
+      </a>
+      <nav class="nav-links">
+        <a href="#overview" class="nav-link active" id="nav-overview">Overview</a>
+        <a href="#architecture" class="nav-link" id="nav-archi">Architecture</a>
+        <a href="#builder" class="nav-link" id="nav-builder">Interactive Builder</a>
+        <a href="#explorer" class="nav-link" id="nav-explorer">File Explorer</a>
+        <a href="#tiers" class="nav-link" id="nav-tiers">Model Tiers</a>
+        <a href="#get-started" class="nav-link" id="nav-setup">Get Started</a>
+      </nav>
+      <a href="https://github.com/ankit373/hydra" class="btn btn-secondary" style="padding: 8px 16px; font-size: 13px;" id="repo-btn">Repository</a>
+    </div>
+  </header>
+
+  <!-- Hero Section -->
+  <section class="hero" id="overview">
+    <div class="container">
+      <div class="hero-badge animate-on-load">
+        <span class="hero-badge-pulse"></span>
+        Multi-Model Hierarchical AI
+      </div>
+      <h1 class="animate-on-load delay-1">Stop Burning Claude Tokens on<br><span class="gradient-text">Work Cheaper Models Can Do</span></h1>
+      <p class="hero-desc animate-on-load delay-2">
+        Hydra routes every developer task to the right AI model — Claude Code reasons, Gemini Flash executes, Qwen handles the grunt work. Ten tiers, automatic fallbacks, and a terminal dashboard to watch it all happen in real time.
+      </p>
+      <div class="hero-ctas animate-on-load delay-3">
+        <a href="#get-started" class="btn btn-primary" id="cta-get-started">Get Started →</a>
+        <a href="#architecture" class="btn btn-secondary" id="cta-learn">See How it Works</a>
+      </div>
+      
+      <!-- Quick Stats -->
+      <div class="stats-bar">
+        <div class="stat-card animate-on-load delay-3">
+          <div class="stat-num">10</div>
+          <div class="stat-label">Routing Tiers</div>
+        </div>
+        <div class="stat-card animate-on-load delay-3" style="animation-delay: 0.55s;">
+          <div class="stat-num">&lt;200ms</div>
+          <div class="stat-label">Typical Route Overhead</div>
+        </div>
+        <div class="stat-card animate-on-load delay-3" style="animation-delay: 0.65s;">
+          <div class="stat-num">~80%</div>
+          <div class="stat-label">API Cost Savings vs Claude-Only</div>
+        </div>
+        <div class="stat-card animate-on-load delay-3" style="animation-delay: 0.75s;">
+          <div class="stat-num">100%</div>
+          <div class="stat-label">Always-On Local Fallback</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Interactive Architecture Section -->
+  <section class="container" style="margin-bottom: 100px;" id="architecture">
+    <h2 class="section-title">System Architecture</h2>
+    <p class="section-desc">One brain, nine heads. Claude Code classifies and orchestrates — every other tier executes. Click a layer to explore its role.</p>
+    
+    <div class="archi-grid">
+      <!-- Diagram Column -->
+      <div class="archi-diagram-container">
+        <div class="diagram-layer" id="diag-brain" onclick="selectArchLayer('brain')">
+          <div class="diagram-layer-title">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96-.44 2.5 2.5 0 0 1 0-3.12 3 3 0 0 1 0-4.88 2.5 2.5 0 0 1 0-3.12A2.5 2.5 0 0 1 9.5 2zM14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96-.44 2.5 2.5 0 0 0 0-3.12 3 3 0 0 0 0-4.88 2.5 2.5 0 0 0 0-3.12A2.5 2.5 0 0 0 14.5 2z"/></svg>
+            Tier 1 — The Brain
+          </div>
+          <span class="diagram-layer-badge badge-brain">Claude Code</span>
+        </div>
+        
+        <div class="diagram-connect"></div>
+        
+        <div class="diagram-layer" id="diag-router" onclick="selectArchLayer('router')">
+          <div class="diagram-layer-title">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>
+            Routing & Decider Layer
+          </div>
+          <span class="diagram-layer-badge badge-router">route.sh & decide.sh</span>
+        </div>
+        
+        <div class="diagram-connect"></div>
+        
+        <div class="diagram-layer" style="flex-direction: column; align-items: stretch; gap: 12px;" id="diag-heads" onclick="selectArchLayer('heads')">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div class="diagram-layer-title">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+              Execution Heads (Tiers 2-10)
+            </div>
+            <span class="diagram-layer-badge badge-heads">Antigravity & Ollama</span>
+          </div>
+          
+          <div class="diagram-heads-subgrid">
+            <div class="diagram-head-node" id="head-node-expert" onclick="event.stopPropagation(); selectArchLayer('heads-expert')">Expert T2-T3</div>
+            <div class="diagram-head-node" id="head-node-hard" onclick="event.stopPropagation(); selectArchLayer('heads-hard')">Review T4</div>
+            <div class="diagram-head-node" id="head-node-std" onclick="event.stopPropagation(); selectArchLayer('heads-std')">Standard T5-T8</div>
+            <div class="diagram-head-node" id="head-node-grunt" onclick="event.stopPropagation(); selectArchLayer('heads-grunt')">Grunt T9-T10</div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Description Column -->
+      <div class="archi-detail-box" id="archi-details">
+        <h3 class="archi-detail-title" id="archi-detail-title">
+          <span style="color: var(--accent-primary)">●</span> Tier 1 — The Brain
+        </h3>
+        <p class="archi-detail-desc" id="archi-detail-desc">
+          Claude Code resides at the top of the hierarchy. It classifies incoming developer intents, breaks them down using workspace maps, and manages the execution flow. It writes the files, reviews execution logs, and coordinates parallel tasks.
+        </p>
+        <div class="archi-detail-meta" id="archi-detail-meta">
+          <div class="archi-detail-meta-item">
+            <span class="archi-detail-meta-label">Primary Executor</span>
+            <span class="archi-detail-meta-val" id="archi-detail-val-exec">Claude Code CLI</span>
+          </div>
+          <div class="archi-detail-meta-item">
+            <span class="archi-detail-meta-label">Cost Priority</span>
+            <span class="archi-detail-meta-val" id="archi-detail-val-cost">Highest (Conserved)</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Interactive Command Generator Section -->
+  <section class="container builder-section" id="builder">
+    <h2 class="section-title">Interactive Command Builder</h2>
+    <p class="section-desc">Pick the complexity tier that matches your task, type what you need, and copy the exact dispatch command to run.</p>
+    
+    <div class="builder-grid">
+      <!-- Input Control Column -->
+      <div style="display: flex; flex-direction: column; justify-content: space-between;">
+        <div>
+          <span class="prompt-label" style="display: block; margin-bottom: 12px;">Select Complexity Tier</span>
+          <div class="tier-select-grid">
+            <button class="tier-select-btn" id="tier-btn-grunt" onclick="setBuilderTier('GRUNT')">
+              <span class="tier-btn-name">GRUNT (Tier 10)</span>
+              <span class="tier-btn-desc">Local Boilerplate & Mock Data</span>
+            </button>
+            <button class="tier-select-btn" id="tier-btn-trivial" onclick="setBuilderTier('TRIVIAL')">
+              <span class="tier-btn-name">TRIVIAL (Tier 9)</span>
+              <span class="tier-btn-desc">Helper Updates & Constants</span>
+            </button>
+            <button class="tier-select-btn active" id="tier-btn-simple" onclick="setBuilderTier('SIMPLE')">
+              <span class="tier-btn-name">SIMPLE (Tier 8)</span>
+              <span class="tier-btn-desc">DTOs, Schemas & Interfaces</span>
+            </button>
+            <button class="tier-select-btn" id="tier-btn-standard" onclick="setBuilderTier('STANDARD')">
+              <span class="tier-btn-name">STANDARD (Tier 7)</span>
+              <span class="tier-btn-desc">CRUD Controllers & Handlers</span>
+            </button>
+            <button class="tier-select-btn" id="tier-btn-moderate" onclick="setBuilderTier('MODERATE')">
+              <span class="tier-btn-name">MODERATE (Tier 6)</span>
+              <span class="tier-btn-desc">Services & Repository Logic</span>
+            </button>
+            <button class="tier-select-btn" id="tier-btn-complex" onclick="setBuilderTier('COMPLEX')">
+              <span class="tier-btn-name">COMPLEX (Tier 5)</span>
+              <span class="tier-btn-desc">Middleware & Auth Integrations</span>
+            </button>
+            <button class="tier-select-btn" id="tier-btn-hard" onclick="setBuilderTier('HARD')">
+              <span class="tier-btn-name">HARD (Tier 4)</span>
+              <span class="tier-btn-desc">Tradeoff Reviews & Rubber Duck</span>
+            </button>
+            <button class="tier-select-btn" id="tier-btn-very_hard" onclick="setBuilderTier('VERY_HARD')">
+              <span class="tier-btn-name">VERY_HARD (Tier 3)</span>
+              <span class="tier-btn-desc">Multi-Step Reasoning & Refactors</span>
+            </button>
+            <button class="tier-select-btn" id="tier-btn-expert" onclick="setBuilderTier('EXPERT')">
+              <span class="tier-btn-name">EXPERT (Tier 2)</span>
+              <span class="tier-btn-desc">Architecture & Systems Design</span>
+            </button>
+          </div>
+        </div>
+        
+        <div class="prompt-input-wrapper">
+          <label class="prompt-label" for="builder-prompt-input">Enter Developer Intent</label>
+          <textarea class="prompt-textarea" id="builder-prompt-input" oninput="onPromptInput()" placeholder="e.g., write a DTO for user profile settings"></textarea>
+        </div>
+      </div>
+      
+      <!-- Terminal Output Column -->
+      <div class="builder-terminal">
+        <div class="terminal-header">
+          <div class="terminal-dots">
+            <span class="terminal-dot td-red"></span>
+            <span class="terminal-dot td-yellow"></span>
+            <span class="terminal-dot td-green"></span>
+          </div>
+          <span class="terminal-title">bash — hydra CLI</span>
+          <span class="terminal-dot" style="opacity: 0;"></span>
+        </div>
+        <div class="terminal-body">
+          <div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+              <span style="font-family: var(--font-mono); font-size: 11px; color: var(--text-muted);">Generated Command:</span>
+              <button class="code-copy-btn" style="position: static;" onclick="copyBuilderCommand()" id="builder-copy-btn">Copy</button>
+            </div>
+            <div class="terminal-output" id="builder-cmd-text">./dispatch/hydra.sh do SIMPLE "write a DTO for user settings"</div>
+          </div>
+          
+          <div class="terminal-steps">
+            <div class="terminal-step">
+              <span class="terminal-step-bullet">1.</span>
+              <span><strong>Policy Selection:</strong> <code>decide.sh</code> reviews parameters and flags formatting structures.</span>
+            </div>
+            <div class="terminal-step">
+              <span class="terminal-step-bullet">2.</span>
+              <span><strong>Workspace Guard:</strong> <code>scope.sh</code> checks directories to ensure write safety.</span>
+            </div>
+            <div class="terminal-step">
+              <span class="terminal-step-bullet">3.</span>
+              <span><strong>Execution & Rollback:</strong> <code>edit.sh</code> writes code atomically and executes validation.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Interactive File Explorer Section -->
+  <section class="container explorer-section" id="explorer">
+    <h2 class="section-title">Workspace Directory Explorer</h2>
+    <p class="section-desc">Every file has a specific job. Click any entry to see exactly what it does and how it fits into the routing pipeline.</p>
+    
+    <div class="explorer-grid">
+      <!-- File Tree Sidebar -->
+      <div class="file-tree-sidebar">
+        <!-- Core Runner Folder -->
+        <div class="tree-folder">
+          <div class="tree-folder-title">
+            <svg class="tree-folder-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M10,4H4C2.89,4 2,4.89 2,6V18A2,2 0 0,0 4,20H20A2,2 0 0,0 22,18V8C22,6.89 21.1,6 20,6H12L10,4Z"/></svg>
+            Root Components
+          </div>
+          <div class="tree-files-list">
+            <div class="tree-file-item active" onclick="showFile('hydra-ui')">hydra-ui <span class="file-badge">TUI Bash</span></div>
+            <div class="tree-file-item" onclick="showFile('agents')">AGENTS.md <span class="file-badge">Spec</span></div>
+            <div class="tree-file-item" onclick="showFile('claude')">CLAUDE.md <span class="file-badge">Spec</span></div>
+          </div>
+        </div>
+        
+        <!-- Dispatch Folder -->
+        <div class="tree-folder">
+          <div class="tree-folder-title">
+            <svg class="tree-folder-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M10,4H4C2.89,4 2,4.89 2,6V18A2,2 0 0,0 4,20H20A2,2 0 0,0 22,18V8C22,6.89 21.1,6 20,6H12L10,4Z"/></svg>
+            dispatch/
+          </div>
+          <div class="tree-files-list">
+            <div class="tree-file-item" onclick="showFile('hydra-sh')">hydra.sh <span class="file-badge">Bash</span></div>
+            <div class="tree-file-item" onclick="showFile('route-sh')">route.sh <span class="file-badge">Bash</span></div>
+            <div class="tree-file-item" onclick="showFile('agy-sh')">agy.sh <span class="file-badge">Bash</span></div>
+            <div class="tree-file-item" onclick="showFile('ollama-sh')">ollama.sh <span class="file-badge">Bash</span></div>
+            <div class="tree-file-item" onclick="showFile('scope-sh')">scope.sh <span class="file-badge">Bash</span></div>
+            <div class="tree-file-item" onclick="showFile('decide-sh')">decide.sh <span class="file-badge">Bash</span></div>
+            <div class="tree-file-item" onclick="showFile('edit-sh')">edit.sh <span class="file-badge">Bash</span></div>
+            <div class="tree-file-item" onclick="showFile('review-sh')">review.sh <span class="file-badge">Bash</span></div>
+            <div class="tree-file-item" onclick="showFile('parallel-sh')">parallel.sh <span class="file-badge">Bash</span></div>
+            <div class="tree-file-item" onclick="showFile('company-sh')">company.sh <span class="file-badge">Bash</span></div>
+            <div class="tree-file-item" onclick="showFile('repo-map-sh')">repo-map.sh <span class="file-badge">Bash</span></div>
+            <div class="tree-file-item" onclick="showFile('cost-sh')">cost.sh <span class="file-badge">Bash</span></div>
+          </div>
+        </div>
+
+        <!-- Registry Folder -->
+        <div class="tree-folder">
+          <div class="tree-folder-title">
+            <svg class="tree-folder-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M10,4H4C2.89,4 2,4.89 2,6V18A2,2 0 0,0 4,20H20A2,2 0 0,0 22,18V8C22,6.89 21.1,6 20,6H12L10,4Z"/></svg>
+            registry/
+          </div>
+          <div class="tree-files-list">
+            <div class="tree-file-item" onclick="showFile('routing-yaml')">routing.yaml <span class="file-badge">YAML</span></div>
+            <div class="tree-file-item" onclick="showFile('models-yaml')">models.yaml <span class="file-badge">YAML</span></div>
+            <div class="tree-file-item" onclick="showFile('domains-yaml')">domains.yaml <span class="file-badge">YAML</span></div>
+            <div class="tree-file-item" onclick="showFile('workspace-yaml')">workspace.yaml <span class="file-badge">YAML</span></div>
+            <div class="tree-file-item" onclick="showFile('policy-yaml')">policy.yaml <span class="file-badge">YAML</span></div>
+            <div class="tree-file-item" onclick="showFile('playbooks-yaml')">playbooks.yaml <span class="file-badge">YAML</span></div>
+            <div class="tree-file-item" onclick="showFile('pricing-yaml')">pricing.yaml <span class="file-badge">YAML</span></div>
+            <div class="tree-file-item" onclick="showFile('workforce-yaml')">workforce.yaml <span class="file-badge">YAML</span></div>
+          </div>
+        </div>
+
+        <!-- UI Folder -->
+        <div class="tree-folder">
+          <div class="tree-folder-title">
+            <svg class="tree-folder-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M10,4H4C2.89,4 2,4.89 2,6V18A2,2 0 0,0 4,20H20A2,2 0 0,0 22,18V8C22,6.89 21.1,6 20,6H12L10,4Z"/></svg>
+            ui/src/
+          </div>
+          <div class="tree-files-list">
+            <div class="tree-file-item" onclick="showFile('ui-app')">App.tsx <span class="file-badge">TSX</span></div>
+            <div class="tree-file-item" onclick="showFile('ui-state')">state.ts <span class="file-badge">TS</span></div>
+            <div class="tree-file-item" onclick="showFile('ui-status')">StatusPanel.tsx <span class="file-badge">TSX</span></div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Detailed File View -->
+      <div class="file-content-pane">
+        <div class="file-title-bar">
+          <div>
+            <div class="file-name-display" id="file-name">hydra-ui</div>
+            <div class="file-path-display" id="file-path">/hydra-ui</div>
+          </div>
+          <span class="enum-pill" style="border-color: var(--accent-primary); color: #c084fc;" id="file-type-badge">TUI Shell script</span>
+        </div>
+        
+        <p class="file-desc-text" id="file-desc">
+          Executes the compiled Bun application of the React TUI. Run this locally to launch the interactive terminal dashboard to monitor all active token allocations, model executions, and costs.
+        </p>
+        
+        <div class="file-features-list" id="file-features">
+          <div class="file-feature-item">
+            <span class="file-feature-icon">✓</span> Runs TUI in an isolated terminal node.
+          </div>
+          <div class="file-feature-item">
+            <span class="file-feature-icon">✓</span> Invokes the bundle index.tsx using the Bun runtime.
+          </div>
+        </div>
+
+        <div class="code-snippet-box">
+          <button class="code-copy-btn" onclick="copySnippet()" id="copy-btn">Copy</button>
+          <pre id="code-snippet">
+<span class="code-comment">#!/usr/bin/env bash</span>
+<span class="code-comment"># Launch Hydra TUI — run this directly in your terminal</span>
+<span class="code-keyword">exec</span> bun <span class="code-string">"$(dirname "$0")/ui/src/index.tsx"</span>
+          </pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Model Tiers Section -->
+  <section class="container tiers-section" id="tiers">
+    <h2 class="section-title">Model Routing Hierarchy</h2>
+    <p class="section-desc">Each tier is purpose-built — from a free local Qwen model for boilerplate to Claude Opus for architecture decisions. Route.sh picks the right one automatically.</p>
+    
+    <div class="tiers-table-container">
+      <table>
+        <thead>
+          <tr>
+            <th>Tier</th>
+            <th>Complexity Enum</th>
+            <th>Target Model</th>
+            <th>Executor</th>
+            <th>Accuracy Rating</th>
+            <th>Cost Weight</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="tier-badge">1</span></td>
+            <td><span class="enum-pill">CORE</span></td>
+            <td style="font-weight: 600; color: var(--text-bright)">Claude Code</td>
+            <td>Direct Shell</td>
+            <td>
+              <div class="accuracy-dots">
+                <span class="dot filled"></span><span class="dot filled"></span><span class="dot filled"></span><span class="dot filled"></span><span class="dot filled"></span>
+              </div>
+            </td>
+            <td><span class="cost-level cost-high">$$$$$</span></td>
+          </tr>
+          <tr>
+            <td><span class="tier-badge">2</span></td>
+            <td><span class="enum-pill">EXPERT</span></td>
+            <td style="font-weight: 600; color: var(--text-bright)">Claude 4.6 Opus (Thinking)</td>
+            <td>Antigravity</td>
+            <td>
+              <div class="accuracy-dots">
+                <span class="dot filled"></span><span class="dot filled"></span><span class="dot filled"></span><span class="dot filled"></span><span class="dot filled"></span>
+              </div>
+            </td>
+            <td><span class="cost-level cost-high">$$$$</span></td>
+          </tr>
+          <tr>
+            <td><span class="tier-badge">3</span></td>
+            <td><span class="enum-pill">VERY_HARD</span></td>
+            <td style="font-weight: 600; color: var(--text-bright)">Claude 4.6 Sonnet (Thinking)</td>
+            <td>Antigravity</td>
+            <td>
+              <div class="accuracy-dots">
+                <span class="dot filled"></span><span class="dot filled"></span><span class="dot filled"></span><span class="dot filled"></span><span class="dot"></span>
+              </div>
+            </td>
+            <td><span class="cost-level cost-high">$$$</span></td>
+          </tr>
+          <tr>
+            <td><span class="tier-badge">4</span></td>
+            <td><span class="enum-pill">HARD</span></td>
+            <td style="font-weight: 600; color: var(--text-bright)">GPT-OSS 120B (Medium)</td>
+            <td>Antigravity</td>
+            <td>
+              <div class="accuracy-dots">
+                <span class="dot filled"></span><span class="dot filled"></span><span class="dot filled"></span><span class="dot"></span><span class="dot"></span>
+              </div>
+            </td>
+            <td><span class="cost-level cost-med">$$</span></td>
+          </tr>
+          <tr>
+            <td><span class="tier-badge">5</span></td>
+            <td><span class="enum-pill">COMPLEX</span></td>
+            <td style="font-weight: 600; color: var(--text-bright)">Gemini 3.1 Pro (High)</td>
+            <td>Antigravity</td>
+            <td>
+              <div class="accuracy-dots">
+                <span class="dot filled"></span><span class="dot filled"></span><span class="dot filled"></span><span class="dot filled"></span><span class="dot"></span>
+              </div>
+            </td>
+            <td><span class="cost-level cost-med">$$</span></td>
+          </tr>
+          <tr>
+            <td><span class="tier-badge">6</span></td>
+            <td><span class="enum-pill">MODERATE</span></td>
+            <td style="font-weight: 600; color: var(--text-bright)">Gemini 3.1 Pro (Low)</td>
+            <td>Antigravity</td>
+            <td>
+              <div class="accuracy-dots">
+                <span class="dot filled"></span><span class="dot filled"></span><span class="dot filled"></span><span class="dot"></span><span class="dot"></span>
+              </div>
+            </td>
+            <td><span class="cost-level cost-low">$</span></td>
+          </tr>
+          <tr>
+            <td><span class="tier-badge">7</span></td>
+            <td><span class="enum-pill">STANDARD</span></td>
+            <td style="font-weight: 600; color: var(--text-bright)">Gemini 3.5 Flash (High)</td>
+            <td>Antigravity</td>
+            <td>
+              <div class="accuracy-dots">
+                <span class="dot filled"></span><span class="dot filled"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span>
+              </div>
+            </td>
+            <td><span class="cost-level cost-low">$</span></td>
+          </tr>
+          <tr>
+            <td><span class="tier-badge">8</span></td>
+            <td><span class="enum-pill">SIMPLE</span></td>
+            <td style="font-weight: 600; color: var(--text-bright)">Gemini 3.5 Flash (Medium)</td>
+            <td>Antigravity</td>
+            <td>
+              <div class="accuracy-dots">
+                <span class="dot filled"></span><span class="dot filled"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span>
+              </div>
+            </td>
+            <td><span class="cost-level cost-low">$</span></td>
+          </tr>
+          <tr>
+            <td><span class="tier-badge">9</span></td>
+            <td><span class="enum-pill">TRIVIAL</span></td>
+            <td style="font-weight: 600; color: var(--text-bright)">Gemini 3.5 Flash (Low)</td>
+            <td>Antigravity</td>
+            <td>
+              <div class="accuracy-dots">
+                <span class="dot filled"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span>
+              </div>
+            </td>
+            <td><span class="cost-level cost-low">$</span></td>
+          </tr>
+          <tr>
+            <td><span class="tier-badge">10</span></td>
+            <td><span class="enum-pill">GRUNT</span></td>
+            <td style="font-weight: 600; color: var(--text-bright)">Qwen 2.5 Coder 7B</td>
+            <td>Local Ollama</td>
+            <td>
+              <div class="accuracy-dots">
+                <span class="dot filled"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span>
+              </div>
+            </td>
+            <td><span class="cost-level cost-low">Free</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- Getting Started Guide -->
+  <section class="container setup-section" id="get-started">
+    <h2 class="section-title">Getting Started</h2>
+    <p class="section-desc">Three steps to get Hydra running. Install dependencies, clone the repo, and launch the TUI — you'll be routing tasks in under five minutes.</p>
+    
+    <div class="setup-tabs">
+      <button class="setup-tab active" onclick="switchSetupTab('install')" id="tab-btn-install">Installation</button>
+      <button class="setup-tab" onclick="switchSetupTab('cli')" id="tab-btn-cli">CLI Subcommands</button>
+      <button class="setup-tab" onclick="switchSetupTab('tui')" id="tab-btn-tui">Interactive TUI</button>
+    </div>
+    
+    <!-- Install Tab Content -->
+    <div class="setup-content active" id="setup-install">
+      <div class="setup-step">
+        <span class="step-num">1</span>
+        <span class="step-title">Prerequisites</span>
+        <p class="step-text">Ensure you have <code>Bun</code> and the <code>Antigravity CLI</code> installed on your system.</p>
+      </div>
+      <div class="setup-step">
+        <span class="step-num">2</span>
+        <span class="step-title">Clone the Repository</span>
+        <p class="step-text">Pull the Hydra orchestration code into your local developer projects folder.</p>
+        <div class="code-snippet-box step-cmd">
+          <pre>git clone https://github.com/ankit373/hydra.git && cd hydra</pre>
+        </div>
+      </div>
+      <div class="setup-step">
+        <span class="step-num">3</span>
+        <span class="step-title">Install TUI Dependencies</span>
+        <p class="step-text">Navigate into the TUI directory to install packages via Bun.</p>
+        <div class="code-snippet-box step-cmd">
+          <pre>cd ui && bun install && cd ..</pre>
+        </div>
+      </div>
+    </div>
+    
+    <!-- CLI Tab Content -->
+    <div class="setup-content" id="setup-cli">
+      <div class="setup-step">
+        <span class="step-num">1</span>
+        <span class="step-title">Monitor Status</span>
+        <p class="step-text">Display active Antigravity allocations, Claude token percentages, and pool status.</p>
+        <div class="code-snippet-box step-cmd">
+          <pre>./dispatch/hydra.sh status</pre>
+        </div>
+      </div>
+      <div class="setup-step">
+        <span class="step-num">2</span>
+        <span class="step-title">Dispatch a Task</span>
+        <p class="step-text">Send instructions directly to a specific model tier by its complexity enum key.</p>
+        <div class="code-snippet-box step-cmd">
+          <pre>./dispatch/hydra.sh do SIMPLE "write a User DTO class in TypeScript"</pre>
+        </div>
+      </div>
+      <div class="setup-step">
+        <span class="step-num">3</span>
+        <span class="step-title">Rubber Duck Code Review</span>
+        <p class="step-text">Execute a peer evaluation on a code snippet using a different model family to avoid shared biases.</p>
+        <div class="code-snippet-box step-cmd">
+          <pre>./dispatch/hydra.sh duck "$(cat src/auth.ts)"</pre>
+        </div>
+      </div>
+    </div>
+    
+    <!-- TUI Tab Content -->
+    <div class="setup-content" id="setup-tui">
+      <div class="setup-step">
+        <span class="step-num">1</span>
+        <span class="step-title">Boot the Interface</span>
+        <p class="step-text">Launch the React TUI directly in your console (make sure to run outside of standard IDE shells).</p>
+        <div class="code-snippet-box step-cmd">
+          <pre>./hydra-ui</pre>
+        </div>
+      </div>
+      <div class="setup-step">
+        <span class="step-num">2</span>
+        <span class="step-title">Cycle Model Tiers</span>
+        <p class="step-text">Press <code>Tab</code> inside the input console to cycle the complexity key (e.g., standard to simple).</p>
+      </div>
+      <div class="setup-step">
+        <span class="step-num">3</span>
+        <span class="step-title">Check Token & Cost</span>
+        <p class="step-text">Review real-time cost accumulations and active model metrics on the top status panel.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer>
+    <div class="container">
+      <div class="footer-links">
+        <a href="#overview" class="footer-link">Overview</a>
+        <a href="#architecture" class="footer-link">Architecture</a>
+        <a href="#explorer" class="footer-link">File Explorer</a>
+        <a href="#tiers" class="footer-link">Model Tiers</a>
+        <a href="https://github.com/ankit373/hydra" class="footer-link">GitHub</a>
+      </div>
+      <p>© 2026 Hydra System. Released under the MIT License.</p>
+    </div>
+  </footer>
+
+  <script>
+    // Navigation highlighting on scroll
+    const sections = document.querySelectorAll('section, div.setup-section');
+    const navLinks = document.querySelectorAll('.nav-link');
+    
+    window.addEventListener('scroll', () => {
+      let current = '';
+      sections.forEach(section => {
+        const sectionTop = section.offsetTop;
+        const sectionHeight = section.clientHeight;
+        if (pageYOffset >= (sectionTop - 120)) {
+          current = section.getAttribute('id');
+        }
+      });
+      
+      navLinks.forEach(link => {
+        link.classList.remove('active');
+        if (link.getAttribute('href').substring(1) === current) {
+          link.classList.add('active');
+        }
+      });
+    });
+
+    // Architecture interactive diagram
+    const archLayers = {
+      brain: {
+        title: '<span style="color: var(--accent-primary)">●</span> Tier 1 — The Brain',
+        desc: 'Claude Code resides at the top of the hierarchy. It classifies incoming developer intents, breaks them down using workspace maps, and manages the execution flow. It writes the files, reviews execution logs, and coordinates parallel tasks.',
+        exec: 'Claude Code CLI',
+        cost: 'Highest (Conserved)'
+      },
+      router: {
+        title: '<span style="color: var(--accent-secondary)">●</span> Decider & Routing Layer',
+        desc: 'Evaluates file size, extension, and complexity policies using <code>decide.sh</code>. Resolves them into exact models, matches chains, handles fallbacks, and keeps a state lock of the API status.',
+        exec: 'route.sh & decide.sh',
+        cost: 'Negligible (Local)'
+      },
+      heads: {
+        title: '<span style="color: var(--accent-tertiary)">●</span> Execution Heads (Tiers 2-10)',
+        desc: 'A collection of model providers executing single-file rewrites, validation loops, or prompt tasks. Tiers range from Expert (Claude Opus) to Grunt (local Qwen Coder).',
+        exec: 'Antigravity & Ollama',
+        cost: 'Adaptive / Low'
+      },
+      'heads-expert': {
+        title: '<span style="color: var(--accent-primary)">●</span> Expert Tiers (T2-T3)',
+        desc: 'Utilizes Claude 4.6 Opus and Sonnet in thinking mode. Dispatched for architectural restructuring, multithreaded logic modifications, and highly sensitive business files.',
+        exec: 'Antigravity CLI (Claude)',
+        cost: 'High ($0.015 - $0.075 / 1k)'
+      },
+      'heads-hard': {
+        title: '<span style="color: var(--accent-warning)">●</span> Review Tier (T4)',
+        desc: 'Utilizes GPT-OSS 120B at medium reasoning depth. Dedicated to cross-family rubber duck reviews of Claude output — deliberate use of a different model family to surface blind spots that Claude-family models share.',
+        exec: 'Antigravity CLI (GPT-OSS)',
+        cost: 'Moderate ($0.004 - $0.012 / 1k)'
+      },
+      'heads-std': {
+        title: '<span style="color: var(--accent-secondary)">●</span> Standard Tiers (T5-T8)',
+        desc: 'Utilizes Gemini 3.1 Pro and Gemini 3.5 Flash. Takes care of endpoints, controllers, CRUD functions, data mapping, and standard package layouts.',
+        exec: 'Antigravity CLI (Gemini)',
+        cost: 'Moderate ($0.001 - $0.007 / 1k)'
+      },
+      'heads-grunt': {
+        title: '<span style="color: var(--accent-tertiary)">●</span> Grunt Tiers (T9-T10)',
+        desc: 'Utilizes Flash Low and Qwen 2.5 Coder. Designed to produce boilerplate folders, constants, enums, mock databases, and simple script files.',
+        exec: 'Local Ollama / Flash Low',
+        cost: 'Free / Ultra Low'
+      }
+    };
+
+    function selectArchLayer(layerId) {
+      // Remove active class from diagram nodes
+      document.querySelectorAll('.diagram-layer, .diagram-head-node').forEach(el => {
+        el.classList.remove('active');
+      });
+      
+      // Add active to targeted elements
+      if (layerId.startsWith('heads-')) {
+        document.getElementById('diag-heads').classList.add('active');
+        const nodeKey = layerId.slice('heads-'.length);
+        document.getElementById('head-node-' + nodeKey).classList.add('active');
+      } else {
+        document.getElementById('diag-' + layerId).classList.add('active');
+      }
+
+      // Update detail card
+      const details = archLayers[layerId];
+      document.getElementById('archi-detail-title').innerHTML = details.title;
+      document.getElementById('archi-detail-desc').innerHTML = details.desc;
+      document.getElementById('archi-detail-val-exec').innerHTML = details.exec;
+      document.getElementById('archi-detail-val-cost').innerHTML = details.cost;
+      
+      // Visual feedback animation
+      const card = document.getElementById('archi-details');
+      card.style.borderColor = 'rgba(255,255,255,0.2)';
+      setTimeout(() => {
+        card.style.borderColor = 'var(--border-glow)';
+      }, 150);
+    }
+
+    // File Explorer Database
+    const filesDb = {
+      'hydra-ui': {
+        name: 'hydra-ui',
+        path: '/hydra-ui',
+        type: 'TUI Shell script',
+        desc: 'Executes the compiled Bun application of the React TUI. Run this locally to launch the interactive terminal dashboard to monitor all active token allocations, model executions, and costs.',
+        features: [
+          'Runs TUI in an isolated terminal node.',
+          'Invokes the bundle index.tsx using the Bun runtime.'
+        ],
+        code: `#!/usr/bin/env bash
+# Launch Hydra TUI — run this directly in your terminal
+exec bun "$(dirname "$0")/ui/src/index.tsx"`
+      },
+      'agents': {
+        name: 'AGENTS.md',
+        path: '/AGENTS.md',
+        type: 'Markdown Spec',
+        desc: 'Guidelines for Antigravity-executed head prompts. Declares output expectations, specifies file-modification format parameters, and defines direct escalation protocols back to the orchestrator.',
+        features: [
+          'Enforces raw markdown or code returns without preamble.',
+          'Standardizes structural conventions for model prompt contexts.'
+        ],
+        code: `# Hydra — Antigravity Agent Instructions
+
+You are a HEAD in the Hydra system. Claude Code is the orchestrator.
+Your job: execute the delegated task precisely. No more, no less.`
+      },
+      'claude': {
+        name: 'CLAUDE.md',
+        path: '/CLAUDE.md',
+        type: 'Markdown Spec',
+        desc: 'Guidelines for the orchestrator model (Claude Code). Instructs the brain on parsing complexity arrays, verifying directory rules, and invoking rubber-duck analysis files.',
+        features: [
+          'Documents the Token Preservation Rules threshold (compact at 50%, emergency mode at 80%).',
+          'Illustrates A2A context handoff structures.'
+        ],
+        code: `# Hydra — Orchestrator Instructions
+# Claude Code is the BRAIN. Everything else is a HEAD.
+
+## What Hydra Is
+A multi-model AI orchestration system.`
+      },
+      'hydra-sh': {
+        name: 'hydra.sh',
+        path: '/dispatch/hydra.sh',
+        type: 'Bash CLI Entry',
+        desc: 'Exposed CLI subcommand interface. Routes standard user intents directly to specific model tags, runs reviews, or triggers manual state resets.',
+        features: [
+          'Translates CLI do, duck, set-pct, and compact keywords.',
+          'Surfaces authentication warnings to standard output.'
+        ],
+        code: `#!/usr/bin/env bash
+# hydra — single entry point for the Hydra orchestration system
+cmd="\${1:-status}"
+shift || true
+case "$cmd" in
+  status) "$ROUTE" --status ;;`
+      },
+      'route-sh': {
+        name: 'route.sh',
+        path: '/dispatch/route.sh',
+        type: 'Bash Router',
+        desc: 'Coordinates prompt evaluation against model tiers. Implements fallback routing, skip rules for exhausted pools, and enforces safety limits.',
+        features: [
+          'Parses pricing.yaml and models.yaml to direct prompts.',
+          'Writes transaction records to logs/cost.jsonl.'
+        ],
+        code: `#!/usr/bin/env bash
+# Reads registry/models.yaml + registry/routing.yaml and routes a prompt
+# to the right model tier. Implements cascading fallbacks, pool quotas.
+set -euo pipefail`
+      },
+      'agy-sh': {
+        name: 'agy.sh',
+        path: '/dispatch/agy.sh',
+        type: 'Bash Wrapper',
+        desc: 'Integrates Antigravity model setups. Rewrites config settings on the fly to invoke desired models, then reverts settings safely upon exit.',
+        features: [
+          'Parses stderr for authentication links.',
+          'Maintains temporary authentication tokens.'
+        ],
+        code: `# Swap model in settings.json, restore on exit
+original_model=$(jq -r '.model // empty' "$SETTINGS" 2>/dev/null || true)
+trap restore_settings EXIT
+jq --arg m "$model_flag" '.model = $m' "$SETTINGS" > "\${SETTINGS}.tmp"`
+      },
+      'ollama-sh': {
+        name: 'ollama.sh',
+        path: '/dispatch/ollama.sh',
+        type: 'Bash Wrapper',
+        desc: 'Integrates local LLM execution. Verifies the status of the local Ollama daemon, launches it if necessary, and captures execution metrics.',
+        features: [
+          'Handles automatic startup loops on port 11434.',
+          'Extracts prompt_eval_count and eval_count from the API response.'
+        ],
+        code: `response=$(curl -sf "$OLLAMA_HOST/api/generate" \\
+  -H "Content-Type: application/json" \\
+  -d "$(jq -n --arg model "$model_flag" --arg prompt "$prompt" '{model: $model, prompt: $prompt, stream: false}')")`
+      },
+      'scope-sh': {
+        name: 'scope.sh',
+        path: '/dispatch/scope.sh',
+        type: 'Bash Scope Validator',
+        desc: 'Guards workspace directory permissions. Checks file modification requests against absolute paths, allowed globs, and denied globs.',
+        features: [
+          'Honors HYDRA_WORKSPACE environment override variables.',
+          'Walks up directory tree to locate nearest git roots.'
+        ],
+        code: `# Find the workspace whose root contains the given absolute path.
+find_workspace() {
+  local target="$1"
+  while IFS= read -r name; do
+    local root; root=$(ws_field "$name" root)
+    if [[ "$target" == "$root"/* ]]; then ...`
+      },
+      'decide-sh': {
+        name: 'decide.sh',
+        path: '/dispatch/decide.sh',
+        type: 'Bash Decider',
+        desc: 'Evaluates task metadata against rules in policy.yaml to dynamically build execution instructions for downstream editing scripts.',
+        features: [
+          'Compares input file sizes and extensions to policy thresholds.',
+          'Generates merged JSON flags mapping matching rule parameters.'
+        ],
+        code: `# Evaluate rules in registry/policy.yaml against a task-spec
+spec_arg="\${1:-}"
+if [[ "$spec_arg" == "-" ]]; then
+  spec=$(cat)
+else
+  spec=$(cat "$spec_arg")
+fi`
+      },
+      'edit-sh': {
+        name: 'edit.sh',
+        path: '/dispatch/edit.sh',
+        type: 'Bash Atomic Editor',
+        desc: 'Applies edits directly to target files. Generates backup snapshots, queries models for edits, and rolls back updates if file validators fail.',
+        features: [
+          'Handles full file rewrites or search-replace block updates.',
+          'Triggers extension validation syntax checks (e.g., node --check).'
+        ],
+        code: `# Direct-file edit primitive. Snapshot, edit, validate, rollback.
+set -euo pipefail
+# snapshot current file content for rollback
+cp "$FILE" "$BACKUP_FILE"`
+      },
+      'review-sh': {
+        name: 'review.sh',
+        path: '/dispatch/review.sh',
+        type: 'Bash Git Evaluator',
+        desc: 'Reviews uncommitted changes. Generates unified diffs and presents validation interfaces to accept, revert, or route files to QA tiers.',
+        features: [
+          'Queries git status and numstat changes.',
+          'Removes temporary .hydra-bak files upon approval.'
+        ],
+        code: `# Reviews uncommitted edits made by edit.sh
+case "$cmd" in
+  summary)
+    # emit JSON list of modified files
+    ;;
+  reject)
+    # rollback changes using git checkout or backup file`
+      },
+      'parallel-sh': {
+        name: 'parallel.sh',
+        path: '/dispatch/parallel.sh',
+        type: 'Bash Parallel Fanout',
+        desc: 'Handles background task batches. Dispatches concurrent jobs and aggregates results into a unified execution array.',
+        features: [
+          'Pre-flights batches to avoid concurrent write collisions.',
+          'Saves execution states in logs/last_parallel.json.'
+        ],
+        code: `# Fans N independent subtasks out to N tiers simultaneously
+for i in \$(seq 0 \$((task_count - 1))); do
+  dispatch_task "\$i" &
+done
+wait`
+      },
+      'company-sh': {
+        name: 'company.sh',
+        path: '/dispatch/company.sh',
+        type: 'Bash Process Manager',
+        desc: 'Executes automated playbook runs. Integrates issue tickets, commits progress tables, and records run ledgers.',
+        features: [
+          'Maintains stage states (todo, in-progress, completed, blocked).',
+          'Generates git-tracked progress details in HYDRA.md.'
+        ],
+        code: `# Playbook runner and state coordination
+case "$cmd" in
+  start)
+    # create run workspace and write manifest.json
+    ;;
+  next)
+    # fetch next stage and transition state`
+      },
+      'repo-map-sh': {
+        name: 'repo-map.sh',
+        path: '/dispatch/repo-map.sh',
+        type: 'Bash Symbol Extractor',
+        desc: 'Parses codebase trees to compile signatures (classes, functions, variables) into compressed text block maps.',
+        features: [
+          'Supports parsing for TS, JS, Rust, Go, Python, and Shell.',
+          'Excludes node_modules, build directories, and test files.'
+        ],
+        code: `extract_symbols() {
+  local f="$1"
+  local ext="\${f##*.}"
+  case "$ext" in
+    ts|tsx|js)
+      grep -nE '^[[:space:]]*export' "$f"
+      ;;`
+      },
+      'cost-sh': {
+        name: 'cost.sh',
+        path: '/dispatch/cost.sh',
+        type: 'Bash Cost Analyzer',
+        desc: 'Parses transaction logs to report cost profiles grouped by model tier, run ID, or calendar dates.',
+        features: [
+          'Aggregates prompt and completion tokens.',
+          'Renders formatted terminal tables.'
+        ],
+        code: `# Reads logs/cost.jsonl and produces spend summaries
+agg_by_field() {
+  local field="$1"
+  jq -s "group_by(.\$field) | map({key: .[0].\$field, est_cost_usd: map(.est_cost_usd) | add})"
+}`
+      },
+      'routing-yaml': {
+        name: 'routing.yaml',
+        path: '/registry/routing.yaml',
+        type: 'YAML Configuration',
+        desc: 'The routing map definition. Links complexity keys to target numerical tiers and configures cascading model chains.',
+        features: [
+          'Maps GRUNT...CORE enum definitions to Tiers 1-10.',
+          'Specifies review mappings (e.g., Claude output reviewed by GPT-OSS).'
+        ],
+        code: `routing_map:
+  GRUNT:      10   # → Qwen2.5-Coder:7b (Ollama, local)
+  SIMPLE:     8    # → Gemini 3.5 Flash (Medium)
+  CORE:       1    # → Claude Code`
+      },
+      'models-yaml': {
+        name: 'models.yaml',
+        path: '/registry/models.yaml',
+        type: 'YAML Configuration',
+        desc: 'Lists available LLMs and their properties. Defines token pricing limits, connection pools, and fallbacks.',
+        features: [
+          'Defines token pools to restrict shared billing budgets.',
+          'Declares precision settings and fallback tier numbers.'
+        ],
+        code: `token_pools:
+  agy_claude:
+    members: [opus-thinking, sonnet-thinking]
+    quota: "Shared Antigravity Claude allocation"
+    shared: true`
+      },
+      'domains-yaml': {
+        name: 'domains.yaml',
+        path: '/registry/domains.yaml',
+        type: 'YAML Configuration',
+        desc: 'Maps developer task domains (e.g., auth, api, data, infra) to complexity enum keys. This is the first file the orchestrator reads during Step 1 of the classification flow to determine which routing tier to target.',
+        features: [
+          'Resolves domain labels to GRUNT…CORE enum keys.',
+          'Referenced by CLAUDE.md Step 1 before routing.yaml lookup.'
+        ],
+        code: `domains:
+  auth:       COMPLEX     # → Tier 5 — middleware, tokens, sessions
+  api:        STANDARD    # → Tier 7 — controllers, handlers
+  data:       SIMPLE      # → Tier 8 — DTOs, schemas, interfaces
+  infra:      MODERATE    # → Tier 6 — services, repos`
+      },
+      'workspace-yaml': {
+        name: 'workspace.yaml',
+        path: '/registry/workspace.yaml',
+        type: 'YAML Configuration',
+        desc: 'Defines workspace directory roots, write permissions, and custom extension compilation checks.',
+        features: [
+          'Enforces allowed and denied paths.',
+          'Maps validator scripts (e.g., node --check for JS, bash -n for shell).'
+        ],
+        code: `workspaces:
+  hydra-self:
+    root: /Users/ankitjha/hydra
+    git: false
+    allowed_globs:
+      - "dispatch/**"
+      - "registry/**"`
+      },
+      'policy-yaml': {
+        name: 'policy.yaml',
+        path: '/registry/policy.yaml',
+        type: 'YAML Configuration',
+        desc: 'Applies complexity policies to edit parameters. Determines formatting rules based on targets.',
+        features: [
+          'Sets search-replace block rules.',
+          'Controls retry limits and automatic commit options.'
+        ],
+        code: `policies:
+  - name: large_file_prefers_sr_blocks
+    conditions:
+      file_lines_gt: 400
+    actions:
+      set_edit_mode: "sr-blocks"`
+      },
+      'playbooks-yaml': {
+        name: 'playbooks.yaml',
+        path: '/registry/playbooks.yaml',
+        type: 'YAML Configuration',
+        desc: 'Predefined multi-stage execution sequences used by company.sh to automate complex developer workflows. Each playbook defines an ordered list of stages with assigned tier targets.',
+        features: [
+          'Stages support todo, in-progress, completed, and blocked states.',
+          'Referenced by company.sh start / next / status subcommands.'
+        ],
+        code: `playbooks:
+  refactor-sweep:
+    stages:
+      - name: repo-map
+        enum: SIMPLE
+      - name: refactor
+        enum: MODERATE`
+      },
+      'pricing-yaml': {
+        name: 'pricing.yaml',
+        path: '/registry/pricing.yaml',
+        type: 'YAML Configuration',
+        desc: 'Defines per-model cost multipliers used by routing scripts to estimate runtime API spend. Enables cost.sh to produce accurate financial summaries grouped by tier or run.',
+        features: [
+          'Maps model identifiers to input and output token prices.',
+          'Used by route.sh to write cost estimates to logs/cost.jsonl.'
+        ],
+        code: `pricing:
+  opus-thinking:
+    input_per_1k:  0.015
+    output_per_1k: 0.075
+  flash-med:
+    input_per_1k:  0.0001
+    output_per_1k: 0.0004`
+      },
+      'workforce-yaml': {
+        name: 'workforce.yaml',
+        path: '/registry/workforce.yaml',
+        type: 'YAML Configuration',
+        desc: 'Configures agent profiles and workspace role assignments. Defines which model tiers are authorized to write to which workspace roots, enabling fine-grained access control per project.',
+        features: [
+          'Associates named agent roles with allowed tier ranges.',
+          'Pairs roles with workspace entries from workspace.yaml.'
+        ],
+        code: `workforce:
+  roles:
+    frontend-dev:
+      allowed_tiers: [7, 8, 9]
+      workspace: client-app
+    backend-lead:
+      allowed_tiers: [3, 4, 5, 6]
+      workspace: api-server`
+      },
+      'ui-app': {
+        name: 'App.tsx',
+        path: '/ui/src/App.tsx',
+        type: 'React TSX component',
+        desc: 'Core layout of the React TUI. Sets key handlers, maintains chat views, and handles user inputs.',
+        features: [
+          'Binds Tab keys to cycle through active model tiers.',
+          'Interprets slash commands like /status, /tiers, and /reset-pools.'
+        ],
+        code: `export default function App() {
+  const { exit } = useApp()
+  const [messages, setMessages] = useState<Message[]>([])
+  const [selectedEnum, setSelectedEnum] = useState<EnumKey>('STANDARD')`
+      },
+      'ui-state': {
+        name: 'state.ts',
+        path: '/ui/src/state.ts',
+        type: 'TS Utility script',
+        desc: 'Provides state persistence and child process hooks. Interacts with routing scripts and parses financial logs.',
+        features: [
+          'Loads JSON properties representing Claude usage.',
+          'Spawns route.sh to execute prompt strings.'
+        ],
+        code: `export function loadState(): SystemState {
+  const file = \`\${process.env.HOME}/hydra/logs/state.json\`
+  // parses pool levels and claude percentages
+}`
+      },
+      'ui-status': {
+        name: 'StatusPanel.tsx',
+        path: '/ui/src/components/StatusPanel.tsx',
+        type: 'React TSX component',
+        desc: 'Displays the top header in the TUI, showing current Claude context token percentage, active workspace paths, and available API token pools.',
+        features: [
+          'Renders warning colors when Claude threshold approaches 75%.',
+          'Displays active/inactive flags for token pools.'
+        ],
+        code: `export default function StatusPanel({ state }: { state: SystemState }) {
+  const pct = state.claudePct
+  const color = pct >= 75 ? 'red' : pct >= 50 ? 'yellow' : 'green'
+  // renders Ink layout elements
+}`
+      }
+    };
+
+    function showFile(fileKey) {
+      // Update active tree item
+      document.querySelectorAll('.tree-file-item').forEach(el => {
+        el.classList.remove('active');
+      });
+      event.currentTarget.classList.add('active');
+      
+      const fileData = filesDb[fileKey];
+      document.getElementById('file-name').innerText = fileData.name;
+      document.getElementById('file-path').innerText = fileData.path;
+      document.getElementById('file-type-badge').innerText = fileData.type;
+      document.getElementById('file-desc').innerHTML = fileData.desc;
+      
+      // Update features
+      const featuresContainer = document.getElementById('file-features');
+      featuresContainer.innerHTML = '';
+      fileData.features.forEach(feat => {
+        const div = document.createElement('div');
+        div.className = 'file-feature-item';
+        div.innerHTML = `<span class="file-feature-icon">✓</span> <span>${feat}</span>`;
+        featuresContainer.appendChild(div);
+      });
+      
+      // Update code snippet
+      document.getElementById('code-snippet').textContent = fileData.code;
+      document.getElementById('copy-btn').innerText = 'Copy';
+    }
+
+    function copySnippet() {
+      const code = document.getElementById('code-snippet').textContent;
+      navigator.clipboard.writeText(code).then(() => {
+        document.getElementById('copy-btn').innerText = 'Copied!';
+      });
+    }
+
+    // Command Builder State & Logic
+    let currentBuilderTier = 'SIMPLE';
+
+    const tierDefaults = {
+      'GRUNT': {
+        placeholder: 'e.g., scaffold basic project folder structure',
+        defaultVal: 'scaffold basic project folder structure'
+      },
+      'TRIVIAL': {
+        placeholder: 'e.g., define system status error constants',
+        defaultVal: 'define system status error constants'
+      },
+      'SIMPLE': {
+        placeholder: 'e.g., write a DTO for user profile settings',
+        defaultVal: 'write a DTO for user settings'
+      },
+      'STANDARD': {
+        placeholder: 'e.g., create a CRUD controller for blog posts',
+        defaultVal: 'create a CRUD controller for blog posts'
+      },
+      'MODERATE': {
+        placeholder: 'e.g., implement email validation service',
+        defaultVal: 'implement email validation service'
+      },
+      'COMPLEX': {
+        placeholder: 'e.g., write JWT authentication middleware with refresh tokens',
+        defaultVal: 'write JWT authentication middleware'
+      }
+    };
+
+    function setBuilderTier(tierId) {
+      document.querySelectorAll('.tier-select-btn').forEach(btn => {
+        btn.classList.remove('active');
+      });
+      document.getElementById('tier-btn-' + tierId.toLowerCase()).classList.add('active');
+      currentBuilderTier = tierId;
+      
+      // Update placeholder dynamically
+      const info = tierDefaults[tierId];
+      if (info) {
+        document.getElementById('builder-prompt-input').placeholder = info.placeholder;
+      }
+      
+      generateCommand();
+    }
+
+    function onPromptInput() {
+      generateCommand();
+    }
+
+    function generateCommand() {
+      const promptInput = document.getElementById('builder-prompt-input');
+      const info = tierDefaults[currentBuilderTier];
+      const defaultText = info ? info.defaultVal : "write a DTO for user settings";
+      const promptText = promptInput.value.trim() || defaultText;
+      
+      // Escape quotes
+      const escapedPrompt = promptText.replace(/"/g, '\\"');
+      const cmd = `./dispatch/hydra.sh do ${currentBuilderTier} "${escapedPrompt}"`;
+      document.getElementById('builder-cmd-text').innerText = cmd;
+    }
+
+    function copyBuilderCommand() {
+      const cmd = document.getElementById('builder-cmd-text').innerText;
+      navigator.clipboard.writeText(cmd).then(() => {
+        document.getElementById('builder-copy-btn').innerText = 'Copied!';
+        setTimeout(() => {
+          document.getElementById('builder-copy-btn').innerText = 'Copy';
+        }, 2000);
+      });
+    }
+
+    // Tab Switcher
+    function switchSetupTab(tabId) {
+      document.querySelectorAll('.setup-tab').forEach(btn => {
+        btn.classList.remove('active');
+      });
+      document.querySelectorAll('.setup-content').forEach(content => {
+        content.classList.remove('active');
+      });
+
+      document.getElementById('tab-btn-' + tabId).classList.add('active');
+      document.getElementById('setup-' + tabId).classList.add('active');
+    }
+
+    /* ─────────────────────────────────────────────────────────
+       WORLD-CLASS ANIMATION SYSTEM
+    ───────────────────────────────────────────────────────── */
+
+    // 1. Particle canvas system
+    (function() {
+      const canvas = document.getElementById('particle-canvas');
+      const ctx = canvas.getContext('2d');
+      let W, H, particles = [];
+      const MAX_PARTICLES = 80;
+      const CONNECTION_DIST = 140;
+
+      function resize() {
+        W = canvas.width  = window.innerWidth;
+        H = canvas.height = window.innerHeight;
+      }
+      window.addEventListener('resize', resize);
+      resize();
+
+      function Particle() {
+        this.x  = Math.random() * W;
+        this.y  = Math.random() * H;
+        this.vx = (Math.random() - 0.5) * 0.35;
+        this.vy = (Math.random() - 0.5) * 0.35;
+        this.r  = Math.random() * 1.5 + 0.5;
+        this.alpha = Math.random() * 0.4 + 0.1;
+      }
+
+      for (let i = 0; i < MAX_PARTICLES; i++) particles.push(new Particle());
+
+      function draw() {
+        ctx.clearRect(0, 0, W, H);
+        for (let i = 0; i < particles.length; i++) {
+          const p = particles[i];
+          p.x += p.vx; p.y += p.vy;
+          if (p.x < 0 || p.x > W) p.vx *= -1;
+          if (p.y < 0 || p.y > H) p.vy *= -1;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(139,92,246,${p.alpha})`;
+          ctx.fill();
+          for (let j = i + 1; j < particles.length; j++) {
+            const q = particles[j];
+            const dx = p.x - q.x, dy = p.y - q.y;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            if (dist < CONNECTION_DIST) {
+              const opacity = (1 - dist / CONNECTION_DIST) * 0.12;
+              ctx.beginPath();
+              ctx.moveTo(p.x, p.y);
+              ctx.lineTo(q.x, q.y);
+              ctx.strokeStyle = `rgba(139,92,246,${opacity})`;
+              ctx.lineWidth = 0.6;
+              ctx.stroke();
+            }
+          }
+        }
+        requestAnimationFrame(draw);
+      }
+      draw();
+    })();
+
+    // 2. Custom cursor glow
+    (function() {
+      const glow = document.getElementById('cursor-glow');
+      let mx = -1000, my = -1000;
+      document.addEventListener('mousemove', e => {
+        mx = e.clientX; my = e.clientY;
+        glow.style.left = mx + 'px';
+        glow.style.top  = my + 'px';
+      });
+    })();
+
+    // 3. Scroll-reveal via Intersection Observer
+    (function() {
+      const targets = document.querySelectorAll(
+        '.stat-card, .section-title, .section-desc, ' +
+        '.archi-grid, .explorer-grid, .builder-grid, ' +
+        '.tiers-table-container, .setup-tabs, .setup-content'
+      );
+      targets.forEach((el, i) => {
+        el.classList.add('scroll-reveal');
+        el.classList.add('delay-' + ((i % 4) * 100));
+      });
+
+      const io = new IntersectionObserver(entries => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('visible');
+            io.unobserve(entry.target);
+          }
+        });
+      }, { threshold: 0.12 });
+
+      document.querySelectorAll('.scroll-reveal').forEach(el => io.observe(el));
+    })();
+
+    // 4. Animated stat counters
+    (function() {
+      const stats = [
+        { id: null, el: document.querySelectorAll('.stat-num')[0], target: 10, prefix: '', suffix: '' },
+        { id: null, el: document.querySelectorAll('.stat-num')[1], target: 200, prefix: '<', suffix: 'ms' },
+        { id: null, el: document.querySelectorAll('.stat-num')[2], target: 80, prefix: '', suffix: '%' },
+        { id: null, el: document.querySelectorAll('.stat-num')[3], target: 100, prefix: '', suffix: '%' },
+      ];
+      const io = new IntersectionObserver(entries => {
+        entries.forEach(entry => {
+          if (!entry.isIntersecting) return;
+          const s = stats.find(x => x.el === entry.target);
+          if (!s) return;
+          let start = 0;
+          const duration = 1400;
+          const startTime = performance.now();
+          function tick(now) {
+            const elapsed = now - startTime;
+            const progress = Math.min(elapsed / duration, 1);
+            const ease = 1 - Math.pow(1 - progress, 3);
+            const val = Math.round(ease * s.target);
+            s.el.innerText = s.prefix + val + s.suffix;
+            if (progress < 1) requestAnimationFrame(tick);
+          }
+          requestAnimationFrame(tick);
+          io.unobserve(entry.target);
+        });
+      }, { threshold: 0.5 });
+      stats.forEach(s => { if (s.el) io.observe(s.el); });
+    })();
+
+    // 5. Button ripple effect
+    document.querySelectorAll('.btn').forEach(btn => {
+      btn.addEventListener('click', function(e) {
+        const ripple = document.createElement('span');
+        ripple.className = 'ripple-effect';
+        const rect = btn.getBoundingClientRect();
+        ripple.style.left = (e.clientX - rect.left) + 'px';
+        ripple.style.top  = (e.clientY - rect.top) + 'px';
+        btn.appendChild(ripple);
+        setTimeout(() => ripple.remove(), 700);
+      });
+    });
+
+    // 6. Magnetic hover on primary CTA buttons
+    document.querySelectorAll('.btn-primary').forEach(btn => {
+      btn.addEventListener('mousemove', e => {
+        const rect = btn.getBoundingClientRect();
+        const cx = rect.left + rect.width / 2;
+        const cy = rect.top  + rect.height / 2;
+        const dx = (e.clientX - cx) * 0.2;
+        const dy = (e.clientY - cy) * 0.2;
+        btn.style.transform = `translate(${dx}px, ${dy}px) translateY(-2px)`;
+      });
+      btn.addEventListener('mouseleave', () => {
+        btn.style.transform = '';
+      });
+    });
+
+    // 7. Typewriter effect for the hero badge text
+    (function() {
+      const badge = document.querySelector('.hero-badge');
+      if (!badge) return;
+      const pulse = badge.querySelector('.hero-badge-pulse');
+      const text = 'Multi-Model Hierarchical AI';
+      let span = document.createElement('span');
+      badge.appendChild(span);
+      // Remove existing text node
+      badge.childNodes.forEach(n => { if (n.nodeType === 3) n.remove(); });
+      let i = 0;
+      function type() {
+        if (i <= text.length) {
+          span.textContent = text.slice(0, i++);
+          setTimeout(type, 55);
+        }
+      }
+      setTimeout(type, 600);
+    })();
+
+    // 8. Add terminal cursor blink to command builder output
+    (function() {
+      const out = document.getElementById('builder-cmd-text');
+      if (!out) return;
+      const cursor = document.createElement('span');
+      cursor.className = 'term-cursor';
+      out.appendChild(cursor);
+      // Patch generateCommand to keep cursor at end
+      const origGenerate = window.generateCommand;
+      window.generateCommand = function() {
+        origGenerate && origGenerate();
+        if (!out.querySelector('.term-cursor')) out.appendChild(cursor);
+      };
+    })();
+
+    // 9. File tree item stagger animation on folder open
+    document.querySelectorAll('.tree-file-item').forEach((item, i) => {
+      item.style.animationDelay = (i * 0.03) + 's';
+      item.classList.add('animating');
+    });
+
+    // 10. Add glow-border class to interactive cards
+    document.querySelectorAll(
+      '.archi-diagram-container, .archi-detail-box, .explorer-grid, .builder-terminal, .tiers-table-container'
+    ).forEach(el => el.classList.add('glow-border'));
+
+  </script>
+</body>
+</html>

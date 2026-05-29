@@ -40,8 +40,6 @@ export default function InputBar({
         <Text
           color="green"
           bold
-          // Tab cycles enum key
-          onClick={onCycleEnum}
         >
           {selectedEnum}
         </Text>

@@ -2,9 +2,14 @@ import { execSync } from 'child_process'
 import { readFileSync, existsSync } from 'fs'
 import type { SystemState, ClaudeMode, PoolStatus } from './types.js'
 
-const HYDRA = `${process.env.HOME}/hydra`
-const STATE_FILE = `${HYDRA}/logs/state.json`
-const AUTH_FILE  = `${HYDRA}/logs/auth_required.json`
+import { fileURLToPath } from 'url'
+import { dirname, join } from 'path'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = dirname(__filename)
+export const HYDRA = join(__dirname, '../..')
+export const STATE_FILE = join(HYDRA, 'logs/state.json')
+export const AUTH_FILE  = join(HYDRA, 'logs/auth_required.json')
 
 function claudeMode(pct: number): ClaudeMode {
   if (pct >= 80) return 'emergency'

@@ -3,7 +3,7 @@ import { Box, Text, useInput, useApp } from 'ink'
 import StatusPanel from './components/StatusPanel.js'
 import ChatView from './components/ChatView.js'
 import InputBar from './components/InputBar.js'
-import { loadState, dispatch } from './state.js'
+import { loadState, dispatch, STATE_FILE, AUTH_FILE } from './state.js'
 import type { Message, EnumKey, SystemState } from './types.js'
 import { ENUM_KEYS, ENUM_TO_TIER, TIER_LABELS } from './types.js'
 
@@ -48,7 +48,7 @@ export default function App() {
     if (key.tab && !dispatching) {
       setSelectedEnum(prev => {
         const i = ENUM_KEYS.indexOf(prev)
-        return ENUM_KEYS[(i + 1) % ENUM_KEYS.length]
+        return ENUM_KEYS[(i + 1) % ENUM_KEYS.length] ?? 'STANDARD'
       })
     }
     if (key.escape) exit()
@@ -84,7 +84,7 @@ export default function App() {
       case 'auth-clear':
         try {
           const { execSync: execClear } = require('child_process') as typeof import('child_process')
-          execClear(`rm -f ${process.env.HOME}/hydra/logs/auth_required.json`)
+          execClear(`rm -f "${AUTH_FILE}"`)
           setState(loadState())
           addMsg({ role: 'system', content: '✓ Auth flag cleared' })
         } catch { addMsg({ role: 'error', content: 'Failed to clear auth flag' }) }
@@ -97,7 +97,7 @@ export default function App() {
         const pct = parseInt(parts[1] ?? '0', 10)
         if (!isNaN(pct)) {
           const { execSync } = require('child_process') as typeof import('child_process')
-          const stateFile = `${process.env.HOME}/hydra/logs/state.json`
+          const stateFile = STATE_FILE
           try {
             execSync(`jq '.claude_pct = ${pct}' ${stateFile} > ${stateFile}.tmp && mv ${stateFile}.tmp ${stateFile}`)
             setState(loadState())
@@ -107,7 +107,7 @@ export default function App() {
         break
       case 'reset-pools':
         const { execSync: ex2 } = require('child_process') as typeof import('child_process')
-        const sf = `${process.env.HOME}/hydra/logs/state.json`
+        const sf = STATE_FILE
         try {
           ex2(`jq '.exhausted_pools = []' ${sf} > ${sf}.tmp && mv ${sf}.tmp ${sf}`)
           setState(loadState())
@@ -194,7 +194,7 @@ export default function App() {
         selectedEnum={selectedEnum}
         onCycleEnum={() => setSelectedEnum(prev => {
           const i = ENUM_KEYS.indexOf(prev)
-          return ENUM_KEYS[(i + 1) % ENUM_KEYS.length]
+          return ENUM_KEYS[(i + 1) % ENUM_KEYS.length] ?? 'STANDARD'
         })}
         disabled={dispatching}
       />
