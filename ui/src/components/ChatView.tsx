@@ -44,7 +44,7 @@ function MessageRow({ msg }: { msg: Message }) {
       )}
       <Box marginLeft={2} flexDirection="column">
         {msg.content.split('\n').map((line, i) => (
-          <Text key={i}>{line}</Text>
+          <Text key={`${msg.id}-${i}`}>{line}</Text>
         ))}
       </Box>
     </Box>
