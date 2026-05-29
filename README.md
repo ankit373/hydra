@@ -32,7 +32,9 @@ hydra/
 
 *   **[AGENTS.md](AGENTS.md)**: Rules and guidelines for delegated Antigravity heads. Standardizes output formats, error propagation, and the protocol for escalating tasks back to the orchestrator.
 *   **[CLAUDE.md](CLAUDE.md)**: Master guidelines for Claude Code (the Brain). Contains the classification flow, token preservation limits (with warnings at 75% and emergency thresholds at 80%), rubber duck review protocols, and CLI usage commands.
-*   **[hydra-ui](hydra-ui)**: A startup wrapper shell script that boots the interactive Ink React Terminal User Interface (TUI) via Bun.
+*   **[hydra-ui](hydra-ui)**: A startup wrapper shell script that boots the interactive Ink React Terminal User Interface (TUI) via Bun. Now automatically validates system requirements and resolves home directories.
+*   **[install.sh](install.sh)**: Standalone installer script that copies Hydra system modules, handles npm configurations, configures `state.json`, and updates your shell RC config.
+*   **[Formula/hydra.rb](Formula/hydra.rb)**: Homebrew configuration tap for automated package manager installations.
 
 ---
 
@@ -118,24 +120,64 @@ Tasks are classified and dispatched to one of the following ten tiers:
 
 ## Getting Started
 
-### Installation
+### Installation & Environment Setup
 
-Ensure you have [Bun](https://bun.sh) and the [Antigravity CLI](https://antigravity.google) installed.
+Hydra supports three installation methods depending on your environment.
 
-1. Clone the repository and navigate to its root:
-   ```bash
-   git clone https://github.com/ankit373/hydra.git
-   cd hydra
-   ```
+#### Option A: Homebrew (Recommended)
+Install directly using the Homebrew formula (installs the latest main branch commit under `--HEAD`):
+```bash
+brew install --HEAD Formula/hydra.rb
+```
 
-2. Install the TUI dependencies:
-   ```bash
-   cd ui
-   bun install
-   cd ..
-   ```
+To switch from the `--HEAD` release to a versioned release, read the comments inside the Homebrew formula file: [hydra.rb](Formula/hydra.rb).
 
-3. Launch the interactive TUI interface:
-   ```bash
-   ./hydra-ui
-   ```
+#### Option B: Standalone Installer
+Run the standalone installer script. It copies all code scripts to `~/.hydra`, runs `bun install` to set up TUI dependencies, seeds the initial `state.json` file, writes a dedicated `hydra` launcher binary, and automatically patches your `~/.zshrc` (or `~/.bashrc`):
+```bash
+./install.sh
+```
+
+#### Option C: Manual Development Install
+Clone the repository and install npm packages manually:
+```bash
+git clone https://github.com/ankit373/hydra.git
+cd hydra/ui
+bun install
+```
+
+### Path & Data Isolation
+
+To prevent conflicts and support immutable system layouts (like Homebrew cellar installations), Hydra separates execution files from mutable state. 
+
+#### `HYDRA_HOME` Resolution Order
+For core scripts (dispatch scripts, registries, and TUI modules), the system resolves `HYDRA_HOME` dynamically in this order:
+1. **`HYDRA_HOME` environment variable**: Set explicitly by the Homebrew wrapper script or the launcher created by `install.sh`.
+2. **Auto-Detection**: If `dispatch/route.sh` exists relative to the module file (`__dirname` in `state.ts` or `dirname $0` in `hydra-ui`), it resolves to the local repository directory (enabling development mode to work out of the box without any variables).
+3. **Fallback**: Default to `~/.hydra` (the standard standalone installation path).
+
+#### `HYDRA_DATA` for Mutable State
+All mutable logs, authentication triggers, and configuration states (`logs/`, `state.json`, `cost.jsonl`) are kept completely separate from the read-only script directories and always write to `HYDRA_DATA` (which defaults to `~/.hydra`).
+
+If you need to redirect logs or configuration states elsewhere, set `HYDRA_DATA` in your shell configuration:
+```bash
+export HYDRA_DATA="/custom/path/to/data"
+```
+
+### Execution
+
+Once installed, the following commands are added to your PATH:
+
+*   **`hydra`**: Command-line routing utility. Example:
+    ```bash
+    hydra do SIMPLE "write a user profile settings schema"
+    ```
+*   **`hydra-ui`**: Opens the React/Ink terminal console dashboard to monitor model state and run dispatches interactively.
+
+### Claude Code Integration
+
+If you are running inside a Claude Code CLI session, you can run Hydra directly as a slash command:
+```bash
+/hydra do SIMPLE "write a user profile settings schema"
+```
+Claude Code will intercept the slash command, invoke the Hydra decider and router, and merge the generated code outputs back into your current editor context.

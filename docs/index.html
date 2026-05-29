@@ -1629,7 +1629,7 @@
               <span style="font-family: var(--font-mono); font-size: 11px; color: var(--text-muted);">Generated Command:</span>
               <button class="code-copy-btn" style="position: static;" onclick="copyBuilderCommand()" id="builder-copy-btn">Copy</button>
             </div>
-            <div class="terminal-output" id="builder-cmd-text">./dispatch/hydra.sh do SIMPLE "write a DTO for user settings"</div>
+            <div class="terminal-output" id="builder-cmd-text">hydra do SIMPLE "write a DTO for user settings"</div>
           </div>
           
           <div class="terminal-steps">
@@ -1669,6 +1669,8 @@
             <div class="tree-file-item active" onclick="showFile('hydra-ui')">hydra-ui <span class="file-badge">TUI Bash</span></div>
             <div class="tree-file-item" onclick="showFile('agents')">AGENTS.md <span class="file-badge">Spec</span></div>
             <div class="tree-file-item" onclick="showFile('claude')">CLAUDE.md <span class="file-badge">Spec</span></div>
+            <div class="tree-file-item" onclick="showFile('installer')">install.sh <span class="file-badge">Shell</span></div>
+            <div class="tree-file-item" onclick="showFile('brew-formula')">hydra.rb <span class="file-badge">Ruby</span></div>
           </div>
         </div>
         
@@ -1842,6 +1844,22 @@
         <!-- Console chat view -->
         <div class="tui-console">
           <div class="tui-chat-view" id="tui-chat-view">
+            <div style="font-family: var(--font-mono); font-size: 11px; line-height: 1.25; margin-bottom: 12px; white-space: pre;">
+<span style="color: var(--accent-secondary); font-weight: bold;">  o__o__o   o__o__o   o__o__o</span>
+<span style="color: var(--accent-secondary);">   \   /     \   /     \   /</span>
+<span style="color: var(--accent-secondary);">    \ /       \ /       \ /</span>
+<span style="color: var(--accent-primary); font-weight: bold;">     o---------o---------o</span>
+<span style="color: var(--accent-primary);">      \       / \       /</span>
+<span style="color: var(--accent-primary);">       \     /   \     /</span>
+<span style="color: var(--accent-secondary); font-weight: bold;">        o---o-----o---o</span>
+<span style="color: var(--accent-secondary);">         \   \   /   /</span>
+<span style="color: var(--accent-secondary);">          \   \ /   /</span>
+<span style="color: var(--accent-primary); font-weight: bold;">           o---o---o</span>
+<span style="color: var(--accent-primary);">            \  |  /</span>
+<span style="color: var(--accent-primary);">             \ | /</span>
+<span style="color: var(--accent-secondary); font-weight: bold;">              o</span>
+            </div>
+            <div class="tui-msg-log" style="color: var(--accent-secondary); font-weight: bold; margin-bottom: 4px;">HYDRA AI — MULTI-MODEL ORCHESTRATION</div>
             <div class="tui-msg-log">🐍 System: Hydra multi-model TUI initialized.</div>
             <div class="tui-msg-log">🐍 System: Press Tab to cycle tiers. Try typing a query or /help.</div>
           </div>
@@ -2008,30 +2026,42 @@
       <button class="setup-tab active" onclick="switchSetupTab('install')" id="tab-btn-install">Installation</button>
       <button class="setup-tab" onclick="switchSetupTab('cli')" id="tab-btn-cli">CLI Subcommands</button>
       <button class="setup-tab" onclick="switchSetupTab('tui')" id="tab-btn-tui">Interactive TUI</button>
+      <button class="setup-tab" onclick="switchSetupTab('claude')" id="tab-btn-claude">Claude Integration</button>
     </div>
     
     <!-- Install Tab Content -->
     <div class="setup-content active" id="setup-install">
       <div class="setup-step">
-        <span class="step-num">1</span>
-        <span class="step-title">Prerequisites</span>
-        <p class="step-text">Ensure you have <code>Bun</code> and the <code>Antigravity CLI</code> installed on your system.</p>
-      </div>
-      <div class="setup-step">
-        <span class="step-num">2</span>
-        <span class="step-title">Clone the Repository</span>
-        <p class="step-text">Pull the Hydra orchestration code into your local developer projects folder.</p>
+        <span class="step-num">A</span>
+        <span class="step-title">Option A: Homebrew Tap (Recommended)</span>
+        <p class="step-text">Installs Hydra directly to your system PATH using the Homebrew tap. This builds the isolated launcher, resolves cellar dependencies, and adds the command seamlessly.</p>
         <div class="code-snippet-box step-cmd">
-          <pre>git clone https://github.com/ankit373/hydra.git && cd hydra</pre>
+          <pre>brew install --HEAD Formula/hydra.rb</pre>
         </div>
       </div>
       <div class="setup-step">
-        <span class="step-num">3</span>
-        <span class="step-title">Install TUI Dependencies</span>
-        <p class="step-text">Navigate into the TUI directory to install packages via Bun.</p>
+        <span class="step-num">B</span>
+        <span class="step-title">Option B: Standalone Installer</span>
+        <p class="step-text">Copies all modules to <code>~/.hydra</code>, installs Bun dependencies, seeds the local <code>state.json</code>, writes the launch script, and automatically registers them in your shell configuration profile (<code>~/.zshrc</code> / <code>~/.bashrc</code>).</p>
         <div class="code-snippet-box step-cmd">
-          <pre>cd ui && bun install && cd ..</pre>
+          <pre>./install.sh</pre>
         </div>
+      </div>
+      <div class="setup-step">
+        <span class="step-num">C</span>
+        <span class="step-title">Option C: Manual Development Install</span>
+        <p class="step-text">Clone the source code manually and install dependencies. Excellent for hacking on the TUI dashboard or customizing router scripts.</p>
+        <div class="code-snippet-box step-cmd">
+          <pre>git clone https://github.com/ankit373/hydra.git && cd hydra/ui && bun install</pre>
+        </div>
+      </div>
+      <div class="setup-step">
+        <span class="step-num">⚡</span>
+        <span class="step-title">Path & Data Isolation</span>
+        <p class="step-text">Hydra isolates core read-only scripts from mutable runtime state:
+          <br>• <strong>HYDRA_HOME</strong>: Resolves env var -> local auto-detection (repo mode) -> falls back to <code>~/.hydra</code>.
+          <br>• <strong>HYDRA_DATA</strong>: All mutable logs and state (like <code>state.json</code>, <code>cost.jsonl</code>) are stored here (defaults to <code>~/.hydra</code>). Override by setting <code>export HYDRA_DATA="/your/path"</code>.
+        </p>
       </div>
     </div>
     
@@ -2042,7 +2072,7 @@
         <span class="step-title">Monitor Status</span>
         <p class="step-text">Display active Antigravity allocations, Claude token percentages, and pool status.</p>
         <div class="code-snippet-box step-cmd">
-          <pre>./dispatch/hydra.sh status</pre>
+          <pre>hydra status</pre>
         </div>
       </div>
       <div class="setup-step">
@@ -2050,7 +2080,7 @@
         <span class="step-title">Dispatch a Task</span>
         <p class="step-text">Send instructions directly to a specific model tier by its complexity enum key.</p>
         <div class="code-snippet-box step-cmd">
-          <pre>./dispatch/hydra.sh do SIMPLE "write a User DTO class in TypeScript"</pre>
+          <pre>hydra do SIMPLE "write a User DTO class in TypeScript"</pre>
         </div>
       </div>
       <div class="setup-step">
@@ -2058,7 +2088,7 @@
         <span class="step-title">Rubber Duck Code Review</span>
         <p class="step-text">Execute a peer evaluation on a code snippet using a different model family to avoid shared biases.</p>
         <div class="code-snippet-box step-cmd">
-          <pre>./dispatch/hydra.sh duck "$(cat src/auth.ts)"</pre>
+          <pre>hydra duck "$(cat src/auth.ts)"</pre>
         </div>
       </div>
     </div>
@@ -2070,7 +2100,7 @@
         <span class="step-title">Boot the Interface</span>
         <p class="step-text">Launch the React TUI directly in your console (make sure to run outside of standard IDE shells).</p>
         <div class="code-snippet-box step-cmd">
-          <pre>./hydra-ui</pre>
+          <pre>hydra-ui</pre>
         </div>
       </div>
       <div class="setup-step">
@@ -2082,6 +2112,28 @@
         <span class="step-num">3</span>
         <span class="step-title">Check Token & Cost</span>
         <p class="step-text">Review real-time cost accumulations and active model metrics on the top status panel.</p>
+      </div>
+    </div>
+
+    <!-- Claude Code Integration Tab Content -->
+    <div class="setup-content" id="setup-claude">
+      <div class="setup-step">
+        <span class="step-num">1</span>
+        <span class="step-title">Slash Command Integration</span>
+        <p class="step-text">Type <code>/hydra</code> inside a running Claude Code CLI interactive session.</p>
+      </div>
+      <div class="setup-step">
+        <span class="step-num">2</span>
+        <span class="step-title">Execute Delegation Tasks</span>
+        <p class="step-text">Specify complexity tiers and prompts right in your chat window without leaving the session.</p>
+        <div class="code-snippet-box step-cmd">
+          <pre>/hydra do SIMPLE "write a User DTO class in TypeScript"</pre>
+        </div>
+      </div>
+      <div class="setup-step">
+        <span class="step-num">3</span>
+        <span class="step-title">Context Interception</span>
+        <p class="step-text">Claude Code intercepts the command, coordinates with route.sh, and applies the outputs directly back to your workspace.</p>
       </div>
     </div>
   </section>
@@ -2204,15 +2256,71 @@
       'hydra-ui': {
         name: 'hydra-ui',
         path: '/hydra-ui',
-        type: 'TUI Shell script',
-        desc: 'Executes the compiled Bun application of the React TUI. Run this locally to launch the interactive terminal dashboard to monitor all active token allocations, model executions, and costs.',
+        type: 'TUI Launch wrapper',
+        desc: 'Launcher script for the React TUI. Dynamically resolves HYDRA_HOME (env var, auto-detected repository dir, or ~/.hydra), seeds state.json if missing, validates bun/jq/yq dependencies, and executes the React TUI.',
         features: [
-          'Runs TUI in an isolated terminal node.',
-          'Invokes the bundle index.tsx using the Bun runtime.'
+          'Resolves installation pathway dynamically (env var -> auto-detect -> ~/.hydra).',
+          'Checks and validates binary dependencies (bun, jq, yq) automatically.',
+          'Seeds state.json on first run if it does not exist.'
         ],
         code: `#!/usr/bin/env bash
 # Launch Hydra TUI — run this directly in your terminal
-exec bun "$(dirname "$0")/ui/src/index.tsx"`
+set -euo pipefail
+# Resolve HYDRA_HOME: env var > repo root (dev) > ~/.hydra (installed)
+if [[ -z "\${HYDRA_HOME:-}" ]]; then
+  if [[ -f "\$SCRIPT_DIR/dispatch/route.sh" ]]; then
+    export HYDRA_HOME="\$SCRIPT_DIR"
+  elif [[ -f "\$HOME/.hydra/dispatch/route.sh" ]]; then
+    export HYDRA_HOME="\$HOME/.hydra"
+  fi
+fi
+# Resolve HYDRA_DATA (mutable logs/state) — always user-owned
+export HYDRA_DATA="\${HYDRA_DATA:-$HOME/.hydra}"
+mkdir -p "\$HYDRA_DATA/logs"
+# Dependency checks
+missing=()
+for dep in bun jq yq; do
+  command -v "\$dep" &>/dev/null || missing+=("\$dep")
+done
+exec bun "\$HYDRA_HOME/ui/src/index.tsx"`
+      },
+      'installer': {
+        name: 'install.sh',
+        path: '/install.sh',
+        type: 'Standalone Installer script',
+        desc: 'Copies core Hydra modules and UI to ~/.hydra, runs bun install, seeds state.json, writes a dedicated launcher executable, and patches shell configuration (~/.zshrc or ~/.bashrc).',
+        features: [
+          'Copies read-only system scripts to isolated ~/.hydra directory.',
+          'Validates critical binary dependencies (bun, jq, yq) before copy.',
+          'Automatically seeds state.json and writes a hydra wrapper executable.',
+          'Adds HYDRA_HOME and PATH configuration to shell RC files.'
+        ],
+        code: `#!/usr/bin/env bash
+# Hydra — standalone installer
+set -euo pipefail
+REPO="\$(cd "\$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
+DEST="\${HYDRA_HOME:-\$HOME/.hydra}"
+# Check dependencies, copy files, run bun install, write launcher...`
+      },
+      'brew-formula': {
+        name: 'hydra.rb',
+        path: '/Formula/hydra.rb',
+        type: 'Homebrew Formula',
+        desc: 'Homebrew formula to install Hydra. Installs read-only code files under Cellar libexec, compiles bun node_modules, and creates a wrapper executable in PATH pointing to isolated logs and state directories.',
+        features: [
+          'Splits read-only installation (libexec) from user state (HYDRA_DATA).',
+          'Exposes wrapper script directly in system PATH bin.',
+          'Provides clear comments for switching from --HEAD to a versioned tag.'
+        ],
+        code: `class Hydra < Formula
+  desc "Multi-model AI orchestration TUI — routes tasks across Claude, Gemini, GPT, and local models"
+  homepage "https://github.com/ankit373/hydra"
+  head "https://github.com/ankit373/hydra.git", branch: "main"
+  depends_on "jq"
+  depends_on "yq"
+  depends_on "oven-sh/bun/bun"
+  # Installs files to libexec and writes path-isolated bin/hydra launcher
+end`
       },
       'agents': {
         name: 'AGENTS.md',
@@ -2575,15 +2683,20 @@ agg_by_field() {
         name: 'state.ts',
         path: '/ui/src/state.ts',
         type: 'TS Utility script',
-        desc: 'Provides state persistence and child process hooks. Interacts with routing scripts and parses financial logs.',
+        desc: 'Provides state loading and child process runners. Resolves HYDRA_HOME and HYDRA_DATA dynamically without hardcoded directories.',
         features: [
-          'Loads JSON properties representing Claude usage.',
-          'Spawns route.sh to execute prompt strings.'
+          'Resolves HYDRA_HOME dynamically: env var -> repo root auto-detect -> fallback to ~/.hydra.',
+          'Isolates mutable data files (logs/, state.json) to HYDRA_DATA directory.',
+          'Loads token pools, Claude mode percentages, and spawns route.sh.'
         ],
-        code: `export function loadState(): SystemState {
-  const file = \`\${process.env.HOME}/hydra/logs/state.json\`
-  // parses pool levels and claude percentages
-}`
+        code: `function resolveHydraHome(): string {
+  if (process.env.HYDRA_HOME) return process.env.HYDRA_HOME;
+  const repoGuess = join(__dirname, '../..');
+  if (existsSync(join(repoGuess, 'dispatch/route.sh'))) return repoGuess;
+  return join(homedir(), '.hydra');
+}
+export const HYDRA = resolveHydraHome();
+export const STATE_FILE = join(resolveHydraData(), 'logs/state.json');`
       },
       'ui-status': {
         name: 'StatusPanel.tsx',
@@ -2635,6 +2748,185 @@ agg_by_field() {
       navigator.clipboard.writeText(code).then(() => {
         document.getElementById('copy-btn').innerText = 'Copied!';
       });
+    }
+
+    // TUI Simulator State & Logic
+    const tuiEnumKeys = ['GRUNT', 'TRIVIAL', 'SIMPLE', 'STANDARD', 'MODERATE', 'COMPLEX', 'HARD', 'VERY_HARD', 'EXPERT', 'CORE'];
+    let tuiCurrentEnumIndex = 3; // STANDARD
+    let tuiClaudePct = 52;
+
+    const tuiModelInfo = {
+      'CORE':      { tier: 1,  model: 'Claude Core',          color: 'magenta' },
+      'EXPERT':    { tier: 2,  model: 'Opus Thinking',         color: 'red'     },
+      'VERY_HARD': { tier: 3,  model: 'Sonnet Thinking',       color: 'red'     },
+      'HARD':      { tier: 4,  model: 'GPT-OSS 120B',          color: 'yellow'  },
+      'COMPLEX':    { tier: 5,  model: 'Gemini 3.1 Pro (High)', color: 'blue'    },
+      'MODERATE':  { tier: 6,  model: 'Gemini 3.1 Pro (Low)',  color: 'blue'    },
+      'STANDARD':  { tier: 7,  model: 'Gemini 3.5 Flash (High)',color: 'green'   },
+      'SIMPLE':    { tier: 8,  model: 'Gemini 3.5 Flash (Med)', color: 'green'   },
+      'TRIVIAL':   { tier: 9,  model: 'Gemini 3.5 Flash (Low)', color: 'green'   },
+      'GRUNT':     { tier: 10, model: 'Qwen 2.5 Coder (local)',color: 'cyan'    }
+    };
+
+    function cycleTuiTier() {
+      tuiCurrentEnumIndex = (tuiCurrentEnumIndex + 1) % tuiEnumKeys.length;
+      updateTuiPrefix();
+    }
+
+    function updateTuiPrefix() {
+      const activeEnum = tuiEnumKeys[tuiCurrentEnumIndex];
+      document.getElementById('tui-prompt-prefix').innerText = activeEnum + ' ❯';
+    }
+
+    function addTuiMessage(type, content) {
+      const view = document.getElementById('tui-chat-view');
+      const div = document.createElement('div');
+      div.className = 'tui-msg-' + type;
+      if (type === 'log') {
+        div.innerText = '🐍 System: ' + content;
+      } else if (type === 'user') {
+        const activeEnum = tuiEnumKeys[tuiCurrentEnumIndex];
+        div.innerText = activeEnum + ' ❯ ' + content;
+      } else if (type === 'ai') {
+        div.innerText = content;
+      } else if (type === 'sys-alert') {
+        div.innerText = '⚠️ System: ' + content;
+      }
+      view.appendChild(div);
+      view.scrollTop = view.scrollHeight;
+      return div;
+    }
+
+    function handleTuiInput(event) {
+      if (event.key === 'Tab') {
+        event.preventDefault();
+        cycleTuiTier();
+        return;
+      }
+      if (event.key === 'Enter') {
+        const input = document.getElementById('tui-console-input');
+        const text = input.value.trim();
+        if (!text) return;
+        input.value = '';
+
+        addTuiMessage('user', text);
+
+        if (text.startsWith('/')) {
+          handleTuiCommand(text);
+          return;
+        }
+
+        // Simulate dispatch
+        simulateTuiDispatch(text);
+      }
+    }
+
+    function handleTuiCommand(cmd) {
+      const parts = cmd.slice(1).split(/\s+/);
+      const subcommand = parts[0];
+
+      setTimeout(() => {
+        if (subcommand === 'help') {
+          addTuiMessage('log', 'Commands: /status /tiers /set-pct <n> /reset-pools /clear');
+        } else if (subcommand === 'status') {
+          addTuiMessage('log', `Claude: ${tuiClaudePct}% [${getClaudeMode(tuiClaudePct)}] | Pools: Claude(agy):ok, GeminiPro:ok, Flash:ok, GPT-OSS:ok, Qwen(local):ok`);
+        } else if (subcommand === 'tiers') {
+          const list = Object.entries(tuiModelInfo).map(([k, v]) => `T${v.tier} ${v.model}`).join(' | ');
+          addTuiMessage('log', list);
+        } else if (subcommand === 'clear') {
+          const view = document.getElementById('tui-chat-view');
+          view.innerHTML = '';
+          addTuiMessage('log', 'Console cleared.');
+        } else if (subcommand === 'set-pct') {
+          const pct = parseInt(parts[1] || '0', 10);
+          if (!isNaN(pct)) {
+            tuiClaudePct = pct;
+            document.getElementById('tui-topbar-pct').innerText = pct + '%';
+            document.getElementById('tui-sidebar-pct').innerText = pct + '%';
+            
+            const filled = Math.round(pct / 10);
+            const barText = '█'.repeat(filled) + '░'.repeat(10 - filled);
+            document.getElementById('tui-sidebar-bar').innerText = barText;
+            
+            const mode = getClaudeMode(pct);
+            const sidebarMode = document.getElementById('tui-sidebar-mode');
+            sidebarMode.innerText = '[' + mode.toUpperCase() + ']';
+            
+            document.getElementById('tui-topbar-mode').innerText = mode.toUpperCase();
+            
+            addTuiMessage('log', `Claude context set to ${pct}%`);
+          } else {
+            addTuiMessage('log', 'Usage: /set-pct <number>');
+          }
+        } else if (subcommand === 'reset-pools') {
+          addTuiMessage('log', 'All pools reset to ok');
+        } else {
+          addTuiMessage('log', `Unknown command: ${cmd}`);
+        }
+      }, 100);
+    }
+
+    function getClaudeMode(pct) {
+      if (pct >= 80) return 'emergency';
+      if (pct >= 75) return 'critical';
+      if (pct >= 70) return 'warning';
+      if (pct >= 65) return 'caution';
+      if (pct >= 50) return 'compact';
+      return 'normal';
+    }
+
+    function classifyPrompt(text) {
+      const t = text.toLowerCase();
+      if (/\b(scaffold|boilerplate|empty|stub|template|create folder)\b/.test(t)) return 'GRUNT';
+      if (/\b(enum|constant|config file|barrel)\b/.test(t)) return 'TRIVIAL';
+      if (/\b(dto|schema|interface|type def|model class)\b/.test(t)) return 'SIMPLE';
+      if (/\b(controller|handler|endpoint|route|crud)\b/.test(t)) return 'STANDARD';
+      if (/\b(service|repository|use case|repo)\b/.test(t)) return 'MODERATE';
+      if (/\b(middleware|auth|guard|interceptor|pipeline)\b/.test(t)) return 'COMPLEX';
+      if (/\b(review|tradeoff|rubber duck|second opinion)\b/.test(t)) return 'HARD';
+      if (/\b(algorithm|refactor|complex|multi.file)\b/.test(t)) return 'VERY_HARD';
+      if (/\b(architect|design|adr|rfc|strategy|system design)\b/.test(t)) return 'EXPERT';
+      if (/\b(core business|critical path|security core)\b/.test(t)) return 'CORE';
+      return tuiEnumKeys[tuiCurrentEnumIndex]; // fallback to active cycle key
+    }
+
+    function simulateTuiDispatch(text) {
+      const enumKey = classifyPrompt(text);
+      const info = tuiModelInfo[enumKey];
+      
+      addTuiMessage('log', `classifying → ${enumKey} → T${info.tier}: ${info.model}`);
+      
+      const spinnerDiv = addTuiMessage('log', 'dispatching…');
+      
+      setTimeout(() => {
+        // Remove spinner message
+        spinnerDiv.remove();
+        
+        let response = '';
+        if (enumKey === 'SIMPLE') {
+          response = `[HYDRA] Output received from ${info.model}:\n\nexport interface UserSettingsDto {\n  theme: 'light' | 'dark';\n  notificationsEnabled: boolean;\n  refreshIntervalMs: number;\n}`;
+        } else if (enumKey === 'GRUNT') {
+          response = `[HYDRA] Output received from ${info.model}:\n\n✓ Created new folder: src/mocks\n✓ Generated file: src/mocks/user.fixture.json\n✓ Generated file: src/mocks/auth.stub.ts`;
+        } else if (enumKey === 'TRIVIAL') {
+          response = `[HYDRA] Output received from ${info.model}:\n\nexport const SESSION_TIMEOUT_MS = 3600000;\nexport const MAX_RETRY_ATTEMPTS = 5;\nexport const DEFAULT_PAGE_SIZE = 20;`;
+        } else if (enumKey === 'COMPLEX') {
+          response = `[HYDRA] Output received from ${info.model}:\n\nimport jwt from 'jsonwebtoken';\n\nexport function authMiddleware(req, res, next) {\n  const token = req.headers.authorization?.split(' ')[1];\n  if (!token) return res.status(401).json({ error: 'Auth required' });\n  try {\n    req.user = jwt.verify(token, process.env.JWT_SECRET);\n    next();\n  } catch {\n    res.status(403).json({ error: 'Invalid token' });\n  }\n}`;
+        } else if (enumKey === 'STANDARD') {
+          response = `[HYDRA] Output received from ${info.model}:\n\nexport class UserController {\n  constructor(private userService: UserService) {}\n  \n  async getProfile(req, res) {\n    const user = await this.userService.getUserById(req.user.id);\n    return res.json(user);\n  }\n}`;
+        } else {
+          response = `[HYDRA] Output received from ${info.model}:\n\nTask "${text}" completed successfully. All unit tests passed (100% success).`;
+        }
+        
+        addTuiMessage('ai', response);
+        
+        // Update sidebar "LAST DISPATCH" block
+        document.getElementById('tui-sidebar-last').style.display = 'block';
+        document.getElementById('tui-last-tier-text').innerText = `T${info.tier} ${enumKey}`;
+        document.getElementById('tui-last-model-text').innerText = info.model;
+        
+        const chatView = document.getElementById('tui-chat-view');
+        chatView.scrollTop = chatView.scrollHeight;
+      }, 1200);
     }
 
     // Command Builder State & Logic
@@ -2695,7 +2987,7 @@ agg_by_field() {
       
       // Escape quotes
       const escapedPrompt = promptText.replace(/"/g, '\\"');
-      const cmd = `./dispatch/hydra.sh do ${currentBuilderTier} "${escapedPrompt}"`;
+      const cmd = `hydra do ${currentBuilderTier} "${escapedPrompt}"`;
       document.getElementById('builder-cmd-text').innerText = cmd;
     }
 

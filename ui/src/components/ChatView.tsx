@@ -65,9 +65,24 @@ export default function ChatView({
   return (
     <Box flexDirection="column" flexGrow={1} paddingX={1} overflow="hidden">
       {visible.length === 0 && (
-        <Box flexDirection="column" marginTop={2}>
-          <Text bold color="cyan">🐍 Hydra</Text>
-          <Text dimColor>Multi-model orchestration. Type a task or /help</Text>
+        <Box flexDirection="column" marginTop={1}>
+          <Box flexDirection="column" marginBottom={1}>
+            <Text color="cyan" bold>  o__o__o   o__o__o   o__o__o</Text>
+            <Text color="cyan">   \\   /     \\   /     \\   /</Text>
+            <Text color="cyan">    \\ /       \\ /       \\ /</Text>
+            <Text color="magenta" bold>     o---------o---------o</Text>
+            <Text color="magenta">      \\       / \\       /</Text>
+            <Text color="magenta">       \\     /   \\     /</Text>
+            <Text color="cyan" bold>        o---o-----o---o</Text>
+            <Text color="cyan">         \\   \\   /   /</Text>
+            <Text color="cyan">          \\   \\ /   /</Text>
+            <Text color="magenta" bold>           o---o---o</Text>
+            <Text color="magenta">            \\  |  /</Text>
+            <Text color="magenta">             \\ | /</Text>
+            <Text color="cyan" bold>              o</Text>
+          </Box>
+          <Text bold color="cyan">HYDRA AI — MULTI-MODEL ORCHESTRATION</Text>
+          <Text dimColor>Type a task or /help to start</Text>
           <Text> </Text>
           <Text dimColor>Examples:</Text>
           <Text dimColor>  write a User DTO in TypeScript</Text>

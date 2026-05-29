@@ -1,3 +1,44 @@
 #!/usr/bin/env bash
 # Launch Hydra TUI — run this directly in your terminal (not inside Claude Code)
-exec bun "$(dirname "$0")/ui/src/index.tsx"
+set -euo pipefail
+
+# Follow symlinks before resolving the directory so PATH symlinks work correctly.
+_src="${BASH_SOURCE[0]}"
+while [[ -L "$_src" ]]; do _src="$(readlink "$_src")"; done
+SCRIPT_DIR="$(cd "$(dirname "$_src")" && pwd)"
+unset _src
+
+# Resolve HYDRA_HOME: env var > repo root (dev) > ~/.hydra (installed)
+if [[ -z "${HYDRA_HOME:-}" ]]; then
+  if [[ -f "$SCRIPT_DIR/dispatch/route.sh" ]]; then
+    export HYDRA_HOME="$SCRIPT_DIR"
+  elif [[ -f "$HOME/.hydra/dispatch/route.sh" ]]; then
+    export HYDRA_HOME="$HOME/.hydra"
+  else
+    echo "❌ Hydra scripts not found." >&2
+    echo "   Run install.sh or set HYDRA_HOME to your hydra directory." >&2
+    exit 1
+  fi
+fi
+
+# Resolve HYDRA_DATA (mutable logs/state) — always user-owned
+export HYDRA_DATA="${HYDRA_DATA:-$HOME/.hydra}"
+mkdir -p "$HYDRA_DATA/logs"
+
+# Seed state.json if missing
+if [[ ! -f "$HYDRA_DATA/logs/state.json" ]]; then
+  echo '{"claude_pct":0,"exhausted_pools":[]}' > "$HYDRA_DATA/logs/state.json"
+fi
+
+# Dependency checks
+missing=()
+for dep in bun jq yq; do
+  command -v "$dep" &>/dev/null || missing+=("$dep")
+done
+if [[ ${#missing[@]} -gt 0 ]]; then
+  echo "❌ Missing dependencies: ${missing[*]}" >&2
+  echo "   Install with: brew install ${missing[*]}" >&2
+  exit 1
+fi
+
+exec bun "$HYDRA_HOME/ui/src/index.tsx"

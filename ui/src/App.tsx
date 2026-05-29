@@ -3,6 +3,7 @@ import { Box, Text, useInput, useApp } from 'ink'
 import StatusPanel from './components/StatusPanel.js'
 import ChatView from './components/ChatView.js'
 import InputBar from './components/InputBar.js'
+import { readFileSync, writeFileSync, existsSync, unlinkSync } from 'fs'
 import { loadState, dispatch, STATE_FILE, AUTH_FILE } from './state.js'
 import type { Message, EnumKey, SystemState } from './types.js'
 import { ENUM_KEYS, ENUM_TO_TIER, TIER_LABELS } from './types.js'
@@ -74,8 +75,9 @@ export default function App() {
         if (authState.authRequired && authState.authUrl) {
           addMsg({ role: 'system', content: `🔐 Auth required for pool: ${authState.authPool}\n\nURL: ${authState.authUrl}\n\nCopy this URL to your browser. After login, run /auth-clear` })
           try {
-            const { execSync: exec } = require('child_process') as typeof import('child_process')
-            exec(`open "${authState.authUrl}" 2>/dev/null || xdg-open "${authState.authUrl}" 2>/dev/null || true`)
+            const { spawn: spawnOpen } = require('child_process') as typeof import('child_process')
+            const opener = process.platform === 'darwin' ? 'open' : 'xdg-open'
+            spawnOpen(opener, [authState.authUrl], { detached: true, stdio: 'ignore' }).unref()
           } catch {}
         } else {
           addMsg({ role: 'system', content: '✓ No auth required — all pools healthy' })
@@ -83,8 +85,7 @@ export default function App() {
         break
       case 'auth-clear':
         try {
-          const { execSync: execClear } = require('child_process') as typeof import('child_process')
-          execClear(`rm -f "${AUTH_FILE}"`)
+          if (existsSync(AUTH_FILE)) unlinkSync(AUTH_FILE)
           setState(loadState())
           addMsg({ role: 'system', content: '✓ Auth flag cleared' })
         } catch { addMsg({ role: 'error', content: 'Failed to clear auth flag' }) }
@@ -96,20 +97,20 @@ export default function App() {
       case 'set-pct':
         const pct = parseInt(parts[1] ?? '0', 10)
         if (!isNaN(pct)) {
-          const { execSync } = require('child_process') as typeof import('child_process')
-          const stateFile = STATE_FILE
           try {
-            execSync(`jq '.claude_pct = ${pct}' ${stateFile} > ${stateFile}.tmp && mv ${stateFile}.tmp ${stateFile}`)
+            const raw = existsSync(STATE_FILE) ? JSON.parse(readFileSync(STATE_FILE, 'utf8')) : {}
+            raw.claude_pct = pct
+            writeFileSync(STATE_FILE, JSON.stringify(raw))
             setState(loadState())
             addMsg({ role: 'system', content: `Claude context set to ${pct}%` })
           } catch { addMsg({ role: 'error', content: 'Failed to update state' }) }
         }
         break
       case 'reset-pools':
-        const { execSync: ex2 } = require('child_process') as typeof import('child_process')
-        const sf = STATE_FILE
         try {
-          ex2(`jq '.exhausted_pools = []' ${sf} > ${sf}.tmp && mv ${sf}.tmp ${sf}`)
+          const raw = existsSync(STATE_FILE) ? JSON.parse(readFileSync(STATE_FILE, 'utf8')) : {}
+          raw.exhausted_pools = []
+          writeFileSync(STATE_FILE, JSON.stringify(raw))
           setState(loadState())
           addMsg({ role: 'system', content: 'All pools reset to ok' })
         } catch { addMsg({ role: 'error', content: 'Failed to reset pools' }) }
@@ -136,7 +137,8 @@ export default function App() {
 
     addMsg({ role: 'user', content: text })
 
-    const enumKey = classify(text) !== 'STANDARD' ? classify(text) : selectedEnum
+    const classified = classify(text)
+    const enumKey = classified !== 'STANDARD' ? classified : selectedEnum
     const tier = ENUM_TO_TIER[enumKey]
     const model = TIER_LABELS[tier]?.model ?? 'unknown'
 

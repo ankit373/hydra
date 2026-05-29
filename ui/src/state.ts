@@ -1,5 +1,6 @@
 import { execSync } from 'child_process'
 import { readFileSync, existsSync } from 'fs'
+import { homedir } from 'os'
 import type { SystemState, ClaudeMode, PoolStatus } from './types.js'
 
 import { fileURLToPath } from 'url'
@@ -7,9 +8,26 @@ import { dirname, join } from 'path'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
-export const HYDRA = join(__dirname, '../..')
-export const STATE_FILE = join(HYDRA, 'logs/state.json')
-export const AUTH_FILE  = join(HYDRA, 'logs/auth_required.json')
+
+// HYDRA_HOME = where dispatch/ and registry/ live (scripts, read-only)
+// Priority: env var → auto-detect repo layout → ~/.hydra (installed)
+function resolveHydraHome(): string {
+  if (process.env.HYDRA_HOME) return process.env.HYDRA_HOME
+  const repoGuess = join(__dirname, '../..')
+  if (existsSync(join(repoGuess, 'dispatch/route.sh'))) return repoGuess
+  return join(homedir(), '.hydra')
+}
+
+// HYDRA_DATA = where logs/ and state live (mutable, per-user)
+function resolveHydraData(): string {
+  if (process.env.HYDRA_DATA) return process.env.HYDRA_DATA
+  return join(homedir(), '.hydra')
+}
+
+export const HYDRA      = resolveHydraHome()
+const        HYDRA_DATA = resolveHydraData()
+export const STATE_FILE = join(HYDRA_DATA, 'logs/state.json')
+export const AUTH_FILE  = join(HYDRA_DATA, 'logs/auth_required.json')
 
 function claudeMode(pct: number): ClaudeMode {
   if (pct >= 80) return 'emergency'
@@ -82,8 +100,9 @@ export async function dispatch(enumKey: string, prompt: string): Promise<string>
     let out = '', err = ''
     child.stdout?.on('data', (d: Buffer) => { out += d.toString() })
     child.stderr?.on('data', (d: Buffer) => { err += d.toString() })
-    child.on('close', (code: number) => {
-      if (code === 0 && out.trim()) resolve(out.trim())
+    child.on('close', (code: number | null, signal: NodeJS.Signals | null) => {
+      if (code === 0) resolve(out.trim())
+      else if (signal) reject(new Error(err.trim() || `killed by signal ${signal}`))
       else reject(new Error(err.trim() || `exit ${code}`))
     })
   })

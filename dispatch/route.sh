@@ -24,7 +24,9 @@ set -euo pipefail
 HYDRA_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 REGISTRY_MODELS="$HYDRA_DIR/registry/models.yaml"
 REGISTRY_ROUTING="$HYDRA_DIR/registry/routing.yaml"
-LOG_DIR="$HYDRA_DIR/logs"
+# HYDRA_DATA overrides the mutable data dir (logs, state.json) so the TUI
+# and the router always read/write the same state.json.
+LOG_DIR="${HYDRA_DATA:+$HYDRA_DATA/logs}"; LOG_DIR="${LOG_DIR:-$HYDRA_DIR/logs}"
 LOG_FILE="$LOG_DIR/dispatch.log"
 STATE_FILE="$LOG_DIR/state.json"   # tracks pool exhaustion, claude usage %
 
