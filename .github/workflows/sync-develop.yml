@@ -1,0 +1,23 @@
+name: Sync develop with main
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  sync:
+    name: Merge main → develop
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Merge main into develop
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout develop
+          git merge origin/main --no-edit --ff-only || git merge origin/main --no-edit -X theirs
+          git push origin develop
