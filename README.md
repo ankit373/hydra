@@ -1,188 +1,428 @@
-# Hydra — Multi-Model AI Orchestration System
+<div align="center">
 
-Hydra is a robust, multi-model AI routing and orchestration system designed to run as a hierarchy of cooperative AI agents. In this setup, the Claude Code CLI functions as the **Brain** (Orchestrator / Tier 1), while cheaper, faster, or specialized models (served via the Antigravity CLI and local Ollama) act as **Heads** (Tiers 2-10) to execute specific subtasks.
+<pre>
+    ██╗  ██╗██╗   ██╗██████╗ ██████╗  █████╗ 
+    ██║  ██║╚██╗ ██╔╝██╔══██╗██╔══██╗██╔══██╗
+    ███████║ ╚████╔╝ ██║  ██║██████╔╝███████║
+    ██╔══██║  ╚██╔╝  ██║  ██║██╔══██╗██╔══██║
+    ██║  ██║   ██║   ██████╔╝██║  ██║██║  ██║
+    ╚═╝  ╚═╝   ╚═╝   ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝
+</pre>
 
-By delegating tasks based on complexity, Hydra optimizes API costs, preserves Claude's context window, and accelerates developer velocity.
+### The AI Control Plane for Software Development
+
+*One command. Every model. Total control.*
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-8b5cf6.svg)](LICENSE)
+[![Go 1.22](https://img.shields.io/badge/Go-1.22-00ADD8?logo=go&logoColor=white)](core/go.mod)
+[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey?logo=apple)](https://hydra.uvansa.com)
+[![GitHub Stars](https://img.shields.io/github/stars/ankit373/hydra?style=flat&color=8b5cf6)](https://github.com/ankit373/hydra/stargazers)
+[![GitHub Issues](https://img.shields.io/github/issues/ankit373/hydra?color=06b6d4)](https://github.com/ankit373/hydra/issues)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
+
+<br/>
+
+[**Website**](https://hydra.uvansa.com) · [**Docs**](https://hydra.uvansa.com/docs) · [**Roadmap**](https://github.com/users/ankit373/projects/2) · [**Issues**](https://github.com/ankit373/hydra/issues)
+
+</div>
 
 ---
 
-## Architecture & Directory Layout
+## What is Hydra?
 
-The project is structured into three main layers: **Dispatchers** (execution binaries/scripts), **Registries** (YAML configuration files defining system policy, routing, and workspaces), and the **TUI** (an Ink/React terminal dashboard interface).
+You have Claude Code for complex problems, Codex for code generation, Ollama running local models, API keys for half a dozen providers. Every prompt goes to the most expensive model because routing is manual. Sensitive data flows through third-party APIs because there is no enforcement layer. You have no idea what you're spending across all of them.
+
+**Hydra is the control plane that sits in front of all of it.**
+
+It discovers every AI model on your machine, assigns each a capability score, routes tasks to the right model by complexity and cost, enforces PII policy so sensitive data never leaves your machine, and logs every dispatch with token counts and cost — without any manual configuration.
+
+```bash
+brew install --HEAD Formula/hydra.rb && hydra init
+```
+
+---
+
+## Works With
+
+Hydra discovers and routes to all of these automatically — no plugins, no manual config:
+
+**Coding Agents & CLIs**
+
+| | | | | |
+|:-:|:-:|:-:|:-:|:-:|
+| ![Claude](https://img.shields.io/badge/Claude_Code-8b5cf6?logo=anthropic&logoColor=white&style=flat-square) | ![Codex](https://img.shields.io/badge/OpenAI_Codex-412991?logo=openai&logoColor=white&style=flat-square) | ![Cursor](https://img.shields.io/badge/Cursor-black?logo=cursor&logoColor=white&style=flat-square) | ![Kiro](https://img.shields.io/badge/Amazon_Kiro-FF9900?logo=amazon&logoColor=white&style=flat-square) | ![Windsurf](https://img.shields.io/badge/Windsurf-0ea5e9?style=flat-square) |
+| ![Gemini](https://img.shields.io/badge/Gemini_CLI-4285F4?logo=google&logoColor=white&style=flat-square) | ![Copilot](https://img.shields.io/badge/GitHub_Copilot-24292e?logo=github&logoColor=white&style=flat-square) | ![Cody](https://img.shields.io/badge/Sourcegraph_Cody-FF5543?style=flat-square) | ![Amp](https://img.shields.io/badge/Amp-10b981?style=flat-square) | ![Continue](https://img.shields.io/badge/Continue-6366f1?style=flat-square) |
+
+**API Providers**
+
+| | | | | | |
+|:-:|:-:|:-:|:-:|:-:|:-:|
+| ![Anthropic](https://img.shields.io/badge/Anthropic-8b5cf6?style=flat-square) | ![OpenAI](https://img.shields.io/badge/OpenAI-412991?logo=openai&logoColor=white&style=flat-square) | ![Google](https://img.shields.io/badge/Google_AI-4285F4?logo=google&logoColor=white&style=flat-square) | ![Groq](https://img.shields.io/badge/Groq-f97316?style=flat-square) | ![Mistral](https://img.shields.io/badge/Mistral-f59e0b?style=flat-square) | ![DeepSeek](https://img.shields.io/badge/DeepSeek-06b6d4?style=flat-square) |
+| ![Together](https://img.shields.io/badge/Together_AI-10b981?style=flat-square) | ![Fireworks](https://img.shields.io/badge/Fireworks-ef4444?style=flat-square) | ![xAI](https://img.shields.io/badge/xAI_Grok-black?style=flat-square) | ![Bedrock](https://img.shields.io/badge/AWS_Bedrock-FF9900?logo=amazon&logoColor=white&style=flat-square) | ![Azure](https://img.shields.io/badge/Azure_OpenAI-0078D4?logo=microsoft&logoColor=white&style=flat-square) | ![Cohere](https://img.shields.io/badge/Cohere-39d353?style=flat-square) |
+
+**Local Runtimes**
+
+| | |
+|:-:|:-:|
+| ![Ollama](https://img.shields.io/badge/Ollama-black?style=flat-square) | ![LM Studio](https://img.shields.io/badge/LM_Studio-8b5cf6?style=flat-square) |
+
+---
+
+## Architecture
 
 ```
-hydra/
-├── README.md               # Main repository documentation
-├── AGENTS.md               # Antigravity agent instructions & execution rules
-├── CLAUDE.md               # Claude Code orchestrator instructions & reference
-├── hydra-ui                # Entry script to launch the React TUI
-├── dispatch/               # Core routing, execution, and utility scripts
-├── registry/               # Policy, pricing, routing, and workspace configuration files
-├── skills/                 # System prompts for specific agent capabilities
-├── context/                # Project context files injected into agent environments
-├── scripts/                # Housekeeping and maintenance scripts
-└── ui/                     # Ink-based React terminal application source code
+  ┌───────────────────────────────────────────────────────────────────┐
+  │                         hydra dispatch                            │
+  └───────────────────────────────┬───────────────────────────────────┘
+                                  │
+                    ┌─────────────▼──────────────┐
+                    │          Hydra              │
+                    │                             │
+                    │  ┌─────────────────────┐    │
+                    │  │   Policy Engine     │    │
+                    │  │  PII detection      │    │
+                    │  │  cost ceiling       │    │
+                    │  │  local-only routing │    │
+                    │  └──────────┬──────────┘    │
+                    │             │               │
+                    │  ┌──────────▼──────────┐    │
+                    │  │    Tier Router      │    │
+                    │  │  score → tier       │    │
+                    │  │  fallback chains    │    │
+                    │  └──────────┬──────────┘    │
+                    └────────┬────┴────────────────┘
+                             │
+           ┌─────────────────┼─────────────────┐
+           │                 │                 │
+    ┌──────▼──────┐   ┌──────▼──────┐   ┌──────▼──────┐
+    │  CLI Heads  │   │  API Heads  │   │ Local Heads │
+    │             │   │             │   │             │
+    │ Claude Code │   │   OpenAI    │   │   Ollama    │
+    │    Codex    │   │  Anthropic  │   │  LM Studio  │
+    │   Cursor    │   │    Groq     │   │             │
+    │    Kiro     │   │  Together   │   │             │
+    │  Windsurf   │   │   + more    │   │             │
+    └─────────────┘   └─────────────┘   └─────────────┘
+      score: 60–95      score: 70–95      score: 50–72
 ```
 
 ---
 
-## File-by-File Reference
+## Features
 
-### Root Directory
+### 🔍 Zero-Config Discovery
 
-*   **[AGENTS.md](AGENTS.md)**: Rules and guidelines for delegated Antigravity heads. Standardizes output formats, error propagation, and the protocol for escalating tasks back to the orchestrator.
-*   **[CLAUDE.md](CLAUDE.md)**: Master guidelines for Claude Code (the Brain). Contains the classification flow, token preservation limits (with warnings at 75% and emergency thresholds at 80%), rubber duck review protocols, and CLI usage commands.
-*   **[hydra-ui](hydra-ui)**: A startup wrapper shell script that boots the interactive Ink React Terminal User Interface (TUI) via Bun. Now automatically validates system requirements and resolves home directories.
-*   **[install.sh](install.sh)**: Standalone installer script that copies Hydra system modules, handles npm configurations, configures `state.json`, and updates your shell RC config.
-*   **[Formula/hydra.rb](Formula/hydra.rb)**: Homebrew configuration tap for automated package manager installations.
+Hydra scans your machine in under two seconds. No config files to edit, no plugins to install.
+
+```
+$ hydra probe
+
+  Heads discovered (6)                           2.1s
+
+  › claude              Claude Code         score:95  cli    ✓ ready
+    codex               OpenAI Codex        score:88  cli    ✓ ready
+    openai              OpenAI (API)        score:88  env    ✓ key found
+    ollama/qwen3:8b     Qwen3 8B            score:66  port   ✓ running
+    ollama/phi4-mini    Phi-4 Mini          score:64  port   ✓ running
+    anthropic           Anthropic (API)     score:95  env    ✓ key found
+```
+
+Scanning happens across three channels simultaneously:
+
+| Channel | What it finds |
+|---------|---------------|
+| **PATH scan** | 13+ CLI tools — Claude Code, Codex, Cursor, Kiro, Windsurf, Gemini, Copilot, Cody, Amp, Continue, Ollama binary |
+| **Port scan** | Ollama (11434), LM Studio (1234) — queries each server and lists every installed model individually |
+| **Env vars** | 14 API providers — Anthropic, OpenAI, Google, xAI, Groq, Together, Fireworks, Mistral, DeepSeek, Bedrock, Azure, Perplexity, Cohere, Replicate |
+
+### 🧠 Hardware-Aware Local Model Selection
+
+When you have Ollama, Hydra picks the best model for your actual available memory — not your total RAM. It reads 7 days of memory usage history and uses the 75th-percentile free memory reading so the recommendation reflects how your machine actually runs under typical load, not a lucky snapshot.
+
+```
+  Detected: Apple Silicon · 16GB total · memory fully occupied (1.2GB free)
+  ⚠  Memory tight — close other apps to run local models
+
+  Recommended alternatives (free tiers available):
+
+  ✓ Claude Code   Free tier via claude.ai — npm install -g @anthropic-ai/claude-code
+  ✓ OpenAI Codex  Free tier — npm install -g @openai/codex
+  ✓ Cursor        Free tier IDE — cursor.com
+```
+
+```
+  Detected: Apple Silicon · 32GB total · 18.4GB free for models
+  Based on 14 samples over 6 days · typical free: 17.8GB avg, 16.2GB p75
+
+  ✓ Qwen2.5-Coder 32B   32B   uses ~20GB · 0.4GB left (very tight)
+  ✓ Qwen3 14B           14B   uses ~10GB · 6.2GB left free
+  ✓ Qwen2.5-Coder 14B   14B   uses ~10GB · 6.2GB left free
+  ✓ Qwen3 8B             8B   uses ~6GB  · 10.2GB left free  ← recommended
+  ✓ Qwen2.5-Coder 7B     7B   uses ~5GB  · 11.2GB left free
+```
+
+### 🔒 PII-Aware Routing (Enforced, Not Conventional)
+
+Enable local-only policy in `hydra init` and any prompt containing sensitive data is blocked from leaving your machine — at the dispatch layer, before any network call is made.
+
+Detected patterns: Social Security Numbers, credit card numbers, email addresses, API keys and tokens, IP addresses, private key material.
+
+```bash
+$ hydra dispatch --prompt "process payment for card 4111-1111-1111-1111"
+
+  Policy violation: prompt contains PII (credit card pattern)
+  Action: routing to local-only head
+
+  Dispatching → ollama/qwen3:8b  [local, no API call made]
+```
+
+### 💰 Full Cost Visibility
+
+Every dispatch is logged to `~/.hydra/dispatch.jsonl` with model, tier, token counts, estimated cost, and fallback chain. Run `hydra stats` to see where your budget is going.
+
+```
+$ hydra stats
+
+  Cost — last 30 days
+
+  Model                 Dispatches   Tokens       Est. Cost
+  claude                12           48,200        $0.72
+  openai                4            12,100        $0.18
+  ollama/qwen3:8b       89           341,000       $0.00  (local, free)
+  ─────────────────────────────────────────────────────────
+  Total                 105          401,300       $0.90
+
+  Saved vs all-Claude: ~$6.03  (87%)
+  Local model share:   85%
+```
+
+### ⚡ Tier-Based Dispatch with Automatic Fallbacks
+
+Tasks route through named tiers by capability score. If a head is unavailable, Hydra falls back automatically.
+
+| Tier | Score range | Example heads |
+|------|-------------|---------------|
+| `expert` | 90–100 | Claude Code, Claude Opus |
+| `complex` | 80–89 | Codex, GPT-4.1, Gemini Pro |
+| `standard` | 70–79 | Gemini Flash, Claude Haiku |
+| `simple` | 60–69 | Qwen3 8B, Qwen2.5-Coder 7B (local) |
+| `local` | 50–59 | Llama 3.2 3B, Phi-4 Mini |
+
+```bash
+# Let Hydra pick the best available model
+hydra dispatch --prompt "refactor auth middleware to use JWT refresh tokens"
+
+# Preview the full fallback chain before dispatching
+hydra dispatch --dry-run --prompt "write a SQL migration"
+#
+#   Primary:   claude (score: 95)
+#   Fallback:  codex  (score: 88)  ← if claude unavailable
+#   Fallback:  openai (score: 88)  ← if codex unavailable
+#   Local:     ollama/qwen3:8b     ← always available
+
+# Force local — no API calls regardless of policy
+hydra dispatch --local --prompt "write unit tests for this function"
+```
 
 ---
 
-### Dispatch Layer (`dispatch/`)
+## Comparison
 
-This directory houses the execution primitives that form the backbone of Hydra's routing and manipulation capabilities.
-
-*   **[dispatch/hydra.sh](dispatch/hydra.sh)**: The primary CLI entry point for developers. Provides quick subcommands for checking system status (`hydra status`), displaying active model tiers (`hydra list`), executing prompts (`hydra do`), running rubber-duck reviews (`hydra duck`), and managing token state.
-*   **[dispatch/route.sh](dispatch/route.sh)**: The core Hydra router. Resolves routing keys (e.g., `SIMPLE`, `COMPLEX`) to numeric model tiers, manages cascading fallback lists on tool/API failure, skips exhausted API quotas, and monitors state for Claude token protection.
-*   **[dispatch/agy.sh](dispatch/agy.sh)**: A wrapper script around `agy --print` (Antigravity). Dynamically swaps target models in `~/.gemini/antigravity-cli/settings.json`, detects when browser authentication is required, and runs a token-estimation sidecar to write token stats on exit.
-*   **[dispatch/ollama.sh](dispatch/ollama.sh)**: Executes prompts using local models running on Ollama (used for Tier 10 `GRUNT` work). Automatically checks server health, starts the Ollama daemon if inactive, and parses JSON output to capture exact token usage.
-*   **[dispatch/scope.sh](dispatch/scope.sh)**: A workspace validation engine. Ensures file modification requests target absolute paths within defined workspace roots and conform to configured path glob boundaries (`allowed_globs` and `denied_globs`).
-*   **[dispatch/decide.sh](dispatch/decide.sh)**: Evaluates task metadata (file size, task type, extension) against rules in `registry/policy.yaml` to dynamically build execution instructions for downstream editing scripts.
-*   **[dispatch/edit.sh](dispatch/edit.sh)**: An atomic file writer. Backs up target files, requests the model edit, extracts changed code, performs code block application, and runs a validation check. If validation fails, it automatically rolls back changes.
-*   **[dispatch/review.sh](dispatch/review.sh)**: A git-and-backup validation harness. Allows the orchestrator to list modified files, view diffs, approve changes, or reject and roll them back safely. Can also dispatch a diff to a QA model tier for critique.
-*   **[dispatch/parallel.sh](dispatch/parallel.sh)**: Fans out multiple independent tasks (either text prompts or file edits) concurrently using background jobs, gathering execution states into a unified JSON array.
-*   **[dispatch/company.sh](dispatch/company.sh)**: Coordinates multi-stage playbook execution. Resolves workspace contexts, maintains stage states (todo, in-progress, completed, blocked), posts comments to GitHub Issues or Jira tickets, and updates a markdown progress ledger (`HYDRA.md`).
-*   **[dispatch/repo-map.sh](dispatch/repo-map.sh)**: Scans workspace directories and builds a compressed representation of code signatures and declarations (classes, functions, interfaces) to supply context to model prompts without exceeding token limits.
-*   **[dispatch/STRATEGY_RESEARCH.md](dispatch/STRATEGY_RESEARCH.md)**: Research notes detailing strategies from industry tools (Aider, Composer, Cursor) mapping their application to Hydra's architectural goals.
-*   **[dispatch/PHASE2_NOTES.md](dispatch/PHASE2_NOTES.md)**: Planning and status document detailing Phase 1 delivery items and Phase 2 items such as search-replace diff blocks, unified diff strategies, and automatic git commits.
-*   **[dispatch/cost.sh](dispatch/cost.sh)**: Parses `logs/cost.jsonl` to aggregate and render financial tables grouping cost by tier, token count, task_id, run_id, or day.
-
----
-
-### Configuration & Registry Layer (`registry/`)
-
-YAML configuration files that govern routing, access control, cost estimation, and model setups.
-
-*   **[registry/routing.yaml](registry/routing.yaml)**: Defines the central complexity enum (`GRUNT` to `CORE`) mapping to specific tier numbers. Configures fallback routing arrays and defines cross-model review mappings.
-*   **[registry/models.yaml](registry/models.yaml)**: Configures all available models. Defines token quotas, pricing profiles, and groups models into token pools (e.g., `agy_flash`, `agy_gemini_pro`, `agy_claude`) to track and limit concurrent usage.
-*   **[registry/domains.yaml](registry/domains.yaml)**: Maps developer task domains (e.g., `auth`, `api`, `data`) to complexity enum keys. This is the first file the orchestrator reads during task classification to determine routing.
-*   **[registry/workspace.yaml](registry/workspace.yaml)**: Sets directory scopes, file edit exclusion patterns (e.g., ignoring `.env` files and `node_modules`), and maps file extensions to validation syntax check commands.
-*   **[registry/policy.yaml](registry/policy.yaml)**: Implements condition checks for routing tasks. Dictates when to apply search-replace diff block formats versus full file rewrites.
-*   **[registry/playbooks.yaml](registry/playbooks.yaml)**: Predefined sequences of stages used by `company.sh` to automate complex developer workflows (e.g., refactoring paths, code quality sweeps).
-*   **[registry/pricing.yaml](registry/pricing.yaml)**: Defines pricing multipliers used by routing scripts to estimate runtime API costs.
-*   **[registry/workforce.yaml](registry/workforce.yaml)**: Configures agent profiles and workspace roles.
-
----
-
-### Ink React TUI (`ui/`)
-
-A React-based Terminal User Interface built with Ink that acts as a real-time command dashboard for monitoring Hydra's system state.
-
-*   **[ui/package.json](ui/package.json)**: Declares TUI package specifications and scripts (`dev`, `start`), using Bun for runtime execution and Ink for console UI rendering.
-*   **[ui/tsconfig.json](ui/tsconfig.json)**: TypeScript configuration defining compilation parameters.
-*   **[ui/src/index.tsx](ui/src/index.tsx)**: Entry point that initializes React and mounts the main Ink TUI component in the shell.
-*   **[ui/src/App.tsx](ui/src/App.tsx)**: Main TUI application component. Manages application state, handles keyboard listeners (using `Tab` to cycle model tiers and `Esc` to quit), and processes slash commands (`/status`, `/tiers`, `/set-pct`).
-*   **[ui/src/state.ts](ui/src/state.ts)**: Interacts with shell utilities. Spawns `route.sh` as a child process and reads configuration logs to update the UI with token percent usage and cost estimations.
-*   **[ui/src/types.ts](ui/src/types.ts)**: Contains TypeScript type definitions, mappings from routing keys to tier indices, and tier metadata.
-*   **[ui/src/components/StatusPanel.tsx](ui/src/components/StatusPanel.tsx)**: Displays the top header in the TUI, showing current Claude context token percentage, active workspace paths, and available API token pools.
-*   **[ui/src/components/ChatView.tsx](ui/src/components/ChatView.tsx)**: Renders a scrollable console representation of the chat history, highlighting outputs by model role (system, user, assistant, error).
-*   **[ui/src/components/InputBar.tsx](ui/src/components/InputBar.tsx)**: Renders the shell input bar at the bottom of the interface, showcasing the currently selected model tier.
-
----
-
-### Skills & Context
-
-*   **[skills/delegate.md](skills/delegate.md)**: System instruction prompt directing models on how to divide a large chore into isolated subtasks, formatting them as a JSON list for `parallel.sh`.
-*   **[skills/escalate.md](skills/escalate.md)**: Guidance defining when a model should fail-fast and escalate a task to a higher tier due to design ambiguity or cross-file dependencies.
-*   **[skills/rubber-duck.md](skills/rubber-duck.md)**: Review instructions for model-based critique. Focuses on detecting tradeoffs, identifying edge cases, and verifying syntax correctness.
-*   **[scripts/maintenance.sh](scripts/maintenance.sh)**: A simple cleanup tool that resets state files, wipes execution logs, and rotates temporary backup copies.
-
----
-
-## Model Tier Map
-
-Tasks are classified and dispatched to one of the following ten tiers:
-
-| Tier | Enum Key | Target Model | Executor | Role |
-| :--- | :--- | :--- | :--- | :--- |
-| **1** | `CORE` | Claude Code | Direct CLI | Brain (Orchestrator, does not route) |
-| **2** | `EXPERT` | Claude Opus 4.6 (Thinking) | Antigravity | Architecture decisions, systems design |
-| **3** | `VERY_HARD` | Claude Sonnet 4.6 (Thinking) | Antigravity | Complex refactors, multi-step logic |
-| **4** | `HARD` | Gemini 2.0 Flash Thinking | Antigravity | Tradeoff reviews, Rubber Duck evaluations |
-| **5** | `COMPLEX` | Gemini 3.1 Pro (High) | Antigravity | Middleware, security, APIs |
-| **6** | `MODERATE` | Gemini 3.1 Pro (Low) | Antigravity | Service components, validation code |
-| **7** | `STANDARD` | Gemini 3.5 Flash (High) | Antigravity | Controllers, basic CRUD, handlers |
-| **8** | `SIMPLE` | Gemini 3.5 Flash (Medium) | Antigravity | DTOs, interfaces, database schemas |
-| **9** | `TRIVIAL` | Gemini 3.5 Flash (Low) | Antigravity | Constants, configurations, helper updates |
-| **10** | `GRUNT` | Qwen 2.5 Coder 7B | Ollama | Local boilerplate, mock data, simple scripts |
+| | Hydra | Manual routing | LiteLLM | RouteLLM |
+|---|:---:|:---:|:---:|:---:|
+| Auto-discovers tools on your machine | ✅ | ❌ | ❌ | ❌ |
+| Hardware-aware local model selection | ✅ | ❌ | ❌ | ❌ |
+| PII detection + local enforcement | ✅ | ❌ | ❌ | ❌ |
+| Fallback chains | ✅ | ❌ | ✅ | ✅ |
+| Per-dispatch cost logging | ✅ | ❌ | ✅ | ❌ |
+| Works with CLI tools (not just APIs) | ✅ | ✅ | ❌ | ❌ |
+| Zero config to start | ✅ | ✅ | ❌ | ❌ |
+| MCP server registry *(v2)* | 🔨 | ❌ | ❌ | ❌ |
+| Central security agent *(v2)* | 🔨 | ❌ | ❌ | ❌ |
 
 ---
 
 ## Getting Started
 
-### Installation & Environment Setup
+### Install
 
-Hydra supports three installation methods depending on your environment.
-
-#### Option A: Homebrew (Recommended)
-Install locally from the cloned repository (installs the latest main branch commit under `--HEAD`):
+**Homebrew (recommended):**
 ```bash
 brew install --HEAD Formula/hydra.rb
 ```
 
-Or tap and install the published package:
+**Standalone installer:**
 ```bash
-brew tap ankit373/hydra && brew install hydra
+curl -fsSL https://raw.githubusercontent.com/ankit373/hydra/main/install.sh | sh
 ```
 
-To switch from the `--HEAD` release to a versioned release, read the comments inside the Homebrew formula file: [hydra.rb](Formula/hydra.rb).
-
-#### Option B: Standalone Installer
-Run the standalone installer script. It copies all code scripts to `~/.hydra`, runs `bun install` to set up TUI dependencies, seeds the initial `state.json` file, writes a dedicated `hydra` launcher binary, and automatically patches your `~/.zshrc` (or `~/.bashrc`):
-```bash
-./install.sh
-```
-
-#### Option C: Manual Development Install
-Clone the repository and install npm packages manually:
+**From source:**
 ```bash
 git clone https://github.com/ankit373/hydra.git
-cd hydra/ui
-bun install
+cd hydra/core
+go build -o hydra ./cmd/hydra && mv hydra /usr/local/bin/
 ```
 
-### Path & Data Isolation
+### First Run
 
-To prevent conflicts and support immutable system layouts (like Homebrew cellar installations), Hydra separates execution files from mutable state. 
-
-#### `HYDRA_HOME` Resolution Order
-For core scripts (dispatch scripts, registries, and TUI modules), the system resolves `HYDRA_HOME` dynamically in this order:
-1. **`HYDRA_HOME` environment variable**: Set explicitly by the Homebrew wrapper script or the launcher created by `install.sh`.
-2. **Auto-Detection**: If `dispatch/route.sh` exists relative to the module file (`__dirname` in `state.ts` or `dirname $0` in `hydra-ui`), it resolves to the local repository directory (enabling development mode to work out of the box without any variables).
-3. **Fallback**: Default to `~/.hydra` (the standard standalone installation path).
-
-#### `HYDRA_DATA` for Mutable State
-All mutable logs, authentication triggers, and configuration states (`logs/`, `state.json`, `cost.jsonl`) are kept completely separate from the read-only script directories and always write to `HYDRA_DATA` (which defaults to `~/.hydra`).
-
-If you need to redirect logs or configuration states elsewhere, set `HYDRA_DATA` in your shell configuration:
 ```bash
-export HYDRA_DATA="/custom/path/to/data"
+hydra init
 ```
 
-### Execution
+The wizard scans your machine, ranks every model it finds, walks you through picking a Cortex (your main model), lets you choose a local Ollama model calibrated to your actual hardware, and asks whether you work with sensitive data that should never leave your machine. Takes about 60 seconds.
 
-Once installed, the following commands are added to your PATH:
+### Core Commands
 
-*   **`hydra`**: Command-line routing utility. Example:
-    ```bash
-    hydra do SIMPLE "write a user profile settings schema"
-    ```
-*   **`hydra-ui`**: Opens the React/Ink terminal console dashboard to monitor model state and run dispatches interactively.
-
-### Claude Code Integration
-
-If you are running inside a Claude Code CLI session, you can run Hydra directly as a slash command:
 ```bash
-/hydra do SIMPLE "write a user profile settings schema"
+hydra init                              # first-run wizard
+hydra probe                             # scan and display all available models
+hydra status                            # live system state
+hydra dispatch --prompt "..."           # route a prompt to the best model
+hydra dispatch --dry-run --prompt "..." # preview routing without executing
+hydra dispatch --local --prompt "..."   # local models only, no API calls
+hydra stats                             # cost summary (v1.1)
 ```
-Claude Code will intercept the slash command, invoke the Hydra decider and router, and merge the generated code outputs back into your current editor context.
+
+---
+
+## Configuration
+
+`~/.hydra/config.toml` — written by `hydra init`, editable by hand:
+
+```toml
+cortex = "claude"
+
+[[tiers]]
+name    = "expert"
+heads   = ["claude", "codex"]
+
+[[tiers]]
+name    = "simple"
+heads   = ["ollama/qwen3:8b"]
+
+[[tiers]]
+name    = "local"
+heads   = ["ollama/phi4-mini"]
+
+[policies.pii]
+action  = "local-only"
+```
+
+---
+
+## Adding a Model
+
+Models are defined in [`core/internal/capabilities/data.json`](core/internal/capabilities/data.json). Adding support for a new model is one JSON entry — no Go code required:
+
+```json
+{
+  "id": "your-model-id",
+  "name": "Your Model Name",
+  "provider": "your-provider",
+  "capScore": 82
+}
+```
+
+For Ollama models, add a family pattern:
+
+```json
+{
+  "id": "family-prefix",
+  "name": "Model Family Name",
+  "provider": "ollama",
+  "capScore": 70,
+  "ollamaFamily": true
+}
+```
+
+---
+
+## Roadmap
+
+| Feature | Release | Status |
+|---------|---------|--------|
+| Auto-discovery: CLI, API keys, local ports | v1.0 | ✅ Shipped |
+| Hardware-aware Ollama model selection | v1.0 | ✅ Shipped |
+| PII detection + local-only enforcement | v1.0 | ✅ Shipped |
+| Tier routing with automatic fallback chains | v1.0 | ✅ Shipped |
+| First-run TUI wizard (`hydra init`) | v1.0 | ✅ Shipped |
+| `hydra stats` — cost breakdown by model and day | v1.1 | 🔨 Building |
+| Ollama model deduplication (binary vs models) | v1.1 | 🔨 Building |
+| MCP Server Registry | v2.0 | 📋 [#9](https://github.com/ankit373/hydra/issues/9) |
+| Per-model MCP access controls | v2.0 | 📋 [#10](https://github.com/ankit373/hydra/issues/10) |
+| Central security agent | v2.0 | 📋 [#10](https://github.com/ankit373/hydra/issues/10) |
+| Real-time cost dashboard | v2.0 | 📋 [#11](https://github.com/ankit373/hydra/issues/11) |
+| Swarm dispatch — parallel multi-model tasks | v2.0 | 📋 [#11](https://github.com/ankit373/hydra/issues/11) |
+| Web UI | v3.0 | 📋 [#12](https://github.com/ankit373/hydra/issues/12) |
+| Compliance reporting (SOC 2, GDPR) | v3.0 | 📋 Planned |
+
+See the full [Hydra Roadmap project board](https://github.com/users/ankit373/projects/2).
+
+### v2: Beyond Routing — The Full Control Plane
+
+The current layer answers: *which model handles this task?*
+
+v2 extends the control plane to answer: *what is each model allowed to touch?*
+
+**MCP Server Registry** — a central inventory of every MCP server connected to your AI tools. Today there is no way to know which model is talking to which server, what operations it has been authorized, or what it has actually called. Hydra v2 changes that: one place to see, grant, and revoke access across every model.
+
+**Central Security Agent** — a policy enforcement point between your models and your MCP servers. Even if a model has filesystem or GitHub MCP access configured, the security agent can block writes, deletes, or network calls based on centrally-defined rules. Deny rules apply regardless of what the individual model thinks it is authorized to do.
+
+**Cost Dashboard** — real-time spend tracking with per-model and per-task-type breakdowns, budget alerts, and a local vs cloud ratio so you know exactly how much you are saving by running locally.
+
+---
+
+## Project Structure
+
+```
+hydra/
+├── core/                        # Go binary — the control plane
+│   ├── cmd/hydra/               # CLI entry point (Cobra)
+│   └── internal/
+│       ├── capabilities/        # Capability scoring — data.json, no hardcoded logic
+│       ├── config/              # TOML config at ~/.hydra/config.toml
+│       ├── dispatch/            # Tier routing + fallback chains + cost logging
+│       ├── executor/            # CLI and HTTP executors for every head type
+│       ├── policy/              # PII detection + routing enforcement
+│       ├── probe/               # Concurrent multi-provider discovery
+│       ├── provider/            # CLI, env, and port discovery providers
+│       │   ├── cli/             # PATH scanner (13+ tools)
+│       │   ├── env/             # API key scanner (14 providers)
+│       │   └── port/            # Local server scanner (Ollama, LM Studio)
+│       ├── rank/                # Deduplication and capability ranking
+│       ├── sysinfo/             # Hardware detection + 7-day memory history
+│       └── tui/                 # Bubbletea init wizard + install guide
+├── dispatch/                    # Shell dispatch layer (agy + Ollama wrappers)
+├── registry/                    # Routing YAML, model definitions, policy config
+├── skills/                      # Skill prompts (delegate, escalate, rubber-duck)
+├── docs/                        # GitHub Pages (hydra.uvansa.com)
+└── Formula/hydra.rb             # Homebrew tap formula
+```
+
+---
+
+## Contributing
+
+Issues and pull requests are welcome. A few entry points:
+
+- **Add a model** — edit [`core/internal/capabilities/data.json`](core/internal/capabilities/data.json). One JSON entry. No Go required.
+- **Add a discovery provider** — implement the [`Provider` interface](core/internal/provider/provider.go) and call `provider.Register()` in an `init()` function.
+- **Add an executor** — add a row to `cliTemplates` in [`core/internal/executor/cli.go`](core/internal/executor/cli.go) or extend the HTTP executor for a new API schema.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the full guide.
+
+---
+
+## License
+
+MIT — see [LICENSE](LICENSE).
+
+---
+
+<div align="center">
+
+Built with Go · Bubbletea · Cobra · Lipgloss
+
+[hydra.uvansa.com](https://hydra.uvansa.com)
+
+</div>
