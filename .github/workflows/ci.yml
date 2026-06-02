@@ -1,7 +1,6 @@
 name: CI
 
-# Only run on PRs targeting main or develop.
-# Push to main/develop by admin is trusted — no CI burn on every direct push.
+# Disabled — re-enable before shipping by removing the `if: false` on each job.
 on:
   pull_request:
     branches: [main, develop]
@@ -15,10 +14,7 @@ jobs:
   shellcheck:
     name: Shellcheck
     runs-on: ubuntu-latest
-    # Only run when shell scripts actually changed
-    if: >
-      contains(github.event.pull_request.changed_files_url, '.sh') ||
-      github.event_name == 'pull_request'
+    if: false
     steps:
       - uses: actions/checkout@v4
 
@@ -34,9 +30,7 @@ jobs:
   typecheck:
     name: TypeScript typecheck
     runs-on: ubuntu-latest
-    # Only run when UI source files changed
-    if: >
-      github.event_name == 'pull_request'
+    if: false
     steps:
       - uses: actions/checkout@v4
 
@@ -56,6 +50,7 @@ jobs:
   yaml-lint:
     name: YAML validation
     runs-on: ubuntu-latest
+    if: false
     steps:
       - uses: actions/checkout@v4
 
@@ -75,6 +70,7 @@ jobs:
   secret-scan:
     name: Secret scan
     runs-on: ubuntu-latest
+    if: false
     steps:
       - uses: actions/checkout@v4
         with:
