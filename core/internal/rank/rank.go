@@ -15,11 +15,27 @@ var sourceWeight = map[string]int{"cli": 3, "env": 2, "port": 1}
 // per provider, preferring CLI source on ties) then sorts descending by score.
 // Local heads (LocalOnly=true) are never deduplicated against remote heads
 // because they serve a different purpose.
+//
+// Special case: the generic "ollama" CLI head (the runtime binary) is suppressed
+// when any port-discovered Ollama model exists — the named models are strictly
+// more useful than the bare runtime as a dispatchable head.
 func ByCapScore(heads []provider.Head) []provider.Head {
+	// Check if Ollama port models are present before deduping.
+	hasOllamaPortModels := false
+	for _, h := range heads {
+		if h.Provider == "ollama" && h.Source == "port" {
+			hasOllamaPortModels = true
+			break
+		}
+	}
+
 	best := map[string]provider.Head{}
 
 	for _, h := range heads {
-		// Local models get unique keys so they're never merged with remote ones.
+		// Suppress the generic ollama CLI binary when named port models exist.
+		if hasOllamaPortModels && h.ID == "ollama" && h.Source == "cli" {
+			continue
+		}
 		key := dedupeKey(h)
 		existing, ok := best[key]
 		if !ok {
@@ -49,8 +65,8 @@ func ByCapScore(heads []provider.Head) []provider.Head {
 }
 
 func dedupeKey(h provider.Head) string {
-	if h.LocalOnly {
-		return h.ID // each local model is unique
+	if h.LocalOnly || h.Provider == "antigravity" {
+		return h.ID // each local model or antigravity tier is unique
 	}
 	return h.Provider // one entry per cloud provider
 }
