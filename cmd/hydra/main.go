@@ -14,6 +14,7 @@ import (
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/dispatch"
 	"github.com/ankit373/hydra/internal/editor"
+	"github.com/ankit373/hydra/internal/parallel"
 	"github.com/ankit373/hydra/internal/probe"
 	"github.com/ankit373/hydra/internal/review"
 	"github.com/ankit373/hydra/internal/tui"
@@ -41,7 +42,7 @@ func rootCmd() *cobra.Command {
 			return cmd.Help()
 		},
 	}
-	root.AddCommand(cmdInit(), cmdProbe(), cmdStatus(), cmdDispatch(), cmdEdit(), cmdReview())
+	root.AddCommand(cmdInit(), cmdProbe(), cmdStatus(), cmdDispatch(), cmdEdit(), cmdReview(), cmdParallel())
 	return root
 }
 
@@ -356,6 +357,49 @@ func cmdReview() *cobra.Command {
 	qa.Flags().IntVar(&qaTier, "tier", 4, "reviewer tier (default 4 = HARD/GPT-OSS)")
 
 	cmd.AddCommand(sum, diff, approve, reject, qa)
+	return cmd
+}
+
+// ── parallel ──────────────────────────────────────────────────────────────────
+
+func cmdParallel() *cobra.Command {
+	var tasksFile string
+
+	cmd := &cobra.Command{
+		Use:   "parallel",
+		Short: "Fan N tasks out to N Hydra Heads simultaneously",
+		RunE: func(_ *cobra.Command, _ []string) error {
+			raw, err := os.ReadFile(tasksFile)
+			if err != nil {
+				return fmt.Errorf("reading tasks file: %w", err)
+			}
+			var tasks []parallel.Task
+			if err := json.Unmarshal(raw, &tasks); err != nil {
+				return fmt.Errorf("invalid JSON in %s: %w", tasksFile, err)
+			}
+
+			ctx := context.Background()
+			results, err := parallel.Run(ctx, tasks)
+			if err != nil {
+				return err
+			}
+
+			out, _ := json.MarshalIndent(results, "", "  ")
+			fmt.Println(string(out))
+
+			// Exit non-zero if any task failed.
+			for _, r := range results {
+				var s struct{ Status string }
+				if json.Unmarshal(r.Raw(), &s) == nil && s.Status == "fail" {
+					os.Exit(1)
+				}
+			}
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVar(&tasksFile, "tasks", "", "path to tasks JSON file (required)")
+	_ = cmd.MarkFlagRequired("tasks")
 	return cmd
 }
 
