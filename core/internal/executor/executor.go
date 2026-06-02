@@ -33,10 +33,12 @@ type Executor interface {
 
 // Supports reports whether Hydra can execute a discovered head today.
 func Supports(h provider.Head) bool {
+	if h.Source == "registry" {
+		return true // agy heads — AgyExecutor handles them
+	}
 	if h.Source == "port" || h.Endpoint != "" {
 		return SupportsHTTP(h)
 	}
-
 	if _, ok := cliTemplates[h.Provider]; ok {
 		return true
 	}
@@ -44,9 +46,14 @@ func Supports(h provider.Head) bool {
 	return ok
 }
 
-// For selects the correct Executor implementation for a given Head.
-// Port-sourced heads (Ollama, LM Studio) use HTTP; everything else uses CLI.
+// For selects the correct Executor for a given Head.
+//   - registry source (agy tiers): AgyExecutor → calls dispatch/agy.sh
+//   - port source / explicit endpoint: HTTPExecutor → OpenAI-compatible REST
+//   - everything else: CLIExecutor → subprocess
 func For(h provider.Head) Executor {
+	if h.Source == "registry" {
+		return &AgyExecutor{}
+	}
 	if h.Source == "port" || h.Endpoint != "" {
 		return &HTTPExecutor{}
 	}
