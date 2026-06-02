@@ -96,6 +96,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		}
 		r := &Result{Output: resp.Output, Head: h, Retries: i, Response: resp}
 		_ = d.logDispatch(r, prompt)
+		d.syncStateJSON(r)
 		return r, nil
 	}
 
@@ -155,9 +156,42 @@ func (d *Dispatcher) selectHeads(tierHint string, localOnly bool) []provider.Hea
 	return candidates
 }
 
+// syncStateJSON updates ~/.hydra/logs/state.json after a successful dispatch
+// so the Ink UI (ui/) reflects Go dispatcher activity.
+// It reads the existing file first to preserve claude_pct and exhausted_pools
+// written by the shell router, then updates last_tier, last_model, last_status.
+func (d *Dispatcher) syncStateJSON(r *Result) {
+	stateDir := filepath.Join(config.Dir(), "logs")
+	statePath := filepath.Join(stateDir, "state.json")
+
+	// Read existing state to preserve shell-managed fields.
+	existing := map[string]any{}
+	if raw, err := os.ReadFile(statePath); err == nil {
+		_ = json.Unmarshal(raw, &existing)
+	}
+
+	existing["last_model"] = r.Head.Name
+	existing["last_status"] = "ok"
+	if tier := r.Head.Meta["tier"]; tier != "" {
+		existing["last_tier"] = tier
+	}
+
+	updated, err := json.MarshalIndent(existing, "", "  ")
+	if err != nil {
+		return
+	}
+
+	_ = os.MkdirAll(stateDir, 0o700)
+	tmp := statePath + ".tmp"
+	if err := os.WriteFile(tmp, updated, 0o600); err != nil {
+		return
+	}
+	_ = os.Rename(tmp, statePath)
+}
+
 // logDispatch appends a JSON record to ~/.hydra/dispatch.jsonl for analytics.
 func (d *Dispatcher) logDispatch(r *Result, prompt string) error {
-	entry := map[string]interface{}{
+	entry := map[string]any{
 		"ts":             time.Now().UTC().Format(time.RFC3339),
 		"head":           r.Head.ID,
 		"provider":       r.Head.Provider,
