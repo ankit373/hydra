@@ -192,25 +192,6 @@ func writeAuthRequired(pool, modelFlag, authURL string) {
 	_ = os.WriteFile(filepath.Join(logDir, "auth_required.json"), data, 0o600)
 }
 
-// writeTokenSidecar writes to HYDRA_TOKEN_SIDECAR if set (for cost.sh compatibility).
-func writeTokenSidecar(model, executor, source string, promptTokens, responseTokens int) {
-	sidecar := os.Getenv("HYDRA_TOKEN_SIDECAR")
-	if sidecar == "" {
-		return
-	}
-	type entry struct {
-		Model          string `json:"model"`
-		Executor       string `json:"executor"`
-		Source         string `json:"source"`
-		PromptTokens   int    `json:"prompt_tokens"`
-		ResponseTokens int    `json:"response_tokens"`
-	}
-	data, err := json.Marshal(entry{model, executor, source, promptTokens, responseTokens})
-	if err != nil {
-		return
-	}
-	_ = os.WriteFile(sidecar, data, 0o600)
-}
 
 func min3(a, b int) int {
 	if a < b {
