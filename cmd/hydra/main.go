@@ -10,7 +10,10 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 
+	"encoding/json"
+
 	"github.com/ankit373/hydra/internal/config"
+	"github.com/ankit373/hydra/internal/cost"
 	"github.com/ankit373/hydra/internal/dispatch"
 	"github.com/ankit373/hydra/internal/probe"
 	"github.com/ankit373/hydra/internal/tui"
@@ -38,7 +41,7 @@ func rootCmd() *cobra.Command {
 			return cmd.Help()
 		},
 	}
-	root.AddCommand(cmdInit(), cmdProbe(), cmdStatus(), cmdDispatch())
+	root.AddCommand(cmdInit(), cmdProbe(), cmdStatus(), cmdDispatch(), cmdCost())
 	return root
 }
 
@@ -211,6 +214,163 @@ func cmdDispatch() *cobra.Command {
 	cmd.Flags().BoolVarP(&localOnly, "local", "l", false, "force local heads only")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "show selected head without executing")
 	cmd.Flags().StringVarP(&system, "system", "s", "", "system prompt")
+	return cmd
+}
+
+// ── cost ──────────────────────────────────────────────────────────────────────
+
+func cmdCost() *cobra.Command {
+	var jsonOut bool
+
+	printJSON := func(v any) {
+		raw, _ := json.MarshalIndent(v, "", "  ")
+		fmt.Println(string(raw))
+	}
+
+	cmd := &cobra.Command{
+		Use:   "cost",
+		Short: "Show spend summaries from cost.jsonl",
+		RunE: func(_ *cobra.Command, _ []string) error {
+			r, err := cost.Summary()
+			if err != nil {
+				return err
+			}
+			if jsonOut {
+				printJSON(r)
+				return nil
+			}
+			cost.RenderSummary(r)
+			return nil
+		},
+	}
+	cmd.PersistentFlags().BoolVar(&jsonOut, "json", false, "machine-readable JSON output")
+
+	cmd.AddCommand(
+		&cobra.Command{
+			Use: "today", Short: "Today's per-tier breakdown",
+			RunE: func(_ *cobra.Command, _ []string) error {
+				rows, err := cost.Today()
+				if err != nil {
+					return err
+				}
+				if jsonOut {
+					printJSON(rows)
+					return nil
+				}
+				cost.RenderTable("Today's spend by tier", rows)
+				return nil
+			},
+		},
+		&cobra.Command{
+			Use: "all", Short: "All-time per-tier breakdown",
+			RunE: func(_ *cobra.Command, _ []string) error {
+				rows, err := cost.All()
+				if err != nil {
+					return err
+				}
+				if jsonOut {
+					printJSON(rows)
+					return nil
+				}
+				cost.RenderTable("All-time spend by tier", rows)
+				return nil
+			},
+		},
+		&cobra.Command{
+			Use: "by-pool", Short: "All-time per-pool totals",
+			RunE: func(_ *cobra.Command, _ []string) error {
+				rows, err := cost.ByPool()
+				if err != nil {
+					return err
+				}
+				if jsonOut {
+					printJSON(rows)
+					return nil
+				}
+				cost.RenderTable("All-time spend by pool", rows)
+				return nil
+			},
+		},
+		&cobra.Command{
+			Use:  "by-task <task_id>",
+			Short: "Spending for a specific task",
+			Args: cobra.ExactArgs(1),
+			RunE: func(_ *cobra.Command, args []string) error {
+				totals, err := cost.ByTask(args[0])
+				if err != nil {
+					return err
+				}
+				if jsonOut {
+					printJSON(totals)
+					return nil
+				}
+				fmt.Printf("\n  Task %s\n", args[0])
+				fmt.Printf("    calls   %d\n    tok     %d+%d\n    cost    $%.6f\n    wall    %ds\n\n",
+					totals.Calls, totals.PromptTokens, totals.ResponseTokens,
+					totals.EstCostUSD, totals.WallSeconds)
+				return nil
+			},
+		},
+		&cobra.Command{
+			Use:  "by-run <run_id>",
+			Short: "Spending for a playbook run",
+			Args: cobra.ExactArgs(1),
+			RunE: func(_ *cobra.Command, args []string) error {
+				r, err := cost.ByRun(args[0])
+				if err != nil {
+					return err
+				}
+				if jsonOut {
+					printJSON(r)
+					return nil
+				}
+				fmt.Printf("\n  Run %s\n", args[0])
+				fmt.Printf("    calls   %d\n    cost    $%.6f\n    wall    %ds\n",
+					r.Totals.Calls, r.Totals.EstCostUSD, r.Totals.WallSeconds)
+				cost.RenderTable("Per-tier", r.ByTier)
+				return nil
+			},
+		},
+	)
+
+	tail := &cobra.Command{
+		Use:  "tail [N]",
+		Short: "Last N calls (default 10)",
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			n := 10
+			if len(args) > 0 {
+				fmt.Sscanf(args[0], "%d", &n)
+			}
+			rows, err := cost.Tail(n)
+			if err != nil {
+				return err
+			}
+			if jsonOut {
+				printJSON(rows)
+				return nil
+			}
+			cost.RenderTail(rows)
+			return nil
+		},
+	}
+
+	var since string
+	jsonCmd := &cobra.Command{
+		Use:  "json",
+		Short: "Raw JSONL rows (optionally filtered by --since)",
+		RunE: func(_ *cobra.Command, _ []string) error {
+			rows, err := cost.JSON(since)
+			if err != nil {
+				return err
+			}
+			printJSON(rows)
+			return nil
+		},
+	}
+	jsonCmd.Flags().StringVar(&since, "since", "", "ISO timestamp prefix filter (e.g. 2026-06-01)")
+
+	cmd.AddCommand(tail, jsonCmd)
 	return cmd
 }
 
