@@ -82,6 +82,15 @@ POL_ESCALATE_ON_FAIL="true"
 POL_RUBBER_DUCK="false"
 POL_DIFF_CAP_PCT=90
 POL_VALIDATE_STRICT="false"
+POL_USE_REPO_MAP="false"
+POL_USE_WORKTREE="false"
+POL_TEST_LOOP="false"
+POL_LINT_LOOP="false"
+POL_DEDUP_FILE_READS="true"
+POL_PROMPT_CACHE="true"
+POL_DEFENSIVE="false"
+POL_MAX_COST_USD=0
+POL_MAX_WALL_SECONDS=600
 POL_MATCHED_RULES="[]"
 
 if [[ -n "$POLICY_JSON" ]]; then
@@ -101,8 +110,17 @@ if [[ -n "$POLICY_JSON" ]]; then
   POL_RUBBER_DUCK=$(jq -r     '.rubber_duck           // false | tostring' "$POLICY_JSON")
   POL_DIFF_CAP_PCT=$(jq -r    '.diff_size_cap_pct     // 90'              "$POLICY_JSON")
   POL_VALIDATE_STRICT=$(jq -r '.validate_strict       // false | tostring' "$POLICY_JSON")
+  POL_USE_REPO_MAP=$(jq -r    '.use_repo_map          // false | tostring' "$POLICY_JSON")
+  POL_USE_WORKTREE=$(jq -r    '.use_worktree          // false | tostring' "$POLICY_JSON")
+  POL_TEST_LOOP=$(jq -r       '.test_loop             // false | tostring' "$POLICY_JSON")
+  POL_LINT_LOOP=$(jq -r       '.lint_loop             // false | tostring' "$POLICY_JSON")
+  POL_DEDUP_FILE_READS=$(jq -r '.dedup_file_reads     // true  | tostring' "$POLICY_JSON")
+  POL_PROMPT_CACHE=$(jq -r    '.prompt_cache          // true  | tostring' "$POLICY_JSON")
+  POL_DEFENSIVE=$(jq -r       '.defensive             // false | tostring' "$POLICY_JSON")
+  POL_MAX_COST_USD=$(jq -r    '.max_cost_usd          // 0'                "$POLICY_JSON")
+  POL_MAX_WALL_SECONDS=$(jq -r '.max_wall_seconds     // 600'              "$POLICY_JSON")
   POL_MATCHED_RULES=$(jq -c   '.matched_rules         // []'              "$POLICY_JSON")
-  info "policy loaded: mode=$POL_EDIT_MODE atomic=$POL_ATOMIC commit=$POL_AUTO_COMMIT validate_strict=$POL_VALIDATE_STRICT rules=$(echo "$POL_MATCHED_RULES" | jq -r 'join(",")')"
+  info "policy loaded: mode=$POL_EDIT_MODE atomic=$POL_ATOMIC commit=$POL_AUTO_COMMIT repo_map=$POL_USE_REPO_MAP strict=$POL_VALIDATE_STRICT rules=$(echo "$POL_MATCHED_RULES" | jq -r 'join(",")')"
 fi
 
 # Honor policy edit_mode if it was set and --mode wasn't explicitly given.
@@ -166,10 +184,29 @@ else
   context_note="The file does NOT yet exist. Create it per the instruction below."
 fi
 
+# ── Optional repo-map injection (policy.use_repo_map=true) ──────────────────
+REPO_MAP_BLOCK=""
+if [[ "${POL_USE_REPO_MAP:-}" == "true" ]]; then
+  RM_SH="$HYDRA_DIR/dispatch/repo-map.sh"
+  if [[ -x "$RM_SH" ]]; then
+    rm_out=$("$RM_SH" for "$FILE" 2>/dev/null || true)
+    rm_bytes=${#rm_out}
+    # Cap at 24KB to keep prompt size sane; trim with a marker if too big
+    if [[ $rm_bytes -gt 24576 ]]; then
+      info "repo map ${rm_bytes}B truncated to 24KB"
+      rm_out=$(printf '%s\n…[truncated, %d bytes total]…' "${rm_out:0:24576}" "$rm_bytes")
+    fi
+    if [[ -n "$rm_out" ]]; then
+      REPO_MAP_BLOCK=$(printf '\nProject context (symbol map of nearby files):\n%s\n' "$rm_out")
+      info "repo map injected (${rm_bytes}B)"
+    fi
+  fi
+fi
+
 EDIT_PROMPT=$(cat <<EOF
 You are editing a single file. Output ONLY the new file content between the
 markers. No prose. No explanations. No code fences (no \`\`\`).
-
+$REPO_MAP_BLOCK
 File path: $FILE
 $context_note
 
@@ -291,10 +328,16 @@ if [[ $VALIDATE -eq 1 && "${HYDRA_VALIDATE:-on}" != "off" ]]; then
   ext="${FILE##*.}"
   vtmpl=$("$SCOPE" validator "$ext" 2>/dev/null || true)
 
-  # Special path for ts/tsx: try workspace-local tsc if present
+  # Special path for ts/tsx: try workspace-local tsc if present.
+  # Prefer running tsc with the package's tsconfig.json (-p flag) so the package's
+  # compiler options (target, lib, jsx, etc.) apply. Without -p, tsc ignores the
+  # tsconfig and defaults to ES3 target, which fails on any modern code in sibling
+  # files. See ankit373/hydra#4.
   if [[ -z "$vtmpl" && ( "$ext" == "ts" || "$ext" == "tsx" ) && -n "$GIT_ROOT" ]]; then
-    if [[ -f "$GIT_ROOT/node_modules/.bin/tsc" ]]; then
-      vtmpl="$GIT_ROOT/node_modules/.bin/tsc --noEmit --allowJs --skipLibCheck {file}"
+    if [[ -f "$GIT_ROOT/node_modules/.bin/tsc" && -f "$GIT_ROOT/tsconfig.json" ]]; then
+      vtmpl="$GIT_ROOT/node_modules/.bin/tsc --noEmit -p $GIT_ROOT/tsconfig.json"
+    elif [[ -f "$GIT_ROOT/node_modules/.bin/tsc" ]]; then
+      vtmpl="$GIT_ROOT/node_modules/.bin/tsc --noEmit --allowJs --skipLibCheck --target es2022 --lib es2022,dom {file}"
     fi
   fi
 

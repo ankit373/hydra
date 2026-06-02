@@ -12,32 +12,48 @@
 #        sha256 "<paste sha256 here>"
 
 class Hydra < Formula
-  desc "Multi-model AI orchestration TUI — routes tasks across Claude, Gemini, GPT, and local models"
-  homepage "https://github.com/ankit373/hydra"
+  desc "AI control plane — routes prompts across Claude, Gemini, GPT, and local models with cost and policy controls"
+  homepage "https://hydra.uvansa.com"
   license "MIT"
 
   head "https://github.com/ankit373/hydra.git", branch: "main"
 
+  depends_on "go" => :build
   depends_on "jq"
   depends_on "yq"
   depends_on "oven-sh/bun/bun"
 
   def install
-    # Install scripts and registry (read-only, shared)
+    # Install shell scripts and registry (read-only, shared)
     libexec.install "dispatch", "registry", "context", "skills", "ui"
-
-    # Make all dispatch scripts executable
     Dir["#{libexec}/dispatch/*.sh"].each { |f| chmod 0755, f }
+
+    # Build the Go control plane binary into libexec so the bin/ wrapper can call it
+    system "go", "build", "-o", libexec/"hydra", "./cmd/hydra"
+    chmod 0755, libexec/"hydra"
 
     # Install UI npm/bun dependencies
     cd libexec/"ui" do
       system "bun", "install", "--frozen-lockfile"
     end
 
-    # Write the `hydra` bin wrapper
-    # HYDRA_HOME → libexec (read-only scripts, set at install time)
-    # HYDRA_DATA → ~/.hydra (mutable: logs, state — always user-owned)
+    # hydra → Go binary wrapper
+    # Sets HYDRA_HOME so the binary finds dispatch/agy.sh and registry/models.yaml.
     (bin/"hydra").write <<~SH
+      #!/usr/bin/env bash
+      set -euo pipefail
+      export HYDRA_HOME="#{libexec}"
+      export HYDRA_DATA="${HYDRA_DATA:-$HOME/.hydra}"
+      mkdir -p "$HYDRA_DATA/logs"
+      if [[ ! -f "$HYDRA_DATA/logs/state.json" ]]; then
+        echo '{"claude_pct":0,"exhausted_pools":[]}' > "$HYDRA_DATA/logs/state.json"
+      fi
+      exec "#{libexec}/hydra" "$@"
+    SH
+    chmod 0755, bin/"hydra"
+
+    # hydra-ui → Ink TUI dashboard
+    (bin/"hydra-ui").write <<~SH
       #!/usr/bin/env bash
       set -euo pipefail
       export HYDRA_HOME="#{libexec}"
@@ -48,7 +64,7 @@ class Hydra < Formula
       fi
       exec env NODE_ENV=production bun "#{libexec}/ui/src/index.tsx" "$@"
     SH
-    chmod 0755, bin/"hydra"
+    chmod 0755, bin/"hydra-ui"
   end
 
   def caveats
@@ -58,22 +74,25 @@ class Hydra < Formula
         agy  (Antigravity CLI / Windsurf)  — https://windsurf.com
         agy must be authenticated before use: run `agy` interactively once.
 
-      Ollama is optional (used for Tier 10 local inference):
+      Ollama is optional (used for local inference):
         brew install ollama
 
       Your mutable data (logs, state) lives in:
-        ~/.hydra/
+        ~/.hydra/   (override with HYDRA_DATA=/your/path)
 
-      To override: export HYDRA_DATA=/your/path before running hydra.
+      Commands:
+        hydra dispatch --help   — Go control plane
+        hydra-ui                — Ink TUI monitoring dashboard
     EOS
   end
 
   test do
-    # Verify the wrapper is executable and HYDRA_HOME resolves correctly
     ENV["HYDRA_DATA"] = testpath.to_s
     (testpath/"logs").mkpath
     (testpath/"logs/state.json").write('{"claude_pct":0,"exhausted_pools":[]}')
     assert_predicate bin/"hydra", :executable?
-    assert_match "dispatch/route.sh", shell_output("cat #{bin}/hydra")
+    assert_predicate bin/"hydra-ui", :executable?
+    assert_match "HYDRA_HOME", shell_output("cat #{bin}/hydra")
+    assert_match "libexec/hydra", shell_output("cat #{bin}/hydra")
   end
 end
