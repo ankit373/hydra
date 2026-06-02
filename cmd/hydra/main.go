@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/dispatch"
+	"github.com/ankit373/hydra/internal/editor"
 	"github.com/ankit373/hydra/internal/probe"
 	"github.com/ankit373/hydra/internal/tui"
 
@@ -38,7 +40,7 @@ func rootCmd() *cobra.Command {
 			return cmd.Help()
 		},
 	}
-	root.AddCommand(cmdInit(), cmdProbe(), cmdStatus(), cmdDispatch())
+	root.AddCommand(cmdInit(), cmdProbe(), cmdStatus(), cmdDispatch(), cmdEdit())
 	return root
 }
 
@@ -211,6 +213,49 @@ func cmdDispatch() *cobra.Command {
 	cmd.Flags().BoolVarP(&localOnly, "local", "l", false, "force local heads only")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "show selected head without executing")
 	cmd.Flags().StringVarP(&system, "system", "s", "", "system prompt")
+	return cmd
+}
+
+// ── edit ──────────────────────────────────────────────────────────────────────
+
+func cmdEdit() *cobra.Command {
+	var (
+		file       string
+		enum       string
+		prompt     string
+		noValidate bool
+	)
+
+	cmd := &cobra.Command{
+		Use:   "edit",
+		Short: "Atomic, validated, rollback-safe file edit via a Hydra Head",
+		RunE: func(_ *cobra.Command, _ []string) error {
+			ctx := context.Background()
+			result, err := editor.Edit(ctx, editor.Request{
+				File:     file,
+				Enum:     enum,
+				Prompt:   prompt,
+				Validate: !noValidate,
+			})
+			if err != nil {
+				return err
+			}
+			raw, _ := json.MarshalIndent(result, "", "  ")
+			fmt.Println(string(raw))
+			if result.Status != "ok" {
+				os.Exit(2)
+			}
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVar(&file, "file", "", "absolute path to file (required)")
+	cmd.Flags().StringVar(&enum, "enum", "", "routing enum key, e.g. SIMPLE (required)")
+	cmd.Flags().StringVar(&prompt, "prompt", "", "edit instruction (required)")
+	cmd.Flags().BoolVar(&noValidate, "no-validate", false, "skip extension validator")
+	_ = cmd.MarkFlagRequired("file")
+	_ = cmd.MarkFlagRequired("enum")
+	_ = cmd.MarkFlagRequired("prompt")
 	return cmd
 }
 
