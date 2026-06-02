@@ -10,9 +10,12 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 
+	"encoding/json"
+
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/dispatch"
 	"github.com/ankit373/hydra/internal/probe"
+	"github.com/ankit373/hydra/internal/review"
 	"github.com/ankit373/hydra/internal/tui"
 
 	_ "github.com/ankit373/hydra/internal/provider/cli"
@@ -38,7 +41,7 @@ func rootCmd() *cobra.Command {
 			return cmd.Help()
 		},
 	}
-	root.AddCommand(cmdInit(), cmdProbe(), cmdStatus(), cmdDispatch())
+	root.AddCommand(cmdInit(), cmdProbe(), cmdStatus(), cmdDispatch(), cmdReview())
 	return root
 }
 
@@ -211,6 +214,99 @@ func cmdDispatch() *cobra.Command {
 	cmd.Flags().BoolVarP(&localOnly, "local", "l", false, "force local heads only")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "show selected head without executing")
 	cmd.Flags().StringVarP(&system, "system", "s", "", "system prompt")
+	return cmd
+}
+
+// ── review ────────────────────────────────────────────────────────────────────
+
+func cmdReview() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "review",
+		Short: "Review, approve, reject, or QA-check Hydra-edited files",
+	}
+
+	// summary
+	sum := &cobra.Command{
+		Use:   "summary [file...]",
+		Short: "JSON diff stats for edited files (reads last logs if no files given)",
+		RunE: func(_ *cobra.Command, args []string) error {
+			result, err := review.Summary(args)
+			if err != nil {
+				return err
+			}
+			raw, _ := json.MarshalIndent(result, "", "  ")
+			fmt.Println(string(raw))
+			return nil
+		},
+	}
+
+	// diff
+	diff := &cobra.Command{
+		Use:   "diff <file>",
+		Short: "Print unified diff for a file",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			out, err := review.Diff(args[0])
+			if err != nil {
+				return err
+			}
+			fmt.Print(out)
+			return nil
+		},
+	}
+
+	// approve
+	approve := &cobra.Command{
+		Use:   "approve <file>",
+		Short: "Accept changes (removes backup for non-git workspaces)",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			result, err := review.Approve(args[0])
+			if err != nil {
+				return err
+			}
+			raw, _ := json.MarshalIndent(result, "", "  ")
+			fmt.Println(string(raw))
+			return nil
+		},
+	}
+
+	// reject
+	reject := &cobra.Command{
+		Use:   "reject <file>",
+		Short: "Rollback file to pre-edit state",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			result, err := review.Reject(args[0])
+			if err != nil {
+				return err
+			}
+			raw, _ := json.MarshalIndent(result, "", "  ")
+			fmt.Println(string(raw))
+			return nil
+		},
+	}
+
+	// qa
+	var qaTier int
+	qa := &cobra.Command{
+		Use:   "qa <file>",
+		Short: "Send file diff to a Hydra Head for LLM code review",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			ctx := context.Background()
+			result, err := review.QA(ctx, args[0], qaTier)
+			if err != nil {
+				return err
+			}
+			raw, _ := json.MarshalIndent(result, "", "  ")
+			fmt.Println(string(raw))
+			return nil
+		},
+	}
+	qa.Flags().IntVar(&qaTier, "tier", 4, "reviewer tier (default 4 = HARD/GPT-OSS)")
+
+	cmd.AddCommand(sum, diff, approve, reject, qa)
 	return cmd
 }
 
