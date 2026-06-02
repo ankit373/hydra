@@ -151,6 +151,8 @@ func cmdDispatch() *cobra.Command {
 		localOnly bool
 		dryRun    bool
 		system    string
+		a2aFile   string
+		enumKey   string
 	)
 
 	cmd := &cobra.Command{
@@ -171,6 +173,8 @@ func cmdDispatch() *cobra.Command {
 				LocalOnly: localOnly,
 				DryRun:    dryRun,
 				System:    system,
+				A2AFile:   a2aFile,
+				Enum:      enumKey,
 			}
 
 			result, err := d.Dispatch(ctx, prompt, opts)
@@ -211,6 +215,8 @@ func cmdDispatch() *cobra.Command {
 	cmd.Flags().BoolVarP(&localOnly, "local", "l", false, "force local heads only")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "show selected head without executing")
 	cmd.Flags().StringVarP(&system, "system", "s", "", "system prompt")
+	cmd.Flags().StringVar(&a2aFile, "a2a", "", "path to A2A handoff JSON (prepends structured context to prompt)")
+	cmd.Flags().StringVar(&enumKey, "enum", "", "routing enum key for cost logging (e.g. SIMPLE)")
 	return cmd
 }
 
