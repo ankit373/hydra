@@ -6,9 +6,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/ankit373/hydra/internal/config"
@@ -16,6 +19,7 @@ import (
 	"github.com/ankit373/hydra/internal/policy"
 	"github.com/ankit373/hydra/internal/probe"
 	"github.com/ankit373/hydra/internal/provider"
+	"gopkg.in/yaml.v3"
 )
 
 // Options controls dispatch behaviour.
@@ -24,7 +28,9 @@ type Options struct {
 	LocalOnly bool   // override: force local heads only
 	MaxTokens int
 	System    string
-	DryRun    bool // print selected head without executing
+	DryRun    bool   // print selected head without executing
+	A2AFile   string // path to A2A handoff JSON; prepends structured context to prompt
+	Enum      string // enum key (e.g. "SIMPLE") for cost logging
 }
 
 // Result is the outcome of a successful dispatch.
@@ -38,9 +44,10 @@ type Result struct {
 
 // Dispatcher holds resolved config and the probed head list.
 type Dispatcher struct {
-	cfg    *config.Config
-	heads  []provider.Head
-	policy *policy.Engine
+	cfg     *config.Config
+	heads   []provider.Head
+	policy  *policy.Engine
+	pricing *pricingConfig
 }
 
 // New builds a Dispatcher from the saved config and a fresh machine probe.
@@ -57,25 +64,53 @@ func New(ctx context.Context) (*Dispatcher, error) {
 		localOnly = true
 	}
 
+	pricing, _ := loadPricing()
+
 	return &Dispatcher{
-		cfg:    cfg,
-		heads:  result.Heads,
-		policy: policy.New(policy.DefaultRules(localOnly)),
+		cfg:     cfg,
+		heads:   result.Heads,
+		policy:  policy.New(policy.DefaultRules(localOnly)),
+		pricing: pricing,
 	}, nil
 }
 
 // Dispatch routes prompt through policy + tier selection + execution with fallback.
 func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) (*Result, error) {
-	req := policy.Request{Prompt: prompt, TierHint: opts.TierHint}
+	// Apply claude% preservation — may downgrade tier or abort.
+	tier, mode, pct := d.claudeMode(opts.TierHint)
+	switch mode {
+	case "emergency":
+		log.Printf("🚨 EMERGENCY: Claude at %d%% — routing to local tier only. Start a new session.", pct)
+		tier = "10"
+		opts.LocalOnly = true
+	case "critical":
+		log.Printf("🔴 CRITICAL: Claude at %d%% — downgrading tier by 2. Run /compact NOW.", pct)
+	case "warning":
+		log.Printf("🟠 WARNING: Claude at %d%% — downgrading tier by 1. Run /compact now.", pct)
+	case "caution":
+		log.Printf("🟡 CAUTION: Claude at %d%% — Run /compact immediately.", pct)
+	case "compact":
+		log.Printf("ℹ️  Claude at %d%% — Consider running /compact.", pct)
+	}
+
+	// Inject A2A handoff context into prompt if provided.
+	if opts.A2AFile != "" {
+		injected, err := injectA2A(opts.A2AFile, prompt)
+		if err == nil {
+			prompt = injected
+		}
+	}
+
+	req := policy.Request{Prompt: prompt, TierHint: tier}
 	action := d.policy.Evaluate(req)
 
 	if action.Deny {
 		return nil, fmt.Errorf("dispatch denied by policy: %s", action.Reason)
 	}
 
-	candidates := d.selectHeads(opts.TierHint, action.LocalOnly || opts.LocalOnly)
+	candidates := d.selectHeads(tier, action.LocalOnly || opts.LocalOnly)
 	if len(candidates) == 0 {
-		return nil, fmt.Errorf("no available heads for tier %q (localOnly=%v)", opts.TierHint, opts.LocalOnly)
+		return nil, fmt.Errorf("no available heads for tier %q (localOnly=%v)", tier, opts.LocalOnly)
 	}
 
 	if opts.DryRun {
@@ -96,12 +131,111 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 			continue
 		}
 		r := &Result{Output: resp.Output, Head: h, Retries: i, Response: resp}
-		_ = d.logDispatch(r, prompt)
+		_ = d.logDispatch(r, prompt, opts)
+		_ = d.writeHandoff(r, prompt)
 		d.syncStateJSON(r)
 		return r, nil
 	}
 
 	return nil, fmt.Errorf("all heads failed (tried %d): %w", len(candidates), lastErr)
+}
+
+// claudeMode reads claude_pct from state.json and returns the (possibly downgraded) tier,
+// mode string, and raw percentage.
+func (d *Dispatcher) claudeMode(tierHint string) (tier string, mode string, pct int) {
+	pct = readClaudePct()
+	mode = claudePctMode(pct)
+	tier = tierHint
+
+	// Convert tier hint to int so we can downgrade numerically.
+	t, err := strconv.Atoi(tierHint)
+	if err != nil {
+		return tier, mode, pct
+	}
+	switch mode {
+	case "critical":
+		t += 2
+	case "emergency":
+		t = 10
+	case "warning":
+		t++
+	}
+	if t > 10 {
+		t = 10
+	}
+	return strconv.Itoa(t), mode, pct
+}
+
+func readClaudePct() int {
+	statePath := filepath.Join(config.Dir(), "logs", "state.json")
+	raw, err := os.ReadFile(statePath)
+	if err != nil {
+		return 0
+	}
+	var s struct {
+		ClaudePct int `json:"claude_pct"`
+	}
+	if err := json.Unmarshal(raw, &s); err != nil {
+		return 0
+	}
+	return s.ClaudePct
+}
+
+func claudePctMode(pct int) string {
+	switch {
+	case pct >= 80:
+		return "emergency"
+	case pct >= 75:
+		return "critical"
+	case pct >= 70:
+		return "warning"
+	case pct >= 65:
+		return "caution"
+	case pct >= 50:
+		return "compact"
+	default:
+		return "normal"
+	}
+}
+
+// injectA2A reads a handoff JSON file and prepends a structured block to the prompt.
+func injectA2A(path, prompt string) (string, error) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return prompt, fmt.Errorf("a2a: %w", err)
+	}
+	var h struct {
+		From        string   `json:"from"`
+		Task        string   `json:"task"`
+		Files       []string `json:"files"`
+		Context     string   `json:"context"`
+		Conventions string   `json:"conventions"`
+		PriorOutput string   `json:"prior_output"`
+	}
+	if err := json.Unmarshal(raw, &h); err != nil {
+		return prompt, fmt.Errorf("a2a: %w", err)
+	}
+	block := fmt.Sprintf(
+		"A2A HANDOFF from: %s\nFiles in scope: %s\nConventions:\n%s\nPrior output:\n%s\nContext:\n%s\n\nTASK:\n%s",
+		h.From, strings.Join(h.Files, ", "), h.Conventions, h.PriorOutput, h.Context, h.Task,
+	)
+	return block + "\n\nADDITIONAL INSTRUCTION:\n" + prompt, nil
+}
+
+// writeHandoff saves last_handoff.json after a successful dispatch.
+func (d *Dispatcher) writeHandoff(r *Result, prompt string) error {
+	handoffPath := filepath.Join(config.Dir(), "logs", "last_handoff.json")
+	h := map[string]any{
+		"from":         fmt.Sprintf("hydra-tier-%d", uiTier(r.Head)),
+		"model":        r.Head.Name,
+		"task":         prompt,
+		"prior_output": r.Response.Output,
+	}
+	raw, err := json.MarshalIndent(h, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(handoffPath, raw, 0o600)
 }
 
 // selectHeads returns heads to try, in order of preference.
@@ -159,13 +293,10 @@ func (d *Dispatcher) selectHeads(tierHint string, localOnly bool) []provider.Hea
 
 // syncStateJSON updates ~/.hydra/logs/state.json after a successful dispatch
 // so the Ink UI (ui/) reflects Go dispatcher activity.
-// It reads the existing file first to preserve claude_pct and exhausted_pools
-// written by the shell router, then updates last_tier, last_model, last_status.
 func (d *Dispatcher) syncStateJSON(r *Result) {
 	stateDir := filepath.Join(config.Dir(), "logs")
 	statePath := filepath.Join(stateDir, "state.json")
 
-	// Read existing state to preserve shell-managed fields.
 	existing := map[string]any{}
 	if raw, err := os.ReadFile(statePath); err == nil {
 		_ = json.Unmarshal(raw, &existing)
@@ -188,23 +319,65 @@ func (d *Dispatcher) syncStateJSON(r *Result) {
 	_ = os.Rename(tmp, statePath)
 }
 
-// logDispatch appends a JSON record to ~/.hydra/dispatch.jsonl for analytics.
-func (d *Dispatcher) logDispatch(r *Result, prompt string) error {
-	entry := map[string]any{
+// logDispatch writes to dispatch.jsonl and cost.jsonl.
+func (d *Dispatcher) logDispatch(r *Result, prompt string, opts Options) error {
+	tier := uiTier(r.Head)
+	wallMs := r.Response.Duration.Milliseconds()
+	estCost := d.estimateCost(tier, r.Response.InputTokens, r.Response.OutputTokens)
+
+	logDir := filepath.Join(config.Dir(), "logs")
+	_ = os.MkdirAll(logDir, 0o700)
+
+	dispatchEntry := map[string]any{
 		"ts":             time.Now().UTC().Format(time.RFC3339),
 		"head":           r.Head.ID,
 		"provider":       r.Head.Provider,
+		"tier":           tier,
+		"enum":           opts.Enum,
 		"input_tokens":   r.Response.InputTokens,
 		"output_tokens":  r.Response.OutputTokens,
-		"duration_ms":    r.Response.Duration.Milliseconds(),
+		"duration_ms":    wallMs,
 		"local":          r.Head.LocalOnly,
 		"prompt_preview": truncate(prompt, 80),
+		"task_id":        os.Getenv("HYDRA_TASK_ID"),
+		"run_id":         os.Getenv("HYDRA_RUN_ID"),
 	}
+	if err := appendJSONL(filepath.Join(logDir, "dispatch.jsonl"), dispatchEntry); err != nil {
+		return err
+	}
+
+	// cost.jsonl only written when we have token data.
+	if r.Response.InputTokens > 0 || r.Response.OutputTokens > 0 {
+		source := "real"
+		if r.Response.InputTokens == 0 {
+			source = "estimate"
+		}
+		costEntry := map[string]any{
+			"ts":             time.Now().UTC().Format(time.RFC3339),
+			"tier":           tier,
+			"enum":           opts.Enum,
+			"model":          r.Response.Model,
+			"executor":       r.Head.Provider,
+			"pool":           r.Head.Meta["token_pool"],
+			"prompt_tokens":  r.Response.InputTokens,
+			"response_tokens": r.Response.OutputTokens,
+			"est_cost_usd":   estCost,
+			"wall_ms":        wallMs,
+			"source":         source,
+			"task_id":        os.Getenv("HYDRA_TASK_ID"),
+			"run_id":         os.Getenv("HYDRA_RUN_ID"),
+		}
+		_ = appendJSONL(filepath.Join(logDir, "cost.jsonl"), costEntry)
+	}
+
+	return nil
+}
+
+func appendJSONL(path string, entry map[string]any) error {
 	raw, err := json.Marshal(entry)
 	if err != nil {
 		return err
 	}
-	path := filepath.Join(config.Dir(), "dispatch.jsonl")
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		return err
@@ -214,8 +387,45 @@ func (d *Dispatcher) logDispatch(r *Result, prompt string) error {
 	return err
 }
 
+// estimateCost returns $/call from pricing.yaml tier rates.
+func (d *Dispatcher) estimateCost(tier, inputTokens, outputTokens int) float64 {
+	if d.pricing == nil {
+		return 0
+	}
+	tp, ok := d.pricing.Tiers[tier]
+	if !ok {
+		return 0
+	}
+	in := float64(inputTokens) / 1_000_000 * tp.InputPerMillion
+	out := float64(outputTokens) / 1_000_000 * tp.OutputPerMillion
+	return math.Round((in+out)*1_000_000) / 1_000_000
+}
+
+// ── Pricing ──────────────────────────────────────────────────────────────────
+
+type pricingTier struct {
+	InputPerMillion  float64 `yaml:"input_per_million"`
+	OutputPerMillion float64 `yaml:"output_per_million"`
+}
+
+type pricingConfig struct {
+	Tiers map[int]pricingTier `yaml:"tiers"`
+}
+
+func loadPricing() (*pricingConfig, error) {
+	path := filepath.Join(config.ScriptHome(), "registry", "pricing.yaml")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var p pricingConfig
+	if err := yaml.Unmarshal(raw, &p); err != nil {
+		return nil, err
+	}
+	return &p, nil
+}
+
 // uiTier converts a Head to the 1-10 integer that ui/src/types.ts TIER_LABELS expects.
-// Registry heads carry their exact tier in Meta; all others are derived from score.
 func uiTier(h provider.Head) int {
 	if h.Source == "registry" {
 		if t := h.Meta["tier"]; t != "" {
@@ -226,9 +436,9 @@ func uiTier(h provider.Head) int {
 	}
 	switch {
 	case h.CapScore >= 95:
-		return 1 // Claude Code (cortex)
+		return 1
 	case h.CapScore >= 90:
-		return 2 // expert
+		return 2
 	case h.CapScore >= 85:
 		return 3
 	case h.CapScore >= 80:
@@ -244,7 +454,7 @@ func uiTier(h provider.Head) int {
 	case h.CapScore >= 60:
 		return 9
 	default:
-		return 10 // local
+		return 10
 	}
 }
 
