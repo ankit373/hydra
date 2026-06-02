@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -10,10 +11,9 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 
-	"encoding/json"
-
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/dispatch"
+	"github.com/ankit373/hydra/internal/editor"
 	"github.com/ankit373/hydra/internal/probe"
 	"github.com/ankit373/hydra/internal/review"
 	"github.com/ankit373/hydra/internal/tui"
@@ -41,7 +41,7 @@ func rootCmd() *cobra.Command {
 			return cmd.Help()
 		},
 	}
-	root.AddCommand(cmdInit(), cmdProbe(), cmdStatus(), cmdDispatch(), cmdReview())
+	root.AddCommand(cmdInit(), cmdProbe(), cmdStatus(), cmdDispatch(), cmdEdit(), cmdReview())
 	return root
 }
 
@@ -154,6 +154,8 @@ func cmdDispatch() *cobra.Command {
 		localOnly bool
 		dryRun    bool
 		system    string
+		a2aFile   string
+		enumKey   string
 	)
 
 	cmd := &cobra.Command{
@@ -174,6 +176,8 @@ func cmdDispatch() *cobra.Command {
 				LocalOnly: localOnly,
 				DryRun:    dryRun,
 				System:    system,
+				A2AFile:   a2aFile,
+				Enum:      enumKey,
 			}
 
 			result, err := d.Dispatch(ctx, prompt, opts)
@@ -214,6 +218,51 @@ func cmdDispatch() *cobra.Command {
 	cmd.Flags().BoolVarP(&localOnly, "local", "l", false, "force local heads only")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "show selected head without executing")
 	cmd.Flags().StringVarP(&system, "system", "s", "", "system prompt")
+	cmd.Flags().StringVar(&a2aFile, "a2a", "", "path to A2A handoff JSON (prepends structured context to prompt)")
+	cmd.Flags().StringVar(&enumKey, "enum", "", "routing enum key for cost logging (e.g. SIMPLE)")
+	return cmd
+}
+
+// ── edit ──────────────────────────────────────────────────────────────────────
+
+func cmdEdit() *cobra.Command {
+	var (
+		file       string
+		enum       string
+		prompt     string
+		noValidate bool
+	)
+
+	cmd := &cobra.Command{
+		Use:   "edit",
+		Short: "Atomic, validated, rollback-safe file edit via a Hydra Head",
+		RunE: func(_ *cobra.Command, _ []string) error {
+			ctx := context.Background()
+			result, err := editor.Edit(ctx, editor.Request{
+				File:     file,
+				Enum:     enum,
+				Prompt:   prompt,
+				Validate: !noValidate,
+			})
+			if err != nil {
+				return err
+			}
+			raw, _ := json.MarshalIndent(result, "", "  ")
+			fmt.Println(string(raw))
+			if result.Status != "ok" {
+				os.Exit(2)
+			}
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVar(&file, "file", "", "absolute path to file (required)")
+	cmd.Flags().StringVar(&enum, "enum", "", "routing enum key, e.g. SIMPLE (required)")
+	cmd.Flags().StringVar(&prompt, "prompt", "", "edit instruction (required)")
+	cmd.Flags().BoolVar(&noValidate, "no-validate", false, "skip extension validator")
+	_ = cmd.MarkFlagRequired("file")
+	_ = cmd.MarkFlagRequired("enum")
+	_ = cmd.MarkFlagRequired("prompt")
 	return cmd
 }
 
