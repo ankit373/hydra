@@ -34,6 +34,28 @@ func Dir() string {
 	return filepath.Join(home, ".hydra")
 }
 
+// ScriptHome returns the directory that contains dispatch/ and registry/.
+// Resolution order:
+//  1. $HYDRA_HOME env var (set by Homebrew formula or install.sh)
+//  2. Auto-detect: walk up from binary location looking for dispatch/route.sh
+//  3. ~/.hydra (standalone install copies scripts here)
+func ScriptHome() string {
+	if h := os.Getenv("HYDRA_HOME"); h != "" {
+		return h
+	}
+	// Walk up from executable looking for dispatch/route.sh (dev / repo layout).
+	if exe, err := os.Executable(); err == nil {
+		dir := filepath.Dir(exe)
+		for i := 0; i < 5; i++ {
+			if _, err := os.Stat(filepath.Join(dir, "dispatch", "route.sh")); err == nil {
+				return dir
+			}
+			dir = filepath.Dir(dir)
+		}
+	}
+	return Dir()
+}
+
 // Path returns the full path to the config file.
 func Path() string { return filepath.Join(Dir(), "config.toml") }
 
