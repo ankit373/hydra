@@ -70,28 +70,11 @@ done
 [[ "$FILE" != /* ]] && err "--file must be absolute: $FILE" && exit 1
 
 # ── Load policy (if provided) ────────────────────────────────────────────────
-# Policy flags become POL_* env-style locals. Phase 1 reads but mostly no-ops;
-# Phase 2 features (sr_blocks, atomic, agentic, auto_commit, etc.) hook here.
+# Only the two fields that are actively consumed in Phase 1 are parsed.
+# Phase 2 fields (atomic, auto_commit, test_loop, etc.) are added here when implemented.
 
 POL_EDIT_MODE="rewrite"
-POL_ATOMIC="false"
-POL_AUTO_COMMIT="false"
-POL_TRACK_TOKENS="true"
-POL_VALIDATORS="[]"
-POL_MAX_RETRIES=1
-POL_ESCALATE_ON_FAIL="true"
-POL_RUBBER_DUCK="false"
-POL_DIFF_CAP_PCT=90
-POL_VALIDATE_STRICT="false"
 POL_USE_REPO_MAP="false"
-POL_USE_WORKTREE="false"
-POL_TEST_LOOP="false"
-POL_LINT_LOOP="false"
-POL_DEDUP_FILE_READS="true"
-POL_PROMPT_CACHE="true"
-POL_DEFENSIVE="false"
-POL_MAX_COST_USD=0
-POL_MAX_WALL_SECONDS=600
 POL_MATCHED_RULES="[]"
 
 if [[ -n "$POLICY_JSON" ]]; then
@@ -101,27 +84,10 @@ if [[ -n "$POLICY_JSON" ]]; then
   if ! jq empty "$POLICY_JSON" >/dev/null 2>&1; then
     err "--policy file is not valid JSON: $POLICY_JSON"; exit 1
   fi
-  POL_EDIT_MODE=$(jq -r       '.edit_mode             // "rewrite"'   "$POLICY_JSON")
-  POL_ATOMIC=$(jq -r          '.atomic                // false | tostring' "$POLICY_JSON")
-  POL_AUTO_COMMIT=$(jq -r     '.auto_commit           // false | tostring' "$POLICY_JSON")
-  POL_TRACK_TOKENS=$(jq -r    '.track_tokens          // true  | tostring' "$POLICY_JSON")
-  POL_VALIDATORS=$(jq -c      '.validators            // []'              "$POLICY_JSON")
-  POL_MAX_RETRIES=$(jq -r     '.max_retries           // 1'               "$POLICY_JSON")
-  POL_ESCALATE_ON_FAIL=$(jq -r '.escalate_on_fail     // true  | tostring' "$POLICY_JSON")
-  POL_RUBBER_DUCK=$(jq -r     '.rubber_duck           // false | tostring' "$POLICY_JSON")
-  POL_DIFF_CAP_PCT=$(jq -r    '.diff_size_cap_pct     // 90'              "$POLICY_JSON")
-  POL_VALIDATE_STRICT=$(jq -r '.validate_strict       // false | tostring' "$POLICY_JSON")
-  POL_USE_REPO_MAP=$(jq -r    '.use_repo_map          // false | tostring' "$POLICY_JSON")
-  POL_USE_WORKTREE=$(jq -r    '.use_worktree          // false | tostring' "$POLICY_JSON")
-  POL_TEST_LOOP=$(jq -r       '.test_loop             // false | tostring' "$POLICY_JSON")
-  POL_LINT_LOOP=$(jq -r       '.lint_loop             // false | tostring' "$POLICY_JSON")
-  POL_DEDUP_FILE_READS=$(jq -r '.dedup_file_reads     // true  | tostring' "$POLICY_JSON")
-  POL_PROMPT_CACHE=$(jq -r    '.prompt_cache          // true  | tostring' "$POLICY_JSON")
-  POL_DEFENSIVE=$(jq -r       '.defensive             // false | tostring' "$POLICY_JSON")
-  POL_MAX_COST_USD=$(jq -r    '.max_cost_usd          // 0'                "$POLICY_JSON")
-  POL_MAX_WALL_SECONDS=$(jq -r '.max_wall_seconds     // 600'              "$POLICY_JSON")
-  POL_MATCHED_RULES=$(jq -c   '.matched_rules         // []'              "$POLICY_JSON")
-  info "policy loaded: mode=$POL_EDIT_MODE atomic=$POL_ATOMIC commit=$POL_AUTO_COMMIT repo_map=$POL_USE_REPO_MAP strict=$POL_VALIDATE_STRICT rules=$(echo "$POL_MATCHED_RULES" | jq -r 'join(",")')"
+  POL_EDIT_MODE=$(jq -r    '.edit_mode   // "rewrite"'       "$POLICY_JSON")
+  POL_USE_REPO_MAP=$(jq -r '.use_repo_map // false | tostring' "$POLICY_JSON")
+  POL_MATCHED_RULES=$(jq -c '.matched_rules // []'            "$POLICY_JSON")
+  info "policy loaded: mode=$POL_EDIT_MODE repo_map=$POL_USE_REPO_MAP rules=$(echo "$POL_MATCHED_RULES" | jq -r 'join(",")')"
 fi
 
 # Honor policy edit_mode if it was set and --mode wasn't explicitly given.
@@ -174,6 +140,16 @@ cleanup_our_backup() {
   [[ $WE_CREATED_BACKUP -eq 1 && -f "$BACKUP" ]] && rm -f "$BACKUP"
 }
 
+# ── Per-invocation markers ────────────────────────────────────────────────────
+# UUID markers prevent injection: if the file content or prompt contains the
+# literal marker string, a fixed marker would break extraction. A fresh UUID
+# per invocation makes collision cryptographically impossible.
+_mid=$(cat /proc/sys/kernel/random/uuid 2>/dev/null \
+       || uuidgen 2>/dev/null \
+       || od -A n -t x -N 16 /dev/urandom | tr -d ' \n')
+MARKER_START="<<<HYDRA_EDIT_START_${_mid}>>>"
+MARKER_END="<<<HYDRA_EDIT_END_${_mid}>>>"
+
 # ── Build edit prompt ─────────────────────────────────────────────────────────
 # Strict markers so we can extract the new file content unambiguously.
 
@@ -215,15 +191,15 @@ Instruction:
 $PROMPT
 
 Current file content:
-<<<HYDRA_FILE_START>>>
+$MARKER_START
 $current_block
-<<<HYDRA_FILE_END>>>
+$MARKER_END
 
 Now output the COMPLETE new file content (every line, not a diff, not a
 snippet) between these exact markers and nothing else:
-<<<HYDRA_FILE_START>>>
+$MARKER_START
 (new content here)
-<<<HYDRA_FILE_END>>>
+$MARKER_END
 EOF
 )
 
@@ -248,11 +224,11 @@ fi
 
 extract_between() {
   # Strict: content between START and END markers (exclusive).
-  echo "$1" | awk '
+  echo "$1" | awk -v ms="$MARKER_START" -v me="$MARKER_END" '
     BEGIN { inside=0; printed=0 }
-    /<<<HYDRA_FILE_END>>>/ && inside==1 { inside=0; printed=1; exit }
+    $0 == me && inside==1 { inside=0; printed=1; exit }
     inside==1 { print }
-    /<<<HYDRA_FILE_START>>>/ && printed==0 { inside=1 }
+    $0 == ms && printed==0 { inside=1 }
   '
 }
 
@@ -263,15 +239,15 @@ extract_lenient() {
   # - END missing   → everything from line after START to EOF
   local text="$1"
   local has_start has_end
-  has_start=$(echo "$text" | grep -c '<<<HYDRA_FILE_START>>>' || true)
-  has_end=$(echo "$text"   | grep -c '<<<HYDRA_FILE_END>>>'   || true)
+  has_start=$(echo "$text" | grep -cF "$MARKER_START" || true)
+  has_end=$(echo "$text"   | grep -cF "$MARKER_END"   || true)
 
   if [[ "$has_start" -gt 0 && "$has_end" -gt 0 ]]; then
     extract_between "$text"
   elif [[ "$has_end" -gt 0 ]]; then
-    echo "$text" | awk '/<<<HYDRA_FILE_END>>>/ { exit } { print }'
+    echo "$text" | awk -v me="$MARKER_END" '$0 == me { exit } { print }'
   elif [[ "$has_start" -gt 0 ]]; then
-    echo "$text" | awk 'p { print } /<<<HYDRA_FILE_START>>>/ { p=1 }'
+    echo "$text" | awk -v ms="$MARKER_START" 'p { print } $0 == ms { p=1 }'
   else
     echo ""
   fi
@@ -298,8 +274,8 @@ NEW_CONTENT=$(echo "$NEW_CONTENT" | awk '
   }
 ')
 
-# Marker leakage check — abort if any HYDRA marker survives in the body
-if echo "$NEW_CONTENT" | grep -q "<<<HYDRA_FILE_"; then
+# Marker leakage check — abort if our unique markers survive in the extracted body
+if echo "$NEW_CONTENT" | grep -qF "$MARKER_START" || echo "$NEW_CONTENT" | grep -qF "$MARKER_END"; then
   err "marker leakage detected in new content — rejecting"
   cleanup_our_backup
   emit_json "fail" "$FILE" "$WORKSPACE" "$GIT_ROOT" "$ENUM" 0 0 "false" "false" "marker_leakage"

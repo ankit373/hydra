@@ -46,6 +46,10 @@ func (e *AgyExecutor) Execute(ctx context.Context, req Request) (*Response, erro
 	}
 
 	settingsPath := agySitesPath()
+
+	// Recover from a prior SIGKILL that left settings.json in a swapped state.
+	recoverAgySwap(settingsPath)
+
 	originalModel, err := swapAgyModel(settingsPath, modelFlag)
 	if err != nil {
 		// Settings file might not exist yet — proceed without swapping.
@@ -123,30 +127,48 @@ func agySitesPath() string {
 	return filepath.Join(home, ".gemini", "antigravity-cli", "settings.json")
 }
 
+// agyOrigSuffix is the sentinel backup written before any settings.json swap.
+// If the process is SIGKILLed mid-swap, recoverAgySwap restores it on next run.
+const agyOrigSuffix = ".hydra-orig"
+
 // swapAgyModel writes modelFlag into settings.json and returns the original model.
+// It writes a sentinel backup first so recoverAgySwap() can undo a partial swap
+// caused by SIGKILL between os.Rename and the defer restoreAgyModel.
 func swapAgyModel(settingsPath, modelFlag string) (string, error) {
 	raw, err := os.ReadFile(settingsPath)
 	if err != nil {
 		return "", err
 	}
+	// Write sentinel before any mutation — must survive SIGKILL.
+	if err := os.WriteFile(settingsPath+agyOrigSuffix, raw, 0o600); err != nil {
+		return "", err
+	}
 	var m map[string]interface{}
 	if err := json.Unmarshal(raw, &m); err != nil {
+		_ = os.Remove(settingsPath + agyOrigSuffix)
 		return "", err
 	}
 	original, _ := m["model"].(string)
 	m["model"] = modelFlag
 	updated, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {
+		_ = os.Remove(settingsPath + agyOrigSuffix)
 		return "", err
 	}
 	tmp := settingsPath + ".hydra-tmp"
 	if err := os.WriteFile(tmp, updated, 0o600); err != nil {
+		_ = os.Remove(settingsPath + agyOrigSuffix)
 		return "", err
 	}
-	return original, os.Rename(tmp, settingsPath)
+	if err := os.Rename(tmp, settingsPath); err != nil {
+		_ = os.Remove(settingsPath + agyOrigSuffix)
+		_ = os.Remove(tmp)
+		return "", err
+	}
+	return original, nil
 }
 
-// restoreAgyModel writes back the original model (or deletes the key if empty).
+// restoreAgyModel writes back the original model and removes the sentinel.
 func restoreAgyModel(settingsPath, originalModel string) {
 	raw, err := os.ReadFile(settingsPath)
 	if err != nil {
@@ -169,7 +191,27 @@ func restoreAgyModel(settingsPath, originalModel string) {
 	if err := os.WriteFile(tmp, updated, 0o600); err != nil {
 		return
 	}
-	_ = os.Rename(tmp, settingsPath)
+	if err := os.Rename(tmp, settingsPath); err == nil {
+		_ = os.Remove(settingsPath + agyOrigSuffix)
+	}
+}
+
+// recoverAgySwap detects a stale sentinel left by a prior SIGKILL and restores
+// settings.json to its pre-swap state. No-ops when no sentinel exists.
+func recoverAgySwap(settingsPath string) {
+	orig, err := os.ReadFile(settingsPath + agyOrigSuffix)
+	if err != nil {
+		return
+	}
+	tmp := settingsPath + ".hydra-tmp"
+	if err := os.WriteFile(tmp, orig, 0o600); err != nil {
+		return
+	}
+	if err := os.Rename(tmp, settingsPath); err != nil {
+		_ = os.Remove(tmp)
+		return
+	}
+	_ = os.Remove(settingsPath + agyOrigSuffix)
 }
 
 // writeAuthRequired writes logs/auth_required.json so the TUI can surface it.

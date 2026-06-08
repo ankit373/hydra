@@ -471,3 +471,33 @@ func truncate(s string, n int) string {
 	}
 	return s[:n] + "…"
 }
+
+// EnumToTier maps a routing enum key (e.g. "SIMPLE") to a tier number string.
+// Single source of truth — editor and parallel both delegate here.
+func EnumToTier(enum string) string {
+	const (
+		GRUNT    = "10"
+		TRIVIAL  = "9"
+		SIMPLE   = "8"
+		STANDARD = "7"
+		MODERATE = "6"
+		COMPLEX  = "5"
+		HARD     = "4"
+		VERY_HARD = "3"
+		EXPERT   = "2"
+		CORE     = "1"
+	)
+	switch enum {
+	case "GRUNT":     return GRUNT
+	case "TRIVIAL":   return TRIVIAL
+	case "SIMPLE":    return SIMPLE
+	case "STANDARD":  return STANDARD
+	case "MODERATE":  return MODERATE
+	case "COMPLEX":   return COMPLEX
+	case "HARD":      return HARD
+	case "VERY_HARD": return VERY_HARD
+	case "EXPERT":    return EXPERT
+	case "CORE":      return CORE
+	default:          return ""
+	}
+}

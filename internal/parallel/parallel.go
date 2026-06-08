@@ -256,13 +256,21 @@ snippet) between these exact markers and nothing else:
 
 	// Atomic write
 	_ = os.MkdirAll(filepath.Dir(file), 0o755)
-	tmp := fmt.Sprintf("%s.hydra-tmp.%d", file, os.Getpid())
-	if err := os.WriteFile(tmp, []byte(newContent+"\n"), 0o644); err != nil {
+	tmpF, err := os.CreateTemp(filepath.Dir(file), ".hydra-tmp.*")
+	if err != nil {
 		cleanupBackup()
 		return failEdit(task, "write_failed: "+err.Error())
 	}
-	if err := os.Rename(tmp, file); err != nil {
-		_ = os.Remove(tmp)
+	tmpPath := tmpF.Name()
+	if _, werr := fmt.Fprint(tmpF, newContent+"\n"); werr != nil {
+		_ = tmpF.Close()
+		_ = os.Remove(tmpPath)
+		cleanupBackup()
+		return failEdit(task, "write_failed: "+werr.Error())
+	}
+	_ = tmpF.Close()
+	if err := os.Rename(tmpPath, file); err != nil {
+		_ = os.Remove(tmpPath)
 		cleanupBackup()
 		return failEdit(task, "rename_failed: "+err.Error())
 	}
@@ -279,8 +287,7 @@ snippet) between these exact markers and nothing else:
 			vtmpl = tscTemplate(resolved.GitRoot)
 		}
 		if vtmpl != "" {
-			cmd := strings.ReplaceAll(vtmpl, "{file}", file)
-			if rc := runValidate(cmd); rc != 0 {
+			if rc := runValidate(vtmpl, file); rc != 0 {
 				rollback(file, origContent, origExisted, resolved.GitRoot, backup)
 				return mustMarshal(EditResult{
 					Label: task.Label, Enum: task.Enum, Mode: "edit",
@@ -429,12 +436,20 @@ func rollback(file, origContent string, origExisted bool, gitRoot, backup string
 	_ = os.WriteFile(file, []byte(origContent), 0o644)
 }
 
-func runValidate(cmd string) int {
-	parts := strings.Fields(cmd)
+// runValidate splits the validator template around {file} to prevent
+// paths-with-spaces from being fragmented by strings.Fields.
+func runValidate(vtmpl, file string) int {
+	var parts []string
+	if idx := strings.Index(vtmpl, "{file}"); idx >= 0 {
+		parts = append(strings.Fields(vtmpl[:idx]), file)
+		parts = append(parts, strings.Fields(vtmpl[idx+len("{file}"):])...)
+	} else {
+		parts = strings.Fields(vtmpl)
+	}
 	if len(parts) == 0 {
 		return 0
 	}
-	c := exec.Command(parts[0], parts[1:]...) //nolint:gosec
+	c := exec.Command(parts[0], parts[1:]...)
 	if err := c.Run(); err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			return exitErr.ExitCode()
@@ -489,15 +504,4 @@ func diffStats(file, origContent, gitRoot, backup string, origExisted bool) (add
 	return
 }
 
-var enumTiers = map[string]string{
-	"GRUNT": "10", "TRIVIAL": "9", "SIMPLE": "8", "STANDARD": "7",
-	"MODERATE": "6", "COMPLEX": "5", "HARD": "4", "VERY_HARD": "3",
-	"EXPERT": "2", "CORE": "1",
-}
-
-func enumToTier(enum string) string {
-	if t, ok := enumTiers[enum]; ok {
-		return t
-	}
-	return ""
-}
+func enumToTier(enum string) string { return dispatch.EnumToTier(enum) }
