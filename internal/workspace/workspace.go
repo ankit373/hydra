@@ -63,9 +63,13 @@ func Load(hydraHome string) (*Registry, error) {
 
 	r := &Registry{validators: make(map[string]string)}
 	for name, e := range rf.Workspaces {
+		root := filepath.Clean(e.Root)
+		if !filepath.IsAbs(root) {
+			return nil, fmt.Errorf("workspace %q: root %q must be an absolute path", name, e.Root)
+		}
 		r.workspaces = append(r.workspaces, Workspace{
 			Name:         name,
-			Root:         e.Root,
+			Root:         root,
 			Git:          e.Git,
 			AllowedGlobs: e.AllowedGlobs,
 			DeniedGlobs:  e.DeniedGlobs,

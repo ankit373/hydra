@@ -8,6 +8,7 @@ package agy
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 
@@ -16,6 +17,13 @@ import (
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/provider"
 )
+
+// agiTierScores maps registry tier numbers to capability scores.
+// Declared once to avoid a map allocation on every Discover call.
+var agiTierScores = map[int]int{
+	2: 92, 3: 88, 4: 82, 5: 80,
+	6: 78, 7: 72, 8: 70, 9: 68,
+}
 
 func init() {
 	provider.Register(&Provider{})
@@ -46,7 +54,8 @@ func (p *Provider) Discover(_ context.Context) ([]provider.Head, error) {
 		} `yaml:"models"`
 	}
 	if err := yaml.Unmarshal(data, &reg); err != nil {
-		return nil, nil // malformed YAML — don't crash, just skip
+		log.Printf("agy provider: malformed models.yaml at %s: %v — no agy heads available", registryPath, err)
+		return nil, nil
 	}
 
 	var heads []provider.Head
@@ -73,11 +82,7 @@ func (p *Provider) Discover(_ context.Context) ([]provider.Head, error) {
 // tierScore maps the registry tier number to a Go capability score.
 // Tier 2 = Opus Thinking (highest); tier 9 = Flash Low (lowest agy tier).
 func tierScore(tier int) int {
-	scores := map[int]int{
-		2: 92, 3: 88, 4: 82, 5: 80,
-		6: 78, 7: 72, 8: 70, 9: 68,
-	}
-	if s, ok := scores[tier]; ok {
+	if s, ok := agiTierScores[tier]; ok {
 		return s
 	}
 	return 60

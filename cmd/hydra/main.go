@@ -647,7 +647,9 @@ func cmdRunStart() *cobra.Command {
 				NeedsDesignSystem: needsDS,
 				ParentRun:         parentID,
 			})
-			_ = dryRun // DryRun not in StartOptions; caller can inspect stdout
+			if dryRun {
+				fmt.Fprintln(os.Stderr, "warning: --dry-run not yet implemented for run start; run will be created normally")
+			}
 			if err != nil {
 				return err
 			}
@@ -704,9 +706,9 @@ func cmdRunComplete() *cobra.Command {
 				}
 				findings = append(findings, severity+": "+finding)
 			}
-			_ = output
 			state, err := company.Complete(args[0], args[1], company.CompleteOptions{
 				Findings: findings,
+				Output:   output,
 			})
 			if err != nil {
 				return err
@@ -851,10 +853,10 @@ func cmdRunPrune() *cobra.Command {
 		Use:   "prune",
 		Short: "Remove old completed runs",
 		RunE: func(_ *cobra.Command, _ []string) error {
-			_ = keepMin
 			pruned, kept, err := company.Prune(workspace, company.PruneOptions{
 				OlderThan: olderThan,
 				DryRun:    dryRun,
+				KeepMin:   keepMin,
 			})
 			if err != nil {
 				return err

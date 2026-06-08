@@ -23,16 +23,23 @@ type memorySample struct {
 	WiredGB float64   `json:"wired_gb"`
 }
 
-// historyPath returns ~/.hydra/memory_history.jsonl
+// historyPath returns ~/.hydra/memory_history.jsonl, or "" if the home dir is unavailable.
 func historyPath() string {
-	home, _ := os.UserHomeDir()
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
 	return filepath.Join(home, ".hydra", historyFile)
 }
+
 
 // recordSample appends the current reading to the history file if enough time
 // has passed since the last sample. Silently ignores write errors.
 func recordSample(s *Specs) {
 	path := historyPath()
+	if path == "" {
+		return
+	}
 
 	// Don't spam: skip if we wrote recently.
 	if info, err := os.Stat(path); err == nil {
@@ -64,6 +71,9 @@ func recordSample(s *Specs) {
 // loadRecentSamples reads the last historyDays worth of samples.
 func loadRecentSamples() []memorySample {
 	path := historyPath()
+	if path == "" {
+		return nil
+	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil

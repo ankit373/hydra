@@ -61,8 +61,7 @@ type SummaryResult struct {
 
 // LoadAll reads all rows from cost.jsonl.
 func LoadAll() ([]Row, error) {
-	path := costLogPath()
-	return loadRows(path, "")
+	return loadRows(costLogPath())
 }
 
 // Summary returns today + all-time totals and last 5 recent rows.
@@ -199,18 +198,27 @@ func Tail(n int) ([]Row, error) {
 	return out, nil
 }
 
-// JSON returns raw rows, optionally filtered by since (ISO timestamp prefix).
+// JSON returns raw rows, optionally filtered by since (RFC3339 timestamp).
+// Uses time.Parse for comparison so timezone offsets are handled correctly.
 func JSON(since string) ([]Row, error) {
-	if since == "" {
-		return LoadAll()
-	}
 	all, err := LoadAll()
 	if err != nil {
 		return nil, err
 	}
+	if since == "" {
+		return all, nil
+	}
+	sinceT, err := time.Parse(time.RFC3339, since)
+	if err != nil {
+		return nil, fmt.Errorf("cost: invalid since timestamp %q: %w", since, err)
+	}
 	var out []Row
 	for _, r := range all {
-		if r.TS >= since {
+		t, err := time.Parse(time.RFC3339, r.TS)
+		if err != nil {
+			continue
+		}
+		if !t.Before(sinceT) {
 			out = append(out, r)
 		}
 	}
@@ -274,7 +282,7 @@ func costLogPath() string {
 	return filepath.Join(config.Dir(), "logs", "cost.jsonl")
 }
 
-func loadRows(path, since string) ([]Row, error) {
+func loadRows(path string) ([]Row, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -294,9 +302,6 @@ func loadRows(path, since string) ([]Row, error) {
 		var r Row
 		if err := json.Unmarshal([]byte(line), &r); err != nil {
 			continue // skip malformed rows
-		}
-		if since != "" && r.TS < since {
-			continue
 		}
 		rows = append(rows, r)
 	}

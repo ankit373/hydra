@@ -421,7 +421,6 @@ func (e *HTTPExecutor) executeBedrock(ctx context.Context, req Request) (*Respon
 		return nil, err
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("x-amz-content-sha256", sha256Hex(raw))
 	if err := signAWSRequest(httpReq, raw, bedrockRegion(), "bedrock"); err != nil {
 		return nil, fmt.Errorf("http exec %s: %w", req.Head.ID, err)
 	}
@@ -493,7 +492,8 @@ func (e *HTTPExecutor) executeReplicate(ctx context.Context, req Request) (*Resp
 		return nil, fmt.Errorf("http exec %s: decode: %w", req.Head.ID, err)
 	}
 
-	for pred.Status == "starting" || pred.Status == "processing" {
+	const maxPollIter = 150 // 150 × 2s = 5 min ceiling
+	for i := 0; i < maxPollIter && (pred.Status == "starting" || pred.Status == "processing"); i++ {
 		if pred.URLs.Get == "" {
 			break
 		}
