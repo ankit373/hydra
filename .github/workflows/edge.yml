@@ -1,0 +1,77 @@
+name: Edge Build
+
+on:
+  push:
+    branches:
+      - develop
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  edge:
+    name: Build & publish edge release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Compute edge version
+        id: ver
+        run: |
+          SHA=$(git rev-parse --short HEAD)
+          # Use latest tag as base, append edge suffix
+          BASE=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          echo "version=${BASE}-edge.${SHA}" >> "$GITHUB_OUTPUT"
+          echo "sha=${SHA}" >> "$GITHUB_OUTPUT"
+
+      # Delete existing edge release + tag so we can overwrite it
+      - name: Delete previous edge release
+        run: |
+          gh release delete edge --yes 2>/dev/null || true
+          git push origin :refs/tags/edge 2>/dev/null || true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build snapshot binaries
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          version: latest
+          args: release --snapshot --clean --skip=publish,sign,sbom
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GORELEASER_CURRENT_TAG: ${{ steps.ver.outputs.version }}
+
+      # Publish as a GitHub pre-release tagged "edge" (always overwritten)
+      - name: Publish edge release
+        run: |
+          gh release create edge dist/*.tar.gz dist/*.zip dist/checksums.txt \
+            --title "Edge — ${{ steps.ver.outputs.version }}" \
+            --notes "$(cat <<'EOF'
+          > ⚠️ **This is an edge/nightly build** — built from the latest commit on \`develop\`.
+          > It may be unstable. Use the [stable release](https://github.com/ankit373/hydra/releases/latest) for production.
+
+          **Commit**: \`${{ steps.ver.outputs.sha }}\`
+          **Version**: \`${{ steps.ver.outputs.version }}\`
+
+          **Install edge build**
+          \`\`\`bash
+          # macOS (Apple Silicon)
+          curl -L https://github.com/ankit373/hydra/releases/download/edge/hydra_${{ steps.ver.outputs.version }}_darwin_arm64.tar.gz | tar xz
+          sudo mv hydra /usr/local/bin/
+          \`\`\`
+          EOF
+          )" \
+            --prerelease \
+            --latest=false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

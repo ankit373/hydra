@@ -697,7 +697,7 @@ func Ledger(workspace string) error {
 	writeSection("✗", "Failed", failed)
 
 	if len(open)+len(blocked)+len(completed)+len(failed) == 0 {
-		fmt.Fprintln(f, "_(no runs yet)_\n")
+		fmt.Fprintln(f, "_(no runs yet)_")
 	}
 
 	fmt.Fprintln(f, "<!-- /HYDRA-AUTO -->")
