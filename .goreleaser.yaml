@@ -96,9 +96,6 @@ brews:
       - name: jq
       - name: yq
       - name: bun
-        tap:
-          owner: oven-sh
-          name: homebrew-bun
     install: |
       bin.install "hydra"
     test: |
