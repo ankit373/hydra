@@ -6,7 +6,6 @@ package workspace
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -168,26 +167,13 @@ func GitRoot(path string) string {
 	return ""
 }
 
-// GitRootCmd uses git rev-parse for accuracy when git is available.
-func GitRootCmd(path string) string {
-	dir := path
-	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
-		dir = filepath.Dir(dir)
-	}
-	out, err := exec.Command("git", "-C", dir, "rev-parse", "--show-toplevel").Output()
-	if err != nil {
-		return GitRoot(path)
-	}
-	return strings.TrimSpace(string(out))
-}
-
 // find returns the workspace whose root contains path.
 // Respects HYDRA_WORKSPACE override.
 func (r *Registry) find(path string) (Workspace, error) {
 	if override := os.Getenv("HYDRA_WORKSPACE"); override != "" {
 		for _, ws := range r.workspaces {
 			if ws.Name == override {
-				if !strings.HasPrefix(path, ws.Root) {
+				if path != ws.Root && !strings.HasPrefix(path, ws.Root+"/") {
 					return Workspace{}, fmt.Errorf("HYDRA_WORKSPACE=%s root (%s) does not contain %s", override, ws.Root, path)
 				}
 				return ws, nil

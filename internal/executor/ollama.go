@@ -6,8 +6,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
+	"strings"
+	"sync"
 	"time"
 )
 
@@ -100,18 +103,29 @@ func (e *OllamaExecutor) Execute(ctx context.Context, req Request) (*Response, e
 	}, nil
 }
 
+// ollamaServeOnce ensures at most one `ollama serve` process is started by Hydra.
+var ollamaServeOnce sync.Once
+
 // ensureRunning checks Ollama health and attempts auto-start if down.
 func (e *OllamaExecutor) ensureRunning(host string) error {
 	if e.isHealthy(host) {
 		return nil
 	}
 
-	// Attempt to start ollama serve in background.
-	ollamaCmd := exec.Command("ollama", "serve")
-	ollamaCmd.Stdout = nil
-	ollamaCmd.Stderr = nil
-	if err := ollamaCmd.Start(); err != nil {
-		return fmt.Errorf("ollama not running and could not start: %w", err)
+	var startErr error
+	ollamaServeOnce.Do(func() {
+		cmd := exec.Command("ollama", "serve")
+		cmd.Stdout = nil
+		cmd.Stderr = nil
+		if err := cmd.Start(); err != nil {
+			startErr = fmt.Errorf("ollama not running and could not start: %w", err)
+			return
+		}
+		// Reap the child when it exits so it doesn't become a zombie.
+		go func() { _ = cmd.Wait() }()
+	})
+	if startErr != nil {
+		return startErr
 	}
 
 	// Wait up to 3 seconds for it to become healthy.
@@ -142,8 +156,18 @@ func (e *OllamaExecutor) isHealthy(host string) bool {
 }
 
 func ollamaHost() string {
-	if h := os.Getenv("OLLAMA_HOST"); h != "" {
-		return h
+	h := os.Getenv("OLLAMA_HOST")
+	if h == "" {
+		return "http://localhost:11434"
 	}
-	return "http://localhost:11434"
+	u, err := url.Parse(h)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
+		return "http://localhost:11434"
+	}
+	// Only allow loopback targets unless the scheme is https.
+	host := u.Hostname()
+	if u.Scheme == "http" && !strings.HasPrefix(host, "127.") && host != "localhost" && host != "::1" {
+		return "http://localhost:11434"
+	}
+	return h
 }

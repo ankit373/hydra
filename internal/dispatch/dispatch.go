@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ankit373/hydra/internal/config"
@@ -41,6 +42,9 @@ type Result struct {
 	Retries   int
 	*executor.Response
 }
+
+// stateMu protects concurrent read-modify-write on state.json across goroutines.
+var stateMu sync.Mutex
 
 // Dispatcher holds resolved config and the probed head list.
 type Dispatcher struct {
@@ -294,6 +298,9 @@ func (d *Dispatcher) selectHeads(tierHint string, localOnly bool) []provider.Hea
 // syncStateJSON updates ~/.hydra/logs/state.json after a successful dispatch
 // so the Ink UI (ui/) reflects Go dispatcher activity.
 func (d *Dispatcher) syncStateJSON(r *Result) {
+	stateMu.Lock()
+	defer stateMu.Unlock()
+
 	stateDir := filepath.Join(config.Dir(), "logs")
 	statePath := filepath.Join(stateDir, "state.json")
 

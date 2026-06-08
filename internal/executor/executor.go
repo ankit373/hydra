@@ -6,6 +6,8 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/ankit373/hydra/internal/provider"
@@ -76,8 +78,18 @@ type tokenSidecar struct {
 
 // writeTokenSidecar writes token usage to HYDRA_TOKEN_SIDECAR if set.
 func writeTokenSidecar(model, executorName, source string, prompt, response int) {
-	path := os.Getenv("HYDRA_TOKEN_SIDECAR")
-	if path == "" {
+	raw := os.Getenv("HYDRA_TOKEN_SIDECAR")
+	if raw == "" {
+		return
+	}
+	// Reject paths with traversal components or path separators in the basename.
+	clean := filepath.Clean(raw)
+	if !filepath.IsAbs(clean) || strings.Contains(filepath.Base(clean), "..") {
+		return
+	}
+	// Only allow writes inside os.TempDir to prevent arbitrary file writes.
+	tmpDir := filepath.Clean(os.TempDir())
+	if !strings.HasPrefix(clean, tmpDir+string(filepath.Separator)) {
 		return
 	}
 	data, _ := json.Marshal(tokenSidecar{
@@ -87,5 +99,5 @@ func writeTokenSidecar(model, executorName, source string, prompt, response int)
 		PromptTokens:   prompt,
 		ResponseTokens: response,
 	})
-	_ = os.WriteFile(path, data, 0o644)
+	_ = os.WriteFile(clean, data, 0o600)
 }

@@ -244,12 +244,13 @@ func (e *HTTPExecutor) executeGemini(ctx context.Context, req Request) (*Respons
 		return nil, err
 	}
 
-	u := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s", url.PathEscape(model), url.QueryEscape(apiKeyFor("google")))
+	u := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent", url.PathEscape(model))
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, u, bytes.NewReader(raw))
 	if err != nil {
 		return nil, err
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("x-goog-api-key", apiKeyFor("google"))
 
 	start := time.Now()
 	resp, err := e.httpClient().Do(httpReq)
@@ -534,6 +535,9 @@ type replicatePrediction struct {
 }
 
 func (e *HTTPExecutor) getReplicatePrediction(ctx context.Context, headID, getURL string) (replicatePrediction, error) {
+	if !strings.HasPrefix(getURL, "https://api.replicate.com/") {
+		return replicatePrediction{}, fmt.Errorf("http exec %s: unexpected Replicate poll URL %q", headID, getURL)
+	}
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, getURL, nil)
 	if err != nil {
 		return replicatePrediction{}, err
@@ -666,7 +670,7 @@ func joinCohereBlocks(blocks []struct {
 }
 
 func httpStatusError(headID string, resp *http.Response) error {
-	b, _ := io.ReadAll(resp.Body)
+	b, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 	return fmt.Errorf("http exec %s: status %d — %s", headID, resp.StatusCode, string(b))
 }
 

@@ -4,8 +4,16 @@ package policy
 
 import (
 	"regexp"
-	"strings"
 )
+
+// piiPatterns are compiled once at package init to avoid per-call allocations.
+var piiPatterns = []*regexp.Regexp{
+	regexp.MustCompile(`\b\d{3}[-.\s]?\d{2}[-.\s]?\d{4}\b`),                              // SSN
+	regexp.MustCompile(`\b\d{4}[- ]?\d{4}[- ]?\d{4}[- ]?\d{4}\b`),                        // credit card
+	regexp.MustCompile(`\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b`),           // email (fixed: [A-Za-z] not [A-Z|a-z])
+	regexp.MustCompile(`(?i)\b(password|secret|api[-_]?key|token|private[-_]?key)\s*[:=]\s*\S+`), // credentials
+	regexp.MustCompile(`\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b`),                         // IP address
+}
 
 // Action is what the engine tells the dispatcher to do.
 type Action struct {
@@ -55,33 +63,12 @@ func (e *Engine) Evaluate(req Request) Action {
 // information. This is a fast heuristic; replace with Presidio via sidecar for
 // production-grade detection.
 func ContainsPII(req Request) bool {
-	patterns := []*regexp.Regexp{
-		regexp.MustCompile(`\b\d{3}[-.\s]?\d{2}[-.\s]?\d{4}\b`), // SSN
-		regexp.MustCompile(`\b\d{4}[- ]?\d{4}[- ]?\d{4}[- ]?\d{4}\b`), // credit card
-		regexp.MustCompile(`\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Z|a-z]{2,}\b`), // email
-		regexp.MustCompile(`(?i)\b(password|secret|api[-_]?key|token|private[-_]?key)\s*[:=]\s*\S+`), // credentials
-		regexp.MustCompile(`\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b`), // IP address
-	}
-	lower := strings.ToLower(req.Prompt)
-	_ = lower
-	for _, p := range patterns {
+	for _, p := range piiPatterns {
 		if p.MatchString(req.Prompt) {
 			return true
 		}
 	}
 	return false
-}
-
-// HasTag returns a condition function that matches when req has the given tag.
-func HasTag(tag string) func(Request) bool {
-	return func(req Request) bool {
-		for _, t := range req.Tags {
-			if t == tag {
-				return true
-			}
-		}
-		return false
-	}
 }
 
 // ── Default rule set ──────────────────────────────────────────────────────────

@@ -2,6 +2,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -41,7 +42,7 @@ func Dir() string {
 //  3. ~/.hydra (standalone install copies scripts here)
 func ScriptHome() string {
 	if h := os.Getenv("HYDRA_HOME"); h != "" {
-		return h
+		return filepath.Clean(h)
 	}
 	// Walk up from executable looking for dispatch/route.sh (dev / repo layout).
 	if exe, err := os.Executable(); err == nil {
@@ -74,15 +75,24 @@ func Load() (*Config, error) {
 	return &cfg, nil
 }
 
-// Save writes cfg to the config file, creating the directory if needed.
+// Save writes cfg to the config file atomically (temp file + rename).
 func Save(cfg *Config) error {
 	if err := os.MkdirAll(Dir(), 0o700); err != nil {
 		return err
 	}
-	f, err := os.Create(Path())
+	tmp, err := os.CreateTemp(Dir(), ".config-*.toml")
 	if err != nil {
+		return fmt.Errorf("config save: %w", err)
+	}
+	tmpName := tmp.Name()
+	if err := toml.NewEncoder(tmp).Encode(cfg); err != nil {
+		tmp.Close()
+		os.Remove(tmpName)
 		return err
 	}
-	defer f.Close()
-	return toml.NewEncoder(f).Encode(cfg)
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmpName)
+		return err
+	}
+	return os.Rename(tmpName, Path())
 }

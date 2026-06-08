@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"time"
@@ -70,19 +71,25 @@ type ollamaService struct{}
 func (s *ollamaService) port() int { return 11434 }
 
 func (s *ollamaService) probe(ctx context.Context, caps *capabilities.DB) ([]provider.Head, error) {
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost:11434/api/tags", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost:11434/api/tags", nil)
+	if err != nil {
+		return nil, err
+	}
 	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("ollama probe: unexpected status %d", resp.StatusCode)
+	}
 
 	var payload struct {
 		Models []struct {
 			Name string `json:"name"`
 		} `json:"models"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&payload); err != nil {
 		return nil, err
 	}
 
@@ -109,19 +116,25 @@ type lmStudioService struct{}
 func (s *lmStudioService) port() int { return 1234 }
 
 func (s *lmStudioService) probe(ctx context.Context, caps *capabilities.DB) ([]provider.Head, error) {
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost:1234/v1/models", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost:1234/v1/models", nil)
+	if err != nil {
+		return nil, err
+	}
 	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("lmstudio probe: unexpected status %d", resp.StatusCode)
+	}
 
 	var payload struct {
 		Data []struct {
 			ID string `json:"id"`
 		} `json:"data"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&payload); err != nil {
 		return nil, err
 	}
 

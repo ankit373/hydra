@@ -897,10 +897,10 @@ func Children(parentRunID string) ([]ChildRun, error) {
 			continue
 		}
 		cs, _ := readState(crd)
-		cur, total := 0, len(cm.Stages)
-		if cs != nil {
-			cur = cs.CurrentStage
+		if cs == nil {
+			continue
 		}
+		cur, total := cs.CurrentStage, len(cm.Stages)
 		result = append(result, ChildRun{
 			RunID:    e.Name(),
 			Playbook: cm.Playbook,

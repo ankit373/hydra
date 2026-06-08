@@ -33,9 +33,10 @@ SCOPE="$HYDRA_DIR/dispatch/scope.sh"
 ROUTE="$HYDRA_DIR/dispatch/route.sh"
 
 mkdir -p "$LOG_DIR"
-log() { printf '[%s] edit: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >> "$LOG_FILE"; }
-err() { echo "❌ edit: $*" >&2; log "ERROR: $*"; }
+log()  { printf '[%s] edit: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >> "$LOG_FILE"; }
+err()  { echo "❌ edit: $*" >&2; log "ERROR: $*"; }
 info() { echo "🧷 edit: $*" >&2; log "INFO: $*"; }
+warn() { echo "⚠️  edit: $*" >&2; log "WARN: $*"; }
 
 emit_json() {
   # emit_json <status> <file> <workspace> <git_root> <enum> <added> <removed> <validator> <rolled_back> <error>
@@ -315,8 +316,8 @@ fi
 
 # ── Atomic write ──────────────────────────────────────────────────────────────
 
-TMP="${FILE}.hydra-tmp.$$"
 mkdir -p "$(dirname "$FILE")"
+TMP=$(mktemp "$(dirname "$FILE")/.hydra-tmp.XXXXXX")
 printf '%s\n' "$NEW_CONTENT" > "$TMP"
 mv "$TMP" "$FILE"
 info "wrote new content ($(wc -l < "$FILE" | tr -d ' ') lines)"
@@ -342,10 +343,13 @@ if [[ $VALIDATE -eq 1 && "${HYDRA_VALIDATE:-on}" != "off" ]]; then
   fi
 
   if [[ -n "$vtmpl" ]]; then
-    cmd="${vtmpl//\{file\}/$FILE}"
-    info "validating: $cmd"
+    # Build the command as an array — never use eval. Replace the {file} placeholder
+    # with the actual path as a separate, quoted argument to prevent shell injection.
+    IFS=' ' read -ra vcmd <<< "${vtmpl//\{file\}/}"
+    vcmd+=("$FILE")
+    info "validating: ${vcmd[*]}"
     set +e
-    vout=$(eval "$cmd" 2>&1)
+    vout=$("${vcmd[@]}" 2>&1)
     vrc=$?
     set -e
 

@@ -852,7 +852,7 @@ cmd_ticket_comment() {
         err "gh CLI not installed — cannot comment on github ticket"
         exit 1
       fi
-      gh issue comment "$ref" --body "$body" >/dev/null
+      gh issue comment -- "$ref" --body "$body" >/dev/null
       log "run $run_id commented on $ref"
       echo "commented on $ref"
       ;;

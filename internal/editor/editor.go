@@ -14,7 +14,6 @@ import (
 
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/dispatch"
-	"github.com/ankit373/hydra/internal/policy"
 	"github.com/ankit373/hydra/internal/workspace"
 )
 
@@ -82,18 +81,6 @@ func Edit(ctx context.Context, req Request) (*Result, error) {
 			_ = os.Remove(backup)
 		}
 	}
-
-	// ── Policy ────────────────────────────────────────────────────────────────
-	var fp policy.FilePolicy
-	eng, pErr := policy.LoadFilePolicy(config.ScriptHome())
-	if pErr == nil {
-		fp = eng.Decide(policy.Spec{
-			File:          req.File,
-			FileExtension: fileExt(req.File),
-			Workspace:     wsName,
-		})
-	}
-	_ = fp // Phase 1: snapshot flags; Phase 2 will consume them
 
 	// ── Build prompt ──────────────────────────────────────────────────────────
 	var ctxNote string
@@ -403,8 +390,8 @@ func diffStats(file, origContent, gitRoot, backup string, origExisted bool) (add
 	if origExisted {
 		origLines = strings.Count(origContent, "\n")
 	}
-	added = max(0, newLines-origLines)
-	removed = max(0, origLines-newLines)
+	added = max(0, newLines-origLines)   //nolint:builtin — uses Go 1.21+ built-in
+	removed = max(0, origLines-newLines) //nolint:builtin
 	return
 }
 
@@ -413,12 +400,6 @@ func readFileLines(path string) string {
 	return string(raw)
 }
 
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
 
 func firstLine(s string) string {
 	lines := strings.SplitN(strings.TrimSpace(s), "\n", 2)

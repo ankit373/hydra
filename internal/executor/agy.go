@@ -58,7 +58,10 @@ func (e *AgyExecutor) Execute(ctx context.Context, req Request) (*Response, erro
 
 	timeout := 300 * time.Second
 	if t := os.Getenv("AGY_TIMEOUT"); t != "" {
-		if d, err := time.ParseDuration(t + "s"); err == nil {
+		if d, err := time.ParseDuration(t); err == nil {
+			timeout = d
+		} else if d, err := time.ParseDuration(t + "s"); err == nil {
+			// Bare integer seconds (e.g. "300") — treat as seconds.
 			timeout = d
 		}
 	}
@@ -79,7 +82,7 @@ func (e *AgyExecutor) Execute(ctx context.Context, req Request) (*Response, erro
 
 	// Auth detection: check stderr + first 3 lines of stdout only.
 	// Never scan full output — model responses may contain auth strings.
-	firstLines := strings.Join(strings.SplitN(outStr, "\n", 4)[:min3(strings.Count(outStr, "\n")+1, 3)], "\n")
+	firstLines := strings.Join(strings.SplitN(outStr, "\n", 4)[:min(strings.Count(outStr, "\n")+1, 3)], "\n")
 	authSignal := stderrStr + "\n" + firstLines
 
 	if authSignalRe.MatchString(authSignal) {
@@ -192,10 +195,3 @@ func writeAuthRequired(pool, modelFlag, authURL string) {
 	_ = os.WriteFile(filepath.Join(logDir, "auth_required.json"), data, 0o600)
 }
 
-
-func min3(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
