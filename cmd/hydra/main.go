@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 
+	"github.com/ankit373/hydra/internal/build"
 	"github.com/ankit373/hydra/internal/company"
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/cost"
@@ -20,6 +21,7 @@ import (
 	"github.com/ankit373/hydra/internal/probe"
 	"github.com/ankit373/hydra/internal/review"
 	"github.com/ankit373/hydra/internal/tui"
+	"github.com/ankit373/hydra/internal/update"
 
 	_ "github.com/ankit373/hydra/internal/provider/cli"
 	_ "github.com/ankit373/hydra/internal/provider/env"
@@ -28,8 +30,18 @@ import (
 )
 
 func main() {
+	// Non-blocking update check — prints notification after command output.
+	updateAvailable := update.Check()
+
 	if err := rootCmd().Execute(); err != nil {
 		os.Exit(1)
+	}
+
+	if updateAvailable != "" {
+		fmt.Fprintf(os.Stderr, "\n  %s  hydra %s is available → brew upgrade hydra\n",
+			lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Render("✦"),
+			updateAvailable,
+		)
 	}
 }
 
@@ -44,8 +56,33 @@ func rootCmd() *cobra.Command {
 			return cmd.Help()
 		},
 	}
-	root.AddCommand(cmdInit(), cmdProbe(), cmdStatus(), cmdDispatch(), cmdEdit(), cmdReview(), cmdParallel(), cmdCost(), cmdRun())
+	root.AddCommand(
+		cmdInit(), cmdProbe(), cmdStatus(), cmdDispatch(),
+		cmdEdit(), cmdReview(), cmdParallel(), cmdCost(), cmdRun(),
+		cmdVersion(),
+	)
 	return root
+}
+
+// ── version ───────────────────────────────────────────────────────────────────
+
+func cmdVersion() *cobra.Command {
+	return &cobra.Command{
+		Use:   "version",
+		Short: "Print version, commit, and build info",
+		Run: func(_ *cobra.Command, _ []string) {
+			fmt.Printf("  hydra %s\n", build.Version)
+			fmt.Printf("  commit:  %s\n", build.Commit)
+			fmt.Printf("  built:   %s\n", build.Date)
+			fmt.Printf("  by:      %s\n", build.BuiltBy)
+			if latest := update.Check(); latest != "" {
+				fmt.Printf("\n  %s  %s is available → brew upgrade hydra\n",
+					lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Render("✦"),
+					latest,
+				)
+			}
+		},
+	}
 }
 
 // ── init ──────────────────────────────────────────────────────────────────────

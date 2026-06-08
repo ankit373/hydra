@@ -1,0 +1,31 @@
+name: Release Please
+
+# release-please watches for conventional commits on main and:
+#   1. Opens a "Release PR" with bumped version + updated CHANGELOG.md
+#   2. When the Release PR is merged, creates the tag → triggers release.yml
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    name: Release Please
+    runs-on: ubuntu-latest
+    steps:
+      - uses: googleapis/release-please-action@v4
+        id: release
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          release-type: go
+          # Conventional commits determine version bump:
+          #   feat:     → minor bump (1.1.0 → 1.2.0)
+          #   fix:      → patch bump (1.1.0 → 1.1.1)
+          #   feat!: or BREAKING CHANGE → major bump (1.1.0 → 2.0.0)
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json

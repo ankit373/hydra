@@ -1,0 +1,146 @@
+version: 2
+project_name: hydra
+
+before:
+  hooks:
+    - go mod tidy
+
+# ── Builds ────────────────────────────────────────────────────────────────────
+
+builds:
+  - id: hydra
+    main: ./cmd/hydra
+    binary: hydra
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X github.com/ankit373/hydra/internal/build.Version={{.Version}}
+      - -X github.com/ankit373/hydra/internal/build.Commit={{.ShortCommit}}
+      - -X github.com/ankit373/hydra/internal/build.Date={{.CommitDate}}
+      - -X github.com/ankit373/hydra/internal/build.BuiltBy=goreleaser
+    goos:
+      - darwin
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+
+# ── Archives ──────────────────────────────────────────────────────────────────
+
+archives:
+  - id: default
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        format: zip
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- .Version }}_
+      {{- .Os }}_
+      {{- .Arch }}
+    files:
+      - LICENSE
+      - README.md
+      - CHANGELOG.md
+
+# ── Checksums & Signing ───────────────────────────────────────────────────────
+
+checksum:
+  name_template: "checksums.txt"
+
+# Phase 3: cosign signing — uncomment when COSIGN_KEY is configured
+# signs:
+#   - artifacts: checksum
+#     cmd: cosign
+#     args:
+#       - sign-blob
+#       - "--yes"
+#       - "--output-signature=${signature}"
+#       - "${artifact}"
+#     env:
+#       - COSIGN_EXPERIMENTAL=1
+
+# ── SBOM ─────────────────────────────────────────────────────────────────────
+
+sboms:
+  - artifacts: archive
+    documents:
+      - "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}.sbom.json"
+
+# ── Homebrew Tap ──────────────────────────────────────────────────────────────
+
+brews:
+  - name: hydra
+    repository:
+      owner: ankit373
+      name: homebrew-hydra
+      branch: main
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    commit_author:
+      name: goreleaser-bot
+      email: goreleaser@uvansa.com
+    commit_msg_template: "chore: bump hydra to {{ .Tag }}"
+    directory: Formula
+    homepage: "https://hydra.uvansa.com"
+    description: "Multi-model AI orchestration — one Cortex, many Heads"
+    license: MIT
+    dependencies:
+      - name: jq
+      - name: yq
+      - name: bun
+        tap:
+          owner: oven-sh
+          name: homebrew-bun
+    install: |
+      bin.install "hydra"
+    test: |
+      assert_match version.to_s, shell_output("#{bin}/hydra version")
+
+# ── Changelog ─────────────────────────────────────────────────────────────────
+
+changelog:
+  use: git-cliff
+  # git-cliff reads cliff.toml automatically
+
+# ── GitHub Release ────────────────────────────────────────────────────────────
+
+release:
+  github:
+    owner: ankit373
+    name: hydra
+  name_template: "v{{ .Version }}"
+  header: |
+    ## Hydra {{ .Tag }}
+
+    > Full release notes: https://hydra.uvansa.com/changelog/{{ .Tag }}
+
+  footer: |
+
+    ---
+    **Install / Upgrade**
+    ```bash
+    brew install ankit373/hydra/hydra   # first install
+    brew upgrade hydra                   # upgrade
+    ```
+    **Verify (after cosign enabled)**
+    ```bash
+    cosign verify-blob --signature checksums.txt.sig checksums.txt
+    ```
+    **Verify SHA**
+    ```bash
+    sha256sum --check checksums.txt
+    ```
+
+  # Auto-detect pre-release from tag (e.g. v1.0.0-rc.1, v1.0.0-beta.1)
+  prerelease: auto
+
+  # Draft releases are published immediately on tag push
+  draft: false

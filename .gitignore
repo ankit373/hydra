@@ -20,7 +20,7 @@ auth_required.json
 node_modules/
 ui/node_modules/
 dist/
-build/
+/build/
 out/
 .cache/
 .eslintcache
