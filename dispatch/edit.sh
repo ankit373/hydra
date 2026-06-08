@@ -126,7 +126,7 @@ fi
 # Honor policy edit_mode if it was set and --mode wasn't explicitly given.
 # (Phase 1 only supports rewrite; sr_blocks/agentic gracefully fall back with a warning.)
 if [[ -n "$POLICY_JSON" && "$MODE" == "rewrite" && "$POL_EDIT_MODE" != "rewrite" ]]; then
-  info "policy requested edit_mode=$POL_EDIT_MODE — Phase 1 only implements rewrite, falling back"
+  warn "policy requested edit_mode=$POL_EDIT_MODE but only 'rewrite' is implemented — falling back to rewrite. Set edit_mode=rewrite in your policy file to silence this warning."
 fi
 
 # CORE tier is the orchestrator itself — it should use native Edit/Write

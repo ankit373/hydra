@@ -3,7 +3,10 @@ package tui
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -233,7 +236,45 @@ func (m InitModel) save() error {
 			"pii": {Action: "local-only"},
 		}
 	}
-	return config.Save(cfg)
+	if err := config.Save(cfg); err != nil {
+		return err
+	}
+	return exportToRoutingYAML(tiers, m.cortex)
+}
+
+// exportToRoutingYAML appends a discovered_heads block to registry/routing.yaml
+// so that route.sh and human operators can see what hydra init found.
+// Any existing auto-discovered block is replaced.
+func exportToRoutingYAML(tiers []config.Tier, cortex *provider.Head) error {
+	routingPath := filepath.Join(config.ScriptHome(), "registry", "routing.yaml")
+
+	existing, err := os.ReadFile(routingPath)
+	if err != nil {
+		return nil // routing.yaml not present in this install layout — skip silently
+	}
+
+	// Strip any previously written discovered block.
+	const marker = "\n# ── Auto-discovered by hydra init"
+	base := string(existing)
+	if idx := strings.Index(base, marker); idx != -1 {
+		base = base[:idx]
+	}
+
+	// Build the new discovered block.
+	var b strings.Builder
+	b.WriteString(marker)
+	b.WriteString(" ────────────────────────────────────────\n")
+	b.WriteString(fmt.Sprintf("# Generated: %s\n", time.Now().UTC().Format("2006-01-02T15:04:05Z")))
+	b.WriteString("# Re-run `hydra init` to refresh.\n")
+	b.WriteString("discovered_heads:\n")
+	if cortex != nil {
+		b.WriteString(fmt.Sprintf("  cortex: %s\n", cortex.ID))
+	}
+	for _, t := range tiers {
+		b.WriteString(fmt.Sprintf("  %s: [%s]\n", t.Name, strings.Join(t.Heads, ", ")))
+	}
+
+	return os.WriteFile(routingPath, []byte(strings.TrimRight(base, "\n")+"\n"+b.String()), 0o644)
 }
 
 // buildTiers assigns Heads to named tiers by default score bands.

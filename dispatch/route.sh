@@ -21,6 +21,18 @@
 # ─────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
+# ── Deprecation notice ────────────────────────────────────────────────────────
+# dispatch/route.sh is the legacy entry point for external callers.
+# The Go control plane (hydra dispatch) is now the single external entry point.
+# Internal script callers (edit.sh, parallel.sh, etc.) set HYDRA_INTERNAL=1
+# to suppress this warning.
+if [[ "${HYDRA_INTERNAL:-}" != "1" ]]; then
+  echo "⚠️  route.sh is deprecated as an external entry point." >&2
+  echo "   Use: hydra dispatch --enum <KEY> --prompt \"<prompt>\"" >&2
+  echo "   Or:  hydra dispatch --tier <N> --prompt \"<prompt>\"" >&2
+  echo "   Set HYDRA_INTERNAL=1 to suppress this warning in script callers." >&2
+fi
+
 HYDRA_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 REGISTRY_MODELS="$HYDRA_DIR/registry/models.yaml"
 REGISTRY_ROUTING="$HYDRA_DIR/registry/routing.yaml"
