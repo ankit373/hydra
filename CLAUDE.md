@@ -206,6 +206,31 @@ hotfix/#{n}-slug    ← branches from main tag. Merged → main, cherry-picked �
 
 ---
 
+## GitHub Project & Issue Hygiene (MANDATORY)
+
+Every issue must be:
+1. **On the GitHub project board** (Project #2 "Hydra Roadmap")
+2. **Linked to its branch** — GitHub auto-links when branch name contains the issue number (`feature/54-hydra-stats` links to #54)
+3. **Linked to its PR** — PR body must contain `Closes #<issue>` for auto-close on merge
+4. **Moving through board states** at every transition (Todo → In Progress → In Review → Done)
+
+### Link a branch to an issue (GitHub auto-detection)
+GitHub automatically links a branch to an issue when the branch name contains the issue number.
+**Always name branches `feature/#{n}-slug`, `fix/#{n}-slug` etc.** — this is what creates the link.
+
+To verify the link is showing on the issue:
+```bash
+gh issue view 54 --json linkedBranches
+```
+
+### Link a PR to an issue
+Always include `Closes #<n>` in the PR body. This:
+- Shows the PR on the issue page
+- Auto-closes the issue when the PR merges
+- Auto-moves the issue to Done on the project board (if configured)
+
+---
+
 ## Step 1 — Create a GitHub Issue FIRST
 
 Before touching any code, create an issue and add it to the board:
@@ -602,14 +627,14 @@ Track via `gh issue list`. Key upcoming features:
 
 | # | Feature | Status |
 |---|---|---|
-| #11 | Swarm dispatch (race/best/all) | PR #51 open |
-| #52 | Dynamic pricing (OpenRouter) | PR #61 open |
+| #11 | Swarm dispatch (race/best/all) | ✅ merged PR #51 |
+| #52 | Dynamic pricing (OpenRouter) | ✅ merged PR #61 |
 | #53 | Lifecycle hook system (PreDispatch/PostDispatch events) | open |
-| #54 | `hydra stats` — session cost rollup | open |
+| #54 | `hydra stats` — session cost rollup | ✅ merged PR #66 |
 | #55 | Programmatic token budget / claude_pct auto-tracking | open |
 | #56 | TUI component library (Box/ScrollBox/ProgressBar/Spinner) | open |
 | #57 | Context window tracker (auto-measure claude_pct from API responses) | open |
-| #58 | `EndTruncatingAccumulator` | ✅ merged |
+| #58 | `EndTruncatingAccumulator` | ✅ merged PR #60 |
 | #59 | Swarm head retry + reconnection (backoff on 429/503) | open |
 
 ### claude-code patterns being ported to Hydra
