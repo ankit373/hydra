@@ -80,7 +80,10 @@ func (a *Accumulator) String() string {
 	return string(a.buf)
 }
 
-// Len returns the number of bytes currently stored (including the truncation marker if present).
+// Len returns the number of bytes currently stored. When truncation has
+// occurred this includes the length of the truncation marker itself, so
+// Len() may exceed maxBytes. Do not use Len() as a budget guard — use
+// TotalBytes() to know how many bytes were actually written by the source.
 func (a *Accumulator) Len() int {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -102,6 +105,10 @@ func (a *Accumulator) Truncated() bool {
 }
 
 // Reset clears all state so the Accumulator can be reused.
+// The underlying byte slice is retained (resliced to zero length) to avoid
+// re-allocation on the next use. If the previous capture was large (e.g. a
+// 33 MB subprocess output) and the Accumulator will not be reused, set it to
+// nil instead of calling Reset to release the backing memory.
 func (a *Accumulator) Reset() {
 	a.mu.Lock()
 	defer a.mu.Unlock()

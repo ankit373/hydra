@@ -18,6 +18,7 @@ import (
 	"github.com/ankit373/hydra/internal/dispatch"
 	"github.com/ankit373/hydra/internal/editor"
 	"github.com/ankit373/hydra/internal/parallel"
+	"github.com/ankit373/hydra/internal/pricing"
 	"github.com/ankit373/hydra/internal/probe"
 	"github.com/ankit373/hydra/internal/review"
 	"github.com/ankit373/hydra/internal/tui"
@@ -64,6 +65,7 @@ func rootCmd() *cobra.Command {
 	root.AddCommand(
 		cmdInit(), cmdProbe(), cmdStatus(), cmdDispatch(),
 		cmdEdit(), cmdReview(), cmdParallel(), cmdCost(), cmdRun(),
+		cmdPricing(),
 		cmdVersion(),
 	)
 	return root
@@ -596,6 +598,82 @@ func cmdCost() *cobra.Command {
 	jsonCmd.Flags().StringVar(&since, "since", "", "ISO timestamp prefix filter (e.g. 2026-06-01)")
 
 	cmd.AddCommand(tail, jsonCmd)
+	return cmd
+}
+
+// ── pricing ───────────────────────────────────────────────────────────────────
+
+func cmdPricing() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "pricing",
+		Short: "Manage live model pricing data (OpenRouter cache)",
+	}
+	cmd.AddCommand(cmdPricingRefresh(), cmdPricingList())
+	return cmd
+}
+
+func cmdPricingRefresh() *cobra.Command {
+	return &cobra.Command{
+		Use:   "refresh",
+		Short: "Force-fetch latest pricing from OpenRouter and update local cache",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			fmt.Fprintln(os.Stderr, "Fetching pricing from OpenRouter…")
+			n, err := pricing.Refresh()
+			if err != nil {
+				return fmt.Errorf("pricing refresh: %w", err)
+			}
+			fmt.Fprintf(os.Stdout, "Cached pricing for %d models.\n", n)
+			return nil
+		},
+	}
+}
+
+func cmdPricingList() *cobra.Command {
+	var jsonOut bool
+	cmd := &cobra.Command{
+		Use:   "list [filter]",
+		Short: "List all models and their $/1M token rates (sorted alphabetically)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			db := pricing.Load()
+			// Hoist filter once — db.Models() is already sorted.
+			filter := strings.ToLower(strings.Join(args, " "))
+
+			if jsonOut {
+				type row struct {
+					Model            string  `json:"model"`
+					InputPerMillion  float64 `json:"input_per_mtok"`
+					OutputPerMillion float64 `json:"output_per_mtok"`
+				}
+				var rows []row
+				for _, m := range db.Models() {
+					if filter != "" && !strings.Contains(m, filter) {
+						continue
+					}
+					p, _ := db.ModelPrice(m)
+					rows = append(rows, row{m, p.InputPerMillion, p.OutputPerMillion})
+				}
+				return json.NewEncoder(os.Stdout).Encode(rows)
+			}
+
+			fmt.Fprintf(os.Stdout, "%-55s  %10s  %11s\n", "Model", "In $/1M", "Out $/1M")
+			fmt.Fprintln(os.Stdout, strings.Repeat("─", 82))
+			count := 0
+			for _, m := range db.Models() {
+				if filter != "" && !strings.Contains(m, filter) {
+					continue
+				}
+				p, _ := db.ModelPrice(m)
+				fmt.Fprintf(os.Stdout, "%-55s  %10.4f  %11.4f\n",
+					m, p.InputPerMillion, p.OutputPerMillion)
+				count++
+			}
+			if count == 0 {
+				fmt.Fprintln(os.Stdout, "(no models matched)")
+			}
+			return nil
+		},
+	}
+	cmd.Flags().BoolVar(&jsonOut, "json", false, "Output as JSON")
 	return cmd
 }
 
