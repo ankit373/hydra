@@ -176,27 +176,64 @@ dispatch/route.sh --list
 
 ---
 
+## Branching Strategy
+
+Modelled after GitHub CLI + Helm — simple enough for a small team, rigorous enough that nothing untested hits main.
+
+```
+main                ← production only. NEVER pushed directly. Tags live here.
+  ↑ squash PR
+release/v1.x        ← UAT gate. Cut from develop 1-2 days before release.
+  ↑ squash PR         Bug fixes land here only. Merged → main AND back → develop.
+develop             ← integration. All features land here. Edge builds fire here.
+  ↑ squash PR
+feature/#{n}-slug   ← short-lived. Always branch from develop.
+fix/#{n}-slug
+chore/#{n}-slug
+
+hotfix/#{n}-slug    ← branches from main tag. Merged → main, cherry-picked → develop.
+```
+
+### Branch rules (hard rules, no exceptions)
+
+| Branch | Who pushes | Version bump? | CI publishes |
+|---|---|---|---|
+| `main` | release-please PR only | **YES** — semver tag | stable release + Homebrew |
+| `release/v*` | cut from develop | no | RC pre-release (`v1.2.0-rc.1`) |
+| `develop` | feature PR merges | no | edge pre-release (overwritten) |
+| `feature/*` `fix/*` `chore/*` | you | no | nothing |
+| `hotfix/*` | you | no | nothing (merges to main trigger release) |
+
+---
+
 ## Step 1 — Create a GitHub Issue FIRST
 
-Before touching any code, create an issue:
+Before touching any code, create an issue and add it to the board:
 
 ```bash
 # Feature
-gh issue create \
+ISSUE_URL=$(gh issue create \
   --title "feat: <short description>" \
   --body "## Problem\n\n## Solution\n\n## Acceptance Criteria\n- [ ] " \
   --label "enhancement" \
-  --assignee "@me"
+  --assignee "@me")
+ISSUE=$(echo "$ISSUE_URL" | grep -oE '[0-9]+$')
 
 # Bug
-gh issue create \
+ISSUE_URL=$(gh issue create \
   --title "fix: <short description>" \
   --body "## Steps to Reproduce\n\n## Expected\n\n## Actual\n\n## Fix" \
   --label "bug" \
-  --assignee "@me"
-```
+  --assignee "@me")
+ISSUE=$(echo "$ISSUE_URL" | grep -oE '[0-9]+$')
 
-Capture the issue number (e.g. `#43`). Everything that follows references it.
+# Add to project board and move to Todo
+gh project item-add 2 --owner ankit373 --url "$ISSUE_URL"
+ITEM_ID=$(gh project item-list 2 --owner ankit373 --format json --limit 100 \
+  | python3 -c "import json,sys; [print(i['id']) for i in json.load(sys.stdin).get('items',[]) if '/${ISSUE}' in str(i.get('content',{}).get('url',''))]")
+gh project item-edit --project-id PVT_kwHOAL1qLc4BZbZZ --id "$ITEM_ID" \
+  --field-id PVTSSF_lAHOAL1qLc4BZbZZzhUaGlE --single-select-option-id f75ad846
+```
 
 ---
 
@@ -212,9 +249,17 @@ Branch naming is strict — always include the issue number:
 | Chore / deps | `chore/#{issue}-short-desc` | `chore/46-bump-bubbletea` |
 
 ```bash
-# Always branch from develop (except hotfix → branch from main)
+# Features/fixes — always branch from develop
 git checkout develop && git pull origin develop
 git checkout -b feature/43-hydra-stats
+
+# Hotfixes — branch from the last production tag
+git checkout main && git pull origin main
+git checkout -b hotfix/45-nil-panic
+
+# Move issue to In Progress
+gh project item-edit --project-id PVT_kwHOAL1qLc4BZbZZ --id "$ITEM_ID" \
+  --field-id PVTSSF_lAHOAL1qLc4BZbZZzhUaGlE --single-select-option-id 47fc9ee4
 ```
 
 ---
@@ -235,7 +280,6 @@ Every commit must follow the conventional commit spec.
 | `docs:`, `test:`, `ci:`, `style:` | no bump, hidden in changelog | — |
 
 ```bash
-# Good commit messages
 git commit -m "feat(dispatch): add --dry-run flag to preview routing decisions"
 git commit -m "fix(update): skip check when HYDRA_NO_UPDATE_CHECK is set"
 git commit -m "chore(deps): bump golang.org/x/sys to v0.25.0"
@@ -263,62 +307,102 @@ EOF
 )" \
   --base develop \
   --draft=false
+
+# Move issue to In Review
+gh project item-edit --project-id PVT_kwHOAL1qLc4BZbZZ --id "$ITEM_ID" \
+  --field-id PVTSSF_lAHOAL1qLc4BZbZZzhUaGlE --single-select-option-id 1490e846
 ```
 
 **PR rules:**
 - Title must be a valid conventional commit (e.g. `feat(scope): description`)
 - Body must contain `Closes #<issue>` — auto-links and closes the issue on merge
-- Target branch is `develop` (not `main`) for all feature/fix work
-- Hotfixes only target `main`
+- All features/fixes target `develop`. Hotfixes target `main`.
+- Never open a PR directly to `main` from a feature branch.
 
 ---
 
 ## Step 5 — Review & Merge
 
 - PRs to `develop` require 0 approvals (self-merge allowed) but must pass CI
-- PRs to `main` require 1 approval
-- Merge strategy: **Squash and merge** for features/fixes (clean linear history)
-- Never force-push to `develop` or `main`
+- PRs to `main` (release branch merges, hotfixes) require 1 approval
+- Merge strategy: **Squash and merge** everywhere — clean linear history
+- Never force-push to `develop`, `release/*`, or `main`
+
+```bash
+# After merge — move issue to Done
+gh project item-edit --project-id PVT_kwHOAL1qLc4BZbZZ --id "$ITEM_ID" \
+  --field-id PVTSSF_lAHOAL1qLc4BZbZZzhUaGlE --single-select-option-id 98236657
+```
 
 ---
 
 ## Step 6 — Release Cycle
 
-### Automatic (normal flow)
-`release-please` watches `main` and does this automatically:
+### Normal release flow (feature release)
 
 ```
-Commits land on develop
+Features merge to develop (conventional commits)
+        ↓  (accumulate until ready)
+Cut release branch: git checkout -b release/v1.2.0 develop
+        ↓  (push → rc.yml fires → publishes v1.2.0-rc.1 pre-release)
+UAT testing on release/v1.2.0
+Bug fixes committed directly to release/v1.2.0
+        ↓  (each push → rc.yml publishes v1.2.0-rc.2, rc.3 …)
+Sign-off ✓
         ↓
-PR merged to main (conventional commits)
+PR: release/v1.2.0 → main  (squash merge)
         ↓
-release-please opens "Release PR" automatically
-(bumps version in .release-please-manifest.json,
- updates CHANGELOG.md with grouped commits)
+release-please opens Release PR on main (bumps version, updates CHANGELOG)
         ↓
-Review and merge the Release PR
+Merge Release PR → tag v1.2.0 created → release.yml fires
         ↓
-Tag created (e.g. v1.2.0) → release.yml fires
+GoReleaser builds all platforms, publishes stable release, updates Homebrew tap
         ↓
-GoReleaser builds all platforms, publishes GitHub Release,
-updates Homebrew tap (ankit373/homebrew-hydra)
+Cherry-pick any release-branch fixes back to develop
 ```
 
-### Manual release (emergency / hotfix)
+### Cutting a release branch
+
 ```bash
-# Cut a release manually — only when release-please can't
-git checkout main && git pull
-git tag v1.2.1 -m "hotfix: fix nil panic in dispatch"
-git push origin v1.2.1
-# → release.yml fires automatically
+git checkout develop && git pull origin develop
+git checkout -b release/v1.2.0
+git push -u origin release/v1.2.0
+# → rc.yml fires automatically, publishes v1.2.0-rc.1
+```
+
+### Hotfix flow (production bug)
+
+```bash
+# Branch from the last production tag
+git checkout main && git pull origin main
+git checkout -b hotfix/45-nil-panic
+
+# Fix, commit, push
+git commit -m "fix(dispatch): nil panic when prompt is empty"
+git push -u origin hotfix/45-nil-panic
+
+# PR → main (requires 1 approval)
+gh pr create --base main --title "fix(dispatch): nil panic when prompt is empty"
+
+# After merge → release-please picks it up → patch release (v1.2.1)
+# Cherry-pick back to develop
+git checkout develop && git cherry-pick <commit-sha>
+git push origin develop
 ```
 
 ### Release channels
-| Channel | Branch | Tag | Install |
+
+| Channel | Branch | Tag pattern | Install |
 |---|---|---|---|
-| **stable** | `main` (tagged) | `v1.2.0` | `brew install hydra` |
-| **beta/rc** | `release/v1.2.0` | `v1.2.0-rc.1` | pre-release on GitHub |
+| **stable** | `main` (tagged by release-please) | `v1.2.0` | `brew install hydra` |
+| **RC / UAT** | `release/v*` | `v1.2.0-rc.1` | GitHub pre-release |
 | **edge** | `develop` | `edge` (overwritten) | GitHub pre-release |
+
+### Version bump rules (CRITICAL)
+- **Only `main` ever gets a semver tag** — release-please enforces this
+- `release/*` and `develop` get pre-release tags only (RC / edge) — no semver bump
+- Never manually bump version numbers — release-please reads conventional commits
+- `BREAKING CHANGE:` in commit body → major bump; `feat:` → minor; `fix:`/`perf:` → patch
 
 ---
 

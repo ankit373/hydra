@@ -1,0 +1,77 @@
+name: RC Build
+
+on:
+  push:
+    branches:
+      - "release/v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  rc:
+    name: Build & publish RC release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Compute RC version
+        id: ver
+        run: |
+          # Branch is release/v1.2.0 → extract semver
+          BRANCH="${GITHUB_REF_NAME}"
+          SEMVER="${BRANCH#release/}"
+          SHA=$(git rev-parse --short HEAD)
+
+          # Count how many RC tags already exist for this version
+          RC_COUNT=$(git tag --list "${SEMVER}-rc.*" | wc -l | tr -d ' ')
+          RC_NUM=$((RC_COUNT + 1))
+          RC_TAG="${SEMVER}-rc.${RC_NUM}"
+
+          echo "version=${RC_TAG}" >> "$GITHUB_OUTPUT"
+          echo "tag=${RC_TAG}" >> "$GITHUB_OUTPUT"
+          echo "sha=${SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Build RC binaries
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          version: latest
+          args: release --snapshot --clean --skip=publish,sign,sbom
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GORELEASER_CURRENT_TAG: ${{ steps.ver.outputs.version }}
+
+      - name: Publish RC release
+        run: |
+          gh release create "${{ steps.ver.outputs.tag }}" dist/*.tar.gz dist/*.zip dist/checksums.txt \
+            --title "RC — ${{ steps.ver.outputs.version }}" \
+            --notes "$(cat <<'EOF'
+          > 🧪 **This is a release candidate** — built from \`${{ github.ref_name }}\` for UAT testing.
+          > Do not use in production. Stable release pending sign-off.
+
+          **Branch**: \`${{ github.ref_name }}\`
+          **Commit**: \`${{ steps.ver.outputs.sha }}\`
+          **Version**: \`${{ steps.ver.outputs.version }}\`
+
+          **Install RC build**
+          \`\`\`bash
+          # macOS (Apple Silicon)
+          curl -L https://github.com/ankit373/hydra/releases/download/${{ steps.ver.outputs.tag }}/hydra_${{ steps.ver.outputs.version }}_darwin_arm64.tar.gz | tar xz
+          sudo mv hydra /usr/local/bin/
+          \`\`\`
+          EOF
+          )" \
+            --prerelease \
+            --latest=false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
