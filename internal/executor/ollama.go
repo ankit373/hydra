@@ -87,9 +87,10 @@ func (e *OllamaExecutor) Execute(ctx context.Context, req Request) (*Response, e
 		return nil, httpStatusError(req.Head.ID, resp)
 	}
 
-	// Cap response body to prevent runaway memory from very large JSON payloads.
-	maxBytes := int64(util.DefaultMaxBytes)
-	limited := io.LimitReader(resp.Body, maxBytes+1)
+	// Safety net: cap response body so a runaway/adversarial server can't OOM us.
+	// If the body exceeds the limit the JSON decoder returns an error, which is
+	// the right outcome — Ollama should never emit a 33 MB JSON response.
+	limited := io.LimitReader(resp.Body, int64(util.DefaultMaxBytes)+1)
 
 	var out ollamaGenerateResponse
 	if err := json.NewDecoder(limited).Decode(&out); err != nil {
@@ -99,9 +100,6 @@ func (e *OllamaExecutor) Execute(ctx context.Context, req Request) (*Response, e
 		return nil, fmt.Errorf("ollama exec %s: empty response", req.Head.ID)
 	}
 
-	// Detect if the response field itself was truncated by the limit reader.
-	truncated := int64(len(out.Response)) >= maxBytes
-
 	writeTokenSidecar(modelFlag, "ollama", "real", out.PromptEvalCount, out.EvalCount)
 
 	return &Response{
@@ -110,7 +108,6 @@ func (e *OllamaExecutor) Execute(ctx context.Context, req Request) (*Response, e
 		Model:        firstNonEmpty(out.Model, modelFlag),
 		InputTokens:  out.PromptEvalCount,
 		OutputTokens: out.EvalCount,
-		Truncated:    truncated,
 	}, nil
 }
 

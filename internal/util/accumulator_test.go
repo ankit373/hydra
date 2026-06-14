@@ -1,7 +1,9 @@
 package util
 
 import (
+	"fmt"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -92,5 +94,73 @@ func TestAccumulator_ImplementsWriter(t *testing.T) {
 	}
 	if a.String() != "test" {
 		t.Fatalf("got %q", a.String())
+	}
+}
+
+func TestAccumulator_ConcurrentWrites(t *testing.T) {
+	// Goroutine-safety: 50 goroutines each writing 100 bytes concurrently.
+	// Must not race (run with -race), total must equal 50*100 = 5000.
+	a := NewAccumulator(1 << 20) // 1 MB — large enough to not truncate
+	var wg sync.WaitGroup
+	for i := range 50 {
+		i := i
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, _ = a.Write([]byte(fmt.Sprintf("%0100d", i)))
+		}()
+	}
+	wg.Wait()
+	if a.TotalBytes() != 50*100 {
+		t.Fatalf("TotalBytes %d, want %d", a.TotalBytes(), 50*100)
+	}
+	if a.Truncated() {
+		t.Fatal("should not truncate")
+	}
+}
+
+func TestAccumulator_ConcurrentTruncation(t *testing.T) {
+	// Many goroutines writing into a tiny cap — only one must set the marker.
+	a := NewAccumulator(10)
+	var wg sync.WaitGroup
+	for range 20 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, _ = a.Write([]byte("AAAAAAAAAA")) // 10 bytes each
+		}()
+	}
+	wg.Wait()
+	s := a.String()
+	// Marker must appear exactly once.
+	if count := strings.Count(s, truncationMarker); count != 1 {
+		t.Fatalf("truncation marker appears %d times, want 1", count)
+	}
+	if a.TotalBytes() != 20*10 {
+		t.Fatalf("TotalBytes %d, want 200", a.TotalBytes())
+	}
+}
+
+func TestAccumulator_EnvOverride(t *testing.T) {
+	t.Setenv("HYDRA_MAX_OUTPUT_BYTES", "20")
+	a := NewAccumulator(0) // env should override
+	_, _ = a.Write([]byte(strings.Repeat("X", 25)))
+	if !a.Truncated() {
+		t.Fatal("expected truncation from env override")
+	}
+	// Should have stored exactly 20 bytes + marker, not DefaultMaxBytes.
+	if a.TotalBytes() != 25 {
+		t.Fatalf("TotalBytes %d, want 25", a.TotalBytes())
+	}
+}
+
+func TestAccumulator_EmptyWrite(t *testing.T) {
+	a := NewAccumulator(10)
+	n, err := a.Write([]byte{})
+	if err != nil || n != 0 {
+		t.Fatalf("empty write: n=%d err=%v", n, err)
+	}
+	if a.Truncated() || a.Len() != 0 {
+		t.Fatal("empty write should not change state")
 	}
 }
