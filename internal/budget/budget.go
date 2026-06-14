@@ -64,9 +64,11 @@ func ModeFor(pct int) Mode {
 }
 
 // Tracker holds the latest snapshot for a single model. Safe for concurrent use.
+// modelID is set once at construction and never mutated — no lock needed for reads.
 type Tracker struct {
-	mu   sync.RWMutex
-	snap Snapshot
+	modelID string
+	mu      sync.RWMutex
+	snap    Snapshot
 }
 
 func (t *Tracker) Update(used, window int, source string) Snapshot {
@@ -78,7 +80,7 @@ func (t *Tracker) Update(used, window int, source string) Snapshot {
 		pct = 100
 	}
 	s := Snapshot{
-		ModelID:   t.snap.ModelID,
+		ModelID:   t.modelID,
 		Used:      used,
 		Window:    window,
 		Pct:       pct,
@@ -122,7 +124,7 @@ func (r *Registry) Record(modelID string, used int, source string) Snapshot {
 	r.mu.Lock()
 	t, ok := r.models[modelID]
 	if !ok {
-		t = &Tracker{snap: Snapshot{ModelID: modelID}}
+		t = &Tracker{modelID: modelID}
 		r.models[modelID] = t
 	}
 	window := windowFor(r.windows, modelID)

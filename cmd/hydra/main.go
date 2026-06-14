@@ -5,12 +5,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 
+	"github.com/ankit373/hydra/internal/budget"
 	"github.com/ankit373/hydra/internal/build"
 	"github.com/ankit373/hydra/internal/company"
 	"github.com/ankit373/hydra/internal/config"
@@ -193,7 +195,7 @@ func cmdStatus() *cobra.Command {
 }
 
 func printBudgetStatus() {
-	statePath := fmt.Sprintf("%s/logs/state.json", config.Dir())
+	statePath := filepath.Join(config.Dir(), "logs", "state.json")
 	raw, err := os.ReadFile(statePath)
 	if err != nil {
 		return
@@ -208,7 +210,7 @@ func printBudgetStatus() {
 
 	// claude_pct block (orchestrator context window).
 	if state.ClaudePct > 0 {
-		mode := budgetModeLabel(state.ClaudePct)
+		mode := budget.ModeFor(state.ClaudePct).String()
 		bar := budgetBar(state.ClaudePct)
 		fmt.Printf("  %s  %s %3d%%  %s\n",
 			dimStyle.Render("Claude  :"),
@@ -233,7 +235,7 @@ func printBudgetStatus() {
 		fmt.Printf("  %-20s  %s %3d%%  %-8s  %s\n",
 			truncLabel(modelID, 20),
 			bar, pct,
-			fmt.Sprintf("%dk/%dk", used/1000, window/1000),
+			tokenLabel(used, window),
 			budgetModeStyle(mode).Render(mode),
 		)
 	}
@@ -257,24 +259,21 @@ func budgetBar(pct int) string {
 		filled = width
 	}
 	bar := strings.Repeat("█", filled) + strings.Repeat("░", width-filled)
-	return budgetModeStyle(budgetModeLabel(pct)).Render(bar)
+	return budgetModeStyle(budget.ModeFor(pct).String()).Render(bar)
 }
 
-func budgetModeLabel(pct int) string {
-	switch {
-	case pct >= 80:
-		return "emergency"
-	case pct >= 75:
-		return "critical"
-	case pct >= 70:
-		return "warning"
-	case pct >= 65:
-		return "caution"
-	case pct >= 50:
-		return "compact"
-	default:
-		return "normal"
+// tokenLabel formats used/window as a human-readable string without integer truncation.
+func tokenLabel(used, window int) string {
+	f := func(n int) string {
+		if n >= 1_000_000 {
+			return fmt.Sprintf("%.1fM", float64(n)/1_000_000)
+		}
+		if n >= 1_000 {
+			return fmt.Sprintf("%dk", n/1000)
+		}
+		return fmt.Sprintf("%d", n)
 	}
+	return fmt.Sprintf("%s/%s", f(used), f(window))
 }
 
 func budgetModeStyle(mode string) lipgloss.Style {

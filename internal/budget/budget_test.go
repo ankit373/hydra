@@ -41,7 +41,7 @@ func TestModeString(t *testing.T) {
 }
 
 func TestTracker_Update(t *testing.T) {
-	tr := &Tracker{snap: Snapshot{ModelID: "m1"}}
+	tr := &Tracker{modelID: "m1"}
 	snap := tr.Update(150_000, 200_000, "real")
 
 	if snap.ModelID != "m1" {
@@ -59,7 +59,7 @@ func TestTracker_Update(t *testing.T) {
 }
 
 func TestTracker_PctClamped(t *testing.T) {
-	tr := &Tracker{snap: Snapshot{ModelID: "m"}}
+	tr := &Tracker{modelID: "m"}
 	snap := tr.Update(999_999, 100, "estimate")
 	if snap.Pct != 100 {
 		t.Errorf("Pct should be clamped to 100, got %d", snap.Pct)
@@ -67,7 +67,7 @@ func TestTracker_PctClamped(t *testing.T) {
 }
 
 func TestTracker_ZeroWindow(t *testing.T) {
-	tr := &Tracker{snap: Snapshot{ModelID: "m"}}
+	tr := &Tracker{modelID: "m"}
 	snap := tr.Update(1000, 0, "real")
 	if snap.Pct != 0 {
 		t.Errorf("zero window should produce 0 pct, got %d", snap.Pct)

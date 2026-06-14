@@ -316,8 +316,10 @@ func (d *Dispatcher) recordBudget(r *Result) {
 	if d.budget == nil || r.Response.InputTokens == 0 {
 		return
 	}
+	// agy estimates tokens via len(prompt)/4 and marks InputTokens non-zero but
+	// source is determined by logDispatch; mirror its "estimate" rule here.
 	source := "real"
-	if r.Response.InputTokens == 0 {
+	if r.Response.OutputTokens == 0 {
 		source = "estimate"
 	}
 	d.budget.Record(r.Head.ID, r.Response.InputTokens, source)
@@ -347,11 +349,12 @@ func (d *Dispatcher) syncStateJSON(r *Result) {
 		budgetMap := map[string]any{}
 		for _, s := range snaps {
 			budgetMap[s.ModelID] = map[string]any{
-				"pct":    s.Pct,
-				"used":   s.Used,
-				"window": s.Window,
-				"mode":   s.Mode.String(),
-				"source": s.Source,
+				"pct":        s.Pct,
+				"used":       s.Used,
+				"window":     s.Window,
+				"mode":       s.Mode.String(),
+				"source":     s.Source,
+				"updated_at": s.UpdatedAt.Format(time.RFC3339),
 			}
 		}
 		existing["budget"] = budgetMap
