@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -12,6 +13,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/ankit373/hydra/internal/util"
 )
 
 // OllamaExecutor calls the Ollama native /api/generate endpoint.
@@ -84,13 +87,20 @@ func (e *OllamaExecutor) Execute(ctx context.Context, req Request) (*Response, e
 		return nil, httpStatusError(req.Head.ID, resp)
 	}
 
+	// Cap response body to prevent runaway memory from very large JSON payloads.
+	maxBytes := int64(util.DefaultMaxBytes)
+	limited := io.LimitReader(resp.Body, maxBytes+1)
+
 	var out ollamaGenerateResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.NewDecoder(limited).Decode(&out); err != nil {
 		return nil, fmt.Errorf("ollama exec %s: decode: %w", req.Head.ID, err)
 	}
 	if out.Response == "" {
 		return nil, fmt.Errorf("ollama exec %s: empty response", req.Head.ID)
 	}
+
+	// Detect if the response field itself was truncated by the limit reader.
+	truncated := int64(len(out.Response)) >= maxBytes
 
 	writeTokenSidecar(modelFlag, "ollama", "real", out.PromptEvalCount, out.EvalCount)
 
@@ -100,6 +110,7 @@ func (e *OllamaExecutor) Execute(ctx context.Context, req Request) (*Response, e
 		Model:        firstNonEmpty(out.Model, modelFlag),
 		InputTokens:  out.PromptEvalCount,
 		OutputTokens: out.EvalCount,
+		Truncated:    truncated,
 	}, nil
 }
 

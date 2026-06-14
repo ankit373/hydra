@@ -28,6 +28,7 @@ type Response struct {
 	OutputTokens int
 	Duration     time.Duration
 	Model        string
+	Truncated    bool // true when output exceeded the accumulator cap
 }
 
 // Executor runs a prompt and returns a response.
