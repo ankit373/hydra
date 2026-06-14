@@ -2171,14 +2171,17 @@
       </a>
       <nav class="nav-links">
         <a href="#overview" class="nav-link active" id="nav-overview">Overview</a>
-        <a href="#architecture" class="nav-link" id="nav-archi">Architecture</a>
+        <a href="#why-hydra" class="nav-link" id="nav-why">Why Hydra</a>
         <a href="#features" class="nav-link" id="nav-features">What's New</a>
         <a href="#tiers" class="nav-link" id="nav-tiers">Model Tiers</a>
         <a href="#get-started" class="nav-link" id="nav-setup">Get Started</a>
         <a href="#community" class="nav-link" id="nav-community">Community</a>
       </nav>
       <div style="display: flex; align-items: center; gap: 12px;">
-        <a href="https://github.com/ankit373/hydra" target="_blank" rel="noopener" class="btn btn-secondary" style="padding: 8px 16px; font-size: 13px;" id="repo-btn">GitHub</a>
+        <a href="https://github.com/ankit373/hydra" target="_blank" rel="noopener" class="btn btn-secondary" style="padding: 8px 16px; font-size: 13px; display: flex; align-items: center; gap: 6px;" id="repo-btn">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .25a12 12 0 1 0 0 24 12 12 0 0 0 0-24zm3.286 17.251c-.19.336-.596.448-.933.26l-2.618-1.51-2.618 1.51a.687.687 0 0 1-.933-.26.69.69 0 0 1 .26-.934l2.953-1.703V9.75a.688.688 0 0 1 1.375 0v4.114l2.953 1.703a.689.689 0 0 1 .26.934z" style="display:none"/><path d="M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16z" style="display:none"/></svg>
+          ⭐ <span id="nav-star-count">GitHub</span>
+        </a>
         <button class="mobile-menu-toggle" id="mobile-menu-toggle" aria-label="Toggle Navigation Menu">
           <svg viewBox="0 0 24 24" width="24" height="24">
             <path class="menu-icon-bars" fill="currentColor" d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/>
@@ -2193,35 +2196,56 @@
     <div class="container">
       <div class="hero-badge animate-on-load">
         <span class="hero-badge-pulse"></span>
-        Multi-Model Hierarchical AI
+        Open Source &nbsp;·&nbsp; v1.0 &nbsp;·&nbsp; MIT License
       </div>
-      <h1 class="animate-on-load delay-1">Route Every Dev Task to the<br><span class="gradient-text">Right AI Model Automatically</span></h1>
+      <h1 class="animate-on-load delay-1">Stop Paying Claude Prices<br><span class="gradient-text">for Boilerplate Code</span></h1>
       <p class="hero-desc animate-on-load delay-2">
-        Hydra automatically routes every developer task to the right AI model — using Claude when it matters, Gemini for standard work, and free local Qwen when it's boilerplate. Ten tiers, swarm dispatch, real-time cost tracking, zero Python required.
+        Hydra routes each task to the cheapest model that can handle it — Claude for hard reasoning, Gemini Flash for standard work, free local Qwen for boilerplate. Your API bill drops ~80%. Your output quality doesn't. Install in 30 seconds.
       </p>
       <div class="hero-ctas animate-on-load delay-3">
-        <a href="#get-started" class="btn btn-primary" id="cta-get-started">Get Started →</a>
+        <a href="#get-started" class="btn btn-primary" id="cta-get-started">Install via Homebrew →</a>
         <a href="#architecture" class="btn btn-secondary" id="cta-learn">See How it Works</a>
-        <a href="#community" class="btn btn-secondary" id="cta-community" style="border-color: rgba(16,185,129,0.4); color: var(--accent-tertiary);">Join Community</a>
       </div>
-      
-      <!-- Quick Stats -->
+
+      <!-- Quick Stats — cost savings first -->
       <div class="stats-bar">
         <div class="stat-card animate-on-load delay-3">
-          <div class="stat-num">10</div>
-          <div class="stat-label">Routing Tiers</div>
-        </div>
-        <div class="stat-card animate-on-load delay-3" style="animation-delay: 0.55s;">
-          <div class="stat-num">&lt;200ms</div>
-          <div class="stat-label">Typical Route Overhead</div>
-        </div>
-        <div class="stat-card animate-on-load delay-3" style="animation-delay: 0.65s;">
           <div class="stat-num">~80%</div>
           <div class="stat-label">API Cost Savings vs Claude-Only</div>
         </div>
-        <div class="stat-card animate-on-load delay-3" style="animation-delay: 0.75s;">
+        <div class="stat-card animate-on-load delay-3" style="animation-delay: 0.45s;">
           <div class="stat-num">100%</div>
           <div class="stat-label">Always-On Local Fallback</div>
+        </div>
+        <div class="stat-card animate-on-load delay-3" style="animation-delay: 0.55s;">
+          <div class="stat-num">10</div>
+          <div class="stat-label">Routing Tiers</div>
+        </div>
+        <div class="stat-card animate-on-load delay-3" style="animation-delay: 0.65s;">
+          <div class="stat-num">&lt;200ms</div>
+          <div class="stat-label">Typical Route Overhead</div>
+        </div>
+      </div>
+
+      <!-- Terminal demo -->
+      <div class="animate-on-load delay-3" style="animation-delay: 0.8s; max-width: 680px; margin: 48px auto 0; background: #0d1117; border: 1px solid rgba(139,92,246,0.3); border-radius: 12px; overflow: hidden; box-shadow: 0 0 40px rgba(139,92,246,0.15);">
+        <div style="background: #161b22; padding: 10px 16px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid rgba(255,255,255,0.06);">
+          <span style="width: 12px; height: 12px; border-radius: 50%; background: #ff5f57; display: inline-block;"></span>
+          <span style="width: 12px; height: 12px; border-radius: 50%; background: #febc2e; display: inline-block;"></span>
+          <span style="width: 12px; height: 12px; border-radius: 50%; background: #28c840; display: inline-block;"></span>
+          <span style="margin-left: 8px; font-size: 12px; color: #8b949e; font-family: var(--font-mono);">~  hydra</span>
+        </div>
+        <div style="padding: 20px 24px; font-family: var(--font-mono); font-size: 13px; line-height: 1.8;">
+          <div><span style="color: #8b949e;">$</span> <span style="color: #e6edf3;">hydra do SIMPLE "write a User DTO for profile settings"</span></div>
+          <div style="color: #8b949e; margin-top: 4px;">→ routing SIMPLE to <span style="color: #22d3ee;">gemini-2.0-flash</span> (tier 8, $0.0001/call)</div>
+          <div style="color: #8b949e;">→ completed in 1.2s</div>
+          <div style="margin-top: 12px;"><span style="color: #8b949e;">$</span> <span style="color: #e6edf3;">hydra do CORE "design the auth architecture for multi-tenant SaaS"</span></div>
+          <div style="color: #8b949e; margin-top: 4px;">→ routing CORE to <span style="color: #c084fc;">claude-opus-4-7</span> (tier 1, $0.015/call)</div>
+          <div style="color: #8b949e;">→ completed in 4.8s</div>
+          <div style="margin-top: 12px;"><span style="color: #8b949e;">$</span> <span style="color: #e6edf3;">hydra stats</span></div>
+          <div style="margin-top: 4px;">
+            <span style="color: #8b949e;">session cost  </span><span style="color: #34d399;">$0.017</span><span style="color: #8b949e;">  (vs </span><span style="color: #f87171;">$0.09</span><span style="color: #8b949e;"> all-Claude)  saved </span><span style="color: #34d399;">81%</span>
+          </div>
         </div>
       </div>
     </div>
@@ -2292,6 +2316,60 @@
           </div>
         </div>
       </div>
+    </div>
+  </section>
+
+  <!-- Why Not Just Use Claude? Cost Comparison -->
+  <section class="container" id="why-hydra" style="margin-bottom: 100px;">
+    <h2 class="section-title">Why Not Just Use Claude for Everything?</h2>
+    <p class="section-desc">You could. Most people do. Here's what that costs vs. what Hydra costs for the same session.</p>
+
+    <div style="max-width: 760px; margin: 40px auto 0;">
+      <div style="overflow-x: auto; border-radius: 14px; border: 1px solid rgba(139,92,246,0.25);">
+        <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+          <thead>
+            <tr style="background: rgba(139,92,246,0.12);">
+              <th style="padding: 14px 20px; text-align: left; color: var(--text-muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em;">Task</th>
+              <th style="padding: 14px 20px; text-align: center; color: #f87171; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em;">Without Hydra<br><span style="font-size: 10px; opacity: 0.7;">(All Claude Sonnet)</span></th>
+              <th style="padding: 14px 20px; text-align: center; color: #34d399; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em;">With Hydra<br><span style="font-size: 10px; opacity: 0.7;">(Optimal tier)</span></th>
+              <th style="padding: 14px 20px; text-align: center; color: var(--text-muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em;">Model Used</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr style="border-top: 1px solid rgba(255,255,255,0.05);">
+              <td style="padding: 14px 20px; color: var(--text-main);">Write a DTO / interface</td>
+              <td style="padding: 14px 20px; text-align: center; color: #f87171;">~$0.003</td>
+              <td style="padding: 14px 20px; text-align: center; color: #34d399;">$0.000</td>
+              <td style="padding: 14px 20px; text-align: center; color: var(--text-muted); font-family: var(--font-mono); font-size: 12px;">Qwen local (free)</td>
+            </tr>
+            <tr style="border-top: 1px solid rgba(255,255,255,0.05); background: rgba(255,255,255,0.02);">
+              <td style="padding: 14px 20px; color: var(--text-main);">CRUD controller + tests</td>
+              <td style="padding: 14px 20px; text-align: center; color: #f87171;">~$0.008</td>
+              <td style="padding: 14px 20px; text-align: center; color: #34d399;">~$0.0001</td>
+              <td style="padding: 14px 20px; text-align: center; color: var(--text-muted); font-family: var(--font-mono); font-size: 12px;">Gemini 2.0 Flash</td>
+            </tr>
+            <tr style="border-top: 1px solid rgba(255,255,255,0.05);">
+              <td style="padding: 14px 20px; color: var(--text-main);">Code review + refactor</td>
+              <td style="padding: 14px 20px; text-align: center; color: #f87171;">~$0.012</td>
+              <td style="padding: 14px 20px; text-align: center; color: #fbbf24;">~$0.004</td>
+              <td style="padding: 14px 20px; text-align: center; color: var(--text-muted); font-family: var(--font-mono); font-size: 12px;">Gemini 2.5 Pro</td>
+            </tr>
+            <tr style="border-top: 1px solid rgba(255,255,255,0.05); background: rgba(255,255,255,0.02);">
+              <td style="padding: 14px 20px; color: var(--text-main);">Architecture decision</td>
+              <td style="padding: 14px 20px; text-align: center; color: #f87171;">~$0.020</td>
+              <td style="padding: 14px 20px; text-align: center; color: #fbbf24;">~$0.020</td>
+              <td style="padding: 14px 20px; text-align: center; color: var(--text-muted); font-family: var(--font-mono); font-size: 12px;">Claude Opus (tier 1)</td>
+            </tr>
+            <tr style="border-top: 1px solid rgba(139,92,246,0.3); background: rgba(139,92,246,0.06);">
+              <td style="padding: 16px 20px; color: var(--text-bright); font-weight: 700;">Typical session (50 calls)</td>
+              <td style="padding: 16px 20px; text-align: center; color: #f87171; font-weight: 700; font-size: 16px;">~$0.22</td>
+              <td style="padding: 16px 20px; text-align: center; color: #34d399; font-weight: 700; font-size: 16px;">~$0.04</td>
+              <td style="padding: 16px 20px; text-align: center; color: #34d399; font-weight: 600;">82% saved</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p style="margin: 16px 0 0; font-size: 13px; color: var(--text-muted); text-align: center;">Pricing based on OpenRouter rates as of June 2026. Claude Sonnet 4.6 at $3/M input · Gemini 2.0 Flash at $0.075/M · Qwen local via Ollama free. Use <code style="font-family: var(--font-mono);">hydra pricing list</code> for live rates.</p>
     </div>
   </section>
 
@@ -4083,10 +4161,10 @@ export const STATE_FILE = join(resolveHydraData(), 'logs/state.json');`
     // 4. Animated stat counters
     (function() {
       const stats = [
-        { id: null, el: document.querySelectorAll('.stat-num')[0], target: 10, prefix: '', suffix: '' },
-        { id: null, el: document.querySelectorAll('.stat-num')[1], target: 200, prefix: '<', suffix: 'ms' },
-        { id: null, el: document.querySelectorAll('.stat-num')[2], target: 80, prefix: '', suffix: '%' },
-        { id: null, el: document.querySelectorAll('.stat-num')[3], target: 100, prefix: '', suffix: '%' },
+        { id: null, el: document.querySelectorAll('.stat-num')[0], target: 80, prefix: '~', suffix: '%' },
+        { id: null, el: document.querySelectorAll('.stat-num')[1], target: 100, prefix: '', suffix: '%' },
+        { id: null, el: document.querySelectorAll('.stat-num')[2], target: 10, prefix: '', suffix: '' },
+        { id: null, el: document.querySelectorAll('.stat-num')[3], target: 200, prefix: '<', suffix: 'ms' },
       ];
       const io = new IntersectionObserver(entries => {
         entries.forEach(entry => {
@@ -4198,23 +4276,26 @@ export const STATE_FILE = join(resolveHydraData(), 'logs/state.json');`
       const REPO = 'ankit373/hydra';
       const API  = 'https://api.github.com/repos/' + REPO;
 
-      // Star count — only show widget when stars >= 100
+      // Star count — update nav badge always; show floating widget when stars >= 100
       fetch(API)
         .then(r => r.json())
         .then(data => {
           const stars = data.stargazers_count || 0;
+          const fmt = n => n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(n);
+          // Nav badge — always visible
+          const navBadge = document.getElementById('nav-star-count');
+          if (navBadge) navBadge.textContent = stars > 0 ? '★ ' + fmt(stars) : 'GitHub';
+          // Floating widget — only at >= 100
           if (stars >= 100) {
             const widget = document.getElementById('star-widget');
             const count  = document.getElementById('star-widget-count');
             if (widget && count) {
-              count.textContent = stars >= 1000
-                ? (stars / 1000).toFixed(1) + 'k'
-                : stars;
+              count.textContent = fmt(stars);
               widget.style.display = 'block';
             }
           }
         })
-        .catch(() => {}); // silently fail — widget stays hidden
+        .catch(() => {}); // silently fail
 
       // Contributors wall
       fetch(API + '/contributors?per_page=30&anon=false')
