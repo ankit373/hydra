@@ -2249,8 +2249,8 @@
           <div class="stat-label">Routing Tiers</div>
         </div>
         <div class="stat-card animate-on-load delay-3" style="animation-delay: 0.65s;">
-          <div class="stat-num">&lt;200ms</div>
-          <div class="stat-label">Typical Route Overhead</div>
+          <div class="stat-num">~1µs</div>
+          <div class="stat-label">Routing Overhead (benchmarked)</div>
         </div>
       </div>
 
@@ -4191,7 +4191,7 @@ export const STATE_FILE = join(resolveHydraData(), 'logs/state.json');`
         { id: null, el: document.querySelectorAll('.stat-num')[0], target: 80, prefix: '~', suffix: '%' },
         { id: null, el: document.querySelectorAll('.stat-num')[1], target: 100, prefix: '', suffix: '%' },
         { id: null, el: document.querySelectorAll('.stat-num')[2], target: 10, prefix: '', suffix: '' },
-        { id: null, el: document.querySelectorAll('.stat-num')[3], target: 200, prefix: '<', suffix: 'ms' },
+        { id: null, el: document.querySelectorAll('.stat-num')[3], target: 0, prefix: '', suffix: '' }, // static — ~1µs shown in HTML
       ];
       const io = new IntersectionObserver(entries => {
         entries.forEach(entry => {

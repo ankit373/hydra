@@ -5,6 +5,7 @@
 ## What It Does
 
 - **10-tier routing**: Claude Opus (tier 1, complex reasoning) down to Qwen3 via Ollama (tier 10, free local)
+- **~1µs routing overhead**: the Go routing engine (policy eval + head selection + budget check) adds ~1,130 ns per dispatch — benchmarked on Apple M1 via `go test -bench=BenchmarkRoutingPath`
 - **Swarm dispatch**: fan a single prompt to multiple models simultaneously — race (fastest), best (LLM-judged quality), or all (aggregate)
 - **Token budget enforcement**: 6 pressure modes (Normal → Emergency) auto-downgrade tiers as context window fills
 - **Cost analytics**: `hydra stats` shows spend broken down by model, tier, and day
