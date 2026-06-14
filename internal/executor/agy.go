@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ankit373/hydra/internal/config"
@@ -35,6 +36,11 @@ var authSignalRe = regexp.MustCompile(
 )
 var authURLRe = regexp.MustCompile(`https?://\S+`)
 
+// agyMu serializes all agy executions that mutate settings.json.
+// agy uses a single shared settings.json; concurrent swaps corrupt it.
+// Serialization eliminates the filesystem race at the cost of agy parallelism.
+var agyMu sync.Mutex
+
 // AgyExecutor invokes `agy --print` with model selection via settings.json swap.
 // Ports all logic from dispatch/agy.sh natively in Go.
 type AgyExecutor struct{}
@@ -44,6 +50,11 @@ func (e *AgyExecutor) Execute(ctx context.Context, req Request) (*Response, erro
 	if modelFlag == "" {
 		return nil, fmt.Errorf("agy executor: head %q has no model_flag in Meta", req.Head.ID)
 	}
+
+	// Serialize all agy invocations — settings.json is a single shared file.
+	// Concurrent swaps corrupt it, making swarm mode produce wrong models.
+	agyMu.Lock()
+	defer agyMu.Unlock()
 
 	settingsPath := agySitesPath()
 
@@ -116,12 +127,12 @@ func (e *AgyExecutor) Execute(ctx context.Context, req Request) (*Response, erro
 	writeTokenSidecar(modelFlag, "agy", "estimate", promptTokens, responseTokens)
 
 	return &Response{
-		Output:        output,
-		Duration:      duration,
-		Model:         req.Head.ID,
-		InputTokens:   promptTokens,
-		OutputTokens:  responseTokens,
-		Truncated:     stdout.Truncated(),
+		Output:       output,
+		Duration:     duration,
+		Model:        req.Head.ID,
+		InputTokens:  promptTokens,
+		OutputTokens: responseTokens,
+		Truncated:    stdout.Truncated(),
 	}, nil
 }
 
