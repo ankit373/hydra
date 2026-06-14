@@ -3,6 +3,8 @@ package pricing
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -13,11 +15,15 @@ import (
 
 const defaultCacheTTLHours = 24
 
+// errEmptyCache is returned when the cache file exists and parses correctly
+// but contains no model entries. Distinct from os.ErrNotExist.
+var errEmptyCache = errors.New("pricing cache is empty")
+
 // priceCache is the on-disk JSON structure.
 type priceCache struct {
-	FetchedAt time.Time              `json:"fetched_at"`
-	Source    string                 `json:"source"`
-	Models    map[string]ModelPrice  `json:"models"`
+	FetchedAt time.Time             `json:"fetched_at"`
+	Source    string                `json:"source"`
+	Models    map[string]ModelPrice `json:"models"`
 }
 
 func cachePath() string {
@@ -33,7 +39,8 @@ func cacheTTL() time.Duration {
 	return defaultCacheTTLHours * time.Hour
 }
 
-// readCache reads and parses the cache file. Returns an error if missing or corrupt.
+// readCache reads and parses the cache file.
+// Returns errEmptyCache when the file is valid but has no model entries.
 func readCache() (*priceCache, error) {
 	raw, err := os.ReadFile(cachePath())
 	if err != nil {
@@ -41,10 +48,10 @@ func readCache() (*priceCache, error) {
 	}
 	var c priceCache
 	if err := json.Unmarshal(raw, &c); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("pricing cache corrupt: %w", err)
 	}
 	if len(c.Models) == 0 {
-		return nil, os.ErrNotExist
+		return nil, errEmptyCache
 	}
 	return &c, nil
 }
@@ -70,10 +77,8 @@ func fetchAndSave() (*priceCache, error) {
 		Models:    models,
 	}
 
-	if err := writeCache(c); err != nil {
-		// Non-fatal — return the data even if we couldn't persist it.
-		return c, nil
-	}
+	// Non-fatal if we can't persist — return the data regardless.
+	_ = writeCache(c)
 	return c, nil
 }
 
@@ -93,8 +98,15 @@ func writeCache(c *priceCache) error {
 		return err
 	}
 	tmp := cachePath() + ".tmp"
+	// Always clean up the tmp file, even on rename failure (cross-device move).
+	defer func() { _ = os.Remove(tmp) }()
+
 	if err := os.WriteFile(tmp, raw, 0o600); err != nil {
 		return err
 	}
-	return os.Rename(tmp, cachePath())
+	if err := os.Rename(tmp, cachePath()); err != nil {
+		// Rename failed (e.g. cross-device). Fall back to direct write.
+		return os.WriteFile(cachePath(), raw, 0o600)
+	}
+	return nil
 }

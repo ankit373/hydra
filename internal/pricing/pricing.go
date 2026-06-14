@@ -4,7 +4,9 @@
 package pricing
 
 import (
+	"log"
 	"math"
+	"sort"
 	"strings"
 )
 
@@ -21,44 +23,58 @@ type TierPrice struct {
 }
 
 // DB is the live pricing store. Load it once at startup with Load().
-// All methods are safe for concurrent use after construction.
+//
+// Concurrency: DB is read-only after Load() returns. No fields are written
+// after construction, so all methods are safe for concurrent reads. Do NOT
+// store a *DB and mutate it — if you need a refresh, call Load() again.
 type DB struct {
 	// model name (lowercase) → price; populated from cache or OpenRouter fetch
 	models map[string]ModelPrice
-	// tier (1-10) → price; always populated from pricing.yaml fallback
+	// tier (1-10) → price; populated from pricing.yaml fallback
 	tiers map[int]TierPrice
 }
 
-// Load builds a DB: tries the local cache first, falls back to pricing.yaml.
-// A background refresh is started when the cache is stale (>24h).
-// Never returns nil — worst case it returns a DB with only tier data.
+// Load builds a DB: loads tier fallback immediately, then overlays live model
+// data from the local cache. A background refresh is started when the cache is
+// stale (>24h). On first run with no cache, a background fetch is kicked off
+// and tier-based pricing is used until the cache is warm.
+//
+// Never returns nil — worst case returns a DB with only tier data.
 func Load() *DB {
 	db := &DB{
 		models: make(map[string]ModelPrice),
 		tiers:  make(map[int]TierPrice),
 	}
 
-	// Always load tier fallback first — it's always available.
+	// Tier fallback is always loaded first — it's always available locally.
 	if tp, err := loadFallbackTiers(); err == nil {
 		db.tiers = tp
+	} else {
+		// pricing.yaml is missing. EstimateCost will return 0 for unknown tiers.
+		// This poisons cost.jsonl — warn loudly so the operator notices.
+		log.Printf("hydra/pricing: WARNING — could not load registry/pricing.yaml: %v. All tier cost estimates will be $0.00.", err)
 	}
 
-	// Try live model data from cache.
+	// Overlay live model-specific prices from cache.
 	if cache, err := readCache(); err == nil {
 		for k, v := range cache.Models {
 			db.models[strings.ToLower(k)] = v
 		}
-		// Kick off background refresh if stale.
 		if isCacheStale(cache) {
-			go func() { _ = refreshCache() }()
+			// Stale but usable — refresh in background, don't block caller.
+			go func() {
+				if err := refreshCache(); err != nil {
+					log.Printf("hydra/pricing: background refresh failed: %v", err)
+				}
+			}()
 		}
 	} else {
-		// No valid cache — fetch synchronously (best-effort, 10s timeout).
-		if cache, err := fetchAndSave(); err == nil {
-			for k, v := range cache.Models {
-				db.models[strings.ToLower(k)] = v
+		// No valid cache — kick off background fetch; use tier pricing until warm.
+		go func() {
+			if err := refreshCache(); err != nil {
+				log.Printf("hydra/pricing: initial background fetch failed: %v", err)
 			}
-		}
+		}()
 	}
 
 	return db
@@ -85,21 +101,25 @@ func (db *DB) CostForModel(modelName string, tier, inputTokens, outputTokens int
 
 // EstimateCost returns the estimated USD cost using tier-based pricing.
 // Implements the swarm.PricingReader interface.
+// Returns 0 if neither the requested tier nor tier 10 exist in pricing.yaml —
+// callers should treat 0 as "pricing unavailable" not "free".
 func (db *DB) EstimateCost(tier, inputTokens, outputTokens int) float64 {
 	tp, ok := db.tiers[tier]
 	if !ok {
-		// Tier not in pricing.yaml — use tier 10 (cheapest) as floor.
+		// Requested tier not in pricing.yaml — fall back to tier 10 (local/cheapest).
+		// If tier 10 is also missing (broken install), zero is returned.
 		tp = db.tiers[10]
 	}
 	return round6(cost(tp.InputPerMillion, tp.OutputPerMillion, inputTokens, outputTokens))
 }
 
-// Models returns all model names in the live pricing data.
+// Models returns all model names in the live pricing data, sorted alphabetically.
 func (db *DB) Models() []string {
 	out := make([]string, 0, len(db.models))
 	for k := range db.models {
 		out = append(out, k)
 	}
+	sort.Strings(out)
 	return out
 }
 
@@ -113,6 +133,12 @@ func (db *DB) ModelPrice(modelName string) (ModelPrice, bool) {
 func (db *DB) TierPrice(tier int) (TierPrice, bool) {
 	p, ok := db.tiers[tier]
 	return p, ok
+}
+
+// HasTiers reports whether tier pricing was loaded successfully.
+// Returns false when pricing.yaml was missing or unreadable.
+func (db *DB) HasTiers() bool {
+	return len(db.tiers) > 0
 }
 
 func cost(inputPerM, outputPerM float64, inputTokens, outputTokens int) float64 {

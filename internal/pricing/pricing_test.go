@@ -3,15 +3,15 @@ package pricing
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"path/filepath"
 	"testing"
 	"time"
 )
 
-// ── unit tests for cost math ──────────────────────────────────────────────────
+// ── cost math ─────────────────────────────────────────────────────────────────
 
 func TestCost(t *testing.T) {
 	cases := []struct {
@@ -19,9 +19,9 @@ func TestCost(t *testing.T) {
 		inTok, outTok         int
 		want                  float64
 	}{
-		// 1M tokens each at $15/$75 per million → $15 + $75 = $90
+		// 1M tokens each at $15/$75 per million → $90
 		{15.0, 75.0, 1_000_000, 1_000_000, 90.0},
-		// 100 in-tokens × $15/1M = $0.0015; 50 out-tokens × $75/1M = $0.00375
+		// 100 in × $15/1M = $0.0015; 50 out × $75/1M = $0.00375
 		{15.0, 75.0, 100, 50, 0.0015 + 0.00375},
 		{0, 0, 999999, 999999, 0},
 		// 500 × $3/1M = $0.0015; 200 × $15/1M = $0.003
@@ -37,33 +37,58 @@ func TestCost(t *testing.T) {
 	}
 }
 
+// ── DB.EstimateCost ───────────────────────────────────────────────────────────
+
 func TestDB_EstimateCost_FallsBackToTier10(t *testing.T) {
 	db := &DB{
 		models: map[string]ModelPrice{},
-		tiers: map[int]TierPrice{
-			10: {InputPerMillion: 0, OutputPerMillion: 0},
-		},
+		tiers:  map[int]TierPrice{10: {InputPerMillion: 0, OutputPerMillion: 0}},
 	}
-	// Tier 99 doesn't exist — should use tier 10 (free local).
 	got := db.EstimateCost(99, 1000, 500)
 	if got != 0 {
 		t.Fatalf("want 0 for local tier fallback, got %v", got)
 	}
 }
 
-func TestDB_CostForModel_PrefersModeToTier(t *testing.T) {
+func TestDB_EstimateCost_ZeroWhenTier10Missing(t *testing.T) {
+	// CRITICAL case: both requested tier and tier 10 are absent.
+	// Must return 0, not panic.
+	db := &DB{
+		models: map[string]ModelPrice{},
+		tiers:  map[int]TierPrice{}, // completely empty
+	}
+	got := db.EstimateCost(1, 1_000_000, 1_000_000)
+	if got != 0 {
+		t.Fatalf("want 0 when tiers map empty, got %v", got)
+	}
+	if db.HasTiers() {
+		t.Fatal("HasTiers should be false for empty tiers map")
+	}
+}
+
+func TestDB_EstimateCost_KnownTier(t *testing.T) {
+	db := &DB{
+		models: map[string]ModelPrice{},
+		tiers:  map[int]TierPrice{1: {InputPerMillion: 15, OutputPerMillion: 75}},
+	}
+	got := db.EstimateCost(1, 1_000_000, 1_000_000)
+	if got != 90.0 {
+		t.Fatalf("got %v, want 90.0", got)
+	}
+}
+
+// ── DB.CostForModel ───────────────────────────────────────────────────────────
+
+func TestDB_CostForModel_PrefersModelToTier(t *testing.T) {
 	db := &DB{
 		models: map[string]ModelPrice{
 			"anthropic/claude-opus-4": {InputPerMillion: 15, OutputPerMillion: 75},
 		},
-		tiers: map[int]TierPrice{
-			1: {InputPerMillion: 999, OutputPerMillion: 999}, // wrong — should not be used
-		},
+		tiers: map[int]TierPrice{1: {InputPerMillion: 999, OutputPerMillion: 999}},
 	}
 	got := db.CostForModel("anthropic/claude-opus-4", 1, 1_000_000, 0)
-	want := round6(15.0)
-	if got != want {
-		t.Fatalf("CostForModel: got %v, want %v", got, want)
+	if got != round6(15.0) {
+		t.Fatalf("CostForModel: got %v, want 15.0", got)
 	}
 }
 
@@ -74,10 +99,29 @@ func TestDB_CostForModel_CaseInsensitive(t *testing.T) {
 		},
 		tiers: map[int]TierPrice{},
 	}
-	// Lookup with mixed case.
 	got := db.CostForModel("Anthropic/Claude-Opus-4", 1, 1_000_000, 0)
 	if got == 0 {
 		t.Fatal("case-insensitive lookup failed")
+	}
+}
+
+// ── DB.Models sort order ──────────────────────────────────────────────────────
+
+func TestDB_Models_Sorted(t *testing.T) {
+	db := &DB{
+		models: map[string]ModelPrice{
+			"z/model": {},
+			"a/model": {},
+			"m/model": {},
+		},
+		tiers: map[int]TierPrice{},
+	}
+	got := db.Models()
+	want := []string{"a/model", "m/model", "z/model"}
+	for i, v := range got {
+		if v != want[i] {
+			t.Fatalf("Models() not sorted: got %v, want %v", got, want)
+		}
 	}
 }
 
@@ -95,25 +139,30 @@ func TestFetchFromOpenRouter(t *testing.T) {
 					},
 				},
 				{
-					"id": "free/model",
-					"pricing": map[string]string{
-						"prompt":     "-1", // negative → skipped
-						"completion": "-1",
-					},
+					// Negative price → skipped
+					"id": "bad/negative",
+					"pricing": map[string]string{"prompt": "-1", "completion": "-1"},
 				},
 				{
-					"id": "broken/model",
-					"pricing": map[string]string{
-						"prompt":     "not-a-number",
-						"completion": "0",
-					},
+					// Parse error → skipped
+					"id": "bad/parse",
+					"pricing": map[string]string{"prompt": "NaN", "completion": "0"},
+				},
+				{
+					// Empty string → skipped
+					"id": "bad/empty",
+					"pricing": map[string]string{"prompt": "", "completion": ""},
+				},
+				{
+					// "0" price = free model → included with $0 rates
+					"id": "free/model",
+					"pricing": map[string]string{"prompt": "0", "completion": "0"},
 				},
 			},
 		})
 	}))
 	defer srv.Close()
 
-	// Temporarily override the URL constant by monkey-patching via test helper.
 	orig := openRouterModelsURL
 	t.Cleanup(func() { openRouterModelsURL = orig })
 	openRouterModelsURL = srv.URL
@@ -122,8 +171,9 @@ func TestFetchFromOpenRouter(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(models) != 1 {
-		t.Fatalf("expected 1 model (skipping negative and broken), got %d", len(models))
+	// Expect 2: the paid model + the free model. Negative/empty/parse-error are skipped.
+	if len(models) != 2 {
+		t.Fatalf("expected 2 models, got %d: %v", len(models), models)
 	}
 	p := models["anthropic/claude-opus-4"]
 	if p.InputPerMillion != 15.0 {
@@ -132,25 +182,41 @@ func TestFetchFromOpenRouter(t *testing.T) {
 	if p.OutputPerMillion != 75.0 {
 		t.Fatalf("output price: got %v, want 75.0", p.OutputPerMillion)
 	}
+	free := models["free/model"]
+	if free.InputPerMillion != 0 || free.OutputPerMillion != 0 {
+		t.Fatalf("free model should have $0 rates, got %+v", free)
+	}
 }
 
-// ── Cache read/write/TTL ──────────────────────────────────────────────────────
+func TestFetchFromOpenRouter_Non200(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+	orig := openRouterModelsURL
+	t.Cleanup(func() { openRouterModelsURL = orig })
+	openRouterModelsURL = srv.URL
+
+	_, err := fetchFromOpenRouter(context.Background())
+	if err == nil {
+		t.Fatal("expected error on HTTP 503")
+	}
+}
+
+// ── Cache ─────────────────────────────────────────────────────────────────────
 
 func TestCacheRoundtrip(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("HYDRA_CONFIG_DIR", dir) // override config.Dir() via env
+	t.Setenv("HYDRA_CONFIG_DIR", dir)
 
 	c := &priceCache{
 		FetchedAt: time.Now().UTC(),
 		Source:    "test",
-		Models: map[string]ModelPrice{
-			"test/model": {InputPerMillion: 1.0, OutputPerMillion: 2.0},
-		},
+		Models:    map[string]ModelPrice{"test/model": {1.0, 2.0}},
 	}
 	if err := writeCache(c); err != nil {
 		t.Fatal(err)
 	}
-
 	got, err := readCache()
 	if err != nil {
 		t.Fatal(err)
@@ -160,6 +226,25 @@ func TestCacheRoundtrip(t *testing.T) {
 	}
 	if got.Models["test/model"].InputPerMillion != 1.0 {
 		t.Fatal("model price not preserved through roundtrip")
+	}
+}
+
+func TestReadCache_EmptySentinel(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HYDRA_CONFIG_DIR", dir)
+
+	// Write a valid but empty cache.
+	c := &priceCache{FetchedAt: time.Now(), Models: map[string]ModelPrice{}}
+	if err := writeCache(c); err != nil {
+		t.Fatal(err)
+	}
+	_, err := readCache()
+	if !errors.Is(err, errEmptyCache) {
+		t.Fatalf("expected errEmptyCache, got %v", err)
+	}
+	// Must NOT return os.ErrNotExist for a file that exists.
+	if errors.Is(err, os.ErrNotExist) {
+		t.Fatal("errEmptyCache must not alias os.ErrNotExist")
 	}
 }
 
@@ -191,10 +276,11 @@ func TestParsePerToken(t *testing.T) {
 		wantErr bool
 	}{
 		{"0.000015", 0.000015, false},
-		{"0", 0, false},
+		{"0", 0, false},   // free model — included, not skipped
 		{"", 0, true},
 		{"-1", 0, true},
 		{"abc", 0, true},
+		{"NaN", 0, true},
 	}
 	for _, c := range cases {
 		got, err := parsePerToken(c.s)
@@ -205,11 +291,4 @@ func TestParsePerToken(t *testing.T) {
 			t.Errorf("parsePerToken(%q) = %v, want %v", c.s, got, c.want)
 		}
 	}
-}
-
-// cachePath uses config.Dir() which reads HYDRA_CONFIG_DIR env or defaults.
-// We need the test cache to land in t.TempDir().
-func init() {
-	_ = filepath.Join // ensure filepath is used
-	_ = os.Getenv    // ensure os is used
 }

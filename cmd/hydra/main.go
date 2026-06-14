@@ -631,10 +631,12 @@ func cmdPricingRefresh() *cobra.Command {
 func cmdPricingList() *cobra.Command {
 	var jsonOut bool
 	cmd := &cobra.Command{
-		Use:   "list",
-		Short: "List all models and their $/1M token rates",
+		Use:   "list [filter]",
+		Short: "List all models and their $/1M token rates (sorted alphabetically)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			db := pricing.Load()
+			// Hoist filter once — db.Models() is already sorted.
+			filter := strings.ToLower(strings.Join(args, " "))
 
 			if jsonOut {
 				type row struct {
@@ -644,17 +646,15 @@ func cmdPricingList() *cobra.Command {
 				}
 				var rows []row
 				for _, m := range db.Models() {
-					p, _ := db.ModelPrice(m)
-					filter := strings.Join(args, " ")
-					if filter != "" && !strings.Contains(m, strings.ToLower(filter)) {
+					if filter != "" && !strings.Contains(m, filter) {
 						continue
 					}
+					p, _ := db.ModelPrice(m)
 					rows = append(rows, row{m, p.InputPerMillion, p.OutputPerMillion})
 				}
 				return json.NewEncoder(os.Stdout).Encode(rows)
 			}
 
-			filter := strings.ToLower(strings.Join(args, " "))
 			fmt.Fprintf(os.Stdout, "%-55s  %10s  %11s\n", "Model", "In $/1M", "Out $/1M")
 			fmt.Fprintln(os.Stdout, strings.Repeat("─", 82))
 			count := 0
