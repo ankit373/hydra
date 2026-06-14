@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ankit373/hydra/internal/config"
@@ -41,6 +42,9 @@ type Result struct {
 	Retries   int
 	*executor.Response
 }
+
+// stateMu protects concurrent read-modify-write on state.json across goroutines.
+var stateMu sync.Mutex
 
 // Dispatcher holds resolved config and the probed head list.
 type Dispatcher struct {
@@ -294,6 +298,9 @@ func (d *Dispatcher) selectHeads(tierHint string, localOnly bool) []provider.Hea
 // syncStateJSON updates ~/.hydra/logs/state.json after a successful dispatch
 // so the Ink UI (ui/) reflects Go dispatcher activity.
 func (d *Dispatcher) syncStateJSON(r *Result) {
+	stateMu.Lock()
+	defer stateMu.Unlock()
+
 	stateDir := filepath.Join(config.Dir(), "logs")
 	statePath := filepath.Join(stateDir, "state.json")
 
@@ -463,4 +470,34 @@ func truncate(s string, n int) string {
 		return s
 	}
 	return s[:n] + "…"
+}
+
+// EnumToTier maps a routing enum key (e.g. "SIMPLE") to a tier number string.
+// Single source of truth — editor and parallel both delegate here.
+func EnumToTier(enum string) string {
+	const (
+		GRUNT    = "10"
+		TRIVIAL  = "9"
+		SIMPLE   = "8"
+		STANDARD = "7"
+		MODERATE = "6"
+		COMPLEX  = "5"
+		HARD     = "4"
+		VERY_HARD = "3"
+		EXPERT   = "2"
+		CORE     = "1"
+	)
+	switch enum {
+	case "GRUNT":     return GRUNT
+	case "TRIVIAL":   return TRIVIAL
+	case "SIMPLE":    return SIMPLE
+	case "STANDARD":  return STANDARD
+	case "MODERATE":  return MODERATE
+	case "COMPLEX":   return COMPLEX
+	case "HARD":      return HARD
+	case "VERY_HARD": return VERY_HARD
+	case "EXPERT":    return EXPERT
+	case "CORE":      return CORE
+	default:          return ""
+	}
 }

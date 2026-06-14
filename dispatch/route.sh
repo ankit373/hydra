@@ -71,16 +71,16 @@ tier_pool() { model_field "$1" token_pool; }
 
 # Check if a pool is marked exhausted in state.json
 pool_exhausted() {
-  [[ -f "$STATE_FILE" ]] && jq -e ".exhausted_pools | index(\"$1\") != null" "$STATE_FILE" > /dev/null 2>&1
+  [[ -f "$STATE_FILE" ]] && jq -e --arg p "$1" '(.exhausted_pools // []) | index($p) != null' "$STATE_FILE" > /dev/null 2>&1
 }
 
 # Mark a pool as exhausted
 mark_pool_exhausted() {
   mkdir -p "$LOG_DIR"
   if [[ -f "$STATE_FILE" ]]; then
-    jq ".exhausted_pools += [\"$1\"]" "$STATE_FILE" > "$STATE_FILE.tmp" && mv "$STATE_FILE.tmp" "$STATE_FILE"
+    jq --arg p "$1" '.exhausted_pools = ((.exhausted_pools // []) + [$p])' "$STATE_FILE" > "$STATE_FILE.tmp" && mv "$STATE_FILE.tmp" "$STATE_FILE"
   else
-    echo "{\"exhausted_pools\":[\"$1\"],\"claude_pct\":0}" > "$STATE_FILE"
+    jq -n --arg p "$1" '{"exhausted_pools":[$p],"claude_pct":0}' > "$STATE_FILE"
   fi
   warn "Pool '$1' marked exhausted. Will skip all tiers in this pool."
 }
@@ -107,6 +107,7 @@ apply_tier_downgrade() {
   local tier="$1" mode="$2"
   local downgrade=0
   case "$mode" in
+    warning)   downgrade=1 ;;
     critical)  downgrade=2 ;;
     emergency) downgrade=3 ;;
   esac
@@ -291,7 +292,7 @@ for try_tier in "${tiers_to_try[@]}"; do
   # Token-tracking sidecar — executor writes counts here, we read after
   HYDRA_TOKEN_SIDECAR=$(mktemp -t hydra-tokens.XXXXXX.json)
   export HYDRA_TOKEN_SIDECAR
-  call_start_ns=$(date +%s%N 2>/dev/null || python3 -c 'import time;print(int(time.time()*1e9))')
+  call_start_ns=$(date +%s%N 2>/dev/null || python3 -c 'import time;print(int(time.time()*1e9))' 2>/dev/null || echo 0)
 
   set +e
   case "$executor" in
@@ -310,46 +311,56 @@ for try_tier in "${tiers_to_try[@]}"; do
   esac
   set -e
 
-  call_end_ns=$(date +%s%N 2>/dev/null || python3 -c 'import time;print(int(time.time()*1e9))')
+  call_end_ns=$(date +%s%N 2>/dev/null || python3 -c 'import time;print(int(time.time()*1e9))' 2>/dev/null || echo 0)
+  [[ "$call_start_ns" =~ ^[0-9]+$ ]] || call_start_ns=0
+  [[ "$call_end_ns"   =~ ^[0-9]+$ ]] || call_end_ns=0
   wall_ms=$(( (call_end_ns - call_start_ns) / 1000000 ))
 
-  # ── Log token cost (best-effort; never fails the call) ─────────────────────
-  if [[ -s "$HYDRA_TOKEN_SIDECAR" ]] && jq empty "$HYDRA_TOKEN_SIDECAR" 2>/dev/null; then
-    sidecar=$(cat "$HYDRA_TOKEN_SIDECAR")
-    pricing_file="$HYDRA_DIR/registry/pricing.yaml"
-    in_price=0; out_price=0
-    if [[ -f "$pricing_file" ]]; then
-      in_price=$(yq -r ".tiers.\"$try_tier\".input_per_million // 0"  "$pricing_file" 2>/dev/null || echo 0)
-      out_price=$(yq -r ".tiers.\"$try_tier\".output_per_million // 0" "$pricing_file" 2>/dev/null || echo 0)
-    fi
-    p_tok=$(echo "$sidecar" | jq -r '.prompt_tokens   // 0')
-    r_tok=$(echo "$sidecar" | jq -r '.response_tokens // 0')
-    cost=$(awk -v p="$p_tok" -v r="$r_tok" -v pi="$in_price" -v po="$out_price" \
-      'BEGIN{ printf "%.6f", (p/1000000)*pi + (r/1000000)*po }')
+  # ── Log token cost (best-effort; a logging failure must never abort a dispatch) ──
+  {
+    if [[ -s "$HYDRA_TOKEN_SIDECAR" ]] && jq empty "$HYDRA_TOKEN_SIDECAR" 2>/dev/null; then
+      sidecar=$(cat "$HYDRA_TOKEN_SIDECAR")
+      pricing_file="$HYDRA_DIR/registry/pricing.yaml"
+      in_price=0; out_price=0
+      if [[ -f "$pricing_file" ]]; then
+        in_price=$(yq -r ".tiers.\"$try_tier\".input_per_million // 0"  "$pricing_file" 2>/dev/null || echo 0)
+        out_price=$(yq -r ".tiers.\"$try_tier\".output_per_million // 0" "$pricing_file" 2>/dev/null || echo 0)
+      fi
+      p_tok=$(echo "$sidecar" | jq -r '.prompt_tokens   // 0')
+      r_tok=$(echo "$sidecar" | jq -r '.response_tokens // 0')
+      cost=$(awk -v p="$p_tok" -v r="$r_tok" -v pi="$in_price" -v po="$out_price" \
+        'BEGIN{ printf "%.6f", (p/1000000)*pi + (r/1000000)*po }')
 
-    cost_log="$LOG_DIR/cost.jsonl"
-    jq -n -c \
-      --arg ts        "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-      --argjson tier  "$try_tier" \
-      --arg enum      "${enum_key:-}" \
-      --arg model     "$model_name" \
-      --arg executor  "$executor" \
-      --arg pool      "$pool" \
-      --argjson prompt_tokens   "$p_tok" \
-      --argjson response_tokens "$r_tok" \
-      --argjson est_cost_usd    "$cost" \
-      --argjson wall_ms         "$wall_ms" \
-      --argjson sidecar         "$sidecar" \
-      --arg task_id   "${HYDRA_TASK_ID:-}" \
-      --arg run_id    "${HYDRA_RUN_ID:-}" \
-      '{ ts: $ts, tier: $tier, enum: $enum, model: $model,
-         executor: $executor, pool: $pool,
-         prompt_tokens: $prompt_tokens, response_tokens: $response_tokens,
-         est_cost_usd: $est_cost_usd, wall_ms: $wall_ms,
-         source: $sidecar.source, task_id: $task_id, run_id: $run_id }' \
-      >> "$cost_log"
-  fi
-  rm -f "$HYDRA_TOKEN_SIDECAR"
+      # Ensure numeric values before --argjson to prevent jq parse errors
+      [[ "$p_tok"   =~ ^[0-9]+$           ]] || p_tok=0
+      [[ "$r_tok"   =~ ^[0-9]+$           ]] || r_tok=0
+      [[ "$cost"    =~ ^[0-9]+\.?[0-9]*$  ]] || cost=0
+      [[ "$wall_ms" =~ ^-?[0-9]+$         ]] || wall_ms=0
+
+      cost_log="$LOG_DIR/cost.jsonl"
+      jq -n -c \
+        --arg ts        "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        --argjson tier  "$try_tier" \
+        --arg enum      "${enum_key:-}" \
+        --arg model     "$model_name" \
+        --arg executor  "$executor" \
+        --arg pool      "$pool" \
+        --argjson prompt_tokens   "$p_tok" \
+        --argjson response_tokens "$r_tok" \
+        --argjson est_cost_usd    "$cost" \
+        --argjson wall_ms         "$wall_ms" \
+        --argjson sidecar         "$sidecar" \
+        --arg task_id   "${HYDRA_TASK_ID:-}" \
+        --arg run_id    "${HYDRA_RUN_ID:-}" \
+        '{ ts: $ts, tier: $tier, enum: $enum, model: $model,
+           executor: $executor, pool: $pool,
+           prompt_tokens: $prompt_tokens, response_tokens: $response_tokens,
+           est_cost_usd: $est_cost_usd, wall_ms: $wall_ms,
+           source: $sidecar.source, task_id: $task_id, run_id: $run_id }' \
+        >> "$cost_log"
+    fi
+    rm -f "${HYDRA_TOKEN_SIDECAR:-}"
+  } || { rm -f "${HYDRA_TOKEN_SIDECAR:-}"; true; }
 
   if [[ $exit_code -eq 0 && -n "$output" ]]; then
     echo "$output"

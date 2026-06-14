@@ -23,9 +23,17 @@ fi
 AGY_TIMEOUT="${AGY_TIMEOUT:-300}"  # default 5 min, override via env
 
 SETTINGS="$HOME/.gemini/antigravity-cli/settings.json"
-AUTH_FILE="${HYDRA_AUTH_FILE:-$HOME/hydra/logs/auth_required.json}"
+HYDRA_DIR="${HYDRA_DIR:-$(cd "$(dirname "$0")/.." && pwd)}"
+# AUTH_FILE must align with the path route.sh reads — use $HYDRA_DIR/logs/
+AUTH_FILE="${HYDRA_AUTH_FILE:-$HYDRA_DIR/logs/auth_required.json}"
 
-# Swap model in settings.json, restore on exit
+# ── Settings swap with flock to prevent concurrent corruption ────────────────
+# When parallel.sh invokes multiple agy.sh instances concurrently, each must
+# hold an exclusive lock for the full read-modify-run-restore cycle.
+LOCK_FILE="${SETTINGS}.hydra.lock"
+exec 9>"$LOCK_FILE"
+flock -x 9
+
 original_model=$(jq -r '.model // empty' "$SETTINGS" 2>/dev/null || true)
 restore_settings() {
   if [[ -n "$original_model" ]]; then
@@ -33,13 +41,15 @@ restore_settings() {
   else
     jq 'del(.model)' "$SETTINGS" > "${SETTINGS}.tmp" && mv "${SETTINGS}.tmp" "$SETTINGS"
   fi
+  flock -u 9
 }
 trap restore_settings EXIT
 
 jq --arg m "$model_flag" '.model = $m' "$SETTINGS" > "${SETTINGS}.tmp" && mv "${SETTINGS}.tmp" "$SETTINGS"
 
 # Capture stdout and stderr separately — auth errors come on stderr before any output
-stderr_output=$(mktemp)
+stderr_output=$(mktemp -t hydra-agy-stderr.XXXXXX)
+trap 'rm -f "$stderr_output"; restore_settings' EXIT
 output=$(agy --print "$prompt" --print-timeout "${AGY_TIMEOUT}s" 2>"$stderr_output")
 exit_code=$?
 stderr_content=$(cat "$stderr_output"); rm -f "$stderr_output"
@@ -70,9 +80,11 @@ if [[ -n "${HYDRA_TOKEN_SIDECAR:-}" ]]; then
   prompt_chars=${#prompt}
   response_chars=${#output}
   factor=4
-  if [[ -f "$HOME/hydra/registry/pricing.yaml" ]]; then
-    f=$(yq -r '.estimate_factor // 4' "$HOME/hydra/registry/pricing.yaml" 2>/dev/null || echo 4)
-    [[ "$f" =~ ^[0-9]+$ ]] && factor="$f"
+  pricing_file="$HYDRA_DIR/registry/pricing.yaml"
+  if [[ -f "$pricing_file" ]]; then
+    f=$(yq -r '.estimate_factor // 4' "$pricing_file" 2>/dev/null || echo 4)
+    # Require a strictly positive integer to avoid division by zero
+    [[ "$f" =~ ^[1-9][0-9]*$ ]] && factor="$f"
   fi
   prompt_tokens=$(( prompt_chars / factor ))
   response_tokens=$(( response_chars / factor ))

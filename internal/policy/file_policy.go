@@ -150,8 +150,7 @@ func matchCondition(key string, val interface{}, spec Spec) bool {
 	case "eq":
 		return fmt.Sprintf("%v", specVal) == fmt.Sprintf("%v", val)
 	case "ne":
-		sv := fmt.Sprintf("%v", specVal)
-		return sv != "" && sv != fmt.Sprintf("%v", val)
+		return fmt.Sprintf("%v", specVal) != fmt.Sprintf("%v", val)
 	case "gt", "lt", "gte", "lte":
 		sn := toFloat(specVal)
 		vn := toFloat(val)
@@ -257,7 +256,10 @@ func toFloat(v interface{}) float64 {
 		if n { return 1 }
 		return 0
 	case string:
-		f, _ := strconv.ParseFloat(n, 64)
+		f, err := strconv.ParseFloat(n, 64)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "policy: non-numeric value %q treated as 0\n", n)
+		}
 		return f
 	}
 	return 0

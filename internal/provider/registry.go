@@ -14,9 +14,6 @@ func Register(p Provider) { global.add(p) }
 // All returns every registered provider.
 func All() []Provider { return global.all() }
 
-// Get returns a specific provider by ID.
-func Get(id string) (Provider, error) { return global.get(id) }
-
 // Registry is a thread-safe map of Providers.
 // The global instance is used by default; tests may construct their own.
 type Registry struct {

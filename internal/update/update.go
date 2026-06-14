@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ankit373/hydra/internal/build"
@@ -30,9 +31,28 @@ type state struct {
 	LatestVersion string    `json:"latest_version"`
 }
 
-// Check returns the latest version string if an update is available,
-// or empty string if up-to-date, disabled, non-TTY, or a dev build.
+var (
+	checkOnce   sync.Once
+	checkResult string
+)
+
+// Check returns the latest version if an update is available, empty otherwise.
+// Safe to call multiple times — the network fetch runs at most once per process.
 func Check() string {
+	checkOnce.Do(func() { checkResult = doCheck() })
+	return checkResult
+}
+
+// CheckAsync fires Check in a goroutine and returns a buffered channel.
+// The channel delivers exactly one value (the version string or "").
+// Drain with a select/default to avoid blocking if the check hasn't returned.
+func CheckAsync() <-chan string {
+	ch := make(chan string, 1)
+	go func() { ch <- Check() }()
+	return ch
+}
+
+func doCheck() string {
 	if os.Getenv("HYDRA_NO_UPDATE_CHECK") != "" || os.Getenv("CI") != "" {
 		return ""
 	}

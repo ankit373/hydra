@@ -852,7 +852,7 @@ cmd_ticket_comment() {
         err "gh CLI not installed — cannot comment on github ticket"
         exit 1
       fi
-      gh issue comment "$ref" --body "$body" >/dev/null
+      gh issue comment -- "$ref" --body "$body" >/dev/null
       log "run $run_id commented on $ref"
       echo "commented on $ref"
       ;;
@@ -1095,9 +1095,16 @@ cmd_fanout_ships() {
   local parent_rd; parent_rd="$(find_run_dir "$parent")" || { err "parent run $parent not found"; exit 1; }
   local workspace; workspace="$(jq -r '.workspace' "$parent_rd/manifest.json")"
 
-  # Apply filter if provided, otherwise select all features
+  # Apply filter if provided, otherwise select all features.
+  # --filter accepts a raw jq expression and must be trusted input (orchestrator-supplied).
+  # Validate it contains only alphanumeric identifiers, dots, quotes, spaces, and comparison
+  # operators to prevent env/path/shell injections from attacker-controlled backlog files.
   local features
   if [[ -n "$filter" ]]; then
+    if ! [[ "$filter" =~ ^[A-Za-z0-9_.\ \"\'=!<>|]+$ ]]; then
+      err "fanout-ships: --filter contains unsafe characters: $filter"
+      exit 1
+    fi
     features="$(jq -c --argjson dummy null ".features // [] | map(select($filter))" "$backlog_file")"
   else
     features="$(jq -c '.features // []' "$backlog_file")"

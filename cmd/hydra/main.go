@@ -30,18 +30,23 @@ import (
 )
 
 func main() {
-	// Non-blocking update check — prints notification after command output.
-	updateAvailable := update.Check()
+	// Fire update check in the background — never blocks startup.
+	updateCh := update.CheckAsync()
 
 	if err := rootCmd().Execute(); err != nil {
 		os.Exit(1)
 	}
 
-	if updateAvailable != "" {
-		fmt.Fprintf(os.Stderr, "\n  %s  hydra %s is available → brew upgrade hydra\n",
-			lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Render("✦"),
-			updateAvailable,
-		)
+	select {
+	case latest := <-updateCh:
+		if latest != "" {
+			fmt.Fprintf(os.Stderr, "\n  %s  hydra %s is available → brew upgrade hydra\n",
+				lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Render("✦"),
+				latest,
+			)
+		}
+	default:
+		// Check still in flight — skip notification rather than block.
 	}
 }
 
@@ -75,12 +80,7 @@ func cmdVersion() *cobra.Command {
 			fmt.Printf("  commit:  %s\n", build.Commit)
 			fmt.Printf("  built:   %s\n", build.Date)
 			fmt.Printf("  by:      %s\n", build.BuiltBy)
-			if latest := update.Check(); latest != "" {
-				fmt.Printf("\n  %s  %s is available → brew upgrade hydra\n",
-					lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Render("✦"),
-					latest,
-				)
-			}
+			// Update notice is printed by main() after Execute returns.
 		},
 	}
 }
@@ -647,7 +647,9 @@ func cmdRunStart() *cobra.Command {
 				NeedsDesignSystem: needsDS,
 				ParentRun:         parentID,
 			})
-			_ = dryRun // DryRun not in StartOptions; caller can inspect stdout
+			if dryRun {
+				fmt.Fprintln(os.Stderr, "warning: --dry-run not yet implemented for run start; run will be created normally")
+			}
 			if err != nil {
 				return err
 			}
@@ -704,9 +706,9 @@ func cmdRunComplete() *cobra.Command {
 				}
 				findings = append(findings, severity+": "+finding)
 			}
-			_ = output
 			state, err := company.Complete(args[0], args[1], company.CompleteOptions{
 				Findings: findings,
+				Output:   output,
 			})
 			if err != nil {
 				return err
@@ -851,10 +853,10 @@ func cmdRunPrune() *cobra.Command {
 		Use:   "prune",
 		Short: "Remove old completed runs",
 		RunE: func(_ *cobra.Command, _ []string) error {
-			_ = keepMin
 			pruned, kept, err := company.Prune(workspace, company.PruneOptions{
 				OlderThan: olderThan,
 				DryRun:    dryRun,
+				KeepMin:   keepMin,
 			})
 			if err != nil {
 				return err

@@ -19,7 +19,11 @@ const (
 )
 
 func (p Pressure) String() string {
-	return [...]string{"low", "moderate", "high"}[p]
+	names := [...]string{"low", "moderate", "high"}
+	if p < 0 || int(p) >= len(names) {
+		return "unknown"
+	}
+	return names[p]
 }
 
 // Specs describes the hardware and current memory state relevant to AI model selection.
@@ -79,12 +83,6 @@ func (s *Specs) bestFreeEstimate() float64 {
 	}
 	// Nothing known — be conservative.
 	return s.TotalRAMGB * 0.55
-}
-
-// UsingHistoricalData reports whether recommendations are based on historical
-// averages (true) or just the current snapshot (false).
-func (s *Specs) UsingHistoricalData() bool {
-	return s.History != nil && s.History.Reliable
 }
 
 // MemoryNote returns a human-readable explanation of the effective value.

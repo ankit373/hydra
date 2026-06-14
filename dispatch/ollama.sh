@@ -16,19 +16,25 @@ prompt="${2:-}"
 
 OLLAMA_HOST="${OLLAMA_HOST:-http://localhost:11434}"
 
+# Validate OLLAMA_HOST: only allow http://localhost*, http://127.*, or https://*
+if [[ ! "$OLLAMA_HOST" =~ ^https?://(localhost|127\.|::1) ]] && [[ ! "$OLLAMA_HOST" =~ ^https:// ]]; then
+  echo "❌ ollama.sh: OLLAMA_HOST must be a loopback address or https — got: $OLLAMA_HOST" >&2
+  exit 1
+fi
+
 # ── Health check ──────────────────────────────────────────────────────────────
-if ! curl -sf "$OLLAMA_HOST/" > /dev/null 2>&1; then
+if ! curl -sf --max-redirs 0 "$OLLAMA_HOST/" > /dev/null 2>&1; then
   echo "⚠️  Ollama not running. Starting..." >&2
   ollama serve &>/dev/null &
   sleep 3
-  if ! curl -sf "$OLLAMA_HOST/" > /dev/null 2>&1; then
+  if ! curl -sf --max-redirs 0 "$OLLAMA_HOST/" > /dev/null 2>&1; then
     echo "❌ Ollama failed to start. Is it installed?" >&2
     exit 1
   fi
 fi
 
 # ── Dispatch ──────────────────────────────────────────────────────────────────
-response=$(curl -sf "$OLLAMA_HOST/api/generate" \
+response=$(curl -sf --max-redirs 0 "$OLLAMA_HOST/api/generate" \
   -H "Content-Type: application/json" \
   -d "$(jq -n \
     --arg model "$model_flag" \

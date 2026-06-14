@@ -307,7 +307,9 @@ func Next(runID string) (*NextResult, error) {
 	})
 	state.Status = "in_progress"
 	state.UpdatedAt = now
-	_ = writeJSON(filepath.Join(rd, "state.json"), state)
+	if err := writeJSON(filepath.Join(rd, "state.json"), state); err != nil {
+		return nil, fmt.Errorf("Next: persist state: %w", err)
+	}
 
 	return &NextResult{
 		RunID:       runID,
@@ -326,6 +328,7 @@ type CompleteOptions struct {
 	Status   string   // ok | fail | skipped
 	Findings []string // severity strings
 	Note     string
+	Output   string   // result/output text from this stage
 }
 
 // Complete marks a stage done and advances state.
@@ -374,7 +377,9 @@ func Complete(runID, stageName string, opts CompleteOptions) (*State, error) {
 			state.Status = "blocked"
 			state.BlockingFindings = &BlockingFindings{Stage: stageName, Findings: intersection}
 			state.UpdatedAt = now
-			_ = writeJSON(filepath.Join(rd, "state.json"), state)
+			if err := writeJSON(filepath.Join(rd, "state.json"), state); err != nil {
+				return nil, fmt.Errorf("Complete: persist blocked state: %w", err)
+			}
 			_ = Ledger(manifest.Workspace)
 			return state, nil
 		}
@@ -385,7 +390,9 @@ func Complete(runID, stageName string, opts CompleteOptions) (*State, error) {
 	state.CurrentStage++
 	state.Status = "pending"
 	state.UpdatedAt = now
-	_ = writeJSON(filepath.Join(rd, "state.json"), state)
+	if err := writeJSON(filepath.Join(rd, "state.json"), state); err != nil {
+		return nil, fmt.Errorf("Complete: persist state: %w", err)
+	}
 	_ = Ledger(manifest.Workspace)
 
 	return state, nil
@@ -784,6 +791,7 @@ type PruneOptions struct {
 	OlderThan          string // e.g. "30d"
 	IncludeCompleted   bool
 	DryRun             bool
+	KeepMin            int // minimum runs to retain regardless of age
 }
 
 // Prune deletes finished runs older than a threshold.
@@ -843,6 +851,12 @@ func Prune(workspace string, opts PruneOptions) (pruned, kept int, err error) {
 			continue
 		}
 
+		// Respect KeepMin: once we've already kept >= KeepMin, allow pruning.
+		if opts.KeepMin > 0 && kept < opts.KeepMin {
+			kept++
+			continue
+		}
+
 		if opts.DryRun {
 			fmt.Printf("[dry-run] would delete %s\n", rd)
 		} else {
@@ -897,10 +911,10 @@ func Children(parentRunID string) ([]ChildRun, error) {
 			continue
 		}
 		cs, _ := readState(crd)
-		cur, total := 0, len(cm.Stages)
-		if cs != nil {
-			cur = cs.CurrentStage
+		if cs == nil {
+			continue
 		}
+		cur, total := cs.CurrentStage, len(cm.Stages)
 		result = append(result, ChildRun{
 			RunID:    e.Name(),
 			Playbook: cm.Playbook,
@@ -1057,7 +1071,7 @@ func writeJSON(path string, v any) error {
 		return err
 	}
 	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, raw, 0o644); err != nil {
+	if err := os.WriteFile(tmp, raw, 0o600); err != nil {
 		return err
 	}
 	return os.Rename(tmp, path)
@@ -1194,7 +1208,12 @@ func removeFromIndex(indexPath, runID string) error {
 			lines = append(lines, line)
 		}
 	}
-	return os.WriteFile(indexPath, []byte(strings.Join(lines, "\n")+"\n"), 0o600)
+	// Write atomically so concurrent processes never see a partial index.
+	tmp := indexPath + ".tmp"
+	if err := os.WriteFile(tmp, []byte(strings.Join(lines, "\n")+"\n"), 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, indexPath)
 }
 
 func parseDuration(s string) int64 {
@@ -1242,7 +1261,8 @@ func gzipFile(src, dst string) error {
 		return err
 	}
 	defer in.Close()
-	out, err := os.Create(dst)
+	// O_EXCL prevents a symlink attack if dst already exists.
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0o600)
 	if err != nil {
 		return err
 	}

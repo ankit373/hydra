@@ -177,14 +177,11 @@ func Reject(file string) (*RejectResult, error) {
 
 	gitRoot := resolved.GitRoot
 	if gitRoot != "" {
-		tracked, _ := exec.Command("git", "-C", gitRoot, "ls-files", "--error-unmatch", file).CombinedOutput()
-		if len(tracked) > 0 || tracked != nil {
-			if err := exec.Command("git", "-C", gitRoot, "ls-files", "--error-unmatch", file).Run(); err == nil {
-				if err := exec.Command("git", "-C", gitRoot, "checkout", "--", file).Run(); err != nil {
-					return nil, fmt.Errorf("git checkout failed: %w", err)
-				}
-				return &RejectResult{Status: "rejected", File: file, Method: "git_checkout"}, nil
+		if err := exec.Command("git", "-C", gitRoot, "ls-files", "--error-unmatch", file).Run(); err == nil {
+			if err := exec.Command("git", "-C", gitRoot, "checkout", "--", file).Run(); err != nil {
+				return nil, fmt.Errorf("git checkout failed: %w", err)
 			}
+			return &RejectResult{Status: "rejected", File: file, Method: "git_checkout"}, nil
 		}
 		// Untracked new file
 		if fileExists(file) {

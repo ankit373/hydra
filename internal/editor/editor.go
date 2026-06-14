@@ -14,7 +14,6 @@ import (
 
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/dispatch"
-	"github.com/ankit373/hydra/internal/policy"
 	"github.com/ankit373/hydra/internal/workspace"
 )
 
@@ -82,18 +81,6 @@ func Edit(ctx context.Context, req Request) (*Result, error) {
 			_ = os.Remove(backup)
 		}
 	}
-
-	// ── Policy ────────────────────────────────────────────────────────────────
-	var fp policy.FilePolicy
-	eng, pErr := policy.LoadFilePolicy(config.ScriptHome())
-	if pErr == nil {
-		fp = eng.Decide(policy.Spec{
-			File:          req.File,
-			FileExtension: fileExt(req.File),
-			Workspace:     wsName,
-		})
-	}
-	_ = fp // Phase 1: snapshot flags; Phase 2 will consume them
 
 	// ── Build prompt ──────────────────────────────────────────────────────────
 	var ctxNote string
@@ -169,13 +156,21 @@ snippet) between these exact markers and nothing else:
 
 	// ── Atomic write ──────────────────────────────────────────────────────────
 	_ = os.MkdirAll(filepath.Dir(req.File), 0o755)
-	tmp := fmt.Sprintf("%s.hydra-tmp.%d", req.File, os.Getpid())
-	if err := os.WriteFile(tmp, []byte(newContent+"\n"), 0o644); err != nil {
+	tmpF, err := os.CreateTemp(filepath.Dir(req.File), ".hydra-tmp.*")
+	if err != nil {
 		cleanupBackup()
 		return failResult(req, "write_failed: "+err.Error()), nil
 	}
-	if err := os.Rename(tmp, req.File); err != nil {
-		_ = os.Remove(tmp)
+	tmpPath := tmpF.Name()
+	if _, werr := fmt.Fprint(tmpF, newContent+"\n"); werr != nil {
+		_ = tmpF.Close()
+		_ = os.Remove(tmpPath)
+		cleanupBackup()
+		return failResult(req, "write_failed: "+werr.Error()), nil
+	}
+	_ = tmpF.Close()
+	if err := os.Rename(tmpPath, req.File); err != nil {
+		_ = os.Remove(tmpPath)
 		cleanupBackup()
 		return failResult(req, "rename_failed: "+err.Error()), nil
 	}
@@ -192,8 +187,7 @@ snippet) between these exact markers and nothing else:
 		}
 
 		if vtmpl != "" {
-			cmd := strings.ReplaceAll(vtmpl, "{file}", req.File)
-			vout, vrc := runCmd(cmd)
+			vout, vrc := runValidatorCmd(vtmpl, req.File)
 			if vrc != 0 {
 				validatorPassed = false
 				rollback(req.File, origContent, origExisted, resolved.GitRoot, backup)
@@ -350,12 +344,20 @@ func rollback(file, origContent string, origExisted bool, gitRoot, backup string
 	_ = os.WriteFile(file, []byte(origContent), 0o644)
 }
 
-func runCmd(cmd string) (output string, exitCode int) {
-	parts := strings.Fields(cmd)
+// runValidatorCmd executes a validator template safely.
+// Splits around {file} so paths containing spaces are never fragmented by Fields.
+func runValidatorCmd(vtmpl, file string) (output string, exitCode int) {
+	var parts []string
+	if idx := strings.Index(vtmpl, "{file}"); idx >= 0 {
+		parts = append(strings.Fields(vtmpl[:idx]), file)
+		parts = append(parts, strings.Fields(vtmpl[idx+len("{file}"):])...)
+	} else {
+		parts = strings.Fields(vtmpl)
+	}
 	if len(parts) == 0 {
 		return "", 0
 	}
-	c := exec.Command(parts[0], parts[1:]...) //nolint:gosec
+	c := exec.Command(parts[0], parts[1:]...)
 	out, err := c.CombinedOutput()
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
@@ -403,8 +405,8 @@ func diffStats(file, origContent, gitRoot, backup string, origExisted bool) (add
 	if origExisted {
 		origLines = strings.Count(origContent, "\n")
 	}
-	added = max(0, newLines-origLines)
-	removed = max(0, origLines-newLines)
+	added = max(0, newLines-origLines)   //nolint:builtin — uses Go 1.21+ built-in
+	removed = max(0, origLines-newLines) //nolint:builtin
 	return
 }
 
@@ -413,12 +415,6 @@ func readFileLines(path string) string {
 	return string(raw)
 }
 
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
 
 func firstLine(s string) string {
 	lines := strings.SplitN(strings.TrimSpace(s), "\n", 2)
@@ -446,24 +442,4 @@ func writeLastEdit(file, enum, ws string, added, removed int) error {
 	return os.WriteFile(path, raw, 0o600)
 }
 
-// enumToTier maps routing enum keys to tier numbers (from routing.yaml).
-// Used when routing.yaml can't be loaded at runtime.
-var enumTiers = map[string]string{
-	"GRUNT":     "10",
-	"TRIVIAL":   "9",
-	"SIMPLE":    "8",
-	"STANDARD":  "7",
-	"MODERATE":  "6",
-	"COMPLEX":   "5",
-	"HARD":      "4",
-	"VERY_HARD": "3",
-	"EXPERT":    "2",
-	"CORE":      "1",
-}
-
-func enumToTier(enum string) string {
-	if t, ok := enumTiers[enum]; ok {
-		return t
-	}
-	return ""
-}
+func enumToTier(enum string) string { return dispatch.EnumToTier(enum) }
