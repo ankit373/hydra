@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"math"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -18,9 +17,9 @@ import (
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/executor"
 	"github.com/ankit373/hydra/internal/policy"
+	"github.com/ankit373/hydra/internal/pricing"
 	"github.com/ankit373/hydra/internal/probe"
 	"github.com/ankit373/hydra/internal/provider"
-	"gopkg.in/yaml.v3"
 )
 
 // Options controls dispatch behaviour.
@@ -51,7 +50,7 @@ type Dispatcher struct {
 	cfg     *config.Config
 	heads   []provider.Head
 	policy  *policy.Engine
-	pricing *pricingConfig
+	pricing *pricing.DB
 }
 
 // New builds a Dispatcher from the saved config and a fresh machine probe.
@@ -68,13 +67,11 @@ func New(ctx context.Context) (*Dispatcher, error) {
 		localOnly = true
 	}
 
-	pricing, _ := loadPricing()
-
 	return &Dispatcher{
 		cfg:     cfg,
 		heads:   result.Heads,
 		policy:  policy.New(policy.DefaultRules(localOnly)),
-		pricing: pricing,
+		pricing: pricing.Load(),
 	}, nil
 }
 
@@ -394,42 +391,12 @@ func appendJSONL(path string, entry map[string]any) error {
 	return err
 }
 
-// estimateCost returns $/call from pricing.yaml tier rates.
+// estimateCost returns $/call using the live pricing DB (OpenRouter + tier fallback).
 func (d *Dispatcher) estimateCost(tier, inputTokens, outputTokens int) float64 {
 	if d.pricing == nil {
 		return 0
 	}
-	tp, ok := d.pricing.Tiers[tier]
-	if !ok {
-		return 0
-	}
-	in := float64(inputTokens) / 1_000_000 * tp.InputPerMillion
-	out := float64(outputTokens) / 1_000_000 * tp.OutputPerMillion
-	return math.Round((in+out)*1_000_000) / 1_000_000
-}
-
-// ── Pricing ──────────────────────────────────────────────────────────────────
-
-type pricingTier struct {
-	InputPerMillion  float64 `yaml:"input_per_million"`
-	OutputPerMillion float64 `yaml:"output_per_million"`
-}
-
-type pricingConfig struct {
-	Tiers map[int]pricingTier `yaml:"tiers"`
-}
-
-func loadPricing() (*pricingConfig, error) {
-	path := filepath.Join(config.ScriptHome(), "registry", "pricing.yaml")
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-	var p pricingConfig
-	if err := yaml.Unmarshal(raw, &p); err != nil {
-		return nil, err
-	}
-	return &p, nil
+	return d.pricing.EstimateCost(tier, inputTokens, outputTokens)
 }
 
 // uiTier converts a Head to the 1-10 integer that ui/src/types.ts TIER_LABELS expects.
