@@ -152,7 +152,7 @@ func cmdProbe() *cobra.Command {
 func cmdStatus() *cobra.Command {
 	return &cobra.Command{
 		Use:   "status",
-		Short: "Show current Cortex and Head configuration",
+		Short: "Show current Cortex, Head configuration, and budget utilisation",
 		RunE: func(_ *cobra.Command, _ []string) error {
 			cfg, err := config.Load()
 			if err != nil {
@@ -184,9 +184,121 @@ func cmdStatus() *cobra.Command {
 				fmt.Printf("  %-14s  %s\n", t.Name, strings.Join(t.Heads, ", "))
 			}
 			fmt.Println()
+
+			// Budget section — read from state.json (written by dispatcher).
+			printBudgetStatus()
 			return nil
 		},
 	}
+}
+
+func printBudgetStatus() {
+	statePath := fmt.Sprintf("%s/logs/state.json", config.Dir())
+	raw, err := os.ReadFile(statePath)
+	if err != nil {
+		return
+	}
+	var state struct {
+		ClaudePct int                        `json:"claude_pct"`
+		Budget    map[string]map[string]any  `json:"budget"`
+	}
+	if err := json.Unmarshal(raw, &state); err != nil {
+		return
+	}
+
+	// claude_pct block (orchestrator context window).
+	if state.ClaudePct > 0 {
+		mode := budgetModeLabel(state.ClaudePct)
+		bar := budgetBar(state.ClaudePct)
+		fmt.Printf("  %s  %s %3d%%  %s\n",
+			dimStyle.Render("Claude  :"),
+			bar, state.ClaudePct, budgetModeStyle(mode).Render(mode),
+		)
+	}
+
+	if len(state.Budget) == 0 {
+		return
+	}
+
+	fmt.Println()
+	fmt.Println(dimStyle.Render("  " + strings.Repeat("─", 48)))
+	fmt.Printf("  %-20s  %6s  %8s  %s\n", "Model", "  Used", " Window", "Mode")
+	fmt.Println(dimStyle.Render("  " + strings.Repeat("─", 48)))
+	for modelID, snap := range state.Budget {
+		pct := int(toFloat(snap["pct"]))
+		used := int(toFloat(snap["used"]))
+		window := int(toFloat(snap["window"]))
+		mode, _ := snap["mode"].(string)
+		bar := budgetBar(pct)
+		fmt.Printf("  %-20s  %s %3d%%  %-8s  %s\n",
+			truncLabel(modelID, 20),
+			bar, pct,
+			fmt.Sprintf("%dk/%dk", used/1000, window/1000),
+			budgetModeStyle(mode).Render(mode),
+		)
+	}
+	fmt.Println()
+}
+
+func toFloat(v any) float64 {
+	switch x := v.(type) {
+	case float64:
+		return x
+	case int:
+		return float64(x)
+	}
+	return 0
+}
+
+func budgetBar(pct int) string {
+	const width = 10
+	filled := pct * width / 100
+	if filled > width {
+		filled = width
+	}
+	bar := strings.Repeat("█", filled) + strings.Repeat("░", width-filled)
+	return budgetModeStyle(budgetModeLabel(pct)).Render(bar)
+}
+
+func budgetModeLabel(pct int) string {
+	switch {
+	case pct >= 80:
+		return "emergency"
+	case pct >= 75:
+		return "critical"
+	case pct >= 70:
+		return "warning"
+	case pct >= 65:
+		return "caution"
+	case pct >= 50:
+		return "compact"
+	default:
+		return "normal"
+	}
+}
+
+func budgetModeStyle(mode string) lipgloss.Style {
+	switch mode {
+	case "emergency":
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("196")).Bold(true)
+	case "critical":
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
+	case "warning":
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
+	case "caution":
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("226"))
+	case "compact":
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("250"))
+	default:
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("82"))
+	}
+}
+
+func truncLabel(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n-1] + "…"
 }
 
 // ── dispatch ──────────────────────────────────────────────────────────────────

@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ankit373/hydra/internal/budget"
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/executor"
 	"github.com/ankit373/hydra/internal/policy"
@@ -52,10 +53,14 @@ type Dispatcher struct {
 	heads   []provider.Head
 	policy  *policy.Engine
 	pricing *pricing.DB
+	budget  *budget.Registry
 }
 
 // Heads returns the probed head list for external callers (e.g. swarm).
 func (d *Dispatcher) Heads() []provider.Head { return d.heads }
+
+// Budget returns the budget registry for external callers (e.g. hydra status).
+func (d *Dispatcher) Budget() *budget.Registry { return d.budget }
 
 // EstimateCost exposes per-tier cost estimation for external callers.
 func (d *Dispatcher) EstimateCost(tier, inputTokens, outputTokens int) float64 {
@@ -76,11 +81,15 @@ func New(ctx context.Context) (*Dispatcher, error) {
 		localOnly = true
 	}
 
+	registryDir := filepath.Join(config.ScriptHome(), "registry")
+	budgetReg := budget.NewRegistry(budget.LoadWindows(registryDir))
+
 	return &Dispatcher{
 		cfg:     cfg,
 		heads:   result.Heads,
 		policy:  policy.New(policy.DefaultRules(localOnly)),
 		pricing: pricing.Load(),
+		budget:  budgetReg,
 	}, nil
 }
 
@@ -143,6 +152,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		r := &Result{Output: resp.Output, Head: h, Retries: i, Response: resp}
 		_ = d.logDispatch(r, prompt, opts)
 		_ = d.writeHandoff(r, prompt)
+		d.recordBudget(r)
 		d.syncStateJSON(r)
 		return r, nil
 	}
@@ -301,6 +311,18 @@ func (d *Dispatcher) selectHeads(tierHint string, localOnly bool) []provider.Hea
 	return candidates
 }
 
+// recordBudget updates the budget registry with this call's token usage.
+func (d *Dispatcher) recordBudget(r *Result) {
+	if d.budget == nil || r.Response.InputTokens == 0 {
+		return
+	}
+	source := "real"
+	if r.Response.InputTokens == 0 {
+		source = "estimate"
+	}
+	d.budget.Record(r.Head.ID, r.Response.InputTokens, source)
+}
+
 // syncStateJSON updates ~/.hydra/logs/state.json after a successful dispatch
 // so the Ink UI (ui/) reflects Go dispatcher activity.
 func (d *Dispatcher) syncStateJSON(r *Result) {
@@ -318,6 +340,22 @@ func (d *Dispatcher) syncStateJSON(r *Result) {
 	existing["last_model"] = r.Head.Name
 	existing["last_status"] = "ok"
 	existing["last_tier"] = rank.UITier(r.Head)
+
+	// Persist per-model budget snapshots so the TUI and status command can read them.
+	if d.budget != nil {
+		snaps := d.budget.All()
+		budgetMap := map[string]any{}
+		for _, s := range snaps {
+			budgetMap[s.ModelID] = map[string]any{
+				"pct":    s.Pct,
+				"used":   s.Used,
+				"window": s.Window,
+				"mode":   s.Mode.String(),
+				"source": s.Source,
+			}
+		}
+		existing["budget"] = budgetMap
+	}
 
 	updated, err := json.MarshalIndent(existing, "", "  ")
 	if err != nil {
