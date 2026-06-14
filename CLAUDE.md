@@ -12,6 +12,7 @@ Never do work yourself that belongs to a lower tier. Never escalate work to your
 registry/routing.yaml   ← THE ENUM. Change tier assignments here only.
 registry/models.yaml    ← All model definitions, token pools, fallback chains.
 registry/domains.yaml   ← Domain → enum key routing (references routing.yaml).
+registry/pricing.yaml   ← Static tier pricing fallback (used when offline).
 dispatch/route.sh       ← Entry point for all delegated execution.
 dispatch/agy.sh         ← agy subprocess wrapper.
 dispatch/ollama.sh      ← Ollama API wrapper.
@@ -20,6 +21,10 @@ skills/                 ← Claude Code skills (delegate, rubber-duck, escalate)
 .agents/skills/         ← agy TUI slash command skills.
 context/                ← Convention templates to inject into delegated prompts.
 logs/                   ← Dispatch log + state.json (pool exhaustion, claude_pct).
+
+internal/pricing/       ← Live pricing DB (OpenRouter fetch + 24h cache + tier fallback).
+internal/util/          ← Shared utilities (Accumulator, etc).
+internal/swarm/         ← Swarm dispatch — fan-out to multiple heads (race/best/all).
 ```
 
 ---
@@ -384,3 +389,82 @@ internal/update/update.go     ← startup update checker (24h cache)
 .github/workflows/edge.yml    ← fires on develop push → edge build
 .github/workflows/release-please.yml ← fires on main push → release PR
 ```
+
+---
+
+## Go Control Plane — Package Map
+
+All Go source lives under `cmd/` and `internal/`. Key packages:
+
+| Package | Purpose |
+|---|---|
+| `internal/dispatch` | Core router: policy → head selection → executor → fallback |
+| `internal/executor` | Per-provider execution: agy, ollama, HTTP (OpenAI-compat), CLI |
+| `internal/provider` | Head discovery plugins (agy registry, env, port, CLI) |
+| `internal/probe` | Machine scan — finds all live heads at startup |
+| `internal/swarm` | Fan-out dispatch: race / best (LLM judge) / all (CapScore rank) |
+| `internal/pricing` | Live cost DB: OpenRouter fetch + 24h cache + tier YAML fallback |
+| `internal/util` | Shared utilities: `Accumulator` (bounded io.Writer, 33 MB cap) |
+| `internal/cost` | Reads `cost.jsonl`, produces spend summaries |
+| `internal/policy` | Allow/deny rules (PII local-only, etc.) |
+| `internal/rank` | CapScore ranking helpers |
+| `internal/config` | Hydra config load/save (`~/.config/hydra/`) |
+| `internal/company` | Playbook run state machine (multi-stage AI workflows) |
+| `internal/tui` | Bubble Tea TUI: init wizard, install flow |
+| `internal/review` | Code review subcommand |
+| `internal/editor` | Editor integration |
+
+### Key invariants
+- `internal/util.Accumulator` **must** be used for all subprocess stdout/stderr capture — never `bytes.Buffer` for unbounded output.
+- `internal/pricing.DB` is the single source of truth for all cost estimation — never hardcode $/token values.
+- `internal/swarm` uses `sync.WaitGroup` (not errgroup) for race mode to guarantee goroutine drain and prevent zombie agy subprocesses.
+- All executors must set `Response.Truncated = true` when output was capped.
+
+### Pricing flow
+```
+pricing.Load()
+  → readCache()           # ~/.config/hydra/pricing_cache.json (24h TTL)
+  → fetchFromOpenRouter() # background refresh if stale
+  → loadFallbackTiers()   # registry/pricing.yaml (always loaded)
+```
+`HYDRA_PRICING_TTL_HOURS` overrides the 24h TTL.
+`hydra pricing refresh` forces a synchronous fetch.
+`hydra pricing list [filter] [--json]` shows all known models.
+
+### Swarm dispatch
+```
+hydra dispatch --swarm --swarm-mode race|best|all "<prompt>"
+  --swarm-heads head1,head2    # explicit head IDs (bypasses tier)
+  --swarm-max-heads 5          # cap fan-out
+  --swarm-max-cost 0.05        # pre-flight cost guard in USD
+  --swarm-judge-tier 1         # which tier judges in 'best' mode
+```
+
+---
+
+## Open Backlog (issues to build next)
+
+Track via `gh issue list`. Key upcoming features:
+
+| # | Feature | Status |
+|---|---|---|
+| #11 | Swarm dispatch (race/best/all) | PR #51 open |
+| #52 | Dynamic pricing (OpenRouter) | PR #61 open |
+| #53 | Lifecycle hook system (PreDispatch/PostDispatch events) | open |
+| #54 | `hydra stats` — session cost rollup | open |
+| #55 | Programmatic token budget / claude_pct auto-tracking | open |
+| #56 | TUI component library (Box/ScrollBox/ProgressBar/Spinner) | open |
+| #57 | Context window tracker (auto-measure claude_pct from API responses) | open |
+| #58 | `EndTruncatingAccumulator` | ✅ merged |
+| #59 | Swarm head retry + reconnection (backoff on 429/503) | open |
+
+### claude-code patterns being ported to Hydra
+These were extracted from the Claude Code source (`/Users/ankitjha/claude-code/src`) and filed as issues above:
+- **Cost tracking**: session rollup pattern from `cost-tracker.ts` → #54
+- **Hook system**: 26-event lifecycle taxonomy from `agentSdkTypes.ts` → #53
+- **Token budget enforcement**: `tokenBudget.ts` threshold logic → #55
+- **TUI components**: Ink `Box/ScrollBox/ProgressBar/Spinner` patterns → #56
+- **Context window tracking**: `tokens.ts` + `context.ts` measurement → #57
+- **Output accumulator**: `EndTruncatingAccumulator` from `stringUtils.ts` → #58 ✅
+- **Swarm reconnection**: `swarm/reconnection.ts` backoff patterns → #59
+- **Dynamic pricing**: OpenRouter API (not `modelCost.ts` which is Anthropic-only) → #52
