@@ -294,10 +294,11 @@ func budgetModeStyle(mode string) lipgloss.Style {
 }
 
 func truncLabel(s string, n int) string {
-	if len(s) <= n {
+	r := []rune(s)
+	if len(r) <= n {
 		return s
 	}
-	return s[:n-1] + "…"
+	return string(r[:n-1]) + "…"
 }
 
 // ── dispatch ──────────────────────────────────────────────────────────────────

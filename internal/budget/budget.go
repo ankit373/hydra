@@ -145,12 +145,19 @@ func (r *Registry) Get(modelID string) Snapshot {
 }
 
 // All returns snapshots for every tracked model, in no guaranteed order.
+// Trackers are collected under r.mu then snapshotted outside it to avoid
+// holding two locks simultaneously.
 func (r *Registry) All() []Snapshot {
 	r.mu.RLock()
-	out := make([]Snapshot, 0, len(r.models))
+	trackers := make([]*Tracker, 0, len(r.models))
 	for _, t := range r.models {
-		out = append(out, t.Snapshot())
+		trackers = append(trackers, t)
 	}
 	r.mu.RUnlock()
+
+	out := make([]Snapshot, 0, len(trackers))
+	for _, t := range trackers {
+		out = append(out, t.Snapshot())
+	}
 	return out
 }

@@ -59,9 +59,6 @@ type Dispatcher struct {
 // Heads returns the probed head list for external callers (e.g. swarm).
 func (d *Dispatcher) Heads() []provider.Head { return d.heads }
 
-// Budget returns the budget registry for external callers (e.g. hydra status).
-func (d *Dispatcher) Budget() *budget.Registry { return d.budget }
-
 // EstimateCost exposes per-tier cost estimation for external callers.
 func (d *Dispatcher) EstimateCost(tier, inputTokens, outputTokens int) float64 {
 	return d.estimateCost(tier, inputTokens, outputTokens)
@@ -299,8 +296,7 @@ func (d *Dispatcher) recordBudget(r *Result) {
 	if d.budget == nil || r.Response.InputTokens == 0 {
 		return
 	}
-	// agy estimates tokens via len(prompt)/4 and marks InputTokens non-zero but
-	// source is determined by logDispatch; mirror its "estimate" rule here.
+	// No output tokens → execution was cut short or agy returned an estimate.
 	source := "real"
 	if r.Response.OutputTokens == 0 {
 		source = "estimate"
