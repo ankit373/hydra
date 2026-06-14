@@ -322,40 +322,110 @@ git push origin v1.2.1
 
 ---
 
-## Step 7 — GitHub Board (always keep updated)
+## Step 7 — GitHub Project Board (MANDATORY — every state change)
 
-Every issue must move through the board as work progresses.
+Board: **Project #2 "Hydra Roadmap"** — `PVT_kwHOAL1qLc4BZbZZ`
+Field: **Status** — `PVTSSF_lAHOAL1qLc4BZbZZzhUaGlE`
 
+| Column | Option ID | When to move |
+|---|---|---|
+| Todo | `f75ad846` | Issue created (new work planned) |
+| In Progress | `47fc9ee4` | Branch created / coding started |
+| In Review | `1490e846` | PR opened |
+| Deploy | `bcafa7ca` | PR merged, waiting for release tag |
+| Done | `98236657` | Released / closed |
+
+**This is not optional.** Every issue must be moved at every transition. Do not skip steps.
+
+### How to move an issue
+
+First, get the project item ID for the issue:
 ```bash
-# Move issue to "In Progress" when you start
-gh issue edit 43 --add-label "in-progress"
-
-# Move to "In Review" when PR is open (auto via PR link)
-
-# "Done" happens automatically when PR with "Closes #43" merges
+# Find item ID for issue #43
+ITEM_ID=$(gh project item-list 2 --owner ankit373 --format json --limit 100 \
+  | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+for i in d.get('items',[]):
+    if '#43' in str(i.get('content',{}).get('url','')):
+        print(i['id'])
+" 2>/dev/null)
+# OR look it up directly:
+gh project item-list 2 --owner ankit373 --format json --limit 100 | python3 -c \
+  "import json,sys; [print(i['id'], i.get('status',''), i.get('title','')[:60]) for i in json.load(sys.stdin).get('items',[])]"
 ```
 
-Board columns: **Backlog → Todo → In Progress → In Review → Done**
+Then move it:
+```bash
+# Move to Todo (issue created)
+gh project item-edit --project-id PVT_kwHOAL1qLc4BZbZZ \
+  --id <ITEM_ID> \
+  --field-id PVTSSF_lAHOAL1qLc4BZbZZzhUaGlE \
+  --single-select-option-id f75ad846
+
+# Move to In Progress (branch created, coding started)
+gh project item-edit --project-id PVT_kwHOAL1qLc4BZbZZ \
+  --id <ITEM_ID> \
+  --field-id PVTSSF_lAHOAL1qLc4BZbZZzhUaGlE \
+  --single-select-option-id 47fc9ee4
+
+# Move to In Review (PR opened)
+gh project item-edit --project-id PVT_kwHOAL1qLc4BZbZZ \
+  --id <ITEM_ID> \
+  --field-id PVTSSF_lAHOAL1qLc4BZbZZzhUaGlE \
+  --single-select-option-id 1490e846
+
+# Move to Done (merged and closed)
+gh project item-edit --project-id PVT_kwHOAL1qLc4BZbZZ \
+  --id <ITEM_ID> \
+  --field-id PVTSSF_lAHOAL1qLc4BZbZZzhUaGlE \
+  --single-select-option-id 98236657
+```
+
+### Add new issues to the board automatically
+```bash
+# After gh issue create, add it to the project and set Todo
+ISSUE_URL=$(gh issue create ... | tail -1)
+gh project item-add 2 --owner ankit373 --url "$ISSUE_URL"
+# then move to Todo using item-edit as above
+```
 
 ---
 
 ## Quick Start — Full Flow in One Go
 
 ```bash
-# 1. Create issue
-ISSUE=$(gh issue create --title "feat: hydra stats" --label enhancement --assignee "@me" --body "Add cost stats subcommand" | grep -oE '[0-9]+$')
+# 1. Create issue + add to board + move to Todo
+ISSUE_URL=$(gh issue create --title "feat: hydra stats" --label enhancement --assignee "@me" \
+  --body "Add cost stats subcommand")
+ISSUE=$(echo "$ISSUE_URL" | grep -oE '[0-9]+$')
+gh project item-add 2 --owner ankit373 --url "$ISSUE_URL"
+ITEM_ID=$(gh project item-list 2 --owner ankit373 --format json --limit 100 \
+  | python3 -c "import json,sys; [print(i['id']) for i in json.load(sys.stdin).get('items',[]) if '/${ISSUE}' in str(i.get('content',{}).get('url',''))]")
+# Move → Todo
+gh project item-edit --project-id PVT_kwHOAL1qLc4BZbZZ --id "$ITEM_ID" \
+  --field-id PVTSSF_lAHOAL1qLc4BZbZZzhUaGlE --single-select-option-id f75ad846
 
-# 2. Create branch
+# 2. Create branch + move to In Progress
 git checkout develop && git pull origin develop
 git checkout -b feature/${ISSUE}-hydra-stats
+gh project item-edit --project-id PVT_kwHOAL1qLc4BZbZZ --id "$ITEM_ID" \
+  --field-id PVTSSF_lAHOAL1qLc4BZbZZzhUaGlE --single-select-option-id 47fc9ee4
 
 # 3. Write code, commit with conventional message
-git add . && git commit -m "feat(stats): add hydra stats subcommand (#${ISSUE})"
+git add internal/stats/ cmd/hydra/main.go
+git commit -m "feat(stats): add hydra stats subcommand (#${ISSUE})"
 
-# 4. Push and open PR
+# 4. Push and open PR + move to In Review
 git push -u origin HEAD
 gh pr create --title "feat(stats): add hydra stats subcommand" \
   --body "Closes #${ISSUE}" --base develop
+gh project item-edit --project-id PVT_kwHOAL1qLc4BZbZZ --id "$ITEM_ID" \
+  --field-id PVTSSF_lAHOAL1qLc4BZbZZzhUaGlE --single-select-option-id 1490e846
+
+# 5. After merge — move to Done
+gh project item-edit --project-id PVT_kwHOAL1qLc4BZbZZ --id "$ITEM_ID" \
+  --field-id PVTSSF_lAHOAL1qLc4BZbZZzhUaGlE --single-select-option-id 98236657
 ```
 
 ---
