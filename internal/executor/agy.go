@@ -1,7 +1,6 @@
 package executor
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -13,6 +12,7 @@ import (
 	"time"
 
 	"github.com/ankit373/hydra/internal/config"
+	"github.com/ankit373/hydra/internal/util"
 )
 
 // AuthRequiredError is returned when agy signals that authentication is needed.
@@ -72,10 +72,13 @@ func (e *AgyExecutor) Execute(ctx context.Context, req Request) (*Response, erro
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	var stdout, stderr bytes.Buffer
+	// stderr is only used for auth detection — cap it at 64 KB so a runaway
+	// process can't exhaust memory through error output.
+	stderr := util.NewAccumulator(64 << 10)
+	stdout := util.NewAccumulator(0)
 	cmd := exec.CommandContext(ctx, "agy", "--print", req.Prompt, "--print-timeout", fmt.Sprintf("%ds", int(timeout.Seconds())))
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
 
 	start := time.Now()
 	runErr := cmd.Run()
@@ -118,6 +121,7 @@ func (e *AgyExecutor) Execute(ctx context.Context, req Request) (*Response, erro
 		Model:         req.Head.ID,
 		InputTokens:   promptTokens,
 		OutputTokens:  responseTokens,
+		Truncated:     stdout.Truncated(),
 	}, nil
 }
 
