@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://ankit373.github.io/hydra/sitemap.xml
+Sitemap: https://hydra.uvansa.com/sitemap.xml
