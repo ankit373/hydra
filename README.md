@@ -14,7 +14,7 @@
 *One command. Every model. Total control.*
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-8b5cf6.svg)](LICENSE)
-[![Go 1.22](https://img.shields.io/badge/Go-1.22-00ADD8?logo=go&logoColor=white)](core/go.mod)
+[![Go 1.24](https://img.shields.io/badge/Go-1.24-00ADD8?logo=go&logoColor=white)](go.mod)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey?logo=apple)](https://hydra.uvansa.com)
 [![GitHub Stars](https://img.shields.io/github/stars/ankit373/hydra?style=flat&color=8b5cf6)](https://github.com/ankit373/hydra/stargazers)
 [![GitHub Issues](https://img.shields.io/github/issues/ankit373/hydra?color=06b6d4)](https://github.com/ankit373/hydra/issues)
@@ -181,7 +181,7 @@ $ hydra dispatch --prompt "process payment for card 4111-1111-1111-1111"
 Every dispatch is logged to `~/.hydra/dispatch.jsonl` with model, tier, token counts, estimated cost, and fallback chain. Run `hydra stats` to see where your budget is going.
 
 ```
-$ hydra stats
+$ hydra cost
 
   Cost — last 30 days
 
@@ -248,7 +248,7 @@ hydra dispatch --local --prompt "write unit tests for this function"
 
 **Homebrew (recommended):**
 ```bash
-brew install --HEAD Formula/hydra.rb
+brew install ankit373/hydra/hydra
 ```
 
 **Standalone installer:**
@@ -259,7 +259,7 @@ curl -fsSL https://raw.githubusercontent.com/ankit373/hydra/main/install.sh | sh
 **From source:**
 ```bash
 git clone https://github.com/ankit373/hydra.git
-cd hydra/core
+cd hydra
 go build -o hydra ./cmd/hydra && mv hydra /usr/local/bin/
 ```
 
@@ -280,7 +280,7 @@ hydra status                            # live system state
 hydra dispatch --prompt "..."           # route a prompt to the best model
 hydra dispatch --dry-run --prompt "..." # preview routing without executing
 hydra dispatch --local --prompt "..."   # local models only, no API calls
-hydra stats                             # cost summary (v1.1)
+hydra cost                              # cost summary by model and day
 ```
 
 ---
@@ -346,7 +346,7 @@ For Ollama models, add a family pattern:
 | PII detection + local-only enforcement | v1.0 | ✅ Shipped |
 | Tier routing with automatic fallback chains | v1.0 | ✅ Shipped |
 | First-run TUI wizard (`hydra init`) | v1.0 | ✅ Shipped |
-| `hydra stats` — cost breakdown by model and day | v1.1 | 🔨 Building |
+| `hydra cost` — cost breakdown by model and day | v1.1 | ✅ Shipped |
 | Ollama model deduplication (binary vs models) | v1.1 | 🔨 Building |
 | MCP Server Registry | v2.0 | 📋 [#9](https://github.com/ankit373/hydra/issues/9) |
 | Per-model MCP access controls | v2.0 | 📋 [#10](https://github.com/ankit373/hydra/issues/10) |
@@ -376,27 +376,26 @@ v2 extends the control plane to answer: *what is each model allowed to touch?*
 
 ```
 hydra/
-├── core/                        # Go binary — the control plane
-│   ├── cmd/hydra/               # CLI entry point (Cobra)
-│   └── internal/
-│       ├── capabilities/        # Capability scoring — data.json, no hardcoded logic
-│       ├── config/              # TOML config at ~/.hydra/config.toml
-│       ├── dispatch/            # Tier routing + fallback chains + cost logging
-│       ├── executor/            # CLI and HTTP executors for every head type
-│       ├── policy/              # PII detection + routing enforcement
-│       ├── probe/               # Concurrent multi-provider discovery
-│       ├── provider/            # CLI, env, and port discovery providers
-│       │   ├── cli/             # PATH scanner (13+ tools)
-│       │   ├── env/             # API key scanner (14 providers)
-│       │   └── port/            # Local server scanner (Ollama, LM Studio)
-│       ├── rank/                # Deduplication and capability ranking
-│       ├── sysinfo/             # Hardware detection + 7-day memory history
-│       └── tui/                 # Bubbletea init wizard + install guide
+├── cmd/hydra/                   # CLI entry point (Cobra)
+├── internal/
+│   ├── capabilities/            # Capability scoring — data.json, no hardcoded logic
+│   ├── config/                  # TOML config at ~/.hydra/config.toml
+│   ├── dispatch/                # Tier routing + fallback chains + cost logging
+│   ├── executor/                # CLI and HTTP executors for every head type
+│   ├── policy/                  # PII detection + routing enforcement
+│   ├── probe/                   # Concurrent multi-provider discovery
+│   ├── provider/                # CLI, env, and port discovery providers
+│   │   ├── cli/                 # PATH scanner (13+ tools)
+│   │   ├── env/                 # API key scanner (14 providers)
+│   │   └── port/                # Local server scanner (Ollama, LM Studio)
+│   ├── rank/                    # Deduplication and capability ranking
+│   ├── sysinfo/                 # Hardware detection + 7-day memory history
+│   └── tui/                     # Bubbletea init wizard + install guide
 ├── dispatch/                    # Shell dispatch layer (agy + Ollama wrappers)
 ├── registry/                    # Routing YAML, model definitions, policy config
 ├── skills/                      # Skill prompts (delegate, escalate, rubber-duck)
 ├── docs/                        # GitHub Pages (hydra.uvansa.com)
-└── Formula/hydra.rb             # Homebrew tap formula
+└── Formula/hydra.rb             # Homebrew formula (auto-updated by goreleaser)
 ```
 
 ---
@@ -405,9 +404,9 @@ hydra/
 
 Issues and pull requests are welcome. A few entry points:
 
-- **Add a model** — edit [`core/internal/capabilities/data.json`](core/internal/capabilities/data.json). One JSON entry. No Go required.
-- **Add a discovery provider** — implement the [`Provider` interface](core/internal/provider/provider.go) and call `provider.Register()` in an `init()` function.
-- **Add an executor** — add a row to `cliTemplates` in [`core/internal/executor/cli.go`](core/internal/executor/cli.go) or extend the HTTP executor for a new API schema.
+- **Add a model** — edit [`internal/capabilities/data.json`](internal/capabilities/data.json). One JSON entry. No Go required.
+- **Add a discovery provider** — implement the [`Provider` interface](internal/provider/provider.go) and call `provider.Register()` in an `init()` function.
+- **Add an executor** — add a row to `cliTemplates` in [`internal/executor/cli.go`](internal/executor/cli.go) or extend the HTTP executor for a new API schema.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the full guide.
 
