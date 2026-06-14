@@ -241,10 +241,17 @@
       font-family: var(--font-inter);
       line-height: 1.6;
       overflow-x: hidden;
-      background-image: 
+      background-image:
         radial-gradient(circle at 10% 20%, rgba(139, 92, 246, 0.08) 0%, transparent 40%),
         radial-gradient(circle at 90% 80%, rgba(6, 182, 212, 0.08) 0%, transparent 40%);
       background-attachment: fixed;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    /* Keep code, inputs, and textareas selectable so users can copy commands */
+    pre, code, input, textarea, .code-snippet-box, .terminal-output, .tui-input {
+      user-select: text;
+      -webkit-user-select: text;
     }
 
     /* Scrollbar Styling */
@@ -4191,7 +4198,7 @@ export const STATE_FILE = join(resolveHydraData(), 'logs/state.json');`
         { id: null, el: document.querySelectorAll('.stat-num')[0], target: 80, prefix: '~', suffix: '%' },
         { id: null, el: document.querySelectorAll('.stat-num')[1], target: 100, prefix: '', suffix: '%' },
         { id: null, el: document.querySelectorAll('.stat-num')[2], target: 10, prefix: '', suffix: '' },
-        { id: null, el: document.querySelectorAll('.stat-num')[3], target: 0, prefix: '', suffix: '' }, // static — ~1µs shown in HTML
+        // stat[3] (~1µs) is non-integer — left as static HTML, excluded from counter
       ];
       const io = new IntersectionObserver(entries => {
         entries.forEach(entry => {
