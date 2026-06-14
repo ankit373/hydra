@@ -34,11 +34,15 @@ jobs:
           echo "version=${BASE}-edge.${SHA}" >> "$GITHUB_OUTPUT"
           echo "sha=${SHA}" >> "$GITHUB_OUTPUT"
 
-      # Delete existing edge release + tag so we can overwrite it
+      # Delete existing edge release + tag so we can overwrite it.
+      # Must delete local tag too — fetch-depth:0 pulls it into the checkout,
+      # and gh release create refuses to create a tag that exists locally but
+      # not on remote.
       - name: Delete previous edge release
         run: |
           gh release delete edge --yes 2>/dev/null || true
           git push origin :refs/tags/edge 2>/dev/null || true
+          git tag -d edge 2>/dev/null || true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
