@@ -7,7 +7,6 @@ import (
 
 	"github.com/ankit373/hydra/internal/executor"
 	"github.com/ankit373/hydra/internal/provider"
-	"golang.org/x/sync/errgroup"
 )
 
 // executeHead runs one head and returns a completed Attempt.
@@ -47,6 +46,7 @@ func executeHead(ctx context.Context, h provider.Head, prompt string, opts Optio
 	a.Output = resp.Output
 	a.InputTokens = resp.InputTokens
 	a.OutputTokens = resp.OutputTokens
+	a.Truncated = resp.Truncated
 	return a
 }
 
@@ -97,21 +97,24 @@ func runRace(ctx context.Context, heads []provider.Head, prompt string, opts Opt
 
 // runAll fires all heads concurrently and waits for every one to finish.
 // Used by both ModeAll (rank by CapScore) and ModeBest (feed to judge).
+// Uses sync.WaitGroup (not errgroup) — guarantees goroutine drain regardless
+// of errors, preventing zombie agy subprocesses.
 func runAll(ctx context.Context, heads []provider.Head, prompt string, opts Options) []Attempt {
 	attempts := make([]Attempt, len(heads))
 	var mu sync.Mutex
+	var wg sync.WaitGroup
 
-	g, gctx := errgroup.WithContext(ctx)
 	for i, h := range heads {
 		i, h := i, h
-		g.Go(func() error {
-			a := executeHead(gctx, h, prompt, opts)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			a := executeHead(ctx, h, prompt, opts)
 			mu.Lock()
 			attempts[i] = a
 			mu.Unlock()
-			return nil // always nil — errors captured in Attempt
-		})
+		}()
 	}
-	_ = g.Wait()
+	wg.Wait()
 	return attempts
 }

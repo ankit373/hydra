@@ -31,6 +31,7 @@ type Attempt struct {
 	Head         provider.Head
 	Status       HeadStatus
 	Output       string
+	Truncated    bool // true when output was capped by the accumulator
 	InputTokens  int
 	OutputTokens int
 	Duration     time.Duration

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"time"
+	"unicode/utf8"
 
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/dispatch"
@@ -149,12 +150,6 @@ func (s *Swarm) Run(ctx context.Context, prompt string, opts Options) (*SwarmRes
 			winner := &attempts[verdict.WinnerIndex]
 			winner.Rank = 1
 			result.Winner = winner
-			// Apply scores from verdict.
-			for i := range attempts {
-				if i < len(verdict.Scores) {
-					attempts[i].EstCostUSD = attempts[i].EstCostUSD // preserve cost
-				}
-			}
 		} else {
 			// Judge completely failed — fall back to CapScore winner.
 			result.Winner = capScoreWinner(attempts)
@@ -243,8 +238,9 @@ func firstSuccessful(attempts []Attempt) *Attempt {
 }
 
 func truncate(s string, n int) string {
-	if len(s) <= n {
+	if utf8.RuneCountInString(s) <= n {
 		return s
 	}
-	return s[:n] + "…"
+	runes := []rune(s)
+	return string(runes[:n]) + "…"
 }

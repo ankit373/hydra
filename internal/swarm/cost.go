@@ -6,10 +6,10 @@ import (
 	"math"
 	"os"
 	"path/filepath"
-	"time"
 
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/provider"
+	"github.com/ankit373/hydra/internal/rank"
 )
 
 // PricingReader abstracts the per-tier cost lookup so swarm doesn't need to
@@ -30,9 +30,7 @@ func preflightCost(heads []provider.Head, prompt string, pr PricingReader, maxUS
 	estInputTokens := len(prompt) / 4
 	var total float64
 	for _, h := range heads {
-		tier := uiTier(h)
-		// Estimate: same tokens in, half tokens out (conservative).
-		total += pr.EstimateCost(tier, estInputTokens, estInputTokens/2)
+		total += pr.EstimateCost(rank.UITier(h), estInputTokens, estInputTokens/2)
 	}
 
 	total = round6(total)
@@ -49,8 +47,7 @@ func enrichCosts(attempts []Attempt, pr PricingReader) {
 	}
 	for i := range attempts {
 		if attempts[i].Status == StatusOK {
-			tier := uiTier(attempts[i].Head)
-			attempts[i].EstCostUSD = round6(pr.EstimateCost(tier, attempts[i].InputTokens, attempts[i].OutputTokens))
+			attempts[i].EstCostUSD = round6(pr.EstimateCost(rank.UITier(attempts[i].Head), attempts[i].InputTokens, attempts[i].OutputTokens))
 		}
 	}
 }
@@ -76,8 +73,8 @@ func logAttempts(result *SwarmResult, promptPreview string) {
 			continue
 		}
 		entry := map[string]any{
-			"ts":              time.Now().UTC().Format(time.RFC3339),
-			"tier":            uiTier(a.Head),
+			"ts":              a.FinishedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
+			"tier":            rank.UITier(a.Head),
 			"model":           a.Head.Name,
 			"executor":        a.Head.Provider,
 			"pool":            a.Head.Meta["token_pool"],
@@ -102,41 +99,6 @@ func costSource(a Attempt) string {
 		return "real"
 	}
 	return "estimate"
-}
-
-// uiTier converts a Head's CapScore to a 1-10 tier integer.
-// Mirrors the same function in dispatch.go — kept local to avoid a circular import.
-func uiTier(h provider.Head) int {
-	if h.Source == "registry" {
-		if t := h.Meta["tier"]; t != "" {
-			var n int
-			if _, err := fmt.Sscanf(t, "%d", &n); err == nil {
-				return n
-			}
-		}
-	}
-	switch {
-	case h.CapScore >= 95:
-		return 1
-	case h.CapScore >= 90:
-		return 2
-	case h.CapScore >= 85:
-		return 3
-	case h.CapScore >= 80:
-		return 4
-	case h.CapScore >= 78:
-		return 5
-	case h.CapScore >= 72:
-		return 6
-	case h.CapScore >= 70:
-		return 7
-	case h.CapScore >= 65:
-		return 8
-	case h.CapScore >= 60:
-		return 9
-	default:
-		return 10
-	}
 }
 
 func round6(f float64) float64 {

@@ -328,20 +328,15 @@ func printSwarmResult(r *swarm.SwarmResult) {
 	fmt.Printf("  %-28s  %-10s  %7s  %7s  %8s\n", "HEAD", "STATUS", "TIME", "SCORE", "COST")
 	fmt.Println(sep)
 
-	for _, a := range r.Attempts {
+	for i, a := range r.Attempts {
 		statusStr := statusIcon(a.Status) + " " + string(a.Status)
 		timeStr := "-"
 		if a.Duration > 0 {
 			timeStr = fmt.Sprintf("%dms", a.Duration.Milliseconds())
 		}
 		scoreStr := "-"
-		if r.Verdict != nil && a.Status == swarm.StatusOK {
-			for i, att := range r.Attempts {
-				if att.Head.ID == a.Head.ID && i < len(r.Verdict.Scores) {
-					scoreStr = fmt.Sprintf("%d/100", r.Verdict.Scores[i])
-					break
-				}
-			}
+		if r.Verdict != nil && a.Status == swarm.StatusOK && i < len(r.Verdict.Scores) {
+			scoreStr = fmt.Sprintf("%d/100", r.Verdict.Scores[i])
 		}
 		costStr := fmt.Sprintf("$%.4f", a.EstCostUSD)
 		if a.EstCostUSD == 0 {
