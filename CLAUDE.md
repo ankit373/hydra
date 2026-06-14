@@ -12,6 +12,7 @@ Never do work yourself that belongs to a lower tier. Never escalate work to your
 registry/routing.yaml   ← THE ENUM. Change tier assignments here only.
 registry/models.yaml    ← All model definitions, token pools, fallback chains.
 registry/domains.yaml   ← Domain → enum key routing (references routing.yaml).
+registry/pricing.yaml   ← Static tier pricing fallback (used when offline).
 dispatch/route.sh       ← Entry point for all delegated execution.
 dispatch/agy.sh         ← agy subprocess wrapper.
 dispatch/ollama.sh      ← Ollama API wrapper.
@@ -20,6 +21,10 @@ skills/                 ← Claude Code skills (delegate, rubber-duck, escalate)
 .agents/skills/         ← agy TUI slash command skills.
 context/                ← Convention templates to inject into delegated prompts.
 logs/                   ← Dispatch log + state.json (pool exhaustion, claude_pct).
+
+internal/pricing/       ← Live pricing DB (OpenRouter fetch + 24h cache + tier fallback).
+internal/util/          ← Shared utilities (Accumulator, etc).
+internal/swarm/         ← Swarm dispatch — fan-out to multiple heads (race/best/all).
 ```
 
 ---
@@ -171,27 +176,64 @@ dispatch/route.sh --list
 
 ---
 
+## Branching Strategy
+
+Modelled after GitHub CLI + Helm — simple enough for a small team, rigorous enough that nothing untested hits main.
+
+```
+main                ← production only. NEVER pushed directly. Tags live here.
+  ↑ squash PR
+release/v1.x        ← UAT gate. Cut from develop 1-2 days before release.
+  ↑ squash PR         Bug fixes land here only. Merged → main AND back → develop.
+develop             ← integration. All features land here. Edge builds fire here.
+  ↑ squash PR
+feature/#{n}-slug   ← short-lived. Always branch from develop.
+fix/#{n}-slug
+chore/#{n}-slug
+
+hotfix/#{n}-slug    ← branches from main tag. Merged → main, cherry-picked → develop.
+```
+
+### Branch rules (hard rules, no exceptions)
+
+| Branch | Who pushes | Version bump? | CI publishes |
+|---|---|---|---|
+| `main` | release-please PR only | **YES** — semver tag | stable release + Homebrew |
+| `release/v*` | cut from develop | no | RC pre-release (`v1.2.0-rc.1`) |
+| `develop` | feature PR merges | no | edge pre-release (overwritten) |
+| `feature/*` `fix/*` `chore/*` | you | no | nothing |
+| `hotfix/*` | you | no | nothing (merges to main trigger release) |
+
+---
+
 ## Step 1 — Create a GitHub Issue FIRST
 
-Before touching any code, create an issue:
+Before touching any code, create an issue and add it to the board:
 
 ```bash
 # Feature
-gh issue create \
+ISSUE_URL=$(gh issue create \
   --title "feat: <short description>" \
   --body "## Problem\n\n## Solution\n\n## Acceptance Criteria\n- [ ] " \
   --label "enhancement" \
-  --assignee "@me"
+  --assignee "@me")
+ISSUE=$(echo "$ISSUE_URL" | grep -oE '[0-9]+$')
 
 # Bug
-gh issue create \
+ISSUE_URL=$(gh issue create \
   --title "fix: <short description>" \
   --body "## Steps to Reproduce\n\n## Expected\n\n## Actual\n\n## Fix" \
   --label "bug" \
-  --assignee "@me"
-```
+  --assignee "@me")
+ISSUE=$(echo "$ISSUE_URL" | grep -oE '[0-9]+$')
 
-Capture the issue number (e.g. `#43`). Everything that follows references it.
+# Add to project board and move to Todo
+gh project item-add 2 --owner ankit373 --url "$ISSUE_URL"
+ITEM_ID=$(gh project item-list 2 --owner ankit373 --format json --limit 100 \
+  | python3 -c "import json,sys; [print(i['id']) for i in json.load(sys.stdin).get('items',[]) if '/${ISSUE}' in str(i.get('content',{}).get('url',''))]")
+gh project item-edit --project-id PVT_kwHOAL1qLc4BZbZZ --id "$ITEM_ID" \
+  --field-id PVTSSF_lAHOAL1qLc4BZbZZzhUaGlE --single-select-option-id f75ad846
+```
 
 ---
 
@@ -207,9 +249,17 @@ Branch naming is strict — always include the issue number:
 | Chore / deps | `chore/#{issue}-short-desc` | `chore/46-bump-bubbletea` |
 
 ```bash
-# Always branch from develop (except hotfix → branch from main)
+# Features/fixes — always branch from develop
 git checkout develop && git pull origin develop
 git checkout -b feature/43-hydra-stats
+
+# Hotfixes — branch from the last production tag
+git checkout main && git pull origin main
+git checkout -b hotfix/45-nil-panic
+
+# Move issue to In Progress
+gh project item-edit --project-id PVT_kwHOAL1qLc4BZbZZ --id "$ITEM_ID" \
+  --field-id PVTSSF_lAHOAL1qLc4BZbZZzhUaGlE --single-select-option-id 47fc9ee4
 ```
 
 ---
@@ -230,7 +280,6 @@ Every commit must follow the conventional commit spec.
 | `docs:`, `test:`, `ci:`, `style:` | no bump, hidden in changelog | — |
 
 ```bash
-# Good commit messages
 git commit -m "feat(dispatch): add --dry-run flag to preview routing decisions"
 git commit -m "fix(update): skip check when HYDRA_NO_UPDATE_CHECK is set"
 git commit -m "chore(deps): bump golang.org/x/sys to v0.25.0"
@@ -258,99 +307,209 @@ EOF
 )" \
   --base develop \
   --draft=false
+
+# Move issue to In Review
+gh project item-edit --project-id PVT_kwHOAL1qLc4BZbZZ --id "$ITEM_ID" \
+  --field-id PVTSSF_lAHOAL1qLc4BZbZZzhUaGlE --single-select-option-id 1490e846
 ```
 
 **PR rules:**
 - Title must be a valid conventional commit (e.g. `feat(scope): description`)
 - Body must contain `Closes #<issue>` — auto-links and closes the issue on merge
-- Target branch is `develop` (not `main`) for all feature/fix work
-- Hotfixes only target `main`
+- All features/fixes target `develop`. Hotfixes target `main`.
+- Never open a PR directly to `main` from a feature branch.
 
 ---
 
 ## Step 5 — Review & Merge
 
 - PRs to `develop` require 0 approvals (self-merge allowed) but must pass CI
-- PRs to `main` require 1 approval
-- Merge strategy: **Squash and merge** for features/fixes (clean linear history)
-- Never force-push to `develop` or `main`
+- PRs to `main` (release branch merges, hotfixes) require 1 approval
+- Merge strategy: **Squash and merge** everywhere — clean linear history
+- Never force-push to `develop`, `release/*`, or `main`
+
+```bash
+# After merge — move issue to Done
+gh project item-edit --project-id PVT_kwHOAL1qLc4BZbZZ --id "$ITEM_ID" \
+  --field-id PVTSSF_lAHOAL1qLc4BZbZZzhUaGlE --single-select-option-id 98236657
+```
 
 ---
 
 ## Step 6 — Release Cycle
 
-### Automatic (normal flow)
-`release-please` watches `main` and does this automatically:
+### Normal release flow (feature release)
 
 ```
-Commits land on develop
+Features merge to develop (conventional commits)
+        ↓  (accumulate until ready)
+Cut release branch: git checkout -b release/v1.2.0 develop
+        ↓  (push → rc.yml fires → publishes v1.2.0-rc.1 pre-release)
+UAT testing on release/v1.2.0
+Bug fixes committed directly to release/v1.2.0
+        ↓  (each push → rc.yml publishes v1.2.0-rc.2, rc.3 …)
+Sign-off ✓
         ↓
-PR merged to main (conventional commits)
+PR: release/v1.2.0 → main  (squash merge)
         ↓
-release-please opens "Release PR" automatically
-(bumps version in .release-please-manifest.json,
- updates CHANGELOG.md with grouped commits)
+release-please opens Release PR on main (bumps version, updates CHANGELOG)
         ↓
-Review and merge the Release PR
+Merge Release PR → tag v1.2.0 created → release.yml fires
         ↓
-Tag created (e.g. v1.2.0) → release.yml fires
+GoReleaser builds all platforms, publishes stable release, updates Homebrew tap
         ↓
-GoReleaser builds all platforms, publishes GitHub Release,
-updates Homebrew tap (ankit373/homebrew-hydra)
+Cherry-pick any release-branch fixes back to develop
 ```
 
-### Manual release (emergency / hotfix)
+### Cutting a release branch
+
 ```bash
-# Cut a release manually — only when release-please can't
-git checkout main && git pull
-git tag v1.2.1 -m "hotfix: fix nil panic in dispatch"
-git push origin v1.2.1
-# → release.yml fires automatically
+git checkout develop && git pull origin develop
+git checkout -b release/v1.2.0
+git push -u origin release/v1.2.0
+# → rc.yml fires automatically, publishes v1.2.0-rc.1
+```
+
+### Hotfix flow (production bug)
+
+```bash
+# Branch from the last production tag
+git checkout main && git pull origin main
+git checkout -b hotfix/45-nil-panic
+
+# Fix, commit, push
+git commit -m "fix(dispatch): nil panic when prompt is empty"
+git push -u origin hotfix/45-nil-panic
+
+# PR → main (requires 1 approval)
+gh pr create --base main --title "fix(dispatch): nil panic when prompt is empty"
+
+# After merge → release-please picks it up → patch release (v1.2.1)
+# Cherry-pick back to develop
+git checkout develop && git cherry-pick <commit-sha>
+git push origin develop
 ```
 
 ### Release channels
-| Channel | Branch | Tag | Install |
+
+| Channel | Branch | Tag pattern | Install |
 |---|---|---|---|
-| **stable** | `main` (tagged) | `v1.2.0` | `brew install hydra` |
-| **beta/rc** | `release/v1.2.0` | `v1.2.0-rc.1` | pre-release on GitHub |
+| **stable** | `main` (tagged by release-please) | `v1.2.0` | `brew install hydra` |
+| **RC / UAT** | `release/v*` | `v1.2.0-rc.1` | GitHub pre-release |
 | **edge** | `develop` | `edge` (overwritten) | GitHub pre-release |
+
+### Version bump rules (CRITICAL)
+- **Only `main` ever gets a semver tag** — release-please enforces this
+- `release/*` and `develop` get pre-release tags only (RC / edge) — no semver bump
+- Never manually bump version numbers — release-please reads conventional commits
+- `BREAKING CHANGE:` in commit body → major bump; `feat:` → minor; `fix:`/`perf:` → patch
 
 ---
 
-## Step 7 — GitHub Board (always keep updated)
+## Step 7 — GitHub Project Board (MANDATORY — every state change)
 
-Every issue must move through the board as work progresses.
+Board: **Project #2 "Hydra Roadmap"** — `PVT_kwHOAL1qLc4BZbZZ`
+Field: **Status** — `PVTSSF_lAHOAL1qLc4BZbZZzhUaGlE`
 
+| Column | Option ID | When to move |
+|---|---|---|
+| Todo | `f75ad846` | Issue created (new work planned) |
+| In Progress | `47fc9ee4` | Branch created / coding started |
+| In Review | `1490e846` | PR opened |
+| Deploy | `bcafa7ca` | PR merged, waiting for release tag |
+| Done | `98236657` | Released / closed |
+
+**This is not optional.** Every issue must be moved at every transition. Do not skip steps.
+
+### How to move an issue
+
+First, get the project item ID for the issue:
 ```bash
-# Move issue to "In Progress" when you start
-gh issue edit 43 --add-label "in-progress"
-
-# Move to "In Review" when PR is open (auto via PR link)
-
-# "Done" happens automatically when PR with "Closes #43" merges
+# Find item ID for issue #43
+ITEM_ID=$(gh project item-list 2 --owner ankit373 --format json --limit 100 \
+  | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+for i in d.get('items',[]):
+    if '#43' in str(i.get('content',{}).get('url','')):
+        print(i['id'])
+" 2>/dev/null)
+# OR look it up directly:
+gh project item-list 2 --owner ankit373 --format json --limit 100 | python3 -c \
+  "import json,sys; [print(i['id'], i.get('status',''), i.get('title','')[:60]) for i in json.load(sys.stdin).get('items',[])]"
 ```
 
-Board columns: **Backlog → Todo → In Progress → In Review → Done**
+Then move it:
+```bash
+# Move to Todo (issue created)
+gh project item-edit --project-id PVT_kwHOAL1qLc4BZbZZ \
+  --id <ITEM_ID> \
+  --field-id PVTSSF_lAHOAL1qLc4BZbZZzhUaGlE \
+  --single-select-option-id f75ad846
+
+# Move to In Progress (branch created, coding started)
+gh project item-edit --project-id PVT_kwHOAL1qLc4BZbZZ \
+  --id <ITEM_ID> \
+  --field-id PVTSSF_lAHOAL1qLc4BZbZZzhUaGlE \
+  --single-select-option-id 47fc9ee4
+
+# Move to In Review (PR opened)
+gh project item-edit --project-id PVT_kwHOAL1qLc4BZbZZ \
+  --id <ITEM_ID> \
+  --field-id PVTSSF_lAHOAL1qLc4BZbZZzhUaGlE \
+  --single-select-option-id 1490e846
+
+# Move to Done (merged and closed)
+gh project item-edit --project-id PVT_kwHOAL1qLc4BZbZZ \
+  --id <ITEM_ID> \
+  --field-id PVTSSF_lAHOAL1qLc4BZbZZzhUaGlE \
+  --single-select-option-id 98236657
+```
+
+### Add new issues to the board automatically
+```bash
+# After gh issue create, add it to the project and set Todo
+ISSUE_URL=$(gh issue create ... | tail -1)
+gh project item-add 2 --owner ankit373 --url "$ISSUE_URL"
+# then move to Todo using item-edit as above
+```
 
 ---
 
 ## Quick Start — Full Flow in One Go
 
 ```bash
-# 1. Create issue
-ISSUE=$(gh issue create --title "feat: hydra stats" --label enhancement --assignee "@me" --body "Add cost stats subcommand" | grep -oE '[0-9]+$')
+# 1. Create issue + add to board + move to Todo
+ISSUE_URL=$(gh issue create --title "feat: hydra stats" --label enhancement --assignee "@me" \
+  --body "Add cost stats subcommand")
+ISSUE=$(echo "$ISSUE_URL" | grep -oE '[0-9]+$')
+gh project item-add 2 --owner ankit373 --url "$ISSUE_URL"
+ITEM_ID=$(gh project item-list 2 --owner ankit373 --format json --limit 100 \
+  | python3 -c "import json,sys; [print(i['id']) for i in json.load(sys.stdin).get('items',[]) if '/${ISSUE}' in str(i.get('content',{}).get('url',''))]")
+# Move → Todo
+gh project item-edit --project-id PVT_kwHOAL1qLc4BZbZZ --id "$ITEM_ID" \
+  --field-id PVTSSF_lAHOAL1qLc4BZbZZzhUaGlE --single-select-option-id f75ad846
 
-# 2. Create branch
+# 2. Create branch + move to In Progress
 git checkout develop && git pull origin develop
 git checkout -b feature/${ISSUE}-hydra-stats
+gh project item-edit --project-id PVT_kwHOAL1qLc4BZbZZ --id "$ITEM_ID" \
+  --field-id PVTSSF_lAHOAL1qLc4BZbZZzhUaGlE --single-select-option-id 47fc9ee4
 
 # 3. Write code, commit with conventional message
-git add . && git commit -m "feat(stats): add hydra stats subcommand (#${ISSUE})"
+git add internal/stats/ cmd/hydra/main.go
+git commit -m "feat(stats): add hydra stats subcommand (#${ISSUE})"
 
-# 4. Push and open PR
+# 4. Push and open PR + move to In Review
 git push -u origin HEAD
 gh pr create --title "feat(stats): add hydra stats subcommand" \
   --body "Closes #${ISSUE}" --base develop
+gh project item-edit --project-id PVT_kwHOAL1qLc4BZbZZ --id "$ITEM_ID" \
+  --field-id PVTSSF_lAHOAL1qLc4BZbZZzhUaGlE --single-select-option-id 1490e846
+
+# 5. After merge — move to Done
+gh project item-edit --project-id PVT_kwHOAL1qLc4BZbZZ --id "$ITEM_ID" \
+  --field-id PVTSSF_lAHOAL1qLc4BZbZZzhUaGlE --single-select-option-id 98236657
 ```
 
 ---
@@ -384,3 +543,82 @@ internal/update/update.go     ← startup update checker (24h cache)
 .github/workflows/edge.yml    ← fires on develop push → edge build
 .github/workflows/release-please.yml ← fires on main push → release PR
 ```
+
+---
+
+## Go Control Plane — Package Map
+
+All Go source lives under `cmd/` and `internal/`. Key packages:
+
+| Package | Purpose |
+|---|---|
+| `internal/dispatch` | Core router: policy → head selection → executor → fallback |
+| `internal/executor` | Per-provider execution: agy, ollama, HTTP (OpenAI-compat), CLI |
+| `internal/provider` | Head discovery plugins (agy registry, env, port, CLI) |
+| `internal/probe` | Machine scan — finds all live heads at startup |
+| `internal/swarm` | Fan-out dispatch: race / best (LLM judge) / all (CapScore rank) |
+| `internal/pricing` | Live cost DB: OpenRouter fetch + 24h cache + tier YAML fallback |
+| `internal/util` | Shared utilities: `Accumulator` (bounded io.Writer, 33 MB cap) |
+| `internal/cost` | Reads `cost.jsonl`, produces spend summaries |
+| `internal/policy` | Allow/deny rules (PII local-only, etc.) |
+| `internal/rank` | CapScore ranking helpers |
+| `internal/config` | Hydra config load/save (`~/.config/hydra/`) |
+| `internal/company` | Playbook run state machine (multi-stage AI workflows) |
+| `internal/tui` | Bubble Tea TUI: init wizard, install flow |
+| `internal/review` | Code review subcommand |
+| `internal/editor` | Editor integration |
+
+### Key invariants
+- `internal/util.Accumulator` **must** be used for all subprocess stdout/stderr capture — never `bytes.Buffer` for unbounded output.
+- `internal/pricing.DB` is the single source of truth for all cost estimation — never hardcode $/token values.
+- `internal/swarm` uses `sync.WaitGroup` (not errgroup) for race mode to guarantee goroutine drain and prevent zombie agy subprocesses.
+- All executors must set `Response.Truncated = true` when output was capped.
+
+### Pricing flow
+```
+pricing.Load()
+  → readCache()           # ~/.config/hydra/pricing_cache.json (24h TTL)
+  → fetchFromOpenRouter() # background refresh if stale
+  → loadFallbackTiers()   # registry/pricing.yaml (always loaded)
+```
+`HYDRA_PRICING_TTL_HOURS` overrides the 24h TTL.
+`hydra pricing refresh` forces a synchronous fetch.
+`hydra pricing list [filter] [--json]` shows all known models.
+
+### Swarm dispatch
+```
+hydra dispatch --swarm --swarm-mode race|best|all "<prompt>"
+  --swarm-heads head1,head2    # explicit head IDs (bypasses tier)
+  --swarm-max-heads 5          # cap fan-out
+  --swarm-max-cost 0.05        # pre-flight cost guard in USD
+  --swarm-judge-tier 1         # which tier judges in 'best' mode
+```
+
+---
+
+## Open Backlog (issues to build next)
+
+Track via `gh issue list`. Key upcoming features:
+
+| # | Feature | Status |
+|---|---|---|
+| #11 | Swarm dispatch (race/best/all) | PR #51 open |
+| #52 | Dynamic pricing (OpenRouter) | PR #61 open |
+| #53 | Lifecycle hook system (PreDispatch/PostDispatch events) | open |
+| #54 | `hydra stats` — session cost rollup | open |
+| #55 | Programmatic token budget / claude_pct auto-tracking | open |
+| #56 | TUI component library (Box/ScrollBox/ProgressBar/Spinner) | open |
+| #57 | Context window tracker (auto-measure claude_pct from API responses) | open |
+| #58 | `EndTruncatingAccumulator` | ✅ merged |
+| #59 | Swarm head retry + reconnection (backoff on 429/503) | open |
+
+### claude-code patterns being ported to Hydra
+These were extracted from the Claude Code source (`/Users/ankitjha/claude-code/src`) and filed as issues above:
+- **Cost tracking**: session rollup pattern from `cost-tracker.ts` → #54
+- **Hook system**: 26-event lifecycle taxonomy from `agentSdkTypes.ts` → #53
+- **Token budget enforcement**: `tokenBudget.ts` threshold logic → #55
+- **TUI components**: Ink `Box/ScrollBox/ProgressBar/Spinner` patterns → #56
+- **Context window tracking**: `tokens.ts` + `context.ts` measurement → #57
+- **Output accumulator**: `EndTruncatingAccumulator` from `stringUtils.ts` → #58 ✅
+- **Swarm reconnection**: `swarm/reconnection.ts` backoff patterns → #59
+- **Dynamic pricing**: OpenRouter API (not `modelCost.ts` which is Anthropic-only) → #52

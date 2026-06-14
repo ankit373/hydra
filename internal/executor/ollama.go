@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -12,6 +13,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/ankit373/hydra/internal/util"
 )
 
 // OllamaExecutor calls the Ollama native /api/generate endpoint.
@@ -84,8 +87,13 @@ func (e *OllamaExecutor) Execute(ctx context.Context, req Request) (*Response, e
 		return nil, httpStatusError(req.Head.ID, resp)
 	}
 
+	// Safety net: cap response body so a runaway/adversarial server can't OOM us.
+	// If the body exceeds the limit the JSON decoder returns an error, which is
+	// the right outcome — Ollama should never emit a 33 MB JSON response.
+	limited := io.LimitReader(resp.Body, int64(util.DefaultMaxBytes)+1)
+
 	var out ollamaGenerateResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.NewDecoder(limited).Decode(&out); err != nil {
 		return nil, fmt.Errorf("ollama exec %s: decode: %w", req.Head.ID, err)
 	}
 	if out.Response == "" {
