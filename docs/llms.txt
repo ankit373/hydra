@@ -1,0 +1,59 @@
+# Hydra — Multi-Model AI Orchestration CLI
+
+> Hydra is an open source CLI written in Go that automatically routes developer tasks to the right AI model. It reduces LLM API costs by 70-85% by using cheap or free models for simple tasks (DTOs, CRUD, boilerplate) and reserving frontier models for work that actually needs them (architecture, complex reasoning).
+
+## What It Does
+
+- **10-tier routing**: Claude Opus (tier 1, complex reasoning) down to Qwen3 via Ollama (tier 10, free local)
+- **~1µs routing overhead**: the Go routing engine (policy eval + head selection + budget check) adds ~1,130 ns per dispatch — benchmarked on Apple M1 via `go test -bench=BenchmarkRoutingPath`
+- **Swarm dispatch**: fan a single prompt to multiple models simultaneously — race (fastest), best (LLM-judged quality), or all (aggregate)
+- **Token budget enforcement**: 6 pressure modes (Normal → Emergency) auto-downgrade tiers as context window fills
+- **Cost analytics**: `hydra stats` shows spend broken down by model, tier, and day
+- **Dynamic pricing**: live rates from OpenRouter API with 24h cache and static YAML offline fallback
+- **A2A handoff**: structured JSON context passed between agents across tasks
+
+## Who It's For
+
+Developers who use Claude Code, Cursor, Windsurf, or any AI coding assistant and want to reduce API costs without changing their workflow. Also useful for anyone building multi-model AI pipelines in Go.
+
+## Installation
+
+```bash
+brew tap ankit373/hydra && brew install hydra
+```
+
+Or build from source (requires Go 1.22+):
+
+```bash
+git clone https://github.com/ankit373/hydra && cd hydra && go build ./cmd/hydra
+```
+
+## Pricing
+
+**Free and open source — MIT License.** No subscription. Bring your own API keys.
+
+You pay the underlying model providers directly:
+- Claude Opus: ~$15/M output tokens (Anthropic)
+- Gemini 2.0 Flash: ~$0.075/M input (Google)
+- Qwen local via Ollama: $0
+
+Typical savings: 75-85% vs routing everything through Claude. Run `hydra pricing list` for live rates.
+
+## Key Links
+
+- Homepage: https://hydra.uvansa.com/
+- Source code: https://github.com/ankit373/hydra
+- Installation: https://hydra.uvansa.com/#get-started
+- Model tier reference: https://hydra.uvansa.com/#tiers
+- What's new in v1.0: https://hydra.uvansa.com/#features
+- Cost comparison: https://hydra.uvansa.com/#why-hydra
+- FAQ: https://hydra.uvansa.com/#faq
+- Changelog: https://github.com/ankit373/hydra/blob/main/CHANGELOG.md
+
+## License
+
+MIT — https://github.com/ankit373/hydra/blob/main/LICENSE
+
+## Author
+
+Ankit Jha — https://github.com/ankit373

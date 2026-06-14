@@ -108,6 +108,23 @@ jq '.claude_pct = 52' logs/state.json > logs/state.json.tmp && mv logs/state.jso
 
 ---
 
+## Code Quality Standard — Non-Negotiable
+
+**Everything written here must be industry-best. No exceptions. No "good enough".**
+
+When reviewing or producing code:
+- **Be brutally honest.** If it's wrong, say it's wrong. If it's mediocre, say it's mediocre. Do not soften findings to protect feelings.
+- **Run the race detector.** `go test -race ./...`. If it fails, it ships nothing.
+- **Never ship duplicate logic.** Three copies of the same threshold table is a bug, not an inconvenience.
+- **Dead code is a lie.** A branch that can never execute is a statement about the code that is false. Delete it.
+- **User-visible output must be correct.** `used/1000` truncating to zero is broken, not "close enough."
+- **Exported symbols must be used.** An exported function with no callers is noise that misleads the next engineer.
+- **If the race detector, linter, or vet flag it — fix it before asking for review.** Not after.
+
+The bar is: would a senior engineer at a top systems shop approve this without comment? If not, keep working.
+
+---
+
 ## Karpathy Guidelines (always apply)
 - Think before coding. State assumptions. Push back when a simpler approach exists.
 - Minimum code. No speculative features. No abstractions for single-use code.
@@ -568,6 +585,37 @@ internal/update/update.go     ← startup update checker (24h cache)
 .github/workflows/edge.yml    ← fires on develop push → edge build
 .github/workflows/release-please.yml ← fires on main push → release PR
 ```
+
+---
+
+## Docs Site — Keep These Files in Sync (MANDATORY)
+
+The GitHub Pages site at `hydra.uvansa.com` serves static files from `docs/`. Several of these are **manually maintained** — they do not update themselves. Whenever a relevant change lands, update all affected files in the same commit or PR.
+
+```
+docs/index.html    ← landing page (features, stats, CLI tab, cost table)
+docs/llms.txt      ← AI context file (ChatGPT/Claude/Perplexity read this)
+docs/pricing.md    ← machine-readable pricing for AI agents
+docs/sitemap.xml   ← lastmod date + any new public URLs
+docs/robots.txt    ← AI crawler rules (only change if bot policy changes)
+```
+
+### What triggers an update
+
+| Change | Files to update |
+|---|---|
+| New CLI subcommand (`hydra foo`) | `index.html` (CLI tab), `llms.txt` (What It Does) |
+| New feature shipped | `index.html` (What's New section), `llms.txt` |
+| Version bump (e.g. 1.0 → 1.1) | `index.html` (badge, structured data), `llms.txt`, `sitemap.xml` lastmod |
+| Pricing change (model rates) | `pricing.md`, cost comparison table in `index.html`, `llms.txt` |
+| New public page or anchor | `sitemap.xml` |
+| AI crawler policy change | `robots.txt` |
+
+### Rules
+- `llms.txt` must always reflect what `hydra --help` and `hydra stats` actually do — no aspirational features
+- `pricing.md` costs must match `hydra pricing list` live output — never hardcode stale rates without noting the date
+- `sitemap.xml` `lastmod` must be updated whenever `index.html` changes
+- Do not add features to `llms.txt` that haven't shipped to `main` yet
 
 ---
 

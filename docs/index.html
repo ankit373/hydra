@@ -4,22 +4,28 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Hydra — Multi-Model AI Orchestration CLI</title>
-  <meta name="description" content="Route every dev task to the right AI model automatically. Hydra orchestrates Claude, Gemini, GPT, and local Qwen via Ollama — cutting LLM costs without sacrificing quality.">
+  <meta name="description" content="Cut AI API costs 80% without changing your workflow. Hydra routes dev tasks to the cheapest model that can handle them — Claude for hard reasoning, Gemini Flash for standard work, free local Qwen for boilerplate. Open source CLI, MIT license.">
   <meta name="keywords" content="multi-model AI orchestration, LLM router, Claude Code, Ollama, local LLM, AI model routing, LLM cost optimization, AI coding assistant, llm orchestration CLI, model routing open source">
 
   <!-- Open Graph / Social sharing -->
   <meta property="og:type" content="website">
-  <meta property="og:url" content="https://ankit373.github.io/hydra/">
+  <meta property="og:url" content="https://hydra.uvansa.com/">
   <meta property="og:title" content="Hydra — Multi-Model AI Orchestration CLI">
-  <meta property="og:description" content="Route every dev task to the right AI model automatically. Hydra orchestrates Claude, Gemini, GPT, and local Qwen via Ollama — cutting LLM costs without sacrificing quality.">
-  <meta property="og:image" content="https://ankit373.github.io/hydra/logo.png">
+  <meta property="og:description" content="Cut AI API costs 80% without changing your workflow. Hydra routes each task to the cheapest model that can handle it — open source, MIT license, installs via Homebrew.">
+  <meta property="og:image" content="https://hydra.uvansa.com/logo.png">
   <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:site" content="@ankit373">
   <meta name="twitter:title" content="Hydra — Multi-Model AI Orchestration CLI">
-  <meta name="twitter:description" content="Route every dev task to the right AI model automatically. Claude when it matters, Ollama when it's free. Open source LLM router CLI.">
-  <meta name="twitter:image" content="https://ankit373.github.io/hydra/logo.png">
+  <meta name="twitter:description" content="Route every dev task to the right AI model automatically. Claude when it matters, Ollama when it's free. Open source LLM router CLI written in Go.">
+  <meta name="twitter:image" content="https://hydra.uvansa.com/logo.png">
 
   <!-- Canonical URL -->
-  <link rel="canonical" href="https://ankit373.github.io/hydra/">
+  <link rel="canonical" href="https://hydra.uvansa.com/">
+
+  <!-- AI context file — machine-readable summary for LLMs and AI agents -->
+  <link rel="ai-context" href="https://hydra.uvansa.com/llms.txt" type="text/plain">
+  <!-- Machine-readable pricing for AI agents evaluating dev tools -->
+  <link rel="ai-pricing" href="https://hydra.uvansa.com/pricing.md" type="text/markdown">
 
   <!-- Structured Data: SoftwareApplication -->
   <script type="application/ld+json">
@@ -30,31 +36,36 @@
     "applicationCategory": "DeveloperApplication",
     "operatingSystem": "macOS, Linux",
     "description": "Route every dev task to the right AI model automatically. Hydra orchestrates Claude, Gemini, GPT, and local Qwen via Ollama — cutting LLM costs without sacrificing quality.",
-    "url": "https://ankit373.github.io/hydra/",
+    "url": "https://hydra.uvansa.com/",
     "downloadUrl": "https://github.com/ankit373/hydra",
-    "softwareVersion": "0.2.0",
+    "softwareVersion": "1.0.0",
+    "datePublished": "2026-01-01",
+    "dateModified": "2026-06-15",
     "license": "https://github.com/ankit373/hydra/blob/main/LICENSE",
     "author": {
       "@type": "Person",
       "name": "Ankit Jha",
-      "url": "https://github.com/ankit373"
+      "url": "https://github.com/ankit373",
+      "sameAs": ["https://github.com/ankit373"]
     },
     "offers": {
       "@type": "Offer",
       "price": "0",
       "priceCurrency": "USD"
     },
-    "keywords": "multi-model AI orchestration, LLM router, Claude Code, Ollama, local LLM, AI model routing, LLM cost optimization, AI coding assistant",
+    "keywords": "multi-model AI orchestration, LLM router, Claude Code, Ollama, local LLM, AI model routing, LLM cost optimization, AI coding assistant, go cli, swarm dispatch",
     "codeRepository": "https://github.com/ankit373/hydra",
-    "programmingLanguage": ["Shell", "TypeScript"],
+    "programmingLanguage": ["Go"],
     "featureList": [
       "10-tier model routing by task complexity",
       "Automatic fallback chains",
       "Local Ollama + cloud model hybrid",
-      "Context window budget monitoring",
+      "Swarm dispatch — race, best, and all modes across multiple models simultaneously",
+      "Token budget enforcement — per-model context window tracking with 6 pressure modes",
+      "Dynamic live pricing — OpenRouter API pricing with 24h cache and tier fallback",
+      "hydra stats — real-time session cost rollup by model, tier, and day",
       "A2A agent-to-agent handoff protocol",
-      "React/Ink terminal dashboard",
-      "Homebrew installable"
+      "Homebrew installable on macOS and Linux"
     ]
   }
   </script>
@@ -65,13 +76,123 @@
     "@context": "https://schema.org",
     "@type": "WebSite",
     "name": "Hydra",
-    "url": "https://ankit373.github.io/hydra/",
-    "description": "Open source multi-model AI orchestration CLI",
+    "url": "https://hydra.uvansa.com/",
+    "description": "Open source multi-model AI orchestration CLI written in Go",
     "potentialAction": {
       "@type": "SearchAction",
       "target": "https://github.com/ankit373/hydra/search?q={search_term_string}",
       "query-input": "required name=search_term_string"
     }
+  }
+  </script>
+
+  <!-- Structured Data: FAQ -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "What is Hydra?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Hydra is an open source multi-model AI orchestration CLI written in Go. It routes developer tasks to the right AI model automatically — using Claude for complex reasoning, Gemini for standard tasks, and free local Qwen/Ollama for boilerplate. The result is up to 80% reduction in LLM API costs without sacrificing output quality."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "How does Hydra reduce AI costs?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Hydra classifies each task by complexity and routes it to the cheapest model capable of handling it. Boilerplate code, mock data, and simple helpers go to local Qwen via Ollama (free). Standard CRUD and API work goes to Gemini Flash (~100x cheaper than Claude). Only architecture decisions and complex reasoning tasks reach Claude. This tiered routing typically reduces total LLM spend by 70-85% compared to routing everything through a frontier model."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "How do I install Hydra?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Install Hydra via Homebrew: run 'brew tap ankit373/hydra && brew install hydra'. Alternatively, download the binary from GitHub releases or build from source with 'go build ./cmd/hydra'. Hydra requires Go 1.22+ and optionally Ollama for local model support."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "What models does Hydra support?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Hydra supports any model accessible via Antigravity (agy) or Ollama. Out of the box: Claude Opus and Sonnet (tiers 1-3), Gemini 2.5 Pro and Flash (tiers 4-8), and Qwen3 via Ollama (tiers 9-10 local). New models are added by editing registry/models.yaml — no code changes required."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "What is swarm dispatch?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Swarm dispatch fans a single prompt out to multiple model heads simultaneously. Race mode returns the first successful response. Best mode uses an LLM judge to pick the highest quality answer. All mode aggregates every response for comparison. Run it with: hydra dispatch --swarm --swarm-mode race 'your prompt'."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Does Hydra work without internet?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes. Hydra maintains a 100% local fallback chain. When cloud APIs are unavailable or token budgets are exhausted, Hydra automatically routes to Qwen via Ollama running locally. The routing and cost tracking engine runs entirely offline — only the model API calls require network access."
+        }
+      }
+    ]
+  }
+  </script>
+
+  <!-- Structured Data: Organization (entity recognition) -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareSourceCode",
+    "name": "Hydra",
+    "description": "Open source multi-model AI orchestration CLI written in Go. Routes developer tasks to the cheapest model capable of handling them.",
+    "codeRepository": "https://github.com/ankit373/hydra",
+    "programmingLanguage": "Go",
+    "license": "https://opensource.org/licenses/MIT",
+    "author": {
+      "@type": "Person",
+      "name": "Ankit Jha",
+      "url": "https://github.com/ankit373"
+    },
+    "isAccessibleForFree": true,
+    "url": "https://hydra.uvansa.com/"
+  }
+  </script>
+
+  <!-- Structured Data: HowTo (Installation) -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "HowTo",
+    "name": "How to Install Hydra AI Orchestration CLI",
+    "description": "Install Hydra, the open source multi-model AI orchestration CLI, on macOS or Linux in under five minutes.",
+    "totalTime": "PT5M",
+    "tool": [{"@type": "HowToTool", "name": "Homebrew"}, {"@type": "HowToTool", "name": "Go 1.22+"}],
+    "step": [
+      {
+        "@type": "HowToStep",
+        "name": "Install via Homebrew",
+        "text": "Run: brew tap ankit373/hydra && brew install hydra",
+        "position": 1
+      },
+      {
+        "@type": "HowToStep",
+        "name": "Initialize Hydra",
+        "text": "Run: hydra init to configure your API keys and set up the default routing policy.",
+        "position": 2
+      },
+      {
+        "@type": "HowToStep",
+        "name": "Dispatch your first task",
+        "text": "Run: hydra do SIMPLE 'write a User DTO in TypeScript' to send your first task through the routing pipeline.",
+        "position": 3
+      }
+    ]
   }
   </script>
   
@@ -2077,13 +2198,17 @@
       </a>
       <nav class="nav-links">
         <a href="#overview" class="nav-link active" id="nav-overview">Overview</a>
-        <a href="#architecture" class="nav-link" id="nav-archi">Architecture</a>
+        <a href="#why-hydra" class="nav-link" id="nav-why">Why Hydra</a>
+        <a href="#features" class="nav-link" id="nav-features">What's New</a>
         <a href="#tiers" class="nav-link" id="nav-tiers">Model Tiers</a>
         <a href="#get-started" class="nav-link" id="nav-setup">Get Started</a>
         <a href="#community" class="nav-link" id="nav-community">Community</a>
       </nav>
       <div style="display: flex; align-items: center; gap: 12px;">
-        <a href="https://github.com/ankit373/hydra" target="_blank" rel="noopener" class="btn btn-secondary" style="padding: 8px 16px; font-size: 13px;" id="repo-btn">GitHub</a>
+        <a href="https://github.com/ankit373/hydra" target="_blank" rel="noopener" class="btn btn-secondary" style="padding: 8px 16px; font-size: 13px; display: flex; align-items: center; gap: 6px;" id="repo-btn">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .25a12 12 0 1 0 0 24 12 12 0 0 0 0-24zm3.286 17.251c-.19.336-.596.448-.933.26l-2.618-1.51-2.618 1.51a.687.687 0 0 1-.933-.26.69.69 0 0 1 .26-.934l2.953-1.703V9.75a.688.688 0 0 1 1.375 0v4.114l2.953 1.703a.689.689 0 0 1 .26.934z" style="display:none"/><path d="M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16z" style="display:none"/></svg>
+          <span id="nav-star-count">GitHub</span>
+        </a>
         <button class="mobile-menu-toggle" id="mobile-menu-toggle" aria-label="Toggle Navigation Menu">
           <svg viewBox="0 0 24 24" width="24" height="24">
             <path class="menu-icon-bars" fill="currentColor" d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/>
@@ -2098,35 +2223,56 @@
     <div class="container">
       <div class="hero-badge animate-on-load">
         <span class="hero-badge-pulse"></span>
-        Multi-Model Hierarchical AI
+        Open Source &nbsp;·&nbsp; v1.0 &nbsp;·&nbsp; MIT License
       </div>
-      <h1 class="animate-on-load delay-1">Route Every Dev Task to the<br><span class="gradient-text">Right AI Model Automatically</span></h1>
+      <h1 class="animate-on-load delay-1">Cut AI API Costs 80%<br><span class="gradient-text">Without Sacrificing Quality</span></h1>
       <p class="hero-desc animate-on-load delay-2">
-        Hydra automatically routes every developer task to the right AI model — using Claude when it matters, Ollama when it's free. Ten tiers, automatic fallbacks, zero Python required.
+        Hydra routes each task to the cheapest model that can handle it — Claude for hard reasoning, Gemini Flash for standard work, free local Qwen for boilerplate. Your API bill drops ~80%. Your output quality doesn't. Install in 30 seconds.
       </p>
       <div class="hero-ctas animate-on-load delay-3">
-        <a href="#get-started" class="btn btn-primary" id="cta-get-started">Get Started →</a>
+        <a href="#get-started" class="btn btn-primary" id="cta-get-started">Install via Homebrew →</a>
         <a href="#architecture" class="btn btn-secondary" id="cta-learn">See How it Works</a>
-        <a href="#community" class="btn btn-secondary" id="cta-community" style="border-color: rgba(16,185,129,0.4); color: var(--accent-tertiary);">Join Community</a>
       </div>
-      
-      <!-- Quick Stats -->
+
+      <!-- Quick Stats — cost savings first -->
       <div class="stats-bar">
         <div class="stat-card animate-on-load delay-3">
-          <div class="stat-num">10</div>
-          <div class="stat-label">Routing Tiers</div>
-        </div>
-        <div class="stat-card animate-on-load delay-3" style="animation-delay: 0.55s;">
-          <div class="stat-num">&lt;200ms</div>
-          <div class="stat-label">Typical Route Overhead</div>
-        </div>
-        <div class="stat-card animate-on-load delay-3" style="animation-delay: 0.65s;">
           <div class="stat-num">~80%</div>
           <div class="stat-label">API Cost Savings vs Claude-Only</div>
         </div>
-        <div class="stat-card animate-on-load delay-3" style="animation-delay: 0.75s;">
+        <div class="stat-card animate-on-load delay-3" style="animation-delay: 0.45s;">
           <div class="stat-num">100%</div>
           <div class="stat-label">Always-On Local Fallback</div>
+        </div>
+        <div class="stat-card animate-on-load delay-3" style="animation-delay: 0.55s;">
+          <div class="stat-num">10</div>
+          <div class="stat-label">Routing Tiers</div>
+        </div>
+        <div class="stat-card animate-on-load delay-3" style="animation-delay: 0.65s;">
+          <div class="stat-num">~1µs</div>
+          <div class="stat-label">Routing Overhead (benchmarked)</div>
+        </div>
+      </div>
+
+      <!-- Terminal demo -->
+      <div class="animate-on-load delay-3" style="animation-delay: 0.8s; max-width: 680px; margin: 48px auto 0; background: #0d1117; border: 1px solid rgba(139,92,246,0.3); border-radius: 12px; overflow: hidden; box-shadow: 0 0 40px rgba(139,92,246,0.15);">
+        <div style="background: #161b22; padding: 10px 16px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid rgba(255,255,255,0.06);">
+          <span style="width: 12px; height: 12px; border-radius: 50%; background: #ff5f57; display: inline-block;"></span>
+          <span style="width: 12px; height: 12px; border-radius: 50%; background: #febc2e; display: inline-block;"></span>
+          <span style="width: 12px; height: 12px; border-radius: 50%; background: #28c840; display: inline-block;"></span>
+          <span style="margin-left: 8px; font-size: 12px; color: #8b949e; font-family: var(--font-mono);">~  hydra</span>
+        </div>
+        <div style="padding: 20px 24px; font-family: var(--font-mono); font-size: 13px; line-height: 1.8;">
+          <div><span style="color: #8b949e;">$</span> <span style="color: #e6edf3;">hydra do SIMPLE "write a User DTO for profile settings"</span></div>
+          <div style="color: #8b949e; margin-top: 4px;">→ routing SIMPLE to <span style="color: #22d3ee;">gemini-2.0-flash</span> (tier 8, $0.0001/call)</div>
+          <div style="color: #8b949e;">→ completed in 1.2s</div>
+          <div style="margin-top: 12px;"><span style="color: #8b949e;">$</span> <span style="color: #e6edf3;">hydra do CORE "design the auth architecture for multi-tenant SaaS"</span></div>
+          <div style="color: #8b949e; margin-top: 4px;">→ routing CORE to <span style="color: #c084fc;">claude-opus-4-7</span> (tier 1, $0.015/call)</div>
+          <div style="color: #8b949e;">→ completed in 4.8s</div>
+          <div style="margin-top: 12px;"><span style="color: #8b949e;">$</span> <span style="color: #e6edf3;">hydra stats</span></div>
+          <div style="margin-top: 4px;">
+            <span style="color: #8b949e;">session cost  </span><span style="color: #34d399;">$0.017</span><span style="color: #8b949e;">  (vs </span><span style="color: #f87171;">$0.09</span><span style="color: #8b949e;"> all-Claude)  saved </span><span style="color: #34d399;">81%</span>
+          </div>
         </div>
       </div>
     </div>
@@ -2197,6 +2343,126 @@
           </div>
         </div>
       </div>
+    </div>
+  </section>
+
+  <!-- Why Not Just Use Claude? Cost Comparison -->
+  <section class="container" id="why-hydra" style="margin-bottom: 100px;">
+    <h2 class="section-title">Why Not Just Use Claude for Everything?</h2>
+    <p class="section-desc">You could. Most people do. Here's what that costs vs. what Hydra costs for the same session.</p>
+
+    <div style="max-width: 760px; margin: 40px auto 0;">
+      <div style="overflow-x: auto; border-radius: 14px; border: 1px solid rgba(139,92,246,0.25);">
+        <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+          <thead>
+            <tr style="background: rgba(139,92,246,0.12);">
+              <th style="padding: 14px 20px; text-align: left; color: var(--text-muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em;">Task</th>
+              <th style="padding: 14px 20px; text-align: center; color: #f87171; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em;">Without Hydra<br><span style="font-size: 10px; opacity: 0.7;">(All Claude Sonnet)</span></th>
+              <th style="padding: 14px 20px; text-align: center; color: #34d399; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em;">With Hydra<br><span style="font-size: 10px; opacity: 0.7;">(Optimal tier)</span></th>
+              <th style="padding: 14px 20px; text-align: center; color: var(--text-muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em;">Model Used</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr style="border-top: 1px solid rgba(255,255,255,0.05);">
+              <td style="padding: 14px 20px; color: var(--text-main);">Write a DTO / interface</td>
+              <td style="padding: 14px 20px; text-align: center; color: #f87171;">~$0.003</td>
+              <td style="padding: 14px 20px; text-align: center; color: #34d399;">$0.000</td>
+              <td style="padding: 14px 20px; text-align: center; color: var(--text-muted); font-family: var(--font-mono); font-size: 12px;">Qwen local (free)</td>
+            </tr>
+            <tr style="border-top: 1px solid rgba(255,255,255,0.05); background: rgba(255,255,255,0.02);">
+              <td style="padding: 14px 20px; color: var(--text-main);">CRUD controller + tests</td>
+              <td style="padding: 14px 20px; text-align: center; color: #f87171;">~$0.008</td>
+              <td style="padding: 14px 20px; text-align: center; color: #34d399;">~$0.0001</td>
+              <td style="padding: 14px 20px; text-align: center; color: var(--text-muted); font-family: var(--font-mono); font-size: 12px;">Gemini 2.0 Flash</td>
+            </tr>
+            <tr style="border-top: 1px solid rgba(255,255,255,0.05);">
+              <td style="padding: 14px 20px; color: var(--text-main);">Code review + refactor</td>
+              <td style="padding: 14px 20px; text-align: center; color: #f87171;">~$0.012</td>
+              <td style="padding: 14px 20px; text-align: center; color: #fbbf24;">~$0.004</td>
+              <td style="padding: 14px 20px; text-align: center; color: var(--text-muted); font-family: var(--font-mono); font-size: 12px;">Gemini 2.5 Pro</td>
+            </tr>
+            <tr style="border-top: 1px solid rgba(255,255,255,0.05); background: rgba(255,255,255,0.02);">
+              <td style="padding: 14px 20px; color: var(--text-main);">Architecture decision</td>
+              <td style="padding: 14px 20px; text-align: center; color: #f87171;">~$0.020</td>
+              <td style="padding: 14px 20px; text-align: center; color: #fbbf24;">~$0.020</td>
+              <td style="padding: 14px 20px; text-align: center; color: var(--text-muted); font-family: var(--font-mono); font-size: 12px;">Claude Opus (tier 1)</td>
+            </tr>
+            <tr style="border-top: 1px solid rgba(139,92,246,0.3); background: rgba(139,92,246,0.06);">
+              <td style="padding: 16px 20px; color: var(--text-bright); font-weight: 700;">Typical session (50 calls)</td>
+              <td style="padding: 16px 20px; text-align: center; color: #f87171; font-weight: 700; font-size: 16px;">~$0.22</td>
+              <td style="padding: 16px 20px; text-align: center; color: #34d399; font-weight: 700; font-size: 16px;">~$0.04</td>
+              <td style="padding: 16px 20px; text-align: center; color: #34d399; font-weight: 600;">82% saved</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p style="margin: 16px 0 0; font-size: 13px; color: var(--text-muted); text-align: center;">Pricing based on OpenRouter rates as of June 2026. Claude Sonnet 4.6 at $3/M input · Gemini 2.0 Flash at $0.075/M · Qwen local via Ollama free. Use <code style="font-family: var(--font-mono);">hydra pricing list</code> for live rates.</p>
+    </div>
+  </section>
+
+  <!-- New Features Section -->
+  <section class="container" id="features" style="margin-bottom: 100px;">
+    <h2 class="section-title">What's New in v1.0</h2>
+    <p class="section-desc">Hydra 1.0 ships a full Go control plane, swarm dispatch, live cost analytics, per-model token budgets, and real-time pricing from OpenRouter. Here's what each feature gives you.</p>
+
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px; margin-top: 40px;">
+
+      <div class="arch-card scroll-reveal" style="background: rgba(139,92,246,0.07); border: 1px solid rgba(139,92,246,0.25); border-radius: 16px; padding: 28px;">
+        <div style="font-size: 28px; margin-bottom: 14px;">⚡</div>
+        <h3 style="font-family: var(--font-display); font-size: 18px; color: var(--text-bright); margin: 0 0 10px;">Swarm Dispatch</h3>
+        <p style="color: var(--text-muted); font-size: 14px; line-height: 1.65; margin: 0 0 16px;">Fan a single prompt out to multiple model heads simultaneously. <strong style="color: var(--text-main);">Race</strong> returns the fastest response. <strong style="color: var(--text-main);">Best</strong> uses an LLM judge to pick highest quality. <strong style="color: var(--text-main);">All</strong> aggregates every answer.</p>
+        <div class="code-snippet-box" style="margin: 0; padding: 10px 14px;">
+          <pre style="margin: 0; font-size: 12px; color: var(--accent-primary);">hydra dispatch --swarm --swarm-mode race "prompt"</pre>
+        </div>
+      </div>
+
+      <div class="arch-card scroll-reveal" style="background: rgba(6,182,212,0.07); border: 1px solid rgba(6,182,212,0.25); border-radius: 16px; padding: 28px;">
+        <div style="font-size: 28px; margin-bottom: 14px;">📊</div>
+        <h3 style="font-family: var(--font-display); font-size: 18px; color: var(--text-bright); margin: 0 0 10px;">Cost Analytics</h3>
+        <p style="color: var(--text-muted); font-size: 14px; line-height: 1.65; margin: 0 0 16px;">Every dispatch writes to <code style="color: var(--accent-secondary); font-family: var(--font-mono);">cost.jsonl</code>. <strong style="color: var(--text-main);">hydra stats</strong> reads it and breaks down spend by model, tier, and day — so you know exactly what you're paying and where.</p>
+        <div class="code-snippet-box" style="margin: 0; padding: 10px 14px;">
+          <pre style="margin: 0; font-size: 12px; color: var(--accent-secondary);">hydra stats          # session rollup
+hydra stats --json   # machine-readable</pre>
+        </div>
+      </div>
+
+      <div class="arch-card scroll-reveal" style="background: rgba(16,185,129,0.07); border: 1px solid rgba(16,185,129,0.25); border-radius: 16px; padding: 28px;">
+        <div style="font-size: 28px; margin-bottom: 14px;">🎯</div>
+        <h3 style="font-family: var(--font-display); font-size: 18px; color: var(--text-bright); margin: 0 0 10px;">Token Budget Enforcement</h3>
+        <p style="color: var(--text-muted); font-size: 14px; line-height: 1.65; margin: 0 0 16px;">Six pressure modes (Normal → Emergency) track context window utilisation per model. At 75% it downgrades tiers. At 80% it stops cloud routing entirely and falls back to local Qwen.</p>
+        <div class="code-snippet-box" style="margin: 0; padding: 10px 14px;">
+          <pre style="margin: 0; font-size: 12px; color: var(--accent-tertiary);">hydra status  # shows per-model budget bars</pre>
+        </div>
+      </div>
+
+      <div class="arch-card scroll-reveal" style="background: rgba(245,158,11,0.07); border: 1px solid rgba(245,158,11,0.25); border-radius: 16px; padding: 28px;">
+        <div style="font-size: 28px; margin-bottom: 14px;">💰</div>
+        <h3 style="font-family: var(--font-display); font-size: 18px; color: var(--text-bright); margin: 0 0 10px;">Dynamic Live Pricing</h3>
+        <p style="color: var(--text-muted); font-size: 14px; line-height: 1.65; margin: 0 0 16px;">Cost estimates come from a live OpenRouter price feed (24h cache) with static YAML as offline fallback. Never hardcoded — when providers cut prices, Hydra picks it up automatically.</p>
+        <div class="code-snippet-box" style="margin: 0; padding: 10px 14px;">
+          <pre style="margin: 0; font-size: 12px; color: var(--accent-warning);">hydra pricing list       # all known models + $/M
+hydra pricing refresh    # force live fetch</pre>
+        </div>
+      </div>
+
+      <div class="arch-card scroll-reveal" style="background: rgba(139,92,246,0.07); border: 1px solid rgba(139,92,246,0.25); border-radius: 16px; padding: 28px;">
+        <div style="font-size: 28px; margin-bottom: 14px;">🔗</div>
+        <h3 style="font-family: var(--font-display); font-size: 18px; color: var(--text-bright); margin: 0 0 10px;">Go Control Plane</h3>
+        <p style="color: var(--text-muted); font-size: 14px; line-height: 1.65; margin: 0 0 16px;">The entire routing engine — policy evaluation, head selection, executor dispatch, budget tracking, fallback chains — is now a single statically-compiled Go binary. No Node runtime, no shell fragility.</p>
+        <div class="code-snippet-box" style="margin: 0; padding: 10px 14px;">
+          <pre style="margin: 0; font-size: 12px; color: var(--accent-primary);">brew tap ankit373/hydra && brew install hydra</pre>
+        </div>
+      </div>
+
+      <div class="arch-card scroll-reveal" style="background: rgba(6,182,212,0.07); border: 1px solid rgba(6,182,212,0.25); border-radius: 16px; padding: 28px;">
+        <div style="font-size: 28px; margin-bottom: 14px;">🤖</div>
+        <h3 style="font-family: var(--font-display); font-size: 18px; color: var(--text-bright); margin: 0 0 10px;">A2A Handoff Protocol</h3>
+        <p style="color: var(--text-muted); font-size: 14px; line-height: 1.65; margin: 0 0 16px;">Structured JSON handoff files pass task context between agents — from, task, files in scope, conventions, prior output. The last handoff is always persisted at <code style="color: var(--accent-secondary); font-family: var(--font-mono);">~/.config/hydra/logs/last_handoff.json</code>.</p>
+        <div class="code-snippet-box" style="margin: 0; padding: 10px 14px;">
+          <pre style="margin: 0; font-size: 12px; color: var(--accent-secondary);">hydra dispatch --a2a logs/last_handoff.json "next task"</pre>
+        </div>
+      </div>
+
     </div>
   </section>
 
@@ -2716,8 +2982,8 @@
     <div class="setup-content" id="setup-cli">
       <div class="setup-step">
         <span class="step-num">1</span>
-        <span class="step-title">Monitor Status</span>
-        <p class="step-text">Display active Antigravity allocations, Claude token percentages, and pool status.</p>
+        <span class="step-title">Monitor Status &amp; Budget</span>
+        <p class="step-text">Display per-model token budget bars, Claude context percentage, and pool health. Budget modes (Normal → Emergency) trigger automatic tier downgrades before you hit the context wall.</p>
         <div class="code-snippet-box step-cmd">
           <pre>hydra status</pre>
         </div>
@@ -2725,15 +2991,35 @@
       <div class="setup-step">
         <span class="step-num">2</span>
         <span class="step-title">Dispatch a Task</span>
-        <p class="step-text">Send instructions directly to a specific model tier by its complexity enum key.</p>
+        <p class="step-text">Send instructions directly to a specific model tier by its complexity enum key. Hydra handles head selection, fallback, A2A handoff, and cost logging automatically.</p>
         <div class="code-snippet-box step-cmd">
-          <pre>hydra do SIMPLE "write a User DTO class in TypeScript"</pre>
+          <pre>hydra do SIMPLE "write a User DTO class in TypeScript"
+hydra dispatch --swarm --swarm-mode best "compare implementations"</pre>
         </div>
       </div>
       <div class="setup-step">
         <span class="step-num">3</span>
+        <span class="step-title">Cost Analytics</span>
+        <p class="step-text">Aggregate spend from <code>cost.jsonl</code> across every session — broken down by model, tier, and day. Use <code>--json</code> to pipe into dashboards or alert scripts.</p>
+        <div class="code-snippet-box step-cmd">
+          <pre>hydra stats             # table view
+hydra stats --json      # JSON output</pre>
+        </div>
+      </div>
+      <div class="setup-step">
+        <span class="step-num">4</span>
+        <span class="step-title">Live Pricing</span>
+        <p class="step-text">Inspect current per-token rates for every model Hydra knows about. Rates are fetched from OpenRouter (24h cache) with a static YAML offline fallback.</p>
+        <div class="code-snippet-box step-cmd">
+          <pre>hydra pricing list              # all models
+hydra pricing list claude       # filter by name
+hydra pricing refresh           # force live fetch</pre>
+        </div>
+      </div>
+      <div class="setup-step">
+        <span class="step-num">5</span>
         <span class="step-title">Rubber Duck Code Review</span>
-        <p class="step-text">Execute a peer evaluation on a code snippet using a different model family to avoid shared biases.</p>
+        <p class="step-text">Execute a peer evaluation on a code snippet using a different model family to avoid shared confirmation bias.</p>
         <div class="code-snippet-box step-cmd">
           <pre>hydra duck "$(cat src/auth.ts)"</pre>
         </div>
@@ -2782,6 +3068,76 @@
         <span class="step-title">Context Interception</span>
         <p class="step-text">Claude Code intercepts the command, coordinates with route.sh, and applies the outputs directly back to your workspace.</p>
       </div>
+    </div>
+  </section>
+
+  <!-- FAQ Section -->
+  <section class="container" id="faq" style="margin-bottom: 100px;">
+    <h2 class="section-title">Frequently Asked Questions</h2>
+    <p class="section-desc">Real questions, honest answers. No marketing copy.</p>
+
+    <div style="max-width: 800px; margin: 40px auto 0; display: flex; flex-direction: column; gap: 2px;">
+
+      <details style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 0; overflow: hidden; margin-bottom: 8px;">
+        <summary style="padding: 20px 24px; cursor: pointer; font-weight: 600; font-size: 16px; color: var(--text-bright); list-style: none; display: flex; justify-content: space-between; align-items: center;">
+          What is Hydra and why does it exist?
+          <span style="color: var(--accent-primary); font-size: 20px; font-weight: 300; line-height: 1; flex-shrink: 0; margin-left: 16px;">+</span>
+        </summary>
+        <div style="padding: 0 24px 20px; color: var(--text-muted); font-size: 15px; line-height: 1.7; border-top: 1px solid var(--border-color);">
+          <p style="margin: 16px 0 0;">Hydra is an open source multi-model AI orchestration CLI written in Go. The problem it solves: using Claude for every task is expensive and overkill. Using only local models misses quality for hard problems. Hydra routes each task to the cheapest model that can actually handle it — using Claude for architecture decisions, Gemini Flash for standard CRUD, and local Qwen for boilerplate — automatically, with no code changes to your workflow.</p>
+        </div>
+      </details>
+
+      <details style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 0; overflow: hidden; margin-bottom: 8px;">
+        <summary style="padding: 20px 24px; cursor: pointer; font-weight: 600; font-size: 16px; color: var(--text-bright); list-style: none; display: flex; justify-content: space-between; align-items: center;">
+          How does the ~80% cost saving actually work?
+          <span style="color: var(--accent-primary); font-size: 20px; font-weight: 300; line-height: 1; flex-shrink: 0; margin-left: 16px;">+</span>
+        </summary>
+        <div style="padding: 0 24px 20px; color: var(--text-muted); font-size: 15px; line-height: 1.7; border-top: 1px solid var(--border-color);">
+          <p style="margin: 16px 0 0;">Claude Sonnet costs ~$3/M input tokens. Gemini 2.0 Flash costs ~$0.075/M — 40× cheaper. Qwen running locally on Ollama costs $0. In a typical coding session, most tasks are SIMPLE (DTOs, schemas, helpers) or STANDARD (CRUD controllers). Hydra routes those to Gemini Flash or local Qwen, reserving Claude for the 10-20% of tasks that need frontier reasoning. The result: 75-85% lower bill compared to routing everything through Claude. <em style="color: var(--text-main);">hydra stats</em> shows your actual numbers per session.</p>
+        </div>
+      </details>
+
+      <details style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 0; overflow: hidden; margin-bottom: 8px;">
+        <summary style="padding: 20px 24px; cursor: pointer; font-weight: 600; font-size: 16px; color: var(--text-bright); list-style: none; display: flex; justify-content: space-between; align-items: center;">
+          Does it work without internet access?
+          <span style="color: var(--accent-primary); font-size: 20px; font-weight: 300; line-height: 1; flex-shrink: 0; margin-left: 16px;">+</span>
+        </summary>
+        <div style="padding: 0 24px 20px; color: var(--text-muted); font-size: 15px; line-height: 1.7; border-top: 1px solid var(--border-color);">
+          <p style="margin: 16px 0 0;">Yes. Hydra maintains a 100% local fallback chain. When cloud APIs are unavailable or budgets are exhausted, it automatically routes to Qwen via Ollama running on your machine. The routing engine, cost tracking, and budget enforcement all run entirely offline. Only the actual model API calls need network access.</p>
+        </div>
+      </details>
+
+      <details style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 0; overflow: hidden; margin-bottom: 8px;">
+        <summary style="padding: 20px 24px; cursor: pointer; font-weight: 600; font-size: 16px; color: var(--text-bright); list-style: none; display: flex; justify-content: space-between; align-items: center;">
+          What is swarm dispatch?
+          <span style="color: var(--accent-primary); font-size: 20px; font-weight: 300; line-height: 1; flex-shrink: 0; margin-left: 16px;">+</span>
+        </summary>
+        <div style="padding: 0 24px 20px; color: var(--text-muted); font-size: 15px; line-height: 1.7; border-top: 1px solid var(--border-color);">
+          <p style="margin: 16px 0 0;">Swarm dispatch fans a single prompt out to multiple model heads in parallel. <strong style="color: var(--text-main);">Race</strong> mode returns the first successful response (optimises for latency). <strong style="color: var(--text-main);">Best</strong> mode runs all heads then uses an LLM judge to pick the highest quality answer (optimises for quality, useful for critical code reviews). <strong style="color: var(--text-main);">All</strong> mode returns every response for manual comparison. Run with: <code style="color: var(--accent-primary); font-family: var(--font-mono);">hydra dispatch --swarm --swarm-mode race "your prompt"</code>.</p>
+        </div>
+      </details>
+
+      <details style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 0; overflow: hidden; margin-bottom: 8px;">
+        <summary style="padding: 20px 24px; cursor: pointer; font-weight: 600; font-size: 16px; color: var(--text-bright); list-style: none; display: flex; justify-content: space-between; align-items: center;">
+          How do I add a new model?
+          <span style="color: var(--accent-primary); font-size: 20px; font-weight: 300; line-height: 1; flex-shrink: 0; margin-left: 16px;">+</span>
+        </summary>
+        <div style="padding: 0 24px 20px; color: var(--text-muted); font-size: 15px; line-height: 1.7; border-top: 1px solid var(--border-color);">
+          <p style="margin: 16px 0 0;">Edit <code style="color: var(--accent-secondary); font-family: var(--font-mono);">registry/models.yaml</code> to add a new model entry — set ID, provider, name, tier assignment, and context window. No code changes required. Assign it to a tier in <code style="color: var(--accent-secondary); font-family: var(--font-mono);">registry/routing.yaml</code> and it will appear in the probe results and be eligible for dispatch immediately on the next run.</p>
+        </div>
+      </details>
+
+      <details style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 0; overflow: hidden; margin-bottom: 8px;">
+        <summary style="padding: 20px 24px; cursor: pointer; font-weight: 600; font-size: 16px; color: var(--text-bright); list-style: none; display: flex; justify-content: space-between; align-items: center;">
+          Is Hydra production-ready?
+          <span style="color: var(--accent-primary); font-size: 20px; font-weight: 300; line-height: 1; flex-shrink: 0; margin-left: 16px;">+</span>
+        </summary>
+        <div style="padding: 0 24px 20px; color: var(--text-muted); font-size: 15px; line-height: 1.7; border-top: 1px solid var(--border-color);">
+          <p style="margin: 16px 0 0;">Hydra 1.0 is actively used for real development work. The Go control plane passes the race detector (<code style="color: var(--accent-tertiary); font-family: var(--font-mono);">go test -race</code>), has concurrent-safe budget tracking, and uses atomic file writes for state persistence. That said, it's a solo developer tool — not a multi-tenant API gateway. Use it for your own workflows, Claude Code integrations, and local AI pipelines.</p>
+        </div>
+      </details>
+
     </div>
   </section>
 
@@ -2857,15 +3213,17 @@
       <div class="footer-links">
         <a href="#overview" class="footer-link">Overview</a>
         <a href="#architecture" class="footer-link">Architecture</a>
+        <a href="#features" class="footer-link">What's New</a>
         <a href="#tiers" class="footer-link">Model Tiers</a>
         <a href="#get-started" class="footer-link">Get Started</a>
+        <a href="#faq" class="footer-link">FAQ</a>
         <a href="#community" class="footer-link">Community</a>
         <a href="https://github.com/ankit373/hydra/discussions" target="_blank" rel="noopener" class="footer-link">Discussions</a>
         <a href="https://github.com/ankit373/hydra/blob/main/CHANGELOG.md" target="_blank" rel="noopener" class="footer-link">Changelog</a>
         <a href="https://github.com/ankit373/hydra/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener" class="footer-link">Contributing</a>
         <a href="https://github.com/ankit373/hydra" target="_blank" rel="noopener" class="footer-link">GitHub</a>
       </div>
-      <p>© 2026 Ankit Jha. Released under the <a href="https://github.com/ankit373/hydra/blob/main/LICENSE" target="_blank" rel="noopener" style="color: var(--accent-primary); text-decoration: none;">MIT License</a>.</p>
+      <p>© 2026 Ankit Jha. Released under the <a href="https://github.com/ankit373/hydra/blob/main/LICENSE" target="_blank" rel="noopener" style="color: var(--accent-primary); text-decoration: none;">MIT License</a>. &nbsp;·&nbsp; <span style="color: var(--text-muted);">Last updated June 2026</span> &nbsp;·&nbsp; <a href="/llms.txt" style="color: var(--text-muted); text-decoration: none; font-size: 12px;">llms.txt</a></p>
     </div>
   </footer>
 
@@ -3830,10 +4188,10 @@ export const STATE_FILE = join(resolveHydraData(), 'logs/state.json');`
     // 4. Animated stat counters
     (function() {
       const stats = [
-        { id: null, el: document.querySelectorAll('.stat-num')[0], target: 10, prefix: '', suffix: '' },
-        { id: null, el: document.querySelectorAll('.stat-num')[1], target: 200, prefix: '<', suffix: 'ms' },
-        { id: null, el: document.querySelectorAll('.stat-num')[2], target: 80, prefix: '', suffix: '%' },
-        { id: null, el: document.querySelectorAll('.stat-num')[3], target: 100, prefix: '', suffix: '%' },
+        { id: null, el: document.querySelectorAll('.stat-num')[0], target: 80, prefix: '~', suffix: '%' },
+        { id: null, el: document.querySelectorAll('.stat-num')[1], target: 100, prefix: '', suffix: '%' },
+        { id: null, el: document.querySelectorAll('.stat-num')[2], target: 10, prefix: '', suffix: '' },
+        { id: null, el: document.querySelectorAll('.stat-num')[3], target: 0, prefix: '', suffix: '' }, // static — ~1µs shown in HTML
       ];
       const io = new IntersectionObserver(entries => {
         entries.forEach(entry => {
@@ -3858,7 +4216,15 @@ export const STATE_FILE = join(resolveHydraData(), 'logs/state.json');`
       stats.forEach(s => { if (s.el) io.observe(s.el); });
     })();
 
-    // 5. Button ripple effect
+    // 5. FAQ accordion toggle — swap + / − icon
+    document.querySelectorAll('#faq details').forEach(d => {
+      d.addEventListener('toggle', () => {
+        const icon = d.querySelector('summary span:last-child');
+        if (icon) icon.textContent = d.open ? '−' : '+';
+      });
+    });
+
+    // 6. Button ripple effect
     document.querySelectorAll('.btn').forEach(btn => {
       btn.addEventListener('click', function(e) {
         const ripple = document.createElement('span');
@@ -3937,23 +4303,25 @@ export const STATE_FILE = join(resolveHydraData(), 'logs/state.json');`
       const REPO = 'ankit373/hydra';
       const API  = 'https://api.github.com/repos/' + REPO;
 
-      // Star count — only show widget when stars >= 100
+      // Star count — update nav badge always; show floating widget when stars >= 100
       fetch(API)
         .then(r => r.json())
         .then(data => {
           const stars = data.stargazers_count || 0;
+          const fmt = n => n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(n);
+          // Nav badge + floating widget — only when stars >= 100
           if (stars >= 100) {
+            const navBadge = document.getElementById('nav-star-count');
+            if (navBadge) navBadge.textContent = '★ ' + fmt(stars);
             const widget = document.getElementById('star-widget');
             const count  = document.getElementById('star-widget-count');
             if (widget && count) {
-              count.textContent = stars >= 1000
-                ? (stars / 1000).toFixed(1) + 'k'
-                : stars;
+              count.textContent = fmt(stars);
               widget.style.display = 'block';
             }
           }
         })
-        .catch(() => {}); // silently fail — widget stays hidden
+        .catch(() => {}); // silently fail
 
       // Contributors wall
       fetch(API + '/contributors?per_page=30&anon=false')

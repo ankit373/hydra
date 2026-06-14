@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ankit373/hydra/internal/budget"
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/executor"
 	"github.com/ankit373/hydra/internal/policy"
@@ -52,6 +53,7 @@ type Dispatcher struct {
 	heads   []provider.Head
 	policy  *policy.Engine
 	pricing *pricing.DB
+	budget  *budget.Registry
 }
 
 // Heads returns the probed head list for external callers (e.g. swarm).
@@ -76,11 +78,15 @@ func New(ctx context.Context) (*Dispatcher, error) {
 		localOnly = true
 	}
 
+	registryDir := filepath.Join(config.ScriptHome(), "registry")
+	budgetReg := budget.NewRegistry(budget.LoadWindows(registryDir))
+
 	return &Dispatcher{
 		cfg:     cfg,
 		heads:   result.Heads,
 		policy:  policy.New(policy.DefaultRules(localOnly)),
 		pricing: pricing.Load(),
+		budget:  budgetReg,
 	}, nil
 }
 
@@ -143,6 +149,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		r := &Result{Output: resp.Output, Head: h, Retries: i, Response: resp}
 		_ = d.logDispatch(r, prompt, opts)
 		_ = d.writeHandoff(r, prompt)
+		d.recordBudget(r)
 		d.syncStateJSON(r)
 		return r, nil
 	}
@@ -154,7 +161,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 // mode string, and raw percentage.
 func (d *Dispatcher) claudeMode(tierHint string) (tier string, mode string, pct int) {
 	pct = readClaudePct()
-	mode = claudePctMode(pct)
+	mode = budget.ModeFor(pct).String()
 	tier = tierHint
 
 	// Convert tier hint to int so we can downgrade numerically.
@@ -189,23 +196,6 @@ func readClaudePct() int {
 		return 0
 	}
 	return s.ClaudePct
-}
-
-func claudePctMode(pct int) string {
-	switch {
-	case pct >= 80:
-		return "emergency"
-	case pct >= 75:
-		return "critical"
-	case pct >= 70:
-		return "warning"
-	case pct >= 65:
-		return "caution"
-	case pct >= 50:
-		return "compact"
-	default:
-		return "normal"
-	}
 }
 
 // injectA2A reads a handoff JSON file and prepends a structured block to the prompt.
@@ -301,6 +291,19 @@ func (d *Dispatcher) selectHeads(tierHint string, localOnly bool) []provider.Hea
 	return candidates
 }
 
+// recordBudget updates the budget registry with this call's token usage.
+func (d *Dispatcher) recordBudget(r *Result) {
+	if d.budget == nil || r.Response.InputTokens == 0 {
+		return
+	}
+	// No output tokens → execution was cut short or agy returned an estimate.
+	source := "real"
+	if r.Response.OutputTokens == 0 {
+		source = "estimate"
+	}
+	d.budget.Record(r.Head.ID, r.Response.InputTokens, source)
+}
+
 // syncStateJSON updates ~/.hydra/logs/state.json after a successful dispatch
 // so the Ink UI (ui/) reflects Go dispatcher activity.
 func (d *Dispatcher) syncStateJSON(r *Result) {
@@ -318,6 +321,23 @@ func (d *Dispatcher) syncStateJSON(r *Result) {
 	existing["last_model"] = r.Head.Name
 	existing["last_status"] = "ok"
 	existing["last_tier"] = rank.UITier(r.Head)
+
+	// Persist per-model budget snapshots so the TUI and status command can read them.
+	if d.budget != nil {
+		snaps := d.budget.All()
+		budgetMap := map[string]any{}
+		for _, s := range snaps {
+			budgetMap[s.ModelID] = map[string]any{
+				"pct":        s.Pct,
+				"used":       s.Used,
+				"window":     s.Window,
+				"mode":       s.Mode.String(),
+				"source":     s.Source,
+				"updated_at": s.UpdatedAt.Format(time.RFC3339),
+			}
+		}
+		existing["budget"] = budgetMap
+	}
 
 	updated, err := json.MarshalIndent(existing, "", "  ")
 	if err != nil {
