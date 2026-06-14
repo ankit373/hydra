@@ -41,6 +41,9 @@ func Supports(h provider.Head) bool {
 	if h.Source == "registry" {
 		return true // agy heads — AgyExecutor handles them
 	}
+	if h.Source == "env" {
+		return SupportsHTTP(h) // API-key heads — HTTPExecutor handles them
+	}
 	if h.Source == "port" || h.Endpoint != "" {
 		return SupportsHTTP(h)
 	}
@@ -53,12 +56,16 @@ func Supports(h provider.Head) bool {
 
 // For selects the correct Executor for a given Head.
 //   - registry source (agy tiers): AgyExecutor → calls dispatch/agy.sh
+//   - env source (API key heads): HTTPExecutor → direct provider REST API
 //   - ollama source: OllamaExecutor → native /api/generate
 //   - port source / explicit endpoint: HTTPExecutor → OpenAI-compatible REST
 //   - everything else: CLIExecutor → subprocess
 func For(h provider.Head) Executor {
 	if h.Source == "registry" {
 		return &AgyExecutor{}
+	}
+	if h.Source == "env" {
+		return &HTTPExecutor{}
 	}
 	if h.Source == "ollama" || h.Provider == "ollama" {
 		return &OllamaExecutor{}

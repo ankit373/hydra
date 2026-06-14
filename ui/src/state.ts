@@ -92,9 +92,11 @@ export function loadState(): SystemState {
 export async function dispatch(enumKey: string, prompt: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const { spawn } = require('child_process') as typeof import('child_process')
+    // Use the Go binary — route.sh is deprecated and produces warnings in the TUI.
+    const hydrabin = process.env.HYDRA_BIN ?? 'hydra'
     const child = spawn(
-      `${HYDRA}/dispatch/route.sh`,
-      ['--enum', enumKey, '--prompt', prompt],
+      hydrabin,
+      ['dispatch', '--enum', enumKey, '--prompt', prompt],
       { env: { ...process.env }, timeout: 300_000 }
     )
     let out = '', err = ''

@@ -92,6 +92,8 @@ func SupportsHTTP(h provider.Head) bool {
 	switch h.Provider {
 	case "anthropic":
 		return apiKeyFor("anthropic") != "" && defaultModelFor("anthropic") != ""
+	case "openrouter":
+		return apiKeyFor("openrouter") != "" && defaultModelFor("openrouter") != ""
 	case "google":
 		return apiKeyFor("google") != "" && defaultModelFor("google") != ""
 	case "cohere":
@@ -576,7 +578,8 @@ func openAICompatConfigFor(h provider.Head) (openAICompatConfig, error) {
 	}
 
 	configs := map[string]cfg{
-		"openai":     {baseURL: "https://api.openai.com", model: defaultModelFor("openai"), header: "Authorization", key: "Bearer " + apiKeyFor("openai")},
+		"openai":      {baseURL: "https://api.openai.com", model: defaultModelFor("openai"), header: "Authorization", key: "Bearer " + apiKeyFor("openai")},
+		"openrouter": {baseURL: "https://openrouter.ai/api", model: defaultModelFor("openrouter"), header: "Authorization", key: "Bearer " + apiKeyFor("openrouter")},
 		"xai":        {baseURL: "https://api.x.ai", model: defaultModelFor("xai"), header: "Authorization", key: "Bearer " + apiKeyFor("xai")},
 		"groq":       {baseURL: "https://api.groq.com/openai", model: defaultModelFor("groq"), header: "Authorization", key: "Bearer " + apiKeyFor("groq")},
 		"together":   {baseURL: "https://api.together.xyz", model: defaultModelFor("together"), header: "Authorization", key: "Bearer " + apiKeyFor("together")},
@@ -681,7 +684,8 @@ func defaultModelFor(providerID string) string {
 	}
 	specs := map[string]modelSpec{
 		"anthropic":  {fallback: "claude-sonnet-4-20250514", envs: []string{"ANTHROPIC_MODEL", "HYDRA_MODEL_ANTHROPIC"}},
-		"openai":     {fallback: "gpt-4o", envs: []string{"OPENAI_MODEL", "HYDRA_MODEL_OPENAI"}},
+		"openai":      {fallback: "gpt-4o", envs: []string{"OPENAI_MODEL", "HYDRA_MODEL_OPENAI"}},
+		"openrouter": {fallback: "anthropic/claude-sonnet-4-5", envs: []string{"OPENROUTER_MODEL", "HYDRA_MODEL_OPENROUTER"}},
 		"google":     {fallback: "gemini-2.5-flash", envs: []string{"GEMINI_MODEL", "GOOGLE_MODEL", "HYDRA_MODEL_GOOGLE"}},
 		"xai":        {fallback: "grok-3-latest", envs: []string{"XAI_MODEL", "HYDRA_MODEL_XAI"}},
 		"groq":       {fallback: "llama-3.3-70b-versatile", envs: []string{"GROQ_MODEL", "HYDRA_MODEL_GROQ"}},
@@ -707,7 +711,8 @@ func defaultModelFor(providerID string) string {
 func apiKeyFor(providerID string) string {
 	envs := map[string][]string{
 		"anthropic": {"ANTHROPIC_API_KEY"},
-		"openai":    {"OPENAI_API_KEY"},
+		"openai":     {"OPENAI_API_KEY"},
+		"openrouter": {"OPENROUTER_API_KEY"},
 		"google":    {"GEMINI_API_KEY", "GOOGLE_API_KEY"},
 		"xai":       {"XAI_API_KEY"},
 		"groq":      {"GROQ_API_KEY"},
