@@ -31,6 +31,8 @@ type Row struct {
 	Source         string  `json:"source"`
 	TaskID         string  `json:"task_id"`
 	RunID          string  `json:"run_id"`
+	SwarmMode      string  `json:"swarm_mode"`
+	SwarmWinner    bool    `json:"swarm_winner"`
 }
 
 // Totals is an aggregate summary.
@@ -225,6 +227,83 @@ func JSON(since string) ([]Row, error) {
 	return out, nil
 }
 
+// FilterDays returns rows from the last n calendar days (UTC). n=0 returns all.
+func FilterDays(rows []Row, n int) []Row {
+	if n <= 0 {
+		return rows
+	}
+	cutoff := time.Now().UTC().AddDate(0, 0, -n).Format("2006-01-02")
+	var out []Row
+	for _, r := range rows {
+		if len(r.TS) >= 10 && r.TS[:10] >= cutoff {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// ByModel returns per-model totals sorted by cost descending.
+func ByModel(rows []Row) []GroupRow {
+	return groupBy(rows, func(r Row) string {
+		if r.Model == "" {
+			return "unknown"
+		}
+		return r.Model
+	})
+}
+
+// ByDay returns per-day totals sorted by date ascending.
+func ByDay(rows []Row) []GroupRow {
+	groups := groupBy(rows, func(r Row) string {
+		if len(r.TS) >= 10 {
+			return r.TS[:10]
+		}
+		return "unknown"
+	})
+	sort.Slice(groups, func(i, j int) bool { return groups[i].Key < groups[j].Key })
+	return groups
+}
+
+// SwarmSummary holds swarm-specific aggregate stats.
+type SwarmSummary struct {
+	Runs       int     `json:"runs"`
+	WinnerRate float64 `json:"winner_rate"` // fraction 0-1
+	AvgWallMS  int64   `json:"avg_wall_ms"`
+	TotalCost  float64 `json:"total_cost_usd"`
+	ByMode     map[string]int `json:"by_mode"`
+}
+
+// SwarmStats returns aggregated stats for swarm-only rows.
+func SwarmStats(rows []Row) SwarmSummary {
+	var swarmRows []Row
+	for _, r := range rows {
+		if r.SwarmMode != "" {
+			swarmRows = append(swarmRows, r)
+		}
+	}
+	s := SwarmSummary{ByMode: map[string]int{}}
+	s.Runs = len(swarmRows)
+	if s.Runs == 0 {
+		return s
+	}
+	winners := 0
+	var totalWall int64
+	for _, r := range swarmRows {
+		if r.SwarmWinner {
+			winners++
+		}
+		totalWall += r.WallMS
+		s.TotalCost += r.EstCostUSD
+		if r.SwarmMode != "" {
+			s.ByMode[r.SwarmMode]++
+		}
+	}
+	s.WinnerRate = float64(winners) / float64(s.Runs)
+	s.AvgWallMS = totalWall / int64(s.Runs)
+	s.TotalCost = math.Round(s.TotalCost*1_000_000) / 1_000_000
+	return s
+}
+
 // ── Rendering ─────────────────────────────────────────────────────────────────
 
 // RenderSummary prints a human-readable summary.
@@ -261,6 +340,74 @@ func RenderTable(title string, rows []GroupRow) {
 			r.EstCostUSD, r.WallMS/1000)
 	}
 	fmt.Println()
+}
+
+// RenderStatsTable prints the polished stats-command table with comma-formatted numbers.
+func RenderStatsTable(period string, rows []GroupRow) {
+	sep := strings.Repeat("─", 71)
+	fmt.Printf("\nPeriod: %s\n\n", period)
+	fmt.Printf("  %-32s  %6s  %9s  %9s  %10s\n", "Model / Key", "Calls", "In Tok", "Out Tok", "Cost USD")
+	fmt.Println("  " + sep)
+	var totCalls, totIn, totOut int
+	var totCost float64
+	for _, r := range rows {
+		fmt.Printf("  %-32s  %6s  %9s  %9s  %10s\n",
+			truncLabel(r.Key, 32),
+			commaInt(r.Calls),
+			commaInt(r.PromptTokens),
+			commaInt(r.ResponseTokens),
+			fmt.Sprintf("$%.3f", r.EstCostUSD),
+		)
+		totCalls += r.Calls
+		totIn += r.PromptTokens
+		totOut += r.ResponseTokens
+		totCost += r.EstCostUSD
+	}
+	fmt.Println("  " + sep)
+	fmt.Printf("  %-32s  %6s  %9s  %9s  %10s\n",
+		"Total",
+		commaInt(totCalls),
+		commaInt(totIn),
+		commaInt(totOut),
+		fmt.Sprintf("$%.3f", totCost),
+	)
+	fmt.Println()
+}
+
+// RenderSwarmStats prints the swarm-specific summary.
+func RenderSwarmStats(s SwarmSummary) {
+	fmt.Printf("\nSwarm runs: %d  Winner rate: %.0f%%  Avg wall time: %.1fs  Total: $%.4f\n",
+		s.Runs, s.WinnerRate*100, float64(s.AvgWallMS)/1000, s.TotalCost)
+	if len(s.ByMode) > 0 {
+		fmt.Print("Modes:")
+		for mode, count := range s.ByMode {
+			fmt.Printf("  %s=%d", mode, count)
+		}
+		fmt.Println()
+	}
+	fmt.Println()
+}
+
+func commaInt(n int) string {
+	s := fmt.Sprintf("%d", n)
+	if n < 1000 {
+		return s
+	}
+	result := ""
+	for i, c := range s {
+		if i > 0 && (len(s)-i)%3 == 0 {
+			result += ","
+		}
+		result += string(c)
+	}
+	return result
+}
+
+func truncLabel(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	return s[:max-1] + "…"
 }
 
 // RenderTail prints human-readable tail rows.
@@ -321,6 +468,9 @@ func aggregate(rows []Row) Totals {
 	t.EstCostUSD = math.Round(t.EstCostUSD*1_000_000) / 1_000_000
 	return t
 }
+
+// GroupBy aggregates rows using an arbitrary key function, sorted by cost descending.
+func GroupBy(rows []Row, key func(Row) string) []GroupRow { return groupBy(rows, key) }
 
 func groupBy(rows []Row, key func(Row) string) []GroupRow {
 	m := map[string]*GroupRow{}

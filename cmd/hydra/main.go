@@ -65,7 +65,7 @@ func rootCmd() *cobra.Command {
 	}
 	root.AddCommand(
 		cmdInit(), cmdProbe(), cmdStatus(), cmdDispatch(),
-		cmdEdit(), cmdReview(), cmdParallel(), cmdCost(), cmdRun(),
+		cmdEdit(), cmdReview(), cmdParallel(), cmdCost(), cmdStats(), cmdRun(),
 		cmdPricing(),
 		cmdVersion(),
 	)
@@ -734,6 +734,137 @@ func cmdCost() *cobra.Command {
 	jsonCmd.Flags().StringVar(&since, "since", "", "ISO timestamp prefix filter (e.g. 2026-06-01)")
 
 	cmd.AddCommand(tail, jsonCmd)
+	return cmd
+}
+
+// ── stats ─────────────────────────────────────────────────────────────────────
+
+func cmdStats() *cobra.Command {
+	var (
+		days      int
+		byModel   bool
+		byTier    bool
+		byDay     bool
+		swarmOnly bool
+		sessionID string
+		jsonOut   bool
+	)
+
+	printJSON := func(v any) {
+		raw, _ := json.MarshalIndent(v, "", "  ")
+		fmt.Println(string(raw))
+	}
+
+	cmd := &cobra.Command{
+		Use:   "stats",
+		Short: "Spend analytics — model, tier, day, and swarm breakdowns",
+		Long: `hydra stats shows cost.jsonl summaries with rich grouping options.
+
+Examples:
+  hydra stats                  # today summary
+  hydra stats --days 7         # last 7 days, grouped by model
+  hydra stats --model          # all-time by model
+  hydra stats --tier           # all-time by tier
+  hydra stats --day            # all-time by day
+  hydra stats --swarm          # swarm-only stats + winner rate
+  hydra stats --session <id>   # single session/task breakdown
+  hydra stats --json           # machine-readable output`,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			all, err := cost.LoadAll()
+			if err != nil {
+				return err
+			}
+
+			// Session filter takes priority.
+			if sessionID != "" {
+				var rows []cost.Row
+				for _, r := range all {
+					if r.TaskID == sessionID || r.RunID == sessionID {
+						rows = append(rows, r)
+					}
+				}
+				if len(rows) == 0 {
+					return fmt.Errorf("no entries found for session %q", sessionID)
+				}
+				groups := cost.ByModel(rows)
+				if jsonOut {
+					printJSON(groups)
+					return nil
+				}
+				cost.RenderStatsTable(fmt.Sprintf("session %s", sessionID), groups)
+				return nil
+			}
+
+			rows := cost.FilterDays(all, days)
+
+			period := "all time"
+			if days > 0 {
+				period = fmt.Sprintf("last %d days", days)
+			} else if days == 0 && !byModel && !byTier && !byDay && !swarmOnly {
+				// Default: today
+				rows = cost.FilterDays(all, 1)
+				period = "today"
+			}
+
+			if swarmOnly {
+				s := cost.SwarmStats(rows)
+				if jsonOut {
+					printJSON(s)
+					return nil
+				}
+				cost.RenderSwarmStats(s)
+				return nil
+			}
+
+			if byDay {
+				groups := cost.ByDay(rows)
+				if jsonOut {
+					printJSON(groups)
+					return nil
+				}
+				cost.RenderStatsTable(period+" · by day", groups)
+				return nil
+			}
+
+			if byTier {
+				groups := cost.GroupBy(rows, func(r cost.Row) string {
+					if r.Tier == 0 {
+						return "unknown"
+					}
+					return fmt.Sprintf("tier-%d", r.Tier)
+				})
+				if jsonOut {
+					printJSON(groups)
+					return nil
+				}
+				cost.RenderStatsTable(period+" · by tier", groups)
+				return nil
+			}
+
+			// Default grouping: by model.
+			groups := cost.ByModel(rows)
+			if jsonOut {
+				printJSON(groups)
+				return nil
+			}
+			cost.RenderStatsTable(period+" · by model", groups)
+
+			// Append swarm summary if any swarm rows exist.
+			s := cost.SwarmStats(rows)
+			if s.Runs > 0 {
+				cost.RenderSwarmStats(s)
+			}
+			return nil
+		},
+	}
+
+	cmd.Flags().IntVar(&days, "days", 0, "show last N days (0 = today by default)")
+	cmd.Flags().BoolVar(&byModel, "model", false, "group by model (default grouping)")
+	cmd.Flags().BoolVar(&byTier, "tier", false, "group by tier")
+	cmd.Flags().BoolVar(&byDay, "day", false, "group by calendar day")
+	cmd.Flags().BoolVar(&swarmOnly, "swarm", false, "swarm-only stats: winner rate, avg wall time, mode breakdown")
+	cmd.Flags().StringVar(&sessionID, "session", "", "filter to a single task_id or run_id")
+	cmd.Flags().BoolVar(&jsonOut, "json", false, "machine-readable JSON output")
 	return cmd
 }
 
