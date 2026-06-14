@@ -20,6 +20,7 @@ import (
 	"github.com/ankit373/hydra/internal/parallel"
 	"github.com/ankit373/hydra/internal/probe"
 	"github.com/ankit373/hydra/internal/review"
+	"github.com/ankit373/hydra/internal/swarm"
 	"github.com/ankit373/hydra/internal/tui"
 	"github.com/ankit373/hydra/internal/update"
 
@@ -196,6 +197,13 @@ func cmdDispatch() *cobra.Command {
 		system    string
 		a2aFile   string
 		enumKey   string
+		// swarm flags
+		doSwarm       bool
+		swarmMode     string
+		swarmHeads    string
+		swarmMaxHeads int
+		swarmMaxCost  float64
+		swarmJudge    string
 	)
 
 	cmd := &cobra.Command{
@@ -211,6 +219,39 @@ func cmdDispatch() *cobra.Command {
 				return err
 			}
 
+			// ── swarm mode ────────────────────────────────────────────────
+			if doSwarm {
+				var headIDs []string
+				if swarmHeads != "" {
+					for _, id := range strings.Split(swarmHeads, ",") {
+						if id = strings.TrimSpace(id); id != "" {
+							headIDs = append(headIDs, id)
+						}
+					}
+				}
+				mode := swarm.SwarmMode(swarmMode)
+				if mode == "" {
+					mode = swarm.ModeBest
+				}
+				sw := swarm.New(d, d.Heads(), d)
+				result, err := sw.Run(ctx, prompt, swarm.Options{
+					Mode:          mode,
+					TierHint:      tier,
+					HeadIDs:       headIDs,
+					MaxHeads:      swarmMaxHeads,
+					MaxEstCostUSD: swarmMaxCost,
+					LocalOnly:     localOnly,
+					System:        system,
+					JudgeTierHint: swarmJudge,
+				})
+				if err != nil {
+					return err
+				}
+				printSwarmResult(result)
+				return nil
+			}
+
+			// ── normal single dispatch ─────────────────────────────────────
 			opts := dispatch.Options{
 				TierHint:  tier,
 				LocalOnly: localOnly,
@@ -260,7 +301,107 @@ func cmdDispatch() *cobra.Command {
 	cmd.Flags().StringVarP(&system, "system", "s", "", "system prompt")
 	cmd.Flags().StringVar(&a2aFile, "a2a", "", "path to A2A handoff JSON (prepends structured context to prompt)")
 	cmd.Flags().StringVar(&enumKey, "enum", "", "routing enum key for cost logging (e.g. SIMPLE)")
+	// swarm flags
+	cmd.Flags().BoolVar(&doSwarm, "swarm", false, "fan prompt out to multiple heads simultaneously")
+	cmd.Flags().StringVar(&swarmMode, "swarm-mode", "best", "response strategy: best|race|all")
+	cmd.Flags().StringVar(&swarmHeads, "swarm-heads", "", "comma-separated head IDs to target (overrides --tier)")
+	cmd.Flags().IntVar(&swarmMaxHeads, "swarm-max-heads", 0, "max heads to fire (default 5)")
+	cmd.Flags().Float64Var(&swarmMaxCost, "swarm-max-cost", 0, "refuse swarm if preflight cost estimate exceeds this USD")
+	cmd.Flags().StringVar(&swarmJudge, "swarm-judge-tier", "", "tier for judge head in best mode (default: tier 1 / cortex)")
 	return cmd
+}
+
+// printSwarmResult renders the swarm result to stdout.
+func printSwarmResult(r *swarm.SwarmResult) {
+	sep := dimStyle.Render("  " + strings.Repeat("─", 60))
+
+	fmt.Println()
+	fmt.Printf("  %s [%s · %d heads]\n\n",
+		cortexStyle.Render("▶ SWARM"),
+		dimStyle.Render(string(r.Mode)),
+		len(r.Attempts),
+	)
+
+	// Attempt table header.
+	fmt.Printf("  %-28s  %-10s  %7s  %7s  %8s\n", "HEAD", "STATUS", "TIME", "SCORE", "COST")
+	fmt.Println(sep)
+
+	for _, a := range r.Attempts {
+		statusStr := statusIcon(a.Status) + " " + string(a.Status)
+		timeStr := "-"
+		if a.Duration > 0 {
+			timeStr = fmt.Sprintf("%dms", a.Duration.Milliseconds())
+		}
+		scoreStr := "-"
+		if r.Verdict != nil && a.Status == swarm.StatusOK {
+			for i, att := range r.Attempts {
+				if att.Head.ID == a.Head.ID && i < len(r.Verdict.Scores) {
+					scoreStr = fmt.Sprintf("%d/100", r.Verdict.Scores[i])
+					break
+				}
+			}
+		}
+		costStr := fmt.Sprintf("$%.4f", a.EstCostUSD)
+		if a.EstCostUSD == 0 {
+			costStr = "-"
+		}
+		winnerMark := "  "
+		if a.Rank == 1 {
+			winnerMark = cortexStyle.Render("→ ")
+		}
+		fmt.Printf("%s%-28s  %-10s  %7s  %7s  %8s\n",
+			winnerMark, a.Head.Name, statusStr, timeStr, scoreStr, costStr,
+		)
+	}
+
+	fmt.Println(sep)
+
+	// Verdict line.
+	if r.Verdict != nil && r.Winner != nil {
+		judgeLabel := "LLM judge"
+		if r.Verdict.Meta.UsedFallback {
+			judgeLabel = "cap-score fallback"
+		}
+		fmt.Printf("\n  %s %s  [%s, %dms]\n",
+			dimStyle.Render("Winner →"),
+			cortexStyle.Render(r.Winner.Head.Name),
+			judgeLabel,
+			r.Verdict.Meta.Duration.Milliseconds(),
+		)
+		if r.Verdict.Reason != "" {
+			fmt.Printf("  %s\n", dimStyle.Render(`"`+r.Verdict.Reason+`"`))
+		}
+	} else if r.Winner != nil {
+		fmt.Printf("\n  %s %s\n",
+			dimStyle.Render("Winner →"),
+			cortexStyle.Render(r.Winner.Head.Name),
+		)
+	}
+
+	fmt.Printf("\n  %s  total $%.4f  ·  wall %dms  ·  %d/%d succeeded\n\n",
+		sep,
+		r.TotalCostUSD,
+		r.WallDuration.Milliseconds(),
+		r.SucceededCount(),
+		len(r.Attempts),
+	)
+
+	// Winner output.
+	if r.Winner != nil && r.Winner.Output != "" {
+		fmt.Println(r.Winner.Output)
+		fmt.Println()
+	}
+}
+
+func statusIcon(s swarm.HeadStatus) string {
+	switch s {
+	case swarm.StatusOK:
+		return "✓"
+	case swarm.StatusCanceled:
+		return "·"
+	default:
+		return "✗"
+	}
 }
 
 // ── edit ──────────────────────────────────────────────────────────────────────

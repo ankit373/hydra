@@ -54,6 +54,14 @@ type Dispatcher struct {
 	pricing *pricingConfig
 }
 
+// Heads returns the probed head list for external callers (e.g. swarm).
+func (d *Dispatcher) Heads() []provider.Head { return d.heads }
+
+// EstimateCost exposes per-tier cost estimation for external callers.
+func (d *Dispatcher) EstimateCost(tier, inputTokens, outputTokens int) float64 {
+	return d.estimateCost(tier, inputTokens, outputTokens)
+}
+
 // New builds a Dispatcher from the saved config and a fresh machine probe.
 func New(ctx context.Context) (*Dispatcher, error) {
 	cfg, err := config.Load()
