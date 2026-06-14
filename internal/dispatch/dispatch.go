@@ -164,7 +164,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 // mode string, and raw percentage.
 func (d *Dispatcher) claudeMode(tierHint string) (tier string, mode string, pct int) {
 	pct = readClaudePct()
-	mode = claudePctMode(pct)
+	mode = budget.ModeFor(pct).String()
 	tier = tierHint
 
 	// Convert tier hint to int so we can downgrade numerically.
@@ -199,23 +199,6 @@ func readClaudePct() int {
 		return 0
 	}
 	return s.ClaudePct
-}
-
-func claudePctMode(pct int) string {
-	switch {
-	case pct >= 80:
-		return "emergency"
-	case pct >= 75:
-		return "critical"
-	case pct >= 70:
-		return "warning"
-	case pct >= 65:
-		return "caution"
-	case pct >= 50:
-		return "compact"
-	default:
-		return "normal"
-	}
 }
 
 // injectA2A reads a handoff JSON file and prepends a structured block to the prompt.

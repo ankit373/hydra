@@ -108,6 +108,23 @@ jq '.claude_pct = 52' logs/state.json > logs/state.json.tmp && mv logs/state.jso
 
 ---
 
+## Code Quality Standard — Non-Negotiable
+
+**Everything written here must be industry-best. No exceptions. No "good enough".**
+
+When reviewing or producing code:
+- **Be brutally honest.** If it's wrong, say it's wrong. If it's mediocre, say it's mediocre. Do not soften findings to protect feelings.
+- **Run the race detector.** `go test -race ./...`. If it fails, it ships nothing.
+- **Never ship duplicate logic.** Three copies of the same threshold table is a bug, not an inconvenience.
+- **Dead code is a lie.** A branch that can never execute is a statement about the code that is false. Delete it.
+- **User-visible output must be correct.** `used/1000` truncating to zero is broken, not "close enough."
+- **Exported symbols must be used.** An exported function with no callers is noise that misleads the next engineer.
+- **If the race detector, linter, or vet flag it — fix it before asking for review.** Not after.
+
+The bar is: would a senior engineer at a top systems shop approve this without comment? If not, keep working.
+
+---
+
 ## Karpathy Guidelines (always apply)
 - Think before coding. State assumptions. Push back when a simpler approach exists.
 - Minimum code. No speculative features. No abstractions for single-use code.
