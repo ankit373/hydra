@@ -67,10 +67,16 @@ func rootCmd() *cobra.Command {
 	}
 	root.AddCommand(
 		cmdInit(), cmdProbe(), cmdStatus(), cmdDispatch(),
-		cmdEdit(), cmdReview(), cmdParallel(), cmdCost(), cmdStats(), cmdRun(),
+		cmdEdit(), cmdReview(), cmdParallel(), cmdCost(), cmdStats(),
 		cmdPricing(),
 		cmdVersion(),
 	)
+	// `run` is the experimental playbook state machine — a separate, unproven
+	// subsystem kept off the default product surface. Opt in with HYDRA_EXPERIMENTAL=1.
+	// (Code is preserved, not deleted; this only unregisters the command by default.)
+	if os.Getenv("HYDRA_EXPERIMENTAL") != "" {
+		root.AddCommand(cmdRun())
+	}
 	return root
 }
 
