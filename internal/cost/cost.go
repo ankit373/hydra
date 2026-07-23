@@ -28,7 +28,9 @@ type Row struct {
 	ResponseTokens int     `json:"response_tokens"`
 	EstCostUSD     float64 `json:"est_cost_usd"`
 	WallMS         int64   `json:"wall_ms"`
-	Source         string  `json:"source"`
+	Source         string  `json:"source"`        // legacy, mirrors tokens_source
+	TokensSource   string  `json:"tokens_source"` // "actual" (provider) or "estimated" (agy char/4)
+	CostSource     string  `json:"cost_source"`   // always "estimated" — cost is derived, never billed
 	TaskID         string  `json:"task_id"`
 	RunID          string  `json:"run_id"`
 	SwarmMode      string  `json:"swarm_mode"`
@@ -59,6 +61,35 @@ type SummaryResult struct {
 	Today   Totals  `json:"today"`
 	AllTime Totals  `json:"all_time"`
 	Recent  []Row   `json:"recent"`
+	// Token-source share (all-time), counting prompt+response tokens.
+	ActualTokens    int `json:"actual_tokens"`
+	EstimatedTokens int `json:"estimated_tokens"`
+}
+
+// tokensEstimated reports whether a row's tokens were estimated rather than
+// reported by the provider. New rows carry tokens_source; legacy rows fall
+// back to the old `source` field ("estimate" → estimated).
+func tokensEstimated(r Row) bool {
+	switch r.TokensSource {
+	case "estimated":
+		return true
+	case "actual":
+		return false
+	}
+	return r.Source == "estimate"
+}
+
+// TokenSourceShare returns total actual vs estimated tokens (prompt+response).
+func TokenSourceShare(rows []Row) (actual, estimated int) {
+	for _, r := range rows {
+		n := r.PromptTokens + r.ResponseTokens
+		if tokensEstimated(r) {
+			estimated += n
+		} else {
+			actual += n
+		}
+	}
+	return actual, estimated
 }
 
 // LoadAll reads all rows from cost.jsonl.
@@ -90,10 +121,13 @@ func Summary() (*SummaryResult, error) {
 		recent[i], recent[j] = recent[j], recent[i]
 	}
 
+	actualTok, estTok := TokenSourceShare(all)
 	return &SummaryResult{
-		Today:   aggregate(todayRows),
-		AllTime: aggregate(all),
-		Recent:  recent,
+		Today:           aggregate(todayRows),
+		AllTime:         aggregate(all),
+		Recent:          recent,
+		ActualTokens:    actualTok,
+		EstimatedTokens: estTok,
 	}, nil
 }
 
@@ -318,6 +352,12 @@ func RenderSummary(r *SummaryResult) {
 	fmt.Println()
 	fmt.Println("  All time")
 	renderTotals(r.AllTime, "    ")
+	if tot := r.ActualTokens + r.EstimatedTokens; tot > 0 {
+		estPct := float64(r.EstimatedTokens) * 100 / float64(tot)
+		fmt.Printf("    token source   %.0f%% actual · %.0f%% estimated (agy char/4)\n",
+			100-estPct, estPct)
+	}
+	fmt.Println("    (cost is estimated: pricing × tokens, not billed)")
 	fmt.Println()
 	fmt.Println("  Recent (last 5):")
 	for _, row := range r.Recent {

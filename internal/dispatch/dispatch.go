@@ -296,9 +296,9 @@ func (d *Dispatcher) recordBudget(r *Result) {
 	if d.budget == nil || r.Response.InputTokens == 0 {
 		return
 	}
-	// No output tokens → execution was cut short or agy returned an estimate.
+	// Estimated tokens (agy char/4) must not be booked as measured usage.
 	source := "real"
-	if r.Response.OutputTokens == 0 {
+	if r.Response.TokensEstimated {
 		source = "estimate"
 	}
 	d.budget.Record(r.Head.ID, r.Response.InputTokens, source)
@@ -381,9 +381,18 @@ func (d *Dispatcher) logDispatch(r *Result, prompt string, opts Options) error {
 
 	// cost.jsonl only written when we have token data.
 	if r.Response.InputTokens > 0 || r.Response.OutputTokens > 0 {
-		source := "real"
-		if r.Response.InputTokens == 0 {
-			source = "estimate"
+		// tokens_source reflects whether the provider reported usage (actual)
+		// or Hydra estimated it (estimated, e.g. agy char/4). cost_source is
+		// always "estimated": est_cost_usd is derived from pricing × tokens,
+		// never a billed figure. `source` is retained for backward-compat with
+		// older readers and mirrors tokens_source.
+		tokensSource := "actual"
+		if r.Response.TokensEstimated {
+			tokensSource = "estimated"
+		}
+		legacySource := "real"
+		if r.Response.TokensEstimated {
+			legacySource = "estimate"
 		}
 		costEntry := map[string]any{
 			"ts":             time.Now().UTC().Format(time.RFC3339),
@@ -396,7 +405,9 @@ func (d *Dispatcher) logDispatch(r *Result, prompt string, opts Options) error {
 			"response_tokens": r.Response.OutputTokens,
 			"est_cost_usd":   estCost,
 			"wall_ms":        wallMs,
-			"source":         source,
+			"tokens_source":  tokensSource,
+			"cost_source":    "estimated",
+			"source":         legacySource,
 			"task_id":        os.Getenv("HYDRA_TASK_ID"),
 			"run_id":         os.Getenv("HYDRA_RUN_ID"),
 		}

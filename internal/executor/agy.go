@@ -133,6 +133,8 @@ func (e *AgyExecutor) Execute(ctx context.Context, req Request) (*Response, erro
 		InputTokens:  promptTokens,
 		OutputTokens: responseTokens,
 		Truncated:    stdout.Truncated(),
+		// agy does not report token usage — these are char/4 estimates.
+		TokensEstimated: true,
 	}, nil
 }
 
