@@ -1,30 +1,49 @@
 # Hydra — Orchestrator Instructions
-# Claude Code is the BRAIN. Everything else is a HEAD.
+# Provider-neutral, local-first control plane. The orchestrator delegates; cheaper/local heads do the work.
 
 ## What Hydra Is
-A multi-model AI orchestration system. Claude Code orchestrates; Antigravity (agy) and Ollama do the work.
+A **local-first, multi-vendor AI control plane** shipped as a Go CLI (`hydra`). It discovers every
+model on your machine (CLI agents, API keys, local servers), scores each, and routes tasks by
+complexity/cost with automatic fallback — enforcing policy (PII/local-only) and logging spend.
+
+Whatever model you drive Hydra with acts as the **orchestrator**; Antigravity (agy), API providers,
+and Ollama are interchangeable **heads**. No single vendor is privileged — the whole point is
+routing *across* providers (and *away* from expensive ones), so keep it provider-neutral.
 Never do work yourself that belongs to a lower tier. Never escalate work to yourself that a cheaper head can handle.
+
+> **Direction (roadmap, not yet shipped):** Hydra is evolving from a cost router into a *Trust
+> Control Plane* — routing to a target *confidence of correctness* (calibration + optimal-stopping
+> ensembles), graph-aware routing, and a local MCP accountability ledger. See the private planning
+> docs (`ROADMAP_TRUST_CONTROL_PLANE.md`, `HYDRA_MANIFESTO.md`, `SPEC_TRUST_V1.md`). Do not describe
+> those features as shipped until they land.
 
 ---
 
 ## Directory Layout
+
+**The `hydra` Go CLI is the primary interface** (`cmd/hydra` + `internal/`). The `dispatch/*.sh`
+shell layer is **deprecated legacy** — route.sh is superseded by `hydra dispatch` and kept only
+for internal fallback (`HYDRA_INTERNAL=1`). Prefer the Go commands everywhere.
 ```
+cmd/hydra/              ← CLI entry point (Cobra): dispatch, probe, status, cost, stats,
+                          swarm, edit, review, parallel, pricing, run, init.
+internal/dispatch/      ← Tier routing + fallback + policy + cost logging (the router).
+internal/executor/      ← Executors: agy, Ollama, HTTP (API providers), CLI subprocess.
+internal/provider/      ← Discovery: cli / env (API keys) / port / agy.
+internal/swarm/         ← Swarm dispatch — fan-out to multiple heads (race/best/all + judge).
+internal/pricing/       ← Live pricing DB (OpenRouter fetch + 24h cache + tier fallback).
+internal/policy/        ← PII detection + local-only enforcement.
+internal/{cost,budget}/ ← Spend reporting + token-budget (claude_pct) governor.
+internal/util/          ← Shared utilities (Accumulator, etc).
+
 registry/routing.yaml   ← THE ENUM. Change tier assignments here only.
-registry/models.yaml    ← All model definitions, token pools, fallback chains.
+registry/models.yaml    ← Model definitions, token pools, fallback chains (flags are
+                          install-specific defaults — verify against your providers).
 registry/domains.yaml   ← Domain → enum key routing (references routing.yaml).
 registry/pricing.yaml   ← Static tier pricing fallback (used when offline).
-dispatch/route.sh       ← Entry point for all delegated execution.
-dispatch/agy.sh         ← agy subprocess wrapper.
-dispatch/ollama.sh      ← Ollama API wrapper.
-heads/                  ← Per-model identity/capability descriptions.
-skills/                 ← Claude Code skills (delegate, rubber-duck, escalate).
-.agents/skills/         ← agy TUI slash command skills.
-context/                ← Convention templates to inject into delegated prompts.
 logs/                   ← Dispatch log + state.json (pool exhaustion, claude_pct).
 
-internal/pricing/       ← Live pricing DB (OpenRouter fetch + 24h cache + tier fallback).
-internal/util/          ← Shared utilities (Accumulator, etc).
-internal/swarm/         ← Swarm dispatch — fan-out to multiple heads (race/best/all).
+dispatch/*.sh           ← DEPRECATED legacy shell layer (route.sh, agy.sh, ollama.sh, …).
 ```
 
 ---
@@ -38,26 +57,27 @@ Check `registry/routing.yaml` to resolve the enum key to a tier number.
 
 ### Step 2 — Check State
 ```bash
-dispatch/route.sh --status      # check claude_pct and exhausted pools
+hydra status      # check claude_pct, budget, and available heads
 ```
 If claude_pct ≥ 75: freeze escalations, do not route new work to tier 1 (yourself).
 If claude_pct ≥ 95: emergency mode — warn user, only route, don't execute.
 
 ### Step 3 — Dispatch
 ```bash
-dispatch/route.sh --enum SIMPLE --prompt "<task>" [--context <file>] [--a2a logs/last_handoff.json]
+hydra dispatch --enum SIMPLE --prompt "<task>" [--system <text>] [--a2a logs/last_handoff.json]
 ```
-route.sh handles all fallbacks automatically. You do not need to retry.
+Dispatch handles fallbacks automatically. You do not need to retry. Use `--dry-run` to preview
+the routing chain, `--local` to force local-only, `--tier N` to pin a tier.
 
 ### Step 4 — Review
 Read the output. Ask: does this compile? match conventions? solve the task?
-If no → escalate one tier: `--tier $((current+1_lower))`  (route.sh handles it)
+If no → escalate one tier: `hydra dispatch --tier <lower-number> …` (lower tier number = stronger).
 If yes → apply to disk, continue.
 
 ### Step 5 — Rubber Duck
-For any output from tiers 2-3 (Claude family in agy), run rubber duck review:
+For any output from tiers 2-3 (agy Claude family), run rubber duck review:
 ```bash
-dispatch/route.sh --tier 4 --prompt "Review this for tradeoffs and blind spots:\n<output>"
+hydra dispatch --tier 4 --prompt "Review this for tradeoffs and blind spots:\n<output>"
 ```
 Skip rubber duck if claude_pct ≥ 75 (preserve tokens).
 
@@ -77,7 +97,7 @@ cat > /tmp/hydra_handoff.json <<EOF
   "prior_output": "<what was already done>"
 }
 EOF
-dispatch/route.sh --tier 6 --prompt "<next task>" --a2a /tmp/hydra_handoff.json
+hydra dispatch --tier 6 --prompt "<next task>" --a2a /tmp/hydra_handoff.json
 ```
 The last handoff is always saved to `logs/last_handoff.json` automatically.
 
@@ -103,7 +123,7 @@ Update `logs/state.json` when you know your token usage percent:
 jq '.claude_pct = 52' logs/state.json > logs/state.json.tmp && mv logs/state.json.tmp logs/state.json
 ```
 
-**Same 70%/75%/80% rule applies to ALL delegated models** — route.sh enforces this via fallback chains.
+**Same 70%/75%/80% rule applies to ALL delegated models** — `hydra dispatch` enforces this via the budget governor + fallback chains.
 **Qwen (tier 10) is always the terminal fallback** — it runs locally so is always available regardless of API limits.
 
 ---
@@ -166,22 +186,25 @@ no hallucinated APIs, explicit about tradeoffs.
 ## Quick Reference
 ```bash
 # Dispatch by enum key (preferred)
-dispatch/route.sh --enum SIMPLE --prompt "write a User DTO in TypeScript"
+hydra dispatch --enum SIMPLE --prompt "write a User DTO in TypeScript"
 
 # Dispatch by tier
-dispatch/route.sh --tier 8 --prompt "write a User DTO in TypeScript"
+hydra dispatch --tier 8 --prompt "write a User DTO in TypeScript"
 
-# With file context
-dispatch/route.sh --enum STANDARD --prompt "add pagination" --context src/users/controller.ts
+# Preview the routing/fallback chain without executing
+hydra dispatch --dry-run --enum STANDARD --prompt "add pagination"
+
+# Force local-only (no API calls)
+hydra dispatch --local --prompt "write unit tests"
 
 # With A2A handoff
-dispatch/route.sh --enum MODERATE --prompt "add auth" --a2a logs/last_handoff.json
+hydra dispatch --enum MODERATE --prompt "add auth" --a2a logs/last_handoff.json
 
-# Check system status
-dispatch/route.sh --status
+# Fan-out to multiple heads (swarm) and judge the best
+hydra dispatch --swarm --swarm-mode best --prompt "implement rate limiter"
 
-# List all tiers
-dispatch/route.sh --list
+# System state / discovered heads / spend
+hydra status ; hydra probe ; hydra cost ; hydra stats
 ```
 
 ---
