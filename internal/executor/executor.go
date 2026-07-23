@@ -41,7 +41,7 @@ func Supports(h provider.Head) bool {
 	if h.Source == "registry" {
 		return true // agy heads — AgyExecutor handles them
 	}
-	if h.Source == "port" || h.Endpoint != "" {
+	if h.Source == "port" || h.Source == "env" || h.Endpoint != "" {
 		return SupportsHTTP(h)
 	}
 	if _, ok := cliTemplates[h.Provider]; ok {
@@ -54,8 +54,12 @@ func Supports(h provider.Head) bool {
 // For selects the correct Executor for a given Head.
 //   - registry source (agy tiers): AgyExecutor → calls dispatch/agy.sh
 //   - ollama source: OllamaExecutor → native /api/generate
-//   - port source / explicit endpoint: HTTPExecutor → OpenAI-compatible REST
+//   - env source / port source / explicit endpoint: HTTPExecutor → per-provider REST
 //   - everything else: CLIExecutor → subprocess
+//
+// env-key heads (Source=="env") carry no Executable — they are API providers
+// (anthropic, openai, groq, …). HTTPExecutor.Execute dispatches on Head.Provider
+// and already has an adapter for each, so env heads route to HTTP, not CLI.
 func For(h provider.Head) Executor {
 	if h.Source == "registry" {
 		return &AgyExecutor{}
@@ -63,7 +67,7 @@ func For(h provider.Head) Executor {
 	if h.Source == "ollama" || h.Provider == "ollama" {
 		return &OllamaExecutor{}
 	}
-	if h.Source == "port" || h.Endpoint != "" {
+	if h.Source == "port" || h.Source == "env" || h.Endpoint != "" {
 		return &HTTPExecutor{}
 	}
 	return &CLIExecutor{}
