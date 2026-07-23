@@ -312,7 +312,7 @@ action  = "local-only"
 
 ## Adding a Model
 
-Models are defined in [`core/internal/capabilities/data.json`](core/internal/capabilities/data.json). Adding support for a new model is one JSON entry — no Go code required:
+Models are defined in [`internal/capabilities/data.json`](internal/capabilities/data.json). Adding support for a new model is one JSON entry — no Go code required:
 
 ```json
 {
