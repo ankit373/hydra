@@ -46,6 +46,7 @@ func executeHead(ctx context.Context, h provider.Head, prompt string, opts Optio
 	a.Output = resp.Output
 	a.InputTokens = resp.InputTokens
 	a.OutputTokens = resp.OutputTokens
+	a.TokensEstimated = resp.TokensEstimated
 	a.Truncated = resp.Truncated
 	return a
 }

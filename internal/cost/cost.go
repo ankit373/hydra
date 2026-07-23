@@ -66,6 +66,20 @@ type SummaryResult struct {
 	EstimatedTokens int `json:"estimated_tokens"`
 }
 
+// SourceLabels returns the cost.jsonl provenance labels for a token count that
+// was either reported by the provider (estimated=false) or estimated by Hydra
+// (estimated=true, e.g. agy's char/4). It is the single source of truth for
+// these labels so the dispatch and swarm log paths cannot drift.
+//   - tokensSource: "actual" | "estimated"
+//   - costSource:   always "estimated" (est_cost_usd is pricing × tokens, never billed)
+//   - legacySource: "real" | "estimate" — mirrors tokensSource for older readers
+func SourceLabels(estimated bool) (tokensSource, costSource, legacySource string) {
+	if estimated {
+		return "estimated", "estimated", "estimate"
+	}
+	return "actual", "estimated", "real"
+}
+
 // tokensEstimated reports whether a row's tokens were estimated rather than
 // reported by the provider. New rows carry tokens_source; legacy rows fall
 // back to the old `source` field ("estimate" → estimated).
