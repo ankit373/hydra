@@ -8,6 +8,17 @@
 # To reorder tiers  → change tier number AND update routing.yaml to match
 # To disable        → set enabled: false (route.sh auto-escalates)
 # ─────────────────────────────────────────────────────────────────────────────
+#
+# ⚠️  model_flag VALUES ARE INSTALL-SPECIFIC DEFAULTS — VERIFY, DON'T TRUST.
+# The `model_flag` and version-bearing `name` fields below (e.g. agy Claude/Gemini
+# tiers) are provider-INTERNAL identifiers that only resolve on YOUR specific
+# Antigravity / Ollama / API installation. They are starting defaults, NOT a
+# guarantee that a given model or version is current or available to you.
+# Before relying on a tier, confirm its model_flag actually exists in your
+# provider (agy model list · `ollama list` · the provider's API). Mismatched
+# flags fail at dispatch and route.sh auto-escalates to the next tier.
+# (A `hydra doctor` command that validates these against live providers is planned.)
+# ─────────────────────────────────────────────────────────────────────────────
 
 version: "1.0"
 
