@@ -133,6 +133,19 @@ func TestTokenSourceShare(t *testing.T) {
 	}
 }
 
+func TestSourceLabels(t *testing.T) {
+	// estimated=true → estimated everywhere, legacy "estimate"
+	ts, cs, ls := SourceLabels(true)
+	if ts != "estimated" || cs != "estimated" || ls != "estimate" {
+		t.Errorf("SourceLabels(true) = %q/%q/%q, want estimated/estimated/estimate", ts, cs, ls)
+	}
+	// estimated=false → actual tokens, but cost is still derived, legacy "real"
+	ts, cs, ls = SourceLabels(false)
+	if ts != "actual" || cs != "estimated" || ls != "real" {
+		t.Errorf("SourceLabels(false) = %q/%q/%q, want actual/estimated/real", ts, cs, ls)
+	}
+}
+
 func TestTokensEstimated_Precedence(t *testing.T) {
 	// tokens_source wins over legacy source when both are present.
 	if tokensEstimated(Row{TokensSource: "actual", Source: "estimate"}) {

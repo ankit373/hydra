@@ -16,6 +16,7 @@ import (
 
 	"github.com/ankit373/hydra/internal/budget"
 	"github.com/ankit373/hydra/internal/config"
+	"github.com/ankit373/hydra/internal/cost"
 	"github.com/ankit373/hydra/internal/executor"
 	"github.com/ankit373/hydra/internal/policy"
 	"github.com/ankit373/hydra/internal/pricing"
@@ -381,19 +382,12 @@ func (d *Dispatcher) logDispatch(r *Result, prompt string, opts Options) error {
 
 	// cost.jsonl only written when we have token data.
 	if r.Response.InputTokens > 0 || r.Response.OutputTokens > 0 {
-		// tokens_source reflects whether the provider reported usage (actual)
-		// or Hydra estimated it (estimated, e.g. agy char/4). cost_source is
-		// always "estimated": est_cost_usd is derived from pricing × tokens,
-		// never a billed figure. `source` is retained for backward-compat with
-		// older readers and mirrors tokens_source.
-		tokensSource := "actual"
-		if r.Response.TokensEstimated {
-			tokensSource = "estimated"
-		}
-		legacySource := "real"
-		if r.Response.TokensEstimated {
-			legacySource = "estimate"
-		}
+		// Provenance labels come from cost.SourceLabels so dispatch and swarm
+		// stay in lock-step: tokens_source reflects whether the provider
+		// reported usage or Hydra estimated it (agy char/4); cost_source is
+		// always "estimated" (est_cost_usd is pricing × tokens, never billed);
+		// the legacy `source` field mirrors tokens_source for older readers.
+		tokensSource, costSource, legacySource := cost.SourceLabels(r.Response.TokensEstimated)
 		costEntry := map[string]any{
 			"ts":             time.Now().UTC().Format(time.RFC3339),
 			"tier":           tier,
@@ -406,7 +400,7 @@ func (d *Dispatcher) logDispatch(r *Result, prompt string, opts Options) error {
 			"est_cost_usd":   estCost,
 			"wall_ms":        wallMs,
 			"tokens_source":  tokensSource,
-			"cost_source":    "estimated",
+			"cost_source":    costSource,
 			"source":         legacySource,
 			"task_id":        os.Getenv("HYDRA_TASK_ID"),
 			"run_id":         os.Getenv("HYDRA_RUN_ID"),

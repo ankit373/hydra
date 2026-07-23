@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/ankit373/hydra/internal/config"
+	"github.com/ankit373/hydra/internal/cost"
 	"github.com/ankit373/hydra/internal/provider"
 	"github.com/ankit373/hydra/internal/rank"
 )
@@ -72,6 +73,8 @@ func logAttempts(result *SwarmResult, promptPreview string) {
 		if a.Status == StatusPending || a.Status == StatusCanceled {
 			continue
 		}
+		// Shared with the dispatch log path — see cost.SourceLabels.
+		tokensSource, costSrc, legacySource := cost.SourceLabels(a.TokensEstimated)
 		entry := map[string]any{
 			"ts":              a.FinishedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
 			"tier":            rank.UITier(a.Head),
@@ -82,7 +85,9 @@ func logAttempts(result *SwarmResult, promptPreview string) {
 			"response_tokens": a.OutputTokens,
 			"est_cost_usd":    a.EstCostUSD,
 			"wall_ms":         a.Duration.Milliseconds(),
-			"source":          costSource(a),
+			"tokens_source":   tokensSource,
+			"cost_source":     costSrc,
+			"source":          legacySource,
 			"swarm_mode":      string(result.Mode),
 			"swarm_winner":    a.Status == StatusOK && a.Rank == 1,
 			"task_id":         taskID,
@@ -92,13 +97,6 @@ func logAttempts(result *SwarmResult, promptPreview string) {
 		raw, _ := json.Marshal(entry)
 		_, _ = fmt.Fprintln(f, string(raw))
 	}
-}
-
-func costSource(a Attempt) string {
-	if a.InputTokens > 0 {
-		return "real"
-	}
-	return "estimate"
 }
 
 func round6(f float64) float64 {
