@@ -24,9 +24,8 @@ class Hydra < Formula
   depends_on "oven-sh/bun/bun"
 
   def install
-    # Install shell scripts and registry (read-only, shared)
-    libexec.install "dispatch", "registry", "context", "skills", "ui"
-    Dir["#{libexec}/dispatch/*.sh"].each { |f| chmod 0755, f }
+    # Install registry (YAML config) + UI (read-only, shared)
+    libexec.install "registry", "context", "skills", "ui"
 
     # Build the Go control plane binary into libexec so the bin/ wrapper can call it
     system "go", "build", "-o", libexec/"hydra", "./cmd/hydra"
@@ -38,7 +37,7 @@ class Hydra < Formula
     end
 
     # hydra → Go binary wrapper
-    # Sets HYDRA_HOME so the binary finds dispatch/agy.sh and registry/models.yaml.
+    # Sets HYDRA_HOME so the binary finds registry/models.yaml.
     (bin/"hydra").write <<~SH
       #!/usr/bin/env bash
       set -euo pipefail

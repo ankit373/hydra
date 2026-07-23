@@ -44,7 +44,7 @@ jobs:
       # Warnings and style hints are surfaced but don't block the PR.
       - name: Lint shell scripts
         run: |
-          shellcheck --severity=error dispatch/*.sh install.sh scripts/*.sh
+          shellcheck --severity=error install.sh
 
   typecheck:
     name: TypeScript typecheck
