@@ -14,7 +14,6 @@ import (
 
 	"github.com/ankit373/hydra/internal/budget"
 	"github.com/ankit373/hydra/internal/build"
-	"github.com/ankit373/hydra/internal/company"
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/cost"
 	"github.com/ankit373/hydra/internal/dispatch"
@@ -27,10 +26,10 @@ import (
 	"github.com/ankit373/hydra/internal/tui"
 	"github.com/ankit373/hydra/internal/update"
 
+	_ "github.com/ankit373/hydra/internal/provider/agy"
 	_ "github.com/ankit373/hydra/internal/provider/cli"
 	_ "github.com/ankit373/hydra/internal/provider/env"
 	_ "github.com/ankit373/hydra/internal/provider/port"
-	_ "github.com/ankit373/hydra/internal/provider/agy"
 )
 
 func main() {
@@ -71,12 +70,6 @@ func rootCmd() *cobra.Command {
 		cmdPricing(),
 		cmdVersion(),
 	)
-	// `run` is the experimental playbook state machine — a separate, unproven
-	// subsystem kept off the default product surface. Opt in with HYDRA_EXPERIMENTAL=1.
-	// (Code is preserved, not deleted; this only unregisters the command by default.)
-	if os.Getenv("HYDRA_EXPERIMENTAL") != "" {
-		root.AddCommand(cmdRun())
-	}
 	return root
 }
 
@@ -207,8 +200,8 @@ func printBudgetStatus() {
 		return
 	}
 	var state struct {
-		ClaudePct int                        `json:"claude_pct"`
-		Budget    map[string]map[string]any  `json:"budget"`
+		ClaudePct int                       `json:"claude_pct"`
+		Budget    map[string]map[string]any `json:"budget"`
 	}
 	if err := json.Unmarshal(raw, &state); err != nil {
 		return
@@ -773,9 +766,9 @@ func cmdCost() *cobra.Command {
 			},
 		},
 		&cobra.Command{
-			Use:  "by-task <task_id>",
+			Use:   "by-task <task_id>",
 			Short: "Spending for a specific task",
-			Args: cobra.ExactArgs(1),
+			Args:  cobra.ExactArgs(1),
 			RunE: func(_ *cobra.Command, args []string) error {
 				totals, err := cost.ByTask(args[0])
 				if err != nil {
@@ -793,9 +786,9 @@ func cmdCost() *cobra.Command {
 			},
 		},
 		&cobra.Command{
-			Use:  "by-run <run_id>",
+			Use:   "by-run <run_id>",
 			Short: "Spending for a playbook run",
-			Args: cobra.ExactArgs(1),
+			Args:  cobra.ExactArgs(1),
 			RunE: func(_ *cobra.Command, args []string) error {
 				r, err := cost.ByRun(args[0])
 				if err != nil {
@@ -815,9 +808,9 @@ func cmdCost() *cobra.Command {
 	)
 
 	tail := &cobra.Command{
-		Use:  "tail [N]",
+		Use:   "tail [N]",
 		Short: "Last N calls (default 10)",
-		Args: cobra.MaximumNArgs(1),
+		Args:  cobra.MaximumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			n := 10
 			if len(args) > 0 {
@@ -838,7 +831,7 @@ func cmdCost() *cobra.Command {
 
 	var since string
 	jsonCmd := &cobra.Command{
-		Use:  "json",
+		Use:   "json",
 		Short: "Raw JSONL rows (optionally filtered by --since)",
 		RunE: func(_ *cobra.Command, _ []string) error {
 			rows, err := cost.JSON(since)
@@ -1059,319 +1052,6 @@ func cmdPricingList() *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "Output as JSON")
-	return cmd
-}
-
-// ── run (playbook state machine) ──────────────────────────────────────────────
-
-func cmdRun() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "run",
-		Short: "Manage playbook runs (state machine for multi-stage AI workflows)",
-	}
-	cmd.AddCommand(
-		cmdRunStart(),
-		cmdRunNext(),
-		cmdRunComplete(),
-		cmdRunStatus(),
-		cmdRunList(),
-		cmdRunShow(),
-		cmdRunWorklog(),
-		cmdRunLedger(),
-		cmdRunTicket(),
-		cmdRunTicketComment(),
-		cmdRunPrune(),
-		cmdRunChildren(),
-		cmdRunRotateLogs(),
-	)
-	return cmd
-}
-
-func cmdRunStart() *cobra.Command {
-	var (
-		workspace string
-		intent    string
-		hasUI     bool
-		devFacing bool
-		needsDS   bool
-		parentID  string
-		dryRun    bool
-	)
-	cmd := &cobra.Command{
-		Use:   "start <playbook>",
-		Short: "Start a new playbook run",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(_ *cobra.Command, args []string) error {
-			runID, err := company.Start(args[0], company.StartOptions{
-				Workspace:         workspace,
-				Intent:            intent,
-				HasUI:             hasUI,
-				DevFacing:         devFacing,
-				NeedsDesignSystem: needsDS,
-				ParentRun:         parentID,
-			})
-			if dryRun {
-				fmt.Fprintln(os.Stderr, "warning: --dry-run not yet implemented for run start; run will be created normally")
-			}
-			if err != nil {
-				return err
-			}
-			fmt.Println(runID)
-			return nil
-		},
-	}
-	cmd.Flags().StringVarP(&workspace, "workspace", "w", "", "workspace path (default: current dir)")
-	cmd.Flags().StringVar(&intent, "intent", "", "short description of the task")
-	cmd.Flags().BoolVar(&hasUI, "has-ui", false, "task involves UI changes")
-	cmd.Flags().BoolVar(&devFacing, "dev-facing", false, "task is developer-facing")
-	cmd.Flags().BoolVar(&needsDS, "needs-design-system", false, "task requires design system")
-	cmd.Flags().StringVar(&parentID, "parent", "", "parent run ID for child runs")
-	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "print manifest without creating run")
-	return cmd
-}
-
-func cmdRunNext() *cobra.Command {
-	return &cobra.Command{
-		Use:   "next <run-id>",
-		Short: "Advance to the next stage of a run",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(_ *cobra.Command, args []string) error {
-			result, err := company.Next(args[0])
-			if err != nil {
-				return err
-			}
-			raw, err := json.Marshal(result)
-			if err != nil {
-				return err
-			}
-			fmt.Println(string(raw))
-			return nil
-		},
-	}
-}
-
-func cmdRunComplete() *cobra.Command {
-	var (
-		finding  string
-		blocking bool
-		output   string
-	)
-	cmd := &cobra.Command{
-		Use:   "complete <run-id> <stage-name>",
-		Short: "Mark a stage as complete",
-		Args:  cobra.ExactArgs(2),
-		RunE: func(_ *cobra.Command, args []string) error {
-			findings := []string{}
-			if finding != "" {
-				severity := "info"
-				if blocking {
-					severity = "blocking"
-				}
-				findings = append(findings, severity+": "+finding)
-			}
-			state, err := company.Complete(args[0], args[1], company.CompleteOptions{
-				Findings: findings,
-				Output:   output,
-			})
-			if err != nil {
-				return err
-			}
-			raw, err := json.Marshal(state)
-			if err != nil {
-				return err
-			}
-			fmt.Println(string(raw))
-			return nil
-		},
-	}
-	cmd.Flags().StringVar(&finding, "finding", "", "finding note to attach")
-	cmd.Flags().BoolVar(&blocking, "blocking", false, "mark finding as blocking")
-	cmd.Flags().StringVar(&output, "output", "", "output/result from this stage")
-	return cmd
-}
-
-func cmdRunStatus() *cobra.Command {
-	return &cobra.Command{
-		Use:   "status <run-id>",
-		Short: "Print run status",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(_ *cobra.Command, args []string) error {
-			return company.PrintStatus(args[0])
-		},
-	}
-}
-
-func cmdRunList() *cobra.Command {
-	var workspace string
-	cmd := &cobra.Command{
-		Use:   "list",
-		Short: "List all runs in a workspace",
-		RunE: func(_ *cobra.Command, _ []string) error {
-			runs, err := company.List(workspace)
-			if err != nil {
-				return err
-			}
-			for _, r := range runs {
-				fmt.Printf("%-40s  %-12s  %s\n", r.RunID, r.Status, r.Playbook)
-			}
-			return nil
-		},
-	}
-	cmd.Flags().StringVarP(&workspace, "workspace", "w", "", "workspace path (default: current dir)")
-	return cmd
-}
-
-func cmdRunShow() *cobra.Command {
-	return &cobra.Command{
-		Use:   "show <run-id>",
-		Short: "Show full run details as JSON",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(_ *cobra.Command, args []string) error {
-			result, err := company.Show(args[0])
-			if err != nil {
-				return err
-			}
-			raw, err := json.MarshalIndent(result, "", "  ")
-			if err != nil {
-				return err
-			}
-			fmt.Println(string(raw))
-			return nil
-		},
-	}
-}
-
-func cmdRunWorklog() *cobra.Command {
-	return &cobra.Command{
-		Use:   "worklog <run-id>",
-		Short: "Print worklog markdown section for a run",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(_ *cobra.Command, args []string) error {
-			md, err := company.Worklog(args[0])
-			if err != nil {
-				return err
-			}
-			fmt.Print(md)
-			return nil
-		},
-	}
-}
-
-func cmdRunLedger() *cobra.Command {
-	var workspace string
-	cmd := &cobra.Command{
-		Use:   "ledger",
-		Short: "Regenerate HYDRA.md ledger for a workspace",
-		RunE: func(_ *cobra.Command, _ []string) error {
-			return company.Ledger(workspace)
-		},
-	}
-	cmd.Flags().StringVarP(&workspace, "workspace", "w", "", "workspace path (default: current dir)")
-	return cmd
-}
-
-func cmdRunTicket() *cobra.Command {
-	return &cobra.Command{
-		Use:   "ticket <run-id> <ref>",
-		Short: "Associate a ticket reference with a run",
-		Args:  cobra.ExactArgs(2),
-		RunE: func(_ *cobra.Command, args []string) error {
-			return company.SetTicket(args[0], args[1], "")
-		},
-	}
-}
-
-func cmdRunTicketComment() *cobra.Command {
-	var dryRun bool
-	cmd := &cobra.Command{
-		Use:   "ticket-comment <run-id> <body>",
-		Short: "Post a comment to the associated ticket",
-		Args:  cobra.ExactArgs(2),
-		RunE: func(_ *cobra.Command, args []string) error {
-			result, _, err := company.TicketComment(args[0], args[1], dryRun)
-			if err != nil {
-				return err
-			}
-			if dryRun {
-				fmt.Println(dimStyle.Render("[dry-run] would post:"))
-				fmt.Println(result.Body)
-			} else {
-				fmt.Println(dimStyle.Render("Posted to " + result.Ticket))
-			}
-			return nil
-		},
-	}
-	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "print comment without posting")
-	return cmd
-}
-
-func cmdRunPrune() *cobra.Command {
-	var (
-		workspace string
-		olderThan string
-		keepMin   int
-		dryRun    bool
-	)
-	cmd := &cobra.Command{
-		Use:   "prune",
-		Short: "Remove old completed runs",
-		RunE: func(_ *cobra.Command, _ []string) error {
-			pruned, kept, err := company.Prune(workspace, company.PruneOptions{
-				OlderThan: olderThan,
-				DryRun:    dryRun,
-				KeepMin:   keepMin,
-			})
-			if err != nil {
-				return err
-			}
-			fmt.Printf("pruned %d  kept %d\n", pruned, kept)
-			return nil
-		},
-	}
-	cmd.Flags().StringVarP(&workspace, "workspace", "w", "", "workspace path")
-	cmd.Flags().StringVar(&olderThan, "older-than", "30d", "prune runs older than this (e.g. 7d, 2h)")
-	cmd.Flags().IntVar(&keepMin, "keep-min", 5, "minimum number of runs to keep")
-	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "print what would be pruned without deleting")
-	return cmd
-}
-
-func cmdRunChildren() *cobra.Command {
-	return &cobra.Command{
-		Use:   "children <parent-run-id>",
-		Short: "List child runs of a parent run",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(_ *cobra.Command, args []string) error {
-			children, err := company.Children(args[0])
-			if err != nil {
-				return err
-			}
-			for _, c := range children {
-				fmt.Printf("%-40s  %-12s  %s\n", c.RunID, c.Status, c.Playbook)
-			}
-			return nil
-		},
-	}
-}
-
-func cmdRunRotateLogs() *cobra.Command {
-	var (
-		maxSize string
-		keep    int
-	)
-	cmd := &cobra.Command{
-		Use:   "rotate-logs",
-		Short: "Rotate dispatch.jsonl and cost.jsonl",
-		RunE: func(_ *cobra.Command, _ []string) error {
-			n, err := company.RotateLogs(maxSize, keep)
-			if err != nil {
-				return err
-			}
-			fmt.Printf("rotated %d file(s)\n", n)
-			return nil
-		},
-	}
-	cmd.Flags().StringVar(&maxSize, "max-size", "10MB", "rotate files larger than this")
-	cmd.Flags().IntVar(&keep, "keep", 5, "number of rotated files to keep")
 	return cmd
 }
 
