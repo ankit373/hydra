@@ -33,13 +33,12 @@ mkdir -p "$DEST/bin"
 (cd "$REPO" && go build -o "$DEST/bin/hydra" ./cmd/hydra)
 echo "✓ Built $DEST/bin/hydra"
 
-# ── Copy shell scripts and registry ──────────────────────────────────────────
+# ── Copy registry and assets ─────────────────────────────────────────────────
 mkdir -p "$DEST/logs"
-for dir in dispatch registry context skills ui; do
+for dir in registry context skills ui; do
   rm -rf "$DEST/$dir"
   cp -r "$REPO/$dir" "$DEST/$dir"
 done
-chmod +x "$DEST/dispatch/"*.sh
 
 # Install UI dependencies (frozen — uses existing bun.lock)
 cd "$DEST/ui"
@@ -52,7 +51,7 @@ if [[ ! -f "$DEST/logs/state.json" ]]; then
 fi
 
 # ── Create hydra launcher (Go control plane) ──────────────────────────────────
-# The binary needs HYDRA_HOME so it can find dispatch/agy.sh and registry/models.yaml.
+# The binary needs HYDRA_HOME so it can find registry/models.yaml.
 LAUNCHER="$DEST/hydra"
 cat > "$LAUNCHER" <<SH
 #!/usr/bin/env bash

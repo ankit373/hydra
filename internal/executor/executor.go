@@ -52,7 +52,7 @@ func Supports(h provider.Head) bool {
 }
 
 // For selects the correct Executor for a given Head.
-//   - registry source (agy tiers): AgyExecutor → calls dispatch/agy.sh
+//   - registry source (agy tiers): AgyExecutor → native (execs the `agy` binary)
 //   - ollama source: OllamaExecutor → native /api/generate
 //   - env source / port source / explicit endpoint: HTTPExecutor → per-provider REST
 //   - everything else: CLIExecutor → subprocess
