@@ -1101,7 +1101,8 @@ cmd_fanout_ships() {
   # operators to prevent env/path/shell injections from attacker-controlled backlog files.
   local features
   if [[ -n "$filter" ]]; then
-    if ! [[ "$filter" =~ ^[A-Za-z0-9_.\ \"\'=!<>|]+$ ]]; then
+    local safe_re='^[A-Za-z0-9_. "'\''=!<>|]+$'
+    if ! [[ "$filter" =~ $safe_re ]]; then
       err "fanout-ships: --filter contains unsafe characters: $filter"
       exit 1
     fi
