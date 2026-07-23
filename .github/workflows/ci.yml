@@ -1,6 +1,5 @@
 name: CI
 
-# Disabled — re-enable before shipping by removing the `if: false` on each job.
 on:
   pull_request:
     branches: [main, develop]
@@ -14,7 +13,6 @@ jobs:
   shellcheck:
     name: Shellcheck
     runs-on: ubuntu-latest
-    if: false
     steps:
       - uses: actions/checkout@v4
 
@@ -30,7 +28,6 @@ jobs:
   typecheck:
     name: TypeScript typecheck
     runs-on: ubuntu-latest
-    if: false
     steps:
       - uses: actions/checkout@v4
 
@@ -50,7 +47,6 @@ jobs:
   yaml-lint:
     name: YAML validation
     runs-on: ubuntu-latest
-    if: false
     steps:
       - uses: actions/checkout@v4
 
@@ -70,13 +66,12 @@ jobs:
   secret-scan:
     name: Secret scan
     runs-on: ubuntu-latest
-    if: false
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
       - name: Run Gitleaks
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
