@@ -29,6 +29,13 @@ type Response struct {
 	Duration     time.Duration
 	Model        string
 	Truncated    bool // true when output exceeded the accumulator cap
+
+	// TokensEstimated is true when InputTokens/OutputTokens were derived by
+	// Hydra (e.g. agy's char/4 heuristic) rather than reported by the provider.
+	// HTTP and Ollama executors parse real usage and leave this false; the agy
+	// executor sets it true. Consumers must not present estimated tokens as
+	// measured spend.
+	TokensEstimated bool
 }
 
 // Executor runs a prompt and returns a response.

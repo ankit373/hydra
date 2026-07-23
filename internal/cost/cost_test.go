@@ -117,6 +117,39 @@ func TestCommaInt(t *testing.T) {
 	}
 }
 
+func TestTokenSourceShare(t *testing.T) {
+	rows := []Row{
+		{PromptTokens: 100, ResponseTokens: 50, TokensSource: "actual"},    // 150 actual
+		{PromptTokens: 40, ResponseTokens: 10, TokensSource: "estimated"},  // 50 estimated
+		{PromptTokens: 20, ResponseTokens: 5, Source: "real"},              // 25 legacy → actual
+		{PromptTokens: 8, ResponseTokens: 2, Source: "estimate"},           // 10 legacy → estimated
+	}
+	actual, estimated := TokenSourceShare(rows)
+	if actual != 175 {
+		t.Errorf("actual = %d, want 175", actual)
+	}
+	if estimated != 60 {
+		t.Errorf("estimated = %d, want 60", estimated)
+	}
+}
+
+func TestTokensEstimated_Precedence(t *testing.T) {
+	// tokens_source wins over legacy source when both are present.
+	if tokensEstimated(Row{TokensSource: "actual", Source: "estimate"}) {
+		t.Error("tokens_source=actual should not be estimated despite legacy source=estimate")
+	}
+	if !tokensEstimated(Row{TokensSource: "estimated", Source: "real"}) {
+		t.Error("tokens_source=estimated should be estimated despite legacy source=real")
+	}
+	// Unlabeled legacy rows fall back to source.
+	if !tokensEstimated(Row{Source: "estimate"}) {
+		t.Error("legacy source=estimate should be estimated")
+	}
+	if tokensEstimated(Row{Source: "real"}) {
+		t.Error("legacy source=real should be actual")
+	}
+}
+
 func TestGroupBy_Exported(t *testing.T) {
 	rows := []Row{
 		makeRow("a", 1, 0, 0, 0.5, 0, "", false),
