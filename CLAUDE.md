@@ -659,7 +659,7 @@ All Go source lives under `cmd/` and `internal/`. Key packages:
 | `internal/policy` | Allow/deny rules (PII local-only, etc.) |
 | `internal/rank` | CapScore ranking helpers |
 | `internal/config` | Hydra config load/save (`~/.config/hydra/`) |
-| `internal/company` | Playbook run state machine (multi-stage AI workflows) |
+| `internal/trust` | Trust Control Plane confidence layer: per-source calibration (Beta-Bernoulli → LLR/D) + defect-cost model. `hydra trust`. SPRT ensemble is Phase 2 (not yet shipped). |
 | `internal/tui` | Bubble Tea TUI: init wizard, install flow |
 | `internal/review` | Code review subcommand |
 | `internal/editor` | Editor integration |

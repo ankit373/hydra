@@ -23,6 +23,7 @@ import (
 	"github.com/ankit373/hydra/internal/probe"
 	"github.com/ankit373/hydra/internal/review"
 	"github.com/ankit373/hydra/internal/swarm"
+	"github.com/ankit373/hydra/internal/trust"
 	"github.com/ankit373/hydra/internal/tui"
 	"github.com/ankit373/hydra/internal/update"
 
@@ -67,7 +68,7 @@ func rootCmd() *cobra.Command {
 	root.AddCommand(
 		cmdInit(), cmdProbe(), cmdStatus(), cmdDispatch(),
 		cmdEdit(), cmdReview(), cmdParallel(), cmdCost(), cmdStats(),
-		cmdPricing(),
+		cmdPricing(), cmdTrust(),
 		cmdVersion(),
 	)
 	return root
@@ -1052,6 +1053,122 @@ func cmdPricingList() *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "Output as JSON")
+	return cmd
+}
+
+// ── trust ───────────────────────────────────────────────────────────────────────
+
+func cmdTrust() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "trust",
+		Short: "Confidence layer: source calibration and defect-cost (Trust Control Plane)",
+	}
+	cmd.AddCommand(cmdTrustCalibration(), cmdTrustRecord(), cmdTrustDefect())
+	return cmd
+}
+
+func cmdTrustCalibration() *cobra.Command {
+	var domain string
+	var jsonOut bool
+	cmd := &cobra.Command{
+		Use:   "calibration",
+		Short: "Per-source sensitivity / specificity / diagnostic power (D)",
+		RunE: func(_ *cobra.Command, _ []string) error {
+			cal, err := trust.New(trust.DefaultPath())
+			if err != nil {
+				return err
+			}
+			stats := cal.Report()
+			if domain != "" {
+				filtered := stats[:0]
+				for _, s := range stats {
+					if s.Domain == domain {
+						filtered = append(filtered, s)
+					}
+				}
+				stats = filtered
+			}
+			if jsonOut {
+				return json.NewEncoder(os.Stdout).Encode(stats)
+			}
+			if len(stats) == 0 {
+				fmt.Println("\n  No calibration recorded yet. Feed outcomes with `hydra trust record`.")
+				return nil
+			}
+			fmt.Printf("\n  %-28s %-10s %6s %7s %7s %8s\n", "Source", "Domain", "n", "se", "sp", "D(nats)")
+			fmt.Println("  " + strings.Repeat("─", 74))
+			for _, s := range stats {
+				fmt.Printf("  %-28.28s %-10.10s %6.0f %7.3f %7.3f %8.3f\n",
+					s.Source, s.Domain, s.N, s.Se, s.Sp, s.D)
+			}
+			fmt.Println()
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&domain, "domain", "", "filter to one domain")
+	cmd.Flags().BoolVar(&jsonOut, "json", false, "machine-readable JSON output")
+	return cmd
+}
+
+func cmdTrustRecord() *cobra.Command {
+	var source, domain, outcome string
+	var saidCorrect bool
+	cmd := &cobra.Command{
+		Use:   "record",
+		Short: "Record a source's verdict + ground-truth outcome to train calibration",
+		RunE: func(_ *cobra.Command, _ []string) error {
+			o := trust.ParseOutcome(outcome)
+			if o == trust.OutcomeUnknown {
+				return fmt.Errorf("--outcome must be correct|incorrect (got %q)", outcome)
+			}
+			if source == "" {
+				return fmt.Errorf("--source is required")
+			}
+			cal, err := trust.New(trust.DefaultPath())
+			if err != nil {
+				return err
+			}
+			if err := cal.Update(source, domain, saidCorrect, o); err != nil {
+				return err
+			}
+			fmt.Printf("  recorded: %s/%s said_correct=%v outcome=%s → D=%.3f nats\n",
+				source, domain, saidCorrect, outcome, cal.D(source, domain))
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&source, "source", "", "evidence source, e.g. model:claude-sonnet or verifier:tests")
+	cmd.Flags().StringVar(&domain, "domain", "", "task domain")
+	cmd.Flags().BoolVar(&saidCorrect, "said-correct", false, "the source's raw verdict")
+	cmd.Flags().StringVar(&outcome, "outcome", "", "ground truth: correct|incorrect")
+	return cmd
+}
+
+func cmdTrustDefect() *cobra.Command {
+	var domain string
+	var blast float64
+	var irreversible, pii, production bool
+	cmd := &cobra.Command{
+		Use:   "defect",
+		Short: "Preview the modeled cost of shipping a wrong answer for a task",
+		RunE: func(_ *cobra.Command, _ []string) error {
+			dm := trust.NewDefectModel()
+			task := trust.Task{
+				Domain:       domain,
+				BlastRadius:  blast,
+				Irreversible: irreversible,
+				TouchesPII:   pii,
+				Production:   production,
+			}
+			fmt.Printf("  defect cost ≈ $%.2f  (blast=%.1f irreversible=%v pii=%v prod=%v)\n",
+				dm.CostUSD(task), blast, irreversible, pii, production)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&domain, "domain", "", "task domain")
+	cmd.Flags().Float64Var(&blast, "blast", 1.0, "blast-radius multiplier (Graphify supplies this in Phase 3)")
+	cmd.Flags().BoolVar(&irreversible, "irreversible", false, "change cannot be cheaply undone")
+	cmd.Flags().BoolVar(&pii, "pii", false, "task handles personal data")
+	cmd.Flags().BoolVar(&production, "production", false, "target is production")
 	return cmd
 }
 
