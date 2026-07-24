@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -19,6 +20,7 @@ import (
 	"github.com/ankit373/hydra/internal/cost"
 	"github.com/ankit373/hydra/internal/dispatch"
 	"github.com/ankit373/hydra/internal/editor"
+	"github.com/ankit373/hydra/internal/entropy"
 	"github.com/ankit373/hydra/internal/graph"
 	"github.com/ankit373/hydra/internal/optimal"
 	"github.com/ankit373/hydra/internal/parallel"
@@ -71,7 +73,7 @@ func rootCmd() *cobra.Command {
 	root.AddCommand(
 		cmdInit(), cmdProbe(), cmdStatus(), cmdDispatch(),
 		cmdEdit(), cmdReview(), cmdParallel(), cmdCost(), cmdStats(),
-		cmdPricing(), cmdTrust(), cmdGraph(),
+		cmdPricing(), cmdTrust(), cmdGraph(), cmdContext(),
 		cmdVersion(),
 	)
 	return root
@@ -472,6 +474,53 @@ func cmdDispatch() *cobra.Command {
 	cmd.Flags().StringVar(&domain, "domain", "", "calibration domain for --confidence (default: \"default\")")
 	cmd.Flags().StringVar(&file, "file", "", "target file — raises the confidence bar by its code blast radius")
 	cmd.Flags().StringVar(&graphPath, "graph", "graph.json", "path to the dependency graph used with --file")
+	return cmd
+}
+
+// cmdContext inspects context-window quality (signal density, useful tokens).
+func cmdContext() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "context",
+		Short: "Measure context-window quality — signal density, not just length",
+	}
+	var jsonOut bool
+	var minDensity float64
+	entropyCmd := &cobra.Command{
+		Use:   "entropy [file]",
+		Short: "Signal density + useful tokens of a file (or stdin), with a compact recommendation",
+		Args:  cobra.MaximumNArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			var raw []byte
+			var err error
+			if len(args) == 1 && args[0] != "-" {
+				raw, err = os.ReadFile(args[0])
+			} else {
+				raw, err = io.ReadAll(os.Stdin)
+			}
+			if err != nil {
+				return err
+			}
+			rec := entropy.Governor{MinDensity: minDensity}.Assess(string(raw))
+			if jsonOut {
+				return json.NewEncoder(os.Stdout).Encode(map[string]any{
+					"tokens": rec.Snap.Tokens, "density": rec.Snap.Density,
+					"useful_tokens": rec.Snap.UsefulTokens, "compact": rec.Compact, "reason": rec.Reason,
+				})
+			}
+			fmt.Printf("\n  tokens (est)     %d\n", rec.Snap.Tokens)
+			fmt.Printf("  signal density   %.1f%%\n", rec.Snap.Density*100)
+			fmt.Printf("  useful tokens    %.0f\n", rec.Snap.UsefulTokens)
+			if rec.Compact {
+				fmt.Printf("  %s %s\n\n", cortexStyle.Render("⚠ compact:"), rec.Reason)
+			} else {
+				fmt.Printf("  %s\n\n", dimStyle.Render("✓ "+rec.Reason))
+			}
+			return nil
+		},
+	}
+	entropyCmd.Flags().BoolVar(&jsonOut, "json", false, "machine-readable JSON output")
+	entropyCmd.Flags().Float64Var(&minDensity, "min-density", 0, "signal-density floor for the compact recommendation (default 0.35)")
+	cmd.AddCommand(entropyCmd)
 	return cmd
 }
 
