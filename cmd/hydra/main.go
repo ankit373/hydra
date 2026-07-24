@@ -209,21 +209,30 @@ func printBudgetStatus() {
 		return
 	}
 	var state struct {
-		ClaudePct int                       `json:"claude_pct"`
-		Budget    map[string]map[string]any `json:"budget"`
+		ClaudePct        int                       `json:"claude_pct"`
+		ClaudePctHistory []int                     `json:"claude_pct_history"`
+		Budget           map[string]map[string]any `json:"budget"`
 	}
 	if err := json.Unmarshal(raw, &state); err != nil {
 		return
 	}
 
-	// claude_pct block (orchestrator context window).
+	// claude_pct block (orchestrator context window). When enough history has
+	// accumulated, show the rate-aware effective mode (first-passage risk) — a
+	// fast burn escalates above the static level band before it crosses a line.
 	if state.ClaudePct > 0 {
-		mode := budget.ModeFor(state.ClaudePct).String()
+		burnRate, risk := budget.RiskFromHistory(state.ClaudePctHistory)
+		eff := budget.EffectiveMode(state.ClaudePct, risk)
 		bar := budgetBar(state.ClaudePct)
-		fmt.Printf("  %s  %s %3d%%  %s\n",
+		line := fmt.Sprintf("  %s  %s %3d%%  %s",
 			dimStyle.Render("Claude  :"),
-			bar, state.ClaudePct, budgetModeStyle(mode).Render(mode),
+			bar, state.ClaudePct, budgetModeStyle(eff.String()).Render(eff.String()),
 		)
+		if eff > budget.ModeFor(state.ClaudePct) {
+			line += "  " + dimStyle.Render(fmt.Sprintf("↑ burning +%.0f%%/step, %.0f%% risk of 80%%",
+				burnRate, risk*100))
+		}
+		fmt.Println(line)
 	}
 
 	if len(state.Budget) == 0 {
