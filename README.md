@@ -350,7 +350,13 @@ The wizard scans your machine, ranks every model it finds, walks you through pic
 # Discovery & state
 hydra init                              # first-run wizard
 hydra probe                             # scan and display all available models
-hydra status                            # live system state (heads, budget bars)
+hydra status                            # live system state (heads, budget bars, burn-rate risk)
+
+# Model registry (add a new model at runtime — no rebuild)
+hydra models list                       # built-in + your models, by capability score
+hydra models add kimi-k3 --provider moonshot --cap-score 85   # upsert into your overlay
+hydra models remove kimi-k3             # remove one of your additions
+hydra models sync                       # import the OpenRouter catalog (provisional scores)
 
 # Dispatch
 hydra dispatch --prompt "..."           # route a prompt to the best model
@@ -416,7 +422,15 @@ action  = "local-only"
 
 ## Adding a Model
 
-Models are defined in [`internal/capabilities/data.json`](internal/capabilities/data.json). Adding support for a new model is one JSON entry — no Go code required:
+**At runtime — no rebuild.** Add any model to your local registry and Hydra picks it up on the next `probe`/`dispatch`. Additions live in an overlay at `~/.hydra/models.json` and merge over the built-ins:
+
+```bash
+hydra models add kimi-k3 --name "Kimi K3" --provider moonshot --cap-score 85
+hydra models list                 # confirm it shows up, tagged "user"
+hydra models remove kimi-k3       # remove it (built-ins can be overridden, not removed)
+```
+
+**Built-in defaults** live in [`internal/capabilities/data.json`](internal/capabilities/data.json). To contribute a model as a shipped default, add one JSON entry — no Go code required:
 
 ```json
 {
@@ -462,6 +476,9 @@ For Ollama models, add a family pattern:
 | **Context-entropy governor** — compact on falling signal density, not length | ✅ Shipped |
 | **MCP accountability ledger** — record + gate what every agent touches | ✅ Shipped |
 | **Verification oracles** — tests/compile/lint as first-class evidence | ✅ Shipped |
+| **Runtime model registry** — `hydra models add` merges a `~/.hydra/models.json` overlay, no rebuild | ✅ Shipped |
+| **Percolation-κ blast radius** — Molloy–Reed core detection weights hub files higher | ✅ Shipped |
+| **Rate-aware budget governor** — first-passage-time risk on `claude_pct`, escalates before a threshold | ✅ Shipped |
 | Outcome auto-wiring (tests / review / revert → calibration) | 🔨 Building |
 | MCP server registry + central security agent | 📋 [#9](https://github.com/ankit373/hydra/issues/9)/[#10](https://github.com/ankit373/hydra/issues/10) |
 | Web UI + real-time cost dashboard | 📋 [#11](https://github.com/ankit373/hydra/issues/11)/[#12](https://github.com/ankit373/hydra/issues/12) |
@@ -485,7 +502,7 @@ The design principle throughout: **no single vendor is privileged** — Hydra ro
 hydra/
 ├── cmd/hydra/                   # CLI entry point (Cobra) — every subcommand
 ├── internal/
-│   ├── capabilities/            # Capability scoring — data.json, no hardcoded logic
+│   ├── capabilities/            # Capability scoring — embedded data.json ⊕ runtime ~/.hydra/models.json overlay
 │   ├── config/                  # TOML config at ~/.hydra/config.toml
 │   ├── dispatch/                # Tier routing + fallback chains + policy + cost logging
 │   ├── executor/                # Native executors: agy · Ollama · per-provider HTTP · CLI
@@ -500,7 +517,7 @@ hydra/
 │   ├── trust/                   # Trust Control Plane: calibration · defect-cost · SPRT ensemble
 │   ├── pricing/                 # Live cost DB (OpenRouter fetch + 24h cache + YAML fallback)
 │   ├── cost/                    # cost.jsonl reader + spend summaries + source labeling
-│   ├── budget/                  # Per-model token-budget governor (6 pressure modes)
+│   ├── budget/                  # Token-budget governor: 6 static pressure modes + rate-aware first-passage risk on claude_pct
 │   ├── rank/                    # Deduplication + CapScore ranking
 │   ├── editor/                  # Scoped, validated, rollback-safe file edits
 │   ├── parallel/                # Independent multi-task fan-out
@@ -520,7 +537,7 @@ hydra/
 
 Issues and pull requests are welcome. A few entry points:
 
-- **Add a model** — edit [`internal/capabilities/data.json`](internal/capabilities/data.json). One JSON entry. No Go required.
+- **Add a model** — at runtime, `hydra models add <id> --provider <p> --cap-score <n>` (no rebuild). To ship it as a built-in default, add one entry to [`internal/capabilities/data.json`](internal/capabilities/data.json). No Go required.
 - **Add a discovery provider** — implement the [`Provider` interface](internal/provider/provider.go) and call `provider.Register()` in an `init()` function.
 - **Add an executor** — add a row to `cliTemplates` in [`internal/executor/cli.go`](internal/executor/cli.go) or extend the HTTP executor for a new API schema.
 
