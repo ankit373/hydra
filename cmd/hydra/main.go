@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -318,6 +319,9 @@ func cmdDispatch() *cobra.Command {
 		swarmMaxHeads int
 		swarmMaxCost  float64
 		swarmJudge    string
+		// trust / SPRT flags
+		confidence float64
+		domain     string
 	)
 
 	cmd := &cobra.Command{
@@ -331,6 +335,26 @@ func cmdDispatch() *cobra.Command {
 			d, err := dispatch.New(ctx)
 			if err != nil {
 				return err
+			}
+
+			// ── SPRT confidence mode ──────────────────────────────────────
+			if confidence > 0 {
+				sw := swarm.New(d, d.Heads(), d)
+				res, err := sw.RunSPRT(ctx, prompt, swarm.Options{
+					TierHint:      tier,
+					MaxHeads:      swarmMaxHeads,
+					MaxEstCostUSD: swarmMaxCost,
+					LocalOnly:     localOnly,
+					System:        system,
+					Confidence:    confidence,
+					Domain:        domain,
+				})
+				if err != nil {
+					return err
+				}
+				printSPRTResult(res)
+				logTrustRun(res, prompt, domain)
+				return nil
 			}
 
 			// ── swarm mode ────────────────────────────────────────────────
@@ -422,7 +446,79 @@ func cmdDispatch() *cobra.Command {
 	cmd.Flags().IntVar(&swarmMaxHeads, "swarm-max-heads", 0, "max heads to fire (default 5)")
 	cmd.Flags().Float64Var(&swarmMaxCost, "swarm-max-cost", 0, "refuse swarm if preflight cost estimate exceeds this USD")
 	cmd.Flags().StringVar(&swarmJudge, "swarm-judge-tier", "", "tier for judge head in best mode (default: tier 1 / cortex)")
+	// trust / SPRT flags
+	cmd.Flags().Float64Var(&confidence, "confidence", 0, "route via SPRT ensemble until this P(correct) is reached, e.g. 0.95")
+	cmd.Flags().StringVar(&domain, "domain", "", "calibration domain for --confidence (default: \"default\")")
 	return cmd
+}
+
+// printSPRTResult renders an SPRT confidence run: the LLR ledger, the decision,
+// and the winning answer.
+func printSPRTResult(r *swarm.SPRTResult) {
+	sep := dimStyle.Render("  " + strings.Repeat("─", 60))
+	t := r.Trust
+
+	fmt.Println()
+	fmt.Printf("  %s [%s]\n\n", cortexStyle.Render("▶ SPRT"), dimStyle.Render(r.Domain))
+
+	fmt.Printf("  %-28s  %-9s  %8s  %10s\n", "SOURCE", "VERDICT", "LLR", "Λ AFTER")
+	fmt.Println(sep)
+	for _, e := range t.Ledger {
+		verdict := "agree"
+		if !e.Agreed {
+			verdict = "disagree"
+		}
+		fmt.Printf("  %-28.28s  %-9s  %+8.3f  %+10.3f\n", e.Source, verdict, e.LLR, e.LambdaAfter)
+	}
+	fmt.Println(sep)
+
+	fmt.Printf("\n  %s %s  ·  confidence %.1f%%  ·  %d samples  ·  $%.4f\n",
+		dimStyle.Render("Decision →"),
+		cortexStyle.Render(t.Decision.String()),
+		t.Confidence*100, t.Samples, t.SpentUSD,
+	)
+	fmt.Println()
+	if t.Candidate != "" {
+		fmt.Println(t.Candidate)
+		fmt.Println()
+	}
+}
+
+// logTrustRun appends the SPRT run to ~/.hydra/trust.jsonl (best-effort).
+func logTrustRun(r *swarm.SPRTResult, prompt, domain string) {
+	if domain == "" {
+		domain = "default"
+	}
+	models := make([]string, 0, len(r.Attempts))
+	seen := map[string]bool{}
+	for _, a := range r.Attempts {
+		if !seen[a.Head.ID] {
+			seen[a.Head.ID] = true
+			models = append(models, a.Head.ID)
+		}
+	}
+	_, costSource, _ := cost.SourceLabels(anyEstimated(r.Attempts))
+	_ = trust.LogRun(trust.DefaultLogPath(), trust.RunLog{
+		TaskHash:   trust.TaskHash(prompt),
+		Domain:     domain,
+		TargetConf: r.Target,
+		FinalConf:  r.Trust.Confidence,
+		Samples:    r.Trust.Samples,
+		Models:     models,
+		CostUSD:    r.Trust.SpentUSD,
+		CostSource: costSource,
+		Decision:   r.Trust.Decision.String(),
+		Ledger:     r.Trust.Ledger,
+	})
+}
+
+func anyEstimated(attempts []swarm.Attempt) bool {
+	for _, a := range attempts {
+		if a.TokensEstimated {
+			return true
+		}
+	}
+	return false
 }
 
 // printSwarmResult renders the swarm result to stdout.
@@ -1063,8 +1159,89 @@ func cmdTrust() *cobra.Command {
 		Use:   "trust",
 		Short: "Confidence layer: source calibration and defect-cost (Trust Control Plane)",
 	}
-	cmd.AddCommand(cmdTrustCalibration(), cmdTrustRecord(), cmdTrustDefect())
+	cmd.AddCommand(cmdTrustCalibration(), cmdTrustRecord(), cmdTrustDefect(),
+		cmdTrustStats(), cmdTrustExplain())
 	return cmd
+}
+
+func cmdTrustStats() *cobra.Command {
+	var days int
+	var jsonOut bool
+	cmd := &cobra.Command{
+		Use:   "stats",
+		Short: "SPRT run rollup: samples saved vs fixed-N, auto-clear rate, achieved vs target confidence",
+		RunE: func(_ *cobra.Command, _ []string) error {
+			runs, err := trust.LoadRuns(trust.DefaultLogPath())
+			if err != nil {
+				return err
+			}
+			if days > 0 {
+				cutoff := time.Now().UTC().AddDate(0, 0, -days).Format(time.RFC3339)
+				kept := runs[:0]
+				for _, r := range runs {
+					if r.TS >= cutoff {
+						kept = append(kept, r)
+					}
+				}
+				runs = kept
+			}
+			s := trust.Aggregate(runs, 5) // compare against a fixed-5 swarm
+			if jsonOut {
+				return json.NewEncoder(os.Stdout).Encode(s)
+			}
+			if s.Runs == 0 {
+				fmt.Println("\n  No SPRT runs yet. Try `hydra dispatch --confidence 0.95 --prompt ...`.")
+				return nil
+			}
+			fmt.Printf("\n  Trust stats (%d runs)\n", s.Runs)
+			fmt.Println("  " + strings.Repeat("─", 52))
+			fmt.Printf("  mean samples        %.2f  (vs fixed-%d swarm)\n", s.MeanSamples, s.FixedSwarmN)
+			fmt.Printf("  samples saved       %.0f%%\n", s.SamplesSavedPct)
+			fmt.Printf("  auto-cleared        %.0f%%  (reached target without a human)\n", s.AutoClearedPct)
+			fmt.Printf("  confidence          target %.1f%% → achieved %.1f%%\n",
+				s.MeanTargetConf*100, s.MeanFinalConf*100)
+			fmt.Printf("  total spend         $%.4f\n\n", s.TotalCostUSD)
+			return nil
+		},
+	}
+	cmd.Flags().IntVar(&days, "days", 0, "only include runs from the last N days")
+	cmd.Flags().BoolVar(&jsonOut, "json", false, "machine-readable JSON output")
+	return cmd
+}
+
+func cmdTrustExplain() *cobra.Command {
+	return &cobra.Command{
+		Use:   "explain <task_hash>",
+		Short: "Show the LLR ledger for a past SPRT run — why it stopped where it did",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			runs, err := trust.LoadRuns(trust.DefaultLogPath())
+			if err != nil {
+				return err
+			}
+			for i := len(runs) - 1; i >= 0; i-- { // newest match first
+				r := runs[i]
+				if r.TaskHash != args[0] {
+					continue
+				}
+				fmt.Printf("\n  task %s  ·  domain %s  ·  %s\n", r.TaskHash, r.Domain, r.TS)
+				fmt.Printf("  target %.1f%% → achieved %.1f%%  ·  %d samples  ·  %s\n\n",
+					r.TargetConf*100, r.FinalConf*100, r.Samples, r.Decision)
+				fmt.Printf("  %-28s  %-9s  %8s  %10s\n", "SOURCE", "VERDICT", "LLR", "Λ AFTER")
+				fmt.Println("  " + strings.Repeat("─", 60))
+				for _, e := range r.Ledger {
+					verdict := "agree"
+					if !e.Agreed {
+						verdict = "disagree"
+					}
+					fmt.Printf("  %-28.28s  %-9s  %+8.3f  %+10.3f\n", e.Source, verdict, e.LLR, e.LambdaAfter)
+				}
+				fmt.Println()
+				return nil
+			}
+			return fmt.Errorf("no run found with task_hash %q", args[0])
+		},
+	}
 }
 
 func cmdTrustCalibration() *cobra.Command {

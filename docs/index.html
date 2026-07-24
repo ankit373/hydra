@@ -2423,6 +2423,16 @@
         </div>
       </div>
 
+      <div class="arch-card scroll-reveal" style="background: rgba(139,92,246,0.07); border: 1px solid rgba(139,92,246,0.25); border-radius: 16px; padding: 28px;">
+        <div style="font-size: 28px; margin-bottom: 14px;">🧭</div>
+        <h3 style="font-family: var(--font-display); font-size: 18px; color: var(--text-bright); margin: 0 0 10px;">Confidence Routing <span style="font-size: 11px; color: var(--accent-primary); border: 1px solid rgba(139,92,246,0.4); border-radius: 6px; padding: 1px 6px; vertical-align: middle;">NEW</span></h3>
+        <p style="color: var(--text-muted); font-size: 14px; line-height: 1.65; margin: 0 0 16px;">Instead of always firing a fixed number of models, <strong style="color: var(--text-main);">--confidence</strong> runs a sequential probability ratio test (SPRT): it samples models adaptively and stops the moment a target confidence of correctness is reached, using per-source calibration you build from real outcomes. Fewer calls on easy tasks; more only where accuracy demands it.</p>
+        <div class="code-snippet-box" style="margin: 0; padding: 10px 14px;">
+          <pre style="margin: 0; font-size: 12px; color: var(--accent-primary);">hydra dispatch --confidence 0.95 "prompt"
+hydra trust stats        # samples saved, achieved conf</pre>
+        </div>
+      </div>
+
       <div class="arch-card scroll-reveal" style="background: rgba(6,182,212,0.07); border: 1px solid rgba(6,182,212,0.25); border-radius: 16px; padding: 28px;">
         <div style="font-size: 28px; margin-bottom: 14px;">📊</div>
         <h3 style="font-family: var(--font-display); font-size: 18px; color: var(--text-bright); margin: 0 0 10px;">Cost Analytics</h3>
