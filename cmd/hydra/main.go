@@ -866,15 +866,28 @@ func cmdGraph() *cobra.Command {
 			for _, id := range g.NodesInFile(file) {
 				deps += g.DependentCount(id)
 			}
+			pFactor := g.PercolationFactor(file)
 			if jsonOut {
 				return json.NewEncoder(os.Stdout).Encode(map[string]any{
 					"file": file, "blast_radius": radius, "transitive_dependents": deps,
 					"defect_cost_usd": dm.CostUSD(task), "required_confidence": dm.RequiredConfidence(task),
+					"kappa": g.Kappa(), "percolates": g.Percolates(), "percolation_factor": pFactor,
 				})
 			}
 			fmt.Printf("\n  %s\n", cortexStyle.Render(file))
 			fmt.Printf("    transitive dependents  %d\n", deps)
 			fmt.Printf("    blast radius           %.2f×\n", radius)
+			if g.Percolates() {
+				core := "periphery"
+				if pFactor > 1.0 {
+					core = fmt.Sprintf("core (+%.0f%%)", (pFactor-1)*100)
+				}
+				fmt.Printf("    graph κ                %.2f  %s\n",
+					g.Kappa(), dimStyle.Render("supercritical — cascades possible; this file is "+core))
+			} else {
+				fmt.Printf("    graph κ                %.2f  %s\n",
+					g.Kappa(), dimStyle.Render("subcritical — edits stay local"))
+			}
 			fmt.Printf("    defect cost            $%.2f\n", dm.CostUSD(task))
 			fmt.Printf("    demands confidence     %.1f%%\n\n", dm.RequiredConfidence(task)*100)
 			return nil

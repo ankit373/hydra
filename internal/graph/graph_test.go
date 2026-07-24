@@ -129,6 +129,102 @@ func TestCoupling(t *testing.T) {
 	}
 }
 
+// starGraph: m leaves each depending on one center → highly supercritical.
+func starGraph(m int) *Graph {
+	nodes := []Node{{ID: "center", File: "center.go"}}
+	var edges []Edge
+	for i := 0; i < m; i++ {
+		id := "leaf" + string(rune('A'+i))
+		nodes = append(nodes, Node{ID: id, File: id + ".go"})
+		edges = append(edges, Edge{From: id, To: "center"})
+	}
+	return fromDoc(Doc{Nodes: nodes, Edges: edges})
+}
+
+// pathGraph: a directed chain 0→1→…→(n-1). κ approaches 2 from below.
+func pathGraph(n int) *Graph {
+	var nodes []Node
+	var edges []Edge
+	for i := 0; i < n; i++ {
+		id := "n" + string(rune('0'+i))
+		nodes = append(nodes, Node{ID: id, File: id + ".go"})
+		if i > 0 {
+			edges = append(edges, Edge{From: "n" + string(rune('0'+i-1)), To: id})
+		}
+	}
+	return fromDoc(Doc{Nodes: nodes, Edges: edges})
+}
+
+func TestKappa_TopologyOrdering(t *testing.T) {
+	star := starGraph(9) // κ = (m+1)/2 = 5
+	path := pathGraph(9)  // κ → 2⁻
+	disc := fromDoc(Doc{Nodes: []Node{{ID: "x", File: "x.go"}, {ID: "y", File: "y.go"}}})
+
+	if !star.Percolates() {
+		t.Errorf("star κ = %.3f, expected supercritical (≥2)", star.Kappa())
+	}
+	if star.Kappa() <= path.Kappa() {
+		t.Errorf("star κ (%.3f) should exceed path κ (%.3f)", star.Kappa(), path.Kappa())
+	}
+	if path.Kappa() >= 2.0 || path.Kappa() < 1.5 {
+		t.Errorf("path κ = %.3f, want in [1.5, 2.0)", path.Kappa())
+	}
+	if disc.Kappa() != 0 || disc.Percolates() {
+		t.Errorf("edgeless graph κ = %.3f, want 0 and non-percolating", disc.Kappa())
+	}
+}
+
+// A hub-core file and a peripheral file with the SAME transitive-dependent count
+// must be priced differently once the graph is supercritical.
+func TestPercolation_EqualCountDifferentDegree(t *testing.T) {
+	nodes := []Node{{ID: "X", File: "x.go"}, {ID: "Y", File: "y.go"}}
+	var edges []Edge
+	// X: a fan-in hub with 6 direct dependents (degree 6, count 6).
+	for _, d := range []string{"a", "b", "c", "g", "h", "i"} {
+		nodes = append(nodes, Node{ID: d, File: d + ".go"})
+		edges = append(edges, Edge{From: d, To: "X"})
+	}
+	// Y: a 6-long chain of dependents (degree 1 at Y, count 6).
+	chain := []string{"d", "e", "f", "p", "q", "r"}
+	prev := "Y"
+	for _, c := range chain {
+		nodes = append(nodes, Node{ID: c, File: c + ".go"})
+		edges = append(edges, Edge{From: c, To: prev})
+		prev = c
+	}
+	g := fromDoc(Doc{Nodes: nodes, Edges: edges})
+
+	if !g.Percolates() {
+		t.Fatalf("test graph κ = %.3f, expected supercritical", g.Kappa())
+	}
+	if cx, cy := g.DependentCount("X"), g.DependentCount("Y"); cx != cy {
+		t.Fatalf("precondition: equal counts required, got X=%d Y=%d", cx, cy)
+	}
+	bx, by := g.BlastRadiusForFile("x.go"), g.BlastRadiusForFile("y.go")
+	if bx <= by {
+		t.Errorf("hub file blast (%.3f) should exceed peripheral file blast (%.3f) at equal count", bx, by)
+	}
+	// The peripheral file (below-mean degree) gets no lift.
+	if f := g.PercolationFactor("y.go"); f != 1.0 {
+		t.Errorf("peripheral PercolationFactor = %.3f, want 1.0", f)
+	}
+	if f := g.PercolationFactor("x.go"); f <= 1.0 {
+		t.Errorf("hub PercolationFactor = %.3f, want > 1.0", f)
+	}
+}
+
+func TestPercolation_SubcriticalIsNeutral(t *testing.T) {
+	// The canonical sample graph is subcritical (κ≈1.67) → factor 1.0 everywhere,
+	// so blast radius is unchanged from the pre-percolation formula.
+	g := sampleGraph()
+	if g.Percolates() {
+		t.Fatalf("sample graph unexpectedly supercritical (κ=%.3f)", g.Kappa())
+	}
+	if f := g.PercolationFactor("a.go"); f != 1.0 {
+		t.Errorf("subcritical PercolationFactor = %.3f, want exactly 1.0", f)
+	}
+}
+
 func TestLoad_RoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "graph.json")
 	data := `{"nodes":[{"id":"a","file":"a.go"},{"id":"b","file":"b.go"}],"edges":[{"from":"b","to":"a"}]}`
