@@ -31,7 +31,7 @@ type Provider struct{}
 func (p *Provider) ID() string { return "port" }
 
 func (p *Provider) Discover(ctx context.Context) ([]provider.Head, error) {
-	caps, err := capabilities.Load("")
+	caps, err := capabilities.Load(capabilities.DefaultOverlayPath())
 	if err != nil {
 		return nil, err
 	}

@@ -17,7 +17,7 @@ type Provider struct{}
 func (p *Provider) ID() string { return "env" }
 
 func (p *Provider) Discover(_ context.Context) ([]provider.Head, error) {
-	caps, err := capabilities.Load("")
+	caps, err := capabilities.Load(capabilities.DefaultOverlayPath())
 	if err != nil {
 		return nil, err
 	}

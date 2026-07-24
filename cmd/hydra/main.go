@@ -16,6 +16,7 @@ import (
 
 	"github.com/ankit373/hydra/internal/budget"
 	"github.com/ankit373/hydra/internal/build"
+	"github.com/ankit373/hydra/internal/capabilities"
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/cost"
 	"github.com/ankit373/hydra/internal/dispatch"
@@ -75,7 +76,7 @@ func rootCmd() *cobra.Command {
 	root.AddCommand(
 		cmdInit(), cmdProbe(), cmdStatus(), cmdDispatch(),
 		cmdEdit(), cmdReview(), cmdParallel(), cmdCost(), cmdStats(),
-		cmdPricing(), cmdTrust(), cmdGraph(), cmdContext(), cmdMCP(), cmdOracle(),
+		cmdPricing(), cmdTrust(), cmdGraph(), cmdContext(), cmdMCP(), cmdOracle(), cmdModels(),
 		cmdVersion(),
 	)
 	return root
@@ -657,6 +658,138 @@ func cmdMCP() *cobra.Command {
 	report.Flags().BoolVar(&repJSON, "json", false, "machine-readable JSON output")
 
 	cmd.AddCommand(check, record, logCmd, report)
+	return cmd
+}
+
+// cmdModels manages the runtime-extensible model capability registry.
+func cmdModels() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "models",
+		Short: "Manage the model registry — add new models (e.g. Kimi K2) without recompiling",
+	}
+	overlay := capabilities.DefaultOverlayPath()
+
+	var jsonOut bool
+	list := &cobra.Command{
+		Use:   "list",
+		Short: "List all models (built-in + your additions), by capability score",
+		RunE: func(_ *cobra.Command, _ []string) error {
+			db, err := capabilities.Load(overlay)
+			if err != nil {
+				return err
+			}
+			entries := db.Entries()
+			if jsonOut {
+				return json.NewEncoder(os.Stdout).Encode(entries)
+			}
+			fmt.Printf("\n  %-26s %-14s %6s  %s\n", "ID", "PROVIDER", "SCORE", "SOURCE")
+			fmt.Println("  " + strings.Repeat("─", 58))
+			for _, e := range entries {
+				src := dimStyle.Render(e.Source)
+				if e.Source == "user" {
+					src = cortexStyle.Render("user")
+				}
+				fmt.Printf("  %-26.26s %-14.14s %6d  %s\n", e.ID, e.Provider, e.CapScore, src)
+			}
+			fmt.Println()
+			return nil
+		},
+	}
+	list.Flags().BoolVar(&jsonOut, "json", false, "machine-readable JSON output")
+
+	var addName, addProvider string
+	var addScore int
+	add := &cobra.Command{
+		Use:   "add <id>",
+		Short: "Add or update a model in your registry",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			if addScore < 0 || addScore > 100 {
+				return fmt.Errorf("--cap-score must be 0–100, got %d", addScore)
+			}
+			e := capabilities.Entry{ID: args[0], Name: addName, Provider: addProvider, CapScore: addScore}
+			if e.Name == "" {
+				e.Name = args[0]
+			}
+			replaced, err := capabilities.AddModel(overlay, e)
+			if err != nil {
+				return err
+			}
+			verb := "added"
+			if replaced {
+				verb = "updated"
+			}
+			fmt.Printf("  %s %s (%s, score %d) → %s\n", verb, e.ID, e.Provider, e.CapScore, overlay)
+			return nil
+		},
+	}
+	add.Flags().StringVar(&addName, "name", "", "display name (default: the id)")
+	add.Flags().StringVar(&addProvider, "provider", "", "provider, e.g. moonshot / openai / local")
+	add.Flags().IntVar(&addScore, "cap-score", 70, "capability score 0–100")
+
+	remove := &cobra.Command{
+		Use:   "remove <id>",
+		Short: "Remove a model from your registry",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			removed, err := capabilities.RemoveModel(overlay, args[0])
+			if err != nil {
+				return err
+			}
+			if !removed {
+				return fmt.Errorf("%q is not in your registry (built-ins can't be removed, only overridden)", args[0])
+			}
+			fmt.Printf("  removed %s\n", args[0])
+			return nil
+		},
+	}
+
+	var syncFilter string
+	var syncDry bool
+	sync := &cobra.Command{
+		Use:   "sync",
+		Short: "Import models from the live OpenRouter catalog (provisional capScores)",
+		RunE: func(_ *cobra.Command, _ []string) error {
+			db := pricing.Load()
+			models := db.Models()
+			added, skipped := 0, 0
+			builtin, _ := capabilities.Load("")
+			for _, id := range models {
+				if syncFilter != "" && !strings.Contains(strings.ToLower(id), strings.ToLower(syncFilter)) {
+					continue
+				}
+				// Don't clobber a model already known (built-in or user).
+				if builtin.Name(id) != id {
+					skipped++
+					continue
+				}
+				provider := id
+				if i := strings.IndexByte(id, '/'); i > 0 {
+					provider = id[:i]
+				}
+				e := capabilities.Entry{ID: id, Name: id, Provider: provider, CapScore: capabilities.HeuristicCapScore(id)}
+				if syncDry {
+					fmt.Printf("  + %-40.40s %-12.12s score %d\n", e.ID, e.Provider, e.CapScore)
+					added++
+					continue
+				}
+				if _, err := capabilities.AddModel(overlay, e); err != nil {
+					return err
+				}
+				added++
+			}
+			word := "imported"
+			if syncDry {
+				word = "would import"
+			}
+			fmt.Printf("\n  %s %d models (%d already known, skipped). capScores are provisional — refine with `hydra models add`.\n\n", word, added, skipped)
+			return nil
+		},
+	}
+	sync.Flags().StringVar(&syncFilter, "filter", "", "only import models whose id contains this substring")
+	sync.Flags().BoolVar(&syncDry, "dry-run", false, "show what would be imported without writing")
+
+	cmd.AddCommand(list, add, remove, sync)
 	return cmd
 }
 
