@@ -36,9 +36,13 @@ You have Claude Code for complex problems, Codex for code generation, Ollama run
 
 It discovers every AI model on your machine, assigns each a capability score, routes tasks to the right model by complexity and cost, enforces PII policy so sensitive data never leaves your machine, and logs every dispatch with token counts and cost — without any manual configuration.
 
+And it's growing into a **Trust Control Plane**: route not just to the cheapest model, but to a *target confidence of correctness* — sampling models adaptively and stopping the moment you're sure enough (see **Confidence Routing** under [Features](#features)).
+
 ```bash
-brew install --HEAD Formula/hydra.rb && hydra init
+brew install ankit373/hydra/hydra && hydra init
 ```
+
+> **Pure Go, single binary.** Hydra is one `hydra` CLI — the legacy shell layer is gone. Everything below runs through `hydra <command>`.
 
 ---
 
@@ -71,40 +75,61 @@ Hydra discovers and routes to all of these automatically — no plugins, no manu
 ## Architecture
 
 ```
-  ┌───────────────────────────────────────────────────────────────────┐
-  │                         hydra dispatch                            │
-  └───────────────────────────────┬───────────────────────────────────┘
-                                  │
-                    ┌─────────────▼──────────────┐
-                    │          Hydra              │
-                    │                             │
-                    │  ┌─────────────────────┐    │
-                    │  │   Policy Engine     │    │
-                    │  │  PII detection      │    │
-                    │  │  cost ceiling       │    │
-                    │  │  local-only routing │    │
-                    │  └──────────┬──────────┘    │
-                    │             │               │
-                    │  ┌──────────▼──────────┐    │
-                    │  │    Tier Router      │    │
-                    │  │  score → tier       │    │
-                    │  │  fallback chains    │    │
-                    │  └──────────┬──────────┘    │
-                    └────────┬────┴────────────────┘
-                             │
-           ┌─────────────────┼─────────────────┐
-           │                 │                 │
-    ┌──────▼──────┐   ┌──────▼──────┐   ┌──────▼──────┐
-    │  CLI Heads  │   │  API Heads  │   │ Local Heads │
-    │             │   │             │   │             │
-    │ Claude Code │   │   OpenAI    │   │   Ollama    │
-    │    Codex    │   │  Anthropic  │   │  LM Studio  │
-    │   Cursor    │   │    Groq     │   │             │
-    │    Kiro     │   │  Together   │   │             │
-    │  Windsurf   │   │   + more    │   │             │
-    └─────────────┘   └─────────────┘   └─────────────┘
-      score: 60–95      score: 70–95      score: 50–72
+  ┌───────────────────────────────────────────────────────────────────────┐
+  │   hydra dispatch  [--local | --swarm | --confidence 0.95]               │
+  └───────────────────────────────────┬─────────────────────────────────────┘
+                                       │
+                     ┌─────────────────▼─────────────────┐
+                     │  Policy Engine                     │  PII detection
+                     │  (blocks before any network call)  │  cost ceiling · local-only
+                     └─────────────────┬─────────────────┘
+                                       │
+                     ┌─────────────────▼─────────────────┐
+                     │  Router                            │  CapScore → tier
+                     │  score → tier → fallback chain     │  ~1.1 µs/dispatch
+                     └───┬───────────────┬───────────────┬─┘
+             single      │        swarm  │    confidence │  (SPRT)
+          ┌──────────────▼┐  ┌───────────▼──┐  ┌──────────▼───────────┐
+          │ best available│  │ race/best/all│  │ Trust Control Plane   │
+          │ head + fallbk │  │ + LLM judge  │  │ calibration → LLR/D    │
+          └──────┬────────┘  └──────┬───────┘  │ SPRT optimal-stopping  │
+                 │                  │          │ defect-cost model      │
+                 │                  │          └──────────┬────────────┘
+                 └──────────────────┴─────────────────────┘
+                                       │
+              ┌────────────────────────┼────────────────────────┐
+       ┌──────▼──────┐          ┌──────▼──────┐          ┌───────▼─────┐
+       │  CLI Heads  │          │  API Heads  │          │ Local Heads │
+       │ Claude Code │          │   OpenAI    │          │   Ollama    │
+       │   Codex     │          │  Anthropic  │          │  LM Studio  │
+       │  Cursor …   │          │  Groq … +12 │          │             │
+       └─────────────┘          └─────────────┘          └─────────────┘
+         score 60–95              score 70–95              score 50–72
+                                       │
+                     ┌─────────────────▼─────────────────┐
+                     │  Observability                     │  cost.jsonl (est/actual)
+                     │  cost + calibration + trust ledgers│  calibration.jsonl · trust.jsonl
+                     └────────────────────────────────────┘
 ```
+
+Every executor is **native Go** — `agy`, Ollama, per-provider HTTP (OpenAI-compatible + Anthropic/Gemini/Cohere/Azure/Bedrock/Replicate), and generic CLI. No shell scripts in the hot path.
+
+---
+
+## By the Numbers
+
+| Metric | Value | How it's measured |
+|---|---|---|
+| Routing overhead | **~1,130 ns / dispatch** | `go test -bench=BenchmarkRoutingPath` (Apple M1): policy eval + head selection + budget check |
+| Cost vs all-frontier | **75–85% lower** | typical coding session where most tasks are SIMPLE/STANDARD; see `hydra stats` for your own numbers |
+| Machine discovery | **< 2 s** for 13+ CLIs, 14 API providers, 2 local runtimes | concurrent PATH + env + port scan (`hydra probe`) |
+| Calibration convergence | a 90%-reliable source → **D ≈ 1.76 nats** diagnostic power | `internal/trust` table tests; a coin-flip source → **D ≈ 0** (contributes nothing) |
+| SPRT — easy tasks | **2.6 samples, −49% vs fixed-5**, 98.8% accuracy | 20k seeded synthetic trials, `TestSPRT_Law3` |
+| SPRT — blended workload | **3.8 samples, −24% vs fixed-5**, 98.2% accuracy | same suite; 71% easy / 29% hard task mix |
+| SPRT — hard tasks | **6.8 samples** (adaptively *more* than 5), 96.7% accuracy | fixed-N ensembles can't do this — SPRT spends where accuracy demands it |
+| Output capture | bounded at **33 MB** per subprocess | `internal/util.Accumulator` — no unbounded buffers |
+
+> **Methodology & honesty.** Routing overhead, discovery, calibration, and SPRT figures are **measured** by the test/benchmark suite (`go test ./...`, race-clean in CI). The SPRT numbers come from *synthetic* trials with known ground truth, not production traffic — they validate the algorithm (Wald sequential test), and land above the continuous theoretical `E[N]` (easy 1.33 / blended 2.48) because real evidence arrives in discrete steps. Cost-savings ranges are workload-dependent estimates; `hydra stats` reports your actual spend. As production `trust.jsonl` accumulates, `hydra trust stats` graduates these from *modeled* to *observed*.
 
 ---
 
@@ -178,7 +203,7 @@ $ hydra dispatch --prompt "process payment for card 4111-1111-1111-1111"
 
 ### 💰 Full Cost Visibility
 
-Every dispatch is logged to `~/.hydra/dispatch.jsonl` with model, tier, token counts, estimated cost, and fallback chain. Run `hydra stats` to see where your budget is going.
+Every dispatch is logged to `~/.hydra/cost.jsonl` with model, tier, token counts, estimated cost, and fallback chain. Costs are **honestly labeled**: `tokens_source` marks whether a provider reported real usage or Hydra estimated it, and `cost_source` is always `estimated` (pricing × tokens, never a billed figure). Run `hydra cost` or `hydra stats` to see where your budget is going.
 
 ```
 $ hydra cost
@@ -224,6 +249,40 @@ hydra dispatch --dry-run --prompt "write a SQL migration"
 hydra dispatch --local --prompt "write unit tests for this function"
 ```
 
+### 🐝 Swarm Dispatch
+
+Fan a single prompt out to multiple heads at once, then keep the best answer:
+
+```bash
+hydra dispatch --swarm --swarm-mode race "prompt"   # first success wins (latency)
+hydra dispatch --swarm --swarm-mode best "prompt"   # LLM judge picks the best answer
+hydra dispatch --swarm --swarm-mode all  "prompt"   # every answer, ranked by CapScore
+```
+
+`--swarm-max-heads`, `--swarm-max-cost` (pre-flight cost guard), and `--swarm-heads id1,id2` give you fine control over fan-out.
+
+### 🧭 Confidence Routing (Trust Control Plane)
+
+Most routers optimize *cost*. Hydra is growing a second axis: **verified correctness**. Instead of always firing a fixed number of models, `--confidence` runs a **sequential probability ratio test (SPRT)** — it samples models adaptively, in most-diagnostic-per-dollar order, and stops the moment the calibrated log-odds cross the target confidence.
+
+```bash
+hydra dispatch --confidence 0.95 --prompt "is this migration safe to run in prod?"
+```
+
+It leans on **per-source calibration** you build from real outcomes — each model/verifier earns a measured sensitivity, specificity, and *diagnostic power* `D`. A coin-flip source (`D≈0`) contributes nothing; a proven one lets a single vote go a long way.
+
+```bash
+hydra trust record --source model:claude-sonnet --domain go --said-correct --outcome correct
+hydra trust calibration          # per-source se / sp / D table
+hydra trust defect --pii --production   # modeled $ cost of shipping a wrong answer
+hydra trust stats                # samples saved vs fixed-N, achieved vs target confidence
+hydra trust explain <task_hash>  # the full LLR ledger for a past run — why it stopped
+```
+
+In synthetic benchmarks this cuts model calls **~49% on easy tasks** and **~24% on a blended workload** at ≥98% accuracy — while deliberately sampling *more* than a fixed swarm on genuinely hard tasks, which a fixed-N ensemble cannot do. Calibration is cold-start conservative: with no history, sources are treated as uninformative and Hydra falls back to sampling broadly.
+
+> The SPRT ensemble, calibration engine, and defect-cost model have shipped. Graph-aware (blast-radius) routing, a local MCP accountability ledger, and a pluggable verification-oracle interface are on the [roadmap](#roadmap).
+
 ---
 
 ## Comparison
@@ -234,11 +293,14 @@ hydra dispatch --local --prompt "write unit tests for this function"
 | Hardware-aware local model selection | ✅ | ❌ | ❌ | ❌ |
 | PII detection + local enforcement | ✅ | ❌ | ❌ | ❌ |
 | Fallback chains | ✅ | ❌ | ✅ | ✅ |
-| Per-dispatch cost logging | ✅ | ❌ | ✅ | ❌ |
+| Per-dispatch cost logging (est. vs actual labeled) | ✅ | ❌ | ✅ | ❌ |
 | Works with CLI tools (not just APIs) | ✅ | ✅ | ❌ | ❌ |
 | Zero config to start | ✅ | ✅ | ❌ | ❌ |
-| MCP server registry *(v2)* | 🔨 | ❌ | ❌ | ❌ |
-| Central security agent *(v2)* | 🔨 | ❌ | ❌ | ❌ |
+| Swarm dispatch (race / best / all) | ✅ | ❌ | ❌ | ❌ |
+| Route to a **confidence of correctness** (SPRT) | ✅ | ❌ | ❌ | ❌ |
+| Per-source calibration (sensitivity / specificity / D) | ✅ | ❌ | ❌ | ❌ |
+| MCP accountability ledger *(roadmap)* | 🔨 | ❌ | ❌ | ❌ |
+| Central security agent *(roadmap)* | 🔨 | ❌ | ❌ | ❌ |
 
 ---
 
@@ -274,13 +336,34 @@ The wizard scans your machine, ranks every model it finds, walks you through pic
 ### Core Commands
 
 ```bash
+# Discovery & state
 hydra init                              # first-run wizard
 hydra probe                             # scan and display all available models
-hydra status                            # live system state
+hydra status                            # live system state (heads, budget bars)
+
+# Dispatch
 hydra dispatch --prompt "..."           # route a prompt to the best model
 hydra dispatch --dry-run --prompt "..." # preview routing without executing
 hydra dispatch --local --prompt "..."   # local models only, no API calls
-hydra cost                              # cost summary by model and day
+hydra dispatch --swarm --swarm-mode best "..."   # fan out to many heads, judge best
+hydra dispatch --confidence 0.95 "..."  # SPRT: sample until this P(correct) is reached
+
+# Cost & pricing
+hydra cost                              # spend summary (est. vs actual labeled)
+hydra stats                             # rollup by model / tier / day
+hydra pricing list                      # live $/1M-token rates (OpenRouter + fallback)
+
+# Trust Control Plane
+hydra trust calibration                 # per-source sensitivity / specificity / D
+hydra trust record ...                  # feed an outcome to train calibration
+hydra trust defect ...                  # modeled cost of shipping a wrong answer
+hydra trust stats                       # samples saved, achieved vs target confidence
+hydra trust explain <task_hash>         # the LLR ledger for a past SPRT run
+
+# Editing & batch
+hydra edit --file ... --prompt "..."    # scoped, validated, rollback-safe file edit
+hydra review ...                        # code review / approve / reject / QA
+hydra parallel ...                      # fan independent tasks across heads
 ```
 
 ---
@@ -339,36 +422,36 @@ For Ollama models, add a family pattern:
 
 ## Roadmap
 
-| Feature | Release | Status |
-|---------|---------|--------|
-| Auto-discovery: CLI, API keys, local ports | v1.0 | ✅ Shipped |
-| Hardware-aware Ollama model selection | v1.0 | ✅ Shipped |
-| PII detection + local-only enforcement | v1.0 | ✅ Shipped |
-| Tier routing with automatic fallback chains | v1.0 | ✅ Shipped |
-| First-run TUI wizard (`hydra init`) | v1.0 | ✅ Shipped |
-| `hydra cost` — cost breakdown by model and day | v1.1 | ✅ Shipped |
-| Ollama model deduplication (binary vs models) | v1.1 | 🔨 Building |
-| MCP Server Registry | v2.0 | 📋 [#9](https://github.com/ankit373/hydra/issues/9) |
-| Per-model MCP access controls | v2.0 | 📋 [#10](https://github.com/ankit373/hydra/issues/10) |
-| Central security agent | v2.0 | 📋 [#10](https://github.com/ankit373/hydra/issues/10) |
-| Real-time cost dashboard | v2.0 | 📋 [#11](https://github.com/ankit373/hydra/issues/11) |
-| Swarm dispatch — parallel multi-model tasks | v2.0 | 📋 [#11](https://github.com/ankit373/hydra/issues/11) |
-| Web UI | v3.0 | 📋 [#12](https://github.com/ankit373/hydra/issues/12) |
-| Compliance reporting (SOC 2, GDPR) | v3.0 | 📋 Planned |
+| Feature | Status |
+|---------|--------|
+| Auto-discovery: CLI, API keys, local ports | ✅ Shipped |
+| Hardware-aware Ollama model selection | ✅ Shipped |
+| PII detection + local-only enforcement | ✅ Shipped |
+| Tier routing with automatic fallback chains | ✅ Shipped |
+| First-run TUI wizard (`hydra init`) | ✅ Shipped |
+| `hydra cost` / `hydra stats` — spend breakdown, est. vs actual | ✅ Shipped |
+| Dynamic live pricing (OpenRouter + 24h cache) | ✅ Shipped |
+| Swarm dispatch — race / best / all + LLM judge | ✅ Shipped |
+| **Per-source calibration** (Beta-Bernoulli → LLR / D) | ✅ Shipped |
+| **Defect-cost model** (`hydra trust defect`) | ✅ Shipped |
+| **SPRT confidence routing** (`hydra dispatch --confidence`) | ✅ Shipped |
+| Graph-aware routing (blast-radius → confidence) | 🔨 Building |
+| Outcome auto-wiring (tests / review / revert → calibration) | 🔨 Building |
+| Local MCP accountability ledger | 📋 Planned |
+| Pluggable verification-oracle interface | 📋 Planned |
+| MCP server registry + central security agent | 📋 [#9](https://github.com/ankit373/hydra/issues/9)/[#10](https://github.com/ankit373/hydra/issues/10) |
+| Web UI + real-time cost dashboard | 📋 [#11](https://github.com/ankit373/hydra/issues/11)/[#12](https://github.com/ankit373/hydra/issues/12) |
 
 See the full [Hydra Roadmap project board](https://github.com/users/ankit373/projects/2).
 
-### v2: Beyond Routing — The Full Control Plane
+### The arc: from cost router to Trust Control Plane
 
-The current layer answers: *which model handles this task?*
+Hydra started by answering *which model is cheapest for this task?* It's evolving to answer a harder question: ***how sure are we the answer is right, and what's the least attention we can spend to be that sure?***
 
-v2 extends the control plane to answer: *what is each model allowed to touch?*
+- **Today** — calibration measures each source's real diagnostic power; SPRT samples adaptively to a target confidence; the defect-cost model prices what a wrong answer costs.
+- **Next** — graph-aware routing uses code blast-radius to raise the confidence bar where a mistake is expensive; a local MCP ledger records what every model was actually allowed to touch and did; a verification-oracle interface lets test-runners and compilers act as first-class, high-`D` evidence sources.
 
-**MCP Server Registry** — a central inventory of every MCP server connected to your AI tools. Today there is no way to know which model is talking to which server, what operations it has been authorized, or what it has actually called. Hydra v2 changes that: one place to see, grant, and revoke access across every model.
-
-**Central Security Agent** — a policy enforcement point between your models and your MCP servers. Even if a model has filesystem or GitHub MCP access configured, the security agent can block writes, deletes, or network calls based on centrally-defined rules. Deny rules apply regardless of what the individual model thinks it is authorized to do.
-
-**Cost Dashboard** — real-time spend tracking with per-model and per-task-type breakdowns, budget alerts, and a local vs cloud ratio so you know exactly how much you are saving by running locally.
+The design principle throughout: **no single vendor is privileged** — Hydra routes *across* providers and *away* from expensive ones, optimizing verified correctness per unit of human attention.
 
 ---
 
@@ -376,26 +459,35 @@ v2 extends the control plane to answer: *what is each model allowed to touch?*
 
 ```
 hydra/
-├── cmd/hydra/                   # CLI entry point (Cobra)
+├── cmd/hydra/                   # CLI entry point (Cobra) — every subcommand
 ├── internal/
 │   ├── capabilities/            # Capability scoring — data.json, no hardcoded logic
 │   ├── config/                  # TOML config at ~/.hydra/config.toml
-│   ├── dispatch/                # Tier routing + fallback chains + cost logging
-│   ├── executor/                # CLI and HTTP executors for every head type
-│   ├── policy/                  # PII detection + routing enforcement
-│   ├── probe/                   # Concurrent multi-provider discovery
-│   ├── provider/                # CLI, env, and port discovery providers
+│   ├── dispatch/                # Tier routing + fallback chains + policy + cost logging
+│   ├── executor/                # Native executors: agy · Ollama · per-provider HTTP · CLI
+│   ├── provider/                # Discovery providers (self-register via init())
 │   │   ├── cli/                 # PATH scanner (13+ tools)
 │   │   ├── env/                 # API key scanner (14 providers)
-│   │   └── port/                # Local server scanner (Ollama, LM Studio)
-│   ├── rank/                    # Deduplication and capability ranking
+│   │   ├── port/                # Local server scanner (Ollama, LM Studio)
+│   │   └── agy/                 # Antigravity tier registry
+│   ├── probe/                   # Concurrent multi-provider discovery
+│   ├── policy/                  # PII detection + local-only enforcement
+│   ├── swarm/                   # Fan-out dispatch: race / best (LLM judge) / all + SPRT adapter
+│   ├── trust/                   # Trust Control Plane: calibration · defect-cost · SPRT ensemble
+│   ├── pricing/                 # Live cost DB (OpenRouter fetch + 24h cache + YAML fallback)
+│   ├── cost/                    # cost.jsonl reader + spend summaries + source labeling
+│   ├── budget/                  # Per-model token-budget governor (6 pressure modes)
+│   ├── rank/                    # Deduplication + CapScore ranking
+│   ├── editor/                  # Scoped, validated, rollback-safe file edits
+│   ├── parallel/                # Independent multi-task fan-out
+│   ├── review/                  # Code review / approve / reject / QA
+│   ├── util/                    # Shared utilities (bounded Accumulator, 33 MB cap)
 │   ├── sysinfo/                 # Hardware detection + 7-day memory history
+│   ├── build/ · update/         # Version stamping + startup update check
 │   └── tui/                     # Bubbletea init wizard + install guide
-├── dispatch/                    # Shell dispatch layer (agy + Ollama wrappers)
-├── registry/                    # Routing YAML, model definitions, policy config
-├── skills/                      # Skill prompts (delegate, escalate, rubber-duck)
-├── docs/                        # GitHub Pages (hydra.uvansa.com)
-└── Formula/hydra.rb             # Homebrew formula (auto-updated by goreleaser)
+├── registry/                    # routing.yaml (the enum) · models · domains · pricing · policy
+├── docs/                        # GitHub Pages (hydra.uvansa.com) — index.html, llms.txt
+└── Formula/hydra.rb             # Homebrew formula (auto-updated by GoReleaser)
 ```
 
 ---

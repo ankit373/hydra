@@ -44,6 +44,10 @@ type Options struct {
 	// Judge (ModeBest only).
 	JudgeTierHint string        // "" → use config.Cortex head
 	JudgeTimeout  time.Duration // 0 → 30 s
+
+	// SPRT mode (RunSPRT).
+	Confidence float64 // target P(correct); >0 selects the SPRT ensemble
+	Domain     string  // calibration domain ("" → "default")
 }
 
 // SwarmResult is the complete outcome of a swarm dispatch.

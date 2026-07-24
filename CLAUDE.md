@@ -21,19 +21,20 @@ Never do work yourself that belongs to a lower tier. Never escalate work to your
 
 ## Directory Layout
 
-**The `hydra` Go CLI is the primary interface** (`cmd/hydra` + `internal/`). The `dispatch/*.sh`
-shell layer is **deprecated legacy** — route.sh is superseded by `hydra dispatch` and kept only
-for internal fallback (`HYDRA_INTERNAL=1`). Prefer the Go commands everywhere.
+**The `hydra` Go CLI is the entire interface** (`cmd/hydra` + `internal/`). The legacy
+`dispatch/*.sh` shell layer and the `internal/company` playbook engine have been **removed**
+(#86, #88) — there is no shell fallback and no `hydra run`. Everything is native Go.
 ```
 cmd/hydra/              ← CLI entry point (Cobra): dispatch, probe, status, cost, stats,
-                          swarm, edit, review, parallel, pricing, run, init.
+                          pricing, edit, review, parallel, trust, init.
 internal/dispatch/      ← Tier routing + fallback + policy + cost logging (the router).
-internal/executor/      ← Executors: agy, Ollama, HTTP (API providers), CLI subprocess.
+internal/executor/      ← Native executors: agy, Ollama, HTTP (API providers), CLI subprocess.
 internal/provider/      ← Discovery: cli / env (API keys) / port / agy.
-internal/swarm/         ← Swarm dispatch — fan-out to multiple heads (race/best/all + judge).
+internal/swarm/         ← Fan-out (race/best/all + judge) + SPRT adapter (swarm→trust).
+internal/trust/         ← Trust Control Plane: calibration (LLR/D) + defect-cost + SPRT ensemble.
 internal/pricing/       ← Live pricing DB (OpenRouter fetch + 24h cache + tier fallback).
 internal/policy/        ← PII detection + local-only enforcement.
-internal/{cost,budget}/ ← Spend reporting + token-budget (claude_pct) governor.
+internal/{cost,budget}/ ← Spend reporting (est/actual labeling) + token-budget governor.
 internal/util/          ← Shared utilities (Accumulator, etc).
 
 registry/routing.yaml   ← THE ENUM. Change tier assignments here only.
@@ -42,8 +43,6 @@ registry/models.yaml    ← Model definitions, token pools, fallback chains (fla
 registry/domains.yaml   ← Domain → enum key routing (references routing.yaml).
 registry/pricing.yaml   ← Static tier pricing fallback (used when offline).
 logs/                   ← Dispatch log + state.json (pool exhaustion, claude_pct).
-
-dispatch/*.sh           ← DEPRECATED legacy shell layer (route.sh, agy.sh, ollama.sh, …).
 ```
 
 ---
@@ -202,6 +201,13 @@ hydra dispatch --enum MODERATE --prompt "add auth" --a2a logs/last_handoff.json
 
 # Fan-out to multiple heads (swarm) and judge the best
 hydra dispatch --swarm --swarm-mode best --prompt "implement rate limiter"
+
+# Route to a target confidence of correctness (SPRT optimal-stopping ensemble)
+hydra dispatch --confidence 0.95 --prompt "is this migration safe for prod?"
+
+# Trust Control Plane: calibration, defect-cost, run stats, and the LLR ledger
+hydra trust calibration ; hydra trust record --source model:x --domain go --said-correct --outcome correct
+hydra trust defect --pii --production ; hydra trust stats ; hydra trust explain <task_hash>
 
 # System state / discovered heads / spend
 hydra status ; hydra probe ; hydra cost ; hydra stats
@@ -659,7 +665,7 @@ All Go source lives under `cmd/` and `internal/`. Key packages:
 | `internal/policy` | Allow/deny rules (PII local-only, etc.) |
 | `internal/rank` | CapScore ranking helpers |
 | `internal/config` | Hydra config load/save (`~/.config/hydra/`) |
-| `internal/trust` | Trust Control Plane confidence layer: per-source calibration (Beta-Bernoulli → LLR/D) + defect-cost model. `hydra trust`. SPRT ensemble is Phase 2 (not yet shipped). |
+| `internal/trust` | Trust Control Plane confidence layer: per-source calibration (Beta-Bernoulli → LLR/D), defect-cost model, and the SPRT optimal-stopping ensemble (`trust.Run`). Drives `hydra dispatch --confidence` and `hydra trust calibration\|record\|defect\|stats\|explain`. |
 | `internal/tui` | Bubble Tea TUI: init wizard, install flow |
 | `internal/review` | Code review subcommand |
 | `internal/editor` | Editor integration |
