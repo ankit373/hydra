@@ -9,17 +9,10 @@ import (
 )
 
 // calibrateSymmetric trains (id,domain) to se=sp≈p using n balanced samples.
+// calibrateSymmetric trains (id,domain) to se=sp≈p; it delegates to the
+// production helper backing `hydra trust benchmark` so the two never diverge.
 func calibrateSymmetric(c *Calibrator, id, domain string, p float64, n int) {
-	correct := int(p * float64(n))
-	wrong := n - correct
-	for i := 0; i < correct; i++ {
-		_ = c.Update(id, domain, true, OutcomeCorrect)   // TP
-		_ = c.Update(id, domain, false, OutcomeIncorrect) // TN
-	}
-	for i := 0; i < wrong; i++ {
-		_ = c.Update(id, domain, false, OutcomeCorrect)  // FN
-		_ = c.Update(id, domain, true, OutcomeIncorrect) // FP
-	}
+	calibrateSynthetic(c, id, domain, p, n)
 }
 
 // scriptExec returns a fixed answer sequence, one per Execute call.
