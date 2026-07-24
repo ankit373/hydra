@@ -22,6 +22,7 @@ import (
 	"github.com/ankit373/hydra/internal/editor"
 	"github.com/ankit373/hydra/internal/entropy"
 	"github.com/ankit373/hydra/internal/graph"
+	"github.com/ankit373/hydra/internal/ledger"
 	"github.com/ankit373/hydra/internal/optimal"
 	"github.com/ankit373/hydra/internal/parallel"
 	"github.com/ankit373/hydra/internal/pricing"
@@ -73,7 +74,7 @@ func rootCmd() *cobra.Command {
 	root.AddCommand(
 		cmdInit(), cmdProbe(), cmdStatus(), cmdDispatch(),
 		cmdEdit(), cmdReview(), cmdParallel(), cmdCost(), cmdStats(),
-		cmdPricing(), cmdTrust(), cmdGraph(), cmdContext(),
+		cmdPricing(), cmdTrust(), cmdGraph(), cmdContext(), cmdMCP(),
 		cmdVersion(),
 	)
 	return root
@@ -474,6 +475,123 @@ func cmdDispatch() *cobra.Command {
 	cmd.Flags().StringVar(&domain, "domain", "", "calibration domain for --confidence (default: \"default\")")
 	cmd.Flags().StringVar(&file, "file", "", "target file — raises the confidence bar by its code blast radius")
 	cmd.Flags().StringVar(&graphPath, "graph", "graph.json", "path to the dependency graph used with --file")
+	return cmd
+}
+
+// cmdMCP is the local MCP accountability ledger + policy gate.
+func cmdMCP() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "mcp",
+		Short: "Local accountability ledger: record and gate what agents touch",
+	}
+
+	// check: evaluate the policy for an access and record the decision.
+	var chkAgent, chkResource, chkAction, policyPath string
+	check := &cobra.Command{
+		Use:   "check <tool>",
+		Short: "Evaluate the policy for a tool/resource access and record it",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			pol, err := ledger.LoadPolicy(policyPath)
+			if err != nil {
+				return err
+			}
+			decision, err := ledger.Check(ledger.DefaultPath(), pol,
+				chkAgent, args[0], chkResource, ledger.Action(chkAction))
+			if err != nil {
+				return err
+			}
+			fmt.Printf("  %s  %s %s/%s (%s)\n", strings.ToUpper(string(decision)),
+				chkAgent, args[0], chkResource, chkAction)
+			if decision == ledger.Deny {
+				os.Exit(3) // non-zero so callers can gate on it
+			}
+			return nil
+		},
+	}
+	check.Flags().StringVar(&chkAgent, "agent", "", "agent making the access")
+	check.Flags().StringVar(&chkResource, "resource", "", "resource being accessed")
+	check.Flags().StringVar(&chkAction, "action", "read", "read|write|exec|network")
+	check.Flags().StringVar(&policyPath, "policy", ledger.DefaultPolicyPath(), "path to the access policy JSON")
+
+	// record: append an event directly (for external tools reporting access).
+	var recAgent, recTool, recResource, recAction, recDecision string
+	record := &cobra.Command{
+		Use:   "record",
+		Short: "Append an access event to the ledger",
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return ledger.Record(ledger.DefaultPath(), ledger.Event{
+				Agent: recAgent, Tool: recTool, Resource: recResource,
+				Action: ledger.Action(recAction), Decision: ledger.Decision(recDecision),
+			})
+		},
+	}
+	record.Flags().StringVar(&recAgent, "agent", "", "agent")
+	record.Flags().StringVar(&recTool, "tool", "", "tool")
+	record.Flags().StringVar(&recResource, "resource", "", "resource")
+	record.Flags().StringVar(&recAction, "action", "read", "read|write|exec|network")
+	record.Flags().StringVar(&recDecision, "decision", "allow", "allow|deny")
+
+	// log: list events, optionally filtered.
+	var logAgent string
+	var logDenied bool
+	logCmd := &cobra.Command{
+		Use:   "log",
+		Short: "List ledger events (newest last)",
+		RunE: func(_ *cobra.Command, _ []string) error {
+			events, err := ledger.Load(ledger.DefaultPath())
+			if err != nil {
+				return err
+			}
+			events = ledger.Filter(events, logAgent, logDenied)
+			if len(events) == 0 {
+				fmt.Println("  (no matching ledger events)")
+				return nil
+			}
+			for _, e := range events {
+				fmt.Printf("  %s  %-6s  %-12s %s/%s %s\n", e.TS, strings.ToUpper(string(e.Decision)),
+					e.Agent, e.Tool, e.Resource, dimStyle.Render(string(e.Action)))
+			}
+			return nil
+		},
+	}
+	logCmd.Flags().StringVar(&logAgent, "agent", "", "filter to one agent")
+	logCmd.Flags().BoolVar(&logDenied, "denied", false, "only show denied accesses")
+
+	// report: aggregate summary.
+	var repJSON bool
+	report := &cobra.Command{
+		Use:   "report",
+		Short: "Accountability summary: allowed/denied, by agent and tool",
+		RunE: func(_ *cobra.Command, _ []string) error {
+			events, err := ledger.Load(ledger.DefaultPath())
+			if err != nil {
+				return err
+			}
+			s := ledger.Summarize(events)
+			if repJSON {
+				return json.NewEncoder(os.Stdout).Encode(s)
+			}
+			fmt.Printf("\n  ledger events   %d  (%d allowed · %d denied)\n", s.Total, s.Allowed, s.Denied)
+			if len(s.ByAgent) > 0 {
+				fmt.Println("  by agent:")
+				for _, kc := range ledger.SortedCounts(s.ByAgent) {
+					fmt.Printf("    %-20s %d\n", kc.Key, kc.Count)
+				}
+			}
+			if len(s.ByTool) > 0 {
+				fmt.Println("  by tool:")
+				for _, kc := range ledger.SortedCounts(s.ByTool) {
+					fmt.Printf("    %-20s %d\n", kc.Key, kc.Count)
+				}
+			}
+			fmt.Println()
+			return nil
+		},
+	}
+	report.Flags().BoolVar(&repJSON, "json", false, "machine-readable JSON output")
+
+	cmd.AddCommand(check, record, logCmd, report)
 	return cmd
 }
 
