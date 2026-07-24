@@ -93,6 +93,42 @@ func TestLoad_MissingFileIsEmpty(t *testing.T) {
 	}
 }
 
+func TestCoupling(t *testing.T) {
+	// Two files whose impact sets are disjoint → minimal coordination cost.
+	disjoint := fromDoc(Doc{
+		Nodes: []Node{{ID: "x", File: "x.go"}, {ID: "y", File: "y.go"}},
+		Edges: nil, // no dependents, no overlap
+	})
+	if got := disjoint.Coupling([]string{"x.go", "y.go"}); math.Abs(got-kMin) > 1e-9 {
+		t.Errorf("disjoint Coupling = %v, want kMin=%v", got, kMin)
+	}
+
+	// Two files that share their entire dependent set → maximal coupling.
+	// hub1, hub2 both depended on by the same {a,b,c}.
+	shared := fromDoc(Doc{
+		Nodes: []Node{
+			{ID: "h1", File: "h1.go"}, {ID: "h2", File: "h2.go"},
+			{ID: "a", File: "a.go"}, {ID: "b", File: "b.go"}, {ID: "c", File: "c.go"},
+		},
+		Edges: []Edge{
+			{From: "a", To: "h1"}, {From: "b", To: "h1"}, {From: "c", To: "h1"},
+			{From: "a", To: "h2"}, {From: "b", To: "h2"}, {From: "c", To: "h2"},
+		},
+	})
+	k := shared.Coupling([]string{"h1.go", "h2.go"})
+	if k <= disjoint.Coupling([]string{"x.go", "y.go"}) {
+		t.Errorf("shared-subgraph coupling (%v) should exceed disjoint (%v)", k, disjoint.Coupling([]string{"x.go", "y.go"}))
+	}
+	if k < 0.10 { // {a,b,c} shared out of union {h1,a,b,c}∪{h2,a,b,c} → strong overlap
+		t.Errorf("shared coupling = %v, expected substantial overlap", k)
+	}
+
+	// Fewer than two files → kMin (nothing to coordinate).
+	if got := shared.Coupling([]string{"h1.go"}); got != kMin {
+		t.Errorf("single-file Coupling = %v, want kMin", got)
+	}
+}
+
 func TestLoad_RoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "graph.json")
 	data := `{"nodes":[{"id":"a","file":"a.go"},{"id":"b","file":"b.go"}],"edges":[{"from":"b","to":"a"}]}`

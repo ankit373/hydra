@@ -32,7 +32,9 @@ internal/executor/      ← Native executors: agy, Ollama, HTTP (API providers),
 internal/provider/      ← Discovery: cli / env (API keys) / port / agy.
 internal/swarm/         ← Fan-out (race/best/all + judge) + SPRT adapter (swarm→trust).
 internal/trust/         ← Trust Control Plane: calibration (LLR/D) + defect-cost + SPRT ensemble.
-internal/graph/         ← Code dependency graph (graph.json) → blast radius → defect cost.
+internal/graph/         ← Code dependency graph (graph.json) → blast radius + coupling k.
+internal/a2a/           ← Causal agent handoffs: vector clocks + concurrent-edit conflict detection.
+internal/optimal/       ← Optimal parallel-agent count n*=√((1-s)/k) (Amdahl+coordination, Law 4).
 internal/pricing/       ← Live pricing DB (OpenRouter fetch + 24h cache + tier fallback).
 internal/policy/        ← PII detection + local-only enforcement.
 internal/{cost,budget}/ ← Spend reporting (est/actual labeling) + token-budget governor.
@@ -209,6 +211,10 @@ hydra dispatch --confidence 0.95 --prompt "is this migration safe for prod?"
 # Blast-radius aware: --file raises the confidence bar by the code graph
 hydra graph blast internal/auth/token.go
 hydra dispatch --confidence 0.90 --file internal/auth/token.go --prompt "rotate signing key"
+
+# Optimal parallelism (Law 4): how many agents to fan out for these files
+hydra graph parallel internal/a.go internal/b.go
+# A2A handoffs (last_handoff.json) now carry a vector clock for causal ordering.
 
 # Trust Control Plane: calibration, defect-cost, run stats, and the LLR ledger
 hydra trust calibration ; hydra trust record --source model:x --domain go --said-correct --outcome correct
@@ -671,7 +677,9 @@ All Go source lives under `cmd/` and `internal/`. Key packages:
 | `internal/rank` | CapScore ranking helpers |
 | `internal/config` | Hydra config load/save (`~/.config/hydra/`) |
 | `internal/trust` | Trust Control Plane confidence layer: per-source calibration (Beta-Bernoulli → LLR/D), defect-cost model + `RequiredConfidence`, and the SPRT optimal-stopping ensemble (`trust.Run`). Drives `hydra dispatch --confidence` and `hydra trust calibration\|record\|defect\|stats\|explain`. |
-| `internal/graph` | Code dependency graph (`graph.json`, Graphify or any tree-sitter indexer) → transitive-dependent blast radius → `trust.Task.BlastRadius`. Drives `hydra graph blast` and `hydra dispatch --file`. |
+| `internal/graph` | Code dependency graph (`graph.json`, Graphify or any tree-sitter indexer) → transitive-dependent blast radius + coupling `k`. Drives `hydra graph blast\|parallel` and `hydra dispatch --file`. |
+| `internal/a2a` | Agent-to-agent handoffs with vector clocks: causal ordering (before/after/concurrent) + `ConflictsWith` (concurrent + overlapping files). Backs `last_handoff.json` and `--a2a`. |
+| `internal/optimal` | Optimal parallel-agent count `n*=√((1−s)/k)` and speedup (Amdahl + coordination, Manifesto Law 4). Drives `hydra graph parallel`. |
 | `internal/tui` | Bubble Tea TUI: init wizard, install flow |
 | `internal/review` | Code review subcommand |
 | `internal/editor` | Editor integration |

@@ -20,6 +20,7 @@ import (
 	"github.com/ankit373/hydra/internal/dispatch"
 	"github.com/ankit373/hydra/internal/editor"
 	"github.com/ankit373/hydra/internal/graph"
+	"github.com/ankit373/hydra/internal/optimal"
 	"github.com/ankit373/hydra/internal/parallel"
 	"github.com/ankit373/hydra/internal/pricing"
 	"github.com/ankit373/hydra/internal/probe"
@@ -516,7 +517,43 @@ func cmdGraph() *cobra.Command {
 	}
 	blast.Flags().StringVar(&graphPath, "graph", "graph.json", "path to the dependency graph (graph.json)")
 	blast.Flags().BoolVar(&jsonOut, "json", false, "machine-readable JSON output")
-	cmd.AddCommand(blast)
+
+	var parGraph string
+	var parJSON bool
+	var serial float64
+	parallelCmd := &cobra.Command{
+		Use:   "parallel <file> [file...]",
+		Short: "Optimal number of parallel agents for editing these files (Law 4)",
+		Args:  cobra.MinimumNArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			g, err := graph.Load(parGraph)
+			if err != nil {
+				return err
+			}
+			k := g.Coupling(args)
+			n, speedup := optimal.Agents(serial, k)
+			if parJSON {
+				return json.NewEncoder(os.Stdout).Encode(map[string]any{
+					"files": args, "serial_fraction": serial, "coordination_k": k,
+					"optimal_agents": n, "speedup": speedup,
+				})
+			}
+			fmt.Printf("\n  %s\n", cortexStyle.Render(fmt.Sprintf("%d file(s)", len(args))))
+			fmt.Printf("    coordination cost k    %.3f\n", k)
+			fmt.Printf("    optimal agents n*      %d\n", n)
+			fmt.Printf("    speedup S(n*)          %.2f×\n", speedup)
+			if speedup < 1 {
+				fmt.Printf("    %s\n", dimStyle.Render("→ heavily coupled — parallelism doesn't pay; edit serially"))
+			}
+			fmt.Println()
+			return nil
+		},
+	}
+	parallelCmd.Flags().StringVar(&parGraph, "graph", "graph.json", "path to the dependency graph (graph.json)")
+	parallelCmd.Flags().BoolVar(&parJSON, "json", false, "machine-readable JSON output")
+	parallelCmd.Flags().Float64Var(&serial, "serial", optimal.DefaultSerialFraction, "serial (non-parallelizable) work fraction s")
+
+	cmd.AddCommand(blast, parallelCmd)
 	return cmd
 }
 

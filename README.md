@@ -127,6 +127,7 @@ Every executor is **native Go** — `agy`, Ollama, per-provider HTTP (OpenAI-com
 | SPRT — easy tasks | **2.6 samples, −49% vs fixed-5**, 98.8% accuracy | 20k seeded synthetic trials, `TestSPRT_Law3` |
 | SPRT — blended workload | **3.8 samples, −24% vs fixed-5**, 98.2% accuracy | same suite; 71% easy / 29% hard task mix |
 | SPRT — hard tasks | **6.8 samples** (adaptively *more* than 5), 96.7% accuracy | fixed-N ensembles can't do this — SPRT spends where accuracy demands it |
+| Optimal parallelism | **6 agents** for independent work → **2** for same-subgraph edits | `n* = √((1−s)/k)`, Law 4; `k` from graph coupling (`internal/optimal`) |
 | Output capture | bounded at **33 MB** per subprocess | `internal/util.Accumulator` — no unbounded buffers |
 
 > **Methodology & honesty.** Routing overhead, discovery, calibration, and SPRT figures are **measured** by the test/benchmark suite (`go test ./...`, race-clean in CI). The SPRT numbers come from *synthetic* trials with known ground truth, not production traffic — they validate the algorithm (Wald sequential test), and land above the continuous theoretical `E[N]` (easy 1.33 / blended 2.48) because real evidence arrives in discrete steps. Cost-savings ranges are workload-dependent estimates; `hydra stats` reports your actual spend. As production `trust.jsonl` accumulates, `hydra trust stats` graduates these from *modeled* to *observed*.
@@ -368,6 +369,7 @@ hydra trust defect ...                  # modeled cost of shipping a wrong answe
 hydra trust stats                       # samples saved, achieved vs target confidence
 hydra trust explain <task_hash>         # the LLR ledger for a past SPRT run
 hydra graph blast <file>                # a file's blast radius + the confidence it demands
+hydra graph parallel <files...>         # optimal number of parallel agents (Law 4)
 
 # Editing & batch
 hydra edit --file ... --prompt "..."    # scoped, validated, rollback-safe file edit
@@ -445,6 +447,8 @@ For Ollama models, add a family pattern:
 | **Defect-cost model** (`hydra trust defect`) | ✅ Shipped |
 | **SPRT confidence routing** (`hydra dispatch --confidence`) | ✅ Shipped |
 | **Graph-aware routing** — blast-radius → defect cost → confidence | ✅ Shipped |
+| **Optimal parallelism** — `n* = √((1−s)/k)` from graph coupling (Law 4) | ✅ Shipped |
+| **Causal A2A handoffs** — vector clocks, concurrent-edit conflict detection | ✅ Shipped |
 | Outcome auto-wiring (tests / review / revert → calibration) | 🔨 Building |
 | Local MCP accountability ledger | 📋 Planned |
 | Pluggable verification-oracle interface | 📋 Planned |
