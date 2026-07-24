@@ -1497,7 +1497,40 @@ func cmdTrust() *cobra.Command {
 		Short: "Confidence layer: source calibration and defect-cost (Trust Control Plane)",
 	}
 	cmd.AddCommand(cmdTrustCalibration(), cmdTrustRecord(), cmdTrustDefect(),
-		cmdTrustStats(), cmdTrustExplain())
+		cmdTrustStats(), cmdTrustExplain(), cmdTrustBenchmark())
+	return cmd
+}
+
+func cmdTrustBenchmark() *cobra.Command {
+	var trials int
+	var seed int64
+	var jsonOut bool
+	cmd := &cobra.Command{
+		Use:   "benchmark",
+		Short: "Measure the SPRT ensemble on a synthetic suite (the [MEASURED] Law 3 numbers)",
+		RunE: func(_ *cobra.Command, _ []string) error {
+			r := trust.Benchmark(trials, seed)
+			if jsonOut {
+				return json.NewEncoder(os.Stdout).Encode(r)
+			}
+			fmt.Printf("\n  Hydra Trust Benchmark — %d trials/case (vs fixed-%d swarm)\n", r.Trials, r.FixedN)
+			fmt.Println("  " + strings.Repeat("─", 62))
+			fmt.Printf("  %-18s %10s %10s %12s\n", "workload", "samples", "accuracy", "vs fixed-N")
+			row := func(c trust.BenchCase) {
+				fmt.Printf("  %-18s %10.2f %9.1f%% %11.0f%%\n", c.Label, c.MeanSamples, c.Accuracy*100, c.SavedPct)
+			}
+			for _, c := range r.Cases {
+				row(c)
+			}
+			fmt.Println("  " + strings.Repeat("─", 62))
+			row(r.Blended)
+			fmt.Println()
+			return nil
+		},
+	}
+	cmd.Flags().IntVar(&trials, "trials", 20000, "trials per difficulty")
+	cmd.Flags().Int64Var(&seed, "seed", 42, "PRNG seed (fixed → reproducible)")
+	cmd.Flags().BoolVar(&jsonOut, "json", false, "machine-readable JSON output")
 	return cmd
 }
 

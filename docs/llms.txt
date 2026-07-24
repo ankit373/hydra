@@ -1,6 +1,6 @@
-# Hydra — Multi-Model AI Orchestration CLI
+# Hydra — The Trust Control Plane for AI Development
 
-> Hydra is an open source CLI written in Go that automatically routes developer tasks to the right AI model. It reduces LLM API costs by 70-85% by using cheap or free models for simple tasks (DTOs, CRUD, boilerplate) and reserving frontier models for work that actually needs them (architecture, complex reasoning).
+> Hydra is an open source CLI written in Go that routes developer tasks across every AI model on your machine — not just to the cheapest one, but to a target *confidence of correctness*. It reduces LLM API costs by 70-85% by using cheap or free models for simple tasks and reserving frontier models for work that needs them, and it can route to a calibrated confidence: sampling models adaptively (SPRT) and stopping as soon as the evidence is strong enough, spending more only where accuracy demands it.
 
 ## What It Does
 

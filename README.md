@@ -9,9 +9,10 @@
     ╚═╝  ╚═╝   ╚═╝   ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝
 </pre>
 
-### The AI Control Plane for Software Development
+### The Trust Control Plane for AI Development
 
-*One command. Every model. Total control.*
+*Route to a **confidence of correctness**, not just the cheapest model.*
+*One command. Every model. Provable trust.*
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-8b5cf6.svg)](LICENSE)
 [![Go 1.24](https://img.shields.io/badge/Go-1.24-00ADD8?logo=go&logoColor=white)](go.mod)
@@ -131,7 +132,7 @@ Every executor is **native Go** — `agy`, Ollama, per-provider HTTP (OpenAI-com
 | Context signal density | useful tokens = `length × ρ`; a dense 100k window beats a noisy 1M | Law 5; ρ via gzip-ratio proxy (`internal/entropy`) — compact on falling ρ |
 | Output capture | bounded at **33 MB** per subprocess | `internal/util.Accumulator` — no unbounded buffers |
 
-> **Methodology & honesty.** Routing overhead, discovery, calibration, and SPRT figures are **measured** by the test/benchmark suite (`go test ./...`, race-clean in CI). The SPRT numbers come from *synthetic* trials with known ground truth, not production traffic — they validate the algorithm (Wald sequential test), and land above the continuous theoretical `E[N]` (easy 1.33 / blended 2.48) because real evidence arrives in discrete steps. Cost-savings ranges are workload-dependent estimates; `hydra stats` reports your actual spend. As production `trust.jsonl` accumulates, `hydra trust stats` graduates these from *modeled* to *observed*.
+> **Methodology & honesty.** Routing overhead, discovery, calibration, and SPRT figures are **measured** — reproduce the SPRT numbers yourself with `hydra trust benchmark` (deterministic for a fixed seed; race-clean in CI). The SPRT numbers come from *synthetic* trials with known ground truth, not production traffic — they validate the algorithm (Wald sequential test), and land above the continuous theoretical `E[N]` (easy 1.33 / blended 2.48) because real evidence arrives in discrete steps. Cost-savings ranges are workload-dependent estimates; `hydra stats` reports your actual spend. As production `trust.jsonl` accumulates, `hydra trust stats` graduates these from *modeled* to *observed*.
 
 ---
 
@@ -369,6 +370,7 @@ hydra trust record ...                  # feed an outcome to train calibration
 hydra trust defect ...                  # modeled cost of shipping a wrong answer
 hydra trust stats                       # samples saved, achieved vs target confidence
 hydra trust explain <task_hash>         # the LLR ledger for a past SPRT run
+hydra trust benchmark                   # measured SPRT numbers (samples saved, accuracy)
 hydra graph blast <file>                # a file's blast radius + the confidence it demands
 hydra graph parallel <files...>         # optimal number of parallel agents (Law 4)
 hydra context entropy <file|->          # signal density + useful tokens + compact hint
