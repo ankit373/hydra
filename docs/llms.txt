@@ -8,6 +8,7 @@
 - **~1µs routing overhead**: the Go routing engine (policy eval + head selection + budget check) adds ~1,130 ns per dispatch — benchmarked on Apple M1 via `go test -bench=BenchmarkRoutingPath`
 - **Swarm dispatch**: fan a single prompt to multiple models simultaneously — race (fastest), best (LLM-judged quality), or all (aggregate)
 - **Confidence routing**: `hydra dispatch --confidence 0.95` runs an SPRT (sequential probability ratio test) ensemble that samples models adaptively and stops as soon as a target confidence of correctness is reached, using per-source calibration (`hydra trust calibration`) you build up from real outcomes — fewer model calls on easy tasks, more only where accuracy demands it
+- **Blast-radius aware**: `hydra dispatch --file X` and `hydra graph blast X` read a code dependency graph (`graph.json`) so an edit to a widely-depended-on file demands higher confidence than a leaf — the defect-cost model holds expected leaked-defect cost roughly constant
 - **Token budget enforcement**: 6 pressure modes (Normal → Emergency) auto-downgrade tiers as context window fills
 - **Cost analytics**: `hydra stats` shows spend broken down by model, tier, and day
 - **Dynamic pricing**: live rates from OpenRouter API with 24h cache and static YAML offline fallback
