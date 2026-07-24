@@ -373,7 +373,8 @@ hydra graph blast <file>                # a file's blast radius + the confidence
 hydra graph parallel <files...>         # optimal number of parallel agents (Law 4)
 hydra context entropy <file|->          # signal density + useful tokens + compact hint
 
-# Accountability
+# Verification & accountability
+hydra oracle verify go test ./... --source verifier:go-test  # verifier as evidence + its LLR
 hydra mcp check <tool> --agent A --resource R --action write  # gate + record an access
 hydra mcp log --denied                  # what got blocked
 hydra mcp report                        # allowed/denied by agent and tool
@@ -458,8 +459,8 @@ For Ollama models, add a family pattern:
 | **Causal A2A handoffs** — vector clocks, concurrent-edit conflict detection | ✅ Shipped |
 | **Context-entropy governor** — compact on falling signal density, not length | ✅ Shipped |
 | **MCP accountability ledger** — record + gate what every agent touches | ✅ Shipped |
+| **Verification oracles** — tests/compile/lint as first-class evidence | ✅ Shipped |
 | Outcome auto-wiring (tests / review / revert → calibration) | 🔨 Building |
-| Pluggable verification-oracle interface | 📋 Planned |
 | MCP server registry + central security agent | 📋 [#9](https://github.com/ankit373/hydra/issues/9)/[#10](https://github.com/ankit373/hydra/issues/10) |
 | Web UI + real-time cost dashboard | 📋 [#11](https://github.com/ankit373/hydra/issues/11)/[#12](https://github.com/ankit373/hydra/issues/12) |
 
@@ -469,8 +470,8 @@ See the full [Hydra Roadmap project board](https://github.com/users/ankit373/pro
 
 Hydra started by answering *which model is cheapest for this task?* It's evolving to answer a harder question: ***how sure are we the answer is right, and what's the least attention we can spend to be that sure?***
 
-- **Today** — calibration measures each source's real diagnostic power; SPRT samples adaptively to a target confidence; the defect-cost model prices what a wrong answer costs; graph-aware routing reads a code dependency graph so an edit's **blast radius** raises the confidence bar where a mistake is expensive; and a local **accountability ledger** records — and can gate — what every agent was allowed to touch and did.
-- **Next** — a verification-oracle interface lets test-runners and compilers act as first-class, high-`D` evidence sources; outcomes (tests/review/revert) auto-train calibration.
+- **Today** — calibration measures each source's real diagnostic power; SPRT samples adaptively to a target confidence; the defect-cost model prices what a wrong answer costs; graph-aware routing reads a code dependency graph so an edit's **blast radius** raises the confidence bar where a mistake is expensive; a local **accountability ledger** records — and can gate — what every agent was allowed to touch and did; and **verification oracles** (tests, compilers, linters) act as first-class, high-`D` evidence sources whose verdict can outweigh a model's opinion.
+- **Next** — outcomes (tests/review/revert) auto-train calibration in the background, so `D` reflects reality without manual `hydra trust record`.
 
 The design principle throughout: **no single vendor is privileged** — Hydra routes *across* providers and *away* from expensive ones, optimizing verified correctness per unit of human attention.
 
