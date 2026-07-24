@@ -10,10 +10,10 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
+	"github.com/ankit373/hydra/internal/a2a"
 	"github.com/ankit373/hydra/internal/budget"
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/cost"
@@ -201,42 +201,36 @@ func readClaudePct() int {
 
 // injectA2A reads a handoff JSON file and prepends a structured block to the prompt.
 func injectA2A(path, prompt string) (string, error) {
-	raw, err := os.ReadFile(path)
+	h, err := a2a.Load(path)
 	if err != nil {
 		return prompt, fmt.Errorf("a2a: %w", err)
 	}
-	var h struct {
-		From        string   `json:"from"`
-		Task        string   `json:"task"`
-		Files       []string `json:"files"`
-		Context     string   `json:"context"`
-		Conventions string   `json:"conventions"`
-		PriorOutput string   `json:"prior_output"`
+	if h == nil {
+		return prompt, nil // no handoff → prompt unchanged
 	}
-	if err := json.Unmarshal(raw, &h); err != nil {
-		return prompt, fmt.Errorf("a2a: %w", err)
-	}
-	block := fmt.Sprintf(
-		"A2A HANDOFF from: %s\nFiles in scope: %s\nConventions:\n%s\nPrior output:\n%s\nContext:\n%s\n\nTASK:\n%s",
-		h.From, strings.Join(h.Files, ", "), h.Conventions, h.PriorOutput, h.Context, h.Task,
-	)
-	return block + "\n\nADDITIONAL INSTRUCTION:\n" + prompt, nil
+	return h.PromptBlock(prompt) + "\n\nADDITIONAL INSTRUCTION:\n" + prompt, nil
 }
 
-// writeHandoff saves last_handoff.json after a successful dispatch.
+// writeHandoff saves last_handoff.json after a successful dispatch, advancing
+// the vector clock so downstream agents inherit this dispatch's causal history.
 func (d *Dispatcher) writeHandoff(r *Result, prompt string) error {
 	handoffPath := filepath.Join(config.Dir(), "logs", "last_handoff.json")
-	h := map[string]any{
-		"from":         fmt.Sprintf("hydra-tier-%d", rank.UITier(r.Head)),
-		"model":        r.Head.Name,
-		"task":         prompt,
-		"prior_output": r.Response.Output,
+
+	// Inherit the prior handoff's clock (if any) and tick for this agent.
+	var base a2a.Clock
+	if prior, err := a2a.Load(handoffPath); err == nil && prior != nil {
+		base = prior.Clock
 	}
-	raw, err := json.MarshalIndent(h, "", "  ")
-	if err != nil {
-		return err
+	from := fmt.Sprintf("hydra-tier-%d", rank.UITier(r.Head))
+
+	h := a2a.Handoff{
+		From:        from,
+		Model:       r.Head.Name,
+		Task:        prompt,
+		PriorOutput: r.Response.Output,
+		Clock:       base.Tick(from),
 	}
-	return os.WriteFile(handoffPath, raw, 0o600)
+	return h.Save(handoffPath)
 }
 
 // selectHeads returns heads to try, in order of preference.

@@ -111,29 +111,104 @@ func (g *Graph) DependentCount(nodeID string) int {
 	return len(g.transitiveDependents([]string{nodeID}))
 }
 
+// seedsForFile returns the node IDs declared in a file, matching by exact path
+// first and falling back to basename so callers may pass absolute or relative
+// paths.
+func (g *Graph) seedsForFile(file string) []string {
+	if g == nil || len(g.filesToNodes) == 0 {
+		return nil
+	}
+	if seeds := g.filesToNodes[file]; len(seeds) > 0 {
+		return seeds
+	}
+	base := filepath.Base(file)
+	var seeds []string
+	for f, ids := range g.filesToNodes {
+		if filepath.Base(f) == base {
+			seeds = append(seeds, ids...)
+		}
+	}
+	return seeds
+}
+
 // BlastRadiusForFile returns a defect-cost multiplier for editing a file:
 // 1 + log2(1 + transitive dependents) over all nodes declared in that file. A
 // leaf (or an unknown file, or no graph) yields 1.0; a widely-depended-on file
 // grows sub-linearly so one hub node doesn't produce an absurd multiplier.
 func (g *Graph) BlastRadiusForFile(file string) float64 {
-	if g == nil || len(g.filesToNodes) == 0 {
-		return 1.0
-	}
-	seeds := g.filesToNodes[file]
-	if len(seeds) == 0 {
-		// Try a basename match so callers can pass absolute or relative paths.
-		base := filepath.Base(file)
-		for f, ids := range g.filesToNodes {
-			if filepath.Base(f) == base {
-				seeds = append(seeds, ids...)
-			}
-		}
-	}
+	seeds := g.seedsForFile(file)
 	if len(seeds) == 0 {
 		return 1.0
 	}
 	count := len(g.transitiveDependents(seeds))
 	return 1.0 + math.Log2(1.0+float64(count))
+}
+
+// Coordination-cost bounds for Coupling, mapping graph overlap → the k used by
+// package optimal (independent work → kMin ⇒ n*≈6; fully-overlapping → kMax ⇒ n*≈2).
+const (
+	kMin = 0.02
+	kMax = 0.30
+)
+
+// Coupling returns the per-agent coordination cost k for editing a set of files
+// in parallel, derived from how much their impact sets (own nodes + transitive
+// dependents) overlap. Disjoint files → kMin (safe to parallelize widely);
+// files sharing the same subgraph → toward kMax (parallelism collapses). Fewer
+// than two files, or no graph, → kMin.
+func (g *Graph) Coupling(files []string) float64 {
+	if g == nil || len(files) < 2 {
+		return kMin
+	}
+	sets := make([]map[string]bool, len(files))
+	for i, f := range files {
+		sets[i] = g.affectedSet(f)
+	}
+	var sum float64
+	var pairs int
+	for i := 0; i < len(sets); i++ {
+		for j := i + 1; j < len(sets); j++ {
+			sum += jaccard(sets[i], sets[j])
+			pairs++
+		}
+	}
+	overlap := 0.0
+	if pairs > 0 {
+		overlap = sum / float64(pairs)
+	}
+	return kMin + overlap*(kMax-kMin)
+}
+
+// affectedSet is a file's own nodes plus everything that transitively depends on
+// them — the region of the graph an edit could perturb.
+func (g *Graph) affectedSet(file string) map[string]bool {
+	seeds := g.seedsForFile(file)
+	set := make(map[string]bool, len(seeds))
+	for _, s := range seeds {
+		set[s] = true
+	}
+	for n := range g.transitiveDependents(seeds) {
+		set[n] = true
+	}
+	return set
+}
+
+// jaccard is |A∩B| / |A∪B|; two empty sets have no overlap (0).
+func jaccard(a, b map[string]bool) float64 {
+	if len(a) == 0 && len(b) == 0 {
+		return 0
+	}
+	inter := 0
+	for k := range a {
+		if b[k] {
+			inter++
+		}
+	}
+	union := len(a) + len(b) - inter
+	if union == 0 {
+		return 0
+	}
+	return float64(inter) / float64(union)
 }
 
 // Dependents returns the direct dependents of a node (for `hydra graph blast`).
