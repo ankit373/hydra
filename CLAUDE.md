@@ -32,7 +32,7 @@ internal/executor/      ← Native executors: agy, Ollama, HTTP (API providers),
 internal/provider/      ← Discovery: cli / env (API keys) / port / agy.
 internal/swarm/         ← Fan-out (race/best/all + judge) + SPRT adapter (swarm→trust).
 internal/trust/         ← Trust Control Plane: calibration (LLR/D) + defect-cost + SPRT ensemble.
-internal/graph/         ← Code dependency graph (graph.json) → blast radius + coupling k.
+internal/graph/         ← Code dependency graph (graph.json) → blast radius + coupling k + percolation κ (Molloy–Reed).
 internal/a2a/           ← Causal agent handoffs: vector clocks + concurrent-edit conflict detection.
 internal/optimal/       ← Optimal parallel-agent count n*=√((1-s)/k) (Amdahl+coordination, Law 4).
 internal/entropy/       ← Context signal density (gzip proxy) → useful_tokens=L·ρ; compaction governor (Law 5).
@@ -40,7 +40,8 @@ internal/ledger/        ← MCP accountability ledger: record + policy-gate what
 internal/oracle/        ← Verification oracles (tests/compile/lint) as calibrated evidence sources. `hydra oracle`.
 internal/pricing/       ← Live pricing DB (OpenRouter fetch + 24h cache + tier fallback).
 internal/policy/        ← PII detection + local-only enforcement.
-internal/{cost,budget}/ ← Spend reporting (est/actual labeling) + token-budget governor.
+internal/{cost,budget}/ ← Spend reporting (est/actual labeling) + token-budget governor (static bands + rate-aware first-passage on claude_pct).
+internal/capabilities/  ← Model capability scores: embedded data.json ⊕ runtime user overlay (~/.hydra/models.json). `hydra models`.
 internal/util/          ← Shared utilities (Accumulator, etc).
 
 registry/routing.yaml   ← THE ENUM. Change tier assignments here only.
@@ -223,7 +224,12 @@ hydra graph parallel internal/a.go internal/b.go
 hydra trust calibration ; hydra trust record --source model:x --domain go --said-correct --outcome correct
 hydra trust defect --pii --production ; hydra trust stats ; hydra trust explain <task_hash>
 
+# Add a model at runtime (no rebuild) — merges into ~/.hydra/models.json overlay
+hydra models add kimi-k3 --name "Kimi K3" --provider moonshot --cap-score 85
+hydra models list ; hydra models remove kimi-k3 ; hydra models sync   # import OpenRouter catalog
+
 # System state / discovered heads / spend
+# `hydra status` shows the rate-aware claude_pct governor (first-passage risk toward 80%).
 hydra status ; hydra probe ; hydra cost ; hydra stats
 ```
 
@@ -679,8 +685,10 @@ All Go source lives under `cmd/` and `internal/`. Key packages:
 | `internal/policy` | Allow/deny rules (PII local-only, etc.) |
 | `internal/rank` | CapScore ranking helpers |
 | `internal/config` | Hydra config load/save (`~/.config/hydra/`) |
+| `internal/capabilities` | Model capability scores: embedded `data.json` ⊕ runtime user overlay (`~/.hydra/models.json`) merged at discovery, so new models are added without a rebuild. Drives `hydra models list\|add\|remove\|sync`. |
+| `internal/budget` | Token-budget governor: static pressure bands (`ModeFor`) + a rate-aware first-passage-time model on the orchestrator's `claude_pct` session history (`RiskFromHistory`/`EffectiveMode`) that escalates before a threshold is crossed. Feeds `claudeMode` downgrades and `hydra status`. |
 | `internal/trust` | Trust Control Plane confidence layer: per-source calibration (Beta-Bernoulli → LLR/D), defect-cost model + `RequiredConfidence`, and the SPRT optimal-stopping ensemble (`trust.Run`). Drives `hydra dispatch --confidence` and `hydra trust calibration\|record\|defect\|stats\|explain`. |
-| `internal/graph` | Code dependency graph (`graph.json`, Graphify or any tree-sitter indexer) → transitive-dependent blast radius + coupling `k`. Drives `hydra graph blast\|parallel` and `hydra dispatch --file`. |
+| `internal/graph` | Code dependency graph (`graph.json`, Graphify or any tree-sitter indexer) → transitive-dependent blast radius + coupling `k` + Molloy–Reed percolation κ=⟨k²⟩/⟨k⟩ (κ≥2 ⟹ cascade-capable core; `PercolationFactor` lifts hub-core files). Drives `hydra graph blast\|parallel` and `hydra dispatch --file`. |
 | `internal/a2a` | Agent-to-agent handoffs with vector clocks: causal ordering (before/after/concurrent) + `ConflictsWith` (concurrent + overlapping files). Backs `last_handoff.json` and `--a2a`. |
 | `internal/optimal` | Optimal parallel-agent count `n*=√((1−s)/k)` and speedup (Amdahl + coordination, Manifesto Law 4). Drives `hydra graph parallel`. |
 | `internal/entropy` | Context signal density ρ (gzip-ratio proxy) → `useful_tokens = L·ρ` + a compaction governor (Manifesto Law 5). Drives `hydra context entropy`. |
