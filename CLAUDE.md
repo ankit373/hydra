@@ -37,6 +37,7 @@ internal/a2a/           ← Causal agent handoffs: vector clocks + concurrent-ed
 internal/optimal/       ← Optimal parallel-agent count n*=√((1-s)/k) (Amdahl+coordination, Law 4).
 internal/entropy/       ← Context signal density (gzip proxy) → useful_tokens=L·ρ; compaction governor (Law 5).
 internal/ledger/        ← MCP accountability ledger: record + policy-gate what agents touch. `hydra mcp`.
+internal/oracle/        ← Verification oracles (tests/compile/lint) as calibrated evidence sources. `hydra oracle`.
 internal/pricing/       ← Live pricing DB (OpenRouter fetch + 24h cache + tier fallback).
 internal/policy/        ← PII detection + local-only enforcement.
 internal/{cost,budget}/ ← Spend reporting (est/actual labeling) + token-budget governor.
@@ -684,6 +685,7 @@ All Go source lives under `cmd/` and `internal/`. Key packages:
 | `internal/optimal` | Optimal parallel-agent count `n*=√((1−s)/k)` and speedup (Amdahl + coordination, Manifesto Law 4). Drives `hydra graph parallel`. |
 | `internal/entropy` | Context signal density ρ (gzip-ratio proxy) → `useful_tokens = L·ρ` + a compaction governor (Manifesto Law 5). Drives `hydra context entropy`. |
 | `internal/ledger` | Local MCP accountability ledger: append-only access events + glob allow/deny `Policy.Decide` gate (records every decision). Drives `hydra mcp check\|record\|log\|report`. |
+| `internal/oracle` | Verification oracles: `Oracle`/`CommandOracle` run tests/compile/lint (exit 0 = pass) and map the verdict to a calibrated LLR (`oracle.LLR`) — a high-`D` evidence source. Drives `hydra oracle verify`. |
 | `internal/tui` | Bubble Tea TUI: init wizard, install flow |
 | `internal/review` | Code review subcommand |
 | `internal/editor` | Editor integration |

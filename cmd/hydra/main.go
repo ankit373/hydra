@@ -24,6 +24,7 @@ import (
 	"github.com/ankit373/hydra/internal/graph"
 	"github.com/ankit373/hydra/internal/ledger"
 	"github.com/ankit373/hydra/internal/optimal"
+	"github.com/ankit373/hydra/internal/oracle"
 	"github.com/ankit373/hydra/internal/parallel"
 	"github.com/ankit373/hydra/internal/pricing"
 	"github.com/ankit373/hydra/internal/probe"
@@ -74,7 +75,7 @@ func rootCmd() *cobra.Command {
 	root.AddCommand(
 		cmdInit(), cmdProbe(), cmdStatus(), cmdDispatch(),
 		cmdEdit(), cmdReview(), cmdParallel(), cmdCost(), cmdStats(),
-		cmdPricing(), cmdTrust(), cmdGraph(), cmdContext(), cmdMCP(),
+		cmdPricing(), cmdTrust(), cmdGraph(), cmdContext(), cmdMCP(), cmdOracle(),
 		cmdVersion(),
 	)
 	return root
@@ -475,6 +476,70 @@ func cmdDispatch() *cobra.Command {
 	cmd.Flags().StringVar(&domain, "domain", "", "calibration domain for --confidence (default: \"default\")")
 	cmd.Flags().StringVar(&file, "file", "", "target file — raises the confidence bar by its code blast radius")
 	cmd.Flags().StringVar(&graphPath, "graph", "graph.json", "path to the dependency graph used with --file")
+	return cmd
+}
+
+// cmdOracle runs a verification oracle and reports its calibrated evidence.
+func cmdOracle() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "oracle",
+		Short: "Run deterministic verifiers (tests/compile/lint) as evidence sources",
+	}
+	var source, domain, candidateFile, record string
+	verify := &cobra.Command{
+		Use:   "verify <command...>",
+		Short: "Run a verifier command; report pass/fail + its calibrated LLR",
+		Args:  cobra.MinimumNArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			candidate := ""
+			if candidateFile != "" {
+				raw, err := os.ReadFile(candidateFile)
+				if err != nil {
+					return err
+				}
+				candidate = string(raw)
+			}
+			src := source
+			if src == "" {
+				src = "verifier:" + args[0]
+			}
+			o := &oracle.CommandOracle{Template: strings.Join(args, " "), Source: src}
+			v, err := o.Verify(context.Background(), candidate, trust.Task{Domain: domain})
+			if err != nil {
+				return err
+			}
+
+			cal, err := trust.New(trust.DefaultPath())
+			if err != nil {
+				return err
+			}
+			if record != "" {
+				if out := trust.ParseOutcome(record); out != trust.OutcomeUnknown {
+					_ = cal.Update(src, domain, v.Passed, out)
+				}
+			}
+			llr := oracle.LLR(cal, src, domain, v)
+
+			status := cortexStyle.Render("PASS")
+			if !v.Passed {
+				status = "FAIL"
+			}
+			fmt.Printf("\n  %s  %s\n", status, dimStyle.Render(src))
+			if v.Detail != "" {
+				fmt.Printf("  %s\n", dimStyle.Render(v.Detail))
+			}
+			fmt.Printf("  calibrated evidence  %+.3f nats\n\n", llr)
+			if !v.Passed {
+				os.Exit(1)
+			}
+			return nil
+		},
+	}
+	verify.Flags().StringVar(&source, "source", "", "calibration source id (default: verifier:<cmd>)")
+	verify.Flags().StringVar(&domain, "domain", "", "task domain")
+	verify.Flags().StringVar(&candidateFile, "candidate", "", "file holding the answer to verify (for {file}/{answer})")
+	verify.Flags().StringVar(&record, "record", "", "train calibration with the true outcome: correct|incorrect")
+	cmd.AddCommand(verify)
 	return cmd
 }
 
