@@ -22,16 +22,56 @@ func DefaultWeights() DefectWeights {
 	}
 }
 
+// defaultToleratedLeakUSD is the expected cost of leaked defects Hydra is
+// willing to tolerate per task. RequiredConfidence sets the error probability α
+// so that α × (defect cost) ≈ this constant: a mistake that costs 10× more must
+// be 10× less likely. The baseline task (defect cost = Base) yields α = 0.10, i.e.
+// a 90% target — matching the SPRT default.
+const defaultToleratedLeakUSD = 0.10
+
+// maxConfidence caps how sure Hydra will insist on being, so an enormous
+// blast radius can't demand an unreachable (α→0) target.
+const maxConfidence = 0.999
+
 // DefectModel prices the cost of shipping an incorrect answer for a task. That
 // cost sets how much confidence a task must clear before Hydra stops sampling
-// (Phase 2) and is surfaced in `hydra dispatch --dry-run` / `hydra trust defect`.
+// (RequiredConfidence) and is surfaced in `hydra dispatch --confidence --file`,
+// `hydra trust defect`, and `hydra dispatch --dry-run`.
 type DefectModel struct {
 	W DefectWeights
+	// ToleratedLeakUSD is the expected leaked-defect cost held constant by
+	// RequiredConfidence. Zero uses defaultToleratedLeakUSD.
+	ToleratedLeakUSD float64
 }
 
 // NewDefectModel returns a model using the default weights.
 func NewDefectModel() *DefectModel {
 	return &DefectModel{W: DefaultWeights()}
+}
+
+// RequiredConfidence maps a task's defect cost to the confidence-of-correctness
+// Hydra should demand before it stops sampling. It holds the *expected leaked
+// defect cost* constant: α = toleratedLeak / defectCost, so target = 1 − α. A
+// costlier mistake linearly lowers the tolerated error probability; the result
+// is clamped to [0.5, maxConfidence].
+func (d *DefectModel) RequiredConfidence(t Task) float64 {
+	leak := d.ToleratedLeakUSD
+	if leak <= 0 {
+		leak = defaultToleratedLeakUSD
+	}
+	cost := d.CostUSD(t)
+	if cost <= 0 {
+		return 0.5
+	}
+	alpha := leak / cost
+	target := 1 - alpha
+	if target > maxConfidence {
+		target = maxConfidence
+	}
+	if target < 0.5 {
+		target = 0.5
+	}
+	return target
 }
 
 // CostUSD = Base × blast × w_irrev × w_pii × w_prod, with each risk factor

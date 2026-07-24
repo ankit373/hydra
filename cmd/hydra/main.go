@@ -19,6 +19,7 @@ import (
 	"github.com/ankit373/hydra/internal/cost"
 	"github.com/ankit373/hydra/internal/dispatch"
 	"github.com/ankit373/hydra/internal/editor"
+	"github.com/ankit373/hydra/internal/graph"
 	"github.com/ankit373/hydra/internal/parallel"
 	"github.com/ankit373/hydra/internal/pricing"
 	"github.com/ankit373/hydra/internal/probe"
@@ -69,7 +70,7 @@ func rootCmd() *cobra.Command {
 	root.AddCommand(
 		cmdInit(), cmdProbe(), cmdStatus(), cmdDispatch(),
 		cmdEdit(), cmdReview(), cmdParallel(), cmdCost(), cmdStats(),
-		cmdPricing(), cmdTrust(),
+		cmdPricing(), cmdTrust(), cmdGraph(),
 		cmdVersion(),
 	)
 	return root
@@ -322,6 +323,8 @@ func cmdDispatch() *cobra.Command {
 		// trust / SPRT flags
 		confidence float64
 		domain     string
+		file       string
+		graphPath  string
 	)
 
 	cmd := &cobra.Command{
@@ -338,7 +341,24 @@ func cmdDispatch() *cobra.Command {
 			}
 
 			// ── SPRT confidence mode ──────────────────────────────────────
-			if confidence > 0 {
+			// Triggered by --confidence, or by --file (blast radius derives a
+			// target on its own). Blast radius raises the bar but never lowers a
+			// target the user explicitly asked for.
+			effectiveConf := confidence
+			if file != "" {
+				g, err := graph.Load(graphPath)
+				if err != nil {
+					return err
+				}
+				task := trust.Task{Domain: domain, BlastRadius: g.BlastRadiusForFile(file)}
+				derived := trust.NewDefectModel().RequiredConfidence(task)
+				fmt.Printf("  %s blast radius %.2f → demands confidence ≥ %.1f%%\n",
+					dimStyle.Render("graph:"), task.BlastRadius, derived*100)
+				if derived > effectiveConf {
+					effectiveConf = derived
+				}
+			}
+			if effectiveConf > 0 {
 				sw := swarm.New(d, d.Heads(), d)
 				res, err := sw.RunSPRT(ctx, prompt, swarm.Options{
 					TierHint:      tier,
@@ -346,7 +366,7 @@ func cmdDispatch() *cobra.Command {
 					MaxEstCostUSD: swarmMaxCost,
 					LocalOnly:     localOnly,
 					System:        system,
-					Confidence:    confidence,
+					Confidence:    effectiveConf,
 					Domain:        domain,
 				})
 				if err != nil {
@@ -449,6 +469,54 @@ func cmdDispatch() *cobra.Command {
 	// trust / SPRT flags
 	cmd.Flags().Float64Var(&confidence, "confidence", 0, "route via SPRT ensemble until this P(correct) is reached, e.g. 0.95")
 	cmd.Flags().StringVar(&domain, "domain", "", "calibration domain for --confidence (default: \"default\")")
+	cmd.Flags().StringVar(&file, "file", "", "target file — raises the confidence bar by its code blast radius")
+	cmd.Flags().StringVar(&graphPath, "graph", "graph.json", "path to the dependency graph used with --file")
+	return cmd
+}
+
+// cmdGraph inspects the code dependency graph Hydra uses for blast-radius routing.
+func cmdGraph() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "graph",
+		Short: "Inspect the code dependency graph used for blast-radius routing",
+	}
+	var graphPath string
+	var jsonOut bool
+	blast := &cobra.Command{
+		Use:   "blast <file>",
+		Short: "Show a file's blast radius (how much transitively depends on it)",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			g, err := graph.Load(graphPath)
+			if err != nil {
+				return err
+			}
+			file := args[0]
+			radius := g.BlastRadiusForFile(file)
+			task := trust.Task{BlastRadius: radius}
+			dm := trust.NewDefectModel()
+
+			var deps int
+			for _, id := range g.NodesInFile(file) {
+				deps += g.DependentCount(id)
+			}
+			if jsonOut {
+				return json.NewEncoder(os.Stdout).Encode(map[string]any{
+					"file": file, "blast_radius": radius, "transitive_dependents": deps,
+					"defect_cost_usd": dm.CostUSD(task), "required_confidence": dm.RequiredConfidence(task),
+				})
+			}
+			fmt.Printf("\n  %s\n", cortexStyle.Render(file))
+			fmt.Printf("    transitive dependents  %d\n", deps)
+			fmt.Printf("    blast radius           %.2f×\n", radius)
+			fmt.Printf("    defect cost            $%.2f\n", dm.CostUSD(task))
+			fmt.Printf("    demands confidence     %.1f%%\n\n", dm.RequiredConfidence(task)*100)
+			return nil
+		},
+	}
+	blast.Flags().StringVar(&graphPath, "graph", "graph.json", "path to the dependency graph (graph.json)")
+	blast.Flags().BoolVar(&jsonOut, "json", false, "machine-readable JSON output")
+	cmd.AddCommand(blast)
 	return cmd
 }
 
@@ -1321,14 +1389,27 @@ func cmdTrustRecord() *cobra.Command {
 }
 
 func cmdTrustDefect() *cobra.Command {
-	var domain string
+	var domain, file, graphPath string
 	var blast float64
 	var irreversible, pii, production bool
 	cmd := &cobra.Command{
 		Use:   "defect",
-		Short: "Preview the modeled cost of shipping a wrong answer for a task",
+		Short: "Preview the modeled cost of a wrong answer + the confidence it demands",
 		RunE: func(_ *cobra.Command, _ []string) error {
 			dm := trust.NewDefectModel()
+
+			// --file derives blast radius from the code dependency graph,
+			// overriding --blast when a graph is available.
+			blastSource := "flag"
+			if file != "" {
+				g, err := graph.Load(graphPath)
+				if err != nil {
+					return err
+				}
+				blast = g.BlastRadiusForFile(file)
+				blastSource = "graph"
+			}
+
 			task := trust.Task{
 				Domain:       domain,
 				BlastRadius:  blast,
@@ -1336,13 +1417,17 @@ func cmdTrustDefect() *cobra.Command {
 				TouchesPII:   pii,
 				Production:   production,
 			}
-			fmt.Printf("  defect cost ≈ $%.2f  (blast=%.1f irreversible=%v pii=%v prod=%v)\n",
-				dm.CostUSD(task), blast, irreversible, pii, production)
+			fmt.Printf("  defect cost ≈ $%.2f  (blast=%.2f [%s] irreversible=%v pii=%v prod=%v)\n",
+				dm.CostUSD(task), blast, blastSource, irreversible, pii, production)
+			fmt.Printf("  → demands confidence ≥ %.1f%%  (use with: hydra dispatch --confidence %.3f)\n",
+				dm.RequiredConfidence(task)*100, dm.RequiredConfidence(task))
 			return nil
 		},
 	}
 	cmd.Flags().StringVar(&domain, "domain", "", "task domain")
-	cmd.Flags().Float64Var(&blast, "blast", 1.0, "blast-radius multiplier (Graphify supplies this in Phase 3)")
+	cmd.Flags().Float64Var(&blast, "blast", 1.0, "blast-radius multiplier (ignored when --file is set)")
+	cmd.Flags().StringVar(&file, "file", "", "derive blast radius from this file's dependents in the code graph")
+	cmd.Flags().StringVar(&graphPath, "graph", "graph.json", "path to the dependency graph (graph.json)")
 	cmd.Flags().BoolVar(&irreversible, "irreversible", false, "change cannot be cheaply undone")
 	cmd.Flags().BoolVar(&pii, "pii", false, "task handles personal data")
 	cmd.Flags().BoolVar(&production, "production", false, "target is production")

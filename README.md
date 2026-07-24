@@ -279,6 +279,14 @@ hydra trust stats                # samples saved vs fixed-N, achieved vs target 
 hydra trust explain <task_hash>  # the full LLR ledger for a past run — why it stopped
 ```
 
+**Blast-radius aware.** Point Hydra at a dependency graph (`graph.json` from [Graphify](https://github.com/safishamsi/graphify) or any tree-sitter indexer) and the confidence bar scales with how much code an edit could break — a fix to a hub everything imports demands far more certainty than a leaf helper:
+
+```bash
+hydra graph blast internal/auth/token.go        # 3 transitive dependents → demands 96.7%
+hydra dispatch --confidence 0.90 --file internal/auth/token.go "rotate the signing key"
+#   graph: blast radius 3.00 → demands confidence ≥ 96.7%  (raises the 0.90 floor)
+```
+
 In synthetic benchmarks this cuts model calls **~49% on easy tasks** and **~24% on a blended workload** at ≥98% accuracy — while deliberately sampling *more* than a fixed swarm on genuinely hard tasks, which a fixed-N ensemble cannot do. Calibration is cold-start conservative: with no history, sources are treated as uninformative and Hydra falls back to sampling broadly.
 
 > The SPRT ensemble, calibration engine, and defect-cost model have shipped. Graph-aware (blast-radius) routing, a local MCP accountability ledger, and a pluggable verification-oracle interface are on the [roadmap](#roadmap).
@@ -359,6 +367,7 @@ hydra trust record ...                  # feed an outcome to train calibration
 hydra trust defect ...                  # modeled cost of shipping a wrong answer
 hydra trust stats                       # samples saved, achieved vs target confidence
 hydra trust explain <task_hash>         # the LLR ledger for a past SPRT run
+hydra graph blast <file>                # a file's blast radius + the confidence it demands
 
 # Editing & batch
 hydra edit --file ... --prompt "..."    # scoped, validated, rollback-safe file edit
@@ -435,7 +444,7 @@ For Ollama models, add a family pattern:
 | **Per-source calibration** (Beta-Bernoulli → LLR / D) | ✅ Shipped |
 | **Defect-cost model** (`hydra trust defect`) | ✅ Shipped |
 | **SPRT confidence routing** (`hydra dispatch --confidence`) | ✅ Shipped |
-| Graph-aware routing (blast-radius → confidence) | 🔨 Building |
+| **Graph-aware routing** — blast-radius → defect cost → confidence | ✅ Shipped |
 | Outcome auto-wiring (tests / review / revert → calibration) | 🔨 Building |
 | Local MCP accountability ledger | 📋 Planned |
 | Pluggable verification-oracle interface | 📋 Planned |
@@ -448,8 +457,8 @@ See the full [Hydra Roadmap project board](https://github.com/users/ankit373/pro
 
 Hydra started by answering *which model is cheapest for this task?* It's evolving to answer a harder question: ***how sure are we the answer is right, and what's the least attention we can spend to be that sure?***
 
-- **Today** — calibration measures each source's real diagnostic power; SPRT samples adaptively to a target confidence; the defect-cost model prices what a wrong answer costs.
-- **Next** — graph-aware routing uses code blast-radius to raise the confidence bar where a mistake is expensive; a local MCP ledger records what every model was actually allowed to touch and did; a verification-oracle interface lets test-runners and compilers act as first-class, high-`D` evidence sources.
+- **Today** — calibration measures each source's real diagnostic power; SPRT samples adaptively to a target confidence; the defect-cost model prices what a wrong answer costs; and graph-aware routing reads a code dependency graph so an edit's **blast radius** raises the confidence bar where a mistake is expensive.
+- **Next** — a local MCP ledger records what every model was actually allowed to touch and did; a verification-oracle interface lets test-runners and compilers act as first-class, high-`D` evidence sources; outcomes (tests/review/revert) auto-train calibration.
 
 The design principle throughout: **no single vendor is privileged** — Hydra routes *across* providers and *away* from expensive ones, optimizing verified correctness per unit of human attention.
 

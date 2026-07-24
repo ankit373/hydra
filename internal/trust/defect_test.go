@@ -1,6 +1,9 @@
 package trust
 
-import "testing"
+import (
+	"math"
+	"testing"
+)
 
 func TestDefectCostUSD(t *testing.T) {
 	dm := NewDefectModel() // Base 1, Irrev 5, PII 10, Prod 3
@@ -23,6 +26,39 @@ func TestDefectCostUSD(t *testing.T) {
 				t.Errorf("CostUSD(%+v) = %v, want %v", tt.task, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestRequiredConfidence_HoldsLeakConstant(t *testing.T) {
+	dm := NewDefectModel() // tolerated leak $0.10
+
+	// Baseline task (defect cost = Base = 1) → α=0.10 → 90%.
+	if got := dm.RequiredConfidence(Task{}); math.Abs(got-0.90) > 1e-9 {
+		t.Errorf("RequiredConfidence(base) = %v, want 0.90", got)
+	}
+	// blast 2 → cost 2 → α=0.05 → 95%.
+	if got := dm.RequiredConfidence(Task{BlastRadius: 2}); math.Abs(got-0.95) > 1e-9 {
+		t.Errorf("RequiredConfidence(blast 2) = %v, want 0.95", got)
+	}
+	// The invariant: α × defect cost ≈ tolerated leak, for un-capped targets.
+	for _, blast := range []float64{1, 2, 5, 10} {
+		task := Task{BlastRadius: blast}
+		alpha := 1 - dm.RequiredConfidence(task)
+		if leak := alpha * dm.CostUSD(task); math.Abs(leak-0.10) > 1e-9 {
+			t.Errorf("blast %v: expected leaked cost α·C = %v, want 0.10", blast, leak)
+		}
+	}
+}
+
+func TestRequiredConfidence_CappedAtMax(t *testing.T) {
+	dm := NewDefectModel()
+	// Enormous defect cost (all flags + high blast) would demand α→0; capped.
+	got := dm.RequiredConfidence(Task{BlastRadius: 50, Irreversible: true, TouchesPII: true, Production: true})
+	if got > maxConfidence {
+		t.Errorf("RequiredConfidence = %v, want ≤ %v (capped)", got, maxConfidence)
+	}
+	if got < 0.99 {
+		t.Errorf("very costly task should still demand ≥0.99, got %v", got)
 	}
 }
 
