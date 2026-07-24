@@ -144,6 +144,101 @@ func TestRegistry_Concurrent(t *testing.T) {
 	}
 }
 
+func TestAppendPctHistory(t *testing.T) {
+	// Appends on change, ignores non-positive, dedups consecutive, bounds length.
+	h := AppendPctHistory(nil, 40, 12)
+	h = AppendPctHistory(h, 40, 12) // no change → no append
+	h = AppendPctHistory(h, 0, 12)  // unknown → ignored
+	h = AppendPctHistory(h, 47, 12)
+	if len(h) != 2 || h[0] != 40 || h[1] != 47 {
+		t.Fatalf("append/dedup failed: %v", h)
+	}
+	// Bounding keeps the newest max entries.
+	h = nil
+	for i := 1; i <= 20; i++ {
+		h = AppendPctHistory(h, i, 5)
+	}
+	if len(h) != 5 || h[0] != 16 || h[4] != 20 {
+		t.Errorf("bounding failed: %v", h)
+	}
+}
+
+func TestFirstPassageProb_EdgeCases(t *testing.T) {
+	if p := FirstPassageProb(0, 0.1, 0.1, 3); p != 1 {
+		t.Errorf("already-at-barrier should be certain, got %v", p)
+	}
+	if p := FirstPassageProb(0.2, 0.1, 0.1, 0); p != 0 {
+		t.Errorf("no horizon should be impossible, got %v", p)
+	}
+	if p := FirstPassageProb(0.2, 0, 0, 3); p != 0 {
+		t.Errorf("no drift, no vol → 0, got %v", p)
+	}
+	if p := FirstPassageProb(0.2, 0.1, 0, 3); p != 1 { // μH = 0.3 ≥ 0.2
+		t.Errorf("drift reaches barrier deterministically → 1, got %v", p)
+	}
+	if p := FirstPassageProb(0.5, 0.01, 0, 3); p != 0 { // μH = 0.03 < 0.5
+		t.Errorf("drift too slow in horizon → 0, got %v", p)
+	}
+}
+
+func TestFirstPassageProb_Monotonic(t *testing.T) {
+	if !(FirstPassageProb(0.3, 0.05, 0.05, 3) > FirstPassageProb(0.3, 0.02, 0.05, 3)) {
+		t.Error("probability should rise with drift")
+	}
+	if !(FirstPassageProb(0.2, 0.03, 0.05, 3) > FirstPassageProb(0.4, 0.03, 0.05, 3)) {
+		t.Error("probability should fall with distance to barrier")
+	}
+}
+
+func TestRiskFromHistory(t *testing.T) {
+	// Fewer than two points → no signal.
+	if br, r := RiskFromHistory([]int{55}); br != 0 || r != 0 {
+		t.Errorf("single point should give no signal, got br=%v r=%v", br, r)
+	}
+	// Fast climb that reaches the 80% barrier within the horizon → high risk.
+	brFast, rFast := RiskFromHistory([]int{60, 68, 74})
+	if brFast <= 0 {
+		t.Errorf("rising series should have positive burn rate, got %v", brFast)
+	}
+	if rFast < 0.5 {
+		t.Errorf("fast climb near barrier should be high risk, got %v", rFast)
+	}
+	// Same distance to barrier but a slower rate → strictly lower risk.
+	_, rSlower := RiskFromHistory([]int{72, 73, 74})
+	if !(rFast > rSlower) {
+		t.Errorf("faster climb should be riskier: fast=%v slower=%v", rFast, rSlower)
+	}
+	// Slow climb far from barrier → low risk.
+	_, rSlow := RiskFromHistory([]int{20, 21, 22})
+	if rSlow > 0.1 {
+		t.Errorf("slow climb far from barrier should be low risk, got %v", rSlow)
+	}
+	// Flat series → zero burn, zero risk.
+	if br, r := RiskFromHistory([]int{60, 60, 60}); br != 0 || r != 0 {
+		t.Errorf("flat series should give no signal, got br=%v r=%v", br, r)
+	}
+}
+
+func TestEffectiveMode(t *testing.T) {
+	// No risk → exactly the level band (backward compatible).
+	for _, pct := range []int{0, 55, 72, 90} {
+		if EffectiveMode(pct, 0) != ModeFor(pct) {
+			t.Errorf("EffectiveMode(%d, 0) should equal ModeFor", pct)
+		}
+	}
+	// High risk floors the mode above a low band.
+	if EffectiveMode(55, 0.9) != ModeCritical { // band=compact, risk≥0.8 → critical
+		t.Errorf("high risk should floor to critical, got %s", EffectiveMode(55, 0.9))
+	}
+	if EffectiveMode(55, 0.6) != ModeWarning { // band=compact, risk≥0.5 → warning
+		t.Errorf("moderate risk should floor to warning, got %s", EffectiveMode(55, 0.6))
+	}
+	// Never downgrades below the level band.
+	if EffectiveMode(90, 0.6) != ModeEmergency { // band already emergency
+		t.Errorf("risk floor must not lower a high band, got %s", EffectiveMode(90, 0.6))
+	}
+}
+
 func TestLoadWindows_Fallback(t *testing.T) {
 	// Non-existent path → empty map, no panic.
 	windows := LoadWindows("/no/such/path")

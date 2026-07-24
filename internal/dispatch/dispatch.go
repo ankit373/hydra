@@ -159,10 +159,14 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 }
 
 // claudeMode reads claude_pct from state.json and returns the (possibly downgraded) tier,
-// mode string, and raw percentage.
+// mode string, and raw percentage. The mode is rate-aware: a fast burn (high
+// first-passage risk toward the 80% line) escalates the mode above its static
+// level band, so the tier downgrades earlier. With no history the effective mode
+// equals ModeFor(pct) — identical to the prior behavior.
 func (d *Dispatcher) claudeMode(tierHint string) (tier string, mode string, pct int) {
 	pct = readClaudePct()
-	mode = budget.ModeFor(pct).String()
+	_, risk := budget.RiskFromHistory(readClaudePctHistory())
+	mode = budget.EffectiveMode(pct, risk).String()
 	tier = tierHint
 
 	// Convert tier hint to int so we can downgrade numerically.
@@ -197,6 +201,47 @@ func readClaudePct() int {
 		return 0
 	}
 	return s.ClaudePct
+}
+
+// readClaudePctHistory reads the bounded claude_pct trajectory from state.json.
+// A missing file or field yields nil, so callers get no rate signal.
+func readClaudePctHistory() []int {
+	statePath := filepath.Join(config.Dir(), "logs", "state.json")
+	raw, err := os.ReadFile(statePath)
+	if err != nil {
+		return nil
+	}
+	var s struct {
+		History []int `json:"claude_pct_history"`
+	}
+	if err := json.Unmarshal(raw, &s); err != nil {
+		return nil
+	}
+	return s.History
+}
+
+// asInt coerces a value decoded from JSON (numbers arrive as float64) to an int.
+func asInt(v any) int {
+	switch x := v.(type) {
+	case float64:
+		return int(x)
+	case int:
+		return x
+	}
+	return 0
+}
+
+// asIntSlice coerces a JSON-decoded array (elements arrive as float64) to []int.
+func asIntSlice(v any) []int {
+	raw, ok := v.([]any)
+	if !ok {
+		return nil
+	}
+	out := make([]int, 0, len(raw))
+	for _, e := range raw {
+		out = append(out, asInt(e))
+	}
+	return out
 }
 
 // injectA2A reads a handoff JSON file and prepends a structured block to the prompt.
@@ -316,6 +361,15 @@ func (d *Dispatcher) syncStateJSON(r *Result) {
 	existing["last_model"] = r.Head.Name
 	existing["last_status"] = "ok"
 	existing["last_tier"] = rank.UITier(r.Head)
+
+	// Append the current orchestrator claude_pct (written by the orchestrator,
+	// e.g. `jq '.claude_pct = 52'`) to a bounded history, so `hydra status` can
+	// compute a rate-aware first-passage risk from the session trajectory rather
+	// than reacting only to the instantaneous level.
+	if pct := asInt(existing["claude_pct"]); pct > 0 {
+		existing["claude_pct_history"] = budget.AppendPctHistory(
+			asIntSlice(existing["claude_pct_history"]), pct, budget.MaxPctHistory)
+	}
 
 	// Persist per-model budget snapshots so the TUI and status command can read them.
 	if d.budget != nil {
