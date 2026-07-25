@@ -1,26 +1,80 @@
 name: Sync develop with main
 
+# GitFlow "reverse merge" (a.k.a. back-merge): after anything lands on main
+# (a release version bump, a hotfix), those commits must flow BACK into develop
+# so develop never falls behind main. The direction is always **main → develop**
+# — main is the source of truth for released code; develop integrates on top.
+#
+# develop is a protected branch (linear history, PR-only, no direct pushes), so
+# we cannot push a merge straight to it. Instead this opens a back-merge PR from
+# a branch that is (develop + main), which is then squash-merged to keep develop
+# linear. The job no-ops when develop already contains everything on main.
+
 on:
   push:
     branches: [main]
 
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: back-merge-main
+  cancel-in-progress: true
+
 jobs:
-  sync:
-    name: Merge main → develop
+  back-merge:
+    name: Open back-merge PR (main → develop)
     runs-on: ubuntu-latest
-    if: false
-    permissions:
-      contents: write
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Merge main into develop
+      - name: Build back-merge branch (develop + main)
+        id: prep
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git checkout develop
-          git merge origin/main --no-edit --ff-only || git merge origin/main --no-edit -X theirs
-          git push origin develop
+          git fetch origin main develop
+
+          # Start from develop and merge main IN — this keeps develop's own work
+          # and only adds what main has that develop lacks (release/hotfix commits).
+          git checkout -B chore/back-merge-main origin/develop
+          if ! git merge origin/main --no-edit; then
+            git merge --abort
+            echo "conflict=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # If the merge introduced nothing beyond develop, there is nothing to sync.
+          if git diff --quiet origin/develop..HEAD; then
+            echo "nothing=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "nothing=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Push branch + open/update PR
+        if: steps.prep.outputs.conflict != 'true' && steps.prep.outputs.nothing != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git push -f origin chore/back-merge-main
+          # Create the PR if one isn't already open for this branch; otherwise the
+          # force-push above already updated the existing PR.
+          gh pr create \
+            --base develop \
+            --head chore/back-merge-main \
+            --title "chore: back-merge main → develop" \
+            --body "Automated GitFlow back-merge: released commits on \`main\` flowing back into \`develop\`. **Squash-merge** to keep develop's linear history." \
+            2>/dev/null || echo "A back-merge PR is already open; it was updated by the force-push."
+
+      - name: Nothing to sync
+        if: steps.prep.outputs.nothing == 'true'
+        run: echo "develop already contains everything on main — no back-merge needed."
+
+      - name: Conflict — manual back-merge required
+        if: steps.prep.outputs.conflict == 'true'
+        run: |
+          echo "::warning title=Back-merge conflict::main → develop has conflicts; open the back-merge PR manually and resolve."
+          exit 0
