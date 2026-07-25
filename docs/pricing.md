@@ -5,7 +5,7 @@
 - **Price**: $0 — free forever
 - **License**: MIT
 - **Source**: https://github.com/ankit373/hydra
-- **Install**: `brew tap ankit373/hydra && brew install hydra`
+- **Install**: `brew install ankit373/hydra/hyctl` (also npm/npx/pip/curl)
 - **Limits**: None — route as many tasks as you want
 - **Support**: GitHub Issues and Discussions
 
@@ -27,7 +27,7 @@ Hydra itself is free. The underlying models charge per token:
 | Gemini 2.0 Flash | 6-8 | ~$0.075/M tokens | ~$0.30/M tokens | Google |
 | Qwen3 (local) | 9-10 | $0 | $0 | Ollama, runs locally |
 
-Run `hydra pricing list` for live rates fetched from OpenRouter.
+Run `hyctl pricing list` for live rates fetched from OpenRouter.
 
 ## Typical Savings vs All-Claude Sessions
 

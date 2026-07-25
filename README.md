@@ -40,10 +40,10 @@ It discovers every AI model on your machine, assigns each a capability score, ro
 And it's growing into a **Trust Control Plane**: route not just to the cheapest model, but to a *target confidence of correctness* — sampling models adaptively and stopping the moment you're sure enough (see **Confidence Routing** under [Features](#features)).
 
 ```bash
-brew install ankit373/hydra/hydra && hydra init
+brew install ankit373/hydra/hyctl && hyctl init
 ```
 
-> **Pure Go, single binary.** Hydra is one `hydra` CLI — the legacy shell layer is gone. Everything below runs through `hydra <command>`.
+> **Pure Go, single binary.** Hydra is one `hyctl` CLI — the legacy shell layer is gone. Everything below runs through `hyctl <command>`.
 
 ---
 
@@ -77,7 +77,7 @@ Hydra discovers and routes to all of these automatically — no plugins, no manu
 
 ```
   ┌───────────────────────────────────────────────────────────────────────┐
-  │   hydra dispatch  [--local | --swarm | --confidence 0.95]               │
+  │   hyctl dispatch  [--local | --swarm | --confidence 0.95]               │
   └───────────────────────────────────┬─────────────────────────────────────┘
                                        │
                      ┌─────────────────▼─────────────────┐
@@ -122,8 +122,8 @@ Every executor is **native Go** — `agy`, Ollama, per-provider HTTP (OpenAI-com
 | Metric | Value | How it's measured |
 |---|---|---|
 | Routing overhead | **~1,130 ns / dispatch** | `go test -bench=BenchmarkRoutingPath` (Apple M1): policy eval + head selection + budget check |
-| Cost vs all-frontier | **75–85% lower** | typical coding session where most tasks are SIMPLE/STANDARD; see `hydra stats` for your own numbers |
-| Machine discovery | **< 2 s** for 13+ CLIs, 14 API providers, 2 local runtimes | concurrent PATH + env + port scan (`hydra probe`) |
+| Cost vs all-frontier | **75–85% lower** | typical coding session where most tasks are SIMPLE/STANDARD; see `hyctl stats` for your own numbers |
+| Machine discovery | **< 2 s** for 13+ CLIs, 14 API providers, 2 local runtimes | concurrent PATH + env + port scan (`hyctl probe`) |
 | Calibration convergence | a 90%-reliable source → **D ≈ 1.76 nats** diagnostic power | `internal/trust` table tests; a coin-flip source → **D ≈ 0** (contributes nothing) |
 | SPRT — easy tasks | **2.6 samples, −49% vs fixed-5**, 98.8% accuracy | 20k seeded synthetic trials, `TestSPRT_Law3` |
 | SPRT — blended workload | **3.8 samples, −24% vs fixed-5**, 98.2% accuracy | same suite; 71% easy / 29% hard task mix |
@@ -132,7 +132,7 @@ Every executor is **native Go** — `agy`, Ollama, per-provider HTTP (OpenAI-com
 | Context signal density | useful tokens = `length × ρ`; a dense 100k window beats a noisy 1M | Law 5; ρ via gzip-ratio proxy (`internal/entropy`) — compact on falling ρ |
 | Output capture | bounded at **33 MB** per subprocess | `internal/util.Accumulator` — no unbounded buffers |
 
-> **Methodology & honesty.** Routing overhead, discovery, calibration, and SPRT figures are **measured** — reproduce the SPRT numbers yourself with `hydra trust benchmark` (deterministic for a fixed seed; race-clean in CI). The SPRT numbers come from *synthetic* trials with known ground truth, not production traffic — they validate the algorithm (Wald sequential test), and land above the continuous theoretical `E[N]` (easy 1.33 / blended 2.48) because real evidence arrives in discrete steps. Cost-savings ranges are workload-dependent estimates; `hydra stats` reports your actual spend. As production `trust.jsonl` accumulates, `hydra trust stats` graduates these from *modeled* to *observed*.
+> **Methodology & honesty.** Routing overhead, discovery, calibration, and SPRT figures are **measured** — reproduce the SPRT numbers yourself with `hyctl trust benchmark` (deterministic for a fixed seed; race-clean in CI). The SPRT numbers come from *synthetic* trials with known ground truth, not production traffic — they validate the algorithm (Wald sequential test), and land above the continuous theoretical `E[N]` (easy 1.33 / blended 2.48) because real evidence arrives in discrete steps. Cost-savings ranges are workload-dependent estimates; `hyctl stats` reports your actual spend. As production `trust.jsonl` accumulates, `hyctl trust stats` graduates these from *modeled* to *observed*.
 
 ---
 
@@ -153,7 +153,7 @@ $$A = \ln\frac{1-\beta}{\alpha}, \qquad B = \ln\frac{\beta}{1-\alpha}$$
 for target error rates $\alpha,\beta$. Wald proved this minimizes the **expected number of samples** $E[N]$ among *all* tests with the same error bounds.
 
 *Analogy — a doctor ordering one test at a time and stopping the moment the diagnosis is certain, instead of always running the full panel.*
-⊢ Wald (1945), optimality proven · ◈ −24% (blended) / −49% (easy) samples vs fixed-5 at ≥98% accuracy — reproduce with `hydra trust benchmark` · source: [`internal/trust`](internal/trust)
+⊢ Wald (1945), optimality proven · ◈ −24% (blended) / −49% (easy) samples vs fixed-5 at ≥98% accuracy — reproduce with `hyctl trust benchmark` · source: [`internal/trust`](internal/trust)
 
 ### 2 · Calibration — diagnostic power `D`
 
@@ -175,7 +175,7 @@ $$c^\star = 1 - \frac{\tau}{C_{\text{defect}}}$$
 A costlier defect ⟹ a higher confidence bar ⟹ SPRT samples more before it stops. Blast radius (§4) feeds $C_{\text{defect}}$.
 
 *Analogy — you demand far more certainty before heart surgery than before a haircut.*
-⊢ Bayes decision theory · ○ $C_{\text{defect}}$ is a modeled estimate (`hydra trust defect`) · source: [`internal/trust`](internal/trust)
+⊢ Bayes decision theory · ○ $C_{\text{defect}}$ is a modeled estimate (`hyctl trust defect`) · source: [`internal/trust`](internal/trust)
 
 ### 4 · Blast radius — Molloy–Reed percolation
 
@@ -186,7 +186,7 @@ $$\kappa = \frac{\langle k^2 \rangle}{\langle k \rangle} \ge 2$$
 Files inside a high-$\kappa$ core get their confidence bar raised: an edit to a hub everything imports must be far surer than an edit to a leaf helper.
 
 *Analogy — the epidemic threshold $R_0$: below it a change stays local; above it, one edit can infect the whole graph.*
-⊢ Molloy–Reed (1995), proven · ▣ computed from `graph.json` in [`internal/graph`](internal/graph) — see `hydra graph blast`
+⊢ Molloy–Reed (1995), proven · ▣ computed from `graph.json` in [`internal/graph`](internal/graph) — see `hyctl graph blast`
 
 ### 5 · Optimal parallelism — Amdahl + coordination
 
@@ -197,7 +197,7 @@ $$T(n) = s + \frac{1-s}{n} + k\,n \quad\xrightarrow{\ \frac{dT}{dn}=0\ }\quad n^
 Independent files (small $k$) → fan out to ~6 agents; tightly-coupled edits to the same subgraph (large $k$) → ~2. More is slower.
 
 *Analogy — adding cooks to a kitchen: past $n^\star$ they spend more time coordinating than cooking.*
-⊢ Amdahl (1967) + coordination term · ▣ $k$ derived from graph coupling in [`internal/optimal`](internal/optimal) — see `hydra graph parallel`
+⊢ Amdahl (1967) + coordination term · ▣ $k$ derived from graph coupling in [`internal/optimal`](internal/optimal) — see `hyctl graph parallel`
 
 ### 6 · Context governor — signal density, not length
 
@@ -208,7 +208,7 @@ $$\rho = \frac{\lvert \text{gzip}(C) \rvert}{\lvert C \rvert}, \qquad \text{usef
 Highly compressible context (repetitive, stale) has low $\rho$ and few useful tokens — so Hydra compacts on **falling $\rho$**, not on raw length. A dense 100k window beats a noisy 1M one.
 
 *Analogy — signal-to-noise: a short, sharp briefing beats a rambling transcript ten times its length.*
-⊢ Shannon source-coding (entropy rate) · ○ gzip is a proxy, not a proof — a heuristic · source: [`internal/entropy`](internal/entropy) — see `hydra context entropy`
+⊢ Shannon source-coding (entropy rate) · ○ gzip is a proxy, not a proof — a heuristic · source: [`internal/entropy`](internal/entropy) — see `hyctl context entropy`
 
 > **See it move.** The interactive derivations — the SPRT log-odds walk hitting its boundaries, the percolation phase transition at $\kappa=2$, the Amdahl curve with its $n^\star$ marker, and the KL overlap that *is* `D` — live on the [**First Principles** page](https://hydra.uvansa.com/first-principles.html).
 
@@ -221,7 +221,7 @@ Highly compressible context (repetitive, stale) has low $\rho$ and few useful to
 Hydra scans your machine in under two seconds. No config files to edit, no plugins to install.
 
 ```
-$ hydra probe
+$ hyctl probe
 
   Heads discovered (6)                           2.1s
 
@@ -269,12 +269,12 @@ When you have Ollama, Hydra picks the best model for your actual available memor
 
 ### 🔒 PII-Aware Routing (Enforced, Not Conventional)
 
-Enable local-only policy in `hydra init` and any prompt containing sensitive data is blocked from leaving your machine — at the dispatch layer, before any network call is made.
+Enable local-only policy in `hyctl init` and any prompt containing sensitive data is blocked from leaving your machine — at the dispatch layer, before any network call is made.
 
 Detected patterns: Social Security Numbers, credit card numbers, email addresses, API keys and tokens, IP addresses, private key material.
 
 ```bash
-$ hydra dispatch "process payment for card 4111-1111-1111-1111"
+$ hyctl dispatch "process payment for card 4111-1111-1111-1111"
 
   Policy violation: prompt contains PII (credit card pattern)
   Action: routing to local-only head
@@ -284,10 +284,10 @@ $ hydra dispatch "process payment for card 4111-1111-1111-1111"
 
 ### 💰 Full Cost Visibility
 
-Every dispatch is logged to `~/.hydra/cost.jsonl` with model, tier, token counts, estimated cost, and fallback chain. Costs are **honestly labeled**: `tokens_source` marks whether a provider reported real usage or Hydra estimated it, and `cost_source` is always `estimated` (pricing × tokens, never a billed figure). Run `hydra cost` or `hydra stats` to see where your budget is going.
+Every dispatch is logged to `~/.hydra/cost.jsonl` with model, tier, token counts, estimated cost, and fallback chain. Costs are **honestly labeled**: `tokens_source` marks whether a provider reported real usage or Hydra estimated it, and `cost_source` is always `estimated` (pricing × tokens, never a billed figure). Run `hyctl cost` or `hyctl stats` to see where your budget is going.
 
 ```
-$ hydra cost
+$ hyctl cost
 
   Cost — last 30 days
 
@@ -316,10 +316,10 @@ Tasks route through named tiers by capability score. If a head is unavailable, H
 
 ```bash
 # Let Hydra pick the best available model
-hydra dispatch "refactor auth middleware to use JWT refresh tokens"
+hyctl dispatch "refactor auth middleware to use JWT refresh tokens"
 
 # Preview the full fallback chain before dispatching
-hydra dispatch --dry-run "write a SQL migration"
+hyctl dispatch --dry-run "write a SQL migration"
 #
 #   Primary:   claude (score: 95)
 #   Fallback:  codex  (score: 88)  ← if claude unavailable
@@ -327,7 +327,7 @@ hydra dispatch --dry-run "write a SQL migration"
 #   Local:     ollama/qwen3:8b     ← always available
 
 # Force local — no API calls regardless of policy
-hydra dispatch --local "write unit tests for this function"
+hyctl dispatch --local "write unit tests for this function"
 ```
 
 ### 🐝 Swarm Dispatch
@@ -335,9 +335,9 @@ hydra dispatch --local "write unit tests for this function"
 Fan a single prompt out to multiple heads at once, then keep the best answer:
 
 ```bash
-hydra dispatch --swarm --swarm-mode race "prompt"   # first success wins (latency)
-hydra dispatch --swarm --swarm-mode best "prompt"   # LLM judge picks the best answer
-hydra dispatch --swarm --swarm-mode all  "prompt"   # every answer, ranked by CapScore
+hyctl dispatch --swarm --swarm-mode race "prompt"   # first success wins (latency)
+hyctl dispatch --swarm --swarm-mode best "prompt"   # LLM judge picks the best answer
+hyctl dispatch --swarm --swarm-mode all  "prompt"   # every answer, ranked by CapScore
 ```
 
 `--swarm-max-heads`, `--swarm-max-cost` (pre-flight cost guard), and `--swarm-heads id1,id2` give you fine control over fan-out.
@@ -347,24 +347,24 @@ hydra dispatch --swarm --swarm-mode all  "prompt"   # every answer, ranked by Ca
 Most routers optimize *cost*. Hydra is growing a second axis: **verified correctness**. Instead of always firing a fixed number of models, `--confidence` runs a **sequential probability ratio test (SPRT)** — it samples models adaptively, in most-diagnostic-per-dollar order, and stops the moment the calibrated log-odds cross the target confidence.
 
 ```bash
-hydra dispatch --confidence 0.95 "is this migration safe to run in prod?"
+hyctl dispatch --confidence 0.95 "is this migration safe to run in prod?"
 ```
 
 It leans on **per-source calibration** you build from real outcomes — each model/verifier earns a measured sensitivity, specificity, and *diagnostic power* `D`. A coin-flip source (`D≈0`) contributes nothing; a proven one lets a single vote go a long way.
 
 ```bash
-hydra trust record --source model:claude-sonnet --domain go --said-correct --outcome correct
-hydra trust calibration          # per-source se / sp / D table
-hydra trust defect --pii --production   # modeled $ cost of shipping a wrong answer
-hydra trust stats                # samples saved vs fixed-N, achieved vs target confidence
-hydra trust explain <task_hash>  # the full LLR ledger for a past run — why it stopped
+hyctl trust record --source model:claude-sonnet --domain go --said-correct --outcome correct
+hyctl trust calibration          # per-source se / sp / D table
+hyctl trust defect --pii --production   # modeled $ cost of shipping a wrong answer
+hyctl trust stats                # samples saved vs fixed-N, achieved vs target confidence
+hyctl trust explain <task_hash>  # the full LLR ledger for a past run — why it stopped
 ```
 
 **Blast-radius aware.** Point Hydra at a dependency graph (`graph.json` from [Graphify](https://github.com/safishamsi/graphify) or any tree-sitter indexer) and the confidence bar scales with how much code an edit could break — a fix to a hub everything imports demands far more certainty than a leaf helper:
 
 ```bash
-hydra graph blast internal/auth/token.go        # 3 transitive dependents → demands 96.7%
-hydra dispatch --confidence 0.90 --file internal/auth/token.go "rotate the signing key"
+hyctl graph blast internal/auth/token.go        # 3 transitive dependents → demands 96.7%
+hyctl dispatch --confidence 0.90 --file internal/auth/token.go "rotate the signing key"
 #   graph: blast radius 3.00 → demands confidence ≥ 96.7%  (raises the 0.90 floor)
 ```
 
@@ -395,29 +395,44 @@ In synthetic benchmarks this cuts model calls **~49% on easy tasks** and **~24% 
 
 ## Getting Started
 
-### Install
+The CLI binary is **`hyctl`** (the product is Hydra). Pick whichever fits your stack — every method installs the same prebuilt binary and verifies its checksum.
 
-**Homebrew (recommended):**
+**Homebrew** (macOS/Linux):
 ```bash
-brew install ankit373/hydra/hydra
+brew install ankit373/hydra/hyctl
 ```
 
-**Standalone installer:**
+**npm** — or run once with no install via **npx**:
+```bash
+npm install -g hyctl      # global install
+npx hyctl init            # run without installing
+```
+
+**pip** (Python 3.8+):
+```bash
+pip install hyctl
+```
+
+**Standalone installer** (curl):
 ```bash
 curl -fsSL https://raw.githubusercontent.com/ankit373/hydra/main/install.sh | sh
 ```
 
-**From source:**
+**Prebuilt binaries** — download from [github.com/ankit373/hydra/releases](https://github.com/ankit373/hydra/releases).
+
+**From source** (Go 1.22+):
 ```bash
 git clone https://github.com/ankit373/hydra.git
 cd hydra
-go build -o hydra ./cmd/hydra && mv hydra /usr/local/bin/
+go build -o hyctl ./cmd/hydra && mv hyctl /usr/local/bin/
 ```
+
+> Not to be confused with the unrelated `hydra`/`hydra-cli` npm packages (pnxtech microservice libs) or homebrew-core's `hydra` (THC password cracker) — this project's CLI is `hyctl`.
 
 ### First Run
 
 ```bash
-hydra init
+hyctl init
 ```
 
 The wizard scans your machine, ranks every model it finds, walks you through picking a Cortex (your main model), lets you choose a local Ollama model calibrated to your actual hardware, and asks whether you work with sensitive data that should never leave your machine. Takes about 60 seconds.
@@ -426,57 +441,57 @@ The wizard scans your machine, ranks every model it finds, walks you through pic
 
 ```bash
 # Discovery & state
-hydra init                              # first-run wizard
-hydra probe                             # scan and display all available models
-hydra status                            # live system state (heads, budget bars, burn-rate risk)
-hydra tui                               # interactive cockpit — chat+code / dashboard / agent-tree (Tab cycles)
+hyctl init                              # first-run wizard
+hyctl probe                             # scan and display all available models
+hyctl status                            # live system state (heads, budget bars, burn-rate risk)
+hyctl tui                               # interactive cockpit — chat+code / dashboard / agent-tree (Tab cycles)
 
 # Model registry (add a new model at runtime — no rebuild)
-hydra models list                       # built-in + your models, by capability score
-hydra models add kimi-k3 --provider moonshot --cap-score 85   # upsert into your overlay
-hydra models remove kimi-k3             # remove one of your additions
-hydra models sync                       # import the OpenRouter catalog (provisional scores)
+hyctl models list                       # built-in + your models, by capability score
+hyctl models add kimi-k3 --provider moonshot --cap-score 85   # upsert into your overlay
+hyctl models remove kimi-k3             # remove one of your additions
+hyctl models sync                       # import the OpenRouter catalog (provisional scores)
 
 # Dispatch
-hydra dispatch "..."           # route a prompt to the best model
-hydra dispatch --dry-run "..." # preview routing without executing
-hydra dispatch --local "..."   # local models only, no API calls
-hydra dispatch --swarm --swarm-mode best "..."   # fan out to many heads, judge best
-hydra dispatch --confidence 0.95 "..."  # SPRT: sample until this P(correct) is reached
+hyctl dispatch "..."           # route a prompt to the best model
+hyctl dispatch --dry-run "..." # preview routing without executing
+hyctl dispatch --local "..."   # local models only, no API calls
+hyctl dispatch --swarm --swarm-mode best "..."   # fan out to many heads, judge best
+hyctl dispatch --confidence 0.95 "..."  # SPRT: sample until this P(correct) is reached
 
 # Cost & pricing
-hydra cost                              # spend summary (est. vs actual labeled)
-hydra stats                             # rollup by model / tier / day
-hydra pricing list                      # live $/1M-token rates (OpenRouter + fallback)
+hyctl cost                              # spend summary (est. vs actual labeled)
+hyctl stats                             # rollup by model / tier / day
+hyctl pricing list                      # live $/1M-token rates (OpenRouter + fallback)
 
 # Trust Control Plane
-hydra trust calibration                 # per-source sensitivity / specificity / D
-hydra trust record ...                  # feed an outcome to train calibration
-hydra trust defect ...                  # modeled cost of shipping a wrong answer
-hydra trust stats                       # samples saved, achieved vs target confidence
-hydra trust explain <task_hash>         # the LLR ledger for a past SPRT run
-hydra trust benchmark                   # measured SPRT numbers (samples saved, accuracy)
-hydra graph blast <file>                # a file's blast radius + the confidence it demands
-hydra graph parallel <files...>         # optimal number of parallel agents (Law 4)
-hydra context entropy <file|->          # signal density + useful tokens + compact hint
+hyctl trust calibration                 # per-source sensitivity / specificity / D
+hyctl trust record ...                  # feed an outcome to train calibration
+hyctl trust defect ...                  # modeled cost of shipping a wrong answer
+hyctl trust stats                       # samples saved, achieved vs target confidence
+hyctl trust explain <task_hash>         # the LLR ledger for a past SPRT run
+hyctl trust benchmark                   # measured SPRT numbers (samples saved, accuracy)
+hyctl graph blast <file>                # a file's blast radius + the confidence it demands
+hyctl graph parallel <files...>         # optimal number of parallel agents (Law 4)
+hyctl context entropy <file|->          # signal density + useful tokens + compact hint
 
 # Verification & accountability
-hydra oracle verify go test ./... --source verifier:go-test  # verifier as evidence + its LLR
-hydra mcp check <tool> --agent A --resource R --action write  # gate + record an access
-hydra mcp log --denied                  # what got blocked
-hydra mcp report                        # allowed/denied by agent and tool
+hyctl oracle verify go test ./... --source verifier:go-test  # verifier as evidence + its LLR
+hyctl mcp check <tool> --agent A --resource R --action write  # gate + record an access
+hyctl mcp log --denied                  # what got blocked
+hyctl mcp report                        # allowed/denied by agent and tool
 
 # Editing & batch
-hydra edit --file ... --prompt "..."    # scoped, validated, rollback-safe file edit
-hydra review ...                        # code review / approve / reject / QA
-hydra parallel ...                      # fan independent tasks across heads
+hyctl edit --file ... --prompt "..."    # scoped, validated, rollback-safe file edit
+hyctl review ...                        # code review / approve / reject / QA
+hyctl parallel ...                      # fan independent tasks across heads
 ```
 
 ---
 
 ## Configuration
 
-`~/.hydra/config.toml` — written by `hydra init`, editable by hand:
+`~/.hydra/config.toml` — written by `hyctl init`, editable by hand:
 
 ```toml
 cortex = "claude"
@@ -504,9 +519,9 @@ action  = "local-only"
 **At runtime — no rebuild.** Add any model to your local registry and Hydra picks it up on the next `probe`/`dispatch`. Additions live in an overlay at `~/.hydra/models.json` and merge over the built-ins:
 
 ```bash
-hydra models add kimi-k3 --name "Kimi K3" --provider moonshot --cap-score 85
-hydra models list                 # confirm it shows up, tagged "user"
-hydra models remove kimi-k3       # remove it (built-ins can be overridden, not removed)
+hyctl models add kimi-k3 --name "Kimi K3" --provider moonshot --cap-score 85
+hyctl models list                 # confirm it shows up, tagged "user"
+hyctl models remove kimi-k3       # remove it (built-ins can be overridden, not removed)
 ```
 
 **Built-in defaults** live in [`internal/capabilities/data.json`](internal/capabilities/data.json). To contribute a model as a shipped default, add one JSON entry — no Go code required:
@@ -542,20 +557,20 @@ For Ollama models, add a family pattern:
 | Hardware-aware Ollama model selection | ✅ Shipped |
 | PII detection + local-only enforcement | ✅ Shipped |
 | Tier routing with automatic fallback chains | ✅ Shipped |
-| First-run TUI wizard (`hydra init`) | ✅ Shipped |
-| `hydra cost` / `hydra stats` — spend breakdown, est. vs actual | ✅ Shipped |
+| First-run TUI wizard (`hyctl init`) | ✅ Shipped |
+| `hyctl cost` / `hyctl stats` — spend breakdown, est. vs actual | ✅ Shipped |
 | Dynamic live pricing (OpenRouter + 24h cache) | ✅ Shipped |
 | Swarm dispatch — race / best / all + LLM judge | ✅ Shipped |
 | **Per-source calibration** (Beta-Bernoulli → LLR / D) | ✅ Shipped |
-| **Defect-cost model** (`hydra trust defect`) | ✅ Shipped |
-| **SPRT confidence routing** (`hydra dispatch --confidence`) | ✅ Shipped |
+| **Defect-cost model** (`hyctl trust defect`) | ✅ Shipped |
+| **SPRT confidence routing** (`hyctl dispatch --confidence`) | ✅ Shipped |
 | **Graph-aware routing** — blast-radius → defect cost → confidence | ✅ Shipped |
 | **Optimal parallelism** — `n* = √((1−s)/k)` from graph coupling (Law 4) | ✅ Shipped |
 | **Causal A2A handoffs** — vector clocks, concurrent-edit conflict detection | ✅ Shipped |
 | **Context-entropy governor** — compact on falling signal density, not length | ✅ Shipped |
 | **MCP accountability ledger** — record + gate what every agent touches | ✅ Shipped |
 | **Verification oracles** — tests/compile/lint as first-class evidence | ✅ Shipped |
-| **Runtime model registry** — `hydra models add` merges a `~/.hydra/models.json` overlay, no rebuild | ✅ Shipped |
+| **Runtime model registry** — `hyctl models add` merges a `~/.hydra/models.json` overlay, no rebuild | ✅ Shipped |
 | **Percolation-κ blast radius** — Molloy–Reed core detection weights hub files higher | ✅ Shipped |
 | **Rate-aware budget governor** — first-passage-time risk on `claude_pct`, escalates before a threshold | ✅ Shipped |
 | MCP server registry + central security agent | 📋 [#9](https://github.com/ankit373/hydra/issues/9)/[#10](https://github.com/ankit373/hydra/issues/10) |
@@ -606,7 +621,7 @@ hydra/
 
 Issues and pull requests are welcome. A few entry points:
 
-- **Add a model** — at runtime, `hydra models add <id> --provider <p> --cap-score <n>` (no rebuild). To ship it as a built-in default, add one entry to [`internal/capabilities/data.json`](internal/capabilities/data.json). No Go required.
+- **Add a model** — at runtime, `hyctl models add <id> --provider <p> --cap-score <n>` (no rebuild). To ship it as a built-in default, add one entry to [`internal/capabilities/data.json`](internal/capabilities/data.json). No Go required.
 - **Add a discovery provider** — implement the [`Provider` interface](internal/provider/provider.go) and call `provider.Register()` in an `init()` function.
 - **Add an executor** — add a row to `cliTemplates` in [`internal/executor/cli.go`](internal/executor/cli.go) or extend the HTTP executor for a new API schema.
 

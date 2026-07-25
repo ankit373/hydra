@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Hydra Documentation — CLI, TUI, Trust &amp; Integrations</title>
   <meta name="description" content="Hydra docs: the CLI, the TUI cockpit, integrations (Claude Code, Codex, Gemini, Ollama…), and every command — what it does, how it works, and how to use it.">
-  <meta name="keywords" content="Hydra docs, hydra tui, hydra dispatch, Claude Code integration, Codex, Ollama, LM Studio, LLM router documentation, provider-neutral AI orchestration">
+  <meta name="keywords" content="Hydra docs, hyctl tui, hyctl dispatch, Claude Code integration, Codex, Ollama, LM Studio, LLM router documentation, provider-neutral AI orchestration">
 
   <meta property="og:type" content="article">
   <meta property="og:url" content="https://hydra.uvansa.com/docs.html">
@@ -258,33 +258,33 @@ footer a{color:var(--dim);} footer a:hover{color:var(--aqua);}
       <a href="#local">Local runtimes</a>
 
       <div class="grp" data-grp>First run</div>
-      <a href="#init"><code>hydra init</code></a>
-      <a href="#probe"><code>hydra probe</code></a>
-      <a href="#status"><code>hydra status</code></a>
+      <a href="#init"><code>hyctl init</code></a>
+      <a href="#probe"><code>hyctl probe</code></a>
+      <a href="#status"><code>hyctl status</code></a>
 
       <div class="grp" data-grp>Dispatch</div>
-      <a href="#dispatch"><code>hydra dispatch</code></a>
+      <a href="#dispatch"><code>hyctl dispatch</code></a>
       <a href="#swarm"><code>--swarm</code></a>
       <a href="#confidence"><code>--confidence</code></a>
-      <a href="#edit"><code>hydra edit</code></a>
-      <a href="#review"><code>hydra review</code></a>
-      <a href="#parallel"><code>hydra parallel</code></a>
+      <a href="#edit"><code>hyctl edit</code></a>
+      <a href="#review"><code>hyctl review</code></a>
+      <a href="#parallel"><code>hyctl parallel</code></a>
 
       <div class="grp" data-grp>Trust &amp; graph</div>
-      <a href="#trust"><code>hydra trust</code></a>
+      <a href="#trust"><code>hyctl trust</code></a>
       <a href="#graph-blast"><code>graph blast</code></a>
       <a href="#graph-parallel"><code>graph parallel</code></a>
       <a href="#context"><code>context entropy</code></a>
 
       <div class="grp" data-grp>Accountability</div>
-      <a href="#mcp"><code>hydra mcp</code></a>
-      <a href="#oracle"><code>hydra oracle</code></a>
+      <a href="#mcp"><code>hyctl mcp</code></a>
+      <a href="#oracle"><code>hyctl oracle</code></a>
 
       <div class="grp" data-grp>Cost &amp; registry</div>
-      <a href="#cost"><code>hydra cost</code></a>
-      <a href="#stats"><code>hydra stats</code></a>
-      <a href="#pricing"><code>hydra pricing</code></a>
-      <a href="#models"><code>hydra models</code></a>
+      <a href="#cost"><code>hyctl cost</code></a>
+      <a href="#stats"><code>hyctl stats</code></a>
+      <a href="#pricing"><code>hyctl pricing</code></a>
+      <a href="#models"><code>hyctl models</code></a>
 
       <div class="grp" data-grp>Concepts</div>
       <a href="#tiers">Tiers &amp; CapScore</a>
@@ -323,23 +323,29 @@ footer a{color:var(--dim);} footer a:hover{color:var(--aqua);}
       <p class="sum">Pure Go, single static binary.</p>
       <div class="sub"><div class="lbl">Usage</div>
         <pre><span class="c"># Homebrew (recommended)</span>
-brew install ankit373/hydra/hydra
+brew install ankit373/hydra/hyctl
+
+<span class="c"># npm  ·  or run once, no install:  npx hyctl</span>
+npm install -g hyctl
+
+<span class="c"># pip</span>
+pip install hyctl
 
 <span class="c"># Standalone installer</span>
 curl -fsSL https://raw.githubusercontent.com/ankit373/hydra/main/install.sh | sh
 
 <span class="c"># From source (Go 1.22+)</span>
 git clone https://github.com/ankit373/hydra.git &amp;&amp; cd hydra
-go build -o hydra ./cmd/hydra</pre>
+go build -o hyctl ./cmd/hydra</pre>
       </div>
     </section>
 
     <!-- ══ CLI ══ -->
     <section class="doc" id="cli">
       <h2>The CLI <span class="badge ship">shipped</span> <span class="tagline">the whole interface</span></h2>
-      <p class="sum">Everything Hydra does runs through the single <span class="fx">hydra</span> binary — dispatch, discovery, trust, graph, cost. Scriptable, CI-friendly, zero daemon.</p>
+      <p class="sum">Everything Hydra does runs through the single <span class="fx">hyctl</span> binary — dispatch, discovery, trust, graph, cost. Scriptable, CI-friendly, zero daemon.</p>
       <div class="term">
-        <div class="bar"><i class="d1"></i><i class="d2"></i><i class="d3"></i><span class="ttl">hydra dispatch --dry-run "add pagination"</span></div>
+        <div class="bar"><i class="d1"></i><i class="d2"></i><i class="d3"></i><span class="ttl">hyctl dispatch --dry-run "add pagination"</span></div>
 <pre><span class="td">  prompt</span> <span class="ta">→</span> <span class="ta">STANDARD</span> <span class="ta">→</span> <span class="td">T5</span>
   <span class="td">Primary:</span>   <span class="tc">gemini pro</span>   <span class="tf">score 82</span>
   <span class="td">Fallback:</span>  <span class="tc">openrouter</span>   <span class="tf">score 76  ← if primary rate-limits</span>
@@ -350,8 +356,8 @@ go build -o hydra ./cmd/hydra</pre>
 
     <!-- ══ TUI ══ -->
     <section class="doc" id="tui">
-      <h2><span class="cmd">hydra tui</span> <span class="badge ship">shipped</span> <span class="tagline">interactive cockpit</span></h2>
-      <p class="sum">A terminal cockpit you <b>operate</b> — type a task, press enter, watch it route. <b>Tab</b> cycles three views. Everything below is a real <span class="fx">hydra tui --snapshot</span> frame.</p>
+      <h2><span class="cmd">hyctl tui</span> <span class="badge ship">shipped</span> <span class="tagline">interactive cockpit</span></h2>
+      <p class="sum">A terminal cockpit you <b>operate</b> — type a task, press enter, watch it route. <b>Tab</b> cycles three views. Everything below is a real <span class="fx">hyctl tui --snapshot</span> frame.</p>
       <div class="tabs" role="tablist">
         <button class="tab on" data-pane="tui0" role="tab">chat + code</button>
         <button class="tab" data-pane="tui1" role="tab">dashboard</button>
@@ -411,9 +417,9 @@ go build -o hydra ./cmd/hydra</pre>
         <p><b>chat + code</b> shows the live routing decision and streams a snippet as the chosen head "writes." <b>dashboard</b> shows per-head sparklines, cost saved vs your priciest head, confidence, and a band-colored governor gauge. <b>agent tree</b> is the recursive supervision tree with A2A handoffs and <span class="fx">↑/↓</span> node inspection.</p>
       </div>
       <div class="sub"><div class="lbl">Keys &amp; usage</div>
-        <pre>hydra tui
+        <pre>hyctl tui
 <span class="c"># Tab cycle views · ↑/↓ select tree node · : commands · :q quit</span>
-hydra tui <span class="fl">--snapshot</span> <span class="fl">--view</span> 0|1|2   <span class="c"># render one static frame</span></pre>
+hyctl tui <span class="fl">--snapshot</span> <span class="fl">--view</span> 0|1|2   <span class="c"># render one static frame</span></pre>
       </div>
     </section>
 
@@ -467,7 +473,7 @@ hydra tui <span class="fl">--snapshot</span> <span class="fl">--view</span> 0|1|
           </div>
         </div>
       </div>
-      <div class="callout">The TUI ships today (<span class="fx">hydra tui</span>). The desktop app is a design preview — track it on the roadmap.</div>
+      <div class="callout">The TUI ships today (<span class="fx">hyctl tui</span>). The desktop app is a design preview — track it on the roadmap.</div>
     </section>
 
     <!-- ══ INTEGRATIONS ══ -->
@@ -510,7 +516,7 @@ hydra tui <span class="fl">--snapshot</span> <span class="fl">--view</span> 0|1|
         <span class="chip">Cohere</span><span class="chip">Replicate</span>
       </div>
       <div class="sub"><div class="lbl">Add one</div><pre>export ANTHROPIC_API_KEY=sk-…      <span class="c"># then:</span>
-hydra probe                        <span class="c"># it shows up as a scored head</span></pre></div>
+hyctl probe                        <span class="c"># it shows up as a scored head</span></pre></div>
     </section>
 
     <section class="doc" id="local">
@@ -524,37 +530,37 @@ hydra probe                        <span class="c"># it shows up as a scored hea
 
     <!-- ══ INIT ══ -->
     <section class="doc" id="init">
-      <h2><span class="cmd">hydra init</span> <span class="tagline">first-run wizard</span></h2>
+      <h2><span class="cmd">hyctl init</span> <span class="tagline">first-run wizard</span></h2>
       <p class="sum">Scans your machine, ranks every model, and walks you through picking a <b>Cortex</b> (orchestrator), a local model calibrated to your real free RAM, and whether you handle sensitive data. Writes <span class="fx">~/.hydra/config.toml</span>.</p>
-      <div class="sub"><div class="lbl">Usage</div><pre>hydra init</pre></div>
+      <div class="sub"><div class="lbl">Usage</div><pre>hyctl init</pre></div>
     </section>
 
     <section class="doc" id="probe">
-      <h2><span class="cmd">hydra probe</span> <span class="tagline">discover every head</span></h2>
+      <h2><span class="cmd">hyctl probe</span> <span class="tagline">discover every head</span></h2>
       <p class="sum">Runs the three discovery channels concurrently and lists every head with its CapScore and status.</p>
-      <div class="sub"><div class="lbl">Usage</div><pre>hydra probe</pre></div>
+      <div class="sub"><div class="lbl">Usage</div><pre>hyctl probe</pre></div>
     </section>
 
     <section class="doc" id="status">
-      <h2><span class="cmd">hydra status</span> <span class="tagline">live state</span></h2>
+      <h2><span class="cmd">hyctl status</span> <span class="tagline">live state</span></h2>
       <p class="sum">Heads, budget bars, and the <b>rate-aware</b> governor.</p>
       <div class="sub"><div class="lbl">How it works</div><p>Models context usage as a drifting process and estimates the <b>first-passage probability</b> of crossing the ceiling before the task ends — escalating <i>before</i> a threshold is hit.</p></div>
-      <div class="sub"><div class="lbl">Usage</div><pre>hydra status</pre></div>
+      <div class="sub"><div class="lbl">Usage</div><pre>hyctl status</pre></div>
       <a class="more" href="#governor">How the governor decides →</a>
     </section>
 
     <!-- ══ DISPATCH ══ -->
     <section class="doc" id="dispatch">
-      <h2><span class="cmd">hydra dispatch</span> <span class="tagline">the router</span></h2>
+      <h2><span class="cmd">hyctl dispatch</span> <span class="tagline">the router</span></h2>
       <p class="sum">Routes a prompt to the <b>cheapest head that clears the bar</b>, with automatic fallback. The core command.</p>
       <div class="sub"><div class="lbl">How it works</div>
         <p>1 · classify → enum/tier · 2 · <b>policy gate</b> (PII can block before any network call) · 3 · select highest-CapScore available head at/under tier · 4 · execute · 5 · on failure fall down the chain to local Qwen · 6 · log tokens + cost. ~1.1µs of decision overhead.</p>
       </div>
       <div class="sub"><div class="lbl">Usage</div>
-        <pre>hydra dispatch <span class="s">"refactor auth to JWT refresh"</span>
-hydra dispatch <span class="fl">--enum</span> SIMPLE <span class="s">"write a User DTO"</span>
-hydra dispatch <span class="fl">--dry-run</span> <span class="s">"add pagination"</span>
-hydra dispatch <span class="fl">--local</span> <span class="s">"write unit tests"</span></pre>
+        <pre>hyctl dispatch <span class="s">"refactor auth to JWT refresh"</span>
+hyctl dispatch <span class="fl">--enum</span> SIMPLE <span class="s">"write a User DTO"</span>
+hyctl dispatch <span class="fl">--dry-run</span> <span class="s">"add pagination"</span>
+hyctl dispatch <span class="fl">--local</span> <span class="s">"write unit tests"</span></pre>
       </div>
       <div class="sub"><div class="lbl">Key flags</div>
         <div class="pill-row">
@@ -568,7 +574,7 @@ hydra dispatch <span class="fl">--local</span> <span class="s">"write unit tests
       <h2><span class="cmd">dispatch --swarm</span> <span class="tagline">fan out, keep the best</span></h2>
       <p class="sum"><b>race</b> (first success), <b>best</b> (LLM judge), or <b>all</b> (ranked by CapScore), with a pre-flight cost guard.</p>
       <div class="sub"><div class="lbl">Usage</div>
-        <pre>hydra dispatch <span class="fl">--swarm</span> <span class="fl">--swarm-mode</span> best <span class="s">"implement a rate limiter"</span>
+        <pre>hyctl dispatch <span class="fl">--swarm</span> <span class="fl">--swarm-mode</span> best <span class="s">"implement a rate limiter"</span>
   <span class="fl">--swarm-max-heads</span> 5  <span class="fl">--swarm-max-cost</span> 0.05  <span class="fl">--swarm-judge-tier</span> 1</pre></div>
     </section>
 
@@ -576,108 +582,108 @@ hydra dispatch <span class="fl">--local</span> <span class="s">"write unit tests
       <h2><span class="cmd">dispatch --confidence</span> <span class="tagline">route to a P(correct)</span></h2>
       <p class="sum">Sample models <b>adaptively</b> until a target confidence is reached, then stop.</p>
       <div class="sub"><div class="lbl">How it works</div><p>An <b>SPRT</b> accumulates the calibrated log-likelihood ratio across votes and stops at the boundary implied by your target. <span class="fx">--file</span> raises the bar by blast radius.</p></div>
-      <div class="sub"><div class="lbl">Usage</div><pre>hydra dispatch <span class="fl">--confidence</span> 0.95 <span class="s">"is this migration safe for prod?"</span></pre></div>
+      <div class="sub"><div class="lbl">Usage</div><pre>hyctl dispatch <span class="fl">--confidence</span> 0.95 <span class="s">"is this migration safe for prod?"</span></pre></div>
       <a class="more" href="/first-principles.html#sprt">See the SPRT walk derived →</a>
     </section>
 
     <section class="doc" id="edit">
-      <h2><span class="cmd">hydra edit</span> <span class="tagline">safe file edits</span></h2>
+      <h2><span class="cmd">hyctl edit</span> <span class="tagline">safe file edits</span></h2>
       <p class="sum">Scoped, validated, <b>rollback-safe</b> single-file edit through a head.</p>
-      <div class="sub"><div class="lbl">Usage</div><pre>hydra edit <span class="fl">--file</span> internal/foo.go <span class="fl">--prompt</span> <span class="s">"add a nil check"</span></pre></div>
+      <div class="sub"><div class="lbl">Usage</div><pre>hyctl edit <span class="fl">--file</span> internal/foo.go <span class="fl">--prompt</span> <span class="s">"add a nil check"</span></pre></div>
     </section>
     <section class="doc" id="review">
-      <h2><span class="cmd">hydra review</span> <span class="tagline">code review</span></h2>
+      <h2><span class="cmd">hyctl review</span> <span class="tagline">code review</span></h2>
       <p class="sum">Review / approve / reject / QA a change.</p>
-      <div class="sub"><div class="lbl">Usage</div><pre>hydra review <span class="fl">--file</span> internal/foo.go</pre></div>
+      <div class="sub"><div class="lbl">Usage</div><pre>hyctl review <span class="fl">--file</span> internal/foo.go</pre></div>
     </section>
     <section class="doc" id="parallel">
-      <h2><span class="cmd">hydra parallel</span> <span class="tagline">fan independent tasks</span></h2>
+      <h2><span class="cmd">hyctl parallel</span> <span class="tagline">fan independent tasks</span></h2>
       <p class="sum">Fan a set of independent tasks across heads. Optimal count follows <span class="fx">n*=√((1−s)/k)</span>.</p>
-      <div class="sub"><div class="lbl">Usage</div><pre>hydra parallel <span class="fl">--tasks</span> tasks.txt</pre></div>
+      <div class="sub"><div class="lbl">Usage</div><pre>hyctl parallel <span class="fl">--tasks</span> tasks.txt</pre></div>
       <a class="more" href="#graph-parallel">graph parallel →</a>
     </section>
 
     <!-- ══ TRUST / GRAPH / CONTEXT ══ -->
     <section class="doc" id="trust">
-      <h2><span class="cmd">hydra trust</span> <span class="tagline">the confidence layer</span></h2>
+      <h2><span class="cmd">hyctl trust</span> <span class="tagline">the confidence layer</span></h2>
       <p class="sum">Builds and inspects the calibration behind <span class="fx">--confidence</span>. Each source earns a measured reliability from real outcomes.</p>
       <div class="sub"><div class="lbl">How it works</div><p>A Beta-Bernoulli posterior over sensitivity/specificity → a per-vote LLR and a <b>diagnostic power D</b> (KL divergence, nats). A coin-flip source has D≈0 and is ignored. The defect-cost model prices a wrong answer and sets the required confidence.</p></div>
       <div class="sub"><div class="lbl">Subcommands</div>
-        <pre>hydra trust calibration      <span class="c"># per-source se / sp / D</span>
-hydra trust record <span class="fl">--source</span> model:claude <span class="fl">--domain</span> go <span class="fl">--said-correct</span> <span class="fl">--outcome</span> correct
-hydra trust defect <span class="fl">--pii</span> <span class="fl">--production</span>
-hydra trust stats   <span class="c"># samples saved vs fixed-N</span>
-hydra trust explain &lt;hash&gt;   <span class="c"># the LLR ledger for a run</span>
-hydra trust benchmark        <span class="c"># measured SPRT numbers</span></pre>
+        <pre>hyctl trust calibration      <span class="c"># per-source se / sp / D</span>
+hyctl trust record <span class="fl">--source</span> model:claude <span class="fl">--domain</span> go <span class="fl">--said-correct</span> <span class="fl">--outcome</span> correct
+hyctl trust defect <span class="fl">--pii</span> <span class="fl">--production</span>
+hyctl trust stats   <span class="c"># samples saved vs fixed-N</span>
+hyctl trust explain &lt;hash&gt;   <span class="c"># the LLR ledger for a run</span>
+hyctl trust benchmark        <span class="c"># measured SPRT numbers</span></pre>
       </div>
       <a class="more" href="/first-principles.html#calibration">See diagnostic power D derived →</a>
     </section>
 
     <section class="doc" id="graph-blast">
-      <h2><span class="cmd">hydra graph blast</span> <span class="tagline">how dangerous is this file?</span></h2>
+      <h2><span class="cmd">hyctl graph blast</span> <span class="tagline">how dangerous is this file?</span></h2>
       <p class="sum">Reports a file's blast radius and the confidence a change to it demands.</p>
       <div class="sub"><div class="lbl">How it works</div><p>From <span class="fx">graph.json</span> it counts transitive dependents and computes <span class="fx">κ = ⟨k²⟩/⟨k⟩</span> (Molloy–Reed). <b>κ ≥ 2</b> ⟹ cascade-capable core ⟹ higher confidence bar.</p></div>
-      <div class="sub"><div class="lbl">Usage</div><pre>hydra graph blast internal/auth/token.go</pre></div>
+      <div class="sub"><div class="lbl">Usage</div><pre>hyctl graph blast internal/auth/token.go</pre></div>
       <a class="more" href="/first-principles.html#percolation">Drag the percolation threshold →</a>
     </section>
 
     <section class="doc" id="graph-parallel">
-      <h2><span class="cmd">hydra graph parallel</span> <span class="tagline">how many agents?</span></h2>
+      <h2><span class="cmd">hyctl graph parallel</span> <span class="tagline">how many agents?</span></h2>
       <p class="sum">Returns the optimal number of parallel agents for a set of files.</p>
       <div class="sub"><div class="lbl">How it works</div><p>Amdahl + coordination cost: minimizing <span class="fx">T(n)=s+(1−s)/n+kn</span> gives <span class="fx">n*=√((1−s)/k)</span>. Independent files → ~6; coupled → ~2.</p></div>
-      <div class="sub"><div class="lbl">Usage</div><pre>hydra graph parallel internal/a.go internal/b.go</pre></div>
+      <div class="sub"><div class="lbl">Usage</div><pre>hyctl graph parallel internal/a.go internal/b.go</pre></div>
       <a class="more" href="/first-principles.html#parallelism">See the speedup curve →</a>
     </section>
 
     <section class="doc" id="context">
-      <h2><span class="cmd">hydra context entropy</span> <span class="tagline">signal, not length</span></h2>
+      <h2><span class="cmd">hyctl context entropy</span> <span class="tagline">signal, not length</span></h2>
       <p class="sum">Measures context density and tells you when to compact.</p>
       <div class="sub"><div class="lbl">How it works</div><p><span class="fx">ρ = |gzip(C)|/|C|</span> proxies the entropy rate; <span class="fx">useful = L·ρ</span>. Compact on falling ρ, not raw length.</p></div>
-      <div class="sub"><div class="lbl">Usage</div><pre>hydra context entropy internal/foo.go
-cat notes.md | hydra context entropy -</pre></div>
+      <div class="sub"><div class="lbl">Usage</div><pre>hyctl context entropy internal/foo.go
+cat notes.md | hyctl context entropy -</pre></div>
       <a class="more" href="/first-principles.html#entropy">See useful-tokens fall →</a>
     </section>
 
     <!-- ══ MCP / ORACLE ══ -->
     <section class="doc" id="mcp">
-      <h2><span class="cmd">hydra mcp</span> <span class="tagline">accountability ledger</span></h2>
+      <h2><span class="cmd">hyctl mcp</span> <span class="tagline">accountability ledger</span></h2>
       <p class="sum">A local, append-only ledger that records — and can <b>gate</b> — what every agent touches.</p>
       <div class="sub"><div class="lbl">Subcommands</div>
-        <pre>hydra mcp check &lt;tool&gt; <span class="fl">--agent</span> A <span class="fl">--resource</span> R <span class="fl">--action</span> write
-hydra mcp log <span class="fl">--denied</span>     <span class="c"># what got blocked</span>
-hydra mcp report          <span class="c"># allowed / denied by agent &amp; tool</span></pre></div>
+        <pre>hyctl mcp check &lt;tool&gt; <span class="fl">--agent</span> A <span class="fl">--resource</span> R <span class="fl">--action</span> write
+hyctl mcp log <span class="fl">--denied</span>     <span class="c"># what got blocked</span>
+hyctl mcp report          <span class="c"># allowed / denied by agent &amp; tool</span></pre></div>
     </section>
 
     <section class="doc" id="oracle">
-      <h2><span class="cmd">hydra oracle verify</span> <span class="tagline">tests as evidence</span></h2>
+      <h2><span class="cmd">hyctl oracle verify</span> <span class="tagline">tests as evidence</span></h2>
       <p class="sum">Turns a verifier (tests/compile/lint) into a <b>high-D evidence source</b> whose verdict can outweigh a model's opinion.</p>
-      <div class="sub"><div class="lbl">Usage</div><pre>hydra oracle verify go test ./... <span class="fl">--source</span> verifier:go-test</pre></div>
+      <div class="sub"><div class="lbl">Usage</div><pre>hyctl oracle verify go test ./... <span class="fl">--source</span> verifier:go-test</pre></div>
     </section>
 
     <!-- ══ COST / STATS / PRICING / MODELS ══ -->
     <section class="doc" id="cost">
-      <h2><span class="cmd">hydra cost</span> <span class="tagline">spend, honestly labeled</span></h2>
+      <h2><span class="cmd">hyctl cost</span> <span class="tagline">spend, honestly labeled</span></h2>
       <p class="sum">Reads <span class="fx">cost.jsonl</span>; <span class="fx">tokens_source</span> marks real-vs-estimated, <span class="fx">cost_source</span> is always <i>estimated</i>.</p>
-      <div class="sub"><div class="lbl">Usage</div><pre>hydra cost</pre></div>
+      <div class="sub"><div class="lbl">Usage</div><pre>hyctl cost</pre></div>
     </section>
     <section class="doc" id="stats">
-      <h2><span class="cmd">hydra stats</span> <span class="tagline">rollup</span></h2>
+      <h2><span class="cmd">hyctl stats</span> <span class="tagline">rollup</span></h2>
       <p class="sum">Cost rollup by <b>model, tier, and day</b> — your real savings.</p>
-      <div class="sub"><div class="lbl">Usage</div><pre>hydra stats</pre></div>
+      <div class="sub"><div class="lbl">Usage</div><pre>hyctl stats</pre></div>
     </section>
     <section class="doc" id="pricing">
-      <h2><span class="cmd">hydra pricing</span> <span class="tagline">live rates</span></h2>
+      <h2><span class="cmd">hyctl pricing</span> <span class="tagline">live rates</span></h2>
       <p class="sum">Live OpenRouter rates, cached 24h, with a static YAML fallback offline.</p>
-      <div class="sub"><div class="lbl">Usage</div><pre>hydra pricing list [filter] [<span class="fl">--json</span>]
-hydra pricing refresh</pre></div>
+      <div class="sub"><div class="lbl">Usage</div><pre>hyctl pricing list [filter] [<span class="fl">--json</span>]
+hyctl pricing refresh</pre></div>
     </section>
     <section class="doc" id="models">
-      <h2><span class="cmd">hydra models</span> <span class="tagline">runtime registry</span></h2>
+      <h2><span class="cmd">hyctl models</span> <span class="tagline">runtime registry</span></h2>
       <p class="sum">Add a model at runtime — no rebuild. Merges into <span class="fx">~/.hydra/models.json</span>.</p>
       <div class="sub"><div class="lbl">Usage</div>
-        <pre>hydra models list
-hydra models add kimi-k3 <span class="fl">--provider</span> moonshot <span class="fl">--cap-score</span> 85
-hydra models sync   <span class="c"># import the OpenRouter catalog</span></pre></div>
+        <pre>hyctl models list
+hyctl models add kimi-k3 <span class="fl">--provider</span> moonshot <span class="fl">--cap-score</span> 85
+hyctl models sync   <span class="c"># import the OpenRouter catalog</span></pre></div>
     </section>
 
     <!-- ══ CONCEPTS ══ -->

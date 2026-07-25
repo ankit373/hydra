@@ -1,100 +1,128 @@
-#!/usr/bin/env bash
-# Hydra — standalone installer
-# Usage: ./install.sh
-#        HYDRA_HOME=/custom/path ./install.sh
-set -euo pipefail
+#!/usr/bin/env sh
+# Hydra (hyctl) — standalone binary installer
+#
+#   curl -fsSL https://raw.githubusercontent.com/ankit373/hydra/main/install.sh | sh
+#
+# Downloads the prebuilt `hyctl` binary for your OS/arch from the latest
+# GitHub release, verifies it against the published checksums, and installs it.
+# No Go toolchain required.
+#
+# Environment overrides:
+#   HYDRA_VERSION=v1.2.0       pin a specific release (default: latest)
+#   HYDRA_BIN=/usr/local/bin   install directory (default: auto)
+set -eu
 
-REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-_raw_dest="${HYDRA_HOME:-$HOME/.hydra}"
-mkdir -p "$_raw_dest"
-DEST="$(cd "$_raw_dest" && pwd)"
-unset _raw_dest
-SHELL_RC="${SHELL_RC:-}"
+REPO="ankit373/hydra"
+PROJECT="hydra"      # goreleaser project_name → archive filename prefix
+BINARY="hyctl"       # binary name inside the archive
+BASE="https://github.com/${REPO}/releases"
 
-echo "🐍 Hydra installer"
-echo "   Source : $REPO"
-echo "   Dest   : $DEST"
-echo ""
+info()  { printf '  %s\n' "$*"; }
+warn()  { printf '  ! %s\n' "$*" >&2; }
+die()   { printf '  x %s\n' "$*" >&2; exit 1; }
 
-# ── Dependency checks ─────────────────────────────────────────────────────────
-missing=()
-for dep in go bun jq yq; do
-  command -v "$dep" &>/dev/null || missing+=("$dep")
-done
-if [[ ${#missing[@]} -gt 0 ]]; then
-  echo "❌ Missing: ${missing[*]}"
-  echo "   brew install ${missing[*]}"
-  exit 1
+need() { command -v "$1" >/dev/null 2>&1 || die "required tool not found: $1"; }
+
+# ── Detect a downloader ────────────────────────────────────────────────────────
+if command -v curl >/dev/null 2>&1; then
+  DL="curl -fsSL"
+  DLO="curl -fsSL -o"
+elif command -v wget >/dev/null 2>&1; then
+  DL="wget -qO-"
+  DLO="wget -qO"
+else
+  die "need curl or wget to download"
 fi
 
-# ── Build Go binary ───────────────────────────────────────────────────────────
-echo "→ Building hydra binary..."
-mkdir -p "$DEST/bin"
-(cd "$REPO" && go build -o "$DEST/bin/hydra" ./cmd/hydra)
-echo "✓ Built $DEST/bin/hydra"
+# ── Detect OS ──────────────────────────────────────────────────────────────────
+os="$(uname -s)"
+case "$os" in
+  Darwin) OS="darwin" ;;
+  Linux)  OS="linux" ;;
+  *)      die "unsupported OS: $os (Windows: download the .zip from ${BASE}/latest)" ;;
+esac
 
-# ── Copy registry and assets ─────────────────────────────────────────────────
-mkdir -p "$DEST/logs"
-for dir in registry context skills ui; do
-  rm -rf "$DEST/$dir"
-  cp -r "$REPO/$dir" "$DEST/$dir"
-done
+# ── Detect arch ────────────────────────────────────────────────────────────────
+arch="$(uname -m)"
+case "$arch" in
+  x86_64|amd64)   ARCH="amd64" ;;
+  arm64|aarch64)  ARCH="arm64" ;;
+  *)              die "unsupported architecture: $arch" ;;
+esac
 
-# Install UI dependencies (frozen — uses existing bun.lock)
-cd "$DEST/ui"
-bun install --frozen-lockfile --silent
-cd "$REPO"
+echo "Hydra installer (hyctl)"
 
-# ── Seed state.json ───────────────────────────────────────────────────────────
-if [[ ! -f "$DEST/logs/state.json" ]]; then
-  echo '{"claude_pct":0,"exhausted_pools":[]}' > "$DEST/logs/state.json"
+# ── Resolve version ────────────────────────────────────────────────────────────
+if [ "${HYDRA_VERSION:-}" != "" ]; then
+  TAG="$HYDRA_VERSION"
+else
+  # Parse tag_name from the GitHub API without requiring jq.
+  TAG="$($DL "https://api.github.com/repos/${REPO}/releases/latest" \
+    | grep -m1 '"tag_name"' \
+    | sed -E 's/.*"tag_name" *: *"([^"]+)".*/\1/')"
+  [ "${TAG:-}" != "" ] || die "could not determine latest release — set HYDRA_VERSION=vX.Y.Z"
 fi
 
-# ── Create hydra launcher (Go control plane) ──────────────────────────────────
-# The binary needs HYDRA_HOME so it can find registry/models.yaml.
-LAUNCHER="$DEST/hydra"
-cat > "$LAUNCHER" <<SH
-#!/usr/bin/env bash
-export HYDRA_HOME="$DEST"
-export HYDRA_DATA="\${HYDRA_DATA:-\$HOME/.hydra}"
-mkdir -p "\$HYDRA_DATA/logs"
-[[ -f "\$HYDRA_DATA/logs/state.json" ]] || echo '{"claude_pct":0,"exhausted_pools":[]}' > "\$HYDRA_DATA/logs/state.json"
-exec "$DEST/bin/hydra" "\$@"
-SH
-chmod +x "$LAUNCHER"
+# Archive version = tag without a leading 'v' (matches goreleaser name_template).
+VER="${TAG#v}"
+ARCHIVE="${PROJECT}_${VER}_${OS}_${ARCH}.tar.gz"
+URL="${BASE}/download/${TAG}/${ARCHIVE}"
+SUMS_URL="${BASE}/download/${TAG}/checksums.txt"
 
-# ── Create hydra-ui launcher (Ink TUI dashboard) ──────────────────────────────
-UI_LAUNCHER="$DEST/hydra-ui"
-cat > "$UI_LAUNCHER" <<SH
-#!/usr/bin/env bash
-export HYDRA_HOME="$DEST"
-export HYDRA_DATA="\${HYDRA_DATA:-\$HOME/.hydra}"
-mkdir -p "\$HYDRA_DATA/logs"
-[[ -f "\$HYDRA_DATA/logs/state.json" ]] || echo '{"claude_pct":0,"exhausted_pools":[]}' > "\$HYDRA_DATA/logs/state.json"
-exec env NODE_ENV=production bun "$DEST/ui/src/index.tsx" "\$@"
-SH
-chmod +x "$UI_LAUNCHER"
+info "Release : ${TAG}"
+info "Target  : ${OS}/${ARCH}"
+info "Archive : ${ARCHIVE}"
 
-# ── Shell integration ─────────────────────────────────────────────────────────
-if [[ -z "$SHELL_RC" ]]; then
-  if [[ -f "$HOME/.zshrc" ]]; then SHELL_RC="$HOME/.zshrc"
-  elif [[ -f "$HOME/.bashrc" ]]; then SHELL_RC="$HOME/.bashrc"
+# ── Download into a temp dir ───────────────────────────────────────────────────
+TMP="$(mktemp -d 2>/dev/null || mktemp -d -t hyctl)"
+trap 'rm -rf "$TMP"' EXIT INT TERM
+
+echo "-> Downloading..."
+$DLO "$TMP/$ARCHIVE" "$URL" || die "download failed: $URL"
+
+# ── Verify checksum (skip only if no checksums.txt or no sha tool) ──────────────
+if $DLO "$TMP/checksums.txt" "$SUMS_URL" 2>/dev/null; then
+  if command -v sha256sum >/dev/null 2>&1; then
+    SHA="$(sha256sum "$TMP/$ARCHIVE" | awk '{print $1}')"
+  elif command -v shasum >/dev/null 2>&1; then
+    SHA="$(shasum -a 256 "$TMP/$ARCHIVE" | awk '{print $1}')"
+  else
+    SHA=""
+    warn "no sha256 tool found — skipping checksum verification"
   fi
+  if [ "${SHA:-}" != "" ]; then
+    EXPECTED="$(grep " ${ARCHIVE}\$" "$TMP/checksums.txt" | awk '{print $1}')"
+    [ "${EXPECTED:-}" != "" ] || die "checksum for ${ARCHIVE} not found in checksums.txt"
+    [ "$SHA" = "$EXPECTED" ] || die "checksum mismatch — refusing to install (expected ${EXPECTED}, got ${SHA})"
+    info "Checksum: verified"
+  fi
+else
+  warn "checksums.txt not published for ${TAG} — skipping verification"
 fi
 
-if [[ -n "$SHELL_RC" ]] && ! grep -q "HYDRA_HOME" "$SHELL_RC" 2>/dev/null; then
-  {
-    echo ""
-    echo "# Hydra"
-    echo "export HYDRA_HOME=\"$DEST\""
-    echo "export PATH=\"\$PATH:$DEST\""
-  } >> "$SHELL_RC"
-  echo "✓ Added HYDRA_HOME and PATH to $SHELL_RC"
+# ── Extract ────────────────────────────────────────────────────────────────────
+need tar
+tar -xzf "$TMP/$ARCHIVE" -C "$TMP" "$BINARY" || die "archive did not contain '${BINARY}'"
+chmod +x "$TMP/$BINARY"
+
+# ── Choose install dir ─────────────────────────────────────────────────────────
+if [ "${HYDRA_BIN:-}" != "" ]; then
+  DEST="$HYDRA_BIN"
+elif [ -d /usr/local/bin ] && [ -w /usr/local/bin ]; then
+  DEST="/usr/local/bin"
+else
+  DEST="$HOME/.local/bin"
 fi
+mkdir -p "$DEST"
+
+mv "$TMP/$BINARY" "$DEST/$BINARY"
+info "Installed: ${DEST}/${BINARY}"
+
+# ── PATH hint ──────────────────────────────────────────────────────────────────
+case ":$PATH:" in
+  *":$DEST:"*) : ;;
+  *) warn "add ${DEST} to your PATH:  export PATH=\"\$PATH:${DEST}\"" ;;
+esac
 
 echo ""
-echo "✓ Installed to $DEST"
-echo ""
-echo "  Control plane : $DEST/hydra dispatch --help"
-echo "  Dashboard TUI : $DEST/hydra-ui"
-echo "  After rc      : source ${SHELL_RC:-~/.zshrc} && hydra"
+echo "Done — ${BINARY} ${TAG} installed. Run:  ${BINARY} init"
