@@ -5,9 +5,11 @@ package swarm
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/ankit373/hydra/internal/config"
+	"github.com/ankit373/hydra/internal/dispatch"
 	"github.com/ankit373/hydra/internal/provider"
 	"github.com/ankit373/hydra/internal/rank"
 	"github.com/ankit373/hydra/internal/trust"
@@ -69,10 +71,20 @@ func (s *Swarm) RunSPRT(ctx context.Context, prompt string, opts Options) (*SPRT
 	}
 
 	adapter := &sprtExecutor{swarm: s, prompt: prompt, opts: opts, byID: byID}
+
+	// Behavior-based agreement: two independently-correct answers that differ only
+	// in wording must count as agreement, not disagreement — the effect that capped
+	// real SPRT confidence at 32.9% (see the findings doc §3). nil when no
+	// dispatcher is available, in which case trust.Run keeps its textual default.
+	var equiv trust.AnswerEquivalence
+	if s.d != nil {
+		equiv = s.judgeEquivalence(ctx, prompt, opts)
+	}
+
 	res, err := trust.Run(ctx, trust.Task{Domain: domain}, sources, adapter, cal, trust.Target{
 		Confidence: opts.Confidence,
 		MaxCostUSD: opts.MaxEstCostUSD,
-	})
+	}, trust.WithEquivalence(equiv))
 	if err != nil {
 		return nil, err
 	}
@@ -116,4 +128,63 @@ func (e *sprtExecutor) Execute(ctx context.Context, src trust.Source, _ trust.Ta
 		return trust.Answer{}, fmt.Errorf("sprt: head %s failed: %s", h.ID, a.Status)
 	}
 	return trust.Answer{Text: a.Output, CostUSD: a.EstCostUSD}, nil
+}
+
+// judgeEquivalence returns a behavior-based trust.AnswerEquivalence backed by the
+// LLM judge: it asks whether two answers are equivalent solutions to the prompt,
+// so two independently-correct answers that differ only in wording count as
+// agreement rather than disagreement. Identical text (mod formatting) short-
+// circuits without a call; any dispatch/parse failure degrades to the textual
+// default, so the ensemble never blocks on the judge. Like the ModeBest judge,
+// these calls are ensemble overhead and are not added to the SPRT sample spend.
+func (s *Swarm) judgeEquivalence(ctx context.Context, prompt string, opts Options) trust.AnswerEquivalence {
+	timeout := opts.JudgeTimeout
+	if timeout <= 0 {
+		timeout = defaultJudgeTimeout
+	}
+	return func(candidate, answer string) bool {
+		if trust.TextEquivalence(candidate, answer) {
+			return true // identical mod formatting — no need to spend a judge call
+		}
+		jctx, cancel := context.WithTimeout(ctx, timeout)
+		defer cancel()
+		out, err := s.d.Dispatch(jctx, buildEquivalencePrompt(prompt, candidate, answer), dispatch.Options{
+			TierHint: opts.JudgeTierHint,
+			System:   "You compare two answers for equivalence. Reply with exactly one word: YES or NO.",
+		})
+		if err != nil {
+			return trust.TextEquivalence(candidate, answer) // degrade, never block
+		}
+		return parseYesNo(out.Output)
+	}
+}
+
+// buildEquivalencePrompt asks whether two answers are equivalent solutions.
+func buildEquivalencePrompt(prompt, a, b string) string {
+	var sb strings.Builder
+	sb.WriteString("Two answers were given to the same task. Decide whether they are EQUIVALENT — ")
+	sb.WriteString("both correct/valid solutions that satisfy the task, even if they differ in ")
+	sb.WriteString("wording, identifiers, formatting, or style.\n\nTask:\n---\n")
+	sb.WriteString(prompt)
+	sb.WriteString("\n---\n\nAnswer A:\n---\n")
+	sb.WriteString(a)
+	sb.WriteString("\n---\n\nAnswer B:\n---\n")
+	sb.WriteString(b)
+	sb.WriteString("\n---\n\nAre A and B equivalent? Reply with exactly one word: YES or NO.")
+	return sb.String()
+}
+
+// parseYesNo extracts a yes/no decision from a judge reply. Ambiguous or empty
+// replies are treated as NO — the conservative direction for a trust check, so a
+// confused judge never inflates agreement.
+func parseYesNo(s string) bool {
+	for _, f := range strings.Fields(strings.ToLower(s)) {
+		switch {
+		case strings.HasPrefix(f, "yes"):
+			return true
+		case strings.HasPrefix(f, "no"):
+			return false
+		}
+	}
+	return false
 }

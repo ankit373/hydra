@@ -44,6 +44,17 @@ func Agents(s, k float64) (nStar int, speedup float64) {
 }
 
 // Speedup evaluates S(n) for the given parameters.
+//
+// Domain of validity: this Amdahl-with-linear-coordination form models
+// coordination-BOUND work and has a hard ceiling S(n) ≤ n for every s ≥ 0, k ≥ 0
+// (equality only at s = k = 0). It therefore cannot represent *superlinear*
+// speedup. The real optimal-parallelism benchmark measured superlinear speedup —
+// S = 2.33 at n=2 and 9.3 at n=4 — driven by per-agent context dilution (each of
+// n agents holds ~1/n of the context and generates faster), a regime this model
+// falsifiably does not cover: no (s, k) can fit S > n, which is why the grid-fit
+// pinned to the boundary with high residual. A context/entropy-aware successor is
+// data-gated future work. See TRUST_CONTROL_PLANE_BENCHMARK_FINDINGS.md §2 and
+// TestSpeedup_CeilingIsN_NeverSuperlinear.
 func Speedup(s, k, n float64) float64 {
 	if n <= 0 {
 		return 1

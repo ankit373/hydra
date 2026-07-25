@@ -82,3 +82,30 @@ func TestAgents_ZeroK(t *testing.T) {
 		t.Errorf("k=0 speedup should be Amdahl ceiling 1/s = 5, got %v", speedup)
 	}
 }
+
+// Falsification invariant (see findings §2): the Amdahl+coordination model has a
+// hard ceiling S(n) ≤ n for every valid (s ≥ 0, k ≥ 0) — it structurally cannot
+// produce superlinear speedup. The real benchmark measured S = 2.33 at n=2 and
+// 9.3 at n=4 (superlinear, from per-agent context dilution), so no (s, k) can fit
+// that data — a clean refutation of this model for embarrassingly-parallel,
+// context-bound agent work, not a tuning miss. Guarding the ceiling here keeps the
+// falsification honest and reproducible.
+func TestSpeedup_CeilingIsN_NeverSuperlinear(t *testing.T) {
+	for s := 0.0; s <= 1.0+1e-9; s += 0.1 {
+		for k := 0.0; k <= 1.0+1e-9; k += 0.05 {
+			for _, n := range []float64{1, 2, 3, 4, 6, 8, 16, 32} {
+				if got := Speedup(s, k, n); got > n+1e-9 {
+					t.Fatalf("Speedup(s=%.2f, k=%.2f, n=%.0f) = %.4f exceeds n — "+
+						"model must be incapable of superlinear speedup", s, k, n, got)
+				}
+			}
+		}
+	}
+	// Sanity: the observed benchmark speedups are superlinear, hence unreachable.
+	if s := Speedup(0, 0, 2); s > 2.33 {
+		t.Fatalf("best-case S(2) = %.4f should be < observed 2.33 (superlinear)", s)
+	}
+	if s := Speedup(0, 0, 4); s > 9.3 {
+		t.Fatalf("best-case S(4) = %.4f should be < observed 9.3 (superlinear)", s)
+	}
+}
