@@ -395,24 +395,39 @@ In synthetic benchmarks this cuts model calls **~49% on easy tasks** and **~24% 
 
 ## Getting Started
 
-### Install
+The CLI binary is **`hyctl`** (the product is Hydra). Pick whichever fits your stack — every method installs the same prebuilt binary and verifies its checksum.
 
-**Homebrew (recommended):**
+**Homebrew** (macOS/Linux):
 ```bash
 brew install ankit373/hydra/hyctl
 ```
 
-**Standalone installer:**
+**npm** — or run once with no install via **npx**:
+```bash
+npm install -g hyctl      # global install
+npx hyctl init            # run without installing
+```
+
+**pip** (Python 3.8+):
+```bash
+pip install hyctl
+```
+
+**Standalone installer** (curl):
 ```bash
 curl -fsSL https://raw.githubusercontent.com/ankit373/hydra/main/install.sh | sh
 ```
 
-**From source:**
+**Prebuilt binaries** — download from [github.com/ankit373/hydra/releases](https://github.com/ankit373/hydra/releases).
+
+**From source** (Go 1.22+):
 ```bash
 git clone https://github.com/ankit373/hydra.git
-cd hyctl
+cd hydra
 go build -o hyctl ./cmd/hydra && mv hyctl /usr/local/bin/
 ```
+
+> Not to be confused with the unrelated `hydra`/`hydra-cli` npm packages (pnxtech microservice libs) or homebrew-core's `hydra` (THC password cracker) — this project's CLI is `hyctl`.
 
 ### First Run
 

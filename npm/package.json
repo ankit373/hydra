@@ -1,0 +1,47 @@
+{
+  "name": "hyctl",
+  "version": "1.0.0",
+  "description": "Hydra (hyctl) — local-first, multi-vendor AI control plane. Discovers every model on your machine and routes each task to the cheapest head that clears your target confidence.",
+  "keywords": [
+    "ai",
+    "llm",
+    "orchestration",
+    "cli",
+    "router",
+    "ollama",
+    "claude",
+    "openai",
+    "local-first"
+  ],
+  "homepage": "https://hydra.uvansa.com",
+  "bugs": "https://github.com/ankit373/hydra/issues",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ankit373/hydra.git",
+    "directory": "npm"
+  },
+  "license": "MIT",
+  "author": "ankit373",
+  "bin": {
+    "hyctl": "bin/cli.js"
+  },
+  "scripts": {
+    "postinstall": "node scripts/postinstall.js"
+  },
+  "files": [
+    "bin/cli.js",
+    "scripts/postinstall.js"
+  ],
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ],
+  "cpu": [
+    "x64",
+    "arm64"
+  ],
+  "engines": {
+    "node": ">=16"
+  }
+}

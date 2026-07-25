@@ -41,14 +41,20 @@ Developers who use Claude Code, Cursor, Windsurf, or any AI coding assistant and
 
 ## Installation
 
+The CLI binary is named `hyctl` (the product is Hydra). Available via:
+
 ```bash
-brew tap ankit373/hydra && brew install hyctl
+brew install ankit373/hydra/hyctl                                                 # Homebrew
+npm install -g hyctl                                                              # npm
+npx hyctl                                                                         # npx (no install)
+pip install hyctl                                                                 # pip
+curl -fsSL https://raw.githubusercontent.com/ankit373/hydra/main/install.sh | sh  # standalone
 ```
 
 Or build from source (requires Go 1.22+):
 
 ```bash
-git clone https://github.com/ankit373/hydra && cd hyctl && go build ./cmd/hydra
+git clone https://github.com/ankit373/hydra && cd hydra && go build ./cmd/hydra
 ```
 
 ## Pricing

@@ -5,7 +5,7 @@
 - **Price**: $0 — free forever
 - **License**: MIT
 - **Source**: https://github.com/ankit373/hydra
-- **Install**: `brew tap ankit373/hydra && brew install hyctl`
+- **Install**: `brew install ankit373/hydra/hyctl` (also npm/npx/pip/curl)
 - **Limits**: None — route as many tasks as you want
 - **Support**: GitHub Issues and Discussions
 

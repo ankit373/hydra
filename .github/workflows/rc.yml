@@ -67,7 +67,7 @@ jobs:
           \`\`\`bash
           # macOS (Apple Silicon)
           curl -L https://github.com/ankit373/hydra/releases/download/${{ steps.ver.outputs.tag }}/hydra_${{ steps.ver.outputs.version }}_darwin_arm64.tar.gz | tar xz
-          sudo mv hydra /usr/local/bin/
+          sudo mv hyctl /usr/local/bin/
           \`\`\`
           EOF
           )" \
