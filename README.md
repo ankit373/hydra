@@ -136,6 +136,84 @@ Every executor is **native Go** — `agy`, Ollama, per-provider HTTP (OpenAI-com
 
 ---
 
+## The Math
+
+Hydra's routing decisions are not heuristics with a confident tone — each one is a named result you can check. Every equation below is either a **theorem we apply** or a **quantity we measure**, tagged so you always know which:
+
+> ⊢ **proven** — an established theorem · ▣ **measured** — computed in-repo, reproducible · ◈ **synthetic** — seeded benchmark, known ground truth · ○ **modeled** — an estimate or proxy
+
+### 1 · Confidence routing — Wald's Sequential Probability Ratio Test
+
+Instead of always polling a fixed number of models, Hydra accumulates the log-likelihood ratio across votes $x_1,\dots,x_n$ and stops the instant the evidence is conclusive:
+
+$$\Lambda_n = \sum_{i=1}^{n} \ln \frac{P(x_i \mid \text{correct})}{P(x_i \mid \text{incorrect})}, \qquad \text{accept if } \Lambda_n \ge A,\ \ \text{reject if } \Lambda_n \le B$$
+
+$$A = \ln\frac{1-\beta}{\alpha}, \qquad B = \ln\frac{\beta}{1-\alpha}$$
+
+for target error rates $\alpha,\beta$. Wald proved this minimizes the **expected number of samples** $E[N]$ among *all* tests with the same error bounds.
+
+*Analogy — a doctor ordering one test at a time and stopping the moment the diagnosis is certain, instead of always running the full panel.*
+⊢ Wald (1945), optimality proven · ◈ −24% (blended) / −49% (easy) samples vs fixed-5 at ≥98% accuracy — reproduce with `hydra trust benchmark` · source: [`internal/trust`](internal/trust)
+
+### 2 · Calibration — diagnostic power `D`
+
+Every source (model or verifier) earns a sensitivity $se=P(\text{says correct}\mid\text{correct})$ and specificity $sp=P(\text{says incorrect}\mid\text{incorrect})$ from real outcomes (a Beta-Bernoulli posterior). A single vote is worth an LLR of $\ln\frac{se}{1-sp}$ (a "correct" vote) or $\ln\frac{1-se}{sp}$ (an "incorrect" vote). Its **diagnostic power** is the expected evidence per vote — the KL divergence between the vote distributions under the two hypotheses, in nats:
+
+$$D = se\,\ln\frac{se}{1-sp} + (1-se)\,\ln\frac{1-se}{sp}$$
+
+A perfectly reliable source has large $D$; a coin-flip source ($se=sp=0.5$) has $D=0$ and contributes nothing no matter how often it votes. A 90%-reliable source gives $D\approx 1.76$ nats.
+
+*Analogy — a witness's credibility, measured in nats. A coin-flip witness tells you nothing however many times they testify.*
+⊢ information theory (KL divergence) · ▣ measured — the 90% → 1.76-nat figure is a table test in [`internal/trust`](internal/trust)
+
+### 3 · When to stop — the defect-cost bar
+
+Confidence isn't free and defects aren't equal, so the required bar is a Bayes-risk decision. The expected loss of shipping an answer believed correct with confidence $c$ is $(1-c)\,C_{\text{defect}}$; ship only when that clears a loss tolerance $\tau$:
+
+$$c^\star = 1 - \frac{\tau}{C_{\text{defect}}}$$
+
+A costlier defect ⟹ a higher confidence bar ⟹ SPRT samples more before it stops. Blast radius (§4) feeds $C_{\text{defect}}$.
+
+*Analogy — you demand far more certainty before heart surgery than before a haircut.*
+⊢ Bayes decision theory · ○ $C_{\text{defect}}$ is a modeled estimate (`hydra trust defect`) · source: [`internal/trust`](internal/trust)
+
+### 4 · Blast radius — Molloy–Reed percolation
+
+Treat the code as a graph with degree mean $\langle k\rangle$ and second moment $\langle k^2\rangle$. A **giant connected component** — a cascade-capable core where one change can ripple everywhere — exists precisely when the Molloy–Reed criterion holds:
+
+$$\kappa = \frac{\langle k^2 \rangle}{\langle k \rangle} \ge 2$$
+
+Files inside a high-$\kappa$ core get their confidence bar raised: an edit to a hub everything imports must be far surer than an edit to a leaf helper.
+
+*Analogy — the epidemic threshold $R_0$: below it a change stays local; above it, one edit can infect the whole graph.*
+⊢ Molloy–Reed (1995), proven · ▣ computed from `graph.json` in [`internal/graph`](internal/graph) — see `hydra graph blast`
+
+### 5 · Optimal parallelism — Amdahl + coordination
+
+Fanning work across $n$ agents speeds the parallel part but adds coordination cost that grows with $n$. With serial fraction $s$ and per-agent coupling $k$, wall-clock time is
+
+$$T(n) = s + \frac{1-s}{n} + k\,n \quad\xrightarrow{\ \frac{dT}{dn}=0\ }\quad n^\star = \sqrt{\frac{1-s}{k}}$$
+
+Independent files (small $k$) → fan out to ~6 agents; tightly-coupled edits to the same subgraph (large $k$) → ~2. More is slower.
+
+*Analogy — adding cooks to a kitchen: past $n^\star$ they spend more time coordinating than cooking.*
+⊢ Amdahl (1967) + coordination term · ▣ $k$ derived from graph coupling in [`internal/optimal`](internal/optimal) — see `hydra graph parallel`
+
+### 6 · Context governor — signal density, not length
+
+A context window's value is its information density, not its token count. Hydra proxies the entropy rate with a compression ratio $\rho\in(0,1]$ and counts only the *useful* tokens:
+
+$$\rho = \frac{\lvert \text{gzip}(C) \rvert}{\lvert C \rvert}, \qquad \text{useful tokens} = L \cdot \rho$$
+
+Highly compressible context (repetitive, stale) has low $\rho$ and few useful tokens — so Hydra compacts on **falling $\rho$**, not on raw length. A dense 100k window beats a noisy 1M one.
+
+*Analogy — signal-to-noise: a short, sharp briefing beats a rambling transcript ten times its length.*
+⊢ Shannon source-coding (entropy rate) · ○ gzip is a proxy, not a proof — a heuristic · source: [`internal/entropy`](internal/entropy) — see `hydra context entropy`
+
+> **See it move.** The interactive derivations — the SPRT log-odds walk hitting its boundaries, the percolation phase transition at $\kappa=2$, the Amdahl curve with its $n^\star$ marker, and the KL overlap that *is* `D` — live on the [**First Principles** page](https://hydra.uvansa.com/first-principles.html).
+
+---
+
 ## Features
 
 ### 🔍 Zero-Config Discovery
