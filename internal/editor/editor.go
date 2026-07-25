@@ -97,7 +97,7 @@ func Edit(ctx context.Context, req Request) (*Result, error) {
 	}
 
 	editPrompt := fmt.Sprintf(`You are editing a single file. Output ONLY the new file content between the
-markers. No prose. No explanations. No code fences (no ` + "```" + `).
+markers. No prose. No explanations. No code fences (no `+"```"+`).
 
 File path: %s
 %s
@@ -194,14 +194,14 @@ snippet) between these exact markers and nothing else:
 				validatorPassed = false
 				rollback(req.File, origContent, origExisted, resolved.GitRoot, backup)
 				return &Result{
-					Status:      "fail",
-					File:        req.File,
-					Workspace:   wsName,
-					GitRoot:     resolved.GitRoot,
-					Enum:        req.Enum,
+					Status:          "fail",
+					File:            req.File,
+					Workspace:       wsName,
+					GitRoot:         resolved.GitRoot,
+					Enum:            req.Enum,
 					ValidatorPassed: false,
-					RolledBack:  true,
-					Error:       "validation_failed: " + firstLine(vout),
+					RolledBack:      true,
+					Error:           "validation_failed: " + firstLine(vout),
 				}, nil
 			}
 		}
@@ -417,7 +417,6 @@ func readFileLines(path string) string {
 	return string(raw)
 }
 
-
 func firstLine(s string) string {
 	lines := strings.SplitN(strings.TrimSpace(s), "\n", 2)
 	if len(lines) > 0 {
@@ -428,11 +427,11 @@ func firstLine(s string) string {
 
 func writeLastEdit(file, enum, ws string, added, removed int) error {
 	h := map[string]any{
-		"from":         "hydra-edit-" + enum,
-		"file":         file,
-		"enum":         enum,
-		"workspace":    ws,
-		"lines_added":  added,
+		"from":          "hydra-edit-" + enum,
+		"file":          file,
+		"enum":          enum,
+		"workspace":     ws,
+		"lines_added":   added,
 		"lines_removed": removed,
 	}
 	raw, err := json.MarshalIndent(h, "", "  ")

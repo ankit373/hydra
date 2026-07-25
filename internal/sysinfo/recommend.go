@@ -9,7 +9,7 @@ import (
 
 // ModelRecommendation is a ranked suggestion for a specific Ollama model.
 type ModelRecommendation struct {
-	Model        string  // ollama pull <model>
+	Model        string // ollama pull <model>
 	DisplayName  string
 	SizeB        int     // parameter count in billions
 	RAMNeededGB  float64 // approximate RAM required (Q4_K_M quantisation)
@@ -22,17 +22,17 @@ type ModelRecommendation struct {
 // ollamaModels lists supported Ollama models ordered by capability (highest first).
 // RAMNeededGB is conservative (Q4_K_M quantisation).
 var ollamaModels = []ModelRecommendation{
-	{Model: "qwen2.5-coder:72b",  DisplayName: "Qwen2.5-Coder 72B",  SizeB: 72,  RAMNeededGB: 45},
-	{Model: "qwen3:30b",          DisplayName: "Qwen3 30B",           SizeB: 30,  RAMNeededGB: 20},
-	{Model: "qwen2.5-coder:32b",  DisplayName: "Qwen2.5-Coder 32B",  SizeB: 32,  RAMNeededGB: 20},
-	{Model: "qwen3:14b",          DisplayName: "Qwen3 14B",           SizeB: 14,  RAMNeededGB: 10},
-	{Model: "qwen2.5-coder:14b",  DisplayName: "Qwen2.5-Coder 14B",  SizeB: 14,  RAMNeededGB: 10},
-	{Model: "llama3.1:70b",       DisplayName: "Llama 3.1 70B",       SizeB: 70,  RAMNeededGB: 45},
-	{Model: "qwen3:8b",           DisplayName: "Qwen3 8B",            SizeB: 8,   RAMNeededGB: 6},
-	{Model: "qwen2.5-coder:7b",   DisplayName: "Qwen2.5-Coder 7B",   SizeB: 7,   RAMNeededGB: 5},
-	{Model: "llama3.2:3b",        DisplayName: "Llama 3.2 3B",        SizeB: 3,   RAMNeededGB: 3},
-	{Model: "qwen2.5-coder:1.5b", DisplayName: "Qwen2.5-Coder 1.5B", SizeB: 2,   RAMNeededGB: 2},
-	{Model: "phi4-mini",          DisplayName: "Phi-4 Mini",          SizeB: 4,   RAMNeededGB: 3},
+	{Model: "qwen2.5-coder:72b", DisplayName: "Qwen2.5-Coder 72B", SizeB: 72, RAMNeededGB: 45},
+	{Model: "qwen3:30b", DisplayName: "Qwen3 30B", SizeB: 30, RAMNeededGB: 20},
+	{Model: "qwen2.5-coder:32b", DisplayName: "Qwen2.5-Coder 32B", SizeB: 32, RAMNeededGB: 20},
+	{Model: "qwen3:14b", DisplayName: "Qwen3 14B", SizeB: 14, RAMNeededGB: 10},
+	{Model: "qwen2.5-coder:14b", DisplayName: "Qwen2.5-Coder 14B", SizeB: 14, RAMNeededGB: 10},
+	{Model: "llama3.1:70b", DisplayName: "Llama 3.1 70B", SizeB: 70, RAMNeededGB: 45},
+	{Model: "qwen3:8b", DisplayName: "Qwen3 8B", SizeB: 8, RAMNeededGB: 6},
+	{Model: "qwen2.5-coder:7b", DisplayName: "Qwen2.5-Coder 7B", SizeB: 7, RAMNeededGB: 5},
+	{Model: "llama3.2:3b", DisplayName: "Llama 3.2 3B", SizeB: 3, RAMNeededGB: 3},
+	{Model: "qwen2.5-coder:1.5b", DisplayName: "Qwen2.5-Coder 1.5B", SizeB: 2, RAMNeededGB: 2},
+	{Model: "phi4-mini", DisplayName: "Phi-4 Mini", SizeB: 4, RAMNeededGB: 3},
 }
 
 // OllamaRecommendations returns models ranked for this machine.
@@ -120,4 +120,3 @@ func (s *Specs) PressureWarning() string {
 	}
 	return ""
 }
-

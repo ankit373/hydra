@@ -236,15 +236,15 @@ func recoverAgySwap(settingsPath string) {
 // writeAuthRequired writes logs/auth_required.json so the TUI can surface it.
 func writeAuthRequired(pool, modelFlag, authURL string) {
 	type authEntry struct {
-		Pool      string `json:"pool"`
-		Model     string `json:"model"`
-		AuthURL   string `json:"auth_url"`
+		Pool       string `json:"pool"`
+		Model      string `json:"model"`
+		AuthURL    string `json:"auth_url"`
 		DetectedAt string `json:"detected_at"`
 	}
 	entry := authEntry{
-		Pool:      pool,
-		Model:     modelFlag,
-		AuthURL:   authURL,
+		Pool:       pool,
+		Model:      modelFlag,
+		AuthURL:    authURL,
 		DetectedAt: time.Now().UTC().Format(time.RFC3339),
 	}
 	data, err := json.MarshalIndent(entry, "", "  ")
@@ -255,4 +255,3 @@ func writeAuthRequired(pool, modelFlag, authURL string) {
 	_ = os.MkdirAll(logDir, 0o700)
 	_ = os.WriteFile(filepath.Join(logDir, "auth_required.json"), data, 0o600)
 }
-

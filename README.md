@@ -274,7 +274,7 @@ Enable local-only policy in `hydra init` and any prompt containing sensitive dat
 Detected patterns: Social Security Numbers, credit card numbers, email addresses, API keys and tokens, IP addresses, private key material.
 
 ```bash
-$ hydra dispatch --prompt "process payment for card 4111-1111-1111-1111"
+$ hydra dispatch "process payment for card 4111-1111-1111-1111"
 
   Policy violation: prompt contains PII (credit card pattern)
   Action: routing to local-only head
@@ -316,10 +316,10 @@ Tasks route through named tiers by capability score. If a head is unavailable, H
 
 ```bash
 # Let Hydra pick the best available model
-hydra dispatch --prompt "refactor auth middleware to use JWT refresh tokens"
+hydra dispatch "refactor auth middleware to use JWT refresh tokens"
 
 # Preview the full fallback chain before dispatching
-hydra dispatch --dry-run --prompt "write a SQL migration"
+hydra dispatch --dry-run "write a SQL migration"
 #
 #   Primary:   claude (score: 95)
 #   Fallback:  codex  (score: 88)  ← if claude unavailable
@@ -327,7 +327,7 @@ hydra dispatch --dry-run --prompt "write a SQL migration"
 #   Local:     ollama/qwen3:8b     ← always available
 
 # Force local — no API calls regardless of policy
-hydra dispatch --local --prompt "write unit tests for this function"
+hydra dispatch --local "write unit tests for this function"
 ```
 
 ### 🐝 Swarm Dispatch
@@ -347,7 +347,7 @@ hydra dispatch --swarm --swarm-mode all  "prompt"   # every answer, ranked by Ca
 Most routers optimize *cost*. Hydra is growing a second axis: **verified correctness**. Instead of always firing a fixed number of models, `--confidence` runs a **sequential probability ratio test (SPRT)** — it samples models adaptively, in most-diagnostic-per-dollar order, and stops the moment the calibrated log-odds cross the target confidence.
 
 ```bash
-hydra dispatch --confidence 0.95 --prompt "is this migration safe to run in prod?"
+hydra dispatch --confidence 0.95 "is this migration safe to run in prod?"
 ```
 
 It leans on **per-source calibration** you build from real outcomes — each model/verifier earns a measured sensitivity, specificity, and *diagnostic power* `D`. A coin-flip source (`D≈0`) contributes nothing; a proven one lets a single vote go a long way.
@@ -438,9 +438,9 @@ hydra models remove kimi-k3             # remove one of your additions
 hydra models sync                       # import the OpenRouter catalog (provisional scores)
 
 # Dispatch
-hydra dispatch --prompt "..."           # route a prompt to the best model
-hydra dispatch --dry-run --prompt "..." # preview routing without executing
-hydra dispatch --local --prompt "..."   # local models only, no API calls
+hydra dispatch "..."           # route a prompt to the best model
+hydra dispatch --dry-run "..." # preview routing without executing
+hydra dispatch --local "..."   # local models only, no API calls
 hydra dispatch --swarm --swarm-mode best "..."   # fan out to many heads, judge best
 hydra dispatch --confidence 0.95 "..."  # SPRT: sample until this P(correct) is reached
 

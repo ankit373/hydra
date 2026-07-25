@@ -35,7 +35,7 @@ type Task struct {
 	Enum     string `json:"enum"`
 	Prompt   string `json:"prompt"`
 	File     string `json:"file,omitempty"`
-	Context  string `json:"context,omitempty"` // context file path for text tasks
+	Context  string `json:"context,omitempty"`  // context file path for text tasks
 	Validate *bool  `json:"validate,omitempty"` // edit tasks only; nil = true
 }
 
@@ -71,7 +71,7 @@ type Result struct {
 }
 
 func (r Result) MarshalJSON() ([]byte, error) { return r.raw, nil }
-func (r Result) Raw() json.RawMessage          { return r.raw }
+func (r Result) Raw() json.RawMessage         { return r.raw }
 
 // Run fans all tasks out as goroutines and collects results.
 // Returns non-nil error only for pre-flight failures; individual task errors

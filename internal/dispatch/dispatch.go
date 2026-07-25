@@ -439,21 +439,21 @@ func (d *Dispatcher) logDispatch(r *Result, prompt string, opts Options) error {
 		// the legacy `source` field mirrors tokens_source for older readers.
 		tokensSource, costSource, legacySource := cost.SourceLabels(r.Response.TokensEstimated)
 		costEntry := map[string]any{
-			"ts":             time.Now().UTC().Format(time.RFC3339),
-			"tier":           tier,
-			"enum":           opts.Enum,
-			"model":          r.Response.Model,
-			"executor":       r.Head.Provider,
-			"pool":           r.Head.Meta["token_pool"],
-			"prompt_tokens":  r.Response.InputTokens,
+			"ts":              time.Now().UTC().Format(time.RFC3339),
+			"tier":            tier,
+			"enum":            opts.Enum,
+			"model":           r.Response.Model,
+			"executor":        r.Head.Provider,
+			"pool":            r.Head.Meta["token_pool"],
+			"prompt_tokens":   r.Response.InputTokens,
 			"response_tokens": r.Response.OutputTokens,
-			"est_cost_usd":   estCost,
-			"wall_ms":        wallMs,
-			"tokens_source":  tokensSource,
-			"cost_source":    costSource,
-			"source":         legacySource,
-			"task_id":        os.Getenv("HYDRA_TASK_ID"),
-			"run_id":         os.Getenv("HYDRA_RUN_ID"),
+			"est_cost_usd":    estCost,
+			"wall_ms":         wallMs,
+			"tokens_source":   tokensSource,
+			"cost_source":     costSource,
+			"source":          legacySource,
+			"task_id":         os.Getenv("HYDRA_TASK_ID"),
+			"run_id":          os.Getenv("HYDRA_RUN_ID"),
 		}
 		_ = appendJSONL(filepath.Join(logDir, "cost.jsonl"), costEntry)
 	}
@@ -494,28 +494,39 @@ func truncate(s string, n int) string {
 // Single source of truth — editor and parallel both delegate here.
 func EnumToTier(enum string) string {
 	const (
-		GRUNT    = "10"
-		TRIVIAL  = "9"
-		SIMPLE   = "8"
-		STANDARD = "7"
-		MODERATE = "6"
-		COMPLEX  = "5"
-		HARD     = "4"
+		GRUNT     = "10"
+		TRIVIAL   = "9"
+		SIMPLE    = "8"
+		STANDARD  = "7"
+		MODERATE  = "6"
+		COMPLEX   = "5"
+		HARD      = "4"
 		VERY_HARD = "3"
-		EXPERT   = "2"
-		CORE     = "1"
+		EXPERT    = "2"
+		CORE      = "1"
 	)
 	switch enum {
-	case "GRUNT":     return GRUNT
-	case "TRIVIAL":   return TRIVIAL
-	case "SIMPLE":    return SIMPLE
-	case "STANDARD":  return STANDARD
-	case "MODERATE":  return MODERATE
-	case "COMPLEX":   return COMPLEX
-	case "HARD":      return HARD
-	case "VERY_HARD": return VERY_HARD
-	case "EXPERT":    return EXPERT
-	case "CORE":      return CORE
-	default:          return ""
+	case "GRUNT":
+		return GRUNT
+	case "TRIVIAL":
+		return TRIVIAL
+	case "SIMPLE":
+		return SIMPLE
+	case "STANDARD":
+		return STANDARD
+	case "MODERATE":
+		return MODERATE
+	case "COMPLEX":
+		return COMPLEX
+	case "HARD":
+		return HARD
+	case "VERY_HARD":
+		return VERY_HARD
+	case "EXPERT":
+		return EXPERT
+	case "CORE":
+		return CORE
+	default:
+		return ""
 	}
 }

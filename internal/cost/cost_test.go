@@ -121,10 +121,10 @@ func TestCommaInt(t *testing.T) {
 
 func TestTokenSourceShare(t *testing.T) {
 	rows := []Row{
-		{PromptTokens: 100, ResponseTokens: 50, TokensSource: "actual"},    // 150 actual
-		{PromptTokens: 40, ResponseTokens: 10, TokensSource: "estimated"},  // 50 estimated
-		{PromptTokens: 20, ResponseTokens: 5, Source: "real"},              // 25 legacy → actual
-		{PromptTokens: 8, ResponseTokens: 2, Source: "estimate"},           // 10 legacy → estimated
+		{PromptTokens: 100, ResponseTokens: 50, TokensSource: "actual"},   // 150 actual
+		{PromptTokens: 40, ResponseTokens: 10, TokensSource: "estimated"}, // 50 estimated
+		{PromptTokens: 20, ResponseTokens: 5, Source: "real"},             // 25 legacy → actual
+		{PromptTokens: 8, ResponseTokens: 2, Source: "estimate"},          // 10 legacy → estimated
 	}
 	actual, estimated := TokenSourceShare(rows)
 	if actual != 175 {

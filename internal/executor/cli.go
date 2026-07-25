@@ -67,15 +67,15 @@ func (t cliTemplate) buildArgs(prompt string) []string {
 // cliTemplates maps provider ID (or head ID) to invocation template.
 // To add a new CLI tool, add an entry here and in capabilities/data.json.
 var cliTemplates = map[string]cliTemplate{
-	"anthropic":   {args: []string{"--print", ""}},              // claude --print "<prompt>"
-	"openai":      {args: []string{""}},                          // codex "<prompt>"
-	"google":      {args: []string{""}},                          // gemini "<prompt>"
-	"antigravity": {args: []string{""}},                          // agy "<prompt>"
+	"anthropic":   {args: []string{"--print", ""}}, // claude --print "<prompt>"
+	"openai":      {args: []string{""}},            // codex "<prompt>"
+	"google":      {args: []string{""}},            // gemini "<prompt>"
+	"antigravity": {args: []string{""}},            // agy "<prompt>"
 	"cursor":      {args: []string{"--stdio"}, stdinPrompt: true},
-	"amazon":      {args: []string{""}},                          // kiro "<prompt>"
-	"codeium":     {args: []string{""}},                          // windsurf "<prompt>"
-	"github":      {args: []string{"copilot", "suggest", ""}},   // gh-copilot
-	"sourcegraph": {args: []string{"ask", ""}},                   // cody ask "<prompt>"
+	"amazon":      {args: []string{""}},                       // kiro "<prompt>"
+	"codeium":     {args: []string{""}},                       // windsurf "<prompt>"
+	"github":      {args: []string{"copilot", "suggest", ""}}, // gh-copilot
+	"sourcegraph": {args: []string{"ask", ""}},                // cody ask "<prompt>"
 	"continue":    {stdinPrompt: true},
 	"amp":         {args: []string{""}},
 }

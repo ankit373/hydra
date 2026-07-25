@@ -18,10 +18,10 @@ func TestPolicy_Decide_FirstMatchWins(t *testing.T) {
 	}
 
 	tests := []struct {
-		name                    string
-		agent, tool, resource   string
-		action                  Action
-		want                    Decision
+		name                  string
+		agent, tool, resource string
+		action                Action
+		want                  Decision
 	}{
 		{"untrusted agent denied outright", "untrusted", "fs", "/repo/a.go", Read, Deny},
 		{"write to /etc denied by rule", "svc", "fs", "/etc/passwd", Write, Deny},

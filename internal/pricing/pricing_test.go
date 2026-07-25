@@ -142,22 +142,22 @@ func TestFetchFromOpenRouter(t *testing.T) {
 				},
 				{
 					// Negative price → skipped
-					"id": "bad/negative",
+					"id":      "bad/negative",
 					"pricing": map[string]string{"prompt": "-1", "completion": "-1"},
 				},
 				{
 					// Parse error → skipped
-					"id": "bad/parse",
+					"id":      "bad/parse",
 					"pricing": map[string]string{"prompt": "NaN", "completion": "0"},
 				},
 				{
 					// Empty string → skipped
-					"id": "bad/empty",
+					"id":      "bad/empty",
 					"pricing": map[string]string{"prompt": "", "completion": ""},
 				},
 				{
 					// "0" price = free model → included with $0 rates
-					"id": "free/model",
+					"id":      "free/model",
 					"pricing": map[string]string{"prompt": "0", "completion": "0"},
 				},
 			},
@@ -278,7 +278,7 @@ func TestParsePerToken(t *testing.T) {
 		wantErr bool
 	}{
 		{"0.000015", 0.000015, false},
-		{"0", 0, false},   // free model — included, not skipped
+		{"0", 0, false}, // free model — included, not skipped
 		{"", 0, true},
 		{"-1", 0, true},
 		{"abc", 0, true},

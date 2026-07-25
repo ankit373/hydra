@@ -40,14 +40,14 @@ type ollamaGenerateRequest struct {
 }
 
 type ollamaGenerateResponse struct {
-	Response           string  `json:"response"`
-	Model              string  `json:"model"`
-	Done               bool    `json:"done"`
-	PromptEvalCount    int     `json:"prompt_eval_count"`
-	EvalCount          int     `json:"eval_count"`
-	PromptEvalDuration int64   `json:"prompt_eval_duration"`
-	EvalDuration       int64   `json:"eval_duration"`
-	TotalDuration      int64   `json:"total_duration"`
+	Response           string `json:"response"`
+	Model              string `json:"model"`
+	Done               bool   `json:"done"`
+	PromptEvalCount    int    `json:"prompt_eval_count"`
+	EvalCount          int    `json:"eval_count"`
+	PromptEvalDuration int64  `json:"prompt_eval_duration"`
+	EvalDuration       int64  `json:"eval_duration"`
+	TotalDuration      int64  `json:"total_duration"`
 }
 
 func (e *OllamaExecutor) Execute(ctx context.Context, req Request) (*Response, error) {

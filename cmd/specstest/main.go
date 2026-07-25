@@ -22,7 +22,9 @@ func main() {
 	fmt.Println("\nModel recommendations:")
 	for _, r := range specs.OllamaRecommendations() {
 		icon := "✗"
-		if r.Fits { icon = "✓" }
+		if r.Fits {
+			icon = "✓"
+		}
 		fmt.Printf("  %s %-26s %s\n", icon, r.DisplayName, r.Reason)
 	}
 	fmt.Printf("\nBest: %s\n", specs.BestOllamaModel().Model)

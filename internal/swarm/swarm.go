@@ -219,7 +219,7 @@ func capScoreWinner(attempts []Attempt) *Attempt {
 
 func rankByCapScore(attempts []Attempt) {
 	type indexed struct {
-		idx  int
+		idx   int
 		score int
 	}
 	var ok []indexed

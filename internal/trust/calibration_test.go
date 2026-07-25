@@ -118,8 +118,8 @@ func TestPersistenceReplay(t *testing.T) {
 
 func TestReport_SortedByD(t *testing.T) {
 	c, _ := New("")
-	feed(t, c, "weak", "go", 60, 40, 60, 40)  // ~0.6 accurate → low D
-	feed(t, c, "strong", "go", 95, 5, 95, 5)  // ~0.95 → high D
+	feed(t, c, "weak", "go", 60, 40, 60, 40) // ~0.6 accurate → low D
+	feed(t, c, "strong", "go", 95, 5, 95, 5) // ~0.95 → high D
 	rep := c.Report()
 	if len(rep) != 2 {
 		t.Fatalf("Report rows = %d, want 2", len(rep))

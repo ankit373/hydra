@@ -60,9 +60,9 @@ type GroupRow struct {
 
 // SummaryResult is the output of Summary().
 type SummaryResult struct {
-	Today   Totals  `json:"today"`
-	AllTime Totals  `json:"all_time"`
-	Recent  []Row   `json:"recent"`
+	Today   Totals `json:"today"`
+	AllTime Totals `json:"all_time"`
+	Recent  []Row  `json:"recent"`
 	// Token-source share (all-time), counting prompt+response tokens.
 	ActualTokens    int `json:"actual_tokens"`
 	EstimatedTokens int `json:"estimated_tokens"`
@@ -207,8 +207,8 @@ func ByTask(taskID string) (*Totals, error) {
 
 // ByRunResult is the output of ByRun.
 type ByRunResult struct {
-	Totals  Totals     `json:"totals"`
-	ByTier  []GroupRow `json:"by_tier"`
+	Totals Totals     `json:"totals"`
+	ByTier []GroupRow `json:"by_tier"`
 }
 
 // ByRun returns totals and per-tier breakdown for a specific run_id.
@@ -316,10 +316,10 @@ func ByDay(rows []Row) []GroupRow {
 
 // SwarmSummary holds swarm-specific aggregate stats.
 type SwarmSummary struct {
-	Runs       int     `json:"runs"`
-	WinnerRate float64 `json:"winner_rate"` // fraction 0-1
-	AvgWallMS  int64   `json:"avg_wall_ms"`
-	TotalCost  float64 `json:"total_cost_usd"`
+	Runs       int            `json:"runs"`
+	WinnerRate float64        `json:"winner_rate"` // fraction 0-1
+	AvgWallMS  int64          `json:"avg_wall_ms"`
+	TotalCost  float64        `json:"total_cost_usd"`
 	ByMode     map[string]int `json:"by_mode"`
 }
 
