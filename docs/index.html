@@ -36,6 +36,7 @@
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
     "name": "Hydra",
+    "alternateName": "Hydra Trust Control Plane",
     "applicationCategory": "DeveloperApplication",
     "operatingSystem": "macOS, Linux",
     "description": "Route every dev task to the right AI model automatically. Hydra orchestrates Claude, Gemini, GPT, and local Qwen via Ollama — cutting LLM costs without sacrificing quality.",
@@ -80,13 +81,9 @@
     "@context": "https://schema.org",
     "@type": "WebSite",
     "name": "Hydra",
+    "alternateName": "Hydra Trust Control Plane",
     "url": "https://hydra.uvansa.com/",
-    "description": "Open source multi-model AI orchestration CLI written in Go",
-    "potentialAction": {
-      "@type": "SearchAction",
-      "target": "https://github.com/ankit373/hydra/search?q={search_term_string}",
-      "query-input": "required name=search_term_string"
-    }
+    "description": "Open source multi-model AI orchestration CLI written in Go"
   }
   </script>
 
@@ -101,7 +98,7 @@
         "name": "What is Hydra?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "Hydra is an open source multi-model AI orchestration CLI written in Go. It routes developer tasks to the right AI model automatically — using Claude for complex reasoning, Gemini for standard tasks, and free local Qwen/Ollama for boilerplate. The result is up to 80% reduction in LLM API costs without sacrificing output quality."
+          "text": "Hydra is an open source multi-model AI orchestration CLI written in Go. It routes developer tasks to the right AI model automatically — using Claude for complex reasoning, Gemini for standard tasks, and free local Qwen/Ollama for boilerplate. The result is a 70-85% reduction in LLM API costs without sacrificing output quality."
         }
       },
       {
@@ -154,6 +151,7 @@
     "@context": "https://schema.org",
     "@type": "SoftwareSourceCode",
     "name": "Hydra",
+    "alternateName": "Hydra Trust Control Plane",
     "description": "Open source multi-model AI orchestration CLI written in Go. Routes developer tasks to the cheapest model capable of handling them.",
     "codeRepository": "https://github.com/ankit373/hydra",
     "programmingLanguage": "Go",
@@ -165,38 +163,6 @@
     },
     "isAccessibleForFree": true,
     "url": "https://hydra.uvansa.com/"
-  }
-  </script>
-
-  <!-- Structured Data: HowTo (Installation) -->
-  <script type="application/ld+json">
-  {
-    "@context": "https://schema.org",
-    "@type": "HowTo",
-    "name": "How to Install Hydra AI Orchestration CLI",
-    "description": "Install Hydra, the open source multi-model AI orchestration CLI, on macOS or Linux in under five minutes.",
-    "totalTime": "PT5M",
-    "tool": [{"@type": "HowToTool", "name": "Homebrew"}, {"@type": "HowToTool", "name": "Go 1.22+"}],
-    "step": [
-      {
-        "@type": "HowToStep",
-        "name": "Install via Homebrew",
-        "text": "Run: brew tap ankit373/hydra && brew install hydra",
-        "position": 1
-      },
-      {
-        "@type": "HowToStep",
-        "name": "Initialize Hydra",
-        "text": "Run: hydra init to configure your API keys and set up the default routing policy.",
-        "position": 2
-      },
-      {
-        "@type": "HowToStep",
-        "name": "Dispatch your first task",
-        "text": "Run: hydra dispatch --enum SIMPLE 'write a User DTO in TypeScript' to send your first task through the routing pipeline.",
-        "position": 3
-      }
-    ]
   }
   </script>
 
@@ -717,35 +683,35 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
 
   <div class="bento">
     <div class="tile big" style="--gl:rgba(63,217,138,.12)">
-      <div class="num tnum" data-to="73" data-suffix="%">0<span class="u">%</span></div>
+      <div class="num tnum" data-to="73" data-suffix="%">73<span class="u">%</span></div>
       <div>
         <div class="cap">cheaper, typically</div>
         <div class="mech">Median cost avoided by routing boilerplate <em>away</em> from the frontier orchestrator to a mid or local head. Reproduce with <code>hydra stats</code>.</div>
       </div>
     </div>
     <div class="tile med" style="--gl:rgba(0,230,195,.12)">
-      <div class="num tnum" data-to="58" data-suffix="%">0<span class="u">%</span></div>
+      <div class="num tnum" data-to="58" data-suffix="%">58<span class="u">%</span></div>
       <div>
         <div class="cap">kept 100% local</div>
         <div class="mech">Share of tasks that never left your machine. No hosted gateway can claim this.</div>
       </div>
     </div>
     <div class="tile med" style="--gl:rgba(139,92,246,.12)">
-      <div class="num tnum" data-to="0.95" data-dec="2">0.00</div>
+      <div class="num tnum" data-to="0.95" data-dec="2">0.95</div>
       <div>
         <div class="cap">target confidence</div>
         <div class="mech">Routes to a calibrated confidence-of-correctness, then stops early via SPRT.</div>
       </div>
     </div>
     <div class="tile med" style="--gl:rgba(42,240,224,.12)">
-      <div class="num tnum" data-to="12">0</div>
+      <div class="num tnum" data-to="12">12</div>
       <div>
         <div class="cap">heads discovered</div>
         <div class="mech">CLI agents + API keys + local servers found on a typical dev box. Run <code>hydra probe</code>.</div>
       </div>
     </div>
     <div class="tile wide" style="--gl:rgba(232,82,200,.12)">
-      <div class="num tnum" data-to="100" data-suffix="%">0<span class="u">%</span></div>
+      <div class="num tnum" data-to="100" data-suffix="%">100<span class="u">%</span></div>
       <div>
         <div class="cap">offline-capable · ~0ms routing overhead</div>
         <div class="mech">The router runs on-device with zero network calls to decide. Local Qwen is the always-on terminal fallback, so a dispatch <em>never</em> hard-fails on a rate limit.</div>
