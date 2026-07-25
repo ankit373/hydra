@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 package tui
 
 // cockpit.go — the interactive terminal cockpit (`hydra tui`).
