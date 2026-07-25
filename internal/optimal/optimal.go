@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 // Package optimal computes the provably-best number of parallel agents for a
 // task, per Manifesto Law 4. Over-spawning on tightly-coupled code is slower
 // than a smaller fleet: coordination cost grows linearly with agent count while

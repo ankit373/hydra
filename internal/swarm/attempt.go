@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 // Package swarm implements fan-out dispatch: one prompt fired at multiple
 // Heads simultaneously, with race / best / all response strategies.
 package swarm

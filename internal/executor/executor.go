@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 // Package executor runs prompts against Hydra Heads.
 // Two strategies: CLI (subprocess) and HTTP (OpenAI-compatible REST).
 package executor

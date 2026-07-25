@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 // Package policy evaluates routing rules before a prompt is dispatched.
 // Rules are evaluated in order; the first match wins.
 package policy

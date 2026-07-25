@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 // Package capabilities provides model scoring data, embedded at compile time
 // and extensible at runtime via a user overlay (~/.hydra/models.json), so users
 // can add new models (e.g. Kimi K2) without editing source or recompiling.

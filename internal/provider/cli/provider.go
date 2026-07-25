@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 // Package cli discovers AI heads available as CLI tools on PATH.
 // To add a new CLI tool: add one entry to the knownCLIs table — no other changes needed.
 package cli

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 // Package dispatch routes a prompt through policy evaluation, head selection,
 // and execution — with automatic fallback on failure.
 package dispatch

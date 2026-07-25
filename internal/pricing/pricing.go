@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 // Package pricing provides live model cost data fetched from OpenRouter,
 // cached locally with a 24-hour TTL, falling back to the static
 // registry/pricing.yaml when offline or on first run.

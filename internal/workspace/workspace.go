@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 // Package workspace validates file paths against the workspace registry
 // (registry/workspace.yaml) and provides git root detection and per-extension
 // validator lookup. Go port of dispatch/scope.sh.

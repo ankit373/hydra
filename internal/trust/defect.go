@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 package trust
 
 // DefectWeights are the multipliers that turn a task's risk attributes into the

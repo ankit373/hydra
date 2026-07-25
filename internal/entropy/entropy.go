@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 // Package entropy measures the useful information in a context window, not just
 // its length. Manifesto Law 5: useful_tokens = length × signal_density. A big
 // noisy window can carry less usable context than a small dense one, so

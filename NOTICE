@@ -1,0 +1,75 @@
+Hydra
+Copyright (c) 2025 Ankit Jha
+
+This product is licensed under the MIT License (see LICENSE).
+
+It contains software from the following third-party open source projects,
+each under its own license. This list covers every package actually linked
+into the `hydra` binary across all release platforms (darwin, linux,
+windows), per `go list -deps ./cmd/hydra/...`. No copyleft (GPL/AGPL/LGPL)
+dependency is present as of the date below.
+
+Regenerate by re-running the dependency walk in
+CONTRIBUTING notes / commit history if go.mod changes.
+Last verified: 2026-07-25 against go.mod / go.sum.
+
+--------------------------------------------------------------------------
+MIT License
+--------------------------------------------------------------------------
+  github.com/BurntSushi/toml            Copyright (c) 2013 TOML authors
+  github.com/aymanbagabas/go-osc52/v2    Copyright (c) 2022 Ayman Bagabas
+  github.com/charmbracelet/bubbletea    Copyright (c) 2020-2023 Charmbracelet, Inc
+  github.com/charmbracelet/colorprofile Copyright (c) 2025 Charmbracelet, Inc
+  github.com/charmbracelet/lipgloss     Copyright (c) 2021-2023 Charmbracelet, Inc
+  github.com/charmbracelet/x/ansi       Copyright (c) 2023-2024 Charmbracelet, Inc
+  github.com/charmbracelet/x/cellbuf    Copyright (c) 2023-2024 Charmbracelet, Inc
+  github.com/charmbracelet/x/term       Copyright (c) 2023-2024 Charmbracelet, Inc
+  github.com/erikgeiser/coninput        Copyright (c) 2021 Erik Geiser              (Windows builds only)
+  github.com/lucasb-eyer/go-colorful    Copyright (c) 2013 Lucas Beyer
+  github.com/mattn/go-isatty            Copyright (c) Yasuhiro MATSUMOTO
+  github.com/mattn/go-localereader      mattn                                        (Windows builds only;
+                                                                                       MIT per upstream repo,
+                                                                                       LICENSE file not present
+                                                                                       in the tagged module zip)
+  github.com/mattn/go-runewidth         Copyright (c) 2016 mattn
+  github.com/muesli/ansi                Copyright (c) 2019-2020 Christian Muehlhaeuser
+  github.com/muesli/cancelreader        Copyright (c) 2021-2022 Christian Muehlhaeuser
+  github.com/muesli/termenv             Copyright (c) 2019-2020 Christian Muehlhaeuser
+  github.com/rivo/uniseg                Copyright (c) 2019 Oliver Kuederle
+  github.com/xo/terminfo                Copyright (c) 2020 Kenneth Shaw
+
+  Full text: https://opensource.org/license/mit
+
+--------------------------------------------------------------------------
+BSD 3-Clause License
+--------------------------------------------------------------------------
+  github.com/spf13/pflag                Copyright (c) 2012 Alex Ogier / The Go Authors
+  golang.org/x/sync                     Copyright 2009 The Go Authors
+  golang.org/x/sys                      Copyright 2009 The Go Authors            (incl. windows/unix subpkgs)
+  golang.org/x/text                     Copyright (c) 2009 The Go Authors        (Windows builds: transform pkg)
+
+  Full text: https://opensource.org/license/bsd-3-clause
+
+--------------------------------------------------------------------------
+Apache License 2.0
+--------------------------------------------------------------------------
+  github.com/spf13/cobra                 The Cobra Authors  (no upstream NOTICE file to reproduce)
+  github.com/inconshreveable/mousetrap   Copyright 2014 Alan Shreve            (Windows builds only)
+
+  Full text: https://www.apache.org/licenses/LICENSE-2.0
+
+--------------------------------------------------------------------------
+Dual: MIT OR Apache License 2.0 (upstream's choice)
+--------------------------------------------------------------------------
+  gopkg.in/yaml.v3                       Copyright (c) 2006-2010 Kirill Simonov
+                                          Copyright (c) 2006-2011 Kirill Simonov (yaml.v2 lineage)
+
+  Terms used here: MIT, per https://opensource.org/license/mit
+--------------------------------------------------------------------------
+
+None of the above requires source disclosure, network-use disclosure, or
+relicensing of Hydra's own code — all are permissive licenses compatible
+with MIT redistribution. This file exists for attribution completeness in
+compiled release binaries (Homebrew, GitHub Releases); it imposes no
+additional obligations beyond what each dependency's own license already
+requires (reproduce copyright + license text with binary redistributions).

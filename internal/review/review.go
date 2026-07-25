@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 // Package review provides the review surface for files edited by Hydra.
 // It is the Go port of dispatch/review.sh.
 package review

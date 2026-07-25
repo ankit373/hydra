@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 // Package rank provides ordering and deduplication for discovered Heads.
 package rank
 

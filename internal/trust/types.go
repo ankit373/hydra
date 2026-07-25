@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 // Package trust is the confidence layer of the Trust Control Plane: it measures
 // how much each evidence source's verdict is actually worth (calibration) and
 // how costly a wrong answer is for a given task (defect cost). Phase 1 ships the
