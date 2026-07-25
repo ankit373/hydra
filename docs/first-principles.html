@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>First Principles — The Math Behind Hydra</title>
-  <meta name="description" content="The theorems, measurements, and honest math behind every Hydra routing decision: Wald's SPRT, calibration diagnostic power (KL divergence), Bayes defect-cost, Molloy–Reed percolation, Amdahl optimal parallelism, and context entropy — with interactive derivations.">
+  <meta name="description" content="The math behind Hydra's router — SPRT, calibration, percolation-κ, and optimal parallelism — with interactive, provable derivations you can check.">
   <meta name="keywords" content="SPRT sequential probability ratio test, KL divergence calibration, Molloy-Reed percolation, Amdahl's law parallelism, LLM router math, confidence routing, Bayes decision theory, Hydra">
 
   <meta property="og:type" content="article">
@@ -155,6 +155,8 @@ a{color:inherit;text-decoration:none;}
 .viz .ctl button:hover{border-color:var(--aqua);color:var(--aqua);}
 .viz .readout{margin-left:auto;text-align:right;color:var(--faint);}
 .viz .readout b{color:var(--ink);font-size:15px;}
+figure.viz{margin:24px 0 8px;}
+.vizcap{font-family:var(--mono);font-size:11px;color:var(--faint);padding:9px 16px;border-top:1px solid var(--line);background:rgba(6,7,15,.4);}
 
 .tags{display:flex;flex-wrap:wrap;gap:9px;margin-top:22px;}
 .src{display:flex;flex-wrap:wrap;gap:10px 22px;margin-top:14px;font-family:var(--mono);font-size:12.5px;color:var(--faint);}
@@ -225,7 +227,7 @@ footer{border-top:1px solid var(--line);margin-top:40px;padding:44px 0 56px;}
       <i>B</i> <span class="op">=</span> <span class="op">ln</span> <span class="frac"><span class="num"><i>β</i></span><span class="den">1 − <i>α</i></span></span>
     </div>
 
-    <div class="viz">
+    <figure class="viz">
       <div class="canvas-wrap"><canvas id="c-sprt" width="1040" height="380" role="img" aria-label="Animated log-odds random walk crossing the accept and reject boundaries"></canvas></div>
       <div class="ctl">
         <label>source reliability <span class="v" id="v-sprt-rel">0.85</span>
@@ -234,7 +236,8 @@ footer{border-top:1px solid var(--line);margin-top:40px;padding:44px 0 56px;}
         <button id="b-sprt-run" type="button">↻ run again</button>
         <div class="readout">samples used <b class="tnum" id="o-sprt-n">—</b> &nbsp;·&nbsp; fixed-5 would use <b>5</b></div>
       </div>
-    </div>
+      <figcaption class="vizcap">Interactive: the SPRT log-odds walk crossing the accept/reject boundaries.</figcaption>
+    </figure>
 
     <p class="analogy">A doctor ordering one test at a time and stopping the moment the diagnosis is certain — instead of always running the full panel.</p>
     <div class="tags">
@@ -257,7 +260,7 @@ footer{border-top:1px solid var(--line);margin-top:40px;padding:44px 0 56px;}
       <span class="frac"><span class="num">1 − <i>se</i></span><span class="den"><i>sp</i></span></span>
     </div>
 
-    <div class="viz">
+    <figure class="viz">
       <div class="canvas-wrap"><canvas id="c-cal" width="1040" height="340" role="img" aria-label="Vote probability distributions under correct and incorrect hypotheses, with diagnostic power D"></canvas></div>
       <div class="ctl">
         <label>sensitivity <i>se</i> <span class="v" id="v-cal-se">0.90</span>
@@ -268,7 +271,8 @@ footer{border-top:1px solid var(--line);margin-top:40px;padding:44px 0 56px;}
         </label>
         <div class="readout">diagnostic power <b class="tnum" id="o-cal-d">1.76</b> nats</div>
       </div>
-    </div>
+      <figcaption class="vizcap">Interactive: vote distributions under both hypotheses — the gap between them is the diagnostic power D.</figcaption>
+    </figure>
 
     <p class="analogy">A witness's credibility measured in nats. A coin-flip witness tells you nothing however many times they testify.</p>
     <div class="tags">
@@ -289,7 +293,7 @@ footer{border-top:1px solid var(--line);margin-top:40px;padding:44px 0 56px;}
       <span class="frac"><span class="num"><i>τ</i></span><span class="den"><i>C</i><sub>defect</sub></span></span>
     </div>
 
-    <div class="viz">
+    <figure class="viz">
       <div class="canvas-wrap"><canvas id="c-defect" width="1040" height="300" role="img" aria-label="Required confidence rising as the defect cost grows"></canvas></div>
       <div class="ctl">
         <label>defect cost <i>C</i><sub>defect</sub> <span class="v" id="v-def-c">$126</span>
@@ -297,7 +301,8 @@ footer{border-top:1px solid var(--line);margin-top:40px;padding:44px 0 56px;}
         </label>
         <div class="readout">required confidence <b class="tnum" id="o-def-cstar">96.0%</b> &nbsp;·&nbsp; ≈ <b class="tnum" id="o-def-n">2</b> samples</div>
       </div>
-    </div>
+      <figcaption class="vizcap">Interactive: the required confidence rising as the defect cost grows.</figcaption>
+    </figure>
 
     <p class="analogy">You demand far more certainty before heart surgery than before a haircut — the bar scales with what a mistake costs.</p>
     <div class="tags">
@@ -319,7 +324,7 @@ footer{border-top:1px solid var(--line);margin-top:40px;padding:44px 0 56px;}
       <span class="op">≥</span> <span class="cyv">2</span>
     </div>
 
-    <div class="viz">
+    <figure class="viz">
       <div class="canvas-wrap"><canvas id="c-perc" width="1040" height="400" role="img" aria-label="Random dependency graph; the giant component appears as mean degree crosses the percolation threshold"></canvas></div>
       <div class="ctl">
         <label>mean degree ⟨<i>k</i>⟩ <span class="v" id="v-perc-k">1.8</span>
@@ -328,7 +333,8 @@ footer{border-top:1px solid var(--line);margin-top:40px;padding:44px 0 56px;}
         <button id="b-perc-re" type="button">↻ resample graph</button>
         <div class="readout"><b class="tnum" id="o-perc-kappa">2.7</b> = κ &nbsp;·&nbsp; <b id="o-perc-state">cascade core</b> &nbsp;·&nbsp; giant <b class="tnum" id="o-perc-frac">72%</b></div>
       </div>
-    </div>
+      <figcaption class="vizcap">Interactive: a random dependency graph where the giant component appears as κ crosses 2.</figcaption>
+    </figure>
 
     <p class="analogy">The epidemic threshold R₀ — below it a change stays local; above it, one edit can infect the whole graph.</p>
     <div class="tags">
@@ -353,7 +359,7 @@ footer{border-top:1px solid var(--line);margin-top:40px;padding:44px 0 56px;}
       <span class="op" style="font-size:1.3em;">√</span><span class="rt"><span class="frac"><span class="num">1 − <i>s</i></span><span class="den"><i>k</i></span></span></span>
     </div>
 
-    <div class="viz">
+    <figure class="viz">
       <div class="canvas-wrap"><canvas id="c-amdahl" width="1040" height="360" role="img" aria-label="Speedup curve versus number of agents, with the optimal n-star marker"></canvas></div>
       <div class="ctl">
         <label>serial fraction <i>s</i> <span class="v" id="v-amd-s">0.05</span>
@@ -364,7 +370,8 @@ footer{border-top:1px solid var(--line);margin-top:40px;padding:44px 0 56px;}
         </label>
         <div class="readout">optimum <b class="tnum" id="o-amd-n">6.9</b> agents &nbsp;·&nbsp; peak speedup <b class="tnum" id="o-amd-s">×3.1</b></div>
       </div>
-    </div>
+      <figcaption class="vizcap">Interactive: the speedup curve versus agent count, with the optimal n★ marked.</figcaption>
+    </figure>
 
     <p class="analogy">Adding cooks to a kitchen: past n★ they spend more time coordinating than cooking.</p>
     <div class="tags">
@@ -387,7 +394,7 @@ footer{border-top:1px solid var(--line);margin-top:40px;padding:44px 0 56px;}
       useful <span class="op">=</span> <i>L</i> <span class="op">·</span> <i>ρ</i>
     </div>
 
-    <div class="viz">
+    <figure class="viz">
       <div class="canvas-wrap"><canvas id="c-entropy" width="1040" height="260" role="img" aria-label="Useful tokens shrinking as context redundancy rises"></canvas></div>
       <div class="ctl">
         <label>context redundancy <span class="v" id="v-ent-r">40%</span>
@@ -395,7 +402,8 @@ footer{border-top:1px solid var(--line);margin-top:40px;padding:44px 0 56px;}
         </label>
         <div class="readout">ρ = <b class="tnum" id="o-ent-rho">0.60</b> &nbsp;·&nbsp; useful <b class="tnum" id="o-ent-u">120k</b> of 200k</div>
       </div>
-    </div>
+      <figcaption class="vizcap">Interactive: useful tokens shrinking as context redundancy rises.</figcaption>
+    </figure>
 
     <p class="analogy">Signal-to-noise: a short, sharp briefing beats a rambling transcript ten times its length.</p>
     <div class="tags">
