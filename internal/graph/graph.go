@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 // Package graph reads a code dependency graph (graph.json, as produced by
 // Graphify or any tree-sitter indexer) and computes a file's blast radius — how
 // much other code transitively depends on it. Hydra feeds blast radius into the

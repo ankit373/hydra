@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 // Package ledger is Hydra's local MCP accountability ledger: an append-only
 // record of what every agent was allowed to touch and did. A policy gate decides
 // allow/deny for each tool/resource access and writes the decision to the ledger,

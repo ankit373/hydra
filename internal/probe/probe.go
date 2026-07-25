@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 // Package probe orchestrates all registered providers and returns a ranked
 // list of available Heads with a recommended Cortex.
 package probe

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 // Package build exposes version metadata injected at build time via -ldflags.
 package build
 

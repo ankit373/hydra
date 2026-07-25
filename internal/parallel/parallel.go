@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 // Package parallel fans N independent tasks out to N Hydra Heads simultaneously.
 // It is the Go port of dispatch/parallel.sh.
 package parallel

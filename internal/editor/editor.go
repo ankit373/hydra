@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 // Package editor provides atomic, validated, rollback-safe file editing via
 // Hydra Heads. It is the Go port of dispatch/edit.sh.
 package editor
