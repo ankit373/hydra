@@ -54,7 +54,7 @@ func main() {
 	select {
 	case latest := <-updateCh:
 		if latest != "" {
-			fmt.Fprintf(os.Stderr, "\n  %s  hydra %s is available → brew upgrade hydra\n",
+			fmt.Fprintf(os.Stderr, "\n  %s  hyctl %s is available → brew upgrade hyctl\n",
 				lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Render("✦"),
 				latest,
 			)
@@ -66,7 +66,7 @@ func main() {
 
 func rootCmd() *cobra.Command {
 	root := &cobra.Command{
-		Use:   "hydra",
+		Use:   "hyctl",
 		Short: "Multi-model AI orchestration — one Cortex, many Heads",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if !config.Exists() {

@@ -10,7 +10,7 @@ before:
 builds:
   - id: hydra
     main: ./cmd/hydra
-    binary: hydra
+    binary: hyctl
     env:
       - CGO_ENABLED=0
     flags:
@@ -40,7 +40,8 @@ archives:
       - tar.gz
     format_overrides:
       - goos: windows
-        format: zip
+        formats:
+          - zip
     name_template: >-
       {{ .ProjectName }}_
       {{- .Version }}_
@@ -77,30 +78,13 @@ sboms:
       - "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}.sbom.json"
 
 # ── Homebrew Tap ──────────────────────────────────────────────────────────────
-
-brews:
-  - name: hydra
-    repository:
-      owner: ankit373
-      name: homebrew-hydra
-      branch: main
-      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
-    commit_author:
-      name: goreleaser-bot
-      email: goreleaser@uvansa.com
-    commit_msg_template: "chore: bump hydra to {{ .Tag }}"
-    directory: Formula
-    homepage: "https://hydra.uvansa.com"
-    description: "Multi-model AI orchestration — one Cortex, many Heads"
-    license: MIT
-    dependencies:
-      - name: jq
-      - name: yq
-      - name: bun
-    install: |
-      bin.install "hydra"
-    test: |
-      assert_match version.to_s, shell_output("#{bin}/hydra version")
+# The tap formula (ankit373/homebrew-hydra → Formula/hyctl.rb) is currently
+# maintained by scripts/update-tap-formula.sh, which regenerates it from the
+# release archive + checksums after each release. GoReleaser's native `brews:`
+# automation is intentionally disabled until a cross-repo push token
+# (HOMEBREW_TAP_GITHUB_TOKEN) is added as a repo secret — the default
+# GITHUB_TOKEN cannot push to the separate tap repository. To re-enable
+# automation, add that secret and restore a `brews:` block here.
 
 # ── Changelog ─────────────────────────────────────────────────────────────────
 
@@ -134,8 +118,9 @@ release:
     ---
     **Install / Upgrade**
     ```bash
-    brew install ankit373/hydra/hydra   # first install
-    brew upgrade hydra                   # upgrade
+    brew tap ankit373/hydra   # first install (one-time)
+    brew install hyctl
+    brew upgrade hyctl        # upgrade
     ```
     **Verify (after cosign enabled)**
     ```bash
