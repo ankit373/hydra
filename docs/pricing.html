@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pricing — Hydra is $0</title>
+  <meta name="description" content="Hydra is free and open source. No seats, no tiers, no telemetry. You bring your own API keys and pay the model providers directly — Hydra just makes you pay them 70–85% less. Want Hydra customised or built out for your stack? Get in touch.">
+  <meta name="keywords" content="Hydra pricing, free LLM router, open source AI orchestration, bring your own keys">
+
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://hydra.uvansa.com/pricing.html">
+  <meta property="og:title" content="Pricing — Hydra is $0">
+  <meta property="og:description" content="Free and open source. You pay the models, not us — and Hydra makes you pay them less. Custom builds on request.">
+  <meta property="og:image" content="https://hydra.uvansa.com/logo.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:site" content="@ankit373">
+  <meta name="twitter:title" content="Pricing — Hydra is $0">
+  <meta name="twitter:description" content="Free and open source. Bring your own keys; Hydra cuts the bill 70–85%.">
+  <meta name="twitter:image" content="https://hydra.uvansa.com/logo.png">
+
+  <link rel="canonical" href="https://hydra.uvansa.com/pricing.html">
+  <link rel="icon" type="image/png" href="logo.png">
+  <link rel="ai-context" href="https://hydra.uvansa.com/llms.txt" type="text/plain">
+  <link rel="ai-pricing" href="https://hydra.uvansa.com/pricing.md" type="text/markdown">
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    "name": "Hydra",
+    "description": "Open source multi-model AI orchestration CLI. Free to use.",
+    "url": "https://hydra.uvansa.com/pricing.html",
+    "brand": { "@type": "Brand", "name": "Hydra" },
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD",
+      "availability": "https://schema.org/InStock",
+      "url": "https://hydra.uvansa.com/"
+    }
+  }
+  </script>
+
+<style>
+:root{
+  color-scheme:dark;
+  --bg:#06070F;--bg2:#0A0C18;--panel:rgba(18,20,38,.62);
+  --line:rgba(150,140,255,.16);--line-2:rgba(150,140,255,.30);
+  --ink:#E7E9F5;--dim:#9aa0c4;--faint:#5a5f85;
+  --cyan:#2AF0E0;--aqua:#00E6C3;--violet:#8B5CF6;--magenta:#E852C8;
+  --cheap:#3FD98A;--mid:#E0A93A;--exp:#FF5A6E;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,Roboto,Helvetica,Arial,sans-serif;
+  --mono:ui-monospace,"JetBrains Mono","SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+  --maxw:1120px;
+}
+*{box-sizing:border-box;}
+html{scroll-behavior:smooth;}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto;}}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.6;
+  overflow-x:hidden;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;}
+.wrap{max-width:var(--maxw);margin:0 auto;padding:0 24px;}
+a{color:inherit;text-decoration:none;}
+::selection{background:rgba(0,230,195,.28);color:#fff;}
+:focus-visible{outline:2px solid var(--aqua);outline-offset:3px;border-radius:4px;}
+.mono{font-family:var(--mono);}
+.tnum{font-variant-numeric:tabular-nums;}
+.grad{background:linear-gradient(96deg,var(--cyan) 4%,#7FA8FF 40%,var(--violet) 66%,var(--magenta) 98%);
+  -webkit-background-clip:text;background-clip:text;color:transparent;}
+.gcheap{background:linear-gradient(90deg,var(--cheap),var(--cyan));-webkit-background-clip:text;background-clip:text;color:transparent;}
+
+/* top nav */
+.topbar{position:sticky;top:0;z-index:60;display:flex;align-items:center;gap:14px;height:52px;padding:0 24px;
+  font-family:var(--mono);font-size:12.5px;background:rgba(6,7,15,.72);backdrop-filter:blur(14px);
+  border-bottom:1px solid var(--line);}
+.topbar .mark{font-weight:800;letter-spacing:1.5px;font-size:15px;
+  background:linear-gradient(90deg,var(--cyan),var(--violet) 55%,var(--magenta));
+  -webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 0 10px rgba(120,90,255,.4));}
+.topbar .pill{font-size:10.5px;color:var(--faint);border:1px solid var(--line);border-radius:20px;padding:2px 9px;}
+.topbar .grow{flex:1;}
+.topbar nav{display:flex;gap:20px;}
+.topbar nav a{color:var(--dim);transition:color .15s;}
+.topbar nav a:hover,.topbar nav a.here{color:var(--aqua);}
+.topbar .ghost{border:1px solid var(--line-2);border-radius:6px;padding:5px 12px;color:var(--ink);}
+.topbar .ghost:hover{border-color:var(--aqua);color:var(--aqua);}
+@media(max-width:720px){.topbar nav{display:none;}}
+
+/* ── hero: statement + a receipt that totals zero ── */
+.hero{position:relative;overflow:hidden;padding:64px 0 46px;}
+#aurora{position:absolute;inset:0;width:100%;height:100%;z-index:0;opacity:.85;}
+.hero .wrap{position:relative;z-index:1;display:grid;grid-template-columns:1.05fr .95fr;gap:52px;align-items:center;}
+@media(max-width:860px){.hero .wrap{grid-template-columns:1fr;gap:36px;}}
+.eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:4px;text-transform:uppercase;color:var(--aqua);margin-bottom:18px;}
+.hero h1{font-size:clamp(40px,6.6vw,74px);line-height:1.0;letter-spacing:-2px;font-weight:800;}
+.hero h1 em{font-style:normal;}
+.hero .sub{font-size:clamp(15px,1.9vw,18px);color:var(--dim);max-width:44ch;margin:22px 0 0;}
+.hero .sub b{color:var(--ink);font-weight:600;}
+.nos{display:flex;flex-wrap:wrap;gap:8px 8px;margin-top:26px;font-family:var(--mono);font-size:12px;}
+.nos span{border:1px solid var(--line);border-radius:20px;padding:6px 12px;color:var(--dim);background:rgba(20,22,44,.4);}
+.nos span i{color:var(--exp);font-style:normal;font-weight:700;margin-right:4px;}
+
+/* receipt */
+.receipt{font-family:var(--mono);background:linear-gradient(180deg,rgba(16,18,36,.92),rgba(9,10,22,.92));
+  border:1px solid var(--line-2);border-radius:16px;padding:26px 26px 30px;position:relative;
+  box-shadow:0 30px 80px rgba(0,0,0,.5),0 0 0 1px rgba(0,230,195,.06),0 0 60px rgba(120,90,255,.14);}
+.receipt::before,.receipt::after{content:"";position:absolute;left:14px;right:14px;height:10px;
+  background:repeating-linear-gradient(90deg,transparent 0 8px,var(--bg) 8px 16px);}
+.receipt::before{top:-5px;} .receipt::after{bottom:-5px;}
+.rhead{display:flex;justify-content:space-between;align-items:center;font-size:11.5px;color:var(--faint);letter-spacing:1px;}
+.rhead b{color:var(--ink);font-weight:600;letter-spacing:.5px;}
+.rhead .tag{color:var(--cheap);border:1px solid rgba(63,217,138,.4);border-radius:5px;padding:2px 7px;font-size:10px;}
+.rdash{border-top:1px dashed var(--line-2);margin:16px 0;}
+.ritem{display:flex;justify-content:space-between;font-size:13px;color:var(--dim);padding:5px 0;}
+.ritem .z{color:var(--faint);}
+.rtotal{display:flex;justify-content:space-between;align-items:baseline;margin-top:8px;}
+.rtotal .lbl{font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--faint);}
+.rtotal .amt{font-size:clamp(44px,8vw,76px);font-weight:800;letter-spacing:-2px;line-height:.9;
+  background:linear-gradient(180deg,#eafcff,var(--cyan) 40%,var(--aqua) 90%);
+  -webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 4px 30px rgba(0,230,195,.4));}
+.rfoot{font-size:11px;color:var(--faint);margin-top:14px;text-align:center;letter-spacing:.5px;}
+
+.scrollhint{position:relative;z-index:1;text-align:center;margin-top:36px;font-family:var(--mono);font-size:11px;
+  letter-spacing:2px;text-transform:uppercase;color:var(--faint);}
+
+/* ── sections ── */
+.blk{padding:74px 0;border-top:1px solid var(--line);}
+.klabel{font-family:var(--mono);font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--faint);
+  display:flex;gap:10px;align-items:center;margin-bottom:16px;}
+.klabel b{color:var(--aqua);font-weight:500;}
+.big{font-size:clamp(28px,4.6vw,46px);font-weight:770;letter-spacing:-1px;text-wrap:balance;line-height:1.05;}
+.lede{color:var(--dim);font-size:16px;max-width:66ch;margin:16px 0 0;}
+.lede b{color:var(--ink);font-weight:600;}
+
+/* savings engine */
+.engine{margin-top:34px;border:1px solid var(--line-2);border-radius:20px;overflow:hidden;
+  background:linear-gradient(180deg,rgba(14,16,32,.7),rgba(9,10,22,.7));}
+.engine .top{padding:28px 30px 6px;}
+.slabel{display:flex;justify-content:space-between;align-items:flex-end;font-family:var(--mono);font-size:12.5px;color:var(--dim);}
+.slabel .amt{font-size:clamp(26px,4vw,40px);font-weight:800;letter-spacing:-1px;color:var(--ink);}
+.slider{-webkit-appearance:none;appearance:none;width:100%;height:6px;border-radius:6px;margin:18px 0 2px;
+  background:linear-gradient(90deg,var(--cyan),var(--violet),var(--magenta));outline:none;cursor:pointer;}
+.slider::-webkit-slider-thumb{-webkit-appearance:none;width:20px;height:20px;border-radius:50%;background:#fff;
+  box-shadow:0 0 0 4px rgba(0,230,195,.25),0 0 16px rgba(0,230,195,.7);cursor:pointer;}
+.slider::-moz-range-thumb{width:20px;height:20px;border:0;border-radius:50%;background:#fff;
+  box-shadow:0 0 0 4px rgba(0,230,195,.25),0 0 16px rgba(0,230,195,.7);cursor:pointer;}
+.srange{display:flex;justify-content:space-between;font-family:var(--mono);font-size:10.5px;color:var(--faint);margin-top:4px;}
+
+/* the flow bar */
+.flowbar{margin:22px 30px 4px;height:58px;border-radius:12px;background:rgba(6,7,15,.55);
+  border:1px solid var(--line);display:flex;overflow:hidden;position:relative;}
+.flowbar .seg{height:100%;display:flex;align-items:center;justify-content:center;font-family:var(--mono);
+  font-size:12px;font-weight:600;transition:width .25s ease;white-space:nowrap;overflow:hidden;}
+.flowbar .keep{background:linear-gradient(90deg,rgba(63,217,138,.9),rgba(42,240,224,.85));color:#04140c;}
+.flowbar .pay{background:linear-gradient(90deg,rgba(139,92,246,.85),rgba(232,82,200,.8));color:#0a0416;}
+.flowbar .rest{flex:1;color:var(--faint);font-family:var(--mono);font-size:11px;display:flex;align-items:center;padding-left:12px;}
+
+.stat3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px;background:var(--line);margin-top:26px;
+  border-top:1px solid var(--line);}
+@media(max-width:680px){.stat3{grid-template-columns:1fr;}}
+.stat3 .s{background:var(--bg2);padding:22px 26px;}
+.stat3 .t{font-family:var(--mono);font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--faint);}
+.stat3 .n{font-size:clamp(26px,4vw,38px);font-weight:800;letter-spacing:-1px;margin-top:8px;}
+.stat3 .frontier .n{color:var(--dim);text-decoration:line-through;text-decoration-color:var(--exp);text-decoration-thickness:2px;}
+.stat3 .keepn .n{color:var(--cheap);}
+.stat3 .payn .n{color:var(--violet);}
+.stat3 .d{font-size:12.5px;color:var(--faint);margin-top:4px;}
+
+.feebar{display:flex;align-items:center;gap:16px;flex-wrap:wrap;justify-content:center;padding:20px 26px;
+  border-top:1px solid var(--line);background:rgba(0,230,195,.05);}
+.feebar .lab{font-family:var(--mono);font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--dim);}
+.feebar .fee{font-size:clamp(28px,4.5vw,44px);font-weight:800;letter-spacing:-1px;color:var(--aqua);
+  filter:drop-shadow(0 0 18px rgba(0,230,195,.35));}
+.feebar .always{font-family:var(--mono);font-size:12px;color:var(--cheap);border:1px solid rgba(63,217,138,.35);
+  border-radius:20px;padding:5px 12px;}
+.enote{color:var(--faint);font-size:13px;margin:16px 4px 0;font-family:var(--mono);}
+
+/* free forever */
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px 34px;margin-top:30px;}
+@media(max-width:720px){.grid2{grid-template-columns:1fr;}}
+.ln{display:flex;gap:12px;align-items:flex-start;color:var(--dim);font-size:15px;}
+.ln .k{color:var(--cheap);flex:none;font-family:var(--mono);}
+.ln b{color:var(--ink);font-weight:600;}
+
+/* custom CTA */
+.cta-blk{text-align:center;padding:96px 0 44px;border-top:1px solid var(--line);position:relative;}
+.cta-blk .big span{display:block;}
+.cta{display:inline-flex;align-items:center;gap:12px;margin-top:28px;font-family:var(--mono);font-size:15px;
+  padding:17px 32px;border-radius:12px;color:#06070F;font-weight:700;letter-spacing:.3px;
+  background:linear-gradient(96deg,var(--cyan),var(--violet) 60%,var(--magenta));
+  box-shadow:0 12px 44px rgba(120,90,255,.38);transition:transform .16s,box-shadow .16s;}
+.cta:hover{transform:translateY(-2px);box-shadow:0 16px 58px rgba(120,90,255,.55);}
+.cta-note{color:var(--faint);font-family:var(--mono);font-size:12px;margin-top:16px;}
+
+footer{border-top:1px solid var(--line);padding:44px 0 56px;}
+.foot{display:flex;flex-wrap:wrap;gap:24px;align-items:center;justify-content:space-between;}
+.foot .mark{font-weight:800;font-size:20px;letter-spacing:1.5px;
+  background:linear-gradient(90deg,var(--cyan),var(--violet) 55%,var(--magenta));
+  -webkit-background-clip:text;background-clip:text;color:transparent;}
+.foot p{color:var(--faint);font-size:13px;margin:6px 0 0;}
+.foot nav{display:flex;gap:20px;font-family:var(--mono);font-size:12.5px;}
+.foot nav a{color:var(--dim);}.foot nav a:hover{color:var(--aqua);}
+
+.reveal{opacity:0;transform:translateY(18px);transition:opacity .6s ease,transform .6s ease;}
+.reveal.in{opacity:1;transform:none;}
+@media(prefers-reduced-motion:reduce){.reveal{opacity:1;transform:none;transition:none;}}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <a class="mark" href="/">HYDRA</a>
+  <span class="pill">free · open</span>
+  <span class="grow"></span>
+  <nav>
+    <a href="/docs.html">Docs</a>
+    <a href="/first-principles.html">First principles</a>
+    <a href="/pricing.html" class="here">Pricing</a>
+    <a href="https://github.com/ankit373/hydra">GitHub</a>
+  </nav>
+  <a class="ghost" href="/">← home</a>
+</div>
+
+<section class="hero">
+  <canvas id="aurora" aria-hidden="true"></canvas>
+  <div class="wrap">
+    <div>
+      <div class="eyebrow">pricing</div>
+      <h1>We never<br>send you<br><em class="grad">an invoice.</em></h1>
+      <p class="sub">Hydra is open source. You bring your own keys and pay the <b>model providers</b> directly — Hydra just makes that bill <b>70–85% smaller</b>. Our cut of it is, and always will be, zero.</p>
+      <div class="nos">
+        <span><i>no</i>seats</span><span><i>no</i>tiers</span><span><i>no</i>trial</span>
+        <span><i>no</i>telemetry</span><span><i>no</i>lock-in</span><span><i>no</i>invoice</span>
+      </div>
+    </div>
+
+    <div class="receipt" role="img" aria-label="An itemized receipt from Hydra totaling zero dollars">
+      <div class="rhead"><b>HYDRA — Trust Control Plane</b><span class="tag">OPEN SOURCE</span></div>
+      <div class="rdash"></div>
+      <div class="ritem"><span>License</span><span class="z">$0.00</span></div>
+      <div class="ritem"><span>Seats × ∞</span><span class="z">$0.00</span></div>
+      <div class="ritem"><span>Dispatches · unlimited</span><span class="z">$0.00</span></div>
+      <div class="ritem"><span>Every feature, every command</span><span class="z">$0.00</span></div>
+      <div class="ritem"><span>Telemetry surcharge</span><span class="z">$0.00</span></div>
+      <div class="rdash"></div>
+      <div class="rtotal"><span class="lbl">Amount due</span><span class="amt">$0.00</span></div>
+      <div class="rfoot">— thank you for routing responsibly —</div>
+    </div>
+  </div>
+  <div class="scrollhint">↓ so what <em>do</em> you pay?</div>
+</section>
+
+<!-- SAVINGS ENGINE -->
+<section class="blk wrap reveal" id="engine-sec">
+  <div class="klabel"><span>the only bill</span><b>goes to the models — and Hydra shrinks it</b></div>
+  <h2 class="big">Move the slider. <span class="gcheap">Watch what we take.</span></h2>
+  <p class="lede">Route everything through a frontier model and you pay frontier prices on every task. Hydra sends each task to the cheapest head that clears the bar — most land on free local models. <b>Whatever you were going to spend, Hydra's fee stays pinned at zero.</b></p>
+
+  <div class="engine">
+    <div class="top">
+      <div class="slabel"><span>your monthly spend, everything → frontier</span><span class="amt tnum" id="e-frontier">$1,000</span></div>
+      <input id="e-slider" class="slider" type="range" min="0" max="100" step="1" value="50" aria-label="Your monthly frontier-model spend">
+      <div class="srange"><span>$100</span><span>$1,000</span><span>$10,000</span></div>
+    </div>
+
+    <div class="flowbar" aria-hidden="true">
+      <div class="seg keep" id="e-seg-keep">you keep</div>
+      <div class="seg pay" id="e-seg-pay">providers</div>
+      <div class="rest" id="e-seg-rest">$0 → Hydra</div>
+    </div>
+
+    <div class="stat3">
+      <div class="s frontier"><div class="t">frontier-only bill</div><div class="n tnum" id="e-num-frontier">$1,000</div><div class="d">the naive way — one expensive model for everything</div></div>
+      <div class="s payn"><div class="t">with Hydra · to providers</div><div class="n tnum" id="e-num-pay">$200</div><div class="d">cheapest head that clears the bar · free local floor</div></div>
+      <div class="s keepn"><div class="t">you keep</div><div class="n tnum" id="e-num-keep">$800</div><div class="d">back in your pocket, every month</div></div>
+    </div>
+
+    <div class="feebar">
+      <span class="lab">Hydra's fee</span>
+      <span class="fee tnum">$0.00</span>
+      <span class="always">always — it never moves</span>
+    </div>
+  </div>
+  <p class="enote">Illustrative at ~80% routing efficiency (a typical coding session where most tasks are simple/standard). Your real numbers come from <span style="color:var(--cyan)">hydra stats</span>.</p>
+</section>
+
+<!-- FREE, NO ASTERISKS -->
+<section class="blk wrap reveal">
+  <div class="klabel"><span>free forever</span><b>what "free" actually means here</b></div>
+  <h2 class="big">No asterisks.</h2>
+  <div class="grid2">
+    <div class="ln"><span class="k">✓</span><span><b>No subscription, no seats.</b> Install it on every machine you own.</span></div>
+    <div class="ln"><span class="k">✓</span><span><b>No usage limits.</b> Hydra never meters dispatches — providers do their own billing.</span></div>
+    <div class="ln"><span class="k">✓</span><span><b>No telemetry.</b> Routing, cost logs, and calibration stay on your machine.</span></div>
+    <div class="ln"><span class="k">✓</span><span><b>No lock-in.</b> Provider-neutral by design — swap heads, go fully local, leave anytime.</span></div>
+    <div class="ln"><span class="k">✓</span><span><b>Open to inspect.</b> The source is public — see exactly how every routing and policy decision is made.</span></div>
+    <div class="ln"><span class="k">✓</span><span><b>A $0 path always exists.</b> With Ollama the terminal fallback is a free local model.</span></div>
+  </div>
+</section>
+
+<!-- THE ONE PAID THING -->
+<section class="cta-blk wrap reveal">
+  <div class="klabel" style="justify-content:center;"><span>the one thing that isn't free</span></div>
+  <h2 class="big"><span>Want Hydra <span class="grad">customised</span> —</span><span>or built out for your stack?</span></h2>
+  <p class="lede" style="margin:16px auto 0;">A routing policy shaped around your models. A trust ledger wired into your systems. A private, on-prem deployment. Capabilities only your team needs. The open-source Hydra stays <b>free and complete</b> — this isn't a paid tier, it's the bespoke build we take on <b>with you</b>.</p>
+  <a class="cta" id="contact" href="/" rel="nofollow">Let's build it →</a>
+  <div class="cta-note" id="contact-note">opens your mail app · no address here for bots to harvest</div>
+</section>
+
+<footer>
+  <div class="wrap foot">
+    <div>
+      <a class="mark" href="/">HYDRA</a>
+      <p>The Trust Control Plane for AI development. Free, open source, provider-neutral. <span style="opacity:.6">MIT.</span></p>
+    </div>
+    <nav>
+      <a href="/">Home</a>
+      <a href="/docs.html">Docs</a>
+      <a href="/first-principles.html">First principles</a>
+      <a href="https://github.com/ankit373/hydra">GitHub</a>
+    </nav>
+  </div>
+</footer>
+
+<script>
+(function(){
+  "use strict";
+  var REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // ── obfuscated mailto (assembled at runtime; no raw address in the HTML) ──
+  var addr=['ankit','.','jha'].join('')+'@'+['uvansa','com'].join('.');
+  var subject=encodeURIComponent('Custom build on Hydra');
+  var body=encodeURIComponent("Hi Ankit,\n\nWe'd like to explore customising Hydra for our stack:\n\n- What we want:\n- Our stack:\n- Rough timeline:\n\nThanks!");
+  var a=document.getElementById('contact');
+  if(a){ a.href='mailto:'+addr+'?subject='+subject+'&body='+body; }
+
+  // ── savings engine ──
+  var EFF=0.80, MAX=10000;
+  var sl=document.getElementById('e-slider');
+  var elFrontierTop=document.getElementById('e-frontier'),
+      elFrontier=document.getElementById('e-num-frontier'),
+      elPay=document.getElementById('e-num-pay'),
+      elKeep=document.getElementById('e-num-keep'),
+      segKeep=document.getElementById('e-seg-keep'),
+      segPay=document.getElementById('e-seg-pay'),
+      segRest=document.getElementById('e-seg-rest');
+  function money(n){ return '$'+Math.round(n).toLocaleString(); }
+  function spendFor(t){ // log map $100 → $10,000
+    var v=100*Math.pow(100, t/100);
+    // round to a clean step
+    var step = v<1000?10 : v<3000?50 : 100;
+    return Math.round(v/step)*step;
+  }
+  function render(){
+    var F=spendFor(+sl.value);
+    var pay=F*(1-EFF), keep=F*EFF;
+    elFrontierTop.textContent=money(F);
+    elFrontier.textContent=money(F);
+    elPay.textContent=money(pay);
+    elKeep.textContent=money(keep);
+    // flow bar: total fills proportional to F/MAX; within it keep vs pay
+    var fill=Math.max(0.06, F/MAX); // fraction of the bar used
+    segKeep.style.width=(fill*EFF*100)+'%';
+    segPay.style.width=(fill*(1-EFF)*100)+'%';
+    segKeep.textContent = fill>0.18 ? 'you keep' : '';
+    segPay.textContent  = fill>0.10 ? 'providers' : '';
+  }
+  if(sl){ sl.addEventListener('input',render); render(); }
+
+  // ── reveal ──
+  if('IntersectionObserver' in window && !REDUCED){
+    var io=new IntersectionObserver(function(es){ es.forEach(function(e){ if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target);} }); }, {threshold:.14});
+    document.querySelectorAll('.reveal').forEach(function(el){ io.observe(el); });
+  } else { document.querySelectorAll('.reveal').forEach(function(el){ el.classList.add('in'); }); }
+
+  // ── aurora background ──
+  var cv=document.getElementById('aurora');
+  if(cv){
+    var ctx=cv.getContext('2d'), dpr=Math.min(window.devicePixelRatio||1,2), w=0,h=0;
+    var blobs=[{x:.24,y:.30,r:.44,c:[42,240,224]},{x:.74,y:.24,r:.42,c:[139,92,246]},{x:.56,y:.72,r:.5,c:[232,82,200]}];
+    function size(){ w=cv.clientWidth; h=cv.clientHeight; cv.width=Math.round(w*dpr); cv.height=Math.round(h*dpr); ctx.setTransform(dpr,0,0,dpr,0,0); }
+    function frame(t){
+      ctx.clearRect(0,0,w,h); ctx.globalCompositeOperation='lighter';
+      for(var i=0;i<blobs.length;i++){ var b=blobs[i];
+        var dx=REDUCED?0:Math.sin(t/3600+i*2.1)*0.035, dy=REDUCED?0:Math.cos(t/4400+i*1.7)*0.035;
+        var cx=(b.x+dx)*w, cy=(b.y+dy)*h, rr=b.r*Math.min(w,h)*1.1;
+        var g=ctx.createRadialGradient(cx,cy,0,cx,cy,rr);
+        g.addColorStop(0,'rgba('+b.c[0]+','+b.c[1]+','+b.c[2]+',0.22)');
+        g.addColorStop(1,'rgba('+b.c[0]+','+b.c[1]+','+b.c[2]+',0)');
+        ctx.fillStyle=g; ctx.beginPath(); ctx.arc(cx,cy,rr,0,7); ctx.fill();
+      }
+      ctx.globalCompositeOperation='source-over';
+      if(!REDUCED) requestAnimationFrame(frame);
+    }
+    size(); addEventListener('resize',function(){ size(); if(REDUCED) frame(0); });
+    if(REDUCED) frame(0); else requestAnimationFrame(frame);
+  }
+})();
+</script>
+</body>
+</html>

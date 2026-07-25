@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 // Package provider defines the interfaces and types every Hydra Head must implement.
 // Add a new model source: implement Provider, call Register in your package's init().
 package provider

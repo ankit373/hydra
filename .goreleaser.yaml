@@ -48,6 +48,7 @@ archives:
       {{- .Arch }}
     files:
       - LICENSE
+      - NOTICE
       - README.md
       - CHANGELOG.md
 

@@ -3,6 +3,7 @@
   "module": "src/index.tsx",
   "type": "module",
   "private": true,
+  "license": "MIT",
   "bin": { "hydra-ui": "./src/index.tsx" },
   "scripts": {
     "start": "bun src/index.tsx",

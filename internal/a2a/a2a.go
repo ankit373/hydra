@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 // Package a2a models agent-to-agent handoffs with causal ordering. Each handoff
 // carries a vector clock so Hydra can tell whether two handoffs are sequential
 // (one happened-before the other) or concurrent — and, when concurrent, whether

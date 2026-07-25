@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 // Package tui contains the Hydra init wizard built with Bubbletea.
 package tui
 

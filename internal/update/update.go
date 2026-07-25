@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 // Package update checks for newer Hydra releases and notifies the user.
 // Matches the pattern used by github.com/cli/cli/internal/update:
 //   - Results cached in ~/.hydra/update_state.json for 24 h

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 // Package budget tracks per-model context window utilisation and enforces
 // the global 70%/75%/80% budget rules defined in CLAUDE.md.
 package budget

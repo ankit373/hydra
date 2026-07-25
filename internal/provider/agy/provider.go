@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 // Package agy discovers Antigravity-backed model tiers by reading
 // registry/models.yaml from the Hydra script home directory.
 // Each enabled agy tier becomes an individual Go Head so the dispatcher

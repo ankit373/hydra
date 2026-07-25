@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 // Package port discovers AI heads running as local HTTP services.
 // To add a new local service: implement a portService and add it to services.
 package port

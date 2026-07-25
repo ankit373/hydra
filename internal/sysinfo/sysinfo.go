@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 // Package sysinfo detects hardware specs relevant to AI model selection.
 package sysinfo
 

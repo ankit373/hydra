@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 // Package config defines Hydra's runtime configuration: Cortex, Heads, policies, skills.
 package config
 

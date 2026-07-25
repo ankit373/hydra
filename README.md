@@ -136,6 +136,84 @@ Every executor is **native Go** — `agy`, Ollama, per-provider HTTP (OpenAI-com
 
 ---
 
+## The Math
+
+Hydra's routing decisions are not heuristics with a confident tone — each one is a named result you can check. Every equation below is either a **theorem we apply** or a **quantity we measure**, tagged so you always know which:
+
+> ⊢ **proven** — an established theorem · ▣ **measured** — computed in-repo, reproducible · ◈ **synthetic** — seeded benchmark, known ground truth · ○ **modeled** — an estimate or proxy
+
+### 1 · Confidence routing — Wald's Sequential Probability Ratio Test
+
+Instead of always polling a fixed number of models, Hydra accumulates the log-likelihood ratio across votes $x_1,\dots,x_n$ and stops the instant the evidence is conclusive:
+
+$$\Lambda_n = \sum_{i=1}^{n} \ln \frac{P(x_i \mid \text{correct})}{P(x_i \mid \text{incorrect})}, \qquad \text{accept if } \Lambda_n \ge A,\ \ \text{reject if } \Lambda_n \le B$$
+
+$$A = \ln\frac{1-\beta}{\alpha}, \qquad B = \ln\frac{\beta}{1-\alpha}$$
+
+for target error rates $\alpha,\beta$. Wald proved this minimizes the **expected number of samples** $E[N]$ among *all* tests with the same error bounds.
+
+*Analogy — a doctor ordering one test at a time and stopping the moment the diagnosis is certain, instead of always running the full panel.*
+⊢ Wald (1945), optimality proven · ◈ −24% (blended) / −49% (easy) samples vs fixed-5 at ≥98% accuracy — reproduce with `hydra trust benchmark` · source: [`internal/trust`](internal/trust)
+
+### 2 · Calibration — diagnostic power `D`
+
+Every source (model or verifier) earns a sensitivity $se=P(\text{says correct}\mid\text{correct})$ and specificity $sp=P(\text{says incorrect}\mid\text{incorrect})$ from real outcomes (a Beta-Bernoulli posterior). A single vote is worth an LLR of $\ln\frac{se}{1-sp}$ (a "correct" vote) or $\ln\frac{1-se}{sp}$ (an "incorrect" vote). Its **diagnostic power** is the expected evidence per vote — the KL divergence between the vote distributions under the two hypotheses, in nats:
+
+$$D = se\,\ln\frac{se}{1-sp} + (1-se)\,\ln\frac{1-se}{sp}$$
+
+A perfectly reliable source has large $D$; a coin-flip source ($se=sp=0.5$) has $D=0$ and contributes nothing no matter how often it votes. A 90%-reliable source gives $D\approx 1.76$ nats.
+
+*Analogy — a witness's credibility, measured in nats. A coin-flip witness tells you nothing however many times they testify.*
+⊢ information theory (KL divergence) · ▣ measured — the 90% → 1.76-nat figure is a table test in [`internal/trust`](internal/trust)
+
+### 3 · When to stop — the defect-cost bar
+
+Confidence isn't free and defects aren't equal, so the required bar is a Bayes-risk decision. The expected loss of shipping an answer believed correct with confidence $c$ is $(1-c)\,C_{\text{defect}}$; ship only when that clears a loss tolerance $\tau$:
+
+$$c^\star = 1 - \frac{\tau}{C_{\text{defect}}}$$
+
+A costlier defect ⟹ a higher confidence bar ⟹ SPRT samples more before it stops. Blast radius (§4) feeds $C_{\text{defect}}$.
+
+*Analogy — you demand far more certainty before heart surgery than before a haircut.*
+⊢ Bayes decision theory · ○ $C_{\text{defect}}$ is a modeled estimate (`hydra trust defect`) · source: [`internal/trust`](internal/trust)
+
+### 4 · Blast radius — Molloy–Reed percolation
+
+Treat the code as a graph with degree mean $\langle k\rangle$ and second moment $\langle k^2\rangle$. A **giant connected component** — a cascade-capable core where one change can ripple everywhere — exists precisely when the Molloy–Reed criterion holds:
+
+$$\kappa = \frac{\langle k^2 \rangle}{\langle k \rangle} \ge 2$$
+
+Files inside a high-$\kappa$ core get their confidence bar raised: an edit to a hub everything imports must be far surer than an edit to a leaf helper.
+
+*Analogy — the epidemic threshold $R_0$: below it a change stays local; above it, one edit can infect the whole graph.*
+⊢ Molloy–Reed (1995), proven · ▣ computed from `graph.json` in [`internal/graph`](internal/graph) — see `hydra graph blast`
+
+### 5 · Optimal parallelism — Amdahl + coordination
+
+Fanning work across $n$ agents speeds the parallel part but adds coordination cost that grows with $n$. With serial fraction $s$ and per-agent coupling $k$, wall-clock time is
+
+$$T(n) = s + \frac{1-s}{n} + k\,n \quad\xrightarrow{\ \frac{dT}{dn}=0\ }\quad n^\star = \sqrt{\frac{1-s}{k}}$$
+
+Independent files (small $k$) → fan out to ~6 agents; tightly-coupled edits to the same subgraph (large $k$) → ~2. More is slower.
+
+*Analogy — adding cooks to a kitchen: past $n^\star$ they spend more time coordinating than cooking.*
+⊢ Amdahl (1967) + coordination term · ▣ $k$ derived from graph coupling in [`internal/optimal`](internal/optimal) — see `hydra graph parallel`
+
+### 6 · Context governor — signal density, not length
+
+A context window's value is its information density, not its token count. Hydra proxies the entropy rate with a compression ratio $\rho\in(0,1]$ and counts only the *useful* tokens:
+
+$$\rho = \frac{\lvert \text{gzip}(C) \rvert}{\lvert C \rvert}, \qquad \text{useful tokens} = L \cdot \rho$$
+
+Highly compressible context (repetitive, stale) has low $\rho$ and few useful tokens — so Hydra compacts on **falling $\rho$**, not on raw length. A dense 100k window beats a noisy 1M one.
+
+*Analogy — signal-to-noise: a short, sharp briefing beats a rambling transcript ten times its length.*
+⊢ Shannon source-coding (entropy rate) · ○ gzip is a proxy, not a proof — a heuristic · source: [`internal/entropy`](internal/entropy) — see `hydra context entropy`
+
+> **See it move.** The interactive derivations — the SPRT log-odds walk hitting its boundaries, the percolation phase transition at $\kappa=2$, the Amdahl curve with its $n^\star$ marker, and the KL overlap that *is* `D` — live on the [**First Principles** page](https://hydra.uvansa.com/first-principles.html).
+
+---
+
 ## Features
 
 ### 🔍 Zero-Config Discovery
@@ -292,7 +370,7 @@ hydra dispatch --confidence 0.90 --file internal/auth/token.go "rotate the signi
 
 In synthetic benchmarks this cuts model calls **~49% on easy tasks** and **~24% on a blended workload** at ≥98% accuracy — while deliberately sampling *more* than a fixed swarm on genuinely hard tasks, which a fixed-N ensemble cannot do. Calibration is cold-start conservative: with no history, sources are treated as uninformative and Hydra falls back to sampling broadly.
 
-> The SPRT ensemble, calibration engine, and defect-cost model have shipped. Graph-aware (blast-radius) routing, a local MCP accountability ledger, and a pluggable verification-oracle interface are on the [roadmap](#roadmap).
+> The SPRT ensemble, calibration engine, defect-cost model, graph-aware (blast-radius) routing, the local MCP accountability ledger, and verification oracles have all shipped. A central security agent and a web dashboard are on the [roadmap](#roadmap).
 
 ---
 
@@ -310,7 +388,7 @@ In synthetic benchmarks this cuts model calls **~49% on easy tasks** and **~24% 
 | Swarm dispatch (race / best / all) | ✅ | ❌ | ❌ | ❌ |
 | Route to a **confidence of correctness** (SPRT) | ✅ | ❌ | ❌ | ❌ |
 | Per-source calibration (sensitivity / specificity / D) | ✅ | ❌ | ❌ | ❌ |
-| MCP accountability ledger *(roadmap)* | 🔨 | ❌ | ❌ | ❌ |
+| MCP accountability ledger | ✅ | ❌ | ❌ | ❌ |
 | Central security agent *(roadmap)* | 🔨 | ❌ | ❌ | ❌ |
 
 ---
@@ -351,6 +429,7 @@ The wizard scans your machine, ranks every model it finds, walks you through pic
 hydra init                              # first-run wizard
 hydra probe                             # scan and display all available models
 hydra status                            # live system state (heads, budget bars, burn-rate risk)
+hydra tui                               # interactive cockpit — chat+code / dashboard / agent-tree (Tab cycles)
 
 # Model registry (add a new model at runtime — no rebuild)
 hydra models list                       # built-in + your models, by capability score
@@ -479,20 +558,10 @@ For Ollama models, add a family pattern:
 | **Runtime model registry** — `hydra models add` merges a `~/.hydra/models.json` overlay, no rebuild | ✅ Shipped |
 | **Percolation-κ blast radius** — Molloy–Reed core detection weights hub files higher | ✅ Shipped |
 | **Rate-aware budget governor** — first-passage-time risk on `claude_pct`, escalates before a threshold | ✅ Shipped |
-| Outcome auto-wiring (tests / review / revert → calibration) | 🔨 Building |
 | MCP server registry + central security agent | 📋 [#9](https://github.com/ankit373/hydra/issues/9)/[#10](https://github.com/ankit373/hydra/issues/10) |
 | Web UI + real-time cost dashboard | 📋 [#11](https://github.com/ankit373/hydra/issues/11)/[#12](https://github.com/ankit373/hydra/issues/12) |
 
 See the full [Hydra Roadmap project board](https://github.com/users/ankit373/projects/2).
-
-### The arc: from cost router to Trust Control Plane
-
-Hydra started by answering *which model is cheapest for this task?* It's evolving to answer a harder question: ***how sure are we the answer is right, and what's the least attention we can spend to be that sure?***
-
-- **Today** — calibration measures each source's real diagnostic power; SPRT samples adaptively to a target confidence; the defect-cost model prices what a wrong answer costs; graph-aware routing reads a code dependency graph so an edit's **blast radius** raises the confidence bar where a mistake is expensive; a local **accountability ledger** records — and can gate — what every agent was allowed to touch and did; and **verification oracles** (tests, compilers, linters) act as first-class, high-`D` evidence sources whose verdict can outweigh a model's opinion.
-- **Next** — outcomes (tests/review/revert) auto-train calibration in the background, so `D` reflects reality without manual `hydra trust record`.
-
-The design principle throughout: **no single vendor is privileged** — Hydra routes *across* providers and *away* from expensive ones, optimizing verified correctness per unit of human attention.
 
 ---
 

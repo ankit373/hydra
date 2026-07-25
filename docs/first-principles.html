@@ -1,0 +1,775 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>First Principles — The Math Behind Hydra</title>
+  <meta name="description" content="The theorems, measurements, and honest math behind every Hydra routing decision: Wald's SPRT, calibration diagnostic power (KL divergence), Bayes defect-cost, Molloy–Reed percolation, Amdahl optimal parallelism, and context entropy — with interactive derivations.">
+  <meta name="keywords" content="SPRT sequential probability ratio test, KL divergence calibration, Molloy-Reed percolation, Amdahl's law parallelism, LLM router math, confidence routing, Bayes decision theory, Hydra">
+
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://hydra.uvansa.com/first-principles.html">
+  <meta property="og:title" content="First Principles — The Math Behind Hydra">
+  <meta property="og:description" content="Every Hydra routing decision is a named result you can check. Interactive derivations: SPRT, calibration D, percolation κ, optimal parallelism.">
+  <meta property="og:image" content="https://hydra.uvansa.com/logo.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:site" content="@ankit373">
+  <meta name="twitter:title" content="First Principles — The Math Behind Hydra">
+  <meta name="twitter:description" content="Wald's SPRT, KL-divergence calibration, Molloy–Reed percolation, Amdahl optimal parallelism — the proofs behind the router, made interactive.">
+  <meta name="twitter:image" content="https://hydra.uvansa.com/logo.png">
+
+  <link rel="canonical" href="https://hydra.uvansa.com/first-principles.html">
+  <link rel="icon" type="image/png" href="logo.png">
+  <link rel="ai-context" href="https://hydra.uvansa.com/llms.txt" type="text/plain">
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    "headline": "First Principles — The Math Behind Hydra",
+    "description": "The theorems and measurements behind Hydra's routing: Wald's sequential probability ratio test, calibration diagnostic power via KL divergence, Bayes defect-cost, Molloy–Reed percolation, Amdahl optimal parallelism, and context entropy.",
+    "url": "https://hydra.uvansa.com/first-principles.html",
+    "image": "https://hydra.uvansa.com/logo.png",
+    "datePublished": "2026-07-25",
+    "dateModified": "2026-07-25",
+    "author": { "@type": "Person", "name": "Ankit Jha", "url": "https://github.com/ankit373" },
+    "publisher": { "@type": "Organization", "name": "Hydra", "url": "https://hydra.uvansa.com/" },
+    "about": ["Sequential analysis", "Information theory", "Percolation theory", "Parallel computing", "Bayesian decision theory"],
+    "keywords": "SPRT, KL divergence, Molloy-Reed, Amdahl's law, LLM routing, confidence routing"
+  }
+  </script>
+
+<style>
+:root{
+  color-scheme:dark;
+  --bg:#06070F;--bg2:#0A0C18;--panel:rgba(18,20,38,.62);
+  --line:rgba(150,140,255,.16);--line-2:rgba(150,140,255,.30);
+  --ink:#E7E9F5;--dim:#9aa0c4;--faint:#5a5f85;
+  --cyan:#2AF0E0;--aqua:#00E6C3;--violet:#8B5CF6;--magenta:#E852C8;
+  --cheap:#3FD98A;--mid:#E0A93A;--exp:#FF5A6E;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,Roboto,Helvetica,Arial,sans-serif;
+  --mono:ui-monospace,"JetBrains Mono","SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+  --math:"Cambria Math","Latin Modern Math","STIX Two Math",Georgia,"Times New Roman",serif;
+  --maxw:1080px;
+}
+*{box-sizing:border-box;}
+html{scroll-behavior:smooth;}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto;}}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.6;
+  overflow-x:hidden;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;}
+.wrap{max-width:var(--maxw);margin:0 auto;padding:0 24px;}
+h1,h2,h3{margin:0;text-wrap:balance;}
+a{color:inherit;text-decoration:none;}
+::selection{background:rgba(0,230,195,.28);color:#fff;}
+:focus-visible{outline:2px solid var(--aqua);outline-offset:3px;border-radius:4px;}
+.mono{font-family:var(--mono);}
+.tnum{font-variant-numeric:tabular-nums;}
+.grad{background:linear-gradient(96deg,var(--cyan) 4%,#7FA8FF 40%,var(--violet) 66%,var(--magenta) 98%);
+  -webkit-background-clip:text;background-clip:text;color:transparent;}
+.accent{color:var(--aqua);}.cy{color:var(--cyan);}.vi{color:var(--violet);}.mg{color:var(--magenta);}
+.cheap{color:var(--cheap);}.mid{color:var(--mid);}.exp{color:var(--exp);}
+
+/* ── top nav ─────────────────────────────────────────────────────────────── */
+.topbar{position:sticky;top:0;z-index:60;display:flex;align-items:center;gap:14px;height:52px;padding:0 24px;
+  font-family:var(--mono);font-size:12.5px;background:rgba(6,7,15,.7);backdrop-filter:blur(14px);
+  border-bottom:1px solid var(--line);}
+.topbar .mark{font-weight:800;letter-spacing:1.5px;font-size:15px;
+  background:linear-gradient(90deg,var(--cyan),var(--violet) 55%,var(--magenta));
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+  filter:drop-shadow(0 0 10px rgba(120,90,255,.4));}
+.topbar .pill{font-size:10.5px;color:var(--faint);border:1px solid var(--line);border-radius:20px;padding:2px 9px;}
+.topbar .grow{flex:1;}
+.topbar nav{display:flex;gap:20px;}
+.topbar nav a{color:var(--dim);transition:color .15s;}
+.topbar nav a:hover{color:var(--aqua);}
+.topbar .ghost{border:1px solid var(--line-2);border-radius:6px;padding:5px 12px;color:var(--ink);transition:.15s;}
+.topbar .ghost:hover{border-color:var(--aqua);color:var(--aqua);}
+@media(max-width:820px){.topbar nav{display:none;}}
+
+/* ── hero ────────────────────────────────────────────────────────────────── */
+.hero{position:relative;padding:74px 0 40px;text-align:center;overflow:hidden;}
+.hero::before{content:"";position:absolute;inset:-40% 0 auto;height:520px;z-index:0;
+  background:radial-gradient(60% 60% at 50% 0%,rgba(139,92,246,.20),transparent 70%),
+             radial-gradient(50% 50% at 78% 12%,rgba(232,82,200,.14),transparent 70%),
+             radial-gradient(46% 46% at 22% 16%,rgba(42,240,224,.13),transparent 70%);
+  filter:blur(6px);pointer-events:none;}
+.hero>*{position:relative;z-index:1;}
+.eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:3.5px;text-transform:uppercase;color:var(--aqua);
+  margin-bottom:16px;}
+.hero h1{font-size:clamp(38px,7vw,76px);line-height:1.02;letter-spacing:-1.5px;font-weight:800;}
+.hero .sub{font-size:clamp(15px,2vw,19px);color:var(--dim);max-width:60ch;margin:20px auto 0;}
+.hero .sub b{color:var(--ink);font-weight:600;}
+
+/* honesty legend */
+.legend{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin:30px auto 0;max-width:760px;}
+.tag{font-family:var(--mono);font-size:11.5px;letter-spacing:.3px;padding:6px 12px;border-radius:20px;
+  border:1px solid var(--line);background:rgba(20,22,44,.5);display:inline-flex;gap:7px;align-items:center;}
+.tag .g{font-weight:700;}
+.tag.proven .g{color:var(--cyan);}.tag.measured .g{color:var(--cheap);}
+.tag.synthetic .g{color:var(--violet);}.tag.modeled .g{color:var(--mid);}
+
+/* ── pillar section ──────────────────────────────────────────────────────── */
+.pillar{padding:56px 0;border-top:1px solid var(--line);}
+.pillar .head{display:flex;align-items:baseline;gap:16px;margin-bottom:8px;}
+.pillar .idx{font-family:var(--mono);font-size:13px;color:var(--faint);letter-spacing:2px;}
+.pillar h2{font-size:clamp(22px,3.4vw,34px);letter-spacing:-.5px;font-weight:750;}
+.pillar .kicker{font-family:var(--mono);font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--aqua);
+  margin-bottom:20px;}
+.pillar p.lede{color:var(--dim);font-size:15.5px;max-width:70ch;margin:0 0 22px;}
+.pillar p.lede b{color:var(--ink);font-weight:600;}
+.analogy{font-style:italic;color:var(--faint);font-size:14.5px;margin:18px 0 0;padding-left:14px;
+  border-left:2px solid var(--line-2);}
+
+/* equation block */
+.eq{font-family:var(--math);font-size:clamp(19px,3vw,27px);color:var(--ink);text-align:center;
+  margin:8px 0 6px;padding:22px 18px;border:1px solid var(--line);border-radius:14px;
+  background:linear-gradient(180deg,rgba(20,22,44,.5),rgba(12,13,28,.5));
+  overflow-x:auto;filter:drop-shadow(0 0 22px rgba(120,90,255,.10));}
+.eq i{font-style:italic;}
+.eq .op{color:var(--dim);font-family:var(--math);padding:0 .18em;}
+.eq .big{font-size:1.5em;line-height:.8;vertical-align:-.18em;color:var(--violet);}
+.eq .frac{display:inline-flex;flex-direction:column;text-align:center;vertical-align:middle;margin:0 .14em;}
+.eq .frac .num{padding:0 .5em .06em;border-bottom:1.5px solid var(--line-2);}
+.eq .frac .den{padding:.06em .5em 0;}
+.eq .rt{border-top:1.5px solid currentColor;padding:.05em .3em 0;margin-left:-.05em;}
+.eq sub,.eq sup{font-size:.62em;}
+.eq .hl{color:var(--aqua);}.eq .cyv{color:var(--cyan);}.eq .mgv{color:var(--magenta);}
+
+/* interactive viz card */
+.viz{margin:24px 0 8px;border:1px solid var(--line);border-radius:16px;overflow:hidden;
+  background:rgba(10,12,24,.55);}
+.viz .canvas-wrap{position:relative;width:100%;}
+.viz canvas{display:block;width:100%;height:auto;}
+.viz .ctl{display:flex;flex-wrap:wrap;gap:18px 26px;align-items:center;padding:14px 18px;
+  border-top:1px solid var(--line);background:rgba(6,7,15,.5);font-family:var(--mono);font-size:12.5px;}
+.viz .ctl label{display:flex;flex-direction:column;gap:6px;color:var(--dim);min-width:150px;}
+.viz .ctl label .v{color:var(--aqua);font-weight:600;}
+.viz .ctl input[type=range]{-webkit-appearance:none;appearance:none;height:4px;border-radius:4px;
+  background:linear-gradient(90deg,var(--cyan),var(--violet));outline:none;cursor:pointer;}
+.viz .ctl input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:15px;height:15px;border-radius:50%;
+  background:var(--aqua);box-shadow:0 0 10px rgba(0,230,195,.7);cursor:pointer;}
+.viz .ctl input[type=range]::-moz-range-thumb{width:15px;height:15px;border:0;border-radius:50%;
+  background:var(--aqua);box-shadow:0 0 10px rgba(0,230,195,.7);cursor:pointer;}
+.viz .ctl button{font-family:var(--mono);font-size:12px;padding:8px 16px;border-radius:7px;cursor:pointer;
+  border:1px solid var(--line-2);color:var(--ink);background:rgba(20,22,44,.5);transition:.15s;}
+.viz .ctl button:hover{border-color:var(--aqua);color:var(--aqua);}
+.viz .readout{margin-left:auto;text-align:right;color:var(--faint);}
+.viz .readout b{color:var(--ink);font-size:15px;}
+
+.tags{display:flex;flex-wrap:wrap;gap:9px;margin-top:22px;}
+.src{display:flex;flex-wrap:wrap;gap:10px 22px;margin-top:14px;font-family:var(--mono);font-size:12.5px;color:var(--faint);}
+.src a{color:var(--dim);border-bottom:1px dashed var(--line-2);}
+.src a:hover{color:var(--aqua);border-color:var(--aqua);}
+.src code{color:var(--cyan);}
+
+/* footer */
+footer{border-top:1px solid var(--line);margin-top:40px;padding:44px 0 56px;}
+.foot{display:flex;flex-wrap:wrap;gap:24px;align-items:center;justify-content:space-between;}
+.foot .mark{font-weight:800;font-size:20px;letter-spacing:1.5px;
+  background:linear-gradient(90deg,var(--cyan),var(--violet) 55%,var(--magenta));
+  -webkit-background-clip:text;background-clip:text;color:transparent;}
+.foot p{color:var(--faint);font-size:13px;margin:6px 0 0;}
+.foot nav{display:flex;gap:20px;font-family:var(--mono);font-size:12.5px;}
+.foot nav a{color:var(--dim);}.foot nav a:hover{color:var(--aqua);}
+
+.reveal{opacity:0;transform:translateY(18px);transition:opacity .6s ease,transform .6s ease;}
+.reveal.in{opacity:1;transform:none;}
+@media(prefers-reduced-motion:reduce){.reveal{opacity:1;transform:none;transition:none;}}
+</style>
+</head>
+<body>
+
+<div class="topbar" id="topbar">
+  <a class="mark" href="/">HYDRA</a>
+  <span class="pill">first principles</span>
+  <span class="grow"></span>
+  <nav>
+    <a href="#sprt">SPRT</a>
+    <a href="#calibration">Calibration</a>
+    <a href="#defect">Defect cost</a>
+    <a href="#percolation">Percolation</a>
+    <a href="#parallelism">Parallelism</a>
+    <a href="#entropy">Entropy</a>
+  </nav>
+  <a class="ghost" href="/">← home</a>
+</div>
+
+<header class="hero wrap">
+  <div class="eyebrow">provable trust</div>
+  <h1>The router doesn't guess.<br><span class="grad">It derives.</span></h1>
+  <p class="sub">Every routing decision Hydra makes is a <b>named result you can check</b> — a proven theorem it applies, or a quantity it measures. Not heuristics with a confident tone. Here are the six, each one interactive.</p>
+  <div class="legend">
+    <span class="tag proven"><span class="g">⊢ proven</span> established theorem</span>
+    <span class="tag measured"><span class="g">▣ measured</span> computed in-repo</span>
+    <span class="tag synthetic"><span class="g">◈ synthetic</span> seeded benchmark</span>
+    <span class="tag modeled"><span class="g">○ modeled</span> estimate / proxy</span>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- ═══ 1 · SPRT ═══════════════════════════════════════════════════════════ -->
+  <section class="pillar reveal" id="sprt">
+    <div class="head"><span class="idx">01</span><h2>Confidence routing</h2></div>
+    <div class="kicker">Wald's sequential probability ratio test</div>
+    <p class="lede">Instead of polling a fixed number of models, Hydra accumulates the <b>log-likelihood ratio</b> across votes and stops the instant the evidence is conclusive. Wald proved this minimizes the expected number of samples among <i>all</i> tests with the same error bounds.</p>
+
+    <div class="eq" aria-label="Lambda n equals sum from i equals 1 to n of the natural log of P of x i given correct over P of x i given incorrect">
+      <i>Λ</i><sub>n</sub> <span class="op">=</span> <span class="big">Σ</span><sub>i=1</sub><sup>n</sup> <span class="op">ln</span>
+      <span class="frac"><span class="num"><i>P</i>(<i>x</i><sub>i</sub> | correct)</span><span class="den"><i>P</i>(<i>x</i><sub>i</sub> | incorrect)</span></span>
+      &nbsp;&nbsp; <span class="hl">accept</span> <span class="op">if</span> <i>Λ</i><sub>n</sub> ≥ <i>A</i>, &nbsp; <span class="mgv">reject</span> <span class="op">if</span> <i>Λ</i><sub>n</sub> ≤ <i>B</i>
+    </div>
+    <div class="eq">
+      <i>A</i> <span class="op">=</span> <span class="op">ln</span> <span class="frac"><span class="num">1 − <i>β</i></span><span class="den"><i>α</i></span></span>
+      <span class="op">,</span>&nbsp;&nbsp;&nbsp;
+      <i>B</i> <span class="op">=</span> <span class="op">ln</span> <span class="frac"><span class="num"><i>β</i></span><span class="den">1 − <i>α</i></span></span>
+    </div>
+
+    <div class="viz">
+      <div class="canvas-wrap"><canvas id="c-sprt" width="1040" height="380" role="img" aria-label="Animated log-odds random walk crossing the accept and reject boundaries"></canvas></div>
+      <div class="ctl">
+        <label>source reliability <span class="v" id="v-sprt-rel">0.85</span>
+          <input type="range" id="s-sprt-rel" min="0.55" max="0.95" step="0.01" value="0.85" aria-label="source reliability">
+        </label>
+        <button id="b-sprt-run" type="button">↻ run again</button>
+        <div class="readout">samples used <b class="tnum" id="o-sprt-n">—</b> &nbsp;·&nbsp; fixed-5 would use <b>5</b></div>
+      </div>
+    </div>
+
+    <p class="analogy">A doctor ordering one test at a time and stopping the moment the diagnosis is certain — instead of always running the full panel.</p>
+    <div class="tags">
+      <span class="tag proven"><span class="g">⊢ proven</span> Wald (1945), optimal E[N]</span>
+      <span class="tag synthetic"><span class="g">◈ synthetic</span> −24% blended / −49% easy vs fixed-5 at ≥98% accuracy</span>
+    </div>
+    <div class="src"><span>source <a href="https://github.com/ankit373/hydra/tree/main/internal/trust">internal/trust</a></span><span>reproduce <code>hydra trust benchmark</code></span></div>
+  </section>
+
+  <!-- ═══ 2 · CALIBRATION ════════════════════════════════════════════════════ -->
+  <section class="pillar reveal" id="calibration">
+    <div class="head"><span class="idx">02</span><h2>Calibration</h2></div>
+    <div class="kicker">diagnostic power · KL divergence</div>
+    <p class="lede">Each source earns a <b>sensitivity</b> <i>se</i> and <b>specificity</b> <i>sp</i> from real outcomes. Its worth is the expected evidence per vote — the KL divergence between the vote distributions under the two hypotheses, in <b>nats</b>. A coin-flip source scores <span class="accent">D = 0</span> and adds nothing however often it votes.</p>
+
+    <div class="eq" aria-label="D equals se times ln se over one minus sp, plus one minus se times ln one minus se over sp">
+      <i>D</i> <span class="op">=</span> <i>se</i> <span class="op">·</span> <span class="op">ln</span>
+      <span class="frac"><span class="num"><i>se</i></span><span class="den">1 − <i>sp</i></span></span>
+      <span class="op">+</span> (1 − <i>se</i>) <span class="op">·</span> <span class="op">ln</span>
+      <span class="frac"><span class="num">1 − <i>se</i></span><span class="den"><i>sp</i></span></span>
+    </div>
+
+    <div class="viz">
+      <div class="canvas-wrap"><canvas id="c-cal" width="1040" height="340" role="img" aria-label="Vote probability distributions under correct and incorrect hypotheses, with diagnostic power D"></canvas></div>
+      <div class="ctl">
+        <label>sensitivity <i>se</i> <span class="v" id="v-cal-se">0.90</span>
+          <input type="range" id="s-cal-se" min="0.5" max="0.99" step="0.01" value="0.90" aria-label="sensitivity">
+        </label>
+        <label>specificity <i>sp</i> <span class="v" id="v-cal-sp">0.90</span>
+          <input type="range" id="s-cal-sp" min="0.5" max="0.99" step="0.01" value="0.90" aria-label="specificity">
+        </label>
+        <div class="readout">diagnostic power <b class="tnum" id="o-cal-d">1.76</b> nats</div>
+      </div>
+    </div>
+
+    <p class="analogy">A witness's credibility measured in nats. A coin-flip witness tells you nothing however many times they testify.</p>
+    <div class="tags">
+      <span class="tag proven"><span class="g">⊢ proven</span> information theory (KL divergence)</span>
+      <span class="tag measured"><span class="g">▣ measured</span> 90% reliability → 1.76 nats (table test)</span>
+    </div>
+    <div class="src"><span>source <a href="https://github.com/ankit373/hydra/tree/main/internal/trust">internal/trust</a></span><span><code>hydra trust calibration</code></span></div>
+  </section>
+
+  <!-- ═══ 3 · DEFECT COST ════════════════════════════════════════════════════ -->
+  <section class="pillar reveal" id="defect">
+    <div class="head"><span class="idx">03</span><h2>When to stop</h2></div>
+    <div class="kicker">the defect-cost bar · Bayes risk</div>
+    <p class="lede">Confidence isn't free and defects aren't equal. The expected loss of shipping an answer believed correct with confidence <i>c</i> is (1 − <i>c</i>)·<i>C</i><sub>defect</sub>; ship only when that clears a loss tolerance <i>τ</i>. A costlier defect ⟹ a higher bar ⟹ SPRT samples more before it stops.</p>
+
+    <div class="eq" aria-label="c star equals one minus tau over C defect">
+      <i>c</i><sup>★</sup> <span class="op">=</span> 1 <span class="op">−</span>
+      <span class="frac"><span class="num"><i>τ</i></span><span class="den"><i>C</i><sub>defect</sub></span></span>
+    </div>
+
+    <div class="viz">
+      <div class="canvas-wrap"><canvas id="c-defect" width="1040" height="300" role="img" aria-label="Required confidence rising as the defect cost grows"></canvas></div>
+      <div class="ctl">
+        <label>defect cost <i>C</i><sub>defect</sub> <span class="v" id="v-def-c">$126</span>
+          <input type="range" id="s-def-c" min="0" max="100" step="1" value="40" aria-label="defect cost (log scale)">
+        </label>
+        <div class="readout">required confidence <b class="tnum" id="o-def-cstar">96.0%</b> &nbsp;·&nbsp; ≈ <b class="tnum" id="o-def-n">2</b> samples</div>
+      </div>
+    </div>
+
+    <p class="analogy">You demand far more certainty before heart surgery than before a haircut — the bar scales with what a mistake costs.</p>
+    <div class="tags">
+      <span class="tag proven"><span class="g">⊢ proven</span> Bayes decision theory</span>
+      <span class="tag modeled"><span class="g">○ modeled</span> C<sub>defect</sub> is an estimate</span>
+    </div>
+    <div class="src"><span>source <a href="https://github.com/ankit373/hydra/tree/main/internal/trust">internal/trust</a></span><span><code>hydra trust defect --pii --production</code></span></div>
+  </section>
+
+  <!-- ═══ 4 · PERCOLATION ════════════════════════════════════════════════════ -->
+  <section class="pillar reveal" id="percolation">
+    <div class="head"><span class="idx">04</span><h2>Blast radius</h2></div>
+    <div class="kicker">Molloy–Reed percolation criterion</div>
+    <p class="lede">Treat the code as a graph with degree mean ⟨<i>k</i>⟩ and second moment ⟨<i>k</i><sup>2</sup>⟩. A <b>giant connected component</b> — a cascade-capable core where one change can ripple everywhere — exists precisely when <i>κ</i> ≥ 2. Files inside it get their confidence bar raised.</p>
+
+    <div class="eq" aria-label="kappa equals mean of k squared over mean of k, greater than or equal to 2">
+      <i>κ</i> <span class="op">=</span>
+      <span class="frac"><span class="num">⟨<i>k</i><sup>2</sup>⟩</span><span class="den">⟨<i>k</i>⟩</span></span>
+      <span class="op">≥</span> <span class="cyv">2</span>
+    </div>
+
+    <div class="viz">
+      <div class="canvas-wrap"><canvas id="c-perc" width="1040" height="400" role="img" aria-label="Random dependency graph; the giant component appears as mean degree crosses the percolation threshold"></canvas></div>
+      <div class="ctl">
+        <label>mean degree ⟨<i>k</i>⟩ <span class="v" id="v-perc-k">1.8</span>
+          <input type="range" id="s-perc-k" min="0.2" max="4" step="0.1" value="1.8" aria-label="mean degree">
+        </label>
+        <button id="b-perc-re" type="button">↻ resample graph</button>
+        <div class="readout"><b class="tnum" id="o-perc-kappa">2.7</b> = κ &nbsp;·&nbsp; <b id="o-perc-state">cascade core</b> &nbsp;·&nbsp; giant <b class="tnum" id="o-perc-frac">72%</b></div>
+      </div>
+    </div>
+
+    <p class="analogy">The epidemic threshold R₀ — below it a change stays local; above it, one edit can infect the whole graph.</p>
+    <div class="tags">
+      <span class="tag proven"><span class="g">⊢ proven</span> Molloy–Reed (1995)</span>
+      <span class="tag measured"><span class="g">▣ measured</span> computed from graph.json</span>
+    </div>
+    <div class="src"><span>source <a href="https://github.com/ankit373/hydra/tree/main/internal/graph">internal/graph</a></span><span><code>hydra graph blast &lt;file&gt;</code></span></div>
+  </section>
+
+  <!-- ═══ 5 · PARALLELISM ════════════════════════════════════════════════════ -->
+  <section class="pillar reveal" id="parallelism">
+    <div class="head"><span class="idx">05</span><h2>Optimal parallelism</h2></div>
+    <div class="kicker">Amdahl's law + coordination cost</div>
+    <p class="lede">Fanning work across <i>n</i> agents speeds the parallel part but adds coordination cost that grows with <i>n</i>. With serial fraction <i>s</i> and per-agent coupling <i>k</i>, minimizing wall-clock time gives a closed-form optimum. Independent files → ~6 agents; tightly-coupled edits → ~2. <b>More is slower.</b></p>
+
+    <div class="eq" aria-label="T of n equals s plus one minus s over n plus k n; n star equals square root of one minus s over k">
+      <i>T</i>(<i>n</i>) <span class="op">=</span> <i>s</i> <span class="op">+</span>
+      <span class="frac"><span class="num">1 − <i>s</i></span><span class="den"><i>n</i></span></span>
+      <span class="op">+</span> <i>k</i><i>n</i>
+      &nbsp;&nbsp;<span class="op">⟹</span>&nbsp;&nbsp;
+      <i>n</i><sup>★</sup> <span class="op">=</span>
+      <span class="op" style="font-size:1.3em;">√</span><span class="rt"><span class="frac"><span class="num">1 − <i>s</i></span><span class="den"><i>k</i></span></span></span>
+    </div>
+
+    <div class="viz">
+      <div class="canvas-wrap"><canvas id="c-amdahl" width="1040" height="360" role="img" aria-label="Speedup curve versus number of agents, with the optimal n-star marker"></canvas></div>
+      <div class="ctl">
+        <label>serial fraction <i>s</i> <span class="v" id="v-amd-s">0.05</span>
+          <input type="range" id="s-amd-s" min="0" max="0.5" step="0.01" value="0.05" aria-label="serial fraction">
+        </label>
+        <label>coupling <i>k</i> <span class="v" id="v-amd-k">0.02</span>
+          <input type="range" id="s-amd-k" min="0.005" max="0.3" step="0.005" value="0.02" aria-label="coupling cost">
+        </label>
+        <div class="readout">optimum <b class="tnum" id="o-amd-n">6.9</b> agents &nbsp;·&nbsp; peak speedup <b class="tnum" id="o-amd-s">×3.1</b></div>
+      </div>
+    </div>
+
+    <p class="analogy">Adding cooks to a kitchen: past n★ they spend more time coordinating than cooking.</p>
+    <div class="tags">
+      <span class="tag proven"><span class="g">⊢ proven</span> Amdahl (1967) + coordination term</span>
+      <span class="tag measured"><span class="g">▣ measured</span> k from graph coupling</span>
+    </div>
+    <div class="src"><span>source <a href="https://github.com/ankit373/hydra/tree/main/internal/optimal">internal/optimal</a></span><span><code>hydra graph parallel &lt;files…&gt;</code></span></div>
+  </section>
+
+  <!-- ═══ 6 · ENTROPY ════════════════════════════════════════════════════════ -->
+  <section class="pillar reveal" id="entropy">
+    <div class="head"><span class="idx">06</span><h2>Context governor</h2></div>
+    <div class="kicker">signal density, not length</div>
+    <p class="lede">A context window's value is its information density, not its token count. Hydra proxies the entropy rate with a compression ratio <i>ρ</i> and counts only the <b>useful</b> tokens. Highly compressible context (repetitive, stale) has low <i>ρ</i> — so Hydra compacts on <b>falling ρ</b>, not on raw length.</p>
+
+    <div class="eq" aria-label="rho equals size of gzip of C over size of C; useful tokens equals L times rho">
+      <i>ρ</i> <span class="op">=</span>
+      <span class="frac"><span class="num">|gzip(<i>C</i>)|</span><span class="den">|<i>C</i>|</span></span>
+      <span class="op">,</span>&nbsp;&nbsp;&nbsp;
+      useful <span class="op">=</span> <i>L</i> <span class="op">·</span> <i>ρ</i>
+    </div>
+
+    <div class="viz">
+      <div class="canvas-wrap"><canvas id="c-entropy" width="1040" height="260" role="img" aria-label="Useful tokens shrinking as context redundancy rises"></canvas></div>
+      <div class="ctl">
+        <label>context redundancy <span class="v" id="v-ent-r">40%</span>
+          <input type="range" id="s-ent-r" min="0" max="92" step="1" value="40" aria-label="context redundancy">
+        </label>
+        <div class="readout">ρ = <b class="tnum" id="o-ent-rho">0.60</b> &nbsp;·&nbsp; useful <b class="tnum" id="o-ent-u">120k</b> of 200k</div>
+      </div>
+    </div>
+
+    <p class="analogy">Signal-to-noise: a short, sharp briefing beats a rambling transcript ten times its length.</p>
+    <div class="tags">
+      <span class="tag proven"><span class="g">⊢ proven</span> Shannon source-coding</span>
+      <span class="tag modeled"><span class="g">○ modeled</span> gzip is a proxy, not a proof</span>
+    </div>
+    <div class="src"><span>source <a href="https://github.com/ankit373/hydra/tree/main/internal/entropy">internal/entropy</a></span><span><code>hydra context entropy &lt;file&gt;</code></span></div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap foot">
+    <div>
+      <a class="mark" href="/">HYDRA</a>
+      <p>The Trust Control Plane for AI development. Route to a confidence of correctness.</p>
+    </div>
+    <nav>
+      <a href="/">Home</a>
+      <a href="/docs.html">Docs</a>
+      <a href="/pricing.html">Pricing</a>
+      <a href="https://github.com/ankit373/hydra">GitHub</a>
+      <a href="/llms.txt">llms.txt</a>
+    </nav>
+  </div>
+</footer>
+
+<script>
+(function(){
+  "use strict";
+  var REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var C = {bg:'#06070F',ink:'#E7E9F5',dim:'#9aa0c4',faint:'#5a5f85',
+           cyan:'#2AF0E0',aqua:'#00E6C3',violet:'#8B5CF6',magenta:'#E852C8',
+           cheap:'#3FD98A',mid:'#E0A93A',exp:'#FF5A6E'};
+
+  // topbar shade + reveal on scroll
+  var topbar = document.getElementById('topbar');
+  addEventListener('scroll', function(){ topbar.classList.toggle('scrolled', scrollY > 8); }, {passive:true});
+  if ('IntersectionObserver' in window && !REDUCED){
+    var io = new IntersectionObserver(function(es){ es.forEach(function(e){ if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target);} }); }, {threshold:.12});
+    document.querySelectorAll('.reveal').forEach(function(el){ io.observe(el); });
+  } else { document.querySelectorAll('.reveal').forEach(function(el){ el.classList.add('in'); }); }
+
+  // retina fit; returns {ctx,w,h}
+  function fit(canvas){
+    var dpr = Math.min(window.devicePixelRatio||1, 2);
+    var cssW = canvas.clientWidth || canvas.width;
+    var ratio = canvas.height / canvas.width;
+    var cssH = cssW * ratio;
+    canvas.style.height = cssH + 'px';
+    canvas.width = Math.round(cssW*dpr); canvas.height = Math.round(cssH*dpr);
+    var ctx = canvas.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0);
+    return {ctx:ctx, w:cssW, h:cssH};
+  }
+  function glow(ctx, col, blur){ ctx.shadowColor = col; ctx.shadowBlur = blur||0; }
+  function noGlow(ctx){ ctx.shadowBlur = 0; }
+  function mono(px){ return px+'px ui-monospace, "SF Mono", Menlo, monospace'; }
+
+  // ══ 1 · SPRT ═══════════════════════════════════════════════════════════════
+  (function(){
+    var cv=document.getElementById('c-sprt'); if(!cv) return;
+    var relEl=document.getElementById('s-sprt-rel'), relV=document.getElementById('v-sprt-rel'),
+        nOut=document.getElementById('o-sprt-n'), runBtn=document.getElementById('b-sprt-run');
+    var alpha=0.05, beta=0.05, A=Math.log((1-beta)/alpha), B=Math.log(beta/(1-alpha));
+    var path=[], anim=0, raf=null;
+
+    function simulate(){
+      var rel=parseFloat(relEl.value); // se = sp = rel
+      var lPlus=Math.log(rel/(1-rel)), lMinus=Math.log((1-rel)/rel);
+      var L=0; path=[{n:0,L:0}];
+      for(var i=1;i<=60;i++){
+        // truth = correct (H1): '+' vote w.p. se
+        L += (Math.random()<rel)? lPlus : lMinus;
+        path.push({n:i,L:L});
+        if(L>=A || L<=B) break;
+      }
+      nOut.textContent = path.length-1;
+      nOut.style.color = (path.length-1) < 5 ? C.cheap : C.mid;
+    }
+    function draw(){
+      var d=fit(cv), ctx=d.ctx, w=d.w, h=d.h, padL=54, padR=18, padT=26, padB=30;
+      ctx.clearRect(0,0,w,h);
+      var maxN=Math.max(12, path.length+1);
+      var yMax=Math.max(A,3.4)*1.15, yMin=Math.min(B,-3.4)*1.15;
+      function X(n){ return padL + (w-padL-padR)*(n/maxN); }
+      function Y(v){ return padT + (h-padT-padB)*(1-(v-yMin)/(yMax-yMin)); }
+      // zero line
+      ctx.strokeStyle='rgba(150,140,255,.14)'; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(padL,Y(0)); ctx.lineTo(w-padR,Y(0)); ctx.stroke();
+      // boundaries
+      function bound(v,col,lab){
+        ctx.setLineDash([6,6]); ctx.strokeStyle=col; ctx.lineWidth=1.5; glow(ctx,col,10);
+        ctx.beginPath(); ctx.moveTo(padL,Y(v)); ctx.lineTo(w-padR,Y(v)); ctx.stroke(); noGlow(ctx); ctx.setLineDash([]);
+        ctx.fillStyle=col; ctx.font=mono(11); ctx.textAlign='left';
+        ctx.fillText(lab, padL+4, Y(v)+(v>0?-6:14));
+      }
+      bound(A, C.cheap, 'A = accept  (ln 19 ≈ +2.94)');
+      bound(B, C.exp,  'B = reject  (−2.94)');
+      // axis label
+      ctx.fillStyle=C.faint; ctx.font=mono(10); ctx.textAlign='left';
+      ctx.fillText('log-odds Λ', 6, padT+4);
+      ctx.textAlign='right'; ctx.fillText('samples →', w-padR, h-8);
+      // path
+      var upto = REDUCED ? path.length : Math.min(anim, path.length);
+      var grad=ctx.createLinearGradient(padL,0,w-padR,0);
+      grad.addColorStop(0,C.cyan); grad.addColorStop(1,C.violet);
+      ctx.strokeStyle=grad; ctx.lineWidth=2.4; glow(ctx,C.violet,8);
+      ctx.beginPath();
+      for(var i=0;i<upto;i++){ var p=path[i]; if(i===0)ctx.moveTo(X(p.n),Y(p.L)); else ctx.lineTo(X(p.n),Y(p.L)); }
+      ctx.stroke(); noGlow(ctx);
+      // nodes
+      for(var j=0;j<upto;j++){ var q=path[j]; ctx.fillStyle=C.aqua; ctx.beginPath(); ctx.arc(X(q.n),Y(q.L),2.6,0,7); ctx.fill(); }
+      // decision marker
+      if(upto>=path.length && path.length>1){
+        var last=path[path.length-1]; var decided = last.L>=A;
+        var col=decided?C.cheap:C.exp;
+        ctx.fillStyle=col; glow(ctx,col,14); ctx.beginPath(); ctx.arc(X(last.n),Y(last.L),5.5,0,7); ctx.fill(); noGlow(ctx);
+        ctx.font=mono(12); ctx.textAlign='center'; ctx.fillStyle=col;
+        ctx.fillText(decided?'✓ accept':'✕ reject', X(last.n), Y(last.L)+(last.L>0?-14:22));
+      }
+    }
+    function run(){
+      simulate();
+      if(REDUCED){ draw(); return; }
+      anim=0; if(raf)cancelAnimationFrame(raf);
+      (function step(){ anim+=0.5; draw(); if(anim<path.length){ raf=requestAnimationFrame(step);} })();
+    }
+    relEl.addEventListener('input', function(){ relV.textContent=parseFloat(relEl.value).toFixed(2); run(); });
+    runBtn.addEventListener('click', run);
+    addEventListener('resize', draw);
+    run();
+  })();
+
+  // ══ 2 · CALIBRATION D ══════════════════════════════════════════════════════
+  (function(){
+    var cv=document.getElementById('c-cal'); if(!cv) return;
+    var seEl=document.getElementById('s-cal-se'), spEl=document.getElementById('s-cal-sp'),
+        seV=document.getElementById('v-cal-se'), spV=document.getElementById('v-cal-sp'),
+        dOut=document.getElementById('o-cal-d');
+    function D(se,sp){ return se*Math.log(se/(1-sp)) + (1-se)*Math.log((1-se)/sp); }
+    function draw(){
+      var se=parseFloat(seEl.value), sp=parseFloat(spEl.value);
+      seV.textContent=se.toFixed(2); spV.textContent=sp.toFixed(2);
+      var d=D(se,sp); dOut.textContent=d.toFixed(2);
+      dOut.style.color = d<0.3? C.faint : d<1.2? C.mid : C.cheap;
+      var dd=fit(cv), ctx=dd.ctx, w=dd.w, h=dd.h, padT=30, padB=44;
+      ctx.clearRect(0,0,w,h);
+      // two groups: H1 (correct) and H0 (incorrect); bars = P(vote +), P(vote -)
+      var groups=[
+        {lab:'item is CORRECT', col:C.cyan, plus:se, minus:1-se},
+        {lab:'item is INCORRECT', col:C.magenta, plus:1-sp, minus:sp}
+      ];
+      var gw=(w-80)/2, base=h-padB, maxH=h-padT-padB, bw=gw*0.3;
+      groups.forEach(function(g,gi){
+        var gx=40+gi*gw;
+        ctx.fillStyle=C.faint; ctx.font=mono(11); ctx.textAlign='center';
+        ctx.fillText(g.lab, gx+gw/2, h-16);
+        [['vote +',g.plus],['vote −',g.minus]].forEach(function(bar,bi){
+          var x=gx+gw*0.25+bi*gw*0.4, bh=maxH*bar[1];
+          ctx.fillStyle='rgba(150,140,255,.10)'; ctx.fillRect(x-bw/2, base-maxH, bw, maxH);
+          var grad=ctx.createLinearGradient(0,base,0,base-bh);
+          grad.addColorStop(0,'rgba(20,22,44,.4)'); grad.addColorStop(1,g.col);
+          ctx.fillStyle=grad; glow(ctx,g.col,12); ctx.fillRect(x-bw/2, base-bh, bw, bh); noGlow(ctx);
+          ctx.fillStyle=C.ink; ctx.font=mono(11); ctx.textAlign='center';
+          ctx.fillText(bar[1].toFixed(2), x, base-bh-8);
+          ctx.fillStyle=C.dim; ctx.fillText(bar[0], x, base+16);
+        });
+      });
+      // divider
+      ctx.strokeStyle='rgba(150,140,255,.12)'; ctx.beginPath(); ctx.moveTo(40+gw,padT-6); ctx.lineTo(40+gw,base); ctx.stroke();
+      // D banner
+      ctx.textAlign='left'; ctx.fillStyle=C.faint; ctx.font=mono(11);
+      ctx.fillText('the gap between these two shapes IS the evidence — D nats per vote', 40, padT-10);
+    }
+    seEl.addEventListener('input',draw); spEl.addEventListener('input',draw);
+    addEventListener('resize',draw); draw();
+  })();
+
+  // ══ 3 · DEFECT COST ════════════════════════════════════════════════════════
+  (function(){
+    var cv=document.getElementById('c-defect'); if(!cv) return;
+    var cEl=document.getElementById('s-def-c'), cV=document.getElementById('v-def-c'),
+        csOut=document.getElementById('o-def-cstar'), nOut=document.getElementById('o-def-n');
+    var TAUv=5; // loss tolerance $
+    function cost(t){ return Math.round(Math.pow(10, 0.5 + t/100*4)); } // $3 .. $30k log
+    function draw(){
+      var t=parseFloat(cEl.value), Cd=cost(t);
+      var cstar=Math.max(0.5, 1 - TAUv/Cd); cstar=Math.min(cstar,0.9995);
+      cV.textContent='$'+Cd.toLocaleString();
+      csOut.textContent=(cstar*100).toFixed(cstar>0.99?2:1)+'%';
+      // approx SPRT samples to reach cstar with a D≈1.76 source: N ≈ ln(c/(1-c))/D, min 1
+      var N=Math.max(1, Math.ceil(Math.log(cstar/(1-cstar))/1.758));
+      nOut.textContent=N;
+      var d=fit(cv), ctx=d.ctx, w=d.w, h=d.h, padL=60, padR=30, padT=24, padB=40;
+      ctx.clearRect(0,0,w,h);
+      // curve c*(Cd) across the slider range
+      function X(tt){ return padL+(w-padL-padR)*(tt/100); }
+      function Y(c){ return padT+(h-padT-padB)*(1-(c-0.5)/0.5); }
+      // grid
+      ctx.strokeStyle='rgba(150,140,255,.10)'; ctx.lineWidth=1; ctx.font=mono(10); ctx.fillStyle=C.faint; ctx.textAlign='right';
+      [0.5,0.75,0.9,0.99].forEach(function(c){ ctx.beginPath(); ctx.moveTo(padL,Y(c)); ctx.lineTo(w-padR,Y(c)); ctx.stroke(); ctx.fillText((c*100).toFixed(0)+'%',padL-8,Y(c)+3); });
+      // curve
+      var grad=ctx.createLinearGradient(padL,0,w-padR,0);
+      grad.addColorStop(0,C.cheap); grad.addColorStop(0.6,C.mid); grad.addColorStop(1,C.exp);
+      ctx.strokeStyle=grad; ctx.lineWidth=2.6; glow(ctx,C.mid,7); ctx.beginPath();
+      for(var tt=0;tt<=100;tt+=1){ var cc=Math.min(0.9995,Math.max(0.5,1-TAUv/cost(tt))); var x=X(tt),y=Y(cc); if(tt===0)ctx.moveTo(x,y); else ctx.lineTo(x,y);} ctx.stroke(); noGlow(ctx);
+      // marker
+      var mx=X(t), my=Y(cstar);
+      ctx.strokeStyle='rgba(0,230,195,.4)'; ctx.setLineDash([4,4]); ctx.beginPath(); ctx.moveTo(mx,my); ctx.lineTo(mx,h-padB); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle=C.aqua; glow(ctx,C.aqua,14); ctx.beginPath(); ctx.arc(mx,my,6,0,7); ctx.fill(); noGlow(ctx);
+      ctx.fillStyle=C.faint; ctx.font=mono(10); ctx.textAlign='center'; ctx.fillText('cheap defect', X(6),h-8); ctx.fillText('catastrophic defect', X(92),h-8);
+      ctx.textAlign='left'; ctx.fillStyle=C.faint; ctx.fillText('required confidence  c★', padL, padT-8);
+    }
+    cEl.addEventListener('input',draw); addEventListener('resize',draw); draw();
+  })();
+
+  // ══ 4 · PERCOLATION ════════════════════════════════════════════════════════
+  (function(){
+    var cv=document.getElementById('c-perc'); if(!cv) return;
+    var kEl=document.getElementById('s-perc-k'), kV=document.getElementById('v-perc-k'),
+        reBtn=document.getElementById('b-perc-re'),
+        kapOut=document.getElementById('o-perc-kappa'), stOut=document.getElementById('o-perc-state'), frOut=document.getElementById('o-perc-frac');
+    var N=64, seed=1, nodes=[], edges=[];
+    function rand(){ seed=(seed*1103515245+12345)&0x7fffffff; return seed/0x7fffffff; }
+    function build(){
+      var meanK=parseFloat(kEl.value); kV.textContent=meanK.toFixed(1);
+      var p=meanK/(N-1);
+      edges=[]; var deg=new Array(N).fill(0);
+      // union-find
+      var par=[]; for(var i=0;i<N;i++)par[i]=i;
+      function find(a){ while(par[a]!==a){par[a]=par[par[a]];a=par[a];} return a; }
+      for(var a=0;a<N;a++) for(var b=a+1;b<N;b++){ if(rand()<p){ edges.push([a,b]); deg[a]++; deg[b]++; var ra=find(a),rb=find(b); if(ra!==rb)par[ra]=rb; } }
+      // component sizes
+      var size={}; for(var n=0;n<N;n++){ var r=find(n); size[r]=(size[r]||0)+1; }
+      var big=0, bigRoot=-1; for(var k in size){ if(size[k]>big){big=size[k];bigRoot=+k;} }
+      var giant={}; for(var m=0;m<N;m++){ giant[m]=(find(m)===bigRoot && big>1); }
+      // moments
+      var sum=0,sum2=0; for(var q=0;q<N;q++){ sum+=deg[q]; sum2+=deg[q]*deg[q]; }
+      var mk=sum/N, mk2=sum2/N, kappa= mk>0? mk2/mk : 0;
+      // layout (once)
+      if(nodes.length!==N){ nodes=[]; for(var z=0;z<N;z++){ var ang=z/N*Math.PI*2, rr=0.34+0.11*Math.sin(z*2.3); nodes.push({ang:ang,r:rr}); } }
+      return {deg:deg,giant:giant,kappa:kappa,frac:big/N,find:find,bigRoot:bigRoot,big:big};
+    }
+    var state;
+    function draw(){
+      state=build();
+      kapOut.textContent=state.kappa.toFixed(1);
+      var core = state.kappa>=2;
+      stOut.textContent = core?'cascade core':'fragmented';
+      stOut.style.color = core?C.exp:C.cheap;
+      kapOut.style.color = core?C.exp:C.cheap;
+      frOut.textContent=Math.round(state.frac*100)+'%';
+      var d=fit(cv), ctx=d.ctx, w=d.w, h=d.h;
+      ctx.clearRect(0,0,w,h);
+      var cx=w*0.42, cy=h/2, R=Math.min(w*0.42,h*0.42);
+      function P(i){ var nd=nodes[i]; return {x:cx+Math.cos(nd.ang)*R*nd.r*1.6, y:cy+Math.sin(nd.ang)*R*nd.r*1.6}; }
+      // edges
+      edges.forEach(function(e){
+        var inG = state.giant[e[0]]&&state.giant[e[1]];
+        var pa=P(e[0]), pb=P(e[1]);
+        ctx.strokeStyle= inG? 'rgba(232,82,200,.55)' : 'rgba(150,140,255,.14)';
+        ctx.lineWidth= inG?1.4:0.8; if(inG){glow(ctx,C.magenta,6);}
+        ctx.beginPath(); ctx.moveTo(pa.x,pa.y); ctx.lineTo(pb.x,pb.y); ctx.stroke(); noGlow(ctx);
+      });
+      // nodes
+      for(var i=0;i<N;i++){ var pt=P(i), inG=state.giant[i];
+        ctx.fillStyle= inG? C.magenta : 'rgba(120,120,160,.5)';
+        if(inG){glow(ctx,C.magenta,10);}
+        ctx.beginPath(); ctx.arc(pt.x,pt.y, inG?3.4:2.1, 0,7); ctx.fill(); noGlow(ctx);
+      }
+      // gauge on right
+      var gx=w-150, gy0=40, gy1=h-40;
+      ctx.strokeStyle='rgba(150,140,255,.16)'; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(gx,gy0); ctx.lineTo(gx,gy1); ctx.stroke();
+      function GY(kap){ var t=Math.min(kap,5)/5; return gy1-(gy1-gy0)*t; }
+      // threshold at kappa=2
+      var ty=GY(2); ctx.strokeStyle=C.exp; ctx.setLineDash([5,5]); glow(ctx,C.exp,8);
+      ctx.beginPath(); ctx.moveTo(gx-8,ty); ctx.lineTo(gx+120,ty); ctx.stroke(); noGlow(ctx); ctx.setLineDash([]);
+      ctx.fillStyle=C.exp; ctx.font=mono(11); ctx.textAlign='left'; ctx.fillText('κ = 2  threshold', gx+10, ty-7);
+      // current kappa marker
+      var ky=GY(state.kappa); ctx.fillStyle= core?C.exp:C.cheap; glow(ctx,core?C.exp:C.cheap,14);
+      ctx.beginPath(); ctx.arc(gx,ky,6,0,7); ctx.fill(); noGlow(ctx);
+      ctx.fillStyle=C.ink; ctx.font=mono(13); ctx.fillText('κ = '+state.kappa.toFixed(1), gx+12, ky+4);
+      ctx.fillStyle=C.faint; ctx.font=mono(10); ctx.fillText('giant component', gx-4, gy0-14);
+    }
+    kEl.addEventListener('input',draw);
+    // each build() advances the PRNG, so redrawing already yields a fresh graph
+    reBtn.addEventListener('click', draw);
+    addEventListener('resize',draw); draw();
+  })();
+
+  // ══ 5 · AMDAHL ═════════════════════════════════════════════════════════════
+  (function(){
+    var cv=document.getElementById('c-amdahl'); if(!cv) return;
+    var sEl=document.getElementById('s-amd-s'), kEl=document.getElementById('s-amd-k'),
+        sV=document.getElementById('v-amd-s'), kV=document.getElementById('v-amd-k'),
+        nOut=document.getElementById('o-amd-n'), spOut=document.getElementById('o-amd-s');
+    function T(n,s,k){ return s + (1-s)/n + k*n; }
+    function draw(){
+      var s=parseFloat(sEl.value), k=parseFloat(kEl.value);
+      sV.textContent=s.toFixed(2); kV.textContent=k.toFixed(3);
+      var nstar=Math.sqrt((1-s)/k);
+      var t1=T(1,s,k), peak=t1/T(nstar,s,k);
+      nOut.textContent=nstar.toFixed(1); spOut.textContent='×'+peak.toFixed(1);
+      var d=fit(cv), ctx=d.ctx, w=d.w, h=d.h, padL=52, padR=24, padT=24, padB=38;
+      ctx.clearRect(0,0,w,h);
+      var Nmax=24;
+      // find max speedup for y-scale
+      var yMax=1; for(var n=1;n<=Nmax;n+=0.5){ yMax=Math.max(yMax, t1/T(n,s,k)); } yMax*=1.12;
+      function X(n){ return padL+(w-padL-padR)*((n-1)/(Nmax-1)); }
+      function Y(v){ return padT+(h-padT-padB)*(1-v/yMax); }
+      // grid
+      ctx.strokeStyle='rgba(150,140,255,.10)'; ctx.font=mono(10); ctx.fillStyle=C.faint; ctx.textAlign='right';
+      for(var g=1;g<=Math.floor(yMax);g++){ ctx.beginPath(); ctx.moveTo(padL,Y(g)); ctx.lineTo(w-padR,Y(g)); ctx.stroke(); ctx.fillText('×'+g, padL-6, Y(g)+3); }
+      ctx.textAlign='center';
+      [1,6,12,18,24].forEach(function(n){ ctx.fillText(n, X(n), h-8); });
+      ctx.textAlign='left'; ctx.fillStyle=C.faint; ctx.fillText('speedup  S(n)=T(1)/T(n)', padL, padT-8);
+      ctx.textAlign='right'; ctx.fillText('agents n →', w-padR, h-8);
+      // curve
+      var grad=ctx.createLinearGradient(padL,0,w-padR,0);
+      grad.addColorStop(0,C.cyan); grad.addColorStop(0.5,C.violet); grad.addColorStop(1,C.magenta);
+      ctx.strokeStyle=grad; ctx.lineWidth=2.6; glow(ctx,C.violet,7); ctx.beginPath();
+      var first=true; for(var nn=1;nn<=Nmax;nn+=0.25){ var v=t1/T(nn,s,k),x=X(nn),y=Y(v); if(first){ctx.moveTo(x,y);first=false;} else ctx.lineTo(x,y);} ctx.stroke(); noGlow(ctx);
+      // n* marker
+      var nx=X(Math.min(nstar,Nmax)), ny=Y(peak);
+      ctx.strokeStyle='rgba(0,230,195,.45)'; ctx.setLineDash([4,4]); ctx.beginPath(); ctx.moveTo(nx,ny); ctx.lineTo(nx,h-padB); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle=C.aqua; glow(ctx,C.aqua,15); ctx.beginPath(); ctx.arc(nx,ny,6,0,7); ctx.fill(); noGlow(ctx);
+      ctx.fillStyle=C.aqua; ctx.font=mono(12); ctx.textAlign='center';
+      ctx.fillText('n★ ≈ '+nstar.toFixed(1), nx, ny-12);
+    }
+    sEl.addEventListener('input',draw); kEl.addEventListener('input',draw); addEventListener('resize',draw); draw();
+  })();
+
+  // ══ 6 · ENTROPY ════════════════════════════════════════════════════════════
+  (function(){
+    var cv=document.getElementById('c-entropy'); if(!cv) return;
+    var rEl=document.getElementById('s-ent-r'), rV=document.getElementById('v-ent-r'),
+        rhoOut=document.getElementById('o-ent-rho'), uOut=document.getElementById('o-ent-u');
+    var L=200000;
+    function draw(){
+      var r=parseFloat(rEl.value)/100; rV.textContent=Math.round(r*100)+'%';
+      var rho=1-r; var useful=Math.round(L*rho);
+      rhoOut.textContent=rho.toFixed(2);
+      uOut.textContent=(useful/1000).toFixed(0)+'k';
+      uOut.style.color = rho<0.35?C.exp:rho<0.6?C.mid:C.cheap;
+      var d=fit(cv), ctx=d.ctx, w=d.w, h=d.h, padL=20, padR=20, padT=40, padB=40;
+      ctx.clearRect(0,0,w,h);
+      var bx=padL, bw=w-padL-padR, by=padT+20, bh=h-padT-padB-20;
+      // full window (faint)
+      ctx.fillStyle='rgba(150,140,255,.10)'; ctx.strokeStyle='rgba(150,140,255,.25)';
+      ctx.fillRect(bx,by,bw,bh); ctx.strokeRect(bx,by,bw,bh);
+      // useful portion
+      var uw=bw*rho;
+      var grad=ctx.createLinearGradient(bx,0,bx+uw,0);
+      grad.addColorStop(0,C.cyan); grad.addColorStop(1,C.violet);
+      ctx.fillStyle=grad; glow(ctx,C.violet,14); ctx.fillRect(bx,by,uw,bh); noGlow(ctx);
+      // redundant (noise) hatch
+      ctx.fillStyle='rgba(255,90,110,.12)';
+      ctx.fillRect(bx+uw,by,bw-uw,bh);
+      // labels
+      ctx.font=mono(12); ctx.textAlign='left'; ctx.fillStyle=C.ink;
+      ctx.fillText('useful signal · '+(useful/1000).toFixed(0)+'k tokens', bx+10, by-10);
+      ctx.textAlign='right'; ctx.fillStyle=C.exp;
+      if(r>0.05) ctx.fillText('redundant · compacted away', bx+bw-10, by-10);
+      ctx.textAlign='center'; ctx.fillStyle=C.faint; ctx.font=mono(11);
+      ctx.fillText('a '+(L/1000)+'k window carries only '+(useful/1000).toFixed(0)+'k of real signal at ρ='+rho.toFixed(2), w/2, by+bh+26);
+      // compaction threshold
+      var thr=0.4, tx=bx+bw*thr;
+      ctx.strokeStyle=C.mid; ctx.setLineDash([5,5]); ctx.beginPath(); ctx.moveTo(tx,by-4); ctx.lineTo(tx,by+bh+4); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle=C.mid; ctx.font=mono(10); ctx.textAlign='center'; ctx.fillText('compact below ρ=0.40', tx, by+bh+40);
+    }
+    rEl.addEventListener('input',draw); addEventListener('resize',draw); draw();
+  })();
+
+})();
+</script>
+</body>
+</html>

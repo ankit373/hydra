@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 // Package env discovers AI heads via API keys present in the environment.
 // To add a new provider: add one entry to the knownKeys table.
 package env

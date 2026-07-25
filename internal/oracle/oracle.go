@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 // Package oracle turns deterministic verifiers — test runners, compilers,
 // linters — into first-class evidence sources for the Trust Control Plane. A
 // passing suite is far stronger evidence of correctness than any single model's

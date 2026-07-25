@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 // Package cost reads ~/.hydra/logs/cost.jsonl and produces spend summaries.
 // It is the Go port of dispatch/cost.sh.
 package cost
