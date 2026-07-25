@@ -10,7 +10,7 @@ before:
 builds:
   - id: hydra
     main: ./cmd/hydra
-    binary: hydra
+    binary: hyctl
     env:
       - CGO_ENABLED=0
     flags:
@@ -79,7 +79,7 @@ sboms:
 # ── Homebrew Tap ──────────────────────────────────────────────────────────────
 
 brews:
-  - name: hydra
+  - name: hyctl
     repository:
       owner: ankit373
       name: homebrew-hydra
@@ -88,19 +88,15 @@ brews:
     commit_author:
       name: goreleaser-bot
       email: goreleaser@uvansa.com
-    commit_msg_template: "chore: bump hydra to {{ .Tag }}"
+    commit_msg_template: "chore: bump hyctl to {{ .Tag }}"
     directory: Formula
     homepage: "https://hydra.uvansa.com"
     description: "Multi-model AI orchestration — one Cortex, many Heads"
     license: MIT
-    dependencies:
-      - name: jq
-      - name: yq
-      - name: bun
     install: |
-      bin.install "hydra"
+      bin.install "hyctl"
     test: |
-      assert_match version.to_s, shell_output("#{bin}/hydra version")
+      assert_match version.to_s, shell_output("#{bin}/hyctl version")
 
 # ── Changelog ─────────────────────────────────────────────────────────────────
 
@@ -134,8 +130,9 @@ release:
     ---
     **Install / Upgrade**
     ```bash
-    brew install ankit373/hydra/hydra   # first install
-    brew upgrade hydra                   # upgrade
+    brew tap ankit373/hydra   # first install (one-time)
+    brew install hyctl
+    brew upgrade hyctl        # upgrade
     ```
     **Verify (after cosign enabled)**
     ```bash

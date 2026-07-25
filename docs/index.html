@@ -64,11 +64,11 @@
       "10-tier model routing by task complexity",
       "Automatic fallback chains terminating at always-on local Qwen",
       "Local Ollama + cloud model hybrid — provider-neutral discovery",
-      "Interactive TUI cockpit (hydra tui) — chat, route work, and watch spend live",
+      "Interactive TUI cockpit (hyctl tui) — chat, route work, and watch spend live",
       "Swarm dispatch — race, best, and all modes across multiple models simultaneously",
       "Token budget enforcement — per-model context window tracking with pressure modes",
       "Dynamic live pricing — OpenRouter API pricing with 24h cache and tier fallback",
-      "hydra stats — real-time session cost rollup by model, tier, and day",
+      "hyctl stats — real-time session cost rollup by model, tier, and day",
       "A2A agent-to-agent handoff protocol",
       "Homebrew installable on macOS and Linux"
     ]
@@ -114,7 +114,7 @@
         "name": "How do I install Hydra?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "Install Hydra via Homebrew: run 'brew tap ankit373/hydra && brew install hydra'. Alternatively, download the binary from GitHub releases or build from source with 'go build ./cmd/hydra'. Hydra requires Go 1.22+ and optionally Ollama for local model support."
+          "text": "Install Hydra via Homebrew: run 'brew tap ankit373/hydra && brew install hyctl'. Alternatively, download the binary from GitHub releases or build from source with 'go build ./cmd/hydra'. Hydra requires Go 1.22+ and optionally Ollama for local model support."
         }
       },
       {
@@ -122,7 +122,7 @@
         "name": "What models does Hydra support?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "Hydra supports any model accessible via Antigravity (agy) or Ollama. Out of the box: Claude Opus and Sonnet (tiers 1-3), Gemini 2.5 Pro and Flash (tiers 4-8), and Qwen3 via Ollama (tiers 9-10 local). New models are added at runtime with 'hydra models add' or by editing registry/models.yaml — no code changes required."
+          "text": "Hydra supports any model accessible via Antigravity (agy) or Ollama. Out of the box: Claude Opus and Sonnet (tiers 1-3), Gemini 2.5 Pro and Flash (tiers 4-8), and Qwen3 via Ollama (tiers 9-10 local). New models are added at runtime with 'hyctl models add' or by editing registry/models.yaml — no code changes required."
         }
       },
       {
@@ -130,7 +130,7 @@
         "name": "What is swarm dispatch?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "Swarm dispatch fans a single prompt out to multiple model heads simultaneously. Race mode returns the first successful response. Best mode uses an LLM judge to pick the highest quality answer. All mode aggregates every response for comparison. Run it with: hydra dispatch --swarm --swarm-mode race 'your prompt'."
+          "text": "Swarm dispatch fans a single prompt out to multiple model heads simultaneously. Race mode returns the first successful response. Best mode uses an LLM judge to pick the highest quality answer. All mode aggregates every response for comparison. Run it with: hyctl dispatch --swarm --swarm-mode race 'your prompt'."
         }
       },
       {
@@ -472,12 +472,12 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
     <a href="/pricing.html">Pricing</a>
     <a href="#start">Get started</a>
   </nav>
-  <a class="ghost" href="#start">$ brew install hydra</a>
+  <a class="ghost" href="#start">$ brew install hyctl</a>
 </div>
 
-<!-- ══ 1 · HERO — live 3D neon hydra ════════════════════════════════════════ -->
+<!-- ══ 1 · HERO — live 3D neon hyctl ════════════════════════════════════════ -->
 <header class="hero">
-  <canvas id="stage" aria-label="Live 3D neon hydra — three heads converging into a neural-network body"></canvas>
+  <canvas id="stage" aria-label="Live 3D neon hyctl — three heads converging into a neural-network body"></canvas>
   <div class="hero-grid" aria-hidden="true"></div>
   <div class="hero-vign" aria-hidden="true"></div>
   <div class="hero-inner">
@@ -486,8 +486,8 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
     <div class="tagline">One Cortex · Many Heads</div>
     <p class="subline">The local-first <b>Trust Control Plane</b> for AI. Hydra discovers every model on your machine — CLI agents, API keys, local servers — and routes each task to the cheapest head that clears your <b>target confidence</b>.</p>
     <div class="ctas">
-      <button class="install" data-copy="brew install hydra" aria-label="Copy install command">
-        <span class="dollar">$</span><span class="cmd">brew install <b>hydra</b></span><span class="cp">copy</span>
+      <button class="install" data-copy="brew tap ankit373/hydra && brew install hyctl" aria-label="Copy install command">
+        <span class="dollar">$</span><span class="cmd">brew install <b>hyctl</b></span><span class="cp">copy</span>
       </button>
       <a class="btn-ghost" href="/docs.html">Read the docs →</a>
     </div>
@@ -556,7 +556,7 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
           <circle class="pop" cx="286" cy="76"  r="4.5" fill="#8B5CF6" style="transition-delay:.45s"/>
           <text class="dotlbl pop" x="238" y="70" style="transition-delay:.5s">all-Claude</text>
         </g>
-        <!-- hydra markers on the frontier -->
+        <!-- hyctl markers on the frontier -->
         <g class="dots">
           <circle class="pop" cx="150" cy="66" r="5.5" fill="#00E6C3" style="transition-delay:.6s;filter:drop-shadow(0 0 5px #00E6C3)"/>
           <circle class="pop" cx="250" cy="46" r="5.5" fill="#00E6C3" style="transition-delay:.7s;filter:drop-shadow(0 0 5px #00E6C3)"/>
@@ -679,14 +679,14 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
 <section class="blk wrap reveal" id="numbers">
   <div class="klabel"><span>By the numbers</span><b>every number has a mechanism</b></div>
   <h2 class="big">Loud numbers. <span class="grad">Real levers.</span></h2>
-  <p class="lede">No tokens-processed arms race. Each of these is something you can reproduce on your own machine with <b>hydra stats</b> and <b>hydra probe</b>.</p>
+  <p class="lede">No tokens-processed arms race. Each of these is something you can reproduce on your own machine with <b>hyctl stats</b> and <b>hyctl probe</b>.</p>
 
   <div class="bento">
     <div class="tile big" style="--gl:rgba(63,217,138,.12)">
       <div class="num tnum" data-to="73" data-suffix="%">73<span class="u">%</span></div>
       <div>
         <div class="cap">cheaper, typically</div>
-        <div class="mech">Median cost avoided by routing boilerplate <em>away</em> from the frontier orchestrator to a mid or local head. Reproduce with <code>hydra stats</code>.</div>
+        <div class="mech">Median cost avoided by routing boilerplate <em>away</em> from the frontier orchestrator to a mid or local head. Reproduce with <code>hyctl stats</code>.</div>
       </div>
     </div>
     <div class="tile med" style="--gl:rgba(0,230,195,.12)">
@@ -707,7 +707,7 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
       <div class="num tnum" data-to="12">12</div>
       <div>
         <div class="cap">heads discovered</div>
-        <div class="mech">CLI agents + API keys + local servers found on a typical dev box. Run <code>hydra probe</code>.</div>
+        <div class="mech">CLI agents + API keys + local servers found on a typical dev box. Run <code>hyctl probe</code>.</div>
       </div>
     </div>
     <div class="tile wide" style="--gl:rgba(232,82,200,.12)">
@@ -728,7 +728,7 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
 
   <div class="cmp-scroll">
     <table class="cmp">
-      <colgroup><col><col class="hydra"><col><col><col></colgroup>
+      <colgroup><col><col class="hyctl"><col><col><col></colgroup>
       <thead>
         <tr>
           <th scope="col">Capability</th>
@@ -749,7 +749,7 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
       </tbody>
     </table>
   </div>
-  <p class="cmp-note"><b>The interactive agent-tree cockpit is the one roadmap item here</b> — every row checked above ships today in the CLI (<code>hydra dispatch --confidence</code>, <code>hydra graph blast</code>, <code>hydra mcp</code>).</p>
+  <p class="cmp-note"><b>The interactive agent-tree cockpit is the one roadmap item here</b> — every row checked above ships today in the CLI (<code>hyctl dispatch --confidence</code>, <code>hyctl graph blast</code>, <code>hyctl mcp</code>).</p>
 </section>
 
 <!-- ══ 7 · GETTING STARTED ══════════════════════════════════════════════════ -->
@@ -763,8 +763,8 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
       <h3>Get the binary</h3>
       <p>One Go binary. No daemon, no account, no cloud.</p>
       <div class="term">
-        <div class="copyline" data-copy="brew install hydra"><span><span class="p">$</span> brew install hydra</span><span class="cp">copy</span></div>
-        <div class="o">🍺 <span class="g">hydra 1.x</span> installed · run `hydra`</div>
+        <div class="copyline" data-copy="brew tap ankit373/hydra && brew install hyctl"><span><span class="p">$</span> brew tap ankit373/hydra &amp;&amp; brew install hyctl</span><span class="cp">copy</span></div>
+        <div class="o">🍺 <span class="g">hyctl 1.x</span> installed · run `hyctl`</div>
       </div>
     </div>
     <div class="step">
@@ -772,7 +772,7 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
       <h3>Scan your machine</h3>
       <p>Finds every head: CLI agents, API keys, local servers.</p>
       <div class="term">
-        <div class="copyline" data-copy="hydra probe"><span><span class="p">$</span> hydra probe</span><span class="cp">copy</span></div>
+        <div class="copyline" data-copy="hyctl probe"><span><span class="p">$</span> hyctl probe</span><span class="cp">copy</span></div>
         <div class="o"><span class="g">✓</span> 12 heads · agy · gemini · openrouter</div>
         <div class="o"><span class="c">          ollama(qwen) · lmstudio · …</span></div>
       </div>
@@ -782,7 +782,7 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
       <h3>Route a task</h3>
       <p>Classify → tier → cheapest head that clears confidence.</p>
       <div class="term">
-        <div class="copyline" data-copy='hydra dispatch --enum SIMPLE "write a User DTO"'><span><span class="p">$</span> hydra dispatch --enum SIMPLE …</span><span class="cp">copy</span></div>
+        <div class="copyline" data-copy='hyctl dispatch --enum SIMPLE "write a User DTO"'><span><span class="p">$</span> hyctl dispatch --enum SIMPLE …</span><span class="cp">copy</span></div>
         <div class="o"><span class="c">→ T8 gemini-flash · $0.0001</span></div>
         <div class="o"><span class="g">✓ done</span> · saved $0.0149 vs all-Claude</div>
       </div>
@@ -795,8 +795,8 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
   <h2>Stop paying frontier prices<br>for <span class="grad">boilerplate</span>.</h2>
   <p>One cortex, many heads. Route each task to the cheapest head that clears your bar — on your own hardware, with your spend and policy staying home.</p>
   <div class="ctas">
-    <button class="install" data-copy="brew install hydra" aria-label="Copy install command">
-      <span class="dollar">$</span><span class="cmd">brew install <b>hydra</b></span><span class="cp">copy</span>
+    <button class="install" data-copy="brew tap ankit373/hydra && brew install hyctl" aria-label="Copy install command">
+      <span class="dollar">$</span><span class="cmd">brew install <b>hyctl</b></span><span class="cp">copy</span>
     </button>
     <a class="btn-ghost" href="#universe">See the whitespace ↑</a>
   </div>
@@ -834,7 +834,7 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
     </div>
     <div class="foot-bottom">
       <span class="badges"><b>MIT</b> · provider-neutral · runs offline · <span>One Cortex · Many Heads</span></span>
-      <span class="egg">$ hydra dispatch --enum SIMPLE "ship it"<span class="cur"></span></span>
+      <span class="egg">$ hyctl dispatch --enum SIMPLE "ship it"<span class="cur"></span></span>
     </div>
   </div>
 </footer>
@@ -865,7 +865,7 @@ function costColor(x){
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
-   1 · HERO — live 3D neon hydra (canvas engine adapted from the v2 prototype)
+   1 · HERO — live 3D neon hyctl (canvas engine adapted from the v2 prototype)
    ══════════════════════════════════════════════════════════════════════════*/
 (function heroHydra(){
   var cv=$('#stage'); if(!cv) return;
@@ -973,7 +973,7 @@ function costColor(x){
     eval:{col:[139,92,246],label:'Eval / observability'},
     local:{col:[232,82,200],label:'Local runtime'},
     frontier:{col:[110,116,150],label:'Frontier head'},
-    hydra:{col:[0,230,195],label:'Trust control plane'}
+    hyctl:{col:[0,230,195],label:'Trust control plane'}
   };
   /* x: -1 hosted … +1 local-first ; y: -1 cost/latency … +1 trust/confidence */
   var STARS=[
@@ -1002,7 +1002,7 @@ function costColor(x){
     {n:'Mistral',c:'frontier',x:0.30,y:-0.93,r:2.0,t:'Frontier head — a destination, not a router'},
     {n:'Meta Llama',c:'frontier',x:0.02,y:-0.86,r:2.0,t:'Open-weights head — a destination'},
     // Hydra — local + trust (top-right, alone)
-    {n:'Hydra',c:'hydra',x:0.60,y:0.58,r:6.2,t:'Local-first · provider-neutral · routes to a target confidence, on your machine',hydra:true}
+    {n:'Hydra',c:'hyctl',x:0.60,y:0.58,r:6.2,t:'Local-first · provider-neutral · routes to a target confidence, on your machine',hyctl:true}
   ];
   STARS.forEach(function(s,i){s.ph=Math.random()*6.283;s.sp=0.4+Math.random()*0.6;
     s.tw=0.7+Math.random()*0.7;                  // per-star twinkle frequency (organic, non-mechanical)
@@ -1124,7 +1124,7 @@ function costColor(x){
       g2.addColorStop(1,'rgba('+col[0]+','+col[1]+','+col[2]+',0)');
       ctx.fillStyle=g2;ctx.beginPath();ctx.arc(s.px,s.py,rad*5,0,6.283);ctx.fill();
       ctx.fillStyle='rgba(255,255,255,'+(s.c==='frontier'?0.6:0.95)+')';ctx.beginPath();ctx.arc(s.px,s.py,Math.max(1,rad*0.62),0,6.283);ctx.fill();
-      // permanent hydra label — drawn last, tracks its (barely-moving) star so it stays readable
+      // permanent hyctl label — drawn last, tracks its (barely-moving) star so it stays readable
       if(s.hydra){
         ctx.font='700 14px ui-monospace,Menlo,monospace';ctx.fillStyle='rgba(0,230,195,.95)';ctx.textAlign='left';
         ctx.fillText('HYDRA',s.px+22,s.py+5);

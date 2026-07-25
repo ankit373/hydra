@@ -2,7 +2,7 @@
 # Provider-neutral, local-first control plane. The orchestrator delegates; cheaper/local heads do the work.
 
 ## What Hydra Is
-A **local-first, multi-vendor AI control plane** shipped as a Go CLI (`hydra`). It discovers every
+A **local-first, multi-vendor AI control plane** shipped as a Go CLI (`hyctl`). It discovers every
 model on your machine (CLI agents, API keys, local servers), scores each, and routes tasks by
 complexity/cost with automatic fallback — enforcing policy (PII/local-only) and logging spend.
 
@@ -21,9 +21,9 @@ Never do work yourself that belongs to a lower tier. Never escalate work to your
 
 ## Directory Layout
 
-**The `hydra` Go CLI is the entire interface** (`cmd/hydra` + `internal/`). The legacy
+**The `hyctl` Go CLI is the entire interface** (`cmd/hydra` + `internal/`). The legacy
 `dispatch/*.sh` shell layer and the `internal/company` playbook engine have been **removed**
-(#86, #88) — there is no shell fallback and no `hydra run`. Everything is native Go.
+(#86, #88) — there is no shell fallback and no `hyctl run`. Everything is native Go.
 ```
 cmd/hydra/              ← CLI entry point (Cobra): dispatch, probe, status, cost, stats,
                           pricing, edit, review, parallel, trust, init.
@@ -36,12 +36,12 @@ internal/graph/         ← Code dependency graph (graph.json) → blast radius 
 internal/a2a/           ← Causal agent handoffs: vector clocks + concurrent-edit conflict detection.
 internal/optimal/       ← Optimal parallel-agent count n*=√((1-s)/k) (Amdahl+coordination, Law 4).
 internal/entropy/       ← Context signal density (gzip proxy) → useful_tokens=L·ρ; compaction governor (Law 5).
-internal/ledger/        ← MCP accountability ledger: record + policy-gate what agents touch. `hydra mcp`.
-internal/oracle/        ← Verification oracles (tests/compile/lint) as calibrated evidence sources. `hydra oracle`.
+internal/ledger/        ← MCP accountability ledger: record + policy-gate what agents touch. `hyctl mcp`.
+internal/oracle/        ← Verification oracles (tests/compile/lint) as calibrated evidence sources. `hyctl oracle`.
 internal/pricing/       ← Live pricing DB (OpenRouter fetch + 24h cache + tier fallback).
 internal/policy/        ← PII detection + local-only enforcement.
 internal/{cost,budget}/ ← Spend reporting (est/actual labeling) + token-budget governor (static bands + rate-aware first-passage on claude_pct).
-internal/capabilities/  ← Model capability scores: embedded data.json ⊕ runtime user overlay (~/.hydra/models.json). `hydra models`.
+internal/capabilities/  ← Model capability scores: embedded data.json ⊕ runtime user overlay (~/.hydra/models.json). `hyctl models`.
 internal/util/          ← Shared utilities (Accumulator, etc).
 
 registry/routing.yaml   ← THE ENUM. Change tier assignments here only.
@@ -63,27 +63,27 @@ Check `registry/routing.yaml` to resolve the enum key to a tier number.
 
 ### Step 2 — Check State
 ```bash
-hydra status      # check claude_pct, budget, and available heads
+hyctl status      # check claude_pct, budget, and available heads
 ```
 If claude_pct ≥ 75: freeze escalations, do not route new work to tier 1 (yourself).
 If claude_pct ≥ 95: emergency mode — warn user, only route, don't execute.
 
 ### Step 3 — Dispatch
 ```bash
-hydra dispatch --enum SIMPLE "<task>" [--system <text>] [--a2a logs/last_handoff.json]
+hyctl dispatch --enum SIMPLE "<task>" [--system <text>] [--a2a logs/last_handoff.json]
 ```
 Dispatch handles fallbacks automatically. You do not need to retry. Use `--dry-run` to preview
 the routing chain, `--local` to force local-only, `--tier N` to pin a tier.
 
 ### Step 4 — Review
 Read the output. Ask: does this compile? match conventions? solve the task?
-If no → escalate one tier: `hydra dispatch --tier <lower-number> …` (lower tier number = stronger).
+If no → escalate one tier: `hyctl dispatch --tier <lower-number> …` (lower tier number = stronger).
 If yes → apply to disk, continue.
 
 ### Step 5 — Rubber Duck
 For any output from tiers 2-3 (agy Claude family), run rubber duck review:
 ```bash
-hydra dispatch --tier 4 "Review this for tradeoffs and blind spots:\n<output>"
+hyctl dispatch --tier 4 "Review this for tradeoffs and blind spots:\n<output>"
 ```
 Skip rubber duck if claude_pct ≥ 75 (preserve tokens).
 
@@ -103,7 +103,7 @@ cat > /tmp/hydra_handoff.json <<EOF
   "prior_output": "<what was already done>"
 }
 EOF
-hydra dispatch --tier 6 "<next task>" --a2a /tmp/hydra_handoff.json
+hyctl dispatch --tier 6 "<next task>" --a2a /tmp/hydra_handoff.json
 ```
 The last handoff is always saved to `logs/last_handoff.json` automatically.
 
@@ -129,7 +129,7 @@ Update `logs/state.json` when you know your token usage percent:
 jq '.claude_pct = 52' logs/state.json > logs/state.json.tmp && mv logs/state.json.tmp logs/state.json
 ```
 
-**Same 70%/75%/80% rule applies to ALL delegated models** — `hydra dispatch` enforces this via the budget governor + fallback chains.
+**Same 70%/75%/80% rule applies to ALL delegated models** — `hyctl dispatch` enforces this via the budget governor + fallback chains.
 **Qwen (tier 10) is always the terminal fallback** — it runs locally so is always available regardless of API limits.
 
 ---
@@ -192,45 +192,45 @@ no hallucinated APIs, explicit about tradeoffs.
 ## Quick Reference
 ```bash
 # Dispatch by enum key (preferred)
-hydra dispatch --enum SIMPLE "write a User DTO in TypeScript"
+hyctl dispatch --enum SIMPLE "write a User DTO in TypeScript"
 
 # Dispatch by tier
-hydra dispatch --tier 8 "write a User DTO in TypeScript"
+hyctl dispatch --tier 8 "write a User DTO in TypeScript"
 
 # Preview the routing/fallback chain without executing
-hydra dispatch --dry-run --enum STANDARD "add pagination"
+hyctl dispatch --dry-run --enum STANDARD "add pagination"
 
 # Force local-only (no API calls)
-hydra dispatch --local "write unit tests"
+hyctl dispatch --local "write unit tests"
 
 # With A2A handoff
-hydra dispatch --enum MODERATE "add auth" --a2a logs/last_handoff.json
+hyctl dispatch --enum MODERATE "add auth" --a2a logs/last_handoff.json
 
 # Fan-out to multiple heads (swarm) and judge the best
-hydra dispatch --swarm --swarm-mode best "implement rate limiter"
+hyctl dispatch --swarm --swarm-mode best "implement rate limiter"
 
 # Route to a target confidence of correctness (SPRT optimal-stopping ensemble)
-hydra dispatch --confidence 0.95 "is this migration safe for prod?"
+hyctl dispatch --confidence 0.95 "is this migration safe for prod?"
 
 # Blast-radius aware: --file raises the confidence bar by the code graph
-hydra graph blast internal/auth/token.go
-hydra dispatch --confidence 0.90 --file internal/auth/token.go "rotate signing key"
+hyctl graph blast internal/auth/token.go
+hyctl dispatch --confidence 0.90 --file internal/auth/token.go "rotate signing key"
 
 # Optimal parallelism (Law 4): how many agents to fan out for these files
-hydra graph parallel internal/a.go internal/b.go
+hyctl graph parallel internal/a.go internal/b.go
 # A2A handoffs (last_handoff.json) now carry a vector clock for causal ordering.
 
 # Trust Control Plane: calibration, defect-cost, run stats, and the LLR ledger
-hydra trust calibration ; hydra trust record --source model:x --domain go --said-correct --outcome correct
-hydra trust defect --pii --production ; hydra trust stats ; hydra trust explain <task_hash>
+hyctl trust calibration ; hyctl trust record --source model:x --domain go --said-correct --outcome correct
+hyctl trust defect --pii --production ; hyctl trust stats ; hyctl trust explain <task_hash>
 
 # Add a model at runtime (no rebuild) — merges into ~/.hydra/models.json overlay
-hydra models add kimi-k3 --name "Kimi K3" --provider moonshot --cap-score 85
-hydra models list ; hydra models remove kimi-k3 ; hydra models sync   # import OpenRouter catalog
+hyctl models add kimi-k3 --name "Kimi K3" --provider moonshot --cap-score 85
+hyctl models list ; hyctl models remove kimi-k3 ; hyctl models sync   # import OpenRouter catalog
 
 # System state / discovered heads / spend
-# `hydra status` shows the rate-aware claude_pct governor (first-passage risk toward 80%).
-hydra status ; hydra probe ; hydra cost ; hydra stats
+# `hyctl status` shows the rate-aware claude_pct governor (first-passage risk toward 80%).
+hyctl status ; hyctl probe ; hyctl cost ; hyctl stats
 ```
 
 ---
@@ -362,7 +362,7 @@ Every commit must follow the conventional commit spec.
 
 | Prefix | Effect | Example |
 |---|---|---|
-| `feat:` | minor version bump | `feat: add hydra stats subcommand` |
+| `feat:` | minor version bump | `feat: add hyctl stats subcommand` |
 | `fix:` | patch bump | `fix: nil panic in dispatch on empty prompt` |
 | `feat!:` or `BREAKING CHANGE:` in body | major bump | `feat!: rename --tier to --level` |
 | `perf:` | patch bump | `perf: cache probe results for 60s` |
@@ -382,10 +382,10 @@ git commit -m "chore(deps): bump golang.org/x/sys to v0.25.0"
 
 ```bash
 gh pr create \
-  --title "feat(stats): hydra stats — cost breakdown by model/tier/day" \
+  --title "feat(stats): hyctl stats — cost breakdown by model/tier/day" \
   --body "$(cat <<'EOF'
 ## Summary
-- Adds `hydra stats` subcommand
+- Adds `hyctl stats` subcommand
 - Reads cost.jsonl, groups by model / tier / day
 - Outputs table with totals
 
@@ -485,7 +485,7 @@ git push origin develop
 
 | Channel | Branch | Tag pattern | Install |
 |---|---|---|---|
-| **stable** | `main` (tagged by release-please) | `v1.2.0` | `brew install hydra` |
+| **stable** | `main` (tagged by release-please) | `v1.2.0` | `brew install hyctl` |
 | **RC / UAT** | `release/v*` | `v1.2.0-rc.1` | GitHub pre-release |
 | **edge** | `develop` | `edge` (overwritten) | GitHub pre-release |
 
@@ -571,7 +571,7 @@ gh project item-add 2 --owner ankit373 --url "$ISSUE_URL"
 
 ```bash
 # 1. Create issue + add to board + move to Todo
-ISSUE_URL=$(gh issue create --title "feat: hydra stats" --label enhancement --assignee "@me" \
+ISSUE_URL=$(gh issue create --title "feat: hyctl stats" --label enhancement --assignee "@me" \
   --body "Add cost stats subcommand")
 ISSUE=$(echo "$ISSUE_URL" | grep -oE '[0-9]+$')
 gh project item-add 2 --owner ankit373 --url "$ISSUE_URL"
@@ -589,11 +589,11 @@ gh project item-edit --project-id PVT_kwHOAL1qLc4BZbZZ --id "$ITEM_ID" \
 
 # 3. Write code, commit with conventional message
 git add internal/stats/ cmd/hydra/main.go
-git commit -m "feat(stats): add hydra stats subcommand (#${ISSUE})"
+git commit -m "feat(stats): add hyctl stats subcommand (#${ISSUE})"
 
 # 4. Push and open PR + move to In Review
 git push -u origin HEAD
-gh pr create --title "feat(stats): add hydra stats subcommand" \
+gh pr create --title "feat(stats): add hyctl stats subcommand" \
   --body "Closes #${ISSUE}" --base develop
 gh project item-edit --project-id PVT_kwHOAL1qLc4BZbZZ --id "$ITEM_ID" \
   --field-id PVTSSF_lAHOAL1qLc4BZbZZzhUaGlE --single-select-option-id 1490e846
@@ -653,7 +653,7 @@ docs/robots.txt    ← AI crawler rules (only change if bot policy changes)
 
 | Change | Files to update |
 |---|---|
-| New CLI subcommand (`hydra foo`) | `index.html` (CLI tab), `llms.txt` (What It Does) |
+| New CLI subcommand (`hyctl foo`) | `index.html` (CLI tab), `llms.txt` (What It Does) |
 | New feature shipped | `index.html` (What's New section), `llms.txt` |
 | Version bump (e.g. 1.0 → 1.1) | `index.html` (badge, structured data), `llms.txt`, `sitemap.xml` lastmod |
 | Pricing change (model rates) | `pricing.md`, cost comparison table in `index.html`, `llms.txt` |
@@ -661,8 +661,8 @@ docs/robots.txt    ← AI crawler rules (only change if bot policy changes)
 | AI crawler policy change | `robots.txt` |
 
 ### Rules
-- `llms.txt` must always reflect what `hydra --help` and `hydra stats` actually do — no aspirational features
-- `pricing.md` costs must match `hydra pricing list` live output — never hardcode stale rates without noting the date
+- `llms.txt` must always reflect what `hyctl --help` and `hyctl stats` actually do — no aspirational features
+- `pricing.md` costs must match `hyctl pricing list` live output — never hardcode stale rates without noting the date
 - `sitemap.xml` `lastmod` must be updated whenever `index.html` changes
 - Do not add features to `llms.txt` that haven't shipped to `main` yet
 
@@ -685,15 +685,15 @@ All Go source lives under `cmd/` and `internal/`. Key packages:
 | `internal/policy` | Allow/deny rules (PII local-only, etc.) |
 | `internal/rank` | CapScore ranking helpers |
 | `internal/config` | Hydra config load/save (`~/.config/hydra/`) |
-| `internal/capabilities` | Model capability scores: embedded `data.json` ⊕ runtime user overlay (`~/.hydra/models.json`) merged at discovery, so new models are added without a rebuild. Drives `hydra models list\|add\|remove\|sync`. |
-| `internal/budget` | Token-budget governor: static pressure bands (`ModeFor`) + a rate-aware first-passage-time model on the orchestrator's `claude_pct` session history (`RiskFromHistory`/`EffectiveMode`) that escalates before a threshold is crossed. Feeds `claudeMode` downgrades and `hydra status`. |
-| `internal/trust` | Trust Control Plane confidence layer: per-source calibration (Beta-Bernoulli → LLR/D), defect-cost model + `RequiredConfidence`, and the SPRT optimal-stopping ensemble (`trust.Run`). Drives `hydra dispatch --confidence` and `hydra trust calibration\|record\|defect\|stats\|explain`. |
-| `internal/graph` | Code dependency graph (`graph.json`, Graphify or any tree-sitter indexer) → transitive-dependent blast radius + coupling `k` + Molloy–Reed percolation κ=⟨k²⟩/⟨k⟩ (κ≥2 ⟹ cascade-capable core; `PercolationFactor` lifts hub-core files). Drives `hydra graph blast\|parallel` and `hydra dispatch --file`. |
+| `internal/capabilities` | Model capability scores: embedded `data.json` ⊕ runtime user overlay (`~/.hydra/models.json`) merged at discovery, so new models are added without a rebuild. Drives `hyctl models list\|add\|remove\|sync`. |
+| `internal/budget` | Token-budget governor: static pressure bands (`ModeFor`) + a rate-aware first-passage-time model on the orchestrator's `claude_pct` session history (`RiskFromHistory`/`EffectiveMode`) that escalates before a threshold is crossed. Feeds `claudeMode` downgrades and `hyctl status`. |
+| `internal/trust` | Trust Control Plane confidence layer: per-source calibration (Beta-Bernoulli → LLR/D), defect-cost model + `RequiredConfidence`, and the SPRT optimal-stopping ensemble (`trust.Run`). Drives `hyctl dispatch --confidence` and `hyctl trust calibration\|record\|defect\|stats\|explain`. |
+| `internal/graph` | Code dependency graph (`graph.json`, Graphify or any tree-sitter indexer) → transitive-dependent blast radius + coupling `k` + Molloy–Reed percolation κ=⟨k²⟩/⟨k⟩ (κ≥2 ⟹ cascade-capable core; `PercolationFactor` lifts hub-core files). Drives `hyctl graph blast\|parallel` and `hyctl dispatch --file`. |
 | `internal/a2a` | Agent-to-agent handoffs with vector clocks: causal ordering (before/after/concurrent) + `ConflictsWith` (concurrent + overlapping files). Backs `last_handoff.json` and `--a2a`. |
-| `internal/optimal` | Optimal parallel-agent count `n*=√((1−s)/k)` and speedup (Amdahl + coordination, Manifesto Law 4). Drives `hydra graph parallel`. |
-| `internal/entropy` | Context signal density ρ (gzip-ratio proxy) → `useful_tokens = L·ρ` + a compaction governor (Manifesto Law 5). Drives `hydra context entropy`. |
-| `internal/ledger` | Local MCP accountability ledger: append-only access events + glob allow/deny `Policy.Decide` gate (records every decision). Drives `hydra mcp check\|record\|log\|report`. |
-| `internal/oracle` | Verification oracles: `Oracle`/`CommandOracle` run tests/compile/lint (exit 0 = pass) and map the verdict to a calibrated LLR (`oracle.LLR`) — a high-`D` evidence source. Drives `hydra oracle verify`. |
+| `internal/optimal` | Optimal parallel-agent count `n*=√((1−s)/k)` and speedup (Amdahl + coordination, Manifesto Law 4). Drives `hyctl graph parallel`. |
+| `internal/entropy` | Context signal density ρ (gzip-ratio proxy) → `useful_tokens = L·ρ` + a compaction governor (Manifesto Law 5). Drives `hyctl context entropy`. |
+| `internal/ledger` | Local MCP accountability ledger: append-only access events + glob allow/deny `Policy.Decide` gate (records every decision). Drives `hyctl mcp check\|record\|log\|report`. |
+| `internal/oracle` | Verification oracles: `Oracle`/`CommandOracle` run tests/compile/lint (exit 0 = pass) and map the verdict to a calibrated LLR (`oracle.LLR`) — a high-`D` evidence source. Drives `hyctl oracle verify`. |
 | `internal/tui` | Bubble Tea TUI: init wizard, install flow |
 | `internal/review` | Code review subcommand |
 | `internal/editor` | Editor integration |
@@ -712,12 +712,12 @@ pricing.Load()
   → loadFallbackTiers()   # registry/pricing.yaml (always loaded)
 ```
 `HYDRA_PRICING_TTL_HOURS` overrides the 24h TTL.
-`hydra pricing refresh` forces a synchronous fetch.
-`hydra pricing list [filter] [--json]` shows all known models.
+`hyctl pricing refresh` forces a synchronous fetch.
+`hyctl pricing list [filter] [--json]` shows all known models.
 
 ### Swarm dispatch
 ```
-hydra dispatch --swarm --swarm-mode race|best|all "<prompt>"
+hyctl dispatch --swarm --swarm-mode race|best|all "<prompt>"
   --swarm-heads head1,head2    # explicit head IDs (bypasses tier)
   --swarm-max-heads 5          # cap fan-out
   --swarm-max-cost 0.05        # pre-flight cost guard in USD
