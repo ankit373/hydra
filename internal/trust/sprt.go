@@ -90,9 +90,13 @@ type Result struct {
 // runs out of budget. A source that disagrees with the candidate pushes Λ down;
 // if Λ crosses the reject threshold B the run pivots to that source's answer
 // (destructive interference collapses to the better branch).
-func Run(ctx context.Context, task Task, sources []Source, exec Executor, cal *Calibrator, t Target) (*Result, error) {
+func Run(ctx context.Context, task Task, sources []Source, exec Executor, cal *Calibrator, t Target, opts ...RunOption) (*Result, error) {
 	if len(sources) == 0 {
 		return nil, fmt.Errorf("sprt: no sources provided")
+	}
+	cfg := runConfig{equiv: TextEquivalence}
+	for _, o := range opts {
+		o(&cfg)
 	}
 	alpha := 1 - t.Confidence
 	if alpha <= 0 || alpha >= 1 {
@@ -131,7 +135,7 @@ func Run(ctx context.Context, task Task, sources []Source, exec Executor, cal *C
 		if candidate == "" {
 			candidate = ans.Text // first answer seeds the candidate
 		}
-		agreed := normalizeAnswer(ans.Text) == normalizeAnswer(candidate)
+		agreed := cfg.equiv(candidate, ans.Text)
 
 		llr := cal.LLR(src.ID, task.Domain, agreed)
 		if src.Family != "" && familySeen[src.Family] {
@@ -176,9 +180,49 @@ func evidencePerCost(cal *Calibrator, src Source, domain string) float64 {
 	return d / src.EstCostUSD
 }
 
-// normalizeAnswer defines answer equality for agreement detection. v1 is a
-// conservative trim; semantic/structural equivalence is future work.
-func normalizeAnswer(s string) string { return strings.TrimSpace(s) }
+// AnswerEquivalence decides whether a source's answer counts as agreeing with the
+// current candidate for the purpose of accumulating correctness evidence.
+//
+// The v1 default (TextEquivalence) compares normalized text — which miscounts two
+// independently-correct answers that differ only in wording (variable names,
+// println vs. fmt.Println) as *disagreement*, pushing Λ the wrong way. In the real
+// benchmark this capped achieved confidence at 32.9% even though both sources were
+// oracle-verified correct (see TRUST_CONTROL_PLANE_BENCHMARK_FINDINGS.md §3).
+// Callers that can compare *behavior* — an oracle verdict in a benchmark, an LLM
+// judge in production — inject a semantic comparator via WithEquivalence.
+type AnswerEquivalence func(candidate, answer string) bool
+
+// RunOption configures an SPRT run without changing Run's core signature.
+type RunOption func(*runConfig)
+
+type runConfig struct {
+	equiv AnswerEquivalence
+}
+
+// WithEquivalence overrides how answer agreement is decided (default:
+// TextEquivalence). A nil comparator is ignored, keeping the default.
+func WithEquivalence(fn AnswerEquivalence) RunOption {
+	return func(c *runConfig) {
+		if fn != nil {
+			c.equiv = fn
+		}
+	}
+}
+
+// TextEquivalence is the v1 default agreement check: case-insensitive with
+// collapsed whitespace. It removes trivial-formatting false disagreements but is
+// NOT semantic — two behaviorally-equivalent answers with different identifiers
+// still register as disagreement. Supply WithEquivalence for behavior-based
+// comparison.
+func TextEquivalence(candidate, answer string) bool {
+	return normalizeAnswer(candidate) == normalizeAnswer(answer)
+}
+
+// normalizeAnswer canonicalizes text for TextEquivalence: lowercase, with runs of
+// whitespace collapsed to single spaces and leading/trailing space removed.
+func normalizeAnswer(s string) string {
+	return strings.Join(strings.Fields(strings.ToLower(s)), " ")
+}
 
 // sigmoid maps the log-odds Λ back to a probability for display.
 func sigmoid(x float64) float64 { return 1 / (1 + math.Exp(-x)) }
