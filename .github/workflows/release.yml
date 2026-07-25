@@ -18,18 +18,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0   # full history required for git-cliff changelog
+          fetch-depth: 0   # full history for accurate build metadata
 
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
           cache: true
-
-      - name: Install git-cliff
-        uses: taiki-e/install-action@v2
-        with:
-          tool: git-cliff
 
       # Phase 3: enable cosign for binary signing
       # - name: Install cosign
