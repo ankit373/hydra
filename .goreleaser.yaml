@@ -105,12 +105,21 @@ brews:
 # ── Changelog ─────────────────────────────────────────────────────────────────
 
 changelog:
-  use: git-cliff
-  # git-cliff reads cliff.toml automatically
+  # release-please owns the release notes (see release.mode above), so
+  # GoReleaser does not generate a changelog. NOTE: `use: git-cliff` was
+  # invalid config (valid: git|github|github-native|gitlab) and failed schema
+  # validation — disabling is correct now that notes come from release-please.
+  disable: true
 
 # ── GitHub Release ────────────────────────────────────────────────────────────
 
 release:
+  # release-please already creates the GitHub Release (with sectioned notes:
+  # ✨ Features / 🐛 Fixes / ⚡ Performance) when its Release PR merges.
+  # keep-existing ⇒ GoReleaser ONLY appends binaries / checksums / SBOM and
+  # never overwrites those notes — so every release has notes, guaranteed.
+  # (If the release doesn't exist yet, GoReleaser creates it using header/footer.)
+  mode: keep-existing
   github:
     owner: ankit373
     name: hydra
