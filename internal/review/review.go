@@ -31,8 +31,8 @@ type FileEntry struct {
 
 // SummaryResult is the JSON output of Summary.
 type SummaryResult struct {
-	Files  []FileEntry    `json:"files"`
-	Totals SummaryTotals  `json:"totals"`
+	Files  []FileEntry   `json:"files"`
+	Totals SummaryTotals `json:"totals"`
 }
 
 // SummaryTotals aggregates counts across all files.

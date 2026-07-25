@@ -10,7 +10,8 @@ import (
 )
 
 // a ← b ← c   and   a ← d   (arrows point from dependency to dependent)
-//   b depends on a; c depends on b; d depends on a.
+//
+//	b depends on a; c depends on b; d depends on a.
 func sampleGraph() *Graph {
 	return fromDoc(Doc{
 		Nodes: []Node{
@@ -159,7 +160,7 @@ func pathGraph(n int) *Graph {
 
 func TestKappa_TopologyOrdering(t *testing.T) {
 	star := starGraph(9) // κ = (m+1)/2 = 5
-	path := pathGraph(9)  // κ → 2⁻
+	path := pathGraph(9) // κ → 2⁻
 	disc := fromDoc(Doc{Nodes: []Node{{ID: "x", File: "x.go"}, {ID: "y", File: "y.go"}}})
 
 	if !star.Percolates() {

@@ -30,19 +30,19 @@ const (
 // All fields are set before the Attempt is returned from a runner; callers
 // must treat the value as read-only.
 type Attempt struct {
-	Head         provider.Head
-	Status       HeadStatus
-	Output       string
-	Truncated    bool // true when output was capped by the accumulator
+	Head            provider.Head
+	Status          HeadStatus
+	Output          string
+	Truncated       bool // true when output was capped by the accumulator
 	InputTokens     int
 	OutputTokens    int
 	TokensEstimated bool // true when tokens were estimated (agy char/4), not provider-reported
 	Duration        time.Duration
 	EstCostUSD      float64
-	Err          error // original typed error — never stringified before display
-	StartedAt    time.Time
-	FinishedAt   time.Time
-	Rank         int // 1 = winner; 0 = unranked
+	Err             error // original typed error — never stringified before display
+	StartedAt       time.Time
+	FinishedAt      time.Time
+	Rank            int // 1 = winner; 0 = unranked
 }
 
 // Succeeded reports whether the attempt produced usable output.

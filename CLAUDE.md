@@ -70,7 +70,7 @@ If claude_pct ≥ 95: emergency mode — warn user, only route, don't execute.
 
 ### Step 3 — Dispatch
 ```bash
-hydra dispatch --enum SIMPLE --prompt "<task>" [--system <text>] [--a2a logs/last_handoff.json]
+hydra dispatch --enum SIMPLE "<task>" [--system <text>] [--a2a logs/last_handoff.json]
 ```
 Dispatch handles fallbacks automatically. You do not need to retry. Use `--dry-run` to preview
 the routing chain, `--local` to force local-only, `--tier N` to pin a tier.
@@ -83,7 +83,7 @@ If yes → apply to disk, continue.
 ### Step 5 — Rubber Duck
 For any output from tiers 2-3 (agy Claude family), run rubber duck review:
 ```bash
-hydra dispatch --tier 4 --prompt "Review this for tradeoffs and blind spots:\n<output>"
+hydra dispatch --tier 4 "Review this for tradeoffs and blind spots:\n<output>"
 ```
 Skip rubber duck if claude_pct ≥ 75 (preserve tokens).
 
@@ -103,7 +103,7 @@ cat > /tmp/hydra_handoff.json <<EOF
   "prior_output": "<what was already done>"
 }
 EOF
-hydra dispatch --tier 6 --prompt "<next task>" --a2a /tmp/hydra_handoff.json
+hydra dispatch --tier 6 "<next task>" --a2a /tmp/hydra_handoff.json
 ```
 The last handoff is always saved to `logs/last_handoff.json` automatically.
 
@@ -192,29 +192,29 @@ no hallucinated APIs, explicit about tradeoffs.
 ## Quick Reference
 ```bash
 # Dispatch by enum key (preferred)
-hydra dispatch --enum SIMPLE --prompt "write a User DTO in TypeScript"
+hydra dispatch --enum SIMPLE "write a User DTO in TypeScript"
 
 # Dispatch by tier
-hydra dispatch --tier 8 --prompt "write a User DTO in TypeScript"
+hydra dispatch --tier 8 "write a User DTO in TypeScript"
 
 # Preview the routing/fallback chain without executing
-hydra dispatch --dry-run --enum STANDARD --prompt "add pagination"
+hydra dispatch --dry-run --enum STANDARD "add pagination"
 
 # Force local-only (no API calls)
-hydra dispatch --local --prompt "write unit tests"
+hydra dispatch --local "write unit tests"
 
 # With A2A handoff
-hydra dispatch --enum MODERATE --prompt "add auth" --a2a logs/last_handoff.json
+hydra dispatch --enum MODERATE "add auth" --a2a logs/last_handoff.json
 
 # Fan-out to multiple heads (swarm) and judge the best
-hydra dispatch --swarm --swarm-mode best --prompt "implement rate limiter"
+hydra dispatch --swarm --swarm-mode best "implement rate limiter"
 
 # Route to a target confidence of correctness (SPRT optimal-stopping ensemble)
-hydra dispatch --confidence 0.95 --prompt "is this migration safe for prod?"
+hydra dispatch --confidence 0.95 "is this migration safe for prod?"
 
 # Blast-radius aware: --file raises the confidence bar by the code graph
 hydra graph blast internal/auth/token.go
-hydra dispatch --confidence 0.90 --file internal/auth/token.go --prompt "rotate signing key"
+hydra dispatch --confidence 0.90 --file internal/auth/token.go "rotate signing key"
 
 # Optimal parallelism (Law 4): how many agents to fan out for these files
 hydra graph parallel internal/a.go internal/b.go

@@ -31,9 +31,9 @@ func (p Pressure) String() string {
 // Specs describes the hardware and current memory state relevant to AI model selection.
 type Specs struct {
 	TotalRAMGB     float64
-	FreeRAMGB      float64  // recoverable memory right now (free + reclaimable)
-	WiredRAMGB     float64  // locked by OS/kernel — cannot be reclaimed
-	GPUVRAMGB      float64  // 0 if no discrete GPU detected
+	FreeRAMGB      float64 // recoverable memory right now (free + reclaimable)
+	WiredRAMGB     float64 // locked by OS/kernel — cannot be reclaimed
+	GPUVRAMGB      float64 // 0 if no discrete GPU detected
 	IsAppleSilicon bool
 	GPUName        string
 	Arch           string
@@ -211,9 +211,9 @@ func darwinMemoryState() (freeGB, wiredGB float64) {
 	pages := parseVmStatFields(string(out))
 	toGB := func(p float64) float64 { return p * pageSize / (1 << 30) }
 
-	free     := pages["Pages free"]
-	inactive := pages["Pages inactive"]   // reclaimable
-	wired    := pages["Pages wired down"] // locked
+	free := pages["Pages free"]
+	inactive := pages["Pages inactive"] // reclaimable
+	wired := pages["Pages wired down"]  // locked
 
 	return toGB(free + inactive), toGB(wired)
 }

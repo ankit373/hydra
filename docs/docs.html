@@ -337,7 +337,7 @@ go build -o hydra ./cmd/hydra</pre>
       <h2>The CLI <span class="badge ship">shipped</span> <span class="tagline">the whole interface</span></h2>
       <p class="sum">Everything Hydra does runs through the single <span class="fx">hydra</span> binary — dispatch, discovery, trust, graph, cost. Scriptable, CI-friendly, zero daemon.</p>
       <div class="term">
-        <div class="bar"><i class="d1"></i><i class="d2"></i><i class="d3"></i><span class="ttl">hydra dispatch --dry-run --prompt "add pagination"</span></div>
+        <div class="bar"><i class="d1"></i><i class="d2"></i><i class="d3"></i><span class="ttl">hydra dispatch --dry-run "add pagination"</span></div>
 <pre><span class="td">  prompt</span> <span class="ta">→</span> <span class="ta">STANDARD</span> <span class="ta">→</span> <span class="td">T5</span>
   <span class="td">Primary:</span>   <span class="tc">gemini pro</span>   <span class="tf">score 82</span>
   <span class="td">Fallback:</span>  <span class="tc">openrouter</span>   <span class="tf">score 76  ← if primary rate-limits</span>
@@ -549,10 +549,10 @@ hydra probe                        <span class="c"># it shows up as a scored hea
         <p>1 · classify → enum/tier · 2 · <b>policy gate</b> (PII can block before any network call) · 3 · select highest-CapScore available head at/under tier · 4 · execute · 5 · on failure fall down the chain to local Qwen · 6 · log tokens + cost. ~1.1µs of decision overhead.</p>
       </div>
       <div class="sub"><div class="lbl">Usage</div>
-        <pre>hydra dispatch <span class="fl">--prompt</span> <span class="s">"refactor auth to JWT refresh"</span>
-hydra dispatch <span class="fl">--enum</span> SIMPLE <span class="fl">--prompt</span> <span class="s">"write a User DTO"</span>
-hydra dispatch <span class="fl">--dry-run</span> <span class="fl">--prompt</span> <span class="s">"add pagination"</span>
-hydra dispatch <span class="fl">--local</span> <span class="fl">--prompt</span> <span class="s">"write unit tests"</span></pre>
+        <pre>hydra dispatch <span class="s">"refactor auth to JWT refresh"</span>
+hydra dispatch <span class="fl">--enum</span> SIMPLE <span class="s">"write a User DTO"</span>
+hydra dispatch <span class="fl">--dry-run</span> <span class="s">"add pagination"</span>
+hydra dispatch <span class="fl">--local</span> <span class="s">"write unit tests"</span></pre>
       </div>
       <div class="sub"><div class="lbl">Key flags</div>
         <div class="pill-row">
@@ -574,7 +574,7 @@ hydra dispatch <span class="fl">--local</span> <span class="fl">--prompt</span> 
       <h2><span class="cmd">dispatch --confidence</span> <span class="tagline">route to a P(correct)</span></h2>
       <p class="sum">Sample models <b>adaptively</b> until a target confidence is reached, then stop.</p>
       <div class="sub"><div class="lbl">How it works</div><p>An <b>SPRT</b> accumulates the calibrated log-likelihood ratio across votes and stops at the boundary implied by your target. <span class="fx">--file</span> raises the bar by blast radius.</p></div>
-      <div class="sub"><div class="lbl">Usage</div><pre>hydra dispatch <span class="fl">--confidence</span> 0.95 <span class="fl">--prompt</span> <span class="s">"is this migration safe for prod?"</span></pre></div>
+      <div class="sub"><div class="lbl">Usage</div><pre>hydra dispatch <span class="fl">--confidence</span> 0.95 <span class="s">"is this migration safe for prod?"</span></pre></div>
       <a class="more" href="/first-principles.html#sprt">See the SPRT walk derived →</a>
     </section>
 

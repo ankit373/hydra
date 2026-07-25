@@ -13,9 +13,9 @@ import (
 
 // Tier groups one or more Head IDs under a named capability level.
 type Tier struct {
-	Name    string   `toml:"name"`
-	Heads   []string `toml:"heads"`
-	Policy  string   `toml:"policy,omitempty"`
+	Name   string   `toml:"name"`
+	Heads  []string `toml:"heads"`
+	Policy string   `toml:"policy,omitempty"`
 }
 
 // Policy is a named routing rule applied before dispatch.
@@ -25,9 +25,9 @@ type Policy struct {
 
 // Config is the root Hydra configuration.
 type Config struct {
-	Cortex   string            `toml:"cortex"`            // Head ID acting as the brain
-	Tiers    []Tier            `toml:"tiers"`             // ordered by capability (high → low)
-	Skills   []string          `toml:"skills"`            // enabled skill IDs
+	Cortex   string            `toml:"cortex"` // Head ID acting as the brain
+	Tiers    []Tier            `toml:"tiers"`  // ordered by capability (high → low)
+	Skills   []string          `toml:"skills"` // enabled skill IDs
 	Policies map[string]Policy `toml:"policies,omitempty"`
 }
 

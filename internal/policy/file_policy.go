@@ -16,19 +16,19 @@ import (
 // Spec is the input to the file policy evaluator — describes the task.
 // All fields are optional; missing fields don't satisfy any condition.
 type Spec struct {
-	File          string  `json:"file"`
-	FileLines     int     `json:"file_lines"`
-	FileCount     int     `json:"file_count"`
-	FileExtension string  `json:"file_extension"`
-	TaskType      string  `json:"task_type"`
-	InPlaybook    bool    `json:"in_playbook"`
-	StageName     string  `json:"stage_name"`
-	HasGit        bool    `json:"has_git"`
-	EnumTier      int     `json:"enum_tier"`
-	Workspace     string  `json:"workspace"`
-	Prompt        string  `json:"prompt"`
-	PromptLength  int     `json:"prompt_length"`
-	ContextPct    int     `json:"context_pct"`
+	File          string `json:"file"`
+	FileLines     int    `json:"file_lines"`
+	FileCount     int    `json:"file_count"`
+	FileExtension string `json:"file_extension"`
+	TaskType      string `json:"task_type"`
+	InPlaybook    bool   `json:"in_playbook"`
+	StageName     string `json:"stage_name"`
+	HasGit        bool   `json:"has_git"`
+	EnumTier      int    `json:"enum_tier"`
+	Workspace     string `json:"workspace"`
+	Prompt        string `json:"prompt"`
+	PromptLength  int    `json:"prompt_length"`
+	ContextPct    int    `json:"context_pct"`
 }
 
 // FilePolicy is the merged output of policy evaluation.
@@ -57,9 +57,9 @@ type FilePolicy struct {
 }
 
 type policyFile struct {
-	Version  string                   `yaml:"version"`
-	Defaults map[string]interface{}   `yaml:"defaults"`
-	Rules    []policyRule             `yaml:"rules"`
+	Version  string                 `yaml:"version"`
+	Defaults map[string]interface{} `yaml:"defaults"`
+	Rules    []policyRule           `yaml:"rules"`
 }
 
 type policyRule struct {
@@ -157,10 +157,14 @@ func matchCondition(key string, val interface{}, spec Spec) bool {
 		sn := toFloat(specVal)
 		vn := toFloat(val)
 		switch op {
-		case "gt":  return sn > vn
-		case "lt":  return sn < vn
-		case "gte": return sn >= vn
-		case "lte": return sn <= vn
+		case "gt":
+			return sn > vn
+		case "lt":
+			return sn < vn
+		case "gte":
+			return sn >= vn
+		case "lte":
+			return sn <= vn
 		}
 	case "in":
 		sv := fmt.Sprintf("%v", specVal)
@@ -196,19 +200,32 @@ func matchCondition(key string, val interface{}, spec Spec) bool {
 // specField returns the value of a spec field by name.
 func specField(field string, spec Spec) interface{} {
 	switch field {
-	case "file":           return spec.File
-	case "file_lines":     return spec.FileLines
-	case "file_count":     return spec.FileCount
-	case "file_extension": return spec.FileExtension
-	case "task_type":      return spec.TaskType
-	case "in_playbook":    return spec.InPlaybook
-	case "stage_name":     return spec.StageName
-	case "has_git":        return spec.HasGit
-	case "enum_tier":      return spec.EnumTier
-	case "workspace":      return spec.Workspace
-	case "prompt":         return spec.Prompt
-	case "prompt_length":  return spec.PromptLength
-	case "context_pct":    return spec.ContextPct
+	case "file":
+		return spec.File
+	case "file_lines":
+		return spec.FileLines
+	case "file_count":
+		return spec.FileCount
+	case "file_extension":
+		return spec.FileExtension
+	case "task_type":
+		return spec.TaskType
+	case "in_playbook":
+		return spec.InPlaybook
+	case "stage_name":
+		return spec.StageName
+	case "has_git":
+		return spec.HasGit
+	case "enum_tier":
+		return spec.EnumTier
+	case "workspace":
+		return spec.Workspace
+	case "prompt":
+		return spec.Prompt
+	case "prompt_length":
+		return spec.PromptLength
+	case "context_pct":
+		return spec.ContextPct
 	}
 	return ""
 }
@@ -250,12 +267,18 @@ func applyMap(m map[string]interface{}, fp *FilePolicy) {
 
 func toFloat(v interface{}) float64 {
 	switch n := v.(type) {
-	case int:     return float64(n)
-	case int64:   return float64(n)
-	case float64: return n
-	case float32: return float64(n)
+	case int:
+		return float64(n)
+	case int64:
+		return float64(n)
+	case float64:
+		return n
+	case float32:
+		return float64(n)
 	case bool:
-		if n { return 1 }
+		if n {
+			return 1
+		}
 		return 0
 	case string:
 		f, err := strconv.ParseFloat(n, 64)

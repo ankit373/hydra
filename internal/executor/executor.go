@@ -83,11 +83,11 @@ func For(h provider.Head) Executor {
 }
 
 type tokenSidecar struct {
-	Model         string `json:"model"`
-	Executor      string `json:"executor"`
-	Source        string `json:"source"`
-	PromptTokens  int    `json:"prompt_tokens"`
-	ResponseTokens int   `json:"response_tokens"`
+	Model          string `json:"model"`
+	Executor       string `json:"executor"`
+	Source         string `json:"source"`
+	PromptTokens   int    `json:"prompt_tokens"`
+	ResponseTokens int    `json:"response_tokens"`
 }
 
 // writeTokenSidecar writes token usage to HYDRA_TOKEN_SIDECAR if set.

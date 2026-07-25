@@ -8,9 +8,10 @@ import (
 )
 
 // Manifesto Law 4 numbers (s = 0.2):
-//   independent  k=0.02 → n*≈6.3→6
-//   moderate     k=0.08 → n*≈3.2→3
-//   heavy        k=0.30 → n*≈1.6→2
+//
+//	independent  k=0.02 → n*≈6.3→6
+//	moderate     k=0.08 → n*≈3.2→3
+//	heavy        k=0.30 → n*≈1.6→2
 func TestAgents_MatchesLaw4(t *testing.T) {
 	cases := []struct {
 		name  string

@@ -14,7 +14,7 @@ import (
 const (
 	historyFile    = "memory_history.jsonl"
 	historyDays    = 7
-	minSamples     = 3    // need at least this many samples before trusting the average
+	minSamples     = 3         // need at least this many samples before trusting the average
 	sampleInterval = time.Hour // don't write more than once per hour
 )
 
@@ -33,7 +33,6 @@ func historyPath() string {
 	}
 	return filepath.Join(home, ".hydra", historyFile)
 }
-
 
 // recordSample appends the current reading to the history file if enough time
 // has passed since the last sample. Silently ignores write errors.
@@ -97,13 +96,13 @@ func loadRecentSamples() []memorySample {
 
 // HistoricalStats summarises recent memory readings.
 type HistoricalStats struct {
-	Samples    int
-	Days       int
-	AvgFreeGB  float64
-	P75FreeGB  float64 // 75th percentile — "typically this much is free"
-	MinFreeGB  float64
-	MaxFreeGB  float64
-	Reliable   bool    // true when we have enough samples to trust the average
+	Samples   int
+	Days      int
+	AvgFreeGB float64
+	P75FreeGB float64 // 75th percentile — "typically this much is free"
+	MinFreeGB float64
+	MaxFreeGB float64
+	Reliable  bool // true when we have enough samples to trust the average
 }
 
 // LoadHistory reads recent samples and computes summary statistics.

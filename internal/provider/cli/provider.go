@@ -50,17 +50,17 @@ var knownCLIs = []struct {
 	providerID string
 	local      bool
 }{
-	{"claude",     "anthropic",   false},
-	{"codex",      "openai",      false},
-	{"cursor",     "cursor",      false},
-	{"kiro",       "amazon",      false}, // Amazon Kiro
-	{"gemini",     "google",      false},
-	{"windsurf",   "codeium",     false},
-	{"amp",        "amp",         false},
-	{"gh-copilot", "github",      false}, // gh extension install github/gh-copilot
-	{"cody",       "sourcegraph", false},
-	{"continue",   "continue",    false},
-	{"agy",        "antigravity", false},
-	{"ollama",     "local",       true},
-	{"llamafile",  "local",       true},
+	{"claude", "anthropic", false},
+	{"codex", "openai", false},
+	{"cursor", "cursor", false},
+	{"kiro", "amazon", false}, // Amazon Kiro
+	{"gemini", "google", false},
+	{"windsurf", "codeium", false},
+	{"amp", "amp", false},
+	{"gh-copilot", "github", false}, // gh extension install github/gh-copilot
+	{"cody", "sourcegraph", false},
+	{"continue", "continue", false},
+	{"agy", "antigravity", false},
+	{"ollama", "local", true},
+	{"llamafile", "local", true},
 }

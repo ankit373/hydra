@@ -56,7 +56,7 @@ func renderHead(idx int) string {
 const neckLine = `      \               |               /      `
 const bodyLine = `       \_____________=_____________/       `
 const scaleLine = `                  |||||||                  `
-const tailLine  = `              ~~~~~~~~~~~                  `
+const tailLine = `              ~~~~~~~~~~~                  `
 
 func renderBody() string {
 	s := lipgloss.NewStyle().Foreground(cNeck)
@@ -114,7 +114,7 @@ func renderStats(s Stats) string {
 
 	heads := stat("Heads", fmt.Sprintf("%d", s.Heads))
 	tasks := stat("Tasks", fmt.Sprintf("%d", s.Tasks))
-	cost  := stat("Cost", fmt.Sprintf("$%.2f", s.CostUSD))
+	cost := stat("Cost", fmt.Sprintf("$%.2f", s.CostUSD))
 	saved := stat("Saved", fmt.Sprintf("%d%%", s.SavePct))
 
 	return "  " + lipgloss.JoinHorizontal(lipgloss.Top, heads, " ", tasks, " ", cost, " ", saved)

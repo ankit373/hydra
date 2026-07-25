@@ -10,19 +10,19 @@ import (
 
 // piiPatterns are compiled once at package init to avoid per-call allocations.
 var piiPatterns = []*regexp.Regexp{
-	regexp.MustCompile(`\b\d{3}[-.\s]?\d{2}[-.\s]?\d{4}\b`),                              // SSN
-	regexp.MustCompile(`\b\d{4}[- ]?\d{4}[- ]?\d{4}[- ]?\d{4}\b`),                        // credit card
-	regexp.MustCompile(`\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b`),           // email (fixed: [A-Za-z] not [A-Z|a-z])
+	regexp.MustCompile(`\b\d{3}[-.\s]?\d{2}[-.\s]?\d{4}\b`),                                      // SSN
+	regexp.MustCompile(`\b\d{4}[- ]?\d{4}[- ]?\d{4}[- ]?\d{4}\b`),                                // credit card
+	regexp.MustCompile(`\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b`),                   // email (fixed: [A-Za-z] not [A-Z|a-z])
 	regexp.MustCompile(`(?i)\b(password|secret|api[-_]?key|token|private[-_]?key)\s*[:=]\s*\S+`), // credentials
-	regexp.MustCompile(`\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b`),                         // IP address
+	regexp.MustCompile(`\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b`),                                 // IP address
 }
 
 // Action is what the engine tells the dispatcher to do.
 type Action struct {
-	Deny       bool   // block the request entirely
-	LocalOnly  bool   // only route to heads where LocalOnly=true
-	TierCeil   string // do not use tiers above this (e.g. "standard")
-	Reason     string // human-readable explanation
+	Deny      bool   // block the request entirely
+	LocalOnly bool   // only route to heads where LocalOnly=true
+	TierCeil  string // do not use tiers above this (e.g. "standard")
+	Reason    string // human-readable explanation
 }
 
 // Request carries everything the engine needs to make a decision.
