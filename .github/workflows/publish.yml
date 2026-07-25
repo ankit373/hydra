@@ -38,12 +38,27 @@ jobs:
         with:
           ref: ${{ inputs.tag }}
           fetch-depth: 0
+      # Idempotent: if this tag's release already has archives (e.g. a re-run or
+      # workflow_dispatch re-publish), skip GoReleaser so it doesn't fail trying
+      # to re-upload existing assets — downstream channels still run.
+      - name: Check for existing artifacts
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          n=$(gh release view "${{ inputs.tag }}" --repo "$GITHUB_REPOSITORY" \
+                --json assets -q '[.assets[].name | select(endswith(".tar.gz"))] | length' 2>/dev/null || echo 0)
+          echo "has_assets=$n" >> "$GITHUB_OUTPUT"
+          echo "Existing archive assets: $n"
       - uses: actions/setup-go@v5
+        if: ${{ steps.check.outputs.has_assets == '0' }}
         with:
           go-version-file: go.mod
           cache: true
       - uses: anchore/sbom-action/download-syft@v0
-      - name: GoReleaser (append to existing release)
+        if: ${{ steps.check.outputs.has_assets == '0' }}
+      - name: GoReleaser (build + upload to the release)
+        if: ${{ steps.check.outputs.has_assets == '0' }}
         uses: goreleaser/goreleaser-action@v6
         with:
           version: latest
