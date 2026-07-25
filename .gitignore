@@ -52,7 +52,19 @@ package-lock.json
 yarn.lock
 pnpm-lock.yaml
 
-# Private planning docs
+# Private planning docs — local-only scoping / planning / spec / review / design.
+# NEVER commit these. Glob patterns catch future ones; explicit names below are legacy.
+*_SCOPE.md
+*_SCOPING.md
+*_PLAN.md
+*_PLANNING.md
+*_SPEC.md
+SPEC_*.md
+*_REVIEW.md
+*_MODEL.md
+*_DRAFT.md
+*_FINDINGS.md
+*_PRIVATE.md
 ROADMAP_PRIVATE.md
 ARCHITECTURE_BRAIN.md
 RESEARCH_FINDINGS.md

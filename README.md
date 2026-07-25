@@ -292,7 +292,7 @@ hydra dispatch --confidence 0.90 --file internal/auth/token.go "rotate the signi
 
 In synthetic benchmarks this cuts model calls **~49% on easy tasks** and **~24% on a blended workload** at ≥98% accuracy — while deliberately sampling *more* than a fixed swarm on genuinely hard tasks, which a fixed-N ensemble cannot do. Calibration is cold-start conservative: with no history, sources are treated as uninformative and Hydra falls back to sampling broadly.
 
-> The SPRT ensemble, calibration engine, and defect-cost model have shipped. Graph-aware (blast-radius) routing, a local MCP accountability ledger, and a pluggable verification-oracle interface are on the [roadmap](#roadmap).
+> The SPRT ensemble, calibration engine, defect-cost model, graph-aware (blast-radius) routing, the local MCP accountability ledger, and verification oracles have all shipped. A central security agent and a web dashboard are on the [roadmap](#roadmap).
 
 ---
 
@@ -310,7 +310,7 @@ In synthetic benchmarks this cuts model calls **~49% on easy tasks** and **~24% 
 | Swarm dispatch (race / best / all) | ✅ | ❌ | ❌ | ❌ |
 | Route to a **confidence of correctness** (SPRT) | ✅ | ❌ | ❌ | ❌ |
 | Per-source calibration (sensitivity / specificity / D) | ✅ | ❌ | ❌ | ❌ |
-| MCP accountability ledger *(roadmap)* | 🔨 | ❌ | ❌ | ❌ |
+| MCP accountability ledger | ✅ | ❌ | ❌ | ❌ |
 | Central security agent *(roadmap)* | 🔨 | ❌ | ❌ | ❌ |
 
 ---
@@ -351,6 +351,7 @@ The wizard scans your machine, ranks every model it finds, walks you through pic
 hydra init                              # first-run wizard
 hydra probe                             # scan and display all available models
 hydra status                            # live system state (heads, budget bars, burn-rate risk)
+hydra tui                               # interactive cockpit — chat+code / dashboard / agent-tree (Tab cycles)
 
 # Model registry (add a new model at runtime — no rebuild)
 hydra models list                       # built-in + your models, by capability score
@@ -479,20 +480,10 @@ For Ollama models, add a family pattern:
 | **Runtime model registry** — `hydra models add` merges a `~/.hydra/models.json` overlay, no rebuild | ✅ Shipped |
 | **Percolation-κ blast radius** — Molloy–Reed core detection weights hub files higher | ✅ Shipped |
 | **Rate-aware budget governor** — first-passage-time risk on `claude_pct`, escalates before a threshold | ✅ Shipped |
-| Outcome auto-wiring (tests / review / revert → calibration) | 🔨 Building |
 | MCP server registry + central security agent | 📋 [#9](https://github.com/ankit373/hydra/issues/9)/[#10](https://github.com/ankit373/hydra/issues/10) |
 | Web UI + real-time cost dashboard | 📋 [#11](https://github.com/ankit373/hydra/issues/11)/[#12](https://github.com/ankit373/hydra/issues/12) |
 
 See the full [Hydra Roadmap project board](https://github.com/users/ankit373/projects/2).
-
-### The arc: from cost router to Trust Control Plane
-
-Hydra started by answering *which model is cheapest for this task?* It's evolving to answer a harder question: ***how sure are we the answer is right, and what's the least attention we can spend to be that sure?***
-
-- **Today** — calibration measures each source's real diagnostic power; SPRT samples adaptively to a target confidence; the defect-cost model prices what a wrong answer costs; graph-aware routing reads a code dependency graph so an edit's **blast radius** raises the confidence bar where a mistake is expensive; a local **accountability ledger** records — and can gate — what every agent was allowed to touch and did; and **verification oracles** (tests, compilers, linters) act as first-class, high-`D` evidence sources whose verdict can outweigh a model's opinion.
-- **Next** — outcomes (tests/review/revert) auto-train calibration in the background, so `D` reflects reality without manual `hydra trust record`.
-
-The design principle throughout: **no single vendor is privileged** — Hydra routes *across* providers and *away* from expensive ones, optimizing verified correctness per unit of human attention.
 
 ---
 
