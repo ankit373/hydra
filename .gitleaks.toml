@@ -1,0 +1,16 @@
+# Gitleaks configuration for Hydra.
+# Extends the full default ruleset, then allowlists values that are PUBLIC by
+# design and therefore NOT secrets.
+
+title = "Hydra"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Public, intentional identifiers embedded in the shipped site — not secrets"
+regexes = [
+  # Ahrefs Web Analytics data-key: a public site identifier embedded in the page
+  # <head> and served to every visitor (equivalent to a GA measurement ID).
+  '''yRz83E87rXgYWlhmro5mIg''',
+]
