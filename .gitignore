@@ -74,3 +74,7 @@ HYDRA_MANIFESTO.md
 SPEC_TRUST_V1.md
 BUILD_STATE.md
 HYDRA_INFERENCE_SCOPING.md
+
+# Python
+__pycache__/
+*.pyc
