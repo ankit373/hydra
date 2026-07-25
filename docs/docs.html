@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Documentation — Hydra</title>
+  <meta name="description" content="Complete Hydra documentation: every command explained — what it does, how it works (the logic and calculation), and how to use it. Dispatch, swarm, confidence routing, trust calibration, graph blast radius, budget governor, and more.">
+  <meta name="keywords" content="Hydra docs, hydra dispatch, hydra trust, hydra graph, confidence routing, SPRT, calibration, percolation kappa, LLM router documentation">
+
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://hydra.uvansa.com/docs.html">
+  <meta property="og:title" content="Documentation — Hydra">
+  <meta property="og:description" content="Every Hydra command, explained: what it does, how it works, and how to use it.">
+  <meta property="og:image" content="https://hydra.uvansa.com/logo.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Documentation — Hydra">
+  <meta name="twitter:description" content="Every Hydra command, explained: what it does, the logic behind it, and how to use it.">
+  <meta name="twitter:image" content="https://hydra.uvansa.com/logo.png">
+
+  <link rel="canonical" href="https://hydra.uvansa.com/docs.html">
+  <link rel="icon" type="image/png" href="logo.png">
+  <link rel="ai-context" href="https://hydra.uvansa.com/llms.txt" type="text/plain">
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    "headline": "Hydra Documentation",
+    "description": "Complete command reference for Hydra: what each command does, how it works, and how to use it.",
+    "url": "https://hydra.uvansa.com/docs.html",
+    "datePublished": "2026-07-25",
+    "dateModified": "2026-07-25",
+    "author": { "@type": "Person", "name": "Ankit Jha", "url": "https://github.com/ankit373" },
+    "publisher": { "@type": "Organization", "name": "Hydra", "url": "https://hydra.uvansa.com/" }
+  }
+  </script>
+
+<style>
+:root{
+  color-scheme:dark;
+  --bg:#06070F;--bg2:#0A0C18;--panel:rgba(18,20,38,.62);
+  --line:rgba(150,140,255,.16);--line-2:rgba(150,140,255,.30);
+  --ink:#E7E9F5;--dim:#9aa0c4;--faint:#5a5f85;
+  --cyan:#2AF0E0;--aqua:#00E6C3;--violet:#8B5CF6;--magenta:#E852C8;
+  --cheap:#3FD98A;--mid:#E0A93A;--exp:#FF5A6E;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,Roboto,Helvetica,Arial,sans-serif;
+  --mono:ui-monospace,"JetBrains Mono","SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+  --side:250px;
+}
+*{box-sizing:border-box;}
+html{scroll-behavior:smooth;}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto;}}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.62;
+  -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;}
+a{color:inherit;text-decoration:none;}
+::selection{background:rgba(0,230,195,.28);color:#fff;}
+:focus-visible{outline:2px solid var(--aqua);outline-offset:3px;border-radius:4px;}
+.mono{font-family:var(--mono);}
+
+/* top nav */
+.topbar{position:sticky;top:0;z-index:70;display:flex;align-items:center;gap:14px;height:52px;padding:0 24px;
+  font-family:var(--mono);font-size:12.5px;background:rgba(6,7,15,.82);backdrop-filter:blur(14px);
+  border-bottom:1px solid var(--line);}
+.topbar .mark{font-weight:800;letter-spacing:1.5px;font-size:15px;
+  background:linear-gradient(90deg,var(--cyan),var(--violet) 55%,var(--magenta));
+  -webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 0 10px rgba(120,90,255,.4));}
+.topbar .pill{font-size:10.5px;color:var(--faint);border:1px solid var(--line);border-radius:20px;padding:2px 9px;}
+.topbar .grow{flex:1;}
+.topbar nav{display:flex;gap:20px;}
+.topbar nav a{color:var(--dim);transition:color .15s;}
+.topbar nav a:hover,.topbar nav a.here{color:var(--aqua);}
+@media(max-width:720px){.topbar nav{display:none;}}
+
+.grad{background:linear-gradient(96deg,var(--cyan) 4%,#7FA8FF 40%,var(--violet) 66%,var(--magenta) 98%);
+  -webkit-background-clip:text;background-clip:text;color:transparent;}
+
+/* layout */
+.shell{max-width:1240px;margin:0 auto;display:grid;grid-template-columns:var(--side) 1fr;gap:0;}
+@media(max-width:900px){.shell{grid-template-columns:1fr;}}
+
+/* sidebar */
+.side{position:sticky;top:52px;align-self:start;height:calc(100vh - 52px);overflow-y:auto;
+  padding:24px 14px 60px 24px;border-right:1px solid var(--line);}
+@media(max-width:900px){.side{position:static;height:auto;border-right:0;border-bottom:1px solid var(--line);}}
+.search{width:100%;font-family:var(--mono);font-size:13px;color:var(--ink);background:rgba(20,22,44,.6);
+  border:1px solid var(--line-2);border-radius:9px;padding:10px 12px;margin-bottom:18px;}
+.search::placeholder{color:var(--faint);}
+.search:focus{outline:none;border-color:var(--aqua);box-shadow:0 0 0 3px rgba(0,230,195,.12);}
+.side .grp{font-family:var(--mono);font-size:10.5px;letter-spacing:2px;text-transform:uppercase;color:var(--faint);
+  margin:18px 0 7px;}
+.side a{display:block;color:var(--dim);font-size:13.5px;padding:4px 8px;border-radius:6px;border-left:2px solid transparent;transition:.13s;}
+.side a:hover{color:var(--ink);background:rgba(150,140,255,.06);}
+.side a.active{color:var(--aqua);border-left-color:var(--aqua);background:rgba(0,230,195,.06);}
+.side a code{font-family:var(--mono);font-size:12.5px;color:inherit;}
+.side .empty{color:var(--faint);font-size:12.5px;padding:8px;display:none;}
+
+/* content */
+.content{padding:38px 40px 100px;min-width:0;}
+@media(max-width:640px){.content{padding:30px 22px 80px;}}
+.content h1{font-size:clamp(30px,5vw,46px);letter-spacing:-1px;font-weight:800;margin:0 0 8px;text-wrap:balance;}
+.content .intro{color:var(--dim);font-size:16px;max-width:70ch;margin:0 0 10px;}
+.content .intro b{color:var(--ink);}
+
+.doc{scroll-margin-top:64px;padding:30px 0;border-top:1px solid var(--line);}
+.doc:first-of-type{border-top:0;}
+.doc h2{font-size:clamp(20px,3vw,28px);letter-spacing:-.4px;font-weight:750;display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;}
+.doc h2 .cmd{font-family:var(--mono);color:var(--cyan);}
+.doc h2 .tagline{font-size:14px;color:var(--faint);font-weight:400;font-family:var(--sans);}
+.doc .sum{color:var(--dim);font-size:15.5px;margin:10px 0 0;max-width:74ch;}
+.doc .sum b{color:var(--ink);font-weight:600;}
+.sub{margin:18px 0 0;}
+.sub .lbl{font-family:var(--mono);font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--aqua);margin-bottom:7px;}
+.sub p{margin:0;color:var(--dim);font-size:15px;max-width:74ch;}
+.sub p b{color:var(--ink);font-weight:600;}
+.sub p .fx{font-family:var(--mono);color:var(--cyan);font-size:13.5px;background:rgba(42,240,224,.08);padding:1px 6px;border-radius:5px;}
+pre{margin:8px 0 0;background:rgba(10,12,24,.7);border:1px solid var(--line);border-radius:11px;
+  padding:14px 16px;overflow-x:auto;font-family:var(--mono);font-size:13px;line-height:1.7;color:var(--ink);}
+pre .c{color:var(--faint);} pre .fl{color:var(--aqua);} pre .k{color:var(--violet);} pre .s{color:var(--cheap);}
+.pill-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;}
+.mp{font-family:var(--mono);font-size:11.5px;color:var(--dim);border:1px solid var(--line);border-radius:6px;padding:4px 9px;background:rgba(20,22,44,.4);}
+.mp b{color:var(--aqua);font-weight:600;}
+.more{display:inline-flex;gap:7px;align-items:center;margin-top:14px;font-family:var(--mono);font-size:12.5px;color:var(--dim);border-bottom:1px dashed var(--line-2);}
+.more:hover{color:var(--aqua);border-color:var(--aqua);}
+.callout{margin-top:14px;border-left:2px solid var(--line-2);padding:2px 0 2px 14px;color:var(--faint);font-size:14px;font-style:italic;}
+
+footer{border-top:1px solid var(--line);padding:36px 40px;color:var(--faint);font-size:13px;font-family:var(--mono);
+  display:flex;flex-wrap:wrap;gap:18px;justify-content:space-between;}
+footer a{color:var(--dim);} footer a:hover{color:var(--aqua);}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <a class="mark" href="/">HYDRA</a>
+  <span class="pill">docs</span>
+  <span class="grow"></span>
+  <nav>
+    <a href="/docs.html" class="here">Docs</a>
+    <a href="/first-principles.html">First principles</a>
+    <a href="/pricing.html">Pricing</a>
+    <a href="https://github.com/ankit373/hydra">GitHub</a>
+  </nav>
+  <a class="pill" href="/">← home</a>
+</div>
+
+<div class="shell">
+  <aside class="side">
+    <input id="q" class="search" type="search" placeholder="Search commands…  (press /)" aria-label="Search documentation">
+    <nav id="toc">
+      <div class="grp" data-grp>Getting started</div>
+      <a href="#install"><code>install</code></a>
+      <a href="#init"><code>hydra init</code></a>
+      <a href="#probe"><code>hydra probe</code></a>
+      <a href="#status"><code>hydra status</code></a>
+      <a href="#tui"><code>hydra tui</code></a>
+
+      <div class="grp" data-grp>Dispatch</div>
+      <a href="#dispatch"><code>hydra dispatch</code></a>
+      <a href="#swarm"><code>--swarm</code></a>
+      <a href="#confidence"><code>--confidence</code></a>
+      <a href="#edit"><code>hydra edit</code></a>
+      <a href="#review"><code>hydra review</code></a>
+      <a href="#parallel"><code>hydra parallel</code></a>
+
+      <div class="grp" data-grp>Trust &amp; graph</div>
+      <a href="#trust"><code>hydra trust</code></a>
+      <a href="#graph-blast"><code>hydra graph blast</code></a>
+      <a href="#graph-parallel"><code>hydra graph parallel</code></a>
+      <a href="#context"><code>hydra context entropy</code></a>
+
+      <div class="grp" data-grp>Accountability</div>
+      <a href="#mcp"><code>hydra mcp</code></a>
+      <a href="#oracle"><code>hydra oracle</code></a>
+
+      <div class="grp" data-grp>Cost &amp; registry</div>
+      <a href="#cost"><code>hydra cost</code></a>
+      <a href="#stats"><code>hydra stats</code></a>
+      <a href="#pricing"><code>hydra pricing</code></a>
+      <a href="#models"><code>hydra models</code></a>
+
+      <div class="grp" data-grp>Concepts</div>
+      <a href="#tiers">Tiers &amp; CapScore</a>
+      <a href="#fallback">Fallback chains</a>
+      <a href="#policy">PII / local-only</a>
+      <a href="#governor">Budget governor</a>
+      <a href="#a2a">A2A handoffs</a>
+      <a href="#math">The math</a>
+      <div class="empty" id="noresults">No commands match.</div>
+    </nav>
+  </aside>
+
+  <main class="content">
+    <h1>Documentation</h1>
+    <p class="intro">Every Hydra command — <b>what it does</b>, <b>how it works</b> (the logic and the calculation), and <b>how to use it</b>. The deep derivations live on <a class="grad" href="/first-principles.html">First Principles</a>. Everything here runs through the single <code class="mono">hydra</code> binary.</p>
+
+    <!-- ══ INSTALL ══ -->
+    <section class="doc" id="install">
+      <h2><span class="cmd">install</span> <span class="tagline">one binary, no runtime</span></h2>
+      <p class="sum">Hydra is pure Go — a single static binary. Homebrew is the shortest path; a standalone installer and source build also work.</p>
+      <div class="sub"><div class="lbl">Usage</div>
+        <pre><span class="c"># Homebrew (recommended)</span>
+brew install ankit373/hydra/hydra
+
+<span class="c"># Standalone installer</span>
+curl -fsSL https://raw.githubusercontent.com/ankit373/hydra/main/install.sh | sh
+
+<span class="c"># From source (Go 1.22+)</span>
+git clone https://github.com/ankit373/hydra.git
+cd hydra && go build -o hydra ./cmd/hydra</pre>
+      </div>
+    </section>
+
+    <!-- ══ INIT ══ -->
+    <section class="doc" id="init">
+      <h2><span class="cmd">hydra init</span> <span class="tagline">first-run wizard</span></h2>
+      <p class="sum">Scans your machine, ranks every model it finds, and walks you through picking a <b>Cortex</b> (your orchestrator), a local Ollama model calibrated to your real hardware, and whether you handle sensitive data.</p>
+      <div class="sub"><div class="lbl">How it works</div>
+        <p>Runs <span class="fx">probe</span> across three channels, reads 7 days of memory history to recommend a local model that fits your <b>actual free RAM</b> (75th-percentile, not total), and writes <span class="fx">~/.hydra/config.toml</span>. Takes ~60 seconds.</p>
+      </div>
+      <div class="sub"><div class="lbl">Usage</div><pre>hydra init</pre></div>
+    </section>
+
+    <!-- ══ PROBE ══ -->
+    <section class="doc" id="probe">
+      <h2><span class="cmd">hydra probe</span> <span class="tagline">discover every head</span></h2>
+      <p class="sum">Concurrent machine scan that finds every available head and assigns each a <b>CapScore</b> — in under two seconds.</p>
+      <div class="sub"><div class="lbl">How it works</div>
+        <p>Three scanners run in parallel: <b>PATH</b> (13+ CLI agents — Claude Code, Codex, Cursor…), <b>env vars</b> (14 API providers via their keys), and <b>ports</b> (Ollama 11434, LM Studio 1234 — queried and enumerated model-by-model). Results are de-duplicated and ranked by CapScore.</p>
+      </div>
+      <div class="sub"><div class="lbl">Usage</div><pre>hydra probe</pre></div>
+    </section>
+
+    <!-- ══ STATUS ══ -->
+    <section class="doc" id="status">
+      <h2><span class="cmd">hydra status</span> <span class="tagline">live system state</span></h2>
+      <p class="sum">Shows discovered heads, budget bars, and the <b>rate-aware</b> budget governor.</p>
+      <div class="sub"><div class="lbl">How it works</div>
+        <p>Beyond a static "you're at 58%" band, the governor models the orchestrator's context usage as a drifting process and estimates the <b>first-passage probability</b> of crossing the 80% ceiling before the task ends — so it escalates <i>before</i> a threshold is hit, not after. Reads <span class="fx">logs/state.json</span> history.</p>
+      </div>
+      <div class="sub"><div class="lbl">Usage</div><pre>hydra status</pre></div>
+      <a class="more" href="#governor">How the governor decides →</a>
+    </section>
+
+    <!-- ══ TUI ══ -->
+    <section class="doc" id="tui">
+      <h2><span class="cmd">hydra tui</span> <span class="tagline">interactive cockpit</span></h2>
+      <p class="sum">A terminal cockpit you can operate. <b>Tab</b> cycles three views; type a task and press enter to dispatch.</p>
+      <div class="sub"><div class="lbl">How it works</div>
+        <p><b>chat + code</b> shows the live routing decision (classify → tier → head → fallback → cost saved) with a snippet streamed as the chosen head "writes." <b>dashboard</b> shows per-head sparklines, cost saved vs your priciest head, last confidence, and a band-colored governor gauge. <b>agent-tree</b> is the supervision tree with A2A handoffs and <span class="fx">↑/↓</span> node inspection.</p>
+      </div>
+      <div class="sub"><div class="lbl">Usage</div>
+        <pre>hydra tui
+hydra tui <span class="fl">--snapshot</span> <span class="fl">--view</span> 1   <span class="c"># render one static frame (docs / preview)</span></pre>
+      </div>
+    </section>
+
+    <!-- ══ DISPATCH ══ -->
+    <section class="doc" id="dispatch">
+      <h2><span class="cmd">hydra dispatch</span> <span class="tagline">the router</span></h2>
+      <p class="sum">Routes a prompt to the <b>cheapest head that clears the bar</b>, with automatic fallback. This is the core command; everything else supports it.</p>
+      <div class="sub"><div class="lbl">How it works — the pipeline</div>
+        <p>1 · <b>Classify</b> the task to an enum key (or take <span class="fx">--enum</span>/<span class="fx">--tier</span>).  2 · <b>Policy gate</b> — PII detection can block a network call before it happens.  3 · <b>Select</b> the highest-CapScore available head at or under the target tier.  4 · <b>Execute</b> via the native executor (agy / Ollama / HTTP / CLI).  5 · On failure, <b>fall down the chain</b> — terminating at local Qwen, which never runs out.  6 · <b>Log</b> tokens and cost to <span class="fx">cost.jsonl</span>. The whole decision adds ~1.1µs.</p>
+      </div>
+      <div class="sub"><div class="lbl">Usage</div>
+        <pre>hydra dispatch <span class="fl">--prompt</span> <span class="s">"refactor auth middleware to JWT refresh"</span>
+hydra dispatch <span class="fl">--enum</span> SIMPLE <span class="fl">--prompt</span> <span class="s">"write a User DTO"</span>
+hydra dispatch <span class="fl">--dry-run</span> <span class="fl">--prompt</span> <span class="s">"add pagination"</span>   <span class="c"># preview the chain</span>
+hydra dispatch <span class="fl">--local</span> <span class="fl">--prompt</span> <span class="s">"write unit tests"</span>    <span class="c"># no API calls</span></pre>
+      </div>
+      <div class="sub"><div class="lbl">Key flags</div>
+        <div class="pill-row">
+          <span class="mp"><b>--enum</b> SIMPLE|STANDARD|…</span>
+          <span class="mp"><b>--tier</b> N (pin a tier)</span>
+          <span class="mp"><b>--dry-run</b> preview chain</span>
+          <span class="mp"><b>--local</b> local-only</span>
+          <span class="mp"><b>--file</b> raise bar by blast radius</span>
+          <span class="mp"><b>--a2a</b> handoff.json</span>
+          <span class="mp"><b>--system</b> system prompt</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══ SWARM ══ -->
+    <section class="doc" id="swarm">
+      <h2><span class="cmd">dispatch --swarm</span> <span class="tagline">fan out, keep the best</span></h2>
+      <p class="sum">Fan one prompt to several heads at once and keep the best answer.</p>
+      <div class="sub"><div class="lbl">How it works</div>
+        <p><b>race</b> — first success wins (latency). <b>best</b> — an LLM judge picks the strongest answer. <b>all</b> — every answer, ranked by CapScore. A pre-flight <span class="fx">--swarm-max-cost</span> guard aborts if the fan-out would exceed your budget.</p>
+      </div>
+      <div class="sub"><div class="lbl">Usage</div>
+        <pre>hydra dispatch <span class="fl">--swarm</span> <span class="fl">--swarm-mode</span> best <span class="s">"implement a rate limiter"</span>
+  <span class="fl">--swarm-heads</span> agy,gemini      <span class="c"># explicit heads (bypass tier)</span>
+  <span class="fl">--swarm-max-heads</span> 5           <span class="c"># cap fan-out</span>
+  <span class="fl">--swarm-max-cost</span> 0.05        <span class="c"># USD guard</span>
+  <span class="fl">--swarm-judge-tier</span> 1         <span class="c"># who judges in 'best'</span></pre>
+      </div>
+    </section>
+
+    <!-- ══ CONFIDENCE ══ -->
+    <section class="doc" id="confidence">
+      <h2><span class="cmd">dispatch --confidence</span> <span class="tagline">route to a P(correct)</span></h2>
+      <p class="sum">Instead of a fixed number of models, sample <b>adaptively</b> until a target confidence of correctness is reached — then stop.</p>
+      <div class="sub"><div class="lbl">How it works — the calculation</div>
+        <p>Runs a <b>sequential probability ratio test (SPRT)</b>: it accumulates the calibrated log-likelihood ratio across votes and stops the moment it crosses the boundary implied by your target. Cheap on easy tasks, more sampling only where accuracy demands it. Add <span class="fx">--file</span> and the <b>blast radius</b> raises the bar automatically.</p>
+      </div>
+      <div class="sub"><div class="lbl">Usage</div>
+        <pre>hydra dispatch <span class="fl">--confidence</span> 0.95 <span class="fl">--prompt</span> <span class="s">"is this migration safe for prod?"</span>
+hydra dispatch <span class="fl">--confidence</span> 0.90 <span class="fl">--file</span> internal/auth/token.go <span class="s">"rotate the signing key"</span></pre>
+      </div>
+      <a class="more" href="/first-principles.html#sprt">See the SPRT walk derived →</a>
+    </section>
+
+    <!-- ══ EDIT ══ -->
+    <section class="doc" id="edit">
+      <h2><span class="cmd">hydra edit</span> <span class="tagline">safe file edits</span></h2>
+      <p class="sum">A scoped, validated, <b>rollback-safe</b> file edit driven by a head.</p>
+      <div class="sub"><div class="lbl">How it works</div><p>Restricts the change to the named file, validates the result, and keeps a rollback so a bad edit never corrupts your tree.</p></div>
+      <div class="sub"><div class="lbl">Usage</div><pre>hydra edit <span class="fl">--file</span> internal/foo.go <span class="fl">--prompt</span> <span class="s">"add a nil check"</span></pre></div>
+    </section>
+
+    <!-- ══ REVIEW ══ -->
+    <section class="doc" id="review">
+      <h2><span class="cmd">hydra review</span> <span class="tagline">code review</span></h2>
+      <p class="sum">Run a code review / approve / reject / QA pass through a head.</p>
+      <div class="sub"><div class="lbl">Usage</div><pre>hydra review <span class="fl">--file</span> internal/foo.go</pre></div>
+    </section>
+
+    <!-- ══ PARALLEL ══ -->
+    <section class="doc" id="parallel">
+      <h2><span class="cmd">hydra parallel</span> <span class="tagline">fan independent tasks</span></h2>
+      <p class="sum">Fan a set of <b>independent</b> tasks across heads concurrently.</p>
+      <div class="sub"><div class="lbl">How it works</div><p>For truly independent work the optimal agent count follows <span class="fx">n* = √((1−s)/k)</span> — see <a class="more" href="#graph-parallel" style="margin:0;display:inline">graph parallel</a>.</p></div>
+      <div class="sub"><div class="lbl">Usage</div><pre>hydra parallel <span class="fl">--tasks</span> tasks.txt</pre></div>
+    </section>
+
+    <!-- ══ TRUST ══ -->
+    <section class="doc" id="trust">
+      <h2><span class="cmd">hydra trust</span> <span class="tagline">the confidence layer</span></h2>
+      <p class="sum">Builds and inspects the calibration that powers <span class="fx">--confidence</span>. Each source earns a measured reliability from real outcomes.</p>
+      <div class="sub"><div class="lbl">How it works — the calculation</div>
+        <p>Each source gets a Beta-Bernoulli posterior over <b>sensitivity</b> and <b>specificity</b>, which becomes a per-vote log-likelihood ratio and a <b>diagnostic power</b> <span class="fx">D</span> (KL divergence, in nats). A coin-flip source has D≈0 and is ignored; a proven one lets a single vote go far. The <b>defect-cost</b> model prices a wrong answer and sets the required confidence.</p>
+      </div>
+      <div class="sub"><div class="lbl">Subcommands</div>
+        <pre>hydra trust calibration      <span class="c"># per-source se / sp / D table</span>
+hydra trust record <span class="fl">--source</span> model:claude <span class="fl">--domain</span> go <span class="fl">--said-correct</span> <span class="fl">--outcome</span> correct
+hydra trust defect <span class="fl">--pii</span> <span class="fl">--production</span>   <span class="c"># modeled $ cost of shipping a defect</span>
+hydra trust stats            <span class="c"># samples saved vs fixed-N; achieved vs target</span>
+hydra trust explain &lt;hash&gt;   <span class="c"># the full LLR ledger for a past run</span>
+hydra trust benchmark        <span class="c"># measured SPRT numbers (deterministic seed)</span></pre>
+      </div>
+      <a class="more" href="/first-principles.html#calibration">See diagnostic power D derived →</a>
+    </section>
+
+    <!-- ══ GRAPH BLAST ══ -->
+    <section class="doc" id="graph-blast">
+      <h2><span class="cmd">hydra graph blast</span> <span class="tagline">how dangerous is this file?</span></h2>
+      <p class="sum">Reads a code dependency graph and reports a file's <b>blast radius</b> — and the confidence a change to it demands.</p>
+      <div class="sub"><div class="lbl">How it works — the calculation</div>
+        <p>From <span class="fx">graph.json</span> it counts transitive dependents and computes the percolation number <span class="fx">κ = ⟨k²⟩/⟨k⟩</span> (Molloy–Reed). When <b>κ ≥ 2</b> the file sits in a cascade-capable core, so its confidence bar is lifted — an edit to a hub everything imports must be far surer than a leaf helper.</p>
+      </div>
+      <div class="sub"><div class="lbl">Usage</div><pre>hydra graph blast internal/auth/token.go</pre></div>
+      <a class="more" href="/first-principles.html#percolation">Drag the percolation threshold →</a>
+    </section>
+
+    <!-- ══ GRAPH PARALLEL ══ -->
+    <section class="doc" id="graph-parallel">
+      <h2><span class="cmd">hydra graph parallel</span> <span class="tagline">how many agents?</span></h2>
+      <p class="sum">Given a set of files, returns the <b>optimal number of parallel agents</b>.</p>
+      <div class="sub"><div class="lbl">How it works — the calculation</div>
+        <p>Amdahl's law plus a coordination cost that grows with agent count: minimizing <span class="fx">T(n)=s+(1−s)/n+kn</span> gives <span class="fx">n*=√((1−s)/k)</span>, where <b>k</b> comes from graph coupling. Independent files → ~6 agents; tightly-coupled edits → ~2. More is slower.</p>
+      </div>
+      <div class="sub"><div class="lbl">Usage</div><pre>hydra graph parallel internal/a.go internal/b.go</pre></div>
+      <a class="more" href="/first-principles.html#parallelism">See the speedup curve →</a>
+    </section>
+
+    <!-- ══ CONTEXT ══ -->
+    <section class="doc" id="context">
+      <h2><span class="cmd">hydra context entropy</span> <span class="tagline">signal, not length</span></h2>
+      <p class="sum">Measures a context's information density and tells you when to compact.</p>
+      <div class="sub"><div class="lbl">How it works — the calculation</div>
+        <p>Signal density <span class="fx">ρ = |gzip(C)| / |C|</span> proxies the entropy rate; <span class="fx">useful = L·ρ</span>. Compact on <b>falling ρ</b> (stale, repetitive context) rather than on raw length — a dense 100k window beats a noisy 1M one.</p>
+      </div>
+      <div class="sub"><div class="lbl">Usage</div><pre>hydra context entropy internal/foo.go
+cat notes.md | hydra context entropy -</pre></div>
+      <a class="more" href="/first-principles.html#entropy">See useful-tokens fall →</a>
+    </section>
+
+    <!-- ══ MCP ══ -->
+    <section class="doc" id="mcp">
+      <h2><span class="cmd">hydra mcp</span> <span class="tagline">accountability ledger</span></h2>
+      <p class="sum">A local, append-only ledger that records — and can <b>gate</b> — what every agent is allowed to touch and did.</p>
+      <div class="sub"><div class="lbl">How it works</div>
+        <p>A glob allow/deny <b>policy</b> decides each access (and records the decision). Every read/write event is appended to a local log you can audit — no data leaves your machine.</p>
+      </div>
+      <div class="sub"><div class="lbl">Subcommands</div>
+        <pre>hydra mcp check &lt;tool&gt; <span class="fl">--agent</span> A <span class="fl">--resource</span> R <span class="fl">--action</span> write
+hydra mcp record …          <span class="c"># append an access event</span>
+hydra mcp log <span class="fl">--denied</span>        <span class="c"># what got blocked</span>
+hydra mcp report            <span class="c"># allowed / denied by agent and tool</span></pre>
+      </div>
+    </section>
+
+    <!-- ══ ORACLE ══ -->
+    <section class="doc" id="oracle">
+      <h2><span class="cmd">hydra oracle verify</span> <span class="tagline">tests as evidence</span></h2>
+      <p class="sum">Turns a verifier (tests, compiler, linter) into a <b>first-class evidence source</b> whose verdict can outweigh a model's opinion.</p>
+      <div class="sub"><div class="lbl">How it works — the calculation</div>
+        <p>Runs the command; exit 0 = pass. That verdict maps to a calibrated LLR — a high-<span class="fx">D</span> source — that feeds the same confidence math as model votes. A green test suite is strong, cheap evidence.</p>
+      </div>
+      <div class="sub"><div class="lbl">Usage</div><pre>hydra oracle verify go test ./... <span class="fl">--source</span> verifier:go-test</pre></div>
+    </section>
+
+    <!-- ══ COST ══ -->
+    <section class="doc" id="cost">
+      <h2><span class="cmd">hydra cost</span> <span class="tagline">spend, honestly labeled</span></h2>
+      <p class="sum">Summarizes spend from the dispatch log, with <b>est-vs-actual</b> labeling.</p>
+      <div class="sub"><div class="lbl">How it works</div><p>Reads <span class="fx">cost.jsonl</span>. <span class="fx">tokens_source</span> marks whether a provider reported real usage or Hydra estimated it; <span class="fx">cost_source</span> is always <i>estimated</i> (pricing × tokens, never a billed figure).</p></div>
+      <div class="sub"><div class="lbl">Usage</div><pre>hydra cost</pre></div>
+    </section>
+
+    <!-- ══ STATS ══ -->
+    <section class="doc" id="stats">
+      <h2><span class="cmd">hydra stats</span> <span class="tagline">rollup</span></h2>
+      <p class="sum">Session cost rollup grouped by <b>model, tier, and day</b> — the source of truth for your real savings.</p>
+      <div class="sub"><div class="lbl">Usage</div><pre>hydra stats</pre></div>
+    </section>
+
+    <!-- ══ PRICING ══ -->
+    <section class="doc" id="pricing">
+      <h2><span class="cmd">hydra pricing</span> <span class="tagline">live rates</span></h2>
+      <p class="sum">The single source of truth for cost estimation.</p>
+      <div class="sub"><div class="lbl">How it works</div><p>Live rates fetched from the OpenRouter API, cached 24h, with a static <span class="fx">registry/pricing.yaml</span> tier fallback when offline. <span class="fx">HYDRA_PRICING_TTL_HOURS</span> overrides the TTL.</p></div>
+      <div class="sub"><div class="lbl">Usage</div><pre>hydra pricing list [filter] [<span class="fl">--json</span>]
+hydra pricing refresh        <span class="c"># force a synchronous fetch</span></pre></div>
+    </section>
+
+    <!-- ══ MODELS ══ -->
+    <section class="doc" id="models">
+      <h2><span class="cmd">hydra models</span> <span class="tagline">runtime registry</span></h2>
+      <p class="sum">Add a model at runtime — <b>no rebuild</b>.</p>
+      <div class="sub"><div class="lbl">How it works</div><p>Built-in scores live in embedded <span class="fx">data.json</span>; your additions merge over them via a runtime overlay at <span class="fx">~/.hydra/models.json</span>, picked up on the next probe/dispatch.</p></div>
+      <div class="sub"><div class="lbl">Usage</div>
+        <pre>hydra models list
+hydra models add kimi-k3 <span class="fl">--name</span> <span class="s">"Kimi K3"</span> <span class="fl">--provider</span> moonshot <span class="fl">--cap-score</span> 85
+hydra models remove kimi-k3
+hydra models sync            <span class="c"># import the OpenRouter catalog</span></pre>
+      </div>
+    </section>
+
+    <!-- ══ CONCEPTS ══ -->
+    <section class="doc" id="tiers">
+      <h2>Tiers &amp; CapScore <span class="tagline">how routing decides</span></h2>
+      <p class="sum">Every head gets a <b>CapScore</b> (0–100) from its capability profile; tasks route through named tiers by score. Lower tier number = stronger head.</p>
+      <div class="sub"><div class="lbl">The ladder</div>
+        <pre><span class="k">expert</span>    90–100   Claude Opus, Claude Code
+<span class="k">complex</span>   80–89    Codex, GPT-class, Gemini Pro
+<span class="k">standard</span>  70–79    Gemini Flash, Claude Haiku
+<span class="k">simple</span>    60–69    Qwen3 8B, Qwen2.5-Coder 7B (local)
+<span class="k">local</span>     50–59    Llama 3.2 3B, Phi-4 Mini</pre>
+      </div>
+    </section>
+
+    <section class="doc" id="fallback">
+      <h2>Fallback chains <span class="tagline">never a dead end</span></h2>
+      <p class="sum">If the chosen head is unavailable or rate-limited, Hydra falls to the next head in the chain automatically — <b>terminating at local Qwen</b>, which runs on your machine and is always available.</p>
+      <div class="callout">You never retry by hand. Preview any chain with <span class="fx">hydra dispatch --dry-run</span>.</div>
+    </section>
+
+    <section class="doc" id="policy">
+      <h2>PII policy / local-only <span class="tagline">enforced, not conventional</span></h2>
+      <p class="sum">With local-only policy enabled, any prompt containing sensitive data is <b>blocked from leaving your machine</b> — at the dispatch layer, before any network call.</p>
+      <div class="sub"><div class="lbl">Detected patterns</div><p>SSNs, credit-card numbers, emails, API keys/tokens, IP addresses, private-key material. A matching prompt is re-routed to a local head instead of an API.</p></div>
+    </section>
+
+    <section class="doc" id="governor">
+      <h2>Budget governor <span class="tagline">spend attention wisely</span></h2>
+      <p class="sum">Keeps every model — and the orchestrator itself — under its context ceiling.</p>
+      <div class="sub"><div class="lbl">How it works</div>
+        <p>Static <b>pressure bands</b> (normal → compact → caution → warning → critical → emergency) downgrade tiers as usage climbs. On top of that, a <b>rate-aware first-passage</b> model watches the burn rate and escalates <i>before</i> a threshold is crossed. The terminal fallback is always the free local head.</p>
+      </div>
+      <div class="sub"><div class="lbl">Bands</div>
+        <pre>0–49%   normal      full orchestration
+50–64%  compact     compact recommended
+65–69%  caution     compact urgently
+70–74%  warning     downgrade one tier
+75–79%  critical    routing only
+80%+    emergency    route to local, warn</pre>
+      </div>
+    </section>
+
+    <section class="doc" id="a2a">
+      <h2>A2A handoffs <span class="tagline">causal, conflict-aware</span></h2>
+      <p class="sum">When work passes between agents, Hydra carries a structured handoff with a <b>vector clock</b> for causal ordering.</p>
+      <div class="sub"><div class="lbl">How it works</div><p>Vector clocks establish happens-before / concurrent relationships; two concurrent handoffs that touch overlapping files are flagged as a <b>conflict</b>. The last handoff is saved to <span class="fx">logs/last_handoff.json</span> and replayed with <span class="fx">--a2a</span>.</p></div>
+    </section>
+
+    <section class="doc" id="math">
+      <h2>The math <span class="tagline">why the router isn't vibes</span></h2>
+      <p class="sum">Six results run the router: Wald's SPRT, calibration diagnostic power (KL), the Bayes defect-cost bar, Molloy–Reed percolation-κ, Amdahl optimal parallelism, and context entropy. Each is stated, derived, and made interactive.</p>
+      <a class="more" href="/first-principles.html">Open First Principles — six interactive proofs →</a>
+    </section>
+
+  </main>
+</div>
+
+<footer>
+  <span>© Hydra — MIT. The Trust Control Plane for AI development.</span>
+  <span><a href="/">Home</a> · <a href="/first-principles.html">First principles</a> · <a href="/pricing.html">Pricing</a> · <a href="https://github.com/ankit373/hydra">GitHub</a></span>
+</footer>
+
+<script>
+(function(){
+  "use strict";
+  var q=document.getElementById('q'), toc=document.getElementById('toc'),
+      links=Array.prototype.slice.call(toc.querySelectorAll('a[href^="#"]')),
+      groups=Array.prototype.slice.call(toc.querySelectorAll('[data-grp]')),
+      noRes=document.getElementById('noresults'),
+      docs=Array.prototype.slice.call(document.querySelectorAll('.doc'));
+
+  // "/" focuses search
+  addEventListener('keydown', function(e){
+    if(e.key==='/' && document.activeElement!==q){ e.preventDefault(); q.focus(); }
+    if(e.key==='Escape' && document.activeElement===q){ q.value=''; filter(); q.blur(); }
+  });
+
+  function filter(){
+    var term=q.value.trim().toLowerCase();
+    var any=false;
+    docs.forEach(function(d){
+      var hit = !term || d.textContent.toLowerCase().indexOf(term)>=0;
+      d.style.display = hit?'':'none';
+      var link=toc.querySelector('a[href="#'+d.id+'"]');
+      if(link) link.style.display = hit?'':'none';
+      if(hit) any=true;
+    });
+    // hide a group header if all its links are hidden
+    groups.forEach(function(g){
+      var vis=false, n=g.nextElementSibling;
+      while(n && !n.hasAttribute('data-grp') && n.id!=='noresults'){
+        if(n.tagName==='A' && n.style.display!=='none'){ vis=true; break; }
+        n=n.nextElementSibling;
+      }
+      g.style.display = vis?'':'none';
+    });
+    noRes.style.display = any?'none':'block';
+  }
+  q.addEventListener('input', filter);
+
+  // scrollspy — highlight the section in view
+  if('IntersectionObserver' in window){
+    var spy=new IntersectionObserver(function(es){
+      es.forEach(function(e){
+        if(e.isIntersecting){
+          links.forEach(function(l){ l.classList.toggle('active', l.getAttribute('href')==='#'+e.target.id); });
+        }
+      });
+    }, {rootMargin:'-52px 0px -70% 0px', threshold:0});
+    docs.forEach(function(d){ spy.observe(d); });
+  }
+})();
+</script>
+</body>
+</html>
