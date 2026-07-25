@@ -136,7 +136,37 @@ pre .c{color:var(--faint);} pre .fl{color:var(--aqua);} pre .k{color:var(--viole
   padding:7px 14px;cursor:pointer;background:rgba(20,22,44,.4);transition:.14s;}
 .tab:hover{color:var(--ink);border-color:var(--line-2);}
 .tab.on{color:var(--aqua);border-color:var(--aqua);background:rgba(0,230,195,.08);}
-.pane{display:none;}.pane.on{display:block;}
+/* animated view swap (TUI tabs + app nav) — crossfade + height morph + neon sweep */
+.panes{position:relative;transition:height .36s cubic-bezier(.4,0,.2,1);overflow:hidden;}
+.pane{position:absolute;top:0;left:0;width:100%;opacity:0;transform:translateY(14px) scale(.985);filter:blur(3px);
+  pointer-events:none;transition:opacity .26s ease,transform .42s cubic-bezier(.2,.8,.2,1),filter .26s ease;}
+.pane.on{opacity:1;transform:none;filter:none;pointer-events:auto;}
+.pane::after{content:"";position:absolute;inset:0;pointer-events:none;border-radius:12px;opacity:0;
+  background:linear-gradient(105deg,transparent 38%,rgba(0,230,195,.16) 50%,transparent 62%);background-size:250% 100%;background-position:170% 0;}
+.pane.sweep::after{animation:sweep .62s ease-out;}
+@keyframes sweep{0%{opacity:1;background-position:170% 0;}100%{opacity:0;background-position:-70% 0;}}
+.tab{transition:color .16s,border-color .16s,background .16s,transform .16s;}
+.tab.on{transform:translateY(-1px);}
+.appnav .item{cursor:pointer;transition:background .16s,color .16s,border-color .16s;}
+.appcock{font-family:var(--mono);font-size:12.5px;}
+.appcock .crow{padding:5px 2px;color:var(--dim);border-bottom:1px solid rgba(150,140,255,.06);}
+.appcock .crow.you{color:var(--mid);}
+.apptree{font-size:12.5px;line-height:1.95;color:var(--dim);}
+@media(prefers-reduced-motion:reduce){
+  .panes{height:auto!important;transition:none;overflow:visible;}
+  .pane{position:relative;display:none;opacity:1;transform:none;filter:none;transition:none;}
+  .pane.on{display:block;}
+  .pane.sweep::after{animation:none;}
+}
+/* copy-to-clipboard on command blocks */
+.codewrap{position:relative;}
+.copybtn{position:absolute;top:8px;right:8px;font-family:var(--mono);font-size:10.5px;letter-spacing:.4px;
+  color:var(--dim);background:rgba(16,18,34,.92);border:1px solid var(--line-2);border-radius:7px;padding:5px 10px;
+  cursor:pointer;opacity:0;transition:opacity .15s,color .15s,border-color .15s;z-index:2;}
+.codewrap:hover .copybtn,.copybtn:focus-visible{opacity:1;}
+.copybtn:hover{color:var(--aqua);border-color:var(--aqua);}
+.copybtn.done{color:var(--cheap);border-color:rgba(63,217,138,.5);opacity:1;}
+@media(hover:none){.copybtn{opacity:.85;}}
 
 /* desktop app mockup */
 .appwin{border:1px solid var(--line-2);border-radius:14px;overflow:hidden;margin-top:14px;
@@ -326,6 +356,7 @@ go build -o hydra ./cmd/hydra</pre>
         <button class="tab" data-pane="tui2" role="tab">agent tree</button>
       </div>
 
+      <div class="panes" id="tuiPanes">
       <div class="pane on" id="tui0">
         <div class="term">
           <div class="bar"><i class="d1"></i><i class="d2"></i><i class="d3"></i><span class="ttl">HYDRA ▸ chat + code</span></div>
@@ -372,6 +403,7 @@ go build -o hydra ./cmd/hydra</pre>
      <span class="tf">┄┄▶ A2A  token-rotation → tests  (files resolved +1 · context compacted)</span></pre>
         </div>
       </div>
+      </div>
 
       <div class="sub"><div class="lbl">How it works</div>
         <p><b>chat + code</b> shows the live routing decision and streams a snippet as the chosen head "writes." <b>dashboard</b> shows per-head sparklines, cost saved vs your priciest head, confidence, and a band-colored governor gauge. <b>agent tree</b> is the recursive supervision tree with A2A handoffs and <span class="fx">↑/↓</span> node inspection.</p>
@@ -386,26 +418,50 @@ hydra tui <span class="fl">--snapshot</span> <span class="fl">--view</span> 0|1|
     <!-- ══ APP ══ -->
     <section class="doc" id="app">
       <h2>The desktop app <span class="badge prev">design preview</span> <span class="tagline">point-and-click cockpit</span></h2>
-      <p class="sum">The same cockpit as a native window — sidebar navigation, live routing, and a click-through agent tree for people who don't live in a terminal. <b>In design; not yet shipped.</b> Here's the direction:</p>
-      <div class="appwin" role="img" aria-label="Desktop app preview: sidebar navigation with a live dashboard view">
-        <div class="tb"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i><span class="ttl">Hydra.app — Dashboard</span></div>
+      <p class="sum">The same cockpit as a native window. <b>Click the sidebar</b> — the views swap live. <b>In design; not yet shipped.</b> Here's the direction:</p>
+      <div class="appwin">
+        <div class="tb"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i><span class="ttl" id="appTitle">Hydra.app — Dashboard</span></div>
         <div class="appbody">
-          <div class="appnav">
-            <div class="item"><span class="dot"></span>Cockpit</div>
-            <div class="item on"><span class="dot"></span>Dashboard</div>
-            <div class="item"><span class="dot"></span>Agent tree</div>
-            <div class="item"><span class="dot"></span>Trust</div>
-            <div class="item"><span class="dot"></span>Cost</div>
+          <div class="appnav" id="appNav" role="tablist">
+            <div class="item" data-av="av-cockpit" data-title="Cockpit" role="tab" tabindex="0"><span class="dot"></span>Cockpit</div>
+            <div class="item on" data-av="av-dash" data-title="Dashboard" role="tab" tabindex="0"><span class="dot"></span>Dashboard</div>
+            <div class="item" data-av="av-tree" data-title="Agent tree" role="tab" tabindex="0"><span class="dot"></span>Agent tree</div>
           </div>
           <div class="appview">
-            <div class="ah">fleet · this session</div>
-            <div class="appcards">
-              <div class="appcard"><div class="t">saved vs frontier</div><div class="v" style="color:var(--cheap)">$6.03</div><div class="spark"><span style="color:var(--cheap)">▁▃▄▆▅▇█▇</span></div></div>
-              <div class="appcard"><div class="t">local share</div><div class="v" style="color:var(--cyan)">85%</div><div class="spark"><span style="color:var(--cyan)">▂▄▃▅▆▆▇█</span></div></div>
-              <div class="appcard"><div class="t">last confidence</div><div class="v" style="color:var(--violet)">0.98</div><div class="spark"><span style="color:var(--violet)">▅▆▆▇▇█▇█</span></div></div>
+            <div class="panes" id="appPanes">
+              <div class="pane" id="av-cockpit">
+                <div class="ah">route a task</div>
+                <div class="appcock">
+                  <div class="crow you">❯ rotate the signing key in internal/auth/token.go</div>
+                  <div class="crow">prompt → CORE → T1 → <span style="color:var(--violet)">agy · claude</span></div>
+                  <div class="crow"><span style="color:var(--exp)">κ=3.1 ⚠</span> · 12 dependents → confidence bar raised to 0.95</div>
+                  <div class="crow"><span style="color:var(--cyan)">conf 0.98</span> / target 0.95 · SPRT <span style="color:var(--cheap)">accept</span></div>
+                  <div class="crow"><span style="color:var(--cheap)">✔ done · saved $0.0149 vs all-frontier</span></div>
+                </div>
+              </div>
+              <div class="pane on" id="av-dash">
+                <div class="ah">fleet · this session</div>
+                <div class="appcards">
+                  <div class="appcard"><div class="t">saved vs frontier</div><div class="v" style="color:var(--cheap)">$6.03</div><div class="spark"><span style="color:var(--cheap)">▁▃▄▆▅▇█▇</span></div></div>
+                  <div class="appcard"><div class="t">local share</div><div class="v" style="color:var(--cyan)">85%</div><div class="spark"><span style="color:var(--cyan)">▂▄▃▅▆▆▇█</span></div></div>
+                  <div class="appcard"><div class="t">last confidence</div><div class="v" style="color:var(--violet)">0.98</div><div class="spark"><span style="color:var(--violet)">▅▆▆▇▇█▇█</span></div></div>
+                </div>
+                <div class="ah" style="margin-top:16px">governor · claude_pct</div>
+                <div class="spark" style="font-size:15px"><span style="color:var(--mid)">███████████░░░░░░░</span> <span style="color:var(--mid)">58%</span></div>
+              </div>
+              <div class="pane" id="av-tree">
+                <div class="ah">supervision tree</div>
+                <div class="apptree mono">
+                  <div><span style="color:var(--violet)">orchestrator</span> <span style="color:var(--faint)">T1 · cortex · you · 0.71</span></div>
+                  <div>├─ design <span style="color:var(--faint)">T3 · agy · claude · returned · 0.93</span></div>
+                  <div>├─ <span style="color:var(--aqua)">token-rotation</span> <span style="color:var(--faint)">T3 · agy · claude · running · 0.88</span></div>
+                  <div>│&nbsp;&nbsp;├─ worker-1 <span style="color:var(--faint)">T6 · gemini pro · 0.91</span></div>
+                  <div>│&nbsp;&nbsp;└─ worker-2 <span style="color:var(--faint)">T8 · gemini flash · 0.62</span></div>
+                  <div>└─ docs <span style="color:var(--faint)">T10 · qwen · local · 0.87</span></div>
+                  <div style="color:var(--faint)">&nbsp;&nbsp;&nbsp;┄▶ A2A token-rotation → tests</div>
+                </div>
+              </div>
             </div>
-            <div class="ah" style="margin-top:16px">governor · claude_pct</div>
-            <div class="spark" style="font-size:15px"><span style="color:var(--mid)">███████████░░░░░░░</span> <span style="color:var(--mid)">58%</span></div>
           </div>
         </div>
       </div>
@@ -688,14 +744,63 @@ hydra models sync   <span class="c"># import the OpenRouter catalog</span></pre>
       noRes=document.getElementById('noresults'),
       docs=Array.prototype.slice.call(document.querySelectorAll('.doc'));
 
-  // TUI view tabs
-  document.querySelectorAll('.tab').forEach(function(t){
-    t.addEventListener('click', function(){
-      var pane=t.getAttribute('data-pane');
-      t.parentNode.querySelectorAll('.tab').forEach(function(x){ x.classList.toggle('on', x===t); });
-      document.querySelectorAll('#tui0,#tui1,#tui2').forEach(function(p){ p.classList.toggle('on', p.id===pane); });
+  var REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // ── copy-to-clipboard on command blocks (skip terminal renders) ──
+  document.querySelectorAll('.content pre').forEach(function(pre){
+    if(pre.closest('.term')) return;                 // terminal output, not a command
+    var wrap=document.createElement('div'); wrap.className='codewrap';
+    pre.parentNode.insertBefore(wrap, pre); wrap.appendChild(pre);
+    var btn=document.createElement('button'); btn.className='copybtn'; btn.type='button';
+    btn.textContent='copy'; btn.setAttribute('aria-label','Copy to clipboard'); wrap.appendChild(btn);
+    btn.addEventListener('click', function(){
+      var text=pre.innerText.replace(/\s+$/,'');
+      function done(){ btn.textContent='✓ copied'; btn.classList.add('done');
+        setTimeout(function(){ btn.textContent='copy'; btn.classList.remove('done'); }, 1500); }
+      function fallback(){ var ta=document.createElement('textarea'); ta.value=text;
+        ta.style.position='fixed'; ta.style.opacity='0'; document.body.appendChild(ta); ta.focus(); ta.select();
+        try{ document.execCommand('copy'); }catch(e){} document.body.removeChild(ta); done(); }
+      if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(text).then(done, fallback); }
+      else fallback();
     });
   });
+
+  // ── animated view swap (shared by TUI tabs + app nav) ──
+  function setHeight(panes){ var on=panes.querySelector('.pane.on'); if(on && !REDUCED){ panes.style.height=on.offsetHeight+'px'; } }
+  function swap(panes, targetId){
+    var target=panes.querySelector('#'+targetId); if(!target || target.classList.contains('on')) return;
+    if(!REDUCED) panes.style.height=panes.offsetHeight+'px';
+    panes.querySelectorAll('.pane').forEach(function(p){ p.classList.remove('on'); });
+    target.classList.add('on');
+    if(!REDUCED){
+      target.classList.remove('sweep'); void target.offsetWidth; target.classList.add('sweep');
+      requestAnimationFrame(function(){ panes.style.height=target.offsetHeight+'px'; });
+    }
+  }
+  var tuiPanes=document.getElementById('tuiPanes');
+  if(tuiPanes){
+    setHeight(tuiPanes);
+    document.querySelectorAll('.tab').forEach(function(t){
+      t.addEventListener('click', function(){
+        document.querySelectorAll('.tab').forEach(function(x){ x.classList.toggle('on', x===t); });
+        swap(tuiPanes, t.getAttribute('data-pane'));
+      });
+    });
+  }
+  var appPanes=document.getElementById('appPanes'), appNav=document.getElementById('appNav'), appTitle=document.getElementById('appTitle');
+  if(appPanes && appNav){
+    setHeight(appPanes);
+    appNav.querySelectorAll('.item').forEach(function(it){
+      function activate(){
+        appNav.querySelectorAll('.item').forEach(function(x){ x.classList.toggle('on', x===it); });
+        swap(appPanes, it.getAttribute('data-av'));
+        if(appTitle) appTitle.textContent='Hydra.app — '+it.getAttribute('data-title');
+      }
+      it.addEventListener('click', activate);
+      it.addEventListener('keydown', function(e){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); activate(); } });
+    });
+  }
+  addEventListener('resize', function(){ if(tuiPanes) setHeight(tuiPanes); if(appPanes) setHeight(appPanes); });
 
   // "/" focuses search
   addEventListener('keydown', function(e){
