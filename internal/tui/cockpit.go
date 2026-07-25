@@ -188,6 +188,28 @@ func (m Cockpit) submit() (tea.Model, tea.Cmd) {
 	return nm, ckCodeTick(nm.codeGen)
 }
 
+// baseline returns the cost and short model name of the priciest available head —
+// the "route everything to the top tier" reference the savings are measured against.
+// Provider-neutral by construction: it reflects whatever the most expensive
+// discovered head happens to be, never a hardcoded vendor.
+func (m Cockpit) baseline() (float64, string) {
+	base, name := 0.0, "frontier"
+	for _, h := range m.heads {
+		if h.up && h.price > base {
+			base, name = h.price, ckBaseName(h.name)
+		}
+	}
+	return base, name
+}
+
+// ckBaseName trims a "provider · model" head label down to the model part.
+func ckBaseName(n string) string {
+	if i := strings.LastIndex(n, "· "); i >= 0 {
+		return strings.TrimSpace(n[i+len("· "):])
+	}
+	return n
+}
+
 // run simulates a dispatch and appends the live routing decision to the log.
 func (m Cockpit) run(task string) Cockpit {
 	m.runs++
@@ -204,7 +226,8 @@ func (m Cockpit) run(task string) Cockpit {
 	m.codeGen++
 
 	cost := h.price
-	saved := 0.015 - cost
+	base, baseName := m.baseline()
+	saved := base - cost
 	if saved < 0 {
 		saved = 0
 	}
@@ -244,7 +267,7 @@ func (m Cockpit) run(task string) Cockpit {
 	}
 	m.log = append(m.log, ckDimS.Render("  route  ")+
 		lipgloss.NewStyle().Foreground(h.color).Render(h.name)+
-		ckDimS.Render("  "+costStr+"  vs all-Claude $0.0150"))
+		ckDimS.Render(fmt.Sprintf("  %s  vs all-%s $%.4f", costStr, baseName, base)))
 	if hasFilePath(task) {
 		m.log = append(m.log, ckDimS.Render("  blast  ")+ckExpS.Render("κ=3.1 ⚠")+
 			ckDimS.Render("  12 dependents → confidence bar raised to 0.95"))

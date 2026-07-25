@@ -88,7 +88,8 @@ func (m Cockpit) dash(w, h int) string {
 		ckCyanS.Render(m.mode))
 
 	savedPct := int(m.saved * 40)
-	saveBox := ckLabelS.Render("SAVED vs all-Claude") + "\n\n " +
+	_, baseName := m.baseline()
+	saveBox := ckLabelS.Render("SAVED vs all-"+baseName) + "\n\n " +
 		lipgloss.NewStyle().Foreground(ckCheap).Bold(true).Render(fmt.Sprintf("$%.4f", m.saved)) + "\n " +
 		ckBar(min(100, savedPct), 20) + "\n " + ckDimS.Render(fmt.Sprintf("%d runs routed cheap", m.runs))
 
