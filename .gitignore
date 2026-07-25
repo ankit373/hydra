@@ -20,7 +20,7 @@ auth_required.json
 node_modules/
 ui/node_modules/
 dist/
-build/
+/build/
 out/
 .cache/
 .eslintcache
@@ -52,5 +52,25 @@ package-lock.json
 yarn.lock
 pnpm-lock.yaml
 
-# Private planning docs
+# Private planning docs — local-only scoping / planning / spec / review / design.
+# NEVER commit these. Glob patterns catch future ones; explicit names below are legacy.
+*_SCOPE.md
+*_SCOPING.md
+*_PLAN.md
+*_PLANNING.md
+*_SPEC.md
+SPEC_*.md
+*_REVIEW.md
+*_MODEL.md
+*_DRAFT.md
+*_FINDINGS.md
+*_PRIVATE.md
 ROADMAP_PRIVATE.md
+ARCHITECTURE_BRAIN.md
+RESEARCH_FINDINGS.md
+STRATEGY_REVIEW.md
+ROADMAP_TRUST_CONTROL_PLANE.md
+HYDRA_MANIFESTO.md
+SPEC_TRUST_V1.md
+BUILD_STATE.md
+HYDRA_INFERENCE_SCOPING.md

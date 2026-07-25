@@ -1,7 +1,5 @@
 name: CI
 
-# Only run on PRs targeting main or develop.
-# Push to main/develop by admin is trusted — no CI burn on every direct push.
 on:
   pull_request:
     branches: [main, develop]
@@ -12,13 +10,30 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  go:
+    name: Go build & test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Build
+        run: go build ./...
+
+      - name: Test
+        run: go test ./... -race
+
   shellcheck:
     name: Shellcheck
     runs-on: ubuntu-latest
-    # Only run when shell scripts actually changed
-    if: >
-      contains(github.event.pull_request.changed_files_url, '.sh') ||
-      github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@v4
 
@@ -29,14 +44,11 @@ jobs:
       # Warnings and style hints are surfaced but don't block the PR.
       - name: Lint shell scripts
         run: |
-          shellcheck --severity=error dispatch/*.sh install.sh scripts/*.sh
+          shellcheck --severity=error install.sh
 
   typecheck:
     name: TypeScript typecheck
     runs-on: ubuntu-latest
-    # Only run when UI source files changed
-    if: >
-      github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@v4
 

@@ -1,4 +1,30 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://ankit373.github.io/hydra/sitemap.xml
+# AI search bots — explicitly allowed so these platforms can cite Hydra
+User-agent: GPTBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: anthropic-ai
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+
+# CCBot (Common Crawl bulk training scraper) — blocked
+User-agent: CCBot
+Disallow: /
+
+Sitemap: https://hydra.uvansa.com/sitemap.xml

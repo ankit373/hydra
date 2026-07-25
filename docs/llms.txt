@@ -1,0 +1,85 @@
+# Hydra — The Trust Control Plane for AI Development
+
+> Hydra is an open source CLI written in Go that routes developer tasks across every AI model on your machine — not just to the cheapest one, but to a target *confidence of correctness*. It reduces LLM API costs by 70-85% by using cheap or free models for simple tasks and reserving frontier models for work that needs them, and it can route to a calibrated confidence: sampling models adaptively (SPRT) and stopping as soon as the evidence is strong enough, spending more only where accuracy demands it.
+
+## What It Does
+
+- **10-tier routing**: Claude Opus (tier 1, complex reasoning) down to Qwen3 via Ollama (tier 10, free local)
+- **Interactive TUI cockpit**: `hydra tui` opens an interactive cockpit — chat with your heads, route work, and watch spend live. Three views: chat+code, dashboard, and agent-tree. `hydra tui --snapshot` renders one static frame for docs/previews
+- **~1µs routing overhead**: the Go routing engine (policy eval + head selection + budget check) adds ~1,130 ns per dispatch — benchmarked on Apple M1 via `go test -bench=BenchmarkRoutingPath`
+- **Swarm dispatch**: fan a single prompt to multiple models simultaneously — race (fastest), best (LLM-judged quality), or all (aggregate)
+- **Confidence routing**: `hydra dispatch --confidence 0.95` runs an SPRT (sequential probability ratio test) ensemble that samples models adaptively and stops as soon as a target confidence of correctness is reached, using per-source calibration (`hydra trust calibration`) you build up from real outcomes — fewer model calls on easy tasks, more only where accuracy demands it
+- **Blast-radius aware**: `hydra dispatch --file X` and `hydra graph blast X` read a code dependency graph (`graph.json`) so an edit to a widely-depended-on file demands higher confidence than a leaf — the defect-cost model holds expected leaked-defect cost roughly constant
+- **Token budget enforcement**: pressure modes (Normal → Emergency) plus a rate-aware first-passage governor auto-downgrade tiers as the orchestrator's context window fills
+- **Cost analytics**: `hydra stats` shows spend broken down by model, tier, and day
+- **Dynamic pricing**: live rates from OpenRouter API with 24h cache and static YAML offline fallback
+- **A2A handoff**: structured JSON context (with vector clocks for causal ordering) passed between agents across tasks
+
+## CLI Commands
+
+- `hydra dispatch` — route a task to the cheapest head that clears the bar (`--enum`/`--tier`, `--swarm`, `--confidence`, `--file`, `--local`, `--dry-run`, `--a2a`)
+- `hydra probe` — scan the machine for every available head (CLI agents, API keys, local servers)
+- `hydra status` — session state: rate-aware `claude_pct` budget governor and discovered heads
+- `hydra tui` — interactive cockpit: chat, route work, and watch spend live
+- `hydra cost` — spend report (estimated vs actual) from the dispatch cost log
+- `hydra stats` — session cost rollup by model, tier, and day
+- `hydra pricing` — live pricing DB: `list`, `refresh`
+- `hydra trust` — confidence layer: `calibration`, `record`, `defect`, `stats`, `explain`
+- `hydra graph` — code dependency graph: `blast` (blast radius + percolation-κ), `parallel` (optimal agent count)
+- `hydra context` — context signal density / entropy governor: `entropy`
+- `hydra mcp` — local MCP accountability ledger: `check`, `record`, `log`, `report`
+- `hydra oracle` — verification oracles (tests/compile/lint) as calibrated evidence: `verify`
+- `hydra models` — model capability registry: `list`, `add`, `remove`, `sync`
+- `hydra edit` — editor integration
+- `hydra review` — code review
+- `hydra init` — first-run wizard: discover heads, choose your cortex
+- `hydra version` — build and version info
+
+## Who It's For
+
+Developers who use Claude Code, Cursor, Windsurf, or any AI coding assistant and want to reduce API costs without changing their workflow. Also useful for anyone building multi-model AI pipelines in Go.
+
+## Installation
+
+```bash
+brew tap ankit373/hydra && brew install hydra
+```
+
+Or build from source (requires Go 1.22+):
+
+```bash
+git clone https://github.com/ankit373/hydra && cd hydra && go build ./cmd/hydra
+```
+
+## Pricing
+
+**Free and open source — MIT License.** No subscription. Bring your own API keys.
+
+You pay the underlying model providers directly:
+- Claude Opus: ~$15/M output tokens (Anthropic)
+- Gemini 2.0 Flash: ~$0.075/M input (Google)
+- Qwen local via Ollama: $0
+
+Typical savings: 75-85% vs routing everything through Claude. Run `hydra pricing list` for live rates.
+
+## Key Links
+
+- Homepage: https://hydra.uvansa.com/
+- Documentation — every command (what it does, how it works, the logic/calculation, how to use): https://hydra.uvansa.com/docs.html
+- Pricing — free and open source (MIT); bring your own keys, pay providers directly. Custom builds on request: https://hydra.uvansa.com/pricing.html
+- Source code: https://github.com/ankit373/hydra
+- Installation: https://hydra.uvansa.com/#start
+- Model tier ladder / live routing: https://hydra.uvansa.com/#routing
+- First Principles — the math behind the router (Wald SPRT, calibration diagnostic power D via KL divergence, Bayes defect-cost, Molloy–Reed percolation-κ, Amdahl optimal parallelism, context entropy), with interactive derivations: https://hydra.uvansa.com/first-principles.html
+- The routing math teaser (Pareto, SPRT, percolation-κ charts): https://hydra.uvansa.com/#math
+- Where Hydra fits (local-first + trust quadrant): https://hydra.uvansa.com/#universe
+- Cost comparison vs gateways: https://hydra.uvansa.com/#compare
+- Changelog: https://github.com/ankit373/hydra/blob/main/CHANGELOG.md
+
+## License
+
+MIT — https://github.com/ankit373/hydra/blob/main/LICENSE
+
+## Author
+
+Ankit Jha — https://github.com/ankit373

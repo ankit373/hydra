@@ -8,6 +8,17 @@
 # To reorder tiers  → change tier number AND update routing.yaml to match
 # To disable        → set enabled: false (route.sh auto-escalates)
 # ─────────────────────────────────────────────────────────────────────────────
+#
+# ⚠️  model_flag VALUES ARE INSTALL-SPECIFIC DEFAULTS — VERIFY, DON'T TRUST.
+# The `model_flag` and version-bearing `name` fields below (e.g. agy Claude/Gemini
+# tiers) are provider-INTERNAL identifiers that only resolve on YOUR specific
+# Antigravity / Ollama / API installation. They are starting defaults, NOT a
+# guarantee that a given model or version is current or available to you.
+# Before relying on a tier, confirm its model_flag actually exists in your
+# provider (agy model list · `ollama list` · the provider's API). Mismatched
+# flags fail at dispatch and route.sh auto-escalates to the next tier.
+# (A `hydra doctor` command that validates these against live providers is planned.)
+# ─────────────────────────────────────────────────────────────────────────────
 
 version: "1.0"
 
@@ -81,6 +92,7 @@ models:
     model_flag: null
     token_pool: claude_direct
     enabled: true
+    context_window: 200000
     tokens_per_call: high
     speed: medium            # thoughtful, not instant
     accuracy: highest
@@ -103,6 +115,7 @@ models:
     model_flag: "claude-opus-4-6-thinking"
     token_pool: agy_claude
     enabled: true
+    context_window: 200000
     tokens_per_call: very_high
     speed: slow              # thinking mode takes time
     accuracy: very_high
@@ -124,6 +137,7 @@ models:
     model_flag: "claude-sonnet-4-6-thinking"
     token_pool: agy_claude
     enabled: true
+    context_window: 200000
     tokens_per_call: high
     speed: medium_slow
     accuracy: high
@@ -145,6 +159,7 @@ models:
     model_flag: "gemini-2.0-flash-thinking-exp"
     token_pool: agy_flash_thinking
     enabled: true
+    context_window: 1000000
     tokens_per_call: medium
     speed: fast
     accuracy: high
@@ -166,6 +181,7 @@ models:
     model_flag: "gemini-3.1-pro"
     token_pool: agy_gemini_pro
     enabled: true
+    context_window: 1000000
     tokens_per_call: medium_high
     speed: medium
     accuracy: medium_high
@@ -187,6 +203,7 @@ models:
     model_flag: "gemini-3.1-pro-low"
     token_pool: agy_gemini_pro
     enabled: true
+    context_window: 1000000
     tokens_per_call: medium
     speed: medium_fast
     accuracy: medium_high
@@ -208,6 +225,7 @@ models:
     model_flag: "gemini-3.5-flash-high"
     token_pool: agy_flash
     enabled: true
+    context_window: 1000000
     tokens_per_call: low_medium
     speed: fast
     accuracy: medium
@@ -229,6 +247,7 @@ models:
     model_flag: "gemini-3.5-flash"
     token_pool: agy_flash
     enabled: true
+    context_window: 1000000
     tokens_per_call: low
     speed: fast
     accuracy: medium_low
@@ -250,6 +269,7 @@ models:
     model_flag: "gemini-3.5-flash-low"
     token_pool: agy_flash
     enabled: true
+    context_window: 1000000
     tokens_per_call: very_low
     speed: very_fast
     accuracy: low
@@ -271,6 +291,7 @@ models:
     model_flag: "Qwen2.5-Coder:7b"
     token_pool: local_ollama
     enabled: true
+    context_window: 32768
     tokens_per_call: free
     speed: slow              # local inference on Apple Silicon ~15-40 tok/s
     accuracy: low_medium
