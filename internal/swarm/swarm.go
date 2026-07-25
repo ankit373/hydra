@@ -35,7 +35,7 @@ type Options struct {
 
 	// Execution constraints.
 	MaxHeads       int           // hard cap on fan-out (0 → defaultMaxHeads = 5)
-	PerHeadTimeout time.Duration // per-head deadline (0 = inherit parent ctx)
+	PerHeadTimeout time.Duration // per-head deadline (0 → defaultPerHeadTimeout, 300s; never unbounded)
 	MaxEstCostUSD  float64       // pre-flight guard; 0 = no limit
 	LocalOnly      bool
 
