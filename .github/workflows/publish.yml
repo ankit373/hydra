@@ -1,0 +1,129 @@
+name: Publish (all channels)
+
+# Single source of truth for shipping a release everywhere: binaries + checksums
+# (GitHub release), Homebrew tap, npm, and pip. curl (install.sh) needs nothing —
+# it always resolves the latest release at runtime.
+#
+# Called automatically by release-please.yml when a release is created, and
+# manually via workflow_dispatch (e.g. to (re)publish an existing tag).
+#
+# Each channel is gated on its secret being present, so the release never fails
+# just because a token has not been configured yet:
+#   HOMEBREW_TAP_GITHUB_TOKEN  → PAT with push access to ankit373/homebrew-hydra
+#   NPM_TOKEN                  → npm automation token (publish)
+#   PYPI_API_TOKEN             → PyPI API token (publish)
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to publish (e.g. v1.0.1)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  binaries:
+    name: Binaries + checksums (GoReleaser)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: anchore/sbom-action/download-syft@v0
+      - name: GoReleaser (append to existing release)
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          version: latest
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GORELEASER_CURRENT_TAG: ${{ inputs.tag }}
+
+  homebrew:
+    name: Homebrew tap
+    needs: binaries
+    runs-on: ubuntu-latest
+    env:
+      TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+      - name: Update tap formula
+        if: ${{ env.TAP_TOKEN != '' }}
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+        run: ./scripts/update-tap-formula.sh "${{ inputs.tag }}"
+      - name: Skipped (no token)
+        if: ${{ env.TAP_TOKEN == '' }}
+        run: echo "::warning::HOMEBREW_TAP_GITHUB_TOKEN not set — skipping Homebrew tap update."
+
+  npm:
+    name: npm
+    needs: binaries
+    runs-on: ubuntu-latest
+    env:
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+      - name: Publish
+        if: ${{ env.NPM_TOKEN != '' }}
+        working-directory: npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          VERSION="${{ inputs.tag }}"; VERSION="${VERSION#v}"
+          npm version "$VERSION" --no-git-tag-version --allow-same-version
+          npm publish --access public
+      - name: Skipped (no token)
+        if: ${{ env.NPM_TOKEN == '' }}
+        run: echo "::warning::NPM_TOKEN not set — skipping npm publish."
+
+  pip:
+    name: pip / PyPI
+    needs: binaries
+    runs-on: ubuntu-latest
+    env:
+      PYPI_API_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Build + publish
+        if: ${{ env.PYPI_API_TOKEN != '' }}
+        working-directory: pip
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        run: |
+          VERSION="${{ inputs.tag }}"; VERSION="${VERSION#v}"
+          sed -i "s/^version = .*/version = \"$VERSION\"/" pyproject.toml
+          sed -i "s/^__version__ = .*/__version__ = \"$VERSION\"/" hyctl/__init__.py
+          python -m pip install --upgrade build twine
+          python -m build
+          python -m twine upload dist/*
+      - name: Skipped (no token)
+        if: ${{ env.PYPI_API_TOKEN == '' }}
+        run: echo "::warning::PYPI_API_TOKEN not set — skipping PyPI publish."

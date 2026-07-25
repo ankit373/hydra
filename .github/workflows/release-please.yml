@@ -2,7 +2,11 @@ name: Release Please
 
 # release-please watches for conventional commits on main and:
 #   1. Opens a "Release PR" with bumped version + updated CHANGELOG.md
-#   2. When the Release PR is merged, creates the tag → triggers release.yml
+#   2. When the Release PR is merged, creates the tag + GitHub release
+#   3. This workflow then fans the release out to every channel (binaries,
+#      Homebrew, npm, pip) via publish.yml — so a feature release auto-updates
+#      everywhere with no manual steps. curl (install.sh) always resolves the
+#      latest release at runtime, so it needs nothing.
 
 on:
   push:
@@ -17,6 +21,9 @@ jobs:
   release-please:
     name: Release Please
     runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
       - uses: googleapis/release-please-action@v4
         id: release
@@ -29,3 +36,12 @@ jobs:
           #   feat!: or BREAKING CHANGE → major bump (1.1.0 → 2.0.0)
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+  publish:
+    name: Publish everywhere
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    uses: ./.github/workflows/publish.yml
+    with:
+      tag: ${{ needs.release-please.outputs.tag_name }}
+    secrets: inherit
