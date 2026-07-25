@@ -74,7 +74,7 @@ func rootCmd() *cobra.Command {
 		},
 	}
 	root.AddCommand(
-		cmdInit(), cmdProbe(), cmdStatus(), cmdDispatch(),
+		cmdInit(), cmdProbe(), cmdStatus(), cmdTui(), cmdDispatch(),
 		cmdEdit(), cmdReview(), cmdParallel(), cmdCost(), cmdStats(),
 		cmdPricing(), cmdTrust(), cmdGraph(), cmdContext(), cmdMCP(), cmdOracle(), cmdModels(),
 		cmdVersion(),
@@ -96,6 +96,34 @@ func cmdVersion() *cobra.Command {
 			// Update notice is printed by main() after Execute returns.
 		},
 	}
+}
+
+// ── tui (interactive cockpit) ───────────────────────────────────────────────────
+
+func cmdTui() *cobra.Command {
+	var snapshot bool
+	var snapView int
+	c := &cobra.Command{
+		Use:   "tui",
+		Short: "Interactive cockpit — chat, route work, and watch spend live",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if snapshot {
+				if cmd.Flags().Changed("view") {
+					fmt.Print(tui.CockpitSnapshotView(snapView))
+				} else {
+					fmt.Print(tui.CockpitSnapshot())
+				}
+				fmt.Println()
+				return nil
+			}
+			p := tea.NewProgram(tui.NewCockpit(), tea.WithAltScreen())
+			_, err := p.Run()
+			return err
+		},
+	}
+	c.Flags().BoolVar(&snapshot, "snapshot", false, "Render one static frame and exit (docs/preview)")
+	c.Flags().IntVar(&snapView, "view", 0, "With --snapshot: render a single view (0 chat+code, 1 dashboard, 2 agent-tree)")
+	return c
 }
 
 // ── init ──────────────────────────────────────────────────────────────────────
