@@ -1033,7 +1033,28 @@ function costColor(x){
     // Hydra — local + trust (top-right, alone)
     {n:'Hydra',c:'hydra',x:0.60,y:0.58,r:6.2,t:'Local-first · provider-neutral · routes to a target confidence, on your machine',hydra:true}
   ];
-  STARS.forEach(function(s){s.ph=Math.random()*6.283;s.sp=0.4+Math.random()*0.6;s.bx=s.x;s.by=s.y;});
+  STARS.forEach(function(s,i){s.ph=Math.random()*6.283;s.sp=0.4+Math.random()*0.6;
+    s.tw=0.7+Math.random()*0.7;                  // per-star twinkle frequency (organic, non-mechanical)
+    s.bx=s.x;s.by=s.y;                            // locked base position — the quadrant anchor
+    s.px=0;s.py=0;s.lx=0;s.ly=0;s.idx=i;});       // cached screen pos + eased gravitational lean
+  /* constellation links: connect each star to its 1–2 nearest SAME-category
+     neighbours (sparse graph, computed once from locked base positions). Hydra
+     is alone in its quadrant, so it links to nothing — it stays the focal point. */
+  var LINKCATS=['gateway','eval','local','frontier'];
+  var links=[],heat={};
+  LINKCATS.forEach(function(cat){
+    heat[cat]=0;
+    var grp=STARS.filter(function(s){return s.c===cat;}),seen={};
+    grp.forEach(function(s){
+      var near=grp.filter(function(o){return o!==s;}).map(function(o){
+        return {o:o,d:(o.bx-s.bx)*(o.bx-s.bx)+(o.by-s.by)*(o.by-s.by)};
+      }).sort(function(a,b){return a.d-b.d;});
+      for(var k=0;k<Math.min(2,near.length);k++){
+        var b=near[k].o,key=Math.min(s.idx,b.idx)+'-'+Math.max(s.idx,b.idx);
+        if(seen[key])continue;seen[key]=1;links.push({a:s,b:b,cat:cat});
+      }
+    });
+  });
   function resize(){DPR=Math.min(devicePixelRatio||1,2);W=cv.clientWidth;H=cv.clientHeight;
     cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);}
   addEventListener('resize',resize);
@@ -1044,15 +1065,36 @@ function costColor(x){
   cv.addEventListener('pointerleave',function(){mouse.on=false;mouse.x=-999;mouse.y=-999;});
   var t=0,running=true,hovered=null;
   onVisible(cv.parentNode,function(vis){running=vis;});
-  function pos(s){
-    if(reduce)return {px:mapX(s.bx),py:mapY(s.by)};
-    var dx=Math.sin(t*s.sp+s.ph)*0.012,dy=Math.cos(t*s.sp*0.8+s.ph)*0.012;
-    return {px:mapX(s.bx+dx),py:mapY(s.by+dy)};
+  /* clamp a drifting coordinate so it can never cross out of its home quadrant.
+     Corner clusters (|base|>0.06) are pinned to their side; central frontier
+     destinations (near an axis) may wander a hair — that carries no quadrant meaning. */
+  function keepSide(v,base){
+    if(base>0.06)return v<0.04?0.04:v;
+    if(base<-0.06)return v>-0.04?-0.04:v;
+    return v;
+  }
+  function updatePositions(){
+    for(var i=0;i<STARS.length;i++){
+      var s=STARS[i],nx=s.bx,ny=s.by;
+      if(!reduce){                                     // gentle per-star orbital drift
+        nx=keepSide(s.bx+Math.sin(t*s.sp+s.ph)*0.011,s.bx);
+        ny=keepSide(s.by+Math.cos(t*s.sp*0.8+s.ph)*0.011,s.by);
+      }
+      var sx=mapX(nx),sy=mapY(ny),tx=0,ty=0;
+      if(!reduce && mouse.on){                          // gravitational lean toward the cursor
+        var vx=mouse.x-sx,vy=mouse.y-sy,d=Math.hypot(vx,vy)||1;
+        var pull=Math.exp(-d/170)*(s.hydra?5:14);       // px — Hydra barely leans (stays focal)
+        tx=vx/d*pull;ty=vy/d*pull;
+      }
+      s.lx+=(tx-s.lx)*0.08;s.ly+=(ty-s.ly)*0.08;         // ease in, and ease back when cursor leaves
+      s.px=sx+s.lx;s.py=sy+s.ly;
+    }
   }
   function draw(){
+    updatePositions();
     ctx.clearRect(0,0,W,H);
     // faint quadrant axes
-    ctx.strokeStyle='rgba(150,140,255,.12)';ctx.lineWidth=1;
+    ctx.strokeStyle='rgba(150,140,255,.12)';ctx.lineWidth=1;ctx.lineCap='butt';
     ctx.beginPath();ctx.moveTo(mapX(0),padY-14);ctx.lineTo(mapX(0),H-padY+14);ctx.stroke();
     ctx.beginPath();ctx.moveTo(padX-14,mapY(0));ctx.lineTo(W-padX+14,mapY(0));ctx.stroke();
     // highlight the empty (top-right) quadrant with a soft aqua wash
@@ -1060,50 +1102,66 @@ function costColor(x){
     var qg=ctx.createRadialGradient(mapX(0.6),mapY(0.6),0,mapX(0.6),mapY(0.6),Math.max(W,H)*0.42);
     qg.addColorStop(0,'rgba(0,230,195,.10)');qg.addColorStop(1,'rgba(0,230,195,0)');
     ctx.fillStyle=qg;ctx.fillRect(hx,padY-14,W-padX-hx+14,hy-padY+14);
-    // cluster glows
+    // per-cluster proximity heat (0..1, eased) — drives constellation + glow brightening
+    for(var ci=0;ci<LINKCATS.length;ci++){
+      var cat=LINKCATS[ci],mind=1e9;
+      for(var si=0;si<STARS.length;si++){if(STARS[si].c!==cat)continue;
+        var ex=STARS[si].px-mouse.x,ey=STARS[si].py-mouse.y,ed=ex*ex+ey*ey;if(ed<mind)mind=ed;}
+      var th=(mouse.on&&!reduce)?Math.exp(-Math.sqrt(mind)/210):0;
+      heat[cat]+=(th-heat[cat])*(reduce?1:0.08);
+    }
+    // cluster glows (brighten a touch under the cursor)
     ['gateway','eval','local'].forEach(function(cat){
       var pts=STARS.filter(function(s){return s.c===cat;}),cx=0,cy=0;
-      pts.forEach(function(s){var p=pos(s);cx+=p.px;cy+=p.py;});cx/=pts.length;cy/=pts.length;
-      var col=CATS[cat].col,g=ctx.createRadialGradient(cx,cy,0,cx,cy,150);
-      g.addColorStop(0,'rgba('+col[0]+','+col[1]+','+col[2]+',.09)');g.addColorStop(1,'rgba('+col[0]+','+col[1]+','+col[2]+',0)');
+      pts.forEach(function(s){cx+=s.px;cy+=s.py;});cx/=pts.length;cy/=pts.length;
+      var col=CATS[cat].col,g=ctx.createRadialGradient(cx,cy,0,cx,cy,150),gi=0.06+0.055*heat[cat];
+      g.addColorStop(0,'rgba('+col[0]+','+col[1]+','+col[2]+','+gi+')');g.addColorStop(1,'rgba('+col[0]+','+col[1]+','+col[2]+',0)');
       ctx.fillStyle=g;ctx.beginPath();ctx.arc(cx,cy,150,0,6.283);ctx.fill();
     });
-    // hit-test
+    // constellation lines between same-category stars — brighten when the cluster is near the cursor
+    ctx.lineCap='round';
+    for(var li=0;li<links.length;li++){
+      var L=links[li],col=CATS[L.cat].col,h=heat[L.cat];
+      ctx.strokeStyle='rgba('+col[0]+','+col[1]+','+col[2]+','+(0.05+0.20*h)+')';
+      ctx.lineWidth=0.7+0.8*h;
+      ctx.beginPath();ctx.moveTo(L.a.px,L.a.py);ctx.lineTo(L.b.px,L.b.py);ctx.stroke();
+    }
+    // hit-test (cached positions)
     hovered=null;var best=22*22;
-    for(var i=0;i<STARS.length;i++){var p=pos(STARS[i]);var dx=p.px-mouse.x,dy=p.py-mouse.y,d=dx*dx+dy*dy;
+    for(var i=0;i<STARS.length;i++){var dx=STARS[i].px-mouse.x,dy=STARS[i].py-mouse.y,d=dx*dx+dy*dy;
       if(mouse.on && d<best){best=d;hovered=STARS[i];}}
     // stars
     for(var j=0;j<STARS.length;j++){
-      var s=STARS[j],p=pos(s),col=CATS[s.c].col;
-      var tw=reduce?1:(0.72+0.28*Math.sin(t*1.6+s.ph));
+      var s=STARS[j],col=CATS[s.c].col;
+      // smoother, organic twinkle: slow per-star base + faint fast shimmer, held in [0.5,1]
+      var tw=reduce?1:(0.75+0.17*Math.sin(t*s.tw+s.ph)+0.08*Math.sin(t*2.3+s.ph*1.7));
       var isH=(hovered===s), scale=isH?1.5:1;
       var rad=s.r*scale;
       if(s.hydra){
-        // pulsing halo
+        // pulsing halo — the clear focal point
         var hr=(reduce?34:34+Math.sin(t*1.4)*6);
-        var hg=ctx.createRadialGradient(p.px,p.py,0,p.px,p.py,hr);
+        var hg=ctx.createRadialGradient(s.px,s.py,0,s.px,s.py,hr);
         hg.addColorStop(0,'rgba(0,230,195,.35)');hg.addColorStop(0.5,'rgba(0,230,195,.12)');hg.addColorStop(1,'rgba(0,230,195,0)');
-        ctx.fillStyle=hg;ctx.beginPath();ctx.arc(p.px,p.py,hr,0,6.283);ctx.fill();
+        ctx.fillStyle=hg;ctx.beginPath();ctx.arc(s.px,s.py,hr,0,6.283);ctx.fill();
         // ring
         ctx.strokeStyle='rgba(0,230,195,'+(0.5+0.3*Math.sin(t*1.4))+')';ctx.lineWidth=1.4;
-        ctx.beginPath();ctx.arc(p.px,p.py,16,0,6.283);ctx.stroke();
+        ctx.beginPath();ctx.arc(s.px,s.py,16,0,6.283);ctx.stroke();
       }
-      var g2=ctx.createRadialGradient(p.px,p.py,0,p.px,p.py,rad*5);
+      var g2=ctx.createRadialGradient(s.px,s.py,0,s.px,s.py,rad*5);
       g2.addColorStop(0,'rgba('+col[0]+','+col[1]+','+col[2]+','+(0.9*tw)+')');
       g2.addColorStop(0.4,'rgba('+col[0]+','+col[1]+','+col[2]+','+(0.35*tw)+')');
       g2.addColorStop(1,'rgba('+col[0]+','+col[1]+','+col[2]+',0)');
-      ctx.fillStyle=g2;ctx.beginPath();ctx.arc(p.px,p.py,rad*5,0,6.283);ctx.fill();
-      ctx.fillStyle='rgba(255,255,255,'+(s.c==='frontier'?0.6:0.95)+')';ctx.beginPath();ctx.arc(p.px,p.py,Math.max(1,rad*0.62),0,6.283);ctx.fill();
-      // permanent hydra label
+      ctx.fillStyle=g2;ctx.beginPath();ctx.arc(s.px,s.py,rad*5,0,6.283);ctx.fill();
+      ctx.fillStyle='rgba(255,255,255,'+(s.c==='frontier'?0.6:0.95)+')';ctx.beginPath();ctx.arc(s.px,s.py,Math.max(1,rad*0.62),0,6.283);ctx.fill();
+      // permanent hydra label — drawn last, tracks its (barely-moving) star so it stays readable
       if(s.hydra){
         ctx.font='700 14px ui-monospace,Menlo,monospace';ctx.fillStyle='rgba(0,230,195,.95)';ctx.textAlign='left';
-        ctx.fillText('HYDRA',p.px+22,p.py+5);
+        ctx.fillText('HYDRA',s.px+22,s.py+5);
       }
     }
     // tooltip
     if(hovered){
-      var hp=pos(hovered);
-      tip.style.left=hp.px+'px';tip.style.top=hp.py+'px';
+      tip.style.left=hovered.px+'px';tip.style.top=hovered.py+'px';
       tipNm.textContent=hovered.n;tipCat.textContent=CATS[hovered.c].label;tipTg.textContent=hovered.t;
       tip.classList.add('show');cv.style.cursor='pointer';
     }else{tip.classList.remove('show');cv.style.cursor='default';}
