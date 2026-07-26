@@ -1,6 +1,6 @@
 {
   "name": "hyctl",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Hydra (hyctl) — local-first, multi-vendor AI control plane. Discovers every model on your machine and routes each task to the cheapest head that clears your target confidence.",
   "keywords": [
     "ai",

@@ -1,5 +1,9 @@
 name: Release
 
+# Fallback path for a manually pushed vX.Y.Z tag (release-please tags are handled
+# by release-please.yml instead). Both paths funnel through publish.yml so every
+# channel — binaries, Homebrew, npm, pip — is updated the same way.
+
 on:
   push:
     tags:
@@ -7,34 +11,10 @@ on:
 
 permissions:
   contents: write
-  id-token: write   # for cosign keyless signing (Phase 3)
-  packages: write
 
 jobs:
-  goreleaser:
-    name: GoReleaser
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0   # full history for accurate build metadata
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-          cache: true
-
-      # Phase 3: enable cosign for binary signing
-      # - name: Install cosign
-      #   uses: sigstore/cosign-installer@v3
-
-      - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@v6
-        with:
-          version: latest
-          args: release --clean
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+  publish:
+    uses: ./.github/workflows/publish.yml
+    with:
+      tag: ${{ github.ref_name }}
+    secrets: inherit

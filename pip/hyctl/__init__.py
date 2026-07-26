@@ -17,7 +17,7 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 
 REPO = "ankit373/hydra"
 PROJECT = "hydra"  # goreleaser archive filename prefix
