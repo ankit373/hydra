@@ -385,6 +385,15 @@ func cmdDispatch() *cobra.Command {
 				return err
 			}
 
+			var headIDs []string
+			if swarmHeads != "" {
+				for _, id := range strings.Split(swarmHeads, ",") {
+					if id = strings.TrimSpace(id); id != "" {
+						headIDs = append(headIDs, id)
+					}
+				}
+			}
+
 			// ── SPRT confidence mode ──────────────────────────────────────
 			// Triggered by --confidence, or by --file (blast radius derives a
 			// target on its own). Blast radius raises the bar but never lowers a
@@ -407,6 +416,7 @@ func cmdDispatch() *cobra.Command {
 				sw := swarm.New(d, d.Heads(), d)
 				res, err := sw.RunSPRT(ctx, prompt, swarm.Options{
 					TierHint:      tier,
+					HeadIDs:       headIDs,
 					MaxHeads:      swarmMaxHeads,
 					MaxEstCostUSD: swarmMaxCost,
 					LocalOnly:     localOnly,
@@ -424,14 +434,6 @@ func cmdDispatch() *cobra.Command {
 
 			// ── swarm mode ────────────────────────────────────────────────
 			if doSwarm {
-				var headIDs []string
-				if swarmHeads != "" {
-					for _, id := range strings.Split(swarmHeads, ",") {
-						if id = strings.TrimSpace(id); id != "" {
-							headIDs = append(headIDs, id)
-						}
-					}
-				}
 				mode := swarm.SwarmMode(swarmMode)
 				if mode == "" {
 					mode = swarm.ModeBest
