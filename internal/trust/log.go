@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/ankit373/hydra/internal/config"
 )
 
 // RunLog is one persisted SPRT run — the data the "By The Numbers" page
@@ -27,6 +29,7 @@ type RunLog struct {
 	CostSource string     `json:"cost_source"` // from cost.SourceLabels
 	Decision   string     `json:"decision"`    // accept | stopped_on_budget
 	Ledger     []Evidence `json:"ledger,omitempty"`
+	Config     string     `json:"config,omitempty"` // deployment-identity breadcrumb (config.Breadcrumb)
 }
 
 // DefaultLogPath is where SPRT runs are persisted (~/.hydra/trust.jsonl).
@@ -43,10 +46,16 @@ func TaskHash(prompt string) string {
 	return fmt.Sprintf("%08x", h.Sum32())
 }
 
-// LogRun appends one run to the trust log, stamping TS if the caller left it blank.
+// LogRun appends one run to the trust log, stamping TS and Config (best-effort)
+// if the caller left them blank.
 func LogRun(path string, r RunLog) error {
 	if r.TS == "" {
 		r.TS = time.Now().UTC().Format(time.RFC3339)
+	}
+	if r.Config == "" {
+		if bc, err := config.Breadcrumb(); err == nil {
+			r.Config = bc
+		}
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err

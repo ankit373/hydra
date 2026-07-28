@@ -10,6 +10,50 @@ import (
 	"testing"
 )
 
+func writeTestRegistry(t *testing.T, dir string) {
+	t.Helper()
+	regDir := filepath.Join(dir, "registry")
+	if err := os.MkdirAll(regDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"routing.yaml", "models.yaml", "domains.yaml"} {
+		if err := os.WriteFile(filepath.Join(regDir, name), []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestRecord_StampsConfigBreadcrumbWhenBlank(t *testing.T) {
+	home := t.TempDir()
+	writeTestRegistry(t, home)
+	t.Setenv("HYDRA_HOME", home)
+
+	path := filepath.Join(t.TempDir(), "mcp_ledger.jsonl")
+	if err := Record(path, Event{Agent: "a", Tool: "t", Decision: Allow}); err != nil {
+		t.Fatal(err)
+	}
+	events, err := Load(path)
+	if err != nil || len(events) != 1 {
+		t.Fatalf("Load = %d events, err %v", len(events), err)
+	}
+	if events[0].Config == "" {
+		t.Error("Record should stamp Config from config.Breadcrumb when blank and a registry is available")
+	}
+}
+
+func TestRecord_ConfigOmittedGracefullyWithoutRegistry(t *testing.T) {
+	t.Setenv("HYDRA_HOME", t.TempDir()) // no registry/ present
+
+	path := filepath.Join(t.TempDir(), "mcp_ledger.jsonl")
+	if err := Record(path, Event{Agent: "a", Tool: "t", Decision: Allow}); err != nil {
+		t.Fatalf("Record should not fail when the breadcrumb is unavailable: %v", err)
+	}
+	events, _ := Load(path)
+	if len(events) != 1 || events[0].Config != "" {
+		t.Errorf("Config should stay empty when registry files are unreadable, got %+v", events)
+	}
+}
+
 func TestPolicy_Decide_FirstMatchWins(t *testing.T) {
 	p := Policy{
 		Rules: []Rule{
