@@ -496,7 +496,9 @@ func (d *Dispatcher) logDispatch(r *Result, prompt string, opts Options) error {
 			"source":          legacySource,
 			"task_id":         taskID,
 			"run_id":          runID,
-			"config":          breadcrumb,
+		}
+		if breadcrumb != "" { // match the omitempty on cost.Row.Config
+			costEntry["config"] = breadcrumb
 		}
 		_ = appendJSONL(filepath.Join(logDir, "cost.jsonl"), costEntry)
 	}

@@ -1,37 +1,26 @@
 // SPDX-License-Identifier: MIT
 
-package config
+// External test package: internal/testutil imports config, so config's own
+// in-package tests could not use the shared registry fixture without a cycle.
+package config_test
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
-)
 
-func writeRegistry(t *testing.T, dir string, routing, models, domains string) {
-	t.Helper()
-	regDir := filepath.Join(dir, "registry")
-	if err := os.MkdirAll(regDir, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	files := map[string]string{"routing.yaml": routing, "models.yaml": models, "domains.yaml": domains}
-	for name, content := range files {
-		if err := os.WriteFile(filepath.Join(regDir, name), []byte(content), 0o600); err != nil {
-			t.Fatal(err)
-		}
-	}
-}
+	"github.com/ankit373/hydra/internal/config"
+	"github.com/ankit373/hydra/internal/testutil"
+)
 
 func TestBreadcrumb_DeterministicForSameRegistry(t *testing.T) {
 	dir := t.TempDir()
-	writeRegistry(t, dir, "routing: a", "models: b", "domains: c")
+	testutil.WriteRegistry(t, dir, "routing: a", "models: b", "domains: c")
 	t.Setenv("HYDRA_HOME", dir)
 
-	h1, err := Breadcrumb()
+	h1, err := config.Breadcrumb()
 	if err != nil {
 		t.Fatal(err)
 	}
-	h2, err := Breadcrumb()
+	h2, err := config.Breadcrumb()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,18 +32,20 @@ func TestBreadcrumb_DeterministicForSameRegistry(t *testing.T) {
 	}
 }
 
+// Guards against caching the fingerprint for the process lifetime: the
+// long-running TUI must not keep serving a stale hash after a registry edit.
 func TestBreadcrumb_ChangesWhenAnyRegistryFileChanges(t *testing.T) {
 	dir := t.TempDir()
-	writeRegistry(t, dir, "routing: a", "models: b", "domains: c")
+	testutil.WriteRegistry(t, dir, "routing: a", "models: b", "domains: c")
 	t.Setenv("HYDRA_HOME", dir)
 
-	before, err := Breadcrumb()
+	before, err := config.Breadcrumb()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	writeRegistry(t, dir, "routing: a-edited", "models: b", "domains: c")
-	after, err := Breadcrumb()
+	testutil.WriteRegistry(t, dir, "routing: a-edited", "models: b", "domains: c")
+	after, err := config.Breadcrumb()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,7 +56,7 @@ func TestBreadcrumb_ChangesWhenAnyRegistryFileChanges(t *testing.T) {
 
 func TestBreadcrumb_MissingRegistryErrors(t *testing.T) {
 	t.Setenv("HYDRA_HOME", t.TempDir()) // no registry/ dir at all
-	if _, err := Breadcrumb(); err == nil {
+	if _, err := config.Breadcrumb(); err == nil {
 		t.Error("Breadcrumb should error when registry files are unreadable")
 	}
 }

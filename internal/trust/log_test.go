@@ -4,27 +4,15 @@ package trust
 
 import (
 	"math"
-	"os"
 	"path/filepath"
 	"testing"
-)
 
-func writeTestRegistry(t *testing.T, dir string) {
-	t.Helper()
-	regDir := filepath.Join(dir, "registry")
-	if err := os.MkdirAll(regDir, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	for _, name := range []string{"routing.yaml", "models.yaml", "domains.yaml"} {
-		if err := os.WriteFile(filepath.Join(regDir, name), []byte("x"), 0o600); err != nil {
-			t.Fatal(err)
-		}
-	}
-}
+	"github.com/ankit373/hydra/internal/testutil"
+)
 
 func TestLogRun_StampsConfigBreadcrumbWhenBlank(t *testing.T) {
 	home := t.TempDir()
-	writeTestRegistry(t, home)
+	testutil.WriteRegistry(t, home)
 	t.Setenv("HYDRA_HOME", home)
 
 	path := filepath.Join(t.TempDir(), "trust.jsonl")

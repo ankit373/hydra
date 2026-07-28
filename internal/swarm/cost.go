@@ -107,7 +107,9 @@ func logAttempts(attempts []Attempt, mode SwarmMode, opts Options, promptPreview
 			"task_id":         taskID,
 			"run_id":          runID,
 			"prompt_preview":  promptPreview,
-			"config":          breadcrumb,
+		}
+		if breadcrumb != "" { // match the omitempty on cost.Row.Config
+			entry["config"] = breadcrumb
 		}
 		raw, _ := json.Marshal(entry)
 		_, _ = fmt.Fprintln(f, string(raw))
