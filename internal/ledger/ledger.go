@@ -40,6 +40,41 @@ const (
 	Deny  Decision = "deny"
 )
 
+// ParseAction normalizes and validates an action string. Matching is exact, so
+// an unrecognized or differently-cased value would silently miss every
+// action-scoped rule and fall through to the default — hence a hard error
+// rather than a best-effort coercion.
+func ParseAction(s string) (Action, error) {
+	switch a := Action(strings.ToLower(strings.TrimSpace(s))); a {
+	case Read, Write, Exec, Network:
+		return a, nil
+	case "":
+		return "", fmt.Errorf("action is required (read|write|exec|network)")
+	default:
+		return "", fmt.Errorf("unknown action %q (want read|write|exec|network)", s)
+	}
+}
+
+// ParseDecision normalizes and validates a decision string. An unrecognized
+// value is rejected because callers gate on Deny exactly: a decision of "DENY"
+// or "block" would print like a denial while comparing unequal to Deny.
+func ParseDecision(s string) (Decision, error) {
+	switch d := Decision(strings.ToLower(strings.TrimSpace(s))); d {
+	case Allow, Deny:
+		return d, nil
+	case "":
+		return "", fmt.Errorf("decision is required (allow|deny)")
+	default:
+		return "", fmt.Errorf("unknown decision %q (want allow|deny)", s)
+	}
+}
+
+// NormalizeClassification lowercases a data-sensitivity tag so a caller that
+// declares "PII" cannot slip past a rule written as "pii".
+func NormalizeClassification(s string) string {
+	return strings.ToLower(strings.TrimSpace(s))
+}
+
 // Event is one recorded access attempt.
 type Event struct {
 	TS       string   `json:"ts"`
@@ -69,6 +104,11 @@ type Event struct {
 // therefore share a hash, so a verifier must match the tool/resource itself
 // (see LatestBound) rather than treating a hash match as proof of which
 // operation was approved.
+//
+// Decode JSON parameters with DecodeParams, not a plain json.Unmarshal: that
+// keeps numbers as json.Number so their exact literal is hashed. Decoding into
+// a bare any turns every number into a float64, which silently collapses
+// integers above 2^53 — 1000000000000000001 and ...002 would share a hash.
 func HashParams(params map[string]any) (string, error) {
 	raw, err := json.Marshal(params)
 	if err != nil {
@@ -76,6 +116,20 @@ func HashParams(params map[string]any) (string, error) {
 	}
 	sum := sha256.Sum256(raw)
 	return hex.EncodeToString(sum[:]), nil
+}
+
+// DecodeParams parses a JSON object of invocation parameters, preserving each
+// number's exact literal (json.Number) so HashParams cannot collide two
+// different large integers through float64 rounding. A JSON `null` decodes to
+// a nil map, meaning "no parameters supplied".
+func DecodeParams(raw string) (map[string]any, error) {
+	dec := json.NewDecoder(strings.NewReader(raw))
+	dec.UseNumber()
+	var params map[string]any
+	if err := dec.Decode(&params); err != nil {
+		return nil, err
+	}
+	return params, nil
 }
 
 // VerifyParams reports whether params match a previously recorded hash — the
@@ -90,13 +144,17 @@ func VerifyParams(params map[string]any, hash string) (bool, error) {
 	return got == hash, nil
 }
 
-// LatestBound returns the most recent event for a tool/resource that carries a
-// parameters hash — the approval that execution-time params should be verified
-// against. An empty tool or resource matches any.
+// LatestBound returns the most recent *allowed* event for a tool/resource that
+// carries a parameters hash — the approval that execution-time params should be
+// verified against. An empty tool or resource matches any.
+//
+// Only Allow events qualify: a denied attempt is recorded with the parameters
+// it was refused for, and treating that as an approval would let a verifier
+// confirm exactly the parameters the gate just rejected.
 func LatestBound(events []Event, tool, resource string) (Event, bool) {
 	for i := len(events) - 1; i >= 0; i-- {
 		e := events[i]
-		if e.ParametersHash == "" {
+		if e.ParametersHash == "" || e.Decision != Allow {
 			continue
 		}
 		if fieldMatch(tool, e.Tool) && fieldMatch(resource, e.Resource) {
@@ -133,18 +191,30 @@ func Record(path string, e Event) error {
 	return err
 }
 
-// Load reads all events; a missing ledger yields no events.
+// Load reads all events; a missing ledger yields no events. Unparseable lines
+// are skipped — use LoadCounted when the caller needs to report them.
 func Load(path string) ([]Event, error) {
+	events, _, err := LoadCounted(path)
+	return events, err
+}
+
+// LoadCounted is Load plus the number of unparseable lines skipped. An
+// append-only accountability ledger that silently discards records is a
+// contradiction, and a truncated tail (a crash mid-write) would otherwise
+// make verification fall back to an older approval with no indication — so
+// callers should surface a non-zero count.
+func LoadCounted(path string) ([]Event, int, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, nil
+			return nil, 0, nil
 		}
-		return nil, err
+		return nil, 0, err
 	}
 	defer f.Close()
 
 	var events []Event
+	var skipped int
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
 	for sc.Scan() {
@@ -154,15 +224,21 @@ func Load(path string) ([]Event, error) {
 		}
 		var e Event
 		if err := json.Unmarshal([]byte(line), &e); err != nil {
+			skipped++
 			continue
 		}
 		events = append(events, e)
 	}
-	return events, sc.Err()
+	return events, skipped, sc.Err()
 }
 
 // Rule is one allow/deny rule. Empty fields (and "*") match anything; Resource
 // is matched as a glob (path.Match semantics via filepath.Match).
+//
+// Note that filepath.Match's `*` does NOT cross a path separator, and there is
+// no recursive `**`: a rule for "/etc/*" matches "/etc/passwd" but not
+// "/etc/ssh/sshd_config". Deny rules intended to cover a subtree must enumerate
+// each depth (or match on a prefix-free resource naming scheme).
 type Rule struct {
 	Agent          string   `json:"agent,omitempty"`
 	Tool           string   `json:"tool,omitempty"`
@@ -251,7 +327,46 @@ func LoadPolicy(path string) (Policy, error) {
 	if p.Default == "" {
 		p.Default = Allow
 	}
+	if err := p.validate(); err != nil {
+		return Policy{}, fmt.Errorf("policy %s: %w", path, err)
+	}
 	return p, nil
+}
+
+// validate normalizes and checks every rule. A policy is rejected rather than
+// partially honored: a rule whose decision or action does not parse can never
+// match (or can never deny), so loading it would silently weaken the gate —
+// a default-deny posture written as "DENY" would void entirely.
+func (p *Policy) validate() error {
+	d, err := ParseDecision(string(p.Default))
+	if err != nil {
+		return fmt.Errorf("default: %w", err)
+	}
+	p.Default = d
+
+	for i := range p.Rules {
+		r := &p.Rules[i]
+		d, err := ParseDecision(string(r.Decision))
+		if err != nil {
+			return fmt.Errorf("rule %d: %w", i, err)
+		}
+		r.Decision = d
+		if r.Action != "" {
+			a, err := ParseAction(string(r.Action))
+			if err != nil {
+				return fmt.Errorf("rule %d: %w", i, err)
+			}
+			r.Action = a
+		}
+		// A malformed glob can never match, so globMatch falls back to exact
+		// comparison — meaning a typo'd deny rule silently permits everything
+		// it was written to block. Reject it at load instead.
+		if _, err := filepath.Match(r.Resource, ""); err != nil {
+			return fmt.Errorf("rule %d: invalid resource pattern %q: %w", i, r.Resource, err)
+		}
+		r.Classification = NormalizeClassification(r.Classification)
+	}
+	return nil
 }
 
 // CheckRequest describes one access-check request: what's being accessed, by
@@ -263,7 +378,9 @@ type CheckRequest struct {
 	Action   Action
 
 	// Params is hashed (HashParams) and recorded as Event.ParametersHash,
-	// binding this decision to the exact parameters it was made for.
+	// binding this decision to the exact parameters it was made for. A non-nil
+	// but empty map still binds (a no-argument invocation is a real, verifiable
+	// operation); only nil means "no parameters supplied".
 	Params map[string]any
 
 	// Classification is the data-sensitivity tag (e.g. "pii"). If empty and
@@ -279,13 +396,13 @@ type CheckRequest struct {
 // Deny (and records that denial) rather than a zero Decision, so a caller that
 // only tests `decision == Deny` can never be tricked into proceeding.
 func Check(path string, p Policy, req CheckRequest) (Decision, error) {
-	classification := req.Classification
+	classification := NormalizeClassification(req.Classification)
 	if classification == "" && req.Content != "" && policy.ContainsPII(policy.Request{Prompt: req.Content}) {
 		classification = "pii"
 	}
 
 	var hash string
-	if len(req.Params) > 0 {
+	if req.Params != nil {
 		h, err := HashParams(req.Params)
 		if err != nil {
 			// Unhashable params cannot be bound to a decision, so the access is

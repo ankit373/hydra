@@ -480,7 +480,7 @@ hyctl oracle verify go test ./... --source verifier:go-test  # verifier as evide
 hyctl mcp check <tool> --agent A --resource R --action write  # gate + record an access
 hyctl mcp check <tool> --content "$DATA" --action network      # PII auto-classified; policy can deny egress
 hyctl mcp check <tool> --params '{"amount":500}'               # bind a hash of the params to the decision
-hyctl mcp verify <tool> --params '{"amount":500}'              # prove executed params == approved params
+hyctl mcp verify <tool> --resource R --params '{"amount":500}' # prove executed params == approved params
 hyctl mcp log --denied                  # what got blocked
 hyctl mcp report                        # allowed/denied by agent and tool
 

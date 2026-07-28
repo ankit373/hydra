@@ -601,25 +601,33 @@ func cmdMCP() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			action, err := ledger.ParseAction(chkAction)
+			if err != nil {
+				return fmt.Errorf("--action: %w", err)
+			}
 			var params map[string]any
 			if chkParams != "" {
-				if err := json.Unmarshal([]byte(chkParams), &params); err != nil {
+				if params, err = ledger.DecodeParams(chkParams); err != nil {
 					return fmt.Errorf("--params: %w", err)
 				}
 			}
-			decision, err := ledger.Check(ledger.DefaultPath(), pol, ledger.CheckRequest{
-				Agent: chkAgent, Tool: args[0], Resource: chkResource, Action: ledger.Action(chkAction),
+			decision, checkErr := ledger.Check(ledger.DefaultPath(), pol, ledger.CheckRequest{
+				Agent: chkAgent, Tool: args[0], Resource: chkResource, Action: action,
 				Params: params, Classification: chkClassification, Content: chkContent,
 			})
-			if err != nil {
-				return err
+			// Report the decision before any error: a Deny that failed to write
+			// to the ledger is still a Deny, and callers gate on exit 3.
+			if decision != "" {
+				fmt.Printf("  %s  %s %s/%s (%s)\n", strings.ToUpper(string(decision)),
+					chkAgent, args[0], chkResource, action)
 			}
-			fmt.Printf("  %s  %s %s/%s (%s)\n", strings.ToUpper(string(decision)),
-				chkAgent, args[0], chkResource, chkAction)
+			if checkErr != nil {
+				fmt.Fprintf(os.Stderr, "  ledger error: %v\n", checkErr)
+			}
 			if decision == ledger.Deny {
 				os.Exit(3) // non-zero so callers can gate on it
 			}
-			return nil
+			return checkErr
 		},
 	}
 	check.Flags().StringVar(&chkAgent, "agent", "", "agent making the access")
@@ -636,22 +644,32 @@ func cmdMCP() *cobra.Command {
 		Use:   "record",
 		Short: "Append an access event to the ledger",
 		RunE: func(_ *cobra.Command, _ []string) error {
+			action, err := ledger.ParseAction(recAction)
+			if err != nil {
+				return fmt.Errorf("--action: %w", err)
+			}
+			decision, err := ledger.ParseDecision(recDecision)
+			if err != nil {
+				return fmt.Errorf("--decision: %w", err)
+			}
+			// Bind whenever --params was supplied — including "{}" — so this
+			// agrees with `check`, whose binding keys off a non-nil map.
 			var hash string
 			if recParams != "" {
-				var params map[string]any
-				if err := json.Unmarshal([]byte(recParams), &params); err != nil {
+				params, err := ledger.DecodeParams(recParams)
+				if err != nil {
 					return fmt.Errorf("--params: %w", err)
 				}
-				h, err := ledger.HashParams(params)
-				if err != nil {
-					return err
+				if params != nil {
+					if hash, err = ledger.HashParams(params); err != nil {
+						return err
+					}
 				}
-				hash = h
 			}
 			return ledger.Record(ledger.DefaultPath(), ledger.Event{
 				Agent: recAgent, Tool: recTool, Resource: recResource,
-				Action: ledger.Action(recAction), Decision: ledger.Decision(recDecision),
-				ParametersHash: hash, Classification: recClassification,
+				Action: action, Decision: decision,
+				ParametersHash: hash, Classification: ledger.NormalizeClassification(recClassification),
 			})
 		},
 	}
@@ -665,22 +683,37 @@ func cmdMCP() *cobra.Command {
 
 	// verify: re-check execution-time params against the recorded approval.
 	var verResource, verParams string
+	var verAnyResource bool
 	verify := &cobra.Command{
 		Use:   "verify <tool>",
 		Short: "Verify execution-time parameters against the hash bound at approval",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
-			var params map[string]any
-			if err := json.Unmarshal([]byte(verParams), &params); err != nil {
+			// An empty tool would match an approval recorded for a different
+			// tool entirely, so require it explicitly.
+			tool := strings.TrimSpace(args[0])
+			if tool == "" {
+				return fmt.Errorf("tool argument is required")
+			}
+			if strings.TrimSpace(verResource) == "" && !verAnyResource {
+				return fmt.Errorf("--resource is required (the hash covers parameters only, " +
+					"so the approval's resource must be matched explicitly); pass --any-resource to override")
+			}
+			params, err := ledger.DecodeParams(verParams)
+			if err != nil {
 				return fmt.Errorf("--params: %w", err)
 			}
-			events, err := ledger.Load(ledger.DefaultPath())
+			events, skipped, err := ledger.LoadCounted(ledger.DefaultPath())
 			if err != nil {
 				return err
 			}
-			approval, ok := ledger.LatestBound(events, args[0], verResource)
+			if skipped > 0 {
+				fmt.Fprintf(os.Stderr, "  warning: %d unparseable ledger line(s) skipped — "+
+					"verification may be against an older approval\n", skipped)
+			}
+			approval, ok := ledger.LatestBound(events, tool, verResource)
 			if !ok {
-				return fmt.Errorf("no parameter-bound ledger event for %s/%s — nothing to verify against", args[0], verResource)
+				return fmt.Errorf("no allowed, parameter-bound ledger event for %s/%s — nothing to verify against", tool, verResource)
 			}
 			match, err := ledger.VerifyParams(params, approval.ParametersHash)
 			if err != nil {
@@ -699,7 +732,8 @@ func cmdMCP() *cobra.Command {
 			return nil
 		},
 	}
-	verify.Flags().StringVar(&verResource, "resource", "", "resource the approval was recorded for (default: any)")
+	verify.Flags().StringVar(&verResource, "resource", "", "resource the approval was recorded for (required)")
+	verify.Flags().BoolVar(&verAnyResource, "any-resource", false, "match an approval for any resource of this tool (weaker: the hash does not cover the resource)")
 	verify.Flags().StringVar(&verParams, "params", "", "JSON object of the parameters about to execute (required)")
 	_ = verify.MarkFlagRequired("params")
 

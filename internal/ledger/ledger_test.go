@@ -3,7 +3,9 @@
 package ledger
 
 import (
+	"encoding/json"
 	"math"
+	"os"
 	"path/filepath"
 	"testing"
 )
@@ -202,10 +204,10 @@ func TestCheck_FailsClosedOnUnhashableParams(t *testing.T) {
 
 func TestLatestBound(t *testing.T) {
 	events := []Event{
-		{Tool: "fs", Resource: "a", ParametersHash: "h1"},
-		{Tool: "fs", Resource: "a"}, // no hash — must be skipped
-		{Tool: "fs", Resource: "a", ParametersHash: "h2"},
-		{Tool: "net", Resource: "b", ParametersHash: "h3"},
+		{Tool: "fs", Resource: "a", ParametersHash: "h1", Decision: Allow},
+		{Tool: "fs", Resource: "a", Decision: Allow}, // no hash — must be skipped
+		{Tool: "fs", Resource: "a", ParametersHash: "h2", Decision: Allow},
+		{Tool: "net", Resource: "b", ParametersHash: "h3", Decision: Allow},
 	}
 	if e, ok := LatestBound(events, "fs", "a"); !ok || e.ParametersHash != "h2" {
 		t.Errorf("LatestBound should return the newest bound event (h2), got %+v ok=%v", e, ok)
@@ -216,8 +218,177 @@ func TestLatestBound(t *testing.T) {
 	if _, ok := LatestBound(events, "missing", ""); ok {
 		t.Error("unknown tool should not resolve an approval")
 	}
-	if _, ok := LatestBound([]Event{{Tool: "fs"}}, "fs", ""); ok {
+	if _, ok := LatestBound([]Event{{Tool: "fs", Decision: Allow}}, "fs", ""); ok {
 		t.Error("events without a hash must not be treated as approvals")
+	}
+}
+
+// A denied attempt is recorded with the parameters it was refused for. Treating
+// that as an approval let `mcp verify` confirm exactly the parameters the gate
+// had just rejected, and exit 0.
+func TestLatestBound_DeniedEventIsNotAnApproval(t *testing.T) {
+	denied := []Event{{Tool: "write_file", Resource: "/etc/passwd", ParametersHash: "h", Decision: Deny}}
+	if e, ok := LatestBound(denied, "write_file", "/etc/passwd"); ok {
+		t.Errorf("a DENIED event must never be returned as an approval, got %+v", e)
+	}
+
+	// A later deny must not shadow an earlier legitimate allow either.
+	mixed := []Event{
+		{Tool: "t", Resource: "r", ParametersHash: "good", Decision: Allow},
+		{Tool: "t", Resource: "r", ParametersHash: "bad", Decision: Deny},
+	}
+	if e, ok := LatestBound(mixed, "t", "r"); !ok || e.ParametersHash != "good" {
+		t.Errorf("a later deny must not shadow an earlier allow, got %+v ok=%v", e, ok)
+	}
+}
+
+// Decoding params into a bare `any` turns every number into float64, which
+// collapses integers above 2^53 — two different amounts would share a hash.
+func TestDecodeParams_PreservesLargeIntegerPrecision(t *testing.T) {
+	a, err := DecodeParams(`{"amount":1000000000000000001}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := DecodeParams(`{"amount":1000000000000000002}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ha, _ := HashParams(a)
+	hb, _ := HashParams(b)
+	if ha == hb {
+		t.Error("two different large integers must not share a parameters hash")
+	}
+
+	// Same logical value supplied two ways must agree.
+	viaJSON, _ := DecodeParams(`{"big":4611686018427387904}`)
+	hJSON, _ := HashParams(viaJSON)
+	hGo, _ := HashParams(map[string]any{"big": json.Number("4611686018427387904")})
+	if hJSON != hGo {
+		t.Errorf("identical logical params hashed differently: %s vs %s", hJSON, hGo)
+	}
+}
+
+func TestDecodeParams_NullIsNilEmptyIsNot(t *testing.T) {
+	if p, err := DecodeParams("null"); err != nil || p != nil {
+		t.Errorf("JSON null should decode to a nil map, got %#v err=%v", p, err)
+	}
+	p, err := DecodeParams("{}")
+	if err != nil || p == nil {
+		t.Errorf("{} should decode to a non-nil empty map, got %#v err=%v", p, err)
+	}
+}
+
+// A no-argument invocation is still a real, verifiable operation, so "{}" must
+// bind a hash rather than being silently dropped.
+func TestCheck_EmptyParamsObjectStillBinds(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "l.jsonl")
+	params, _ := DecodeParams("{}")
+	if _, err := Check(path, Policy{Default: Allow}, CheckRequest{Tool: "t", Resource: "r", Action: Read, Params: params}); err != nil {
+		t.Fatal(err)
+	}
+	events, _ := Load(path)
+	if len(events) != 1 || events[0].ParametersHash == "" {
+		t.Errorf("an empty params object should still bind a hash, got %+v", events)
+	}
+}
+
+func TestParseAction_RejectsCaseAndTypos(t *testing.T) {
+	for _, in := range []string{"write", "WRITE", " Write "} {
+		if a, err := ParseAction(in); err != nil || a != Write {
+			t.Errorf("ParseAction(%q) = %q, %v; want write with no error", in, a, err)
+		}
+	}
+	for _, bad := range []string{"", "bogus", "yolo"} {
+		if _, err := ParseAction(bad); err == nil {
+			t.Errorf("ParseAction(%q) should error — an unmatched action silently bypasses every action rule", bad)
+		}
+	}
+}
+
+func TestParseDecision_RejectsLookalikes(t *testing.T) {
+	if d, err := ParseDecision("DENY"); err != nil || d != Deny {
+		t.Errorf(`ParseDecision("DENY") = %q, %v; want deny`, d, err)
+	}
+	for _, bad := range []string{"", "block", "reject", "totally-fine"} {
+		if _, err := ParseDecision(bad); err == nil {
+			t.Errorf("ParseDecision(%q) should error — it would print like a deny but compare unequal to Deny", bad)
+		}
+	}
+}
+
+// A rule or default whose decision does not parse would silently void the gate:
+// a default-deny posture written as "DENY" must not load as allow.
+func TestLoadPolicy_RejectsInvalidDecisionsAndActions(t *testing.T) {
+	write := func(t *testing.T, body string) string {
+		t.Helper()
+		p := filepath.Join(t.TempDir(), "policy.json")
+		if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+
+	// "DENY" normalizes rather than voiding.
+	pol, err := LoadPolicy(write(t, `{"rules":[{"resource":"*","decision":"DENY"}],"default":"allow"}`))
+	if err != nil {
+		t.Fatalf("uppercase decision should normalize, not error: %v", err)
+	}
+	if d, _ := pol.Decide("a", "t", "/etc/shadow", Read, ""); d != Deny {
+		t.Errorf(`rule decision "DENY" must deny, got %q`, d)
+	}
+
+	for _, bad := range []string{
+		`{"rules":[{"resource":"*","decision":"block"}],"default":"allow"}`,
+		`{"rules":[{"action":"yolo","decision":"deny"}],"default":"allow"}`,
+		`{"rules":[],"default":"nonsense"}`,
+	} {
+		if _, err := LoadPolicy(write(t, bad)); err == nil {
+			t.Errorf("policy should be rejected, not partially honored: %s", bad)
+		}
+	}
+}
+
+// The caller declared the data sensitive; a differently-cased tag must not slip
+// past a rule written in lowercase.
+func TestCheck_ClassificationCaseCannotBypassRule(t *testing.T) {
+	p := Policy{Rules: []Rule{{Classification: "pii", Decision: Deny}}, Default: Allow}
+	for _, tag := range []string{"pii", "PII", "Pii", " pii "} {
+		path := filepath.Join(t.TempDir(), "l.jsonl")
+		d, err := Check(path, p, CheckRequest{Tool: "t", Resource: "r", Action: Read, Classification: tag})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if d != Deny {
+			t.Errorf("classification %q bypassed the pii deny rule (got %q)", tag, d)
+		}
+	}
+}
+
+// A truncated tail (crash mid-write) must not silently revert verification to
+// an older approval.
+func TestLoadCounted_ReportsUnparseableLines(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "l.jsonl")
+	if err := Record(path, Event{Tool: "t", Decision: Allow, ParametersHash: "h1"}); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Append a truncated record.
+	if err := os.WriteFile(path, append(raw, []byte(`{"ts":"2026-01-01T00:00:00Z","tool":"t","par`)...), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	events, skipped, err := LoadCounted(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 1 {
+		t.Errorf("parseable events = %d, want 1", len(events))
+	}
+	if skipped != 1 {
+		t.Errorf("skipped = %d, want 1 — a discarded record must be reported", skipped)
 	}
 }
 
