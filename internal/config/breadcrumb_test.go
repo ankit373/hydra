@@ -13,7 +13,7 @@ import (
 
 func TestBreadcrumb_DeterministicForSameRegistry(t *testing.T) {
 	dir := t.TempDir()
-	testutil.WriteRegistry(t, dir, "routing: a", "models: b", "domains: c")
+	testutil.WriteRegistry(t, dir, "routing: a", "models: b", "domains: c", "pricing: d")
 	t.Setenv("HYDRA_HOME", dir)
 
 	h1, err := config.Breadcrumb()
@@ -36,7 +36,7 @@ func TestBreadcrumb_DeterministicForSameRegistry(t *testing.T) {
 // long-running TUI must not keep serving a stale hash after a registry edit.
 func TestBreadcrumb_ChangesWhenAnyRegistryFileChanges(t *testing.T) {
 	dir := t.TempDir()
-	testutil.WriteRegistry(t, dir, "routing: a", "models: b", "domains: c")
+	testutil.WriteRegistry(t, dir, "routing: a", "models: b", "domains: c", "pricing: d")
 	t.Setenv("HYDRA_HOME", dir)
 
 	before, err := config.Breadcrumb()
@@ -44,13 +44,57 @@ func TestBreadcrumb_ChangesWhenAnyRegistryFileChanges(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	testutil.WriteRegistry(t, dir, "routing: a-edited", "models: b", "domains: c")
+	testutil.WriteRegistry(t, dir, "routing: a-edited", "models: b", "domains: c", "pricing: d")
 	after, err := config.Breadcrumb()
 	if err != nil {
 		t.Fatal(err)
 	}
 	if before == after {
 		t.Error("Breadcrumb should change when routing.yaml changes")
+	}
+}
+
+// Plain concatenation would be ambiguous: moving content across a file boundary
+// leaves the byte stream unchanged, so two materially different deployments
+// would share a fingerprint — exactly what the breadcrumb exists to prevent.
+func TestBreadcrumb_DistinguishesContentMovedAcrossFileBoundary(t *testing.T) {
+	dirA := t.TempDir()
+	testutil.WriteRegistry(t, dirA, "tier: 1\n", "model: x\n", "d: y\n", "p: z\n")
+	t.Setenv("HYDRA_HOME", dirA)
+	a, err := config.Breadcrumb()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	dirB := t.TempDir()
+	testutil.WriteRegistry(t, dirB, "tier: 1\nmodel: x\n", "", "d: y\n", "p: z\n")
+	t.Setenv("HYDRA_HOME", dirB)
+	b, err := config.Breadcrumb()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a == b {
+		t.Errorf("fingerprint collided across a file boundary: both %s", a[:16])
+	}
+}
+
+// pricing.yaml drives cost-based routing, so an edit must change the identity.
+func TestBreadcrumb_CoversPricing(t *testing.T) {
+	dir := t.TempDir()
+	testutil.WriteRegistry(t, dir, "routing: a", "models: b", "domains: c", "tier1: 0.001")
+	t.Setenv("HYDRA_HOME", dir)
+	before, err := config.Breadcrumb()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	testutil.WriteRegistry(t, dir, "routing: a", "models: b", "domains: c", "tier1: 999.0")
+	after, err := config.Breadcrumb()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if before == after {
+		t.Error("a pricing.yaml edit must change the deployment fingerprint")
 	}
 }
 
