@@ -3,6 +3,7 @@
 package ledger
 
 import (
+	"math"
 	"path/filepath"
 	"testing"
 )
@@ -176,6 +177,47 @@ func TestCheck_ExplicitClassificationOverridesContentDetection(t *testing.T) {
 	events, _ := Load(path)
 	if events[0].Classification != "public" {
 		t.Errorf("explicit Classification should win over content-derived detection, got %q", events[0].Classification)
+	}
+}
+
+func TestCheck_FailsClosedOnUnhashableParams(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mcp_ledger.jsonl")
+	p := Policy{Default: Allow}
+
+	// NaN cannot be JSON-encoded, so the params cannot be bound to the decision.
+	d, err := Check(path, p, CheckRequest{Agent: "a", Tool: "t", Resource: "r", Action: Write,
+		Params: map[string]any{"bad": math.NaN()}})
+	if err == nil {
+		t.Fatal("unhashable params should surface an error")
+	}
+	if d != Deny {
+		t.Errorf("Check must fail CLOSED on hash failure, got %q — a caller testing `d == Deny` would proceed", d)
+	}
+	// The refused attempt must still be accounted for.
+	events, _ := Load(path)
+	if len(events) != 1 || events[0].Decision != Deny {
+		t.Errorf("the denial should itself be recorded, got %+v", events)
+	}
+}
+
+func TestLatestBound(t *testing.T) {
+	events := []Event{
+		{Tool: "fs", Resource: "a", ParametersHash: "h1"},
+		{Tool: "fs", Resource: "a"}, // no hash — must be skipped
+		{Tool: "fs", Resource: "a", ParametersHash: "h2"},
+		{Tool: "net", Resource: "b", ParametersHash: "h3"},
+	}
+	if e, ok := LatestBound(events, "fs", "a"); !ok || e.ParametersHash != "h2" {
+		t.Errorf("LatestBound should return the newest bound event (h2), got %+v ok=%v", e, ok)
+	}
+	if e, ok := LatestBound(events, "", ""); !ok || e.ParametersHash != "h3" {
+		t.Errorf("empty tool/resource should match any, got %+v", e)
+	}
+	if _, ok := LatestBound(events, "missing", ""); ok {
+		t.Error("unknown tool should not resolve an approval")
+	}
+	if _, ok := LatestBound([]Event{{Tool: "fs"}}, "fs", ""); ok {
+		t.Error("events without a hash must not be treated as approvals")
 	}
 }
 

@@ -663,6 +663,42 @@ func cmdMCP() *cobra.Command {
 	record.Flags().StringVar(&recParams, "params", "", "JSON object of invocation parameters; hashed and bound to the recorded event")
 	record.Flags().StringVar(&recClassification, "classification", "", "data-sensitivity tag (e.g. pii)")
 
+	// verify: re-check execution-time params against the recorded approval.
+	var verResource, verParams string
+	verify := &cobra.Command{
+		Use:   "verify <tool>",
+		Short: "Verify execution-time parameters against the hash bound at approval",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			var params map[string]any
+			if err := json.Unmarshal([]byte(verParams), &params); err != nil {
+				return fmt.Errorf("--params: %w", err)
+			}
+			events, err := ledger.Load(ledger.DefaultPath())
+			if err != nil {
+				return err
+			}
+			approval, ok := ledger.LatestBound(events, args[0], verResource)
+			if !ok {
+				return fmt.Errorf("no parameter-bound ledger event for %s/%s — nothing to verify against", args[0], verResource)
+			}
+			match, err := ledger.VerifyParams(params, approval.ParametersHash)
+			if err != nil {
+				return err
+			}
+			if !match {
+				fmt.Printf("  %s  parameters do NOT match the approval recorded at %s\n",
+					strings.ToUpper(string(ledger.Deny)), approval.TS)
+				os.Exit(3) // non-zero so callers can gate on it
+			}
+			fmt.Printf("  MATCH  parameters match the approval recorded at %s\n", approval.TS)
+			return nil
+		},
+	}
+	verify.Flags().StringVar(&verResource, "resource", "", "resource the approval was recorded for (default: any)")
+	verify.Flags().StringVar(&verParams, "params", "", "JSON object of the parameters about to execute (required)")
+	_ = verify.MarkFlagRequired("params")
+
 	// log: list events, optionally filtered.
 	var logAgent string
 	var logDenied bool
@@ -722,7 +758,7 @@ func cmdMCP() *cobra.Command {
 	}
 	report.Flags().BoolVar(&repJSON, "json", false, "machine-readable JSON output")
 
-	cmd.AddCommand(check, record, logCmd, report)
+	cmd.AddCommand(check, record, verify, logCmd, report)
 	return cmd
 }
 

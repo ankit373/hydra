@@ -84,6 +84,22 @@ func VerifyParams(params map[string]any, hash string) (bool, error) {
 	return got == hash, nil
 }
 
+// LatestBound returns the most recent event for a tool/resource that carries a
+// parameters hash — the approval that execution-time params should be verified
+// against. An empty tool or resource matches any.
+func LatestBound(events []Event, tool, resource string) (Event, bool) {
+	for i := len(events) - 1; i >= 0; i-- {
+		e := events[i]
+		if e.ParametersHash == "" {
+			continue
+		}
+		if fieldMatch(tool, e.Tool) && fieldMatch(resource, e.Resource) {
+			return e, true
+		}
+	}
+	return Event{}, false
+}
+
 // DefaultPath is where the ledger lives (~/.hydra/mcp_ledger.jsonl).
 func DefaultPath() string {
 	home, _ := os.UserHomeDir()
@@ -252,6 +268,10 @@ type CheckRequest struct {
 
 // Check evaluates the policy AND records the resulting event to the ledger —
 // the accountability gate. It returns the decision.
+//
+// Check fails closed: if the request's parameters cannot be hashed, it returns
+// Deny (and records that denial) rather than a zero Decision, so a caller that
+// only tests `decision == Deny` can never be tricked into proceeding.
 func Check(path string, p Policy, req CheckRequest) (Decision, error) {
 	classification := req.Classification
 	if classification == "" && req.Content != "" && policy.ContainsPII(policy.Request{Prompt: req.Content}) {
@@ -262,7 +282,14 @@ func Check(path string, p Policy, req CheckRequest) (Decision, error) {
 	if len(req.Params) > 0 {
 		h, err := HashParams(req.Params)
 		if err != nil {
-			return "", err
+			// Unhashable params cannot be bound to a decision, so the access is
+			// denied — and the denial is itself recorded for accountability.
+			_ = Record(path, Event{
+				Agent: req.Agent, Tool: req.Tool, Resource: req.Resource,
+				Action: req.Action, Decision: Deny, Classification: classification,
+				Reason: "unhashable parameters: " + err.Error(),
+			})
+			return Deny, err
 		}
 		hash = h
 	}

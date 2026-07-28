@@ -27,7 +27,7 @@
 - `hyctl trust` — confidence layer: `calibration`, `record`, `defect`, `stats`, `explain`
 - `hyctl graph` — code dependency graph: `blast` (blast radius + percolation-κ), `parallel` (optimal agent count)
 - `hyctl context` — context signal density / entropy governor: `entropy`
-- `hyctl mcp` — local MCP accountability ledger: `check`, `record`, `log`, `report`
+- `hyctl mcp` — local MCP accountability ledger: `check`, `record`, `verify`, `log`, `report`. Access checks can be classification-aware (PII auto-detected from content) and bind a SHA256 hash of the invocation parameters, so `verify` can later prove the executed parameters match the ones that were approved
 - `hyctl oracle` — verification oracles (tests/compile/lint) as calibrated evidence: `verify`
 - `hyctl models` — model capability registry: `list`, `add`, `remove`, `sync`
 - `hyctl edit` — editor integration
