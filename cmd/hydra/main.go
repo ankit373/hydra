@@ -686,12 +686,16 @@ func cmdMCP() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			// Name the matched approval explicitly: the hash covers the
+			// parameters only, so the operator must be able to see which
+			// tool/resource the approval was actually recorded for.
+			target := fmt.Sprintf("%s/%s at %s", approval.Tool, approval.Resource, approval.TS)
 			if !match {
-				fmt.Printf("  %s  parameters do NOT match the approval recorded at %s\n",
-					strings.ToUpper(string(ledger.Deny)), approval.TS)
+				fmt.Printf("  %s  parameters do NOT match the approval for %s\n",
+					strings.ToUpper(string(ledger.Deny)), target)
 				os.Exit(3) // non-zero so callers can gate on it
 			}
-			fmt.Printf("  MATCH  parameters match the approval recorded at %s\n", approval.TS)
+			fmt.Printf("  MATCH  parameters match the approval for %s\n", target)
 			return nil
 		},
 	}

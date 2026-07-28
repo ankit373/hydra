@@ -63,6 +63,12 @@ type Event struct {
 // between an access decision and the parameters actually used at execution
 // time. Go's json.Marshal sorts map[string]any keys, so this is canonical
 // regardless of map iteration order.
+//
+// Scope: the hash covers the parameters ONLY — not the tool, resource, or
+// action. Two approvals with identical parameters for different resources
+// therefore share a hash, so a verifier must match the tool/resource itself
+// (see LatestBound) rather than treating a hash match as proof of which
+// operation was approved.
 func HashParams(params map[string]any) (string, error) {
 	raw, err := json.Marshal(params)
 	if err != nil {
