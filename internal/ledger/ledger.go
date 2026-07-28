@@ -9,6 +9,8 @@ package ledger
 
 import (
 	"bufio"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -16,6 +18,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/ankit373/hydra/internal/policy"
 )
 
 // Action is the kind of access an agent attempts against a resource.
@@ -45,6 +49,39 @@ type Event struct {
 	Action   Action   `json:"action"`
 	Decision Decision `json:"decision"`
 	Reason   string   `json:"reason,omitempty"`
+
+	// ParametersHash binds this decision to the exact parameters it was made
+	// for (HashParams) — tamper-evidence between an access decision and the
+	// parameters actually used at execution time.
+	ParametersHash string `json:"parameters_hash,omitempty"`
+	// Classification is the data-sensitivity tag this access was evaluated
+	// under (e.g. "pii"). Empty means unclassified.
+	Classification string `json:"classification,omitempty"`
+}
+
+// HashParams returns a SHA256 hex hash of params, for tamper-evident binding
+// between an access decision and the parameters actually used at execution
+// time. Go's json.Marshal sorts map[string]any keys, so this is canonical
+// regardless of map iteration order.
+func HashParams(params map[string]any) (string, error) {
+	raw, err := json.Marshal(params)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(raw)
+	return hex.EncodeToString(sum[:]), nil
+}
+
+// VerifyParams reports whether params match a previously recorded hash — the
+// check to run at execution time to detect tampering between an approval and
+// its use (e.g. once decision and execution can happen on different
+// machines/agents).
+func VerifyParams(params map[string]any, hash string) (bool, error) {
+	got, err := HashParams(params)
+	if err != nil {
+		return false, err
+	}
+	return got == hash, nil
 }
 
 // DefaultPath is where the ledger lives (~/.hydra/mcp_ledger.jsonl).
@@ -105,11 +142,12 @@ func Load(path string) ([]Event, error) {
 // Rule is one allow/deny rule. Empty fields (and "*") match anything; Resource
 // is matched as a glob (path.Match semantics via filepath.Match).
 type Rule struct {
-	Agent    string   `json:"agent,omitempty"`
-	Tool     string   `json:"tool,omitempty"`
-	Resource string   `json:"resource,omitempty"`
-	Action   Action   `json:"action,omitempty"`
-	Decision Decision `json:"decision"`
+	Agent          string   `json:"agent,omitempty"`
+	Tool           string   `json:"tool,omitempty"`
+	Resource       string   `json:"resource,omitempty"`
+	Action         Action   `json:"action,omitempty"`
+	Classification string   `json:"classification,omitempty"`
+	Decision       Decision `json:"decision"`
 }
 
 // Policy is an ordered rule set with a default decision. First matching rule wins.
@@ -120,10 +158,11 @@ type Policy struct {
 
 // Decide evaluates an access against the policy, returning the decision and a
 // human-readable reason. A zero Default is treated as Allow (Hydra records
-// everything but blocks nothing unless a rule says so).
-func (p Policy) Decide(agent, tool, resource string, action Action) (Decision, string) {
+// everything but blocks nothing unless a rule says so). classification is the
+// data-sensitivity tag for this access ("" if unclassified or not applicable).
+func (p Policy) Decide(agent, tool, resource string, action Action, classification string) (Decision, string) {
 	for i, r := range p.Rules {
-		if r.matches(agent, tool, resource, action) {
+		if r.matches(agent, tool, resource, action, classification) {
 			return r.Decision, fmt.Sprintf("rule %d (%s %s/%s)", i, r.Decision, ruleOr(r.Tool), ruleOr(r.Resource))
 		}
 	}
@@ -134,11 +173,12 @@ func (p Policy) Decide(agent, tool, resource string, action Action) (Decision, s
 	return def, "default"
 }
 
-func (r Rule) matches(agent, tool, resource string, action Action) bool {
+func (r Rule) matches(agent, tool, resource string, action Action, classification string) bool {
 	return fieldMatch(r.Agent, agent) &&
 		fieldMatch(r.Tool, tool) &&
 		globMatch(r.Resource, resource) &&
-		(r.Action == "" || r.Action == action)
+		(r.Action == "" || r.Action == action) &&
+		fieldMatch(r.Classification, classification)
 }
 
 // fieldMatch: empty or "*" matches anything; otherwise exact.
@@ -192,13 +232,46 @@ func LoadPolicy(path string) (Policy, error) {
 	return p, nil
 }
 
+// CheckRequest describes one access-check request: what's being accessed, by
+// whom, with what parameters, and (optionally) its data classification.
+type CheckRequest struct {
+	Agent    string
+	Tool     string
+	Resource string
+	Action   Action
+
+	// Params is hashed (HashParams) and recorded as Event.ParametersHash,
+	// binding this decision to the exact parameters it was made for.
+	Params map[string]any
+
+	// Classification is the data-sensitivity tag (e.g. "pii"). If empty and
+	// Content is non-empty, it is derived via policy.ContainsPII(Content).
+	Classification string
+	Content        string
+}
+
 // Check evaluates the policy AND records the resulting event to the ledger —
 // the accountability gate. It returns the decision.
-func Check(path string, p Policy, agent, tool, resource string, action Action) (Decision, error) {
-	decision, reason := p.Decide(agent, tool, resource, action)
+func Check(path string, p Policy, req CheckRequest) (Decision, error) {
+	classification := req.Classification
+	if classification == "" && req.Content != "" && policy.ContainsPII(policy.Request{Prompt: req.Content}) {
+		classification = "pii"
+	}
+
+	var hash string
+	if len(req.Params) > 0 {
+		h, err := HashParams(req.Params)
+		if err != nil {
+			return "", err
+		}
+		hash = h
+	}
+
+	decision, reason := p.Decide(req.Agent, req.Tool, req.Resource, req.Action, classification)
 	err := Record(path, Event{
-		Agent: agent, Tool: tool, Resource: resource,
-		Action: action, Decision: decision, Reason: reason,
+		Agent: req.Agent, Tool: req.Tool, Resource: req.Resource,
+		Action: req.Action, Decision: decision, Reason: reason,
+		ParametersHash: hash, Classification: classification,
 	})
 	return decision, err
 }

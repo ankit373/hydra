@@ -591,7 +591,7 @@ func cmdMCP() *cobra.Command {
 	}
 
 	// check: evaluate the policy for an access and record the decision.
-	var chkAgent, chkResource, chkAction, policyPath string
+	var chkAgent, chkResource, chkAction, policyPath, chkParams, chkContent, chkClassification string
 	check := &cobra.Command{
 		Use:   "check <tool>",
 		Short: "Evaluate the policy for a tool/resource access and record it",
@@ -601,8 +601,16 @@ func cmdMCP() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			decision, err := ledger.Check(ledger.DefaultPath(), pol,
-				chkAgent, args[0], chkResource, ledger.Action(chkAction))
+			var params map[string]any
+			if chkParams != "" {
+				if err := json.Unmarshal([]byte(chkParams), &params); err != nil {
+					return fmt.Errorf("--params: %w", err)
+				}
+			}
+			decision, err := ledger.Check(ledger.DefaultPath(), pol, ledger.CheckRequest{
+				Agent: chkAgent, Tool: args[0], Resource: chkResource, Action: ledger.Action(chkAction),
+				Params: params, Classification: chkClassification, Content: chkContent,
+			})
 			if err != nil {
 				return err
 			}
@@ -618,16 +626,32 @@ func cmdMCP() *cobra.Command {
 	check.Flags().StringVar(&chkResource, "resource", "", "resource being accessed")
 	check.Flags().StringVar(&chkAction, "action", "read", "read|write|exec|network")
 	check.Flags().StringVar(&policyPath, "policy", ledger.DefaultPolicyPath(), "path to the access policy JSON")
+	check.Flags().StringVar(&chkParams, "params", "", "JSON object of invocation parameters; hashed and bound to the recorded decision")
+	check.Flags().StringVar(&chkContent, "content", "", "raw content being accessed; scanned for PII to auto-derive --classification if unset")
+	check.Flags().StringVar(&chkClassification, "classification", "", "explicit data-sensitivity tag (e.g. pii); overrides --content detection")
 
 	// record: append an event directly (for external tools reporting access).
-	var recAgent, recTool, recResource, recAction, recDecision string
+	var recAgent, recTool, recResource, recAction, recDecision, recParams, recClassification string
 	record := &cobra.Command{
 		Use:   "record",
 		Short: "Append an access event to the ledger",
 		RunE: func(_ *cobra.Command, _ []string) error {
+			var hash string
+			if recParams != "" {
+				var params map[string]any
+				if err := json.Unmarshal([]byte(recParams), &params); err != nil {
+					return fmt.Errorf("--params: %w", err)
+				}
+				h, err := ledger.HashParams(params)
+				if err != nil {
+					return err
+				}
+				hash = h
+			}
 			return ledger.Record(ledger.DefaultPath(), ledger.Event{
 				Agent: recAgent, Tool: recTool, Resource: recResource,
 				Action: ledger.Action(recAction), Decision: ledger.Decision(recDecision),
+				ParametersHash: hash, Classification: recClassification,
 			})
 		},
 	}
@@ -636,6 +660,8 @@ func cmdMCP() *cobra.Command {
 	record.Flags().StringVar(&recResource, "resource", "", "resource")
 	record.Flags().StringVar(&recAction, "action", "read", "read|write|exec|network")
 	record.Flags().StringVar(&recDecision, "decision", "allow", "allow|deny")
+	record.Flags().StringVar(&recParams, "params", "", "JSON object of invocation parameters; hashed and bound to the recorded event")
+	record.Flags().StringVar(&recClassification, "classification", "", "data-sensitivity tag (e.g. pii)")
 
 	// log: list events, optionally filtered.
 	var logAgent string

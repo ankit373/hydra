@@ -32,7 +32,7 @@ func TestPolicy_Decide_FirstMatchWins(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, _ := p.Decide(tt.agent, tt.tool, tt.resource, tt.action)
+			got, _ := p.Decide(tt.agent, tt.tool, tt.resource, tt.action, "")
 			if got != tt.want {
 				t.Errorf("Decide = %v, want %v", got, tt.want)
 			}
@@ -42,18 +42,28 @@ func TestPolicy_Decide_FirstMatchWins(t *testing.T) {
 
 func TestPolicy_DefaultAllowWhenUnset(t *testing.T) {
 	var p Policy // no rules, zero default
-	if got, _ := p.Decide("a", "t", "r", Read); got != Allow {
+	if got, _ := p.Decide("a", "t", "r", Read, ""); got != Allow {
 		t.Errorf("empty policy default = %v, want allow", got)
 	}
 }
 
 func TestGlobMatch(t *testing.T) {
 	p := Policy{Rules: []Rule{{Resource: "secrets/*.key", Decision: Deny}}, Default: Allow}
-	if d, _ := p.Decide("a", "fs", "secrets/prod.key", Read); d != Deny {
+	if d, _ := p.Decide("a", "fs", "secrets/prod.key", Read, ""); d != Deny {
 		t.Error("glob secrets/*.key should match secrets/prod.key")
 	}
-	if d, _ := p.Decide("a", "fs", "src/main.go", Read); d != Allow {
+	if d, _ := p.Decide("a", "fs", "src/main.go", Read, ""); d != Allow {
 		t.Error("non-matching resource should hit default allow")
+	}
+}
+
+func TestPolicy_Decide_MatchesOnClassification(t *testing.T) {
+	p := Policy{Rules: []Rule{{Classification: "pii", Decision: Deny}}, Default: Allow}
+	if d, _ := p.Decide("a", "fs", "any", Read, "pii"); d != Deny {
+		t.Error("pii-classified access should hit the classification rule")
+	}
+	if d, _ := p.Decide("a", "fs", "any", Read, ""); d != Allow {
+		t.Error("unclassified access should skip the classification rule")
 	}
 }
 
@@ -61,10 +71,10 @@ func TestCheck_RecordsDecision(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "mcp_ledger.jsonl")
 	p := Policy{Rules: []Rule{{Tool: "fs", Resource: "/etc/*", Decision: Deny}}, Default: Allow}
 
-	if d, err := Check(path, p, "agentA", "fs", "/etc/hosts", Write); err != nil || d != Deny {
+	if d, err := Check(path, p, CheckRequest{Agent: "agentA", Tool: "fs", Resource: "/etc/hosts", Action: Write}); err != nil || d != Deny {
 		t.Fatalf("Check = %v (err %v), want deny", d, err)
 	}
-	if d, err := Check(path, p, "agentA", "fs", "/repo/x.go", Write); err != nil || d != Allow {
+	if d, err := Check(path, p, CheckRequest{Agent: "agentA", Tool: "fs", Resource: "/repo/x.go", Action: Write}); err != nil || d != Allow {
 		t.Fatalf("Check = %v (err %v), want allow", d, err)
 	}
 
@@ -77,6 +87,95 @@ func TestCheck_RecordsDecision(t *testing.T) {
 	}
 	if events[0].Decision != Deny || events[0].TS == "" {
 		t.Errorf("first event should be a timestamped deny: %+v", events[0])
+	}
+}
+
+func TestHashParams_DeterministicRegardlessOfKeyOrder(t *testing.T) {
+	a := map[string]any{"path": "/etc/passwd", "mode": "r"}
+	b := map[string]any{"mode": "r", "path": "/etc/passwd"}
+	ha, err := HashParams(a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hb, err := HashParams(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ha != hb {
+		t.Errorf("hash should not depend on map insertion order: %s != %s", ha, hb)
+	}
+}
+
+func TestHashParams_DifferentParamsDifferentHash(t *testing.T) {
+	h1, _ := HashParams(map[string]any{"path": "/etc/passwd"})
+	h2, _ := HashParams(map[string]any{"path": "/etc/shadow"})
+	if h1 == h2 {
+		t.Error("different params must not hash to the same value")
+	}
+}
+
+func TestVerifyParams(t *testing.T) {
+	approved := map[string]any{"amount": 100, "account": "acct-1"}
+	hash, err := HashParams(approved)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := VerifyParams(approved, hash); err != nil || !ok {
+		t.Errorf("VerifyParams(same params) = %v, %v, want true, nil", ok, err)
+	}
+	tampered := map[string]any{"amount": 1000000, "account": "acct-1"}
+	if ok, err := VerifyParams(tampered, hash); err != nil || ok {
+		t.Errorf("VerifyParams(tampered params) = %v, %v, want false, nil", ok, err)
+	}
+}
+
+func TestCheck_BindsParametersHash(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mcp_ledger.jsonl")
+	p := Policy{Default: Allow}
+	params := map[string]any{"resource": "invoice-42", "amount": 500}
+
+	if _, err := Check(path, p, CheckRequest{Agent: "a", Tool: "billing", Resource: "invoice-42", Action: Write, Params: params}); err != nil {
+		t.Fatal(err)
+	}
+	events, err := Load(path)
+	if err != nil || len(events) != 1 {
+		t.Fatalf("Load = %v events, err %v", len(events), err)
+	}
+	wantHash, _ := HashParams(params)
+	if events[0].ParametersHash != wantHash {
+		t.Errorf("ParametersHash = %q, want %q", events[0].ParametersHash, wantHash)
+	}
+}
+
+func TestCheck_ClassificationFromContent(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mcp_ledger.jsonl")
+	p := Policy{Rules: []Rule{{Classification: "pii", Decision: Deny}}, Default: Allow}
+
+	d, err := Check(path, p, CheckRequest{Agent: "a", Tool: "export", Resource: "customers.csv", Action: Read,
+		Content: "contact me at jane.doe@example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d != Deny {
+		t.Errorf("PII content should be classified and denied by the classification rule, got %v", d)
+	}
+	events, _ := Load(path)
+	if len(events) != 1 || events[0].Classification != "pii" {
+		t.Fatalf("event classification = %+v, want pii", events)
+	}
+}
+
+func TestCheck_ExplicitClassificationOverridesContentDetection(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mcp_ledger.jsonl")
+	p := Policy{Default: Allow}
+
+	if _, err := Check(path, p, CheckRequest{Agent: "a", Tool: "export", Resource: "r", Action: Read,
+		Content: "jane.doe@example.com", Classification: "public"}); err != nil {
+		t.Fatal(err)
+	}
+	events, _ := Load(path)
+	if events[0].Classification != "public" {
+		t.Errorf("explicit Classification should win over content-derived detection, got %q", events[0].Classification)
 	}
 }
 
