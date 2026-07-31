@@ -50,7 +50,7 @@ jobs:
                 --json assets -q '[.assets[].name | select(endswith(".tar.gz"))] | length' 2>/dev/null || echo 0)
           echo "has_assets=$n" >> "$GITHUB_OUTPUT"
           echo "Existing archive assets: $n"
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         if: ${{ steps.check.outputs.has_assets == '0' }}
         with:
           go-version-file: go.mod
