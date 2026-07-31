@@ -59,7 +59,7 @@ jobs:
         if: ${{ steps.check.outputs.has_assets == '0' }}
       - name: GoReleaser (build + upload to the release)
         if: ${{ steps.check.outputs.has_assets == '0' }}
-        uses: goreleaser/goreleaser-action@v6
+        uses: goreleaser/goreleaser-action@v7
         with:
           version: latest
           args: release --clean
