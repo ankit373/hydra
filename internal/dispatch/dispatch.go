@@ -11,6 +11,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"sync"
 	"time"
@@ -105,8 +106,14 @@ func New(ctx context.Context) (*Dispatcher, error) {
 
 // Dispatch routes prompt through policy + tier selection + execution with fallback.
 func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) (*Result, error) {
+	// Resolve the hint to a capability number BEFORE the governor runs. A named
+	// config tier ("expert") is otherwise opaque to claudeMode's Atoi, which
+	// left the whole token-preservation table inert for every non-numeric hint
+	// (#165).
+	hint := d.resolveTierHint(opts.TierHint)
+
 	// Apply claude% preservation — may downgrade tier or abort.
-	tier, mode, pct := d.claudeMode(opts.TierHint)
+	tier, mode, pct := d.claudeMode(hint)
 	switch mode {
 	case "emergency":
 		log.Printf("🚨 EMERGENCY: Claude at %d%% — routing to local tier only. Start a new session.", pct)
@@ -137,9 +144,14 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		return nil, fmt.Errorf("dispatch denied by policy: %s", action.Reason)
 	}
 
-	candidates := d.selectHeads(tier, action.LocalOnly || opts.LocalOnly)
+	localOnly := action.LocalOnly || opts.LocalOnly
+	candidates := d.selectHeads(tier, localOnly)
 	if len(candidates) == 0 {
-		return nil, fmt.Errorf("no available heads for tier %q (localOnly=%v)", tier, opts.LocalOnly)
+		// Report the effective localOnly (policy may have forced it), not just
+		// the caller's flag, or a PII-forced local-only run points the user at
+		// the wrong cause.
+		return nil, fmt.Errorf("no available heads for tier %q (localOnly=%v); "+
+			"check `hyctl probe` and the tier names in your config", tier, localOnly)
 	}
 
 	if opts.DryRun {
@@ -316,12 +328,61 @@ func (d *Dispatcher) writeHandoff(r *Result, prompt string) error {
 	return h.Save(handoffPath)
 }
 
+// resolveTierHint normalizes a tier hint to a capability number ("1".."10").
+//
+// An empty hint stays empty. A numeric hint passes through. A named config
+// tier resolves to the strongest capability tier among its live heads, so the
+// budget governor can reason about — and downgrade — named tiers too. An
+// unrecognized name is returned unchanged so selectHeads yields nothing and
+// the caller can report the bad hint instead of silently widening.
+func (d *Dispatcher) resolveTierHint(hint string) string {
+	if hint == "" {
+		return ""
+	}
+	if _, err := strconv.Atoi(hint); err == nil {
+		return hint
+	}
+	for _, t := range d.cfg.Tiers {
+		if t.Name != hint {
+			continue
+		}
+		ids := make(map[string]bool, len(t.Heads))
+		for _, id := range t.Heads {
+			ids[id] = true
+		}
+		strongest := 0
+		for _, h := range d.heads {
+			if !ids[h.ID] {
+				continue
+			}
+			if n := rank.UITier(h); strongest == 0 || n < strongest {
+				strongest = n
+			}
+		}
+		if strongest > 0 {
+			return strconv.Itoa(strongest)
+		}
+		return hint // named tier has no live heads; let the caller report it
+	}
+	return hint
+}
+
 // selectHeads returns heads to try, in order of preference.
 //
-// No tier hint → all probed heads ranked by score (config tiers ignored).
-// Tier hint    → only heads assigned to that tier in config;
+// No tier hint  → all probed heads ranked by score (config tiers ignored).
+// Named tier    → heads assigned to that tier in config (e.g. "expert").
+// Numeric tier  → heads whose capability tier is at or below the requested
 //
-//	falls back to all probed heads if the tier has no live heads.
+//	strength, via rank.UITier. Lower number = stronger, so "10" yields the
+//	cheapest local heads and "1" yields everything with the strongest first.
+//
+// Numeric hints must NOT be resolved through config tier names: config tiers
+// are named (expert/complex/…) while enums resolve to "1".."10", so an exact
+// name match can never succeed and the old fall-through silently returned the
+// single most expensive head — the exact inverse of cost routing (#165).
+//
+// A hint that matches nothing returns no candidates; the caller reports that
+// rather than silently widening to every head.
 func (d *Dispatcher) selectHeads(tierHint string, localOnly bool) []provider.Head {
 	filter := func(h provider.Head) bool {
 		if !executor.Supports(h) {
@@ -344,7 +405,38 @@ func (d *Dispatcher) selectHeads(tierHint string, localOnly bool) []provider.Hea
 		return all
 	}
 
-	// Collect head IDs assigned to the requested tier in config.
+	// Numeric hint → select by capability tier, independent of config naming.
+	if want, err := strconv.Atoi(tierHint); err == nil {
+		var candidates []provider.Head
+		for _, h := range d.heads {
+			// d.heads is pre-sorted by CapScore (probe.Run → rank.ByCapScore),
+			// so "at or below the requested strength" yields the strongest
+			// eligible head first and weaker ones as the fallback chain.
+			if filter(h) && rank.UITier(h) >= want {
+				candidates = append(candidates, h)
+			}
+		}
+		if len(candidates) > 0 {
+			return candidates
+		}
+		// Nothing is that cheap. Degrade to the cheapest heads available —
+		// ascending capability, so the fallback is the least expensive option
+		// rather than the most. Silently escalating to the strongest head is
+		// what made tier routing worthless in the first place (#165).
+		for _, h := range d.heads {
+			if filter(h) {
+				candidates = append(candidates, h)
+			}
+		}
+		if len(candidates) > 0 {
+			slices.Reverse(candidates) // pre-sorted strongest-first → cheapest-first
+			log.Printf("⚠️  no head at tier %d or cheaper — falling back to the cheapest available (%s)",
+				want, candidates[0].ID)
+		}
+		return candidates
+	}
+
+	// Named tier → heads assigned to it in config.
 	tierIDs := map[string]bool{}
 	for _, t := range d.cfg.Tiers {
 		if t.Name == tierHint {
@@ -354,17 +446,11 @@ func (d *Dispatcher) selectHeads(tierHint string, localOnly bool) []provider.Hea
 		}
 	}
 
-	// Filter live probed heads to those in the tier.
 	var candidates []provider.Head
 	for _, h := range d.heads {
 		if filter(h) && tierIDs[h.ID] {
 			candidates = append(candidates, h)
 		}
-	}
-
-	// Tier had no live heads — fall back to all available.
-	if len(candidates) == 0 {
-		return d.selectHeads("", localOnly)
 	}
 	return candidates
 }

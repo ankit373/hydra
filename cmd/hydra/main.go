@@ -477,8 +477,14 @@ func cmdDispatch() *cobra.Command {
 			}
 
 			// ── normal single dispatch ─────────────────────────────────────
+			// An enum is a routing instruction, not just a cost label: resolve
+			// it to a tier when no explicit --tier was given (#165).
+			tierHint := tier
+			if tierHint == "" && enumKey != "" {
+				tierHint = dispatch.EnumToTier(enumKey)
+			}
 			opts := dispatch.Options{
-				TierHint:  tier,
+				TierHint:  tierHint,
 				LocalOnly: localOnly,
 				DryRun:    dryRun,
 				System:    system,
@@ -527,7 +533,7 @@ func cmdDispatch() *cobra.Command {
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "show selected head without executing")
 	cmd.Flags().StringVarP(&system, "system", "s", "", "system prompt")
 	cmd.Flags().StringVar(&a2aFile, "a2a", "", "path to A2A handoff JSON (prepends structured context to prompt)")
-	cmd.Flags().StringVar(&enumKey, "enum", "", "routing enum key for cost logging (e.g. SIMPLE)")
+	cmd.Flags().StringVar(&enumKey, "enum", "", "routing enum key, e.g. SIMPLE — selects the tier when --tier is unset")
 	// swarm flags
 	cmd.Flags().BoolVar(&doSwarm, "swarm", false, "fan prompt out to multiple heads simultaneously")
 	cmd.Flags().StringVar(&swarmMode, "swarm-mode", "best", "response strategy: best|race|all")
