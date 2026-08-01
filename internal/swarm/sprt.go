@@ -97,6 +97,11 @@ func (s *Swarm) RunSPRT(ctx context.Context, prompt string, opts Options) (*SPRT
 		}
 	}
 
+	// Log the sampled heads to cost.jsonl, exactly as Run does for race/best/all.
+	// Without this the ensemble's per-head spend is invisible to `hyctl cost` and
+	// `hyctl stats` — only the aggregate trust.jsonl row survives (#175).
+	logAttempts(adapter.attempts, ModeSPRT, truncate(prompt, 80))
+
 	return &SPRTResult{Trust: res, Attempts: adapter.attempts, Domain: domain, Prompt: prompt, Target: opts.Confidence}, nil
 }
 

@@ -21,6 +21,10 @@ const (
 	ModeRace SwarmMode = "race" // first success wins; all others are canceled
 	ModeBest SwarmMode = "best" // fire all; LLM judge (with CapScore fallback) picks winner
 	ModeAll  SwarmMode = "all"  // fire all; return ranked by CapScore, no judge
+	// ModeSPRT labels cost rows from RunSPRT's adaptive optimal-stopping ensemble.
+	// It is a cost-log label, not a value Options.Mode ever takes — RunSPRT is
+	// entered via Options.Confidence, not via Mode.
+	ModeSPRT SwarmMode = "sprt"
 )
 
 // Options configures a swarm run.
@@ -173,7 +177,7 @@ func (s *Swarm) Run(ctx context.Context, prompt string, opts Options) (*SwarmRes
 	}
 
 	// 7. Log to cost.jsonl.
-	logAttempts(result, truncate(prompt, 80))
+	logAttempts(result.Attempts, result.Mode, truncate(prompt, 80))
 
 	return result, nil
 }
