@@ -32,6 +32,7 @@ import (
 	"github.com/ankit373/hydra/internal/pricing"
 	"github.com/ankit373/hydra/internal/probe"
 	"github.com/ankit373/hydra/internal/review"
+	"github.com/ankit373/hydra/internal/runid"
 	"github.com/ankit373/hydra/internal/swarm"
 	"github.com/ankit373/hydra/internal/trust"
 	"github.com/ankit373/hydra/internal/tui"
@@ -390,6 +391,11 @@ func cmdDispatch() *cobra.Command {
 			prompt := strings.Join(args, " ")
 			ctx := context.Background()
 
+			// One invocation is one run with one logical task, whichever path
+			// below handles it — so a swarm's attempts and the dispatch that
+			// drove them share an identity in the logs (#181).
+			runID, taskID := runid.New(), runid.New()
+
 			d, err := dispatch.New(ctx)
 			if err != nil {
 				return err
@@ -423,6 +429,8 @@ func cmdDispatch() *cobra.Command {
 					System:        system,
 					Confidence:    effectiveConf,
 					Domain:        domain,
+					RunID:         runID,
+					TaskID:        taskID,
 				})
 				if err != nil {
 					return err
@@ -456,6 +464,8 @@ func cmdDispatch() *cobra.Command {
 					LocalOnly:     localOnly,
 					System:        system,
 					JudgeTierHint: swarmJudge,
+					RunID:         runID,
+					TaskID:        taskID,
 				})
 				if err != nil {
 					return err
@@ -472,6 +482,8 @@ func cmdDispatch() *cobra.Command {
 				System:    system,
 				A2AFile:   a2aFile,
 				Enum:      enumKey,
+				RunID:     runID,
+				TaskID:    taskID,
 			}
 
 			result, err := d.Dispatch(ctx, prompt, opts)
@@ -1296,7 +1308,7 @@ func cmdParallel() *cobra.Command {
 			}
 
 			ctx := context.Background()
-			results, err := parallel.Run(ctx, tasks)
+			results, err := parallel.Run(ctx, tasks, parallel.Options{RunID: runid.New()})
 			if err != nil {
 				return err
 			}

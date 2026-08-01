@@ -10,7 +10,7 @@ import (
 )
 
 func TestRun_EmptyBatch(t *testing.T) {
-	_, err := Run(context.Background(), nil)
+	_, err := Run(context.Background(), nil, Options{})
 	if err == nil {
 		t.Fatal("Run(nil) = nil error, want error")
 	}
@@ -23,7 +23,7 @@ func TestRun_DuplicateFileConflict(t *testing.T) {
 		{Label: "a", Enum: "SIMPLE", File: "/abs/path/foo.go", Prompt: "x"},
 		{Label: "b", Enum: "SIMPLE", File: "/abs/path/foo.go", Prompt: "y"},
 	}
-	_, err := Run(context.Background(), tasks)
+	_, err := Run(context.Background(), tasks, Options{})
 	if err == nil {
 		t.Fatal("Run(duplicate file) = nil error, want conflict error")
 	}

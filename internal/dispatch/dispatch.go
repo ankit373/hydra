@@ -25,6 +25,7 @@ import (
 	"github.com/ankit373/hydra/internal/probe"
 	"github.com/ankit373/hydra/internal/provider"
 	"github.com/ankit373/hydra/internal/rank"
+	"github.com/ankit373/hydra/internal/runid"
 )
 
 // Options controls dispatch behaviour.
@@ -36,6 +37,14 @@ type Options struct {
 	DryRun    bool   // print selected head without executing
 	A2AFile   string // path to A2A handoff JSON; prepends structured context to prompt
 	Enum      string // enum key (e.g. "SIMPLE") for cost logging
+
+	// RunID groups every log row produced by one user-facing invocation;
+	// TaskID groups the rows for one logical task inside it. Empty means
+	// "derive one" (see runid.ResolveRun/ResolveTask) — pass them explicitly
+	// when several dispatches belong to the same run, as a parallel batch or a
+	// swarm does, otherwise each call is its own run.
+	RunID  string
+	TaskID string
 }
 
 // Result is the outcome of a successful dispatch.
@@ -412,6 +421,11 @@ func (d *Dispatcher) logDispatch(r *Result, prompt string, opts Options) error {
 	logDir := filepath.Join(config.Dir(), "logs")
 	_ = os.MkdirAll(logDir, 0o700)
 
+	// Resolve once so both rows carry the same identity. Before #181 these read
+	// env vars nothing ever set, so every row logged run_id:"" / task_id:"".
+	runID := runid.ResolveRun(opts.RunID)
+	taskID := runid.ResolveTask(opts.TaskID)
+
 	dispatchEntry := map[string]any{
 		"ts":             time.Now().UTC().Format(time.RFC3339),
 		"head":           r.Head.ID,
@@ -423,8 +437,8 @@ func (d *Dispatcher) logDispatch(r *Result, prompt string, opts Options) error {
 		"duration_ms":    wallMs,
 		"local":          r.Head.LocalOnly,
 		"prompt_preview": truncate(prompt, 80),
-		"task_id":        os.Getenv("HYDRA_TASK_ID"),
-		"run_id":         os.Getenv("HYDRA_RUN_ID"),
+		"task_id":        taskID,
+		"run_id":         runID,
 	}
 	if err := appendJSONL(filepath.Join(logDir, "dispatch.jsonl"), dispatchEntry); err != nil {
 		return err
@@ -452,8 +466,8 @@ func (d *Dispatcher) logDispatch(r *Result, prompt string, opts Options) error {
 			"tokens_source":   tokensSource,
 			"cost_source":     costSource,
 			"source":          legacySource,
-			"task_id":         os.Getenv("HYDRA_TASK_ID"),
-			"run_id":          os.Getenv("HYDRA_RUN_ID"),
+			"task_id":         taskID,
+			"run_id":          runID,
 		}
 		_ = appendJSONL(filepath.Join(logDir, "cost.jsonl"), costEntry)
 	}

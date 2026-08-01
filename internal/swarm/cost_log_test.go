@@ -78,7 +78,7 @@ func TestLogAttempts_SPRTModeIsRecorded(t *testing.T) {
 	}
 
 	rows := readCostRows(t, func() {
-		logAttempts(attempts, ModeSPRT, "explain this migration")
+		logAttempts(attempts, ModeSPRT, Options{}, "explain this migration")
 	})
 
 	if len(rows) != 2 {
@@ -120,7 +120,7 @@ func TestLogAttempts_SkipsUnexecutedAttempts(t *testing.T) {
 	}
 
 	rows := readCostRows(t, func() {
-		logAttempts(attempts, ModeRace, "p")
+		logAttempts(attempts, ModeRace, Options{}, "p")
 	})
 
 	// OK + Failed both really ran; Pending/Canceled did not.
@@ -139,7 +139,7 @@ func TestLogAttempts_SkipsUnexecutedAttempts(t *testing.T) {
 func TestLogAttempts_ModeLabelIsCallerSupplied(t *testing.T) {
 	for _, mode := range []SwarmMode{ModeRace, ModeBest, ModeAll, ModeSPRT} {
 		rows := readCostRows(t, func() {
-			logAttempts([]Attempt{costAttempt("h", StatusOK, 1)}, mode, "p")
+			logAttempts([]Attempt{costAttempt("h", StatusOK, 1)}, mode, Options{}, "p")
 		})
 		if len(rows) != 1 {
 			t.Fatalf("mode %s: wrote %d rows, want 1", mode, len(rows))
