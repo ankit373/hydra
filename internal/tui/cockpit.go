@@ -7,13 +7,26 @@ package tui
 // decisions, with a dashboard view (Tab). Neon identity, aqua interaction.
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/ankit373/hydra/internal/budget"
+	"github.com/ankit373/hydra/internal/config"
+	"github.com/ankit373/hydra/internal/cost"
+	"github.com/ankit373/hydra/internal/executor"
+	"github.com/ankit373/hydra/internal/pricing"
+	"github.com/ankit373/hydra/internal/probe"
+	"github.com/ankit373/hydra/internal/provider"
+	"github.com/ankit373/hydra/internal/rank"
 )
 
 // ── palette (ck-prefixed to avoid clashing with splash.go/init.go) ──────────────
@@ -89,6 +102,43 @@ func ValidSnapshotView(view int) (ok bool, names []string) {
 	return ckValidView(view), append([]string(nil), ckViewNames...)
 }
 
+// ckHeadsFrom converts a real probe result into display rows, ranked the way
+// dispatch ranks them so the cockpit shows the order routing would actually
+// use. price comes from the live pricing DB; a head with no known price shows
+// 0, which renders as "—" rather than a fabricated figure.
+func ckHeadsFrom(heads []provider.Head, pr *pricing.DB) []ckHead {
+	out := make([]ckHead, 0, len(heads))
+	for _, h := range heads {
+		tier := rank.UITier(h)
+		var price float64
+		if pr != nil {
+			// Per-1K-token yardstick, only for the relative cost colour ramp.
+			price = pr.EstimateCost(tier, 1000, 0)
+		}
+		out = append(out, ckHead{
+			name:  h.Name,
+			tier:  tier,
+			price: price,
+			up:    executor.Supports(h),
+			color: ckTierColor(tier),
+		})
+	}
+	return out
+}
+
+// ckTierColor maps a capability tier onto the cost ramp: cheap local heads
+// green, mid amber, expensive frontier heads violet/red.
+func ckTierColor(tier int) lipgloss.Color {
+	switch {
+	case tier <= 2:
+		return ckViolet
+	case tier <= 6:
+		return ckCyan
+	default:
+		return ckCheap
+	}
+}
+
 // Cockpit is the interactive `hydra tui` model.
 type Cockpit struct {
 	w, h      int
@@ -99,9 +149,8 @@ type Cockpit struct {
 	heads     []ckHead
 	mode      string
 	runs      int
-	saved     float64
-	local     int
 	claudePct int
+	spend     float64 // today's real estimated spend, from cost.jsonl
 
 	// live code panel (chat+code view): a snippet streamed line-by-line.
 	codeLang  string
@@ -109,31 +158,84 @@ type Cockpit struct {
 	codeShown int
 	codeGen   int // generation guard so a new run cancels stale tick loops
 
-	// last dispatch confidence (dashboard figure).
-	lastConf   float64
-	lastTarget float64
-
 	// agent-tree view selection cursor.
 	treeSel int
 }
 
-// NewCockpit builds the cockpit model with discovered-head placeholders.
+// NewCockpit builds the cockpit from the machine's real state: heads from a
+// probe, the governor from state.json, spend from cost.jsonl.
+//
+// It previously shipped a hardcoded roster of five heads that may not exist on
+// this machine, a governor that counted up from 52 as you typed, and a price
+// table used to compute "savings" — all presented as live telemetry, and all
+// reachable by `--snapshot`, which generates imagery for the docs site (#189).
+// Anything not yet measurable is now omitted rather than simulated.
 func NewCockpit() Cockpit {
-	return Cockpit{
+	ctx, cancel := context.WithTimeout(context.Background(), ckProbeTimeout)
+	defer cancel()
+	probed := probe.Run(ctx)
+
+	pr := pricing.Load()
+	heads := ckHeadsFrom(probed.Heads, pr)
+
+	pct := ckClaudePct()
+	m := Cockpit{
 		mode:      "dispatch",
-		claudePct: 52,
-		heads: []ckHead{
-			{"agy · claude", 1, 0.015, true, ckViolet},
-			{"gemini pro", 5, 0.0012, true, ckCyan},
-			{"gemini flash", 8, 0.00012, true, ckCyan},
-			{"openrouter", 6, 0.0009, true, ckCyan},
-			{"qwen · local", 10, 0, true, ckCheap},
-		},
-		log: []string{
-			ckDimS.Render("🐉 Hydra initialised · 5 heads discovered · routing engine ready."),
-			ckDimS.Render("Type a task and press enter. Tab = chat/dash/tree · /trust /swarm /local · :q quits."),
-		},
+		claudePct: pct,
+		heads:     heads,
+		spend:     ckSpendToday(),
 	}
+
+	switch len(heads) {
+	case 0:
+		m.log = []string{
+			ckDimS.Render("🐉 Hydra initialised · no heads discovered."),
+			ckDimS.Render("Run `hyctl probe` to see what was found, or `hyctl init` to configure."),
+		}
+	default:
+		m.log = []string{
+			ckDimS.Render(fmt.Sprintf("🐉 Hydra initialised · %d head%s discovered · routing engine ready.",
+				len(heads), plural(len(heads)))),
+			ckDimS.Render("Type a task and press enter. Tab = chat/dash/tree · /trust /swarm /local · :q quits."),
+		}
+	}
+	return m
+}
+
+// ckProbeTimeout bounds startup: a wedged provider must not hang the cockpit
+// before it can draw anything.
+const ckProbeTimeout = 5 * time.Second
+
+// ckClaudePct reads the orchestrator's real context usage from state.json.
+// Absent state means unknown, which renders as unknown — not as a number.
+func ckClaudePct() int {
+	raw, err := os.ReadFile(filepath.Join(config.Dir(), "logs", "state.json"))
+	if err != nil {
+		return 0
+	}
+	var s struct {
+		ClaudePct int `json:"claude_pct"`
+	}
+	if err := json.Unmarshal(raw, &s); err != nil {
+		return 0
+	}
+	return s.ClaudePct
+}
+
+// ckSpendToday returns today's real estimated spend from cost.jsonl.
+func ckSpendToday() float64 {
+	summary, err := cost.Summary()
+	if err != nil || summary == nil {
+		return 0
+	}
+	return summary.Today.EstCostUSD
+}
+
+func plural(n int) string {
+	if n == 1 {
+		return ""
+	}
+	return "s"
 }
 
 func (m Cockpit) Init() tea.Cmd { return nil }
@@ -244,13 +346,21 @@ func ckBaseName(n string) string {
 	return n
 }
 
-// run simulates a dispatch and appends the live routing decision to the log.
+// run previews the routing decision for a task and appends it to the log.
+// It does not execute anything — see the note it prints.
 func (m Cockpit) run(task string) Cockpit {
 	m.runs++
 	m.log = append(m.log, ckYouS.Render("❯ "+task))
 
 	enum, wantTier := classifyTask(task, m.mode)
 	idx := m.pickHead(wantTier)
+	// Since #189 the roster is a real probe, so it can legitimately be empty on
+	// a machine with nothing installed. There is no route to preview then, and
+	// inventing one is exactly what this PR removes.
+	if idx < 0 {
+		m.log = append(m.log, ckDimS.Render("  no heads discovered — run `hyctl probe` to see why"))
+		return m
+	}
 	h := m.heads[idx]
 	fell := m.mode != "local" && h.tier > wantTier
 
@@ -261,57 +371,41 @@ func (m Cockpit) run(task string) Cockpit {
 
 	cost := h.price
 	base, baseName := m.baseline()
-	saved := base - cost
-	if saved < 0 {
-		saved = 0
-	}
-	m.saved += saved
-	if h.tier >= 9 {
-		m.local++
-	}
-
-	target := 0.80
-	if m.mode == "trust" || hasFilePath(task) {
-		target = 0.95
-	}
-	reached := target
-	if h.tier <= 3 {
-		reached += 0.03
-	}
-	if h.tier >= 9 {
-		reached -= 0.06
-	}
-	if reached > 0.999 {
-		reached = 0.999
-	}
-	m.lastConf, m.lastTarget = reached, target
 
 	flow := ckDimS.Render("  prompt ") + ckAquaS.Render("→ ") + ckInkS.Render(enum) +
 		ckAquaS.Render(" → ") + ckDimS.Render(fmt.Sprintf("T%d", wantTier))
 	if fell {
-		flow += ckAquaS.Render(" → ") + ckMidS.Render("✗ rate-limited") +
-			ckAquaS.Render(" → ") + ckCyanS.Render(fmt.Sprintf("T%d fallback", h.tier))
+		flow += ckAquaS.Render(" → ") + ckMidS.Render("no head at that tier") +
+			ckAquaS.Render(" → ") + ckCyanS.Render(fmt.Sprintf("T%d", h.tier))
 	}
 	flow += ckAquaS.Render(" → ") + lipgloss.NewStyle().Foreground(h.color).Render(h.name)
 	m.log = append(m.log, flow)
 
 	costStr := "free (local)"
 	if cost > 0 {
-		costStr = fmt.Sprintf("$%.4f", cost)
+		costStr = fmt.Sprintf("~$%.4f", cost)
+	} else if base == 0 {
+		// No pricing data loaded — say so rather than implying "free".
+		costStr = "cost unknown"
 	}
-	m.log = append(m.log, ckDimS.Render("  route  ")+
-		lipgloss.NewStyle().Foreground(h.color).Render(h.name)+
-		ckDimS.Render(fmt.Sprintf("  %s  vs all-%s $%.4f", costStr, baseName, base)))
-	if hasFilePath(task) {
-		m.log = append(m.log, ckDimS.Render("  blast  ")+ckExpS.Render("κ=3.1 ⚠")+
-			ckDimS.Render("  12 dependents → confidence bar raised to 0.95"))
+	line := ckDimS.Render("  route  ") +
+		lipgloss.NewStyle().Foreground(h.color).Render(h.name) +
+		ckDimS.Render("  "+costStr)
+	if base > 0 {
+		line += ckDimS.Render(fmt.Sprintf("  vs all-%s ~$%.4f", baseName, base))
 	}
-	m.log = append(m.log, ckDimS.Render("  conf   ")+ckCyanS.Render(fmt.Sprintf("%.2f", reached))+
-		ckDimS.Render(fmt.Sprintf(" / target %.2f · SPRT ", target))+ckCheapS.Render("accept"))
-	m.log = append(m.log, ckCheapS.Render("  ✔ done")+ckDimS.Render("  · saved ")+
-		ckCheapS.Render(fmt.Sprintf("$%.4f", saved)))
+	m.log = append(m.log, line)
 
-	m.claudePct = min(96, 52+m.runs*3)
+	// Confidence and blast radius are deliberately absent. The cockpit used to
+	// print an invented "conf 0.98 / target 0.95 · SPRT accept" and a literal
+	// "κ=3.1 ⚠ 12 dependents" for any prompt containing a file path, with no
+	// trust or graph code involved. Both are real Hydra capabilities
+	// (`--confidence`, `--file`) but reach them via the CLI until the cockpit
+	// executes dispatches for real — a fabricated number is worse than none,
+	// especially since --snapshot publishes these frames (#189).
+	m.log = append(m.log, ckDimS.Render("  plan   ")+
+		ckDimS.Render("routing preview only — the cockpit does not execute dispatches yet"))
+
 	return m
 }
 
@@ -332,7 +426,7 @@ func (m Cockpit) pickHead(wantTier int) int {
 				return i
 			}
 		}
-		return len(m.heads) - 1
+		return len(m.heads) - 1 // -1 when the roster is empty; callers must check
 	}
 	return best
 }
@@ -380,19 +474,22 @@ func (m Cockpit) chatCode(bodyH int) string {
 func (m Cockpit) header() string {
 	viewName := ckViewName(m.view)
 	left := ckWordmark("HYDRA") + ckDimS.Render(" ▸ ") + ckCyanS.Render(viewName) +
-		ckDimS.Render(" · heads: agy·gemini·openrouter·qwen")
-	mode, mc := "normal", ckCheapS
-	switch {
-	case m.claudePct >= 75:
-		mode, mc = "critical", ckExpS
-	case m.claudePct >= 65:
-		mode, mc = "warning", ckMidS
-	case m.claudePct >= 50:
-		mode, mc = "compact", ckMidS
+		ckDimS.Render(" · "+m.headSummary())
+
+	// budget.ModeFor is the single source of truth for the band. This used to
+	// re-implement the thresholds inline — a fourth copy, alongside the two in
+	// cockpit_views.go and the real one in internal/budget (#189).
+	mode := budget.ModeFor(m.claudePct)
+	mc := ckCheapS
+	switch mode.String() {
+	case "critical", "emergency":
+		mc = ckExpS
+	case "warning", "caution", "compact":
+		mc = ckMidS
 	}
-	right := ckDimS.Render("MODE ") + mc.Render(mode) +
+	right := ckDimS.Render("MODE ") + mc.Render(mode.String()) +
 		ckDimS.Render(fmt.Sprintf(" %d%%   ", m.claudePct)) +
-		ckDimS.Render("saved ") + ckCheapS.Render(fmt.Sprintf("$%.2f", m.saved))
+		ckDimS.Render("today ") + ckCheapS.Render(fmt.Sprintf("$%.4f", m.spend))
 	gap := m.w - lipgloss.Width(left) - lipgloss.Width(right) - 2
 	if gap < 1 {
 		gap = 1
@@ -558,4 +655,19 @@ func truncate(s string, n int) string {
 		return s[:n]
 	}
 	return s[:n-1] + "…"
+}
+
+// headSummary names the discovered heads for the header, truncated to keep the
+// bar from wrapping. It replaced a hardcoded "agy·gemini·openrouter·qwen"
+// string that named heads the machine may not have (#189).
+func (m Cockpit) headSummary() string {
+	if len(m.heads) == 0 {
+		return "no heads"
+	}
+	names := make([]string, 0, len(m.heads))
+	for _, h := range m.heads {
+		names = append(names, ckBaseName(h.name))
+	}
+	s := "heads: " + strings.Join(names, "·")
+	return truncate(s, 46)
 }
