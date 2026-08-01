@@ -479,6 +479,7 @@ func (d *Dispatcher) logDispatch(r *Result, prompt string, opts Options) error {
 		// always "estimated" (est_cost_usd is pricing × tokens, never billed);
 		// the legacy `source` field mirrors tokens_source for older readers.
 		tokensSource, costSource, legacySource := cost.SourceLabels(r.Response.TokensEstimated)
+		breadcrumb, _ := config.Breadcrumb()
 		costEntry := map[string]any{
 			"ts":              time.Now().UTC().Format(time.RFC3339),
 			"tier":            tier,
@@ -495,6 +496,9 @@ func (d *Dispatcher) logDispatch(r *Result, prompt string, opts Options) error {
 			"source":          legacySource,
 			"task_id":         taskID,
 			"run_id":          runID,
+		}
+		if breadcrumb != "" { // match the omitempty on cost.Row.Config
+			costEntry["config"] = breadcrumb
 		}
 		_ = appendJSONL(filepath.Join(logDir, "cost.jsonl"), costEntry)
 	}

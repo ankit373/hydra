@@ -684,7 +684,7 @@ All Go source lives under `cmd/` and `internal/`. Key packages:
 | `internal/cost` | Reads `cost.jsonl`, produces spend summaries |
 | `internal/policy` | Allow/deny rules (PII local-only, etc.) |
 | `internal/rank` | CapScore ranking helpers |
-| `internal/config` | Hydra config load/save (`~/.config/hydra/`) |
+| `internal/config` | Hydra config load/save (`~/.config/hydra/`); `Breadcrumb()` — SHA256 deployment-identity fingerprint over `registry/{routing,models,domains}.yaml`, auto-stamped into ledger/trust/cost log entries so they can be tied back to the exact routing rules in effect. |
 | `internal/capabilities` | Model capability scores: embedded `data.json` ⊕ runtime user overlay (`~/.hydra/models.json`) merged at discovery, so new models are added without a rebuild. Drives `hyctl models list\|add\|remove\|sync`. |
 | `internal/budget` | Token-budget governor: static pressure bands (`ModeFor`) + a rate-aware first-passage-time model on the orchestrator's `claude_pct` session history (`RiskFromHistory`/`EffectiveMode`) that escalates before a threshold is crossed. Feeds `claudeMode` downgrades and `hyctl status`. |
 | `internal/trust` | Trust Control Plane confidence layer: per-source calibration (Beta-Bernoulli → LLR/D), defect-cost model + `RequiredConfidence`, and the SPRT optimal-stopping ensemble (`trust.Run`). Drives `hyctl dispatch --confidence` and `hyctl trust calibration\|record\|defect\|stats\|explain`. |

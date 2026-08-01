@@ -81,6 +81,7 @@ func logAttempts(attempts []Attempt, mode SwarmMode, opts Options, promptPreview
 
 	runID := runid.ResolveRun(opts.RunID)
 	taskID := runid.ResolveTask(opts.TaskID)
+	breadcrumb, _ := config.Breadcrumb()
 
 	for _, a := range attempts {
 		if a.Status == StatusPending || a.Status == StatusCanceled {
@@ -106,6 +107,9 @@ func logAttempts(attempts []Attempt, mode SwarmMode, opts Options, promptPreview
 			"task_id":         taskID,
 			"run_id":          runID,
 			"prompt_preview":  promptPreview,
+		}
+		if breadcrumb != "" { // match the omitempty on cost.Row.Config
+			entry["config"] = breadcrumb
 		}
 		raw, _ := json.Marshal(entry)
 		_, _ = fmt.Fprintln(f, string(raw))

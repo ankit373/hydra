@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/policy"
 )
 
@@ -92,6 +93,11 @@ type Event struct {
 	// Classification is the data-sensitivity tag this access was evaluated
 	// under (e.g. "pii"). Empty means unclassified.
 	Classification string `json:"classification,omitempty"`
+
+	// Config is the deployment-identity breadcrumb (config.Breadcrumb) in
+	// effect when this event was recorded, ties the event to the exact
+	// routing rules that were live.
+	Config string `json:"config,omitempty"`
 }
 
 // HashParams returns a SHA256 hex hash of params, for tamper-evident binding
@@ -170,10 +176,15 @@ func DefaultPath() string {
 	return filepath.Join(home, ".hydra", "mcp_ledger.jsonl")
 }
 
-// Record appends one event, stamping TS if blank.
+// Record appends one event, stamping TS and Config (best-effort) if blank.
 func Record(path string, e Event) error {
 	if e.TS == "" {
 		e.TS = time.Now().UTC().Format(time.RFC3339)
+	}
+	if e.Config == "" {
+		if bc, err := config.Breadcrumb(); err == nil {
+			e.Config = bc
+		}
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err

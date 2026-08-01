@@ -37,6 +37,7 @@ type Row struct {
 	RunID          string  `json:"run_id"`
 	SwarmMode      string  `json:"swarm_mode"`
 	SwarmWinner    bool    `json:"swarm_winner"`
+	Config         string  `json:"config,omitempty"` // deployment-identity breadcrumb (config.Breadcrumb)
 }
 
 // Totals is an aggregate summary.
