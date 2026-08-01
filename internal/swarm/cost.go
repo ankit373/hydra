@@ -13,6 +13,7 @@ import (
 	"github.com/ankit373/hydra/internal/cost"
 	"github.com/ankit373/hydra/internal/provider"
 	"github.com/ankit373/hydra/internal/rank"
+	"github.com/ankit373/hydra/internal/runid"
 )
 
 // PricingReader abstracts the per-tier cost lookup so swarm doesn't need to
@@ -62,7 +63,12 @@ func enrichCosts(attempts []Attempt, pr PricingReader) {
 // path can share it: RunSPRT produces attempts without ever building a
 // SwarmResult, and without this its ensemble spend never reached cost.jsonl at
 // all — only the aggregate trust.jsonl row (#175).
-func logAttempts(attempts []Attempt, mode SwarmMode, promptPreview string) {
+//
+// Every attempt shares the run's identity: heads racing or voting on one prompt
+// are all working the same logical task, so they carry the same TaskID. That is
+// what lets a reader group "5 heads on one task" rather than seeing 5 unrelated
+// rows (#181).
+func logAttempts(attempts []Attempt, mode SwarmMode, opts Options, promptPreview string) {
 	logDir := filepath.Join(config.Dir(), "logs")
 	_ = os.MkdirAll(logDir, 0o700)
 	path := filepath.Join(logDir, "cost.jsonl")
@@ -73,8 +79,8 @@ func logAttempts(attempts []Attempt, mode SwarmMode, promptPreview string) {
 	}
 	defer f.Close()
 
-	runID := os.Getenv("HYDRA_RUN_ID")
-	taskID := os.Getenv("HYDRA_TASK_ID")
+	runID := runid.ResolveRun(opts.RunID)
+	taskID := runid.ResolveTask(opts.TaskID)
 
 	for _, a := range attempts {
 		if a.Status == StatusPending || a.Status == StatusCanceled {

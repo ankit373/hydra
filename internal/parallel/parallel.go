@@ -20,6 +20,7 @@ import (
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/dispatch"
 	"github.com/ankit373/hydra/internal/policy"
+	"github.com/ankit373/hydra/internal/runid"
 	"github.com/ankit373/hydra/internal/workspace"
 )
 
@@ -73,13 +74,26 @@ type Result struct {
 func (r Result) MarshalJSON() ([]byte, error) { return r.raw, nil }
 func (r Result) Raw() json.RawMessage         { return r.raw }
 
+// Options configures a batch run.
+type Options struct {
+	// RunID groups every log row the batch produces. All tasks in one batch
+	// share it; each task still gets its own TaskID, so a reader can tell "one
+	// batch of three tasks" from "three unrelated runs" (#181). Empty derives
+	// one for the batch.
+	RunID string
+}
+
 // Run fans all tasks out as goroutines and collects results.
 // Returns non-nil error only for pre-flight failures; individual task errors
 // are captured in each result's Status/Error fields.
-func Run(ctx context.Context, tasks []Task) ([]Result, error) {
+func Run(ctx context.Context, tasks []Task, opts Options) ([]Result, error) {
 	if len(tasks) == 0 {
 		return nil, fmt.Errorf("no tasks provided")
 	}
+
+	// Resolve the batch's run identity once, here rather than per goroutine, so
+	// every task in the batch genuinely shares it.
+	runID := runid.ResolveRun(opts.RunID)
 
 	// Pre-flight: detect duplicate file targets.
 	seen := map[string]string{}
@@ -100,12 +114,14 @@ func Run(ctx context.Context, tasks []Task) ([]Result, error) {
 
 	for i, task := range tasks {
 		i, task := i, task
+		// Each task is its own logical unit of work inside the shared run.
+		taskID := runid.New()
 		g.Go(func() error {
 			var raw json.RawMessage
 			if task.File != "" {
-				raw = runEditTask(gctx, task)
+				raw = runEditTask(gctx, task, runID, taskID)
 			} else {
-				raw = runTextTask(gctx, task)
+				raw = runTextTask(gctx, task, runID, taskID)
 			}
 			mu.Lock()
 			results[i] = Result{raw: raw}
@@ -121,7 +137,7 @@ func Run(ctx context.Context, tasks []Task) ([]Result, error) {
 }
 
 // runTextTask dispatches a prompt and returns the raw JSON result.
-func runTextTask(ctx context.Context, task Task) json.RawMessage {
+func runTextTask(ctx context.Context, task Task, runID, taskID string) json.RawMessage {
 	d, err := dispatch.New(ctx)
 	if err != nil {
 		return failText(task, "dispatcher init: "+err.Error())
@@ -136,6 +152,8 @@ func runTextTask(ctx context.Context, task Task) json.RawMessage {
 
 	result, err := d.Dispatch(ctx, prompt, dispatch.Options{
 		TierHint: enumToTier(task.Enum),
+		RunID:    runID,
+		TaskID:   taskID,
 	})
 	if err != nil {
 		return failText(task, err.Error())
@@ -153,7 +171,7 @@ func runTextTask(ctx context.Context, task Task) json.RawMessage {
 // runEditTask performs an atomic file edit and returns the raw JSON result.
 // Self-contained port of the edit.sh flow so this package compiles on develop
 // before internal/editor merges. Once editor merges, this can delegate to editor.Edit.
-func runEditTask(ctx context.Context, task Task) json.RawMessage {
+func runEditTask(ctx context.Context, task Task, runID, taskID string) json.RawMessage {
 	file := task.File
 	if !filepath.IsAbs(file) {
 		return failEdit(task, "file path must be absolute")
@@ -235,6 +253,8 @@ snippet) between these exact markers and nothing else:
 	}
 	dispResult, err := d.Dispatch(ctx, editPrompt, dispatch.Options{
 		TierHint: enumToTier(task.Enum),
+		RunID:    runID,
+		TaskID:   taskID,
 	})
 	if err != nil {
 		cleanupBackup()

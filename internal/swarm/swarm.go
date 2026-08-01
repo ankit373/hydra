@@ -54,6 +54,13 @@ type Options struct {
 	// SPRT mode (RunSPRT).
 	Confidence float64 // target P(correct); >0 selects the SPRT ensemble
 	Domain     string  // calibration domain ("" → "default")
+
+	// RunID/TaskID group this swarm's attempt rows with the invocation and the
+	// logical task they belong to. Every head racing or voting on one prompt is
+	// working the same task, so they share a TaskID — that is what lets a reader
+	// tell "5 heads on one task" from "5 separate tasks" (#181).
+	RunID  string
+	TaskID string
 }
 
 // SwarmResult is the complete outcome of a swarm dispatch.
@@ -177,7 +184,7 @@ func (s *Swarm) Run(ctx context.Context, prompt string, opts Options) (*SwarmRes
 	}
 
 	// 7. Log to cost.jsonl.
-	logAttempts(result.Attempts, result.Mode, truncate(prompt, 80))
+	logAttempts(result.Attempts, result.Mode, opts, truncate(prompt, 80))
 
 	return result, nil
 }
