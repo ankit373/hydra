@@ -109,8 +109,18 @@ func cmdTui() *cobra.Command {
 		Use:   "tui",
 		Short: "Interactive cockpit — chat, route work, and watch spend live",
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			viewSet := cmd.Flags().Changed("view")
+			if viewSet {
+				if ok, names := tui.ValidSnapshotView(snapView); !ok {
+					return fmt.Errorf("--view %d is out of range: valid values are 0..%d (%s)",
+						snapView, len(names)-1, strings.Join(names, ", "))
+				}
+				if !snapshot {
+					return fmt.Errorf("--view applies only with --snapshot")
+				}
+			}
 			if snapshot {
-				if cmd.Flags().Changed("view") {
+				if viewSet {
 					fmt.Print(tui.CockpitSnapshotView(snapView))
 				} else {
 					fmt.Print(tui.CockpitSnapshot())

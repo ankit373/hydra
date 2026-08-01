@@ -57,11 +57,43 @@ type ckHead struct {
 	color lipgloss.Color
 }
 
+// Cockpit views. The name table is the single source of truth — deriving the
+// count and the bounds check from it keeps the Tab cycle, the header label, and
+// the --view validation from drifting apart when a view is added.
+const (
+	ckViewChatCode = iota
+	ckViewDashboard
+	ckViewAgentTree
+)
+
+var ckViewNames = []string{"chat+code", "dashboard", "agent-tree"}
+
+// ckViewCount is how many views exist.
+func ckViewCount() int { return len(ckViewNames) }
+
+// ckViewName is total: an out-of-range view yields the default label rather
+// than panicking. `--snapshot --view N` reaches the header with unvalidated N.
+func ckViewName(v int) string {
+	if !ckValidView(v) {
+		return ckViewNames[ckViewChatCode]
+	}
+	return ckViewNames[v]
+}
+
+// ckValidView reports whether v names a real view.
+func ckValidView(v int) bool { return v >= 0 && v < len(ckViewNames) }
+
+// ValidSnapshotView reports whether view is a usable --view value, and returns
+// the valid view names so a caller can build a useful error message.
+func ValidSnapshotView(view int) (ok bool, names []string) {
+	return ckValidView(view), append([]string(nil), ckViewNames...)
+}
+
 // Cockpit is the interactive `hydra tui` model.
 type Cockpit struct {
 	w, h      int
 	ready     bool
-	view      int // 0 = chat+code, 1 = dashboard, 2 = agent tree
+	view      int // one of the ckView* constants
 	input     string
 	log       []string
 	heads     []ckHead
@@ -123,7 +155,7 @@ func (m Cockpit) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case tea.KeyCtrlC:
 			return m, tea.Quit
 		case tea.KeyTab:
-			m.view = (m.view + 1) % 3
+			m.view = (m.view + 1) % ckViewCount()
 		case tea.KeyUp:
 			if m.view == 2 && m.treeSel > 0 {
 				m.treeSel--
@@ -346,7 +378,7 @@ func (m Cockpit) chatCode(bodyH int) string {
 }
 
 func (m Cockpit) header() string {
-	viewName := []string{"chat+code", "dashboard", "agent-tree"}[m.view]
+	viewName := ckViewName(m.view)
 	left := ckWordmark("HYDRA") + ckDimS.Render(" ▸ ") + ckCyanS.Render(viewName) +
 		ckDimS.Render(" · heads: agy·gemini·openrouter·qwen")
 	mode, mc := "normal", ckCheapS
@@ -415,13 +447,18 @@ func (m Cockpit) hint() string {
 
 // CockpitSnapshotView renders one static frame of the given view (0 chat+code,
 // 1 dashboard, 2 agent-tree) after two demo dispatches, with the code stream and
-// tree selection settled so the frame is fully populated.
+// tree selection settled so the frame is fully populated. An out-of-range view
+// falls back to the default instead of panicking; callers that can report an
+// error to the user should reject it up front with ValidSnapshotView.
 func CockpitSnapshotView(view int) string {
 	m := NewCockpit()
 	m = m.run("write a User DTO for profile settings")            // SIMPLE → TS interface
 	m = m.run("rotate the signing key in internal/auth/token.go") // CORE   → Go key-rotation
 	m.codeShown = len(m.codeLines)                                // reveal the whole snippet
 	m.treeSel = 2                                                 // highlight the token-rotation node
+	if !ckValidView(view) {
+		view = ckViewChatCode
+	}
 	m.view = view
 	m.w, m.h, m.ready = 100, 30, true
 	return m.View()
