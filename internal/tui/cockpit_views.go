@@ -4,17 +4,19 @@ package tui
 
 // cockpit_views.go — the three cockpit view modes cycled by Tab:
 //   view 0  chat + live code panel   (chatCode → codePanel)
-//   view 1  dashboard / fleet pulse  (dash)
-//   view 2  agent supervision tree   (tree)
-// plus their pure helpers (syntax highlighter, sparklines, tier/state colour
-// ramps, the fixed example agent tree). Neon identity via the ck-prefixed
-// palette declared in cockpit.go.
+//   view 1  dashboard                (dash) — reads real probe/cost/trust data
+//   view 2  agent supervision tree   (tree) — still a fixed example; see #189
+// plus their pure helpers (syntax highlighter, tier/state colour ramps). Neon
+// identity via the ck-prefixed palette declared in cockpit.go.
 
 import (
 	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/ankit373/hydra/internal/budget"
+	"github.com/ankit373/hydra/internal/trust"
 )
 
 // ── view 0 · live code panel ─────────────────────────────────────────────────
@@ -62,62 +64,85 @@ func (m Cockpit) codePanel(w, h int) string {
 
 // ── view 1 · dashboard ───────────────────────────────────────────────────────
 
-// dash is the fleet pulse: per-head sparklines, cost saved, confidence, and the
-// band-coloured governor gauge.
+// dash is the fleet pulse: discovered heads, real spend, real calibration
+// stats, and the governor gauge.
+//
+// Everything here reads a real source. It previously rendered LCG-hashed
+// "sparklines", a per-head confidence bucketed by tier, and a savings figure
+// derived from an invented price table — all with no backing data (#189).
+// Where a real figure is not available yet it is labelled unavailable rather
+// than invented, because --snapshot publishes these frames.
 func (m Cockpit) dash(w, h int) string {
 	var fleet strings.Builder
-	fleet.WriteString(ckLabelS.Render("FLEET PULSE · heads") + "\n\n")
+	fleet.WriteString(ckLabelS.Render("FLEET · discovered heads") + "\n\n")
+	if len(m.heads) == 0 {
+		fleet.WriteString(ckDimS.Render(" no heads discovered — run `hyctl probe`") + "\n")
+	}
 	for _, hd := range m.heads {
 		st := ckCheapS.Render("● up  ")
 		if !hd.up {
 			st = ckExpS.Render("● down")
 		}
-		name := lipgloss.NewStyle().Foreground(hd.color).Width(14).Render(truncate(hd.name, 14))
-		spark := lipgloss.NewStyle().Foreground(hd.color).
-			Render(ckSparkStr(ckSparkVals(ckHashSeed(hd.name)+m.runs, 14)))
-		conf := 0.80
-		switch {
-		case hd.tier <= 3:
-			conf = 0.94
-		case hd.tier >= 9:
-			conf = 0.74
+		name := lipgloss.NewStyle().Foreground(hd.color).Width(18).Render(truncate(hd.name, 18))
+		price := ckDimS.Render("       —")
+		if hd.price > 0 {
+			price = ckDimS.Render(fmt.Sprintf(" ~$%.4f", hd.price))
 		}
 		fleet.WriteString(" " + name + " " + st +
-			ckDimS.Render(fmt.Sprintf(" T%-2d ", hd.tier)) + spark +
-			ckDimS.Render(fmt.Sprintf("  %.2f", conf)) + "\n")
+			ckDimS.Render(fmt.Sprintf(" T%-2d", hd.tier)) + price + "\n")
 	}
-	fleet.WriteString("\n" + ckDimS.Render(fmt.Sprintf("%d dispatches · %d local · mode ", m.runs, m.local)) +
-		ckCyanS.Render(m.mode))
+	fleet.WriteString("\n" + ckDimS.Render(fmt.Sprintf("%d head%s · mode ",
+		len(m.heads), plural(len(m.heads)))) + ckCyanS.Render(m.mode))
 
-	savedPct := int(m.saved * 40)
-	_, baseName := m.baseline()
-	saveBox := ckLabelS.Render("SAVED vs all-"+baseName) + "\n\n " +
-		lipgloss.NewStyle().Foreground(ckCheap).Bold(true).Render(fmt.Sprintf("$%.4f", m.saved)) + "\n " +
-		ckBar(min(100, savedPct), 20) + "\n " + ckDimS.Render(fmt.Sprintf("%d runs routed cheap", m.runs))
+	// Real spend, from cost.jsonl.
+	spendBox := ckLabelS.Render("SPEND · today") + "\n\n " +
+		lipgloss.NewStyle().Foreground(ckCheap).Bold(true).Render(fmt.Sprintf("$%.4f", m.spend)) + "\n " +
+		ckFaintS.Render("estimated, not billed") + "\n " +
+		ckDimS.Render("`hyctl cost` for the breakdown")
 
-	confBox := ckLabelS.Render("CONFIDENCE · last dispatch") + "\n\n " +
-		lipgloss.NewStyle().Foreground(ckCyan).Bold(true).Render(fmt.Sprintf("%.2f", m.lastConf)) +
-		ckDimS.Render(fmt.Sprintf("  / target %.2f", m.lastTarget)) + "\n " +
-		ckBar(int(m.lastConf*100), 20) + "\n " + ckDimS.Render("SPRT ") + ckCheapS.Render("accept")
+	// Real calibration stats, from trust.jsonl.
+	confBox := ckLabelS.Render("TRUST · calibration") + "\n\n " + m.trustSummary()
 
-	band, bc := "normal", ckCheapS
-	switch {
-	case m.claudePct >= 75:
-		band, bc = "critical", ckExpS
-	case m.claudePct >= 65:
-		band, bc = "warning", ckMidS
-	case m.claudePct >= 50:
-		band, bc = "compact", ckMidS
+	// One source of truth for the band — internal/budget. This block used to
+	// re-implement the thresholds, making a third copy that already disagreed
+	// with the governor (CLAUDE.md forbids exactly this).
+	mode := budget.ModeFor(m.claudePct)
+	bc := ckCheapS
+	switch mode.String() {
+	case "critical", "emergency":
+		bc = ckExpS
+	case "warning", "caution":
+		bc = ckMidS
+	case "compact":
+		bc = ckMidS
+	}
+	govLine := ckDimS.Render("band ") + bc.Render(mode.String())
+	if m.claudePct == 0 {
+		govLine = ckFaintS.Render("no claude_pct in state.json yet")
 	}
 	govBox := ckLabelS.Render("GOVERNOR · claude_pct") + "\n\n " + ckBar(m.claudePct, 20) +
-		ckDimS.Render(fmt.Sprintf("  %d%%", m.claudePct)) + "\n " +
-		ckDimS.Render("band ") + bc.Render(band) + "\n " +
-		ckFaintS.Render("first-passage → 80%: ") + ckCheapS.Render("low")
+		ckDimS.Render(fmt.Sprintf("  %d%%", m.claudePct)) + "\n " + govLine
 
 	right := lipgloss.JoinVertical(lipgloss.Left,
-		ckBoxS.Render(saveBox), ckBoxS.Render(confBox), ckBoxS.Render(govBox))
+		ckBoxS.Render(spendBox), ckBoxS.Render(confBox), ckBoxS.Render(govBox))
 	row := lipgloss.JoinHorizontal(lipgloss.Top, ckBoxS.Render(fleet.String()), " ", right)
 	return lipgloss.NewStyle().Width(w).Height(h).Render(row)
+}
+
+// trustSummary renders real SPRT statistics, or says plainly that there are
+// none yet. It never invents a confidence figure.
+func (m Cockpit) trustSummary() string {
+	runs, err := trust.LoadRuns(trust.DefaultLogPath())
+	if err != nil || len(runs) == 0 {
+		return ckFaintS.Render("no SPRT runs recorded") + "\n " +
+			ckDimS.Render("`hyctl dispatch --confidence 0.95 …`")
+	}
+	st := trust.Aggregate(runs, 5)
+	return lipgloss.NewStyle().Foreground(ckCyan).Bold(true).
+		Render(fmt.Sprintf("%.2f", st.MeanFinalConf)) +
+		ckDimS.Render(fmt.Sprintf("  mean over %d run%s", st.Runs, plural(st.Runs))) + "\n " +
+		ckBar(int(st.MeanFinalConf*100), 20) + "\n " +
+		ckDimS.Render(fmt.Sprintf("%.1f samples · %.0f%% auto-cleared", st.MeanSamples, st.AutoClearedPct))
 }
 
 // ── view 2 · agent tree ──────────────────────────────────────────────────────
@@ -315,46 +340,6 @@ func ckSnippet(enum string) (string, []string) {
 }
 
 // ── sparklines + colour ramps ────────────────────────────────────────────────
-
-var ckBlocks = []rune("▁▂▃▄▅▆▇█")
-
-// ckSparkVals produces n deterministic values in [0,1] from a seed (LCG) — a
-// stable but lively pulse trace per head.
-func ckSparkVals(seed, n int) []float64 {
-	s := uint32(seed)*2654435761 | 1
-	out := make([]float64, n)
-	for i := range out {
-		s = s*1664525 + 1013904223
-		out[i] = float64(s>>24) / 255.0
-	}
-	return out
-}
-
-// ckSparkStr maps [0,1] values to block glyphs ▁▂▃▄▅▆▇█.
-func ckSparkStr(vals []float64) string {
-	var b strings.Builder
-	for _, x := range vals {
-		idx := int(x * float64(len(ckBlocks)))
-		if idx >= len(ckBlocks) {
-			idx = len(ckBlocks) - 1
-		}
-		if idx < 0 {
-			idx = 0
-		}
-		b.WriteRune(ckBlocks[idx])
-	}
-	return b.String()
-}
-
-// ckHashSeed is a small FNV-1a hash used only to seed sparklines.
-func ckHashSeed(s string) int {
-	h := uint32(2166136261)
-	for _, r := range s {
-		h ^= uint32(r)
-		h *= 16777619
-	}
-	return int(h & 0x7fffffff)
-}
 
 // ckCostColor ramps the cost/tier scale: T1 (expensive) red → mid amber →
 // T10 (cheap, local) green.
