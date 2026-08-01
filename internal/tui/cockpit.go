@@ -65,6 +65,7 @@ var ckFileRe = regexp.MustCompile(`[\w/]+\.(go|ts|js|py|rs|java)`)
 // ── model ───────────────────────────────────────────────────────────────────────
 
 type ckHead struct {
+	id    string
 	name  string
 	tier  int
 	price float64
@@ -118,6 +119,7 @@ func ckHeadsFrom(heads []provider.Head, pr *pricing.DB) []ckHead {
 			price = pr.EstimateCost(tier, 1000, 0)
 		}
 		out = append(out, ckHead{
+			id:    h.ID,
 			name:  h.Name,
 			tier:  tier,
 			price: price,
@@ -152,7 +154,8 @@ type Cockpit struct {
 	mode      string
 	runs      int
 	claudePct int
-	spend     float64 // today's real estimated spend, from cost.jsonl
+	spend     float64   // today's real estimated spend, from cost.jsonl
+	metrics   ckMetrics // real latency/savings/blast/calibration, loaded once
 
 	// live code panel (chat+code view): a snippet streamed line-by-line.
 	codeLang  string
@@ -189,6 +192,7 @@ func NewCockpit() Cockpit {
 		claudePct: pct,
 		heads:     heads,
 		spend:     ckSpendToday(),
+		metrics:   ckLoadMetrics(pr),
 	}
 	m.runID, m.runLive, m.treeRows = ckLoadTree()
 
@@ -402,13 +406,26 @@ func (m Cockpit) run(task string) Cockpit {
 	}
 	m.log = append(m.log, line)
 
-	// Confidence and blast radius are deliberately absent. The cockpit used to
-	// print an invented "conf 0.98 / target 0.95 · SPRT accept" and a literal
-	// "κ=3.1 ⚠ 12 dependents" for any prompt containing a file path, with no
-	// trust or graph code involved. Both are real Hydra capabilities
-	// (`--confidence`, `--file`) but reach them via the CLI until the cockpit
-	// executes dispatches for real — a fabricated number is worse than none,
-	// especially since --snapshot publishes these frames (#189).
+	// Real blast radius, walked from graph.json, when the prompt names a file
+	// that is actually in the graph. This replaced a literal "κ=3.1 ⚠ 12
+	// dependents" printed for any prompt containing a file path (#193).
+	if f := ckFileRe.FindString(task); f != "" {
+		if radius, deps, kappa, ok := m.metrics.ckBlastFor(f); ok {
+			risk := ckCheapS
+			if kappa >= 2 {
+				risk = ckExpS
+			}
+			m.log = append(m.log, ckDimS.Render("  blast  ")+
+				risk.Render(fmt.Sprintf("κ=%.1f", kappa))+
+				ckDimS.Render(fmt.Sprintf("  %d dependent%s · radius %.2f×  → %s",
+					deps, plural(deps), radius, truncate(f, 40))))
+		}
+	}
+
+	// Confidence is still absent: it requires actually running the SPRT
+	// ensemble, which the cockpit cannot do until it executes dispatches. Blast
+	// radius above is different — it is a static graph property, computable
+	// without running anything.
 	m.log = append(m.log, ckDimS.Render("  plan   ")+
 		ckDimS.Render("routing preview only — the cockpit does not execute dispatches yet"))
 
@@ -650,8 +667,6 @@ func containsAny(s string, subs ...string) bool {
 	}
 	return false
 }
-
-func hasFilePath(s string) bool { return ckFileRe.MatchString(s) }
 
 func truncate(s string, n int) string {
 	if len(s) <= n {
