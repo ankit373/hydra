@@ -84,22 +84,44 @@ func (m Cockpit) dash(w, h int) string {
 		if !hd.up {
 			st = ckExpS.Render("● down")
 		}
-		name := lipgloss.NewStyle().Foreground(hd.color).Width(18).Render(truncate(hd.name, 18))
-		price := ckDimS.Render("       —")
-		if hd.price > 0 {
-			price = ckDimS.Render(fmt.Sprintf(" ~$%.4f", hd.price))
+		name := lipgloss.NewStyle().Foreground(hd.color).Width(15).Render(truncate(hd.name, 15))
+
+		// Real latency history from cost.jsonl wall_ms — "—" for a head that
+		// has never run, rather than a zero-filled chart.
+		series, lastMS := m.metrics.ckSeriesFor(hd.name, hd.id)
+		spark := lipgloss.NewStyle().Foreground(hd.color).
+			Render(fmt.Sprintf("%-*s", ckSparkWidth, ckSpark(series)))
+		lat := ckDimS.Render(fmt.Sprintf("%7s", ckFmtMS(lastMS)))
+
+		// Calibrated diagnosticity (nats) where the trust ledger has data.
+		// Keyed by head ID: trust records sources as ids, not display names.
+		diag := ckFaintS.Render("   —")
+		if d := m.metrics.ckDiagnosticity(hd.id, ""); d > 0 {
+			diag = ckCyanS.Render(fmt.Sprintf("%4.2f", d))
 		}
+
 		fleet.WriteString(" " + name + " " + st +
-			ckDimS.Render(fmt.Sprintf(" T%-2d", hd.tier)) + price + "\n")
+			ckDimS.Render(fmt.Sprintf(" T%-2d ", hd.tier)) + spark + lat + " " + diag + "\n")
 	}
-	fleet.WriteString("\n" + ckDimS.Render(fmt.Sprintf("%d head%s · mode ",
+	fleet.WriteString("\n" + ckFaintS.Render(fmt.Sprintf(" %-16s %-6s %-4s %-*s %7s %4s",
+		"", "", "", ckSparkWidth, "latency", "last", "D")) + "\n")
+	fleet.WriteString(ckDimS.Render(fmt.Sprintf("%d head%s · mode ",
 		len(m.heads), plural(len(m.heads)))) + ckCyanS.Render(m.mode))
 
-	// Real spend, from cost.jsonl.
+	// Real spend and real savings, both from cost.jsonl rows priced through the
+	// same pricing DB — so the comparison is like-for-like.
 	spendBox := ckLabelS.Render("SPEND · today") + "\n\n " +
 		lipgloss.NewStyle().Foreground(ckCheap).Bold(true).Render(fmt.Sprintf("$%.4f", m.spend)) + "\n " +
-		ckFaintS.Render("estimated, not billed") + "\n " +
-		ckDimS.Render("`hyctl cost` for the breakdown")
+		ckFaintS.Render("estimated, not billed")
+	if m.metrics.baseUSD > 0 {
+		pct := 0
+		if m.metrics.baseUSD > 0 {
+			pct = int(m.metrics.savedUSD / m.metrics.baseUSD * 100)
+		}
+		spendBox += "\n\n " + ckDimS.Render("saved vs all-T1  ") +
+			ckCheapS.Render(fmt.Sprintf("$%.4f", m.metrics.savedUSD)) + "\n " +
+			ckBar(pct, 20) + ckDimS.Render(fmt.Sprintf("  %d%%", pct))
+	}
 
 	// Real calibration stats, from trust.jsonl.
 	confBox := ckLabelS.Render("TRUST · calibration") + "\n\n " + m.trustSummary()
