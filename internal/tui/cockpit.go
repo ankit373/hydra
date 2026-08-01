@@ -27,6 +27,8 @@ import (
 	"github.com/ankit373/hydra/internal/probe"
 	"github.com/ankit373/hydra/internal/provider"
 	"github.com/ankit373/hydra/internal/rank"
+	"github.com/ankit373/hydra/internal/runlog"
+	"github.com/ankit373/hydra/internal/tree"
 )
 
 // ── palette (ck-prefixed to avoid clashing with splash.go/init.go) ──────────────
@@ -158,8 +160,11 @@ type Cockpit struct {
 	codeShown int
 	codeGen   int // generation guard so a new run cancels stale tick loops
 
-	// agent-tree view selection cursor.
-	treeSel int
+	// agent-tree view: the reconstructed run and its flattened rows.
+	treeSel  int
+	runID    string
+	runLive  bool
+	treeRows []tree.Row
 }
 
 // NewCockpit builds the cockpit from the machine's real state: heads from a
@@ -185,6 +190,7 @@ func NewCockpit() Cockpit {
 		heads:     heads,
 		spend:     ckSpendToday(),
 	}
+	m.runID, m.runLive, m.treeRows = ckLoadTree()
 
 	switch len(heads) {
 	case 0:
@@ -263,7 +269,7 @@ func (m Cockpit) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.treeSel--
 			}
 		case tea.KeyDown:
-			if m.view == 2 && m.treeSel < len(ckTree)-1 {
+			if m.view == 2 && m.treeSel < len(m.treeRows)-1 {
 				m.treeSel++
 			}
 		case tea.KeyEnter:
@@ -670,4 +676,26 @@ func (m Cockpit) headSummary() string {
 	}
 	s := "heads: " + strings.Join(names, "·")
 	return truncate(s, 46)
+}
+
+// ckLoadTree reconstructs the run to display: the live one if a heartbeat is
+// fresh, else the most recent. Returns no rows when nothing has been recorded,
+// which the view renders as an honest empty state rather than an example (#191).
+func ckLoadTree() (runID string, live bool, rows []tree.Row) {
+	if ids, err := runlog.LiveRuns(); err == nil && len(ids) > 0 {
+		runID, live = ids[0], true
+	} else {
+		ids, err := runlog.Runs()
+		if err != nil || len(ids) == 0 {
+			return "", false, nil
+		}
+		runID = ids[0]
+	}
+
+	events, err := runlog.Load(runID)
+	if err != nil || len(events) == 0 {
+		return runID, live, nil
+	}
+	t, _ := tree.Reconstruct(events)
+	return runID, live, t.Rows()
 }
