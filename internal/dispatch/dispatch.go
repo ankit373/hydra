@@ -26,6 +26,7 @@ import (
 	"github.com/ankit373/hydra/internal/provider"
 	"github.com/ankit373/hydra/internal/rank"
 	"github.com/ankit373/hydra/internal/runid"
+	"github.com/ankit373/hydra/internal/runlog"
 )
 
 // Options controls dispatch behaviour.
@@ -145,8 +146,20 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		return &Result{Head: candidates[0], Fallbacks: candidates[1:]}, nil
 	}
 
+	// The run log records the shape of the run — which head was picked, when,
+	// and how it ended — none of which the cost/dispatch outcome rows capture.
+	// Observability must never fail the work, so every append error is ignored.
+	rl := runlog.New(runid.ResolveRun(opts.RunID))
+	taskID := runid.ResolveTask(opts.TaskID)
+
 	var lastErr error
 	for i, h := range candidates {
+		_ = rl.Append(runlog.Event{
+			Kind: runlog.KindHeadSelected, TaskID: taskID,
+			Head: h.ID, Model: h.Name, Tier: rank.UITier(h),
+			Detail: fmt.Sprintf("candidate %d of %d", i+1, len(candidates)),
+		})
+		started := time.Now()
 		exec := executor.For(h)
 		resp, err := exec.Execute(ctx, executor.Request{
 			Prompt:    prompt,
@@ -156,9 +169,23 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		})
 		if err != nil {
 			lastErr = err
+			// A failed candidate is part of the run's shape: it is why the
+			// fallback chain advanced, and nothing else records it.
+			_ = rl.Append(runlog.Event{
+				Kind: runlog.KindError, TaskID: taskID,
+				Head: h.ID, Model: h.Name, Tier: rank.UITier(h),
+				Status: "failed", DurationMS: time.Since(started).Milliseconds(),
+				Detail: truncate(err.Error(), 200),
+			})
 			continue
 		}
 		r := &Result{Output: resp.Output, Head: h, Retries: i, Response: resp}
+		_ = rl.Append(runlog.Event{
+			Kind: runlog.KindDispatchFinished, TaskID: taskID,
+			Head: h.ID, Model: resp.Model, Tier: rank.UITier(h), Status: "ok",
+			CostUSD:    d.estimateCost(rank.UITier(h), resp.InputTokens, resp.OutputTokens),
+			DurationMS: resp.Duration.Milliseconds(),
+		})
 		_ = d.logDispatch(r, prompt, opts)
 		_ = d.writeHandoff(r, prompt)
 		d.recordBudget(r)
