@@ -16,6 +16,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/ankit373/hydra/internal/budget"
+	"github.com/ankit373/hydra/internal/tree"
 	"github.com/ankit373/hydra/internal/trust"
 )
 
@@ -147,84 +148,129 @@ func (m Cockpit) trustSummary() string {
 
 // ── view 2 · agent tree ──────────────────────────────────────────────────────
 
-// ckTreeNode is one node in the fixed example supervision tree. prefix carries
-// the box-drawing indent so the flat slice renders as a tree.
-type ckTreeNode struct {
-	prefix string
-	name   string
-	model  string
-	tier   int
-	state  string // returned | running | await | pending | failed
-	conf   float64
-	instr  string
-}
-
-// ckTree is a small, representative run: the orchestrator delegates key
-// rotation, tests, and docs; token-rotation itself fans out to two workers.
-var ckTree = []ckTreeNode{
-	{"", "orchestrator", "cortex · you", 1, "await", 0.71, "Coordinate: rotate signing key, add tests, update docs — target 0.95"},
-	{"├─ ", "design", "agy · claude", 3, "returned", 0.93, "Design a safe key-rotation; check blast radius κ=3.1 (12 dependents)"},
-	{"├─ ", "token-rotation", "agy · claude", 3, "running", 0.88, "Rotate signing key in internal/auth/token.go without breaking live tokens"},
-	{"│  ├─ ", "worker-1", "gemini pro", 6, "returned", 0.91, "Implement RotateSigningKey(): stage the new key, retire the old one"},
-	{"│  └─ ", "worker-2", "gemini flash", 8, "running", 0.62, "Update callers to reference the new active key ID"},
-	{"├─ ", "tests", "gemini pro", 6, "pending", 0.0, "Write rotation tests; verify pre-rotation tokens still verify"},
-	{"└─ ", "docs", "qwen · local", 10, "returned", 0.87, "Document the key-rotation runbook + rollback steps"},
-}
-
-// tree renders the supervision tree with a selection cursor and a detail line
-// for the highlighted node. Ownership edges are solid (─); the A2A handoff is
-// drawn dashed (┄) as an overlay note.
+// tree renders the supervision tree for a real run, reconstructed from the
+// per-run event log via internal/tree.
+//
+// It replaced a hand-authored 7-node literal in which each row carried its own
+// box-drawing indent as a string field — a picture of a tree rather than a
+// tree, fixed at one shape and describing a run that never happened (#191).
+// Prefixes are now derived from depth and last-child position, so arbitrary
+// depth and branching render correctly.
+//
+// Ownership edges are solid (─); A2A handoffs are a dashed overlay (┄), kept
+// visually distinct because they are a different relation, not a parent.
 func (m Cockpit) tree(w, h int) string {
-	sel := m.treeSel
-	if sel < 0 || sel >= len(ckTree) {
-		sel = 0
-	}
 	var b strings.Builder
 	b.WriteString(ckLabelS.Render("AGENT TREE · supervision") +
 		ckDimS.Render("   ownership ") + ckFaintS.Render("─") +
-		ckDimS.Render("   A2A ") + lipgloss.NewStyle().Foreground(ckMagenta).Render("┄") + "\n\n")
+		ckDimS.Render("   A2A ") + lipgloss.NewStyle().Foreground(ckMagenta).Render("┄"))
 
-	for i, n := range ckTree {
+	if m.runID != "" {
+		live := ""
+		if m.runLive {
+			live = ckCheapS.Render("  ● live")
+		}
+		b.WriteString(ckFaintS.Render("   run "+truncate(m.runID, 24)) + live)
+	}
+	b.WriteString("\n\n")
+
+	rows := m.treeRows
+	if len(rows) == 0 {
+		// No fictional fallback: say there is nothing and how to make some.
+		b.WriteString(ckFaintS.Render(" no runs recorded yet") + "\n\n" +
+			ckDimS.Render(" Run a dispatch to populate this view:") + "\n" +
+			ckDimS.Render("   hyctl dispatch \"add a retry to the token refresher\"") + "\n\n" +
+			ckFaintS.Render(" Events are written to ~/.hydra/logs/runs/<run_id>.jsonl"))
+		return lipgloss.NewStyle().Width(w).Height(h).Padding(0, 1).Render(b.String())
+	}
+
+	sel := m.treeSel
+	if sel < 0 || sel >= len(rows) {
+		sel = 0
+	}
+
+	for i, r := range rows {
 		marker := "  "
 		if i == sel {
 			marker = ckAquaS.Render("▸ ")
 		}
-		label := lipgloss.NewStyle().Foreground(ckCostColor(n.tier)).Bold(i == sel).Render(n.name)
-		conf := ckDimS.Render("conf ") + ckCyanS.Render(fmt.Sprintf("%.2f", n.conf))
-		if n.conf == 0 {
-			conf = ckDimS.Render("conf —")
+		n := r.Node
+		label := lipgloss.NewStyle().Foreground(ckCostColor(n.Tier)).Bold(i == sel).
+			Render(truncate(nodeLabel(n), 28))
+
+		line := marker + ckFaintS.Render(treePrefix(r)) + label +
+			ckDimS.Render(fmt.Sprintf("  T%-2d", n.Tier))
+		if n.Model != "" {
+			line += ckDimS.Render("  " + truncate(n.Model, 20))
 		}
-		b.WriteString(marker + ckFaintS.Render(n.prefix) + label + "  " +
-			ckDimS.Render(fmt.Sprintf("T%-2d", n.tier)) + "  " +
-			ckDimS.Render(n.model) + ckFaintS.Render(" · ") +
-			ckStateStyle(n.state).Render(n.state) + ckFaintS.Render(" · ") + conf + "\n")
+		line += ckFaintS.Render(" · ") + ckStateStyle(string(n.State)).Render(string(n.State))
+		if n.CostUSD > 0 {
+			line += ckFaintS.Render(" · ") + ckDimS.Render(fmt.Sprintf("$%.4f", n.CostUSD))
+		}
+		if len(n.Handoffs) > 0 {
+			line += lipgloss.NewStyle().Foreground(ckMagenta).
+				Render(fmt.Sprintf("  ┄%d", len(n.Handoffs)))
+		}
+		b.WriteString(line + "\n")
 	}
 
-	b.WriteString("\n     " + lipgloss.NewStyle().Foreground(ckMagenta).Render("┄┄▶ A2A") +
-		ckDimS.Render("  token-rotation → tests   ") +
-		ckFaintS.Render("(handoff: files resolved +1 · context compacted)") + "\n")
-
-	// selected-node detail
-	s := ckTree[sel]
+	// Selected-node detail.
+	s := rows[sel].Node
 	detail := ckLabelS.Render("SELECTED") + "  " +
-		lipgloss.NewStyle().Foreground(ckCostColor(s.tier)).Bold(true).Render(s.name) +
-		ckDimS.Render(fmt.Sprintf(" · T%d · %s · ", s.tier, s.model)) +
-		ckStateStyle(s.state).Render(s.state)
-	instrW := w - 18
-	if instrW < 10 {
-		instrW = 10
+		lipgloss.NewStyle().Foreground(ckCostColor(s.Tier)).Bold(true).Render(nodeLabel(s)) +
+		ckDimS.Render(fmt.Sprintf(" · T%d", s.Tier))
+	if s.Model != "" {
+		detail += ckDimS.Render(" · " + s.Model)
 	}
-	instr := ckDimS.Render("instruction  ") + ckInkS.Render(truncate(s.instr, instrW))
-	var confLine string
-	if s.conf > 0 {
-		confLine = ckDimS.Render("confidence   ") + ckBar(int(s.conf*100), 20) +
-			ckCyanS.Render(fmt.Sprintf("  %.2f", s.conf)) + ckDimS.Render(" / target 0.95")
-	} else {
-		confLine = ckDimS.Render("confidence   ") + ckFaintS.Render("pending — not yet dispatched")
+	detail += ckDimS.Render(" · ") + ckStateStyle(string(s.State)).Render(string(s.State))
+
+	lines := []string{b.String(), detail}
+
+	if s.DurationMS > 0 {
+		lines = append(lines, ckDimS.Render("duration     ")+
+			ckInkS.Render(fmt.Sprintf("%dms", s.DurationMS)))
+	}
+	if s.Detail != "" {
+		dw := w - 18
+		if dw < 10 {
+			dw = 10
+		}
+		lines = append(lines, ckDimS.Render("detail       ")+ckInkS.Render(truncate(s.Detail, dw)))
+	}
+	// Confidence is shown only when one was actually recorded — never invented.
+	if s.Confidence > 0 {
+		lines = append(lines, ckDimS.Render("confidence   ")+ckBar(int(s.Confidence*100), 20)+
+			ckCyanS.Render(fmt.Sprintf("  %.2f", s.Confidence)))
+	}
+	for _, hf := range s.Handoffs {
+		lines = append(lines, lipgloss.NewStyle().Foreground(ckMagenta).Render("┄┄▶ A2A      ")+
+			ckDimS.Render(hf.To+"  ")+ckFaintS.Render(truncate(hf.Detail, 40)))
 	}
 
-	body := b.String() + "\n" + detail + "\n" + instr + "\n" + confLine
-	return lipgloss.NewStyle().Width(w).Height(h).Padding(0, 1).Render(body)
+	return lipgloss.NewStyle().Width(w).Height(h).Padding(0, 1).
+		Render(strings.Join(lines, "\n"))
+}
+
+// nodeLabel prefers a human name over an opaque id.
+func nodeLabel(n *tree.Node) string {
+	if n.Head != "" {
+		return n.Head
+	}
+	return n.ID
+}
+
+// treePrefix builds the box-drawing indent from a row's depth and last-child
+// flag. The old implementation stored this string per node, which is why it
+// only ever rendered one fixed shape.
+func treePrefix(r tree.Row) string {
+	if r.Depth == 0 {
+		return ""
+	}
+	branch := "├─ "
+	if r.Last {
+		branch = "└─ "
+	}
+	return strings.Repeat("│  ", r.Depth-1) + branch
 }
 
 // ── syntax highlighter ───────────────────────────────────────────────────────
