@@ -57,7 +57,12 @@ func enrichCosts(attempts []Attempt, pr PricingReader) {
 
 // logAttempts writes one cost.jsonl entry per attempt that actually executed
 // (StatusOK or StatusFailed — not Pending/Canceled).
-func logAttempts(result *SwarmResult, promptPreview string) {
+//
+// It takes the attempts and mode directly rather than a *SwarmResult so the SPRT
+// path can share it: RunSPRT produces attempts without ever building a
+// SwarmResult, and without this its ensemble spend never reached cost.jsonl at
+// all — only the aggregate trust.jsonl row (#175).
+func logAttempts(attempts []Attempt, mode SwarmMode, promptPreview string) {
 	logDir := filepath.Join(config.Dir(), "logs")
 	_ = os.MkdirAll(logDir, 0o700)
 	path := filepath.Join(logDir, "cost.jsonl")
@@ -71,7 +76,7 @@ func logAttempts(result *SwarmResult, promptPreview string) {
 	runID := os.Getenv("HYDRA_RUN_ID")
 	taskID := os.Getenv("HYDRA_TASK_ID")
 
-	for _, a := range result.Attempts {
+	for _, a := range attempts {
 		if a.Status == StatusPending || a.Status == StatusCanceled {
 			continue
 		}
@@ -90,7 +95,7 @@ func logAttempts(result *SwarmResult, promptPreview string) {
 			"tokens_source":   tokensSource,
 			"cost_source":     costSrc,
 			"source":          legacySource,
-			"swarm_mode":      string(result.Mode),
+			"swarm_mode":      string(mode),
 			"swarm_winner":    a.Status == StatusOK && a.Rank == 1,
 			"task_id":         taskID,
 			"run_id":          runID,
