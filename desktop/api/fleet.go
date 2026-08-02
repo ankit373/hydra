@@ -96,7 +96,11 @@ func (a *API) GetFleet() (*Fleet, error) {
 		return nil, err
 	}
 
-	f := &Fleet{GroupThreshold: GroupThreshold}
+	// Runs is initialised rather than left nil: a nil slice marshals to null,
+	// and types.ts declares runs as Run[], so the type would be lying to every
+	// future caller on a machine that has never dispatched (#230). Session
+	// initialises its slices for the same reason.
+	f := &Fleet{GroupThreshold: GroupThreshold, Runs: []Run{}}
 	if len(ids) == 0 {
 		return f, nil
 	}
