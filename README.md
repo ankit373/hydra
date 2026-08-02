@@ -478,6 +478,9 @@ hyctl context entropy <file|->          # signal density + useful tokens + compa
 # Verification & accountability
 hyctl oracle verify go test ./... --source verifier:go-test  # verifier as evidence + its LLR
 hyctl mcp check <tool> --agent A --resource R --action write  # gate + record an access
+hyctl mcp check <tool> --content "$DATA" --action network      # PII auto-classified; policy can deny egress
+hyctl mcp check <tool> --params '{"amount":500}'               # bind a hash of the params to the decision
+hyctl mcp verify <tool> --resource R --params '{"amount":500}' # prove executed params == approved params
 hyctl mcp log --denied                  # what got blocked
 hyctl mcp report                        # allowed/denied by agent and tool
 
@@ -608,12 +611,43 @@ hydra/
 │   ├── review/                  # Code review / approve / reject / QA
 │   ├── util/                    # Shared utilities (bounded Accumulator, 33 MB cap)
 │   ├── sysinfo/                 # Hardware detection + 7-day memory history
+│   ├── runlog/                  # Per-run event log (~/.hydra/logs/runs/) + liveness heartbeat + edit snapshots
+│   ├── tree/                    # Reconstructs a run: supervision tree + timeline, framework-free
+│   ├── runid/                   # Run/task identity — correlates every log a run produces
+│   ├── a2a/                     # Agent handoffs with vector clocks (causal ordering + conflict detection)
+│   ├── graph/                   # Code dependency graph → blast radius + percolation κ
+│   ├── ledger/                  # Local MCP accountability ledger + policy gate
+│   ├── oracle/                  # Verification oracles (tests/compile/lint) as calibrated evidence
+│   ├── optimal/ · entropy/      # Optimal parallel-agent count · context signal density
 │   ├── build/ · update/         # Version stamping + startup update check
-│   └── tui/                     # Bubbletea init wizard + install guide
+│   └── tui/                     # Bubbletea cockpit + init wizard
+├── desktop/                     # Desktop app (own Go module) — Wails v2 + React/TS
+│   ├── api/                     # Go backend: Dashboard · Fleet · Session · Code · chat (no Wails imports)
+│   └── frontend/                # React views over the same logs the CLI writes
 ├── registry/                    # routing.yaml (the enum) · models · domains · pricing · policy
 ├── docs/                        # GitHub Pages (hydra.uvansa.com) — index.html, llms.txt
 └── Formula/hydra.rb             # Homebrew formula (auto-updated by GoReleaser)
 ```
+
+### The desktop app
+
+A native window over the same engine: **Dashboard** (spend, governor pressure, trust record),
+**Fleet** (runs in flight and the agents inside them), **Session** (one run's timeline, plus a
+layered graph when it fanned out), and **Code** (the file edits a run made, as diffs) — over a
+persistent chat dock.
+
+It reads `~/.hydra/logs/` directly. No daemon, no telemetry, and its numbers are the CLI's numbers:
+Dashboard totals are asserted equal to `hyctl cost` and `hyctl stats` for the same data.
+
+**Built, not yet packaged** — there is no installer or signed build today:
+
+```bash
+go install github.com/wailsapp/wails/v2/cmd/wails@latest
+cd desktop && wails build                   # → desktop/build/bin/
+```
+
+`desktop/` is a separate Go module on purpose: Wails takes the root module from 25 requires to 50,
+and `hyctl` ships via brew/npm/pip/curl and never links a webview.
 
 ---
 

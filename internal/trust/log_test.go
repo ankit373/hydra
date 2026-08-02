@@ -6,11 +6,50 @@ import (
 	"math"
 	"path/filepath"
 	"testing"
+
+	"github.com/ankit373/hydra/internal/testutil"
 )
 
+func TestLogRun_StampsConfigBreadcrumbWhenBlank(t *testing.T) {
+	home := t.TempDir()
+	testutil.WriteRegistry(t, home)
+	t.Setenv("HYDRA_HOME", home)
+
+	path := filepath.Join(t.TempDir(), "trust.jsonl")
+	if err := LogRun(path, RunLog{TaskHash: "abc"}); err != nil {
+		t.Fatal(err)
+	}
+	runs, err := LoadRuns(path)
+	if err != nil || len(runs) != 1 {
+		t.Fatalf("LoadRuns = %d runs, err %v", len(runs), err)
+	}
+	if runs[0].Config == "" {
+		t.Error("LogRun should stamp Config from config.Breadcrumb when blank and a registry is available")
+	}
+}
+
+func TestLogRun_ConfigOmittedGracefullyWithoutRegistry(t *testing.T) {
+	t.Setenv("HYDRA_HOME", t.TempDir()) // no registry/ present
+
+	path := filepath.Join(t.TempDir(), "trust.jsonl")
+	if err := LogRun(path, RunLog{TaskHash: "abc"}); err != nil {
+		t.Fatalf("LogRun should not fail when the breadcrumb is unavailable: %v", err)
+	}
+	runs, _ := LoadRuns(path)
+	if len(runs) != 1 || runs[0].Config != "" {
+		t.Errorf("Config should stay empty when registry files are unreadable, got %+v", runs)
+	}
+}
+
 func TestTaskHash_StableAndDistinct(t *testing.T) {
-	if TaskHash("hello") != TaskHash("hello") {
-		t.Error("TaskHash not stable for identical input")
+	// Repeat rather than compare one call to itself: TaskHash must not pick up
+	// map-iteration order or any other per-call nondeterminism, and a single
+	// self-comparison would not catch that (it also trips staticcheck SA4000).
+	want := TaskHash("hello")
+	for i := range 100 {
+		if got := TaskHash("hello"); got != want {
+			t.Fatalf("TaskHash not stable: call %d gave %q, want %q", i, got, want)
+		}
 	}
 	if TaskHash("hello") == TaskHash("world") {
 		t.Error("TaskHash collided on distinct inputs")

@@ -16,6 +16,7 @@
 
     {"id": "env/anthropic",  "name": "Anthropic API",      "provider": "anthropic",   "capScore": 90},
     {"id": "env/openai",     "name": "OpenAI API",         "provider": "openai",      "capScore": 85},
+    {"id": "env/openrouter", "name": "OpenRouter API",     "provider": "openrouter",  "capScore": 85},
     {"id": "env/google",     "name": "Google AI API",      "provider": "google",      "capScore": 78},
     {"id": "env/xai",        "name": "xAI API",            "provider": "xai",         "capScore": 76},
     {"id": "env/groq",       "name": "Groq API",           "provider": "groq",        "capScore": 72},

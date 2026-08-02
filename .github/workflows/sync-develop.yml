@@ -27,7 +27,7 @@ jobs:
     name: Open back-merge PR (main → develop)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -42,6 +42,9 @@ jobs:
           # and only adds what main has that develop lacks (release/hotfix commits).
           git checkout -B chore/back-merge-main origin/develop
           if ! git merge origin/main --no-edit; then
+            # Record *which* files conflicted before aborting throws the state
+            # away — "there was a conflict" is not actionable on its own.
+            git diff --name-only --diff-filter=U > /tmp/back-merge-conflicts.txt || true
             git merge --abort
             echo "conflict=true" >> "$GITHUB_OUTPUT"
             exit 0
@@ -73,8 +76,15 @@ jobs:
         if: steps.prep.outputs.nothing == 'true'
         run: echo "develop already contains everything on main — no back-merge needed."
 
+      # This step FAILS the job on purpose. It used to warn and exit 0, which
+      # made a back-merge that did not happen look identical to one that did —
+      # the v1.0.1 release's back-merge conflicted, reported green, and left
+      # develop claiming 1.0.0 for eight days (#215). A sync that silently does
+      # not sync is worse than no sync at all, because it is trusted.
       - name: Conflict — manual back-merge required
         if: steps.prep.outputs.conflict == 'true'
         run: |
-          echo "::warning title=Back-merge conflict::main → develop has conflicts; open the back-merge PR manually and resolve."
-          exit 0
+          echo "::error title=Back-merge conflict::main → develop conflicts; develop is now behind main. Resolve manually — see the file list below."
+          echo "Conflicting files:"
+          cat /tmp/back-merge-conflicts.txt 2>/dev/null || echo "  (list unavailable)"
+          exit 1

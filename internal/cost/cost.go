@@ -7,6 +7,7 @@ package cost
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"os"
@@ -17,6 +18,11 @@ import (
 
 	"github.com/ankit373/hydra/internal/config"
 )
+
+// ErrNoLog reports that cost.jsonl does not exist — nothing has dispatched yet.
+// It is distinct from a read failure so a caller can tell "never ran" (render an
+// empty state) from "cannot read" (surface the error). Match it with errors.Is.
+var ErrNoLog = errors.New("no cost log")
 
 // Row is one entry in cost.jsonl.
 type Row struct {
@@ -37,6 +43,7 @@ type Row struct {
 	RunID          string  `json:"run_id"`
 	SwarmMode      string  `json:"swarm_mode"`
 	SwarmWinner    bool    `json:"swarm_winner"`
+	Config         string  `json:"config,omitempty"` // deployment-identity breadcrumb (config.Breadcrumb)
 }
 
 // Totals is an aggregate summary.
@@ -489,7 +496,7 @@ func loadRows(path string) ([]Row, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("no cost log at %s — has anything dispatched yet?", path)
+			return nil, fmt.Errorf("%w at %s — has anything dispatched yet?", ErrNoLog, path)
 		}
 		return nil, err
 	}

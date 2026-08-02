@@ -5,6 +5,7 @@ package swarm
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/ankit373/hydra/internal/provider"
@@ -188,6 +189,51 @@ func TestIDSelector(t *testing.T) {
 
 	if _, err := (&IDSelector{}).Select(all, Options{HeadIDs: []string{"h1", "missing"}}); err == nil {
 		t.Error("missing head ID should error")
+	}
+}
+
+// An explicitly pinned list must survive the default cap — otherwise pinning
+// heads to escape the top-N CapScore crowding silently gets trimmed back to N.
+func TestIDSelector_DefaultCapDoesNotTrimExplicitPins(t *testing.T) {
+	var all []provider.Head
+	var ids []string
+	for i := 0; i < defaultMaxHeads+2; i++ {
+		id := fmt.Sprintf("h%d", i)
+		all = append(all, registryHead(id, id, 50))
+		ids = append(ids, id)
+	}
+
+	got, err := (&IDSelector{}).Select(all, Options{HeadIDs: ids}) // MaxHeads unset
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != len(ids) {
+		t.Errorf("pinned %d heads, got %d — the default cap trimmed an explicit list", len(ids), len(got))
+	}
+
+	// An explicit MaxHeads is a deliberate instruction and must still cap.
+	got, err = (&IDSelector{}).Select(all, Options{HeadIDs: ids, MaxHeads: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 {
+		t.Errorf("explicit MaxHeads=2 should cap to 2, got %d", len(got))
+	}
+}
+
+// The default cap must still apply when heads were NOT explicitly pinned.
+func TestCapScoreSelector_DefaultCapStillApplies(t *testing.T) {
+	var all []provider.Head
+	for i := 0; i < defaultMaxHeads+3; i++ {
+		id := fmt.Sprintf("c%d", i)
+		all = append(all, registryHead(id, id, 50))
+	}
+	got, err := (&CapScoreSelector{}).Select(all, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != defaultMaxHeads {
+		t.Errorf("unpinned selection should cap at %d, got %d", defaultMaxHeads, len(got))
 	}
 }
 

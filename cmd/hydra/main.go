@@ -32,6 +32,8 @@ import (
 	"github.com/ankit373/hydra/internal/pricing"
 	"github.com/ankit373/hydra/internal/probe"
 	"github.com/ankit373/hydra/internal/review"
+	"github.com/ankit373/hydra/internal/runid"
+	"github.com/ankit373/hydra/internal/runlog"
 	"github.com/ankit373/hydra/internal/swarm"
 	"github.com/ankit373/hydra/internal/trust"
 	"github.com/ankit373/hydra/internal/tui"
@@ -109,8 +111,18 @@ func cmdTui() *cobra.Command {
 		Use:   "tui",
 		Short: "Interactive cockpit — chat, route work, and watch spend live",
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			viewSet := cmd.Flags().Changed("view")
+			if viewSet {
+				if ok, names := tui.ValidSnapshotView(snapView); !ok {
+					return fmt.Errorf("--view %d is out of range: valid values are 0..%d (%s)",
+						snapView, len(names)-1, strings.Join(names, ", "))
+				}
+				if !snapshot {
+					return fmt.Errorf("--view applies only with --snapshot")
+				}
+			}
 			if snapshot {
-				if cmd.Flags().Changed("view") {
+				if viewSet {
 					fmt.Print(tui.CockpitSnapshotView(snapView))
 				} else {
 					fmt.Print(tui.CockpitSnapshot())
@@ -380,9 +392,40 @@ func cmdDispatch() *cobra.Command {
 			prompt := strings.Join(args, " ")
 			ctx := context.Background()
 
+			// One invocation is one run with one logical task, whichever path
+			// below handles it — so a swarm's attempts and the dispatch that
+			// drove them share an identity in the logs (#181).
+			//
+			// Resolve rather than mint: runid ranks explicit > env > generated,
+			// so calling New() here and passing the result as the explicit value
+			// silently outranked HYDRA_RUN_ID and made it dead at the only entry
+			// point that matters (#204).
+			runID, taskID := runid.ResolveRun(""), runid.ResolveTask("")
+
+			// Mark the run live for its whole duration. Without this
+			// runlog.LiveRuns() is always empty and nothing — cockpit or desktop
+			// Fleet — can distinguish a running agent from a finished one.
+			hb := runlog.StartHeartbeat(ctx, runID, runlog.HeartbeatInterval)
+			defer hb.Stop()
+
+			rl := runlog.New(runID)
+			_ = rl.Append(runlog.Event{Kind: runlog.KindRunStarted, TaskID: taskID, Detail: promptPreview(prompt)})
+			defer func() {
+				_ = rl.Append(runlog.Event{Kind: runlog.KindRunFinished, TaskID: taskID})
+			}()
+
 			d, err := dispatch.New(ctx)
 			if err != nil {
 				return err
+			}
+
+			var headIDs []string
+			if swarmHeads != "" {
+				for _, id := range strings.Split(swarmHeads, ",") {
+					if id = strings.TrimSpace(id); id != "" {
+						headIDs = append(headIDs, id)
+					}
+				}
 			}
 
 			// ── SPRT confidence mode ──────────────────────────────────────
@@ -407,12 +450,15 @@ func cmdDispatch() *cobra.Command {
 				sw := swarm.New(d, d.Heads(), d)
 				res, err := sw.RunSPRT(ctx, prompt, swarm.Options{
 					TierHint:      tier,
+					HeadIDs:       headIDs,
 					MaxHeads:      swarmMaxHeads,
 					MaxEstCostUSD: swarmMaxCost,
 					LocalOnly:     localOnly,
 					System:        system,
 					Confidence:    effectiveConf,
 					Domain:        domain,
+					RunID:         runID,
+					TaskID:        taskID,
 				})
 				if err != nil {
 					return err
@@ -424,14 +470,6 @@ func cmdDispatch() *cobra.Command {
 
 			// ── swarm mode ────────────────────────────────────────────────
 			if doSwarm {
-				var headIDs []string
-				if swarmHeads != "" {
-					for _, id := range strings.Split(swarmHeads, ",") {
-						if id = strings.TrimSpace(id); id != "" {
-							headIDs = append(headIDs, id)
-						}
-					}
-				}
 				mode := swarm.SwarmMode(swarmMode)
 				if mode == "" {
 					mode = swarm.ModeBest
@@ -446,6 +484,8 @@ func cmdDispatch() *cobra.Command {
 					LocalOnly:     localOnly,
 					System:        system,
 					JudgeTierHint: swarmJudge,
+					RunID:         runID,
+					TaskID:        taskID,
 				})
 				if err != nil {
 					return err
@@ -455,13 +495,21 @@ func cmdDispatch() *cobra.Command {
 			}
 
 			// ── normal single dispatch ─────────────────────────────────────
+			// An enum is a routing instruction, not just a cost label: resolve
+			// it to a tier when no explicit --tier was given (#165).
+			tierHint := tier
+			if tierHint == "" && enumKey != "" {
+				tierHint = dispatch.EnumToTier(enumKey)
+			}
 			opts := dispatch.Options{
-				TierHint:  tier,
+				TierHint:  tierHint,
 				LocalOnly: localOnly,
 				DryRun:    dryRun,
 				System:    system,
 				A2AFile:   a2aFile,
 				Enum:      enumKey,
+				RunID:     runID,
+				TaskID:    taskID,
 			}
 
 			result, err := d.Dispatch(ctx, prompt, opts)
@@ -503,7 +551,7 @@ func cmdDispatch() *cobra.Command {
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "show selected head without executing")
 	cmd.Flags().StringVarP(&system, "system", "s", "", "system prompt")
 	cmd.Flags().StringVar(&a2aFile, "a2a", "", "path to A2A handoff JSON (prepends structured context to prompt)")
-	cmd.Flags().StringVar(&enumKey, "enum", "", "routing enum key for cost logging (e.g. SIMPLE)")
+	cmd.Flags().StringVar(&enumKey, "enum", "", "routing enum key, e.g. SIMPLE — selects the tier when --tier is unset")
 	// swarm flags
 	cmd.Flags().BoolVar(&doSwarm, "swarm", false, "fan prompt out to multiple heads simultaneously")
 	cmd.Flags().StringVar(&swarmMode, "swarm-mode", "best", "response strategy: best|race|all")
@@ -591,7 +639,7 @@ func cmdMCP() *cobra.Command {
 	}
 
 	// check: evaluate the policy for an access and record the decision.
-	var chkAgent, chkResource, chkAction, policyPath string
+	var chkAgent, chkResource, chkAction, policyPath, chkParams, chkContent, chkClassification string
 	check := &cobra.Command{
 		Use:   "check <tool>",
 		Short: "Evaluate the policy for a tool/resource access and record it",
@@ -601,33 +649,75 @@ func cmdMCP() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			decision, err := ledger.Check(ledger.DefaultPath(), pol,
-				chkAgent, args[0], chkResource, ledger.Action(chkAction))
+			action, err := ledger.ParseAction(chkAction)
 			if err != nil {
-				return err
+				return fmt.Errorf("--action: %w", err)
 			}
-			fmt.Printf("  %s  %s %s/%s (%s)\n", strings.ToUpper(string(decision)),
-				chkAgent, args[0], chkResource, chkAction)
+			var params map[string]any
+			if chkParams != "" {
+				if params, err = ledger.DecodeParams(chkParams); err != nil {
+					return fmt.Errorf("--params: %w", err)
+				}
+			}
+			decision, checkErr := ledger.Check(ledger.DefaultPath(), pol, ledger.CheckRequest{
+				Agent: chkAgent, Tool: args[0], Resource: chkResource, Action: action,
+				Params: params, Classification: chkClassification, Content: chkContent,
+			})
+			// Report the decision before any error: a Deny that failed to write
+			// to the ledger is still a Deny, and callers gate on exit 3.
+			if decision != "" {
+				fmt.Printf("  %s  %s %s/%s (%s)\n", strings.ToUpper(string(decision)),
+					chkAgent, args[0], chkResource, action)
+			}
+			if checkErr != nil {
+				fmt.Fprintf(os.Stderr, "  ledger error: %v\n", checkErr)
+			}
 			if decision == ledger.Deny {
 				os.Exit(3) // non-zero so callers can gate on it
 			}
-			return nil
+			return checkErr
 		},
 	}
 	check.Flags().StringVar(&chkAgent, "agent", "", "agent making the access")
 	check.Flags().StringVar(&chkResource, "resource", "", "resource being accessed")
 	check.Flags().StringVar(&chkAction, "action", "read", "read|write|exec|network")
 	check.Flags().StringVar(&policyPath, "policy", ledger.DefaultPolicyPath(), "path to the access policy JSON")
+	check.Flags().StringVar(&chkParams, "params", "", "JSON object of invocation parameters; hashed and bound to the recorded decision")
+	check.Flags().StringVar(&chkContent, "content", "", "raw content being accessed; scanned for PII to auto-derive --classification if unset")
+	check.Flags().StringVar(&chkClassification, "classification", "", "explicit data-sensitivity tag (e.g. pii); overrides --content detection")
 
 	// record: append an event directly (for external tools reporting access).
-	var recAgent, recTool, recResource, recAction, recDecision string
+	var recAgent, recTool, recResource, recAction, recDecision, recParams, recClassification string
 	record := &cobra.Command{
 		Use:   "record",
 		Short: "Append an access event to the ledger",
 		RunE: func(_ *cobra.Command, _ []string) error {
+			action, err := ledger.ParseAction(recAction)
+			if err != nil {
+				return fmt.Errorf("--action: %w", err)
+			}
+			decision, err := ledger.ParseDecision(recDecision)
+			if err != nil {
+				return fmt.Errorf("--decision: %w", err)
+			}
+			// Bind whenever --params was supplied — including "{}" — so this
+			// agrees with `check`, whose binding keys off a non-nil map.
+			var hash string
+			if recParams != "" {
+				params, err := ledger.DecodeParams(recParams)
+				if err != nil {
+					return fmt.Errorf("--params: %w", err)
+				}
+				if params != nil {
+					if hash, err = ledger.HashParams(params); err != nil {
+						return err
+					}
+				}
+			}
 			return ledger.Record(ledger.DefaultPath(), ledger.Event{
 				Agent: recAgent, Tool: recTool, Resource: recResource,
-				Action: ledger.Action(recAction), Decision: ledger.Decision(recDecision),
+				Action: action, Decision: decision,
+				ParametersHash: hash, Classification: ledger.NormalizeClassification(recClassification),
 			})
 		},
 	}
@@ -636,6 +726,64 @@ func cmdMCP() *cobra.Command {
 	record.Flags().StringVar(&recResource, "resource", "", "resource")
 	record.Flags().StringVar(&recAction, "action", "read", "read|write|exec|network")
 	record.Flags().StringVar(&recDecision, "decision", "allow", "allow|deny")
+	record.Flags().StringVar(&recParams, "params", "", "JSON object of invocation parameters; hashed and bound to the recorded event")
+	record.Flags().StringVar(&recClassification, "classification", "", "data-sensitivity tag (e.g. pii)")
+
+	// verify: re-check execution-time params against the recorded approval.
+	var verResource, verParams string
+	var verAnyResource bool
+	verify := &cobra.Command{
+		Use:   "verify <tool>",
+		Short: "Verify execution-time parameters against the hash bound at approval",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			// An empty tool would match an approval recorded for a different
+			// tool entirely, so require it explicitly.
+			tool := strings.TrimSpace(args[0])
+			if tool == "" {
+				return fmt.Errorf("tool argument is required")
+			}
+			if strings.TrimSpace(verResource) == "" && !verAnyResource {
+				return fmt.Errorf("--resource is required (the hash covers parameters only, " +
+					"so the approval's resource must be matched explicitly); pass --any-resource to override")
+			}
+			params, err := ledger.DecodeParams(verParams)
+			if err != nil {
+				return fmt.Errorf("--params: %w", err)
+			}
+			events, skipped, err := ledger.LoadCounted(ledger.DefaultPath())
+			if err != nil {
+				return err
+			}
+			if skipped > 0 {
+				fmt.Fprintf(os.Stderr, "  warning: %d unparseable ledger line(s) skipped — "+
+					"verification may be against an older approval\n", skipped)
+			}
+			approval, ok := ledger.LatestBound(events, tool, verResource)
+			if !ok {
+				return fmt.Errorf("no allowed, parameter-bound ledger event for %s/%s — nothing to verify against", tool, verResource)
+			}
+			match, err := ledger.VerifyParams(params, approval.ParametersHash)
+			if err != nil {
+				return err
+			}
+			// Name the matched approval explicitly: the hash covers the
+			// parameters only, so the operator must be able to see which
+			// tool/resource the approval was actually recorded for.
+			target := fmt.Sprintf("%s/%s at %s", approval.Tool, approval.Resource, approval.TS)
+			if !match {
+				fmt.Printf("  %s  parameters do NOT match the approval for %s\n",
+					strings.ToUpper(string(ledger.Deny)), target)
+				os.Exit(3) // non-zero so callers can gate on it
+			}
+			fmt.Printf("  MATCH  parameters match the approval for %s\n", target)
+			return nil
+		},
+	}
+	verify.Flags().StringVar(&verResource, "resource", "", "resource the approval was recorded for (required)")
+	verify.Flags().BoolVar(&verAnyResource, "any-resource", false, "match an approval for any resource of this tool (weaker: the hash does not cover the resource)")
+	verify.Flags().StringVar(&verParams, "params", "", "JSON object of the parameters about to execute (required)")
+	_ = verify.MarkFlagRequired("params")
 
 	// log: list events, optionally filtered.
 	var logAgent string
@@ -696,7 +844,7 @@ func cmdMCP() *cobra.Command {
 	}
 	report.Flags().BoolVar(&repJSON, "json", false, "machine-readable JSON output")
 
-	cmd.AddCommand(check, record, logCmd, report)
+	cmd.AddCommand(check, record, verify, logCmd, report)
 	return cmd
 }
 
@@ -1146,11 +1294,20 @@ func cmdEdit() *cobra.Command {
 		Short: "Atomic, validated, rollback-safe file edit via a Hydra Head",
 		RunE: func(_ *cobra.Command, _ []string) error {
 			ctx := context.Background()
+
+			// Resolve rather than mint, so HYDRA_RUN_ID groups an edit with the
+			// invocation that spawned it (#204, #211).
+			runID, taskID := runid.ResolveRun(""), runid.ResolveTask("")
+			hb := runlog.StartHeartbeat(ctx, runID, runlog.HeartbeatInterval)
+			defer hb.Stop()
+
 			result, err := editor.Edit(ctx, editor.Request{
 				File:     file,
 				Enum:     enum,
 				Prompt:   prompt,
 				Validate: !noValidate,
+				RunID:    runID,
+				TaskID:   taskID,
 			})
 			if err != nil {
 				return err
@@ -1286,7 +1443,7 @@ func cmdParallel() *cobra.Command {
 			}
 
 			ctx := context.Background()
-			results, err := parallel.Run(ctx, tasks)
+			results, err := parallel.Run(ctx, tasks, parallel.Options{RunID: runid.New()})
 			if err != nil {
 				return err
 			}
@@ -1927,3 +2084,16 @@ var (
 	cortexStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
 	dimStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 )
+
+// promptPreview shortens a prompt for a log Detail field. Run events carry a
+// short human label, never the full text — the atomic-append guarantee that
+// makes the run log safe under concurrency is per write() call, so entries must
+// stay small.
+func promptPreview(s string) string {
+	const max = 80
+	s = strings.TrimSpace(strings.ReplaceAll(s, "\n", " "))
+	if len(s) <= max {
+		return s
+	}
+	return s[:max] + "…"
+}

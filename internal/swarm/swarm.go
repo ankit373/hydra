@@ -21,6 +21,10 @@ const (
 	ModeRace SwarmMode = "race" // first success wins; all others are canceled
 	ModeBest SwarmMode = "best" // fire all; LLM judge (with CapScore fallback) picks winner
 	ModeAll  SwarmMode = "all"  // fire all; return ranked by CapScore, no judge
+	// ModeSPRT labels cost rows from RunSPRT's adaptive optimal-stopping ensemble.
+	// It is a cost-log label, not a value Options.Mode ever takes — RunSPRT is
+	// entered via Options.Confidence, not via Mode.
+	ModeSPRT SwarmMode = "sprt"
 )
 
 // Options configures a swarm run.
@@ -35,7 +39,7 @@ type Options struct {
 
 	// Execution constraints.
 	MaxHeads       int           // hard cap on fan-out (0 → defaultMaxHeads = 5)
-	PerHeadTimeout time.Duration // per-head deadline (0 = inherit parent ctx)
+	PerHeadTimeout time.Duration // per-head deadline (0 → defaultPerHeadTimeout, 300s; never unbounded)
 	MaxEstCostUSD  float64       // pre-flight guard; 0 = no limit
 	LocalOnly      bool
 
@@ -50,6 +54,13 @@ type Options struct {
 	// SPRT mode (RunSPRT).
 	Confidence float64 // target P(correct); >0 selects the SPRT ensemble
 	Domain     string  // calibration domain ("" → "default")
+
+	// RunID/TaskID group this swarm's attempt rows with the invocation and the
+	// logical task they belong to. Every head racing or voting on one prompt is
+	// working the same task, so they share a TaskID — that is what lets a reader
+	// tell "5 heads on one task" from "5 separate tasks" (#181).
+	RunID  string
+	TaskID string
 }
 
 // SwarmResult is the complete outcome of a swarm dispatch.
@@ -173,7 +184,8 @@ func (s *Swarm) Run(ctx context.Context, prompt string, opts Options) (*SwarmRes
 	}
 
 	// 7. Log to cost.jsonl.
-	logAttempts(result, truncate(prompt, 80))
+	logAttempts(result.Attempts, result.Mode, opts, truncate(prompt, 80))
+	logRunEvents(result.Attempts, result.Mode, opts)
 
 	return result, nil
 }

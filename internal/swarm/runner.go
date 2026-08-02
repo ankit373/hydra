@@ -11,6 +11,29 @@ import (
 	"github.com/ankit373/hydra/internal/provider"
 )
 
+// defaultPerHeadTimeout bounds any head whose executor does not self-limit.
+// Without a deadline a single hung head (e.g. a reachable-but-TTY-blocked CLI,
+// or a subprocess that never returns) blocks runAll's wg.Wait forever. Aligned
+// with the agy executor's own 300s print-timeout so this acts as a backstop
+// rather than preempting executor-level handling. Override per call via
+// Options.PerHeadTimeout.
+const defaultPerHeadTimeout = 300 * time.Second
+
+// executorFor resolves the executor for a head. Indirected through a package
+// variable so tests can inject a stub without a live provider.
+var executorFor = executor.For
+
+// effectiveTimeout returns the per-head deadline to apply: the caller's explicit
+// Options.PerHeadTimeout when positive, otherwise defaultPerHeadTimeout. Swarm
+// never runs a head unbounded — a zero value means "use the default", not "no
+// limit".
+func effectiveTimeout(opts Options) time.Duration {
+	if opts.PerHeadTimeout > 0 {
+		return opts.PerHeadTimeout
+	}
+	return defaultPerHeadTimeout
+}
+
 // executeHead runs one head and returns a completed Attempt.
 // Never returns an error — all failures are captured in Attempt.Status/Err.
 func executeHead(ctx context.Context, h provider.Head, prompt string, opts Options) Attempt {
@@ -20,14 +43,10 @@ func executeHead(ctx context.Context, h provider.Head, prompt string, opts Optio
 		StartedAt: time.Now(),
 	}
 
-	execCtx := ctx
-	var cancel context.CancelFunc
-	if opts.PerHeadTimeout > 0 {
-		execCtx, cancel = context.WithTimeout(ctx, opts.PerHeadTimeout)
-		defer cancel()
-	}
+	execCtx, cancel := context.WithTimeout(ctx, effectiveTimeout(opts))
+	defer cancel()
 
-	exec := executor.For(h)
+	exec := executorFor(h)
 	resp, err := exec.Execute(execCtx, executor.Request{
 		Prompt:    prompt,
 		Head:      h,

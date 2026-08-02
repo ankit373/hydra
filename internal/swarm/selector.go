@@ -133,7 +133,15 @@ func executable(h provider.Head) bool {
 func applyFiltersAndCap(heads []provider.Head, opts Options) []provider.Head {
 	maxHeads := opts.MaxHeads
 	if maxHeads <= 0 {
-		maxHeads = defaultMaxHeads
+		// An explicit HeadIDs list is the caller's stated intent, so the
+		// *default* cap must not silently trim it — pinning 7 heads and
+		// receiving 5 is exactly the source-diversity problem --swarm-heads
+		// exists to solve. An explicitly set MaxHeads still applies.
+		if len(opts.HeadIDs) > 0 {
+			maxHeads = len(heads)
+		} else {
+			maxHeads = defaultMaxHeads
+		}
 	}
 
 	var out []provider.Head

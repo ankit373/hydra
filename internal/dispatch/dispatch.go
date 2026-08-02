@@ -11,6 +11,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"sync"
 	"time"
@@ -25,6 +26,8 @@ import (
 	"github.com/ankit373/hydra/internal/probe"
 	"github.com/ankit373/hydra/internal/provider"
 	"github.com/ankit373/hydra/internal/rank"
+	"github.com/ankit373/hydra/internal/runid"
+	"github.com/ankit373/hydra/internal/runlog"
 )
 
 // Options controls dispatch behaviour.
@@ -36,6 +39,14 @@ type Options struct {
 	DryRun    bool   // print selected head without executing
 	A2AFile   string // path to A2A handoff JSON; prepends structured context to prompt
 	Enum      string // enum key (e.g. "SIMPLE") for cost logging
+
+	// RunID groups every log row produced by one user-facing invocation;
+	// TaskID groups the rows for one logical task inside it. Empty means
+	// "derive one" (see runid.ResolveRun/ResolveTask) — pass them explicitly
+	// when several dispatches belong to the same run, as a parallel batch or a
+	// swarm does, otherwise each call is its own run.
+	RunID  string
+	TaskID string
 }
 
 // Result is the outcome of a successful dispatch.
@@ -95,8 +106,14 @@ func New(ctx context.Context) (*Dispatcher, error) {
 
 // Dispatch routes prompt through policy + tier selection + execution with fallback.
 func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) (*Result, error) {
+	// Resolve the hint to a capability number BEFORE the governor runs. A named
+	// config tier ("expert") is otherwise opaque to claudeMode's Atoi, which
+	// left the whole token-preservation table inert for every non-numeric hint
+	// (#165).
+	hint := d.resolveTierHint(opts.TierHint)
+
 	// Apply claude% preservation — may downgrade tier or abort.
-	tier, mode, pct := d.claudeMode(opts.TierHint)
+	tier, mode, pct := d.claudeMode(hint)
 	switch mode {
 	case "emergency":
 		log.Printf("🚨 EMERGENCY: Claude at %d%% — routing to local tier only. Start a new session.", pct)
@@ -127,17 +144,34 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		return nil, fmt.Errorf("dispatch denied by policy: %s", action.Reason)
 	}
 
-	candidates := d.selectHeads(tier, action.LocalOnly || opts.LocalOnly)
+	localOnly := action.LocalOnly || opts.LocalOnly
+	candidates := d.selectHeads(tier, localOnly)
 	if len(candidates) == 0 {
-		return nil, fmt.Errorf("no available heads for tier %q (localOnly=%v)", tier, opts.LocalOnly)
+		// Report the effective localOnly (policy may have forced it), not just
+		// the caller's flag, or a PII-forced local-only run points the user at
+		// the wrong cause.
+		return nil, fmt.Errorf("no available heads for tier %q (localOnly=%v); "+
+			"check `hyctl probe` and the tier names in your config", tier, localOnly)
 	}
 
 	if opts.DryRun {
 		return &Result{Head: candidates[0], Fallbacks: candidates[1:]}, nil
 	}
 
+	// The run log records the shape of the run — which head was picked, when,
+	// and how it ended — none of which the cost/dispatch outcome rows capture.
+	// Observability must never fail the work, so every append error is ignored.
+	rl := runlog.New(runid.ResolveRun(opts.RunID))
+	taskID := runid.ResolveTask(opts.TaskID)
+
 	var lastErr error
 	for i, h := range candidates {
+		_ = rl.Append(runlog.Event{
+			Kind: runlog.KindHeadSelected, TaskID: taskID,
+			Head: h.ID, Model: h.Name, Tier: rank.UITier(h),
+			Detail: fmt.Sprintf("candidate %d of %d", i+1, len(candidates)),
+		})
+		started := time.Now()
 		exec := executor.For(h)
 		resp, err := exec.Execute(ctx, executor.Request{
 			Prompt:    prompt,
@@ -147,11 +181,34 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		})
 		if err != nil {
 			lastErr = err
+			// A failed candidate is part of the run's shape: it is why the
+			// fallback chain advanced, and nothing else records it.
+			_ = rl.Append(runlog.Event{
+				Kind: runlog.KindError, TaskID: taskID,
+				Head: h.ID, Model: h.Name, Tier: rank.UITier(h),
+				Status: "failed", DurationMS: time.Since(started).Milliseconds(),
+				Detail: truncate(err.Error(), 200),
+			})
 			continue
 		}
 		r := &Result{Output: resp.Output, Head: h, Retries: i, Response: resp}
+		_ = rl.Append(runlog.Event{
+			Kind: runlog.KindDispatchFinished, TaskID: taskID,
+			Head: h.ID, Model: resp.Model, Tier: rank.UITier(h), Status: "ok",
+			CostUSD:    d.estimateCost(rank.UITier(h), resp.InputTokens, resp.OutputTokens),
+			DurationMS: resp.Duration.Milliseconds(),
+		})
 		_ = d.logDispatch(r, prompt, opts)
-		_ = d.writeHandoff(r, prompt)
+		if from, err := d.writeHandoff(r, prompt); err == nil {
+			// last_handoff.json keeps only the newest. Appending the handoff
+			// here is what makes a *chain* of them reconstructable, which is
+			// the stated purpose of KindHandoff and did not happen before #204.
+			_ = rl.Append(runlog.Event{
+				Kind: runlog.KindHandoff, TaskID: taskID,
+				Agent: h.ID, Head: h.ID, Model: h.Name,
+				Ref: from, Detail: "context handed to " + from,
+			})
+		}
 		d.recordBudget(r)
 		d.syncStateJSON(r)
 		return r, nil
@@ -260,7 +317,8 @@ func injectA2A(path, prompt string) (string, error) {
 
 // writeHandoff saves last_handoff.json after a successful dispatch, advancing
 // the vector clock so downstream agents inherit this dispatch's causal history.
-func (d *Dispatcher) writeHandoff(r *Result, prompt string) error {
+// It returns the handoff's From identity so the caller can record the edge.
+func (d *Dispatcher) writeHandoff(r *Result, prompt string) (string, error) {
 	handoffPath := filepath.Join(config.Dir(), "logs", "last_handoff.json")
 
 	// Inherit the prior handoff's clock (if any) and tick for this agent.
@@ -277,15 +335,64 @@ func (d *Dispatcher) writeHandoff(r *Result, prompt string) error {
 		PriorOutput: r.Response.Output,
 		Clock:       base.Tick(from),
 	}
-	return h.Save(handoffPath)
+	return from, h.Save(handoffPath)
+}
+
+// resolveTierHint normalizes a tier hint to a capability number ("1".."10").
+//
+// An empty hint stays empty. A numeric hint passes through. A named config
+// tier resolves to the strongest capability tier among its live heads, so the
+// budget governor can reason about — and downgrade — named tiers too. An
+// unrecognized name is returned unchanged so selectHeads yields nothing and
+// the caller can report the bad hint instead of silently widening.
+func (d *Dispatcher) resolveTierHint(hint string) string {
+	if hint == "" {
+		return ""
+	}
+	if _, err := strconv.Atoi(hint); err == nil {
+		return hint
+	}
+	for _, t := range d.cfg.Tiers {
+		if t.Name != hint {
+			continue
+		}
+		ids := make(map[string]bool, len(t.Heads))
+		for _, id := range t.Heads {
+			ids[id] = true
+		}
+		strongest := 0
+		for _, h := range d.heads {
+			if !ids[h.ID] {
+				continue
+			}
+			if n := rank.UITier(h); strongest == 0 || n < strongest {
+				strongest = n
+			}
+		}
+		if strongest > 0 {
+			return strconv.Itoa(strongest)
+		}
+		return hint // named tier has no live heads; let the caller report it
+	}
+	return hint
 }
 
 // selectHeads returns heads to try, in order of preference.
 //
-// No tier hint → all probed heads ranked by score (config tiers ignored).
-// Tier hint    → only heads assigned to that tier in config;
+// No tier hint  → all probed heads ranked by score (config tiers ignored).
+// Named tier    → heads assigned to that tier in config (e.g. "expert").
+// Numeric tier  → heads whose capability tier is at or below the requested
 //
-//	falls back to all probed heads if the tier has no live heads.
+//	strength, via rank.UITier. Lower number = stronger, so "10" yields the
+//	cheapest local heads and "1" yields everything with the strongest first.
+//
+// Numeric hints must NOT be resolved through config tier names: config tiers
+// are named (expert/complex/…) while enums resolve to "1".."10", so an exact
+// name match can never succeed and the old fall-through silently returned the
+// single most expensive head — the exact inverse of cost routing (#165).
+//
+// A hint that matches nothing returns no candidates; the caller reports that
+// rather than silently widening to every head.
 func (d *Dispatcher) selectHeads(tierHint string, localOnly bool) []provider.Head {
 	filter := func(h provider.Head) bool {
 		if !executor.Supports(h) {
@@ -308,7 +415,38 @@ func (d *Dispatcher) selectHeads(tierHint string, localOnly bool) []provider.Hea
 		return all
 	}
 
-	// Collect head IDs assigned to the requested tier in config.
+	// Numeric hint → select by capability tier, independent of config naming.
+	if want, err := strconv.Atoi(tierHint); err == nil {
+		var candidates []provider.Head
+		for _, h := range d.heads {
+			// d.heads is pre-sorted by CapScore (probe.Run → rank.ByCapScore),
+			// so "at or below the requested strength" yields the strongest
+			// eligible head first and weaker ones as the fallback chain.
+			if filter(h) && rank.UITier(h) >= want {
+				candidates = append(candidates, h)
+			}
+		}
+		if len(candidates) > 0 {
+			return candidates
+		}
+		// Nothing is that cheap. Degrade to the cheapest heads available —
+		// ascending capability, so the fallback is the least expensive option
+		// rather than the most. Silently escalating to the strongest head is
+		// what made tier routing worthless in the first place (#165).
+		for _, h := range d.heads {
+			if filter(h) {
+				candidates = append(candidates, h)
+			}
+		}
+		if len(candidates) > 0 {
+			slices.Reverse(candidates) // pre-sorted strongest-first → cheapest-first
+			log.Printf("⚠️  no head at tier %d or cheaper — falling back to the cheapest available (%s)",
+				want, candidates[0].ID)
+		}
+		return candidates
+	}
+
+	// Named tier → heads assigned to it in config.
 	tierIDs := map[string]bool{}
 	for _, t := range d.cfg.Tiers {
 		if t.Name == tierHint {
@@ -318,17 +456,11 @@ func (d *Dispatcher) selectHeads(tierHint string, localOnly bool) []provider.Hea
 		}
 	}
 
-	// Filter live probed heads to those in the tier.
 	var candidates []provider.Head
 	for _, h := range d.heads {
 		if filter(h) && tierIDs[h.ID] {
 			candidates = append(candidates, h)
 		}
-	}
-
-	// Tier had no live heads — fall back to all available.
-	if len(candidates) == 0 {
-		return d.selectHeads("", localOnly)
 	}
 	return candidates
 }
@@ -346,8 +478,9 @@ func (d *Dispatcher) recordBudget(r *Result) {
 	d.budget.Record(r.Head.ID, r.Response.InputTokens, source)
 }
 
-// syncStateJSON updates ~/.hydra/logs/state.json after a successful dispatch
-// so the Ink UI (ui/) reflects Go dispatcher activity.
+// syncStateJSON updates ~/.hydra/logs/state.json after a successful dispatch so
+// the governor readouts reflect it — `hyctl status`, the cockpit's dashboard,
+// and the desktop app all read that file.
 func (d *Dispatcher) syncStateJSON(r *Result) {
 	stateMu.Lock()
 	defer stateMu.Unlock()
@@ -412,6 +545,11 @@ func (d *Dispatcher) logDispatch(r *Result, prompt string, opts Options) error {
 	logDir := filepath.Join(config.Dir(), "logs")
 	_ = os.MkdirAll(logDir, 0o700)
 
+	// Resolve once so both rows carry the same identity. Before #181 these read
+	// env vars nothing ever set, so every row logged run_id:"" / task_id:"".
+	runID := runid.ResolveRun(opts.RunID)
+	taskID := runid.ResolveTask(opts.TaskID)
+
 	dispatchEntry := map[string]any{
 		"ts":             time.Now().UTC().Format(time.RFC3339),
 		"head":           r.Head.ID,
@@ -423,8 +561,8 @@ func (d *Dispatcher) logDispatch(r *Result, prompt string, opts Options) error {
 		"duration_ms":    wallMs,
 		"local":          r.Head.LocalOnly,
 		"prompt_preview": truncate(prompt, 80),
-		"task_id":        os.Getenv("HYDRA_TASK_ID"),
-		"run_id":         os.Getenv("HYDRA_RUN_ID"),
+		"task_id":        taskID,
+		"run_id":         runID,
 	}
 	if err := appendJSONL(filepath.Join(logDir, "dispatch.jsonl"), dispatchEntry); err != nil {
 		return err
@@ -438,6 +576,7 @@ func (d *Dispatcher) logDispatch(r *Result, prompt string, opts Options) error {
 		// always "estimated" (est_cost_usd is pricing × tokens, never billed);
 		// the legacy `source` field mirrors tokens_source for older readers.
 		tokensSource, costSource, legacySource := cost.SourceLabels(r.Response.TokensEstimated)
+		breadcrumb, _ := config.Breadcrumb()
 		costEntry := map[string]any{
 			"ts":              time.Now().UTC().Format(time.RFC3339),
 			"tier":            tier,
@@ -452,8 +591,11 @@ func (d *Dispatcher) logDispatch(r *Result, prompt string, opts Options) error {
 			"tokens_source":   tokensSource,
 			"cost_source":     costSource,
 			"source":          legacySource,
-			"task_id":         os.Getenv("HYDRA_TASK_ID"),
-			"run_id":          os.Getenv("HYDRA_RUN_ID"),
+			"task_id":         taskID,
+			"run_id":          runID,
+		}
+		if breadcrumb != "" { // match the omitempty on cost.Row.Config
+			costEntry["config"] = breadcrumb
 		}
 		_ = appendJSONL(filepath.Join(logDir, "cost.jsonl"), costEntry)
 	}

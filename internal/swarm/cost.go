@@ -13,6 +13,7 @@ import (
 	"github.com/ankit373/hydra/internal/cost"
 	"github.com/ankit373/hydra/internal/provider"
 	"github.com/ankit373/hydra/internal/rank"
+	"github.com/ankit373/hydra/internal/runid"
 )
 
 // PricingReader abstracts the per-tier cost lookup so swarm doesn't need to
@@ -57,7 +58,17 @@ func enrichCosts(attempts []Attempt, pr PricingReader) {
 
 // logAttempts writes one cost.jsonl entry per attempt that actually executed
 // (StatusOK or StatusFailed — not Pending/Canceled).
-func logAttempts(result *SwarmResult, promptPreview string) {
+//
+// It takes the attempts and mode directly rather than a *SwarmResult so the SPRT
+// path can share it: RunSPRT produces attempts without ever building a
+// SwarmResult, and without this its ensemble spend never reached cost.jsonl at
+// all — only the aggregate trust.jsonl row (#175).
+//
+// Every attempt shares the run's identity: heads racing or voting on one prompt
+// are all working the same logical task, so they carry the same TaskID. That is
+// what lets a reader group "5 heads on one task" rather than seeing 5 unrelated
+// rows (#181).
+func logAttempts(attempts []Attempt, mode SwarmMode, opts Options, promptPreview string) {
 	logDir := filepath.Join(config.Dir(), "logs")
 	_ = os.MkdirAll(logDir, 0o700)
 	path := filepath.Join(logDir, "cost.jsonl")
@@ -68,10 +79,11 @@ func logAttempts(result *SwarmResult, promptPreview string) {
 	}
 	defer f.Close()
 
-	runID := os.Getenv("HYDRA_RUN_ID")
-	taskID := os.Getenv("HYDRA_TASK_ID")
+	runID := runid.ResolveRun(opts.RunID)
+	taskID := runid.ResolveTask(opts.TaskID)
+	breadcrumb, _ := config.Breadcrumb()
 
-	for _, a := range result.Attempts {
+	for _, a := range attempts {
 		if a.Status == StatusPending || a.Status == StatusCanceled {
 			continue
 		}
@@ -90,11 +102,14 @@ func logAttempts(result *SwarmResult, promptPreview string) {
 			"tokens_source":   tokensSource,
 			"cost_source":     costSrc,
 			"source":          legacySource,
-			"swarm_mode":      string(result.Mode),
+			"swarm_mode":      string(mode),
 			"swarm_winner":    a.Status == StatusOK && a.Rank == 1,
 			"task_id":         taskID,
 			"run_id":          runID,
 			"prompt_preview":  promptPreview,
+		}
+		if breadcrumb != "" { // match the omitempty on cost.Row.Config
+			entry["config"] = breadcrumb
 		}
 		raw, _ := json.Marshal(entry)
 		_, _ = fmt.Fprintln(f, string(raw))
