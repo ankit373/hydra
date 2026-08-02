@@ -277,8 +277,9 @@ hotfix/#{n}-slug    ← branches from main tag. Merged → main, cherry-picked �
 Every issue must be:
 1. **On the GitHub project board** (Project #2 "Hydra Roadmap")
 2. **Linked to its branch** — GitHub auto-links when branch name contains the issue number (`feature/54-hydra-stats` links to #54)
-3. **Linked to its PR** — PR body must contain `Closes #<issue>` for auto-close on merge
+3. **Linked to its PR** — PR body must contain `Closes #<issue>` so the PR shows on the issue
 4. **Moving through board states** at every transition (Todo → In Progress → In Review → Done)
+5. **Closed by hand once the release carrying it reaches `main`** — see below; nothing closes it for you
 
 ### Link a branch to an issue (GitHub auto-detection)
 GitHub automatically links a branch to an issue when the branch name contains the issue number.
@@ -290,10 +291,23 @@ gh issue view 54 --json linkedBranches
 ```
 
 ### Link a PR to an issue
-Always include `Closes #<n>` in the PR body. This:
-- Shows the PR on the issue page
-- Auto-closes the issue when the PR merges
-- Auto-moves the issue to Done on the project board (if configured)
+Always include `Closes #<n>` in the PR body. This shows the PR on the issue page and creates the
+link — that is the whole reason to keep writing it.
+
+**It does not close the issue.** GitHub only honours the closing keyword when the PR merges into the
+**default branch**, which here is `main`. Every feature/fix PR targets `develop` by design, so the
+keyword links but never fires — and it fails silently: the PR merges green and the issue stays open.
+17 issues accumulated this way before anyone noticed (#217).
+
+Close issues explicitly when the release carrying them lands on `main`, which is the board's
+existing `Deploy` → `Done` transition:
+
+```bash
+gh issue close <n> --comment "Shipped in v1.1.0."
+```
+
+(This is unrelated to the project-board columns, which need a `read:project` OAuth scope. Closing
+an issue needs no extra scope.)
 
 ---
 
@@ -406,8 +420,9 @@ gh project item-edit --project-id PVT_kwHOAL1qLc4BZbZZ --id "$ITEM_ID" \
 
 **PR rules:**
 - Title must be a valid conventional commit (e.g. `feat(scope): description`)
-- Body must contain `Closes #<issue>` — auto-links and closes the issue on merge
-- All features/fixes target `develop`. Hotfixes target `main`.
+- Body must contain `Closes #<issue>` — this links the PR to the issue. It does **not** close it:
+  the keyword only fires on merge into the default branch (`main`). Close it by hand at release.
+- All features/fixes target `develop`. Hotfixes target `main` — and there the keyword *does* fire.
 - Never open a PR directly to `main` from a feature branch.
 
 ---
@@ -598,7 +613,13 @@ gh pr create --title "feat(stats): add hyctl stats subcommand" \
 gh project item-edit --project-id PVT_kwHOAL1qLc4BZbZZ --id "$ITEM_ID" \
   --field-id PVTSSF_lAHOAL1qLc4BZbZZzhUaGlE --single-select-option-id 1490e846
 
-# 5. After merge — move to Done
+# 5. After merge to develop — move to Deploy (merged, not yet released)
+gh project item-edit --project-id PVT_kwHOAL1qLc4BZbZZ --id "$ITEM_ID" \
+  --field-id PVTSSF_lAHOAL1qLc4BZbZZzhUaGlE --single-select-option-id bcafa7ca
+
+# 6. After the release carrying it lands on main — close the issue, then move to Done.
+#    Nothing does this for you: "Closes #n" does not fire on a develop-targeted PR (#217).
+gh issue close "${ISSUE}" --comment "Shipped in v1.1.0."
 gh project item-edit --project-id PVT_kwHOAL1qLc4BZbZZ --id "$ITEM_ID" \
   --field-id PVTSSF_lAHOAL1qLc4BZbZZzhUaGlE --single-select-option-id 98236657
 ```
