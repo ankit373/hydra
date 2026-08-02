@@ -109,7 +109,6 @@ a{color:inherit;text-decoration:none;}
 .doc h2 .tagline{font-size:14px;color:var(--faint);font-weight:400;font-family:var(--sans);}
 .badge{font-family:var(--mono);font-size:10.5px;letter-spacing:1px;text-transform:uppercase;padding:3px 9px;border-radius:20px;font-weight:600;}
 .badge.ship{color:var(--cheap);border:1px solid rgba(63,217,138,.4);background:rgba(63,217,138,.08);}
-.badge.prev{color:var(--mid);border:1px solid rgba(224,169,58,.4);background:rgba(224,169,58,.08);}
 .doc .sum{color:var(--dim);font-size:15.5px;margin:10px 0 0;max-width:76ch;}
 .doc .sum b{color:var(--ink);font-weight:600;}
 .sub{margin:18px 0 0;}
@@ -442,8 +441,8 @@ hyctl tui <span class="fl">--snapshot</span> <span class="fl">--view</span> 0|1|
 
     <!-- ══ APP ══ -->
     <section class="doc" id="app">
-      <h2>The desktop app <span class="badge prev">build from source</span> <span class="tagline">point-and-click cockpit</span></h2>
-      <p class="sum">A native window over the same engine — Wails v2 + React, in <span class="fx">desktop/</span>. Four views over a persistent chat dock. <b>Built, not yet packaged:</b> there is no installer or signed build, so today you build it yourself. <b>Click the sidebar</b> — the views swap live.</p>
+      <h2>The desktop app <span class="badge ship">download</span> <span class="tagline">point-and-click cockpit</span></h2>
+      <p class="sum">A native window over the same engine — Wails v2 + React, in <span class="fx">desktop/</span>. Four views over a persistent chat dock. <b>Every release ships a build for macOS, Windows and Linux.</b> <b>Click the sidebar</b> — the views swap live.</p>
       <div class="appwin">
         <div class="tb"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i><span class="ttl" id="appTitle">Hydra.app — Dashboard</span></div>
         <div class="appbody">
@@ -500,8 +499,15 @@ hyctl tui <span class="fl">--snapshot</span> <span class="fl">--view</span> 0|1|
           </div>
         </div>
       </div>
-      <div class="sub"><div class="lbl">Build it</div><pre>go install github.com/wailsapp/wails/v2/cmd/wails@latest
-cd desktop &amp;&amp; wails build                <span class="c"># → desktop/build/bin/</span></pre></div>
+      <div class="sub"><div class="lbl">Get it</div><pre><span class="c"># Download from the releases page:</span>
+hydra-desktop_&lt;version&gt;_darwin_universal.zip   <span class="c"># macOS, Intel + Apple Silicon</span>
+hydra-desktop_&lt;version&gt;_windows_amd64.zip      <span class="c"># Windows</span>
+hydra-desktop_&lt;version&gt;_linux_amd64.tar.gz     <span class="c"># Linux</span>
+
+<span class="c"># Or build it yourself:</span>
+go install github.com/wailsapp/wails/v2/cmd/wails@latest
+cd desktop &amp;&amp; wails build                <span class="c"># → desktop/build/bin/Hydra.app</span></pre></div>
+      <div class="callout"><b>The builds are not code-signed yet</b>, so the first launch takes one extra step. <b>macOS:</b> Gatekeeper reports an unidentified developer — right-click the app → <b>Open</b> → <b>Open</b>, once. If it still refuses after unzipping from a terminal, run <span class="fx">xattr -dr com.apple.quarantine Hydra.app</span>. <b>Windows:</b> SmartScreen may warn — <b>More info</b> → <b>Run anyway</b>. <b>Linux:</b> needs <span class="fx">libgtk-3-0</span> and <span class="fx">libwebkit2gtk-4.1-0</span>, then <span class="fx">chmod +x Hydra</span>.</div>
       <div class="callout">The app reads the same logs the CLI writes, so its numbers are the CLI's numbers — Dashboard totals match <span class="fx">hyctl cost</span> and <span class="fx">hyctl stats</span> for the same data. There is no separate daemon and no telemetry: it reads <span class="fx">~/.hydra/logs/</span> on your machine.</div>
     </section>
 
