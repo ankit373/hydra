@@ -639,11 +639,30 @@ persistent chat dock.
 It reads `~/.hydra/logs/` directly. No daemon, no telemetry, and its numbers are the CLI's numbers:
 Dashboard totals are asserted equal to `hyctl cost` and `hyctl stats` for the same data.
 
-**Built, not yet packaged** — there is no installer or signed build today:
+**Download** — every release carries a build for each platform, on the
+[releases page](https://github.com/ankit373/hydra/releases/latest):
+
+| platform | artifact |
+|---|---|
+| macOS (Intel + Apple Silicon) | `hydra-desktop_<version>_darwin_universal.zip` |
+| Windows | `hydra-desktop_<version>_windows_amd64.zip` |
+| Linux | `hydra-desktop_<version>_linux_amd64.tar.gz` |
+
+**The builds are not code-signed yet**, so the first launch takes one extra step:
+
+- **macOS** — Gatekeeper will say Hydra "cannot be opened because it is from an unidentified
+  developer". Right-click the app → **Open** → **Open**. Once only. If you unzipped from Terminal
+  and macOS still refuses, clear the quarantine flag: `xattr -dr com.apple.quarantine Hydra.app`
+- **Windows** — SmartScreen may show "Windows protected your PC". Click **More info** → **Run
+  anyway**
+- **Linux** — needs `libgtk-3-0` and `libwebkit2gtk-4.1-0`, which most desktop distributions
+  already have. `chmod +x Hydra` and run it
+
+To build it yourself instead:
 
 ```bash
 go install github.com/wailsapp/wails/v2/cmd/wails@latest
-cd desktop && wails build                   # → desktop/build/bin/
+cd desktop && wails build                   # → desktop/build/bin/Hydra.app
 ```
 
 `desktop/` is a separate Go module on purpose: Wails takes the root module from 25 requires to 50,

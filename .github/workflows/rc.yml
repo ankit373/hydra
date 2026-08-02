@@ -13,6 +13,9 @@ jobs:
   rc:
     name: Build & publish RC release
     runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.ver.outputs.tag }}
+      version: ${{ steps.ver.outputs.version }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -75,3 +78,14 @@ jobs:
             --latest=false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # UAT needs the app, not just the CLI. Without this the RC that testers sign
+  # off on contains no desktop build at all (#227).
+  desktop:
+    name: Desktop app
+    needs: rc
+    uses: ./.github/workflows/desktop-build.yml
+    with:
+      version: ${{ needs.rc.outputs.version }}
+      tag: ${{ needs.rc.outputs.tag }}
+      upload: true
