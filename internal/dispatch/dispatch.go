@@ -478,8 +478,9 @@ func (d *Dispatcher) recordBudget(r *Result) {
 	d.budget.Record(r.Head.ID, r.Response.InputTokens, source)
 }
 
-// syncStateJSON updates ~/.hydra/logs/state.json after a successful dispatch
-// so the Ink UI (ui/) reflects Go dispatcher activity.
+// syncStateJSON updates ~/.hydra/logs/state.json after a successful dispatch so
+// the governor readouts reflect it — `hyctl status`, the cockpit's dashboard,
+// and the desktop app all read that file.
 func (d *Dispatcher) syncStateJSON(r *Result) {
 	stateMu.Lock()
 	defer stateMu.Unlock()

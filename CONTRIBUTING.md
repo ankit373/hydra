@@ -29,8 +29,8 @@ By participating you agree to our [Code of Conduct](CODE_OF_CONDUCT.md). We main
 - **Feature requests** — open an issue using the [feature template](.github/ISSUE_TEMPLATE/feature_request.md)
 - **Documentation improvements** — edit `.md` files and send a PR
 - **New model integrations** — add an entry to `registry/models.yaml` + a tier in `registry/routing.yaml`
-- **Shell script fixes** — see the standards section below
-- **UI (Ink/React TUI)** — see `ui/README.md` for the frontend dev workflow
+- **Terminal cockpit** — `internal/tui` (Bubble Tea)
+- **Desktop app** — `desktop/` (Wails v2 + React/TS); its Go backend is `desktop/api`
 
 ---
 
@@ -43,8 +43,9 @@ By participating you agree to our [Code of Conduct](CODE_OF_CONDUCT.md). We main
 | `bash` ≥ 5 | Shell runtime | `brew install bash` |
 | `jq` | JSON processing | `brew install jq` |
 | `yq` | YAML processing | `brew install yq` |
-| `bun` | TUI runtime | `brew install oven-sh/bun/bun` |
+| `node` ≥ 20 | Desktop frontend | `brew install node` |
 | `shellcheck` | Shell linting | `brew install shellcheck` |
+| `wails` | Desktop app builds (optional) | `go install github.com/wailsapp/wails/v2/cmd/wails@latest` |
 
 Optional (for full dispatch testing):
 
@@ -59,14 +60,13 @@ Optional (for full dispatch testing):
 git clone https://github.com/ankit373/hydra.git
 cd hydra
 
-# Install TUI dependencies
-cd ui && bun install && cd ..
+# Build and check the CLI — this is the whole interface
+go build ./... && go test ./... -race
+go run ./cmd/hydra status
 
-# Verify scripts are executable
-chmod +x dispatch/*.sh hydra-ui install.sh
-
-# Run status check
-dispatch/route.sh --status
+# Desktop app (optional — it is a separate Go module)
+cd desktop && go test ./... -race
+cd frontend && npm ci && npm run typecheck
 ```
 
 No secrets or API keys are needed just to browse, modify, or test the routing logic.
@@ -75,21 +75,25 @@ No secrets or API keys are needed just to browse, modify, or test the routing lo
 
 ## Making Changes
 
-1. Fork the repository and create a branch from `main`:
+1. Fork the repository and create a branch from `develop`:
    ```bash
    git checkout -b feat/my-feature
    ```
 2. Make your changes (see standards below).
-3. Run `shellcheck` on any modified shell scripts:
+3. Everything CI gates on, before you push:
    ```bash
-   shellcheck dispatch/*.sh
+   gofmt -l ./cmd ./internal        # must print nothing
+   go vet ./... && go build ./...
+   go test ./... -race
+   staticcheck ./...                # go install honnef.co/go/tools/cmd/staticcheck@2026.1
+   shellcheck --severity=error install.sh
    ```
 4. Test manually:
    ```bash
-   dispatch/route.sh --list
-   dispatch/route.sh --status
+   go run ./cmd/hydra probe         # what this machine can route to
+   go run ./cmd/hydra dispatch --dry-run --enum SIMPLE "add a helper"
    ```
-5. Commit and push, then open a pull request.
+5. Commit and push, then open a pull request against `develop`.
 
 ---
 

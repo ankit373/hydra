@@ -124,18 +124,30 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Set up Bun
-        uses: oven-sh/setup-bun@v2
+      # This job used to typecheck ui/, the Ink TUI removed in #197. It now
+      # covers the desktop frontend, which had no CI coverage at all — its
+      # types.ts mirrors the Go DTOs by hand, so a compile error there is
+      # exactly the kind of drift CI should catch.
+      - name: Set up Node
+        uses: actions/setup-node@v7
         with:
-          bun-version: latest
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/frontend/package-lock.json
 
       - name: Install dependencies
-        working-directory: ui
-        run: bun install --frozen-lockfile
+        working-directory: desktop/frontend
+        run: npm ci
 
-      - name: Run typecheck
-        working-directory: ui
-        run: bun run typecheck
+      - name: Typecheck
+        working-directory: desktop/frontend
+        run: npm run typecheck
+
+      # The production bundle must build, not merely typecheck — `wails build`
+      # runs this exact command before it compiles any Go.
+      - name: Build
+        working-directory: desktop/frontend
+        run: npm run build
 
   yaml-lint:
     name: YAML validation
