@@ -171,3 +171,17 @@ func TestRun_TasksShareRunAndGetDistinctTaskIDs(t *testing.T) {
 		seen[id] = true
 	}
 }
+
+// Same defect as internal/editor's extractBetween (#168): a line longer than
+// bufio.Scanner's 64 KiB default silently produced an empty extraction, which
+// parallel then wrote over the user's file. Both copies must stay fixed.
+func TestExtractBetween_LineBeyondScannerLimit(t *testing.T) {
+	for _, n := range []int{1000, 65000, 70000, 1 << 20} {
+		long := strings.Repeat("x", n)
+		raw := markerStart + "\n" + long + "\n" + markerEnd + "\n"
+		got := extractBetween(raw)
+		if got != long {
+			t.Errorf("line of %d chars: extracted %d chars, want %d", n, len(got), n)
+		}
+	}
+}

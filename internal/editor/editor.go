@@ -5,7 +5,6 @@
 package editor
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -16,6 +15,7 @@ import (
 
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/dispatch"
+	"github.com/ankit373/hydra/internal/util"
 	"github.com/ankit373/hydra/internal/workspace"
 )
 
@@ -303,12 +303,14 @@ func extractContent(raw string) string {
 }
 
 func extractBetween(raw string) string {
-	scanner := bufio.NewScanner(strings.NewReader(raw))
+	// util.SplitLines, not bufio.Scanner: a Scanner stops at a token longer than
+	// its buffer and only says so via Err(), so a single >64 KiB line — minified
+	// JS, a data URI, one-line JSON — used to yield an empty extraction that was
+	// then written over the user's file as if it had succeeded (#168).
 	var out []string
 	inside := false
 	printed := false
-	for scanner.Scan() {
-		line := scanner.Text()
+	for _, line := range util.SplitLines(raw) {
 		if !printed && strings.Contains(line, markerStart) {
 			inside = true
 			continue
