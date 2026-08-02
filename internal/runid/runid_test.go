@@ -3,14 +3,21 @@
 package runid
 
 import (
+	"encoding/hex"
 	"strings"
 	"sync"
 	"testing"
 )
 
 func TestNew_NonEmptyAndUnique(t *testing.T) {
-	seen := map[string]bool{}
-	for i := 0; i < 500; i++ {
+	// 20k in a tight loop lands well inside one wall-clock second, so this
+	// exercises the suffix alone rather than relying on the timestamp to
+	// separate anything. At 64 bits that collides with probability ~1e-11; at
+	// the 24 bits this package shipped with (#198) it collides essentially
+	// always.
+	const n = 20_000
+	seen := make(map[string]bool, n)
+	for i := range n {
 		id := New()
 		if id == "" {
 			t.Fatal("New() returned empty")
@@ -19,6 +26,43 @@ func TestNew_NonEmptyAndUnique(t *testing.T) {
 			t.Fatalf("New() collided on %q after %d calls", id, i)
 		}
 		seen[id] = true
+	}
+}
+
+// The uniqueness test above is probabilistic — it would still pass at, say, 5
+// bytes. This pins the entropy width itself so narrowing the suffix fails
+// loudly rather than turning New() flaky again.
+func TestNew_SuffixCarriesFullEntropy(t *testing.T) {
+	id := New()
+	_, suffix, ok := strings.Cut(id, "-")
+	if !ok {
+		t.Fatalf("id %q has no %q separator", id, "-")
+	}
+	// Deliberately a literal, not randBytes*2: asserting the constant against
+	// itself would pass at any width and guard nothing.
+	const wantHexChars = 16 // 64 bits
+	if len(suffix) != wantHexChars {
+		t.Errorf("suffix %q is %d hex chars (%d bits), want %d (64 bits) — see #198",
+			suffix, len(suffix), len(suffix)*4, wantHexChars)
+	}
+	if _, err := hex.DecodeString(suffix); err != nil {
+		t.Errorf("suffix %q is not hex: %v", suffix, err)
+	}
+}
+
+// A suffix that is constant, or drawn from a tiny set, would pass both tests
+// above if the timestamp happened to tick. Sampling the first byte across many
+// draws catches a suffix that is not actually random.
+func TestNew_SuffixIsNotConstant(t *testing.T) {
+	firstBytes := map[string]bool{}
+	for range 1000 {
+		_, suffix, _ := strings.Cut(New(), "-")
+		firstBytes[suffix[:2]] = true
+	}
+	// 1000 draws over 256 values: seeing fewer than 200 distinct would mean the
+	// source is badly skewed. A uniform source yields ~254.
+	if len(firstBytes) < 200 {
+		t.Errorf("only %d distinct leading bytes in 1000 draws — suffix is not uniformly random", len(firstBytes))
 	}
 }
 

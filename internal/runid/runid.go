@@ -32,14 +32,23 @@ const (
 	EnvTaskID = "HYDRA_TASK_ID"
 )
 
-// New returns a fresh identifier, e.g. "20260801T104530Z-3f9c1a".
+// randBytes is the width of New's random suffix.
+//
+// The timestamp only resolves to the second, so every ID minted inside the same
+// second collides unless the suffix separates them — and a parallel batch or a
+// swarm mints many in one second by design. At the original 3 bytes the
+// birthday bound gave 0.7% for 500 IDs and 52% for 5000, which is not a
+// theoretical risk: it silently merged two unrelated runs' rows in cost.jsonl,
+// the exact correlation failure #181 set out to fix (#198). At 8 bytes, 10,000
+// IDs in one second collide with probability ~3e-12.
+const randBytes = 8
+
+// New returns a fresh identifier, e.g. "20260801T104530Z-3f9c1a4b5c6d7e8f".
 func New() string {
-	var b [3]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		// crypto/rand failing is not a reason to lose correlation entirely;
-		// the timestamp alone still groups a run in practice.
-		return time.Now().UTC().Format("20060102T150405Z")
-	}
+	var b [randBytes]byte
+	// rand.Read never returns an error (it panics if the system source fails),
+	// so there is no fallback path to write here.
+	_, _ = rand.Read(b[:])
 	return fmt.Sprintf("%s-%s", time.Now().UTC().Format("20060102T150405Z"), hex.EncodeToString(b[:]))
 }
 
