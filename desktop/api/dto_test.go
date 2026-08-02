@@ -59,27 +59,67 @@ func TestDTOs_FieldNamesAreExplicitlyTagged(t *testing.T) {
 // deliberate exception: its breakdowns are nil to mean "never ran", and
 // types.ts declares them `Breakdown[] | null` so TypeScript forces the check.
 func TestDTOs_SliceFieldsAreNeverNilOnTheWire(t *testing.T) {
-	s, err := New().GetSession("")
+	// Every DTO the views iterate, not just Session's. Covering one type is how
+	// Fleet.runs shipped as null on a fresh machine while this test stayed green
+	// (#230) — types.ts declares runs as Run[], so the type was lying.
+	//
+	// Run on an empty HOME on purpose: nil slices only appear when there is no
+	// data, which is precisely the state a newly downloaded app starts in.
+	withEmptyHome(t)
+	a := New()
+
+	sess, err := a.GetSession("")
 	if err != nil {
 		t.Fatal(err)
 	}
-	raw, err := json.Marshal(s)
+	fleet, err := a.GetFleet()
 	if err != nil {
 		t.Fatal(err)
 	}
-	var m map[string]any
-	if err := json.Unmarshal(raw, &m); err != nil {
+	edits, err := a.GetEdits("")
+	if err != nil {
 		t.Fatal(err)
 	}
-	for _, key := range []string{"timeline", "agents", "edges"} {
-		v, ok := m[key]
-		if !ok {
-			t.Errorf("Session omits %q", key)
-			continue
+	diff, err := a.GetDiff("", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cases := []struct {
+		name  string
+		value any
+		keys  []string
+	}{
+		{"Session", sess, []string{"timeline", "agents", "edges"}},
+		{"Fleet", fleet, []string{"runs"}},
+		{"Diff", diff, []string{"lines"}},
+	}
+	for _, c := range cases {
+		raw, err := json.Marshal(c.value)
+		if err != nil {
+			t.Fatalf("%s: %v", c.name, err)
 		}
-		if v == nil {
-			t.Errorf("Session.%s serialised as null; the view iterates it and would throw", key)
+		var m map[string]any
+		if err := json.Unmarshal(raw, &m); err != nil {
+			t.Fatalf("%s: %v", c.name, err)
 		}
+		for _, key := range c.keys {
+			v, ok := m[key]
+			if !ok {
+				t.Errorf("%s omits %q", c.name, key)
+				continue
+			}
+			if v == nil {
+				t.Errorf("%s.%s serialised as null; the view iterates it and would throw", c.name, key)
+			}
+		}
+	}
+
+	// GetEdits returns a bare slice, so check the marshalled form directly.
+	if raw, err := json.Marshal(edits); err != nil {
+		t.Fatal(err)
+	} else if string(raw) == "null" {
+		t.Error("GetEdits serialised as null; the Code view iterates it and would throw")
 	}
 }
 
