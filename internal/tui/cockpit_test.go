@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-// `hydra tui --snapshot --view 3` used to panic with an index-out-of-range:
+// `hyctl tui --snapshot --view 3` used to panic with an index-out-of-range:
 // header() indexed a 3-element slice literal with an unvalidated m.view.
 func TestCockpitSnapshotView_OutOfRangeDoesNotPanic(t *testing.T) {
 	for _, view := range []int{-1, -100, 3, 99} {
