@@ -12,7 +12,7 @@ import (
 
 // calibrateSymmetric trains (id,domain) to se=sp≈p using n balanced samples.
 // calibrateSymmetric trains (id,domain) to se=sp≈p; it delegates to the
-// production helper backing `hydra trust benchmark` so the two never diverge.
+// production helper backing `hyctl trust benchmark` so the two never diverge.
 func calibrateSymmetric(c *Calibrator, id, domain string, p float64, n int) {
 	calibrateSynthetic(c, id, domain, p, n)
 }

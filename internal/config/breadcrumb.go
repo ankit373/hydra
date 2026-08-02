@@ -6,8 +6,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"os"
-	"path/filepath"
+
+	"github.com/ankit373/hydra/registry"
 )
 
 // BreadcrumbFiles are the registry files that define this deployment's
@@ -26,11 +26,16 @@ var BreadcrumbFiles = []string{"routing.yaml", "models.yaml", "domains.yaml", "p
 // process-lifetime cache would serve a stale fingerprint to the long-running
 // TUI after `hyctl init` or a registry edit. Freshness is worth more than the
 // microseconds. Revisit only with a profile that says otherwise.
+// Reads each file through registry.Read, so an installed binary fingerprints
+// its embedded rules and an operator with on-disk overrides fingerprints those
+// instead — which is the distinction the breadcrumb exists to record. Before
+// #238 this read disk only and returned an error on every installed binary, so
+// the fingerprint was silently absent from exactly the logs it was added for.
 func Breadcrumb() (string, error) {
-	dir := filepath.Join(ScriptHome(), "registry")
+	home := ScriptHome()
 	h := sha256.New()
 	for _, name := range BreadcrumbFiles {
-		raw, err := os.ReadFile(filepath.Join(dir, name))
+		raw, err := registry.Read(home, name)
 		if err != nil {
 			return "", err
 		}

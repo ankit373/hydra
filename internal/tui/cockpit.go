@@ -2,7 +2,7 @@
 
 package tui
 
-// cockpit.go — the interactive terminal cockpit (`hydra tui`).
+// cockpit.go — the interactive terminal cockpit (`hyctl tui`).
 // A real Bubble Tea program: chat/console + heads sidebar + live routing
 // decisions, with a dashboard view (Tab). Neon identity, aqua interaction.
 
@@ -143,7 +143,7 @@ func ckTierColor(tier int) lipgloss.Color {
 	}
 }
 
-// Cockpit is the interactive `hydra tui` model.
+// Cockpit is the interactive `hyctl tui` model.
 type Cockpit struct {
 	w, h      int
 	ready     bool
@@ -585,7 +585,7 @@ func CockpitSnapshotView(view int) string {
 }
 
 // CockpitSnapshot renders all three views stacked, each labelled — the
-// representative frame shown by `hydra tui --snapshot`.
+// representative frame shown by `hyctl tui --snapshot`.
 func CockpitSnapshot() string {
 	label := func(s string) string { return ckLabelS.Render("── " + s + " " + strings.Repeat("─", 40)) }
 	return label("VIEW 1/3 · CHAT + CODE (tab)") + "\n" + CockpitSnapshotView(0) + "\n\n" +

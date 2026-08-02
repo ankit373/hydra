@@ -30,16 +30,24 @@ func TestRecord_StampsConfigBreadcrumbWhenBlank(t *testing.T) {
 	}
 }
 
-func TestRecord_ConfigOmittedGracefullyWithoutRegistry(t *testing.T) {
+// The ledger is an accountability record: an event that cannot say which
+// routing rules were in effect is materially weaker evidence. This used to
+// assert Config stays *empty* without an on-disk registry — which was every
+// installed binary, so the field the breadcrumb was built for was blank in
+// practice (#238). With the registry embedded, it must always be stamped.
+func TestRecord_StampsConfigEvenWithNoOnDiskRegistry(t *testing.T) {
 	t.Setenv("HYDRA_HOME", t.TempDir()) // no registry/ present
 
 	path := filepath.Join(t.TempDir(), "mcp_ledger.jsonl")
 	if err := Record(path, Event{Agent: "a", Tool: "t", Decision: Allow}); err != nil {
-		t.Fatalf("Record should not fail when the breadcrumb is unavailable: %v", err)
+		t.Fatalf("Record failed: %v", err)
 	}
 	events, _ := Load(path)
-	if len(events) != 1 || events[0].Config != "" {
-		t.Errorf("Config should stay empty when registry files are unreadable, got %+v", events)
+	if len(events) != 1 {
+		t.Fatalf("want 1 event, got %d", len(events))
+	}
+	if events[0].Config == "" {
+		t.Error("Config is empty — the event cannot be tied back to the rules that produced it")
 	}
 }
 

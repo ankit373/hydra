@@ -446,7 +446,7 @@ type Summary struct {
 	ByTool  map[string]int `json:"by_tool"`
 }
 
-// Summarize aggregates events for `hydra mcp report`.
+// Summarize aggregates events for `hyctl mcp report`.
 func Summarize(events []Event) Summary {
 	s := Summary{ByAgent: map[string]int{}, ByTool: map[string]int{}}
 	for _, e := range events {

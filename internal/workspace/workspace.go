@@ -12,6 +12,8 @@ import (
 	"strings"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/ankit373/hydra/registry"
 )
 
 // Workspace is a single entry from registry/workspace.yaml.
@@ -50,12 +52,12 @@ type Registry struct {
 	validators map[string]string // ext → command template
 }
 
-// Load reads registry/workspace.yaml relative to hydraHome.
+// Load reads registry/workspace.yaml — an on-disk copy under hydraHome if one
+// exists, otherwise the copy embedded in the binary (#238).
 func Load(hydraHome string) (*Registry, error) {
-	path := filepath.Join(hydraHome, "registry", "workspace.yaml")
-	raw, err := os.ReadFile(path)
+	raw, err := registry.Read(hydraHome, "workspace.yaml")
 	if err != nil {
-		return nil, fmt.Errorf("workspace.yaml not found at %s", path)
+		return nil, fmt.Errorf("workspace.yaml unreadable: %w", err)
 	}
 
 	var rf registryFile

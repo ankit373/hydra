@@ -315,7 +315,7 @@ func jaccard(a, b map[string]bool) float64 {
 	return float64(inter) / float64(union)
 }
 
-// Dependents returns the direct dependents of a node (for `hydra graph blast`).
+// Dependents returns the direct dependents of a node (for `hyctl graph blast`).
 func (g *Graph) Dependents(nodeID string) []string {
 	if g == nil {
 		return nil

@@ -11,13 +11,12 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"os"
-	"path/filepath"
 
 	"gopkg.in/yaml.v3"
 
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/provider"
+	"github.com/ankit373/hydra/registry"
 )
 
 // agiTierScores maps registry tier numbers to capability scores.
@@ -37,10 +36,12 @@ type Provider struct{}
 func (p *Provider) ID() string { return "agy" }
 
 func (p *Provider) Discover(_ context.Context) ([]provider.Head, error) {
-	registryPath := filepath.Join(config.ScriptHome(), "registry", "models.yaml")
-	data, err := os.ReadFile(registryPath)
+	// An on-disk registry wins; otherwise the copy embedded in the binary is
+	// used. Before #238 this read disk only and returned nothing when it was
+	// missing, which is every installed binary — so agy, a first-class head,
+	// was silently undiscoverable for anyone who did not clone the repo.
+	data, err := registry.Read(config.ScriptHome(), "models.yaml")
 	if err != nil {
-		// No registry file — binary running without the full repo. Silently return nothing.
 		return nil, nil
 	}
 
@@ -56,7 +57,7 @@ func (p *Provider) Discover(_ context.Context) ([]provider.Head, error) {
 		} `yaml:"models"`
 	}
 	if err := yaml.Unmarshal(data, &reg); err != nil {
-		log.Printf("agy provider: malformed models.yaml at %s: %v — no agy heads available", registryPath, err)
+		log.Printf("agy provider: malformed models.yaml: %v — no agy heads available", err)
 		return nil, nil
 	}
 
