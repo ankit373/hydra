@@ -2,7 +2,11 @@ name: CI
 
 on:
   pull_request:
-    branches: [main, develop]
+    # release/v* is included because it is the UAT gate: it is what a release is
+    # validated on, and where fixes land during validation. Leaving it out meant
+    # a PR into a release branch reported "no checks reported" and was mergeable
+    # with zero verification (#224).
+    branches: [main, develop, "release/v*"]
 
 # Cancel any in-progress run for the same branch when a new commit is pushed.
 concurrency:
