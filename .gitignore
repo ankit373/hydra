@@ -51,6 +51,9 @@ Thumbs.db
 package-lock.json
 yarn.lock
 pnpm-lock.yaml
+# The desktop frontend is npm, not bun, and its lockfile must be committed —
+# without it `npm ci` cannot run and nobody builds the same bundle twice.
+!desktop/frontend/package-lock.json
 
 # Private planning docs — local-only scoping / planning / spec / review / design.
 # NEVER commit these. Glob patterns catch future ones; explicit names below are legacy.

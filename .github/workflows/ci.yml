@@ -55,6 +55,54 @@ jobs:
       - name: Test
         run: go test ./... -race
 
+  desktop:
+    name: Desktop backend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: desktop/go.mod
+          cache: true
+
+      # desktop/ is its own module, so the root job's `./...` does not reach it.
+      # Without this job its tests would silently never run.
+      #
+      # No build tag here: desktop/main.go is the only file that imports Wails
+      # and it is behind `//go:build desktop`, so nothing on this runner needs
+      # libwebkit2gtk. desktop/api — the part with the tests — imports no UI
+      # framework at all.
+      - name: Gofmt
+        working-directory: desktop
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "::error::These files are not gofmt'd:"
+            echo "$unformatted"
+            gofmt -d .
+            exit 1
+          fi
+
+      - name: Vet
+        working-directory: desktop
+        run: go vet ./...
+
+      # Same reasoning as the root job: staticcheck must be built with the
+      # toolchain it analyses.
+      - name: Install staticcheck
+        working-directory: desktop
+        run: GOTOOLCHAIN=$(go env GOVERSION) go install honnef.co/go/tools/cmd/staticcheck@2026.1
+
+      - name: Staticcheck
+        working-directory: desktop
+        run: staticcheck ./...
+
+      - name: Test
+        working-directory: desktop
+        run: go test ./... -race
+
   shellcheck:
     name: Shellcheck
     runs-on: ubuntu-latest

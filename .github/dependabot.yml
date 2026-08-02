@@ -16,3 +16,29 @@ updates:
     commit-message:
       prefix: "chore(deps)"
     open-pull-requests-limit: 5
+
+  # The desktop app is its own Go module (see desktop/go.mod), so the root
+  # ecosystem entry does not reach it. Grouped into one PR per week — Wails
+  # pulls ~25 transitive deps and ungrouped updates would bury the queue.
+  - package-ecosystem: "gomod"
+    directory: "/desktop"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "chore(deps)"
+    open-pull-requests-limit: 3
+    groups:
+      desktop-go:
+        patterns: ["*"]
+
+  # Desktop frontend (React/TS).
+  - package-ecosystem: "npm"
+    directory: "/desktop/frontend"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "chore(deps)"
+    open-pull-requests-limit: 3
+    groups:
+      desktop-frontend:
+        patterns: ["*"]
