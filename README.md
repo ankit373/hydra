@@ -648,6 +648,14 @@ Dashboard totals are asserted equal to `hyctl cost` and `hyctl stats` for the sa
 | Windows | `hydra-desktop_<version>_windows_amd64.zip` |
 | Linux | `hydra-desktop_<version>_linux_amd64.tar.gz` |
 
+Each artifact ships a `.sha256` next to it. Until the builds are signed this is the only integrity
+check available, so it is worth the one command:
+
+```bash
+shasum -a 256 -c hydra-desktop_<version>_darwin_universal.zip.sha256   # macOS
+sha256sum   -c hydra-desktop_<version>_linux_amd64.tar.gz.sha256       # Linux
+```
+
 **The builds are not code-signed yet**, so the first launch takes one extra step:
 
 - **macOS** — Gatekeeper will say Hydra "cannot be opened because it is from an unidentified

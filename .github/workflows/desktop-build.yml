@@ -91,6 +91,37 @@ jobs:
           echo "Installing Wails CLI $version"
           go install "github.com/wailsapp/wails/v2/cmd/wails@$version"
 
+      # CFBundleVersion and CFBundleShortVersionString are templated from
+      # wails.json's info.productVersion by build/darwin/Info.plist. Nothing
+      # ever set it, so every bundle claimed Wails' 1.0.0 default while the
+      # binary's ldflags reported the real release: Finder disagreed with the
+      # app's own footer, and because macOS compares CFBundleVersion to decide
+      # what is newer, every future release would still look like 1.0.0 (#233).
+      #
+      # Normalised rather than passed straight through — callers send
+      # "v1.1.0-rc.5", "v1.1.0" and literally "ci", and CFBundleVersion has to
+      # be dotted digits. The pre-release suffix is dropped because an rc is a
+      # pre-release *of* that version; the exact build stays visible in the
+      # footer via ldflags, which is the authoritative place for it.
+      - name: Stamp the bundle version
+        shell: bash
+        working-directory: desktop
+        # Through env, not ${{ }} interpolated into the script body: the value
+        # is derived from a branch name upstream, and expression substitution
+        # happens before bash ever parses the line.
+        env:
+          RAW_VERSION: ${{ inputs.version }}
+        run: |
+          v="${RAW_VERSION#v}"   # v1.1.0-rc.5 → 1.1.0-rc.5
+          v="${v%%-*}"           # 1.1.0-rc.5  → 1.1.0
+          if ! printf '%s' "$v" | grep -Eq '^[0-9]+(\.[0-9]+){0,2}$'; then
+            echo "::notice::'$RAW_VERSION' is not a release version — stamping 0.0.0"
+            v=0.0.0
+          fi
+          echo "CFBundleVersion=$v (from '$RAW_VERSION')"
+          jq --arg v "$v" '.info.productVersion = $v' wails.json > wails.json.tmp
+          mv wails.json.tmp wails.json
+
       - name: Build
         shell: bash
         working-directory: desktop
@@ -145,7 +176,13 @@ jobs:
         working-directory: desktop/build/bin
         run: |
           shopt -s nullglob
-          found=(hydra-desktop_*)
+          # Checksums are written after this step, but exclude them anyway so a
+          # future reorder cannot fail the size guard on a 100-byte .sha256.
+          found=()
+          for f in hydra-desktop_*; do
+            case "$f" in *.sha256) continue ;; esac
+            found+=("$f")
+          done
           if [ ${#found[@]} -eq 0 ]; then
             echo "::error::no artifact was produced for ${{ matrix.goos }}/${{ matrix.arch }}"
             ls -la
@@ -160,6 +197,30 @@ jobs:
               echo "::error::$f is only $size bytes — that is not a real app bundle"
               exit 1
             fi
+          done
+
+      # goreleaser's checksums.txt covers the hyctl binaries only — it is built
+      # by a different job that never sees these files, so the desktop artifacts
+      # shipped with no way to verify them at all (#233). That matters more
+      # while the app is unsigned, not less: with no Developer ID signature to
+      # check, the checksum is the only integrity evidence a downloader has.
+      #
+      # One sidecar per artifact rather than a shared file: the three platform
+      # jobs run in parallel, and appending to a single checksums.txt would be a
+      # race between them. Each job owns exactly the files it produced.
+      - name: Checksum the artifact
+        shell: bash
+        working-directory: desktop/build/bin
+        run: |
+          shopt -s nullglob
+          for f in hydra-desktop_*; do
+            case "$f" in *.sha256) continue ;; esac
+            if command -v sha256sum >/dev/null 2>&1; then
+              sha256sum "$f" > "$f.sha256"
+            else
+              shasum -a 256 "$f" > "$f.sha256"   # macOS has no sha256sum
+            fi
+            cat "$f.sha256"
           done
 
       - name: Upload to the release

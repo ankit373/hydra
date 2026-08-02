@@ -7,8 +7,14 @@
         <string>{{.Info.ProductName}}</string>
         <key>CFBundleExecutable</key>
         <string>{{.OutputFilename}}</string>
+        <!-- Hardcoded, not the com.wails.<name> the Wails template ships: that
+             namespace belongs to the Wails project, not us, and this is the
+             identity macOS keys preferences, TCC permissions and update
+             comparisons off. Changing it after users have installed resets all
+             of that, and notarization requires it to sit under a domain the
+             signing team owns — hydra.uvansa.com reversed. -->
         <key>CFBundleIdentifier</key>
-        <string>com.wails.{{safeBundleID .Name}}</string>
+        <string>com.uvansa.hydra</string>
         <key>CFBundleVersion</key>
         <string>{{.Info.ProductVersion}}</string>
         <key>CFBundleGetInfoString</key>

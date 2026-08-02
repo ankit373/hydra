@@ -504,10 +504,13 @@ hydra-desktop_&lt;version&gt;_darwin_universal.zip   <span class="c"># macOS, In
 hydra-desktop_&lt;version&gt;_windows_amd64.zip      <span class="c"># Windows</span>
 hydra-desktop_&lt;version&gt;_linux_amd64.tar.gz     <span class="c"># Linux</span>
 
+<span class="c"># Every artifact ships a .sha256 beside it — verify before you run:</span>
+shasum -a 256 -c hydra-desktop_&lt;version&gt;_darwin_universal.zip.sha256
+
 <span class="c"># Or build it yourself:</span>
 go install github.com/wailsapp/wails/v2/cmd/wails@latest
 cd desktop &amp;&amp; wails build                <span class="c"># → desktop/build/bin/Hydra.app</span></pre></div>
-      <div class="callout"><b>The builds are not code-signed yet</b>, so the first launch takes one extra step. <b>macOS:</b> Gatekeeper reports an unidentified developer — right-click the app → <b>Open</b> → <b>Open</b>, once. If it still refuses after unzipping from a terminal, run <span class="fx">xattr -dr com.apple.quarantine Hydra.app</span>. <b>Windows:</b> SmartScreen may warn — <b>More info</b> → <b>Run anyway</b>. <b>Linux:</b> needs <span class="fx">libgtk-3-0</span> and <span class="fx">libwebkit2gtk-4.1-0</span>, then <span class="fx">chmod +x Hydra</span>.</div>
+      <div class="callout"><b>The builds are not code-signed yet</b>, so the published <span class="fx">.sha256</span> is the only integrity check available — worth the one command above. The first launch also takes one extra step. <b>macOS:</b> Gatekeeper reports an unidentified developer — right-click the app → <b>Open</b> → <b>Open</b>, once. If it still refuses after unzipping from a terminal, run <span class="fx">xattr -dr com.apple.quarantine Hydra.app</span>. <b>Windows:</b> SmartScreen may warn — <b>More info</b> → <b>Run anyway</b>. <b>Linux:</b> needs <span class="fx">libgtk-3-0</span> and <span class="fx">libwebkit2gtk-4.1-0</span>, then <span class="fx">chmod +x Hydra</span>.</div>
       <div class="callout">The app reads the same logs the CLI writes, so its numbers are the CLI's numbers — Dashboard totals match <span class="fx">hyctl cost</span> and <span class="fx">hyctl stats</span> for the same data. There is no separate daemon and no telemetry: it reads <span class="fx">~/.hydra/logs/</span> on your machine.</div>
     </section>
 

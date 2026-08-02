@@ -7,6 +7,7 @@
   "frontend:build": "npm run build",
   "frontend:dev:watcher": "npm run dev",
   "frontend:dev:serverUrl": "auto",
+  "//productVersion": "Deliberately absent. desktop-build.yml injects it from the release version before calling wails build, because it feeds CFBundleVersion/CFBundleShortVersionString in build/darwin/Info.plist. A static value here would be a second source of truth that goes stale the moment a release ships — the same drift that froze every bundle at Wails' 1.0.0 default (#233). Local builds keep that default on purpose: they are not distributed, and their ldflags say 'dev' to match.",
   "info": {
     "productName": "Hydra",
     "comments": "Local-first, multi-vendor AI control plane."
