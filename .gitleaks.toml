@@ -1,6 +1,6 @@
 # Gitleaks configuration for Hydra.
 # Extends the full default ruleset, then allowlists values that are PUBLIC by
-# design and therefore NOT secrets.
+# design, or synthetic, and therefore NOT secrets.
 
 title = "Hydra"
 
@@ -8,9 +8,25 @@ title = "Hydra"
 useDefault = true
 
 [allowlist]
-description = "Public, intentional identifiers embedded in the shipped site — not secrets"
+description = "Public identifiers and synthetic test fixtures — not secrets"
+
+# Conditions are OR-ed: a finding is allowed if its content matches a regex
+# below OR its file matches a path below.
+
 regexes = [
   # Ahrefs Web Analytics data-key: a public site identifier embedded in the page
   # <head> and served to every visitor (equivalent to a GA measurement ID).
   '''yRz83E87rXgYWlhmro5mIg''',
+]
+
+paths = [
+  # The corpus for Hydra's own PII detector (#169). Its fixtures are secrets by
+  # construction — a test that a private key is detected has to contain
+  # something shaped like a private key — so gitleaks flags all of them.
+  #
+  # Every value there is synthetic or a vendor's published example
+  # (e.g. AKIAIOSFODNN7EXAMPLE is AWS's documented sample key). Scoped to this
+  # one file rather than to *_test.go, so a real credential pasted into any
+  # other test is still caught.
+  '''^internal/policy/pii_test\.go$''',
 ]

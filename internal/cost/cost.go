@@ -504,6 +504,10 @@ func loadRows(path string) ([]Row, error) {
 
 	var rows []Row
 	scanner := bufio.NewScanner(f)
+	// Match every other jsonl reader here (ledger, runlog, trust): a row with a
+	// long prompt preview would otherwise exceed the 64 KiB default and abort
+	// the whole report, since Err() is returned below.
+	scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" {

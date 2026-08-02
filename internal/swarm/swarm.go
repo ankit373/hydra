@@ -101,6 +101,32 @@ func New(d *dispatch.Dispatcher, heads []provider.Head, pricing PricingReader) *
 	return &Swarm{d: d, heads: heads, pricing: pricing}
 }
 
+// Plan reports what Run or RunSPRT would do without executing anything: which
+// heads would be engaged, and what one round of fan-out is estimated to cost.
+//
+// It exists so --dry-run can mean the same thing in every mode. It used to mean
+// nothing in swarm and SPRT modes — the flag was read only by the single-dispatch
+// path, which both ensemble branches returned before reaching, so a dry run
+// fired a paid ensemble (#167).
+//
+// Selection deliberately mirrors Run and RunSPRT, which resolve the same
+// selector against the same options; a plan that picked different heads from the
+// run it describes would be worse than no plan.
+func (s *Swarm) Plan(prompt string, opts Options) (heads []provider.Head, estUSD float64, err error) {
+	cfg, err := config.Load()
+	if err != nil {
+		return nil, 0, fmt.Errorf("swarm: config load: %w", err)
+	}
+	selected, err := resolveSelector(opts, cfg).Select(s.heads, opts)
+	if err != nil {
+		return nil, 0, err
+	}
+	if len(selected) == 0 {
+		return nil, 0, fmt.Errorf("swarm: no heads available for the requested configuration")
+	}
+	return selected, estimateFanoutCost(selected, prompt, s.pricing), nil
+}
+
 // Run executes the swarm: selects heads, optionally checks cost, fires them,
 // collects results, optionally judges, logs costs.
 func (s *Swarm) Run(ctx context.Context, prompt string, opts Options) (*SwarmResult, error) {

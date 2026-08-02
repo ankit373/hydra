@@ -23,21 +23,32 @@ type PricingReader interface {
 	EstimateCost(tier int, inputTokens, outputTokens int) float64
 }
 
-// preflightCost estimates the total cost of firing all selected heads before
-// any execution begins. Returns an error if the estimate exceeds maxUSD.
-// Uses prompt character count / 4 as a token estimate (same as agy executor).
-func preflightCost(heads []provider.Head, prompt string, pr PricingReader, maxUSD float64) (float64, error) {
-	if pr == nil || maxUSD <= 0 {
-		return 0, nil
+// estimateFanoutCost estimates the total USD cost of firing every selected
+// head once. Uses prompt character count / 4 as a token estimate (same as the
+// agy executor).
+//
+// Separate from preflightCost because a *guard* can skip the arithmetic when no
+// limit is set, but a *plan* cannot: --dry-run must report the cost even when
+// nothing caps it (#167).
+func estimateFanoutCost(heads []provider.Head, prompt string, pr PricingReader) float64 {
+	if pr == nil {
+		return 0
 	}
-
 	estInputTokens := len(prompt) / 4
 	var total float64
 	for _, h := range heads {
 		total += pr.EstimateCost(rank.UITier(h), estInputTokens, estInputTokens/2)
 	}
+	return round6(total)
+}
 
-	total = round6(total)
+// preflightCost estimates the total cost of firing all selected heads before
+// any execution begins. Returns an error if the estimate exceeds maxUSD.
+func preflightCost(heads []provider.Head, prompt string, pr PricingReader, maxUSD float64) (float64, error) {
+	if pr == nil || maxUSD <= 0 {
+		return 0, nil
+	}
+	total := estimateFanoutCost(heads, prompt, pr)
 	if total > maxUSD {
 		return total, fmt.Errorf("swarm: estimated cost $%.4f exceeds limit $%.4f (%d heads)", total, maxUSD, len(heads))
 	}
