@@ -65,6 +65,8 @@
       "Automatic fallback chains terminating at always-on local Qwen",
       "Local Ollama + cloud model hybrid — provider-neutral discovery",
       "Interactive TUI cockpit (hyctl tui) — chat, route work, and watch spend live",
+      "Desktop app (Wails v2, build from source) — Dashboard, Fleet, Session and Code views over a chat dock",
+      "Per-run event log — reconstruct any run's supervision tree, timeline and file edits",
       "Swarm dispatch — race, best, and all modes across multiple models simultaneously",
       "Token budget enforcement — per-model context window tracking with pressure modes",
       "Dynamic live pricing — OpenRouter API pricing with 24h cache and tier fallback",
@@ -728,7 +730,7 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
       </tbody>
     </table>
   </div>
-  <p class="cmp-note"><b>The interactive agent-tree cockpit is the one roadmap item here</b> — every row checked above ships today in the CLI (<code>hyctl dispatch --confidence</code>, <code>hyctl graph blast</code>, <code>hyctl mcp</code>).</p>
+  <p class="cmp-note"><b>Every row checked above ships today</b> — <code>hyctl dispatch --confidence</code>, <code>hyctl graph blast</code>, <code>hyctl mcp</code>. The agent-tree cockpit (<code>hyctl tui</code>) now renders real runs from the per-run event log, and the desktop app is built but not yet packaged — you build it from <code>desktop/</code>.</p>
 </section>
 
 <!-- ══ 7 · GETTING STARTED ══════════════════════════════════════════════════ -->

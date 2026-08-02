@@ -442,26 +442,26 @@ hyctl tui <span class="fl">--snapshot</span> <span class="fl">--view</span> 0|1|
 
     <!-- ══ APP ══ -->
     <section class="doc" id="app">
-      <h2>The desktop app <span class="badge prev">design preview</span> <span class="tagline">point-and-click cockpit</span></h2>
-      <p class="sum">The same cockpit as a native window. <b>Click the sidebar</b> — the views swap live. <b>In design; not yet shipped.</b> Here's the direction:</p>
+      <h2>The desktop app <span class="badge prev">build from source</span> <span class="tagline">point-and-click cockpit</span></h2>
+      <p class="sum">A native window over the same engine — Wails v2 + React, in <span class="fx">desktop/</span>. Four views over a persistent chat dock. <b>Built, not yet packaged:</b> there is no installer or signed build, so today you build it yourself. <b>Click the sidebar</b> — the views swap live.</p>
       <div class="appwin">
         <div class="tb"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i><span class="ttl" id="appTitle">Hydra.app — Dashboard</span></div>
         <div class="appbody">
           <div class="appnav" id="appNav" role="tablist">
-            <div class="item" data-av="av-cockpit" data-title="Cockpit" role="tab" tabindex="0"><span class="dot"></span>Cockpit</div>
             <div class="item on" data-av="av-dash" data-title="Dashboard" role="tab" tabindex="0"><span class="dot"></span>Dashboard</div>
-            <div class="item" data-av="av-tree" data-title="Agent tree" role="tab" tabindex="0"><span class="dot"></span>Agent tree</div>
+            <div class="item" data-av="av-cockpit" data-title="Fleet" role="tab" tabindex="0"><span class="dot"></span>Fleet</div>
+            <div class="item" data-av="av-tree" data-title="Session" role="tab" tabindex="0"><span class="dot"></span>Session</div>
+            <div class="item" data-av="av-code" data-title="Code" role="tab" tabindex="0"><span class="dot"></span>Code</div>
           </div>
           <div class="appview">
             <div class="panes" id="appPanes">
               <div class="pane" id="av-cockpit">
-                <div class="ah">route a task</div>
+                <div class="ah">runs · live first</div>
                 <div class="appcock">
-                  <div class="crow you">❯ rotate the signing key in internal/auth/token.go</div>
-                  <div class="crow">prompt → CORE → T1 → <span style="color:var(--violet)">agy · claude</span></div>
-                  <div class="crow"><span style="color:var(--exp)">κ=3.1 ⚠</span> · 12 dependents → confidence bar raised to 0.95</div>
-                  <div class="crow"><span style="color:var(--cyan)">conf 0.98</span> / target 0.95 · SPRT <span style="color:var(--cheap)">accept</span></div>
-                  <div class="crow"><span style="color:var(--cheap)">✔ done · saved $0.0149 vs all-frontier</span></div>
+                  <div class="crow"><span style="color:var(--aqua)">●</span> 20260802T190000Z-5e55… <span style="color:var(--faint)">4.7s · $0.0031 · 3 agents</span></div>
+                  <div class="crow"><span style="color:var(--faint)">&nbsp;&nbsp;&nbsp;2 running · 1 ok</span></div>
+                  <div class="crow"><span style="color:var(--faint)">○ 20260802T182210Z-ab41… &nbsp;1.3s · $0.0000 · 1 agent · ok</span></div>
+                  <div class="crow"><span style="color:var(--faint)">○ 20260802T175902Z-9d07… &nbsp;8.1s · $0.0142 · 5 agents · ok</span></div>
                 </div>
               </div>
               <div class="pane on" id="av-dash">
@@ -486,11 +486,23 @@ hyctl tui <span class="fl">--snapshot</span> <span class="fl">--view</span> 0|1|
                   <div style="color:var(--faint)">&nbsp;&nbsp;&nbsp;┄▶ A2A token-rotation → tests</div>
                 </div>
               </div>
+              <div class="pane" id="av-code">
+                <div class="ah">internal/auth/token.go &nbsp;<span style="color:var(--cheap)">+2</span> <span style="color:var(--exp)">−1</span></div>
+                <div class="apptree mono">
+                  <div><span style="color:var(--faint)">&nbsp;41&nbsp;&nbsp;41</span> &nbsp; func Rotate(k *Key) error {</div>
+                  <div style="background:rgba(255,90,110,.12)"><span style="color:var(--faint)">&nbsp;42&nbsp;&nbsp;&nbsp;&nbsp;</span> <span style="color:var(--exp)">−</span> return k.rotate()</div>
+                  <div style="background:rgba(63,217,138,.12)"><span style="color:var(--faint)">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;42</span> <span style="color:var(--cheap)">+</span> if err := k.validate(); err != nil {</div>
+                  <div style="background:rgba(63,217,138,.12)"><span style="color:var(--faint)">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;43</span> <span style="color:var(--cheap)">+</span> &nbsp;&nbsp;return err</div>
+                  <div><span style="color:var(--faint)">&nbsp;43&nbsp;&nbsp;44</span> &nbsp; }</div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
       </div>
-      <div class="callout">The TUI ships today (<span class="fx">hyctl tui</span>). The desktop app is a design preview — track it on the roadmap.</div>
+      <div class="sub"><div class="lbl">Build it</div><pre>go install github.com/wailsapp/wails/v2/cmd/wails@latest
+cd desktop &amp;&amp; wails build                <span class="c"># → desktop/build/bin/</span></pre></div>
+      <div class="callout">The app reads the same logs the CLI writes, so its numbers are the CLI's numbers — Dashboard totals match <span class="fx">hyctl cost</span> and <span class="fx">hyctl stats</span> for the same data. There is no separate daemon and no telemetry: it reads <span class="fx">~/.hydra/logs/</span> on your machine.</div>
     </section>
 
     <!-- ══ INTEGRATIONS ══ -->
