@@ -452,8 +452,10 @@ Features merge to develop (conventional commits)
 Cut release branch: git checkout -b release/v1.2.0 develop
         ↓  (push → rc.yml fires → publishes v1.2.0-rc.1 pre-release)
 UAT testing on release/v1.2.0
-Bug fixes committed directly to release/v1.2.0
-        ↓  (each push → rc.yml publishes v1.2.0-rc.2, rc.3 …)
+Bug fixes land via PR into release/v1.2.0 (direct pushes are rejected — the
+release-branch-protection ruleset requires a PR and linear history, so a merge
+commit cannot land there either; squash or rebase only)
+        ↓  (each merge → rc.yml publishes v1.2.0-rc.2, rc.3 …)
 Sign-off ✓
         ↓
 PR: release/v1.2.0 → main  (squash merge)
