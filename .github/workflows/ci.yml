@@ -14,16 +14,40 @@ jobs:
     name: Go build & test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: true
 
+      # Formatting is checked before anything expensive runs — it is the
+      # cheapest failure to produce and the cheapest to fix.
+      - name: Gofmt
+        run: |
+          unformatted=$(gofmt -l ./cmd ./internal)
+          if [ -n "$unformatted" ]; then
+            echo "::error::These files are not gofmt'd:"
+            echo "$unformatted"
+            gofmt -d ./cmd ./internal
+            exit 1
+          fi
+
       - name: Vet
         run: go vet ./...
+
+      # staticcheck must be BUILT with the same toolchain it analyses. Its own
+      # go.mod asks for go1.25, so a plain `go install` builds it on go1.25 and
+      # it then rejects every go1.26 stdlib file it parses ("file requires newer
+      # Go version"), failing the whole run. Pinning GOTOOLCHAIN to whatever
+      # this module actually resolved to keeps the two in step without
+      # hardcoding a version that would drift from go.mod.
+      - name: Install staticcheck
+        run: GOTOOLCHAIN=$(go env GOVERSION) go install honnef.co/go/tools/cmd/staticcheck@2026.1
+
+      - name: Staticcheck
+        run: staticcheck ./...
 
       - name: Build
         run: go build ./...
@@ -35,7 +59,7 @@ jobs:
     name: Shellcheck
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install shellcheck
         run: sudo apt-get install -y shellcheck
@@ -50,7 +74,7 @@ jobs:
     name: TypeScript typecheck
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up Bun
         uses: oven-sh/setup-bun@v2
@@ -69,7 +93,7 @@ jobs:
     name: YAML validation
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install yq
         run: |
@@ -88,7 +112,7 @@ jobs:
     name: Secret scan
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 

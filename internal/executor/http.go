@@ -824,7 +824,8 @@ func canonicalHeaders(req *http.Request) (string, string) {
 		case "host":
 			b.WriteString("host:" + req.URL.Host + "\n")
 		default:
-			b.WriteString(key + ":" + strings.TrimSpace(req.Header.Get(http.CanonicalHeaderKey(key))) + "\n")
+			// Header.Get canonicalises its argument itself (S1035).
+			b.WriteString(key + ":" + strings.TrimSpace(req.Header.Get(key)) + "\n")
 		}
 	}
 	return b.String(), strings.Join(keys, ";")

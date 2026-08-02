@@ -3,7 +3,6 @@
 package provider
 
 import (
-	"fmt"
 	"sync"
 )
 
@@ -37,14 +36,4 @@ func (r *Registry) all() []Provider {
 		out = append(out, p)
 	}
 	return out
-}
-
-func (r *Registry) get(id string) (Provider, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	p, ok := r.providers[id]
-	if !ok {
-		return nil, fmt.Errorf("provider %q not registered", id)
-	}
-	return p, nil
 }
