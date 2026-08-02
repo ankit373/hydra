@@ -6,6 +6,8 @@
 
 - **10-tier routing**: Claude Opus (tier 1, complex reasoning) down to Qwen3 via Ollama (tier 10, free local)
 - **Interactive TUI cockpit**: `hyctl tui` opens an interactive cockpit — chat with your heads, route work, and watch spend live. Three views: chat+code, dashboard, and agent-tree. `hyctl tui --snapshot` renders one static frame for docs/previews
+- **Desktop app (build from source)**: a Wails v2 GUI in `desktop/` with four views — Dashboard (spend, governor pressure, trust record), Fleet (runs in flight and the agents inside them), Session (one run's timeline, plus a layered graph when the run fanned out), Code (the file edits a run made, as diffs) — over a persistent chat dock. Not yet packaged for distribution: build it with `cd desktop && wails build`
+- **Per-run event log**: every dispatch writes `~/.hydra/logs/runs/<run_id>.jsonl` — head selection, swarm attempts, SPRT samples with their running confidence, A2A handoffs, and file edits — which is what the cockpit's agent-tree and the desktop app reconstruct a run from. `HYDRA_RUN_ID` groups invocations an external orchestrator spawns into one run
 - **~1µs routing overhead**: the Go routing engine (policy eval + head selection + budget check) adds ~1,130 ns per dispatch — benchmarked on Apple M1 via `go test -bench=BenchmarkRoutingPath`
 - **Swarm dispatch**: fan a single prompt to multiple models simultaneously — race (fastest), best (LLM-judged quality), or all (aggregate)
 - **Confidence routing**: `hyctl dispatch --confidence 0.95` runs an SPRT (sequential probability ratio test) ensemble that samples models adaptively and stops as soon as a target confidence of correctness is reached, using per-source calibration (`hyctl trust calibration`) you build up from real outcomes — fewer model calls on easy tasks, more only where accuracy demands it
@@ -13,6 +15,7 @@
 - **Token budget enforcement**: pressure modes (Normal → Emergency) plus a rate-aware first-passage governor auto-downgrade tiers as the orchestrator's context window fills
 - **Cost analytics**: `hyctl stats` shows spend broken down by model, tier, and day
 - **Dynamic pricing**: live rates from OpenRouter API with 24h cache and static YAML offline fallback
+- **Any API key works**: set `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `GEMINI_API_KEY`, `GROQ_API_KEY`, `MISTRAL_API_KEY`, `DEEPSEEK_API_KEY`, `XAI_API_KEY` (or Bedrock/Azure/Cohere/Replicate/Together/Fireworks/Perplexity credentials) and the provider becomes a routable head automatically — no config file to touch
 - **A2A handoff**: structured JSON context (with vector clocks for causal ordering) passed between agents across tasks
 
 ## CLI Commands
@@ -30,7 +33,8 @@
 - `hyctl mcp` — local MCP accountability ledger: `check`, `record`, `verify`, `log`, `report`. Access checks can be classification-aware (PII auto-detected from content) and bind a SHA256 hash of the invocation parameters, so `verify` can later prove the executed parameters match the ones that were approved
 - `hyctl oracle` — verification oracles (tests/compile/lint) as calibrated evidence: `verify`
 - `hyctl models` — model capability registry: `list`, `add`, `remove`, `sync`
-- `hyctl edit` — editor integration
+- `hyctl parallel` — fan N independent tasks out to N heads at once, from a task JSON file
+- `hyctl edit` — scoped, validated, rollback-safe single-file edit
 - `hyctl review` — code review
 - `hyctl init` — first-run wizard: discover heads, choose your cortex
 - `hyctl version` — build and version info

@@ -70,10 +70,12 @@ jobs:
       # desktop/ is its own module, so the root job's `./...` does not reach it.
       # Without this job its tests would silently never run.
       #
-      # No build tag here: desktop/main.go is the only file that imports Wails
-      # and it is behind `//go:build desktop`, so nothing on this runner needs
-      # libwebkit2gtk. desktop/api — the part with the tests — imports no UI
-      # framework at all.
+      # Scoped to ./api/... deliberately: desktop/main.go imports Wails, which
+      # needs libwebkit2gtk to compile on Linux. A build tag used to exclude it,
+      # but `wails build` generates bindings by compiling that package untagged,
+      # so the tag broke the documented build command (#213). desktop/api — the
+      # part with the tests — imports no UI framework at all, and main.go is
+      # exercised by `wails build` on a machine that has a webview.
       - name: Gofmt
         working-directory: desktop
         run: |
@@ -87,7 +89,7 @@ jobs:
 
       - name: Vet
         working-directory: desktop
-        run: go vet ./...
+        run: go vet ./api/...
 
       # Same reasoning as the root job: staticcheck must be built with the
       # toolchain it analyses.
@@ -97,11 +99,11 @@ jobs:
 
       - name: Staticcheck
         working-directory: desktop
-        run: staticcheck ./...
+        run: staticcheck ./api/...
 
       - name: Test
         working-directory: desktop
-        run: go test ./... -race
+        run: go test ./api/... -race
 
   shellcheck:
     name: Shellcheck

@@ -1,7 +1,5 @@
 // SPDX-License-Identifier: MIT
 
-//go:build desktop
-
 // Command hydradesk is Hydra's desktop app.
 //
 // It lives in this module rather than its own repo because it binds directly to
@@ -11,7 +9,12 @@
 //
 // This file is the only one that knows Wails exists. Everything it binds lives
 // in desktop/api, which imports no UI framework and is unit-tested without a
-// webview.
+// webview — so CI checks the backend with `./api/...` and never needs
+// libwebkit2gtk on a Linux runner.
+//
+// It carries no build tag. One did exclude it, but `wails build` generates
+// bindings by compiling this package untagged, so the tag made the documented
+// build command fail with "build constraints exclude all Go files" (#213).
 package main
 
 import (
