@@ -245,7 +245,7 @@ func (m InitModel) save() error {
 }
 
 // exportToRoutingYAML appends a discovered_heads block to registry/routing.yaml
-// so that route.sh and human operators can see what hydra init found.
+// so that route.sh and human operators can see what hyctl init found.
 // Any existing auto-discovered block is replaced.
 func exportToRoutingYAML(tiers []config.Tier, cortex *provider.Head) error {
 	routingPath := filepath.Join(config.ScriptHome(), "registry", "routing.yaml")
@@ -256,7 +256,7 @@ func exportToRoutingYAML(tiers []config.Tier, cortex *provider.Head) error {
 	}
 
 	// Strip any previously written discovered block.
-	const marker = "\n# ── Auto-discovered by hydra init"
+	const marker = "\n# ── Auto-discovered by hyctl init"
 	base := string(existing)
 	if idx := strings.Index(base, marker); idx != -1 {
 		base = base[:idx]
@@ -267,7 +267,7 @@ func exportToRoutingYAML(tiers []config.Tier, cortex *provider.Head) error {
 	b.WriteString(marker)
 	b.WriteString(" ────────────────────────────────────────\n")
 	b.WriteString(fmt.Sprintf("# Generated: %s\n", time.Now().UTC().Format("2006-01-02T15:04:05Z")))
-	b.WriteString("# Re-run `hydra init` to refresh.\n")
+	b.WriteString("# Re-run `hyctl init` to refresh.\n")
 	b.WriteString("discovered_heads:\n")
 	if cortex != nil {
 		b.WriteString(fmt.Sprintf("  cortex: %s\n", cortex.ID))

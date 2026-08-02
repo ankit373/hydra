@@ -304,7 +304,7 @@ func (m InstallModel) View() string {
 		if opt.envKey != "" || opt.installCmd == "" {
 			b.WriteString(sPrompt.Render("  Manual steps:\n"))
 			b.WriteString("  " + codeStyle.Render(opt.postInstall) + "\n\n")
-			b.WriteString(sDim.Render("  After setting up, run: hydra init\n"))
+			b.WriteString(sDim.Render("  After setting up, run: hyctl init\n"))
 			b.WriteString(sHint.Render("\n  Press enter to exit\n"))
 			return b.String()
 		}
@@ -328,13 +328,13 @@ func (m InstallModel) View() string {
 	case installStepDone:
 		if m.err {
 			b.WriteString(sError.Render("  Install failed.\n\n"))
-			b.WriteString(sDim.Render("  Try running the command manually, then: hydra init\n"))
+			b.WriteString(sDim.Render("  Try running the command manually, then: hyctl init\n"))
 		} else {
 			b.WriteString(successStyle.Render("  Done!\n\n"))
 			if m.selected != nil {
 				b.WriteString("  " + codeStyle.Render(m.selected.postInstall) + "\n\n")
 			}
-			b.WriteString(sDim.Render("  Then run: hydra init\n"))
+			b.WriteString(sDim.Render("  Then run: hyctl init\n"))
 		}
 	}
 

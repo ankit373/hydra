@@ -210,7 +210,7 @@ func cmdStatus() *cobra.Command {
 		RunE: func(_ *cobra.Command, _ []string) error {
 			cfg, err := config.Load()
 			if err != nil {
-				return fmt.Errorf("no config found — run: hydra init")
+				return fmt.Errorf("no config found — run: hyctl init")
 			}
 
 			fmt.Println()
@@ -1000,7 +1000,7 @@ func cmdModels() *cobra.Command {
 			if syncDry {
 				word = "would import"
 			}
-			fmt.Printf("\n  %s %d models (%d already known, skipped). capScores are provisional — refine with `hydra models add`.\n\n", word, added, skipped)
+			fmt.Printf("\n  %s %d models (%d already known, skipped). capScores are provisional — refine with `hyctl models add`.\n\n", word, added, skipped)
 			return nil
 		},
 	}
@@ -1710,17 +1710,17 @@ func cmdStats() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "stats",
 		Short: "Spend analytics — model, tier, day, and swarm breakdowns",
-		Long: `hydra stats shows cost.jsonl summaries with rich grouping options.
+		Long: `hyctl stats shows cost.jsonl summaries with rich grouping options.
 
 Examples:
-  hydra stats                  # today summary
-  hydra stats --days 7         # last 7 days, grouped by model
-  hydra stats --model          # all-time by model
-  hydra stats --tier           # all-time by tier
-  hydra stats --day            # all-time by day
-  hydra stats --swarm          # swarm-only stats + winner rate
-  hydra stats --session <id>   # single session/task breakdown
-  hydra stats --json           # machine-readable output`,
+  hyctl stats                  # today summary
+  hyctl stats --days 7         # last 7 days, grouped by model
+  hyctl stats --model          # all-time by model
+  hyctl stats --tier           # all-time by tier
+  hyctl stats --day            # all-time by day
+  hyctl stats --swarm          # swarm-only stats + winner rate
+  hyctl stats --session <id>   # single session/task breakdown
+  hyctl stats --json           # machine-readable output`,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			all, err := cost.LoadAll()
 			if err != nil {
@@ -1967,7 +1967,7 @@ func cmdTrustStats() *cobra.Command {
 				return json.NewEncoder(os.Stdout).Encode(s)
 			}
 			if s.Runs == 0 {
-				fmt.Println("\n  No SPRT runs yet. Try `hydra dispatch --confidence 0.95 --prompt ...`.")
+				fmt.Println("\n  No SPRT runs yet. Try `hyctl dispatch --confidence 0.95 --prompt ...`.")
 				return nil
 			}
 			fmt.Printf("\n  Trust stats (%d runs)\n", s.Runs)
@@ -2046,7 +2046,7 @@ func cmdTrustCalibration() *cobra.Command {
 				return json.NewEncoder(os.Stdout).Encode(stats)
 			}
 			if len(stats) == 0 {
-				fmt.Println("\n  No calibration recorded yet. Feed outcomes with `hydra trust record`.")
+				fmt.Println("\n  No calibration recorded yet. Feed outcomes with `hyctl trust record`.")
 				return nil
 			}
 			fmt.Printf("\n  %-28s %-10s %6s %7s %7s %8s\n", "Source", "Domain", "n", "se", "sp", "D(nats)")
@@ -2128,7 +2128,7 @@ func cmdTrustDefect() *cobra.Command {
 			}
 			fmt.Printf("  defect cost ≈ $%.2f  (blast=%.2f [%s] irreversible=%v pii=%v prod=%v)\n",
 				dm.CostUSD(task), blast, blastSource, irreversible, pii, production)
-			fmt.Printf("  → demands confidence ≥ %.1f%%  (use with: hydra dispatch --confidence %.3f)\n",
+			fmt.Printf("  → demands confidence ≥ %.1f%%  (use with: hyctl dispatch --confidence %.3f)\n",
 				dm.RequiredConfidence(task)*100, dm.RequiredConfidence(task))
 			return nil
 		},

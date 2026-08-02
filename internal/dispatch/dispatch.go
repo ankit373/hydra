@@ -82,7 +82,7 @@ func (d *Dispatcher) EstimateCost(tier, inputTokens, outputTokens int) float64 {
 func New(ctx context.Context) (*Dispatcher, error) {
 	cfg, err := config.Load()
 	if err != nil {
-		return nil, fmt.Errorf("no hydra config — run: hydra init")
+		return nil, fmt.Errorf("no hydra config — run: hyctl init")
 	}
 
 	result := probe.Run(ctx)
@@ -92,8 +92,7 @@ func New(ctx context.Context) (*Dispatcher, error) {
 		localOnly = true
 	}
 
-	registryDir := filepath.Join(config.ScriptHome(), "registry")
-	budgetReg := budget.NewRegistry(budget.LoadWindows(registryDir))
+	budgetReg := budget.NewRegistry(budget.LoadWindows(config.ScriptHome()))
 
 	return &Dispatcher{
 		cfg:     cfg,
@@ -498,7 +497,7 @@ func (d *Dispatcher) syncStateJSON(r *Result) {
 	existing["last_tier"] = rank.UITier(r.Head)
 
 	// Append the current orchestrator claude_pct (written by the orchestrator,
-	// e.g. `jq '.claude_pct = 52'`) to a bounded history, so `hydra status` can
+	// e.g. `jq '.claude_pct = 52'`) to a bounded history, so `hyctl status` can
 	// compute a rate-aware first-passage risk from the session trajectory rather
 	// than reacting only to the instantaneous level.
 	if pct := asInt(existing["claude_pct"]); pct > 0 {

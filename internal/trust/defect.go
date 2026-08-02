@@ -37,8 +37,8 @@ const maxConfidence = 0.999
 
 // DefectModel prices the cost of shipping an incorrect answer for a task. That
 // cost sets how much confidence a task must clear before Hydra stops sampling
-// (RequiredConfidence) and is surfaced in `hydra dispatch --confidence --file`,
-// `hydra trust defect`, and `hydra dispatch --dry-run`.
+// (RequiredConfidence) and is surfaced in `hyctl dispatch --confidence --file`,
+// `hyctl trust defect`, and `hyctl dispatch --dry-run`.
 type DefectModel struct {
 	W DefectWeights
 	// ToleratedLeakUSD is the expected leaked-defect cost held constant by

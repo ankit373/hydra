@@ -16,7 +16,7 @@ import (
 )
 
 // RunLog is one persisted SPRT run — the data the "By The Numbers" page
-// graduates from [MODEL] to [MEASURED], and what `hydra trust stats/explain` read.
+// graduates from [MODEL] to [MEASURED], and what `hyctl trust stats/explain` read.
 type RunLog struct {
 	TS         string     `json:"ts"`
 	TaskHash   string     `json:"task_hash"`
@@ -39,7 +39,7 @@ func DefaultLogPath() string {
 }
 
 // TaskHash is a short stable identifier for a prompt, used to correlate a run
-// with `hydra trust explain <task_hash>`.
+// with `hyctl trust explain <task_hash>`.
 func TaskHash(prompt string) string {
 	h := fnv.New32a()
 	_, _ = h.Write([]byte(prompt))
@@ -101,7 +101,7 @@ func LoadRuns(path string) ([]RunLog, error) {
 	return runs, scanner.Err()
 }
 
-// Stats is the aggregate view produced by `hydra trust stats`.
+// Stats is the aggregate view produced by `hyctl trust stats`.
 type Stats struct {
 	Runs            int     `json:"runs"`
 	MeanSamples     float64 `json:"mean_samples"`

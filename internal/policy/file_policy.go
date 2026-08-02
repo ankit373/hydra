@@ -5,12 +5,13 @@ package policy
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"reflect"
 	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/ankit373/hydra/registry"
 )
 
 // Spec is the input to the file policy evaluator — describes the task.
@@ -73,12 +74,12 @@ type FilePolicyEngine struct {
 	pf policyFile
 }
 
-// LoadFilePolicy reads registry/policy.yaml relative to hydraHome.
+// LoadFilePolicy reads registry/policy.yaml — an on-disk copy under hydraHome
+// if one exists, otherwise the copy embedded in the binary (#238).
 func LoadFilePolicy(hydraHome string) (*FilePolicyEngine, error) {
-	path := filepath.Join(hydraHome, "registry", "policy.yaml")
-	raw, err := os.ReadFile(path)
+	raw, err := registry.Read(hydraHome, "policy.yaml")
 	if err != nil {
-		return nil, fmt.Errorf("policy.yaml not found at %s", path)
+		return nil, fmt.Errorf("policy.yaml unreadable: %w", err)
 	}
 	var pf policyFile
 	if err := yaml.Unmarshal(raw, &pf); err != nil {
