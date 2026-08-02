@@ -42,8 +42,14 @@ func TestLogRun_ConfigOmittedGracefullyWithoutRegistry(t *testing.T) {
 }
 
 func TestTaskHash_StableAndDistinct(t *testing.T) {
-	if TaskHash("hello") != TaskHash("hello") {
-		t.Error("TaskHash not stable for identical input")
+	// Repeat rather than compare one call to itself: TaskHash must not pick up
+	// map-iteration order or any other per-call nondeterminism, and a single
+	// self-comparison would not catch that (it also trips staticcheck SA4000).
+	want := TaskHash("hello")
+	for i := range 100 {
+		if got := TaskHash("hello"); got != want {
+			t.Fatalf("TaskHash not stable: call %d gave %q, want %q", i, got, want)
+		}
 	}
 	if TaskHash("hello") == TaskHash("world") {
 		t.Error("TaskHash collided on distinct inputs")
