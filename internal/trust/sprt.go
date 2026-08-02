@@ -70,6 +70,13 @@ type Evidence struct {
 	Candidate   string  `json:"candidate"`
 	LambdaAfter float64 `json:"lambda_after"`
 	CostUSD     float64 `json:"cost_usd"`
+
+	// ConfidenceAfter is σ(LambdaAfter) — the running P(correct) once this
+	// source had been weighed. Stored rather than left for readers to derive:
+	// the ledger is a public JSON type written to trust.jsonl and read by the
+	// run log, and a second copy of the sigmoid in each reader is a third place
+	// for the confidence to drift.
+	ConfidenceAfter float64 `json:"confidence_after"`
 }
 
 // Result is the outcome of Run.
@@ -147,6 +154,7 @@ func Run(ctx context.Context, task Task, sources []Source, exec Executor, cal *C
 		res.Ledger = append(res.Ledger, Evidence{
 			Source: src.ID, Agreed: agreed, LLR: llr,
 			Candidate: candidate, LambdaAfter: lambda, CostUSD: cost,
+			ConfidenceAfter: sigmoid(lambda),
 		})
 
 		if lambda >= A {

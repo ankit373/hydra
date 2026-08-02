@@ -33,6 +33,7 @@ import (
 	"github.com/ankit373/hydra/internal/probe"
 	"github.com/ankit373/hydra/internal/review"
 	"github.com/ankit373/hydra/internal/runid"
+	"github.com/ankit373/hydra/internal/runlog"
 	"github.com/ankit373/hydra/internal/swarm"
 	"github.com/ankit373/hydra/internal/trust"
 	"github.com/ankit373/hydra/internal/tui"
@@ -394,7 +395,24 @@ func cmdDispatch() *cobra.Command {
 			// One invocation is one run with one logical task, whichever path
 			// below handles it — so a swarm's attempts and the dispatch that
 			// drove them share an identity in the logs (#181).
-			runID, taskID := runid.New(), runid.New()
+			//
+			// Resolve rather than mint: runid ranks explicit > env > generated,
+			// so calling New() here and passing the result as the explicit value
+			// silently outranked HYDRA_RUN_ID and made it dead at the only entry
+			// point that matters (#204).
+			runID, taskID := runid.ResolveRun(""), runid.ResolveTask("")
+
+			// Mark the run live for its whole duration. Without this
+			// runlog.LiveRuns() is always empty and nothing — cockpit or desktop
+			// Fleet — can distinguish a running agent from a finished one.
+			hb := runlog.StartHeartbeat(ctx, runID, runlog.HeartbeatInterval)
+			defer hb.Stop()
+
+			rl := runlog.New(runID)
+			_ = rl.Append(runlog.Event{Kind: runlog.KindRunStarted, TaskID: taskID, Detail: promptPreview(prompt)})
+			defer func() {
+				_ = rl.Append(runlog.Event{Kind: runlog.KindRunFinished, TaskID: taskID})
+			}()
 
 			d, err := dispatch.New(ctx)
 			if err != nil {
@@ -2057,3 +2075,16 @@ var (
 	cortexStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
 	dimStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 )
+
+// promptPreview shortens a prompt for a log Detail field. Run events carry a
+// short human label, never the full text — the atomic-append guarantee that
+// makes the run log safe under concurrency is per write() call, so entries must
+// stay small.
+func promptPreview(s string) string {
+	const max = 80
+	s = strings.TrimSpace(strings.ReplaceAll(s, "\n", " "))
+	if len(s) <= max {
+		return s
+	}
+	return s[:max] + "…"
+}
