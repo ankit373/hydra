@@ -9,6 +9,7 @@ import (
 
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/testutil"
+	"github.com/ankit373/hydra/registry"
 )
 
 func TestBreadcrumb_DeterministicForSameRegistry(t *testing.T) {
@@ -98,9 +99,39 @@ func TestBreadcrumb_CoversPricing(t *testing.T) {
 	}
 }
 
-func TestBreadcrumb_MissingRegistryErrors(t *testing.T) {
+// BreadcrumbFiles and the embedded set are maintained in different packages, so
+// adding a file to one without the other would make Breadcrumb error on every
+// installed binary again — silently, since callers stamp a blank fingerprint
+// rather than failing.
+func TestBreadcrumbFiles_AreAllEmbeddedInTheBinary(t *testing.T) {
+	for _, name := range config.BreadcrumbFiles {
+		if _, err := registry.Read("", name); err != nil {
+			t.Errorf("%s is in BreadcrumbFiles but not embedded in the registry package: %v", name, err)
+		}
+	}
+}
+
+// This used to assert an error for a missing registry — which was every
+// installed binary, so the fingerprint was absent from exactly the ledger,
+// trust and cost logs it exists to stamp (#238). The registry is embedded now,
+// so a machine with nothing on disk must still produce a stable fingerprint:
+// that of the rules the binary actually shipped with.
+func TestBreadcrumb_FingerprintsTheEmbeddedRulesWhenNothingIsOnDisk(t *testing.T) {
 	t.Setenv("HYDRA_HOME", t.TempDir()) // no registry/ dir at all
-	if _, err := config.Breadcrumb(); err == nil {
-		t.Error("Breadcrumb should error when registry files are unreadable")
+
+	first, err := config.Breadcrumb()
+	if err != nil {
+		t.Fatalf("Breadcrumb failed with no on-disk registry: %v", err)
+	}
+	if first == "" {
+		t.Fatal("Breadcrumb returned an empty fingerprint")
+	}
+
+	second, err := config.Breadcrumb()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first != second {
+		t.Errorf("embedded fingerprint is not stable: %s then %s", first, second)
 	}
 }

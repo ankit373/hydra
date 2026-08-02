@@ -28,16 +28,23 @@ func TestLogRun_StampsConfigBreadcrumbWhenBlank(t *testing.T) {
 	}
 }
 
-func TestLogRun_ConfigOmittedGracefullyWithoutRegistry(t *testing.T) {
+// A trust run's confidence is only interpretable against the routing rules that
+// produced it. This used to assert Config stays *empty* without an on-disk
+// registry — which was every installed binary (#238). With the registry
+// embedded, it must always be stamped.
+func TestLogRun_StampsConfigEvenWithNoOnDiskRegistry(t *testing.T) {
 	t.Setenv("HYDRA_HOME", t.TempDir()) // no registry/ present
 
 	path := filepath.Join(t.TempDir(), "trust.jsonl")
 	if err := LogRun(path, RunLog{TaskHash: "abc"}); err != nil {
-		t.Fatalf("LogRun should not fail when the breadcrumb is unavailable: %v", err)
+		t.Fatalf("LogRun failed: %v", err)
 	}
 	runs, _ := LoadRuns(path)
-	if len(runs) != 1 || runs[0].Config != "" {
-		t.Errorf("Config should stay empty when registry files are unreadable, got %+v", runs)
+	if len(runs) != 1 {
+		t.Fatalf("want 1 run, got %d", len(runs))
+	}
+	if runs[0].Config == "" {
+		t.Error("Config is empty — the run cannot be tied back to the rules that produced it")
 	}
 }
 
