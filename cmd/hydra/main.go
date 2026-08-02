@@ -1294,11 +1294,20 @@ func cmdEdit() *cobra.Command {
 		Short: "Atomic, validated, rollback-safe file edit via a Hydra Head",
 		RunE: func(_ *cobra.Command, _ []string) error {
 			ctx := context.Background()
+
+			// Resolve rather than mint, so HYDRA_RUN_ID groups an edit with the
+			// invocation that spawned it (#204, #211).
+			runID, taskID := runid.ResolveRun(""), runid.ResolveTask("")
+			hb := runlog.StartHeartbeat(ctx, runID, runlog.HeartbeatInterval)
+			defer hb.Stop()
+
 			result, err := editor.Edit(ctx, editor.Request{
 				File:     file,
 				Enum:     enum,
 				Prompt:   prompt,
 				Validate: !noValidate,
+				RunID:    runID,
+				TaskID:   taskID,
 			})
 			if err != nil {
 				return err
