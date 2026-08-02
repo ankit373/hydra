@@ -187,3 +187,17 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_CONFIG: ${{ github.workspace }}/.gitleaks.toml
+
+  # The only place desktop/main.go is compiled. The `desktop` job above is
+  # scoped to ./api/... because main.go imports Wails, so without this the Wails
+  # wiring — bindings, embedded frontend, app setup — is verified by nobody and
+  # breaks are found only when someone runs `wails build` by hand (#227).
+  #
+  # Linux only: it catches Go-level breakage for a fraction of the cost of a
+  # three-OS matrix on every PR. The full matrix runs on RC and release builds.
+  desktop-app:
+    name: Desktop app build
+    uses: ./.github/workflows/desktop-build.yml
+    with:
+      version: ci
+      targets: '[{"runner":"ubuntu-latest","platform":"linux/amd64","goos":"linux","arch":"amd64","tags":"webkit2_41"}]'
