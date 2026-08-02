@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/provider"
 )
 
@@ -267,5 +268,68 @@ func TestCapScoreSelector_MaxHeadsCap(t *testing.T) {
 	}
 	if len(got) != 2 {
 		t.Errorf("MaxHeads=2 returned %d heads", len(got))
+	}
+}
+
+// estimateFanoutCost must report a cost even with no --swarm-max-cost limit.
+// preflightCost short-circuits to 0 when no limit is set, which is right for a
+// guard and wrong for the plan --dry-run prints (#167).
+func TestEstimateFanoutCost_IndependentOfAnyLimit(t *testing.T) {
+	heads := []provider.Head{registryHead("a", "A", 90), registryHead("b", "B", 80), registryHead("c", "C", 70)}
+	pr := fakePricing{per: 0.01}
+
+	if got := estimateFanoutCost(heads, "some prompt", pr); got != 0.03 {
+		t.Errorf("estimateFanoutCost = %v, want 0.03", got)
+	}
+	// The guard reports nothing here — that difference is the whole point.
+	if total, _ := preflightCost(heads, "some prompt", pr, 0); total != 0 {
+		t.Errorf("preflightCost with no limit = %v, want 0", total)
+	}
+	if got := estimateFanoutCost(heads, "p", nil); got != 0 {
+		t.Errorf("nil pricing = %v, want 0", got)
+	}
+}
+
+// Plan must pick exactly the heads the corresponding run would, or --dry-run
+// describes something other than what executing would do.
+func TestPlan_SelectsSameHeadsAsRunAndExecutesNothing(t *testing.T) {
+	all := []provider.Head{registryHead("h1", "H1", 90), registryHead("h2", "H2", 80), registryHead("h3", "H3", 70)}
+	s := New(nil, all, fakePricing{per: 0.01})
+
+	opts := Options{HeadIDs: []string{"h1", "h3"}}
+	heads, est, err := s.Plan("some prompt", opts)
+	if err != nil {
+		t.Fatalf("Plan: %v", err)
+	}
+
+	// Same selector, same options — Plan must not diverge from the run path.
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("config: %v", err)
+	}
+	want, err := resolveSelector(opts, cfg).Select(all, opts)
+	if err != nil {
+		t.Fatalf("selector: %v", err)
+	}
+	if len(heads) != len(want) {
+		t.Fatalf("Plan selected %d heads, the run path selects %d", len(heads), len(want))
+	}
+	for i := range want {
+		if heads[i].ID != want[i].ID {
+			t.Errorf("head %d: Plan chose %q, run path chooses %q", i, heads[i].ID, want[i].ID)
+		}
+	}
+	if est != 0.02 {
+		t.Errorf("est = %v, want 0.02 for 2 heads", est)
+	}
+
+	// s was built with a nil dispatcher: had Plan executed anything it would
+	// have panicked rather than reached here.
+}
+
+func TestPlan_NoHeadsIsAnError(t *testing.T) {
+	s := New(nil, nil, fakePricing{per: 0.01})
+	if _, _, err := s.Plan("p", Options{}); err == nil {
+		t.Error("Plan with no heads should error, not report an empty plan as fine")
 	}
 }
