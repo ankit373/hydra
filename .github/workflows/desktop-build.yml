@@ -217,11 +217,32 @@ jobs:
             case "$f" in *.sha256) continue ;; esac
             if command -v sha256sum >/dev/null 2>&1; then
               sha256sum "$f" > "$f.sha256"
+              sha256sum -c "$f.sha256"
             else
               shasum -a 256 "$f" > "$f.sha256"   # macOS has no sha256sum
+              shasum -a 256 -c "$f.sha256"
             fi
-            cat "$f.sha256"
           done
+
+      # Runs the exact command the docs hand Windows users, against a file
+      # sha256sum wrote in binary mode. Different tool, different hex case, and
+      # a '*' marker in the line — so this proves the documented command really
+      # works rather than restating the step above, and it keeps working: if the
+      # docs and the artifact ever drift apart, this job fails.
+      - name: Verify the checksum the way the docs tell Windows users to
+        if: matrix.goos == 'windows'
+        shell: pwsh
+        working-directory: desktop/build/bin
+        run: |
+          Get-ChildItem hydra-desktop_*.sha256 | ForEach-Object {
+            $expected = (Get-Content $_.FullName).Split(' ')[0].Trim()
+            $file     = $_.FullName -replace '\.sha256$', ''
+            $actual   = (Get-FileHash $file -Algorithm SHA256).Hash
+            if ($actual -ne $expected) {
+              throw "checksum mismatch for $file`n  expected $expected`n  actual   $actual"
+            }
+            "OK  $(Split-Path $file -Leaf)"
+          }
 
       - name: Upload to the release
         if: inputs.upload

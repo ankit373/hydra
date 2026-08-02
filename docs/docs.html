@@ -505,7 +505,12 @@ hydra-desktop_&lt;version&gt;_windows_amd64.zip      <span class="c"># Windows</
 hydra-desktop_&lt;version&gt;_linux_amd64.tar.gz     <span class="c"># Linux</span>
 
 <span class="c"># Every artifact ships a .sha256 beside it — verify before you run:</span>
-shasum -a 256 -c hydra-desktop_&lt;version&gt;_darwin_universal.zip.sha256
+shasum -a 256 -c hydra-desktop_&lt;version&gt;_darwin_universal.zip.sha256   <span class="c"># macOS</span>
+sha256sum   -c hydra-desktop_&lt;version&gt;_linux_amd64.tar.gz.sha256       <span class="c"># Linux</span>
+
+<span class="c"># Windows (PowerShell):</span>
+$f = "hydra-desktop_&lt;version&gt;_windows_amd64.zip"
+(Get-FileHash $f -Algorithm SHA256).Hash -eq (Get-Content "$f.sha256").Split(' ')[0]
 
 <span class="c"># Or build it yourself:</span>
 go install github.com/wailsapp/wails/v2/cmd/wails@latest
