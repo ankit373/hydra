@@ -6,6 +6,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/ankit373/hydra/internal/config"
@@ -290,9 +293,29 @@ func TestEstimateFanoutCost_IndependentOfAnyLimit(t *testing.T) {
 	}
 }
 
+// withTempConfig points config.Dir() at a throwaway home containing a minimal
+// config.toml. config.Load fails outright when the file is missing, so any test
+// touching the selection path is otherwise green only on a machine that happens
+// to have run `hyctl init` — which is exactly how this test passed locally and
+// failed on a clean CI runner.
+func withTempConfig(t *testing.T) {
+	t.Helper()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // os.UserHomeDir on Windows
+	dir := filepath.Join(home, ".hydra")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "config.toml"), []byte("cortex = \"claude\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // Plan must pick exactly the heads the corresponding run would, or --dry-run
 // describes something other than what executing would do.
 func TestPlan_SelectsSameHeadsAsRunAndExecutesNothing(t *testing.T) {
+	withTempConfig(t)
 	all := []provider.Head{registryHead("h1", "H1", 90), registryHead("h2", "H2", 80), registryHead("h3", "H3", 70)}
 	s := New(nil, all, fakePricing{per: 0.01})
 
@@ -327,9 +350,34 @@ func TestPlan_SelectsSameHeadsAsRunAndExecutesNothing(t *testing.T) {
 	// have panicked rather than reached here.
 }
 
-func TestPlan_NoHeadsIsAnError(t *testing.T) {
-	s := New(nil, nil, fakePricing{per: 0.01})
-	if _, _, err := s.Plan("p", Options{}); err == nil {
-		t.Error("Plan with no heads should error, not report an empty plan as fine")
-	}
+// Plan must never report "here is your plan" with nothing in it. Two distinct
+// paths reach that state, so both are pinned: the selector rejecting an empty
+// roster outright, and a filter emptying a non-empty one — the latter returns
+// (empty, nil), which is what Plan's own length check exists to catch.
+func TestPlan_EmptyResultIsAlwaysAnError(t *testing.T) {
+	// Without a config the error would come from config.Load instead, and these
+	// would pass without ever reaching the checks they exist to test.
+	withTempConfig(t)
+
+	t.Run("empty roster", func(t *testing.T) {
+		s := New(nil, nil, fakePricing{per: 0.01})
+		_, _, err := s.Plan("p", Options{})
+		if err == nil {
+			t.Fatal("Plan with no heads should error, not report an empty plan as fine")
+		}
+		if !strings.Contains(err.Error(), "heads") {
+			t.Errorf("error was %q, want it to name heads as the problem", err)
+		}
+	})
+
+	t.Run("filter empties a non-empty roster", func(t *testing.T) {
+		// MinCapScore above every head: applyFiltersAndCap returns (empty, nil),
+		// so the selector reports no error and only Plan's own check stops it.
+		all := []provider.Head{registryHead("h1", "H1", 50), registryHead("h2", "H2", 40)}
+		s := New(nil, all, fakePricing{per: 0.01})
+		_, _, err := s.Plan("p", Options{TierHint: "nonexistent-tier", MinCapScore: 99})
+		if err == nil {
+			t.Fatal("every head filtered out should error, not yield an empty plan")
+		}
+	})
 }
