@@ -185,6 +185,7 @@ func (s *Swarm) Run(ctx context.Context, prompt string, opts Options) (*SwarmRes
 
 	// 7. Log to cost.jsonl.
 	logAttempts(result.Attempts, result.Mode, opts, truncate(prompt, 80))
+	logRunEvents(result.Attempts, result.Mode, opts)
 
 	return result, nil
 }

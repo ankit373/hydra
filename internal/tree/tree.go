@@ -28,7 +28,6 @@
 package tree
 
 import (
-	"sort"
 	"time"
 
 	"github.com/ankit373/hydra/internal/runlog"
@@ -155,13 +154,18 @@ func Apply(t *Tree, e runlog.Event) *Tree {
 		t.RunID = e.RunID
 	}
 
+	// Run-level events describe the invocation, not a node in it, so they are
+	// timeline-only. This is keyed on the kind rather than on whether nodeID
+	// happened to come back empty: a run_started that carries a TaskID — which
+	// is legitimate metadata — would otherwise fall through nodeID's TaskID
+	// branch and materialise a phantom root labelled with a raw id (#204).
+	if e.Kind == runlog.KindRunStarted || e.Kind == runlog.KindRunFinished {
+		return t
+	}
+
 	id := nodeID(e)
 	if id == "" {
-		// Run-level events (run_started/run_finished) belong to no node; they
-		// are timeline-only, not a failure.
-		if e.Kind != runlog.KindRunStarted && e.Kind != runlog.KindRunFinished {
-			t.Skipped++
-		}
+		t.Skipped++
 		return t
 	}
 
@@ -393,14 +397,4 @@ func (t *Tree) CountByState() map[State]int {
 		counts[n.State]++
 	}
 	return counts
-}
-
-// SortedEntries returns timeline entries by sequence number. Load already
-// yields append order; this makes the guarantee explicit for callers that
-// merge entries from more than one source.
-func (tl *Timeline) SortedEntries() []Entry {
-	out := make([]Entry, len(tl.Entries))
-	copy(out, tl.Entries)
-	sort.SliceStable(out, func(i, j int) bool { return out[i].Seq < out[j].Seq })
-	return out
 }

@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"golang.org/x/sync/errgroup"
 
@@ -21,6 +22,7 @@ import (
 	"github.com/ankit373/hydra/internal/dispatch"
 	"github.com/ankit373/hydra/internal/policy"
 	"github.com/ankit373/hydra/internal/runid"
+	"github.com/ankit373/hydra/internal/runlog"
 	"github.com/ankit373/hydra/internal/workspace"
 )
 
@@ -110,6 +112,17 @@ func Run(ctx context.Context, tasks []Task, opts Options) ([]Result, error) {
 	results := make([]Result, len(tasks))
 	var mu sync.Mutex
 
+	// A batch is a fan-out, and the tree that renders it needs the fan-out's
+	// shape: one node per task, all under the batch. Before #204 nothing in this
+	// package emitted, so an N-task batch had no structure at all in the run log.
+	// Appends are best-effort throughout — a lost event must never fail a task.
+	rl := runlog.New(runID)
+	_ = rl.Append(runlog.Event{
+		Kind:   runlog.KindTaskStarted,
+		Agent:  batchAgent,
+		Detail: fmt.Sprintf("parallel batch · %d tasks", len(tasks)),
+	})
+
 	g, gctx := errgroup.WithContext(ctx)
 
 	for i, task := range tasks {
@@ -117,6 +130,12 @@ func Run(ctx context.Context, tasks []Task, opts Options) ([]Result, error) {
 		// Each task is its own logical unit of work inside the shared run.
 		taskID := runid.New()
 		g.Go(func() error {
+			_ = rl.Append(runlog.Event{
+				Kind: runlog.KindTaskStarted, TaskID: taskID,
+				Agent: task.Label, Parent: batchAgent, Detail: task.Enum,
+			})
+
+			started := time.Now()
 			var raw json.RawMessage
 			if task.File != "" {
 				raw = runEditTask(gctx, task, runID, taskID)
@@ -126,14 +145,39 @@ func Run(ctx context.Context, tasks []Task, opts Options) ([]Result, error) {
 			mu.Lock()
 			results[i] = Result{raw: raw}
 			mu.Unlock()
+
+			_ = rl.Append(runlog.Event{
+				Kind: runlog.KindTaskFinished, TaskID: taskID,
+				Agent: task.Label, Parent: batchAgent,
+				Status:     statusOf(raw),
+				DurationMS: time.Since(started).Milliseconds(),
+			})
 			return nil // always nil — errors are captured in raw
 		})
 	}
 
 	_ = g.Wait()
 
+	_ = rl.Append(runlog.Event{Kind: runlog.KindTaskFinished, Agent: batchAgent})
+
 	_ = persistResults(results)
 	return results, nil
+}
+
+// batchAgent is the batch's own node in the tree — the parent every task hangs
+// off, so a fan-out renders as a fan-out rather than N unrelated roots.
+const batchAgent = "parallel"
+
+// statusOf recovers a task's outcome from the JSON each runner already
+// produces, rather than threading a second return value through both paths.
+func statusOf(raw json.RawMessage) string {
+	var v struct {
+		Status string `json:"status"`
+	}
+	if err := json.Unmarshal(raw, &v); err != nil || v.Status == "" {
+		return "unknown"
+	}
+	return v.Status
 }
 
 // runTextTask dispatches a prompt and returns the raw JSON result.

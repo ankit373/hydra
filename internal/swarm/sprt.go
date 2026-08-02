@@ -102,6 +102,12 @@ func (s *Swarm) RunSPRT(ctx context.Context, prompt string, opts Options) (*SPRT
 	// `hyctl stats` — only the aggregate trust.jsonl row survives (#175).
 	logAttempts(adapter.attempts, ModeSPRT, opts, truncate(prompt, 80))
 
+	// Samples come from the LLR ledger, not from the attempt list: the ledger is
+	// what carries the running confidence after each source was weighed, which
+	// is the whole reason --confidence exists. Emitting attempts here instead
+	// would record that N heads ran but not what their evidence did (#204).
+	logSamples(res.Ledger, adapter.attempts, opts)
+
 	return &SPRTResult{Trust: res, Attempts: adapter.attempts, Domain: domain, Prompt: prompt, Target: opts.Confidence}, nil
 }
 

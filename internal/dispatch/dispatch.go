@@ -199,7 +199,16 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 			DurationMS: resp.Duration.Milliseconds(),
 		})
 		_ = d.logDispatch(r, prompt, opts)
-		_ = d.writeHandoff(r, prompt)
+		if from, err := d.writeHandoff(r, prompt); err == nil {
+			// last_handoff.json keeps only the newest. Appending the handoff
+			// here is what makes a *chain* of them reconstructable, which is
+			// the stated purpose of KindHandoff and did not happen before #204.
+			_ = rl.Append(runlog.Event{
+				Kind: runlog.KindHandoff, TaskID: taskID,
+				Agent: h.ID, Head: h.ID, Model: h.Name,
+				Ref: from, Detail: "context handed to " + from,
+			})
+		}
 		d.recordBudget(r)
 		d.syncStateJSON(r)
 		return r, nil
@@ -308,7 +317,8 @@ func injectA2A(path, prompt string) (string, error) {
 
 // writeHandoff saves last_handoff.json after a successful dispatch, advancing
 // the vector clock so downstream agents inherit this dispatch's causal history.
-func (d *Dispatcher) writeHandoff(r *Result, prompt string) error {
+// It returns the handoff's From identity so the caller can record the edge.
+func (d *Dispatcher) writeHandoff(r *Result, prompt string) (string, error) {
 	handoffPath := filepath.Join(config.Dir(), "logs", "last_handoff.json")
 
 	// Inherit the prior handoff's clock (if any) and tick for this agent.
@@ -325,7 +335,7 @@ func (d *Dispatcher) writeHandoff(r *Result, prompt string) error {
 		PriorOutput: r.Response.Output,
 		Clock:       base.Tick(from),
 	}
-	return h.Save(handoffPath)
+	return from, h.Save(handoffPath)
 }
 
 // resolveTierHint normalizes a tier hint to a capability number ("1".."10").

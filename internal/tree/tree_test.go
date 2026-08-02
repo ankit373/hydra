@@ -290,23 +290,35 @@ func TestTree_Aggregates(t *testing.T) {
 	}
 }
 
-func TestTimeline_SortedBySeq(t *testing.T) {
-	// Deliberately out of sequence order, as a merge of two sources could be.
+// One run legitimately has several writers — the CLI logs the run's lifecycle
+// while dispatch logs the routing inside it — so seq values interleave and
+// repeat across them. runlog's own doc says seq "is not the sort key"; file
+// order is. A timeline that re-sorted by seq would put a run's end before a
+// handoff that happened first (#204).
+func TestTimeline_PreservesFileOrderAcrossWriters(t *testing.T) {
+	// Exactly the interleaving a real dispatch produces: writer A is the CLI
+	// (run lifecycle), writer B is dispatch (routing), each counting from 1.
 	events := []runlog.Event{
-		ev(3, runlog.KindAttempt, agent("a")),
-		ev(1, runlog.KindTaskStarted, agent("a")),
-		ev(2, runlog.KindHeadSelected, agent("a")),
+		ev(1, runlog.KindRunStarted),
+		ev(1, runlog.KindHeadSelected, agent("h")),
+		ev(2, runlog.KindDispatchFinished, agent("h"), status("ok")),
+		ev(3, runlog.KindHandoff, agent("h"), ref("next")),
+		ev(2, runlog.KindRunFinished),
 	}
 	_, tl := Reconstruct(events)
-	sorted := tl.SortedEntries()
-	for i, want := range []uint64{1, 2, 3} {
-		if sorted[i].Seq != want {
-			t.Errorf("sorted[%d].Seq = %d, want %d", i, sorted[i].Seq, want)
-		}
+
+	var kinds []runlog.Kind
+	for _, e := range tl.Entries {
+		kinds = append(kinds, e.Kind)
 	}
-	// The original slice must not be reordered under the caller.
-	if tl.Entries[0].Seq != 3 {
-		t.Error("SortedEntries mutated the underlying slice")
+	want := []runlog.Kind{
+		runlog.KindRunStarted, runlog.KindHeadSelected,
+		runlog.KindDispatchFinished, runlog.KindHandoff, runlog.KindRunFinished,
+	}
+	for i := range want {
+		if i >= len(kinds) || kinds[i] != want[i] {
+			t.Fatalf("timeline order = %v, want %v — sorting by seq reorders across writers", kinds, want)
+		}
 	}
 }
 
@@ -335,5 +347,40 @@ func TestReconstruct_FromRealDispatchShape(t *testing.T) {
 	}
 	if tr.Nodes["h2"].TaskID != "t1" && tr.Nodes["h1"].TaskID != "t1" {
 		t.Error("task id was not carried onto the nodes")
+	}
+}
+
+// A run-level event describes the invocation, not a node in it. It carries a
+// TaskID as legitimate metadata, and nodeID falls back to TaskID — so without an
+// explicit kind check the run's own start would appear in the tree as a node
+// named after a raw timestamp id (#204).
+func TestApply_RunLevelEventsNeverCreateNodes(t *testing.T) {
+	events := []runlog.Event{
+		{V: 1, Seq: 1, RunID: "r", TaskID: "task-abc", Kind: runlog.KindRunStarted},
+		{V: 1, Seq: 2, RunID: "r", TaskID: "task-abc", Kind: runlog.KindHeadSelected, Head: "agy"},
+		{V: 1, Seq: 3, RunID: "r", TaskID: "task-abc", Kind: runlog.KindDispatchFinished,
+			Head: "agy", Status: "ok"},
+		{V: 1, Seq: 4, RunID: "r", TaskID: "task-abc", Kind: runlog.KindRunFinished},
+	}
+	tr, tl := Reconstruct(events)
+
+	if _, exists := tr.Nodes["task-abc"]; exists {
+		t.Error("run-level event created a node keyed by its TaskID")
+	}
+	rows := tr.Rows()
+	if len(rows) != 1 {
+		t.Fatalf("%d rows, want 1 (just the head): %+v", len(rows), rows)
+	}
+	if rows[0].Node.ID != "agy" {
+		t.Errorf("row 0 is %q, want the head %q", rows[0].Node.ID, "agy")
+	}
+	if tr.Skipped != 0 {
+		t.Errorf("Skipped = %d; run-level events are expected, not malformed", tr.Skipped)
+	}
+	// They must still appear on the timeline — that is where a run's start and
+	// end belong.
+	if len(tl.Entries) != len(events) {
+		t.Errorf("%d timeline entries, want %d — run-level events belong on the timeline",
+			len(tl.Entries), len(events))
 	}
 }
