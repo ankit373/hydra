@@ -1,0 +1,110 @@
+import { useState } from 'react'
+import type { Session as SessionData, TimelineEntry } from '../types'
+import { clockTime, ms, pct, usdExact } from '../format'
+import { SessionGraph } from './SessionGraph'
+
+export function Session({
+  session,
+  onBack,
+}: {
+  session: SessionData
+  onBack: () => void
+}) {
+  // Timeline is the default: most runs are linear, and a list is the right
+  // shape for a linear thing.
+  const [tab, setTab] = useState<'timeline' | 'graph'>('timeline')
+
+  return (
+    <>
+      <header className="view__head">
+        <button className="back" onClick={onBack}>
+          ← Fleet
+        </button>
+        <h1 className="view__title">
+          <span className="session__id">{session.runId}</span>
+          {session.live && <span className="session__live">live</span>}
+        </h1>
+      </header>
+
+      {session.error && <div className="error">unreadable: {session.error}</div>}
+
+      {!session.error && !session.found && (
+        <div className="empty">
+          <p className="empty__title">No log for this run</p>
+          <p>It may have been cleaned up, or nothing was ever written for it.</p>
+        </div>
+      )}
+
+      {session.found && (
+        <>
+          {session.skipped > 0 && (
+            <p className="run__warn">
+              {session.skipped} event{session.skipped === 1 ? '' : 's'} could not be attributed to an
+              agent
+            </p>
+          )}
+
+          {/* The Graph tab appears only when a list genuinely cannot show the
+              shape. Drawing a graph of a straight line is worse than a list. */}
+          {session.nonLinear && (
+            <div className="tabs">
+              <button
+                className="tab"
+                aria-current={tab === 'timeline' ? 'page' : undefined}
+                onClick={() => setTab('timeline')}
+              >
+                Timeline
+              </button>
+              <button
+                className="tab"
+                aria-current={tab === 'graph' ? 'page' : undefined}
+                onClick={() => setTab('graph')}
+              >
+                Graph
+              </button>
+            </div>
+          )}
+
+          {tab === 'graph' && session.nonLinear ? (
+            <SessionGraph session={session} />
+          ) : (
+            <Timeline entries={session.timeline} />
+          )}
+        </>
+      )}
+    </>
+  )
+}
+
+function Timeline({ entries }: { entries: TimelineEntry[] }) {
+  if (entries.length === 0) return null
+  return (
+    <ol className="timeline">
+      {entries.map((e, i) => (
+        <li key={i} className={`tl tl--${e.status || kindClass(e.kind)}`}>
+          <span className="tl__time">{e.ts ? clockTime(e.ts) : '—'}</span>
+          <span className="tl__kind">{e.kind.replace(/_/g, ' ')}</span>
+          <span className="tl__who">
+            {e.model || e.head || e.nodeId || ''}
+            {e.tier > 0 && <span className="agent__tier">T{e.tier}</span>}
+          </span>
+          {/* Evidence leads. For an SPRT sample this is
+              "agreed · LLR +1.200 → Λ 1.200" — what actually happened to the
+              log-odds, ahead of any narration. */}
+          {e.detail && <span className="tl__detail">{e.detail}</span>}
+          <span className="tl__meta">
+            {e.confidence > 0 && `${pct(e.confidence * 100, 1)} · `}
+            {e.durationMs > 0 && `${ms(e.durationMs)} · `}
+            {e.costUsd > 0 && usdExact(e.costUsd)}
+          </span>
+        </li>
+      ))}
+    </ol>
+  )
+}
+
+function kindClass(kind: string): string {
+  if (kind === 'error') return 'failed'
+  if (kind === 'run_started' || kind === 'task_started') return 'running'
+  return 'pending'
+}

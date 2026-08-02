@@ -2,7 +2,7 @@ import { useState } from 'react'
 import type { Agent, Fleet as FleetData, Run } from '../types'
 import { ms, pct, usdExact } from '../format'
 
-export function Fleet({ data }: { data: FleetData }) {
+export function Fleet({ data, onOpen }: { data: FleetData; onOpen: (runID: string) => void }) {
   return (
     <>
       <header className="view__head">
@@ -24,7 +24,7 @@ export function Fleet({ data }: { data: FleetData }) {
       ) : (
         <div className="runs">
           {data.runs.map((r) => (
-            <RunCard key={r.id} run={r} groupThreshold={data.groupThreshold} />
+            <RunCard key={r.id} run={r} groupThreshold={data.groupThreshold} onOpen={onOpen} />
           ))}
         </div>
       )}
@@ -32,7 +32,15 @@ export function Fleet({ data }: { data: FleetData }) {
   )
 }
 
-function RunCard({ run, groupThreshold }: { run: Run; groupThreshold: number }) {
+function RunCard({
+  run,
+  groupThreshold,
+  onOpen,
+}: {
+  run: Run
+  groupThreshold: number
+  onOpen: (runID: string) => void
+}) {
   // Past the threshold a fan-out stops being readable as cards, so it collapses
   // to its state counts until asked to expand. A live run starts expanded —
   // it is the one you opened the app to watch.
@@ -43,7 +51,9 @@ function RunCard({ run, groupThreshold }: { run: Run; groupThreshold: number }) 
     <section className={`run ${run.live ? 'run--live' : ''}`}>
       <header className="run__head">
         <span className={`run__dot ${run.live ? 'run__dot--live' : ''}`} />
-        <span className="run__id">{run.id}</span>
+        <button className="run__id run__id--link" onClick={() => onOpen(run.id)}>
+          {run.id}
+        </button>
         <span className="run__meta">
           {ms(run.elapsedMs)} · {usdExact(run.costUsd)}
           {run.confidence > 0 && ` · ${pct(run.confidence * 100, 1)} confidence`}

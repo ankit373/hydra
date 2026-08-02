@@ -108,3 +108,41 @@ export interface Fleet {
   /** Agent count past which a run collapses. Defined in Go, not the view. */
   groupThreshold: number
 }
+
+export interface TimelineEntry {
+  kind: string
+  /** Empty when the event carried no parseable timestamp. */
+  ts: string
+  nodeId?: string
+  head?: string
+  model?: string
+  tier: number
+  status?: string
+  costUsd: number
+  durationMs: number
+  confidence: number
+  /** The verifiable part — for an SPRT sample, "agreed · LLR +1.2 → Λ 1.2". */
+  detail?: string
+}
+
+/** An A2A collaboration edge — distinct from Agent.parent, which is ownership. */
+export interface Edge {
+  from: string
+  to: string
+  ts: string
+  detail?: string
+}
+
+export interface Session {
+  runId: string
+  live: boolean
+  /** False when the run id names no log — different from a run that did nothing. */
+  found: boolean
+  error?: string
+  timeline: TimelineEntry[]
+  agents: Agent[]
+  edges: Edge[]
+  /** True only when a list cannot convey the shape: a fan-out or an A2A edge. */
+  nonLinear: boolean
+  skipped: number
+}

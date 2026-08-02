@@ -345,3 +345,124 @@ body {
 }
 .agent__meta { margin-left: auto; color: var(--hy-dim); font-size: 12px; font-variant-numeric: tabular-nums; }
 .agent__detail { color: var(--hy-dim); font-size: 12px; }
+
+/* ── Session ───────────────────────────────────────────────────────────── */
+
+.back {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: var(--hy-dim);
+  font: inherit;
+  font-size: 12px;
+  padding: 0 0 8px;
+  cursor: pointer;
+}
+.back:hover { color: var(--hy-aqua); }
+.back:focus-visible { outline: 2px solid var(--hy-aqua); outline-offset: 2px; }
+
+.session__id { font-family: var(--hy-font-mono); font-size: 17px; letter-spacing: -0.01em; }
+.session__live {
+  margin-left: 10px;
+  font-family: var(--hy-font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  background: var(--hy-aqua);
+  color: var(--hy-bg);
+  border-radius: 999px;
+  padding: 2px 8px;
+  vertical-align: middle;
+}
+
+.run__id--link {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.run__id--link:hover { color: var(--hy-aqua); }
+.run__id--link:focus-visible { outline: 2px solid var(--hy-aqua); outline-offset: 2px; }
+
+.tabs { display: flex; gap: 4px; margin: 16px 0 12px; }
+
+.tab {
+  appearance: none;
+  background: transparent;
+  border: 1px solid var(--hy-line);
+  border-radius: var(--hy-radius-sm);
+  color: var(--hy-dim);
+  font: inherit;
+  font-size: 12px;
+  padding: 5px 13px;
+  cursor: pointer;
+}
+.tab[aria-current="page"] { color: var(--hy-ink); border-color: var(--hy-aqua); background: var(--hy-panel); }
+.tab:focus-visible { outline: 2px solid var(--hy-aqua); outline-offset: 1px; }
+
+.timeline {
+  list-style: none;
+  margin: 16px 0 0;
+  padding: 0;
+  background: var(--hy-panel);
+  border: 1px solid var(--hy-line);
+  border-radius: var(--hy-radius);
+  overflow: hidden;
+}
+
+.tl {
+  display: flex;
+  align-items: baseline;
+  gap: 11px;
+  padding: 8px 15px;
+  font-size: 13px;
+  border-bottom: 1px solid var(--hy-line);
+  border-left: 2px solid transparent;
+}
+.tl:last-child { border-bottom: 0; }
+.tl--ok      { border-left-color: var(--hy-cheap); }
+.tl--failed  { border-left-color: var(--hy-expensive); }
+.tl--running { border-left-color: var(--hy-aqua); }
+
+.tl__time { font-family: var(--hy-font-mono); font-size: 11px; color: var(--hy-dim); flex: 0 0 66px; }
+.tl__kind {
+  font-family: var(--hy-font-mono);
+  font-size: 11px;
+  color: var(--hy-dim);
+  flex: 0 0 132px;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+.tl__who { font-family: var(--hy-font-mono); font-size: 12px; display: flex; align-items: baseline; gap: 6px; }
+.tl__detail { color: var(--hy-ink); font-size: 12px; }
+.tl__meta { margin-left: auto; color: var(--hy-dim); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* ── Session graph ─────────────────────────────────────────────────────── */
+
+.graph {
+  margin-top: 16px;
+  background: var(--hy-panel);
+  border: 1px solid var(--hy-line);
+  border-radius: var(--hy-radius);
+  padding: 12px;
+  overflow: auto;
+}
+
+.edge { stroke: var(--hy-line); stroke-width: 1.5; }
+/* Dashed, not a different arrowhead: an A2A edge is a different *relation*
+   from ownership, and the distinction has to survive at a glance. */
+.edge--a2a { stroke: var(--hy-violet); stroke-dasharray: 4 4; }
+
+.gnode { fill: var(--hy-bg-2); stroke: var(--hy-line); stroke-width: 1; }
+.gnode--ok      { stroke: var(--hy-cheap); }
+.gnode--failed  { stroke: var(--hy-expensive); }
+.gnode--running { stroke: var(--hy-aqua); }
+
+.gnode__label { fill: var(--hy-ink); font-family: var(--hy-font-mono); font-size: 11px; }
+.gnode__sub   { fill: var(--hy-dim); font-family: var(--hy-font-mono); font-size: 10px; }
+
+.graph__legend { margin: 10px 0 0; font-size: 11px; color: var(--hy-dim); }

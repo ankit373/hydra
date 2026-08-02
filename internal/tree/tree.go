@@ -317,9 +317,17 @@ func parseTS(s string) time.Time {
 }
 
 func entryOf(e runlog.Event) Entry {
+	// A run-level event belongs to no node, the same fact Apply encodes by
+	// refusing to create one. nodeID falls back to TaskID, so without this a
+	// run's own start would name a node that does not exist and a renderer
+	// would print a raw id where an agent name belongs (#209).
+	id := nodeID(e)
+	if e.Kind == runlog.KindRunStarted || e.Kind == runlog.KindRunFinished {
+		id = ""
+	}
 	return Entry{
 		Seq: e.Seq, TS: parseTS(e.TS), Kind: e.Kind,
-		NodeID: nodeID(e), TaskID: e.TaskID,
+		NodeID: id, TaskID: e.TaskID,
 		Head: e.Head, Model: e.Model, Tier: e.Tier, Status: e.Status,
 		CostUSD: e.CostUSD, DurationMS: e.DurationMS, Confidence: e.Confidence,
 		Detail: e.Detail,
