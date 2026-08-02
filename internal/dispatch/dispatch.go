@@ -92,8 +92,7 @@ func New(ctx context.Context) (*Dispatcher, error) {
 		localOnly = true
 	}
 
-	registryDir := filepath.Join(config.ScriptHome(), "registry")
-	budgetReg := budget.NewRegistry(budget.LoadWindows(registryDir))
+	budgetReg := budget.NewRegistry(budget.LoadWindows(config.ScriptHome()))
 
 	return &Dispatcher{
 		cfg:     cfg,

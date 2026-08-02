@@ -624,7 +624,8 @@ hydra/
 ├── desktop/                     # Desktop app (own Go module) — Wails v2 + React/TS
 │   ├── api/                     # Go backend: Dashboard · Fleet · Session · Code · chat (no Wails imports)
 │   └── frontend/                # React views over the same logs the CLI writes
-├── registry/                    # routing.yaml (the enum) · models · domains · pricing · policy
+├── registry/                    # routing · models · domains · pricing · policy — go:embed'd into
+│                                #   the binary; $HYDRA_HOME/registry/<file> overrides it
 ├── docs/                        # GitHub Pages (hydra.uvansa.com) — index.html, llms.txt
 └── Formula/hydra.rb             # Homebrew formula (auto-updated by GoReleaser)
 ```

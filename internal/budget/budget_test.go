@@ -3,6 +3,8 @@
 package budget
 
 import (
+	"os"
+	"path/filepath"
 	"sync"
 	"testing"
 )
@@ -241,14 +243,42 @@ func TestEffectiveMode(t *testing.T) {
 	}
 }
 
-func TestLoadWindows_Fallback(t *testing.T) {
-	// Non-existent path → empty map, no panic.
+// This used to assert an empty map for a missing registry, which described the
+// bug rather than a requirement: models.yaml was absent on every installed
+// binary, so context windows silently fell back to a flat 200k for everything
+// (#238). It is embedded now, so the honest contract is that a machine with no
+// on-disk registry still gets the real windows.
+func TestLoadWindows_UsesEmbeddedRegistryWhenNoneIsOnDisk(t *testing.T) {
 	windows := LoadWindows("/no/such/path")
-	if windows == nil {
-		t.Fatal("LoadWindows should return empty map, not nil")
+	if len(windows) == 0 {
+		t.Fatal("no windows loaded — the embedded registry should always be readable")
 	}
-	if len(windows) != 0 {
-		t.Errorf("want empty map for missing registry, got %d entries", len(windows))
+	for id, w := range windows {
+		if w <= 0 {
+			t.Errorf("%s has a non-positive context window (%d)", id, w)
+		}
+	}
+}
+
+// The override is the reason the files stay editable YAML rather than becoming
+// Go constants; if it stops working, operators lose the ability to retune
+// routing without a rebuild and would have no way to tell.
+func TestLoadWindows_OnDiskRegistryOverridesTheEmbeddedCopy(t *testing.T) {
+	home := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(home, "registry"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	yaml := "models:\n  - id: only-model\n    provider: ollama\n    context_window: 4242\n"
+	if err := os.WriteFile(filepath.Join(home, "registry", "models.yaml"), []byte(yaml), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	windows := LoadWindows(home)
+	if got := windows["only-model"]; got != 4242 {
+		t.Errorf("on-disk models.yaml ignored: only-model window = %d, want 4242", got)
+	}
+	if len(windows) != 1 {
+		t.Errorf("embedded entries leaked through the override: got %d windows, want 1", len(windows))
 	}
 }
 

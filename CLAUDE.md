@@ -44,11 +44,20 @@ internal/{cost,budget}/ ← Spend reporting (est/actual labeling) + token-budget
 internal/capabilities/  ← Model capability scores: embedded data.json ⊕ runtime user overlay (~/.hydra/models.json). `hyctl models`.
 internal/util/          ← Shared utilities (Accumulator, etc).
 
-registry/routing.yaml   ← THE ENUM. Change tier assignments here only.
-registry/models.yaml    ← Model definitions, token pools, fallback chains (flags are
-                          install-specific defaults — verify against your providers).
-registry/domains.yaml   ← Domain → enum key routing (references routing.yaml).
-registry/pricing.yaml   ← Static tier pricing fallback (used when offline).
+registry/               ← Routing data, compiled into the binary via `go:embed` (registry.go)
+                          and overridable on disk at `$HYDRA_HOME/registry/<file>`. Nothing ships
+                          these files as separate artifacts — brew/npm/pip/curl install the binary
+                          alone, so before #238 every install ran with no registry at all.
+  routing.yaml          ← Enum → tier reference table, and what `hyctl init` writes. NOTE: the
+                          runtime mapping is `dispatch.EnumToTier`, a hardcoded Go switch — editing
+                          this file alone does NOT change how a dispatch routes.
+  models.yaml           ← Model definitions, token pools, context windows, fallback chains (flags
+                          are install-specific defaults — verify against your providers). Read by
+                          the agy provider and the budget governor.
+  domains.yaml          ← Domain → enum key routing (references routing.yaml).
+  pricing.yaml          ← Tier pricing. Prices the CLI-agent heads that never appear in
+                          OpenRouter's catalog, so it is load-bearing, not just an offline fallback.
+  policy.yaml           ← File-policy rules.  workspace.yaml ← workspace roots + validators.
 logs/                   ← Dispatch log + state.json (pool exhaustion, claude_pct).
 ```
 
@@ -59,7 +68,8 @@ logs/                   ← Dispatch log + state.json (pool exhaustion, claude_p
 ### Step 1 — Classify
 Read `registry/domains.yaml` to identify the domain and task type.
 Look up the enum key (e.g. `SIMPLE`, `COMPLEX`).
-Check `registry/routing.yaml` to resolve the enum key to a tier number.
+`registry/routing.yaml` documents which tier that enum resolves to; the mapping the router
+actually applies is `dispatch.EnumToTier`.
 
 ### Step 2 — Check State
 ```bash
@@ -714,6 +724,7 @@ All Go source lives under `cmd/` and `internal/`. Key packages:
 | `internal/cost` | Reads `cost.jsonl`, produces spend summaries |
 | `internal/policy` | Allow/deny rules (PII local-only, etc.) |
 | `internal/rank` | CapScore ranking helpers |
+| `registry` | The routing YAML **and** the `go:embed` that compiles it into the binary. `registry.Read(home, name)` prefers `$HYDRA_HOME/registry/<name>` so operators can retune without a rebuild, and falls back to the embedded copy — which is what every brew/npm/pip/curl install uses, since none of them ship the files (#238). |
 | `internal/config` | Hydra config load/save (`~/.config/hydra/`); `Breadcrumb()` — SHA256 deployment-identity fingerprint over `registry/{routing,models,domains}.yaml`, auto-stamped into ledger/trust/cost log entries so they can be tied back to the exact routing rules in effect. |
 | `internal/capabilities` | Model capability scores: embedded `data.json` ⊕ runtime user overlay (`~/.hydra/models.json`) merged at discovery, so new models are added without a rebuild. Drives `hyctl models list\|add\|remove\|sync`. |
 | `internal/budget` | Token-budget governor: static pressure bands (`ModeFor`) + a rate-aware first-passage-time model on the orchestrator's `claude_pct` session history (`RiskFromHistory`/`EffectiveMode`) that escalates before a threshold is crossed. Feeds `claudeMode` downgrades and `hyctl status`. |
@@ -739,8 +750,10 @@ All Go source lives under `cmd/` and `internal/`. Key packages:
 pricing.Load()
   → readCache()           # ~/.config/hydra/pricing_cache.json (24h TTL)
   → fetchFromOpenRouter() # background refresh if stale
-  → loadFallbackTiers()   # registry/pricing.yaml (always loaded)
+  → loadFallbackTiers()   # registry/pricing.yaml — embedded in the binary, on-disk copy wins
 ```
+The tier table is not just an offline fallback: it is what prices the CLI-agent heads (claude, agy,
+codex, cursor…) that never appear in OpenRouter's catalog.
 `HYDRA_PRICING_TTL_HOURS` overrides the 24h TTL.
 `hyctl pricing refresh` forces a synchronous fetch.
 `hyctl pricing list [filter] [--json]` shows all known models.
