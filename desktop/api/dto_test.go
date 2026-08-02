@@ -54,6 +54,35 @@ func TestDTOs_FieldNamesAreExplicitlyTagged(t *testing.T) {
 	}
 }
 
+// A nil slice marshals to null, and the frontend iterates these fields
+// directly — `for (const e of session.edges)` throws on null. Dashboard is the
+// deliberate exception: its breakdowns are nil to mean "never ran", and
+// types.ts declares them `Breakdown[] | null` so TypeScript forces the check.
+func TestDTOs_SliceFieldsAreNeverNilOnTheWire(t *testing.T) {
+	s, err := New().GetSession("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := json.Marshal(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var m map[string]any
+	if err := json.Unmarshal(raw, &m); err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{"timeline", "agents", "edges"} {
+		v, ok := m[key]
+		if !ok {
+			t.Errorf("Session omits %q", key)
+			continue
+		}
+		if v == nil {
+			t.Errorf("Session.%s serialised as null; the view iterates it and would throw", key)
+		}
+	}
+}
+
 // An empty fleet must serialise as valid JSON with the flags the view branches
 // on, rather than as null.
 func TestFleet_SerialisesEmptyStateForTheView(t *testing.T) {

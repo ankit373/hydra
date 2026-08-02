@@ -384,3 +384,35 @@ func TestApply_RunLevelEventsNeverCreateNodes(t *testing.T) {
 			len(tl.Entries), len(events))
 	}
 }
+
+// Apply refuses to create a node for a run-level event; entryOf must agree, or
+// the timeline names a node the tree does not have. nodeID falls back to
+// TaskID, which a run_started legitimately carries.
+func TestTimeline_RunLevelEntriesNameNoNode(t *testing.T) {
+	events := []runlog.Event{
+		{V: 1, Seq: 1, RunID: "r", TaskID: "task-abc", Kind: runlog.KindRunStarted},
+		{V: 1, Seq: 2, RunID: "r", TaskID: "task-abc", Kind: runlog.KindHeadSelected, Head: "agy"},
+		{V: 1, Seq: 3, RunID: "r", TaskID: "task-abc", Kind: runlog.KindRunFinished},
+	}
+	tr, tl := Reconstruct(events)
+
+	for _, e := range tl.Entries {
+		switch e.Kind {
+		case runlog.KindRunStarted, runlog.KindRunFinished:
+			if e.NodeID != "" {
+				t.Errorf("%s names node %q; run-level events belong to no node", e.Kind, e.NodeID)
+			}
+			// The task id is still carried — it is real metadata, just not a node.
+			if e.TaskID != "task-abc" {
+				t.Errorf("%s dropped its TaskID", e.Kind)
+			}
+		default:
+			if e.NodeID == "" {
+				t.Errorf("%s has no NodeID", e.Kind)
+			}
+			if _, ok := tr.Nodes[e.NodeID]; !ok {
+				t.Errorf("%s names node %q, which the tree does not have", e.Kind, e.NodeID)
+			}
+		}
+	}
+}
