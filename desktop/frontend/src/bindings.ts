@@ -6,12 +6,13 @@
 // harness. Reading the methods off `window.go` at call time — the same object
 // the generated module wraps — keeps the source tree self-contained.
 
-import type { Dashboard, Version } from './types'
+import type { Dashboard, Fleet, Version } from './types'
 
 interface WailsGo {
   api: {
     API: {
       GetDashboard(): Promise<Dashboard>
+      GetFleet(): Promise<Fleet>
       GetVersion(): Promise<Version>
     }
   }
@@ -32,4 +33,5 @@ function backend() {
 }
 
 export const GetDashboard = (): Promise<Dashboard> => backend().GetDashboard()
+export const GetFleet = (): Promise<Fleet> => backend().GetFleet()
 export const GetVersion = (): Promise<Version> => backend().GetVersion()

@@ -66,3 +66,45 @@ export interface Version {
   commit: string
   date: string
 }
+
+export interface Agent {
+  id: string
+  parent?: string
+  depth: number
+  head?: string
+  model?: string
+  tier: number
+  state: string
+  costUsd: number
+  confidence: number
+  durationMs: number
+  detail?: string
+}
+
+export interface Run {
+  id: string
+  live: boolean
+  startedAt: string
+  elapsedMs: number
+  costUsd: number
+  /** Zero means "not a confidence run", not "no confidence". */
+  confidence: number
+  agents: Agent[]
+  running: number
+  ok: number
+  failed: number
+  pending: number
+  allCount: number
+  /** Events the reconstruction could not attribute — surfaced, never hidden. */
+  skipped: number
+  /** Set when this run's log could not be read; the row still renders. */
+  error?: string
+}
+
+export interface Fleet {
+  hasRuns: boolean
+  liveCount: number
+  runs: Run[]
+  /** Agent count past which a run collapses. Defined in Go, not the view. */
+  groupThreshold: number
+}
