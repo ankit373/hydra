@@ -18,7 +18,7 @@ auth_required.json
 
 # ── Node / Bun ─────────────────────────────────────────────────────────────
 node_modules/
-ui/node_modules/
+desktop/frontend/node_modules/
 dist/
 /build/
 out/
