@@ -69,6 +69,7 @@ func (k keySpec) detected() bool {
 var knownKeys = []keySpec{
 	{envVars: []string{"ANTHROPIC_API_KEY"}, providerID: "anthropic"},
 	{envVars: []string{"OPENAI_API_KEY"}, providerID: "openai"},
+	{envVars: []string{"OPENROUTER_API_KEY"}, providerID: "openrouter"},
 	{envVars: []string{"GEMINI_API_KEY", "GOOGLE_API_KEY"}, anyOf: true, providerID: "google"},
 	{envVars: []string{"XAI_API_KEY"}, providerID: "xai"},
 	{envVars: []string{"GROQ_API_KEY"}, providerID: "groq"},
