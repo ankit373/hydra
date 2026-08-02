@@ -75,7 +75,6 @@ Typical savings: 75-85% vs routing everything through Claude. Run `hyctl pricing
 - Pricing — free and open source (MIT); bring your own keys, pay providers directly. Custom builds on request: https://hydra.uvansa.com/pricing.html
 - Source code: https://github.com/ankit373/hydra
 - Installation: https://hydra.uvansa.com/#start
-- Model tier ladder / live routing: https://hydra.uvansa.com/#routing
 - First Principles — the math behind the router (Wald SPRT, calibration diagnostic power D via KL divergence, Bayes defect-cost, Molloy–Reed percolation-κ, Amdahl optimal parallelism, context entropy), with interactive derivations: https://hydra.uvansa.com/first-principles.html
 - The routing math teaser (Pareto, SPRT, percolation-κ charts): https://hydra.uvansa.com/#math
 - Where Hydra fits (local-first + trust quadrant): https://hydra.uvansa.com/#universe
