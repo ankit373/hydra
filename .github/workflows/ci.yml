@@ -200,5 +200,4 @@ jobs:
     uses: ./.github/workflows/desktop-build.yml
     with:
       version: ci
-      # TEMPORARY: full matrix to prove the macOS and Windows paths before the
-      # first release build uses them. Narrowed back to Linux before merge.
+      targets: '[{"runner":"ubuntu-latest","platform":"linux/amd64","goos":"linux","arch":"amd64","tags":"webkit2_41"}]'
