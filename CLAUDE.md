@@ -624,15 +624,22 @@ Current version is tracked in `.release-please-manifest.json`.
 
 ```
 .goreleaser.yaml              ← build matrix, archives, homebrew tap config
-cliff.toml                    ← changelog generation from conventional commits
 release-please-config.json    ← release-please behaviour
-.release-please-manifest.json ← current version (managed by release-please)
-CHANGELOG.md                  ← auto-generated, do not edit manually
+.release-please-manifest.json ← last released version. release-please reads THIS, not tags,
+                                to compute the next bump — if it drifts from the newest tag,
+                                the next release is computed off the wrong base (#215).
+CHANGELOG.md                  ← release-please prepends each release; the pre-1.0 tail is a
+                                hand-written historical record. Do not edit the generated part.
 internal/build/build.go       ← version vars set by ldflags at build time
 internal/update/update.go     ← startup update checker (24h cache)
 .github/workflows/release.yml ← fires on tag push → goreleaser
 .github/workflows/edge.yml    ← fires on develop push → edge build
+.github/workflows/rc.yml      ← fires on release/v* push → RC pre-release
+.github/workflows/publish.yml ← fans a release out to brew/npm/pip
 .github/workflows/release-please.yml ← fires on main push → release PR
+.github/workflows/sync-develop.yml   ← fires on main push → back-merge PR (main → develop).
+                                       FAILS loudly on conflict; a red run here means develop
+                                       is behind main and a release cut will not merge cleanly.
 ```
 
 ---
