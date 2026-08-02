@@ -4,18 +4,7 @@
 // Rules are evaluated in order; the first match wins.
 package policy
 
-import (
-	"regexp"
-)
-
-// piiPatterns are compiled once at package init to avoid per-call allocations.
-var piiPatterns = []*regexp.Regexp{
-	regexp.MustCompile(`\b\d{3}[-.\s]?\d{2}[-.\s]?\d{4}\b`),                                      // SSN
-	regexp.MustCompile(`\b\d{4}[- ]?\d{4}[- ]?\d{4}[- ]?\d{4}\b`),                                // credit card
-	regexp.MustCompile(`\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b`),                   // email (fixed: [A-Za-z] not [A-Z|a-z])
-	regexp.MustCompile(`(?i)\b(password|secret|api[-_]?key|token|private[-_]?key)\s*[:=]\s*\S+`), // credentials
-	regexp.MustCompile(`\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b`),                                 // IP address
-}
+// PII detection lives in pii.go.
 
 // Action is what the engine tells the dispatcher to do.
 type Action struct {
@@ -57,20 +46,6 @@ func (e *Engine) Evaluate(req Request) Action {
 		}
 	}
 	return Action{}
-}
-
-// ── Built-in conditions ───────────────────────────────────────────────────────
-
-// ContainsPII returns true if the prompt likely contains personally identifiable
-// information. This is a fast heuristic; replace with Presidio via sidecar for
-// production-grade detection.
-func ContainsPII(req Request) bool {
-	for _, p := range piiPatterns {
-		if p.MatchString(req.Prompt) {
-			return true
-		}
-	}
-	return false
 }
 
 // ── Default rule set ──────────────────────────────────────────────────────────
