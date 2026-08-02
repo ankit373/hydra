@@ -146,3 +146,44 @@ export interface Session {
   nonLinear: boolean
   skipped: number
 }
+
+export interface Edit {
+  file: string
+  ts: string
+  detail?: string
+  /** Empty when no snapshot was stored — the change happened, the diff cannot be shown. */
+  ref?: string
+  added: number
+  removed: number
+}
+
+export interface DiffLine {
+  op: string
+  text: string
+  /** 0 when the line is an addition. */
+  oldLine: number
+  /** 0 when the line is a removal. */
+  newLine: number
+}
+
+export interface Diff {
+  file: string
+  found: boolean
+  /** Why a diff is unavailable, so the view is specific rather than blank. */
+  reason?: string
+  lines: DiffLine[]
+  added: number
+  removed: number
+}
+
+export interface ChatReply {
+  output: string
+  head: string
+  model: string
+  tier: number
+  costUsd: number
+  durationMs: number
+  /** Links the reply into Session — "why did it say that" is one click. */
+  runId: string
+  error?: string
+}

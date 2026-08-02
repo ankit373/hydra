@@ -30,6 +30,13 @@ type Request struct {
 	Enum     string // routing enum key (e.g. "SIMPLE")
 	Prompt   string // edit instruction
 	Validate bool   // run extension validator after write (default true)
+
+	// RunID and TaskID correlate this edit with the invocation that drove it.
+	// Before #211 they were not threaded at all: the dispatch below ran with no
+	// identity, so an edit's cost row carried a freshly-derived run and nothing
+	// could tell which run touched which file. Empty derives one, as elsewhere.
+	RunID  string
+	TaskID string
 }
 
 // Result is the JSON output emitted by Edit.
@@ -134,6 +141,8 @@ snippet) between these exact markers and nothing else:
 	tierHint := enumToTier(req.Enum)
 	dispResult, err := d.Dispatch(ctx, editPrompt, dispatch.Options{
 		TierHint: tierHint,
+		RunID:    req.RunID,
+		TaskID:   req.TaskID,
 	})
 	if err != nil {
 		cleanupBackup()
@@ -209,6 +218,11 @@ snippet) between these exact markers and nothing else:
 
 	// ── Diff stats ────────────────────────────────────────────────────────────
 	added, removed := diffStats(req.File, origContent, resolved.GitRoot, backup, origExisted)
+
+	// ── Run log ───────────────────────────────────────────────────────────────
+	// Emitted here, after validation, so a rolled-back edit is never recorded as
+	// an applied change — the rollback path returns above without reaching this.
+	logEdit(req, origContent, newContent+"\n", added, removed)
 
 	// ── A2A handoff ───────────────────────────────────────────────────────────
 	_ = writeLastEdit(req.File, req.Enum, wsName, added, removed)

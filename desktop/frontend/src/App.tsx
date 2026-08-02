@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
-import { GetDashboard, GetFleet, GetSession, GetVersion } from './bindings'
+import { GetDashboard, GetEdits, GetFleet, GetSession, GetVersion } from './bindings'
 import type {
   Dashboard as DashboardData,
+  Edit,
   Fleet as FleetData,
   Session as SessionData,
   Version,
@@ -9,6 +10,8 @@ import type {
 import { Dashboard } from './views/Dashboard'
 import { Fleet } from './views/Fleet'
 import { Session } from './views/Session'
+import { Code } from './views/Code'
+import { ChatDock } from './views/ChatDock'
 
 /** Dashboard is retrospective — a slow refresh is enough and costs nothing. */
 const DASHBOARD_MS = 5000
@@ -20,14 +23,11 @@ const DASHBOARD_MS = 5000
  */
 const LIVE_MS = 2000
 
-// Code arrives in Phase 6. It is listed disabled rather than hidden so the
-// shell's shape is honest about where this is going, and rendered as "soon"
-// rather than as an empty view that looks broken.
 const NAV = [
   { id: 'dashboard', label: 'Dashboard', ready: true },
   { id: 'fleet', label: 'Fleet', ready: true },
   { id: 'session', label: 'Session', ready: true },
-  { id: 'code', label: 'Code', ready: false },
+  { id: 'code', label: 'Code', ready: true },
 ] as const
 
 type ViewID = (typeof NAV)[number]['id']
@@ -38,6 +38,7 @@ export default function App() {
   const [dashboard, setDashboard] = useState<DashboardData | null>(null)
   const [fleet, setFleet] = useState<FleetData | null>(null)
   const [session, setSession] = useState<SessionData | null>(null)
+  const [edits, setEdits] = useState<Edit[] | null>(null)
   const [version, setVersion] = useState<Version | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -45,6 +46,7 @@ export default function App() {
     try {
       if (which === 'fleet') setFleet(await GetFleet())
       else if (which === 'session') setSession(await GetSession(id))
+      else if (which === 'code') setEdits(await GetEdits(id))
       else setDashboard(await GetDashboard())
       setError(null)
     } catch (e) {
@@ -69,7 +71,9 @@ export default function App() {
 
   const openSession = useCallback((id: string) => {
     setRunID(id)
-    setSession(null) // don't show the previous run's data under a new id
+    // Don't show the previous run's data under a new id.
+    setSession(null)
+    setEdits(null)
     setView('session')
   }, [])
 
@@ -78,10 +82,13 @@ export default function App() {
   // further qualification.
   const selectNav = useCallback(
     (id: ViewID) => {
-      if (id === 'session' && !runID) {
+      if ((id === 'session' || id === 'code') && !runID) {
         const first = fleet?.runs?.[0]?.id
         if (!first) return
-        openSession(first)
+        setRunID(first)
+        setSession(null)
+        setEdits(null)
+        setView(id)
         return
       }
       setView(id)
@@ -92,7 +99,8 @@ export default function App() {
   const loading =
     (view === 'dashboard' && !dashboard) ||
     (view === 'fleet' && !fleet) ||
-    (view === 'session' && !session)
+    (view === 'session' && !session) ||
+    (view === 'code' && !edits)
 
   return (
     <div className="shell">
@@ -107,7 +115,10 @@ export default function App() {
               key={n.id}
               className="rail__item"
               aria-current={view === n.id ? 'page' : undefined}
-              disabled={!n.ready || (n.id === 'session' && !runID && !fleet?.runs?.length)}
+              disabled={
+                !n.ready ||
+                ((n.id === 'session' || n.id === 'code') && !runID && !fleet?.runs?.length)
+              }
               onClick={() => n.ready && selectNav(n.id)}
             >
               {n.label}
@@ -132,8 +143,22 @@ export default function App() {
         {!error && view === 'session' && session && (
           <Session session={session} onBack={() => setView('fleet')} />
         )}
+        {!error && view === 'code' && edits && (
+          <>
+            <header className="view__head">
+              <button className="back" onClick={() => setView('session')}>
+                ← Session
+              </button>
+              <h1 className="view__title">Code</h1>
+              <p className="view__sub">What this run changed on disk.</p>
+            </header>
+            <Code runID={runID} edits={edits} />
+          </>
+        )}
         {!error && loading && <p style={{ color: 'var(--hy-dim)' }}>Reading logs…</p>}
       </main>
+
+      <ChatDock onOpenRun={openSession} />
     </div>
   )
 }
