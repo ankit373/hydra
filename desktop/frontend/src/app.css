@@ -1,0 +1,230 @@
+/* Layout and components. All colour, type, and radius values come from
+   tokens.css — brand/tokens.css is the single source of truth and is copied in
+   verbatim, never edited here. */
+
+* { box-sizing: border-box; }
+
+html, body, #root { height: 100%; margin: 0; }
+
+body {
+  background: var(--hy-bg);
+  color: var(--hy-ink);
+  font-family: var(--hy-font-display);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Shell ─────────────────────────────────────────────────────────────── */
+
+.shell { display: flex; height: 100%; }
+
+.rail {
+  width: 210px;
+  flex: 0 0 210px;
+  border-right: 1px solid var(--hy-line);
+  background: var(--hy-bg-2);
+  display: flex;
+  flex-direction: column;
+  /* Clears the inset macOS traffic lights. */
+  padding: 34px 12px 12px;
+  --wails-draggable: drag;
+}
+
+.rail__brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 10px 18px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-size: 15px;
+}
+
+.rail__mark {
+  width: 10px; height: 10px; border-radius: 3px;
+  background: var(--hy-brand);
+}
+
+.rail__nav { display: flex; flex-direction: column; gap: 2px; }
+
+.rail__item {
+  --wails-draggable: no-drag;
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--hy-dim);
+  font: inherit;
+  text-align: left;
+  padding: 9px 11px;
+  border-radius: var(--hy-radius-sm);
+  cursor: pointer;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.rail__item:hover:not(:disabled) { background: var(--hy-panel); color: var(--hy-ink); }
+.rail__item[aria-current="page"] { background: var(--hy-panel); color: var(--hy-ink); }
+.rail__item:disabled { opacity: .38; cursor: default; }
+.rail__item:focus-visible { outline: 2px solid var(--hy-aqua); outline-offset: 1px; }
+
+.rail__soon {
+  font-family: var(--hy-font-mono);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: var(--hy-dim);
+  opacity: .7;
+}
+
+.rail__foot {
+  margin-top: auto;
+  padding: 10px;
+  font-family: var(--hy-font-mono);
+  font-size: 10px;
+  color: var(--hy-dim);
+  line-height: 1.7;
+  word-break: break-all;
+}
+
+.main { flex: 1; overflow-y: auto; padding: 34px 30px 40px; }
+
+/* ── Headings ──────────────────────────────────────────────────────────── */
+
+.view__head { margin-bottom: 22px; }
+.view__title { margin: 0; font-size: 24px; letter-spacing: -0.03em; }
+.view__sub { margin: 5px 0 0; color: var(--hy-dim); font-size: 13px; }
+
+.section__title {
+  margin: 30px 0 11px;
+  font-family: var(--hy-font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .11em;
+  color: var(--hy-dim);
+}
+
+/* ── Cards ─────────────────────────────────────────────────────────────── */
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 12px;
+}
+
+.card {
+  background: var(--hy-panel);
+  border: 1px solid var(--hy-line);
+  border-radius: var(--hy-radius);
+  padding: 15px 17px;
+}
+
+.card__label {
+  font-family: var(--hy-font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .09em;
+  color: var(--hy-dim);
+}
+
+.card__value {
+  margin-top: 7px;
+  font-size: 27px;
+  font-weight: 600;
+  letter-spacing: -0.035em;
+  font-variant-numeric: tabular-nums;
+}
+
+.card__note { margin-top: 5px; font-size: 12px; color: var(--hy-dim); }
+
+.card__value--unknown { color: var(--hy-dim); font-size: 19px; font-weight: 500; }
+
+/* ── Governor bands ────────────────────────────────────────────────────── */
+
+.gov--normal   { color: var(--hy-gov-normal); }
+.gov--warning  { color: var(--hy-gov-warning); }
+.gov--critical { color: var(--hy-gov-critical); }
+
+.gov__track {
+  margin-top: 10px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--hy-line);
+  overflow: hidden;
+}
+.gov__fill { height: 100%; border-radius: 2px; background: currentColor; }
+
+/* ── Tables ────────────────────────────────────────────────────────────── */
+
+.table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+
+.table th {
+  text-align: left;
+  font-family: var(--hy-font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .09em;
+  color: var(--hy-dim);
+  font-weight: 500;
+  padding: 0 12px 8px 0;
+  border-bottom: 1px solid var(--hy-line);
+}
+.table th.num, .table td.num { text-align: right; }
+
+.table td {
+  padding: 9px 12px 9px 0;
+  border-bottom: 1px solid var(--hy-line);
+  font-size: 13px;
+}
+.table td.mono { font-family: var(--hy-font-mono); font-size: 12px; }
+.table tr:last-child td { border-bottom: 0; }
+
+.table__wrap {
+  background: var(--hy-panel);
+  border: 1px solid var(--hy-line);
+  border-radius: var(--hy-radius);
+  padding: 14px 17px;
+  overflow-x: auto;
+}
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 12px;
+}
+
+/* ── Cost ramp ─────────────────────────────────────────────────────────── */
+
+.cost--free      { color: var(--hy-dim); }
+.cost--cheap     { color: var(--hy-cheap); }
+.cost--mid       { color: var(--hy-mid); }
+.cost--expensive { color: var(--hy-expensive); }
+
+/* ── Empty / error states ──────────────────────────────────────────────── */
+
+.empty {
+  border: 1px dashed var(--hy-line);
+  border-radius: var(--hy-radius);
+  padding: 46px 30px;
+  text-align: center;
+  color: var(--hy-dim);
+}
+.empty__title { color: var(--hy-ink); font-size: 16px; margin: 0 0 7px; }
+.empty code {
+  font-family: var(--hy-font-mono);
+  font-size: 12px;
+  background: var(--hy-bg-2);
+  border: 1px solid var(--hy-line);
+  border-radius: var(--hy-radius-sm);
+  padding: 2px 7px;
+  color: var(--hy-aqua);
+}
+
+.error {
+  border: 1px solid var(--hy-expensive);
+  border-radius: var(--hy-radius);
+  padding: 15px 17px;
+  color: var(--hy-expensive);
+  font-family: var(--hy-font-mono);
+  font-size: 12px;
+}
