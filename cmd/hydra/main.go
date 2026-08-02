@@ -31,6 +31,8 @@ import (
 	"github.com/ankit373/hydra/internal/parallel"
 	"github.com/ankit373/hydra/internal/pricing"
 	"github.com/ankit373/hydra/internal/probe"
+	"github.com/ankit373/hydra/internal/provider"
+	"github.com/ankit373/hydra/internal/rank"
 	"github.com/ankit373/hydra/internal/review"
 	"github.com/ankit373/hydra/internal/runid"
 	"github.com/ankit373/hydra/internal/runlog"
@@ -446,6 +448,35 @@ func cmdDispatch() *cobra.Command {
 					effectiveConf = derived
 				}
 			}
+			// --dry-run must mean "spend nothing" in every mode. It was read only
+			// by the single-dispatch path far below, which neither ensemble
+			// branch reaches — so `--dry-run --confidence 0.95` fired a paid
+			// ensemble and printed no plan at all (#167).
+			if dryRun && (effectiveConf > 0 || doSwarm) {
+				mode := swarm.SwarmMode(swarmMode)
+				if mode == "" {
+					mode = swarm.ModeBest
+				}
+				sw := swarm.New(d, d.Heads(), d)
+				planOpts := swarm.Options{
+					Mode:          mode,
+					TierHint:      tier,
+					HeadIDs:       headIDs,
+					MaxHeads:      swarmMaxHeads,
+					MaxEstCostUSD: swarmMaxCost,
+					LocalOnly:     localOnly,
+					System:        system,
+					Confidence:    effectiveConf,
+					Domain:        domain,
+				}
+				heads, estUSD, err := sw.Plan(prompt, planOpts)
+				if err != nil {
+					return err
+				}
+				printEnsemblePlan(heads, estUSD, effectiveConf, mode, swarmMaxCost)
+				return nil
+			}
+
 			if effectiveConf > 0 {
 				sw := swarm.New(d, d.Heads(), d)
 				res, err := sw.RunSPRT(ctx, prompt, swarm.Options{
@@ -562,7 +593,7 @@ func cmdDispatch() *cobra.Command {
 	// trust / SPRT flags
 	cmd.Flags().Float64Var(&confidence, "confidence", 0, "route via SPRT ensemble until this P(correct) is reached, e.g. 0.95")
 	cmd.Flags().StringVar(&domain, "domain", "", "calibration domain for --confidence (default: \"default\")")
-	cmd.Flags().StringVar(&file, "file", "", "target file — raises the confidence bar by its code blast radius")
+	cmd.Flags().StringVar(&file, "file", "", "target file — derives a confidence target from its blast radius, so this alone selects the SPRT ensemble")
 	cmd.Flags().StringVar(&graphPath, "graph", "graph.json", "path to the dependency graph used with --file")
 	return cmd
 }
@@ -1192,6 +1223,40 @@ func anyEstimated(attempts []swarm.Attempt) bool {
 }
 
 // printSwarmResult renders the swarm result to stdout.
+// printEnsemblePlan is what --dry-run shows for the swarm and SPRT paths: the
+// heads that would be engaged and the cost of one round, so the flag answers
+// "what would this spend" rather than spending it.
+//
+// The head count is an upper bound in SPRT mode: the ensemble stops as soon as
+// the log-odds cross the target, so it usually queries fewer. Saying so beats
+// printing a number that reads as a promise.
+func printEnsemblePlan(heads []provider.Head, estUSD, confidence float64, mode swarm.SwarmMode, maxCostUSD float64) {
+	sep := dimStyle.Render("  " + strings.Repeat("─", 60))
+
+	label := fmt.Sprintf("swarm · %s", mode)
+	if confidence > 0 {
+		label = fmt.Sprintf("SPRT · target %.1f%%", confidence*100)
+	}
+
+	fmt.Println()
+	fmt.Printf("  %s [%s]\n\n", cortexStyle.Render("▶ DRY RUN"), dimStyle.Render(label))
+	fmt.Printf("  %-28s  %7s  %8s\n", "HEAD", "TIER", "SOURCE")
+	fmt.Println(sep)
+	for _, h := range heads {
+		fmt.Printf("  %-28s  %7d  %8s\n", h.Name, rank.UITier(h), h.Source)
+	}
+	fmt.Println(sep)
+
+	if confidence > 0 {
+		fmt.Printf("  %s\n", dimStyle.Render(fmt.Sprintf("at most %d heads queried; SPRT stops early once the target is met", len(heads))))
+	}
+	fmt.Printf("  %s\n", dimStyle.Render(fmt.Sprintf("estimated cost for one round: $%.4f", estUSD)))
+	if maxCostUSD > 0 && estUSD > maxCostUSD {
+		fmt.Printf("  %s\n", warnStyle.Render(fmt.Sprintf("this exceeds --swarm-max-cost $%.4f and would be refused", maxCostUSD)))
+	}
+	fmt.Printf("  %s\n\n", dimStyle.Render("nothing was executed"))
+}
+
 func printSwarmResult(r *swarm.SwarmResult) {
 	sep := dimStyle.Render("  " + strings.Repeat("─", 60))
 
@@ -2083,6 +2148,7 @@ func cmdTrustDefect() *cobra.Command {
 var (
 	cortexStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
 	dimStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	warnStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
 )
 
 // promptPreview shortens a prompt for a log Detail field. Run events carry a
