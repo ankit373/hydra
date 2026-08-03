@@ -24,6 +24,7 @@ import (
 	"github.com/ankit373/hydra/internal/dispatch"
 	"github.com/ankit373/hydra/internal/editor"
 	"github.com/ankit373/hydra/internal/entropy"
+	"github.com/ankit373/hydra/internal/executor"
 	"github.com/ankit373/hydra/internal/graph"
 	"github.com/ankit373/hydra/internal/ledger"
 	"github.com/ankit373/hydra/internal/optimal"
@@ -198,12 +199,33 @@ func cmdProbe() *cobra.Command {
 			}
 			fmt.Printf("  %-30s  %-5s  %-5s  %s\n", "Head", "Score", "Src", "Provider")
 			fmt.Println("  " + strings.Repeat("─", 56))
+			// Discovery finding a head is not the same as Hydra being able to
+			// drive it. Listing both identically is what let `probe` advertise
+			// the Ollama binary that `dispatch --local` then refused (#248), so
+			// unroutable heads are marked and carry their reason.
+			var unroutable int
 			for _, h := range result.Heads {
 				marker := "  "
 				if result.Cortex != nil && h.ID == result.Cortex.ID {
 					marker = cortexStyle.Render("→ ")
 				}
-				fmt.Printf("%s%-30s  %-5d  %-5s  %s\n", marker, h.Name, h.CapScore, h.Source, h.Provider)
+				why := executor.Unroutable(h)
+				if why != "" {
+					marker = warnStyle.Render("✗ ")
+					unroutable++
+				}
+				row := fmt.Sprintf("%-30s  %-5d  %-5s  %s", h.Name, h.CapScore, h.Source, h.Provider)
+				if why == "" {
+					fmt.Printf("%s%s\n", marker, row)
+					continue
+				}
+				fmt.Printf("%s%s\n", marker, dimStyle.Render(row))
+				fmt.Printf("    %s\n", dimStyle.Render("↳ "+why))
+			}
+			if unroutable > 0 {
+				fmt.Printf("\n  %s\n", dimStyle.Render(fmt.Sprintf(
+					"✗ = discovered but not routable (%d of %d) — dispatch will skip these.",
+					unroutable, len(result.Heads))))
 			}
 			return nil
 		},
