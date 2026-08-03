@@ -5,7 +5,6 @@
 package parallel
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -14,12 +13,16 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"golang.org/x/sync/errgroup"
 
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/dispatch"
 	"github.com/ankit373/hydra/internal/policy"
+	"github.com/ankit373/hydra/internal/runid"
+	"github.com/ankit373/hydra/internal/runlog"
+	"github.com/ankit373/hydra/internal/util"
 	"github.com/ankit373/hydra/internal/workspace"
 )
 
@@ -73,13 +76,26 @@ type Result struct {
 func (r Result) MarshalJSON() ([]byte, error) { return r.raw, nil }
 func (r Result) Raw() json.RawMessage         { return r.raw }
 
+// Options configures a batch run.
+type Options struct {
+	// RunID groups every log row the batch produces. All tasks in one batch
+	// share it; each task still gets its own TaskID, so a reader can tell "one
+	// batch of three tasks" from "three unrelated runs" (#181). Empty derives
+	// one for the batch.
+	RunID string
+}
+
 // Run fans all tasks out as goroutines and collects results.
 // Returns non-nil error only for pre-flight failures; individual task errors
 // are captured in each result's Status/Error fields.
-func Run(ctx context.Context, tasks []Task) ([]Result, error) {
+func Run(ctx context.Context, tasks []Task, opts Options) ([]Result, error) {
 	if len(tasks) == 0 {
 		return nil, fmt.Errorf("no tasks provided")
 	}
+
+	// Resolve the batch's run identity once, here rather than per goroutine, so
+	// every task in the batch genuinely shares it.
+	runID := runid.ResolveRun(opts.RunID)
 
 	// Pre-flight: detect duplicate file targets.
 	seen := map[string]string{}
@@ -96,32 +112,76 @@ func Run(ctx context.Context, tasks []Task) ([]Result, error) {
 	results := make([]Result, len(tasks))
 	var mu sync.Mutex
 
+	// A batch is a fan-out, and the tree that renders it needs the fan-out's
+	// shape: one node per task, all under the batch. Before #204 nothing in this
+	// package emitted, so an N-task batch had no structure at all in the run log.
+	// Appends are best-effort throughout — a lost event must never fail a task.
+	rl := runlog.New(runID)
+	_ = rl.Append(runlog.Event{
+		Kind:   runlog.KindTaskStarted,
+		Agent:  batchAgent,
+		Detail: fmt.Sprintf("parallel batch · %d tasks", len(tasks)),
+	})
+
 	g, gctx := errgroup.WithContext(ctx)
 
 	for i, task := range tasks {
 		i, task := i, task
+		// Each task is its own logical unit of work inside the shared run.
+		taskID := runid.New()
 		g.Go(func() error {
+			_ = rl.Append(runlog.Event{
+				Kind: runlog.KindTaskStarted, TaskID: taskID,
+				Agent: task.Label, Parent: batchAgent, Detail: task.Enum,
+			})
+
+			started := time.Now()
 			var raw json.RawMessage
 			if task.File != "" {
-				raw = runEditTask(gctx, task)
+				raw = runEditTask(gctx, task, runID, taskID)
 			} else {
-				raw = runTextTask(gctx, task)
+				raw = runTextTask(gctx, task, runID, taskID)
 			}
 			mu.Lock()
 			results[i] = Result{raw: raw}
 			mu.Unlock()
+
+			_ = rl.Append(runlog.Event{
+				Kind: runlog.KindTaskFinished, TaskID: taskID,
+				Agent: task.Label, Parent: batchAgent,
+				Status:     statusOf(raw),
+				DurationMS: time.Since(started).Milliseconds(),
+			})
 			return nil // always nil — errors are captured in raw
 		})
 	}
 
 	_ = g.Wait()
 
+	_ = rl.Append(runlog.Event{Kind: runlog.KindTaskFinished, Agent: batchAgent})
+
 	_ = persistResults(results)
 	return results, nil
 }
 
+// batchAgent is the batch's own node in the tree — the parent every task hangs
+// off, so a fan-out renders as a fan-out rather than N unrelated roots.
+const batchAgent = "parallel"
+
+// statusOf recovers a task's outcome from the JSON each runner already
+// produces, rather than threading a second return value through both paths.
+func statusOf(raw json.RawMessage) string {
+	var v struct {
+		Status string `json:"status"`
+	}
+	if err := json.Unmarshal(raw, &v); err != nil || v.Status == "" {
+		return "unknown"
+	}
+	return v.Status
+}
+
 // runTextTask dispatches a prompt and returns the raw JSON result.
-func runTextTask(ctx context.Context, task Task) json.RawMessage {
+func runTextTask(ctx context.Context, task Task, runID, taskID string) json.RawMessage {
 	d, err := dispatch.New(ctx)
 	if err != nil {
 		return failText(task, "dispatcher init: "+err.Error())
@@ -136,6 +196,8 @@ func runTextTask(ctx context.Context, task Task) json.RawMessage {
 
 	result, err := d.Dispatch(ctx, prompt, dispatch.Options{
 		TierHint: enumToTier(task.Enum),
+		RunID:    runID,
+		TaskID:   taskID,
 	})
 	if err != nil {
 		return failText(task, err.Error())
@@ -153,7 +215,7 @@ func runTextTask(ctx context.Context, task Task) json.RawMessage {
 // runEditTask performs an atomic file edit and returns the raw JSON result.
 // Self-contained port of the edit.sh flow so this package compiles on develop
 // before internal/editor merges. Once editor merges, this can delegate to editor.Edit.
-func runEditTask(ctx context.Context, task Task) json.RawMessage {
+func runEditTask(ctx context.Context, task Task, runID, taskID string) json.RawMessage {
 	file := task.File
 	if !filepath.IsAbs(file) {
 		return failEdit(task, "file path must be absolute")
@@ -235,6 +297,8 @@ snippet) between these exact markers and nothing else:
 	}
 	dispResult, err := d.Dispatch(ctx, editPrompt, dispatch.Options{
 		TierHint: enumToTier(task.Enum),
+		RunID:    runID,
+		TaskID:   taskID,
 	})
 	if err != nil {
 		cleanupBackup()
@@ -385,11 +449,13 @@ func extractContent(raw string) string {
 }
 
 func extractBetween(raw string) string {
-	scanner := bufio.NewScanner(strings.NewReader(raw))
+	// util.SplitLines, not bufio.Scanner: a Scanner stops at a token longer than
+	// its buffer and only says so via Err(), so a single >64 KiB line — minified
+	// JS, a data URI, one-line JSON — used to yield an empty extraction that was
+	// then written over the user's file as if it had succeeded (#168).
 	var out []string
 	inside, printed := false, false
-	for scanner.Scan() {
-		line := scanner.Text()
+	for _, line := range util.SplitLines(raw) {
 		if !printed && strings.Contains(line, markerStart) {
 			inside = true
 			continue

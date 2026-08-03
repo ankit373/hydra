@@ -478,6 +478,9 @@ hyctl context entropy <file|->          # signal density + useful tokens + compa
 # Verification & accountability
 hyctl oracle verify go test ./... --source verifier:go-test  # verifier as evidence + its LLR
 hyctl mcp check <tool> --agent A --resource R --action write  # gate + record an access
+hyctl mcp check <tool> --content "$DATA" --action network      # PII auto-classified; policy can deny egress
+hyctl mcp check <tool> --params '{"amount":500}'               # bind a hash of the params to the decision
+hyctl mcp verify <tool> --resource R --params '{"amount":500}' # prove executed params == approved params
 hyctl mcp log --denied                  # what got blocked
 hyctl mcp report                        # allowed/denied by agent and tool
 
@@ -608,12 +611,78 @@ hydra/
 │   ├── review/                  # Code review / approve / reject / QA
 │   ├── util/                    # Shared utilities (bounded Accumulator, 33 MB cap)
 │   ├── sysinfo/                 # Hardware detection + 7-day memory history
+│   ├── runlog/                  # Per-run event log (~/.hydra/logs/runs/) + liveness heartbeat + edit snapshots
+│   ├── tree/                    # Reconstructs a run: supervision tree + timeline, framework-free
+│   ├── runid/                   # Run/task identity — correlates every log a run produces
+│   ├── a2a/                     # Agent handoffs with vector clocks (causal ordering + conflict detection)
+│   ├── graph/                   # Code dependency graph → blast radius + percolation κ
+│   ├── ledger/                  # Local MCP accountability ledger + policy gate
+│   ├── oracle/                  # Verification oracles (tests/compile/lint) as calibrated evidence
+│   ├── optimal/ · entropy/      # Optimal parallel-agent count · context signal density
 │   ├── build/ · update/         # Version stamping + startup update check
-│   └── tui/                     # Bubbletea init wizard + install guide
-├── registry/                    # routing.yaml (the enum) · models · domains · pricing · policy
+│   └── tui/                     # Bubbletea cockpit + init wizard
+├── desktop/                     # Desktop app (own Go module) — Wails v2 + React/TS
+│   ├── api/                     # Go backend: Dashboard · Fleet · Session · Code · chat (no Wails imports)
+│   └── frontend/                # React views over the same logs the CLI writes
+├── registry/                    # routing · models · domains · pricing · policy — go:embed'd into
+│                                #   the binary; $HYDRA_HOME/registry/<file> overrides it
 ├── docs/                        # GitHub Pages (hydra.uvansa.com) — index.html, llms.txt
-└── Formula/hydra.rb             # Homebrew formula (auto-updated by GoReleaser)
+└── scripts/                     # update-tap-formula.sh — regenerates Formula/hyctl.rb in the
+                                 #   ankit373/homebrew-hydra tap after each release
 ```
+
+### The desktop app
+
+A native window over the same engine: **Dashboard** (spend, governor pressure, trust record),
+**Fleet** (runs in flight and the agents inside them), **Session** (one run's timeline, plus a
+layered graph when it fanned out), and **Code** (the file edits a run made, as diffs) — over a
+persistent chat dock.
+
+It reads `~/.hydra/logs/` directly. No daemon, no telemetry, and its numbers are the CLI's numbers:
+Dashboard totals are asserted equal to `hyctl cost` and `hyctl stats` for the same data.
+
+**Download** — every release carries a build for each platform, on the
+[releases page](https://github.com/ankit373/hydra/releases/latest):
+
+| platform | artifact |
+|---|---|
+| macOS (Intel + Apple Silicon) | `hydra-desktop_<version>_darwin_universal.zip` |
+| Windows | `hydra-desktop_<version>_windows_amd64.zip` |
+| Linux | `hydra-desktop_<version>_linux_amd64.tar.gz` |
+
+Each artifact ships a `.sha256` next to it. Until the builds are signed this is the only integrity
+check available, so it is worth the one command:
+
+```bash
+shasum -a 256 -c hydra-desktop_<version>_darwin_universal.zip.sha256   # macOS
+sha256sum   -c hydra-desktop_<version>_linux_amd64.tar.gz.sha256       # Linux
+```
+
+```powershell
+# Windows (PowerShell)
+$f = "hydra-desktop_<version>_windows_amd64.zip"
+(Get-FileHash $f -Algorithm SHA256).Hash -eq (Get-Content "$f.sha256").Split(' ')[0]   # → True
+```
+
+**The builds are not code-signed yet**, so the first launch takes one extra step:
+
+- **macOS** — Gatekeeper will say Hydra "cannot be opened because it is from an unidentified
+  developer". Right-click the app → **Open** → **Open**. Once only. If you unzipped from Terminal
+  and macOS still refuses, clear the quarantine flag: `xattr -dr com.apple.quarantine Hydra.app`
+- **Windows** — SmartScreen may show "Windows protected your PC". Click **More info** → **Run
+  anyway**
+- **Linux** — needs `libgtk-3-0` and `libwebkit2gtk-4.1-0`, which most desktop distributions
+  already have. `chmod +x Hydra` and run it
+
+To build it yourself instead:
+
+```bash
+go install github.com/wailsapp/wails/v2/cmd/wails@latest
+cd desktop && wails build                   # → desktop/build/bin/Hydra.app
+```
+
+`desktop/` is a separate Go module on purpose: Wails takes the root module from 25 requires to 50,
+and `hyctl` ships via brew/npm/pip/curl and never links a webview.
 
 ---
 

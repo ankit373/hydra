@@ -294,3 +294,42 @@ func TestParsePerToken(t *testing.T) {
 		}
 	}
 }
+
+// Hydra is a cost router, so a tier that prices at $0.00 is not a missing
+// feature — it is a wrong number presented as a real one. registry/pricing.yaml
+// used to be read from disk only, and no install path ships it, so every
+// installed binary logged a WARNING and then estimated every CLI-agent head at
+// zero (#238). Those heads never appear in OpenRouter's catalog, so the tier
+// table is the only thing that prices them.
+//
+// HYDRA_HOME points at an empty dir to reproduce an installed machine: no
+// registry on disk, nothing to walk up to.
+func TestLoadFallbackTiers_NonZeroOnAMachineWithNoRegistryOnDisk(t *testing.T) {
+	t.Setenv("HYDRA_HOME", t.TempDir())
+
+	tiers, err := loadFallbackTiers()
+	if err != nil {
+		t.Fatalf("tier pricing unreadable with no on-disk registry: %v", err)
+	}
+	if len(tiers) == 0 {
+		t.Fatal("no tiers loaded — every cost estimate would be $0.00")
+	}
+	// Tier 10 is the local Ollama head and is genuinely free — asserting
+	// non-zero across the board would encode a wrong expectation, not a
+	// stronger guarantee. Every paid tier must be priced.
+	const localTier = 10
+	paid := 0
+	for tier, tp := range tiers {
+		if tier == localTier {
+			continue
+		}
+		if tp.InputPerMillion <= 0 && tp.OutputPerMillion <= 0 {
+			t.Errorf("tier %d prices at $0.00 in and out", tier)
+			continue
+		}
+		paid++
+	}
+	if paid == 0 {
+		t.Fatal("no paid tier carries a price — every API head would estimate at $0.00")
+	}
+}

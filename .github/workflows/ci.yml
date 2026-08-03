@@ -2,7 +2,11 @@ name: CI
 
 on:
   pull_request:
-    branches: [main, develop]
+    # release/v* is included because it is the UAT gate: it is what a release is
+    # validated on, and where fixes land during validation. Leaving it out meant
+    # a PR into a release branch reported "no checks reported" and was mergeable
+    # with zero verification (#224).
+    branches: [main, develop, "release/v*"]
 
 # Cancel any in-progress run for the same branch when a new commit is pushed.
 concurrency:
@@ -14,16 +18,40 @@ jobs:
     name: Go build & test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: true
 
+      # Formatting is checked before anything expensive runs — it is the
+      # cheapest failure to produce and the cheapest to fix.
+      - name: Gofmt
+        run: |
+          unformatted=$(gofmt -l ./cmd ./internal)
+          if [ -n "$unformatted" ]; then
+            echo "::error::These files are not gofmt'd:"
+            echo "$unformatted"
+            gofmt -d ./cmd ./internal
+            exit 1
+          fi
+
       - name: Vet
         run: go vet ./...
+
+      # staticcheck must be BUILT with the same toolchain it analyses. Its own
+      # go.mod asks for go1.25, so a plain `go install` builds it on go1.25 and
+      # it then rejects every go1.26 stdlib file it parses ("file requires newer
+      # Go version"), failing the whole run. Pinning GOTOOLCHAIN to whatever
+      # this module actually resolved to keeps the two in step without
+      # hardcoding a version that would drift from go.mod.
+      - name: Install staticcheck
+        run: GOTOOLCHAIN=$(go env GOVERSION) go install honnef.co/go/tools/cmd/staticcheck@2026.1
+
+      - name: Staticcheck
+        run: staticcheck ./...
 
       - name: Build
         run: go build ./...
@@ -31,11 +59,61 @@ jobs:
       - name: Test
         run: go test ./... -race
 
+  desktop:
+    name: Desktop backend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: desktop/go.mod
+          cache: true
+
+      # desktop/ is its own module, so the root job's `./...` does not reach it.
+      # Without this job its tests would silently never run.
+      #
+      # Scoped to ./api/... deliberately: desktop/main.go imports Wails, which
+      # needs libwebkit2gtk to compile on Linux. A build tag used to exclude it,
+      # but `wails build` generates bindings by compiling that package untagged,
+      # so the tag broke the documented build command (#213). desktop/api — the
+      # part with the tests — imports no UI framework at all, and main.go is
+      # exercised by `wails build` on a machine that has a webview.
+      - name: Gofmt
+        working-directory: desktop
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "::error::These files are not gofmt'd:"
+            echo "$unformatted"
+            gofmt -d .
+            exit 1
+          fi
+
+      - name: Vet
+        working-directory: desktop
+        run: go vet ./api/...
+
+      # Same reasoning as the root job: staticcheck must be built with the
+      # toolchain it analyses.
+      - name: Install staticcheck
+        working-directory: desktop
+        run: GOTOOLCHAIN=$(go env GOVERSION) go install honnef.co/go/tools/cmd/staticcheck@2026.1
+
+      - name: Staticcheck
+        working-directory: desktop
+        run: staticcheck ./api/...
+
+      - name: Test
+        working-directory: desktop
+        run: go test ./api/... -race
+
   shellcheck:
     name: Shellcheck
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install shellcheck
         run: sudo apt-get install -y shellcheck
@@ -50,26 +128,38 @@ jobs:
     name: TypeScript typecheck
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - name: Set up Bun
-        uses: oven-sh/setup-bun@v2
+      # This job used to typecheck ui/, the Ink TUI removed in #197. It now
+      # covers the desktop frontend, which had no CI coverage at all — its
+      # types.ts mirrors the Go DTOs by hand, so a compile error there is
+      # exactly the kind of drift CI should catch.
+      - name: Set up Node
+        uses: actions/setup-node@v7
         with:
-          bun-version: latest
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/frontend/package-lock.json
 
       - name: Install dependencies
-        working-directory: ui
-        run: bun install --frozen-lockfile
+        working-directory: desktop/frontend
+        run: npm ci
 
-      - name: Run typecheck
-        working-directory: ui
-        run: bun run typecheck
+      - name: Typecheck
+        working-directory: desktop/frontend
+        run: npm run typecheck
+
+      # The production bundle must build, not merely typecheck — `wails build`
+      # runs this exact command before it compiles any Go.
+      - name: Build
+        working-directory: desktop/frontend
+        run: npm run build
 
   yaml-lint:
     name: YAML validation
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install yq
         run: |
@@ -88,7 +178,7 @@ jobs:
     name: Secret scan
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -97,3 +187,17 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_CONFIG: ${{ github.workspace }}/.gitleaks.toml
+
+  # The only place desktop/main.go is compiled. The `desktop` job above is
+  # scoped to ./api/... because main.go imports Wails, so without this the Wails
+  # wiring — bindings, embedded frontend, app setup — is verified by nobody and
+  # breaks are found only when someone runs `wails build` by hand (#227).
+  #
+  # Linux only: it catches Go-level breakage for a fraction of the cost of a
+  # three-OS matrix on every PR. The full matrix runs on RC and release builds.
+  desktop-app:
+    name: Desktop app build
+    uses: ./.github/workflows/desktop-build.yml
+    with:
+      version: ci
+      targets: '[{"runner":"ubuntu-latest","platform":"linux/amd64","goos":"linux","arch":"amd64","tags":"webkit2_41"}]'

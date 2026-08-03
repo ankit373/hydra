@@ -65,6 +65,8 @@
       "Automatic fallback chains terminating at always-on local Qwen",
       "Local Ollama + cloud model hybrid — provider-neutral discovery",
       "Interactive TUI cockpit (hyctl tui) — chat, route work, and watch spend live",
+      "Desktop app (Wails v2) for macOS, Windows and Linux — Dashboard, Fleet, Session and Code views over a chat dock",
+      "Per-run event log — reconstruct any run's supervision tree, timeline and file edits",
       "Swarm dispatch — race, best, and all modes across multiple models simultaneously",
       "Token budget enforcement — per-model context window tracking with pressure modes",
       "Dynamic live pricing — OpenRouter API pricing with 24h cache and tier fallback",
@@ -178,6 +180,10 @@
    Single self-contained file. No CDN, no web fonts, no libraries. Hand-rolled
    canvas/SVG. Body never scrolls horizontally.
    ========================================================================== */
+@font-face{font-family:"Space Grotesk";font-style:normal;font-weight:400 700;font-display:swap;
+  src:url("fonts/SpaceGrotesk.woff2") format("woff2");}
+@font-face{font-family:"JetBrains Mono";font-style:normal;font-weight:400 700;font-display:swap;
+  src:url("fonts/JetBrainsMono.woff2") format("woff2");}
 :root{
   color-scheme:dark;
   --bg:#06070F;--bg2:#0A0C18;--panel:rgba(18,20,38,.62);
@@ -186,7 +192,8 @@
   --cyan:#2AF0E0;--aqua:#00E6C3;--violet:#8B5CF6;--magenta:#E852C8;
   --cheap:#3FD98A;--mid:#E0A93A;--exp:#FF5A6E;
   --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,Roboto,Helvetica,Arial,sans-serif;
-  --mono:ui-monospace,"JetBrains Mono","SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+  --mono:"JetBrains Mono",ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+  --display:"Space Grotesk",system-ui,sans-serif;
   --maxw:1200px;
 }
 *{box-sizing:border-box;}
@@ -225,24 +232,60 @@ a{color:inherit;text-decoration:none;}
 .topbar .ghost:hover{border-color:var(--aqua);color:var(--aqua);}
 @media(max-width:720px){.topbar nav{display:none;}}
 
-/* ── hero ──────────────────────────────────────────────────────────────── */
-.hero{position:relative;height:min(98vh,940px);min-height:600px;overflow:hidden;
-  display:flex;flex-direction:column;justify-content:flex-end;}
-#stage{position:absolute;inset:0;width:100%;height:100%;display:block;}
-.hero-grid{position:absolute;inset:0;pointer-events:none;opacity:.5;
-  background-image:linear-gradient(rgba(150,140,255,.05) 1px,transparent 1px),
-    linear-gradient(90deg,rgba(150,140,255,.05) 1px,transparent 1px);
-  background-size:56px 56px;
-  mask-image:radial-gradient(120% 90% at 50% 30%,#000 30%,transparent 78%);
-  -webkit-mask-image:radial-gradient(120% 90% at 50% 30%,#000 30%,transparent 78%);}
-.hero-vign{position:absolute;inset:0;pointer-events:none;
-  background:radial-gradient(125% 85% at 50% 24%,transparent 38%,rgba(6,7,15,.6) 76%,var(--bg) 100%);}
+/* ── hero — hydra-hud: dive into the cortex ──────────────────────────────── */
+.hero-pin{position:relative;}
+.hero-sticky{position:sticky;top:0;height:100svh;min-height:600px;overflow:hidden;background:var(--bg);
+  display:flex;flex-direction:column;justify-content:flex-end;cursor:grab;}
+.hero-sticky.drag{cursor:grabbing;}
+#stage{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:pan-y;}
+#scan{position:absolute;inset:0;pointer-events:none;opacity:.5;mix-blend-mode:overlay;z-index:1;
+  background:repeating-linear-gradient(0deg,rgba(255,255,255,.035) 0 1px,transparent 1px 3px);}
+#vig{position:absolute;inset:0;pointer-events:none;z-index:1;
+  background:radial-gradient(circle at 50% 46%,transparent 50%,rgba(2,3,9,.72));}
+.hero-hud{position:absolute;inset:0;pointer-events:none;font-size:12px;letter-spacing:.5px;z-index:2;
+  opacity:1;transition:opacity .5s ease;}
+.hero-sticky.released .hero-hud{opacity:0;}
+.hud-corner{position:absolute;width:26px;height:26px;border:1px solid rgba(150,140,255,.34);}
+.hud-corner.tl{top:20px;left:20px;border-right:0;border-bottom:0;}
+.hud-corner.tr{top:20px;right:20px;border-left:0;border-bottom:0;}
+.hud-corner.bl{bottom:20px;left:20px;border-right:0;border-top:0;}
+.hud-corner.br{bottom:20px;right:20px;border-left:0;border-top:0;}
+.hud-meta{position:absolute;top:20px;right:24px;text-align:right;color:var(--dim);line-height:1.7;
+  text-transform:uppercase;letter-spacing:2px;font-size:10px;font-family:var(--mono);}
+.hud-meta b{color:var(--aqua);font-weight:500;}
+.hud-panel{position:absolute;border:1px solid var(--line);background:rgba(10,12,24,.55);
+  backdrop-filter:blur(3px);border-radius:8px;padding:12px 14px;font-family:var(--mono);}
+.hud-panel .ttl{color:var(--aqua);font-size:9.5px;letter-spacing:3px;text-transform:uppercase;margin-bottom:9px;
+  display:flex;justify-content:space-between;}
+.hud-panel .ttl .dot{color:var(--cheap);}
+#hudLog{left:24px;bottom:24px;width:min(400px,38vw);}
+#hudLog .line{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--dim);line-height:1.75;font-size:11px;}
+#hudLog .line .en{color:var(--ink);} #hudLog .line .hd{color:var(--cyan);} #hudLog .line .ok{color:var(--cheap);} #hudLog .line .c{color:var(--mid);}
+#hudTele{right:24px;bottom:24px;width:210px;}
+.hud-row{display:flex;justify-content:space-between;color:var(--dim);font-size:11px;margin:7px 0;}
+.hud-row b{color:var(--ink);font-weight:500;font-variant-numeric:tabular-nums;}
+.hud-bar{height:6px;border-radius:3px;background:rgba(255,255,255,.06);overflow:hidden;margin-top:3px;}
+.hud-bar>i{display:block;height:100%;background:linear-gradient(90deg,var(--aqua),var(--cyan));border-radius:3px;transition:width .5s;}
+.hud-mode{color:var(--cheap)!important;}
+.deep{position:absolute;left:50%;bottom:15%;transform:translateX(-50%);text-align:center;pointer-events:none;
+  opacity:0;transition:opacity .25s ease-out;width:min(460px,80vw);z-index:2;}
+.deep .dt{font-family:var(--display);font-weight:700;letter-spacing:3px;font-size:15px;transition:opacity .15s ease-out;
+  background:linear-gradient(90deg,var(--cyan),var(--violet),var(--magenta));-webkit-background-clip:text;background-clip:text;
+  color:transparent;margin-bottom:7px;}
+.deep .db{font-size:11px;color:var(--dim);letter-spacing:.5px;line-height:1.6;transition:opacity .15s ease-out;font-family:var(--mono);}
+.skip-intro{position:absolute;top:20px;left:50%;transform:translateX(-50%);z-index:3;pointer-events:auto;
+  font-family:var(--mono);font-size:10.5px;letter-spacing:2px;text-transform:uppercase;color:var(--faint);
+  border:1px solid var(--line);border-radius:20px;padding:6px 14px;transition:.15s;background:rgba(6,7,15,.4);}
+.skip-intro:hover{color:var(--aqua);border-color:var(--aqua);}
+.hero-buffer{height:14vh;}
+@media(max-width:720px){#hudLog,#hudTele,.hud-meta{display:none;}
+  .skip-intro{top:16px;}}
 .hero-inner{position:relative;z-index:3;padding:0 24px 9vh;max-width:var(--maxw);margin:0 auto;width:100%;
-  text-align:center;pointer-events:none;}
+  text-align:center;pointer-events:none;transition:opacity .12s linear;}
 .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:3.5px;text-transform:uppercase;color:var(--aqua);
   margin-bottom:20px;opacity:.9;}
 .eyebrow span{color:var(--faint);}
-.wordmark{font-weight:800;letter-spacing:.13em;line-height:.9;font-size:clamp(58px,14vw,168px);
+.wordmark{font-family:var(--display);font-weight:700;letter-spacing:.13em;line-height:.9;font-size:clamp(58px,14vw,168px);
   background:linear-gradient(96deg,var(--cyan) 6%,#7FA8FF 40%,var(--violet) 66%,var(--magenta) 98%);
   -webkit-background-clip:text;background-clip:text;color:transparent;
   filter:drop-shadow(0 0 34px rgba(90,120,255,.38)) drop-shadow(0 0 72px rgba(232,82,200,.2));}
@@ -265,7 +308,8 @@ a{color:inherit;text-decoration:none;}
   border:1px solid var(--line-2);color:var(--ink);background:rgba(20,22,44,.4);display:inline-flex;align-items:center;gap:8px;transition:.16s;}
 .btn-ghost:hover{border-color:var(--aqua);color:var(--aqua);transform:translateY(-1px);}
 .scrollhint{position:absolute;bottom:18px;left:50%;transform:translateX(-50%);z-index:3;font-family:var(--mono);
-  font-size:11px;letter-spacing:2px;color:var(--faint);text-transform:uppercase;animation:bob 2.6s ease-in-out infinite;}
+  font-size:11px;letter-spacing:2px;color:var(--faint);text-transform:uppercase;animation:bob 2.6s ease-in-out infinite;
+  transition:opacity .12s linear;}
 @keyframes bob{50%{transform:translate(-50%,7px);}}
 
 /* ── section scaffolding ───────────────────────────────────────────────── */
@@ -335,30 +379,6 @@ h2.big{font-size:clamp(28px,4.4vw,46px);letter-spacing:-1px;font-weight:800;line
 .pg-node.dep.hot circle{fill:rgba(0,230,195,.55)!important;}
 .pg-readout{font-family:var(--mono);font-size:10px;fill:var(--faint);}
 .pg-readout tspan.k{fill:var(--exp);}
-
-/* ── section 4 · routing flow ──────────────────────────────────────────── */
-.route-frame{margin-top:34px;border:1px solid var(--line-2);border-radius:16px;overflow:hidden;
-  background:linear-gradient(180deg,#0A0C18,#070912);box-shadow:0 40px 120px rgba(0,0,0,.5);}
-.route-bar{display:flex;align-items:center;gap:12px;padding:12px 18px;border-bottom:1px solid var(--line);
-  font-family:var(--mono);font-size:12px;color:var(--dim);flex-wrap:wrap;}
-.route-bar .dot{width:9px;height:9px;border-radius:50%;background:var(--aqua);box-shadow:0 0 10px var(--aqua);animation:blink 1.8s infinite;}
-@keyframes blink{50%{opacity:.35;}}
-.route-bar b{color:var(--aqua);}
-.route-bar .grow{flex:1;}
-#routeSvg{width:100%;height:auto;display:block;padding:8px 6px 14px;}
-.rung{cursor:default;}
-.rung .rb{transition:opacity .2s,stroke .2s;}
-.rung.lit .rb{stroke:var(--aqua);stroke-width:1.6;}
-.rung.chosen .rb{stroke:var(--aqua);stroke-width:2;}
-.rung text{font-family:var(--mono);}
-.fnode rect{transition:stroke .25s,fill .25s;}
-.fnode text{font-family:var(--mono);}
-.fedge{fill:none;stroke:var(--line-2);stroke-width:1.6;transition:stroke .25s,opacity .25s;opacity:.55;stroke-dasharray:4 4;}
-.fedge.active{stroke:var(--aqua);opacity:1;stroke-dasharray:none;}
-.fedge.fallback.active{stroke:var(--mid);}
-.route-legend{display:flex;flex-wrap:wrap;gap:8px 22px;padding:0 18px 16px;font-family:var(--mono);font-size:11.5px;color:var(--dim);}
-.route-legend span{display:inline-flex;align-items:center;gap:7px;}
-.route-legend i{width:22px;height:3px;border-radius:2px;}
 
 /* ── section 5 · crazy numbers bento ───────────────────────────────────── */
 .bento{display:grid;gap:18px;margin-top:34px;grid-template-columns:repeat(6,1fr);}
@@ -451,7 +471,7 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
 .reveal.in{opacity:1;transform:none;}
 @media(prefers-reduced-motion:reduce){
   .reveal{opacity:1!important;transform:none!important;transition:none!important;}
-  .scrollhint,.route-bar .dot,.foot-bottom .egg .cur{animation:none!important;}
+  .scrollhint,.foot-bottom .egg .cur{animation:none!important;}
 }
 </style>
 <script src="https://analytics.ahrefs.com/analytics.js" data-key="yRz83E87rXgYWlhmro5mIg" async></script>
@@ -467,7 +487,6 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
     <a href="#universe">Universe</a>
     <a href="/docs.html">Docs</a>
     <a href="/first-principles.html">First principles</a>
-    <a href="#routing">Routing</a>
     <a href="#compare">Compare</a>
     <a href="/pricing.html">Pricing</a>
     <a href="https://github.com/ankit373/hydra">GitHub</a>
@@ -476,25 +495,45 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
   <a class="ghost" href="https://github.com/ankit373/hydra">★ GitHub</a>
 </div>
 
-<!-- ══ 1 · HERO — live 3D neon hyctl ════════════════════════════════════════ -->
-<header class="hero">
-  <canvas id="stage" aria-label="Live 3D neon hyctl — three heads converging into a neural-network body"></canvas>
-  <div class="hero-grid" aria-hidden="true"></div>
-  <div class="hero-vign" aria-hidden="true"></div>
-  <div class="hero-inner">
-    <div class="eyebrow">local-first <span>·</span> provider-neutral <span>·</span> trust control plane</div>
-    <h1 class="wordmark">HYDRA<span style="position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;"> — the local-first Trust Control Plane: multi-model AI orchestration CLI</span></h1>
-    <div class="tagline">One Cortex · Many Heads</div>
-    <p class="subline">The local-first <b>Trust Control Plane</b> for AI. Hydra discovers every model on your machine — CLI agents, API keys, local servers — and routes each task to the cheapest head that clears your <b>target confidence</b>.</p>
-    <div class="ctas">
-      <button class="install" data-copy="brew install ankit373/hydra/hyctl" aria-label="Copy install command">
-        <span class="dollar">$</span><span class="cmd">brew install <b>ankit373/hydra/hyctl</b></span><span class="cp">copy</span>
-      </button>
-      <a class="btn-ghost" href="/docs.html">Read the docs →</a>
+<!-- ══ 1 · HERO — hydra-hud: dive into the cortex ══════════════════════════ -->
+<div class="hero-pin" id="heroPin">
+  <header class="hero-sticky" id="heroSticky">
+    <canvas id="stage" aria-label="Live control-plane visualization: many heads converging into the cortex, then diving in to demonstrate routing, trust, swarm, the budget governor and local-first policy"></canvas>
+    <div id="scan" aria-hidden="true"></div><div id="vig" aria-hidden="true"></div>
+    <div class="hero-hud" id="heroHud" aria-hidden="true">
+      <div class="hud-corner tl"></div><div class="hud-corner tr"></div><div class="hud-corner bl"></div><div class="hud-corner br"></div>
+      <div class="hud-meta">local-first &middot; provider-neutral<br><b id="hudHeads">3</b> heads discovered<br>uptime <b id="hudUp">00:00</b></div>
+      <div class="hud-panel" id="hudLog"><div class="ttl"><span>routing log</span><span class="dot">&#9679; live</span></div><div id="hudLogBody"></div></div>
+      <div class="hud-panel" id="hudTele">
+        <div class="ttl"><span>telemetry</span><span class="dot" id="hudMstate">&#9679;</span></div>
+        <div class="hud-row"><span>confidence</span><b id="hudConf">0.94</b></div><div class="hud-bar"><i id="hudConfbar" style="width:94%"></i></div>
+        <div class="hud-row" style="margin-top:12px"><span>saved vs all-Claude</span><b id="hudSaved">$0.00</b></div>
+        <div class="hud-row"><span>routed local</span><b id="hudLocal">0%</b></div>
+        <div class="hud-row"><span>governor</span><b class="hud-mode" id="hudMode">NORMAL 34%</b></div>
+      </div>
+      <div class="deep" id="hudDeep">
+        <div class="dt" id="hudDeepTitle">INSIDE THE CORTEX</div>
+        <div class="db" id="hudDeepBody">everything the router is doing, one capability at a time</div>
+      </div>
     </div>
-  </div>
-  <div class="scrollhint" aria-hidden="true">move your cursor · scroll ↓</div>
-</header>
+    <a class="skip-intro" href="#universe">skip intro ↓</a>
+    <div class="hero-inner" id="heroCopy">
+      <div class="eyebrow">local-first <span>·</span> provider-neutral <span>·</span> trust control plane</div>
+      <h1 class="wordmark">HYDRA<span style="position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;"> — the local-first Trust Control Plane: multi-model AI orchestration CLI</span></h1>
+      <div class="tagline">One Cortex · Many Heads</div>
+      <p class="subline">The local-first <b>Trust Control Plane</b> for AI. Hydra discovers every model on your machine — CLI agents, API keys, local servers — and routes each task to the cheapest head that clears your <b>target confidence</b>.</p>
+      <div class="ctas">
+        <button class="install" data-copy="brew install ankit373/hydra/hyctl" aria-label="Copy install command">
+          <span class="dollar">$</span><span class="cmd">brew install <b>ankit373/hydra/hyctl</b></span><span class="cp">copy</span>
+        </button>
+        <a class="btn-ghost" href="/docs.html">Read the docs →</a>
+      </div>
+    </div>
+    <div class="scrollhint" id="scrollHint" aria-hidden="true">drag to orbit &middot; scroll to dive ↓</div>
+  </header>
+  <div id="heroRelease" style="position:absolute;bottom:0;left:0;width:1px;height:1px;" aria-hidden="true"></div>
+</div>
+<div class="hero-buffer" aria-hidden="true"></div>
 
 <!-- ══ 2 · WHERE WE FIT IN THE UNIVERSE ═════════════════════════════════════ -->
 <section class="blk wrap reveal" id="universe">
@@ -617,65 +656,6 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
   </div>
 </section>
 
-<!-- ══ 4 · LIVE ROUTING FLOW ════════════════════════════════════════════════ -->
-<section class="blk wrap reveal" id="routing">
-  <div class="klabel"><span>Live routing</span><b>watch a task fall down the cost ladder</b></div>
-  <h2 class="big">Cheapest head that <span class="grad">clears the bar</span> — with a local floor.</h2>
-  <p class="lede">A task is classified, then falls down the ten-tier ladder (red = expensive, green = free/local) to the cheapest head that fits. If that head rate-limits, the fallback fires — terminating at local Qwen, which <b>never runs out</b>.</p>
-
-  <div class="route-frame">
-    <div class="route-bar">
-      <span class="dot" aria-hidden="true"></span>
-      <span>dispatch <b>--enum STANDARD</b> --file <b>internal/auth/token.go</b></span>
-      <span class="grow"></span>
-      <span id="routePhase">classifying…</span>
-    </div>
-    <svg id="routeSvg" viewBox="0 0 980 520" role="img" aria-label="Animated routing: a task descends the tier ladder to a chosen head, then fails over to local Qwen.">
-      <defs>
-        <filter id="soft" x="-40%" y="-40%" width="180%" height="180%">
-          <feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
-        </filter>
-      </defs>
-      <text x="30" y="42" class="mono" font-size="12" fill="#5a5f85" letter-spacing="1.5">TIER LADDER — cost ↓</text>
-      <g id="ladder"></g>
-      <!-- flow nodes -->
-      <g class="fnode" id="fPrompt">
-        <rect x="560" y="30" width="360" height="46" rx="9" fill="rgba(20,22,44,.5)" stroke="#8B5CF6" stroke-width="1.4"/>
-        <text x="580" y="52" font-size="13" fill="#E7E9F5">prompt</text>
-        <text x="580" y="68" font-size="11" fill="#9aa0c4">"rotate the signing key in token.go"</text>
-      </g>
-      <g class="fnode" id="fClassify">
-        <rect x="560" y="104" width="360" height="46" rx="9" fill="rgba(20,22,44,.5)" stroke="#2AF0E0" stroke-width="1.4"/>
-        <text x="580" y="126" font-size="13" fill="#2AF0E0">classify → STANDARD · target 0.95</text>
-        <text x="580" y="142" font-size="11" fill="#9aa0c4">blast κ=3.1 ⚠ 12 dependents → bar raised</text>
-      </g>
-      <g class="fnode" id="fPrimary">
-        <rect x="620" y="272" width="300" height="46" rx="9" fill="rgba(20,22,44,.5)" stroke="#E0A93A" stroke-width="1.4"/>
-        <text x="638" y="294" font-size="13" fill="#E7E9F5" id="primaryTitle">openrouter · T6</text>
-        <text x="638" y="310" font-size="11" fill="#9aa0c4" id="primaryState">primary head</text>
-      </g>
-      <g class="fnode" id="fQwen">
-        <rect x="620" y="450" width="300" height="46" rx="9" fill="rgba(20,22,44,.5)" stroke="#3FD98A" stroke-width="1.4"/>
-        <text x="638" y="472" font-size="13" fill="#E7E9F5">qwen · T10 · local</text>
-        <text x="638" y="488" font-size="11" fill="#9aa0c4" id="qwenState">terminal fallback · always on</text>
-      </g>
-      <!-- edges -->
-      <path class="fedge" id="ePromptClassify" d="M740,76 L740,104"/>
-      <path class="fedge" id="eChosenPrimary"  d="M330,295 L620,295"/>
-      <path class="fedge" id="eClassifyPrimary" d="M740,150 C740,210 740,240 740,272"/>
-      <path class="fedge fallback" id="ePrimaryQwen" d="M770,318 L770,450"/>
-      <path class="fedge" id="eChosenQwen" d="M330,471 L620,471"/>
-      <g id="tokens"></g>
-    </svg>
-    <div class="route-legend">
-      <span><i style="background:linear-gradient(90deg,#FF5A6E,#E0A93A,#3FD98A)"></i> tier cost ramp</span>
-      <span><i style="background:#00E6C3"></i> active route</span>
-      <span><i style="background:#E0A93A"></i> fallback fired</span>
-      <span><i style="background:#3FD98A"></i> local terminal floor</span>
-    </div>
-  </div>
-</section>
-
 <!-- ══ 5 · CRAZY NUMBERS ════════════════════════════════════════════════════ -->
 <section class="blk wrap reveal" id="numbers">
   <div class="klabel"><span>By the numbers</span><b>every number has a mechanism</b></div>
@@ -750,7 +730,7 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
       </tbody>
     </table>
   </div>
-  <p class="cmp-note"><b>The interactive agent-tree cockpit is the one roadmap item here</b> — every row checked above ships today in the CLI (<code>hyctl dispatch --confidence</code>, <code>hyctl graph blast</code>, <code>hyctl mcp</code>).</p>
+  <p class="cmp-note"><b>Every row checked above ships today</b> — <code>hyctl dispatch --confidence</code>, <code>hyctl graph blast</code>, <code>hyctl mcp</code>. The agent-tree cockpit (<code>hyctl tui</code>) now renders real runs from the per-run event log, and the desktop app ships as a download for macOS, Windows and Linux with every release — not yet code-signed, so macOS needs right-click → Open on first launch.</p>
 </section>
 
 <!-- ══ 7 · GETTING STARTED ══════════════════════════════════════════════════ -->
@@ -818,7 +798,6 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
         <h4>Product</h4>
         <a href="#universe">The universe</a>
         <a href="#math">The math</a>
-        <a href="#routing">Live routing</a>
         <a href="#compare">Comparison</a>
       </div>
       <div class="col">
@@ -859,109 +838,435 @@ function onVisible(el,cb,opts){
 }
 var NS='http://www.w3.org/2000/svg';
 function svg(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attrs)e.setAttribute(k,attrs[k]);return e;}
-function lerp(a,b,t){return a+(b-a)*t;}
-/* cost ramp: 0 = cheap(green) … 1 = expensive(red) through mid(amber) */
-function costColor(x){
-  var g=[63,217,138],m=[224,169,58],r=[255,90,110],c;
-  if(x<0.5){var t=x/0.5;c=[lerp(g[0],m[0],t),lerp(g[1],m[1],t),lerp(g[2],m[2],t)];}
-  else{var t=(x-0.5)/0.5;c=[lerp(m[0],r[0],t),lerp(m[1],r[1],t),lerp(m[2],r[2],t)];}
-  return 'rgb('+(c[0]|0)+','+(c[1]|0)+','+(c[2]|0)+')';
-}
 
 /* ══════════════════════════════════════════════════════════════════════════
-   1 · HERO — live 3D neon hyctl (canvas engine adapted from the v2 prototype)
+   1 · HERO — hydra-hud: heads converge into the cortex, then the scroll
+       dives inside for a live 5-stop tour (routing / trust / swarm /
+       governor / local-first), each stop driven by real simulated telemetry.
    ══════════════════════════════════════════════════════════════════════════*/
-(function heroHydra(){
+(function heroHud(){
   var cv=$('#stage'); if(!cv) return;
-  var ctx=cv.getContext('2d'), W=0,H=0,DPR=1;
-  var off=document.createElement('canvas'), octx=off.getContext('2d');
-  var N=[],E=[];
-  function node(x,y,z,c,r){N.push({x:x,y:y,z:z,c:c,r:r||2.4,ph:Math.random()*6.283});return N.length-1;}
-  function edge(a,b){E.push([a,b]);}
-  var CY=[70,240,224],BL=[127,168,255],VI=[150,110,246],MA=[232,90,200];
-  /* a volumetric dragon head: centre muzzle + mirrored left/right sides joined
-     by width-rungs, so it reads as a real 3D skull from any angle. */
-  function head(cx,cy,cz,yaw,mir,col){
-    var cyw=Math.cos(yaw),syw=Math.sin(yaw);
-    function nd(lx,ly,lz,r,c){if(mir)lx=-lx;var rx=lx*cyw+lz*syw,rz=-lx*syw+lz*cyw;
-      return node(cx+rx,cy+ly,cz+rz,c||col,r);}
-    function P(x,y,w,r,c){return [nd(x,y,w,r,c),nd(x,y,-w,r,c)];}
-    var eyeC=[Math.min(255,col[0]+120),Math.min(255,col[1]+130),Math.min(255,col[2]+120)];
-    var snout=nd(0.40,0.02,0,1.4);
-    var nose=P(0.25,0.12,0.05,1.1), brow=P(0.06,0.22,0.09,1.3), cheek=P(0.09,0.03,0.10,1.1),
-        jawF=P(0.29,-0.10,0.06,1.0), jawM=P(0.05,-0.12,0.08,1.2), hinge=P(-0.19,0.05,0.09,1.5),
-        backT=P(-0.13,0.23,0.07,1.4), frill=P(-0.20,0.10,0.05,1.0);
-    var eye=[nd(0.16,0.14,0.11,2.0,eyeC), nd(0.16,0.14,-0.11,2.0,eyeC)];
-    var horn=[[nd(-0.04,0.28,0.06,1.2),nd(-0.21,0.45,0.10,0.9)], [nd(-0.04,0.28,-0.06,1.2),nd(-0.21,0.45,-0.10,0.9)]];
-    var tooth=[[nd(0.28,-0.03,0.05,0.7),nd(0.20,-0.04,0.06,0.7)], [nd(0.28,-0.03,-0.05,0.7),nd(0.20,-0.04,-0.06,0.7)]];
-    var neck=nd(-0.22,0.03,0,2.0);
-    for(var s=0;s<2;s++){
-      edge(snout,nose[s]);edge(nose[s],brow[s]);edge(brow[s],backT[s]);
-      edge(snout,jawF[s]);edge(jawF[s],jawM[s]);edge(jawM[s],hinge[s]);
-      edge(backT[s],hinge[s]);edge(backT[s],frill[s]);edge(frill[s],hinge[s]);edge(cheek[s],hinge[s]);
-      edge(nose[s],eye[s]);edge(brow[s],eye[s]);edge(eye[s],cheek[s]);
-      edge(jawF[s],tooth[s][0]);edge(tooth[s][0],tooth[s][1]);edge(tooth[s][1],cheek[s]);
-      edge(backT[s],horn[s][0]);edge(horn[s][0],horn[s][1]);
-      edge(hinge[s],neck);
+  var x=cv.getContext('2d'), stage=$('#heroSticky'), heroPin=$('#heroPin');
+  var heroCopy=$('#heroCopy'), scrollHint=$('#scrollHint');
+  var C={cyan:'#2AF0E0',violet:'#8B5CF6',magenta:'#E852C8',aqua:'#00E6C3',cheap:'#3FD98A',mid:'#E0A93A',exp:'#FF5A6E',dim:'#6B73A0'};
+
+  // ── graph model ──────────────────────────────────────────────────────────
+  var seed=20260726; function rnd(){seed=(seed*1664525+1013904223)>>>0;return seed/4294967296;}
+  var currentElapsed=0;
+  var nodes=[], edges=[];
+  function N(p,color,r,type,label,stats,bornAt){nodes.push({p:p,color:color,r:r,type:type,label:label,stats:stats,bornAt:bornAt||0,age:0,sx:0,sy:0,sr:1,depth:1});return nodes.length-1;}
+  function E(a,b,kind,w){edges.push({a:a,b:b,kind:kind,w:w||1});}
+  function hx(h){return[parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)];}
+  function mixHex(a,b,t){var A=hx(a),B=hx(b),c=[];for(var i=0;i<3;i++)c.push(Math.round(A[i]+(B[i]-A[i])*t));
+    return'#'+c.map(function(v){return('0'+v.toString(16)).slice(-2);}).join('');}
+  function vsub(a,b){return[a[0]-b[0],a[1]-b[1],a[2]-b[2]];}
+  function vnorm(a){var l=Math.hypot(a[0],a[1],a[2])||1;return[a[0]/l,a[1]/l,a[2]/l];}
+  function vcross(a,b){return[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];}
+  function pt(base,vs){var r=[base[0],base[1],base[2]];for(var i=0;i<vs.length;i++){var s=vs[i][0],v=vs[i][1];r[0]+=s*v[0];r[1]+=s*v[1];r[2]+=s*v[2];}return r;}
+  function eob(x){var c1=1.70158,c3=c1+1;return Math.max(0,1+c3*Math.pow(x-1,3)+c1*Math.pow(x-1,2));}
+
+  var CORTEX=N([0,-1.25,0],C.aqua,10,'cortex','CORTEX',{k:'router · SPRT ensemble'},0);
+
+  // fractal micro-core: the same many-heads-one-cortex pattern, spinning fast, at small scale,
+  // inside the router -- a visual echo of everything the ensemble is doing right now.
+  var MICRO_SCALE=0.85;
+  var microCortex=N([0,0,0],C.aqua,3.4,'mcortex',null,null,30);
+  nodes[microCortex].local=[0,0,0]; nodes[microCortex].micro=true;
+  var MICRO_DIRS=[
+    {dir:[0,1.05,0.15],  col:C.cyan},
+    {dir:[-0.85,0.55,-0.25],col:C.magenta},
+    {dir:[0.85,0.55,0.30],  col:C.magenta}
+  ];
+  MICRO_DIRS.forEach(function(m,mi){
+    var b0=90+mi*60, b1=150+mi*60, b2=280+mi*60;
+    var r1local=[m.dir[0]*0.42,m.dir[1]*0.42,m.dir[2]*0.42];
+    var r2local=[m.dir[0]*0.74,m.dir[1]*0.74,m.dir[2]*0.74];
+    var r1=N(r1local, mixHex(C.violet,m.col,0.4),1.3,'mrelay',null,null,b0);
+    nodes[r1].local=r1local; nodes[r1].micro=true;
+    var r2=N(r2local, mixHex(C.violet,m.col,0.75),1.1,'mrelay',null,null,b1);
+    nodes[r2].local=r2local; nodes[r2].micro=true;
+    var mh=N(m.dir.slice(), m.col,1.8,'mhead',null,null,b2);
+    nodes[mh].local=m.dir.slice(); nodes[mh].micro=true;
+    E(microCortex,r1,'micro');E(r1,r2,'micro');E(r2,mh,'micro');
+  });
+
+  // each head is a neck growing outward from cortex to a crystalline, point-by-point head
+  function spawnHead(h, hi, neckStart){
+    var A=nodes[CORTEX].p, B=h.dir, relays=[], M=6;
+    for(var i=1;i<=M;i++){var t=i/(M+1);
+      var p=[A[0]+(B[0]-A[0])*t + (rnd()-.5)*0.18,
+              A[1]+(B[1]-A[1])*t + Math.sin(t*3.14)*0.25,
+              A[2]+(B[2]-A[2])*t + (rnd()-.5)*0.18];
+      relays.push(N(p, mixHex(C.violet,h.col,t), 2.6+t*1.2,'relay',null,null, neckStart+(i-1)*74));
     }
-    edge(nose[0],nose[1]);edge(brow[0],brow[1]);edge(cheek[0],cheek[1]);edge(jawM[0],jawM[1]);edge(backT[0],backT[1]);
-    return neck;
+    var headBorn=neckStart+M*74+160;
+    var head=N(B,h.col,7,'head',h.name,{tier:h.tier,lat:h.lat,cost:h.cost,conf:h.conf,local:h.local},headBorn);
+    h.headIdx=head; h.bornAt=headBorn;
+    var path=[CORTEX].concat(relays,[head]);
+    for(var pi=0;pi<path.length-1;pi++)E(path[pi],path[pi+1],'spine',1.4);
+    h.path=path;
+
+    // crystalline head detail: assembles point by point, one vertex snapping in after another
+    var prevP=nodes[relays[relays.length-1]].p;
+    var T=vnorm(vsub(B,prevP)); var U=vnorm(vcross(T,[0,1,0])); if(Math.hypot(U[0],U[1],U[2])<0.2)U=[1,0,0]; var V=vnorm(vcross(U,T));
+    var hb=headBorn+90, hCol=mixHex(h.col,'#ffffff',0.32), STAG=95;
+    var hL=N(pt(B,[[0.16,V],[0.05,T]]),hCol,1.4,'horn',null,null,hb+STAG*0);
+    var hR=N(pt(B,[[-0.16,V],[0.05,T]]),hCol,1.4,'horn',null,null,hb+STAG*1);
+    var sn=N(pt(B,[[0.24,T],[-0.02,V]]),hCol,1.2,'horn',null,null,hb+STAG*2);
+    var jw=N(pt(B,[[0.09,T],[-0.12,V]]),h.col,1.1,'horn',null,null,hb+STAG*3);
+    var fL=N(pt(B,[[0.11,V],[0.17,T]]),hCol,0.9,'horn',null,null,hb+STAG*4);
+    var fR=N(pt(B,[[-0.11,V],[0.17,T]]),hCol,0.9,'horn',null,null,hb+STAG*5);
+    E(head,hL,'horn');E(head,hR,'horn');E(head,sn,'horn');E(head,jw,'horn');E(hL,sn,'horn');E(hR,sn,'horn');E(jw,sn,'horn');
+    E(sn,fL,'horn');E(sn,fR,'horn');E(fL,fR,'horn');
+    var hdEl=$('#hudHeads'); if(hdEl)hdEl.textContent=HEADS.length;
   }
-  var bC=head(0.00,0.72,0.10,-1.35,false,CY);
-  var bL=head(-0.64,0.46,0.02, 0.35,true, MA);
-  var bR=head(0.64,0.46,0.02, -0.35,false,VI);
-  var hub=node(0,0.30,0.03,[100,215,235],3.4),shL=node(-0.31,0.12,0.06,BL,2.7),shR=node(0.31,0.12,0.06,BL,2.7);
-  var mid=node(0,0.05,0.13,[130,150,240],2.7),mL=node(-0.25,-0.17,0.02,[155,120,242],2.5),mR=node(0.25,-0.17,0.02,[160,115,240],2.5);
-  var cM=node(0,-0.23,0.15,[165,110,238],2.7),lL=node(-0.15,-0.47,0.02,[195,95,224],2.3),lR=node(0.15,-0.47,0.02,[198,92,222],2.3);
-  var cL=node(0,-0.53,0.06,[210,86,214],2.5),tail=node(0,-0.98,0,[228,80,206],2.0);
-  edge(bC,hub);edge(bL,shL);edge(bR,shR);edge(bC,shL);edge(bC,shR);
-  edge(hub,shL);edge(hub,shR);edge(hub,mid);edge(shL,mid);edge(shR,mid);edge(shL,mL);edge(shR,mR);
-  edge(mid,cM);edge(mL,cM);edge(mR,cM);edge(mL,mR);edge(mL,lL);edge(mR,lR);edge(cM,cL);edge(lL,cL);edge(lR,cL);edge(lL,lR);edge(cL,tail);edge(lL,tail);edge(lR,tail);
-  var mx=0,my=0,rotY=0,curRX=0,curRY=0,t=0;
-  var PART=[];for(var pi=0;pi<72;pi++){PART.push({x:(Math.random()*2-1)*1.7,y:(Math.random()*2-1)*1.5,z:(Math.random()*2-1)*1.2,s:Math.random()*0.4+0.18,vy:Math.random()*0.0007+0.0002});}
-  function resize(){DPR=Math.min(devicePixelRatio||1,1.7);W=cv.clientWidth;H=cv.clientHeight;
-    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
-    off.width=W*DPR;off.height=H*DPR;octx.setTransform(DPR,0,0,DPR,0,0);}
-  addEventListener('resize',resize);
-  addEventListener('pointermove',function(e){var r=cv.getBoundingClientRect();mx=((e.clientX-r.left)/r.width-0.5)*2;my=((e.clientY-r.top)/r.height-0.5)*2;});
-  function proj(p,ry,rx){var cy_=Math.cos(ry),sy=Math.sin(ry);var x=p.x*cy_+p.z*sy,z=-p.x*sy+p.z*cy_,y=p.y;
-    var cx_=Math.cos(rx),sx=Math.sin(rx);var y2=y*cx_-z*sx,z2=y*sx+z*cx_;var f=3.0,sc=f/(f-z2);return {x:x*sc,y:-y2*sc,z:z2,sc:sc};}
-  function renderScene(cx,cy,R,ry,rx){
-    octx.setTransform(DPR,0,0,DPR,0,0);octx.clearRect(0,0,W,H);octx.globalCompositeOperation='lighter';
-    for(var k=0;k<PART.length;k++){var pt=PART[k];if(!reduce){pt.y+=pt.vy;}if(pt.y>1.6)pt.y=-1.6;
-      var q=proj(pt,ry*0.55,rx*0.55),sx=cx+q.x*R,sy=cy+q.y*R,a=Math.max(0,0.05+q.z*0.05);
-      octx.fillStyle='rgba(130,150,255,'+a+')';octx.beginPath();octx.arc(sx,sy,Math.max(0.4,pt.s*q.sc*1.2),0,6.283);octx.fill();}
-    var PJ=N.map(function(n){var q=proj(n,ry,rx);return {sx:cx+q.x*R,sy:cy+q.y*R,z:q.z,sc:q.sc};});
-    for(var i=0;i<E.length;i++){var a=PJ[E[i][0]],b=PJ[E[i][1]],ca=N[E[i][0]].c,cb=N[E[i][1]].c;
-      var col=[(ca[0]+cb[0])/2,(ca[1]+cb[1])/2,(ca[2]+cb[2])/2],depth=(a.z+b.z)/2,al=0.34+depth*0.22;
-      octx.strokeStyle='rgba('+(col[0]|0)+','+(col[1]|0)+','+(col[2]|0)+','+(0.12+depth*0.08)+')';octx.lineWidth=4.5;octx.beginPath();octx.moveTo(a.sx,a.sy);octx.lineTo(b.sx,b.sy);octx.stroke();
-      octx.strokeStyle='rgba('+(col[0]|0)+','+(col[1]|0)+','+(col[2]|0)+','+al+')';octx.lineWidth=1.2;octx.beginPath();octx.moveTo(a.sx,a.sy);octx.lineTo(b.sx,b.sy);octx.stroke();}
-    for(var j=0;j<N.length;j++){var n=N[j],pp=PJ[j];var pulse=reduce?1:(0.7+0.3*Math.sin(t*2.2+n.ph));
-      var rad=(n.r*pp.sc)*pulse*(Math.min(W,H)/600),col=n.c,br=0.5+pp.z*0.35;
-      var rg=octx.createRadialGradient(pp.sx,pp.sy,0,pp.sx,pp.sy,rad*4.4);
-      rg.addColorStop(0,'rgba(255,255,255,'+(0.92*pulse)+')');rg.addColorStop(0.28,'rgba('+col[0]+','+col[1]+','+col[2]+','+(0.85*br)+')');rg.addColorStop(1,'rgba('+col[0]+','+col[1]+','+col[2]+',0)');
-      octx.fillStyle=rg;octx.beginPath();octx.arc(pp.sx,pp.sy,rad*4.4,0,6.283);octx.fill();
-      octx.fillStyle='rgba(255,255,255,'+(0.92*pulse)+')';octx.beginPath();octx.arc(pp.sx,pp.sy,Math.max(0.8,rad*0.7),0,6.283);octx.fill();}
+
+  // the three heads Hydra ships with today
+  var HEADS=[
+    {name:'claude · agy',tier:'T2',col:C.cyan, lat:1180,cost:'$0.90',conf:0.97,dir:[-1.7,1.9,-0.4],local:false},
+    {name:'ollama · qwen',tier:'T10',col:C.cheap,lat:41,cost:'$0.00',conf:0.90,dir:[0,2.55,0.35],local:true},
+    {name:'openrouter',   tier:'T6',col:C.magenta,lat:430,cost:'$0.12',conf:0.93,dir:[1.7,1.9,0.55],local:false}
+  ];
+  HEADS.forEach(function(h,hi){spawnHead(h,hi,880+hi*260);});
+
+  // more heads keep being "discovered" over time -- first at 10s, next at 30s, then every 20s
+  // until the fleet reaches ten, then it settles
+  var EXTRA_HEADS=[
+    {name:'gemini · flash',    tier:'T5', col:C.cyan,    lat:520, cost:'$0.08',conf:0.91,dir:[-2.4,0.9,1.4],  local:false},
+    {name:'groq · llama3',     tier:'T7', col:C.cheap,   lat:95,  cost:'$0.02',conf:0.89,dir:[2.4,0.7,1.5],   local:false},
+    {name:'mistral · large',   tier:'T4', col:C.magenta, lat:610, cost:'$0.24',conf:0.94,dir:[-1.5,-0.8,-1.9],local:false},
+    {name:'ollama · phi3',     tier:'T10',col:C.cheap,   lat:18,  cost:'$0.00',conf:0.86,dir:[1.5,-0.8,-1.9], local:true},
+    {name:'deepseek · v3',     tier:'T8', col:C.violet,  lat:340, cost:'$0.05',conf:0.90,dir:[0,-1.1,-2.7],   local:false},
+    {name:'together · qwen2',  tier:'T9', col:C.cheap,   lat:210, cost:'$0.03',conf:0.88,dir:[-2.95,0.05,0.35], local:false},
+    {name:'fireworks · mixtral',tier:'T6',col:C.magenta, lat:280, cost:'$0.09',conf:0.92,dir:[2.95,0.05,0.35],  local:false}
+  ];
+  var SPAWN_DELAYS=[10000,30000,50000,70000,90000,110000,130000];
+  if(!reduce)EXTRA_HEADS.forEach(function(h,idx){
+    setTimeout(function(){HEADS.push(h);spawnHead(h,HEADS.length-1,currentElapsed+40);}, SPAWN_DELAYS[idx]);
+  });
+
+  // cached glow sprites (perf: no per-frame gradients / blur; radius quantized to keep the cache small)
+  var spriteCache={};
+  function glow(color,R){var key=color+R; if(spriteCache[key])return spriteCache[key];
+    var s=Math.ceil(R*4),o=document.createElement('canvas');o.width=o.height=s*2;var g=o.getContext('2d');
+    var rg=g.createRadialGradient(s,s,0,s,s,s);var rgb=hx(color),r=rgb[0],gg=rgb[1],b=rgb[2];
+    rg.addColorStop(0,'rgba('+r+','+gg+','+b+',0.95)');rg.addColorStop(0.3,'rgba('+r+','+gg+','+b+',0.35)');rg.addColorStop(1,'rgba('+r+','+gg+','+b+',0)');
+    g.fillStyle=rg;g.fillRect(0,0,s*2,s*2);spriteCache[key]=o;return o;}
+  function qR(R){return Math.max(1,Math.round(R*3)/3);}
+
+  // ── camera ─────────────────────────────────────────────────────────────────
+  var W,H,DPR,cx,cy,scl,angY=-0.35,angX=0.12,vX=0,drag=false,lx=0,ly=0;
+  function resize(){DPR=Math.min(devicePixelRatio||1,2);W=cv.clientWidth||innerWidth;H=cv.clientHeight||innerHeight;cv.width=W*DPR;cv.height=H*DPR;
+    x.setTransform(DPR,0,0,DPR,0,0);cx=W/2;cy=H*0.46;scl=Math.min(W,H)*0.155;}
+  addEventListener('resize',resize);resize();
+  stage.addEventListener('pointerdown',function(e){if(e.pointerType==='touch')return;drag=true;lx=e.clientX;ly=e.clientY;stage.classList.add('drag');if(stage.setPointerCapture)stage.setPointerCapture(e.pointerId);});
+  addEventListener('pointerup',function(){drag=false;stage.classList.remove('drag');});
+  addEventListener('pointermove',function(e){if(drag){vX=(e.clientX-lx)*0.006;angY+=vX;angX=Math.max(-0.5,Math.min(0.7,angX+(e.clientY-ly)*0.004));lx=e.clientX;ly=e.clientY;}});
+  var CAM=4.6,FOC=3.2;
+
+  // ── scroll: dive into the cortex, then tour what it can do ──────────────────
+  var deepEl=$('#hudDeep'), deepTitleEl=$('#hudDeepTitle'), deepBodyEl=$('#hudDeepBody');
+  var DIVE_VH=1.0, PER_VH=0.65;
+  var FEATURES=[
+    {title:'COST-DESCENDING ROUTING', body:'every task drops through the tier ladder — the cheapest head that clears the bar wins the work.', accent:'linear-gradient(90deg,'+C.exp+','+C.mid+','+C.cheap+')'},
+    {title:'TRUST CONTROL PLANE',     body:'an SPRT ensemble votes to a target confidence, not just to the cheapest answer.', accent:'linear-gradient(90deg,'+C.aqua+','+C.cyan+')'},
+    {title:'SWARM · RACE / BEST-OF-N', body:'fan a task out to several heads at once, judge the field, keep the winner.', accent:'linear-gradient(90deg,'+C.violet+','+C.magenta+')'},
+    {title:'BUDGET GOVERNOR',         body:'a rate-aware governor watches claude_pct and downgrades tiers before you hit the wall.', accent:C.cheap},
+    {title:'LOCAL-FIRST POLICY',      body:'PII and local-only tasks never leave the machine — enforced, not promised.', accent:'linear-gradient(90deg,'+C.cheap+','+C.aqua+')'}
+  ];
+  heroPin.style.height=((DIVE_VH+FEATURES.length*PER_VH)*100)+'vh';
+  var zoomT=0, featureT=0, activeFeature=-1, switching=false, featureSwitchStart=-1e9, released=false;
+
+  // each renderer draws the cortex acting out its own feature, driven by the real (simulated)
+  // telemetry state above -- not decoration, the same numbers the HUD panels already show
+  function featRoute(cn,cR,a){
+    var bands=[{c:C.exp,lbl:'PAID · FRONTIER'},{c:C.mid,lbl:'MID TIER'},{c:C.cheap,lbl:'CHEAP / LOCAL'}];
+    var h=HEADS[activeHead];
+    var cost=h?(h.local?0:parseFloat(h.cost.slice(1))):0.5;
+    var lit=h?(h.local||cost<0.05?2:cost<0.3?1:0):1;
+    var x0=cn.sx+cR*3.6,y0=cn.sy-32;
+    bands.forEach(function(b,i){var y=y0+i*22,on=i===lit;
+      x.globalAlpha=a*(on?1:0.32);x.fillStyle=b.c;
+      x.beginPath();if(x.roundRect)x.roundRect(x0,y,42,13,4);else x.rect(x0,y,42,13);x.fill();
+      x.globalAlpha=a*(on?0.95:0.55);x.fillStyle=on?'#EAFBFF':hexA('#9AA0C4',0.8);
+      x.font='9px "JetBrains Mono",monospace';x.textAlign='left';x.textBaseline='middle';
+      x.fillText(b.lbl,x0+50,y+7);});
+    x.globalAlpha=1;
   }
-  function draw(){
-    var cx=W/2,R=Math.min(W,H)*0.46;
-    if(!reduce){rotY+=0.0016;}
-    curRY+=((mx*0.5)-curRY)*0.06;curRX+=((my*0.28)-curRX)*0.06;
-    var bob=reduce?0:Math.sin(t*0.7)*8;
-    var cy=H*0.42+bob,ry=rotY+curRY,rx=-0.12+curRX;
-    renderScene(cx,cy,R,ry,rx);
-    ctx.setTransform(DPR,0,0,DPR,0,0);ctx.globalCompositeOperation='source-over';ctx.clearRect(0,0,W,H);
-    var g=ctx.createRadialGradient(cx,cy,0,cx,cy,R*1.6);g.addColorStop(0,'rgba(80,90,200,0.14)');g.addColorStop(0.5,'rgba(150,60,180,0.05)');g.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
-    ctx.globalCompositeOperation='lighter';
-    if(!reduce){ctx.filter='blur(18px)';ctx.globalAlpha=0.5;ctx.drawImage(off,0,0,W,H);ctx.filter='blur(7px)';ctx.globalAlpha=0.5;ctx.drawImage(off,0,0,W,H);}
-    ctx.filter='none';ctx.globalAlpha=1;ctx.drawImage(off,0,0,W,H);
-    ctx.globalCompositeOperation='source-over';t+=0.016;
+  function featTrust(cn,cR,a){
+    var R=cR*4.4,conf=lastConf;
+    x.globalAlpha=a;x.strokeStyle=hexA('#3a3f6a',0.55);x.lineWidth=3;
+    x.beginPath();x.arc(cn.sx,cn.sy,R,-1.5708,4.712);x.stroke();
+    x.strokeStyle=hexA(C.aqua,0.95);x.lineWidth=3.4;
+    x.beginPath();x.arc(cn.sx,cn.sy,R,-1.5708,-1.5708+6.2832*conf);x.stroke();
+    x.fillStyle='#EAFBFF';x.font='13px "JetBrains Mono",monospace';x.textAlign='center';x.textBaseline='middle';
+    x.fillText((conf*100).toFixed(0)+'%',cn.sx,cn.sy-R-16);
+    x.globalAlpha=1;x.textAlign='left';
   }
-  resize();
-  var running=true;
-  onVisible(cv.parentNode||cv,function(vis){running=vis;});
-  if(reduce){draw();}
-  else{(function loop(){if(running)draw();requestAnimationFrame(loop);})();}
+  function featSwarm(cn,cR,a,elapsed){
+    var NN=5,dur=1500,winner=2;
+    for(var i=0;i<NN;i++){
+      var t=((elapsed+i*140)%dur)/dur,ang=i/NN*6.2832+i*0.4;
+      if(i===winner){
+        // the winner travels to a finish line, stops, holds, then flashes before the next race
+        var travelT=Math.min(1,t/0.62), holdT=Math.max(0,(t-0.62)/0.38);
+        var rr=cR*1.5+travelT*cR*3.6;
+        var px=cn.sx+Math.cos(ang)*rr,py=cn.sy+Math.sin(ang)*rr*0.55;
+        x.globalAlpha=a*Math.min(1,travelT*3);
+        x.fillStyle='#EAFBFF';
+        x.beginPath();x.arc(px,py,3.2+holdT*1.6,0,6.2832);x.fill();
+        if(holdT>0){
+          x.globalAlpha=a*(1-holdT)*0.85;x.strokeStyle=hexA(C.aqua,0.9);x.lineWidth=1.6;
+          x.beginPath();x.arc(px,py,6+holdT*24,0,6.2832);x.stroke();
+        }
+      } else {
+        var fadeT=Math.min(1,t/0.5),rr2=cR*1.5+t*cR*3.4;
+        var px2=cn.sx+Math.cos(ang)*rr2,py2=cn.sy+Math.sin(ang)*rr2*0.55;
+        x.globalAlpha=a*(1-fadeT)*0.6;x.fillStyle=C.violet;
+        x.beginPath();x.arc(px2,py2,2,0,6.2832);x.fill();
+      }
+    }
+    x.globalAlpha=1;
+  }
+  function featGovernor(cn,cR,a){
+    var pct=govPct/100,col=govPct<50?C.cheap:govPct<75?C.mid:C.exp,R=cR*3.9;
+    x.globalAlpha=a;x.strokeStyle=hexA('#3a3f6a',0.55);x.lineWidth=4;
+    x.beginPath();x.arc(cn.sx,cn.sy,R,2.356,7.925);x.stroke();
+    x.strokeStyle=hexA(col,0.95);x.lineWidth=4.4;
+    x.beginPath();x.arc(cn.sx,cn.sy,R,2.356,2.356+4.712*pct);x.stroke();
+    x.fillStyle=hexA(col,0.95);x.font='12px "JetBrains Mono",monospace';x.textAlign='center';x.textBaseline='middle';
+    x.fillText(Math.round(govPct)+'%',cn.sx,cn.sy+R+18);
+    x.globalAlpha=1;x.textAlign='left';
+  }
+  function featLocal(cn,cR,a){
+    var R=cR*3.2;
+    x.globalAlpha=a;x.strokeStyle=hexA(C.cheap,0.85);x.lineWidth=2.2;
+    x.beginPath();x.arc(cn.sx,cn.sy,R,0,6.2832);x.stroke();
+    x.fillStyle=hexA(C.cheap,0.95);x.font='10px "JetBrains Mono",monospace';x.textAlign='center';x.textBaseline='middle';
+    x.fillText('LOCAL-ONLY ✓',cn.sx,cn.sy+R+16);
+    x.globalAlpha=1;x.textAlign='left';
+  }
+  var FEATURE_RENDERERS=[featRoute,featTrust,featSwarm,featGovernor,featLocal];
+
+  // scroll fraction is computed from #heroPin's own box, not document.body.scrollHeight --
+  // this section is one part of a longer page, not the whole page, so a page-wide fraction
+  // would blow through all 5 tour stops almost instantly once embedded
+  function onScroll(){
+    var rect=heroPin.getBoundingClientRect();
+    var total=Math.max(1, heroPin.offsetHeight - stage.offsetHeight);
+    var scrolledPast=Math.max(0, Math.min(total, -rect.top));
+    var totalVh=DIVE_VH+FEATURES.length*PER_VH;
+    var vhScrolled=(scrolledPast/total)*totalVh;
+    zoomT=Math.min(1,vhScrolled/DIVE_VH);
+    featureT=Math.max(0,Math.min(FEATURES.length-0.001,(vhScrolled-DIVE_VH)/PER_VH));
+    if(deepEl)deepEl.style.opacity=Math.max(0,Math.min(1,(zoomT-0.55)/0.4));
+    if(heroCopy)heroCopy.style.opacity=Math.max(0,1-zoomT*1.8);
+    if(scrollHint)scrollHint.style.opacity=Math.max(0,1-zoomT*3);
+    var idx=Math.floor(featureT);
+    if(idx!==activeFeature&&idx>=0&&idx<FEATURES.length&&!switching){
+      switching=true;
+      if(deepTitleEl)deepTitleEl.style.opacity=0;
+      if(deepBodyEl)deepBodyEl.style.opacity=0;
+      setTimeout(function(){
+        // re-read featureT rather than trusting the idx captured above -- if another onScroll
+        // landed while this switch was in flight, its request was dropped (switching was true),
+        // so applying the live value here is what keeps the caption from sticking on a stale stop
+        var latest=Math.max(0,Math.min(FEATURES.length-1,Math.floor(featureT)));
+        activeFeature=latest; var f=FEATURES[latest]; featureSwitchStart=currentElapsed;
+        if(deepTitleEl){deepTitleEl.textContent=f.title; deepTitleEl.style.background=f.accent; deepTitleEl.style.opacity=1;}
+        if(deepBodyEl){deepBodyEl.textContent=f.body; deepBodyEl.style.opacity=1;}
+        switching=false;
+      },150);
+    }
+  }
+  addEventListener('scroll',onScroll,{passive:true});
+  addEventListener('resize',onScroll);
+  onScroll();
+  function project(p,cA,sA,cB,sB,pcx,pcy,pscl){var X=p[0]*cA+p[2]*sA,Z=-p[0]*sA+p[2]*cA,Y=p[1]*cB-Z*sB;Z=p[1]*sB+Z*cB;var zc=CAM+Z,s=FOC/zc*pscl;return[pcx+X*s,pcy-Y*s,zc,s];}
+
+  // ── flow packets (dispatch → head, response → cortex) ───────────────────────
+  var packets=[], cortexPulses=[];
+  function spawnDispatch(h){
+    var col=h.local?C.cheap:(h.headIdx!=null&&nodes[h.headIdx].color)||C.aqua;
+    packets.push({path:h.path,t:0,sp:0.9+Math.random()*0.3,col:C.aqua,dir:1});
+    cortexPulses.push({born:currentElapsed,col:C.aqua});
+    setTimeout(function(){packets.push({path:h.path.slice().reverse(),t:0,sp:0.8,col:col,dir:-1});cortexPulses.push({born:currentElapsed,col:col});}, 260);
+  }
+
+  // ── telemetry sim ───────────────────────────────────────────────────────────
+  var ENUMS=['SIMPLE','STANDARD','MODERATE','COMPLEX','CRITICAL'];
+  var saved=0,localCount=0,totalDispatches=0,activeHead=1,upSec=0,govPct=34,lastConf=0.94;
+  var logbody=$('#hudLogBody'); var lines=[];
+  function pad(n){return n<10?'0'+n:''+n;}
+  function tick(){
+    var born=HEADS.filter(function(h){return h.headIdx!=null&&nodes[h.headIdx].age>=REVEAL;});
+    if(!born.length)return;
+    var h=born[Math.floor(Math.random()*born.length)];
+    var idx=HEADS.indexOf(h);activeHead=idx;
+    var en=ENUMS[Math.floor(Math.random()*ENUMS.length)];
+    var lat=Math.round(h.lat*(0.85+Math.random()*0.3));
+    var conf=(h.conf-0.02+Math.random()*0.04); lastConf=conf;
+    totalDispatches++; if(h.local)localCount++;
+    var cost=h.local?0:parseFloat(h.cost.slice(1))*(0.4+Math.random());
+    var avoid=0.9*(0.5+Math.random()); saved+=Math.max(0,avoid-cost);
+    spawnDispatch(h);
+    var line='<div class="line"><span class="en">'+en+'</span> &rarr; '+h.tier+' &rarr; <span class="hd">'+h.name+'</span> &middot; <span class="c">'+(h.local?'local':'$'+cost.toFixed(3))+'</span> &middot; '+lat+'ms &middot; <span class="ok">conf '+conf.toFixed(2)+' ✓</span></div>';
+    lines.unshift(line); if(lines.length>7)lines.pop(); if(logbody)logbody.innerHTML=lines.join('');
+    var confEl=$('#hudConf'); if(confEl)confEl.textContent=conf.toFixed(2);
+    var confbarEl=$('#hudConfbar'); if(confbarEl)confbarEl.style.width=Math.round(conf*100)+'%';
+    var savedEl=$('#hudSaved'); if(savedEl)savedEl.textContent='$'+saved.toFixed(2);
+    var localEl=$('#hudLocal'); if(localEl)localEl.textContent=Math.round(localCount/totalDispatches*100)+'%';
+    govPct=Math.max(20,Math.min(96,govPct+(Math.random()-0.45)*8));
+    var band=govPct<50?'NORMAL':govPct<75?'WARNING':'CRITICAL';
+    var mEl=$('#hudMode'); if(mEl){mEl.textContent=band+' '+Math.round(govPct)+'%';mEl.style.color=govPct<50?C.cheap:govPct<75?C.mid:C.exp;}
+    var mstateEl=$('#hudMstate'); if(mstateEl)mstateEl.style.color=govPct<75?C.cheap:C.exp;
+    if(activeFeature===3&&deepTitleEl&&mEl)deepTitleEl.style.background=mEl.style.color;
+  }
+  if(!reduce){setInterval(tick,1400);setTimeout(tick,400);
+    setInterval(function(){upSec++;var upEl=$('#hudUp');if(upEl)upEl.textContent=pad(Math.floor(upSec/60))+':'+pad(upSec%60);},1000);}
+
+  // ── render ───────────────────────────────────────────────────────────────
+  var START_TS=null;
+  var REVEAL=260; // ms for a node to finish popping in once born
+  function draw(ts){
+    if(START_TS===null)START_TS=ts;
+    var elapsed=ts-START_TS; currentElapsed=elapsed;
+    if(!drag){if(!reduce)angY+=0.0016;angY+=vX;vX*=0.94;}
+    var cA=Math.cos(angY),sA=Math.sin(angY),cB=Math.cos(angX),sB=Math.sin(angX);
+    // scrolling dives the camera into the cortex, growing the micro-core and fading the fleet
+    var zscl=scl*(1+zoomT*2.6), zoomFactor=zscl/scl, fleetFade=Math.max(0,1-zoomT*1.35);
+    // solve for the pan that keeps the cortex centred as zscl grows: project it once, unpanned, at this
+    // frame's zoom, then pull the origin toward that point by zoomT -- exact, no lagging estimate
+    var cortexRaw=project(nodes[CORTEX].p,cA,sA,cB,sB,cx,cy,zscl);
+    var zcx=cx-(cortexRaw[0]-cx)*zoomT, zcy=cy-(cortexRaw[1]-cy)*zoomT;
+    // the micro-core spins on its own, independent of camera orbit, and grows as we dive in
+    var cortexP=nodes[CORTEX].p, mA=elapsed*0.0011, cM=Math.cos(mA), sM=Math.sin(mA);
+    for(var ni=0;ni<nodes.length;ni++){var mn=nodes[ni];if(mn.micro){var lp=mn.local;
+      var rx=lp[0]*cM+lp[2]*sM, rz=-lp[0]*sM+lp[2]*cM;
+      mn.p=[cortexP[0]+rx*MICRO_SCALE, cortexP[1]+lp[1]*MICRO_SCALE, cortexP[2]+rz*MICRO_SCALE];}}
+    for(var nj=0;nj<nodes.length;nj++){var pn=nodes[nj];var q=project(pn.p,cA,sA,cB,sB,zcx,zcy,zscl);pn.sx=q[0];pn.sy=q[1];pn.depth=q[2];pn.sr=q[3];pn.age=elapsed-pn.bornAt;}
+    x.clearRect(0,0,W,H);
+
+    // edges (additive) -- a not-yet-born endpoint means the edge hasn't been discovered yet; the
+    // later-born endpoint's age drives both a "growing wire" length and its fade-in
+    x.globalCompositeOperation='lighter';x.lineWidth=1;
+    for(var ei=0;ei<edges.length;ei++){var e=edges[ei];var a=nodes[e.a],b=nodes[e.b];
+      if(a.sx<-40||a.sx>W+40||a.sy<-40||a.sy>H+40||b.sx<-40||b.sx>W+40||b.sy<-40||b.sy>H+40)continue;
+      var early=b.bornAt>=a.bornAt?a:b, late=b.bornAt>=a.bornAt?b:a;
+      if(late.age<0)continue;
+      var growT=Math.min(1,late.age/REVEAL);
+      var dep=Math.max(0.12,Math.min(1,(CAM+2)/((a.depth+b.depth)/2+1.4)));
+      var base=e.kind==='spine'?0.5:e.kind==='horn'?0.4:e.kind==='micro'?0.55:0.2;
+      var eFade=e.kind==='micro'?1:fleetFade; if(eFade<=0)continue;
+      var ezoom=e.kind==='micro'?zoomFactor:Math.min(zoomFactor,1.6);
+      x.strokeStyle=hexA(a.color,base*dep*growT*eFade);x.lineWidth=(e.kind==='spine'?1.5*dep:e.kind==='horn'?1.1*dep:e.kind==='micro'?0.7*dep:0.8*dep)*ezoom;
+      var ex=a.sx-b.sx,ey=a.sy-b.sy; if(ex*ex+ey*ey>(0.6*W)*(0.6*W))continue;
+      var gx=early.sx+(late.sx-early.sx)*growT, gy=early.sy+(late.sy-early.sy)*growT;
+      x.beginPath();x.moveTo(early.sx,early.sy);x.lineTo(gx,gy);x.stroke();}
+
+    // flow packets
+    for(var pi=packets.length-1;pi>=0;pi--){var pk=packets[pi];pk.t+=pk.sp/60;
+      var fp=pk.t*(pk.path.length-1);var s=Math.floor(fp),f=fp-s;
+      if(s>=pk.path.length-1){packets.splice(pi,1);continue;}
+      var pa=nodes[pk.path[s]],pb=nodes[pk.path[s+1]];var px=pa.sx+(pb.sx-pa.sx)*f,py=pa.sy+(pb.sy-pa.sy)*f;
+      var sp=glow(pk.col,7);x.globalAlpha=0.95;x.drawImage(sp,px-14,py-14,28,28);x.globalAlpha=1;}
+
+    // nodes far->near -- pop in with an overshoot ease once born; the cortex breathes
+    var ord=[]; for(var oi=0;oi<nodes.length;oi++)ord.push(oi);
+    ord.sort(function(i,j){return nodes[j].depth-nodes[i].depth;});
+    for(var oj=0;oj<ord.length;oj++){var idx2=ord[oj];var n3=nodes[idx2];
+      if(n3.age<0)continue;
+      if(n3.sx<-40||n3.sx>W+40||n3.sy<-40||n3.sy>H+40)continue;
+      var nFade=(n3.micro||idx2===CORTEX)?1:fleetFade; if(nFade<=0)continue;
+      var dep2=Math.max(0.25,Math.min(1.3,(CAM+1.6)/(n3.depth+1.2)));
+      var grow=Math.min(1,n3.age/REVEAL), scaleMul=eob(grow), alphaMul=Math.min(1,n3.age/160)*nFade;
+      var R=n3.r*dep2*scaleMul*zoomFactor;
+      if(idx2===CORTEX)R*=1+0.09*Math.sin(elapsed*0.0022);
+      R=qR(R);
+      // molten white-hot flash on arrival, cooling into the true color as it settles
+      var flashT=Math.min(1,grow*1.6); var fc=flashT<1?mixHex('#ffffff',n3.color,flashT):n3.color;
+      var sp2=glow(fc,R*1.1);x.globalAlpha=Math.min(1,dep2)*alphaMul;x.drawImage(sp2,n3.sx-R*2.2,n3.sy-R*2.2,R*4.4,R*4.4);
+      // crisp core
+      var rgb=hx(fc),r0=rgb[0],g0=rgb[1],b0=rgb[2];
+      x.fillStyle='rgba('+Math.min(255,r0+70)+','+Math.min(255,g0+70)+','+Math.min(255,b0+70)+','+(Math.min(1,dep2)*alphaMul)+')';
+      x.beginPath();x.arc(n3.sx,n3.sy,Math.max(0.7,R*0.5),0,6.2832);x.fill();}
+    x.globalAlpha=1;x.globalCompositeOperation='source-over';
+
+    // cortex activity: an expanding pulse ring fires on every real dispatch, plus two slow
+    // independently-rotating containment rings so it reads as a live core even before any scrolling
+    if(nodes[CORTEX].age>=0){var cn=nodes[CORTEX];
+      var cdep=Math.max(0.25,Math.min(1.3,(CAM+1.6)/(cn.depth+1.2))); var cR=qR(cn.r*cdep*zoomFactor);
+      x.globalCompositeOperation='lighter';
+      for(var ci=cortexPulses.length-1;ci>=0;ci--){var pu=cortexPulses[ci],page=elapsed-pu.born;
+        if(page>900){cortexPulses.splice(ci,1);continue;}
+        var ptt=page/900,pr=cR*(1.1+ptt*3.2);
+        x.strokeStyle=hexA(pu.col,(1-ptt)*0.55);x.lineWidth=Math.max(0.6,1.6*(1-ptt));
+        x.beginPath();x.arc(cn.sx,cn.sy,pr,0,6.2832);x.stroke();}
+      var r1a=elapsed*0.00046,r2a=-elapsed*0.00033+1.1;
+      x.strokeStyle=hexA(C.aqua,0.22);x.lineWidth=1;
+      x.beginPath();x.ellipse(cn.sx,cn.sy,cR*2.6,cR*0.85,r1a,0,6.2832);x.stroke();
+      x.strokeStyle=hexA(C.violet,0.16);x.lineWidth=1;
+      x.beginPath();x.ellipse(cn.sx,cn.sy,cR*2.2,cR*0.95,r2a,0,6.2832);x.stroke();
+      x.globalCompositeOperation='source-over';
+
+      // once scrolled in far enough, the cortex demonstrates whichever capability is active --
+      // each switch eases in over ~400ms rather than snapping, so stops read as one continuous
+      // demo instead of discrete slides
+      if(zoomT>0.25&&activeFeature>=0){
+        var diveAlpha=Math.min(1,(zoomT-0.25)/0.3);
+        var switchAlpha=Math.min(1,(elapsed-featureSwitchStart)/400);
+        FEATURE_RENDERERS[activeFeature](cn,cR,diveAlpha*switchAlpha,elapsed);
+      }
+    }
+
+    // active-head reticle + callouts (only once the head has fully arrived)
+    // the active head gets the full readout; everyone else gets a compact name-only tag so
+    // the fleet stays legible once there are ten of them on screen at once
+    x.font='11px "JetBrains Mono",monospace';x.textBaseline='middle';
+    if(fleetFade>0.05)HEADS.forEach(function(h,hi){var n4=nodes[h.headIdx];if(n4.age<REVEAL)return;var active=hi===activeHead;
+      var ndep=Math.max(0.25,Math.min(1.3,(CAM+1.6)/(n4.depth+1.2))); var nR=n4.r*ndep;
+      var align,lx2,ly2;
+      if(n4.sx<cx-34){align='right';lx2=n4.sx-16;ly2=n4.sy;}
+      else if(n4.sx>cx+34){align='left';lx2=n4.sx+16;ly2=n4.sy;}
+      else{align='center';lx2=n4.sx;ly2=n4.sy-30;}
+      x.textAlign=align;
+      if(active){
+        x.strokeStyle=hexA(C.aqua,0.9);x.lineWidth=1.3;var R2=nR*2.2+9;
+        for(var k=0;k<4;k++){var a0=(ts*0.0009)+k*1.5708;x.beginPath();
+          x.arc(n4.sx,n4.sy,R2,a0+0.25,a0+1.05);x.stroke();}
+        x.strokeStyle=hexA(n4.color,0.5);x.lineWidth=1;x.beginPath();
+        if(align==='center'){x.moveTo(n4.sx,n4.sy-nR*1.6);x.lineTo(lx2,ly2+8);}
+        else{var sgn=align==='left'?1:-1;x.moveTo(n4.sx+sgn*nR*1.6,n4.sy);x.lineTo(lx2-sgn*5,ly2);}
+        x.stroke();
+        var stat=h.tier+' · '+(h.local?'LOCAL':h.cost+'/1k')+' · '+h.lat+'ms';
+        x.fillStyle='#EAFBFF';x.fillText(h.name.toUpperCase(),lx2,ly2-7);
+        x.fillStyle=hexA('#9AA0C4',0.9);x.fillText(stat,lx2,ly2+8);
+      } else {
+        var tx=align==='left'?n4.sx+nR*1.5+6:align==='right'?n4.sx-nR*1.5-6:n4.sx;
+        var ty=align==='center'?n4.sy-nR*1.5-8:n4.sy;
+        x.fillStyle=hexA(n4.color,0.65);x.font='9.5px "JetBrains Mono",monospace';
+        x.fillText(h.name.toUpperCase(),tx,ty);x.font='11px "JetBrains Mono",monospace';
+      }
+    });
+    // cortex label
+    if(nodes[CORTEX].age>=0){var n5=nodes[CORTEX];var ndep2=Math.max(0.25,Math.min(1.3,(CAM+1.6)/(n5.depth+1.2)));var nR2=n5.r*ndep2;
+     x.textAlign='left';x.fillStyle=hexA(C.aqua,0.95);x.font='12px "JetBrains Mono",monospace';
+     x.fillText('CORTEX',n5.sx+nR2*2.4+8,n5.sy+2);
+     x.fillStyle=hexA('#9AA0C4',0.8);x.font='10px "JetBrains Mono",monospace';x.fillText('router · SPRT',n5.sx+nR2*2.4+8,n5.sy+16);}
+    x.textAlign='left';
+  }
+  function hexA(h,a){var rgb=hx(h);return'rgba('+rgb[0]+','+rgb[1]+','+rgb[2]+','+a+')';}
+
+  // the rAF loop pauses once the sticky hero has released and scrolled off — no point
+  // burning a frame budget animating a canvas that's no longer on screen
+  var looping=false;
+  function loop(ts){looping=true;draw(ts);if(!released){requestAnimationFrame(loop);}else{looping=false;}}
+  onVisible($('#heroRelease'),function(vis){
+    released=vis;
+    stage.classList.toggle('released',vis);
+    if(!vis&&!looping)requestAnimationFrame(loop);
+  });
+  requestAnimationFrame(loop);
 })();
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -1245,154 +1550,6 @@ function costColor(x){
   if(!reduce){
     onVisible(host,function(vis,io){if(vis){highlight(byId.token);setTimeout(clearHi,1600);if(io)io.disconnect();}},{threshold:0.4});
   }
-})();
-
-/* ══════════════════════════════════════════════════════════════════════════
-   4 · ROUTING FLOW — a task descends the tier ladder → head → fallback to Qwen
-   ══════════════════════════════════════════════════════════════════════════*/
-(function routing(){
-  var host=$('#routeSvg'); if(!host) return;
-  var ladder=$('#ladder'),tokensG=$('#tokens'),phaseEl=$('#routePhase');
-  var TIERS=[
-    {t:1, m:'agy · Claude Opus', p:'$15.00'},
-    {t:2, m:'Claude Sonnet',     p:'$3.00'},
-    {t:3, m:'GPT-class',         p:'$2.50'},
-    {t:4, m:'Gemini Pro',        p:'$1.25'},
-    {t:5, m:'Mixtral 8x22',      p:'$0.60'},
-    {t:6, m:'openrouter · mid',  p:'$0.30'},
-    {t:7, m:'Gemini Flash',      p:'$0.12'},
-    {t:8, m:'Claude Haiku',      p:'$0.08'},
-    {t:9, m:'local · 13B',       p:'$0.00'},
-    {t:10,m:'qwen · local',      p:'$0.00'}
-  ];
-  var X=30,Wd=300,RH=30,Y0=56,DY=44,CHOSEN=5; // chosen index = T6
-  var rungEls=[];
-  TIERS.forEach(function(T,i){
-    var y=Y0+i*DY, col=costColor(i/9);
-    var g=svg('g',{class:'rung'+(i===CHOSEN?' chosen':'')});
-    var bar=svg('rect',{x:X,y:y,width:6,height:RH,rx:2,fill:col});
-    var rb=svg('rect',{x:X+10,y:y,width:Wd-10,height:RH,rx:6,class:'rb',
-      fill:'rgba(20,22,44,.5)',stroke:'rgba(150,140,255,.16)','stroke-width':1});
-    var tt=svg('text',{x:X+22,y:y+19,'font-size':12,fill:'#E7E9F5'});tt.textContent='T'+T.t;
-    var mm=svg('text',{x:X+52,y:y+19,'font-size':12,fill:'#9aa0c4'});mm.textContent=T.m;
-    var pp=svg('text',{x:X+Wd-6,y:y+19,'font-size':11.5,fill:col,'text-anchor':'end',
-      'font-family':'ui-monospace,Menlo,monospace'});pp.textContent=T.p;
-    g.appendChild(bar);g.appendChild(rb);g.appendChild(tt);g.appendChild(mm);g.appendChild(pp);
-    ladder.appendChild(g);rungEls.push({g:g,y:y});
-  });
-  // descend marker
-  var marker=svg('circle',{cx:X+3,cy:Y0-8,r:0,fill:'#00E6C3',filter:'url(#soft)'});
-  ladder.appendChild(marker);
-  // node refs
-  var fPrompt=$('#fPrompt'),fClassify=$('#fClassify'),fPrimary=$('#fPrimary'),fQwen=$('#fQwen');
-  var primaryTitle=$('#primaryTitle'),primaryState=$('#primaryState'),qwenState=$('#qwenState');
-  var ePromptClassify=$('#ePromptClassify'),eChosenPrimary=$('#eChosenPrimary'),
-      eClassifyPrimary=$('#eClassifyPrimary'),ePrimaryQwen=$('#ePrimaryQwen'),eChosenQwen=$('#eChosenQwen');
-  var primaryRect=fPrimary.querySelector('rect'),qwenRect=fQwen.querySelector('rect');
-  // token pool
-  var TOK=[];for(var i=0;i<5;i++){var c=svg('circle',{r:2.6,fill:'#00E6C3',opacity:0});tokensG.appendChild(c);TOK.push(c);}
-  function ptAt(pts,t){
-    var segs=[],total=0,i;
-    for(i=0;i<pts.length-1;i++){var dx=pts[i+1][0]-pts[i][0],dy=pts[i+1][1]-pts[i][1];var l=Math.hypot(dx,dy);segs.push(l);total+=l;}
-    var d=t*total,acc=0;
-    for(i=0;i<segs.length;i++){if(d<=acc+segs[i]||i===segs.length-1){var f=segs[i]?(d-acc)/segs[i]:0;
-      return [pts[i][0]+(pts[i+1][0]-pts[i][0])*f, pts[i][1]+(pts[i+1][1]-pts[i][1])*f];}acc+=segs[i];}
-    return pts[pts.length-1];
-  }
-  var PATHS={
-    pc:[[740,76],[740,104]],
-    cp:[[740,150],[740,230],[740,272]],
-    chosen:[[336,295],[620,295]],
-    fb:[[770,318],[770,450]]
-  };
-  function setTokens(pts,color,on){
-    for(var k=0;k<TOK.length;k++){
-      if(!on){TOK[k].setAttribute('opacity',0);continue;}
-      TOK[k].setAttribute('fill',color);
-    }
-  }
-  function edge(el,on,fb){el.classList.toggle('active',on);}
-  function resetVisual(){
-    rungEls.forEach(function(r){r.g.classList.remove('lit');});
-    [ePromptClassify,eChosenPrimary,eClassifyPrimary,ePrimaryQwen,eChosenQwen].forEach(function(e){e.classList.remove('active');});
-    primaryRect.setAttribute('stroke','#E0A93A');primaryTitle.textContent='openrouter · T6';primaryState.textContent='primary head';
-    primaryState.setAttribute('fill','#9aa0c4');
-    qwenRect.setAttribute('stroke','#3FD98A');qwenState.textContent='terminal fallback · always on';
-    marker.setAttribute('r',0);
-    for(var k=0;k<TOK.length;k++)TOK[k].setAttribute('opacity',0);
-  }
-  // phase clock
-  var t=0,running=true;
-  onVisible(host,function(vis){running=vis;});
-  function label(s){if(phaseEl)phaseEl.textContent=s;}
-
-  function frame(dt){
-    t+=dt; var T=t%8; // 8s cycle
-    // reset at cycle start
-    if(T<0.05){resetVisual();}
-    // 0.0–0.8 prompt → classify
-    if(T>=0.0){ if(T<1.4){label('classifying task…');} }
-    if(T>=0.2 && T<1.4){ ePromptClassify.classList.add('active');
-      var tt=((T-0.2)/1.2); flowTokens(PATHS.pc,'#8B5CF6',tt,2);
-    }
-    // 1.4–3.2 descend ladder to T6 + classify→primary
-    if(T>=1.4 && T<3.4){
-      label('descending cost ladder → cheapest head that clears 0.95');
-      eClassifyPrimary.classList.add('active');
-      var frac=(T-1.4)/2.0; // 0..1
-      var step=Math.min(CHOSEN,Math.floor(frac*(CHOSEN+1)));
-      for(var i=0;i<=step;i++)rungEls[i].g.classList.add('lit');
-      // marker glides down left rail
-      var my=Y0-8 + frac*(rungEls[CHOSEN].y+15-(Y0-8));
-      marker.setAttribute('cy',my);marker.setAttribute('r',4);
-      eChosenPrimary.classList.add('active');
-      flowTokens(PATHS.cp,'#00E6C3',(T-1.4)/2.0%1,3);
-      primaryRect.setAttribute('stroke','#00E6C3');
-    }
-    // 3.4–4.2 primary working
-    if(T>=3.4 && T<4.4){ label('openrouter working…'); primaryState.textContent='streaming…'; }
-    // 4.4–5.2 primary 429
-    if(T>=4.4 && T<5.2){
-      label('openrouter rate-limited (429) → failing over');
-      primaryRect.setAttribute('stroke','#FF5A6E');primaryState.textContent='✗ 429 rate-limited';primaryState.setAttribute('fill','#FF5A6E');
-    }
-    // 5.2–6.8 fallback → qwen
-    if(T>=5.2 && T<6.9){
-      label('fallback fired → local Qwen (T10)');
-      ePrimaryQwen.classList.add('active');eChosenQwen.classList.add('active');rungEls[9].g.classList.add('lit');
-      flowTokens(PATHS.fb,'#E0A93A',(T-5.2)/1.6,3);
-      qwenRect.setAttribute('stroke','#3FD98A');
-    }
-    // 6.9–8.0 done
-    if(T>=6.9){
-      label('✓ done · confidence 0.95 · $0.00 (local) · saved $0.0150');
-      qwenState.textContent='✔ done · 0.95 · free (local)';qwenState.setAttribute('fill','#3FD98A');
-      for(var k=0;k<TOK.length;k++)TOK[k].setAttribute('opacity',0);
-    }
-  }
-  function flowTokens(pts,color,base,count){
-    for(var k=0;k<TOK.length;k++){
-      if(k>=count){TOK[k].setAttribute('opacity',0);continue;}
-      var tt=(base + k/count)%1;
-      var p=ptAt(pts,tt);
-      TOK[k].setAttribute('cx',p[0]);TOK[k].setAttribute('cy',p[1]);
-      TOK[k].setAttribute('fill',color);TOK[k].setAttribute('opacity',0.9);
-    }
-  }
-  function staticFrame(){
-    // reduced motion: show resolved fallback state
-    resetVisual();
-    for(var i=0;i<=CHOSEN;i++)rungEls[i].g.classList.add('lit');
-    rungEls[9].g.classList.add('lit');
-    ePromptClassify.classList.add('active');eClassifyPrimary.classList.add('active');
-    eChosenPrimary.classList.add('active');ePrimaryQwen.classList.add('active');eChosenQwen.classList.add('active');
-    primaryRect.setAttribute('stroke','#FF5A6E');primaryState.textContent='✗ 429 → failed over';primaryState.setAttribute('fill','#FF5A6E');
-    qwenRect.setAttribute('stroke','#3FD98A');qwenState.textContent='✔ done · 0.95 · free (local)';qwenState.setAttribute('fill','#3FD98A');
-    label('✓ resolved · rate-limit → local Qwen · confidence 0.95');
-  }
-  if(reduce){staticFrame();return;}
-  var last=performance.now();
-  (function loop(now){var dt=Math.min(0.05,(now-last)/1000);last=now;if(running)frame(dt);requestAnimationFrame(loop);})(last);
 })();
 
 /* ══════════════════════════════════════════════════════════════════════════

@@ -5,10 +5,9 @@
 package budget
 
 import (
-	"os"
-	"path/filepath"
-
 	"gopkg.in/yaml.v3"
+
+	"github.com/ankit373/hydra/registry"
 )
 
 const (
@@ -26,13 +25,17 @@ type modelsFile struct {
 	Models []modelEntry `yaml:"models"`
 }
 
-// LoadWindows reads registry/models.yaml relative to the repo root and returns
-// a map of model-id → context window size. Missing entries get provider-based
-// fallbacks (ollama → 32 768, everything else → 200 000).
-func LoadWindows(registryDir string) map[string]int {
+// LoadWindows reads registry/models.yaml — an on-disk copy under home if one
+// exists, otherwise the copy embedded in the binary — and returns a map of
+// model-id → context window size. Missing entries get provider-based fallbacks
+// (ollama → 32 768, everything else → 200 000).
+//
+// home is the Hydra home directory, not the registry directory: Read appends
+// "registry" itself so every caller resolves the override the same way.
+func LoadWindows(home string) map[string]int {
 	out := map[string]int{}
 
-	raw, err := os.ReadFile(filepath.Join(registryDir, "models.yaml"))
+	raw, err := registry.Read(home, "models.yaml")
 	if err != nil {
 		return out
 	}

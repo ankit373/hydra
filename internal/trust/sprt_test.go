@@ -12,7 +12,7 @@ import (
 
 // calibrateSymmetric trains (id,domain) to se=sp≈p using n balanced samples.
 // calibrateSymmetric trains (id,domain) to se=sp≈p; it delegates to the
-// production helper backing `hydra trust benchmark` so the two never diverge.
+// production helper backing `hyctl trust benchmark` so the two never diverge.
 func calibrateSymmetric(c *Calibrator, id, domain string, p float64, n int) {
 	calibrateSynthetic(c, id, domain, p, n)
 }
@@ -143,6 +143,68 @@ func TestSPRT_MiscalibratedSourceContributesNothing(t *testing.T) {
 	}
 	if math.Abs(res.Confidence-0.5) > 0.02 {
 		t.Errorf("confidence = %.4f, want ≈0.5 (coin carries no information)", res.Confidence)
+	}
+}
+
+// A behavior-based comparator lifts the "two correct answers disagree" cap: three
+// differently-worded but equivalent answers must accumulate agreement (Λ → accept),
+// where the default text check counts them as disagreement and never accepts. This
+// is the mechanism that resolves the 32.9% real-confidence cap (findings §3).
+func TestSPRT_BehavioralEquivalenceLiftsAgreement(t *testing.T) {
+	c, _ := New("")
+	calibrateSymmetric(c, "sim", "d", 0.9, 1000)
+
+	// Correct answers, worded differently — a textual check calls these "disagree".
+	seq := func() []string {
+		return []string{"return a + b", "func sum(a,b int) int { return b+a }", "the sum: a plus b"}
+	}
+
+	// Default (text) equivalence: differing texts never converge → not accepted.
+	def, err := Run(context.Background(), Task{Domain: "d"}, nSources("sim", 3, 1),
+		&scriptExec{seq: seq()}, c, Target{Confidence: 0.95})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if def.Decision == DecisionAccept {
+		t.Fatalf("precondition: default text check should NOT accept three differing texts")
+	}
+
+	// Behavioral equivalence (all three are equivalent solutions): agreement accrues.
+	allEquiv := func(_, _ string) bool { return true }
+	beh, err := Run(context.Background(), Task{Domain: "d"}, nSources("sim", 3, 1),
+		&scriptExec{seq: seq()}, c, Target{Confidence: 0.95}, WithEquivalence(allEquiv))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if beh.Decision != DecisionAccept {
+		t.Errorf("behavioral equivalence: decision = %v, want accept", beh.Decision)
+	}
+	if beh.Confidence <= def.Confidence {
+		t.Errorf("behavioral equivalence should raise confidence: beh=%.4f def=%.4f", beh.Confidence, def.Confidence)
+	}
+}
+
+// A nil comparator (WithEquivalence(nil)) is ignored — the default is kept.
+func TestSPRT_WithEquivalenceNilKeepsDefault(t *testing.T) {
+	c, _ := New("")
+	calibrateSymmetric(c, "sim", "d", 0.9, 1000)
+	res, err := Run(context.Background(), Task{Domain: "d"}, nSources("sim", 5, 1),
+		&scriptExec{seq: []string{"A", "A", "A", "A", "A"}}, c, Target{Confidence: 0.95}, WithEquivalence(nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Decision != DecisionAccept {
+		t.Errorf("nil equivalence should fall back to default text check; decision = %v", res.Decision)
+	}
+}
+
+// TextEquivalence is case- and whitespace-insensitive but not semantic.
+func TestTextEquivalence(t *testing.T) {
+	if !TextEquivalence("Return  A+B", "return a+b") {
+		t.Error("case/whitespace differences should be equivalent under the text default")
+	}
+	if TextEquivalence("return a+b", "return b+a") {
+		t.Error("materially different text should NOT be equivalent under the text default")
 	}
 }
 

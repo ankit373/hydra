@@ -193,8 +193,8 @@ func RemoveModel(path, id string) (removed bool, err error) {
 }
 
 // HeuristicCapScore estimates a provisional capScore from a model id/name, used
-// by `hydra models sync` when importing from OpenRouter. Deliberately rough —
-// users can override with `hydra models add`.
+// by `hyctl models sync` when importing from OpenRouter. Deliberately rough —
+// users can override with `hyctl models add`.
 func HeuristicCapScore(id string) int {
 	s := strings.ToLower(id)
 	switch {

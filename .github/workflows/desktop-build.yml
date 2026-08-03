@@ -1,0 +1,263 @@
+name: Desktop app build
+
+# Builds the Wails desktop app and, optionally, attaches it to a release.
+#
+# Reusable so the three callers cannot drift apart:
+#   ci.yml       → Linux only, no upload. This is the only place main.go is
+#                  compiled at all: the `desktop` job in ci.yml is scoped to
+#                  ./api/... because main.go imports Wails, so without this the
+#                  Wails wiring is verified by nobody (#227).
+#   rc.yml       → full matrix, uploaded, so UAT tests the real app
+#   publish.yml  → full matrix, uploaded, so stable releases carry it
+#
+# Cross-compiling is not possible: each platform links its own webview
+# (WebKit on macOS, WebView2 on Windows, webkit2gtk on Linux), so every target
+# needs a native runner.
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: "Version string baked into the binary via ldflags"
+        required: true
+        type: string
+      tag:
+        description: "Release tag to upload artifacts to (required when upload is true)"
+        required: false
+        type: string
+        default: ""
+      upload:
+        description: "Attach the built artifacts to the release"
+        required: false
+        type: boolean
+        default: false
+      targets:
+        description: "JSON array of build targets. Defaults to all three platforms."
+        required: false
+        type: string
+        default: >-
+          [
+            {"runner":"macos-latest","platform":"darwin/universal","goos":"darwin","arch":"universal","tags":""},
+            {"runner":"windows-latest","platform":"windows/amd64","goos":"windows","arch":"amd64","tags":""},
+            {"runner":"ubuntu-latest","platform":"linux/amd64","goos":"linux","arch":"amd64","tags":"webkit2_41"}
+          ]
+
+# Deliberately no `permissions:` block. A reusable workflow cannot request more
+# than its caller holds, and ci.yml declares none — pinning contents: write here
+# would make the CI call fail to start. rc.yml and publish.yml both already
+# grant contents: write at the top level, which is what the upload step needs;
+# the CI call inherits read and never uploads.
+
+jobs:
+  build:
+    name: ${{ matrix.goos }}/${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(inputs.targets) }}
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: desktop/go.mod
+          cache: true
+          cache-dependency-path: desktop/go.sum
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/frontend/package-lock.json
+
+      # Ubuntu 24.04 ships webkit2gtk-4.1, not 4.0 — hence the webkit2_41 build
+      # tag in the target definition above. Without both the link step fails.
+      - name: Linux webview dependencies
+        if: matrix.goos == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
+
+      - name: Install Wails CLI
+        shell: bash
+        run: |
+          # Pinned to the version in desktop/go.mod so the CLI and the library
+          # cannot drift — a mismatch produces bindings the app fails to link.
+          version=$(awk '/wailsapp\/wails\/v2 / {print $2}' desktop/go.mod)
+          echo "Installing Wails CLI $version"
+          go install "github.com/wailsapp/wails/v2/cmd/wails@$version"
+
+      # CFBundleVersion and CFBundleShortVersionString are templated from
+      # wails.json's info.productVersion by build/darwin/Info.plist. Nothing
+      # ever set it, so every bundle claimed Wails' 1.0.0 default while the
+      # binary's ldflags reported the real release: Finder disagreed with the
+      # app's own footer, and because macOS compares CFBundleVersion to decide
+      # what is newer, every future release would still look like 1.0.0 (#233).
+      #
+      # Normalised rather than passed straight through — callers send
+      # "v1.1.0-rc.5", "v1.1.0" and literally "ci", and CFBundleVersion has to
+      # be dotted digits. The pre-release suffix is dropped because an rc is a
+      # pre-release *of* that version; the exact build stays visible in the
+      # footer via ldflags, which is the authoritative place for it.
+      - name: Stamp the bundle version
+        shell: bash
+        working-directory: desktop
+        # Through env, not ${{ }} interpolated into the script body: the value
+        # is derived from a branch name upstream, and expression substitution
+        # happens before bash ever parses the line.
+        env:
+          RAW_VERSION: ${{ inputs.version }}
+        run: |
+          v="${RAW_VERSION#v}"   # v1.1.0-rc.5 → 1.1.0-rc.5
+          v="${v%%-*}"           # 1.1.0-rc.5  → 1.1.0
+          if ! printf '%s' "$v" | grep -Eq '^[0-9]+(\.[0-9]+){0,2}$'; then
+            echo "::notice::'$RAW_VERSION' is not a release version — stamping 0.0.0"
+            v=0.0.0
+          fi
+          echo "CFBundleVersion=$v (from '$RAW_VERSION')"
+          jq --arg v "$v" '.info.productVersion = $v' wails.json > wails.json.tmp
+          mv wails.json.tmp wails.json
+
+      - name: Build
+        shell: bash
+        working-directory: desktop
+        run: |
+          # Same ldflags goreleaser uses for hyctl, so the app reports the
+          # release it came from instead of "dev" (#227).
+          LD="-X github.com/ankit373/hydra/internal/build.Version=${{ inputs.version }}"
+          LD="$LD -X github.com/ankit373/hydra/internal/build.Commit=$(git rev-parse --short HEAD)"
+          LD="$LD -X github.com/ankit373/hydra/internal/build.Date=$(git log -1 --format=%cI)"
+          LD="$LD -X github.com/ankit373/hydra/internal/build.BuiltBy=github-actions"
+
+          TAGS=""
+          if [ -n "${{ matrix.tags }}" ]; then TAGS="-tags ${{ matrix.tags }}"; fi
+
+          wails build -clean -platform ${{ matrix.platform }} $TAGS -ldflags "$LD"
+
+      # The bundle name comes from wails.json's outputfilename (Hydra), so these
+      # are exact rather than globbed — a rename should break the build loudly
+      # here, not produce a release with a silently missing artifact.
+      - name: Package (macOS)
+        if: matrix.goos == 'darwin'
+        shell: bash
+        working-directory: desktop/build/bin
+        run: |
+          # ditto, not zip: it preserves the bundle's symlinks and extended
+          # attributes, which a plain zip mangles into an app that will not launch.
+          ditto -c -k --sequesterRsrc --keepParent Hydra.app \
+            "hydra-desktop_${{ inputs.version }}_darwin_universal.zip"
+
+      - name: Package (Windows)
+        if: matrix.goos == 'windows'
+        shell: pwsh
+        working-directory: desktop/build/bin
+        run: |
+          Compress-Archive -Path Hydra.exe -DestinationPath "hydra-desktop_${{ inputs.version }}_windows_amd64.zip"
+
+      - name: Package (Linux)
+        if: matrix.goos == 'linux'
+        shell: bash
+        working-directory: desktop/build/bin
+        run: |
+          tar czf "hydra-desktop_${{ inputs.version }}_linux_amd64.tar.gz" Hydra
+
+      # Signing is deliberately absent, not forgotten. macOS will report an
+      # unidentified developer until an Apple Developer ID is available; the
+      # docs tell users exactly what to do. When the certificates exist they
+      # slot in here, gated on their secrets, the same way publish.yml gates
+      # Homebrew/npm/pip — no pipeline restructuring required.
+
+      - name: Verify the artifact exists and is not empty
+        shell: bash
+        working-directory: desktop/build/bin
+        run: |
+          shopt -s nullglob
+          # Checksums are written after this step, but exclude them anyway so a
+          # future reorder cannot fail the size guard on a 100-byte .sha256.
+          found=()
+          for f in hydra-desktop_*; do
+            case "$f" in *.sha256) continue ;; esac
+            found+=("$f")
+          done
+          if [ ${#found[@]} -eq 0 ]; then
+            echo "::error::no artifact was produced for ${{ matrix.goos }}/${{ matrix.arch }}"
+            ls -la
+            exit 1
+          fi
+          for f in "${found[@]}"; do
+            size=$(wc -c < "$f")
+            echo "$f: $size bytes"
+            # A Wails bundle is tens of MB; anything tiny means the build
+            # produced a stub and the upload would look successful.
+            if [ "$size" -lt 1000000 ]; then
+              echo "::error::$f is only $size bytes — that is not a real app bundle"
+              exit 1
+            fi
+          done
+
+      # goreleaser's checksums.txt covers the hyctl binaries only — it is built
+      # by a different job that never sees these files, so the desktop artifacts
+      # shipped with no way to verify them at all (#233). That matters more
+      # while the app is unsigned, not less: with no Developer ID signature to
+      # check, the checksum is the only integrity evidence a downloader has.
+      #
+      # One sidecar per artifact rather than a shared file: the three platform
+      # jobs run in parallel, and appending to a single checksums.txt would be a
+      # race between them. Each job owns exactly the files it produced.
+      - name: Checksum the artifact
+        shell: bash
+        working-directory: desktop/build/bin
+        run: |
+          shopt -s nullglob
+          for f in hydra-desktop_*; do
+            case "$f" in *.sha256) continue ;; esac
+            if command -v sha256sum >/dev/null 2>&1; then
+              sha256sum "$f" > "$f.sha256"
+              sha256sum -c "$f.sha256"
+            else
+              shasum -a 256 "$f" > "$f.sha256"   # macOS has no sha256sum
+              shasum -a 256 -c "$f.sha256"
+            fi
+          done
+
+      # Runs the exact command the docs hand Windows users, against a file
+      # sha256sum wrote in binary mode. Different tool, different hex case, and
+      # a '*' marker in the line — so this proves the documented command really
+      # works rather than restating the step above, and it keeps working: if the
+      # docs and the artifact ever drift apart, this job fails.
+      - name: Verify the checksum the way the docs tell Windows users to
+        if: matrix.goos == 'windows'
+        shell: pwsh
+        working-directory: desktop/build/bin
+        run: |
+          Get-ChildItem hydra-desktop_*.sha256 | ForEach-Object {
+            $expected = (Get-Content $_.FullName).Split(' ')[0].Trim()
+            $file     = $_.FullName -replace '\.sha256$', ''
+            $actual   = (Get-FileHash $file -Algorithm SHA256).Hash
+            if ($actual -ne $expected) {
+              throw "checksum mismatch for $file`n  expected $expected`n  actual   $actual"
+            }
+            "OK  $(Split-Path $file -Leaf)"
+          }
+
+      - name: Upload to the release
+        if: inputs.upload
+        shell: bash
+        working-directory: desktop/build/bin
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "${{ inputs.tag }}" hydra-desktop_* --clobber --repo "$GITHUB_REPOSITORY"
+
+      - name: Upload as a workflow artifact
+        if: ${{ !inputs.upload }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: hydra-desktop-${{ matrix.goos }}-${{ matrix.arch }}
+          path: desktop/build/bin/hydra-desktop_*
+          if-no-files-found: error
+          retention-days: 7

@@ -21,6 +21,10 @@ const (
 	ModeRace SwarmMode = "race" // first success wins; all others are canceled
 	ModeBest SwarmMode = "best" // fire all; LLM judge (with CapScore fallback) picks winner
 	ModeAll  SwarmMode = "all"  // fire all; return ranked by CapScore, no judge
+	// ModeSPRT labels cost rows from RunSPRT's adaptive optimal-stopping ensemble.
+	// It is a cost-log label, not a value Options.Mode ever takes — RunSPRT is
+	// entered via Options.Confidence, not via Mode.
+	ModeSPRT SwarmMode = "sprt"
 )
 
 // Options configures a swarm run.
@@ -35,7 +39,7 @@ type Options struct {
 
 	// Execution constraints.
 	MaxHeads       int           // hard cap on fan-out (0 → defaultMaxHeads = 5)
-	PerHeadTimeout time.Duration // per-head deadline (0 = inherit parent ctx)
+	PerHeadTimeout time.Duration // per-head deadline (0 → defaultPerHeadTimeout, 300s; never unbounded)
 	MaxEstCostUSD  float64       // pre-flight guard; 0 = no limit
 	LocalOnly      bool
 
@@ -50,6 +54,13 @@ type Options struct {
 	// SPRT mode (RunSPRT).
 	Confidence float64 // target P(correct); >0 selects the SPRT ensemble
 	Domain     string  // calibration domain ("" → "default")
+
+	// RunID/TaskID group this swarm's attempt rows with the invocation and the
+	// logical task they belong to. Every head racing or voting on one prompt is
+	// working the same task, so they share a TaskID — that is what lets a reader
+	// tell "5 heads on one task" from "5 separate tasks" (#181).
+	RunID  string
+	TaskID string
 }
 
 // SwarmResult is the complete outcome of a swarm dispatch.
@@ -88,6 +99,32 @@ type Swarm struct {
 // pricing may be nil — cost estimation and pre-flight guard will be skipped.
 func New(d *dispatch.Dispatcher, heads []provider.Head, pricing PricingReader) *Swarm {
 	return &Swarm{d: d, heads: heads, pricing: pricing}
+}
+
+// Plan reports what Run or RunSPRT would do without executing anything: which
+// heads would be engaged, and what one round of fan-out is estimated to cost.
+//
+// It exists so --dry-run can mean the same thing in every mode. It used to mean
+// nothing in swarm and SPRT modes — the flag was read only by the single-dispatch
+// path, which both ensemble branches returned before reaching, so a dry run
+// fired a paid ensemble (#167).
+//
+// Selection deliberately mirrors Run and RunSPRT, which resolve the same
+// selector against the same options; a plan that picked different heads from the
+// run it describes would be worse than no plan.
+func (s *Swarm) Plan(prompt string, opts Options) (heads []provider.Head, estUSD float64, err error) {
+	cfg, err := config.Load()
+	if err != nil {
+		return nil, 0, fmt.Errorf("swarm: config load: %w", err)
+	}
+	selected, err := resolveSelector(opts, cfg).Select(s.heads, opts)
+	if err != nil {
+		return nil, 0, err
+	}
+	if len(selected) == 0 {
+		return nil, 0, fmt.Errorf("swarm: no heads available for the requested configuration")
+	}
+	return selected, estimateFanoutCost(selected, prompt, s.pricing), nil
 }
 
 // Run executes the swarm: selects heads, optionally checks cost, fires them,
@@ -173,7 +210,8 @@ func (s *Swarm) Run(ctx context.Context, prompt string, opts Options) (*SwarmRes
 	}
 
 	// 7. Log to cost.jsonl.
-	logAttempts(result, truncate(prompt, 80))
+	logAttempts(result.Attempts, result.Mode, opts, truncate(prompt, 80))
+	logRunEvents(result.Attempts, result.Mode, opts)
 
 	return result, nil
 }

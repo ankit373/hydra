@@ -86,6 +86,15 @@ func UITier(h provider.Head) int {
 			}
 		}
 	}
+	// A local head costs nothing to run, so for cost routing it belongs at the
+	// cheapest tier regardless of how capable it is. Without this, Ollama's
+	// score of exactly 60 landed it at tier 9 — one short of the bottom — and
+	// `--enum GRUNT` degraded past it to a *paid* cloud head, which is the
+	// inverse of the point (#248). It also makes CLAUDE.md's promise that
+	// tier 10 is the always-available terminal fallback actually true.
+	if h.LocalOnly {
+		return 10
+	}
 	switch {
 	case h.CapScore >= 95:
 		return 1

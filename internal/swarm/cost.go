@@ -13,6 +13,7 @@ import (
 	"github.com/ankit373/hydra/internal/cost"
 	"github.com/ankit373/hydra/internal/provider"
 	"github.com/ankit373/hydra/internal/rank"
+	"github.com/ankit373/hydra/internal/runid"
 )
 
 // PricingReader abstracts the per-tier cost lookup so swarm doesn't need to
@@ -22,21 +23,32 @@ type PricingReader interface {
 	EstimateCost(tier int, inputTokens, outputTokens int) float64
 }
 
-// preflightCost estimates the total cost of firing all selected heads before
-// any execution begins. Returns an error if the estimate exceeds maxUSD.
-// Uses prompt character count / 4 as a token estimate (same as agy executor).
-func preflightCost(heads []provider.Head, prompt string, pr PricingReader, maxUSD float64) (float64, error) {
-	if pr == nil || maxUSD <= 0 {
-		return 0, nil
+// estimateFanoutCost estimates the total USD cost of firing every selected
+// head once. Uses prompt character count / 4 as a token estimate (same as the
+// agy executor).
+//
+// Separate from preflightCost because a *guard* can skip the arithmetic when no
+// limit is set, but a *plan* cannot: --dry-run must report the cost even when
+// nothing caps it (#167).
+func estimateFanoutCost(heads []provider.Head, prompt string, pr PricingReader) float64 {
+	if pr == nil {
+		return 0
 	}
-
 	estInputTokens := len(prompt) / 4
 	var total float64
 	for _, h := range heads {
 		total += pr.EstimateCost(rank.UITier(h), estInputTokens, estInputTokens/2)
 	}
+	return round6(total)
+}
 
-	total = round6(total)
+// preflightCost estimates the total cost of firing all selected heads before
+// any execution begins. Returns an error if the estimate exceeds maxUSD.
+func preflightCost(heads []provider.Head, prompt string, pr PricingReader, maxUSD float64) (float64, error) {
+	if pr == nil || maxUSD <= 0 {
+		return 0, nil
+	}
+	total := estimateFanoutCost(heads, prompt, pr)
 	if total > maxUSD {
 		return total, fmt.Errorf("swarm: estimated cost $%.4f exceeds limit $%.4f (%d heads)", total, maxUSD, len(heads))
 	}
@@ -57,7 +69,17 @@ func enrichCosts(attempts []Attempt, pr PricingReader) {
 
 // logAttempts writes one cost.jsonl entry per attempt that actually executed
 // (StatusOK or StatusFailed — not Pending/Canceled).
-func logAttempts(result *SwarmResult, promptPreview string) {
+//
+// It takes the attempts and mode directly rather than a *SwarmResult so the SPRT
+// path can share it: RunSPRT produces attempts without ever building a
+// SwarmResult, and without this its ensemble spend never reached cost.jsonl at
+// all — only the aggregate trust.jsonl row (#175).
+//
+// Every attempt shares the run's identity: heads racing or voting on one prompt
+// are all working the same logical task, so they carry the same TaskID. That is
+// what lets a reader group "5 heads on one task" rather than seeing 5 unrelated
+// rows (#181).
+func logAttempts(attempts []Attempt, mode SwarmMode, opts Options, promptPreview string) {
 	logDir := filepath.Join(config.Dir(), "logs")
 	_ = os.MkdirAll(logDir, 0o700)
 	path := filepath.Join(logDir, "cost.jsonl")
@@ -68,10 +90,11 @@ func logAttempts(result *SwarmResult, promptPreview string) {
 	}
 	defer f.Close()
 
-	runID := os.Getenv("HYDRA_RUN_ID")
-	taskID := os.Getenv("HYDRA_TASK_ID")
+	runID := runid.ResolveRun(opts.RunID)
+	taskID := runid.ResolveTask(opts.TaskID)
+	breadcrumb, _ := config.Breadcrumb()
 
-	for _, a := range result.Attempts {
+	for _, a := range attempts {
 		if a.Status == StatusPending || a.Status == StatusCanceled {
 			continue
 		}
@@ -90,11 +113,14 @@ func logAttempts(result *SwarmResult, promptPreview string) {
 			"tokens_source":   tokensSource,
 			"cost_source":     costSrc,
 			"source":          legacySource,
-			"swarm_mode":      string(result.Mode),
+			"swarm_mode":      string(mode),
 			"swarm_winner":    a.Status == StatusOK && a.Rank == 1,
 			"task_id":         taskID,
 			"run_id":          runID,
 			"prompt_preview":  promptPreview,
+		}
+		if breadcrumb != "" { // match the omitempty on cost.Row.Config
+			entry["config"] = breadcrumb
 		}
 		raw, _ := json.Marshal(entry)
 		_, _ = fmt.Fprintln(f, string(raw))

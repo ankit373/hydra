@@ -6,11 +6,57 @@ import (
 	"math"
 	"path/filepath"
 	"testing"
+
+	"github.com/ankit373/hydra/internal/testutil"
 )
 
+func TestLogRun_StampsConfigBreadcrumbWhenBlank(t *testing.T) {
+	home := t.TempDir()
+	testutil.WriteRegistry(t, home)
+	t.Setenv("HYDRA_HOME", home)
+
+	path := filepath.Join(t.TempDir(), "trust.jsonl")
+	if err := LogRun(path, RunLog{TaskHash: "abc"}); err != nil {
+		t.Fatal(err)
+	}
+	runs, err := LoadRuns(path)
+	if err != nil || len(runs) != 1 {
+		t.Fatalf("LoadRuns = %d runs, err %v", len(runs), err)
+	}
+	if runs[0].Config == "" {
+		t.Error("LogRun should stamp Config from config.Breadcrumb when blank and a registry is available")
+	}
+}
+
+// A trust run's confidence is only interpretable against the routing rules that
+// produced it. This used to assert Config stays *empty* without an on-disk
+// registry — which was every installed binary (#238). With the registry
+// embedded, it must always be stamped.
+func TestLogRun_StampsConfigEvenWithNoOnDiskRegistry(t *testing.T) {
+	t.Setenv("HYDRA_HOME", t.TempDir()) // no registry/ present
+
+	path := filepath.Join(t.TempDir(), "trust.jsonl")
+	if err := LogRun(path, RunLog{TaskHash: "abc"}); err != nil {
+		t.Fatalf("LogRun failed: %v", err)
+	}
+	runs, _ := LoadRuns(path)
+	if len(runs) != 1 {
+		t.Fatalf("want 1 run, got %d", len(runs))
+	}
+	if runs[0].Config == "" {
+		t.Error("Config is empty — the run cannot be tied back to the rules that produced it")
+	}
+}
+
 func TestTaskHash_StableAndDistinct(t *testing.T) {
-	if TaskHash("hello") != TaskHash("hello") {
-		t.Error("TaskHash not stable for identical input")
+	// Repeat rather than compare one call to itself: TaskHash must not pick up
+	// map-iteration order or any other per-call nondeterminism, and a single
+	// self-comparison would not catch that (it also trips staticcheck SA4000).
+	want := TaskHash("hello")
+	for i := range 100 {
+		if got := TaskHash("hello"); got != want {
+			t.Fatalf("TaskHash not stable: call %d gave %q, want %q", i, got, want)
+		}
 	}
 	if TaskHash("hello") == TaskHash("world") {
 		t.Error("TaskHash collided on distinct inputs")

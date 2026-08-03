@@ -5,6 +5,7 @@ package editor
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -104,5 +105,30 @@ func TestDiffStats_InMemory(t *testing.T) {
 	added, removed = diffStats(file, "a\nb\nc\nd\ne\n", "", file+".no-backup", true)
 	if added != 0 || removed != 2 {
 		t.Errorf("diffStats shrink: added=%d removed=%d, want 0/2", added, removed)
+	}
+}
+
+// extractBetween must not lose content to a line longer than bufio.Scanner's
+// 64 KiB default. It used to: the Scanner stopped, its Err() was never checked,
+// and the empty result was written over the user's file as a success (#168).
+// Minified JS, a data URI or one-line JSON all cross that threshold.
+func TestExtractBetween_LineBeyondScannerLimit(t *testing.T) {
+	for _, n := range []int{1000, 65000, 70000, 1 << 20} {
+		long := strings.Repeat("x", n)
+		raw := markerStart + "\n" + long + "\n" + markerEnd + "\n"
+		got := extractBetween(raw)
+		if got != long {
+			t.Errorf("line of %d chars: extracted %d chars, want %d", n, len(got), n)
+		}
+	}
+}
+
+// A long line among ordinary ones must not disturb the surrounding lines.
+func TestExtractBetween_LongLineAmongShort(t *testing.T) {
+	long := strings.Repeat("y", 200000)
+	raw := markerStart + "\nfirst\n" + long + "\nlast\n" + markerEnd + "\ntrailing junk\n"
+	want := "first\n" + long + "\nlast"
+	if got := extractBetween(raw); got != want {
+		t.Errorf("got %d chars, want %d", len(got), len(want))
 	}
 }

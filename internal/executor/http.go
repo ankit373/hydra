@@ -570,35 +570,39 @@ func openAICompatConfigFor(h provider.Head) (openAICompatConfig, error) {
 		}, nil
 	}
 
-	type cfg struct {
-		baseURL string
-		model   string
-		header  string
-		key     string
+	// baseURL only. The auth header is built below from the raw key, never
+	// stored pre-formatted: "Bearer " + "" is a non-empty string, so a table
+	// holding the formatted value made the emptiness check below unreachable and
+	// every OpenAI-compatible provider reported as supported with no key set
+	// (#200).
+	baseURLs := map[string]string{
+		"openai": "https://api.openai.com",
+		// OpenRouter speaks the OpenAI chat-completions wire format, so it needs
+		// no executor of its own — only a base URL. Hydra already reads its
+		// catalogue for pricing; this lets it dispatch there too.
+		"openrouter": "https://openrouter.ai/api",
+		"xai":        "https://api.x.ai",
+		"groq":       "https://api.groq.com/openai",
+		"together":   "https://api.together.xyz",
+		"fireworks":  "https://api.fireworks.ai/inference",
+		"mistral":    "https://api.mistral.ai",
+		"deepseek":   "https://api.deepseek.com",
+		"perplexity": "https://api.perplexity.ai",
 	}
-
-	configs := map[string]cfg{
-		"openai":     {baseURL: "https://api.openai.com", model: defaultModelFor("openai"), header: "Authorization", key: "Bearer " + apiKeyFor("openai")},
-		"xai":        {baseURL: "https://api.x.ai", model: defaultModelFor("xai"), header: "Authorization", key: "Bearer " + apiKeyFor("xai")},
-		"groq":       {baseURL: "https://api.groq.com/openai", model: defaultModelFor("groq"), header: "Authorization", key: "Bearer " + apiKeyFor("groq")},
-		"together":   {baseURL: "https://api.together.xyz", model: defaultModelFor("together"), header: "Authorization", key: "Bearer " + apiKeyFor("together")},
-		"fireworks":  {baseURL: "https://api.fireworks.ai/inference", model: defaultModelFor("fireworks"), header: "Authorization", key: "Bearer " + apiKeyFor("fireworks")},
-		"mistral":    {baseURL: "https://api.mistral.ai", model: defaultModelFor("mistral"), header: "Authorization", key: "Bearer " + apiKeyFor("mistral")},
-		"deepseek":   {baseURL: "https://api.deepseek.com", model: defaultModelFor("deepseek"), header: "Authorization", key: "Bearer " + apiKeyFor("deepseek")},
-		"perplexity": {baseURL: "https://api.perplexity.ai", model: defaultModelFor("perplexity"), header: "Authorization", key: "Bearer " + apiKeyFor("perplexity")},
-	}
-	c, ok := configs[h.Provider]
+	baseURL, ok := baseURLs[h.Provider]
 	if !ok {
 		return openAICompatConfig{}, errUnsupportedHTTPProvider
 	}
-	if c.key == "" || c.model == "" {
+
+	key, model := apiKeyFor(h.Provider), defaultModelFor(h.Provider)
+	if key == "" || model == "" {
 		return openAICompatConfig{}, errUnsupportedHTTPProvider
 	}
 
 	return openAICompatConfig{
-		BaseURL: c.baseURL,
-		Model:   c.model,
-		Headers: map[string]string{c.header: c.key},
+		BaseURL: baseURL,
+		Model:   model,
+		Headers: map[string]string{"Authorization": "Bearer " + key},
 	}, nil
 }
 
@@ -684,6 +688,7 @@ func defaultModelFor(providerID string) string {
 	specs := map[string]modelSpec{
 		"anthropic":  {fallback: "claude-sonnet-4-20250514", envs: []string{"ANTHROPIC_MODEL", "HYDRA_MODEL_ANTHROPIC"}},
 		"openai":     {fallback: "gpt-4o", envs: []string{"OPENAI_MODEL", "HYDRA_MODEL_OPENAI"}},
+		"openrouter": {fallback: "anthropic/claude-sonnet-4-5", envs: []string{"OPENROUTER_MODEL", "HYDRA_MODEL_OPENROUTER"}},
 		"google":     {fallback: "gemini-2.5-flash", envs: []string{"GEMINI_MODEL", "GOOGLE_MODEL", "HYDRA_MODEL_GOOGLE"}},
 		"xai":        {fallback: "grok-3-latest", envs: []string{"XAI_MODEL", "HYDRA_MODEL_XAI"}},
 		"groq":       {fallback: "llama-3.3-70b-versatile", envs: []string{"GROQ_MODEL", "HYDRA_MODEL_GROQ"}},
@@ -708,16 +713,17 @@ func defaultModelFor(providerID string) string {
 
 func apiKeyFor(providerID string) string {
 	envs := map[string][]string{
-		"anthropic": {"ANTHROPIC_API_KEY"},
-		"openai":    {"OPENAI_API_KEY"},
-		"google":    {"GEMINI_API_KEY", "GOOGLE_API_KEY"},
-		"xai":       {"XAI_API_KEY"},
-		"groq":      {"GROQ_API_KEY"},
-		"together":  {"TOGETHER_API_KEY"},
-		"fireworks": {"FIREWORKS_API_KEY"},
-		"mistral":   {"MISTRAL_API_KEY"},
-		"deepseek":  {"DEEPSEEK_API_KEY"},
-		"azure":     {"AZURE_OPENAI_API_KEY"},
+		"anthropic":  {"ANTHROPIC_API_KEY"},
+		"openai":     {"OPENAI_API_KEY"},
+		"openrouter": {"OPENROUTER_API_KEY"},
+		"google":     {"GEMINI_API_KEY", "GOOGLE_API_KEY"},
+		"xai":        {"XAI_API_KEY"},
+		"groq":       {"GROQ_API_KEY"},
+		"together":   {"TOGETHER_API_KEY"},
+		"fireworks":  {"FIREWORKS_API_KEY"},
+		"mistral":    {"MISTRAL_API_KEY"},
+		"deepseek":   {"DEEPSEEK_API_KEY"},
+		"azure":      {"AZURE_OPENAI_API_KEY"},
 		"perplexity": {
 			"PERPLEXITY_API_KEY",
 		},
@@ -824,7 +830,8 @@ func canonicalHeaders(req *http.Request) (string, string) {
 		case "host":
 			b.WriteString("host:" + req.URL.Host + "\n")
 		default:
-			b.WriteString(key + ":" + strings.TrimSpace(req.Header.Get(http.CanonicalHeaderKey(key))) + "\n")
+			// Header.Get canonicalises its argument itself (S1035).
+			b.WriteString(key + ":" + strings.TrimSpace(req.Header.Get(key)) + "\n")
 		}
 	}
 	return b.String(), strings.Join(keys, ";")

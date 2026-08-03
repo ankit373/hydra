@@ -45,20 +45,43 @@ type Executor interface {
 	Execute(ctx context.Context, req Request) (*Response, error)
 }
 
-// Supports reports whether Hydra can execute a discovered head today.
-func Supports(h provider.Head) bool {
-	if h.Source == "registry" {
-		return true // agy heads — AgyExecutor handles them
-	}
-	if h.Source == "port" || h.Source == "env" || h.Endpoint != "" {
-		return SupportsHTTP(h)
+// Unroutable explains why a discovered head cannot be dispatched to, or returns
+// "" when it can.
+//
+// This is the primary check and Supports delegates to it, so a surface that
+// lists heads and a surface that routes to them cannot disagree. They did:
+// `hyctl probe` advertised the PATH-discovered Ollama binary while
+// `hyctl dispatch --local` refused and told the user to go look at `hyctl probe`
+// (#248). Discovery finding a head and Hydra being able to drive it are
+// different questions, and only one function should answer the second.
+func Unroutable(h provider.Head) string {
+	switch {
+	case h.Source == "registry":
+		return "" // agy tiers — AgyExecutor handles them
+	case h.Source == "port" || h.Source == "env" || h.Endpoint != "":
+		if SupportsHTTP(h) {
+			return ""
+		}
+		return "no API key or default model configured for " + h.Provider
 	}
 	if _, ok := cliTemplates[h.Provider]; ok {
-		return true
+		return ""
 	}
-	_, ok := cliTemplates[h.ID]
-	return ok
+	if _, ok := cliTemplates[h.ID]; ok {
+		return ""
+	}
+	// ollama and llamafile are found on $PATH but driven over HTTP, so the
+	// binary alone is not routable — the port provider registers the real heads
+	// once a server answers. Say that, rather than "no executor", because the
+	// user can act on it.
+	if h.LocalOnly {
+		return "binary only — start its local server (e.g. `ollama serve`) to route to its models"
+	}
+	return "no executor for provider " + h.Provider
 }
+
+// Supports reports whether Hydra can execute a discovered head today.
+func Supports(h provider.Head) bool { return Unroutable(h) == "" }
 
 // For selects the correct Executor for a given Head.
 //   - registry source (agy tiers): AgyExecutor → native (execs the `agy` binary)

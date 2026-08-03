@@ -34,7 +34,7 @@ jobs:
     name: Binaries + checksums (GoReleaser)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.tag }}
           fetch-depth: 0
@@ -50,7 +50,7 @@ jobs:
                 --json assets -q '[.assets[].name | select(endswith(".tar.gz"))] | length' 2>/dev/null || echo 0)
           echo "has_assets=$n" >> "$GITHUB_OUTPUT"
           echo "Existing archive assets: $n"
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         if: ${{ steps.check.outputs.has_assets == '0' }}
         with:
           go-version-file: go.mod
@@ -59,7 +59,7 @@ jobs:
         if: ${{ steps.check.outputs.has_assets == '0' }}
       - name: GoReleaser (build + upload to the release)
         if: ${{ steps.check.outputs.has_assets == '0' }}
-        uses: goreleaser/goreleaser-action@v6
+        uses: goreleaser/goreleaser-action@v7
         with:
           version: latest
           args: release --clean
@@ -74,7 +74,7 @@ jobs:
     env:
       TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.tag }}
       - name: Update tap formula
@@ -93,10 +93,10 @@ jobs:
     env:
       NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.tag }}
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "20"
           registry-url: "https://registry.npmjs.org"
@@ -120,10 +120,10 @@ jobs:
     env:
       PYPI_API_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.tag }}
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
       - name: Build + publish
@@ -142,3 +142,12 @@ jobs:
       - name: Skipped (no token)
         if: ${{ env.PYPI_API_TOKEN == '' }}
         run: echo "::warning::PYPI_API_TOKEN not set — skipping PyPI publish."
+
+  desktop:
+    name: Desktop app
+    needs: binaries
+    uses: ./.github/workflows/desktop-build.yml
+    with:
+      version: ${{ inputs.tag }}
+      tag: ${{ inputs.tag }}
+      upload: true

@@ -7,10 +7,13 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/ankit373/hydra/internal/runlog"
+	"github.com/ankit373/hydra/internal/tree"
 )
 
 func TestRun_EmptyBatch(t *testing.T) {
-	_, err := Run(context.Background(), nil)
+	_, err := Run(context.Background(), nil, Options{})
 	if err == nil {
 		t.Fatal("Run(nil) = nil error, want error")
 	}
@@ -23,7 +26,7 @@ func TestRun_DuplicateFileConflict(t *testing.T) {
 		{Label: "a", Enum: "SIMPLE", File: "/abs/path/foo.go", Prompt: "x"},
 		{Label: "b", Enum: "SIMPLE", File: "/abs/path/foo.go", Prompt: "y"},
 	}
-	_, err := Run(context.Background(), tasks)
+	_, err := Run(context.Background(), tasks, Options{})
 	if err == nil {
 		t.Fatal("Run(duplicate file) = nil error, want conflict error")
 	}
@@ -69,5 +72,116 @@ func TestResult_MarshalJSON(t *testing.T) {
 	}
 	if string(r.Raw()) != `{"label":"a","status":"ok"}` {
 		t.Errorf("Raw() mismatch")
+	}
+}
+
+// A batch is a fan-out and must reconstruct as one: a batch root with each task
+// as a child. Before #204 this package emitted nothing, so an N-task batch had
+// no structure in the run log at all.
+func TestRun_EmitsBatchTree(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("HYDRA_RUN_ID", "")
+	t.Setenv("HYDRA_TASK_ID", "")
+
+	tasks := []Task{
+		{Label: "alpha", Enum: "SIMPLE", Prompt: "a"},
+		{Label: "beta", Enum: "SIMPLE", Prompt: "b"},
+		{Label: "gamma", Enum: "SIMPLE", Prompt: "c"},
+	}
+	// Dispatch cannot succeed in a test environment; the tree shape is what
+	// matters and it is written either way.
+	if _, err := Run(context.Background(), tasks, Options{RunID: "run-batch"}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	events, err := runlog.Load("run-batch")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) == 0 {
+		t.Fatal("a parallel batch wrote no run-log events")
+	}
+
+	tr, _ := tree.Reconstruct(events)
+	rows := tr.Rows()
+	if len(rows) != len(tasks)+1 {
+		t.Fatalf("%d rows, want %d (batch root + one per task)", len(rows), len(tasks)+1)
+	}
+	if rows[0].Node.ID != batchAgent {
+		t.Errorf("root = %q, want %q", rows[0].Node.ID, batchAgent)
+	}
+
+	seen := map[string]bool{}
+	for _, r := range rows[1:] {
+		if r.Depth != 1 {
+			t.Errorf("task %q at depth %d, want 1", r.Node.ID, r.Depth)
+		}
+		seen[r.Node.ID] = true
+	}
+	for _, task := range tasks {
+		if !seen[task.Label] {
+			t.Errorf("task %q missing from the tree", task.Label)
+		}
+	}
+}
+
+// Every task in a batch shares the batch's run but gets its own task id — that
+// is what lets a reader tell "one batch of three" from "three unrelated runs".
+func TestRun_TasksShareRunAndGetDistinctTaskIDs(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	tasks := []Task{
+		{Label: "one", Enum: "SIMPLE", Prompt: "a"},
+		{Label: "two", Enum: "SIMPLE", Prompt: "b"},
+	}
+	if _, err := Run(context.Background(), tasks, Options{RunID: "run-ids"}); err != nil {
+		t.Fatal(err)
+	}
+
+	events, err := runlog.Load("run-ids")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	taskIDs := map[string]string{} // label → task id
+	for _, e := range events {
+		if e.RunID != "run-ids" {
+			t.Errorf("event carries run_id %q, want run-ids", e.RunID)
+		}
+		if e.Agent == batchAgent || e.TaskID == "" {
+			continue
+		}
+		if prev, ok := taskIDs[e.Agent]; ok && prev != e.TaskID {
+			t.Errorf("task %q has two task ids: %q and %q", e.Agent, prev, e.TaskID)
+		}
+		taskIDs[e.Agent] = e.TaskID
+	}
+	if len(taskIDs) != len(tasks) {
+		t.Fatalf("saw %d tasks, want %d", len(taskIDs), len(tasks))
+	}
+	seen := map[string]bool{}
+	for label, id := range taskIDs {
+		if seen[id] {
+			t.Errorf("task %q reused task id %q — tasks must be distinguishable", label, id)
+		}
+		seen[id] = true
+	}
+}
+
+// Same defect as internal/editor's extractBetween (#168): a line longer than
+// bufio.Scanner's 64 KiB default silently produced an empty extraction, which
+// parallel then wrote over the user's file. Both copies must stay fixed.
+func TestExtractBetween_LineBeyondScannerLimit(t *testing.T) {
+	for _, n := range []int{1000, 65000, 70000, 1 << 20} {
+		long := strings.Repeat("x", n)
+		raw := markerStart + "\n" + long + "\n" + markerEnd + "\n"
+		got := extractBetween(raw)
+		if got != long {
+			t.Errorf("line of %d chars: extracted %d chars, want %d", n, len(got), n)
+		}
 	}
 }

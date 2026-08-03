@@ -9,6 +9,8 @@ package ledger
 
 import (
 	"bufio"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -16,6 +18,9 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/ankit373/hydra/internal/config"
+	"github.com/ankit373/hydra/internal/policy"
 )
 
 // Action is the kind of access an agent attempts against a resource.
@@ -36,6 +41,41 @@ const (
 	Deny  Decision = "deny"
 )
 
+// ParseAction normalizes and validates an action string. Matching is exact, so
+// an unrecognized or differently-cased value would silently miss every
+// action-scoped rule and fall through to the default — hence a hard error
+// rather than a best-effort coercion.
+func ParseAction(s string) (Action, error) {
+	switch a := Action(strings.ToLower(strings.TrimSpace(s))); a {
+	case Read, Write, Exec, Network:
+		return a, nil
+	case "":
+		return "", fmt.Errorf("action is required (read|write|exec|network)")
+	default:
+		return "", fmt.Errorf("unknown action %q (want read|write|exec|network)", s)
+	}
+}
+
+// ParseDecision normalizes and validates a decision string. An unrecognized
+// value is rejected because callers gate on Deny exactly: a decision of "DENY"
+// or "block" would print like a denial while comparing unequal to Deny.
+func ParseDecision(s string) (Decision, error) {
+	switch d := Decision(strings.ToLower(strings.TrimSpace(s))); d {
+	case Allow, Deny:
+		return d, nil
+	case "":
+		return "", fmt.Errorf("decision is required (allow|deny)")
+	default:
+		return "", fmt.Errorf("unknown decision %q (want allow|deny)", s)
+	}
+}
+
+// NormalizeClassification lowercases a data-sensitivity tag so a caller that
+// declares "PII" cannot slip past a rule written as "pii".
+func NormalizeClassification(s string) string {
+	return strings.ToLower(strings.TrimSpace(s))
+}
+
 // Event is one recorded access attempt.
 type Event struct {
 	TS       string   `json:"ts"`
@@ -45,6 +85,89 @@ type Event struct {
 	Action   Action   `json:"action"`
 	Decision Decision `json:"decision"`
 	Reason   string   `json:"reason,omitempty"`
+
+	// ParametersHash binds this decision to the exact parameters it was made
+	// for (HashParams) — tamper-evidence between an access decision and the
+	// parameters actually used at execution time.
+	ParametersHash string `json:"parameters_hash,omitempty"`
+	// Classification is the data-sensitivity tag this access was evaluated
+	// under (e.g. "pii"). Empty means unclassified.
+	Classification string `json:"classification,omitempty"`
+
+	// Config is the deployment-identity breadcrumb (config.Breadcrumb) in
+	// effect when this event was recorded, ties the event to the exact
+	// routing rules that were live.
+	Config string `json:"config,omitempty"`
+}
+
+// HashParams returns a SHA256 hex hash of params, for tamper-evident binding
+// between an access decision and the parameters actually used at execution
+// time. Go's json.Marshal sorts map[string]any keys, so this is canonical
+// regardless of map iteration order.
+//
+// Scope: the hash covers the parameters ONLY — not the tool, resource, or
+// action. Two approvals with identical parameters for different resources
+// therefore share a hash, so a verifier must match the tool/resource itself
+// (see LatestBound) rather than treating a hash match as proof of which
+// operation was approved.
+//
+// Decode JSON parameters with DecodeParams, not a plain json.Unmarshal: that
+// keeps numbers as json.Number so their exact literal is hashed. Decoding into
+// a bare any turns every number into a float64, which silently collapses
+// integers above 2^53 — 1000000000000000001 and ...002 would share a hash.
+func HashParams(params map[string]any) (string, error) {
+	raw, err := json.Marshal(params)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(raw)
+	return hex.EncodeToString(sum[:]), nil
+}
+
+// DecodeParams parses a JSON object of invocation parameters, preserving each
+// number's exact literal (json.Number) so HashParams cannot collide two
+// different large integers through float64 rounding. A JSON `null` decodes to
+// a nil map, meaning "no parameters supplied".
+func DecodeParams(raw string) (map[string]any, error) {
+	dec := json.NewDecoder(strings.NewReader(raw))
+	dec.UseNumber()
+	var params map[string]any
+	if err := dec.Decode(&params); err != nil {
+		return nil, err
+	}
+	return params, nil
+}
+
+// VerifyParams reports whether params match a previously recorded hash — the
+// check to run at execution time to detect tampering between an approval and
+// its use (e.g. once decision and execution can happen on different
+// machines/agents).
+func VerifyParams(params map[string]any, hash string) (bool, error) {
+	got, err := HashParams(params)
+	if err != nil {
+		return false, err
+	}
+	return got == hash, nil
+}
+
+// LatestBound returns the most recent *allowed* event for a tool/resource that
+// carries a parameters hash — the approval that execution-time params should be
+// verified against. An empty tool or resource matches any.
+//
+// Only Allow events qualify: a denied attempt is recorded with the parameters
+// it was refused for, and treating that as an approval would let a verifier
+// confirm exactly the parameters the gate just rejected.
+func LatestBound(events []Event, tool, resource string) (Event, bool) {
+	for i := len(events) - 1; i >= 0; i-- {
+		e := events[i]
+		if e.ParametersHash == "" || e.Decision != Allow {
+			continue
+		}
+		if fieldMatch(tool, e.Tool) && fieldMatch(resource, e.Resource) {
+			return e, true
+		}
+	}
+	return Event{}, false
 }
 
 // DefaultPath is where the ledger lives (~/.hydra/mcp_ledger.jsonl).
@@ -53,10 +176,15 @@ func DefaultPath() string {
 	return filepath.Join(home, ".hydra", "mcp_ledger.jsonl")
 }
 
-// Record appends one event, stamping TS if blank.
+// Record appends one event, stamping TS and Config (best-effort) if blank.
 func Record(path string, e Event) error {
 	if e.TS == "" {
 		e.TS = time.Now().UTC().Format(time.RFC3339)
+	}
+	if e.Config == "" {
+		if bc, err := config.Breadcrumb(); err == nil {
+			e.Config = bc
+		}
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
@@ -74,18 +202,30 @@ func Record(path string, e Event) error {
 	return err
 }
 
-// Load reads all events; a missing ledger yields no events.
+// Load reads all events; a missing ledger yields no events. Unparseable lines
+// are skipped — use LoadCounted when the caller needs to report them.
 func Load(path string) ([]Event, error) {
+	events, _, err := LoadCounted(path)
+	return events, err
+}
+
+// LoadCounted is Load plus the number of unparseable lines skipped. An
+// append-only accountability ledger that silently discards records is a
+// contradiction, and a truncated tail (a crash mid-write) would otherwise
+// make verification fall back to an older approval with no indication — so
+// callers should surface a non-zero count.
+func LoadCounted(path string) ([]Event, int, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, nil
+			return nil, 0, nil
 		}
-		return nil, err
+		return nil, 0, err
 	}
 	defer f.Close()
 
 	var events []Event
+	var skipped int
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
 	for sc.Scan() {
@@ -95,21 +235,28 @@ func Load(path string) ([]Event, error) {
 		}
 		var e Event
 		if err := json.Unmarshal([]byte(line), &e); err != nil {
+			skipped++
 			continue
 		}
 		events = append(events, e)
 	}
-	return events, sc.Err()
+	return events, skipped, sc.Err()
 }
 
 // Rule is one allow/deny rule. Empty fields (and "*") match anything; Resource
 // is matched as a glob (path.Match semantics via filepath.Match).
+//
+// Note that filepath.Match's `*` does NOT cross a path separator, and there is
+// no recursive `**`: a rule for "/etc/*" matches "/etc/passwd" but not
+// "/etc/ssh/sshd_config". Deny rules intended to cover a subtree must enumerate
+// each depth (or match on a prefix-free resource naming scheme).
 type Rule struct {
-	Agent    string   `json:"agent,omitempty"`
-	Tool     string   `json:"tool,omitempty"`
-	Resource string   `json:"resource,omitempty"`
-	Action   Action   `json:"action,omitempty"`
-	Decision Decision `json:"decision"`
+	Agent          string   `json:"agent,omitempty"`
+	Tool           string   `json:"tool,omitempty"`
+	Resource       string   `json:"resource,omitempty"`
+	Action         Action   `json:"action,omitempty"`
+	Classification string   `json:"classification,omitempty"`
+	Decision       Decision `json:"decision"`
 }
 
 // Policy is an ordered rule set with a default decision. First matching rule wins.
@@ -120,10 +267,11 @@ type Policy struct {
 
 // Decide evaluates an access against the policy, returning the decision and a
 // human-readable reason. A zero Default is treated as Allow (Hydra records
-// everything but blocks nothing unless a rule says so).
-func (p Policy) Decide(agent, tool, resource string, action Action) (Decision, string) {
+// everything but blocks nothing unless a rule says so). classification is the
+// data-sensitivity tag for this access ("" if unclassified or not applicable).
+func (p Policy) Decide(agent, tool, resource string, action Action, classification string) (Decision, string) {
 	for i, r := range p.Rules {
-		if r.matches(agent, tool, resource, action) {
+		if r.matches(agent, tool, resource, action, classification) {
 			return r.Decision, fmt.Sprintf("rule %d (%s %s/%s)", i, r.Decision, ruleOr(r.Tool), ruleOr(r.Resource))
 		}
 	}
@@ -134,11 +282,12 @@ func (p Policy) Decide(agent, tool, resource string, action Action) (Decision, s
 	return def, "default"
 }
 
-func (r Rule) matches(agent, tool, resource string, action Action) bool {
+func (r Rule) matches(agent, tool, resource string, action Action, classification string) bool {
 	return fieldMatch(r.Agent, agent) &&
 		fieldMatch(r.Tool, tool) &&
 		globMatch(r.Resource, resource) &&
-		(r.Action == "" || r.Action == action)
+		(r.Action == "" || r.Action == action) &&
+		fieldMatch(r.Classification, classification)
 }
 
 // fieldMatch: empty or "*" matches anything; otherwise exact.
@@ -189,16 +338,101 @@ func LoadPolicy(path string) (Policy, error) {
 	if p.Default == "" {
 		p.Default = Allow
 	}
+	if err := p.validate(); err != nil {
+		return Policy{}, fmt.Errorf("policy %s: %w", path, err)
+	}
 	return p, nil
+}
+
+// validate normalizes and checks every rule. A policy is rejected rather than
+// partially honored: a rule whose decision or action does not parse can never
+// match (or can never deny), so loading it would silently weaken the gate —
+// a default-deny posture written as "DENY" would void entirely.
+func (p *Policy) validate() error {
+	d, err := ParseDecision(string(p.Default))
+	if err != nil {
+		return fmt.Errorf("default: %w", err)
+	}
+	p.Default = d
+
+	for i := range p.Rules {
+		r := &p.Rules[i]
+		d, err := ParseDecision(string(r.Decision))
+		if err != nil {
+			return fmt.Errorf("rule %d: %w", i, err)
+		}
+		r.Decision = d
+		if r.Action != "" {
+			a, err := ParseAction(string(r.Action))
+			if err != nil {
+				return fmt.Errorf("rule %d: %w", i, err)
+			}
+			r.Action = a
+		}
+		// A malformed glob can never match, so globMatch falls back to exact
+		// comparison — meaning a typo'd deny rule silently permits everything
+		// it was written to block. Reject it at load instead.
+		if _, err := filepath.Match(r.Resource, ""); err != nil {
+			return fmt.Errorf("rule %d: invalid resource pattern %q: %w", i, r.Resource, err)
+		}
+		r.Classification = NormalizeClassification(r.Classification)
+	}
+	return nil
+}
+
+// CheckRequest describes one access-check request: what's being accessed, by
+// whom, with what parameters, and (optionally) its data classification.
+type CheckRequest struct {
+	Agent    string
+	Tool     string
+	Resource string
+	Action   Action
+
+	// Params is hashed (HashParams) and recorded as Event.ParametersHash,
+	// binding this decision to the exact parameters it was made for. A non-nil
+	// but empty map still binds (a no-argument invocation is a real, verifiable
+	// operation); only nil means "no parameters supplied".
+	Params map[string]any
+
+	// Classification is the data-sensitivity tag (e.g. "pii"). If empty and
+	// Content is non-empty, it is derived via policy.ContainsPII(Content).
+	Classification string
+	Content        string
 }
 
 // Check evaluates the policy AND records the resulting event to the ledger —
 // the accountability gate. It returns the decision.
-func Check(path string, p Policy, agent, tool, resource string, action Action) (Decision, error) {
-	decision, reason := p.Decide(agent, tool, resource, action)
+//
+// Check fails closed: if the request's parameters cannot be hashed, it returns
+// Deny (and records that denial) rather than a zero Decision, so a caller that
+// only tests `decision == Deny` can never be tricked into proceeding.
+func Check(path string, p Policy, req CheckRequest) (Decision, error) {
+	classification := NormalizeClassification(req.Classification)
+	if classification == "" && req.Content != "" && policy.ContainsPII(policy.Request{Prompt: req.Content}) {
+		classification = "pii"
+	}
+
+	var hash string
+	if req.Params != nil {
+		h, err := HashParams(req.Params)
+		if err != nil {
+			// Unhashable params cannot be bound to a decision, so the access is
+			// denied — and the denial is itself recorded for accountability.
+			_ = Record(path, Event{
+				Agent: req.Agent, Tool: req.Tool, Resource: req.Resource,
+				Action: req.Action, Decision: Deny, Classification: classification,
+				Reason: "unhashable parameters: " + err.Error(),
+			})
+			return Deny, err
+		}
+		hash = h
+	}
+
+	decision, reason := p.Decide(req.Agent, req.Tool, req.Resource, req.Action, classification)
 	err := Record(path, Event{
-		Agent: agent, Tool: tool, Resource: resource,
-		Action: action, Decision: decision, Reason: reason,
+		Agent: req.Agent, Tool: req.Tool, Resource: req.Resource,
+		Action: req.Action, Decision: decision, Reason: reason,
+		ParametersHash: hash, Classification: classification,
 	})
 	return decision, err
 }
@@ -212,7 +446,7 @@ type Summary struct {
 	ByTool  map[string]int `json:"by_tool"`
 }
 
-// Summarize aggregates events for `hydra mcp report`.
+// Summarize aggregates events for `hyctl mcp report`.
 func Summarize(events []Event) Summary {
 	s := Summary{ByAgent: map[string]int{}, ByTool: map[string]int{}}
 	for _, e := range events {

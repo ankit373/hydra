@@ -37,11 +37,19 @@ func Dir() string {
 	return filepath.Join(home, ".hydra")
 }
 
-// ScriptHome returns the directory that contains registry/ (the YAML config root).
+// ScriptHome returns the directory searched for an on-disk registry/ override.
 // Resolution order:
-//  1. $HYDRA_HOME env var (set by Homebrew formula or install.sh)
-//  2. Auto-detect: walk up from binary location looking for registry/routing.yaml
-//  3. ~/.hydra (standalone install copies the registry here)
+//  1. $HYDRA_HOME env var
+//  2. Auto-detect: walk up from the binary looking for registry/routing.yaml
+//     (repo checkout / dev layout)
+//  3. ~/.hydra
+//
+// Step 3 used to be documented as "standalone install copies the registry here".
+// Nothing has ever done that — not install.sh, not the tap formula, not the npm
+// or pip installers — which is why every installed binary ran with no registry
+// at all until #238. It is the embedded copy that makes the files always
+// available now; this path only decides where an operator's *override* is read
+// from, so a miss here is normal rather than a failure.
 func ScriptHome() string {
 	if h := os.Getenv("HYDRA_HOME"); h != "" {
 		return filepath.Clean(h)

@@ -5,7 +5,6 @@
 package editor
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -16,6 +15,7 @@ import (
 
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/dispatch"
+	"github.com/ankit373/hydra/internal/util"
 	"github.com/ankit373/hydra/internal/workspace"
 )
 
@@ -30,6 +30,13 @@ type Request struct {
 	Enum     string // routing enum key (e.g. "SIMPLE")
 	Prompt   string // edit instruction
 	Validate bool   // run extension validator after write (default true)
+
+	// RunID and TaskID correlate this edit with the invocation that drove it.
+	// Before #211 they were not threaded at all: the dispatch below ran with no
+	// identity, so an edit's cost row carried a freshly-derived run and nothing
+	// could tell which run touched which file. Empty derives one, as elsewhere.
+	RunID  string
+	TaskID string
 }
 
 // Result is the JSON output emitted by Edit.
@@ -134,6 +141,8 @@ snippet) between these exact markers and nothing else:
 	tierHint := enumToTier(req.Enum)
 	dispResult, err := d.Dispatch(ctx, editPrompt, dispatch.Options{
 		TierHint: tierHint,
+		RunID:    req.RunID,
+		TaskID:   req.TaskID,
 	})
 	if err != nil {
 		cleanupBackup()
@@ -209,6 +218,11 @@ snippet) between these exact markers and nothing else:
 
 	// ── Diff stats ────────────────────────────────────────────────────────────
 	added, removed := diffStats(req.File, origContent, resolved.GitRoot, backup, origExisted)
+
+	// ── Run log ───────────────────────────────────────────────────────────────
+	// Emitted here, after validation, so a rolled-back edit is never recorded as
+	// an applied change — the rollback path returns above without reaching this.
+	logEdit(req, origContent, newContent+"\n", added, removed)
 
 	// ── A2A handoff ───────────────────────────────────────────────────────────
 	_ = writeLastEdit(req.File, req.Enum, wsName, added, removed)
@@ -289,12 +303,14 @@ func extractContent(raw string) string {
 }
 
 func extractBetween(raw string) string {
-	scanner := bufio.NewScanner(strings.NewReader(raw))
+	// util.SplitLines, not bufio.Scanner: a Scanner stops at a token longer than
+	// its buffer and only says so via Err(), so a single >64 KiB line — minified
+	// JS, a data URI, one-line JSON — used to yield an empty extraction that was
+	// then written over the user's file as if it had succeeded (#168).
 	var out []string
 	inside := false
 	printed := false
-	for scanner.Scan() {
-		line := scanner.Text()
+	for _, line := range util.SplitLines(raw) {
 		if !printed && strings.Contains(line, markerStart) {
 			inside = true
 			continue

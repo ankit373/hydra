@@ -1,0 +1,17 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "//name": "Sets the .app bundle directory name AND the bundle identifier (com.wails.<name>). outputfilename sets the executable inside it. Both must be Hydra or the bundle is Hydra.app containing hydradesk, or vice versa.",
+  "name": "Hydra",
+  "outputfilename": "Hydra",
+  "frontend:install": "npm install",
+  "frontend:build": "npm run build",
+  "frontend:dev:watcher": "npm run dev",
+  "frontend:dev:serverUrl": "auto",
+  "//productVersion": "Deliberately absent. desktop-build.yml injects it from the release version before calling wails build, because it feeds CFBundleVersion/CFBundleShortVersionString in build/darwin/Info.plist. A static value here would be a second source of truth that goes stale the moment a release ships — the same drift that froze every bundle at Wails' 1.0.0 default (#233). Local builds keep that default on purpose: they are not distributed, and their ldflags say 'dev' to match.",
+  "info": {
+    "productName": "Hydra",
+    "comments": "Local-first, multi-vendor AI control plane.",
+    "//copyright": "Matches LICENSE. Unset, Wails ships the literal placeholder 'Copyright.........' into NSHumanReadableCopyright, which macOS shows in Get Info.",
+    "copyright": "Copyright (c) 2025 Ankit Jha. MIT licensed."
+  }
+}

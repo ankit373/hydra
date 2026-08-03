@@ -24,6 +24,7 @@ import (
 	"github.com/ankit373/hydra/internal/dispatch"
 	"github.com/ankit373/hydra/internal/editor"
 	"github.com/ankit373/hydra/internal/entropy"
+	"github.com/ankit373/hydra/internal/executor"
 	"github.com/ankit373/hydra/internal/graph"
 	"github.com/ankit373/hydra/internal/ledger"
 	"github.com/ankit373/hydra/internal/optimal"
@@ -31,7 +32,11 @@ import (
 	"github.com/ankit373/hydra/internal/parallel"
 	"github.com/ankit373/hydra/internal/pricing"
 	"github.com/ankit373/hydra/internal/probe"
+	"github.com/ankit373/hydra/internal/provider"
+	"github.com/ankit373/hydra/internal/rank"
 	"github.com/ankit373/hydra/internal/review"
+	"github.com/ankit373/hydra/internal/runid"
+	"github.com/ankit373/hydra/internal/runlog"
 	"github.com/ankit373/hydra/internal/swarm"
 	"github.com/ankit373/hydra/internal/trust"
 	"github.com/ankit373/hydra/internal/tui"
@@ -68,6 +73,10 @@ func rootCmd() *cobra.Command {
 	root := &cobra.Command{
 		Use:   "hyctl",
 		Short: "Multi-model AI orchestration — one Cortex, many Heads",
+		// `hyctl --version` used to answer "unknown flag" even though a version
+		// subcommand existed. It is the near-universal convention, so people
+		// type it first. Same text as the subcommand, from one function.
+		Version: build.Version,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if !config.Exists() {
 				return runInit()
@@ -75,6 +84,7 @@ func rootCmd() *cobra.Command {
 			return cmd.Help()
 		},
 	}
+	root.SetVersionTemplate(versionText())
 	root.AddCommand(
 		cmdInit(), cmdProbe(), cmdStatus(), cmdTui(), cmdDispatch(),
 		cmdEdit(), cmdReview(), cmdParallel(), cmdCost(), cmdStats(),
@@ -86,15 +96,19 @@ func rootCmd() *cobra.Command {
 
 // ── version ───────────────────────────────────────────────────────────────────
 
+// versionText is shared by the `version` subcommand and the root `--version`
+// flag, so the two can never drift into reporting differently.
+func versionText() string {
+	return fmt.Sprintf("  hydra %s\n  commit:  %s\n  built:   %s\n  by:      %s\n",
+		build.Version, build.Commit, build.Date, build.BuiltBy)
+}
+
 func cmdVersion() *cobra.Command {
 	return &cobra.Command{
 		Use:   "version",
 		Short: "Print version, commit, and build info",
 		Run: func(_ *cobra.Command, _ []string) {
-			fmt.Printf("  hydra %s\n", build.Version)
-			fmt.Printf("  commit:  %s\n", build.Commit)
-			fmt.Printf("  built:   %s\n", build.Date)
-			fmt.Printf("  by:      %s\n", build.BuiltBy)
+			fmt.Print(versionText())
 			// Update notice is printed by main() after Execute returns.
 		},
 	}
@@ -109,8 +123,18 @@ func cmdTui() *cobra.Command {
 		Use:   "tui",
 		Short: "Interactive cockpit — chat, route work, and watch spend live",
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			viewSet := cmd.Flags().Changed("view")
+			if viewSet {
+				if ok, names := tui.ValidSnapshotView(snapView); !ok {
+					return fmt.Errorf("--view %d is out of range: valid values are 0..%d (%s)",
+						snapView, len(names)-1, strings.Join(names, ", "))
+				}
+				if !snapshot {
+					return fmt.Errorf("--view applies only with --snapshot")
+				}
+			}
 			if snapshot {
-				if cmd.Flags().Changed("view") {
+				if viewSet {
 					fmt.Print(tui.CockpitSnapshotView(snapView))
 				} else {
 					fmt.Print(tui.CockpitSnapshot())
@@ -175,12 +199,33 @@ func cmdProbe() *cobra.Command {
 			}
 			fmt.Printf("  %-30s  %-5s  %-5s  %s\n", "Head", "Score", "Src", "Provider")
 			fmt.Println("  " + strings.Repeat("─", 56))
+			// Discovery finding a head is not the same as Hydra being able to
+			// drive it. Listing both identically is what let `probe` advertise
+			// the Ollama binary that `dispatch --local` then refused (#248), so
+			// unroutable heads are marked and carry their reason.
+			var unroutable int
 			for _, h := range result.Heads {
 				marker := "  "
 				if result.Cortex != nil && h.ID == result.Cortex.ID {
 					marker = cortexStyle.Render("→ ")
 				}
-				fmt.Printf("%s%-30s  %-5d  %-5s  %s\n", marker, h.Name, h.CapScore, h.Source, h.Provider)
+				why := executor.Unroutable(h)
+				if why != "" {
+					marker = warnStyle.Render("✗ ")
+					unroutable++
+				}
+				row := fmt.Sprintf("%-30s  %-5d  %-5s  %s", h.Name, h.CapScore, h.Source, h.Provider)
+				if why == "" {
+					fmt.Printf("%s%s\n", marker, row)
+					continue
+				}
+				fmt.Printf("%s%s\n", marker, dimStyle.Render(row))
+				fmt.Printf("    %s\n", dimStyle.Render("↳ "+why))
+			}
+			if unroutable > 0 {
+				fmt.Printf("\n  %s\n", dimStyle.Render(fmt.Sprintf(
+					"✗ = discovered but not routable (%d of %d) — dispatch will skip these.",
+					unroutable, len(result.Heads))))
 			}
 			return nil
 		},
@@ -196,7 +241,7 @@ func cmdStatus() *cobra.Command {
 		RunE: func(_ *cobra.Command, _ []string) error {
 			cfg, err := config.Load()
 			if err != nil {
-				return fmt.Errorf("no config found — run: hydra init")
+				return fmt.Errorf("no config found — run: hyctl init")
 			}
 
 			fmt.Println()
@@ -380,9 +425,40 @@ func cmdDispatch() *cobra.Command {
 			prompt := strings.Join(args, " ")
 			ctx := context.Background()
 
+			// One invocation is one run with one logical task, whichever path
+			// below handles it — so a swarm's attempts and the dispatch that
+			// drove them share an identity in the logs (#181).
+			//
+			// Resolve rather than mint: runid ranks explicit > env > generated,
+			// so calling New() here and passing the result as the explicit value
+			// silently outranked HYDRA_RUN_ID and made it dead at the only entry
+			// point that matters (#204).
+			runID, taskID := runid.ResolveRun(""), runid.ResolveTask("")
+
+			// Mark the run live for its whole duration. Without this
+			// runlog.LiveRuns() is always empty and nothing — cockpit or desktop
+			// Fleet — can distinguish a running agent from a finished one.
+			hb := runlog.StartHeartbeat(ctx, runID, runlog.HeartbeatInterval)
+			defer hb.Stop()
+
+			rl := runlog.New(runID)
+			_ = rl.Append(runlog.Event{Kind: runlog.KindRunStarted, TaskID: taskID, Detail: promptPreview(prompt)})
+			defer func() {
+				_ = rl.Append(runlog.Event{Kind: runlog.KindRunFinished, TaskID: taskID})
+			}()
+
 			d, err := dispatch.New(ctx)
 			if err != nil {
 				return err
+			}
+
+			var headIDs []string
+			if swarmHeads != "" {
+				for _, id := range strings.Split(swarmHeads, ",") {
+					if id = strings.TrimSpace(id); id != "" {
+						headIDs = append(headIDs, id)
+					}
+				}
 			}
 
 			// ── SPRT confidence mode ──────────────────────────────────────
@@ -399,20 +475,63 @@ func cmdDispatch() *cobra.Command {
 				derived := trust.NewDefectModel().RequiredConfidence(task)
 				fmt.Printf("  %s blast radius %.2f → demands confidence ≥ %.1f%%\n",
 					dimStyle.Render("graph:"), task.BlastRadius, derived*100)
+				// --file exists to RAISE the bar for risky files. With no graph
+				// it silently never raises, while printing a line that reads
+				// exactly like blast-radius-aware routing happened (#251). The
+				// bar itself is unchanged — only the claim about it.
+				if g.Empty() {
+					fmt.Printf("  %s\n", warnStyle.Render(
+						"graph: no graph at "+graphPath+" — radius 1.00 is a default, not a measurement"))
+				} else if !g.Knows(file) {
+					fmt.Printf("  %s\n", warnStyle.Render(
+						"graph: "+file+" is not in the graph — radius 1.00 is a default, not a measurement"))
+				}
 				if derived > effectiveConf {
 					effectiveConf = derived
 				}
 			}
-			if effectiveConf > 0 {
+			// --dry-run must mean "spend nothing" in every mode. It was read only
+			// by the single-dispatch path far below, which neither ensemble
+			// branch reaches — so `--dry-run --confidence 0.95` fired a paid
+			// ensemble and printed no plan at all (#167).
+			if dryRun && (effectiveConf > 0 || doSwarm) {
+				mode := swarm.SwarmMode(swarmMode)
+				if mode == "" {
+					mode = swarm.ModeBest
+				}
 				sw := swarm.New(d, d.Heads(), d)
-				res, err := sw.RunSPRT(ctx, prompt, swarm.Options{
+				planOpts := swarm.Options{
+					Mode:          mode,
 					TierHint:      tier,
+					HeadIDs:       headIDs,
 					MaxHeads:      swarmMaxHeads,
 					MaxEstCostUSD: swarmMaxCost,
 					LocalOnly:     localOnly,
 					System:        system,
 					Confidence:    effectiveConf,
 					Domain:        domain,
+				}
+				heads, estUSD, err := sw.Plan(prompt, planOpts)
+				if err != nil {
+					return err
+				}
+				printEnsemblePlan(heads, estUSD, effectiveConf, mode, swarmMaxCost)
+				return nil
+			}
+
+			if effectiveConf > 0 {
+				sw := swarm.New(d, d.Heads(), d)
+				res, err := sw.RunSPRT(ctx, prompt, swarm.Options{
+					TierHint:      tier,
+					HeadIDs:       headIDs,
+					MaxHeads:      swarmMaxHeads,
+					MaxEstCostUSD: swarmMaxCost,
+					LocalOnly:     localOnly,
+					System:        system,
+					Confidence:    effectiveConf,
+					Domain:        domain,
+					RunID:         runID,
+					TaskID:        taskID,
 				})
 				if err != nil {
 					return err
@@ -424,14 +543,6 @@ func cmdDispatch() *cobra.Command {
 
 			// ── swarm mode ────────────────────────────────────────────────
 			if doSwarm {
-				var headIDs []string
-				if swarmHeads != "" {
-					for _, id := range strings.Split(swarmHeads, ",") {
-						if id = strings.TrimSpace(id); id != "" {
-							headIDs = append(headIDs, id)
-						}
-					}
-				}
 				mode := swarm.SwarmMode(swarmMode)
 				if mode == "" {
 					mode = swarm.ModeBest
@@ -446,6 +557,8 @@ func cmdDispatch() *cobra.Command {
 					LocalOnly:     localOnly,
 					System:        system,
 					JudgeTierHint: swarmJudge,
+					RunID:         runID,
+					TaskID:        taskID,
 				})
 				if err != nil {
 					return err
@@ -455,13 +568,21 @@ func cmdDispatch() *cobra.Command {
 			}
 
 			// ── normal single dispatch ─────────────────────────────────────
+			// An enum is a routing instruction, not just a cost label: resolve
+			// it to a tier when no explicit --tier was given (#165).
+			tierHint := tier
+			if tierHint == "" && enumKey != "" {
+				tierHint = dispatch.EnumToTier(enumKey)
+			}
 			opts := dispatch.Options{
-				TierHint:  tier,
+				TierHint:  tierHint,
 				LocalOnly: localOnly,
 				DryRun:    dryRun,
 				System:    system,
 				A2AFile:   a2aFile,
 				Enum:      enumKey,
+				RunID:     runID,
+				TaskID:    taskID,
 			}
 
 			result, err := d.Dispatch(ctx, prompt, opts)
@@ -503,7 +624,7 @@ func cmdDispatch() *cobra.Command {
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "show selected head without executing")
 	cmd.Flags().StringVarP(&system, "system", "s", "", "system prompt")
 	cmd.Flags().StringVar(&a2aFile, "a2a", "", "path to A2A handoff JSON (prepends structured context to prompt)")
-	cmd.Flags().StringVar(&enumKey, "enum", "", "routing enum key for cost logging (e.g. SIMPLE)")
+	cmd.Flags().StringVar(&enumKey, "enum", "", "routing enum key, e.g. SIMPLE — selects the tier when --tier is unset")
 	// swarm flags
 	cmd.Flags().BoolVar(&doSwarm, "swarm", false, "fan prompt out to multiple heads simultaneously")
 	cmd.Flags().StringVar(&swarmMode, "swarm-mode", "best", "response strategy: best|race|all")
@@ -514,7 +635,7 @@ func cmdDispatch() *cobra.Command {
 	// trust / SPRT flags
 	cmd.Flags().Float64Var(&confidence, "confidence", 0, "route via SPRT ensemble until this P(correct) is reached, e.g. 0.95")
 	cmd.Flags().StringVar(&domain, "domain", "", "calibration domain for --confidence (default: \"default\")")
-	cmd.Flags().StringVar(&file, "file", "", "target file — raises the confidence bar by its code blast radius")
+	cmd.Flags().StringVar(&file, "file", "", "target file — derives a confidence target from its blast radius, so this alone selects the SPRT ensemble")
 	cmd.Flags().StringVar(&graphPath, "graph", "graph.json", "path to the dependency graph used with --file")
 	return cmd
 }
@@ -591,7 +712,7 @@ func cmdMCP() *cobra.Command {
 	}
 
 	// check: evaluate the policy for an access and record the decision.
-	var chkAgent, chkResource, chkAction, policyPath string
+	var chkAgent, chkResource, chkAction, policyPath, chkParams, chkContent, chkClassification string
 	check := &cobra.Command{
 		Use:   "check <tool>",
 		Short: "Evaluate the policy for a tool/resource access and record it",
@@ -601,33 +722,75 @@ func cmdMCP() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			decision, err := ledger.Check(ledger.DefaultPath(), pol,
-				chkAgent, args[0], chkResource, ledger.Action(chkAction))
+			action, err := ledger.ParseAction(chkAction)
 			if err != nil {
-				return err
+				return fmt.Errorf("--action: %w", err)
 			}
-			fmt.Printf("  %s  %s %s/%s (%s)\n", strings.ToUpper(string(decision)),
-				chkAgent, args[0], chkResource, chkAction)
+			var params map[string]any
+			if chkParams != "" {
+				if params, err = ledger.DecodeParams(chkParams); err != nil {
+					return fmt.Errorf("--params: %w", err)
+				}
+			}
+			decision, checkErr := ledger.Check(ledger.DefaultPath(), pol, ledger.CheckRequest{
+				Agent: chkAgent, Tool: args[0], Resource: chkResource, Action: action,
+				Params: params, Classification: chkClassification, Content: chkContent,
+			})
+			// Report the decision before any error: a Deny that failed to write
+			// to the ledger is still a Deny, and callers gate on exit 3.
+			if decision != "" {
+				fmt.Printf("  %s  %s %s/%s (%s)\n", strings.ToUpper(string(decision)),
+					chkAgent, args[0], chkResource, action)
+			}
+			if checkErr != nil {
+				fmt.Fprintf(os.Stderr, "  ledger error: %v\n", checkErr)
+			}
 			if decision == ledger.Deny {
 				os.Exit(3) // non-zero so callers can gate on it
 			}
-			return nil
+			return checkErr
 		},
 	}
 	check.Flags().StringVar(&chkAgent, "agent", "", "agent making the access")
 	check.Flags().StringVar(&chkResource, "resource", "", "resource being accessed")
 	check.Flags().StringVar(&chkAction, "action", "read", "read|write|exec|network")
 	check.Flags().StringVar(&policyPath, "policy", ledger.DefaultPolicyPath(), "path to the access policy JSON")
+	check.Flags().StringVar(&chkParams, "params", "", "JSON object of invocation parameters; hashed and bound to the recorded decision")
+	check.Flags().StringVar(&chkContent, "content", "", "raw content being accessed; scanned for PII to auto-derive --classification if unset")
+	check.Flags().StringVar(&chkClassification, "classification", "", "explicit data-sensitivity tag (e.g. pii); overrides --content detection")
 
 	// record: append an event directly (for external tools reporting access).
-	var recAgent, recTool, recResource, recAction, recDecision string
+	var recAgent, recTool, recResource, recAction, recDecision, recParams, recClassification string
 	record := &cobra.Command{
 		Use:   "record",
 		Short: "Append an access event to the ledger",
 		RunE: func(_ *cobra.Command, _ []string) error {
+			action, err := ledger.ParseAction(recAction)
+			if err != nil {
+				return fmt.Errorf("--action: %w", err)
+			}
+			decision, err := ledger.ParseDecision(recDecision)
+			if err != nil {
+				return fmt.Errorf("--decision: %w", err)
+			}
+			// Bind whenever --params was supplied — including "{}" — so this
+			// agrees with `check`, whose binding keys off a non-nil map.
+			var hash string
+			if recParams != "" {
+				params, err := ledger.DecodeParams(recParams)
+				if err != nil {
+					return fmt.Errorf("--params: %w", err)
+				}
+				if params != nil {
+					if hash, err = ledger.HashParams(params); err != nil {
+						return err
+					}
+				}
+			}
 			return ledger.Record(ledger.DefaultPath(), ledger.Event{
 				Agent: recAgent, Tool: recTool, Resource: recResource,
-				Action: ledger.Action(recAction), Decision: ledger.Decision(recDecision),
+				Action: action, Decision: decision,
+				ParametersHash: hash, Classification: ledger.NormalizeClassification(recClassification),
 			})
 		},
 	}
@@ -636,6 +799,64 @@ func cmdMCP() *cobra.Command {
 	record.Flags().StringVar(&recResource, "resource", "", "resource")
 	record.Flags().StringVar(&recAction, "action", "read", "read|write|exec|network")
 	record.Flags().StringVar(&recDecision, "decision", "allow", "allow|deny")
+	record.Flags().StringVar(&recParams, "params", "", "JSON object of invocation parameters; hashed and bound to the recorded event")
+	record.Flags().StringVar(&recClassification, "classification", "", "data-sensitivity tag (e.g. pii)")
+
+	// verify: re-check execution-time params against the recorded approval.
+	var verResource, verParams string
+	var verAnyResource bool
+	verify := &cobra.Command{
+		Use:   "verify <tool>",
+		Short: "Verify execution-time parameters against the hash bound at approval",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			// An empty tool would match an approval recorded for a different
+			// tool entirely, so require it explicitly.
+			tool := strings.TrimSpace(args[0])
+			if tool == "" {
+				return fmt.Errorf("tool argument is required")
+			}
+			if strings.TrimSpace(verResource) == "" && !verAnyResource {
+				return fmt.Errorf("--resource is required (the hash covers parameters only, " +
+					"so the approval's resource must be matched explicitly); pass --any-resource to override")
+			}
+			params, err := ledger.DecodeParams(verParams)
+			if err != nil {
+				return fmt.Errorf("--params: %w", err)
+			}
+			events, skipped, err := ledger.LoadCounted(ledger.DefaultPath())
+			if err != nil {
+				return err
+			}
+			if skipped > 0 {
+				fmt.Fprintf(os.Stderr, "  warning: %d unparseable ledger line(s) skipped — "+
+					"verification may be against an older approval\n", skipped)
+			}
+			approval, ok := ledger.LatestBound(events, tool, verResource)
+			if !ok {
+				return fmt.Errorf("no allowed, parameter-bound ledger event for %s/%s — nothing to verify against", tool, verResource)
+			}
+			match, err := ledger.VerifyParams(params, approval.ParametersHash)
+			if err != nil {
+				return err
+			}
+			// Name the matched approval explicitly: the hash covers the
+			// parameters only, so the operator must be able to see which
+			// tool/resource the approval was actually recorded for.
+			target := fmt.Sprintf("%s/%s at %s", approval.Tool, approval.Resource, approval.TS)
+			if !match {
+				fmt.Printf("  %s  parameters do NOT match the approval for %s\n",
+					strings.ToUpper(string(ledger.Deny)), target)
+				os.Exit(3) // non-zero so callers can gate on it
+			}
+			fmt.Printf("  MATCH  parameters match the approval for %s\n", target)
+			return nil
+		},
+	}
+	verify.Flags().StringVar(&verResource, "resource", "", "resource the approval was recorded for (required)")
+	verify.Flags().BoolVar(&verAnyResource, "any-resource", false, "match an approval for any resource of this tool (weaker: the hash does not cover the resource)")
+	verify.Flags().StringVar(&verParams, "params", "", "JSON object of the parameters about to execute (required)")
+	_ = verify.MarkFlagRequired("params")
 
 	// log: list events, optionally filtered.
 	var logAgent string
@@ -696,7 +917,7 @@ func cmdMCP() *cobra.Command {
 	}
 	report.Flags().BoolVar(&repJSON, "json", false, "machine-readable JSON output")
 
-	cmd.AddCommand(check, record, logCmd, report)
+	cmd.AddCommand(check, record, verify, logCmd, report)
 	return cmd
 }
 
@@ -821,7 +1042,7 @@ func cmdModels() *cobra.Command {
 			if syncDry {
 				word = "would import"
 			}
-			fmt.Printf("\n  %s %d models (%d already known, skipped). capScores are provisional — refine with `hydra models add`.\n\n", word, added, skipped)
+			fmt.Printf("\n  %s %d models (%d already known, skipped). capScores are provisional — refine with `hyctl models add`.\n\n", word, added, skipped)
 			return nil
 		},
 	}
@@ -906,29 +1127,57 @@ func cmdGraph() *cobra.Command {
 				deps += g.DependentCount(id)
 			}
 			pFactor := g.PercolationFactor(file)
+			// A radius of 1.0 means either "nothing depends on this" or "I have
+			// no idea" — opposite conclusions that used to render identically.
+			// internal/a2a reported 6 dependents and 97.4% required confidence
+			// with the graph, and "subcritical — edits stay local" at 90.0%
+			// without it (#251).
+			loaded, known := !g.Empty(), g.Knows(file)
 			if jsonOut {
 				return json.NewEncoder(os.Stdout).Encode(map[string]any{
 					"file": file, "blast_radius": radius, "transitive_dependents": deps,
 					"defect_cost_usd": dm.CostUSD(task), "required_confidence": dm.RequiredConfidence(task),
 					"kappa": g.Kappa(), "percolates": g.Percolates(), "percolation_factor": pFactor,
+					"graph_loaded": loaded, "file_in_graph": known,
 				})
 			}
 			fmt.Printf("\n  %s\n", cortexStyle.Render(file))
-			fmt.Printf("    transitive dependents  %d\n", deps)
-			fmt.Printf("    blast radius           %.2f×\n", radius)
-			if g.Percolates() {
-				core := "periphery"
-				if pFactor > 1.0 {
-					core = fmt.Sprintf("core (+%.0f%%)", (pFactor-1)*100)
-				}
-				fmt.Printf("    graph κ                %.2f  %s\n",
-					g.Kappa(), dimStyle.Render("supercritical — cascades possible; this file is "+core))
-			} else {
-				fmt.Printf("    graph κ                %.2f  %s\n",
-					g.Kappa(), dimStyle.Render("subcritical — edits stay local"))
+			if !loaded {
+				fmt.Printf("    %s\n", warnStyle.Render("no graph at "+graphPath+" — nothing was analysed"))
+			} else if !known {
+				fmt.Printf("    %s\n", warnStyle.Render("not in the graph — check the path, or reindex"))
 			}
-			fmt.Printf("    defect cost            $%.2f\n", dm.CostUSD(task))
-			fmt.Printf("    demands confidence     %.1f%%\n\n", dm.RequiredConfidence(task)*100)
+			measured := loaded && known
+			suffix := func() string {
+				if measured {
+					return ""
+				}
+				return "  " + dimStyle.Render("(default, not measured)")
+			}()
+			fmt.Printf("    transitive dependents  %d%s\n", deps, suffix)
+			fmt.Printf("    blast radius           %.2f×%s\n", radius, suffix)
+			// κ is a property of the whole graph, so it stays meaningful for an
+			// unknown file — but with no graph at all it is 0.0, and rendering
+			// that as "edits stay local" is a safety claim from no data.
+			if loaded {
+				if g.Percolates() {
+					core := "periphery"
+					if pFactor > 1.0 {
+						core = fmt.Sprintf("core (+%.0f%%)", (pFactor-1)*100)
+					}
+					fmt.Printf("    graph κ                %.2f  %s\n",
+						g.Kappa(), dimStyle.Render("supercritical — cascades possible; this file is "+core))
+				} else {
+					fmt.Printf("    graph κ                %.2f  %s\n",
+						g.Kappa(), dimStyle.Render("subcritical — edits stay local"))
+				}
+			}
+			fmt.Printf("    defect cost            $%.2f%s\n", dm.CostUSD(task), suffix)
+			fmt.Printf("    demands confidence     %.1f%%%s\n\n", dm.RequiredConfidence(task)*100, suffix)
+			if !measured {
+				fmt.Printf("  %s\n\n", dimStyle.Render(
+					"A radius of 1.00× here means \"unknown\", not \"safe\" — generate a graph to get a real bar."))
+			}
 			return nil
 		},
 	}
@@ -1044,6 +1293,40 @@ func anyEstimated(attempts []swarm.Attempt) bool {
 }
 
 // printSwarmResult renders the swarm result to stdout.
+// printEnsemblePlan is what --dry-run shows for the swarm and SPRT paths: the
+// heads that would be engaged and the cost of one round, so the flag answers
+// "what would this spend" rather than spending it.
+//
+// The head count is an upper bound in SPRT mode: the ensemble stops as soon as
+// the log-odds cross the target, so it usually queries fewer. Saying so beats
+// printing a number that reads as a promise.
+func printEnsemblePlan(heads []provider.Head, estUSD, confidence float64, mode swarm.SwarmMode, maxCostUSD float64) {
+	sep := dimStyle.Render("  " + strings.Repeat("─", 60))
+
+	label := fmt.Sprintf("swarm · %s", mode)
+	if confidence > 0 {
+		label = fmt.Sprintf("SPRT · target %.1f%%", confidence*100)
+	}
+
+	fmt.Println()
+	fmt.Printf("  %s [%s]\n\n", cortexStyle.Render("▶ DRY RUN"), dimStyle.Render(label))
+	fmt.Printf("  %-28s  %7s  %8s\n", "HEAD", "TIER", "SOURCE")
+	fmt.Println(sep)
+	for _, h := range heads {
+		fmt.Printf("  %-28s  %7d  %8s\n", h.Name, rank.UITier(h), h.Source)
+	}
+	fmt.Println(sep)
+
+	if confidence > 0 {
+		fmt.Printf("  %s\n", dimStyle.Render(fmt.Sprintf("at most %d heads queried; SPRT stops early once the target is met", len(heads))))
+	}
+	fmt.Printf("  %s\n", dimStyle.Render(fmt.Sprintf("estimated cost for one round: $%.4f", estUSD)))
+	if maxCostUSD > 0 && estUSD > maxCostUSD {
+		fmt.Printf("  %s\n", warnStyle.Render(fmt.Sprintf("this exceeds --swarm-max-cost $%.4f and would be refused", maxCostUSD)))
+	}
+	fmt.Printf("  %s\n\n", dimStyle.Render("nothing was executed"))
+}
+
 func printSwarmResult(r *swarm.SwarmResult) {
 	sep := dimStyle.Render("  " + strings.Repeat("─", 60))
 
@@ -1146,11 +1429,20 @@ func cmdEdit() *cobra.Command {
 		Short: "Atomic, validated, rollback-safe file edit via a Hydra Head",
 		RunE: func(_ *cobra.Command, _ []string) error {
 			ctx := context.Background()
+
+			// Resolve rather than mint, so HYDRA_RUN_ID groups an edit with the
+			// invocation that spawned it (#204, #211).
+			runID, taskID := runid.ResolveRun(""), runid.ResolveTask("")
+			hb := runlog.StartHeartbeat(ctx, runID, runlog.HeartbeatInterval)
+			defer hb.Stop()
+
 			result, err := editor.Edit(ctx, editor.Request{
 				File:     file,
 				Enum:     enum,
 				Prompt:   prompt,
 				Validate: !noValidate,
+				RunID:    runID,
+				TaskID:   taskID,
 			})
 			if err != nil {
 				return err
@@ -1286,7 +1578,7 @@ func cmdParallel() *cobra.Command {
 			}
 
 			ctx := context.Background()
-			results, err := parallel.Run(ctx, tasks)
+			results, err := parallel.Run(ctx, tasks, parallel.Options{RunID: runid.New()})
 			if err != nil {
 				return err
 			}
@@ -1488,17 +1780,17 @@ func cmdStats() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "stats",
 		Short: "Spend analytics — model, tier, day, and swarm breakdowns",
-		Long: `hydra stats shows cost.jsonl summaries with rich grouping options.
+		Long: `hyctl stats shows cost.jsonl summaries with rich grouping options.
 
 Examples:
-  hydra stats                  # today summary
-  hydra stats --days 7         # last 7 days, grouped by model
-  hydra stats --model          # all-time by model
-  hydra stats --tier           # all-time by tier
-  hydra stats --day            # all-time by day
-  hydra stats --swarm          # swarm-only stats + winner rate
-  hydra stats --session <id>   # single session/task breakdown
-  hydra stats --json           # machine-readable output`,
+  hyctl stats                  # today summary
+  hyctl stats --days 7         # last 7 days, grouped by model
+  hyctl stats --model          # all-time by model
+  hyctl stats --tier           # all-time by tier
+  hyctl stats --day            # all-time by day
+  hyctl stats --swarm          # swarm-only stats + winner rate
+  hyctl stats --session <id>   # single session/task breakdown
+  hyctl stats --json           # machine-readable output`,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			all, err := cost.LoadAll()
 			if err != nil {
@@ -1745,7 +2037,7 @@ func cmdTrustStats() *cobra.Command {
 				return json.NewEncoder(os.Stdout).Encode(s)
 			}
 			if s.Runs == 0 {
-				fmt.Println("\n  No SPRT runs yet. Try `hydra dispatch --confidence 0.95 --prompt ...`.")
+				fmt.Println("\n  No SPRT runs yet. Try `hyctl dispatch --confidence 0.95 --prompt ...`.")
 				return nil
 			}
 			fmt.Printf("\n  Trust stats (%d runs)\n", s.Runs)
@@ -1824,7 +2116,7 @@ func cmdTrustCalibration() *cobra.Command {
 				return json.NewEncoder(os.Stdout).Encode(stats)
 			}
 			if len(stats) == 0 {
-				fmt.Println("\n  No calibration recorded yet. Feed outcomes with `hydra trust record`.")
+				fmt.Println("\n  No calibration recorded yet. Feed outcomes with `hyctl trust record`.")
 				return nil
 			}
 			fmt.Printf("\n  %-28s %-10s %6s %7s %7s %8s\n", "Source", "Domain", "n", "se", "sp", "D(nats)")
@@ -1906,7 +2198,7 @@ func cmdTrustDefect() *cobra.Command {
 			}
 			fmt.Printf("  defect cost ≈ $%.2f  (blast=%.2f [%s] irreversible=%v pii=%v prod=%v)\n",
 				dm.CostUSD(task), blast, blastSource, irreversible, pii, production)
-			fmt.Printf("  → demands confidence ≥ %.1f%%  (use with: hydra dispatch --confidence %.3f)\n",
+			fmt.Printf("  → demands confidence ≥ %.1f%%  (use with: hyctl dispatch --confidence %.3f)\n",
 				dm.RequiredConfidence(task)*100, dm.RequiredConfidence(task))
 			return nil
 		},
@@ -1926,4 +2218,18 @@ func cmdTrustDefect() *cobra.Command {
 var (
 	cortexStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
 	dimStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	warnStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
 )
+
+// promptPreview shortens a prompt for a log Detail field. Run events carry a
+// short human label, never the full text — the atomic-append guarantee that
+// makes the run log safe under concurrency is per write() call, so entries must
+// stay small.
+func promptPreview(s string) string {
+	const max = 80
+	s = strings.TrimSpace(strings.ReplaceAll(s, "\n", " "))
+	if len(s) <= max {
+		return s
+	}
+	return s[:max] + "…"
+}

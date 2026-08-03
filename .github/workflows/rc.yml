@@ -13,14 +13,17 @@ jobs:
   rc:
     name: Build & publish RC release
     runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.ver.outputs.tag }}
+      version: ${{ steps.ver.outputs.version }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: true
@@ -43,7 +46,7 @@ jobs:
           echo "sha=${SHA}" >> "$GITHUB_OUTPUT"
 
       - name: Build RC binaries
-        uses: goreleaser/goreleaser-action@v6
+        uses: goreleaser/goreleaser-action@v7
         with:
           version: latest
           args: release --snapshot --clean --skip=publish,sign,sbom
@@ -75,3 +78,14 @@ jobs:
             --latest=false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # UAT needs the app, not just the CLI. Without this the RC that testers sign
+  # off on contains no desktop build at all (#227).
+  desktop:
+    name: Desktop app
+    needs: rc
+    uses: ./.github/workflows/desktop-build.yml
+    with:
+      version: ${{ needs.rc.outputs.version }}
+      tag: ${{ needs.rc.outputs.tag }}
+      upload: true

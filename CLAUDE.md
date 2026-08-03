@@ -44,11 +44,20 @@ internal/{cost,budget}/ ← Spend reporting (est/actual labeling) + token-budget
 internal/capabilities/  ← Model capability scores: embedded data.json ⊕ runtime user overlay (~/.hydra/models.json). `hyctl models`.
 internal/util/          ← Shared utilities (Accumulator, etc).
 
-registry/routing.yaml   ← THE ENUM. Change tier assignments here only.
-registry/models.yaml    ← Model definitions, token pools, fallback chains (flags are
-                          install-specific defaults — verify against your providers).
-registry/domains.yaml   ← Domain → enum key routing (references routing.yaml).
-registry/pricing.yaml   ← Static tier pricing fallback (used when offline).
+registry/               ← Routing data, compiled into the binary via `go:embed` (registry.go)
+                          and overridable on disk at `$HYDRA_HOME/registry/<file>`. Nothing ships
+                          these files as separate artifacts — brew/npm/pip/curl install the binary
+                          alone, so before #238 every install ran with no registry at all.
+  routing.yaml          ← Enum → tier reference table, and what `hyctl init` writes. NOTE: the
+                          runtime mapping is `dispatch.EnumToTier`, a hardcoded Go switch — editing
+                          this file alone does NOT change how a dispatch routes.
+  models.yaml           ← Model definitions, token pools, context windows, fallback chains (flags
+                          are install-specific defaults — verify against your providers). Read by
+                          the agy provider and the budget governor.
+  domains.yaml          ← Domain → enum key routing (references routing.yaml).
+  pricing.yaml          ← Tier pricing. Prices the CLI-agent heads that never appear in
+                          OpenRouter's catalog, so it is load-bearing, not just an offline fallback.
+  policy.yaml           ← File-policy rules.  workspace.yaml ← workspace roots + validators.
 logs/                   ← Dispatch log + state.json (pool exhaustion, claude_pct).
 ```
 
@@ -59,7 +68,8 @@ logs/                   ← Dispatch log + state.json (pool exhaustion, claude_p
 ### Step 1 — Classify
 Read `registry/domains.yaml` to identify the domain and task type.
 Look up the enum key (e.g. `SIMPLE`, `COMPLEX`).
-Check `registry/routing.yaml` to resolve the enum key to a tier number.
+`registry/routing.yaml` documents which tier that enum resolves to; the mapping the router
+actually applies is `dispatch.EnumToTier`.
 
 ### Step 2 — Check State
 ```bash
@@ -130,7 +140,14 @@ jq '.claude_pct = 52' logs/state.json > logs/state.json.tmp && mv logs/state.jso
 ```
 
 **Same 70%/75%/80% rule applies to ALL delegated models** — `hyctl dispatch` enforces this via the budget governor + fallback chains.
-**Qwen (tier 10) is always the terminal fallback** — it runs locally so is always available regardless of API limits.
+**Local heads are tier 10, the terminal fallback** — they cost nothing, so `rank.UITier` puts any
+`LocalOnly` head at the cheapest tier regardless of its score, and API limits never apply to them.
+
+This holds only while a local head is actually **routable**. Ollama is discovered twice: as a binary
+on `$PATH` (not routable on its own — nothing can drive it) and, once its server answers on `:11434`,
+as one routable head per model via the port provider. With the server down there is no tier-10 head,
+and dispatch degrades to the cheapest routable head and says so. `hyctl probe` marks unroutable
+heads with `✗` and the reason (#248).
 
 ---
 
@@ -277,8 +294,9 @@ hotfix/#{n}-slug    ← branches from main tag. Merged → main, cherry-picked �
 Every issue must be:
 1. **On the GitHub project board** (Project #2 "Hydra Roadmap")
 2. **Linked to its branch** — GitHub auto-links when branch name contains the issue number (`feature/54-hydra-stats` links to #54)
-3. **Linked to its PR** — PR body must contain `Closes #<issue>` for auto-close on merge
+3. **Linked to its PR** — PR body must contain `Closes #<issue>` so the PR shows on the issue
 4. **Moving through board states** at every transition (Todo → In Progress → In Review → Done)
+5. **Closed by hand once the release carrying it reaches `main`** — see below; nothing closes it for you
 
 ### Link a branch to an issue (GitHub auto-detection)
 GitHub automatically links a branch to an issue when the branch name contains the issue number.
@@ -290,10 +308,23 @@ gh issue view 54 --json linkedBranches
 ```
 
 ### Link a PR to an issue
-Always include `Closes #<n>` in the PR body. This:
-- Shows the PR on the issue page
-- Auto-closes the issue when the PR merges
-- Auto-moves the issue to Done on the project board (if configured)
+Always include `Closes #<n>` in the PR body. This shows the PR on the issue page and creates the
+link — that is the whole reason to keep writing it.
+
+**It does not close the issue.** GitHub only honours the closing keyword when the PR merges into the
+**default branch**, which here is `main`. Every feature/fix PR targets `develop` by design, so the
+keyword links but never fires — and it fails silently: the PR merges green and the issue stays open.
+17 issues accumulated this way before anyone noticed (#217).
+
+Close issues explicitly when the release carrying them lands on `main`, which is the board's
+existing `Deploy` → `Done` transition:
+
+```bash
+gh issue close <n> --comment "Shipped in v1.1.0."
+```
+
+(This is unrelated to the project-board columns, which need a `read:project` OAuth scope. Closing
+an issue needs no extra scope.)
 
 ---
 
@@ -406,8 +437,9 @@ gh project item-edit --project-id PVT_kwHOAL1qLc4BZbZZ --id "$ITEM_ID" \
 
 **PR rules:**
 - Title must be a valid conventional commit (e.g. `feat(scope): description`)
-- Body must contain `Closes #<issue>` — auto-links and closes the issue on merge
-- All features/fixes target `develop`. Hotfixes target `main`.
+- Body must contain `Closes #<issue>` — this links the PR to the issue. It does **not** close it:
+  the keyword only fires on merge into the default branch (`main`). Close it by hand at release.
+- All features/fixes target `develop`. Hotfixes target `main` — and there the keyword *does* fire.
 - Never open a PR directly to `main` from a feature branch.
 
 ---
@@ -437,8 +469,10 @@ Features merge to develop (conventional commits)
 Cut release branch: git checkout -b release/v1.2.0 develop
         ↓  (push → rc.yml fires → publishes v1.2.0-rc.1 pre-release)
 UAT testing on release/v1.2.0
-Bug fixes committed directly to release/v1.2.0
-        ↓  (each push → rc.yml publishes v1.2.0-rc.2, rc.3 …)
+Bug fixes land via PR into release/v1.2.0 (direct pushes are rejected — the
+release-branch-protection ruleset requires a PR and linear history, so a merge
+commit cannot land there either; squash or rebase only)
+        ↓  (each merge → rc.yml publishes v1.2.0-rc.2, rc.3 …)
 Sign-off ✓
         ↓
 PR: release/v1.2.0 → main  (squash merge)
@@ -598,7 +632,13 @@ gh pr create --title "feat(stats): add hyctl stats subcommand" \
 gh project item-edit --project-id PVT_kwHOAL1qLc4BZbZZ --id "$ITEM_ID" \
   --field-id PVTSSF_lAHOAL1qLc4BZbZZzhUaGlE --single-select-option-id 1490e846
 
-# 5. After merge — move to Done
+# 5. After merge to develop — move to Deploy (merged, not yet released)
+gh project item-edit --project-id PVT_kwHOAL1qLc4BZbZZ --id "$ITEM_ID" \
+  --field-id PVTSSF_lAHOAL1qLc4BZbZZzhUaGlE --single-select-option-id bcafa7ca
+
+# 6. After the release carrying it lands on main — close the issue, then move to Done.
+#    Nothing does this for you: "Closes #n" does not fire on a develop-targeted PR (#217).
+gh issue close "${ISSUE}" --comment "Shipped in v1.1.0."
 gh project item-edit --project-id PVT_kwHOAL1qLc4BZbZZ --id "$ITEM_ID" \
   --field-id PVTSSF_lAHOAL1qLc4BZbZZzhUaGlE --single-select-option-id 98236657
 ```
@@ -624,15 +664,22 @@ Current version is tracked in `.release-please-manifest.json`.
 
 ```
 .goreleaser.yaml              ← build matrix, archives, homebrew tap config
-cliff.toml                    ← changelog generation from conventional commits
 release-please-config.json    ← release-please behaviour
-.release-please-manifest.json ← current version (managed by release-please)
-CHANGELOG.md                  ← auto-generated, do not edit manually
+.release-please-manifest.json ← last released version. release-please reads THIS, not tags,
+                                to compute the next bump — if it drifts from the newest tag,
+                                the next release is computed off the wrong base (#215).
+CHANGELOG.md                  ← release-please prepends each release; the pre-1.0 tail is a
+                                hand-written historical record. Do not edit the generated part.
 internal/build/build.go       ← version vars set by ldflags at build time
 internal/update/update.go     ← startup update checker (24h cache)
 .github/workflows/release.yml ← fires on tag push → goreleaser
 .github/workflows/edge.yml    ← fires on develop push → edge build
+.github/workflows/rc.yml      ← fires on release/v* push → RC pre-release
+.github/workflows/publish.yml ← fans a release out to brew/npm/pip
 .github/workflows/release-please.yml ← fires on main push → release PR
+.github/workflows/sync-develop.yml   ← fires on main push → back-merge PR (main → develop).
+                                       FAILS loudly on conflict; a red run here means develop
+                                       is behind main and a release cut will not merge cleanly.
 ```
 
 ---
@@ -684,7 +731,8 @@ All Go source lives under `cmd/` and `internal/`. Key packages:
 | `internal/cost` | Reads `cost.jsonl`, produces spend summaries |
 | `internal/policy` | Allow/deny rules (PII local-only, etc.) |
 | `internal/rank` | CapScore ranking helpers |
-| `internal/config` | Hydra config load/save (`~/.config/hydra/`) |
+| `registry` | The routing YAML **and** the `go:embed` that compiles it into the binary. `registry.Read(home, name)` prefers `$HYDRA_HOME/registry/<name>` so operators can retune without a rebuild, and falls back to the embedded copy — which is what every brew/npm/pip/curl install uses, since none of them ship the files (#238). |
+| `internal/config` | Hydra config load/save (`~/.config/hydra/`); `Breadcrumb()` — SHA256 deployment-identity fingerprint over `registry/{routing,models,domains}.yaml`, auto-stamped into ledger/trust/cost log entries so they can be tied back to the exact routing rules in effect. |
 | `internal/capabilities` | Model capability scores: embedded `data.json` ⊕ runtime user overlay (`~/.hydra/models.json`) merged at discovery, so new models are added without a rebuild. Drives `hyctl models list\|add\|remove\|sync`. |
 | `internal/budget` | Token-budget governor: static pressure bands (`ModeFor`) + a rate-aware first-passage-time model on the orchestrator's `claude_pct` session history (`RiskFromHistory`/`EffectiveMode`) that escalates before a threshold is crossed. Feeds `claudeMode` downgrades and `hyctl status`. |
 | `internal/trust` | Trust Control Plane confidence layer: per-source calibration (Beta-Bernoulli → LLR/D), defect-cost model + `RequiredConfidence`, and the SPRT optimal-stopping ensemble (`trust.Run`). Drives `hyctl dispatch --confidence` and `hyctl trust calibration\|record\|defect\|stats\|explain`. |
@@ -692,7 +740,7 @@ All Go source lives under `cmd/` and `internal/`. Key packages:
 | `internal/a2a` | Agent-to-agent handoffs with vector clocks: causal ordering (before/after/concurrent) + `ConflictsWith` (concurrent + overlapping files). Backs `last_handoff.json` and `--a2a`. |
 | `internal/optimal` | Optimal parallel-agent count `n*=√((1−s)/k)` and speedup (Amdahl + coordination, Manifesto Law 4). Drives `hyctl graph parallel`. |
 | `internal/entropy` | Context signal density ρ (gzip-ratio proxy) → `useful_tokens = L·ρ` + a compaction governor (Manifesto Law 5). Drives `hyctl context entropy`. |
-| `internal/ledger` | Local MCP accountability ledger: append-only access events + glob allow/deny `Policy.Decide` gate (records every decision). Drives `hyctl mcp check\|record\|log\|report`. |
+| `internal/ledger` | Local MCP accountability ledger: append-only access events + glob allow/deny `Policy.Decide` gate (records every decision), classification-aware (`Rule.Classification`, auto-derived from content via `policy.ContainsPII` or set explicitly) + `HashParams`/`VerifyParams` SHA256 parameter-hash binding for tamper-evidence between a decision and its execution. `Check` fails **closed** (unhashable params → `Deny`, recorded); `LoadPolicy` rejects unparseable decisions/actions/globs rather than silently voiding a rule, actions/classifications are case-normalized, and only **Allow** events count as approvals for `verify`. Drives `hyctl mcp check\|record\|verify\|log\|report`. |
 | `internal/oracle` | Verification oracles: `Oracle`/`CommandOracle` run tests/compile/lint (exit 0 = pass) and map the verdict to a calibrated LLR (`oracle.LLR`) — a high-`D` evidence source. Drives `hyctl oracle verify`. |
 | `internal/tui` | Bubble Tea TUI: init wizard, install flow |
 | `internal/review` | Code review subcommand |
@@ -709,8 +757,10 @@ All Go source lives under `cmd/` and `internal/`. Key packages:
 pricing.Load()
   → readCache()           # ~/.config/hydra/pricing_cache.json (24h TTL)
   → fetchFromOpenRouter() # background refresh if stale
-  → loadFallbackTiers()   # registry/pricing.yaml (always loaded)
+  → loadFallbackTiers()   # registry/pricing.yaml — embedded in the binary, on-disk copy wins
 ```
+The tier table is not just an offline fallback: it is what prices the CLI-agent heads (claude, agy,
+codex, cursor…) that never appear in OpenRouter's catalog.
 `HYDRA_PRICING_TTL_HOURS` overrides the 24h TTL.
 `hyctl pricing refresh` forces a synchronous fetch.
 `hyctl pricing list [filter] [--json]` shows all known models.
