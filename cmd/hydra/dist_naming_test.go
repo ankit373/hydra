@@ -142,6 +142,13 @@ func TestInstallers_OnlyRequestTargetsThatAreBuilt(t *testing.T) {
 			oses:   shellCaseValues(t, repoFile(t, "install.sh"), `OS="`),
 			arches: shellCaseValues(t, repoFile(t, "install.sh"), `ARCH="`),
 		},
+		{
+			// install.ps1 is Windows-only by construction, so its OS is fixed
+			// rather than parsed; only the arch switch can vary (#264).
+			name:   "install.ps1",
+			oses:   []string{"windows"},
+			arches: psArchValues(t, repoFile(t, "install.ps1")),
+		},
 	}
 
 	for _, inst := range installers {
@@ -171,6 +178,63 @@ func shellCaseValues(t *testing.T, src, prefix string) []string {
 		out = append(out, g[1])
 	}
 	return out
+}
+
+// psArchValues pulls the architectures out of install.ps1's switch, e.g.
+// `'ARM64' { $Arch = 'arm64' }`.
+func psArchValues(t *testing.T, src string) []string {
+	t.Helper()
+	re := regexp.MustCompile(`\$Arch\s*=\s*'([a-z0-9_]+)'`)
+	m := re.FindAllStringSubmatch(src, -1)
+	if len(m) == 0 {
+		t.Fatal("no $Arch assignments found in install.ps1 — restructured, and this " +
+			"guard is no longer reading what it thinks it is")
+	}
+	var out []string
+	for _, g := range m {
+		out = append(out, g[1])
+	}
+	return out
+}
+
+// install.ps1 is the Windows counterpart to install.sh. It must verify
+// checksums and fail closed on a checksums.txt that omits the archive — the
+// #241 hole, and the one behaviour every other installer already shares.
+func TestInstallPs1_VerifiesChecksumsAndFailsClosed(t *testing.T) {
+	src := repoFile(t, "install.ps1")
+
+	if !strings.Contains(src, "Get-FileHash") || !strings.Contains(src, "SHA256") {
+		t.Error("install.ps1 does not compute a SHA256 of what it downloaded")
+	}
+	if !strings.Contains(src, "is not listed in checksums.txt") {
+		t.Error("install.ps1 does not fail closed when checksums.txt omits the archive — " +
+			"that is #241, and every other installer already refuses this case")
+	}
+	if !strings.Contains(src, "checksum mismatch") {
+		t.Error("install.ps1 does not fail on a checksum mismatch")
+	}
+	// Per-user install: an installer that demands elevation for a CLI is a
+	// worse default than one that asks the user to extend PATH.
+	//
+	// Matched on the environment variable rather than the prose "Program
+	// Files", which appears in the script's own comment explaining why it is
+	// not used — the first version of this check failed on that comment, which
+	// is a fair reminder that a substring is not a usage.
+	if regexp.MustCompile(`\$env:ProgramFiles|\$env:ProgramW6432`).MatchString(src) {
+		t.Error("install.ps1 installs under Program Files, which needs elevation")
+	}
+	// PATH must be written at User scope only; Machine needs admin and changes
+	// the environment for everyone on the box.
+	if strings.Contains(src, "'Machine'") {
+		t.Error("install.ps1 writes an environment variable at Machine scope")
+	}
+	if !strings.Contains(src, "LOCALAPPDATA") {
+		t.Error("install.ps1 does not default to a per-user location")
+	}
+	// It must request the zip; Windows archives are not tar.gz.
+	if !strings.Contains(src, ".zip") {
+		t.Error("install.ps1 does not request a .zip")
+	}
 }
 
 // The archive extension must match goreleaser's format_overrides, or the

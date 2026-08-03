@@ -52,10 +52,11 @@ brew install ankit373/hydra/hyctl                                               
 npm install -g hyctl                                                              # npm
 npx hyctl                                                                         # npx (no install)
 pip install hyctl                                                                 # pip
-curl -fsSL https://raw.githubusercontent.com/ankit373/hydra/main/install.sh | sh  # standalone
+curl -fsSL https://raw.githubusercontent.com/ankit373/hydra/main/install.sh | sh  # standalone (macOS/Linux)
+irm https://raw.githubusercontent.com/ankit373/hydra/main/install.ps1 | iex        # standalone (Windows)
 ```
 
-Platform support: `hyctl` is built for macOS, Linux and Windows on both x86-64 and ARM64 — six targets, every release. Homebrew covers macOS and Linux; npm/npx and pip cover all three OSes; `install.sh` covers macOS and Linux (there is no PowerShell installer yet, so on Windows use npm, pip, or the archive directly). The desktop app ships for macOS (universal), Windows x86-64 and Linux x86-64; ARM64 desktop builds are not yet available.
+Platform support: `hyctl` is built for macOS, Linux and Windows on both x86-64 and ARM64 — six targets, every release. Homebrew covers macOS and Linux; npm/npx and pip cover all three OSes; `install.sh` covers macOS and Linux and `install.ps1` covers Windows (per-user, no admin rights; both verify the release checksum). The desktop app ships for macOS (universal), Windows x86-64 and Linux x86-64; ARM64 desktop builds are not yet available.
 
 Or build from source (requires Go 1.22+):
 
