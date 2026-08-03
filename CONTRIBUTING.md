@@ -10,6 +10,7 @@ Thank you for taking the time to contribute! This document explains how to get s
 - [Ways to Contribute](#ways-to-contribute)
 - [Development Setup](#development-setup)
 - [Making Changes](#making-changes)
+- [The Regression Contract](#the-regression-contract)
 - [Commit Style](#commit-style)
 - [Pull Request Process](#pull-request-process)
 - [Shell Script Standards](#shell-script-standards)
@@ -84,9 +85,17 @@ No secrets or API keys are needed just to browse, modify, or test the routing lo
    ```bash
    gofmt -l ./cmd ./internal        # must print nothing
    go vet ./... && go build ./...
-   go test ./... -race
+   go test ./... -race -count=1     # -count=1: Go caches results, and a cached
+                                    # PASS from before your change looks identical
    staticcheck ./...                # go install honnef.co/go/tools/cmd/staticcheck@2026.1
    shellcheck --severity=error install.sh
+   ```
+   CI runs that suite on **Linux, macOS and Windows**, and separately builds and
+   vets all six release targets (`darwin`/`linux`/`windows` × `amd64`/`arm64`).
+   You only have one of those locally, so if you touch anything that reads a
+   path, spawns a process, or checks a file mode, cross-compile before you push:
+   ```bash
+   GOOS=windows GOARCH=arm64 go build ./... && GOOS=windows GOARCH=arm64 go vet ./...
    ```
 4. Test manually:
    ```bash
@@ -94,6 +103,100 @@ No secrets or API keys are needed just to browse, modify, or test the routing lo
    go run ./cmd/hydra dispatch --dry-run --enum SIMPLE "add a helper"
    ```
 5. Commit and push, then open a pull request against `develop`.
+
+---
+
+## The Regression Contract
+
+Most of Hydra's tests are **regression contracts**: they pin behaviour that is
+already correct, so a change either preserves it or goes red with an
+explanation. They are not there to describe new features — they are there so
+that you, working on one corner of the router, find out immediately when you
+have changed something in another corner that someone depends on.
+
+If a contract test fails on your branch, the default assumption is that **the
+behaviour changed and that is the finding**, not that the test is stale.
+
+### Writing one
+
+Four rules, in order of how often they matter:
+
+**1. Assert the contract, not the implementation.** Test observable behaviour —
+CLI output and exit codes, on-disk file shapes, exported API. If your test
+would fail on a pure rename, it is pinning the wrong thing and it will be
+deleted the first time someone refactors.
+
+**2. Be hermetic.** Use `testutil.NewSandbox(t)`. It gives the test a private
+home directory, a private `$HYDRA_HOME`, an empty `$PATH` and no provider
+credentials, so a contributor with no Ollama, no API keys and no `agy` gets
+byte-identical results to CI and to a maintainer whose laptop has all three.
+
+```go
+s := testutil.NewSandbox(t)
+s.FakeBinary(t, "ollama")            // this machine "has" ollama, and only ollama
+s.SetKey(t, "ANTHROPIC_API_KEY", "k") // …and exactly one API head
+```
+
+Discovery tests especially: that layer's whole job is reporting what is
+installed, so it is the layer most likely to report *your* machine instead of
+the fixture.
+
+**3. Be deterministic.** No wall-clock comparisons, no map-iteration order, no
+randomness in assertions. Sort explicitly before comparing. If you need a
+timestamp or a duration in output, let `testutil.Golden` normalise it.
+
+**4. Parametrise by platform; do not skip.** Hydra ships for macOS, Linux and
+Windows on x86-64 and ARM64, and CI runs the suite on all three OSes. A
+`t.Skip("not on windows")` hides exactly the class of bug that matters — the
+snapshot-permission and heartbeat bugs (#273, #274) were both found the day the
+Windows leg was switched on. Where a guarantee genuinely differs by platform,
+assert the platform's own mechanism:
+
+```go
+if runtime.GOOS == "windows" {
+    // A FileMode only toggles the read-only bit here; the ACL on the user's
+    // profile is the real protection, so assert containment instead.
+    ...
+    continue
+}
+if info.Mode().Perm()&0o077 != 0 { ... }
+```
+
+A skip needs a one-line reason, and the total number of them is budgeted — see
+the coverage gate.
+
+### Golden files
+
+`testutil.Golden(t, "name", got, tempPaths...)` compares against
+`testdata/name.golden` after normalising machine-specific values (temp paths,
+versions, SHAs, timestamps, durations, path separators, line endings).
+
+Re-bless with:
+```bash
+go test ./internal/somepkg -run TestName -update
+```
+
+**Re-blessing is legitimate when you meant to change the output. It is the bug
+when you did not.** The failure message prints both versions and the first
+differing line so you can tell which case you are in — read it before running
+`-update`. A PR that re-blesses a golden should say in its description why the
+output changed.
+
+### Verifying that a test can actually fail
+
+A regression test that cannot fail is worse than no test, because it reads as
+coverage. Before you rely on one, break the thing it guards and confirm it goes
+red:
+
+```bash
+# make the change you expect to be caught, then:
+go test ./internal/somepkg -count=1     # must FAIL
+# revert, then:
+go test ./internal/somepkg -count=1     # must PASS
+```
+
+`-count=1` is required — Go caches test results, and a cached PASS from before
+your change looks identical to a real one.
 
 ---
 
