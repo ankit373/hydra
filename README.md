@@ -16,7 +16,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-8b5cf6.svg)](LICENSE)
 [![Go 1.24](https://img.shields.io/badge/Go-1.24-00ADD8?logo=go&logoColor=white)](go.mod)
-[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey?logo=apple)](https://hydra.uvansa.com)
+[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey)](https://hydra.uvansa.com#platform-support)
 [![GitHub Stars](https://img.shields.io/github/stars/ankit373/hydra?style=flat&color=8b5cf6)](https://github.com/ankit373/hydra/stargazers)
 [![GitHub Issues](https://img.shields.io/github/issues/ankit373/hydra?color=06b6d4)](https://github.com/ankit373/hydra/issues)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
@@ -419,6 +419,24 @@ curl -fsSL https://raw.githubusercontent.com/ankit373/hydra/main/install.sh | sh
 ```
 
 **Prebuilt binaries** — download from [github.com/ankit373/hydra/releases](https://github.com/ankit373/hydra/releases).
+
+#### Platform support
+
+Every release builds `hyctl` for all six targets below. This table is kept in step with
+`.goreleaser.yaml`'s build matrix — if a row is here, an artifact exists for it.
+
+| OS | x86-64 | ARM64 | Homebrew | npm / npx | pip | `install.sh` |
+|---|:--:|:--:|:--:|:--:|:--:|:--:|
+| macOS | ✅ | ✅ (Apple Silicon) | ✅ | ✅ | ✅ | ✅ |
+| Linux | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Windows | ✅ | ✅ | — | ✅ | ✅ | — |
+
+Windows has no Homebrew and no `curl \| sh` path — use npm or pip, or download the archive
+directly. A PowerShell installer is [tracked separately](https://github.com/ankit373/hydra/issues/264).
+
+The **desktop app** ships for macOS (universal), Windows x86-64 and Linux x86-64. ARM64 desktop
+builds are [not yet available](https://github.com/ankit373/hydra/issues/263) — the CLI covers ARM64
+on all three OSes.
 
 **From source** (Go 1.22+):
 ```bash
