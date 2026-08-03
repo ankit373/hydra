@@ -5,6 +5,7 @@ package sysinfo
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"runtime"
 	"strconv"
@@ -206,14 +207,19 @@ func (s *Specs) computePressure() Pressure {
 
 // ── macOS ─────────────────────────────────────────────────────────────────────
 
+// darwinRAM returns total RAM in GB, or 0 if it could not be read.
+//
+// Like linuxRAM, this used to return a hardcoded 8 on failure. Fixing one and
+// leaving the other would leave the same fabricated number in the same family
+// of functions, which is how a defect class survives its own fix.
 func darwinRAM() float64 {
 	out, err := exec.Command("sysctl", "-n", "hw.memsize").Output()
 	if err != nil {
-		return 8
+		return 0
 	}
 	bytes, err := strconv.ParseInt(strings.TrimSpace(string(out)), 10, 64)
 	if err != nil {
-		return 8
+		return 0
 	}
 	return float64(bytes) / (1 << 30)
 }
@@ -303,32 +309,65 @@ func darwinGPUVRAM() (float64, string) {
 
 // ── Linux ─────────────────────────────────────────────────────────────────────
 
-func linuxRAM() float64 {
-	out, err := exec.Command("grep", "MemTotal", "/proc/meminfo").Output()
-	if err != nil {
-		return 8
+// meminfoPath is the kernel's memory summary. A var so tests can point the
+// readers at a fixture instead of the host's real memory, which is neither
+// deterministic nor present off Linux.
+var meminfoPath = "/proc/meminfo"
+
+// parseMeminfo returns the named /proc/meminfo fields converted from kB to GB.
+// Fields that are absent or unparsable are simply missing from the result, so a
+// caller can tell "not present" from "zero" — a distinction the old
+// `grep | Fields` pipeline collapsed.
+//
+// Kept as a pure function over a string so it is testable against a fixture on
+// every OS, not only on Linux.
+func parseMeminfo(content string) map[string]float64 {
+	out := make(map[string]float64, 2)
+	for _, line := range strings.Split(content, "\n") {
+		// Format is "MemTotal:       16007748 kB" — name, value, unit.
+		name, rest, found := strings.Cut(line, ":")
+		if !found {
+			continue
+		}
+		fields := strings.Fields(rest)
+		if len(fields) == 0 {
+			continue
+		}
+		kb, err := strconv.ParseFloat(fields[0], 64)
+		if err != nil {
+			continue
+		}
+		// The unit must be present and must be kB. Every memory field in
+		// /proc/meminfo carries it; the ones that do not are counts, not sizes
+		// (HugePages_Total is a bare "0"), and reading those as gigabytes would
+		// be silent nonsense.
+		if len(fields) < 2 || !strings.EqualFold(fields[1], "kB") {
+			continue
+		}
+		out[name] = kb / (1 << 20)
 	}
-	fields := strings.Fields(string(out))
-	if len(fields) < 2 {
-		return 8
-	}
-	kb, _ := strconv.ParseFloat(fields[1], 64)
-	return kb / (1 << 20)
+	return out
 }
 
-func linuxFreeRAM() float64 {
-	// MemAvailable is a kernel estimate of how much can be freed without swapping.
-	out, err := exec.Command("grep", "MemAvailable", "/proc/meminfo").Output()
+func readMeminfo() map[string]float64 {
+	raw, err := os.ReadFile(meminfoPath)
 	if err != nil {
-		return 0
+		return nil
 	}
-	fields := strings.Fields(string(out))
-	if len(fields) < 2 {
-		return 0
-	}
-	kb, _ := strconv.ParseFloat(fields[1], 64)
-	return kb / (1 << 20)
+	return parseMeminfo(string(raw))
 }
+
+// linuxRAM returns total RAM in GB, or 0 if it could not be read.
+//
+// It used to return a hardcoded 8 on failure — a number no one measured,
+// presented as a reading, which then flowed into model-fit recommendations. 0
+// routes through HardwareKnown to PressureUnknown instead, so an unreadable
+// machine is reported as unreadable (#261, same class as #258).
+func linuxRAM() float64 { return readMeminfo()["MemTotal"] }
+
+// linuxFreeRAM returns MemAvailable — the kernel's own estimate of how much can
+// be reclaimed without swapping — in GB, or 0 if it could not be read.
+func linuxFreeRAM() float64 { return readMeminfo()["MemAvailable"] }
 
 func nvidiaVRAM() (float64, string) {
 	out, err := exec.Command("nvidia-smi",
