@@ -207,14 +207,19 @@ func (s *Specs) computePressure() Pressure {
 
 // ── macOS ─────────────────────────────────────────────────────────────────────
 
+// darwinRAM returns total RAM in GB, or 0 if it could not be read.
+//
+// Like linuxRAM, this used to return a hardcoded 8 on failure. Fixing one and
+// leaving the other would leave the same fabricated number in the same family
+// of functions, which is how a defect class survives its own fix.
 func darwinRAM() float64 {
 	out, err := exec.Command("sysctl", "-n", "hw.memsize").Output()
 	if err != nil {
-		return 8
+		return 0
 	}
 	bytes, err := strconv.ParseInt(strings.TrimSpace(string(out)), 10, 64)
 	if err != nil {
-		return 8
+		return 0
 	}
 	return float64(bytes) / (1 << 30)
 }
