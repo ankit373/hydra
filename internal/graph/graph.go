@@ -330,3 +330,22 @@ func (g *Graph) NodesInFile(file string) []string {
 	}
 	return g.filesToNodes[file]
 }
+
+// Empty reports whether the graph holds no nodes at all — which is what Load
+// returns when graph.json is absent.
+//
+// Callers that *present* results need this. Degrading a missing graph to a
+// blast radius of 1.0 is the right library behaviour, but a UI that prints that
+// default as "subcritical — edits stay local" is making an affirmative safety
+// claim from no data, and it silently lowered the confidence bar on files that
+// are genuinely cascade risks (#251).
+func (g *Graph) Empty() bool {
+	return g == nil || len(g.degree) == 0
+}
+
+// Knows reports whether the graph contains the given file. A false here means a
+// blast radius of 1.0 is a default, not a measurement — the file may be
+// misspelled, outside the indexed tree, or simply not indexed yet.
+func (g *Graph) Knows(file string) bool {
+	return len(g.seedsForFile(file)) > 0
+}

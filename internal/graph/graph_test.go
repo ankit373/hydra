@@ -242,3 +242,44 @@ func TestLoad_RoundTrip(t *testing.T) {
 		t.Errorf("loaded DependentCount(a) = %d, want 1", got)
 	}
 }
+
+// A blast radius of 1.0 means either "nothing depends on this" or "I have no
+// idea", and those are opposite conclusions. Before #251 they rendered
+// identically: internal/a2a reported 6 dependents and 97.4% required confidence
+// with a graph, and "subcritical — edits stay local" at 90.0% without one.
+// Empty and Knows are what let a UI tell a default from a measurement.
+func TestEmptyAndKnows_DistinguishNoDataFromNoDependents(t *testing.T) {
+	missing, err := Load(filepath.Join(t.TempDir(), "absent.json"))
+	if err != nil {
+		t.Fatalf("Load of a missing graph should not error: %v", err)
+	}
+	if !missing.Empty() {
+		t.Error("a graph loaded from a missing file reports Empty() = false")
+	}
+	if missing.Knows("internal/a2a") {
+		t.Error("an empty graph claims to know a file")
+	}
+	// The degraded radius itself is unchanged — that contract is deliberate.
+	if got := missing.BlastRadiusForFile("internal/a2a"); got != 1.0 {
+		t.Errorf("BlastRadiusForFile on an empty graph = %v, want 1.0", got)
+	}
+
+	populated := fromDoc(Doc{
+		Nodes: []Node{{ID: "a", File: "a.go"}, {ID: "b", File: "b.go"}},
+		Edges: []Edge{{From: "b", To: "a"}},
+	})
+	if populated.Empty() {
+		t.Error("a graph with nodes reports Empty() = true")
+	}
+	if !populated.Knows("a.go") {
+		t.Error("Knows(a.go) = false for an indexed file")
+	}
+	// An unindexed file in a real graph is still a default, not a measurement —
+	// the case a typo or a stale index produces.
+	if populated.Knows("typo.go") {
+		t.Error("Knows(typo.go) = true for a file that is not in the graph")
+	}
+	if got := populated.BlastRadiusForFile("typo.go"); got != 1.0 {
+		t.Errorf("unknown file radius = %v, want the 1.0 default", got)
+	}
+}
