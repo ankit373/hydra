@@ -68,11 +68,43 @@ func buildInstallOptions(specs *sysinfo.Specs) []installOption {
 	}
 }
 
-func ollamaInstallCmd() string {
-	if runtime.GOOS == "darwin" {
+// ollamaInstallCmd returns the vendor-documented install command for this OS.
+//
+// The Windows branch is not a guess: ollama.com/download/windows documents
+// `irm https://ollama.com/install.ps1 | iex` and offers no winget package, so
+// the command is PowerShell and must be run by PowerShell — which is why
+// runInstallCmd dispatches on the shell rather than assuming cmd.exe.
+//
+// Before #259 this returned the POSIX curl pipeline on every non-darwin OS,
+// and runInstallCmd handed it to `sh`, which stock Windows does not have.
+func ollamaInstallCmd() string { return ollamaInstallCmdFor(runtime.GOOS) }
+
+// shellFor returns the argv prefix that runs a shell command line on this OS.
+func shellFor(cmd string) []string { return shellForOS(runtime.GOOS, cmd) }
+
+// The two functions below take goos explicitly rather than reading runtime.GOOS
+// so every platform's decision is testable from every platform. That matters
+// here: the bug being fixed only manifests on Windows, so a test that could
+// only exercise the running OS would have passed on the broken version
+// everywhere except the one machine nobody ran it on (#259).
+func ollamaInstallCmdFor(goos string) string {
+	switch goos {
+	case "darwin":
 		return "brew install ollama"
+	case "windows":
+		return "irm https://ollama.com/install.ps1 | iex"
+	default:
+		return "curl -fsSL https://ollama.com/install.sh | sh"
 	}
-	return "curl -fsSL https://ollama.ai/install.sh | sh"
+}
+
+func shellForOS(goos, cmd string) []string {
+	if goos == "windows" {
+		// -NoProfile so a user's profile cannot alter the command; -Command
+		// takes a command line, matching what ollamaInstallCmdFor produces.
+		return []string{"powershell", "-NoProfile", "-NonInteractive", "-Command", cmd}
+	}
+	return []string{"sh", "-lc", cmd}
 }
 
 // ── Steps ─────────────────────────────────────────────────────────────────────
@@ -202,10 +234,31 @@ func runInstallCmd(cmd string) tea.Cmd {
 		if strings.TrimSpace(cmd) == "" {
 			return installDoneMsg{}
 		}
-		c := exec.Command("sh", "-lc", cmd)
-		_, err := c.CombinedOutput()
+		argv := shellFor(cmd)
+		c := exec.Command(argv[0], argv[1:]...)
+		out, err := c.CombinedOutput()
+		if err != nil {
+			// The shell's own output is the only thing that explains *why* an
+			// install failed. Discarding it — as this did — left the user with
+			// a bare exit status and nothing to act on.
+			if msg := lastMeaningfulLine(string(out)); msg != "" {
+				return installDoneMsg{err: fmt.Errorf("%s: %s", err, msg)}
+			}
+		}
 		return installDoneMsg{err: err}
 	}
+}
+
+// lastMeaningfulLine returns the final non-blank line of command output, which
+// for an installer is almost always the error worth showing.
+func lastMeaningfulLine(out string) string {
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		if l := strings.TrimSpace(lines[i]); l != "" {
+			return l
+		}
+	}
+	return ""
 }
 
 // ── View ──────────────────────────────────────────────────────────────────────
