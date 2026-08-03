@@ -174,6 +174,44 @@ jobs:
         run: |
           shellcheck --severity=error install.sh
 
+  # install.ps1's counterpart to the shellcheck job above. It runs on Windows
+  # because that is where PowerShell's own parser lives — and because nobody
+  # developing this repo on macOS or Linux can otherwise tell whether the
+  # installer even parses, let alone works (#264).
+  powershell:
+    name: PowerShell lint
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # A parse error is the failure that matters most: install.ps1 is piped
+      # straight into `iex`, so a syntax error reaches users as a wall of
+      # PowerShell noise mid-install.
+      - name: Parse install.ps1
+        shell: pwsh
+        run: |
+          $errs = $null
+          $null = [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path ./install.ps1), [ref]$null, [ref]$errs)
+          if ($errs) {
+            $errs | ForEach-Object { Write-Host "::error::$($_.Extent.StartLineNumber): $($_.Message)" }
+            exit 1
+          }
+          Write-Host "install.ps1 parses cleanly"
+
+      - name: PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          Install-Module -Name PSScriptAnalyzer -Force -Scope CurrentUser -ErrorAction Stop
+          $results = Invoke-ScriptAnalyzer -Path ./install.ps1 -Severity Error,Warning
+          if ($results) {
+            $results | Format-Table -AutoSize | Out-String | Write-Host
+            # Errors block; warnings are surfaced, matching shellcheck's policy
+            # of --severity=error above.
+            if ($results | Where-Object { $_.Severity -eq 'Error' }) { exit 1 }
+          }
+          Write-Host "PSScriptAnalyzer: no errors"
+
   typecheck:
     name: TypeScript typecheck
     runs-on: ubuntu-latest
