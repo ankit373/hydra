@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/ankit373/hydra/internal/config"
+	"github.com/ankit373/hydra/internal/diff"
 	"github.com/ankit373/hydra/internal/dispatch"
 	"github.com/ankit373/hydra/internal/util"
 	"github.com/ankit373/hydra/internal/workspace"
@@ -407,16 +408,16 @@ func diffStats(file, origContent, gitRoot, backup string, origExisted bool) (add
 		}
 	}
 	if fileExists(backup) {
-		out, err := exec.Command("diff", "-u", backup, file).CombinedOutput()
-		_ = err
-		for _, l := range strings.Split(string(out), "\n") {
-			if strings.HasPrefix(l, "+") && !strings.HasPrefix(l, "+++") {
-				added++
-			} else if strings.HasPrefix(l, "-") && !strings.HasPrefix(l, "---") {
-				removed++
-			}
+		// From the edit script, not by re-parsing diff(1)'s text. The `_ = err`
+		// here was the tell: the error was captured and deliberately dropped,
+		// so a missing diff(1) counted zero lines in empty output and reported
+		// a modified file as 0/0 (#260).
+		before, errBefore := os.ReadFile(backup)
+		after, errAfter := os.ReadFile(file)
+		if errBefore == nil && errAfter == nil {
+			added, removed = diff.Stats(before, after)
+			return
 		}
-		return
 	}
 	newLines := strings.Count(readFileLines(file), "\n")
 	origLines := 0

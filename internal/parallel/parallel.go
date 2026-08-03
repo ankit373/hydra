@@ -18,6 +18,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/ankit373/hydra/internal/config"
+	"github.com/ankit373/hydra/internal/diff"
 	"github.com/ankit373/hydra/internal/dispatch"
 	"github.com/ankit373/hydra/internal/policy"
 	"github.com/ankit373/hydra/internal/runid"
@@ -548,15 +549,15 @@ func diffStats(file, origContent, gitRoot, backup string, origExisted bool) (add
 		}
 	}
 	if fileExists(backup) {
-		out, _ := exec.Command("diff", "-u", backup, file).CombinedOutput()
-		for _, l := range strings.Split(string(out), "\n") {
-			if strings.HasPrefix(l, "+") && !strings.HasPrefix(l, "+++") {
-				added++
-			} else if strings.HasPrefix(l, "-") && !strings.HasPrefix(l, "---") {
-				removed++
-			}
+		// From the edit script, not by re-parsing diff(1)'s text: with no
+		// diff(1) on PATH the old code counted zero lines in empty output and
+		// reported a modified file as 0/0 (#260).
+		before, errBefore := os.ReadFile(backup)
+		after, errAfter := os.ReadFile(file)
+		if errBefore == nil && errAfter == nil {
+			added, removed = diff.Stats(before, after)
+			return
 		}
-		return
 	}
 	newContent, _ := os.ReadFile(file)
 	newLines := strings.Count(string(newContent), "\n")

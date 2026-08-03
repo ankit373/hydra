@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/ankit373/hydra/internal/config"
+	"github.com/ankit373/hydra/internal/diff"
 	"github.com/ankit373/hydra/internal/dispatch"
 	"github.com/ankit373/hydra/internal/workspace"
 )
@@ -128,8 +129,19 @@ func Diff(file string) (string, error) {
 
 	backup := file + ".hydra-bak"
 	if fileExists(backup) {
-		out, _ := exec.Command("diff", "-u", backup, file).CombinedOutput()
-		return string(out), nil
+		// Both reads must succeed. This used to shell out to diff(1) and
+		// discard the error, so a missing binary or an unreadable file
+		// produced ("", nil) — a blank diff a reviewer would read as "no
+		// changes" and approve (#260).
+		before, err := os.ReadFile(backup)
+		if err != nil {
+			return "", fmt.Errorf("reading backup for %s: %w", file, err)
+		}
+		after, err := os.ReadFile(file)
+		if err != nil {
+			return "", fmt.Errorf("reading %s: %w", file, err)
+		}
+		return diff.Unified(backup, file, before, after), nil
 	}
 
 	return "", fmt.Errorf("no diff available for %s (no git root, no backup)", file)
@@ -283,14 +295,15 @@ func numstat(file, gitRoot string) (added, removed int, status string) {
 
 	backup := file + ".hydra-bak"
 	if fileExists(backup) {
-		out, _ := exec.Command("diff", "-u", backup, file).CombinedOutput()
-		for _, l := range strings.Split(string(out), "\n") {
-			if strings.HasPrefix(l, "+") && !strings.HasPrefix(l, "+++") {
-				added++
-			} else if strings.HasPrefix(l, "-") && !strings.HasPrefix(l, "---") {
-				removed++
-			}
+		// Counted from the edit script rather than by re-parsing diff(1)'s
+		// text. Without diff(1) on PATH the old code counted zero lines in an
+		// empty output and reported a modified file as 0/0 (#260).
+		before, errBefore := os.ReadFile(backup)
+		after, errAfter := os.ReadFile(file)
+		if errBefore != nil || errAfter != nil {
+			return 0, 0, "no_baseline"
 		}
+		added, removed = diff.Stats(before, after)
 		return added, removed, "modified"
 	}
 
