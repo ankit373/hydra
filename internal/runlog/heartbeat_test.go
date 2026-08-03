@@ -93,23 +93,45 @@ func TestStaleAfter_ToleratesMissedTicks(t *testing.T) {
 	}
 }
 
+// The whole liveness design rests on mtime advancing: IsAlive is
+// now-ModTime <= StaleAfter, so a marker that never moves ages out and every
+// running agent reports dead.
+//
+// Polled rather than asserted after one fixed sleep (#274). Windows' system
+// clock and timer granularity are both ~15.6ms, so a single 60ms window is
+// within noise there — and a flaky assertion on a real invariant is worse than
+// no assertion, because it gets deleted. Polling keeps the invariant exact (it
+// still fails if the heartbeat genuinely stops) while removing the dependency on
+// how coarse the platform's clock is. On failure it prints the observed
+// timestamps, so CI reports what actually happened instead of a bare verdict.
 func TestHeartbeat_KeepsMarkerFresh(t *testing.T) {
 	tempHome(t)
-	h := StartHeartbeat(context.Background(), "run-fresh", 10*time.Millisecond)
+	const interval = 10 * time.Millisecond
+	h := StartHeartbeat(context.Background(), "run-fresh", interval)
 	defer h.Stop()
 
 	first, err := os.Stat(HeartbeatPath("run-fresh"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(60 * time.Millisecond)
-	second, err := os.Stat(HeartbeatPath("run-fresh"))
-	if err != nil {
-		t.Fatal(err)
+
+	deadline := time.Now().Add(3 * time.Second)
+	var last time.Time
+	for time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+		cur, err := os.Stat(HeartbeatPath("run-fresh"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		last = cur.ModTime()
+		if last.After(first.ModTime()) {
+			return
+		}
 	}
-	if !second.ModTime().After(first.ModTime()) {
-		t.Error("marker mtime did not advance — the heartbeat is not ticking")
-	}
+	t.Errorf("marker mtime did not advance in 3s at a %v interval — the heartbeat is not ticking.\n"+
+		"  first = %s\n  last  = %s\n  delta = %v",
+		interval, first.ModTime().Format(time.RFC3339Nano), last.Format(time.RFC3339Nano),
+		last.Sub(first.ModTime()))
 }
 
 func TestHeartbeat_StopIsIdempotentAndRemovesMarker(t *testing.T) {
