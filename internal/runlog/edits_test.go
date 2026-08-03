@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -113,7 +114,15 @@ func TestLoadEdit_PartialPairIsMissing(t *testing.T) {
 }
 
 // Snapshots are verbatim copies of the user's source, so they must not be
-// world-readable.
+// readable by other users.
+//
+// The mechanism differs by platform and the test follows it rather than
+// skipping (#273). On Unix the guarantee is the 0600 mode SaveEdit sets. On
+// Windows a FileMode only toggles the read-only attribute — 0600 becomes 0666 —
+// so the mode proves nothing there, and the actual protection is the ACL on the
+// user's profile directory. Asserting containment under the home directory is
+// what makes that guarantee non-vacuous: it is exactly the property that would
+// break if snapshots ever moved to a shared or temp location.
 func TestSaveEdit_SnapshotsAreNotWorldReadable(t *testing.T) {
 	home := editSandbox(t)
 
@@ -132,6 +141,24 @@ func TestSaveEdit_SnapshotsAreNotWorldReadable(t *testing.T) {
 		info, err := e.Info()
 		if err != nil {
 			t.Fatal(err)
+		}
+		if runtime.GOOS == "windows" {
+			// Mode bits carry no access information here; assert the mechanism
+			// that does. filepath.EvalSymlinks resolves the 8.3/symlinked temp
+			// paths Windows hands out, which would otherwise defeat the compare.
+			got, err := filepath.EvalSymlinks(filepath.Join(dir, e.Name()))
+			if err != nil {
+				t.Fatal(err)
+			}
+			want, err := filepath.EvalSymlinks(home)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.HasPrefix(got, want) {
+				t.Errorf("%s resolved to %s, outside the user profile %s; on Windows that ACL is "+
+					"the only thing protecting a verbatim copy of the user's source", e.Name(), got, want)
+			}
+			continue
 		}
 		if info.Mode().Perm()&0o077 != 0 {
 			t.Errorf("%s has mode %v; snapshots hold the user's source verbatim", e.Name(), info.Mode().Perm())
