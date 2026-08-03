@@ -18,15 +18,30 @@ const (
 	PressureLow      Pressure = iota // plenty of headroom
 	PressureModerate                 // usable but getting tight
 	PressureHigh                     // constrained; only small models safe
+	// PressureUnknown means detection failed — no reading was taken.
+	//
+	// Appended rather than inserted so the three values above keep their
+	// numbering. It exists because the alternative is worse than useless:
+	// computePressure used to return PressureLow whenever TotalRAMGB was 0,
+	// so a platform with no detection path (every Windows machine, until this
+	// change) reported the single most permissive verdict from no data at all,
+	// while Summary said "0GB RAM · memory fully occupied" in the same breath.
+	// A default must never be rendered as a measurement (#251, #258).
+	PressureUnknown
 )
 
 func (p Pressure) String() string {
-	names := [...]string{"low", "moderate", "high"}
+	names := [...]string{"low", "moderate", "high", "unknown"}
 	if p < 0 || int(p) >= len(names) {
 		return "unknown"
 	}
 	return names[p]
 }
+
+// HardwareKnown reports whether Detect actually read this machine's memory. When
+// false, every memory-derived field is a placeholder and callers must not
+// present it as a measurement or rank models against it.
+func (s *Specs) HardwareKnown() bool { return s != nil && s.TotalRAMGB > 0 }
 
 // Specs describes the hardware and current memory state relevant to AI model selection.
 type Specs struct {
@@ -89,6 +104,9 @@ func (s *Specs) bestFreeEstimate() float64 {
 
 // MemoryNote returns a human-readable explanation of the effective value.
 func (s *Specs) MemoryNote() string {
+	if !s.HardwareKnown() {
+		return unknownHardwareNote
+	}
 	eff := s.EffectiveVRAMGB()
 	switch {
 	case s.GPUVRAMGB > 0 && !s.IsAppleSilicon:
@@ -106,8 +124,20 @@ func (s *Specs) MemoryNote() string {
 	}
 }
 
+// Text shown wherever hardware could not be read. It says "unknown", not a
+// number, because the number would be 0 and every reader — human or code —
+// would take that as a measurement of an empty machine rather than an absence
+// of one (#258).
+const (
+	unknownHardwareSummary = "hardware unknown · could not read this machine's memory"
+	unknownHardwareNote    = "memory could not be detected on this platform — local model sizing is unavailable"
+)
+
 // Summary returns a one-line hardware description for display.
 func (s *Specs) Summary() string {
+	if !s.HardwareKnown() {
+		return unknownHardwareSummary
+	}
 	eff := s.EffectiveVRAMGB()
 	switch {
 	case s.IsAppleSilicon:
@@ -145,6 +175,9 @@ func Detect() *Specs {
 		s.TotalRAMGB = linuxRAM()
 		s.FreeRAMGB = linuxFreeRAM()
 		s.GPUVRAMGB, s.GPUName = nvidiaVRAM()
+	case "windows":
+		s.TotalRAMGB, s.FreeRAMGB = windowsMemory()
+		s.GPUVRAMGB, s.GPUName = nvidiaVRAM() // nvidia-smi ships on Windows too
 	}
 
 	s.History = LoadHistory()
@@ -154,8 +187,11 @@ func Detect() *Specs {
 }
 
 func (s *Specs) computePressure() Pressure {
+	// No reading was taken. Reporting PressureLow here — as this did until
+	// #258 — is an affirmative "plenty of headroom" claim derived from nothing,
+	// and it is the most permissive verdict the type can express.
 	if s.TotalRAMGB == 0 {
-		return PressureLow
+		return PressureUnknown
 	}
 	ratio := s.EffectiveVRAMGB() / s.TotalRAMGB
 	switch {
