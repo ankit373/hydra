@@ -273,13 +273,21 @@ a{color:inherit;text-decoration:none;}
   background:linear-gradient(90deg,var(--cyan),var(--violet),var(--magenta));-webkit-background-clip:text;background-clip:text;
   color:transparent;margin-bottom:7px;}
 .deep .db{font-size:11px;color:var(--dim);letter-spacing:.5px;line-height:1.6;transition:opacity .15s ease-out;font-family:var(--mono);}
-.skip-intro{position:absolute;top:20px;left:50%;transform:translateX(-50%);z-index:3;pointer-events:auto;
+/* top must clear .topbar (position:sticky, top:0, height:52px, z-index:60).
+   At top:20px this pill sat entirely inside the bar's 0–52px band, and since
+   .hero-pin creates no stacking context above z-index 60, the bar painted over
+   it — background and backdrop-filter and all — so every click landed on the
+   topbar and "skip intro" did nothing. Kept below the bar rather than raised
+   above it: floating a hero control over the nav is the wrong fix. */
+.skip-intro{position:absolute;top:68px;left:50%;transform:translateX(-50%);z-index:3;pointer-events:auto;
   font-family:var(--mono);font-size:10.5px;letter-spacing:2px;text-transform:uppercase;color:var(--faint);
   border:1px solid var(--line);border-radius:20px;padding:6px 14px;transition:.15s;background:rgba(6,7,15,.4);}
 .skip-intro:hover{color:var(--aqua);border-color:var(--aqua);}
 .hero-buffer{height:14vh;}
 @media(max-width:720px){#hudLog,#hudTele,.hud-meta{display:none;}
-  .skip-intro{top:16px;}}
+  /* The topbar keeps its 52px height on mobile — only its nav is hidden — so
+     this still has to clear it. */
+  .skip-intro{top:64px;}}
 .hero-inner{position:relative;z-index:3;padding:0 24px 9vh;max-width:var(--maxw);margin:0 auto;width:100%;
   text-align:center;pointer-events:none;transition:opacity .12s linear;}
 .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:3.5px;text-transform:uppercase;color:var(--aqua);
