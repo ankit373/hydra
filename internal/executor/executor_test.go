@@ -3,6 +3,7 @@
 package executor
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/ankit373/hydra/internal/provider"
@@ -83,5 +84,43 @@ func typeName(v interface{}) string {
 		return "cli"
 	default:
 		return "unknown"
+	}
+}
+
+// The PATH-discovered Ollama head is the case that made probe and dispatch
+// disagree (#248): probe listed it, dispatch filtered it out, and the error
+// told the user to go look at probe. The reason must be actionable — "no
+// executor" would leave them no better off than before.
+func TestUnroutable_LocalBinaryWithoutAServerSaysWhatToDo(t *testing.T) {
+	// Exactly how internal/provider/cli registers it: {"ollama", "local", true}.
+	head := provider.Head{ID: "ollama", Name: "Ollama", Provider: "local", Source: "cli", LocalOnly: true}
+
+	why := Unroutable(head)
+	if why == "" {
+		t.Fatal("Unroutable = \"\" for a PATH-only ollama head; dispatch cannot drive it")
+	}
+	if !strings.Contains(why, "server") {
+		t.Errorf("reason %q does not mention the server the user needs to start", why)
+	}
+	if Supports(head) {
+		t.Error("Supports disagrees with Unroutable — the two must never diverge")
+	}
+}
+
+// Supports is defined as Unroutable == "", so this holds by construction today.
+// It is pinned because the previous shape — two functions each walking the same
+// branches — is exactly how a listing surface and a routing surface drift apart.
+func TestSupports_AlwaysAgreesWithUnroutable(t *testing.T) {
+	heads := []provider.Head{
+		{ID: "opus-thinking", Provider: "agy", Source: "registry"},
+		{ID: "ollama", Provider: "local", Source: "cli", LocalOnly: true},
+		{ID: "claude", Provider: "anthropic", Source: "cli"},
+		{ID: "mystery", Provider: "nobody", Source: "cli"},
+		{ID: "env/anthropic", Provider: "anthropic", Source: "env"},
+	}
+	for _, h := range heads {
+		if Supports(h) != (Unroutable(h) == "") {
+			t.Errorf("%s: Supports=%v but Unroutable=%q", h.ID, Supports(h), Unroutable(h))
+		}
 	}
 }

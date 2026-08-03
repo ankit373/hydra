@@ -140,7 +140,14 @@ jq '.claude_pct = 52' logs/state.json > logs/state.json.tmp && mv logs/state.jso
 ```
 
 **Same 70%/75%/80% rule applies to ALL delegated models** — `hyctl dispatch` enforces this via the budget governor + fallback chains.
-**Qwen (tier 10) is always the terminal fallback** — it runs locally so is always available regardless of API limits.
+**Local heads are tier 10, the terminal fallback** — they cost nothing, so `rank.UITier` puts any
+`LocalOnly` head at the cheapest tier regardless of its score, and API limits never apply to them.
+
+This holds only while a local head is actually **routable**. Ollama is discovered twice: as a binary
+on `$PATH` (not routable on its own — nothing can drive it) and, once its server answers on `:11434`,
+as one routable head per model via the port provider. With the server down there is no tier-10 head,
+and dispatch degrades to the cheapest routable head and says so. `hyctl probe` marks unroutable
+heads with `✗` and the reason (#248).
 
 ---
 
