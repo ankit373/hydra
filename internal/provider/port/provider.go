@@ -11,6 +11,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/ankit373/hydra/internal/capabilities"
@@ -21,9 +22,13 @@ func init() { provider.Register(&Provider{}) }
 
 var httpClient = &http.Client{Timeout: 2 * time.Second}
 
-// portService probes a specific port and returns discovered Heads.
+// portService probes a specific address and returns discovered Heads.
+//
+// addr is a host:port, not a bare port: $OLLAMA_HOST can move Ollama to another
+// host as well as another port, and a liveness check aimed at the wrong address
+// answers a different question than the probe that follows it (#282).
 type portService interface {
-	port() int
+	addr() string
 	probe(ctx context.Context, caps *capabilities.DB) ([]provider.Head, error)
 }
 
@@ -38,14 +43,18 @@ func (p *Provider) Discover(ctx context.Context) ([]provider.Head, error) {
 		return nil, err
 	}
 
+	// Base URLs are resolved here, once, and handed to the services — so a
+	// service can be constructed against a test server, and so the address the
+	// liveness dial uses is provably the same one the probe and the head's
+	// Endpoint use.
 	services := []portService{
-		&ollamaService{},
-		&lmStudioService{},
+		&ollamaService{base: provider.OllamaHost()},
+		&lmStudioService{base: defaultLMStudioHost},
 	}
 
 	var heads []provider.Head
 	for _, svc := range services {
-		if !isOpen(svc.port()) {
+		if !isOpen(svc.addr()) {
 			continue
 		}
 		found, err := svc.probe(ctx, caps)
@@ -57,8 +66,10 @@ func (p *Provider) Discover(ctx context.Context) ([]provider.Head, error) {
 	return heads, nil
 }
 
-func isOpen(port int) bool {
-	conn, err := net.DialTimeout("tcp", fmt.Sprintf("localhost:%d", port), 400*time.Millisecond)
+// isOpen is a cheap liveness check before the real probe, so a machine with
+// nothing listening does not pay the HTTP client's full timeout per service.
+func isOpen(addr string) bool {
+	conn, err := net.DialTimeout("tcp", addr, 400*time.Millisecond)
 	if err != nil {
 		return false
 	}
@@ -66,14 +77,33 @@ func isOpen(port int) bool {
 	return true
 }
 
+// hostPort extracts "host:port" from a base URL, supplying defaultPort when the
+// URL carries none. The dial and the HTTP probe must target the same place;
+// deriving one from the other is what keeps them in step.
+func hostPort(base string, defaultPort int) string {
+	u, err := url.Parse(base)
+	if err != nil || u.Host == "" {
+		return fmt.Sprintf("localhost:%d", defaultPort)
+	}
+	if u.Port() != "" {
+		return u.Host
+	}
+	return net.JoinHostPort(u.Hostname(), fmt.Sprintf("%d", defaultPort))
+}
+
 // ── Ollama ────────────────────────────────────────────────────────────────────
 
-type ollamaService struct{}
+// ollamaService is constructed with the base URL $OLLAMA_HOST resolves to.
+// This used to hardcode localhost:11434 while the executor honoured the
+// variable, so a user running Ollama on any other address had a working server
+// discovery could not see: no tier-10 head, and a silent degrade to a paid
+// one (#282).
+type ollamaService struct{ base string }
 
-func (s *ollamaService) port() int { return 11434 }
+func (s *ollamaService) addr() string { return hostPort(s.base, 11434) }
 
 func (s *ollamaService) probe(ctx context.Context, caps *capabilities.DB) ([]provider.Head, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost:11434/api/tags", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.base+"/api/tags", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -98,11 +128,14 @@ func (s *ollamaService) probe(ctx context.Context, caps *capabilities.DB) ([]pro
 	heads := make([]provider.Head, 0, len(payload.Models))
 	for _, m := range payload.Models {
 		heads = append(heads, provider.Head{
-			ID:        "ollama/" + m.Name,
-			Name:      m.Name + " (Ollama)",
-			Provider:  "local",
-			Source:    "port",
-			Endpoint:  "http://localhost:11434",
+			ID:       "ollama/" + m.Name,
+			Name:     m.Name + " (Ollama)",
+			Provider: "local",
+			Source:   "port",
+			// The address it was found at, not a constant. The executor dials
+			// this later, so a head discovered at one address and stamped with
+			// another fails at the point of use.
+			Endpoint:  s.base,
 			CapScore:  caps.ScoreOllama(m.Name),
 			LocalOnly: true,
 			AuthReady: true,
@@ -113,12 +146,18 @@ func (s *ollamaService) probe(ctx context.Context, caps *capabilities.DB) ([]pro
 
 // ── LM Studio ─────────────────────────────────────────────────────────────────
 
-type lmStudioService struct{}
+// defaultLMStudioHost is LM Studio's default server address. Unlike Ollama it
+// publishes no environment variable for relocating it, so there is nothing to
+// honour — but the base is still a field so the two services behave the same
+// way and both are testable against a stub server.
+const defaultLMStudioHost = "http://localhost:1234"
 
-func (s *lmStudioService) port() int { return 1234 }
+type lmStudioService struct{ base string }
+
+func (s *lmStudioService) addr() string { return hostPort(s.base, 1234) }
 
 func (s *lmStudioService) probe(ctx context.Context, caps *capabilities.DB) ([]provider.Head, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost:1234/v1/models", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.base+"/v1/models", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -147,7 +186,7 @@ func (s *lmStudioService) probe(ctx context.Context, caps *capabilities.DB) ([]p
 			Name:      m.ID + " (LM Studio)",
 			Provider:  "local",
 			Source:    "port",
-			Endpoint:  "http://localhost:1234",
+			Endpoint:  s.base,
 			CapScore:  caps.ScoreOllama(m.ID),
 			LocalOnly: true,
 			AuthReady: true,
