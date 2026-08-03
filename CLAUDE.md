@@ -475,7 +475,7 @@ commit cannot land there either; squash or rebase only)
         ↓  (each merge → rc.yml publishes v1.2.0-rc.2, rc.3 …)
 Sign-off ✓
         ↓
-PR: release/v1.2.0 → main  (squash merge)
+PR: release/v1.2.0 → main  (squash merge — MUST carry a Release-As footer, see below)
         ↓
 release-please opens Release PR on main (bumps version, updates CHANGELOG)
         ↓
@@ -485,6 +485,49 @@ GoReleaser builds all platforms, publishes stable release, updates Homebrew tap
         ↓
 Cherry-pick any release-branch fixes back to develop
 ```
+
+### ⚠️ The squash-merge trap — `Release-As:` is mandatory
+
+**A squash merge of `release/v*` → `main` destroys the commit history release-please
+needs, and the release silently does not happen.**
+
+This is not hypothetical: it is exactly what happened to v1.1.0. PR #219 merged green,
+`Release Please` ran green, and **no release was produced**. Its log:
+
+```
+✔ Considering: 3 commits
+✔ No user facing commits found since e5e766e — skipping
+```
+
+The reason: squashing collapses every `feat:`/`fix:` commit on the release branch into a
+**single** commit whose type is taken from the PR title — here `chore(release): v1.1.0`.
+`chore` does not bump. release-please saw no user-facing commit and correctly did nothing.
+Nothing failed, nothing was red, and no `v1.1.0` tag was ever created.
+
+**Therefore: the release→main PR body MUST contain a `Release-As:` footer**, which forces
+the version regardless of commit types:
+
+```
+Release-As: 1.2.0
+```
+
+Put it on its own line at the end of the PR body, so the squash commit carries it. Give the
+PR a `fix(release):` or `feat(release):` title as well, so a user-facing commit exists and
+release-please cannot take the "nothing to do" path at all. Belt and braces — this step is
+invisible when it works and completely silent when it is missed.
+
+**Verify after merging**, every time — a green `Release Please` run does not mean a release:
+
+```bash
+gh run list --branch main --workflow "Release Please" --limit 1   # must be success
+gh pr list --state open --search "release"                        # a Release PR MUST appear
+git ls-remote --tags origin | grep "v1.2.0$"                      # after merging that PR
+```
+
+If no Release PR appears, the footer was missing. Fix it by pushing another PR to `main`
+carrying the footer; do **not** create the tag by hand — a manual tag leaves
+`.release-please-manifest.json` behind at the old version, and the next release is then
+computed off the wrong base (#215).
 
 ### Cutting a release branch
 
