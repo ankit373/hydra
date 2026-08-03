@@ -72,6 +72,10 @@ func rootCmd() *cobra.Command {
 	root := &cobra.Command{
 		Use:   "hyctl",
 		Short: "Multi-model AI orchestration — one Cortex, many Heads",
+		// `hyctl --version` used to answer "unknown flag" even though a version
+		// subcommand existed. It is the near-universal convention, so people
+		// type it first. Same text as the subcommand, from one function.
+		Version: build.Version,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if !config.Exists() {
 				return runInit()
@@ -79,6 +83,7 @@ func rootCmd() *cobra.Command {
 			return cmd.Help()
 		},
 	}
+	root.SetVersionTemplate(versionText())
 	root.AddCommand(
 		cmdInit(), cmdProbe(), cmdStatus(), cmdTui(), cmdDispatch(),
 		cmdEdit(), cmdReview(), cmdParallel(), cmdCost(), cmdStats(),
@@ -90,15 +95,19 @@ func rootCmd() *cobra.Command {
 
 // ── version ───────────────────────────────────────────────────────────────────
 
+// versionText is shared by the `version` subcommand and the root `--version`
+// flag, so the two can never drift into reporting differently.
+func versionText() string {
+	return fmt.Sprintf("  hydra %s\n  commit:  %s\n  built:   %s\n  by:      %s\n",
+		build.Version, build.Commit, build.Date, build.BuiltBy)
+}
+
 func cmdVersion() *cobra.Command {
 	return &cobra.Command{
 		Use:   "version",
 		Short: "Print version, commit, and build info",
 		Run: func(_ *cobra.Command, _ []string) {
-			fmt.Printf("  hydra %s\n", build.Version)
-			fmt.Printf("  commit:  %s\n", build.Commit)
-			fmt.Printf("  built:   %s\n", build.Date)
-			fmt.Printf("  by:      %s\n", build.BuiltBy)
+			fmt.Print(versionText())
 			// Update notice is printed by main() after Execute returns.
 		},
 	}

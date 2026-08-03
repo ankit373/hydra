@@ -627,7 +627,8 @@ hydra/
 ├── registry/                    # routing · models · domains · pricing · policy — go:embed'd into
 │                                #   the binary; $HYDRA_HOME/registry/<file> overrides it
 ├── docs/                        # GitHub Pages (hydra.uvansa.com) — index.html, llms.txt
-└── Formula/hydra.rb             # Homebrew formula (auto-updated by GoReleaser)
+└── scripts/                     # update-tap-formula.sh — regenerates Formula/hyctl.rb in the
+                                 #   ankit373/homebrew-hydra tap after each release
 ```
 
 ### The desktop app

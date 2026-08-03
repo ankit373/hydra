@@ -67,18 +67,27 @@ async function main() {
     fail(`download failed — ${e.message}`);
   }
 
-  // Verify against checksums.txt (skip only if the file is absent).
+  // Verify against checksums.txt. Only an unreachable checksums.txt is a
+  // warning — a network blip should not brick `npm install`. A checksums.txt
+  // that downloads but does not list this archive is a broken release and
+  // fails closed: the realistic cause is drift, since `archive` is built here
+  // from goreleaser's name_template, so a template change would otherwise stop
+  // verification happening for every user while installs kept succeeding (#241).
+  let sums;
   try {
-    const sums = (await get(`${base}/checksums.txt`)).toString('utf8');
-    const line = sums.split('\n').find((l) => l.trim().endsWith(archive));
-    if (line) {
-      const expected = line.trim().split(/\s+/)[0];
-      const actual = crypto.createHash('sha256').update(archiveBuf).digest('hex');
-      if (expected !== actual) fail(`checksum mismatch (expected ${expected}, got ${actual})`);
-      console.log('hyctl: checksum verified');
-    }
+    sums = (await get(`${base}/checksums.txt`)).toString('utf8');
   } catch {
     console.warn('hyctl: checksums.txt unavailable — skipping verification');
+  }
+  if (sums !== undefined) {
+    const line = sums.split('\n').find((l) => l.trim().endsWith(archive));
+    if (!line) {
+      fail(`${archive} is not listed in checksums.txt — refusing to install unverified`);
+    }
+    const expected = line.trim().split(/\s+/)[0];
+    const actual = crypto.createHash('sha256').update(archiveBuf).digest('hex');
+    if (expected !== actual) fail(`checksum mismatch (expected ${expected}, got ${actual})`);
+    console.log('hyctl: checksum verified');
   }
 
   // Extract via the system `tar` (handles .tar.gz on unix and .zip on Win10+).
