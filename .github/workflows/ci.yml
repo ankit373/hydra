@@ -14,9 +14,28 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Hydra ships for darwin, linux and windows on both amd64 and arm64, but every
+  # job in this file used to run on ubuntu-latest — so `go test` only ever ran on
+  # Linux. That is how a Windows user came to see "0GB RAM · memory fully
+  # occupied" and "memory pressure: low" at the same time (#258), and how the
+  # non-git diff path came to return ("", nil) — silently indistinguishable from
+  # "no changes" — on any machine without diff(1) (#260). Neither is exotic; both
+  # are simply untested surfaces. The matrix is the fix (#255).
   go:
     name: Go build & test
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # One platform's failure must never mask another's: the whole point is to
+      # learn the full list in a single run.
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    defaults:
+      run:
+        # Windows runners default to pwsh. Every `run:` block here is bash, and
+        # Git Bash ships on the Windows image, so pinning the shell keeps one
+        # script working on all three rather than forking it per OS.
+        shell: bash
     steps:
       - uses: actions/checkout@v7
 
@@ -26,9 +45,12 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      # Formatting is checked before anything expensive runs — it is the
-      # cheapest failure to produce and the cheapest to fix.
+      # gofmt/vet/staticcheck analyse source, not behaviour — their verdict does
+      # not vary by runner OS, so they run once on Linux rather than three times.
+      # Formatting is checked before anything expensive: cheapest failure to
+      # produce, cheapest to fix.
       - name: Gofmt
+        if: runner.os == 'Linux'
         run: |
           unformatted=$(gofmt -l ./cmd ./internal)
           if [ -n "$unformatted" ]; then
@@ -39,6 +61,7 @@ jobs:
           fi
 
       - name: Vet
+        if: runner.os == 'Linux'
         run: go vet ./...
 
       # staticcheck must be BUILT with the same toolchain it analyses. Its own
@@ -48,20 +71,40 @@ jobs:
       # this module actually resolved to keeps the two in step without
       # hardcoding a version that would drift from go.mod.
       - name: Install staticcheck
+        if: runner.os == 'Linux'
         run: GOTOOLCHAIN=$(go env GOVERSION) go install honnef.co/go/tools/cmd/staticcheck@2026.1
 
       - name: Staticcheck
+        if: runner.os == 'Linux'
         run: staticcheck ./...
 
       - name: Build
         run: go build ./...
 
+      # -count=1 defeats the test cache. setup-go restores the build cache across
+      # runs, so without it a green result can be a replay of a previous run's
+      # verdict rather than a fresh one — which is precisely the failure mode this
+      # matrix exists to rule out.
+      #
+      # The race detector supports windows/amd64, but needs cgo and a C compiler.
+      # If the Windows image ever stops shipping one, drop -race for that leg
+      # rather than dropping the leg — an unraced Windows run still catches every
+      # platform bug listed above.
       - name: Test
-        run: go test ./... -race
+        run: go test ./... -race -count=1
 
+  # The desktop app ships for all three OSes, so its Go backend is tested on all
+  # three too — same reasoning as the root job above (#257).
   desktop:
     name: Desktop backend
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v7
 
@@ -70,6 +113,9 @@ jobs:
         with:
           go-version-file: desktop/go.mod
           cache: true
+          # desktop/ is a separate module; without this the cache key is computed
+          # from the root go.sum and the two modules share a poisoned cache.
+          cache-dependency-path: desktop/go.sum
 
       # desktop/ is its own module, so the root job's `./...` does not reach it.
       # Without this job its tests would silently never run.
@@ -81,6 +127,7 @@ jobs:
       # part with the tests — imports no UI framework at all, and main.go is
       # exercised by `wails build` on a machine that has a webview.
       - name: Gofmt
+        if: runner.os == 'Linux'
         working-directory: desktop
         run: |
           unformatted=$(gofmt -l .)
@@ -92,22 +139,25 @@ jobs:
           fi
 
       - name: Vet
+        if: runner.os == 'Linux'
         working-directory: desktop
         run: go vet ./api/...
 
       # Same reasoning as the root job: staticcheck must be built with the
       # toolchain it analyses.
       - name: Install staticcheck
+        if: runner.os == 'Linux'
         working-directory: desktop
         run: GOTOOLCHAIN=$(go env GOVERSION) go install honnef.co/go/tools/cmd/staticcheck@2026.1
 
       - name: Staticcheck
+        if: runner.os == 'Linux'
         working-directory: desktop
         run: staticcheck ./api/...
 
       - name: Test
         working-directory: desktop
-        run: go test ./api/... -race
+        run: go test ./api/... -race -count=1
 
   shellcheck:
     name: Shellcheck
@@ -154,6 +204,49 @@ jobs:
       - name: Build
         working-directory: desktop/frontend
         run: npm run build
+
+  # Every target Hydra ships (and windows/arm64, which it should — see #262)
+  # compiles and vets clean today. Nothing guarded that, so a Unix-only syscall
+  # or a platform-specific import could land with CI fully green, because CI only
+  # ever built for the runner's own OS.
+  #
+  # This is deliberately build+vet, not test: it is a compile-time guard covering
+  # targets that have no runner (linux/arm64, windows/arm64). Behaviour is the
+  # `go` matrix's job. Together they cover build for 6 targets and behaviour for 3.
+  cross-compile:
+    name: Cross-compile (6 targets)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build and vet every release target
+        run: |
+          set -u
+          failed=""
+          for t in darwin/amd64 darwin/arm64 linux/amd64 linux/arm64 \
+                   windows/amd64 windows/arm64; do
+            export GOOS="${t%/*}" GOARCH="${t#*/}"
+            printf '%-16s' "$t"
+            if ! out=$(go build ./... 2>&1); then
+              echo "BUILD FAILED"; echo "$out"
+              failed="$failed $t(build)"; continue
+            fi
+            if ! out=$(go vet ./... 2>&1); then
+              echo "VET FAILED"; echo "$out"
+              failed="$failed $t(vet)"; continue
+            fi
+            echo "ok"
+          done
+          if [ -n "$failed" ]; then
+            echo "::error::cross-compile failed for:$failed"
+            exit 1
+          fi
 
   yaml-lint:
     name: YAML validation
