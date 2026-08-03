@@ -24,6 +24,7 @@ import (
 	"github.com/ankit373/hydra/internal/dispatch"
 	"github.com/ankit373/hydra/internal/editor"
 	"github.com/ankit373/hydra/internal/entropy"
+	"github.com/ankit373/hydra/internal/executor"
 	"github.com/ankit373/hydra/internal/graph"
 	"github.com/ankit373/hydra/internal/ledger"
 	"github.com/ankit373/hydra/internal/optimal"
@@ -198,12 +199,33 @@ func cmdProbe() *cobra.Command {
 			}
 			fmt.Printf("  %-30s  %-5s  %-5s  %s\n", "Head", "Score", "Src", "Provider")
 			fmt.Println("  " + strings.Repeat("─", 56))
+			// Discovery finding a head is not the same as Hydra being able to
+			// drive it. Listing both identically is what let `probe` advertise
+			// the Ollama binary that `dispatch --local` then refused (#248), so
+			// unroutable heads are marked and carry their reason.
+			var unroutable int
 			for _, h := range result.Heads {
 				marker := "  "
 				if result.Cortex != nil && h.ID == result.Cortex.ID {
 					marker = cortexStyle.Render("→ ")
 				}
-				fmt.Printf("%s%-30s  %-5d  %-5s  %s\n", marker, h.Name, h.CapScore, h.Source, h.Provider)
+				why := executor.Unroutable(h)
+				if why != "" {
+					marker = warnStyle.Render("✗ ")
+					unroutable++
+				}
+				row := fmt.Sprintf("%-30s  %-5d  %-5s  %s", h.Name, h.CapScore, h.Source, h.Provider)
+				if why == "" {
+					fmt.Printf("%s%s\n", marker, row)
+					continue
+				}
+				fmt.Printf("%s%s\n", marker, dimStyle.Render(row))
+				fmt.Printf("    %s\n", dimStyle.Render("↳ "+why))
+			}
+			if unroutable > 0 {
+				fmt.Printf("\n  %s\n", dimStyle.Render(fmt.Sprintf(
+					"✗ = discovered but not routable (%d of %d) — dispatch will skip these.",
+					unroutable, len(result.Heads))))
 			}
 			return nil
 		},
@@ -453,6 +475,17 @@ func cmdDispatch() *cobra.Command {
 				derived := trust.NewDefectModel().RequiredConfidence(task)
 				fmt.Printf("  %s blast radius %.2f → demands confidence ≥ %.1f%%\n",
 					dimStyle.Render("graph:"), task.BlastRadius, derived*100)
+				// --file exists to RAISE the bar for risky files. With no graph
+				// it silently never raises, while printing a line that reads
+				// exactly like blast-radius-aware routing happened (#251). The
+				// bar itself is unchanged — only the claim about it.
+				if g.Empty() {
+					fmt.Printf("  %s\n", warnStyle.Render(
+						"graph: no graph at "+graphPath+" — radius 1.00 is a default, not a measurement"))
+				} else if !g.Knows(file) {
+					fmt.Printf("  %s\n", warnStyle.Render(
+						"graph: "+file+" is not in the graph — radius 1.00 is a default, not a measurement"))
+				}
 				if derived > effectiveConf {
 					effectiveConf = derived
 				}
@@ -1094,29 +1127,57 @@ func cmdGraph() *cobra.Command {
 				deps += g.DependentCount(id)
 			}
 			pFactor := g.PercolationFactor(file)
+			// A radius of 1.0 means either "nothing depends on this" or "I have
+			// no idea" — opposite conclusions that used to render identically.
+			// internal/a2a reported 6 dependents and 97.4% required confidence
+			// with the graph, and "subcritical — edits stay local" at 90.0%
+			// without it (#251).
+			loaded, known := !g.Empty(), g.Knows(file)
 			if jsonOut {
 				return json.NewEncoder(os.Stdout).Encode(map[string]any{
 					"file": file, "blast_radius": radius, "transitive_dependents": deps,
 					"defect_cost_usd": dm.CostUSD(task), "required_confidence": dm.RequiredConfidence(task),
 					"kappa": g.Kappa(), "percolates": g.Percolates(), "percolation_factor": pFactor,
+					"graph_loaded": loaded, "file_in_graph": known,
 				})
 			}
 			fmt.Printf("\n  %s\n", cortexStyle.Render(file))
-			fmt.Printf("    transitive dependents  %d\n", deps)
-			fmt.Printf("    blast radius           %.2f×\n", radius)
-			if g.Percolates() {
-				core := "periphery"
-				if pFactor > 1.0 {
-					core = fmt.Sprintf("core (+%.0f%%)", (pFactor-1)*100)
-				}
-				fmt.Printf("    graph κ                %.2f  %s\n",
-					g.Kappa(), dimStyle.Render("supercritical — cascades possible; this file is "+core))
-			} else {
-				fmt.Printf("    graph κ                %.2f  %s\n",
-					g.Kappa(), dimStyle.Render("subcritical — edits stay local"))
+			if !loaded {
+				fmt.Printf("    %s\n", warnStyle.Render("no graph at "+graphPath+" — nothing was analysed"))
+			} else if !known {
+				fmt.Printf("    %s\n", warnStyle.Render("not in the graph — check the path, or reindex"))
 			}
-			fmt.Printf("    defect cost            $%.2f\n", dm.CostUSD(task))
-			fmt.Printf("    demands confidence     %.1f%%\n\n", dm.RequiredConfidence(task)*100)
+			measured := loaded && known
+			suffix := func() string {
+				if measured {
+					return ""
+				}
+				return "  " + dimStyle.Render("(default, not measured)")
+			}()
+			fmt.Printf("    transitive dependents  %d%s\n", deps, suffix)
+			fmt.Printf("    blast radius           %.2f×%s\n", radius, suffix)
+			// κ is a property of the whole graph, so it stays meaningful for an
+			// unknown file — but with no graph at all it is 0.0, and rendering
+			// that as "edits stay local" is a safety claim from no data.
+			if loaded {
+				if g.Percolates() {
+					core := "periphery"
+					if pFactor > 1.0 {
+						core = fmt.Sprintf("core (+%.0f%%)", (pFactor-1)*100)
+					}
+					fmt.Printf("    graph κ                %.2f  %s\n",
+						g.Kappa(), dimStyle.Render("supercritical — cascades possible; this file is "+core))
+				} else {
+					fmt.Printf("    graph κ                %.2f  %s\n",
+						g.Kappa(), dimStyle.Render("subcritical — edits stay local"))
+				}
+			}
+			fmt.Printf("    defect cost            $%.2f%s\n", dm.CostUSD(task), suffix)
+			fmt.Printf("    demands confidence     %.1f%%%s\n\n", dm.RequiredConfidence(task)*100, suffix)
+			if !measured {
+				fmt.Printf("  %s\n\n", dimStyle.Render(
+					"A radius of 1.00× here means \"unknown\", not \"safe\" — generate a graph to get a real bar."))
+			}
 			return nil
 		},
 	}

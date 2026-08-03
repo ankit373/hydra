@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -149,6 +150,14 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		// Report the effective localOnly (policy may have forced it), not just
 		// the caller's flag, or a PII-forced local-only run points the user at
 		// the wrong cause.
+		// Pointing at `hyctl probe` was actively misleading when the only
+		// matching heads were ones probe listed but no executor can drive:
+		// the user looks, sees the head, and learns nothing (#248). Name the
+		// blocked heads and why instead.
+		if blocked := d.blockedHeads(localOnly); blocked != "" {
+			return nil, fmt.Errorf("no routable heads for tier %q (localOnly=%v).\n%s",
+				tier, localOnly, blocked)
+		}
 		return nil, fmt.Errorf("no available heads for tier %q (localOnly=%v); "+
 			"check `hyctl probe` and the tier names in your config", tier, localOnly)
 	}
@@ -374,6 +383,29 @@ func (d *Dispatcher) resolveTierHint(hint string) string {
 		return hint // named tier has no live heads; let the caller report it
 	}
 	return hint
+}
+
+// blockedHeads describes discovered heads that were excluded because no
+// executor can drive them, formatted for an error message. Returns "" when
+// nothing was excluded for that reason — in which case the real problem is the
+// tier or the config, and the caller says so instead.
+//
+// Respects localOnly so a PII-forced local run does not list cloud heads the
+// user was never going to be allowed to use anyway.
+func (d *Dispatcher) blockedHeads(localOnly bool) string {
+	var b strings.Builder
+	for _, h := range d.heads {
+		if localOnly && !h.LocalOnly {
+			continue
+		}
+		if why := executor.Unroutable(h); why != "" {
+			fmt.Fprintf(&b, "  %s (%s): %s\n", h.Name, h.Provider, why)
+		}
+	}
+	if b.Len() == 0 {
+		return ""
+	}
+	return "Discovered, but not routable:\n" + b.String()
 }
 
 // selectHeads returns heads to try, in order of preference.

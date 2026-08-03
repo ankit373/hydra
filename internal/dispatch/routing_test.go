@@ -3,6 +3,7 @@
 package dispatch
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/ankit373/hydra/internal/budget"
@@ -187,5 +188,70 @@ func TestSelectHeads_NoCheapHeadFallsBackToCheapest(t *testing.T) {
 	}
 	if got[0].ID != "expert" {
 		t.Errorf("fallback primary = %q, want cheapest (\"expert\")", got[0].ID)
+	}
+}
+
+// The existing tier-10 test uses a local head at score 40, which the score
+// ladder already put at tier 10 — so it passed while the real machine failed.
+// Ollama scores exactly 60, which landed at tier 9, and GRUNT degraded past it
+// to a paid cloud head (#248). Same shape, real number.
+func TestSelectHeads_Tier10PrefersALocalHeadOverAPaidOne(t *testing.T) {
+	d := routingDispatcher()
+	d.heads = []provider.Head{
+		registryHead("paid-cheap", 68, false), // a real Gemini Flash Low score
+		registryHead("ollama", 60, true),      // exactly Ollama's score
+	}
+
+	got := d.selectHeads("10", false)
+	if len(got) == 0 {
+		t.Fatal("tier 10 selected no heads — GRUNT would degrade to a paid head")
+	}
+	if got[0].ID != "ollama" {
+		t.Errorf("tier 10 primary = %q, want \"ollama\" — a free local head must win the cheapest tier", got[0].ID)
+	}
+	// Asserting the ID alone is not enough, and I had this wrong first: with
+	// only two heads the *degraded* fallback also returns ollama, because it
+	// reverses to weakest-first and ollama is weakest. So the test passed with
+	// the fix removed. What actually distinguishes a real tier-10 match from a
+	// degraded pick is the head's own tier.
+	if tier := rank.UITier(got[0]); tier < 10 {
+		t.Errorf("tier 10 was served by a head at tier %d — selected via the degradation path, "+
+			"not because a local head belongs at the cheapest tier", tier)
+	}
+}
+
+// The error a user actually hits when the only local head on the machine is one
+// no executor can drive. Pointing at `hyctl probe` was worse than useless: probe
+// listed the head, so looking there taught them nothing (#248).
+func TestDispatch_NoRoutableHeadsNamesTheBlockedHeadAndWhy(t *testing.T) {
+	d := routingDispatcher()
+	// Exactly how internal/provider/cli registers the PATH-discovered binary.
+	d.heads = []provider.Head{
+		{ID: "ollama", Name: "Ollama", Provider: "local", Source: "cli", LocalOnly: true},
+	}
+
+	msg := d.blockedHeads(true)
+	if msg == "" {
+		t.Fatal("blockedHeads returned nothing for a head no executor can drive")
+	}
+	for _, want := range []string{"Ollama", "server"} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("message does not mention %q:\n%s", want, msg)
+		}
+	}
+}
+
+// A cloud head must not be listed as the blocker for a local-only run — the
+// user could not have used it either way, so naming it sends them the wrong way.
+func TestDispatch_BlockedHeadsRespectsLocalOnly(t *testing.T) {
+	d := routingDispatcher()
+	d.heads = []provider.Head{
+		{ID: "mystery", Name: "Mystery Cloud", Provider: "nobody", Source: "cli"},
+	}
+	if msg := d.blockedHeads(true); msg != "" {
+		t.Errorf("local-only run listed a cloud head as the blocker:\n%s", msg)
+	}
+	if msg := d.blockedHeads(false); msg == "" {
+		t.Error("a non-local run should still report the undrivable cloud head")
 	}
 }
