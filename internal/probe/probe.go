@@ -22,8 +22,13 @@ type Result struct {
 // It never returns an error — individual provider failures are silently skipped
 // so a broken provider doesn't block the init wizard.
 func Run(ctx context.Context) *Result {
-	providers := provider.All()
+	return RunWith(ctx, provider.All())
+}
 
+// RunWith is Run against an explicit provider set, so discovery can be tested
+// without registering fakes into the process-global registry — which every
+// other test in the binary would then see.
+func RunWith(ctx context.Context, providers []provider.Provider) *Result {
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	var all []provider.Head
@@ -32,6 +37,13 @@ func Run(ctx context.Context) *Result {
 		wg.Add(1)
 		go func(p provider.Provider) {
 			defer wg.Done()
+			// "Individual provider failures are silently skipped" has to include
+			// a panic, or the guarantee is only about the errors a provider
+			// remembers to return. Without this, one misbehaving provider takes
+			// down the whole probe — and `hyctl probe` is often the first thing
+			// a user runs.
+			defer func() { _ = recover() }()
+
 			heads, err := p.Discover(ctx)
 			if err != nil {
 				return
