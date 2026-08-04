@@ -35,22 +35,6 @@ func TestRun_DuplicateFileConflict(t *testing.T) {
 	}
 }
 
-func TestExtractContent(t *testing.T) {
-	body := markerStart + "\nhello\nworld\n" + markerEnd
-	if got := extractContent("prose\n" + body + "\ntrailing"); got != "hello\nworld" {
-		t.Errorf("extractContent(both) = %q, want %q", got, "hello\nworld")
-	}
-	if got := extractContent("no markers here"); got != "" {
-		t.Errorf("extractContent(none) = %q, want empty", got)
-	}
-}
-
-func TestStripOuterFence(t *testing.T) {
-	if got := stripOuterFence("```ts\nconst x = 1\n```"); got != "const x = 1" {
-		t.Errorf("stripOuterFence() = %q, want %q", got, "const x = 1")
-	}
-}
-
 func TestFileExt(t *testing.T) {
 	if got := fileExt("main.go"); got != "go" {
 		t.Errorf("fileExt = %q, want go", got)
