@@ -14,6 +14,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/ankit373/hydra/internal/glob"
 	"github.com/ankit373/hydra/registry"
 )
 
@@ -338,63 +339,7 @@ func contains(root, path string) bool {
 	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
-// matchGlob matches a relative path against a glob pattern.
-// Supports ** for matching zero or more path segments, * for single-segment wildcard.
-func matchGlob(rel, pattern string) bool {
-	rel = strings.TrimPrefix(rel, "./")
-	return matchSegments(strings.Split(rel, "/"), strings.Split(pattern, "/"))
-}
-
-// matchSegments matches path segments against pattern segments.
-// "**" matches zero or more path segments; everything else uses filepath.Match.
-//
-// Memoized on (path index, pattern index). Without that, each "**" branches
-// over every remaining split point and the recursion is exponential in the
-// number of "**" segments — a pattern like "**/**/**/…/nomatch" against a long
-// path never returns. That is a denial of service on the scope check, which is
-// the one thing standing between a model and the filesystem: hyctl edit would
-// hang rather than allow or refuse.
-//
-// Found by FuzzMatchGlob_TerminatesAndNeverPanics, which produced
-// "**/**/**/**/**/**/**/**/**/**/<junk>" against 21 path segments. The
-// hand-written pathological case missed it, because its tail matched quickly
-// and the search never had to exhaust the space.
-//
-// Memoization makes the state space (len(path)+1) × (len(pat)+1), so matching
-// is now polynomial and bounded by the inputs rather than by their structure.
-func matchSegments(path, pat []string) bool {
-	type state struct{ i, j int }
-	memo := make(map[state]bool)
-
-	var match func(i, j int) bool
-	match = func(i, j int) bool {
-		key := state{i, j}
-		if cached, ok := memo[key]; ok {
-			return cached
-		}
-		result := func() bool {
-			if j == len(pat) {
-				return i == len(path)
-			}
-			if pat[j] == "**" {
-				// Consume 0, 1, 2, … remaining path segments.
-				for k := i; k <= len(path); k++ {
-					if match(k, j+1) {
-						return true
-					}
-				}
-				return false
-			}
-			if i == len(path) {
-				return false
-			}
-			if matched, _ := filepath.Match(pat[j], path[i]); !matched {
-				return false
-			}
-			return match(i+1, j+1)
-		}()
-		memo[key] = result
-		return result
-	}
-	return match(0, 0)
-}
+// matchGlob matches a relative path against a glob pattern, using the shared
+// dialect in internal/glob so workspace.yaml and mcp_policy.json cannot drift
+// apart or change meaning by platform (#310).
+func matchGlob(rel, pattern string) bool { return glob.Match(pattern, rel) }

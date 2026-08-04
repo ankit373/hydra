@@ -206,12 +206,14 @@ func TestGlobMatch_Behaviour(t *testing.T) {
 	}{
 		{"/repo/*", "/repo/a.go", true},
 		{"/repo/*", "/repo/sub/a.go", false},
-		// NOT true: this package uses filepath.Match, which has no "**" — it
-		// treats the pattern as a single segment. internal/workspace DOES
-		// implement segment-crossing "**", so the two config files speak
-		// different glob dialects and a "**/secrets/**" rule copied from
-		// workspace.yaml into mcp_policy.json silently matches nothing (#310).
-		{"/repo/**", "/repo/sub/a.go", false},
+		// Both of these are now the same dialect internal/workspace uses, on
+		// every platform. Before #310 this package used filepath.Match: no "**"
+		// at all, and a "\\" separator on Windows — so "/repo/*" matched one
+		// level on Unix and arbitrarily deep on Windows, which the three-OS
+		// matrix caught.
+		{"/repo/**", "/repo/sub/a.go", true},
+		{"**/secrets/**", "/repo/a/secrets/key.pem", true},
+		{"**/.env*", "/repo/a/b/.env.local", true},
 		{"", "/anything", true}, // an empty pattern is "any resource"
 		{"/exact", "/exact", true},
 		{"/exact", "/other", false},
