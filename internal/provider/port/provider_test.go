@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ankit373/hydra/internal/capabilities"
 	"github.com/ankit373/hydra/internal/provider"
@@ -209,5 +210,97 @@ func TestDiscovery_ResolvesTheSameHostTheExecutorWill(t *testing.T) {
 				t.Errorf("service base %q does not match resolved host %q", svc.base, got)
 			}
 		})
+	}
+}
+
+// Discover walks every service. With nothing listening it must find nothing and
+// not hang — a probe that blocks is worse than one that finds nothing, because
+// `hyctl probe` is often the first command a user runs.
+func TestDiscover_NothingListeningFindsNothingQuickly(t *testing.T) {
+	s := testutil.NewSandbox(t)
+	// Point Ollama at a port nothing is on, so the liveness dial fails fast.
+	s.SetKey(t, "OLLAMA_HOST", "http://127.0.0.1:1")
+
+	start := time.Now()
+	heads, err := (&Provider{}).Discover(context.Background())
+	elapsed := time.Since(start)
+
+	if err != nil {
+		t.Fatalf("Discover errored with nothing listening: %v", err)
+	}
+	if len(heads) != 0 {
+		t.Errorf("found %d heads with nothing listening: %+v", len(heads), heads)
+	}
+	// Two services, each with a 400ms dial timeout, plus slack.
+	if elapsed > 5*time.Second {
+		t.Errorf("Discover took %v with nothing listening", elapsed)
+	}
+}
+
+// isOpen is the cheap liveness check that saves paying the HTTP timeout per
+// service. It must be accurate in both directions or Discover either skips a
+// live server or waits out a dead one.
+func TestIsOpen_DetectsListeningAndNot(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
+	defer srv.Close()
+
+	addr := strings.TrimPrefix(srv.URL, "http://")
+	if !isOpen(addr) {
+		t.Errorf("isOpen(%q) = false for a listening server", addr)
+	}
+	if isOpen("127.0.0.1:1") {
+		t.Error("isOpen reported a closed port as open")
+	}
+	if isOpen("not-a-valid-address") {
+		t.Error("isOpen reported a malformed address as open")
+	}
+}
+
+// Discover finds a real service when one is listening — the positive case that
+// proves the negative ones above are not passing for the wrong reason.
+func TestDiscover_FindsAListeningOllama(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/tags" {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = w.Write([]byte(`{"models":[{"name":"qwen3:8b"}]}`))
+	}))
+	defer srv.Close()
+
+	s := testutil.NewSandbox(t)
+	s.SetKey(t, "OLLAMA_HOST", srv.URL)
+
+	heads, err := (&Provider{}).Discover(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(heads) != 1 {
+		t.Fatalf("got %d heads, want the one served model: %+v", len(heads), heads)
+	}
+	if heads[0].ID != "ollama/qwen3:8b" {
+		t.Errorf("ID = %q", heads[0].ID)
+	}
+	if heads[0].Endpoint != srv.URL {
+		t.Errorf("Endpoint = %q, want the address it was found at", heads[0].Endpoint)
+	}
+}
+
+// Each service's dial address is derived from the base it will probe, for both
+// services — checked directly, since computing them independently is what let
+// them disagree before.
+func TestServiceAddrs_DeriveFromTheirBases(t *testing.T) {
+	if got, want := (&ollamaService{base: "http://127.0.0.1:11500"}).addr(), "127.0.0.1:11500"; got != want {
+		t.Errorf("ollama addr = %q, want %q", got, want)
+	}
+	if got, want := (&lmStudioService{base: "http://127.0.0.1:4321"}).addr(), "127.0.0.1:4321"; got != want {
+		t.Errorf("lmstudio addr = %q, want %q", got, want)
+	}
+	// Default ports are supplied when the base carries none.
+	if got := (&ollamaService{base: "http://localhost"}).addr(); got != "localhost:11434" {
+		t.Errorf("ollama addr with no port = %q, want localhost:11434", got)
+	}
+	if got := (&lmStudioService{base: "http://localhost"}).addr(); got != "localhost:1234" {
+		t.Errorf("lmstudio addr with no port = %q, want localhost:1234", got)
 	}
 }
