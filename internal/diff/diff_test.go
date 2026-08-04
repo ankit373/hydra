@@ -84,16 +84,7 @@ func TestStats_AgreesWithUnified(t *testing.T) {
 	added, removed := Stats(old, new)
 	u := Unified("old", "new", old, new)
 
-	var uAdded, uRemoved int
-	for _, l := range strings.Split(u, "\n") {
-		switch {
-		case strings.HasPrefix(l, "+++"), strings.HasPrefix(l, "---"):
-		case strings.HasPrefix(l, "+"):
-			uAdded++
-		case strings.HasPrefix(l, "-"):
-			uRemoved++
-		}
-	}
+	uAdded, uRemoved := countDiffLines(u)
 	if added != uAdded || removed != uRemoved {
 		t.Errorf("Stats = +%d/-%d but the diff body has +%d/-%d", added, removed, uAdded, uRemoved)
 	}
@@ -129,16 +120,7 @@ func TestUnified_MatchesSystemDiffWhereAvailable(t *testing.T) {
 			// diff(1) exits 1 when files differ; that is not an error.
 			out, _ := exec.Command("diff", "-u", oldPath, newPath).CombinedOutput()
 
-			var sysAdded, sysRemoved int
-			for _, l := range strings.Split(string(out), "\n") {
-				switch {
-				case strings.HasPrefix(l, "+++"), strings.HasPrefix(l, "---"):
-				case strings.HasPrefix(l, "+"):
-					sysAdded++
-				case strings.HasPrefix(l, "-"):
-					sysRemoved++
-				}
-			}
+			sysAdded, sysRemoved := countDiffLines(string(out))
 			added, removed := Stats([]byte(tc.old), []byte(tc.new))
 			if added != sysAdded || removed != sysRemoved {
 				t.Errorf("Stats = +%d/-%d, diff(1) = +%d/-%d\nsystem output:\n%s",
@@ -191,10 +173,17 @@ func applyUnified(old []string, u string) ([]string, error) {
 	var out []string
 	oldIdx := 0 // 0-based cursor into old
 
-	for _, l := range strings.Split(strings.TrimRight(u, "\n"), "\n") {
+	// The "--- old" / "+++ new" lines are the file header and appear exactly
+	// once, before the first hunk. They are NOT recognised by prefix: a content
+	// line beginning "++" renders as "+++" and is indistinguishable from the
+	// header. Real diff(1) emits exactly that, and the first version of this
+	// helper dropped such lines as headers and silently lost content — found by
+	// FuzzUnified_RoundTrips with old="0", new="++".
+	for i, l := range strings.Split(strings.TrimRight(u, "\n"), "\n") {
+		if i < 2 {
+			continue // the two header lines
+		}
 		switch {
-		case strings.HasPrefix(l, "---"), strings.HasPrefix(l, "+++"):
-			continue
 		case strings.HasPrefix(l, "@@"):
 			// "@@ -oldStart,oldLines +newStart,newLines @@"
 			var oldStart, oldLines, newStart, newLines int
@@ -237,4 +226,25 @@ func applyUnified(old []string, u string) ([]string, error) {
 		}
 	}
 	return append(out, old[oldIdx:]...), nil
+}
+
+// countDiffLines counts added/removed lines in a unified diff body.
+//
+// Only the first two lines are the file header. Recognising "---"/"+++" by
+// prefix anywhere is wrong: a content line beginning "++" renders as "+++" and
+// would be skipped as a header, undercounting the change. diff(1) emits exactly
+// that shape.
+func countDiffLines(u string) (added, removed int) {
+	for i, l := range strings.Split(u, "\n") {
+		if i < 2 {
+			continue
+		}
+		switch {
+		case strings.HasPrefix(l, "+"):
+			added++
+		case strings.HasPrefix(l, "-"):
+			removed++
+		}
+	}
+	return added, removed
 }

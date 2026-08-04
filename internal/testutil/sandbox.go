@@ -188,11 +188,16 @@ func (s *Sandbox) AllowHostBinary(t *testing.T, name string) bool {
 		return false
 	}
 
-	link := filepath.Join(s.BinDir, filepath.Base(real))
-	// Symlink where possible; copy is not worth it for an executable that may
-	// resolve siblings relative to itself.
-	if err := os.Symlink(real, link); err != nil {
-		t.Fatalf("linking %s into the sandbox: %v", name, err)
-	}
+	// Put the tool's own directory on PATH rather than linking the binary into
+	// the sandbox. An executable frequently resolves siblings relative to its
+	// own location, and a symlink breaks that: on Windows, linking git.exe out
+	// of its install tree made every invocation fail with 0xc0000135
+	// (STATUS_DLL_NOT_FOUND).
+	//
+	// This exposes one directory rather than one file, so it is a slightly
+	// wider hole than the name suggests — but the alternative is a test that
+	// cannot run at all, and the sandbox's other guarantees (home, HYDRA_HOME,
+	// credentials) are untouched.
+	t.Setenv("PATH", filepath.Dir(real)+string(os.PathListSeparator)+os.Getenv("PATH"))
 	return true
 }

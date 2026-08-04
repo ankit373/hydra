@@ -39,6 +39,11 @@ func repoSandbox(t *testing.T, gitInit bool) string {
 			{"init", "-q"},
 			{"config", "user.email", "t@example.com"},
 			{"config", "user.name", "t"},
+			// Windows git defaults core.autocrlf=true, so a checkout rewrites
+			// LF to CRLF and the restored bytes differ from the committed ones.
+			// Pinned off so the test asserts what git restored rather than what
+			// the platform's line-ending policy happens to be.
+			{"config", "core.autocrlf", "false"},
 		} {
 			cmd := exec.Command("git", append([]string{"-C", repo}, args...)...)
 			if out, err := cmd.CombinedOutput(); err != nil {
@@ -63,13 +68,17 @@ func repoSandbox(t *testing.T, gitInit bool) string {
 	}
 	t.Cleanup(func() { _ = os.Chdir(prev) })
 
-	// Resolve, because macOS hands out /var symlinks for temp dirs and the
-	// workspace root will be the resolved form.
-	resolved, err := filepath.EvalSymlinks(repo)
+	// Return the working directory as the OS reports it, not the temp path we
+	// were handed. workspace's fallback roots itself at GitRoot(os.Getwd()), and
+	// the two spellings differ in practice: macOS gives /var symlinks for temp
+	// dirs, and Windows normalises casing and short (8.3) components. Comparing
+	// against anything else makes every containment check fail with
+	// "no workspace contains …" — which is exactly what the Windows leg caught.
+	cwd, err := os.Getwd()
 	if err != nil {
 		return repo
 	}
-	return resolved
+	return cwd
 }
 
 func write(t *testing.T, path, content string) {
