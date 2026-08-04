@@ -198,16 +198,18 @@ func TestCLI_ReadCommandsSurviveAFreshInstall(t *testing.T) {
 // no data yet is a broken contract.
 func TestCLI_JSONOutputParses(t *testing.T) {
 	for _, args := range [][]string{
-		{"cost", "--json"},
 		{"models", "list", "--json"},
-		{"probe", "--json"},
+		{"mcp", "report", "--json"},
 	} {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
 			cliSandbox(t)
-			out, _, err := run(t, args...)
+			out, cobraOut, err := run(t, args...)
 			if err != nil {
-				t.Skipf("`hyctl %s` is not available in this environment: %v",
-					strings.Join(args, " "), err)
+				// Not a skip: every command listed here works on a fresh
+				// install, and a skip would read as coverage while silently
+				// stopping.
+				t.Fatalf("`hyctl %s` failed on a fresh install: %v (%s)",
+					strings.Join(args, " "), err, cobraOut)
 			}
 			trimmed := strings.TrimSpace(out)
 			if trimmed == "" {

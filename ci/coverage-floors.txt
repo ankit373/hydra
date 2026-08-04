@@ -21,7 +21,14 @@
 #
 # Format:  <import path relative to the module root>  <minimum percent>
 
-floor cmd/hydra                     44
+# cmd/hydra will not reach 90, and the number understates what is tested.
+# Two reasons, both structural:
+#   - main(), runInit() and cmdTui drive an interactive terminal. There is no
+#     unit test for "the wizard rendered on a TTY".
+#   - `hyctl edit`, the MCP gate, the oracle and `parallel` call os.Exit with
+#     codes callers gate on (2 and 3). Those are contract-tested against a real
+#     built binary, and a subprocess contributes nothing to this profile.
+floor cmd/hydra                     58
 floor internal/a2a                  95
 floor internal/budget               95
 floor internal/capabilities         92
