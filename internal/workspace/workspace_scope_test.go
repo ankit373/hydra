@@ -10,7 +10,10 @@ import (
 	"testing"
 	"time"
 
+	"gopkg.in/yaml.v3"
+
 	"github.com/ankit373/hydra/internal/testutil"
+	"github.com/ankit373/hydra/registry"
 )
 
 // Check is the security boundary: it decides whether Hydra may write to a file
@@ -331,9 +334,14 @@ func TestLoad_FallsBackToTheEmbeddedRegistryOnEveryPlatform(t *testing.T) {
 			t.Errorf("skipped entry %+v does not identify itself or say why", sk)
 		}
 	}
-	// Every entry is accounted for exactly once.
-	if got, want := len(r.workspaces)+len(r.Skipped()), 2; got != want {
-		t.Errorf("embedded registry yielded %d kept + skipped, want %d", got, want)
+	// The embedded registry declares no workspaces, so anything present here is
+	// the synthesized fallback — never a machine-specific entry compiled into
+	// the binary (#297).
+	for _, ws := range r.workspaces {
+		if ws.Name != DefaultWorkspaceName {
+			t.Errorf("embedded registry produced workspace %q rooted at %q; it must ship none",
+				ws.Name, ws.Root)
+		}
 	}
 	if len(r.validators) == 0 {
 		t.Error("embedded registry defines no validators")
@@ -428,4 +436,198 @@ func timeoutAfterSeconds(n int) <-chan struct{} {
 		close(ch)
 	}()
 	return ch
+}
+
+// ── default workspace fallback (#297) ─────────────────────────────────────────
+
+// A fresh install ships no workspaces, so Hydra falls back to the repository
+// the user is standing in. Without this a new user's first `hyctl edit` fails
+// with "no workspace contains …" and there is nothing in the binary that could
+// ever match.
+func TestLoad_FallsBackToTheCurrentRepository(t *testing.T) {
+	testutil.NewSandbox(t)
+
+	repo := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	chdir(t, repo)
+
+	r, err := Load("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(r.workspaces) != 1 {
+		t.Fatalf("got %d workspaces, want the synthesized fallback: %+v", len(r.workspaces), r.workspaces)
+	}
+	ws := r.workspaces[0]
+	if ws.Name != DefaultWorkspaceName {
+		t.Errorf("fallback name = %q, want %q so it is identifiable as not user-configured",
+			ws.Name, DefaultWorkspaceName)
+	}
+	// It must be the repo root, resolved — macOS hands out /var symlinks for
+	// temp dirs, so compare resolved forms.
+	if !sameDir(t, ws.Root, repo) {
+		t.Errorf("fallback root = %q, want the git root %q", ws.Root, repo)
+	}
+	if _, err := r.Check(filepath.Join(ws.Root, "src", "main.go")); err != nil {
+		t.Errorf("an ordinary file in the repo was refused: %v", err)
+	}
+}
+
+// The fallback is the git root, never a bare working directory. Defaulting
+// write scope to "/" or a home directory is not a decision to make for a user,
+// so outside a repository there is deliberately no workspace at all.
+func TestLoad_NoFallbackOutsideAGitRepository(t *testing.T) {
+	testutil.NewSandbox(t)
+
+	plain := t.TempDir() // no .git anywhere beneath the temp root
+	chdir(t, plain)
+
+	r, err := Load("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, ws := range r.workspaces {
+		if ws.Name == DefaultWorkspaceName {
+			t.Errorf("synthesized a workspace at %q outside any git repository — "+
+				"a bare cwd could be / or $HOME", ws.Root)
+		}
+	}
+}
+
+// The fallback exists to make a fresh install usable, not to expose every
+// secret in the tree. These must be refused even though allowed_globs is "**".
+func TestLoad_FallbackStillDeniesSecrets(t *testing.T) {
+	testutil.NewSandbox(t)
+
+	repo := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	chdir(t, repo)
+
+	r, err := Load("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := r.workspaces[0].Root // resolved form; temp dirs are symlinks on macOS
+	for _, rel := range []string{
+		".env",
+		filepath.Join("app", ".env.production"),
+		filepath.Join("config", "secrets", "db.yml"),
+		filepath.Join("certs", "server.pem"),
+		filepath.Join("certs", "server.key"),
+		filepath.Join(".ssh", "id_rsa"),
+		filepath.Join("node_modules", "pkg", "index.js"),
+		filepath.Join(".git", "config"),
+		filepath.Join("infra", "prod-credentials.json"),
+	} {
+		if _, err := r.Check(filepath.Join(root, rel)); err == nil {
+			t.Errorf("%s was writable under the default workspace", rel)
+		}
+	}
+	// …and ordinary source is still writable, or the deny set is just blocking
+	// everything and the fallback is useless.
+	if _, err := r.Check(filepath.Join(root, "src", "app.go")); err != nil {
+		t.Errorf("ordinary source was refused: %v", err)
+	}
+}
+
+// A configured registry is never widened by the fallback. It applies only when
+// the file yields no usable entry.
+func TestLoad_ConfiguredRegistryIsNeverWidened(t *testing.T) {
+	s := testutil.NewSandbox(t)
+
+	repo := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	chdir(t, repo)
+
+	// A registry that defines exactly one narrow workspace elsewhere.
+	other := t.TempDir()
+	regDir := filepath.Join(s.HydraHome, "registry")
+	if err := os.MkdirAll(regDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	body := "version: \"1.0\"\nworkspaces:\n  only:\n    root: " + filepath.ToSlash(other) +
+		"\n    git: \"false\"\n    allowed_globs: [\"src/**\"]\n"
+	if err := os.WriteFile(filepath.Join(regDir, "workspace.yaml"), []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := Load(s.HydraHome)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, ws := range r.workspaces {
+		if ws.Name == DefaultWorkspaceName {
+			t.Fatal("the fallback was added alongside a configured workspace — " +
+				"a configured registry must never be widened")
+		}
+	}
+	// The cwd repo must NOT be writable: it is not in the configured registry.
+	if _, err := r.Check(filepath.Join(repo, "src", "main.go")); err == nil {
+		t.Error("the current repo was writable despite not being configured")
+	}
+}
+
+// The embedded registry must not ship anyone's personal paths. It is compiled
+// into every binary, so an absolute root here is one machine's layout published
+// to every user (#297).
+func TestEmbeddedRegistry_ShipsNoMachineSpecificRoots(t *testing.T) {
+	testutil.NewSandbox(t)
+
+	raw, err := registryFileBytes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, bad := range []string{"/Users/", "/home/", "C:\\Users", "/root/"} {
+		if strings.Contains(raw, bad) && !strings.Contains(raw, "#") {
+			t.Errorf("embedded workspace.yaml contains %q", bad)
+		}
+	}
+	// Parse it and assert no configured workspace carries an absolute root.
+	var rf registryFile
+	if err := yaml.Unmarshal([]byte(raw), &rf); err != nil {
+		t.Fatal(err)
+	}
+	for name, e := range rf.Workspaces {
+		t.Errorf("embedded registry defines workspace %q with root %q — this ships to "+
+			"every user of every install", name, e.Root)
+	}
+}
+
+func registryFileBytes() (string, error) {
+	b, err := registry.Read("", "workspace.yaml")
+	return string(b), err
+}
+
+// chdir changes directory for the duration of the test.
+func chdir(t *testing.T, dir string) {
+	t.Helper()
+	prev, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(prev) })
+}
+
+// sameDir compares two directories after resolving symlinks — macOS temp dirs
+// are /var/… symlinks to /private/var/….
+func sameDir(t *testing.T, a, b string) bool {
+	t.Helper()
+	ra, err := filepath.EvalSymlinks(a)
+	if err != nil {
+		ra = a
+	}
+	rb, err := filepath.EvalSymlinks(b)
+	if err != nil {
+		rb = b
+	}
+	return filepath.Clean(ra) == filepath.Clean(rb)
 }
