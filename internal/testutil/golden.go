@@ -111,7 +111,11 @@ func Golden(t *testing.T, name, got string, tempPaths ...string) {
 		}
 		t.Fatal(err)
 	}
-	want := string(wantRaw)
+	// Normalise the expected side too. It is text on disk, and git's autocrlf
+	// rewrites checked-in files to CRLF on Windows checkouts — so comparing a
+	// normalised `got` against a raw `want` made every golden fail there, on
+	// output that was byte-identical apart from line endings.
+	want := Normalise(string(wantRaw))
 	if norm == want {
 		return
 	}
