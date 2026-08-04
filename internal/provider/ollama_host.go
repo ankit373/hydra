@@ -3,6 +3,7 @@
 package provider
 
 import (
+	"net"
 	"net/url"
 	"os"
 	"strings"
@@ -48,6 +49,19 @@ func OllamaHost() string {
 	return strings.TrimRight(u.Scheme+"://"+u.Host, "/")
 }
 
+// isLoopback decides whether cleartext is acceptable for this host.
+//
+// It parses the address rather than matching a "127." prefix, because a prefix
+// match is not an address check: "127.0.0.1.evil.com" is a perfectly valid
+// hostname that someone else controls and that resolves wherever they point it,
+// and it passed. The guard exists to keep the user's source code off the
+// network in cleartext, so it has to test what the string actually is.
 func isLoopback(host string) bool {
-	return host == "localhost" || host == "::1" || strings.HasPrefix(host, "127.")
+	if host == "localhost" {
+		return true
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		return ip.IsLoopback()
+	}
+	return false
 }

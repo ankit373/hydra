@@ -22,10 +22,14 @@ import (
 )
 
 const (
-	releaseURL = "https://api.github.com/repos/ankit373/hydra/releases/latest"
-	cacheFile  = "update_state.json"
-	cacheTTL   = 24 * time.Hour
+	cacheFile = "update_state.json"
+	cacheTTL  = 24 * time.Hour
 )
+
+// releaseURL is a var so tests can point it at an httptest server, matching
+// pricing's openRouterModelsURL. The alternative is a test that either reaches
+// GitHub for real or does not run at all.
+var releaseURL = "https://api.github.com/repos/ankit373/hydra/releases/latest"
 
 type state struct {
 	CheckedAt     time.Time `json:"checked_at"`
