@@ -1,0 +1,75 @@
+# Per-package coverage floors, enforced by `go run ./ci/covergate`.
+#
+# Floors are a ratchet: they may be raised freely, but lowering one requires an
+# explicit commit a reviewer can see. That is the whole point — nothing here
+# stops coverage sliding back down except the fact that doing so must be
+# written down.
+#
+# Values are today's real numbers minus a small margin, so the gate lands green
+# and stays green under the ordinary variation a coverage run has (a test that
+# skips on one platform moves a package by a fraction of a percent). Raise a
+# floor in the same PR that raises the coverage.
+#
+# Format:  <import path relative to the module root>  <minimum percent>
+
+floor cmd/hydra                     44
+floor internal/a2a                  95
+floor internal/budget               95
+floor internal/capabilities         92
+floor internal/config               86
+floor internal/cost                 93
+floor internal/diff                 94
+floor internal/dispatch             90
+floor internal/editor               84
+floor internal/entropy              90
+floor internal/executor             86
+floor internal/glob                 99
+floor internal/graph                90
+floor internal/ledger               88
+floor internal/optimal              99
+floor internal/oracle               87
+floor internal/parallel             86
+floor internal/policy               90
+floor internal/pricing              88
+floor internal/probe                93
+floor internal/provider             99
+floor internal/provider/agy         92
+floor internal/provider/cli         89
+floor internal/provider/env         93
+floor internal/provider/port        86
+floor internal/rank                 93
+floor internal/review               90
+floor internal/runid                99
+floor internal/runlog               88
+floor internal/swarm                90
+floor internal/sysinfo              92
+floor internal/testutil             69
+floor internal/tree                 88
+floor internal/trust                90
+floor internal/tui                  82
+floor internal/update               91
+floor internal/util                 92
+floor internal/workspace            91
+floor registry                      88
+
+# Packages allowed to have no test files at all.
+#
+# The list started at eleven — the entire platform and discovery layer. It is
+# down to two, and both are permanent:
+#
+#   internal/build   is four ldflags-injected string vars and nothing else.
+#   cmd/specstest    is a debug main that prints sysinfo.Detect()'s output; the
+#                    logic it prints is covered in internal/sysinfo.
+#
+# Adding anything here needs a reason on the line. A package with no tests is
+# not a package with nothing to test.
+no-tests internal/build   ldflags-injected version vars only
+no-tests cmd/specstest    debug main; the logic it prints is covered in internal/sysinfo
+
+# Maximum number of t.Skip/t.Skipf calls across the whole test suite.
+#
+# Skips are how a cross-platform suite hides the problem it exists to catch: a
+# three-OS matrix where every awkward test skips on two of them is decorative.
+# Each skip must carry a reason, and the total cannot grow without this number
+# being edited — which a reviewer sees.
+skip-budget 32

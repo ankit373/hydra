@@ -93,6 +93,23 @@ jobs:
       - name: Test
         run: go test ./... -race -count=1
 
+      # Coverage floors, the zero-test-package allow-list and the skip budget.
+      #
+      # Linux only: all three are properties of the source, not of the runner,
+      # and the numbers would differ per OS anyway — a test that legitimately
+      # skips on Windows moves that package's coverage there. Enforcing one set
+      # of floors on the platform they were measured on is the only version of
+      # this that means anything.
+      #
+      # Run without -race: the detector does not change coverage, and this is a
+      # second full pass over the suite.
+      - name: Coverage floors
+        if: runner.os == 'Linux'
+        run: |
+          go test ./internal/... ./cmd/... ./registry/... \
+            -coverprofile=cover.out -count=1
+          go run ./ci/covergate -profile cover.out -config ci/coverage-floors.txt
+
   # The desktop app ships for all three OSes, so its Go backend is tested on all
   # three too — same reasoning as the root job above (#257).
   desktop:
