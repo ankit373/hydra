@@ -298,8 +298,8 @@ func TestStringifyAny(t *testing.T) {
 	}{
 		{"nil", nil, ""},
 		{"string", "hi", "hi"},
-		{"slice of strings", []any{"a", "b"}, "a\nb"},
-		{"slice with empties", []any{"a", "", "b"}, "a\nb"},
+		{"slice of strings", []any{"a", "b"}, "ab"},
+		{"slice with empties", []any{"a", "", "b"}, "ab"},
 		{"empty slice", []any{}, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

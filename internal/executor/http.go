@@ -862,6 +862,12 @@ func stringifyAny(v any) string {
 	case string:
 		return x
 	case []any:
+		// Joined with nothing between them. Replicate's predictions API streams a
+		// text answer as an array of *token fragments* — ["Hel", "lo", ", wor",
+		// "ld"] — and its own clients concatenate them. Joining with "\n" put a
+		// line break between every token, so every Replicate answer arrived as
+		// one fragment per line. Its own tests asserted that, which is how the
+		// shape survived: they pinned the implementation rather than the format.
 		parts := make([]string, 0, len(x))
 		for _, item := range x {
 			s := stringifyAny(item)
@@ -869,7 +875,7 @@ func stringifyAny(v any) string {
 				parts = append(parts, s)
 			}
 		}
-		return strings.Join(parts, "\n")
+		return strings.Join(parts, "")
 	default:
 		raw, err := json.Marshal(x)
 		if err != nil {

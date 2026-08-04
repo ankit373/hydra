@@ -38,6 +38,56 @@ var APIKeyVars = []string{
 	"XAI_API_KEY",
 }
 
+// ModelPinVars is every environment variable that names *which model* a
+// provider should use, or how to reach it (executor.defaultModelFor's table,
+// plus Azure's endpoint/deployment/version and the AWS region).
+//
+// These are not credentials, so APIKeyVars did not cover them — and a
+// developer with ANTHROPIC_MODEL exported for day-to-day use had every test
+// that touches model resolution silently read their shell instead of the
+// default under test. The failure mode is the one the sandbox exists to
+// prevent: a test that passes on one machine and not another, for a reason
+// nothing in the test names.
+//
+// Kept in sync with defaultModelFor by TestModelPinVars_CoversDefaultModelFor.
+var ModelPinVars = []string{
+	"ANTHROPIC_MODEL",
+	"AWS_BEDROCK_MODEL_ID",
+	"AWS_DEFAULT_REGION",
+	"AWS_REGION",
+	"AWS_SESSION_TOKEN",
+	"AZURE_OPENAI_API_VERSION",
+	"AZURE_OPENAI_DEPLOYMENT",
+	"BEDROCK_MODEL_ID",
+	"COHERE_MODEL",
+	"DEEPSEEK_MODEL",
+	"FIREWORKS_MODEL",
+	"GEMINI_MODEL",
+	"GOOGLE_MODEL",
+	"GROQ_MODEL",
+	"HYDRA_MODEL_ANTHROPIC",
+	"HYDRA_MODEL_BEDROCK",
+	"HYDRA_MODEL_COHERE",
+	"HYDRA_MODEL_DEEPSEEK",
+	"HYDRA_MODEL_FIREWORKS",
+	"HYDRA_MODEL_GOOGLE",
+	"HYDRA_MODEL_GROQ",
+	"HYDRA_MODEL_MISTRAL",
+	"HYDRA_MODEL_OPENAI",
+	"HYDRA_MODEL_OPENROUTER",
+	"HYDRA_MODEL_PERPLEXITY",
+	"HYDRA_MODEL_REPLICATE",
+	"HYDRA_MODEL_TOGETHER",
+	"HYDRA_MODEL_XAI",
+	"MISTRAL_MODEL",
+	"OPENAI_MODEL",
+	"OPENROUTER_MODEL",
+	"PERPLEXITY_MODEL",
+	"REPLICATE_MODEL",
+	"TOGETHER_MODEL",
+	"XAI_MODEL",
+}
+
 // tuningVars are Hydra's own knobs. A developer with HYDRA_HOME exported for
 // day-to-day use would otherwise have every test read their real registry.
 var tuningVars = []string{
@@ -108,6 +158,9 @@ func NewSandbox(t *testing.T) *Sandbox {
 	t.Setenv("PATH", s.BinDir)
 
 	for _, v := range APIKeyVars {
+		t.Setenv(v, "")
+	}
+	for _, v := range ModelPinVars {
 		t.Setenv(v, "")
 	}
 	for _, v := range tuningVars {
