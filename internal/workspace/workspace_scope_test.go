@@ -299,35 +299,52 @@ func TestValidatorFor(t *testing.T) {
 
 // ── Load ──────────────────────────────────────────────────────────────────────
 
-// Load must work with no on-disk registry: the embedded copy is what every
+// Load must not fail with no on-disk registry: the embedded copy is what every
 // brew/npm/pip install actually runs with (#238).
-func TestLoad_FallsBackToTheEmbeddedRegistry(t *testing.T) {
+//
+// It must also not fail because an *entry* is unusable. The embedded registry
+// ships POSIX roots, and filepath.IsAbs("/Users/x") is false on Windows — which
+// made Load error outright there, killing the whole scope layer before it
+// looked at a single path (#297). One bad entry must narrow what Hydra can
+// touch, never disable it.
+func TestLoad_FallsBackToTheEmbeddedRegistryOnEveryPlatform(t *testing.T) {
 	testutil.NewSandbox(t)
 
 	r, err := Load("")
 	if err != nil {
-		t.Fatalf("Load with no on-disk registry failed: %v — this is what every "+
-			"installed binary does", err)
+		t.Fatalf("Load with no on-disk registry failed on %s: %v — this is what every "+
+			"installed binary does", runtime.GOOS, err)
 	}
-	if len(r.workspaces) == 0 {
-		t.Error("embedded registry defines no workspaces")
-	}
+	// Whatever survives must be usable.
 	for _, ws := range r.workspaces {
 		if !filepath.IsAbs(ws.Root) {
-			t.Errorf("workspace %q has a non-absolute root %q", ws.Name, ws.Root)
+			t.Errorf("workspace %q kept a non-absolute root %q", ws.Name, ws.Root)
 		}
 		if len(ws.AllowedGlobs) == 0 {
 			t.Errorf("workspace %q allows nothing — it can never be used", ws.Name)
 		}
 	}
+	// Whatever was dropped must say why, or a user cannot tell "nothing
+	// configured" from "your configuration was ignored".
+	for _, sk := range r.Skipped() {
+		if sk.Name == "" || sk.Reason == "" {
+			t.Errorf("skipped entry %+v does not identify itself or say why", sk)
+		}
+	}
+	// Every entry is accounted for exactly once.
+	if got, want := len(r.workspaces)+len(r.Skipped()), 2; got != want {
+		t.Errorf("embedded registry yielded %d kept + skipped, want %d", got, want)
+	}
 	if len(r.validators) == 0 {
 		t.Error("embedded registry defines no validators")
 	}
+	t.Logf("%s: %d workspaces usable, %d skipped", runtime.GOOS, len(r.workspaces), len(r.Skipped()))
 }
 
-// A relative root is a configuration error, not something to silently accept:
-// every containment check downstream assumes absolute paths.
-func TestLoad_RejectsRelativeRoots(t *testing.T) {
+// A root that is not absolute for this platform is skipped, not fatal — and a
+// skipped workspace fails closed: paths that would have resolved to it are
+// refused rather than silently allowed.
+func TestLoad_UnusableRootIsSkippedAndFailsClosed(t *testing.T) {
 	s := testutil.NewSandbox(t)
 
 	regDir := filepath.Join(s.HydraHome, "registry")
@@ -339,8 +356,23 @@ func TestLoad_RejectsRelativeRoots(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := Load(s.HydraHome); err == nil {
-		t.Error("a workspace with a relative root was accepted")
+	r, err := Load(s.HydraHome)
+	if err != nil {
+		t.Fatalf("one unusable entry made the whole load fail: %v", err)
+	}
+	if len(r.workspaces) != 0 {
+		t.Errorf("a relative root was kept: %+v", r.workspaces)
+	}
+	if len(r.Skipped()) != 1 || r.Skipped()[0].Name != "bad" {
+		t.Errorf("the skipped entry was not recorded: %+v", r.Skipped())
+	}
+	// Fails closed: nothing resolves into a workspace that was dropped.
+	abs, err := filepath.Abs(filepath.Join("relative", "path", "x.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.Check(abs); err == nil {
+		t.Error("a path resolved into a workspace that was skipped at load")
 	}
 }
 

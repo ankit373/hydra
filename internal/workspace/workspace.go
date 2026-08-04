@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -46,10 +47,28 @@ type workspaceEntry struct {
 	DeniedGlobs  []string `yaml:"denied_globs"`
 }
 
+// SkippedWorkspace is an entry Load could not use. It is kept so callers can
+// distinguish "no workspaces are configured" from "your configuration was read
+// and then ignored" — the second is a problem the user needs told about.
+type SkippedWorkspace struct {
+	Name   string
+	Root   string
+	Reason string
+}
+
 // Registry holds the loaded workspace configuration.
 type Registry struct {
 	workspaces []Workspace
 	validators map[string]string // ext → command template
+	skipped    []SkippedWorkspace
+}
+
+// Skipped returns the workspace entries Load read but could not use.
+func (r *Registry) Skipped() []SkippedWorkspace {
+	if r == nil {
+		return nil
+	}
+	return r.skipped
 }
 
 // Load reads registry/workspace.yaml — an on-disk copy under hydraHome if one
@@ -69,7 +88,24 @@ func Load(hydraHome string) (*Registry, error) {
 	for name, e := range rf.Workspaces {
 		root := filepath.Clean(e.Root)
 		if !filepath.IsAbs(root) {
-			return nil, fmt.Errorf("workspace %q: root %q must be an absolute path", name, e.Root)
+			// Skip this entry rather than failing the whole load.
+			//
+			// A root that is not absolute *for this platform* must not make the
+			// entire scope layer unusable. The embedded registry ships POSIX
+			// roots, and filepath.IsAbs("/Users/x") is false on Windows — so
+			// erroring here made workspace.Load fail outright there, and every
+			// hyctl edit/parallel/review died before it looked at a path (#297).
+			//
+			// Skipping fails closed: paths that would have resolved to this
+			// workspace are now refused by find() as "no workspace contains",
+			// which is the safe direction. Skipped is recorded so callers can
+			// tell "no workspaces configured" from "your config was ignored".
+			r.skipped = append(r.skipped, SkippedWorkspace{
+				Name:   name,
+				Root:   e.Root,
+				Reason: "root is not an absolute path on " + runtime.GOOS,
+			})
+			continue
 		}
 		r.workspaces = append(r.workspaces, Workspace{
 			Name:         name,
