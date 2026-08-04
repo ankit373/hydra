@@ -7,6 +7,7 @@ package review
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -119,7 +120,7 @@ func Diff(file string) (string, error) {
 		resolved, _ = reg.Resolve(file)
 	}
 
-	if resolved.GitRoot != "" {
+	if gitUsable(resolved.GitRoot) {
 		out, err := exec.Command("git", "-C", resolved.GitRoot, "diff", "--", file).Output()
 		if err != nil {
 			return "", fmt.Errorf("git diff failed: %w", err)
@@ -164,7 +165,7 @@ func Approve(file string) (*ApproveResult, error) {
 		resolved, _ = reg.Resolve(file)
 	}
 
-	if resolved.GitRoot == "" {
+	if !gitUsable(resolved.GitRoot) {
 		backup := file + ".hydra-bak"
 		if fileExists(backup) {
 			_ = os.Remove(backup)
@@ -190,15 +191,21 @@ func Reject(file string) (*RejectResult, error) {
 	}
 
 	gitRoot := resolved.GitRoot
-	if gitRoot != "" {
-		if err := exec.Command("git", "-C", gitRoot, "ls-files", "--error-unmatch", file).Run(); err == nil {
+	if gitUsable(gitRoot) {
+		err := exec.Command("git", "-C", gitRoot, "ls-files", "--error-unmatch", file).Run()
+		if err == nil {
 			if err := exec.Command("git", "-C", gitRoot, "checkout", "--", file).Run(); err != nil {
 				return nil, fmt.Errorf("git checkout failed: %w", err)
 			}
 			return &RejectResult{Status: "rejected", File: file, Method: "git_checkout"}, nil
 		}
-		// Untracked new file
-		if fileExists(file) {
+		// Only a clean exit status of 1 means "this path is not tracked". Any
+		// other failure — git missing, .git present but not a repository, a
+		// permissions error — means we do not know, and deleting a file we
+		// cannot prove is disposable is unrecoverable data loss. Before this,
+		// every one of those took the branch below and removed the file.
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 && fileExists(file) {
 			_ = os.Remove(file)
 			return &RejectResult{Status: "rejected", File: file, Method: "rm_untracked"}, nil
 		}
@@ -262,6 +269,19 @@ CONCERNS <bullet list of issues>`, file, diffText)
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
+// gitUsable reports whether git can actually operate on root.
+//
+// workspace.GitRoot only stats for a ".git" entry, so it happily reports a root
+// for a stray marker, a broken checkout, or a machine with no git installed.
+// Every caller here then ran a git command and read its failure as a fact about
+// the file rather than about git — which, in Reject, meant deleting it.
+func gitUsable(root string) bool {
+	if root == "" {
+		return false
+	}
+	return exec.Command("git", "-C", root, "rev-parse", "--git-dir").Run() == nil
+}
+
 func scopeCheck(file string) error {
 	reg, err := workspace.Load(config.ScriptHome())
 	if err != nil {
@@ -275,7 +295,7 @@ func scopeCheck(file string) error {
 
 // numstat returns (added, removed, statusString) for a file.
 func numstat(file, gitRoot string) (added, removed int, status string) {
-	if gitRoot != "" {
+	if gitUsable(gitRoot) {
 		if err := exec.Command("git", "-C", gitRoot, "ls-files", "--error-unmatch", file).Run(); err == nil {
 			out, _ := exec.Command("git", "-C", gitRoot, "diff", "--numstat", "--", file).Output()
 			line := strings.TrimSpace(string(out))
