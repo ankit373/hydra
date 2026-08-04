@@ -199,15 +199,32 @@ jobs:
           }
           Write-Host "install.ps1 parses cleanly"
 
+      # Best-effort, unlike the parse step above. PSScriptAnalyzer has to be
+      # fetched from the PowerShell Gallery, and a gallery outage is not a
+      # defect in install.ps1 — blocking every unrelated PR on it is the wrong
+      # trade. The parse check needs no network and is the real gate.
       - name: PSScriptAnalyzer
         shell: pwsh
         run: |
-          Install-Module -Name PSScriptAnalyzer -Force -Scope CurrentUser -ErrorAction Stop
+          try {
+            # Registering explicitly: the runner image occasionally starts with
+            # no repositories, which surfaces as "No match was found for the
+            # specified search criteria and module name 'PSScriptAnalyzer'".
+            if (-not (Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue)) {
+              Register-PSRepository -Default -ErrorAction Stop
+            }
+            Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -ErrorAction SilentlyContinue
+            Install-Module -Name PSScriptAnalyzer -Force -Scope CurrentUser -ErrorAction Stop
+          } catch {
+            Write-Host "::warning::PSScriptAnalyzer unavailable ($($_.Exception.Message)) — skipping. The parse check above still ran."
+            exit 0
+          }
+
           $results = Invoke-ScriptAnalyzer -Path ./install.ps1 -Severity Error,Warning
           if ($results) {
             $results | Format-Table -AutoSize | Out-String | Write-Host
-            # Errors block; warnings are surfaced, matching shellcheck's policy
-            # of --severity=error above.
+            # Errors block; warnings are surfaced, matching the shellcheck job's
+            # --severity=error policy.
             if ($results | Where-Object { $_.Severity -eq 'Error' }) { exit 1 }
           }
           Write-Host "PSScriptAnalyzer: no errors"
