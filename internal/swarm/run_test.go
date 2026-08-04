@@ -6,7 +6,6 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -24,14 +23,10 @@ import (
 // swarmHead builds a head backed by a fake CLI binary that prints reply.
 func swarmHead(t *testing.T, s *testutil.Sandbox, id string, capScore int, reply string) provider.Head {
 	t.Helper()
-	body := "#!/bin/sh\n/bin/cat <<'HYDRA_EOF'\n" + reply + "\nHYDRA_EOF\n"
-	if runtime.GOOS == "windows" {
-		body = "@echo off\r\necho " + strings.ReplaceAll(reply, "\n", " ") + "\r\n"
-	}
 	return provider.Head{
 		ID: id, Name: id, Provider: "openai", Source: "cli",
 		CapScore: capScore, AuthReady: true,
-		Executable: s.FakeBinary(t, "fake-"+id, body),
+		Executable: s.FakeBinary(t, "fake-"+id, testutil.EchoScript(reply)),
 	}
 }
 

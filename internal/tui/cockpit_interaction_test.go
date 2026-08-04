@@ -13,7 +13,7 @@ import (
 	"github.com/ankit373/hydra/internal/rank"
 )
 
-// The cockpit's command bar is how a user drives `hydra tui`. Every command it
+// The cockpit's command bar is how a user drives `hyctl tui`. Every command it
 // accepts must do what it says, and every one it does not recognise must say so
 // rather than being swallowed.
 

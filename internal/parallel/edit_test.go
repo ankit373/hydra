@@ -41,20 +41,7 @@ func editSandbox(t *testing.T, reply string) (repo string) {
 	// rather than `claude` because its capability score puts it at UITier 6, so
 	// enum MODERATE routes to it — a tier-1 head is *stronger* than any enum an
 	// edit task is allowed to ask for, and selection would find nothing.
-	// /bin/cat by absolute path: the sandbox empties $PATH, so a bare `cat`
-	// resolves to nothing and the script exits 127.
-	body := "#!/bin/sh\n/bin/cat <<'HYDRA_EOF'\n" + reply + "\nHYDRA_EOF\n"
-	if runtime.GOOS == "windows" {
-		body = "@echo off\r\n"
-		for _, line := range strings.Split(reply, "\n") {
-			if line == "" {
-				body += "echo.\r\n"
-				continue
-			}
-			body += "echo " + line + "\r\n"
-		}
-	}
-	s.FakeBinary(t, "cody", body)
+	s.FakeBinary(t, "cody", testutil.EchoScript(reply))
 
 	repo = t.TempDir()
 	// A .git directory that is not a repository: workspace resolution roots

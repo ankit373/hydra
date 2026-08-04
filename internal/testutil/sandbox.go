@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -253,4 +254,48 @@ func (s *Sandbox) AllowHostBinary(t *testing.T, name string) bool {
 	// credentials) are untouched.
 	t.Setenv("PATH", filepath.Dir(real)+string(os.PathListSeparator)+os.Getenv("PATH"))
 	return true
+}
+
+// EchoScript returns a script body for FakeBinary that prints reply verbatim on
+// stdout, on whichever platform the test is running.
+//
+// It exists because the obvious Windows form is wrong in a way that only shows
+// up for the payloads these tests actually use. `echo <<<HYDRA_FILE_START>>>`
+// in a .bat is not an echo of that text: `<` and `>` are cmd.exe's redirection
+// operators, so the interpreter fails with "<< was unexpected at this time"
+// and the fake head exits 255. Every marker-based edit test therefore passed on
+// Unix and failed on Windows for a reason that had nothing to do with the code
+// under test.
+//
+// On Unix the reply goes through a quoted heredoc, which needs no escaping at
+// all. /bin/cat is named by absolute path because NewSandbox empties $PATH.
+func EchoScript(reply string) string {
+	if runtime.GOOS != "windows" {
+		return "#!/bin/sh\n/bin/cat <<'HYDRA_TESTUTIL_EOF'\n" + reply + "\nHYDRA_TESTUTIL_EOF\n"
+	}
+
+	var b strings.Builder
+	b.WriteString("@echo off\r\n")
+	for _, line := range strings.Split(reply, "\n") {
+		line = strings.TrimSuffix(line, "\r")
+		if line == "" {
+			b.WriteString("echo.\r\n")
+			continue
+		}
+		b.WriteString("echo " + escapeBatch(line) + "\r\n")
+	}
+	return b.String()
+}
+
+// escapeBatch quotes the characters cmd.exe interprets before echo sees them.
+// The caret must be escaped first, or it would double-escape everything after.
+func escapeBatch(s string) string {
+	return strings.NewReplacer(
+		"^", "^^",
+		"<", "^<",
+		">", "^>",
+		"&", "^&",
+		"|", "^|",
+		"%", "%%",
+	).Replace(s)
 }
