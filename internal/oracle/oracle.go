@@ -9,6 +9,7 @@ package oracle
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"strings"
@@ -70,7 +71,15 @@ func (o *CommandOracle) Verify(ctx context.Context, candidate string, _ trust.Ta
 		defer cleanup()
 	}
 	if len(parts) == 0 {
-		return Verdict{Passed: true}, nil
+		// An empty template is a misconfiguration, not a passing verdict.
+		//
+		// This returned Passed:true, which is the worst possible default here:
+		// an oracle is a high-D evidence source, so LLR lets its verdict
+		// outweigh several models' votes. A template that was blank, or lost in
+		// config, therefore produced *confident false evidence* that the
+		// candidate was correct — and did it silently, since nothing else in
+		// the chain can tell an unconfigured oracle from a satisfied one.
+		return Verdict{}, fmt.Errorf("oracle %s: empty command template", o.Source)
 	}
 	cmd := exec.CommandContext(ctx, parts[0], parts[1:]...)
 	out, runErr := cmd.CombinedOutput()
