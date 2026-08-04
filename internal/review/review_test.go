@@ -39,6 +39,11 @@ func repoSandbox(t *testing.T, gitInit bool) string {
 			{"init", "-q"},
 			{"config", "user.email", "t@example.com"},
 			{"config", "user.name", "t"},
+			// Windows git defaults core.autocrlf=true, so a checkout rewrites
+			// LF to CRLF and the restored bytes differ from the committed ones.
+			// Pinned off so the test asserts what git restored rather than what
+			// the platform's line-ending policy happens to be.
+			{"config", "core.autocrlf", "false"},
 		} {
 			cmd := exec.Command("git", append([]string{"-C", repo}, args...)...)
 			if out, err := cmd.CombinedOutput(); err != nil {
