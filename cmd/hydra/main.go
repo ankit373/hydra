@@ -350,6 +350,13 @@ func budgetBar(pct int) string {
 	if filled > width {
 		filled = width
 	}
+	// state.json is written by another process — and by hand, per the
+	// orchestrator protocol's `jq '.claude_pct = 52'`. A negative value there
+	// reached strings.Repeat with a negative count, which panics: `hyctl status`
+	// crashed on a malformed field it only meant to display.
+	if filled < 0 {
+		filled = 0
+	}
 	bar := strings.Repeat("█", filled) + strings.Repeat("░", width-filled)
 	return budgetModeStyle(budget.ModeFor(pct).String()).Render(bar)
 }
