@@ -281,6 +281,17 @@ func darwinGPUVRAM() (float64, string) {
 	if err != nil {
 		return 0, ""
 	}
+	return parseSPDisplays(out)
+}
+
+// parseSPDisplays pulls the chipset name and VRAM size out of
+// `system_profiler SPDisplaysDataType`.
+//
+// Split from the exec for the same reason parseMeminfo is: the parser is the
+// part that can be wrong, and running system_profiler for real is neither
+// deterministic nor available off macOS — so as one function it was untestable
+// everywhere, which is how a misparse ships.
+func parseSPDisplays(out []byte) (float64, string) {
 	lines := strings.Split(string(out), "\n")
 	var name string
 	for _, line := range lines {
@@ -376,6 +387,14 @@ func nvidiaVRAM() (float64, string) {
 	if err != nil {
 		return 0, ""
 	}
+	return parseNvidiaSMI(out)
+}
+
+// parseNvidiaSMI reads the first row of
+// `nvidia-smi --query-gpu=memory.total,name --format=csv,noheader,nounits`,
+// which is MiB and a card name. Split from the exec so it is testable without
+// an NVIDIA card present.
+func parseNvidiaSMI(out []byte) (float64, string) {
 	line := strings.TrimSpace(strings.SplitN(string(out), "\n", 2)[0])
 	parts := strings.SplitN(line, ", ", 2)
 	if len(parts) < 2 {
