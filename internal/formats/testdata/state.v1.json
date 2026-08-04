@@ -1,0 +1,10 @@
+{
+  "claude_pct": 52,
+  "claude_pct_history": [10, 25, 40, 52],
+  "last_model": "claude-sonnet-4",
+  "last_tier": 2,
+  "last_status": "ok",
+  "budget": {
+    "claude-sonnet-4": {"used": 120000, "window": 200000, "pct": 60, "mode": "compact", "source": "estimate"}
+  }
+}

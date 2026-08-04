@@ -1,0 +1,5 @@
+{
+  "from": "hydra-tier-2",
+  "task": "rotate the signing key",
+  "prior_output": "func RotateSigningKey(...) error { ... }"
+}
