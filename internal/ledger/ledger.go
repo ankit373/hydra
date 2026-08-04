@@ -15,6 +15,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/ankit373/hydra/internal/glob"
 	"sort"
 	"strings"
 	"time"
@@ -297,16 +299,11 @@ func fieldMatch(pattern, v string) bool {
 
 // globMatch: empty or "*" matches anything; otherwise filepath.Match glob. A
 // malformed pattern falls back to exact comparison rather than erroring.
-func globMatch(pattern, v string) bool {
-	if pattern == "" || pattern == "*" {
-		return true
-	}
-	ok, err := filepath.Match(pattern, v)
-	if err != nil {
-		return pattern == v
-	}
-	return ok
-}
+// globMatch delegates to the shared dialect. It used filepath.Match, which has
+// no "**" and whose separator is "\" on Windows — so "/repo/*" matched one
+// level on Unix and arbitrarily deep on Windows, and a "**/secrets/**" rule
+// copied from workspace.yaml matched nothing at all (#310).
+func globMatch(pattern, v string) bool { return glob.Match(pattern, v) }
 
 func ruleOr(s string) string {
 	if s == "" {
