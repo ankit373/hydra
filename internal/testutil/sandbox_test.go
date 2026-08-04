@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -166,5 +167,76 @@ func TestFakeBinary_IsExecutableOnThisOS(t *testing.T) {
 	}
 	if err := exec.Command(resolved).Run(); err != nil {
 		t.Errorf("planted binary is not runnable: %v", err)
+	}
+}
+
+// The Windows branch of EchoScript is what the marker-based edit tests depend
+// on, and it cannot be exercised from a Unix runner — so the escaping it
+// applies is tested directly. Getting it wrong is not a rendering nit: an
+// unescaped "<" makes cmd.exe fail the whole script with "<< was unexpected at
+// this time", and the fake head exits 255 with no output.
+func TestEscapeBatch_QuotesEveryCmdMetacharacter(t *testing.T) {
+	tests := map[string]string{
+		"<<<HYDRA_FILE_START>>>": "^<^<^<HYDRA_FILE_START^>^>^>",
+		"a & b":                  "a ^& b",
+		"a | b":                  "a ^| b",
+		"100%":                   "100%%",
+		"plain text":             "plain text",
+		"":                       "",
+		// The caret is escaped first, so an existing one is not doubled by a
+		// later replacement.
+		"a ^ b": "a ^^ b",
+		"^<":    "^^^<",
+	}
+	for in, want := range tests {
+		if got := escapeBatch(in); got != want {
+			t.Errorf("escapeBatch(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestEchoScript_ProducesAScriptForThisPlatform(t *testing.T) {
+	reply := "<<<HYDRA_FILE_START>>>\npackage main\n<<<HYDRA_FILE_END>>>"
+	got := EchoScript(reply)
+
+	if got == "" {
+		t.Fatal("EchoScript produced nothing")
+	}
+	if runtime.GOOS == "windows" {
+		if strings.Contains(got, "echo <<<") {
+			t.Errorf("the redirection operators were not escaped:\n%s", got)
+		}
+		if !strings.Contains(got, "@echo off") {
+			t.Errorf("not a batch script:\n%s", got)
+		}
+		return
+	}
+	if !strings.HasPrefix(got, "#!/bin/sh") {
+		t.Errorf("not a shell script:\n%s", got)
+	}
+	// A quoted heredoc needs no escaping, so the payload must appear verbatim.
+	if !strings.Contains(got, reply) {
+		t.Errorf("the reply was altered:\n%s", got)
+	}
+	// /bin/cat by absolute path — NewSandbox empties $PATH, so a bare `cat`
+	// exits 127.
+	if !strings.Contains(got, "/bin/cat") {
+		t.Errorf("cat is not named by absolute path:\n%s", got)
+	}
+}
+
+// A round trip through FakeBinary: the script must actually print the reply.
+func TestEchoScript_RoundTripsThroughAFakeBinary(t *testing.T) {
+	s := NewSandbox(t)
+	reply := "<<<HYDRA_FILE_START>>>\nline one\n<<<HYDRA_FILE_END>>>"
+	path := s.FakeBinary(t, "echo-head", EchoScript(reply))
+
+	out, err := exec.Command(path).Output()
+	if err != nil {
+		t.Fatalf("the fake head failed to run: %v", err)
+	}
+	got := strings.ReplaceAll(strings.TrimSpace(string(out)), "\r\n", "\n")
+	if got != reply {
+		t.Errorf("the fake head printed:\n%q\nwant:\n%q", got, reply)
 	}
 }

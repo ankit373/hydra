@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -36,6 +37,56 @@ var APIKeyVars = []string{
 	"REPLICATE_API_TOKEN",
 	"TOGETHER_API_KEY",
 	"XAI_API_KEY",
+}
+
+// ModelPinVars is every environment variable that names *which model* a
+// provider should use, or how to reach it (executor.defaultModelFor's table,
+// plus Azure's endpoint/deployment/version and the AWS region).
+//
+// These are not credentials, so APIKeyVars did not cover them — and a
+// developer with ANTHROPIC_MODEL exported for day-to-day use had every test
+// that touches model resolution silently read their shell instead of the
+// default under test. The failure mode is the one the sandbox exists to
+// prevent: a test that passes on one machine and not another, for a reason
+// nothing in the test names.
+//
+// Kept in sync with defaultModelFor by TestModelPinVars_CoversDefaultModelFor.
+var ModelPinVars = []string{
+	"ANTHROPIC_MODEL",
+	"AWS_BEDROCK_MODEL_ID",
+	"AWS_DEFAULT_REGION",
+	"AWS_REGION",
+	"AWS_SESSION_TOKEN",
+	"AZURE_OPENAI_API_VERSION",
+	"AZURE_OPENAI_DEPLOYMENT",
+	"BEDROCK_MODEL_ID",
+	"COHERE_MODEL",
+	"DEEPSEEK_MODEL",
+	"FIREWORKS_MODEL",
+	"GEMINI_MODEL",
+	"GOOGLE_MODEL",
+	"GROQ_MODEL",
+	"HYDRA_MODEL_ANTHROPIC",
+	"HYDRA_MODEL_BEDROCK",
+	"HYDRA_MODEL_COHERE",
+	"HYDRA_MODEL_DEEPSEEK",
+	"HYDRA_MODEL_FIREWORKS",
+	"HYDRA_MODEL_GOOGLE",
+	"HYDRA_MODEL_GROQ",
+	"HYDRA_MODEL_MISTRAL",
+	"HYDRA_MODEL_OPENAI",
+	"HYDRA_MODEL_OPENROUTER",
+	"HYDRA_MODEL_PERPLEXITY",
+	"HYDRA_MODEL_REPLICATE",
+	"HYDRA_MODEL_TOGETHER",
+	"HYDRA_MODEL_XAI",
+	"MISTRAL_MODEL",
+	"OPENAI_MODEL",
+	"OPENROUTER_MODEL",
+	"PERPLEXITY_MODEL",
+	"REPLICATE_MODEL",
+	"TOGETHER_MODEL",
+	"XAI_MODEL",
 }
 
 // tuningVars are Hydra's own knobs. A developer with HYDRA_HOME exported for
@@ -108,6 +159,9 @@ func NewSandbox(t *testing.T) *Sandbox {
 	t.Setenv("PATH", s.BinDir)
 
 	for _, v := range APIKeyVars {
+		t.Setenv(v, "")
+	}
+	for _, v := range ModelPinVars {
 		t.Setenv(v, "")
 	}
 	for _, v := range tuningVars {
@@ -200,4 +254,48 @@ func (s *Sandbox) AllowHostBinary(t *testing.T, name string) bool {
 	// credentials) are untouched.
 	t.Setenv("PATH", filepath.Dir(real)+string(os.PathListSeparator)+os.Getenv("PATH"))
 	return true
+}
+
+// EchoScript returns a script body for FakeBinary that prints reply verbatim on
+// stdout, on whichever platform the test is running.
+//
+// It exists because the obvious Windows form is wrong in a way that only shows
+// up for the payloads these tests actually use. `echo <<<HYDRA_FILE_START>>>`
+// in a .bat is not an echo of that text: `<` and `>` are cmd.exe's redirection
+// operators, so the interpreter fails with "<< was unexpected at this time"
+// and the fake head exits 255. Every marker-based edit test therefore passed on
+// Unix and failed on Windows for a reason that had nothing to do with the code
+// under test.
+//
+// On Unix the reply goes through a quoted heredoc, which needs no escaping at
+// all. /bin/cat is named by absolute path because NewSandbox empties $PATH.
+func EchoScript(reply string) string {
+	if runtime.GOOS != "windows" {
+		return "#!/bin/sh\n/bin/cat <<'HYDRA_TESTUTIL_EOF'\n" + reply + "\nHYDRA_TESTUTIL_EOF\n"
+	}
+
+	var b strings.Builder
+	b.WriteString("@echo off\r\n")
+	for _, line := range strings.Split(reply, "\n") {
+		line = strings.TrimSuffix(line, "\r")
+		if line == "" {
+			b.WriteString("echo.\r\n")
+			continue
+		}
+		b.WriteString("echo " + escapeBatch(line) + "\r\n")
+	}
+	return b.String()
+}
+
+// escapeBatch quotes the characters cmd.exe interprets before echo sees them.
+// The caret must be escaped first, or it would double-escape everything after.
+func escapeBatch(s string) string {
+	return strings.NewReplacer(
+		"^", "^^",
+		"<", "^<",
+		">", "^>",
+		"&", "^&",
+		"|", "^|",
+		"%", "%%",
+	).Replace(s)
 }
