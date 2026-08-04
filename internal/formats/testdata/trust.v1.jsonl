@@ -1,0 +1,2 @@
+{"ts":"2026-07-20T08:00:00Z","task_hash":"a1b2c3d4","domain":"go","target_conf":0.95,"final_conf":0.96,"samples":3,"models":["claude","qwen"],"cost_usd":0.0412,"cost_source":"estimated","decision":"accept"}
+{"ts":"2026-08-01T09:30:00Z","task_hash":"deadbeef","domain":"default","target_conf":0.9,"final_conf":0.72,"samples":5,"models":["agy-tier-3"],"cost_usd":0.02,"cost_source":"estimated","decision":"stopped_on_budget","ledger":[{"source":"model:agy-tier-3","agreed":true,"llr":0.8,"lambda_after":0.8}],"config":"3f9c1a"}
