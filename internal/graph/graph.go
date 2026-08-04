@@ -280,7 +280,18 @@ func (g *Graph) Coupling(files []string) float64 {
 	if pairs > 0 {
 		overlap = sum / float64(pairs)
 	}
-	return kMin + overlap*(kMax-kMin)
+	// Clamped because the interpolation overshoots on exact overlap:
+	// 0.02 + 1×0.28 evaluates to 0.30000000000000004, four ulps above kMax. The
+	// excess is numerically irrelevant to n*, but the documented range is either
+	// true or it is not, and a caller is entitled to rely on it.
+	k := kMin + overlap*(kMax-kMin)
+	if k > kMax {
+		return kMax
+	}
+	if k < kMin {
+		return kMin
+	}
+	return k
 }
 
 // affectedSet is a file's own nodes plus everything that transitively depends on
