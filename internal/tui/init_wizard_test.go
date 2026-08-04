@@ -116,7 +116,7 @@ func TestInitWizard_DecliningLocalOnlyWritesNoPIIPolicy(t *testing.T) {
 	m, _ = send(m, "enter")         // cortex: claude
 	m, _ = send(m, "enter")         // tiers
 	m, _ = send(m, "down", "enter") // privacy: cursor 1 = no
-	m, _ = send(m, "enter")         // skills → save
+	_, _ = send(m, "enter")         // skills → save; the config is the assertion
 
 	cfg, err := config.Load()
 	if err != nil {

@@ -142,8 +142,8 @@ func TestInstallWizard_DecliningRunsNothing(t *testing.T) {
 		t.Fatalf("step = %v, want confirm", m.(InstallModel).step)
 	}
 
-	m, cmd := m.Update(key("down")) // cursor 1 = "I'll do it myself"
-	m, cmd = m.Update(key("enter"))
+	m, _ = m.Update(key("down")) // cursor 1 = "I'll do it myself"
+	m, cmd := m.Update(key("enter"))
 
 	im := m.(InstallModel)
 	if !im.done {
