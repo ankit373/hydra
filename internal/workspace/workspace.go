@@ -106,7 +106,15 @@ func (r *Registry) Check(path string) (string, error) {
 		return "", err
 	}
 
-	rel, _ := filepath.Rel(ws.Root, path)
+	// filepath.Rel cleans both sides, so rel is already free of "." and ".."
+	// segments — and find has established containment, so it cannot start with
+	// "..". ToSlash because the glob patterns are written with forward slashes
+	// and matchGlob splits on "/"; without it no pattern matches on Windows.
+	rel, err := filepath.Rel(ws.Root, path)
+	if err != nil {
+		return "", fmt.Errorf("path %s is not relative to workspace %q root %s", path, ws.Name, ws.Root)
+	}
+	rel = filepath.ToSlash(rel)
 
 	// Denied globs win.
 	for _, pat := range ws.DeniedGlobs {
@@ -161,18 +169,28 @@ func (r *Registry) ValidatorFor(ext string) string {
 
 // GitRoot walks up from path to find the nearest .git directory.
 // Returns empty string if not inside a git repo.
+// Termination is by fixed point, not by comparing against "/". filepath.Dir
+// returns its argument unchanged once it reaches the filesystem root, and on
+// Windows that root is "C:\", never "/" — so the old `for dir != "/"` condition
+// never became false there and the walk spun forever.
 func GitRoot(path string) string {
 	dir := path
 	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
 		dir = filepath.Dir(dir)
 	}
-	for dir != "/" && dir != "" {
+	for {
+		if dir == "" {
+			return ""
+		}
 		if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
 			return dir
 		}
-		dir = filepath.Dir(dir)
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "" // reached the root on any platform
+		}
+		dir = parent
 	}
-	return ""
 }
 
 // find returns the workspace whose root contains path.
@@ -181,7 +199,7 @@ func (r *Registry) find(path string) (Workspace, error) {
 	if override := os.Getenv("HYDRA_WORKSPACE"); override != "" {
 		for _, ws := range r.workspaces {
 			if ws.Name == override {
-				if path != ws.Root && !strings.HasPrefix(path, ws.Root+"/") {
+				if !contains(ws.Root, path) {
 					return Workspace{}, fmt.Errorf("HYDRA_WORKSPACE=%s root (%s) does not contain %s", override, ws.Root, path)
 				}
 				return ws, nil
@@ -191,11 +209,34 @@ func (r *Registry) find(path string) (Workspace, error) {
 	}
 
 	for _, ws := range r.workspaces {
-		if strings.HasPrefix(path, ws.Root+"/") || path == ws.Root {
+		if contains(ws.Root, path) {
 			return ws, nil
 		}
 	}
 	return Workspace{}, fmt.Errorf("no workspace contains %s", path)
+}
+
+// contains reports whether path is root itself or lives beneath it.
+//
+// This used to be `strings.HasPrefix(path, root+"/")`, which was wrong three
+// ways. It let "/ws/../etc/passwd" through, because the literal prefix matches
+// even though the path resolves outside the root — a workspace with a "**"
+// allowed_glob would then have permitted writing anywhere on the filesystem.
+// It hardcoded "/" as the separator, so on Windows no path ever matched any
+// workspace and every edit was rejected. And a sibling directory named
+// "<root>-evil" only failed to match by luck of the trailing slash.
+//
+// filepath.Rel cleans both operands and is separator-correct, so all three fall
+// out of using it: a path that escapes yields a rel beginning with "..".
+func contains(root, path string) bool {
+	rel, err := filepath.Rel(root, path)
+	if err != nil {
+		return false // different volumes on Windows, or otherwise unrelatable
+	}
+	if rel == "." {
+		return true // the root itself
+	}
+	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 // matchGlob matches a relative path against a glob pattern.
