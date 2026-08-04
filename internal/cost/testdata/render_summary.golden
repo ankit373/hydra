@@ -1,0 +1,20 @@
+
+  Hydra cost summary
+  ═════════════════════════════════════════════════════════════
+
+  Today (2026-08-04)
+    calls          3
+    tokens in/out  1200 / 450
+    est cost       <usd>
+    wall time      <dur>
+
+  All time
+    calls          128
+    tokens in/out  900000 / 250000
+    est cost       <usd>
+    wall time      <dur>
+    token source   87% actual · 13% estimated (agy char/4)
+    (cost is estimated: pricing × tokens, not billed)
+
+  Recent (last 5):
+  <ts>  /8  gemini-flash — 400+120 tok, <usd>, <dur>
