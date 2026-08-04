@@ -12,8 +12,10 @@
 # measures ~10 points apart. Enforcing macOS numbers on a Linux runner would
 # fail for a reason that has nothing to do with the change under review.
 #
-# Set from a real CI run, with a small margin for the ordinary variation a
-# coverage run has. Raise a floor in the same PR that raises the coverage; the
+# Set from a real CI run (30941076262), with a small margin for the ordinary
+# variation a coverage run has. internal/sysinfo is the widest gap: it reads
+# memory through darwinRAM/darwinMemoryState on macOS and /proc on Linux, so it
+# measures 94.5% there and 83.9% here. Raise a floor in the same PR that raises the coverage; the
 # gate prints every package's measured value, so the number to use is in the
 # log of the run you are looking at.
 #
@@ -49,13 +51,13 @@ floor internal/review               90
 floor internal/runid                99
 floor internal/runlog               88
 floor internal/swarm                90
-floor internal/sysinfo              92
+floor internal/sysinfo              82
 floor internal/testutil             69
 floor internal/tree                 88
 floor internal/trust                90
 floor internal/tui                  82
-floor internal/update               91
-floor internal/util                 92
+floor internal/update               87
+floor internal/util                 99
 floor internal/workspace            91
 floor registry                      88
 
