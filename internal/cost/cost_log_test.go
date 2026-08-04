@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ankit373/hydra/internal/testutil"
 )
@@ -309,5 +310,318 @@ func TestRenderSummary_SubCentSpendIsNotShownAsZero(t *testing.T) {
 	if strings.Contains(out, "$0.00\n") && !strings.Contains(out, "0.0004") {
 		t.Logf("output:\n%s", out)
 		t.Error("a real sub-cent charge renders as $0.00 with no indication it was non-zero")
+	}
+}
+
+// Summary is what `hyctl cost` prints. It must separate today from all-time and
+// report the token-source split, since "estimated" spend must never be shown as
+// measured.
+func TestSummary_SeparatesTodayFromAllTimeAndLabelsTokenSource(t *testing.T) {
+	today := time.Now().UTC().Format(time.RFC3339)
+	old := time.Now().UTC().AddDate(0, 0, -30).Format(time.RFC3339)
+
+	fixture(t,
+		row(t, Row{TS: old, Model: "a", EstCostUSD: 1.00, PromptTokens: 100,
+			ResponseTokens: 50, TokensSource: "actual"}),
+		row(t, Row{TS: today, Model: "b", EstCostUSD: 0.25, PromptTokens: 20,
+			ResponseTokens: 10, TokensSource: "estimated"}),
+	)
+
+	res, err := Summary()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.AllTime.Calls != 2 {
+		t.Errorf("AllTime.Calls = %d, want 2", res.AllTime.Calls)
+	}
+	if res.Today.Calls != 1 {
+		t.Errorf("Today.Calls = %d, want just the row from today", res.Today.Calls)
+	}
+	if res.Today.EstCostUSD > res.AllTime.EstCostUSD {
+		t.Error("today's spend exceeds all-time spend")
+	}
+	// The split is what stops estimated tokens being presented as measured.
+	if res.ActualTokens == 0 || res.EstimatedTokens == 0 {
+		t.Errorf("token source split = %d actual / %d estimated; both rows should be "+
+			"counted and labelled", res.ActualTokens, res.EstimatedTokens)
+	}
+	if len(res.Recent) == 0 {
+		t.Error("Summary carries no recent rows to show")
+	}
+}
+
+// Today and All are the per-tier breakdown `hyctl cost` prints. Today must be a
+// subset of All, and both are sorted by spend so the expensive tier is first.
+func TestTodayAndAll_GroupByTier(t *testing.T) {
+	today := time.Now().UTC().Format(time.RFC3339)
+	old := time.Now().UTC().AddDate(0, 0, -10).Format(time.RFC3339)
+
+	fixture(t,
+		row(t, Row{TS: today, Tier: 3, Model: "m1", EstCostUSD: 0.10, PromptTokens: 1}),
+		row(t, Row{TS: today, Tier: 3, Model: "m1", EstCostUSD: 0.20, PromptTokens: 1}),
+		row(t, Row{TS: today, Tier: 8, Model: "m3", EstCostUSD: 0.90, PromptTokens: 1}),
+		row(t, Row{TS: old, Tier: 1, Model: "m2", EstCostUSD: 0.30, PromptTokens: 1}),
+	)
+
+	todayRows, err := Today()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(todayRows) != 2 {
+		t.Fatalf("Today() = %+v, want tiers 3 and 8 only (tier 1 is 10 days old)", todayRows)
+	}
+	// Sorted by spend descending — the expensive tier is what the user must see.
+	if todayRows[0].Key != "8" {
+		t.Errorf("Today()[0].Key = %q, want the costliest tier 8 first: %+v",
+			todayRows[0].Key, todayRows)
+	}
+	for _, g := range todayRows {
+		if g.Key == "3" && g.Calls != 2 {
+			t.Errorf("tier 3 has %d calls, want the 2 rows merged", g.Calls)
+		}
+	}
+
+	allRows, err := All()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(allRows) != 3 {
+		t.Errorf("All() = %+v, want all three tiers", allRows)
+	}
+
+	// ByPool labels rows with no pool rather than dropping them; an unlabelled
+	// row that vanished would understate spend.
+	pools, err := ByPool()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pools) != 1 || pools[0].Key != "unknown" || pools[0].Calls != 4 {
+		t.Errorf("ByPool() = %+v, want all 4 rows under \"unknown\"", pools)
+	}
+}
+
+// JSON is the scripting surface; `--since` must filter on real timestamps
+// rather than string comparison, so timezone offsets behave.
+func TestJSON_FiltersBySinceUsingRealTimestamps(t *testing.T) {
+	fixture(t,
+		row(t, Row{TS: "2026-08-01T10:00:00Z", Model: "old", PromptTokens: 1}),
+		row(t, Row{TS: "2026-08-03T10:00:00+02:00", Model: "offset", PromptTokens: 1}),
+		row(t, Row{TS: "2026-08-05T10:00:00Z", Model: "new", PromptTokens: 1}),
+	)
+
+	all, err := JSON("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(all) != 3 {
+		t.Errorf("JSON(\"\") returned %d rows, want all 3", len(all))
+	}
+
+	since, err := JSON("2026-08-02T00:00:00Z")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(since) != 2 {
+		t.Errorf("JSON(since) returned %d rows, want the 2 at or after it: %+v", len(since), since)
+	}
+
+	if _, err := JSON("not-a-timestamp"); err == nil {
+		t.Error("an unparsable --since was accepted; the user would silently get " +
+			"unfiltered output")
+	}
+}
+
+// FilterDays trims to the last N calendar days. n<=0 means "everything", which
+// is what an unset flag produces.
+func TestFilterDays_Windows(t *testing.T) {
+	now := time.Now().UTC()
+	rows := []Row{
+		{TS: now.Format(time.RFC3339)},
+		{TS: now.AddDate(0, 0, -2).Format(time.RFC3339)},
+		{TS: now.AddDate(0, 0, -40).Format(time.RFC3339)},
+		{TS: "unparsable"},
+	}
+	if got := len(FilterDays(rows, 0)); got != len(rows) {
+		t.Errorf("FilterDays(n=0) returned %d rows, want all %d", got, len(rows))
+	}
+	if got := len(FilterDays(rows, 7)); got > 3 {
+		t.Errorf("FilterDays(n=7) returned %d rows, want at most the recent ones", got)
+	}
+}
+
+// SwarmStats only counts swarm rows, and reports the winner rate as a fraction
+// — a rate above 1 would render as "150%".
+func TestSwarmStats_CountsOnlySwarmRowsAndBoundsTheRate(t *testing.T) {
+	rows := []Row{
+		{SwarmMode: "best", SwarmWinner: true, WallMS: 1000, EstCostUSD: 0.1},
+		{SwarmMode: "best", SwarmWinner: false, WallMS: 3000, EstCostUSD: 0.2},
+		{SwarmMode: "race", SwarmWinner: true, WallMS: 2000, EstCostUSD: 0.3},
+		{Model: "not-a-swarm-row", WallMS: 9999, EstCostUSD: 9.9},
+	}
+	got := SwarmStats(rows)
+
+	if got.Runs != 3 {
+		t.Errorf("Runs = %d, want the 3 swarm rows only", got.Runs)
+	}
+	if got.WinnerRate < 0 || got.WinnerRate > 1 {
+		t.Errorf("WinnerRate = %v, outside [0,1] — it renders as a percentage", got.WinnerRate)
+	}
+	if got.TotalCost > 1.0 {
+		t.Errorf("TotalCost = %v; the non-swarm row was included", got.TotalCost)
+	}
+	if got.ByMode["best"] != 2 || got.ByMode["race"] != 1 {
+		t.Errorf("ByMode = %v", got.ByMode)
+	}
+
+	// No swarm rows at all must be a zero summary, not a divide by zero.
+	empty := SwarmStats([]Row{{Model: "plain"}})
+	if empty.Runs != 0 || empty.WinnerRate != 0 {
+		t.Errorf("SwarmStats with no swarm rows = %+v", empty)
+	}
+}
+
+// ByRun / ByTask are how a caller asks "what did that one run cost me". A
+// missing id must be an error, not silently-zero spend.
+func TestByRunAndByTask_ScopeToOneIDAndErrorWhenAbsent(t *testing.T) {
+	ts := time.Now().UTC().Format(time.RFC3339)
+	fixture(t,
+		row(t, Row{TS: ts, RunID: "run-a", TaskID: "task-1", Tier: 1, EstCostUSD: 0.10, PromptTokens: 5}),
+		row(t, Row{TS: ts, RunID: "run-a", TaskID: "task-2", Tier: 8, EstCostUSD: 0.02, PromptTokens: 5}),
+		row(t, Row{TS: ts, RunID: "run-b", TaskID: "task-3", Tier: 1, EstCostUSD: 9.00, PromptTokens: 5}),
+	)
+
+	res, err := ByRun("run-a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Totals.Calls != 2 {
+		t.Errorf("ByRun(run-a).Calls = %d, want 2 — run-b leaked in", res.Totals.Calls)
+	}
+	if res.Totals.EstCostUSD > 1.0 {
+		t.Errorf("ByRun(run-a) cost = %v; run-b's $9 was counted", res.Totals.EstCostUSD)
+	}
+	if len(res.ByTier) != 2 {
+		t.Errorf("ByRun(run-a).ByTier = %+v, want tiers 1 and 8", res.ByTier)
+	}
+
+	tot, err := ByTask("task-3")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tot.Calls != 1 {
+		t.Errorf("ByTask(task-3).Calls = %d, want 1", tot.Calls)
+	}
+
+	if _, err := ByRun("nope"); err == nil {
+		t.Error("ByRun on an unknown run returned no error — a typo'd run id would " +
+			"report $0.00 spent")
+	}
+	if _, err := ByTask("nope"); err == nil {
+		t.Error("ByTask on an unknown task returned no error")
+	}
+}
+
+// ByModel and ByDay back `hyctl stats`. ByDay's key must be the calendar day
+// (not the full timestamp), or every call becomes its own "day".
+func TestByModelAndByDay_KeyOnModelAndCalendarDay(t *testing.T) {
+	rows := []Row{
+		{TS: "2026-08-01T01:00:00Z", Model: "sonnet", EstCostUSD: 0.10, PromptTokens: 1},
+		{TS: "2026-08-01T23:59:59Z", Model: "sonnet", EstCostUSD: 0.20, PromptTokens: 1},
+		{TS: "2026-08-02T01:00:00Z", Model: "", EstCostUSD: 0.05, PromptTokens: 1},
+		{TS: "bad", Model: "x"},
+	}
+
+	var sawUnknown bool
+	for _, g := range ByModel(rows) {
+		if g.Key == "sonnet" && g.Calls != 2 {
+			t.Errorf("sonnet grouped into %d calls, want 2", g.Calls)
+		}
+		if g.Key == "unknown" {
+			sawUnknown = true
+		}
+	}
+	if !sawUnknown {
+		t.Errorf("a row with no model was not labelled \"unknown\": %+v", ByModel(rows))
+	}
+
+	days := ByDay(rows)
+	if len(days) != 3 {
+		t.Fatalf("ByDay() = %+v, want two calendar days plus \"unknown\"", days)
+	}
+	// Ascending by date, unlike every other grouping — a chart drawn from this
+	// reads left-to-right in time.
+	for i := 1; i < len(days); i++ {
+		if days[i-1].Key > days[i].Key {
+			t.Errorf("ByDay is not sorted ascending: %+v", days)
+			break
+		}
+	}
+	if days[0].Key != "2026-08-01" {
+		t.Errorf("ByDay()[0].Key = %q, want the earliest day", days[0].Key)
+	}
+}
+
+// Tail is `hyctl cost --tail`: newest first, clamped to what exists.
+func TestTail_NewestFirstAndClamped(t *testing.T) {
+	fixture(t,
+		row(t, Row{TS: "2026-08-01T00:00:00Z", Model: "oldest", PromptTokens: 1}),
+		row(t, Row{TS: "2026-08-02T00:00:00Z", Model: "middle", PromptTokens: 1}),
+		row(t, Row{TS: "2026-08-03T00:00:00Z", Model: "newest", PromptTokens: 1}),
+	)
+
+	two, err := Tail(2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(two) != 2 || two[0].Model != "newest" || two[1].Model != "middle" {
+		t.Errorf("Tail(2) = %+v, want newest first", two)
+	}
+
+	for _, n := range []int{0, -1, 999} {
+		all, err := Tail(n)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(all) != 3 {
+			t.Errorf("Tail(%d) returned %d rows, want all 3 clamped", n, len(all))
+		}
+	}
+}
+
+// The rendered tables are the actual product surface. They must not panic on
+// empty input, must survive labels longer than the column, and must format
+// large numbers readably rather than as an unreadable digit run.
+func TestRenderers_HandleEmptyLongLabelsAndLargeNumbers(t *testing.T) {
+	// Empty input: a fresh install runs `hyctl stats` before anything dispatched.
+	_ = capture(t, func() { RenderStatsTable("today", nil) })
+	_ = capture(t, func() { RenderTail(nil) })
+
+	long := strings.Repeat("very-long-model-name-", 5)
+	out := capture(t, func() {
+		RenderStatsTable("all time", []GroupRow{
+			{Key: long, Calls: 1234567, PromptTokens: 9876543, ResponseTokens: 12, EstCostUSD: 12.5},
+			{Key: "short", Calls: 1, PromptTokens: 999, ResponseTokens: 0, EstCostUSD: 0.001},
+		})
+	})
+	if strings.Contains(out, long) {
+		t.Error("an over-long key was printed in full, breaking the column alignment")
+	}
+	if !strings.Contains(out, "1,234,567") {
+		t.Errorf("large counts are not comma-grouped:\n%s", out)
+	}
+	if !strings.Contains(out, "999") || strings.Contains(out, ",999") {
+		t.Errorf("a sub-1000 number was given a separator:\n%s", out)
+	}
+	if !strings.Contains(out, "Total") {
+		t.Errorf("no total row:\n%s", out)
+	}
+
+	// A row with no enum must still print something — "?" — rather than a gap
+	// that reads as a missing column.
+	tail := capture(t, func() {
+		RenderTail([]Row{{TS: "2026-08-01T00:00:00Z", Tier: 3, Model: "m", WallMS: 12}})
+	})
+	if !strings.Contains(tail, "?/3") {
+		t.Errorf("a row with no enum did not render a placeholder:\n%s", tail)
 	}
 }
