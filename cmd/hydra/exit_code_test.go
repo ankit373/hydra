@@ -42,13 +42,27 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-// exitCode runs the built binary in a sandboxed HOME and returns its exit code.
+// exitCode runs the built binary in a fresh sandboxed HOME.
 func exitCode(t *testing.T, args ...string) (code int, output string) {
 	t.Helper()
 	if hyctlBin == "" {
 		t.Skip("hyctl could not be built in this environment")
 	}
-	s := testutil.NewSandbox(t)
+	return runBinary(t, testutil.NewSandbox(t), args...)
+}
+
+// runBinary runs the built binary against an existing sandbox, so a test can
+// seed the files a command reads and still observe its exit code.
+//
+// Any command that calls os.Exit has to be driven this way: in-process, the
+// exit takes the test binary down with it. `hyctl edit` returns 2, and the MCP
+// gate and the oracle return 3 — deliberately, so a shell script can branch on
+// the verdict — which means the exit code *is* the contract for those.
+func runBinary(t *testing.T, s *testutil.Sandbox, args ...string) (code int, output string) {
+	t.Helper()
+	if hyctlBin == "" {
+		t.Skip("hyctl could not be built in this environment")
+	}
 
 	cmd := exec.Command(hyctlBin, args...)
 	cmd.Env = append(os.Environ(),
