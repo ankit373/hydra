@@ -4,6 +4,7 @@ package testutil
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -71,6 +72,10 @@ type Sandbox struct {
 	// BinDir is the only directory on $PATH. Empty until FakeBinary is called,
 	// so exec.LookPath finds nothing by default.
 	BinDir string
+
+	// hostPath is $PATH as it was before scrubbing, so AllowHostBinary can
+	// still find a real tool after the sandbox has hidden everything.
+	hostPath string
 }
 
 // NewSandbox installs a hermetic environment for the duration of t. Every
@@ -81,6 +86,7 @@ func NewSandbox(t *testing.T) *Sandbox {
 
 	root := t.TempDir()
 	s := &Sandbox{
+		hostPath:  os.Getenv("PATH"),
 		Home:      filepath.Join(root, "home"),
 		HydraHome: filepath.Join(root, "hydra"),
 		BinDir:    filepath.Join(root, "bin"),
@@ -153,4 +159,40 @@ func (s *Sandbox) FakeBinary(t *testing.T, name string, body ...string) string {
 func (s *Sandbox) SetKey(t *testing.T, envVar, value string) {
 	t.Helper()
 	t.Setenv(envVar, value)
+}
+
+// AllowHostBinary admits one real host tool into the sandbox by linking it onto
+// the sandbox's $PATH.
+//
+// The alternative is t.Skip, and a skipped test is how a suite quietly stops
+// covering the thing it was written for: internal/review's git paths — the ones
+// that delete files — skipped on every machine because the sandbox had hidden
+// git. Naming the dependency keeps the test running and keeps the sandbox
+// hermetic in every other respect.
+//
+// Returns false if the tool genuinely is not installed, which is the only case
+// a caller may legitimately skip on.
+func (s *Sandbox) AllowHostBinary(t *testing.T, name string) bool {
+	t.Helper()
+
+	// LookPath against the pre-scrub PATH, since the sandbox has hidden it.
+	saved := os.Getenv("PATH")
+	if err := os.Setenv("PATH", s.hostPath); err != nil {
+		t.Fatal(err)
+	}
+	real, lookErr := exec.LookPath(name)
+	if err := os.Setenv("PATH", saved); err != nil {
+		t.Fatal(err)
+	}
+	if lookErr != nil {
+		return false
+	}
+
+	link := filepath.Join(s.BinDir, filepath.Base(real))
+	// Symlink where possible; copy is not worth it for an executable that may
+	// resolve siblings relative to itself.
+	if err := os.Symlink(real, link); err != nil {
+		t.Fatalf("linking %s into the sandbox: %v", name, err)
+	}
+	return true
 }
