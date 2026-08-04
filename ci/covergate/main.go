@@ -151,15 +151,24 @@ func check(cfg *Config, profile, root string) (problems []string, skips int, err
 		}
 	}
 
-	// A package measured well above its floor is not a problem, but a floor
-	// that has drifted far below reality no longer protects anything. Report it
-	// without failing.
-	for _, pkg := range sortedKeys(cfg.Floors) {
-		if got, ok := coverage[pkg]; ok && got-cfg.Floors[pkg] >= 10 {
-			fmt.Printf("covergate: %s is %.1f%% against a floor of %.0f%% — consider ratcheting\n",
-				pkg, got, cfg.Floors[pkg])
+	// Every measurement, printed whether or not the run passes. Ratcheting a
+	// floor means knowing the current number, and the run you are looking at is
+	// where it should be — not a local run on a different OS, where the same
+	// package can measure ten points apart.
+	fmt.Println("covergate: measured coverage")
+	for _, pkg := range sortedKeys(coverage) {
+		got := coverage[pkg]
+		floor, hasFloor := cfg.Floors[pkg]
+		switch {
+		case !hasFloor:
+			fmt.Printf("  %-32s %5.1f%%  (no floor)\n", pkg, got)
+		case got-floor >= 10:
+			fmt.Printf("  %-32s %5.1f%%  floor %.0f%%  ← consider ratcheting\n", pkg, got, floor)
+		default:
+			fmt.Printf("  %-32s %5.1f%%  floor %.0f%%\n", pkg, got, floor)
 		}
 	}
+	fmt.Println()
 
 	// 2. Packages with no test files.
 	untested, err := packagesWithoutTests(root)

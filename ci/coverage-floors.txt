@@ -5,10 +5,17 @@
 # stops coverage sliding back down except the fact that doing so must be
 # written down.
 #
-# Values are today's real numbers minus a small margin, so the gate lands green
-# and stays green under the ordinary variation a coverage run has (a test that
-# skips on one platform moves a package by a fraction of a percent). Raise a
-# floor in the same PR that raises the coverage.
+# Values are the numbers measured **on Linux**, because that is where the gate
+# runs. They are not the numbers you will see on a Mac: internal/sysinfo reads
+# memory through darwinRAM/darwinMemoryState there and through /proc on Linux,
+# so each platform leaves the other's readers uncovered and the same package
+# measures ~10 points apart. Enforcing macOS numbers on a Linux runner would
+# fail for a reason that has nothing to do with the change under review.
+#
+# Set from a real CI run, with a small margin for the ordinary variation a
+# coverage run has. Raise a floor in the same PR that raises the coverage; the
+# gate prints every package's measured value, so the number to use is in the
+# log of the run you are looking at.
 #
 # Format:  <import path relative to the module root>  <minimum percent>
 
