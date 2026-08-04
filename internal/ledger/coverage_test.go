@@ -210,7 +210,7 @@ func TestGlobMatch_Behaviour(t *testing.T) {
 		// treats the pattern as a single segment. internal/workspace DOES
 		// implement segment-crossing "**", so the two config files speak
 		// different glob dialects and a "**/secrets/**" rule copied from
-		// workspace.yaml into mcp_policy.json silently matches nothing (#311).
+		// workspace.yaml into mcp_policy.json silently matches nothing (#310).
 		{"/repo/**", "/repo/sub/a.go", false},
 		{"", "/anything", true}, // an empty pattern is "any resource"
 		{"/exact", "/exact", true},
