@@ -3,6 +3,13 @@ logs/
 !logs/.gitkeep
 *.log
 *.jsonl
+# …except the checked-in format fixtures. They are files as an earlier Hydra
+# wrote them, and the whole point is that they stay byte-identical — the
+# backward-compatibility contract in internal/formats has nothing to compare
+# against without them. The blanket *.jsonl rule above is for logs, and it
+# silently swallowed them: the tests passed locally against files git had
+# never seen, and failed on all three CI runners.
+!internal/formats/testdata/*.jsonl
 state.json
 auth_required.json
 
