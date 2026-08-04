@@ -126,7 +126,70 @@ func Load(hydraHome string) (*Registry, error) {
 		}
 	}
 
+	// Nothing was configured at all — fall back to the repository the user is
+	// standing in, so a fresh install works without hand-writing a registry
+	// (#297).
+	//
+	// The condition is "the file declared no workspaces", not "no workspace
+	// survived". If entries exist but were all skipped, the user configured
+	// something and it could not be used: substituting a different scope for
+	// the one they asked for would be worse than refusing. That case is
+	// reported through Skipped() and Hydra edits nothing.
+	if len(rf.Workspaces) == 0 {
+		if ws, ok := defaultWorkspace(); ok {
+			r.workspaces = append(r.workspaces, ws)
+		}
+	}
+
 	return r, nil
+}
+
+// DefaultWorkspaceName is the name given to the synthesized fallback workspace,
+// so it is identifiable in errors and logs as "not something you configured".
+const DefaultWorkspaceName = "cwd"
+
+// defaultDeniedGlobs is the floor for the synthesized workspace. The fallback
+// exists to make a fresh install usable, not to hand a model the contents of
+// every credential file in the tree, so these are denied even though
+// allowed_globs is "**".
+var defaultDeniedGlobs = []string{
+	"**/.git/**",
+	"**/.env*",
+	"**/node_modules/**",
+	"**/vendor/**",
+	"**/secrets/**",
+	"**/*.pem",
+	"**/*.key",
+	"**/id_rsa*",
+	"**/*-credentials*.json",
+	"**/.aws/**",
+	"**/.ssh/**",
+}
+
+// defaultWorkspace synthesizes a workspace rooted at the current repository.
+//
+// Deliberately the git root, not the working directory. A bare cwd could be
+// "/" or the user's home, and defaulting write scope to either is not a
+// tradeoff to make on a user's behalf. A git repository is a bounded,
+// intentional project, and it is the same boundary every other developer tool
+// assumes. Outside a repository there is no default at all — Hydra says it has
+// no workspace and the user configures one, which is the honest outcome.
+func defaultWorkspace() (Workspace, bool) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return Workspace{}, false
+	}
+	root := GitRoot(cwd)
+	if root == "" {
+		return Workspace{}, false
+	}
+	return Workspace{
+		Name:         DefaultWorkspaceName,
+		Root:         filepath.Clean(root),
+		Git:          "auto",
+		AllowedGlobs: []string{"**"},
+		DeniedGlobs:  defaultDeniedGlobs,
+	}, true
 }
 
 // Check validates that path is inside a workspace and matches its glob rules.
