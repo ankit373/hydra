@@ -345,27 +345,56 @@ func matchGlob(rel, pattern string) bool {
 	return matchSegments(strings.Split(rel, "/"), strings.Split(pattern, "/"))
 }
 
-// matchSegments recursively matches path segments against pattern segments.
+// matchSegments matches path segments against pattern segments.
 // "**" matches zero or more path segments; everything else uses filepath.Match.
+//
+// Memoized on (path index, pattern index). Without that, each "**" branches
+// over every remaining split point and the recursion is exponential in the
+// number of "**" segments — a pattern like "**/**/**/…/nomatch" against a long
+// path never returns. That is a denial of service on the scope check, which is
+// the one thing standing between a model and the filesystem: hyctl edit would
+// hang rather than allow or refuse.
+//
+// Found by FuzzMatchGlob_TerminatesAndNeverPanics, which produced
+// "**/**/**/**/**/**/**/**/**/**/<junk>" against 21 path segments. The
+// hand-written pathological case missed it, because its tail matched quickly
+// and the search never had to exhaust the space.
+//
+// Memoization makes the state space (len(path)+1) × (len(pat)+1), so matching
+// is now polynomial and bounded by the inputs rather than by their structure.
 func matchSegments(path, pat []string) bool {
-	if len(pat) == 0 {
-		return len(path) == 0
-	}
-	if pat[0] == "**" {
-		// Try consuming 0, 1, 2, ... path segments with this **.
-		for i := 0; i <= len(path); i++ {
-			if matchSegments(path[i:], pat[1:]) {
-				return true
-			}
+	type state struct{ i, j int }
+	memo := make(map[state]bool)
+
+	var match func(i, j int) bool
+	match = func(i, j int) bool {
+		key := state{i, j}
+		if cached, ok := memo[key]; ok {
+			return cached
 		}
-		return false
+		result := func() bool {
+			if j == len(pat) {
+				return i == len(path)
+			}
+			if pat[j] == "**" {
+				// Consume 0, 1, 2, … remaining path segments.
+				for k := i; k <= len(path); k++ {
+					if match(k, j+1) {
+						return true
+					}
+				}
+				return false
+			}
+			if i == len(path) {
+				return false
+			}
+			if matched, _ := filepath.Match(pat[j], path[i]); !matched {
+				return false
+			}
+			return match(i+1, j+1)
+		}()
+		memo[key] = result
+		return result
 	}
-	if len(path) == 0 {
-		return false
-	}
-	matched, _ := filepath.Match(pat[0], path[0])
-	if !matched {
-		return false
-	}
-	return matchSegments(path[1:], pat[1:])
+	return match(0, 0)
 }
