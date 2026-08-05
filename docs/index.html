@@ -427,6 +427,9 @@ table.cmp td:first-child,table.cmp th[scope=row]{text-align:left;font-family:var
 table.cmp tbody tr:last-child td,table.cmp tbody tr:last-child th{border-bottom:none;}
 .cmp-note{font-family:var(--mono);font-size:12px;color:var(--faint);margin-top:16px;}
 .cmp-note b{color:var(--aqua);}
+.cmp-note a{color:var(--dim);text-decoration:underline;text-underline-offset:2px;
+  text-decoration-color:var(--line-2);}
+.cmp-note a:hover{color:var(--aqua);text-decoration-color:var(--aqua);}
 
 /* ── section 7 · getting started ───────────────────────────────────────── */
 .steps{display:grid;gap:18px;margin-top:34px;grid-template-columns:1fr;}
@@ -779,10 +782,16 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
       See the app <span aria-hidden="true">→</span>
     </a>
   </div>
-  <p class="cmp-note" style="margin-top:18px">
+  <div class="term" style="margin-top:20px;max-width:720px">
+    <div class="copyline" data-copy="curl -fsSL https://raw.githubusercontent.com/ankit373/hydra/main/install-app.sh | sh"><span><span class="p">$</span> curl -fsSL …/install-app.sh | sh</span><span class="cp">copy</span></div>
+    <div class="o"><span class="g">✓</span> checksum verified · <span class="c">/Applications/Hydra.app</span></div>
+  </div>
+  <p class="cmp-note" style="margin-top:16px">
     macOS · Linux · Windows, attached to every GitHub release with a SHA-256
     checksum. Not yet code-signed, so macOS needs right-click → Open the first
-    time. ARM64 desktop builds are not there yet (<a href="https://github.com/ankit373/hydra/issues/263">#263</a>).
+    time — the install script clears that for you. Linux ARM64 is not built yet
+    (<a href="https://github.com/ankit373/hydra/issues/263">#263</a>).
+    <a href="/app.html#download">Direct downloads</a>.
   </p>
 </section>
 

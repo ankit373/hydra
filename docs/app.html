@@ -185,12 +185,39 @@ table.mini td.n{text-align:right;color:var(--ink);}
 .feat .tag{font-family:var(--mono);font-size:9.5px;letter-spacing:1.4px;text-transform:uppercase;
   color:var(--aqua);margin-bottom:9px;}
 .feat p{font-size:14px;color:var(--dim);margin:0;}
-.dl{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px;margin-top:30px;}
-.dl a{display:block;border:1px solid var(--line);border-radius:10px;padding:18px 20px;background:var(--panel);
-  transition:.18s;color:var(--ink);}
-.dl a:hover{border-color:var(--aqua);text-decoration:none;transform:translateY(-2px);}
-.dl .os{font-family:var(--display);font-size:17px;margin-bottom:4px;}
+/* ── install command ───────────────────────────────────────────────────── */
+.term{font-family:var(--mono);font-size:12.5px;background:#070912;border:1px solid var(--line);border-radius:9px;
+  padding:13px 15px;color:#c7d0e8;overflow-x:auto;}
+.term .p{color:var(--aqua);}.term .c{color:var(--faint);}.term .o{color:var(--dim);}
+.term .g{color:var(--cheap);}
+.copyline{display:flex;align-items:center;gap:14px;justify-content:space-between;cursor:pointer;}
+.copyline .cp{font-size:10.5px;color:var(--faint);transition:.15s;flex-shrink:0;}
+.copyline:hover .cp{color:var(--aqua);}
+.copyline.copied .cp{color:var(--cheap);}
+.term .o{margin-top:2px;}
+
+/* ── direct downloads ──────────────────────────────────────────────────── */
+.dl{margin-top:18px;border:1px solid var(--line);border-radius:11px;overflow:hidden;background:var(--panel);}
+.dl .row{display:grid;grid-template-columns:145px 1fr auto auto auto;gap:20px;align-items:center;
+  padding:13px 18px;border-top:1px solid var(--line);}
+.dl .row:first-child{border-top:0;}
+.dl .row.off{opacity:.55;}
+.dl .os{font-family:var(--display);font-size:15px;}
 .dl .meta{font-family:var(--mono);font-size:11px;color:var(--faint);}
+.dl .sz{font-family:var(--mono);font-size:11px;color:var(--faint);text-align:right;}
+.dl .get{font-family:var(--mono);font-size:11.5px;border:1px solid var(--line-2);border-radius:7px;
+  padding:6px 14px;color:var(--aqua);white-space:nowrap;transition:.16s;}
+.dl .get:hover{background:var(--aqua);color:#06070F;text-decoration:none;border-color:var(--aqua);}
+.dl .sum{font-family:var(--mono);font-size:10.5px;color:var(--faint);white-space:nowrap;}
+.dl .sum:hover{color:var(--aqua);}
+@media(max-width:760px){
+  .dl .row{grid-template-columns:1fr auto;gap:5px 14px;}
+  .dl .os{grid-column:1;grid-row:1;}
+  .dl .meta{grid-column:1;grid-row:2;}
+  .dl .sz{grid-column:1;grid-row:3;text-align:left;}
+  .dl .get{grid-column:2;grid-row:1/3;align-self:center;}
+  .dl .sum{grid-column:2;grid-row:3;text-align:right;}
+}
 .note{border-left:2px solid var(--line-2);padding:10px 0 10px 16px;margin-top:26px;color:var(--dim);font-size:14px;}
 .note b{color:var(--ink);}
 footer{border-top:1px solid var(--line);padding:34px 0 56px;color:var(--faint);
@@ -431,45 +458,75 @@ footer a{color:var(--dim);}
 <!-- ══ DOWNLOAD ════════════════════════════════════════════════════════ -->
 <section class="blk wrap" id="download">
   <div class="klabel"><span>Download</span><b>free · MIT · no sign-up</b></div>
-  <h2>Built and published with <span class="grad">every release</span>.</h2>
+  <h2>One command on <span class="grad">macOS and Linux</span>.</h2>
   <p>
-    Each build is attached to its GitHub release with a SHA-256 checksum beside it.
-    The app expects <span class="mono">hyctl</span> to be installed — it reads the
-    logs the CLI writes, so install that first if you have not.
+    It resolves the newest release, checks the download against the SHA-256 published
+    beside it, and refuses to install on a mismatch. Nothing runs as root and nothing
+    is written outside your applications directory.
   </p>
 
+  <div class="term" style="margin-top:22px;">
+    <div class="copyline" data-copy="curl -fsSL https://raw.githubusercontent.com/ankit373/hydra/main/install-app.sh | sh"><span><span class="p">$</span> curl -fsSL https://raw.githubusercontent.com/ankit373/hydra/main/install-app.sh | sh</span><span class="cp">copy</span></div>
+    <div class="o">&nbsp;&nbsp;Release&nbsp;: <span class="g">v1.1.0</span></div>
+    <div class="o">&nbsp;&nbsp;Target&nbsp;&nbsp;: darwin_universal</div>
+    <div class="o">&nbsp;&nbsp;Checksum: <span class="g">verified</span></div>
+    <div class="o">&nbsp;&nbsp;Installed: /Applications/Hydra.app</div>
+  </div>
+  <p style="font-size:13.5px;color:var(--faint);margin-top:12px;">
+    Pin a version with <span class="mono">HYDRA_VERSION=v1.1.0</span>, or change where it
+    lands with <span class="mono">HYDRA_APP_DIR=~/Applications</span>.
+    <a href="https://github.com/ankit373/hydra/blob/main/install-app.sh">Read the script</a>
+    before you pipe it to a shell — it is under 200 lines and you should.
+  </p>
+
+  <h3 style="font-family:var(--display);font-size:19px;margin-top:40px;">Or take the binary directly</h3>
   <div class="dl">
-    <a href="https://github.com/ankit373/hydra/releases/latest">
+    <div class="row">
       <div class="os">macOS</div>
       <div class="meta">universal · Apple Silicon + Intel</div>
-    </a>
-    <a href="https://github.com/ankit373/hydra/releases/latest">
+      <div class="sz">8.3 MB</div>
+      <a class="get" href="https://github.com/ankit373/hydra/releases/download/v1.1.0/hydra-desktop_v1.1.0_darwin_universal.zip">.zip</a>
+      <a class="sum" href="https://github.com/ankit373/hydra/releases/download/v1.1.0/hydra-desktop_v1.1.0_darwin_universal.zip.sha256">sha256</a>
+    </div>
+    <div class="row">
       <div class="os">Linux</div>
-      <div class="meta">x86-64 · tar.gz</div>
-    </a>
-    <a href="https://github.com/ankit373/hydra/releases/latest">
+      <div class="meta">x86-64</div>
+      <div class="sz">4.3 MB</div>
+      <a class="get" href="https://github.com/ankit373/hydra/releases/download/v1.1.0/hydra-desktop_v1.1.0_linux_amd64.tar.gz">.tar.gz</a>
+      <a class="sum" href="https://github.com/ankit373/hydra/releases/download/v1.1.0/hydra-desktop_v1.1.0_linux_amd64.tar.gz.sha256">sha256</a>
+    </div>
+    <div class="row">
       <div class="os">Windows</div>
-      <div class="meta">x86-64 · zip</div>
-    </a>
+      <div class="meta">x86-64 · unzip and run Hydra.exe</div>
+      <div class="sz">4.8 MB</div>
+      <a class="get" href="https://github.com/ankit373/hydra/releases/download/v1.1.0/hydra-desktop_v1.1.0_windows_amd64.zip">.zip</a>
+      <a class="sum" href="https://github.com/ankit373/hydra/releases/download/v1.1.0/hydra-desktop_v1.1.0_windows_amd64.zip.sha256">sha256</a>
+    </div>
+    <div class="row off">
+      <div class="os">Linux ARM64</div>
+      <div class="meta">not built yet — <a href="https://github.com/ankit373/hydra/issues/263">#263</a></div>
+      <div class="sz">—</div>
+      <div class="sum"></div>
+      <div class="sum"></div>
+    </div>
+  </div>
+  <p style="font-size:13px;color:var(--faint);margin-top:12px;font-family:var(--mono);">
+    v1.1.0 · <a href="https://github.com/ankit373/hydra/releases">all releases</a>
+  </p>
+
+  <div class="note">
+    <b>Not code-signed yet.</b> The build carries no Apple Developer signature, so
+    macOS quarantines it and the first launch fails with "damaged". The install
+    script clears that flag for you; if you unzipped it by hand, run
+    <span class="mono">xattr -dr com.apple.quarantine /Applications/Hydra.app</span>
+    or right-click → Open. Gatekeeper is telling you the truth: nobody has paid
+    Apple to vouch for this. The checksum is what you can verify instead.
   </div>
 
   <div class="note">
-    <b>Not code-signed yet.</b> On macOS the first launch needs right-click →
-    Open, because the build carries no Apple Developer signature. Gatekeeper is
-    telling you the truth: nobody has paid Apple to vouch for it. The checksum
-    beside each download is what you can verify instead.
-  </div>
-
-  <div class="note">
-    <b>ARM64 Linux and Windows are not built yet.</b> The CLI ships for both; the
-    desktop app does not, and we would rather say so than let you download
-    something that will not start. Progress is tracked in
-    <a href="https://github.com/ankit373/hydra/issues/263">issue #263</a>.
-  </div>
-
-  <div class="note">
-    <b>Don't have the CLI yet?</b>
-    <span class="mono">brew install ankit373/tap/hyctl</span> — or see
+    <b>Install the CLI too.</b> The app reads the logs <span class="mono">hyctl</span>
+    writes — without it there is nothing to show and the app will look empty rather
+    than unconfigured. <span class="mono">brew install ankit373/hydra/hyctl</span>, or
     <a href="/#start">the other install paths</a>.
   </div>
 </section>
@@ -482,6 +539,33 @@ footer a{color:var(--dim);}
     MIT licensed · runs on your machine
   </div>
 </footer>
+
+<script>
+// Copy-to-clipboard on the install command. Same behaviour as the landing page;
+// kept as its own copy because this page ships no other JS and pulling in a
+// shared bundle for eight lines would cost a request.
+(function(){
+  function copy(text,done){
+    if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(text).then(done,done);return;}
+    try{var ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.opacity=0;
+      document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);}catch(e){}
+    done();
+  }
+  Array.prototype.forEach.call(document.querySelectorAll('[data-copy]'),function(el){
+    el.setAttribute('role','button');el.setAttribute('tabindex','0');
+    function fire(){
+      copy(el.getAttribute('data-copy'),function(){
+        el.classList.add('copied');
+        var cp=el.querySelector('.cp'),prev=cp?cp.textContent:'';
+        if(cp)cp.textContent='✓ copied';
+        setTimeout(function(){el.classList.remove('copied');if(cp)cp.textContent=prev;},1400);
+      });
+    }
+    el.addEventListener('click',fire);
+    el.addEventListener('keydown',function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();fire();}});
+  });
+})();
+</script>
 
 </body>
 </html>

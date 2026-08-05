@@ -56,6 +56,14 @@ curl -fsSL https://raw.githubusercontent.com/ankit373/hydra/main/install.sh | sh
 irm https://raw.githubusercontent.com/ankit373/hydra/main/install.ps1 | iex        # standalone (Windows)
 ```
 
+The desktop app installs separately, with its own script (macOS and Linux):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ankit373/hydra/main/install-app.sh | sh
+```
+
+It resolves the newest release tag (desktop asset names embed their version, so GitHub's `/latest/download/` shortcut cannot address them), verifies the download against the `.sha256` published beside it, installs the `.app` to `/Applications` on macOS or the binary to `~/.local/share/hydra` with a `~/.local/bin` symlink on Linux, and clears the macOS quarantine flag. `HYDRA_VERSION` pins a release; `HYDRA_APP_DIR` changes the install directory. Windows has no script — download `hydra-desktop_<version>_windows_amd64.zip` from the releases page and unzip it.
+
 Platform support: `hyctl` is built for macOS, Linux and Windows on both x86-64 and ARM64 — six targets, every release. Homebrew covers macOS and Linux; npm/npx and pip cover all three OSes; `install.sh` covers macOS and Linux and `install.ps1` covers Windows (per-user, no admin rights; both verify the release checksum). The desktop app ships for macOS (universal), Windows x86-64 and Linux x86-64; ARM64 desktop builds are not yet available.
 
 Or build from source (requires Go 1.22+):
