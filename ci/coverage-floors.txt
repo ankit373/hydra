@@ -90,4 +90,8 @@ no-tests cmd/specstest    debug main; the logic it prints is covered in internal
 # three-OS matrix where every awkward test skips on two of them is decorative.
 # Each skip must carry a reason, and the total cannot grow without this number
 # being edited — which a reviewer sees.
-skip-budget 32
+# Raised from 32 when the oracle's {file}-staging test landed: it needs
+# /bin/test, which is POSIX, and the staging contract it guards is covered on
+# every platform by TestDefaultWriteTemp. Raising this is the deliberate act the
+# gate exists to force — the increase is in the diff.
+skip-budget 34

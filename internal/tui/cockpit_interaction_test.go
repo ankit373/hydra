@@ -122,7 +122,7 @@ func TestCockpit_NoHeadsDiscoveredSaysSoAndStreamsNothing(t *testing.T) {
 
 	m, _ := enter(typed(before, "add pagination"))
 	joined := strings.Join(m.log, "\n")
-	if !strings.Contains(joined, "no heads discovered") {
+	if !strings.Contains(joined, "no routable head") {
 		t.Errorf("the log does not say why nothing was routed:\n%s", joined)
 	}
 	if !strings.Contains(joined, "hyctl probe") {
@@ -758,5 +758,93 @@ func TestCockpitTruncate_CountsRunesNotBytes(t *testing.T) {
 	}
 	if got := truncate("日本語モデル", 3); got != "日本…" {
 		t.Errorf("truncate = %q, want the first two runes plus an ellipsis", got)
+	}
+}
+
+// pickHead is the cockpit's own routing: the cheapest head at or below the
+// wanted strength, falling back down the ladder. It must never answer
+// "cheapest" with "most expensive" — the same inversion #165 fixed in the
+// router itself.
+func TestPickHead_NeverAnswersCheapestWithStrongest(t *testing.T) {
+	m := NewCockpit()
+	m.heads = []ckHead{
+		{id: "opus", name: "opus", tier: 1, up: true},
+		{id: "sonnet", name: "sonnet", tier: 3, up: true},
+		{id: "qwen", name: "qwen", tier: 10, up: true},
+	}
+
+	// Asking for the cheapest tier must land on the local head.
+	if got := m.pickHead(10); got < 0 || m.heads[got].id != "qwen" {
+		t.Errorf("pickHead(10) = %d (%v), want the local head", got, m.heads)
+	}
+	// Asking for tier 3 must not escalate to tier 1.
+	if got := m.pickHead(3); m.heads[got].tier < 3 {
+		t.Errorf("pickHead(3) selected tier %d — stronger than requested",
+			m.heads[got].tier)
+	}
+	// Asking for tier 1 gets tier 1.
+	if got := m.pickHead(1); m.heads[got].id != "opus" {
+		t.Errorf("pickHead(1) = %s", m.heads[got].id)
+	}
+
+	// A head that is down is not selectable, and the search falls to the
+	// terminal tier rather than picking it anyway.
+	m.heads[2].up = false
+	if got := m.pickHead(10); got >= 0 && m.heads[got].id == "qwen" {
+		t.Error("pickHead selected a head that is down")
+	}
+
+	// With everything down there is nothing to route to. Returning an index
+	// anyway would have the cockpit preview a route to a head nothing can
+	// drive — the same shape as #248.
+	for i := range m.heads {
+		m.heads[i].up = false
+	}
+	if got := m.pickHead(1); got >= 0 {
+		t.Errorf("pickHead = %d with every head down; the cockpit would preview a "+
+			"route to %q, which nothing can execute", got, m.heads[got].id)
+	}
+
+	empty := NewCockpit()
+	empty.heads = nil
+	if got := empty.pickHead(1); got >= 0 {
+		t.Errorf("pickHead on an empty roster = %d, want a negative index so the "+
+			"caller's guard fires", got)
+	}
+}
+
+// A prompt naming a file that is in the graph gets a real blast radius; one
+// naming a file that is not gets none, rather than a fabricated figure (#193).
+func TestCockpitRun_BlastRadiusOnlyForFilesTheGraphKnows(t *testing.T) {
+	testutil.NewSandbox(t)
+
+	base := NewCockpit()
+	base.heads = testHeads()
+
+	withFile, _ := enter(typed(base, "rotate the key in internal/nowhere/absent.go"))
+	joined := strings.Join(withFile.log, "\n")
+	// No graph is loaded in a sandbox, so there is nothing to report — and a
+	// literal blast line for any prompt containing a path is exactly what #193
+	// removed.
+	if strings.Contains(joined, "κ=") {
+		t.Errorf("a blast radius was printed for a file no graph knows:\n%s", joined)
+	}
+	if !strings.Contains(joined, "routing preview only") {
+		t.Errorf("the run did not complete:\n%s", joined)
+	}
+}
+
+// The header carries the governor percentage and the head roster. It must
+// render at any width without wrapping past its budget.
+func TestCockpitHeader_RendersAtEveryWidth(t *testing.T) {
+	testutil.NewSandbox(t)
+
+	m := NewCockpit()
+	m.heads = testHeads()
+	for _, w := range []int{0, 10, 40, 80, 200} {
+		m.w, m.h, m.ready = w, 24, true
+		if got := m.header(); strings.TrimSpace(got) == "" {
+			t.Errorf("header rendered nothing at width %d", w)
+		}
 	}
 }

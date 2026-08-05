@@ -368,7 +368,7 @@ func (m Cockpit) run(task string) Cockpit {
 	// a machine with nothing installed. There is no route to preview then, and
 	// inventing one is exactly what this PR removes.
 	if idx < 0 {
-		m.log = append(m.log, ckDimS.Render("  no heads discovered — run `hyctl probe` to see why"))
+		m.log = append(m.log, ckDimS.Render("  no routable head — run `hyctl probe` to see why"))
 		return m
 	}
 	h := m.heads[idx]
@@ -449,7 +449,12 @@ func (m Cockpit) pickHead(wantTier int) int {
 				return i
 			}
 		}
-		return len(m.heads) - 1 // -1 when the roster is empty; callers must check
+		// Nothing is routable. This used to fall back to the last head in the
+		// roster whether or not it was up, so a machine with only an
+		// unroutable head — the ollama binary with no server behind it — got a
+		// routing preview naming a head nothing can drive. Same shape as #248:
+		// a surface claiming a head is usable when it is not.
+		return -1
 	}
 	return best
 }
