@@ -6,6 +6,13 @@ Format: [Semantic Versioning](https://semver.org). Entries from v1.0.1 onward ar
 
 ---
 
+## [1.1.0](https://github.com/ankit373/hydra/compare/v1.1.0-rc.9...v1.1.0) (2026-08-03)
+
+
+### Bug Fixes
+
+* **release:** v1.1.0 never shipped — squash merge erased the release ([#289](https://github.com/ankit373/hydra/issues/289)) ([d070f3f](https://github.com/ankit373/hydra/commit/d070f3f35ea2bb30d7fa676ff300ff6307d5430b)), closes [#288](https://github.com/ankit373/hydra/issues/288)
+
 ## [1.0.1](https://github.com/ankit373/hydra/compare/v1.0.0-rc.1...v1.0.1) (2026-07-25)
 
 
