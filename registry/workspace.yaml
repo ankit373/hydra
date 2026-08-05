@@ -22,46 +22,34 @@
 
 version: "1.0"
 
-workspaces:
+# Empty by design.
+#
+# This file is compiled into the binary (go:embed), so anything here ships to
+# every user of every install. It used to carry two absolute roots from the
+# maintainer's own machine (/Users/ankitjha/…), which meant a fresh install had
+# no workspace that could ever match, and every published artifact leaked one
+# person's directory layout (#297).
+#
+# With no entries here, Hydra falls back to **the git repository you are
+# standing in** — allowed_globs "**", minus a denied set covering .git, .env,
+# credentials, keys, node_modules and vendor. The fallback is deliberately the
+# git root and not the working directory: a bare cwd could be "/" or your home
+# directory, and defaulting write scope to either is not a decision to make on
+# a user's behalf. Outside a git repository there is no default, and Hydra will
+# say it has no workspace rather than guess.
+#
+# Define workspaces below to override that entirely — the fallback applies only
+# when this map yields no usable entry, so a configured registry is never
+# widened. Roots must be absolute for the platform Hydra is running on; an entry
+# that is not is skipped (and reported), never fatal.
+#
+#   my-project:
+#     root: /absolute/path/to/project
+#     git: auto                 # auto | true | false
+#     allowed_globs: ["src/**", "test/**"]
+#     denied_globs:  ["**/.env*", "**/secrets/**"]
 
-  apphire:
-    root: /Users/ankitjha/apphire
-    git: auto                   # each sub-package is its own git repo
-    allowed_globs:
-      - "core/**"
-      - "cortex/**"
-      - "forge/**"
-      - "prism/**"
-      - "sentinel/**"
-      - "vault/**"
-      - "vector/**"
-      - "scripts/**"
-    denied_globs:
-      - "**/.env*"
-      - "**/node_modules/**"
-      - "**/.next/**"
-      - "**/dist/**"
-      - "**/build/**"
-      - "**/.git/**"
-      - "**/firebase-admin-*.json"
-      - "**/*-credentials*.json"
-      - "**/secrets/**"
-      - "**/.wrangler/**"
-
-  hydra-self:
-    root: /Users/ankitjha/hydra
-    git: false                  # not a git repo; uses .hydra-bak backups
-    allowed_globs:
-      - "dispatch/**"
-      - "registry/**"
-      - "scripts/**"
-      - "skills/**"
-      - "domains/**"
-      - "heads/**"
-      - "context/**"
-    denied_globs:
-      - "**/logs/**"
-      - "**/.git/**"
+workspaces: {}
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Validators — per-extension safety check run after every edit.

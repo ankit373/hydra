@@ -442,9 +442,20 @@ func RenderSwarmStats(s SwarmSummary) {
 	fmt.Printf("\nSwarm runs: %d  Winner rate: %.0f%%  Avg wall time: %.1fs  Total: $%.4f\n",
 		s.Runs, s.WinnerRate*100, float64(s.AvgWallMS)/1000, s.TotalCost)
 	if len(s.ByMode) > 0 {
+		// Sorted, because Go randomises map iteration: `hyctl stats` printed the
+		// modes in a different order on every run, so two invocations on
+		// identical data disagreed and the output could not be diffed or
+		// scripted against. Found by the golden test, which is the one kind of
+		// test that notices.
+		modes := make([]string, 0, len(s.ByMode))
+		for mode := range s.ByMode {
+			modes = append(modes, mode)
+		}
+		sort.Strings(modes)
+
 		fmt.Print("Modes:")
-		for mode, count := range s.ByMode {
-			fmt.Printf("  %s=%d", mode, count)
+		for _, mode := range modes {
+			fmt.Printf("  %s=%d", mode, s.ByMode[mode])
 		}
 		fmt.Println()
 	}

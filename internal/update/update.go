@@ -9,7 +9,6 @@ package update
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -23,10 +22,14 @@ import (
 )
 
 const (
-	releaseURL = "https://api.github.com/repos/ankit373/hydra/releases/latest"
-	cacheFile  = "update_state.json"
-	cacheTTL   = 24 * time.Hour
+	cacheFile = "update_state.json"
+	cacheTTL  = 24 * time.Hour
 )
+
+// releaseURL is a var so tests can point it at an httptest server, matching
+// pricing's openRouterModelsURL. The alternative is a test that either reaches
+// GitHub for real or does not run at all.
+var releaseURL = "https://api.github.com/repos/ankit373/hydra/releases/latest"
 
 type state struct {
 	CheckedAt     time.Time `json:"checked_at"`
@@ -114,26 +117,103 @@ func fetchLatest() string {
 	return payload.TagName
 }
 
-// semverGT reports whether a > b (both "vX.Y.Z[-pre]" format).
+// semverGT reports whether a > b, following SemVer 2.0.0 precedence.
+//
+// The pre-release identifier is part of the comparison, not something to
+// discard. Stripping it — as this did — made every release equal to its own
+// pre-releases, so semverGT("v1.1.0", "v1.1.0-rc.9") was false and a user
+// running rc.9 was never told the final v1.1.0 existed. rc-to-rc updates were
+// invisible for the same reason.
 func semverGT(a, b string) bool {
-	ap, bp := parseVer(a), parseVer(b)
-	for i := range ap {
-		if ap[i] != bp[i] {
-			return ap[i] > bp[i]
+	aNum, aPre := parseVer(a)
+	bNum, bPre := parseVer(b)
+
+	for i := range aNum {
+		if aNum[i] != bNum[i] {
+			return aNum[i] > bNum[i]
 		}
 	}
-	return false
+	// Same X.Y.Z: a pre-release has LOWER precedence than the release itself.
+	if aPre == "" && bPre == "" {
+		return false
+	}
+	if aPre == "" {
+		return true // a is the release, b is a pre-release of it
+	}
+	if bPre == "" {
+		return false
+	}
+	return comparePrerelease(aPre, bPre) > 0
 }
 
-func parseVer(v string) [3]int {
-	v = strings.TrimPrefix(v, "v")
-	if idx := strings.IndexAny(v, "-+"); idx != -1 {
-		v = v[:idx]
+// comparePrerelease orders two dot-separated pre-release strings per SemVer:
+// numeric identifiers compare numerically, alphanumeric ones lexically, numeric
+// sorts below alphanumeric, and a longer run of equal identifiers wins.
+func comparePrerelease(a, b string) int {
+	as, bs := strings.Split(a, "."), strings.Split(b, ".")
+	for i := 0; i < len(as) && i < len(bs); i++ {
+		if as[i] == bs[i] {
+			continue
+		}
+		an, aIsNum := numericIdent(as[i])
+		bn, bIsNum := numericIdent(bs[i])
+		switch {
+		case aIsNum && bIsNum:
+			if an != bn {
+				return sign(an - bn)
+			}
+		case aIsNum:
+			return -1 // numeric < alphanumeric
+		case bIsNum:
+			return 1
+		default:
+			return strings.Compare(as[i], bs[i])
+		}
+	}
+	return sign(len(as) - len(bs))
+}
+
+func numericIdent(s string) (int, bool) {
+	if s == "" {
+		return 0, false
+	}
+	n := 0
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return 0, false
+		}
+		n = n*10 + int(c-'0')
+	}
+	return n, true
+}
+
+func sign(n int) int {
+	switch {
+	case n > 0:
+		return 1
+	case n < 0:
+		return -1
+	}
+	return 0
+}
+
+// parseVer splits "vX.Y.Z[-pre][+build]" into its numeric core and pre-release.
+// Build metadata is discarded: SemVer excludes it from precedence entirely.
+func parseVer(v string) ([3]int, string) {
+	v = strings.TrimPrefix(strings.TrimSpace(v), "v")
+	if idx := strings.IndexByte(v, '+'); idx != -1 {
+		v = v[:idx] // build metadata never affects precedence
+	}
+	pre := ""
+	if idx := strings.IndexByte(v, '-'); idx != -1 {
+		pre, v = v[idx+1:], v[:idx]
 	}
 	parts := strings.SplitN(v, ".", 3)
 	var out [3]int
 	for i := 0; i < len(parts) && i < 3; i++ {
-		fmt.Sscanf(parts[i], "%d", &out[i])
+		if n, ok := numericIdent(parts[i]); ok {
+			out[i] = n
+		}
 	}
-	return out
+	return out, pre
 }

@@ -48,6 +48,12 @@ func SaveEdit(runID, ref string, before, after []byte) error {
 		return err
 	}
 	// 0600: an edit snapshot is a verbatim copy of the user's source.
+	//
+	// Enforced on Unix only. On Windows a FileMode toggles nothing but the
+	// read-only attribute, so this lands as 0666 and the MkdirAll above is a
+	// no-op — the protection there is the ACL on the user's profile directory,
+	// which is why these live under Dir() and not a temp path (#273). Stated
+	// rather than assumed: the mode is not a guarantee on every platform.
 	if err := os.WriteFile(filepath.Join(dir, ref+".before"), before, 0o600); err != nil {
 		return err
 	}

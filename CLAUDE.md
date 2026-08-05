@@ -511,8 +511,9 @@ the version regardless of commit types:
 Release-As: 1.2.0
 ```
 
-Put it on its own line at the end of the PR body, so the squash commit carries it. Give the
-PR a `fix(release):` or `feat(release):` title as well, so a user-facing commit exists and
+Put it on its own line at the end of the PR **body** — a squash composes the commit message
+from title + body, so a footer in a local commit message is discarded. Give the PR a
+`fix(release):` or `feat(release):` title as well, so a user-facing commit exists and
 release-please cannot take the "nothing to do" path at all. Belt and braces — this step is
 invisible when it works and completely silent when it is missed.
 

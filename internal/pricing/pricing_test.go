@@ -11,6 +11,8 @@ import (
 	"os"
 	"testing"
 	"time"
+
+	"github.com/ankit373/hydra/internal/testutil"
 )
 
 // ── cost math ─────────────────────────────────────────────────────────────────
@@ -208,8 +210,13 @@ func TestFetchFromOpenRouter_Non200(t *testing.T) {
 // ── Cache ─────────────────────────────────────────────────────────────────────
 
 func TestCacheRoundtrip(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("HYDRA_CONFIG_DIR", dir)
+	// HYDRA_CONFIG_DIR was read by nothing — config.Dir() resolves from the
+	// home directory — so this test wrote its fixture straight into the
+	// developer's real ~/.hydra/pricing_cache.json and left it there. A plain
+	// `go test ./...` therefore replaced the machine's live pricing data with
+	// an empty models map, after which every model priced off the tier
+	// fallback until the next background refresh.
+	testutil.NewSandbox(t)
 
 	c := &priceCache{
 		FetchedAt: time.Now().UTC(),
@@ -232,8 +239,13 @@ func TestCacheRoundtrip(t *testing.T) {
 }
 
 func TestReadCache_EmptySentinel(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("HYDRA_CONFIG_DIR", dir)
+	// HYDRA_CONFIG_DIR was read by nothing — config.Dir() resolves from the
+	// home directory — so this test wrote its fixture straight into the
+	// developer's real ~/.hydra/pricing_cache.json and left it there. A plain
+	// `go test ./...` therefore replaced the machine's live pricing data with
+	// an empty models map, after which every model priced off the tier
+	// fallback until the next background refresh.
+	testutil.NewSandbox(t)
 
 	// Write a valid but empty cache.
 	c := &priceCache{FetchedAt: time.Now(), Models: map[string]ModelPrice{}}

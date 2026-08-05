@@ -1,0 +1,112 @@
+# Per-package coverage floors, enforced by `go run ./ci/covergate`.
+#
+# Floors are a ratchet: they may be raised freely, but lowering one requires an
+# explicit commit a reviewer can see. That is the whole point — nothing here
+# stops coverage sliding back down except the fact that doing so must be
+# written down.
+#
+# Values are the numbers measured **on Linux**, because that is where the gate
+# runs. They are not the numbers you will see on a Mac: internal/sysinfo reads
+# memory through darwinRAM/darwinMemoryState there and through /proc on Linux,
+# so each platform leaves the other's readers uncovered and the same package
+# measures ~10 points apart. Enforcing macOS numbers on a Linux runner would
+# fail for a reason that has nothing to do with the change under review.
+#
+# Set from a real CI run (30941076262), with a small margin for the ordinary
+# variation a coverage run has. internal/sysinfo is the widest gap: it reads
+# memory through darwinRAM/darwinMemoryState on macOS and /proc on Linux, so it
+# measures 94.5% there and 83.9% here. Running this on a Mac therefore prints a
+# "consider ratcheting" line for sysinfo every time — that advisory is comparing
+# a macOS measurement against a Linux floor, and acting on it would break CI. Raise a floor in the same PR that raises the coverage; the
+# gate prints every package's measured value, so the number to use is in the
+# log of the run you are looking at.
+#
+# Format:  <import path relative to the module root>  <minimum percent>
+
+# cmd/hydra will not reach 90, and the number understates what is tested.
+# Two reasons, both structural:
+#   - main(), runInit() and cmdTui drive an interactive terminal. There is no
+#     unit test for "the wizard rendered on a TTY".
+#   - `hyctl edit`, the MCP gate, the oracle and `parallel` call os.Exit with
+#     codes callers gate on (2 and 3). Those are contract-tested against a real
+#     built binary, and a subprocess contributes nothing to this profile.
+floor cmd/specstest                 90
+floor cmd/hydra                     77
+floor internal/a2a                  93
+floor internal/budget               92
+floor internal/capabilities         90
+floor internal/config               84
+floor internal/cost                 91
+floor internal/diff                 92
+floor internal/dispatch             89
+floor internal/editor               86
+floor internal/entropy              88
+floor internal/executor             86
+floor internal/glob                 96
+floor internal/graph                88
+floor internal/ledger               86
+floor internal/optimal              96
+floor internal/oracle               85
+floor internal/parallel             87
+floor internal/policy               88
+floor internal/pricing              86
+floor internal/probe                91
+floor internal/provider             96
+floor internal/provider/agy         90
+floor internal/provider/cli         87
+floor internal/provider/env         91
+floor internal/provider/port        89
+floor internal/rank                 91
+floor internal/review               88
+floor internal/runid                96
+floor internal/runlog               85
+floor internal/swarm                89
+floor internal/sysinfo              82
+floor internal/testutil             81
+floor internal/tree                 86
+floor internal/trust                88
+floor internal/tui                  86
+floor internal/update               89
+floor internal/util                 96
+floor internal/workspace            89
+floor registry                      86
+
+# Packages allowed to have no test files at all.
+#
+# The list started at eleven — the entire platform and discovery layer. It is
+# down to two, and both are permanent:
+#
+#   internal/build   is four ldflags-injected string vars and nothing else.
+#
+# cmd/specstest's floor is 90 against a Linux reading of 94.1%, not the 100%
+# a Mac reports: main() prints the memory-pressure warning only when there is
+# one, and whether there is one depends on the machine. In a 17-statement
+# package a single conditional branch is 5.9%, so the margin has to be wider
+# than the usual few points.
+#
+# cmd/specstest was here too, on the grounds that it is "just a debug main".
+# That was the wrong call: it is the diagnostic a user is pointed at when local
+# model sizing does not match what they expect, so a version of it that panics
+# or prints nothing is worse than none — it is consulted precisely when
+# something is already wrong. It now has a smoke test and a floor.
+#
+# Adding anything here needs a reason on the line. A package with no tests is
+# not a package with nothing to test.
+no-tests internal/build   ldflags-injected version vars only
+
+# Maximum number of t.Skip/t.Skipf calls across the whole test suite.
+#
+# Skips are how a cross-platform suite hides the problem it exists to catch: a
+# three-OS matrix where every awkward test skips on two of them is decorative.
+# Each skip must carry a reason, and the total cannot grow without this number
+# being edited — which a reviewer sees.
+# Raised 32 -> 34 for the oracle's {file}-staging test (/bin/test is POSIX,
+# and the contract it guards is covered platform-independently), then 34 -> 40
+# for the batch that took total coverage past 90%: the agy read-only-directory
+# case (Windows does not enforce a directory mode for the owner, and root
+# ignores it), the POSIX /usr/bin/true|false oracle verdicts, and the
+# workspace-validator templates, which are POSIX command lines.
+#
+# Each raise is the deliberate act the gate exists to force — the increase is
+# always in the diff, next to its reason.
+skip-budget 40

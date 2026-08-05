@@ -1,0 +1,13 @@
+{
+  "nodes": [
+    {"id": "internal/auth/token.go", "file": "internal/auth/token.go"},
+    {"id": "internal/api/login.go", "file": "internal/api/login.go"},
+    {"id": "internal/api/refresh.go", "file": "internal/api/refresh.go"},
+    {"id": "cmd/server/main.go", "file": "cmd/server/main.go"}
+  ],
+  "edges": [
+    {"from": "internal/api/login.go", "to": "internal/auth/token.go"},
+    {"from": "internal/api/refresh.go", "to": "internal/auth/token.go"},
+    {"from": "cmd/server/main.go", "to": "internal/api/login.go"}
+  ]
+}

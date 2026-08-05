@@ -28,9 +28,11 @@ builds:
     goarch:
       - amd64
       - arm64
-    ignore:
-      - goos: windows
-        goarch: arm64
+    # No `ignore` here on purpose. windows/arm64 was excluded, but both the npm
+    # and pip installers map process.arch/platform.machine() "arm64" straight to
+    # windows/arm64 and request an archive that was therefore never uploaded —
+    # so Windows-on-ARM installs 404'd (#262). The target builds and vets clean,
+    # and ci.yml's cross-compile job now guards that for all six targets.
 
 # ── Archives ──────────────────────────────────────────────────────────────────
 
