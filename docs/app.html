@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hydra Desktop — watch every agent, every dollar, live</title>
+  <meta name="description" content="The Hydra desktop app: four views over your local control plane — Dashboard, Fleet, Session, Code. See what each agent is doing and what it costs, as it happens. macOS, Linux and Windows.">
+  <meta name="keywords" content="AI agent dashboard, LLM cost dashboard, desktop app, multi-model orchestration UI, agent monitoring, Hydra desktop">
+
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://hydra.uvansa.com/app.html">
+  <meta property="og:title" content="Hydra Desktop — watch every agent, every dollar, live">
+  <meta property="og:description" content="Four views over your local control plane: Dashboard, Fleet, Session, Code. Free, open source, runs entirely on your machine.">
+  <meta property="og:image" content="https://hydra.uvansa.com/logo.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:site" content="@ankit373">
+  <meta name="twitter:title" content="Hydra Desktop — watch every agent, every dollar, live">
+  <meta name="twitter:description" content="Four views over your local control plane. See what each agent is doing and what it costs, as it happens.">
+  <meta name="twitter:image" content="https://hydra.uvansa.com/logo.png">
+
+  <link rel="canonical" href="https://hydra.uvansa.com/app.html">
+  <link rel="icon" type="image/png" href="logo.png">
+  <link rel="ai-context" href="https://hydra.uvansa.com/llms.txt" type="text/plain">
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "Hydra Desktop",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS, Linux, Windows",
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+    "license": "https://opensource.org/licenses/MIT",
+    "url": "https://hydra.uvansa.com/app.html",
+    "downloadUrl": "https://github.com/ankit373/hydra/releases/latest",
+    "isPartOf": { "@type": "SoftwareApplication", "name": "Hydra", "url": "https://hydra.uvansa.com/" }
+  }
+  </script>
+
+<style>
+@font-face{font-family:"Space Grotesk";font-style:normal;font-weight:400 700;font-display:swap;
+  src:url("fonts/SpaceGrotesk.woff2") format("woff2");}
+@font-face{font-family:"JetBrains Mono";font-style:normal;font-weight:400 700;font-display:swap;
+  src:url("fonts/JetBrainsMono.woff2") format("woff2");}
+
+/* Tokens are copied from the same source the desktop app itself uses
+   (desktop/frontend/src/tokens.css) so this page and the app cannot drift
+   into looking like two different products. */
+:root{
+  color-scheme:dark;
+  --bg:#06070F;--bg2:#0A0C18;--panel:rgba(18,20,38,.62);
+  --line:rgba(150,140,255,.16);--line-2:rgba(150,140,255,.30);
+  --ink:#E7E9F5;--dim:#9aa0c4;--faint:#5a5f85;
+  --cyan:#2AF0E0;--aqua:#00E6C3;--violet:#8B5CF6;--magenta:#E852C8;
+  --cheap:#3FD98A;--mid:#E0A93A;--exp:#FF5A6E;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,Roboto,Helvetica,Arial,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+  --display:"Space Grotesk",system-ui,sans-serif;
+  --maxw:1200px;
+}
+*{box-sizing:border-box;}
+html{scroll-behavior:smooth;}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto;}}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.55;
+  overflow-x:hidden;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;}
+.wrap{max-width:var(--maxw);margin:0 auto;padding:0 24px;}
+h1,h2,h3{margin:0;text-wrap:balance;}
+a{color:var(--aqua);text-decoration:none;}
+a:hover{text-decoration:underline;}
+.mono{font-family:var(--mono);}
+.grad{background:linear-gradient(90deg,var(--cyan),var(--violet),var(--magenta));
+  -webkit-background-clip:text;background-clip:text;color:transparent;}
+
+/* ── top bar ─────────────────────────────────────────────────────────── */
+.topbar{position:sticky;top:0;z-index:60;display:flex;align-items:center;justify-content:space-between;
+  gap:18px;padding:10px 24px;font-family:var(--mono);font-size:12.5px;
+  background:rgba(6,7,15,.55);backdrop-filter:blur(14px);border-bottom:1px solid var(--line);}
+.topbar nav{display:flex;gap:18px;flex-wrap:wrap;}
+.topbar a{color:var(--dim);}
+.topbar a:hover{color:var(--ink);text-decoration:none;}
+.topbar .brand{color:var(--ink);font-weight:700;letter-spacing:.5px;}
+.topbar .ghost{border:1px solid var(--line-2);border-radius:6px;padding:5px 12px;color:var(--ink);}
+
+/* ── hero ────────────────────────────────────────────────────────────── */
+.hero{padding:76px 0 44px;text-align:center;position:relative;overflow:hidden;}
+.hero::before{content:"";position:absolute;inset:-40% 20% auto;height:520px;
+  background:radial-gradient(closest-side,rgba(139,92,246,.20),transparent 70%);pointer-events:none;}
+.klabel{display:inline-flex;gap:8px;align-items:center;font-family:var(--mono);font-size:10.5px;
+  letter-spacing:2px;text-transform:uppercase;color:var(--faint);margin-bottom:18px;}
+.klabel b{color:var(--aqua);font-weight:600;}
+.hero h1{font-family:var(--display);font-size:clamp(34px,6vw,64px);line-height:1.04;letter-spacing:-1.5px;}
+.hero p.lede{max-width:640px;margin:20px auto 0;color:var(--dim);font-size:17px;}
+.cta{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:30px;}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:11px 20px;border-radius:8px;
+  font-family:var(--mono);font-size:13px;border:1px solid var(--line-2);color:var(--ink);transition:.15s;}
+.btn:hover{border-color:var(--aqua);text-decoration:none;transform:translateY(-1px);}
+.btn.primary{background:linear-gradient(90deg,var(--cyan),var(--violet));border:none;color:#06070F;font-weight:700;}
+.btn.primary:hover{filter:brightness(1.12);}
+
+/* ── the app preview ─────────────────────────────────────────────────── */
+.stage{margin:52px auto 0;max-width:1000px;padding:0 24px;}
+.win{border:1px solid var(--line-2);border-radius:12px;overflow:hidden;background:var(--bg2);
+  box-shadow:0 40px 120px -30px rgba(139,92,246,.45), 0 0 0 1px rgba(255,255,255,.02) inset;}
+.win-bar{display:flex;align-items:center;gap:8px;padding:9px 14px;border-bottom:1px solid var(--line);
+  background:rgba(10,12,24,.9);}
+.dot{width:10px;height:10px;border-radius:50%;background:#2a2f4a;}
+.dot.r{background:#FF5A6E;}.dot.y{background:#E0A93A;}.dot.g{background:#3FD98A;}
+.win-title{margin-left:10px;font-family:var(--mono);font-size:11px;color:var(--faint);}
+.win-body{display:grid;grid-template-columns:132px 1fr;min-height:376px;}
+.side{border-right:1px solid var(--line);padding:14px 10px;background:rgba(6,7,15,.5);}
+.side .lbl{font-family:var(--mono);font-size:9.5px;letter-spacing:1.6px;color:var(--faint);
+  text-transform:uppercase;padding:0 8px 10px;}
+.nav-item{display:flex;align-items:center;gap:8px;padding:7px 9px;border-radius:6px;
+  font-family:var(--mono);font-size:12px;color:var(--dim);margin-bottom:2px;}
+.nav-item i{width:5px;height:5px;border-radius:50%;background:currentColor;opacity:.5;font-style:normal;}
+.pane{padding:18px 20px;position:relative;}
+
+/* Each pane fades in on its own slice of one 24s loop. Four views, 6s each. */
+.view{position:absolute;inset:18px 20px;opacity:0;animation:cycle 24s infinite;}
+.view:nth-child(1){animation-delay:0s;}
+.view:nth-child(2){animation-delay:6s;}
+.view:nth-child(3){animation-delay:12s;}
+.view:nth-child(4){animation-delay:18s;}
+@keyframes cycle{
+  0%,1%   {opacity:0;transform:translateY(6px);}
+  3%,23%  {opacity:1;transform:none;}
+  25%,100%{opacity:0;transform:translateY(-4px);}
+}
+/* The sidebar highlight tracks the same 24s clock. */
+.nav-item{animation:navlit 24s infinite;}
+.nav-item:nth-of-type(1){animation-delay:0s;}
+.nav-item:nth-of-type(2){animation-delay:6s;}
+.nav-item:nth-of-type(3){animation-delay:12s;}
+.nav-item:nth-of-type(4){animation-delay:18s;}
+@keyframes navlit{
+  0%,1%   {background:transparent;color:var(--dim);}
+  3%,23%  {background:rgba(0,230,195,.10);color:var(--aqua);}
+  25%,100%{background:transparent;color:var(--dim);}
+}
+/* Anyone who has asked the OS to stop moving things gets a static first view. */
+@media(prefers-reduced-motion:reduce){
+  .view,.nav-item{animation:none;}
+  .view{opacity:0;}
+  .view:nth-child(1){opacity:1;}
+  .nav-item:nth-of-type(1){background:rgba(0,230,195,.10);color:var(--aqua);}
+}
+
+.vhead{font-family:var(--display);font-size:15px;margin-bottom:2px;}
+.vsub{font-family:var(--mono);font-size:10.5px;color:var(--faint);margin-bottom:14px;}
+.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px;}
+.card{border:1px solid var(--line);border-radius:8px;padding:10px 12px;background:var(--panel);}
+.card .k{font-family:var(--mono);font-size:9.5px;color:var(--faint);text-transform:uppercase;letter-spacing:1.2px;}
+.card .v{font-family:var(--display);font-size:20px;margin-top:3px;}
+table.mini{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:11.5px;}
+table.mini th{text-align:left;color:var(--faint);font-weight:400;padding:5px 6px;
+  border-bottom:1px solid var(--line);text-transform:uppercase;font-size:9.5px;letter-spacing:1px;}
+table.mini td{padding:5px 6px;border-bottom:1px solid rgba(150,140,255,.07);color:var(--dim);}
+table.mini td.n{text-align:right;color:var(--ink);}
+.bar{height:5px;border-radius:3px;background:rgba(150,140,255,.14);overflow:hidden;}
+.bar i{display:block;height:100%;border-radius:3px;}
+.row{display:flex;align-items:center;gap:10px;padding:8px 6px;border-bottom:1px solid rgba(150,140,255,.07);
+  font-family:var(--mono);font-size:11.5px;}
+.pill{font-family:var(--mono);font-size:9.5px;padding:2px 7px;border-radius:99px;border:1px solid var(--line-2);color:var(--dim);}
+.pill.live{border-color:var(--aqua);color:var(--aqua);}
+.pill.ok{border-color:var(--cheap);color:var(--cheap);}
+.pill.fail{border-color:var(--exp);color:var(--exp);}
+.blink{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--aqua);
+  animation:pulse 1.4s ease-in-out infinite;}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:.25;}}
+@media(prefers-reduced-motion:reduce){.blink{animation:none;}}
+.diff{font-family:var(--mono);font-size:11px;line-height:1.75;}
+.diff .add{color:var(--cheap);}
+.diff .del{color:var(--exp);}
+.diff .ctx{color:var(--faint);}
+.caption{text-align:center;font-family:var(--mono);font-size:11px;color:var(--faint);margin-top:14px;}
+
+/* ── content blocks ──────────────────────────────────────────────────── */
+.blk{padding:74px 0;border-top:1px solid var(--line);}
+.blk h2{font-family:var(--display);font-size:clamp(24px,3.6vw,38px);letter-spacing:-.8px;margin-bottom:14px;}
+.blk p{color:var(--dim);max-width:760px;}
+.grid4{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;margin-top:32px;}
+.feat{border:1px solid var(--line);border-radius:10px;padding:20px;background:var(--panel);transition:.18s;}
+.feat:hover{border-color:var(--line-2);transform:translateY(-2px);}
+.feat h3{font-family:var(--display);font-size:17px;margin-bottom:8px;}
+.feat .tag{font-family:var(--mono);font-size:9.5px;letter-spacing:1.4px;text-transform:uppercase;
+  color:var(--aqua);margin-bottom:9px;}
+.feat p{font-size:14px;color:var(--dim);margin:0;}
+/* ── install command ───────────────────────────────────────────────────── */
+.term{font-family:var(--mono);font-size:12.5px;background:#070912;border:1px solid var(--line);border-radius:9px;
+  padding:13px 15px;color:#c7d0e8;overflow-x:auto;}
+.term .p{color:var(--aqua);}.term .c{color:var(--faint);}.term .o{color:var(--dim);}
+.term .g{color:var(--cheap);}
+.copyline{display:flex;align-items:center;gap:14px;justify-content:space-between;cursor:pointer;}
+.copyline .cp{font-size:10.5px;color:var(--faint);transition:.15s;flex-shrink:0;}
+.copyline:hover .cp{color:var(--aqua);}
+.copyline.copied .cp{color:var(--cheap);}
+.term .o{margin-top:2px;}
+
+/* ── direct downloads ──────────────────────────────────────────────────── */
+.dl{margin-top:18px;border:1px solid var(--line);border-radius:11px;overflow:hidden;background:var(--panel);}
+.dl .row{display:grid;grid-template-columns:145px 1fr auto auto auto;gap:20px;align-items:center;
+  padding:13px 18px;border-top:1px solid var(--line);}
+.dl .row:first-child{border-top:0;}
+.dl .row.off{opacity:.55;}
+.dl .os{font-family:var(--display);font-size:15px;}
+.dl .meta{font-family:var(--mono);font-size:11px;color:var(--faint);}
+.dl .sz{font-family:var(--mono);font-size:11px;color:var(--faint);text-align:right;}
+.dl .get{font-family:var(--mono);font-size:11.5px;border:1px solid var(--line-2);border-radius:7px;
+  padding:6px 14px;color:var(--aqua);white-space:nowrap;transition:.16s;}
+.dl .get:hover{background:var(--aqua);color:#06070F;text-decoration:none;border-color:var(--aqua);}
+.dl .sum{font-family:var(--mono);font-size:10.5px;color:var(--faint);white-space:nowrap;}
+.dl .sum:hover{color:var(--aqua);}
+@media(max-width:760px){
+  .dl .row{grid-template-columns:1fr auto;gap:5px 14px;}
+  .dl .os{grid-column:1;grid-row:1;}
+  .dl .meta{grid-column:1;grid-row:2;}
+  .dl .sz{grid-column:1;grid-row:3;text-align:left;}
+  .dl .get{grid-column:2;grid-row:1/3;align-self:center;}
+  .dl .sum{grid-column:2;grid-row:3;text-align:right;}
+}
+.note{border-left:2px solid var(--line-2);padding:10px 0 10px 16px;margin-top:26px;color:var(--dim);font-size:14px;}
+.note b{color:var(--ink);}
+footer{border-top:1px solid var(--line);padding:34px 0 56px;color:var(--faint);
+  font-family:var(--mono);font-size:12px;}
+footer a{color:var(--dim);}
+@media(max-width:720px){
+  .win-body{grid-template-columns:1fr;}
+  .side{display:none;}
+  .cards{grid-template-columns:1fr;}
+  .view{position:static;opacity:1;animation:none;display:none;}
+  .view:nth-child(1){display:block;}
+  .pane{min-height:0;}
+}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <nav>
+    <a class="brand" href="/">HYDRA</a>
+    <a href="/#universe">Universe</a>
+    <a href="/docs.html">Docs</a>
+    <a href="/app.html" style="color:var(--aqua)">Desktop app</a>
+    <a href="/pricing.html">Pricing</a>
+    <a href="https://github.com/ankit373/hydra">GitHub</a>
+  </nav>
+  <a class="ghost" href="#download">Download</a>
+</div>
+
+<!-- ══ HERO ════════════════════════════════════════════════════════════ -->
+<section class="hero">
+  <div class="wrap">
+    <div class="klabel"><span>Hydra Desktop</span><b>ships with every release</b></div>
+    <h1>Your agents are already running.<br><span class="grad">Now you can watch them.</span></h1>
+    <p class="lede">
+      The CLI routes the work. The desktop app shows you what it did — which head
+      answered, how long it took, what it cost, how confident it was, and which
+      files changed. It reads the same local logs <span class="mono">hyctl</span>
+      writes, so there is nothing to connect and nothing to sign in to.
+    </p>
+    <div class="cta">
+      <a class="btn primary" href="#download">Download for your platform</a>
+      <a class="btn" href="#views">See the four views</a>
+    </div>
+  </div>
+
+  <!-- The preview below is a live HTML rendering, built from the app's own
+       design tokens — not a screenshot and not a recording. It shows the real
+       view names and the real shape of each screen; the numbers in it are
+       illustrative sample data. -->
+  <div class="stage">
+    <div class="win">
+      <div class="win-bar">
+        <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+        <span class="win-title">Hydra — localhost · no account, no telemetry</span>
+      </div>
+      <div class="win-body">
+        <div class="side">
+          <div class="lbl">Views</div>
+          <div class="nav-item"><i></i>Dashboard</div>
+          <div class="nav-item"><i></i>Fleet</div>
+          <div class="nav-item"><i></i>Session</div>
+          <div class="nav-item"><i></i>Code</div>
+        </div>
+
+        <div class="pane">
+          <!-- 1 · Dashboard -->
+          <div class="view">
+            <div class="vhead">Dashboard</div>
+            <div class="vsub">spend, grouped by model · tier · day</div>
+            <div class="cards">
+              <div class="card"><div class="k">Calls today</div><div class="v">128</div></div>
+              <div class="card"><div class="k">Spend today</div><div class="v" style="color:var(--aqua)">$0.42</div></div>
+              <div class="card"><div class="k">vs all-frontier</div><div class="v" style="color:var(--cheap)">−83%</div></div>
+            </div>
+            <table class="mini">
+              <tr><th>Model</th><th>Tier</th><th style="text-align:right">Calls</th><th style="text-align:right">Cost</th></tr>
+              <tr><td>claude-sonnet</td><td>2</td><td class="n">14</td><td class="n">$0.31</td></tr>
+              <tr><td>gemini-flash</td><td>6</td><td class="n">37</td><td class="n">$0.11</td></tr>
+              <tr><td>qwen2.5-coder:7b</td><td>10</td><td class="n">77</td><td class="n" style="color:var(--cheap)">free</td></tr>
+            </table>
+          </div>
+
+          <!-- 2 · Fleet -->
+          <div class="view">
+            <div class="vhead">Fleet</div>
+            <div class="vsub">every run on this machine, newest first</div>
+            <div class="row"><span class="blink"></span><span style="flex:1">add pagination to /users</span>
+              <span class="pill live">live</span><span style="color:var(--dim)">tier 6</span></div>
+            <div class="row"><span style="width:6px"></span><span style="flex:1">rotate the signing key</span>
+              <span class="pill ok">done</span><span style="color:var(--dim)">tier 1</span></div>
+            <div class="row"><span style="width:6px"></span><span style="flex:1">write DTO tests</span>
+              <span class="pill ok">done</span><span style="color:var(--cheap)">local</span></div>
+            <div class="row"><span style="width:6px"></span><span style="flex:1">refactor the ledger globs</span>
+              <span class="pill fail">failed</span><span style="color:var(--dim)">tier 3</span></div>
+            <div style="margin-top:14px">
+              <div style="font-family:var(--mono);font-size:10px;color:var(--faint);margin-bottom:5px">
+                CONTEXT USED · 52%</div>
+              <div class="bar"><i style="width:52%;background:var(--cheap)"></i></div>
+            </div>
+          </div>
+
+          <!-- 3 · Session -->
+          <div class="view">
+            <div class="vhead">Session <span class="pill live" style="margin-left:6px">live</span></div>
+            <div class="vsub">run-4b1 · what this agent is doing, in order</div>
+            <div class="row"><span style="color:var(--faint);width:52px">00:00.0</span>
+              <span style="flex:1">head selected — <span style="color:var(--aqua)">gemini-flash</span> (tier 6)</span></div>
+            <div class="row"><span style="color:var(--faint);width:52px">00:01.2</span>
+              <span style="flex:1">candidate 1 failed — falling through</span><span class="pill fail">retry</span></div>
+            <div class="row"><span style="color:var(--faint);width:52px">00:02.9</span>
+              <span style="flex:1">dispatch finished — 1.4k tok</span><span class="pill ok">ok</span></div>
+            <div class="row"><span style="color:var(--faint);width:52px">00:03.1</span>
+              <span style="flex:1">handed off to hydra-tier-6</span></div>
+            <div class="row"><span style="color:var(--faint);width:52px">00:03.4</span>
+              <span style="flex:1">edited <span class="mono">internal/api/users.go</span></span>
+              <span style="color:var(--cheap)">+18</span><span style="color:var(--exp)">−4</span></div>
+            <div style="margin-top:12px;font-family:var(--mono);font-size:10px;color:var(--faint)">
+              TIMELINE · a layered graph appears here when a run fans out</div>
+          </div>
+
+          <!-- 4 · Code -->
+          <div class="view">
+            <div class="vhead">Code</div>
+            <div class="vsub">what this run actually changed on disk</div>
+            <div style="font-family:var(--mono);font-size:11px;color:var(--dim);margin-bottom:10px">
+              internal/api/users.go <span style="color:var(--cheap)">+18</span>
+              <span style="color:var(--exp)">−4</span></div>
+            <div class="diff">
+              <div class="ctx">  func ListUsers(w http.ResponseWriter, r *http.Request) {</div>
+              <div class="del">-   users := store.All()</div>
+              <div class="add">+   page, size := paging.FromQuery(r.URL.Query())</div>
+              <div class="add">+   users, total := store.Page(page, size)</div>
+              <div class="ctx">  </div>
+              <div class="add">+   w.Header().Set("X-Total-Count", strconv.Itoa(total))</div>
+              <div class="ctx">    json.NewEncoder(w).Encode(users)</div>
+              <div class="ctx">  }</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="caption">
+      A live rendering of the app's four views, built from its own design tokens.
+      Not a screenshot — the numbers are sample data.
+    </p>
+  </div>
+</section>
+
+<!-- ══ THE FOUR VIEWS ══════════════════════════════════════════════════ -->
+<section class="blk wrap" id="views">
+  <div class="klabel"><span>What's in it</span><b>four views, one question each</b></div>
+  <h2>Each screen answers something you'd otherwise <span class="grad">grep the logs for</span>.</h2>
+  <p>
+    The app is a reader, not a second brain. Everything it shows comes from the
+    JSONL files <span class="mono">hyctl</span> already writes to
+    <span class="mono">~/.hydra</span> — so the numbers on screen are the same
+    ones <span class="mono">hyctl cost</span> and <span class="mono">hyctl stats</span>
+    print, by construction.
+  </p>
+
+  <div class="grid4">
+    <div class="feat">
+      <div class="tag">Dashboard</div>
+      <h3>Where the money went</h3>
+      <p>Spend grouped by model, by tier and by day, with call counts beside each —
+        alongside the governor's context pressure and your trust record, so cost
+        and confidence sit on one screen.</p>
+    </div>
+    <div class="feat">
+      <div class="tag">Fleet</div>
+      <h3>What's running right now</h3>
+      <p>Runs in flight and the agents inside them, newest first, with the live
+        ones marked. Answers "is something still going, and should I be worried
+        about it".</p>
+    </div>
+    <div class="feat">
+      <div class="tag">Session</div>
+      <h3>Why it did that</h3>
+      <p>One run's timeline in order: which head was selected, which candidates
+        failed and why it fell through, how long each step took, where it handed
+        off — and a layered graph when the run fanned out, so a swarm reads as a
+        shape rather than a list.</p>
+    </div>
+    <div class="feat">
+      <div class="tag">Code</div>
+      <h3>What changed on disk</h3>
+      <p>The files a run touched and the diff for each. If a run says it edited
+        something, this is where you check what it actually wrote.</p>
+    </div>
+  </div>
+
+  <div class="note">
+    <b>Plus a chat dock.</b> Collapsed by default, on every screen. Type a task,
+    let Hydra auto-route it, and watch the run appear in Fleet — without leaving
+    the view you were reading.
+  </div>
+</section>
+
+<!-- ══ WHY IT'S DIFFERENT ══════════════════════════════════════════════ -->
+<section class="blk wrap">
+  <div class="klabel"><span>The shape of it</span><b>local by construction</b></div>
+  <h2>No account. No server. <span class="grad">Nothing leaves the machine.</span></h2>
+  <p>
+    There is no Hydra backend to sign in to, because there is no Hydra backend.
+    The app opens the same files on your disk that the CLI writes, and that is the
+    whole data path. Close it and the CLI keeps working exactly as before — it is
+    a window onto the control plane, not a dependency of it.
+  </p>
+  <div class="grid4">
+    <div class="feat">
+      <div class="tag">Same numbers</div>
+      <h3>Agrees with the CLI</h3>
+      <p>Both read <span class="mono">cost.jsonl</span>. A figure that differed
+        between them would be a bug, and there is a test that says so.</p>
+    </div>
+    <div class="feat">
+      <div class="tag">Provider-neutral</div>
+      <h3>Whatever you have installed</h3>
+      <p>Claude, Gemini, Codex, an API key, a local Ollama model — the app shows
+        whichever heads your machine actually has, and marks the ones it cannot drive.</p>
+    </div>
+    <div class="feat">
+      <div class="tag">Estimated vs measured</div>
+      <h3>Labelled, never conflated</h3>
+      <p>Where a provider reports real token usage it says so; where Hydra
+        estimated it, it says that instead. A guess is never shown as a measurement.</p>
+    </div>
+    <div class="feat">
+      <div class="tag">MIT</div>
+      <h3>Read the whole thing</h3>
+      <p>Frontend and backend are in the same repo as the CLI. If you want to know
+        what it does with your data, the answer is in <span class="mono">desktop/</span>.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══ DOWNLOAD ════════════════════════════════════════════════════════ -->
+<section class="blk wrap" id="download">
+  <div class="klabel"><span>Download</span><b>free · MIT · no sign-up</b></div>
+  <h2>One command on <span class="grad">macOS and Linux</span>.</h2>
+  <p>
+    It resolves the newest release, checks the download against the SHA-256 published
+    beside it, and refuses to install on a mismatch. Nothing runs as root and nothing
+    is written outside your applications directory.
+  </p>
+
+  <div class="term" style="margin-top:22px;">
+    <div class="copyline" data-copy="curl -fsSL https://raw.githubusercontent.com/ankit373/hydra/main/install-app.sh | sh"><span><span class="p">$</span> curl -fsSL https://raw.githubusercontent.com/ankit373/hydra/main/install-app.sh | sh</span><span class="cp">copy</span></div>
+    <div class="o">&nbsp;&nbsp;Release&nbsp;: <span class="g">v1.1.0</span></div>
+    <div class="o">&nbsp;&nbsp;Target&nbsp;&nbsp;: darwin_universal</div>
+    <div class="o">&nbsp;&nbsp;Checksum: <span class="g">verified</span></div>
+    <div class="o">&nbsp;&nbsp;Installed: /Applications/Hydra.app</div>
+  </div>
+  <p style="font-size:13.5px;color:var(--faint);margin-top:12px;">
+    Pin a version with <span class="mono">HYDRA_VERSION=v1.1.0</span>, or change where it
+    lands with <span class="mono">HYDRA_APP_DIR=~/Applications</span>.
+    <a href="https://github.com/ankit373/hydra/blob/main/install-app.sh">Read the script</a>
+    before you pipe it to a shell — it is under 200 lines and you should.
+  </p>
+
+  <h3 style="font-family:var(--display);font-size:19px;margin-top:40px;">Or take the binary directly</h3>
+  <div class="dl">
+    <div class="row">
+      <div class="os">macOS</div>
+      <div class="meta">universal · Apple Silicon + Intel</div>
+      <div class="sz">8.3 MB</div>
+      <a class="get" href="https://github.com/ankit373/hydra/releases/download/v1.1.0/hydra-desktop_v1.1.0_darwin_universal.zip">.zip</a>
+      <a class="sum" href="https://github.com/ankit373/hydra/releases/download/v1.1.0/hydra-desktop_v1.1.0_darwin_universal.zip.sha256">sha256</a>
+    </div>
+    <div class="row">
+      <div class="os">Linux</div>
+      <div class="meta">x86-64</div>
+      <div class="sz">4.3 MB</div>
+      <a class="get" href="https://github.com/ankit373/hydra/releases/download/v1.1.0/hydra-desktop_v1.1.0_linux_amd64.tar.gz">.tar.gz</a>
+      <a class="sum" href="https://github.com/ankit373/hydra/releases/download/v1.1.0/hydra-desktop_v1.1.0_linux_amd64.tar.gz.sha256">sha256</a>
+    </div>
+    <div class="row">
+      <div class="os">Windows</div>
+      <div class="meta">x86-64 · unzip and run Hydra.exe</div>
+      <div class="sz">4.8 MB</div>
+      <a class="get" href="https://github.com/ankit373/hydra/releases/download/v1.1.0/hydra-desktop_v1.1.0_windows_amd64.zip">.zip</a>
+      <a class="sum" href="https://github.com/ankit373/hydra/releases/download/v1.1.0/hydra-desktop_v1.1.0_windows_amd64.zip.sha256">sha256</a>
+    </div>
+    <div class="row off">
+      <div class="os">Linux ARM64</div>
+      <div class="meta">not built yet — <a href="https://github.com/ankit373/hydra/issues/263">#263</a></div>
+      <div class="sz">—</div>
+      <div class="sum"></div>
+      <div class="sum"></div>
+    </div>
+  </div>
+  <p style="font-size:13px;color:var(--faint);margin-top:12px;font-family:var(--mono);">
+    v1.1.0 · <a href="https://github.com/ankit373/hydra/releases">all releases</a>
+  </p>
+
+  <div class="note">
+    <b>Not code-signed yet.</b> The build carries no Apple Developer signature, so
+    macOS quarantines it and the first launch fails with "damaged". The install
+    script clears that flag for you; if you unzipped it by hand, run
+    <span class="mono">xattr -dr com.apple.quarantine /Applications/Hydra.app</span>
+    or right-click → Open. Gatekeeper is telling you the truth: nobody has paid
+    Apple to vouch for this. The checksum is what you can verify instead.
+  </div>
+
+  <div class="note">
+    <b>Install the CLI too.</b> The app reads the logs <span class="mono">hyctl</span>
+    writes — without it there is nothing to show and the app will look empty rather
+    than unconfigured. <span class="mono">brew install ankit373/hydra/hyctl</span>, or
+    <a href="/#start">the other install paths</a>.
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <a href="/">Hydra</a> · <a href="/docs.html">Docs</a> ·
+    <a href="/pricing.html">Pricing</a> ·
+    <a href="https://github.com/ankit373/hydra">GitHub</a> ·
+    MIT licensed · runs on your machine
+  </div>
+</footer>
+
+<script>
+// Copy-to-clipboard on the install command. Same behaviour as the landing page;
+// kept as its own copy because this page ships no other JS and pulling in a
+// shared bundle for eight lines would cost a request.
+(function(){
+  function copy(text,done){
+    if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(text).then(done,done);return;}
+    try{var ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.opacity=0;
+      document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);}catch(e){}
+    done();
+  }
+  Array.prototype.forEach.call(document.querySelectorAll('[data-copy]'),function(el){
+    el.setAttribute('role','button');el.setAttribute('tabindex','0');
+    function fire(){
+      copy(el.getAttribute('data-copy'),function(){
+        el.classList.add('copied');
+        var cp=el.querySelector('.cp'),prev=cp?cp.textContent:'';
+        if(cp)cp.textContent='✓ copied';
+        setTimeout(function(){el.classList.remove('copied');if(cp)cp.textContent=prev;},1400);
+      });
+    }
+    el.addEventListener('click',fire);
+    el.addEventListener('keydown',function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();fire();}});
+  });
+})();
+</script>
+
+</body>
+</html>
