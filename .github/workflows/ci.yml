@@ -187,9 +187,14 @@ jobs:
 
       # Only fail on real errors (SC severity=error).
       # Warnings and style hints are surfaced but don't block the PR.
+      #
+      # Both installers are piped straight into `sh` by users following the
+      # README, so a syntax error here reaches them mid-install. Naming them
+      # explicitly rather than globbing keeps that intent visible — and is why
+      # a new installer must be added to this list, not just written.
       - name: Lint shell scripts
         run: |
-          shellcheck --severity=error install.sh
+          shellcheck --severity=error install.sh install-app.sh
 
   # install.ps1's counterpart to the shellcheck job above. It runs on Windows
   # because that is where PowerShell's own parser lives — and because nobody
