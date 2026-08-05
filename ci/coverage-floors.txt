@@ -30,8 +30,8 @@
 #   - `hyctl edit`, the MCP gate, the oracle and `parallel` call os.Exit with
 #     codes callers gate on (2 and 3). Those are contract-tested against a real
 #     built binary, and a subprocess contributes nothing to this profile.
-floor cmd/specstest                 96
-floor cmd/hydra                     75
+floor cmd/specstest                 90
+floor cmd/hydra                     77
 floor internal/a2a                  93
 floor internal/budget               92
 floor internal/capabilities         90
@@ -62,7 +62,7 @@ floor internal/runid                96
 floor internal/runlog               85
 floor internal/swarm                89
 floor internal/sysinfo              82
-floor internal/testutil             78
+floor internal/testutil             81
 floor internal/tree                 86
 floor internal/trust                88
 floor internal/tui                  86
@@ -77,6 +77,12 @@ floor registry                      86
 # down to two, and both are permanent:
 #
 #   internal/build   is four ldflags-injected string vars and nothing else.
+#
+# cmd/specstest's floor is 90 against a Linux reading of 94.1%, not the 100%
+# a Mac reports: main() prints the memory-pressure warning only when there is
+# one, and whether there is one depends on the machine. In a 17-statement
+# package a single conditional branch is 5.9%, so the margin has to be wider
+# than the usual few points.
 #
 # cmd/specstest was here too, on the grounds that it is "just a debug main".
 # That was the wrong call: it is the diagnostic a user is pointed at when local

@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/testutil"
@@ -846,4 +847,291 @@ func TestCLI_MCPCheck_DefaultIsPermissiveUntilToldOtherwise(t *testing.T) {
 		"--resource", "/etc/passwd", "--agent", "a"); code != 3 {
 		t.Errorf("a rule-matched deny exited %d, want 3:\n%s", code, out)
 	}
+}
+
+// ── mcp check: classification ─────────────────────────────────────────────────
+
+// The ledger is classification-aware: a policy rule can key on a
+// data-sensitivity tag, and the tag is derived from the content being accessed
+// when it is not given explicitly. That derivation is what makes a PII rule
+// apply to content nobody remembered to label.
+func TestCLI_MCPCheck_ClassificationFromContentAndExplicit(t *testing.T) {
+	s := populated(t)
+
+	// Deny anything classified as PII, allow the rest.
+	policy := `{"rules":[{"classification":"pii","decision":"deny"}]}`
+	if err := os.WriteFile(filepath.Join(config.Dir(), "mcp_policy.json"),
+		[]byte(policy), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	// Content that looks like PII must be classified as such without anyone
+	// saying so, and therefore denied.
+	code, out := runBinary(t, s, "mcp", "check", "fs.read",
+		"--action", "read", "--resource", "/tmp/customers.csv", "--agent", "a",
+		"--content", "name,ssn\nAda Lovelace,123-45-6789")
+	if code != 3 {
+		t.Errorf("PII content exited %d, want the deny code 3 — the classification "+
+			"was not derived from the content:\n%s", code, out)
+	}
+
+	// Content with nothing sensitive in it is not classified, so the PII rule
+	// does not match and the permissive default applies.
+	code, out = runBinary(t, s, "mcp", "check", "fs.read",
+		"--action", "read", "--resource", "/tmp/notes.txt", "--agent", "a",
+		"--content", "just some ordinary notes about the build")
+	if code != 0 {
+		t.Errorf("ordinary content exited %d, want 0:\n%s", code, out)
+	}
+
+	// An explicit --classification overrides the content scan, so an operator
+	// can label something the detector would miss.
+	code, out = runBinary(t, s, "mcp", "check", "fs.read",
+		"--action", "read", "--resource", "/tmp/notes.txt", "--agent", "a",
+		"--content", "nothing sensitive here", "--classification", "pii")
+	if code != 3 {
+		t.Errorf("an explicit --classification pii exited %d, want 3 — the "+
+			"explicit tag must beat the content scan:\n%s", code, out)
+	}
+}
+
+// A malformed --params or a policy file that will not parse must be refused.
+// A policy that silently fails to load is a gate that is not gating.
+func TestCLI_MCPCheck_RefusesBadInput(t *testing.T) {
+	s := populated(t)
+
+	if code, out := runBinary(t, s, "mcp", "check", "fs.read",
+		"--action", "read", "--resource", "/tmp/x", "--agent", "a",
+		"--params", "{not json"); code == 0 {
+		t.Errorf("a malformed --params was accepted:\n%s", out)
+	}
+	if code, out := runBinary(t, s, "mcp", "check", "fs.read",
+		"--action", "not-an-action", "--resource", "/tmp/x", "--agent", "a"); code == 0 {
+		t.Errorf("an unknown --action was accepted:\n%s", out)
+	}
+
+	// A policy file that does not parse must fail loudly rather than falling
+	// back to "no rules", which would allow everything.
+	if err := os.WriteFile(filepath.Join(config.Dir(), "mcp_policy.json"),
+		[]byte("{not json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if code, out := runBinary(t, s, "mcp", "check", "fs.read",
+		"--action", "read", "--resource", "/tmp/x", "--agent", "a"); code == 0 {
+		t.Errorf("an unparsable policy was treated as no rules, which allows "+
+			"everything:\n%s", out)
+	}
+}
+
+// ── models add: validation ────────────────────────────────────────────────────
+
+// A model's capability score is what selection ranks on, so a nonsensical one
+// would place a head at a tier that does not reflect it.
+func TestCLI_ModelsAdd_ValidatesTheCapabilityScore(t *testing.T) {
+	populated(t)
+
+	for _, score := range []string{"-1", "101", "1000"} {
+		t.Run("score "+score, func(t *testing.T) {
+			_, cobraOut, err := run(t, "models", "add", "bad-score-"+score,
+				"--name", "X", "--provider", "p", "--cap-score", score)
+			if err == nil {
+				t.Fatalf("--cap-score %s was accepted", score)
+			}
+			if !strings.Contains(err.Error()+cobraOut, "0") {
+				t.Errorf("the error does not state the valid range: %v", err)
+			}
+		})
+	}
+
+	// The boundaries are valid.
+	for _, score := range []string{"0", "100"} {
+		if _, _, err := run(t, "models", "add", "edge-"+score,
+			"--name", "X", "--provider", "p", "--cap-score", score); err != nil {
+			t.Errorf("--cap-score %s was refused: %v", score, err)
+		}
+	}
+
+	// The name defaults to the id rather than being written empty — an unnamed
+	// model renders as a blank row in `hyctl models list`.
+	if _, _, err := run(t, "models", "add", "unnamed-model",
+		"--provider", "p", "--cap-score", "50"); err != nil {
+		t.Fatal(err)
+	}
+	out, _, err := run(t, "models", "list")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "unnamed-model") {
+		t.Errorf("a model added without --name is not listed:\n%s", out)
+	}
+}
+
+// Overriding a built-in is allowed — that is how a user retunes a score without
+// a rebuild — but removing one is not, since the built-in would come straight
+// back and the removal would look like it worked.
+func TestCLI_ModelsRemove_CannotRemoveABuiltIn(t *testing.T) {
+	populated(t)
+
+	// `claude` is in the embedded data.json.
+	_, cobraOut, err := run(t, "models", "remove", "claude")
+	if err == nil {
+		t.Fatal("a built-in model was removed; it would reappear on the next run")
+	}
+	if !strings.Contains(err.Error()+cobraOut, "built-in") {
+		t.Errorf("the error does not explain why: %v", err)
+	}
+
+	// Overriding it is fine, and then the override can be removed.
+	if _, _, err := run(t, "models", "add", "claude",
+		"--name", "My Claude", "--provider", "anthropic", "--cap-score", "99"); err != nil {
+		t.Fatalf("overriding a built-in was refused: %v", err)
+	}
+	if _, _, err := run(t, "models", "remove", "claude"); err != nil {
+		t.Errorf("removing an override was refused: %v", err)
+	}
+}
+
+// ── graph: json and parallel ──────────────────────────────────────────────────
+
+func TestCLI_Graph_ParallelAndJSON(t *testing.T) {
+	populated(t)
+	g := seedGraph(t)
+
+	out, cobraOut, err := run(t, "graph", "parallel",
+		"internal/auth/token.go", "internal/api/login.go", "--graph", g, "--json")
+	if err != nil {
+		t.Fatalf("`graph parallel --json` failed: %v (%s)", err, cobraOut)
+	}
+	var doc map[string]any
+	if jerr := json.Unmarshal([]byte(strings.TrimSpace(out)), &doc); jerr != nil {
+		t.Fatalf("not a JSON object: %v\n%s", jerr, out)
+	}
+	if len(doc) == 0 {
+		t.Errorf("the JSON carries no fields:\n%s", out)
+	}
+
+	// A graph file that is not there must be an error, not a silent empty graph
+	// that reports every file as safe to change.
+	if _, _, err := run(t, "graph", "blast", "x.go",
+		"--graph", filepath.Join(t.TempDir(), "absent.json")); err == nil {
+		out, _, _ := run(t, "graph", "blast", "x.go",
+			"--graph", filepath.Join(t.TempDir(), "absent.json"))
+		if !strings.Contains(strings.ToLower(out), "no graph") &&
+			!strings.Contains(strings.ToLower(out), "not") {
+			t.Errorf("a missing graph reported a radius without saying it had no "+
+				"data:\n%s", out)
+		}
+	}
+}
+
+// ── review qa ─────────────────────────────────────────────────────────────────
+
+// `hyctl review qa` sends a diff to a head for review. With no diff there is
+// nothing to pay for, and it must refuse rather than dispatching an empty prompt.
+func TestCLI_ReviewQA_RefusesWithNoDiff(t *testing.T) {
+	_, repo := dispatchable(t, "APPROVED looks fine")
+
+	clean := filepath.Join(repo, "clean.go")
+	if err := os.WriteFile(clean, []byte("package main\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, cobraOut, err := run(t, "review", "qa", clean); err == nil {
+		t.Error("`review qa` dispatched a review for a file with no diff")
+	} else if !strings.Contains(err.Error()+cobraOut, "no diff") {
+		t.Errorf("error = %v, want it to say there is no diff", err)
+	}
+
+	// With a real diff it dispatches and returns the verdict.
+	edited := filepath.Join(repo, "edited.go")
+	if err := os.WriteFile(edited, []byte("package main\n\nfunc f() {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(edited+".hydra-bak", []byte("package main\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out, cobraOut, err := run(t, "review", "qa", edited, "--tier", "6")
+	if err != nil {
+		t.Fatalf("`review qa` failed on a real diff: %v (%s)", err, cobraOut)
+	}
+	if !strings.Contains(out+cobraOut, "APPROVED") {
+		t.Errorf("the head's verdict is not reported:\n%s", out+cobraOut)
+	}
+}
+
+// ── init: the wizard needs a terminal ─────────────────────────────────────────
+
+// `hyctl init` and the bare `hyctl` on a fresh install both open an interactive
+// wizard. There is no unit test for "the wizard rendered", but there is one for
+// the thing that actually goes wrong in practice: run non-interactively — from
+// a CI job, a Dockerfile, a script — it must fail fast with a message naming the
+// cause, not hang waiting for input nobody is going to give it.
+func TestCLI_Init_FailsFastWithNoTerminal(t *testing.T) {
+	testutil.NewSandbox(t) // no config: this is a fresh install
+
+	done := make(chan error, 1)
+	go func() {
+		_, _, err := run(t, "init")
+		done <- err
+	}()
+
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("`hyctl init` reported success with no terminal to render on")
+		}
+		if !strings.Contains(strings.ToLower(err.Error()), "tty") &&
+			!strings.Contains(strings.ToLower(err.Error()), "terminal") &&
+			!strings.Contains(strings.ToLower(err.Error()), "device") {
+			t.Errorf("error = %v, want it to name the missing terminal", err)
+		}
+	case <-time.After(20 * time.Second):
+		// The failure mode this guards: a script that appears to succeed
+		// because it is still waiting.
+		t.Fatal("`hyctl init` hung with no terminal instead of failing")
+	}
+}
+
+// The bare `hyctl` with no config runs the wizard rather than printing help —
+// a first-run user who types just the binary name should be set up, not handed
+// a flag list. With a config it prints help instead.
+func TestCLI_BareInvocation_WizardOnFirstRunHelpAfterwards(t *testing.T) {
+	t.Run("no config runs the wizard", func(t *testing.T) {
+		testutil.NewSandbox(t)
+
+		done := make(chan error, 1)
+		go func() {
+			_, _, err := run(t)
+			done <- err
+		}()
+		select {
+		case err := <-done:
+			if err == nil {
+				t.Error("the bare command succeeded with no config and no terminal; " +
+					"it should have tried the wizard and failed on the TTY")
+			}
+		case <-time.After(20 * time.Second):
+			t.Fatal("the bare command hung")
+		}
+	})
+
+	t.Run("with a config prints help", func(t *testing.T) {
+		cliSandbox(t) // saves a config
+
+		out, cobraOut, err := run(t)
+		if err != nil {
+			t.Fatalf("the bare command failed with a config present: %v", err)
+		}
+		combined := out + cobraOut
+		if !strings.Contains(combined, "Available Commands") &&
+			!strings.Contains(combined, "Usage") {
+			t.Errorf("the bare command did not print help:\n%s", combined)
+		}
+		// Help must list the subcommands a user needs next.
+		for _, want := range []string{"dispatch", "status", "cost"} {
+			if !strings.Contains(combined, want) {
+				t.Errorf("help omits %q:\n%s", want, combined)
+			}
+		}
+	})
 }

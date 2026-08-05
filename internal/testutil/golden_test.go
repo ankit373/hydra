@@ -398,3 +398,62 @@ func TestWriteRegistry_RejectsAPartialContentList(t *testing.T) {
 			"the result would be a partial registry")
 	}
 }
+
+// The -update path is how a golden is re-blessed. It has to actually write the
+// normalised output, or a contributor runs the command from the failure message
+// and nothing changes.
+func TestGolden_UpdateWritesTheNormalisedOutput(t *testing.T) {
+	dir := t.TempDir()
+	prev, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(prev) })
+
+	// Flip the flag the way `go test -update` does.
+	orig := *updateGolden
+	*updateGolden = true
+	t.Cleanup(func() { *updateGolden = orig })
+
+	// No testdata directory yet: -update must create it rather than failing,
+	// since the first blessing of a new golden is the common case.
+	fake := &testing.T{}
+	Golden(fake, "fresh", "ran at 2026-08-05T12:00:00Z\ncost $1.2345\n")
+	if fake.Failed() {
+		t.Fatal("Golden -update failed on a new fixture")
+	}
+
+	raw, err := os.ReadFile(filepath.Join("testdata", "fresh.golden"))
+	if err != nil {
+		t.Fatalf("-update wrote no fixture: %v", err)
+	}
+	// What lands on disk is the *normalised* form. Writing the raw output would
+	// bake this machine's timestamp into the fixture and fail everywhere else.
+	got := string(raw)
+	if strings.Contains(got, "2026-08-05") {
+		t.Errorf("the fixture kept a real timestamp:\n%s", got)
+	}
+	if !strings.Contains(got, "<ts>") || !strings.Contains(got, "<usd>") {
+		t.Errorf("the fixture was written un-normalised:\n%s", got)
+	}
+
+	// Re-blessing an existing fixture overwrites it.
+	Golden(fake, "fresh", "different output\n")
+	raw, err = os.ReadFile(filepath.Join("testdata", "fresh.golden"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), "different output") {
+		t.Errorf("-update did not overwrite the fixture:\n%s", raw)
+	}
+
+	// With the flag off the same call compares instead of writing, which is the
+	// distinction the whole harness turns on.
+	*updateGolden = false
+	if !goldenFails(t, "fresh", "something else entirely\n") {
+		t.Error("with -update off, Golden wrote instead of comparing")
+	}
+}
