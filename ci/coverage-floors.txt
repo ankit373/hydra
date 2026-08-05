@@ -30,7 +30,7 @@
 #   - `hyctl edit`, the MCP gate, the oracle and `parallel` call os.Exit with
 #     codes callers gate on (2 and 3). Those are contract-tested against a real
 #     built binary, and a subprocess contributes nothing to this profile.
-floor cmd/hydra                     58
+floor cmd/hydra                     62
 floor internal/a2a                  95
 floor internal/budget               95
 floor internal/capabilities         92

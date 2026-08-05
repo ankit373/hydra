@@ -102,6 +102,35 @@ var tuningVars = []string{
 	"OLLAMA_HOST",
 }
 
+// Blocking outbound HTTP has to happen at package load, not per test.
+//
+// net/http resolves the proxy environment exactly once per process
+// (transport.go's envProxyOnce). Setting HTTP_PROXY inside NewSandbox is
+// therefore a no-op for the rest of the run if anything resolved it first —
+// which is how a `hyctl pricing refresh` contract test reached OpenRouter for
+// real and reported "Cached pricing for 333 models". The block was documented
+// as a backstop against accidental egress and in that binary was not one at
+// all.
+//
+// This init runs before TestMain and before any test, so the one resolution
+// sees the dead proxy. Requests to localhost and loopback are never proxied by
+// Go regardless of NO_PROXY, so httptest servers still work — which is what
+// makes this safe to apply to the whole binary rather than per test.
+//
+// It is still a backstop, not a boundary: a transport built with Proxy: nil
+// bypasses it. A test that must not reach the network should inject a client.
+func init() {
+	for k, v := range map[string]string{
+		"HTTP_PROXY":  "127.0.0.1:1",
+		"HTTPS_PROXY": "127.0.0.1:1",
+		"NO_PROXY":    "",
+	} {
+		if err := os.Setenv(k, v); err != nil {
+			panic("testutil: could not block outbound HTTP: " + err.Error())
+		}
+	}
+}
+
 // Sandbox is a hermetic environment for one test: a private home directory, a
 // private $HYDRA_HOME, an empty $PATH, and no provider credentials.
 //
@@ -171,13 +200,10 @@ func NewSandbox(t *testing.T) *Sandbox {
 		t.Setenv(v, "")
 	}
 
-	// Best-effort outbound-HTTP block. This stops any client using
-	// http.DefaultTransport (which honours the proxy environment) from reaching
-	// the network — that covers the pricing fetcher and the update checker. It
-	// does NOT stop a transport constructed with Proxy: nil, so it is a
-	// backstop against accidental egress, not a sandbox boundary. Tests that
-	// must not hit the network should inject a fake client rather than rely on
-	// this alone.
+	// Re-asserted here so a test that sets its own proxy vars has them restored
+	// afterwards. The block that actually takes effect is the package init
+	// above — by the time this runs, net/http has usually already resolved the
+	// proxy environment for good.
 	t.Setenv("HTTP_PROXY", "127.0.0.1:1")
 	t.Setenv("HTTPS_PROXY", "127.0.0.1:1")
 	t.Setenv("NO_PROXY", "")
