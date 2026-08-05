@@ -78,6 +78,7 @@ Typical savings: 75-85% vs routing everything through Claude. Run `hyctl pricing
 ## Key Links
 
 - Homepage: https://hydra.uvansa.com/
+- Desktop app — the four views (Dashboard, Fleet, Session, Code), what each answers, and the platform downloads: https://hydra.uvansa.com/app.html
 - Documentation — every command (what it does, how it works, the logic/calculation, how to use): https://hydra.uvansa.com/docs.html
 - Pricing — free and open source (MIT); bring your own keys, pay providers directly. Custom builds on request: https://hydra.uvansa.com/pricing.html
 - Source code: https://github.com/ankit373/hydra

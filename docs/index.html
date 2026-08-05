@@ -481,6 +481,21 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
   .reveal{opacity:1!important;transform:none!important;transition:none!important;}
   .scrollhint,.foot-bottom .egg .cur{animation:none!important;}
 }
+/* ── desktop app tease (section 6b) ─────────────────────────────────────── */
+.app-tease{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:22px;
+  margin-top:28px;padding:22px 24px;border:1px solid var(--line);border-radius:12px;
+  background:linear-gradient(120deg,rgba(42,240,224,.05),rgba(232,82,200,.05));}
+.app-tease-views{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:16px;flex:1;}
+.app-tease-views span{display:flex;flex-direction:column;gap:3px;font-family:var(--mono);
+  font-size:11px;color:var(--faint);}
+.app-tease-views b{font-family:var(--display);font-size:14px;color:var(--ink);font-weight:600;}
+.app-tease-cta{display:inline-flex;align-items:center;gap:9px;padding:11px 20px;border-radius:8px;
+  font-family:var(--mono);font-size:13px;font-weight:700;color:#06070F;
+  background:linear-gradient(90deg,var(--cyan),var(--violet));transition:.15s;white-space:nowrap;}
+.app-tease-cta:hover{filter:brightness(1.12);text-decoration:none;transform:translateY(-1px);}
+@media(max-width:640px){.app-tease{flex-direction:column;align-items:stretch;}
+  .app-tease-cta{justify-content:center;}}
+
 </style>
 <script src="https://analytics.ahrefs.com/analytics.js" data-key="yRz83E87rXgYWlhmro5mIg" async></script>
 </head>
@@ -495,6 +510,7 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
     <a href="#universe">Universe</a>
     <a href="/docs.html">Docs</a>
     <a href="/first-principles.html">First principles</a>
+    <a href="/app.html">Desktop app</a>
     <a href="#compare">Compare</a>
     <a href="/pricing.html">Pricing</a>
     <a href="https://github.com/ankit373/hydra">GitHub</a>
@@ -739,6 +755,35 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
     </table>
   </div>
   <p class="cmp-note"><b>Every row checked above ships today</b> — <code>hyctl dispatch --confidence</code>, <code>hyctl graph blast</code>, <code>hyctl mcp</code>. The agent-tree cockpit (<code>hyctl tui</code>) now renders real runs from the per-run event log, and the desktop app ships as a download for macOS, Windows and Linux with every release — not yet code-signed, so macOS needs right-click → Open on first launch.</p>
+</section>
+
+<!-- ══ 6b · DESKTOP APP NUDGE ═══════════════════════════════════════════════ -->
+<section class="blk wrap reveal" id="app">
+  <div class="klabel"><span>Hydra Desktop</span><b>ships with every release</b></div>
+  <h2 class="big">Prefer to <span class="grad">watch</span> it rather than grep it?</h2>
+  <p style="max-width:720px;color:var(--dim)">
+    Everything above is the CLI. The same control plane has a desktop app —
+    four views over the logs <code>hyctl</code> already writes: where the money
+    went, what is running now, why a run picked the head it did, and which files
+    it changed. No account, no server, nothing leaves the machine.
+  </p>
+
+  <div class="app-tease">
+    <div class="app-tease-views">
+      <span><b>Dashboard</b>where the money went</span>
+      <span><b>Fleet</b>what is running now</span>
+      <span><b>Session</b>why it did that</span>
+      <span><b>Code</b>what changed on disk</span>
+    </div>
+    <a class="app-tease-cta" href="/app.html">
+      See the app <span aria-hidden="true">→</span>
+    </a>
+  </div>
+  <p class="cmp-note" style="margin-top:18px">
+    macOS · Linux · Windows, attached to every GitHub release with a SHA-256
+    checksum. Not yet code-signed, so macOS needs right-click → Open the first
+    time. ARM64 desktop builds are not there yet (<a href="https://github.com/ankit373/hydra/issues/263">#263</a>).
+  </p>
 </section>
 
 <!-- ══ 7 · GETTING STARTED ══════════════════════════════════════════════════ -->
