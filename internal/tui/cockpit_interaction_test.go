@@ -3,14 +3,20 @@
 package tui
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/provider"
 	"github.com/ankit373/hydra/internal/rank"
+	"github.com/ankit373/hydra/internal/testutil"
+	"github.com/ankit373/hydra/internal/tree"
 )
 
 // The cockpit's command bar is how a user drives `hyctl tui`. Every command it
@@ -504,5 +510,253 @@ func TestCkStateStyle_CoversEveryState(t *testing.T) {
 	}
 	if ckStateStyle("running").GetForeground() == ckStateStyle("pending").GetForeground() {
 		t.Error("a running agent is coloured identically to a pending one")
+	}
+}
+
+// Tab cycles the views, and the arrow keys only move the tree selection while
+// the tree is the view being shown — otherwise a stray arrow in the chat pane
+// silently moves a selection the user cannot see.
+func TestCockpit_KeyBindings(t *testing.T) {
+	m := NewCockpit()
+	m.treeRows = make([]tree.Row, 4)
+
+	start := m.view
+	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	if next.(Cockpit).view == start {
+		t.Error("tab did not change the view")
+	}
+	// Tab wraps rather than running off the end.
+	c := next.(Cockpit)
+	for i := 0; i < 10; i++ {
+		n, _ := c.Update(tea.KeyMsg{Type: tea.KeyTab})
+		c = n.(Cockpit)
+		if c.view < 0 || c.view >= ckViewCount() {
+			t.Fatalf("tab left view = %d, outside 0..%d", c.view, ckViewCount()-1)
+		}
+	}
+
+	// Arrows in the chat view must not move the tree selection.
+	chat := NewCockpit()
+	chat.view = 0
+	chat.treeRows = make([]tree.Row, 4)
+	n, _ := chat.Update(tea.KeyMsg{Type: tea.KeyDown})
+	if n.(Cockpit).treeSel != 0 {
+		t.Error("an arrow key in the chat view moved a selection the user cannot see")
+	}
+
+	// In the tree view they do, bounded at both ends.
+	treeView := NewCockpit()
+	treeView.view = 2
+	treeView.treeRows = make([]tree.Row, 3)
+	cur := tea.Model(treeView)
+	for i := 0; i < 10; i++ {
+		cur, _ = cur.Update(tea.KeyMsg{Type: tea.KeyDown})
+	}
+	if got := cur.(Cockpit).treeSel; got != 2 {
+		t.Errorf("treeSel = %d after running off the bottom of a 3-row tree, want 2", got)
+	}
+	for i := 0; i < 10; i++ {
+		cur, _ = cur.Update(tea.KeyMsg{Type: tea.KeyUp})
+	}
+	if got := cur.(Cockpit).treeSel; got != 0 {
+		t.Errorf("treeSel = %d after running off the top, want 0", got)
+	}
+
+	// Text editing: runes accumulate, space is a rune, backspace removes one,
+	// escape clears. Backspace on an empty line must not underflow the slice.
+	edit := tea.Model(NewCockpit())
+	edit = typedModel(edit, "abc")
+	edit, _ = edit.Update(tea.KeyMsg{Type: tea.KeySpace})
+	edit = typedModel(edit, "d")
+	if got := edit.(Cockpit).input; got != "abc d" {
+		t.Errorf("input = %q, want %q", got, "abc d")
+	}
+	edit, _ = edit.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+	if got := edit.(Cockpit).input; got != "abc " {
+		t.Errorf("input = %q after backspace", got)
+	}
+	edit, _ = edit.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	if got := edit.(Cockpit).input; got != "" {
+		t.Errorf("input = %q after escape, want empty", got)
+	}
+	for i := 0; i < 5; i++ {
+		edit, _ = edit.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+	}
+	if got := edit.(Cockpit).input; got != "" {
+		t.Errorf("backspace on an empty line produced %q", got)
+	}
+
+	if _, cmd := NewCockpit().Update(tea.KeyMsg{Type: tea.KeyCtrlC}); cmd == nil {
+		t.Error("ctrl+c did not quit")
+	}
+}
+
+func typedModel(m tea.Model, s string) tea.Model {
+	for _, r := range s {
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+	}
+	return m
+}
+
+// The dashboard's numbers are read from the same files `hyctl status` and
+// `hyctl cost` read. Absent or corrupt state must render as unknown, never as
+// a number the user would act on (#189).
+func TestCockpitDashboardReaders_AbsentDataIsUnknownNotZero(t *testing.T) {
+	testutil.NewSandbox(t)
+
+	if got := ckClaudePct(); got != 0 {
+		t.Errorf("ckClaudePct() = %d with no state.json, want 0 (rendered as unknown)", got)
+	}
+	if got := ckSpendToday(); got != 0 {
+		t.Errorf("ckSpendToday() = %v with no cost log, want 0", got)
+	}
+
+	dir := filepath.Join(config.Dir(), "logs")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "state.json"), []byte("{truncated"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := ckClaudePct(); got != 0 {
+		t.Errorf("ckClaudePct() = %d on corrupt state.json", got)
+	}
+
+	// With real data both must report it — a reader that always says 0 is
+	// indistinguishable from one that works on an empty machine.
+	if err := os.WriteFile(filepath.Join(dir, "state.json"), []byte(`{"claude_pct":73}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := ckClaudePct(); got != 73 {
+		t.Errorf("ckClaudePct() = %d with 73 on disk", got)
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	row := `{"ts":"` + now + `","tier":1,"model":"m","prompt_tokens":10,` +
+		`"response_tokens":5,"est_cost_usd":0.25}` + "\n"
+	if err := os.WriteFile(filepath.Join(dir, "cost.jsonl"), []byte(row), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := ckSpendToday(); got != 0.25 {
+		t.Errorf("ckSpendToday() = %v with $0.25 spent today", got)
+	}
+}
+
+// classifyTask picks the enum and tier a prompt routes to. Getting it wrong
+// sends architectural work to a 7B local model, or a one-line rename to the
+// most expensive head on the machine.
+func TestClassifyTask_RoutesByWhatTheWorkActuallyIs(t *testing.T) {
+	tests := []struct {
+		task     string
+		mode     string
+		wantEnum string
+		wantTier int
+	}{
+		// --local overrides everything: the point of the flag is that nothing
+		// leaves the machine, whatever the task looks like.
+		{"design a multi-tenant security model", "local", "LOCAL", 10},
+		{"rotate the signing key without breaking live tokens", "", "CORE", 1},
+		{"design the migration", "", "CORE", 1},
+		{"refactor this for a data race", "", "COMPLEX", 3},
+		{"review the concurrency here", "", "COMPLEX", 3},
+		{"add pagination to the users endpoint", "", "STANDARD", 6},
+		{"write a handler test", "", "STANDARD", 6},
+		{"rename x to y", "", "SIMPLE", 8},
+		{"", "", "SIMPLE", 8},
+	}
+	for _, tt := range tests {
+		enum, tier := classifyTask(tt.task, tt.mode)
+		if enum != tt.wantEnum || tier != tt.wantTier {
+			t.Errorf("classifyTask(%q, %q) = (%s, %d), want (%s, %d)",
+				tt.task, tt.mode, enum, tier, tt.wantEnum, tt.wantTier)
+		}
+	}
+
+	// A long prompt with no keyword is more than trivial, so it must not land
+	// at the cheapest tier by default.
+	long := strings.Repeat("please do the thing carefully ", 5)
+	enum, tier := classifyTask(long, "")
+	if tier >= 8 {
+		t.Errorf("a %d-character prompt classified as %s/tier %d — length alone "+
+			"should lift it above trivial", len(long), enum, tier)
+	}
+
+	// Every classification must name a routable tier.
+	for _, tt := range tests {
+		if _, tier := classifyTask(tt.task, tt.mode); tier < 1 || tier > 10 {
+			t.Errorf("classifyTask(%q) produced tier %d, outside 1..10", tt.task, tier)
+		}
+	}
+}
+
+// The cockpit lays out three views against whatever terminal it is given. A
+// panel that panics or renders nothing at an awkward width is a blank screen.
+func TestCockpit_RendersAtEveryTerminalSize(t *testing.T) {
+	testutil.NewSandbox(t)
+
+	base := NewCockpit()
+	base.heads = testHeads()
+	m, _ := enter(typed(base, "add pagination to the users endpoint"))
+
+	sizes := []struct{ w, h int }{
+		{0, 0},     // before the first resize
+		{20, 5},    // absurdly small
+		{40, 12},   // too narrow to split chat and code
+		{80, 24},   // the usual
+		{200, 60},  // very wide
+		{500, 200}, // wider than anything real
+	}
+	for _, view := range []int{0, 1, 2} {
+		for _, sz := range sizes {
+			m.view = view
+			m.w, m.h, m.ready = sz.w, sz.h, true
+			out := m.View()
+			if strings.TrimSpace(out) == "" {
+				t.Errorf("view %d rendered nothing at %dx%d", view, sz.w, sz.h)
+			}
+		}
+	}
+
+	// Before the first WindowSizeMsg the model is not ready; it must still
+	// render something rather than a blank terminal.
+	fresh := NewCockpit()
+	if strings.TrimSpace(fresh.View()) == "" {
+		t.Error("the cockpit renders nothing before its first resize")
+	}
+}
+
+// truncate bounds the header and every table label. It must never exceed its
+// budget in *display cells*, and must never cut a rune in half — the header
+// draws model names, which are not all ASCII.
+func TestCockpitTruncate_CountsRunesNotBytes(t *testing.T) {
+	inputs := []string{
+		"",
+		"ab",
+		"a-fairly-long-model-name",
+		strings.Repeat("x", 200),
+		"日本語モデル",                // every rune is 3 bytes
+		"qwen2.5-coder:7b-日本語",  // mixed
+		strings.Repeat("é", 60), // 2 bytes each
+	}
+	for _, n := range []int{0, 1, 2, 5, 8, 46} {
+		for _, s := range inputs {
+			got := truncate(s, n)
+			if r := []rune(got); len(r) > n && len([]rune(s)) > n {
+				t.Errorf("truncate(%q, %d) returned %d runes", s, n, len(r))
+			}
+			// A split rune renders as a replacement character in the header.
+			for _, r := range got {
+				if r == '\uFFFD' {
+					t.Errorf("truncate(%q, %d) = %q — it cut a rune in half", s, n, got)
+					break
+				}
+			}
+		}
+	}
+	if got := truncate("short", 46); got != "short" {
+		t.Errorf("truncate = %q", got)
+	}
+	if got := truncate("日本語モデル", 3); got != "日本…" {
+		t.Errorf("truncate = %q, want the first two runes plus an ellipsis", got)
 	}
 }

@@ -668,14 +668,21 @@ func containsAny(s string, subs ...string) bool {
 	return false
 }
 
+// truncate bounds a label to n display cells.
+//
+// Counted in runes, not bytes. Slicing a string at a byte offset cuts a
+// multi-byte rune in half: "日本語モデル" truncated to 8 came out as
+// "日本\xe8…", which a terminal draws as a replacement character in the header
+// bar. cmd/hydra's truncLabel already counted runes; this one did not.
 func truncate(s string, n int) string {
-	if len(s) <= n {
+	r := []rune(s)
+	if len(r) <= n {
 		return s
 	}
 	if n <= 1 {
-		return s[:n]
+		return string(r[:n])
 	}
-	return s[:n-1] + "…"
+	return string(r[:n-1]) + "…"
 }
 
 // headSummary names the discovered heads for the header, truncated to keep the

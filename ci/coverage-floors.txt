@@ -15,7 +15,9 @@
 # Set from a real CI run (30941076262), with a small margin for the ordinary
 # variation a coverage run has. internal/sysinfo is the widest gap: it reads
 # memory through darwinRAM/darwinMemoryState on macOS and /proc on Linux, so it
-# measures 94.5% there and 83.9% here. Raise a floor in the same PR that raises the coverage; the
+# measures 94.5% there and 83.9% here. Running this on a Mac therefore prints a
+# "consider ratcheting" line for sysinfo every time — that advisory is comparing
+# a macOS measurement against a Linux floor, and acting on it would break CI. Raise a floor in the same PR that raises the coverage; the
 # gate prints every package's measured value, so the number to use is in the
 # log of the run you are looking at.
 #
@@ -36,7 +38,7 @@ floor internal/config               86
 floor internal/cost                 93
 floor internal/diff                 94
 floor internal/dispatch             90
-floor internal/editor               84
+floor internal/editor               87
 floor internal/entropy              90
 floor internal/executor             86
 floor internal/glob                 99
@@ -52,7 +54,7 @@ floor internal/provider             99
 floor internal/provider/agy         92
 floor internal/provider/cli         89
 floor internal/provider/env         93
-floor internal/provider/port        86
+floor internal/provider/port        90
 floor internal/rank                 93
 floor internal/review               90
 floor internal/runid                99
@@ -62,7 +64,7 @@ floor internal/sysinfo              82
 floor internal/testutil             69
 floor internal/tree                 88
 floor internal/trust                90
-floor internal/tui                  82
+floor internal/tui                  85
 floor internal/update               87
 floor internal/util                 99
 floor internal/workspace            91

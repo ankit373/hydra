@@ -685,3 +685,163 @@ func TestRollback_UsesGitInARepository(t *testing.T) {
 		t.Error("an untracked file the edit created survived the rollback")
 	}
 }
+
+// A model that ignored the instruction entirely — no markers, no content —
+// against a file that does not exist yet is a different failure from an empty
+// replacement: there is nothing to preserve, and the file must not be created.
+func TestEdit_MarkerParseFailedOnANewFile(t *testing.T) {
+	repo := editSandbox(t, "I would suggest the following approach: ...")
+	file := filepath.Join(repo, "never-created.go")
+
+	res, err := Edit(context.Background(), Request{
+		File: file, Enum: "MODERATE", Prompt: "create it",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Status != "fail" {
+		t.Fatalf("status = %q, want fail", res.Status)
+	}
+	if res.Error != "marker_parse_failed" {
+		t.Errorf("Error = %q, want marker_parse_failed — an empty_replacement "+
+			"would imply there was content to lose", res.Error)
+	}
+	if _, statErr := os.Stat(file); statErr == nil {
+		t.Error("a file was created from an answer that parsed to nothing")
+	}
+}
+
+// A model that echoes the terminator back inside its content would write it
+// into the file, and the next edit would parse against it.
+func TestEdit_TerminatorLeakageIsRefused(t *testing.T) {
+	repo := editSandbox(t, "line one\n<<<HYDRA_FILE_END>>>\n<<<HYDRA_FILE_END>>>")
+	file := filepath.Join(repo, "a.go")
+	original := "package main\n"
+	if err := os.WriteFile(file, []byte(original), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := Edit(context.Background(), Request{File: file, Enum: "MODERATE", Prompt: "x"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Status == "ok" {
+		if raw, _ := os.ReadFile(file); strings.Contains(string(raw), "HYDRA_FILE_END") {
+			t.Errorf("a marker was written into the file: %q", raw)
+		}
+	}
+}
+
+// A write that cannot land must be reported as write_failed and must not
+// consume the backup — the file is unchanged, so its baseline still applies.
+func TestEdit_UnwritableTargetIsReportedNotSilent(t *testing.T) {
+	repo := editSandbox(t, marked("new content"))
+
+	// The target path's parent is a file, so no temp file can be created
+	// beside it and the rename can never happen.
+	blocker := filepath.Join(repo, "blocker")
+	if err := os.WriteFile(blocker, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	file := filepath.Join(blocker, "child.go")
+
+	res, err := Edit(context.Background(), Request{File: file, Enum: "MODERATE", Prompt: "x"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Status != "fail" {
+		t.Fatalf("status = %q writing under a regular file, want fail", res.Status)
+	}
+	if !strings.Contains(res.Error, "write_failed") && !strings.Contains(res.Error, "scope") {
+		t.Errorf("Error = %q, want it to name the write failure", res.Error)
+	}
+}
+
+// firstLine trims the validator's output down to what fits on one line of the
+// result. An empty output must stay empty rather than becoming a blank line
+// that reads as a message.
+func TestFirstLine_TrimsAndBounds(t *testing.T) {
+	tests := map[string]string{
+		"one\ntwo\nthree": "one",
+		// TrimSpace runs on the whole string before the split, so leading
+		// whitespace goes and trailing whitespace on the first line stays.
+		// Cosmetic in a one-line error, and pinned so it does not drift.
+		"  padded  \nnext": "padded  ",
+		"only":             "only",
+		"":                 "",
+		"\n\n\n":           "",
+		"\n\nreal message": "real message",
+	}
+	for in, want := range tests {
+		if got := firstLine(in); got != want {
+			t.Errorf("firstLine(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// writeLastEdit must fail loudly when it cannot write. `hyctl review` with no
+// arguments reads that file, so losing it silently means the user reviews
+// nothing and is told the tree is clean.
+func TestWriteLastEdit_UnwritableLogDirIsAnError(t *testing.T) {
+	testutil.NewSandbox(t)
+
+	// ~/.hydra is a regular file, so logs/ cannot be created.
+	if err := os.WriteFile(config.Dir(), []byte("not a dir"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeLastEdit("/abs/f.go", "SIMPLE", "ws", 1, 0); err == nil {
+		t.Error("writeLastEdit reported success with an uncreatable logs directory")
+	}
+}
+
+// logEdit is best-effort: an edit that succeeded must not be reported as failed
+// because its observability record could not be written.
+func TestLogEdit_IsBestEffort(t *testing.T) {
+	testutil.NewSandbox(t)
+
+	// Nothing to write into, and nothing may panic or block.
+	if err := os.WriteFile(config.Dir(), []byte("not a dir"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	logEdit(Request{File: "/abs/f.go", RunID: "run-x", TaskID: "task-x"},
+		"before", "after", 1, 0)
+}
+
+// diffStats prefers git when there is a repository, since git knows about
+// staged and committed state that a .hydra-bak does not.
+func TestDiffStats_UsesGitInARepository(t *testing.T) {
+	s := testutil.NewSandbox(t)
+	if !s.AllowHostBinary(t, "git") {
+		t.Skip("git is not installed on this machine")
+	}
+
+	repo := t.TempDir()
+	for _, args := range [][]string{
+		{"init", "-q"},
+		{"config", "user.email", "t@example.com"},
+		{"config", "user.name", "t"},
+		{"config", "core.autocrlf", "false"},
+	} {
+		if out, err := exec.Command("git", append([]string{"-C", repo}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v (%s)", args, err, out)
+		}
+	}
+
+	file := filepath.Join(repo, "a.go")
+	if err := os.WriteFile(file, []byte("one\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{{"add", "a.go"}, {"commit", "-qm", "init"}} {
+		if out, err := exec.Command("git", append([]string{"-C", repo}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v (%s)", args, err, out)
+		}
+	}
+	if err := os.WriteFile(file, []byte("one\ntwo\nthree\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	added, removed := diffStats(file, "one\n", repo, file+".hydra-bak", true)
+	if added != 2 || removed != 0 {
+		t.Errorf("diffStats = (%d, %d), want (2, 0) from git's own numstat", added, removed)
+	}
+}
