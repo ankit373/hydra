@@ -1080,14 +1080,20 @@ func TestCLI_Init_FailsFastWithNoTerminal(t *testing.T) {
 		if err == nil {
 			t.Fatal("`hyctl init` reported success with no terminal to render on")
 		}
-		if !strings.Contains(strings.ToLower(err.Error()), "tty") &&
-			!strings.Contains(strings.ToLower(err.Error()), "terminal") &&
-			!strings.Contains(strings.ToLower(err.Error()), "device") {
+		msg := strings.ToLower(err.Error())
+		if !strings.Contains(msg, "terminal") {
 			t.Errorf("error = %v, want it to name the missing terminal", err)
 		}
+		// The message has to say what to do instead, since the caller is a
+		// script that cannot answer a prompt.
+		if !strings.Contains(msg, "config.toml") {
+			t.Errorf("error = %v, want it to point at configuring Hydra directly", err)
+		}
 	case <-time.After(20 * time.Second):
-		// The failure mode this guards: a script that appears to succeed
-		// because it is still waiting.
+		// The failure mode this guards, and it was real: on Windows there is no
+		// /dev/tty to fail opening, so the wizard blocked reading stdin
+		// forever and a Dockerfile or CI job running `hyctl init` wedged with
+		// no output. Only the Windows leg of the matrix showed it.
 		t.Fatal("`hyctl init` hung with no terminal instead of failing")
 	}
 }
@@ -1134,4 +1140,37 @@ func TestCLI_BareInvocation_WizardOnFirstRunHelpAfterwards(t *testing.T) {
 			}
 		}
 	})
+}
+
+// `hyctl tui` opens the same kind of interactive UI and needs the same guard —
+// otherwise it is the second command that hangs a script.
+func TestCLI_Tui_FailsFastWithNoTerminal(t *testing.T) {
+	cliSandbox(t)
+
+	done := make(chan error, 1)
+	go func() {
+		_, _, err := run(t, "tui")
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("`hyctl tui` reported success with no terminal")
+		}
+		if !strings.Contains(strings.ToLower(err.Error()), "terminal") {
+			t.Errorf("error = %v, want it to name the missing terminal", err)
+		}
+	case <-time.After(20 * time.Second):
+		t.Fatal("`hyctl tui` hung with no terminal")
+	}
+
+	// --snapshot is the non-interactive path and must still work: it is what
+	// the docs preview is generated from, in CI, with no terminal.
+	out, _, err := run(t, "tui", "--snapshot")
+	if err != nil {
+		t.Fatalf("`hyctl tui --snapshot` needs no terminal but failed: %v", err)
+	}
+	if strings.TrimSpace(out) == "" {
+		t.Error("--snapshot rendered nothing")
+	}
 }
