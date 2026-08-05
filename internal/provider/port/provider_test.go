@@ -304,3 +304,116 @@ func TestServiceAddrs_DeriveFromTheirBases(t *testing.T) {
 		t.Errorf("lmstudio addr with no port = %q, want localhost:1234", got)
 	}
 }
+
+// Each probe reads a different vendor's response shape. A non-200, an
+// unparsable body or an empty catalogue must each yield no heads rather than a
+// head Hydra cannot drive — discovery reporting something that is not there is
+// the #248 defect class.
+func TestProbes_RejectBadResponses(t *testing.T) {
+	caps, err := capabilities.Load("")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name   string
+		status int
+		body   string
+	}{
+		{"server error", http.StatusInternalServerError, ``},
+		{"not found", http.StatusNotFound, `{}`},
+		{"unparsable body", http.StatusOK, `{truncated`},
+		{"empty catalogue", http.StatusOK, `{"models":[],"data":[]}`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(tt.status)
+				_, _ = w.Write([]byte(tt.body))
+			}))
+			defer srv.Close()
+
+			for _, svc := range []portService{
+				&ollamaService{base: srv.URL},
+				&lmStudioService{base: srv.URL},
+			} {
+				heads, err := svc.probe(context.Background(), caps)
+				if len(heads) != 0 {
+					t.Errorf("%T returned %d heads for a %s response: %+v",
+						svc, len(heads), tt.name, heads)
+				}
+				if tt.status != http.StatusOK && err == nil {
+					t.Errorf("%T reported success on HTTP %d", svc, tt.status)
+				}
+			}
+		})
+	}
+
+	// Nothing listening at all: an error, not a silent empty success that
+	// looks the same as "the server is up and has no models".
+	for _, svc := range []portService{
+		&ollamaService{base: "http://127.0.0.1:1"},
+		&lmStudioService{base: "http://127.0.0.1:1"},
+	} {
+		if heads, err := svc.probe(context.Background(), caps); err == nil {
+			t.Errorf("%T reported success against a dead port: %+v", svc, heads)
+		}
+	}
+}
+
+// LM Studio speaks the OpenAI catalogue shape, Ollama its own. Each head must
+// carry the address it was actually found at — the executor dials it later, so
+// a head discovered at one address and stamped with another fails at the point
+// of use (#282).
+func TestProbes_StampTheAddressTheyWereFoundAt(t *testing.T) {
+	caps, err := capabilities.Load("")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ollama := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"models":[{"name":"qwen2.5-coder:7b"},{"name":"llama3.2:3b"}]}`))
+	}))
+	defer ollama.Close()
+
+	heads, err := (&ollamaService{base: ollama.URL}).probe(context.Background(), caps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(heads) != 2 {
+		t.Fatalf("got %d heads, want one per model", len(heads))
+	}
+	for _, h := range heads {
+		if h.Endpoint != ollama.URL {
+			t.Errorf("%s is stamped with %q but was found at %q; the executor "+
+				"dials the stamp (#282)", h.ID, h.Endpoint, ollama.URL)
+		}
+		if !h.LocalOnly {
+			t.Errorf("%s is not marked local; it would not sit at the terminal tier", h.ID)
+		}
+		if h.CapScore <= 0 {
+			t.Errorf("%s has no capability score, so it cannot be ranked", h.ID)
+		}
+	}
+
+	lms := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"data":[{"id":"mistral-7b-instruct"}]}`))
+	}))
+	defer lms.Close()
+
+	lmHeads, err := (&lmStudioService{base: lms.URL}).probe(context.Background(), caps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(lmHeads) != 1 {
+		t.Fatalf("got %d LM Studio heads, want 1", len(lmHeads))
+	}
+	if lmHeads[0].Endpoint != lms.URL {
+		t.Errorf("LM Studio head stamped with %q, found at %q", lmHeads[0].Endpoint, lms.URL)
+	}
+	// The two services must not collide in the head-id namespace.
+	if lmHeads[0].ID == heads[0].ID {
+		t.Error("an LM Studio head and an Ollama head share an id")
+	}
+}

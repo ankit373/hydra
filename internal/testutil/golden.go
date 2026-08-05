@@ -36,8 +36,16 @@ var normalisers = []struct {
 	{regexp.MustCompile(`\bv?\d+\.\d+\.\d+(-[0-9A-Za-z.\-]+)?(\+[0-9A-Za-z.\-]+)?\b`), "<ver>"},
 	// Git short SHAs (7-12 hex). Longer runs of hex are content, not a commit.
 	{regexp.MustCompile(`\b[0-9a-f]{7,12}\b`), "<sha>"},
-	// RFC3339 timestamps.
+	// RFC3339 timestamps. Must run before the bare-date rule below, or the
+	// date half would be substituted and the time half left behind.
 	{regexp.MustCompile(`\b\d{4}-\d{2}-\d{2}T[\d:.]+(Z|[+\-]\d{2}:\d{2})`), "<ts>"},
+	// Bare calendar dates: "Today (2026-08-04)".
+	//
+	// Added after the cost summary's golden broke overnight. It pins a date
+	// derived from time.Now(), so the fixture was only ever correct on the day
+	// it was blessed — a test that fails tomorrow, for everyone, with no change
+	// to the code. Normalising it is the fix; re-blessing daily is not.
+	{regexp.MustCompile(`\b\d{4}-\d{2}-\d{2}\b`), "<date>"},
 	// Dollar amounts.
 	{regexp.MustCompile(`\$\d+\.\d+`), "<usd>"},
 }
