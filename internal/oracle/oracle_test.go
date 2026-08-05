@@ -6,6 +6,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/ankit373/hydra/internal/trust"
@@ -101,5 +102,75 @@ func TestLLR_CalibratedVerifierDominates(t *testing.T) {
 	}
 	if pass <= modelPass {
 		t.Errorf("calibrated verifier (%.3f) should dominate a middling model (%.3f)", pass, modelPass)
+	}
+}
+
+// defaultWriteTemp materialises the candidate for a {file} oracle. Its failure
+// paths matter because an oracle that cannot stage its input must report that,
+// not return a verdict — a verdict drawn from nothing is confident false
+// evidence, and an oracle's LLR outweighs several models' votes.
+func TestDefaultWriteTemp(t *testing.T) {
+	path, cleanup, err := defaultWriteTemp("the candidate answer")
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("the temp file was not written: %v", err)
+	}
+	if string(raw) != "the candidate answer" {
+		t.Errorf("content = %q", raw)
+	}
+	cleanup()
+	if _, err := os.Stat(path); err == nil {
+		t.Error("cleanup left the temp file behind; every {file} verification " +
+			"would leak one")
+	}
+
+	// An unwritable temp directory must be an error rather than a verdict.
+	blocker := filepath.Join(t.TempDir(), "not-a-dir")
+	if err := os.WriteFile(blocker, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TMPDIR", blocker)
+	if p, c, err := defaultWriteTemp("x"); err == nil {
+		if c != nil {
+			c()
+		}
+		t.Errorf("defaultWriteTemp succeeded at %q with an unusable TMPDIR", p)
+	}
+}
+
+// A {file} oracle must actually receive the candidate on disk, and the file
+// must be gone afterwards.
+func TestCommandOracle_FileTemplateStagesAndCleansUp(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("/bin/test is POSIX; the staging contract is covered by " +
+			"TestDefaultWriteTemp on every platform")
+	}
+
+	var staged string
+	o := &CommandOracle{
+		Template: "/bin/test -s {file}",
+		Source:   "verifier:test",
+		writeTemp: func(content string) (string, func(), error) {
+			p, c, err := defaultWriteTemp(content)
+			staged = p
+			return p, c, err
+		},
+	}
+
+	v, err := o.Verify(context.Background(), "some content", trust.Task{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !v.Passed {
+		t.Errorf("a non-empty staged file failed `test -s`: %+v", v)
+	}
+	if staged == "" {
+		t.Fatal("nothing was staged")
+	}
+	if _, err := os.Stat(staged); err == nil {
+		t.Error("the staged file survived the verification")
 	}
 }
