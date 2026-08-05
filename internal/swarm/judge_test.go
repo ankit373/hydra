@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/ankit373/hydra/internal/config"
 	"strings"
 	"testing"
 	"time"
@@ -351,5 +352,108 @@ func TestClassifyError_EveryStatus(t *testing.T) {
 	deadline := fmt.Errorf("head timed out: %w", context.DeadlineExceeded)
 	if got := classifyError(deadline); got != StatusTimeout {
 		t.Errorf("a wrapped deadline classified as %v, want Timeout", got)
+	}
+}
+
+// ── selectors ─────────────────────────────────────────────────────────────────
+
+// TierSelector resolves a named config tier. When that tier has no live heads it
+// falls back to capability ranking rather than returning nothing — a swarm that
+// silently engages zero heads is indistinguishable from one that ran.
+func TestTierSelector_FallsBackWhenTheTierIsEmpty(t *testing.T) {
+	heads := []provider.Head{
+		registryHeadFor("strong", 95),
+		registryHeadFor("mid", 70),
+	}
+	cfg := &config.Config{Tiers: []config.Tier{
+		{Name: "expert", Heads: []string{"strong"}},
+		{Name: "ghost", Heads: []string{"a-head-that-is-not-installed"}},
+	}}
+	sel := &TierSelector{cfg: cfg}
+
+	// A tier with a live head selects exactly it.
+	got, err := sel.Select(heads, Options{TierHint: "expert"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].ID != "strong" {
+		t.Errorf("Select(expert) = %+v, want just the configured head", got)
+	}
+
+	// A tier whose heads are all absent falls back to capability ranking rather
+	// than selecting nothing.
+	got, err = sel.Select(heads, Options{TierHint: "ghost"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) == 0 {
+		t.Error("a tier with no live heads selected nothing; the swarm would " +
+			"report a run that engaged no head")
+	}
+
+	// A tier name that is not in the config at all does the same.
+	got, err = sel.Select(heads, Options{TierHint: "never-configured"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) == 0 {
+		t.Error("an unknown tier name selected nothing")
+	}
+
+	// MinCapScore still filters after the fallback, so a floor is not lost by
+	// taking the fallback path.
+	got, err = sel.Select(heads, Options{TierHint: "ghost", MinCapScore: 90})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, h := range got {
+		if h.CapScore < 90 {
+			t.Errorf("%s scored %d, below the requested floor of 90", h.ID, h.CapScore)
+		}
+	}
+}
+
+// IDSelector resolves explicit head ids. A typo'd id must be reported, not
+// silently dropped — the user asked for a specific head.
+func TestIDSelector_ReportsAnUnknownID(t *testing.T) {
+	heads := []provider.Head{registryHeadFor("known", 90)}
+	sel := &IDSelector{}
+
+	got, err := sel.Select(heads, Options{HeadIDs: []string{"known"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].ID != "known" {
+		t.Errorf("Select = %+v", got)
+	}
+
+	if _, err := sel.Select(heads, Options{HeadIDs: []string{"known", "typo"}}); err == nil {
+		t.Error("an unknown head id was silently dropped; the user asked for it " +
+			"by name")
+	}
+}
+
+func registryHeadFor(id string, capScore int) provider.Head {
+	return provider.Head{
+		ID: id, Name: id, Provider: "agy", Source: "registry",
+		CapScore: capScore, AuthReady: true,
+	}
+}
+
+// ── equivalence parsing ───────────────────────────────────────────────────────
+
+// parseYesNo is covered in sprt_test.go; this pins the prompt it parses.
+
+// buildEquivalencePrompt must carry both answers and the original question, or
+// the judge is comparing something other than what it was asked about.
+func TestBuildEquivalencePrompt_CarriesBothAnswers(t *testing.T) {
+	got := buildEquivalencePrompt("is the migration safe?",
+		"yes, with a backfill", "safe if you backfill first")
+	for _, want := range []string{
+		"is the migration safe?", "yes, with a backfill", "safe if you backfill first",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the prompt omits %q:\n%s", want, got)
+		}
 	}
 }

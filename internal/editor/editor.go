@@ -440,8 +440,16 @@ func diffStats(file, origContent, gitRoot, backup string, origExisted bool) (add
 		out, err := exec.Command("git", "-C", gitRoot, "diff", "--numstat", "--", file).Output()
 		if err == nil {
 			line := strings.TrimSpace(string(out))
-			fmt.Sscanf(line, "%d\t%d", &added, &removed)
-			return
+			// Empty numstat means git has no baseline for this path — an
+			// untracked file it has never seen — not that nothing changed.
+			// Returning 0/0 there reported a file the edit had just *created*
+			// as zero lines added, which reads as "nothing happened": the same
+			// #260 shape as the diff(1) hole below, one branch up. Fall through
+			// to the backup and line-count paths instead.
+			if line != "" {
+				fmt.Sscanf(line, "%d\t%d", &added, &removed)
+				return
+			}
 		}
 	}
 	if fileExists(backup) {

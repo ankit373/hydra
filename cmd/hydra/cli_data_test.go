@@ -479,7 +479,7 @@ func TestCLI_Parallel_RefusesAMalformedSpec(t *testing.T) {
 	if err := os.WriteFile(bad, []byte("{not json"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if code, out := runBinary(t, s, "parallel", "--spec", bad); code == 0 {
+	if code, out := runBinary(t, s, "parallel", "--tasks", bad); code == 0 {
 		t.Errorf("a malformed batch spec was accepted:\n%s", out)
 	}
 
@@ -487,11 +487,11 @@ func TestCLI_Parallel_RefusesAMalformedSpec(t *testing.T) {
 	if err := os.WriteFile(empty, []byte("[]"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if code, out := runBinary(t, s, "parallel", "--spec", empty); code == 0 {
+	if code, out := runBinary(t, s, "parallel", "--tasks", empty); code == 0 {
 		t.Errorf("an empty batch was accepted; there is nothing to run:\n%s", out)
 	}
 
-	if code, out := runBinary(t, s, "parallel", "--spec", filepath.Join(dir, "absent.json")); code == 0 {
+	if code, out := runBinary(t, s, "parallel", "--tasks", filepath.Join(dir, "absent.json")); code == 0 {
 		t.Errorf("a missing spec file was accepted:\n%s", out)
 	}
 }

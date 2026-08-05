@@ -5,9 +5,13 @@ package executor
 import (
 	"context"
 	"encoding/json"
+	"github.com/ankit373/hydra/internal/config"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -653,4 +657,134 @@ func TestModelPinVars_CoversDefaultModelFor(t *testing.T) {
 	if got := bedrockRegion(); got != "" {
 		t.Errorf("bedrockRegion() = %q inside a sandbox, want empty", got)
 	}
+}
+
+// Every adapter decodes its vendor's response shape. A 200 with a body that
+// does not parse must be an error, not an empty successful answer — each
+// adapter has its own decode call, so each needs its own case.
+func TestEveryProvider_UnparsableBodyIsAnError(t *testing.T) {
+	providers := []string{"anthropic", "google", "cohere", "azure", "bedrock", "replicate", "openai"}
+
+	for _, p := range providers {
+		t.Run(p, func(t *testing.T) {
+			s := testutil.NewSandbox(t)
+			for _, kv := range [][2]string{
+				{"ANTHROPIC_API_KEY", "k"}, {"GEMINI_API_KEY", "k"}, {"COHERE_API_KEY", "k"},
+				{"AZURE_OPENAI_API_KEY", "k"}, {"REPLICATE_API_TOKEN", "k"}, {"OPENAI_API_KEY", "k"},
+				{"AWS_ACCESS_KEY_ID", "k"}, {"AWS_SECRET_ACCESS_KEY", "k"},
+			} {
+				s.SetKey(t, kv[0], kv[1])
+			}
+			t.Setenv("AWS_REGION", "us-east-1")
+			t.Setenv("AZURE_OPENAI_ENDPOINT", "https://r.openai.azure.com")
+			t.Setenv("AZURE_OPENAI_DEPLOYMENT", "d")
+			t.Setenv("REPLICATE_MODEL", "m/n")
+
+			srv, _ := serve(t, http.StatusOK, `{"truncated`)
+			resp, err := redirect(srv).Execute(context.Background(), Request{
+				Prompt: "hi", Head: head(p),
+			})
+			if err == nil {
+				t.Fatalf("an unparsable 200 body was reported as success: %+v", resp)
+			}
+			if !strings.Contains(err.Error(), "decode") && !strings.Contains(err.Error(), "parse") {
+				t.Errorf("error = %v, want it to say the response could not be read", err)
+			}
+		})
+	}
+}
+
+// The agy settings swap writes a sentinel before it mutates anything. If that
+// write fails there is no recovery record, so the swap must not proceed — a
+// mutation with no sentinel is exactly the state SIGKILL recovery cannot undo.
+func TestSwapAgyModel_UnwritableDirectoryDoesNotMutate(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("windows does not enforce a read-only directory mode for the owner")
+	}
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores directory permissions")
+	}
+	testutil.NewSandbox(t)
+
+	path := agySitesPath()
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	original := `{"model":"the-users-model","theme":"dark"}`
+	if err := os.WriteFile(path, []byte(original), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// Read-only directory: the file can still be read, but no sentinel or temp
+	// file can be created beside it.
+	if err := os.Chmod(filepath.Dir(path), 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(filepath.Dir(path), 0o700) })
+
+	if _, err := swapAgyModel(path, "hydras-model"); err == nil {
+		t.Fatal("swapAgyModel reported success with no sentinel written")
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(raw) != original {
+		t.Errorf("settings.json was mutated without a recovery record: %q", raw)
+	}
+}
+
+// restoreAgyModel and recoverAgySwap are best-effort by design: they must not
+// panic or corrupt the file when it has become unreadable or unparsable
+// underneath them.
+func TestRestoreAndRecover_AreBestEffortOnBadInput(t *testing.T) {
+	testutil.NewSandbox(t)
+
+	dir := t.TempDir()
+	missing := filepath.Join(dir, "absent.json")
+	// Neither may create a file that was not there.
+	restoreAgyModel(missing, "m")
+	recoverAgySwap(missing)
+	if _, err := os.Stat(missing); err == nil {
+		t.Error("a settings.json was created from nothing")
+	}
+
+	// Unparsable settings: restore must leave it exactly as it found it rather
+	// than replacing config it cannot interpret.
+	corrupt := filepath.Join(dir, "corrupt.json")
+	body := "{ hand-edited and broken"
+	if err := os.WriteFile(corrupt, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	restoreAgyModel(corrupt, "m")
+	if raw, _ := os.ReadFile(corrupt); string(raw) != body {
+		t.Errorf("restore rewrote an unparsable settings.json: %q", raw)
+	}
+
+	// A sentinel with no settings file beside it: recovery writes the sentinel
+	// back, which is the whole point — the settings file was lost mid-swap.
+	lost := filepath.Join(dir, "lost.json")
+	if err := os.WriteFile(lost+agyOrigSuffix, []byte(`{"model":"restored"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	recoverAgySwap(lost)
+	raw, err := os.ReadFile(lost)
+	if err != nil {
+		t.Fatalf("recovery did not restore a settings file from its sentinel: %v", err)
+	}
+	if !strings.Contains(string(raw), "restored") {
+		t.Errorf("recovered content = %q", raw)
+	}
+}
+
+// writeAuthRequired is best-effort observability: an auth failure must still be
+// reported to the caller even when the record cannot be written.
+func TestWriteAuthRequired_UnwritableLogDirIsSilent(t *testing.T) {
+	testutil.NewSandbox(t)
+
+	// ~/.hydra is a regular file, so logs/ cannot be created.
+	if err := os.WriteFile(config.Dir(), []byte("not a dir"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// The assertion is that this returns at all.
+	writeAuthRequired("pool", "model", "https://example.com/auth")
 }
