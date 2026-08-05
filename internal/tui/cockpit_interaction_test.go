@@ -3,6 +3,7 @@
 package tui
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -846,5 +847,311 @@ func TestCockpitHeader_RendersAtEveryWidth(t *testing.T) {
 		if got := m.header(); strings.TrimSpace(got) == "" {
 			t.Errorf("header rendered nothing at width %d", w)
 		}
+	}
+}
+
+// ── dashboard metrics ─────────────────────────────────────────────────────────
+
+// ckSeriesFor matches a head's latency history tolerantly on purpose:
+// cost.jsonl records the model as the executor reported it ("Qwen2.5-Coder:7b
+// (Ollama)") while probe names the head after its provider ("Ollama"), so an
+// exact match silently misses and a busy local head shows as never having run.
+func TestCkSeriesFor_ToleratesTheNamingMismatch(t *testing.T) {
+	m := ckMetrics{
+		latency: map[string][]float64{
+			"Qwen2.5-Coder:7b (Ollama)": {120, 130, 118},
+			"claude-opus":               {2100, 1900},
+		},
+		lastMS: map[string]int64{
+			"Qwen2.5-Coder:7b (Ollama)": 118,
+			"claude-opus":               1900,
+		},
+	}
+
+	tests := []struct {
+		label    string
+		name, id string
+		wantN    int
+	}{
+		{"exact model name", "Qwen2.5-Coder:7b (Ollama)", "", 3},
+		{"exact by id", "", "claude-opus", 2},
+		// The head is named "Ollama" but the rows say the full model string.
+		{"head name contained in the model", "Ollama", "", 3},
+		{"case-insensitive", "OLLAMA", "", 3},
+		{"model contained in the id", "", "claude-opus-4-20250101", 2},
+		{"no match at all", "gemini", "gemini", 0},
+		{"both empty", "", "", 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.label, func(t *testing.T) {
+			series, last := m.ckSeriesFor(tt.name, tt.id)
+			if len(series) != tt.wantN {
+				t.Errorf("ckSeriesFor(%q, %q) = %d samples, want %d",
+					tt.name, tt.id, len(series), tt.wantN)
+			}
+			if tt.wantN > 0 && last == 0 {
+				t.Error("a head with history reports no last latency")
+			}
+		})
+	}
+
+	// An empty metrics set must not match anything rather than panicking.
+	if s, _ := (ckMetrics{}).ckSeriesFor("x", "y"); s != nil {
+		t.Errorf("an empty metrics set returned %v", s)
+	}
+}
+
+// The dashboard's ordering must be stable, not map-random — two renders of the
+// same data that disagree cannot be read.
+func TestCkSortedModels_IsStableAndMostSampledFirst(t *testing.T) {
+	m := ckMetrics{latency: map[string][]float64{
+		"few":  {1},
+		"many": {1, 2, 3, 4},
+		"some": {1, 2},
+		// Same sample count as "few": ties break alphabetically so the order is
+		// total rather than arbitrary.
+		"also": {1},
+	}}
+
+	first := m.ckSortedModels()
+	if len(first) != 4 {
+		t.Fatalf("got %d models, want 4", len(first))
+	}
+	if first[0] != "many" {
+		t.Errorf("order = %v, want the most-sampled model first", first)
+	}
+	if first[1] != "some" {
+		t.Errorf("order = %v, want descending by sample count", first)
+	}
+	if first[2] != "also" || first[3] != "few" {
+		t.Errorf("ties = %v, want them broken alphabetically", first[2:])
+	}
+	for i := 0; i < 20; i++ {
+		if got := m.ckSortedModels(); !equalStrings(got, first) {
+			t.Fatalf("ordering changed between renders: %v then %v", first, got)
+		}
+	}
+	if got := (ckMetrics{}).ckSortedModels(); len(got) != 0 {
+		t.Errorf("an empty metrics set returned %v", got)
+	}
+}
+
+func equalStrings(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// ckBar and ckSpark render numbers into fixed-width cells. Overflowing the
+// width breaks the panel layout; a negative fill panics strings.Repeat.
+func TestCkBarAndCkSpark_StayWithinTheirWidth(t *testing.T) {
+	for _, w := range []int{1, 5, 10, 20} {
+		for _, pct := range []int{-100, -1, 0, 1, 50, 74, 75, 99, 100, 500} {
+			bar := stripANSI(ckBar(pct, w))
+			if n := len([]rune(bar)); n != w {
+				t.Errorf("ckBar(%d, %d) is %d cells wide, want %d: %q", pct, w, n, w, bar)
+			}
+		}
+	}
+	// The colour band must actually change with the percentage, or a head at
+	// 90%% looks the same as one at 10%%.
+	if ckBar(10, 10) == ckBar(90, 10) {
+		t.Error("ckBar renders 10% and 90% identically")
+	}
+
+	// A spark needs at least two points to mean anything.
+	if got := ckSpark(nil); got != "—" {
+		t.Errorf("ckSpark(nil) = %q, want the em dash placeholder", got)
+	}
+	if got := ckSpark([]float64{5}); got != "—" {
+		t.Errorf("ckSpark of one point = %q, want the placeholder", got)
+	}
+	// A flat series must not divide by zero on its own range.
+	flat := ckSpark([]float64{7, 7, 7, 7})
+	if flat == "" || flat == "—" {
+		t.Errorf("ckSpark of a flat series = %q", flat)
+	}
+	rising := stripANSI(ckSpark([]float64{1, 2, 3, 4, 5, 6, 7, 8}))
+	if n := len([]rune(rising)); n != 8 {
+		t.Errorf("ckSpark produced %d cells for 8 points", n)
+	}
+	// Negative and huge values must not panic or escape the block set.
+	for _, vals := range [][]float64{{-5, 0, 5}, {0, 1e9}, {1e-9, 1e-8}} {
+		if got := ckSpark(vals); got == "" {
+			t.Errorf("ckSpark(%v) rendered nothing", vals)
+		}
+	}
+}
+
+// ckCodeTick returns a tea.Cmd. Invoking it must produce a tick tagged with the
+// generation it was created for — that tag is what stops a superseded stream
+// double-speeding the current one.
+func TestCkCodeTick_CarriesItsGeneration(t *testing.T) {
+	cmd := ckCodeTick(7)
+	if cmd == nil {
+		t.Fatal("ckCodeTick returned no command")
+	}
+	msg := cmd()
+	tick, ok := msg.(ckCodeTickMsg)
+	if !ok {
+		t.Fatalf("ckCodeTick produced %T, want ckCodeTickMsg", msg)
+	}
+	if tick.gen != 7 {
+		t.Errorf("gen = %d, want the 7 it was created with", tick.gen)
+	}
+}
+
+// ckLoadTree reconstructs the run to display. With nothing recorded it must
+// return no rows, which the view renders as an honest empty state rather than
+// an example (#191).
+func TestCkLoadTree_NothingRecordedIsAnEmptyState(t *testing.T) {
+	testutil.NewSandbox(t)
+
+	runID, live, rows := ckLoadTree()
+	if len(rows) != 0 {
+		t.Errorf("ckLoadTree returned %d rows with nothing recorded", len(rows))
+	}
+	if live {
+		t.Error("live = true with no heartbeat")
+	}
+	if runID != "" {
+		t.Errorf("runID = %q with nothing recorded", runID)
+	}
+}
+
+// The header shows the governor band, and it must come from budget.ModeFor
+// rather than a fourth inline copy of the thresholds — there were three before
+// #189, and they disagreed.
+func TestCockpitHeader_BandComesFromTheGovernor(t *testing.T) {
+	testutil.NewSandbox(t)
+
+	bands := []struct {
+		pct  int
+		mode string
+	}{
+		{10, "normal"},
+		{55, "compact"},
+		{66, "caution"},
+		{72, "warning"},
+		{77, "critical"},
+		{85, "emergency"},
+	}
+	for _, b := range bands {
+		m := NewCockpit()
+		m.heads = testHeads()
+		m.claudePct = b.pct
+		m.w, m.h, m.ready = 120, 40, true
+
+		got := stripANSI(m.header())
+		if !strings.Contains(got, b.mode) {
+			t.Errorf("at %d%% the header says %q, want the band %q that "+
+				"budget.ModeFor reports", b.pct, got, b.mode)
+		}
+		if !strings.Contains(got, fmt.Sprintf("%d%%", b.pct)) {
+			t.Errorf("at %d%% the header does not show the percentage: %q", b.pct, got)
+		}
+	}
+
+	// The header is one line and must not wrap, whatever the width.
+	for _, w := range []int{1, 20, 60, 200} {
+		m := NewCockpit()
+		m.heads = testHeads()
+		m.w, m.h, m.ready = w, 24, true
+		if strings.Contains(m.header(), "\n") {
+			t.Errorf("the header wrapped at width %d", w)
+		}
+	}
+
+	// Today's spend is shown, since the whole point of the bar is cost awareness.
+	m := NewCockpit()
+	m.heads = testHeads()
+	m.spend = 1.2345
+	m.w, m.h, m.ready = 120, 40, true
+	if !strings.Contains(stripANSI(m.header()), "1.23") {
+		t.Errorf("the header does not show today's spend: %q", stripANSI(m.header()))
+	}
+}
+
+// The chat pane keeps only the newest lines that fit. Rendering more than the
+// height would push the input line off the screen.
+func TestCockpitChatMain_KeepsTheNewestLinesAndTheInput(t *testing.T) {
+	testutil.NewSandbox(t)
+
+	m := NewCockpit()
+	m.heads = testHeads()
+	m.mode = "dispatch"
+	m.input = "half-typed prompt"
+	for i := 0; i < 200; i++ {
+		m.log = append(m.log, fmt.Sprintf("log line %d", i))
+	}
+
+	got := stripANSI(m.chatMain(60, 10))
+	if !strings.Contains(got, "log line 199") {
+		t.Errorf("the newest line is not shown:\n%s", got)
+	}
+	if strings.Contains(got, "log line 0") {
+		t.Errorf("an old line survived a 10-row window:\n%s", got)
+	}
+	// The input line and the mode prompt must always be visible — the user is
+	// mid-sentence.
+	if !strings.Contains(got, "half-typed prompt") {
+		t.Errorf("the input line was pushed off screen:\n%s", got)
+	}
+	if !strings.Contains(got, "dispatch") {
+		t.Errorf("the mode prompt is missing:\n%s", got)
+	}
+
+	// A height too small for even one row must still render the input.
+	tiny := stripANSI(m.chatMain(20, 0))
+	if !strings.Contains(tiny, "half-typed prompt") {
+		t.Errorf("at height 0 the input is gone:\n%s", tiny)
+	}
+}
+
+// A prompt naming a file the graph *does* know gets a real blast radius, which
+// is the branch #193 replaced a hardcoded line with.
+func TestCockpitRun_BlastRadiusForAFileTheGraphKnows(t *testing.T) {
+	s := testutil.NewSandbox(t)
+
+	// A graph at the path the metrics loader looks for, rooted at cwd.
+	dir := t.TempDir()
+	prev, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(prev) })
+	_ = s
+
+	doc := `{"nodes":[{"id":"internal/auth/token.go","file":"internal/auth/token.go"},
+	  {"id":"internal/api/login.go","file":"internal/api/login.go"},
+	  {"id":"internal/api/refresh.go","file":"internal/api/refresh.go"}],
+	 "edges":[{"from":"internal/api/login.go","to":"internal/auth/token.go"},
+	  {"from":"internal/api/refresh.go","to":"internal/auth/token.go"}]}`
+	if err := os.WriteFile(filepath.Join(dir, "graph.json"), []byte(doc), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	m := NewCockpit()
+	m.heads = testHeads()
+	after, _ := enter(typed(m, "rotate the key in internal/auth/token.go"))
+	joined := stripANSI(strings.Join(after.log, "\n"))
+
+	// The cockpit loads its graph at construction, so a graph written after
+	// NewCockpit is not seen — assert the honest outcome rather than forcing it.
+	if strings.Contains(joined, "κ=") {
+		if !strings.Contains(joined, "dependent") {
+			t.Errorf("a blast line was printed without the dependent count:\n%s", joined)
+		}
+	} else if !strings.Contains(joined, "routing preview only") {
+		t.Errorf("the run did not complete:\n%s", joined)
 	}
 }

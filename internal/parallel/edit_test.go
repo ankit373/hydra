@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -743,5 +744,104 @@ func TestPersistResults_UnwritableLogDirIsReportedNotFatal(t *testing.T) {
 	err := persistResults([]Result{{raw: json.RawMessage(`{"status":"ok"}`)}})
 	if err == nil {
 		t.Error("persistResults reported success with an uncreatable logs directory")
+	}
+}
+
+// In a real repository git holds the baseline, so both the rollback and the
+// line counts come from it rather than from a .hydra-bak that was never written.
+func TestRollbackAndDiffStats_UseGitInARepository(t *testing.T) {
+	s := testutil.NewSandbox(t)
+	if !s.AllowHostBinary(t, "git") {
+		t.Skip("git is not installed on this machine")
+	}
+
+	repo := t.TempDir()
+	git := func(args ...string) {
+		t.Helper()
+		out, err := exec.Command("git", append([]string{"-C", repo}, args...)...).CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v (%s)", args, err, out)
+		}
+	}
+	git("init", "-q")
+	git("config", "user.email", "t@example.com")
+	git("config", "user.name", "t")
+	// Windows git defaults core.autocrlf=true, so a checkout rewrites LF to
+	// CRLF and the restored bytes differ from the committed ones.
+	git("config", "core.autocrlf", "false")
+
+	file := filepath.Join(repo, "a.go")
+	original := "one\n"
+	if err := os.WriteFile(file, []byte(original), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	git("add", "a.go")
+	git("commit", "-qm", "init")
+
+	// diffStats reads git's own numstat.
+	if err := os.WriteFile(file, []byte("one\ntwo\nthree\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	added, removed := diffStats(file, original, repo, file+".hydra-bak", true)
+	if added != 2 || removed != 0 {
+		t.Errorf("diffStats = (%d, %d), want (2, 0) from git numstat", added, removed)
+	}
+
+	// rollback restores from the index, not from a backup that does not exist.
+	rollback(file, original, true, repo, file+".hydra-bak")
+	if raw, _ := os.ReadFile(file); string(raw) != original {
+		t.Errorf("file = %q after rollback, want the committed content", raw)
+	}
+
+	// An untracked file has nothing in the index, so rollback removes it.
+	untracked := filepath.Join(repo, "new.go")
+	if err := os.WriteFile(untracked, []byte("created by the edit\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rollback(untracked, "", false, repo, untracked+".hydra-bak")
+	if _, err := os.Stat(untracked); err == nil {
+		t.Error("an untracked file the edit created survived rollback")
+	}
+
+	// And its line count comes from the file itself, since git has no baseline
+	// for it — reporting 0/0 would read as "nothing changed".
+	fresh := filepath.Join(repo, "fresh.go")
+	if err := os.WriteFile(fresh, []byte("a\nb\nc\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if a, r := diffStats(fresh, "", repo, fresh+".hydra-bak", false); a == 0 && r == 0 {
+		t.Error("a new file reported no lines added")
+	}
+}
+
+// persistResults writes the batch for `hyctl review` to read. A batch whose
+// results cannot be persisted must say so — the edits are already on disk, and
+// the user needs to know they cannot see what changed.
+func TestPersistResults_RoundTripsThroughDisk(t *testing.T) {
+	testutil.NewSandbox(t)
+
+	rows := []Result{
+		{raw: json.RawMessage(`{"label":"one","mode":"edit","status":"ok","file":"/a.go"}`)},
+		{raw: json.RawMessage(`{"label":"two","mode":"edit","status":"fail","file":"/b.go"}`)},
+	}
+	if err := persistResults(rows); err != nil {
+		t.Fatal(err)
+	}
+
+	raw, err := os.ReadFile(filepath.Join(config.Dir(), "logs", "last_parallel.json"))
+	if err != nil {
+		t.Fatalf("nothing was persisted: %v", err)
+	}
+	var got []map[string]any
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatalf("last_parallel.json is not a JSON array: %v\n%s", err, raw)
+	}
+	if len(got) != 2 {
+		t.Fatalf("persisted %d rows, want 2", len(got))
+	}
+	// Both outcomes survive: `hyctl review` needs the failures as much as the
+	// successes, since a failed edit may still have touched the file.
+	if got[0]["status"] != "ok" || got[1]["status"] != "fail" {
+		t.Errorf("statuses did not round-trip: %v", got)
 	}
 }

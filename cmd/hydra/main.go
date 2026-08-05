@@ -1019,6 +1019,18 @@ func cmdModels() *cobra.Command {
 		RunE: func(_ *cobra.Command, _ []string) error {
 			db := pricing.Load()
 			models := db.Models()
+			// An empty live catalogue is not "nothing new to import" — it means
+			// no model pricing was available at all, which can only happen when
+			// there is no cache and the fetch did not land. Reporting
+			// "imported 0 models" for that reads as a completed sync against an
+			// already-complete catalogue, so the user never learns the fetch
+			// failed. Tier pricing is still loaded, which is why Load() itself
+			// cannot report this.
+			if len(models) == 0 {
+				return fmt.Errorf("no model catalogue available — the OpenRouter " +
+					"fetch has not landed. Run `hyctl pricing refresh` first, or " +
+					"check network access")
+			}
 			added, skipped := 0, 0
 			builtin, _ := capabilities.Load("")
 			for _, id := range models {

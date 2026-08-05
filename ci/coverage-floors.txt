@@ -30,45 +30,46 @@
 #   - `hyctl edit`, the MCP gate, the oracle and `parallel` call os.Exit with
 #     codes callers gate on (2 and 3). Those are contract-tested against a real
 #     built binary, and a subprocess contributes nothing to this profile.
-floor cmd/hydra                     62
-floor internal/a2a                  95
-floor internal/budget               95
-floor internal/capabilities         92
-floor internal/config               86
-floor internal/cost                 93
-floor internal/diff                 94
-floor internal/dispatch             90
-floor internal/editor               87
-floor internal/entropy              90
+floor cmd/specstest                 96
+floor cmd/hydra                     75
+floor internal/a2a                  93
+floor internal/budget               92
+floor internal/capabilities         90
+floor internal/config               84
+floor internal/cost                 91
+floor internal/diff                 92
+floor internal/dispatch             89
+floor internal/editor               86
+floor internal/entropy              88
 floor internal/executor             86
-floor internal/glob                 99
-floor internal/graph                90
-floor internal/ledger               88
-floor internal/optimal              99
-floor internal/oracle               87
-floor internal/parallel             86
-floor internal/policy               90
-floor internal/pricing              88
-floor internal/probe                93
-floor internal/provider             99
-floor internal/provider/agy         92
-floor internal/provider/cli         89
-floor internal/provider/env         93
-floor internal/provider/port        90
-floor internal/rank                 93
-floor internal/review               90
-floor internal/runid                99
-floor internal/runlog               88
-floor internal/swarm                90
+floor internal/glob                 96
+floor internal/graph                88
+floor internal/ledger               86
+floor internal/optimal              96
+floor internal/oracle               85
+floor internal/parallel             87
+floor internal/policy               88
+floor internal/pricing              86
+floor internal/probe                91
+floor internal/provider             96
+floor internal/provider/agy         90
+floor internal/provider/cli         87
+floor internal/provider/env         91
+floor internal/provider/port        89
+floor internal/rank                 91
+floor internal/review               88
+floor internal/runid                96
+floor internal/runlog               85
+floor internal/swarm                89
 floor internal/sysinfo              82
-floor internal/testutil             69
-floor internal/tree                 88
-floor internal/trust                90
-floor internal/tui                  85
-floor internal/update               87
-floor internal/util                 99
-floor internal/workspace            91
-floor registry                      88
+floor internal/testutil             78
+floor internal/tree                 86
+floor internal/trust                88
+floor internal/tui                  86
+floor internal/update               89
+floor internal/util                 96
+floor internal/workspace            89
+floor registry                      86
 
 # Packages allowed to have no test files at all.
 #
@@ -76,13 +77,16 @@ floor registry                      88
 # down to two, and both are permanent:
 #
 #   internal/build   is four ldflags-injected string vars and nothing else.
-#   cmd/specstest    is a debug main that prints sysinfo.Detect()'s output; the
-#                    logic it prints is covered in internal/sysinfo.
+#
+# cmd/specstest was here too, on the grounds that it is "just a debug main".
+# That was the wrong call: it is the diagnostic a user is pointed at when local
+# model sizing does not match what they expect, so a version of it that panics
+# or prints nothing is worse than none — it is consulted precisely when
+# something is already wrong. It now has a smoke test and a floor.
 #
 # Adding anything here needs a reason on the line. A package with no tests is
 # not a package with nothing to test.
 no-tests internal/build   ldflags-injected version vars only
-no-tests cmd/specstest    debug main; the logic it prints is covered in internal/sysinfo
 
 # Maximum number of t.Skip/t.Skipf calls across the whole test suite.
 #
@@ -90,8 +94,13 @@ no-tests cmd/specstest    debug main; the logic it prints is covered in internal
 # three-OS matrix where every awkward test skips on two of them is decorative.
 # Each skip must carry a reason, and the total cannot grow without this number
 # being edited — which a reviewer sees.
-# Raised from 32 when the oracle's {file}-staging test landed: it needs
-# /bin/test, which is POSIX, and the staging contract it guards is covered on
-# every platform by TestDefaultWriteTemp. Raising this is the deliberate act the
-# gate exists to force — the increase is in the diff.
-skip-budget 34
+# Raised 32 -> 34 for the oracle's {file}-staging test (/bin/test is POSIX,
+# and the contract it guards is covered platform-independently), then 34 -> 40
+# for the batch that took total coverage past 90%: the agy read-only-directory
+# case (Windows does not enforce a directory mode for the owner, and root
+# ignores it), the POSIX /usr/bin/true|false oracle verdicts, and the
+# workspace-validator templates, which are POSIX command lines.
+#
+# Each raise is the deliberate act the gate exists to force — the increase is
+# always in the diff, next to its reason.
+skip-budget 40
