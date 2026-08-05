@@ -128,11 +128,18 @@ func TestDefaultWriteTemp(t *testing.T) {
 	}
 
 	// An unwritable temp directory must be an error rather than a verdict.
+	//
+	// All three variables: os.TempDir reads $TMPDIR on unix and %TMP%/%TEMP% on
+	// Windows. Setting only TMPDIR made this pass everywhere and assert nothing
+	// on the Windows runner, where the write simply succeeded in the real temp
+	// directory.
 	blocker := filepath.Join(t.TempDir(), "not-a-dir")
 	if err := os.WriteFile(blocker, []byte("x"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("TMPDIR", blocker)
+	for _, v := range []string{"TMPDIR", "TMP", "TEMP"} {
+		t.Setenv(v, blocker)
+	}
 	if p, c, err := defaultWriteTemp("x"); err == nil {
 		if c != nil {
 			c()
