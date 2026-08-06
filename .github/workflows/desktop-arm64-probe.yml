@@ -1,0 +1,33 @@
+name: Desktop ARM64 probe
+
+# TEMPORARY. Delete this file once #263 is settled either way.
+#
+# #263's first acceptance criterion is "runner availability confirmed and
+# written down". This answers it by building, not by reading a changelog:
+# it calls the real desktop-build.yml with only the two arm64 targets, on
+# hosted ARM runners, and uploads whatever comes out as a workflow artifact.
+#
+# Three things can happen, and all three are useful answers:
+#   - green   → native ARM runners work and Wails links against the arm64
+#               webview. Wire the targets into the default matrix.
+#   - red     → the failure log says exactly what is missing (a package with
+#               no arm64 build, a Wails limitation). That goes in #263.
+#   - timeout → the runner label does not exist for this repo. desktop-build's
+#               timeout-minutes turns a six-hour queue into a 30-minute answer.
+#
+# Manual dispatch only. It never runs on push, so it costs nothing until asked.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    uses: ./.github/workflows/desktop-build.yml
+    with:
+      version: probe
+      upload: false
+      targets: >-
+        [
+          {"runner":"ubuntu-24.04-arm","platform":"linux/arm64","goos":"linux","arch":"arm64","tags":"webkit2_41"},
+          {"runner":"windows-11-arm","platform":"windows/arm64","goos":"windows","arch":"arm64","tags":""}
+        ]

@@ -52,6 +52,10 @@ jobs:
   build:
     name: ${{ matrix.goos }}/${{ matrix.arch }}
     runs-on: ${{ matrix.runner }}
+    # A job asking for a runner label that does not exist does not fail — it
+    # queues, and without this it would sit there for six hours before GitHub
+    # gives up. 30 minutes is roughly double the slowest real build.
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -151,19 +155,23 @@ jobs:
           ditto -c -k --sequesterRsrc --keepParent Hydra.app \
             "hydra-desktop_${{ inputs.version }}_darwin_universal.zip"
 
+      # Named from matrix.arch, not hardcoded: with amd64 the only non-macOS
+      # target these read the same either way, and an arm64 target added to the
+      # matrix would otherwise silently overwrite the amd64 artifact on the
+      # release (same filename, `gh release upload --clobber`).
       - name: Package (Windows)
         if: matrix.goos == 'windows'
         shell: pwsh
         working-directory: desktop/build/bin
         run: |
-          Compress-Archive -Path Hydra.exe -DestinationPath "hydra-desktop_${{ inputs.version }}_windows_amd64.zip"
+          Compress-Archive -Path Hydra.exe -DestinationPath "hydra-desktop_${{ inputs.version }}_windows_${{ matrix.arch }}.zip"
 
       - name: Package (Linux)
         if: matrix.goos == 'linux'
         shell: bash
         working-directory: desktop/build/bin
         run: |
-          tar czf "hydra-desktop_${{ inputs.version }}_linux_amd64.tar.gz" Hydra
+          tar czf "hydra-desktop_${{ inputs.version }}_linux_${{ matrix.arch }}.tar.gz" Hydra
 
       # Signing is deliberately absent, not forgotten. macOS will report an
       # unidentified developer until an Apple Developer ID is available; the
