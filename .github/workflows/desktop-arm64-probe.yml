@@ -15,9 +15,14 @@ name: Desktop ARM64 probe
 #   - timeout → the runner label does not exist for this repo. desktop-build's
 #               timeout-minutes turns a six-hour queue into a 30-minute answer.
 #
-# Manual dispatch only. It never runs on push, so it costs nothing until asked.
+# Scoped to this one branch. `workflow_dispatch` alone is not usable here:
+# GitHub only offers that trigger for workflows that already exist on the
+# default branch, and this one is meant to never reach it.
 
 on:
+  push:
+    branches:
+      - feature/263-desktop-arm64
   workflow_dispatch:
 
 jobs:
