@@ -443,9 +443,11 @@ Every release builds `hyctl` for all six targets below. This table is kept in st
 
 Windows has no Homebrew; use npm, pip, `install.ps1`, or download the archive directly.
 
-The **desktop app** ships for macOS (universal), Windows x86-64 and Linux x86-64. ARM64 desktop
-builds are [not yet available](https://github.com/ankit373/hydra/issues/263) — the CLI covers ARM64
-on all three OSes.
+The **desktop app** ships for macOS (universal), Windows x86-64 and Linux x86-64. Windows ARM64 and
+Linux ARM64 build on hosted ARM runners as of [#263](https://github.com/ankit373/hydra/issues/263),
+but were added after v1.2.0 was cut — the first release carrying them is the one after v1.2.0, and
+`install-app.sh` picks them up automatically once published. The CLI has covered ARM64 on all three
+OSes all along.
 
 **From source** (Go 1.22+):
 ```bash
