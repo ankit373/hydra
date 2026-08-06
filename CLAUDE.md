@@ -746,7 +746,8 @@ docs/robots.txt    ← AI crawler rules (only change if bot policy changes)
 |---|---|
 | New CLI subcommand (`hyctl foo`) | `index.html` (CLI tab), `llms.txt` (What It Does) |
 | New feature shipped | `index.html` (What's New section), `llms.txt` |
-| Version bump (e.g. 1.0 → 1.1) | `index.html` (badge, structured data), `llms.txt`, `sitemap.xml` lastmod |
+| Version bump (e.g. 1.0 → 1.1) | `index.html` (badge, structured data), `llms.txt`, `sitemap.xml` lastmod, **`app.html` download links** |
+| New desktop build target | `app.html` download table, `README.md` platform table, `llms.txt` platform support |
 | Pricing change (model rates) | `pricing.md`, cost comparison table in `index.html`, `llms.txt` |
 | New public page or anchor | `sitemap.xml` |
 | AI crawler policy change | `robots.txt` |
@@ -755,6 +756,10 @@ docs/robots.txt    ← AI crawler rules (only change if bot policy changes)
 - `llms.txt` must always reflect what `hyctl --help` and `hyctl stats` actually do — no aspirational features
 - `pricing.md` costs must match `hyctl pricing list` live output — never hardcode stale rates without noting the date
 - `sitemap.xml` `lastmod` must be updated whenever `index.html` changes
+- `app.html`'s direct download links are **version-pinned by necessity** — desktop asset names embed
+  their version, so GitHub's `/releases/latest/download/` shortcut cannot address them. They go stale
+  every release and must be bumped by hand; the `install-app.sh` command beside them resolves the
+  newest tag at runtime and never goes stale, which is why it is the primary path on the page
 - Do not add features to `llms.txt` that haven't shipped to `main` yet
 
 ---

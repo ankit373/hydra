@@ -56,9 +56,7 @@ case "$os" in
     EXT="zip"
     ;;
   Linux)
-    [ "$ARCH" = "amd64" ] || die "the desktop app has no linux/${ARCH} build yet — \
-the CLI does (install.sh). Progress: ${BASE%/releases}/issues/263"
-    PLATFORM="linux_amd64"
+    PLATFORM="linux_${ARCH}"
     EXT="tar.gz"
     ;;
   MINGW*|MSYS*|CYGWIN*)
@@ -99,8 +97,20 @@ TMP="$(mktemp -d 2>/dev/null || mktemp -d -t hydra-desktop)"
 trap 'rm -rf "$TMP"' EXIT INT TERM
 
 echo "-> Downloading..."
-$DLO "$TMP/$ARCHIVE" "$URL" || die "download failed: $URL
-  (the desktop app first shipped in v1.1.0 — older tags have no build)"
+#
+# A missing archive is the normal way this fails, and the reason is almost
+# always one of two things: a tag from before the app existed, or a target
+# whose builds started later than the tag being installed. Naming both beats a
+# bare 404, and asking for a newer release is something the user can act on.
+if ! $DLO "$TMP/$ARCHIVE" "$URL"; then
+  warn "no ${ARCHIVE} on release ${TAG}"
+  case "$PLATFORM" in
+    *_arm64) die "linux/arm64 desktop builds start after v1.2.0 (#263). Pick a \
+newer release, or use the CLI, which has shipped for arm64 all along." ;;
+    *)       die "the desktop app first shipped in v1.1.0 — older tags have no \
+build. Try without HYDRA_VERSION to take the newest release." ;;
+  esac
+fi
 
 # ── Verify checksum ────────────────────────────────────────────────────────────
 #

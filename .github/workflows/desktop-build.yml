@@ -12,7 +12,8 @@ name: Desktop app build
 #
 # Cross-compiling is not possible: each platform links its own webview
 # (WebKit on macOS, WebView2 on Windows, webkit2gtk on Linux), so every target
-# needs a native runner.
+# needs a native runner — including the two arm64 ones, which is why they
+# waited on hosted ARM runners existing (#263).
 
 on:
   workflow_call:
@@ -32,14 +33,21 @@ on:
         type: boolean
         default: false
       targets:
-        description: "JSON array of build targets. Defaults to all three platforms."
+        description: "JSON array of build targets. Defaults to every platform."
         required: false
         type: string
+        # linux/arm64 and windows/arm64 build on hosted ARM runners
+        # (ubuntu-24.04-arm, windows-11-arm), confirmed by building rather than
+        # by reading a changelog — see #263. Wails links each platform against
+        # its own webview, so these are native builds like every other target
+        # here, not cross-compiles.
         default: >-
           [
             {"runner":"macos-latest","platform":"darwin/universal","goos":"darwin","arch":"universal","tags":""},
             {"runner":"windows-latest","platform":"windows/amd64","goos":"windows","arch":"amd64","tags":""},
-            {"runner":"ubuntu-latest","platform":"linux/amd64","goos":"linux","arch":"amd64","tags":"webkit2_41"}
+            {"runner":"windows-11-arm","platform":"windows/arm64","goos":"windows","arch":"arm64","tags":""},
+            {"runner":"ubuntu-latest","platform":"linux/amd64","goos":"linux","arch":"amd64","tags":"webkit2_41"},
+            {"runner":"ubuntu-24.04-arm","platform":"linux/arm64","goos":"linux","arch":"arm64","tags":"webkit2_41"}
           ]
 
 # Deliberately no `permissions:` block. A reusable workflow cannot request more
@@ -52,6 +60,10 @@ jobs:
   build:
     name: ${{ matrix.goos }}/${{ matrix.arch }}
     runs-on: ${{ matrix.runner }}
+    # A job asking for a runner label that does not exist does not fail — it
+    # queues, and without this it would sit there for six hours before GitHub
+    # gives up. 30 minutes is roughly double the slowest real build.
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -151,19 +163,23 @@ jobs:
           ditto -c -k --sequesterRsrc --keepParent Hydra.app \
             "hydra-desktop_${{ inputs.version }}_darwin_universal.zip"
 
+      # Named from matrix.arch, not hardcoded: with amd64 the only non-macOS
+      # target these read the same either way, and an arm64 target added to the
+      # matrix would otherwise silently overwrite the amd64 artifact on the
+      # release (same filename, `gh release upload --clobber`).
       - name: Package (Windows)
         if: matrix.goos == 'windows'
         shell: pwsh
         working-directory: desktop/build/bin
         run: |
-          Compress-Archive -Path Hydra.exe -DestinationPath "hydra-desktop_${{ inputs.version }}_windows_amd64.zip"
+          Compress-Archive -Path Hydra.exe -DestinationPath "hydra-desktop_${{ inputs.version }}_windows_${{ matrix.arch }}.zip"
 
       - name: Package (Linux)
         if: matrix.goos == 'linux'
         shell: bash
         working-directory: desktop/build/bin
         run: |
-          tar czf "hydra-desktop_${{ inputs.version }}_linux_amd64.tar.gz" Hydra
+          tar czf "hydra-desktop_${{ inputs.version }}_linux_${{ matrix.arch }}.tar.gz" Hydra
 
       # Signing is deliberately absent, not forgotten. macOS will report an
       # unidentified developer until an Apple Developer ID is available; the
