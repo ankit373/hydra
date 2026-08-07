@@ -9,6 +9,19 @@ on:
 permissions:
   contents: write
 
+# Multiple pushes to develop within seconds of each other (three squash-merges
+# in a row, say) each fire their own run, and the "delete previous edge
+# release, then recreate it" step below is not atomic across concurrent runs:
+# two runs can both pass the delete before either recreates, and whichever
+# creates second then finds the tag the first run just made and fails (#337).
+# Worse, an older commit's run finishing after a newer one's would silently
+# publish a stale edge build under a "successful" green check. Cancelling an
+# in-flight run for a superseded commit is correct here — this is a nightly
+# convenience build, not a gated release, so there is nothing worth finishing.
+concurrency:
+  group: edge-build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   edge:
     name: Build & publish edge release
