@@ -16,7 +16,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-8b5cf6.svg)](LICENSE)
 [![Go 1.24](https://img.shields.io/badge/Go-1.24-00ADD8?logo=go&logoColor=white)](go.mod)
-[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey?logo=apple)](https://hydra.uvansa.com)
+[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey)](https://hydra.uvansa.com#platform-support)
 [![GitHub Stars](https://img.shields.io/github/stars/ankit373/hydra?style=flat&color=8b5cf6)](https://github.com/ankit373/hydra/stargazers)
 [![GitHub Issues](https://img.shields.io/github/issues/ankit373/hydra?color=06b6d4)](https://github.com/ankit373/hydra/issues)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
@@ -413,12 +413,39 @@ npx hyctl init            # run without installing
 pip install hyctl
 ```
 
-**Standalone installer** (curl):
+**Standalone installer** — macOS/Linux (curl):
 ```bash
 curl -fsSL https://raw.githubusercontent.com/ankit373/hydra/main/install.sh | sh
 ```
 
+**Standalone installer** — Windows (PowerShell):
+```powershell
+irm https://raw.githubusercontent.com/ankit373/hydra/main/install.ps1 | iex
+```
+Installs per-user to `%LOCALAPPDATA%\Programs\hyctl` and extends your user `PATH` —
+no administrator rights needed. Both installers verify the download against the
+release's `checksums.txt` and refuse to install if it is listed and does not match.
+Pin a version with `$env:HYDRA_VERSION` / `HYDRA_VERSION`, or change the directory
+with `$env:HYDRA_BIN` / `HYDRA_BIN`.
+
 **Prebuilt binaries** — download from [github.com/ankit373/hydra/releases](https://github.com/ankit373/hydra/releases).
+
+#### Platform support
+
+Every release builds `hyctl` for all six targets below. This table is kept in step with
+`.goreleaser.yaml`'s build matrix — if a row is here, an artifact exists for it.
+
+| OS | x86-64 | ARM64 | Homebrew | npm / npx | pip | script |
+|---|:--:|:--:|:--:|:--:|:--:|:--:|
+| macOS | ✅ | ✅ (Apple Silicon) | ✅ | ✅ | ✅ | `install.sh` |
+| Linux | ✅ | ✅ | ✅ | ✅ | ✅ | `install.sh` |
+| Windows | ✅ | ✅ | — | ✅ | ✅ | `install.ps1` |
+
+Windows has no Homebrew; use npm, pip, `install.ps1`, or download the archive directly.
+
+The **desktop app** ships for macOS (universal), Windows x86-64 and Linux x86-64. ARM64 desktop
+builds are [not yet available](https://github.com/ankit373/hydra/issues/263) — the CLI covers ARM64
+on all three OSes.
 
 **From source** (Go 1.22+):
 ```bash
@@ -641,7 +668,19 @@ persistent chat dock.
 It reads `~/.hydra/logs/` directly. No daemon, no telemetry, and its numbers are the CLI's numbers:
 Dashboard totals are asserted equal to `hyctl cost` and `hyctl stats` for the same data.
 
-**Download** — every release carries a build for each platform, on the
+**Install** — macOS and Linux:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ankit373/hydra/main/install-app.sh | sh
+```
+
+It resolves the newest release (the asset names embed their version, so GitHub's `/latest/download/`
+shortcut cannot address them), verifies the download against the published `.sha256`, installs the
+`.app` to `/Applications` — or the binary to `~/.local/share/hydra` with a `~/.local/bin` symlink on
+Linux — and clears the macOS quarantine flag so the first launch works. `HYDRA_VERSION=v1.1.0` pins
+a release; `HYDRA_APP_DIR` changes where it lands.
+
+**Or take the artifact directly**, from the
 [releases page](https://github.com/ankit373/hydra/releases/latest):
 
 | platform | artifact |

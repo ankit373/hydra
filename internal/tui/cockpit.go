@@ -368,7 +368,7 @@ func (m Cockpit) run(task string) Cockpit {
 	// a machine with nothing installed. There is no route to preview then, and
 	// inventing one is exactly what this PR removes.
 	if idx < 0 {
-		m.log = append(m.log, ckDimS.Render("  no heads discovered — run `hyctl probe` to see why"))
+		m.log = append(m.log, ckDimS.Render("  no routable head — run `hyctl probe` to see why"))
 		return m
 	}
 	h := m.heads[idx]
@@ -449,7 +449,12 @@ func (m Cockpit) pickHead(wantTier int) int {
 				return i
 			}
 		}
-		return len(m.heads) - 1 // -1 when the roster is empty; callers must check
+		// Nothing is routable. This used to fall back to the last head in the
+		// roster whether or not it was up, so a machine with only an
+		// unroutable head — the ollama binary with no server behind it — got a
+		// routing preview naming a head nothing can drive. Same shape as #248:
+		// a surface claiming a head is usable when it is not.
+		return -1
 	}
 	return best
 }
@@ -668,14 +673,21 @@ func containsAny(s string, subs ...string) bool {
 	return false
 }
 
+// truncate bounds a label to n display cells.
+//
+// Counted in runes, not bytes. Slicing a string at a byte offset cuts a
+// multi-byte rune in half: "日本語モデル" truncated to 8 came out as
+// "日本\xe8…", which a terminal draws as a replacement character in the header
+// bar. cmd/hydra's truncLabel already counted runes; this one did not.
 func truncate(s string, n int) string {
-	if len(s) <= n {
+	r := []rune(s)
+	if len(r) <= n {
 		return s
 	}
 	if n <= 1 {
-		return s[:n]
+		return string(r[:n])
 	}
-	return s[:n-1] + "…"
+	return string(r[:n-1]) + "…"
 }
 
 // headSummary names the discovered heads for the header, truncated to keep the

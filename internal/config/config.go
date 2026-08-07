@@ -104,5 +104,13 @@ func Save(cfg *Config) error {
 		os.Remove(tmpName)
 		return err
 	}
-	return os.Rename(tmpName, Path())
+	if err := os.Rename(tmpName, Path()); err != nil {
+		// Windows refuses a rename onto a file another process has open, so two
+		// concurrent hyctl invocations reliably leave .config-*.toml litter in
+		// ~/.hydra. The rename failing is survivable; leaving debris behind on
+		// every collision is not.
+		os.Remove(tmpName)
+		return fmt.Errorf("config save: %w", err)
+	}
+	return nil
 }

@@ -14,6 +14,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 
 	"github.com/ankit373/hydra/internal/budget"
@@ -142,6 +143,9 @@ func cmdTui() *cobra.Command {
 				fmt.Println()
 				return nil
 			}
+			if err := requireTerminal("hyctl tui"); err != nil {
+				return err
+			}
 			p := tea.NewProgram(tui.NewCockpit(), tea.WithAltScreen())
 			_, err := p.Run()
 			return err
@@ -162,7 +166,30 @@ func cmdInit() *cobra.Command {
 	}
 }
 
+// requireTerminal refuses to open an interactive UI when there is nothing to
+// render it on.
+//
+// Without this the wizard hangs. On unix Bubble Tea fails opening /dev/tty, so
+// the symptom is at least an error; on Windows there is no equivalent failure
+// and it blocks reading stdin forever — so `hyctl init` in a Dockerfile, a CI
+// job, or any piped invocation wedges the build with no output. Found by the
+// Windows leg of the test matrix, which is the only place the difference shows.
+//
+// stdin *and* stdout: a piped stdin with a terminal stdout still has no way to
+// answer a prompt.
+func requireTerminal(cmd string) error {
+	if isatty.IsTerminal(os.Stdin.Fd()) && isatty.IsTerminal(os.Stdout.Fd()) {
+		return nil
+	}
+	return fmt.Errorf("%s needs an interactive terminal, and this one is not "+
+		"attached to a TTY.\n  In a script or container, configure Hydra by "+
+		"writing ~/.hydra/config.toml directly, or run this from a real shell", cmd)
+}
+
 func runInit() error {
+	if err := requireTerminal("hyctl init"); err != nil {
+		return err
+	}
 	fmt.Println(dimStyle.Render("  Scanning your machine for AI models..."))
 	result := probe.Run(context.Background())
 
@@ -349,6 +376,13 @@ func budgetBar(pct int) string {
 	filled := pct * width / 100
 	if filled > width {
 		filled = width
+	}
+	// state.json is written by another process — and by hand, per the
+	// orchestrator protocol's `jq '.claude_pct = 52'`. A negative value there
+	// reached strings.Repeat with a negative count, which panics: `hyctl status`
+	// crashed on a malformed field it only meant to display.
+	if filled < 0 {
+		filled = 0
 	}
 	bar := strings.Repeat("█", filled) + strings.Repeat("░", width-filled)
 	return budgetModeStyle(budget.ModeFor(pct).String()).Render(bar)
@@ -1012,6 +1046,18 @@ func cmdModels() *cobra.Command {
 		RunE: func(_ *cobra.Command, _ []string) error {
 			db := pricing.Load()
 			models := db.Models()
+			// An empty live catalogue is not "nothing new to import" — it means
+			// no model pricing was available at all, which can only happen when
+			// there is no cache and the fetch did not land. Reporting
+			// "imported 0 models" for that reads as a completed sync against an
+			// already-complete catalogue, so the user never learns the fetch
+			// failed. Tier pricing is still loaded, which is why Load() itself
+			// cannot report this.
+			if len(models) == 0 {
+				return fmt.Errorf("no model catalogue available — the OpenRouter " +
+					"fetch has not landed. Run `hyctl pricing refresh` first, or " +
+					"check network access")
+			}
 			added, skipped := 0, 0
 			builtin, _ := capabilities.Load("")
 			for _, id := range models {

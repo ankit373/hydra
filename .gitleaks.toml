@@ -17,6 +17,25 @@ regexes = [
   # Ahrefs Web Analytics data-key: a public site identifier embedded in the page
   # <head> and served to every visitor (equivalent to a GA measurement ID).
   '''yRz83E87rXgYWlhmro5mIg''',
+
+  # AWS SigV4 known-answer vectors: the *derived signing keys* for AWS's own
+  # published example secret, used by internal/executor/sigv4_test.go. They are
+  # 64 hex chars of high entropy, so gitleaks reads them as generic-api-key —
+  # correct by pattern, wrong by fact. A signing key is the output of a KDF over
+  # a documented sample secret; it authenticates nothing, and the first value is
+  # printed verbatim in AWS's "deriving the signing key" documentation.
+  #
+  # They are hardcoded on purpose. Computing them in the test would only prove
+  # the code agrees with itself, which is the entire thing a known-answer vector
+  # exists to rule out. Splitting them to dodge the entropy rule would be worse
+  # still: defeating the scanner by obfuscation rather than declaring the
+  # exception.
+  #
+  # Allowlisted as exact values rather than by path — tighter than the
+  # pii_test.go entry below, since this cannot hide anything but these two
+  # specific strings, in any file.
+  '''f4780e2d9f65fa895f9c67b32ce1baf0b0d8a43505a000a1a9e090d414db404d''',
+  '''938127b5336810ddb6a5d6af445fcac9e371f9ed418ed386b022aed82901be75''',
 ]
 
 paths = [

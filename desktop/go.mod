@@ -10,6 +10,16 @@ module github.com/ankit373/hydra/desktop
 
 go 1.25.0
 
+// Pinned explicitly rather than left to resolve from the `go` line above.
+// actions/setup-go reads this file (go-version-file: desktop/go.mod) to decide
+// what to install, and without a toolchain line it installed exactly go1.25.0
+// — confirmed from the real shipped v1.2.0-rc.2 binary's own `go version -m`
+// output, not assumed. govulncheck found 21 reachable stdlib CVEs; go1.26.4
+// (the root module's own pin) closed 20 of them, one — GO-2026-5856, an ECH
+// privacy leak in crypto/tls — needing 1.26.5. Went one further than matching
+// root rather than leave a known-fixed CVE open for no reason.
+toolchain go1.26.5
+
 require (
 	github.com/ankit373/hydra v0.0.0
 	github.com/wailsapp/wails/v2 v2.13.0
@@ -41,10 +51,10 @@ require (
 	github.com/valyala/fasttemplate v1.2.2 // indirect
 	github.com/wailsapp/go-webview2 v1.0.22 // indirect
 	github.com/wailsapp/mimetype v1.4.1 // indirect
-	golang.org/x/crypto v0.51.0 // indirect
-	golang.org/x/net v0.54.0 // indirect
-	golang.org/x/sys v0.44.0 // indirect
-	golang.org/x/text v0.37.0 // indirect
+	golang.org/x/crypto v0.54.0 // indirect
+	golang.org/x/net v0.57.0 // indirect
+	golang.org/x/sys v0.47.0 // indirect
+	golang.org/x/text v0.40.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 

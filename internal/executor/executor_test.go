@@ -124,3 +124,48 @@ func TestSupports_AlwaysAgreesWithUnroutable(t *testing.T) {
 		}
 	}
 }
+
+// The same invariant over the whole shape space rather than five hand-picked
+// heads. #248 was the listing surface and the routing surface disagreeing about
+// what could be dispatched to; the fix made Supports derive from Unroutable so
+// they structurally cannot. That guarantee is only worth what it is checked
+// over — a handful of examples can miss exactly the combination that breaks it.
+//
+// Two properties, for every combination:
+//   - Supports(h) ⟺ Unroutable(h) == ""
+//   - an unroutable head's reason is non-empty and actionable, because probe
+//     prints it verbatim as the explanation of why the head is skipped
+func TestSupportsAndUnroutable_AgreeOverEveryHeadShape(t *testing.T) {
+	sources := []string{"registry", "cli", "env", "port", "", "unknown-source"}
+	providers := []string{"agy", "anthropic", "openai", "local", "nobody", ""}
+	endpoints := []string{"", "http://localhost:11434"}
+
+	checked := 0
+	for _, src := range sources {
+		for _, prov := range providers {
+			for _, ep := range endpoints {
+				for _, local := range []bool{false, true} {
+					for _, auth := range []bool{false, true} {
+						h := provider.Head{
+							ID: prov + "/" + src, Provider: prov, Source: src,
+							Endpoint: ep, LocalOnly: local, AuthReady: auth,
+						}
+						why := Unroutable(h)
+						if Supports(h) != (why == "") {
+							t.Errorf("%+v: Supports=%v but Unroutable=%q", h, Supports(h), why)
+						}
+						if why != "" && len(strings.TrimSpace(why)) < 10 {
+							t.Errorf("%+v: Unroutable reason %q is too terse to act on — "+
+								"probe prints it verbatim as the reason the head is skipped", h, why)
+						}
+						checked++
+					}
+				}
+			}
+		}
+	}
+	if checked == 0 {
+		t.Fatal("no combinations checked")
+	}
+	t.Logf("agreement held over %d head shapes", checked)
+}

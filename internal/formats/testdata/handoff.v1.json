@@ -1,0 +1,10 @@
+{
+  "from": "hydra-tier-3",
+  "model": "agy-tier-3",
+  "task": "add pagination to the users endpoint",
+  "files": ["internal/api/users.go"],
+  "conventions": "match the existing handler style",
+  "context": "the endpoint currently returns everything",
+  "prior_output": "func ListUsers(...) { ... }",
+  "clock": {"hydra-tier-1": 1, "hydra-tier-3": 2}
+}

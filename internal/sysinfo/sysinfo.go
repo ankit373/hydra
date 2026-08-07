@@ -5,6 +5,7 @@ package sysinfo
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"runtime"
 	"strconv"
@@ -18,15 +19,30 @@ const (
 	PressureLow      Pressure = iota // plenty of headroom
 	PressureModerate                 // usable but getting tight
 	PressureHigh                     // constrained; only small models safe
+	// PressureUnknown means detection failed — no reading was taken.
+	//
+	// Appended rather than inserted so the three values above keep their
+	// numbering. It exists because the alternative is worse than useless:
+	// computePressure used to return PressureLow whenever TotalRAMGB was 0,
+	// so a platform with no detection path (every Windows machine, until this
+	// change) reported the single most permissive verdict from no data at all,
+	// while Summary said "0GB RAM · memory fully occupied" in the same breath.
+	// A default must never be rendered as a measurement (#251, #258).
+	PressureUnknown
 )
 
 func (p Pressure) String() string {
-	names := [...]string{"low", "moderate", "high"}
+	names := [...]string{"low", "moderate", "high", "unknown"}
 	if p < 0 || int(p) >= len(names) {
 		return "unknown"
 	}
 	return names[p]
 }
+
+// HardwareKnown reports whether Detect actually read this machine's memory. When
+// false, every memory-derived field is a placeholder and callers must not
+// present it as a measurement or rank models against it.
+func (s *Specs) HardwareKnown() bool { return s != nil && s.TotalRAMGB > 0 }
 
 // Specs describes the hardware and current memory state relevant to AI model selection.
 type Specs struct {
@@ -89,6 +105,9 @@ func (s *Specs) bestFreeEstimate() float64 {
 
 // MemoryNote returns a human-readable explanation of the effective value.
 func (s *Specs) MemoryNote() string {
+	if !s.HardwareKnown() {
+		return unknownHardwareNote
+	}
 	eff := s.EffectiveVRAMGB()
 	switch {
 	case s.GPUVRAMGB > 0 && !s.IsAppleSilicon:
@@ -106,8 +125,20 @@ func (s *Specs) MemoryNote() string {
 	}
 }
 
+// Text shown wherever hardware could not be read. It says "unknown", not a
+// number, because the number would be 0 and every reader — human or code —
+// would take that as a measurement of an empty machine rather than an absence
+// of one (#258).
+const (
+	unknownHardwareSummary = "hardware unknown · could not read this machine's memory"
+	unknownHardwareNote    = "memory could not be detected on this platform — local model sizing is unavailable"
+)
+
 // Summary returns a one-line hardware description for display.
 func (s *Specs) Summary() string {
+	if !s.HardwareKnown() {
+		return unknownHardwareSummary
+	}
 	eff := s.EffectiveVRAMGB()
 	switch {
 	case s.IsAppleSilicon:
@@ -145,6 +176,9 @@ func Detect() *Specs {
 		s.TotalRAMGB = linuxRAM()
 		s.FreeRAMGB = linuxFreeRAM()
 		s.GPUVRAMGB, s.GPUName = nvidiaVRAM()
+	case "windows":
+		s.TotalRAMGB, s.FreeRAMGB = windowsMemory()
+		s.GPUVRAMGB, s.GPUName = nvidiaVRAM() // nvidia-smi ships on Windows too
 	}
 
 	s.History = LoadHistory()
@@ -154,8 +188,11 @@ func Detect() *Specs {
 }
 
 func (s *Specs) computePressure() Pressure {
+	// No reading was taken. Reporting PressureLow here — as this did until
+	// #258 — is an affirmative "plenty of headroom" claim derived from nothing,
+	// and it is the most permissive verdict the type can express.
 	if s.TotalRAMGB == 0 {
-		return PressureLow
+		return PressureUnknown
 	}
 	ratio := s.EffectiveVRAMGB() / s.TotalRAMGB
 	switch {
@@ -170,14 +207,19 @@ func (s *Specs) computePressure() Pressure {
 
 // ── macOS ─────────────────────────────────────────────────────────────────────
 
+// darwinRAM returns total RAM in GB, or 0 if it could not be read.
+//
+// Like linuxRAM, this used to return a hardcoded 8 on failure. Fixing one and
+// leaving the other would leave the same fabricated number in the same family
+// of functions, which is how a defect class survives its own fix.
 func darwinRAM() float64 {
 	out, err := exec.Command("sysctl", "-n", "hw.memsize").Output()
 	if err != nil {
-		return 8
+		return 0
 	}
 	bytes, err := strconv.ParseInt(strings.TrimSpace(string(out)), 10, 64)
 	if err != nil {
-		return 8
+		return 0
 	}
 	return float64(bytes) / (1 << 30)
 }
@@ -239,6 +281,17 @@ func darwinGPUVRAM() (float64, string) {
 	if err != nil {
 		return 0, ""
 	}
+	return parseSPDisplays(out)
+}
+
+// parseSPDisplays pulls the chipset name and VRAM size out of
+// `system_profiler SPDisplaysDataType`.
+//
+// Split from the exec for the same reason parseMeminfo is: the parser is the
+// part that can be wrong, and running system_profiler for real is neither
+// deterministic nor available off macOS — so as one function it was untestable
+// everywhere, which is how a misparse ships.
+func parseSPDisplays(out []byte) (float64, string) {
 	lines := strings.Split(string(out), "\n")
 	var name string
 	for _, line := range lines {
@@ -267,32 +320,65 @@ func darwinGPUVRAM() (float64, string) {
 
 // ── Linux ─────────────────────────────────────────────────────────────────────
 
-func linuxRAM() float64 {
-	out, err := exec.Command("grep", "MemTotal", "/proc/meminfo").Output()
-	if err != nil {
-		return 8
+// meminfoPath is the kernel's memory summary. A var so tests can point the
+// readers at a fixture instead of the host's real memory, which is neither
+// deterministic nor present off Linux.
+var meminfoPath = "/proc/meminfo"
+
+// parseMeminfo returns the named /proc/meminfo fields converted from kB to GB.
+// Fields that are absent or unparsable are simply missing from the result, so a
+// caller can tell "not present" from "zero" — a distinction the old
+// `grep | Fields` pipeline collapsed.
+//
+// Kept as a pure function over a string so it is testable against a fixture on
+// every OS, not only on Linux.
+func parseMeminfo(content string) map[string]float64 {
+	out := make(map[string]float64, 2)
+	for _, line := range strings.Split(content, "\n") {
+		// Format is "MemTotal:       16007748 kB" — name, value, unit.
+		name, rest, found := strings.Cut(line, ":")
+		if !found {
+			continue
+		}
+		fields := strings.Fields(rest)
+		if len(fields) == 0 {
+			continue
+		}
+		kb, err := strconv.ParseFloat(fields[0], 64)
+		if err != nil {
+			continue
+		}
+		// The unit must be present and must be kB. Every memory field in
+		// /proc/meminfo carries it; the ones that do not are counts, not sizes
+		// (HugePages_Total is a bare "0"), and reading those as gigabytes would
+		// be silent nonsense.
+		if len(fields) < 2 || !strings.EqualFold(fields[1], "kB") {
+			continue
+		}
+		out[name] = kb / (1 << 20)
 	}
-	fields := strings.Fields(string(out))
-	if len(fields) < 2 {
-		return 8
-	}
-	kb, _ := strconv.ParseFloat(fields[1], 64)
-	return kb / (1 << 20)
+	return out
 }
 
-func linuxFreeRAM() float64 {
-	// MemAvailable is a kernel estimate of how much can be freed without swapping.
-	out, err := exec.Command("grep", "MemAvailable", "/proc/meminfo").Output()
+func readMeminfo() map[string]float64 {
+	raw, err := os.ReadFile(meminfoPath)
 	if err != nil {
-		return 0
+		return nil
 	}
-	fields := strings.Fields(string(out))
-	if len(fields) < 2 {
-		return 0
-	}
-	kb, _ := strconv.ParseFloat(fields[1], 64)
-	return kb / (1 << 20)
+	return parseMeminfo(string(raw))
 }
+
+// linuxRAM returns total RAM in GB, or 0 if it could not be read.
+//
+// It used to return a hardcoded 8 on failure — a number no one measured,
+// presented as a reading, which then flowed into model-fit recommendations. 0
+// routes through HardwareKnown to PressureUnknown instead, so an unreadable
+// machine is reported as unreadable (#261, same class as #258).
+func linuxRAM() float64 { return readMeminfo()["MemTotal"] }
+
+// linuxFreeRAM returns MemAvailable — the kernel's own estimate of how much can
+// be reclaimed without swapping — in GB, or 0 if it could not be read.
+func linuxFreeRAM() float64 { return readMeminfo()["MemAvailable"] }
 
 func nvidiaVRAM() (float64, string) {
 	out, err := exec.Command("nvidia-smi",
@@ -301,6 +387,14 @@ func nvidiaVRAM() (float64, string) {
 	if err != nil {
 		return 0, ""
 	}
+	return parseNvidiaSMI(out)
+}
+
+// parseNvidiaSMI reads the first row of
+// `nvidia-smi --query-gpu=memory.total,name --format=csv,noheader,nounits`,
+// which is MiB and a card name. Split from the exec so it is testable without
+// an NVIDIA card present.
+func parseNvidiaSMI(out []byte) (float64, string) {
 	line := strings.TrimSpace(strings.SplitN(string(out), "\n", 2)[0])
 	parts := strings.SplitN(line, ", ", 2)
 	if len(parts) < 2 {

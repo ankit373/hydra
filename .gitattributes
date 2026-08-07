@@ -1,0 +1,4 @@
+# Golden files are compared byte-for-byte after normalisation. Pinning them to
+# LF keeps a Windows checkout from rewriting them to CRLF underneath the tests.
+*.golden text eol=lf
+testdata/** text eol=lf

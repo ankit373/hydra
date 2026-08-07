@@ -37,11 +37,25 @@ var ollamaModels = []ModelRecommendation{
 
 // OllamaRecommendations returns models ranked for this machine.
 // The first entry with Fits=true is the primary recommendation.
+//
+// When the hardware could not be read, every model is returned with Fits=false
+// and a reason saying so. Ranking against the zero value would silently compare
+// each model to a 0GB budget and report "insufficient memory" — a hardware
+// verdict drawn from the absence of a hardware reading (#258).
 func (s *Specs) OllamaRecommendations() []ModelRecommendation {
 	effective := s.EffectiveVRAMGB()
+	known := s.HardwareKnown()
 
 	out := make([]ModelRecommendation, len(ollamaModels))
 	for i, m := range ollamaModels {
+		if !known {
+			m.Fits = false
+			m.RAMAfterLoad = 0
+			m.Reason = unknownHardwareNote
+			m.MemoryCost = fmt.Sprintf("needs ~%.0fGB · available memory unknown", m.RAMNeededGB)
+			out[i] = m
+			continue
+		}
 		remaining := effective - m.RAMNeededGB
 		m.Fits = remaining >= 0
 		m.RAMAfterLoad = remaining
@@ -71,6 +85,9 @@ func (s *Specs) BestOllamaModel() ModelRecommendation {
 		if m.Fits {
 			return m
 		}
+	}
+	if !s.HardwareKnown() {
+		return ModelRecommendation{Fits: false, Reason: unknownHardwareNote}
 	}
 	return ModelRecommendation{Fits: false, Reason: "insufficient memory for any local model"}
 }
@@ -113,6 +130,9 @@ func (s *Specs) reason(m ModelRecommendation, effectiveGB float64) string {
 // PressureWarning returns a warning string if memory pressure is high, else "".
 func (s *Specs) PressureWarning() string {
 	switch s.MemPressure {
+	case PressureUnknown:
+		return "Memory could not be detected on this platform — local model sizing is unavailable. " +
+			"API-backed heads are unaffected."
 	case PressureModerate:
 		return fmt.Sprintf("Memory moderate (%.1fGB free) — close other apps for better performance.", s.FreeRAMGB)
 	case PressureHigh:

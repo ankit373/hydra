@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/ankit373/hydra/internal/config"
+	"github.com/ankit373/hydra/internal/diff"
 	"github.com/ankit373/hydra/internal/dispatch"
 	"github.com/ankit373/hydra/internal/util"
 	"github.com/ankit373/hydra/internal/workspace"
@@ -82,7 +83,10 @@ func Edit(ctx context.Context, req Request) (*Result, error) {
 	backup := req.File + ".hydra-bak"
 	createdBackup := false
 	if resolved.GitRoot == "" && origExisted && !fileExists(backup) {
-		_ = os.WriteFile(backup, []byte(origContent), 0o644)
+		// 0600: the backup is a verbatim copy of the user's source, sitting
+		// beside it until the edit is approved. It was 0644 — the same defect
+		// #273 fixed for runlog's edit snapshots, still present here.
+		_ = os.WriteFile(backup, []byte(origContent), 0o600)
 		createdBackup = true
 	}
 	cleanupBackup := func() {
@@ -166,24 +170,9 @@ snippet) between these exact markers and nothing else:
 	}
 
 	// ── Atomic write ──────────────────────────────────────────────────────────
-	_ = os.MkdirAll(filepath.Dir(req.File), 0o755)
-	tmpF, err := os.CreateTemp(filepath.Dir(req.File), ".hydra-tmp.*")
-	if err != nil {
+	if err := atomicWrite(req.File, newContent+"\n"); err != nil {
 		cleanupBackup()
 		return failResult(req, "write_failed: "+err.Error()), nil
-	}
-	tmpPath := tmpF.Name()
-	if _, werr := fmt.Fprint(tmpF, newContent+"\n"); werr != nil {
-		_ = tmpF.Close()
-		_ = os.Remove(tmpPath)
-		cleanupBackup()
-		return failResult(req, "write_failed: "+werr.Error()), nil
-	}
-	_ = tmpF.Close()
-	if err := os.Rename(tmpPath, req.File); err != nil {
-		_ = os.Remove(tmpPath)
-		cleanupBackup()
-		return failResult(req, "rename_failed: "+err.Error()), nil
 	}
 
 	// ── Validate ──────────────────────────────────────────────────────────────
@@ -249,6 +238,55 @@ func failResult(req Request, errMsg string) *Result {
 		Enum:   req.Enum,
 		Error:  errMsg,
 	}
+}
+
+// atomicWrite replaces path's contents via a temp file and a rename, so a
+// crash mid-write can never leave a half-written source file on disk.
+//
+// It preserves the existing file's permissions. os.CreateTemp creates at 0600,
+// and the rename carries that mode onto the target — so before this, every
+// `hyctl edit` silently reset the file it touched to 0600. Editing a shell
+// script made it non-executable, and any file's group/other access was dropped
+// without a word.
+//
+// On Windows a FileMode only toggles the read-only attribute, so the Chmod is
+// close to a no-op there; that is the platform's behaviour, not a bug here
+// (same caveat as #273).
+func atomicWrite(path, content string) error {
+	mode := os.FileMode(0o644) // a new file: the usual default
+	if info, err := os.Stat(path); err == nil {
+		mode = info.Mode().Perm()
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+
+	tmpF, err := os.CreateTemp(filepath.Dir(path), ".hydra-tmp.*")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmpF.Name()
+	cleanup := func() { _ = os.Remove(tmpPath) }
+
+	if _, err := fmt.Fprint(tmpF, content); err != nil {
+		_ = tmpF.Close()
+		cleanup()
+		return err
+	}
+	if err := tmpF.Close(); err != nil {
+		cleanup()
+		return err
+	}
+	// Before the rename, so the file is never briefly visible at 0600.
+	if err := os.Chmod(tmpPath, mode); err != nil {
+		cleanup()
+		return err
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		cleanup()
+		return err
+	}
+	return nil
 }
 
 func readFile(path string) (content string, existed bool) {
@@ -402,21 +440,29 @@ func diffStats(file, origContent, gitRoot, backup string, origExisted bool) (add
 		out, err := exec.Command("git", "-C", gitRoot, "diff", "--numstat", "--", file).Output()
 		if err == nil {
 			line := strings.TrimSpace(string(out))
-			fmt.Sscanf(line, "%d\t%d", &added, &removed)
-			return
+			// Empty numstat means git has no baseline for this path — an
+			// untracked file it has never seen — not that nothing changed.
+			// Returning 0/0 there reported a file the edit had just *created*
+			// as zero lines added, which reads as "nothing happened": the same
+			// #260 shape as the diff(1) hole below, one branch up. Fall through
+			// to the backup and line-count paths instead.
+			if line != "" {
+				fmt.Sscanf(line, "%d\t%d", &added, &removed)
+				return
+			}
 		}
 	}
 	if fileExists(backup) {
-		out, err := exec.Command("diff", "-u", backup, file).CombinedOutput()
-		_ = err
-		for _, l := range strings.Split(string(out), "\n") {
-			if strings.HasPrefix(l, "+") && !strings.HasPrefix(l, "+++") {
-				added++
-			} else if strings.HasPrefix(l, "-") && !strings.HasPrefix(l, "---") {
-				removed++
-			}
+		// From the edit script, not by re-parsing diff(1)'s text. The `_ = err`
+		// here was the tell: the error was captured and deliberately dropped,
+		// so a missing diff(1) counted zero lines in empty output and reported
+		// a modified file as 0/0 (#260).
+		before, errBefore := os.ReadFile(backup)
+		after, errAfter := os.ReadFile(file)
+		if errBefore == nil && errAfter == nil {
+			added, removed = diff.Stats(before, after)
+			return
 		}
-		return
 	}
 	newLines := strings.Count(readFileLines(file), "\n")
 	origLines := 0

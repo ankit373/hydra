@@ -9,13 +9,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
-	"os"
 	"os/exec"
-	"strings"
 	"sync"
 	"time"
 
+	"github.com/ankit373/hydra/internal/provider"
 	"github.com/ankit373/hydra/internal/util"
 )
 
@@ -165,19 +163,7 @@ func (e *OllamaExecutor) isHealthy(host string) bool {
 	return resp.StatusCode < 400
 }
 
-func ollamaHost() string {
-	h := os.Getenv("OLLAMA_HOST")
-	if h == "" {
-		return "http://localhost:11434"
-	}
-	u, err := url.Parse(h)
-	if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
-		return "http://localhost:11434"
-	}
-	// Only allow loopback targets unless the scheme is https.
-	host := u.Hostname()
-	if u.Scheme == "http" && !strings.HasPrefix(host, "127.") && host != "localhost" && host != "::1" {
-		return "http://localhost:11434"
-	}
-	return h
-}
+// ollamaHost delegates to provider.OllamaHost so discovery and execution can
+// never resolve to different addresses again (#282). Kept as a wrapper rather
+// than replacing every call site, since the name reads better here.
+func ollamaHost() string { return provider.OllamaHost() }

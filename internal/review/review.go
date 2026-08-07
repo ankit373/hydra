@@ -7,6 +7,7 @@ package review
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -15,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/ankit373/hydra/internal/config"
+	"github.com/ankit373/hydra/internal/diff"
 	"github.com/ankit373/hydra/internal/dispatch"
 	"github.com/ankit373/hydra/internal/workspace"
 )
@@ -118,7 +120,7 @@ func Diff(file string) (string, error) {
 		resolved, _ = reg.Resolve(file)
 	}
 
-	if resolved.GitRoot != "" {
+	if gitUsable(resolved.GitRoot) {
 		out, err := exec.Command("git", "-C", resolved.GitRoot, "diff", "--", file).Output()
 		if err != nil {
 			return "", fmt.Errorf("git diff failed: %w", err)
@@ -128,8 +130,19 @@ func Diff(file string) (string, error) {
 
 	backup := file + ".hydra-bak"
 	if fileExists(backup) {
-		out, _ := exec.Command("diff", "-u", backup, file).CombinedOutput()
-		return string(out), nil
+		// Both reads must succeed. This used to shell out to diff(1) and
+		// discard the error, so a missing binary or an unreadable file
+		// produced ("", nil) — a blank diff a reviewer would read as "no
+		// changes" and approve (#260).
+		before, err := os.ReadFile(backup)
+		if err != nil {
+			return "", fmt.Errorf("reading backup for %s: %w", file, err)
+		}
+		after, err := os.ReadFile(file)
+		if err != nil {
+			return "", fmt.Errorf("reading %s: %w", file, err)
+		}
+		return diff.Unified(backup, file, before, after), nil
 	}
 
 	return "", fmt.Errorf("no diff available for %s (no git root, no backup)", file)
@@ -152,7 +165,7 @@ func Approve(file string) (*ApproveResult, error) {
 		resolved, _ = reg.Resolve(file)
 	}
 
-	if resolved.GitRoot == "" {
+	if !gitUsable(resolved.GitRoot) {
 		backup := file + ".hydra-bak"
 		if fileExists(backup) {
 			_ = os.Remove(backup)
@@ -178,15 +191,21 @@ func Reject(file string) (*RejectResult, error) {
 	}
 
 	gitRoot := resolved.GitRoot
-	if gitRoot != "" {
-		if err := exec.Command("git", "-C", gitRoot, "ls-files", "--error-unmatch", file).Run(); err == nil {
+	if gitUsable(gitRoot) {
+		err := exec.Command("git", "-C", gitRoot, "ls-files", "--error-unmatch", file).Run()
+		if err == nil {
 			if err := exec.Command("git", "-C", gitRoot, "checkout", "--", file).Run(); err != nil {
 				return nil, fmt.Errorf("git checkout failed: %w", err)
 			}
 			return &RejectResult{Status: "rejected", File: file, Method: "git_checkout"}, nil
 		}
-		// Untracked new file
-		if fileExists(file) {
+		// Only a clean exit status of 1 means "this path is not tracked". Any
+		// other failure — git missing, .git present but not a repository, a
+		// permissions error — means we do not know, and deleting a file we
+		// cannot prove is disposable is unrecoverable data loss. Before this,
+		// every one of those took the branch below and removed the file.
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 && fileExists(file) {
 			_ = os.Remove(file)
 			return &RejectResult{Status: "rejected", File: file, Method: "rm_untracked"}, nil
 		}
@@ -250,6 +269,19 @@ CONCERNS <bullet list of issues>`, file, diffText)
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
+// gitUsable reports whether git can actually operate on root.
+//
+// workspace.GitRoot only stats for a ".git" entry, so it happily reports a root
+// for a stray marker, a broken checkout, or a machine with no git installed.
+// Every caller here then ran a git command and read its failure as a fact about
+// the file rather than about git — which, in Reject, meant deleting it.
+func gitUsable(root string) bool {
+	if root == "" {
+		return false
+	}
+	return exec.Command("git", "-C", root, "rev-parse", "--git-dir").Run() == nil
+}
+
 func scopeCheck(file string) error {
 	reg, err := workspace.Load(config.ScriptHome())
 	if err != nil {
@@ -263,7 +295,7 @@ func scopeCheck(file string) error {
 
 // numstat returns (added, removed, statusString) for a file.
 func numstat(file, gitRoot string) (added, removed int, status string) {
-	if gitRoot != "" {
+	if gitUsable(gitRoot) {
 		if err := exec.Command("git", "-C", gitRoot, "ls-files", "--error-unmatch", file).Run(); err == nil {
 			out, _ := exec.Command("git", "-C", gitRoot, "diff", "--numstat", "--", file).Output()
 			line := strings.TrimSpace(string(out))
@@ -283,14 +315,15 @@ func numstat(file, gitRoot string) (added, removed int, status string) {
 
 	backup := file + ".hydra-bak"
 	if fileExists(backup) {
-		out, _ := exec.Command("diff", "-u", backup, file).CombinedOutput()
-		for _, l := range strings.Split(string(out), "\n") {
-			if strings.HasPrefix(l, "+") && !strings.HasPrefix(l, "+++") {
-				added++
-			} else if strings.HasPrefix(l, "-") && !strings.HasPrefix(l, "---") {
-				removed++
-			}
+		// Counted from the edit script rather than by re-parsing diff(1)'s
+		// text. Without diff(1) on PATH the old code counted zero lines in an
+		// empty output and reported a modified file as 0/0 (#260).
+		before, errBefore := os.ReadFile(backup)
+		after, errAfter := os.ReadFile(file)
+		if errBefore != nil || errAfter != nil {
+			return 0, 0, "no_baseline"
 		}
+		added, removed = diff.Stats(before, after)
 		return added, removed, "modified"
 	}
 

@@ -273,13 +273,21 @@ a{color:inherit;text-decoration:none;}
   background:linear-gradient(90deg,var(--cyan),var(--violet),var(--magenta));-webkit-background-clip:text;background-clip:text;
   color:transparent;margin-bottom:7px;}
 .deep .db{font-size:11px;color:var(--dim);letter-spacing:.5px;line-height:1.6;transition:opacity .15s ease-out;font-family:var(--mono);}
-.skip-intro{position:absolute;top:20px;left:50%;transform:translateX(-50%);z-index:3;pointer-events:auto;
+/* top must clear .topbar (position:sticky, top:0, height:52px, z-index:60).
+   At top:20px this pill sat entirely inside the bar's 0–52px band, and since
+   .hero-pin creates no stacking context above z-index 60, the bar painted over
+   it — background and backdrop-filter and all — so every click landed on the
+   topbar and "skip intro" did nothing. Kept below the bar rather than raised
+   above it: floating a hero control over the nav is the wrong fix. */
+.skip-intro{position:absolute;top:68px;left:50%;transform:translateX(-50%);z-index:3;pointer-events:auto;
   font-family:var(--mono);font-size:10.5px;letter-spacing:2px;text-transform:uppercase;color:var(--faint);
   border:1px solid var(--line);border-radius:20px;padding:6px 14px;transition:.15s;background:rgba(6,7,15,.4);}
 .skip-intro:hover{color:var(--aqua);border-color:var(--aqua);}
 .hero-buffer{height:14vh;}
 @media(max-width:720px){#hudLog,#hudTele,.hud-meta{display:none;}
-  .skip-intro{top:16px;}}
+  /* The topbar keeps its 52px height on mobile — only its nav is hidden — so
+     this still has to clear it. */
+  .skip-intro{top:64px;}}
 .hero-inner{position:relative;z-index:3;padding:0 24px 9vh;max-width:var(--maxw);margin:0 auto;width:100%;
   text-align:center;pointer-events:none;transition:opacity .12s linear;}
 .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:3.5px;text-transform:uppercase;color:var(--aqua);
@@ -419,6 +427,9 @@ table.cmp td:first-child,table.cmp th[scope=row]{text-align:left;font-family:var
 table.cmp tbody tr:last-child td,table.cmp tbody tr:last-child th{border-bottom:none;}
 .cmp-note{font-family:var(--mono);font-size:12px;color:var(--faint);margin-top:16px;}
 .cmp-note b{color:var(--aqua);}
+.cmp-note a{color:var(--dim);text-decoration:underline;text-underline-offset:2px;
+  text-decoration-color:var(--line-2);}
+.cmp-note a:hover{color:var(--aqua);text-decoration-color:var(--aqua);}
 
 /* ── section 7 · getting started ───────────────────────────────────────── */
 .steps{display:grid;gap:18px;margin-top:34px;grid-template-columns:1fr;}
@@ -473,6 +484,21 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
   .reveal{opacity:1!important;transform:none!important;transition:none!important;}
   .scrollhint,.foot-bottom .egg .cur{animation:none!important;}
 }
+/* ── desktop app tease (section 6b) ─────────────────────────────────────── */
+.app-tease{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:22px;
+  margin-top:28px;padding:22px 24px;border:1px solid var(--line);border-radius:12px;
+  background:linear-gradient(120deg,rgba(42,240,224,.05),rgba(232,82,200,.05));}
+.app-tease-views{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:16px;flex:1;}
+.app-tease-views span{display:flex;flex-direction:column;gap:3px;font-family:var(--mono);
+  font-size:11px;color:var(--faint);}
+.app-tease-views b{font-family:var(--display);font-size:14px;color:var(--ink);font-weight:600;}
+.app-tease-cta{display:inline-flex;align-items:center;gap:9px;padding:11px 20px;border-radius:8px;
+  font-family:var(--mono);font-size:13px;font-weight:700;color:#06070F;
+  background:linear-gradient(90deg,var(--cyan),var(--violet));transition:.15s;white-space:nowrap;}
+.app-tease-cta:hover{filter:brightness(1.12);text-decoration:none;transform:translateY(-1px);}
+@media(max-width:640px){.app-tease{flex-direction:column;align-items:stretch;}
+  .app-tease-cta{justify-content:center;}}
+
 </style>
 <script src="https://analytics.ahrefs.com/analytics.js" data-key="yRz83E87rXgYWlhmro5mIg" async></script>
 </head>
@@ -487,6 +513,7 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
     <a href="#universe">Universe</a>
     <a href="/docs.html">Docs</a>
     <a href="/first-principles.html">First principles</a>
+    <a href="/app.html">Desktop app</a>
     <a href="#compare">Compare</a>
     <a href="/pricing.html">Pricing</a>
     <a href="https://github.com/ankit373/hydra">GitHub</a>
@@ -731,6 +758,41 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
     </table>
   </div>
   <p class="cmp-note"><b>Every row checked above ships today</b> — <code>hyctl dispatch --confidence</code>, <code>hyctl graph blast</code>, <code>hyctl mcp</code>. The agent-tree cockpit (<code>hyctl tui</code>) now renders real runs from the per-run event log, and the desktop app ships as a download for macOS, Windows and Linux with every release — not yet code-signed, so macOS needs right-click → Open on first launch.</p>
+</section>
+
+<!-- ══ 6b · DESKTOP APP NUDGE ═══════════════════════════════════════════════ -->
+<section class="blk wrap reveal" id="app">
+  <div class="klabel"><span>Hydra Desktop</span><b>ships with every release</b></div>
+  <h2 class="big">Prefer to <span class="grad">watch</span> it rather than grep it?</h2>
+  <p style="max-width:720px;color:var(--dim)">
+    Everything above is the CLI. The same control plane has a desktop app —
+    four views over the logs <code>hyctl</code> already writes: where the money
+    went, what is running now, why a run picked the head it did, and which files
+    it changed. No account, no server, nothing leaves the machine.
+  </p>
+
+  <div class="app-tease">
+    <div class="app-tease-views">
+      <span><b>Dashboard</b>where the money went</span>
+      <span><b>Fleet</b>what is running now</span>
+      <span><b>Session</b>why it did that</span>
+      <span><b>Code</b>what changed on disk</span>
+    </div>
+    <a class="app-tease-cta" href="/app.html">
+      See the app <span aria-hidden="true">→</span>
+    </a>
+  </div>
+  <div class="term" style="margin-top:20px;max-width:720px">
+    <div class="copyline" data-copy="curl -fsSL https://raw.githubusercontent.com/ankit373/hydra/main/install-app.sh | sh"><span><span class="p">$</span> curl -fsSL …/install-app.sh | sh</span><span class="cp">copy</span></div>
+    <div class="o"><span class="g">✓</span> checksum verified · <span class="c">/Applications/Hydra.app</span></div>
+  </div>
+  <p class="cmp-note" style="margin-top:16px">
+    macOS · Linux · Windows, attached to every GitHub release with a SHA-256
+    checksum. Not yet code-signed, so macOS needs right-click → Open the first
+    time — the install script clears that for you. Linux ARM64 is not built yet
+    (<a href="https://github.com/ankit373/hydra/issues/263">#263</a>).
+    <a href="/app.html#download">Direct downloads</a>.
+  </p>
 </section>
 
 <!-- ══ 7 · GETTING STARTED ══════════════════════════════════════════════════ -->
