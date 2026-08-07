@@ -1,8 +1,16 @@
 version: 2
+
+# target-branch: develop on every entry, and NOT the omit-and-let-it-default
+# option. Dependabot's default is the repo's default branch — main here — which
+# is exactly what CLAUDE.md's branch policy forbids: "Never open a PR directly
+# to main from a feature branch." Every dependency PR was landing on main
+# unreviewed by that policy until this was noticed (#334). main only ever moves
+# via a release-branch PR or a hotfix; a dependency bump is neither.
 updates:
   # Keep GitHub Actions up to date
   - package-ecosystem: "github-actions"
     directory: "/"
+    target-branch: develop
     schedule:
       interval: "weekly"
     commit-message:
@@ -13,6 +21,7 @@ updates:
   # pulls ~25 transitive deps and ungrouped updates would bury the queue.
   - package-ecosystem: "gomod"
     directory: "/desktop"
+    target-branch: develop
     schedule:
       interval: "weekly"
     commit-message:
@@ -25,6 +34,7 @@ updates:
   # Desktop frontend (React/TS).
   - package-ecosystem: "npm"
     directory: "/desktop/frontend"
+    target-branch: develop
     schedule:
       interval: "weekly"
     commit-message:
