@@ -6,6 +6,13 @@ Format: [Semantic Versioning](https://semver.org). Entries from v1.0.1 onward ar
 
 ---
 
+## [1.2.0](https://github.com/ankit373/hydra/compare/v1.2.0-rc.3...v1.2.0) (2026-08-07)
+
+
+### Features
+
+* **release:** v1.2.0 — desktop app, multi-arch distribution, 90% coverage ([#324](https://github.com/ankit373/hydra/issues/324)) ([f55e3c3](https://github.com/ankit373/hydra/commit/f55e3c3a800d6e32ad19c3ea003881815499166b))
+
 ## [1.1.0](https://github.com/ankit373/hydra/compare/v1.1.0-rc.9...v1.1.0) (2026-08-03)
 
 
