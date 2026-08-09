@@ -1,0 +1,56 @@
+{
+  "$schema": "https://fundingjson.org/schema/v1.1.0.json",
+  "version": "1.0.0",
+  "entity": {
+    "type": "individual",
+    "role": "owner",
+    "name": "Ankit Jha",
+    "email": "jhanakit373@gmail.com",
+    "description": "Independent developer building Hydra and other open-source, local-first developer tooling under the Uvansa product umbrella.",
+    "webpageUrl": {
+      "url": "https://hydra.uvansa.com/"
+    }
+  },
+  "projects": [
+    {
+      "guid": "hydra",
+      "name": "Hydra",
+      "description": "Hydra is an open source CLI (hyctl), written in Go, that routes developer tasks across every AI model on your machine to a target confidence of correctness. It cuts LLM API costs 70-85% by using cheap or local models for simple tasks and reserving frontier models for work that needs them, enforces PII/local-only policy, and logs spend.",
+      "webpageUrl": {
+        "url": "https://hydra.uvansa.com/"
+      },
+      "repositoryUrl": {
+        "url": "https://github.com/ankit373/hydra",
+        "wellKnown": "https://raw.githubusercontent.com/ankit373/hydra/main/.well-known/funding-manifest-urls"
+      },
+      "licenses": ["spdx:MIT"],
+      "tags": ["ai", "llm", "cli", "developer-tools", "devops", "orchestration", "go"]
+    }
+  ],
+  "funding": {
+    "channels": [
+      {
+        "guid": "github-sponsors",
+        "type": "payment-provider",
+        "description": "GitHub Sponsors, via Open Source Collective as fiscal host — being set up. Will cover Hydra and other Uvansa open-source projects (e.g. Mainspring) as separate projects under one collective."
+      },
+      {
+        "guid": "open-collective",
+        "type": "payment-provider",
+        "description": "Open Collective, hosted by Open Source Collective — not yet created. Reserved slug: opencollective.com/hyctl."
+      }
+    ],
+    "plans": [
+      {
+        "guid": "sponsor-hydra",
+        "status": "active",
+        "name": "Sponsor Hydra development",
+        "description": "Recurring or one-time support for Hydra's development — the routing engine, trust control plane, and desktop app.",
+        "amount": 0,
+        "currency": "USD",
+        "frequency": "monthly",
+        "channels": ["github-sponsors", "open-collective"]
+      }
+    ]
+  }
+}

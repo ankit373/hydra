@@ -96,6 +96,7 @@ Typical savings: 75-85% vs routing everything through Claude. Run `hyctl pricing
 - Where Hydra fits (local-first + trust quadrant): https://hydra.uvansa.com/#universe
 - Cost comparison vs gateways: https://hydra.uvansa.com/#compare
 - Changelog: https://github.com/ankit373/hydra/blob/main/CHANGELOG.md
+- Funding — machine-readable funding manifest (fundingjson.org): https://hydra.uvansa.com/funding.json
 
 ## License
 
