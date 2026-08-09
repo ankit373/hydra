@@ -3,9 +3,9 @@
 package trust
 
 import (
-	"bufio"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math"
 	"os"
 	"path/filepath"
@@ -93,8 +93,8 @@ type record struct {
 	Outcome     int    `json:"outcome"`
 }
 
-// load replays the jsonl file into the in-memory posterior. A missing file is
-// not an error — it just means no calibration has been recorded yet.
+// load replays the jsonl file into the in-memory posterior, resuming from the
+// last snapshot (calibration_snapshot.go) instead of the start when one exists.
 func (c *Calibrator) load() error {
 	f, err := os.Open(c.path)
 	if err != nil {
@@ -105,10 +105,32 @@ func (c *Calibrator) load() error {
 	}
 	defer f.Close()
 
-	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
+	info, err := f.Stat()
+	if err != nil {
+		return err
+	}
+
+	var startOffset int64
+	if snap, offset, ok := loadSnapshot(snapshotPath(c.path), info.Size()); ok {
+		c.store = snap
+		startOffset = offset
+	}
+	if startOffset > 0 {
+		if _, err := f.Seek(startOffset, io.SeekStart); err != nil {
+			return err
+		}
+	}
+
+	// Bounded by the snapshot's own threshold except on the very first load of
+	// a pre-existing history — no worse than the old full-file replay.
+	delta, err := io.ReadAll(f)
+	if err != nil {
+		return err
+	}
+
+	var replayed int
+	for _, line := range strings.Split(string(delta), "\n") {
+		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
 		}
@@ -117,8 +139,13 @@ func (c *Calibrator) load() error {
 			continue // skip malformed rows
 		}
 		c.apply(r.Source, r.Domain, r.SaidCorrect, Outcome(r.Outcome))
+		replayed++
 	}
-	return scanner.Err()
+
+	if replayed >= snapshotThreshold {
+		_ = saveSnapshot(snapshotPath(c.path), c.store, startOffset+int64(len(delta)))
+	}
+	return nil
 }
 
 // apply folds one observation into the in-memory posterior (no persistence).
