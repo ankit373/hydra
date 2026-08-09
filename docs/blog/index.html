@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Blog · Hydra</title>
+  <meta name="description" content="Research notes and field reports from the team building Hydra: where AI is actually heading, checked against the roadmap, with sources and the math shown.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://hydra.uvansa.com/blog/">
+  <meta property="og:title" content="Blog · Hydra">
+  <meta property="og:description" content="Research notes and field reports from the team building Hydra.">
+  <meta property="og:image" content="https://hydra.uvansa.com/logo.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:site" content="@ankit373">
+  <link rel="canonical" href="https://hydra.uvansa.com/blog/">
+  <link rel="icon" type="image/png" href="/logo.png">
+  <link rel="ai-context" href="/llms.txt" type="text/plain">
+
+<style>
+:root{
+  color-scheme:dark;
+  --bg:#06070F;--bg2:#0A0C18;--panel:rgba(18,20,38,.62);
+  --line:rgba(150,140,255,.16);--line-2:rgba(150,140,255,.30);
+  --ink:#E7E9F5;--dim:#9aa0c4;--faint:#5a5f85;
+  --cyan:#2AF0E0;--aqua:#00E6C3;--violet:#8B5CF6;--magenta:#E852C8;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,Roboto,Helvetica,Arial,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+  --maxw:900px;
+}
+@font-face{font-family:"Space Grotesk";font-style:normal;font-weight:400 700;font-display:swap;
+  src:url("/fonts/SpaceGrotesk.woff2") format("woff2");}
+@font-face{font-family:"JetBrains Mono";font-style:normal;font-weight:400 700;font-display:swap;
+  src:url("/fonts/JetBrainsMono.woff2") format("woff2");}
+*{box-sizing:border-box;}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.6;
+  overflow-x:hidden;-webkit-font-smoothing:antialiased;}
+.wrap{max-width:var(--maxw);margin:0 auto;padding:0 24px;}
+h1,h2{margin:0;text-wrap:balance;font-family:"Space Grotesk",var(--sans);}
+a{color:inherit;text-decoration:none;}
+::selection{background:rgba(0,230,195,.28);color:#fff;}
+.mono{font-family:var(--mono);}
+.grad{background:linear-gradient(96deg,var(--cyan) 4%,#7FA8FF 40%,var(--violet) 66%,var(--magenta) 98%);
+  -webkit-background-clip:text;background-clip:text;color:transparent;}
+
+.topbar{position:sticky;top:0;z-index:60;display:flex;align-items:center;gap:14px;height:52px;padding:0 24px;
+  font-family:var(--mono);font-size:12.5px;background:rgba(6,7,15,.7);backdrop-filter:blur(14px);
+  border-bottom:1px solid var(--line);}
+.topbar .mark{font-weight:800;letter-spacing:1.5px;font-size:15px;
+  background:linear-gradient(90deg,var(--cyan),var(--violet) 55%,var(--magenta));
+  -webkit-background-clip:text;background-clip:text;color:transparent;}
+.topbar .pill{font-size:10.5px;color:var(--faint);border:1px solid var(--line);border-radius:20px;padding:2px 9px;}
+.topbar .grow{flex:1;}
+.topbar .ghost{border:1px solid var(--line-2);border-radius:6px;padding:5px 12px;color:var(--ink);transition:.15s;}
+.topbar .ghost:hover{border-color:var(--aqua);color:var(--aqua);}
+
+.hero{padding:64px 0 20px;}
+.eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--aqua);margin-bottom:16px;}
+.hero h1{font-size:clamp(32px,5.6vw,52px);line-height:1.06;letter-spacing:-.5px;font-weight:750;}
+.hero p{font-size:17px;color:var(--dim);max-width:600px;margin:18px 0 0;}
+
+.postlist{padding:36px 0 80px;}
+.post{display:block;padding:28px 0;border-top:1px solid var(--line);transition:.15s;}
+.post:first-child{border-top:none;}
+.post:hover .title{color:var(--aqua);}
+.post .meta{font-family:var(--mono);font-size:11.5px;color:var(--faint);margin-bottom:10px;display:flex;gap:12px;}
+.post .title{font-size:clamp(20px,2.6vw,26px);font-weight:700;letter-spacing:-.2px;transition:color .15s;}
+.post .dek{color:var(--dim);font-size:15px;margin-top:10px;max-width:620px;}
+.post .read{margin-top:14px;font-family:var(--mono);font-size:12.5px;color:var(--aqua);display:flex;align-items:center;gap:6px;}
+
+footer{border-top:1px solid var(--line);margin-top:20px;padding:44px 0 56px;}
+.foot{display:flex;flex-wrap:wrap;gap:24px;align-items:center;justify-content:space-between;max-width:var(--maxw);margin:0 auto;padding:0 24px;}
+.foot .mark{font-weight:800;font-size:20px;letter-spacing:1.5px;
+  background:linear-gradient(90deg,var(--cyan),var(--violet) 55%,var(--magenta));
+  -webkit-background-clip:text;background-clip:text;color:transparent;}
+.foot p{color:var(--faint);font-size:13px;margin:6px 0 0;}
+.foot nav{display:flex;gap:20px;font-family:var(--mono);font-size:12.5px;}
+.foot nav a{color:var(--dim);}.foot nav a:hover{color:var(--aqua);}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <a class="mark" href="/">HYDRA</a>
+  <span class="pill">blog</span>
+  <span class="grow"></span>
+  <a class="ghost" href="/">← home</a>
+</div>
+
+<header class="hero wrap">
+  <div class="eyebrow">research notes</div>
+  <h1>Field notes from<br><span class="grad">building Hydra.</span></h1>
+  <p>Where AI is actually heading, checked against real papers and our own roadmap, sources and math shown, not just conclusions.</p>
+</header>
+
+<main class="wrap postlist">
+  <a class="post" href="/blog/the-diagnosis-is-unanimous.html">
+    <div class="meta"><span>Aug 9, 2026</span><span>·</span><span>17 min</span><span>·</span><span>23 sources</span></div>
+    <div class="title">The Diagnosis Is Unanimous. The Cure Isn't.</div>
+    <p class="dek">A blind read of the AI research frontier, the papers, the arguments, the money, with the actual math shown. Checked against Hydra's own roadmap only at the very end.</p>
+    <div class="read">Read the post →</div>
+  </a>
+</main>
+
+<footer>
+  <div class="foot">
+    <div>
+      <a class="mark" href="/">HYDRA</a>
+      <p>The Trust Control Plane for AI development. Route to a confidence of correctness.</p>
+    </div>
+    <nav>
+      <a href="/">Home</a>
+      <a href="/docs.html">Docs</a>
+      <a href="/first-principles.html">First principles</a>
+      <a href="https://github.com/ankit373/hydra">GitHub</a>
+      <a href="/llms.txt">llms.txt</a>
+    </nav>
+  </div>
+</footer>
+
+</body>
+</html>
