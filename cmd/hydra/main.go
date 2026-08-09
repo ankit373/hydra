@@ -31,6 +31,7 @@ import (
 	"github.com/ankit373/hydra/internal/optimal"
 	"github.com/ankit373/hydra/internal/oracle"
 	"github.com/ankit373/hydra/internal/parallel"
+	"github.com/ankit373/hydra/internal/policy"
 	"github.com/ankit373/hydra/internal/pricing"
 	"github.com/ankit373/hydra/internal/probe"
 	"github.com/ankit373/hydra/internal/provider"
@@ -445,10 +446,12 @@ func cmdDispatch() *cobra.Command {
 		swarmMaxCost  float64
 		swarmJudge    string
 		// trust / SPRT flags
-		confidence float64
-		domain     string
-		file       string
-		graphPath  string
+		confidence   float64
+		domain       string
+		file         string
+		graphPath    string
+		irreversible bool
+		production   bool
 	)
 
 	cmd := &cobra.Command{
@@ -496,30 +499,42 @@ func cmdDispatch() *cobra.Command {
 			}
 
 			// ── SPRT confidence mode ──────────────────────────────────────
-			// Triggered by --confidence, or by --file (blast radius derives a
-			// target on its own). Blast radius raises the bar but never lowers a
-			// target the user explicitly asked for.
+			// Triggered by --confidence, or by any real risk signal (--file's
+			// blast radius, --irreversible, --production, or PII auto-detected
+			// in the prompt). Risk raises the bar but never lowers a target the
+			// user explicitly asked for.
 			effectiveConf := confidence
-			if file != "" {
-				g, err := graph.Load(graphPath)
-				if err != nil {
-					return err
+			touchesPII := policy.ContainsPII(policy.Request{Prompt: prompt})
+			if file != "" || irreversible || production || touchesPII {
+				radius := 1.0
+				if file != "" {
+					g, err := graph.Load(graphPath)
+					if err != nil {
+						return err
+					}
+					radius = g.BlastRadiusForFile(file)
+					// --file exists to RAISE the bar for risky files. With no graph
+					// it silently never raises, while printing a line that reads
+					// exactly like blast-radius-aware routing happened (#251). The
+					// bar itself is unchanged — only the claim about it.
+					if g.Empty() {
+						fmt.Printf("  %s\n", warnStyle.Render(
+							"graph: no graph at "+graphPath+" — radius 1.00 is a default, not a measurement"))
+					} else if !g.Knows(file) {
+						fmt.Printf("  %s\n", warnStyle.Render(
+							"graph: "+file+" is not in the graph — radius 1.00 is a default, not a measurement"))
+					}
 				}
-				task := trust.Task{Domain: domain, BlastRadius: g.BlastRadiusForFile(file)}
+				task := trust.Task{
+					Domain:       domain,
+					BlastRadius:  radius,
+					Irreversible: irreversible,
+					TouchesPII:   touchesPII,
+					Production:   production,
+				}
 				derived := trust.NewDefectModel().RequiredConfidence(task)
-				fmt.Printf("  %s blast radius %.2f → demands confidence ≥ %.1f%%\n",
-					dimStyle.Render("graph:"), task.BlastRadius, derived*100)
-				// --file exists to RAISE the bar for risky files. With no graph
-				// it silently never raises, while printing a line that reads
-				// exactly like blast-radius-aware routing happened (#251). The
-				// bar itself is unchanged — only the claim about it.
-				if g.Empty() {
-					fmt.Printf("  %s\n", warnStyle.Render(
-						"graph: no graph at "+graphPath+" — radius 1.00 is a default, not a measurement"))
-				} else if !g.Knows(file) {
-					fmt.Printf("  %s\n", warnStyle.Render(
-						"graph: "+file+" is not in the graph — radius 1.00 is a default, not a measurement"))
-				}
+				fmt.Printf("  %s blast=%.2f irreversible=%v pii=%v prod=%v → demands confidence ≥ %.1f%%\n",
+					dimStyle.Render("defect:"), task.BlastRadius, irreversible, touchesPII, production, derived*100)
 				if derived > effectiveConf {
 					effectiveConf = derived
 				}
@@ -671,6 +686,8 @@ func cmdDispatch() *cobra.Command {
 	cmd.Flags().StringVar(&domain, "domain", "", "calibration domain for --confidence (default: \"default\")")
 	cmd.Flags().StringVar(&file, "file", "", "target file — derives a confidence target from its blast radius, so this alone selects the SPRT ensemble")
 	cmd.Flags().StringVar(&graphPath, "graph", "graph.json", "path to the dependency graph used with --file")
+	cmd.Flags().BoolVar(&irreversible, "irreversible", false, "change cannot be cheaply undone — raises the required confidence")
+	cmd.Flags().BoolVar(&production, "production", false, "target is production — raises the required confidence")
 	return cmd
 }
 

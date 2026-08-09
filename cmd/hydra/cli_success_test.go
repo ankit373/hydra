@@ -180,6 +180,39 @@ func TestCLI_Dispatch_SwarmDryRunFiresNothing(t *testing.T) {
 	}
 }
 
+// A real risk signal — PII in the prompt, or --irreversible/--production —
+// must trigger SPRT mode on its own, not just --file's blast radius.
+func TestCLI_Dispatch_RiskSignalsTriggerSPRTWithoutFileOrConfidence(t *testing.T) {
+	dispatchable(t, "answered")
+
+	out, cobraOut, err := run(t, "dispatch", "--irreversible", "--production",
+		"--dry-run", "--tier", "6", "mail alice.smith@example.co.uk about it")
+	if err != nil {
+		t.Fatalf("dry run failed: %v (%s)", err, cobraOut)
+	}
+	combined := out + cobraOut
+	if !strings.Contains(combined, "SPRT") {
+		t.Errorf("a prompt with PII + --irreversible + --production did not select SPRT mode:\n%s", combined)
+	}
+	if !strings.Contains(combined, "irreversible=true") || !strings.Contains(combined, "pii=true") || !strings.Contains(combined, "prod=true") {
+		t.Errorf("the defect line does not reflect all three risk signals:\n%s", combined)
+	}
+}
+
+// With none of --confidence/--file/--irreversible/--production, and no PII,
+// dispatch must not silently enter SPRT mode.
+func TestCLI_Dispatch_NoRiskSignalsStaysInSingleDispatchMode(t *testing.T) {
+	dispatchable(t, "answered")
+
+	out, cobraOut, err := run(t, "dispatch", "--dry-run", "--tier", "6", "implement a rate limiter")
+	if err != nil {
+		t.Fatalf("dry run failed: %v (%s)", err, cobraOut)
+	}
+	if strings.Contains(out+cobraOut, "SPRT") {
+		t.Errorf("a plain dispatch with no risk signal entered SPRT mode:\n%s", out+cobraOut)
+	}
+}
+
 // An SPRT dry run is the same contract for --confidence.
 func TestCLI_Dispatch_ConfidenceDryRunFiresNothing(t *testing.T) {
 	dispatchable(t, "answered")
