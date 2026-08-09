@@ -12,6 +12,7 @@ import (
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/dispatch"
 	"github.com/ankit373/hydra/internal/provider"
+	"github.com/ankit373/hydra/internal/trust"
 )
 
 // SwarmMode is the response selection strategy.
@@ -198,7 +199,11 @@ func (s *Swarm) Run(ctx context.Context, prompt string, opts Options) (*SwarmRes
 			result.Winner = capScoreWinner(attempts)
 		}
 	case ModeAll:
-		rankByCapScore(attempts)
+		if cal, domain := loadCalibrationFor(opts); cal != nil {
+			rankByCalibratedScore(attempts, cal, domain)
+		} else {
+			rankByCapScore(attempts)
+		}
 		if w := firstSuccessful(attempts); w != nil {
 			result.Winner = w
 		}
@@ -226,7 +231,73 @@ func buildJudge(d *dispatch.Dispatcher, opts Options, cfg *config.Config) Judge 
 	}
 	llm := newLLMJudge(d, tierHint, opts.JudgeTimeout)
 	cap_ := &CapScoreJudge{}
-	return newCompositeJudge(llm, cap_)
+	fallback := newCompositeJudge(llm, cap_)
+
+	cal, domain := loadCalibrationFor(opts)
+	if cal == nil {
+		return fallback
+	}
+	return newCompositeJudge(newCalibratedJudge(cal, domain, nil), fallback)
+}
+
+// loadCalibrationFor resolves the calibrator + domain a ModeBest/ModeAll run
+// should use. A load error degrades to (nil, domain): calibration is an
+// enhancement to these modes, not a dependency, so callers must treat a nil
+// Calibrator as "no calibration data" and fall back to their pre-existing
+// behavior rather than fail the dispatch.
+func loadCalibrationFor(opts Options) (*trust.Calibrator, string) {
+	domain := opts.Domain
+	if domain == "" {
+		domain = "default"
+	}
+	cal, err := trust.New(trust.DefaultPath())
+	if err != nil {
+		return nil, domain
+	}
+	return cal, domain
+}
+
+// rankByCalibratedScore ranks successful attempts by measured diagnostic
+// power D(source, domain) instead of static CapScore, so ModeAll surfaces the
+// most-trustworthy-in-this-domain answer first once calibration data exists.
+// D (not the Dawid-Skene Λ CalibratedJudge computes) is the right quantity
+// here: D is a property of a single source, which is exactly what ranking
+// candidates by "how trustworthy is this one" needs, whereas Λ scores a
+// specific hypothesis against the whole ensemble's votes — the question
+// CalibratedJudge answers, not the question a display ranking asks.
+// Falls back to rankByCapScore's exact ordering when no successful attempt
+// has any calibration history yet (every D is 0) — a fresh install ranks
+// identically to before this existed.
+func rankByCalibratedScore(attempts []Attempt, cal *trust.Calibrator, domain string) {
+	type indexed struct {
+		idx int
+		d   float64
+	}
+	var ok []indexed
+	maxD := 0.0
+	for i, a := range attempts {
+		if a.Status != StatusOK {
+			continue
+		}
+		d := cal.D(a.Head.ID, domain)
+		ok = append(ok, indexed{i, d})
+		if d > maxD {
+			maxD = d
+		}
+	}
+	if maxD <= 0 {
+		rankByCapScore(attempts)
+		return
+	}
+	sort.Slice(ok, func(i, j int) bool {
+		if ok[i].d != ok[j].d {
+			return ok[i].d > ok[j].d
+		}
+		return attempts[ok[i].idx].Head.CapScore > attempts[ok[j].idx].Head.CapScore
+	})
+	for rank, item := range ok {
+		attempts[item.idx].Rank = rank + 1
+	}
 }
 
 func raceWinner(attempts []Attempt) *Attempt {
