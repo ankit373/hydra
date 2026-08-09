@@ -20,10 +20,7 @@ func attemptWith(id, family string, capScore int, output string) Attempt {
 	}
 }
 
-// seedReliable feeds a calibrator enough correct, self-reported-correct
-// observations that se and sp both land well above 0.5 — an informative,
-// well-calibrated source, in contrast to one nobody has ever called
-// hyctl trust record for (D=0, uninformative prior).
+// seedReliable feeds enough observations that se/sp land well above 0.5 (informative, D>0).
 func seedReliable(t *testing.T, cal *trust.Calibrator, source, domain string) {
 	t.Helper()
 	for i := 0; i < 20; i++ {
@@ -47,10 +44,7 @@ func newTestCalibrator(t *testing.T) *trust.Calibrator {
 	return cal
 }
 
-// A calibrated, historically-reliable low-CapScore source must be able to
-// beat an uncalibrated high-CapScore one — this is the entire point of the
-// rework: CapScore alone (today's fallback) cannot express "I have never
-// seen this source be right before."
+// A calibrated low-CapScore source must beat an uncalibrated high-CapScore one.
 func TestCalibratedJudge_CalibratedWinnerOverridesCapScore(t *testing.T) {
 	cal := newTestCalibrator(t)
 	seedReliable(t, cal, "model:reliable", testDomain)
@@ -71,10 +65,7 @@ func TestCalibratedJudge_CalibratedWinnerOverridesCapScore(t *testing.T) {
 	}
 }
 
-// Zero calibration history anywhere must produce an error (not an arbitrary
-// pick), so CompositeJudge falls through to LLMJudge/CapScoreJudge — any
-// install that has never run `hyctl trust record` gets byte-identical
-// behavior to before CalibratedJudge existed.
+// Zero calibration history anywhere must error, not pick arbitrarily, so CompositeJudge falls back.
 func TestCalibratedJudge_NoCalibrationData_ErrorsForFallback(t *testing.T) {
 	cal := newTestCalibrator(t)
 	attempts := []Attempt{
@@ -89,8 +80,7 @@ func TestCalibratedJudge_NoCalibrationData_ErrorsForFallback(t *testing.T) {
 	}
 }
 
-// The single-success case must short-circuit without consulting calibration
-// at all — mirrors LLMJudge's own trivial case.
+// The single-success case must short-circuit without consulting calibration.
 func TestCalibratedJudge_SingleSuccess_ShortCircuits(t *testing.T) {
 	cal := newTestCalibrator(t)
 	attempts := []Attempt{
@@ -111,12 +101,7 @@ func TestCalibratedJudge_SingleSuccess_ShortCircuits(t *testing.T) {
 	}
 }
 
-// A repeat vote from an already-counted model family must be discounted:
-// two agreeing votes from the SAME family must win by a smaller posterior
-// margin than two agreeing votes from DIFFERENT families, holding every
-// other input identical. This is trust.CorrelationDiscount doing its job —
-// a swarm of near-duplicate models must not out-vote a single dissenter
-// through sheer headcount.
+// Two agreeing votes from the SAME family must win by a smaller margin than from DIFFERENT families.
 func TestCalibratedJudge_SameFamilyRepeatIsDiscounted(t *testing.T) {
 	posteriorFor := func(secondFamily string) float64 {
 		cal := newTestCalibrator(t)

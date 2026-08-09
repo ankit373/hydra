@@ -10,45 +10,20 @@ import (
 	"github.com/ankit373/hydra/internal/trust"
 )
 
-// CalibratedJudge is a Dawid-Skene naive-Bayes combiner (Dawid & Skene, 1979:
-// P(votes|z=k) = Π_i C_i[k,vote_i] over each rater's confusion matrix) over
-// the K distinct answers in a completed swarm round, using trust.Calibrator's
-// already-estimated per-source confusion matrices as the emission model.
-//
-// It is the batch/simultaneous dual of trust.Run's SPRT ensemble: SPRT
-// accumulates the identical LLR evidence sequentially against one evolving
-// candidate with early stopping, which fits sampling sources one at a time at
-// a cost; ModeBest already has all N attempts in hand with nothing left to
-// sample, so the right move is to score every candidate hypothesis at once
-// (see lambdaFor) and take the log-posterior argmax, rather than pick a
-// winner via a single independent LLM judge call or a static CapScore rank —
-// neither of which is calibration-aware, and both of which are exactly the
-// naive-voting shape the correlated-error literature (e.g. Zhou et al.,
-// "Variation in Verification," arXiv:2509.17995) finds captures only a
-// fraction of the available gain.
-//
-// trust.CorrelationDiscount — reused, not duplicated — is the mean-field
-// correction for the one documented way the naive-Bayes independence
-// assumption breaks: models make more correlated errors as they get
-// stronger, so a repeat vote from an already-seen model family is discounted
-// rather than counted as independent confirmation.
-//
-// Returns an error when every hypothesis' Λ is exactly 0 — every source is
-// uncalibrated (se=sp=0.5 ⟹ LLR≡0) — letting CompositeJudge fall through to
-// LLMJudge/CapScoreJudge unchanged. Any install that has never run `hyctl
-// trust record` gets byte-identical behavior to before this existed.
+// CalibratedJudge is a Dawid-Skene naive-Bayes combiner over the K distinct
+// answers in a swarm round — the batch dual of trust.Run's sequential SPRT,
+// scoring every candidate hypothesis at once instead of picking via a single
+// LLM judge call or a static CapScore rank. Errors when every hypothesis'
+// Λ is 0 (no calibration data anywhere), so CompositeJudge falls through to
+// LLMJudge/CapScoreJudge unchanged.
 type CalibratedJudge struct {
 	cal    *trust.Calibrator
 	domain string
 	equiv  trust.AnswerEquivalence // nil → trust.TextEquivalence (no extra LLM calls)
 }
 
-// newCalibratedJudge constructs a CalibratedJudge. A nil equiv defaults to
-// trust.TextEquivalence rather than a semantic (LLM-backed) comparator: this
-// mirrors trust.Run's own v1-default-is-textual, semantic-is-opt-in pattern,
-// and keeps ModeBest's cheapest-mode judge overhead at zero extra LLM calls —
-// spending more model calls to fix naive voting would be a regression in
-// exactly the resource this rework is meant to protect.
+// newCalibratedJudge defaults a nil equiv to trust.TextEquivalence, keeping
+// ModeBest's judge overhead at zero extra LLM calls unless a caller opts in.
 func newCalibratedJudge(cal *trust.Calibrator, domain string, equiv trust.AnswerEquivalence) *CalibratedJudge {
 	if equiv == nil {
 		equiv = trust.TextEquivalence
@@ -115,14 +90,8 @@ func (j *CalibratedJudge) Judge(_ context.Context, _ string, attempts []Attempt)
 	}, nil
 }
 
-// lambdaFor computes Λ_k, the Dawid-Skene log-posterior (uniform prior) of
-// the hypothesis "hypothesis is the correct answer": every successful
-// attempt casts an implicit binary vote — agree if it's a member of
-// hypothesis, disagree otherwise — weighted by that source's calibrated LLR
-// for the vote it cast, with a same-family repeat discounted per
-// trust.CorrelationDiscount (family-seen state is local to this one
-// hypothesis's tally, since a different hypothesis reassigns which attempts
-// agree vs. disagree).
+// lambdaFor computes Λ_k: every attempt votes agree/disagree with hypothesis,
+// weighted by its calibrated LLR, same-family repeats discounted.
 func (j *CalibratedJudge) lambdaFor(hypothesis agreementGroup, successful []int, attempts []Attempt) float64 {
 	inGroup := make(map[int]bool, len(hypothesis.members))
 	for _, idx := range hypothesis.members {
@@ -143,10 +112,8 @@ func (j *CalibratedJudge) lambdaFor(hypothesis agreementGroup, successful []int,
 	return lambda
 }
 
-// representative picks which member of the winning hypothesis becomes the
-// returned WinnerIndex. Every member agrees (they're the same answer by
-// construction), so this is a tie-break, not a second decision: the member
-// with the strongest individual evidence for correctness, then CapScore.
+// representative breaks the tie among a hypothesis's equally-valid members by
+// individual evidence, then CapScore.
 func representative(g agreementGroup, attempts []Attempt, cal *trust.Calibrator, domain string) int {
 	best := g.members[0]
 	bestLLR := cal.LLR(attempts[best].Head.ID, domain, true)
@@ -159,11 +126,7 @@ func representative(g agreementGroup, attempts []Attempt, cal *trust.Calibrator,
 	return best
 }
 
-// clusterByAgreement groups successful attempt indices whose outputs the
-// equivalence function treats as the same answer. Greedy: each attempt joins
-// the first existing group it agrees with (compared against that group's
-// first member), or starts a new group. Attempt counts here are bounded by
-// MaxHeads (default 5), so this is cheap regardless of the O(n²) shape.
+// clusterByAgreement greedily groups attempts whose outputs equiv treats as the same answer.
 func clusterByAgreement(attempts []Attempt, successful []int, equiv trust.AnswerEquivalence) []agreementGroup {
 	var groups []agreementGroup
 	for _, idx := range successful {
@@ -192,10 +155,7 @@ func allZero(xs []float64) bool {
 	return true
 }
 
-// softmax turns K hypotheses' log-posteriors into a normalized probability
-// distribution — the direct K-ary generalization of sigmoid, which is what
-// trust.Run already uses to turn a single Λ into P(correct) for its binary
-// (accept candidate / reject candidate) decision.
+// softmax is the K-ary generalization of the sigmoid trust.Run uses for its binary decision.
 func softmax(lambda []float64) []float64 {
 	max := lambda[0]
 	for _, l := range lambda[1:] {

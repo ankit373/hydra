@@ -10,13 +10,8 @@ import (
 	"strings"
 )
 
-// CorrelationDiscount caps the evidence from a model family that has already
-// voted: two heads backed by the same base model are not independent, so a
-// repeat vote counts for half. Prevents false agreement from inflating Λ.
-// Exported so other ensembling paths (internal/swarm's CalibratedJudge) share
-// this one source of truth instead of hardcoding a second copy of the same
-// constant; a future empirical per-family coupling (issue #118) replaces this
-// single definition and every caller upgrades with it.
+// CorrelationDiscount halves a repeat vote from an already-seen model family.
+// Exported so internal/swarm's CalibratedJudge shares this one constant too.
 const CorrelationDiscount = 0.5
 
 // Target configures an SPRT run. The domain used for calibration lookups comes

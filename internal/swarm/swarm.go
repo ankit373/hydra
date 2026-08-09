@@ -240,11 +240,8 @@ func buildJudge(d *dispatch.Dispatcher, opts Options, cfg *config.Config) Judge 
 	return newCompositeJudge(newCalibratedJudge(cal, domain, nil), fallback)
 }
 
-// loadCalibrationFor resolves the calibrator + domain a ModeBest/ModeAll run
-// should use. A load error degrades to (nil, domain): calibration is an
-// enhancement to these modes, not a dependency, so callers must treat a nil
-// Calibrator as "no calibration data" and fall back to their pre-existing
-// behavior rather than fail the dispatch.
+// loadCalibrationFor degrades to (nil, domain) on a load error — callers
+// treat nil as "no calibration data" and fall back rather than fail.
 func loadCalibrationFor(opts Options) (*trust.Calibrator, string) {
 	domain := opts.Domain
 	if domain == "" {
@@ -257,17 +254,8 @@ func loadCalibrationFor(opts Options) (*trust.Calibrator, string) {
 	return cal, domain
 }
 
-// rankByCalibratedScore ranks successful attempts by measured diagnostic
-// power D(source, domain) instead of static CapScore, so ModeAll surfaces the
-// most-trustworthy-in-this-domain answer first once calibration data exists.
-// D (not the Dawid-Skene Λ CalibratedJudge computes) is the right quantity
-// here: D is a property of a single source, which is exactly what ranking
-// candidates by "how trustworthy is this one" needs, whereas Λ scores a
-// specific hypothesis against the whole ensemble's votes — the question
-// CalibratedJudge answers, not the question a display ranking asks.
-// Falls back to rankByCapScore's exact ordering when no successful attempt
-// has any calibration history yet (every D is 0) — a fresh install ranks
-// identically to before this existed.
+// rankByCalibratedScore ranks by D(source, domain) instead of static CapScore,
+// falling back to rankByCapScore's exact order when no attempt has any D.
 func rankByCalibratedScore(attempts []Attempt, cal *trust.Calibrator, domain string) {
 	type indexed struct {
 		idx int
