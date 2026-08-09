@@ -22,6 +22,7 @@ import (
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/cost"
 	"github.com/ankit373/hydra/internal/executor"
+	"github.com/ankit373/hydra/internal/ledger"
 	"github.com/ankit373/hydra/internal/policy"
 	"github.com/ankit373/hydra/internal/pricing"
 	"github.com/ankit373/hydra/internal/probe"
@@ -179,6 +180,15 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 			Head: h.ID, Model: h.Name, Tier: rank.UITier(h),
 			Detail: fmt.Sprintf("candidate %d of %d", i+1, len(candidates)),
 		})
+		if decision, lerr := ledger.CheckAndRecordDispatch("hydra-dispatch", h.ID, "", prompt); lerr == nil && decision == ledger.Deny {
+			lastErr = fmt.Errorf("denied by ledger policy: head %s", h.ID)
+			_ = rl.Append(runlog.Event{
+				Kind: runlog.KindError, TaskID: taskID,
+				Head: h.ID, Model: h.Name, Tier: rank.UITier(h),
+				Status: "denied", Detail: "denied by ledger policy",
+			})
+			continue
+		}
 		started := time.Now()
 		exec := executor.For(h)
 		resp, err := exec.Execute(ctx, executor.Request{
