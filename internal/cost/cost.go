@@ -6,6 +6,7 @@ package cost
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -239,17 +240,25 @@ func ByRun(runID string) (*ByRunResult, error) {
 	}, nil
 }
 
-// Tail returns the last N rows.
+// Tail returns the last N rows, newest first, via a backward tail-seek rather
+// than loading the whole log.
 func Tail(n int) ([]Row, error) {
-	all, err := LoadAll()
+	if n <= 0 {
+		return LoadAll()
+	}
+	lines, err := tailLines(costLogPath(), n)
 	if err != nil {
 		return nil, err
 	}
-	if n <= 0 || n > len(all) {
-		n = len(all)
+	rows := make([]Row, 0, len(lines))
+	for _, line := range lines {
+		var r Row
+		if err := json.Unmarshal([]byte(line), &r); err != nil {
+			continue // skip malformed rows, same tolerance as loadRows
+		}
+		rows = append(rows, r)
 	}
-	rows := all[len(all)-n:]
-	// Reverse so newest first.
+	// lines is oldest-first; reverse so the newest row is first.
 	out := make([]Row, len(rows))
 	for i, r := range rows {
 		out[len(rows)-1-i] = r
@@ -531,6 +540,51 @@ func loadRows(path string) ([]Row, error) {
 		rows = append(rows, r)
 	}
 	return rows, scanner.Err()
+}
+
+// tailLines returns the last n non-empty lines, oldest first, reading
+// backward from EOF in chunks (the tail -n algorithm) instead of the whole file.
+func tailLines(path string, n int) ([]string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("%w at %s — has anything dispatched yet?", ErrNoLog, path)
+		}
+		return nil, err
+	}
+	defer f.Close()
+
+	info, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+
+	const chunkSize = 64 * 1024
+	var buf []byte
+	pos := info.Size()
+	for pos > 0 && bytes.Count(buf, []byte("\n")) <= n {
+		readSize := int64(chunkSize)
+		if readSize > pos {
+			readSize = pos
+		}
+		pos -= readSize
+		chunk := make([]byte, readSize)
+		if _, err := f.ReadAt(chunk, pos); err != nil {
+			return nil, err
+		}
+		buf = append(chunk, buf...)
+	}
+
+	var lines []string
+	for _, l := range strings.Split(string(buf), "\n") {
+		if strings.TrimSpace(l) != "" {
+			lines = append(lines, l)
+		}
+	}
+	if len(lines) > n {
+		lines = lines[len(lines)-n:]
+	}
+	return lines, nil
 }
 
 func aggregate(rows []Row) Totals {

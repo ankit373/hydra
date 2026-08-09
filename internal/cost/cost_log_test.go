@@ -5,6 +5,7 @@ package cost
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -584,6 +585,34 @@ func TestTail_NewestFirstAndClamped(t *testing.T) {
 		}
 		if len(all) != 3 {
 			t.Errorf("Tail(%d) returned %d rows, want all 3 clamped", n, len(all))
+		}
+	}
+}
+
+// A log spanning several 64 KiB chunks must still tail correctly, not off-by-a-chunk.
+func TestTailLines_CorrectAcrossChunkBoundaries(t *testing.T) {
+	var lines []string
+	pad := strings.Repeat("x", 100)
+	for i := 0; i < 2000; i++ {
+		lines = append(lines, row(t, Row{TS: "2026-08-01T00:00:00Z", Model: fmt.Sprintf("m%d-%s", i, pad), PromptTokens: 1}))
+	}
+	path := fixture(t, lines...)
+
+	got, err := tailLines(path, 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 5 {
+		t.Fatalf("tailLines returned %d lines, want 5", len(got))
+	}
+	for i, want := range []int{1995, 1996, 1997, 1998, 1999} {
+		var r Row
+		if err := json.Unmarshal([]byte(got[i]), &r); err != nil {
+			t.Fatalf("line %d did not parse: %v", i, err)
+		}
+		wantModel := fmt.Sprintf("m%d-%s", want, pad)
+		if r.Model != wantModel {
+			t.Errorf("line %d: Model = %q, want %q — tailLines must be exact across chunk boundaries", i, r.Model, wantModel)
 		}
 	}
 }
