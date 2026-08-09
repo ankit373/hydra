@@ -229,6 +229,51 @@ func TestCLI_GraphParallel_ScalesWithTheWork(t *testing.T) {
 	}
 }
 
+// `hyctl graph generate` must produce a graph.json that `hyctl graph blast`
+// can actually read — against a real Go module, not a hand-built fixture.
+func TestCLI_GraphGenerate_ProducesAGraphBlastCanRead(t *testing.T) {
+	s := populated(t)
+	if !s.AllowHostBinary(t, "go") {
+		t.Skip("go is not on the host PATH, which should be impossible here")
+	}
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module example.com/gentest\n\ngo 1.21\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for rel, body := range map[string]string{
+		"a/a.go": "package a\n",
+		"b/b.go": "package b\n\nimport _ \"example.com/gentest/a\"\n",
+	} {
+		full := filepath.Join(dir, rel)
+		if err := os.MkdirAll(filepath.Dir(full), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	out := filepath.Join(dir, "graph.json")
+
+	genOut, cobraOut, err := run(t, "graph", "generate", dir, "--out", out)
+	if err != nil {
+		t.Fatalf("`hyctl graph generate` failed: %v (%s)", err, cobraOut)
+	}
+	if !strings.Contains(genOut+cobraOut, "nodes") {
+		t.Errorf("generate did not report a node count:\n%s", genOut+cobraOut)
+	}
+	if _, err := os.Stat(out); err != nil {
+		t.Fatalf("no graph.json was written: %v", err)
+	}
+
+	blastOut, cobraOut, err := run(t, "graph", "blast", "b", "--graph", out)
+	if err != nil {
+		t.Fatalf("`hyctl graph blast` could not read the generated graph: %v (%s)", err, cobraOut)
+	}
+	if strings.Contains(strings.ToLower(blastOut+cobraOut), "not in the graph") {
+		t.Errorf("blast did not recognize a node generate produced:\n%s", blastOut+cobraOut)
+	}
+}
+
 // ── cost and stats over real rows ─────────────────────────────────────────────
 
 func TestCLI_CostSubcommands_AgainstRealRows(t *testing.T) {

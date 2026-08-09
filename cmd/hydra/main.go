@@ -1265,7 +1265,45 @@ func cmdGraph() *cobra.Command {
 	parallelCmd.Flags().BoolVar(&parJSON, "json", false, "machine-readable JSON output")
 	parallelCmd.Flags().Float64Var(&serial, "serial", optimal.DefaultSerialFraction, "serial (non-parallelizable) work fraction s")
 
-	cmd.AddCommand(blast, parallelCmd)
+	var genOut, genExclude string
+	generate := &cobra.Command{
+		Use:   "generate [path]",
+		Short: "Generate graph.json from a Go module's package-import graph (go list -json)",
+		Long: "Generate graph.json from a Go module's package-import graph via `go list -json`.\n" +
+			"Go package granularity only — not a general tree-sitter indexer. For other\n" +
+			"languages, use Graphify or any indexer that produces the same {nodes,edges} schema.",
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			dir := "."
+			if len(args) == 1 {
+				dir = args[0]
+			}
+			var exclude []string
+			for _, e := range strings.Split(genExclude, ",") {
+				if e = strings.TrimSpace(e); e != "" {
+					exclude = append(exclude, e)
+				}
+			}
+			doc, err := graph.GenerateGo(dir, exclude)
+			if err != nil {
+				return err
+			}
+			raw, err := json.MarshalIndent(doc, "", "  ")
+			if err != nil {
+				return err
+			}
+			if err := os.WriteFile(genOut, raw, 0o644); err != nil {
+				return err
+			}
+			fmt.Printf("  %s %d nodes, %d edges → %s\n",
+				cortexStyle.Render("graph:"), len(doc.Nodes), len(doc.Edges), genOut)
+			return nil
+		},
+	}
+	generate.Flags().StringVar(&genOut, "out", "graph.json", "output path")
+	generate.Flags().StringVar(&genExclude, "exclude", "", "comma-separated module-relative path prefixes to skip (e.g. bench,cmd/specstest)")
+
+	cmd.AddCommand(blast, parallelCmd, generate)
 	return cmd
 }
 
