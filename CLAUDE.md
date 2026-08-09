@@ -2,20 +2,21 @@
 # Provider-neutral, local-first control plane. The orchestrator delegates; cheaper/local heads do the work.
 
 ## What Hydra Is
-A **local-first, multi-vendor AI control plane** shipped as a Go CLI (`hyctl`). It discovers every
-model on your machine (CLI agents, API keys, local servers), scores each, and routes tasks by
-complexity/cost with automatic fallback — enforcing policy (PII/local-only) and logging spend.
+A **local-first, multi-vendor Trust Control Plane** shipped as a Go CLI (`hyctl`). It discovers
+every model on your machine (CLI agents, API keys, local servers), scores each, and routes tasks by
+complexity/cost with automatic fallback — enforcing policy (PII/local-only) and logging spend. It
+also routes to a target *confidence of correctness*: calibration (`internal/trust`) + an
+optimal-stopping SPRT ensemble (`hyctl dispatch --confidence`), graph-aware routing
+(`internal/graph`), causal A2A handoffs (`internal/a2a`), a context-entropy governor
+(`internal/entropy`), a local MCP accountability ledger (`internal/ledger`), and a pluggable
+verification-oracle interface (`internal/oracle`) — all shipped, not roadmap. See the package map
+below, and the private planning docs (`ROADMAP_TRUST_CONTROL_PLANE.md`, `HYDRA_MANIFESTO.md`,
+`SPEC_TRUST_V1.md`) for the theory/math behind it.
 
 Whatever model you drive Hydra with acts as the **orchestrator**; Antigravity (agy), API providers,
 and Ollama are interchangeable **heads**. No single vendor is privileged — the whole point is
 routing *across* providers (and *away* from expensive ones), so keep it provider-neutral.
 Never do work yourself that belongs to a lower tier. Never escalate work to yourself that a cheaper head can handle.
-
-> **Direction (roadmap, not yet shipped):** Hydra is evolving from a cost router into a *Trust
-> Control Plane* — routing to a target *confidence of correctness* (calibration + optimal-stopping
-> ensembles), graph-aware routing, and a local MCP accountability ledger. See the private planning
-> docs (`ROADMAP_TRUST_CONTROL_PLANE.md`, `HYDRA_MANIFESTO.md`, `SPEC_TRUST_V1.md`). Do not describe
-> those features as shipped until they land.
 
 ---
 

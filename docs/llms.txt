@@ -1,6 +1,6 @@
 # Hydra — The Trust Control Plane for AI Development
 
-> Hydra is an open source CLI written in Go that routes developer tasks across every AI model on your machine — not just to the cheapest one, but to a target *confidence of correctness*. It reduces LLM API costs by 70-85% by using cheap or free models for simple tasks and reserving frontier models for work that needs them, and it can route to a calibrated confidence: sampling models adaptively (SPRT) and stopping as soon as the evidence is strong enough, spending more only where accuracy demands it.
+> Hydra is the Trust Control Plane for AI development: an open source CLI written in Go that routes developer tasks across every AI model on your machine to a target *confidence of correctness*, not just the cheapest one — sampling models adaptively (SPRT) and stopping as soon as the evidence is strong enough, spending more only where accuracy demands it. It also reduces LLM API costs by 70-85% along the way, by using cheap or free models for simple tasks and reserving frontier models for work that needs them.
 
 ## What It Does
 
