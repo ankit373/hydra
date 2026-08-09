@@ -12,6 +12,7 @@ import (
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/dispatch"
 	"github.com/ankit373/hydra/internal/provider"
+	"github.com/ankit373/hydra/internal/trust"
 )
 
 // SwarmMode is the response selection strategy.
@@ -198,7 +199,11 @@ func (s *Swarm) Run(ctx context.Context, prompt string, opts Options) (*SwarmRes
 			result.Winner = capScoreWinner(attempts)
 		}
 	case ModeAll:
-		rankByCapScore(attempts)
+		if cal, domain := loadCalibrationFor(opts); cal != nil {
+			rankByCalibratedScore(attempts, cal, domain)
+		} else {
+			rankByCapScore(attempts)
+		}
 		if w := firstSuccessful(attempts); w != nil {
 			result.Winner = w
 		}
@@ -226,7 +231,61 @@ func buildJudge(d *dispatch.Dispatcher, opts Options, cfg *config.Config) Judge 
 	}
 	llm := newLLMJudge(d, tierHint, opts.JudgeTimeout)
 	cap_ := &CapScoreJudge{}
-	return newCompositeJudge(llm, cap_)
+	fallback := newCompositeJudge(llm, cap_)
+
+	cal, domain := loadCalibrationFor(opts)
+	if cal == nil {
+		return fallback
+	}
+	return newCompositeJudge(newCalibratedJudge(cal, domain, nil), fallback)
+}
+
+// loadCalibrationFor degrades to (nil, domain) on a load error — callers
+// treat nil as "no calibration data" and fall back rather than fail.
+func loadCalibrationFor(opts Options) (*trust.Calibrator, string) {
+	domain := opts.Domain
+	if domain == "" {
+		domain = "default"
+	}
+	cal, err := trust.New(trust.DefaultPath())
+	if err != nil {
+		return nil, domain
+	}
+	return cal, domain
+}
+
+// rankByCalibratedScore ranks by D(source, domain) instead of static CapScore,
+// falling back to rankByCapScore's exact order when no attempt has any D.
+func rankByCalibratedScore(attempts []Attempt, cal *trust.Calibrator, domain string) {
+	type indexed struct {
+		idx int
+		d   float64
+	}
+	var ok []indexed
+	maxD := 0.0
+	for i, a := range attempts {
+		if a.Status != StatusOK {
+			continue
+		}
+		d := cal.D(a.Head.ID, domain)
+		ok = append(ok, indexed{i, d})
+		if d > maxD {
+			maxD = d
+		}
+	}
+	if maxD <= 0 {
+		rankByCapScore(attempts)
+		return
+	}
+	sort.Slice(ok, func(i, j int) bool {
+		if ok[i].d != ok[j].d {
+			return ok[i].d > ok[j].d
+		}
+		return attempts[ok[i].idx].Head.CapScore > attempts[ok[j].idx].Head.CapScore
+	})
+	for rank, item := range ok {
+		attempts[item.idx].Rank = rank + 1
+	}
 }
 
 func raceWinner(attempts []Attempt) *Attempt {

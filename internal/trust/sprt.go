@@ -10,10 +10,9 @@ import (
 	"strings"
 )
 
-// correlationDiscount caps the evidence from a model family that has already
-// voted: two heads backed by the same base model are not independent, so a
-// repeat vote counts for half. Prevents false agreement from inflating Λ.
-const correlationDiscount = 0.5
+// CorrelationDiscount halves a repeat vote from an already-seen model family.
+// Exported so internal/swarm's CalibratedJudge shares this one constant too.
+const CorrelationDiscount = 0.5
 
 // Target configures an SPRT run. The domain used for calibration lookups comes
 // from the Task, not here, so there is exactly one source of truth for it.
@@ -146,7 +145,7 @@ func Run(ctx context.Context, task Task, sources []Source, exec Executor, cal *C
 
 		llr := cal.LLR(src.ID, task.Domain, agreed)
 		if src.Family != "" && familySeen[src.Family] {
-			llr *= correlationDiscount
+			llr *= CorrelationDiscount
 		}
 		familySeen[src.Family] = true
 
