@@ -16,6 +16,7 @@ import (
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/diff"
 	"github.com/ankit373/hydra/internal/dispatch"
+	"github.com/ankit373/hydra/internal/trust"
 	"github.com/ankit373/hydra/internal/util"
 	"github.com/ankit373/hydra/internal/workspace"
 )
@@ -47,6 +48,7 @@ type Result struct {
 	Workspace       string `json:"workspace"`
 	GitRoot         string `json:"git_root"`
 	Enum            string `json:"enum"`
+	Head            string `json:"head,omitempty"` // head ID that produced the edit
 	LinesAdded      int    `json:"lines_added"`
 	LinesRemoved    int    `json:"lines_removed"`
 	ValidatorPassed bool   `json:"validator_passed"`
@@ -188,6 +190,7 @@ snippet) between these exact markers and nothing else:
 
 		if vtmpl != "" {
 			vout, vrc := runValidatorCmd(vtmpl, req.File)
+			recordValidationOutcome(dispResult.Head.ID, fileExt(req.File), vrc == 0)
 			if vrc != 0 {
 				validatorPassed = false
 				rollback(req.File, origContent, origExisted, resolved.GitRoot, backup)
@@ -197,6 +200,7 @@ snippet) between these exact markers and nothing else:
 					Workspace:       wsName,
 					GitRoot:         resolved.GitRoot,
 					Enum:            req.Enum,
+					Head:            dispResult.Head.ID,
 					ValidatorPassed: false,
 					RolledBack:      true,
 					Error:           "validation_failed: " + firstLine(vout),
@@ -214,7 +218,7 @@ snippet) between these exact markers and nothing else:
 	logEdit(req, origContent, newContent+"\n", added, removed)
 
 	// ── A2A handoff ───────────────────────────────────────────────────────────
-	_ = writeLastEdit(req.File, req.Enum, wsName, added, removed)
+	_ = writeLastEdit(req.File, req.Enum, wsName, dispResult.Head.ID, added, removed)
 
 	return &Result{
 		Status:          "ok",
@@ -222,11 +226,32 @@ snippet) between these exact markers and nothing else:
 		Workspace:       wsName,
 		GitRoot:         resolved.GitRoot,
 		Enum:            req.Enum,
+		Head:            dispResult.Head.ID,
 		LinesAdded:      added,
 		LinesRemoved:    removed,
 		ValidatorPassed: validatorPassed,
 		RolledBack:      false,
 	}, nil
+}
+
+// recordValidationOutcome is a best-effort calibration observation: the
+// validator's exit code is real, objective ground truth (it parsed/compiled
+// or it didn't), so it needs no separate self-assessment step — the produced
+// edit is its own implicit claim of correctness, the same proxy trust.Run
+// already uses. Never lets a calibration failure affect the edit itself.
+func recordValidationOutcome(headID, domain string, passed bool) {
+	if headID == "" {
+		return
+	}
+	cal, err := trust.New(trust.DefaultPath())
+	if err != nil {
+		return
+	}
+	outcome := trust.OutcomeIncorrect
+	if passed {
+		outcome = trust.OutcomeCorrect
+	}
+	_ = cal.Update(headID, domain, true, outcome)
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -487,12 +512,13 @@ func firstLine(s string) string {
 	return s
 }
 
-func writeLastEdit(file, enum, ws string, added, removed int) error {
+func writeLastEdit(file, enum, ws, headID string, added, removed int) error {
 	h := map[string]any{
 		"from":          "hydra-edit-" + enum,
 		"file":          file,
 		"enum":          enum,
 		"workspace":     ws,
+		"head_id":       headID,
 		"lines_added":   added,
 		"lines_removed": removed,
 	}
