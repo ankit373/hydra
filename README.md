@@ -35,9 +35,9 @@ You have Claude Code for complex problems, Codex for code generation, Ollama run
 
 **Hydra is the control plane that sits in front of all of it.**
 
-It discovers every AI model on your machine, assigns each a capability score, routes tasks to the right model by complexity and cost, enforces PII policy so sensitive data never leaves your machine, and logs every dispatch with token counts and cost — without any manual configuration.
+It discovers every AI model on your machine, assigns each a capability score, and routes tasks not just to the cheapest one but to a *target confidence of correctness* — enforcing PII policy so sensitive data never leaves your machine, and logging every dispatch with token counts and cost, without any manual configuration.
 
-And it's growing into a **Trust Control Plane**: route not just to the cheapest model, but to a *target confidence of correctness* — sampling models adaptively and stopping the moment you're sure enough (see **Confidence Routing** under [Features](#features)).
+**Confidence routing** samples models adaptively (SPRT) and stops the moment you're sure enough, using per-model calibration built from real outcomes (see **Confidence Routing** under [Features](#features)) — and because cheap or local models handle the tasks that don't need a frontier model, this typically cuts LLM spend 70-85% along the way.
 
 ```bash
 brew install ankit373/hydra/hyctl && hyctl init

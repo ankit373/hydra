@@ -3,20 +3,20 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Hydra — Multi-Model AI Orchestration CLI</title>
-  <meta name="description" content="Cut AI API costs 70–85% without changing your workflow. Hydra routes each dev task to the cheapest capable model — Claude, Gemini, or free local Qwen.">
-  <meta name="keywords" content="multi-model AI orchestration, LLM router, Claude Code, Ollama, local LLM, AI model routing, LLM cost optimization, AI coding assistant, llm orchestration CLI, model routing open source">
+  <title>Hydra — The Trust Control Plane for AI Development</title>
+  <meta name="description" content="Route to a target confidence of correctness, not just the cheapest model. Hydra samples models adaptively (SPRT), cuts AI API costs 70-85% along the way, and keeps sensitive data local.">
+  <meta name="keywords" content="trust control plane, AI confidence routing, multi-model AI orchestration, LLM router, Claude Code, Ollama, local LLM, AI model routing, LLM cost optimization, AI coding assistant, llm orchestration CLI, model routing open source">
 
   <!-- Open Graph / Social sharing -->
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://hydra.uvansa.com/">
-  <meta property="og:title" content="Hydra — Multi-Model AI Orchestration CLI">
-  <meta property="og:description" content="Cut AI API costs 80% without changing your workflow. Hydra routes each task to the cheapest model that can handle it — open source, MIT license, installs via Homebrew.">
+  <meta property="og:title" content="Hydra — The Trust Control Plane for AI Development">
+  <meta property="og:description" content="Hydra routes tasks across every model on your machine to a target confidence of correctness — sampling adaptively (SPRT) and stopping once the evidence is strong enough. Cuts AI costs 70-85% along the way. Open source, MIT license.">
   <meta property="og:image" content="https://hydra.uvansa.com/logo.png">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:site" content="@ankit373">
-  <meta name="twitter:title" content="Hydra — Multi-Model AI Orchestration CLI">
-  <meta name="twitter:description" content="Route every dev task to the right AI model automatically. Claude when it matters, Ollama when it's free. Open source LLM router CLI written in Go.">
+  <meta name="twitter:title" content="Hydra — The Trust Control Plane for AI Development">
+  <meta name="twitter:description" content="Route to a confidence of correctness, not just the cheapest model. One command, every AI model, provable trust — open source LLM orchestration CLI in Go.">
   <meta name="twitter:image" content="https://hydra.uvansa.com/logo.png">
 
   <!-- Canonical URL -->
@@ -39,12 +39,12 @@
     "alternateName": "Hydra Trust Control Plane",
     "applicationCategory": "DeveloperApplication",
     "operatingSystem": "macOS, Linux",
-    "description": "Route every dev task to the right AI model automatically. Hydra orchestrates Claude, Gemini, GPT, and local Qwen via Ollama — cutting LLM costs without sacrificing quality.",
+    "description": "Hydra is the Trust Control Plane for AI development: it routes tasks across every model on your machine to a target confidence of correctness — sampling models adaptively (SPRT) and stopping once the evidence is strong enough — while cutting AI API costs 70-85% along the way.",
     "url": "https://hydra.uvansa.com/",
     "downloadUrl": "https://github.com/ankit373/hydra",
     "softwareVersion": "1.0.0",
     "datePublished": "2026-01-01",
-    "dateModified": "2026-07-25",
+    "dateModified": "2026-08-09",
     "license": "https://github.com/ankit373/hydra/blob/main/LICENSE",
     "author": {
       "@type": "Person",
@@ -57,10 +57,14 @@
       "price": "0",
       "priceCurrency": "USD"
     },
-    "keywords": "multi-model AI orchestration, LLM router, Claude Code, Ollama, local LLM, AI model routing, LLM cost optimization, AI coding assistant, go cli, swarm dispatch",
+    "keywords": "trust control plane, AI confidence routing, multi-model AI orchestration, LLM router, Claude Code, Ollama, local LLM, AI model routing, LLM cost optimization, AI coding assistant, go cli, swarm dispatch",
     "image": "https://hydra.uvansa.com/logo.png",
     "sameAs": "https://github.com/ankit373/hydra",
     "featureList": [
+      "Confidence routing — hyctl dispatch --confidence samples models adaptively (SPRT) and stops once a target confidence of correctness is reached",
+      "Per-source calibration (hyctl trust calibration) — measures each model's diagnostic power from real outcomes",
+      "Blast-radius aware routing — a code dependency graph raises the confidence bar for widely-depended-on files",
+      "Local MCP accountability ledger — records and gates what each agent's tools touch",
       "10-tier model routing by task complexity",
       "Automatic fallback chains terminating at always-on local Qwen",
       "Local Ollama + cloud model hybrid — provider-neutral discovery",
@@ -71,7 +75,7 @@
       "Token budget enforcement — per-model context window tracking with pressure modes",
       "Dynamic live pricing — OpenRouter API pricing with 24h cache and tier fallback",
       "hyctl stats — real-time session cost rollup by model, tier, and day",
-      "A2A agent-to-agent handoff protocol",
+      "A2A agent-to-agent handoff protocol with vector clocks for causal ordering",
       "Homebrew installable on macOS and Linux"
     ]
   }
@@ -85,7 +89,7 @@
     "name": "Hydra",
     "alternateName": "Hydra Trust Control Plane",
     "url": "https://hydra.uvansa.com/",
-    "description": "Open source multi-model AI orchestration CLI written in Go"
+    "description": "The Trust Control Plane for AI development — open source, written in Go"
   }
   </script>
 
@@ -100,7 +104,15 @@
         "name": "What is Hydra?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "Hydra is an open source multi-model AI orchestration CLI written in Go. It routes developer tasks to the right AI model automatically — using Claude for complex reasoning, Gemini for standard tasks, and free local Qwen/Ollama for boilerplate. The result is a 70-85% reduction in LLM API costs without sacrificing output quality."
+          "text": "Hydra is the Trust Control Plane for AI development — an open source CLI written in Go that routes developer tasks across every AI model on your machine to a target confidence of correctness, not just the cheapest one. It samples models adaptively (SPRT) and stops as soon as the evidence is strong enough, which also cuts AI API costs 70-85% along the way."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "What is a Trust Control Plane?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "A Trust Control Plane routes work to a target confidence of correctness rather than just the cheapest or fastest model. Hydra measures each model's calibration from real outcomes (hyctl trust calibration), runs a sequential probability ratio test (SPRT) that samples models adaptively and stops once confidence crosses your target, and automatically raises the bar for code with a wider blast radius — spending more only where accuracy demands it."
         }
       },
       {
@@ -154,7 +166,7 @@
     "@type": "SoftwareSourceCode",
     "name": "Hydra",
     "alternateName": "Hydra Trust Control Plane",
-    "description": "Open source multi-model AI orchestration CLI written in Go. Routes developer tasks to the cheapest model capable of handling them.",
+    "description": "Hydra is the Trust Control Plane for AI development — an open source CLI written in Go that routes tasks across every model on your machine to a target confidence of correctness.",
     "codeRepository": "https://github.com/ankit373/hydra",
     "programmingLanguage": "Go",
     "license": "https://opensource.org/licenses/MIT",
