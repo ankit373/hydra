@@ -37,6 +37,7 @@ func (p *Provider) Discover(_ context.Context) ([]provider.Head, error) {
 			Source:    "env",
 			CapScore:  caps.Score(id),
 			AuthReady: true,
+			Meta:      map[string]string{"model_source": caps.Source(id)},
 		})
 	}
 	return heads, nil

@@ -53,6 +53,9 @@ func TestDiscover_OneKeyYieldsOneHead(t *testing.T) {
 	if h.LocalOnly {
 		t.Error("LocalOnly = true for an API head — --local would route paid work as if it were free")
 	}
+	if got := h.Meta["model_source"]; got != "builtin" {
+		t.Errorf("Meta[model_source] = %q, want builtin — env/anthropic is in the embedded catalog", got)
+	}
 }
 
 // anyOf: either variable alone is enough. Requiring both would silently hide a

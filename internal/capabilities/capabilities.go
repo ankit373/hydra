@@ -111,6 +111,33 @@ func (db *DB) Name(id string) string {
 	return id
 }
 
+// Source returns id's capability entry's provenance — "builtin" for the
+// embedded, curated catalog, "user" for one added via the runtime overlay
+// (`hyctl models add`), or "" if id matched neither and fell to DefaultScore.
+// This is the "managed vs. discovered" distinction AI-BOM tooling is built
+// around — a user-added model isn't malicious, it just wasn't vetted by
+// whoever curated the embedded catalog, and that's worth being able to see.
+func (db *DB) Source(id string) string {
+	if m, ok := db.index[id]; ok {
+		return m.Source
+	}
+	return ""
+}
+
+// SourceOllama returns "builtin" when modelName matched a curated family
+// pattern, or "" when it fell to DefaultScore (an unrecognized local model) —
+// the ScoreOllama analog of Source, since family-pattern matching has no
+// per-model Entry to look up.
+func (db *DB) SourceOllama(modelName string) string {
+	lower := strings.ToLower(modelName)
+	for _, f := range db.d.OllamaFamilies {
+		if strings.Contains(lower, f.Pattern) {
+			return "builtin"
+		}
+	}
+	return ""
+}
+
 // Entries returns all models (built-in ⊕ user), sorted by capScore descending.
 func (db *DB) Entries() []Entry {
 	out := append([]Entry(nil), db.d.Known...)
