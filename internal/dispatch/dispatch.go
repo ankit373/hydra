@@ -49,6 +49,11 @@ type Options struct {
 	// concept applies (e.g. a plain text dispatch with no target file).
 	Resource string
 
+	// MaxCostUSD refuses a candidate whose estimated cost exceeds it before
+	// executing — the same preflight guard swarm.Options.MaxEstCostUSD already
+	// gives fan-out mode, extended to ordinary dispatch. 0 = no limit.
+	MaxCostUSD float64
+
 	// RunID groups every log row produced by one user-facing invocation;
 	// TaskID groups the rows for one logical task inside it. Empty means
 	// "derive one" (see runid.ResolveRun/ResolveTask) — pass them explicitly
@@ -195,6 +200,26 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 				Status: "denied", Detail: "denied by ledger policy",
 			})
 			continue
+		}
+		if opts.MaxCostUSD > 0 {
+			estInputTokens := len(prompt) / 4
+			estCost := d.estimateCost(rank.UITier(h), estInputTokens, estInputTokens/2)
+			if estCost > opts.MaxCostUSD {
+				lastErr = fmt.Errorf("estimated cost $%.4f for head %s exceeds limit $%.4f", estCost, h.ID, opts.MaxCostUSD)
+				_ = rl.Append(runlog.Event{
+					Kind: runlog.KindError, TaskID: taskID,
+					Head: h.ID, Model: h.Name, Tier: rank.UITier(h),
+					Status: "denied", Detail: "exceeds cost ceiling",
+				})
+				// Shares the ledger's accountability trail with policy denials
+				// (Reason distinguishes them) so `hyctl security` has one place
+				// to find every kind of refused access, cost or policy.
+				_ = ledger.Record(ledger.DefaultPath(), ledger.Event{
+					Agent: "hydra-dispatch", Tool: h.ID, Decision: ledger.Deny,
+					Reason: fmt.Sprintf("exceeds cost ceiling: estimated $%.4f > limit $%.4f", estCost, opts.MaxCostUSD),
+				})
+				continue
+			}
 		}
 		started := time.Now()
 		exec := executor.For(h)

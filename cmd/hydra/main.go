@@ -438,6 +438,7 @@ func cmdDispatch() *cobra.Command {
 		system    string
 		a2aFile   string
 		enumKey   string
+		maxCost   float64
 		// swarm flags
 		doSwarm       bool
 		swarmMode     string
@@ -624,14 +625,15 @@ func cmdDispatch() *cobra.Command {
 				tierHint = dispatch.EnumToTier(enumKey)
 			}
 			opts := dispatch.Options{
-				TierHint:  tierHint,
-				LocalOnly: localOnly,
-				DryRun:    dryRun,
-				System:    system,
-				A2AFile:   a2aFile,
-				Enum:      enumKey,
-				RunID:     runID,
-				TaskID:    taskID,
+				TierHint:   tierHint,
+				LocalOnly:  localOnly,
+				DryRun:     dryRun,
+				System:     system,
+				A2AFile:    a2aFile,
+				Enum:       enumKey,
+				RunID:      runID,
+				TaskID:     taskID,
+				MaxCostUSD: maxCost,
 			}
 
 			result, err := d.Dispatch(ctx, prompt, opts)
@@ -674,6 +676,7 @@ func cmdDispatch() *cobra.Command {
 	cmd.Flags().StringVarP(&system, "system", "s", "", "system prompt")
 	cmd.Flags().StringVar(&a2aFile, "a2a", "", "path to A2A handoff JSON (prepends structured context to prompt)")
 	cmd.Flags().StringVar(&enumKey, "enum", "", "routing enum key, e.g. SIMPLE — selects the tier when --tier is unset")
+	cmd.Flags().Float64Var(&maxCost, "max-cost", 0, "refuse a candidate head if its estimated cost exceeds this USD (denial-of-wallet guard)")
 	// swarm flags
 	cmd.Flags().BoolVar(&doSwarm, "swarm", false, "fan prompt out to multiple heads simultaneously")
 	cmd.Flags().StringVar(&swarmMode, "swarm-mode", "best", "response strategy: best|race|all")
