@@ -161,6 +161,13 @@ func TestCLI_Security_HandlesEmptyAndSeededLedger(t *testing.T) {
 			Head   string `json:"head"`
 			Denied int    `json:"denied"`
 		} `json:"byHead"`
+		IntegrityIntact bool `json:"integrityIntact"`
+		Coverage        struct {
+			Applicable     int     `json:"applicable"`
+			Covered        int     `json:"covered"`
+			PercentCovered float64 `json:"percentCovered"`
+		} `json:"coverage"`
+		Recommendations []string `json:"recommendations"`
 	}
 	if err := json.Unmarshal([]byte(out+cobraOut), &rep); err != nil {
 		t.Fatalf("security --json did not parse: %v\n%s", err, out+cobraOut)
@@ -170,6 +177,29 @@ func TestCLI_Security_HandlesEmptyAndSeededLedger(t *testing.T) {
 	}
 	if len(rep.ByHead) != 1 || rep.ByHead[0].Head != "sketchy" {
 		t.Errorf("ByHead = %+v, want exactly the denied head", rep.ByHead)
+	}
+	if !rep.IntegrityIntact {
+		t.Error("IntegrityIntact = false on an untampered ledger")
+	}
+	if rep.Coverage.Applicable != 8 {
+		t.Errorf("Coverage.Applicable = %d, want 8", rep.Coverage.Applicable)
+	}
+	if len(rep.Recommendations) == 0 {
+		t.Error("Recommendations is empty despite real coverage gaps existing")
+	}
+
+	// Text output must show the headline coverage score and the recommendations
+	// section — the KPI/feedback-loop surface, not just the raw tables.
+	textOut, textCobraOut, err := run(t, "security")
+	if err != nil {
+		t.Fatalf("`hyctl security` failed: %v", err)
+	}
+	combined := textOut + textCobraOut
+	if !strings.Contains(combined, "OWASP LLM Top-10 coverage") {
+		t.Errorf("text output missing the coverage headline:\n%s", combined)
+	}
+	if !strings.Contains(combined, "recommendations") {
+		t.Errorf("text output missing the recommendations section:\n%s", combined)
 	}
 }
 

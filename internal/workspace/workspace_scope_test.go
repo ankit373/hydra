@@ -300,6 +300,23 @@ func TestValidatorFor(t *testing.T) {
 	}
 }
 
+func TestHasAnyValidator(t *testing.T) {
+	r, _ := scopeRegistry(t, []string{"**"}, nil)
+	if !r.HasAnyValidator() {
+		t.Error("HasAnyValidator() = false, want true — \"go\" has a real (non-null) command")
+	}
+
+	allNull := &Registry{validators: map[string]string{"ts": "", "tsx": ""}}
+	if allNull.HasAnyValidator() {
+		t.Error("HasAnyValidator() = true with every entry explicitly nulled out, want false")
+	}
+
+	empty := &Registry{}
+	if empty.HasAnyValidator() {
+		t.Error("HasAnyValidator() = true with no validators configured at all, want false")
+	}
+}
+
 // ── Load ──────────────────────────────────────────────────────────────────────
 
 // Load must not fail with no on-disk registry: the embedded copy is what every
