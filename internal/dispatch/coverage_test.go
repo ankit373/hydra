@@ -240,6 +240,28 @@ func TestDispatch_DefaultLedgerPolicyRecordsButNeverBlocks(t *testing.T) {
 	}
 }
 
+// A ledger rule keyed on Resource must scope by the file a dispatch acts on,
+// not just by head — the concrete "excessive agency" containment: a head may
+// be trusted in general but still denied write access to a specific path.
+func TestDispatch_LedgerResourceScopingBlocksOnlyMatchingFiles(t *testing.T) {
+	s := testutil.NewSandbox(t)
+	writeLedgerPolicy(t, ledger.Policy{Rules: []ledger.Rule{{Resource: "internal/auth/*", Decision: ledger.Deny}}})
+
+	if _, err := liveDispatcher(echoHead(t, s, "h1", 90)).
+		Dispatch(context.Background(), "go", Options{Resource: "internal/auth/token.go"}); err == nil {
+		t.Error("dispatch touching internal/auth/token.go should have been denied by the resource rule")
+	}
+
+	res, err := liveDispatcher(echoHead(t, s, "h1", 90)).
+		Dispatch(context.Background(), "go", Options{Resource: "internal/api/handler.go"})
+	if err != nil {
+		t.Fatalf("dispatch touching a non-matching resource should succeed: %v", err)
+	}
+	if res.Head.ID != "h1" {
+		t.Errorf("Head = %q, want h1", res.Head.ID)
+	}
+}
+
 func writeLedgerPolicy(t *testing.T, p ledger.Policy) {
 	t.Helper()
 	raw, err := json.Marshal(p)

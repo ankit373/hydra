@@ -42,6 +42,13 @@ type Options struct {
 	A2AFile   string // path to A2A handoff JSON; prepends structured context to prompt
 	Enum      string // enum key (e.g. "SIMPLE") for cost logging
 
+	// Resource is the file (or other resource) this dispatch acts on, if any —
+	// e.g. the path editor.Edit is about to write. Passed to the ledger so a
+	// policy rule can express least-privilege file scoping ("deny writes under
+	// internal/auth/**"), not just per-head rules. Empty means no resource
+	// concept applies (e.g. a plain text dispatch with no target file).
+	Resource string
+
 	// RunID groups every log row produced by one user-facing invocation;
 	// TaskID groups the rows for one logical task inside it. Empty means
 	// "derive one" (see runid.ResolveRun/ResolveTask) — pass them explicitly
@@ -180,7 +187,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 			Head: h.ID, Model: h.Name, Tier: rank.UITier(h),
 			Detail: fmt.Sprintf("candidate %d of %d", i+1, len(candidates)),
 		})
-		if decision, lerr := ledger.CheckAndRecordDispatch("hydra-dispatch", h.ID, "", prompt); lerr == nil && decision == ledger.Deny {
+		if decision, lerr := ledger.CheckAndRecordDispatch("hydra-dispatch", h.ID, opts.Resource, prompt); lerr == nil && decision == ledger.Deny {
 			lastErr = fmt.Errorf("denied by ledger policy: head %s", h.ID)
 			_ = rl.Append(runlog.Event{
 				Kind: runlog.KindError, TaskID: taskID,

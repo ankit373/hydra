@@ -122,6 +122,7 @@ func Edit(ctx context.Context, req Request) (*Result, error) {
 		TierHint: tierHint,
 		RunID:    req.RunID,
 		TaskID:   req.TaskID,
+		Resource: req.File,
 	})
 	if err != nil {
 		cleanupBackup()

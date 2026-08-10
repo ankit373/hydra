@@ -14,6 +14,7 @@ import (
 
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/dispatch"
+	"github.com/ankit373/hydra/internal/ledger"
 	"github.com/ankit373/hydra/internal/testutil"
 
 	// Providers register themselves in init(), and this package does not import
@@ -126,6 +127,51 @@ func TestEdit_WritesTheModelsContentAndReportsTheDiff(t *testing.T) {
 		if strings.HasPrefix(e.Name(), ".hydra-tmp") || strings.HasSuffix(e.Name(), ".hydra-bak") {
 			t.Errorf("%s was left behind after a successful edit", e.Name())
 		}
+	}
+}
+
+// A ledger rule keyed on a file glob must block runEditTask against a
+// matching path — mirrors editor.Edit's own resource-scoping test, since
+// parallel.runEditTask duplicates that flow.
+func TestEdit_LedgerResourceRuleBlocksAMatchingFile(t *testing.T) {
+	repo := editSandbox(t, marked("package main\n\nfunc main() {}"))
+	writeLedgerPolicy(t, ledger.Policy{Rules: []ledger.Rule{{Resource: "**/secrets/**", Decision: ledger.Deny}}})
+
+	blocked := filepath.Join(repo, "secrets", "key.go")
+	if err := os.MkdirAll(filepath.Dir(blocked), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(blocked, []byte("package secrets\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got := runEdit(t, Task{Label: "edit", Enum: "MODERATE", File: blocked, Prompt: "add a helper", Validate: boolPtr(false)})
+	if got.Status != "fail" {
+		t.Errorf("status = %q, want fail — the resource rule should have blocked this edit", got.Status)
+	}
+
+	allowed := filepath.Join(repo, "main.go")
+	if err := os.WriteFile(allowed, []byte("package main\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got = runEdit(t, Task{Label: "edit", Enum: "MODERATE", File: allowed, Prompt: "add an empty main", Validate: boolPtr(false)})
+	if got.Status != "ok" {
+		t.Errorf("status = %q, want ok — a non-matching path must not be blocked: %q", got.Status, got.Error)
+	}
+}
+
+func writeLedgerPolicy(t *testing.T, p ledger.Policy) {
+	t.Helper()
+	raw, err := json.Marshal(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := ledger.DefaultPolicyPath()
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
+		t.Fatal(err)
 	}
 }
 
