@@ -101,6 +101,14 @@ func TestFirstRun_EveryEntryPointIsSafeWithNoHydraHome(t *testing.T) {
 			t.Error("Version is empty")
 		}
 	})
+
+	// CheckHyctl reads $PATH, not ~/.hydra, so an empty home is unrelated to
+	// it — but it is the very first call the app makes on a fresh machine
+	// (#383), so it belongs in this contract too: it must return a value, not
+	// panic, regardless of what is or is not installed.
+	t.Run("hyctl status", func(t *testing.T) {
+		_ = a.CheckHyctl()
+	})
 }
 
 // The whole first-run payload must be marshallable and free of nulls where the

@@ -176,6 +176,22 @@ export interface Diff {
   removed: number
 }
 
+export interface HyctlStatus {
+  found: boolean
+  path?: string
+  version?: string
+  /** False on platforms InstallHyctl cannot drive (Windows) — see its Go doc. */
+  supported: boolean
+}
+
+export interface InstallResult {
+  ok: boolean
+  version?: string
+  /** The installer's combined stdout/stderr, shown on both success and failure. */
+  log: string
+  error?: string
+}
+
 export interface ChatReply {
   output: string
   head: string

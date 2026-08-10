@@ -229,6 +229,82 @@ body {
   font-size: 12px;
 }
 
+/* ── Setup banner (#383 — hyctl missing) ──────────────────────────────── */
+
+.setup {
+  background: var(--hy-panel);
+  border: 1px solid var(--hy-line);
+  border-left: 3px solid var(--hy-aqua);
+  border-radius: var(--hy-radius);
+  padding: 15px 17px;
+  margin-bottom: 22px;
+}
+
+.setup__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.setup__title { font-weight: 600; font-size: 14px; }
+
+.setup__dismiss {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: var(--hy-dim);
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+.setup__dismiss:hover { color: var(--hy-ink); }
+.setup__dismiss:focus-visible { outline: 2px solid var(--hy-aqua); outline-offset: 1px; }
+
+.setup__body { margin: 9px 0 0; font-size: 13px; color: var(--hy-dim); line-height: 1.55; }
+.setup__body code {
+  font-family: var(--hy-font-mono);
+  font-size: 12px;
+  background: var(--hy-bg-2);
+  border: 1px solid var(--hy-line);
+  border-radius: var(--hy-radius-sm);
+  padding: 1px 6px;
+  color: var(--hy-aqua);
+}
+
+.setup__install {
+  appearance: none;
+  margin-top: 12px;
+  border: 0;
+  border-radius: var(--hy-radius-sm);
+  background: var(--hy-aqua);
+  color: var(--hy-bg);
+  font: inherit;
+  font-weight: 600;
+  font-size: 13px;
+  padding: 8px 16px;
+  cursor: pointer;
+}
+.setup__install:disabled { opacity: .6; cursor: default; }
+.setup__install:focus-visible { outline: 2px solid var(--hy-ink); outline-offset: 2px; }
+
+.setup__error {
+  margin: 10px 0 0;
+  color: var(--hy-expensive);
+  font-family: var(--hy-font-mono);
+  font-size: 12px;
+}
+
+.setup__log {
+  margin: 10px 0 0;
+  max-height: 160px;
+  overflow-y: auto;
+  background: var(--hy-bg-2);
+  border: 1px solid var(--hy-line);
+  border-radius: var(--hy-radius-sm);
+  padding: 10px 12px;
+  font-family: var(--hy-font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  color: var(--hy-dim);
+}
+
 /* ── Fleet ─────────────────────────────────────────────────────────────── */
 
 .rail__live {
