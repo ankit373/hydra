@@ -6,7 +6,17 @@
 // harness. Reading the methods off `window.go` at call time — the same object
 // the generated module wraps — keeps the source tree self-contained.
 
-import type { ChatReply, Dashboard, Diff, Edit, Fleet, Session, Version } from './types'
+import type {
+  ChatReply,
+  Dashboard,
+  Diff,
+  Edit,
+  Fleet,
+  Session,
+  UpdateStatus,
+  UpgradeResult,
+  Version,
+} from './types'
 
 interface WailsGo {
   api: {
@@ -19,6 +29,8 @@ interface WailsGo {
       ChatEnums(): Promise<string[]>
       GetDiff(runID: string, ref: string, file: string): Promise<Diff>
       GetVersion(): Promise<Version>
+      GetUpdateStatus(): Promise<UpdateStatus>
+      TriggerUpgrade(): Promise<UpgradeResult>
     }
   }
 }
@@ -47,3 +59,5 @@ export const Chat = (prompt: string, enumKey: string): Promise<ChatReply> =>
   backend().Chat(prompt, enumKey)
 export const ChatEnums = (): Promise<string[]> => backend().ChatEnums()
 export const GetVersion = (): Promise<Version> => backend().GetVersion()
+export const GetUpdateStatus = (): Promise<UpdateStatus> => backend().GetUpdateStatus()
+export const TriggerUpgrade = (): Promise<UpgradeResult> => backend().TriggerUpgrade()

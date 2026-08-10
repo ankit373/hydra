@@ -26,10 +26,12 @@ const (
 	cacheTTL  = 24 * time.Hour
 )
 
-// releaseURL is a var so tests can point it at an httptest server, matching
+// ReleaseURL is a var so tests can point it at an httptest server, matching
 // pricing's openRouterModelsURL. The alternative is a test that either reaches
-// GitHub for real or does not run at all.
-var releaseURL = "https://api.github.com/repos/ankit373/hydra/releases/latest"
+// GitHub for real or does not run at all. Exported (not just this package's
+// concern) so desktop/api's tests can drive GetUpdateStatus/TriggerUpgrade
+// against a stub too, rather than reaching the real GitHub API.
+var ReleaseURL = "https://api.github.com/repos/ankit373/hydra/releases/latest"
 
 type state struct {
 	CheckedAt     time.Time `json:"checked_at"`
@@ -67,6 +69,36 @@ func doCheck() string {
 	if !isatty.IsTerminal(os.Stdout.Fd()) {
 		return ""
 	}
+	return checkLatest()
+}
+
+// CheckIgnoringTTY runs the same env-var and dev-build gates as doCheck, plus
+// the shared 24h-cached GitHub fetch and semver compare, but skips the TTY
+// check. It exists for callers with no controlling terminal to gate on — the
+// desktop app has no stdout at all, so doCheck (and therefore Check) would
+// always silently return "" for it.
+//
+// Unlike Check, this does not memoise with sync.Once: Check's process is
+// hyctl, which runs once and exits, so "at most one fetch per process" and "at
+// most one fetch per 24h" are the same guarantee. The desktop app is
+// long-running and expected to call this repeatedly (e.g. on a poll timer), so
+// memoising in-process would freeze the answer for the life of the window.
+// resolveLatest's on-disk cache is what bounds this to one network fetch per
+// 24h regardless of caller.
+func CheckIgnoringTTY() string {
+	if os.Getenv("HYDRA_NO_UPDATE_CHECK") != "" || os.Getenv("CI") != "" {
+		return ""
+	}
+	if build.Version == "dev" {
+		return ""
+	}
+	return checkLatest()
+}
+
+// checkLatest resolves the latest release (cache-then-fetch) and reports it
+// only if newer than the running build. Shared by doCheck and CheckIgnoringTTY
+// so the two entry points cannot drift on what "an update exists" means.
+func checkLatest() string {
 	latest := resolveLatest()
 	if latest != "" && semverGT(latest, build.Version) {
 		return latest
@@ -94,7 +126,7 @@ func resolveLatest() string {
 
 func fetchLatest() string {
 	client := &http.Client{Timeout: 3 * time.Second}
-	req, err := http.NewRequest(http.MethodGet, releaseURL, nil)
+	req, err := http.NewRequest(http.MethodGet, ReleaseURL, nil)
 	if err != nil {
 		return ""
 	}

@@ -36,9 +36,9 @@ func stubReleases(t *testing.T, status int, body string) *int {
 	}))
 	t.Cleanup(srv.Close)
 
-	orig := releaseURL
-	releaseURL = srv.URL
-	t.Cleanup(func() { releaseURL = orig })
+	orig := ReleaseURL
+	ReleaseURL = srv.URL
+	t.Cleanup(func() { ReleaseURL = orig })
 	return &calls
 }
 
@@ -77,9 +77,9 @@ func TestFetchLatest_FailuresAreSilentAndEmpty(t *testing.T) {
 
 	// Nothing listening at all.
 	testutil.NewSandbox(t)
-	orig := releaseURL
-	releaseURL = "http://127.0.0.1:1/releases"
-	t.Cleanup(func() { releaseURL = orig })
+	orig := ReleaseURL
+	ReleaseURL = "http://127.0.0.1:1/releases"
+	t.Cleanup(func() { ReleaseURL = orig })
 	if got := fetchLatest(); got != "" {
 		t.Errorf("fetchLatest() = %q with a dead endpoint, want empty", got)
 	}
@@ -96,9 +96,9 @@ func TestFetchLatest_UsesGitHubTokenWhenPresent(t *testing.T) {
 		_, _ = w.Write([]byte(`{"tag_name":"v1.0.0"}`))
 	}))
 	defer srv.Close()
-	orig := releaseURL
-	releaseURL = srv.URL
-	defer func() { releaseURL = orig }()
+	orig := ReleaseURL
+	ReleaseURL = srv.URL
+	defer func() { ReleaseURL = orig }()
 
 	t.Setenv("GITHUB_TOKEN", "ghp_test")
 	fetchLatest()
@@ -260,5 +260,103 @@ func TestCheckAndCheckAsync_FetchAtMostOncePerProcess(t *testing.T) {
 	}
 	if *calls > 1 {
 		t.Errorf("made %d network calls; the check is memoised for the process", *calls)
+	}
+}
+
+// CheckIgnoringTTY exists for exactly one reason: a caller with no controlling
+// terminal (the desktop app) still needs an answer. go test's own stdout is
+// never a TTY, so doCheck() returning "" here is the gap this closes.
+func TestCheckIgnoringTTY_SkipsTheTTYGate(t *testing.T) {
+	testutil.NewSandbox(t)
+	calls := stubReleases(t, 200, `{"tag_name":"v9.9.9"}`)
+	orig := build.Version
+	build.Version = "v0.0.1"
+	t.Cleanup(func() { build.Version = orig })
+
+	if got := doCheck(); got != "" {
+		t.Fatalf("doCheck() = %q, want empty under go test (no TTY) — precondition for this test", got)
+	}
+	if got := CheckIgnoringTTY(); got != "v9.9.9" {
+		t.Errorf("CheckIgnoringTTY() = %q, want v9.9.9 despite no TTY", got)
+	}
+	if *calls != 1 {
+		t.Errorf("made %d network calls, want 1", *calls)
+	}
+}
+
+// The env-var and dev-build gates still apply — only the TTY check is skipped.
+func TestCheckIgnoringTTY_StillRefusesBeforeTouchingTheNetwork(t *testing.T) {
+	tests := []struct {
+		name string
+		env  [2]string
+	}{
+		{"HYDRA_NO_UPDATE_CHECK is set", [2]string{"HYDRA_NO_UPDATE_CHECK", "1"}},
+		{"running in CI", [2]string{"CI", "true"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			testutil.NewSandbox(t)
+			calls := stubReleases(t, 200, `{"tag_name":"v9.9.9"}`)
+			t.Setenv(tt.env[0], tt.env[1])
+
+			if got := CheckIgnoringTTY(); got != "" {
+				t.Errorf("CheckIgnoringTTY() = %q, want empty", got)
+			}
+			if *calls != 0 {
+				t.Errorf("made %d network calls despite the gate", *calls)
+			}
+		})
+	}
+
+	t.Run("dev build", func(t *testing.T) {
+		testutil.NewSandbox(t)
+		calls := stubReleases(t, 200, `{"tag_name":"v9.9.9"}`)
+		orig := build.Version
+		build.Version = "dev"
+		t.Cleanup(func() { build.Version = orig })
+
+		if got := CheckIgnoringTTY(); got != "" {
+			t.Errorf("CheckIgnoringTTY() = %q on a dev build", got)
+		}
+		if *calls != 0 {
+			t.Errorf("a dev build made %d network calls", *calls)
+		}
+	})
+}
+
+// No update is offered to a caller already on the latest version.
+func TestCheckIgnoringTTY_NoUpdateWhenCurrent(t *testing.T) {
+	testutil.NewSandbox(t)
+	stubReleases(t, 200, `{"tag_name":"v1.0.0"}`)
+	orig := build.Version
+	build.Version = "v1.0.0"
+	t.Cleanup(func() { build.Version = orig })
+
+	if got := CheckIgnoringTTY(); got != "" {
+		t.Errorf("CheckIgnoringTTY() = %q, want empty when already current", got)
+	}
+}
+
+// Unlike Check, CheckIgnoringTTY must not freeze its answer for the life of
+// the process via sync.Once — the desktop app is long-running and expected to
+// poll it. The on-disk cache in resolveLatest is what bounds the network
+// calls, not an in-process memo.
+func TestCheckIgnoringTTY_DoesNotMemoiseInProcess(t *testing.T) {
+	testutil.NewSandbox(t)
+	if err := os.MkdirAll(config.Dir(), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	calls := stubReleases(t, 200, `{"tag_name":"v2.0.0"}`)
+	orig := build.Version
+	build.Version = "v1.0.0"
+	t.Cleanup(func() { build.Version = orig })
+
+	first := CheckIgnoringTTY()
+	second := CheckIgnoringTTY()
+	if first != "v2.0.0" || second != "v2.0.0" {
+		t.Fatalf("CheckIgnoringTTY() = %q then %q, want v2.0.0 both times", first, second)
+	}
+	if *calls != 1 {
+		t.Errorf("made %d network calls, want 1 (bounded by the 24h disk cache, not a process memo)", *calls)
 	}
 }

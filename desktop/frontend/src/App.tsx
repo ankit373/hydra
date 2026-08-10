@@ -12,6 +12,7 @@ import { Fleet } from './views/Fleet'
 import { Session } from './views/Session'
 import { Code } from './views/Code'
 import { ChatDock } from './views/ChatDock'
+import { UpdateNotice } from './views/UpdateNotice'
 
 /** Dashboard is retrospective — a slow refresh is enough and costs nothing. */
 const DASHBOARD_MS = 5000
@@ -131,6 +132,7 @@ export default function App() {
         </div>
         <div className="rail__foot">
           {version ? `${version.version} · ${version.commit}` : ''}
+          <UpdateNotice />
         </div>
       </nav>
 
