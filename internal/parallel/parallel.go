@@ -199,6 +199,7 @@ func runTextTask(ctx context.Context, task Task, runID, taskID string) json.RawM
 		TierHint: enumToTier(task.Enum),
 		RunID:    runID,
 		TaskID:   taskID,
+		Resource: task.Context,
 	})
 	if err != nil {
 		return failText(task, err.Error())
@@ -300,6 +301,7 @@ snippet) between these exact markers and nothing else:
 		TierHint: enumToTier(task.Enum),
 		RunID:    runID,
 		TaskID:   taskID,
+		Resource: file,
 	})
 	if err != nil {
 		cleanupBackup()

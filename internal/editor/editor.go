@@ -149,6 +149,7 @@ snippet) between these exact markers and nothing else:
 		TierHint: tierHint,
 		RunID:    req.RunID,
 		TaskID:   req.TaskID,
+		Resource: req.File,
 	})
 	if err != nil {
 		cleanupBackup()

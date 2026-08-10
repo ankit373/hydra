@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/ankit373/hydra/internal/config"
+	"github.com/ankit373/hydra/internal/ledger"
 	"github.com/ankit373/hydra/internal/runlog"
 	"github.com/ankit373/hydra/internal/testutil"
 	"github.com/ankit373/hydra/internal/trust"
@@ -135,6 +136,58 @@ func TestEdit_WritesTheContentAndRecordsTheEdit(t *testing.T) {
 	}
 	if !sawEdit {
 		t.Errorf("no edit event in the run log: %+v", events)
+	}
+}
+
+// A ledger rule keyed on a file glob must block an edit to a matching path —
+// the concrete "excessive agency" containment: a head may be trusted in
+// general but still denied write access to a specific subtree.
+func TestEdit_LedgerResourceRuleBlocksAMatchingFile(t *testing.T) {
+	repo := editSandbox(t, marked("package main\n\nfunc main() {}"))
+	writeLedgerPolicy(t, ledger.Policy{Rules: []ledger.Rule{{Resource: "**/secrets/**", Decision: ledger.Deny}}})
+
+	blocked := filepath.Join(repo, "secrets", "key.go")
+	if err := os.MkdirAll(filepath.Dir(blocked), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(blocked, []byte("package secrets\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := Edit(context.Background(), Request{
+		File: blocked, Enum: "MODERATE", Prompt: "add a helper",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Status != "fail" {
+		t.Errorf("status = %q, want fail — the resource rule should have blocked this edit", res.Status)
+	}
+
+	allowed := filepath.Join(repo, "main.go")
+	res, err = Edit(context.Background(), Request{
+		File: allowed, Enum: "MODERATE", Prompt: "add an empty main",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Status != "ok" {
+		t.Errorf("status = %q, want ok — a non-matching path must not be blocked: %q", res.Status, res.Error)
+	}
+}
+
+func writeLedgerPolicy(t *testing.T, p ledger.Policy) {
+	t.Helper()
+	raw, err := json.Marshal(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := ledger.DefaultPolicyPath()
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
+		t.Fatal(err)
 	}
 }
 
