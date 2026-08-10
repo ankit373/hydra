@@ -176,6 +176,62 @@ func TestBuildArgs_SubstitutionAndSpacing(t *testing.T) {
 	}
 }
 
+// A candidate answer containing whitespace or flag-like tokens must land as
+// ONE atomic argv element, never re-split — otherwise it can inject extra
+// argv entries into whatever binary the template names (CWE-88 argument
+// injection). This is the regression test for the bug: {answer} used to be
+// substituted via raw string-replace before Fields-splitting, so whitespace
+// in the candidate fragmented into multiple argv tokens.
+func TestBuildArgs_AnswerWithWhitespaceIsOneAtomicArg(t *testing.T) {
+	o := &CommandOracle{Template: "grep {answer} file.txt", Source: "v"}
+	malicious := "ok --exec=rm -rf /"
+
+	parts, cleanup, err := o.buildArgs(malicious)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cleanup != nil {
+		cleanup()
+	}
+	want := []string{"grep", malicious, "file.txt"}
+	if len(parts) != len(want) {
+		t.Fatalf("buildArgs = %q, want %q — the candidate was fragmented into %d argv tokens instead of 1",
+			parts, want, len(parts)-2)
+	}
+	for i := range want {
+		if parts[i] != want[i] {
+			t.Errorf("parts[%d] = %q, want %q", i, parts[i], want[i])
+		}
+	}
+}
+
+// The same guarantee must hold when {answer} and {file} share a template,
+// each substituting atomically regardless of order.
+func TestBuildArgs_AnswerAndFileBothAtomicRegardlessOfOrder(t *testing.T) {
+	malicious := "ok --exec=rm -rf /"
+	o := &CommandOracle{
+		Template:  "diff {answer} {file}",
+		Source:    "v",
+		writeTemp: func(string) (string, func(), error) { return "/tmp/expected.txt", func() {}, nil },
+	}
+	parts, cleanup, err := o.buildArgs(malicious)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cleanup != nil {
+		cleanup()
+	}
+	want := []string{"diff", malicious, "/tmp/expected.txt"}
+	if len(parts) != len(want) {
+		t.Fatalf("buildArgs = %q, want %q", parts, want)
+	}
+	for i := range want {
+		if parts[i] != want[i] {
+			t.Errorf("parts[%d] = %q, want %q", i, parts[i], want[i])
+		}
+	}
+}
+
 // A cancelled context must stop the oracle rather than let it run to its own
 // timeout — the SPRT loop relies on this to bound a run.
 func TestVerify_HonoursContextCancellation(t *testing.T) {

@@ -92,11 +92,15 @@ func (o *CommandOracle) Verify(ctx context.Context, candidate string, _ trust.Ta
 	return Verdict{Passed: true}, nil
 }
 
-// buildArgs splits the template, substituting {answer} inline and materializing
-// {file} to a temp path. It mirrors editor.runValidatorCmd's safe splitting so
-// paths with spaces are never fragmented.
+// buildArgs splits the template into argv, substituting {answer} inline and
+// materializing {file} to a temp path. Both substitute as exactly one atomic
+// argv element via splitTemplate — never re-split by whitespace inside the
+// substituted value, so a candidate answer containing whitespace or flag-like
+// tokens cannot inject extra argv entries into whatever binary the template
+// names (CWE-88 argument injection).
 func (o *CommandOracle) buildArgs(candidate string) (parts []string, cleanup func(), err error) {
 	tmpl := o.Template
+	var filePath string
 	if strings.Contains(tmpl, "{file}") {
 		writer := o.writeTemp
 		if writer == nil {
@@ -107,16 +111,34 @@ func (o *CommandOracle) buildArgs(candidate string) (parts []string, cleanup fun
 			return nil, nil, werr
 		}
 		cleanup = cl
-		idx := strings.Index(tmpl, "{file}")
-		parts = append(strings.Fields(subAnswer(tmpl[:idx], candidate)), path)
-		parts = append(parts, strings.Fields(subAnswer(tmpl[idx+len("{file}"):], candidate))...)
-		return parts, cleanup, nil
+		filePath = path
 	}
-	return strings.Fields(subAnswer(tmpl, candidate)), nil, nil
+	return splitTemplate(tmpl, candidate, filePath), cleanup, nil
 }
 
-func subAnswer(s, candidate string) string {
-	return strings.ReplaceAll(s, "{answer}", candidate)
+// splitTemplate tokenizes tmpl into argv. Each {answer}/{file} placeholder
+// substitutes as exactly one atomic argv element, in whatever order and
+// however many times they appear; literal text around them is split on
+// whitespace normally, mirroring editor.runValidatorCmd's handling of {file}.
+func splitTemplate(tmpl, answer, file string) []string {
+	var parts []string
+	for {
+		ai := strings.Index(tmpl, "{answer}")
+		fi := strings.Index(tmpl, "{file}")
+		var idx int
+		var token, value string
+		switch {
+		case ai < 0 && fi < 0:
+			return append(parts, strings.Fields(tmpl)...)
+		case fi < 0 || (ai >= 0 && ai < fi):
+			idx, token, value = ai, "{answer}", answer
+		default:
+			idx, token, value = fi, "{file}", file
+		}
+		parts = append(parts, strings.Fields(tmpl[:idx])...)
+		parts = append(parts, value)
+		tmpl = tmpl[idx+len(token):]
+	}
 }
 
 // LLR maps a verdict to the calibrated log-likelihood-ratio contribution of this
