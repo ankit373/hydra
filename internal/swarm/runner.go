@@ -4,10 +4,12 @@ package swarm
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
 	"github.com/ankit373/hydra/internal/executor"
+	"github.com/ankit373/hydra/internal/ledger"
 	"github.com/ankit373/hydra/internal/provider"
 )
 
@@ -41,6 +43,14 @@ func executeHead(ctx context.Context, h provider.Head, prompt string, opts Optio
 		Head:      h,
 		Status:    StatusRunning,
 		StartedAt: time.Now(),
+	}
+
+	if decision, err := ledger.CheckAndRecordDispatch("hydra-swarm", h.ID, "", prompt); err == nil && decision == ledger.Deny {
+		a.FinishedAt = time.Now()
+		a.Duration = a.FinishedAt.Sub(a.StartedAt)
+		a.Status = StatusFailed
+		a.Err = fmt.Errorf("denied by ledger policy: head %s", h.ID)
+		return a
 	}
 
 	execCtx, cancel := context.WithTimeout(ctx, effectiveTimeout(opts))

@@ -434,6 +434,23 @@ func Check(path string, p Policy, req CheckRequest) (Decision, error) {
 	return decision, err
 }
 
+// CheckAndRecordDispatch is the automatic-dispatch-path counterpart to the
+// manual `hyctl mcp check`: it loads the default policy, evaluates one head
+// call as a tool/resource access (Action=Exec), and records the decision —
+// so a real dispatch produces a ledger event without anyone invoking
+// `hyctl mcp` by hand. Default (no rules configured) policy is Allow, so this
+// only changes behavior for an install that has deliberately configured a
+// deny rule.
+func CheckAndRecordDispatch(agent, headID, resource, content string) (Decision, error) {
+	pol, err := LoadPolicy(DefaultPolicyPath())
+	if err != nil {
+		return "", err
+	}
+	return Check(DefaultPath(), pol, CheckRequest{
+		Agent: agent, Tool: headID, Resource: resource, Action: Exec, Content: content,
+	})
+}
+
 // Summary is the aggregate accountability report.
 type Summary struct {
 	Total   int            `json:"total"`

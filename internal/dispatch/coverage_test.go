@@ -15,6 +15,7 @@ import (
 	"github.com/ankit373/hydra/internal/budget"
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/executor"
+	"github.com/ankit373/hydra/internal/ledger"
 	"github.com/ankit373/hydra/internal/policy"
 	"github.com/ankit373/hydra/internal/pricing"
 	"github.com/ankit373/hydra/internal/provider"
@@ -178,6 +179,79 @@ func TestDispatch_FallsThroughToTheNextHead(t *testing.T) {
 	if res.Retries != 1 {
 		t.Errorf("Retries = %d, want 1 — the user is told how far the chain fell",
 			res.Retries)
+	}
+}
+
+// A ledger deny rule must actually block a real dispatch to that head, not
+// just log it — the entire point of a policy gate over an accountability log.
+func TestDispatch_LedgerDenyRuleBlocksTheHead(t *testing.T) {
+	s := testutil.NewSandbox(t)
+	writeLedgerPolicy(t, ledger.Policy{Rules: []ledger.Rule{{Tool: "denied", Decision: ledger.Deny}}})
+
+	res, err := liveDispatcher(echoHead(t, s, "denied", 95), echoHead(t, s, "ok", 90)).
+		Dispatch(context.Background(), "go", Options{})
+	if err != nil {
+		t.Fatalf("dispatch gave up instead of falling back past the denied head: %v", err)
+	}
+	if res.Head.ID != "ok" {
+		t.Errorf("answered by %q, want the fallback head — the denied one must never run", res.Head.ID)
+	}
+
+	events, err := ledger.Load(ledger.DefaultPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var sawDeny bool
+	for _, e := range events {
+		if e.Tool == "denied" && e.Decision == ledger.Deny {
+			sawDeny = true
+		}
+	}
+	if !sawDeny {
+		t.Errorf("no deny event recorded for the denied head: %+v", events)
+	}
+}
+
+// With no policy configured, the ledger's default-allow must leave dispatch
+// behavior unchanged — but it must still record the access.
+func TestDispatch_DefaultLedgerPolicyRecordsButNeverBlocks(t *testing.T) {
+	s := testutil.NewSandbox(t)
+
+	res, err := liveDispatcher(echoHead(t, s, "h1", 90)).Dispatch(context.Background(), "go", Options{})
+	if err != nil {
+		t.Fatalf("a dispatch with no ledger policy configured must succeed: %v", err)
+	}
+	if res.Head.ID != "h1" {
+		t.Errorf("Head = %q, want h1", res.Head.ID)
+	}
+
+	events, err := ledger.Load(ledger.DefaultPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var sawAllow bool
+	for _, e := range events {
+		if e.Tool == "h1" && e.Decision == ledger.Allow {
+			sawAllow = true
+		}
+	}
+	if !sawAllow {
+		t.Errorf("no allow event recorded for a real dispatch: %+v", events)
+	}
+}
+
+func writeLedgerPolicy(t *testing.T, p ledger.Policy) {
+	t.Helper()
+	raw, err := json.Marshal(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := ledger.DefaultPolicyPath()
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
+		t.Fatal(err)
 	}
 }
 
