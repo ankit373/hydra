@@ -888,3 +888,68 @@ body {
 
 /* The dock floats over the main column; keep the last rows reachable. */
 .main { padding-bottom: 86px; }
+
+/* ── Update notice ─────────────────────────────────────────────────────── */
+/* Lives in .rail__foot, next to the version string. Renders nothing at all
+   when up to date, so it adds no weight to the common case. */
+
+.update-notice { margin-top: 6px; }
+
+.update-notice__badge {
+  appearance: none;
+  background: transparent;
+  border: 1px solid var(--hy-aqua);
+  border-radius: 999px;
+  color: var(--hy-aqua);
+  font: inherit;
+  font-family: var(--hy-font-mono);
+  font-size: 10px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+.update-notice__badge:hover { background: var(--hy-panel); }
+.update-notice__badge:focus-visible { outline: 2px solid var(--hy-aqua); outline-offset: 2px; }
+
+.update-notice__panel {
+  margin-top: 8px;
+  padding: 9px 10px;
+  background: var(--hy-panel);
+  border: 1px solid var(--hy-line);
+  border-radius: var(--hy-radius-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.update-notice__hint { margin: 0; color: var(--hy-dim); font-size: 11px; line-height: 1.5; }
+.update-notice__error { margin: 0; color: var(--hy-expensive); font-size: 11px; }
+
+.update-notice__cta {
+  appearance: none;
+  align-self: flex-start;
+  background: var(--hy-aqua);
+  border: 0;
+  border-radius: var(--hy-radius-sm);
+  color: var(--hy-bg);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 5px 11px;
+  cursor: pointer;
+}
+.update-notice__cta:hover { opacity: .88; }
+.update-notice__cta:focus-visible { outline: 2px solid var(--hy-ink); outline-offset: 2px; }
+
+.update-notice__log {
+  max-height: 140px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 7px 8px;
+  background: var(--hy-bg);
+  border-radius: var(--hy-radius-sm);
+  color: var(--hy-dim);
+  font-family: var(--hy-font-mono);
+  font-size: 10px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}

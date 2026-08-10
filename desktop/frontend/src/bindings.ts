@@ -15,6 +15,8 @@ import type {
   HyctlStatus,
   InstallResult,
   Session,
+  UpdateStatus,
+  UpgradeResult,
   Version,
 } from './types'
 
@@ -29,6 +31,8 @@ interface WailsGo {
       ChatEnums(): Promise<string[]>
       GetDiff(runID: string, ref: string, file: string): Promise<Diff>
       GetVersion(): Promise<Version>
+      GetUpdateStatus(): Promise<UpdateStatus>
+      TriggerUpgrade(): Promise<UpgradeResult>
       CheckHyctl(): Promise<HyctlStatus>
       InstallHyctl(): Promise<InstallResult>
     }
@@ -59,5 +63,7 @@ export const Chat = (prompt: string, enumKey: string): Promise<ChatReply> =>
   backend().Chat(prompt, enumKey)
 export const ChatEnums = (): Promise<string[]> => backend().ChatEnums()
 export const GetVersion = (): Promise<Version> => backend().GetVersion()
+export const GetUpdateStatus = (): Promise<UpdateStatus> => backend().GetUpdateStatus()
+export const TriggerUpgrade = (): Promise<UpgradeResult> => backend().TriggerUpgrade()
 export const CheckHyctl = (): Promise<HyctlStatus> => backend().CheckHyctl()
 export const InstallHyctl = (): Promise<InstallResult> => backend().InstallHyctl()

@@ -67,6 +67,19 @@ export interface Version {
   date: string
 }
 
+export interface UpdateStatus {
+  current: string
+  /** Empty unless available is true. */
+  latest?: string
+  available: boolean
+}
+
+export interface UpgradeResult {
+  ok: boolean
+  /** Combined stdout+stderr of install-app.sh, for troubleshooting a failure. */
+  output: string
+}
+
 export interface Agent {
   id: string
   parent?: string
