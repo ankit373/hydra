@@ -39,6 +39,7 @@ import (
 	"github.com/ankit373/hydra/internal/review"
 	"github.com/ankit373/hydra/internal/runid"
 	"github.com/ankit373/hydra/internal/runlog"
+	"github.com/ankit373/hydra/internal/security"
 	"github.com/ankit373/hydra/internal/swarm"
 	"github.com/ankit373/hydra/internal/trust"
 	"github.com/ankit373/hydra/internal/tui"
@@ -91,7 +92,7 @@ func rootCmd() *cobra.Command {
 		cmdInit(), cmdProbe(), cmdStatus(), cmdTui(), cmdDispatch(),
 		cmdEdit(), cmdReview(), cmdParallel(), cmdCost(), cmdStats(),
 		cmdPricing(), cmdTrust(), cmdGraph(), cmdContext(), cmdMCP(), cmdOracle(), cmdModels(),
-		cmdVersion(),
+		cmdSecurity(), cmdVersion(),
 	)
 	return root
 }
@@ -1003,6 +1004,66 @@ func cmdMCP() *cobra.Command {
 
 	cmd.AddCommand(check, record, verify, logCmd, report, verifyChain)
 	return cmd
+}
+
+// cmdSecurity is the security posture dashboard: ledger accountability,
+// per-head risk, and a short list of honest checks — never a manufactured
+// score, only what's actually configured and observed.
+func cmdSecurity() *cobra.Command {
+	var jsonOut bool
+	cmd := &cobra.Command{
+		Use:   "security",
+		Short: "Security posture dashboard: ledger accountability, risk by head, and honest checks",
+		RunE: func(_ *cobra.Command, _ []string) error {
+			heads := probe.Run(context.Background()).Heads
+			rep, err := security.Build(heads)
+			if err != nil {
+				return err
+			}
+			if jsonOut {
+				return json.NewEncoder(os.Stdout).Encode(rep)
+			}
+			printSecurityReport(rep)
+			return nil
+		},
+	}
+	cmd.Flags().BoolVar(&jsonOut, "json", false, "machine-readable JSON output")
+	return cmd
+}
+
+func printSecurityReport(r *security.Report) {
+	fmt.Println()
+	if !r.HasData {
+		fmt.Println(dimStyle.Render("  no ledger events yet — nothing has dispatched through hyctl on this machine"))
+	} else {
+		fmt.Printf("  %s  %d  (%d allowed · %d denied · %d flagged)\n",
+			cortexStyle.Render("ledger events"), r.Ledger.Total, r.Ledger.Allowed, r.Ledger.Denied, r.Ledger.Flagged)
+	}
+
+	if len(r.ByHead) > 0 {
+		fmt.Println()
+		fmt.Println(dimStyle.Render("  " + strings.Repeat("─", 48)))
+		fmt.Printf("  %-24s %8s %8s\n", "HEAD", "DENIED", "FLAGGED")
+		fmt.Println(dimStyle.Render("  " + strings.Repeat("─", 48)))
+		for _, h := range r.ByHead {
+			fmt.Printf("  %-24.24s %8d %8d\n", h.Head, h.Denied, h.Flagged)
+		}
+	}
+
+	fmt.Println()
+	fmt.Println(dimStyle.Render("  " + strings.Repeat("─", 48)))
+	fmt.Println("  checks:")
+	for _, c := range r.Checks {
+		status := c.Status
+		if strings.Contains(strings.ToLower(status), "broken") {
+			status = warnStyle.Render(status)
+		} else if status == "intact" || strings.HasSuffix(status, "refusal(s)") {
+			status = okStyle.Render(status)
+		}
+		fmt.Printf("    %-26s %s\n", c.Name, status)
+		fmt.Println(dimStyle.Render("      " + c.Detail))
+	}
+	fmt.Println()
 }
 
 // cmdModels manages the runtime-extensible model capability registry.
