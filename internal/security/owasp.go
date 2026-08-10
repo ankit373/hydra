@@ -4,6 +4,8 @@ package security
 
 import (
 	"fmt"
+	"slices"
+	"time"
 
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/ledger"
@@ -33,6 +35,13 @@ type Category struct {
 	Name   string         `json:"name"`
 	Status CoverageStatus `json:"status"`
 	Detail string         `json:"detail"`
+
+	// GapSince/GapAgeDays are set only when Status is Gap, from the score
+	// history Build already persists — the earliest recorded run where this
+	// category was already a gap. A brand-new gap (no matching history) gets
+	// age 0: this run is the first evidence of it.
+	GapSince   string `json:"gapSince,omitempty"`
+	GapAgeDays int    `json:"gapAgeDays,omitempty"`
 }
 
 // Coverage is Hydra's posture against the OWASP LLM Top 10: a percentage of
@@ -150,4 +159,33 @@ func llm10UnboundedConsumption(events []ledger.Event) Category {
 	c.Status = Gap
 	c.Detail = "no dispatch has ever been refused for exceeding a cost ceiling — set one with --max-cost"
 	return c
+}
+
+// annotateGapAge fills in GapSince/GapAgeDays for every currently-Gap
+// category, using score history that Build already loads and persists
+// (security_score.jsonl, since #396) — no new logging, just reading data
+// that already exists. history must be oldest-first, which
+// loadScoreHistory/appendScoreHistory already guarantee (the log is
+// append-only).
+func annotateGapAge(cats []Category, history []scoreEntry, now time.Time) []Category {
+	out := make([]Category, len(cats))
+	copy(out, cats)
+	for i, c := range out {
+		if c.Status != Gap {
+			continue
+		}
+		for _, h := range history {
+			if !slices.Contains(h.Gaps, c.ID) {
+				continue
+			}
+			ts, err := time.Parse(time.RFC3339, h.TS)
+			if err != nil {
+				continue
+			}
+			out[i].GapSince = h.TS
+			out[i].GapAgeDays = int(now.Sub(ts).Hours() / 24)
+			break
+		}
+	}
+	return out
 }

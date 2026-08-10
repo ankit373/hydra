@@ -287,26 +287,41 @@ func TestDashSecurity_NilReportRendersUnavailable(t *testing.T) {
 	}
 }
 
-func TestDashSecurity_RendersCoverageAndRecommendations(t *testing.T) {
+func TestDashSecurity_RendersCoverageAndActions(t *testing.T) {
 	m := Cockpit{w: 120, h: 30, ready: true, security: &security.Report{
 		IntegrityIntact: true,
 		Coverage: security.Coverage{
 			Applicable: 8, Covered: 3, PercentCovered: 37.5,
 			Categories: []security.Category{
 				{ID: "LLM01", Name: "Prompt Injection", Status: security.Enforced},
-				{ID: "LLM03", Name: "Supply Chain", Status: security.Gap, Detail: "no integrity verification"},
+				{ID: "LLM03", Name: "Supply Chain", Status: security.Gap, Detail: "no integrity verification", GapAgeDays: 45},
 				{ID: "LLM04", Name: "Data and Model Poisoning", Status: security.NotApplicable},
 			},
 		},
-		Trend:           security.Trend{Available: true, DeltaPct: 12, FirstPct: 25.5},
-		ByHead:          []ledger.HeadRisk{{Head: "sketchy", Denied: 2, Flagged: 1}},
-		Recommendations: []string{"LLM03 Supply Chain: no integrity verification"},
+		Trend:  security.Trend{Available: true, DeltaPct: 12, FirstPct: 25.5},
+		ByHead: []ledger.HeadRisk{{Head: "sketchy", Denied: 2, Flagged: 1}},
+		History: []security.HistoryPoint{
+			{TS: "2026-07-01T00:00:00Z", PercentCovered: 12.5},
+			{TS: "2026-08-01T00:00:00Z", PercentCovered: 37.5},
+		},
+		Actions: []security.Action{
+			{ID: "LLM03", Kind: "gap", Title: "Supply Chain", Detail: "no integrity verification",
+				AgeDays: 45, Priority: security.PriorityNow},
+		},
 	}}
 	out := m.dashSecurity(120, 30)
-	for _, want := range []string{"37%", "LLM01", "enforced", "LLM03", "gap", "sketchy", "denied 2", "Supply Chain"} {
+	for _, want := range []string{
+		"37%", "LLM01", "enforced", "LLM03", "gap", "45d", "sketchy", "denied 2",
+		"NOW", "Supply Chain", "history",
+	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("dashSecurity output missing %q:\n%s", want, out)
 		}
+	}
+	// The real ckSpark sparkline, not a placeholder — same block glyphs the
+	// latency panel already uses.
+	if !strings.ContainsAny(out, "▁▂▃▄▅▆▇█") {
+		t.Errorf("dashSecurity did not render a real history sparkline:\n%s", out)
 	}
 	// N/A categories must never appear in the rendered list.
 	if strings.Contains(out, "LLM04") {
