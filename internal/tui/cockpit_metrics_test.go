@@ -10,6 +10,8 @@ import (
 
 	"github.com/ankit373/hydra/internal/cost"
 	"github.com/ankit373/hydra/internal/graph"
+	"github.com/ankit373/hydra/internal/ledger"
+	"github.com/ankit373/hydra/internal/security"
 )
 
 // cost.jsonl carries wall_ms on every row, so a per-head latency trace is real
@@ -270,5 +272,58 @@ func TestBlastFor_RealGraphYieldsRealNumbers(t *testing.T) {
 	// A file absent from the graph reports nothing at all.
 	if _, _, _, ok := m.ckBlastFor("not-in-graph.go"); ok {
 		t.Error("a file absent from the graph reported a blast radius")
+	}
+}
+
+// dashSecurity must handle all three real states without panicking or
+// rendering an empty frame: no report at all (Build failed), a normal
+// report, and one where the ledger chain has been tampered with.
+
+func TestDashSecurity_NilReportRendersUnavailable(t *testing.T) {
+	m := Cockpit{w: 120, h: 30, ready: true, security: nil}
+	out := m.dashSecurity(120, 30)
+	if !strings.Contains(out, "unavailable") {
+		t.Errorf("a nil security report should say so plainly:\n%s", out)
+	}
+}
+
+func TestDashSecurity_RendersCoverageAndRecommendations(t *testing.T) {
+	m := Cockpit{w: 120, h: 30, ready: true, security: &security.Report{
+		IntegrityIntact: true,
+		Coverage: security.Coverage{
+			Applicable: 8, Covered: 3, PercentCovered: 37.5,
+			Categories: []security.Category{
+				{ID: "LLM01", Name: "Prompt Injection", Status: security.Enforced},
+				{ID: "LLM03", Name: "Supply Chain", Status: security.Gap, Detail: "no integrity verification"},
+				{ID: "LLM04", Name: "Data and Model Poisoning", Status: security.NotApplicable},
+			},
+		},
+		Trend:           security.Trend{Available: true, DeltaPct: 12, FirstPct: 25.5},
+		ByHead:          []ledger.HeadRisk{{Head: "sketchy", Denied: 2, Flagged: 1}},
+		Recommendations: []string{"LLM03 Supply Chain: no integrity verification"},
+	}}
+	out := m.dashSecurity(120, 30)
+	for _, want := range []string{"37%", "LLM01", "enforced", "LLM03", "gap", "sketchy", "denied 2", "Supply Chain"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("dashSecurity output missing %q:\n%s", want, out)
+		}
+	}
+	// N/A categories must never appear in the rendered list.
+	if strings.Contains(out, "LLM04") {
+		t.Errorf("an N/A category (LLM04) was rendered:\n%s", out)
+	}
+}
+
+func TestDashSecurity_IntegrityCompromisedOverridesTheScore(t *testing.T) {
+	m := Cockpit{w: 120, h: 30, ready: true, security: &security.Report{
+		IntegrityIntact: false,
+		Coverage:        security.Coverage{Applicable: 8, Covered: 8, PercentCovered: 100},
+	}}
+	out := m.dashSecurity(120, 30)
+	if !strings.Contains(out, "INTEGRITY COMPROMISED") {
+		t.Errorf("a broken chain must override the headline, got:\n%s", out)
+	}
+	if strings.Contains(out, "100%") {
+		t.Errorf("the coverage percentage must not render when integrity is compromised:\n%s", out)
 	}
 }

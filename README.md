@@ -473,7 +473,7 @@ The wizard scans your machine, ranks every model it finds, walks you through pic
 hyctl init                              # first-run wizard
 hyctl probe                             # scan and display all available models
 hyctl status                            # live system state (heads, budget bars, burn-rate risk)
-hyctl tui                               # interactive cockpit — chat+code / dashboard / agent-tree (Tab cycles)
+hyctl tui                               # interactive cockpit — chat+code / dashboard / agent-tree / security (Tab cycles)
 
 # Model registry (add a new model at runtime — no rebuild)
 hyctl models list                       # built-in + your models, by capability score

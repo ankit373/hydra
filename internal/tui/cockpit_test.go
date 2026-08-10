@@ -10,7 +10,7 @@ import (
 // `hyctl tui --snapshot --view 3` used to panic with an index-out-of-range:
 // header() indexed a 3-element slice literal with an unvalidated m.view.
 func TestCockpitSnapshotView_OutOfRangeDoesNotPanic(t *testing.T) {
-	for _, view := range []int{-1, -100, 3, 99} {
+	for _, view := range []int{-1, -100, len(ckViewNames), 99} {
 		t.Run(strings.TrimSpace(viewLabel(view)), func(t *testing.T) {
 			defer func() {
 				if r := recover(); r != nil {

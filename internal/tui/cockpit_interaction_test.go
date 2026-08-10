@@ -222,12 +222,14 @@ func TestCockpit_ResizeIsRecorded(t *testing.T) {
 
 // The snapshot is what `hyctl tui --snapshot` prints. All three views must
 // render and be labelled, or the output is unreadable in a bug report.
-func TestCockpitSnapshot_RendersAllThreeViews(t *testing.T) {
+func TestCockpitSnapshot_RendersAllViews(t *testing.T) {
 	got := CockpitSnapshot()
 	if strings.TrimSpace(got) == "" {
 		t.Fatal("CockpitSnapshot rendered nothing")
 	}
-	for _, want := range []string{"VIEW 1/3", "VIEW 2/3", "VIEW 3/3"} {
+	n := len(ckViewNames)
+	for i := 1; i <= n; i++ {
+		want := fmt.Sprintf("VIEW %d/%d", i, n)
 		if !strings.Contains(got, want) {
 			t.Errorf("the snapshot is missing %q", want)
 		}
@@ -707,7 +709,7 @@ func TestCockpit_RendersAtEveryTerminalSize(t *testing.T) {
 		{200, 60},  // very wide
 		{500, 200}, // wider than anything real
 	}
-	for _, view := range []int{0, 1, 2} {
+	for view := 0; view < ckViewCount(); view++ {
 		for _, sz := range sizes {
 			m.view = view
 			m.w, m.h, m.ready = sz.w, sz.h, true

@@ -2,10 +2,11 @@
 
 package tui
 
-// cockpit_views.go — the three cockpit view modes cycled by Tab:
+// cockpit_views.go — the four cockpit view modes cycled by Tab:
 //   view 0  chat + live code panel   (chatCode → codePanel)
 //   view 1  dashboard                (dash) — reads real probe/cost/trust data
 //   view 2  agent supervision tree   (tree) — still a fixed example; see #189
+//   view 3  security                 (dashSecurity) — reads internal/security.Build
 // plus their pure helpers (syntax highlighter, tier/state colour ramps). Neon
 // identity via the ck-prefixed palette declared in cockpit.go.
 
@@ -16,6 +17,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/ankit373/hydra/internal/budget"
+	"github.com/ankit373/hydra/internal/security"
 	"github.com/ankit373/hydra/internal/tree"
 	"github.com/ankit373/hydra/internal/trust"
 )
@@ -293,6 +295,94 @@ func treePrefix(r tree.Row) string {
 		branch = "└─ "
 	}
 	return strings.Repeat("│  ", r.Depth-1) + branch
+}
+
+// ── view 3 · security ────────────────────────────────────────────────────────
+
+// dashSecurity is the OWASP LLM Top-10 coverage view: the same report
+// `hyctl security` prints, reused rather than recomputed — m.security is
+// loaded once in NewCockpit, so this reads no I/O, matching dash's own rule.
+// Column budgets are fixed, not proportional to w — matching dash()'s own
+// fleet/spend/trust/governor boxes, which are all fixed-width content laid
+// out side by side and only padded to fill w by the final Width(w).Render.
+// A width that scales with the terminal risks a line longer than lipgloss's
+// border can hold, which corrupts the box drawing rather than wrapping.
+const (
+	ckSecNameW = 26 // category name column
+	ckSecRecW  = 40 // recommendation text column (narrower right-hand box)
+)
+
+func (m Cockpit) dashSecurity(w, h int) string {
+	if m.security == nil {
+		return lipgloss.NewStyle().Width(w).Height(h).Render(
+			ckFaintS.Render(" security report unavailable — the ledger could not be read"))
+	}
+	r := m.security
+
+	var head strings.Builder
+	head.WriteString(ckLabelS.Render("SECURITY · OWASP LLM Top-10 coverage") + "\n\n")
+	if !r.IntegrityIntact {
+		head.WriteString(" " + ckExpS.Render("INTEGRITY COMPROMISED") +
+			ckDimS.Render(" — ledger tampered") + "\n")
+	} else {
+		pct := int(r.Coverage.PercentCovered)
+		head.WriteString(" " + ckCoverageBar(pct, 20) +
+			ckDimS.Render(fmt.Sprintf("  %d%%  (%d/%d)", pct, r.Coverage.Covered, r.Coverage.Applicable)) + "\n")
+		if r.Trend.Available {
+			arrow, style := "→", ckDimS
+			switch {
+			case r.Trend.DeltaPct > 0:
+				arrow, style = "↑", ckCheapS
+			case r.Trend.DeltaPct < 0:
+				arrow, style = "↓", ckExpS
+			}
+			head.WriteString(" " + style.Render(fmt.Sprintf("%s %+.0f%% since first run (was %.0f%%)",
+				arrow, r.Trend.DeltaPct, r.Trend.FirstPct)) + "\n")
+		}
+	}
+	head.WriteString("\n")
+	for _, c := range r.Coverage.Categories {
+		if c.Status == security.NotApplicable {
+			continue
+		}
+		style := ckDimS
+		switch c.Status {
+		case security.Enforced:
+			style = ckCheapS
+		case security.Configured:
+			style = ckCyanS
+		case security.Gap:
+			style = ckExpS
+		}
+		head.WriteString(fmt.Sprintf(" %-6s %-*s %s\n", c.ID, ckSecNameW, truncate(c.Name, ckSecNameW), style.Render(string(c.Status))))
+	}
+
+	var risk strings.Builder
+	risk.WriteString(ckLabelS.Render("PER-HEAD RISK") + "\n\n")
+	if len(r.ByHead) == 0 {
+		risk.WriteString(ckFaintS.Render(" nothing denied or flagged yet") + "\n")
+	}
+	for _, hr := range r.ByHead {
+		risk.WriteString(fmt.Sprintf(" %-20s denied %-3d flagged %-3d\n", truncate(hr.Head, 20), hr.Denied, hr.Flagged))
+	}
+
+	var rec strings.Builder
+	rec.WriteString(ckLabelS.Render("RECOMMENDATIONS") + "\n\n")
+	if len(r.Recommendations) == 0 {
+		rec.WriteString(ckCheapS.Render(" nothing to recommend") + "\n")
+	}
+	const maxRec = 6 // height-bounded, matches the terminal frames this view fits in
+	for i, line := range r.Recommendations {
+		if i >= maxRec {
+			rec.WriteString(ckFaintS.Render(fmt.Sprintf(" … %d more", len(r.Recommendations)-maxRec)) + "\n")
+			break
+		}
+		rec.WriteString(" " + ckDimS.Render(truncate(line, ckSecRecW)) + "\n")
+	}
+
+	right := lipgloss.JoinVertical(lipgloss.Left, ckBoxS.Render(risk.String()), ckBoxS.Render(rec.String()))
+	row := lipgloss.JoinHorizontal(lipgloss.Top, ckBoxS.Render(head.String()), " ", right)
+	return lipgloss.NewStyle().Width(w).Height(h).Render(row)
 }
 
 // ── syntax highlighter ───────────────────────────────────────────────────────
