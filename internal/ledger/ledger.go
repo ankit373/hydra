@@ -96,6 +96,13 @@ type Event struct {
 	// under (e.g. "pii"). Empty means unclassified.
 	Classification string `json:"classification,omitempty"`
 
+	// Flagged is true when Content matched a heuristic prompt-injection
+	// marker (policy.ContainsInjectionMarkers). A non-blocking audit signal —
+	// it does not itself cause Deny. See FlagReason for which phrase matched.
+	Flagged bool `json:"flagged,omitempty"`
+	// FlagReason is the specific heuristic that matched, when Flagged is true.
+	FlagReason string `json:"flag_reason,omitempty"`
+
 	// Config is the deployment-identity breadcrumb (config.Breadcrumb) in
 	// effect when this event was recorded, ties the event to the exact
 	// routing rules that were live.
@@ -394,7 +401,10 @@ type CheckRequest struct {
 	// Classification is the data-sensitivity tag (e.g. "pii"). If empty and
 	// Content is non-empty, it is derived via policy.ContainsPII(Content).
 	Classification string
-	Content        string
+	// FlagReason is the injection-marker reason, if already known. If empty
+	// and Content is non-empty, it is derived via policy.InjectionMarker(Content).
+	FlagReason string
+	Content    string
 }
 
 // Check evaluates the policy AND records the resulting event to the ledger —
@@ -409,6 +419,14 @@ func Check(path string, p Policy, req CheckRequest) (Decision, error) {
 		classification = "pii"
 	}
 
+	flagReason := req.FlagReason
+	if flagReason == "" && req.Content != "" {
+		if reason, ok := policy.InjectionMarker(policy.Request{Prompt: req.Content}); ok {
+			flagReason = reason
+		}
+	}
+	flagged := flagReason != ""
+
 	var hash string
 	if req.Params != nil {
 		h, err := HashParams(req.Params)
@@ -418,6 +436,7 @@ func Check(path string, p Policy, req CheckRequest) (Decision, error) {
 			_ = Record(path, Event{
 				Agent: req.Agent, Tool: req.Tool, Resource: req.Resource,
 				Action: req.Action, Decision: Deny, Classification: classification,
+				Flagged: flagged, FlagReason: flagReason,
 				Reason: "unhashable parameters: " + err.Error(),
 			})
 			return Deny, err
@@ -430,6 +449,7 @@ func Check(path string, p Policy, req CheckRequest) (Decision, error) {
 		Agent: req.Agent, Tool: req.Tool, Resource: req.Resource,
 		Action: req.Action, Decision: decision, Reason: reason,
 		ParametersHash: hash, Classification: classification,
+		Flagged: flagged, FlagReason: flagReason,
 	})
 	return decision, err
 }
@@ -456,6 +476,7 @@ type Summary struct {
 	Total   int            `json:"total"`
 	Allowed int            `json:"allowed"`
 	Denied  int            `json:"denied"`
+	Flagged int            `json:"flagged"`
 	ByAgent map[string]int `json:"by_agent"`
 	ByTool  map[string]int `json:"by_tool"`
 }
@@ -470,6 +491,9 @@ func Summarize(events []Event) Summary {
 			s.Allowed++
 		case Deny:
 			s.Denied++
+		}
+		if e.Flagged {
+			s.Flagged++
 		}
 		s.ByAgent[e.Agent]++
 		s.ByTool[e.Tool]++
