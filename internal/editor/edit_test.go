@@ -15,6 +15,7 @@ import (
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/runlog"
 	"github.com/ankit373/hydra/internal/testutil"
+	"github.com/ankit373/hydra/internal/trust"
 
 	// Providers register themselves in init(), and this package does not import
 	// them — without these blanks provider.All() is empty in the test binary and
@@ -275,6 +276,51 @@ func TestEdit_PassingValidationKeepsTheEdit(t *testing.T) {
 	if raw, _ := os.ReadFile(file); !strings.Contains(string(raw), "validated") {
 		t.Errorf("the edit was rolled back despite passing: %q", raw)
 	}
+	if res.Head != "cody" {
+		t.Errorf("Head = %q, want cody", res.Head)
+	}
+}
+
+// A validator's exit code is real ground truth — it must reach calibration
+// automatically, both when it passes and when it fails, without a human
+// ever running `hyctl trust record`.
+func TestEdit_ValidationOutcomeReachesCalibration(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the workspace validator template is a POSIX command line here")
+	}
+	for _, tt := range []struct {
+		name      string
+		validator string
+	}{
+		{"pass", "/usr/bin/true {file}"},
+		{"fail", "/usr/bin/false {file}"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := editSandbox(t, marked("content"))
+			writeWorkspaceYAML(t, repo, tt.validator)
+			file := filepath.Join(repo, "a.go")
+			if err := os.WriteFile(file, []byte("package main\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+
+			if _, err := Edit(context.Background(), Request{
+				File: file, Enum: "MODERATE", Prompt: "x", Validate: true,
+			}); err != nil {
+				t.Fatal(err)
+			}
+
+			cal, err := trust.New(trust.DefaultPath())
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, s := range cal.Report() {
+				if s.Source == "cody" && s.Domain == "go" && s.N == 1 {
+					return
+				}
+			}
+			t.Errorf("no calibration observation recorded for cody/go: %+v", cal.Report())
+		})
+	}
 }
 
 // The backup is a verbatim copy of the user's source sitting beside it until
@@ -482,7 +528,7 @@ func TestDiffStats_CountsFromTheBackupWhenGitIsUnavailable(t *testing.T) {
 func TestWriteLastEdit_IsReadableByReview(t *testing.T) {
 	testutil.NewSandbox(t)
 
-	if err := writeLastEdit("/abs/file.go", "SIMPLE", "ws", 3, 1); err != nil {
+	if err := writeLastEdit("/abs/file.go", "SIMPLE", "ws", "claude", 3, 1); err != nil {
 		t.Fatal(err)
 	}
 	raw, err := os.ReadFile(filepath.Join(config.Dir(), "logs", "last_edit.json"))
@@ -499,6 +545,10 @@ func TestWriteLastEdit_IsReadableByReview(t *testing.T) {
 	}
 	if got["lines_added"] != float64(3) || got["lines_removed"] != float64(1) {
 		t.Errorf("line counts = %v/%v", got["lines_added"], got["lines_removed"])
+	}
+	// review reads this back to attribute an approve/reject to the right head.
+	if got["head_id"] != "claude" {
+		t.Errorf("last_edit.json head_id = %v, want claude", got["head_id"])
 	}
 }
 
@@ -789,7 +839,7 @@ func TestWriteLastEdit_UnwritableLogDirIsAnError(t *testing.T) {
 	if err := os.WriteFile(config.Dir(), []byte("not a dir"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := writeLastEdit("/abs/f.go", "SIMPLE", "ws", 1, 0); err == nil {
+	if err := writeLastEdit("/abs/f.go", "SIMPLE", "ws", "claude", 1, 0); err == nil {
 		t.Error("writeLastEdit reported success with an uncreatable logs directory")
 	}
 }
