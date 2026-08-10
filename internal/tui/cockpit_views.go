@@ -2,10 +2,11 @@
 
 package tui
 
-// cockpit_views.go — the three cockpit view modes cycled by Tab:
+// cockpit_views.go — the four cockpit view modes cycled by Tab:
 //   view 0  chat + live code panel   (chatCode → codePanel)
 //   view 1  dashboard                (dash) — reads real probe/cost/trust data
 //   view 2  agent supervision tree   (tree) — still a fixed example; see #189
+//   view 3  security                 (dashSecurity) — reads internal/security.Build
 // plus their pure helpers (syntax highlighter, tier/state colour ramps). Neon
 // identity via the ck-prefixed palette declared in cockpit.go.
 
@@ -16,6 +17,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/ankit373/hydra/internal/budget"
+	"github.com/ankit373/hydra/internal/security"
 	"github.com/ankit373/hydra/internal/tree"
 	"github.com/ankit373/hydra/internal/trust"
 )
@@ -293,6 +295,135 @@ func treePrefix(r tree.Row) string {
 		branch = "└─ "
 	}
 	return strings.Repeat("│  ", r.Depth-1) + branch
+}
+
+// ── view 3 · security ────────────────────────────────────────────────────────
+
+// dashSecurity is the OWASP LLM Top-10 coverage view: the same report
+// `hyctl security` prints, reused rather than recomputed — m.security is
+// loaded once in NewCockpit, so this reads no I/O, matching dash's own rule.
+// Column budgets are fixed, not proportional to w — matching dash()'s own
+// fleet/spend/trust/governor boxes, which are all fixed-width content laid
+// out side by side and only padded to fill w by the final Width(w).Render.
+// A width that scales with the terminal risks a line longer than lipgloss's
+// border can hold, which corrupts the box drawing rather than wrapping.
+const (
+	ckSecNameW = 26 // category name column
+	ckSecRecW  = 40 // action text column (narrower right-hand box)
+)
+
+// dashSecurity leads with the hero KPI (coverage bar, real history sparkline,
+// trend) in the largest visual weight, then the ACTIONS queue — priority-
+// ranked, ages included — as the primary thing to act on. The exhaustive
+// category list and per-head table stay on screen too, just visually
+// secondary: this view already fits one frame without scrolling, so there's
+// no separate interactive "detail mode" here (unlike the desktop app, where
+// a Hero/Detailed tab split earns its keep with real charts).
+func (m Cockpit) dashSecurity(w, h int) string {
+	if m.security == nil {
+		return lipgloss.NewStyle().Width(w).Height(h).Render(
+			ckFaintS.Render(" security report unavailable — the ledger could not be read"))
+	}
+	r := m.security
+
+	var head strings.Builder
+	head.WriteString(ckLabelS.Render("SECURITY · OWASP LLM Top-10 coverage") + "\n\n")
+	if !r.IntegrityIntact {
+		head.WriteString(" " + ckExpS.Render("INTEGRITY COMPROMISED") +
+			ckDimS.Render(" — ledger tampered") + "\n")
+	} else {
+		pct := int(r.Coverage.PercentCovered)
+		head.WriteString(" " + ckCoverageBar(pct, 20) +
+			ckDimS.Render(fmt.Sprintf("  %d%%  (%d/%d)", pct, r.Coverage.Covered, r.Coverage.Applicable)) + "\n")
+		// ckSpark is the same real-data-only sparkline the latency panel
+		// uses (cockpit_metrics.go) — reused, not reinvented. It already
+		// renders "—" for fewer than 2 points, so a fresh install needs no
+		// special-casing here.
+		if len(r.History) >= 2 {
+			vals := make([]float64, len(r.History))
+			for i, hp := range r.History {
+				vals[i] = hp.PercentCovered
+			}
+			head.WriteString(" " + ckDimS.Render("history ") + ckSpark(vals) + "\n")
+		}
+		if r.Trend.Available {
+			arrow, style := "→", ckDimS
+			switch {
+			case r.Trend.DeltaPct > 0:
+				arrow, style = "↑", ckCheapS
+			case r.Trend.DeltaPct < 0:
+				arrow, style = "↓", ckExpS
+			}
+			head.WriteString(" " + style.Render(fmt.Sprintf("%s %+.0f%% since first run (was %.0f%%)",
+				arrow, r.Trend.DeltaPct, r.Trend.FirstPct)) + "\n")
+		}
+	}
+	head.WriteString("\n")
+	for _, c := range r.Coverage.Categories {
+		if c.Status == security.NotApplicable {
+			continue
+		}
+		style := ckDimS
+		switch c.Status {
+		case security.Enforced:
+			style = ckCheapS
+		case security.Configured:
+			style = ckCyanS
+		case security.Gap:
+			style = ckExpS
+		}
+		label := style.Render(string(c.Status))
+		if c.Status == security.Gap && c.GapAgeDays > 0 {
+			label += ckDimS.Render(fmt.Sprintf(" %dd", c.GapAgeDays))
+		}
+		head.WriteString(fmt.Sprintf(" %-6s %-*s %s\n", c.ID, ckSecNameW, truncate(c.Name, ckSecNameW), label))
+	}
+
+	var risk strings.Builder
+	risk.WriteString(ckLabelS.Render("PER-HEAD RISK") + "\n\n")
+	if len(r.ByHead) == 0 {
+		risk.WriteString(ckFaintS.Render(" nothing denied or flagged yet") + "\n")
+	}
+	for _, hr := range r.ByHead {
+		risk.WriteString(fmt.Sprintf(" %-20s denied %-3d flagged %-3d\n", truncate(hr.Head, 20), hr.Denied, hr.Flagged))
+	}
+
+	var actions strings.Builder
+	actions.WriteString(ckLabelS.Render("ACTIONS") + ckDimS.Render(" · next hardening step") + "\n\n")
+	if len(r.Actions) == 0 {
+		actions.WriteString(ckCheapS.Render(" nothing to act on") + "\n")
+	}
+	const maxActions = 6 // height-bounded, matches the terminal frames this view fits in
+	for i, a := range r.Actions {
+		if i >= maxActions {
+			actions.WriteString(ckFaintS.Render(fmt.Sprintf(" … %d more", len(r.Actions)-maxActions)) + "\n")
+			break
+		}
+		tag, style := ckActionPriorityTag(a.Priority)
+		age := ""
+		if a.AgeDays > 0 {
+			age = ckDimS.Render(fmt.Sprintf(" %dd", a.AgeDays))
+		}
+		actions.WriteString(" " + style.Render(tag) + age + " " + ckDimS.Render(truncate(a.Title, ckSecRecW)) + "\n")
+	}
+
+	right := lipgloss.JoinVertical(lipgloss.Left, ckBoxS.Render(risk.String()), ckBoxS.Render(actions.String()))
+	row := lipgloss.JoinHorizontal(lipgloss.Top, ckBoxS.Render(head.String()), " ", right)
+	return lipgloss.NewStyle().Width(w).Height(h).Render(row)
+}
+
+// ckActionPriorityTag renders an Action's priority as a short label plus the
+// style to color it with — the same three tiers buildActions already ranked
+// by (real age or active risk), never a new severity of its own.
+func ckActionPriorityTag(p security.ActionPriority) (string, lipgloss.Style) {
+	switch p {
+	case security.PriorityNow:
+		return "NOW", ckExpS
+	case security.PrioritySoon:
+		return "SOON", ckMidS
+	default:
+		return "WATCH", ckDimS
+	}
 }
 
 // ── syntax highlighter ───────────────────────────────────────────────────────

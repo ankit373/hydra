@@ -9,7 +9,9 @@ package security
 
 import (
 	"fmt"
+	"sort"
 	"strings"
+	"time"
 
 	"github.com/ankit373/hydra/internal/ledger"
 	"github.com/ankit373/hydra/internal/provider"
@@ -53,10 +55,49 @@ type Report struct {
 	IntegrityIntact bool `json:"integrityIntact"`
 	// Trend compares Coverage against the first-ever recorded run, when history exists.
 	Trend Trend `json:"trend"`
-	// Recommendations is the feedback loop: one line per coverage Gap plus
-	// one per above-threshold risky head — generated from the same data
-	// above, the backlog for the next hardening round.
-	Recommendations []string `json:"recommendations,omitempty"`
+	// History is the full persisted coverage series, oldest first, this run
+	// last — the real trend a chart is drawn from, not just Trend's single
+	// collapsed delta.
+	History []HistoryPoint `json:"history,omitempty"`
+	// Actions is the feedback loop: one item per coverage Gap plus one per
+	// above-threshold risky head, ranked most-urgent first — the backlog for
+	// the next hardening round. Priority comes from real signals (a gap's
+	// persisted age, or a head's active denied/flagged count) — never an
+	// invented severity score.
+	Actions []Action `json:"actions,omitempty"`
+}
+
+// ActionPriority ranks an Action by real urgency — a gap's persisted age, or
+// whether a head is actively risky right now — never a guessed severity.
+type ActionPriority string
+
+const (
+	// PriorityNow: a stale gap (>=30 days old) or an actively risky head.
+	// A risky head never gets an age-based downgrade — it's live, ongoing
+	// exposure, not aging debt.
+	PriorityNow ActionPriority = "now"
+	// PrioritySoon: a gap aging 7-29 days.
+	PrioritySoon ActionPriority = "soon"
+	// PriorityWatch: a gap under 7 days old.
+	PriorityWatch ActionPriority = "watch"
+)
+
+// gapStaleDays/gapAgingDays mirror the aging-bucket convention vulnerability
+// management dashboards use (fresh / aging / stale) — applied here to a
+// coverage gap's own persisted age instead of a CVE's.
+const (
+	gapStaleDays = 30
+	gapAgingDays = 7
+)
+
+// Action is one item in the prioritized action queue.
+type Action struct {
+	ID       string         `json:"id"`
+	Kind     string         `json:"kind"` // "gap" | "risk"
+	Title    string         `json:"title"`
+	Detail   string         `json:"detail"`
+	AgeDays  int            `json:"ageDays"`
+	Priority ActionPriority `json:"priority"`
 }
 
 // Build assembles the report from the ledger, the loaded access policy, and
@@ -99,9 +140,14 @@ func Build(heads []provider.Head) (*Report, error) {
 	historyPath := DefaultScoreHistoryPath()
 	prior := loadScoreHistory(historyPath)
 	r.Trend = buildTrend(prior, r.Coverage)
+
+	now := time.Now().UTC()
+	r.Coverage.Categories = annotateGapAge(r.Coverage.Categories, prior, now)
+	r.History = append(toHistoryPoints(prior), HistoryPoint{TS: now.Format(time.RFC3339), PercentCovered: r.Coverage.PercentCovered})
+
 	appendScoreHistory(historyPath, r.Coverage)
 
-	r.Recommendations = buildRecommendations(r.Coverage, r.ByHead)
+	r.Actions = buildActions(r.Coverage, r.ByHead)
 
 	return r, nil
 }
@@ -120,22 +166,64 @@ func chainCheck(res ledger.ChainResult) Check {
 		Detail: fmt.Sprintf("%d chained event(s), %d unchained", res.Chained, res.Unchained)}
 }
 
-// buildRecommendations is the feedback loop: exactly the coverage Gaps plus
-// heads whose denied+flagged activity crosses riskThreshold — nothing else.
-func buildRecommendations(cov Coverage, byHead []ledger.HeadRisk) []string {
+// buildActions is the feedback loop: exactly the coverage Gaps plus heads
+// whose denied+flagged activity crosses riskThreshold — nothing else —
+// ranked most-urgent first so the queue reads top-to-bottom as work order.
+func buildActions(cov Coverage, byHead []ledger.HeadRisk) []Action {
 	const riskThreshold = 2
-	var out []string
+	var out []Action
 	for _, c := range cov.Categories {
-		if c.Status == Gap {
-			out = append(out, fmt.Sprintf("%s %s: %s", c.ID, c.Name, c.Detail))
+		if c.Status != Gap {
+			continue
 		}
+		out = append(out, Action{
+			ID: c.ID, Kind: "gap", Title: c.Name, Detail: c.Detail,
+			AgeDays: c.GapAgeDays, Priority: gapPriority(c.GapAgeDays),
+		})
 	}
 	for _, h := range byHead {
 		if h.Denied+h.Flagged >= riskThreshold {
-			out = append(out, fmt.Sprintf("%s: %d denied, %d flagged — review its ledger rules", h.Head, h.Denied, h.Flagged))
+			out = append(out, Action{
+				ID:       h.Head,
+				Kind:     "risk",
+				Title:    fmt.Sprintf("%s — risky head", h.Head),
+				Detail:   fmt.Sprintf("%d denied, %d flagged — review its ledger rules", h.Denied, h.Flagged),
+				Priority: PriorityNow,
+			})
 		}
 	}
+	sort.SliceStable(out, func(i, j int) bool {
+		pi, pj := priorityRank(out[i].Priority), priorityRank(out[j].Priority)
+		if pi != pj {
+			return pi < pj
+		}
+		return out[i].AgeDays > out[j].AgeDays
+	})
 	return out
+}
+
+// gapPriority buckets a gap's persisted age the way vulnerability-management
+// dashboards bucket finding age: fresh, aging, stale.
+func gapPriority(ageDays int) ActionPriority {
+	switch {
+	case ageDays >= gapStaleDays:
+		return PriorityNow
+	case ageDays >= gapAgingDays:
+		return PrioritySoon
+	default:
+		return PriorityWatch
+	}
+}
+
+func priorityRank(p ActionPriority) int {
+	switch p {
+	case PriorityNow:
+		return 0
+	case PrioritySoon:
+		return 1
+	default:
+		return 2
+	}
 }
 
 // costCeilingReason reports whether e was a --max-cost refusal — the one

@@ -28,6 +28,7 @@ import (
 	"github.com/ankit373/hydra/internal/provider"
 	"github.com/ankit373/hydra/internal/rank"
 	"github.com/ankit373/hydra/internal/runlog"
+	"github.com/ankit373/hydra/internal/security"
 	"github.com/ankit373/hydra/internal/tree"
 )
 
@@ -80,9 +81,10 @@ const (
 	ckViewChatCode = iota
 	ckViewDashboard
 	ckViewAgentTree
+	ckViewSecurity
 )
 
-var ckViewNames = []string{"chat+code", "dashboard", "agent-tree"}
+var ckViewNames = []string{"chat+code", "dashboard", "agent-tree", "security"}
 
 // ckViewCount is how many views exist.
 func ckViewCount() int { return len(ckViewNames) }
@@ -157,6 +159,11 @@ type Cockpit struct {
 	spend     float64   // today's real estimated spend, from cost.jsonl
 	metrics   ckMetrics // real latency/savings/blast/calibration, loaded once
 
+	// security is the OWASP LLM Top-10 coverage/ledger report, loaded once at
+	// startup like everything else here — nil if Build failed, handled by the
+	// security view the same way an empty machine is handled elsewhere.
+	security *security.Report
+
 	// live code panel (chat+code view): a snippet streamed line-by-line.
 	codeLang  string
 	codeLines []string
@@ -187,12 +194,14 @@ func NewCockpit() Cockpit {
 	heads := ckHeadsFrom(probed.Heads, pr)
 
 	pct := ckClaudePct()
+	secReport, _ := security.Build(probed.Heads) // best-effort: nil on error, handled by the view
 	m := Cockpit{
 		mode:      "dispatch",
 		claudePct: pct,
 		heads:     heads,
 		spend:     ckSpendToday(),
 		metrics:   ckLoadMetrics(pr),
+		security:  secReport,
 	}
 	m.runID, m.runLive, m.treeRows = ckLoadTree()
 
@@ -206,7 +215,7 @@ func NewCockpit() Cockpit {
 		m.log = []string{
 			ckDimS.Render(fmt.Sprintf("🐉 Hydra initialised · %d head%s discovered · routing engine ready.",
 				len(heads), plural(len(heads)))),
-			ckDimS.Render("Type a task and press enter. Tab = chat/dash/tree · /trust /swarm /local · :q quits."),
+			ckDimS.Render("Type a task and press enter. Tab = chat/dash/tree/security · /trust /swarm /local · :q quits."),
 		}
 	}
 	return m
@@ -319,6 +328,9 @@ func (m Cockpit) submit() (tea.Model, tea.Cmd) {
 		return m, nil
 	case t == ":tree":
 		m.view = 2
+		return m, nil
+	case t == ":security":
+		m.view = ckViewSecurity
 		return m, nil
 	case strings.HasPrefix(t, "/"):
 		switch t {
@@ -475,6 +487,8 @@ func (m Cockpit) View() string {
 		body = m.dash(m.w, bodyH)
 	case 2:
 		body = m.tree(m.w, bodyH)
+	case ckViewSecurity:
+		body = m.dashSecurity(m.w, bodyH)
 	default:
 		body = m.chatCode(bodyH)
 	}
@@ -562,7 +576,7 @@ func (m Cockpit) chatMain(w, h int) string {
 func (m Cockpit) hint() string {
 	k := func(s string) string { return ckAquaS.Render(s) }
 	return ckFaintS.Render(" ") + k("enter") + ckFaintS.Render(" dispatch   ") +
-		k("tab") + ckFaintS.Render(" chat/dash/tree   ") +
+		k("tab") + ckFaintS.Render(" chat/dash/tree/security   ") +
 		k("↑↓") + ckFaintS.Render(" select   ") +
 		k("/trust /swarm /local") + ckFaintS.Render(" mode   ") +
 		k(":q") + ckFaintS.Render(" quit")
@@ -571,10 +585,11 @@ func (m Cockpit) hint() string {
 // ── snapshot (static render for docs / non-tty preview) ─────────────────────────
 
 // CockpitSnapshotView renders one static frame of the given view (0 chat+code,
-// 1 dashboard, 2 agent-tree) after two demo dispatches, with the code stream and
-// tree selection settled so the frame is fully populated. An out-of-range view
-// falls back to the default instead of panicking; callers that can report an
-// error to the user should reject it up front with ValidSnapshotView.
+// 1 dashboard, 2 agent-tree, 3 security) after two demo dispatches, with the
+// code stream and tree selection settled so the frame is fully populated. An
+// out-of-range view falls back to the default instead of panicking; callers
+// that can report an error to the user should reject it up front with
+// ValidSnapshotView.
 func CockpitSnapshotView(view int) string {
 	m := NewCockpit()
 	m = m.run("write a User DTO for profile settings")            // SIMPLE → TS interface
@@ -589,13 +604,14 @@ func CockpitSnapshotView(view int) string {
 	return m.View()
 }
 
-// CockpitSnapshot renders all three views stacked, each labelled — the
+// CockpitSnapshot renders all four views stacked, each labelled — the
 // representative frame shown by `hyctl tui --snapshot`.
 func CockpitSnapshot() string {
 	label := func(s string) string { return ckLabelS.Render("── " + s + " " + strings.Repeat("─", 40)) }
-	return label("VIEW 1/3 · CHAT + CODE (tab)") + "\n" + CockpitSnapshotView(0) + "\n\n" +
-		label("VIEW 2/3 · DASHBOARD (tab)") + "\n" + CockpitSnapshotView(1) + "\n\n" +
-		label("VIEW 3/3 · AGENT TREE (tab · ↑↓ select)") + "\n" + CockpitSnapshotView(2)
+	return label("VIEW 1/4 · CHAT + CODE (tab)") + "\n" + CockpitSnapshotView(0) + "\n\n" +
+		label("VIEW 2/4 · DASHBOARD (tab)") + "\n" + CockpitSnapshotView(1) + "\n\n" +
+		label("VIEW 3/4 · AGENT TREE (tab · ↑↓ select)") + "\n" + CockpitSnapshotView(2) + "\n\n" +
+		label("VIEW 4/4 · SECURITY (tab)") + "\n" + CockpitSnapshotView(ckViewSecurity)
 }
 
 // ── helpers ─────────────────────────────────────────────────────────────────────
@@ -626,6 +642,9 @@ func ckLerpHex(t float64) lipgloss.Color {
 	return lipgloss.Color(fmt.Sprintf("#%02X%02X%02X", l(a[0], b[0]), l(a[1], b[1]), l(a[2], b[2])))
 }
 
+// ckBar is a pressure gauge: high is bad (cost spend, governor claude_pct), so
+// the color ramp reddens as pct rises. Do not reuse it for a metric where high
+// is good — see ckCoverageBar for that shape instead.
 func ckBar(pct, width int) string {
 	fill := pct * width / 100
 	if fill > width {
@@ -638,6 +657,27 @@ func ckBar(pct, width int) string {
 	switch {
 	case pct >= 75:
 		col = ckExp
+	case pct >= 50:
+		col = ckMid
+	}
+	return lipgloss.NewStyle().Foreground(col).Render(strings.Repeat("█", fill)) +
+		ckFaintS.Render(strings.Repeat("░", width-fill))
+}
+
+// ckCoverageBar is ckBar's color ramp inverted: high is good (OWASP LLM
+// Top-10 coverage), so it greens as pct rises instead of reddening.
+func ckCoverageBar(pct, width int) string {
+	fill := pct * width / 100
+	if fill > width {
+		fill = width
+	}
+	if fill < 0 {
+		fill = 0
+	}
+	col := ckExp
+	switch {
+	case pct >= 75:
+		col = ckCheap
 	case pct >= 50:
 		col = ckMid
 	}

@@ -4,12 +4,14 @@ package main
 
 import (
 	"context"
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -218,7 +220,7 @@ func cmdTui() *cobra.Command {
 		},
 	}
 	c.Flags().BoolVar(&snapshot, "snapshot", false, "Render one static frame and exit (docs/preview)")
-	c.Flags().IntVar(&snapView, "view", 0, "With --snapshot: render a single view (0 chat+code, 1 dashboard, 2 agent-tree)")
+	c.Flags().IntVar(&snapView, "view", 0, "With --snapshot: render a single view (0 chat+code, 1 dashboard, 2 agent-tree, 3 security)")
 	return c
 }
 
@@ -1082,7 +1084,7 @@ func cmdMCP() *cobra.Command {
 // per-head risk, and a short list of honest checks — never a manufactured
 // score, only what's actually configured and observed.
 func cmdSecurity() *cobra.Command {
-	var jsonOut bool
+	var jsonOut, csvOut bool
 	cmd := &cobra.Command{
 		Use:   "security",
 		Short: "Security posture dashboard: ledger accountability, risk by head, and honest checks",
@@ -1092,15 +1094,42 @@ func cmdSecurity() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if jsonOut {
+			switch {
+			case jsonOut:
 				return json.NewEncoder(os.Stdout).Encode(rep)
+			case csvOut:
+				return securityCSV(os.Stdout, rep)
+			default:
+				printSecurityReport(rep)
+				return nil
 			}
-			printSecurityReport(rep)
-			return nil
 		},
 	}
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "machine-readable JSON output")
+	cmd.Flags().BoolVar(&csvOut, "csv", false, "one row per OWASP LLM Top-10 category (id,name,status,gap_age_days,detail)")
 	return cmd
+}
+
+// securityCSV emits the coverage table as one row per finding — the same
+// shape GitHub's and AWS Security Hub's security-overview CSV exports use —
+// so it can be dropped straight into a tracker or spreadsheet.
+func securityCSV(w io.Writer, r *security.Report) error {
+	cw := csv.NewWriter(w)
+	if err := cw.Write([]string{"id", "name", "status", "gap_age_days", "detail"}); err != nil {
+		return err
+	}
+	for _, c := range r.Coverage.Categories {
+		if c.Status == security.NotApplicable {
+			continue
+		}
+		if err := cw.Write([]string{
+			c.ID, c.Name, string(c.Status), strconv.Itoa(c.GapAgeDays), c.Detail,
+		}); err != nil {
+			return err
+		}
+	}
+	cw.Flush()
+	return cw.Error()
 }
 
 func printSecurityReport(r *security.Report) {
@@ -1138,15 +1167,33 @@ func printSecurityReport(r *security.Report) {
 		fmt.Println(dimStyle.Render("      " + c.Detail))
 	}
 
-	if len(r.Recommendations) > 0 {
+	if len(r.Actions) > 0 {
 		fmt.Println()
 		fmt.Println(dimStyle.Render("  " + strings.Repeat("─", 48)))
-		fmt.Println(warnStyle.Render("  recommendations (next hardening backlog):"))
-		for _, rec := range r.Recommendations {
-			fmt.Printf("    - %s\n", rec)
+		fmt.Println(warnStyle.Render("  action queue (next hardening backlog, most urgent first):"))
+		for _, a := range r.Actions {
+			age := ""
+			if a.AgeDays > 0 {
+				age = dimStyle.Render(fmt.Sprintf(" · %dd", a.AgeDays))
+			}
+			fmt.Printf("    %s %s%s — %s\n", actionPriorityTag(a.Priority), a.Title, age, a.Detail)
 		}
 	}
 	fmt.Println()
+}
+
+// actionPriorityTag renders an Action's priority as a short colored tag.
+// Colors mirror budgetModeStyle's own critical/warning/dim convention rather
+// than inventing a new palette.
+func actionPriorityTag(p security.ActionPriority) string {
+	switch p {
+	case security.PriorityNow:
+		return lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("196")).Render("[NOW]")
+	case security.PrioritySoon:
+		return warnStyle.Render("[SOON]")
+	default:
+		return dimStyle.Render("[WATCH]")
+	}
 }
 
 // printCoverageHeadline is the KPI tile: coverage against the OWASP LLM Top
@@ -1187,6 +1234,9 @@ func printCoverageHeadline(r *security.Report) {
 			label = okStyle.Render(label)
 		case security.Gap:
 			label = warnStyle.Render(label)
+			if c.GapAgeDays > 0 {
+				label += dimStyle.Render(fmt.Sprintf(" (%dd)", c.GapAgeDays))
+			}
 		}
 		fmt.Printf("    %-6s %-32s %s\n", c.ID, c.Name, label)
 	}

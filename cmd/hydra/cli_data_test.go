@@ -167,7 +167,10 @@ func TestCLI_Security_HandlesEmptyAndSeededLedger(t *testing.T) {
 			Covered        int     `json:"covered"`
 			PercentCovered float64 `json:"percentCovered"`
 		} `json:"coverage"`
-		Recommendations []string `json:"recommendations"`
+		Actions []struct {
+			ID       string `json:"id"`
+			Priority string `json:"priority"`
+		} `json:"actions"`
 	}
 	if err := json.Unmarshal([]byte(out+cobraOut), &rep); err != nil {
 		t.Fatalf("security --json did not parse: %v\n%s", err, out+cobraOut)
@@ -184,12 +187,12 @@ func TestCLI_Security_HandlesEmptyAndSeededLedger(t *testing.T) {
 	if rep.Coverage.Applicable != 8 {
 		t.Errorf("Coverage.Applicable = %d, want 8", rep.Coverage.Applicable)
 	}
-	if len(rep.Recommendations) == 0 {
-		t.Error("Recommendations is empty despite real coverage gaps existing")
+	if len(rep.Actions) == 0 {
+		t.Error("Actions is empty despite real coverage gaps existing")
 	}
 
-	// Text output must show the headline coverage score and the recommendations
-	// section — the KPI/feedback-loop surface, not just the raw tables.
+	// Text output must show the headline coverage score and the action queue
+	// — the KPI/feedback-loop surface, not just the raw tables.
 	textOut, textCobraOut, err := run(t, "security")
 	if err != nil {
 		t.Fatalf("`hyctl security` failed: %v", err)
@@ -198,8 +201,8 @@ func TestCLI_Security_HandlesEmptyAndSeededLedger(t *testing.T) {
 	if !strings.Contains(combined, "OWASP LLM Top-10 coverage") {
 		t.Errorf("text output missing the coverage headline:\n%s", combined)
 	}
-	if !strings.Contains(combined, "recommendations") {
-		t.Errorf("text output missing the recommendations section:\n%s", combined)
+	if !strings.Contains(combined, "action queue") {
+		t.Errorf("text output missing the action queue section:\n%s", combined)
 	}
 }
 
