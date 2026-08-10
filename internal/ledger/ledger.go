@@ -103,6 +103,13 @@ type Event struct {
 	// FlagReason is the specific heuristic that matched, when Flagged is true.
 	FlagReason string `json:"flag_reason,omitempty"`
 
+	// PrevHash is the previous event's Hash, and Hash is sha256 of this event
+	// (PrevHash set, Hash cleared) — a local hash chain, so an edited or
+	// deleted line breaks the link and VerifyChain can detect it. Both empty
+	// means this event predates the feature ("unchained"), not tampered.
+	PrevHash string `json:"prev_hash,omitempty"`
+	Hash     string `json:"hash,omitempty"`
+
 	// Config is the deployment-identity breadcrumb (config.Breadcrumb) in
 	// effect when this event was recorded, ties the event to the exact
 	// routing rules that were live.
@@ -195,6 +202,11 @@ func Record(path string, e Event) error {
 			e.Config = bc
 		}
 	}
+	if e.PrevHash == "" {
+		e.PrevHash = readChainHash(chainHashPath(path))
+	}
+	e.Hash = hashEvent(e)
+
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
@@ -207,8 +219,84 @@ func Record(path string, e Event) error {
 	if err != nil {
 		return err
 	}
-	_, err = fmt.Fprintln(f, string(raw))
-	return err
+	if _, err := fmt.Fprintln(f, string(raw)); err != nil {
+		return err
+	}
+	// Best-effort: a failed chainhash write costs the next Record a fresh
+	// chain start (reported as a false break at verify time, never a false
+	// all-clear) rather than failing the access decision it was recording.
+	_ = writeChainHash(chainHashPath(path), e.Hash)
+	return nil
+}
+
+// hashEvent computes e's chain hash: sha256 of e's canonical JSON with Hash
+// cleared (PrevHash, being an ordinary field, is covered by the same hash —
+// no separate prefix needed). Event holds only strings and typed strings, so
+// json.Marshal cannot fail here.
+func hashEvent(e Event) string {
+	e.Hash = ""
+	raw, _ := json.Marshal(e)
+	sum := sha256.Sum256(raw)
+	return hex.EncodeToString(sum[:])
+}
+
+func chainHashPath(ledgerPath string) string { return ledgerPath + ".chainhash" }
+
+func readChainHash(path string) string {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(raw))
+}
+
+func writeChainHash(path, hash string) error {
+	return os.WriteFile(path, []byte(hash+"\n"), 0o600)
+}
+
+// ChainResult is VerifyChain's report.
+type ChainResult struct {
+	// Chained is the number of events that carry a hash (post-migration).
+	Chained int `json:"chained"`
+	// Unchained is the number of events with no hash — they predate this
+	// feature, not tampered.
+	Unchained int  `json:"unchained"`
+	Intact    bool `json:"intact"`
+	// BrokenAt is the index into the events slice VerifyChain read, of the
+	// first event whose hash doesn't match — 0 when Intact.
+	BrokenAt int `json:"broken_at,omitempty"`
+}
+
+// VerifyChain walks path's events in order, recomputing each chained event's
+// hash and confirming it links to the one before it. An event with no Hash is
+// treated as pre-migration and excluded from verification, not flagged
+// broken — the chain only covers events recorded since this feature shipped.
+func VerifyChain(path string) (ChainResult, error) {
+	events, _, err := LoadCounted(path)
+	if err != nil {
+		return ChainResult{}, err
+	}
+	res := ChainResult{Intact: true}
+	prevHash := ""
+	chainStarted := false
+	for i, e := range events {
+		if e.Hash == "" {
+			res.Unchained++
+			continue
+		}
+		res.Chained++
+		broken := hashEvent(e) != e.Hash
+		if chainStarted && e.PrevHash != prevHash {
+			broken = true
+		}
+		if broken && res.Intact {
+			res.Intact = false
+			res.BrokenAt = i
+		}
+		prevHash = e.Hash
+		chainStarted = true
+	}
+	return res, nil
 }
 
 // Load reads all events; a missing ledger yields no events. Unparseable lines

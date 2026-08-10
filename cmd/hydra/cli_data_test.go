@@ -109,6 +109,28 @@ func TestCLI_MCPLogAndReport_SurfaceFlaggedEvents(t *testing.T) {
 	}
 }
 
+// `hyctl mcp verify-chain` is the tamper-evidence check over the ledger —
+// it must report intact after ordinary recording and confirm gate-ability
+// (a non-zero exit) when it isn't, matching the other ledger verify commands.
+func TestCLI_MCPVerifyChain_ReportsIntactAfterOrdinaryRecording(t *testing.T) {
+	testutil.NewSandbox(t)
+
+	for i := 0; i < 3; i++ {
+		if _, cobraOut, err := run(t, "mcp", "record", "--agent", "a", "--tool", "t", "--decision", "allow"); err != nil {
+			t.Fatalf("`hyctl mcp record` failed: %v (%s)", err, cobraOut)
+		}
+	}
+
+	out, cobraOut, err := run(t, "mcp", "verify-chain")
+	if err != nil {
+		t.Fatalf("`hyctl mcp verify-chain` failed on an untampered ledger: %v", err)
+	}
+	combined := out + cobraOut
+	if !strings.Contains(strings.ToLower(combined), "intact") {
+		t.Errorf("verify-chain did not report intact:\n%s", combined)
+	}
+}
+
 // ── trust ─────────────────────────────────────────────────────────────────────
 
 // `hyctl trust explain` is the audit trail behind a confidence number: it must
