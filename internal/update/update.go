@@ -72,11 +72,15 @@ func doCheck() string {
 	return checkLatest()
 }
 
-// CheckIgnoringTTY runs the same env-var and dev-build gates as doCheck, plus
-// the shared 24h-cached GitHub fetch and semver compare, but skips the TTY
-// check. It exists for callers with no controlling terminal to gate on — the
-// desktop app has no stdout at all, so doCheck (and therefore Check) would
-// always silently return "" for it.
+// CheckIgnoringTTY runs the same opt-out and dev-build gates as doCheck, plus
+// the shared 24h-cached GitHub fetch and semver compare, but skips both the
+// TTY check and the CI check. It exists for callers with no controlling
+// terminal to gate on — the desktop app has no stdout at all, so doCheck (and
+// therefore Check) would always silently return "" for it. The CI gate exists
+// in doCheck to keep hyctl's own CLI banner quiet inside automated scripts;
+// that reasoning doesn't transfer to a GUI app checking for its own update,
+// and keeping it here would make a real user's update check silently no-op if
+// their shell happens to export CI=1 for an unrelated reason.
 //
 // Unlike Check, this does not memoise with sync.Once: Check's process is
 // hyctl, which runs once and exits, so "at most one fetch per process" and "at
@@ -86,7 +90,7 @@ func doCheck() string {
 // resolveLatest's on-disk cache is what bounds this to one network fetch per
 // 24h regardless of caller.
 func CheckIgnoringTTY() string {
-	if os.Getenv("HYDRA_NO_UPDATE_CHECK") != "" || os.Getenv("CI") != "" {
+	if os.Getenv("HYDRA_NO_UPDATE_CHECK") != "" {
 		return ""
 	}
 	if build.Version == "dev" {
