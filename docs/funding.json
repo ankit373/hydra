@@ -45,7 +45,7 @@
         "guid": "sponsor-hydra",
         "status": "active",
         "name": "Sponsor Hydra development",
-        "description": "Recurring or one-time support for Hydra's development — the routing engine, trust control plane, and desktop app.",
+        "description": "Funds the compute and larger benchmark datasets Hydra's trust control plane depends on: running large task sets on a recurring cadence to keep routing-confidence calibration accurate, plus sustaining development pace on the routing engine, trust control plane, and desktop app.",
         "amount": 0,
         "currency": "USD",
         "frequency": "monthly",
