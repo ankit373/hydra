@@ -1033,6 +1033,8 @@ func cmdSecurity() *cobra.Command {
 
 func printSecurityReport(r *security.Report) {
 	fmt.Println()
+	printCoverageHeadline(r)
+
 	if !r.HasData {
 		fmt.Println(dimStyle.Render("  no ledger events yet — nothing has dispatched through hyctl on this machine"))
 	} else {
@@ -1063,7 +1065,92 @@ func printSecurityReport(r *security.Report) {
 		fmt.Printf("    %-26s %s\n", c.Name, status)
 		fmt.Println(dimStyle.Render("      " + c.Detail))
 	}
+
+	if len(r.Recommendations) > 0 {
+		fmt.Println()
+		fmt.Println(dimStyle.Render("  " + strings.Repeat("─", 48)))
+		fmt.Println(warnStyle.Render("  recommendations (next hardening backlog):"))
+		for _, rec := range r.Recommendations {
+			fmt.Printf("    - %s\n", rec)
+		}
+	}
 	fmt.Println()
+}
+
+// printCoverageHeadline is the KPI tile: coverage against the OWASP LLM Top
+// 10, never presented as "you are X% secure" — always labeled against the
+// named taxonomy it measures. A broken ledger chain hard-overrides it,
+// since none of the other evidence can be trusted once the ledger itself
+// might have been tampered with.
+func printCoverageHeadline(r *security.Report) {
+	if !r.IntegrityIntact {
+		fmt.Printf("  %s  %s\n", cortexStyle.Render("OWASP LLM Top-10 coverage"),
+			warnStyle.Render("INTEGRITY COMPROMISED — ledger tampering detected, score withheld"))
+		fmt.Println()
+		return
+	}
+	cov := r.Coverage
+	pct := fmt.Sprintf("%.0f%%", cov.PercentCovered)
+	fmt.Printf("  %s  %s  (%d/%d applicable categories)\n",
+		cortexStyle.Render("OWASP LLM Top-10 coverage"), okStyle.Render(pct), cov.Covered, cov.Applicable)
+	if r.Trend.Available {
+		arrow := "→"
+		style := dimStyle
+		if r.Trend.DeltaPct > 0 {
+			arrow, style = "↑", okStyle
+		} else if r.Trend.DeltaPct < 0 {
+			arrow, style = "↓", warnStyle
+		}
+		fmt.Println(style.Render(fmt.Sprintf("    %s %+.0f%% since %s (was %.0f%%)",
+			arrow, r.Trend.DeltaPct, relativeTime(r.Trend.FirstTS), r.Trend.FirstPct)))
+	}
+	fmt.Println(dimStyle.Render("  " + strings.Repeat("─", 48)))
+	for _, c := range cov.Categories {
+		if c.Status == security.NotApplicable {
+			continue
+		}
+		label := string(c.Status)
+		switch c.Status {
+		case security.Enforced:
+			label = okStyle.Render(label)
+		case security.Gap:
+			label = warnStyle.Render(label)
+		}
+		fmt.Printf("    %-6s %-32s %s\n", c.ID, c.Name, label)
+	}
+	fmt.Println()
+}
+
+// relativeTime renders an RFC3339 timestamp as a human-relative duration
+// ("3 hours ago"). Falls back to the raw string if it doesn't parse — a
+// display glitch, never a crash, over a timestamp some future format change
+// didn't anticipate.
+func relativeTime(ts string) string {
+	t, err := time.Parse(time.RFC3339, ts)
+	if err != nil {
+		return ts
+	}
+	d := time.Since(t)
+	switch {
+	case d < time.Minute:
+		return "just now"
+	case d < time.Hour:
+		n := int(d / time.Minute)
+		return fmt.Sprintf("%d minute%s ago", n, plural(n))
+	case d < 24*time.Hour:
+		n := int(d / time.Hour)
+		return fmt.Sprintf("%d hour%s ago", n, plural(n))
+	default:
+		n := int(d / (24 * time.Hour))
+		return fmt.Sprintf("%d day%s ago", n, plural(n))
+	}
+}
+
+func plural(n int) string {
+	if n == 1 {
+		return ""
+	}
+	return "s"
 }
 
 // cmdModels manages the runtime-extensible model capability registry.

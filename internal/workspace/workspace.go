@@ -267,6 +267,19 @@ func (r *Registry) ValidatorFor(ext string) string {
 	return r.validators[strings.TrimPrefix(ext, ".")]
 }
 
+// HasAnyValidator reports whether at least one extension has a real
+// (non-null) validator command — "output validation runs for at least one
+// file type" as distinct from every entry having been explicitly nulled out
+// (as ts/tsx are by default, relying on a different built-in path instead).
+func (r *Registry) HasAnyValidator() bool {
+	for _, cmd := range r.validators {
+		if cmd != "" {
+			return true
+		}
+	}
+	return false
+}
+
 // GitRoot walks up from path to find the nearest .git directory.
 // Returns empty string if not inside a git repo.
 // Termination is by fixed point, not by comparing against "/". filepath.Dir

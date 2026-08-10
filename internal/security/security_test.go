@@ -95,6 +95,81 @@ func TestBuild_ChainCheckReflectsRealVerifyChain(t *testing.T) {
 	if chain.Status != "BROKEN" {
 		t.Errorf("chain check Status = %q, want BROKEN after tampering", chain.Status)
 	}
+	if r.IntegrityIntact {
+		t.Error("Report.IntegrityIntact = true after tampering, want false — the hard override must fire")
+	}
+}
+
+func TestBuild_IntegrityIntactWhenChainUntampered(t *testing.T) {
+	testutil.NewSandbox(t)
+	if err := ledger.Record(ledger.DefaultPath(), ledger.Event{Agent: "a", Tool: "h1", Decision: ledger.Allow}); err != nil {
+		t.Fatal(err)
+	}
+	r, err := Build(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !r.IntegrityIntact {
+		t.Error("Report.IntegrityIntact = false with an untampered chain, want true")
+	}
+}
+
+// Recommendations is the feedback loop: exactly the coverage Gaps plus
+// above-threshold risky heads, nothing else.
+func TestBuild_RecommendationsListsGapsAndRiskyHeads(t *testing.T) {
+	testutil.NewSandbox(t)
+	for i := 0; i < 2; i++ {
+		if err := ledger.Record(ledger.DefaultPath(), ledger.Event{Agent: "a", Tool: "sketchy", Decision: ledger.Deny}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	r, err := Build(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(r.Recommendations, "\n")
+	for _, want := range []string{"LLM03", "LLM07", "sketchy"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("Recommendations missing %q:\n%s", want, joined)
+		}
+	}
+	// A head with only one denial is below the threshold and must not appear.
+	if err := ledger.Record(ledger.DefaultPath(), ledger.Event{Agent: "a", Tool: "barely-risky", Decision: ledger.Deny}); err != nil {
+		t.Fatal(err)
+	}
+	r, err = Build(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(strings.Join(r.Recommendations, "\n"), "barely-risky") {
+		t.Error("a head with a single denial (below threshold) should not be recommended")
+	}
+}
+
+// Build must persist a score-history entry every call, so the second call in
+// the same test sees a trend against the first.
+func TestBuild_PersistsScoreHistoryAcrossCalls(t *testing.T) {
+	testutil.NewSandbox(t)
+
+	first, err := Build(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Trend.Available {
+		t.Error("first-ever Build() call reported a trend, want none")
+	}
+
+	second, err := Build(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !second.Trend.Available {
+		t.Fatal("second Build() call reported no trend — the first call's history was not persisted")
+	}
+	if second.Trend.FirstPct != first.Coverage.PercentCovered {
+		t.Errorf("Trend.FirstPct = %v, want %v (the first call's own coverage)", second.Trend.FirstPct, first.Coverage.PercentCovered)
+	}
 }
 
 func TestBuild_CostCeilingCheckCountsCostDenials(t *testing.T) {

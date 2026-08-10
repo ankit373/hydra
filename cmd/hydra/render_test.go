@@ -274,3 +274,29 @@ func TestCLI_CostAndStatsAgainstRealRows(t *testing.T) {
 		})
 	}
 }
+
+// relativeTime is the trend line's human-facing duration — a bad format
+// string here would silently misreport how stale the comparison point is.
+func TestRelativeTime(t *testing.T) {
+	cases := []struct {
+		ago  time.Duration
+		want string
+	}{
+		{30 * time.Second, "just now"},
+		{5 * time.Minute, "5 minutes ago"},
+		{1 * time.Minute, "1 minute ago"},
+		{3 * time.Hour, "3 hours ago"},
+		{1 * time.Hour, "1 hour ago"},
+		{48 * time.Hour, "2 days ago"},
+	}
+	for _, tc := range cases {
+		ts := time.Now().Add(-tc.ago).Format(time.RFC3339)
+		if got := relativeTime(ts); got != tc.want {
+			t.Errorf("relativeTime(%s ago) = %q, want %q", tc.ago, got, tc.want)
+		}
+	}
+
+	if got := relativeTime("not a timestamp"); got != "not a timestamp" {
+		t.Errorf("relativeTime(garbage) = %q, want the raw string back, not a crash", got)
+	}
+}

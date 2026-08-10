@@ -42,6 +42,21 @@ type Report struct {
 	Ledger LedgerPanel       `json:"ledger"`
 	ByHead []ledger.HeadRisk `json:"byHead"`
 	Checks []Check           `json:"checks"`
+
+	// Coverage is Hydra's posture against the OWASP LLM Top 10 — the score.
+	Coverage Coverage `json:"coverage"`
+	// IntegrityIntact is false when VerifyChain found tampering — a hard
+	// override on Coverage's own percentage, since a tampered ledger means
+	// none of the other evidence in this report can be trusted (mirrors SSL
+	// Labs' pattern of a single catastrophic flaw capping an otherwise-decent
+	// weighted grade).
+	IntegrityIntact bool `json:"integrityIntact"`
+	// Trend compares Coverage against the first-ever recorded run, when history exists.
+	Trend Trend `json:"trend"`
+	// Recommendations is the feedback loop: one line per coverage Gap plus
+	// one per above-threshold risky head — generated from the same data
+	// above, the backlog for the next hardening round.
+	Recommendations []string `json:"recommendations,omitempty"`
 }
 
 // Build assembles the report from the ledger, the loaded access policy, and
@@ -66,21 +81,33 @@ func Build(heads []provider.Head) (*Report, error) {
 		return nil, err
 	}
 
+	chainRes, err := ledger.VerifyChain(ledger.DefaultPath())
+	if err != nil {
+		return nil, err
+	}
+	r.IntegrityIntact = chainRes.Intact
+
 	r.Checks = []Check{
-		chainCheck(),
+		chainCheck(chainRes),
 		costCeilingCheck(events),
 		provenanceCheck(heads),
 		frameworkCheck(pol),
 	}
+
+	r.Coverage = computeCoverage(pol, events)
+
+	historyPath := DefaultScoreHistoryPath()
+	prior := loadScoreHistory(historyPath)
+	r.Trend = buildTrend(prior, r.Coverage)
+	appendScoreHistory(historyPath, r.Coverage)
+
+	r.Recommendations = buildRecommendations(r.Coverage, r.ByHead)
+
 	return r, nil
 }
 
-func chainCheck() Check {
+func chainCheck(res ledger.ChainResult) Check {
 	const name = "Ledger chain integrity"
-	res, err := ledger.VerifyChain(ledger.DefaultPath())
-	if err != nil {
-		return Check{Name: name, Status: "error", Detail: err.Error()}
-	}
 	if res.Chained == 0 {
 		return Check{Name: name, Status: "no chained events",
 			Detail: fmt.Sprintf("%d unchained event(s) predate this feature", res.Unchained)}
@@ -93,11 +120,36 @@ func chainCheck() Check {
 		Detail: fmt.Sprintf("%d chained event(s), %d unchained", res.Chained, res.Unchained)}
 }
 
+// buildRecommendations is the feedback loop: exactly the coverage Gaps plus
+// heads whose denied+flagged activity crosses riskThreshold — nothing else.
+func buildRecommendations(cov Coverage, byHead []ledger.HeadRisk) []string {
+	const riskThreshold = 2
+	var out []string
+	for _, c := range cov.Categories {
+		if c.Status == Gap {
+			out = append(out, fmt.Sprintf("%s %s: %s", c.ID, c.Name, c.Detail))
+		}
+	}
+	for _, h := range byHead {
+		if h.Denied+h.Flagged >= riskThreshold {
+			out = append(out, fmt.Sprintf("%s: %d denied, %d flagged — review its ledger rules", h.Head, h.Denied, h.Flagged))
+		}
+	}
+	return out
+}
+
+// costCeilingReason reports whether e was a --max-cost refusal — the one
+// substring check shared by the cost-ceiling Check and the LLM10 detector,
+// so the two can never disagree about what counts.
+func costCeilingReason(e ledger.Event) bool {
+	return e.Decision == ledger.Deny && strings.Contains(e.Reason, "cost ceiling")
+}
+
 func costCeilingCheck(events []ledger.Event) Check {
 	const name = "Denial-of-wallet guard"
 	n := 0
 	for _, e := range events {
-		if e.Decision == ledger.Deny && strings.Contains(e.Reason, "cost ceiling") {
+		if costCeilingReason(e) {
 			n++
 		}
 	}
