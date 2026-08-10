@@ -926,8 +926,12 @@ func cmdMCP() *cobra.Command {
 				return nil
 			}
 			for _, e := range events {
-				fmt.Printf("  %s  %-6s  %-12s %s/%s %s\n", e.TS, strings.ToUpper(string(e.Decision)),
+				line := fmt.Sprintf("  %s  %-6s  %-12s %s/%s %s", e.TS, strings.ToUpper(string(e.Decision)),
 					e.Agent, e.Tool, e.Resource, dimStyle.Render(string(e.Action)))
+				if e.Flagged {
+					line += dimStyle.Render(fmt.Sprintf("  [flagged: %s]", e.FlagReason))
+				}
+				fmt.Println(line)
 			}
 			return nil
 		},
@@ -949,7 +953,7 @@ func cmdMCP() *cobra.Command {
 			if repJSON {
 				return json.NewEncoder(os.Stdout).Encode(s)
 			}
-			fmt.Printf("\n  ledger events   %d  (%d allowed · %d denied)\n", s.Total, s.Allowed, s.Denied)
+			fmt.Printf("\n  ledger events   %d  (%d allowed · %d denied · %d flagged)\n", s.Total, s.Allowed, s.Denied, s.Flagged)
 			if len(s.ByAgent) > 0 {
 				fmt.Println("  by agent:")
 				for _, kc := range ledger.SortedCounts(s.ByAgent) {

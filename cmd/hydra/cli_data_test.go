@@ -72,6 +72,43 @@ func populated(t *testing.T) *testutil.Sandbox {
 	return s
 }
 
+// ── mcp ───────────────────────────────────────────────────────────────────────
+
+// A flagged event (heuristic prompt-injection marker matched) must be visible
+// in both `mcp log` and `mcp report` — otherwise the signal lands in the
+// JSONL and is invisible everywhere an operator actually looks.
+func TestCLI_MCPLogAndReport_SurfaceFlaggedEvents(t *testing.T) {
+	testutil.NewSandbox(t)
+	now := time.Now().UTC().Format(time.RFC3339)
+	seed(t, "mcp_ledger.jsonl", strings.Join([]string{
+		`{"ts":"` + now + `","agent":"hydra-dispatch","tool":"claude","resource":"","action":"exec","decision":"allow","flagged":true,"flag_reason":"ignore previous instructions"}`,
+		`{"ts":"` + now + `","agent":"hydra-dispatch","tool":"claude","resource":"","action":"exec","decision":"allow"}`,
+	}, "\n")+"\n")
+
+	logOut, logCobraOut, err := run(t, "mcp", "log")
+	if err != nil {
+		t.Fatalf("`hyctl mcp log` failed: %v", err)
+	}
+	combined := logOut + logCobraOut
+	if !strings.Contains(combined, "flagged") || !strings.Contains(combined, "ignore previous instructions") {
+		t.Errorf("`mcp log` does not surface the flagged event:\n%s", combined)
+	}
+
+	repOut, repCobraOut, err := run(t, "mcp", "report", "--json")
+	if err != nil {
+		t.Fatalf("`hyctl mcp report --json` failed: %v", err)
+	}
+	var s struct {
+		Flagged int `json:"flagged"`
+	}
+	if err := json.Unmarshal([]byte(repOut+repCobraOut), &s); err != nil {
+		t.Fatalf("report --json did not parse: %v\n%s", err, repOut+repCobraOut)
+	}
+	if s.Flagged != 1 {
+		t.Errorf("report flagged count = %d, want 1", s.Flagged)
+	}
+}
+
 // ── trust ─────────────────────────────────────────────────────────────────────
 
 // `hyctl trust explain` is the audit trail behind a confidence number: it must
