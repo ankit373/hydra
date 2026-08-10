@@ -526,3 +526,115 @@ func TestFilter(t *testing.T) {
 		t.Errorf("Filter(agent=a, denied) = %d, want 1", len(got))
 	}
 }
+
+func TestVerifyChain_RoundTripIsIntact(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mcp_ledger.jsonl")
+	for i := 0; i < 5; i++ {
+		if err := Record(path, Event{Agent: "a", Tool: "t", Decision: Allow}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	res, err := VerifyChain(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Intact || res.Chained != 5 || res.Unchained != 0 {
+		t.Errorf("ChainResult = %+v, want intact with 5 chained events", res)
+	}
+}
+
+// Editing a line after the fact must be detectable — the entire point of a
+// hash chain over a plain append-only file.
+func TestVerifyChain_DetectsATamperedLine(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mcp_ledger.jsonl")
+	for i := 0; i < 3; i++ {
+		if err := Record(path, Event{Agent: "a", Tool: "t", Decision: Allow}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimRight(string(raw), "\n"), "\n")
+	var e Event
+	if err := json.Unmarshal([]byte(lines[1]), &e); err != nil {
+		t.Fatal(err)
+	}
+	e.Decision = Deny // tamper: flip an already-recorded decision
+	tampered, err := json.Marshal(e)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines[1] = string(tampered)
+	if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := VerifyChain(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Intact {
+		t.Fatal("VerifyChain reported intact after a line was hand-edited")
+	}
+	if res.BrokenAt != 1 {
+		t.Errorf("BrokenAt = %d, want 1 (the tampered line's index)", res.BrokenAt)
+	}
+}
+
+// A ledger written before this feature has no Hash on any event — that must
+// report as fully unchained, not as a broken chain.
+func TestVerifyChain_PreExistingLedgerIsUnchainedNotBroken(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mcp_ledger.jsonl")
+	old := []Event{
+		{Agent: "a", Tool: "t", Decision: Allow},
+		{Agent: "a", Tool: "t", Decision: Deny},
+	}
+	var lines []string
+	for _, e := range old {
+		raw, err := json.Marshal(e)
+		if err != nil {
+			t.Fatal(err)
+		}
+		lines = append(lines, string(raw))
+	}
+	if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := VerifyChain(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Intact || res.Chained != 0 || res.Unchained != 2 {
+		t.Errorf("ChainResult = %+v, want intact with 0 chained, 2 unchained", res)
+	}
+}
+
+// A ledger that mixes pre-feature (unchained) events with new (chained) ones
+// — the real-world shape every existing installation will have — must verify
+// the chained tail without complaining about the unchained head.
+func TestVerifyChain_MixedUnchainedThenChainedIsIntact(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mcp_ledger.jsonl")
+	old, err := json.Marshal(Event{Agent: "a", Tool: "t", Decision: Allow})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, append(old, '\n'), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 3; i++ {
+		if err := Record(path, Event{Agent: "a", Tool: "t", Decision: Allow}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	res, err := VerifyChain(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Intact || res.Chained != 3 || res.Unchained != 1 {
+		t.Errorf("ChainResult = %+v, want intact with 3 chained, 1 unchained", res)
+	}
+}

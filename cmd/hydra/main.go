@@ -972,7 +972,33 @@ func cmdMCP() *cobra.Command {
 	}
 	report.Flags().BoolVar(&repJSON, "json", false, "machine-readable JSON output")
 
-	cmd.AddCommand(check, record, verify, logCmd, report)
+	// verify-chain: confirm the ledger's hash chain hasn't been tampered with.
+	var chainJSON bool
+	verifyChain := &cobra.Command{
+		Use:   "verify-chain",
+		Short: "Confirm the ledger's hash chain is intact (tamper-evidence)",
+		RunE: func(_ *cobra.Command, _ []string) error {
+			res, err := ledger.VerifyChain(ledger.DefaultPath())
+			if err != nil {
+				return err
+			}
+			if chainJSON {
+				return json.NewEncoder(os.Stdout).Encode(res)
+			}
+			if res.Intact {
+				fmt.Printf("  %s  chain intact — %d chained event(s), %d unchained (pre-dates this feature)\n",
+					okStyle.Render("OK"), res.Chained, res.Unchained)
+				return nil
+			}
+			fmt.Printf("  %s  chain broken at event index %d — the ledger was modified after recording\n",
+				strings.ToUpper(string(ledger.Deny)), res.BrokenAt)
+			os.Exit(3) // non-zero so callers can gate on it
+			return nil
+		},
+	}
+	verifyChain.Flags().BoolVar(&chainJSON, "json", false, "machine-readable JSON output")
+
+	cmd.AddCommand(check, record, verify, logCmd, report, verifyChain)
 	return cmd
 }
 
@@ -2333,6 +2359,7 @@ var (
 	cortexStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
 	dimStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 	warnStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
+	okStyle     = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("42"))
 )
 
 // promptPreview shortens a prompt for a log Detail field. Run events carry a
