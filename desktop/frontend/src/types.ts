@@ -205,6 +205,65 @@ export interface InstallResult {
   error?: string
 }
 
+export type CoverageStatus = 'enforced' | 'configured' | 'gap' | 'n/a'
+
+export interface Category {
+  id: string
+  name: string
+  status: CoverageStatus
+  detail: string
+}
+
+export interface Coverage {
+  categories: Category[]
+  /** Categories excluding n/a. */
+  applicable: number
+  /** Enforced + Configured. */
+  covered: number
+  percentCovered: number
+}
+
+export interface Trend {
+  available: boolean
+  deltaPct: number
+  firstPct: number
+  firstTs: string
+}
+
+export interface LedgerPanel {
+  total: number
+  allowed: number
+  denied: number
+  flagged: number
+}
+
+export interface HeadRisk {
+  head: string
+  denied: number
+  flagged: number
+}
+
+export interface Check {
+  name: string
+  status: string
+  detail: string
+}
+
+export interface SecurityReport {
+  /** False when the ledger has never recorded an event. */
+  hasData: boolean
+  ledger: LedgerPanel
+  byHead: HeadRisk[]
+  checks: Check[]
+  coverage: Coverage
+  /** Hard override: false means the ledger chain was tampered with — the
+   *  coverage percentage above cannot be trusted regardless of its value. */
+  integrityIntact: boolean
+  trend: Trend
+  /** The feedback loop: one line per coverage gap plus one per risky head. */
+  recommendations?: string[]
+}
+
 export interface ChatReply {
   output: string
   head: string

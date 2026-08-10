@@ -40,6 +40,16 @@ export function govBand(p: number): 'normal' | 'warning' | 'critical' {
   return 'normal'
 }
 
+/**
+ * Coverage band for the OWASP LLM Top-10 score. Inverted from govBand: here
+ * high is good, since this is "percent covered" not "percent of budget used".
+ */
+export function coverageBand(pct: number): 'good' | 'warn' | 'bad' {
+  if (pct >= 80) return 'good'
+  if (pct >= 50) return 'warn'
+  return 'bad'
+}
+
 /** Cost ramp for a per-row figure, relative to the largest row in its table. */
 export function costBand(v: number, max: number): 'free' | 'cheap' | 'mid' | 'expensive' {
   if (v <= 0) return 'free'

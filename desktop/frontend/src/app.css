@@ -138,6 +138,7 @@ body {
 .card__note { margin-top: 5px; font-size: 12px; color: var(--hy-dim); }
 
 .card__value--unknown { color: var(--hy-dim); font-size: 19px; font-weight: 500; }
+.card__value--sm { margin-top: 7px; font-size: 15px; font-weight: 600; }
 
 /* ── Governor bands ────────────────────────────────────────────────────── */
 
@@ -153,6 +154,61 @@ body {
   overflow: hidden;
 }
 .gov__fill { height: 100%; border-radius: 2px; background: currentColor; }
+
+/* ── Security ──────────────────────────────────────────────────────────── */
+
+/* Inverted from .gov--*: here high is good, since this is a coverage
+   percentage, not a budget-pressure gauge. */
+.sec-score--good { color: var(--hy-cheap); }
+.sec-score--warn { color: var(--hy-mid); }
+.sec-score--bad  { color: var(--hy-expensive); }
+
+.sec-cats { list-style: none; margin: 0; padding: 0; }
+
+.sec-cat {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--hy-line);
+}
+.sec-cat:last-child { border-bottom: 0; }
+
+.sec-cat__id {
+  font-family: var(--hy-font-mono);
+  font-size: 11px;
+  color: var(--hy-dim);
+  flex: 0 0 42px;
+}
+.sec-cat__name { font-size: 13px; flex: 0 0 190px; }
+.sec-cat__detail { color: var(--hy-dim); font-size: 12px; flex: 1; }
+
+.sec-cat__status {
+  font-family: var(--hy-font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--hy-line);
+  color: var(--hy-dim);
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+.sec-cat__status--enforced   { color: var(--hy-cheap);     border-color: color-mix(in srgb, var(--hy-cheap) 40%, transparent); }
+.sec-cat__status--configured { color: var(--hy-aqua);      border-color: color-mix(in srgb, var(--hy-aqua) 40%, transparent); }
+.sec-cat__status--gap        { color: var(--hy-expensive); border-color: color-mix(in srgb, var(--hy-expensive) 40%, transparent); }
+
+.sec-recs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.sec-recs li {
+  background: var(--hy-panel);
+  border: 1px solid var(--hy-line);
+  border-left: 3px solid var(--hy-mid);
+  border-radius: var(--hy-radius-sm);
+  padding: 9px 12px;
+  font-size: 13px;
+  color: var(--hy-ink);
+}
 
 /* ── Tables ────────────────────────────────────────────────────────────── */
 
