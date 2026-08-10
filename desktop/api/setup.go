@@ -193,15 +193,25 @@ func defaultHyctlSearchDirs() []string {
 
 // findHyctlInCommonDirs checks hyctlSearchDirs directly with os.Stat, for the
 // PATH-refresh gap CheckHyctl's doc comment describes.
+//
+// On Windows this tries every name PATHEXT would resolve for a bare "hyctl":
+// install.ps1 produces hyctl.exe, but a real hyctl.exe binary is what this
+// checks for in production — the multi-name list exists so a fake, script-based
+// stand-in (a .bat, the same trick internal/testutil.Sandbox.FakeBinary and
+// this package's own fakeHyctl test helper use to avoid compiling a real PE
+// binary in a test) resolves too, the same way exec.LookPath's PATHEXT search
+// would treat both as valid.
 func findHyctlInCommonDirs() (string, error) {
-	bin := "hyctl"
+	names := []string{"hyctl"}
 	if runtime.GOOS == "windows" {
-		bin = "hyctl.exe"
+		names = []string{"hyctl.exe", "hyctl.bat", "hyctl.cmd"}
 	}
 	for _, dir := range hyctlSearchDirs() {
-		p := filepath.Join(dir, bin)
-		if info, err := os.Stat(p); err == nil && !info.IsDir() {
-			return p, nil
+		for _, name := range names {
+			p := filepath.Join(dir, name)
+			if info, err := os.Stat(p); err == nil && !info.IsDir() {
+				return p, nil
+			}
 		}
 	}
 	return "", fmt.Errorf("hyctl not found in common install locations")
