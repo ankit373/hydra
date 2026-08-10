@@ -54,6 +54,8 @@ func (j *CalibratedJudge) Judge(_ context.Context, _ string, attempts []Attempt)
 	}
 
 	groups := clusterByAgreement(attempts, successful, j.equiv)
+	recordSwarmCoAgreement(j.domain, successful, attempts, j.equiv)
+
 	lambda := make([]float64, len(groups))
 	for k := range groups {
 		lambda[k] = j.lambdaFor(groups[k], successful, attempts)
@@ -103,7 +105,7 @@ func (j *CalibratedJudge) lambdaFor(hypothesis agreementGroup, successful []int,
 		llr := j.cal.LLR(attempts[idx].Head.ID, j.domain, inGroup[idx])
 		if fam := attempts[idx].Head.Provider; fam != "" {
 			if seenFamily[fam] {
-				llr *= trust.CorrelationDiscount
+				llr *= trust.FamilyDiscount(trust.DefaultCoAgreementPath(), fam)
 			}
 			seenFamily[fam] = true
 		}
@@ -128,22 +130,34 @@ func representative(g agreementGroup, attempts []Attempt, cal *trust.Calibrator,
 
 // clusterByAgreement greedily groups attempts whose outputs equiv treats as the same answer.
 func clusterByAgreement(attempts []Attempt, successful []int, equiv trust.AnswerEquivalence) []agreementGroup {
-	var groups []agreementGroup
-	for _, idx := range successful {
-		placed := false
-		for gi := range groups {
-			rep := groups[gi].members[0]
-			if equiv(attempts[rep].Output, attempts[idx].Output) {
-				groups[gi].members = append(groups[gi].members, idx)
-				placed = true
-				break
-			}
+	texts := make([]string, len(successful))
+	for i, idx := range successful {
+		texts[i] = attempts[idx].Output
+	}
+	groups := make([]agreementGroup, 0, len(texts))
+	for _, g := range trust.ClusterByAgreement(texts, equiv) {
+		members := make([]int, len(g))
+		for i, localIdx := range g {
+			members[i] = successful[localIdx]
 		}
-		if !placed {
-			groups = append(groups, agreementGroup{members: []int{idx}})
-		}
+		groups = append(groups, agreementGroup{members: members})
 	}
 	return groups
+}
+
+// recordSwarmCoAgreement feeds ModeBest's own agreement structure into the
+// same coupling measurement trust.Run's SPRT path feeds, so a family's
+// FamilyDiscount improves from every ensembling path, not just --confidence.
+func recordSwarmCoAgreement(domain string, successful []int, attempts []Attempt, equiv trust.AnswerEquivalence) {
+	ids := make([]string, len(successful))
+	families := make([]string, len(successful))
+	texts := make([]string, len(successful))
+	for i, idx := range successful {
+		ids[i] = attempts[idx].Head.ID
+		families[i] = attempts[idx].Head.Provider
+		texts[i] = attempts[idx].Output
+	}
+	trust.RecordCoAgreement(trust.DefaultCoAgreementPath(), domain, ids, families, texts, equiv)
 }
 
 func allZero(xs []float64) bool {

@@ -2226,6 +2226,15 @@ func cmdTrustCalibration() *cobra.Command {
 				fmt.Printf("  %-28.28s %-10.10s %6.0f %7.3f %7.3f %8.3f\n",
 					s.Source, s.Domain, s.N, s.Se, s.Sp, s.D)
 			}
+			// A family whose members have converged on effectively one vote is a
+			// coordination risk the se/sp table above cannot show — two "sources"
+			// that always agree are one opinion, not confirming evidence.
+			for _, fam := range trust.KnownFamilies(trust.DefaultCoAgreementPath()) {
+				if j, warn := trust.FalseConsensusWarning(trust.DefaultCoAgreementPath(), fam); warn {
+					fmt.Printf("\n  %s\n", warnStyle.Render(fmt.Sprintf(
+						"false-consensus warning: %q's members measured J=%.2f — effectively one vote, not independent confirmation", fam, j)))
+				}
+			}
 			fmt.Println()
 			return nil
 		},
