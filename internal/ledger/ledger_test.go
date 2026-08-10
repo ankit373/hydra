@@ -112,6 +112,53 @@ func TestPolicy_Decide_MatchesOnClassification(t *testing.T) {
 	}
 }
 
+func TestFrameworksCovered_ReturnsDistinctSortedNonEmptyTags(t *testing.T) {
+	// Rules built directly (not through LoadPolicy) already carry normalized
+	// tags here — case normalization is validate()'s job, covered separately
+	// by TestLoadPolicy_NormalizesFramework.
+	p := Policy{Rules: []Rule{
+		{Tool: "a", Framework: "owasp:llm06", Decision: Deny},
+		{Tool: "b", Framework: "owasp:llm06", Decision: Deny}, // duplicate
+		{Tool: "c", Framework: "atlas:ai-ml-attack-staging", Decision: Allow},
+		{Tool: "d", Decision: Allow}, // untagged, must not appear
+	}}
+	got := p.FrameworksCovered()
+	want := []string{"atlas:ai-ml-attack-staging", "owasp:llm06"}
+	if len(got) != len(want) {
+		t.Fatalf("FrameworksCovered = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("FrameworksCovered[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
+func TestFrameworksCovered_EmptyWhenNoRuleIsTagged(t *testing.T) {
+	p := Policy{Rules: []Rule{{Tool: "a", Decision: Allow}}}
+	if got := p.FrameworksCovered(); len(got) != 0 {
+		t.Errorf("FrameworksCovered = %v, want empty", got)
+	}
+}
+
+// LoadPolicy must normalize Framework the same way it normalizes
+// Classification — a rule authored as "OWASP:LLM06" and one authored as
+// "owasp:llm06" are the same tag.
+func TestLoadPolicy_NormalizesFramework(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "policy.json")
+	body := `{"rules":[{"tool":"a","framework":"OWASP:LLM06","decision":"deny"}],"default":"allow"}`
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	pol, err := LoadPolicy(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := pol.FrameworksCovered(); len(got) != 1 || got[0] != "owasp:llm06" {
+		t.Errorf("FrameworksCovered = %v, want [owasp:llm06]", got)
+	}
+}
+
 func TestCheck_RecordsDecision(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "mcp_ledger.jsonl")
 	p := Policy{Rules: []Rule{{Tool: "fs", Resource: "/etc/*", Decision: Deny}}, Default: Allow}
