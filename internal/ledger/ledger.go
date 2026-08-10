@@ -354,6 +354,13 @@ type Rule struct {
 	Action         Action   `json:"action,omitempty"`
 	Classification string   `json:"classification,omitempty"`
 	Decision       Decision `json:"decision"`
+
+	// Framework optionally tags which recognized security framework category
+	// this rule covers (e.g. "owasp:llm06", "atlas:ai-ml-attack-staging") —
+	// freeform, normalized like Classification. Purely a label for
+	// FrameworksCovered's coverage report: it plays no part in Decide's
+	// matching, since an access attempt carries no "framework" of its own.
+	Framework string `json:"framework,omitempty"`
 }
 
 // Policy is an ordered rule set with a default decision. First matching rule wins.
@@ -468,8 +475,29 @@ func (p *Policy) validate() error {
 			return fmt.Errorf("rule %d: invalid resource pattern %q: %w", i, r.Resource, err)
 		}
 		r.Classification = NormalizeClassification(r.Classification)
+		r.Framework = NormalizeClassification(r.Framework)
 	}
 	return nil
+}
+
+// FrameworksCovered returns the distinct, non-empty Framework tags present
+// across p's rules, sorted — hyctl security's coverage list: which
+// recognized categories (e.g. "owasp:llm06", "atlas:ai-ml-attack-staging")
+// have at least one rule, versus which don't. Never a manufactured score —
+// only what a user has actually tagged and configured.
+func (p Policy) FrameworksCovered() []string {
+	seen := map[string]bool{}
+	for _, r := range p.Rules {
+		if r.Framework != "" {
+			seen[r.Framework] = true
+		}
+	}
+	out := make([]string, 0, len(seen))
+	for f := range seen {
+		out = append(out, f)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // CheckRequest describes one access-check request: what's being accessed, by
