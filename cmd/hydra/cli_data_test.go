@@ -131,6 +131,48 @@ func TestCLI_MCPVerifyChain_ReportsIntactAfterOrdinaryRecording(t *testing.T) {
 	}
 }
 
+// `hyctl security` is the security posture dashboard — it must run clean on
+// an empty machine (no ledger yet) and surface real data once the ledger has
+// events, never panicking on either state.
+func TestCLI_Security_HandlesEmptyAndSeededLedger(t *testing.T) {
+	testutil.NewSandbox(t)
+
+	emptyOut, emptyCobraOut, err := run(t, "security")
+	if err != nil {
+		t.Fatalf("`hyctl security` failed on an empty machine: %v", err)
+	}
+	if !strings.Contains(strings.ToLower(emptyOut+emptyCobraOut), "no ledger events") {
+		t.Errorf("`security` on an empty machine should say so plainly:\n%s", emptyOut+emptyCobraOut)
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	seed(t, "mcp_ledger.jsonl", strings.Join([]string{
+		`{"ts":"` + now + `","agent":"hydra-dispatch","tool":"claude","resource":"","action":"exec","decision":"allow"}`,
+		`{"ts":"` + now + `","agent":"hydra-dispatch","tool":"sketchy","resource":"","action":"exec","decision":"deny","reason":"denied by ledger policy"}`,
+	}, "\n")+"\n")
+
+	out, cobraOut, err := run(t, "security", "--json")
+	if err != nil {
+		t.Fatalf("`hyctl security --json` failed: %v", err)
+	}
+	var rep struct {
+		Ledger struct{ Total, Denied int } `json:"ledger"`
+		ByHead []struct {
+			Head   string `json:"head"`
+			Denied int    `json:"denied"`
+		} `json:"byHead"`
+	}
+	if err := json.Unmarshal([]byte(out+cobraOut), &rep); err != nil {
+		t.Fatalf("security --json did not parse: %v\n%s", err, out+cobraOut)
+	}
+	if rep.Ledger.Total != 2 || rep.Ledger.Denied != 1 {
+		t.Errorf("Ledger = %+v, want Total=2 Denied=1", rep.Ledger)
+	}
+	if len(rep.ByHead) != 1 || rep.ByHead[0].Head != "sketchy" {
+		t.Errorf("ByHead = %+v, want exactly the denied head", rep.ByHead)
+	}
+}
+
 // ── trust ─────────────────────────────────────────────────────────────────────
 
 // `hyctl trust explain` is the audit trail behind a confidence number: it must

@@ -159,6 +159,26 @@ func TestLoadPolicy_NormalizesFramework(t *testing.T) {
 	}
 }
 
+func TestByHeadRisk_GroupsSortsAndOmitsHeadsWithNoRisk(t *testing.T) {
+	events := []Event{
+		{Tool: "quiet", Decision: Allow},
+		{Tool: "risky", Decision: Deny},
+		{Tool: "risky", Decision: Deny},
+		{Tool: "risky", Flagged: true, Decision: Allow},
+		{Tool: "flagged-only", Flagged: true, Decision: Allow},
+	}
+	got := ByHeadRisk(events)
+	if len(got) != 2 {
+		t.Fatalf("ByHeadRisk = %+v, want 2 entries (quiet must be omitted)", got)
+	}
+	if got[0].Head != "risky" || got[0].Denied != 2 || got[0].Flagged != 1 {
+		t.Errorf("got[0] = %+v, want risky with 2 denied, 1 flagged (the riskiest first)", got[0])
+	}
+	if got[1].Head != "flagged-only" || got[1].Denied != 0 || got[1].Flagged != 1 {
+		t.Errorf("got[1] = %+v, want flagged-only with 0 denied, 1 flagged", got[1])
+	}
+}
+
 func TestCheck_RecordsDecision(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "mcp_ledger.jsonl")
 	p := Policy{Rules: []Rule{{Tool: "fs", Resource: "/etc/*", Decision: Deny}}, Default: Allow}
