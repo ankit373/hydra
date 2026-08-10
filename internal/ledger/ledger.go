@@ -632,6 +632,50 @@ func Filter(events []Event, agent string, deniedOnly bool) []Event {
 	return out
 }
 
+// HeadRisk is one head's denied/flagged activity — the "top-N riskiest
+// entity" panel a security dashboard reports on.
+type HeadRisk struct {
+	Head    string `json:"head"`
+	Denied  int    `json:"denied"`
+	Flagged int    `json:"flagged"`
+}
+
+// ByHeadRisk groups denied and flagged counts by Tool (head), sorted by
+// denied+flagged descending then Head ascending. Heads with neither are
+// omitted — this is a risk list, not a full inventory.
+func ByHeadRisk(events []Event) []HeadRisk {
+	type acc struct{ denied, flagged int }
+	byHead := map[string]*acc{}
+	for _, e := range events {
+		if e.Decision != Deny && !e.Flagged {
+			continue
+		}
+		a, ok := byHead[e.Tool]
+		if !ok {
+			a = &acc{}
+			byHead[e.Tool] = a
+		}
+		if e.Decision == Deny {
+			a.denied++
+		}
+		if e.Flagged {
+			a.flagged++
+		}
+	}
+	out := make([]HeadRisk, 0, len(byHead))
+	for head, a := range byHead {
+		out = append(out, HeadRisk{Head: head, Denied: a.denied, Flagged: a.flagged})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		ri, rj := out[i].Denied+out[i].Flagged, out[j].Denied+out[j].Flagged
+		if ri != rj {
+			return ri > rj
+		}
+		return out[i].Head < out[j].Head
+	})
+	return out
+}
+
 // SortedCounts returns key/count pairs sorted by count descending, for stable
 // report rendering.
 func SortedCounts(m map[string]int) []struct {

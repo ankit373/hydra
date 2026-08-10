@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -39,6 +40,7 @@ import (
 	"github.com/ankit373/hydra/internal/review"
 	"github.com/ankit373/hydra/internal/runid"
 	"github.com/ankit373/hydra/internal/runlog"
+	"github.com/ankit373/hydra/internal/security"
 	"github.com/ankit373/hydra/internal/swarm"
 	"github.com/ankit373/hydra/internal/trust"
 	"github.com/ankit373/hydra/internal/tui"
@@ -91,7 +93,7 @@ func rootCmd() *cobra.Command {
 		cmdInit(), cmdProbe(), cmdStatus(), cmdTui(), cmdDispatch(),
 		cmdEdit(), cmdReview(), cmdParallel(), cmdCost(), cmdStats(),
 		cmdPricing(), cmdTrust(), cmdGraph(), cmdContext(), cmdMCP(), cmdOracle(), cmdModels(),
-		cmdVersion(),
+		cmdSecurity(), cmdVersion(), cmdUpgrade(),
 	)
 	return root
 }
@@ -114,6 +116,69 @@ func cmdVersion() *cobra.Command {
 			// Update notice is printed by main() after Execute returns.
 		},
 	}
+}
+
+// ── upgrade ───────────────────────────────────────────────────────────────────
+
+// installScriptCommand is a var so a test can override it without touching
+// the network, matching the pattern update.ReleaseURL uses for the same
+// reason.
+var installScriptCommand = "curl -fsSL https://raw.githubusercontent.com/ankit373/hydra/main/install.sh | sh"
+
+func cmdUpgrade() *cobra.Command {
+	return &cobra.Command{
+		Use:   "upgrade",
+		Short: "Upgrade hyctl to the latest release",
+		Long: "Re-runs install.sh, the same curl installer documented for a fresh " +
+			"install. It downloads the latest release, verifies its checksum, and " +
+			"mv's the new binary over the old one — a rename, not a rewrite, so " +
+			"this process keeps running on its already-loaded pages until it exits " +
+			"and the new binary takes effect on the next invocation.\n\n" +
+			"Skipped for a Homebrew install: overwriting Homebrew's symlink here " +
+			"would desync it from `brew`'s own bookkeeping. Run `brew upgrade " +
+			"hyctl` there instead — the same command the update banner already " +
+			"recommends.",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return runUpgrade(cmd.OutOrStdout())
+		},
+	}
+}
+
+// executablePath is a var so a test can point runUpgrade at a fake path
+// (e.g. one inside a fake Cellar) without depending on where the test binary
+// itself happens to live.
+var executablePath = os.Executable
+
+// runUpgrade re-runs install.sh in place. HYDRA_BIN is pointed at the
+// currently running binary's own directory so the exact binary on PATH gets
+// replaced, rather than install.sh falling back to its own default (which may
+// not be the same directory this process was launched from).
+func runUpgrade(w io.Writer) error {
+	exe, exeErr := executablePath()
+	if exeErr == nil && isHomebrewInstall(exe) {
+		fmt.Fprintln(w, dimStyle.Render("  hyctl was installed via Homebrew — run: brew upgrade hyctl"))
+		return nil
+	}
+
+	fmt.Fprintln(w, dimStyle.Render("  Running install.sh..."))
+	c := exec.Command("sh", "-c", installScriptCommand)
+	c.Stdout = w
+	c.Stderr = w
+	if exeErr == nil {
+		c.Env = append(os.Environ(), "HYDRA_BIN="+filepath.Dir(exe))
+	}
+	return c.Run()
+}
+
+// isHomebrewInstall reports whether exePath resolves into a Homebrew Cellar —
+// true for both /usr/local/Cellar and /opt/homebrew/Cellar on macOS, and
+// Linuxbrew's /home/linuxbrew/.linuxbrew/Cellar.
+func isHomebrewInstall(exePath string) bool {
+	real, err := filepath.EvalSymlinks(exePath)
+	if err != nil {
+		real = exePath
+	}
+	return strings.Contains(real, "/Cellar/")
 }
 
 // ── tui (interactive cockpit) ───────────────────────────────────────────────────
@@ -476,14 +541,22 @@ func cmdDispatch() *cobra.Command {
 			// Mark the run live for its whole duration. Without this
 			// runlog.LiveRuns() is always empty and nothing — cockpit or desktop
 			// Fleet — can distinguish a running agent from a finished one.
-			hb := runlog.StartHeartbeat(ctx, runID, runlog.HeartbeatInterval)
-			defer hb.Stop()
+			//
+			// --dry-run executes nothing in every mode it combines with (plain,
+			// --swarm, --confidence): no head is chosen, no output produced.
+			// Logging one anyway leaves a permanent, contentless Fleet card
+			// behind on every preview — 0ms elapsed, $0.00, no agents, nothing
+			// to say why — indistinguishable from a broken reconstruction (#379).
+			if !dryRun {
+				hb := runlog.StartHeartbeat(ctx, runID, runlog.HeartbeatInterval)
+				defer hb.Stop()
 
-			rl := runlog.New(runID)
-			_ = rl.Append(runlog.Event{Kind: runlog.KindRunStarted, TaskID: taskID, Detail: promptPreview(prompt)})
-			defer func() {
-				_ = rl.Append(runlog.Event{Kind: runlog.KindRunFinished, TaskID: taskID})
-			}()
+				rl := runlog.New(runID)
+				_ = rl.Append(runlog.Event{Kind: runlog.KindRunStarted, TaskID: taskID, Detail: promptPreview(prompt)})
+				defer func() {
+					_ = rl.Append(runlog.Event{Kind: runlog.KindRunFinished, TaskID: taskID})
+				}()
+			}
 
 			d, err := dispatch.New(ctx)
 			if err != nil {
@@ -1003,6 +1076,153 @@ func cmdMCP() *cobra.Command {
 
 	cmd.AddCommand(check, record, verify, logCmd, report, verifyChain)
 	return cmd
+}
+
+// cmdSecurity is the security posture dashboard: ledger accountability,
+// per-head risk, and a short list of honest checks — never a manufactured
+// score, only what's actually configured and observed.
+func cmdSecurity() *cobra.Command {
+	var jsonOut bool
+	cmd := &cobra.Command{
+		Use:   "security",
+		Short: "Security posture dashboard: ledger accountability, risk by head, and honest checks",
+		RunE: func(_ *cobra.Command, _ []string) error {
+			heads := probe.Run(context.Background()).Heads
+			rep, err := security.Build(heads)
+			if err != nil {
+				return err
+			}
+			if jsonOut {
+				return json.NewEncoder(os.Stdout).Encode(rep)
+			}
+			printSecurityReport(rep)
+			return nil
+		},
+	}
+	cmd.Flags().BoolVar(&jsonOut, "json", false, "machine-readable JSON output")
+	return cmd
+}
+
+func printSecurityReport(r *security.Report) {
+	fmt.Println()
+	printCoverageHeadline(r)
+
+	if !r.HasData {
+		fmt.Println(dimStyle.Render("  no ledger events yet — nothing has dispatched through hyctl on this machine"))
+	} else {
+		fmt.Printf("  %s  %d  (%d allowed · %d denied · %d flagged)\n",
+			cortexStyle.Render("ledger events"), r.Ledger.Total, r.Ledger.Allowed, r.Ledger.Denied, r.Ledger.Flagged)
+	}
+
+	if len(r.ByHead) > 0 {
+		fmt.Println()
+		fmt.Println(dimStyle.Render("  " + strings.Repeat("─", 48)))
+		fmt.Printf("  %-24s %8s %8s\n", "HEAD", "DENIED", "FLAGGED")
+		fmt.Println(dimStyle.Render("  " + strings.Repeat("─", 48)))
+		for _, h := range r.ByHead {
+			fmt.Printf("  %-24.24s %8d %8d\n", h.Head, h.Denied, h.Flagged)
+		}
+	}
+
+	fmt.Println()
+	fmt.Println(dimStyle.Render("  " + strings.Repeat("─", 48)))
+	fmt.Println("  checks:")
+	for _, c := range r.Checks {
+		status := c.Status
+		if strings.Contains(strings.ToLower(status), "broken") {
+			status = warnStyle.Render(status)
+		} else if status == "intact" || strings.HasSuffix(status, "refusal(s)") {
+			status = okStyle.Render(status)
+		}
+		fmt.Printf("    %-26s %s\n", c.Name, status)
+		fmt.Println(dimStyle.Render("      " + c.Detail))
+	}
+
+	if len(r.Recommendations) > 0 {
+		fmt.Println()
+		fmt.Println(dimStyle.Render("  " + strings.Repeat("─", 48)))
+		fmt.Println(warnStyle.Render("  recommendations (next hardening backlog):"))
+		for _, rec := range r.Recommendations {
+			fmt.Printf("    - %s\n", rec)
+		}
+	}
+	fmt.Println()
+}
+
+// printCoverageHeadline is the KPI tile: coverage against the OWASP LLM Top
+// 10, never presented as "you are X% secure" — always labeled against the
+// named taxonomy it measures. A broken ledger chain hard-overrides it,
+// since none of the other evidence can be trusted once the ledger itself
+// might have been tampered with.
+func printCoverageHeadline(r *security.Report) {
+	if !r.IntegrityIntact {
+		fmt.Printf("  %s  %s\n", cortexStyle.Render("OWASP LLM Top-10 coverage"),
+			warnStyle.Render("INTEGRITY COMPROMISED — ledger tampering detected, score withheld"))
+		fmt.Println()
+		return
+	}
+	cov := r.Coverage
+	pct := fmt.Sprintf("%.0f%%", cov.PercentCovered)
+	fmt.Printf("  %s  %s  (%d/%d applicable categories)\n",
+		cortexStyle.Render("OWASP LLM Top-10 coverage"), okStyle.Render(pct), cov.Covered, cov.Applicable)
+	if r.Trend.Available {
+		arrow := "→"
+		style := dimStyle
+		if r.Trend.DeltaPct > 0 {
+			arrow, style = "↑", okStyle
+		} else if r.Trend.DeltaPct < 0 {
+			arrow, style = "↓", warnStyle
+		}
+		fmt.Println(style.Render(fmt.Sprintf("    %s %+.0f%% since %s (was %.0f%%)",
+			arrow, r.Trend.DeltaPct, relativeTime(r.Trend.FirstTS), r.Trend.FirstPct)))
+	}
+	fmt.Println(dimStyle.Render("  " + strings.Repeat("─", 48)))
+	for _, c := range cov.Categories {
+		if c.Status == security.NotApplicable {
+			continue
+		}
+		label := string(c.Status)
+		switch c.Status {
+		case security.Enforced:
+			label = okStyle.Render(label)
+		case security.Gap:
+			label = warnStyle.Render(label)
+		}
+		fmt.Printf("    %-6s %-32s %s\n", c.ID, c.Name, label)
+	}
+	fmt.Println()
+}
+
+// relativeTime renders an RFC3339 timestamp as a human-relative duration
+// ("3 hours ago"). Falls back to the raw string if it doesn't parse — a
+// display glitch, never a crash, over a timestamp some future format change
+// didn't anticipate.
+func relativeTime(ts string) string {
+	t, err := time.Parse(time.RFC3339, ts)
+	if err != nil {
+		return ts
+	}
+	d := time.Since(t)
+	switch {
+	case d < time.Minute:
+		return "just now"
+	case d < time.Hour:
+		n := int(d / time.Minute)
+		return fmt.Sprintf("%d minute%s ago", n, plural(n))
+	case d < 24*time.Hour:
+		n := int(d / time.Hour)
+		return fmt.Sprintf("%d hour%s ago", n, plural(n))
+	default:
+		n := int(d / (24 * time.Hour))
+		return fmt.Sprintf("%d day%s ago", n, plural(n))
+	}
+}
+
+func plural(n int) string {
+	if n == 1 {
+		return ""
+	}
+	return "s"
 }
 
 // cmdModels manages the runtime-extensible model capability registry.

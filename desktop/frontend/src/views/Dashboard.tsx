@@ -1,5 +1,6 @@
-import type { Breakdown, Dashboard as DashboardData } from '../types'
-import { clockTime, costBand, govBand, ms, pct, tokens, usd, usdExact } from '../format'
+import type { Breakdown, Dashboard as DashboardData, TrustPanel } from '../types'
+import { clockTime, costBand, govBand, ms, pct, usd, usdExact } from '../format'
+import { Sparkline, SpendTrend } from './DashboardCharts'
 
 export function Dashboard({ data }: { data: DashboardData }) {
   return (
@@ -21,7 +22,7 @@ export function Dashboard({ data }: { data: DashboardData }) {
 }
 
 function SpendCard({ data }: { data: DashboardData }) {
-  const { spend, hasData } = data
+  const { spend, hasData, byDay } = data
   if (!hasData) {
     return (
       <div className="card">
@@ -42,6 +43,7 @@ function SpendCard({ data }: { data: DashboardData }) {
             number is measured rather than estimated from char/4. */}
         {pct(spend.tokensActualPct)} of tokens provider-reported
       </div>
+      {byDay && <Sparkline days={byDay} />}
     </div>
   )
 }
@@ -88,9 +90,45 @@ function TrustCard({ data }: { data: DashboardData }) {
     <div className="card">
       <div className="card__label">Trust ensemble</div>
       <div className="card__value">{trust.meanSamples.toFixed(2)}</div>
+      <TrustCompare trust={trust} />
       <div className="card__note">
-        mean samples vs fixed-{trust.fixedSwarmN} swarm · {pct(trust.samplesSavedPct)} saved ·{' '}
         {trust.runs} run{trust.runs === 1 ? '' : 's'}
+      </div>
+    </div>
+  )
+}
+
+/** SPRT mean samples vs. a fixed-N swarm, same axis, so the saving reads at a
+ * glance instead of as a sentence to parse. */
+function TrustCompare({ trust }: { trust: TrustPanel }) {
+  const max = Math.max(trust.meanSamples, trust.fixedSwarmN, 1)
+  const saved = trust.samplesSavedPct >= 0
+  return (
+    <div className="trust-cmp">
+      <div className="trust-cmp__row">
+        <span className="trust-cmp__label">SPRT</span>
+        <span className="trust-cmp__track">
+          <span
+            className="trust-cmp__fill trust-cmp__fill--actual"
+            style={{ width: `${(trust.meanSamples / max) * 100}%` }}
+          />
+        </span>
+        <span className="trust-cmp__value">{trust.meanSamples.toFixed(2)}</span>
+      </div>
+      <div className="trust-cmp__row">
+        <span className="trust-cmp__label">Fixed-{trust.fixedSwarmN}</span>
+        <span className="trust-cmp__track">
+          <span
+            className="trust-cmp__fill trust-cmp__fill--baseline"
+            style={{ width: `${(trust.fixedSwarmN / max) * 100}%` }}
+          />
+        </span>
+        <span className="trust-cmp__value">{trust.fixedSwarmN}</span>
+      </div>
+      <div className={`trust-cmp__delta ${saved ? 'trust-cmp__delta--good' : 'trust-cmp__delta--bad'}`}>
+        {saved
+          ? `${pct(trust.samplesSavedPct)} fewer samples than a fixed swarm`
+          : `${pct(Math.abs(trust.samplesSavedPct))} more samples than a fixed swarm`}
       </div>
     </div>
   )
@@ -99,53 +137,52 @@ function TrustCard({ data }: { data: DashboardData }) {
 function Breakdowns({ data }: { data: DashboardData }) {
   return (
     <>
+      {data.byDay && data.byDay.length > 0 && (
+        <section>
+          <h2 className="section__title">Spend by day</h2>
+          <SpendTrend days={data.byDay} />
+        </section>
+      )}
       <div className="grid-2">
-        <BreakdownTable title="By model" heading="Model" rows={data.byModel} />
-        <BreakdownTable title="By tier" heading="Tier" rows={data.byTier} />
+        <RankedBars title="By model" rows={data.byModel} />
+        <RankedBars title="By tier" rows={data.byTier} />
       </div>
-      <BreakdownTable title="By day" heading="Day" rows={data.byDay} />
       <RecentTable data={data} />
     </>
   )
 }
 
-function BreakdownTable({
-  title,
-  heading,
-  rows,
-}: {
-  title: string
-  heading: string
-  rows: Breakdown[] | null
-}) {
+/** A ranked horizontal bar list: name, a proportional bar, and the exact
+ * dollar amount — replaces the plain by-model/by-tier tables. */
+function RankedBars({ title, rows }: { title: string; rows: Breakdown[] | null }) {
   if (!rows || rows.length === 0) return null
   const max = Math.max(...rows.map((r) => r.costUsd))
   return (
     <section>
       <h2 className="section__title">{title}</h2>
       <div className="table__wrap">
-        <table className="table">
-          <thead>
-            <tr>
-              <th>{heading}</th>
-              <th className="num">Calls</th>
-              <th className="num">Tokens</th>
-              <th className="num">Wall</th>
-              <th className="num">Cost</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={r.key}>
-                <td className="mono">{r.key}</td>
-                <td className="num">{r.calls}</td>
-                <td className="num">{tokens(r.promptTokens + r.responseTokens)}</td>
-                <td className="num">{ms(r.wallMs)}</td>
-                <td className={`num cost--${costBand(r.costUsd, max)}`}>{usdExact(r.costUsd)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="rank">
+          {rows.map((r) => {
+            const band = costBand(r.costUsd, max)
+            // A day with only free/local calls still gets a sliver: present,
+            // just not comparable to anything on this ramp.
+            const widthPct = max > 0 ? (r.costUsd / max) * 100 : r.calls > 0 ? 4 : 0
+            return (
+              <div className="rank__row" key={r.key}>
+                <span className="rank__name" title={r.key}>
+                  {r.key}
+                </span>
+                <span className="rank__track">
+                  <span
+                    className={`rank__fill rank__fill--${band}`}
+                    style={{ width: `${widthPct}%` }}
+                  />
+                </span>
+                <span className={`rank__value cost--${band}`}>{usdExact(r.costUsd)}</span>
+              </div>
+            )
+          })}
+        </div>
       </div>
     </section>
   )
