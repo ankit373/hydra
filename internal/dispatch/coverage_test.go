@@ -262,6 +262,53 @@ func TestDispatch_LedgerResourceScopingBlocksOnlyMatchingFiles(t *testing.T) {
 	}
 }
 
+// A denial-of-wallet guard: a candidate head whose estimated cost exceeds
+// MaxCostUSD must never execute — mirrors swarm's own preflight-cost pattern,
+// extended to ordinary dispatch (which had no ceiling at all before this).
+func TestDispatch_MaxCostUSDRefusesAnExpensiveHead(t *testing.T) {
+	s := testutil.NewSandbox(t)
+	dd := liveDispatcher(echoHead(t, s, "expensive", 95))
+	dd.pricing = pricing.Load()
+
+	// A prompt with real length, so the char-count/4 token estimate is
+	// nonzero — tier 1's $15/$75-per-million rate then prices well above the
+	// ceiling below.
+	prompt := strings.Repeat("x", 400)
+	if _, err := dd.Dispatch(context.Background(), prompt, Options{MaxCostUSD: 0.0000001}); err == nil {
+		t.Error("dispatch should have been refused: the only head's estimated cost exceeds the ceiling")
+	}
+
+	events, err := ledger.Load(ledger.DefaultPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var sawCostDenial bool
+	for _, e := range events {
+		if e.Decision == ledger.Deny && strings.Contains(e.Reason, "cost ceiling") {
+			sawCostDenial = true
+		}
+	}
+	if !sawCostDenial {
+		t.Errorf("no cost-ceiling denial recorded in the ledger: %+v", events)
+	}
+}
+
+// MaxCostUSD: 0 (the default) must change nothing — a ceiling that silently
+// activates itself would refuse dispatches nobody asked to bound.
+func TestDispatch_ZeroMaxCostUSDIsNoLimit(t *testing.T) {
+	s := testutil.NewSandbox(t)
+	dd := liveDispatcher(echoHead(t, s, "h1", 95))
+	dd.pricing = pricing.Load()
+
+	res, err := dd.Dispatch(context.Background(), "go", Options{MaxCostUSD: 0})
+	if err != nil {
+		t.Fatalf("MaxCostUSD: 0 should not refuse anything: %v", err)
+	}
+	if res.Head.ID != "h1" {
+		t.Errorf("Head = %q, want h1", res.Head.ID)
+	}
+}
+
 func writeLedgerPolicy(t *testing.T, p ledger.Policy) {
 	t.Helper()
 	raw, err := json.Marshal(p)
