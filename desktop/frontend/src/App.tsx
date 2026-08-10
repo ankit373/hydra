@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
-import { GetDashboard, GetEdits, GetFleet, GetSession, GetVersion } from './bindings'
+import { CheckHyctl, GetDashboard, GetEdits, GetFleet, GetSession, GetVersion } from './bindings'
 import type {
   Dashboard as DashboardData,
   Edit,
   Fleet as FleetData,
+  HyctlStatus,
   Session as SessionData,
   Version,
 } from './types'
@@ -13,6 +14,7 @@ import { Session } from './views/Session'
 import { Code } from './views/Code'
 import { ChatDock } from './views/ChatDock'
 import { UpdateNotice } from './views/UpdateNotice'
+import { SetupBanner } from './views/SetupBanner'
 
 /** Dashboard is retrospective — a slow refresh is enough and costs nothing. */
 const DASHBOARD_MS = 5000
@@ -42,6 +44,7 @@ export default function App() {
   const [edits, setEdits] = useState<Edit[] | null>(null)
   const [version, setVersion] = useState<Version | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [hyctlStatus, setHyctlStatus] = useState<HyctlStatus | null>(null)
 
   const load = useCallback(async (which: ViewID, id: string) => {
     try {
@@ -67,6 +70,15 @@ export default function App() {
   useEffect(() => {
     GetVersion().then(setVersion).catch(() => {
       /* Version is decoration; failing to read it must not blank the window. */
+    })
+  }, [])
+
+  // One-shot, not polled: this is a first-run check (#383), not a live value.
+  // A machine with hyctl already on PATH — the common case — never shows
+  // anything, since the banner below renders only when Found is false.
+  useEffect(() => {
+    CheckHyctl().then(setHyctlStatus).catch(() => {
+      /* Same as GetVersion: decoration, not worth blanking the window over. */
     })
   }, [])
 
@@ -137,6 +149,12 @@ export default function App() {
       </nav>
 
       <main className="main">
+        {/* Non-blocking: it sits above whichever view is open rather than
+            replacing it, and renders nothing at all once hyctl is found. */}
+        {hyctlStatus && !hyctlStatus.found && (
+          <SetupBanner status={hyctlStatus} onChanged={setHyctlStatus} />
+        )}
+
         {/* An error replaces the body but never the shell — a broken read
             should not look like a crashed app. */}
         {error && <div className="error">{error}</div>}

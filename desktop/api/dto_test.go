@@ -20,7 +20,7 @@ import (
 // must always be present on the wire. Strings may be omitempty — TypeScript
 // models those naturally as optional.
 func TestDTOs_NumericFieldsAreNeverOmitEmpty(t *testing.T) {
-	for _, v := range []any{Fleet{}, Run{}, Agent{}, Dashboard{}, SpendPanel{}, GovernorPanel{}, TrustPanel{}, Breakdown{}, RecentCall{}} {
+	for _, v := range []any{Fleet{}, Run{}, Agent{}, Dashboard{}, SpendPanel{}, GovernorPanel{}, TrustPanel{}, Breakdown{}, RecentCall{}, HyctlStatus{}, InstallResult{}} {
 		rt := reflect.TypeOf(v)
 		t.Run(rt.Name(), func(t *testing.T) {
 			for i := range rt.NumField() {
@@ -42,7 +42,7 @@ func TestDTOs_NumericFieldsAreNeverOmitEmpty(t *testing.T) {
 // Every DTO must round-trip through JSON unchanged. A field with no json tag
 // would ship a Go-cased key the hand-written mirror does not declare.
 func TestDTOs_FieldNamesAreExplicitlyTagged(t *testing.T) {
-	for _, v := range []any{Fleet{}, Run{}, Agent{}, Dashboard{}, SpendPanel{}, GovernorPanel{}, TrustPanel{}, Breakdown{}, RecentCall{}, Version{}} {
+	for _, v := range []any{Fleet{}, Run{}, Agent{}, Dashboard{}, SpendPanel{}, GovernorPanel{}, TrustPanel{}, Breakdown{}, RecentCall{}, Version{}, HyctlStatus{}, InstallResult{}} {
 		rt := reflect.TypeOf(v)
 		for i := range rt.NumField() {
 			f := rt.Field(i)

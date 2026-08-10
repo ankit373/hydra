@@ -541,14 +541,22 @@ func cmdDispatch() *cobra.Command {
 			// Mark the run live for its whole duration. Without this
 			// runlog.LiveRuns() is always empty and nothing — cockpit or desktop
 			// Fleet — can distinguish a running agent from a finished one.
-			hb := runlog.StartHeartbeat(ctx, runID, runlog.HeartbeatInterval)
-			defer hb.Stop()
+			//
+			// --dry-run executes nothing in every mode it combines with (plain,
+			// --swarm, --confidence): no head is chosen, no output produced.
+			// Logging one anyway leaves a permanent, contentless Fleet card
+			// behind on every preview — 0ms elapsed, $0.00, no agents, nothing
+			// to say why — indistinguishable from a broken reconstruction (#379).
+			if !dryRun {
+				hb := runlog.StartHeartbeat(ctx, runID, runlog.HeartbeatInterval)
+				defer hb.Stop()
 
-			rl := runlog.New(runID)
-			_ = rl.Append(runlog.Event{Kind: runlog.KindRunStarted, TaskID: taskID, Detail: promptPreview(prompt)})
-			defer func() {
-				_ = rl.Append(runlog.Event{Kind: runlog.KindRunFinished, TaskID: taskID})
-			}()
+				rl := runlog.New(runID)
+				_ = rl.Append(runlog.Event{Kind: runlog.KindRunStarted, TaskID: taskID, Detail: promptPreview(prompt)})
+				defer func() {
+					_ = rl.Append(runlog.Event{Kind: runlog.KindRunFinished, TaskID: taskID})
+				}()
+			}
 
 			d, err := dispatch.New(ctx)
 			if err != nil {

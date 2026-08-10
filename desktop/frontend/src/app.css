@@ -200,6 +200,121 @@ body {
 .cost--mid       { color: var(--hy-mid); }
 .cost--expensive { color: var(--hy-expensive); }
 
+/* ── Dashboard: hero spend chart ──────────────────────────────────────── */
+
+.spend-chart {
+  background: var(--hy-panel);
+  border: 1px solid var(--hy-line);
+  border-radius: var(--hy-radius);
+  padding: 16px 17px 12px;
+  overflow-x: auto;
+}
+
+.spend-bar { cursor: default; }
+.spend-bar:focus-visible { outline: none; }
+
+.spend-bar__rect { opacity: .82; transition: opacity .12s; }
+.spend-bar:hover .spend-bar__rect,
+.spend-bar:focus-visible .spend-bar__rect { opacity: 1; }
+
+.spend-bar__rect--free      { fill: var(--hy-dim); }
+.spend-bar__rect--cheap     { fill: var(--hy-cheap); }
+.spend-bar__rect--mid       { fill: var(--hy-mid); }
+.spend-bar__rect--expensive { fill: var(--hy-expensive); }
+
+.spend-tip { pointer-events: none; }
+.spend-tip__bg { fill: var(--hy-bg-2); stroke: var(--hy-line); }
+.spend-tip__value {
+  fill: var(--hy-ink);
+  font-family: var(--hy-font-mono);
+  font-size: 11px;
+  font-weight: 700;
+}
+.spend-tip__meta { fill: var(--hy-dim); font-family: var(--hy-font-mono); font-size: 10px; }
+
+.spend-chart__range {
+  margin-top: 8px;
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--hy-font-mono);
+  font-size: 10px;
+  color: var(--hy-dim);
+}
+
+/* ── Dashboard: inline sparkline (spend stat card) ────────────────────── */
+
+.spend-spark { display: block; margin-top: 9px; }
+.spend-spark__line { stroke: var(--hy-dim); stroke-width: 1.5; }
+.spend-spark__dot  { fill: var(--hy-aqua); }
+
+/* ── Dashboard: ranked bar lists (by model / by tier) ─────────────────── */
+
+.rank { display: flex; flex-direction: column; gap: 9px; }
+
+.rank__row {
+  display: grid;
+  grid-template-columns: minmax(64px, 130px) 1fr auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.rank__name {
+  font-family: var(--hy-font-mono);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rank__track {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--hy-line);
+  overflow: hidden;
+}
+.rank__fill { display: block; height: 100%; border-radius: 4px; }
+.rank__fill--free      { background: var(--hy-dim); }
+.rank__fill--cheap     { background: var(--hy-cheap); }
+.rank__fill--mid       { background: var(--hy-mid); }
+.rank__fill--expensive { background: var(--hy-expensive); }
+
+.rank__value { font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* ── Dashboard: trust comparison bars ──────────────────────────────────── */
+
+.trust-cmp { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+
+.trust-cmp__row {
+  display: grid;
+  grid-template-columns: 58px 1fr auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.trust-cmp__label {
+  font-family: var(--hy-font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--hy-dim);
+}
+
+.trust-cmp__track {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--hy-line);
+  overflow: hidden;
+}
+.trust-cmp__fill { display: block; height: 100%; border-radius: 4px; }
+.trust-cmp__fill--actual   { background: var(--hy-aqua); }
+.trust-cmp__fill--baseline { background: var(--hy-dim); }
+
+.trust-cmp__value { font-size: 12px; font-variant-numeric: tabular-nums; }
+
+.trust-cmp__delta { margin-top: 3px; font-size: 12px; }
+.trust-cmp__delta--good { color: var(--hy-cheap); }
+.trust-cmp__delta--bad  { color: var(--hy-expensive); }
+
 /* ── Empty / error states ──────────────────────────────────────────────── */
 
 .empty {
@@ -227,6 +342,82 @@ body {
   color: var(--hy-expensive);
   font-family: var(--hy-font-mono);
   font-size: 12px;
+}
+
+/* ── Setup banner (#383 — hyctl missing) ──────────────────────────────── */
+
+.setup {
+  background: var(--hy-panel);
+  border: 1px solid var(--hy-line);
+  border-left: 3px solid var(--hy-aqua);
+  border-radius: var(--hy-radius);
+  padding: 15px 17px;
+  margin-bottom: 22px;
+}
+
+.setup__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.setup__title { font-weight: 600; font-size: 14px; }
+
+.setup__dismiss {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: var(--hy-dim);
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+.setup__dismiss:hover { color: var(--hy-ink); }
+.setup__dismiss:focus-visible { outline: 2px solid var(--hy-aqua); outline-offset: 1px; }
+
+.setup__body { margin: 9px 0 0; font-size: 13px; color: var(--hy-dim); line-height: 1.55; }
+.setup__body code {
+  font-family: var(--hy-font-mono);
+  font-size: 12px;
+  background: var(--hy-bg-2);
+  border: 1px solid var(--hy-line);
+  border-radius: var(--hy-radius-sm);
+  padding: 1px 6px;
+  color: var(--hy-aqua);
+}
+
+.setup__install {
+  appearance: none;
+  margin-top: 12px;
+  border: 0;
+  border-radius: var(--hy-radius-sm);
+  background: var(--hy-aqua);
+  color: var(--hy-bg);
+  font: inherit;
+  font-weight: 600;
+  font-size: 13px;
+  padding: 8px 16px;
+  cursor: pointer;
+}
+.setup__install:disabled { opacity: .6; cursor: default; }
+.setup__install:focus-visible { outline: 2px solid var(--hy-ink); outline-offset: 2px; }
+
+.setup__error {
+  margin: 10px 0 0;
+  color: var(--hy-expensive);
+  font-family: var(--hy-font-mono);
+  font-size: 12px;
+}
+
+.setup__log {
+  margin: 10px 0 0;
+  max-height: 160px;
+  overflow-y: auto;
+  background: var(--hy-bg-2);
+  border: 1px solid var(--hy-line);
+  border-radius: var(--hy-radius-sm);
+  padding: 10px 12px;
+  font-family: var(--hy-font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  color: var(--hy-dim);
 }
 
 /* ── Fleet ─────────────────────────────────────────────────────────────── */
@@ -345,6 +536,30 @@ body {
 }
 .agent__meta { margin-left: auto; color: var(--hy-dim); font-size: 12px; font-variant-numeric: tabular-nums; }
 .agent__detail { color: var(--hy-dim); font-size: 12px; }
+
+/* Fleet's inline run graph (RunGraph) reuses .graph/.edge/.gnode from the
+   Session graph below — this modifier only trims the chrome that doesn't fit
+   inside a run card: no legend, tighter margin/padding. */
+.graph--compact { margin-top: 10px; padding: 8px; }
+
+/* Fleet's state heatmap for a run at/above GroupThreshold — one chip per
+   agent, grouped by depth, colored the same as .state-dot/.gnode so "shape of
+   a run" always means the same colours everywhere in the app. */
+.agrid { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
+.agrid__row { display: flex; align-items: flex-start; gap: 8px; }
+.agrid__depth {
+  flex: 0 0 22px;
+  padding-top: 2px;
+  font-family: var(--hy-font-mono);
+  font-size: 10px;
+  color: var(--hy-dim);
+}
+.agrid__chips { display: flex; flex-wrap: wrap; gap: 3px; }
+
+.chip { width: 12px; height: 12px; border-radius: 3px; background: var(--hy-line); flex: 0 0 auto; }
+.chip--running { background: var(--hy-aqua); }
+.chip--ok      { background: var(--hy-cheap); }
+.chip--failed  { background: var(--hy-expensive); }
 
 /* ── Session ───────────────────────────────────────────────────────────── */
 

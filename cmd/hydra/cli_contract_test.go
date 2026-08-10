@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ankit373/hydra/internal/config"
+	"github.com/ankit373/hydra/internal/runlog"
 	"github.com/ankit373/hydra/internal/testutil"
 )
 
@@ -237,6 +238,19 @@ func TestCLI_DryRunExecutesNothing(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(config.Dir(), "logs", "last_handoff.json")); err == nil {
 		t.Error("a dry run wrote a handoff")
+	}
+
+	// A dry run chooses a head but never calls one, so it has no place in a
+	// log of runs either. Before #379 it wrote run_started/run_finished
+	// unconditionally, leaving a permanent, contentless card in the desktop
+	// app's Fleet view for every preview — 0ms, $0.00, no agents, nothing to
+	// say why, indistinguishable from a broken reconstruction.
+	ids, err := runlog.Runs()
+	if err != nil {
+		t.Fatalf("runlog.Runs(): %v", err)
+	}
+	if len(ids) != 0 {
+		t.Errorf("a dry run left %d entries in the run log: %v", len(ids), ids)
 	}
 }
 
