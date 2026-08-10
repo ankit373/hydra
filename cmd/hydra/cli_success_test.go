@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/ankit373/hydra/internal/config"
+	"github.com/ankit373/hydra/internal/runlog"
 	"github.com/ankit373/hydra/internal/testutil"
 )
 
@@ -178,6 +179,9 @@ func TestCLI_Dispatch_SwarmDryRunFiresNothing(t *testing.T) {
 	if _, statErr := os.Stat(filepath.Join(config.Dir(), "logs", "cost.jsonl")); statErr == nil {
 		t.Error("a swarm dry run wrote cost rows")
 	}
+	if ids, runErr := runlog.Runs(); runErr != nil || len(ids) != 0 {
+		t.Errorf("a swarm dry run left run log entries: ids=%v err=%v", ids, runErr)
+	}
 }
 
 // A real risk signal — PII in the prompt, or --irreversible/--production —
@@ -227,6 +231,9 @@ func TestCLI_Dispatch_ConfidenceDryRunFiresNothing(t *testing.T) {
 	}
 	if _, statErr := os.Stat(filepath.Join(config.Dir(), "logs", "cost.jsonl")); statErr == nil {
 		t.Error("an SPRT dry run wrote cost rows")
+	}
+	if ids, runErr := runlog.Runs(); runErr != nil || len(ids) != 0 {
+		t.Errorf("an SPRT dry run left run log entries: ids=%v err=%v", ids, runErr)
 	}
 }
 
