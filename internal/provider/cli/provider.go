@@ -39,6 +39,7 @@ func (p *Provider) Discover(_ context.Context) ([]provider.Head, error) {
 			CapScore:   caps.Score(c.binary),
 			LocalOnly:  c.local,
 			AuthReady:  true,
+			Meta:       map[string]string{"model_source": caps.Source(c.binary)},
 		})
 	}
 	return heads, nil

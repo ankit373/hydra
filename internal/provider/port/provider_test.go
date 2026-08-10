@@ -284,6 +284,9 @@ func TestDiscover_FindsAListeningOllama(t *testing.T) {
 	if heads[0].Endpoint != srv.URL {
 		t.Errorf("Endpoint = %q, want the address it was found at", heads[0].Endpoint)
 	}
+	if got := heads[0].Meta["model_source"]; got != "builtin" {
+		t.Errorf("Meta[model_source] = %q, want builtin — qwen matches a curated family pattern", got)
+	}
 }
 
 // Each service's dial address is derived from the base it will probe, for both
