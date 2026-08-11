@@ -271,6 +271,19 @@ type ChainResult struct {
 	// BrokenAt is the index into the events slice VerifyChain read, of the
 	// first event whose hash doesn't match — 0 when Intact.
 	BrokenAt int `json:"broken_at,omitempty"`
+
+	// Truncated is true when the sidecar anchor names a hash that appears
+	// nowhere in the log: the event it recorded has been removed. Deleting
+	// the *tail* of the log leaves every surviving PrevHash link valid, so
+	// the walk alone cannot see it — the anchor is the only witness.
+	Truncated bool `json:"truncated,omitempty"`
+	// AnchorStale is true when the anchor matches an event that is not the
+	// last one. Nothing was removed; a best-effort writeChainHash simply did
+	// not land. Reported, but not tampering.
+	AnchorStale bool `json:"anchor_stale,omitempty"`
+	// AnchorMissing is true when there is no sidecar to verify against, so
+	// truncation cannot be ruled out either way. Never reported as intact.
+	AnchorMissing bool `json:"anchor_missing,omitempty"`
 }
 
 // VerifyChain walks path's events in order, recomputing each chained event's
@@ -285,12 +298,14 @@ func VerifyChain(path string) (ChainResult, error) {
 	res := ChainResult{Intact: true}
 	prevHash := ""
 	chainStarted := false
+	seen := map[string]bool{}
 	for i, e := range events {
 		if e.Hash == "" {
 			res.Unchained++
 			continue
 		}
 		res.Chained++
+		seen[e.Hash] = true
 		broken := hashEvent(e) != e.Hash
 		if chainStarted && e.PrevHash != prevHash {
 			broken = true
@@ -301,6 +316,32 @@ func VerifyChain(path string) (ChainResult, error) {
 		}
 		prevHash = e.Hash
 		chainStarted = true
+	}
+
+	// The walk above can only detect edits and deletions from the middle,
+	// both of which break a PrevHash link. Deleting the tail leaves the
+	// survivors perfectly self-consistent, so it needs an external witness —
+	// the sidecar anchor Record maintains on every append.
+	anchor := readChainHash(chainHashPath(path))
+	switch {
+	case anchor == "":
+		// Nothing to check against: either pre-migration, or the anchor was
+		// removed along with the events. Not provably intact either way.
+		if res.Chained > 0 {
+			res.AnchorMissing = true
+		}
+	case anchor == prevHash:
+		// Healthy: the anchor names the last event still present.
+	case seen[anchor]:
+		// The anchored event is still in the log but is not the last one, so
+		// nothing was removed — a writeChainHash simply failed (it is
+		// best-effort by design). Report it; do not cry tampering.
+		res.AnchorStale = true
+	default:
+		// The anchor names an event that is no longer anywhere in the log.
+		// It was recorded and is now gone.
+		res.Truncated = true
+		res.Intact = false
 	}
 	return res, nil
 }
