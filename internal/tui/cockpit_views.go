@@ -407,6 +407,17 @@ func (m Cockpit) dashSecurity(w, h int) string {
 			head.WriteString(" " + ckDimS.Render("controls ") +
 				style.Render(truncate(text, ckSecNameW)) + "\n")
 		}
+		// Only shown when there is something to say: a confidence built on
+		// correlated or undiagnostic sources reads as a result while being
+		// none, and the hero is already dense.
+		if n := len(r.Evidence.Families) + len(r.Evidence.WeakSources); n > 0 {
+			head.WriteString(" " + ckDimS.Render("evidence ") +
+				ckExpS.Render(truncate(fmt.Sprintf("%d source(s) inflate confidence", n), ckSecNameW)) + "\n")
+		}
+		if r.Drift.Changed {
+			head.WriteString(" " + ckDimS.Render("config   ") +
+				ckMidS.Render(truncate(fmt.Sprintf("%d epochs — rules changed", len(r.Drift.Epochs)), ckSecNameW)) + "\n")
+		}
 		head.WriteString(" " + ckDimS.Render("blocked  ") + ckExpS.Render(fmt.Sprintf("%d", r.Ledger.Denied)) +
 			ckDimS.Render(" · flagged ") + ckMidS.Render(fmt.Sprintf("%d", r.Ledger.Flagged)) + "\n")
 		// Same reused ckSpark as the coverage history above — a second real

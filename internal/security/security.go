@@ -70,6 +70,12 @@ type Report struct {
 	Exposures []Exposure `json:"exposures,omitempty"`
 	// Threats is the forensic breakdown behind the blocked/flagged counts.
 	Threats Threats `json:"threats"`
+	// Evidence is whether the ensemble's reported confidence rests on
+	// independent, discriminating sources.
+	Evidence EvidenceQuality `json:"evidence"`
+	// Drift reports whether the ledger spans more than one configuration —
+	// decisions made under rules that later changed.
+	Drift ConfigDrift `json:"drift"`
 	// Controls answers "does each declared control actually run" — a control
 	// that is configured but cannot fire is worse than a missing one, since
 	// it reads as protection everywhere it is listed.
@@ -152,6 +158,8 @@ func Build(heads []provider.Head) (*Report, error) {
 	r.PolicyAudit = AuditPolicy(pol, events)
 	r.Threats = ThreatBreakdown(events)
 	r.Controls = Controls(events, r.PolicyAudit, chainRes)
+	r.Evidence = AssessEvidence()
+	r.Drift = DetectConfigDrift(events)
 	r.Events, r.Truncated = evidenceTail(events)
 
 	r.Checks = []Check{
@@ -161,6 +169,8 @@ func Build(heads []provider.Head) (*Report, error) {
 		frameworkCheck(pol),
 		exposureCheck(r.Exposures),
 		policyPostureCheck(r.PolicyAudit),
+		evidenceCheck(r.Evidence),
+		driftCheck(r.Drift),
 	}
 	r.RiskHistory = ledger.ByDayRisk(events)
 
@@ -176,7 +186,7 @@ func Build(heads []provider.Head) (*Report, error) {
 
 	appendScoreHistory(historyPath, r.Coverage)
 
-	r.Actions = buildActions(r.Coverage, r.ByHead, r.Exposures, r.PolicyAudit, r.Controls)
+	r.Actions = buildActions(r.Coverage, r.ByHead, r.Exposures, r.PolicyAudit, r.Controls, r.Evidence, r.Drift)
 
 	return r, nil
 }
@@ -209,7 +219,7 @@ func chainCheck(res ledger.ChainResult) Check {
 // buildActions is the feedback loop: exactly the coverage Gaps plus heads
 // whose denied+flagged activity crosses riskThreshold — nothing else —
 // ranked most-urgent first so the queue reads top-to-bottom as work order.
-func buildActions(cov Coverage, byHead []ledger.HeadRisk, exps []Exposure, audit PolicyAudit, controls []Control) []Action {
+func buildActions(cov Coverage, byHead []ledger.HeadRisk, exps []Exposure, audit PolicyAudit, controls []Control, ev EvidenceQuality, drift ConfigDrift) []Action {
 	const riskThreshold = 2
 	var out []Action
 
@@ -240,6 +250,34 @@ func buildActions(cov Coverage, byHead []ledger.HeadRisk, exps []Exposure, audit
 			Priority: PriorityNow,
 		})
 	}
+	// A confidence figure assembled from correlated or undiagnostic sources
+	// is a number, not an assurance — and unlike a coverage gap it is
+	// actively misleading, because it reads as a result.
+	for _, f := range ev.Families {
+		out = append(out, Action{
+			ID: "family-" + f.Family, Kind: "evidence",
+			Title:    fmt.Sprintf("%s heads vote as one", f.Family),
+			Detail:   fmt.Sprintf("they agree %.0f%% beyond chance, so an ensemble of them reports more confidence than it earned", f.Coupling*100),
+			Priority: PriorityNow,
+		})
+	}
+	for _, w := range ev.WeakSources {
+		out = append(out, Action{
+			ID: "weak-" + w.Source, Kind: "evidence",
+			Title:    fmt.Sprintf("%s carries no diagnostic weight", w.Source),
+			Detail:   fmt.Sprintf("D=%.3f nats over %.0f recorded outcomes — its agreement barely moves the posterior", w.D, w.Observations),
+			Priority: PrioritySoon,
+		})
+	}
+	if drift.Changed {
+		out = append(out, Action{
+			ID: "config-drift", Kind: "policy",
+			Title:    "Routing configuration changed mid-history",
+			Detail:   "earlier ledger decisions were made under different rules than the current ones",
+			Priority: PrioritySoon,
+		})
+	}
+
 	// An unreachable rule is a policy bug: someone wrote a control believing
 	// it applied, and it can never fire.
 	for _, r := range audit.Rules {
