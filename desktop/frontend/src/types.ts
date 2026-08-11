@@ -292,12 +292,86 @@ export interface SecurityReport {
   /** Denied/flagged bucketed by day — the "blocked over time" bypass-attempt
    *  trend, from ledger.ByDayRisk. */
   riskHistory?: DayRisk[]
+  /** Per-rule hit counts, dead/unreachable rules, and the fail-open posture. */
+  policyAudit: PolicyAudit
+  /** Every sensitive-data detection and whether it left the machine. */
+  exposures?: Exposure[]
+  /** The forensic breakdown behind the blocked/flagged counts. */
+  threats: Threats
+  /** A capped tail of the raw ledger — the evidence rows. */
+  events?: LedgerEvent[]
+  /** True when `events` is a partial log, not the whole one. */
+  truncated?: boolean
 }
 
 export interface DayRisk {
   date: string
   denied: number
   flagged: number
+}
+
+export interface RuleStat {
+  index: number
+  summary: string
+  decision: string
+  hits: number
+  /** Never matched anything recorded. */
+  dead: boolean
+  /** Index of an earlier rule that always matches first, so this one can
+   *  never fire. Absent when the rule is reachable. */
+  shadowedBy?: number
+}
+
+export interface PolicyAudit {
+  rules: RuleStat[]
+  default: string
+  /** The default is allow: anything no rule names is permitted. */
+  failOpen: boolean
+  defaultHits: number
+  evaluated: number
+}
+
+export interface Exposure {
+  ts: string
+  agent: string
+  head: string
+  resource: string
+  /** The specific detectors that matched, e.g. "aws access key id". */
+  piiTypes?: string[]
+  /** Not a local-only head — including an undiscovered one (fail-closed). */
+  remote: boolean
+  /** False when the head was not discovered, so `remote` is an assumption
+   *  rather than an observation. */
+  known: boolean
+}
+
+export interface SecurityCount {
+  label: string
+  count: number
+}
+
+export interface Threats {
+  /** Which injection phrase was actually tried. */
+  byMarker?: SecurityCount[]
+  /** Resources drawing repeat denials — probing. */
+  probedResources?: SecurityCount[]
+  /** read / write / exec / network split of risky events. */
+  byAction?: SecurityCount[]
+}
+
+/** One raw ledger row — the evidence behind a finding. */
+export interface LedgerEvent {
+  ts: string
+  agent: string
+  tool: string
+  resource: string
+  action: string
+  decision: string
+  reason?: string
+  classification?: string
+  pii_types?: string[]
+  flagged?: boolean
+  flag_reason?: string
 }
 
 export interface ChatReply {

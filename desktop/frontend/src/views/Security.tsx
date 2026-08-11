@@ -1,6 +1,19 @@
 import { useState } from 'react'
-import type { Action, Category, Check, HeadRisk, LedgerPanel, SecurityReport, Trend } from '../types'
-import { coverageBand, costBand, toSecurityCSV } from '../format'
+import type {
+  Action,
+  Category,
+  Check,
+  Exposure,
+  HeadRisk,
+  LedgerEvent,
+  LedgerPanel,
+  PolicyAudit,
+  SecurityCount,
+  SecurityReport,
+  Threats,
+  Trend,
+} from '../types'
+import { clockTime, coverageBand, costBand, toSecurityCSV } from '../format'
 import {
   CategoryGrid,
   CoverageHistory,
@@ -209,26 +222,282 @@ function ActionCards({ actions }: { actions: Action[] }) {
 
 // ── detailed: the full breakdown ───────────────────────────────────────────
 
+const DETAIL_TABS = [
+  { id: 'coverage', label: 'Coverage' },
+  { id: 'policy', label: 'Policy' },
+  { id: 'exposure', label: 'Exposure' },
+  { id: 'threats', label: 'Threats' },
+  { id: 'evidence', label: 'Evidence' },
+] as const
+
+type DetailTab = (typeof DETAIL_TABS)[number]['id']
+
+// Sub-tabs rather than one long scroll: these are five different questions
+// (what's covered / is the policy sound / did data leak / what was attempted /
+// show me the rows), and stacking them made the view read as a list of lists.
 function Detailed({ data }: { data: SecurityReport }) {
+  const [tab, setTab] = useState<DetailTab>('coverage')
   return (
     <>
-      <div className="cards">
-        <LedgerCard data={data} />
+      <div className="tabs">
+        {DETAIL_TABS.map((t) => (
+          <button
+            key={t.id}
+            className="tab"
+            aria-current={tab === t.id ? 'page' : undefined}
+            onClick={() => setTab(t.id)}
+          >
+            {t.label}
+          </button>
+        ))}
       </div>
-      <Categories categories={data.coverage.categories} />
-      <ByHead rows={data.byHead} />
-      <Checks checks={data.checks} />
-      <section>
-        <h2 className="section__title">Full action queue</h2>
-        {(data.actions ?? []).length > 0 && (
-          <div className="card">
-            <div className="card__label">By priority</div>
-            <StatusDonut segments={actionSegments(data.actions ?? [])} />
+
+      {tab === 'coverage' && (
+        <>
+          <div className="cards">
+            <LedgerCard data={data} />
           </div>
-        )}
-        <ActionCards actions={data.actions ?? []} />
+          <Categories categories={data.coverage.categories} />
+          <ByHead rows={data.byHead} />
+          <Checks checks={data.checks} />
+          <section>
+            <h2 className="section__title">Full action queue</h2>
+            {(data.actions ?? []).length > 0 && (
+              <div className="card">
+                <div className="card__label">By priority</div>
+                <StatusDonut segments={actionSegments(data.actions ?? [])} />
+              </div>
+            )}
+            <ActionCards actions={data.actions ?? []} />
+          </section>
+        </>
+      )}
+      {tab === 'policy' && <PolicyAuditView audit={data.policyAudit} />}
+      {tab === 'exposure' && <ExposureView exposures={data.exposures ?? []} />}
+      {tab === 'threats' && <ThreatsView threats={data.threats} />}
+      {tab === 'evidence' && <EvidenceView events={data.events ?? []} truncated={!!data.truncated} />}
+    </>
+  )
+}
+
+function PolicyAuditView({ audit }: { audit: PolicyAudit }) {
+  if (!audit || audit.rules.length === 0) {
+    return (
+      <>
+        <FailOpenBanner audit={audit} />
+        <p className="card__note">
+          No rules are defined — every access falls through to the {audit?.default ?? 'allow'} default,
+          so nothing is scoped.
+        </p>
+      </>
+    )
+  }
+  const max = Math.max(...audit.rules.map((r) => r.hits), 1)
+  return (
+    <>
+      <FailOpenBanner audit={audit} />
+      <section>
+        <h2 className="section__title">Rules</h2>
+        <div className="table__wrap">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Rule</th>
+                <th>Decides</th>
+                <th className="num">Hits</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {audit.rules.map((r) => (
+                <tr key={r.index}>
+                  <td className="mono">{r.index}</td>
+                  <td className="mono">{r.summary}</td>
+                  <td className={r.decision === 'deny' ? 'cost--expensive' : 'cost--cheap'}>{r.decision}</td>
+                  <td className="num">
+                    {/* An inline proportional bar so a rule doing all the
+                        work is visible without reading every number. */}
+                    <span className="sec-hitbar">
+                      <span className="sec-hitbar__fill" style={{ width: `${(r.hits / max) * 100}%` }} />
+                    </span>
+                    {r.hits}
+                  </td>
+                  <td>
+                    {r.shadowedBy !== undefined ? (
+                      <span className="sec-cat__status sec-cat__status--gap">unreachable · #{r.shadowedBy} wins</span>
+                    ) : r.dead ? (
+                      <span className="sec-cat__status">never matched</span>
+                    ) : (
+                      <span className="sec-cat__status sec-cat__status--enforced">active</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="card__note">
+          {audit.defaultHits} access(es) fell through every rule to the {audit.default} default.
+        </p>
       </section>
     </>
+  )
+}
+
+function FailOpenBanner({ audit }: { audit: PolicyAudit }) {
+  if (!audit?.failOpen) return null
+  return (
+    <div className="error">
+      FAIL-OPEN — the default decision is allow, so anything no rule names is permitted. Set
+      "default": "deny" in the policy to invert that.
+    </div>
+  )
+}
+
+function ExposureView({ exposures }: { exposures: Exposure[] }) {
+  if (exposures.length === 0) {
+    return <p className="card__note">No sensitive data has been detected in any recorded access.</p>
+  }
+  return (
+    <section>
+      <h2 className="section__title">Sensitive data exposure</h2>
+      <div className="table__wrap">
+        <table className="table">
+          <thead>
+            <tr>
+              <th>Destination</th>
+              <th>Head</th>
+              <th>Resource</th>
+              <th>Detected</th>
+              <th>Agent</th>
+            </tr>
+          </thead>
+          <tbody>
+            {exposures.map((e, i) => (
+              <tr key={`${e.ts}-${i}`}>
+                <td>
+                  {/* Confirmed remote and merely-unidentified are different
+                      claims and must not look the same: an offline head is
+                      treated as remote (fail-closed) but is not evidence. */}
+                  {e.remote && e.known ? (
+                    <span className="sec-cat__status sec-cat__status--gap">remote</span>
+                  ) : e.remote ? (
+                    <span className="sec-cat__status">unidentified</span>
+                  ) : (
+                    <span className="sec-cat__status sec-cat__status--enforced">local</span>
+                  )}
+                </td>
+                <td className="mono">{e.head}</td>
+                <td className="mono">{e.resource || '—'}</td>
+                <td>{e.piiTypes?.length ? e.piiTypes.join(', ') : 'unclassified type'}</td>
+                <td className="mono">{e.agent || '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )
+}
+
+function ThreatsView({ threats }: { threats: Threats }) {
+  const empty =
+    !threats?.byMarker?.length && !threats?.probedResources?.length && !threats?.byAction?.length
+  if (empty) {
+    return <p className="card__note">Nothing has been denied or flagged, so there is nothing to break down.</p>
+  }
+  return (
+    <>
+      <CountBars title="Injection markers tried" rows={threats.byMarker} />
+      <CountBars title="Resources probed (repeat denials)" rows={threats.probedResources} />
+      <CountBars title="By action" rows={threats.byAction} />
+    </>
+  )
+}
+
+// Reuses Dashboard's ranked-bar classes rather than adding a fourth bar style.
+function CountBars({ title, rows }: { title: string; rows?: SecurityCount[] }) {
+  if (!rows || rows.length === 0) return null
+  const max = Math.max(...rows.map((r) => r.count))
+  return (
+    <section>
+      <h2 className="section__title">{title}</h2>
+      <div className="table__wrap">
+        <div className="rank">
+          {rows.map((r) => {
+            const band = costBand(r.count, max)
+            return (
+              <div className="rank__row" key={r.label}>
+                <span className="rank__name" title={r.label}>
+                  {r.label}
+                </span>
+                <span className="rank__track">
+                  <span
+                    className={`rank__fill rank__fill--${band}`}
+                    style={{ width: `${(r.count / max) * 100}%` }}
+                  />
+                </span>
+                <span className={`rank__value cost--${band}`}>{r.count}</span>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+// The raw rows behind every finding — Agent/Resource/Action/FlagReason have
+// been recorded on every event since the ledger shipped and rendered nowhere
+// until now.
+function EvidenceView({ events, truncated }: { events: LedgerEvent[]; truncated: boolean }) {
+  if (events.length === 0) {
+    return <p className="card__note">The ledger is empty — nothing has been recorded on this machine.</p>
+  }
+  const rows = [...events].reverse() // newest first
+  return (
+    <section>
+      <h2 className="section__title">Ledger evidence</h2>
+      {truncated && (
+        <p className="card__note">
+          Showing the most recent {events.length} events. The full ledger is longer — read it with{' '}
+          <code>hyctl mcp log</code>.
+        </p>
+      )}
+      <div className="table__wrap">
+        <table className="table">
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Decision</th>
+              <th>Action</th>
+              <th>Head</th>
+              <th>Resource</th>
+              <th>Why</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((e, i) => (
+              <tr key={`${e.ts}-${i}`}>
+                <td className="mono">{e.ts ? clockTime(e.ts) : '—'}</td>
+                <td className={e.decision === 'deny' ? 'cost--expensive' : 'cost--cheap'}>
+                  {e.decision}
+                  {e.flagged && <span className="sec-cat__status sec-cat__status--gap">flagged</span>}
+                </td>
+                <td className="mono">{e.action || '—'}</td>
+                <td className="mono">{e.tool || '—'}</td>
+                <td className="mono">{e.resource || '—'}</td>
+                <td className="card__note">
+                  {e.flag_reason ? `“${e.flag_reason}”` : e.reason || '—'}
+                  {e.pii_types?.length ? ` · ${e.pii_types.join(', ')}` : ''}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
   )
 }
 

@@ -254,6 +254,23 @@ body {
 .sec-risktrend__denied  { stroke: var(--hy-expensive); stroke-width: 1.5; }
 .sec-risktrend__flagged { stroke: var(--hy-mid); stroke-width: 1.5; }
 
+/* Inline proportional bar inside the policy-audit hit column, so the rule
+   doing all the work is visible without reading every number. */
+.sec-hitbar {
+  display: inline-block;
+  width: 42px;
+  height: 4px;
+  margin-right: 7px;
+  vertical-align: middle;
+  border-radius: 2px;
+  background: var(--hy-line);
+  overflow: hidden;
+}
+.sec-hitbar__fill { display: block; height: 100%; border-radius: 2px; background: var(--hy-aqua); }
+
+/* A status pill sitting next to inline text needs to not crowd it. */
+.table td .sec-cat__status { margin-left: 6px; }
+
 /* ── Security: action queue ────────────────────────────────────────────── */
 
 .sec-actions { display: flex; flex-direction: column; gap: 8px; }
