@@ -183,8 +183,8 @@ body {
 
 .sec-hero { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
 
-.sec-hero__score, .sec-hero__radar { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 20px 17px; }
-.sec-hero__radar .card__label { align-self: flex-start; margin-bottom: 4px; }
+.sec-hero__score, .sec-hero__grid { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 20px 17px; }
+.sec-hero__grid .card__label { align-self: flex-start; margin-bottom: 4px; }
 
 .sec-hero__note { margin-top: 10px; font-size: 13px; color: var(--hy-dim); }
 .sec-trend { margin-top: 4px; font-size: 12px; }
@@ -207,10 +207,32 @@ body {
 .sec-history__line { stroke: var(--hy-aqua); stroke-width: 1.5; }
 .sec-history__dot  { fill: var(--hy-aqua); }
 
-.sec-radar__ring  { stroke: var(--hy-line); stroke-width: 1; }
-.sec-radar__axis  { stroke: var(--hy-line); stroke-width: 1; }
-.sec-radar__shape { fill: color-mix(in srgb, var(--hy-aqua) 22%, transparent); stroke: var(--hy-aqua); stroke-width: 1.5; }
-.sec-radar__label { fill: var(--hy-dim); font-family: var(--hy-font-mono); font-size: 10px; }
+/* Small multiples: one compact tile per category, replacing an earlier radar
+   chart — see SecurityCharts.tsx's CategoryGrid doc comment for why. */
+.sec-grid {
+  margin-top: 4px;
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+  gap: 8px;
+}
+.sec-tile {
+  background: var(--hy-bg-2);
+  border: 1px solid var(--hy-line);
+  border-radius: var(--hy-radius-sm);
+  padding: 8px 9px;
+  text-align: left;
+}
+.sec-tile__id { font-family: var(--hy-font-mono); font-size: 10px; color: var(--hy-dim); }
+.sec-tile__bar { margin-top: 6px; height: 4px; border-radius: 2px; background: var(--hy-line); overflow: hidden; }
+.sec-tile__fill { display: block; height: 100%; border-radius: 2px; background: currentColor; }
+.sec-tile__status { margin-top: 5px; font-family: var(--hy-font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: .04em; }
+.sec-tile--enforced   { color: var(--hy-cheap); }
+.sec-tile--configured { color: var(--hy-aqua); }
+.sec-tile--gap        { color: var(--hy-expensive); }
+
+.sec-risktrend__denied  { stroke: var(--hy-expensive); stroke-width: 1.5; }
+.sec-risktrend__flagged { stroke: var(--hy-mid); stroke-width: 1.5; }
 
 /* ── Security: action queue ────────────────────────────────────────────── */
 

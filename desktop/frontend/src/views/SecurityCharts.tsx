@@ -1,4 +1,4 @@
-import type { Category, CoverageStatus, HistoryPoint } from '../types'
+import type { Category, CoverageStatus, DayRisk, HistoryPoint } from '../types'
 
 /**
  * The Security hero's three bespoke SVG charts, following DashboardCharts'
@@ -79,10 +79,7 @@ export function CoverageHistory({ history }: { history: HistoryPoint[] }) {
   )
 }
 
-const RADAR_SIZE = 220
-const RADAR_R = 78
-
-function statusValue(status: CoverageStatus): number {
+function statusFill(status: CoverageStatus): number {
   switch (status) {
     case 'enforced':
       return 1
@@ -95,53 +92,60 @@ function statusValue(status: CoverageStatus): number {
   }
 }
 
-/** The "shape" of coverage across applicable categories, NIST-CSF-radar
- * style: enforced reaches the rim, configured two-thirds out, a gap only a
- * third — a dent in the polygon is a gap, at a glance, no legend needed to
- * see *that* something is missing (the category list still names what). */
-export function CoverageRadar({ categories }: { categories: Category[] }) {
+/**
+ * A small-multiples grid replacing an earlier radar/spider chart: radar
+ * charts are a well-documented legibility trap (axis order changes the shape
+ * you see, precise values are hard to read, more than 2-3 series turns
+ * illegible) — a grid of small, independently-labelled tiles is the standard
+ * alternative, and each tile is self-explanatory without a legend: the ID,
+ * a fill bar (a third/two-thirds/full by status), and the status word.
+ */
+export function CategoryGrid({ categories }: { categories: Category[] }) {
   const cats = categories.filter((c) => c.status !== 'n/a')
-  const n = cats.length
-  if (n < 3) return null // fewer than 3 axes doesn't read as a shape
+  if (cats.length === 0) return null
+  return (
+    <div className="sec-grid">
+      {cats.map((c) => (
+        <div key={c.id} className={`sec-tile sec-tile--${c.status}`} title={c.name}>
+          <div className="sec-tile__id">{c.id}</div>
+          <div className="sec-tile__bar">
+            <div className="sec-tile__fill" style={{ width: `${statusFill(c.status) * 100}%` }} />
+          </div>
+          <div className="sec-tile__status">{c.status}</div>
+        </div>
+      ))}
+    </div>
+  )
+}
 
-  const c = RADAR_SIZE / 2
-  const angle = (i: number) => (Math.PI * 2 * i) / n - Math.PI / 2
-  const pointAt = (i: number, value: number): readonly [number, number] => {
-    const r = RADAR_R * value
-    return [c + r * Math.cos(angle(i)), c + r * Math.sin(angle(i))]
-  }
-  const shape = cats.map((cat, i) => pointAt(i, statusValue(cat.status)))
+const RISK_W = 260
+const RISK_H = 64
+
+/**
+ * Denied (blocked) and flagged (suspected injection marker) accesses per day
+ * — the "blocked over time" trend WAF dashboards report as their headline
+ * security KPI. Scaled to its own data (unlike CoverageHistory's fixed
+ * 0-100), since these are small, unbounded counts, not a percentage.
+ */
+export function RiskTrend({ history }: { history: DayRisk[] }) {
+  if (history.length < 2) return null
+  const max = Math.max(1, ...history.map((d) => Math.max(d.denied, d.flagged)))
+  const xAt = (i: number) => (i / (history.length - 1)) * RISK_W
+  const yAt = (v: number) => RISK_H - (Math.min(v, max) / max) * RISK_H
+  const toLine = (pts: (readonly [number, number])[]) => pts.map(([x, y]) => `${x},${y}`).join(' ')
+  const deniedLine = toLine(history.map((d, i) => [xAt(i), yAt(d.denied)] as const))
+  const flaggedLine = toLine(history.map((d, i) => [xAt(i), yAt(d.flagged)] as const))
 
   return (
     <svg
-      className="sec-radar"
-      width={RADAR_SIZE}
-      height={RADAR_SIZE}
-      viewBox={`0 0 ${RADAR_SIZE} ${RADAR_SIZE}`}
+      className="sec-risktrend"
+      width={RISK_W}
+      height={RISK_H}
       role="img"
-      aria-label="Coverage shape across the OWASP LLM Top-10 applicable categories"
+      aria-label={`Denied and flagged accesses over ${history.length} days`}
     >
-      {[1, 2 / 3, 1 / 3].map((ring) => (
-        <polygon
-          key={ring}
-          className="sec-radar__ring"
-          points={cats.map((_, i) => pointAt(i, ring).join(',')).join(' ')}
-          fill="none"
-        />
-      ))}
-      {cats.map((cat, i) => {
-        const [x, y] = pointAt(i, 1)
-        return <line key={cat.id} className="sec-radar__axis" x1={c} y1={c} x2={x} y2={y} />
-      })}
-      <polygon className="sec-radar__shape" points={shape.map((p) => p.join(',')).join(' ')} />
-      {cats.map((cat, i) => {
-        const [x, y] = pointAt(i, 1.18)
-        return (
-          <text key={cat.id} x={x} y={y} textAnchor="middle" className="sec-radar__label">
-            {cat.id.replace('LLM', '')}
-          </text>
-        )
-      })}
+      <polyline className="sec-risktrend__denied" points={deniedLine} fill="none" />
+      <polyline className="sec-risktrend__flagged" points={flaggedLine} fill="none" />
     </svg>
   )
 }

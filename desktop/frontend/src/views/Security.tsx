@@ -1,7 +1,11 @@
 import { useState } from 'react'
 import type { Action, Category, Check, HeadRisk, SecurityReport, Trend } from '../types'
 import { coverageBand, toSecurityCSV } from '../format'
-import { CoverageHistory, CoverageRadar, CoverageRing } from './SecurityCharts'
+import { CategoryGrid, CoverageHistory, CoverageRing, RiskTrend } from './SecurityCharts'
+
+function findCheckStatus(checks: Check[], name: string): string | undefined {
+  return checks.find((c) => c.name === name)?.status
+}
 
 export function Security({ data }: { data: SecurityReport }) {
   const [tab, setTab] = useState<'hero' | 'detailed'>('hero')
@@ -67,6 +71,9 @@ function downloadSecurityCSV(data: SecurityReport) {
 
 function Hero({ data }: { data: SecurityReport }) {
   const band = coverageBand(data.coverage.percentCovered)
+  const pii = findCheckStatus(data.checks, 'PII/sensitive-data detections')
+  const adherence = findCheckStatus(data.checks, 'Policy adherence')
+
   return (
     <>
       <div className="sec-hero">
@@ -82,9 +89,35 @@ function Hero({ data }: { data: SecurityReport }) {
             </div>
           )}
         </div>
-        <div className="card sec-hero__radar">
-          <div className="card__label">Coverage shape</div>
-          <CoverageRadar categories={data.coverage.categories} />
+        <div className="card sec-hero__grid">
+          <div className="card__label">Coverage by category</div>
+          <CategoryGrid categories={data.coverage.categories} />
+        </div>
+      </div>
+
+      <div className="cards">
+        {pii && (
+          <div className="card">
+            <div className="card__label">PII/sensitive-data detections</div>
+            <div className="card__value--sm">{pii}</div>
+          </div>
+        )}
+        {adherence && (
+          <div className="card">
+            <div className="card__label">Policy adherence</div>
+            <div className="card__value--sm">{adherence}</div>
+          </div>
+        )}
+        <div className="card">
+          <div className="card__label">Bypass attempts</div>
+          <div className="card__value--sm">
+            {data.ledger.denied} blocked · {data.ledger.flagged} flagged
+          </div>
+          {data.riskHistory && data.riskHistory.length >= 2 && (
+            <div className="sec-hero__history">
+              <RiskTrend history={data.riskHistory} />
+            </div>
+          )}
         </div>
       </div>
 

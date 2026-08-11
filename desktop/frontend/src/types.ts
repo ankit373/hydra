@@ -289,6 +289,15 @@ export interface SecurityReport {
   /** The feedback loop: one item per coverage gap plus one per risky head,
    *  ranked most-urgent first. */
   actions?: Action[]
+  /** Denied/flagged bucketed by day — the "blocked over time" bypass-attempt
+   *  trend, from ledger.ByDayRisk. */
+  riskHistory?: DayRisk[]
+}
+
+export interface DayRisk {
+  date: string
+  denied: number
+  flagged: number
 }
 
 export interface ChatReply {
