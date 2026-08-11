@@ -212,6 +212,10 @@ export interface Category {
   name: string
   status: CoverageStatus
   detail: string
+  /** Set only when status is 'gap' — the earliest recorded run where this
+   *  category was already a gap, from persisted score history. */
+  gapSince?: string
+  gapAgeDays?: number
 }
 
 export interface Coverage {
@@ -228,6 +232,26 @@ export interface Trend {
   deltaPct: number
   firstPct: number
   firstTs: string
+}
+
+/** One persisted coverage snapshot — the real series a chart is drawn from. */
+export interface HistoryPoint {
+  ts: string
+  percentCovered: number
+}
+
+export type ActionPriority = 'now' | 'soon' | 'watch'
+
+/** One item in the prioritized action queue — the feedback loop. Priority
+ *  comes from real signals (a gap's persisted age, or an actively risky
+ *  head), never an invented severity score. */
+export interface Action {
+  id: string
+  kind: 'gap' | 'risk'
+  title: string
+  detail: string
+  ageDays: number
+  priority: ActionPriority
 }
 
 export interface LedgerPanel {
@@ -260,8 +284,11 @@ export interface SecurityReport {
    *  coverage percentage above cannot be trusted regardless of its value. */
   integrityIntact: boolean
   trend: Trend
-  /** The feedback loop: one line per coverage gap plus one per risky head. */
-  recommendations?: string[]
+  /** The full persisted coverage series, oldest first, this run last. */
+  history?: HistoryPoint[]
+  /** The feedback loop: one item per coverage gap plus one per risky head,
+   *  ranked most-urgent first. */
+  actions?: Action[]
 }
 
 export interface ChatReply {

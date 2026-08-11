@@ -157,11 +157,90 @@ body {
 
 /* ── Security ──────────────────────────────────────────────────────────── */
 
-/* Inverted from .gov--*: here high is good, since this is a coverage
-   percentage, not a budget-pressure gauge. */
-.sec-score--good { color: var(--hy-cheap); }
-.sec-score--warn { color: var(--hy-mid); }
-.sec-score--bad  { color: var(--hy-expensive); }
+.sec-headrow { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+
+.sec-export {
+  appearance: none;
+  flex: 0 0 auto;
+  background: transparent;
+  border: 1px solid var(--hy-line);
+  border-radius: var(--hy-radius-sm);
+  color: var(--hy-dim);
+  font: inherit;
+  font-size: 12px;
+  padding: 7px 13px;
+  cursor: pointer;
+}
+.sec-export:hover { color: var(--hy-ink); border-color: var(--hy-aqua); }
+.sec-export:focus-visible { outline: 2px solid var(--hy-aqua); outline-offset: 1px; }
+
+/* Generic delta colouring — used wherever a change is simply good or bad,
+   not tied to any one panel. */
+.delta--good { color: var(--hy-cheap); }
+.delta--bad  { color: var(--hy-expensive); }
+
+/* ── Security: hero ──────────────────────────────────────────────────────── */
+
+.sec-hero { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+
+.sec-hero__score, .sec-hero__radar { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 20px 17px; }
+.sec-hero__radar .card__label { align-self: flex-start; margin-bottom: 4px; }
+
+.sec-hero__note { margin-top: 10px; font-size: 13px; color: var(--hy-dim); }
+.sec-trend { margin-top: 4px; font-size: 12px; }
+.sec-hero__history { margin-top: 14px; }
+
+.sec-ring__track { stroke: var(--hy-line); }
+.sec-ring__fill { transition: stroke-dasharray .3s ease; }
+.sec-ring__fill--good { stroke: var(--hy-cheap); }
+.sec-ring__fill--warn { stroke: var(--hy-mid); }
+.sec-ring__fill--bad  { stroke: var(--hy-expensive); }
+.sec-ring__label {
+  fill: var(--hy-ink);
+  font-family: var(--hy-font-mono);
+  font-size: 22px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.sec-history__area { fill: color-mix(in srgb, var(--hy-aqua) 14%, transparent); }
+.sec-history__line { stroke: var(--hy-aqua); stroke-width: 1.5; }
+.sec-history__dot  { fill: var(--hy-aqua); }
+
+.sec-radar__ring  { stroke: var(--hy-line); stroke-width: 1; }
+.sec-radar__axis  { stroke: var(--hy-line); stroke-width: 1; }
+.sec-radar__shape { fill: color-mix(in srgb, var(--hy-aqua) 22%, transparent); stroke: var(--hy-aqua); stroke-width: 1.5; }
+.sec-radar__label { fill: var(--hy-dim); font-family: var(--hy-font-mono); font-size: 10px; }
+
+/* ── Security: action queue ────────────────────────────────────────────── */
+
+.sec-actions { display: flex; flex-direction: column; gap: 8px; }
+
+.sec-action {
+  background: var(--hy-panel);
+  border: 1px solid var(--hy-line);
+  border-left: 3px solid var(--hy-line);
+  border-radius: var(--hy-radius-sm);
+  padding: 10px 13px;
+}
+.sec-action--now   { border-left-color: var(--hy-expensive); }
+.sec-action--soon  { border-left-color: var(--hy-mid); }
+.sec-action--watch { border-left-color: var(--hy-dim); }
+
+.sec-action__head { display: flex; align-items: baseline; gap: 8px; }
+.sec-action__priority {
+  font-family: var(--hy-font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  font-weight: 700;
+}
+.sec-action--now   .sec-action__priority { color: var(--hy-expensive); }
+.sec-action--soon  .sec-action__priority { color: var(--hy-mid); }
+.sec-action--watch .sec-action__priority { color: var(--hy-dim); }
+.sec-action__age { font-family: var(--hy-font-mono); font-size: 11px; color: var(--hy-dim); }
+.sec-action__title { margin-top: 4px; font-size: 13px; font-weight: 600; }
+.sec-action__detail { margin-top: 2px; font-size: 12px; color: var(--hy-dim); }
 
 .sec-cats { list-style: none; margin: 0; padding: 0; }
 
@@ -198,17 +277,6 @@ body {
 .sec-cat__status--enforced   { color: var(--hy-cheap);     border-color: color-mix(in srgb, var(--hy-cheap) 40%, transparent); }
 .sec-cat__status--configured { color: var(--hy-aqua);      border-color: color-mix(in srgb, var(--hy-aqua) 40%, transparent); }
 .sec-cat__status--gap        { color: var(--hy-expensive); border-color: color-mix(in srgb, var(--hy-expensive) 40%, transparent); }
-
-.sec-recs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
-.sec-recs li {
-  background: var(--hy-panel);
-  border: 1px solid var(--hy-line);
-  border-left: 3px solid var(--hy-mid);
-  border-radius: var(--hy-radius-sm);
-  padding: 9px 12px;
-  font-size: 13px;
-  color: var(--hy-ink);
-}
 
 /* ── Tables ────────────────────────────────────────────────────────────── */
 

@@ -50,6 +50,21 @@ export function coverageBand(pct: number): 'good' | 'warn' | 'bad' {
   return 'bad'
 }
 
+/**
+ * The security category table as CSV, one row per applicable finding — the
+ * same shape `hyctl security --csv` emits, so the two exports never disagree
+ * about what a "finding" looks like.
+ */
+export function toSecurityCSV(
+  categories: { id: string; name: string; status: string; gapAgeDays?: number; detail: string }[],
+): string {
+  const esc = (s: string) => `"${s.replace(/"/g, '""')}"`
+  const rows = categories
+    .filter((c) => c.status !== 'n/a')
+    .map((c) => [c.id, esc(c.name), c.status, String(c.gapAgeDays ?? 0), esc(c.detail)].join(','))
+  return ['id,name,status,gap_age_days,detail', ...rows].join('\n')
+}
+
 /** Cost ramp for a per-row figure, relative to the largest row in its table. */
 export function costBand(v: number, max: number): 'free' | 'cheap' | 'mid' | 'expensive' {
   if (v <= 0) return 'free'

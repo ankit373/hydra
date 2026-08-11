@@ -1,15 +1,26 @@
-import type { Category, Check, HeadRisk, SecurityReport } from '../types'
-import { coverageBand } from '../format'
+import { useState } from 'react'
+import type { Action, Category, Check, HeadRisk, SecurityReport, Trend } from '../types'
+import { coverageBand, toSecurityCSV } from '../format'
+import { CoverageHistory, CoverageRadar, CoverageRing } from './SecurityCharts'
 
 export function Security({ data }: { data: SecurityReport }) {
+  const [tab, setTab] = useState<'hero' | 'detailed'>('hero')
+
   return (
     <>
       <header className="view__head">
-        <h1 className="view__title">Security</h1>
-        <p className="view__sub">
-          Coverage against the OWASP LLM Top 10 — the percentage of applicable categories with a
-          live, evidence-backed mechanism. Never a blended score.
-        </p>
+        <div className="sec-headrow">
+          <div>
+            <h1 className="view__title">Security</h1>
+            <p className="view__sub">
+              Coverage against the OWASP LLM Top 10 — the percentage of applicable categories with
+              a live, evidence-backed mechanism. Never a blended score.
+            </p>
+          </div>
+          <button className="sec-export" onClick={() => downloadSecurityCSV(data)}>
+            Export CSV
+          </button>
+        </div>
       </header>
 
       {!data.integrityIntact && (
@@ -19,41 +30,124 @@ export function Security({ data }: { data: SecurityReport }) {
         </div>
       )}
 
-      <div className="cards">
-        <CoverageCard data={data} />
-        <LedgerCard data={data} />
+      <div className="tabs">
+        <button
+          className="tab"
+          aria-current={tab === 'hero' ? 'page' : undefined}
+          onClick={() => setTab('hero')}
+        >
+          Hero
+        </button>
+        <button
+          className="tab"
+          aria-current={tab === 'detailed' ? 'page' : undefined}
+          onClick={() => setTab('detailed')}
+        >
+          Detailed
+        </button>
       </div>
 
-      <Categories categories={data.coverage.categories} />
-      <ByHead rows={data.byHead} />
-      <Checks checks={data.checks} />
-      <Recommendations lines={data.recommendations} />
+      {tab === 'hero' ? <Hero data={data} /> : <Detailed data={data} />}
     </>
   )
 }
 
-function CoverageCard({ data }: { data: SecurityReport }) {
-  const { coverage, trend } = data
-  const band = coverageBand(coverage.percentCovered)
+function downloadSecurityCSV(data: SecurityReport) {
+  const csv = toSecurityCSV(data.coverage.categories)
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `hydra-security-${new Date().toISOString().slice(0, 10)}.csv`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+// ── hero: the catchy first view ────────────────────────────────────────────
+
+function Hero({ data }: { data: SecurityReport }) {
+  const band = coverageBand(data.coverage.percentCovered)
   return (
-    <div className={`card sec-score--${band}`}>
-      <div className="card__label">OWASP LLM Top-10 coverage</div>
-      <div className="card__value">{coverage.percentCovered.toFixed(0)}%</div>
-      <div className="gov__track">
-        <div className="gov__fill" style={{ width: `${Math.min(coverage.percentCovered, 100)}%` }} />
+    <>
+      <div className="sec-hero">
+        <div className="card sec-hero__score">
+          <CoverageRing percent={data.coverage.percentCovered} band={band} />
+          <div className="sec-hero__note">
+            {data.coverage.covered}/{data.coverage.applicable} categories covered
+            <TrendLine trend={data.trend} />
+          </div>
+          {data.history && data.history.length >= 2 && (
+            <div className="sec-hero__history">
+              <CoverageHistory history={data.history} />
+            </div>
+          )}
+        </div>
+        <div className="card sec-hero__radar">
+          <div className="card__label">Coverage shape</div>
+          <CoverageRadar categories={data.coverage.categories} />
+        </div>
       </div>
-      <div className="card__note">
-        {coverage.covered}/{coverage.applicable} categories covered
-        {trend.available && (
-          <>
-            {' · '}
-            {trend.deltaPct > 0 ? '↑' : trend.deltaPct < 0 ? '↓' : '→'}{' '}
-            {trend.deltaPct >= 0 ? '+' : ''}
-            {trend.deltaPct.toFixed(0)}% since first run ({trend.firstPct.toFixed(0)}%)
-          </>
-        )}
-      </div>
+
+      <section>
+        <h2 className="section__title">Top actions</h2>
+        <ActionCards actions={(data.actions ?? []).slice(0, 3)} />
+      </section>
+    </>
+  )
+}
+
+function TrendLine({ trend }: { trend: Trend }) {
+  if (!trend.available) return null
+  const arrow = trend.deltaPct > 0 ? '↑' : trend.deltaPct < 0 ? '↓' : '→'
+  const cls = trend.deltaPct > 0 ? 'delta--good' : trend.deltaPct < 0 ? 'delta--bad' : ''
+  return (
+    <div className={`sec-trend ${cls}`}>
+      {arrow} {trend.deltaPct >= 0 ? '+' : ''}
+      {trend.deltaPct.toFixed(0)}% since first run ({trend.firstPct.toFixed(0)}%)
     </div>
+  )
+}
+
+function ActionCards({ actions }: { actions: Action[] }) {
+  if (actions.length === 0) {
+    return (
+      <p className="card__note">
+        Nothing to act on — every applicable category is covered and no head is flagged.
+      </p>
+    )
+  }
+  return (
+    <div className="sec-actions">
+      {actions.map((a) => (
+        <div className={`sec-action sec-action--${a.priority}`} key={`${a.kind}-${a.id}`}>
+          <div className="sec-action__head">
+            <span className="sec-action__priority">{a.priority}</span>
+            {a.ageDays > 0 && <span className="sec-action__age">{a.ageDays}d</span>}
+          </div>
+          <div className="sec-action__title">{a.title}</div>
+          <div className="sec-action__detail">{a.detail}</div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ── detailed: the full breakdown ───────────────────────────────────────────
+
+function Detailed({ data }: { data: SecurityReport }) {
+  return (
+    <>
+      <div className="cards">
+        <LedgerCard data={data} />
+      </div>
+      <Categories categories={data.coverage.categories} />
+      <ByHead rows={data.byHead} />
+      <Checks checks={data.checks} />
+      <section>
+        <h2 className="section__title">Full action queue</h2>
+        <ActionCards actions={data.actions ?? []} />
+      </section>
+    </>
   )
 }
 
@@ -91,7 +185,10 @@ function Categories({ categories }: { categories: Category[] }) {
             <li className="sec-cat" key={c.id}>
               <span className="sec-cat__id">{c.id}</span>
               <span className="sec-cat__name">{c.name}</span>
-              <span className={`sec-cat__status sec-cat__status--${c.status}`}>{c.status}</span>
+              <span className={`sec-cat__status sec-cat__status--${c.status}`}>
+                {c.status}
+                {c.status === 'gap' && (c.gapAgeDays ?? 0) > 0 && ` ${c.gapAgeDays}d`}
+              </span>
               <span className="sec-cat__detail">{c.detail}</span>
             </li>
           ))}
@@ -149,20 +246,6 @@ function Checks({ checks }: { checks: Check[] }) {
           </div>
         ))}
       </div>
-    </section>
-  )
-}
-
-function Recommendations({ lines }: { lines?: string[] }) {
-  if (!lines || lines.length === 0) return null
-  return (
-    <section>
-      <h2 className="section__title">Recommendations</h2>
-      <ul className="sec-recs">
-        {lines.map((l, i) => (
-          <li key={i}>{l}</li>
-        ))}
-      </ul>
     </section>
   )
 }
