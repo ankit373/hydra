@@ -207,6 +207,26 @@ body {
 .sec-history__line { stroke: var(--hy-aqua); stroke-width: 1.5; }
 .sec-history__dot  { fill: var(--hy-aqua); }
 
+/* Part-to-whole donut + legend — the "N by status" pattern security
+   dashboards (Wiz, Snyk, GitHub) use for a handful of categories summing to
+   a total. See SecurityCharts.tsx's StatusDonut doc comment. */
+.sec-donut { display: flex; align-items: center; gap: 14px; margin-top: 8px; }
+.sec-donut__track { stroke: var(--hy-line); }
+.sec-donut__total {
+  fill: var(--hy-ink);
+  font-family: var(--hy-font-mono);
+  font-size: 16px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.sec-donut__legend { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.sec-donut__legend li {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 12px; color: var(--hy-dim); white-space: nowrap;
+}
+.sec-donut__legend b { color: var(--hy-ink); font-variant-numeric: tabular-nums; margin-left: 2px; }
+.sec-donut__swatch { width: 8px; height: 8px; border-radius: 2px; flex: 0 0 auto; }
+
 /* Small multiples: one compact tile per category, replacing an earlier radar
    chart — see SecurityCharts.tsx's CategoryGrid doc comment for why. */
 .sec-grid {

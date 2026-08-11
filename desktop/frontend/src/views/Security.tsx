@@ -1,10 +1,51 @@
 import { useState } from 'react'
-import type { Action, Category, Check, HeadRisk, SecurityReport, Trend } from '../types'
-import { coverageBand, toSecurityCSV } from '../format'
-import { CategoryGrid, CoverageHistory, CoverageRing, RiskTrend } from './SecurityCharts'
+import type { Action, Category, Check, HeadRisk, LedgerPanel, SecurityReport, Trend } from '../types'
+import { coverageBand, costBand, toSecurityCSV } from '../format'
+import {
+  CategoryGrid,
+  CoverageHistory,
+  CoverageRing,
+  type DonutSegment,
+  RiskTrend,
+  StatusDonut,
+} from './SecurityCharts'
 
 function findCheckStatus(checks: Check[], name: string): string | undefined {
   return checks.find((c) => c.name === name)?.status
+}
+
+function coverageSegments(categories: Category[]): DonutSegment[] {
+  const counts = { enforced: 0, configured: 0, gap: 0 }
+  for (const c of categories) {
+    if (c.status === 'enforced' || c.status === 'configured' || c.status === 'gap') counts[c.status]++
+  }
+  return [
+    { label: 'Enforced', value: counts.enforced, colorVar: 'var(--hy-cheap)' },
+    { label: 'Configured', value: counts.configured, colorVar: 'var(--hy-aqua)' },
+    { label: 'Gap', value: counts.gap, colorVar: 'var(--hy-expensive)' },
+  ]
+}
+
+// Allowed/Denied are mutually exclusive (Decision is one or the other) and
+// sum to Total — a real part-to-whole pie. Flagged is a different,
+// independent dimension (a flagged event can be either allowed or denied),
+// so it can't be a third slice without double-counting; it's called out
+// separately instead of drawn into the same pie.
+function ledgerSegments(ledger: LedgerPanel): DonutSegment[] {
+  return [
+    { label: 'Allowed', value: ledger.allowed, colorVar: 'var(--hy-cheap)' },
+    { label: 'Denied', value: ledger.denied, colorVar: 'var(--hy-expensive)' },
+  ]
+}
+
+function actionSegments(actions: Action[]): DonutSegment[] {
+  const counts = { now: 0, soon: 0, watch: 0 }
+  for (const a of actions) counts[a.priority]++
+  return [
+    { label: 'Now', value: counts.now, colorVar: 'var(--hy-expensive)' },
+    { label: 'Soon', value: counts.soon, colorVar: 'var(--hy-mid)' },
+    { label: 'Watch', value: counts.watch, colorVar: 'var(--hy-dim)' },
+  ]
 }
 
 export function Security({ data }: { data: SecurityReport }) {
@@ -91,6 +132,7 @@ function Hero({ data }: { data: SecurityReport }) {
         </div>
         <div className="card sec-hero__grid">
           <div className="card__label">Coverage by category</div>
+          <StatusDonut segments={coverageSegments(data.coverage.categories)} />
           <CategoryGrid categories={data.coverage.categories} />
         </div>
       </div>
@@ -178,6 +220,12 @@ function Detailed({ data }: { data: SecurityReport }) {
       <Checks checks={data.checks} />
       <section>
         <h2 className="section__title">Full action queue</h2>
+        {(data.actions ?? []).length > 0 && (
+          <div className="card">
+            <div className="card__label">By priority</div>
+            <StatusDonut segments={actionSegments(data.actions ?? [])} />
+          </div>
+        )}
         <ActionCards actions={data.actions ?? []} />
       </section>
     </>
@@ -199,9 +247,13 @@ function LedgerCard({ data }: { data: SecurityReport }) {
     <div className="card">
       <div className="card__label">Ledger activity</div>
       <div className="card__value">{ledger.total}</div>
-      <div className="card__note">
-        {ledger.allowed} allowed · {ledger.denied} denied · {ledger.flagged} flagged
-      </div>
+      <StatusDonut segments={ledgerSegments(ledger)} />
+      {ledger.flagged > 0 && (
+        <div className="card__note">
+          {ledger.flagged} of these were also flagged for a suspected injection marker
+          (flagged is independent of allow/deny, not a third slice above)
+        </div>
+      )}
     </div>
   )
 }
@@ -231,34 +283,44 @@ function Categories({ categories }: { categories: Category[] }) {
   )
 }
 
+// Ranked bars, not a table — the same .rank/.rank__* pattern (and the
+// generic free/cheap/mid/expensive ramp) Dashboard's RankedBars already
+// established for exactly this shape: a handful of named rows ranked by one
+// number, which a bar makes comparable at a glance in a way a table doesn't.
 function ByHead({ rows }: { rows: HeadRisk[] }) {
+  if (rows.length === 0) {
+    return (
+      <section>
+        <h2 className="section__title">Per-head risk</h2>
+        <p className="card__note">Nothing denied or flagged yet.</p>
+      </section>
+    )
+  }
+  const max = Math.max(...rows.map((r) => r.denied + r.flagged))
   return (
     <section>
       <h2 className="section__title">Per-head risk</h2>
-      {rows.length === 0 ? (
-        <p className="card__note">Nothing denied or flagged yet.</p>
-      ) : (
-        <div className="table__wrap">
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Head</th>
-                <th className="num">Denied</th>
-                <th className="num">Flagged</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.head}>
-                  <td className="mono">{r.head}</td>
-                  <td className="num">{r.denied}</td>
-                  <td className="num">{r.flagged}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      <div className="table__wrap">
+        <div className="rank">
+          {rows.map((r) => {
+            const total = r.denied + r.flagged
+            const band = costBand(total, max)
+            return (
+              <div className="rank__row" key={r.head}>
+                <span className="rank__name" title={r.head}>
+                  {r.head}
+                </span>
+                <span className="rank__track">
+                  <span className={`rank__fill rank__fill--${band}`} style={{ width: `${(total / max) * 100}%` }} />
+                </span>
+                <span className={`rank__value cost--${band}`}>
+                  {r.denied} denied · {r.flagged} flagged
+                </span>
+              </div>
+            )
+          })}
         </div>
-      )}
+      </div>
     </section>
   )
 }
