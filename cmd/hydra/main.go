@@ -1167,6 +1167,10 @@ func printSecurityReport(r *security.Report) {
 		fmt.Println(dimStyle.Render("      " + c.Detail))
 	}
 
+	printPolicyAudit(r)
+	printExposures(r)
+	printThreats(r)
+
 	if len(r.Actions) > 0 {
 		fmt.Println()
 		fmt.Println(dimStyle.Render("  " + strings.Repeat("─", 48)))
@@ -1180,6 +1184,91 @@ func printSecurityReport(r *security.Report) {
 		}
 	}
 	fmt.Println()
+}
+
+// printPolicyAudit is the real policy readout: which rules fire, which never
+// have, which never can, and whether the default lets everything through.
+func printPolicyAudit(r *security.Report) {
+	a := r.PolicyAudit
+	fmt.Println()
+	fmt.Println(dimStyle.Render("  " + strings.Repeat("─", 48)))
+	fmt.Printf("  %s\n", cortexStyle.Render("policy audit"))
+
+	posture := okStyle.Render("fail-closed (default deny)")
+	if a.FailOpen {
+		posture = warnStyle.Render("fail-open (default allow)")
+	}
+	fmt.Printf("    %-26s %s\n", "posture", posture)
+
+	if len(a.Rules) == 0 {
+		fmt.Println(dimStyle.Render("    no rules defined — nothing is scoped"))
+		return
+	}
+	fmt.Printf("    %-4s %-30s %-7s %6s  %s\n", "#", "RULE", "DECIDES", "HITS", "")
+	for _, rule := range a.Rules {
+		note := ""
+		switch {
+		case rule.ShadowedBy != nil:
+			note = warnStyle.Render(fmt.Sprintf("UNREACHABLE — rule %d always matches first", *rule.ShadowedBy))
+		case rule.Dead:
+			note = dimStyle.Render("never matched")
+		}
+		fmt.Printf("    %-4d %-30.30s %-7s %6d  %s\n", rule.Index, rule.Summary, rule.Decision, rule.Hits, note)
+	}
+	fmt.Println(dimStyle.Render(fmt.Sprintf("    %d access(es) fell through to the %s default", a.DefaultHits, a.Default)))
+}
+
+// printExposures answers the question a PII count never could: did any of it
+// leave the machine?
+func printExposures(r *security.Report) {
+	if len(r.Exposures) == 0 {
+		return
+	}
+	fmt.Println()
+	fmt.Println(dimStyle.Render("  " + strings.Repeat("─", 48)))
+	fmt.Printf("  %s\n", cortexStyle.Render("sensitive data exposure"))
+	for _, e := range r.Exposures {
+		where := okStyle.Render("local")
+		switch {
+		case e.Remote && e.Known:
+			where = warnStyle.Render("REMOTE")
+		case e.Remote:
+			// Treated as remote (fail-closed) but not observed as such —
+			// distinguished so an offline head can't read as a real leak.
+			where = dimStyle.Render("UNKNOWN")
+		}
+		types := strings.Join(e.PIITypes, ", ")
+		if types == "" {
+			types = "unclassified type"
+		}
+		fmt.Printf("    %-7s %-18.18s %-24.24s %s\n", where, e.Head, e.Resource, dimStyle.Render(types))
+	}
+}
+
+// printThreats is the forensic breakdown behind the blocked/flagged counts:
+// what was actually attempted, against what, and how dangerous the operation
+// was.
+func printThreats(r *security.Report) {
+	th := r.Threats
+	if len(th.ByMarker) == 0 && len(th.ProbedResources) == 0 && len(th.ByAction) == 0 {
+		return
+	}
+	fmt.Println()
+	fmt.Println(dimStyle.Render("  " + strings.Repeat("─", 48)))
+	fmt.Printf("  %s\n", cortexStyle.Render("threat breakdown"))
+	printCountList("injection markers tried", th.ByMarker)
+	printCountList("resources probed (repeat denials)", th.ProbedResources)
+	printCountList("by action", th.ByAction)
+}
+
+func printCountList(title string, counts []security.Count) {
+	if len(counts) == 0 {
+		return
+	}
+	fmt.Printf("    %s\n", dimStyle.Render(title+":"))
+	for _, c := range counts {
+		fmt.Printf("      %-40.40s %d\n", c.Label, c.Count)
+	}
 }
 
 // actionPriorityTag renders an Action's priority as a short colored tag.

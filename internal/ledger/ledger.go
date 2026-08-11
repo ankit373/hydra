@@ -95,6 +95,12 @@ type Event struct {
 	// Classification is the data-sensitivity tag this access was evaluated
 	// under (e.g. "pii"). Empty means unclassified.
 	Classification string `json:"classification,omitempty"`
+	// PIITypes names the specific detectors that matched (e.g. "aws access
+	// key id", "email"), when Classification is "pii". Kept separate from
+	// Classification rather than encoded into it because Classification is a
+	// policy *matching* key (see Rule.matches) — folding the type in would
+	// silently stop every existing {"classification":"pii"} rule matching.
+	PIITypes []string `json:"pii_types,omitempty"`
 
 	// Flagged is true when Content matched a heuristic prompt-injection
 	// marker (policy.ContainsInjectionMarkers). A non-blocking audit signal —
@@ -531,8 +537,11 @@ type CheckRequest struct {
 // only tests `decision == Deny` can never be tricked into proceeding.
 func Check(path string, p Policy, req CheckRequest) (Decision, error) {
 	classification := NormalizeClassification(req.Classification)
-	if classification == "" && req.Content != "" && policy.ContainsPII(policy.Request{Prompt: req.Content}) {
-		classification = "pii"
+	var piiTypes []string
+	if classification == "" && req.Content != "" {
+		if piiTypes = policy.DetectPII(policy.Request{Prompt: req.Content}); len(piiTypes) > 0 {
+			classification = "pii"
+		}
 	}
 
 	flagReason := req.FlagReason
@@ -552,7 +561,7 @@ func Check(path string, p Policy, req CheckRequest) (Decision, error) {
 			_ = Record(path, Event{
 				Agent: req.Agent, Tool: req.Tool, Resource: req.Resource,
 				Action: req.Action, Decision: Deny, Classification: classification,
-				Flagged: flagged, FlagReason: flagReason,
+				PIITypes: piiTypes, Flagged: flagged, FlagReason: flagReason,
 				Reason: "unhashable parameters: " + err.Error(),
 			})
 			return Deny, err
@@ -564,7 +573,7 @@ func Check(path string, p Policy, req CheckRequest) (Decision, error) {
 	err := Record(path, Event{
 		Agent: req.Agent, Tool: req.Tool, Resource: req.Resource,
 		Action: req.Action, Decision: decision, Reason: reason,
-		ParametersHash: hash, Classification: classification,
+		ParametersHash: hash, Classification: classification, PIITypes: piiTypes,
 		Flagged: flagged, FlagReason: flagReason,
 	})
 	return decision, err

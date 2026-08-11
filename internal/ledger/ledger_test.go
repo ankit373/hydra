@@ -181,7 +181,7 @@ func TestByHeadRisk_GroupsSortsAndOmitsHeadsWithNoRisk(t *testing.T) {
 
 func TestByDayRisk_BucketsSortsAndOmitsQuietDays(t *testing.T) {
 	events := []Event{
-		{TS: "2026-08-02T09:00:00Z", Tool: "a", Decision: Allow},                 // quiet day, must be omitted
+		{TS: "2026-08-02T09:00:00Z", Tool: "a", Decision: Allow}, // quiet day, must be omitted
 		{TS: "2026-08-01T09:00:00Z", Tool: "a", Decision: Deny},
 		{TS: "2026-08-01T15:00:00Z", Tool: "a", Flagged: true, Decision: Allow},
 		{TS: "2026-08-03T09:00:00Z", Tool: "a", Decision: Deny},

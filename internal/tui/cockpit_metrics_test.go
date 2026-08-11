@@ -309,9 +309,13 @@ func TestDashSecurity_RendersCoverageAndActions(t *testing.T) {
 			{Date: "2026-07-01", Denied: 1},
 			{Date: "2026-08-01", Denied: 2, Flagged: 1},
 		},
-		Checks: []security.Check{
-			{Name: "PII/sensitive-data detections", Status: "1 detected"},
-			{Name: "Policy adherence", Status: "80% matched a rule"},
+		Exposures: []security.Exposure{
+			{Head: "ollama", Remote: false, Known: true},
+			{Head: "gpt-4o", Remote: true, Known: true, PIITypes: []string{"aws access key id"}},
+		},
+		PolicyAudit: security.PolicyAudit{
+			Default: "allow", FailOpen: true,
+			Rules: []security.RuleStat{{Index: 0, Hits: 3}, {Index: 1, Hits: 0, Dead: true}},
 		},
 		Actions: []security.Action{
 			{ID: "LLM03", Kind: "gap", Title: "Supply Chain", Detail: "no integrity verification",
@@ -322,7 +326,10 @@ func TestDashSecurity_RendersCoverageAndActions(t *testing.T) {
 	for _, want := range []string{
 		"37%", "LLM01", "enforced", "LLM03", "gap", "45d", "sketchy", "denied 2",
 		"NOW", "Supply Chain", "history",
-		"ledger", "PII", "1 detected", "80% matched a rule", "risk trend",
+		"ledger", "risk trend",
+		// The exposure line must lead with the leak, not the raw count, and
+		// the policy line must state the posture rather than a percentage.
+		"exposure", "1 REMOTE", "policy", "fail-open", "1 dead",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("dashSecurity output missing %q:\n%s", want, out)
