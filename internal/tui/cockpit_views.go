@@ -357,6 +357,30 @@ func (m Cockpit) dashSecurity(w, h int) string {
 			head.WriteString(" " + style.Render(fmt.Sprintf("%s %+.0f%% since first run (was %.0f%%)",
 				arrow, r.Trend.DeltaPct, r.Trend.FirstPct)) + "\n")
 		}
+		// PII/policy/bypass-attempt signals, folded into the hero rather than
+		// three new boxes — the view already fits one screen. PII and policy
+		// figures reuse Checks' own formatted Status (no re-parsing); blocked/
+		// flagged come straight from LedgerPanel. Each line stays within
+		// ckSecNameW like the category rows below — a Status string of
+		// unbounded length (Check text isn't fixed-width) must never be
+		// allowed to widen this box, which is what corrupts the box-drawing
+		// when it's joined beside the per-head/actions boxes.
+		if pii := findCheckStatus(r.Checks, "PII/sensitive-data detections"); pii != "" {
+			head.WriteString(" " + ckDimS.Render("PII ") + ckCyanS.Render(truncate(pii, ckSecNameW)) + "\n")
+			head.WriteString(" " + ckDimS.Render("policy ") +
+				ckCyanS.Render(truncate(findCheckStatus(r.Checks, "Policy adherence"), ckSecNameW)) + "\n")
+			head.WriteString(" " + ckDimS.Render("blocked ") + ckExpS.Render(fmt.Sprintf("%d", r.Ledger.Denied)) +
+				ckDimS.Render(" · flagged ") + ckMidS.Render(fmt.Sprintf("%d", r.Ledger.Flagged)) + "\n")
+		}
+		// Same reused ckSpark as the coverage history above — a second real
+		// series, not a second charting mechanism.
+		if len(r.RiskHistory) >= 2 {
+			riskVals := make([]float64, len(r.RiskHistory))
+			for i, d := range r.RiskHistory {
+				riskVals[i] = float64(d.Denied + d.Flagged)
+			}
+			head.WriteString(" " + ckDimS.Render("risk trend ") + ckSpark(riskVals) + "\n")
+		}
 	}
 	head.WriteString("\n")
 	for _, c := range r.Coverage.Categories {
@@ -424,6 +448,18 @@ func ckActionPriorityTag(p security.ActionPriority) (string, lipgloss.Style) {
 	default:
 		return "WATCH", ckDimS
 	}
+}
+
+// findCheckStatus returns a named Check's already-formatted Status string, or
+// "" if absent — lets the hero reuse Checks' own text instead of re-deriving
+// the same numbers a second way.
+func findCheckStatus(checks []security.Check, name string) string {
+	for _, c := range checks {
+		if c.Name == name {
+			return c.Status
+		}
+	}
+	return ""
 }
 
 // ── syntax highlighter ───────────────────────────────────────────────────────

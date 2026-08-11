@@ -59,6 +59,9 @@ type Report struct {
 	// last — the real trend a chart is drawn from, not just Trend's single
 	// collapsed delta.
 	History []HistoryPoint `json:"history,omitempty"`
+	// RiskHistory is denied/flagged activity bucketed by day — the "blocked
+	// over time" trend WAF-style dashboards report, from ledger.ByDayRisk.
+	RiskHistory []ledger.DayRisk `json:"riskHistory,omitempty"`
 	// Actions is the feedback loop: one item per coverage Gap plus one per
 	// above-threshold risky head, ranked most-urgent first — the backlog for
 	// the next hardening round. Priority comes from real signals (a gap's
@@ -133,7 +136,10 @@ func Build(heads []provider.Head) (*Report, error) {
 		costCeilingCheck(events),
 		provenanceCheck(heads),
 		frameworkCheck(pol),
+		piiCheck(events),
+		policyAdherenceCheck(events),
 	}
+	r.RiskHistory = ledger.ByDayRisk(events)
 
 	r.Coverage = computeCoverage(pol, events)
 
@@ -276,4 +282,51 @@ func frameworkCheck(pol ledger.Policy) Check {
 	}
 	return Check{Name: name, Status: fmt.Sprintf("%d tagged", len(covered)),
 		Detail: strings.Join(covered, ", ")}
+}
+
+// piiCheck counts ledger events classified "pii" — content the policy engine
+// auto-detected as sensitive when it was passed to ledger.Check. This is a
+// distinct signal from LLM02's automatic local-only routing (a separate,
+// dispatch-time mechanism in internal/policy.Engine) — additional visibility,
+// not a duplicate of it.
+func piiCheck(events []ledger.Event) Check {
+	const name = "PII/sensitive-data detections"
+	n := 0
+	for _, e := range events {
+		if e.Classification == "pii" {
+			n++
+		}
+	}
+	if n == 0 {
+		return Check{Name: name, Status: "0 detected",
+			Detail: "no ledger-recorded access has been classified as PII on this machine"}
+	}
+	return Check{Name: name, Status: fmt.Sprintf("%d detected", n),
+		Detail: "each was auto-classified from content passed to hyctl mcp check"}
+}
+
+// policyAdherenceCheck reports what fraction of policy-evaluated accesses hit
+// an explicit rule rather than falling through to the default. Only events
+// whose Reason came from Policy.Decide ("rule N (...)" or exactly "default")
+// count — an event recorded some other way (e.g. hyctl mcp record, which
+// never calls Decide) isn't part of this population and must not skew it.
+func policyAdherenceCheck(events []ledger.Event) Check {
+	const name = "Policy adherence"
+	var ruled, defaulted int
+	for _, e := range events {
+		switch {
+		case strings.HasPrefix(e.Reason, "rule "):
+			ruled++
+		case e.Reason == "default":
+			defaulted++
+		}
+	}
+	total := ruled + defaulted
+	if total == 0 {
+		return Check{Name: name, Status: "no policy-evaluated events yet",
+			Detail: "hyctl mcp check hasn't been exercised, or no explicit rules are defined"}
+	}
+	pct := 100 * float64(ruled) / float64(total)
+	return Check{Name: name, Status: fmt.Sprintf("%.0f%% matched a rule", pct),
+		Detail: fmt.Sprintf("%d of %d policy-evaluated accesses hit an explicit rule rather than the default", ruled, total)}
 }
