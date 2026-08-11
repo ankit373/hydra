@@ -46,6 +46,19 @@ export default function App() {
   const [error, setError] = useState<string | null>(null)
   const [hyctlStatus, setHyctlStatus] = useState<HyctlStatus | null>(null)
 
+  // ChatDock's open state lives here, not inside ChatDock, so other views
+  // (Fleet's empty state) can open it — the app already has a way to start a
+  // task without a terminal, it just wasn't reachable from anywhere that
+  // needed it. focusSignal is a counter rather than a boolean so opening it
+  // twice in a row (already open, click "start a task" again) still refocuses
+  // the input instead of no-oping on an unchanged value.
+  const [dockOpen, setDockOpen] = useState(false)
+  const [dockFocusSignal, setDockFocusSignal] = useState(0)
+  const startTask = useCallback(() => {
+    setDockOpen(true)
+    setDockFocusSignal((n) => n + 1)
+  }, [])
+
   const load = useCallback(async (which: ViewID, id: string) => {
     try {
       if (which === 'fleet') setFleet(await GetFleet())
@@ -159,7 +172,9 @@ export default function App() {
             should not look like a crashed app. */}
         {error && <div className="error">{error}</div>}
         {!error && view === 'dashboard' && <Dashboard data={dashboard} />}
-        {!error && view === 'fleet' && fleet && <Fleet data={fleet} onOpen={openSession} />}
+        {!error && view === 'fleet' && fleet && (
+          <Fleet data={fleet} onOpen={openSession} onStartTask={startTask} />
+        )}
         {!error && view === 'session' && session && (
           <Session session={session} onBack={() => setView('fleet')} />
         )}
@@ -178,7 +193,12 @@ export default function App() {
         {!error && loading && <p style={{ color: 'var(--hy-dim)' }}>Reading logs…</p>}
       </main>
 
-      <ChatDock onOpenRun={openSession} />
+      <ChatDock
+        onOpenRun={openSession}
+        open={dockOpen}
+        onOpenChange={setDockOpen}
+        focusSignal={dockFocusSignal}
+      />
     </div>
   )
 }
