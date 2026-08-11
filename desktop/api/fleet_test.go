@@ -274,6 +274,92 @@ func TestGetFleet_MalformedLinesAreSurfacedNotHidden(t *testing.T) {
 	}
 }
 
+// A finished, non-live run with zero agents and no error carries no
+// information — before #390, --dry-run wrote exactly this shape to the
+// runlog. Once real machines accumulate enough of these (sorted
+// live-first-then-newest, so they outrank real history), Fleet looks empty
+// even though HasRuns is technically true. #390 stopped writing new ones;
+// this is the other half — don't surface the ones already on disk either.
+func TestGetFleet_ZeroAgentGhostRunsAreFilteredOut(t *testing.T) {
+	sandbox(t)
+
+	writeRun(t, "20260802T090000Z-ghost",
+		runlog.Event{Kind: runlog.KindRunStarted},
+		runlog.Event{Kind: runlog.KindRunFinished},
+	)
+	writeRun(t, "20260802T100000Z-real",
+		runlog.Event{Kind: runlog.KindHeadSelected, Head: "h"},
+		runlog.Event{Kind: runlog.KindDispatchFinished, Head: "h", Status: "ok"},
+	)
+
+	f, err := New().GetFleet()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r := runByID(f, "20260802T090000Z-ghost"); r != nil {
+		t.Error("a finished, zero-agent, error-free run was not filtered out")
+	}
+	if r := runByID(f, "20260802T100000Z-real"); r == nil {
+		t.Error("the real run was dropped along with the ghost")
+	}
+	if len(f.Runs) != 1 {
+		t.Errorf("len(Runs) = %d, want 1 (ghost filtered, real kept)", len(f.Runs))
+	}
+}
+
+// A machine whose only history is dry-run ghosts must still get the honest
+// "no runs yet" empty state, not a blank list with no explanation — the
+// exact failure this filter would otherwise reintroduce.
+func TestGetFleet_AllGhostRunsStillShowHonestEmptyState(t *testing.T) {
+	sandbox(t)
+
+	writeRun(t, "20260802T090000Z-ghost1",
+		runlog.Event{Kind: runlog.KindRunStarted},
+		runlog.Event{Kind: runlog.KindRunFinished},
+	)
+	writeRun(t, "20260802T100000Z-ghost2",
+		runlog.Event{Kind: runlog.KindRunStarted},
+		runlog.Event{Kind: runlog.KindRunFinished},
+	)
+
+	f, err := New().GetFleet()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f.HasRuns {
+		t.Error("HasRuns = true with every run filtered out — the view would render a blank list with no explanation")
+	}
+	if len(f.Runs) != 0 {
+		t.Errorf("len(Runs) = %d, want 0", len(f.Runs))
+	}
+}
+
+// A live run must never be filtered even with zero agents so far — it may
+// not have picked a head yet, and it is the one the user opened the app to
+// watch. A run with a read error must never be filtered either — the error
+// itself is the information (see TestGetFleet_MalformedLinesAreSurfacedNotHidden
+// for the read-error case; this covers the live case).
+func TestGetFleet_LiveZeroAgentRunIsNeverFiltered(t *testing.T) {
+	sandbox(t)
+
+	writeRun(t, "20260802T100000Z-justStarted",
+		runlog.Event{Kind: runlog.KindRunStarted},
+	)
+	markLive(t, "20260802T100000Z-justStarted")
+
+	f, err := New().GetFleet()
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := runByID(f, "20260802T100000Z-justStarted")
+	if r == nil {
+		t.Fatal("a live run with zero agents so far was filtered out")
+	}
+	if !r.Live {
+		t.Error("run is not marked live")
+	}
+}
+
 // Reading the fleet holds no state and must be safe to poll from several places
 // at once, as the frontend does.
 func TestGetFleet_ConcurrentCallsAreSafe(t *testing.T) {
