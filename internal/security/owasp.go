@@ -58,14 +58,13 @@ type Coverage struct {
 // computeCoverage classifies all 10 OWASP LLM Top-10 categories against
 // Hydra's real, currently-observable state. pol and events are what Build
 // already loaded — passed in rather than reloaded here.
-func computeCoverage(pol ledger.Policy, events []ledger.Event) Coverage {
+func computeCoverage(pol ledger.Policy, events []ledger.Event, sc SupplyChain) Coverage {
 	cats := []Category{
 		{ID: "LLM01", Name: "Prompt Injection", Status: Enforced,
 			Detail: "untrusted content is framed as data (a2a/editor/parallel) and scanned for injection markers automatically"},
 		{ID: "LLM02", Name: "Sensitive Information Disclosure", Status: Enforced,
 			Detail: "PII detection forces local-only routing automatically"},
-		{ID: "LLM03", Name: "Supply Chain", Status: Gap,
-			Detail: "no provider/binary integrity verification exists yet"},
+		llm03SupplyChain(sc),
 		{ID: "LLM04", Name: "Data and Model Poisoning", Status: NotApplicable,
 			Detail: "Hydra routes prompts to models — it does not train or fine-tune any"},
 		llm05OutputHandling(),
@@ -93,6 +92,22 @@ func computeCoverage(pol ledger.Policy, events []ledger.Event) Coverage {
 		pct = 100 * float64(covered) / float64(applicable)
 	}
 	return Coverage{Categories: cats, Applicable: applicable, Covered: covered, PercentCovered: pct}
+}
+
+// llm03SupplyChain: Hydra fingerprints every CLI head's binary and reports
+// when one changes. That is detection, not provenance — it cannot distinguish
+// a legitimate upgrade from a swap, and verifies nothing about origin — so it
+// is Configured once binaries are actually being tracked, never Enforced.
+func llm03SupplyChain(sc SupplyChain) Category {
+	c := Category{ID: "LLM03", Name: "Supply Chain"}
+	if len(sc.Binaries) == 0 {
+		c.Status = Gap
+		c.Detail = "no CLI head binary is being fingerprinted, so a replaced agent binary would go unnoticed"
+		return c
+	}
+	c.Status = Configured
+	c.Detail = fmt.Sprintf("%d head binary(ies) fingerprinted; a replacement is detected, though origin is not verified", len(sc.Binaries))
+	return c
 }
 
 // llm05OutputHandling: Hydra ships default workspace validators (js, py,

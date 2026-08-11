@@ -414,6 +414,10 @@ func (m Cockpit) dashSecurity(w, h int) string {
 			head.WriteString(" " + ckDimS.Render("evidence ") +
 				ckExpS.Render(truncate(fmt.Sprintf("%d source(s) inflate confidence", n), ckSecNameW)) + "\n")
 		}
+		if n := r.SupplyChain.Changed; n > 0 {
+			head.WriteString(" " + ckDimS.Render("binaries ") +
+				ckExpS.Render(truncate(fmt.Sprintf("%d CHANGED since last seen", n), ckSecNameW)) + "\n")
+		}
 		if r.Drift.Changed {
 			head.WriteString(" " + ckDimS.Render("config   ") +
 				ckMidS.Render(truncate(fmt.Sprintf("%d epochs — rules changed", len(r.Drift.Epochs)), ckSecNameW)) + "\n")

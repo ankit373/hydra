@@ -73,6 +73,9 @@ type Report struct {
 	// Evidence is whether the ensemble's reported confidence rests on
 	// independent, discriminating sources.
 	Evidence EvidenceQuality `json:"evidence"`
+	// SupplyChain fingerprints each CLI head's binary so a replacement is
+	// visible — the local form of the rug-pull pattern.
+	SupplyChain SupplyChain `json:"supplyChain"`
 	// Drift reports whether the ledger spans more than one configuration —
 	// decisions made under rules that later changed.
 	Drift ConfigDrift `json:"drift"`
@@ -158,6 +161,7 @@ func Build(heads []provider.Head) (*Report, error) {
 	r.PolicyAudit = AuditPolicy(pol, events)
 	r.Threats = ThreatBreakdown(events)
 	r.Controls = Controls(events, r.PolicyAudit, chainRes)
+	r.SupplyChain = FingerprintHeads(heads)
 	r.Evidence = AssessEvidence()
 	r.Drift = DetectConfigDrift(events)
 	r.Events, r.Truncated = evidenceTail(events)
@@ -171,10 +175,11 @@ func Build(heads []provider.Head) (*Report, error) {
 		policyPostureCheck(r.PolicyAudit),
 		evidenceCheck(r.Evidence),
 		driftCheck(r.Drift),
+		supplyChainCheck(r.SupplyChain),
 	}
 	r.RiskHistory = ledger.ByDayRisk(events)
 
-	r.Coverage = computeCoverage(pol, events)
+	r.Coverage = computeCoverage(pol, events, r.SupplyChain)
 
 	historyPath := DefaultScoreHistoryPath()
 	prior := loadScoreHistory(historyPath)
@@ -186,7 +191,7 @@ func Build(heads []provider.Head) (*Report, error) {
 
 	appendScoreHistory(historyPath, r.Coverage)
 
-	r.Actions = buildActions(r.Coverage, r.ByHead, r.Exposures, r.PolicyAudit, r.Controls, r.Evidence, r.Drift)
+	r.Actions = buildActions(r.Coverage, r.ByHead, r.Exposures, r.PolicyAudit, r.Controls, r.Evidence, r.Drift, r.SupplyChain)
 
 	return r, nil
 }
@@ -219,7 +224,7 @@ func chainCheck(res ledger.ChainResult) Check {
 // buildActions is the feedback loop: exactly the coverage Gaps plus heads
 // whose denied+flagged activity crosses riskThreshold — nothing else —
 // ranked most-urgent first so the queue reads top-to-bottom as work order.
-func buildActions(cov Coverage, byHead []ledger.HeadRisk, exps []Exposure, audit PolicyAudit, controls []Control, ev EvidenceQuality, drift ConfigDrift) []Action {
+func buildActions(cov Coverage, byHead []ledger.HeadRisk, exps []Exposure, audit PolicyAudit, controls []Control, ev EvidenceQuality, drift ConfigDrift, sc SupplyChain) []Action {
 	const riskThreshold = 2
 	var out []Action
 
@@ -250,6 +255,18 @@ func buildActions(cov Coverage, byHead []ledger.HeadRisk, exps []Exposure, audit
 			Priority: PriorityNow,
 		})
 	}
+	// An agent binary that changed under you is the rug-pull pattern itself.
+	for _, b := range sc.Binaries {
+		if b.Changed {
+			out = append(out, Action{
+				ID: "binary-" + b.HeadID, Kind: "supply-chain",
+				Title:    fmt.Sprintf("%s binary changed since it was last seen", b.HeadID),
+				Detail:   fmt.Sprintf("%s — an upgrade and a swap look identical here, so confirm which it was", b.Path),
+				Priority: PriorityNow,
+			})
+		}
+	}
+
 	// A confidence figure assembled from correlated or undiagnostic sources
 	// is a number, not an assurance — and unlike a coverage gap it is
 	// actively misleading, because it reads as a result.

@@ -13,13 +13,14 @@ import (
 	"github.com/ankit373/hydra/internal/trust"
 )
 
-// LLM01/LLM02 are always Enforced (automatic, no config), LLM03/LLM07 are
-// always Gap (no mechanism exists), LLM04/LLM08 are always N/A — these four
-// pairs don't depend on install state, unlike LLM05/06/09/10.
+// LLM01/LLM02 are always Enforced (automatic, no config), LLM07 is always Gap
+// (no mechanism exists), LLM04/LLM08 are always N/A — these don't depend on
+// install state, unlike LLM03/05/06/09/10. LLM03 is Gap only while nothing is
+// being fingerprinted, which is what an empty SupplyChain means here.
 func TestComputeCoverage_StaticCategoriesAreFixed(t *testing.T) {
 	testutil.NewSandbox(t)
 
-	cov := computeCoverage(ledger.Policy{}, nil)
+	cov := computeCoverage(ledger.Policy{}, nil, SupplyChain{})
 	want := map[string]CoverageStatus{
 		"LLM01": Enforced, "LLM02": Enforced,
 		"LLM03": Gap, "LLM07": Gap,
@@ -39,7 +40,7 @@ func TestComputeCoverage_StaticCategoriesAreFixed(t *testing.T) {
 func TestComputeCoverage_NAExcludedFromBothNumeratorAndDenominator(t *testing.T) {
 	testutil.NewSandbox(t)
 
-	cov := computeCoverage(ledger.Policy{}, nil)
+	cov := computeCoverage(ledger.Policy{}, nil, SupplyChain{})
 	if cov.Applicable != 8 {
 		t.Errorf("Applicable = %d, want 8 (10 categories minus LLM04 and LLM08)", cov.Applicable)
 	}

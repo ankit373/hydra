@@ -115,7 +115,7 @@ func TestBuildActions_EvidenceProblemsRaiseActions(t *testing.T) {
 		Families:    []FamilyRisk{{Family: "claude", Coupling: 0.82, Critical: true}},
 		WeakSources: []SourcePower{{Source: "coinflip", D: 0.001, Observations: 40}},
 	}
-	actions := buildActions(Coverage{}, nil, nil, PolicyAudit{}, nil, ev, ConfigDrift{})
+	actions := buildActions(Coverage{}, nil, nil, PolicyAudit{}, nil, ev, ConfigDrift{}, SupplyChain{})
 	if len(actions) != 2 {
 		t.Fatalf("actions = %+v, want one per problem", actions)
 	}
@@ -125,7 +125,7 @@ func TestBuildActions_EvidenceProblemsRaiseActions(t *testing.T) {
 }
 
 func TestBuildActions_ConfigDriftRaisesAnAction(t *testing.T) {
-	actions := buildActions(Coverage{}, nil, nil, PolicyAudit{}, nil, EvidenceQuality{}, ConfigDrift{Changed: true})
+	actions := buildActions(Coverage{}, nil, nil, PolicyAudit{}, nil, EvidenceQuality{}, ConfigDrift{Changed: true}, SupplyChain{})
 	if len(actions) != 1 || !strings.Contains(actions[0].Title, "configuration changed") {
 		t.Fatalf("actions = %+v, want a config-drift action", actions)
 	}
