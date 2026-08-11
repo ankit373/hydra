@@ -159,7 +159,7 @@ func actionsText(actions []Action) string {
 // never downgraded by age the way a gap would be.
 func TestBuildActions_RiskyHeadIsAlwaysPriorityNow(t *testing.T) {
 	byHead := []ledger.HeadRisk{{Head: "sketchy", Denied: 2, Flagged: 1}}
-	actions := buildActions(Coverage{}, byHead)
+	actions := buildActions(Coverage{}, byHead, nil, PolicyAudit{})
 	if len(actions) != 1 || actions[0].Priority != PriorityNow {
 		t.Errorf("actions = %+v, want exactly one PriorityNow action", actions)
 	}
@@ -191,7 +191,7 @@ func TestBuildActions_SortedMostUrgentFirst(t *testing.T) {
 		{ID: "LLM03", Status: Gap, GapAgeDays: 45}, // now (stale)
 		{ID: "LLM06", Status: Gap, GapAgeDays: 10}, // soon
 	}}
-	actions := buildActions(cov, nil)
+	actions := buildActions(cov, nil, nil, PolicyAudit{})
 	if len(actions) != 3 {
 		t.Fatalf("actions = %+v, want 3", actions)
 	}
@@ -320,45 +320,62 @@ func TestBuild_FrameworkCheckReflectsPolicyTags(t *testing.T) {
 	}
 }
 
-func TestPIICheck_CountsOnlyClassifiedEvents(t *testing.T) {
-	none := []ledger.Event{{Tool: "a", Decision: ledger.Allow}}
-	if got := piiCheck(none).Status; got != "0 detected" {
-		t.Errorf("no classified events: Status = %q, want \"0 detected\"", got)
+// The exposure check's whole point is that a count is not a finding: the same
+// number of detections means opposite things depending on where the data went.
+func TestExposureCheck_SplitsLocalFromRemote(t *testing.T) {
+	if got := exposureCheck(nil).Status; got != "none detected" {
+		t.Errorf("no exposures: Status = %q", got)
 	}
 
-	some := []ledger.Event{
-		{Tool: "a", Decision: ledger.Allow, Classification: "pii"},
-		{Tool: "b", Decision: ledger.Allow, Classification: "pii"},
-		{Tool: "c", Decision: ledger.Allow}, // unclassified, must not count
+	local := []Exposure{{Head: "ollama", Remote: false, Known: true}, {Head: "ollama", Remote: false, Known: true}}
+	if got := exposureCheck(local).Status; got != "2 detected, all local" {
+		t.Errorf("all-local: Status = %q, want it to say the control worked", got)
 	}
-	if got := piiCheck(some).Status; got != "2 detected" {
-		t.Errorf("Status = %q, want \"2 detected\"", got)
+
+	mixed := []Exposure{
+		{Head: "ollama", Remote: false, Known: true},
+		{Head: "gpt-4o", Remote: true, Known: true, PIITypes: []string{"aws access key id"}},
+	}
+	got := exposureCheck(mixed)
+	if got.Status != "2 detected, 1 to a remote head" {
+		t.Errorf("Status = %q, want the remote split called out", got.Status)
+	}
+
+	// An undiscovered head is still remote (fail-closed) but must be reported
+	// as unidentified rather than folded into the confirmed-leak count.
+	withUnknown := append(append([]Exposure{}, mixed...), Exposure{Head: "stopped-ollama", Remote: true})
+	if s := exposureCheck(withUnknown).Status; s != "3 detected, 1 to a remote head, 1 unidentified" {
+		t.Errorf("Status = %q, want the unidentified head counted separately", s)
+	}
+	// The detail has to name the destination and the secret type — that is
+	// the difference between a finding and a counter.
+	for _, want := range []string{"gpt-4o", "aws access key id"} {
+		if !strings.Contains(got.Detail, want) {
+			t.Errorf("Detail = %q, want it to name %q", got.Detail, want)
+		}
 	}
 }
 
-// Only Decide's own two Reason shapes ("rule N (...)" or exactly "default")
-// count toward adherence — an event recorded some other way (e.g. via
-// `hyctl mcp record`, which never calls Decide) must not silently skew it.
-func TestPolicyAdherenceCheck_OnlyCountsDecideOutcomes(t *testing.T) {
-	events := []ledger.Event{
-		{Tool: "a", Reason: "rule 0 (deny a/*)"},
-		{Tool: "b", Reason: "rule 1 (allow b/*)"},
-		{Tool: "c", Reason: "default"},
-		{Tool: "d", Reason: "manually recorded, not from Decide"},
+func TestPolicyPostureCheck_ReportsRealFacts(t *testing.T) {
+	// No rules at all is a distinct state from "rules exist but never fired".
+	empty := policyPostureCheck(PolicyAudit{Default: "allow", FailOpen: true})
+	if empty.Status != "no rules defined" {
+		t.Errorf("empty policy: Status = %q", empty.Status)
 	}
-	got := policyAdherenceCheck(events)
-	if got.Status != "67% matched a rule" {
-		t.Errorf("Status = %q, want \"67%% matched a rule\" (2 of 3 Decide-shaped events; the unrelated Reason must be excluded)", got.Status)
-	}
-	if !strings.Contains(got.Detail, "2 of 3") {
-		t.Errorf("Detail = %q, want it to name 2 of 3", got.Detail)
-	}
-}
 
-func TestPolicyAdherenceCheck_NoDecideEventsYet(t *testing.T) {
-	events := []ledger.Event{{Tool: "a", Reason: "manually recorded"}}
-	if got := policyAdherenceCheck(events).Status; got != "no policy-evaluated events yet" {
-		t.Errorf("Status = %q, want the no-data status", got)
+	shadowed := 0
+	a := PolicyAudit{
+		Default: "allow", FailOpen: true, Evaluated: 5, DefaultHits: 3,
+		Rules: []RuleStat{
+			{Index: 0, Hits: 2},
+			{Index: 1, Hits: 0, Dead: true, ShadowedBy: &shadowed},
+		},
+	}
+	got := policyPostureCheck(a)
+	for _, want := range []string{"fail-open", "1 never matched", "1 unreachable"} {
+		if !strings.Contains(got.Status, want) {
+			t.Errorf("Status = %q, want it to mention %q", got.Status, want)
+		}
 	}
 }
 

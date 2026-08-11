@@ -369,21 +369,34 @@ func (m Cockpit) dashSecurity(w, h int) string {
 				ckSegmentedBar(20, []int{r.Ledger.Allowed, r.Ledger.Denied},
 					[]lipgloss.Style{ckCheapS, ckExpS}) + "\n")
 		}
-		// PII/policy/bypass-attempt signals, folded into the hero rather than
-		// three new boxes — the view already fits one screen. PII and policy
-		// figures reuse Checks' own formatted Status (no re-parsing); blocked/
-		// flagged come straight from LedgerPanel. Each line stays within
-		// ckSecNameW like the category rows below — a Status string of
-		// unbounded length (Check text isn't fixed-width) must never be
-		// allowed to widen this box, which is what corrupts the box-drawing
-		// when it's joined beside the per-head/actions boxes.
-		if pii := findCheckStatus(r.Checks, "PII/sensitive-data detections"); pii != "" {
-			head.WriteString(" " + ckDimS.Render("PII ") + ckCyanS.Render(truncate(pii, ckSecNameW)) + "\n")
-			head.WriteString(" " + ckDimS.Render("policy ") +
-				ckCyanS.Render(truncate(findCheckStatus(r.Checks, "Policy adherence"), ckSecNameW)) + "\n")
-			head.WriteString(" " + ckDimS.Render("blocked ") + ckExpS.Render(fmt.Sprintf("%d", r.Ledger.Denied)) +
-				ckDimS.Render(" · flagged ") + ckMidS.Render(fmt.Sprintf("%d", r.Ledger.Flagged)) + "\n")
+		// Exposure/policy/bypass signals, folded into the hero rather than
+		// three new boxes — the view already fits one screen. Each line stays
+		// within ckSecNameW like the category rows below: an unbounded string
+		// here widens the box and corrupts the box-drawing where it is joined
+		// beside the per-head/actions boxes (which is exactly what happened
+		// the first time these lines were added).
+		//
+		// "exposure" leads with whether sensitive data left the machine, not
+		// with how much was detected — a count alone says nothing, since PII
+		// on a local head is the control working.
+		if n := len(r.Exposures); n > 0 {
+			confirmed := security.ConfirmedRemote(r.Exposures)
+			unknown := security.RemoteCount(r.Exposures) - confirmed
+			style, suffix := ckCheapS, "all local"
+			switch {
+			case confirmed > 0:
+				style, suffix = ckExpS, fmt.Sprintf("%d REMOTE", confirmed)
+			case unknown > 0:
+				// Assumed remote, not observed — amber, not red.
+				style, suffix = ckMidS, fmt.Sprintf("%d unidentified", unknown)
+			}
+			head.WriteString(" " + ckDimS.Render("exposure ") +
+				style.Render(truncate(fmt.Sprintf("%d · %s", n, suffix), ckSecNameW)) + "\n")
 		}
+		head.WriteString(" " + ckDimS.Render("policy   ") +
+			ckCyanS.Render(truncate(ckPolicyPosture(r.PolicyAudit), ckSecNameW)) + "\n")
+		head.WriteString(" " + ckDimS.Render("blocked  ") + ckExpS.Render(fmt.Sprintf("%d", r.Ledger.Denied)) +
+			ckDimS.Render(" · flagged ") + ckMidS.Render(fmt.Sprintf("%d", r.Ledger.Flagged)) + "\n")
 		// Same reused ckSpark as the coverage history above — a second real
 		// series, not a second charting mechanism.
 		if len(r.RiskHistory) >= 2 {
@@ -460,6 +473,26 @@ func ckActionPriorityTag(p security.ActionPriority) (string, lipgloss.Style) {
 	default:
 		return "WATCH", ckDimS
 	}
+}
+
+// ckPolicyPosture is the one-line policy readout: fail-open/fail-closed plus
+// the two real defects the audit can prove. It replaced a "NN% matched a
+// rule" figure that got *better* as the policy got more permissive.
+func ckPolicyPosture(a security.PolicyAudit) string {
+	if len(a.Rules) == 0 {
+		return "no rules defined"
+	}
+	s := "fail-closed"
+	if a.FailOpen {
+		s = "fail-open"
+	}
+	if n := a.DeadCount(); n > 0 {
+		s += fmt.Sprintf(" · %d dead", n)
+	}
+	if n := a.ShadowedCount(); n > 0 {
+		s += fmt.Sprintf(" · %d unreachable", n)
+	}
+	return s
 }
 
 // findCheckStatus returns a named Check's already-formatted Status string, or

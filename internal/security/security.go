@@ -62,6 +62,19 @@ type Report struct {
 	// RiskHistory is denied/flagged activity bucketed by day — the "blocked
 	// over time" trend WAF-style dashboards report, from ledger.ByDayRisk.
 	RiskHistory []ledger.DayRisk `json:"riskHistory,omitempty"`
+	// PolicyAudit is the real analysis of the access policy: per-rule hit
+	// counts, dead and provably-unreachable rules, and the fail-open posture.
+	PolicyAudit PolicyAudit `json:"policyAudit"`
+	// Exposures is every PII-classified access and whether it left the
+	// machine — the finding LLM02 is actually about.
+	Exposures []Exposure `json:"exposures,omitempty"`
+	// Threats is the forensic breakdown behind the blocked/flagged counts.
+	Threats Threats `json:"threats"`
+	// Events is a capped tail of the raw ledger, newest last — the evidence
+	// rows behind every finding above. Capped by maxEvidenceEvents; Truncated
+	// says so rather than silently showing a partial log as if it were whole.
+	Events    []ledger.Event `json:"events,omitempty"`
+	Truncated bool           `json:"truncated,omitempty"`
 	// Actions is the feedback loop: one item per coverage Gap plus one per
 	// above-threshold risky head, ranked most-urgent first — the backlog for
 	// the next hardening round. Priority comes from real signals (a gap's
@@ -131,13 +144,18 @@ func Build(heads []provider.Head) (*Report, error) {
 	}
 	r.IntegrityIntact = chainRes.Intact
 
+	r.Exposures = Exposures(events, heads)
+	r.PolicyAudit = AuditPolicy(pol, events)
+	r.Threats = ThreatBreakdown(events)
+	r.Events, r.Truncated = evidenceTail(events)
+
 	r.Checks = []Check{
 		chainCheck(chainRes),
 		costCeilingCheck(events),
 		provenanceCheck(heads),
 		frameworkCheck(pol),
-		piiCheck(events),
-		policyAdherenceCheck(events),
+		exposureCheck(r.Exposures),
+		policyPostureCheck(r.PolicyAudit),
 	}
 	r.RiskHistory = ledger.ByDayRisk(events)
 
@@ -153,7 +171,7 @@ func Build(heads []provider.Head) (*Report, error) {
 
 	appendScoreHistory(historyPath, r.Coverage)
 
-	r.Actions = buildActions(r.Coverage, r.ByHead)
+	r.Actions = buildActions(r.Coverage, r.ByHead, r.Exposures, r.PolicyAudit)
 
 	return r, nil
 }
@@ -175,9 +193,44 @@ func chainCheck(res ledger.ChainResult) Check {
 // buildActions is the feedback loop: exactly the coverage Gaps plus heads
 // whose denied+flagged activity crosses riskThreshold — nothing else —
 // ranked most-urgent first so the queue reads top-to-bottom as work order.
-func buildActions(cov Coverage, byHead []ledger.HeadRisk) []Action {
+func buildActions(cov Coverage, byHead []ledger.HeadRisk, exps []Exposure, audit PolicyAudit) []Action {
 	const riskThreshold = 2
 	var out []Action
+
+	// A real leak outranks everything else in the queue: it already happened,
+	// and unlike a coverage gap it is not hypothetical.
+	// Only a *confirmed* remote destination raises an action. An unidentified
+	// head is still counted as remote in the report (fail-closed), but it is
+	// not evidence enough to head the work queue with.
+	if remote := ConfirmedRemote(exps); remote > 0 {
+		out = append(out, Action{
+			ID: "exposure", Kind: "exposure",
+			Title:    fmt.Sprintf("%d sensitive access(es) reached a remote head", remote),
+			Detail:   exposureSummary(exps),
+			Priority: PriorityNow,
+		})
+	}
+	// An unreachable rule is a policy bug: someone wrote a control believing
+	// it applied, and it can never fire.
+	for _, r := range audit.Rules {
+		if r.ShadowedBy != nil {
+			out = append(out, Action{
+				ID: fmt.Sprintf("rule-%d", r.Index), Kind: "policy",
+				Title:    fmt.Sprintf("Rule #%d is unreachable", r.Index),
+				Detail:   fmt.Sprintf("%s — rule #%d always matches first", r.Summary, *r.ShadowedBy),
+				Priority: PriorityNow,
+			})
+		}
+	}
+	if audit.FailOpen && len(audit.Rules) > 0 {
+		out = append(out, Action{
+			ID: "fail-open", Kind: "policy",
+			Title:    "Access policy is fail-open",
+			Detail:   "anything no rule names is allowed — set \"default\": \"deny\" to invert that",
+			Priority: PrioritySoon,
+		})
+	}
+
 	for _, c := range cov.Categories {
 		if c.Status != Gap {
 			continue
@@ -289,44 +342,118 @@ func frameworkCheck(pol ledger.Policy) Check {
 // distinct signal from LLM02's automatic local-only routing (a separate,
 // dispatch-time mechanism in internal/policy.Engine) — additional visibility,
 // not a duplicate of it.
-func piiCheck(events []ledger.Event) Check {
-	const name = "PII/sensitive-data detections"
-	n := 0
-	for _, e := range events {
-		if e.Classification == "pii" {
-			n++
-		}
+// maxEvidenceEvents caps the raw ledger tail carried in the report. A machine
+// that has dispatched for months has an unbounded log, and a dashboard does
+// not need all of it to show the rows behind a finding.
+const maxEvidenceEvents = 200
+
+// evidenceTail returns the newest events, and whether anything was dropped —
+// reported rather than silently trimmed, so a partial log is never mistaken
+// for the whole one.
+func evidenceTail(events []ledger.Event) ([]ledger.Event, bool) {
+	if len(events) <= maxEvidenceEvents {
+		return events, false
 	}
-	if n == 0 {
-		return Check{Name: name, Status: "0 detected",
-			Detail: "no ledger-recorded access has been classified as PII on this machine"}
-	}
-	return Check{Name: name, Status: fmt.Sprintf("%d detected", n),
-		Detail: "each was auto-classified from content passed to hyctl mcp check"}
+	return events[len(events)-maxEvidenceEvents:], true
 }
 
-// policyAdherenceCheck reports what fraction of policy-evaluated accesses hit
-// an explicit rule rather than falling through to the default. Only events
-// whose Reason came from Policy.Decide ("rule N (...)" or exactly "default")
-// count — an event recorded some other way (e.g. hyctl mcp record, which
-// never calls Decide) isn't part of this population and must not skew it.
-func policyAdherenceCheck(events []ledger.Event) Check {
-	const name = "Policy adherence"
-	var ruled, defaulted int
-	for _, e := range events {
-		switch {
-		case strings.HasPrefix(e.Reason, "rule "):
-			ruled++
-		case e.Reason == "default":
-			defaulted++
+// exposureCheck reports sensitive-data detections split by where they went.
+// The count alone says nothing: PII routed to a local head is the local-only
+// control working, while the same PII routed to a cloud head is data that has
+// left the machine. Only the second is a finding.
+func exposureCheck(exps []Exposure) Check {
+	const name = "Sensitive data exposure"
+	if len(exps) == 0 {
+		return Check{Name: name, Status: "none detected",
+			Detail: "no ledger-recorded access has been classified as sensitive on this machine"}
+	}
+	remote, confirmed := RemoteCount(exps), ConfirmedRemote(exps)
+	if remote == 0 {
+		return Check{Name: name, Status: fmt.Sprintf("%d detected, all local", len(exps)),
+			Detail: "every sensitive access stayed on a local-only head — the control worked"}
+	}
+	// Separate observed leaks from assumed ones. An unrecognised head is
+	// still treated as remote (fail-closed), but saying so is what keeps the
+	// headline number trustworthy — a stopped Ollama server must not read as
+	// a confirmed leak.
+	assumed := remote - confirmed
+	status := fmt.Sprintf("%d detected, %d to a remote head", len(exps), confirmed)
+	if assumed > 0 {
+		status = fmt.Sprintf("%d detected, %d to a remote head, %d unidentified", len(exps), confirmed, assumed)
+	}
+
+	// Only assert a leak when one was actually observed. With no confirmed
+	// destination the honest statement is that the head could not be
+	// identified — claiming data "reached a remote head" off an undiscovered
+	// head would be the same overclaiming this whole rewrite exists to remove.
+	var detail string
+	switch {
+	case confirmed > 0 && assumed > 0:
+		detail = fmt.Sprintf("%s — and %d more to a head not currently discoverable", exposureSummary(exps), assumed)
+	case confirmed > 0:
+		detail = fmt.Sprintf("%s — sensitive data reached a head that leaves this machine", exposureSummary(exps))
+	default:
+		detail = fmt.Sprintf("%d access(es) went to a head that is not currently discoverable, so it cannot be "+
+			"confirmed local — run `hyctl probe` with those heads available to resolve this", assumed)
+	}
+	return Check{Name: name, Status: status, Detail: detail}
+}
+
+// exposureSummary names the remote destinations and secret types, so the
+// detail line is specific enough to act on rather than a restated count.
+func exposureSummary(exps []Exposure) string {
+	heads := map[string]bool{}
+	types := map[string]bool{}
+	for _, e := range exps {
+		if !e.Remote || !e.Known {
+			continue // summarise only confirmed destinations
+		}
+		if e.Head != "" {
+			heads[e.Head] = true
+		}
+		for _, t := range e.PIITypes {
+			types[t] = true
 		}
 	}
-	total := ruled + defaulted
-	if total == 0 {
-		return Check{Name: name, Status: "no policy-evaluated events yet",
-			Detail: "hyctl mcp check hasn't been exercised, or no explicit rules are defined"}
+	s := "to " + strings.Join(sortedKeys(heads), ", ")
+	if len(types) > 0 {
+		s += " (" + strings.Join(sortedKeys(types), ", ") + ")"
 	}
-	pct := 100 * float64(ruled) / float64(total)
-	return Check{Name: name, Status: fmt.Sprintf("%.0f%% matched a rule", pct),
-		Detail: fmt.Sprintf("%d of %d policy-evaluated accesses hit an explicit rule rather than the default", ruled, total)}
+	return s
+}
+
+func sortedKeys(m map[string]bool) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// policyPostureCheck replaces an earlier "policy adherence %" that measured
+// the wrong thing — see policyaudit.go's header for why. This reports the
+// facts an operator can act on: fail-open default, dead rules, unreachable
+// rules.
+func policyPostureCheck(a PolicyAudit) Check {
+	const name = "Policy posture"
+	if len(a.Rules) == 0 {
+		return Check{Name: name, Status: "no rules defined",
+			Detail: fmt.Sprintf("every access falls through to the %s default — nothing is scoped", a.Default)}
+	}
+	var parts []string
+	if a.FailOpen {
+		parts = append(parts, "fail-open default")
+	} else {
+		parts = append(parts, "fail-closed default")
+	}
+	if n := a.DeadCount(); n > 0 {
+		parts = append(parts, fmt.Sprintf("%d never matched", n))
+	}
+	if n := a.ShadowedCount(); n > 0 {
+		parts = append(parts, fmt.Sprintf("%d unreachable", n))
+	}
+	return Check{Name: name, Status: strings.Join(parts, ", "),
+		Detail: fmt.Sprintf("%d rule(s); %d access(es) matched a rule, %d fell through to the %s default",
+			len(a.Rules), a.Evaluated-a.DefaultHits, a.DefaultHits, a.Default)}
 }
