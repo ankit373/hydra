@@ -685,6 +685,32 @@ func ckCoverageBar(pct, width int) string {
 		ckFaintS.Render(strings.Repeat("░", width-fill))
 }
 
+// ckSegmentedBar splits width characters proportionally across vals, each
+// rendered in its own style — the ASCII equivalent of the desktop's
+// allowed/denied/flagged donut, for a surface that has no pie charts. The
+// last segment absorbs integer-division rounding so the bar always sums to
+// exactly width. A zero total renders width faint dots, not a divide by zero.
+func ckSegmentedBar(width int, vals []int, styles []lipgloss.Style) string {
+	total := 0
+	for _, v := range vals {
+		total += v
+	}
+	if total <= 0 {
+		return ckFaintS.Render(strings.Repeat("░", width))
+	}
+	var b strings.Builder
+	used := 0
+	for i, v := range vals {
+		n := v * width / total
+		if i == len(vals)-1 {
+			n = width - used
+		}
+		b.WriteString(styles[i].Render(strings.Repeat("█", n)))
+		used += n
+	}
+	return b.String()
+}
+
 func classifyTask(task, mode string) (string, int) {
 	if mode == "local" {
 		return "LOCAL", 10
