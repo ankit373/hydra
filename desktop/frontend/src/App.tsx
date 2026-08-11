@@ -181,10 +181,12 @@ export default function App() {
         {!error && view === 'code' && edits && (
           <>
             <header className="view__head">
-              <button className="back" onClick={() => setView('session')}>
-                ← Session
-              </button>
-              <h1 className="view__title">Code</h1>
+              <div className="view__headrow">
+                <button className="back" onClick={() => setView('session')}>
+                  ← Session
+                </button>
+                <h1 className="view__title">Code</h1>
+              </div>
               <p className="view__sub">What this run changed on disk.</p>
             </header>
             <Code runID={runID} edits={edits} />
