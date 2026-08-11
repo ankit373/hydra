@@ -159,7 +159,7 @@ func actionsText(actions []Action) string {
 // never downgraded by age the way a gap would be.
 func TestBuildActions_RiskyHeadIsAlwaysPriorityNow(t *testing.T) {
 	byHead := []ledger.HeadRisk{{Head: "sketchy", Denied: 2, Flagged: 1}}
-	actions := buildActions(Coverage{}, byHead, nil, PolicyAudit{}, nil, EvidenceQuality{}, ConfigDrift{})
+	actions := buildActions(Coverage{}, byHead, nil, PolicyAudit{}, nil, EvidenceQuality{}, ConfigDrift{}, SupplyChain{})
 	if len(actions) != 1 || actions[0].Priority != PriorityNow {
 		t.Errorf("actions = %+v, want exactly one PriorityNow action", actions)
 	}
@@ -191,7 +191,7 @@ func TestBuildActions_SortedMostUrgentFirst(t *testing.T) {
 		{ID: "LLM03", Status: Gap, GapAgeDays: 45}, // now (stale)
 		{ID: "LLM06", Status: Gap, GapAgeDays: 10}, // soon
 	}}
-	actions := buildActions(cov, nil, nil, PolicyAudit{}, nil, EvidenceQuality{}, ConfigDrift{})
+	actions := buildActions(cov, nil, nil, PolicyAudit{}, nil, EvidenceQuality{}, ConfigDrift{}, SupplyChain{})
 	if len(actions) != 3 {
 		t.Fatalf("actions = %+v, want 3", actions)
 	}
