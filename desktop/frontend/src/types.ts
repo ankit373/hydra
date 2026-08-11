@@ -304,6 +304,10 @@ export interface SecurityReport {
   truncated?: boolean
   /** Whether each declared control actually runs. */
   controls?: Control[]
+  /** Whether the reported confidence rests on independent, discriminating sources. */
+  evidence: EvidenceQuality
+  /** Whether the ledger spans more than one configuration. */
+  drift: ConfigDrift
 }
 
 export interface DayRisk {
@@ -360,6 +364,44 @@ export interface Control {
   /** False when the claim was established by reading the source rather than
    *  observed at runtime — the reader deserves to know which kind it is. */
   verified: boolean
+}
+
+export interface FamilyRisk {
+  family: string
+  /** Measured excess same-family agreement. */
+  coupling: number
+  critical: boolean
+}
+
+export interface SourcePower {
+  source: string
+  domain: string
+  /** Diagnostic power in nats — expected |LLR|. ~0 is a coin flip. */
+  d: number
+  /** Excludes the prior, so 0 means never calibrated. */
+  observations: number
+}
+
+export interface EvidenceQuality {
+  runs: number
+  families?: FamilyRisk[]
+  weakSources?: SourcePower[]
+  /** Used but never calibrated — absence of data, not measured weakness. */
+  uncalibratedSources?: string[]
+}
+
+export interface ConfigEpoch {
+  breadcrumb: string
+  events: number
+  firstTs: string
+  lastTs: string
+}
+
+export interface ConfigDrift {
+  epochs?: ConfigEpoch[]
+  /** More than one configuration produced this log. */
+  changed: boolean
+  unstamped: number
 }
 
 export interface SecurityCount {

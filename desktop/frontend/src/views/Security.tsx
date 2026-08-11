@@ -3,7 +3,9 @@ import type {
   Action,
   Category,
   Check,
+  ConfigDrift,
   Control,
+  EvidenceQuality,
   Exposure,
   HeadRisk,
   LedgerEvent,
@@ -274,8 +276,18 @@ function Detailed({ data }: { data: SecurityReport }) {
           </section>
         </>
       )}
-      {tab === 'controls' && <ControlsView controls={data.controls ?? []} />}
-      {tab === 'policy' && <PolicyAuditView audit={data.policyAudit} />}
+      {tab === 'controls' && (
+        <>
+          <ControlsView controls={data.controls ?? []} />
+          <ConfidenceEvidenceView evidence={data.evidence} />
+        </>
+      )}
+      {tab === 'policy' && (
+        <>
+          <DriftView drift={data.drift} />
+          <PolicyAuditView audit={data.policyAudit} />
+        </>
+      )}
       {tab === 'exposure' && <ExposureView exposures={data.exposures ?? []} />}
       {tab === 'threats' && <ThreatsView threats={data.threats} />}
       {tab === 'evidence' && <EvidenceView events={data.events ?? []} truncated={!!data.truncated} />}
@@ -327,6 +339,103 @@ function ControlsView({ controls }: { controls: Control[] }) {
                 </tr>
               )
             })}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )
+}
+
+// A confidence figure assembled from correlated or coin-flip sources reads
+// as a result while being none — the opposite of a missing control, which at
+// least looks missing.
+function ConfidenceEvidenceView({ evidence }: { evidence: EvidenceQuality }) {
+  if (!evidence || evidence.runs === 0) {
+    return (
+      <section>
+        <h2 className="section__title">Confidence evidence</h2>
+        <p className="card__note">No confidence run has been recorded, so no confidence has been claimed.</p>
+      </section>
+    )
+  }
+  const families = evidence.families ?? []
+  const weak = evidence.weakSources ?? []
+  const uncal = evidence.uncalibratedSources ?? []
+  return (
+    <section>
+      <h2 className="section__title">Confidence evidence</h2>
+      {families.length === 0 && weak.length === 0 && (
+        <p className="card__note">
+          {evidence.runs} run(s); no correlated families and no source measured as undiagnostic.
+        </p>
+      )}
+      {families.map((f) => (
+        <div className="sec-action sec-action--now" key={f.family}>
+          <div className="sec-action__title">{f.family} heads vote as one</div>
+          <div className="sec-action__detail">
+            they agree {(f.coupling * 100).toFixed(0)}% beyond chance, so an ensemble of them reports
+            more confidence than it earned
+          </div>
+        </div>
+      ))}
+      {weak.map((w) => (
+        <div className="sec-action sec-action--soon" key={w.source}>
+          <div className="sec-action__title">{w.source} carries no diagnostic weight</div>
+          <div className="sec-action__detail">
+            D={w.d.toFixed(3)} nats over {w.observations.toFixed(0)} recorded outcomes — its agreement
+            barely moves the posterior
+          </div>
+        </div>
+      ))}
+      {uncal.length > 0 && (
+        <p className="card__note">
+          {/* Never rendered as weakness: zero observations is no measurement,
+              not a bad one. */}
+          Uncalibrated (weight rests on the prior): {uncal.join(', ')}
+        </p>
+      )}
+    </section>
+  )
+}
+
+function DriftView({ drift }: { drift: ConfigDrift }) {
+  const epochs = drift?.epochs ?? []
+  if (epochs.length === 0) {
+    return null
+  }
+  if (!drift.changed) {
+    return (
+      <p className="card__note">
+        All {epochs[0].events} stamped event(s) were recorded under one configuration ({epochs[0].breadcrumb}).
+      </p>
+    )
+  }
+  return (
+    <section>
+      <h2 className="section__title">Configuration history</h2>
+      <div className="error">
+        The routing/pricing configuration changed mid-history — decisions recorded before{' '}
+        {epochs[epochs.length - 1].firstTs} were made under different rules than those after it.
+      </div>
+      <div className="table__wrap">
+        <table className="table">
+          <thead>
+            <tr>
+              <th>Configuration</th>
+              <th className="num">Events</th>
+              <th>From</th>
+              <th>To</th>
+            </tr>
+          </thead>
+          <tbody>
+            {epochs.map((e) => (
+              <tr key={e.breadcrumb}>
+                <td className="mono">{e.breadcrumb}</td>
+                <td className="num">{e.events}</td>
+                <td className="mono">{e.firstTs || '—'}</td>
+                <td className="mono">{e.lastTs || '—'}</td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
