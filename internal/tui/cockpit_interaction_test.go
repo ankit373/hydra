@@ -991,6 +991,31 @@ func TestCkBarAndCkSpark_StayWithinTheirWidth(t *testing.T) {
 	}
 }
 
+// ckSegmentedBar must always sum to exactly width regardless of how the
+// counts divide — a rounding bug here is exactly the width-overflow bug that
+// already corrupted this box once (see dashSecurity's own comments).
+func TestCkSegmentedBar_AlwaysSumsToWidth(t *testing.T) {
+	styles := []lipgloss.Style{ckCheapS, ckExpS, ckMidS}
+	cases := [][]int{
+		{0, 0, 0}, {1, 0, 0}, {0, 0, 1}, {1, 1, 1}, {7, 3, 2}, {100, 1, 1}, {1, 1, 100},
+	}
+	for _, vals := range cases {
+		for _, w := range []int{1, 10, 20} {
+			bar := stripANSI(ckSegmentedBar(w, vals, styles))
+			if n := len([]rune(bar)); n != w {
+				t.Errorf("ckSegmentedBar(%d, %v) is %d cells wide, want %d: %q", w, vals, n, w, bar)
+			}
+		}
+	}
+}
+
+func TestCkSegmentedBar_ZeroTotalRendersFaintDots(t *testing.T) {
+	got := stripANSI(ckSegmentedBar(10, []int{0, 0, 0}, []lipgloss.Style{ckCheapS, ckExpS, ckMidS}))
+	if got != strings.Repeat("░", 10) {
+		t.Errorf("ckSegmentedBar with zero total = %q, want 10 faint dots", got)
+	}
+}
+
 // ckCodeTick returns a tea.Cmd. Invoking it must produce a tick tagged with the
 // generation it was created for — that tag is what stops a superseded stream
 // double-speeding the current one.

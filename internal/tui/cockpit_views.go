@@ -357,6 +357,18 @@ func (m Cockpit) dashSecurity(w, h int) string {
 			head.WriteString(" " + style.Render(fmt.Sprintf("%s %+.0f%% since first run (was %.0f%%)",
 				arrow, r.Trend.DeltaPct, r.Trend.FirstPct)) + "\n")
 		}
+		// The allowed/denied split as a segmented bar — the ASCII equivalent
+		// of the desktop's donut chart, same green/red mapping the category
+		// list below already uses (enforced/gap). Only Allowed/Denied go in:
+		// they're mutually exclusive and sum to Total, unlike Flagged, which
+		// is an independent dimension (a flagged event can be either) and
+		// would double-count the bar if it were a third segment — Flagged
+		// stays in its own line below instead.
+		if r.Ledger.Total > 0 {
+			head.WriteString(" " + ckDimS.Render("ledger  ") +
+				ckSegmentedBar(20, []int{r.Ledger.Allowed, r.Ledger.Denied},
+					[]lipgloss.Style{ckCheapS, ckExpS}) + "\n")
+		}
 		// PII/policy/bypass-attempt signals, folded into the hero rather than
 		// three new boxes — the view already fits one screen. PII and policy
 		// figures reuse Checks' own formatted Status (no re-parsing); blocked/

@@ -322,7 +322,7 @@ func TestDashSecurity_RendersCoverageAndActions(t *testing.T) {
 	for _, want := range []string{
 		"37%", "LLM01", "enforced", "LLM03", "gap", "45d", "sketchy", "denied 2",
 		"NOW", "Supply Chain", "history",
-		"PII", "1 detected", "80% matched a rule", "risk trend",
+		"ledger", "PII", "1 detected", "80% matched a rule", "risk trend",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("dashSecurity output missing %q:\n%s", want, out)
