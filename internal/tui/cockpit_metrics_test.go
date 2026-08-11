@@ -299,10 +299,19 @@ func TestDashSecurity_RendersCoverageAndActions(t *testing.T) {
 			},
 		},
 		Trend:  security.Trend{Available: true, DeltaPct: 12, FirstPct: 25.5},
+		Ledger: security.LedgerPanel{Total: 5, Allowed: 2, Denied: 2, Flagged: 1},
 		ByHead: []ledger.HeadRisk{{Head: "sketchy", Denied: 2, Flagged: 1}},
 		History: []security.HistoryPoint{
 			{TS: "2026-07-01T00:00:00Z", PercentCovered: 12.5},
 			{TS: "2026-08-01T00:00:00Z", PercentCovered: 37.5},
+		},
+		RiskHistory: []ledger.DayRisk{
+			{Date: "2026-07-01", Denied: 1},
+			{Date: "2026-08-01", Denied: 2, Flagged: 1},
+		},
+		Checks: []security.Check{
+			{Name: "PII/sensitive-data detections", Status: "1 detected"},
+			{Name: "Policy adherence", Status: "80% matched a rule"},
 		},
 		Actions: []security.Action{
 			{ID: "LLM03", Kind: "gap", Title: "Supply Chain", Detail: "no integrity verification",
@@ -313,6 +322,7 @@ func TestDashSecurity_RendersCoverageAndActions(t *testing.T) {
 	for _, want := range []string{
 		"37%", "LLM01", "enforced", "LLM03", "gap", "45d", "sketchy", "denied 2",
 		"NOW", "Supply Chain", "history",
+		"PII", "1 detected", "80% matched a rule", "risk trend",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("dashSecurity output missing %q:\n%s", want, out)

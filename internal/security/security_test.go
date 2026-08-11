@@ -320,6 +320,65 @@ func TestBuild_FrameworkCheckReflectsPolicyTags(t *testing.T) {
 	}
 }
 
+func TestPIICheck_CountsOnlyClassifiedEvents(t *testing.T) {
+	none := []ledger.Event{{Tool: "a", Decision: ledger.Allow}}
+	if got := piiCheck(none).Status; got != "0 detected" {
+		t.Errorf("no classified events: Status = %q, want \"0 detected\"", got)
+	}
+
+	some := []ledger.Event{
+		{Tool: "a", Decision: ledger.Allow, Classification: "pii"},
+		{Tool: "b", Decision: ledger.Allow, Classification: "pii"},
+		{Tool: "c", Decision: ledger.Allow}, // unclassified, must not count
+	}
+	if got := piiCheck(some).Status; got != "2 detected" {
+		t.Errorf("Status = %q, want \"2 detected\"", got)
+	}
+}
+
+// Only Decide's own two Reason shapes ("rule N (...)" or exactly "default")
+// count toward adherence — an event recorded some other way (e.g. via
+// `hyctl mcp record`, which never calls Decide) must not silently skew it.
+func TestPolicyAdherenceCheck_OnlyCountsDecideOutcomes(t *testing.T) {
+	events := []ledger.Event{
+		{Tool: "a", Reason: "rule 0 (deny a/*)"},
+		{Tool: "b", Reason: "rule 1 (allow b/*)"},
+		{Tool: "c", Reason: "default"},
+		{Tool: "d", Reason: "manually recorded, not from Decide"},
+	}
+	got := policyAdherenceCheck(events)
+	if got.Status != "67% matched a rule" {
+		t.Errorf("Status = %q, want \"67%% matched a rule\" (2 of 3 Decide-shaped events; the unrelated Reason must be excluded)", got.Status)
+	}
+	if !strings.Contains(got.Detail, "2 of 3") {
+		t.Errorf("Detail = %q, want it to name 2 of 3", got.Detail)
+	}
+}
+
+func TestPolicyAdherenceCheck_NoDecideEventsYet(t *testing.T) {
+	events := []ledger.Event{{Tool: "a", Reason: "manually recorded"}}
+	if got := policyAdherenceCheck(events).Status; got != "no policy-evaluated events yet" {
+		t.Errorf("Status = %q, want the no-data status", got)
+	}
+}
+
+func TestBuild_RiskHistoryPopulatedFromLedgerEvents(t *testing.T) {
+	testutil.NewSandbox(t)
+	if err := ledger.Record(ledger.DefaultPath(), ledger.Event{
+		TS: "2026-08-01T09:00:00Z", Agent: "a", Tool: "h1", Decision: ledger.Deny,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := Build(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(r.RiskHistory) != 1 || r.RiskHistory[0].Date != "2026-08-01" || r.RiskHistory[0].Denied != 1 {
+		t.Errorf("RiskHistory = %+v, want one entry for 2026-08-01 with 1 denied", r.RiskHistory)
+	}
+}
+
 func findCheck(t *testing.T, r *Report, name string) Check {
 	t.Helper()
 	for _, c := range r.Checks {

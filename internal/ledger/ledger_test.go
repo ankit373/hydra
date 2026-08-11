@@ -179,6 +179,25 @@ func TestByHeadRisk_GroupsSortsAndOmitsHeadsWithNoRisk(t *testing.T) {
 	}
 }
 
+func TestByDayRisk_BucketsSortsAndOmitsQuietDays(t *testing.T) {
+	events := []Event{
+		{TS: "2026-08-02T09:00:00Z", Tool: "a", Decision: Allow},                 // quiet day, must be omitted
+		{TS: "2026-08-01T09:00:00Z", Tool: "a", Decision: Deny},
+		{TS: "2026-08-01T15:00:00Z", Tool: "a", Flagged: true, Decision: Allow},
+		{TS: "2026-08-03T09:00:00Z", Tool: "a", Decision: Deny},
+	}
+	got := ByDayRisk(events)
+	if len(got) != 2 {
+		t.Fatalf("ByDayRisk = %+v, want 2 days (2026-08-02 has neither and must be omitted)", got)
+	}
+	if got[0].Date != "2026-08-01" || got[0].Denied != 1 || got[0].Flagged != 1 {
+		t.Errorf("got[0] = %+v, want 2026-08-01 with 1 denied, 1 flagged", got[0])
+	}
+	if got[1].Date != "2026-08-03" || got[1].Denied != 1 || got[1].Flagged != 0 {
+		t.Errorf("got[1] = %+v, want 2026-08-03 with 1 denied, 0 flagged (ascending order)", got[1])
+	}
+}
+
 func TestCheck_RecordsDecision(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "mcp_ledger.jsonl")
 	p := Policy{Rules: []Rule{{Tool: "fs", Resource: "/etc/*", Decision: Deny}}, Default: Allow}

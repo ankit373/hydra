@@ -676,6 +676,48 @@ func ByHeadRisk(events []Event) []HeadRisk {
 	return out
 }
 
+// DayRisk is one day's denied/flagged activity — the trend a WAF-style
+// "blocked over time" panel is built from.
+type DayRisk struct {
+	Date    string `json:"date"`
+	Denied  int    `json:"denied"`
+	Flagged int    `json:"flagged"`
+}
+
+// ByDayRisk buckets denied/flagged counts by day (TS's first 10 characters,
+// mirroring cost.ByDay's own day-key convention), sorted ascending. Days with
+// neither are omitted — same skip rule as ByHeadRisk.
+func ByDayRisk(events []Event) []DayRisk {
+	type acc struct{ denied, flagged int }
+	byDay := map[string]*acc{}
+	for _, e := range events {
+		if e.Decision != Deny && !e.Flagged {
+			continue
+		}
+		if len(e.TS) < 10 {
+			continue
+		}
+		day := e.TS[:10]
+		a, ok := byDay[day]
+		if !ok {
+			a = &acc{}
+			byDay[day] = a
+		}
+		if e.Decision == Deny {
+			a.denied++
+		}
+		if e.Flagged {
+			a.flagged++
+		}
+	}
+	out := make([]DayRisk, 0, len(byDay))
+	for day, a := range byDay {
+		out = append(out, DayRisk{Date: day, Denied: a.denied, Flagged: a.flagged})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Date < out[j].Date })
+	return out
+}
+
 // SortedCounts returns key/count pairs sorted by count descending, for stable
 // report rendering.
 func SortedCounts(m map[string]int) []struct {
