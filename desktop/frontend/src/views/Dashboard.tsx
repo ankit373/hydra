@@ -1,14 +1,100 @@
+import { useEffect, useRef, useState } from 'react'
 import type { Breakdown, Dashboard as DashboardData, TrustPanel } from '../types'
-import { clockTime, costBand, govBand, ms, pct, usd, usdExact } from '../format'
-import { Sparkline, SpendTrend } from './DashboardCharts'
+import { clockTime, costBand, govBand, ms, pct, tokens, usd, usdExact } from '../format'
+import { ArcGauge, Sparkline, SpendTrend, TrustArc } from './DashboardCharts'
+import { useCountUp, useReveal } from '../reveal'
 
-export function Dashboard({ data }: { data: DashboardData }) {
+/**
+ * `data` is null until App.tsx's first `GetDashboard()` resolves — the
+ * skeleton below covers exactly that window, driven by real state rather
+ * than a fake timeout. Once data lands the HUD chrome (corner brackets,
+ * scanline, vignette) stays mounted for the lifetime of the view; only the
+ * body swaps from skeleton to `DashboardContent`.
+ */
+export function Dashboard({ data }: { data: DashboardData | null }) {
   return (
     <>
-      <header className="view__head">
-        <h1 className="view__title">Dashboard</h1>
-        <p className="view__sub">Spend, governor pressure, and the trust ensemble's record.</p>
-      </header>
+      <HudChrome />
+      {data ? <DashboardContent data={data} /> : <DashboardSkeleton />}
+    </>
+  )
+}
+
+/** Corner brackets, scanline, vignette — brand/living/hydra-hud.src.html's
+ * frame language, scoped to this view rather than the shared app shell. */
+function HudChrome() {
+  return (
+    <>
+      <div className="hud-corner hud-corner--tl" aria-hidden="true" />
+      <div className="hud-corner hud-corner--tr" aria-hidden="true" />
+      <div className="hud-corner hud-corner--bl" aria-hidden="true" />
+      <div className="hud-corner hud-corner--br" aria-hidden="true" />
+      <div className="hud-scanline" aria-hidden="true" />
+      <div className="hud-vignette" aria-hidden="true" />
+    </>
+  )
+}
+
+function DashboardHeader() {
+  return (
+    <header className="view__head">
+      <h1 className="view__title view__title--brand">Dashboard</h1>
+      <p className="view__sub">Spend, governor pressure, and the trust ensemble's record.</p>
+    </header>
+  )
+}
+
+function DashboardSkeleton() {
+  return (
+    <>
+      <DashboardHeader />
+      <div className="cards">
+        <SkeletonCard />
+        <SkeletonCard />
+        <SkeletonCard />
+      </div>
+      <section>
+        <h2 className="section__title">Spend by day</h2>
+        <div className="spend-chart">
+          <div className="skeleton-block skeleton-block--chart" />
+        </div>
+      </section>
+    </>
+  )
+}
+
+function SkeletonCard() {
+  return (
+    <div className="card">
+      <div className="skeleton-block" style={{ width: '50%', height: 10 }} />
+      <div className="skeleton-block" style={{ width: '72%', height: 27, marginTop: 11 }} />
+      <div className="skeleton-block" style={{ width: '85%', height: 12, marginTop: 9 }} />
+    </div>
+  )
+}
+
+function DashboardContent({ data }: { data: DashboardData }) {
+  const [drawerRow, setDrawerRow] = useState<Breakdown | null>(null)
+  const [drawerOpen, setDrawerOpen] = useState(false)
+
+  const openDrawer = (row: Breakdown) => {
+    setDrawerRow(row)
+    setDrawerOpen(true)
+  }
+  const closeDrawer = () => setDrawerOpen(false)
+
+  useEffect(() => {
+    if (!drawerOpen) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeDrawer()
+    }
+    addEventListener('keydown', onKey)
+    return () => removeEventListener('keydown', onKey)
+  }, [drawerOpen])
+
+  return (
+    <div className="dashboard-content">
+      <DashboardHeader />
 
       <div className="cards">
         <SpendCard data={data} />
@@ -16,13 +102,18 @@ export function Dashboard({ data }: { data: DashboardData }) {
         <TrustCard data={data} />
       </div>
 
-      {data.hasData ? <Breakdowns data={data} /> : <EmptyState />}
-    </>
+      {data.hasData ? <Breakdowns data={data} onSelectModel={openDrawer} /> : <EmptyState />}
+
+      <ModelDetailDrawer row={drawerRow} open={drawerOpen} onClose={closeDrawer} />
+    </div>
   )
 }
 
 function SpendCard({ data }: { data: DashboardData }) {
   const { spend, hasData, byDay } = data
+  const revealed = useReveal(hasData)
+  const displaySpend = useCountUp(spend.todayUsd, revealed)
+
   if (!hasData) {
     return (
       <div className="card">
@@ -35,7 +126,7 @@ function SpendCard({ data }: { data: DashboardData }) {
   return (
     <div className="card">
       <div className="card__label">Spend today</div>
-      <div className="card__value">{usd(spend.todayUsd)}</div>
+      <div className="card__value">{usd(displaySpend)}</div>
       <div className="card__note">
         {spend.todayCalls} call{spend.todayCalls === 1 ? '' : 's'} · {usd(spend.allTimeUsd)} all time
         {' · '}
@@ -50,6 +141,9 @@ function SpendCard({ data }: { data: DashboardData }) {
 
 function GovernorCard({ data }: { data: DashboardData }) {
   const { governor } = data
+  const revealed = useReveal(governor.known)
+  const displayPct = useCountUp(governor.pct, revealed)
+
   if (!governor.known) {
     return (
       <div className="card">
@@ -64,9 +158,14 @@ function GovernorCard({ data }: { data: DashboardData }) {
   return (
     <div className={`card gov--${band}`}>
       <div className="card__label">Orchestrator context</div>
-      <div className="card__value">{pct(governor.pct)}</div>
-      <div className="gov__track">
-        <div className="gov__fill" style={{ width: `${Math.min(governor.pct, 100)}%` }} />
+      <div className="arc-wrap">
+        <ArcGauge
+          fraction={Math.min(governor.pct, 100) / 100}
+          color={`var(--hy-gov-${band})`}
+          centerValue={`${Math.round(displayPct)}%`}
+          centerLabel={governor.mode}
+          revealed={revealed}
+        />
       </div>
       <div className="card__note">mode: {governor.mode}</div>
     </div>
@@ -75,6 +174,8 @@ function GovernorCard({ data }: { data: DashboardData }) {
 
 function TrustCard({ data }: { data: DashboardData }) {
   const { trust } = data
+  const revealed = useReveal(trust.runs > 0)
+
   if (trust.runs === 0) {
     return (
       <div className="card">
@@ -89,8 +190,7 @@ function TrustCard({ data }: { data: DashboardData }) {
   return (
     <div className="card">
       <div className="card__label">Trust ensemble</div>
-      <div className="card__value">{trust.meanSamples.toFixed(2)}</div>
-      <TrustCompare trust={trust} />
+      <TrustCompare trust={trust} revealed={revealed} />
       <div className="card__note">
         {trust.runs} run{trust.runs === 1 ? '' : 's'}
       </div>
@@ -98,32 +198,24 @@ function TrustCard({ data }: { data: DashboardData }) {
   )
 }
 
-/** SPRT mean samples vs. a fixed-N swarm, same axis, so the saving reads at a
+/** SPRT mean samples vs. a fixed-N swarm, same ring, so the saving reads at a
  * glance instead of as a sentence to parse. */
-function TrustCompare({ trust }: { trust: TrustPanel }) {
-  const max = Math.max(trust.meanSamples, trust.fixedSwarmN, 1)
+function TrustCompare({ trust, revealed }: { trust: TrustPanel; revealed: boolean }) {
   const saved = trust.samplesSavedPct >= 0
   return (
     <div className="trust-cmp">
-      <div className="trust-cmp__row">
-        <span className="trust-cmp__label">SPRT</span>
-        <span className="trust-cmp__track">
-          <span
-            className="trust-cmp__fill trust-cmp__fill--actual"
-            style={{ width: `${(trust.meanSamples / max) * 100}%` }}
-          />
-        </span>
-        <span className="trust-cmp__value">{trust.meanSamples.toFixed(2)}</span>
-      </div>
-      <div className="trust-cmp__row">
-        <span className="trust-cmp__label">Fixed-{trust.fixedSwarmN}</span>
-        <span className="trust-cmp__track">
-          <span
-            className="trust-cmp__fill trust-cmp__fill--baseline"
-            style={{ width: `${(trust.fixedSwarmN / max) * 100}%` }}
-          />
-        </span>
-        <span className="trust-cmp__value">{trust.fixedSwarmN}</span>
+      <div className="arc-wrap">
+        <TrustArc meanSamples={trust.meanSamples} fixedSwarmN={trust.fixedSwarmN} revealed={revealed} />
+        <div className="arc-legend">
+          <span>
+            <span className="arc-legend__dot arc-legend__dot--actual" />
+            what it actually took
+          </span>
+          <span>
+            <span className="arc-legend__dot arc-legend__dot--baseline" />
+            fixed panel of {trust.fixedSwarmN}
+          </span>
+        </div>
       </div>
       <div className={`trust-cmp__delta ${saved ? 'trust-cmp__delta--good' : 'trust-cmp__delta--bad'}`}>
         {saved
@@ -134,7 +226,13 @@ function TrustCompare({ trust }: { trust: TrustPanel }) {
   )
 }
 
-function Breakdowns({ data }: { data: DashboardData }) {
+function Breakdowns({
+  data,
+  onSelectModel,
+}: {
+  data: DashboardData
+  onSelectModel: (row: Breakdown) => void
+}) {
   return (
     <>
       {data.byDay && data.byDay.length > 0 && (
@@ -144,7 +242,7 @@ function Breakdowns({ data }: { data: DashboardData }) {
         </section>
       )}
       <div className="grid-2">
-        <RankedBars title="By model" rows={data.byModel} />
+        <RankedBars title="By model · click a row for detail" rows={data.byModel} onSelect={onSelectModel} />
         <RankedBars title="By tier" rows={data.byTier} />
       </div>
       <RecentTable data={data} />
@@ -153,8 +251,18 @@ function Breakdowns({ data }: { data: DashboardData }) {
 }
 
 /** A ranked horizontal bar list: name, a proportional bar, and the exact
- * dollar amount — replaces the plain by-model/by-tier tables. */
-function RankedBars({ title, rows }: { title: string; rows: Breakdown[] | null }) {
+ * dollar amount — replaces the plain by-model/by-tier tables. Passing
+ * `onSelect` turns each row into a button that opens the drill-down drawer
+ * (used for "By model" only — one list is enough to prove the pattern out). */
+function RankedBars({
+  title,
+  rows,
+  onSelect,
+}: {
+  title: string
+  rows: Breakdown[] | null
+  onSelect?: (row: Breakdown) => void
+}) {
   if (!rows || rows.length === 0) return null
   const max = Math.max(...rows.map((r) => r.costUsd))
   return (
@@ -167,8 +275,8 @@ function RankedBars({ title, rows }: { title: string; rows: Breakdown[] | null }
             // A day with only free/local calls still gets a sliver: present,
             // just not comparable to anything on this ramp.
             const widthPct = max > 0 ? (r.costUsd / max) * 100 : r.calls > 0 ? 4 : 0
-            return (
-              <div className="rank__row" key={r.key}>
+            const inner = (
+              <>
                 <span className="rank__name" title={r.key}>
                   {r.key}
                 </span>
@@ -179,12 +287,98 @@ function RankedBars({ title, rows }: { title: string; rows: Breakdown[] | null }
                   />
                 </span>
                 <span className={`rank__value cost--${band}`}>{usdExact(r.costUsd)}</span>
+              </>
+            )
+            return onSelect ? (
+              <button
+                key={r.key}
+                type="button"
+                className="rank__row rank__row--detail"
+                onClick={() => onSelect(r)}
+              >
+                {inner}
+              </button>
+            ) : (
+              <div className="rank__row" key={r.key}>
+                {inner}
               </div>
             )
           })}
         </div>
       </div>
     </section>
+  )
+}
+
+/** Slide-in detail panel for a "By model" row — the exact Breakdown fields
+ * GetDashboard already computes (Calls/PromptTokens/ResponseTokens/CostUSD/
+ * WallMS), not a stub. `row` is kept around after close so the panel doesn't
+ * blank out mid-slide-out; `open` alone drives the transform. */
+function ModelDetailDrawer({
+  row,
+  open,
+  onClose,
+}: {
+  row: Breakdown | null
+  open: boolean
+  onClose: () => void
+}) {
+  const closeRef = useRef<HTMLButtonElement>(null)
+
+  useEffect(() => {
+    if (open) closeRef.current?.focus()
+  }, [open])
+
+  return (
+    <>
+      <div
+        className={`drawer-backdrop${open ? ' drawer-backdrop--open' : ''}`}
+        onClick={onClose}
+        aria-hidden="true"
+      />
+      <aside
+        className={`drawer${open ? ' drawer--open' : ''}`}
+        role="dialog"
+        aria-label="Model detail"
+        aria-hidden={!open}
+      >
+        <button
+          ref={closeRef}
+          className="drawer__close"
+          onClick={onClose}
+          aria-label="Close"
+          tabIndex={open ? 0 : -1}
+        >
+          &times;
+        </button>
+        {row && (
+          <>
+            <div className="drawer__title">Breakdown · by model</div>
+            <h2 className="drawer__heading">{row.key}</h2>
+            <div className="drawer__stat">{usdExact(row.costUsd)}</div>
+            <div className="drawer__lbl">total cost</div>
+            <div className="drawer__list">
+              <div className="drawer__list-row">
+                <span>Calls</span>
+                <span>{row.calls}</span>
+              </div>
+              <div className="drawer__list-row">
+                <span>Prompt tokens</span>
+                <span>{tokens(row.promptTokens)}</span>
+              </div>
+              <div className="drawer__list-row">
+                <span>Response tokens</span>
+                <span>{tokens(row.responseTokens)}</span>
+              </div>
+              <div className="drawer__list-row">
+                <span>Wall time</span>
+                <span>{ms(row.wallMs)}</span>
+              </div>
+            </div>
+          </>
+        )}
+      </aside>
+    </>
   )
 }
 

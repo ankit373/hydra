@@ -109,11 +109,11 @@ export default function App() {
     [fleet, runID, openSession],
   )
 
+  // Dashboard handles its own loading state (a skeleton, not this fallback
+  // text) so its first-load window can look like the rest of the view
+  // instead of a plain sentence.
   const loading =
-    (view === 'dashboard' && !dashboard) ||
-    (view === 'fleet' && !fleet) ||
-    (view === 'session' && !session) ||
-    (view === 'code' && !edits)
+    (view === 'fleet' && !fleet) || (view === 'session' && !session) || (view === 'code' && !edits)
 
   return (
     <div className="shell">
@@ -158,7 +158,7 @@ export default function App() {
         {/* An error replaces the body but never the shell — a broken read
             should not look like a crashed app. */}
         {error && <div className="error">{error}</div>}
-        {!error && view === 'dashboard' && dashboard && <Dashboard data={dashboard} />}
+        {!error && view === 'dashboard' && <Dashboard data={dashboard} />}
         {!error && view === 'fleet' && fleet && <Fleet data={fleet} onOpen={openSession} />}
         {!error && view === 'session' && session && (
           <Session session={session} onBack={() => setView('fleet')} />
