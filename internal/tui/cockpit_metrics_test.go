@@ -313,6 +313,10 @@ func TestDashSecurity_RendersCoverageAndActions(t *testing.T) {
 			{Head: "ollama", Remote: false, Known: true},
 			{Head: "gpt-4o", Remote: true, Known: true, PIITypes: []string{"aws access key id"}},
 		},
+		Controls: []security.Control{
+			{Name: "File-policy caps", Declared: true, Wired: false, Detail: "not wired"},
+			{Name: "Ledger access rules", Declared: true, Wired: true},
+		},
 		PolicyAudit: security.PolicyAudit{
 			Default: "allow", FailOpen: true,
 			Rules: []security.RuleStat{{Index: 0, Hits: 3}, {Index: 1, Hits: 0, Dead: true}},
@@ -329,7 +333,7 @@ func TestDashSecurity_RendersCoverageAndActions(t *testing.T) {
 		"ledger", "risk trend",
 		// The exposure line must lead with the leak, not the raw count, and
 		// the policy line must state the posture rather than a percentage.
-		"exposure", "1 REMOTE", "policy", "fail-open", "1 dead",
+		"exposure", "1 REMOTE", "policy", "fail-open", "1 dead", "controls", "1 inert",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("dashSecurity output missing %q:\n%s", want, out)

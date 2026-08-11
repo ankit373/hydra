@@ -1063,14 +1063,29 @@ func cmdMCP() *cobra.Command {
 			if chainJSON {
 				return json.NewEncoder(os.Stdout).Encode(res)
 			}
-			if res.Intact {
+			// Each failure mode is a different claim and gets its own words.
+			// "Broken at index N" is meaningless for a truncation, where every
+			// surviving event verifies and the missing ones left no gap.
+			switch {
+			case res.Truncated:
+				fmt.Printf("  %s  ledger TRUNCATED — the chain anchor names an event that is no longer "+
+					"in the log, so records were deleted from the end\n", strings.ToUpper(string(ledger.Deny)))
+				os.Exit(3)
+			case !res.Intact:
+				fmt.Printf("  %s  chain broken at event index %d — the ledger was modified after recording\n",
+					strings.ToUpper(string(ledger.Deny)), res.BrokenAt)
+				os.Exit(3)
+			case res.AnchorMissing:
+				fmt.Printf("  %s  %d chained event(s) all verify, but the chain anchor (%s) is missing — "+
+					"deletion from the end cannot be ruled out\n",
+					warnStyle.Render("WARN"), res.Chained, filepath.Base(ledger.DefaultPath())+".chainhash")
+			case res.AnchorStale:
+				fmt.Printf("  %s  chain intact — %d chained event(s); the anchor lags the log "+
+					"(a dropped anchor write, not a deletion)\n", okStyle.Render("OK"), res.Chained)
+			default:
 				fmt.Printf("  %s  chain intact — %d chained event(s), %d unchained (pre-dates this feature)\n",
 					okStyle.Render("OK"), res.Chained, res.Unchained)
-				return nil
 			}
-			fmt.Printf("  %s  chain broken at event index %d — the ledger was modified after recording\n",
-				strings.ToUpper(string(ledger.Deny)), res.BrokenAt)
-			os.Exit(3) // non-zero so callers can gate on it
 			return nil
 		},
 	}
@@ -1167,6 +1182,7 @@ func printSecurityReport(r *security.Report) {
 		fmt.Println(dimStyle.Render("      " + c.Detail))
 	}
 
+	printControls(r)
 	printPolicyAudit(r)
 	printExposures(r)
 	printThreats(r)
@@ -1184,6 +1200,40 @@ func printSecurityReport(r *security.Report) {
 		}
 	}
 	fmt.Println()
+}
+
+// printControls answers "does each declared control actually run" — the
+// question a config file cannot answer about itself. A control that is
+// configured but cannot fire reads as protection everywhere it is listed
+// while doing nothing, which is worse than a control that is simply absent.
+func printControls(r *security.Report) {
+	if len(r.Controls) == 0 {
+		return
+	}
+	fmt.Println()
+	fmt.Println(dimStyle.Render("  " + strings.Repeat("─", 48)))
+	fmt.Printf("  %s\n", cortexStyle.Render("control effectiveness"))
+	for _, c := range r.Controls {
+		var tag string
+		switch c.Status() {
+		case "inert":
+			tag = warnStyle.Render("INERT  ")
+		case "limited":
+			tag = warnStyle.Render("LIMITED")
+		case "absent":
+			tag = dimStyle.Render("absent ")
+		default:
+			tag = okStyle.Render("active ")
+		}
+		// Mark rows established by reading the source rather than by
+		// observation, so the reader knows which claims are evidence.
+		src := ""
+		if !c.Verified {
+			src = dimStyle.Render(" [source-derived]")
+		}
+		fmt.Printf("    %s %s%s\n", tag, c.Name, src)
+		fmt.Println(dimStyle.Render("      " + c.Detail))
+	}
 }
 
 // printPolicyAudit is the real policy readout: which rules fire, which never

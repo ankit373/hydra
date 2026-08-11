@@ -70,6 +70,10 @@ type Report struct {
 	Exposures []Exposure `json:"exposures,omitempty"`
 	// Threats is the forensic breakdown behind the blocked/flagged counts.
 	Threats Threats `json:"threats"`
+	// Controls answers "does each declared control actually run" — a control
+	// that is configured but cannot fire is worse than a missing one, since
+	// it reads as protection everywhere it is listed.
+	Controls []Control `json:"controls,omitempty"`
 	// Events is a capped tail of the raw ledger, newest last — the evidence
 	// rows behind every finding above. Capped by maxEvidenceEvents; Truncated
 	// says so rather than silently showing a partial log as if it were whole.
@@ -147,6 +151,7 @@ func Build(heads []provider.Head) (*Report, error) {
 	r.Exposures = Exposures(events, heads)
 	r.PolicyAudit = AuditPolicy(pol, events)
 	r.Threats = ThreatBreakdown(events)
+	r.Controls = Controls(events, r.PolicyAudit, chainRes)
 	r.Events, r.Truncated = evidenceTail(events)
 
 	r.Checks = []Check{
@@ -171,7 +176,7 @@ func Build(heads []provider.Head) (*Report, error) {
 
 	appendScoreHistory(historyPath, r.Coverage)
 
-	r.Actions = buildActions(r.Coverage, r.ByHead, r.Exposures, r.PolicyAudit)
+	r.Actions = buildActions(r.Coverage, r.ByHead, r.Exposures, r.PolicyAudit, r.Controls)
 
 	return r, nil
 }
@@ -182,9 +187,20 @@ func chainCheck(res ledger.ChainResult) Check {
 		return Check{Name: name, Status: "no chained events",
 			Detail: fmt.Sprintf("%d unchained event(s) predate this feature", res.Unchained)}
 	}
+	// A truncation and an in-place edit are different attacks and get
+	// different words: "broken at index N" is meaningless for a truncation,
+	// where every surviving event verifies and the deleted ones left no gap.
+	if res.Truncated {
+		return Check{Name: name, Status: "TRUNCATED",
+			Detail: "the chain anchor names an event no longer in the log — records were deleted from the end"}
+	}
 	if !res.Intact {
 		return Check{Name: name, Status: "BROKEN",
 			Detail: fmt.Sprintf("tampering detected at event index %d", res.BrokenAt)}
+	}
+	if res.AnchorMissing {
+		return Check{Name: name, Status: "no anchor",
+			Detail: fmt.Sprintf("%d chained event(s) verify, but with no chain anchor deletion from the end cannot be ruled out", res.Chained)}
 	}
 	return Check{Name: name, Status: "intact",
 		Detail: fmt.Sprintf("%d chained event(s), %d unchained", res.Chained, res.Unchained)}
@@ -193,9 +209,23 @@ func chainCheck(res ledger.ChainResult) Check {
 // buildActions is the feedback loop: exactly the coverage Gaps plus heads
 // whose denied+flagged activity crosses riskThreshold — nothing else —
 // ranked most-urgent first so the queue reads top-to-bottom as work order.
-func buildActions(cov Coverage, byHead []ledger.HeadRisk, exps []Exposure, audit PolicyAudit) []Action {
+func buildActions(cov Coverage, byHead []ledger.HeadRisk, exps []Exposure, audit PolicyAudit, controls []Control) []Action {
 	const riskThreshold = 2
 	var out []Action
+
+	// A control that is configured but cannot fire outranks a coverage gap:
+	// the gap is a known absence, while this is protection the operator
+	// believes they already have.
+	for _, ctl := range controls {
+		if ctl.Declared && !ctl.Wired {
+			out = append(out, Action{
+				ID: ctl.Name, Kind: "control",
+				Title:    ctl.Name + " is declared but never runs",
+				Detail:   ctl.Detail,
+				Priority: PriorityNow,
+			})
+		}
+	}
 
 	// A real leak outranks everything else in the queue: it already happened,
 	// and unlike a coverage gap it is not hypothetical.

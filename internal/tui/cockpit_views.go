@@ -395,6 +395,18 @@ func (m Cockpit) dashSecurity(w, h int) string {
 		}
 		head.WriteString(" " + ckDimS.Render("policy   ") +
 			ckCyanS.Render(truncate(ckPolicyPosture(r.PolicyAudit), ckSecNameW)) + "\n")
+		// A control that is configured but cannot fire is the finding an
+		// operator is least likely to discover on their own — it looks
+		// healthy in every config file.
+		if len(r.Controls) > 0 {
+			inert := security.InertControls(r.Controls)
+			style, text := ckCheapS, "all active"
+			if inert > 0 {
+				style, text = ckExpS, fmt.Sprintf("%d inert", inert)
+			}
+			head.WriteString(" " + ckDimS.Render("controls ") +
+				style.Render(truncate(text, ckSecNameW)) + "\n")
+		}
 		head.WriteString(" " + ckDimS.Render("blocked  ") + ckExpS.Render(fmt.Sprintf("%d", r.Ledger.Denied)) +
 			ckDimS.Render(" · flagged ") + ckMidS.Render(fmt.Sprintf("%d", r.Ledger.Flagged)) + "\n")
 		// Same reused ckSpark as the coverage history above — a second real
