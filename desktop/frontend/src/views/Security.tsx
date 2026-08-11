@@ -6,6 +6,7 @@ import type {
   ConfigDrift,
   Control,
   EvidenceQuality,
+  SupplyChain,
   Exposure,
   HeadRisk,
   LedgerEvent,
@@ -280,6 +281,7 @@ function Detailed({ data }: { data: SecurityReport }) {
         <>
           <ControlsView controls={data.controls ?? []} />
           <ConfidenceEvidenceView evidence={data.evidence} />
+          <SupplyChainView supply={data.supplyChain} />
         </>
       )}
       {tab === 'policy' && (
@@ -349,6 +351,62 @@ function ControlsView({ controls }: { controls: Control[] }) {
 // A confidence figure assembled from correlated or coin-flip sources reads
 // as a result while being none — the opposite of a missing control, which at
 // least looks missing.
+// A head binary changing under you is the rug-pull pattern itself. First
+// sight is a baseline, not a finding — flagging every head on a first run
+// would teach the reader to ignore the column.
+function SupplyChainView({ supply }: { supply: SupplyChain }) {
+  const bins = supply?.binaries ?? []
+  if (bins.length === 0) {
+    return (
+      <section>
+        <h2 className="section__title">Head binaries</h2>
+        <p className="card__note">No CLI-sourced head was discovered, so there is no local binary to fingerprint.</p>
+      </section>
+    )
+  }
+  return (
+    <section>
+      <h2 className="section__title">Head binaries</h2>
+      {supply.changed > 0 && (
+        <div className="error">
+          {supply.changed} head binary(ies) changed since last seen. An upgrade and a swap look
+          identical here — confirm which it was.
+        </div>
+      )}
+      <div className="table__wrap">
+        <table className="table">
+          <thead>
+            <tr>
+              <th>Head</th>
+              <th>State</th>
+              <th>Fingerprint</th>
+              <th>Path</th>
+            </tr>
+          </thead>
+          <tbody>
+            {bins.map((b) => (
+              <tr key={b.headId}>
+                <td>{b.headId}</td>
+                <td>
+                  <span
+                    className={`sec-cat__status ${
+                      b.changed ? 'sec-cat__status--gap' : b.new ? '' : 'sec-cat__status--enforced'
+                    }`}
+                  >
+                    {b.changed ? 'changed' : b.new ? 'baselined' : 'unchanged'}
+                  </span>
+                </td>
+                <td className="mono">{b.sha256.slice(0, 12)}</td>
+                <td className="mono">{b.path}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )
+}
+
 function ConfidenceEvidenceView({ evidence }: { evidence: EvidenceQuality }) {
   if (!evidence || evidence.runs === 0) {
     return (

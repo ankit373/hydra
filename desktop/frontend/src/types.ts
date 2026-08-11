@@ -308,6 +308,8 @@ export interface SecurityReport {
   evidence: EvidenceQuality
   /** Whether the ledger spans more than one configuration. */
   drift: ConfigDrift
+  /** CLI head binaries and whether any changed since last seen. */
+  supplyChain: SupplyChain
 }
 
 export interface DayRisk {
@@ -364,6 +366,26 @@ export interface Control {
   /** False when the claim was established by reading the source rather than
    *  observed at runtime — the reader deserves to know which kind it is. */
   verified: boolean
+}
+
+export interface HeadBinary {
+  headId: string
+  path: string
+  sha256: string
+  size: number
+  /** No prior fingerprint — a baseline, not a finding. */
+  new?: boolean
+  /** Content hash differs from the stored one. */
+  changed?: boolean
+  previous?: string
+  firstSeen?: string
+}
+
+export interface SupplyChain {
+  binaries?: HeadBinary[]
+  new: number
+  changed: number
+  unfingerprintable?: number
 }
 
 export interface FamilyRisk {
