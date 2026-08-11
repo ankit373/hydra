@@ -92,6 +92,9 @@ body {
 /* ── Headings ──────────────────────────────────────────────────────────── */
 
 .view__head { margin-bottom: 22px; }
+/* Only the views with a back button need a row — plain title+subtitle
+   (Fleet, Dashboard) stack correctly as block siblings with no flex at all. */
+.view__headrow { display: flex; align-items: baseline; gap: 12px; }
 .view__title { margin: 0; font-size: 24px; letter-spacing: -0.03em; }
 .view__title--brand {
   background: var(--hy-brand);
@@ -860,7 +863,7 @@ body {
   color: var(--hy-dim);
   font: inherit;
   font-size: 12px;
-  padding: 0 0 8px;
+  padding: 3px 0;
   cursor: pointer;
 }
 .back:hover { color: var(--hy-aqua); }
