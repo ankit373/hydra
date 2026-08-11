@@ -302,6 +302,8 @@ export interface SecurityReport {
   events?: LedgerEvent[]
   /** True when `events` is a partial log, not the whole one. */
   truncated?: boolean
+  /** Whether each declared control actually runs. */
+  controls?: Control[]
 }
 
 export interface DayRisk {
@@ -343,6 +345,21 @@ export interface Exposure {
   /** False when the head was not discovered, so `remote` is an assumption
    *  rather than an observation. */
   known: boolean
+}
+
+/** One security control and whether it can actually fire. */
+export interface Control {
+  name: string
+  /** Configured, or its code exists. */
+  declared: boolean
+  /** Can actually take effect at runtime. */
+  wired: boolean
+  /** Fires, but is weaker than it appears. */
+  limited?: boolean
+  detail: string
+  /** False when the claim was established by reading the source rather than
+   *  observed at runtime — the reader deserves to know which kind it is. */
+  verified: boolean
 }
 
 export interface SecurityCount {

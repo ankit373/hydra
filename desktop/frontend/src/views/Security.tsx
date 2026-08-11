@@ -3,6 +3,7 @@ import type {
   Action,
   Category,
   Check,
+  Control,
   Exposure,
   HeadRisk,
   LedgerEvent,
@@ -224,6 +225,7 @@ function ActionCards({ actions }: { actions: Action[] }) {
 
 const DETAIL_TABS = [
   { id: 'coverage', label: 'Coverage' },
+  { id: 'controls', label: 'Controls' },
   { id: 'policy', label: 'Policy' },
   { id: 'exposure', label: 'Exposure' },
   { id: 'threats', label: 'Threats' },
@@ -272,11 +274,63 @@ function Detailed({ data }: { data: SecurityReport }) {
           </section>
         </>
       )}
+      {tab === 'controls' && <ControlsView controls={data.controls ?? []} />}
       {tab === 'policy' && <PolicyAuditView audit={data.policyAudit} />}
       {tab === 'exposure' && <ExposureView exposures={data.exposures ?? []} />}
       {tab === 'threats' && <ThreatsView threats={data.threats} />}
       {tab === 'evidence' && <EvidenceView events={data.events ?? []} truncated={!!data.truncated} />}
     </>
+  )
+}
+
+// "Is it configured" is the easy question; this is the useful one. A control
+// that is declared but cannot fire reads as protection everywhere it is
+// listed while doing nothing, so inert rows lead.
+function ControlsView({ controls }: { controls: Control[] }) {
+  if (controls.length === 0) {
+    return <p className="card__note">No controls were audited.</p>
+  }
+  const status = (c: Control) =>
+    !c.declared ? 'absent' : !c.wired ? 'inert' : c.limited ? 'limited' : 'active'
+  const pill = (s: string) =>
+    s === 'active' ? 'sec-cat__status--enforced' : s === 'inert' ? 'sec-cat__status--gap' : ''
+  const rank = (c: Control) => (status(c) === 'inert' ? 0 : status(c) === 'limited' ? 1 : 2)
+  const rows = [...controls].sort((a, b) => rank(a) - rank(b))
+
+  return (
+    <section>
+      <h2 className="section__title">Control effectiveness</h2>
+      <div className="table__wrap">
+        <table className="table">
+          <thead>
+            <tr>
+              <th>Control</th>
+              <th>State</th>
+              <th>Detail</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((c) => {
+              const s = status(c)
+              return (
+                <tr key={c.name}>
+                  <td>
+                    {c.name}
+                    {/* Say which claims are observed and which were read off
+                        the source, rather than presenting both as evidence. */}
+                    {!c.verified && <span className="sec-cat__status">source-derived</span>}
+                  </td>
+                  <td>
+                    <span className={`sec-cat__status ${pill(s)}`}>{s}</span>
+                  </td>
+                  <td className="card__note">{c.detail}</td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </section>
   )
 }
 
