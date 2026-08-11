@@ -348,6 +348,90 @@ func TestSpend_TokenProvenanceShare(t *testing.T) {
 	}
 }
 
+// A fresh machine has no ~/.hydra/calibration.jsonl. That is a real empty
+// leaderboard, not an error — trust.New treats a missing file as an empty
+// store, and the frontend needs a non-nil slice to render "no data yet"
+// rather than a null it can't .map over.
+func TestCalibrationPanel_EmptyOnFreshMachine(t *testing.T) {
+	sandbox(t)
+
+	d, err := New().GetDashboard()
+	if err != nil {
+		t.Fatalf("GetDashboard on a fresh machine must not error: %v", err)
+	}
+	if d.Calibration == nil {
+		t.Error("Calibration is nil; the view iterates it directly and a nil slice marshals to null")
+	}
+	if len(d.Calibration) != 0 {
+		t.Errorf("Calibration has %d rows with no calibration.jsonl", len(d.Calibration))
+	}
+}
+
+// Real calibration history — written the same way `hyctl trust record` does,
+// through trust.Calibrator.Update — must come back out through the Dashboard
+// exactly as trust.Calibrator.Report (the same call `hyctl trust calibration`
+// makes) sees it: most-diagnostic-source first, with Se/Sp/N intact.
+func TestCalibrationPanel_MatchesCalibratorReport(t *testing.T) {
+	home := sandbox(t)
+	path := filepath.Join(home, ".hydra", "calibration.jsonl")
+
+	cal, err := trust.New(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// verifier:go-test: near-perfect — should out-rank the model by D.
+	for i := 0; i < 40; i++ {
+		mustUpdate(t, cal, "verifier:go-test", "go", true, trust.OutcomeCorrect)
+	}
+	for i := 0; i < 40; i++ {
+		mustUpdate(t, cal, "verifier:go-test", "go", false, trust.OutcomeIncorrect)
+	}
+	// model:claude-sonnet: right most of the time, but noisier.
+	for i := 0; i < 8; i++ {
+		mustUpdate(t, cal, "model:claude-sonnet", "go", true, trust.OutcomeCorrect)
+	}
+	for i := 0; i < 2; i++ {
+		mustUpdate(t, cal, "model:claude-sonnet", "go", true, trust.OutcomeIncorrect)
+	}
+
+	d, err := New().GetDashboard()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := cal.Report()
+	if len(d.Calibration) != len(want) {
+		t.Fatalf("Calibration has %d rows, Calibrator.Report says %d", len(d.Calibration), len(want))
+	}
+	for i, w := range want {
+		got := d.Calibration[i]
+		if got.Source != w.Source || got.Domain != w.Domain {
+			t.Errorf("row %d: got %s/%s, want %s/%s (ordering must match Report's D-descending sort)",
+				i, got.Source, got.Domain, w.Source, w.Domain)
+		}
+		if got.D != w.D || got.Se != w.Se || got.Sp != w.Sp {
+			t.Errorf("row %d (%s): D/Se/Sp = %v/%v/%v, want %v/%v/%v",
+				i, got.Source, got.D, got.Se, got.Sp, w.D, w.Se, w.Sp)
+		}
+		if got.N != int(w.N) {
+			t.Errorf("row %d (%s): N = %d, want %d", i, got.Source, got.N, int(w.N))
+		}
+	}
+	if want[0].Source != "verifier:go-test" {
+		t.Fatalf("test setup: expected verifier:go-test to lead, got %s", want[0].Source)
+	}
+}
+
+// mustUpdate mirrors internal/trust's own test helper of the same name —
+// duplicated here rather than exported from trust for one call site, since
+// trust.Calibrator.Update already returns a plain error.
+func mustUpdate(t *testing.T, c *trust.Calibrator, source, domain string, saidCorrect bool, outcome trust.Outcome) {
+	t.Helper()
+	if err := c.Update(source, domain, saidCorrect, outcome); err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+}
+
 // GetDashboard reads fresh on every call and holds no state, which is what
 // makes it safe for the frontend to poll from several places at once.
 func TestGetDashboard_ConcurrentCallsAreSafe(t *testing.T) {
