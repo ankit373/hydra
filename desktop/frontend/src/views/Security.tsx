@@ -1,6 +1,9 @@
 import { useState } from 'react'
 import type {
   Action,
+  AgentPrivilege,
+  Attestation,
+  BOMEntry,
   Category,
   Check,
   ConfigDrift,
@@ -374,7 +377,10 @@ const DETAIL_TABS = [
   { id: 'policy', label: 'Policy' },
   { id: 'exposure', label: 'Exposure' },
   { id: 'threats', label: 'Threats' },
+  { id: 'access', label: 'Access' },
+  { id: 'estate', label: 'Estate' },
   { id: 'evidence', label: 'Evidence' },
+  { id: 'attest', label: 'Attestation' },
 ] as const
 
 type DetailTab = (typeof DETAIL_TABS)[number]['id']
@@ -437,8 +443,167 @@ function Detailed({ data }: { data: SecurityReport }) {
       )}
       {tab === 'exposure' && <ExposureView exposures={data.exposures ?? []} />}
       {tab === 'threats' && <ThreatsView threats={data.threats} />}
+      {tab === 'access' && <PrivilegeView rows={data.privilege ?? []} />}
+      {tab === 'estate' && <BOMView entries={data.bom ?? []} />}
       {tab === 'evidence' && <EvidenceView events={data.events ?? []} truncated={!!data.truncated} />}
+      {tab === 'attest' && <AttestationView a={data.attestation} />}
     </>
+  )
+}
+
+// Least privilege: what an agent actually touched against what a rule scopes.
+// An unscoped agent that changes state leads, because that is the finding.
+function PrivilegeView({ rows }: { rows: AgentPrivilege[] }) {
+  if (rows.length === 0) {
+    return <p className="card__note">No ledger event names an agent, so there is no footprint to review.</p>
+  }
+  return (
+    <section>
+      <h2 className="section__title">Agent entitlements</h2>
+      <p className="card__note">
+        Hydra&rsquo;s default is allow, so an agent no rule names is governed only by that
+        default. Unscoped agents that change state are listed first.
+      </p>
+      <div className="table__wrap">
+        <table className="table">
+          <thead>
+            <tr>
+              <th>Agent</th><th>Scope</th><th className="num">Allowed</th><th className="num">Denied</th>
+              <th className="num">State-changing</th><th>Touched</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((p) => (
+              <tr key={p.agent}>
+                <td className="mono">{p.agent}</td>
+                <td>
+                  <span className={`sec-cat__status ${p.unscoped ? 'sec-sev--high' : 'sec-cat__status--enforced'}`}>
+                    {p.unscoped ? 'unscoped' : 'scoped'}
+                  </span>
+                </td>
+                <td className="num">{p.allowed}</td>
+                <td className="num">{p.denied}</td>
+                <td className={`num ${p.unscoped && p.writesOrExecs > 0 ? 'cost--expensive' : ''}`}>
+                  {p.writesOrExecs}
+                </td>
+                <td className="card__note">
+                  {(p.actions ?? []).join(', ') || '—'}
+                  {(p.resources ?? []).length > 0 && ` · ${p.resources!.length} resource(s)`}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )
+}
+
+// The AI-BOM: an inventory of what is installed is less useful than one that
+// says what is live and what leaves the machine.
+function BOMView({ entries }: { entries: BOMEntry[] }) {
+  if (entries.length === 0) {
+    return <p className="card__note">No heads discovered — run <code>hyctl probe</code>.</p>
+  }
+  const remote = entries.filter((b) => !b.local).length
+  const runtime = entries.filter((b) => b.origin === 'user').length
+  return (
+    <section>
+      <h2 className="section__title">Model estate (AI-BOM)</h2>
+      <p className="card__note">
+        {entries.length} head(s) · {remote} route off-machine
+        {runtime > 0 ? ` · ${runtime} added at runtime rather than from the curated catalog` : ''}
+      </p>
+      <div className="table__wrap">
+        <table className="table">
+          <thead>
+            <tr>
+              <th>Head</th><th>Provider</th><th>Source</th><th>Origin</th>
+              <th>Egress</th><th>Live</th><th>Fingerprint</th>
+            </tr>
+          </thead>
+          <tbody>
+            {entries.map((b) => (
+              <tr key={b.headId}>
+                <td className="mono">{b.headId}</td>
+                <td>{b.provider || '—'}</td>
+                <td>{b.source || '—'}</td>
+                <td>{b.origin === 'user' ? 'runtime' : 'builtin'}</td>
+                <td>
+                  <span className={`sec-cat__status ${b.local ? 'sec-cat__status--enforced' : 'sec-sev--medium'}`}>
+                    {b.local ? 'local' : 'remote'}
+                  </span>
+                </td>
+                <td className="card__note">{b.used ? 'used' : 'idle'}</td>
+                <td className="mono card__note">{b.fingerprint ? b.fingerprint.slice(0, 12) : '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )
+}
+
+// The attestation is only worth something if a reader can check it without
+// trusting the reporter, so the evidence state leads and never hides.
+function AttestationView({ a }: { a: Attestation }) {
+  if (!a || !a.digest) {
+    return <p className="card__note">No attestation was produced for this run.</p>
+  }
+  const trustworthy =
+    a.evidence.chainIntact &&
+    !a.evidence.truncated &&
+    !a.evidence.anchorMissing &&
+    !(a.evidence.events > 0 && a.evidence.chainedEvents === 0)
+  return (
+    <section>
+      <h2 className="section__title">Attestation</h2>
+      {!trustworthy && (
+        <div className="error">
+          The audit log underneath this attestation cannot be independently checked, so the
+          claims above rest on evidence that is not tamper-evident.
+        </div>
+      )}
+      <div className="cards">
+        <div className="card">
+          <div className="card__label">Posture</div>
+          <div className="card__value--sm">{a.verdict}</div>
+          <p className="card__note">{a.trigger}</p>
+        </div>
+        <div className="card">
+          <div className="card__label">Open risks</div>
+          <div className="card__value--sm">
+            {a.openRisks}
+            {a.slaBreached > 0 ? ` · ${a.slaBreached} past SLA` : ''}
+          </div>
+        </div>
+        <div className="card">
+          <div className="card__label">Evidence</div>
+          <div className="card__value--sm">
+            {a.evidence.events} event(s), {a.evidence.chainedEvents} chained
+          </div>
+          <p className="card__note">
+            {a.evidence.truncated
+              ? 'truncated — records were deleted from the end'
+              : a.evidence.anchorMissing
+                ? 'unanchored — truncation would not be detected'
+                : a.evidence.chainIntact
+                  ? 'chain intact'
+                  : 'chain broken — the log was modified after recording'}
+          </p>
+        </div>
+      </div>
+      <p className="card__note" style={{ marginTop: 12 }}>
+        Generated {clockTime(a.generatedAt)} by {a.tool} {a.version}
+        {a.configFingerprint ? ` · rules in force ${a.configFingerprint.slice(0, 12)}` : ''}
+      </p>
+      <p className="card__note">
+        Digest <span className="mono">{a.digest.slice(0, 16)}</span> covers every claim above, so two
+        copies can be compared without trusting either holder. Deliberately unsigned: Hydra has no
+        key management, and a signature without one would be theatre.
+      </p>
+    </section>
   )
 }
 

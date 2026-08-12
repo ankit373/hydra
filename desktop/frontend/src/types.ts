@@ -331,6 +331,72 @@ export interface SecurityReport {
   incidents?: Incident[]
   /** The governed view: every finding as one kind of object. */
   register: RiskRegister
+  /** Checkable, point-in-time statement of posture. Deliberately unsigned. */
+  attestation: Attestation
+  /** Entitlement review: what each agent touched vs what a rule scopes. */
+  privilege?: AgentPrivilege[]
+  /** AI bill of materials: the model estate, with provenance. */
+  bom?: BOMEntry[]
+}
+
+/** What was true, under which rules, over which evidence. */
+export interface Attestation {
+  generatedAt: string
+  tool: string
+  version: string
+  commit?: string
+  /** Deployment breadcrumb: which routing/policy files were in force. */
+  configFingerprint?: string
+  evidence: AttestedEvidence
+  verdict: Verdict
+  trigger: string
+  coveragePercent: number
+  openRisks: number
+  bySeverity: Record<Severity, number>
+  slaBreached: number
+  incidents: number
+  /** Open risks per framework, so a reader can see it from their own standard. */
+  frameworks?: Record<string, number>
+  /** sha256 over every field above, so two copies can be compared. */
+  digest: string
+}
+
+/** The state of the log the attestation rests on. */
+export interface AttestedEvidence {
+  events: number
+  chainedEvents: number
+  chainIntact: boolean
+  /** Reported, never hidden: an attestation over an unverifiable log must say so. */
+  truncated?: boolean
+  anchorMissing?: boolean
+}
+
+/** One agent's observed footprint, for the least-privilege review. */
+export interface AgentPrivilege {
+  agent: string
+  allowed: number
+  denied: number
+  resources?: string[]
+  actions?: string[]
+  heads?: string[]
+  /** True when no policy rule names this agent, so it runs under the default. */
+  unscoped: boolean
+  writesOrExecs: number
+}
+
+/** One model in the estate. */
+export interface BOMEntry {
+  headId: string
+  name?: string
+  provider?: string
+  /** How it was discovered: cli, env, port. */
+  source?: string
+  /** "builtin" (curated catalog) or "user" (added at runtime). */
+  origin?: string
+  local: boolean
+  fingerprint?: string
+  /** True when the ledger shows this head actually handling work. */
+  used: boolean
 }
 
 export interface DayRisk {
