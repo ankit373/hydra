@@ -228,6 +228,12 @@ a{color:inherit;text-decoration:none;}
 .cheap{color:var(--cheap);}.mid{color:var(--mid);}.exp{color:var(--exp);}
 .cy{color:var(--cyan);}.vi{color:var(--violet);}.mg{color:var(--magenta);}
 
+/* Buttons/links are actions, not content — a stray click-drag shouldn't
+   highlight their label. Scoped to controls only: headings, body copy, and
+   the subline stay normally selectable everywhere else on the page. */
+.topbar .ghost,.topbar nav a,.btn-ghost,.skip-intro,.install{
+  user-select:none;-webkit-user-select:none;}
+
 /* ── top nav ───────────────────────────────────────────────────────────── */
 .topbar{position:sticky;top:0;z-index:60;display:flex;align-items:center;gap:14px;height:52px;padding:0 24px;
   font-family:var(--mono);font-size:12.5px;background:rgba(6,7,15,.55);backdrop-filter:blur(14px);

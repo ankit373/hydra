@@ -3,7 +3,15 @@ import type { Agent, Fleet as FleetData, Run } from '../types'
 import { ms, pct, usdExact } from '../format'
 import { RunGraph } from './RunGraph'
 
-export function Fleet({ data, onOpen }: { data: FleetData; onOpen: (runID: string) => void }) {
+export function Fleet({
+  data,
+  onOpen,
+  onStartTask,
+}: {
+  data: FleetData
+  onOpen: (runID: string) => void
+  onStartTask: () => void
+}) {
   return (
     <>
       <header className="view__head">
@@ -18,8 +26,12 @@ export function Fleet({ data, onOpen }: { data: FleetData; onOpen: (runID: strin
       {!data.hasRuns ? (
         <div className="empty">
           <p className="empty__title">No runs yet</p>
-          <p>
-            Run <code>hyctl dispatch --enum SIMPLE "…"</code> and it appears here while it works.
+          <p>Start one from here, or run it from a terminal instead:</p>
+          <button className="empty__cta" onClick={onStartTask}>
+            Start a task
+          </button>
+          <p className="empty__alt">
+            <code>hyctl dispatch --enum SIMPLE "…"</code>
           </p>
         </div>
       ) : (

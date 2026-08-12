@@ -186,25 +186,14 @@ being made obvious in code — delete it and make the names carry it.
 ---
 
 ## gstack Skills Available
-Use these when needed — invoke as /skill-name:
-/browse        — web browsing (prefer this over MCP browser tools)
-/review        — code review
-/qa            — QA run
-/ship          — ship checklist
-/plan-eng-review — engineering plan review
-/plan-ceo-review — executive plan review
-/investigate   — deep investigation
-/document-generate — documentation generation
-/retro         — retrospective
-/benchmark     — benchmarking
-/canary        — canary deployment
-/careful       — careful mode (extra checks)
-Full list: autoplan, benchmark-models, browse, canary, careful, codex, cso,
-design-consultation, design-html, design-review, design-shotgun, devex-review,
-document-generate, document-release, freeze, guard, health, investigate,
-land-and-deploy, learn, office-hours, pair-agent, plan-ceo-review,
-plan-design-review, plan-devex-review, plan-eng-review, qa, qa-only,
-retro, review, scrape, ship, skillify, unfreeze
+Use the `/browse` skill from gstack for all web browsing. Never use `mcp__claude-in-chrome__*` tools.
+
+Available skills: /office-hours, /plan-ceo-review, /plan-eng-review, /plan-design-review,
+/design-consultation, /design-shotgun, /design-html, /review, /ship, /land-and-deploy, /canary,
+/benchmark, /browse, /connect-chrome, /qa, /qa-only, /design-review, /setup-browser-cookies,
+/setup-deploy, /setup-gbrain, /retro, /investigate, /document-release, /document-generate, /codex,
+/cso, /autoplan, /plan-devex-review, /devex-review, /careful, /freeze, /guard, /unfreeze,
+/gstack-upgrade, /learn
 
 ## Karpathy Skills Available
 Located at ~/.claude/skills/karpathy/skills/karpathy-guidelines

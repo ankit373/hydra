@@ -14,6 +14,7 @@
   /* ── Ink ── */
   --hy-ink:       #E7E9F5;              /* primary text */
   --hy-dim:       #9AA0C4;              /* secondary text / labels */
+  --hy-faint:     #525A80;              /* de-emphasized meta (chart ranges, HUD chrome) */
 
   /* ── Brand gradient (the logo) — cyan → violet → magenta ── */
   --hy-cyan:      #2AF0E0;              /* gradient start · center head */

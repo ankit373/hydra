@@ -119,8 +119,20 @@ func (a *API) GetFleet() (*Fleet, error) {
 		if r.Live {
 			f.LiveCount++
 		}
+		// A finished run with zero agents and no error carries no information —
+		// dispatch never reached a head, most commonly a --dry-run preview
+		// (before #390 fixed dry-run writing these in the first place; this
+		// machine's own history still has 16 of them from before that fix).
+		// Sorted live-first-then-most-recent, a pile of these outranks real
+		// history and makes Fleet look empty even when hasRuns is technically
+		// true. A live run is never filtered — it may not have picked a head
+		// yet, and it is the one the user opened the app to watch.
+		if !r.Live && r.AllCount == 0 && r.Error == "" {
+			continue
+		}
 		f.Runs = append(f.Runs, r)
 	}
+	f.HasRuns = len(f.Runs) > 0
 
 	// Live first, then most recent. Run ids are timestamp-prefixed, so a
 	// reverse lexical compare is a reverse chronological one — no parsing, and

@@ -39,6 +39,14 @@ type Dashboard struct {
 	ByDay   []Breakdown `json:"byDay"`
 
 	Recent []RecentCall `json:"recent"`
+
+	// Calibration is per-(source,domain) calibration quality from
+	// internal/trust — which models/oracles actually earn their stated
+	// confidence. Independent of cost.jsonl (a machine can have calibration
+	// history from `hyctl trust record` without ever having dispatched), so
+	// unlike ByModel/ByTier/ByDay it is always a list, never nil — an empty
+	// leaderboard is a real, renderable state, not "never ran".
+	Calibration []CalibrationRow `json:"calibration"`
 }
 
 // SpendPanel is the headline cost figure.
@@ -85,6 +93,18 @@ type Breakdown struct {
 	WallMS         int64   `json:"wallMs"`
 }
 
+// CalibrationRow is one (source, domain) row of the calibration leaderboard —
+// a direct mapping of trust.Stat, the same shape `hyctl trust calibration`
+// prints.
+type CalibrationRow struct {
+	Source string  `json:"source"`
+	Domain string  `json:"domain"`
+	D      float64 `json:"d"`  // diagnostic power (nats) — sort key, most first
+	Se     float64 `json:"se"` // sensitivity
+	Sp     float64 `json:"sp"` // specificity
+	N      int     `json:"n"`  // real observations (excludes the Laplace prior)
+}
+
 // RecentCall is one row of the activity list.
 type RecentCall struct {
 	TS      string  `json:"ts"`
@@ -113,9 +133,10 @@ func (a *API) GetDashboard() (*Dashboard, error) {
 	}
 
 	d := &Dashboard{
-		HasData:  len(rows) > 0,
-		Governor: governorPanel(),
-		Trust:    trustPanel(),
+		HasData:     len(rows) > 0,
+		Governor:    governorPanel(),
+		Trust:       trustPanel(),
+		Calibration: calibrationPanel(),
 	}
 	if !d.HasData {
 		// Breakdowns stay nil, not empty slices: the frontend distinguishes
@@ -193,6 +214,32 @@ func trustPanel() TrustPanel {
 		MeanFinalConf:   s.MeanFinalConf,
 		TotalCostUSD:    s.TotalCostUSD,
 	}
+}
+
+// calibrationPanel loads the same on-disk calibration store `hyctl trust
+// calibration` reads (trust.New(trust.DefaultPath())) and reports it in the
+// same most-diagnostic-first order (Calibrator.Report). A brand-new machine
+// has no ~/.hydra/calibration.jsonl, which trust.New treats as an empty store
+// rather than an error, so this always returns a non-nil, possibly-empty
+// slice — never an error, never nil.
+func calibrationPanel() []CalibrationRow {
+	cal, err := trust.New(trust.DefaultPath())
+	if err != nil {
+		return []CalibrationRow{}
+	}
+	stats := cal.Report()
+	out := make([]CalibrationRow, 0, len(stats))
+	for _, s := range stats {
+		out = append(out, CalibrationRow{
+			Source: s.Source,
+			Domain: s.Domain,
+			D:      s.D,
+			Se:     s.Se,
+			Sp:     s.Sp,
+			N:      int(s.N),
+		})
+	}
+	return out
 }
 
 func toBreakdowns(gs []cost.GroupRow) []Breakdown {

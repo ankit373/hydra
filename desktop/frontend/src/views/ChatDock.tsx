@@ -14,15 +14,32 @@ interface Turn {
  * Never a permanently-large panel: splitting attention between a chat and the
  * view it is about costs more than it gives (Sweller/Tarmizi's split-attention
  * effect), so it opens on engagement and closes again.
+ *
+ * open/onOpenChange are owned by App, not local state — other views (Fleet's
+ * empty state, #422) need to open this dock, and a callback into a sibling
+ * component isn't a thing React has; lifting the one bit of state that
+ * matters is. focusSignal is a counter App bumps every time something asks
+ * this dock to take focus, so "open it and focus the input" works even when
+ * the dock happens to already be open.
  */
-export function ChatDock({ onOpenRun }: { onOpenRun: (runID: string) => void }) {
-  const [open, setOpen] = useState(false)
+export function ChatDock({
+  onOpenRun,
+  open,
+  onOpenChange,
+  focusSignal,
+}: {
+  onOpenRun: (runID: string) => void
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  focusSignal: number
+}) {
   const [prompt, setPrompt] = useState('')
   const [enumKey, setEnumKey] = useState('')
   const [enums, setEnums] = useState<string[]>([])
   const [turns, setTurns] = useState<Turn[]>([])
   const [busy, setBusy] = useState(false)
   const logRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
     ChatEnums().then(setEnums).catch(() => {
@@ -57,9 +74,16 @@ export function ChatDock({ onOpenRun }: { onOpenRun: (runID: string) => void }) 
     }
   }
 
+  // Fires on open (the dock's own toggle button included, not just external
+  // callers) and again on focusSignal so "already open, asked to start a
+  // task again" still moves focus back to the input.
+  useEffect(() => {
+    if (open) inputRef.current?.focus()
+  }, [focusSignal, open])
+
   if (!open) {
     return (
-      <button className="dock dock--closed" onClick={() => setOpen(true)}>
+      <button className="dock dock--closed" onClick={() => onOpenChange(true)}>
         Ask Hydra
         {turns.length > 0 && <span className="dock__count">{turns.length}</span>}
       </button>
@@ -84,7 +108,7 @@ export function ChatDock({ onOpenRun }: { onOpenRun: (runID: string) => void }) 
             </option>
           ))}
         </select>
-        <button className="dock__close" onClick={() => setOpen(false)} aria-label="Collapse">
+        <button className="dock__close" onClick={() => onOpenChange(false)} aria-label="Collapse">
           ×
         </button>
       </header>
@@ -116,6 +140,7 @@ export function ChatDock({ onOpenRun }: { onOpenRun: (runID: string) => void }) 
 
       <div className="dock__input">
         <textarea
+          ref={inputRef}
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
           onKeyDown={(e) => {

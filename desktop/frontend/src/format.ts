@@ -40,6 +40,31 @@ export function govBand(p: number): 'normal' | 'warning' | 'critical' {
   return 'normal'
 }
 
+/**
+ * Coverage band for the OWASP LLM Top-10 score. Inverted from govBand: here
+ * high is good, since this is "percent covered" not "percent of budget used".
+ */
+export function coverageBand(pct: number): 'good' | 'warn' | 'bad' {
+  if (pct >= 80) return 'good'
+  if (pct >= 50) return 'warn'
+  return 'bad'
+}
+
+/**
+ * The security category table as CSV, one row per applicable finding — the
+ * same shape `hyctl security --csv` emits, so the two exports never disagree
+ * about what a "finding" looks like.
+ */
+export function toSecurityCSV(
+  categories: { id: string; name: string; status: string; gapAgeDays?: number; detail: string }[],
+): string {
+  const esc = (s: string) => `"${s.replace(/"/g, '""')}"`
+  const rows = categories
+    .filter((c) => c.status !== 'n/a')
+    .map((c) => [c.id, esc(c.name), c.status, String(c.gapAgeDays ?? 0), esc(c.detail)].join(','))
+  return ['id,name,status,gap_age_days,detail', ...rows].join('\n')
+}
+
 /** Cost ramp for a per-row figure, relative to the largest row in its table. */
 export function costBand(v: number, max: number): 'free' | 'cheap' | 'mid' | 'expensive' {
   if (v <= 0) return 'free'
@@ -48,6 +73,22 @@ export function costBand(v: number, max: number): 'free' | 'cheap' | 'mid' | 'ex
   if (share >= 0.6) return 'expensive'
   if (share >= 0.25) return 'mid'
   return 'cheap'
+}
+
+/** internal/trust calibration keys are "verifier:go-test" / "model:claude-sonnet"
+ * — the prefix is the routing/storage key, not something worth showing next to
+ * every row of a leaderboard. Falls back to the raw string for anything else. */
+export function sourceLabel(source: string): string {
+  const i = source.indexOf(':')
+  return i < 0 ? source : source.slice(i + 1)
+}
+
+/** Oracles (verifier:*, e.g. test/lint results) are a structurally different
+ * kind of evidence than a model's own self-report (model:*) — the calibration
+ * leaderboard color-codes by this distinction. Unrecognized prefixes read as
+ * 'model', the more common case. */
+export function sourceKind(source: string): 'oracle' | 'model' {
+  return source.startsWith('verifier:') ? 'oracle' : 'model'
 }
 
 /** "2026-08-02T10:04:11Z" → "10:04:11". Falls back to the raw string. */
