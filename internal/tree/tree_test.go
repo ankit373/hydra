@@ -385,6 +385,38 @@ func TestApply_RunLevelEventsNeverCreateNodes(t *testing.T) {
 	}
 }
 
+// A KindEdit event carries no identity of its own — it records which file
+// changed, not who changed it — so nodeID falls back to TaskID. Before #434,
+// Agent held the edited file path instead (a since-removed overload), which
+// took priority over that TaskID fallback and split the run into two
+// disconnected nodes: the real agent, and a phantom one named after the file,
+// stuck at StatePending forever since nothing else ever touched it.
+func TestApply_EditEventJoinsItsTasksNodeNotAPhantomOne(t *testing.T) {
+	events := []runlog.Event{
+		{V: 1, Seq: 1, RunID: "r", TaskID: "task-abc", Kind: runlog.KindHeadSelected, Head: "flash-med"},
+		{V: 1, Seq: 2, RunID: "r", TaskID: "task-abc", Kind: runlog.KindDispatchFinished,
+			Head: "flash-med", Status: "ok"},
+		{V: 1, Seq: 3, RunID: "r", TaskID: "task-abc", Kind: runlog.KindEdit,
+			File: "/private/tmp/scratch/greet.py", Ref: "000001", Detail: "+2/-0"},
+	}
+	tr, _ := Reconstruct(events)
+
+	if len(tr.Nodes) != 1 {
+		t.Fatalf("got %d nodes, want 1 — the edit must join flash-med, not mint its own: %+v",
+			len(tr.Nodes), tr.Nodes)
+	}
+	n := tr.Nodes["flash-med"]
+	if n == nil {
+		t.Fatal("no node keyed by the real head \"flash-med\"")
+	}
+	if n.State != StateOK {
+		t.Errorf("state = %q, want ok — the edit event must not downgrade a finished node", n.State)
+	}
+	if n.Detail != "+2/-0" {
+		t.Errorf("detail = %q, want the edit's line counts", n.Detail)
+	}
+}
+
 // Apply refuses to create a node for a run-level event; entryOf must agree, or
 // the timeline names a node the tree does not have. nodeID falls back to
 // TaskID, which a run_started legitimately carries.

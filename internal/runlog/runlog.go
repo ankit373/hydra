@@ -83,7 +83,8 @@ const (
 	// last_handoff.json; appending it here is what makes a chain reconstructable.
 	KindHandoff Kind = "handoff"
 
-	// KindEdit is a file edit. Ref points at the content; the body is never inlined.
+	// KindEdit is a file edit. File is the path changed; Ref points at the
+	// content, which is never inlined.
 	KindEdit Kind = "edit"
 
 	KindError Kind = "error"
@@ -119,6 +120,11 @@ type Event struct {
 	// short human string. Neither may carry a diff or a full model response.
 	Ref    string `json:"ref,omitempty"`
 	Detail string `json:"detail,omitempty"`
+
+	// File is the path a KindEdit event changed. Its own field, not Agent —
+	// an edit has no identity of its own, only a task it happened within
+	// (#434); conflating the two used to mint a phantom tree node per file.
+	File string `json:"file,omitempty"`
 }
 
 // Dir is where per-run files live.
