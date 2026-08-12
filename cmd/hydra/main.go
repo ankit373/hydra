@@ -903,6 +903,12 @@ func cmdMCP() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("--decision: %w", err)
 			}
+			if recTool == "" {
+				return fmt.Errorf("--tool is required")
+			}
+			if recAgent == "" {
+				return fmt.Errorf("--agent is required")
+			}
 			// Bind whenever --params was supplied — including "{}" — so this
 			// agrees with `check`, whose binding keys off a non-nil map.
 			var hash string
@@ -2864,11 +2870,11 @@ func cmdTrustCalibration() *cobra.Command {
 				fmt.Println("\n  No calibration recorded yet. Feed outcomes with `hyctl trust record`.")
 				return nil
 			}
-			fmt.Printf("\n  %-28s %-10s %6s %7s %7s %8s\n", "Source", "Domain", "n", "se", "sp", "D(nats)")
-			fmt.Println("  " + strings.Repeat("─", 74))
+			fmt.Printf("\n  %-28s %-16s %6s %7s %7s %8s\n", "Source", "Domain", "n", "se", "sp", "D(nats)")
+			fmt.Println("  " + strings.Repeat("─", 80))
 			for _, s := range stats {
-				fmt.Printf("  %-28.28s %-10.10s %6.0f %7.3f %7.3f %8.3f\n",
-					s.Source, s.Domain, s.N, s.Se, s.Sp, s.D)
+				fmt.Printf("  %-28.28s %-16s %6.0f %7.3f %7.3f %8.3f\n",
+					s.Source, truncLabel(s.Domain, 16), s.N, s.Se, s.Sp, s.D)
 			}
 			// A family whose members have converged on effectively one vote is a
 			// coordination risk the se/sp table above cannot show — two "sources"
@@ -2901,6 +2907,9 @@ func cmdTrustRecord() *cobra.Command {
 			}
 			if source == "" {
 				return fmt.Errorf("--source is required")
+			}
+			if domain == "" {
+				return fmt.Errorf("--domain is required")
 			}
 			cal, err := trust.New(trust.DefaultPath())
 			if err != nil {

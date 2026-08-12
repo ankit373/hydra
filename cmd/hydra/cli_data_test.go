@@ -284,6 +284,64 @@ func TestCLI_TrustRecordThenCalibration_RoundTrips(t *testing.T) {
 	}
 }
 
+// calibration is append-only, so a blank --domain writes a permanent, unfixable
+// row. It must be refused up front, exactly like --source and --outcome.
+func TestCLI_TrustRecord_RequiresDomain(t *testing.T) {
+	populated(t)
+
+	_, cobraOut, err := run(t, "trust", "record",
+		"--source", "model:test-head", "--said-correct", "--outcome", "correct")
+	if err == nil {
+		t.Fatal("`hyctl trust record` without --domain was accepted")
+	}
+	if !strings.Contains(err.Error()+cobraOut, "--domain") {
+		t.Errorf("error = %v, want it to name --domain", err)
+	}
+}
+
+// Two domains sharing a ten-character prefix (e.g. "trust-bench" and
+// "trust-bench-v2") must not render as the identical truncated label — that
+// makes rows with different n/D visually indistinguishable.
+func TestCLI_TrustCalibration_DistinguishesDomainsWithSharedPrefix(t *testing.T) {
+	populated(t)
+
+	if _, cobraOut, err := run(t, "trust", "record",
+		"--source", "model:x", "--domain", "trust-bench",
+		"--said-correct", "--outcome", "correct"); err != nil {
+		t.Fatalf("`hyctl trust record` (trust-bench) failed: %v (%s)", err, cobraOut)
+	}
+	if _, cobraOut, err := run(t, "trust", "record",
+		"--source", "model:x", "--domain", "trust-bench-v2",
+		"--said-correct", "--outcome", "incorrect"); err != nil {
+		t.Fatalf("`hyctl trust record` (trust-bench-v2) failed: %v (%s)", err, cobraOut)
+	}
+
+	out, cobraOut, err := run(t, "trust", "calibration")
+	if err != nil {
+		t.Fatalf("`hyctl trust calibration` failed: %v", err)
+	}
+	table := out + cobraOut
+
+	var domains []string
+	for _, line := range strings.Split(table, "\n") {
+		if !strings.Contains(line, "model:x") {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			t.Fatalf("row for model:x has no domain column: %q", line)
+		}
+		domains = append(domains, fields[1])
+	}
+	if len(domains) != 2 {
+		t.Fatalf("want 2 rows for model:x, got %d (%v):\n%s", len(domains), domains, table)
+	}
+	if domains[0] == domains[1] {
+		t.Errorf("both domains rendered as the same label %q — the rows are "+
+			"visually indistinguishable:\n%s", domains[0], table)
+	}
+}
+
 // The defect model sets how much confidence a task needs. PII and production
 // must both raise the bar — that is the whole point of the flags.
 func TestCLI_TrustDefect_RaisesTheBarForRiskyWork(t *testing.T) {
