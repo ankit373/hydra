@@ -9,21 +9,9 @@ import (
 	"github.com/ankit373/hydra/internal/ledger"
 )
 
-// Did the rules change underneath the history?
-//
-// Every ledger event carries config.Breadcrumb() — a SHA256 over
-// routing.yaml, models.yaml, domains.yaml and pricing.yaml as they were when
-// the event was recorded. Because it is an ordinary field it is covered by the
-// event's own hash, so a past event's breadcrumb cannot be rewritten without
-// breaking the chain.
-//
-// That makes it the one durable answer to a question the rest of this report
-// cannot ask: were these decisions all made under the same rules? A breadcrumb
-// that changes partway through the log means the routing or pricing config was
-// swapped mid-history — the local instance of the "rug pull" pattern, where an
-// approval granted under one configuration silently continues to apply under a
-// different one. It has been recorded on every event since #238 and read by
-// nothing until now.
+// Were these decisions all made under the same rules? Each event's
+// config.Breadcrumb is covered by its own hash, so a breadcrumb that changes
+// mid-log is a config swapped underneath prior approvals — a local rug pull.
 
 // ConfigEpoch is a span of the ledger recorded under one configuration.
 type ConfigEpoch struct {

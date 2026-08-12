@@ -12,19 +12,8 @@ import (
 	"github.com/ankit373/hydra/internal/runlog"
 )
 
-// What did the agents actually touch, and how far does it reach?
-//
-// Every other section here reasons about access decisions. This one reasons
-// about consequences: an agent editing a leaf file and an agent editing a file
-// forty others depend on are the same ledger event and wildly different risks.
-// Both halves already existed and were never joined — runlog records an `edit`
-// event per file written, and internal/graph scores a file's transitive
-// blast radius from graph.json.
-//
-// The honesty rule is inherited from internal/graph itself, which grew Empty()
-// and Knows() precisely so a UI could not render the neutral 1.0 floor as an
-// affirmative "this edit was safe" (#251). A file the graph does not index is
-// reported as unknown, never as low-risk.
+// Consequences, not decisions: runlog edit events × internal/graph blast
+// radius. A file the graph does not index is unknown, never low-risk (#251).
 
 // maxBlastRuns caps how many recent runs are scanned. Run logs are small but
 // unbounded in number; the newest runs are the ones an operator is reasoning

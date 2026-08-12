@@ -13,18 +13,9 @@ import (
 	"github.com/ankit373/hydra/internal/trust"
 )
 
-// The risk register: the spine everything else hangs off.
-//
-// Until now this package produced nine independent analyses, each with its own
-// shape, its own severity notion and its own table. That is an engineer's
-// dashboard. A security programme has one artifact — a register in which every
-// finding, whatever produced it, is the same kind of object: identified,
-// rated, aged against an SLA, quantified, mapped to the frameworks it bears
-// on, and evidenced.
-//
-// So every analysis in this package converts into a Risk. Nothing new is
-// detected here; what changes is that the outputs become governable instead of
-// merely readable.
+// The spine: every analysis in this package converts into a Risk, so findings
+// are one kind of object — identified, rated, aged against an SLA, quantified,
+// crosswalked, evidenced. Nothing new is detected here.
 
 // RiskClass is where a risk came from, which also drives its framework
 // crosswalk and how its exposure is priced.
@@ -91,15 +82,9 @@ type Risk struct {
 	DueInDays int  `json:"dueInDays"`
 	Breached  bool `json:"breached"`
 
-	// DefectCostUSD is the modelled cost of ONE defect of this class, from
-	// internal/trust's defect model — the same weights that already decide
-	// how much confidence the router buys, so the dashboard and the router
-	// cannot disagree about what a mistake costs.
-	//
-	// It is deliberately not called "exposure": this is a per-occurrence cost,
-	// not an annualised loss. Turning it into one would need a frequency
-	// estimate nothing here measures, and inventing that is exactly the kind
-	// of confident-sounding fiction this package refuses elsewhere.
+	// Cost of ONE defect of this class, from internal/trust's defect model so
+	// dashboard and router agree. Not "exposure": per-occurrence, not
+	// annualised — an annual figure needs a frequency nothing here measures.
 	DefectCostUSD float64        `json:"defectCostUsd"`
 	Frameworks    []FrameworkRef `json:"frameworks,omitempty"`
 	Evidence      []string       `json:"evidence,omitempty"`

@@ -10,22 +10,9 @@ import (
 	"github.com/ankit373/hydra/internal/trust"
 )
 
-// Is the confidence Hydra reports actually earned?
-//
-// `dispatch --confidence 0.95` stops sampling once the log-odds clear a
-// threshold, which is only meaningful if each sample is an independent piece
-// of evidence from a source that discriminates. Two ways that silently fails,
-// both already measured by internal/trust and neither previously surfaced:
-//
-//   - Correlated heads. Two models from the same family agree because they
-//     share training data, not because the answer is right. trust.FamilyCoupling
-//     measures the excess same-family agreement rate; past criticalCoupling the
-//     ensemble is effectively casting one vote while reporting several.
-//   - Undiagnostic sources. A source whose calibrated D (expected |LLR|, in
-//     nats) is ~0 has se+sp≈1 — it is a coin flip, and its agreement moves the
-//     posterior by nothing.
-//
-// A 95% confidence assembled from either is a number, not an assurance.
+// Confidence is only earned if each sample is independent and discriminating.
+// Two silent failures, both already measured by internal/trust: same-family
+// heads voting once while reporting several, and sources whose D is ~0.
 
 // weakPowerNats is the diagnostic power below which a source's agreement
 // carries no usable information. D is expected |LLR| in nats and is exactly 0

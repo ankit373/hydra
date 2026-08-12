@@ -18,38 +18,9 @@ import (
 	"github.com/ankit373/hydra/internal/provider"
 )
 
-// Did the head you approved stay the head you run?
-//
-// The rug-pull pattern is a tool you vetted changing underneath you with no
-// re-approval and no alert. For CLI-sourced heads Hydra already knows the
-// resolved binary path, so the local form of that attack — an agent binary
-// silently replaced or auto-updated — is detectable by fingerprinting it and
-// noticing when the fingerprint moves.
-//
-// This is change detection, not provenance: it cannot tell a legitimate
-// upgrade from a malicious swap, and it verifies nothing about where the
-// binary came from. What it does is make the change *visible*, which is
-// exactly what the pattern relies on not happening.
-//
-// Cost drove the design. Real agent binaries here are 150-270 MB and hash at
-// ~500 ms each, which is unusable in a view the desktop polls every few
-// seconds. A stat is ~1.6 µs. So the stored fingerprint is keyed on
-// (size, mtime) and the content is only re-read when one of those moves —
-// first run pays once per binary, every later run pays a stat. The honest
-// limit of that trade is recorded in the check's own wording: a substitution
-// that preserves both size and mtime is not re-hashed, so it is not seen.
-//
-// The second limit is the store itself. head_binaries.json is a plain file
-// with no chain and no anchor, so an attacker who swaps a binary AND rewrites
-// its recorded fingerprint gets a clean "unchanged" on the next run. Unlike
-// the ledger — where a chain at least makes a partial edit or a deleted tail
-// evident — a rewritten value here is indistinguishable from a true one, and
-// the whole file is regenerated every run so there is no history to contradict
-// it. Closing that properly needs a signing key or an OS-protected store,
-// neither of which Hydra has; so the check states the limit rather than
-// implying a guarantee it cannot make. The threat model this control does
-// cover is the real one it was built for: a binary replaced underneath Hydra
-// by an auto-updater or a rug-pull, not an attacker already inside ~/.hydra.
+// Change detection for head binaries, not provenance: it makes a rug-pull
+// visible, it cannot tell an upgrade from a swap. Both limits are stated in
+// supplyChainCheck's own wording rather than implied away.
 
 // binaryStorePath is where head fingerprints persist.
 func binaryStorePath() string {

@@ -23,10 +23,8 @@ import (
 	"github.com/ankit373/hydra/internal/util"
 )
 
-// ckSafe strips control characters from an untrusted, ledger-derived string
-// before it is truncated and boxed. Order matters: truncating first can cut an
-// escape sequence in half, and lipgloss measures width in runes, so a stray
-// ESC both corrupts the box borders and can rewrite the line it sits on.
+// ckSafe strips control characters before truncation. Order matters: cutting an
+// escape in half corrupts the lipgloss box borders as well as the line.
 func ckSafe(s string) string { return util.SafeTerminal(s) }
 
 // ── view 0 · live code panel ─────────────────────────────────────────────────
@@ -74,14 +72,9 @@ func (m Cockpit) codePanel(w, h int) string {
 
 // ── view 1 · dashboard ───────────────────────────────────────────────────────
 
-// dash is the fleet pulse: discovered heads, real spend, real calibration
-// stats, and the governor gauge.
-//
-// Everything here reads a real source. It previously rendered LCG-hashed
-// "sparklines", a per-head confidence bucketed by tier, and a savings figure
-// derived from an invented price table — all with no backing data (#189).
-// Where a real figure is not available yet it is labelled unavailable rather
-// than invented, because --snapshot publishes these frames.
+// dash is the fleet pulse. Everything reads a real source; a figure that is
+// not available yet is labelled unavailable, never invented (#189) — --snapshot
+// publishes these frames.
 func (m Cockpit) dash(w, h int) string {
 	var fleet strings.Builder
 	fleet.WriteString(ckLabelS.Render("FLEET · discovered heads") + "\n\n")
@@ -179,17 +172,9 @@ func (m Cockpit) trustSummary() string {
 
 // ── view 2 · agent tree ──────────────────────────────────────────────────────
 
-// tree renders the supervision tree for a real run, reconstructed from the
-// per-run event log via internal/tree.
-//
-// It replaced a hand-authored 7-node literal in which each row carried its own
-// box-drawing indent as a string field — a picture of a tree rather than a
-// tree, fixed at one shape and describing a run that never happened (#191).
-// Prefixes are now derived from depth and last-child position, so arbitrary
-// depth and branching render correctly.
-//
-// Ownership edges are solid (─); A2A handoffs are a dashed overlay (┄), kept
-// visually distinct because they are a different relation, not a parent.
+// tree renders a real run's supervision tree via internal/tree; prefixes derive
+// from depth and last-child position, so any shape renders (#191). Ownership
+// edges are solid (─), A2A handoffs dashed (┄) — a different relation.
 func (m Cockpit) tree(w, h int) string {
 	var b strings.Builder
 	b.WriteString(ckLabelS.Render("AGENT TREE · supervision") +
@@ -306,14 +291,9 @@ func treePrefix(r tree.Row) string {
 
 // ── view 3 · security ────────────────────────────────────────────────────────
 
-// dashSecurity is the OWASP LLM Top-10 coverage view: the same report
-// `hyctl security` prints, reused rather than recomputed — m.security is
-// loaded once in NewCockpit, so this reads no I/O, matching dash's own rule.
-// Column budgets are fixed, not proportional to w — matching dash()'s own
-// fleet/spend/trust/governor boxes, which are all fixed-width content laid
-// out side by side and only padded to fill w by the final Width(w).Render.
-// A width that scales with the terminal risks a line longer than lipgloss's
-// border can hold, which corrupts the box drawing rather than wrapping.
+// dashSecurity reuses the report `hyctl security` prints (loaded once in
+// NewCockpit, so no I/O here). Column budgets are FIXED, not proportional to w:
+// a width that scales with the terminal corrupts lipgloss box drawing.
 const (
 	ckSecNameW = 26 // category name column
 	ckSecRecW  = 40 // action text column (narrower right-hand box)
@@ -397,16 +377,9 @@ func (m Cockpit) dashSecurity(w, h int) string {
 				ckSegmentedBar(20, []int{r.Ledger.Allowed, r.Ledger.Denied},
 					[]lipgloss.Style{ckCheapS, ckExpS}) + "\n")
 		}
-		// Exposure/policy/bypass signals, folded into the hero rather than
-		// three new boxes — the view already fits one screen. Each line stays
-		// within ckSecNameW like the category rows below: an unbounded string
-		// here widens the box and corrupts the box-drawing where it is joined
-		// beside the per-head/actions boxes (which is exactly what happened
-		// the first time these lines were added).
-		//
-		// "exposure" leads with whether sensitive data left the machine, not
-		// with how much was detected — a count alone says nothing, since PII
-		// on a local head is the control working.
+		// Folded into the hero, not three new boxes. Every line stays within
+		// ckSecNameW or it corrupts the box drawing. "exposure" leads with
+		// whether data left the machine: PII on a local head is the control working.
 		if n := len(r.Exposures); n > 0 {
 			confirmed := security.ConfirmedRemote(r.Exposures)
 			unknown := security.RemoteCount(r.Exposures) - confirmed

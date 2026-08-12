@@ -13,33 +13,13 @@ import (
 	"github.com/ankit373/hydra/internal/ledger"
 )
 
-// Events are not incidents.
-//
-// Every other analysis here reports facts about a log: N denied, M flagged,
-// this resource probed twice. Read separately they hide the only thing that
-// matters, which is the sequence. One actor over one afternoon:
-//
-//	15:11  write allow  README.md                 ← injection marker, and it landed
-//	15:12  read  deny   /etc/passwd
-//	15:31  read  deny   /etc/passwd               ← same target again
-//	15:44  exec  deny   /etc/shadow               ← escalates to exec
-//	16:20  write deny   internal/ledger/ledger.go ← the audit system itself
-//
-// Reported as counts that is "4 denied, 2 flagged". Reported as an incident it
-// is injection → reconnaissance → privilege escalation → an attempt on the
-// audit trail, and the flagged write that *succeeded* stops being averaged
-// away. This file builds the second reading from the same rows.
+// Counts hide the sequence. "4 denied, 2 flagged" and "injection → recon →
+// escalation → an attempt on the audit trail" are the same rows read twice;
+// only the second is an incident, and only it keeps a *succeeded* flag visible.
 
-// sessionGap is how long a lull can be before the next risky event by the same
-// actor counts as a separate incident. Attacks pause; an hour keeps a paused
-// sequence together without merging genuinely unrelated afternoons.
-//
-// It is also the evasion window, and the check says so rather than leaving the
-// reader to assume correlation is comprehensive: an actor that paces its steps
-// further apart than this never forms a sequence, and each event degrades to
-// its own low-severity incident. Widening the gap does not fix that, it only
-// moves it — and it costs real precision, because unrelated work by the same
-// head starts merging into one bogus "incident".
+// sessionGap is the lull that splits one actor's events into separate
+// incidents. It is also the evasion window, which incidentCheck states rather
+// than implying coverage it does not have. Widening it only moves the gap.
 const sessionGap = time.Hour
 
 // Stage is one observed step in an incident, each derived from a field the
@@ -104,17 +84,9 @@ var auditPaths = []string{
 	"internal/policy",
 }
 
-// targetsAuditMachinery matches on path structure, not raw substrings. A plain
-// strings.Contains treats "notinternal/security-notes.txt" as an attack on the
-// audit trail, and that stage adds 3 to the impact score — a false positive
-// here inflates severity, which is the one direction this report must not err
-// in if its verdicts are to be trusted.
-//
-// The three kinds of pattern in auditPaths are matched by their shape, since
-// they mean different things: a leading dot is a suffix (".chainhash" is an
-// anchor file whatever it hangs off), an embedded slash is a path fragment
-// matched on segment boundaries, and anything else is a file name matched
-// against the base — allowing a sidecar like "mcp_ledger.jsonl.chainhash".
+// Matches path structure, not substrings: strings.Contains scored
+// "notinternal/security-notes.txt" as audit tampering, inflating severity.
+// Pattern shape picks the rule: ".x" suffix, "a/b" segments, else file name.
 func targetsAuditMachinery(resource string) bool {
 	if resource == "" {
 		return false
