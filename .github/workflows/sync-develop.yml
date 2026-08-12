@@ -5,10 +5,25 @@ name: Sync develop with main
 # so develop never falls behind main. The direction is always **main → develop**
 # — main is the source of truth for released code; develop integrates on top.
 #
-# develop is a protected branch (linear history, PR-only, no direct pushes), so
-# we cannot push a merge straight to it. Instead this opens a back-merge PR from
-# a branch that is (develop + main), which is then squash-merged to keep develop
-# linear. The job no-ops when develop already contains everything on main.
+# main and develop both require linear history, and the repo only allows
+# squash-merge — a deliberate policy (CLAUDE.md: "Squash and merge
+# everywhere"), not something this workflow should work around by relaxing.
+# But every squash on main collapses a whole branch into one commit with no
+# real parent link back into develop's history, so a full `git merge
+# origin/main` has to hunt for a common ancestor across that severed graph —
+# it lands on some ancient commit and reports add/add conflicts on
+# nearly every file either branch has independently touched since, even when
+# the content is already identical (#428). Once one back-merge fails this way,
+# the next push re-merges everything since the last success too, so failures
+# compound instead of staying scoped to what actually changed.
+#
+# Cherry-picking exactly what THIS push introduced (before..after) sidesteps
+# that: each commit's own parent is its diff base, not a shared-ancestor
+# search across the severed graph. It's also just automating what the hotfix
+# flow here already prescribes by hand ("cherry-pick back to develop").
+# --empty=drop skips any commit that turns out to be a no-op because develop
+# already has that content — the common case for most of a squashed release
+# commit, since the release branch was cut from develop to begin with.
 
 on:
   push:
@@ -31,26 +46,50 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Build back-merge branch (develop + main)
+      - name: Cherry-pick main's new commits onto develop
         id: prep
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git fetch origin main develop
 
-          # Start from develop and merge main IN — this keeps develop's own work
-          # and only adds what main has that develop lacks (release/hotfix commits).
-          git checkout -B chore/back-merge-main origin/develop
-          if ! git merge origin/main --no-edit; then
-            # Record *which* files conflicted before aborting throws the state
-            # away — "there was a conflict" is not actionable on its own.
-            git diff --name-only --diff-filter=U > /tmp/back-merge-conflicts.txt || true
-            git merge --abort
-            echo "conflict=true" >> "$GITHUB_OUTPUT"
-            exit 0
+          BEFORE="${{ github.event.before }}"
+          AFTER="${{ github.event.after }}"
+
+          # A real 'before' only exists for an ordinary push to an existing
+          # branch. Force-pushes are disabled on main by branch protection, so
+          # in practice this fallback only covers the branch's original
+          # creation — but a full merge is still the right degraded behavior
+          # for it, since there is no "just this push" range to compute.
+          if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ] || ! git cat-file -e "$BEFORE" 2>/dev/null; then
+            echo "No usable 'before' SHA (first push or force-push) — falling back to a full merge."
+            git checkout -B chore/back-merge-main origin/develop
+            if ! git merge origin/main --no-edit; then
+              git diff --name-only --diff-filter=U > /tmp/back-merge-conflicts.txt || true
+              git merge --abort
+              echo "conflict=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          else
+            if [ "$(git rev-list --count "$BEFORE..$AFTER")" -eq 0 ]; then
+              echo "nothing=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            git checkout -B chore/back-merge-main origin/develop
+            if ! git cherry-pick --empty=drop "$BEFORE..$AFTER"; then
+              # Record *which* files conflicted before aborting throws the
+              # state away — "there was a conflict" is not actionable on its
+              # own.
+              git diff --name-only --diff-filter=U > /tmp/back-merge-conflicts.txt || true
+              git cherry-pick --abort
+              echo "conflict=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
           fi
 
-          # If the merge introduced nothing beyond develop, there is nothing to sync.
+          # If every cherry-picked commit turned out to be a no-op (develop
+          # already had the content), there is nothing to sync.
           if git diff --quiet origin/develop..HEAD; then
             echo "nothing=true" >> "$GITHUB_OUTPUT"
           else
@@ -69,7 +108,7 @@ jobs:
             --base develop \
             --head chore/back-merge-main \
             --title "chore: back-merge main → develop" \
-            --body "Automated GitFlow back-merge: released commits on \`main\` flowing back into \`develop\`. **Squash-merge** to keep develop's linear history." \
+            --body "Automated GitFlow back-merge: released commits on \`main\` flowing back into \`develop\` via cherry-pick (#428). **Squash-merge** to keep develop's linear history." \
             2>/dev/null || echo "A back-merge PR is already open; it was updated by the force-push."
 
       - name: Nothing to sync
