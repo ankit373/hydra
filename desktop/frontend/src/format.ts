@@ -50,6 +50,22 @@ export function costBand(v: number, max: number): 'free' | 'cheap' | 'mid' | 'ex
   return 'cheap'
 }
 
+/** internal/trust calibration keys are "verifier:go-test" / "model:claude-sonnet"
+ * — the prefix is the routing/storage key, not something worth showing next to
+ * every row of a leaderboard. Falls back to the raw string for anything else. */
+export function sourceLabel(source: string): string {
+  const i = source.indexOf(':')
+  return i < 0 ? source : source.slice(i + 1)
+}
+
+/** Oracles (verifier:*, e.g. test/lint results) are a structurally different
+ * kind of evidence than a model's own self-report (model:*) — the calibration
+ * leaderboard color-codes by this distinction. Unrecognized prefixes read as
+ * 'model', the more common case. */
+export function sourceKind(source: string): 'oracle' | 'model' {
+  return source.startsWith('verifier:') ? 'oracle' : 'model'
+}
+
 /** "2026-08-02T10:04:11Z" → "10:04:11". Falls back to the raw string. */
 export function clockTime(ts: string): string {
   const t = ts.indexOf('T')
