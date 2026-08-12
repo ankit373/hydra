@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import type { Breakdown, Dashboard as DashboardData, TrustPanel } from '../types'
-import { clockTime, costBand, govBand, ms, pct, tokens, usd, usdExact } from '../format'
+import type { Breakdown, CalibrationRow, Dashboard as DashboardData, TrustPanel } from '../types'
+import { clockTime, costBand, govBand, ms, pct, sourceKind, sourceLabel, tokens, usd, usdExact } from '../format'
 import { ArcGauge, Sparkline, SpendTrend, TrustArc } from './DashboardCharts'
 import { useCountUp, useReveal } from '../reveal'
 
@@ -103,6 +103,8 @@ function DashboardContent({ data }: { data: DashboardData }) {
       </div>
 
       {data.hasData ? <Breakdowns data={data} onSelectModel={openDrawer} /> : <EmptyState />}
+
+      <CalibrationLeaderboard rows={data.calibration} />
 
       <ModelDetailDrawer row={drawerRow} open={drawerOpen} onClose={closeDrawer} />
     </div>
@@ -307,6 +309,93 @@ function RankedBars({
         </div>
       </div>
     </section>
+  )
+}
+
+/**
+ * Which sources actually earn their stated confidence — one row per
+ * (source, domain), sorted by D descending (the order internal/trust's
+ * Calibrator.Report already returns, same as `hyctl trust calibration`).
+ * Bars use the SpendTrend halo treatment (#414) turned sideways: a fainter
+ * halo layered behind a crisp fill, both growing in via `transform: scaleX`
+ * once `useReveal` fires, never `filter: blur`. Independent of `hasData` —
+ * calibration history comes from `hyctl trust record`, not the cost log, so
+ * it can be populated (or empty) regardless of whether anything dispatched.
+ */
+function CalibrationLeaderboard({ rows }: { rows: CalibrationRow[] }) {
+  const revealed = useReveal(rows.length > 0)
+
+  if (rows.length === 0) {
+    return (
+      <section>
+        <h2 className="section__title">Calibration leaderboard</h2>
+        <div className="empty" style={{ marginTop: 0 }}>
+          <p className="empty__title">No calibration recorded yet</p>
+          <p>
+            Feed outcomes with <code>hyctl trust record</code> and this fills in.
+          </p>
+        </div>
+      </section>
+    )
+  }
+
+  const maxD = Math.max(...rows.map((r) => r.d))
+  return (
+    <section>
+      <h2 className="section__title">Calibration leaderboard · who to trust</h2>
+      <div className="table__wrap">
+        <div className="rank">
+          {rows.map((r) => (
+            <CalibrationBar key={`${r.source} ${r.domain}`} row={r} maxD={maxD} revealed={revealed} />
+          ))}
+        </div>
+        <div className="cal-legend">
+          <span>
+            <span className="cal-legend__dot cal-legend__dot--oracle" />
+            test/lint verdict
+          </span>
+          <span>
+            <span className="cal-legend__dot cal-legend__dot--model" />
+            model's own answer
+          </span>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+// How far the halo bleeds past the crisp bar it sits behind, on each edge —
+// matches SpendTrend's HALO_PAD.
+const CAL_HALO_PAD = 3
+
+function CalibrationBar({ row, maxD, revealed }: { row: CalibrationRow; maxD: number; revealed: boolean }) {
+  const kind = sourceKind(row.source)
+  // A source with real observations but zero diagnostic power (a coin flip)
+  // still gets a sliver — the row itself is informative even at D=0.
+  const widthPct = maxD > 0 ? (row.d / maxD) * 100 : row.n > 0 ? 4 : 0
+  const grown = revealed ? ' grown' : ''
+  return (
+    <div className="cal__row">
+      <span className="cal__name" title={row.source}>
+        {sourceLabel(row.source)}
+        <span className="cal__domain">{row.domain}</span>
+      </span>
+      <span className="cal__track">
+        <span
+          className={`cal__halo cal__halo--${kind}${grown}`}
+          style={{
+            width: `calc(${widthPct}% + ${CAL_HALO_PAD * 2}px)`,
+            height: `calc(100% + ${CAL_HALO_PAD * 2}px)`,
+            left: -CAL_HALO_PAD,
+            top: -CAL_HALO_PAD,
+          }}
+        />
+        <span className={`cal__fill cal__fill--${kind}${grown}`} style={{ width: `${widthPct}%` }} />
+      </span>
+      <span className="cal__value" title={`Se ${row.se.toFixed(2)} · Sp ${row.sp.toFixed(2)} · n=${row.n}`}>
+        {row.d.toFixed(2)}
+      </span>
+    </div>
   )
 }
 

@@ -17,13 +17,15 @@ export function Session({
   return (
     <>
       <header className="view__head">
-        <button className="back" onClick={onBack}>
-          ← Fleet
-        </button>
-        <h1 className="view__title">
-          <span className="session__id">{session.runId}</span>
-          {session.live && <span className="session__live">live</span>}
-        </h1>
+        <div className="view__headrow">
+          <button className="back" onClick={onBack}>
+            ← Fleet
+          </button>
+          <h1 className="view__title">
+            <span className="session__id">{session.runId}</span>
+            {session.live && <span className="session__live">live</span>}
+          </h1>
+        </div>
       </header>
 
       {session.error && <div className="error">unreadable: {session.error}</div>}

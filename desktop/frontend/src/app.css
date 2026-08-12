@@ -92,6 +92,9 @@ body {
 /* ── Headings ──────────────────────────────────────────────────────────── */
 
 .view__head { margin-bottom: 22px; }
+/* Only the views with a back button need a row — plain title+subtitle
+   (Fleet, Dashboard) stack correctly as block siblings with no flex at all. */
+.view__headrow { display: flex; align-items: baseline; gap: 12px; }
 .view__title { margin: 0; font-size: 24px; letter-spacing: -0.03em; }
 .view__title--brand {
   background: var(--hy-brand);
@@ -389,6 +392,83 @@ body {
 .trust-cmp__delta--good { color: var(--hy-cheap); }
 .trust-cmp__delta--bad  { color: var(--hy-expensive); }
 
+/* ── Dashboard: calibration leaderboard (#409) ─────────────────────────── */
+/* Same row shape as .rank (name / track / value), plus a domain sub-label and
+   an oracle-vs-model color split. Bars use the spend-bar halo treatment
+   (#414) rotated 90° — a fainter halo layered behind a crisp fill, both
+   growing via `transform: scaleX` from a zero baseline the first time real
+   data lands, never `filter: blur`. */
+
+.cal__row {
+  display: grid;
+  grid-template-columns: minmax(90px, 170px) 1fr auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.cal__name {
+  font-family: var(--hy-font-mono);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cal__domain { margin-left: 6px; font-size: 10px; color: var(--hy-faint); }
+
+/* Not `overflow: hidden` — the halo below deliberately bleeds past the track,
+   the same way SpendTrend's SVG halo bleeds HALO_PAD past its crisp bar. */
+.cal__track {
+  position: relative;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--hy-line);
+}
+
+.cal__halo,
+.cal__fill {
+  position: absolute;
+  top: 0; left: 0;
+  height: 100%;
+  border-radius: 4px;
+  transform-origin: left;
+  transform: scaleX(0);
+  transition: transform .55s cubic-bezier(.22, .9, .3, 1);
+}
+.cal__halo.grown, .cal__fill.grown { transform: scaleX(1); }
+
+/* Width/height/inset (the halo's HALO_PAD bleed) are set inline per row from
+   the D-relative fraction; only the reveal grow-in is CSS. */
+.cal__fill { opacity: .95; }
+.cal__halo { opacity: .3; }
+
+.cal__fill--oracle, .cal__halo--oracle { background: linear-gradient(90deg, rgba(0, 230, 195, .5), var(--hy-aqua)); }
+.cal__fill--model,  .cal__halo--model  { background: linear-gradient(90deg, rgba(139, 92, 246, .5), var(--hy-violet)); }
+
+.cal__value {
+  font-family: var(--hy-font-mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.cal-legend {
+  display: flex;
+  gap: 14px;
+  margin-top: 12px;
+  font-family: var(--hy-font-mono);
+  font-size: 10px;
+  color: var(--hy-dim);
+}
+.cal-legend__dot {
+  display: inline-block;
+  width: 7px; height: 7px;
+  border-radius: 2px;
+  margin-right: 5px;
+  vertical-align: middle;
+}
+.cal-legend__dot--oracle { background: var(--hy-aqua); }
+.cal-legend__dot--model  { background: var(--hy-violet); }
+
 /* ── Dashboard: HUD chrome ─────────────────────────────────────────────── */
 /* Corner brackets + scanline + vignette, the same frame language as
    brand/living/hydra-hud.src.html. Fixed to the viewport but mounted only
@@ -531,6 +611,22 @@ body {
   padding: 2px 7px;
   color: var(--hy-aqua);
 }
+.empty__cta {
+  appearance: none;
+  background: var(--hy-aqua);
+  color: var(--hy-bg);
+  border: 0;
+  border-radius: 999px;
+  font: inherit;
+  font-weight: 600;
+  font-size: 13px;
+  padding: 10px 22px;
+  margin: 10px 0 4px;
+  cursor: pointer;
+}
+.empty__cta:hover { filter: brightness(1.08); }
+.empty__cta:focus-visible { outline: 2px solid var(--hy-ink); outline-offset: 2px; }
+.empty__alt { font-size: 12px; opacity: .75; }
 
 .error {
   border: 1px solid var(--hy-expensive);
@@ -767,7 +863,7 @@ body {
   color: var(--hy-dim);
   font: inherit;
   font-size: 12px;
-  padding: 0 0 8px;
+  padding: 3px 0;
   cursor: pointer;
 }
 .back:hover { color: var(--hy-aqua); }
