@@ -108,3 +108,33 @@ func TestTargetsAuditMachinery_IsNarrow(t *testing.T) {
 		}
 	}
 }
+
+func TestTargetsAuditMachinery_MatchesSegmentsNotSubstrings(t *testing.T) {
+	hits := []string{
+		"internal/ledger/ledger.go",
+		"/Users/x/hydra/internal/security/risk.go",
+		"~/.hydra/mcp_ledger.jsonl",
+		"mcp_policy.json",
+		"logs/mcp_ledger.jsonl.chainhash",
+	}
+	for _, r := range hits {
+		if !targetsAuditMachinery(r) {
+			t.Errorf("targetsAuditMachinery(%q) = false, want true", r)
+		}
+	}
+
+	// The false positives the old strings.Contains produced. Each one added 3
+	// to the impact score and could push an incident a whole severity band up.
+	misses := []string{
+		"notinternal/security-notes.txt",
+		"docs/internal-ledger-design.md",
+		"vendor/xinternal/policyfoo.go",
+		"README.md",
+		"",
+	}
+	for _, r := range misses {
+		if targetsAuditMachinery(r) {
+			t.Errorf("targetsAuditMachinery(%q) = true, want false (false positive inflates severity)", r)
+		}
+	}
+}

@@ -38,6 +38,18 @@ import (
 // first run pays once per binary, every later run pays a stat. The honest
 // limit of that trade is recorded in the check's own wording: a substitution
 // that preserves both size and mtime is not re-hashed, so it is not seen.
+//
+// The second limit is the store itself. head_binaries.json is a plain file
+// with no chain and no anchor, so an attacker who swaps a binary AND rewrites
+// its recorded fingerprint gets a clean "unchanged" on the next run. Unlike
+// the ledger — where a chain at least makes a partial edit or a deleted tail
+// evident — a rewritten value here is indistinguishable from a true one, and
+// the whole file is regenerated every run so there is no history to contradict
+// it. Closing that properly needs a signing key or an OS-protected store,
+// neither of which Hydra has; so the check states the limit rather than
+// implying a guarantee it cannot make. The threat model this control does
+// cover is the real one it was built for: a binary replaced underneath Hydra
+// by an auto-updater or a rug-pull, not an attacker already inside ~/.hydra.
 
 // binaryStorePath is where head fingerprints persist.
 func binaryStorePath() string {
@@ -194,8 +206,9 @@ func supplyChainCheck(sc SupplyChain) Check {
 			Detail: "first run: fingerprints recorded, so a later change to any of these binaries will be reported"}
 	}
 	return Check{Name: name, Status: fmt.Sprintf("%d unchanged", len(sc.Binaries)-sc.New),
-		Detail: "no head binary has changed since its fingerprint was recorded; note that a replacement " +
-			"preserving both size and mtime would not be re-hashed"}
+		Detail: "no head binary has changed since its fingerprint was recorded; two limits on that claim — " +
+			"a replacement preserving both size and mtime would not be re-hashed, and the stored baseline " +
+			"is a plain file, so anything able to write ~/.hydra can forge this result"}
 }
 
 func changedBinarySummary(sc SupplyChain) string {

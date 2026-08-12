@@ -98,6 +98,10 @@ func computeCoverage(pol ledger.Policy, events []ledger.Event, sc SupplyChain) C
 // when one changes. That is detection, not provenance — it cannot distinguish
 // a legitimate upgrade from a swap, and verifies nothing about origin — so it
 // is Configured once binaries are actually being tracked, never Enforced.
+//
+// The baseline it compares against is a plain file (head_binaries.json), so
+// this detects a binary being swapped *under* Hydra, not an attacker who can
+// also write Hydra's own state. See the note in supplychain.go.
 func llm03SupplyChain(sc SupplyChain) Category {
 	c := Category{ID: "LLM03", Name: "Supply Chain"}
 	if len(sc.Binaries) == 0 {
@@ -106,7 +110,8 @@ func llm03SupplyChain(sc SupplyChain) Category {
 		return c
 	}
 	c.Status = Configured
-	c.Detail = fmt.Sprintf("%d head binary(ies) fingerprinted; a replacement is detected, though origin is not verified", len(sc.Binaries))
+	c.Detail = fmt.Sprintf("%d head binary(ies) fingerprinted; a replacement is detected, though origin is not "+
+		"verified and the stored baseline is not itself tamper-evident", len(sc.Binaries))
 	return c
 }
 
