@@ -74,6 +74,21 @@ type Report struct {
 	// Evidence is whether the ensemble's reported confidence rests on
 	// independent, discriminating sources.
 	Evidence EvidenceQuality `json:"evidence"`
+	// Incidents are correlated attack sequences — the reading that a list of
+	// counts cannot give.
+	Incidents []Incident `json:"incidents,omitempty"`
+	// Attestation is the checkable, point-in-time statement of posture — what
+	// was true, under which rules, over which evidence.
+	Attestation Attestation `json:"attestation"`
+	// Posture is the one-line verdict and the condition that decided it.
+	Posture Posture `json:"posture"`
+	// Privilege is the per-agent least-privilege review.
+	Privilege []AgentPrivilege `json:"privilege,omitempty"`
+	// BOM is the model estate: provenance, locality, and what is actually used.
+	BOM []BOMEntry `json:"bom,omitempty"`
+	// Register is the governed view: every finding above as one kind of
+	// object, rated, aged against an SLA, priced and mapped to frameworks.
+	Register RiskRegister `json:"register"`
 	// Blast is the reach of what agents actually edited, joined against the
 	// code graph — consequences rather than access decisions.
 	Blast BlastReport `json:"blast"`
@@ -169,6 +184,9 @@ func Build(heads []provider.Head) (*Report, error) {
 	r.Blast = AssessBlastRadius()
 	r.Evidence = AssessEvidence()
 	r.Drift = DetectConfigDrift(events)
+	r.Incidents = CorrelateIncidents(events, r.Blast)
+	r.Privilege = ReviewPrivilege(events, pol)
+	r.BOM = BuildBOM(heads, events, r.SupplyChain)
 	r.Events, r.Truncated = evidenceTail(events)
 
 	r.Checks = []Check{
@@ -182,6 +200,9 @@ func Build(heads []provider.Head) (*Report, error) {
 		driftCheck(r.Drift),
 		supplyChainCheck(r.SupplyChain),
 		blastCheck(r.Blast),
+		incidentCheck(r.Incidents),
+		privilegeCheck(r.Privilege),
+		bomCheck(r.BOM),
 	}
 	r.RiskHistory = ledger.ByDayRisk(events)
 
@@ -196,6 +217,10 @@ func Build(heads []provider.Head) (*Report, error) {
 	r.History = append(toHistoryPoints(prior), HistoryPoint{TS: now.Format(time.RFC3339), PercentCovered: r.Coverage.PercentCovered})
 
 	appendScoreHistory(historyPath, r.Coverage)
+
+	r.Register = BuildRegister(r, now)
+	r.Posture = AssessPosture(r, chainRes)
+	r.Attestation = Attest(r, chainRes, now)
 
 	r.Actions = buildActions(r.Coverage, r.ByHead, r.Exposures, r.PolicyAudit, r.Controls, r.Evidence, r.Drift, r.SupplyChain, r.Blast)
 
