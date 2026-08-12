@@ -122,6 +122,16 @@ func Diff(file string) (string, error) {
 	}
 
 	if gitUsable(resolved.GitRoot) {
+		// git diff on a pathspec it doesn't track exits 0 with empty output —
+		// identical to a real "no changes" result. Distinguish them before
+		// asking git, the same guard the backup branch below applies (#260).
+		tracked := exec.Command("git", "-C", resolved.GitRoot, "ls-files", "--error-unmatch", file).Run() == nil
+		if !tracked {
+			if fileExists(file) {
+				return "", fmt.Errorf("no diff available for %s (untracked by git, no baseline to compare against)", file)
+			}
+			return "", fmt.Errorf("no diff available for %s (not tracked by git and the file does not exist)", file)
+		}
 		out, err := exec.Command("git", "-C", resolved.GitRoot, "diff", "--", file).Output()
 		if err != nil {
 			return "", fmt.Errorf("git diff failed: %w", err)
@@ -158,6 +168,11 @@ func Approve(file string) (*ApproveResult, error) {
 	}
 	if err := scopeCheck(file); err != nil {
 		return nil, err
+	}
+	// scopeCheck only proves the path is glob-legal; it never stats the file,
+	// so approving a nonexistent path used to still report "approved" (#449).
+	if !fileExists(file) {
+		return nil, fmt.Errorf("cannot approve %s: file does not exist", file)
 	}
 
 	reg, _ := workspace.Load(config.ScriptHome())
