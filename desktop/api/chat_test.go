@@ -5,7 +5,9 @@ package api
 import (
 	"testing"
 
+	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/dispatch"
+	"github.com/ankit373/hydra/internal/testutil"
 )
 
 // The picker must not offer a routing key the router does not understand.
@@ -85,5 +87,28 @@ func TestChat_FailedDispatchReturnsAReply(t *testing.T) {
 	}
 	if r.RunID == "" {
 		t.Error("no RunID; a failed chat still has a run the user can inspect")
+	}
+}
+
+// A machine with zero discoverable heads at all is distinct from an ordinary
+// dispatch failure — dispatch.New already probes fresh on every call, so
+// there is no separate "go discover models" step to point the GUI at. The
+// dock offers a retry instead of a raw CLI instruction it has no terminal
+// for (#434).
+func TestChat_NoHeadsAtAllSetsNeedsProbe(t *testing.T) {
+	testutil.NewSandbox(t)
+	if err := config.Save(&config.Config{Cortex: "x"}); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := New().Chat("hello", "SIMPLE")
+	if err != nil {
+		t.Fatalf("zero heads must come back as a reply, not a Go error: %v", err)
+	}
+	if !r.NeedsProbe {
+		t.Error("NeedsProbe = false, want true — nothing was discoverable at all")
+	}
+	if r.Error == "" {
+		t.Error("no Error on the reply; the dock would render an empty message")
 	}
 }

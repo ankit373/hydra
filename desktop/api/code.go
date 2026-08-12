@@ -62,7 +62,7 @@ func (a *API) GetEdits(runID string) ([]Edit, error) {
 		}
 		added, removed := parseCounts(e.Detail)
 		out = append(out, Edit{
-			File: e.Agent, TS: e.TS, Detail: e.Detail, Ref: e.Ref,
+			File: e.File, TS: e.TS, Detail: e.Detail, Ref: e.Ref,
 			Added: added, Removed: removed,
 		})
 	}
