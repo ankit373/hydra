@@ -72,6 +72,9 @@ export function CoverageHistory({ history }: { history: HistoryPoint[] }) {
       role="img"
       aria-label={`Coverage over ${history.length} recorded runs, most recent ${latestPct} percent`}
     >
+      {/* A flat series with no reference line reads as a filled progress bar
+          rather than a chart. The 100% rule gives the level something to sit against. */}
+      <line className="sec-history__grid" x1={0} y1={0.5} x2={HIST_W} y2={0.5} />
       <path className="sec-history__area" d={area} />
       <polyline className="sec-history__line" points={line} fill="none" />
       <circle className="sec-history__dot" cx={last[0]} cy={last[1]} r={3} />

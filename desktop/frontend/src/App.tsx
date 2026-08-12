@@ -14,6 +14,7 @@ import { Fleet } from './views/Fleet'
 import { Session } from './views/Session'
 import { Code } from './views/Code'
 import { Security as SecurityView } from './views/Security'
+import { ErrorBoundary } from './ErrorBoundary'
 import { ChatDock } from './views/ChatDock'
 import { UpdateNotice } from './views/UpdateNotice'
 import { SetupBanner } from './views/SetupBanner'
@@ -200,16 +201,22 @@ export default function App() {
             <Code runID={runID} edits={edits} />
           </>
         )}
-        {!error && view === 'security' && security && <SecurityView data={security} />}
+        {!error && view === 'security' && security && (
+          <ErrorBoundary label="Security">
+            <SecurityView data={security} />
+          </ErrorBoundary>
+        )}
         {!error && loading && <p style={{ color: 'var(--hy-dim)' }}>Reading logs…</p>}
       </main>
 
-      <ChatDock
-        onOpenRun={openSession}
-        open={dockOpen}
-        onOpenChange={setDockOpen}
-        focusSignal={dockFocusSignal}
-      />
+      <ErrorBoundary label="Chat">
+        <ChatDock
+          onOpenRun={openSession}
+          open={dockOpen}
+          onOpenChange={setDockOpen}
+          focusSignal={dockFocusSignal}
+        />
+      </ErrorBoundary>
     </div>
   )
 }

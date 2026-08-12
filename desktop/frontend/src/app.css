@@ -240,23 +240,64 @@ body {
 .sec-verdict--attention { border-left-color: var(--hy-mid); }
 .sec-verdict--ok        { border-left-color: var(--hy-cheap); }
 
+/* The verdict is the largest thing on the screen. It was 11px while the page
+   title — which carries no information — was the biggest text in the view. */
 .sec-verdict__label {
   font-family: var(--hy-font-mono);
-  font-size: 11px;
+  font-size: 34px;
+  line-height: 1.05;
   text-transform: uppercase;
-  letter-spacing: .12em;
+  letter-spacing: .04em;
   font-weight: 700;
 }
 .sec-verdict--act       .sec-verdict__label { color: var(--hy-expensive); }
 .sec-verdict--attention .sec-verdict__label { color: var(--hy-mid); }
 .sec-verdict--ok        .sec-verdict__label { color: var(--hy-cheap); }
 
-.sec-verdict__trigger { margin-top: 6px; font-size: 14px; line-height: 1.5; }
+/* Neon, per BRAND.md: the state should carry across the room, and the glow is
+   what makes this read as Hydra rather than as a generic admin panel. */
+.sec-verdict--act       .sec-verdict__label { text-shadow: 0 0 18px color-mix(in srgb, var(--hy-expensive) 55%, transparent); }
+.sec-verdict--attention .sec-verdict__label { text-shadow: 0 0 18px color-mix(in srgb, var(--hy-mid) 45%, transparent); }
+.sec-verdict--ok        .sec-verdict__label { text-shadow: 0 0 18px color-mix(in srgb, var(--hy-cheap) 45%, transparent); }
+
+.sec-verdict__trigger { margin-top: 10px; font-size: 15px; line-height: 1.5; }
 .sec-verdict__scope   { margin-top: 6px; font-size: 12px; color: var(--hy-dim); }
+.sec-verdict__stages  { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+
+/* ── Security: top row (verdict + measurement, both above the fold) ─────── */
+
+.sec-top {
+  display: grid;
+  grid-template-columns: minmax(0, 2.2fr) minmax(180px, 1fr) minmax(180px, 1fr);
+  gap: 12px;
+  align-items: stretch;
+  margin-bottom: 14px;
+}
+.sec-top .sec-verdict { margin-bottom: 0; display: flex; flex-direction: column; justify-content: center; }
+.sec-top__score { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 16px 14px; }
+.sec-top__risk  { display: flex; flex-direction: column; justify-content: center; padding: 16px 14px; }
+
+@media (max-width: 1100px) {
+  .sec-top { grid-template-columns: 1fr 1fr; }
+  .sec-top .sec-verdict { grid-column: 1 / -1; }
+}
+@media (max-width: 700px) {
+  .sec-top { grid-template-columns: 1fr; }
+  .sec-verdict__label { font-size: 26px; }
+}
 
 /* ── Security: hero ──────────────────────────────────────────────────────── */
 
 .sec-hero { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+.cards--stack { display: flex; flex-direction: column; gap: 12px; }
+
+/* A hash ID is never what you scan first; it followed the title at equal
+   weight and wrapped onto two lines. */
+.sec-risk__id { display: block; margin-top: 4px; font-size: 11px; color: var(--hy-faint); }
+.sec-curated {
+  margin-left: 6px; font-size: 10px; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--hy-faint); border: 1px solid var(--hy-line); border-radius: 3px; padding: 1px 4px;
+}
 
 .sec-hero__score, .sec-hero__grid { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 20px 17px; }
 .sec-hero__grid .card__label { align-self: flex-start; margin-bottom: 4px; }
@@ -278,6 +319,7 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+.sec-history__grid { stroke: var(--hy-line); stroke-width: 1; stroke-dasharray: 2 3; }
 .sec-history__area { fill: color-mix(in srgb, var(--hy-aqua) 14%, transparent); }
 .sec-history__line { stroke: var(--hy-aqua); stroke-width: 1.5; }
 .sec-history__dot  { fill: var(--hy-aqua); }
@@ -411,6 +453,17 @@ body {
 .sec-cat__status--enforced   { color: var(--hy-cheap);     border-color: color-mix(in srgb, var(--hy-cheap) 40%, transparent); }
 .sec-cat__status--configured { color: var(--hy-aqua);      border-color: color-mix(in srgb, var(--hy-aqua) 40%, transparent); }
 .sec-cat__status--gap        { color: var(--hy-expensive); border-color: color-mix(in srgb, var(--hy-expensive) 40%, transparent); }
+
+/* Severity bands differ by fill and weight, not only hue: critical and high
+   were both pink outlines and were indistinguishable at a glance. */
+.sec-sev--critical {
+  color: var(--hy-bg); font-weight: 700;
+  background: var(--hy-expensive); border-color: var(--hy-expensive);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--hy-expensive) 45%, transparent);
+}
+.sec-sev--high   { color: var(--hy-expensive); font-weight: 700; border-color: var(--hy-expensive); }
+.sec-sev--medium { color: var(--hy-mid);       border-color: color-mix(in srgb, var(--hy-mid) 45%, transparent); }
+.sec-sev--low    { color: var(--hy-dim);       border-color: var(--hy-line); }
 
 /* ── Tables ────────────────────────────────────────────────────────────── */
 

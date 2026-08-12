@@ -72,7 +72,7 @@ function actionSegments(actions: Action[]): DonutSegment[] {
 }
 
 export function Security({ data }: { data: SecurityReport }) {
-  const [tab, setTab] = useState<'hero' | 'detailed'>('hero')
+  const [tab, setTab] = useState<'overview' | 'detailed'>('overview')
 
   return (
     <>
@@ -81,8 +81,7 @@ export function Security({ data }: { data: SecurityReport }) {
           <div>
             <h1 className="view__title">Security</h1>
             <p className="view__sub">
-              Coverage against the OWASP LLM Top 10 — the percentage of applicable categories with
-              a live, evidence-backed mechanism. Never a blended score.
+              What the agents on this machine did, and whether you need to act today.
             </p>
           </div>
           <button className="sec-export" onClick={() => downloadSecurityCSV(data)}>
@@ -101,10 +100,10 @@ export function Security({ data }: { data: SecurityReport }) {
       <div className="tabs">
         <button
           className="tab"
-          aria-current={tab === 'hero' ? 'page' : undefined}
-          onClick={() => setTab('hero')}
+          aria-current={tab === 'overview' ? 'page' : undefined}
+          onClick={() => setTab('overview')}
         >
-          Hero
+          Overview
         </button>
         <button
           className="tab"
@@ -115,7 +114,7 @@ export function Security({ data }: { data: SecurityReport }) {
         </button>
       </div>
 
-      {tab === 'hero' ? <Hero data={data} /> : <Detailed data={data} />}
+      {tab === 'overview' ? <Hero data={data} /> : <Detailed data={data} />}
     </>
   )
 }
@@ -135,15 +134,33 @@ function downloadSecurityCSV(data: SecurityReport) {
 
 // Bottom line up front. A coverage ring is a measurement; the verdict is the
 // answer, and the answer goes first.
-function VerdictBanner({ posture }: { posture: Posture }) {
+function VerdictBanner({ posture, incidents }: { posture: Posture; incidents: Incident[] }) {
   if (!posture) return null
   const cls =
     posture.verdict === 'act now' ? 'sec-verdict--act' :
     posture.verdict === 'attention' ? 'sec-verdict--attention' : 'sec-verdict--ok'
+  // Stages of the incident the verdict is quoting, so the banner carries the
+  // shape of the attack and not only the sentence.
+  const cited = incidents.find((in_) => posture.trigger?.includes(in_.narrative))
   return (
     <div className={`sec-verdict ${cls}`}>
       <div className="sec-verdict__label">{posture.verdict}</div>
       <div className="sec-verdict__trigger">{posture.trigger}</div>
+      {cited && (
+        <div className="sec-verdict__stages">
+          {cited.stages.map((st) => (
+            <span className="sec-cat__status sec-cat__status--gap" key={st}>{st}</span>
+          ))}
+          <span className="sec-action__age">
+            likelihood {cited.likelihood} × impact {cited.impact} · {cited.events?.length ?? 0} event(s)
+          </span>
+        </div>
+      )}
+      {(posture.because?.length ?? 0) > 1 && (
+        <div className="sec-verdict__scope">
+          +{(posture.because?.length ?? 1) - 1} more condition(s) below
+        </div>
+      )}
       {posture.verdict === 'ok' && posture.checked?.length > 0 && (
         <div className="sec-verdict__scope">checked: {posture.checked.join(', ')}</div>
       )}
@@ -151,22 +168,27 @@ function VerdictBanner({ posture }: { posture: Posture }) {
   )
 }
 
+// Critical and high must not read alike at a glance: critical is filled, high
+// is outlined. Colour alone was doing all the work and both rendered pink.
 function sevClass(s: Severity) {
-  return s === 'critical' || s === 'high' ? 'sec-cat__status--gap' : ''
+  if (s === 'critical') return 'sec-sev--critical'
+  if (s === 'high') return 'sec-sev--high'
+  if (s === 'medium') return 'sec-sev--medium'
+  return 'sec-sev--low'
 }
 
 // An incident is a story, so it renders as one — the narrative first, the
 // stage chips and the evidence count under it.
-function IncidentList({ incidents }: { incidents: Incident[] }) {
+function IncidentList({ incidents, heading }: { incidents: Incident[]; heading: string }) {
   if (incidents.length === 0) return null
   return (
     <section>
-      <h2 className="section__title">Incidents</h2>
+      <h2 className="section__title">{heading}</h2>
       <div className="sec-actions">
         {incidents.map((in_) => (
           <div className={`sec-action sec-action--${in_.severity === 'critical' || in_.severity === 'high' ? 'now' : 'soon'}`} key={in_.id}>
             <div className="sec-action__head">
-              <span className="sec-action__priority">{in_.severity}</span>
+              <span className={`sec-cat__status ${sevClass(in_.severity)}`}>{in_.severity}</span>
               <span className="sec-action__age">
                 likelihood {in_.likelihood} × impact {in_.impact}
               </span>
@@ -194,21 +216,24 @@ function RegisterTable({ register }: { register: RiskRegister }) {
       <h2 className="section__title">Risk register</h2>
       <p className="card__note">
         Σ modelled defect cost ${register.sumDefectCostUsd.toFixed(0)} — per-occurrence, not
-        annualised{register.breached > 0 ? ` · ${register.breached} past remediation SLA` : ''}
+        annualised{register.breached > 0 ? ` · ${register.breached} past remediation SLA` : ''}.
+        Framework mappings are curated assertions, not measurements.
       </p>
       <div className="table__wrap">
         <table className="table">
           <thead>
             <tr>
-              <th>ID</th><th>Risk</th><th>Severity</th><th className="num">Due</th>
-              <th className="num">Cost/defect</th><th>Frameworks</th>
+              <th>Risk</th><th>Severity</th><th className="num">Due</th>
+              <th className="num">Cost/defect</th><th>Frameworks <span className="sec-curated">curated</span></th>
             </tr>
           </thead>
           <tbody>
             {risks.map((k: Risk) => (
               <tr key={k.id}>
-                <td className="mono">{k.id}</td>
-                <td>{k.title}</td>
+                <td>
+                  {k.title}
+                  <span className="sec-risk__id mono" title="stable risk ID">{k.id}</span>
+                </td>
                 <td><span className={`sec-cat__status ${sevClass(k.severity)}`}>{k.severity}</span></td>
                 <td className={`num ${k.breached ? 'cost--expensive' : ''}`}>{k.dueInDays}d</td>
                 <td className="num">${k.defectCostUsd.toFixed(0)}</td>
@@ -229,17 +254,22 @@ function Hero({ data }: { data: SecurityReport }) {
   const pii = findCheckStatus(data.checks, 'PII/sensitive-data detections')
   const adherence = findCheckStatus(data.checks, 'Policy adherence')
 
+  // The verdict already quotes the incident that produced it, so re-rendering
+  // that incident underneath prints the same sentence twice in the most
+  // valuable pixels on the screen.
+  const quoted = data.posture?.trigger ?? ''
+  const others = (data.incidents ?? []).filter((in_) => !quoted.includes(in_.narrative))
+
   return (
     <>
-      <VerdictBanner posture={data.posture} />
-      <IncidentList incidents={data.incidents ?? []} />
-      <RegisterTable register={data.register} />
-
-      <div className="sec-hero">
-        <div className="card sec-hero__score">
+      {/* Verdict and measurement on one row: the answer is what you read, the
+          charts are what you check it against. Neither is below the fold. */}
+      <div className="sec-top">
+        <VerdictBanner posture={data.posture} incidents={data.incidents ?? []} />
+        <div className="card sec-top__score">
           <CoverageRing percent={data.coverage.percentCovered} band={band} />
           <div className="sec-hero__note">
-            {data.coverage.covered}/{data.coverage.applicable} categories covered
+            {data.coverage.covered}/{data.coverage.applicable} covered
             <TrendLine trend={data.trend} />
           </div>
           {data.history && data.history.length >= 2 && (
@@ -248,34 +278,41 @@ function Hero({ data }: { data: SecurityReport }) {
             </div>
           )}
         </div>
+        <div className="card sec-top__risk">
+          <div className="card__label">Blocked · flagged</div>
+          <div className="card__value--sm">
+            {data.ledger.denied} blocked · {data.ledger.flagged} flagged
+          </div>
+          {data.riskHistory && data.riskHistory.length >= 2 ? (
+            <div className="sec-hero__history">
+              <RiskTrend history={data.riskHistory} />
+            </div>
+          ) : (
+            <p className="card__note">No history yet — a trend appears after the second day.</p>
+          )}
+        </div>
+      </div>
+
+      <IncidentList incidents={others} heading={others.length === (data.incidents ?? []).length ? 'Incidents' : 'Other incidents'} />
+      <RegisterTable register={data.register} />
+
+      <div className="sec-hero">
         <div className="card sec-hero__grid">
           <div className="card__label">Coverage by category</div>
           <StatusDonut segments={coverageSegments(data.coverage.categories)} />
           <CategoryGrid categories={data.coverage.categories} />
         </div>
-      </div>
-
-      <div className="cards">
-        {pii && (
-          <div className="card">
-            <div className="card__label">PII/sensitive-data detections</div>
-            <div className="card__value--sm">{pii}</div>
-          </div>
-        )}
-        {adherence && (
-          <div className="card">
-            <div className="card__label">Policy adherence</div>
-            <div className="card__value--sm">{adherence}</div>
-          </div>
-        )}
-        <div className="card">
-          <div className="card__label">Bypass attempts</div>
-          <div className="card__value--sm">
-            {data.ledger.denied} blocked · {data.ledger.flagged} flagged
-          </div>
-          {data.riskHistory && data.riskHistory.length >= 2 && (
-            <div className="sec-hero__history">
-              <RiskTrend history={data.riskHistory} />
+        <div className="cards cards--stack">
+          {pii && (
+            <div className="card">
+              <div className="card__label">PII/sensitive-data detections</div>
+              <div className="card__value--sm">{pii}</div>
+            </div>
+          )}
+          {adherence && (
+            <div className="card">
+              <div className="card__label">Policy adherence</div>
+              <div className="card__value--sm">{adherence}</div>
             </div>
           )}
         </div>
