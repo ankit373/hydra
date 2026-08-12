@@ -148,6 +148,7 @@ body {
 .card__note { margin-top: 5px; font-size: 12px; color: var(--hy-dim); }
 
 .card__value--unknown { color: var(--hy-dim); font-size: 19px; font-weight: 500; }
+.card__value--sm { margin-top: 7px; font-size: 15px; font-weight: 600; }
 
 /* ── Governor bands ────────────────────────────────────────────────────── */
 
@@ -199,6 +200,270 @@ body {
 }
 .arc-legend__dot--actual   { background: var(--hy-aqua); }
 .arc-legend__dot--baseline { background: var(--hy-dim); }
+
+/* ── Security ──────────────────────────────────────────────────────────── */
+
+.sec-headrow { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+
+.sec-export {
+  appearance: none;
+  flex: 0 0 auto;
+  background: transparent;
+  border: 1px solid var(--hy-line);
+  border-radius: var(--hy-radius-sm);
+  color: var(--hy-dim);
+  font: inherit;
+  font-size: 12px;
+  padding: 7px 13px;
+  cursor: pointer;
+}
+.sec-export:hover { color: var(--hy-ink); border-color: var(--hy-aqua); }
+.sec-export:focus-visible { outline: 2px solid var(--hy-aqua); outline-offset: 1px; }
+
+/* Generic delta colouring — used wherever a change is simply good or bad,
+   not tied to any one panel. */
+.delta--good { color: var(--hy-cheap); }
+.delta--bad  { color: var(--hy-expensive); }
+
+/* ── Security: verdict banner ─────────────────────────────────────────── */
+/* The answer, before any measurement. Colour carries the state so it reads
+   before the text does. */
+.sec-verdict {
+  border: 1px solid var(--hy-line);
+  border-left: 4px solid var(--hy-line);
+  border-radius: var(--hy-radius);
+  background: var(--hy-panel);
+  padding: 16px 18px;
+  margin-bottom: 14px;
+}
+.sec-verdict--act       { border-left-color: var(--hy-expensive); }
+.sec-verdict--attention { border-left-color: var(--hy-mid); }
+.sec-verdict--ok        { border-left-color: var(--hy-cheap); }
+
+/* The verdict is the largest thing on the screen. It was 11px while the page
+   title — which carries no information — was the biggest text in the view. */
+.sec-verdict__label {
+  font-family: var(--hy-font-mono);
+  font-size: 34px;
+  line-height: 1.05;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  font-weight: 700;
+}
+.sec-verdict--act       .sec-verdict__label { color: var(--hy-expensive); }
+.sec-verdict--attention .sec-verdict__label { color: var(--hy-mid); }
+.sec-verdict--ok        .sec-verdict__label { color: var(--hy-cheap); }
+
+/* Neon, per BRAND.md: the state should carry across the room, and the glow is
+   what makes this read as Hydra rather than as a generic admin panel. */
+.sec-verdict--act       .sec-verdict__label { text-shadow: 0 0 18px color-mix(in srgb, var(--hy-expensive) 55%, transparent); }
+.sec-verdict--attention .sec-verdict__label { text-shadow: 0 0 18px color-mix(in srgb, var(--hy-mid) 45%, transparent); }
+.sec-verdict--ok        .sec-verdict__label { text-shadow: 0 0 18px color-mix(in srgb, var(--hy-cheap) 45%, transparent); }
+
+.sec-verdict__trigger { margin-top: 10px; font-size: 15px; line-height: 1.5; }
+.sec-verdict__scope   { margin-top: 6px; font-size: 12px; color: var(--hy-dim); }
+.sec-verdict__stages  { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+
+/* ── Security: top row (verdict + measurement, both above the fold) ─────── */
+
+.sec-top {
+  display: grid;
+  grid-template-columns: minmax(0, 2.2fr) minmax(180px, 1fr) minmax(180px, 1fr);
+  gap: 12px;
+  align-items: stretch;
+  margin-bottom: 14px;
+}
+.sec-top .sec-verdict { margin-bottom: 0; display: flex; flex-direction: column; justify-content: center; }
+.sec-top__score { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 16px 14px; }
+.sec-top__risk  { display: flex; flex-direction: column; justify-content: center; padding: 16px 14px; }
+
+@media (max-width: 1100px) {
+  .sec-top { grid-template-columns: 1fr 1fr; }
+  .sec-top .sec-verdict { grid-column: 1 / -1; }
+}
+@media (max-width: 700px) {
+  .sec-top { grid-template-columns: 1fr; }
+  .sec-verdict__label { font-size: 26px; }
+}
+
+/* ── Security: hero ──────────────────────────────────────────────────────── */
+
+.sec-hero { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+.cards--stack { display: flex; flex-direction: column; gap: 12px; }
+
+/* A hash ID is never what you scan first; it followed the title at equal
+   weight and wrapped onto two lines. */
+.sec-risk__id { display: block; margin-top: 4px; font-size: 11px; color: var(--hy-faint); }
+.sec-curated {
+  margin-left: 6px; font-size: 10px; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--hy-faint); border: 1px solid var(--hy-line); border-radius: 3px; padding: 1px 4px;
+}
+
+.sec-hero__score, .sec-hero__grid { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 20px 17px; }
+.sec-hero__grid .card__label { align-self: flex-start; margin-bottom: 4px; }
+
+.sec-hero__note { margin-top: 10px; font-size: 13px; color: var(--hy-dim); }
+.sec-trend { margin-top: 4px; font-size: 12px; }
+.sec-hero__history { margin-top: 14px; }
+
+.sec-ring__track { stroke: var(--hy-line); }
+.sec-ring__fill { transition: stroke-dasharray .3s ease; }
+.sec-ring__fill--good { stroke: var(--hy-cheap); }
+.sec-ring__fill--warn { stroke: var(--hy-mid); }
+.sec-ring__fill--bad  { stroke: var(--hy-expensive); }
+.sec-ring__label {
+  fill: var(--hy-ink);
+  font-family: var(--hy-font-mono);
+  font-size: 22px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.sec-history__grid { stroke: var(--hy-line); stroke-width: 1; stroke-dasharray: 2 3; }
+.sec-history__area { fill: color-mix(in srgb, var(--hy-aqua) 14%, transparent); }
+.sec-history__line { stroke: var(--hy-aqua); stroke-width: 1.5; }
+.sec-history__dot  { fill: var(--hy-aqua); }
+
+/* Part-to-whole donut + legend — the "N by status" pattern security
+   dashboards (Wiz, Snyk, GitHub) use for a handful of categories summing to
+   a total. See SecurityCharts.tsx's StatusDonut doc comment. */
+.sec-donut { display: flex; align-items: center; gap: 14px; margin-top: 8px; }
+.sec-donut__track { stroke: var(--hy-line); }
+.sec-donut__total {
+  fill: var(--hy-ink);
+  font-family: var(--hy-font-mono);
+  font-size: 16px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.sec-donut__legend { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.sec-donut__legend li {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 12px; color: var(--hy-dim); white-space: nowrap;
+}
+.sec-donut__legend b { color: var(--hy-ink); font-variant-numeric: tabular-nums; margin-left: 2px; }
+.sec-donut__swatch { width: 8px; height: 8px; border-radius: 2px; flex: 0 0 auto; }
+
+/* Small multiples: one compact tile per category, replacing an earlier radar
+   chart — see SecurityCharts.tsx's CategoryGrid doc comment for why. */
+.sec-grid {
+  margin-top: 4px;
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+  gap: 8px;
+}
+.sec-tile {
+  background: var(--hy-bg-2);
+  border: 1px solid var(--hy-line);
+  border-radius: var(--hy-radius-sm);
+  padding: 8px 9px;
+  text-align: left;
+}
+.sec-tile__id { font-family: var(--hy-font-mono); font-size: 10px; color: var(--hy-dim); }
+.sec-tile__bar { margin-top: 6px; height: 4px; border-radius: 2px; background: var(--hy-line); overflow: hidden; }
+.sec-tile__fill { display: block; height: 100%; border-radius: 2px; background: currentColor; }
+.sec-tile__status { margin-top: 5px; font-family: var(--hy-font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: .04em; }
+.sec-tile--enforced   { color: var(--hy-cheap); }
+.sec-tile--configured { color: var(--hy-aqua); }
+.sec-tile--gap        { color: var(--hy-expensive); }
+
+.sec-risktrend__denied  { stroke: var(--hy-expensive); stroke-width: 1.5; }
+.sec-risktrend__flagged { stroke: var(--hy-mid); stroke-width: 1.5; }
+
+/* Inline proportional bar inside the policy-audit hit column, so the rule
+   doing all the work is visible without reading every number. */
+.sec-hitbar {
+  display: inline-block;
+  width: 42px;
+  height: 4px;
+  margin-right: 7px;
+  vertical-align: middle;
+  border-radius: 2px;
+  background: var(--hy-line);
+  overflow: hidden;
+}
+.sec-hitbar__fill { display: block; height: 100%; border-radius: 2px; background: var(--hy-aqua); }
+
+/* A status pill sitting next to inline text needs to not crowd it. */
+.table td .sec-cat__status { margin-left: 6px; }
+
+/* ── Security: action queue ────────────────────────────────────────────── */
+
+.sec-actions { display: flex; flex-direction: column; gap: 8px; }
+
+.sec-action {
+  background: var(--hy-panel);
+  border: 1px solid var(--hy-line);
+  border-left: 3px solid var(--hy-line);
+  border-radius: var(--hy-radius-sm);
+  padding: 10px 13px;
+}
+.sec-action--now   { border-left-color: var(--hy-expensive); }
+.sec-action--soon  { border-left-color: var(--hy-mid); }
+.sec-action--watch { border-left-color: var(--hy-dim); }
+
+.sec-action__head { display: flex; align-items: baseline; gap: 8px; }
+.sec-action__priority {
+  font-family: var(--hy-font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  font-weight: 700;
+}
+.sec-action--now   .sec-action__priority { color: var(--hy-expensive); }
+.sec-action--soon  .sec-action__priority { color: var(--hy-mid); }
+.sec-action--watch .sec-action__priority { color: var(--hy-dim); }
+.sec-action__age { font-family: var(--hy-font-mono); font-size: 11px; color: var(--hy-dim); }
+.sec-action__title { margin-top: 4px; font-size: 13px; font-weight: 600; }
+.sec-action__detail { margin-top: 2px; font-size: 12px; color: var(--hy-dim); }
+
+.sec-cats { list-style: none; margin: 0; padding: 0; }
+
+.sec-cat {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--hy-line);
+}
+.sec-cat:last-child { border-bottom: 0; }
+
+.sec-cat__id {
+  font-family: var(--hy-font-mono);
+  font-size: 11px;
+  color: var(--hy-dim);
+  flex: 0 0 42px;
+}
+.sec-cat__name { font-size: 13px; flex: 0 0 190px; }
+.sec-cat__detail { color: var(--hy-dim); font-size: 12px; flex: 1; }
+
+.sec-cat__status {
+  font-family: var(--hy-font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--hy-line);
+  color: var(--hy-dim);
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+.sec-cat__status--enforced   { color: var(--hy-cheap);     border-color: color-mix(in srgb, var(--hy-cheap) 40%, transparent); }
+.sec-cat__status--configured { color: var(--hy-aqua);      border-color: color-mix(in srgb, var(--hy-aqua) 40%, transparent); }
+.sec-cat__status--gap        { color: var(--hy-expensive); border-color: color-mix(in srgb, var(--hy-expensive) 40%, transparent); }
+
+/* Severity bands differ by fill and weight, not only hue: critical and high
+   were both pink outlines and were indistinguishable at a glance. */
+.sec-sev--critical {
+  color: var(--hy-bg); font-weight: 700;
+  background: var(--hy-expensive); border-color: var(--hy-expensive);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--hy-expensive) 45%, transparent);
+}
+.sec-sev--high   { color: var(--hy-expensive); font-weight: 700; border-color: var(--hy-expensive); }
+.sec-sev--medium { color: var(--hy-mid);       border-color: color-mix(in srgb, var(--hy-mid) 45%, transparent); }
+.sec-sev--low    { color: var(--hy-dim);       border-color: var(--hy-line); }
 
 /* ── Tables ────────────────────────────────────────────────────────────── */
 

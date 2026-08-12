@@ -342,6 +342,39 @@ hyctl dispatch --swarm --swarm-mode all  "prompt"   # every answer, ranked by Ca
 
 `--swarm-max-heads`, `--swarm-max-cost` (pre-flight cost guard), and `--swarm-heads id1,id2` give you fine control over fan-out.
 
+### 🛡️ Security Posture (`hyctl security`)
+
+Every access an agent makes is already recorded in the local MCP ledger, hash-chained
+and anchored. `hyctl security` reads that log and answers the question you actually
+have:
+
+```
+  VERDICT  ACT NOW
+    critical incident — gpt-4o: the same resource was denied repeatedly, then it
+    escalated to an exec/network action, then it targeted the audit trail itself.
+    recon → escalation → audit-tampering · 4 event(s) · likelihood 8 × impact 8
+
+  activity  4 blocked · 0 flagged
+  evidence  4 event(s), 4 hash-chained, intact
+```
+
+Counts hide the sequence. "4 denied, 2 flagged" and "injection → recon → escalation →
+an attempt on the audit trail" are the same rows read twice; only the second is an
+incident. Severity is OWASP Risk Rating (likelihood × impact), never a blended score.
+
+`--why` opens the full programme underneath: a risk register with an SLA clock and a
+curated crosswalk to OWASP LLM / NIST AI RMF / ISO 42001 / MITRE ATLAS / SOC 2, OWASP
+LLM Top-10 coverage, a policy audit that finds rules which can never fire, PII exposure
+resolved against real heads, control-effectiveness (a control that is configured but
+never applied is reported as **inert**, not as protection), head-binary integrity, and
+edit blast radius. `--attest` emits a checkable attestation that states plainly when
+the underlying log is not tamper-evident, rather than blessing it.
+
+Deliberately honest about its own limits: framework mappings are marked **curated**
+assertions rather than measurements, defect cost is **per-occurrence and not
+annualised**, a file the dependency graph does not index is **unknown** and never
+"low-risk", and the attestation is **unsigned** because Hydra has no key management.
+
 ### 🧭 Confidence Routing (Trust Control Plane)
 
 Most routers optimize *cost*. Hydra is growing a second axis: **verified correctness**. Instead of always firing a fixed number of models, `--confidence` runs a **sequential probability ratio test (SPRT)** — it samples models adaptively, in most-diagnostic-per-dollar order, and stops the moment the calibrated log-odds cross the target confidence.
@@ -473,7 +506,7 @@ The wizard scans your machine, ranks every model it finds, walks you through pic
 hyctl init                              # first-run wizard
 hyctl probe                             # scan and display all available models
 hyctl status                            # live system state (heads, budget bars, burn-rate risk)
-hyctl tui                               # interactive cockpit — chat+code / dashboard / agent-tree (Tab cycles)
+hyctl tui                               # interactive cockpit — chat+code / dashboard / agent-tree / security (Tab cycles)
 
 # Model registry (add a new model at runtime — no rebuild)
 hyctl models list                       # built-in + your models, by capability score
@@ -512,6 +545,9 @@ hyctl mcp check <tool> --params '{"amount":500}'               # bind a hash of 
 hyctl mcp verify <tool> --resource R --params '{"amount":500}' # prove executed params == approved params
 hyctl mcp log --denied                  # what got blocked
 hyctl mcp report                        # allowed/denied by agent and tool
+hyctl security                          # what the agents did, and can the record be trusted
+hyctl security --why                    # the full programme: register, coverage, policy, exposure
+hyctl security --attest                 # checkable attestation: posture + evidence + digest
 
 # Editing & batch
 hyctl edit --file ... --prompt "..."    # scoped, validated, rollback-safe file edit
@@ -598,6 +634,7 @@ For Ollama models, add a family pattern:
 | **SPRT confidence routing** (`hyctl dispatch --confidence`) | ✅ Shipped |
 | **Graph-aware routing** — blast-radius → defect cost → confidence | ✅ Shipped |
 | **Optimal parallelism** — `n* = √((1−s)/k)` from graph coupling (Law 4) | ✅ Shipped |
+| **Security posture** (`hyctl security`) — verdict, correlated incidents, risk register | ✅ Shipped |
 | **Causal A2A handoffs** — vector clocks, concurrent-edit conflict detection | ✅ Shipped |
 | **Context-entropy governor** — compact on falling signal density, not length | ✅ Shipped |
 | **MCP accountability ledger** — record + gate what every agent touches | ✅ Shipped |

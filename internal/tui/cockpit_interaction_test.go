@@ -222,12 +222,14 @@ func TestCockpit_ResizeIsRecorded(t *testing.T) {
 
 // The snapshot is what `hyctl tui --snapshot` prints. All three views must
 // render and be labelled, or the output is unreadable in a bug report.
-func TestCockpitSnapshot_RendersAllThreeViews(t *testing.T) {
+func TestCockpitSnapshot_RendersAllViews(t *testing.T) {
 	got := CockpitSnapshot()
 	if strings.TrimSpace(got) == "" {
 		t.Fatal("CockpitSnapshot rendered nothing")
 	}
-	for _, want := range []string{"VIEW 1/3", "VIEW 2/3", "VIEW 3/3"} {
+	n := len(ckViewNames)
+	for i := 1; i <= n; i++ {
+		want := fmt.Sprintf("VIEW %d/%d", i, n)
 		if !strings.Contains(got, want) {
 			t.Errorf("the snapshot is missing %q", want)
 		}
@@ -707,7 +709,7 @@ func TestCockpit_RendersAtEveryTerminalSize(t *testing.T) {
 		{200, 60},  // very wide
 		{500, 200}, // wider than anything real
 	}
-	for _, view := range []int{0, 1, 2} {
+	for view := 0; view < ckViewCount(); view++ {
 		for _, sz := range sizes {
 			m.view = view
 			m.w, m.h, m.ready = sz.w, sz.h, true
@@ -986,6 +988,31 @@ func TestCkBarAndCkSpark_StayWithinTheirWidth(t *testing.T) {
 		if got := ckSpark(vals); got == "" {
 			t.Errorf("ckSpark(%v) rendered nothing", vals)
 		}
+	}
+}
+
+// ckSegmentedBar must always sum to exactly width regardless of how the
+// counts divide — a rounding bug here is exactly the width-overflow bug that
+// already corrupted this box once (see dashSecurity's own comments).
+func TestCkSegmentedBar_AlwaysSumsToWidth(t *testing.T) {
+	styles := []lipgloss.Style{ckCheapS, ckExpS, ckMidS}
+	cases := [][]int{
+		{0, 0, 0}, {1, 0, 0}, {0, 0, 1}, {1, 1, 1}, {7, 3, 2}, {100, 1, 1}, {1, 1, 100},
+	}
+	for _, vals := range cases {
+		for _, w := range []int{1, 10, 20} {
+			bar := stripANSI(ckSegmentedBar(w, vals, styles))
+			if n := len([]rune(bar)); n != w {
+				t.Errorf("ckSegmentedBar(%d, %v) is %d cells wide, want %d: %q", w, vals, n, w, bar)
+			}
+		}
+	}
+}
+
+func TestCkSegmentedBar_ZeroTotalRendersFaintDots(t *testing.T) {
+	got := stripANSI(ckSegmentedBar(10, []int{0, 0, 0}, []lipgloss.Style{ckCheapS, ckExpS, ckMidS}))
+	if got != strings.Repeat("░", 10) {
+		t.Errorf("ckSegmentedBar with zero total = %q, want 10 faint dots", got)
 	}
 }
 

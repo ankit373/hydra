@@ -218,6 +218,342 @@ export interface InstallResult {
   error?: string
 }
 
+export type CoverageStatus = 'enforced' | 'configured' | 'gap' | 'n/a'
+
+export interface Category {
+  id: string
+  name: string
+  status: CoverageStatus
+  detail: string
+  /** Set only when status is 'gap' — the earliest recorded run where this
+   *  category was already a gap, from persisted score history. */
+  gapSince?: string
+  gapAgeDays?: number
+}
+
+export interface Coverage {
+  categories: Category[]
+  /** Categories excluding n/a. */
+  applicable: number
+  /** Enforced + Configured. */
+  covered: number
+  percentCovered: number
+}
+
+export interface Trend {
+  available: boolean
+  deltaPct: number
+  firstPct: number
+  firstTs: string
+}
+
+/** One persisted coverage snapshot — the real series a chart is drawn from. */
+export interface HistoryPoint {
+  ts: string
+  percentCovered: number
+}
+
+export type ActionPriority = 'now' | 'soon' | 'watch'
+
+/** One item in the prioritized action queue — the feedback loop. Priority
+ *  comes from real signals (a gap's persisted age, or an actively risky
+ *  head), never an invented severity score. */
+export interface Action {
+  id: string
+  kind: 'gap' | 'risk'
+  title: string
+  detail: string
+  ageDays: number
+  priority: ActionPriority
+}
+
+export interface LedgerPanel {
+  total: number
+  allowed: number
+  denied: number
+  flagged: number
+}
+
+export interface HeadRisk {
+  head: string
+  denied: number
+  flagged: number
+}
+
+export interface Check {
+  name: string
+  status: string
+  detail: string
+}
+
+export interface SecurityReport {
+  /** False when the ledger has never recorded an event. */
+  hasData: boolean
+  ledger: LedgerPanel
+  byHead: HeadRisk[]
+  checks: Check[]
+  coverage: Coverage
+  /** Hard override: false means the ledger chain was tampered with — the
+   *  coverage percentage above cannot be trusted regardless of its value. */
+  integrityIntact: boolean
+  trend: Trend
+  /** The full persisted coverage series, oldest first, this run last. */
+  history?: HistoryPoint[]
+  /** The feedback loop: one item per coverage gap plus one per risky head,
+   *  ranked most-urgent first. */
+  actions?: Action[]
+  /** Denied/flagged bucketed by day — the "blocked over time" bypass-attempt
+   *  trend, from ledger.ByDayRisk. */
+  riskHistory?: DayRisk[]
+  /** Per-rule hit counts, dead/unreachable rules, and the fail-open posture. */
+  policyAudit: PolicyAudit
+  /** Every sensitive-data detection and whether it left the machine. */
+  exposures?: Exposure[]
+  /** The forensic breakdown behind the blocked/flagged counts. */
+  threats: Threats
+  /** A capped tail of the raw ledger — the evidence rows. */
+  events?: LedgerEvent[]
+  /** True when `events` is a partial log, not the whole one. */
+  truncated?: boolean
+  /** Whether each declared control actually runs. */
+  controls?: Control[]
+  /** Whether the reported confidence rests on independent, discriminating sources. */
+  evidence: EvidenceQuality
+  /** Whether the ledger spans more than one configuration. */
+  drift: ConfigDrift
+  /** CLI head binaries and whether any changed since last seen. */
+  supplyChain: SupplyChain
+  /** Reach of what agents actually edited, per the code graph. */
+  blast: BlastReport
+  /** The one-line verdict and what decided it. */
+  posture: Posture
+  /** Correlated attack sequences. */
+  incidents?: Incident[]
+  /** The governed view: every finding as one kind of object. */
+  register: RiskRegister
+}
+
+export interface DayRisk {
+  date: string
+  denied: number
+  flagged: number
+}
+
+export interface RuleStat {
+  index: number
+  summary: string
+  decision: string
+  hits: number
+  /** Never matched anything recorded. */
+  dead: boolean
+  /** Index of an earlier rule that always matches first, so this one can
+   *  never fire. Absent when the rule is reachable. */
+  shadowedBy?: number
+}
+
+export interface PolicyAudit {
+  rules: RuleStat[]
+  default: string
+  /** The default is allow: anything no rule names is permitted. */
+  failOpen: boolean
+  defaultHits: number
+  evaluated: number
+}
+
+export interface Exposure {
+  ts: string
+  agent: string
+  head: string
+  resource: string
+  /** The specific detectors that matched, e.g. "aws access key id". */
+  piiTypes?: string[]
+  /** Not a local-only head — including an undiscovered one (fail-closed). */
+  remote: boolean
+  /** False when the head was not discovered, so `remote` is an assumption
+   *  rather than an observation. */
+  known: boolean
+}
+
+/** One security control and whether it can actually fire. */
+export interface Control {
+  name: string
+  /** Configured, or its code exists. */
+  declared: boolean
+  /** Can actually take effect at runtime. */
+  wired: boolean
+  /** Fires, but is weaker than it appears. */
+  limited?: boolean
+  detail: string
+  /** False when the claim was established by reading the source rather than
+   *  observed at runtime — the reader deserves to know which kind it is. */
+  verified: boolean
+}
+
+export type Verdict = 'act now' | 'attention' | 'ok'
+export type Severity = 'critical' | 'high' | 'medium' | 'low'
+
+export interface Posture {
+  verdict: Verdict
+  /** The single condition that produced the verdict. */
+  trigger: string
+  because?: string[]
+  /** What was evaluated — so an "ok" states its scope. */
+  checked: string[]
+}
+
+export interface Incident {
+  id: string
+  actor: string
+  agent?: string
+  start: string
+  end: string
+  stages: string[]
+  /** OWASP Risk Rating factors, kept separate so severity can be argued with. */
+  likelihood: number
+  impact: number
+  severity: Severity
+  narrative: string
+  events: LedgerEvent[]
+}
+
+export interface FrameworkRef {
+  framework: string
+  control: string
+  /** A hand-maintained mapping, not something derived from the data. */
+  curated: boolean
+}
+
+export interface Risk {
+  id: string
+  class: string
+  title: string
+  detail: string
+  severity: Severity
+  status: string
+  firstSeen?: string
+  ageDays: number
+  dueInDays: number
+  breached: boolean
+  /** Cost of ONE defect of this class — per-occurrence, not annualised. */
+  defectCostUsd: number
+  frameworks?: FrameworkRef[]
+  evidence?: string[]
+}
+
+export interface RiskRegister {
+  risks: Risk[]
+  sumDefectCostUsd: number
+  breached: number
+  bySeverity: Record<string, number>
+}
+
+export interface EditedFile {
+  file: string
+  edits: number
+  radius?: number
+  dependents?: number
+  /** False when the graph does not index this file — unknown, not low-risk. */
+  known: boolean
+}
+
+export interface BlastReport {
+  graphPresent: boolean
+  /** Molloy-Reed kappa >= 2: the graph has a cascade-capable core. */
+  percolates: boolean
+  kappa?: number
+  files?: EditedFile[]
+  unknown: number
+  runsScanned: number
+  truncated?: boolean
+}
+
+export interface HeadBinary {
+  headId: string
+  path: string
+  sha256: string
+  size: number
+  /** No prior fingerprint — a baseline, not a finding. */
+  new?: boolean
+  /** Content hash differs from the stored one. */
+  changed?: boolean
+  previous?: string
+  firstSeen?: string
+}
+
+export interface SupplyChain {
+  binaries?: HeadBinary[]
+  new: number
+  changed: number
+  unfingerprintable?: number
+}
+
+export interface FamilyRisk {
+  family: string
+  /** Measured excess same-family agreement. */
+  coupling: number
+  critical: boolean
+}
+
+export interface SourcePower {
+  source: string
+  domain: string
+  /** Diagnostic power in nats — expected |LLR|. ~0 is a coin flip. */
+  d: number
+  /** Excludes the prior, so 0 means never calibrated. */
+  observations: number
+}
+
+export interface EvidenceQuality {
+  runs: number
+  families?: FamilyRisk[]
+  weakSources?: SourcePower[]
+  /** Used but never calibrated — absence of data, not measured weakness. */
+  uncalibratedSources?: string[]
+}
+
+export interface ConfigEpoch {
+  breadcrumb: string
+  events: number
+  firstTs: string
+  lastTs: string
+}
+
+export interface ConfigDrift {
+  epochs?: ConfigEpoch[]
+  /** More than one configuration produced this log. */
+  changed: boolean
+  unstamped: number
+}
+
+export interface SecurityCount {
+  label: string
+  count: number
+}
+
+export interface Threats {
+  /** Which injection phrase was actually tried. */
+  byMarker?: SecurityCount[]
+  /** Resources drawing repeat denials — probing. */
+  probedResources?: SecurityCount[]
+  /** read / write / exec / network split of risky events. */
+  byAction?: SecurityCount[]
+}
+
+/** One raw ledger row — the evidence behind a finding. */
+export interface LedgerEvent {
+  ts: string
+  agent: string
+  tool: string
+  resource: string
+  action: string
+  decision: string
+  reason?: string
+  classification?: string
+  pii_types?: string[]
+  flagged?: boolean
+  flag_reason?: string
+}
+
 export interface ChatReply {
   output: string
   head: string

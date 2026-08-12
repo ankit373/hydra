@@ -88,6 +88,12 @@ func LoadFilePolicy(hydraHome string) (*FilePolicyEngine, error) {
 	return &FilePolicyEngine{pf: pf}, nil
 }
 
+// RuleCount is how many rules policy.yaml declares. It exists so a security
+// audit can report the size of a ruleset without reaching into the parsed
+// file — the count is the difference between "no policy configured" and
+// "policy configured but not applied", which are opposite findings.
+func (e *FilePolicyEngine) RuleCount() int { return len(e.pf.Rules) }
+
 // Decide evaluates all rules against spec and returns the merged FilePolicy.
 func (e *FilePolicyEngine) Decide(spec Spec) FilePolicy {
 	// Start from defaults.

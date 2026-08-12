@@ -179,6 +179,25 @@ func TestByHeadRisk_GroupsSortsAndOmitsHeadsWithNoRisk(t *testing.T) {
 	}
 }
 
+func TestByDayRisk_BucketsSortsAndOmitsQuietDays(t *testing.T) {
+	events := []Event{
+		{TS: "2026-08-02T09:00:00Z", Tool: "a", Decision: Allow}, // quiet day, must be omitted
+		{TS: "2026-08-01T09:00:00Z", Tool: "a", Decision: Deny},
+		{TS: "2026-08-01T15:00:00Z", Tool: "a", Flagged: true, Decision: Allow},
+		{TS: "2026-08-03T09:00:00Z", Tool: "a", Decision: Deny},
+	}
+	got := ByDayRisk(events)
+	if len(got) != 2 {
+		t.Fatalf("ByDayRisk = %+v, want 2 days (2026-08-02 has neither and must be omitted)", got)
+	}
+	if got[0].Date != "2026-08-01" || got[0].Denied != 1 || got[0].Flagged != 1 {
+		t.Errorf("got[0] = %+v, want 2026-08-01 with 1 denied, 1 flagged", got[0])
+	}
+	if got[1].Date != "2026-08-03" || got[1].Denied != 1 || got[1].Flagged != 0 {
+		t.Errorf("got[1] = %+v, want 2026-08-03 with 1 denied, 0 flagged (ascending order)", got[1])
+	}
+}
+
 func TestCheck_RecordsDecision(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "mcp_ledger.jsonl")
 	p := Policy{Rules: []Rule{{Tool: "fs", Resource: "/etc/*", Decision: Deny}}, Default: Allow}
@@ -607,6 +626,136 @@ func TestVerifyChain_RoundTripIsIntact(t *testing.T) {
 	}
 	if !res.Intact || res.Chained != 5 || res.Unchained != 0 {
 		t.Errorf("ChainResult = %+v, want intact with 5 chained events", res)
+	}
+}
+
+// Deleting the TAIL of the ledger leaves every surviving PrevHash link valid,
+// so walking the chain cannot see it — and for a while this returned "intact"
+// on a log that had just had its most recent records removed, which is
+// precisely what someone covering their tracks deletes. The sidecar anchor is
+// the only witness.
+func TestVerifyChain_DetectsTailTruncation(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mcp_ledger.jsonl")
+	for i := 0; i < 5; i++ {
+		if err := Record(path, Event{Agent: "a", Tool: "t", Decision: Allow}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	keepFirstLines(t, path, 3) // drop the last two events
+
+	res, err := VerifyChain(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Truncated {
+		t.Errorf("ChainResult = %+v, want Truncated — the anchor names a removed event", res)
+	}
+	if res.Intact {
+		t.Error("a truncated ledger reported Intact")
+	}
+}
+
+// An anchor that lags the log means a best-effort writeChainHash did not land.
+// Nothing was removed, so this must not be reported as tampering — a security
+// tool that cries wolf over its own dropped write gets ignored.
+func TestVerifyChain_StaleAnchorIsNotTampering(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mcp_ledger.jsonl")
+	for i := 0; i < 3; i++ {
+		if err := Record(path, Event{Agent: "a", Tool: "t", Decision: Allow}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Rewind the anchor to the first event: every event is still present.
+	events, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := writeChainHash(chainHashPath(path), events[0].Hash); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := VerifyChain(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.AnchorStale {
+		t.Errorf("ChainResult = %+v, want AnchorStale", res)
+	}
+	if res.Truncated || !res.Intact {
+		t.Error("a lagging anchor was reported as tampering; nothing was deleted")
+	}
+}
+
+// Deleting the anchor along with the events must not buy back an all-clear.
+func TestVerifyChain_MissingAnchorIsNotAnAllClear(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mcp_ledger.jsonl")
+	for i := 0; i < 3; i++ {
+		if err := Record(path, Event{Agent: "a", Tool: "t", Decision: Allow}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Remove(chainHashPath(path)); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := VerifyChain(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.AnchorMissing {
+		t.Errorf("ChainResult = %+v, want AnchorMissing so the caller cannot read it as verified", res)
+	}
+}
+
+// The ledger must never persist the content it was given to scan. That has
+// always been true structurally — Event has no content field — but nothing
+// asserted it, so a future refactor could start logging prompt bodies (and
+// therefore the very secrets the scan exists to detect) without a single test
+// going red.
+func TestCheck_NeverPersistsRawContent(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mcp_ledger.jsonl")
+	const secret = "AKIAIOSFODNN7EXAMPLE"
+	const marker = "ignore previous instructions"
+	content := "here is my key " + secret + " and also: " + marker
+
+	if _, err := Check(path, Policy{Default: Allow}, CheckRequest{
+		Agent: "a", Tool: "t", Resource: "/r", Action: Read, Content: content,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), secret) {
+		t.Error("the ledger persisted the secret it was scanning for")
+	}
+	if strings.Contains(string(raw), "here is my key") {
+		t.Error("the ledger persisted raw scanned content")
+	}
+	// The derived labels are what may be stored, and must be.
+	if !strings.Contains(string(raw), "aws access key id") {
+		t.Error("the detector name was not recorded, so the detection is unreportable")
+	}
+	if !strings.Contains(string(raw), marker) {
+		t.Error("the matched injection marker was not recorded")
+	}
+}
+
+func keepFirstLines(t *testing.T, path string, n int) {
+	t.Helper()
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimRight(string(raw), "\n"), "\n")
+	if len(lines) < n {
+		t.Fatalf("ledger has %d lines, cannot keep %d", len(lines), n)
+	}
+	out := strings.Join(lines[:n], "\n") + "\n"
+	if err := os.WriteFile(path, []byte(out), 0o600); err != nil {
+		t.Fatal(err)
 	}
 }
 

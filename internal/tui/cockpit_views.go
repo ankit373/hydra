@@ -2,10 +2,11 @@
 
 package tui
 
-// cockpit_views.go — the three cockpit view modes cycled by Tab:
+// cockpit_views.go — the four cockpit view modes cycled by Tab:
 //   view 0  chat + live code panel   (chatCode → codePanel)
 //   view 1  dashboard                (dash) — reads real probe/cost/trust data
 //   view 2  agent supervision tree   (tree) — still a fixed example; see #189
+//   view 3  security                 (dashSecurity) — reads internal/security.Build
 // plus their pure helpers (syntax highlighter, tier/state colour ramps). Neon
 // identity via the ck-prefixed palette declared in cockpit.go.
 
@@ -16,9 +17,15 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/ankit373/hydra/internal/budget"
+	"github.com/ankit373/hydra/internal/security"
 	"github.com/ankit373/hydra/internal/tree"
 	"github.com/ankit373/hydra/internal/trust"
+	"github.com/ankit373/hydra/internal/util"
 )
+
+// ckSafe strips control characters before truncation. Order matters: cutting an
+// escape in half corrupts the lipgloss box borders as well as the line.
+func ckSafe(s string) string { return util.SafeTerminal(s) }
 
 // ── view 0 · live code panel ─────────────────────────────────────────────────
 
@@ -65,14 +72,9 @@ func (m Cockpit) codePanel(w, h int) string {
 
 // ── view 1 · dashboard ───────────────────────────────────────────────────────
 
-// dash is the fleet pulse: discovered heads, real spend, real calibration
-// stats, and the governor gauge.
-//
-// Everything here reads a real source. It previously rendered LCG-hashed
-// "sparklines", a per-head confidence bucketed by tier, and a savings figure
-// derived from an invented price table — all with no backing data (#189).
-// Where a real figure is not available yet it is labelled unavailable rather
-// than invented, because --snapshot publishes these frames.
+// dash is the fleet pulse. Everything reads a real source; a figure that is
+// not available yet is labelled unavailable, never invented (#189) — --snapshot
+// publishes these frames.
 func (m Cockpit) dash(w, h int) string {
 	var fleet strings.Builder
 	fleet.WriteString(ckLabelS.Render("FLEET · discovered heads") + "\n\n")
@@ -170,17 +172,9 @@ func (m Cockpit) trustSummary() string {
 
 // ── view 2 · agent tree ──────────────────────────────────────────────────────
 
-// tree renders the supervision tree for a real run, reconstructed from the
-// per-run event log via internal/tree.
-//
-// It replaced a hand-authored 7-node literal in which each row carried its own
-// box-drawing indent as a string field — a picture of a tree rather than a
-// tree, fixed at one shape and describing a run that never happened (#191).
-// Prefixes are now derived from depth and last-child position, so arbitrary
-// depth and branching render correctly.
-//
-// Ownership edges are solid (─); A2A handoffs are a dashed overlay (┄), kept
-// visually distinct because they are a different relation, not a parent.
+// tree renders a real run's supervision tree via internal/tree; prefixes derive
+// from depth and last-child position, so any shape renders (#191). Ownership
+// edges are solid (─), A2A handoffs dashed (┄) — a different relation.
 func (m Cockpit) tree(w, h int) string {
 	var b strings.Builder
 	b.WriteString(ckLabelS.Render("AGENT TREE · supervision") +
@@ -293,6 +287,276 @@ func treePrefix(r tree.Row) string {
 		branch = "└─ "
 	}
 	return strings.Repeat("│  ", r.Depth-1) + branch
+}
+
+// ── view 3 · security ────────────────────────────────────────────────────────
+
+// dashSecurity reuses the report `hyctl security` prints (loaded once in
+// NewCockpit, so no I/O here). Column budgets are FIXED, not proportional to w:
+// a width that scales with the terminal corrupts lipgloss box drawing.
+const (
+	ckSecNameW = 26 // category name column
+	ckSecRecW  = 40 // action text column (narrower right-hand box)
+)
+
+// dashSecurity leads with the hero KPI (coverage bar, real history sparkline,
+// trend) in the largest visual weight, then the ACTIONS queue — priority-
+// ranked, ages included — as the primary thing to act on. The exhaustive
+// category list and per-head table stay on screen too, just visually
+// secondary: this view already fits one frame without scrolling, so there's
+// no separate interactive "detail mode" here (unlike the desktop app, where
+// a Hero/Detailed tab split earns its keep with real charts).
+// ckCitedIncident is the incident the verdict already quotes.
+func ckCitedIncident(r *security.Report) (security.Incident, bool) {
+	for _, in := range r.Incidents {
+		if in.Narrative != "" && strings.Contains(r.Posture.Trigger, in.Narrative) {
+			return in, true
+		}
+	}
+	return security.Incident{}, false
+}
+
+func ckStagesText(stages []security.Stage) string {
+	out := make([]string, 0, len(stages))
+	for _, st := range stages {
+		out = append(out, string(st))
+	}
+	return strings.Join(out, "→")
+}
+
+func (m Cockpit) dashSecurity(w, h int) string {
+	if m.security == nil {
+		return lipgloss.NewStyle().Width(w).Height(h).Render(
+			ckFaintS.Render(" security report unavailable — the ledger could not be read"))
+	}
+	r := m.security
+
+	var head strings.Builder
+	head.WriteString(ckLabelS.Render("SECURITY · what the agents did") + "\n\n")
+	// Bottom line first: the verdict and the condition that produced it,
+	// before any measurement. Truncated to the same fixed budget as every
+	// other line in this box.
+	{
+		style, label := ckCheapS, "OK"
+		switch r.Posture.Verdict {
+		case security.VerdictActNow:
+			style, label = ckExpS, "ACT NOW"
+		case security.VerdictAttention:
+			style, label = ckMidS, "ATTENTION"
+		}
+		head.WriteString(" " + ckDimS.Render("verdict  ") + style.Render(label) + "\n")
+		if r.Posture.Trigger != "" {
+			head.WriteString(" " + ckFaintS.Render(truncate(ckSafe(r.Posture.Trigger), ckSecNameW+16)) + "\n")
+		}
+		if in, ok := ckCitedIncident(r); ok {
+			head.WriteString(" " + ckDimS.Render("stages   ") +
+				ckExpS.Render(truncate(ckStagesText(in.Stages), ckSecNameW)) + "\n")
+		}
+		if n := len(r.Incidents); n > 0 {
+			head.WriteString(" " + ckDimS.Render("incidents ") +
+				ckExpS.Render(truncate(fmt.Sprintf("%d · worst %s", n, r.Incidents[0].Severity), ckSecNameW)) + "\n")
+		}
+		ev := r.Attestation.Evidence
+		chain, cs := "intact", ckCheapS
+		switch {
+		case ev.Truncated:
+			chain, cs = "TRUNCATED", ckExpS
+		case !ev.ChainIntact:
+			chain, cs = "BROKEN", ckExpS
+		case ev.Events > 0 && ev.ChainedEvents == 0:
+			chain, cs = "unverifiable", ckExpS
+		case ev.AnchorMissing:
+			chain, cs = "unanchored", ckMidS
+		}
+		head.WriteString(" " + ckDimS.Render("evidence ") +
+			cs.Render(truncate(fmt.Sprintf("%d event(s), %d chained, %s", ev.Events, ev.ChainedEvents, chain), ckSecNameW)) + "\n")
+		head.WriteString("\n")
+	}
+	if !r.IntegrityIntact {
+		head.WriteString(" " + ckExpS.Render("INTEGRITY COMPROMISED") +
+			ckDimS.Render(" — ledger tampered") + "\n")
+	} else {
+		pct := int(r.Coverage.PercentCovered)
+		head.WriteString(" " + ckCoverageBar(pct, 20) +
+			ckDimS.Render(fmt.Sprintf("  %d%%  (%d/%d)", pct, r.Coverage.Covered, r.Coverage.Applicable)) + "\n")
+		// ckSpark is the same real-data-only sparkline the latency panel
+		// uses (cockpit_metrics.go) — reused, not reinvented. It already
+		// renders "—" for fewer than 2 points, so a fresh install needs no
+		// special-casing here.
+		if len(r.History) >= 2 {
+			vals := make([]float64, len(r.History))
+			for i, hp := range r.History {
+				vals[i] = hp.PercentCovered
+			}
+			head.WriteString(" " + ckDimS.Render("history ") + ckSpark(vals) + "\n")
+		}
+		if r.Trend.Available {
+			arrow, style := "→", ckDimS
+			switch {
+			case r.Trend.DeltaPct > 0:
+				arrow, style = "↑", ckCheapS
+			case r.Trend.DeltaPct < 0:
+				arrow, style = "↓", ckExpS
+			}
+			head.WriteString(" " + style.Render(fmt.Sprintf("%s %+.0f%% since first run (was %.0f%%)",
+				arrow, r.Trend.DeltaPct, r.Trend.FirstPct)) + "\n")
+		}
+		// The allowed/denied split as a segmented bar — the ASCII equivalent
+		// of the desktop's donut chart, same green/red mapping the category
+		// list below already uses (enforced/gap). Only Allowed/Denied go in:
+		// they're mutually exclusive and sum to Total, unlike Flagged, which
+		// is an independent dimension (a flagged event can be either) and
+		// would double-count the bar if it were a third segment — Flagged
+		// stays in its own line below instead.
+		if r.Ledger.Total > 0 {
+			head.WriteString(" " + ckDimS.Render("ledger  ") +
+				ckSegmentedBar(20, []int{r.Ledger.Allowed, r.Ledger.Denied},
+					[]lipgloss.Style{ckCheapS, ckExpS}) + "\n")
+		}
+		// Folded into the hero, not three new boxes. Every line stays within
+		// ckSecNameW or it corrupts the box drawing. "exposure" leads with
+		// whether data left the machine: PII on a local head is the control working.
+		if n := len(r.Exposures); n > 0 {
+			confirmed := security.ConfirmedRemote(r.Exposures)
+			unknown := security.RemoteCount(r.Exposures) - confirmed
+			style, suffix := ckCheapS, "all local"
+			switch {
+			case confirmed > 0:
+				style, suffix = ckExpS, fmt.Sprintf("%d REMOTE", confirmed)
+			case unknown > 0:
+				// Assumed remote, not observed — amber, not red.
+				style, suffix = ckMidS, fmt.Sprintf("%d unidentified", unknown)
+			}
+			head.WriteString(" " + ckDimS.Render("exposure ") +
+				style.Render(truncate(fmt.Sprintf("%d · %s", n, suffix), ckSecNameW)) + "\n")
+		}
+		head.WriteString(" " + ckDimS.Render("policy   ") +
+			ckCyanS.Render(truncate(ckPolicyPosture(r.PolicyAudit), ckSecNameW)) + "\n")
+		// A control that is configured but cannot fire is the finding an
+		// operator is least likely to discover on their own — it looks
+		// healthy in every config file.
+		if len(r.Controls) > 0 {
+			inert := security.InertControls(r.Controls)
+			style, text := ckCheapS, "all active"
+			if inert > 0 {
+				style, text = ckExpS, fmt.Sprintf("%d inert", inert)
+			}
+			head.WriteString(" " + ckDimS.Render("controls ") +
+				style.Render(truncate(text, ckSecNameW)) + "\n")
+		}
+		// Only shown when there is something to say: a confidence built on
+		// correlated or undiagnostic sources reads as a result while being
+		// none, and the hero is already dense.
+		if n := len(r.Evidence.Families) + len(r.Evidence.WeakSources); n > 0 {
+			head.WriteString(" " + ckDimS.Render("evidence ") +
+				ckExpS.Render(truncate(fmt.Sprintf("%d source(s) inflate confidence", n), ckSecNameW)) + "\n")
+		}
+		if n := r.SupplyChain.Changed; n > 0 {
+			head.WriteString(" " + ckDimS.Render("binaries ") +
+				ckExpS.Render(truncate(fmt.Sprintf("%d CHANGED since last seen", n), ckSecNameW)) + "\n")
+		}
+		if r.Drift.Changed {
+			head.WriteString(" " + ckDimS.Render("config   ") +
+				ckMidS.Render(truncate(fmt.Sprintf("%d epochs — rules changed", len(r.Drift.Epochs)), ckSecNameW)) + "\n")
+		}
+		head.WriteString(" " + ckDimS.Render("blocked  ") + ckExpS.Render(fmt.Sprintf("%d", r.Ledger.Denied)) +
+			ckDimS.Render(" · flagged ") + ckMidS.Render(fmt.Sprintf("%d", r.Ledger.Flagged)) + "\n")
+		// Same reused ckSpark as the coverage history above — a second real
+		// series, not a second charting mechanism.
+		if len(r.RiskHistory) >= 2 {
+			riskVals := make([]float64, len(r.RiskHistory))
+			for i, d := range r.RiskHistory {
+				riskVals[i] = float64(d.Denied + d.Flagged)
+			}
+			head.WriteString(" " + ckDimS.Render("risk trend ") + ckSpark(riskVals) + "\n")
+		}
+	}
+	head.WriteString("\n")
+	for _, c := range r.Coverage.Categories {
+		if c.Status == security.NotApplicable {
+			continue
+		}
+		style := ckDimS
+		switch c.Status {
+		case security.Enforced:
+			style = ckCheapS
+		case security.Configured:
+			style = ckCyanS
+		case security.Gap:
+			style = ckExpS
+		}
+		label := style.Render(string(c.Status))
+		if c.Status == security.Gap && c.GapAgeDays > 0 {
+			label += ckDimS.Render(fmt.Sprintf(" %dd", c.GapAgeDays))
+		}
+		head.WriteString(fmt.Sprintf(" %-6s %-*s %s\n", c.ID, ckSecNameW, truncate(c.Name, ckSecNameW), label))
+	}
+
+	var risk strings.Builder
+	risk.WriteString(ckLabelS.Render("PER-HEAD RISK") + "\n\n")
+	if len(r.ByHead) == 0 {
+		risk.WriteString(ckFaintS.Render(" nothing denied or flagged yet") + "\n")
+	}
+	for _, hr := range r.ByHead {
+		risk.WriteString(fmt.Sprintf(" %-20s denied %-3d flagged %-3d\n", truncate(ckSafe(hr.Head), 20), hr.Denied, hr.Flagged))
+	}
+
+	var actions strings.Builder
+	actions.WriteString(ckLabelS.Render("ACTIONS") + ckDimS.Render(" · next hardening step") + "\n\n")
+	if len(r.Actions) == 0 {
+		actions.WriteString(ckCheapS.Render(" nothing to act on") + "\n")
+	}
+	const maxActions = 6 // height-bounded, matches the terminal frames this view fits in
+	for i, a := range r.Actions {
+		if i >= maxActions {
+			actions.WriteString(ckFaintS.Render(fmt.Sprintf(" … %d more", len(r.Actions)-maxActions)) + "\n")
+			break
+		}
+		tag, style := ckActionPriorityTag(a.Priority)
+		age := ""
+		if a.AgeDays > 0 {
+			age = ckDimS.Render(fmt.Sprintf(" %dd", a.AgeDays))
+		}
+		actions.WriteString(" " + style.Render(tag) + age + " " + ckDimS.Render(truncate(ckSafe(a.Title), ckSecRecW)) + "\n")
+	}
+
+	right := lipgloss.JoinVertical(lipgloss.Left, ckBoxS.Render(risk.String()), ckBoxS.Render(actions.String()))
+	row := lipgloss.JoinHorizontal(lipgloss.Top, ckBoxS.Render(head.String()), " ", right)
+	return lipgloss.NewStyle().Width(w).Height(h).Render(row)
+}
+
+// ckActionPriorityTag renders an Action's priority as a short label plus the
+// style to color it with — the same three tiers buildActions already ranked
+// by (real age or active risk), never a new severity of its own.
+func ckActionPriorityTag(p security.ActionPriority) (string, lipgloss.Style) {
+	switch p {
+	case security.PriorityNow:
+		return "NOW", ckExpS
+	case security.PrioritySoon:
+		return "SOON", ckMidS
+	default:
+		return "WATCH", ckDimS
+	}
+}
+
+// ckPolicyPosture is the one-line policy readout: fail-open/fail-closed plus
+// the two real defects the audit can prove. It replaced a "NN% matched a
+// rule" figure that got *better* as the policy got more permissive.
+func ckPolicyPosture(a security.PolicyAudit) string {
+	if len(a.Rules) == 0 {
+		return "no rules defined"
+	}
+	s := "fail-closed"
+	if a.FailOpen {
+		s = "fail-open"
+	}
+	if n := a.DeadCount(); n > 0 {
+		s += fmt.Sprintf(" · %d dead", n)
+	}
+	if n := a.ShadowedCount(); n > 0 {
+		s += fmt.Sprintf(" · %d unreachable", n)
+	}
+	return s
 }
 
 // ── syntax highlighter ───────────────────────────────────────────────────────

@@ -462,6 +462,7 @@ table.cmp tbody tr:last-child td,table.cmp tbody tr:last-child th{border-bottom:
   padding:12px 14px;color:#c7d0e8;overflow-x:auto;}
 .term .p{color:var(--aqua);}.term .c{color:var(--faint);}.term .o{color:var(--dim);}
 .term .g{color:var(--cheap);}
+.term .e{color:var(--exp);font-weight:700;}
 .copyline{display:flex;align-items:center;gap:10px;justify-content:space-between;cursor:pointer;}
 .copyline .cp{font-size:10.5px;color:var(--faint);transition:.15s;flex-shrink:0;}
 .copyline:hover .cp{color:var(--aqua);}
@@ -534,6 +535,7 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
     <a href="/docs.html">Docs</a>
     <a href="/first-principles.html">First principles</a>
     <a href="/app.html">Desktop app</a>
+    <a href="#security">Security</a>
     <a href="#compare">Compare</a>
     <a href="/pricing.html">Pricing</a>
     <a href="https://github.com/ankit373/hydra">GitHub</a>
@@ -701,6 +703,31 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
   <div style="text-align:center;margin-top:38px;">
     <a class="btn-ghost" href="/first-principles.html">Derive it yourself — six interactive proofs on the First Principles page →</a>
   </div>
+</section>
+
+<!-- ══ 4b · SECURITY ═══════════════════════════════════════════════════════ -->
+<section class="blk wrap reveal" id="security">
+  <div class="klabel"><span>Accountability</span><b>counts hide the sequence</b></div>
+  <h2 class="big">You gave an agent your repo. <span class="grad">What did it do?</span></h2>
+  <p class="lede">Every access an agent makes is recorded in a local, hash-chained ledger. <b>hyctl security</b> reads that log and answers the one question you actually have — not a wall of metrics.</p>
+
+  <div class="term" style="margin-top:22px;max-width:760px">
+    <div class="copyline" data-copy="hyctl security"><span><span class="p">$</span> hyctl security</span><span class="cp">copy</span></div>
+    <div class="o"><span class="e">VERDICT  ACT NOW</span></div>
+    <div class="o"><span class="c">  critical incident — gpt-4o: the same resource was denied</span></div>
+    <div class="o"><span class="c">  repeatedly, then it escalated to an exec/network action,</span></div>
+    <div class="o"><span class="c">  then it targeted the audit trail itself.</span></div>
+    <div class="o"><span class="c">  recon → escalation → audit-tampering · 4 event(s)</span></div>
+    <div class="o">&nbsp;</div>
+    <div class="o">activity  <span class="e">4 blocked</span> · 0 flagged</div>
+    <div class="o">evidence  4 event(s), 4 hash-chained, <span class="g">intact</span></div>
+  </div>
+
+  <p class="lede" style="margin-top:26px">“4 denied, 2 flagged” and “injection → recon → escalation → an attempt on the audit trail” are the same rows read twice. Only the second one is an incident. Severity is <b>OWASP Risk Rating</b> (likelihood × impact) — never a blended score.</p>
+
+  <p class="cmp-note"><b>hyctl security --why</b> opens the whole programme underneath: a risk register on an SLA clock, crosswalked to OWASP LLM / NIST AI RMF / ISO 42001 / MITRE ATLAS / SOC 2 · OWASP LLM Top-10 coverage · a policy audit that finds rules which can <em>never</em> fire · PII exposure resolved against real heads, so a local model is not reported as a leak · control effectiveness, where a control that is configured but never applied reads as <b>inert</b> rather than as protection · head-binary integrity · edit blast radius.</p>
+
+  <p class="cmp-note"><b>Honest about its own limits.</b> Framework mappings are marked <em>curated</em> assertions, not measurements. Defect cost is per-occurrence, not annualised. A file the dependency graph does not index is <em>unknown</em>, never “low-risk”. The attestation is unsigned, because Hydra has no key management and a signature without one is theatre.</p>
 </section>
 
 <!-- ══ 5 · CRAZY NUMBERS ════════════════════════════════════════════════════ -->
@@ -880,6 +907,7 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
         <h4>Product</h4>
         <a href="#universe">The universe</a>
         <a href="#math">The math</a>
+        <a href="#security">Security</a>
         <a href="#compare">Comparison</a>
       </div>
       <div class="col">

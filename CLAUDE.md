@@ -176,28 +176,24 @@ The bar is: would a senior engineer at a top systems shop approve this without c
 - If output is 200 lines and could be 50, ask the delegated head to rewrite.
 - Never add error handling for impossible scenarios.
 
+## Comments — 2-3 lines, hard cap
+**No comment is longer than 2-3 lines. No exceptions, including file headers.**
+Say why, not what; the code already says what. If the rationale genuinely needs a
+page, it belongs in a planning doc or the PR body, not the source. A 20-line essay
+at the top of a file is the tell that the design was argued in comments instead of
+being made obvious in code — delete it and make the names carry it.
+
 ---
 
 ## gstack Skills Available
-Use these when needed — invoke as /skill-name:
-/browse        — web browsing (prefer this over MCP browser tools)
-/review        — code review
-/qa            — QA run
-/ship          — ship checklist
-/plan-eng-review — engineering plan review
-/plan-ceo-review — executive plan review
-/investigate   — deep investigation
-/document-generate — documentation generation
-/retro         — retrospective
-/benchmark     — benchmarking
-/canary        — canary deployment
-/careful       — careful mode (extra checks)
-Full list: autoplan, benchmark-models, browse, canary, careful, codex, cso,
-design-consultation, design-html, design-review, design-shotgun, devex-review,
-document-generate, document-release, freeze, guard, health, investigate,
-land-and-deploy, learn, office-hours, pair-agent, plan-ceo-review,
-plan-design-review, plan-devex-review, plan-eng-review, qa, qa-only,
-retro, review, scrape, ship, skillify, unfreeze
+Use the `/browse` skill from gstack for all web browsing. Never use `mcp__claude-in-chrome__*` tools.
+
+Available skills: /office-hours, /plan-ceo-review, /plan-eng-review, /plan-design-review,
+/design-consultation, /design-shotgun, /design-html, /review, /ship, /land-and-deploy, /canary,
+/benchmark, /browse, /connect-chrome, /qa, /qa-only, /design-review, /setup-browser-cookies,
+/setup-deploy, /setup-gbrain, /retro, /investigate, /document-release, /document-generate, /codex,
+/cso, /autoplan, /plan-devex-review, /devex-review, /careful, /freeze, /guard, /unfreeze,
+/gstack-upgrade, /learn
 
 ## Karpathy Skills Available
 Located at ~/.claude/skills/karpathy/skills/karpathy-guidelines

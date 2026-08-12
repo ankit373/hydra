@@ -6,19 +6,21 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/ankit373/hydra/internal/ledger"
 	"github.com/ankit373/hydra/internal/testutil"
 	"github.com/ankit373/hydra/internal/trust"
 )
 
-// LLM01/LLM02 are always Enforced (automatic, no config), LLM03/LLM07 are
-// always Gap (no mechanism exists), LLM04/LLM08 are always N/A — these four
-// pairs don't depend on install state, unlike LLM05/06/09/10.
+// LLM01/LLM02 are always Enforced (automatic, no config), LLM07 is always Gap
+// (no mechanism exists), LLM04/LLM08 are always N/A — these don't depend on
+// install state, unlike LLM03/05/06/09/10. LLM03 is Gap only while nothing is
+// being fingerprinted, which is what an empty SupplyChain means here.
 func TestComputeCoverage_StaticCategoriesAreFixed(t *testing.T) {
 	testutil.NewSandbox(t)
 
-	cov := computeCoverage(ledger.Policy{}, nil)
+	cov := computeCoverage(ledger.Policy{}, nil, SupplyChain{})
 	want := map[string]CoverageStatus{
 		"LLM01": Enforced, "LLM02": Enforced,
 		"LLM03": Gap, "LLM07": Gap,
@@ -38,7 +40,7 @@ func TestComputeCoverage_StaticCategoriesAreFixed(t *testing.T) {
 func TestComputeCoverage_NAExcludedFromBothNumeratorAndDenominator(t *testing.T) {
 	testutil.NewSandbox(t)
 
-	cov := computeCoverage(ledger.Policy{}, nil)
+	cov := computeCoverage(ledger.Policy{}, nil, SupplyChain{})
 	if cov.Applicable != 8 {
 		t.Errorf("Applicable = %d, want 8 (10 categories minus LLM04 and LLM08)", cov.Applicable)
 	}
@@ -118,5 +120,40 @@ func TestLLM05OutputHandling_EnforcedByDefault(t *testing.T) {
 	testutil.NewSandbox(t)
 	if got := llm05OutputHandling().Status; got != Enforced {
 		t.Errorf("embedded default registry: Status = %q, want Enforced", got)
+	}
+}
+
+// A gap with no matching history entry is brand-new — this run is the first
+// evidence of it, so age must be zero rather than undefined/negative.
+func TestAnnotateGapAge_BrandNewGapHasZeroAge(t *testing.T) {
+	cats := []Category{{ID: "LLM03", Status: Gap}}
+	got := annotateGapAge(cats, nil, time.Now().UTC())
+	if got[0].GapAgeDays != 0 || got[0].GapSince != "" {
+		t.Errorf("brand-new gap = %+v, want zero age and no GapSince", got[0])
+	}
+}
+
+// The *earliest* history entry naming this category wins, not the most
+// recent — age is "how long has this been broken," not "when did we last
+// check."
+func TestAnnotateGapAge_UsesEarliestHistoryOccurrence(t *testing.T) {
+	now := time.Date(2026, 8, 10, 0, 0, 0, 0, time.UTC)
+	history := []scoreEntry{
+		{TS: now.Add(-40 * 24 * time.Hour).Format(time.RFC3339), Gaps: []string{"LLM03"}},
+		{TS: now.Add(-20 * 24 * time.Hour).Format(time.RFC3339), Gaps: []string{"LLM03"}},
+	}
+	got := annotateGapAge([]Category{{ID: "LLM03", Status: Gap}}, history, now)
+	if got[0].GapAgeDays != 40 {
+		t.Errorf("GapAgeDays = %d, want 40 (the earliest occurrence, not the later one)", got[0].GapAgeDays)
+	}
+}
+
+// A category that is not currently a Gap must never get an age, even if an
+// older history entry happens to name it (it was a gap once and got fixed).
+func TestAnnotateGapAge_SkipsNonGapCategories(t *testing.T) {
+	history := []scoreEntry{{TS: "2020-01-01T00:00:00Z", Gaps: []string{"LLM01"}}}
+	got := annotateGapAge([]Category{{ID: "LLM01", Status: Enforced}}, history, time.Now().UTC())
+	if got[0].GapAgeDays != 0 || got[0].GapSince != "" {
+		t.Errorf("non-Gap category = %+v, want no age annotation", got[0])
 	}
 }

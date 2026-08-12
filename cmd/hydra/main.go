@@ -4,12 +4,14 @@ package main
 
 import (
 	"context"
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -45,6 +47,7 @@ import (
 	"github.com/ankit373/hydra/internal/trust"
 	"github.com/ankit373/hydra/internal/tui"
 	"github.com/ankit373/hydra/internal/update"
+	"github.com/ankit373/hydra/internal/util"
 
 	_ "github.com/ankit373/hydra/internal/provider/agy"
 	_ "github.com/ankit373/hydra/internal/provider/cli"
@@ -218,7 +221,7 @@ func cmdTui() *cobra.Command {
 		},
 	}
 	c.Flags().BoolVar(&snapshot, "snapshot", false, "Render one static frame and exit (docs/preview)")
-	c.Flags().IntVar(&snapView, "view", 0, "With --snapshot: render a single view (0 chat+code, 1 dashboard, 2 agent-tree)")
+	c.Flags().IntVar(&snapView, "view", 0, "With --snapshot: render a single view (0 chat+code, 1 dashboard, 2 agent-tree, 3 security)")
 	return c
 }
 
@@ -1003,9 +1006,10 @@ func cmdMCP() *cobra.Command {
 			}
 			for _, e := range events {
 				line := fmt.Sprintf("  %s  %-6s  %-12s %s/%s %s", e.TS, strings.ToUpper(string(e.Decision)),
-					e.Agent, e.Tool, e.Resource, dimStyle.Render(string(e.Action)))
+					util.SafeTerminal(e.Agent), util.SafeTerminal(e.Tool), util.SafeTerminal(e.Resource),
+					dimStyle.Render(string(e.Action)))
 				if e.Flagged {
-					line += dimStyle.Render(fmt.Sprintf("  [flagged: %s]", e.FlagReason))
+					line += dimStyle.Render(fmt.Sprintf("  [flagged: %s]", util.SafeTerminal(e.FlagReason)))
 				}
 				fmt.Println(line)
 			}
@@ -1061,14 +1065,29 @@ func cmdMCP() *cobra.Command {
 			if chainJSON {
 				return json.NewEncoder(os.Stdout).Encode(res)
 			}
-			if res.Intact {
+			// Each failure mode is a different claim and gets its own words.
+			// "Broken at index N" is meaningless for a truncation, where every
+			// surviving event verifies and the missing ones left no gap.
+			switch {
+			case res.Truncated:
+				fmt.Printf("  %s  ledger TRUNCATED — the chain anchor names an event that is no longer "+
+					"in the log, so records were deleted from the end\n", strings.ToUpper(string(ledger.Deny)))
+				os.Exit(3)
+			case !res.Intact:
+				fmt.Printf("  %s  chain broken at event index %d — the ledger was modified after recording\n",
+					strings.ToUpper(string(ledger.Deny)), res.BrokenAt)
+				os.Exit(3)
+			case res.AnchorMissing:
+				fmt.Printf("  %s  %d chained event(s) all verify, but the chain anchor (%s) is missing — "+
+					"deletion from the end cannot be ruled out\n",
+					warnStyle.Render("WARN"), res.Chained, filepath.Base(ledger.DefaultPath())+".chainhash")
+			case res.AnchorStale:
+				fmt.Printf("  %s  chain intact — %d chained event(s); the anchor lags the log "+
+					"(a dropped anchor write, not a deletion)\n", okStyle.Render("OK"), res.Chained)
+			default:
 				fmt.Printf("  %s  chain intact — %d chained event(s), %d unchained (pre-dates this feature)\n",
 					okStyle.Render("OK"), res.Chained, res.Unchained)
-				return nil
 			}
-			fmt.Printf("  %s  chain broken at event index %d — the ledger was modified after recording\n",
-				strings.ToUpper(string(ledger.Deny)), res.BrokenAt)
-			os.Exit(3) // non-zero so callers can gate on it
 			return nil
 		},
 	}
@@ -1082,29 +1101,85 @@ func cmdMCP() *cobra.Command {
 // per-head risk, and a short list of honest checks — never a manufactured
 // score, only what's actually configured and observed.
 func cmdSecurity() *cobra.Command {
-	var jsonOut bool
+	var jsonOut, csvOut, execOut, attestOut, whyOut bool
 	cmd := &cobra.Command{
 		Use:   "security",
-		Short: "Security posture dashboard: ledger accountability, risk by head, and honest checks",
+		Short: "What the agents on this machine did, and whether you need to act",
 		RunE: func(_ *cobra.Command, _ []string) error {
 			heads := probe.Run(context.Background()).Heads
 			rep, err := security.Build(heads)
 			if err != nil {
 				return err
 			}
-			if jsonOut {
+			switch {
+			case jsonOut:
 				return json.NewEncoder(os.Stdout).Encode(rep)
+			case attestOut:
+				return json.NewEncoder(os.Stdout).Encode(rep.Attestation)
+			case execOut:
+				fmt.Print(security.ExecutiveSummary(rep.Attestation))
+				return nil
+			case csvOut:
+				return securityCSV(os.Stdout, rep)
+			default:
+				printSecurityReport(rep, whyOut)
+				return nil
 			}
-			printSecurityReport(rep)
-			return nil
 		},
 	}
+	cmd.Flags().BoolVar(&whyOut, "why", false, "full detail: coverage, controls, policy, exposure, threats, and the risk register")
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "machine-readable JSON output")
+	cmd.Flags().BoolVar(&csvOut, "csv", false, "one row per OWASP LLM Top-10 category (id,name,status,gap_age_days,detail)")
+	cmd.Flags().BoolVar(&execOut, "exec", false, "executive summary: the verdict, open risk by severity, and framework exposure")
+	cmd.Flags().BoolVar(&attestOut, "attest", false, "checkable attestation: posture, evidence state, rules in force, and a digest")
 	return cmd
 }
 
-func printSecurityReport(r *security.Report) {
+// securityCSV emits the coverage table as one row per finding — the same
+// shape GitHub's and AWS Security Hub's security-overview CSV exports use —
+// so it can be dropped straight into a tracker or spreadsheet.
+func securityCSV(w io.Writer, r *security.Report) error {
+	cw := csv.NewWriter(w)
+	if err := cw.Write([]string{"id", "name", "status", "gap_age_days", "detail"}); err != nil {
+		return err
+	}
+	for _, c := range r.Coverage.Categories {
+		if c.Status == security.NotApplicable {
+			continue
+		}
+		if err := cw.Write([]string{
+			c.ID, c.Name, string(c.Status), strconv.Itoa(c.GapAgeDays), c.Detail,
+		}); err != nil {
+			return err
+		}
+	}
+	cw.Flush()
+	return cw.Error()
+}
+
+// printSecurityReport answers one question by default — what did the agents
+// on this machine do, and can the record be trusted — and everything else
+// only under --why. Nine analyses printed unconditionally is an engineer's
+// dashboard, not an answer.
+func printSecurityReport(r *security.Report, why bool) {
 	fmt.Println()
+	printVerdict(r)
+	printIncidents(r)
+	printEvidenceState(r)
+
+	if !why {
+		fmt.Println()
+		fmt.Println(dimStyle.Render("  hyctl security --why    coverage, controls, policy, exposure, risk register"))
+		fmt.Println(dimStyle.Render("  hyctl security --json   machine-readable"))
+		fmt.Println()
+		return
+	}
+
+	printRegister(r)
+
+	fmt.Println()
+	fmt.Println(dimStyle.Render("  " + strings.Repeat("=", 48)))
+	fmt.Println(dimStyle.Render("  detail"))
 	printCoverageHeadline(r)
 
 	if !r.HasData {
@@ -1120,7 +1195,7 @@ func printSecurityReport(r *security.Report) {
 		fmt.Printf("  %-24s %8s %8s\n", "HEAD", "DENIED", "FLAGGED")
 		fmt.Println(dimStyle.Render("  " + strings.Repeat("─", 48)))
 		for _, h := range r.ByHead {
-			fmt.Printf("  %-24.24s %8d %8d\n", h.Head, h.Denied, h.Flagged)
+			fmt.Printf("  %-24.24s %8d %8d\n", util.SafeTerminal(h.Head), h.Denied, h.Flagged)
 		}
 	}
 
@@ -1135,18 +1210,331 @@ func printSecurityReport(r *security.Report) {
 			status = okStyle.Render(status)
 		}
 		fmt.Printf("    %-26s %s\n", c.Name, status)
-		fmt.Println(dimStyle.Render("      " + c.Detail))
+		fmt.Println(dimStyle.Render("      " + util.SafeTerminal(c.Detail)))
 	}
 
-	if len(r.Recommendations) > 0 {
+	printControls(r)
+	printPolicyAudit(r)
+	printExposures(r)
+	printThreats(r)
+
+	if len(r.Actions) > 0 {
 		fmt.Println()
 		fmt.Println(dimStyle.Render("  " + strings.Repeat("─", 48)))
-		fmt.Println(warnStyle.Render("  recommendations (next hardening backlog):"))
-		for _, rec := range r.Recommendations {
-			fmt.Printf("    - %s\n", rec)
+		fmt.Println(warnStyle.Render("  action queue (next hardening backlog, most urgent first):"))
+		for _, a := range r.Actions {
+			age := ""
+			if a.AgeDays > 0 {
+				age = dimStyle.Render(fmt.Sprintf(" · %dd", a.AgeDays))
+			}
+			fmt.Printf("    %s %s%s — %s\n", actionPriorityTag(a.Priority),
+				util.SafeTerminal(a.Title), age, util.SafeTerminal(a.Detail))
 		}
 	}
 	fmt.Println()
+}
+
+// printVerdict is the single line a CISO reads, plus the condition that
+// produced it. Never a blended score — a state with its trigger named.
+func printVerdict(r *security.Report) {
+	p := r.Posture
+	label := okStyle.Render("OK")
+	switch p.Verdict {
+	case security.VerdictActNow:
+		label = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("196")).Render("ACT NOW")
+	case security.VerdictAttention:
+		label = warnStyle.Render("ATTENTION")
+	}
+	fmt.Printf("  %s  %s\n", cortexStyle.Render("VERDICT"), label)
+	// The trigger quotes an incident narrative, which carries an attacker's
+	// own tool name — the one line on this screen most worth forging.
+	fmt.Println(dimStyle.Render("    " + util.SafeTerminal(p.Trigger)))
+	// Stages of the incident the verdict quotes, so the shape of the attack
+	// rides with the sentence instead of being repeated under it.
+	if in, ok := citedIncident(r); ok {
+		fmt.Println(dimStyle.Render(fmt.Sprintf("    %s · %s → %s · %d event(s) · likelihood %d × impact %d",
+			stagesText(in.Stages), shortTS(in.Start), shortTS(in.End), len(in.Events), in.Likelihood, in.Impact)))
+	}
+	if len(p.Because) > 1 {
+		fmt.Println(dimStyle.Render(fmt.Sprintf("    +%d more condition(s) below", len(p.Because)-1)))
+	}
+	if p.Verdict == security.VerdictOK {
+		fmt.Println(dimStyle.Render("    checked: " + strings.Join(p.Checked, ", ")))
+	}
+}
+
+// printEvidenceState is the second half of the developer's question: not just
+// what happened, but whether the record of it can be believed.
+func printEvidenceState(r *security.Report) {
+	fmt.Println()
+	// "0 events, intact" over a log that has never been written reads as a
+	// clean bill of health. Nothing recorded is not the same as nothing wrong.
+	if !r.HasData {
+		fmt.Println(dimStyle.Render(
+			"  no ledger events yet — nothing has dispatched through hyctl on this machine,"))
+		fmt.Println(dimStyle.Render(
+			"  so there is no record to judge and this is not a clean result"))
+		return
+	}
+	ev := r.Attestation.Evidence
+	chain := okStyle.Render("intact")
+	switch {
+	case ev.Truncated:
+		chain = warnStyle.Render("TRUNCATED — records were deleted from the end")
+	case !ev.ChainIntact:
+		chain = warnStyle.Render("BROKEN — the log was modified after recording")
+	case ev.Events > 0 && ev.ChainedEvents == 0:
+		chain = warnStyle.Render("unverifiable — no hash chain on any record")
+	case ev.AnchorMissing:
+		chain = warnStyle.Render("unanchored — truncation would not be detected")
+	}
+	fmt.Printf("  %s  %d blocked · %d flagged\n",
+		cortexStyle.Render("activity"), r.Ledger.Denied, r.Ledger.Flagged)
+	fmt.Printf("  %s  %d event(s), %d hash-chained, %s\n",
+		cortexStyle.Render("evidence"), ev.Events, ev.ChainedEvents, chain)
+}
+
+// printIncidents shows correlated sequences rather than scattered rows.
+// citedIncident is the incident the verdict already quotes, if any.
+func citedIncident(r *security.Report) (security.Incident, bool) {
+	for _, in := range r.Incidents {
+		if in.Narrative != "" && strings.Contains(r.Posture.Trigger, in.Narrative) {
+			return in, true
+		}
+	}
+	return security.Incident{}, false
+}
+
+func stagesText(stages []security.Stage) string {
+	out := make([]string, 0, len(stages))
+	for _, s := range stages {
+		out = append(out, string(s))
+	}
+	return strings.Join(out, " → ")
+}
+
+// printIncidents lists the incidents the verdict does NOT already quote —
+// printing the cited one again puts the same sentence on screen twice.
+func printIncidents(r *security.Report) {
+	cited, hasCited := citedIncident(r)
+	rest := make([]security.Incident, 0, len(r.Incidents))
+	for _, in := range r.Incidents {
+		if hasCited && in.ID == cited.ID {
+			continue
+		}
+		rest = append(rest, in)
+	}
+	if len(rest) == 0 {
+		return
+	}
+	fmt.Println()
+	fmt.Printf("  %s\n", cortexStyle.Render("other incidents"))
+	for _, in := range security.TopIncidents(rest, 3) {
+		fmt.Printf("    %s %s\n", severityTag(in.Severity), util.SafeTerminal(in.Narrative))
+		fmt.Println(dimStyle.Render(fmt.Sprintf("      %s → %s · %d event(s) · likelihood %d × impact %d",
+			shortTS(in.Start), shortTS(in.End), len(in.Events), in.Likelihood, in.Impact)))
+	}
+	if n := len(rest); n > 3 {
+		fmt.Println(dimStyle.Render(fmt.Sprintf("    … %d more", n-3)))
+	}
+}
+
+// printRegister is the governed view: what is open, how overdue, what it is
+// worth, and which frameworks it bears on.
+func printRegister(r *security.Report) {
+	reg := r.Register
+	if len(reg.Risks) == 0 {
+		return
+	}
+	fmt.Println()
+	fmt.Printf("  %s   %s\n", cortexStyle.Render("risk register"),
+		dimStyle.Render(fmt.Sprintf("Σ modelled defect cost $%.0f (per-occurrence, not annualised) · %d past SLA", reg.SumDefectCostUSD, reg.Breached)))
+	fmt.Printf("    %-10s %-42s %-9s %8s %12s\n", "ID", "RISK", "SEVERITY", "DUE", "COST/DEFECT")
+	for _, k := range topRisks(reg.Risks, 6) {
+		due := dimStyle.Render(fmt.Sprintf("%dd", k.DueInDays))
+		if k.Breached {
+			due = warnStyle.Render(fmt.Sprintf("%dd", k.DueInDays))
+		}
+		fmt.Printf("    %-10s %-42.42s %-9s %8s %12s\n",
+			k.ID, util.SafeTerminal(k.Title), severityTag(k.Severity), due, fmt.Sprintf("$%.0f", k.DefectCostUSD))
+		if len(k.Frameworks) > 0 {
+			fmt.Println(dimStyle.Render("               " + frameworksText(k.Frameworks)))
+		}
+	}
+	if n := len(reg.Risks); n > 6 {
+		fmt.Println(dimStyle.Render(fmt.Sprintf("    … %d more", n-6)))
+	}
+}
+
+func topRisks(rs []security.Risk, n int) []security.Risk {
+	if len(rs) <= n {
+		return rs
+	}
+	return rs[:n]
+}
+
+func frameworksText(fs []security.FrameworkRef) string {
+	parts := make([]string, 0, len(fs))
+	for _, f := range fs {
+		parts = append(parts, f.Framework+" "+f.Control)
+	}
+	return strings.Join(parts, " · ")
+}
+
+func severityTag(s security.Severity) string {
+	switch s {
+	case security.SeverityCritical:
+		return lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("196")).Render("CRITICAL")
+	case security.SeverityHigh:
+		return warnStyle.Render("HIGH    ")
+	case security.SeverityMedium:
+		return dimStyle.Render("MEDIUM  ")
+	default:
+		return dimStyle.Render("LOW     ")
+	}
+}
+
+// shortTS trims an RFC3339 stamp to the time of day for a dense table.
+func shortTS(ts string) string {
+	if len(ts) >= 19 {
+		return ts[11:19]
+	}
+	return ts
+}
+
+// printControls answers "does each declared control actually run" — the
+// question a config file cannot answer about itself. A control that is
+// configured but cannot fire reads as protection everywhere it is listed
+// while doing nothing, which is worse than a control that is simply absent.
+func printControls(r *security.Report) {
+	if len(r.Controls) == 0 {
+		return
+	}
+	fmt.Println()
+	fmt.Println(dimStyle.Render("  " + strings.Repeat("─", 48)))
+	fmt.Printf("  %s\n", cortexStyle.Render("control effectiveness"))
+	for _, c := range r.Controls {
+		var tag string
+		switch c.Status() {
+		case "inert":
+			tag = warnStyle.Render("INERT  ")
+		case "limited":
+			tag = warnStyle.Render("LIMITED")
+		case "absent":
+			tag = dimStyle.Render("absent ")
+		default:
+			tag = okStyle.Render("active ")
+		}
+		// Mark rows established by reading the source rather than by
+		// observation, so the reader knows which claims are evidence.
+		src := ""
+		if !c.Verified {
+			src = dimStyle.Render(" [source-derived]")
+		}
+		fmt.Printf("    %s %s%s\n", tag, c.Name, src)
+		fmt.Println(dimStyle.Render("      " + util.SafeTerminal(c.Detail)))
+	}
+}
+
+// printPolicyAudit is the real policy readout: which rules fire, which never
+// have, which never can, and whether the default lets everything through.
+func printPolicyAudit(r *security.Report) {
+	a := r.PolicyAudit
+	fmt.Println()
+	fmt.Println(dimStyle.Render("  " + strings.Repeat("─", 48)))
+	fmt.Printf("  %s\n", cortexStyle.Render("policy audit"))
+
+	posture := okStyle.Render("fail-closed (default deny)")
+	if a.FailOpen {
+		posture = warnStyle.Render("fail-open (default allow)")
+	}
+	fmt.Printf("    %-26s %s\n", "posture", posture)
+
+	if len(a.Rules) == 0 {
+		fmt.Println(dimStyle.Render("    no rules defined — nothing is scoped"))
+		return
+	}
+	fmt.Printf("    %-4s %-30s %-7s %6s  %s\n", "#", "RULE", "DECIDES", "HITS", "")
+	for _, rule := range a.Rules {
+		note := ""
+		switch {
+		case rule.ShadowedBy != nil:
+			note = warnStyle.Render(fmt.Sprintf("UNREACHABLE — rule %d always matches first", *rule.ShadowedBy))
+		case rule.Dead:
+			note = dimStyle.Render("never matched")
+		}
+		fmt.Printf("    %-4d %-30.30s %-7s %6d  %s\n",
+			rule.Index, util.SafeTerminal(rule.Summary), rule.Decision, rule.Hits, note)
+	}
+	fmt.Println(dimStyle.Render(fmt.Sprintf("    %d access(es) fell through to the %s default", a.DefaultHits, a.Default)))
+}
+
+// printExposures answers the question a PII count never could: did any of it
+// leave the machine?
+func printExposures(r *security.Report) {
+	if len(r.Exposures) == 0 {
+		return
+	}
+	fmt.Println()
+	fmt.Println(dimStyle.Render("  " + strings.Repeat("─", 48)))
+	fmt.Printf("  %s\n", cortexStyle.Render("sensitive data exposure"))
+	for _, e := range r.Exposures {
+		where := okStyle.Render("local")
+		switch {
+		case e.Remote && e.Known:
+			where = warnStyle.Render("REMOTE")
+		case e.Remote:
+			// Treated as remote (fail-closed) but not observed as such —
+			// distinguished so an offline head can't read as a real leak.
+			where = dimStyle.Render("UNKNOWN")
+		}
+		types := strings.Join(e.PIITypes, ", ")
+		if types == "" {
+			types = "unclassified type"
+		}
+		fmt.Printf("    %-7s %-18.18s %-24.24s %s\n", where,
+			util.SafeTerminal(e.Head), util.SafeTerminal(e.Resource), dimStyle.Render(types))
+	}
+}
+
+// printThreats is the forensic breakdown behind the blocked/flagged counts:
+// what was actually attempted, against what, and how dangerous the operation
+// was.
+func printThreats(r *security.Report) {
+	th := r.Threats
+	if len(th.ByMarker) == 0 && len(th.ProbedResources) == 0 && len(th.ByAction) == 0 {
+		return
+	}
+	fmt.Println()
+	fmt.Println(dimStyle.Render("  " + strings.Repeat("─", 48)))
+	fmt.Printf("  %s\n", cortexStyle.Render("threat breakdown"))
+	printCountList("injection markers tried", th.ByMarker)
+	printCountList("resources probed (repeat denials)", th.ProbedResources)
+	printCountList("by action", th.ByAction)
+}
+
+func printCountList(title string, counts []security.Count) {
+	if len(counts) == 0 {
+		return
+	}
+	fmt.Printf("    %s\n", dimStyle.Render(title+":"))
+	for _, c := range counts {
+		fmt.Printf("      %-40.40s %d\n", util.SafeTerminal(c.Label), c.Count)
+	}
+}
+
+// actionPriorityTag renders an Action's priority as a short colored tag.
+// Colors mirror budgetModeStyle's own critical/warning/dim convention rather
+// than inventing a new palette.
+func actionPriorityTag(p security.ActionPriority) string {
+	switch p {
+	case security.PriorityNow:
+		return lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("196")).Render("[NOW]")
+	case security.PrioritySoon:
+		return warnStyle.Render("[SOON]")
+	default:
+		return dimStyle.Render("[WATCH]")
+	}
 }
 
 // printCoverageHeadline is the KPI tile: coverage against the OWASP LLM Top
@@ -1187,6 +1575,9 @@ func printCoverageHeadline(r *security.Report) {
 			label = okStyle.Render(label)
 		case security.Gap:
 			label = warnStyle.Render(label)
+			if c.GapAgeDays > 0 {
+				label += dimStyle.Render(fmt.Sprintf(" (%dd)", c.GapAgeDays))
+			}
 		}
 		fmt.Printf("    %-6s %-32s %s\n", c.ID, c.Name, label)
 	}

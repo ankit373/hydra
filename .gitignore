@@ -88,3 +88,6 @@ HYDRA_INFERENCE_SCOPING.md
 # Python
 __pycache__/
 *.pyc
+
+# gstack skill artifacts (security reports, local state)
+.gstack/

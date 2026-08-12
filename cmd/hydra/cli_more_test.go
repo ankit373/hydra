@@ -20,12 +20,12 @@ import (
 func TestCLI_TuiSnapshot_FlagValidation(t *testing.T) {
 	cliSandbox(t)
 
-	// The full three-view frame.
+	// The full four-view frame.
 	out, cobraOut, err := run(t, "tui", "--snapshot")
 	if err != nil {
 		t.Fatalf("`hyctl tui --snapshot` failed: %v (%s)", err, cobraOut)
 	}
-	for _, want := range []string{"VIEW 1/3", "VIEW 2/3", "VIEW 3/3"} {
+	for _, want := range []string{"VIEW 1/4", "VIEW 2/4", "VIEW 3/4", "VIEW 4/4"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("the snapshot is missing %q:\n%s", want, out)
 		}
@@ -36,16 +36,25 @@ func TestCLI_TuiSnapshot_FlagValidation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("`--snapshot --view 1` failed: %v", err)
 	}
-	if strings.Contains(single, "VIEW 1/3") {
-		t.Errorf("--view rendered the labelled three-view frame:\n%s", single)
+	if strings.Contains(single, "VIEW 1/4") {
+		t.Errorf("--view rendered the labelled four-view frame:\n%s", single)
 	}
 	if strings.TrimSpace(single) == "" {
 		t.Error("--view 1 rendered nothing")
 	}
 
+	// The new security view (index 3) renders too.
+	secOut, _, err := run(t, "tui", "--snapshot", "--view", "3")
+	if err != nil {
+		t.Fatalf("`--snapshot --view 3` (security) failed: %v", err)
+	}
+	if !strings.Contains(secOut, "security") {
+		t.Errorf("--view 3 does not mention the security view:\n%s", secOut)
+	}
+
 	// An out-of-range view must be refused with the valid range named. Before
 	// this was checked it was an unchecked slice index — a panic.
-	for _, v := range []string{"-1", "3", "99"} {
+	for _, v := range []string{"-1", "4", "99"} {
 		_, cobraOut, err := run(t, "tui", "--snapshot", "--view", v)
 		if err == nil {
 			t.Errorf("--view %s was accepted", v)

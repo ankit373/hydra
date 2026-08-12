@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
-import { CheckHyctl, GetDashboard, GetEdits, GetFleet, GetSession, GetVersion } from './bindings'
+import { CheckHyctl, GetDashboard, GetEdits, GetFleet, GetSecurity, GetSession, GetVersion } from './bindings'
 import type {
   Dashboard as DashboardData,
   Edit,
   Fleet as FleetData,
   HyctlStatus,
+  SecurityReport,
   Session as SessionData,
   Version,
 } from './types'
@@ -12,6 +13,8 @@ import { Dashboard } from './views/Dashboard'
 import { Fleet } from './views/Fleet'
 import { Session } from './views/Session'
 import { Code } from './views/Code'
+import { Security as SecurityView } from './views/Security'
+import { ErrorBoundary } from './ErrorBoundary'
 import { ChatDock } from './views/ChatDock'
 import { UpdateNotice } from './views/UpdateNotice'
 import { SetupBanner } from './views/SetupBanner'
@@ -31,6 +34,7 @@ const NAV = [
   { id: 'fleet', label: 'Fleet', ready: true },
   { id: 'session', label: 'Session', ready: true },
   { id: 'code', label: 'Code', ready: true },
+  { id: 'security', label: 'Security', ready: true },
 ] as const
 
 type ViewID = (typeof NAV)[number]['id']
@@ -42,6 +46,7 @@ export default function App() {
   const [fleet, setFleet] = useState<FleetData | null>(null)
   const [session, setSession] = useState<SessionData | null>(null)
   const [edits, setEdits] = useState<Edit[] | null>(null)
+  const [security, setSecurity] = useState<SecurityReport | null>(null)
   const [version, setVersion] = useState<Version | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [hyctlStatus, setHyctlStatus] = useState<HyctlStatus | null>(null)
@@ -64,6 +69,7 @@ export default function App() {
       if (which === 'fleet') setFleet(await GetFleet())
       else if (which === 'session') setSession(await GetSession(id))
       else if (which === 'code') setEdits(await GetEdits(id))
+      else if (which === 'security') setSecurity(await GetSecurity())
       else setDashboard(await GetDashboard())
       setError(null)
     } catch (e) {
@@ -75,7 +81,7 @@ export default function App() {
   // at is pure cost.
   useEffect(() => {
     void load(view, runID)
-    const every = view === 'dashboard' ? DASHBOARD_MS : LIVE_MS
+    const every = view === 'dashboard' || view === 'security' ? DASHBOARD_MS : LIVE_MS
     const t = setInterval(() => void load(view, runID), every)
     return () => clearInterval(t)
   }, [load, view, runID])
@@ -126,7 +132,10 @@ export default function App() {
   // text) so its first-load window can look like the rest of the view
   // instead of a plain sentence.
   const loading =
-    (view === 'fleet' && !fleet) || (view === 'session' && !session) || (view === 'code' && !edits)
+    (view === 'fleet' && !fleet) ||
+    (view === 'session' && !session) ||
+    (view === 'code' && !edits) ||
+    (view === 'security' && !security)
 
   return (
     <div className="shell">
@@ -192,15 +201,22 @@ export default function App() {
             <Code runID={runID} edits={edits} />
           </>
         )}
+        {!error && view === 'security' && security && (
+          <ErrorBoundary label="Security">
+            <SecurityView data={security} />
+          </ErrorBoundary>
+        )}
         {!error && loading && <p style={{ color: 'var(--hy-dim)' }}>Reading logs…</p>}
       </main>
 
-      <ChatDock
-        onOpenRun={openSession}
-        open={dockOpen}
-        onOpenChange={setDockOpen}
-        focusSignal={dockFocusSignal}
-      />
+      <ErrorBoundary label="Chat">
+        <ChatDock
+          onOpenRun={openSession}
+          open={dockOpen}
+          onOpenChange={setDockOpen}
+          focusSignal={dockFocusSignal}
+        />
+      </ErrorBoundary>
     </div>
   )
 }

@@ -10,6 +10,8 @@ import (
 
 	"github.com/ankit373/hydra/internal/cost"
 	"github.com/ankit373/hydra/internal/graph"
+	"github.com/ankit373/hydra/internal/ledger"
+	"github.com/ankit373/hydra/internal/security"
 )
 
 // cost.jsonl carries wall_ms on every row, so a per-head latency trace is real
@@ -270,5 +272,94 @@ func TestBlastFor_RealGraphYieldsRealNumbers(t *testing.T) {
 	// A file absent from the graph reports nothing at all.
 	if _, _, _, ok := m.ckBlastFor("not-in-graph.go"); ok {
 		t.Error("a file absent from the graph reported a blast radius")
+	}
+}
+
+// dashSecurity must handle all three real states without panicking or
+// rendering an empty frame: no report at all (Build failed), a normal
+// report, and one where the ledger chain has been tampered with.
+
+func TestDashSecurity_NilReportRendersUnavailable(t *testing.T) {
+	m := Cockpit{w: 120, h: 30, ready: true, security: nil}
+	out := m.dashSecurity(120, 30)
+	if !strings.Contains(out, "unavailable") {
+		t.Errorf("a nil security report should say so plainly:\n%s", out)
+	}
+}
+
+func TestDashSecurity_RendersCoverageAndActions(t *testing.T) {
+	m := Cockpit{w: 120, h: 30, ready: true, security: &security.Report{
+		IntegrityIntact: true,
+		Coverage: security.Coverage{
+			Applicable: 8, Covered: 3, PercentCovered: 37.5,
+			Categories: []security.Category{
+				{ID: "LLM01", Name: "Prompt Injection", Status: security.Enforced},
+				{ID: "LLM03", Name: "Supply Chain", Status: security.Gap, Detail: "no integrity verification", GapAgeDays: 45},
+				{ID: "LLM04", Name: "Data and Model Poisoning", Status: security.NotApplicable},
+			},
+		},
+		Trend:  security.Trend{Available: true, DeltaPct: 12, FirstPct: 25.5},
+		Ledger: security.LedgerPanel{Total: 5, Allowed: 2, Denied: 2, Flagged: 1},
+		ByHead: []ledger.HeadRisk{{Head: "sketchy", Denied: 2, Flagged: 1}},
+		History: []security.HistoryPoint{
+			{TS: "2026-07-01T00:00:00Z", PercentCovered: 12.5},
+			{TS: "2026-08-01T00:00:00Z", PercentCovered: 37.5},
+		},
+		RiskHistory: []ledger.DayRisk{
+			{Date: "2026-07-01", Denied: 1},
+			{Date: "2026-08-01", Denied: 2, Flagged: 1},
+		},
+		Exposures: []security.Exposure{
+			{Head: "ollama", Remote: false, Known: true},
+			{Head: "gpt-4o", Remote: true, Known: true, PIITypes: []string{"aws access key id"}},
+		},
+		Controls: []security.Control{
+			{Name: "File-policy caps", Declared: true, Wired: false, Detail: "not wired"},
+			{Name: "Ledger access rules", Declared: true, Wired: true},
+		},
+		PolicyAudit: security.PolicyAudit{
+			Default: "allow", FailOpen: true,
+			Rules: []security.RuleStat{{Index: 0, Hits: 3}, {Index: 1, Hits: 0, Dead: true}},
+		},
+		Actions: []security.Action{
+			{ID: "LLM03", Kind: "gap", Title: "Supply Chain", Detail: "no integrity verification",
+				AgeDays: 45, Priority: security.PriorityNow},
+		},
+	}}
+	out := m.dashSecurity(120, 30)
+	for _, want := range []string{
+		"37%", "LLM01", "enforced", "LLM03", "gap", "45d", "sketchy", "denied 2",
+		"NOW", "Supply Chain", "history",
+		"ledger", "risk trend",
+		// The exposure line must lead with the leak, not the raw count, and
+		// the policy line must state the posture rather than a percentage.
+		"exposure", "1 REMOTE", "policy", "fail-open", "1 dead", "controls", "1 inert",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("dashSecurity output missing %q:\n%s", want, out)
+		}
+	}
+	// The real ckSpark sparkline, not a placeholder — same block glyphs the
+	// latency panel already uses.
+	if !strings.ContainsAny(out, "▁▂▃▄▅▆▇█") {
+		t.Errorf("dashSecurity did not render a real history sparkline:\n%s", out)
+	}
+	// N/A categories must never appear in the rendered list.
+	if strings.Contains(out, "LLM04") {
+		t.Errorf("an N/A category (LLM04) was rendered:\n%s", out)
+	}
+}
+
+func TestDashSecurity_IntegrityCompromisedOverridesTheScore(t *testing.T) {
+	m := Cockpit{w: 120, h: 30, ready: true, security: &security.Report{
+		IntegrityIntact: false,
+		Coverage:        security.Coverage{Applicable: 8, Covered: 8, PercentCovered: 100},
+	}}
+	out := m.dashSecurity(120, 30)
+	if !strings.Contains(out, "INTEGRITY COMPROMISED") {
+		t.Errorf("a broken chain must override the headline, got:\n%s", out)
+	}
+	if strings.Contains(out, "100%") {
+		t.Errorf("the coverage percentage must not render when integrity is compromised:\n%s", out)
 	}
 }
