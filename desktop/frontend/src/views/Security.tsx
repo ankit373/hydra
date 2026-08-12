@@ -8,6 +8,11 @@ import type {
   EvidenceQuality,
   SupplyChain,
   BlastReport,
+  Incident,
+  Posture,
+  Risk,
+  RiskRegister,
+  Severity,
   Exposure,
   HeadRisk,
   LedgerEvent,
@@ -128,6 +133,97 @@ function downloadSecurityCSV(data: SecurityReport) {
 
 // ── hero: the catchy first view ────────────────────────────────────────────
 
+// Bottom line up front. A coverage ring is a measurement; the verdict is the
+// answer, and the answer goes first.
+function VerdictBanner({ posture }: { posture: Posture }) {
+  if (!posture) return null
+  const cls =
+    posture.verdict === 'act now' ? 'sec-verdict--act' :
+    posture.verdict === 'attention' ? 'sec-verdict--attention' : 'sec-verdict--ok'
+  return (
+    <div className={`sec-verdict ${cls}`}>
+      <div className="sec-verdict__label">{posture.verdict}</div>
+      <div className="sec-verdict__trigger">{posture.trigger}</div>
+      {posture.verdict === 'ok' && posture.checked?.length > 0 && (
+        <div className="sec-verdict__scope">checked: {posture.checked.join(', ')}</div>
+      )}
+    </div>
+  )
+}
+
+function sevClass(s: Severity) {
+  return s === 'critical' || s === 'high' ? 'sec-cat__status--gap' : ''
+}
+
+// An incident is a story, so it renders as one — the narrative first, the
+// stage chips and the evidence count under it.
+function IncidentList({ incidents }: { incidents: Incident[] }) {
+  if (incidents.length === 0) return null
+  return (
+    <section>
+      <h2 className="section__title">Incidents</h2>
+      <div className="sec-actions">
+        {incidents.map((in_) => (
+          <div className={`sec-action sec-action--${in_.severity === 'critical' || in_.severity === 'high' ? 'now' : 'soon'}`} key={in_.id}>
+            <div className="sec-action__head">
+              <span className="sec-action__priority">{in_.severity}</span>
+              <span className="sec-action__age">
+                likelihood {in_.likelihood} × impact {in_.impact}
+              </span>
+            </div>
+            <div className="sec-action__title">{in_.narrative}</div>
+            <div className="sec-action__detail">
+              {in_.stages.map((st) => (
+                <span className="sec-cat__status" key={st}>{st}</span>
+              ))}
+              <span className="sec-action__age"> {in_.events?.length ?? 0} event(s)</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+// The governed view: one table where every finding is the same kind of thing.
+function RegisterTable({ register }: { register: RiskRegister }) {
+  const risks = register?.risks ?? []
+  if (risks.length === 0) return null
+  return (
+    <section>
+      <h2 className="section__title">Risk register</h2>
+      <p className="card__note">
+        Σ modelled defect cost ${register.sumDefectCostUsd.toFixed(0)} — per-occurrence, not
+        annualised{register.breached > 0 ? ` · ${register.breached} past remediation SLA` : ''}
+      </p>
+      <div className="table__wrap">
+        <table className="table">
+          <thead>
+            <tr>
+              <th>ID</th><th>Risk</th><th>Severity</th><th className="num">Due</th>
+              <th className="num">Cost/defect</th><th>Frameworks</th>
+            </tr>
+          </thead>
+          <tbody>
+            {risks.map((k: Risk) => (
+              <tr key={k.id}>
+                <td className="mono">{k.id}</td>
+                <td>{k.title}</td>
+                <td><span className={`sec-cat__status ${sevClass(k.severity)}`}>{k.severity}</span></td>
+                <td className={`num ${k.breached ? 'cost--expensive' : ''}`}>{k.dueInDays}d</td>
+                <td className="num">${k.defectCostUsd.toFixed(0)}</td>
+                <td className="card__note">
+                  {(k.frameworks ?? []).map((f) => `${f.framework} ${f.control}`).join(' · ')}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )
+}
+
 function Hero({ data }: { data: SecurityReport }) {
   const band = coverageBand(data.coverage.percentCovered)
   const pii = findCheckStatus(data.checks, 'PII/sensitive-data detections')
@@ -135,6 +231,10 @@ function Hero({ data }: { data: SecurityReport }) {
 
   return (
     <>
+      <VerdictBanner posture={data.posture} />
+      <IncidentList incidents={data.incidents ?? []} />
+      <RegisterTable register={data.register} />
+
       <div className="sec-hero">
         <div className="card sec-hero__score">
           <CoverageRing percent={data.coverage.percentCovered} band={band} />

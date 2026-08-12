@@ -179,6 +179,35 @@ body {
 .delta--good { color: var(--hy-cheap); }
 .delta--bad  { color: var(--hy-expensive); }
 
+/* ── Security: verdict banner ─────────────────────────────────────────── */
+/* The answer, before any measurement. Colour carries the state so it reads
+   before the text does. */
+.sec-verdict {
+  border: 1px solid var(--hy-line);
+  border-left: 4px solid var(--hy-line);
+  border-radius: var(--hy-radius);
+  background: var(--hy-panel);
+  padding: 16px 18px;
+  margin-bottom: 14px;
+}
+.sec-verdict--act       { border-left-color: var(--hy-expensive); }
+.sec-verdict--attention { border-left-color: var(--hy-mid); }
+.sec-verdict--ok        { border-left-color: var(--hy-cheap); }
+
+.sec-verdict__label {
+  font-family: var(--hy-font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .12em;
+  font-weight: 700;
+}
+.sec-verdict--act       .sec-verdict__label { color: var(--hy-expensive); }
+.sec-verdict--attention .sec-verdict__label { color: var(--hy-mid); }
+.sec-verdict--ok        .sec-verdict__label { color: var(--hy-cheap); }
+
+.sec-verdict__trigger { margin-top: 6px; font-size: 14px; line-height: 1.5; }
+.sec-verdict__scope   { margin-top: 6px; font-size: 12px; color: var(--hy-dim); }
+
 /* ── Security: hero ──────────────────────────────────────────────────────── */
 
 .sec-hero { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }

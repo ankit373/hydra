@@ -312,6 +312,12 @@ export interface SecurityReport {
   supplyChain: SupplyChain
   /** Reach of what agents actually edited, per the code graph. */
   blast: BlastReport
+  /** The one-line verdict and what decided it. */
+  posture: Posture
+  /** Correlated attack sequences. */
+  incidents?: Incident[]
+  /** The governed view: every finding as one kind of object. */
+  register: RiskRegister
 }
 
 export interface DayRisk {
@@ -368,6 +374,64 @@ export interface Control {
   /** False when the claim was established by reading the source rather than
    *  observed at runtime — the reader deserves to know which kind it is. */
   verified: boolean
+}
+
+export type Verdict = 'act now' | 'attention' | 'ok'
+export type Severity = 'critical' | 'high' | 'medium' | 'low'
+
+export interface Posture {
+  verdict: Verdict
+  /** The single condition that produced the verdict. */
+  trigger: string
+  because?: string[]
+  /** What was evaluated — so an "ok" states its scope. */
+  checked: string[]
+}
+
+export interface Incident {
+  id: string
+  actor: string
+  agent?: string
+  start: string
+  end: string
+  stages: string[]
+  /** OWASP Risk Rating factors, kept separate so severity can be argued with. */
+  likelihood: number
+  impact: number
+  severity: Severity
+  narrative: string
+  events: LedgerEvent[]
+}
+
+export interface FrameworkRef {
+  framework: string
+  control: string
+  /** A hand-maintained mapping, not something derived from the data. */
+  curated: boolean
+}
+
+export interface Risk {
+  id: string
+  class: string
+  title: string
+  detail: string
+  severity: Severity
+  status: string
+  firstSeen?: string
+  ageDays: number
+  dueInDays: number
+  breached: boolean
+  /** Cost of ONE defect of this class — per-occurrence, not annualised. */
+  defectCostUsd: number
+  frameworks?: FrameworkRef[]
+  evidence?: string[]
+}
+
+export interface RiskRegister {
+  risks: Risk[]
+  sumDefectCostUsd: number
+  breached: number
+  bySeverity: Record<string, number>
 }
 
 export interface EditedFile {
