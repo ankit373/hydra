@@ -7,6 +7,7 @@ import type {
   Control,
   EvidenceQuality,
   SupplyChain,
+  BlastReport,
   Exposure,
   HeadRisk,
   LedgerEvent,
@@ -282,6 +283,7 @@ function Detailed({ data }: { data: SecurityReport }) {
           <ControlsView controls={data.controls ?? []} />
           <ConfidenceEvidenceView evidence={data.evidence} />
           <SupplyChainView supply={data.supplyChain} />
+          <BlastView blast={data.blast} />
         </>
       )}
       {tab === 'policy' && (
@@ -354,6 +356,70 @@ function ControlsView({ controls }: { controls: Control[] }) {
 // A head binary changing under you is the rug-pull pattern itself. First
 // sight is a baseline, not a finding — flagging every head on a first run
 // would teach the reader to ignore the column.
+// Consequences, not access decisions: an edit to a hub forty files depend on
+// is a different risk from an edit to a leaf. A file the graph does not index
+// is shown as unknown and sorted last — never as low-risk, which is the whole
+// reason internal/graph exposes Knows().
+function BlastView({ blast }: { blast: BlastReport }) {
+  if (!blast?.graphPresent) {
+    return (
+      <section>
+        <h2 className="section__title">Edit blast radius</h2>
+        <p className="card__note">
+          No <code>graph.json</code>, so the reach of an agent's edits cannot be scored. Generate one
+          with <code>hyctl graph</code>.
+        </p>
+      </section>
+    )
+  }
+  const files = blast.files ?? []
+  if (files.length === 0) {
+    return (
+      <section>
+        <h2 className="section__title">Edit blast radius</h2>
+        <p className="card__note">No agent edit was found in the {blast.runsScanned} most recent run(s).</p>
+      </section>
+    )
+  }
+  const max = Math.max(...files.map((f) => f.radius ?? 0), 1)
+  return (
+    <section>
+      <h2 className="section__title">Edit blast radius</h2>
+      {blast.percolates && (
+        <p className="card__note">
+          The dependency graph percolates (kappa {blast.kappa?.toFixed(1)}), so an edit to a hub can
+          cascade.
+        </p>
+      )}
+      <div className="table__wrap">
+        <div className="rank">
+          {files.map((f) => (
+            <div className="rank__row" key={f.file}>
+              <span className="rank__name" title={f.file}>
+                {f.file.split('/').pop()}
+              </span>
+              <span className="rank__track">
+                <span
+                  className={`rank__fill rank__fill--${
+                    !f.known ? 'free' : (f.dependents ?? 0) > 0 ? 'expensive' : 'cheap'
+                  }`}
+                  style={{ width: f.known ? `${((f.radius ?? 0) / max) * 100}%` : '0%' }}
+                />
+              </span>
+              <span className="rank__value">
+                {f.known ? `${f.dependents} dep · ${f.radius?.toFixed(2)}×` : 'unknown'}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+      {blast.truncated && (
+        <p className="card__note">Showing the {blast.runsScanned} most recent runs; older runs were not scanned.</p>
+      )}
+    </section>
+  )
+}
+
 function SupplyChainView({ supply }: { supply: SupplyChain }) {
   const bins = supply?.binaries ?? []
   if (bins.length === 0) {

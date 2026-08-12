@@ -310,6 +310,8 @@ export interface SecurityReport {
   drift: ConfigDrift
   /** CLI head binaries and whether any changed since last seen. */
   supplyChain: SupplyChain
+  /** Reach of what agents actually edited, per the code graph. */
+  blast: BlastReport
 }
 
 export interface DayRisk {
@@ -366,6 +368,26 @@ export interface Control {
   /** False when the claim was established by reading the source rather than
    *  observed at runtime — the reader deserves to know which kind it is. */
   verified: boolean
+}
+
+export interface EditedFile {
+  file: string
+  edits: number
+  radius?: number
+  dependents?: number
+  /** False when the graph does not index this file — unknown, not low-risk. */
+  known: boolean
+}
+
+export interface BlastReport {
+  graphPresent: boolean
+  /** Molloy-Reed kappa >= 2: the graph has a cascade-capable core. */
+  percolates: boolean
+  kappa?: number
+  files?: EditedFile[]
+  unknown: number
+  runsScanned: number
+  truncated?: boolean
 }
 
 export interface HeadBinary {
