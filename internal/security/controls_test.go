@@ -144,7 +144,7 @@ func TestControls_UnreachableLedgerRulesAreLimited(t *testing.T) {
 // operator believes they already have, so it outranks a known gap.
 func TestBuildActions_InertControlRaisesAPriorityNowAction(t *testing.T) {
 	controls := []Control{{Name: "File-policy caps", Declared: true, Wired: false, Detail: "d"}}
-	actions := buildActions(Coverage{}, nil, nil, PolicyAudit{}, controls, EvidenceQuality{}, ConfigDrift{}, SupplyChain{})
+	actions := buildActions(Coverage{}, nil, nil, PolicyAudit{}, controls, EvidenceQuality{}, ConfigDrift{}, SupplyChain{}, BlastReport{})
 	if len(actions) != 1 || actions[0].Priority != PriorityNow || actions[0].Kind != "control" {
 		t.Fatalf("actions = %+v, want one PriorityNow control action", actions)
 	}
@@ -156,7 +156,7 @@ func TestBuildActions_InertControlRaisesAPriorityNowAction(t *testing.T) {
 // A control that is wired must not generate noise.
 func TestBuildActions_WiredControlsRaiseNothing(t *testing.T) {
 	controls := []Control{{Name: "ok", Declared: true, Wired: true}}
-	if actions := buildActions(Coverage{}, nil, nil, PolicyAudit{}, controls, EvidenceQuality{}, ConfigDrift{}, SupplyChain{}); len(actions) != 0 {
+	if actions := buildActions(Coverage{}, nil, nil, PolicyAudit{}, controls, EvidenceQuality{}, ConfigDrift{}, SupplyChain{}, BlastReport{}); len(actions) != 0 {
 		t.Errorf("actions = %+v, want none for a healthy control", actions)
 	}
 }

@@ -9,6 +9,7 @@ package security
 
 import (
 	"fmt"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -73,6 +74,9 @@ type Report struct {
 	// Evidence is whether the ensemble's reported confidence rests on
 	// independent, discriminating sources.
 	Evidence EvidenceQuality `json:"evidence"`
+	// Blast is the reach of what agents actually edited, joined against the
+	// code graph — consequences rather than access decisions.
+	Blast BlastReport `json:"blast"`
 	// SupplyChain fingerprints each CLI head's binary so a replacement is
 	// visible — the local form of the rug-pull pattern.
 	SupplyChain SupplyChain `json:"supplyChain"`
@@ -162,6 +166,7 @@ func Build(heads []provider.Head) (*Report, error) {
 	r.Threats = ThreatBreakdown(events)
 	r.Controls = Controls(events, r.PolicyAudit, chainRes)
 	r.SupplyChain = FingerprintHeads(heads)
+	r.Blast = AssessBlastRadius()
 	r.Evidence = AssessEvidence()
 	r.Drift = DetectConfigDrift(events)
 	r.Events, r.Truncated = evidenceTail(events)
@@ -176,6 +181,7 @@ func Build(heads []provider.Head) (*Report, error) {
 		evidenceCheck(r.Evidence),
 		driftCheck(r.Drift),
 		supplyChainCheck(r.SupplyChain),
+		blastCheck(r.Blast),
 	}
 	r.RiskHistory = ledger.ByDayRisk(events)
 
@@ -191,7 +197,7 @@ func Build(heads []provider.Head) (*Report, error) {
 
 	appendScoreHistory(historyPath, r.Coverage)
 
-	r.Actions = buildActions(r.Coverage, r.ByHead, r.Exposures, r.PolicyAudit, r.Controls, r.Evidence, r.Drift, r.SupplyChain)
+	r.Actions = buildActions(r.Coverage, r.ByHead, r.Exposures, r.PolicyAudit, r.Controls, r.Evidence, r.Drift, r.SupplyChain, r.Blast)
 
 	return r, nil
 }
@@ -224,9 +230,25 @@ func chainCheck(res ledger.ChainResult) Check {
 // buildActions is the feedback loop: exactly the coverage Gaps plus heads
 // whose denied+flagged activity crosses riskThreshold — nothing else —
 // ranked most-urgent first so the queue reads top-to-bottom as work order.
-func buildActions(cov Coverage, byHead []ledger.HeadRisk, exps []Exposure, audit PolicyAudit, controls []Control, ev EvidenceQuality, drift ConfigDrift, sc SupplyChain) []Action {
+func buildActions(cov Coverage, byHead []ledger.HeadRisk, exps []Exposure, audit PolicyAudit,
+	controls []Control, ev EvidenceQuality, drift ConfigDrift, sc SupplyChain, blast BlastReport) []Action {
 	const riskThreshold = 2
 	var out []Action
+
+	// A hub file edited in a graph with a cascade-capable core is where an
+	// agent's change reaches furthest. Molloy-Reed kappa>=2 is the published
+	// criterion internal/graph already implements, so this is not a threshold
+	// invented for this dashboard.
+	if blast.Percolates {
+		if top, ok := riskiestEdit(blast); ok {
+			out = append(out, Action{
+				ID: "blast-" + top.File, Kind: "blast",
+				Title:    fmt.Sprintf("%s was edited and %d file(s) depend on it", filepath.Base(top.File), top.Dependents),
+				Detail:   fmt.Sprintf("radius %.2f× in a percolating graph (kappa=%.1f) — a defect here propagates", top.Radius, blast.Kappa),
+				Priority: PrioritySoon,
+			})
+		}
+	}
 
 	// A control that is configured but cannot fire outranks a coverage gap:
 	// the gap is a known absence, while this is protection the operator
