@@ -80,10 +80,8 @@ func AssessBlastRadius() BlastReport {
 			continue
 		}
 		for _, e := range events {
-			// An edit event carries the edited file path in Agent — the field
-			// is reused per kind, which is easy to misread.
-			if e.Kind == runlog.KindEdit && e.Agent != "" {
-				edits[e.Agent]++
+			if e.Kind == runlog.KindEdit && e.File != "" {
+				edits[e.File]++
 			}
 		}
 	}

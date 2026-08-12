@@ -38,6 +38,13 @@ type ChatReply struct {
 	RunID string `json:"runId"`
 
 	Error string `json:"error,omitempty"`
+
+	// NeedsProbe is true when the machine has zero discoverable heads at all —
+	// distinct from an ordinary dispatch failure. dispatch.New already probes
+	// fresh on every call, so there is no separate "go discover models" step
+	// to point at; the dock offers to retry (which re-probes) instead of
+	// surfacing a CLI instruction a GUI user has no terminal for (#434).
+	NeedsProbe bool `json:"needsProbe,omitempty"`
 }
 
 // Chat dispatches one prompt and returns the reply.
@@ -72,6 +79,11 @@ func (a *API) Chat(prompt, enum string) (*ChatReply, error) {
 	d, err := dispatch.New(ctx)
 	if err != nil {
 		r.Error = err.Error()
+		return r, nil
+	}
+	if len(d.Heads()) == 0 {
+		r.Error = "No models found on this machine yet."
+		r.NeedsProbe = true
 		return r, nil
 	}
 
