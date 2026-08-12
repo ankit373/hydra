@@ -15,6 +15,7 @@ import { Code } from './views/Code'
 import { ChatDock } from './views/ChatDock'
 import { UpdateNotice } from './views/UpdateNotice'
 import { SetupBanner } from './views/SetupBanner'
+import { HydraMark, HydraSpinner } from './brand'
 
 /** Dashboard is retrospective — a slow refresh is enough and costs nothing. */
 const DASHBOARD_MS = 5000
@@ -132,7 +133,7 @@ export default function App() {
     <div className="shell">
       <nav className="rail">
         <div className="rail__brand">
-          <span className="rail__mark" />
+          <HydraMark className="rail__mark" />
           Hydra
         </div>
         <div className="rail__nav">
@@ -192,7 +193,12 @@ export default function App() {
             <Code runID={runID} edits={edits} />
           </>
         )}
-        {!error && loading && <p style={{ color: 'var(--hy-dim)' }}>Reading logs…</p>}
+        {!error && loading && (
+          <div className="loading">
+            <HydraSpinner className="loading__mark" />
+            <p>Reading logs…</p>
+          </div>
+        )}
       </main>
 
       <ChatDock

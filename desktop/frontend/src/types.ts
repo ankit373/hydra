@@ -228,4 +228,7 @@ export interface ChatReply {
   /** Links the reply into Session — "why did it say that" is one click. */
   runId: string
   error?: string
+  /** No heads discoverable at all — the dock offers to retry instead of
+   *  showing a raw dispatch error. */
+  needsProbe?: boolean
 }

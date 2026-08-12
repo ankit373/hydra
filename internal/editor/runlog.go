@@ -42,7 +42,7 @@ func logEdit(req Request, before, after string, added, removed int) {
 	_ = runlog.New(runID).Append(runlog.Event{
 		Kind:   runlog.KindEdit,
 		TaskID: taskID,
-		Agent:  req.File,
+		File:   req.File,
 		Ref:    ref,
 		Detail: detail,
 	})
