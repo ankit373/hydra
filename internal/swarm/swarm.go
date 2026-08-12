@@ -102,6 +102,18 @@ func New(d *dispatch.Dispatcher, heads []provider.Head, pricing PricingReader) *
 	return &Swarm{d: d, heads: heads, pricing: pricing}
 }
 
+// validateMode rejects any SwarmMode Run does not know how to execute. Plan
+// calls this too, so a `--dry-run` reports a plan only for a mode Run would
+// actually accept, instead of previewing a run that Run then refuses (#453).
+func validateMode(m SwarmMode) error {
+	switch m {
+	case ModeRace, ModeBest, ModeAll:
+		return nil
+	default:
+		return fmt.Errorf("swarm: unknown mode %q", m)
+	}
+}
+
 // Plan reports what Run or RunSPRT would do without executing anything: which
 // heads would be engaged, and what one round of fan-out is estimated to cost.
 //
@@ -114,6 +126,13 @@ func New(d *dispatch.Dispatcher, heads []provider.Head, pricing PricingReader) *
 // selector against the same options; a plan that picked different heads from the
 // run it describes would be worse than no plan.
 func (s *Swarm) Plan(prompt string, opts Options) (heads []provider.Head, estUSD float64, err error) {
+	if opts.Mode == "" {
+		opts.Mode = ModeBest
+	}
+	if err := validateMode(opts.Mode); err != nil {
+		return nil, 0, err
+	}
+
 	cfg, err := config.Load()
 	if err != nil {
 		return nil, 0, fmt.Errorf("swarm: config load: %w", err)
@@ -133,6 +152,9 @@ func (s *Swarm) Plan(prompt string, opts Options) (heads []provider.Head, estUSD
 func (s *Swarm) Run(ctx context.Context, prompt string, opts Options) (*SwarmResult, error) {
 	if opts.Mode == "" {
 		opts.Mode = ModeBest
+	}
+	if err := validateMode(opts.Mode); err != nil {
+		return nil, err
 	}
 
 	cfg, err := config.Load()
@@ -165,8 +187,6 @@ func (s *Swarm) Run(ctx context.Context, prompt string, opts Options) (*SwarmRes
 		attempts = runRace(ctx, selected, prompt, opts)
 	case ModeBest, ModeAll:
 		attempts = runAll(ctx, selected, prompt, opts)
-	default:
-		return nil, fmt.Errorf("swarm: unknown mode %q", opts.Mode)
 	}
 
 	wallDuration := time.Since(startedAt)

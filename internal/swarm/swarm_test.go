@@ -381,3 +381,32 @@ func TestPlan_EmptyResultIsAlwaysAnError(t *testing.T) {
 		}
 	})
 }
+
+// #453: `--dry-run` used to print a full plan for a mode Run would reject
+// outright, because Plan never validated Mode at all. Plan must fail the same
+// way Run does, before it ever reports heads or cost as if the run were sound.
+func TestPlan_RejectsUnknownModeLikeRun(t *testing.T) {
+	withTempConfig(t)
+	all := []provider.Head{registryHead("h1", "H1", 90)}
+	s := New(nil, all, fakePricing{per: 0.01})
+
+	_, _, planErr := s.Plan("p", Options{Mode: "bogus"})
+	if planErr == nil {
+		t.Fatal("Plan accepted an unknown swarm mode")
+	}
+	_, runErr := s.Run(context.Background(), "p", Options{Mode: "bogus"})
+	if runErr == nil {
+		t.Fatal("Run accepted an unknown swarm mode")
+	}
+	if planErr.Error() != runErr.Error() {
+		t.Errorf("Plan and Run disagree on an unknown mode:\nPlan: %v\nRun:  %v", planErr, runErr)
+	}
+
+	// Every mode Run actually executes must still plan cleanly, including the
+	// zero value, which both Plan and Run default to ModeBest.
+	for _, mode := range []SwarmMode{ModeRace, ModeBest, ModeAll, ""} {
+		if _, _, err := s.Plan("p", Options{Mode: mode}); err != nil {
+			t.Errorf("Plan rejected valid mode %q: %v", mode, err)
+		}
+	}
+}

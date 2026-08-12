@@ -206,6 +206,9 @@ func TestCLI_Dispatch_RefusesBadFlagsBeforeSpending(t *testing.T) {
 		{"confidence of zero", []string{"dispatch", "--confidence", "0", "x"}},
 		{"negative confidence", []string{"dispatch", "--confidence", "-0.5", "x"}},
 		{"unknown swarm mode", []string{"dispatch", "--swarm", "--swarm-mode", "sideways", "x"}},
+		// #453: --dry-run must reject a bad --swarm-mode exactly like a real
+		// run does, not print a plan for a mode Run would then refuse.
+		{"unknown swarm mode with dry run", []string{"dispatch", "--swarm", "--swarm-mode", "sideways", "--dry-run", "x"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
