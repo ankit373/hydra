@@ -1099,7 +1099,7 @@ func cmdMCP() *cobra.Command {
 // per-head risk, and a short list of honest checks — never a manufactured
 // score, only what's actually configured and observed.
 func cmdSecurity() *cobra.Command {
-	var jsonOut, csvOut bool
+	var jsonOut, csvOut, execOut, attestOut bool
 	cmd := &cobra.Command{
 		Use:   "security",
 		Short: "Security posture dashboard: ledger accountability, risk by head, and honest checks",
@@ -1112,6 +1112,11 @@ func cmdSecurity() *cobra.Command {
 			switch {
 			case jsonOut:
 				return json.NewEncoder(os.Stdout).Encode(rep)
+			case attestOut:
+				return json.NewEncoder(os.Stdout).Encode(rep.Attestation)
+			case execOut:
+				fmt.Print(security.ExecutiveSummary(rep.Attestation))
+				return nil
 			case csvOut:
 				return securityCSV(os.Stdout, rep)
 			default:
@@ -1122,6 +1127,8 @@ func cmdSecurity() *cobra.Command {
 	}
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "machine-readable JSON output")
 	cmd.Flags().BoolVar(&csvOut, "csv", false, "one row per OWASP LLM Top-10 category (id,name,status,gap_age_days,detail)")
+	cmd.Flags().BoolVar(&execOut, "exec", false, "executive summary: the verdict, open risk by severity, and framework exposure")
+	cmd.Flags().BoolVar(&attestOut, "attest", false, "checkable attestation: posture, evidence state, rules in force, and a digest")
 	return cmd
 }
 
@@ -1149,6 +1156,16 @@ func securityCSV(w io.Writer, r *security.Report) error {
 
 func printSecurityReport(r *security.Report) {
 	fmt.Println()
+	// Bottom line up front: the verdict, what decided it, the open exposure,
+	// and the incidents — before any table. The detail below is the
+	// drill-down, not the report.
+	printVerdict(r)
+	printIncidents(r)
+	printRegister(r)
+
+	fmt.Println()
+	fmt.Println(dimStyle.Render("  " + strings.Repeat("=", 48)))
+	fmt.Println(dimStyle.Render("  detail"))
 	printCoverageHeadline(r)
 
 	if !r.HasData {
@@ -1200,6 +1217,107 @@ func printSecurityReport(r *security.Report) {
 		}
 	}
 	fmt.Println()
+}
+
+// printVerdict is the single line a CISO reads, plus the condition that
+// produced it. Never a blended score — a state with its trigger named.
+func printVerdict(r *security.Report) {
+	p := r.Posture
+	label := okStyle.Render("OK")
+	switch p.Verdict {
+	case security.VerdictActNow:
+		label = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("196")).Render("ACT NOW")
+	case security.VerdictAttention:
+		label = warnStyle.Render("ATTENTION")
+	}
+	fmt.Printf("  %s  %s\n", cortexStyle.Render("VERDICT"), label)
+	fmt.Println(dimStyle.Render("    " + p.Trigger))
+	if len(p.Because) > 1 {
+		fmt.Println(dimStyle.Render(fmt.Sprintf("    +%d more condition(s) below", len(p.Because)-1)))
+	}
+	if p.Verdict == security.VerdictOK {
+		fmt.Println(dimStyle.Render("    checked: " + strings.Join(p.Checked, ", ")))
+	}
+}
+
+// printIncidents shows correlated sequences rather than scattered rows.
+func printIncidents(r *security.Report) {
+	if len(r.Incidents) == 0 {
+		return
+	}
+	fmt.Println()
+	fmt.Printf("  %s\n", cortexStyle.Render("incidents"))
+	for _, in := range security.TopIncidents(r.Incidents, 3) {
+		fmt.Printf("    %s %s\n", severityTag(in.Severity), in.Narrative)
+		fmt.Println(dimStyle.Render(fmt.Sprintf("      %s → %s · %d event(s) · likelihood %d × impact %d",
+			shortTS(in.Start), shortTS(in.End), len(in.Events), in.Likelihood, in.Impact)))
+	}
+	if n := len(r.Incidents); n > 3 {
+		fmt.Println(dimStyle.Render(fmt.Sprintf("    … %d more", n-3)))
+	}
+}
+
+// printRegister is the governed view: what is open, how overdue, what it is
+// worth, and which frameworks it bears on.
+func printRegister(r *security.Report) {
+	reg := r.Register
+	if len(reg.Risks) == 0 {
+		return
+	}
+	fmt.Println()
+	fmt.Printf("  %s   %s\n", cortexStyle.Render("risk register"),
+		dimStyle.Render(fmt.Sprintf("Σ modelled defect cost $%.0f (per-occurrence, not annualised) · %d past SLA", reg.SumDefectCostUSD, reg.Breached)))
+	fmt.Printf("    %-10s %-42s %-9s %8s %12s\n", "ID", "RISK", "SEVERITY", "DUE", "COST/DEFECT")
+	for _, k := range topRisks(reg.Risks, 6) {
+		due := dimStyle.Render(fmt.Sprintf("%dd", k.DueInDays))
+		if k.Breached {
+			due = warnStyle.Render(fmt.Sprintf("%dd", k.DueInDays))
+		}
+		fmt.Printf("    %-10s %-42.42s %-9s %8s %12s\n",
+			k.ID, k.Title, severityTag(k.Severity), due, fmt.Sprintf("$%.0f", k.DefectCostUSD))
+		if len(k.Frameworks) > 0 {
+			fmt.Println(dimStyle.Render("               " + frameworksText(k.Frameworks)))
+		}
+	}
+	if n := len(reg.Risks); n > 6 {
+		fmt.Println(dimStyle.Render(fmt.Sprintf("    … %d more", n-6)))
+	}
+}
+
+func topRisks(rs []security.Risk, n int) []security.Risk {
+	if len(rs) <= n {
+		return rs
+	}
+	return rs[:n]
+}
+
+func frameworksText(fs []security.FrameworkRef) string {
+	parts := make([]string, 0, len(fs))
+	for _, f := range fs {
+		parts = append(parts, f.Framework+" "+f.Control)
+	}
+	return strings.Join(parts, " · ")
+}
+
+func severityTag(s security.Severity) string {
+	switch s {
+	case security.SeverityCritical:
+		return lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("196")).Render("CRITICAL")
+	case security.SeverityHigh:
+		return warnStyle.Render("HIGH    ")
+	case security.SeverityMedium:
+		return dimStyle.Render("MEDIUM  ")
+	default:
+		return dimStyle.Render("LOW     ")
+	}
+}
+
+// shortTS trims an RFC3339 stamp to the time of day for a dense table.
+func shortTS(ts string) string {
+	if len(ts) >= 19 {
+		return ts[11:19]
+	}
+	return ts
 }
 
 // printControls answers "does each declared control actually run" — the

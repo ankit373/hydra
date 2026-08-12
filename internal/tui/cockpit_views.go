@@ -328,6 +328,27 @@ func (m Cockpit) dashSecurity(w, h int) string {
 
 	var head strings.Builder
 	head.WriteString(ckLabelS.Render("SECURITY · OWASP LLM Top-10 coverage") + "\n\n")
+	// Bottom line first: the verdict and the condition that produced it,
+	// before any measurement. Truncated to the same fixed budget as every
+	// other line in this box.
+	{
+		style, label := ckCheapS, "OK"
+		switch r.Posture.Verdict {
+		case security.VerdictActNow:
+			style, label = ckExpS, "ACT NOW"
+		case security.VerdictAttention:
+			style, label = ckMidS, "ATTENTION"
+		}
+		head.WriteString(" " + ckDimS.Render("verdict  ") + style.Render(label) + "\n")
+		if r.Posture.Trigger != "" {
+			head.WriteString(" " + ckFaintS.Render(truncate(r.Posture.Trigger, ckSecNameW+16)) + "\n")
+		}
+		if n := len(r.Incidents); n > 0 {
+			head.WriteString(" " + ckDimS.Render("incidents ") +
+				ckExpS.Render(truncate(fmt.Sprintf("%d · worst %s", n, r.Incidents[0].Severity), ckSecNameW)) + "\n")
+		}
+		head.WriteString("\n")
+	}
 	if !r.IntegrityIntact {
 		head.WriteString(" " + ckExpS.Render("INTEGRITY COMPROMISED") +
 			ckDimS.Render(" — ledger tampered") + "\n")
