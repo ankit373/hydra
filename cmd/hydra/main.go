@@ -45,6 +45,7 @@ import (
 	"github.com/ankit373/hydra/internal/trust"
 	"github.com/ankit373/hydra/internal/tui"
 	"github.com/ankit373/hydra/internal/update"
+	"github.com/ankit373/hydra/internal/util"
 
 	_ "github.com/ankit373/hydra/internal/provider/agy"
 	_ "github.com/ankit373/hydra/internal/provider/cli"
@@ -1003,9 +1004,10 @@ func cmdMCP() *cobra.Command {
 			}
 			for _, e := range events {
 				line := fmt.Sprintf("  %s  %-6s  %-12s %s/%s %s", e.TS, strings.ToUpper(string(e.Decision)),
-					e.Agent, e.Tool, e.Resource, dimStyle.Render(string(e.Action)))
+					util.SafeTerminal(e.Agent), util.SafeTerminal(e.Tool), util.SafeTerminal(e.Resource),
+					dimStyle.Render(string(e.Action)))
 				if e.Flagged {
-					line += dimStyle.Render(fmt.Sprintf("  [flagged: %s]", e.FlagReason))
+					line += dimStyle.Render(fmt.Sprintf("  [flagged: %s]", util.SafeTerminal(e.FlagReason)))
 				}
 				fmt.Println(line)
 			}
@@ -1120,7 +1122,7 @@ func printSecurityReport(r *security.Report) {
 		fmt.Printf("  %-24s %8s %8s\n", "HEAD", "DENIED", "FLAGGED")
 		fmt.Println(dimStyle.Render("  " + strings.Repeat("─", 48)))
 		for _, h := range r.ByHead {
-			fmt.Printf("  %-24.24s %8d %8d\n", h.Head, h.Denied, h.Flagged)
+			fmt.Printf("  %-24.24s %8d %8d\n", util.SafeTerminal(h.Head), h.Denied, h.Flagged)
 		}
 	}
 
@@ -1135,7 +1137,7 @@ func printSecurityReport(r *security.Report) {
 			status = okStyle.Render(status)
 		}
 		fmt.Printf("    %-26s %s\n", c.Name, status)
-		fmt.Println(dimStyle.Render("      " + c.Detail))
+		fmt.Println(dimStyle.Render("      " + util.SafeTerminal(c.Detail)))
 	}
 
 	if len(r.Recommendations) > 0 {
