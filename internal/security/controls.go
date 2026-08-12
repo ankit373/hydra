@@ -12,22 +12,9 @@ import (
 	"github.com/ankit373/hydra/internal/policy"
 )
 
-// Control effectiveness: does a configured control actually run?
-//
-// Every other section of this report answers "is a control configured". That
-// is the easier question and the less useful one — a control that is declared
-// but cannot fire is worse than a missing one, because it reads as protection
-// on both the dashboard and in the config file while doing nothing. Two live
-// examples motivated this section, both found by reading the call sites rather
-// than the config:
-//
-//   - registry/policy.yaml declares cost ceilings, diff-size caps, atomic
-//     writes and worktree isolation. Its only Go caller discards the decision.
-//   - a2a.ConflictsWith needs Handoff.Files to detect concurrent edits to the
-//     same file. Nothing populates Files, so it can never return true.
-//
-// Neither is visible from the config, and neither was visible from this
-// dashboard until now.
+// Does a configured control actually run? A control that is declared but
+// cannot fire reads as protection while doing nothing (see #424, #425). Answered
+// by reading call sites, not config — hence Control.Verified.
 
 // Control is one security control and whether it can actually fire.
 type Control struct {

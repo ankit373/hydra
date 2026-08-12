@@ -15,27 +15,9 @@ import (
 	"github.com/ankit373/hydra/internal/ledger"
 )
 
-// "Prove it."
-//
-// A CISO is periodically asked to demonstrate posture to someone who does not
-// trust them by default — an auditor, a customer's security review, a board.
-// A dashboard cannot do that: a screenshot proves nothing, and a JSON dump
-// proves only that someone had a JSON file.
-//
-// What makes an attestation worth anything is that a reader can check it
-// without trusting the reporter. Two properties give that here, and both come
-// from machinery that already exists:
-//
-//   - The ledger is hash-chained and anchored, so the evidence underneath the
-//     report is itself tamper-evident, and the attestation records the chain
-//     state at the moment it was made.
-//   - config.Breadcrumb() fingerprints the routing and policy files in force,
-//     so the attestation names the exact rules the claims were made under.
-//
-// The attestation therefore states what was true, under which rules, over
-// which evidence — and carries its own digest so a later copy can be checked
-// against the original. It is deliberately not signed: Hydra has no key
-// management, and a "signature" without it would be theatre.
+// What was true, under which rules (config.Breadcrumb), over which evidence
+// (the chained ledger) — with a digest so two copies can be compared without
+// trusting either holder. Deliberately unsigned: Hydra has no key management.
 
 // Attestation is a point-in-time, checkable statement of posture.
 type Attestation struct {

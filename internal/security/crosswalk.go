@@ -4,29 +4,9 @@ package security
 
 import "sort"
 
-// Framework crosswalk: one finding, every standard it bears on.
-//
-// A CISO is not asked "is LLM02 covered", they are asked "are we compliant
-// with ISO 42001", "what do we tell the SOC 2 auditor", "does this map to
-// anything in the NIST AI RMF". Answering that per-framework means re-deriving
-// the same findings five times; answering it once means a crosswalk.
-//
-// Two honesty constraints, because this is the part of a GRC product most
-// likely to be quietly wrong:
-//
-//   - Every entry is marked Curated. A crosswalk is an assertion about what a
-//     standard means, not something measured from the data, and the two must
-//     never render alike. Nothing here is machine-derived and nothing pretends
-//     to be.
-//   - The mapping is deliberately shallow and defensible — the control family
-//     a class of finding plainly belongs to — rather than a precise subclause
-//     citation that would be easy to state and hard to defend. Where a
-//     framework has no sensible home for a finding, it is simply absent rather
-//     than stretched to fill the row.
-//
-// The ledger already carries per-rule Framework tags ("owasp:llm06",
-// "atlas:...") for operator-authored mappings; this covers the findings this
-// package derives itself.
+// One finding, every standard it bears on. Every entry is Curated: an
+// assertion about what a standard means, never measured from data, and the two
+// must not render alike. Shallow control-family mappings only, never subclauses.
 
 // crosswalkTable maps a risk class to the framework controls it bears on.
 var crosswalkTable = map[RiskClass][]FrameworkRef{

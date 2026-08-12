@@ -11,19 +11,9 @@ import (
 	"github.com/ankit373/hydra/internal/provider"
 )
 
-// Least-privilege review, and the AI-BOM.
-//
-// Two questions a CISO asks that nothing here answered:
-//
-//	"What can each agent actually do, versus what does it actually need?"
-//	"What models are in my estate, where did they come from, and do they
-//	 leave the building?"
-//
-// Both are answerable from records already kept. The first is an entitlement
-// review: compare what an agent was *allowed* to touch against what it
-// actually touched, and an agent permitted far more than it uses is
-// over-permissioned — the classic least-privilege finding. The second is an
-// inventory with provenance, which is what an AI bill of materials is.
+// Entitlement review (allowed vs actually touched) and the AI-BOM (what is in
+// the estate, where it came from, whether it leaves the machine). Both read
+// from records already kept.
 
 // AgentPrivilege is one agent's observed footprint.
 type AgentPrivilege struct {

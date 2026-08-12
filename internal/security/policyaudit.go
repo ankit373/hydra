@@ -10,14 +10,9 @@ import (
 	"github.com/ankit373/hydra/internal/ledger"
 )
 
-// This file replaced a "policy adherence %" metric that measured the wrong
-// thing: it reported what fraction of accesses matched an explicit rule, so a
-// policy with no rules scored 0% (reading as failure when the truth is "no
-// policy exists") and a single {"resource":"*","decision":"allow"} rule scored
-// 100% while permitting everything — the number improved as the policy got
-// more permissive. What follows answers the questions an operator actually has
-// about a policy: is it fail-open, which rules never fire, and which can never
-// fire at all.
+// Replaced a "policy adherence %" that improved as the policy got more
+// permissive. Answers the real questions: fail-open? which rules never fire?
+// which can never fire at all?
 
 // RuleStat is one policy rule and what the ledger says about it.
 type RuleStat struct {
@@ -144,16 +139,9 @@ func ruleSummary(r ledger.Rule) string {
 	return fmt.Sprintf("%s %s/%s %s", f(string(r.Action)), f(r.Tool), f(r.Resource), f(r.Agent))
 }
 
-// shadowedBy reports the index of an earlier rule that makes rule i
-// unreachable.
-//
-// The test is deliberately *sufficient rather than complete*: an earlier rule
-// shadows this one only when every one of its fields is provably at least as
-// general — empty/"*" (matches anything) or exactly equal. It will miss
-// shadows expressible only through glob subsumption ("a/**" covering "a/b"),
-// and that is the right direction to be wrong in: a security tool that invents
-// a policy bug is worse than one that misses a subtle one, so this never
-// reports a shadow that is not real.
+// shadowedBy reports an earlier rule that makes rule i unreachable. Sufficient,
+// not complete: misses glob subsumption, never reports a shadow that is not
+// real — inventing a policy bug is worse than missing a subtle one.
 func shadowedBy(rules []ledger.Rule, i int) (int, bool) {
 	b := rules[i]
 	for j := 0; j < i; j++ {

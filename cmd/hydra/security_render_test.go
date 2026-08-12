@@ -10,18 +10,9 @@ import (
 	"github.com/ankit373/hydra/internal/security"
 )
 
-// Every string in this report comes from the ledger, and the ledger records
-// what an agent sent — a tool name, a resource path, a flag reason. All of it
-// is attacker-controlled.
-//
-// ESC[2K erases the line it is printed on and CR returns the cursor, so a tool
-// named "gpt\x1b[2K\r  VERDICT  OK" overwrites the finding it appears in with
-// a forged all-clear. The hash chain cannot catch this: nothing was tampered
-// with, the content that arrived was simply hostile.
-//
-// So this test is deliberately written against the *output*, not against any
-// one printer. A new print site that forgets to sanitise fails here, which is
-// the only protection that survives someone adding a column in six months.
+// Ledger strings are attacker-controlled, so a tool name carrying ESC[2K CR
+// can overwrite the finding it appears in with a forged all-clear. Asserted
+// against the whole rendered output so a new print site cannot miss it.
 
 const evilPayload = "gpt\x1b[2K\r  VERDICT  OK  no findings\x9b1m\x7f\x08\ttail"
 
@@ -78,13 +69,9 @@ func TestSecurityPrinters_NeverEmitControlCharacters(t *testing.T) {
 	// emitting raw escapes — the list drifted from the renderer immediately.
 	out := captureStdout(t, func() { printSecurityReport(r) })
 
-	// Checked as raw bytes, not runes: a terminal consumes bytes, and 0x9b is
-	// a single-byte CSI on anything decoding C1. ContainsRune would look for
-	// the UTF-8 encoding of U+009B (0xc2 0x9b) and miss the byte that actually
-	// does the damage.
-	//
-	// \n is how the report is laid out, so it is the one control byte that
-	// legitimately appears. Everything else moves the cursor.
+	// Raw bytes, not runes: 0x9b is a single-byte CSI and ContainsRune would
+	// look for its UTF-8 form instead. \n is the one control byte that
+	// legitimately appears in a laid-out report.
 	stripped := stripStyles(out)
 	for _, bad := range []struct {
 		b    byte
@@ -104,14 +91,9 @@ func TestSecurityPrinters_NeverEmitControlCharacters(t *testing.T) {
 	}
 }
 
-// stripStyles removes the SGR colour sequences lipgloss itself emits, so the
-// assertion above tests the data path rather than the styling.
-//
-// It matches ONLY a well-formed SGR sequence — ESC [ digits and semicolons m.
-// Scanning ahead for the next 'm' instead would let an injected "ESC[2K" eat
-// every character up to some unrelated 'm' later in the line, silently
-// swallowing the very escapes this test exists to find. That is not
-// hypothetical: the greedy version reported one failure where there were five.
+// Strips only well-formed SGR (ESC [ digits m). Scanning to the next 'm'
+// instead lets an injected "ESC[2K" swallow the escapes this test looks for —
+// the greedy version reported one failure where there were five.
 func stripStyles(s string) string {
 	var b strings.Builder
 	for i := 0; i < len(s); {

@@ -176,6 +176,13 @@ The bar is: would a senior engineer at a top systems shop approve this without c
 - If output is 200 lines and could be 50, ask the delegated head to rewrite.
 - Never add error handling for impossible scenarios.
 
+## Comments — 2-3 lines, hard cap
+**No comment is longer than 2-3 lines. No exceptions, including file headers.**
+Say why, not what; the code already says what. If the rationale genuinely needs a
+page, it belongs in a planning doc or the PR body, not the source. A 20-line essay
+at the top of a file is the tell that the design was argued in comments instead of
+being made obvious in code — delete it and make the names carry it.
+
 ---
 
 ## gstack Skills Available
