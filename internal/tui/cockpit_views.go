@@ -559,18 +559,6 @@ func ckPolicyPosture(a security.PolicyAudit) string {
 	return s
 }
 
-// findCheckStatus returns a named Check's already-formatted Status string, or
-// "" if absent — lets the hero reuse Checks' own text instead of re-deriving
-// the same numbers a second way.
-func findCheckStatus(checks []security.Check, name string) string {
-	for _, c := range checks {
-		if c.Name == name {
-			return c.Status
-		}
-	}
-	return ""
-}
-
 // ── syntax highlighter ───────────────────────────────────────────────────────
 
 // ckKeywords are the Go/TypeScript tokens painted violet by ckHighlight.
