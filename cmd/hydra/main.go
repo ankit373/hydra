@@ -1101,10 +1101,10 @@ func cmdMCP() *cobra.Command {
 // per-head risk, and a short list of honest checks — never a manufactured
 // score, only what's actually configured and observed.
 func cmdSecurity() *cobra.Command {
-	var jsonOut, csvOut, execOut, attestOut bool
+	var jsonOut, csvOut, execOut, attestOut, whyOut bool
 	cmd := &cobra.Command{
 		Use:   "security",
-		Short: "Security posture dashboard: ledger accountability, risk by head, and honest checks",
+		Short: "What the agents on this machine did, and whether you need to act",
 		RunE: func(_ *cobra.Command, _ []string) error {
 			heads := probe.Run(context.Background()).Heads
 			rep, err := security.Build(heads)
@@ -1122,11 +1122,12 @@ func cmdSecurity() *cobra.Command {
 			case csvOut:
 				return securityCSV(os.Stdout, rep)
 			default:
-				printSecurityReport(rep)
+				printSecurityReport(rep, whyOut)
 				return nil
 			}
 		},
 	}
+	cmd.Flags().BoolVar(&whyOut, "why", false, "full detail: coverage, controls, policy, exposure, threats, and the risk register")
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "machine-readable JSON output")
 	cmd.Flags().BoolVar(&csvOut, "csv", false, "one row per OWASP LLM Top-10 category (id,name,status,gap_age_days,detail)")
 	cmd.Flags().BoolVar(&execOut, "exec", false, "executive summary: the verdict, open risk by severity, and framework exposure")
@@ -1156,13 +1157,24 @@ func securityCSV(w io.Writer, r *security.Report) error {
 	return cw.Error()
 }
 
-func printSecurityReport(r *security.Report) {
+// printSecurityReport answers one question by default — what did the agents
+// on this machine do, and can the record be trusted — and everything else
+// only under --why. Nine analyses printed unconditionally is an engineer's
+// dashboard, not an answer.
+func printSecurityReport(r *security.Report, why bool) {
 	fmt.Println()
-	// Bottom line up front: the verdict, what decided it, the open exposure,
-	// and the incidents — before any table. The detail below is the
-	// drill-down, not the report.
 	printVerdict(r)
 	printIncidents(r)
+	printEvidenceState(r)
+
+	if !why {
+		fmt.Println()
+		fmt.Println(dimStyle.Render("  hyctl security --why    coverage, controls, policy, exposure, risk register"))
+		fmt.Println(dimStyle.Render("  hyctl security --json   machine-readable"))
+		fmt.Println()
+		return
+	}
+
 	printRegister(r)
 
 	fmt.Println()
@@ -1237,6 +1249,12 @@ func printVerdict(r *security.Report) {
 	// The trigger quotes an incident narrative, which carries an attacker's
 	// own tool name — the one line on this screen most worth forging.
 	fmt.Println(dimStyle.Render("    " + util.SafeTerminal(p.Trigger)))
+	// Stages of the incident the verdict quotes, so the shape of the attack
+	// rides with the sentence instead of being repeated under it.
+	if in, ok := citedIncident(r); ok {
+		fmt.Println(dimStyle.Render(fmt.Sprintf("    %s · %s → %s · %d event(s) · likelihood %d × impact %d",
+			stagesText(in.Stages), shortTS(in.Start), shortTS(in.End), len(in.Events), in.Likelihood, in.Impact)))
+	}
 	if len(p.Because) > 1 {
 		fmt.Println(dimStyle.Render(fmt.Sprintf("    +%d more condition(s) below", len(p.Because)-1)))
 	}
@@ -1245,19 +1263,78 @@ func printVerdict(r *security.Report) {
 	}
 }
 
+// printEvidenceState is the second half of the developer's question: not just
+// what happened, but whether the record of it can be believed.
+func printEvidenceState(r *security.Report) {
+	fmt.Println()
+	// "0 events, intact" over a log that has never been written reads as a
+	// clean bill of health. Nothing recorded is not the same as nothing wrong.
+	if !r.HasData {
+		fmt.Println(dimStyle.Render(
+			"  no ledger events yet — nothing has dispatched through hyctl on this machine,"))
+		fmt.Println(dimStyle.Render(
+			"  so there is no record to judge and this is not a clean result"))
+		return
+	}
+	ev := r.Attestation.Evidence
+	chain := okStyle.Render("intact")
+	switch {
+	case ev.Truncated:
+		chain = warnStyle.Render("TRUNCATED — records were deleted from the end")
+	case !ev.ChainIntact:
+		chain = warnStyle.Render("BROKEN — the log was modified after recording")
+	case ev.Events > 0 && ev.ChainedEvents == 0:
+		chain = warnStyle.Render("unverifiable — no hash chain on any record")
+	case ev.AnchorMissing:
+		chain = warnStyle.Render("unanchored — truncation would not be detected")
+	}
+	fmt.Printf("  %s  %d blocked · %d flagged\n",
+		cortexStyle.Render("activity"), r.Ledger.Denied, r.Ledger.Flagged)
+	fmt.Printf("  %s  %d event(s), %d hash-chained, %s\n",
+		cortexStyle.Render("evidence"), ev.Events, ev.ChainedEvents, chain)
+}
+
 // printIncidents shows correlated sequences rather than scattered rows.
+// citedIncident is the incident the verdict already quotes, if any.
+func citedIncident(r *security.Report) (security.Incident, bool) {
+	for _, in := range r.Incidents {
+		if in.Narrative != "" && strings.Contains(r.Posture.Trigger, in.Narrative) {
+			return in, true
+		}
+	}
+	return security.Incident{}, false
+}
+
+func stagesText(stages []security.Stage) string {
+	out := make([]string, 0, len(stages))
+	for _, s := range stages {
+		out = append(out, string(s))
+	}
+	return strings.Join(out, " → ")
+}
+
+// printIncidents lists the incidents the verdict does NOT already quote —
+// printing the cited one again puts the same sentence on screen twice.
 func printIncidents(r *security.Report) {
-	if len(r.Incidents) == 0 {
+	cited, hasCited := citedIncident(r)
+	rest := make([]security.Incident, 0, len(r.Incidents))
+	for _, in := range r.Incidents {
+		if hasCited && in.ID == cited.ID {
+			continue
+		}
+		rest = append(rest, in)
+	}
+	if len(rest) == 0 {
 		return
 	}
 	fmt.Println()
-	fmt.Printf("  %s\n", cortexStyle.Render("incidents"))
-	for _, in := range security.TopIncidents(r.Incidents, 3) {
+	fmt.Printf("  %s\n", cortexStyle.Render("other incidents"))
+	for _, in := range security.TopIncidents(rest, 3) {
 		fmt.Printf("    %s %s\n", severityTag(in.Severity), util.SafeTerminal(in.Narrative))
 		fmt.Println(dimStyle.Render(fmt.Sprintf("      %s → %s · %d event(s) · likelihood %d × impact %d",
 			shortTS(in.Start), shortTS(in.End), len(in.Events), in.Likelihood, in.Impact)))
 	}
-	if n := len(r.Incidents); n > 3 {
+	if n := len(rest); n > 3 {
 		fmt.Println(dimStyle.Render(fmt.Sprintf("    … %d more", n-3)))
 	}
 }

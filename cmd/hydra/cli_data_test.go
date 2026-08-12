@@ -198,11 +198,29 @@ func TestCLI_Security_HandlesEmptyAndSeededLedger(t *testing.T) {
 		t.Fatalf("`hyctl security` failed: %v", err)
 	}
 	combined := textOut + textCobraOut
-	if !strings.Contains(combined, "OWASP LLM Top-10 coverage") {
-		t.Errorf("text output missing the coverage headline:\n%s", combined)
+	// The default surface is the answer, not the dashboard: a verdict, the
+	// activity, and whether the record can be trusted.
+	for _, want := range []string{"VERDICT", "activity", "evidence"} {
+		if !strings.Contains(combined, want) {
+			t.Errorf("default `security` output missing %q:\n%s", want, combined)
+		}
 	}
-	if !strings.Contains(combined, "action queue") {
-		t.Errorf("text output missing the action queue section:\n%s", combined)
+
+	// Coverage and the action queue moved behind --why when the surface was
+	// re-aimed at "what did the agent do"; they must still be reachable.
+	whyOut, whyCobraOut, err := run(t, "security", "--why")
+	if err != nil {
+		t.Fatalf("`hyctl security --why` failed: %v", err)
+	}
+	why := whyOut + whyCobraOut
+	if !strings.Contains(why, "OWASP LLM Top-10 coverage") {
+		t.Errorf("--why output missing the coverage headline:\n%s", why)
+	}
+	if !strings.Contains(why, "action queue") {
+		t.Errorf("--why output missing the action queue section:\n%s", why)
+	}
+	if len(why) <= len(combined) {
+		t.Error("--why should be a superset of the default surface")
 	}
 }
 

@@ -8,6 +8,7 @@ import (
 
 	"github.com/ankit373/hydra/internal/ledger"
 	"github.com/ankit373/hydra/internal/security"
+	"github.com/ankit373/hydra/internal/util"
 )
 
 // Ledger strings are attacker-controlled, so a tool name carrying ESC[2K CR
@@ -67,7 +68,9 @@ func TestSecurityPrinters_NeverEmitControlCharacters(t *testing.T) {
 	// printers. An earlier version of this test called seven printers by name
 	// and passed while the per-head table and the action queue were both still
 	// emitting raw escapes — the list drifted from the renderer immediately.
-	out := captureStdout(t, func() { printSecurityReport(r) })
+	// --why on, so every printer runs: a sink that only appears in the full
+	// report is exactly the one a default-surface test would miss.
+	out := captureStdout(t, func() { printSecurityReport(r, true) })
 
 	// Raw bytes, not runes: 0x9b is a single-byte CSI and ContainsRune would
 	// look for its UTF-8 form instead. \n is the one control byte that
@@ -111,4 +114,50 @@ func stripStyles(s string) string {
 		i++
 	}
 	return b.String()
+}
+
+// The default surface answers one question: what did the agents do, and can
+// the record be trusted. Nine analyses printed unconditionally is what this
+// change removed, so its absence is the thing worth asserting.
+func TestSecurityReport_DefaultIsTheAnswerNotTheDashboard(t *testing.T) {
+	r := hostileReport()
+
+	lean := stripStyles(captureStdout(t, func() { printSecurityReport(r, false) }))
+	full := stripStyles(captureStdout(t, func() { printSecurityReport(r, true) }))
+
+	for _, want := range []string{"VERDICT", "activity", "evidence", "--why"} {
+		if !strings.Contains(lean, want) {
+			t.Errorf("default output is missing %q", want)
+		}
+	}
+	// Detail sections belong to --why only.
+	for _, unwanted := range []string{"COST/DEFECT", "policy audit", "threat breakdown", "checks:"} {
+		if strings.Contains(lean, unwanted) {
+			t.Errorf("default output leaked the %q section; it belongs behind --why", unwanted)
+		}
+		if !strings.Contains(full, unwanted) {
+			t.Errorf("--why is missing the %q section", unwanted)
+		}
+	}
+	if len(strings.Split(strings.TrimSpace(lean), "\n")) > 20 {
+		t.Errorf("default output grew to %d lines; it exists to fit on one screen",
+			len(strings.Split(strings.TrimSpace(lean), "\n")))
+	}
+}
+
+// The verdict already quotes one incident. Printing it again underneath puts
+// the same sentence on screen twice in the most valuable pixels there are.
+func TestSecurityReport_DoesNotPrintTheCitedIncidentTwice(t *testing.T) {
+	r := hostileReport()
+	narrative := r.Incidents[0].Narrative
+	r.Posture.Trigger = "critical incident — " + narrative
+	rendered := util.SafeTerminal(narrative)
+
+	out := stripStyles(captureStdout(t, func() { printSecurityReport(r, false) }))
+	if n := strings.Count(out, rendered); n != 1 {
+		t.Errorf("cited incident narrative appears %d times, want exactly 1", n)
+	}
+	if strings.Contains(out, "other incidents") {
+		t.Error("the only incident is the cited one, so the 'other incidents' section should not render")
+	}
 }

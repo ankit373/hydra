@@ -306,6 +306,24 @@ const (
 // secondary: this view already fits one frame without scrolling, so there's
 // no separate interactive "detail mode" here (unlike the desktop app, where
 // a Hero/Detailed tab split earns its keep with real charts).
+// ckCitedIncident is the incident the verdict already quotes.
+func ckCitedIncident(r *security.Report) (security.Incident, bool) {
+	for _, in := range r.Incidents {
+		if in.Narrative != "" && strings.Contains(r.Posture.Trigger, in.Narrative) {
+			return in, true
+		}
+	}
+	return security.Incident{}, false
+}
+
+func ckStagesText(stages []security.Stage) string {
+	out := make([]string, 0, len(stages))
+	for _, st := range stages {
+		out = append(out, string(st))
+	}
+	return strings.Join(out, "→")
+}
+
 func (m Cockpit) dashSecurity(w, h int) string {
 	if m.security == nil {
 		return lipgloss.NewStyle().Width(w).Height(h).Render(
@@ -314,7 +332,7 @@ func (m Cockpit) dashSecurity(w, h int) string {
 	r := m.security
 
 	var head strings.Builder
-	head.WriteString(ckLabelS.Render("SECURITY · OWASP LLM Top-10 coverage") + "\n\n")
+	head.WriteString(ckLabelS.Render("SECURITY · what the agents did") + "\n\n")
 	// Bottom line first: the verdict and the condition that produced it,
 	// before any measurement. Truncated to the same fixed budget as every
 	// other line in this box.
@@ -330,10 +348,28 @@ func (m Cockpit) dashSecurity(w, h int) string {
 		if r.Posture.Trigger != "" {
 			head.WriteString(" " + ckFaintS.Render(truncate(ckSafe(r.Posture.Trigger), ckSecNameW+16)) + "\n")
 		}
+		if in, ok := ckCitedIncident(r); ok {
+			head.WriteString(" " + ckDimS.Render("stages   ") +
+				ckExpS.Render(truncate(ckStagesText(in.Stages), ckSecNameW)) + "\n")
+		}
 		if n := len(r.Incidents); n > 0 {
 			head.WriteString(" " + ckDimS.Render("incidents ") +
 				ckExpS.Render(truncate(fmt.Sprintf("%d · worst %s", n, r.Incidents[0].Severity), ckSecNameW)) + "\n")
 		}
+		ev := r.Attestation.Evidence
+		chain, cs := "intact", ckCheapS
+		switch {
+		case ev.Truncated:
+			chain, cs = "TRUNCATED", ckExpS
+		case !ev.ChainIntact:
+			chain, cs = "BROKEN", ckExpS
+		case ev.Events > 0 && ev.ChainedEvents == 0:
+			chain, cs = "unverifiable", ckExpS
+		case ev.AnchorMissing:
+			chain, cs = "unanchored", ckMidS
+		}
+		head.WriteString(" " + ckDimS.Render("evidence ") +
+			cs.Render(truncate(fmt.Sprintf("%d event(s), %d chained, %s", ev.Events, ev.ChainedEvents, chain), ckSecNameW)) + "\n")
 		head.WriteString("\n")
 	}
 	if !r.IntegrityIntact {

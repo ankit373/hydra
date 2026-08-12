@@ -294,7 +294,6 @@ function Hero({ data }: { data: SecurityReport }) {
       </div>
 
       <IncidentList incidents={others} heading={others.length === (data.incidents ?? []).length ? 'Incidents' : 'Other incidents'} />
-      <RegisterTable register={data.register} />
 
       <div className="sec-hero">
         <div className="card sec-hero__grid">
@@ -302,20 +301,24 @@ function Hero({ data }: { data: SecurityReport }) {
           <StatusDonut segments={coverageSegments(data.coverage.categories)} />
           <CategoryGrid categories={data.coverage.categories} />
         </div>
-        <div className="cards cards--stack">
-          {pii && (
-            <div className="card">
-              <div className="card__label">PII/sensitive-data detections</div>
-              <div className="card__value--sm">{pii}</div>
-            </div>
-          )}
-          {adherence && (
-            <div className="card">
-              <div className="card__label">Policy adherence</div>
-              <div className="card__value--sm">{adherence}</div>
-            </div>
-          )}
-        </div>
+        {/* Rendering the column unconditionally left half the row empty on
+            any machine where these checks have not run. */}
+        {(pii || adherence) && (
+          <div className="cards cards--stack">
+            {pii && (
+              <div className="card">
+                <div className="card__label">PII/sensitive-data detections</div>
+                <div className="card__value--sm">{pii}</div>
+              </div>
+            )}
+            {adherence && (
+              <div className="card">
+                <div className="card__label">Policy adherence</div>
+                <div className="card__value--sm">{adherence}</div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <section>
@@ -365,6 +368,7 @@ function ActionCards({ actions }: { actions: Action[] }) {
 // ── detailed: the full breakdown ───────────────────────────────────────────
 
 const DETAIL_TABS = [
+  { id: 'register', label: 'Register' },
   { id: 'coverage', label: 'Coverage' },
   { id: 'controls', label: 'Controls' },
   { id: 'policy', label: 'Policy' },
@@ -379,7 +383,7 @@ type DetailTab = (typeof DETAIL_TABS)[number]['id']
 // (what's covered / is the policy sound / did data leak / what was attempted /
 // show me the rows), and stacking them made the view read as a list of lists.
 function Detailed({ data }: { data: SecurityReport }) {
-  const [tab, setTab] = useState<DetailTab>('coverage')
+  const [tab, setTab] = useState<DetailTab>('register')
   return (
     <>
       <div className="tabs">
@@ -394,6 +398,8 @@ function Detailed({ data }: { data: SecurityReport }) {
           </button>
         ))}
       </div>
+
+      {tab === 'register' && <RegisterTable register={data.register} />}
 
       {tab === 'coverage' && (
         <>
