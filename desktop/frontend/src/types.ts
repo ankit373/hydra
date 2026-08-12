@@ -39,6 +39,17 @@ export interface Breakdown {
   wallMs: number
 }
 
+/** One (source, domain) row of the calibration leaderboard — mirrors Go's
+ * desktop/api.CalibrationRow, itself a mapping of internal/trust.Stat. */
+export interface CalibrationRow {
+  source: string
+  domain: string
+  d: number
+  se: number
+  sp: number
+  n: number
+}
+
 export interface RecentCall {
   ts: string
   model: string
@@ -59,6 +70,8 @@ export interface Dashboard {
   byTier: Breakdown[] | null
   byDay: Breakdown[] | null
   recent: RecentCall[] | null
+  /** Never null — an empty leaderboard is a real, renderable state. */
+  calibration: CalibrationRow[]
 }
 
 export interface Version {
