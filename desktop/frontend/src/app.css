@@ -40,10 +40,29 @@ body {
   font-size: 15px;
 }
 
-.rail__mark {
-  width: 10px; height: 10px; border-radius: 3px;
-  background: var(--hy-brand);
+.rail__mark { width: 22px; height: 22px; flex: 0 0 auto; }
+
+/* Rotation only — no filter/blur, so it costs nothing on a GPU-less machine.
+   The mark's own SVG has no glow filter baked in (unlike brand/svg/mark.svg)
+   for exactly that reason: fine once as a static icon, wasted looping. */
+.hy-spinner { animation: hy-spin 2.2s linear infinite; transform-origin: 50% 50%; }
+@media (prefers-reduced-motion: reduce) {
+  .hy-spinner { animation: none; }
 }
+@keyframes hy-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 60px 0;
+  color: var(--hy-dim);
+}
+.loading__mark { width: 28px; height: 28px; }
 
 .rail__nav { display: flex; flex-direction: column; gap: 2px; }
 
@@ -1163,6 +1182,22 @@ body {
 }
 .turn__meta:hover { color: var(--hy-aqua); }
 .turn__meta:focus-visible { outline: 2px solid var(--hy-aqua); outline-offset: 2px; }
+
+.turn__probe { display: flex; flex-direction: column; align-items: flex-start; gap: 7px; }
+.turn__retry {
+  appearance: none;
+  background: transparent;
+  border: 1px solid var(--hy-line);
+  border-radius: var(--hy-radius-sm);
+  padding: 5px 12px;
+  color: var(--hy-ink);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.turn__retry:hover:not(:disabled) { border-color: var(--hy-aqua); color: var(--hy-aqua); }
+.turn__retry:disabled { opacity: .5; cursor: default; }
+.turn__retry:focus-visible { outline: 2px solid var(--hy-aqua); outline-offset: 2px; }
 
 .dock__input { border-top: 1px solid var(--hy-line); padding: 9px 11px; }
 .dock__input textarea {
