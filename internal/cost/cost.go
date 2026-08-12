@@ -241,9 +241,13 @@ func ByRun(runID string) (*ByRunResult, error) {
 }
 
 // Tail returns the last N rows, newest first, via a backward tail-seek rather
-// than loading the whole log.
+// than loading the whole log. n == 0 returns no rows, matching `tail -n 0`.
+// n < 0 returns everything — see #464 for tightening that UX separately.
 func Tail(n int) ([]Row, error) {
-	if n <= 0 {
+	if n == 0 {
+		return nil, nil
+	}
+	if n < 0 {
 		return LoadAll()
 	}
 	lines, err := tailLines(costLogPath(), n)

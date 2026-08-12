@@ -578,7 +578,7 @@ func TestTail_NewestFirstAndClamped(t *testing.T) {
 		t.Errorf("Tail(2) = %+v, want newest first", two)
 	}
 
-	for _, n := range []int{0, -1, 999} {
+	for _, n := range []int{-1, 999} {
 		all, err := Tail(n)
 		if err != nil {
 			t.Fatal(err)
@@ -586,6 +586,23 @@ func TestTail_NewestFirstAndClamped(t *testing.T) {
 		if len(all) != 3 {
 			t.Errorf("Tail(%d) returned %d rows, want all 3 clamped", n, len(all))
 		}
+	}
+}
+
+// Tail(0) must mean "no rows", matching the `tail -n 0` convention — the
+// previous behavior returned everything, identical to Tail(999999) (#455).
+func TestTail_ZeroReturnsNoRows(t *testing.T) {
+	fixture(t,
+		row(t, Row{TS: "2026-08-01T00:00:00Z", Model: "a", PromptTokens: 1}),
+		row(t, Row{TS: "2026-08-02T00:00:00Z", Model: "b", PromptTokens: 1}),
+	)
+
+	got, err := Tail(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 0 {
+		t.Errorf("Tail(0) returned %d rows, want 0", len(got))
 	}
 }
 
