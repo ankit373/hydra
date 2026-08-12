@@ -132,11 +132,24 @@ func TestCLI_Dispatch_TierAndSystemPromptAndA2A(t *testing.T) {
 		t.Fatalf("`--tier 6 --system` failed: %v (%s)", err, cobraOut)
 	}
 
-	// --a2a prepends a prior handoff. A file that is not there must not fail the
-	// run: a first dispatch pointed at a not-yet-written handoff still runs.
-	if _, _, err := run(t, "dispatch", "--tier", "6",
-		"--a2a", filepath.Join(repo, "absent.json"), "hello"); err != nil {
-		t.Errorf("an absent --a2a file failed the dispatch: %v", err)
+	// --a2a names a file the user explicitly asked for: an absent one must fail
+	// the dispatch with a clear message, not silently proceed without it (#450).
+	absent := filepath.Join(repo, "absent.json")
+	if _, cobraOut, err := run(t, "dispatch", "--tier", "6",
+		"--a2a", absent, "hello"); err == nil {
+		t.Error("an absent --a2a file did not fail the dispatch")
+	} else if !strings.Contains(err.Error()+cobraOut, absent) {
+		t.Errorf("error = %v (%s), want it to name the offending path", err, cobraOut)
+	}
+
+	// Malformed JSON must fail the same way.
+	bad := filepath.Join(repo, "bad.json")
+	if err := os.WriteFile(bad, []byte("{not json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, cobraOut, err := run(t, "dispatch", "--tier", "6",
+		"--a2a", bad, "hello"); err == nil {
+		t.Errorf("a malformed --a2a file did not fail the dispatch (%s)", cobraOut)
 	}
 
 	// A real handoff is read and injected.

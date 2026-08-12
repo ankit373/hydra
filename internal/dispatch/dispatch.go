@@ -142,12 +142,15 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		log.Printf("ℹ️  Claude at %d%% — Consider running /compact.", pct)
 	}
 
-	// Inject A2A handoff context into prompt if provided.
+	// Inject A2A handoff context into prompt if provided. --a2a names a file the
+	// user explicitly asked for, so a read/parse failure must fail the dispatch
+	// rather than silently running without the handoff context (#450).
 	if opts.A2AFile != "" {
 		injected, err := injectA2A(opts.A2AFile, prompt)
-		if err == nil {
-			prompt = injected
+		if err != nil {
+			return nil, fmt.Errorf("--a2a %s: %w", opts.A2AFile, err)
 		}
+		prompt = injected
 	}
 
 	req := policy.Request{Prompt: prompt, TierHint: tier}
@@ -354,13 +357,16 @@ func asIntSlice(v any) []int {
 }
 
 // injectA2A reads a handoff JSON file and prepends a structured block to the prompt.
+// The path always comes from the user-supplied --a2a flag, so unlike a2a.Load's
+// "missing file = no prior handoff" contract for its other (auto-load) callers,
+// a missing or malformed file here is a mistake the user needs to hear about.
 func injectA2A(path, prompt string) (string, error) {
 	h, err := a2a.Load(path)
 	if err != nil {
-		return prompt, fmt.Errorf("a2a: %w", err)
+		return prompt, fmt.Errorf("a2a: malformed handoff file %s: %w", path, err)
 	}
 	if h == nil {
-		return prompt, nil // no handoff → prompt unchanged
+		return prompt, fmt.Errorf("a2a: handoff file not found: %s", path)
 	}
 	return h.PromptBlock(prompt) + "\n\nADDITIONAL INSTRUCTION:\n" + prompt, nil
 }

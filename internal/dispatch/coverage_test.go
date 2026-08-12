@@ -362,9 +362,9 @@ func TestDispatch_PIIForcesLocalOnlyAndSaysSoWhenNothingIsLocal(t *testing.T) {
 	}
 }
 
-// A2A injection: the handoff's context must reach the prompt, and a missing or
-// corrupt handoff file must leave the prompt untouched rather than failing the
-// dispatch.
+// A2A injection: the handoff's context must reach the prompt when the file is
+// valid, and a missing or corrupt handoff file must fail loudly (#450) rather
+// than silently dispatching without the context the user asked for.
 func TestInjectA2A(t *testing.T) {
 	dir := t.TempDir()
 
@@ -388,39 +388,69 @@ func TestInjectA2A(t *testing.T) {
 		}
 	}
 
-	// An absent file is "no handoff", not a failure: a2a.Load reports it as
-	// (nil, nil) and the prompt goes through untouched. That distinction is why
-	// a first dispatch with --a2a pointed at a not-yet-written file still runs.
-	got, err = injectA2A(filepath.Join(dir, "absent.json"), "unchanged")
-	if err != nil {
-		t.Errorf("a missing handoff file was an error: %v", err)
-	}
-	if got != "unchanged" {
-		t.Errorf("prompt = %q with no handoff, want it untouched", got)
+	// --a2a always names a file the user explicitly asked for, so a missing
+	// file must be an error, not silently treated as "no handoff".
+	if _, err := injectA2A(filepath.Join(dir, "absent.json"), "unchanged"); err == nil {
+		t.Error("a missing --a2a file did not produce an error")
 	}
 
 	if err := os.WriteFile(path, []byte("{truncated"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if got, err := injectA2A(path, "unchanged"); err == nil || got != "unchanged" {
-		t.Errorf("corrupt handoff = (%q, %v), want the prompt untouched and an error", got, err)
+	if _, err := injectA2A(path, "unchanged"); err == nil {
+		t.Error("a malformed --a2a file did not produce an error")
 	}
 }
 
-// A dispatch given --a2a must not be derailed by a broken handoff file.
-func TestDispatch_BrokenA2AFileDoesNotFailTheRun(t *testing.T) {
+// A dispatch given a bad --a2a path must fail clearly instead of silently
+// running without the handoff context the user explicitly asked for (#450).
+func TestDispatch_BadA2AFileFailsTheRun(t *testing.T) {
 	s := testutil.NewSandbox(t)
-	dd := liveDispatcher(echoHead(t, s, "h1", 90))
 
-	res, err := dd.Dispatch(context.Background(), "work", Options{
-		A2AFile: filepath.Join(t.TempDir(), "nope.json"),
+	t.Run("nonexistent file", func(t *testing.T) {
+		dd := liveDispatcher(echoHead(t, s, "h1", 90))
+		_, err := dd.Dispatch(context.Background(), "work", Options{
+			A2AFile: filepath.Join(t.TempDir(), "nope.json"),
+		})
+		if err == nil {
+			t.Fatal("a nonexistent --a2a file did not fail the dispatch")
+		}
+		if !strings.Contains(err.Error(), "nope.json") {
+			t.Errorf("error = %v, want it to name the offending path", err)
+		}
 	})
-	if err != nil {
-		t.Fatalf("an unreadable --a2a file failed the whole dispatch: %v", err)
-	}
-	if res.Output == "" {
-		t.Error("no output despite a working head")
-	}
+
+	t.Run("malformed JSON", func(t *testing.T) {
+		dd := liveDispatcher(echoHead(t, s, "h2", 90))
+		path := filepath.Join(t.TempDir(), "bad.json")
+		if err := os.WriteFile(path, []byte("{not json"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		_, err := dd.Dispatch(context.Background(), "work", Options{A2AFile: path})
+		if err == nil {
+			t.Fatal("a malformed --a2a file did not fail the dispatch")
+		}
+	})
+
+	t.Run("valid file still dispatches", func(t *testing.T) {
+		dd := liveDispatcher(echoHead(t, s, "h3", 90))
+		h := a2a.Handoff{From: "agent-1", Task: "earlier task"}
+		raw, err := json.Marshal(h)
+		if err != nil {
+			t.Fatal(err)
+		}
+		path := filepath.Join(t.TempDir(), "handoff.json")
+		if err := os.WriteFile(path, raw, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		res, err := dd.Dispatch(context.Background(), "work", Options{A2AFile: path})
+		if err != nil {
+			t.Fatalf("a valid --a2a file failed the dispatch: %v", err)
+		}
+		if res.Output == "" {
+			t.Error("no output despite a working head")
+		}
+	})
 }
 
 // claudeMode is the token-preservation governor. Its whole purpose is to
