@@ -20,7 +20,14 @@ import (
 	"github.com/ankit373/hydra/internal/security"
 	"github.com/ankit373/hydra/internal/tree"
 	"github.com/ankit373/hydra/internal/trust"
+	"github.com/ankit373/hydra/internal/util"
 )
+
+// ckSafe strips control characters from an untrusted, ledger-derived string
+// before it is truncated and boxed. Order matters: truncating first can cut an
+// escape sequence in half, and lipgloss measures width in runes, so a stray
+// ESC both corrupts the box borders and can rewrite the line it sits on.
+func ckSafe(s string) string { return util.SafeTerminal(s) }
 
 // ── view 0 · live code panel ─────────────────────────────────────────────────
 
@@ -341,7 +348,7 @@ func (m Cockpit) dashSecurity(w, h int) string {
 		}
 		head.WriteString(" " + ckDimS.Render("verdict  ") + style.Render(label) + "\n")
 		if r.Posture.Trigger != "" {
-			head.WriteString(" " + ckFaintS.Render(truncate(r.Posture.Trigger, ckSecNameW+16)) + "\n")
+			head.WriteString(" " + ckFaintS.Render(truncate(ckSafe(r.Posture.Trigger), ckSecNameW+16)) + "\n")
 		}
 		if n := len(r.Incidents); n > 0 {
 			head.WriteString(" " + ckDimS.Render("incidents ") +
@@ -482,7 +489,7 @@ func (m Cockpit) dashSecurity(w, h int) string {
 		risk.WriteString(ckFaintS.Render(" nothing denied or flagged yet") + "\n")
 	}
 	for _, hr := range r.ByHead {
-		risk.WriteString(fmt.Sprintf(" %-20s denied %-3d flagged %-3d\n", truncate(hr.Head, 20), hr.Denied, hr.Flagged))
+		risk.WriteString(fmt.Sprintf(" %-20s denied %-3d flagged %-3d\n", truncate(ckSafe(hr.Head), 20), hr.Denied, hr.Flagged))
 	}
 
 	var actions strings.Builder
@@ -501,7 +508,7 @@ func (m Cockpit) dashSecurity(w, h int) string {
 		if a.AgeDays > 0 {
 			age = ckDimS.Render(fmt.Sprintf(" %dd", a.AgeDays))
 		}
-		actions.WriteString(" " + style.Render(tag) + age + " " + ckDimS.Render(truncate(a.Title, ckSecRecW)) + "\n")
+		actions.WriteString(" " + style.Render(tag) + age + " " + ckDimS.Render(truncate(ckSafe(a.Title), ckSecRecW)) + "\n")
 	}
 
 	right := lipgloss.JoinVertical(lipgloss.Left, ckBoxS.Render(risk.String()), ckBoxS.Render(actions.String()))

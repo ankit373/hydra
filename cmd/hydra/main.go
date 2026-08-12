@@ -47,6 +47,7 @@ import (
 	"github.com/ankit373/hydra/internal/trust"
 	"github.com/ankit373/hydra/internal/tui"
 	"github.com/ankit373/hydra/internal/update"
+	"github.com/ankit373/hydra/internal/util"
 
 	_ "github.com/ankit373/hydra/internal/provider/agy"
 	_ "github.com/ankit373/hydra/internal/provider/cli"
@@ -1005,9 +1006,10 @@ func cmdMCP() *cobra.Command {
 			}
 			for _, e := range events {
 				line := fmt.Sprintf("  %s  %-6s  %-12s %s/%s %s", e.TS, strings.ToUpper(string(e.Decision)),
-					e.Agent, e.Tool, e.Resource, dimStyle.Render(string(e.Action)))
+					util.SafeTerminal(e.Agent), util.SafeTerminal(e.Tool), util.SafeTerminal(e.Resource),
+					dimStyle.Render(string(e.Action)))
 				if e.Flagged {
-					line += dimStyle.Render(fmt.Sprintf("  [flagged: %s]", e.FlagReason))
+					line += dimStyle.Render(fmt.Sprintf("  [flagged: %s]", util.SafeTerminal(e.FlagReason)))
 				}
 				fmt.Println(line)
 			}
@@ -1181,7 +1183,7 @@ func printSecurityReport(r *security.Report) {
 		fmt.Printf("  %-24s %8s %8s\n", "HEAD", "DENIED", "FLAGGED")
 		fmt.Println(dimStyle.Render("  " + strings.Repeat("─", 48)))
 		for _, h := range r.ByHead {
-			fmt.Printf("  %-24.24s %8d %8d\n", h.Head, h.Denied, h.Flagged)
+			fmt.Printf("  %-24.24s %8d %8d\n", util.SafeTerminal(h.Head), h.Denied, h.Flagged)
 		}
 	}
 
@@ -1196,7 +1198,7 @@ func printSecurityReport(r *security.Report) {
 			status = okStyle.Render(status)
 		}
 		fmt.Printf("    %-26s %s\n", c.Name, status)
-		fmt.Println(dimStyle.Render("      " + c.Detail))
+		fmt.Println(dimStyle.Render("      " + util.SafeTerminal(c.Detail)))
 	}
 
 	printControls(r)
@@ -1213,7 +1215,8 @@ func printSecurityReport(r *security.Report) {
 			if a.AgeDays > 0 {
 				age = dimStyle.Render(fmt.Sprintf(" · %dd", a.AgeDays))
 			}
-			fmt.Printf("    %s %s%s — %s\n", actionPriorityTag(a.Priority), a.Title, age, a.Detail)
+			fmt.Printf("    %s %s%s — %s\n", actionPriorityTag(a.Priority),
+				util.SafeTerminal(a.Title), age, util.SafeTerminal(a.Detail))
 		}
 	}
 	fmt.Println()
@@ -1231,7 +1234,9 @@ func printVerdict(r *security.Report) {
 		label = warnStyle.Render("ATTENTION")
 	}
 	fmt.Printf("  %s  %s\n", cortexStyle.Render("VERDICT"), label)
-	fmt.Println(dimStyle.Render("    " + p.Trigger))
+	// The trigger quotes an incident narrative, which carries an attacker's
+	// own tool name — the one line on this screen most worth forging.
+	fmt.Println(dimStyle.Render("    " + util.SafeTerminal(p.Trigger)))
 	if len(p.Because) > 1 {
 		fmt.Println(dimStyle.Render(fmt.Sprintf("    +%d more condition(s) below", len(p.Because)-1)))
 	}
@@ -1248,7 +1253,7 @@ func printIncidents(r *security.Report) {
 	fmt.Println()
 	fmt.Printf("  %s\n", cortexStyle.Render("incidents"))
 	for _, in := range security.TopIncidents(r.Incidents, 3) {
-		fmt.Printf("    %s %s\n", severityTag(in.Severity), in.Narrative)
+		fmt.Printf("    %s %s\n", severityTag(in.Severity), util.SafeTerminal(in.Narrative))
 		fmt.Println(dimStyle.Render(fmt.Sprintf("      %s → %s · %d event(s) · likelihood %d × impact %d",
 			shortTS(in.Start), shortTS(in.End), len(in.Events), in.Likelihood, in.Impact)))
 	}
@@ -1274,7 +1279,7 @@ func printRegister(r *security.Report) {
 			due = warnStyle.Render(fmt.Sprintf("%dd", k.DueInDays))
 		}
 		fmt.Printf("    %-10s %-42.42s %-9s %8s %12s\n",
-			k.ID, k.Title, severityTag(k.Severity), due, fmt.Sprintf("$%.0f", k.DefectCostUSD))
+			k.ID, util.SafeTerminal(k.Title), severityTag(k.Severity), due, fmt.Sprintf("$%.0f", k.DefectCostUSD))
 		if len(k.Frameworks) > 0 {
 			fmt.Println(dimStyle.Render("               " + frameworksText(k.Frameworks)))
 		}
@@ -1350,7 +1355,7 @@ func printControls(r *security.Report) {
 			src = dimStyle.Render(" [source-derived]")
 		}
 		fmt.Printf("    %s %s%s\n", tag, c.Name, src)
-		fmt.Println(dimStyle.Render("      " + c.Detail))
+		fmt.Println(dimStyle.Render("      " + util.SafeTerminal(c.Detail)))
 	}
 }
 
@@ -1381,7 +1386,8 @@ func printPolicyAudit(r *security.Report) {
 		case rule.Dead:
 			note = dimStyle.Render("never matched")
 		}
-		fmt.Printf("    %-4d %-30.30s %-7s %6d  %s\n", rule.Index, rule.Summary, rule.Decision, rule.Hits, note)
+		fmt.Printf("    %-4d %-30.30s %-7s %6d  %s\n",
+			rule.Index, util.SafeTerminal(rule.Summary), rule.Decision, rule.Hits, note)
 	}
 	fmt.Println(dimStyle.Render(fmt.Sprintf("    %d access(es) fell through to the %s default", a.DefaultHits, a.Default)))
 }
@@ -1409,7 +1415,8 @@ func printExposures(r *security.Report) {
 		if types == "" {
 			types = "unclassified type"
 		}
-		fmt.Printf("    %-7s %-18.18s %-24.24s %s\n", where, e.Head, e.Resource, dimStyle.Render(types))
+		fmt.Printf("    %-7s %-18.18s %-24.24s %s\n", where,
+			util.SafeTerminal(e.Head), util.SafeTerminal(e.Resource), dimStyle.Render(types))
 	}
 }
 
@@ -1435,7 +1442,7 @@ func printCountList(title string, counts []security.Count) {
 	}
 	fmt.Printf("    %s\n", dimStyle.Render(title+":"))
 	for _, c := range counts {
-		fmt.Printf("      %-40.40s %d\n", c.Label, c.Count)
+		fmt.Printf("      %-40.40s %d\n", util.SafeTerminal(c.Label), c.Count)
 	}
 }
 

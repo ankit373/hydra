@@ -4,6 +4,8 @@ package security
 
 import (
 	"fmt"
+	"path"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -31,6 +33,13 @@ import (
 // sessionGap is how long a lull can be before the next risky event by the same
 // actor counts as a separate incident. Attacks pause; an hour keeps a paused
 // sequence together without merging genuinely unrelated afternoons.
+//
+// It is also the evasion window, and the check says so rather than leaving the
+// reader to assume correlation is comprehensive: an actor that paces its steps
+// further apart than this never forms a sequence, and each event degrades to
+// its own low-severity incident. Widening the gap does not fix that, it only
+// moves it — and it costs real precision, because unrelated work by the same
+// head starts merging into one bogus "incident".
 const sessionGap = time.Hour
 
 // Stage is one observed step in an incident, each derived from a field the
@@ -95,12 +104,50 @@ var auditPaths = []string{
 	"internal/policy",
 }
 
+// targetsAuditMachinery matches on path structure, not raw substrings. A plain
+// strings.Contains treats "notinternal/security-notes.txt" as an attack on the
+// audit trail, and that stage adds 3 to the impact score — a false positive
+// here inflates severity, which is the one direction this report must not err
+// in if its verdicts are to be trusted.
+//
+// The three kinds of pattern in auditPaths are matched by their shape, since
+// they mean different things: a leading dot is a suffix (".chainhash" is an
+// anchor file whatever it hangs off), an embedded slash is a path fragment
+// matched on segment boundaries, and anything else is a file name matched
+// against the base — allowing a sidecar like "mcp_ledger.jsonl.chainhash".
 func targetsAuditMachinery(resource string) bool {
 	if resource == "" {
 		return false
 	}
+	clean := path.Clean(strings.ReplaceAll(resource, `\`, "/"))
+	base := path.Base(clean)
 	for _, p := range auditPaths {
-		if strings.Contains(resource, p) {
+		switch {
+		case strings.HasPrefix(p, "."):
+			if strings.HasSuffix(base, p) {
+				return true
+			}
+		case strings.Contains(p, "/"):
+			if segmentMatch(clean, p) {
+				return true
+			}
+		default:
+			if base == p || strings.HasPrefix(base, p+".") {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// segmentMatch reports whether pattern appears in resource on segment
+// boundaries: "internal/ledger" matches "internal/ledger/ledger.go" and
+// "/opt/hydra/internal/ledger", but not "notinternal/ledger-notes".
+func segmentMatch(resource, pattern string) bool {
+	segs := strings.Split(resource, "/")
+	pat := strings.Split(pattern, "/")
+	for i := 0; i+len(pat) <= len(segs); i++ {
+		if slices.Equal(segs[i:i+len(pat)], pat) {
 			return true
 		}
 	}
@@ -374,5 +421,6 @@ func incidentCheck(in []Incident) Check {
 	}
 	worst := in[0]
 	return Check{Name: name, Status: fmt.Sprintf("%d incident(s), worst %s", len(in), worst.Severity),
-		Detail: worst.Narrative}
+		Detail: fmt.Sprintf("%s (events by one actor are correlated across gaps of up to %s; "+
+			"steps paced wider than that are not linked)", worst.Narrative, sessionGap)}
 }
