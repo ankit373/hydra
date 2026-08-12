@@ -1,11 +1,14 @@
 import { useMemo } from 'react'
-import type { Session } from '../types'
+import type { Agent, Session } from '../types'
 import { layoutDag } from '../dagreLayout'
 
 // Sugiyama/dagre layout mechanics live in dagreLayout.ts, shared with Fleet's
 // inline run graph — see that file for why dagre over a force-directed layout.
 const NODE_W = 168
 const NODE_H = 46
+// Wider than RunGraph's LABEL_MAX (12): this node has more room, but a full
+// file path (an edit-target node's label) still needs truncating to fit it.
+const LABEL_MAX = 24
 
 interface Placed {
   id: string
@@ -38,7 +41,7 @@ export function SessionGraph({ session }: { session: Session }) {
               width={NODE_W}
               height={NODE_H}
               rx={10}
-              className={`gnode gnode--${n.state || 'pending'}`}
+              className={`gnode gnode--${n.state}`}
             />
             <text x={11} y={19} className="gnode__label">
               {n.label}
@@ -54,6 +57,23 @@ export function SessionGraph({ session }: { session: Session }) {
       </p>
     </div>
   )
+}
+
+function shortLabel(s: string): string {
+  if (s.length <= LABEL_MAX) return s
+  // File paths: the filename at the end is the meaningful part, so truncate
+  // from the start — clipping the end instead hides it (#461).
+  if (s.includes('/')) return `…${s.slice(-(LABEL_MAX - 1))}`
+  return `${s.slice(0, LABEL_MAX - 1)}…`
+}
+
+// A node with none of these signals never went through a run lifecycle — an
+// edit-target node, say — so it isn't "pending" (still to run); it's an
+// artifact the run touched. Reusing 'pending' reads as stuck forever (#462).
+function stateClass(a: Agent): string {
+  if (a.state && a.state !== 'pending') return a.state
+  if (a.tier > 0 || a.durationMs > 0) return 'pending'
+  return 'artifact'
 }
 
 function layout(session: Session) {
@@ -72,12 +92,12 @@ function layout(session: Session) {
       id: p.id,
       x: p.x,
       y: p.y,
-      label: a.model || a.head || a.id,
+      label: shortLabel(a.model || a.head || a.id),
       // Verifiable facts first — tier, state, duration — rather than narration.
       sub: [a.tier > 0 ? `T${a.tier}` : null, a.state, a.durationMs > 0 ? `${a.durationMs}ms` : null]
         .filter(Boolean)
         .join(' · '),
-      state: a.state,
+      state: stateClass(a),
     })
   }
 

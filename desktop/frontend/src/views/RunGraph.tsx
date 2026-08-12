@@ -36,7 +36,7 @@ export function RunGraph({ agents }: { agents: Agent[] }) {
               width={NODE_W}
               height={NODE_H}
               rx={7}
-              className={`gnode gnode--${n.state || 'pending'}`}
+              className={`gnode gnode--${n.state}`}
             />
             <text x={8} y={17} className="gnode__label">
               {n.label}
@@ -53,6 +53,15 @@ function shortLabel(a: Agent): string {
   return s.length > LABEL_MAX ? `${s.slice(0, LABEL_MAX - 1)}…` : s
 }
 
+// A node with none of these signals never went through a run lifecycle — an
+// edit-target node, say — so it isn't "pending" (still to run); it's an
+// artifact the run touched. Reusing 'pending' reads as stuck forever (#462).
+function stateClass(a: Agent): string {
+  if (a.state && a.state !== 'pending') return a.state
+  if (a.tier > 0 || a.durationMs > 0) return 'pending'
+  return 'artifact'
+}
+
 function layout(agents: Agent[]) {
   const { nodes: placed, edges: lines, width, height } = layoutDag(
     agents.map((a) => ({ id: a.id, parent: a.parent })),
@@ -65,7 +74,7 @@ function layout(agents: Agent[]) {
   for (const p of placed) {
     const a = byID.get(p.id)
     if (!a) continue
-    nodes.push({ id: p.id, x: p.x, y: p.y, label: shortLabel(a), state: a.state })
+    nodes.push({ id: p.id, x: p.x, y: p.y, label: shortLabel(a), state: stateClass(a) })
   }
 
   return { nodes, lines, width, height }

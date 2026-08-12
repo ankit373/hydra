@@ -1250,9 +1250,12 @@ body {
 .edge--a2a { stroke: var(--hy-violet); stroke-dasharray: 4 4; }
 
 .gnode { fill: var(--hy-bg-2); stroke: var(--hy-line); stroke-width: 1; }
-.gnode--ok      { stroke: var(--hy-cheap); }
-.gnode--failed  { stroke: var(--hy-expensive); }
-.gnode--running { stroke: var(--hy-aqua); }
+.gnode--ok       { stroke: var(--hy-cheap); }
+.gnode--failed   { stroke: var(--hy-expensive); }
+.gnode--running  { stroke: var(--hy-aqua); }
+/* Not an agent run — an edit-target node, say — so it gets a distinct dashed
+   neutral border rather than the "still to run" implication of pending. */
+.gnode--artifact { stroke: var(--hy-faint); stroke-dasharray: 3 3; }
 
 .gnode__label { fill: var(--hy-ink); font-family: var(--hy-font-mono); font-size: 11px; }
 .gnode__sub   { fill: var(--hy-dim); font-family: var(--hy-font-mono); font-size: 10px; }
