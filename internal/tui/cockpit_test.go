@@ -5,6 +5,8 @@ package tui
 import (
 	"strings"
 	"testing"
+
+	"github.com/charmbracelet/lipgloss"
 )
 
 // `hyctl tui --snapshot --view 3` used to panic with an index-out-of-range:
@@ -101,5 +103,71 @@ func TestTabCycleStaysInRange(t *testing.T) {
 	}
 	if view != 0 {
 		t.Errorf("cycling %d times should return to view 0, got %d", ckViewCount()*3, view)
+	}
+}
+
+// chatMain's total output must be exactly h lines. It previously forgot the
+// divider row stacked below the log box, coming out h+1 lines — Bubble Tea's
+// renderer crops overflow off the TOP, silently deleting the header on every
+// launch of the default tab (#445).
+func TestChatMain_OutputIsExactlyHLines(t *testing.T) {
+	m := Cockpit{w: 120, h: 40, ready: true, mode: "dispatch"}
+	for _, h := range []int{10, 24, 30, 60} {
+		out := m.chatMain(60, h)
+		if got := strings.Count(out, "\n") + 1; got != h {
+			t.Errorf("chatMain(60, %d) produced %d lines, want %d", h, got, h)
+		}
+	}
+}
+
+// The sidebar must never exceed the height it's given, however many heads
+// were discovered — an uncapped list let a busy machine's real head count
+// dictate the whole view's height once JoinHorizontal pads every other
+// column to match it (#446).
+func TestSidebar_NeverExceedsGivenHeight(t *testing.T) {
+	heads := make([]ckHead, 30)
+	for i := range heads {
+		heads[i] = ckHead{id: strings.Repeat("x", i%5+1), name: "head", tier: 1}
+	}
+	m := Cockpit{w: 120, h: 40, ready: true, heads: heads, mode: "dispatch"}
+
+	// The GOVERNOR/MODE chrome above and below the head list is fixed at 8
+	// lines regardless of h — h below that floor is asking for something the
+	// layout cannot do. The bug this guards is a large head list blowing past
+	// h once h is at least big enough for that fixed chrome to fit.
+	for _, h := range []int{10, 15, 20} {
+		out := m.sidebar(h)
+		if got := strings.Count(out, "\n") + 1; got > h {
+			t.Errorf("sidebar(%d) with 30 heads produced %d lines, want <= %d", h, got, h)
+		}
+	}
+
+	// With more heads than fit, the overflow must be disclosed, not silently
+	// dropped.
+	out := m.sidebar(10)
+	if !strings.Contains(out, "more") {
+		t.Errorf("sidebar(10) with 30 heads does not disclose the hidden ones:\n%s", out)
+	}
+}
+
+// Below the width the two-column layout needs, dash and dashSecurity must
+// stack into a single column rather than corrupt: join-then-clamp-to-w splits
+// box borders across the wrong rows once a box's real width exceeds what's
+// left after clamping (#447).
+func TestDashAndDashSecurity_NoLineExceedsWidthWhenNarrow(t *testing.T) {
+	m := Cockpit{w: 40, h: 30, ready: true, mode: "dispatch"}
+
+	for name, render := range map[string]func(w, h int) string{
+		"dash":         m.dash,
+		"dashSecurity": m.dashSecurity,
+	} {
+		t.Run(name, func(t *testing.T) {
+			out := render(40, 20)
+			for i, line := range strings.Split(out, "\n") {
+				if got := lipgloss.Width(line); got > 40 {
+					t.Errorf("line %d is %d cells wide, want <= 40:\n%q", i, got, line)
+				}
+			}
+		})
 	}
 }

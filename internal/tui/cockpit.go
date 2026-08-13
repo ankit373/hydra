@@ -540,27 +540,59 @@ func (m Cockpit) header() string {
 }
 
 func (m Cockpit) sidebar(h int) string {
-	var b strings.Builder
-	b.WriteString(ckLabelS.Render("GOVERNOR") + "\n")
-	b.WriteString(ckBar(m.claudePct, 15) + "\n")
-	b.WriteString(ckDimS.Render(fmt.Sprintf("claude %d%%", m.claudePct)) + "\n\n")
-	b.WriteString(ckLabelS.Render("HEADS") + "\n")
-	for _, hd := range m.heads {
+	head := []string{
+		ckLabelS.Render("GOVERNOR"),
+		ckBar(m.claudePct, 15),
+		ckDimS.Render(fmt.Sprintf("claude %d%%", m.claudePct)),
+		"",
+		ckLabelS.Render("HEADS"),
+	}
+	foot := []string{"", ckLabelS.Render("MODE"), " " + ckCyanS.Render(m.mode)}
+
+	// An uncapped head list can run to 20+ lines on a busy machine, and
+	// lipgloss.Height only pads shorter content — it never truncates taller
+	// content. Left alone, the sidebar's real height dictates the whole
+	// view's height once JoinHorizontal pads every other column to match it
+	// (#446). Cap the list to what's left after the fixed chrome above and
+	// below it, and say how many were left out.
+	avail := h - len(head) - len(foot)
+	var shown []ckHead
+	var more int
+	switch {
+	case avail <= 0:
+		// no room even for a "+N more" line.
+	case len(m.heads) <= avail:
+		shown = m.heads
+	default:
+		keep := avail - 1
+		shown = m.heads[:keep]
+		more = len(m.heads) - keep
+	}
+
+	lines := append([]string{}, head...)
+	for _, hd := range shown {
 		st := ckCheapS.Render("✓")
 		if !hd.up {
 			st = ckExpS.Render("✗")
 		}
 		name := lipgloss.NewStyle().Foreground(hd.color).Render(truncate(hd.name, 15))
-		b.WriteString(" " + st + " " + name + "\n")
+		lines = append(lines, " "+st+" "+name)
 	}
-	b.WriteString("\n" + ckLabelS.Render("MODE") + "\n " + ckCyanS.Render(m.mode) + "\n")
+	if more > 0 {
+		lines = append(lines, ckDimS.Render(fmt.Sprintf(" +%d more", more)))
+	}
+	lines = append(lines, foot...)
+
 	return lipgloss.NewStyle().Width(21).Height(h).
 		BorderStyle(lipgloss.NormalBorder()).BorderRight(true).BorderForeground(ckLineC).
-		Render(b.String())
+		Render(strings.Join(lines, "\n"))
 }
 
 func (m Cockpit) chatMain(w, h int) string {
-	logH := h - 1
+	// h covers the log box, the ╌ divider below it, and the input line — not
+	// just the log box, or the total comes out to h+1 and Bubble Tea crops the
+	// overflow off the TOP, deleting the header on every launch (#445).
+	logH := h - 2
 	if logH < 1 {
 		logH = 1
 	}
