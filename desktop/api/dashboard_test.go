@@ -15,12 +15,16 @@ import (
 )
 
 // sandbox points config.Dir() and trust.DefaultLogPath() at a temp HOME, so a
-// test never reads (or writes) the developer's real ~/.hydra.
+// test never reads (or writes) the developer's real ~/.hydra. Clearing
+// HYDRA_HOME too matters since config.Dir() prefers it over HOME (#442) — a
+// developer or CI runner with one already exported would otherwise leak
+// straight through every "HOME-only" sandbox in this file.
 func sandbox(t *testing.T) string {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home) // windows
+	t.Setenv("HYDRA_HOME", "")
 	if err := os.MkdirAll(filepath.Join(home, ".hydra", "logs"), 0o700); err != nil {
 		t.Fatal(err)
 	}

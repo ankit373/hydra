@@ -181,7 +181,9 @@ export default function App() {
         {/* An error replaces the body but never the shell — a broken read
             should not look like a crashed app. */}
         {error && <div className="error">{error}</div>}
-        {!error && view === 'dashboard' && <Dashboard data={dashboard} />}
+        {!error && view === 'dashboard' && (
+          <Dashboard data={dashboard} dockOpen={dockOpen} onCloseDock={() => setDockOpen(false)} />
+        )}
         {!error && view === 'fleet' && fleet && (
           <Fleet data={fleet} onOpen={openSession} onStartTask={startTask} />
         )}
