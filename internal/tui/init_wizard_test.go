@@ -107,6 +107,28 @@ func TestInitWizard_FullWalkWritesALoadableConfig(t *testing.T) {
 	}
 }
 
+// The done screen must not have a stray whitespace-only line between "ready"
+// and "Cortex :" — lipgloss pads every line of a multi-line Render to its
+// widest line, so a blank line written *inside* the styled block became a row
+// of spaces glued onto the next line instead of a real newline (#465).
+func TestInitWizard_DoneScreenHasNoStrayWhitespaceLine(t *testing.T) {
+	testutil.NewSandbox(t)
+
+	m := tea.Model(NewInitModel(wizardHeads()))
+	m, _ = send(m, "enter", "enter", "enter", "enter")
+
+	im := m.(InitModel)
+	if im.err != nil {
+		t.Fatalf("the wizard reported an error: %v", im.err)
+	}
+	for _, line := range strings.Split(im.View(), "\n") {
+		if strings.TrimSpace(line) == "" && strings.Trim(line, " ") != line {
+			t.Errorf("done screen has a whitespace-only (not empty) line: %q\nfull view:\n%s",
+				line, im.View())
+		}
+	}
+}
+
 // Declining local-only must leave no PII policy, rather than writing one that
 // says something else.
 func TestInitWizard_DecliningLocalOnlyWritesNoPIIPolicy(t *testing.T) {

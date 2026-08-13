@@ -315,27 +315,30 @@ func ckCodeTick(gen int) tea.Cmd {
 func (m Cockpit) submit() (tea.Model, tea.Cmd) {
 	t := strings.TrimSpace(m.input)
 	m.input = ""
+	// Commands are matched case-insensitively (#465) — free-text task input
+	// below is not, since a real task's casing is meaningful.
+	lt := strings.ToLower(t)
 	switch {
-	case t == "":
+	case lt == "":
 		return m, nil
-	case t == ":q" || t == ":quit":
+	case lt == ":q" || lt == ":quit":
 		return m, tea.Quit
-	case t == ":dash":
+	case lt == ":dash":
 		m.view = 1
 		return m, nil
-	case t == ":chat":
+	case lt == ":chat":
 		m.view = 0
 		return m, nil
-	case t == ":tree":
+	case lt == ":tree":
 		m.view = 2
 		return m, nil
-	case t == ":security":
+	case lt == ":security":
 		m.view = ckViewSecurity
 		return m, nil
-	case strings.HasPrefix(t, "/"):
-		switch t {
+	case strings.HasPrefix(lt, "/"):
+		switch lt {
 		case "/dispatch", "/swarm", "/trust", "/local":
-			m.mode = t[1:]
+			m.mode = lt[1:]
 			m.log = append(m.log, ckDimS.Render("mode → ")+ckCyanS.Render(m.mode))
 		default:
 			m.log = append(m.log, ckDimS.Render("unknown command "+t))
@@ -607,10 +610,13 @@ func (m Cockpit) chatMain(w, h int) string {
 
 func (m Cockpit) hint() string {
 	k := func(s string) string { return ckAquaS.Render(s) }
+	// #465: this used to omit /dispatch (a valid mode command, alongside
+	// /swarm /trust /local) and the :dash/:chat/:tree/:security jump
+	// commands entirely — both discoverable only by reading the source.
 	return ckFaintS.Render(" ") + k("enter") + ckFaintS.Render(" dispatch   ") +
-		k("tab") + ckFaintS.Render(" chat/dash/tree/security   ") +
+		k("tab") + ckFaintS.Render("/") + k(":dash :chat :tree :security") + ckFaintS.Render(" jump   ") +
 		k("↑↓") + ckFaintS.Render(" select   ") +
-		k("/trust /swarm /local") + ckFaintS.Render(" mode   ") +
+		k("/dispatch /trust /swarm /local") + ckFaintS.Render(" mode   ") +
 		k(":q") + ckFaintS.Render(" quit")
 }
 
