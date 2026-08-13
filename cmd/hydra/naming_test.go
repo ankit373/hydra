@@ -10,6 +10,8 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
+
+	"github.com/ankit373/hydra/internal/testutil"
 )
 
 // The binary is hyctl. Cobra prints `Use` correctly on its own, but every
@@ -64,5 +66,21 @@ func TestUserFacingText_NeverNamesABinaryThatDoesNotExist(t *testing.T) {
 		if err != nil {
 			t.Fatalf("walking %s: %v", root, err)
 		}
+	}
+}
+
+// A runtime error (e.g. "no config found") used to dump the full flags block
+// for every one of ~25 subcommands, drowning the one line that actually
+// mattered. SilenceUsage on the root command must propagate to every
+// subcommand, including one deep in a command group (#464).
+func TestUserFacingText_RuntimeErrorsDoNotDumpUsage(t *testing.T) {
+	testutil.NewSandbox(t) // no config written
+
+	_, cobraOut, err := run(t, "status")
+	if err == nil {
+		t.Fatal("`hyctl status` on an unconfigured machine did not error")
+	}
+	if strings.Contains(cobraOut, "Usage:") || strings.Contains(cobraOut, "Flags:") {
+		t.Errorf("a runtime error dumped the flags block:\n%s", cobraOut)
 	}
 }

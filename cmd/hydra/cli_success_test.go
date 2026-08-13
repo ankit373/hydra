@@ -407,6 +407,34 @@ func TestCLI_OracleVerify_PassingVerdictReportsEvidence(t *testing.T) {
 	}
 }
 
+// A garbage --record used to be silently ignored — no error, no calibration
+// write, discovered only by its absence from `trust calibration` later.
+// `trust record --outcome` already validates this strictly; `oracle verify
+// --record` now does too, and before running the verifier at all (#464).
+func TestCLI_OracleVerify_GarbageRecordIsRejected(t *testing.T) {
+	// --record is validated before the verifier command ever runs (see the
+	// fix itself), so this never actually executes /usr/bin/true — safe on
+	// every platform, no skip needed.
+	populated(t)
+
+	_, cobraOut, err := run(t, "oracle", "verify", "/usr/bin/true",
+		"--source", "verifier:test", "--domain", "go", "--record", "maybe")
+	if err == nil {
+		t.Fatalf("--record maybe was accepted:\n%s", cobraOut)
+	}
+	if !strings.Contains(err.Error()+cobraOut, "--record") {
+		t.Errorf("error = %v, want it to name --record", err)
+	}
+
+	cal, _, calErr := run(t, "trust", "calibration")
+	if calErr != nil {
+		t.Fatal(calErr)
+	}
+	if strings.Contains(cal, "verifier:test") {
+		t.Errorf("a rejected --record still wrote to calibration:\n%s", cal)
+	}
+}
+
 // ── mcp check, allowed ────────────────────────────────────────────────────────
 
 // An allowed check exits 0, so its body runs in process. The decision must be
@@ -441,6 +469,47 @@ func TestCLI_MCPCheck_AllowedDecisionIsRecorded(t *testing.T) {
 	if !strings.Contains(log+logCobra, "test-agent") {
 		t.Errorf("the allow was not recorded; an unlogged decision is not "+
 			"accountability:\n%s", log+logCobra)
+	}
+}
+
+// tool+"/"+resource used to read as one run-together path whenever resource
+// was itself absolute — "fs.read" + "/tmp/x.txt" rendered as
+// "fs.read//tmp/x.txt", indistinguishable from a single garbled field (#464).
+func TestCLI_MCPCheckAndLog_ToolResourceSeparatorDoesNotCollideWithPaths(t *testing.T) {
+	s := populated(t)
+
+	policy := `{"rules":[{"action":"read","resource":"/tmp/**","decision":"allow"}]}`
+	if err := os.MkdirAll(config.Dir(), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(config.Dir(), "mcp_policy.json"), []byte(policy), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_ = s
+
+	checkOut, checkCobra, err := run(t, "mcp", "check", "fs.read",
+		"--action", "read", "--resource", "/tmp/allowed.txt", "--agent", "test-agent")
+	if err != nil {
+		t.Fatalf("check errored: %v (%s)", err, checkCobra)
+	}
+	combined := checkOut + checkCobra
+	if strings.Contains(combined, "fs.read//tmp") {
+		t.Errorf("mcp check: tool and an absolute resource ran together:\n%s", combined)
+	}
+	if !strings.Contains(combined, "fs.read -> /tmp/allowed.txt") {
+		t.Errorf("mcp check: want tool and resource joined by \" -> \":\n%s", combined)
+	}
+
+	logOut, logCobra, err := run(t, "mcp", "log")
+	if err != nil {
+		t.Fatal(err)
+	}
+	logCombined := logOut + logCobra
+	if strings.Contains(logCombined, "fs.read//tmp") {
+		t.Errorf("mcp log: tool and an absolute resource ran together:\n%s", logCombined)
+	}
+	if !strings.Contains(logCombined, "fs.read -> /tmp/allowed.txt") {
+		t.Errorf("mcp log: want tool and resource joined by \" -> \":\n%s", logCombined)
 	}
 }
 
@@ -894,6 +963,52 @@ func TestCLI_Probe_MarksUnroutableHeads(t *testing.T) {
 	// probe is only useful if probe explains itself (#248).
 	if strings.Contains(combined, "ollama") && !strings.Contains(combined, "✗") {
 		t.Errorf("the unroutable ollama binary is listed without being marked:\n%s", combined)
+	}
+}
+
+// `hyctl probe --json` is the one data-producing command that lacked machine-
+// readable output — every sibling (models/cost/stats/pricing/mcp report/
+// security/graph/context entropy) has one (#464).
+func TestCLI_Probe_JSONIsValidAndMarksRoutability(t *testing.T) {
+	s, _ := dispatchable(t, "answered")
+	s.FakeBinary(t, "ollama")
+
+	out, cobraOut, err := run(t, "probe", "--json")
+	if err != nil {
+		t.Fatalf("`hyctl probe --json` failed: %v (%s)", err, cobraOut)
+	}
+
+	var parsed struct {
+		Cortex string `json:"cortex"`
+		Heads  []struct {
+			ID               string `json:"id"`
+			Routable         bool   `json:"routable"`
+			UnroutableReason string `json:"unroutable_reason"`
+		} `json:"heads"`
+	}
+	if err := json.Unmarshal([]byte(out+cobraOut), &parsed); err != nil {
+		t.Fatalf("probe --json did not parse: %v\n%s", err, out+cobraOut)
+	}
+	if len(parsed.Heads) == 0 {
+		t.Fatal("probe --json reported no heads")
+	}
+
+	var sawRoutable, sawUnroutable bool
+	for _, h := range parsed.Heads {
+		if h.Routable {
+			sawRoutable = true
+		} else {
+			sawUnroutable = true
+			if h.UnroutableReason == "" {
+				t.Errorf("head %q is unroutable with no reason given", h.ID)
+			}
+		}
+	}
+	if !sawRoutable {
+		t.Error("no routable head reported")
+	}
+	if !sawUnroutable {
+		t.Error("the unroutable ollama binary is missing from --json output")
 	}
 }
 

@@ -240,6 +240,13 @@ func TestEdit_EmptyReplacementLeavesTheFileUntouched(t *testing.T) {
 	if _, err := os.Stat(file + ".hydra-bak"); err == nil {
 		t.Error("a backup survived a refused edit")
 	}
+	// Scope resolution ran and succeeded well before the empty-replacement
+	// check — failResult used to zero Workspace/GitRoot regardless, making a
+	// downstream failure indistinguishable from "scope was never resolved"
+	// (#464).
+	if res.Workspace == "" {
+		t.Error("Workspace is empty on a failure that happened after scope resolution succeeded")
+	}
 }
 
 func TestEdit_RefusesBeforeDispatching(t *testing.T) {
