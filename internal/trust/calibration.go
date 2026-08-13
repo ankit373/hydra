@@ -13,6 +13,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/ankit373/hydra/internal/config"
 )
 
 // laplacePrior is the pseudo-count added to every confusion cell so a brand-new
@@ -80,8 +82,7 @@ func New(path string) (*Calibrator, error) {
 
 // DefaultPath is where calibration is persisted for the CLI (~/.hydra/calibration.jsonl).
 func DefaultPath() string {
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".hydra", "calibration.jsonl")
+	return filepath.Join(config.Dir(), "calibration.jsonl")
 }
 
 // record is one persisted training event.

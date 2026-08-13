@@ -889,6 +889,11 @@ func TestWriteLastEdit_UnwritableLogDirIsAnError(t *testing.T) {
 	testutil.NewSandbox(t)
 
 	// ~/.hydra is a regular file, so logs/ cannot be created.
+	// The sandbox pre-creates config.Dir() as an empty directory, so it must
+	// be removed before a file can occupy that path instead.
+	if err := os.RemoveAll(config.Dir()); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(config.Dir(), []byte("not a dir"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -903,6 +908,11 @@ func TestLogEdit_IsBestEffort(t *testing.T) {
 	testutil.NewSandbox(t)
 
 	// Nothing to write into, and nothing may panic or block.
+	// The sandbox pre-creates config.Dir() as an empty directory, so it must
+	// be removed before a file can occupy that path instead.
+	if err := os.RemoveAll(config.Dir()); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(config.Dir(), []byte("not a dir"), 0o600); err != nil {
 		t.Fatal(err)
 	}

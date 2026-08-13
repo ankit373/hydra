@@ -9,6 +9,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/ankit373/hydra/internal/config"
 )
 
 // defaultCorrelationDiscount is FamilyDiscount's fallback below minCoAgreementSamples.
@@ -61,8 +63,7 @@ type coAgreementRecord struct {
 
 // DefaultCoAgreementPath is where co-agreement observations are persisted.
 func DefaultCoAgreementPath() string {
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".hydra", "coagreement.jsonl")
+	return filepath.Join(config.Dir(), "coagreement.jsonl")
 }
 
 // RecordCoAgreement clusters one task's answers by agreement and appends the

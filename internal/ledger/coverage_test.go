@@ -17,6 +17,9 @@ func TestDefaultPaths_AreDistinctAndUnderHydraDir(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
+	// A developer or CI runner with a stray $HYDRA_HOME already exported must
+	// not leak into this "no override" case (#442 was found exactly this way).
+	t.Setenv("HYDRA_HOME", "")
 
 	log, policy := DefaultPath(), DefaultPolicyPath()
 	if !strings.HasPrefix(log, filepath.Join(home, ".hydra")) {
@@ -28,6 +31,23 @@ func TestDefaultPaths_AreDistinctAndUnderHydraDir(t *testing.T) {
 	if log == policy {
 		t.Error("the ledger and its policy are the same file; appending events " +
 			"would destroy the rules")
+	}
+}
+
+// $HYDRA_HOME must win over $HOME for the ledger — the whole point of #442 is
+// that this subsystem is exactly what silently ignored it before.
+func TestDefaultPaths_PreferHydraHomeOverHome(t *testing.T) {
+	home := t.TempDir()
+	hydraHome := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("HYDRA_HOME", hydraHome)
+
+	if got, want := DefaultPath(), filepath.Join(hydraHome, "mcp_ledger.jsonl"); got != want {
+		t.Errorf("DefaultPath() = %q, want %q ($HYDRA_HOME, not $HOME)", got, want)
+	}
+	if got, want := DefaultPolicyPath(), filepath.Join(hydraHome, "mcp_policy.json"); got != want {
+		t.Errorf("DefaultPolicyPath() = %q, want %q ($HYDRA_HOME, not $HOME)", got, want)
 	}
 }
 
