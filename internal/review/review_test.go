@@ -193,6 +193,18 @@ func TestApprove_RefusesAPathOutsideTheWorkspace(t *testing.T) {
 	}
 }
 
+// scopeCheck only validates the path against workspace globs — it never stats
+// the file. Approving a file that never existed must error, not report
+// "approved" for an accountability trail nobody can trust (#449).
+func TestApprove_RefusesANonexistentFile(t *testing.T) {
+	repo := repoSandbox(t, false)
+	file := filepath.Join(repo, "src", "never-existed.go")
+
+	if _, err := Approve(file); err == nil {
+		t.Error("Approve reported success for a file that was never created")
+	}
+}
+
 // ── Reject ────────────────────────────────────────────────────────────────────
 
 // The backup path: with no usable git, the .hydra-bak bytes are the truth.
@@ -302,6 +314,21 @@ func TestReject_UntrackedFileIsRemoved(t *testing.T) {
 	}
 	if _, err := os.Stat(file); !os.IsNotExist(err) {
 		t.Error("an untracked generated file survived rejection")
+	}
+}
+
+// A file that was never created and never tracked has nothing to roll back
+// to, in a real git repo as much as a backup-only workspace (#449 sibling
+// case for Reject — the "nothing to roll back" gate already covers it).
+func TestReject_RefusesANonexistentFileInAGitRepo(t *testing.T) {
+	repo := repoSandbox(t, true)
+	file := filepath.Join(repo, "never-existed.go")
+
+	if _, err := Reject(file); err == nil {
+		t.Error("Reject reported success for a file that was never created or tracked")
+	}
+	if _, err := os.Stat(file); !os.IsNotExist(err) {
+		t.Error("Reject conjured a file that never existed")
 	}
 }
 
@@ -416,5 +443,52 @@ func TestDiff_RefusesRelativePaths(t *testing.T) {
 	repoSandbox(t, false)
 	if _, err := Diff("relative.go"); err == nil {
 		t.Error("a relative path was accepted")
+	}
+}
+
+// git diff on a pathspec it doesn't track exits 0 with empty output, exactly
+// like a real "no changes" result. Both a file that never existed and one
+// that exists but was never git-added hit this — Diff must error on both
+// instead of returning the same blank string a genuine no-op diff gives (#459).
+func TestDiff_UntrackedOrNonexistentFileInAGitRepoErrorsClearly(t *testing.T) {
+	repo := repoSandbox(t, true)
+
+	t.Run("never existed", func(t *testing.T) {
+		file := filepath.Join(repo, "never-existed.go")
+		out, err := Diff(file)
+		if err == nil {
+			t.Errorf("Diff returned %q and no error for a file that never existed", out)
+		}
+	})
+
+	t.Run("exists but was never git-added", func(t *testing.T) {
+		file := filepath.Join(repo, "brand-new.go")
+		write(t, file, "package main\n")
+		out, err := Diff(file)
+		if err == nil {
+			t.Errorf("Diff returned %q and no error for an untracked file", out)
+		}
+	})
+}
+
+// The real "no changes" case — a tracked, committed, untouched file — must
+// stay a non-error empty diff, distinct from the untracked/nonexistent error.
+func TestDiff_RealNoChangesIsNotAnError(t *testing.T) {
+	repo := repoSandbox(t, true)
+	file := filepath.Join(repo, "settled.go")
+	write(t, file, "package main\n")
+
+	for _, args := range [][]string{{"add", "settled.go"}, {"commit", "-qm", "init"}} {
+		if out, err := exec.Command("git", append([]string{"-C", repo}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v failed: %v (%s)", args, err, out)
+		}
+	}
+
+	out, err := Diff(file)
+	if err != nil {
+		t.Fatalf("Diff errored on a real, unmodified, tracked file: %v", err)
+	}
+	if strings.TrimSpace(out) != "" {
+		t.Errorf("Diff = %q, want empty for an unmodified tracked file", out)
 	}
 }
