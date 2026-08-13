@@ -148,9 +148,20 @@ func (m Cockpit) dash(w, h int) string {
 	govBox := ckLabelS.Render("GOVERNOR · claude_pct") + "\n\n " + ckBar(m.claudePct, 20) +
 		ckDimS.Render(fmt.Sprintf("  %d%%", m.claudePct)) + "\n " + govLine
 
+	fleetBox := ckBoxS.Render(fleet.String())
 	right := lipgloss.JoinVertical(lipgloss.Left,
 		ckBoxS.Render(spendBox), ckBoxS.Render(confBox), ckBoxS.Render(govBox))
-	row := lipgloss.JoinHorizontal(lipgloss.Top, ckBoxS.Render(fleet.String()), " ", right)
+
+	// Below the width the two columns need, stack them instead of joining
+	// then clamping to w: the columns no longer share a wrap point once
+	// clamped, which is what split box borders across the wrong rows at
+	// narrow widths (#447) — chatCode() takes the same single-column escape
+	// hatch when it doesn't have room to split.
+	if needed := lipgloss.Width(fleetBox) + 1 + lipgloss.Width(right); w < needed {
+		return lipgloss.NewStyle().Width(w).Height(h).
+			Render(lipgloss.JoinVertical(lipgloss.Left, fleetBox, right))
+	}
+	row := lipgloss.JoinHorizontal(lipgloss.Top, fleetBox, " ", right)
 	return lipgloss.NewStyle().Width(w).Height(h).Render(row)
 }
 
@@ -520,8 +531,16 @@ func (m Cockpit) dashSecurity(w, h int) string {
 		actions.WriteString(" " + style.Render(tag) + age + " " + ckDimS.Render(truncate(ckSafe(a.Title), ckSecRecW)) + "\n")
 	}
 
+	headBox := ckBoxS.Render(head.String())
 	right := lipgloss.JoinVertical(lipgloss.Left, ckBoxS.Render(risk.String()), ckBoxS.Render(actions.String()))
-	row := lipgloss.JoinHorizontal(lipgloss.Top, ckBoxS.Render(head.String()), " ", right)
+
+	// Same narrow-terminal escape hatch as dash(): stack rather than
+	// join-then-clamp, which is what corrupted this box below ~90 columns (#447).
+	if needed := lipgloss.Width(headBox) + 1 + lipgloss.Width(right); w < needed {
+		return lipgloss.NewStyle().Width(w).Height(h).
+			Render(lipgloss.JoinVertical(lipgloss.Left, headBox, right))
+	}
+	row := lipgloss.JoinHorizontal(lipgloss.Top, headBox, " ", right)
 	return lipgloss.NewStyle().Width(w).Height(h).Render(row)
 }
 
