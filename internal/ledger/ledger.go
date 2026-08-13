@@ -199,6 +199,9 @@ func DefaultPath() string {
 }
 
 // Record appends one event, stamping TS and Config (best-effort) if blank.
+// The chainhash read-modify-write is guarded by an OS-level advisory lock
+// (chainLock) — an in-process mutex alone can't stop two `hyctl` processes
+// from forking the hash chain.
 func Record(path string, e Event) error {
 	if e.TS == "" {
 		e.TS = time.Now().UTC().Format(time.RFC3339)
@@ -208,14 +211,21 @@ func Record(path string, e Event) error {
 			e.Config = bc
 		}
 	}
+
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	lock, err := lockChain(lockPath(path))
+	if err != nil {
+		return err
+	}
+	defer lock.unlock()
+
 	if e.PrevHash == "" {
 		e.PrevHash = readChainHash(chainHashPath(path))
 	}
 	e.Hash = hashEvent(e)
 
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return err
-	}
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		return err

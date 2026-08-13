@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/ankit373/hydra/internal/testutil"
@@ -852,5 +853,42 @@ func TestVerifyChain_MixedUnchainedThenChainedIsIntact(t *testing.T) {
 	}
 	if !res.Intact || res.Chained != 3 || res.Unchained != 1 {
 		t.Errorf("ChainResult = %+v, want intact with 3 chained, 1 unchained", res)
+	}
+}
+
+// A swarm dispatch fans Record calls across goroutines against the same
+// ledger. Unserialized, two calls can read the same PrevHash and both append
+// a link claiming it, forking the chain (#443).
+func TestRecord_ConcurrentCallsDoNotForkTheChain(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mcp_ledger.jsonl")
+	const n = 20
+
+	var wg sync.WaitGroup
+	errs := make([]error, n)
+	for i := 0; i < n; i++ {
+		i := i
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			errs[i] = Record(path, Event{Agent: "a", Tool: "t", Decision: Allow})
+		}()
+	}
+	wg.Wait()
+
+	for i, err := range errs {
+		if err != nil {
+			t.Fatalf("Record[%d]: %v", i, err)
+		}
+	}
+
+	res, err := VerifyChain(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Intact {
+		t.Errorf("ChainResult = %+v, want Intact after %d concurrent Record calls", res, n)
+	}
+	if res.Chained != n {
+		t.Errorf("Chained = %d, want %d", res.Chained, n)
 	}
 }
