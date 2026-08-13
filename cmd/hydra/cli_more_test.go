@@ -123,6 +123,12 @@ func TestCLI_MCPRecord_RefusesMalformedInput(t *testing.T) {
 		{"mcp", "record", "--tool", "t", "--action", "read",
 			"--decision", "allow", "--resource", "/x", "--agent", "a",
 			"--params", "{not json"},
+		// A bare `hyctl mcp record` (no --tool/--agent) used to exit 0 and
+		// silently append an empty-agent, empty-tool row forever (#457).
+		{"mcp", "record", "--action", "read",
+			"--decision", "allow", "--resource", "/x", "--agent", "a"},
+		{"mcp", "record", "--tool", "t", "--action", "read",
+			"--decision", "allow", "--resource", "/x"},
 	}
 	for _, args := range cases {
 		t.Run(strings.Join(args[2:6], " "), func(t *testing.T) {
