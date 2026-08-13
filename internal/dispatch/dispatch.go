@@ -122,8 +122,13 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 	// Resolve the hint to a capability number BEFORE the governor runs. A named
 	// config tier ("expert") is otherwise opaque to claudeMode's Atoi, which
 	// left the whole token-preservation table inert for every non-numeric hint
-	// (#165).
-	hint := d.resolveTierHint(opts.TierHint)
+	// (#165). A hint that is invalid on its face — an unconfigured name or an
+	// out-of-range number — is rejected here, before routability ever enters
+	// the picture, so the error blames the actual cause (#451, #454).
+	hint, err := d.resolveTierHint(opts.TierHint)
+	if err != nil {
+		return nil, err
+	}
 
 	// Apply claude% preservation — may downgrade tier or abort.
 	tier, mode, pct := d.claudeMode(hint)
@@ -294,8 +299,11 @@ func (d *Dispatcher) claudeMode(tierHint string) (tier string, mode string, pct 
 	case "warning":
 		t++
 	}
-	if t > 10 {
-		t = 10
+	// Only escalation overflow reaches this — resolveTierHint already rejects
+	// any raw hint outside 1-10, so this clamps e.g. 9+2=11, never user input
+	// silently getting relabelled as "10" (#454).
+	if t > maxTier {
+		t = maxTier
 	}
 	return strconv.Itoa(t), mode, pct
 }
@@ -394,19 +402,34 @@ func (d *Dispatcher) writeHandoff(r *Result, prompt string) (string, error) {
 	return from, h.Save(handoffPath)
 }
 
-// resolveTierHint normalizes a tier hint to a capability number ("1".."10").
+// minTier and maxTier bound the numeric --tier flag: rank.UITier never
+// produces a value outside this range, so nothing above or below it could
+// ever be routable (#454).
+const (
+	minTier = 1
+	maxTier = 10
+)
+
+// resolveTierHint normalizes a tier hint to a capability number ("1".."10"),
+// and reports the two ways a hint can be invalid on its face:
+//   - numeric but outside [minTier,maxTier] — e.g. "0" and "15" both silently
+//     behaved as "no tier" or got clamped to 10 with no indication anything
+//     was wrong (#454).
+//   - named but absent from cfg.Tiers entirely — a config/typo problem, not a
+//     routability one, so the caller must not blame the head pool for it (#451).
 //
-// An empty hint stays empty. A numeric hint passes through. A named config
-// tier resolves to the strongest capability tier among its live heads, so the
-// budget governor can reason about — and downgrade — named tiers too. An
-// unrecognized name is returned unchanged so selectHeads yields nothing and
-// the caller can report the bad hint instead of silently widening.
-func (d *Dispatcher) resolveTierHint(hint string) string {
+// A name that IS configured but currently has no live heads is deliberately
+// NOT an error here: it resolves unchanged, and selectHeads/blockedHeads
+// report the routability gap instead — the tier itself was valid.
+func (d *Dispatcher) resolveTierHint(hint string) (string, error) {
 	if hint == "" {
-		return ""
+		return "", nil
 	}
-	if _, err := strconv.Atoi(hint); err == nil {
-		return hint
+	if n, err := strconv.Atoi(hint); err == nil {
+		if n < minTier || n > maxTier {
+			return "", fmt.Errorf("tier %d is out of range — valid tiers are %d-%d", n, minTier, maxTier)
+		}
+		return hint, nil
 	}
 	for _, t := range d.cfg.Tiers {
 		if t.Name != hint {
@@ -426,11 +449,24 @@ func (d *Dispatcher) resolveTierHint(hint string) string {
 			}
 		}
 		if strongest > 0 {
-			return strconv.Itoa(strongest)
+			return strconv.Itoa(strongest), nil
 		}
-		return hint // named tier has no live heads; let the caller report it
+		return hint, nil // named tier has no live heads; let the caller report it
 	}
-	return hint
+	return "", fmt.Errorf("unknown tier %q — configured tiers: %s", hint, d.tierNameList())
+}
+
+// tierNameList formats cfg.Tiers' names for the "unknown tier" error, so the
+// user sees what they could have typed instead of just what they got wrong.
+func (d *Dispatcher) tierNameList() string {
+	if len(d.cfg.Tiers) == 0 {
+		return "(none configured — run `hyctl init`)"
+	}
+	names := make([]string, len(d.cfg.Tiers))
+	for i, t := range d.cfg.Tiers {
+		names[i] = t.Name
+	}
+	return strings.Join(names, ", ")
 }
 
 // blockedHeads describes discovered heads that were excluded because no
