@@ -84,6 +84,13 @@ func rootCmd() *cobra.Command {
 		// subcommand existed. It is the near-universal convention, so people
 		// type it first. Same text as the subcommand, from one function.
 		Version: build.Version,
+		// A runtime error (e.g. "no hydra config") used to dump the full flags
+		// block for every one of ~25 subcommands, drowning the one line that
+		// actually mattered. Propagates to every subcommand — including a
+		// flag-parsing error (unknown flag, bad value), which now reads the
+		// same way: one line naming the problem. Run --help for the flag list
+		// (#464).
+		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if !config.Exists() {
 				return runInit()
@@ -277,16 +284,53 @@ func runInit() error {
 
 // ── probe ─────────────────────────────────────────────────────────────────────
 
+// probeHeadJSON is probe --json's per-head shape. provider.Head has no json
+// tags of its own — it is an internal discovery record, not a wire format —
+// so this stays a local, deliberately-chosen subset rather than exposing
+// every internal field probe.Run happens to populate.
+type probeHeadJSON struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Provider  string `json:"provider"`
+	Source    string `json:"source"`
+	CapScore  int    `json:"cap_score"`
+	LocalOnly bool   `json:"local_only"`
+	IsCortex  bool   `json:"is_cortex"`
+	// Routable is false when discovery found the head but no executor can
+	// drive it (e.g. the Ollama binary with its server not running) — the
+	// same distinction the human table marks with ✗ (#248).
+	Routable         bool   `json:"routable"`
+	UnroutableReason string `json:"unroutable_reason,omitempty"`
+}
+
 func cmdProbe() *cobra.Command {
-	return &cobra.Command{
+	var jsonOut bool
+	cmd := &cobra.Command{
 		Use:   "probe",
 		Short: "Scan machine for available AI Heads",
 		RunE: func(_ *cobra.Command, _ []string) error {
-			fmt.Println(dimStyle.Render("  Scanning..."))
+			if !jsonOut {
+				fmt.Println(dimStyle.Render("  Scanning..."))
+			}
 			result := probe.Run(context.Background())
 			cortexName := "none"
 			if result.Cortex != nil {
 				cortexName = result.Cortex.Name
+			}
+			if jsonOut {
+				heads := make([]probeHeadJSON, len(result.Heads))
+				for i, h := range result.Heads {
+					why := executor.Unroutable(h)
+					heads[i] = probeHeadJSON{
+						ID: h.ID, Name: h.Name, Provider: h.Provider, Source: h.Source,
+						CapScore: h.CapScore, LocalOnly: h.LocalOnly,
+						IsCortex: result.Cortex != nil && h.ID == result.Cortex.ID,
+						Routable: why == "", UnroutableReason: why,
+					}
+				}
+				return json.NewEncoder(os.Stdout).Encode(map[string]any{
+					"cortex": cortexName, "heads": heads,
+				})
 			}
 			fmt.Println(tui.Splash(cortexName))
 			if len(result.Heads) == 0 {
@@ -326,6 +370,8 @@ func cmdProbe() *cobra.Command {
 			return nil
 		},
 	}
+	cmd.Flags().BoolVar(&jsonOut, "json", false, "machine-readable JSON output")
+	return cmd
 }
 
 // ── status ────────────────────────────────────────────────────────────────────
@@ -782,6 +828,19 @@ func cmdOracle() *cobra.Command {
 		Short: "Run a verifier command; report pass/fail + its calibrated LLR",
 		Args:  cobra.MinimumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
+			// Validated before running the verifier at all: a garbage --record
+			// used to be silently ignored — no error, no calibration write, no
+			// indication anything was wrong, discovered only after the command
+			// had already done its real work. Same check `trust record
+			// --outcome` already has (#464).
+			var recordOutcome trust.Outcome
+			if record != "" {
+				recordOutcome = trust.ParseOutcome(record)
+				if recordOutcome == trust.OutcomeUnknown {
+					return fmt.Errorf("--record must be correct|incorrect (got %q)", record)
+				}
+			}
+
 			candidate := ""
 			if candidateFile != "" {
 				raw, err := os.ReadFile(candidateFile)
@@ -805,9 +864,7 @@ func cmdOracle() *cobra.Command {
 				return err
 			}
 			if record != "" {
-				if out := trust.ParseOutcome(record); out != trust.OutcomeUnknown {
-					_ = cal.Update(src, domain, v.Passed, out)
-				}
+				_ = cal.Update(src, domain, v.Passed, recordOutcome)
 			}
 			llr := oracle.LLR(cal, src, domain, v)
 
@@ -869,7 +926,10 @@ func cmdMCP() *cobra.Command {
 			// Report the decision before any error: a Deny that failed to write
 			// to the ledger is still a Deny, and callers gate on exit 3.
 			if decision != "" {
-				fmt.Printf("  %s  %s %s/%s (%s)\n", strings.ToUpper(string(decision)),
+				// tool+"/"+resource used to read as one run-together path when
+				// resource was itself absolute (e.g. "shell//bin/rm -rf /") —
+				// "->" can't collide with path syntax the way "/" does (#464).
+				fmt.Printf("  %s  %s %s -> %s (%s)\n", strings.ToUpper(string(decision)),
 					chkAgent, args[0], chkResource, action)
 			}
 			if checkErr != nil {
@@ -1011,7 +1071,9 @@ func cmdMCP() *cobra.Command {
 				return nil
 			}
 			for _, e := range events {
-				line := fmt.Sprintf("  %s  %-6s  %-12s %s/%s %s", e.TS, strings.ToUpper(string(e.Decision)),
+				// Same "->" separator as `mcp check` (#464) — a "/" read as
+				// one run-together path when the resource was itself absolute.
+				line := fmt.Sprintf("  %s  %-6s  %-12s %s -> %s %s", e.TS, strings.ToUpper(string(e.Decision)),
 					util.SafeTerminal(e.Agent), util.SafeTerminal(e.Tool), util.SafeTerminal(e.Resource),
 					dimStyle.Render(string(e.Action)))
 				if e.Flagged {
@@ -2496,7 +2558,12 @@ func cmdCost() *cobra.Command {
 	tail := &cobra.Command{
 		Use:   "tail [N]",
 		Short: "Last N calls (default 10)",
-		Args:  cobra.MaximumNArgs(1),
+		// A bare negative N (`cost tail -5`) is indistinguishable from an
+		// unrecognized flag to cobra's parser, which rejects it before this
+		// RunE ever sees it — hence the escape hatch below (#464).
+		Long: "Last N calls (default 10). A negative N needs the flag " +
+			"terminator: `hyctl cost tail -- -5`, or cobra reads it as a flag.",
+		Args: cobra.MaximumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			n := 10
 			if len(args) > 0 {
