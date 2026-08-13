@@ -215,6 +215,10 @@ func TestCLI_Dispatch_RefusesBadFlagsBeforeSpending(t *testing.T) {
 		// #453: --dry-run must reject a bad --swarm-mode exactly like a real
 		// run does, not print a plan for a mode Run would then refuse.
 		{"unknown swarm mode with dry run", []string{"dispatch", "--swarm", "--swarm-mode", "sideways", "--dry-run", "x"}},
+		{"unknown tier name", []string{"dispatch", "--tier", "expert", "x"}},
+		{"tier zero", []string{"dispatch", "--tier", "0", "x"}},
+		{"negative tier", []string{"dispatch", "--tier", "-1", "x"}},
+		{"tier above max", []string{"dispatch", "--tier", "11", "x"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -228,6 +232,42 @@ func TestCLI_Dispatch_RefusesBadFlagsBeforeSpending(t *testing.T) {
 				if strings.Count(string(rows), "\n") > 2 {
 					t.Error("a rejected dispatch wrote a cost row")
 				}
+			}
+		})
+	}
+}
+
+// A named --tier absent from config (#451) and an out-of-range numeric --tier
+// (#454) are both config/input problems, not routability problems. Each must
+// say so distinctly, naming what was actually wrong, rather than falling
+// through to the generic "no routable heads" message that blames the head pool.
+func TestCLI_Dispatch_TierErrorsNameTheActualProblem(t *testing.T) {
+	populated(t)
+
+	cases := []struct {
+		name   string
+		tier   string
+		wantIn []string
+	}{
+		{"unknown named tier", "expert", []string{"expert"}},
+		{"tier zero", "0", []string{"0"}},
+		{"negative tier", "-1", []string{"-1"}},
+		{"tier above max", "11", []string{"11"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, cobraOut, err := run(t, "dispatch", "--tier", tc.tier, "x")
+			if err == nil {
+				t.Fatalf("`hyctl dispatch --tier %s` was accepted", tc.tier)
+			}
+			combined := err.Error() + cobraOut
+			for _, want := range tc.wantIn {
+				if !strings.Contains(combined, want) {
+					t.Errorf("error = %q, want it to mention %q", combined, want)
+				}
+			}
+			if strings.Contains(combined, "no routable heads") || strings.Contains(combined, "no available heads") {
+				t.Errorf("error = %q, blames routability instead of the actual %s", combined, tc.name)
 			}
 		})
 	}

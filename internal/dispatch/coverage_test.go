@@ -340,6 +340,45 @@ func TestDispatch_AllHeadsFailingReportsWhy(t *testing.T) {
 	}
 }
 
+// The end-to-end repro for #451: a documented tier name ("expert") that does
+// not exist in cfg.Tiers must fail with an error naming the bad tier, not the
+// generic "no routable heads" message that blames the head pool for a config
+// problem. A live, perfectly routable head is present, so a regression back to
+// the old behavior would still dispatch successfully rather than error at all.
+func TestDispatch_UnknownNamedTierIsDistinctFromNoRoutableHeads(t *testing.T) {
+	s := testutil.NewSandbox(t)
+	dd := liveDispatcher(echoHead(t, s, "cloud", 90))
+
+	_, err := dd.Dispatch(context.Background(), "go", Options{TierHint: "expert"})
+	if err == nil {
+		t.Fatal("dispatch succeeded with a tier name absent from config")
+	}
+	if !strings.Contains(err.Error(), "unknown tier") || !strings.Contains(err.Error(), "expert") {
+		t.Errorf("error = %v, want it to name \"expert\" as an unknown tier", err)
+	}
+	if strings.Contains(err.Error(), "no routable heads") || strings.Contains(err.Error(), "no available heads") {
+		t.Errorf("error = %v, blames routability for a config problem", err)
+	}
+}
+
+// The end-to-end repro for #454: an out-of-range numeric --tier must fail
+// clearly, naming the requested value, rather than silently behaving as "no
+// tier" (0, negative) or getting clamped to 10 with no trace of the input.
+func TestDispatch_OutOfRangeNumericTierIsRejected(t *testing.T) {
+	s := testutil.NewSandbox(t)
+	dd := liveDispatcher(echoHead(t, s, "cloud", 90))
+
+	for _, hint := range []string{"0", "-1", "11", "20"} {
+		_, err := dd.Dispatch(context.Background(), "go", Options{TierHint: hint})
+		if err == nil {
+			t.Fatalf("dispatch succeeded with out-of-range tier %q", hint)
+		}
+		if !strings.Contains(err.Error(), hint) {
+			t.Errorf("tier %q: error = %v, want it to name the requested value", hint, err)
+		}
+	}
+}
+
 // PII in the prompt forces local-only routing. With no local head that must be
 // a refusal naming the cause, not a quiet escalation to a paid API head — the
 // whole point of the policy.
