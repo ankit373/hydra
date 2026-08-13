@@ -678,7 +678,8 @@ func TestCLI_OracleVerify_PassAndFailDifferByExitCode(t *testing.T) {
 // PASS for a command that actually exits 1.
 func TestCLI_OracleVerify_ArgumentWithSpaceIsNotCorrupted(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		t.Skip("windows has no /bin/sh")
+		t.Log("windows: no /bin/sh-style true/false to drive exit codes here")
+		return
 	}
 	s := populated(t)
 

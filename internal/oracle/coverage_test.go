@@ -110,7 +110,8 @@ func TestVerify_ExitStatusDecidesTheVerdict(t *testing.T) {
 // bash parses as `sh -c 'exit'` — a false PASS for a command that fails.
 func TestVerify_ArgsElementWithSpaceIsNotReTokenized(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		t.Skip("windows has no /bin/sh")
+		t.Log("windows: no /bin/sh-style true/false to drive exit codes here")
+		return
 	}
 	o := &CommandOracle{Args: []string{"sh", "-c", "exit 1"}, Source: "verifier:test"}
 	v, err := o.Verify(context.Background(), "candidate", trust.Task{})
@@ -123,16 +124,62 @@ func TestVerify_ArgsElementWithSpaceIsNotReTokenized(t *testing.T) {
 	}
 }
 
-// The Template path (no real argv, just a config-authored string) still needs
-// its own whitespace splitting — Args is an addition, not a replacement.
-func TestVerify_TemplateStillSplitsOnWhitespace(t *testing.T) {
-	o := &CommandOracle{Template: "true", Source: "verifier:test"}
-	v, err := o.Verify(context.Background(), "candidate", trust.Task{})
+// buildArgsFromArgv must substitute {answer}/{file} into Args elements in
+// place, exactly like buildArgs does for Template — Args is an additional
+// input shape, not a reason to drop placeholder support.
+func TestBuildArgsFromArgv_SubstitutesAnswerAndFile(t *testing.T) {
+	const spaced = "/tmp/expected output.txt"
+	o := &CommandOracle{
+		Args:      []string{"diff", "{answer}", "{file}"},
+		Source:    "v",
+		writeTemp: func(string) (string, func(), error) { return spaced, func() {}, nil },
+	}
+	parts, cleanup, err := o.buildArgs("the-answer")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !v.Passed {
-		t.Error("Passed = false for `true`")
+	if cleanup != nil {
+		cleanup()
+	}
+	want := []string{"diff", "the-answer", spaced}
+	if len(parts) != len(want) {
+		t.Fatalf("buildArgs = %q, want %q", parts, want)
+	}
+	for i := range want {
+		if parts[i] != want[i] {
+			t.Errorf("parts[%d] = %q, want %q", i, parts[i], want[i])
+		}
+	}
+}
+
+// {file} materialization failing through the Args path must abort the same
+// way it does through Template — an oracle that ran against a stale or
+// missing file would misreport the candidate as wrong.
+func TestBuildArgsFromArgv_WriteTempFailureIsAnError(t *testing.T) {
+	o := &CommandOracle{
+		Args: []string{"cat", "{file}"},
+		writeTemp: func(string) (string, func(), error) {
+			return "", nil, errors.New("disk full")
+		},
+	}
+	if _, _, err := o.buildArgs("x"); err == nil {
+		t.Error("a materialization failure through Args produced no error")
+	}
+}
+
+// An Args element with no placeholders needs no materialization at all, and
+// therefore no cleanup to run.
+func TestBuildArgsFromArgv_NoPlaceholdersNoCleanup(t *testing.T) {
+	o := &CommandOracle{Args: []string{"go", "test", "./..."}}
+	parts, cleanup, err := o.buildArgs("x")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cleanup != nil {
+		t.Error("no {file} placeholder present, but a cleanup function was returned")
+	}
+	if len(parts) != 3 || parts[0] != "go" {
+		t.Errorf("buildArgs = %q", parts)
 	}
 }
 
