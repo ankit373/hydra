@@ -52,14 +52,14 @@ registry/               ← Routing data, compiled into the binary via `go:embed
   routing.yaml          ← Enum → tier reference table, and what `hyctl init` writes. NOTE: the
                           runtime mapping is `dispatch.EnumToTier`, a hardcoded Go switch — editing
                           this file alone does NOT change how a dispatch routes.
-  models.yaml           ← Model definitions, token pools, context windows, fallback chains (flags
-                          are install-specific defaults — verify against your providers). Read by
+  models.yaml           ← Model definitions, token pools, context windows (flags are
+                          install-specific defaults — verify against your providers). Read by
                           the agy provider and the budget governor.
   domains.yaml          ← Domain → enum key routing (references routing.yaml).
   pricing.yaml          ← Tier pricing. Prices the CLI-agent heads that never appear in
                           OpenRouter's catalog, so it is load-bearing, not just an offline fallback.
   policy.yaml           ← File-policy rules.  workspace.yaml ← workspace roots + validators.
-logs/                   ← Dispatch log + state.json (pool exhaustion, claude_pct).
+logs/                   ← Dispatch log + state.json (claude_pct, claude_pct_history).
 ```
 
 ---
