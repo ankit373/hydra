@@ -81,6 +81,32 @@ func TestCockpit_ModeCommandsAreAcknowledged(t *testing.T) {
 	}
 }
 
+// Commands are matched case-insensitively (#465) — /Trust used to report
+// "unknown command" purely because of its capitalization.
+func TestCockpit_CommandsAreCaseInsensitive(t *testing.T) {
+	if m, _ := enter(typed(NewCockpit(), ":DASH")); m.view != 1 {
+		t.Errorf(":DASH left view = %d, want 1", m.view)
+	}
+	if m, _ := enter(typed(NewCockpit(), "/Trust")); m.mode != "trust" {
+		t.Errorf("/Trust left mode = %q, want trust", m.mode)
+	}
+	if _, c := enter(typed(NewCockpit(), ":Q")); c == nil {
+		t.Error(":Q did not quit")
+	}
+}
+
+// The hint bar must mention every command it claims to document — /dispatch
+// and the :dash/:chat/:tree/:security jump commands were both real and
+// working but omitted, discoverable only by reading the source (#465).
+func TestCockpit_HintMentionsEveryCommand(t *testing.T) {
+	out := NewCockpit().hint()
+	for _, want := range []string{"/dispatch", "/trust", "/swarm", "/local", ":dash", ":chat", ":tree", ":security", ":q"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("hint() does not mention %q:\n%s", want, out)
+		}
+	}
+}
+
 // An unknown slash command must be reported, not silently ignored — a user who
 // typos a command otherwise thinks it worked.
 func TestCockpit_UnknownCommandIsReported(t *testing.T) {
