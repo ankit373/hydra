@@ -781,7 +781,11 @@ func TestRestoreAndRecover_AreBestEffortOnBadInput(t *testing.T) {
 func TestWriteAuthRequired_UnwritableLogDirIsSilent(t *testing.T) {
 	testutil.NewSandbox(t)
 
-	// ~/.hydra is a regular file, so logs/ cannot be created.
+	// Dir() is a regular file, so logs/ cannot be created. The sandbox
+	// pre-creates it as an empty directory, so remove that first.
+	if err := os.RemoveAll(config.Dir()); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(config.Dir(), []byte("not a dir"), 0o600); err != nil {
 		t.Fatal(err)
 	}

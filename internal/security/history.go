@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/ankit373/hydra/internal/config"
 )
 
 // scoreEntry is one line of ~/.hydra/security_score.jsonl — one hyctl
@@ -51,8 +53,7 @@ func toHistoryPoints(entries []scoreEntry) []HistoryPoint {
 
 // DefaultScoreHistoryPath is where the coverage trend is persisted.
 func DefaultScoreHistoryPath() string {
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".hydra", "security_score.jsonl")
+	return filepath.Join(config.Dir(), "security_score.jsonl")
 }
 
 // loadScoreHistory reads all entries; a missing file yields none.

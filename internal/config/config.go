@@ -31,8 +31,15 @@ type Config struct {
 	Policies map[string]Policy `toml:"policies,omitempty"`
 }
 
-// Dir returns the Hydra config directory (~/.hydra).
+// Dir returns the Hydra state directory: $HYDRA_HOME if set, else ~/.hydra.
+// Every subsystem that persists Hydra state (cost, trust, ledger, security,
+// run logs, config.toml) must resolve its path through this function rather
+// than calling os.UserHomeDir() directly, or $HYDRA_HOME silently stops being
+// an isolation boundary for it (#442).
 func Dir() string {
+	if h := os.Getenv("HYDRA_HOME"); h != "" {
+		return filepath.Clean(h)
+	}
 	home, _ := os.UserHomeDir()
 	return filepath.Join(home, ".hydra")
 }

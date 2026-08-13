@@ -13,10 +13,25 @@ func TestDefaultOverlayPath_IsUnderTheUsersHydraDir(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
+	t.Setenv("HYDRA_HOME", "")
 
 	want := filepath.Join(home, ".hydra", "models.json")
 	if got := DefaultOverlayPath(); got != want {
 		t.Errorf("DefaultOverlayPath() = %q, want %q", got, want)
+	}
+}
+
+// $HYDRA_HOME must win over $HOME (#442).
+func TestDefaultOverlayPath_PrefersHydraHomeOverHome(t *testing.T) {
+	home := t.TempDir()
+	hydraHome := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("HYDRA_HOME", hydraHome)
+
+	want := filepath.Join(hydraHome, "models.json")
+	if got := DefaultOverlayPath(); got != want {
+		t.Errorf("DefaultOverlayPath() = %q, want %q ($HYDRA_HOME, not $HOME)", got, want)
 	}
 }
 

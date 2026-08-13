@@ -12,6 +12,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/ankit373/hydra/internal/config"
 )
 
 //go:embed data.json
@@ -149,8 +151,7 @@ func (db *DB) Entries() []Entry {
 
 // DefaultOverlayPath is where user-added models live.
 func DefaultOverlayPath() string {
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".hydra", "models.json")
+	return filepath.Join(config.Dir(), "models.json")
 }
 
 // LoadOverlay reads the user overlay. A missing file yields no entries.

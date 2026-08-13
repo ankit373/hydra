@@ -381,10 +381,14 @@ func TestExportToRoutingYAML_NoFileOnDiskIsNotAnError(t *testing.T) {
 // A save that cannot write must surface on the done screen rather than showing
 // a success the user will act on.
 func TestInitWizard_SaveFailureIsSurfaced(t *testing.T) {
-	s := testutil.NewSandbox(t)
+	testutil.NewSandbox(t)
 
-	// ~/.hydra is a regular file, so the config directory cannot be created.
-	if err := os.WriteFile(filepath.Join(s.Home, ".hydra"), []byte("not a dir"), 0o600); err != nil {
+	// Dir() is a regular file, so the config directory cannot be created. The
+	// sandbox pre-creates it as an empty directory, so remove that first.
+	if err := os.RemoveAll(config.Dir()); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(config.Dir(), []byte("not a dir"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 

@@ -18,11 +18,16 @@ import (
 // accumulates silently on every collision.
 
 func TestSave_UnwritableConfigDirIsAnErrorNotSilentDataLoss(t *testing.T) {
-	s := testutil.NewSandbox(t)
+	testutil.NewSandbox(t)
 
-	// ~/.hydra is a regular file, so MkdirAll cannot create the directory. This
-	// happens for real when a stray `hydra` file is written by a script.
-	if err := os.WriteFile(filepath.Join(s.Home, ".hydra"), []byte("not a dir"), 0o600); err != nil {
+	// Dir() is a regular file, so MkdirAll cannot create the directory. This
+	// happens for real when a stray `hydra` file is written by a script. The
+	// sandbox pre-creates Dir() as an empty directory, so it must be removed
+	// first or the file write below would fail as "is a directory".
+	if err := os.RemoveAll(Dir()); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(Dir(), []byte("not a dir"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -73,7 +78,12 @@ func TestSave_ReadOnlyConfigDirIsAnError(t *testing.T) {
 	}
 	testutil.NewSandbox(t)
 
-	if err := os.MkdirAll(Dir(), 0o500); err != nil {
+	// The sandbox pre-creates Dir(), so MkdirAll here would be a permission-set
+	// no-op on an already-existing directory — Chmod is what actually locks it.
+	if err := os.MkdirAll(Dir(), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(Dir(), 0o500); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.Chmod(Dir(), 0o700) })

@@ -194,8 +194,7 @@ func LatestBound(events []Event, tool, resource string) (Event, bool) {
 
 // DefaultPath is where the ledger lives (~/.hydra/mcp_ledger.jsonl).
 func DefaultPath() string {
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".hydra", "mcp_ledger.jsonl")
+	return filepath.Join(config.Dir(), "mcp_ledger.jsonl")
 }
 
 // Record appends one event, stamping TS and Config (best-effort) if blank.
@@ -473,8 +472,7 @@ func ruleOr(s string) string {
 
 // DefaultPolicyPath is where the access policy lives (~/.hydra/mcp_policy.json).
 func DefaultPolicyPath() string {
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".hydra", "mcp_policy.json")
+	return filepath.Join(config.Dir(), "mcp_policy.json")
 }
 
 // LoadPolicy reads a policy file. A missing file yields a default-allow policy

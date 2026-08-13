@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/testutil"
 )
 
@@ -21,11 +22,11 @@ import (
 // format contract as much as a data structure, and a parse that silently drops
 // rows understates what the user has spent.
 
-// fixture writes a cost log under the sandbox's HOME and returns its path.
+// fixture writes a cost log under the sandbox's $HYDRA_HOME and returns its path.
 func fixture(t *testing.T, lines ...string) string {
 	t.Helper()
-	s := testutil.NewSandbox(t)
-	dir := filepath.Join(s.Home, ".hydra", "logs")
+	testutil.NewSandbox(t)
+	dir := filepath.Join(config.Dir(), "logs")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatal(err)
 	}
