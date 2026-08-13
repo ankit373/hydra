@@ -794,7 +794,7 @@ func cmdOracle() *cobra.Command {
 			if src == "" {
 				src = "verifier:" + args[0]
 			}
-			o := &oracle.CommandOracle{Template: strings.Join(args, " "), Source: src}
+			o := &oracle.CommandOracle{Args: args, Source: src}
 			v, err := o.Verify(context.Background(), candidate, trust.Task{Domain: domain})
 			if err != nil {
 				return err

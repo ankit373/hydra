@@ -671,6 +671,24 @@ func TestCLI_OracleVerify_PassAndFailDifferByExitCode(t *testing.T) {
 	}
 }
 
+// A verifier argument containing a space (a shell -c script) must reach the
+// verifier exactly as typed, not get corrupted by joining argv into a string
+// and re-splitting it on whitespace (#444). Before the fix, `sh -c "exit 1"`
+// silently became `sh -c exit 1`, which bash runs as `sh -c 'exit'` — a false
+// PASS for a command that actually exits 1.
+func TestCLI_OracleVerify_ArgumentWithSpaceIsNotCorrupted(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("windows has no /bin/sh")
+	}
+	s := populated(t)
+
+	code, out := runBinary(t, s, "oracle", "verify", "--", "sh", "-c", "exit 1")
+	if code == 0 {
+		t.Errorf("`sh -c \"exit 1\"` exited 0 — the quoted argument's space was "+
+			"re-tokenized into two argv elements:\n%s", out)
+	}
+}
+
 // An empty template is a misconfiguration, not a passing verdict: an oracle
 // that votes yes when unset produces confident false evidence, and its LLR
 // outweighs several models.

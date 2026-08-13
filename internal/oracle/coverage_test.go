@@ -102,6 +102,40 @@ func TestVerify_ExitStatusDecidesTheVerdict(t *testing.T) {
 	}
 }
 
+// Args holds real argv (e.g. straight from cobra). An element containing a
+// space, like a shell -c script, must reach exec.Command as one atomic
+// argument — not get re-split by whitespace the way joining argv into
+// Template and re-tokenizing it would (#444). Before the fix, "sh -c \"exit
+// 1\"" (3 argv elements) silently became "sh -c exit 1" (4 elements), which
+// bash parses as `sh -c 'exit'` — a false PASS for a command that fails.
+func TestVerify_ArgsElementWithSpaceIsNotReTokenized(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("windows has no /bin/sh")
+	}
+	o := &CommandOracle{Args: []string{"sh", "-c", "exit 1"}, Source: "verifier:test"}
+	v, err := o.Verify(context.Background(), "candidate", trust.Task{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.Passed {
+		t.Error("Passed = true for a command that exits 1 — the -c script's " +
+			"space was re-tokenized, splitting \"exit 1\" into two argv elements")
+	}
+}
+
+// The Template path (no real argv, just a config-authored string) still needs
+// its own whitespace splitting — Args is an addition, not a replacement.
+func TestVerify_TemplateStillSplitsOnWhitespace(t *testing.T) {
+	o := &CommandOracle{Template: "true", Source: "verifier:test"}
+	v, err := o.Verify(context.Background(), "candidate", trust.Task{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !v.Passed {
+		t.Error("Passed = false for `true`")
+	}
+}
+
 // A missing binary must not be read as "the candidate is wrong" — that is the
 // oracle being unavailable, and treating it as evidence would let a broken
 // toolchain veto correct answers.
