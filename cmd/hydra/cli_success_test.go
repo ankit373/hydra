@@ -184,6 +184,28 @@ func TestCLI_Dispatch_SwarmDryRunFiresNothing(t *testing.T) {
 	}
 }
 
+// Every real swarm mode must still plan cleanly under --dry-run — #453 fixed
+// dry-run to validate --swarm-mode, and that must not catch valid modes too.
+func TestCLI_Dispatch_SwarmDryRunValidModesFireNothing(t *testing.T) {
+	for _, mode := range []string{"race", "best", "all"} {
+		t.Run(mode, func(t *testing.T) {
+			dispatchable(t, "answered")
+
+			out, cobraOut, err := run(t, "dispatch", "--swarm", "--swarm-mode", mode,
+				"--dry-run", "--tier", "6", "implement a rate limiter")
+			if err != nil {
+				t.Fatalf("a %s dry run failed: %v (%s)", mode, err, cobraOut)
+			}
+			if !strings.Contains(out+cobraOut, "DRY RUN") {
+				t.Errorf("the plan is not labelled as a dry run:\n%s", out+cobraOut)
+			}
+			if _, statErr := os.Stat(filepath.Join(config.Dir(), "logs", "cost.jsonl")); statErr == nil {
+				t.Errorf("a %s dry run wrote cost rows", mode)
+			}
+		})
+	}
+}
+
 // A real risk signal — PII in the prompt, or --irreversible/--production —
 // must trigger SPRT mode on its own, not just --file's blast radius.
 func TestCLI_Dispatch_RiskSignalsTriggerSPRTWithoutFileOrConfidence(t *testing.T) {
