@@ -4,6 +4,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/ankit373/hydra/internal/dispatch"
@@ -39,11 +40,13 @@ type ChatReply struct {
 
 	Error string `json:"error,omitempty"`
 
-	// NeedsProbe is true when the machine has zero discoverable heads at all —
-	// distinct from an ordinary dispatch failure. dispatch.New already probes
-	// fresh on every call, so there is no separate "go discover models" step
-	// to point at; the dock offers to retry (which re-probes) instead of
-	// surfacing a CLI instruction a GUI user has no terminal for (#434).
+	// NeedsProbe is true when there is nothing to route this chat to — zero
+	// heads discovered at all, or heads discovered but none dispatchable for
+	// this request (dispatch.ErrNoHeads, e.g. the dock's "auto-route" default
+	// left every candidate filtered out). dispatch.New probes fresh on every
+	// call, so there is no separate "go discover models" step to point at;
+	// the dock offers to retry (which re-probes) instead of surfacing a CLI
+	// instruction a GUI user has no terminal for (#434, #452).
 	NeedsProbe bool `json:"needsProbe,omitempty"`
 }
 
@@ -99,6 +102,13 @@ func (a *API) Chat(prompt, enum string) (*ChatReply, error) {
 		TaskID:   taskID,
 	})
 	if err != nil {
+		if errors.Is(err, dispatch.ErrNoHeads) {
+			// Same dead end as zero heads at all — same friendly retry reply
+			// instead of dispatch's raw, CLI-flavored error text (#452).
+			r.Error = "No model is available to answer this yet."
+			r.NeedsProbe = true
+			return r, nil
+		}
 		r.Error = err.Error()
 		return r, nil
 	}

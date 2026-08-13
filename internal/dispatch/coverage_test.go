@@ -5,6 +5,7 @@ package dispatch
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -398,6 +399,36 @@ func TestDispatch_PIIForcesLocalOnlyAndSaysSoWhenNothingIsLocal(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "localOnly=true") {
 		t.Errorf("error = %v, want it to name local-only as the cause", err)
+	}
+}
+
+// A no-heads dispatch failure must be matchable by errors.Is(err, ErrNoHeads)
+// so a caller with no terminal to point at (the desktop dock) can render a
+// friendly message instead of dispatch's CLI-flavored text (#452). An empty
+// tier hint — the dock's "auto-route" default — must read as "no tier hint
+// given", not a literal `tier ""`.
+func TestDispatch_NoHeadsErrorIsMatchableAndPhrasesAnEmptyTierClearly(t *testing.T) {
+	s := testutil.NewSandbox(t)
+
+	dd := &Dispatcher{
+		cfg:    &config.Config{},
+		heads:  []provider.Head{echoHead(t, s, "cloud", 90)},
+		policy: policy.New(policy.DefaultRules(true)),
+		budget: budget.NewRegistry(nil),
+	}
+
+	_, err := dd.Dispatch(context.Background(), "my SSN is 123-45-6789", Options{})
+	if err == nil {
+		t.Fatal("a PII prompt was dispatched to a non-local head")
+	}
+	if !errors.Is(err, ErrNoHeads) {
+		t.Errorf("error = %v, want it to satisfy errors.Is(err, ErrNoHeads)", err)
+	}
+	if strings.Contains(err.Error(), `tier ""`) {
+		t.Errorf(`error = %v, an empty tier hint printed as the literal tier "" instead of being phrased`, err)
+	}
+	if !strings.Contains(err.Error(), "no tier hint given") {
+		t.Errorf("error = %v, want it to say no tier hint was given", err)
 	}
 }
 
