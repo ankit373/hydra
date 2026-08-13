@@ -12,6 +12,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // Node is one vertex in the dependency graph.
@@ -156,8 +157,10 @@ func (g *Graph) DependentCount(nodeID string) int {
 }
 
 // seedsForFile returns the node IDs declared in a file, matching by exact path
-// first and falling back to basename so callers may pass absolute or relative
-// paths.
+// first, then basename, then (Go package-granularity graphs) the file's
+// containing package — so callers may pass absolute paths, relative paths, or
+// a specific .go file even though `graph generate` indexes at package
+// granularity (#448).
 func (g *Graph) seedsForFile(file string) []string {
 	if g == nil || len(g.filesToNodes) == 0 {
 		return nil
@@ -172,7 +175,34 @@ func (g *Graph) seedsForFile(file string) []string {
 			seeds = append(seeds, ids...)
 		}
 	}
-	return seeds
+	if len(seeds) > 0 {
+		return seeds
+	}
+	if pkg := g.packageIDForFile(file); pkg != "" {
+		return g.filesToNodes[pkg]
+	}
+	return nil
+}
+
+// packageIDForFile resolves a specific file to the package node ID that owns
+// it under GenerateGo's granularity: one node per Go package, keyed by its
+// module-relative import path (e.g. "internal/dispatch/dispatch.go" →
+// "internal/dispatch"). It matches the containing directory verbatim first,
+// then trims leading path segments so an absolute or otherwise-prefixed path
+// still lines up with a package ID.
+func (g *Graph) packageIDForFile(file string) string {
+	dir := filepath.ToSlash(filepath.Dir(file))
+	if _, ok := g.filesToNodes[dir]; ok {
+		return dir
+	}
+	segs := strings.Split(dir, "/")
+	for i := 1; i < len(segs); i++ {
+		suffix := strings.Join(segs[i:], "/")
+		if _, ok := g.filesToNodes[suffix]; ok {
+			return suffix
+		}
+	}
+	return ""
 }
 
 // BlastRadiusForFile returns a defect-cost multiplier for editing a file:
@@ -334,12 +364,12 @@ func (g *Graph) Dependents(nodeID string) []string {
 	return g.dependents[nodeID]
 }
 
-// NodesInFile returns the node IDs declared in a file.
+// NodesInFile returns the node IDs associated with a file — resolved the same
+// way as BlastRadiusForFile and Knows (exact path, basename, or containing
+// package), so a dependents count shown alongside a blast radius always
+// reflects the same node set.
 func (g *Graph) NodesInFile(file string) []string {
-	if g == nil {
-		return nil
-	}
-	return g.filesToNodes[file]
+	return g.seedsForFile(file)
 }
 
 // Empty reports whether the graph holds no nodes at all — which is what Load

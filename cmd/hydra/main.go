@@ -1911,14 +1911,38 @@ func cmdGraph() *cobra.Command {
 			}
 			k := g.Coupling(args)
 			n, speedup := optimal.Agents(serial, k)
+			loaded := !g.Empty()
+			var unknown []string
+			if loaded {
+				for _, f := range args {
+					if !g.Knows(f) {
+						unknown = append(unknown, f)
+					}
+				}
+			}
 			if parJSON {
 				return json.NewEncoder(os.Stdout).Encode(map[string]any{
 					"files": args, "serial_fraction": serial, "coordination_k": k,
 					"optimal_agents": n, "speedup": speedup,
+					"graph_loaded": loaded, "unknown_files": unknown,
 				})
 			}
 			fmt.Printf("\n  %s\n", cortexStyle.Render(fmt.Sprintf("%d file(s)", len(args))))
-			fmt.Printf("    coordination cost k    %.3f\n", k)
+			// Coupling silently treats an unmatched file as having no impact set,
+			// which biases k toward kMin (looks "safe to parallelize") — say so
+			// rather than let a default read as a measurement (#448).
+			if !loaded {
+				fmt.Printf("    %s\n", warnStyle.Render(
+					"no graph at "+parGraph+" — coordination cost k is a default, not a measurement"))
+			} else if len(unknown) > 0 {
+				fmt.Printf("    %s\n", warnStyle.Render(
+					"not in the graph: "+strings.Join(unknown, ", ")+" — their contribution to k is a default, not a measurement"))
+			}
+			suffix := ""
+			if !loaded || len(unknown) > 0 {
+				suffix = "  " + dimStyle.Render("(partially default)")
+			}
+			fmt.Printf("    coordination cost k    %.3f%s\n", k, suffix)
 			fmt.Printf("    optimal agents n*      %d\n", n)
 			fmt.Printf("    speedup S(n*)          %.2f×\n", speedup)
 			if speedup < 1 {
@@ -2933,7 +2957,7 @@ func cmdTrustRecord() *cobra.Command {
 func cmdTrustDefect() *cobra.Command {
 	var domain, file, graphPath string
 	var blast float64
-	var irreversible, pii, production bool
+	var irreversible, pii, production, jsonOut bool
 	cmd := &cobra.Command{
 		Use:   "defect",
 		Short: "Preview the modeled cost of a wrong answer + the confidence it demands",
@@ -2949,7 +2973,14 @@ func cmdTrustDefect() *cobra.Command {
 					return err
 				}
 				blast = g.BlastRadiusForFile(file)
-				blastSource = "graph"
+				// A miss here still yields the 1.0 default, indistinguishable
+				// from a genuinely-measured low-risk file unless the source
+				// tag says so (#448).
+				if g.Empty() || !g.Knows(file) {
+					blastSource = "graph:miss"
+				} else {
+					blastSource = "graph"
+				}
 			}
 
 			task := trust.Task{
@@ -2959,10 +2990,18 @@ func cmdTrustDefect() *cobra.Command {
 				TouchesPII:   pii,
 				Production:   production,
 			}
+			cost, conf := dm.CostUSD(task), dm.RequiredConfidence(task)
+			if jsonOut {
+				return json.NewEncoder(os.Stdout).Encode(map[string]any{
+					"defect_cost_usd": cost, "blast_radius": blast, "blast_source": blastSource,
+					"irreversible": irreversible, "pii": pii, "production": production,
+					"required_confidence": conf,
+				})
+			}
 			fmt.Printf("  defect cost ≈ $%.2f  (blast=%.2f [%s] irreversible=%v pii=%v prod=%v)\n",
-				dm.CostUSD(task), blast, blastSource, irreversible, pii, production)
+				cost, blast, blastSource, irreversible, pii, production)
 			fmt.Printf("  → demands confidence ≥ %.1f%%  (use with: hyctl dispatch --confidence %.3f)\n",
-				dm.RequiredConfidence(task)*100, dm.RequiredConfidence(task))
+				conf*100, conf)
 			return nil
 		},
 	}
@@ -2973,6 +3012,7 @@ func cmdTrustDefect() *cobra.Command {
 	cmd.Flags().BoolVar(&irreversible, "irreversible", false, "change cannot be cheaply undone")
 	cmd.Flags().BoolVar(&pii, "pii", false, "task handles personal data")
 	cmd.Flags().BoolVar(&production, "production", false, "target is production")
+	cmd.Flags().BoolVar(&jsonOut, "json", false, "machine-readable JSON output")
 	return cmd
 }
 

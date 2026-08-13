@@ -64,6 +64,53 @@ func TestBlastRadius_BasenameMatch(t *testing.T) {
 	}
 }
 
+// graph generate (GenerateGo) indexes at Go package granularity — one node
+// per package, keyed by its module-relative import path — not per file. A
+// caller passing a specific file inside an indexed package must still resolve
+// to that package's real measurement, not silently default to 1.0 (#448).
+func TestBlastRadius_PackageGranularity(t *testing.T) {
+	// Mirrors GenerateGo's output shape: ID == File == package import path.
+	g := fromDoc(Doc{
+		Nodes: []Node{
+			{ID: "internal/dispatch", File: "internal/dispatch"},
+			{ID: "internal/executor", File: "internal/executor"},
+			{ID: "internal/policy", File: "internal/policy"},
+		},
+		Edges: []Edge{
+			{From: "internal/executor", To: "internal/dispatch"},
+			{From: "internal/policy", To: "internal/dispatch"},
+		},
+	})
+
+	want := g.BlastRadiusForFile("internal/dispatch")
+	if want == 1.0 {
+		t.Fatal("precondition: package-level lookup should already be a real measurement")
+	}
+	if got := g.BlastRadiusForFile("internal/dispatch/dispatch.go"); got != want {
+		t.Errorf("blast(internal/dispatch/dispatch.go) = %v, want %v (the package's measured radius)", got, want)
+	}
+	if !g.Knows("internal/dispatch/dispatch.go") {
+		t.Error("Knows(internal/dispatch/dispatch.go) = false, want true — package is in the graph")
+	}
+	if got, want := len(g.NodesInFile("internal/dispatch/dispatch.go")), 1; got != want {
+		t.Errorf("NodesInFile(internal/dispatch/dispatch.go) returned %d node(s), want %d", got, want)
+	}
+
+	// An absolute path into the same package must resolve identically.
+	if got := g.BlastRadiusForFile("/repo/internal/dispatch/dispatch.go"); got != want {
+		t.Errorf("blast(absolute path) = %v, want %v", got, want)
+	}
+
+	// A file in a package that genuinely is NOT in the graph must still report
+	// as unrecognized — the fallback must not over-match.
+	if g.Knows("internal/ledger/ledger.go") {
+		t.Error("Knows(internal/ledger/ledger.go) = true, want false — package is not in the graph")
+	}
+	if got := g.BlastRadiusForFile("internal/ledger/ledger.go"); got != 1.0 {
+		t.Errorf("blast(internal/ledger/ledger.go) = %v, want the 1.0 default", got)
+	}
+}
+
 func TestBlastRadius_UnknownAndEmpty(t *testing.T) {
 	g := sampleGraph()
 	if got := g.BlastRadiusForFile("nonexistent.go"); got != 1.0 {
