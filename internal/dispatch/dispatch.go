@@ -7,6 +7,7 @@ package dispatch
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -31,6 +32,12 @@ import (
 	"github.com/ankit373/hydra/internal/runid"
 	"github.com/ankit373/hydra/internal/runlog"
 )
+
+// ErrNoHeads marks a dispatch with no head to run, discovered or routable.
+// Callers match it with errors.Is instead of the formatted message, so a
+// CLI-flavored string (backtick-quoted `hyctl probe`, etc.) never has to leak
+// into a GUI caller that has no terminal to point at (#452).
+var ErrNoHeads = errors.New("no dispatchable heads")
 
 // Options controls dispatch behaviour.
 type Options struct {
@@ -176,11 +183,12 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		// the user looks, sees the head, and learns nothing (#248). Name the
 		// blocked heads and why instead.
 		if blocked := d.blockedHeads(localOnly); blocked != "" {
-			return nil, fmt.Errorf("no routable heads for tier %q (localOnly=%v).\n%s",
-				tier, localOnly, blocked)
+			return nil, fmt.Errorf("%w: no routable heads for %s (localOnly=%v).\n%s",
+				ErrNoHeads, tierClause(tier), localOnly, blocked)
 		}
-		return nil, fmt.Errorf("no available heads for tier %q (localOnly=%v); "+
-			"check `hyctl probe` and the tier names in your config", tier, localOnly)
+		return nil, fmt.Errorf("%w: no available heads for %s (localOnly=%v); "+
+			"check `hyctl probe` and the tier names in your config",
+			ErrNoHeads, tierClause(tier), localOnly)
 	}
 
 	if opts.DryRun {
@@ -467,6 +475,16 @@ func (d *Dispatcher) tierNameList() string {
 		names[i] = t.Name
 	}
 	return strings.Join(names, ", ")
+}
+
+// tierClause phrases the tier for a no-heads error. An empty tier (no hint
+// given at all — e.g. the desktop dock's "auto-route" default) would
+// otherwise print as tier "" — a confusing artifact, not a routing outcome.
+func tierClause(tier string) string {
+	if tier == "" {
+		return "no tier hint given"
+	}
+	return fmt.Sprintf("tier %q", tier)
 }
 
 // blockedHeads describes discovered heads that were excluded because no
