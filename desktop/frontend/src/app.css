@@ -1345,7 +1345,11 @@ body {
   position: fixed;
   right: 22px;
   bottom: 20px;
-  z-index: 10;
+  /* Above .drawer (41) and .drawer-backdrop (40): the drawer spans the same
+     bottom-right corner, and opening the dock already closes the drawer
+     (#460) — so the dock must win the stacking conflict, not lose it and
+     become an unclickable button hidden behind the drawer's panel (#489). */
+  z-index: 42;
   font-family: var(--hy-font-display);
 }
 
