@@ -152,6 +152,36 @@ func TestBuildArgsFromArgv_SubstitutesAnswerAndFile(t *testing.T) {
 	}
 }
 
+// A candidate file written the ordinary way (echo, any text editor) ends in
+// a trailing newline by convention. That newline is not part of the answer,
+// so a verifier doing plain string equality on {answer} must not see it —
+// while {file} still gets the exact original bytes, since a verifier that
+// reads the file itself (compiler, linter) needs the real content (#487).
+func TestBuildArgsFromArgv_AnswerDropsTrailingNewlineButFileKeepsIt(t *testing.T) {
+	var gotFileContent string
+	o := &CommandOracle{
+		Args:   []string{"diff", "{answer}", "{file}"},
+		Source: "v",
+		writeTemp: func(content string) (string, func(), error) {
+			gotFileContent = content
+			return "/tmp/f", func() {}, nil
+		},
+	}
+	parts, cleanup, err := o.buildArgs("42\r\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cleanup != nil {
+		cleanup()
+	}
+	if parts[1] != "42" {
+		t.Errorf("{answer} = %q, want the trailing newline trimmed", parts[1])
+	}
+	if gotFileContent != "42\r\n" {
+		t.Errorf("{file} was materialized from %q, want the untrimmed candidate", gotFileContent)
+	}
+}
+
 // {file} materialization failing through the Args path must abort the same
 // way it does through Template — an oracle that ran against a stale or
 // missing file would misreport the candidate as wrong.
@@ -254,6 +284,33 @@ func TestBuildArgs_SubstitutionAndSpacing(t *testing.T) {
 	}
 	if len(p2) < 2 || p2[0] != "go" {
 		t.Errorf("buildArgs = %q", p2)
+	}
+}
+
+// The Template path must trim {answer}'s trailing newline exactly like Args
+// does — the two substitution paths must not diverge on this (#487).
+func TestBuildArgs_AnswerDropsTrailingNewlineButFileKeepsIt(t *testing.T) {
+	var gotFileContent string
+	o := &CommandOracle{
+		Template: "diff {answer} {file}",
+		Source:   "v",
+		writeTemp: func(content string) (string, func(), error) {
+			gotFileContent = content
+			return "/tmp/f", func() {}, nil
+		},
+	}
+	parts, cleanup, err := o.buildArgs("42\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cleanup != nil {
+		cleanup()
+	}
+	if parts[1] != "42" {
+		t.Errorf("{answer} = %q, want the trailing newline trimmed", parts[1])
+	}
+	if gotFileContent != "42\n" {
+		t.Errorf("{file} was materialized from %q, want the untrimmed candidate", gotFileContent)
 	}
 }
 
