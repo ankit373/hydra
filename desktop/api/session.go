@@ -120,6 +120,17 @@ func (a *API) GetSession(runID string) (*Session, error) {
 			Detail:     n.Detail,
 		})
 		for _, h := range n.Handoffs {
+			// An A2A handoff always crosses runs — the target picks it up in a
+			// later, separate `hyctl dispatch` invocation with its own run_id —
+			// so it can never resolve to a node in *this* run's tree. Every
+			// successful dispatch writes one of these unconditionally (as
+			// bookkeeping for a possible future --a2a chain), so treating it as
+			// a same-run edge made ordinary, single-head runs non-linear 100%
+			// of the time (#485). Only a same-run-resolvable target is real
+			// graph structure.
+			if _, ok := t.Nodes[h.To]; !ok {
+				continue
+			}
 			s.Edges = append(s.Edges, Edge{
 				From: n.ID, To: h.To, TS: formatTS(h.TS), Detail: h.Detail,
 			})
