@@ -51,7 +51,9 @@ type Oracle interface {
 
 // CommandOracle runs an external command as the verifier. Exit code 0 is a pass;
 // any non-zero exit is a fail. The candidate answer is written to a temp file
-// and substituted for {file}; the raw answer is substituted for {answer}.
+// verbatim for {file}; {answer} gets the same content with a trailing
+// newline trimmed — a file-write artifact (echo, any editor), not part of
+// the answer a verifier is comparing against.
 type CommandOracle struct {
 	// Args is the command argv, verbatim, e.g. []string{"sh", "-c", "exit 1"}.
 	// Each element is substituted in place for {file}/{answer} and passed to
@@ -127,7 +129,15 @@ func (o *CommandOracle) buildArgs(candidate string) (parts []string, cleanup fun
 		cleanup = cl
 		filePath = path
 	}
-	return splitTemplate(tmpl, candidate, filePath), cleanup, nil
+	return splitTemplate(tmpl, answerFor(candidate), filePath), cleanup, nil
+}
+
+// answerFor is what fills an {answer} slot: the candidate with a trailing
+// newline trimmed. {file} materialization uses the raw candidate untouched —
+// a verifier reading the file itself (compiler, linter) must see the exact
+// bytes the candidate was.
+func answerFor(candidate string) string {
+	return strings.TrimRight(candidate, "\r\n")
 }
 
 // buildArgsFromArgv substitutes {answer}/{file} inside each Args element in
@@ -155,7 +165,7 @@ func (o *CommandOracle) buildArgsFromArgv(candidate string) (parts []string, cle
 	}
 	parts = make([]string, len(o.Args))
 	for i, a := range o.Args {
-		a = strings.ReplaceAll(a, "{answer}", candidate)
+		a = strings.ReplaceAll(a, "{answer}", answerFor(candidate))
 		a = strings.ReplaceAll(a, "{file}", filePath)
 		parts[i] = a
 	}
