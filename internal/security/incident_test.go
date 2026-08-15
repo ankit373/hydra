@@ -50,6 +50,37 @@ func TestCorrelateIncidents_TheWorkedExample(t *testing.T) {
 	}
 }
 
+// scoreImpact adds +1 per event that touches a file the graph knows to be
+// widely depended on — every qualifying event in an incident should raise the
+// score, not just the first one found. No prior test exercised this with a
+// non-empty BlastReport; a regression here (e.g. reintroducing a break that
+// only lets the first qualifying event count) would have shipped silently.
+func TestCorrelateIncidents_EachWidelyDependedFileTouchRaisesImpact(t *testing.T) {
+	blast := BlastReport{Files: []EditedFile{
+		{File: "a.go", Known: true, Dependents: 3},
+		{File: "b.go", Known: true, Dependents: 5},
+	}}
+
+	oneMatch := []ledger.Event{
+		{TS: "2026-08-09T10:00:00Z", Tool: "h", Resource: "a.go", Action: ledger.Read, Decision: ledger.Deny},
+		{TS: "2026-08-09T10:00:05Z", Tool: "h", Resource: "unrelated.go", Action: ledger.Read, Decision: ledger.Deny},
+	}
+	twoMatches := []ledger.Event{
+		{TS: "2026-08-09T10:00:00Z", Tool: "h", Resource: "a.go", Action: ledger.Read, Decision: ledger.Deny},
+		{TS: "2026-08-09T10:00:05Z", Tool: "h", Resource: "b.go", Action: ledger.Read, Decision: ledger.Deny},
+	}
+
+	one := CorrelateIncidents(oneMatch, blast)
+	two := CorrelateIncidents(twoMatches, blast)
+	if len(one) != 1 || len(two) != 1 {
+		t.Fatalf("got %d and %d incidents, want exactly 1 each", len(one), len(two))
+	}
+	if two[0].Impact <= one[0].Impact {
+		t.Errorf("two qualifying-file touches scored Impact=%d, one touch scored Impact=%d — "+
+			"each qualifying event should raise the score, not just the first", two[0].Impact, one[0].Impact)
+	}
+}
+
 // Blocked and landed are not the same event. A flagged request that succeeded
 // must outrank the identical request that was denied.
 func TestCorrelateIncidents_SucceededOutranksBlocked(t *testing.T) {

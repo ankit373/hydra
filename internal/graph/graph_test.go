@@ -122,31 +122,56 @@ func TestBlastRadius_UnknownAndEmpty(t *testing.T) {
 	}
 }
 
+// checkImpactMatchesSeparateCalls is the shared assertion TestImpact_* uses:
+// Impact must agree exactly with calling BlastRadiusForFile, PercolationFactor,
+// DependentCountForFile, and Knows separately for the same file.
+func checkImpactMatchesSeparateCalls(t *testing.T, g *Graph, file string) {
+	t.Helper()
+	impact := g.Impact(file)
+	if impact.Known != g.Knows(file) {
+		t.Errorf("%s: Impact.Known = %v, want %v", file, impact.Known, g.Knows(file))
+	}
+	if wantRadius := g.BlastRadiusForFile(file); math.Abs(impact.Radius-wantRadius) > 1e-9 {
+		t.Errorf("%s: Impact.Radius = %v, want %v", file, impact.Radius, wantRadius)
+	}
+	if wantDeps := g.DependentCountForFile(file); impact.Dependents != wantDeps {
+		t.Errorf("%s: Impact.Dependents = %v, want %v", file, impact.Dependents, wantDeps)
+	}
+	if wantPct := g.PercolationFactor(file); math.Abs(impact.Percolation-wantPct) > 1e-9 {
+		t.Errorf("%s: Impact.Percolation = %v, want %v", file, impact.Percolation, wantPct)
+	}
+}
+
 // Impact resolves seedsForFile once and derives Radius/Dependents/Percolation
-// from that single pass — it must agree exactly with calling
-// BlastRadiusForFile, PercolationFactor, DependentCountForFile, and Knows
-// separately, for a known hub, a known leaf, and an unknown file.
+// from that single pass — it must agree exactly with calling the four
+// separate functions, for a known hub, a known leaf, and an unknown file, all
+// on a subcritical graph where Percolation is trivially 1.0 everywhere.
 func TestImpact_MatchesSeparateCalls(t *testing.T) {
 	g := sampleGraph()
 	for _, file := range []string{"a.go", "c.go", "nonexistent.go"} {
-		impact := g.Impact(file)
-		if impact.Known != g.Knows(file) {
-			t.Errorf("%s: Impact.Known = %v, want %v", file, impact.Known, g.Knows(file))
-		}
-		if wantRadius := g.BlastRadiusForFile(file); math.Abs(impact.Radius-wantRadius) > 1e-9 {
-			t.Errorf("%s: Impact.Radius = %v, want %v", file, impact.Radius, wantRadius)
-		}
-		if wantDeps := g.DependentCountForFile(file); impact.Dependents != wantDeps {
-			t.Errorf("%s: Impact.Dependents = %v, want %v", file, impact.Dependents, wantDeps)
-		}
-		if wantPct := g.PercolationFactor(file); math.Abs(impact.Percolation-wantPct) > 1e-9 {
-			t.Errorf("%s: Impact.Percolation = %v, want %v", file, impact.Percolation, wantPct)
-		}
+		checkImpactMatchesSeparateCalls(t, g, file)
 	}
 
 	var empty *Graph
 	if got := empty.Impact("a.go"); got.Known || got.Radius != 1.0 || got.Percolation != 1.0 || got.Dependents != 0 {
 		t.Errorf("nil graph Impact = %+v, want the all-neutral zero value", got)
+	}
+}
+
+// The equivalence above is trivial on a subcritical graph, where
+// percolationFactorForSeeds' maxDeg/excess/superMargin/lift arithmetic never
+// runs (PercolationFactor short-circuits to 1.0 before touching it). This
+// exercises Impact on supercriticalGraph's hub file (x.go), where Percolation
+// is genuinely > 1.0 — the only way to catch a copy/paste error in that
+// arithmetic during the BlastRadiusForFile/PercolationFactor→
+// percolationFactorForSeeds extraction.
+func TestImpact_MatchesSeparateCalls_NonTrivialPercolation(t *testing.T) {
+	g := supercriticalGraph()
+	if pct := g.PercolationFactor("x.go"); pct <= 1.0 {
+		t.Fatalf("test fixture bug: x.go's PercolationFactor = %.3f, want > 1.0 (not exercising the non-trivial branch)", pct)
+	}
+	for _, file := range []string{"x.go", "y.go"} {
+		checkImpactMatchesSeparateCalls(t, g, file)
 	}
 }
 
@@ -254,15 +279,18 @@ func TestKappa_TopologyOrdering(t *testing.T) {
 
 // A hub-core file and a peripheral file with the SAME transitive-dependent count
 // must be priced differently once the graph is supercritical.
-func TestPercolation_EqualCountDifferentDegree(t *testing.T) {
+// supercriticalGraph returns a graph with κ≥2: X is a fan-in hub with 6 direct
+// dependents (degree 6, count 6), Y heads a 6-long dependent chain (degree 1
+// at Y, count 6) — equal transitive-dependent counts but very different
+// degree, so PercolationFactor lifts the hub (x.go) above 1.0 while leaving
+// the peripheral chain head (y.go) at exactly 1.0.
+func supercriticalGraph() *Graph {
 	nodes := []Node{{ID: "X", File: "x.go"}, {ID: "Y", File: "y.go"}}
 	var edges []Edge
-	// X: a fan-in hub with 6 direct dependents (degree 6, count 6).
 	for _, d := range []string{"a", "b", "c", "g", "h", "i"} {
 		nodes = append(nodes, Node{ID: d, File: d + ".go"})
 		edges = append(edges, Edge{From: d, To: "X"})
 	}
-	// Y: a 6-long chain of dependents (degree 1 at Y, count 6).
 	chain := []string{"d", "e", "f", "p", "q", "r"}
 	prev := "Y"
 	for _, c := range chain {
@@ -270,7 +298,11 @@ func TestPercolation_EqualCountDifferentDegree(t *testing.T) {
 		edges = append(edges, Edge{From: c, To: prev})
 		prev = c
 	}
-	g := fromDoc(Doc{Nodes: nodes, Edges: edges})
+	return fromDoc(Doc{Nodes: nodes, Edges: edges})
+}
+
+func TestPercolation_EqualCountDifferentDegree(t *testing.T) {
+	g := supercriticalGraph()
 
 	if !g.Percolates() {
 		t.Fatalf("test graph κ = %.3f, expected supercritical", g.Kappa())
