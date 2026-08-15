@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ankit373/hydra/internal/config"
@@ -107,7 +108,35 @@ func RecordCoAgreement(path, domain string, ids, families, texts []string, equiv
 	_, _ = f.WriteString(string(raw) + "\n")
 }
 
+type coAgreementCacheEntry struct {
+	records []coAgreementRecord
+	modTime time.Time
+	size    int64
+}
+
+var (
+	coAgreementCacheMu sync.Mutex
+	coAgreementCache   = map[string]coAgreementCacheEntry{}
+)
+
+// loadCoAgreement reads and caches coagreement.jsonl per path, keyed on
+// mtime+size. One SPRT run can call FamilyDiscount/FamilyCoupling once per
+// repeated-family source while the file is otherwise untouched (the run's own
+// RecordCoAgreement append happens only after sampling finishes), and swarm's
+// judge does the same — without this, every one of those calls re-reads and
+// re-parses the same file from scratch. A real append (mtime or size changes)
+// invalidates the cache on the next call.
 func loadCoAgreement(path string) []coAgreementRecord {
+	info, statErr := os.Stat(path)
+	if statErr == nil {
+		coAgreementCacheMu.Lock()
+		if cached, ok := coAgreementCache[path]; ok && cached.modTime.Equal(info.ModTime()) && cached.size == info.Size() {
+			coAgreementCacheMu.Unlock()
+			return cached.records
+		}
+		coAgreementCacheMu.Unlock()
+	}
+
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return nil
@@ -123,6 +152,12 @@ func loadCoAgreement(path string) []coAgreementRecord {
 			continue
 		}
 		out = append(out, r)
+	}
+
+	if statErr == nil {
+		coAgreementCacheMu.Lock()
+		coAgreementCache[path] = coAgreementCacheEntry{records: out, modTime: info.ModTime(), size: info.Size()}
+		coAgreementCacheMu.Unlock()
 	}
 	return out
 }
