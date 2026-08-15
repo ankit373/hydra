@@ -127,7 +127,15 @@ func Summary() (*SummaryResult, error) {
 	if err != nil {
 		return nil, err
 	}
+	return SummaryFromRows(all), nil
+}
 
+// SummaryFromRows computes the same result as Summary but from rows the
+// caller already loaded — callers that also need the raw rows (e.g. the
+// TUI's latency/savings panels, which call LoadAll for their own purposes)
+// should load once and derive both from that one slice instead of paying for
+// a second full read+parse of cost.jsonl.
+func SummaryFromRows(all []Row) *SummaryResult {
 	todayStr := time.Now().UTC().Format("2006-01-02")
 	var todayRows []Row
 	for _, r := range all {
@@ -136,7 +144,9 @@ func Summary() (*SummaryResult, error) {
 		}
 	}
 
-	recent := all
+	// A copy, not a subslice of all: reversing in place must never mutate the
+	// caller's own rows out from under it when all is shared/reused.
+	recent := append([]Row(nil), all...)
 	if len(recent) > 5 {
 		recent = recent[len(recent)-5:]
 	}
@@ -152,7 +162,7 @@ func Summary() (*SummaryResult, error) {
 		Recent:          recent,
 		ActualTokens:    actualTok,
 		EstimatedTokens: estTok,
-	}, nil
+	}
 }
 
 // Today returns today's per-tier breakdown.
@@ -593,13 +603,18 @@ func tailLines(path string, n int) ([]string, error) {
 
 func aggregate(rows []Row) Totals {
 	var t Totals
+	var totalWallMS int64
 	t.Calls = len(rows)
 	for _, r := range rows {
 		t.PromptTokens += r.PromptTokens
 		t.ResponseTokens += r.ResponseTokens
 		t.EstCostUSD += r.EstCostUSD
-		t.WallSeconds += r.WallMS / 1000
+		totalWallMS += r.WallMS
 	}
+	// Sum milliseconds first, then divide once: dividing per-row before summing
+	// truncates every sub-second call to 0, so a batch of fast calls reports
+	// "0s" total wall time regardless of real cumulative time.
+	t.WallSeconds = totalWallMS / 1000
 	// Round to 6 decimal places.
 	t.EstCostUSD = math.Round(t.EstCostUSD*1_000_000) / 1_000_000
 	return t
