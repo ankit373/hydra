@@ -143,6 +143,13 @@ func CorrelateIncidents(events []ledger.Event, blast BlastReport) []Incident {
 		byActor[e.Tool] = append(byActor[e.Tool], e)
 	}
 
+	// Built once and shared by every incident's scoreImpact call below, instead
+	// of each one linearly scanning all of blast.Files per event to find a
+	// match — O(events_in_incident × len(blast.Files)) repeated once per
+	// incident, when blast.Files is already fully built and doesn't change
+	// within one CorrelateIncidents call.
+	widelyDepended := widelyDependedFiles(blast)
+
 	var out []Incident
 	for actor, evs := range byActor {
 		sort.SliceStable(evs, func(i, j int) bool { return evs[i].TS < evs[j].TS })
@@ -153,10 +160,10 @@ func CorrelateIncidents(events []ledger.Event, blast BlastReport) []Incident {
 				group = append(group, e)
 				continue
 			}
-			out = append(out, buildIncident(actor, group, blast))
+			out = append(out, buildIncident(actor, group, widelyDepended))
 			group = []ledger.Event{e}
 		}
-		out = append(out, buildIncident(actor, group, blast))
+		out = append(out, buildIncident(actor, group, widelyDepended))
 	}
 
 	// Worst first: an operator reads top-down and stops when they run out of
@@ -183,7 +190,21 @@ func withinSession(a, b string) bool {
 	return tb.Sub(ta) <= sessionGap
 }
 
-func buildIncident(actor string, evs []ledger.Event, blast BlastReport) Incident {
+// widelyDependedFiles indexes blast.Files by path, keeping only the files
+// scoreImpact actually cares about (known to the graph and depended on by at
+// least one other file) — an O(1) lookup by e.Resource replaces a linear scan
+// of the whole slice per event.
+func widelyDependedFiles(blast BlastReport) map[string]bool {
+	out := make(map[string]bool, len(blast.Files))
+	for _, f := range blast.Files {
+		if f.Known && f.Dependents > 0 {
+			out[f.File] = true
+		}
+	}
+	return out
+}
+
+func buildIncident(actor string, evs []ledger.Event, widelyDepended map[string]bool) Incident {
 	in := Incident{
 		Actor:  actor,
 		Start:  evs[0].TS,
@@ -229,7 +250,7 @@ func buildIncident(actor string, evs []ledger.Event, blast BlastReport) Incident
 	}
 
 	in.Likelihood = scoreLikelihood(evs, seen)
-	in.Impact = scoreImpact(evs, seen, blast)
+	in.Impact = scoreImpact(evs, seen, widelyDepended)
 	in.Severity = rateSeverity(in.Likelihood, in.Impact)
 	in.Narrative = narrate(in)
 	return in
@@ -259,7 +280,7 @@ func scoreLikelihood(evs []ledger.Event, seen map[Stage]bool) int {
 
 // scoreImpact is the OWASP Risk Rating impact factor, 0-9: how much damage the
 // attempted operations could do.
-func scoreImpact(evs []ledger.Event, seen map[Stage]bool, blast BlastReport) int {
+func scoreImpact(evs []ledger.Event, seen map[Stage]bool, widelyDepended map[string]bool) int {
 	score := 0
 	// Action class. Executing or reaching the network dominates reading.
 	for _, e := range evs {
@@ -278,11 +299,8 @@ func scoreImpact(evs []ledger.Event, seen map[Stage]bool, blast BlastReport) int
 	}
 	// A touched file the graph knows to be widely depended on raises the reach.
 	for _, e := range evs {
-		for _, f := range blast.Files {
-			if f.Known && f.File == e.Resource && f.Dependents > 0 {
-				score += 1
-				break
-			}
+		if widelyDepended[e.Resource] {
+			score += 1
 		}
 	}
 	return clamp09(score)
