@@ -19,7 +19,6 @@ import (
 	"github.com/ankit373/hydra/internal/budget"
 	"github.com/ankit373/hydra/internal/security"
 	"github.com/ankit373/hydra/internal/tree"
-	"github.com/ankit373/hydra/internal/trust"
 	"github.com/ankit373/hydra/internal/util"
 )
 
@@ -89,11 +88,12 @@ func (m Cockpit) dash(w, h int) string {
 		name := lipgloss.NewStyle().Foreground(hd.color).Width(15).Render(truncate(hd.name, 15))
 
 		// Real latency history from cost.jsonl wall_ms — "—" for a head that
-		// has never run, rather than a zero-filled chart.
-		series, lastMS := m.metrics.ckSeriesFor(hd.name, hd.id)
+		// has never run, rather than a zero-filled chart. Resolved once per
+		// head in NewCockpit, not re-matched against every distinct model on
+		// every render.
 		spark := lipgloss.NewStyle().Foreground(hd.color).
-			Render(fmt.Sprintf("%-*s", ckSparkWidth, ckSpark(series)))
-		lat := ckDimS.Render(fmt.Sprintf("%7s", ckFmtMS(lastMS)))
+			Render(fmt.Sprintf("%-*s", ckSparkWidth, ckSpark(hd.series)))
+		lat := ckDimS.Render(fmt.Sprintf("%7s", ckFmtMS(hd.lastMS)))
 
 		// Calibrated diagnosticity (nats) where the trust ledger has data.
 		// Keyed by head ID: trust records sources as ids, not display names.
@@ -168,12 +168,11 @@ func (m Cockpit) dash(w, h int) string {
 // trustSummary renders real SPRT statistics, or says plainly that there are
 // none yet. It never invents a confidence figure.
 func (m Cockpit) trustSummary() string {
-	runs, err := trust.LoadRuns(trust.DefaultLogPath())
-	if err != nil || len(runs) == 0 {
+	st := m.metrics.trustStats
+	if st == nil {
 		return ckFaintS.Render("no SPRT runs recorded") + "\n " +
 			ckDimS.Render("`hyctl dispatch --confidence 0.95 …`")
 	}
-	st := trust.Aggregate(runs, 5)
 	return lipgloss.NewStyle().Foreground(ckCyan).Bold(true).
 		Render(fmt.Sprintf("%.2f", st.MeanFinalConf)) +
 		ckDimS.Render(fmt.Sprintf("  mean over %d run%s", st.Runs, plural(st.Runs))) + "\n " +

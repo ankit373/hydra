@@ -36,7 +36,18 @@ type ckMetrics struct {
 
 	// calibrator is nil when no calibration ledger exists yet.
 	calibrator *trust.Calibrator
+
+	// trustStats is nil when no SPRT run has ever been recorded. Loaded once
+	// here instead of by trustSummary() on every View() call — Bubble Tea
+	// calls View() after every Update(), including the 20Hz code-stream tick,
+	// so a per-render trust.jsonl read was up to 20 full re-reads a second.
+	trustStats *trust.Stats
 }
+
+// ckFixedSwarmN is the fixed-N swarm baseline trust.Aggregate compares the
+// real SPRT sample counts against (Aggregate's own fixedN parameter) — not a
+// windowing count; every recorded run is aggregated.
+const ckFixedSwarmN = 5
 
 // ckSparkWidth is how many samples a sparkline shows.
 const ckSparkWidth = 14
@@ -70,6 +81,10 @@ func ckLoadMetrics(pr *pricing.DB) ckMetrics {
 	}
 	if cal, err := trust.New(trust.DefaultPath()); err == nil {
 		m.calibrator = cal
+	}
+	if runs, err := trust.LoadRuns(trust.DefaultLogPath()); err == nil && len(runs) > 0 {
+		st := trust.Aggregate(runs, ckFixedSwarmN)
+		m.trustStats = &st
 	}
 	// graph.json is optional; a missing one simply means no blast radius.
 	if g, err := graph.Load(ckGraphPath()); err == nil {
@@ -166,9 +181,8 @@ func (m ckMetrics) ckBlastFor(file string) (radius float64, dependents int, kapp
 	if m.graph == nil || file == "" {
 		return 0, 0, 0, false
 	}
-	radius = m.graph.BlastRadiusForFile(file)
-	kappa = m.graph.PercolationFactor(file)
-	dependents = m.graph.DependentCountForFile(file)
+	impact := m.graph.Impact(file)
+	radius, kappa, dependents = impact.Radius, impact.Percolation, impact.Dependents
 	// A file absent from the graph yields the neutral radius; saying nothing is
 	// more honest than reporting a floor value as a measurement.
 	if radius <= 1.0 && dependents == 0 {
