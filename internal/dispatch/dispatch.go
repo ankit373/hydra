@@ -695,11 +695,17 @@ func (d *Dispatcher) syncStateJSON(r *Result) {
 			asIntSlice(existing["claude_pct_history"]), pct, budget.MaxPctHistory)
 	}
 
-	// Persist per-model budget snapshots so the TUI and status command can read them.
+	// Persist per-model budget snapshots so the TUI and status command can read
+	// them. Merge into whatever is already on disk instead of replacing it — each
+	// `hyctl` invocation is a fresh process, so d.budget only knows about models
+	// dispatched to in this run, and overwriting would erase every other model's
+	// entry (#502).
 	if d.budget != nil {
-		snaps := d.budget.All()
-		budgetMap := map[string]any{}
-		for _, s := range snaps {
+		budgetMap, ok := existing["budget"].(map[string]any)
+		if !ok {
+			budgetMap = map[string]any{}
+		}
+		for _, s := range d.budget.All() {
 			budgetMap[s.ModelID] = map[string]any{
 				"pct":        s.Pct,
 				"used":       s.Used,
