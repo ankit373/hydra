@@ -16,6 +16,7 @@ import (
 
 	"github.com/ankit373/hydra/internal/ledger"
 	"github.com/ankit373/hydra/internal/provider"
+	"github.com/ankit373/hydra/internal/trust"
 )
 
 // LedgerPanel is the headline accountability figures.
@@ -170,11 +171,15 @@ func Build(heads []provider.Head) (*Report, error) {
 		return nil, err
 	}
 
-	chainRes, err := ledger.VerifyChain(ledger.DefaultPath())
-	if err != nil {
-		return nil, err
-	}
+	chainRes := ledger.VerifyChainEvents(events, ledger.DefaultPath())
 	r.IntegrityIntact = chainRes.Intact
+
+	// Loaded once, shared by AssessEvidence and computeCoverage's LLM09 check
+	// (both used to independently call trust.LoadRuns on the same file).
+	runs, _ := trust.LoadRuns(trust.DefaultLogPath())
+	// Ditto: shared by the check below and LLM10's coverage category, instead
+	// of each re-scanning events for the same cost-ceiling-denial predicate.
+	costCeilingDenials := countCostCeilingDenials(events)
 
 	r.Exposures = Exposures(events, heads)
 	r.PolicyAudit = AuditPolicy(pol, events)
@@ -182,7 +187,7 @@ func Build(heads []provider.Head) (*Report, error) {
 	r.Controls = Controls(events, r.PolicyAudit, chainRes)
 	r.SupplyChain = FingerprintHeads(heads)
 	r.Blast = AssessBlastRadius()
-	r.Evidence = AssessEvidence()
+	r.Evidence = AssessEvidence(runs)
 	r.Drift = DetectConfigDrift(events)
 	r.Incidents = CorrelateIncidents(events, r.Blast)
 	r.Privilege = ReviewPrivilege(events, pol)
@@ -191,7 +196,7 @@ func Build(heads []provider.Head) (*Report, error) {
 
 	r.Checks = []Check{
 		chainCheck(chainRes),
-		costCeilingCheck(events),
+		costCeilingCheck(costCeilingDenials),
 		provenanceCheck(heads),
 		frameworkCheck(pol),
 		exposureCheck(r.Exposures),
@@ -206,7 +211,7 @@ func Build(heads []provider.Head) (*Report, error) {
 	}
 	r.RiskHistory = ledger.ByDayRisk(events)
 
-	r.Coverage = computeCoverage(pol, events, r.SupplyChain)
+	r.Coverage = computeCoverage(pol, r.SupplyChain, runs, costCeilingDenials)
 
 	historyPath := DefaultScoreHistoryPath()
 	prior := loadScoreHistory(historyPath)
@@ -424,14 +429,22 @@ func costCeilingReason(e ledger.Event) bool {
 	return e.Decision == ledger.Deny && strings.Contains(e.Reason, "cost ceiling")
 }
 
-func costCeilingCheck(events []ledger.Event) Check {
-	const name = "Denial-of-wallet guard"
+// countCostCeilingDenials is shared by costCeilingCheck and
+// llm10UnboundedConsumption — both used to independently scan the identical
+// events slice testing the same predicate; Build now scans once and passes
+// the count to both.
+func countCostCeilingDenials(events []ledger.Event) int {
 	n := 0
 	for _, e := range events {
 		if costCeilingReason(e) {
 			n++
 		}
 	}
+	return n
+}
+
+func costCeilingCheck(n int) Check {
+	const name = "Denial-of-wallet guard"
 	if n == 0 {
 		return Check{Name: name, Status: "0 refusals",
 			Detail: "no dispatch has been refused for exceeding a cost ceiling — set one with --max-cost"}
