@@ -18,7 +18,9 @@ func WrapUntrusted(label, content string) string {
 
 // SafeTerminal replaces every control character in an untrusted single-line
 // string with U+FFFD. A ledger field carrying ESC[2K CR erases the line it
-// prints on and can forge a verdict; sanitise on render, never at ingest.
+// prints on and can forge a verdict. ledger.Record sanitises once at ingest
+// so every consumer inherits it by construction; call this directly for any
+// other untrusted text a render path is about to print.
 func SafeTerminal(s string) string {
 	return strings.Map(func(r rune) rune {
 		if r < 0x20 || r == 0x7f || (r >= 0x80 && r <= 0x9f) {

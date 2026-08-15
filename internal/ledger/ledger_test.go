@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/ankit373/hydra/internal/testutil"
+	"github.com/ankit373/hydra/internal/util"
 )
 
 func TestRecord_StampsConfigBreadcrumbWhenBlank(t *testing.T) {
@@ -890,5 +891,60 @@ func TestRecord_ConcurrentCallsDoNotForkTheChain(t *testing.T) {
 	}
 	if res.Chained != n {
 		t.Errorf("Chained = %d, want %d", res.Chained, n)
+	}
+}
+
+// Agent/Tool/Resource are supplied by whatever's on the other end of an MCP
+// call — a local tool or a misbehaving agent — and every consumer (`mcp log`,
+// `mcp report`, the TUI Security view) prints them verbatim. A raw ESC[2K CR
+// in one of these fields erases the line it prints on and can forge a
+// verdict. Sanitising once at Record makes every consumer safe by
+// construction instead of each one needing its own escape-stripping (#500).
+func TestRecord_SanitizesFreeTextFieldsAtIngest(t *testing.T) {
+	cases := []struct {
+		name  string
+		event Event
+	}{
+		{"escape + carriage return forges a verdict line", Event{
+			Agent: "auditor", Tool: "evil\x1b[2K\rFAKE OK", Resource: "/x", Decision: Allow,
+		}},
+		{"control chars in agent", Event{
+			Agent: "att\x1b[31macker", Tool: "t", Resource: "/x", Decision: Allow,
+		}},
+		{"control chars in resource", Event{
+			Agent: "a", Tool: "t", Resource: "/x\x1b[2K\rspoofed", Decision: Allow,
+		}},
+		{"ordinary text is left alone", Event{
+			Agent: "auditor", Tool: "fs.read", Resource: "/etc/hosts", Decision: Allow,
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "mcp_ledger.jsonl")
+			if err := Record(path, tc.event); err != nil {
+				t.Fatal(err)
+			}
+			events, err := Load(path)
+			if err != nil || len(events) != 1 {
+				t.Fatalf("Load = %d events, err %v", len(events), err)
+			}
+			got := events[0]
+			for _, field := range []struct {
+				name, want, got string
+			}{
+				{"Agent", util.SafeTerminal(tc.event.Agent), got.Agent},
+				{"Tool", util.SafeTerminal(tc.event.Tool), got.Tool},
+				{"Resource", util.SafeTerminal(tc.event.Resource), got.Resource},
+			} {
+				if field.got != field.want {
+					t.Errorf("%s = %q, want %q (util.SafeTerminal of the input)", field.name, field.got, field.want)
+				}
+				for _, r := range field.got {
+					if r < 0x20 || r == 0x7f || (r >= 0x80 && r <= 0x9f) {
+						t.Errorf("%s = %q still carries a raw control byte after Record", field.name, field.got)
+					}
+				}
+			}
+		})
 	}
 }

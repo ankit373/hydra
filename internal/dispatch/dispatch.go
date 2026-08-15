@@ -94,6 +94,12 @@ type Dispatcher struct {
 // Heads returns the probed head list for external callers (e.g. swarm).
 func (d *Dispatcher) Heads() []provider.Head { return d.heads }
 
+// PIILocalOnly reports whether the configured pii policy forces local-only
+// routing. Exported so callers that bypass Dispatch — the SPRT/swarm branches
+// in cmd/hydra's cmdDispatch — can still enforce it instead of acting only on
+// --local, which was config-blind on that path (#500).
+func (d *Dispatcher) PIILocalOnly() bool { return piiLocalOnly(d.cfg) }
+
 // EstimateCost exposes per-tier cost estimation for external callers.
 func (d *Dispatcher) EstimateCost(tier, inputTokens, outputTokens int) float64 {
 	return d.estimateCost(tier, inputTokens, outputTokens)
@@ -139,6 +145,12 @@ func cachedProbe(ctx context.Context) *probe.Result {
 	return probeCacheResult
 }
 
+// piiLocalOnly reports whether cfg's pii policy forces local-only routing.
+func piiLocalOnly(cfg *config.Config) bool {
+	p, ok := cfg.Policies["pii"]
+	return ok && p.Action == "local-only"
+}
+
 // New builds a Dispatcher from the saved config and a (possibly cached) machine probe.
 func New(ctx context.Context) (*Dispatcher, error) {
 	cfg, err := config.Load()
@@ -147,11 +159,7 @@ func New(ctx context.Context) (*Dispatcher, error) {
 	}
 
 	result := cachedProbe(ctx)
-
-	localOnly := false
-	if p, ok := cfg.Policies["pii"]; ok && p.Action == "local-only" {
-		localOnly = true
-	}
+	localOnly := piiLocalOnly(cfg)
 
 	budgetReg := budget.NewRegistry(budget.LoadWindows(config.ScriptHome()))
 
