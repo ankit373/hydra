@@ -108,11 +108,27 @@ func Run(ctx context.Context, task Task, sources []Source, exec Executor, cal *C
 	A := math.Log((1 - alpha) / alpha)
 	B := -A
 
-	// Sample most-evidence-per-dollar first.
-	order := append([]Source(nil), sources...)
-	sort.SliceStable(order, func(i, j int) bool {
-		return evidencePerCost(cal, order[i], task.Domain) > evidencePerCost(cal, order[j], task.Domain)
+	// Sample most-evidence-per-dollar first. Score is computed once per source
+	// (decorate-sort-undecorate), not inside the comparator: evidencePerCost
+	// takes the calibrator's lock and does two log() calls, so recomputing it
+	// per comparison turns an O(n) computation into O(n log n) lock
+	// acquisitions — real cost when Run is called thousands of times in a
+	// benchmark against a calibration that never changes mid-run.
+	type scoredSource struct {
+		src   Source
+		score float64
+	}
+	decorated := make([]scoredSource, len(sources))
+	for i, src := range sources {
+		decorated[i] = scoredSource{src: src, score: evidencePerCost(cal, src, task.Domain)}
+	}
+	sort.SliceStable(decorated, func(i, j int) bool {
+		return decorated[i].score > decorated[j].score
 	})
+	order := make([]Source, len(decorated))
+	for i, d := range decorated {
+		order[i] = d.src
+	}
 
 	res := &Result{Decision: DecisionStoppedOnBudget}
 	var lambda float64
