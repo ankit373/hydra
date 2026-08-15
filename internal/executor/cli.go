@@ -41,11 +41,22 @@ func (e *CLIExecutor) Execute(ctx context.Context, req Request) (*Response, erro
 		return nil, fmt.Errorf("cli exec %s: %w — stderr: %s", req.Head.ID, err, stderr.String())
 	}
 
+	output := strings.TrimSpace(stdout.String())
+
+	promptTokens := len(req.Prompt) / 4
+	responseTokens := len(output) / 4
+	writeTokenSidecar(req.Head.ID, "cli", "estimate", promptTokens, responseTokens)
+
 	return &Response{
-		Output:    strings.TrimSpace(stdout.String()),
-		Duration:  time.Since(start),
-		Model:     req.Head.ID,
-		Truncated: stdout.Truncated(),
+		Output:       output,
+		Duration:     time.Since(start),
+		Model:        req.Head.ID,
+		InputTokens:  promptTokens,
+		OutputTokens: responseTokens,
+		Truncated:    stdout.Truncated(),
+		// CLI tools (claude, codex, cursor, ...) report no token usage — these
+		// are char/4 estimates, same heuristic as the agy executor.
+		TokensEstimated: true,
 	}, nil
 }
 

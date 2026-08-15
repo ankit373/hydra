@@ -698,6 +698,35 @@ func TestSyncStateJSON_PreservesForeignKeysAndExtendsHistory(t *testing.T) {
 	}
 }
 
+// Each `hyctl dispatch` is a fresh process with its own in-memory
+// budget.Registry, so it only ever knows about the head(s) it just ran.
+// Replacing state.json's "budget" map wholesale — instead of merging into it —
+// erased every other model's entry on the very next dispatch (#502).
+func TestSyncStateJSON_MergesBudgetAcrossDispatchesInsteadOfReplacing(t *testing.T) {
+	s := testutil.NewSandbox(t)
+
+	d1 := liveDispatcher(echoHead(t, s, "tier4-head", 90))
+	if _, err := d1.Dispatch(context.Background(), "work", Options{}); err != nil {
+		t.Fatal(err)
+	}
+	d2 := liveDispatcher(echoHead(t, s, "tier8-head", 40))
+	if _, err := d2.Dispatch(context.Background(), "work", Options{}); err != nil {
+		t.Fatal(err)
+	}
+
+	budgetMap, ok := readState(t)["budget"].(map[string]any)
+	if !ok {
+		t.Fatalf("state[\"budget\"] = %#v, want a map", readState(t)["budget"])
+	}
+	if _, ok := budgetMap["tier4-head"]; !ok {
+		t.Errorf("budget map = %v, missing tier4-head — the first dispatch's entry "+
+			"was overwritten by the second", budgetMap)
+	}
+	if _, ok := budgetMap["tier8-head"]; !ok {
+		t.Errorf("budget map = %v, missing tier8-head", budgetMap)
+	}
+}
+
 // asInt / asIntSlice bridge JSON's float64 numbers back to ints. A wrong answer
 // here silently zeroes the governor's history.
 func TestAsIntAndAsIntSlice(t *testing.T) {
