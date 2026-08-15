@@ -68,7 +68,7 @@ func (t cliTemplate) buildArgs(prompt string) []string {
 // To add a new CLI tool, add an entry here and in capabilities/data.json.
 var cliTemplates = map[string]cliTemplate{
 	"anthropic":   {args: []string{"--print", ""}}, // claude --print "<prompt>"
-	"openai":      {args: []string{""}},            // codex "<prompt>"
+	"openai":      {args: []string{"exec", ""}},    // codex exec "<prompt>" — bare codex launches its interactive TUI (#491)
 	"google":      {args: []string{""}},            // gemini "<prompt>"
 	"antigravity": {args: []string{""}},            // agy "<prompt>"
 	"cursor":      {args: []string{"--stdio"}, stdinPrompt: true},
