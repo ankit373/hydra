@@ -620,6 +620,52 @@ func TestCockpit_KeyBindings(t *testing.T) {
 	}
 }
 
+// Enter-to-submit (and text editing generally) must only affect the chat+code
+// view — only that view renders the input line or the log, so typing on
+// Dashboard/Agent-Tree/Security used to silently run the full dispatch-preview
+// pipeline with zero on-screen feedback (#506).
+func TestCockpit_InputIsScopedToTheChatView(t *testing.T) {
+	m := NewCockpit()
+	m.heads = testHeads()
+	m.view = ckViewChatCode
+	m = typed(m, "half a prompt")
+
+	// Tab away: further keystrokes on another view must not touch the input.
+	m.view = ckViewDashboard
+	before := len(m.log)
+	m = typed(m, " more text")
+	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+	m = next.(Cockpit)
+	next, _ = m.Update(tea.KeyMsg{Type: tea.KeySpace})
+	m = next.(Cockpit)
+	if m.input != "half a prompt" {
+		t.Errorf("input on a non-chat view = %q, want untouched", m.input)
+	}
+
+	// Enter on a non-chat view must not run a dispatch preview.
+	m, cmd := enter(m)
+	if len(m.log) != before || cmd != nil {
+		t.Error("enter on the dashboard view ran a dispatch preview with no on-screen feedback")
+	}
+
+	// Esc on a non-chat view must not clear it either.
+	next, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = next.(Cockpit)
+	if m.input != "half a prompt" {
+		t.Errorf("esc on a non-chat view cleared the input: %q", m.input)
+	}
+
+	// Back on chat, the preserved input works normally.
+	m.view = ckViewChatCode
+	m, cmd = enter(m)
+	if len(m.log) <= before {
+		t.Error("enter on the chat view did not submit the preserved input")
+	}
+	if cmd == nil {
+		t.Error("submitting on the chat view did not schedule the code stream")
+	}
+}
+
 func typedModel(m tea.Model, s string) tea.Model {
 	for _, r := range s {
 		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
