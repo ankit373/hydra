@@ -51,8 +51,7 @@ var (
 	loadCacheMu  sync.Mutex
 	loadCacheKey string
 	loadCacheDB  *DB
-	loadCacheErr error
-	loadCached   bool
+	loadCached   bool // only ever set true alongside a successful result — see Load
 )
 
 // loadCacheFingerprint is overlayPath plus its file state: mtime+size when it
@@ -83,17 +82,25 @@ func Load(overlayPath string) (*DB, error) {
 
 	loadCacheMu.Lock()
 	if loadCached && loadCacheKey == key {
-		db, err := loadCacheDB, loadCacheErr
+		db := loadCacheDB
 		loadCacheMu.Unlock()
-		return db, err
+		return db, nil
 	}
 	loadCacheMu.Unlock()
 
 	db, err := loadUncached(overlayPath)
 
-	loadCacheMu.Lock()
-	loadCacheKey, loadCacheDB, loadCacheErr, loadCached = key, db, err, true
-	loadCacheMu.Unlock()
+	// Only a successful result is cached. A stale cached error (e.g. from a
+	// malformed overlay JSON) is worse than a stale cached success: it can
+	// never self-heal once the overlay is fixed, since a fix that happens to
+	// land on the identical mtime+size (SaveOverlay doesn't use an atomic
+	// temp-file+rename, so a same-length rewrite is realistic) would still
+	// match the cached fingerprint and keep serving the old error forever.
+	if err == nil {
+		loadCacheMu.Lock()
+		loadCacheKey, loadCacheDB, loadCached = key, db, true
+		loadCacheMu.Unlock()
+	}
 
 	return db, err
 }
