@@ -243,9 +243,13 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 
 	var lastErr error
 	for i, h := range candidates {
+		// Computed once per candidate instead of once per use below (event
+		// logging, cost estimation): rank.UITier re-derives the same int for
+		// the identical head every time it's called.
+		tier := rank.UITier(h)
 		_ = rl.Append(runlog.Event{
 			Kind: runlog.KindHeadSelected, TaskID: taskID,
-			Head: h.ID, Model: h.Name, Tier: rank.UITier(h),
+			Head: h.ID, Model: h.Name, Tier: tier,
 			Detail: fmt.Sprintf("candidate %d of %d", i+1, len(candidates)),
 		})
 		// Fails closed like ledger.Check itself: a policy-check error (unreadable
@@ -262,19 +266,19 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 			lastErr = fmt.Errorf("%s: head %s", detail, h.ID)
 			_ = rl.Append(runlog.Event{
 				Kind: runlog.KindError, TaskID: taskID,
-				Head: h.ID, Model: h.Name, Tier: rank.UITier(h),
+				Head: h.ID, Model: h.Name, Tier: tier,
 				Status: "denied", Detail: detail,
 			})
 			continue
 		}
 		if opts.MaxCostUSD > 0 {
 			estInputTokens := len(prompt) / 4
-			estCost := d.estimateCost(rank.UITier(h), estInputTokens, estInputTokens/2)
+			estCost := d.estimateCost(tier, estInputTokens, estInputTokens/2)
 			if estCost > opts.MaxCostUSD {
 				lastErr = fmt.Errorf("estimated cost $%.4f for head %s exceeds limit $%.4f", estCost, h.ID, opts.MaxCostUSD)
 				_ = rl.Append(runlog.Event{
 					Kind: runlog.KindError, TaskID: taskID,
-					Head: h.ID, Model: h.Name, Tier: rank.UITier(h),
+					Head: h.ID, Model: h.Name, Tier: tier,
 					Status: "denied", Detail: "exceeds cost ceiling",
 				})
 				// Shares the ledger's accountability trail with policy denials
@@ -301,7 +305,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 			// fallback chain advanced, and nothing else records it.
 			_ = rl.Append(runlog.Event{
 				Kind: runlog.KindError, TaskID: taskID,
-				Head: h.ID, Model: h.Name, Tier: rank.UITier(h),
+				Head: h.ID, Model: h.Name, Tier: tier,
 				Status: "failed", DurationMS: time.Since(started).Milliseconds(),
 				Detail: truncate(err.Error(), 200),
 			})
@@ -310,8 +314,8 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		r := &Result{Output: resp.Output, Head: h, Retries: i, Response: resp}
 		_ = rl.Append(runlog.Event{
 			Kind: runlog.KindDispatchFinished, TaskID: taskID,
-			Head: h.ID, Model: resp.Model, Tier: rank.UITier(h), Status: "ok",
-			CostUSD:    d.estimateCost(rank.UITier(h), resp.InputTokens, resp.OutputTokens),
+			Head: h.ID, Model: resp.Model, Tier: tier, Status: "ok",
+			CostUSD:    d.estimateCost(tier, resp.InputTokens, resp.OutputTokens),
 			DurationMS: resp.Duration.Milliseconds(),
 		})
 		_ = d.logDispatch(r, prompt, opts)
