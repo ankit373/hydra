@@ -449,13 +449,19 @@ func (d *Dispatcher) writeHandoff(r *Result, prompt string) (string, error) {
 		base = prior.Clock
 	}
 	from := fmt.Sprintf("hydra-tier-%d", rank.UITier(r.Head))
+	// The clock is keyed on the head's own identity, not its tier bucket:
+	// every LocalOnly head shares tier 10, so two different local models
+	// would otherwise tick the same "hydra-tier-10" key and become
+	// indistinguishable under Clock.Compare (#503). "From" keeps the
+	// tier-bucket string — it is display text, not a clock key.
+	agentKey := r.Head.ID
 
 	h := a2a.Handoff{
 		From:        from,
 		Model:       r.Head.Name,
 		Task:        prompt,
 		PriorOutput: r.Response.Output,
-		Clock:       base.Tick(from),
+		Clock:       base.Tick(agentKey),
 	}
 	return from, h.Save(handoffPath)
 }

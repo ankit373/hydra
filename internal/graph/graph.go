@@ -48,6 +48,11 @@ type Graph struct {
 	// once at load. kappa ≥ 2 ⟹ a giant (cascade-capable) component exists.
 	meanDeg float64
 	kappa   float64
+	// meanDependents is ⟨D⟩, the mean transitive-dependent count over all
+	// nodes — separate from meanDeg/kappa because a node's own imports
+	// inflate its total degree without saying anything about what depends on
+	// it (#503). PercolationFactor keys its per-file lift off this instead.
+	meanDependents float64
 }
 
 // Load reads graph.json from path. A missing file yields an empty graph and no
@@ -102,6 +107,7 @@ func fromDoc(doc Doc) *Graph {
 		nodes[e.To] = true
 	}
 	g.computeKappa(nodes)
+	g.computeMeanDependents(nodes)
 	return g
 }
 
@@ -122,6 +128,22 @@ func (g *Graph) computeKappa(nodes map[string]bool) {
 	if g.meanDeg > 0 {
 		g.kappa = (sumSq / float64(n)) / g.meanDeg
 	}
+}
+
+// computeMeanDependents fills meanDependents = ⟨D⟩ over the given node set,
+// one BFS per node via DependentCount — cheap at package granularity, and the
+// only way to get a per-node reach figure that means the same thing as the
+// count BlastRadiusForFile already uses.
+func (g *Graph) computeMeanDependents(nodes map[string]bool) {
+	n := len(nodes)
+	if n == 0 {
+		return
+	}
+	var sum float64
+	for id := range nodes {
+		sum += float64(g.DependentCount(id))
+	}
+	g.meanDependents = sum / float64(n)
 }
 
 // transitiveDependents returns every node that transitively depends on any node
@@ -183,20 +205,36 @@ func (g *Graph) seedsForFile(file string) []string {
 	if seeds := g.filesToNodes[file]; len(seeds) > 0 {
 		return seeds
 	}
-	base := filepath.Base(file)
-	var seeds []string
-	for f, ids := range g.filesToNodes {
-		if filepath.Base(f) == base {
-			seeds = append(seeds, ids...)
-		}
-	}
-	if len(seeds) > 0 {
+	if seeds := g.basenameSeeds(file); len(seeds) > 0 {
 		return seeds
 	}
 	if pkg := g.packageIDForFile(file); pkg != "" {
 		return g.filesToNodes[pkg]
 	}
 	return nil
+}
+
+// basenameSeeds matches file by its last path segment against every stored
+// path's last segment, requiring the parent segment to also correspond
+// whenever both paths actually have one. A bare filename (no directory, e.g.
+// a flat non-Go index) has no ancestry to check and is accepted as before;
+// once both sides have a directory, a matching basename alone is not enough —
+// any garbage path whose final component happens to collide with a real
+// package's would otherwise resolve to that package's full data (#503).
+func (g *Graph) basenameSeeds(file string) []string {
+	base := filepath.Base(file)
+	fileDir := filepath.Dir(file)
+	var seeds []string
+	for f, ids := range g.filesToNodes {
+		if filepath.Base(f) != base {
+			continue
+		}
+		fDir := filepath.Dir(f)
+		if fDir == "." || fileDir == "." || filepath.Base(fDir) == filepath.Base(fileDir) {
+			seeds = append(seeds, ids...)
+		}
+	}
+	return seeds
 }
 
 // packageIDForFile resolves a specific file to the package node ID that owns
@@ -233,7 +271,7 @@ func (g *Graph) BlastRadiusForFile(file string) float64 {
 	}
 	count := len(g.transitiveDependents(seeds))
 	base := 1.0 + math.Log2(1.0+float64(count))
-	return base * g.PercolationFactor(file)
+	return base * g.percolationFactor(count)
 }
 
 // Kappa is the Molloy–Reed ratio κ = ⟨k²⟩/⟨k⟩ of the (undirected projection of
@@ -258,31 +296,33 @@ func (g *Graph) Percolates() bool { return g.Kappa() >= 2.0 }
 const percolationCap = 2.0
 
 // PercolationFactor returns a multiplier ≥ 1 that raises the blast radius of a
-// file sitting in the graph's cascade-capable core. It is > 1 only when BOTH:
-//   - the graph is supercritical (κ ≥ 2), so cascades are possible at all, and
-//   - the file's hub-iest node is above the mean degree ⟨k⟩, so it is plausibly
-//     part of the giant component rather than the sparse periphery.
-//
-// Two files with an identical transitive-dependent count are thereby priced
-// differently when one is a densely-connected hub and the other is peripheral.
-// Subcritical graph, unknown file, or no graph → exactly 1.0 (backward compatible).
+// file whose OWN transitive dependent count is above the graph's average, and
+// only when the graph itself is supercritical (κ ≥ 2, a cascade-capable core
+// exists at all). κ still comes from total (in+out) degree — the textbook
+// Molloy-Reed criterion for a giant component — but the per-file excess is
+// deliberately a different quantity: the same dependent count
+// BlastRadiusForFile's base term uses. Keying the per-file lift off total
+// degree let a file's own outbound imports (which inflate degree but say
+// nothing about what depends on it) outscore a file with genuinely more
+// dependents — cmd/hydra, a Go main package with 0 dependents, out-scored
+// real leaves this way. Keying it off dependent count instead makes the
+// factor, and therefore the final blast radius, monotonic non-decreasing in a
+// node's own transitive dependent count (#503).
 func (g *Graph) PercolationFactor(file string) float64 {
-	if g == nil || g.meanDeg <= 0 || g.kappa < 2.0 {
-		return 1.0
-	}
 	seeds := g.seedsForFile(file)
 	if len(seeds) == 0 {
 		return 1.0
 	}
-	maxDeg := 0
-	for _, id := range seeds {
-		if d := g.degree[id]; d > maxDeg {
-			maxDeg = d
-		}
+	return g.percolationFactor(len(g.transitiveDependents(seeds)))
+}
+
+func (g *Graph) percolationFactor(count int) float64 {
+	if g.meanDependents <= 0 || g.kappa < 2.0 {
+		return 1.0
 	}
-	excess := float64(maxDeg)/g.meanDeg - 1.0 // how far above average this file's hub is
+	excess := float64(count)/g.meanDependents - 1.0 // how far above average this file's own reach is
 	if excess <= 0 {
-		return 1.0 // at or below average connectivity — periphery, no lift
+		return 1.0 // at or below average reach — periphery, no lift
 	}
 	// superMargin ∈ (0,1]: 0 at the κ=2 threshold, saturating to 1 by κ=4.
 	superMargin := math.Min((g.kappa-2.0)/2.0, 1.0)
