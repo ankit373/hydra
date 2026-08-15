@@ -642,8 +642,14 @@ func groupBy(rows []Row, key func(Row) string) []GroupRow {
 		g.EstCostUSD = math.Round(g.EstCostUSD*1_000_000) / 1_000_000
 		result = append(result, *g)
 	}
+	// Ties (often several $0 rows) need a deterministic tiebreaker — result is
+	// built from a map, whose iteration order is randomized, so without one
+	// equal-cost rows visibly swapped position on every poll (#506).
 	sort.Slice(result, func(i, j int) bool {
-		return result[i].EstCostUSD > result[j].EstCostUSD
+		if result[i].EstCostUSD != result[j].EstCostUSD {
+			return result[i].EstCostUSD > result[j].EstCostUSD
+		}
+		return result[i].Key < result[j].Key
 	})
 	return result
 }

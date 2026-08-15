@@ -3,6 +3,7 @@
 package graph
 
 import (
+	"fmt"
 	"math"
 	"os"
 	"path/filepath"
@@ -61,6 +62,39 @@ func TestBlastRadius_BasenameMatch(t *testing.T) {
 	g := sampleGraph()
 	if got := g.BlastRadiusForFile("/repo/pkg/a.go"); math.Abs(got-3.0) > 1e-9 {
 		t.Errorf("basename match blast = %v, want 3.0", got)
+	}
+}
+
+// A garbage path whose final segment happens to collide with a real
+// package's basename must not silently resolve to that package's data — the
+// exact bug behind `hyctl graph blast zzz/made/up/dispatch` returning numbers
+// identical to internal/dispatch (#503).
+func TestSeedsForFile_BasenameFallbackRejectsAncestryMismatch(t *testing.T) {
+	g := fromDoc(Doc{Nodes: []Node{{ID: "internal/dispatch", File: "internal/dispatch"}}})
+
+	if g.Knows("zzz/made/up/dispatch") {
+		t.Error("a garbage path matching only the final segment resolved to a real package")
+	}
+	if got := g.BlastRadiusForFile("zzz/made/up/dispatch"); got != 1.0 {
+		t.Errorf("garbage path blast radius = %v, want the 1.0 unknown default", got)
+	}
+	if !g.Knows("internal/dispatch") {
+		t.Error("the real package path itself must still resolve")
+	}
+}
+
+// The ancestry check only applies when both sides actually have a parent
+// segment to compare — a legitimate absolute-path lookup that preserves the
+// real parent must still match, and one that swaps in an unrelated parent
+// must not.
+func TestSeedsForFile_BasenameFallbackAncestry(t *testing.T) {
+	g := fromDoc(Doc{Nodes: []Node{{ID: "n", File: "src/foo/bar.go"}}})
+
+	if !g.Knows("/home/dev/repo/src/foo/bar.go") {
+		t.Error("an absolute path preserving the real parent segment should resolve")
+	}
+	if g.Knows("other/bar.go") {
+		t.Error("same basename under an unrelated parent must not resolve")
 	}
 }
 
@@ -224,9 +258,13 @@ func TestKappa_TopologyOrdering(t *testing.T) {
 	}
 }
 
-// A hub-core file and a peripheral file with the SAME transitive-dependent count
-// must be priced differently once the graph is supercritical.
-func TestPercolation_EqualCountDifferentDegree(t *testing.T) {
+// Two files with the SAME transitive-dependent count must be priced
+// identically, even when one has far more total degree than the other via its
+// own outbound imports. Pre-#503 the lift was keyed on total (in+out) degree,
+// so X (a fan-in hub with no imports of its own) scored higher than Y (same
+// dependent count, reached via a chain) purely because X's raw degree was
+// higher — the same mechanism that let cmd/hydra out-score other leaves.
+func TestPercolation_EqualCountEqualFactorRegardlessOfDegree(t *testing.T) {
 	nodes := []Node{{ID: "X", File: "x.go"}, {ID: "Y", File: "y.go"}}
 	var edges []Edge
 	// X: a fan-in hub with 6 direct dependents (degree 6, count 6).
@@ -250,16 +288,109 @@ func TestPercolation_EqualCountDifferentDegree(t *testing.T) {
 	if cx, cy := g.DependentCount("X"), g.DependentCount("Y"); cx != cy {
 		t.Fatalf("precondition: equal counts required, got X=%d Y=%d", cx, cy)
 	}
+	if degX, degY := g.degree["X"], g.degree["Y"]; degX == degY {
+		t.Fatalf("precondition: unequal total degree required, got X=%d Y=%d", degX, degY)
+	}
 	bx, by := g.BlastRadiusForFile("x.go"), g.BlastRadiusForFile("y.go")
-	if bx <= by {
-		t.Errorf("hub file blast (%.3f) should exceed peripheral file blast (%.3f) at equal count", bx, by)
+	if bx != by {
+		t.Errorf("equal-count files priced differently: x=%.4f y=%.4f — blast radius must depend "+
+			"on dependent count, not on a file's own unrelated degree", bx, by)
 	}
-	// The peripheral file (below-mean degree) gets no lift.
-	if f := g.PercolationFactor("y.go"); f != 1.0 {
-		t.Errorf("peripheral PercolationFactor = %.3f, want 1.0", f)
+	if fx, fy := g.PercolationFactor("x.go"), g.PercolationFactor("y.go"); fx != fy {
+		t.Errorf("equal-count PercolationFactor differs: x=%.4f y=%.4f", fx, fy)
 	}
-	if f := g.PercolationFactor("x.go"); f <= 1.0 {
-		t.Errorf("hub PercolationFactor = %.3f, want > 1.0", f)
+}
+
+// The reported #503 case: a Go main package has 0 transitive dependents (a
+// main package can't be imported) but plenty of outbound imports. It must
+// float at the same neutral 1.0 floor as any other zero-dependent leaf, not
+// score higher just because it happens to import a lot.
+func TestPercolation_ZeroDependentLeafNeverLifted(t *testing.T) {
+	nodes := []Node{{ID: "hub", File: "hub.go"}, {ID: "main", File: "main.go"}, {ID: "leaf", File: "leaf.go"}}
+	var edges []Edge
+	// hub: 6 direct dependents, gives the graph a supercritical core.
+	for i := 0; i < 6; i++ {
+		id := fmt.Sprintf("r%d", i)
+		nodes = append(nodes, Node{ID: id, File: id + ".go"})
+		edges = append(edges, Edge{From: id, To: "hub"})
+	}
+	// main: 0 dependents (nothing imports a main package), but imports 5
+	// packages of its own — inflating its own total degree, not its reach.
+	for i := 0; i < 5; i++ {
+		id := fmt.Sprintf("imp%d", i)
+		nodes = append(nodes, Node{ID: id, File: id + ".go"})
+		edges = append(edges, Edge{From: "main", To: id})
+	}
+	// leaf: 0 dependents, 0 imports — the uncontroversial neutral case.
+	g := fromDoc(Doc{Nodes: nodes, Edges: edges})
+
+	if !g.Percolates() {
+		t.Fatalf("test graph κ = %.3f, expected supercritical", g.Kappa())
+	}
+	if g.DependentCount("main") != 0 || g.DependentCount("leaf") != 0 {
+		t.Fatalf("precondition: both main and leaf must have 0 dependents")
+	}
+	if f := g.PercolationFactor("main.go"); f != 1.0 {
+		t.Errorf("main (0 dependents, heavy imports) PercolationFactor = %.4f, want the neutral 1.0 floor", f)
+	}
+	if got, want := g.BlastRadiusForFile("main.go"), g.BlastRadiusForFile("leaf.go"); got != want {
+		t.Errorf("blast radius main=%.4f leaf=%.4f — a 0-dependent main package must not "+
+			"out-score a 0-dependent leaf", got, want)
+	}
+}
+
+// General regression guard for #503: a node's own outbound imports (which
+// inflate its total degree) must never let it out-rank a node with genuinely
+// more transitive dependents. specs are ordered by strictly increasing
+// dependent count and strictly decreasing import count, the exact inverse
+// correlation that produced the reported bug (dispatch's imports out-scoring
+// provider's real dependents).
+func TestPercolation_MonotonicInDependentCount(t *testing.T) {
+	specs := []struct {
+		id      string
+		deps    int
+		imports int
+	}{
+		{"few", 1, 12},
+		{"mid", 4, 4},
+		{"many", 9, 0},
+	}
+	var nodes []Node
+	var edges []Edge
+	for _, s := range specs {
+		nodes = append(nodes, Node{ID: s.id, File: s.id + ".go"})
+		prev := s.id
+		for d := 0; d < s.deps; d++ {
+			id := fmt.Sprintf("%s_dep%d", s.id, d)
+			nodes = append(nodes, Node{ID: id, File: id + ".go"})
+			edges = append(edges, Edge{From: id, To: prev})
+			prev = id
+		}
+		for i := 0; i < s.imports; i++ {
+			id := fmt.Sprintf("%s_imp%d", s.id, i)
+			nodes = append(nodes, Node{ID: id, File: id + ".go"})
+			edges = append(edges, Edge{From: s.id, To: id})
+		}
+	}
+	g := fromDoc(Doc{Nodes: nodes, Edges: edges})
+	if !g.Percolates() {
+		t.Fatalf("test graph κ = %.3f, expected supercritical", g.Kappa())
+	}
+
+	prevID, prevCount, prevRadius := "", -1, -1.0
+	for _, s := range specs {
+		count := g.DependentCount(s.id)
+		radius := g.BlastRadiusForFile(s.id + ".go")
+		if prevCount >= 0 {
+			if count <= prevCount {
+				t.Fatalf("test precondition broken: %s count %d must exceed %s count %d", s.id, count, prevID, prevCount)
+			}
+			if radius < prevRadius {
+				t.Errorf("%s: dependent count %d > %s's %d, but blast radius %.4f < %.4f — "+
+					"not monotonic in dependent count", s.id, count, prevID, prevCount, radius, prevRadius)
+			}
+		}
+		prevID, prevCount, prevRadius = s.id, count, radius
 	}
 }
 

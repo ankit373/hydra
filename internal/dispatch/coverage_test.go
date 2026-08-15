@@ -141,6 +141,51 @@ func TestDispatch_HandoffClockAdvancesAcrossCalls(t *testing.T) {
 	}
 }
 
+// Every LocalOnly head maps to rank.UITier 10 (#248), so two different local
+// models used to tick the identical "hydra-tier-10" clock key. The clock must
+// key on the head's own identity instead, or two genuinely different agents'
+// handoffs are indistinguishable from one agent dispatching twice (#503). The
+// display "From" string is untouched — it still reads as the tier bucket.
+func TestDispatch_HandoffClockDistinguishesSameTierHeads(t *testing.T) {
+	s := testutil.NewSandbox(t)
+	path := filepath.Join(config.Dir(), "logs", "last_handoff.json")
+
+	localHead := func(id string) provider.Head {
+		h := echoHead(t, s, id, 50)
+		h.LocalOnly = true
+		return h
+	}
+
+	if _, err := liveDispatcher(localHead("model-a")).Dispatch(context.Background(), "first", Options{}); err != nil {
+		t.Fatal(err)
+	}
+	first, err := a2a.Load(path)
+	if err != nil || first == nil {
+		t.Fatal(err)
+	}
+
+	if _, err := liveDispatcher(localHead("model-b")).Dispatch(context.Background(), "second", Options{}); err != nil {
+		t.Fatal(err)
+	}
+	second, err := a2a.Load(path)
+	if err != nil || second == nil {
+		t.Fatal(err)
+	}
+
+	if _, ok := first.Clock["model-a"]; !ok {
+		t.Errorf("first handoff clock %v has no entry for model-a's own identity", first.Clock)
+	}
+	if _, ok := second.Clock["model-b"]; !ok {
+		t.Errorf("second handoff clock %v has no entry for model-b's own identity", second.Clock)
+	}
+	if _, ok := second.Clock["hydra-tier-10"]; ok {
+		t.Errorf("clock keyed on the shared tier bucket instead of head identity: %v", second.Clock)
+	}
+	if first.From != "hydra-tier-10" || second.From != "hydra-tier-10" {
+		t.Errorf("display From must stay the tier-bucket string, got %q and %q", first.From, second.From)
+	}
+}
+
 // A dry run must resolve the chain without executing anything.
 func TestDispatch_DryRunResolvesTheChainWithoutRunningIt(t *testing.T) {
 	s := testutil.NewSandbox(t)
