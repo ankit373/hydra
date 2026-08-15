@@ -3,12 +3,13 @@
 package executor
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"os/exec"
 	"strings"
 	"time"
+
+	"github.com/ankit373/hydra/internal/util"
 )
 
 // CLIExecutor runs a prompt via a subprocess CLI tool.
@@ -30,9 +31,10 @@ func (e *CLIExecutor) Execute(ctx context.Context, req Request) (*Response, erro
 		cmd.Stdin = strings.NewReader(req.Prompt)
 	}
 
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+	stdout := util.NewAccumulator(0)
+	stderr := util.NewAccumulator(64 << 10)
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
 
 	start := time.Now()
 	if err := cmd.Run(); err != nil {
@@ -40,9 +42,10 @@ func (e *CLIExecutor) Execute(ctx context.Context, req Request) (*Response, erro
 	}
 
 	return &Response{
-		Output:   strings.TrimSpace(stdout.String()),
-		Duration: time.Since(start),
-		Model:    req.Head.ID,
+		Output:    strings.TrimSpace(stdout.String()),
+		Duration:  time.Since(start),
+		Model:     req.Head.ID,
+		Truncated: stdout.Truncated(),
 	}, nil
 }
 
