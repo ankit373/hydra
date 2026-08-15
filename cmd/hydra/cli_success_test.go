@@ -107,14 +107,24 @@ func TestCLI_Dispatch_SucceedsAndLogsTheSpend(t *testing.T) {
 		t.Errorf("the dispatch row carries no run_id, so nothing correlates it: %v", row)
 	}
 
-	// cost.jsonl is deliberately *not* written here. A CLI-agent head reports no
-	// token usage, so there is no basis to price the call — and a $0.00 row
-	// would read as "this was free", which is the #258/#261 defect class. The
-	// call is still recorded above; only the price is withheld.
-	if _, statErr := os.Stat(filepath.Join(config.Dir(), "logs", "cost.jsonl")); statErr == nil {
-		billed, _ := os.ReadFile(filepath.Join(config.Dir(), "logs", "cost.jsonl"))
-		t.Errorf("a head that reported no tokens was given a cost row, which reads "+
-			"as a free call:\n%s", billed)
+	// A CLI-agent head reports no real token usage, so Hydra estimates from
+	// char/4 (#502) — cost.jsonl must carry that row, clearly labelled as an
+	// estimate rather than a measurement, or the call is silently invisible to
+	// spend tracking despite having actually run.
+	raw, err = os.ReadFile(filepath.Join(config.Dir(), "logs", "cost.jsonl"))
+	if err != nil {
+		t.Fatalf("no cost row for a CLI-head dispatch: %v", err)
+	}
+	var costRow map[string]any
+	if err := json.Unmarshal([]byte(strings.Split(strings.TrimSpace(string(raw)), "\n")[0]), &costRow); err != nil {
+		t.Fatal(err)
+	}
+	if costRow["tokens_source"] != "estimated" {
+		t.Errorf("tokens_source = %v, want \"estimated\" — a char/4 guess must never "+
+			"be presented as measured usage", costRow["tokens_source"])
+	}
+	if pt, _ := costRow["prompt_tokens"].(float64); pt <= 0 {
+		t.Errorf("prompt_tokens = %v, want > 0", costRow["prompt_tokens"])
 	}
 
 	// And the handoff, which is what the next agent's --a2a reads.
