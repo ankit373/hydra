@@ -56,9 +56,12 @@ type Coverage struct {
 }
 
 // computeCoverage classifies all 10 OWASP LLM Top-10 categories against
-// Hydra's real, currently-observable state. pol and events are what Build
-// already loaded — passed in rather than reloaded here.
-func computeCoverage(pol ledger.Policy, events []ledger.Event, sc SupplyChain) Coverage {
+// Hydra's real, currently-observable state. pol, runs, and costCeilingDenials
+// are what Build already loaded/computed — passed in rather than rederived
+// here (AssessEvidence needs the identical trust runs, and costCeilingCheck
+// needs the identical cost-ceiling-denial count, so Build computes each once
+// for both consumers).
+func computeCoverage(pol ledger.Policy, sc SupplyChain, runs []trust.RunLog, costCeilingDenials int) Coverage {
 	cats := []Category{
 		{ID: "LLM01", Name: "Prompt Injection", Status: Enforced,
 			Detail: "untrusted content is framed as data (a2a/editor/parallel) and scanned for injection markers automatically"},
@@ -73,8 +76,8 @@ func computeCoverage(pol ledger.Policy, events []ledger.Event, sc SupplyChain) C
 			Detail: "no protection exists for --system content today"},
 		{ID: "LLM08", Name: "Vector and Embedding Weaknesses", Status: NotApplicable,
 			Detail: "Hydra has no RAG pipeline or vector store of its own"},
-		llm09Misinformation(),
-		llm10UnboundedConsumption(events),
+		llm09Misinformation(runs),
+		llm10UnboundedConsumption(costCeilingDenials),
 	}
 
 	var applicable, covered int
@@ -145,10 +148,9 @@ func llm06ExcessiveAgency(pol ledger.Policy) Category {
 
 // llm09Misinformation: the SPRT confidence ensemble is Hydra's real mitigation
 // for hallucinated/wrong answers — Configured once it's actually been used.
-func llm09Misinformation() Category {
+func llm09Misinformation(runs []trust.RunLog) Category {
 	c := Category{ID: "LLM09", Name: "Misinformation"}
-	runs, err := trust.LoadRuns(trust.DefaultLogPath())
-	if err != nil || len(runs) == 0 {
+	if len(runs) == 0 {
 		c.Status = Gap
 		c.Detail = "the SPRT confidence ensemble (hyctl dispatch --confidence) has never been used"
 		return c
@@ -161,14 +163,12 @@ func llm09Misinformation() Category {
 // llm10UnboundedConsumption: Configured once a --max-cost ceiling has
 // actually refused a dispatch — the ledger is the only durable record that
 // the guard was ever exercised.
-func llm10UnboundedConsumption(events []ledger.Event) Category {
+func llm10UnboundedConsumption(costCeilingDenials int) Category {
 	c := Category{ID: "LLM10", Name: "Unbounded Consumption"}
-	for _, e := range events {
-		if costCeilingReason(e) {
-			c.Status = Configured
-			c.Detail = "a --max-cost ceiling has refused at least one dispatch"
-			return c
-		}
+	if costCeilingDenials > 0 {
+		c.Status = Configured
+		c.Detail = "a --max-cost ceiling has refused at least one dispatch"
+		return c
 	}
 	c.Status = Gap
 	c.Detail = "no dispatch has ever been refused for exceeding a cost ceiling — set one with --max-cost"

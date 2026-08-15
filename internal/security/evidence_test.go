@@ -14,7 +14,7 @@ import (
 // the quality of confidence it has never claimed.
 func TestAssessEvidence_EmptyOnAFreshMachine(t *testing.T) {
 	testutil.NewSandbox(t)
-	q := AssessEvidence()
+	q := AssessEvidence(nil)
 	if q.Runs != 0 || len(q.Families) != 0 || len(q.WeakSources) != 0 {
 		t.Errorf("AssessEvidence = %+v, want empty", q)
 	}
@@ -34,7 +34,11 @@ func TestAssessEvidence_UncalibratedIsNotWeak(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	q := AssessEvidence()
+	runs, err := trust.LoadRuns(trust.DefaultLogPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	q := AssessEvidence(runs)
 	if len(q.WeakSources) != 0 {
 		t.Errorf("WeakSources = %+v, want none — the source was never calibrated", q.WeakSources)
 	}
@@ -73,7 +77,11 @@ func TestAssessEvidence_MeasuredCoinFlipSourceIsWeak(t *testing.T) {
 		}
 	}
 
-	q := AssessEvidence()
+	runs, err := trust.LoadRuns(trust.DefaultLogPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	q := AssessEvidence(runs)
 	if len(q.WeakSources) != 1 || q.WeakSources[0].Source != "coinflip" {
 		t.Fatalf("WeakSources = %+v, want the measured coin-flip source", q.WeakSources)
 	}
@@ -102,7 +110,7 @@ func TestAssessEvidence_UnusedSourcesAreNotReported(t *testing.T) {
 		}
 	}
 	// No run references it.
-	if q := AssessEvidence(); len(q.WeakSources) != 0 {
+	if q := AssessEvidence(nil); len(q.WeakSources) != 0 {
 		t.Errorf("WeakSources = %+v, want none for a source no run used", q.WeakSources)
 	}
 }
