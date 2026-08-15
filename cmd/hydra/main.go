@@ -328,11 +328,23 @@ func cmdProbe() *cobra.Command {
 						Routable: why == "", UnroutableReason: why,
 					}
 				}
+				warnings := result.Warnings
+				if warnings == nil {
+					warnings = []string{}
+				}
 				return json.NewEncoder(os.Stdout).Encode(map[string]any{
-					"cortex": cortexName, "heads": heads,
+					"cortex": cortexName, "heads": heads, "warnings": warnings,
 				})
 			}
 			fmt.Println(tui.Splash(cortexName))
+			// A provider that failed outright (e.g. a corrupted models.json
+			// overlay) doesn't even reach the unroutable-head accounting below —
+			// its heads never existed here — so without this it degrades to a
+			// silently smaller head list, contradicting probe's own "marks
+			// unroutable heads with the reason" promise (#248).
+			for _, w := range result.Warnings {
+				fmt.Printf("  %s %s\n", warnStyle.Render("⚠"), dimStyle.Render(w))
+			}
 			if len(result.Heads) == 0 {
 				fmt.Println("  No models found.")
 				return nil
@@ -1734,15 +1746,29 @@ func cmdModels() *cobra.Command {
 			if e.Name == "" {
 				e.Name = args[0]
 			}
+
+			// Check against the built-in catalog alone (no overlay) — this is
+			// "does this id shadow a curated entry", which is a different
+			// question from AddModel's "did the overlay already have it".
+			builtin, err := capabilities.Load("")
+			if err != nil {
+				return err
+			}
+			prior, overridesBuiltin := builtin.Entry(args[0])
+
 			replaced, err := capabilities.AddModel(overlay, e)
 			if err != nil {
 				return err
 			}
-			verb := "added"
-			if replaced {
-				verb = "updated"
+			switch {
+			case overridesBuiltin:
+				fmt.Printf("  overriding built-in model %s (was: %s, score %d) → %s, score %d in %s\n",
+					e.ID, prior.Provider, prior.CapScore, e.Provider, e.CapScore, overlay)
+			case replaced:
+				fmt.Printf("  updated %s (%s, score %d) → %s\n", e.ID, e.Provider, e.CapScore, overlay)
+			default:
+				fmt.Printf("  added %s (%s, score %d) → %s\n", e.ID, e.Provider, e.CapScore, overlay)
 			}
-			fmt.Printf("  %s %s (%s, score %d) → %s\n", verb, e.ID, e.Provider, e.CapScore, overlay)
 			return nil
 		},
 	}
@@ -1788,13 +1814,20 @@ func cmdModels() *cobra.Command {
 					"check network access")
 			}
 			added, skipped := 0, 0
-			builtin, _ := capabilities.Load("")
+			// Must include the overlay, not just the embedded catalog — otherwise
+			// a model the user already synced and hand-tuned via `models add`
+			// looks "unknown" here and gets silently overwritten back to a fresh
+			// heuristic capScore on every re-run (#505).
+			known, err := capabilities.Load(overlay)
+			if err != nil {
+				return err
+			}
 			for _, id := range models {
 				if syncFilter != "" && !strings.Contains(strings.ToLower(id), strings.ToLower(syncFilter)) {
 					continue
 				}
 				// Don't clobber a model already known (built-in or user).
-				if builtin.Name(id) != id {
+				if known.Source(id) != "" {
 					skipped++
 					continue
 				}
@@ -2766,36 +2799,46 @@ func cmdPricingList() *cobra.Command {
 			// Hoist filter once — db.Models() is already sorted.
 			filter := strings.ToLower(strings.Join(args, " "))
 
-			if jsonOut {
-				type row struct {
-					Model            string  `json:"model"`
-					InputPerMillion  float64 `json:"input_per_mtok"`
-					OutputPerMillion float64 `json:"output_per_mtok"`
-				}
-				var rows []row
-				for _, m := range db.Models() {
-					if filter != "" && !strings.Contains(m, filter) {
-						continue
-					}
-					p, _ := db.ModelPrice(m)
-					rows = append(rows, row{m, p.InputPerMillion, p.OutputPerMillion})
-				}
-				return json.NewEncoder(os.Stdout).Encode(rows)
+			type row struct {
+				Model            string  `json:"model"`
+				InputPerMillion  float64 `json:"input_per_mtok"`
+				OutputPerMillion float64 `json:"output_per_mtok"`
+				Source           string  `json:"source"` // "openrouter" or "tier"
 			}
-
-			fmt.Fprintf(os.Stdout, "%-55s  %10s  %11s\n", "Model", "In $/1M", "Out $/1M")
-			fmt.Fprintln(os.Stdout, strings.Repeat("─", 82))
-			count := 0
+			// Must start as [] not nil: JSON-encoded nil is `null`, and a script
+			// treating this as an array (docs/pricing.md's whole audience) breaks
+			// on a filter that matches nothing (#505).
+			rows := []row{}
 			for _, m := range db.Models() {
 				if filter != "" && !strings.Contains(m, filter) {
 					continue
 				}
 				p, _ := db.ModelPrice(m)
-				fmt.Fprintf(os.Stdout, "%-55s  %10.4f  %11.4f\n",
-					m, p.InputPerMillion, p.OutputPerMillion)
-				count++
+				rows = append(rows, row{m, p.InputPerMillion, p.OutputPerMillion, "openrouter"})
 			}
-			if count == 0 {
+			// Tier pricing is what prices CLI-agent heads (claude-core,
+			// opus-thinking, …) — they never appear in OpenRouter's catalog, so
+			// without this merge they can never show up here at all, and a
+			// fresh/offline install (no cache, no network) shows a fully empty
+			// table instead of the tier fallback that's actually pricing calls.
+			for _, te := range db.TierEntries() {
+				if filter != "" && !strings.Contains(strings.ToLower(te.ID), filter) {
+					continue
+				}
+				rows = append(rows, row{te.ID, te.InputPerMillion, te.OutputPerMillion, "tier"})
+			}
+
+			if jsonOut {
+				return json.NewEncoder(os.Stdout).Encode(rows)
+			}
+
+			fmt.Fprintf(os.Stdout, "%-45s  %10s  %11s  %s\n", "Model", "In $/1M", "Out $/1M", "Source")
+			fmt.Fprintln(os.Stdout, strings.Repeat("─", 82))
+			for _, r := range rows {
+				fmt.Fprintf(os.Stdout, "%-45s  %10.4f  %11.4f  %s\n",
+					r.Model, r.InputPerMillion, r.OutputPerMillion, r.Source)
+			}
+			if len(rows) == 0 {
 				fmt.Fprintln(os.Stdout, "(no models matched)")
 			}
 			return nil

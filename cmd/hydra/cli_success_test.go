@@ -599,16 +599,21 @@ func TestCLI_PricingList_FilterAndJSON(t *testing.T) {
 
 	// The JSON surface must be an array even when the filter matches nothing —
 	// a jq pipeline iterating it should get zero elements, not a parse error.
+	// Tier pricing (registry/pricing.yaml, embedded) means this is never
+	// actually empty, but it must never be the literal `null` either (#505):
+	// see TestCLI_PricingListJSON_EmitsEmptyArrayNotNullWhenNothingMatches for
+	// the filtered-to-nothing case this used to regress on.
 	out, _, err := run(t, "pricing", "list", "--json")
 	if err != nil {
 		t.Fatalf("`pricing list --json` failed: %v", err)
 	}
 	trimmed := strings.TrimSpace(out)
-	if trimmed != "null" {
-		var rows []map[string]any
-		if jerr := json.Unmarshal([]byte(trimmed), &rows); jerr != nil {
-			t.Fatalf("not a JSON array: %v\n%s", jerr, trimmed)
-		}
+	if trimmed == "null" {
+		t.Fatal("emitted the literal null instead of a JSON array")
+	}
+	var rows []map[string]any
+	if jerr := json.Unmarshal([]byte(trimmed), &rows); jerr != nil {
+		t.Fatalf("not a JSON array: %v\n%s", jerr, trimmed)
 	}
 
 	// A filter narrows the table rather than emptying it.
@@ -1009,6 +1014,48 @@ func TestCLI_Probe_JSONIsValidAndMarksRoutability(t *testing.T) {
 	}
 	if !sawUnroutable {
 		t.Error("the unroutable ollama binary is missing from --json output")
+	}
+}
+
+// A corrupted ~/.hydra/models.json overlay makes capabilities.Load fail, which
+// the cli/env/port providers treat as "this whole provider found nothing" —
+// by design, so one broken provider doesn't block the others. But that used to
+// be completely invisible: every head that provider would have found just
+// vanished with no `✗` and no reason, contradicting probe's own "marks
+// unroutable heads with the reason" promise (#248). This drives that failure
+// end to end and checks the warning actually surfaces (#505).
+func TestCLI_Probe_SurfacesACorruptedOverlayAsAWarning(t *testing.T) {
+	s, _ := dispatchable(t, "answered")
+
+	overlay := filepath.Join(s.HydraHome, "models.json")
+	if err := os.WriteFile(overlay, []byte("{not valid json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	out, cobraOut, err := run(t, "probe")
+	if err != nil {
+		t.Fatalf("`hyctl probe` failed: %v (%s)", err, cobraOut)
+	}
+	combined := out + cobraOut
+	if !strings.Contains(combined, "cli") {
+		t.Errorf("no warning naming the failing provider:\n%s", combined)
+	}
+	if strings.Contains(combined, "cody") {
+		t.Errorf("cody (found by the broken cli provider) should not appear at all:\n%s", combined)
+	}
+
+	jsonOut, jsonCobra, err := run(t, "probe", "--json")
+	if err != nil {
+		t.Fatalf("`hyctl probe --json` failed: %v (%s)", err, jsonCobra)
+	}
+	var parsed struct {
+		Warnings []string `json:"warnings"`
+	}
+	if err := json.Unmarshal([]byte(jsonOut+jsonCobra), &parsed); err != nil {
+		t.Fatalf("probe --json did not parse: %v\n%s", err, jsonOut+jsonCobra)
+	}
+	if len(parsed.Warnings) == 0 {
+		t.Fatal("probe --json reported no warnings for a provider that failed outright")
 	}
 }
 
