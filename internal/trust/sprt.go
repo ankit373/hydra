@@ -168,6 +168,17 @@ func Run(ctx context.Context, task Task, sources []Source, exec Executor, cal *C
 			// The pivoting source's own vote now supports the new candidate.
 			res.Ledger[len(res.Ledger)-1].Candidate = candidate
 			res.Ledger[len(res.Ledger)-1].LambdaAfter = lambda
+			res.Ledger[len(res.Ledger)-1].ConfidenceAfter = sigmoid(lambda)
+			// The reseeded Λ must be tested against A immediately: if the
+			// pivoting source's own evidence alone already clears the accept
+			// threshold, Decision has to reflect that in this same iteration —
+			// otherwise a run that pivoted on its last sampled source ends with
+			// Decision still StoppedOnBudget even though Confidence cleared the
+			// target, corrupting hyctl trust explain and AutoClearedPct.
+			if lambda >= A {
+				res.Decision = DecisionAccept
+				break
+			}
 		}
 	}
 
