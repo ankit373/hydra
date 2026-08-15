@@ -53,16 +53,14 @@ type EvidenceQuality struct {
 	UncalibratedSources []string `json:"uncalibratedSources,omitempty"`
 }
 
-// AssessEvidence reads the trust logs and reports what the confidence rests on.
-// Every input is optional: a machine that has never run an ensemble gets an
-// empty result, not an invented one.
-func AssessEvidence() EvidenceQuality {
+// AssessEvidence reports what the confidence in runs rests on. runs is what
+// Build already loaded (via trust.LoadRuns) — passed in rather than reloaded
+// here, since owasp.go's LLM09 check needs the identical data. Every input is
+// optional: a machine that has never run an ensemble gets an empty result,
+// not an invented one.
+func AssessEvidence(runs []trust.RunLog) EvidenceQuality {
 	var q EvidenceQuality
-
-	runs, err := trust.LoadRuns(trust.DefaultLogPath())
-	if err == nil {
-		q.Runs = len(runs)
-	}
+	q.Runs = len(runs)
 
 	// Which sources actually carried a vote — a weak source nobody uses is
 	// not a finding.
@@ -74,10 +72,10 @@ func AssessEvidence() EvidenceQuality {
 	}
 
 	coPath := trust.DefaultCoAgreementPath()
+	coupling := trust.AllFamilyCoupling(coPath)
 	for _, fam := range trust.KnownFamilies(coPath) {
-		j, warn := trust.FalseConsensusWarning(coPath, fam)
-		if warn {
-			q.Families = append(q.Families, FamilyRisk{Family: fam, Coupling: j, Critical: true})
+		if r := coupling[fam]; r.Warn {
+			q.Families = append(q.Families, FamilyRisk{Family: fam, Coupling: r.J, Critical: true})
 		}
 	}
 	sort.Slice(q.Families, func(i, j int) bool { return q.Families[i].Coupling > q.Families[j].Coupling })

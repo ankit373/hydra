@@ -1893,18 +1893,19 @@ func cmdGraph() *cobra.Command {
 				return err
 			}
 			file := args[0]
-			radius := g.BlastRadiusForFile(file)
+			impact := g.Impact(file)
+			radius := impact.Radius
 			task := trust.Task{BlastRadius: radius}
 			dm := trust.NewDefectModel()
 
-			deps := g.DependentCountForFile(file)
-			pFactor := g.PercolationFactor(file)
+			deps := impact.Dependents
+			pFactor := impact.Percolation
 			// A radius of 1.0 means either "nothing depends on this" or "I have
 			// no idea" — opposite conclusions that used to render identically.
 			// internal/a2a reported 6 dependents and 97.4% required confidence
 			// with the graph, and "subcritical — edits stay local" at 90.0%
 			// without it (#251).
-			loaded, known := !g.Empty(), g.Knows(file)
+			loaded, known := !g.Empty(), impact.Known
 			if jsonOut {
 				return json.NewEncoder(os.Stdout).Encode(map[string]any{
 					"file": file, "blast_radius": radius, "transitive_dependents": deps,
@@ -2967,10 +2968,12 @@ func cmdTrustCalibration() *cobra.Command {
 			// A family whose members have converged on effectively one vote is a
 			// coordination risk the se/sp table above cannot show — two "sources"
 			// that always agree are one opinion, not confirming evidence.
-			for _, fam := range trust.KnownFamilies(trust.DefaultCoAgreementPath()) {
-				if j, warn := trust.FalseConsensusWarning(trust.DefaultCoAgreementPath(), fam); warn {
+			coPath := trust.DefaultCoAgreementPath()
+			coupling := trust.AllFamilyCoupling(coPath)
+			for _, fam := range trust.KnownFamilies(coPath) {
+				if r := coupling[fam]; r.Warn {
 					fmt.Printf("\n  %s\n", warnStyle.Render(fmt.Sprintf(
-						"false-consensus warning: %q's members measured J=%.2f — effectively one vote, not independent confirmation", fam, j)))
+						"false-consensus warning: %q's members measured J=%.2f — effectively one vote, not independent confirmation", fam, r.J)))
 				}
 			}
 			fmt.Println()

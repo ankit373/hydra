@@ -142,6 +142,51 @@ func TestFamilyCoupling_NoExcessAgreementMeasuresNearZero(t *testing.T) {
 	}
 }
 
+// AllFamilyCoupling derives every family's J by complementation (diff bucket
+// = all pairs minus this family's own same-family pairs) instead of rescanning
+// the log once per family. It must agree exactly with calling FamilyCoupling
+// per family — three families (not two) is the minimum shape that actually
+// exercises the "every other family counts toward MY cross-family baseline"
+// case the complementation trick depends on.
+func TestAllFamilyCoupling_MatchesPerFamilyFamilyCoupling(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "coagreement.jsonl")
+	for i := 0; i < minCoAgreementSamples; i++ {
+		aAnswer, bAnswer := "x", "x"
+		if i%3 == 0 {
+			bAnswer = "y" // famA's two members occasionally disagree
+		}
+		cAnswer, dAnswer := "x", "x"
+		if i%2 == 0 {
+			dAnswer = "y" // famB's two members disagree half the time
+		}
+		RecordCoAgreement(path, "go",
+			[]string{"a1", "a2", "b1", "b2", "c1", "c2"},
+			[]string{"famA", "famA", "famB", "famB", "famC", "famC"},
+			[]string{aAnswer, bAnswer, cAnswer, dAnswer, "x", "y"}, // famC's two members always disagree
+			TextEquivalence)
+	}
+
+	all := AllFamilyCoupling(path)
+	for _, fam := range []string{"famA", "famB", "famC"} {
+		wantJ, wantOK := FamilyCoupling(path, fam)
+		got, present := all[fam]
+		if !present {
+			t.Fatalf("%s: missing from AllFamilyCoupling's result", fam)
+		}
+		if got.OK != wantOK {
+			t.Errorf("%s: AllFamilyCoupling.OK=%v, FamilyCoupling ok=%v", fam, got.OK, wantOK)
+			continue
+		}
+		if wantOK && math.Abs(got.J-wantJ) > 1e-9 {
+			t.Errorf("%s: AllFamilyCoupling.J=%.6f, FamilyCoupling J=%.6f — batched computation diverged from the per-family one", fam, got.J, wantJ)
+		}
+		wantWarn := wantOK && wantJ >= criticalCoupling
+		if got.Warn != wantWarn {
+			t.Errorf("%s: AllFamilyCoupling.Warn=%v, want %v", fam, got.Warn, wantWarn)
+		}
+	}
+}
+
 func TestKnownFamilies_ReturnsDistinctSortedNames(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "coagreement.jsonl")
 	RecordCoAgreement(path, "go", []string{"a", "b"}, []string{"zeta", "alpha"}, []string{"x", "y"}, TextEquivalence)
