@@ -1384,7 +1384,10 @@ body {
 .dock--open {
   display: flex;
   flex-direction: column;
-  width: min(430px, calc(100vw - 44px));
+  /* 254 = the 44px of margin this reserved before, plus .rail's 210px — below
+     ~474px viewport width the old formula pinned the dock's left edge inside
+     the rail instead of shrinking around it (#506). */
+  width: min(430px, max(0px, calc(100vw - 254px)));
   max-height: min(560px, calc(100vh - 60px));
   background: var(--hy-bg-2);
   border: 1px solid var(--hy-line);
