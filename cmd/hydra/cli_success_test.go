@@ -176,6 +176,43 @@ func TestCLI_Dispatch_LocalOnlyRefusesWhenNothingIsLocal(t *testing.T) {
 	}
 }
 
+// The pii:local-only config policy must be enforced on the SPRT path exactly
+// like it is on the plain dispatch path, even though nobody passed --local.
+// Before #500, touchesPII alone routed a PII prompt into sw.RunSPRT with
+// LocalOnly bound only to --local, so it silently reached "cody" — a remote
+// CLI head — instead of being refused for lack of a local one.
+func TestCLI_Dispatch_PIIPolicyForcesLocalOnlyOnTheSPRTPath(t *testing.T) {
+	s := testutil.NewSandbox(t)
+	if err := config.Save(&config.Config{
+		Cortex:   "cody",
+		Policies: map[string]config.Policy{"pii": {Action: "local-only"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	s.FakeBinary(t, "cody", testutil.EchoScript("cody's answer"))
+	// The sandbox clears $OLLAMA_HOST but an empty value falls back to the real
+	// default (localhost:11434) — on a machine that actually has Ollama running,
+	// the port provider would discover it for real and the test would pass for
+	// the wrong reason (a real local head, not the policy under test). Point it
+	// at a dead loopback port so the only local-only head is whichever tests set.
+	t.Setenv("OLLAMA_HOST", "http://127.0.0.1:1")
+
+	// A PII-detecting prompt alone triggers the SPRT branch (RequiredConfidence
+	// derives a target > 0 from touchesPII), with no --confidence flag needed —
+	// exactly the reproduction in #500.
+	out, cobraOut, err := run(t, "dispatch", "my SSN is 123-45-6789")
+	combined := out + cobraOut
+	if err == nil {
+		t.Fatalf("a PII prompt reached a non-local head via the SPRT path despite pii:local-only:\n%s", combined)
+	}
+	if !strings.Contains(err.Error()+combined, "no heads available") {
+		t.Errorf("error = %v (%s), want the SPRT path to report no (local) heads available", err, combined)
+	}
+	if strings.Contains(combined, "cody's answer") {
+		t.Error("the remote head actually ran despite the pii:local-only policy")
+	}
+}
+
 // A swarm dry run must name the heads and the estimated cost without firing
 // anything — #167 made --dry-run mean the same thing in every mode.
 func TestCLI_Dispatch_SwarmDryRunFiresNothing(t *testing.T) {

@@ -628,6 +628,14 @@ func cmdDispatch() *cobra.Command {
 			// user explicitly asked for.
 			effectiveConf := confidence
 			touchesPII := policy.ContainsPII(policy.Request{Prompt: prompt})
+			// The plain dispatch path (d.Dispatch) reads cfg.Policies["pii"] itself
+			// and forces LocalOnly. The SPRT/swarm branches below take a shortcut
+			// straight past it and only ever saw --local — so a PII-touching prompt
+			// silently went out to remote heads the instant touchesPII made
+			// effectiveConf > 0 and picked one of those branches instead (#500).
+			if d.PIILocalOnly() && touchesPII {
+				localOnly = true
+			}
 			if file != "" || irreversible || production || touchesPII {
 				radius := 1.0
 				if file != "" {
@@ -1032,6 +1040,27 @@ func cmdMCP() *cobra.Command {
 			if !ok {
 				return fmt.Errorf("no allowed, parameter-bound ledger event for %s/%s — nothing to verify against", tool, verResource)
 			}
+
+			// A parameters_hash read straight off disk proves nothing if the
+			// ledger itself was edited after recording — comparing against it
+			// verbatim previously reported MATCH even on a hand-tampered hash.
+			// `verify-chain` already recomputes and links every chained event;
+			// compose it here so a broken chain refuses the approval instead of
+			// silently trusting it (#500). Approvals that predate hash-chaining
+			// (Hash == "") were never protected either way, so leave them as-is.
+			if approval.Hash != "" {
+				chain, err := ledger.VerifyChain(ledger.DefaultPath())
+				if err != nil {
+					return err
+				}
+				if !chain.Intact {
+					fmt.Printf("  %s  ledger hash chain is broken (event index %d) — the recorded "+
+						"approval cannot be trusted; refusing to verify against it. Run `hyctl mcp verify-chain` for details.\n",
+						strings.ToUpper(string(ledger.Deny)), chain.BrokenAt)
+					os.Exit(3)
+				}
+			}
+
 			match, err := ledger.VerifyParams(params, approval.ParametersHash)
 			if err != nil {
 				return err

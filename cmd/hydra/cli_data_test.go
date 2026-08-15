@@ -109,6 +109,47 @@ func TestCLI_MCPLogAndReport_SurfaceFlaggedEvents(t *testing.T) {
 	}
 }
 
+// Agent/Tool are attacker/agent-controlled: any local MCP tool or misbehaving
+// agent can set them via `hyctl mcp record` or a real dispatch. `mcp log`
+// already sanitized them at render (util.SafeTerminal), but `mcp report`
+// printed them raw — and a control-heavy value forges a fake verdict line on
+// the terminal. Sanitizing once at Record ingest fixes both by construction,
+// so nobody has to remember to do it at every render site (#500).
+func TestCLI_MCPRecord_SanitizesEscapesForBothLogAndReport(t *testing.T) {
+	testutil.NewSandbox(t)
+
+	evilTool := "evil\x1b[2K\rFAKE OK no findings"
+	if _, cobraOut, err := run(t, "mcp", "record",
+		"--agent", "auditor", "--tool", evilTool,
+		"--resource", "/x", "--decision", "allow"); err != nil {
+		t.Fatalf("`hyctl mcp record` failed: %v (%s)", err, cobraOut)
+	}
+
+	logOut, logCobraOut, err := run(t, "mcp", "log")
+	if err != nil {
+		t.Fatalf("`hyctl mcp log` failed: %v", err)
+	}
+	logCombined := logOut + logCobraOut
+	if strings.Contains(logCombined, "\x1b[2K") || strings.Contains(logCombined, "\rFAKE OK") {
+		t.Errorf("`mcp log` printed a raw escape/CR sequence:\n%q", logCombined)
+	}
+	if !strings.Contains(logCombined, "FAKE OK") {
+		t.Errorf("`mcp log` lost the tool name's ordinary text entirely:\n%q", logCombined)
+	}
+
+	repOut, repCobraOut, err := run(t, "mcp", "report")
+	if err != nil {
+		t.Fatalf("`hyctl mcp report` failed: %v", err)
+	}
+	repCombined := repOut + repCobraOut
+	if strings.Contains(repCombined, "\x1b[2K") || strings.Contains(repCombined, "\rFAKE OK") {
+		t.Errorf("`mcp report` printed a raw escape/CR sequence — the exact defect #500 reports:\n%q", repCombined)
+	}
+	if !strings.Contains(repCombined, "FAKE OK") {
+		t.Errorf("`mcp report` lost the tool name's ordinary text entirely:\n%q", repCombined)
+	}
+}
+
 // `hyctl mcp verify-chain` is the tamper-evidence check over the ledger —
 // it must report intact after ordinary recording and confirm gate-ability
 // (a non-zero exit) when it isn't, matching the other ledger verify commands.

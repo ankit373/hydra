@@ -735,6 +735,41 @@ func TestNew_LoadsTheConfigAndArmsThePIIPolicy(t *testing.T) {
 	if action := dd.policy.Evaluate(policy.Request{Prompt: "SSN 123-45-6789", TierHint: "1"}); !action.LocalOnly {
 		t.Error("the pii=local-only config policy did not arm the local-only rule")
 	}
+	// Exported so cmd/hydra's SPRT/swarm dispatch branches — which bypass
+	// Dispatch entirely — can still enforce the same config policy (#500).
+	if !dd.PIILocalOnly() {
+		t.Error("PIILocalOnly() = false, want true for a pii:local-only config")
+	}
+}
+
+// PIILocalOnly is the single source of truth cmd/hydra's SPRT/swarm branches
+// rely on to fold the config policy into their own LocalOnly bool. A wrong
+// answer here reopens #500 regardless of what cmd/hydra does with it.
+func TestDispatcher_PIILocalOnly(t *testing.T) {
+	cases := []struct {
+		name string
+		cfg  *config.Config
+		want bool
+	}{
+		{"no policies configured", &config.Config{}, false},
+		{"pii policy set to something else", &config.Config{
+			Policies: map[string]config.Policy{"pii": {Action: "budget-cap"}},
+		}, false},
+		{"unrelated policy present, pii absent", &config.Config{
+			Policies: map[string]config.Policy{"budget": {Action: "budget-cap"}},
+		}, false},
+		{"pii local-only armed", &config.Config{
+			Policies: map[string]config.Policy{"pii": {Action: "local-only"}},
+		}, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dd := &Dispatcher{cfg: tc.cfg}
+			if got := dd.PIILocalOnly(); got != tc.want {
+				t.Errorf("PIILocalOnly() = %v, want %v", got, tc.want)
+			}
+		})
+	}
 }
 
 // writeStatePct seeds logs/state.json with a claude_pct and optional history.

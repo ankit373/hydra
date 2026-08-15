@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ankit373/hydra/internal/ledger"
 	"github.com/ankit373/hydra/internal/testutil"
 )
 
@@ -107,6 +108,65 @@ func TestCLI_MCPRecordThenVerify_BindsParameters(t *testing.T) {
 	if code == 0 {
 		t.Errorf("verify passed on parameters that were never approved — the "+
 			"binding is not a binding:\n%s", out)
+	}
+}
+
+// `mcp verify` used to trust the on-disk parameters_hash verbatim: hand-edit
+// it to the hash of parameters that were never actually approved, and it
+// reported MATCH — only `mcp verify-chain` caught the tamper, and the two
+// were never composed. Recomputing/validating against the hash chain here
+// closes that (#500).
+func TestCLI_MCPVerify_DetectsTamperedParametersHash(t *testing.T) {
+	s := populated(t)
+
+	approved := `{"path":"/etc/hosts","mode":"read"}`
+	if code, out := runBinary(t, s, "mcp", "record",
+		"--tool", "fs.read", "--action", "read", "--decision", "allow",
+		"--resource", "/etc/hosts", "--agent", "test-agent",
+		"--params", approved); code != 0 {
+		t.Fatalf("`hyctl mcp record` exited %d:\n%s", code, out)
+	}
+
+	// Simulate an attacker hand-editing the ledger line: retarget
+	// parameters_hash to the hash of parameters that were never approved,
+	// without touching the event's own chain hash — exactly what a raw text
+	// edit (not a re-recording) would do.
+	malicious := map[string]any{"path": "/etc/shadow", "mode": "write"}
+	maliciousHash, err := ledger.HashParams(malicious)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ledgerPath := filepath.Join(s.HydraHome, "mcp_ledger.jsonl")
+	raw, err := os.ReadFile(ledgerPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimRight(string(raw), "\n"), "\n")
+	var evt map[string]any
+	if err := json.Unmarshal([]byte(lines[len(lines)-1]), &evt); err != nil {
+		t.Fatal(err)
+	}
+	evt["parameters_hash"] = maliciousHash
+	tamperedLine, err := json.Marshal(evt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines[len(lines)-1] = string(tamperedLine)
+	if err := os.WriteFile(ledgerPath, []byte(strings.Join(lines, "\n")+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	// Before #500 this reported MATCH: the malicious parameters hash exactly
+	// the (tampered) field on disk, and nothing checked the field itself was
+	// ever genuine.
+	maliciousParams := `{"path":"/etc/shadow","mode":"write"}`
+	code, out := runBinary(t, s, "mcp", "verify", "fs.read",
+		"--resource", "/etc/hosts", "--params", maliciousParams)
+	if code == 0 {
+		t.Errorf("verify MATCHed a hand-edited parameters_hash instead of detecting the broken chain:\n%s", out)
+	}
+	if !strings.Contains(strings.ToLower(out), "chain") {
+		t.Errorf("verify output does not explain the chain-tamper cause:\n%s", out)
 	}
 }
 
