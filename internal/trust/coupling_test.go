@@ -47,6 +47,24 @@ func TestRecordCoAgreement_SkipsUnfamiliedSourcesAndTinyRuns(t *testing.T) {
 	}
 }
 
+// loadCoAgreement caches its result per path — an SPRT run or swarm judge may
+// call FamilyDiscount/FamilyCoupling several times against the same file
+// while it's stable — but a real append (the next run's RecordCoAgreement)
+// must never be masked by a stale cache entry.
+func TestLoadCoAgreement_CacheInvalidatesOnRealAppend(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "coagreement.jsonl")
+
+	RecordCoAgreement(path, "go", []string{"a", "b"}, []string{"famA", "famA"}, []string{"x", "x"}, TextEquivalence)
+	if got := loadCoAgreement(path); len(got) != 1 {
+		t.Fatalf("got %d record(s) after first append, want 1", len(got))
+	}
+
+	RecordCoAgreement(path, "python", []string{"c", "d", "e"}, []string{"famB", "famB", "famB"}, []string{"x", "x", "y"}, TextEquivalence)
+	if got := loadCoAgreement(path); len(got) != 2 {
+		t.Errorf("got %d record(s) after second append, want 2 — the cache served a stale read", len(got))
+	}
+}
+
 func TestFamilyCoupling_BelowThresholdIsNotOK(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "coagreement.jsonl")
 	for i := 0; i < minCoAgreementSamples-1; i++ {

@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/ankit373/hydra/internal/glob"
 	"sort"
@@ -475,9 +476,56 @@ func DefaultPolicyPath() string {
 	return filepath.Join(config.Dir(), "mcp_policy.json")
 }
 
+// policyCacheEntry is one path's last-loaded policy, tagged with the file
+// state it was loaded from.
+type policyCacheEntry struct {
+	policy  Policy
+	err     error
+	modTime time.Time
+	size    int64
+}
+
+var (
+	policyCacheMu sync.Mutex
+	policyCache   = map[string]policyCacheEntry{}
+)
+
 // LoadPolicy reads a policy file. A missing file yields a default-allow policy
 // (Hydra records everything but blocks nothing until rules are defined).
+//
+// The parsed result is cached per path, keyed on the file's mtime+size — a
+// dispatch fallback loop or a swarm fan-out checks the same content against
+// several candidate heads in quick succession, and without this every one of
+// them re-reads and re-parses the identical policy file from disk. An
+// os.Stat is far cheaper than that, and any real edit to the file (different
+// mtime or size) invalidates the cache immediately.
 func LoadPolicy(path string) (Policy, error) {
+	info, statErr := os.Stat(path)
+	if statErr != nil {
+		if os.IsNotExist(statErr) {
+			return Policy{Default: Allow}, nil
+		}
+		// Stat failed for a reason other than "missing" (permissions, etc.) —
+		// fall through to the real read, which will surface the same error.
+	} else {
+		policyCacheMu.Lock()
+		if cached, ok := policyCache[path]; ok && cached.modTime.Equal(info.ModTime()) && cached.size == info.Size() {
+			policyCacheMu.Unlock()
+			return cached.policy, cached.err
+		}
+		policyCacheMu.Unlock()
+	}
+
+	p, err := loadPolicyUncached(path)
+	if statErr == nil {
+		policyCacheMu.Lock()
+		policyCache[path] = policyCacheEntry{policy: p, err: err, modTime: info.ModTime(), size: info.Size()}
+		policyCacheMu.Unlock()
+	}
+	return p, err
+}
+
+func loadPolicyUncached(path string) (Policy, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -636,6 +684,9 @@ func Check(path string, p Policy, req CheckRequest) (Decision, error) {
 // only changes behavior for an install that has deliberately configured a
 // deny rule.
 func CheckAndRecordDispatch(agent, headID, resource, content string) (Decision, error) {
+	// LoadPolicy is itself mtime-cached, so a fallback loop or fan-out calling
+	// this once per candidate head for the same content no longer re-reads
+	// and re-parses the identical policy file from disk each time.
 	pol, err := LoadPolicy(DefaultPolicyPath())
 	if err != nil {
 		return "", err

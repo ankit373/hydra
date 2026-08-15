@@ -99,14 +99,54 @@ func (d *Dispatcher) EstimateCost(tier, inputTokens, outputTokens int) float64 {
 	return d.estimateCost(tier, inputTokens, outputTokens)
 }
 
-// New builds a Dispatcher from the saved config and a fresh machine probe.
+// probeCacheTTL bounds how long a machine probe is reused across calls to New
+// within one process. New is called once per CLI invocation, but also once per
+// task inside a parallel batch and once per view inside a TUI snapshot — with
+// no cache each of those redoes the same ~13 exec.LookPath calls and two
+// network liveness checks. A short TTL collapses those into one real probe
+// without leaving a long-running TUI session blind to a server that started
+// or stopped mid-session.
+const probeCacheTTL = 3 * time.Second
+
+var (
+	probeCacheMu     sync.Mutex
+	probeCacheResult *probe.Result
+	probeCacheAt     time.Time
+	probeCacheEnv    string
+)
+
+// probeEnvFingerprint is HOME+PATH, the two environment variables that change
+// what a probe discovers (CLI binaries on PATH; agy/models overlay under
+// HOME). Any change invalidates the cache immediately regardless of TTL —
+// without this, a cached result from one HOME (e.g. a test's temp dir with
+// its own stub binaries) would be silently reused after HOME changes.
+func probeEnvFingerprint() string {
+	return os.Getenv("HOME") + "\x00" + os.Getenv("PATH")
+}
+
+// cachedProbe returns probe.Run's result, reusing it for probeCacheTTL as long
+// as the environment it depends on hasn't changed.
+func cachedProbe(ctx context.Context) *probe.Result {
+	probeCacheMu.Lock()
+	defer probeCacheMu.Unlock()
+	env := probeEnvFingerprint()
+	if probeCacheResult != nil && env == probeCacheEnv && time.Since(probeCacheAt) < probeCacheTTL {
+		return probeCacheResult
+	}
+	probeCacheResult = probe.Run(ctx)
+	probeCacheAt = time.Now()
+	probeCacheEnv = env
+	return probeCacheResult
+}
+
+// New builds a Dispatcher from the saved config and a (possibly cached) machine probe.
 func New(ctx context.Context) (*Dispatcher, error) {
 	cfg, err := config.Load()
 	if err != nil {
 		return nil, fmt.Errorf("no hydra config — run: hyctl init")
 	}
 
-	result := probe.Run(ctx)
+	result := cachedProbe(ctx)
 
 	localOnly := false
 	if p, ok := cfg.Policies["pii"]; ok && p.Action == "local-only" {
@@ -208,12 +248,22 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 			Head: h.ID, Model: h.Name, Tier: rank.UITier(h),
 			Detail: fmt.Sprintf("candidate %d of %d", i+1, len(candidates)),
 		})
-		if decision, lerr := ledger.CheckAndRecordDispatch("hydra-dispatch", h.ID, opts.Resource, prompt); lerr == nil && decision == ledger.Deny {
-			lastErr = fmt.Errorf("denied by ledger policy: head %s", h.ID)
+		// Fails closed like ledger.Check itself: a policy-check error (unreadable
+		// policy file, ledger write failure) must deny, not silently let the
+		// candidate through just because the decision couldn't be computed.
+		// CheckAndRecordDispatch's LoadPolicy is itself mtime-cached, so trying
+		// every candidate against the same prompt no longer re-reads and
+		// re-parses the identical policy file from disk once per candidate.
+		if decision, lerr := ledger.CheckAndRecordDispatch("hydra-dispatch", h.ID, opts.Resource, prompt); lerr != nil || decision == ledger.Deny {
+			detail := "denied by ledger policy"
+			if lerr != nil {
+				detail = "ledger policy check failed: " + lerr.Error()
+			}
+			lastErr = fmt.Errorf("%s: head %s", detail, h.ID)
 			_ = rl.Append(runlog.Event{
 				Kind: runlog.KindError, TaskID: taskID,
 				Head: h.ID, Model: h.Name, Tier: rank.UITier(h),
-				Status: "denied", Detail: "denied by ledger policy",
+				Status: "denied", Detail: detail,
 			})
 			continue
 		}

@@ -1897,10 +1897,7 @@ func cmdGraph() *cobra.Command {
 			task := trust.Task{BlastRadius: radius}
 			dm := trust.NewDefectModel()
 
-			var deps int
-			for _, id := range g.NodesInFile(file) {
-				deps += g.DependentCount(id)
-			}
+			deps := g.DependentCountForFile(file)
 			pFactor := g.PercolationFactor(file)
 			// A radius of 1.0 means either "nothing depends on this" or "I have
 			// no idea" — opposite conclusions that used to render identically.

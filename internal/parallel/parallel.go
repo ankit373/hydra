@@ -110,6 +110,14 @@ func Run(ctx context.Context, tasks []Task, opts Options) ([]Result, error) {
 		seen[t.File] = t.Label
 	}
 
+	// One Dispatcher shared by the whole batch: every task in a `hyctl parallel`
+	// run wants the same machine probe and config, not N independent ones. A
+	// failure here must still surface as a per-task result rather than abort
+	// the batch outright — the run-log tree below gets written either way, and
+	// each task's own JSON result carries the same "dispatcher init" error every
+	// task used to hit independently.
+	d, dispatchErr := dispatch.New(ctx)
+
 	results := make([]Result, len(tasks))
 	var mu sync.Mutex
 
@@ -139,9 +147,9 @@ func Run(ctx context.Context, tasks []Task, opts Options) ([]Result, error) {
 			started := time.Now()
 			var raw json.RawMessage
 			if task.File != "" {
-				raw = runEditTask(gctx, task, runID, taskID)
+				raw = runEditTask(gctx, d, dispatchErr, task, runID, taskID)
 			} else {
-				raw = runTextTask(gctx, task, runID, taskID)
+				raw = runTextTask(gctx, d, dispatchErr, task, runID, taskID)
 			}
 			mu.Lock()
 			results[i] = Result{raw: raw}
@@ -182,10 +190,9 @@ func statusOf(raw json.RawMessage) string {
 }
 
 // runTextTask dispatches a prompt and returns the raw JSON result.
-func runTextTask(ctx context.Context, task Task, runID, taskID string) json.RawMessage {
-	d, err := dispatch.New(ctx)
-	if err != nil {
-		return failText(task, "dispatcher init: "+err.Error())
+func runTextTask(ctx context.Context, d *dispatch.Dispatcher, dispatchErr error, task Task, runID, taskID string) json.RawMessage {
+	if dispatchErr != nil {
+		return failText(task, "dispatcher init: "+dispatchErr.Error())
 	}
 
 	prompt := task.Prompt
@@ -217,7 +224,7 @@ func runTextTask(ctx context.Context, task Task, runID, taskID string) json.RawM
 // runEditTask performs an atomic file edit and returns the raw JSON result.
 // Self-contained port of the edit.sh flow so this package compiles on develop
 // before internal/editor merges. Once editor merges, this can delegate to editor.Edit.
-func runEditTask(ctx context.Context, task Task, runID, taskID string) json.RawMessage {
+func runEditTask(ctx context.Context, d *dispatch.Dispatcher, dispatchErr error, task Task, runID, taskID string) json.RawMessage {
 	file := task.File
 	if !filepath.IsAbs(file) {
 		return failEdit(task, "file path must be absolute")
@@ -270,10 +277,9 @@ func runEditTask(ctx context.Context, task Task, runID, taskID string) json.RawM
 	editPrompt := buildEditPrompt(file, ctxNote, task.Prompt, currentBlock)
 
 	// Dispatch
-	d, err := dispatch.New(ctx)
-	if err != nil {
+	if dispatchErr != nil {
 		cleanupBackup()
-		return failEdit(task, "dispatcher init: "+err.Error())
+		return failEdit(task, "dispatcher init: "+dispatchErr.Error())
 	}
 	dispResult, err := d.Dispatch(ctx, editPrompt, dispatch.Options{
 		TierHint: enumToTier(task.Enum),

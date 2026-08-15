@@ -45,11 +45,17 @@ func executeHead(ctx context.Context, h provider.Head, prompt string, opts Optio
 		StartedAt: time.Now(),
 	}
 
-	if decision, err := ledger.CheckAndRecordDispatch("hydra-swarm", h.ID, "", prompt); err == nil && decision == ledger.Deny {
+	// Fails closed like ledger.Check itself: a policy-check error must deny,
+	// not silently let the head run just because the decision couldn't be computed.
+	if decision, err := ledger.CheckAndRecordDispatch("hydra-swarm", h.ID, "", prompt); err != nil || decision == ledger.Deny {
 		a.FinishedAt = time.Now()
 		a.Duration = a.FinishedAt.Sub(a.StartedAt)
 		a.Status = StatusFailed
-		a.Err = fmt.Errorf("denied by ledger policy: head %s", h.ID)
+		if err != nil {
+			a.Err = fmt.Errorf("ledger policy check failed: %w: head %s", err, h.ID)
+		} else {
+			a.Err = fmt.Errorf("denied by ledger policy: head %s", h.ID)
+		}
 		return a
 	}
 

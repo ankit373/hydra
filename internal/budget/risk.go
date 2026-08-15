@@ -63,7 +63,15 @@ func RiskFromHistory(hist []int) (burnRatePct, risk float64) {
 	for _, d := range deltas {
 		ss += (d - mu) * (d - mu)
 	}
-	sigma := math.Sqrt(ss / float64(n)) // population stddev of increments
+	// Sample stddev (Bessel's correction, n-1): this governor always runs at
+	// small n (MaxPctHistory=12 caps n at 11), where population variance (÷n)
+	// systematically understates volatility. With n==1 there is no way to
+	// estimate spread from a single delta, so sigma stays 0 (ss is trivially 0
+	// there too — no divide-by-zero, no behavior change from before at n==1).
+	var sigma float64
+	if n > 1 {
+		sigma = math.Sqrt(ss / float64(n-1))
+	}
 
 	x := float64(hist[len(hist)-1]) / 100
 	risk = FirstPassageProb(emergencyFrac-x, mu, sigma, riskHorizon)

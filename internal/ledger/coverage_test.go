@@ -67,6 +67,42 @@ func TestLoadPolicy_MissingFileIsDefaultAllow(t *testing.T) {
 	}
 }
 
+// LoadPolicy caches its result per path (a dispatch fallback loop or swarm
+// fan-out calls it once per candidate head for the same content), but a real
+// edit to the file must never be masked by a stale cache entry — the whole
+// reason it keys on mtime+size instead of remembering the first read forever.
+func TestLoadPolicy_CacheInvalidatesOnRealEdit(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "policy.json")
+
+	if err := os.WriteFile(path, []byte(`{"default":"allow","rules":[]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	p1, err := LoadPolicy(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p1.Default != Allow {
+		t.Fatalf("first load Default = %q, want Allow", p1.Default)
+	}
+
+	// Deliberately a different size, so this can never collide with the first
+	// read's cache key regardless of filesystem mtime resolution.
+	body := `{"default":"deny","rules":[{"tool":"fs","resource":"/repo/*","action":"write","decision":"allow"}]}`
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	p2, err := LoadPolicy(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p2.Default != Deny {
+		t.Errorf("after editing the file, Default = %q, want Deny — the cache served a stale read", p2.Default)
+	}
+	if len(p2.Rules) != 1 {
+		t.Errorf("after editing the file, got %d rule(s), want 1 — the cache served a stale read", len(p2.Rules))
+	}
+}
+
 func TestLoadPolicy_MalformedJSONIsAnError(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "policy.json")
 	if err := os.WriteFile(path, []byte("{not json"), 0o600); err != nil {
