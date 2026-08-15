@@ -5,6 +5,7 @@ package parallel
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -351,6 +352,73 @@ func TestEdit_FailedValidationRollsTheFileBack(t *testing.T) {
 	}
 }
 
+// The file-policy engine's Decide result was previously discarded outright
+// (`_ = eng.Decide(...)`), so a declared diff_size_cap_pct never rejected
+// anything. A cap this low must now reject and roll back a real edit.
+func TestEdit_DiffSizeCapExceededRollsTheFileBack(t *testing.T) {
+	repo := editSandbox(t, marked("package main\n\nfunc main() {\n\tprintln(\"hello\")\n}\n"))
+	writePolicyYAML(t, 1) // 1% cap — any real growth trips it
+
+	file := filepath.Join(repo, "a.go")
+	original := "package main\n"
+	if err := os.WriteFile(file, []byte(original), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got := runEdit(t, Task{
+		Label: "cap", Enum: "MODERATE", File: file,
+		Prompt: "grow this file", Validate: boolPtr(false),
+	})
+
+	if got.Status != "fail" || !strings.Contains(got.Error, "diff_size_cap_exceeded") {
+		t.Fatalf("result = %+v, want a diff_size_cap_exceeded failure", got)
+	}
+	if !got.RolledBack {
+		t.Error("RolledBack = false; the caller cannot tell whether the file changed")
+	}
+	raw, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(raw) != original {
+		t.Errorf("the file was left changed despite exceeding the cap:\n%q", raw)
+	}
+	if _, err := os.Stat(file + ".hydra-bak"); err == nil {
+		t.Error("the backup survived the rollback, so the next edit sees a stale baseline")
+	}
+}
+
+// A generous cap must not reject an edit that easily fits within it — the cap
+// is a ceiling, not a trigger on every change. Uses a file large enough that a
+// one-line addition stays well under the default 90% cap; a tiny file would
+// trip even a legitimate small edit (which is exactly why policy.yaml itself
+// raises the cap to 200% for files under 50 lines).
+func TestEdit_DiffWithinCapIsAccepted(t *testing.T) {
+	original := "package main\n" + strings.Repeat("// filler line\n", 20)
+	repo := editSandbox(t, marked(original+"func main() {}\n"))
+	writePolicyYAML(t, 90) // the shipped default
+
+	file := filepath.Join(repo, "a.go")
+	if err := os.WriteFile(file, []byte(original), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got := runEdit(t, Task{
+		Label: "ok", Enum: "MODERATE", File: file,
+		Prompt: "add main", Validate: boolPtr(false),
+	})
+	if got.Status != "ok" {
+		t.Fatalf("result = %+v, want ok", got)
+	}
+	raw, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), "func main() {}") {
+		t.Errorf("file = %q, want the model's content", raw)
+	}
+}
+
 // A validator that passes leaves the edit in place.
 func TestEdit_PassingValidationKeepsTheEdit(t *testing.T) {
 	if runtime.GOOS == "windows" {
@@ -657,6 +725,21 @@ func writeWorkspaceYAML(t *testing.T, root, goValidator string) {
 		"\n    git: \"false\"\n    allowed_globs: [\"**\"]\nvalidators:\n  go: \"" +
 		goValidator + "\"\n"
 	if err := os.WriteFile(filepath.Join(dir, "workspace.yaml"), []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// writePolicyYAML points $HYDRA_HOME's registry at a policy.yaml with one
+// always-matching rule, so a test can force a specific diff_size_cap_pct
+// regardless of the file it edits.
+func writePolicyYAML(t *testing.T, capPct int) {
+	t.Helper()
+	dir := filepath.Join(os.Getenv("HYDRA_HOME"), "registry")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	body := fmt.Sprintf("version: \"1.0\"\nrules:\n  - name: test_cap\n    when:\n      always: true\n    apply:\n      diff_size_cap_pct: %d\n", capPct)
+	if err := os.WriteFile(filepath.Join(dir, "policy.yaml"), []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}
 }

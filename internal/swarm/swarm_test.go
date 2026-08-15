@@ -274,6 +274,118 @@ func TestCapScoreSelector_MaxHeadsCap(t *testing.T) {
 	}
 }
 
+// ── NumericTierSelector ──────────────────────────────────────────────────────
+
+// A numeric --tier used to match no config tier name and always fall through
+// to CapScoreSelector's top-N fan-out — silently firing every head regardless
+// of the requested tier. NumericTierSelector is what resolveSelector now picks
+// for a numeric hint, mirroring dispatch.selectHeads' own semantics (#501).
+func TestResolveSelector_PicksNumericTierSelectorForANumericHint(t *testing.T) {
+	if _, ok := resolveSelector(Options{TierHint: "6"}, &config.Config{}).(*NumericTierSelector); !ok {
+		t.Error("a numeric TierHint did not resolve to NumericTierSelector")
+	}
+	if _, ok := resolveSelector(Options{TierHint: "expert"}, &config.Config{}).(*TierSelector); !ok {
+		t.Error("a named TierHint did not resolve to TierSelector")
+	}
+}
+
+func TestNumericTierSelector_MatchesDispatchSemantics(t *testing.T) {
+	all := []provider.Head{
+		registryHead("strongest", "Strongest", 100), // UITier 1
+		registryHead("mid", "Mid", 70),              // UITier 7
+		registryHead("weak", "Weak", 40),            // UITier 10
+	}
+
+	// Tier 7: excludes the tier-1 head, keeps mid + weaker as fallback,
+	// strongest-eligible first.
+	got, err := (&NumericTierSelector{}).Select(all, Options{TierHint: "7"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) == 0 || got[0].ID != "mid" {
+		t.Errorf("tier 7 primary = %v, want \"mid\"", ids(got))
+	}
+	for _, h := range got {
+		if h.ID == "strongest" {
+			t.Error("tier 7 must not include the tier-1 head")
+		}
+	}
+
+	// Tier 1: everything qualifies, strongest first.
+	got, err = (&NumericTierSelector{}).Select(all, Options{TierHint: "1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 3 || got[0].ID != "strongest" {
+		t.Errorf("tier 1 = %v, want strongest first", ids(got))
+	}
+}
+
+// Nothing matches the requested tier — degrade to the cheapest heads
+// available, never silently escalate to the strongest (most expensive) one.
+func TestNumericTierSelector_DegradesToCheapestNeverStrongest(t *testing.T) {
+	all := []provider.Head{
+		registryHead("strongest", "Strongest", 100),
+		registryHead("expert", "Expert", 92),
+	}
+	got, err := (&NumericTierSelector{}).Select(all, Options{TierHint: "10"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) == 0 {
+		t.Fatal("degrade path selected nothing")
+	}
+	if got[0].ID == "strongest" {
+		t.Errorf("fell back to the STRONGEST head %q — must degrade to the cheapest", got[0].ID)
+	}
+	if got[0].ID != "expert" {
+		t.Errorf("fallback primary = %q, want cheapest (\"expert\")", got[0].ID)
+	}
+}
+
+func ids(heads []provider.Head) []string {
+	out := make([]string, 0, len(heads))
+	for _, h := range heads {
+		out = append(out, h.ID)
+	}
+	return out
+}
+
+// ── validateSwarmTiers ────────────────────────────────────────────────────────
+
+// Run, RunSPRT and Plan all reject an invalid --tier/--swarm-judge-tier via
+// the identical rule dispatch.Dispatch applies — before this, an invalid
+// value under --swarm/--confidence fell straight through to CapScoreSelector
+// instead of erroring (#501).
+func TestValidateSwarmTiers(t *testing.T) {
+	cfg := &config.Config{Tiers: []config.Tier{{Name: "expert", Heads: []string{"strong"}}}}
+
+	valid := []Options{
+		{},
+		{TierHint: "6"},
+		{TierHint: "expert"},
+		{JudgeTierHint: "1"},
+		{TierHint: "6", JudgeTierHint: "expert"},
+	}
+	for _, opts := range valid {
+		if err := validateSwarmTiers(cfg, opts); err != nil {
+			t.Errorf("validateSwarmTiers(%+v) = %v, want nil", opts, err)
+		}
+	}
+
+	invalid := []Options{
+		{TierHint: "99"},
+		{TierHint: "not-a-real-tier"},
+		{JudgeTierHint: "99"},
+		{JudgeTierHint: "not-a-real-tier"},
+	}
+	for _, opts := range invalid {
+		if err := validateSwarmTiers(cfg, opts); err == nil {
+			t.Errorf("validateSwarmTiers(%+v) = nil, want an error", opts)
+		}
+	}
+}
+
 // estimateFanoutCost must report a cost even with no --swarm-max-cost limit.
 // preflightCost short-circuits to 0 when no limit is set, which is right for a
 // guard and wrong for the plan --dry-run prints (#167).

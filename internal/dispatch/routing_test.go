@@ -189,6 +189,28 @@ func TestResolveTierHint_NumericBoundariesAccepted(t *testing.T) {
 	}
 }
 
+// ValidateTierHint is what --swarm/--confidence must call too, or an invalid
+// --tier only errors for plain dispatch (#501). It must accept exactly what
+// resolveTierHint can turn into something routable, and reject everything
+// else with a clear reason.
+func TestValidateTierHint(t *testing.T) {
+	cfg := routingDispatcher().cfg // has tiers "expert" and "local"
+
+	valid := []string{"", "1", "8", "10", "expert", "local"}
+	for _, hint := range valid {
+		if err := ValidateTierHint(cfg, hint); err != nil {
+			t.Errorf("ValidateTierHint(%q) = %v, want nil", hint, err)
+		}
+	}
+
+	invalid := []string{"0", "11", "99", "-1", "bogus", "nonsense"}
+	for _, hint := range invalid {
+		if err := ValidateTierHint(cfg, hint); err == nil {
+			t.Errorf("ValidateTierHint(%q) = nil, want an error", hint)
+		}
+	}
+}
+
 // The end-to-end contract CLAUDE.md documents: an enum is a routing
 // instruction. GRUNT must not land on the most expensive head.
 func TestEnumToTier_RoutesAwayFromStrongest(t *testing.T) {
