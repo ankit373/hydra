@@ -291,17 +291,30 @@ func (m Cockpit) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.treeSel++
 			}
 		case tea.KeyEnter:
-			return m.submit()
+			// Only the chat+code view renders the input line or the log — on
+			// any other tab this used to silently run the full dispatch-preview
+			// pipeline with zero on-screen feedback (#506).
+			if m.view == ckViewChatCode {
+				return m.submit()
+			}
 		case tea.KeyBackspace:
-			if n := len(m.input); n > 0 {
-				m.input = m.input[:n-1]
+			if m.view == ckViewChatCode {
+				if n := len(m.input); n > 0 {
+					m.input = m.input[:n-1]
+				}
 			}
 		case tea.KeyEsc:
-			m.input = ""
+			if m.view == ckViewChatCode {
+				m.input = ""
+			}
 		case tea.KeySpace:
-			m.input += " "
+			if m.view == ckViewChatCode {
+				m.input += " "
+			}
 		case tea.KeyRunes:
-			m.input += string(msg.Runes)
+			if m.view == ckViewChatCode {
+				m.input += string(msg.Runes)
+			}
 		}
 	}
 	return m, nil
@@ -566,9 +579,14 @@ func (m Cockpit) sidebar(h int) string {
 	avail := h - len(head) - len(foot)
 	var shown []ckHead
 	var more int
+	var compact string
 	switch {
 	case avail <= 0:
-		// no room even for a "+N more" line.
+		// No room for even one head row — the header above still states the
+		// real count, so silently showing zero heads would contradict it (#506).
+		if len(m.heads) > 0 {
+			compact = fmt.Sprintf(" %d head%s (not enough room to list)", len(m.heads), plural(len(m.heads)))
+		}
 	case len(m.heads) <= avail:
 		shown = m.heads
 	default:
@@ -589,6 +607,9 @@ func (m Cockpit) sidebar(h int) string {
 	if more > 0 {
 		lines = append(lines, ckDimS.Render(fmt.Sprintf(" +%d more", more)))
 	}
+	if compact != "" {
+		lines = append(lines, ckDimS.Render(compact))
+	}
 	lines = append(lines, foot...)
 
 	return lipgloss.NewStyle().Width(21).Height(h).
@@ -604,13 +625,73 @@ func (m Cockpit) chatMain(w, h int) string {
 	if logH < 1 {
 		logH = 1
 	}
-	lines := m.log
-	if len(lines) > logH {
-		lines = lines[len(lines)-logH:]
-	}
-	logBox := lipgloss.NewStyle().Width(w).Height(logH).Render(strings.Join(lines, "\n"))
+	logBox := lipgloss.NewStyle().Width(w).Height(logH).Render(ckVisibleLog(m.log, w, logH))
 	input := ckCyanS.Render(m.mode+" ❯ ") + ckInkS.Render(m.input) + ckAquaS.Render("▏")
 	return lipgloss.JoinVertical(lipgloss.Left, logBox, ckFaintS.Render(strings.Repeat("╌", max(1, w))), input)
+}
+
+// ckLogEntryCap bounds how many rendered lines a single log entry may
+// occupy. Without it, one long line (a pasted stack trace, a 3000-char task)
+// wraps past the whole pane on its own and pushes the input/divider/hint bar
+// off-frame (#506).
+const ckLogEntryCap = 6
+
+// ckVisibleLog builds the tail of m.log that fits within logH lines as
+// lipgloss will actually render them at width w. Tail-slicing by entry count
+// alone is wrong — Style.Height only pads short content, it never truncates
+// tall content — so a single word-wrapped entry could blow past the pane on
+// its own; each entry is capped before the tail window is sized (#506).
+func ckVisibleLog(log []string, w, logH int) string {
+	entryCap := ckLogEntryCap
+	if logH < entryCap {
+		entryCap = logH
+	}
+	if entryCap < 1 {
+		entryCap = 1
+	}
+
+	clipped := make([]string, len(log))
+	for i, e := range log {
+		clipped[i] = ckClipToLines(e, w, entryCap)
+	}
+
+	start, used := len(clipped), 0
+	for start > 0 {
+		n := ckRenderedLineCount(clipped[start-1], w)
+		if used+n > logH {
+			break
+		}
+		used += n
+		start--
+	}
+	return strings.Join(clipped[start:], "\n")
+}
+
+// ckRenderedLineCount is how many lines s occupies once lipgloss word-wraps
+// it at width w — the same wrapping the log box's own render performs.
+func ckRenderedLineCount(s string, w int) int {
+	if w < 1 {
+		w = 1
+	}
+	return strings.Count(lipgloss.NewStyle().Width(w).Render(s), "\n") + 1
+}
+
+// ckClipToLines truncates one log entry to at most maxLines rendered lines,
+// marking the cut — a single overlong entry must never be able to exceed the
+// whole log pane on its own.
+func ckClipToLines(s string, w, maxLines int) string {
+	if w < 1 {
+		w = 1
+	}
+	rows := strings.Split(lipgloss.NewStyle().Width(w).Render(s), "\n")
+	if len(rows) <= maxLines {
+		return s
+	}
+	if maxLines <= 1 {
+		return ckFaintS.Render("…(truncated)")
+	}
+	rows = append(rows[:maxLines-1], ckFaintS.Render("…(truncated)"))
+	return strings.Join(rows, "\n")
 }
 
 func (m Cockpit) hint() string {

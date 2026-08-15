@@ -120,6 +120,61 @@ func TestChatMain_OutputIsExactlyHLines(t *testing.T) {
 	}
 }
 
+// One overlong entry (a pasted stack trace, a 3000-char task) must not wrap
+// past the log pane and push the input/divider off-frame — the log renderer
+// used to tail-slice by logical entry count, not rendered visual-line count,
+// and Style.Height only pads short content, it never truncates tall (#506).
+func TestChatMain_OneOverlongEntryDoesNotPushInputOffFrame(t *testing.T) {
+	m := Cockpit{w: 120, h: 40, ready: true, mode: "dispatch", input: "still typing"}
+	m.log = []string{strings.Repeat("x", 3000)}
+
+	for _, h := range []int{10, 24, 30} {
+		out := m.chatMain(60, h)
+		if got := strings.Count(out, "\n") + 1; got != h {
+			t.Errorf("chatMain(60, %d) with one huge entry produced %d lines, want %d", h, got, h)
+		}
+		if !strings.Contains(stripANSI(out), "still typing") {
+			t.Errorf("the input line was pushed off frame by one long entry:\n%s", stripANSI(out))
+		}
+	}
+}
+
+// A single overlong entry must be visibly truncated, not silently dropped —
+// the user should see something was cut, not just less log (#506).
+func TestCkClipToLines_MarksTruncationAndBoundsLength(t *testing.T) {
+	long := strings.Repeat("word ", 400)
+	got := stripANSI(ckClipToLines(long, 20, 4))
+	rows := strings.Split(got, "\n")
+	if len(rows) != 4 {
+		t.Fatalf("ckClipToLines produced %d rows, want 4", len(rows))
+	}
+	if !strings.Contains(rows[len(rows)-1], "truncated") {
+		t.Errorf("the last row does not disclose the truncation: %q", rows[len(rows)-1])
+	}
+
+	short := "a short line"
+	if got := ckClipToLines(short, 60, 4); got != short {
+		t.Errorf("a short entry was altered: %q", got)
+	}
+}
+
+// The visible-log window must size itself in wrapped lines, not logical
+// entries, and always keep the newest entry (#506).
+func TestCkVisibleLog_CapsEachEntryAndFillsFromTheTail(t *testing.T) {
+	log := []string{
+		"short one",
+		strings.Repeat("word ", 400), // would wrap past the whole pane alone
+		"short two",
+	}
+	got := stripANSI(ckVisibleLog(log, 20, 8))
+	if n := len(strings.Split(got, "\n")); n > 8 {
+		t.Errorf("ckVisibleLog produced %d lines, want <= 8:\n%s", n, got)
+	}
+	if !strings.Contains(got, "short two") {
+		t.Errorf("the newest entry is missing:\n%s", got)
+	}
+}
+
 // The sidebar must never exceed the height it's given, however many heads
 // were discovered — an uncapped list let a busy machine's real head count
 // dictate the whole view's height once JoinHorizontal pads every other
@@ -147,6 +202,30 @@ func TestSidebar_NeverExceedsGivenHeight(t *testing.T) {
 	out := m.sidebar(10)
 	if !strings.Contains(out, "more") {
 		t.Errorf("sidebar(10) with 30 heads does not disclose the hidden ones:\n%s", out)
+	}
+}
+
+// At terminal heights too short for even one head row, the sidebar used to
+// show zero heads and no "+N more" line, contradicting the header directly
+// above it, which still states the real count (#506).
+func TestSidebar_DisclosesCountWhenNoRoomForAnyHeadRow(t *testing.T) {
+	heads := make([]ckHead, 12)
+	for i := range heads {
+		heads[i] = ckHead{id: strings.Repeat("x", i%5+1), name: "head", tier: 1}
+	}
+	m := Cockpit{w: 120, h: 40, ready: true, heads: heads, mode: "dispatch"}
+
+	// The fixed GOVERNOR/MODE chrome is 8 lines; h=6 leaves no room for a
+	// single head row (avail <= 0) — exactly the state this bug is about.
+	got := stripANSI(m.sidebar(6))
+	if !strings.Contains(got, "12") {
+		t.Errorf("sidebar(6) with 12 heads does not disclose the real count:\n%s", got)
+	}
+
+	// With no heads at all there is nothing to disclose.
+	empty := Cockpit{w: 120, h: 40, ready: true, mode: "dispatch"}
+	if got := empty.sidebar(6); strings.Contains(got, "not enough room") {
+		t.Errorf("sidebar with zero heads still printed a count line:\n%s", got)
 	}
 }
 
