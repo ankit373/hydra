@@ -28,8 +28,9 @@ interface WailsGo {
       GetFleet(): Promise<Fleet>
       GetSession(runID: string): Promise<Session>
       GetEdits(runID: string): Promise<Edit[]>
-      Chat(prompt: string, enumKey: string): Promise<ChatReply>
+      Chat(prompt: string, enumKey: string, runID: string): Promise<ChatReply>
       ChatEnums(): Promise<string[]>
+      NewRunID(): Promise<string>
       GetDiff(runID: string, ref: string, file: string): Promise<Diff>
       GetVersion(): Promise<Version>
       GetUpdateStatus(): Promise<UpdateStatus>
@@ -61,9 +62,10 @@ export const GetSession = (runID: string): Promise<Session> => backend().GetSess
 export const GetEdits = (runID: string): Promise<Edit[]> => backend().GetEdits(runID)
 export const GetDiff = (runID: string, ref: string, file: string): Promise<Diff> =>
   backend().GetDiff(runID, ref, file)
-export const Chat = (prompt: string, enumKey: string): Promise<ChatReply> =>
-  backend().Chat(prompt, enumKey)
+export const Chat = (prompt: string, enumKey: string, runID: string): Promise<ChatReply> =>
+  backend().Chat(prompt, enumKey, runID)
 export const ChatEnums = (): Promise<string[]> => backend().ChatEnums()
+export const NewRunID = (): Promise<string> => backend().NewRunID()
 export const GetVersion = (): Promise<Version> => backend().GetVersion()
 export const GetUpdateStatus = (): Promise<UpdateStatus> => backend().GetUpdateStatus()
 export const TriggerUpgrade = (): Promise<UpgradeResult> => backend().TriggerUpgrade()
