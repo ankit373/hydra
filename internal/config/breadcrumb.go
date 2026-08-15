@@ -23,8 +23,7 @@ var (
 	breadcrumbCacheMu     sync.Mutex
 	breadcrumbCacheKey    string
 	breadcrumbCacheResult string
-	breadcrumbCacheErr    error
-	breadcrumbCached      bool
+	breadcrumbCached      bool // only ever set true alongside a successful result — see Breadcrumb
 )
 
 // breadcrumbFingerprint is a cheap (stat-only) signal for whether Breadcrumb
@@ -38,6 +37,12 @@ var (
 func breadcrumbFingerprint() string {
 	home := ScriptHome()
 	var b strings.Builder
+	// home must be part of the key: two different registry roots whose files
+	// happen to coincide on mtime+size (plausible on filesystems with coarser
+	// mtime resolution — NFS, some CI runners, tmpfs) would otherwise produce
+	// the identical fingerprint string and silently serve one home's cached
+	// hash to the other.
+	b.WriteString(home + "\x00")
 	for _, name := range BreadcrumbFiles {
 		info, err := os.Stat(filepath.Join(home, "registry", name))
 		if err != nil {
@@ -71,17 +76,23 @@ func Breadcrumb() (string, error) {
 
 	breadcrumbCacheMu.Lock()
 	if breadcrumbCached && breadcrumbCacheKey == key {
-		result, err := breadcrumbCacheResult, breadcrumbCacheErr
+		result := breadcrumbCacheResult
 		breadcrumbCacheMu.Unlock()
-		return result, err
+		return result, nil
 	}
 	breadcrumbCacheMu.Unlock()
 
 	result, err := computeBreadcrumb()
 
-	breadcrumbCacheMu.Lock()
-	breadcrumbCacheKey, breadcrumbCacheResult, breadcrumbCacheErr, breadcrumbCached = key, result, err, true
-	breadcrumbCacheMu.Unlock()
+	// Only a successful result is cached. A stale cached error is worse than a
+	// stale cached success: it can never self-heal until an unrelated file
+	// perturbs the fingerprint, whereas retrying costs nothing but the next
+	// call's own read.
+	if err == nil {
+		breadcrumbCacheMu.Lock()
+		breadcrumbCacheKey, breadcrumbCacheResult, breadcrumbCached = key, result, true
+		breadcrumbCacheMu.Unlock()
+	}
 
 	return result, err
 }

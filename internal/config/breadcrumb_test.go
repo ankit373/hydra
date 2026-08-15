@@ -5,7 +5,10 @@
 package config_test
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/testutil"
@@ -96,6 +99,44 @@ func TestBreadcrumb_CoversPricing(t *testing.T) {
 	}
 	if before == after {
 		t.Error("a pricing.yaml edit must change the deployment fingerprint")
+	}
+}
+
+// A fingerprint keyed only on (filename, mtime, size) — without the registry
+// root itself — would let two different HYDRA_HOME directories whose files
+// happen to share mtime+size (plausible on filesystems with coarser mtime
+// resolution: NFS, some CI runners, tmpfs) collide on the identical cache
+// key, silently serving one home's hash to the other. Forcing matching sizes
+// AND mtimes here proves `home` itself is part of the key, rather than the
+// test passing only because real-world mtimes/sizes usually differ.
+func TestBreadcrumb_DifferentHomesDoNotCollideEvenWithMatchingFileStats(t *testing.T) {
+	dirA, dirB := t.TempDir(), t.TempDir()
+	testutil.WriteRegistry(t, dirA, "routing: AAA", "models: b", "domains: c", "pricing: d")
+	testutil.WriteRegistry(t, dirB, "routing: ZZZ", "models: b", "domains: c", "pricing: d")
+
+	fixed := time.Now()
+	for _, dir := range []string{dirA, dirB} {
+		for _, name := range config.BreadcrumbFiles {
+			if err := os.Chtimes(filepath.Join(dir, "registry", name), fixed, fixed); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+
+	t.Setenv("HYDRA_HOME", dirA)
+	a, err := config.Breadcrumb()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("HYDRA_HOME", dirB)
+	b, err := config.Breadcrumb()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if a == b {
+		t.Error("two different HYDRA_HOME directories with matching file stats produced the same fingerprint — the cache is not actually keyed on home")
 	}
 }
 
