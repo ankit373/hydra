@@ -644,6 +644,115 @@ func TestCLI_Models_AddListRemoveRoundTrips(t *testing.T) {
 	}
 }
 
+// `models add` on an id that already exists in the embedded built-in catalog
+// silently shadowed it with the same "added X" phrasing whether X was
+// brand-new or a full override of a curated, heavily-routed identity like
+// "claude" (#505). This must read differently from a routine add.
+func TestCLI_ModelsAdd_WarnsWhenShadowingABuiltin(t *testing.T) {
+	populated(t)
+
+	out, cobraOut, err := run(t, "models", "add", "claude",
+		"--name", "Claude (tuned)", "--provider", "anthropic", "--cap-score", "50")
+	if err != nil {
+		t.Fatalf("`hyctl models add claude` failed: %v (%s)", err, cobraOut)
+	}
+	combined := out + cobraOut
+	if !strings.Contains(combined, "overriding built-in") {
+		t.Errorf("overriding a built-in id printed the generic message, not a distinct "+
+			"warning:\n%s", combined)
+	}
+
+	// A brand-new id must still get the ordinary phrasing.
+	out, cobraOut, err = run(t, "models", "add", "kimi-k4", "--cap-score", "70")
+	if err != nil {
+		t.Fatalf("`hyctl models add kimi-k4` failed: %v (%s)", err, cobraOut)
+	}
+	combined = out + cobraOut
+	if strings.Contains(combined, "overriding built-in") {
+		t.Errorf("a brand-new model was reported as overriding a built-in:\n%s", combined)
+	}
+	if !strings.Contains(combined, "added") {
+		t.Errorf("a brand-new model add did not say it was added:\n%s", combined)
+	}
+}
+
+// `models sync` re-run used to look up "already known" against the embedded
+// catalog only, never the overlay — so a model the user had already synced
+// and hand-tuned via `models add` looked unrecognized and was silently
+// overwritten back to a fresh heuristic capScore on every re-run, all while
+// the printed message claimed it was "already known, skipped" (#505).
+func TestCLI_ModelsSync_DoesNotRevertUserTunedCapScore(t *testing.T) {
+	populated(t)
+	seedPricingCache(t, map[string]struct{ In, Out float64 }{
+		"testvendor/test-model-xyz": {1.0, 2.0},
+	})
+
+	// First sync imports it at the heuristic score.
+	if _, cobraOut, err := run(t, "models", "sync"); err != nil {
+		t.Fatalf("first `hyctl models sync` failed: %v (%s)", err, cobraOut)
+	}
+
+	// The user tunes it by hand afterwards.
+	if _, cobraOut, err := run(t, "models", "add", "testvendor/test-model-xyz",
+		"--provider", "testvendor", "--cap-score", "99"); err != nil {
+		t.Fatalf("`hyctl models add` failed: %v (%s)", err, cobraOut)
+	}
+
+	// Re-running sync must not revert the hand-tuned score, and must say so.
+	out, cobraOut, err := run(t, "models", "sync")
+	if err != nil {
+		t.Fatalf("second `hyctl models sync` failed: %v (%s)", err, cobraOut)
+	}
+	combined := out + cobraOut
+	if !strings.Contains(combined, "1 already known, skipped") {
+		t.Errorf("sync did not report the user-tuned model as already known:\n%s", combined)
+	}
+
+	listOut, listCobra, err := run(t, "models", "list", "--json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var entries []struct {
+		ID       string `json:"id"`
+		CapScore int    `json:"capScore"`
+	}
+	if err := json.Unmarshal([]byte(listOut), &entries); err != nil {
+		t.Fatalf("models list --json did not parse: %v (%s)", err, listOut+listCobra)
+	}
+	found := false
+	for _, e := range entries {
+		if e.ID == "testvendor/test-model-xyz" {
+			found = true
+			if e.CapScore != 99 {
+				t.Errorf("capScore = %d after re-sync, want 99 (the user's tuning) — "+
+					"sync silently reverted it", e.CapScore)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("synced model missing from `models list` entirely")
+	}
+}
+
+// seedPricingCache writes a fresh pricing_cache.json so `pricing.Load()` sees
+// live OpenRouter-shaped data without reaching the network.
+func seedPricingCache(t *testing.T, models map[string]struct{ In, Out float64 }) {
+	t.Helper()
+	m := make(map[string]map[string]float64, len(models))
+	for id, p := range models {
+		m[id] = map[string]float64{"input_per_mtok": p.In, "output_per_mtok": p.Out}
+	}
+	raw, err := json.Marshal(map[string]any{
+		"fetched_at": time.Now().UTC().Format(time.RFC3339),
+		"source":     "test",
+		"models":     m,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	seed(t, "pricing_cache.json", string(raw))
+}
+
 // ── oracle ────────────────────────────────────────────────────────────────────
 
 // An oracle is a high-D evidence source — its verdict can outweigh several
@@ -868,6 +977,73 @@ func TestCLI_PricingList_WorksOffline(t *testing.T) {
 	none, noneCobra, err := run(t, "pricing", "list", "definitely-not-a-model-xyz")
 	if err == nil && strings.TrimSpace(none+noneCobra) == "" {
 		t.Error("a filter matching nothing printed nothing at all")
+	}
+}
+
+// `pricing list --json` used to emit `null` (a nil slice) instead of `[]` when
+// a filter matched nothing — valid JSON, but a script/agent iterating the
+// result as an array breaks on it (#505). docs/pricing.md exists precisely
+// because this output is meant to be machine-consumed.
+func TestCLI_PricingListJSON_EmitsEmptyArrayNotNullWhenNothingMatches(t *testing.T) {
+	populated(t)
+
+	out, cobraOut, err := run(t, "pricing", "list", "--json", "definitely-not-a-model-xyz")
+	if err != nil {
+		t.Fatalf("`hyctl pricing list --json <no-match>` failed: %v (%s)", err, cobraOut)
+	}
+	trimmed := strings.TrimSpace(out)
+	if trimmed == "null" {
+		t.Fatalf("emitted the literal null; a script iterating this as an array panics:\n%s", out)
+	}
+	var v []any
+	if err := json.Unmarshal([]byte(trimmed), &v); err != nil {
+		t.Fatalf("not a JSON array: %v\n%s", err, trimmed)
+	}
+	if v == nil {
+		t.Error("json.Unmarshal produced a nil slice — the wire form was null, not []")
+	}
+	if len(v) != 0 {
+		t.Errorf("got %d rows for a filter that should match nothing: %v", len(v), v)
+	}
+}
+
+// `pricing list` used to only walk the OpenRouter-fetched map, so CLI-agent
+// heads (claude-core, opus-thinking, …) — priced from registry/pricing.yaml,
+// keyed by tier rather than a model name — could never appear here at all,
+// and a fresh/offline install showed a fully empty table (#505).
+func TestCLI_PricingList_MergesTierPricing(t *testing.T) {
+	populated(t)
+
+	out, cobraOut, err := run(t, "pricing", "list", "claude-core")
+	if err != nil {
+		t.Fatalf("`hyctl pricing list claude-core` failed: %v (%s)", err, cobraOut)
+	}
+	if !strings.Contains(out+cobraOut, "claude-core") {
+		t.Fatalf("tier-based pricing for claude-core never showed up:\n%s", out+cobraOut)
+	}
+
+	jsonOut, jsonCobra, err := run(t, "pricing", "list", "--json")
+	if err != nil {
+		t.Fatalf("`hyctl pricing list --json` failed: %v (%s)", err, jsonCobra)
+	}
+	var rows []struct {
+		Model  string `json:"model"`
+		Source string `json:"source"`
+	}
+	if err := json.Unmarshal([]byte(jsonOut), &rows); err != nil {
+		t.Fatalf("not valid JSON: %v\n%s", err, jsonOut)
+	}
+	var sawTier bool
+	for _, r := range rows {
+		if r.Model == "claude-core" {
+			sawTier = true
+			if r.Source != "tier" {
+				t.Errorf("claude-core source = %q, want %q", r.Source, "tier")
+			}
+		}
+	}
+	if !sawTier {
+		t.Fatalf("claude-core is absent from `pricing list --json`:\n%s", jsonOut)
 	}
 }
 

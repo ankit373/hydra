@@ -20,8 +20,19 @@ type ModelPrice struct {
 
 // TierPrice holds per-million-token rates for one tier (from pricing.yaml).
 type TierPrice struct {
+	ID               string  `yaml:"id"`
 	InputPerMillion  float64 `yaml:"input_per_million"`
 	OutputPerMillion float64 `yaml:"output_per_million"`
+}
+
+// TierEntry is one tier's fallback pricing, identified by its registry id
+// (e.g. "claude-core") rather than a tier number — the form callers that
+// merge it alongside OpenRouter model rows want.
+type TierEntry struct {
+	Tier             int
+	ID               string
+	InputPerMillion  float64
+	OutputPerMillion float64
 }
 
 // DB is the live pricing store. Load it once at startup with Load().
@@ -141,6 +152,23 @@ func (db *DB) TierPrice(tier int) (TierPrice, bool) {
 // Returns false when pricing.yaml was missing or unreadable.
 func (db *DB) HasTiers() bool {
 	return len(db.tiers) > 0
+}
+
+// TierEntries returns every tier-based fallback price, sorted by tier number.
+// This is what prices the CLI-agent heads (claude-core, opus-thinking, …) that
+// never appear in OpenRouter's catalog — `pricing list` merges this in
+// alongside Models() so those heads are visible at all (#505).
+func (db *DB) TierEntries() []TierEntry {
+	out := make([]TierEntry, 0, len(db.tiers))
+	for tier, tp := range db.tiers {
+		if tp.ID == "" {
+			continue
+		}
+		out = append(out, TierEntry{Tier: tier, ID: tp.ID,
+			InputPerMillion: tp.InputPerMillion, OutputPerMillion: tp.OutputPerMillion})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Tier < out[j].Tier })
+	return out
 }
 
 func cost(inputPerM, outputPerM float64, inputTokens, outputTokens int) float64 {
