@@ -233,7 +233,38 @@ func (g *Graph) BlastRadiusForFile(file string) float64 {
 	}
 	count := len(g.transitiveDependents(seeds))
 	base := 1.0 + math.Log2(1.0+float64(count))
-	return base * g.PercolationFactor(file)
+	return base * g.percolationFactorForSeeds(seeds)
+}
+
+// FileImpact bundles what BlastRadiusForFile, PercolationFactor,
+// DependentCountForFile, and Knows each separately compute about one file.
+// Every caller that wants more than one of these numbers (hyctl graph blast,
+// the TUI dashboard, hyctl security's blast-radius check all want at least
+// three) used to resolve seedsForFile once per call and run
+// transitiveDependents' BFS twice over — Impact resolves the seed set once
+// and derives all four from that single pass.
+type FileImpact struct {
+	Known       bool
+	Dependents  int
+	Radius      float64
+	Percolation float64
+}
+
+// Impact is the single-resolution counterpart to calling BlastRadiusForFile,
+// PercolationFactor, DependentCountForFile, and Knows separately for file.
+func (g *Graph) Impact(file string) FileImpact {
+	seeds := g.seedsForFile(file)
+	if len(seeds) == 0 {
+		return FileImpact{Radius: 1.0, Percolation: 1.0}
+	}
+	count := len(g.transitiveDependents(seeds))
+	percolation := g.percolationFactorForSeeds(seeds)
+	return FileImpact{
+		Known:       true,
+		Dependents:  count,
+		Radius:      (1.0 + math.Log2(1.0+float64(count))) * percolation,
+		Percolation: percolation,
+	}
 }
 
 // Kappa is the Molloy–Reed ratio κ = ⟨k²⟩/⟨k⟩ of the (undirected projection of
@@ -267,11 +298,21 @@ const percolationCap = 2.0
 // differently when one is a densely-connected hub and the other is peripheral.
 // Subcritical graph, unknown file, or no graph → exactly 1.0 (backward compatible).
 func (g *Graph) PercolationFactor(file string) float64 {
-	if g == nil || g.meanDeg <= 0 || g.kappa < 2.0 {
+	if g == nil {
 		return 1.0
 	}
 	seeds := g.seedsForFile(file)
 	if len(seeds) == 0 {
+		return 1.0
+	}
+	return g.percolationFactorForSeeds(seeds)
+}
+
+// percolationFactorForSeeds is PercolationFactor over an already-resolved seed
+// set — the seed-set counterpart Impact uses so it doesn't pay for a second
+// seedsForFile resolution of the same file.
+func (g *Graph) percolationFactorForSeeds(seeds []string) float64 {
+	if g.meanDeg <= 0 || g.kappa < 2.0 {
 		return 1.0
 	}
 	maxDeg := 0

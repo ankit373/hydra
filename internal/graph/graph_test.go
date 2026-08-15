@@ -122,6 +122,34 @@ func TestBlastRadius_UnknownAndEmpty(t *testing.T) {
 	}
 }
 
+// Impact resolves seedsForFile once and derives Radius/Dependents/Percolation
+// from that single pass — it must agree exactly with calling
+// BlastRadiusForFile, PercolationFactor, DependentCountForFile, and Knows
+// separately, for a known hub, a known leaf, and an unknown file.
+func TestImpact_MatchesSeparateCalls(t *testing.T) {
+	g := sampleGraph()
+	for _, file := range []string{"a.go", "c.go", "nonexistent.go"} {
+		impact := g.Impact(file)
+		if impact.Known != g.Knows(file) {
+			t.Errorf("%s: Impact.Known = %v, want %v", file, impact.Known, g.Knows(file))
+		}
+		if wantRadius := g.BlastRadiusForFile(file); math.Abs(impact.Radius-wantRadius) > 1e-9 {
+			t.Errorf("%s: Impact.Radius = %v, want %v", file, impact.Radius, wantRadius)
+		}
+		if wantDeps := g.DependentCountForFile(file); impact.Dependents != wantDeps {
+			t.Errorf("%s: Impact.Dependents = %v, want %v", file, impact.Dependents, wantDeps)
+		}
+		if wantPct := g.PercolationFactor(file); math.Abs(impact.Percolation-wantPct) > 1e-9 {
+			t.Errorf("%s: Impact.Percolation = %v, want %v", file, impact.Percolation, wantPct)
+		}
+	}
+
+	var empty *Graph
+	if got := empty.Impact("a.go"); got.Known || got.Radius != 1.0 || got.Percolation != 1.0 || got.Dependents != 0 {
+		t.Errorf("nil graph Impact = %+v, want the all-neutral zero value", got)
+	}
+}
+
 func TestCycleSafety(t *testing.T) {
 	g := fromDoc(Doc{
 		Nodes: []Node{{ID: "a", File: "a.go"}, {ID: "b", File: "b.go"}},
