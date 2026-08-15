@@ -57,13 +57,16 @@ func ckLoadMetrics(pr *pricing.DB) ckMetrics {
 		lastMS:  map[string]int64{},
 	}
 
-	rows, err := cost.LoadAll()
-	if err == nil && len(rows) > 0 {
-		m.latency, m.lastMS = ckLatencySeries(rows)
-		m.savedUSD, m.baseUSD = ckSavings(rows, pr)
-	}
-	if s, err := cost.Summary(); err == nil && s != nil {
-		m.spendUSD = s.Today.EstCostUSD
+	// One read of cost.jsonl feeds latency, savings, and today's spend — this
+	// used to be three independent full reads (LoadAll here, plus a separate
+	// Summary call here and another in ckSpendToday), tripling every cockpit
+	// startup's cost.jsonl I/O for identical data.
+	if rows, err := cost.LoadAll(); err == nil {
+		if len(rows) > 0 {
+			m.latency, m.lastMS = ckLatencySeries(rows)
+			m.savedUSD, m.baseUSD = ckSavings(rows, pr)
+		}
+		m.spendUSD = cost.SummaryFromRows(rows).Today.EstCostUSD
 	}
 	if cal, err := trust.New(trust.DefaultPath()); err == nil {
 		m.calibrator = cal
@@ -165,9 +168,7 @@ func (m ckMetrics) ckBlastFor(file string) (radius float64, dependents int, kapp
 	}
 	radius = m.graph.BlastRadiusForFile(file)
 	kappa = m.graph.PercolationFactor(file)
-	for _, id := range m.graph.NodesInFile(file) {
-		dependents += m.graph.DependentCount(id)
-	}
+	dependents = m.graph.DependentCountForFile(file)
 	// A file absent from the graph yields the neutral radius; saying nothing is
 	// more honest than reporting a floor value as a measurement.
 	if radius <= 1.0 && dependents == 0 {

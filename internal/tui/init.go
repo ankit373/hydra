@@ -53,10 +53,17 @@ type InitModel struct {
 	localOnly bool
 	skills    []string
 	err       error
+
+	// specs is detected once here, not per render — viewTiers used to call
+	// sysinfo.Detect() (subprocess spawns: sysctl/vm_stat/nvidia-smi) fresh on
+	// every re-render of the Tiers step, re-probing hardware on every
+	// arrow-key press. install.go's NewInstallModel already gets this right;
+	// this mirrors it.
+	specs *sysinfo.Specs
 }
 
 func NewInitModel(result *probe.Result) InitModel {
-	return InitModel{result: result}
+	return InitModel{result: result, specs: sysinfo.Detect()}
 }
 
 func (m InitModel) Init() tea.Cmd { return nil }
@@ -183,11 +190,10 @@ func (m InitModel) viewTiers(b *strings.Builder) {
 		}
 	}
 	if hasLocal {
-		specs := sysinfo.Detect()
-		best := specs.BestOllamaModel()
+		best := m.specs.BestOllamaModel()
 		b.WriteString(sDim.Render(fmt.Sprintf(
 			"\n  Hardware: %s\n  Best local model for your machine: %s\n",
-			specs.Summary(), best.DisplayName,
+			m.specs.Summary(), best.DisplayName,
 		)))
 	}
 

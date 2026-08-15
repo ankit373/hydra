@@ -195,12 +195,13 @@ func NewCockpit() Cockpit {
 
 	pct := ckClaudePct()
 	secReport, _ := security.Build(probed.Heads) // best-effort: nil on error, handled by the view
+	metrics := ckLoadMetrics(pr)
 	m := Cockpit{
 		mode:      "dispatch",
 		claudePct: pct,
 		heads:     heads,
-		spend:     ckSpendToday(),
-		metrics:   ckLoadMetrics(pr),
+		spend:     metrics.spendUSD, // same value ckSpendToday used to fetch with its own separate cost.jsonl read
+		metrics:   metrics,
 		security:  secReport,
 	}
 	m.runID, m.runLive, m.treeRows = ckLoadTree()
@@ -241,7 +242,11 @@ func ckClaudePct() int {
 	return s.ClaudePct
 }
 
-// ckSpendToday returns today's real estimated spend from cost.jsonl.
+// ckSpendToday returns today's real estimated spend from cost.jsonl. Kept as
+// its own reader (NewCockpit no longer calls it — it gets spend from the
+// metrics it already loaded, via cost.SummaryFromRows, to avoid a second full
+// read of the same file) because it is independently useful and tested as
+// the "absent data reads as zero, not a crash" contract on its own.
 func ckSpendToday() float64 {
 	summary, err := cost.Summary()
 	if err != nil || summary == nil {
@@ -629,27 +634,47 @@ func (m Cockpit) hint() string {
 // that can report an error to the user should reject it up front with
 // ValidSnapshotView.
 func CockpitSnapshotView(view int) string {
+	m := ckSnapshotModel()
+	if !ckValidView(view) {
+		view = ckViewChatCode
+	}
+	m.view = view
+	return m.View()
+}
+
+// ckSnapshotModel builds the one demo Cockpit state every snapshot view
+// renders from. Extracted so CockpitSnapshot builds it once instead of once
+// per view — NewCockpit alone does a machine probe, a full security ledger
+// scan, and a cost.jsonl read, and CockpitSnapshot used to pay for all three
+// four times over for what is really one consistent snapshot shown from four
+// angles.
+func ckSnapshotModel() Cockpit {
 	m := NewCockpit()
 	m = m.run("write a User DTO for profile settings")            // SIMPLE → TS interface
 	m = m.run("rotate the signing key in internal/auth/token.go") // CORE   → Go key-rotation
 	m.codeShown = len(m.codeLines)                                // reveal the whole snippet
 	m.treeSel = 2                                                 // highlight the token-rotation node
-	if !ckValidView(view) {
-		view = ckViewChatCode
-	}
-	m.view = view
 	m.w, m.h, m.ready = 100, 30, true
-	return m.View()
+	return m
 }
 
 // CockpitSnapshot renders all four views stacked, each labelled — the
 // representative frame shown by `hyctl tui --snapshot`.
 func CockpitSnapshot() string {
 	label := func(s string) string { return ckLabelS.Render("── " + s + " " + strings.Repeat("─", 40)) }
-	return label("VIEW 1/4 · CHAT + CODE (tab)") + "\n" + CockpitSnapshotView(0) + "\n\n" +
-		label("VIEW 2/4 · DASHBOARD (tab)") + "\n" + CockpitSnapshotView(1) + "\n\n" +
-		label("VIEW 3/4 · AGENT TREE (tab · ↑↓ select)") + "\n" + CockpitSnapshotView(2) + "\n\n" +
-		label("VIEW 4/4 · SECURITY (tab)") + "\n" + CockpitSnapshotView(ckViewSecurity)
+	base := ckSnapshotModel()
+	view := func(v int) string {
+		m := base
+		if !ckValidView(v) {
+			v = ckViewChatCode
+		}
+		m.view = v
+		return m.View()
+	}
+	return label("VIEW 1/4 · CHAT + CODE (tab)") + "\n" + view(0) + "\n\n" +
+		label("VIEW 2/4 · DASHBOARD (tab)") + "\n" + view(1) + "\n\n" +
+		label("VIEW 3/4 · AGENT TREE (tab · ↑↓ select)") + "\n" + view(2) + "\n\n" +
+		label("VIEW 4/4 · SECURITY (tab)") + "\n" + view(ckViewSecurity)
 }
 
 // ── helpers ─────────────────────────────────────────────────────────────────────
