@@ -5,6 +5,7 @@ package swarm
 import (
 	"context"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -31,12 +32,15 @@ type SPRTResult struct {
 // soon as the calibrated confidence reaches opts.Confidence. It is the production
 // caller of trust.Run — the swarm executor is adapted to trust.Executor here.
 func (s *Swarm) RunSPRT(ctx context.Context, prompt string, opts Options) (*SPRTResult, error) {
-	if opts.Confidence <= 0 || opts.Confidence >= 1 {
+	if math.IsNaN(opts.Confidence) || opts.Confidence <= 0 || opts.Confidence >= 1 {
 		return nil, fmt.Errorf("swarm sprt: confidence must be in (0,1), got %v", opts.Confidence)
 	}
 	cfg, err := config.Load()
 	if err != nil {
 		return nil, fmt.Errorf("swarm sprt: config load: %w", err)
+	}
+	if err := validateSwarmTiers(cfg, opts); err != nil {
+		return nil, err
 	}
 
 	selected, err := resolveSelector(opts, cfg).Select(s.heads, opts)

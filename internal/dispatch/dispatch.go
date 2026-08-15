@@ -174,6 +174,10 @@ func New(ctx context.Context) (*Dispatcher, error) {
 
 // Dispatch routes prompt through policy + tier selection + execution with fallback.
 func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) (*Result, error) {
+	if err := ValidateTierHint(d.cfg, opts.TierHint); err != nil {
+		return nil, err
+	}
+
 	// Resolve the hint to a capability number BEFORE the governor runs. A named
 	// config tier ("expert") is otherwise opaque to claudeMode's Atoi, which
 	// left the whole token-preservation table inert for every non-numeric hint
@@ -481,6 +485,34 @@ const (
 	minTier = 1
 	maxTier = 10
 )
+
+// ValidateTierHint rejects a --tier value that cannot resolve to anything: a
+// numeric value outside [minTier,maxTier], or a name that matches no
+// configured tier. A name that matches a configured tier but currently has no
+// live heads is NOT an error here — that is a runtime availability gap
+// selectHeads reports on its own, distinct from a malformed hint.
+//
+// Plain dispatch, --swarm and --confidence (SPRT) all call this before
+// selecting heads, so an invalid --tier/--swarm-judge-tier value fails the
+// same way in every mode instead of silently widening to a broader, pricier
+// selection (#501).
+func ValidateTierHint(cfg *config.Config, hint string) error {
+	if hint == "" {
+		return nil
+	}
+	if n, err := strconv.Atoi(hint); err == nil {
+		if n < minTier || n > maxTier {
+			return fmt.Errorf("tier %d is out of range (valid: %d-%d)", n, minTier, maxTier)
+		}
+		return nil
+	}
+	for _, t := range cfg.Tiers {
+		if t.Name == hint {
+			return nil
+		}
+	}
+	return fmt.Errorf("unknown tier %q: not a number %d-%d and not a configured tier name", hint, minTier, maxTier)
+}
 
 // resolveTierHint normalizes a tier hint to a capability number ("1".."10"),
 // and reports the two ways a hint can be invalid on its face:
@@ -835,43 +867,34 @@ func truncate(s string, n int) string {
 	return s[:n] + "…"
 }
 
+// enumTiers maps each routing enum key to its tier number — the single
+// source of truth EnumToTier and IsKnownEnum both read, so editor, parallel,
+// and cmd/hydra's --enum validation can never drift apart.
+var enumTiers = map[string]string{
+	"GRUNT":     "10",
+	"TRIVIAL":   "9",
+	"SIMPLE":    "8",
+	"STANDARD":  "7",
+	"MODERATE":  "6",
+	"COMPLEX":   "5",
+	"HARD":      "4",
+	"VERY_HARD": "3",
+	"EXPERT":    "2",
+	"CORE":      "1",
+}
+
 // EnumToTier maps a routing enum key (e.g. "SIMPLE") to a tier number string.
-// Single source of truth — editor and parallel both delegate here.
+// An unrecognized key returns "" — the same value as an empty enum, which is
+// why a caller that must reject a typo instead of silently routing
+// unrestricted checks IsKnownEnum first (#501).
 func EnumToTier(enum string) string {
-	const (
-		GRUNT     = "10"
-		TRIVIAL   = "9"
-		SIMPLE    = "8"
-		STANDARD  = "7"
-		MODERATE  = "6"
-		COMPLEX   = "5"
-		HARD      = "4"
-		VERY_HARD = "3"
-		EXPERT    = "2"
-		CORE      = "1"
-	)
-	switch enum {
-	case "GRUNT":
-		return GRUNT
-	case "TRIVIAL":
-		return TRIVIAL
-	case "SIMPLE":
-		return SIMPLE
-	case "STANDARD":
-		return STANDARD
-	case "MODERATE":
-		return MODERATE
-	case "COMPLEX":
-		return COMPLEX
-	case "HARD":
-		return HARD
-	case "VERY_HARD":
-		return VERY_HARD
-	case "EXPERT":
-		return EXPERT
-	case "CORE":
-		return CORE
-	default:
-		return ""
-	}
+	return enumTiers[enum]
+}
+
+// IsKnownEnum reports whether enum is a recognized routing enum key.
+// EnumToTier's "" result is ambiguous between "no enum given" and
+// "unrecognized key" — this is how a caller tells the two apart.
+func IsKnownEnum(enum string) bool {
+	_, ok := enumTiers[enum]
+	return ok
 }

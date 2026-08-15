@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -585,7 +586,15 @@ func cmdDispatch() *cobra.Command {
 		Use:   "dispatch <prompt>",
 		Short: "Route a prompt to the best available Head",
 		Args:  cobra.MinimumNArgs(1),
-		RunE: func(_ *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// An unrecognized --enum must fail here, before anything routes: its
+			// zero value is byte-identical to "no enum given" everywhere else in
+			// this function, so a typo silently routed to the single strongest
+			// (most expensive) head instead of being reported (#501).
+			if enumKey != "" && !dispatch.IsKnownEnum(enumKey) {
+				return fmt.Errorf("unknown --enum %q: not a recognized routing enum key", enumKey)
+			}
+
 			prompt := strings.Join(args, " ")
 			ctx := context.Background()
 
@@ -638,6 +647,18 @@ func cmdDispatch() *cobra.Command {
 			// blast radius, --irreversible, --production, or PII auto-detected
 			// in the prompt). Risk raises the bar but never lowers a target the
 			// user explicitly asked for.
+			//
+			// Validate the raw flag the moment it was set — before --file's
+			// derived target (always in [0.5, maxConfidence]) can override an
+			// invalid explicit value and mask it. `> 0` alone let NaN/negative
+			// values slip through in both dry-run and real execution, since NaN
+			// compares false against every bound (#501); a confidence of exactly
+			// 0 is otherwise indistinguishable from the flag never being passed
+			// at all, so it is only rejected when the user actually typed it.
+			if cmd.Flags().Changed("confidence") &&
+				(math.IsNaN(confidence) || confidence <= 0 || confidence >= 1) {
+				return fmt.Errorf("--confidence must be in (0,1), got %v", confidence)
+			}
 			effectiveConf := confidence
 			touchesPII := policy.ContainsPII(policy.Request{Prompt: prompt})
 			// The plain dispatch path (d.Dispatch) reads cfg.Policies["pii"] itself
@@ -2277,6 +2298,11 @@ func printSwarmResult(r *swarm.SwarmResult) {
 		if r.Verdict.Reason != "" {
 			fmt.Printf("  %s\n", dimStyle.Render(`"`+r.Verdict.Reason+`"`))
 		}
+		// A fallback with no reason shown is indistinguishable from a healthy
+		// LLM judge run — surface why the primary judge was skipped (#501).
+		if r.Verdict.Meta.UsedFallback && r.Verdict.Meta.FallbackReason != "" {
+			fmt.Printf("  %s\n", warnStyle.Render("judge fallback: "+r.Verdict.Meta.FallbackReason))
+		}
 	} else if r.Winner != nil {
 		fmt.Printf("\n  %s %s\n",
 			dimStyle.Render("Winner →"),
@@ -3118,6 +3144,12 @@ func cmdTrustDefect() *cobra.Command {
 					blastSource = "graph"
 				}
 			}
+			// NaN/+Inf would otherwise render as a nonsensical "$NaN" / "NaN%"
+			// recommendation in text mode and crash json.Encode outright
+			// ("json: unsupported value: NaN") in --json mode (#501).
+			if math.IsNaN(blast) || math.IsInf(blast, 0) {
+				return fmt.Errorf("--blast must be a finite number, got %v", blast)
+			}
 
 			task := trust.Task{
 				Domain:       domain,
@@ -3126,16 +3158,23 @@ func cmdTrustDefect() *cobra.Command {
 				TouchesPII:   pii,
 				Production:   production,
 			}
-			cost, conf := dm.CostUSD(task), dm.RequiredConfidence(task)
+			// CostUSD/RequiredConfidence clamp BlastRadius<=0 to 1.0 internally;
+			// display that same clamped value rather than the raw input, or a
+			// `--blast 0` run shows "blast=0.00" next to a cost/confidence that
+			// was actually computed at 1.0 (#501).
+			usedBlast := trust.NormalizeBlastRadius(blast)
+			cost := dm.CostUSD(task)
+			conf := dm.RequiredConfidence(task)
+
 			if jsonOut {
 				return json.NewEncoder(os.Stdout).Encode(map[string]any{
-					"defect_cost_usd": cost, "blast_radius": blast, "blast_source": blastSource,
+					"domain": domain, "blast_radius": usedBlast, "blast_source": blastSource,
 					"irreversible": irreversible, "pii": pii, "production": production,
-					"required_confidence": conf,
+					"defect_cost_usd": cost, "required_confidence": conf,
 				})
 			}
 			fmt.Printf("  defect cost ≈ $%.2f  (blast=%.2f [%s] irreversible=%v pii=%v prod=%v)\n",
-				cost, blast, blastSource, irreversible, pii, production)
+				cost, usedBlast, blastSource, irreversible, pii, production)
 			fmt.Printf("  → demands confidence ≥ %.1f%%  (use with: hyctl dispatch --confidence %.3f)\n",
 				conf*100, conf)
 			return nil

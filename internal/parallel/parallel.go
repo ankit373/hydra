@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -244,16 +245,9 @@ func runEditTask(ctx context.Context, d *dispatch.Dispatcher, dispatchErr error,
 	}
 	resolved, _ := reg.Resolve(file)
 
-	// Policy (Phase 1)
-	if eng, pErr := policy.LoadFilePolicy(config.ScriptHome()); pErr == nil {
-		_ = eng.Decide(policy.Spec{
-			File:          file,
-			FileExtension: fileExt(file),
-			Workspace:     wsName,
-		})
-	}
-
-	// Snapshot
+	// Snapshot — read before Decide, so the file-policy engine's line-count
+	// and diff-size rules see the file's real shape instead of always
+	// matching on the zero value.
 	origContent, origExisted := readFile(file)
 	backup := file + ".hydra-bak"
 	createdBackup := false
@@ -265,6 +259,24 @@ func runEditTask(ctx context.Context, d *dispatch.Dispatcher, dispatchErr error,
 		if createdBackup {
 			_ = os.Remove(backup)
 		}
+	}
+
+	// Policy (Phase 1). The diff-size cap is enforced below, after the write —
+	// a Decide result that is only ever discarded is not a policy, and the
+	// Security view's own "file-policy caps declared but never run" finding
+	// traced to this exact line (#501).
+	fp := policy.FilePolicy{DiffSizeCapPct: 90} // matches defaultFilePolicy's cap if policy.yaml can't load
+	if eng, pErr := policy.LoadFilePolicy(config.ScriptHome()); pErr == nil {
+		enumTier, _ := strconv.Atoi(enumToTier(task.Enum))
+		fp = eng.Decide(policy.Spec{
+			File:          file,
+			FileLines:     strings.Count(origContent, "\n") + 1,
+			FileCount:     1,
+			FileExtension: fileExt(file),
+			HasGit:        resolved.GitRoot != "",
+			EnumTier:      enumTier,
+			Workspace:     wsName,
+		})
 	}
 
 	// Build prompt
@@ -328,6 +340,26 @@ func runEditTask(ctx context.Context, d *dispatch.Dispatcher, dispatchErr error,
 		return failEdit(task, "rename_failed: "+err.Error())
 	}
 
+	added, removed := diffStats(file, origContent, resolved.GitRoot, backup, origExisted)
+
+	// Enforce the diff-size cap policy declared: registry/policy.yaml's own
+	// doc comment calls it "reject edits changing > N% of file", and nothing
+	// rejected anything before this. A brand-new file has no "percent of
+	// itself changed" to measure, so the cap only applies to modifications.
+	if origExisted && fp.DiffSizeCapPct > 0 {
+		if total := strings.Count(origContent, "\n") + 1; total > 0 {
+			if pct := float64(added+removed) / float64(total) * 100; pct > float64(fp.DiffSizeCapPct) {
+				rollback(file, origContent, origExisted, resolved.GitRoot, backup)
+				return mustMarshal(EditResult{
+					Label: task.Label, Enum: task.Enum, Mode: "edit",
+					Status: "fail", File: file, Workspace: wsName, GitRoot: resolved.GitRoot,
+					RolledBack: true,
+					Error:      fmt.Sprintf("diff_size_cap_exceeded: changed %.0f%% of file (cap %d%%)", pct, fp.DiffSizeCapPct),
+				})
+			}
+		}
+	}
+
 	// Validate
 	validate := true
 	if task.Validate != nil {
@@ -351,7 +383,6 @@ func runEditTask(ctx context.Context, d *dispatch.Dispatcher, dispatchErr error,
 		}
 	}
 
-	added, removed := diffStats(file, origContent, resolved.GitRoot, backup, origExisted)
 	return mustMarshal(EditResult{
 		Label: task.Label, Enum: task.Enum, Mode: "edit",
 		Status: "ok", File: file, Workspace: wsName, GitRoot: resolved.GitRoot,

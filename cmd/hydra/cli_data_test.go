@@ -404,6 +404,50 @@ func TestCLI_TrustDefect_RaisesTheBarForRiskyWork(t *testing.T) {
 	}
 }
 
+// A non-finite --blast must never reach the model: text mode used to print a
+// nonsensical "$NaN" recommendation (exit 0), and --json crashed outright with
+// a leaked Go internal error ("json: unsupported value: NaN", exit 1) instead
+// of a clean CLI error (#501).
+func TestCLI_TrustDefect_RejectsNonFiniteBlast(t *testing.T) {
+	populated(t)
+
+	for _, blast := range []string{"NaN", "+Inf", "-Inf"} {
+		t.Run("text/"+blast, func(t *testing.T) {
+			_, _, err := run(t, "trust", "defect", "--blast", blast)
+			if err == nil {
+				t.Errorf("`trust defect --blast %s` was accepted", blast)
+			}
+		})
+		t.Run("json/"+blast, func(t *testing.T) {
+			_, _, err := run(t, "trust", "defect", "--blast", blast, "--json")
+			if err == nil {
+				t.Errorf("`trust defect --blast %s --json` was accepted", blast)
+			}
+		})
+	}
+}
+
+// The JSON blast_radius must match the value CostUSD/RequiredConfidence
+// actually used, not the raw --blast input: BlastRadius<=0 is internally
+// clamped to 1.0, and the CLI used to display the unclamped input instead.
+func TestCLI_TrustDefect_JSONBlastRadiusMatchesTheUsedValue(t *testing.T) {
+	populated(t)
+
+	for _, blast := range []string{"0", "-5"} {
+		out, cobraOut, err := run(t, "trust", "defect", "--blast", blast, "--json")
+		if err != nil {
+			t.Fatalf("`trust defect --blast %s --json` failed: %v (%s)", blast, err, cobraOut)
+		}
+		var got map[string]any
+		if jerr := json.Unmarshal([]byte(out), &got); jerr != nil {
+			t.Fatalf("output is not JSON: %v\n%s", jerr, out)
+		}
+		if br, _ := got["blast_radius"].(float64); br != 1 {
+			t.Errorf("--blast %s: blast_radius = %v, want 1 (the clamped value CostUSD used)", blast, got["blast_radius"])
+		}
+	}
+}
+
 // ── graph ─────────────────────────────────────────────────────────────────────
 
 func seedGraph(t *testing.T) string {
