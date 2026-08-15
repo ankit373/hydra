@@ -175,8 +175,16 @@ func Build(heads []provider.Head) (*Report, error) {
 	r.IntegrityIntact = chainRes.Intact
 
 	// Loaded once, shared by AssessEvidence and computeCoverage's LLM09 check
-	// (both used to independently call trust.LoadRuns on the same file).
-	runs, _ := trust.LoadRuns(trust.DefaultLogPath())
+	// (both used to independently call trust.LoadRuns on the same file). A
+	// scan failure partway through (a corrupted trust.jsonl) can hand back a
+	// non-nil, partially-populated slice alongside the error — treated as no
+	// runs at all, matching the "any load error means Gap" invariant LLM09's
+	// check relies on, rather than silently reporting Configured off of
+	// truncated/corrupt data.
+	runs, runsErr := trust.LoadRuns(trust.DefaultLogPath())
+	if runsErr != nil {
+		runs = nil
+	}
 	// Ditto: shared by the check below and LLM10's coverage category, instead
 	// of each re-scanning events for the same cost-ceiling-denial predicate.
 	costCeilingDenials := countCostCeilingDenials(events)
