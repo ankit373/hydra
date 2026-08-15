@@ -70,7 +70,7 @@ var cliTemplates = map[string]cliTemplate{
 	"anthropic":   {args: []string{"--print", ""}}, // claude --print "<prompt>"
 	"openai":      {args: []string{"exec", ""}},    // codex exec "<prompt>" — bare codex launches its interactive TUI (#491)
 	"google":      {args: []string{""}},            // gemini "<prompt>"
-	"antigravity": {args: []string{""}},            // agy "<prompt>"
+	"antigravity": {args: []string{"--print", ""}}, // agy --print "<prompt>" — bare agy launches its interactive TUI and, unlike codex, still exits 0 (#492)
 	"cursor":      {args: []string{"--stdio"}, stdinPrompt: true},
 	"amazon":      {args: []string{""}},                       // kiro "<prompt>"
 	"codeium":     {args: []string{""}},                       // windsurf "<prompt>"
