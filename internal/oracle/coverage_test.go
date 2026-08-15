@@ -463,3 +463,70 @@ func TestDefaultWriteTemp_EmptyCandidateStillMaterializes(t *testing.T) {
 		t.Errorf("empty candidate wrote %d bytes", info.Size())
 	}
 }
+
+// A verifier that writes far more than outputCap to stdout, on one line with
+// no newline, must not have that output captured or displayed unbounded: the
+// Accumulator caps memory at outputCap, and firstLine caps the displayed
+// Detail independently at detailMaxLen — a truncation marker inside the
+// captured buffer supplies the newline firstLine slices on (#504).
+func TestVerify_LargeOutputIsBoundedAndTruncated(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Log("windows: no yes/head/tr pipeline to generate the fixture")
+		return
+	}
+	// Generated via a pipeline, not embedded in argv, so this never touches
+	// the {answer}/argv size guard tested separately below.
+	script := `yes | head -c 300000 | tr -d '\n'; exit 1`
+	o := &CommandOracle{Args: []string{"sh", "-c", script}, Source: "v"}
+
+	v, err := o.Verify(context.Background(), "x", trust.Task{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.Passed {
+		t.Fatal("a command exiting 1 reported a pass")
+	}
+	if got, max := len(v.Detail), detailMaxLen+len("...(truncated)"); got > max {
+		t.Errorf("Detail is %d bytes, want <= %d — a ~150000-byte verifier line reached the caller unbounded", got, max)
+	}
+	if !strings.HasSuffix(v.Detail, "...(truncated)") {
+		t.Errorf("Detail = %q, want it to end with the truncation marker", v.Detail)
+	}
+}
+
+// A candidate too large to pass via {answer} must fail with a clear,
+// actionable error before exec is ever attempted — not the raw OS
+// "fork/exec: argument list too long" (#504).
+func TestVerify_OversizedAnswerCandidateReturnsCleanError(t *testing.T) {
+	o := &CommandOracle{Template: "echo {answer}", Source: "v"}
+	huge := strings.Repeat("a", maxArgvBytes+1)
+
+	_, err := o.Verify(context.Background(), huge, trust.Task{})
+	if err == nil {
+		t.Fatal("an oversized {answer} candidate verified without error")
+	}
+	if !strings.Contains(err.Error(), "candidate too large to pass via {answer}") {
+		t.Errorf("error = %q, want a clear oversized-candidate message naming {answer}", err)
+	}
+	if !strings.Contains(err.Error(), "{file}") {
+		t.Errorf("error = %q, want it to suggest {file} as the alternative", err)
+	}
+	if strings.Contains(err.Error(), "argument list too long") {
+		t.Error("the raw OS fork/exec error leaked through instead of a clean message")
+	}
+}
+
+// The same guard must apply through the Args path (buildArgsFromArgv), not
+// just Template — both substitution shapes reach the same exec.Command call.
+func TestVerify_OversizedAnswerViaArgsReturnsCleanError(t *testing.T) {
+	o := &CommandOracle{Args: []string{"echo", "{answer}"}, Source: "v"}
+	huge := strings.Repeat("b", maxArgvBytes+1)
+
+	_, err := o.Verify(context.Background(), huge, trust.Task{})
+	if err == nil {
+		t.Fatal("an oversized {answer} candidate via Args verified without error")
+	}
+	if !strings.Contains(err.Error(), "candidate too large to pass via {answer}") {
+		t.Errorf("error = %q, want a clear oversized-candidate message", err)
+	}
+}

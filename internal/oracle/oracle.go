@@ -15,6 +15,25 @@ import (
 	"strings"
 
 	"github.com/ankit373/hydra/internal/trust"
+	"github.com/ankit373/hydra/internal/util"
+)
+
+const (
+	// outputCap bounds the verifier's combined stdout+stderr capture. This is
+	// diagnostic output for the Detail field, not a primary answer, so it gets
+	// the smaller "stderr-like" cap used elsewhere (cli.go, agy.go) rather than
+	// the default unbounded-answer size.
+	outputCap = 64 << 10
+
+	// detailMaxLen bounds what firstLine ever returns, independent of the
+	// Accumulator's cap — a single newline-free line can otherwise still be
+	// outputCap bytes and flood the terminal.
+	detailMaxLen = 4 << 10
+
+	// maxArgvBytes is a conservative, cross-platform-safe guard against the OS
+	// argv limit (ARG_MAX). Real limits vary (Linux ~2MB, macOS ~256KB-1MB
+	// per historical defaults); this stays well under all of them.
+	maxArgvBytes = 256 << 10
 )
 
 // defaultWriteTemp materializes the candidate to a temp file for {file} oracles.
@@ -93,15 +112,37 @@ func (o *CommandOracle) Verify(ctx context.Context, candidate string, _ trust.Ta
 		// the chain can tell an unconfigured oracle from a satisfied one.
 		return Verdict{}, fmt.Errorf("oracle %s: empty command template", o.Source)
 	}
+	if err := checkArgvSize(parts, candidate); err != nil {
+		return Verdict{}, err
+	}
 	cmd := exec.CommandContext(ctx, parts[0], parts[1:]...)
-	out, runErr := cmd.CombinedOutput()
+	// Both streams share one bounded Accumulator, matching CombinedOutput's
+	// interleaving — but capped, unlike the bytes.Buffer it replaces.
+	out := util.NewAccumulator(outputCap)
+	cmd.Stdout = out
+	cmd.Stderr = out
+	runErr := cmd.Run()
 	if runErr != nil {
 		if _, ok := runErr.(*exec.ExitError); ok {
-			return Verdict{Passed: false, Detail: firstLine(string(out))}, nil
+			return Verdict{Passed: false, Detail: firstLine(out.String())}, nil
 		}
 		return Verdict{}, runErr // couldn't launch the verifier at all
 	}
 	return Verdict{Passed: true}, nil
+}
+
+// checkArgvSize rejects an argv too large to exec before the OS gets a chance
+// to fail with a raw "fork/exec: argument list too long". Only {answer}
+// substitution can grow argv this large; {file} always substitutes a short path.
+func checkArgvSize(parts []string, candidate string) error {
+	total := 0
+	for _, p := range parts {
+		total += len(p)
+	}
+	if total > maxArgvBytes {
+		return fmt.Errorf("candidate too large to pass via {answer} (%d bytes) — use {file} instead", len(candidate))
+	}
+	return nil
 }
 
 // buildArgs builds the argv to execute. When Args holds real argv it is used
@@ -208,7 +249,10 @@ func LLR(cal *trust.Calibrator, source, domain string, v Verdict) float64 {
 func firstLine(s string) string {
 	s = strings.TrimSpace(s)
 	if i := strings.IndexByte(s, '\n'); i >= 0 {
-		return s[:i]
+		s = s[:i]
+	}
+	if len(s) > detailMaxLen {
+		return s[:detailMaxLen] + "...(truncated)"
 	}
 	return s
 }
