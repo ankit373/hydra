@@ -94,9 +94,7 @@ func AssessBlastRadius() BlastReport {
 			continue
 		}
 		ef.Radius = g.BlastRadiusForFile(file)
-		for _, id := range g.NodesInFile(file) {
-			ef.Dependents += g.DependentCount(id)
-		}
+		ef.Dependents = g.DependentCountForFile(file)
 		r.Files = append(r.Files, ef)
 	}
 

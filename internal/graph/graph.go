@@ -156,6 +156,21 @@ func (g *Graph) DependentCount(nodeID string) int {
 	return len(g.transitiveDependents([]string{nodeID}))
 }
 
+// DependentCountForFile returns the number of nodes that transitively depend
+// on any node declared in file, using the same seed set as BlastRadiusForFile.
+// Callers must use this instead of looping NodesInFile+DependentCount per
+// node: that pattern runs one single-seed BFS per node in the file (wasteful)
+// and double-counts any node reachable from more than one of the file's own
+// seeds, so the displayed dependent count can disagree with the count that
+// actually drove BlastRadiusForFile's multiplier.
+func (g *Graph) DependentCountForFile(file string) int {
+	seeds := g.seedsForFile(file)
+	if len(seeds) == 0 {
+		return 0
+	}
+	return len(g.transitiveDependents(seeds))
+}
+
 // seedsForFile returns the node IDs declared in a file, matching by exact path
 // first, then basename, then (Go package-granularity graphs) the file's
 // containing package — so callers may pass absolute paths, relative paths, or
