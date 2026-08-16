@@ -170,6 +170,16 @@ func (db *DB) Name(id string) string {
 	return id
 }
 
+// Entry returns the full capability record for id — built-in or user overlay —
+// and whether it was found. Score/Name/Source each expose one field of this;
+// callers that need to know what an id already resolves to before changing it
+// (e.g. `models add` warning it is about to shadow a curated built-in) want
+// the whole record, not one field at a time.
+func (db *DB) Entry(id string) (Entry, bool) {
+	e, ok := db.index[id]
+	return e, ok
+}
+
 // Source returns id's capability entry's provenance — "builtin" for the
 // embedded, curated catalog, "user" for one added via the runtime overlay
 // (`hyctl models add`), or "" if id matched neither and fell to DefaultScore.

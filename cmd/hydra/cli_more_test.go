@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ankit373/hydra/internal/ledger"
 	"github.com/ankit373/hydra/internal/testutil"
 )
 
@@ -107,6 +108,65 @@ func TestCLI_MCPRecordThenVerify_BindsParameters(t *testing.T) {
 	if code == 0 {
 		t.Errorf("verify passed on parameters that were never approved — the "+
 			"binding is not a binding:\n%s", out)
+	}
+}
+
+// `mcp verify` used to trust the on-disk parameters_hash verbatim: hand-edit
+// it to the hash of parameters that were never actually approved, and it
+// reported MATCH — only `mcp verify-chain` caught the tamper, and the two
+// were never composed. Recomputing/validating against the hash chain here
+// closes that (#500).
+func TestCLI_MCPVerify_DetectsTamperedParametersHash(t *testing.T) {
+	s := populated(t)
+
+	approved := `{"path":"/etc/hosts","mode":"read"}`
+	if code, out := runBinary(t, s, "mcp", "record",
+		"--tool", "fs.read", "--action", "read", "--decision", "allow",
+		"--resource", "/etc/hosts", "--agent", "test-agent",
+		"--params", approved); code != 0 {
+		t.Fatalf("`hyctl mcp record` exited %d:\n%s", code, out)
+	}
+
+	// Simulate an attacker hand-editing the ledger line: retarget
+	// parameters_hash to the hash of parameters that were never approved,
+	// without touching the event's own chain hash — exactly what a raw text
+	// edit (not a re-recording) would do.
+	malicious := map[string]any{"path": "/etc/shadow", "mode": "write"}
+	maliciousHash, err := ledger.HashParams(malicious)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ledgerPath := filepath.Join(s.HydraHome, "mcp_ledger.jsonl")
+	raw, err := os.ReadFile(ledgerPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimRight(string(raw), "\n"), "\n")
+	var evt map[string]any
+	if err := json.Unmarshal([]byte(lines[len(lines)-1]), &evt); err != nil {
+		t.Fatal(err)
+	}
+	evt["parameters_hash"] = maliciousHash
+	tamperedLine, err := json.Marshal(evt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines[len(lines)-1] = string(tamperedLine)
+	if err := os.WriteFile(ledgerPath, []byte(strings.Join(lines, "\n")+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	// Before #500 this reported MATCH: the malicious parameters hash exactly
+	// the (tampered) field on disk, and nothing checked the field itself was
+	// ever genuine.
+	maliciousParams := `{"path":"/etc/shadow","mode":"write"}`
+	code, out := runBinary(t, s, "mcp", "verify", "fs.read",
+		"--resource", "/etc/hosts", "--params", maliciousParams)
+	if code == 0 {
+		t.Errorf("verify MATCHed a hand-edited parameters_hash instead of detecting the broken chain:\n%s", out)
+	}
+	if !strings.Contains(strings.ToLower(out), "chain") {
+		t.Errorf("verify output does not explain the chain-tamper cause:\n%s", out)
 	}
 }
 
@@ -211,6 +271,9 @@ func TestCLI_Dispatch_RefusesBadFlagsBeforeSpending(t *testing.T) {
 		{"confidence above 1", []string{"dispatch", "--confidence", "1.5", "x"}},
 		{"confidence of zero", []string{"dispatch", "--confidence", "0", "x"}},
 		{"negative confidence", []string{"dispatch", "--confidence", "-0.5", "x"}},
+		{"NaN confidence", []string{"dispatch", "--confidence", "NaN", "x"}},
+		{"confidence above 1 in dry-run", []string{"dispatch", "--dry-run", "--confidence", "1.5", "x"}},
+		{"+Inf confidence in dry-run", []string{"dispatch", "--dry-run", "--confidence", "+Inf", "x"}},
 		{"unknown swarm mode", []string{"dispatch", "--swarm", "--swarm-mode", "sideways", "x"}},
 		// #453: --dry-run must reject a bad --swarm-mode exactly like a real
 		// run does, not print a plan for a mode Run would then refuse.
@@ -219,6 +282,11 @@ func TestCLI_Dispatch_RefusesBadFlagsBeforeSpending(t *testing.T) {
 		{"tier zero", []string{"dispatch", "--tier", "0", "x"}},
 		{"negative tier", []string{"dispatch", "--tier", "-1", "x"}},
 		{"tier above max", []string{"dispatch", "--tier", "11", "x"}},
+		{"unrecognized enum", []string{"dispatch", "--enum", "NOTAREALENUM", "x"}},
+		{"swarm, numeric tier out of range", []string{"dispatch", "--swarm", "--tier", "99", "x"}},
+		{"swarm, unknown named tier", []string{"dispatch", "--swarm", "--tier", "not-a-real-tier", "x"}},
+		{"confidence, numeric tier out of range", []string{"dispatch", "--confidence", "0.9", "--tier", "99", "x"}},
+		{"swarm, bad judge tier", []string{"dispatch", "--swarm", "--swarm-judge-tier", "99", "x"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -268,6 +336,40 @@ func TestCLI_Dispatch_TierErrorsNameTheActualProblem(t *testing.T) {
 			}
 			if strings.Contains(combined, "no routable heads") || strings.Contains(combined, "no available heads") {
 				t.Errorf("error = %q, blames routability instead of the actual %s", combined, tc.name)
+			}
+		})
+	}
+}
+
+// A --tier/--swarm-judge-tier/--enum rejection must name the actual problem,
+// not just fail for an unrelated reason (e.g. no heads discovered) that would
+// have rejected the command anyway. Each of these used to be silently
+// swallowed: an invalid --tier fell back to CapScoreSelector's full fan-out
+// under --swarm/--confidence, an unrecognized --enum resolved to "no
+// restriction", and a bad --swarm-judge-tier fell back to the CapScore judge
+// with no message anywhere (#501).
+func TestCLI_Dispatch_RejectionsNameTheActualProblem(t *testing.T) {
+	populated(t)
+
+	cases := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"unrecognized enum", []string{"dispatch", "--enum", "NOTAREALENUM", "x"}, "NOTAREALENUM"},
+		{"swarm tier out of range", []string{"dispatch", "--swarm", "--tier", "99", "x"}, "tier"},
+		{"swarm unknown tier name", []string{"dispatch", "--swarm", "--tier", "not-a-real-tier", "x"}, "tier"},
+		{"confidence tier out of range", []string{"dispatch", "--confidence", "0.9", "--tier", "99", "x"}, "tier"},
+		{"bad swarm judge tier", []string{"dispatch", "--swarm", "--swarm-judge-tier", "99", "x"}, "judge"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, cobraOut, err := run(t, tc.args...)
+			if err == nil {
+				t.Fatalf("`hyctl %s` was accepted", strings.Join(tc.args, " "))
+			}
+			if msg := err.Error() + cobraOut; !strings.Contains(msg, tc.want) {
+				t.Errorf("error = %q, want it to mention %q", msg, tc.want)
 			}
 		})
 	}

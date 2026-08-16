@@ -94,6 +94,12 @@ type Dispatcher struct {
 // Heads returns the probed head list for external callers (e.g. swarm).
 func (d *Dispatcher) Heads() []provider.Head { return d.heads }
 
+// PIILocalOnly reports whether the configured pii policy forces local-only
+// routing. Exported so callers that bypass Dispatch — the SPRT/swarm branches
+// in cmd/hydra's cmdDispatch — can still enforce it instead of acting only on
+// --local, which was config-blind on that path (#500).
+func (d *Dispatcher) PIILocalOnly() bool { return piiLocalOnly(d.cfg) }
+
 // EstimateCost exposes per-tier cost estimation for external callers.
 func (d *Dispatcher) EstimateCost(tier, inputTokens, outputTokens int) float64 {
 	return d.estimateCost(tier, inputTokens, outputTokens)
@@ -139,6 +145,12 @@ func cachedProbe(ctx context.Context) *probe.Result {
 	return probeCacheResult
 }
 
+// piiLocalOnly reports whether cfg's pii policy forces local-only routing.
+func piiLocalOnly(cfg *config.Config) bool {
+	p, ok := cfg.Policies["pii"]
+	return ok && p.Action == "local-only"
+}
+
 // New builds a Dispatcher from the saved config and a (possibly cached) machine probe.
 func New(ctx context.Context) (*Dispatcher, error) {
 	cfg, err := config.Load()
@@ -147,11 +159,7 @@ func New(ctx context.Context) (*Dispatcher, error) {
 	}
 
 	result := cachedProbe(ctx)
-
-	localOnly := false
-	if p, ok := cfg.Policies["pii"]; ok && p.Action == "local-only" {
-		localOnly = true
-	}
+	localOnly := piiLocalOnly(cfg)
 
 	budgetReg := budget.NewRegistry(budget.LoadWindows(config.ScriptHome()))
 
@@ -166,6 +174,10 @@ func New(ctx context.Context) (*Dispatcher, error) {
 
 // Dispatch routes prompt through policy + tier selection + execution with fallback.
 func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) (*Result, error) {
+	if err := ValidateTierHint(d.cfg, opts.TierHint); err != nil {
+		return nil, err
+	}
+
 	// Resolve the hint to a capability number BEFORE the governor runs. A named
 	// config tier ("expert") is otherwise opaque to claudeMode's Atoi, which
 	// left the whole token-preservation table inert for every non-numeric hint
@@ -453,13 +465,19 @@ func (d *Dispatcher) writeHandoff(r *Result, prompt string) (string, error) {
 		base = prior.Clock
 	}
 	from := fmt.Sprintf("hydra-tier-%d", rank.UITier(r.Head))
+	// The clock is keyed on the head's own identity, not its tier bucket:
+	// every LocalOnly head shares tier 10, so two different local models
+	// would otherwise tick the same "hydra-tier-10" key and become
+	// indistinguishable under Clock.Compare (#503). "From" keeps the
+	// tier-bucket string — it is display text, not a clock key.
+	agentKey := r.Head.ID
 
 	h := a2a.Handoff{
 		From:        from,
 		Model:       r.Head.Name,
 		Task:        prompt,
 		PriorOutput: r.Response.Output,
-		Clock:       base.Tick(from),
+		Clock:       base.Tick(agentKey),
 	}
 	return from, h.Save(handoffPath)
 }
@@ -471,6 +489,34 @@ const (
 	minTier = 1
 	maxTier = 10
 )
+
+// ValidateTierHint rejects a --tier value that cannot resolve to anything: a
+// numeric value outside [minTier,maxTier], or a name that matches no
+// configured tier. A name that matches a configured tier but currently has no
+// live heads is NOT an error here — that is a runtime availability gap
+// selectHeads reports on its own, distinct from a malformed hint.
+//
+// Plain dispatch, --swarm and --confidence (SPRT) all call this before
+// selecting heads, so an invalid --tier/--swarm-judge-tier value fails the
+// same way in every mode instead of silently widening to a broader, pricier
+// selection (#501).
+func ValidateTierHint(cfg *config.Config, hint string) error {
+	if hint == "" {
+		return nil
+	}
+	if n, err := strconv.Atoi(hint); err == nil {
+		if n < minTier || n > maxTier {
+			return fmt.Errorf("tier %d is out of range (valid: %d-%d)", n, minTier, maxTier)
+		}
+		return nil
+	}
+	for _, t := range cfg.Tiers {
+		if t.Name == hint {
+			return nil
+		}
+	}
+	return fmt.Errorf("unknown tier %q: not a number %d-%d and not a configured tier name", hint, minTier, maxTier)
+}
 
 // resolveTierHint normalizes a tier hint to a capability number ("1".."10"),
 // and reports the two ways a hint can be invalid on its face:
@@ -693,11 +739,17 @@ func (d *Dispatcher) syncStateJSON(r *Result) {
 			asIntSlice(existing["claude_pct_history"]), pct, budget.MaxPctHistory)
 	}
 
-	// Persist per-model budget snapshots so the TUI and status command can read them.
+	// Persist per-model budget snapshots so the TUI and status command can read
+	// them. Merge into whatever is already on disk instead of replacing it — each
+	// `hyctl` invocation is a fresh process, so d.budget only knows about models
+	// dispatched to in this run, and overwriting would erase every other model's
+	// entry (#502).
 	if d.budget != nil {
-		snaps := d.budget.All()
-		budgetMap := map[string]any{}
-		for _, s := range snaps {
+		budgetMap, ok := existing["budget"].(map[string]any)
+		if !ok {
+			budgetMap = map[string]any{}
+		}
+		for _, s := range d.budget.All() {
 			budgetMap[s.ModelID] = map[string]any{
 				"pct":        s.Pct,
 				"used":       s.Used,
@@ -819,43 +871,34 @@ func truncate(s string, n int) string {
 	return s[:n] + "…"
 }
 
+// enumTiers maps each routing enum key to its tier number — the single
+// source of truth EnumToTier and IsKnownEnum both read, so editor, parallel,
+// and cmd/hydra's --enum validation can never drift apart.
+var enumTiers = map[string]string{
+	"GRUNT":     "10",
+	"TRIVIAL":   "9",
+	"SIMPLE":    "8",
+	"STANDARD":  "7",
+	"MODERATE":  "6",
+	"COMPLEX":   "5",
+	"HARD":      "4",
+	"VERY_HARD": "3",
+	"EXPERT":    "2",
+	"CORE":      "1",
+}
+
 // EnumToTier maps a routing enum key (e.g. "SIMPLE") to a tier number string.
-// Single source of truth — editor and parallel both delegate here.
+// An unrecognized key returns "" — the same value as an empty enum, which is
+// why a caller that must reject a typo instead of silently routing
+// unrestricted checks IsKnownEnum first (#501).
 func EnumToTier(enum string) string {
-	const (
-		GRUNT     = "10"
-		TRIVIAL   = "9"
-		SIMPLE    = "8"
-		STANDARD  = "7"
-		MODERATE  = "6"
-		COMPLEX   = "5"
-		HARD      = "4"
-		VERY_HARD = "3"
-		EXPERT    = "2"
-		CORE      = "1"
-	)
-	switch enum {
-	case "GRUNT":
-		return GRUNT
-	case "TRIVIAL":
-		return TRIVIAL
-	case "SIMPLE":
-		return SIMPLE
-	case "STANDARD":
-		return STANDARD
-	case "MODERATE":
-		return MODERATE
-	case "COMPLEX":
-		return COMPLEX
-	case "HARD":
-		return HARD
-	case "VERY_HARD":
-		return VERY_HARD
-	case "EXPERT":
-		return EXPERT
-	case "CORE":
-		return CORE
-	default:
-		return ""
-	}
+	return enumTiers[enum]
+}
+
+// IsKnownEnum reports whether enum is a recognized routing enum key.
+// EnumToTier's "" result is ambiguous between "no enum given" and
+// "unrecognized key" — this is how a caller tells the two apart.
+func IsKnownEnum(enum string) bool {
+	_, ok := enumTiers[enum]
+	return ok
 }

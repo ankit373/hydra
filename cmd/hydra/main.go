@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -328,11 +329,23 @@ func cmdProbe() *cobra.Command {
 						Routable: why == "", UnroutableReason: why,
 					}
 				}
+				warnings := result.Warnings
+				if warnings == nil {
+					warnings = []string{}
+				}
 				return json.NewEncoder(os.Stdout).Encode(map[string]any{
-					"cortex": cortexName, "heads": heads,
+					"cortex": cortexName, "heads": heads, "warnings": warnings,
 				})
 			}
 			fmt.Println(tui.Splash(cortexName))
+			// A provider that failed outright (e.g. a corrupted models.json
+			// overlay) doesn't even reach the unroutable-head accounting below —
+			// its heads never existed here — so without this it degrades to a
+			// silently smaller head list, contradicting probe's own "marks
+			// unroutable heads with the reason" promise (#248).
+			for _, w := range result.Warnings {
+				fmt.Printf("  %s %s\n", warnStyle.Render("⚠"), dimStyle.Render(w))
+			}
 			if len(result.Heads) == 0 {
 				fmt.Println("  No models found.")
 				return nil
@@ -573,7 +586,15 @@ func cmdDispatch() *cobra.Command {
 		Use:   "dispatch <prompt>",
 		Short: "Route a prompt to the best available Head",
 		Args:  cobra.MinimumNArgs(1),
-		RunE: func(_ *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// An unrecognized --enum must fail here, before anything routes: its
+			// zero value is byte-identical to "no enum given" everywhere else in
+			// this function, so a typo silently routed to the single strongest
+			// (most expensive) head instead of being reported (#501).
+			if enumKey != "" && !dispatch.IsKnownEnum(enumKey) {
+				return fmt.Errorf("unknown --enum %q: not a recognized routing enum key", enumKey)
+			}
+
 			prompt := strings.Join(args, " ")
 			ctx := context.Background()
 
@@ -626,8 +647,28 @@ func cmdDispatch() *cobra.Command {
 			// blast radius, --irreversible, --production, or PII auto-detected
 			// in the prompt). Risk raises the bar but never lowers a target the
 			// user explicitly asked for.
+			//
+			// Validate the raw flag the moment it was set — before --file's
+			// derived target (always in [0.5, maxConfidence]) can override an
+			// invalid explicit value and mask it. `> 0` alone let NaN/negative
+			// values slip through in both dry-run and real execution, since NaN
+			// compares false against every bound (#501); a confidence of exactly
+			// 0 is otherwise indistinguishable from the flag never being passed
+			// at all, so it is only rejected when the user actually typed it.
+			if cmd.Flags().Changed("confidence") &&
+				(math.IsNaN(confidence) || confidence <= 0 || confidence >= 1) {
+				return fmt.Errorf("--confidence must be in (0,1), got %v", confidence)
+			}
 			effectiveConf := confidence
 			touchesPII := policy.ContainsPII(policy.Request{Prompt: prompt})
+			// The plain dispatch path (d.Dispatch) reads cfg.Policies["pii"] itself
+			// and forces LocalOnly. The SPRT/swarm branches below take a shortcut
+			// straight past it and only ever saw --local — so a PII-touching prompt
+			// silently went out to remote heads the instant touchesPII made
+			// effectiveConf > 0 and picked one of those branches instead (#500).
+			if d.PIILocalOnly() && touchesPII {
+				localOnly = true
+			}
 			if file != "" || irreversible || production || touchesPII {
 				radius := 1.0
 				if file != "" {
@@ -1032,6 +1073,27 @@ func cmdMCP() *cobra.Command {
 			if !ok {
 				return fmt.Errorf("no allowed, parameter-bound ledger event for %s/%s — nothing to verify against", tool, verResource)
 			}
+
+			// A parameters_hash read straight off disk proves nothing if the
+			// ledger itself was edited after recording — comparing against it
+			// verbatim previously reported MATCH even on a hand-tampered hash.
+			// `verify-chain` already recomputes and links every chained event;
+			// compose it here so a broken chain refuses the approval instead of
+			// silently trusting it (#500). Approvals that predate hash-chaining
+			// (Hash == "") were never protected either way, so leave them as-is.
+			if approval.Hash != "" {
+				chain, err := ledger.VerifyChain(ledger.DefaultPath())
+				if err != nil {
+					return err
+				}
+				if !chain.Intact {
+					fmt.Printf("  %s  ledger hash chain is broken (event index %d) — the recorded "+
+						"approval cannot be trusted; refusing to verify against it. Run `hyctl mcp verify-chain` for details.\n",
+						strings.ToUpper(string(ledger.Deny)), chain.BrokenAt)
+					os.Exit(3)
+				}
+			}
+
 			match, err := ledger.VerifyParams(params, approval.ParametersHash)
 			if err != nil {
 				return err
@@ -1734,15 +1796,29 @@ func cmdModels() *cobra.Command {
 			if e.Name == "" {
 				e.Name = args[0]
 			}
+
+			// Check against the built-in catalog alone (no overlay) — this is
+			// "does this id shadow a curated entry", which is a different
+			// question from AddModel's "did the overlay already have it".
+			builtin, err := capabilities.Load("")
+			if err != nil {
+				return err
+			}
+			prior, overridesBuiltin := builtin.Entry(args[0])
+
 			replaced, err := capabilities.AddModel(overlay, e)
 			if err != nil {
 				return err
 			}
-			verb := "added"
-			if replaced {
-				verb = "updated"
+			switch {
+			case overridesBuiltin:
+				fmt.Printf("  overriding built-in model %s (was: %s, score %d) → %s, score %d in %s\n",
+					e.ID, prior.Provider, prior.CapScore, e.Provider, e.CapScore, overlay)
+			case replaced:
+				fmt.Printf("  updated %s (%s, score %d) → %s\n", e.ID, e.Provider, e.CapScore, overlay)
+			default:
+				fmt.Printf("  added %s (%s, score %d) → %s\n", e.ID, e.Provider, e.CapScore, overlay)
 			}
-			fmt.Printf("  %s %s (%s, score %d) → %s\n", verb, e.ID, e.Provider, e.CapScore, overlay)
 			return nil
 		},
 	}
@@ -1788,13 +1864,20 @@ func cmdModels() *cobra.Command {
 					"check network access")
 			}
 			added, skipped := 0, 0
-			builtin, _ := capabilities.Load("")
+			// Must include the overlay, not just the embedded catalog — otherwise
+			// a model the user already synced and hand-tuned via `models add`
+			// looks "unknown" here and gets silently overwritten back to a fresh
+			// heuristic capScore on every re-run (#505).
+			known, err := capabilities.Load(overlay)
+			if err != nil {
+				return err
+			}
 			for _, id := range models {
 				if syncFilter != "" && !strings.Contains(strings.ToLower(id), strings.ToLower(syncFilter)) {
 					continue
 				}
 				// Don't clobber a model already known (built-in or user).
-				if builtin.Name(id) != id {
+				if known.Source(id) != "" {
 					skipped++
 					continue
 				}
@@ -2215,6 +2298,11 @@ func printSwarmResult(r *swarm.SwarmResult) {
 		)
 		if r.Verdict.Reason != "" {
 			fmt.Printf("  %s\n", dimStyle.Render(`"`+r.Verdict.Reason+`"`))
+		}
+		// A fallback with no reason shown is indistinguishable from a healthy
+		// LLM judge run — surface why the primary judge was skipped (#501).
+		if r.Verdict.Meta.UsedFallback && r.Verdict.Meta.FallbackReason != "" {
+			fmt.Printf("  %s\n", warnStyle.Render("judge fallback: "+r.Verdict.Meta.FallbackReason))
 		}
 	} else if r.Winner != nil {
 		fmt.Printf("\n  %s %s\n",
@@ -2767,36 +2855,46 @@ func cmdPricingList() *cobra.Command {
 			// Hoist filter once — db.Models() is already sorted.
 			filter := strings.ToLower(strings.Join(args, " "))
 
-			if jsonOut {
-				type row struct {
-					Model            string  `json:"model"`
-					InputPerMillion  float64 `json:"input_per_mtok"`
-					OutputPerMillion float64 `json:"output_per_mtok"`
-				}
-				var rows []row
-				for _, m := range db.Models() {
-					if filter != "" && !strings.Contains(m, filter) {
-						continue
-					}
-					p, _ := db.ModelPrice(m)
-					rows = append(rows, row{m, p.InputPerMillion, p.OutputPerMillion})
-				}
-				return json.NewEncoder(os.Stdout).Encode(rows)
+			type row struct {
+				Model            string  `json:"model"`
+				InputPerMillion  float64 `json:"input_per_mtok"`
+				OutputPerMillion float64 `json:"output_per_mtok"`
+				Source           string  `json:"source"` // "openrouter" or "tier"
 			}
-
-			fmt.Fprintf(os.Stdout, "%-55s  %10s  %11s\n", "Model", "In $/1M", "Out $/1M")
-			fmt.Fprintln(os.Stdout, strings.Repeat("─", 82))
-			count := 0
+			// Must start as [] not nil: JSON-encoded nil is `null`, and a script
+			// treating this as an array (docs/pricing.md's whole audience) breaks
+			// on a filter that matches nothing (#505).
+			rows := []row{}
 			for _, m := range db.Models() {
 				if filter != "" && !strings.Contains(m, filter) {
 					continue
 				}
 				p, _ := db.ModelPrice(m)
-				fmt.Fprintf(os.Stdout, "%-55s  %10.4f  %11.4f\n",
-					m, p.InputPerMillion, p.OutputPerMillion)
-				count++
+				rows = append(rows, row{m, p.InputPerMillion, p.OutputPerMillion, "openrouter"})
 			}
-			if count == 0 {
+			// Tier pricing is what prices CLI-agent heads (claude-core,
+			// opus-thinking, …) — they never appear in OpenRouter's catalog, so
+			// without this merge they can never show up here at all, and a
+			// fresh/offline install (no cache, no network) shows a fully empty
+			// table instead of the tier fallback that's actually pricing calls.
+			for _, te := range db.TierEntries() {
+				if filter != "" && !strings.Contains(strings.ToLower(te.ID), filter) {
+					continue
+				}
+				rows = append(rows, row{te.ID, te.InputPerMillion, te.OutputPerMillion, "tier"})
+			}
+
+			if jsonOut {
+				return json.NewEncoder(os.Stdout).Encode(rows)
+			}
+
+			fmt.Fprintf(os.Stdout, "%-45s  %10s  %11s  %s\n", "Model", "In $/1M", "Out $/1M", "Source")
+			fmt.Fprintln(os.Stdout, strings.Repeat("─", 82))
+			for _, r := range rows {
+				fmt.Fprintf(os.Stdout, "%-45s  %10.4f  %11.4f  %s\n",
+					r.Model, r.InputPerMillion, r.OutputPerMillion, r.Source)
+			}
+			if len(rows) == 0 {
 				fmt.Fprintln(os.Stdout, "(no models matched)")
 			}
 			return nil
@@ -3049,6 +3147,12 @@ func cmdTrustDefect() *cobra.Command {
 					blastSource = "graph"
 				}
 			}
+			// NaN/+Inf would otherwise render as a nonsensical "$NaN" / "NaN%"
+			// recommendation in text mode and crash json.Encode outright
+			// ("json: unsupported value: NaN") in --json mode (#501).
+			if math.IsNaN(blast) || math.IsInf(blast, 0) {
+				return fmt.Errorf("--blast must be a finite number, got %v", blast)
+			}
 
 			task := trust.Task{
 				Domain:       domain,
@@ -3057,16 +3161,23 @@ func cmdTrustDefect() *cobra.Command {
 				TouchesPII:   pii,
 				Production:   production,
 			}
-			cost, conf := dm.CostUSD(task), dm.RequiredConfidence(task)
+			// CostUSD/RequiredConfidence clamp BlastRadius<=0 to 1.0 internally;
+			// display that same clamped value rather than the raw input, or a
+			// `--blast 0` run shows "blast=0.00" next to a cost/confidence that
+			// was actually computed at 1.0 (#501).
+			usedBlast := trust.NormalizeBlastRadius(blast)
+			cost := dm.CostUSD(task)
+			conf := dm.RequiredConfidence(task)
+
 			if jsonOut {
 				return json.NewEncoder(os.Stdout).Encode(map[string]any{
-					"defect_cost_usd": cost, "blast_radius": blast, "blast_source": blastSource,
+					"domain": domain, "blast_radius": usedBlast, "blast_source": blastSource,
 					"irreversible": irreversible, "pii": pii, "production": production,
-					"required_confidence": conf,
+					"defect_cost_usd": cost, "required_confidence": conf,
 				})
 			}
 			fmt.Printf("  defect cost ≈ $%.2f  (blast=%.2f [%s] irreversible=%v pii=%v prod=%v)\n",
-				cost, blast, blastSource, irreversible, pii, production)
+				cost, usedBlast, blastSource, irreversible, pii, production)
 			fmt.Printf("  → demands confidence ≥ %.1f%%  (use with: hyctl dispatch --confidence %.3f)\n",
 				conf*100, conf)
 			return nil

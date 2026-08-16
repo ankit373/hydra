@@ -107,14 +107,24 @@ func TestCLI_Dispatch_SucceedsAndLogsTheSpend(t *testing.T) {
 		t.Errorf("the dispatch row carries no run_id, so nothing correlates it: %v", row)
 	}
 
-	// cost.jsonl is deliberately *not* written here. A CLI-agent head reports no
-	// token usage, so there is no basis to price the call — and a $0.00 row
-	// would read as "this was free", which is the #258/#261 defect class. The
-	// call is still recorded above; only the price is withheld.
-	if _, statErr := os.Stat(filepath.Join(config.Dir(), "logs", "cost.jsonl")); statErr == nil {
-		billed, _ := os.ReadFile(filepath.Join(config.Dir(), "logs", "cost.jsonl"))
-		t.Errorf("a head that reported no tokens was given a cost row, which reads "+
-			"as a free call:\n%s", billed)
+	// A CLI-agent head reports no real token usage, so Hydra estimates from
+	// char/4 (#502) — cost.jsonl must carry that row, clearly labelled as an
+	// estimate rather than a measurement, or the call is silently invisible to
+	// spend tracking despite having actually run.
+	raw, err = os.ReadFile(filepath.Join(config.Dir(), "logs", "cost.jsonl"))
+	if err != nil {
+		t.Fatalf("no cost row for a CLI-head dispatch: %v", err)
+	}
+	var costRow map[string]any
+	if err := json.Unmarshal([]byte(strings.Split(strings.TrimSpace(string(raw)), "\n")[0]), &costRow); err != nil {
+		t.Fatal(err)
+	}
+	if costRow["tokens_source"] != "estimated" {
+		t.Errorf("tokens_source = %v, want \"estimated\" — a char/4 guess must never "+
+			"be presented as measured usage", costRow["tokens_source"])
+	}
+	if pt, _ := costRow["prompt_tokens"].(float64); pt <= 0 {
+		t.Errorf("prompt_tokens = %v, want > 0", costRow["prompt_tokens"])
 	}
 
 	// And the handoff, which is what the next agent's --a2a reads.
@@ -173,6 +183,43 @@ func TestCLI_Dispatch_LocalOnlyRefusesWhenNothingIsLocal(t *testing.T) {
 	}
 	if !strings.Contains(err.Error()+cobraOut, "localOnly=true") {
 		t.Errorf("error = %v, want it to name local-only as the cause", err)
+	}
+}
+
+// The pii:local-only config policy must be enforced on the SPRT path exactly
+// like it is on the plain dispatch path, even though nobody passed --local.
+// Before #500, touchesPII alone routed a PII prompt into sw.RunSPRT with
+// LocalOnly bound only to --local, so it silently reached "cody" — a remote
+// CLI head — instead of being refused for lack of a local one.
+func TestCLI_Dispatch_PIIPolicyForcesLocalOnlyOnTheSPRTPath(t *testing.T) {
+	s := testutil.NewSandbox(t)
+	if err := config.Save(&config.Config{
+		Cortex:   "cody",
+		Policies: map[string]config.Policy{"pii": {Action: "local-only"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	s.FakeBinary(t, "cody", testutil.EchoScript("cody's answer"))
+	// The sandbox clears $OLLAMA_HOST but an empty value falls back to the real
+	// default (localhost:11434) — on a machine that actually has Ollama running,
+	// the port provider would discover it for real and the test would pass for
+	// the wrong reason (a real local head, not the policy under test). Point it
+	// at a dead loopback port so the only local-only head is whichever tests set.
+	t.Setenv("OLLAMA_HOST", "http://127.0.0.1:1")
+
+	// A PII-detecting prompt alone triggers the SPRT branch (RequiredConfidence
+	// derives a target > 0 from touchesPII), with no --confidence flag needed —
+	// exactly the reproduction in #500.
+	out, cobraOut, err := run(t, "dispatch", "my SSN is 123-45-6789")
+	combined := out + cobraOut
+	if err == nil {
+		t.Fatalf("a PII prompt reached a non-local head via the SPRT path despite pii:local-only:\n%s", combined)
+	}
+	if !strings.Contains(err.Error()+combined, "no heads available") {
+		t.Errorf("error = %v (%s), want the SPRT path to report no (local) heads available", err, combined)
+	}
+	if strings.Contains(combined, "cody's answer") {
+		t.Error("the remote head actually ran despite the pii:local-only policy")
 	}
 }
 
@@ -599,16 +646,21 @@ func TestCLI_PricingList_FilterAndJSON(t *testing.T) {
 
 	// The JSON surface must be an array even when the filter matches nothing —
 	// a jq pipeline iterating it should get zero elements, not a parse error.
+	// Tier pricing (registry/pricing.yaml, embedded) means this is never
+	// actually empty, but it must never be the literal `null` either (#505):
+	// see TestCLI_PricingListJSON_EmitsEmptyArrayNotNullWhenNothingMatches for
+	// the filtered-to-nothing case this used to regress on.
 	out, _, err := run(t, "pricing", "list", "--json")
 	if err != nil {
 		t.Fatalf("`pricing list --json` failed: %v", err)
 	}
 	trimmed := strings.TrimSpace(out)
-	if trimmed != "null" {
-		var rows []map[string]any
-		if jerr := json.Unmarshal([]byte(trimmed), &rows); jerr != nil {
-			t.Fatalf("not a JSON array: %v\n%s", jerr, trimmed)
-		}
+	if trimmed == "null" {
+		t.Fatal("emitted the literal null instead of a JSON array")
+	}
+	var rows []map[string]any
+	if jerr := json.Unmarshal([]byte(trimmed), &rows); jerr != nil {
+		t.Fatalf("not a JSON array: %v\n%s", jerr, trimmed)
 	}
 
 	// A filter narrows the table rather than emptying it.
@@ -1009,6 +1061,48 @@ func TestCLI_Probe_JSONIsValidAndMarksRoutability(t *testing.T) {
 	}
 	if !sawUnroutable {
 		t.Error("the unroutable ollama binary is missing from --json output")
+	}
+}
+
+// A corrupted ~/.hydra/models.json overlay makes capabilities.Load fail, which
+// the cli/env/port providers treat as "this whole provider found nothing" —
+// by design, so one broken provider doesn't block the others. But that used to
+// be completely invisible: every head that provider would have found just
+// vanished with no `✗` and no reason, contradicting probe's own "marks
+// unroutable heads with the reason" promise (#248). This drives that failure
+// end to end and checks the warning actually surfaces (#505).
+func TestCLI_Probe_SurfacesACorruptedOverlayAsAWarning(t *testing.T) {
+	s, _ := dispatchable(t, "answered")
+
+	overlay := filepath.Join(s.HydraHome, "models.json")
+	if err := os.WriteFile(overlay, []byte("{not valid json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	out, cobraOut, err := run(t, "probe")
+	if err != nil {
+		t.Fatalf("`hyctl probe` failed: %v (%s)", err, cobraOut)
+	}
+	combined := out + cobraOut
+	if !strings.Contains(combined, "cli") {
+		t.Errorf("no warning naming the failing provider:\n%s", combined)
+	}
+	if strings.Contains(combined, "cody") {
+		t.Errorf("cody (found by the broken cli provider) should not appear at all:\n%s", combined)
+	}
+
+	jsonOut, jsonCobra, err := run(t, "probe", "--json")
+	if err != nil {
+		t.Fatalf("`hyctl probe --json` failed: %v (%s)", err, jsonCobra)
+	}
+	var parsed struct {
+		Warnings []string `json:"warnings"`
+	}
+	if err := json.Unmarshal([]byte(jsonOut+jsonCobra), &parsed); err != nil {
+		t.Fatalf("probe --json did not parse: %v\n%s", err, jsonOut+jsonCobra)
+	}
+	if len(parsed.Warnings) == 0 {
+		t.Fatal("probe --json reported no warnings for a provider that failed outright")
 	}
 }
 

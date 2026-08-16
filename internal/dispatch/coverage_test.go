@@ -141,6 +141,51 @@ func TestDispatch_HandoffClockAdvancesAcrossCalls(t *testing.T) {
 	}
 }
 
+// Every LocalOnly head maps to rank.UITier 10 (#248), so two different local
+// models used to tick the identical "hydra-tier-10" clock key. The clock must
+// key on the head's own identity instead, or two genuinely different agents'
+// handoffs are indistinguishable from one agent dispatching twice (#503). The
+// display "From" string is untouched — it still reads as the tier bucket.
+func TestDispatch_HandoffClockDistinguishesSameTierHeads(t *testing.T) {
+	s := testutil.NewSandbox(t)
+	path := filepath.Join(config.Dir(), "logs", "last_handoff.json")
+
+	localHead := func(id string) provider.Head {
+		h := echoHead(t, s, id, 50)
+		h.LocalOnly = true
+		return h
+	}
+
+	if _, err := liveDispatcher(localHead("model-a")).Dispatch(context.Background(), "first", Options{}); err != nil {
+		t.Fatal(err)
+	}
+	first, err := a2a.Load(path)
+	if err != nil || first == nil {
+		t.Fatal(err)
+	}
+
+	if _, err := liveDispatcher(localHead("model-b")).Dispatch(context.Background(), "second", Options{}); err != nil {
+		t.Fatal(err)
+	}
+	second, err := a2a.Load(path)
+	if err != nil || second == nil {
+		t.Fatal(err)
+	}
+
+	if _, ok := first.Clock["model-a"]; !ok {
+		t.Errorf("first handoff clock %v has no entry for model-a's own identity", first.Clock)
+	}
+	if _, ok := second.Clock["model-b"]; !ok {
+		t.Errorf("second handoff clock %v has no entry for model-b's own identity", second.Clock)
+	}
+	if _, ok := second.Clock["hydra-tier-10"]; ok {
+		t.Errorf("clock keyed on the shared tier bucket instead of head identity: %v", second.Clock)
+	}
+	if first.From != "hydra-tier-10" || second.From != "hydra-tier-10" {
+		t.Errorf("display From must stay the tier-bucket string, got %q and %q", first.From, second.From)
+	}
+}
+
 // A dry run must resolve the chain without executing anything.
 func TestDispatch_DryRunResolvesTheChainWithoutRunningIt(t *testing.T) {
 	s := testutil.NewSandbox(t)
@@ -653,6 +698,35 @@ func TestSyncStateJSON_PreservesForeignKeysAndExtendsHistory(t *testing.T) {
 	}
 }
 
+// Each `hyctl dispatch` is a fresh process with its own in-memory
+// budget.Registry, so it only ever knows about the head(s) it just ran.
+// Replacing state.json's "budget" map wholesale — instead of merging into it —
+// erased every other model's entry on the very next dispatch (#502).
+func TestSyncStateJSON_MergesBudgetAcrossDispatchesInsteadOfReplacing(t *testing.T) {
+	s := testutil.NewSandbox(t)
+
+	d1 := liveDispatcher(echoHead(t, s, "tier4-head", 90))
+	if _, err := d1.Dispatch(context.Background(), "work", Options{}); err != nil {
+		t.Fatal(err)
+	}
+	d2 := liveDispatcher(echoHead(t, s, "tier8-head", 40))
+	if _, err := d2.Dispatch(context.Background(), "work", Options{}); err != nil {
+		t.Fatal(err)
+	}
+
+	budgetMap, ok := readState(t)["budget"].(map[string]any)
+	if !ok {
+		t.Fatalf("state[\"budget\"] = %#v, want a map", readState(t)["budget"])
+	}
+	if _, ok := budgetMap["tier4-head"]; !ok {
+		t.Errorf("budget map = %v, missing tier4-head — the first dispatch's entry "+
+			"was overwritten by the second", budgetMap)
+	}
+	if _, ok := budgetMap["tier8-head"]; !ok {
+		t.Errorf("budget map = %v, missing tier8-head", budgetMap)
+	}
+}
+
 // asInt / asIntSlice bridge JSON's float64 numbers back to ints. A wrong answer
 // here silently zeroes the governor's history.
 func TestAsIntAndAsIntSlice(t *testing.T) {
@@ -734,6 +808,41 @@ func TestNew_LoadsTheConfigAndArmsThePIIPolicy(t *testing.T) {
 	// The PII rule is armed, so a PII prompt is forced local-only.
 	if action := dd.policy.Evaluate(policy.Request{Prompt: "SSN 123-45-6789", TierHint: "1"}); !action.LocalOnly {
 		t.Error("the pii=local-only config policy did not arm the local-only rule")
+	}
+	// Exported so cmd/hydra's SPRT/swarm dispatch branches — which bypass
+	// Dispatch entirely — can still enforce the same config policy (#500).
+	if !dd.PIILocalOnly() {
+		t.Error("PIILocalOnly() = false, want true for a pii:local-only config")
+	}
+}
+
+// PIILocalOnly is the single source of truth cmd/hydra's SPRT/swarm branches
+// rely on to fold the config policy into their own LocalOnly bool. A wrong
+// answer here reopens #500 regardless of what cmd/hydra does with it.
+func TestDispatcher_PIILocalOnly(t *testing.T) {
+	cases := []struct {
+		name string
+		cfg  *config.Config
+		want bool
+	}{
+		{"no policies configured", &config.Config{}, false},
+		{"pii policy set to something else", &config.Config{
+			Policies: map[string]config.Policy{"pii": {Action: "budget-cap"}},
+		}, false},
+		{"unrelated policy present, pii absent", &config.Config{
+			Policies: map[string]config.Policy{"budget": {Action: "budget-cap"}},
+		}, false},
+		{"pii local-only armed", &config.Config{
+			Policies: map[string]config.Policy{"pii": {Action: "local-only"}},
+		}, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dd := &Dispatcher{cfg: tc.cfg}
+			if got := dd.PIILocalOnly(); got != tc.want {
+				t.Errorf("PIILocalOnly() = %v, want %v", got, tc.want)
+			}
+		})
 	}
 }
 

@@ -137,6 +137,9 @@ func (s *Swarm) Plan(prompt string, opts Options) (heads []provider.Head, estUSD
 	if err != nil {
 		return nil, 0, fmt.Errorf("swarm: config load: %w", err)
 	}
+	if err := validateSwarmTiers(cfg, opts); err != nil {
+		return nil, 0, err
+	}
 	selected, err := resolveSelector(opts, cfg).Select(s.heads, opts)
 	if err != nil {
 		return nil, 0, err
@@ -160,6 +163,12 @@ func (s *Swarm) Run(ctx context.Context, prompt string, opts Options) (*SwarmRes
 	cfg, err := config.Load()
 	if err != nil {
 		return nil, fmt.Errorf("swarm: config load: %w", err)
+	}
+	// An invalid --tier/--swarm-judge-tier must fail here, before any heads
+	// are fired or judged — never silently widen to CapScoreSelector's top-N
+	// fan-out (#501).
+	if err := validateSwarmTiers(cfg, opts); err != nil {
+		return nil, err
 	}
 
 	// 1. Head selection.
@@ -242,6 +251,20 @@ func (s *Swarm) Run(ctx context.Context, prompt string, opts Options) (*SwarmRes
 }
 
 // ── private helpers ───────────────────────────────────────────────────────────
+
+// validateSwarmTiers rejects an invalid TierHint or JudgeTierHint before any
+// selection or judging happens, using the identical rule dispatch.Dispatch
+// applies. Run, RunSPRT and Plan all call this so --tier/--swarm-judge-tier
+// fail the same way regardless of mode (#501).
+func validateSwarmTiers(cfg *config.Config, opts Options) error {
+	if err := dispatch.ValidateTierHint(cfg, opts.TierHint); err != nil {
+		return fmt.Errorf("swarm: %w", err)
+	}
+	if err := dispatch.ValidateTierHint(cfg, opts.JudgeTierHint); err != nil {
+		return fmt.Errorf("swarm: judge tier: %w", err)
+	}
+	return nil
+}
 
 func buildJudge(d *dispatch.Dispatcher, opts Options, cfg *config.Config) Judge {
 	tierHint := opts.JudgeTierHint

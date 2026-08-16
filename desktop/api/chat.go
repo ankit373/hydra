@@ -50,13 +50,25 @@ type ChatReply struct {
 	NeedsProbe bool `json:"needsProbe,omitempty"`
 }
 
+// NewRunID mints a run id for the caller to hold before a dispatch starts.
+//
+// The frontend uses this to poll GetSession(runId) for an in-flight chat turn
+// instead of waiting for Chat to return — the run's log exists and is being
+// appended to from the moment Chat begins, not just once it finishes. A thin
+// wrapper rather than the frontend minting its own: the timestamp-prefix +
+// hex format is a contract Fleet's sort depends on (see fleet.go), so there is
+// exactly one place allowed to generate it.
+func (a *API) NewRunID() string { return runid.New() }
+
 // Chat dispatches one prompt and returns the reply.
 //
 // enum is a routing key ("SIMPLE", "STANDARD", …); empty lets dispatch pick.
+// runID lets the caller supply an id minted via NewRunID so it can watch the
+// run live; empty mints a fresh one, same as before NewRunID existed.
 // Errors come back inside the reply rather than as a Go error: a failed
 // dispatch is a normal outcome the dock renders as a message, not an exception
 // that should blank the window.
-func (a *API) Chat(prompt, enum string) (*ChatReply, error) {
+func (a *API) Chat(prompt, enum, runID string) (*ChatReply, error) {
 	if prompt == "" {
 		return &ChatReply{Error: "empty prompt"}, nil
 	}
@@ -64,7 +76,7 @@ func (a *API) Chat(prompt, enum string) (*ChatReply, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), ChatTimeout)
 	defer cancel()
 
-	runID, taskID := runid.New(), runid.New()
+	runID, taskID := runid.ResolveRun(runID), runid.New()
 	r := &ChatReply{RunID: runID}
 
 	// The dock's dispatch is a run like any other: it appears in Fleet while it

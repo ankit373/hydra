@@ -1,10 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
-import { Chat, ChatEnums } from '../bindings'
-import type { ChatReply } from '../types'
+import { Chat, ChatEnums, GetSession, NewRunID } from '../bindings'
+import type { ChatReply, Session as SessionData } from '../types'
 import { ms, usdExact } from '../format'
+import { Timeline } from './Session'
+
+// Matches App.tsx's LIVE_MS — same reasoning: this is "what is happening now",
+// not a retrospective read.
+const POLL_MS = 2000
 
 interface Turn {
   prompt: string
+  runId: string
   reply?: ChatReply
 }
 
@@ -38,8 +44,35 @@ export function ChatDock({
   const [enums, setEnums] = useState<string[]>([])
   const [turns, setTurns] = useState<Turn[]>([])
   const [busy, setBusy] = useState(false)
+  // The one turn currently in flight, if any — Chat's own busy flag already
+  // guarantees at most one, so this doesn't need to be keyed by turn index.
+  const [liveSession, setLiveSession] = useState<SessionData | null>(null)
   const logRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // A dispatch keeps running even if the window closes mid-poll; the interval
+  // itself must not outlive the component.
+  useEffect(() => () => stopPolling(), [])
+
+  function stopPolling() {
+    if (pollRef.current !== null) {
+      clearInterval(pollRef.current)
+      pollRef.current = null
+    }
+  }
+
+  // Runlog is written incrementally from the moment Chat begins (chat.go
+  // appends KindRunStarted before dispatching), so GetSession has something to
+  // show well before the blocking Chat call returns — this is what makes a
+  // chat turn narrate the way Session's own Timeline already does, instead of
+  // sitting behind a spinner until the whole thing finishes (#513).
+  function watchRun(runId: string) {
+    setLiveSession(null)
+    const poll = () => void GetSession(runId).then(setLiveSession).catch(() => {})
+    poll()
+    pollRef.current = setInterval(poll, POLL_MS)
+  }
 
   useEffect(() => {
     ChatEnums().then(setEnums).catch(() => {
@@ -56,9 +89,14 @@ export function ChatDock({
     if (!p || busy) return
     setPrompt('')
     setBusy(true)
-    setTurns((t) => [...t, { prompt: p }])
+    // Minted before dispatching (not read off the reply) so watchRun can
+    // start polling immediately — Chat won't resolve until the whole
+    // dispatch finishes, but the run's log exists from the moment it starts.
+    const runId = await NewRunID()
+    setTurns((t) => [...t, { prompt: p, runId }])
+    watchRun(runId)
     try {
-      const reply = await Chat(p, enumKey)
+      const reply = await Chat(p, enumKey, runId)
       setTurns((t) => t.map((turn, i) => (i === t.length - 1 ? { ...turn, reply } : turn)))
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e)
@@ -70,6 +108,8 @@ export function ChatDock({
         ),
       )
     } finally {
+      stopPolling()
+      setLiveSession(null)
       setBusy(false)
     }
   }
@@ -77,13 +117,18 @@ export function ChatDock({
   // No heads discoverable at all — dispatch.New already probes fresh on every
   // call, so retrying the same prompt IS the "look again" action, not a
   // separate one. Targets a turn by index and reuses its own stored prompt
-  // rather than the (already-cleared) input state.
+  // rather than the (already-cleared) input state. A fresh run id, same as
+  // any other dispatch attempt — the failed attempt's log stays exactly what
+  // it was, a probe that found nothing.
   async function retry(i: number) {
     if (busy) return
     const p = turns[i].prompt
     setBusy(true)
+    const runId = await NewRunID()
+    setTurns((t) => t.map((turn, idx) => (idx === i ? { ...turn, runId } : turn)))
+    watchRun(runId)
     try {
-      const reply = await Chat(p, enumKey)
+      const reply = await Chat(p, enumKey, runId)
       setTurns((t) => t.map((turn, idx) => (idx === i ? { ...turn, reply } : turn)))
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e)
@@ -91,6 +136,8 @@ export function ChatDock({
         t.map((turn, idx) => (idx === i ? { ...turn, reply: { ...emptyReply(), error: message } } : turn)),
       )
     } finally {
+      stopPolling()
+      setLiveSession(null)
       setBusy(false)
     }
   }
@@ -139,7 +186,18 @@ export function ChatDock({
         {turns.map((t, i) => (
           <div key={i} className="turn">
             <p className="turn__you">{t.prompt}</p>
-            {!t.reply && <p className="turn__wait">routing…</p>}
+            {!t.reply && (
+              <>
+                <p className="turn__wait">{liveSession?.found ? 'working…' : 'routing…'}</p>
+                {/* Same event stream Session's Timeline renders after the fact
+                    (runlog.Append writes each event as it happens) — shown
+                    live here instead of making "what is it doing" a click
+                    through to Session once the whole turn is already done. */}
+                {i === turns.length - 1 && liveSession?.found && (
+                  <Timeline entries={liveSession.timeline} />
+                )}
+              </>
+            )}
             {t.reply?.error && !t.reply.needsProbe && <p className="turn__err">{t.reply.error}</p>}
             {t.reply?.needsProbe && (
               <div className="turn__probe">

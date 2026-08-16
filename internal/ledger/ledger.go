@@ -24,6 +24,7 @@ import (
 
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/policy"
+	"github.com/ankit373/hydra/internal/util"
 )
 
 // Action is the kind of access an agent attempts against a resource.
@@ -203,6 +204,15 @@ func DefaultPath() string {
 // (chainLock) — an in-process mutex alone can't stop two `hyctl` processes
 // from forking the hash chain.
 func Record(path string, e Event) error {
+	// Agent/Tool/Resource are supplied by whatever's on the other end of an MCP
+	// call — a local tool or a misbehaving agent — and every consumer (log,
+	// report, the TUI Security view) prints them. Sanitising once here, at the
+	// only place an event enters the ledger, makes every consumer safe by
+	// construction instead of each renderer needing its own escape-stripping (#500).
+	e.Agent = util.SafeTerminal(e.Agent)
+	e.Tool = util.SafeTerminal(e.Tool)
+	e.Resource = util.SafeTerminal(e.Resource)
+
 	if e.TS == "" {
 		e.TS = time.Now().UTC().Format(time.RFC3339)
 	}

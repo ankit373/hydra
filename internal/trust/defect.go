@@ -76,16 +76,23 @@ func (d *DefectModel) RequiredConfidence(t Task) float64 {
 	return target
 }
 
+// NormalizeBlastRadius applies the same clamp CostUSD uses internally: a
+// non-positive radius is treated as 1.0 (local). Exported so a caller that
+// displays BlastRadius alongside a derived cost/confidence — `hyctl trust
+// defect` — shows the value the calculation actually used, not the raw input.
+func NormalizeBlastRadius(blast float64) float64 {
+	if blast <= 0 {
+		return 1.0
+	}
+	return blast
+}
+
 // CostUSD = Base × blast × w_irrev × w_pii × w_prod, with each risk factor
 // applied only when present. BlastRadius ≤ 0 is treated as 1.0 (local).
 func (d *DefectModel) CostUSD(t Task) float64 {
 	cost := d.W.Base
 
-	blast := t.BlastRadius
-	if blast <= 0 {
-		blast = 1.0
-	}
-	cost *= blast
+	cost *= NormalizeBlastRadius(t.BlastRadius)
 
 	if t.Irreversible {
 		cost *= d.W.Irreversible
