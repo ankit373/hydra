@@ -660,7 +660,11 @@ func cmdDispatch() *cobra.Command {
 				return fmt.Errorf("--confidence must be in (0,1), got %v", confidence)
 			}
 			effectiveConf := confidence
-			touchesPII := policy.ContainsPII(policy.Request{Prompt: prompt})
+			// Classified once, here — the only place a plain, swarm, or SPRT
+			// dispatch first needs it — and threaded through so nothing downstream
+			// re-runs DetectPII/InjectionMarker on the same prompt (#522).
+			promptClass := policy.Classify(prompt)
+			touchesPII := promptClass.PII
 			// The plain dispatch path (d.Dispatch) reads cfg.Policies["pii"] itself
 			// and forces LocalOnly. The SPRT/swarm branches below take a shortcut
 			// straight past it and only ever saw --local — so a PII-touching prompt
@@ -735,16 +739,17 @@ func cmdDispatch() *cobra.Command {
 			if effectiveConf > 0 {
 				sw := swarm.New(d, d.Heads(), d)
 				res, err := sw.RunSPRT(ctx, prompt, swarm.Options{
-					TierHint:      tier,
-					HeadIDs:       headIDs,
-					MaxHeads:      swarmMaxHeads,
-					MaxEstCostUSD: swarmMaxCost,
-					LocalOnly:     localOnly,
-					System:        system,
-					Confidence:    effectiveConf,
-					Domain:        domain,
-					RunID:         runID,
-					TaskID:        taskID,
+					TierHint:       tier,
+					HeadIDs:        headIDs,
+					MaxHeads:       swarmMaxHeads,
+					MaxEstCostUSD:  swarmMaxCost,
+					LocalOnly:      localOnly,
+					System:         system,
+					Confidence:     effectiveConf,
+					Domain:         domain,
+					RunID:          runID,
+					TaskID:         taskID,
+					Classification: &promptClass,
 				})
 				if err != nil {
 					return err
@@ -762,16 +767,17 @@ func cmdDispatch() *cobra.Command {
 				}
 				sw := swarm.New(d, d.Heads(), d)
 				result, err := sw.Run(ctx, prompt, swarm.Options{
-					Mode:          mode,
-					TierHint:      tier,
-					HeadIDs:       headIDs,
-					MaxHeads:      swarmMaxHeads,
-					MaxEstCostUSD: swarmMaxCost,
-					LocalOnly:     localOnly,
-					System:        system,
-					JudgeTierHint: swarmJudge,
-					RunID:         runID,
-					TaskID:        taskID,
+					Mode:           mode,
+					TierHint:       tier,
+					HeadIDs:        headIDs,
+					MaxHeads:       swarmMaxHeads,
+					MaxEstCostUSD:  swarmMaxCost,
+					LocalOnly:      localOnly,
+					System:         system,
+					JudgeTierHint:  swarmJudge,
+					RunID:          runID,
+					TaskID:         taskID,
+					Classification: &promptClass,
 				})
 				if err != nil {
 					return err
@@ -788,15 +794,16 @@ func cmdDispatch() *cobra.Command {
 				tierHint = dispatch.EnumToTier(enumKey)
 			}
 			opts := dispatch.Options{
-				TierHint:   tierHint,
-				LocalOnly:  localOnly,
-				DryRun:     dryRun,
-				System:     system,
-				A2AFile:    a2aFile,
-				Enum:       enumKey,
-				RunID:      runID,
-				TaskID:     taskID,
-				MaxCostUSD: maxCost,
+				TierHint:       tierHint,
+				LocalOnly:      localOnly,
+				DryRun:         dryRun,
+				System:         system,
+				A2AFile:        a2aFile,
+				Enum:           enumKey,
+				RunID:          runID,
+				TaskID:         taskID,
+				MaxCostUSD:     maxCost,
+				Classification: &promptClass,
 			}
 
 			result, err := d.Dispatch(ctx, prompt, opts)

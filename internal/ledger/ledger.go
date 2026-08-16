@@ -627,14 +627,31 @@ type CheckRequest struct {
 	// operation); only nil means "no parameters supplied".
 	Params map[string]any
 
-	// Classification is the data-sensitivity tag (e.g. "pii"). If empty and
-	// Content is non-empty, it is derived via policy.ContainsPII(Content).
+	// Classification is the data-sensitivity tag (e.g. "pii"). If Classified is
+	// false and Content is non-empty, it is derived via policy.DetectPII(Content).
 	Classification string
-	// FlagReason is the injection-marker reason, if already known. If empty
-	// and Content is non-empty, it is derived via policy.InjectionMarker(Content).
+	// PIITypes accompanies a caller-supplied Classification (Classified=true) —
+	// the specific detectors that matched, preserved for the recorded Event
+	// instead of being silently dropped because detection was skipped.
+	PIITypes []string
+	// FlagReason is the injection-marker reason. If Classified is false and
+	// Content is non-empty, it is derived via policy.InjectionMarker(Content).
 	FlagReason string
+	// Classified marks Classification/PIITypes/FlagReason as Content's final
+	// verdict, even when all three are zero-value ("checked, and it's clean").
+	// Set via policy.Classify so a caller trying several candidates against the
+	// same content classifies it once instead of once per candidate.
+	Classified bool
 	Content    string
 }
+
+// detectPII and injectionMarker indirect policy's detectors through package
+// variables — mirrors swarm's executorFor — so a test can count calls without
+// a live regex scan on every one of them.
+var (
+	detectPII       = policy.DetectPII
+	injectionMarker = policy.InjectionMarker
+)
 
 // Check evaluates the policy AND records the resulting event to the ledger —
 // the accountability gate. It returns the decision.
@@ -644,16 +661,16 @@ type CheckRequest struct {
 // only tests `decision == Deny` can never be tricked into proceeding.
 func Check(path string, p Policy, req CheckRequest) (Decision, error) {
 	classification := NormalizeClassification(req.Classification)
-	var piiTypes []string
-	if classification == "" && req.Content != "" {
-		if piiTypes = policy.DetectPII(policy.Request{Prompt: req.Content}); len(piiTypes) > 0 {
+	piiTypes := req.PIITypes
+	if !req.Classified && classification == "" && req.Content != "" {
+		if piiTypes = detectPII(policy.Request{Prompt: req.Content}); len(piiTypes) > 0 {
 			classification = "pii"
 		}
 	}
 
 	flagReason := req.FlagReason
-	if flagReason == "" && req.Content != "" {
-		if reason, ok := policy.InjectionMarker(policy.Request{Prompt: req.Content}); ok {
+	if !req.Classified && flagReason == "" && req.Content != "" {
+		if reason, ok := injectionMarker(policy.Request{Prompt: req.Content}); ok {
 			flagReason = reason
 		}
 	}
@@ -693,7 +710,12 @@ func Check(path string, p Policy, req CheckRequest) (Decision, error) {
 // `hyctl mcp` by hand. Default (no rules configured) policy is Allow, so this
 // only changes behavior for an install that has deliberately configured a
 // deny rule.
-func CheckAndRecordDispatch(agent, headID, resource, content string) (Decision, error) {
+//
+// class is content's already-computed classification (policy.Classify) — pass
+// the same one for every candidate head tried against this content so Check
+// never re-runs DetectPII/InjectionMarker per candidate. Pass nil to let Check
+// derive it itself.
+func CheckAndRecordDispatch(agent, headID, resource, content string, class *policy.Classification) (Decision, error) {
 	// LoadPolicy is itself mtime-cached, so a fallback loop or fan-out calling
 	// this once per candidate head for the same content no longer re-reads
 	// and re-parses the identical policy file from disk each time.
@@ -701,9 +723,16 @@ func CheckAndRecordDispatch(agent, headID, resource, content string) (Decision, 
 	if err != nil {
 		return "", err
 	}
-	return Check(DefaultPath(), pol, CheckRequest{
-		Agent: agent, Tool: headID, Resource: resource, Action: Exec, Content: content,
-	})
+	req := CheckRequest{Agent: agent, Tool: headID, Resource: resource, Action: Exec, Content: content}
+	if class != nil {
+		req.Classified = true
+		req.PIITypes = class.PIITypes
+		req.FlagReason = class.FlagReason
+		if class.PII {
+			req.Classification = "pii"
+		}
+	}
+	return Check(DefaultPath(), pol, req)
 }
 
 // Summary is the aggregate accountability report.
