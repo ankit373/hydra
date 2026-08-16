@@ -448,3 +448,87 @@ func TestTimeline_RunLevelEntriesNameNoNode(t *testing.T) {
 		}
 	}
 }
+
+// editOnlyEvents builds n KindEdit events, each its own distinct task with no
+// Agent/Head — the shape that made nodeByTaskID's linear scan over Order pay
+// O(n) per event, O(n^2) for the run (#523).
+func editOnlyEvents(n int) []runlog.Event {
+	events := make([]runlog.Event, n)
+	for i := range events {
+		events[i] = runlog.Event{
+			V: runlog.SchemaVersion, Seq: uint64(i + 1), RunID: "run-edits",
+			TS: time.Now().UTC().Format(time.RFC3339Nano), Kind: runlog.KindEdit,
+			TaskID: fmt.Sprintf("task-%d", i), File: "/scratch/f.py", Detail: "+1/-0",
+		}
+	}
+	return events
+}
+
+// A run of many distinct edit-only tasks must still reconstruct into one node
+// per task, correctly attributed — the byTaskID index changes the lookup's
+// cost, not its result.
+func TestReconstruct_ManyDistinctEditTasks(t *testing.T) {
+	const n = 5000
+	events := editOnlyEvents(n)
+
+	tr, tl := Reconstruct(events)
+
+	if len(tr.Nodes) != n {
+		t.Fatalf("got %d nodes, want %d — one per distinct edit-only task", len(tr.Nodes), n)
+	}
+	if len(tr.Order) != n {
+		t.Fatalf("Order has %d entries, want %d", len(tr.Order), n)
+	}
+	if len(tr.Roots) != n {
+		t.Fatalf("Roots has %d entries, want %d — no Parent was ever set", len(tr.Roots), n)
+	}
+	if len(tl.Entries) != n {
+		t.Fatalf("timeline has %d entries, want %d", len(tl.Entries), n)
+	}
+	if tr.Skipped != 0 {
+		t.Errorf("Skipped = %d, want 0", tr.Skipped)
+	}
+	for i := 0; i < n; i++ {
+		id := fmt.Sprintf("task-%d", i)
+		node := tr.Nodes[id]
+		if node == nil {
+			t.Fatalf("no node for %s", id)
+		}
+		if node.TaskID != id {
+			t.Errorf("node %s TaskID = %q, want %q", id, node.TaskID, id)
+		}
+		// node() seeds a fresh node at StatePending, and KindEdit's own
+		// "if n.State == \"\"" guard never fires on it, so it stays pending.
+		if node.State != StatePending {
+			t.Errorf("node %s state = %q, want pending", id, node.State)
+		}
+		if node.Detail != "+1/-0" {
+			t.Errorf("node %s detail = %q, want the edit's line counts", id, node.Detail)
+		}
+	}
+
+	// Folding one at a time must agree with the bulk reconstruction (the same
+	// invariant TestApply_EqualsReconstruct pins for smaller, mixed-kind runs).
+	folded := NewTree(events[0].RunID)
+	for _, e := range events {
+		folded = Apply(folded, e)
+	}
+	if len(folded.Nodes) != len(tr.Nodes) {
+		t.Fatalf("folded %d nodes, bulk %d", len(folded.Nodes), len(tr.Nodes))
+	}
+}
+
+// BenchmarkReconstruct tracks the cost of folding a run of distinct edit-only
+// tasks. Before the byTaskID index (#523), ns/op per event grew with n
+// (O(n^2) total); after it, ns/op per event should stay roughly flat.
+func BenchmarkReconstruct(b *testing.B) {
+	for _, n := range []int{2000, 8000, 32000} {
+		events := editOnlyEvents(n)
+		b.Run(fmt.Sprintf("n=%d", n), func(b *testing.B) {
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				Reconstruct(events)
+			}
+		})
+	}
+}

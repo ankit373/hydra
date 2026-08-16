@@ -85,6 +85,11 @@ type Tree struct {
 	Roots []string
 	Nodes map[string]*Node
 
+	// byTaskID indexes nodes by task, parallel to Nodes indexing by node ID.
+	// It lets an event with no identity of its own (e.g. KindEdit) find the
+	// node already tracking its task in O(1) instead of scanning Order (#523).
+	byTaskID map[string]*Node
+
 	// Order is node-creation order, so a renderer can lay nodes out stably
 	// rather than at the mercy of map iteration.
 	Order []string
@@ -120,7 +125,7 @@ type Timeline struct {
 
 // NewTree returns an empty tree ready for Apply.
 func NewTree(runID string) *Tree {
-	return &Tree{RunID: runID, Nodes: map[string]*Node{}}
+	return &Tree{RunID: runID, Nodes: map[string]*Node{}, byTaskID: map[string]*Node{}}
 }
 
 // Reconstruct builds a tree and timeline from a run's events. Events are taken
@@ -177,13 +182,19 @@ func Apply(t *Tree, e runlog.Event) *Tree {
 	// agent/head identity (#434). Attribute it to that existing node instead.
 	var n *Node
 	if e.Agent == "" && e.Head == "" && e.TaskID != "" {
-		n = t.nodeByTaskID(e.TaskID)
+		n = t.byTaskID[e.TaskID]
 	}
 	if n == nil {
 		n = t.node(id)
 	}
 	if e.TaskID != "" {
 		n.TaskID = e.TaskID
+		// First claim wins, mirroring the file's existing "first owner wins"
+		// rule for Parent (see link()) — and matching the creation-order
+		// first-match the old linear scan returned when two nodes shared a task.
+		if _, ok := t.byTaskID[e.TaskID]; !ok {
+			t.byTaskID[e.TaskID] = n
+		}
 	}
 	if e.Head != "" {
 		n.Head = e.Head
@@ -262,19 +273,6 @@ func (t *Tree) node(id string) *Node {
 	t.Order = append(t.Order, id)
 	t.Roots = append(t.Roots, id) // provisional; link() promotes it to a child
 	return n
-}
-
-// nodeByTaskID finds a node already tracking this task, regardless of what
-// key it was created under (a task's first event sets that key; it is
-// usually the agent/head, not the task id itself). Runs are small enough
-// that a scan costs nothing worth indexing for.
-func (t *Tree) nodeByTaskID(taskID string) *Node {
-	for _, id := range t.Order {
-		if n := t.Nodes[id]; n != nil && n.TaskID == taskID {
-			return n
-		}
-	}
-	return nil
 }
 
 // link records an ownership edge, creating either endpoint if needed. A node
