@@ -64,7 +64,7 @@ func atoiTier(t *testing.T, s string) int {
 func TestChat_EmptyPromptIsAReplyNotAnError(t *testing.T) {
 	sandbox(t)
 
-	r, err := New().Chat("", "")
+	r, err := New().Chat("", "", "")
 	if err != nil {
 		t.Fatalf("an empty prompt must not error: %v", err)
 	}
@@ -81,12 +81,39 @@ func TestChat_EmptyPromptIsAReplyNotAnError(t *testing.T) {
 func TestChat_FailedDispatchReturnsAReply(t *testing.T) {
 	sandbox(t)
 
-	r, err := New().Chat("hello", "SIMPLE")
+	r, err := New().Chat("hello", "SIMPLE", "")
 	if err != nil {
 		t.Fatalf("a failed dispatch must come back as a reply, not a Go error: %v", err)
 	}
 	if r.RunID == "" {
 		t.Error("no RunID; a failed chat still has a run the user can inspect")
+	}
+}
+
+// The dock mints its id via NewRunID before dispatching, so it can poll
+// GetSession(runId) while Chat is still in flight (#513). Chat must actually
+// use that id rather than silently minting its own.
+func TestChat_HonoursCallerSuppliedRunID(t *testing.T) {
+	sandbox(t)
+
+	want := New().NewRunID()
+	r, err := New().Chat("hello", "SIMPLE", want)
+	if err != nil {
+		t.Fatalf("a failed dispatch must come back as a reply, not a Go error: %v", err)
+	}
+	if r.RunID != want {
+		t.Errorf("RunID = %q, want the caller-supplied %q — the dock's poll would be watching the wrong log", r.RunID, want)
+	}
+}
+
+func TestNewRunID_NonEmptyAndUnique(t *testing.T) {
+	a := New()
+	first, second := a.NewRunID(), a.NewRunID()
+	if first == "" || second == "" {
+		t.Fatal("NewRunID returned an empty id")
+	}
+	if first == second {
+		t.Error("two calls returned the same id")
 	}
 }
 
@@ -101,7 +128,7 @@ func TestChat_NoHeadsAtAllSetsNeedsProbe(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	r, err := New().Chat("hello", "SIMPLE")
+	r, err := New().Chat("hello", "SIMPLE", "")
 	if err != nil {
 		t.Fatalf("zero heads must come back as a reply, not a Go error: %v", err)
 	}

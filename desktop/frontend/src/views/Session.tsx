@@ -78,7 +78,7 @@ export function Session({
   )
 }
 
-function Timeline({ entries }: { entries: TimelineEntry[] }) {
+export function Timeline({ entries }: { entries: TimelineEntry[] }) {
   if (entries.length === 0) return null
   return (
     <ol className="timeline">
