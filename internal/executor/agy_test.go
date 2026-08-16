@@ -18,10 +18,13 @@ import (
 	"github.com/ankit373/hydra/internal/testutil"
 )
 
-// The agy executor is the only one that mutates a file the user owns: it swaps
-// the model into agy's own settings.json, runs, and swaps it back. If it does
-// not swap back, the user's editor is left pointing at whatever model Hydra
-// last routed to — a visible, confusing change they did not make.
+// The agy executor used to mutate a file the user owns: swap the model into
+// agy's own settings.json, run, swap it back — serialized end to end because
+// two concurrent swaps corrupt the shared file. It now passes the model via
+// agy's own --model flag (confirmed against the real CLI, #522), so Execute
+// never touches settings.json for model selection and concurrent calls run
+// their subprocess work in parallel. recoverAgySwap remains only to clean up
+// a sentinel a pre-#522 binary could have left behind mid-swap.
 
 // fakeAgy plants an `agy` on the sandbox's PATH with the given behaviour.
 func fakeAgy(t *testing.T, s *testutil.Sandbox, stdout, stderr string, exitCode int) {
@@ -50,6 +53,23 @@ func fakeAgy(t *testing.T, s *testutil.Sandbox, stdout, stderr string, exitCode 
 		}
 		body += "exit " + itoa(exitCode) + "\n"
 	}
+	s.FakeBinary(t, "agy", body)
+}
+
+// fakeAgyCapturingArgs plants an `agy` that appends its argv (one per line) to
+// argsFile before printing stdout, so a test can assert exactly what Execute
+// invoked it with — e.g. that --model carries the right flag.
+func fakeAgyCapturingArgs(t *testing.T, s *testutil.Sandbox, argsFile, stdout string, exitCode int) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("no portable arg-dumping .bat")
+	}
+	body := "#!/bin/sh\n" +
+		"for a in \"$@\"; do printf '%s\\n' \"$a\" >> " + shellQuote(argsFile) + "; done\n"
+	if stdout != "" {
+		body += "printf '%s\\n' " + shellQuote(stdout) + "\n"
+	}
+	body += "exit " + itoa(exitCode) + "\n"
 	s.FakeBinary(t, "agy", body)
 }
 
@@ -99,15 +119,24 @@ func agyHead(modelFlag string) provider.Head {
 	}
 }
 
-func TestAgyExecute_SwapsTheModelInAndBackOut(t *testing.T) {
+// Model selection goes through agy's own --model flag (confirmed against the
+// real CLI, #522) rather than a settings.json swap, so a live user config —
+// including a model they picked themselves — must survive a dispatch call
+// completely untouched.
+func TestAgyExecute_PassesModelViaFlagAndNeverTouchesSettings(t *testing.T) {
 	s := testutil.NewSandbox(t)
-	fakeAgy(t, s, "the answer", "", 0)
+	argsFile := filepath.Join(t.TempDir(), "args.txt")
+	fakeAgyCapturingArgs(t, s, argsFile, "the answer", 0)
 
 	path := writeAgySettings(t, map[string]any{
 		"model":     "gemini-3-pro",
 		"theme":     "dark", // a setting Hydra does not own
 		"telemetry": false,
 	})
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	resp, err := (&AgyExecutor{}).Execute(context.Background(), Request{
 		Prompt: "hello", Head: agyHead("claude-sonnet-4.5"),
@@ -119,22 +148,34 @@ func TestAgyExecute_SwapsTheModelInAndBackOut(t *testing.T) {
 		t.Errorf("Output = %q", resp.Output)
 	}
 
-	after := readAgySettings(t, path)
-	if after["model"] != "gemini-3-pro" {
-		t.Errorf("model = %v after the run, want the user's own %q restored",
-			after["model"], "gemini-3-pro")
+	raw, err := os.ReadFile(argsFile)
+	if err != nil {
+		t.Fatal(err)
 	}
-	// Everything else must survive the round trip untouched.
-	if after["theme"] != "dark" || after["telemetry"] != false {
-		t.Errorf("settings.json lost the user's other keys: %+v", after)
+	args := strings.Split(strings.TrimRight(string(raw), "\n"), "\n")
+	found := false
+	for i, a := range args {
+		if a == "--model" && i+1 < len(args) && args[i+1] == "claude-sonnet-4.5" {
+			found = true
+		}
 	}
-	// The sentinel backup must not be left behind — a stale one makes the next
-	// run "recover" to an older state.
+	if !found {
+		t.Errorf("agy invoked with args %v, want --model claude-sonnet-4.5 among them", args)
+	}
+
+	// settings.json must be byte-identical — no swap, no restore, nothing.
+	after, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(after) != string(before) {
+		t.Errorf("settings.json changed:\nbefore: %s\nafter:  %s", before, after)
+	}
 	if _, err := os.Stat(path + agyOrigSuffix); err == nil {
-		t.Error("the sentinel backup survived a clean run")
+		t.Error("a sentinel was written even though nothing was swapped")
 	}
 	if _, err := os.Stat(path + ".hydra-tmp"); err == nil {
-		t.Error("a temp file survived a clean run")
+		t.Error("a temp file was written even though nothing was swapped")
 	}
 }
 
@@ -284,27 +325,17 @@ func TestAgyExecute_NoSettingsFileStillRuns(t *testing.T) {
 	}
 }
 
-// swapAgyModel writes a sentinel before it mutates anything, so a SIGKILL
-// between the swap and the restore is recoverable. Without it the user's agy is
-// left pinned to Hydra's last model with nothing recording what it was.
+// recoverAgySwap cleans up a stale sentinel a pre-#522 Hydra binary could
+// leave behind if SIGKILLed mid its old settings.json swap. Execute no longer
+// performs that swap (model selection goes through --model instead), so the
+// "killed mid-swap" state is constructed by hand rather than via swapAgyModel.
 func TestRecoverAgySwap_UndoesAKilledSwap(t *testing.T) {
 	testutil.NewSandbox(t)
 
-	path := writeAgySettings(t, map[string]any{"model": "the-users-model", "theme": "dark"})
-
-	original, err := swapAgyModel(path, "hydras-model")
-	if err != nil {
+	path := writeAgySettings(t, map[string]any{"model": "hydras-model", "theme": "dark"})
+	sentinel := `{"model":"the-users-model","theme":"dark"}`
+	if err := os.WriteFile(path+agyOrigSuffix, []byte(sentinel), 0o600); err != nil {
 		t.Fatal(err)
-	}
-	if original != "the-users-model" {
-		t.Errorf("swapAgyModel returned %q as the original", original)
-	}
-	if got := readAgySettings(t, path)["model"]; got != "hydras-model" {
-		t.Fatalf("model = %v after the swap, want Hydra's", got)
-	}
-	// Simulate SIGKILL: the deferred restore never runs.
-	if _, err := os.Stat(path + agyOrigSuffix); err != nil {
-		t.Fatalf("no sentinel was written before the mutation: %v", err)
 	}
 
 	recoverAgySwap(path)
@@ -328,76 +359,16 @@ func TestRecoverAgySwap_UndoesAKilledSwap(t *testing.T) {
 	}
 }
 
-// A settings.json with no model key means the user never pinned one. Restoring
-// must remove the key again rather than writing an empty string, which agy
-// would read as a model named "".
-func TestRestoreAgyModel_RemovesTheKeyWhenThereWasNone(t *testing.T) {
-	testutil.NewSandbox(t)
-
-	path := writeAgySettings(t, map[string]any{"theme": "dark"})
-
-	original, err := swapAgyModel(path, "hydras-model")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if original != "" {
-		t.Errorf("original = %q, want empty — there was no model key", original)
-	}
-
-	restoreAgyModel(path, original)
-
-	after := readAgySettings(t, path)
-	if _, present := after["model"]; present {
-		t.Errorf("model key = %v after restore, want it absent as it was before",
-			after["model"])
-	}
-}
-
-// A settings.json that is not JSON must not be overwritten. Hydra cannot know
-// what it meant, and replacing it destroys the user's config.
-func TestSwapAgyModel_RefusesToTouchUnparsableSettings(t *testing.T) {
-	testutil.NewSandbox(t)
-
-	path := agySitesPath()
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	corrupt := []byte("{ this was hand-edited and is broken")
-	if err := os.WriteFile(path, corrupt, 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	if _, err := swapAgyModel(path, "m"); err == nil {
-		t.Fatal("an unparsable settings.json was swapped anyway")
-	}
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(raw) != string(corrupt) {
-		t.Errorf("settings.json was modified: %q", raw)
-	}
-	// No sentinel may be left pointing at a file that was never swapped.
-	if _, err := os.Stat(path + agyOrigSuffix); err == nil {
-		t.Error("a sentinel was left behind after a refused swap; the next run would " +
-			"\"recover\" a file that was never changed")
-	}
-}
-
-func TestSwapAgyModel_MissingFileIsAnErrorNotASilentNoOp(t *testing.T) {
-	testutil.NewSandbox(t)
-
-	if _, err := swapAgyModel(filepath.Join(t.TempDir(), "absent.json"), "m"); err == nil {
-		t.Error("swapping a settings.json that does not exist reported success")
-	}
-}
-
-// agy shares one settings.json, so concurrent executions must be serialized.
-// Without the mutex a swarm run corrupts it and every head runs the wrong model.
-func TestAgyExecute_ConcurrentRunsLeaveSettingsIntact(t *testing.T) {
+// Settings.json is no longer touched for model selection, so 8 concurrent
+// calls (each a different model) must leave it byte-for-byte untouched.
+func TestAgyExecute_ConcurrentRunsDoNotTouchSettings(t *testing.T) {
 	s := testutil.NewSandbox(t)
 	fakeAgy(t, s, "ok", "", 0)
 	path := writeAgySettings(t, map[string]any{"model": "the-users-model", "theme": "dark"})
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	var wg sync.WaitGroup
 	for i := 0; i < 8; i++ {
@@ -411,17 +382,77 @@ func TestAgyExecute_ConcurrentRunsLeaveSettingsIntact(t *testing.T) {
 	}
 	wg.Wait()
 
-	after := readAgySettings(t, path)
-	if after["model"] != "the-users-model" {
-		t.Errorf("model = %v after 8 concurrent runs, want the user's own restored",
-			after["model"])
+	after, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if after["theme"] != "dark" {
-		t.Errorf("concurrent runs corrupted settings.json: %+v", after)
+	if string(after) != string(before) {
+		t.Errorf("settings.json changed after 8 concurrent runs:\nbefore: %s\nafter:  %s", before, after)
 	}
 	if _, err := os.Stat(path + agyOrigSuffix); err == nil {
-		t.Error("a sentinel survived concurrent runs")
+		t.Error("a sentinel was written even though model selection uses --model now")
 	}
+}
+
+// The #522 audit's own harness: 3 concurrent calls to a fake agy sleeping
+// 500ms must complete in close to one call's duration, not 3x it. A lock held
+// across cmd.Run() (the bug this fix removes) would serialize them and this
+// would take ~1.5s; narrowing the lock to the settings recovery step alone
+// lets them run in parallel.
+func TestAgyExecute_ConcurrentCallsRunInParallel(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("no portable sleeping .bat")
+	}
+	s := testutil.NewSandbox(t)
+	// Absolute path: the sandbox's $PATH is scrubbed to just BinDir, so a bare
+	// "sleep" resolves to nothing and the script races ahead instead of
+	// actually sleeping (matches TestAgyExecute_HonoursTheTimeout's own /bin/sleep).
+	s.FakeBinary(t, "agy", "#!/bin/sh\n/bin/sleep 0.5\necho ok\n")
+
+	const n = 3
+	runOnce := func() (wall time.Duration, durations []time.Duration) {
+		durations = make([]time.Duration, n)
+		var wg sync.WaitGroup
+		start := time.Now()
+		for i := 0; i < n; i++ {
+			wg.Add(1)
+			go func(i int) {
+				defer wg.Done()
+				callStart := time.Now()
+				_, _ = (&AgyExecutor{}).Execute(context.Background(), Request{
+					Prompt: "hi", Head: agyHead("model-" + itoa(i)),
+				})
+				durations[i] = time.Since(callStart)
+			}(i)
+		}
+		wg.Wait()
+		return time.Since(start), durations
+	}
+
+	// A real sleep(0.5) syscall can't finish early, so full serialization has a
+	// hard floor of n*500ms=1.5s regardless of machine speed — genuine
+	// parallelism stays close to one call's duration instead. 1.2s sits well
+	// below that floor. Up to 3 attempts absorb a one-off host scheduling
+	// stall (which looks identical to a serializing lock in a single sample);
+	// if the lock actually serializes cmd.Run(), no attempt gets close.
+	const budget = 1200 * time.Millisecond
+	var best time.Duration = time.Hour
+	for attempt := 0; attempt < 3; attempt++ {
+		wall, durations := runOnce()
+		for i, d := range durations {
+			t.Logf("attempt %d, call %d: dur=%v", attempt, i, d)
+		}
+		t.Logf("attempt %d: TOTAL WALL TIME for %d concurrent calls: %v", attempt, n, wall)
+		if wall < best {
+			best = wall
+		}
+		if wall <= budget {
+			return
+		}
+	}
+	t.Errorf("best of 3 attempts: wall=%v for %d concurrent 500ms calls, want at least "+
+		"one attempt well under the n*500ms=1.5s serialized floor — the lock is "+
+		"serializing cmd.Run() again", best, n)
 }
 
 // AGY_TIMEOUT accepts a Go duration or a bare integer meaning seconds; the
