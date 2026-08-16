@@ -19,6 +19,12 @@ type Request struct {
 	Prompt   string
 	TierHint string // requested tier enum, e.g. "COMPLEX"
 	Tags     []string
+
+	// PII, when non-nil, is Prompt's already-computed ContainsPII verdict (see
+	// Classify) — passing it skips DetectPII's regex scan a second time for
+	// content a caller already classified. Nil means "unknown; derive it from
+	// Prompt."
+	PII *bool
 }
 
 // Rule is one conditional policy.

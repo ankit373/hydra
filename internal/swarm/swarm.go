@@ -11,6 +11,7 @@ import (
 
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/dispatch"
+	"github.com/ankit373/hydra/internal/policy"
 	"github.com/ankit373/hydra/internal/provider"
 	"github.com/ankit373/hydra/internal/trust"
 )
@@ -62,6 +63,13 @@ type Options struct {
 	// tell "5 heads on one task" from "5 separate tasks" (#181).
 	RunID  string
 	TaskID string
+
+	// Classification is prompt's already-computed PII/injection verdict
+	// (policy.Classify) — cmdDispatch computes this once and passes it here so
+	// Run/RunSPRT resolve it once, before firing any head, instead of every
+	// concurrent executeHead call re-scanning the same prompt. Nil means "not
+	// computed yet"; Run/RunSPRT derive and fill it in before dispatching.
+	Classification *policy.Classification
 }
 
 // SwarmResult is the complete outcome of a swarm dispatch.
@@ -179,6 +187,13 @@ func (s *Swarm) Run(ctx context.Context, prompt string, opts Options) (*SwarmRes
 	}
 	if len(selected) == 0 {
 		return nil, fmt.Errorf("swarm: no heads available for the requested configuration")
+	}
+
+	// Classify once, before any head fires — every concurrent executeHead call
+	// below reuses this instead of each re-scanning the same prompt (#522).
+	if opts.Classification == nil {
+		c := policy.Classify(prompt)
+		opts.Classification = &c
 	}
 
 	// 2. Pre-flight cost guard.

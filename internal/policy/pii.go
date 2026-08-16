@@ -64,7 +64,13 @@ var detectors = []detector{
 }
 
 // ContainsPII reports whether the prompt likely contains sensitive data.
-func ContainsPII(req Request) bool { return len(DetectPII(req)) > 0 }
+// Honors req.PII when already computed, rather than re-running the scan.
+func ContainsPII(req Request) bool {
+	if req.PII != nil {
+		return *req.PII
+	}
+	return len(DetectPII(req)) > 0
+}
 
 // DetectPII returns the names of every detector that matched, deduped and in
 // declaration order.

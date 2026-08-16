@@ -68,6 +68,13 @@ type Options struct {
 	// swarm does, otherwise each call is its own run.
 	RunID  string
 	TaskID string
+
+	// Classification is prompt's already-computed PII/injection verdict
+	// (policy.Classify) — cmdDispatch computes this once for its own
+	// defect-cost/local-only decisions and passes it here so Dispatch and
+	// every fallback candidate's ledger check reuse it instead of re-scanning
+	// prompt once per candidate. Nil means "not computed yet; derive it here."
+	Classification *policy.Classification
 }
 
 // Result is the outcome of a successful dispatch.
@@ -217,7 +224,16 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		prompt = injected
 	}
 
-	req := policy.Request{Prompt: prompt, TierHint: tier}
+	// Classify once and reuse for both the policy engine below and every
+	// fallback candidate's ledger check — DetectPII/InjectionMarker are pure
+	// functions of prompt, so re-running them per candidate repeats the same
+	// answer at the same cost (#522).
+	class := opts.Classification
+	if class == nil {
+		c := policy.Classify(prompt)
+		class = &c
+	}
+	req := policy.Request{Prompt: prompt, TierHint: tier, PII: &class.PII}
 	action := d.policy.Evaluate(req)
 
 	if action.Deny {
@@ -266,7 +282,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		// CheckAndRecordDispatch's LoadPolicy is itself mtime-cached, so trying
 		// every candidate against the same prompt no longer re-reads and
 		// re-parses the identical policy file from disk once per candidate.
-		if decision, lerr := ledger.CheckAndRecordDispatch("hydra-dispatch", h.ID, opts.Resource, prompt); lerr != nil || decision == ledger.Deny {
+		if decision, lerr := ledger.CheckAndRecordDispatch("hydra-dispatch", h.ID, opts.Resource, prompt, class); lerr != nil || decision == ledger.Deny {
 			detail := "denied by ledger policy"
 			if lerr != nil {
 				detail = "ledger policy check failed: " + lerr.Error()

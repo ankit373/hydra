@@ -258,6 +258,57 @@ func TestDispatch_LedgerDenyRuleBlocksTheHead(t *testing.T) {
 	}
 }
 
+// dispatch.go's fallback loop calls ledger.CheckAndRecordDispatch once per
+// candidate against the same prompt. A precomputed Classification must be
+// reused for every one of them, not re-derived from Content — a deliberately
+// "clean" Classification recorded on every candidate despite the prompt
+// containing an email proves it was reused, not recomputed (#522).
+func TestDispatch_ReusesPrecomputedClassificationAcrossFallbackCandidates(t *testing.T) {
+	s := testutil.NewSandbox(t)
+
+	broken1 := echoHead(t, s, "h1", 95)
+	broken1.Executable = filepath.Join(s.BinDir, "does-not-exist")
+	broken2 := echoHead(t, s, "h2", 90)
+	broken2.Executable = filepath.Join(s.BinDir, "does-not-exist")
+	working := echoHead(t, s, "h3", 85)
+
+	prompt := "please contact admin@example.com about this"
+	clean := policy.Classification{}
+	res, err := liveDispatcher(broken1, broken2, working).Dispatch(context.Background(), prompt, Options{
+		Classification: &clean,
+	})
+	if err != nil {
+		t.Fatalf("dispatch gave up instead of falling back to the working head: %v", err)
+	}
+	if res.Head.ID != "h3" {
+		t.Fatalf("answered by %q, want h3 after 2 fallbacks", res.Head.ID)
+	}
+	if res.Retries != 2 {
+		t.Fatalf("Retries = %d, want 2 — three candidates should have been tried", res.Retries)
+	}
+
+	events, err := ledger.Load(ledger.DefaultPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var dispatchEvents int
+	for _, e := range events {
+		if e.Agent != "hydra-dispatch" {
+			continue
+		}
+		dispatchEvents++
+		if e.Classification != "" || len(e.PIITypes) != 0 {
+			t.Errorf("head %s: Classification=%q PIITypes=%v, want both empty — the "+
+				"precomputed clean Classification must be reused for every candidate, "+
+				"not re-derived from a prompt that plainly contains an email",
+				e.Tool, e.Classification, e.PIITypes)
+		}
+	}
+	if dispatchEvents != 3 {
+		t.Fatalf("recorded %d hydra-dispatch ledger events, want 3 (one per candidate)", dispatchEvents)
+	}
+}
+
 // With no policy configured, the ledger's default-allow must leave dispatch
 // behavior unchanged — but it must still record the access.
 func TestDispatch_DefaultLedgerPolicyRecordsButNeverBlocks(t *testing.T) {
@@ -444,6 +495,34 @@ func TestDispatch_PIIForcesLocalOnlyAndSaysSoWhenNothingIsLocal(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "localOnly=true") {
 		t.Errorf("error = %v, want it to name local-only as the cause", err)
+	}
+}
+
+// A precomputed Classification must be trusted over a fresh scan: cmdDispatch
+// computes it once (see main.go) so Dispatch's own policy.Evaluate call reuses
+// it instead of re-scanning prompt. A Dispatch that recomputed anyway would
+// force local-only here (an SSN is in the prompt) and fail with no local
+// head — succeeding proves the override was actually used, not ignored (#522).
+func TestDispatch_PrecomputedClassificationOverridesFreshDetection(t *testing.T) {
+	s := testutil.NewSandbox(t)
+
+	dd := &Dispatcher{
+		cfg:    &config.Config{},
+		heads:  []provider.Head{echoHead(t, s, "cloud", 90)},
+		policy: policy.New(policy.DefaultRules(true)), // local-only PII rule armed
+		budget: budget.NewRegistry(nil),
+	}
+
+	clean := policy.Classification{} // PII: false, despite the SSN below
+	res, err := dd.Dispatch(context.Background(), "my SSN is 123-45-6789", Options{
+		Classification: &clean,
+	})
+	if err != nil {
+		t.Fatalf("dispatch failed even though the precomputed classification says clean: %v", err)
+	}
+	if res.Head.ID != "cloud" {
+		t.Errorf("Head = %q, want the non-local head — the precomputed classification "+
+			"should have let it through instead of forcing local-only", res.Head.ID)
 	}
 }
 

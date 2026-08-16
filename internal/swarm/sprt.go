@@ -11,6 +11,7 @@ import (
 
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/dispatch"
+	"github.com/ankit373/hydra/internal/policy"
 	"github.com/ankit373/hydra/internal/provider"
 	"github.com/ankit373/hydra/internal/rank"
 	"github.com/ankit373/hydra/internal/trust"
@@ -49,6 +50,13 @@ func (s *Swarm) RunSPRT(ctx context.Context, prompt string, opts Options) (*SPRT
 	}
 	if len(selected) == 0 {
 		return nil, fmt.Errorf("swarm sprt: no heads available")
+	}
+
+	// Classify once, before any head is sampled — every executeHead call the
+	// adapter makes below reuses this instead of each re-scanning prompt (#522).
+	if opts.Classification == nil {
+		c := policy.Classify(prompt)
+		opts.Classification = &c
 	}
 
 	domain := opts.Domain

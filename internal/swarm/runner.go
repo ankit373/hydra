@@ -47,7 +47,9 @@ func executeHead(ctx context.Context, h provider.Head, prompt string, opts Optio
 
 	// Fails closed like ledger.Check itself: a policy-check error must deny,
 	// not silently let the head run just because the decision couldn't be computed.
-	if decision, err := ledger.CheckAndRecordDispatch("hydra-swarm", h.ID, "", prompt); err != nil || decision == ledger.Deny {
+	// opts.Classification is resolved once by Run/RunSPRT before any head fires,
+	// so concurrent calls here reuse it instead of each re-scanning prompt (#522).
+	if decision, err := ledger.CheckAndRecordDispatch("hydra-swarm", h.ID, "", prompt, opts.Classification); err != nil || decision == ledger.Deny {
 		a.FinishedAt = time.Now()
 		a.Duration = a.FinishedAt.Sub(a.StartedAt)
 		a.Status = StatusFailed
