@@ -175,31 +175,80 @@ func llm10UnboundedConsumption(events []ledger.Event) Category {
 	return c
 }
 
+// firstGapSeen scans history once and indexes, per category ID, the index of
+// the earliest entry naming it as a gap — history is oldest-first, so the
+// first entry recording an ID wins and later ones are skipped. It does not
+// parse timestamps: that cost belongs at lookup time, scoped to the fixed,
+// small set of categories actually being annotated, not to every one of
+// potentially hundreds of thousands of history entries regardless of
+// whether anything ever looks them up.
+func firstGapSeen(history []scoreEntry) map[string]int {
+	out := make(map[string]int, 8)
+	for i, h := range history {
+		for _, id := range h.Gaps {
+			if _, ok := out[id]; ok {
+				continue
+			}
+			out[id] = i
+		}
+	}
+	return out
+}
+
+// firstParseableGapSince is the fallback for the one case the index above
+// can't resolve on its own: the earliest entry naming id as a gap has a
+// corrupt TS. It mirrors the pre-#524 scan's behavior of skipping a bad
+// timestamp and continuing to look for the next-oldest match — scoped to
+// this single category rather than re-scanning history for every category,
+// since a malformed timestamp is not the common case.
+func firstParseableGapSince(history []scoreEntry, id string) (string, time.Time, bool) {
+	for _, h := range history {
+		if !slices.Contains(h.Gaps, id) {
+			continue
+		}
+		if ts, err := time.Parse(time.RFC3339, h.TS); err == nil {
+			return h.TS, ts, true
+		}
+	}
+	return "", time.Time{}, false
+}
+
 // annotateGapAge fills in GapSince/GapAgeDays for every currently-Gap
 // category, using score history that Build already loads and persists
 // (security_score.jsonl, since #396) — no new logging, just reading data
 // that already exists. history must be oldest-first, which
 // loadScoreHistory/appendScoreHistory already guarantee (the log is
 // append-only).
+//
+// firstGapSeen does one pass over history to index every category's
+// earliest gap sighting; this then does one pass over cats (bounded by the
+// fixed OWASP LLM Top-10 list) to look values up — linear in history size,
+// where the previous nested scan (categories × history × gaps-per-entry)
+// was worse than linear.
 func annotateGapAge(cats []Category, history []scoreEntry, now time.Time) []Category {
+	firstIdx := firstGapSeen(history)
 	out := make([]Category, len(cats))
 	copy(out, cats)
 	for i, c := range out {
 		if c.Status != Gap {
 			continue
 		}
-		for _, h := range history {
-			if !slices.Contains(h.Gaps, c.ID) {
-				continue
-			}
-			ts, err := time.Parse(time.RFC3339, h.TS)
-			if err != nil {
-				continue
-			}
-			out[i].GapSince = h.TS
-			out[i].GapAgeDays = int(now.Sub(ts).Hours() / 24)
-			break
+		idx, ok := firstIdx[c.ID]
+		if !ok {
+			continue
 		}
+		tsStr := history[idx].TS
+		ts, err := time.Parse(time.RFC3339, tsStr)
+		if err != nil {
+			// The indexed entry's own timestamp is corrupt — fall back to a
+			// linear scan for this one category only.
+			tsStr, ts, ok = firstParseableGapSince(history, c.ID)
+			if !ok {
+				continue
+			}
+		}
+		out[i].GapSince = tsStr
+		out[i].GapAgeDays = int(now.Sub(ts).Hours() / 24)
 	}
 	return out
 }

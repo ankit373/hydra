@@ -159,10 +159,19 @@ type Cockpit struct {
 	spend     float64   // today's real estimated spend, from cost.jsonl
 	metrics   ckMetrics // real latency/savings/blast/calibration, loaded once
 
-	// security is the OWASP LLM Top-10 coverage/ledger report, loaded once at
-	// startup like everything else here — nil if Build failed, handled by the
-	// security view the same way an empty machine is handled elsewhere.
-	security *security.Report
+	// security is the OWASP LLM Top-10 coverage/ledger report. Unlike the rest
+	// of the cockpit's state it is NOT loaded at startup — Build() reads the
+	// ledger and the full security_score.jsonl history, a cost even the
+	// default chat+code view would otherwise pay for on every launch (#524).
+	// It is built lazily the first time the security view is actually
+	// requested, then cached here so tabbing away and back doesn't rebuild
+	// it; nil until then, or if Build failed — the view handles both the
+	// same way it handles an empty machine.
+	security      *security.Report
+	securityBuilt bool
+	// probedHeads is kept from the startup probe so loadSecurity can call
+	// security.Build later without re-probing the machine.
+	probedHeads []provider.Head
 
 	// live code panel (chat+code view): a snippet streamed line-by-line.
 	codeLang  string
@@ -194,15 +203,14 @@ func NewCockpit() Cockpit {
 	heads := ckHeadsFrom(probed.Heads, pr)
 
 	pct := ckClaudePct()
-	secReport, _ := security.Build(probed.Heads) // best-effort: nil on error, handled by the view
 	metrics := ckLoadMetrics(pr)
 	m := Cockpit{
-		mode:      "dispatch",
-		claudePct: pct,
-		heads:     heads,
-		spend:     metrics.spendUSD, // same value ckSpendToday used to fetch with its own separate cost.jsonl read
-		metrics:   metrics,
-		security:  secReport,
+		mode:        "dispatch",
+		claudePct:   pct,
+		heads:       heads,
+		spend:       metrics.spendUSD, // same value ckSpendToday used to fetch with its own separate cost.jsonl read
+		metrics:     metrics,
+		probedHeads: probed.Heads, // kept for loadSecurity, which builds the report lazily
 	}
 	m.runID, m.runLive, m.treeRows = ckLoadTree()
 
@@ -219,6 +227,19 @@ func NewCockpit() Cockpit {
 			ckDimS.Render("Type a task and press enter. Tab = chat/dash/tree/security · /trust /swarm /local · :q quits."),
 		}
 	}
+	return m
+}
+
+// loadSecurity builds the security report the first time it's needed and
+// caches the result, so switching away from the security view and back
+// never rebuilds it. Best-effort: a failed Build leaves security nil, same
+// as the old eager path handled it.
+func (m Cockpit) loadSecurity() Cockpit {
+	if m.securityBuilt {
+		return m
+	}
+	m.security, _ = security.Build(m.probedHeads)
+	m.securityBuilt = true
 	return m
 }
 
@@ -282,6 +303,9 @@ func (m Cockpit) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case tea.KeyTab:
 			m.view = (m.view + 1) % ckViewCount()
+			if m.view == ckViewSecurity {
+				m = m.loadSecurity()
+			}
 		case tea.KeyUp:
 			if m.view == 2 && m.treeSel > 0 {
 				m.treeSel--
@@ -352,7 +376,7 @@ func (m Cockpit) submit() (tea.Model, tea.Cmd) {
 		return m, nil
 	case lt == ":security":
 		m.view = ckViewSecurity
-		return m, nil
+		return m.loadSecurity(), nil
 	case strings.HasPrefix(lt, "/"):
 		switch lt {
 		case "/dispatch", "/swarm", "/trust", "/local":
@@ -720,15 +744,21 @@ func CockpitSnapshotView(view int) string {
 		view = ckViewChatCode
 	}
 	m.view = view
+	if view == ckViewSecurity {
+		// Snapshotting the security view directly (not via Tab/Update) is the
+		// one path that has to trigger the lazy build itself — this is what
+		// renders it, so this is what "navigating there" means here.
+		m = m.loadSecurity()
+	}
 	return m.View()
 }
 
 // ckSnapshotModel builds the one demo Cockpit state every snapshot view
 // renders from. Extracted so CockpitSnapshot builds it once instead of once
-// per view — NewCockpit alone does a machine probe, a full security ledger
-// scan, and a cost.jsonl read, and CockpitSnapshot used to pay for all three
-// four times over for what is really one consistent snapshot shown from four
-// angles.
+// per view — NewCockpit alone does a machine probe and a cost.jsonl read,
+// and CockpitSnapshot used to pay for both four times over for what is
+// really one consistent snapshot shown from four angles. The security report
+// is loaded separately, per view, since #524 made it lazy.
 func ckSnapshotModel() Cockpit {
 	m := NewCockpit()
 	m = m.run("write a User DTO for profile settings")            // SIMPLE → TS interface
@@ -750,6 +780,9 @@ func CockpitSnapshot() string {
 			v = ckViewChatCode
 		}
 		m.view = v
+		if v == ckViewSecurity {
+			m = m.loadSecurity()
+		}
 		return m.View()
 	}
 	return label("VIEW 1/4 · CHAT + CODE (tab)") + "\n" + view(0) + "\n\n" +
