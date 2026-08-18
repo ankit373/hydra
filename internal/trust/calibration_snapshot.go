@@ -36,9 +36,9 @@ func snapshotPath(jsonlPath string) string {
 	return jsonlPath + ".snapshot"
 }
 
-// loadSnapshot never errors — missing/corrupt/stale-offset just means "no
-// usable checkpoint," so load() falls back to a full replay.
-func loadSnapshot(path string, jsonlSize int64) (store map[calibKey]*confusion, offset int64, ok bool) {
+// loadSnapshot never errors — missing/corrupt/out-of-bounds/misaligned offset
+// just means "no usable checkpoint," so load() falls back to a full replay.
+func loadSnapshot(path string, jsonl *os.File, jsonlSize int64) (store map[calibKey]*confusion, offset int64, ok bool) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, 0, false
@@ -49,6 +49,14 @@ func loadSnapshot(path string, jsonlSize int64) (store map[calibKey]*confusion, 
 	}
 	if snap.Schema != snapshotSchema || snap.Offset < 0 || snap.Offset > jsonlSize {
 		return nil, 0, false
+	}
+	// A valid checkpoint must land exactly on a line boundary; otherwise
+	// load() would seek mid-line and silently drop the split record.
+	if snap.Offset > 0 {
+		var b [1]byte
+		if _, err := jsonl.ReadAt(b[:], snap.Offset-1); err != nil || b[0] != '\n' {
+			return nil, 0, false
+		}
 	}
 	store = make(map[calibKey]*confusion, len(snap.Entries))
 	for _, e := range snap.Entries {
