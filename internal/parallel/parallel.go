@@ -223,8 +223,9 @@ func runTextTask(ctx context.Context, d *dispatch.Dispatcher, dispatchErr error,
 }
 
 // runEditTask performs an atomic file edit and returns the raw JSON result.
-// Self-contained port of the edit.sh flow so this package compiles on develop
-// before internal/editor merges. Once editor merges, this can delegate to editor.Edit.
+// Self-contained port of edit.sh — its tests target this package's own
+// extractContent/diffStats/rollback — but shares the KindEdit emission with
+// internal/editor via runlog.LogEdit rather than reimplementing it (#531).
 func runEditTask(ctx context.Context, d *dispatch.Dispatcher, dispatchErr error, task Task, runID, taskID string) json.RawMessage {
 	file := task.File
 	if !filepath.IsAbs(file) {
@@ -383,6 +384,10 @@ func runEditTask(ctx context.Context, d *dispatch.Dispatcher, dispatchErr error,
 		}
 	}
 
+	// Same KindEdit shape hyctl edit produces (internal/editor/runlog.go), via
+	// the shared runlog.LogEdit — a parallel batch was writing files with no
+	// trace in the run log at all (#531).
+	runlog.LogEdit(runID, taskID, file, []byte(origContent), []byte(newContent+"\n"), added, removed)
 	return mustMarshal(EditResult{
 		Label: task.Label, Enum: task.Enum, Mode: "edit",
 		Status: "ok", File: file, Workspace: wsName, GitRoot: resolved.GitRoot,

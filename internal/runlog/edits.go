@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 )
 
 // MaxSnapshotBytes caps one side of one edit snapshot.
@@ -58,6 +59,32 @@ func SaveEdit(runID, ref string, before, after []byte) error {
 		return err
 	}
 	return os.WriteFile(filepath.Join(dir, ref+".after"), after, 0o600)
+}
+
+// editSeq numbers snapshots across the process so two edits sharing one run
+// cannot overwrite each other's before/after content.
+var editSeq atomic.Uint64
+
+// LogEdit records one applied edit as a KindEdit event: content saved via
+// SaveEdit and referenced by Ref, Detail formatted as "+N/-M". Shared by every
+// edit path (hyctl edit, hyctl parallel) so they log one event shape (#531).
+//
+// Best-effort: a successful edit must not be reported as failed because its
+// observability record could not be written.
+func LogEdit(runID, taskID, file string, before, after []byte, added, removed int) {
+	ref := fmt.Sprintf("%06d", editSeq.Add(1))
+	detail := fmt.Sprintf("+%d/-%d", added, removed)
+	if err := SaveEdit(runID, ref, before, after); err != nil {
+		ref = ""
+		detail += " · snapshot unavailable"
+	}
+	_ = New(runID).Append(Event{
+		Kind:   KindEdit,
+		TaskID: taskID,
+		File:   file,
+		Ref:    ref,
+		Detail: detail,
+	})
 }
 
 // LoadEdit returns a stored edit's before/after content.
