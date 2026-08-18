@@ -12,7 +12,6 @@ import type {
 import { Dashboard } from './views/Dashboard'
 import { Fleet } from './views/Fleet'
 import { Session } from './views/Session'
-import { Code } from './views/Code'
 import { Security as SecurityView } from './views/Security'
 import { ErrorBoundary } from './ErrorBoundary'
 import { ChatDock } from './views/ChatDock'
@@ -34,7 +33,6 @@ const NAV = [
   { id: 'dashboard', label: 'Dashboard', ready: true },
   { id: 'fleet', label: 'Fleet', ready: true },
   { id: 'session', label: 'Session', ready: true },
-  { id: 'code', label: 'Code', ready: true },
   { id: 'security', label: 'Security', ready: true },
 ] as const
 
@@ -68,9 +66,13 @@ export default function App() {
   const load = useCallback(async (which: ViewID, id: string) => {
     try {
       if (which === 'fleet') setFleet(await GetFleet())
-      else if (which === 'session') setSession(await GetSession(id))
-      else if (which === 'code') setEdits(await GetEdits(id))
-      else if (which === 'security') setSecurity(await GetSecurity())
+      // Code is a tab inside Session now (#519), not its own view — fetch
+      // both together so switching tabs never has to wait on a second load.
+      else if (which === 'session') {
+        const [s, e] = await Promise.all([GetSession(id), GetEdits(id)])
+        setSession(s)
+        setEdits(e)
+      } else if (which === 'security') setSecurity(await GetSecurity())
       else setDashboard(await GetDashboard())
       setError(null)
     } catch (e) {
@@ -102,11 +104,27 @@ export default function App() {
     })
   }, [])
 
+  // Set alongside runID when a caller wants Session to open straight on the
+  // Code tab at a specific file (an artifact-node click, #518) rather than
+  // its own default. Session is keyed by runId below, so a fresh mount reads
+  // this once as initial state — plain opens must clear it, or a later
+  // no-file open of a different run would wrongly inherit it.
+  const [pendingFile, setPendingFile] = useState<string | undefined>()
+
   const openSession = useCallback((id: string) => {
     setRunID(id)
     // Don't show the previous run's data under a new id.
     setSession(null)
     setEdits(null)
+    setPendingFile(undefined)
+    setView('session')
+  }, [])
+
+  const openSessionFile = useCallback((id: string, file: string) => {
+    setRunID(id)
+    setSession(null)
+    setEdits(null)
+    setPendingFile(file)
     setView('session')
   }, [])
 
@@ -115,7 +133,7 @@ export default function App() {
   // further qualification.
   const selectNav = useCallback(
     (id: ViewID) => {
-      if ((id === 'session' || id === 'code') && !runID) {
+      if (id === 'session' && !runID) {
         const first = fleet?.runs?.[0]?.id
         if (!first) return
         setRunID(first)
@@ -126,7 +144,7 @@ export default function App() {
       }
       setView(id)
     },
-    [fleet, runID, openSession],
+    [fleet, runID],
   )
 
   // Dashboard handles its own loading state (a skeleton, not this fallback
@@ -134,8 +152,7 @@ export default function App() {
   // instead of a plain sentence.
   const loading =
     (view === 'fleet' && !fleet) ||
-    (view === 'session' && !session) ||
-    (view === 'code' && !edits) ||
+    (view === 'session' && (!session || !edits)) ||
     (view === 'security' && !security)
 
   return (
@@ -151,10 +168,7 @@ export default function App() {
               key={n.id}
               className="rail__item"
               aria-current={view === n.id ? 'page' : undefined}
-              disabled={
-                !n.ready ||
-                ((n.id === 'session' || n.id === 'code') && !runID && !fleet?.runs?.length)
-              }
+              disabled={!n.ready || (n.id === 'session' && !runID && !fleet?.runs?.length)}
               onClick={() => n.ready && selectNav(n.id)}
             >
               {n.label}
@@ -185,24 +199,25 @@ export default function App() {
           <Dashboard data={dashboard} dockOpen={dockOpen} onCloseDock={() => setDockOpen(false)} />
         )}
         {!error && view === 'fleet' && fleet && (
-          <Fleet data={fleet} onOpen={openSession} onStartTask={startTask} />
+          <Fleet
+            data={fleet}
+            onOpen={openSession}
+            onOpenFile={openSessionFile}
+            onStartTask={startTask}
+          />
         )}
-        {!error && view === 'session' && session && (
-          <Session session={session} onBack={() => setView('fleet')} />
-        )}
-        {!error && view === 'code' && edits && (
-          <>
-            <header className="view__head">
-              <div className="view__headrow">
-                <button className="back" onClick={() => setView('session')}>
-                  ← Session
-                </button>
-                <h1 className="view__title">Code</h1>
-              </div>
-              <p className="view__sub">What this run changed on disk.</p>
-            </header>
-            <Code runID={runID} edits={edits} />
-          </>
+        {!error && view === 'session' && session && edits && (
+          // Keyed by runId: a fresh mount per run resets tab/codeFile state
+          // instead of carrying over a Graph/Code selection from whatever run
+          // was open before, and lets initialTab/initialFile seed cleanly.
+          <Session
+            key={session.runId}
+            session={session}
+            edits={edits}
+            onBack={() => setView('fleet')}
+            initialTab={pendingFile ? 'code' : undefined}
+            initialFile={pendingFile}
+          />
         )}
         {!error && view === 'security' && security && (
           <ErrorBoundary label="Security">

@@ -6,10 +6,12 @@ import { RunGraph } from './RunGraph'
 export function Fleet({
   data,
   onOpen,
+  onOpenFile,
   onStartTask,
 }: {
   data: FleetData
   onOpen: (runID: string) => void
+  onOpenFile: (runID: string, file: string) => void
   onStartTask: () => void
 }) {
   return (
@@ -37,7 +39,13 @@ export function Fleet({
       ) : (
         <div className="runs">
           {data.runs.map((r) => (
-            <RunCard key={r.id} run={r} groupThreshold={data.groupThreshold} onOpen={onOpen} />
+            <RunCard
+              key={r.id}
+              run={r}
+              groupThreshold={data.groupThreshold}
+              onOpen={onOpen}
+              onOpenFile={onOpenFile}
+            />
           ))}
         </div>
       )}
@@ -49,10 +57,12 @@ function RunCard({
   run,
   groupThreshold,
   onOpen,
+  onOpenFile,
 }: {
   run: Run
   groupThreshold: number
   onOpen: (runID: string) => void
+  onOpenFile: (runID: string, file: string) => void
 }) {
   // Past the threshold a node-link graph is a hairball, not a picture (mirrors
   // Airflow's separate Grid view for large DAGs), so it collapses to a state
@@ -97,7 +107,9 @@ function RunCard({
           {/* Below the threshold: a single agent needs no graph, and 2..N draw
               the same dagre DAG SessionGraph uses, just smaller. At/above the
               threshold the toggle above reveals a heatmap grid instead. */}
-          {!large && <RunShape agents={run.agents} />}
+          {!large && (
+            <RunShape agents={run.agents} onOpenFile={(file) => onOpenFile(run.id, file)} />
+          )}
           {large && expanded && run.agents.length > 0 && <AgentGrid agents={run.agents} />}
         </>
       )}
@@ -106,7 +118,13 @@ function RunCard({
 }
 
 /** The 0/1/2..N shape for a run below GroupThreshold. */
-function RunShape({ agents }: { agents: Agent[] }) {
+function RunShape({
+  agents,
+  onOpenFile,
+}: {
+  agents: Agent[]
+  onOpenFile: (file: string) => void
+}) {
   if (agents.length === 0) return null
   // A single node is trivially linear — the same reasoning Session.tsx uses
   // to decide nonLinear (isNonLinear is false whenever there's nothing to
@@ -118,7 +136,7 @@ function RunShape({ agents }: { agents: Agent[] }) {
       </ul>
     )
   }
-  return <RunGraph agents={agents} />
+  return <RunGraph agents={agents} onOpenFile={onOpenFile} />
 }
 
 function StateBar({ run }: { run: Run }) {

@@ -1,18 +1,31 @@
 import { useState } from 'react'
-import type { Session as SessionData, TimelineEntry } from '../types'
+import type { Edit, Session as SessionData, TimelineEntry } from '../types'
 import { clockTime, ms, pct, usdExact } from '../format'
 import { SessionGraph } from './SessionGraph'
+import { Code } from './Code'
 
 export function Session({
   session,
+  edits,
   onBack,
+  initialTab,
+  initialFile,
 }: {
   session: SessionData
+  edits: Edit[]
   onBack: () => void
+  /** Set when Session is opened by clicking an artifact node elsewhere (e.g.
+   *  Fleet's inline graph, #518) — App keys Session by runId, so this only
+   *  needs to seed initial state, not stay in sync afterward. */
+  initialTab?: 'code'
+  initialFile?: string
 }) {
   // Timeline is the default: most runs are linear, and a list is the right
   // shape for a linear thing.
-  const [tab, setTab] = useState<'timeline' | 'graph'>('timeline')
+  const [tab, setTab] = useState<'timeline' | 'code' | 'graph'>(initialTab ?? 'timeline')
+  // Consumed by Code, which re-selects whenever this changes — set once here,
+  // then updated by clicking further artifact nodes within the same session.
+  const [codeFile, setCodeFile] = useState<string | undefined>(initialFile)
 
   return (
     <>
@@ -46,17 +59,24 @@ export function Session({
             </p>
           )}
 
-          {/* The Graph tab appears only when a list genuinely cannot show the
-              shape. Drawing a graph of a straight line is worse than a list. */}
-          {session.nonLinear && (
-            <div className="tabs">
-              <button
-                className="tab"
-                aria-current={tab === 'timeline' ? 'page' : undefined}
-                onClick={() => setTab('timeline')}
-              >
-                Timeline
-              </button>
+          <div className="tabs">
+            <button
+              className="tab"
+              aria-current={tab === 'timeline' ? 'page' : undefined}
+              onClick={() => setTab('timeline')}
+            >
+              Timeline
+            </button>
+            <button
+              className="tab"
+              aria-current={tab === 'code' ? 'page' : undefined}
+              onClick={() => setTab('code')}
+            >
+              Code
+            </button>
+            {/* Graph appears only when a list genuinely cannot show the shape.
+                Drawing a graph of a straight line is worse than a list. */}
+            {session.nonLinear && (
               <button
                 className="tab"
                 aria-current={tab === 'graph' ? 'page' : undefined}
@@ -64,11 +84,23 @@ export function Session({
               >
                 Graph
               </button>
-            </div>
-          )}
+            )}
+          </div>
 
-          {tab === 'graph' && session.nonLinear ? (
-            <SessionGraph session={session} />
+          {tab === 'code' ? (
+            <Code
+              runID={session.runId}
+              edits={edits}
+              initialFile={codeFile}
+            />
+          ) : tab === 'graph' && session.nonLinear ? (
+            <SessionGraph
+              session={session}
+              onOpenFile={(file) => {
+                setCodeFile(file)
+                setTab('code')
+              }}
+            />
           ) : (
             <Timeline entries={session.timeline} />
           )}

@@ -16,10 +16,18 @@ interface Placed {
   y: number
   label: string
   state: string
+  /** The file this node represents, when state is 'artifact' (#518). */
+  file?: string
 }
 
 /** Compact inline DAG for a run's agents — Fleet's 2..GroupThreshold tier. */
-export function RunGraph({ agents }: { agents: Agent[] }) {
+export function RunGraph({
+  agents,
+  onOpenFile,
+}: {
+  agents: Agent[]
+  onOpenFile?: (file: string) => void
+}) {
   const { nodes, lines, width, height } = useMemo(() => layout(agents), [agents])
 
   if (nodes.length === 0) return null
@@ -30,19 +38,40 @@ export function RunGraph({ agents }: { agents: Agent[] }) {
         {lines.map((l, i) => (
           <polyline key={i} points={l.points} className="edge" fill="none" />
         ))}
-        {nodes.map((n) => (
-          <g key={n.id} transform={`translate(${n.x - NODE_W / 2},${n.y - NODE_H / 2})`}>
-            <rect
-              width={NODE_W}
-              height={NODE_H}
-              rx={7}
-              className={`gnode gnode--${n.state}`}
-            />
-            <text x={8} y={17} className="gnode__label">
-              {n.label}
-            </text>
-          </g>
-        ))}
+        {nodes.map((n) => {
+          const clickable = n.file !== undefined && onOpenFile !== undefined
+          return (
+            <g
+              key={n.id}
+              transform={`translate(${n.x - NODE_W / 2},${n.y - NODE_H / 2})`}
+              className={clickable ? 'gnode-wrap--clickable' : undefined}
+              role={clickable ? 'button' : undefined}
+              tabIndex={clickable ? 0 : undefined}
+              aria-label={clickable ? `Open ${n.file}` : undefined}
+              onClick={clickable ? () => onOpenFile!(n.file!) : undefined}
+              onKeyDown={
+                clickable
+                  ? (e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        onOpenFile!(n.file!)
+                      }
+                    }
+                  : undefined
+              }
+            >
+              <rect
+                width={NODE_W}
+                height={NODE_H}
+                rx={7}
+                className={`gnode gnode--${n.state}`}
+              />
+              <text x={8} y={17} className="gnode__label">
+                {n.label}
+              </text>
+            </g>
+          )
+        })}
       </svg>
     </div>
   )
@@ -74,7 +103,15 @@ function layout(agents: Agent[]) {
   for (const p of placed) {
     const a = byID.get(p.id)
     if (!a) continue
-    nodes.push({ id: p.id, x: p.x, y: p.y, label: shortLabel(a), state: stateClass(a) })
+    const state = stateClass(a)
+    nodes.push({
+      id: p.id,
+      x: p.x,
+      y: p.y,
+      label: shortLabel(a),
+      state,
+      file: state === 'artifact' ? a.id : undefined,
+    })
   }
 
   return { nodes, lines, width, height }
