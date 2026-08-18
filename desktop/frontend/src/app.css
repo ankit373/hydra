@@ -1260,6 +1260,13 @@ body {
 .gnode__label { fill: var(--hy-ink); font-family: var(--hy-font-mono); font-size: 11px; }
 .gnode__sub   { fill: var(--hy-dim); font-family: var(--hy-font-mono); font-size: 10px; }
 
+/* Only artifact (edit-target) nodes open something on click — a plain agent
+   node's label/sub already show everything known about it (#518). */
+.gnode-wrap--clickable { cursor: pointer; }
+.gnode-wrap--clickable:hover .gnode,
+.gnode-wrap--clickable:focus-visible .gnode { stroke: var(--hy-aqua); }
+.gnode-wrap--clickable:focus-visible { outline: 2px solid var(--hy-aqua); outline-offset: 2px; }
+
 .graph__legend { margin: 10px 0 0; font-size: 11px; color: var(--hy-dim); }
 
 /* ── Code view ─────────────────────────────────────────────────────────── */

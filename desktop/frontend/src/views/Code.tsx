@@ -2,9 +2,28 @@ import { useEffect, useState } from 'react'
 import { GetDiff } from '../bindings'
 import type { Diff, Edit } from '../types'
 
-export function Code({ runID, edits }: { runID: string; edits: Edit[] }) {
+export function Code({
+  runID,
+  edits,
+  initialFile,
+}: {
+  runID: string
+  edits: Edit[]
+  /** Jump straight to this file — set when a graph node was clicked (#518)
+   *  rather than the tab reached on its own, which just wants index 0. */
+  initialFile?: string
+}) {
   const [selected, setSelected] = useState(0)
   const [diff, setDiff] = useState<Diff | null>(null)
+
+  // Re-selects on every new value, not just at mount — Session stays mounted
+  // across clicking different artifact nodes in the same run, so this has to
+  // react to initialFile changing, not just seed the initial state.
+  useEffect(() => {
+    if (!initialFile) return
+    const i = edits.findIndex((e) => e.file === initialFile)
+    if (i >= 0) setSelected(i)
+  }, [initialFile, edits])
 
   const current = edits[selected]
 

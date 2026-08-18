@@ -17,9 +17,18 @@ interface Placed {
   label: string
   sub: string
   state: string
+  /** The file this node represents, when state is 'artifact' — clicking it
+   *  opens that file rather than nothing (#518). */
+  file?: string
 }
 
-export function SessionGraph({ session }: { session: Session }) {
+export function SessionGraph({
+  session,
+  onOpenFile,
+}: {
+  session: Session
+  onOpenFile?: (file: string) => void
+}) {
   const { nodes, lines, width, height } = useMemo(() => layout(session), [session])
 
   if (nodes.length === 0) return null
@@ -35,22 +44,43 @@ export function SessionGraph({ session }: { session: Session }) {
             fill="none"
           />
         ))}
-        {nodes.map((n) => (
-          <g key={n.id} transform={`translate(${n.x - NODE_W / 2},${n.y - NODE_H / 2})`}>
-            <rect
-              width={NODE_W}
-              height={NODE_H}
-              rx={10}
-              className={`gnode gnode--${n.state}`}
-            />
-            <text x={11} y={19} className="gnode__label">
-              {n.label}
-            </text>
-            <text x={11} y={34} className="gnode__sub">
-              {n.sub}
-            </text>
-          </g>
-        ))}
+        {nodes.map((n) => {
+          const clickable = n.file !== undefined && onOpenFile !== undefined
+          return (
+            <g
+              key={n.id}
+              transform={`translate(${n.x - NODE_W / 2},${n.y - NODE_H / 2})`}
+              className={clickable ? 'gnode-wrap--clickable' : undefined}
+              role={clickable ? 'button' : undefined}
+              tabIndex={clickable ? 0 : undefined}
+              aria-label={clickable ? `Open ${n.file}` : undefined}
+              onClick={clickable ? () => onOpenFile!(n.file!) : undefined}
+              onKeyDown={
+                clickable
+                  ? (e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        onOpenFile!(n.file!)
+                      }
+                    }
+                  : undefined
+              }
+            >
+              <rect
+                width={NODE_W}
+                height={NODE_H}
+                rx={10}
+                className={`gnode gnode--${n.state}`}
+              />
+              <text x={11} y={19} className="gnode__label">
+                {n.label}
+              </text>
+              <text x={11} y={34} className="gnode__sub">
+                {n.sub}
+              </text>
+            </g>
+          )
+        })}
       </svg>
       <p className="graph__legend">
         solid = ownership · dashed = A2A handoff
@@ -88,6 +118,7 @@ function layout(session: Session) {
   for (const p of placed) {
     const a = byID.get(p.id)
     if (!a) continue
+    const state = stateClass(a)
     nodes.push({
       id: p.id,
       x: p.x,
@@ -97,7 +128,10 @@ function layout(session: Session) {
       sub: [a.tier > 0 ? `T${a.tier}` : null, a.state, a.durationMs > 0 ? `${a.durationMs}ms` : null]
         .filter(Boolean)
         .join(' · '),
-      state: stateClass(a),
+      state,
+      // An artifact node's own id IS the file path (see shortLabel's
+      // truncate-from-the-start case, which exists specifically for this).
+      file: state === 'artifact' ? a.id : undefined,
     })
   }
 
