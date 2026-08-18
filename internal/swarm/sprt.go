@@ -43,6 +43,10 @@ func (s *Swarm) RunSPRT(ctx context.Context, prompt string, opts Options) (*SPRT
 	if err := validateSwarmTiers(cfg, opts); err != nil {
 		return nil, err
 	}
+	prompt, err = injectA2A(prompt, opts)
+	if err != nil {
+		return nil, err
+	}
 
 	selected, err := resolveSelector(opts, cfg).Select(s.heads, opts)
 	if err != nil {

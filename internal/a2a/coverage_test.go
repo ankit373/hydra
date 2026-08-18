@@ -3,8 +3,10 @@
 package a2a
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -44,6 +46,46 @@ func TestLoad_MissingFileIsNilNilNotAnError(t *testing.T) {
 	}
 	if h != nil {
 		t.Errorf("a missing handoff returned %+v", h)
+	}
+}
+
+// Inject's handoff context must reach the prompt when the file is valid, and a
+// missing or corrupt handoff file must fail loudly (#450, #530) rather than
+// letting a caller (dispatch, swarm, RunSPRT) silently proceed without it.
+func TestInject(t *testing.T) {
+	dir := t.TempDir()
+
+	h := Handoff{From: "agent-1", Task: "earlier task", PriorOutput: "earlier output"}
+	raw, err := json.Marshal(h)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "handoff.json")
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := Inject(path, "new instruction")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"agent-1", "earlier output", "new instruction", "ADDITIONAL INSTRUCTION"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("injected prompt is missing %q:\n%s", want, got)
+		}
+	}
+
+	// --a2a always names a file the caller explicitly asked for, so a missing
+	// file must be an error, not silently treated as "no handoff".
+	if _, err := Inject(filepath.Join(dir, "absent.json"), "unchanged"); err == nil {
+		t.Error("a missing handoff file did not produce an error")
+	}
+
+	if err := os.WriteFile(path, []byte("{truncated"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Inject(path, "unchanged"); err == nil {
+		t.Error("a malformed handoff file did not produce an error")
 	}
 }
 

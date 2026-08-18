@@ -217,7 +217,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 	// user explicitly asked for, so a read/parse failure must fail the dispatch
 	// rather than silently running without the handoff context (#450).
 	if opts.A2AFile != "" {
-		injected, err := injectA2A(opts.A2AFile, prompt)
+		injected, err := a2a.Inject(opts.A2AFile, prompt)
 		if err != nil {
 			return nil, fmt.Errorf("--a2a %s: %w", opts.A2AFile, err)
 		}
@@ -452,21 +452,6 @@ func asIntSlice(v any) []int {
 		out = append(out, asInt(e))
 	}
 	return out
-}
-
-// injectA2A reads a handoff JSON file and prepends a structured block to the prompt.
-// The path always comes from the user-supplied --a2a flag, so unlike a2a.Load's
-// "missing file = no prior handoff" contract for its other (auto-load) callers,
-// a missing or malformed file here is a mistake the user needs to hear about.
-func injectA2A(path, prompt string) (string, error) {
-	h, err := a2a.Load(path)
-	if err != nil {
-		return prompt, fmt.Errorf("a2a: malformed handoff file %s: %w", path, err)
-	}
-	if h == nil {
-		return prompt, fmt.Errorf("a2a: handoff file not found: %s", path)
-	}
-	return h.PromptBlock(prompt) + "\n\nADDITIONAL INSTRUCTION:\n" + prompt, nil
 }
 
 // writeHandoff saves last_handoff.json after a successful dispatch, advancing

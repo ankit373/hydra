@@ -717,6 +717,10 @@ func cmdDispatch() *cobra.Command {
 					mode = swarm.ModeBest
 				}
 				sw := swarm.New(d, d.Heads(), d)
+				// Every field a real Run()/RunSPRT() call reads must appear here too,
+				// or --dry-run previews something other than what execution does
+				// (#167, #501, #530) — this literal backs both the --swarm and the
+				// --confidence dry-run preview.
 				planOpts := swarm.Options{
 					Mode:          mode,
 					TierHint:      tier,
@@ -725,6 +729,8 @@ func cmdDispatch() *cobra.Command {
 					MaxEstCostUSD: swarmMaxCost,
 					LocalOnly:     localOnly,
 					System:        system,
+					A2AFile:       a2aFile,
+					JudgeTierHint: swarmJudge,
 					Confidence:    effectiveConf,
 					Domain:        domain,
 				}
@@ -739,12 +745,20 @@ func cmdDispatch() *cobra.Command {
 			if effectiveConf > 0 {
 				sw := swarm.New(d, d.Heads(), d)
 				res, err := sw.RunSPRT(ctx, prompt, swarm.Options{
-					TierHint:       tier,
-					HeadIDs:        headIDs,
-					MaxHeads:       swarmMaxHeads,
-					MaxEstCostUSD:  swarmMaxCost,
-					LocalOnly:      localOnly,
-					System:         system,
+					TierHint:      tier,
+					HeadIDs:       headIDs,
+					MaxHeads:      swarmMaxHeads,
+					MaxEstCostUSD: swarmMaxCost,
+					LocalOnly:     localOnly,
+					System:        system,
+					A2AFile:       a2aFile,
+					// JudgeTierHint is not a no-op here: RunSPRT's behavioral
+					// equivalence judge (judgeEquivalence) dispatches through it to
+					// decide whether two candidate answers agree. It just isn't a
+					// ModeBest-style answer-picker, so it is wired in and validated
+					// like every other tier hint rather than rejected as
+					// inapplicable (#530).
+					JudgeTierHint:  swarmJudge,
 					Confidence:     effectiveConf,
 					Domain:         domain,
 					RunID:          runID,
@@ -774,6 +788,7 @@ func cmdDispatch() *cobra.Command {
 					MaxEstCostUSD:  swarmMaxCost,
 					LocalOnly:      localOnly,
 					System:         system,
+					A2AFile:        a2aFile,
 					JudgeTierHint:  swarmJudge,
 					RunID:          runID,
 					TaskID:         taskID,

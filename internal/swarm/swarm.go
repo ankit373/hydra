@@ -9,6 +9,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/ankit373/hydra/internal/a2a"
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/dispatch"
 	"github.com/ankit373/hydra/internal/policy"
@@ -48,6 +49,14 @@ type Options struct {
 	// Prompt parameters.
 	System    string
 	MaxTokens int
+
+	// A2AFile is a path to an A2A handoff JSON file (--a2a): its structured
+	// context is prepended to the prompt before any head fires. Mirrors the
+	// fail-loudly contract dispatch.Options.A2AFile gives plain dispatch — a
+	// missing or malformed file fails Plan/Run/RunSPRT instead of silently
+	// dropping the handoff, which is what happened before this field existed
+	// at all (#530).
+	A2AFile string
 
 	// Judge (ModeBest only).
 	JudgeTierHint string        // "" → use config.Cortex head
@@ -148,6 +157,10 @@ func (s *Swarm) Plan(prompt string, opts Options) (heads []provider.Head, estUSD
 	if err := validateSwarmTiers(cfg, opts); err != nil {
 		return nil, 0, err
 	}
+	prompt, err = injectA2A(prompt, opts)
+	if err != nil {
+		return nil, 0, err
+	}
 	selected, err := resolveSelector(opts, cfg).Select(s.heads, opts)
 	if err != nil {
 		return nil, 0, err
@@ -176,6 +189,10 @@ func (s *Swarm) Run(ctx context.Context, prompt string, opts Options) (*SwarmRes
 	// are fired or judged — never silently widen to CapScoreSelector's top-N
 	// fan-out (#501).
 	if err := validateSwarmTiers(cfg, opts); err != nil {
+		return nil, err
+	}
+	prompt, err = injectA2A(prompt, opts)
+	if err != nil {
 		return nil, err
 	}
 
@@ -279,6 +296,23 @@ func validateSwarmTiers(cfg *config.Config, opts Options) error {
 		return fmt.Errorf("swarm: judge tier: %w", err)
 	}
 	return nil
+}
+
+// injectA2A prepends opts.A2AFile's handoff context to prompt when set, using
+// the identical fail-loudly contract dispatch.Dispatch applies to --a2a. Plan,
+// Run and RunSPRT all call this so a bad handoff file is rejected the same way
+// regardless of mode — before this, swarm.Options had no A2AFile field at all,
+// so --a2a was silently dropped the moment --swarm or --confidence was
+// combined with it (#530).
+func injectA2A(prompt string, opts Options) (string, error) {
+	if opts.A2AFile == "" {
+		return prompt, nil
+	}
+	injected, err := a2a.Inject(opts.A2AFile, prompt)
+	if err != nil {
+		return prompt, fmt.Errorf("swarm: --a2a %s: %w", opts.A2AFile, err)
+	}
+	return injected, nil
 }
 
 func buildJudge(d *dispatch.Dispatcher, opts Options, cfg *config.Config) Judge {
