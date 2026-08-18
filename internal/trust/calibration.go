@@ -112,7 +112,7 @@ func (c *Calibrator) load() error {
 	}
 
 	var startOffset int64
-	if snap, offset, ok := loadSnapshot(snapshotPath(c.path), info.Size()); ok {
+	if snap, offset, ok := loadSnapshot(snapshotPath(c.path), f, info.Size()); ok {
 		c.store = snap
 		startOffset = offset
 	}
