@@ -93,6 +93,48 @@ func TestLMStudio_DiscoversModelsOnANonDefaultAddress(t *testing.T) {
 	}
 }
 
+// Embedding-only models report capabilities but never "completion", so they
+// were discovered as normal routable heads and failed every dispatch (#532).
+// The fix must exclude only the positively-non-completion case and keep every
+// other shape — including no capabilities field at all, for older servers.
+func TestOllama_ExcludesEmbeddingOnlyModels(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/tags" {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = w.Write([]byte(`{"models":[
+			{"name":"qwen3:0.6b","capabilities":["completion"]},
+			{"name":"nomic-embed-text:latest","capabilities":["embedding"]},
+			{"name":"llama3.2:3b"},
+			{"name":"qwen2.5-coder:7b","capabilities":["completion","tools","insert"]}
+		]}`))
+	}))
+	defer srv.Close()
+
+	heads, err := (&ollamaService{base: srv.URL}).probe(context.Background(), caps(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ids := make(map[string]bool, len(heads))
+	for _, h := range heads {
+		ids[h.ID] = true
+	}
+
+	for _, want := range []string{"ollama/qwen3:0.6b", "ollama/llama3.2:3b", "ollama/qwen2.5-coder:7b"} {
+		if !ids[want] {
+			t.Errorf("missing expected head %q among %+v", want, ids)
+		}
+	}
+	if ids["ollama/nomic-embed-text:latest"] {
+		t.Error("nomic-embed-text is embedding-only and must not be offered as a dispatch candidate")
+	}
+	if len(heads) != 3 {
+		t.Errorf("got %d heads, want 3 (embedding-only excluded): %+v", len(heads), heads)
+	}
+}
+
 // A server that answers but not with what we asked for is not a head. Returning
 // one anyway is the #248 failure: advertising something dispatch cannot use.
 func TestProbe_NonOKStatusYieldsNoHeads(t *testing.T) {
