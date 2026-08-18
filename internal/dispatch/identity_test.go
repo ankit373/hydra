@@ -125,7 +125,10 @@ func TestLogDispatch_ExplicitBeatsEnv(t *testing.T) {
 		t.Fatal(err)
 	}
 	rows := readLog(t, home, "cost.jsonl")
-	if len(rows) != 1 || rows[0]["run_id"] != "explicit-run" {
+	if len(rows) != 1 {
+		t.Fatalf("cost.jsonl: got %d rows, want 1", len(rows))
+	}
+	if rows[0]["run_id"] != "explicit-run" {
 		t.Errorf("run_id = %v, want the explicit Options value to win over env", rows[0]["run_id"])
 	}
 }
@@ -143,7 +146,10 @@ func TestLogDispatch_EnvUsedWhenNoExplicit(t *testing.T) {
 		t.Fatal(err)
 	}
 	rows := readLog(t, home, "cost.jsonl")
-	if len(rows) != 1 || rows[0]["run_id"] != "orchestrator-run" {
+	if len(rows) != 1 {
+		t.Fatalf("cost.jsonl: got %d rows, want 1", len(rows))
+	}
+	if rows[0]["run_id"] != "orchestrator-run" {
 		t.Errorf("run_id = %v, want the env value", rows[0]["run_id"])
 	}
 }

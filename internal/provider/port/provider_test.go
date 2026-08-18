@@ -239,9 +239,12 @@ func TestDiscovery_ResolvesTheSameHostTheExecutorWill(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.env, func(t *testing.T) {
 			s := testutil.NewSandbox(t)
-			if tc.env != "" {
-				s.SetKey(t, "OLLAMA_HOST", tc.env)
-			}
+			// Explicit even for "", rather than relying on the sandbox's own
+			// baseline: NewSandbox points OLLAMA_HOST at a dead address by
+			// default so an unrelated test never discovers a real local
+			// Ollama server (#539), so "no override" has to be asserted here,
+			// not borrowed from whatever the sandbox happens to leave behind.
+			s.SetKey(t, "OLLAMA_HOST", tc.env)
 			got := provider.OllamaHost()
 			if got != tc.want {
 				t.Errorf("OllamaHost() = %q with OLLAMA_HOST=%q, want %q", got, tc.env, tc.want)
