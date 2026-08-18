@@ -117,6 +117,25 @@ func TestNewRunID_NonEmptyAndUnique(t *testing.T) {
 	}
 }
 
+// An unrecognized enum must not fall through to unrestricted auto-routing —
+// its zero-tier is byte-identical to "no enum given" everywhere else, so a
+// typo would otherwise silently route to the single strongest head instead of
+// being reported (#533, mirroring cmd/hydra's own --enum check for #501).
+func TestChat_UnknownEnumIsRejected(t *testing.T) {
+	sandbox(t)
+
+	r, err := New().Chat("hello", "NOT_A_REAL_ENUM", "")
+	if err != nil {
+		t.Fatalf("an unknown enum must not error: %v", err)
+	}
+	if r.Error == "" {
+		t.Error("no Error on the reply; a garbage enum silently became auto-routing")
+	}
+	if r.NeedsProbe {
+		t.Error("NeedsProbe = true for a bad enum; that flag means zero heads, not a bad key")
+	}
+}
+
 // A machine with zero discoverable heads at all is distinct from an ordinary
 // dispatch failure — dispatch.New already probes fresh on every call, so
 // there is no separate "go discover models" step to point the GUI at. The

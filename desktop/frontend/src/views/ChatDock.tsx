@@ -8,10 +8,21 @@ import { Timeline } from './Session'
 // not a retrospective read.
 const POLL_MS = 2000
 
+// Turn history survives a reload via sessionStorage — cleared when the window
+// closes, which is the lifetime a still-open chat already implies. Own key so
+// a future view's persistence cannot collide with it.
+const TURNS_KEY = 'hydra.chatDock.turns'
+
 interface Turn {
   prompt: string
   runId: string
   reply?: ChatReply
+  // Set instead of trusting `reply` at face value when this turn's outcome
+  // was reconstructed from the run log after a reload rather than returned by
+  // Chat() itself. runlog never inlines model output (its own doc says so),
+  // so a recovered turn can carry routing/cost but never the answer text —
+  // this is what says so, rather than rendering a blank reply as if real.
+  recoveredNote?: string
 }
 
 /**
@@ -73,6 +84,68 @@ export function ChatDock({
     poll()
     pollRef.current = setInterval(poll, POLL_MS)
   }
+
+  // Reattaches to a run this page did not start watching — either a reload
+  // caught it mid-dispatch, or the log needs one read to learn it already
+  // finished. chat.go's dispatch runs on its own context, unaffected by the
+  // frontend reloading (#533), so the run itself is never actually lost —
+  // only this page's earlier view of it was. Keeps polling like a fresh
+  // dispatch until the run stops being live, then settles the turn from
+  // whatever the log recorded, since the real Chat() promise that would have
+  // carried the answer text back died with the page that awaited it.
+  function reattach(idx: number, runId: string) {
+    setBusy(true)
+    const poll = () => {
+      void GetSession(runId)
+        .then((s) => {
+          if (s.live) {
+            setLiveSession(s)
+            return
+          }
+          stopPolling()
+          setLiveSession(null)
+          setBusy(false)
+          const note = s.found
+            ? 'Finished while this window was reloading — the run record was kept, not the answer text.'
+            : "Couldn't confirm this task's status after reload — check Fleet."
+          setTurns((t) =>
+            t.map((turn, i) =>
+              i === idx ? { ...turn, reply: recoveredReply(runId, s), recoveredNote: note } : turn,
+            ),
+          )
+        })
+        .catch(() => {})
+    }
+    poll()
+    pollRef.current = setInterval(poll, POLL_MS)
+  }
+
+  // Once, on mount: load whatever turn history survived a reload, and if the
+  // last one never got a reply, it was cut off mid-dispatch rather than
+  // actually lost (#533).
+  useEffect(() => {
+    let saved: Turn[]
+    try {
+      saved = JSON.parse(sessionStorage.getItem(TURNS_KEY) ?? '[]')
+    } catch {
+      saved = []
+    }
+    if (!Array.isArray(saved) || saved.length === 0) return
+    setTurns(saved)
+    const last = saved[saved.length - 1]
+    if (last && !last.reply) reattach(saved.length - 1, last.runId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // The inverse of the effect above: every change is what a later reload
+  // would load.
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(TURNS_KEY, JSON.stringify(turns))
+    } catch {
+      /* Storage can be full or disabled; losing persistence must not break the dock. */
+    }
+  }, [turns])
 
   useEffect(() => {
     ChatEnums().then(setEnums).catch(() => {
@@ -198,7 +271,14 @@ export function ChatDock({
                 )}
               </>
             )}
-            {t.reply?.error && !t.reply.needsProbe && <p className="turn__err">{t.reply.error}</p>}
+            {t.reply?.error && !t.reply.needsProbe && (
+              <>
+                <p className="turn__err">{t.reply.error}</p>
+                {/* The run's full record outlives the error — a generic
+                    dispatch failure must not be a dead end (#533). */}
+                {t.reply.runId && <SessionLink reply={t.reply} onOpenRun={onOpenRun} />}
+              </>
+            )}
             {t.reply?.needsProbe && (
               <div className="turn__probe">
                 <p className="turn__err">
@@ -211,16 +291,14 @@ export function ChatDock({
             )}
             {t.reply && !t.reply.error && (
               <>
-                <p className="turn__out">{t.reply.output}</p>
+                {t.recoveredNote ? (
+                  <p className="turn__wait">{t.recoveredNote}</p>
+                ) : (
+                  <p className="turn__out">{t.reply.output}</p>
+                )}
                 {/* Which head, which tier, what it cost — this is a router, so
                     that is the part worth showing, not just the answer. */}
-                <button className="turn__meta" onClick={() => onOpenRun(t.reply!.runId)}>
-                  {t.reply.model || t.reply.head}
-                  {t.reply.tier > 0 && ` · T${t.reply.tier}`}
-                  {t.reply.durationMs > 0 && ` · ${ms(t.reply.durationMs)}`}
-                  {t.reply.costUsd > 0 && ` · ${usdExact(t.reply.costUsd)}`}
-                  {' · session →'}
-                </button>
+                <SessionLink reply={t.reply} onOpenRun={onOpenRun} />
               </>
             )}
           </div>
@@ -245,6 +323,35 @@ export function ChatDock({
       </div>
     </section>
   )
+}
+
+function SessionLink({ reply, onOpenRun }: { reply: ChatReply; onOpenRun: (runID: string) => void }) {
+  const who = reply.model || reply.head
+  return (
+    <button className="turn__meta" onClick={() => onOpenRun(reply.runId)}>
+      {who}
+      {reply.tier > 0 && ` · T${reply.tier}`}
+      {reply.durationMs > 0 && ` · ${ms(reply.durationMs)}`}
+      {reply.costUsd > 0 && ` · ${usdExact(reply.costUsd)}`}
+      {who ? ' · session →' : 'session →'}
+    </button>
+  )
+}
+
+// Built from whatever GetSession recovered rather than Chat()'s own return —
+// the log has routing and cost (TimelineEntry/Agent carry both), never the
+// answer text, so output is deliberately left blank instead of guessed at.
+function recoveredReply(runId: string, s: SessionData): ChatReply {
+  const root = s.agents[0]
+  return {
+    output: '',
+    runId,
+    head: root?.head ?? '',
+    model: root?.model ?? '',
+    tier: root?.tier ?? 0,
+    costUsd: root?.costUsd ?? 0,
+    durationMs: root?.durationMs ?? 0,
+  }
 }
 
 function emptyReply(): ChatReply {

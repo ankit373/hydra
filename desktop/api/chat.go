@@ -104,6 +104,13 @@ func (a *API) Chat(prompt, enum, runID string) (*ChatReply, error) {
 
 	tierHint := ""
 	if enum != "" {
+		// A garbage enum must not fall through to unrestricted auto-routing —
+		// EnumToTier's "" is ambiguous with "no enum given" (#501's fix,
+		// applied here too since the dock is a second caller of the same map).
+		if !dispatch.IsKnownEnum(enum) {
+			r.Error = "unknown routing key: " + enum
+			return r, nil
+		}
 		tierHint = dispatch.EnumToTier(enum)
 	}
 
