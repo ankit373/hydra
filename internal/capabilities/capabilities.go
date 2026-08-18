@@ -8,10 +8,12 @@ package capabilities
 import (
 	_ "embed"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/ankit373/hydra/internal/config"
 )
@@ -45,10 +47,65 @@ type DB struct {
 	index map[string]Entry
 }
 
+var (
+	loadCacheMu  sync.Mutex
+	loadCacheKey string
+	loadCacheDB  *DB
+	loadCached   bool // only ever set true alongside a successful result — see Load
+)
+
+// loadCacheFingerprint is overlayPath plus its file state: mtime+size when it
+// exists, a fixed marker otherwise. The embedded defaults never change at
+// runtime, so the overlay is the only thing that can invalidate a cached DB.
+func loadCacheFingerprint(overlayPath string) string {
+	if overlayPath == "" {
+		return "none"
+	}
+	info, err := os.Stat(overlayPath)
+	if err != nil {
+		return overlayPath + "|absent"
+	}
+	return fmt.Sprintf("%s|%s|%d", overlayPath, info.ModTime(), info.Size())
+}
+
 // Load builds a DB from the embedded defaults, then MERGES a user overlay if
 // overlayPath is non-empty and present: overlay entries add new models and
 // override built-ins by ID. Pass "" for built-ins only.
+//
+// Cached per fingerprint (path + mtime+size, so an overlay edit invalidates
+// on the next call): probe.Run fans out to the cli/env/port providers
+// concurrently, and each independently called Load with the identical
+// overlay path, tripling the embedded-unmarshal + merge work for the same
+// result every single probe.
 func Load(overlayPath string) (*DB, error) {
+	key := loadCacheFingerprint(overlayPath)
+
+	loadCacheMu.Lock()
+	if loadCached && loadCacheKey == key {
+		db := loadCacheDB
+		loadCacheMu.Unlock()
+		return db, nil
+	}
+	loadCacheMu.Unlock()
+
+	db, err := loadUncached(overlayPath)
+
+	// Only a successful result is cached. A stale cached error (e.g. from a
+	// malformed overlay JSON) is worse than a stale cached success: it can
+	// never self-heal once the overlay is fixed, since a fix that happens to
+	// land on the identical mtime+size (SaveOverlay doesn't use an atomic
+	// temp-file+rename, so a same-length rewrite is realistic) would still
+	// match the cached fingerprint and keep serving the old error forever.
+	if err == nil {
+		loadCacheMu.Lock()
+		loadCacheKey, loadCacheDB, loadCached = key, db, true
+		loadCacheMu.Unlock()
+	}
+
+	return db, err
+}
+
+func loadUncached(overlayPath string) (*DB, error) {
 	var d data
 	if err := json.Unmarshal(defaultData, &d); err != nil {
 		return nil, err

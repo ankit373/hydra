@@ -156,6 +156,58 @@ func TestBlastRadius_UnknownAndEmpty(t *testing.T) {
 	}
 }
 
+// checkImpactMatchesSeparateCalls is the shared assertion TestImpact_* uses:
+// Impact must agree exactly with calling BlastRadiusForFile, PercolationFactor,
+// DependentCountForFile, and Knows separately for the same file.
+func checkImpactMatchesSeparateCalls(t *testing.T, g *Graph, file string) {
+	t.Helper()
+	impact := g.Impact(file)
+	if impact.Known != g.Knows(file) {
+		t.Errorf("%s: Impact.Known = %v, want %v", file, impact.Known, g.Knows(file))
+	}
+	if wantRadius := g.BlastRadiusForFile(file); math.Abs(impact.Radius-wantRadius) > 1e-9 {
+		t.Errorf("%s: Impact.Radius = %v, want %v", file, impact.Radius, wantRadius)
+	}
+	if wantDeps := g.DependentCountForFile(file); impact.Dependents != wantDeps {
+		t.Errorf("%s: Impact.Dependents = %v, want %v", file, impact.Dependents, wantDeps)
+	}
+	if wantPct := g.PercolationFactor(file); math.Abs(impact.Percolation-wantPct) > 1e-9 {
+		t.Errorf("%s: Impact.Percolation = %v, want %v", file, impact.Percolation, wantPct)
+	}
+}
+
+// Impact resolves seedsForFile once and derives Radius/Dependents/Percolation
+// from that single pass — it must agree exactly with calling the four
+// separate functions, for a known hub, a known leaf, and an unknown file, all
+// on a subcritical graph where Percolation is trivially 1.0 everywhere.
+func TestImpact_MatchesSeparateCalls(t *testing.T) {
+	g := sampleGraph()
+	for _, file := range []string{"a.go", "c.go", "nonexistent.go"} {
+		checkImpactMatchesSeparateCalls(t, g, file)
+	}
+
+	var empty *Graph
+	if got := empty.Impact("a.go"); got.Known || got.Radius != 1.0 || got.Percolation != 1.0 || got.Dependents != 0 {
+		t.Errorf("nil graph Impact = %+v, want the all-neutral zero value", got)
+	}
+}
+
+// The equivalence above is trivial on a subcritical graph, where
+// percolationFactor's excess/superMargin/lift arithmetic never runs
+// (PercolationFactor short-circuits to 1.0 before touching it). This
+// exercises Impact on supercriticalGraph's hub file (x.go), where Percolation
+// is genuinely > 1.0 — the only way to catch a copy/paste error in that
+// arithmetic during Impact's extraction.
+func TestImpact_MatchesSeparateCalls_NonTrivialPercolation(t *testing.T) {
+	g := supercriticalGraph()
+	if pct := g.PercolationFactor("x.go"); pct <= 1.0 {
+		t.Fatalf("test fixture bug: x.go's PercolationFactor = %.3f, want > 1.0 (not exercising the non-trivial branch)", pct)
+	}
+	for _, file := range []string{"x.go", "y.go"} {
+		checkImpactMatchesSeparateCalls(t, g, file)
+	}
+}
+
 func TestCycleSafety(t *testing.T) {
 	g := fromDoc(Doc{
 		Nodes: []Node{{ID: "a", File: "a.go"}, {ID: "b", File: "b.go"}},
@@ -258,21 +310,19 @@ func TestKappa_TopologyOrdering(t *testing.T) {
 	}
 }
 
-// Two files with the SAME transitive-dependent count must be priced
-// identically, even when one has far more total degree than the other via its
-// own outbound imports. Pre-#503 the lift was keyed on total (in+out) degree,
-// so X (a fan-in hub with no imports of its own) scored higher than Y (same
-// dependent count, reached via a chain) purely because X's raw degree was
-// higher — the same mechanism that let cmd/hydra out-score other leaves.
-func TestPercolation_EqualCountEqualFactorRegardlessOfDegree(t *testing.T) {
+// supercriticalGraph returns a graph with κ≥2: X is a fan-in hub with 6 direct
+// dependents (degree 6, count 6), Y heads a 6-long dependent chain (degree 1
+// at Y, count 6) — equal transitive-dependent counts but very different total
+// degree. Since #503, PercolationFactor keys off dependent count, not degree,
+// so X and Y get the SAME lift here despite the degree difference — see
+// TestPercolation_EqualCountEqualFactorRegardlessOfDegree below.
+func supercriticalGraph() *Graph {
 	nodes := []Node{{ID: "X", File: "x.go"}, {ID: "Y", File: "y.go"}}
 	var edges []Edge
-	// X: a fan-in hub with 6 direct dependents (degree 6, count 6).
 	for _, d := range []string{"a", "b", "c", "g", "h", "i"} {
 		nodes = append(nodes, Node{ID: d, File: d + ".go"})
 		edges = append(edges, Edge{From: d, To: "X"})
 	}
-	// Y: a 6-long chain of dependents (degree 1 at Y, count 6).
 	chain := []string{"d", "e", "f", "p", "q", "r"}
 	prev := "Y"
 	for _, c := range chain {
@@ -280,7 +330,17 @@ func TestPercolation_EqualCountEqualFactorRegardlessOfDegree(t *testing.T) {
 		edges = append(edges, Edge{From: c, To: prev})
 		prev = c
 	}
-	g := fromDoc(Doc{Nodes: nodes, Edges: edges})
+	return fromDoc(Doc{Nodes: nodes, Edges: edges})
+}
+
+// Two files with the SAME transitive-dependent count must be priced
+// identically, even when one has far more total degree than the other via its
+// own outbound imports. Pre-#503 the lift was keyed on total (in+out) degree,
+// so X (a fan-in hub with no imports of its own) scored higher than Y (same
+// dependent count, reached via a chain) purely because X's raw degree was
+// higher — the same mechanism that let cmd/hydra out-score other leaves.
+func TestPercolation_EqualCountEqualFactorRegardlessOfDegree(t *testing.T) {
+	g := supercriticalGraph()
 
 	if !g.Percolates() {
 		t.Fatalf("test graph κ = %.3f, expected supercritical", g.Kappa())

@@ -22,6 +22,7 @@ package glob
 import (
 	"path"
 	"strings"
+	"sync"
 )
 
 // Match reports whether the "/"-separated path matches pattern.
@@ -36,7 +37,33 @@ func Match(pattern, p string) bool {
 		return true
 	}
 	p = strings.TrimPrefix(p, "./")
-	return matchSegments(strings.Split(p, "/"), strings.Split(pattern, "/"))
+	return matchSegments(strings.Split(p, "/"), splitPattern(pattern))
+}
+
+var (
+	splitCacheMu sync.Mutex
+	splitCache   = map[string][]string{}
+)
+
+// splitPattern caches a pattern's "/"-split segments. Patterns come from a
+// small, fixed, operator-controlled set (policy/workspace config rules) that
+// Match is called against repeatedly — once per rule, per resource checked —
+// while the path side genuinely differs on every call, so only the pattern
+// side is worth memoizing. The returned slice is never mutated by callers.
+func splitPattern(pattern string) []string {
+	splitCacheMu.Lock()
+	if segs, ok := splitCache[pattern]; ok {
+		splitCacheMu.Unlock()
+		return segs
+	}
+	splitCacheMu.Unlock()
+
+	segs := strings.Split(pattern, "/")
+
+	splitCacheMu.Lock()
+	splitCache[pattern] = segs
+	splitCacheMu.Unlock()
+	return segs
 }
 
 // matchSegments is memoized on (path index, pattern index).

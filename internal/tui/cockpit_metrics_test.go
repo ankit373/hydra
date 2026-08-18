@@ -197,7 +197,9 @@ func TestDashboard_HeadWithNoHistoryRendersDash(t *testing.T) {
 func TestDashboard_RendersRealLatency(t *testing.T) {
 	m := Cockpit{
 		w: 120, h: 30, ready: true, mode: "dispatch",
-		heads: []ckHead{{name: "busy", tier: 3, up: true, color: ckCyan}},
+		// series/lastMS mirror what NewCockpit resolves once via ckSeriesFor —
+		// dash() itself no longer re-matches against metrics.latency per render.
+		heads: []ckHead{{name: "busy", tier: 3, up: true, color: ckCyan, series: []float64{100, 500, 200, 900}, lastMS: 900}},
 		metrics: ckMetrics{
 			latency: map[string][]float64{"busy": {100, 500, 200, 900}},
 			lastMS:  map[string]int64{"busy": 900},

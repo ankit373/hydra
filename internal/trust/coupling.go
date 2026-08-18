@@ -206,6 +206,80 @@ func FamilyCoupling(path, family string) (j float64, ok bool) {
 	return j, true
 }
 
+// FamilyCouplingResult is one family's measured coupling, as returned by
+// AllFamilyCoupling. Warn mirrors FalseConsensusWarning's threshold check
+// (OK && J >= criticalCoupling) so callers don't need criticalCoupling
+// exported to reproduce it themselves.
+type FamilyCouplingResult struct {
+	J    float64
+	OK   bool
+	Warn bool
+}
+
+// AllFamilyCoupling computes FamilyCoupling for every family observed in the
+// co-agreement log in a single pass, instead of the F full rescans a caller
+// gets from calling FamilyCoupling once per KnownFamilies entry (every real
+// caller of FalseConsensusWarning does exactly that today).
+//
+// The key simplification: family F's "diff" bucket (rate at which anything
+// NOT a same-F pair agrees) is, by construction, every pair that isn't a
+// same-F pair — so diffTotal[F] = (all pairs) - sameTotal[F], and likewise
+// for the agreed counts. That means one global pass collecting each family's
+// own same-family tally, plus one grand total, is enough to derive every
+// family's J — no per-family rescan needed.
+func AllFamilyCoupling(path string) map[string]FamilyCouplingResult {
+	type tally struct{ sameAgree, sameTotal int }
+	same := map[string]*tally{}
+	var totalPairs, totalAgree int
+
+	for _, r := range loadCoAgreement(path) {
+		for i := 0; i < len(r.Sources); i++ {
+			for k := i + 1; k < len(r.Sources); k++ {
+				a, b := r.Sources[i], r.Sources[k]
+				agreed := a.Cluster == b.Cluster
+				totalPairs++
+				if agreed {
+					totalAgree++
+				}
+				if a.Family == b.Family {
+					t := same[a.Family]
+					if t == nil {
+						t = &tally{}
+						same[a.Family] = t
+					}
+					t.sameTotal++
+					if agreed {
+						t.sameAgree++
+					}
+				}
+			}
+		}
+	}
+
+	out := make(map[string]FamilyCouplingResult, len(same))
+	for fam, t := range same {
+		if t.sameTotal < minCoAgreementSamples {
+			out[fam] = FamilyCouplingResult{}
+			continue
+		}
+		sameRate := float64(t.sameAgree) / float64(t.sameTotal)
+		diffTotal := totalPairs - t.sameTotal
+		diffRate := 0.0
+		if diffTotal > 0 {
+			diffRate = float64(totalAgree-t.sameAgree) / float64(diffTotal)
+		}
+		j := sameRate - diffRate
+		switch {
+		case j < 0:
+			j = 0
+		case j > 1:
+			j = 1
+		}
+		out[fam] = FamilyCouplingResult{J: j, OK: true, Warn: j >= criticalCoupling}
+	}
+	return out
+}
+
 // FamilyDiscount replaces the flat correlation constant: 1-J, so a family
 // with no measured excess correlation (J=0) is not discounted at all, and a
 // family whose members are nearly always identical (J→1) contributes almost

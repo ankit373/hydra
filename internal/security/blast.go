@@ -87,14 +87,15 @@ func AssessBlastRadius() BlastReport {
 	}
 
 	for file, n := range edits {
-		ef := EditedFile{File: file, Edits: n, Known: g.Knows(file)}
+		impact := g.Impact(file)
+		ef := EditedFile{File: file, Edits: n, Known: impact.Known}
 		if !ef.Known {
 			r.Unknown++
 			r.Files = append(r.Files, ef)
 			continue
 		}
-		ef.Radius = g.BlastRadiusForFile(file)
-		ef.Dependents = g.DependentCountForFile(file)
+		ef.Radius = impact.Radius
+		ef.Dependents = impact.Dependents
 		r.Files = append(r.Files, ef)
 	}
 

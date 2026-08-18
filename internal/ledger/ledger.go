@@ -315,6 +315,15 @@ func VerifyChain(path string) (ChainResult, error) {
 	if err != nil {
 		return ChainResult{}, err
 	}
+	return VerifyChainEvents(events, path), nil
+}
+
+// VerifyChainEvents is VerifyChain for a caller that already loaded events
+// (e.g. security.Build, which loads the ledger once for its own report and
+// would otherwise pay for a second full read+parse of the identical file just
+// to verify it). path is still needed to look up the sidecar chain-hash
+// anchor, which lives alongside the ledger file, not inside it.
+func VerifyChainEvents(events []Event, path string) ChainResult {
 	res := ChainResult{Intact: true}
 	prevHash := ""
 	chainStarted := false
@@ -363,7 +372,7 @@ func VerifyChain(path string) (ChainResult, error) {
 		res.Truncated = true
 		res.Intact = false
 	}
-	return res, nil
+	return res
 }
 
 // Load reads all events; a missing ledger yields no events. Unparseable lines

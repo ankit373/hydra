@@ -274,6 +274,37 @@ func (g *Graph) BlastRadiusForFile(file string) float64 {
 	return base * g.percolationFactor(count)
 }
 
+// FileImpact bundles what BlastRadiusForFile, PercolationFactor,
+// DependentCountForFile, and Knows each separately compute about one file.
+// Every caller that wants more than one of these numbers (hyctl graph blast,
+// the TUI dashboard, hyctl security's blast-radius check all want at least
+// three) used to resolve seedsForFile once per call and run
+// transitiveDependents' BFS twice over — Impact resolves the seed set once
+// and derives all four from that single pass.
+type FileImpact struct {
+	Known       bool
+	Dependents  int
+	Radius      float64
+	Percolation float64
+}
+
+// Impact is the single-resolution counterpart to calling BlastRadiusForFile,
+// PercolationFactor, DependentCountForFile, and Knows separately for file.
+func (g *Graph) Impact(file string) FileImpact {
+	seeds := g.seedsForFile(file)
+	if len(seeds) == 0 {
+		return FileImpact{Radius: 1.0, Percolation: 1.0}
+	}
+	count := len(g.transitiveDependents(seeds))
+	percolation := g.percolationFactor(count)
+	return FileImpact{
+		Known:       true,
+		Dependents:  count,
+		Radius:      (1.0 + math.Log2(1.0+float64(count))) * percolation,
+		Percolation: percolation,
+	}
+}
+
 // Kappa is the Molloy–Reed ratio κ = ⟨k²⟩/⟨k⟩ of the (undirected projection of
 // the) dependency graph. A random graph has a giant connected component — the
 // substrate for a breaking-change cascade — iff κ ≥ 2 (Molloy & Reed 1995). It

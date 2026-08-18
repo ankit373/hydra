@@ -72,6 +72,14 @@ type ckHead struct {
 	price float64
 	up    bool
 	color lipgloss.Color
+
+	// series/lastMS are ckSeriesFor(id, name)'s result, resolved once when the
+	// cockpit is built rather than by dash() on every render: the fallback
+	// match there is a case-fold + substring scan over every distinct model in
+	// the latency history, and neither m.heads nor m.metrics ever change after
+	// construction, so re-resolving it per frame bought nothing.
+	series []float64
+	lastMS int64
 }
 
 // Cockpit views. The name table is the single source of truth — deriving the
@@ -196,6 +204,9 @@ func NewCockpit() Cockpit {
 	pct := ckClaudePct()
 	secReport, _ := security.Build(probed.Heads) // best-effort: nil on error, handled by the view
 	metrics := ckLoadMetrics(pr)
+	for i := range heads {
+		heads[i].series, heads[i].lastMS = metrics.ckSeriesFor(heads[i].name, heads[i].id)
+	}
 	m := Cockpit{
 		mode:      "dispatch",
 		claudePct: pct,

@@ -20,7 +20,7 @@ import (
 func TestComputeCoverage_StaticCategoriesAreFixed(t *testing.T) {
 	testutil.NewSandbox(t)
 
-	cov := computeCoverage(ledger.Policy{}, nil, SupplyChain{})
+	cov := computeCoverage(ledger.Policy{}, SupplyChain{}, nil, 0)
 	want := map[string]CoverageStatus{
 		"LLM01": Enforced, "LLM02": Enforced,
 		"LLM03": Gap, "LLM07": Gap,
@@ -40,7 +40,7 @@ func TestComputeCoverage_StaticCategoriesAreFixed(t *testing.T) {
 func TestComputeCoverage_NAExcludedFromBothNumeratorAndDenominator(t *testing.T) {
 	testutil.NewSandbox(t)
 
-	cov := computeCoverage(ledger.Policy{}, nil, SupplyChain{})
+	cov := computeCoverage(ledger.Policy{}, SupplyChain{}, nil, 0)
 	if cov.Applicable != 8 {
 		t.Errorf("Applicable = %d, want 8 (10 categories minus LLM04 and LLM08)", cov.Applicable)
 	}
@@ -69,7 +69,7 @@ func TestLLM06ExcessiveAgency_ConfiguredOnlyWithAResourceScopedRule(t *testing.T
 func TestLLM09Misinformation_ConfiguredOnlyWithARecordedRun(t *testing.T) {
 	testutil.NewSandbox(t)
 
-	if got := llm09Misinformation().Status; got != Gap {
+	if got := llm09Misinformation(nil).Status; got != Gap {
 		t.Errorf("no trust.jsonl: Status = %q, want Gap", got)
 	}
 
@@ -80,19 +80,23 @@ func TestLLM09Misinformation_ConfiguredOnlyWithARecordedRun(t *testing.T) {
 	if err := os.WriteFile(trust.DefaultLogPath(), []byte(row), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if got := llm09Misinformation().Status; got != Configured {
+	runs, err := trust.LoadRuns(trust.DefaultLogPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := llm09Misinformation(runs).Status; got != Configured {
 		t.Errorf("a recorded run exists: Status = %q, want Configured", got)
 	}
 }
 
 func TestLLM10UnboundedConsumption_ConfiguredOnlyWithACostCeilingDenial(t *testing.T) {
 	none := []ledger.Event{{Tool: "a", Decision: ledger.Deny, Reason: "denied by ledger policy"}}
-	if got := llm10UnboundedConsumption(none).Status; got != Gap {
+	if got := llm10UnboundedConsumption(countCostCeilingDenials(none)).Status; got != Gap {
 		t.Errorf("no cost-ceiling denial: Status = %q, want Gap", got)
 	}
 
 	withCeiling := []ledger.Event{{Tool: "a", Decision: ledger.Deny, Reason: "exceeds cost ceiling: estimated $1 > limit $0.5"}}
-	if got := llm10UnboundedConsumption(withCeiling).Status; got != Configured {
+	if got := llm10UnboundedConsumption(countCostCeilingDenials(withCeiling)).Status; got != Configured {
 		t.Errorf("a cost-ceiling denial exists: Status = %q, want Configured", got)
 	}
 }

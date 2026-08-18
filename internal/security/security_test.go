@@ -11,6 +11,7 @@ import (
 	"github.com/ankit373/hydra/internal/ledger"
 	"github.com/ankit373/hydra/internal/provider"
 	"github.com/ankit373/hydra/internal/testutil"
+	"github.com/ankit373/hydra/internal/trust"
 )
 
 func TestBuild_NoDataOnAnEmptyMachine(t *testing.T) {
@@ -32,6 +33,64 @@ func TestBuild_NoDataOnAnEmptyMachine(t *testing.T) {
 			t.Errorf("check %+v is missing a Name/Status", c)
 		}
 	}
+}
+
+// A scan failure partway through trust.jsonl (bufio.Scanner's ErrTooLong on
+// an oversized line) hands trust.LoadRuns back a partially-populated, non-nil
+// runs slice alongside a non-nil error. Build must treat that as no runs at
+// all — never silently report LLM09 as Configured off truncated/corrupt data.
+func TestBuild_CorruptedTrustLogReportsGapNotConfigured(t *testing.T) {
+	testutil.NewSandbox(t)
+
+	path := trust.DefaultLogPath()
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// One valid run first, so LoadRuns has accumulated something before it fails.
+	if _, err := f.WriteString(`{"ts":"2026-01-01T00:00:00Z","task_hash":"a","domain":"go",` +
+		`"target_conf":0.9,"final_conf":0.9,"samples":1,"decision":"accept"}` + "\n"); err != nil {
+		t.Fatal(err)
+	}
+	// A single "line" (no newline) bigger than bufio.Scanner's 4MB max token
+	// size, forcing scanner.Err() to return bufio.ErrTooLong.
+	oversized := make([]byte, 5*1024*1024)
+	for i := range oversized {
+		oversized[i] = 'x'
+	}
+	if _, err := f.Write(oversized); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Confirm the fixture actually reproduces LoadRuns' partial+error shape
+	// before trusting Build's behavior against it.
+	runs, loadErr := trust.LoadRuns(path)
+	if loadErr == nil {
+		t.Fatal("test fixture bug: expected trust.LoadRuns to error on the oversized line")
+	}
+	if len(runs) == 0 {
+		t.Fatal("test fixture bug: expected trust.LoadRuns to still return the one valid run parsed before the failure")
+	}
+
+	r, err := Build(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range r.Coverage.Categories {
+		if c.ID == "LLM09" {
+			if c.Status != Gap {
+				t.Errorf("LLM09 status = %q after a corrupted trust.jsonl, want Gap — Build is trusting partial/truncated data", c.Status)
+			}
+			return
+		}
+	}
+	t.Fatal("LLM09 category not found in Coverage.Categories")
 }
 
 // Panel numbers must come straight from ledger.Summarize/ByHeadRisk — no
