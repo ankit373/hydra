@@ -118,8 +118,8 @@ type RecentCall struct {
 
 // GetDashboard assembles the Dashboard view.
 //
-// Every figure routes through the same cost/trust calls the CLI makes —
-// cost.Summary for the headline, cost.ByModel/ByDay/GroupBy for the
+// Every figure routes through the same cost/trust logic the CLI uses —
+// cost.SummaryFromRows for the headline, cost.ByModel/ByDay/GroupBy for the
 // breakdowns, trust.Aggregate for the ensemble record. Reimplementing any of
 // them here would let `hyctl cost` and this view disagree about one file.
 func (a *API) GetDashboard() (*Dashboard, error) {
@@ -144,10 +144,9 @@ func (a *API) GetDashboard() (*Dashboard, error) {
 		return d, nil
 	}
 
-	sum, err := cost.Summary()
-	if err != nil {
-		return nil, err
-	}
+	// rows is already loaded above — cost.Summary would reload cost.jsonl a
+	// second time for the same data, doubling this call's I/O (#524).
+	sum := cost.SummaryFromRows(rows)
 	d.Spend = spendPanel(sum)
 
 	d.ByModel = toBreakdowns(cost.ByModel(rows))

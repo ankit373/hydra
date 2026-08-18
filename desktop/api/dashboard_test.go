@@ -3,6 +3,7 @@
 package api
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -433,6 +434,90 @@ func mustUpdate(t *testing.T, c *trust.Calibrator, source, domain string, saidCo
 	t.Helper()
 	if err := c.Update(source, domain, saidCorrect, outcome); err != nil {
 		t.Fatalf("Update: %v", err)
+	}
+}
+
+// writeManyCostRows fills cost.jsonl with n synthetic rows — large enough
+// that cost.jsonl's read+parse cost dominates a GetDashboard call, so any
+// difference between reading it once and reading it twice shows up in wall
+// time (#524).
+func writeManyCostRows(t *testing.T, home string, n int) {
+	t.Helper()
+	path := filepath.Join(home, ".hydra", "logs", "cost.jsonl")
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	w := bufio.NewWriter(f)
+	defer w.Flush()
+
+	today := time.Now().UTC().Format("2006-01-02")
+	for i := 0; i < n; i++ {
+		row := map[string]any{
+			"ts": today + "T10:00:00Z", "tier": (i % 8) + 1, "model": fmt.Sprintf("model-%d", i%5),
+			"prompt_tokens": 100 + i%50, "response_tokens": 50 + i%20, "est_cost_usd": 0.001,
+			"wall_ms": 200, "tokens_source": "actual", "run_id": fmt.Sprintf("run-%d", i), "task_id": fmt.Sprintf("task-%d", i),
+		}
+		raw, err := json.Marshal(row)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := w.Write(raw); err != nil {
+			t.Fatal(err)
+		}
+		if err := w.WriteByte('\n'); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// GetDashboard used to call cost.LoadAll() directly and then cost.Summary()
+// — which itself calls LoadAll() again — parsing cost.jsonl twice per call.
+// On a large log this test's cost.jsonl deliberately reproduces the shape of
+// the bug: enough rows that the JSONL parse dominates wall time, so a
+// regression back to a second full read shows up as roughly double the time
+// a single cost.LoadAll of the same file takes. The correctness half of this
+// (that Spend actually matches cost.SummaryFromRows) is already covered by
+// TestGetDashboard_MatchesCLI; this test is about the read count.
+func TestGetDashboard_ReadsCostLogOnce(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping large-file timing test in -short mode")
+	}
+	home := sandbox(t)
+	const n = 40000
+	writeManyCostRows(t, home, n)
+
+	start := time.Now()
+	rows, err := cost.LoadAll()
+	if err != nil {
+		t.Fatalf("cost.LoadAll: %v", err)
+	}
+	if len(rows) != n {
+		t.Fatalf("wrote %d rows, LoadAll read %d", n, len(rows))
+	}
+	oneRead := time.Since(start)
+
+	start = time.Now()
+	d, err := New().GetDashboard()
+	if err != nil {
+		t.Fatalf("GetDashboard: %v", err)
+	}
+	dashboardTime := time.Since(start)
+
+	if !d.HasData || d.Spend.TotalCalls != n {
+		t.Fatalf("GetDashboard did not see all %d rows: HasData=%v TotalCalls=%d", n, d.HasData, d.Spend.TotalCalls)
+	}
+
+	// A single-read GetDashboard costs one LoadAll plus a handful of cheap
+	// O(n) in-memory passes (ByModel/ByTier/ByDay/SummaryFromRows) — well
+	// under 2x one read. A regression to calling cost.Summary() (its own
+	// second LoadAll) on top of the first would cost close to 2x oneRead
+	// before those passes even run. 1.6x gives headroom for scheduling noise
+	// while still catching a real regression.
+	if budget := oneRead * 16 / 10; dashboardTime > budget {
+		t.Errorf("GetDashboard took %v for %d rows — more than 1.6x a single cost.LoadAll (%v); "+
+			"looks like it is reading cost.jsonl twice again", dashboardTime, n, oneRead)
 	}
 }
 

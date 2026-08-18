@@ -59,6 +59,67 @@ func TestCockpit_ViewCommandsSwitchViews(t *testing.T) {
 	}
 }
 
+// NewCockpit must not build the security report at startup — the default
+// chat+code view (and dashboard, and agent-tree) never render it, so paying
+// for security.Build's ledger read + coverage scan on every launch is wasted
+// work regardless of view (#524).
+func TestCockpit_SecurityReportNotBuiltAtStartup(t *testing.T) {
+	testutil.NewSandbox(t)
+	m := NewCockpit()
+	if m.securityBuilt || m.security != nil {
+		t.Fatalf("NewCockpit built the security report eagerly: built=%v security=%v", m.securityBuilt, m.security)
+	}
+}
+
+// Tab-cycling into the security view must build the report on first arrival
+// — the whole point of making it lazy is that it still gets built when it is
+// actually needed.
+func TestCockpit_TabIntoSecurityBuildsIt(t *testing.T) {
+	testutil.NewSandbox(t)
+	m := NewCockpit()
+	for i := 0; i < ckViewCount(); i++ {
+		next, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+		m = next.(Cockpit)
+		if m.view == ckViewSecurity {
+			break
+		}
+	}
+	if m.view != ckViewSecurity {
+		t.Fatalf("tabbing %d times never reached the security view (view=%d)", ckViewCount(), m.view)
+	}
+	if !m.securityBuilt {
+		t.Error("navigating to the security view did not build the report")
+	}
+}
+
+// The :security jump command must build the report too, not just Tab-cycling.
+func TestCockpit_SecurityCommandBuildsIt(t *testing.T) {
+	testutil.NewSandbox(t)
+	m, _ := enter(typed(NewCockpit(), ":security"))
+	if m.view != ckViewSecurity {
+		t.Fatalf(":security left view = %d, want %d", m.view, ckViewSecurity)
+	}
+	if !m.securityBuilt {
+		t.Error(":security did not build the report")
+	}
+}
+
+// Switching away from the security view and back must reuse the cached
+// report rather than rebuilding it — otherwise every Tab cycle pays
+// security.Build's cost again.
+func TestCockpit_SecurityReportIsCachedAcrossRevisits(t *testing.T) {
+	testutil.NewSandbox(t)
+	m, _ := enter(typed(NewCockpit(), ":security"))
+	first := m.security
+
+	m, _ = enter(typed(m, ":chat"))
+	m, _ = enter(typed(m, ":security"))
+
+	if m.security != first {
+		t.Error("revisiting the security view rebuilt the report instead of reusing the cached one")
+	}
+}
+
 func TestCockpit_QuitCommands(t *testing.T) {
 	for _, cmd := range []string{":q", ":quit"} {
 		if _, c := enter(typed(NewCockpit(), cmd)); c == nil {
