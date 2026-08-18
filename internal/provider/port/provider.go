@@ -118,7 +118,8 @@ func (s *ollamaService) probe(ctx context.Context, caps *capabilities.DB) ([]pro
 
 	var payload struct {
 		Models []struct {
-			Name string `json:"name"`
+			Name         string   `json:"name"`
+			Capabilities []string `json:"capabilities"`
 		} `json:"models"`
 	}
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&payload); err != nil {
@@ -127,6 +128,9 @@ func (s *ollamaService) probe(ctx context.Context, caps *capabilities.DB) ([]pro
 
 	heads := make([]provider.Head, 0, len(payload.Models))
 	for _, m := range payload.Models {
+		if !completionCapable(m.Capabilities) {
+			continue // embedding-only etc.: reports capabilities but no completion, so it fails every dispatch (#532)
+		}
 		heads = append(heads, provider.Head{
 			ID:       "ollama/" + m.Name,
 			Name:     m.Name + " (Ollama)",
@@ -143,6 +147,23 @@ func (s *ollamaService) probe(ctx context.Context, caps *capabilities.DB) ([]pro
 		})
 	}
 	return heads, nil
+}
+
+// completionCapable reports whether an Ollama model can serve a text-completion
+// request. An empty list means an older server or a model type that never
+// populates the field — treated as capable, since we have no positive signal
+// either way. A non-empty list lacking "completion" (e.g. embedding-only) is
+// the one case we can rule out (#532).
+func completionCapable(caps []string) bool {
+	if len(caps) == 0 {
+		return true
+	}
+	for _, c := range caps {
+		if c == "completion" {
+			return true
+		}
+	}
+	return false
 }
 
 // ── LM Studio ─────────────────────────────────────────────────────────────────
