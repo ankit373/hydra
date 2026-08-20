@@ -57,6 +57,7 @@ jobs:
       - name: Publish RC release
         run: |
           gh release create "${{ steps.ver.outputs.tag }}" dist/*.tar.gz dist/*.zip dist/checksums.txt \
+            --target "${{ github.sha }}" \
             --title "RC — ${{ steps.ver.outputs.version }}" \
             --notes "$(cat <<'EOF'
           > 🧪 **This is a release candidate** — built from \`${{ github.ref_name }}\` for UAT testing.
