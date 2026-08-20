@@ -631,7 +631,7 @@ For Ollama models, add a family pattern:
 | **Percolation-κ blast radius** — Molloy–Reed core detection weights hub files higher | ✅ Shipped |
 | **Rate-aware budget governor** — first-passage-time risk on `claude_pct`, escalates before a threshold | ✅ Shipped |
 | **Security posture** (`hyctl security`) — verdict, correlated incidents, risk register, OWASP LLM Top-10 coverage | ✅ Shipped |
-| **Native desktop app** — HUD Dashboard, Fleet workflow graph, Session, Code views over a persistent chat dock | ✅ Shipped |
+| **Native desktop app** — chat-first, with a pool-aware model picker and a routing/confidence pane; plus Dashboard, Fleet, Session and Security views | ✅ Shipped |
 | MCP server registry — central connection/authorization plane across every MCP server | 📋 [#9](https://github.com/ankit373/hydra/issues/9) |
 | Browser-based Web UI | 📋 [#12](https://github.com/ankit373/hydra/issues/12) |
 
@@ -689,11 +689,18 @@ hydra/
 
 ### The desktop app
 
-A native window over the same engine: **Dashboard** (HUD-style — arc gauges, glow chart, drill-down
-— spend, governor pressure, trust record, and a calibration leaderboard), **Fleet** (a dynamic
-workflow graph of runs in flight and the agents inside them), **Session** (one run's timeline, plus
-a layered graph when it fanned out), and **Code** (the file edits a run made, as diffs) — over a
-persistent chat dock.
+A native window over the same engine, opening on **Chat**: ask for work, and each reply says which
+model answered, at which tier, and what it cost — with the run's timeline narrated live rather than
+after the fact. The composer's model picker groups models by **token pool**, so it shows when a
+choice spends a quota another model shares (Opus and Sonnet draw from the same one). A companion
+pane beside the thread carries the active head, this run's confidence, per-model measured accuracy
+from the calibration record, and the files the run changed.
+
+Four more views sit behind an icon rail: **Dashboard** (HUD-style — arc gauges, glow chart,
+drill-down — spend, governor pressure, trust record, and a calibration leaderboard), **Fleet** (a
+dynamic workflow graph of runs in flight and the agents inside them), **Session** (one run's
+timeline, its file diffs, and a layered graph when it fanned out), and **Security** (OWASP LLM
+Top-10 coverage over the MCP ledger).
 
 It reads `~/.hydra/logs/` directly. No daemon, no telemetry, and its numbers are the CLI's numbers:
 Dashboard totals are asserted equal to `hyctl cost` and `hyctl stats` for the same data.
