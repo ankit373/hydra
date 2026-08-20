@@ -11,26 +11,21 @@ import { useCountUp, useReveal } from '../reveal'
  * scanline, vignette) stays mounted for the lifetime of the view; only the
  * body swaps from skeleton to `DashboardContent`.
  *
- * dockOpen/onCloseDock coordinate the model-detail drawer with ChatDock
- * (#460): both are `position: fixed` overlays with independent z-index
- * stacks, so opening one while the other is already open used to sandwich
- * the dock behind the drawer but above its backdrop instead of ever hiding
- * either. Only one may be open at a time.
+ * The drawer used to coordinate with a floating ChatDock (#460): both were
+ * `position: fixed` overlays that could sandwich each other. Chat is a view of
+ * its own now (#520), so there is no second overlay to collide with and the
+ * mutual-exclusion dance is gone.
  */
 export function Dashboard({
   data,
-  dockOpen,
-  onCloseDock,
 }: {
   data: DashboardData | null
-  dockOpen: boolean
-  onCloseDock: () => void
 }) {
   return (
     <>
       <HudChrome />
       {data ? (
-        <DashboardContent data={data} dockOpen={dockOpen} onCloseDock={onCloseDock} />
+        <DashboardContent data={data} />
       ) : (
         <DashboardSkeleton />
       )}
@@ -93,12 +88,8 @@ function SkeletonCard() {
 
 function DashboardContent({
   data,
-  dockOpen,
-  onCloseDock,
 }: {
   data: DashboardData
-  dockOpen: boolean
-  onCloseDock: () => void
 }) {
   const [drawerRow, setDrawerRow] = useState<Breakdown | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -106,7 +97,6 @@ function DashboardContent({
   const openDrawer = (row: Breakdown) => {
     setDrawerRow(row)
     setDrawerOpen(true)
-    onCloseDock()
   }
   const closeDrawer = () => setDrawerOpen(false)
 
@@ -118,12 +108,6 @@ function DashboardContent({
     addEventListener('keydown', onKey)
     return () => removeEventListener('keydown', onKey)
   }, [drawerOpen])
-
-  // The reverse direction: the dock's own toggle button (or Fleet's "start a
-  // task") can open it while the drawer is already up.
-  useEffect(() => {
-    if (dockOpen) setDrawerOpen(false)
-  }, [dockOpen])
 
   return (
     <div className="dashboard-content">

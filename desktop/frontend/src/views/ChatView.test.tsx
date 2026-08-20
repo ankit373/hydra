@@ -1,26 +1,26 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { ChatDock } from './ChatDock'
-import { Chat, ChatEnums, GetSession, NewRunID } from '../bindings'
+import { ChatView } from './ChatView'
+import { Chat, GetModels, GetSession, NewRunID } from '../bindings'
 import type { ChatReply, Session as SessionData } from '../types'
 
-// ChatDock talks to the Go backend only through these four bindings — mocking
-// the module lets every test drive a specific backend outcome (a run still
-// live, one that finished while the page was away, a plain dispatch failure)
-// without a real Wails runtime.
+// ChatView talks to the Go backend only through these bindings — mocking the
+// module lets every test drive a specific backend outcome (a run still live,
+// one that finished while the view was away, a plain dispatch failure) without
+// a real Wails runtime.
 vi.mock('../bindings', () => ({
   Chat: vi.fn(),
-  ChatEnums: vi.fn(),
+  GetModels: vi.fn(),
   GetSession: vi.fn(),
   NewRunID: vi.fn(),
 }))
 
 const mockChat = vi.mocked(Chat)
-const mockChatEnums = vi.mocked(ChatEnums)
+const mockGetModels = vi.mocked(GetModels)
 const mockGetSession = vi.mocked(GetSession)
 const mockNewRunID = vi.mocked(NewRunID)
 
-const TURNS_KEY = 'hydra.chatDock.turns'
+const TURNS_KEY = 'hydra.chat.turns'
 const noop = () => {}
 
 function emptySession(overrides: Partial<SessionData> = {}): SessionData {
@@ -38,12 +38,12 @@ function emptySession(overrides: Partial<SessionData> = {}): SessionData {
 }
 
 function renderDock(onOpenRun: (runID: string) => void = noop) {
-  return render(<ChatDock onOpenRun={onOpenRun} open={true} onOpenChange={noop} focusSignal={0} />)
+  return render(<ChatView onOpenRun={onOpenRun} focusSignal={0} />)
 }
 
 beforeEach(() => {
   sessionStorage.clear()
-  mockChatEnums.mockResolvedValue([])
+  mockGetModels.mockResolvedValue({ found: true, pools: [] })
   mockGetSession.mockResolvedValue(emptySession())
   let seq = 0
   mockNewRunID.mockImplementation(async () => `run-${++seq}`)
@@ -104,7 +104,7 @@ describe('generic dispatch failures (#533)', () => {
   })
 })
 
-describe('reload recovery (#533)', () => {
+describe('recovery after the view closes (#533)', () => {
   it('persists a completed turn across a remount', async () => {
     mockChat.mockResolvedValue({
       output: 'the answer',
@@ -148,7 +148,7 @@ describe('reload recovery (#533)', () => {
     expect(await screen.findByText('still going')).toBeInTheDocument()
     expect(await screen.findByText('working…')).toBeInTheDocument()
     expect(screen.getByText('head selected')).toBeInTheDocument()
-    await waitFor(() => expect(screen.getByPlaceholderText('routing…')).toBeDisabled())
+    await waitFor(() => expect(screen.getByPlaceholderText('working…')).toBeDisabled())
   })
 
   it('shows a recovery note rather than fabricated output once the run finished unseen', async () => {
@@ -176,7 +176,7 @@ describe('reload recovery (#533)', () => {
 
     renderDock()
 
-    expect(await screen.findByText(/finished while this window was reloading/i)).toBeInTheDocument()
+    expect(await screen.findByText(/finished while this view was closed/i)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /session →/ })).toBeInTheDocument()
     expect(screen.queryByText('the answer')).not.toBeInTheDocument()
 
@@ -184,7 +184,7 @@ describe('reload recovery (#533)', () => {
     await waitFor(() => expect(screen.getByPlaceholderText(/ask anything/i)).not.toBeDisabled())
   })
 
-  it('says so, rather than going silent, when a run cannot be found after reload', async () => {
+  it('says so, rather than going silent, when a run cannot be found', async () => {
     sessionStorage.setItem(TURNS_KEY, JSON.stringify([{ prompt: 'mystery', runId: 'run-gone' }]))
     mockGetSession.mockResolvedValue(emptySession({ runId: 'run-gone', found: false, live: false }))
 
