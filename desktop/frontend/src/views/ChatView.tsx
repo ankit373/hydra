@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import { Chat, GetSession, NewRunID } from '../bindings'
-import type { ChatReply, Session as SessionData } from '../types'
+import { Chat, GetDashboard, GetSession, NewRunID } from '../bindings'
+import type { ChatReply, GovernorPanel, Session as SessionData } from '../types'
 import { ms, usdExact } from '../format'
 import { Timeline } from './Session'
 import { ModelPicker } from './ModelPicker'
+import { Cockpit } from './Cockpit'
+import { GovernorNotice } from './GovernorNotice'
 
 // Matches App.tsx's LIVE_MS — same reasoning: this is "what is happening now",
 // not a retrospective read.
@@ -59,6 +61,7 @@ export function ChatView({
   // The one turn currently in flight, if any — Chat's own busy flag already
   // guarantees at most one, so this doesn't need to be keyed by turn index.
   const [liveSession, setLiveSession] = useState<SessionData | null>(null)
+  const [governor, setGovernor] = useState<GovernorPanel | undefined>()
   const logRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -152,6 +155,15 @@ export function ChatView({
     logRef.current?.scrollTo({ top: logRef.current.scrollHeight })
   }, [turns])
 
+  // Orchestrator pressure is a slow, session-wide value, so it ticks on its own
+  // rather than per turn.
+  useEffect(() => {
+    const tick = () => void GetDashboard().then((d) => setGovernor(d.governor)).catch(() => {})
+    tick()
+    const t = setInterval(tick, 5000)
+    return () => clearInterval(t)
+  }, [])
+
   async function send() {
     const p = prompt.trim()
     if (!p || busy) return
@@ -216,7 +228,9 @@ export function ChatView({
   }, [focusSignal])
 
   return (
-    <section className="chatv">
+    <div className="chatv-split">
+      <GovernorNotice governor={governor} busy={busy} />
+      <section className="chatv">
       <div className="chatv__log" ref={logRef}>
         {turns.length === 0 && (
           <div className="chatv__empty">
@@ -229,6 +243,19 @@ export function ChatView({
         )}
         {turns.map((t, i) => (
           <div key={i} className="turn">
+            {/* A tier change belongs in the transcript, not a toast: a toast
+                vanishes and then a different model answered for no visible
+                reason. Only says what moved — the router does not record *why*,
+                and inventing a reason would be worse than omitting one. */}
+            {tierShift(turns, i) && (
+              <div className="shift">
+                <span className="shift__ico" aria-hidden="true">&#8663;</span>
+                <span className="shift__txt">
+                  Moved to <b>{turns[i - 1].reply!.tier > t.reply!.tier ? 'a stronger' : 'a cheaper'}</b>{' '}
+                  model — T{turns[i - 1].reply!.tier} &rarr; T{t.reply!.tier}
+                </span>
+              </div>
+            )}
             <p className="turn__you">{t.prompt}</p>
             {!t.reply && (
               <>
@@ -308,7 +335,14 @@ export function ChatView({
           </div>
         </div>
       </div>
-    </section>
+      </section>
+
+      <Cockpit
+        live={liveSession}
+        lastReply={lastSettled(turns)}
+        runId={turns[turns.length - 1]?.runId}
+      />
+    </div>
   )
 }
 
@@ -343,4 +377,20 @@ function recoveredReply(runId: string, s: SessionData): ChatReply {
 
 function emptyReply(): ChatReply {
   return { output: '', head: '', model: '', tier: 0, costUsd: 0, durationMs: 0, runId: '' }
+}
+
+/** The most recent turn that actually settled, for the idle sidebar state. */
+function lastSettled(turns: Turn[]): ChatReply | undefined {
+  for (let i = turns.length - 1; i >= 0; i--) {
+    if (turns[i].reply && !turns[i].reply!.error) return turns[i].reply
+  }
+  return undefined
+}
+
+/** True when this turn was answered at a different tier than the one before. */
+function tierShift(turns: Turn[], i: number): boolean {
+  if (i === 0) return false
+  const prev = turns[i - 1].reply
+  const cur = turns[i].reply
+  return !!prev && !!cur && prev.tier > 0 && cur.tier > 0 && prev.tier !== cur.tier
 }
