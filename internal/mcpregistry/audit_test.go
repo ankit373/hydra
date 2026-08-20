@@ -105,6 +105,44 @@ func TestAudit_MatchesInstalledPackageAgainstSyncedRegistry(t *testing.T) {
 	}
 }
 
+func TestAudit_PersistsAliasesSoClassificationForToolWorksAfterward(t *testing.T) {
+	withTempHydraHome(t)
+	withStubbedScoringDeps(t)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	writeJSON(t, filepath.Join(home, ".cursor", "mcp.json"),
+		`{"mcpServers": {"fetch": {"type":"stdio","command":"uvx","args":["mcp-server-fetch"]}}}`)
+
+	if err := writeCache(&registryCache{
+		FetchedAt: time.Now().UTC(),
+		Servers: []ServerRecord{
+			{Name: "io.github.modelcontextprotocol/fetch", Packages: []Package{{RegistryType: "pypi", Identifier: "mcp-server-fetch"}}},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := Audit(context.Background(), ""); err != nil {
+		t.Fatal(err)
+	}
+
+	// Phase 2's automaton starts a newly-seen clean server at PROVISIONAL,
+	// not TRUSTED, so this shouldn't be classified yet — but it also
+	// shouldn't be "never seen" any more, and that alias must now resolve.
+	aliases, err := LoadAliases()
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry, ok := aliases["fetch"]
+	if !ok || entry.RegistryName != "io.github.modelcontextprotocol/fetch" || entry.Status != StatusVerified {
+		t.Fatalf("alias not persisted correctly: %+v (ok=%v)", entry, ok)
+	}
+	if _, flagged := ClassificationForTool("mcp__fetch__something"); flagged {
+		t.Error("a freshly-provisional server should not be flagged")
+	}
+}
+
 func TestAudit_UnresolvedEntryGetsNearestMatchHint(t *testing.T) {
 	withTempHydraHome(t)
 	home := t.TempDir()

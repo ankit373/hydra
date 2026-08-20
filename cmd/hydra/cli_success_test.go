@@ -1286,6 +1286,37 @@ func TestCLI_MCPCheck_ClassificationFromContentAndExplicit(t *testing.T) {
 	}
 }
 
+// A quarantined MCP server's tools must be classified without the caller
+// having to know that server is quarantined — the whole point of Phase 4's
+// wiring is that a policy author writing "deny mcp-quarantined" gets that
+// enforcement automatically off the registry's own state, the same way a
+// PII rule applies to unlabeled content.
+func TestCLI_MCPCheck_ClassificationFromQuarantinedMCPServer(t *testing.T) {
+	s := populated(t)
+
+	seed(t, "mcp_registry_aliases.json", `{"evil-server":{"registry_name":"io.github.x/evil","status":"verified"}}`)
+	seed(t, "mcp_registry_state.json", `{"io.github.x/evil":{"state":"quarantined","manifest_hash":"x","first_seen_at":"2026-01-01T00:00:00Z","state_changed_at":"2026-01-01T00:00:00Z"}}`)
+
+	policy := `{"rules":[{"classification":"mcp-quarantined","decision":"deny"}]}`
+	if err := os.WriteFile(filepath.Join(config.Dir(), "mcp_policy.json"), []byte(policy), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	code, out := runBinary(t, s, "mcp", "check", "mcp__evil-server__do_something",
+		"--action", "exec", "--resource", "x", "--agent", "a")
+	if code != 3 {
+		t.Errorf("a quarantined MCP server's tool exited %d, want the deny code 3:\n%s", code, out)
+	}
+
+	// A tool from a server with no recorded state at all must not be
+	// affected — "never audited" is not the same claim as "quarantined".
+	code, out = runBinary(t, s, "mcp", "check", "mcp__unknown-server__do_something",
+		"--action", "exec", "--resource", "x", "--agent", "a")
+	if code != 0 {
+		t.Errorf("an unaudited MCP server's tool exited %d, want the permissive default 0:\n%s", code, out)
+	}
+}
+
 // A malformed --params or a policy file that will not parse must be refused.
 // A policy that silently fails to load is a gate that is not gating.
 func TestCLI_MCPCheck_RefusesBadInput(t *testing.T) {

@@ -983,9 +983,20 @@ func cmdMCP() *cobra.Command {
 					return fmt.Errorf("--params: %w", err)
 				}
 			}
+			// Explicit --classification and --content-derived PII both take
+			// priority; only fall back to the MCP registry's view of this
+			// tool's server when the caller supplied neither. Auto-derived
+			// the same way policy.ContainsPII already derives "pii" from
+			// --content — this is that same mechanism, for MCP server risk.
+			classification := chkClassification
+			if classification == "" && chkContent == "" {
+				if c, ok := mcpregistry.ClassificationForTool(args[0]); ok {
+					classification = c
+				}
+			}
 			decision, checkErr := ledger.Check(ledger.DefaultPath(), pol, ledger.CheckRequest{
 				Agent: chkAgent, Tool: args[0], Resource: chkResource, Action: action,
-				Params: params, Classification: chkClassification, Content: chkContent,
+				Params: params, Classification: classification, Content: chkContent,
 			})
 			// Report the decision before any error: a Deny that failed to write
 			// to the ledger is still a Deny, and callers gate on exit 3.
