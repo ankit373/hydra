@@ -3,6 +3,7 @@
 package mcpregistry
 
 import (
+	"context"
 	"os"
 	"time"
 )
@@ -23,11 +24,16 @@ const (
 	StatusUnresolved Status = "unresolved"
 )
 
-// AuditEntry is one installed server plus its Phase 1 resolution.
+// AuditEntry is one installed server plus its resolution, score (Phase 2,
+// resolved entries only), and lifecycle state.
 type AuditEntry struct {
 	InstalledServer
-	Status       Status `json:"status"`
-	RegistryName string `json:"registry_name,omitempty"`
+	Status         Status         `json:"status"`
+	RegistryName   string         `json:"registry_name,omitempty"`
+	NearestMatch   string         `json:"nearest_match,omitempty"`    // unresolved entries only: closest known identifier
+	NearestDist    int            `json:"nearest_distance,omitempty"` // edit distance to NearestMatch, -1 if not computed
+	Score          *Score         `json:"score,omitempty"`
+	LifecycleState LifecycleState `json:"lifecycle_state,omitempty"`
 }
 
 // AuditReport is the result of `hyctl mcp registry audit`.
@@ -41,7 +47,9 @@ type AuditReport struct {
 // against the last-synced registry dataset. Works with no prior sync (every
 // entry reports unresolved and RegistrySync is zero) — sync is what upgrades
 // the report from "here's what's installed" to "here's what's verified".
-func Audit(cwd string) (*AuditReport, error) {
+// Resolved entries additionally get a Phase 2 trust score and lifecycle
+// state, persisted across runs so a later version bump can be detected.
+func Audit(ctx context.Context, cwd string) (*AuditReport, error) {
 	installed := Scan(cwd)
 
 	report := &AuditReport{GeneratedAt: time.Now().UTC(), Entries: make([]AuditEntry, 0, len(installed))}
@@ -52,20 +60,51 @@ func Audit(cwd string) (*AuditReport, error) {
 	}
 
 	var index map[string]ServerRecord
+	var corpus []ServerRecord
 	if cache != nil {
 		report.RegistrySync = cache.FetchedAt
 		index = buildPackageIndex(cache.Servers)
+		corpus = cache.Servers
 	}
 
+	states, err := LoadStates()
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now().UTC()
+	statesChanged := false
+
 	for _, s := range installed {
-		entry := AuditEntry{InstalledServer: s, Status: StatusUnresolved}
+		entry := AuditEntry{InstalledServer: s, Status: StatusUnresolved, NearestDist: -1}
 		if !s.Remote && s.Package != "" {
 			if match, ok := index[s.Package]; ok {
 				entry.Status = StatusVerified
 				entry.RegistryName = match.Name
+
+				score := ComputeScore(ctx, match, corpus)
+				entry.Score = &score
+
+				prev, hadPrev := states[match.Name]
+				var prevPtr *ServerState
+				if hadPrev {
+					prevPtr = &prev
+				}
+				next := Advance(prevPtr, match, score, now)
+				states[match.Name] = next
+				statesChanged = true
+				entry.LifecycleState = next.State
+			} else if corpus != nil {
+				nearest, dist := NearestIdentifier(s.Package, corpus)
+				entry.NearestMatch, entry.NearestDist = nearest, dist
 			}
 		}
 		report.Entries = append(report.Entries, entry)
+	}
+
+	if statesChanged {
+		if err := SaveStates(states); err != nil {
+			return nil, err
+		}
 	}
 	return report, nil
 }

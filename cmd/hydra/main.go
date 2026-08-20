@@ -1301,10 +1301,10 @@ func cmdMCPRegistry() *cobra.Command {
 	var auditJSON bool
 	audit := &cobra.Command{
 		Use:   "audit",
-		Short: "Resolve installed MCP servers against the synced registry",
-		RunE: func(_ *cobra.Command, _ []string) error {
+		Short: "Resolve installed MCP servers against the synced registry and score them",
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			cwd, _ := os.Getwd()
-			rpt, err := mcpregistry.Audit(cwd)
+			rpt, err := mcpregistry.Audit(cmd.Context(), cwd)
 			if err != nil {
 				return err
 			}
@@ -1326,6 +1326,27 @@ func cmdMCPRegistry() *cobra.Command {
 					status = warnStyle.Render(status)
 				}
 				fmt.Printf("  %-9s %-16s %-8s %s\n", status, e.Client, e.Scope, e.Name)
+				if e.Score != nil {
+					fmt.Printf("             score %-20s state %-12s confidence %s\n",
+						mcpregistry.FormatScore(*e.Score), e.LifecycleState, mcpregistry.FormatConfidence(e.Score.Confidence))
+					for _, cat := range []struct {
+						name string
+						cs   mcpregistry.CategoryScore
+					}{
+						{"security", e.Score.SecurityImplementation},
+						{"repo health", e.Score.RepositoryHealth},
+						{"operational", e.Score.OperationalSecurity},
+						{"community", e.Score.CommunityGovernance},
+					} {
+						for _, sig := range cat.cs.Signals {
+							if sig.Available && sig.Detail != "" {
+								fmt.Printf("               %-11s %s\n", cat.name, dimStyle.Render(sig.Detail))
+							}
+						}
+					}
+				} else if e.NearestMatch != "" {
+					fmt.Printf("             %s\n", dimStyle.Render(fmt.Sprintf("nearest known identifier: %q (%d edits away) — verify this isn't a typosquat", e.NearestMatch, e.NearestDist)))
+				}
 			}
 			return nil
 		},
