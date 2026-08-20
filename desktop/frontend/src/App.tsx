@@ -14,7 +14,7 @@ import { Fleet } from './views/Fleet'
 import { Session } from './views/Session'
 import { Security as SecurityView } from './views/Security'
 import { ErrorBoundary } from './ErrorBoundary'
-import { ChatDock } from './views/ChatDock'
+import { ChatView } from './views/ChatView'
 import { UpdateNotice } from './views/UpdateNotice'
 import { SetupBanner } from './views/SetupBanner'
 import { HydraMark, HydraSpinner } from './brand'
@@ -29,17 +29,21 @@ const DASHBOARD_MS = 5000
  */
 const LIVE_MS = 2000
 
+// Chat first, and default: the app's job is to get work dispatched, and every
+// other view is retrospective (#520). Glyphs keep the rail narrow enough that
+// chat gets the width; label still ships as the tooltip and accessible name.
 const NAV = [
-  { id: 'dashboard', label: 'Dashboard', ready: true },
-  { id: 'fleet', label: 'Fleet', ready: true },
-  { id: 'session', label: 'Session', ready: true },
-  { id: 'security', label: 'Security', ready: true },
+  { id: 'chat', label: 'Chat', glyph: '\u270E', ready: true },
+  { id: 'dashboard', label: 'Dashboard', glyph: '\u25EB', ready: true },
+  { id: 'fleet', label: 'Fleet', glyph: '\u2318', ready: true },
+  { id: 'session', label: 'Session', glyph: '\u2261', ready: true },
+  { id: 'security', label: 'Security', glyph: '\u26E8', ready: true },
 ] as const
 
 type ViewID = (typeof NAV)[number]['id']
 
 export default function App() {
-  const [view, setView] = useState<ViewID>('dashboard')
+  const [view, setView] = useState<ViewID>('chat')
   const [runID, setRunID] = useState<string>('')
   const [dashboard, setDashboard] = useState<DashboardData | null>(null)
   const [fleet, setFleet] = useState<FleetData | null>(null)
@@ -50,17 +54,13 @@ export default function App() {
   const [error, setError] = useState<string | null>(null)
   const [hyctlStatus, setHyctlStatus] = useState<HyctlStatus | null>(null)
 
-  // ChatDock's open state lives here, not inside ChatDock, so other views
-  // (Fleet's empty state) can open it — the app already has a way to start a
-  // task without a terminal, it just wasn't reachable from anywhere that
-  // needed it. focusSignal is a counter rather than a boolean so opening it
-  // twice in a row (already open, click "start a task" again) still refocuses
-  // the input instead of no-oping on an unchanged value.
-  const [dockOpen, setDockOpen] = useState(false)
-  const [dockFocusSignal, setDockFocusSignal] = useState(0)
+  // Fleet's empty state sends people here to start a task (#422). A counter
+  // rather than a boolean so asking twice still moves the caret back to the
+  // input instead of no-oping on an unchanged value.
+  const [chatFocusSignal, setChatFocusSignal] = useState(0)
   const startTask = useCallback(() => {
-    setDockOpen(true)
-    setDockFocusSignal((n) => n + 1)
+    setView('chat')
+    setChatFocusSignal((n) => n + 1)
   }, [])
 
   const load = useCallback(async (which: ViewID, id: string) => {
@@ -83,6 +83,9 @@ export default function App() {
   // Only the visible view polls: a background tick on a view nobody is looking
   // at is pure cost.
   useEffect(() => {
+    // Chat drives its own reads (it polls the run it just started), so there is
+    // nothing here to tick for it.
+    if (view === 'chat') return
     void load(view, runID)
     const every = view === 'dashboard' || view === 'security' ? DASHBOARD_MS : LIVE_MS
     const t = setInterval(() => void load(view, runID), every)
@@ -157,22 +160,20 @@ export default function App() {
 
   return (
     <div className="shell">
-      <nav className="rail">
-        <div className="rail__brand">
-          <HydraMark className="rail__mark" />
-          Hydra
-        </div>
+      <nav className="rail rail--icons" aria-label="Views">
+        <HydraMark className="rail__mark" />
         <div className="rail__nav">
           {NAV.map((n) => (
             <button
               key={n.id}
               className="rail__item"
               aria-current={view === n.id ? 'page' : undefined}
+              aria-label={n.label}
+              title={n.label}
               disabled={!n.ready || (n.id === 'session' && !runID && !fleet?.runs?.length)}
               onClick={() => n.ready && selectNav(n.id)}
             >
-              {n.label}
-              {!n.ready && <span className="rail__soon">soon</span>}
+              <span aria-hidden="true">{n.glyph}</span>
               {n.id === 'fleet' && (fleet?.liveCount ?? 0) > 0 && (
                 <span className="rail__live">{fleet?.liveCount}</span>
               )}
@@ -180,12 +181,14 @@ export default function App() {
           ))}
         </div>
         <div className="rail__foot">
-          {version ? `${version.version} · ${version.commit}` : ''}
           <UpdateNotice />
+          <span className="rail__ver" title={version ? `${version.version} · ${version.commit}` : ''}>
+            {version ? version.version : ''}
+          </span>
         </div>
       </nav>
 
-      <main className="main">
+      <main className={view === 'chat' ? 'main main--chat' : 'main'}>
         {/* Non-blocking: it sits above whichever view is open rather than
             replacing it, and renders nothing at all once hyctl is found. */}
         {hyctlStatus && !hyctlStatus.found && (
@@ -195,9 +198,12 @@ export default function App() {
         {/* An error replaces the body but never the shell — a broken read
             should not look like a crashed app. */}
         {error && <div className="error">{error}</div>}
-        {!error && view === 'dashboard' && (
-          <Dashboard data={dashboard} dockOpen={dockOpen} onCloseDock={() => setDockOpen(false)} />
+        {!error && view === 'chat' && (
+          <ErrorBoundary label="Chat">
+            <ChatView onOpenRun={openSession} focusSignal={chatFocusSignal} />
+          </ErrorBoundary>
         )}
+        {!error && view === 'dashboard' && <Dashboard data={dashboard} />}
         {!error && view === 'fleet' && fleet && (
           <Fleet
             data={fleet}
@@ -231,15 +237,6 @@ export default function App() {
           </div>
         )}
       </main>
-
-      <ErrorBoundary label="Chat">
-        <ChatDock
-          onOpenRun={openSession}
-          open={dockOpen}
-          onOpenChange={setDockOpen}
-          focusSignal={dockFocusSignal}
-        />
-      </ErrorBoundary>
     </div>
   )
 }

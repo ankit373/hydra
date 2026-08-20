@@ -19,28 +19,19 @@ body {
 .shell { display: flex; height: 100%; }
 
 .rail {
-  width: 210px;
-  flex: 0 0 210px;
+  width: 56px;
+  flex: 0 0 56px;
   border-right: 1px solid var(--hy-line);
   background: var(--hy-bg-2);
   display: flex;
   flex-direction: column;
+  align-items: center;
   /* Clears the inset macOS traffic lights. */
-  padding: 34px 12px 12px;
+  padding: 34px 0 12px;
   --wails-draggable: drag;
 }
 
-.rail__brand {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 8px 10px 18px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  font-size: 15px;
-}
-
-.rail__mark { width: 22px; height: 22px; flex: 0 0 auto; }
+.rail__mark { width: 24px; height: 24px; flex: 0 0 auto; margin-bottom: 14px; }
 
 /* Rotation only — no filter/blur, so it costs nothing on a GPU-less machine.
    The mark's own SVG has no glow filter baked in (unlike brand/svg/mark.svg)
@@ -64,7 +55,7 @@ body {
 }
 .loading__mark { width: 28px; height: 28px; }
 
-.rail__nav { display: flex; flex-direction: column; gap: 2px; }
+.rail__nav { display: flex; flex-direction: column; align-items: center; gap: 3px; }
 
 .rail__item {
   --wails-draggable: no-drag;
@@ -73,40 +64,37 @@ body {
   background: transparent;
   color: var(--hy-dim);
   font: inherit;
-  text-align: left;
-  padding: 9px 11px;
-  border-radius: var(--hy-radius-sm);
+  font-size: 15px;
   cursor: pointer;
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
+  position: relative;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--hy-radius-sm);
+  display: grid;
+  place-items: center;
 }
 .rail__item:hover:not(:disabled) { background: var(--hy-panel); color: var(--hy-ink); }
-.rail__item[aria-current="page"] { background: var(--hy-panel); color: var(--hy-ink); }
+.rail__item[aria-current="page"] { background: var(--hy-bg-3); color: var(--hy-aqua); box-shadow: inset 0 0 0 1px var(--hy-line-2); }
 .rail__item:disabled { opacity: .38; cursor: default; }
 .rail__item:focus-visible { outline: 2px solid var(--hy-aqua); outline-offset: 1px; }
 
-.rail__soon {
-  font-family: var(--hy-font-mono);
-  font-size: 9px;
-  text-transform: uppercase;
-  letter-spacing: .07em;
-  color: var(--hy-dim);
-  opacity: .7;
-}
-
 .rail__foot {
   margin-top: auto;
-  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
   font-family: var(--hy-font-mono);
-  font-size: 10px;
+  font-size: 9px;
   color: var(--hy-dim);
-  line-height: 1.7;
-  word-break: break-all;
 }
+/* Just the version on a 56px rail; the commit lives in the tooltip. */
+.rail__ver { writing-mode: horizontal-tb; font-size: 8.5px; opacity: .75; }
 
-.main { flex: 1; overflow-y: auto; padding: 34px 30px 40px; }
+.main { flex: 1; overflow-y: auto; padding: 34px 30px 40px; min-width: 0; }
+/* Chat manages its own scrolling (log scrolls, composer pinned), so its wrapper
+   must not add a second scroll container or pad the composer off the bottom. */
+.main--chat { overflow: hidden; display: flex; flex-direction: column; padding: 28px 30px 14px; }
 
 /* ── Headings ──────────────────────────────────────────────────────────── */
 
@@ -1346,166 +1334,168 @@ body {
 .dl--del .dl__op { color: var(--hy-expensive); }
 .dl__text { flex: 1 1 auto; padding-right: 14px; }
 
-/* ── Chat dock ─────────────────────────────────────────────────────────── */
+/* ── Chat view ─────────────────────────────────────────────────────────── */
+/* Was a fixed-position dock. It is the default surface now (#520), so it fills
+   its grid cell instead of floating over another view. */
 
-.dock {
-  position: fixed;
-  right: 22px;
-  bottom: 20px;
-  /* Above .drawer (41) and .drawer-backdrop (40): the drawer spans the same
-     bottom-right corner, and opening the dock already closes the drawer
-     (#460) — so the dock must win the stacking conflict, not lose it and
-     become an unclickable button hidden behind the drawer's panel (#489). */
-  z-index: 42;
-  font-family: var(--hy-font-display);
-}
+/* flex:1 + min-height:0, not height:100% — as a flex child in a padded
+   column, 100% overflows and pushes the composer below the fold. */
+.chatv { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
 
-/* Collapsed by default and back to a bar on close: a permanently-large panel
-   splits attention with the view it is about. */
-.dock--closed {
-  appearance: none;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: var(--hy-aqua);
-  color: var(--hy-bg);
-  border: 0;
-  border-radius: 999px;
-  font: inherit;
-  font-weight: 600;
-  font-size: 13px;
-  padding: 11px 20px;
-  cursor: pointer;
-  box-shadow: 0 6px 22px rgba(0, 0, 0, .45);
-}
-.dock--closed:focus-visible { outline: 2px solid var(--hy-ink); outline-offset: 2px; }
+.chatv__log { flex: 1 1 auto; overflow-y: auto; display: flex; flex-direction: column; gap: 20px; padding: 4px 0 14px; }
+.chatv__log > * { max-width: 720px; width: 100%; margin: 0 auto; }
 
-.dock__count {
-  background: rgba(0, 0, 0, .22);
-  border-radius: 999px;
-  padding: 1px 7px;
-  font-size: 11px;
-  font-family: var(--hy-font-mono);
-}
+.chatv__empty { text-align: center; padding: 48px 20px 0; }
+.chatv__emptyT { margin: 0 0 6px; font-size: 16px; font-weight: 600; letter-spacing: -.01em; }
+.chatv__emptyS { margin: 0 auto; max-width: 46ch; color: var(--hy-dim); font-size: 13px; line-height: 1.55; }
 
-.dock--open {
-  display: flex;
-  flex-direction: column;
-  /* 254 = the 44px of margin this reserved before, plus .rail's 210px — below
-     ~474px viewport width the old formula pinned the dock's left edge inside
-     the rail instead of shrinking around it (#506). */
-  width: min(430px, max(0px, calc(100vw - 254px)));
-  max-height: min(560px, calc(100vh - 60px));
-  background: var(--hy-bg-2);
-  border: 1px solid var(--hy-line);
-  border-radius: var(--hy-radius);
-  box-shadow: 0 14px 44px rgba(0, 0, 0, .55);
-  overflow: hidden;
-}
-
-.dock__head { display: flex; align-items: center; gap: 9px; padding: 11px 13px; border-bottom: 1px solid var(--hy-line); }
-.dock__title { font-weight: 600; font-size: 13px; }
-
-.dock__enum {
-  margin-left: auto;
-  appearance: none;
-  background: var(--hy-panel);
-  color: var(--hy-dim);
-  border: 1px solid var(--hy-line);
-  border-radius: var(--hy-radius-sm);
-  font: inherit;
-  font-family: var(--hy-font-mono);
-  font-size: 11px;
-  padding: 3px 7px;
-}
-
-.dock__close {
-  appearance: none;
-  background: transparent;
-  border: 0;
-  color: var(--hy-dim);
-  font-size: 19px;
-  line-height: 1;
-  cursor: pointer;
-  padding: 0 3px;
-}
-.dock__close:hover { color: var(--hy-ink); }
-
-.dock__log { flex: 1 1 auto; overflow-y: auto; padding: 12px 13px; display: flex; flex-direction: column; gap: 14px; }
-.dock__hint { margin: 0; color: var(--hy-dim); font-size: 12px; }
-
-/* Timeline's row anatomy assumes Session's full-width main column; the dock
-   caps out at 430px (#506), so the two fixed-width label columns need to
-   shrink instead of forcing every row to wrap. */
-.dock__log .timeline { margin-top: 6px; font-size: 12px; }
-.dock__log .tl { padding: 6px 10px; gap: 8px; flex-wrap: wrap; }
-.dock__log .tl__kind { flex-basis: auto; }
-.dock__log .tl__meta { margin-left: 0; }
+/* Timeline's row anatomy assumes a full-width column; inside a 720px chat
+   thread the two fixed label columns have to give. */
+.chatv__log .timeline { margin-top: 6px; font-size: 12px; }
+.chatv__log .tl { padding: 6px 10px; gap: 8px; flex-wrap: wrap; }
+.chatv__log .tl__kind { flex-basis: auto; }
+.chatv__log .tl__meta { margin-left: 0; }
 
 .turn { display: flex; flex-direction: column; gap: 5px; }
 .turn__you {
-  margin: 0;
   align-self: flex-end;
-  max-width: 88%;
-  background: var(--hy-panel);
+  max-width: 78%;
+  background: var(--hy-bg-3);
   border: 1px solid var(--hy-line);
-  border-radius: var(--hy-radius-sm);
-  padding: 7px 11px;
-  font-size: 13px;
-  white-space: pre-wrap;
+  border-radius: var(--hy-radius) var(--hy-radius) 3px var(--hy-radius);
+  padding: 9px 14px;
+  font-size: 13.5px;
 }
-.turn__out { margin: 0; font-size: 13px; line-height: 1.55; white-space: pre-wrap; }
+.turn__out { margin: 0; font-size: 14px; line-height: 1.6; white-space: pre-wrap; }
 .turn__wait { margin: 0; color: var(--hy-dim); font-size: 12px; }
 .turn__err { margin: 0; color: var(--hy-expensive); font-size: 12px; font-family: var(--hy-font-mono); }
-
 .turn__meta {
-  appearance: none;
   align-self: flex-start;
-  background: transparent;
+  background: none;
   border: 0;
   padding: 0;
-  color: var(--hy-dim);
-  font: inherit;
   font-family: var(--hy-font-mono);
-  font-size: 11px;
+  font-size: 10.5px;
+  color: var(--hy-dim);
   cursor: pointer;
 }
 .turn__meta:hover { color: var(--hy-aqua); }
 .turn__meta:focus-visible { outline: 2px solid var(--hy-aqua); outline-offset: 2px; }
-
 .turn__probe { display: flex; flex-direction: column; align-items: flex-start; gap: 7px; }
 .turn__retry {
-  appearance: none;
-  background: transparent;
-  border: 1px solid var(--hy-line);
+  font-family: var(--hy-font-mono);
+  font-size: 11px;
+  padding: 5px 11px;
   border-radius: var(--hy-radius-sm);
-  padding: 5px 12px;
+  border: 1px solid var(--hy-line);
+  background: var(--hy-panel);
   color: var(--hy-ink);
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
 }
 .turn__retry:hover:not(:disabled) { border-color: var(--hy-aqua); color: var(--hy-aqua); }
 .turn__retry:disabled { opacity: .5; cursor: default; }
 .turn__retry:focus-visible { outline: 2px solid var(--hy-aqua); outline-offset: 2px; }
 
-.dock__input { border-top: 1px solid var(--hy-line); padding: 9px 11px; }
-.dock__input textarea {
+/* ── Composer ──────────────────────────────────────────────────────────── */
+
+.chatv__composer { flex: 0 0 auto; padding: 12px 0 4px; }
+.chatv__box {
+  max-width: 720px;
+  margin: 0 auto;
+  background: var(--hy-bg-2);
+  border: 1px solid var(--hy-line-2);
+  border-radius: var(--hy-radius);
+  padding: 10px 11px 8px;
+}
+.chatv__box:focus-within { border-color: var(--hy-aqua); }
+.chatv__text {
   width: 100%;
-  resize: none;
+  border: 0; background: none; outline: none; resize: none;
+  color: var(--hy-ink); font: inherit; font-size: 13.5px; line-height: 1.5;
+}
+.chatv__text::placeholder { color: var(--hy-dim); }
+.chatv__bar { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+.chatv__hint { margin-left: auto; font-family: var(--hy-font-mono); font-size: 9.5px; color: var(--hy-dim); }
+.chatv__send {
+  border: 0; border-radius: var(--hy-radius-sm);
+  background: var(--hy-aqua); color: #00251C;
+  font-family: var(--hy-font-mono); font-size: 10.5px; font-weight: 700;
+  letter-spacing: .06em; text-transform: uppercase;
+  padding: 7px 13px;
+}
+.chatv__send:disabled { opacity: .45; cursor: default; }
+
+/* ── Model picker ──────────────────────────────────────────────────────── */
+
+.picker { position: relative; }
+.picker__btn {
+  display: flex; align-items: center; gap: 6px;
   background: var(--hy-panel);
   border: 1px solid var(--hy-line);
-  border-radius: var(--hy-radius-sm);
-  color: var(--hy-ink);
-  font: inherit;
-  font-size: 13px;
-  padding: 8px 10px;
+  border-radius: 999px;
+  padding: 4px 10px 4px 7px;
+  color: var(--hy-ink); font-size: 11.5px;
 }
-.dock__input textarea:focus { outline: none; border-color: var(--hy-aqua); }
-.dock__input textarea::placeholder { color: var(--hy-dim); }
+.picker__btn:hover:not(:disabled) { border-color: var(--hy-aqua); }
+.picker__btn:disabled { opacity: .5; cursor: default; }
+.picker__dot { width: 6px; height: 6px; border-radius: 50%; background: var(--hy-aqua); flex: 0 0 auto; }
+.picker__btnName { font-weight: 600; }
+.picker__btnTier, .picker__caret { font-family: var(--hy-font-mono); font-size: 9px; color: var(--hy-dim); }
 
-/* The dock floats over the main column; keep the last rows reachable. */
-.main { padding-bottom: 86px; }
+.picker__pop {
+  position: absolute; bottom: calc(100% + 8px); left: 0;
+  width: min(430px, 78vw);
+  background: var(--hy-bg-2);
+  border: 1px solid var(--hy-line-2);
+  border-radius: var(--hy-radius);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, .6);
+  overflow: hidden;
+  z-index: 30;
+}
+.picker__head { display: flex; align-items: center; padding: 9px 13px; border-bottom: 1px solid var(--hy-line); }
+.picker__title { font-size: 11.5px; font-weight: 600; }
+.picker__esc { margin-left: auto; font-family: var(--hy-font-mono); font-size: 9px; color: var(--hy-dim); text-transform: uppercase; letter-spacing: .08em; }
+.picker__body { max-height: 400px; overflow-y: auto; }
+
+.picker__auto {
+  display: flex; align-items: center; gap: 9px;
+  width: 100%; text-align: left;
+  padding: 10px 13px;
+  background: rgba(0, 230, 195, .07);
+  border: 0; border-bottom: 1px solid var(--hy-line);
+  border-left: 2px solid var(--hy-aqua);
+  color: var(--hy-ink);
+}
+.picker__auto:hover { background: rgba(0, 230, 195, .12); }
+.picker__autoT { display: block; font-size: 12.5px; font-weight: 600; }
+.picker__autoS { display: block; font-size: 11px; color: var(--hy-dim); margin-top: 1px; }
+.picker__tick { margin-left: auto; color: var(--hy-aqua); font-size: 12px; }
+
+.picker__pool { border-bottom: 1px solid var(--hy-line); }
+.picker__pool:last-child { border-bottom: 0; }
+.picker__poolHead { display: flex; align-items: center; gap: 7px; padding: 7px 13px 5px; background: var(--hy-bg); }
+.picker__poolName { font-family: var(--hy-font-mono); font-size: 9.5px; letter-spacing: .09em; text-transform: uppercase; color: var(--hy-dim); }
+.picker__shared {
+  font-family: var(--hy-font-mono); font-size: 8.5px; letter-spacing: .05em; text-transform: uppercase;
+  color: var(--hy-mid); border: 1px solid rgba(224, 169, 58, .4); border-radius: 3px; padding: 0 4px;
+}
+.picker__poolSpend { margin-left: auto; font-family: var(--hy-font-mono); font-size: 9.5px; color: var(--hy-dim); font-variant-numeric: tabular-nums; }
+
+.picker__m {
+  display: grid; grid-template-columns: 1fr auto; gap: 2px 10px;
+  width: 100%; text-align: left;
+  padding: 8px 13px;
+  background: none; border: 0; border-left: 2px solid transparent;
+  color: var(--hy-ink);
+}
+.picker__m:hover:not(:disabled) { background: var(--hy-panel); border-left-color: var(--hy-line); }
+.picker__m[aria-checked="true"] { background: var(--hy-panel); border-left-color: var(--hy-aqua); }
+.picker__m:disabled { opacity: .45; cursor: default; }
+.picker__mTop { display: flex; align-items: baseline; gap: 7px; }
+.picker__mName { font-size: 12.5px; font-weight: 600; }
+.picker__mTier { font-family: var(--hy-font-mono); font-size: 9px; color: var(--hy-dim); }
+.picker__off { font-family: var(--hy-font-mono); font-size: 8.5px; color: var(--hy-expensive); }
+.picker__mSpec { grid-column: 1 / -1; font-family: var(--hy-font-mono); font-size: 9.5px; color: var(--hy-dim); }
+
 
 /* ── Update notice ─────────────────────────────────────────────────────── */
 /* Lives in .rail__foot, next to the version string. Renders nothing at all

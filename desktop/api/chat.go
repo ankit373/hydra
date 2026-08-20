@@ -65,10 +65,19 @@ func (a *API) NewRunID() string { return runid.New() }
 // enum is a routing key ("SIMPLE", "STANDARD", …); empty lets dispatch pick.
 // runID lets the caller supply an id minted via NewRunID so it can watch the
 // run live; empty mints a fresh one, same as before NewRunID existed.
+//
+// tier pins the starting tier ("1".."10"), which is how the model picker
+// expresses "answer this with Opus Thinking": every registry model declares a
+// tier, so choosing a model chooses its tier. It is a *starting point*, not a
+// guarantee — the governor can still downgrade it and fallback can still move
+// off it, exactly as for any other dispatch. It outranks enum, since an
+// explicit choice should beat an inferred one. Invalid values are rejected by
+// dispatch's own resolveTierHint rather than silently coerced.
+//
 // Errors come back inside the reply rather than as a Go error: a failed
-// dispatch is a normal outcome the dock renders as a message, not an exception
+// dispatch is a normal outcome the view renders as a message, not an exception
 // that should blank the window.
-func (a *API) Chat(prompt, enum, runID string) (*ChatReply, error) {
+func (a *API) Chat(prompt, enum, runID, tier string) (*ChatReply, error) {
 	if prompt == "" {
 		return &ChatReply{Error: "empty prompt"}, nil
 	}
@@ -102,8 +111,12 @@ func (a *API) Chat(prompt, enum, runID string) (*ChatReply, error) {
 		return r, nil
 	}
 
-	tierHint := ""
-	if enum != "" {
+	// An explicit tier outranks an inferred one: picking a model is a stronger
+	// statement than the complexity band a routing key implies. Left unvalidated
+	// here on purpose — dispatch's resolveTierHint already rejects anything
+	// outside 1-10, and duplicating that bound is how the two drift apart.
+	tierHint := tier
+	if tierHint == "" && enum != "" {
 		// A garbage enum must not fall through to unrestricted auto-routing —
 		// EnumToTier's "" is ambiguous with "no enum given" (#501's fix,
 		// applied here too since the dock is a second caller of the same map).

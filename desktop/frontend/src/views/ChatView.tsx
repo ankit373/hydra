@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { Chat, ChatEnums, GetSession, NewRunID } from '../bindings'
+import { Chat, GetSession, NewRunID } from '../bindings'
 import type { ChatReply, Session as SessionData } from '../types'
 import { ms, usdExact } from '../format'
 import { Timeline } from './Session'
+import { ModelPicker } from './ModelPicker'
 
 // Matches App.tsx's LIVE_MS — same reasoning: this is "what is happening now",
 // not a retrospective read.
@@ -11,7 +12,7 @@ const POLL_MS = 2000
 // Turn history survives a reload via sessionStorage — cleared when the window
 // closes, which is the lifetime a still-open chat already implies. Own key so
 // a future view's persistence cannot collide with it.
-const TURNS_KEY = 'hydra.chatDock.turns'
+const TURNS_KEY = 'hydra.chat.turns'
 
 interface Turn {
   prompt: string
@@ -26,33 +27,33 @@ interface Turn {
 }
 
 /**
- * Persistent dock, collapsed to a bar by default.
+ * The chat view — Hydra's default surface (#520).
  *
- * Never a permanently-large panel: splitting attention between a chat and the
- * view it is about costs more than it gives (Sweller/Tarmizi's split-attention
- * effect), so it opens on engagement and closes again.
+ * Was a collapsible dock, whose whole rationale was avoiding split attention
+ * between a chat and the view it commented on. As the primary surface there is
+ * no second view to split from, so the dock's collapse behaviour is gone and
+ * the reasoning is answered instead by keeping the companion sidebar
+ * glanceable rather than readable.
  *
- * open/onOpenChange are owned by App, not local state — other views (Fleet's
- * empty state, #422) need to open this dock, and a callback into a sibling
- * component isn't a thing React has; lifting the one bit of state that
- * matters is. focusSignal is a counter App bumps every time something asks
- * this dock to take focus, so "open it and focus the input" works even when
- * the dock happens to already be open.
+ * Turn history persists in sessionStorage, so navigating away and back does not
+ * lose the conversation, and a dispatch cut off mid-flight is reattached from
+ * its run log rather than treated as lost (#533).
+ *
+ * focusSignal is a counter App bumps when something elsewhere (Fleet's empty
+ * state, #422) asks this view to take the caret, so it works even when the
+ * view is already open.
  */
-export function ChatDock({
+export function ChatView({
   onOpenRun,
-  open,
-  onOpenChange,
   focusSignal,
 }: {
   onOpenRun: (runID: string) => void
-  open: boolean
-  onOpenChange: (open: boolean) => void
   focusSignal: number
 }) {
   const [prompt, setPrompt] = useState('')
-  const [enumKey, setEnumKey] = useState('')
-  const [enums, setEnums] = useState<string[]>([])
+  // Empty means auto-route. A tier, not an enum: the picker offers models,
+  // and every registry model declares a tier (#558).
+  const [tier, setTier] = useState('')
   const [turns, setTurns] = useState<Turn[]>([])
   const [busy, setBusy] = useState(false)
   // The one turn currently in flight, if any — Chat's own busy flag already
@@ -106,8 +107,8 @@ export function ChatDock({
           setLiveSession(null)
           setBusy(false)
           const note = s.found
-            ? 'Finished while this window was reloading — the run record was kept, not the answer text.'
-            : "Couldn't confirm this task's status after reload — check Fleet."
+            ? 'Finished while this view was closed — the run record was kept, not the answer text.'
+            : "Couldn't confirm this task's status — check Fleet."
           setTurns((t) =>
             t.map((turn, i) =>
               i === idx ? { ...turn, reply: recoveredReply(runId, s), recoveredNote: note } : turn,
@@ -143,15 +144,9 @@ export function ChatDock({
     try {
       sessionStorage.setItem(TURNS_KEY, JSON.stringify(turns))
     } catch {
-      /* Storage can be full or disabled; losing persistence must not break the dock. */
+      /* Storage can be full or disabled; losing persistence must not break chat. */
     }
   }, [turns])
-
-  useEffect(() => {
-    ChatEnums().then(setEnums).catch(() => {
-      /* The picker degrades to auto-routing only; not worth surfacing. */
-    })
-  }, [])
 
   useEffect(() => {
     logRef.current?.scrollTo({ top: logRef.current.scrollHeight })
@@ -169,7 +164,7 @@ export function ChatDock({
     setTurns((t) => [...t, { prompt: p, runId }])
     watchRun(runId)
     try {
-      const reply = await Chat(p, enumKey, runId)
+      const reply = await Chat(p, '', runId, tier)
       setTurns((t) => t.map((turn, i) => (i === t.length - 1 ? { ...turn, reply } : turn)))
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e)
@@ -201,7 +196,7 @@ export function ChatDock({
     setTurns((t) => t.map((turn, idx) => (idx === i ? { ...turn, runId } : turn)))
     watchRun(runId)
     try {
-      const reply = await Chat(p, enumKey, runId)
+      const reply = await Chat(p, '', runId, tier)
       setTurns((t) => t.map((turn, idx) => (idx === i ? { ...turn, reply } : turn)))
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e)
@@ -215,47 +210,23 @@ export function ChatDock({
     }
   }
 
-  // Fires on open (the dock's own toggle button included, not just external
-  // callers) and again on focusSignal so "already open, asked to start a
-  // task again" still moves focus back to the input.
+  // Focus on mount, and again whenever something asks for the caret.
   useEffect(() => {
-    if (open) inputRef.current?.focus()
-  }, [focusSignal, open])
-
-  if (!open) {
-    return (
-      <button className="dock dock--closed" onClick={() => onOpenChange(true)}>
-        Ask Hydra
-        {turns.length > 0 && <span className="dock__count">{turns.length}</span>}
-      </button>
-    )
-  }
+    inputRef.current?.focus()
+  }, [focusSignal])
 
   return (
-    <section className="dock dock--open">
-      <header className="dock__head">
-        <span className="dock__title">Ask Hydra</span>
-        <select
-          className="dock__enum"
-          value={enumKey}
-          onChange={(e) => setEnumKey(e.target.value)}
-          aria-label="Routing"
-        >
-          {/* Auto is the absence of an enum, not one of them. */}
-          <option value="">auto-route</option>
-          {enums.map((k) => (
-            <option key={k} value={k}>
-              {k}
-            </option>
-          ))}
-        </select>
-        <button className="dock__close" onClick={() => onOpenChange(false)} aria-label="Collapse">
-          ×
-        </button>
-      </header>
-
-      <div className="dock__log" ref={logRef}>
-        {turns.length === 0 && <p className="dock__hint">Routed like any other task. Replies say which head answered.</p>}
+    <section className="chatv">
+      <div className="chatv__log" ref={logRef}>
+        {turns.length === 0 && (
+          <div className="chatv__empty">
+            <p className="chatv__emptyT">Ask Hydra anything about this repo</p>
+            <p className="chatv__emptyS">
+              Routed like any other task. Every reply says which model answered, at which
+              tier, and what it cost.
+            </p>
+          </div>
+        )}
         {turns.map((t, i) => (
           <div key={i} className="turn">
             <p className="turn__you">{t.prompt}</p>
@@ -305,21 +276,37 @@ export function ChatDock({
         ))}
       </div>
 
-      <div className="dock__input">
-        <textarea
-          ref={inputRef}
-          value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault()
-              void send()
-            }
-          }}
-          placeholder={busy ? 'routing…' : 'Ask anything — enter to send, shift+enter for a newline'}
-          rows={2}
-          disabled={busy}
-        />
+      <div className="chatv__composer">
+        <div className="chatv__box">
+          <textarea
+            className="chatv__text"
+            ref={inputRef}
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault()
+                void send()
+              }
+            }}
+            placeholder={busy ? 'working…' : 'Ask anything about this repo…'}
+            rows={2}
+            disabled={busy}
+          />
+          {/* The model control is part of the send row, not a setting buried in
+              a header: choosing depth is part of asking (#520). */}
+          <div className="chatv__bar">
+            <ModelPicker tier={tier} onPick={setTier} disabled={busy} />
+            <span className="chatv__hint">enter to send</span>
+            <button
+              className="chatv__send"
+              onClick={() => void send()}
+              disabled={busy || prompt.trim() === ''}
+            >
+              Send
+            </button>
+          </div>
+        </div>
       </div>
     </section>
   )
