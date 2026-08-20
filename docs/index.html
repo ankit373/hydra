@@ -429,7 +429,14 @@ h2.big{font-size:clamp(28px,4.4vw,46px);letter-spacing:-1px;font-weight:800;line
 .tile .mech code{font-family:var(--mono);font-size:12px;color:var(--ink);background:rgba(0,0,0,.4);padding:1px 6px;border-radius:4px;}
 
 /* ── section 6 · comparison ────────────────────────────────────────────── */
-.cmp-scroll{margin-top:34px;overflow-x:auto;border:1px solid var(--line);border-radius:14px;-webkit-overflow-scrolling:touch;}
+.cmp-scroll-wrap{position:relative;margin-top:34px;}
+.cmp-scroll{overflow-x:auto;border:1px solid var(--line);border-radius:14px;-webkit-overflow-scrolling:touch;}
+.cmp-swipe-hint{display:none;font-family:var(--mono);font-size:11px;letter-spacing:.5px;color:var(--faint);margin:0 0 8px;}
+@media (max-width:700px){
+  .cmp-swipe-hint{display:block;}
+  .cmp-scroll-wrap::after{content:"";position:absolute;top:1px;right:1px;bottom:1px;width:28px;pointer-events:none;
+    background:linear-gradient(to right,transparent,var(--bg));border-radius:0 13px 13px 0;}
+}
 table.cmp{border-collapse:collapse;width:100%;min-width:680px;font-size:14px;}
 table.cmp th,table.cmp td{padding:16px 18px;text-align:left;border-bottom:1px solid var(--line);}
 table.cmp thead th{font-family:var(--mono);font-size:12px;letter-spacing:.5px;color:var(--dim);font-weight:600;
@@ -781,6 +788,8 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
   <h2 class="big">Others route your traffic. <span class="grad">Hydra routes on your metal.</span></h2>
   <p class="lede">Cost routing and fallback are table stakes — most tools have them. The differentiators are the rows nobody else can check: local-first, confidence/trust routing, and an on-device accountability ledger.</p>
 
+  <div class="cmp-scroll-wrap">
+  <p class="cmp-swipe-hint">swipe to compare →</p>
   <div class="cmp-scroll">
     <table class="cmp">
       <colgroup><col><col class="hyctl"><col><col><col></colgroup>
@@ -803,6 +812,7 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
         <tr><th scope="row">Runs fully offline (0 network to route)</th><td class="hydcol"><span class="yes">✓</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td></tr>
       </tbody>
     </table>
+  </div>
   </div>
   <p class="cmp-note"><b>Every row checked above ships today</b> — <code>hyctl dispatch --confidence</code>, <code>hyctl graph blast</code>, <code>hyctl mcp</code>. The agent-tree cockpit (<code>hyctl tui</code>) now renders real runs from the per-run event log, and the desktop app ships as a download for macOS, Windows and Linux with every release — not yet code-signed, so macOS needs right-click → Open on first launch.</p>
 </section>
@@ -921,8 +931,6 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
         <h4>Resources</h4>
         <a href="/docs.html">Docs</a>
         <a href="https://github.com/ankit373/hydra">GitHub ★</a>
-        <a href="/llms.txt">llms.txt</a>
-        <a href="/pricing.md">pricing.md</a>
       </div>
     </div>
     <div class="foot-bottom">

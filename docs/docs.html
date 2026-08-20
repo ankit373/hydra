@@ -84,6 +84,15 @@ a{color:inherit;text-decoration:none;}
 .side{position:sticky;top:52px;align-self:start;height:calc(100vh - 52px);overflow-y:auto;
   padding:24px 14px 60px 24px;border-right:1px solid var(--line);}
 @media(max-width:960px){.side{position:static;height:auto;border-right:0;border-bottom:1px solid var(--line);}}
+.side-toggle{display:none;width:100%;text-align:left;background:rgba(150,140,255,.06);border:1px solid var(--line);
+  color:var(--ink);font-family:var(--mono);font-size:13px;padding:10px 14px;border-radius:9px;margin-bottom:14px;cursor:pointer;}
+.side-toggle .chev{float:right;transition:transform .15s;}
+.side-toggle[aria-expanded="true"] .chev{transform:rotate(180deg);}
+@media(max-width:960px){
+  .side-toggle{display:block;}
+  #toc{display:none;}
+  .side.open #toc{display:block;}
+}
 .search{width:100%;font-family:var(--mono);font-size:13px;color:var(--ink);background:rgba(20,22,44,.6);
   border:1px solid var(--line-2);border-radius:9px;padding:10px 12px;margin-bottom:18px;}
 .search::placeholder{color:var(--faint);}
@@ -256,6 +265,7 @@ footer a{color:var(--dim);} footer a:hover{color:var(--aqua);}
 
 <div class="shell">
   <aside class="side">
+    <button type="button" id="sideToggle" class="side-toggle" aria-expanded="false" aria-controls="toc">Menu <span class="chev">▾</span></button>
     <input id="q" class="search" type="search" placeholder="Search docs…  (press /)" aria-label="Search documentation">
     <nav id="toc">
       <div class="grp" data-grp>Start here</div>
@@ -796,6 +806,20 @@ hyctl models sync   <span class="c"># import the OpenRouter catalog</span></pre>
       docs=Array.prototype.slice.call(document.querySelectorAll('.doc'));
 
   var REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // ── mobile nav: sidebar starts collapsed under 960px so the link list
+  //    doesn't push the actual doc content off the first screen ──
+  var sideToggle=document.getElementById('sideToggle'), side=document.querySelector('.side');
+  if(sideToggle && side){
+    sideToggle.addEventListener('click', function(){
+      var open=side.classList.toggle('open');
+      sideToggle.setAttribute('aria-expanded', open?'true':'false');
+    });
+    q.addEventListener('focus', function(){
+      side.classList.add('open');
+      sideToggle.setAttribute('aria-expanded','true');
+    });
+  }
 
   // ── copy-to-clipboard on command blocks (skip terminal renders) ──
   document.querySelectorAll('.content pre').forEach(function(pre){
