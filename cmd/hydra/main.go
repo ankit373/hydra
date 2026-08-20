@@ -1364,7 +1364,25 @@ func cmdMCPRegistry() *cobra.Command {
 	}
 	audit.Flags().BoolVar(&auditJSON, "json", false, "machine-readable JSON output")
 
-	cmd.AddCommand(sync, scanCmd, audit)
+	var exportOut string
+	export := &cobra.Command{
+		Use:   "export",
+		Short: "Render every audited server into a static index.html/index.json (no hosting or publishing)",
+		Long: "Writes index.json and index.html to --out, covering only the servers this machine has\n" +
+			"audited via `hyctl mcp registry audit` — not the full synced registry. This produces static\n" +
+			"files only; it does not publish, host, or deploy anything anywhere.",
+		RunE: func(_ *cobra.Command, _ []string) error {
+			n, err := mcpregistry.ExportDirectory(exportOut)
+			if err != nil {
+				return err
+			}
+			fmt.Printf("  wrote %d server(s) to %s/index.html and %s/index.json\n", n, exportOut, exportOut)
+			return nil
+		},
+	}
+	export.Flags().StringVar(&exportOut, "out", "mcp-directory", "output directory for index.html/index.json")
+
+	cmd.AddCommand(sync, scanCmd, audit, export)
 	return cmd
 }
 
