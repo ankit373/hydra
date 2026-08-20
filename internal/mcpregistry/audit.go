@@ -5,6 +5,7 @@ package mcpregistry
 import (
 	"context"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -71,6 +72,10 @@ func Audit(ctx context.Context, cwd string) (*AuditReport, error) {
 	if err != nil {
 		return nil, err
 	}
+	aliases, err := LoadAliases()
+	if err != nil {
+		return nil, err
+	}
 	now := time.Now().UTC()
 	statesChanged := false
 
@@ -98,11 +103,17 @@ func Audit(ctx context.Context, cwd string) (*AuditReport, error) {
 				entry.NearestMatch, entry.NearestDist = nearest, dist
 			}
 		}
+		aliases[strings.ToLower(s.Name)] = aliasEntry{RegistryName: entry.RegistryName, Status: entry.Status}
 		report.Entries = append(report.Entries, entry)
 	}
 
 	if statesChanged {
 		if err := SaveStates(states); err != nil {
+			return nil, err
+		}
+	}
+	if len(installed) > 0 {
+		if err := SaveAliases(aliases); err != nil {
 			return nil, err
 		}
 	}
