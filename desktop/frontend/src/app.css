@@ -1578,3 +1578,171 @@ body {
   .skeleton-block { animation: none; }
   .dashboard-content { animation: none; }
 }
+
+/* ── Chat split: thread + companion pane ───────────────────────────────── */
+/* The pane is glanceable, never readable — that is what makes a permanently
+   visible companion affordable, where the old dock had to collapse (#520). */
+
+.chatv-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 22px;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+/* Below this the pane costs more width than it returns, so the thread takes it. */
+@media (max-width: 1000px) {
+  .chatv-split { grid-template-columns: minmax(0, 1fr); }
+  .cockpit { display: none; }
+}
+
+.cockpit {
+  border-left: 1px solid var(--hy-line);
+  padding-left: 18px;
+  overflow-y: auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.ck { display: flex; flex-direction: column; }
+.ck__head { display: flex; align-items: center; gap: 10px; margin-bottom: 9px; }
+.ck__lbl {
+  font-family: var(--hy-font-mono);
+  font-size: 9px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--hy-dim);
+}
+.ck__rule { flex: 1; height: 1px; background: var(--hy-line); }
+.ck__empty { margin: 0; font-size: 11.5px; color: var(--hy-dim); line-height: 1.5; }
+.ck__empty code { font-family: var(--hy-font-mono); font-size: 11px; color: var(--hy-cyan); }
+
+/* Active head — the one place the brand gradient appears in the app body. */
+.ck__card { background: var(--hy-bg-3); border: 1px solid var(--hy-line); border-radius: var(--hy-radius-sm); overflow: hidden; }
+.ck__cardGrad { height: 2px; background: var(--hy-brand); }
+.ck__cardIn { padding: 10px 12px 11px; }
+.ck__top { display: flex; align-items: center; gap: 8px; }
+.ck__name { font-size: 13px; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ck__tier {
+  font-family: var(--hy-font-mono); font-size: 9px; font-weight: 700;
+  background: var(--hy-bg); border: 1px solid var(--hy-line-2);
+  border-radius: 999px; padding: 1px 6px; flex: 0 0 auto;
+}
+.ck__pulse {
+  margin-left: auto; flex: 0 0 auto;
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--hy-aqua);
+  animation: ck-pulse 1.9s ease-in-out infinite;
+}
+@keyframes ck-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(0, 230, 195, .5); }
+  50%      { box-shadow: 0 0 0 5px rgba(0, 230, 195, 0); }
+}
+@media (prefers-reduced-motion: reduce) { .ck__pulse { animation: none; } }
+.ck__sub { font-size: 11.5px; color: var(--hy-dim); margin-top: 3px; }
+
+.pm { margin-top: 9px; padding-top: 9px; border-top: 1px solid var(--hy-line); }
+.pm__top { display: flex; align-items: center; gap: 6px; }
+.pm__label { font-family: var(--hy-font-mono); font-size: 9px; letter-spacing: .07em; text-transform: uppercase; color: var(--hy-dim); }
+.pm__shared {
+  font-family: var(--hy-font-mono); font-size: 8px; letter-spacing: .05em; text-transform: uppercase;
+  color: var(--hy-mid); border: 1px solid rgba(224, 169, 58, .4); border-radius: 3px; padding: 0 3px;
+}
+.pm__val { font-family: var(--hy-font-mono); font-size: 10.5px; margin-top: 4px; font-variant-numeric: tabular-nums; }
+.pm__with { font-size: 10.5px; color: var(--hy-dim); margin-top: 3px; line-height: 1.45; }
+
+.ck__gauge { display: flex; align-items: center; gap: 12px; }
+.gz { flex: 0 0 auto; }
+.gz__track { fill: none; stroke: var(--hy-bg-3); stroke-width: 5; }
+.gz__fill { fill: none; stroke: var(--hy-aqua); stroke-width: 5; stroke-linecap: round; }
+.ck__gaugeNum { font-family: var(--hy-font-mono); font-size: 19px; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; }
+.ck__gaugeCap { font-size: 11px; color: var(--hy-dim); margin-top: 4px; }
+
+/* Model rows: what it did, and how good it is measured to be at that. */
+.mr { display: flex; flex-direction: column; }
+.mr__row { display: flex; flex-direction: column; gap: 2px; padding: 7px 0 8px; border-bottom: 1px solid var(--hy-line); }
+.mr__row:last-child { border-bottom: 0; }
+.mr__top { display: flex; align-items: baseline; gap: 8px; }
+.mr__name { font-size: 11.5px; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mr__d { margin-left: auto; font-family: var(--hy-font-mono); font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.mr__d--strong { color: var(--hy-cheap); }
+.mr__d--ok     { color: var(--hy-cyan); }
+.mr__d--weak   { color: var(--hy-mid); }
+/* Thin evidence is amber regardless of the value: trust.Stat.N excludes the
+   prior, so a high D on few observations is not a strong measurement. */
+.mr__d--thin   { color: var(--hy-mid); }
+.mr__d--none   { color: var(--hy-dim); }
+.mr__bot { display: flex; align-items: baseline; gap: 8px; }
+.mr__did { font-size: 10.5px; color: var(--hy-dim); }
+.mr__n { margin-left: auto; font-family: var(--hy-font-mono); font-size: 9px; color: var(--hy-dim); white-space: nowrap; }
+.mr__n--thin { color: var(--hy-mid); }
+
+.fr { display: flex; align-items: baseline; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--hy-line); }
+.fr:last-of-type { border-bottom: 0; }
+.fr__name { font-family: var(--hy-font-mono); font-size: 10.5px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fr__pm { margin-left: auto; font-family: var(--hy-font-mono); font-size: 9.5px; white-space: nowrap; }
+.fr__more { font-family: var(--hy-font-mono); font-size: 9px; color: var(--hy-dim); margin-top: 5px; }
+
+/* ── Tier shift, inline in the transcript ──────────────────────────────── */
+
+.shift {
+  display: flex; align-items: flex-start; gap: 9px;
+  padding: 7px 12px;
+  margin-bottom: 4px;
+  background: linear-gradient(90deg, rgba(224, 169, 58, .10), rgba(224, 169, 58, 0));
+  border-left: 2px solid var(--hy-mid);
+  border-radius: 0 var(--hy-radius-sm) var(--hy-radius-sm) 0;
+  font-size: 12px;
+}
+.shift__ico { color: var(--hy-mid); }
+.shift__txt { color: var(--hy-dim); }
+.shift__txt b { color: var(--hy-ink); font-weight: 600; }
+
+/* ── Governor notice ───────────────────────────────────────────────────── */
+
+.gn {
+  position: fixed; inset: 0; z-index: 60;
+  background: rgba(3, 4, 10, .74);
+  display: grid; place-items: center;
+  padding: 20px;
+}
+.gn__box {
+  width: min(420px, 100%);
+  background: var(--hy-bg-2);
+  border: 1px solid var(--hy-line-2);
+  border-radius: var(--hy-radius-lg);
+  box-shadow: 0 26px 70px rgba(0, 0, 0, .7);
+  overflow: hidden;
+}
+.gn__stripe { height: 3px; background: linear-gradient(90deg, var(--hy-mid), var(--hy-expensive)); }
+.gn__in { padding: 17px 19px 19px; }
+.gn__band {
+  display: inline-flex; align-items: center;
+  font-family: var(--hy-font-mono); font-size: 9px;
+  letter-spacing: .1em; text-transform: uppercase;
+  border-radius: 999px; padding: 2px 8px;
+  color: var(--hy-mid); border: 1px solid rgba(224, 169, 58, .4);
+}
+.gn__band--emergency { color: var(--hy-expensive); border-color: rgba(255, 90, 110, .45); }
+.gn__h { font-size: 16px; font-weight: 600; margin: 11px 0 7px; letter-spacing: -.01em; }
+.gn__p { font-size: 12.5px; color: var(--hy-dim); margin: 0; line-height: 1.55; }
+.gn__p b { color: var(--hy-ink); font-weight: 600; }
+
+.gn__meter { position: relative; height: 22px; margin: 13px 0 0; background: var(--hy-bg); border: 1px solid var(--hy-line); border-radius: 5px; overflow: hidden; }
+.gn__fill { position: absolute; inset: 0 auto 0 0; background: linear-gradient(90deg, rgba(63, 217, 138, .28), rgba(224, 169, 58, .45)); }
+.gn__ceil { position: absolute; top: 0; bottom: 0; left: 80%; width: 2px; background: var(--hy-expensive); }
+.gn__now { position: absolute; left: 7px; top: 50%; transform: translateY(-50%); font-family: var(--hy-font-mono); font-size: 10px; font-weight: 700; }
+.gn__stop { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); font-family: var(--hy-font-mono); font-size: 9px; color: var(--hy-expensive); }
+
+.gn__note { font-size: 11.5px; color: var(--hy-dim); margin: 11px 0 0; line-height: 1.5; }
+.gn__note code { font-family: var(--hy-font-mono); font-size: 11px; color: var(--hy-cyan); }
+.gn__esc { font-size: 11px; color: var(--hy-mid); margin: 8px 0 0; }
+.gn__esc b { color: var(--hy-ink); }
+.gn__acts { display: flex; margin-top: 15px; }
+.gn__btn {
+  flex: 1; border-radius: var(--hy-radius-sm); padding: 9px 12px;
+  font-size: 12px; font-weight: 600;
+  border: 1px solid var(--hy-aqua); background: var(--hy-aqua); color: #00251C;
+}

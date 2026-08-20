@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { ChatView } from './ChatView'
-import { Chat, GetModels, GetSession, NewRunID } from '../bindings'
+import { Chat, GetDashboard, GetEdits, GetModels, GetSession, NewRunID } from '../bindings'
 import type { ChatReply, Session as SessionData } from '../types'
 
 // ChatView talks to the Go backend only through these bindings — mocking the
@@ -10,6 +10,8 @@ import type { ChatReply, Session as SessionData } from '../types'
 // a real Wails runtime.
 vi.mock('../bindings', () => ({
   Chat: vi.fn(),
+  GetDashboard: vi.fn(),
+  GetEdits: vi.fn(),
   GetModels: vi.fn(),
   GetSession: vi.fn(),
   NewRunID: vi.fn(),
@@ -17,6 +19,8 @@ vi.mock('../bindings', () => ({
 
 const mockChat = vi.mocked(Chat)
 const mockGetModels = vi.mocked(GetModels)
+const mockGetDashboard = vi.mocked(GetDashboard)
+const mockGetEdits = vi.mocked(GetEdits)
 const mockGetSession = vi.mocked(GetSession)
 const mockNewRunID = vi.mocked(NewRunID)
 
@@ -44,6 +48,38 @@ function renderDock(onOpenRun: (runID: string) => void = noop) {
 beforeEach(() => {
   sessionStorage.clear()
   mockGetModels.mockResolvedValue({ found: true, pools: [] })
+  mockGetEdits.mockResolvedValue([])
+  // The companion pane reads the dashboard for the governor and calibration;
+  // an unknown governor is the quiet default, so no notice fires in these tests.
+  mockGetDashboard.mockResolvedValue({
+    hasData: false,
+    spend: { todayUsd: 0, allTimeUsd: 0, todayCalls: 0, totalCalls: 0, tokensActualPct: 0 },
+    governor: {
+      known: false,
+      pct: 0,
+      mode: '',
+      effectiveMode: '',
+      burnRatePct: 0,
+      risk: 0,
+      observations: 0,
+      horizonObs: 3,
+    },
+    trust: {
+      runs: 0,
+      meanSamples: 0,
+      fixedSwarmN: 0,
+      samplesSavedPct: 0,
+      autoClearedPct: 0,
+      meanTargetConf: 0,
+      meanFinalConf: 0,
+      totalCostUsd: 0,
+    },
+    byModel: null,
+    byTier: null,
+    byDay: null,
+    recent: null,
+    calibration: [],
+  })
   mockGetSession.mockResolvedValue(emptySession())
   let seq = 0
   mockNewRunID.mockImplementation(async () => `run-${++seq}`)
