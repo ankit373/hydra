@@ -634,3 +634,45 @@ export interface ChatReply {
    *  showing a raw dispatch error. */
   needsProbe?: boolean
 }
+
+/** One routable head as registry/models.yaml declares it. */
+export interface Model {
+  id: string
+  name: string
+  tier: number
+  provider: string
+  pool: string
+  /** The registry's own band. Hydra has no thinking-depth dial — depth is which
+   *  model you pick, so this is what a picker shows in its place. */
+  complexityMin: number
+  complexityMax: number
+  /** Qualitative registry labels ("slow", "very_high"), not measurements. */
+  speed: string
+  accuracy: string
+  contextWindow: number
+  /** False means the registry switched it off — still listed, so a picker can
+   *  grey it rather than pretend it does not exist. */
+  enabled: boolean
+}
+
+/** A shared quota and the models drawing from it. */
+export interface Pool {
+  name: string
+  /** False means one member, or members that do not contend. */
+  shared: boolean
+  note?: string
+  models: Model[]
+  /** What Hydra logged against this pool — NOT a provider-reported balance.
+   *  A floor on usage, never a quota reading. */
+  observedCalls: number
+  observedCostUsd: number
+  observedTokens: number
+}
+
+export interface ModelRegistry {
+  /** False when models.yaml could not be read or parsed — an empty list then
+   *  means "could not look", not "no models". */
+  found: boolean
+  error?: string
+  pools: Pool[]
+}

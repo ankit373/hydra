@@ -14,6 +14,7 @@ import type {
   Fleet,
   HyctlStatus,
   InstallResult,
+  ModelRegistry,
   SecurityReport,
   Session,
   UpdateStatus,
@@ -38,6 +39,7 @@ interface WailsGo {
       CheckHyctl(): Promise<HyctlStatus>
       InstallHyctl(): Promise<InstallResult>
       GetSecurity(): Promise<SecurityReport>
+      GetModels(): Promise<ModelRegistry>
     }
   }
 }
@@ -72,3 +74,4 @@ export const TriggerUpgrade = (): Promise<UpgradeResult> => backend().TriggerUpg
 export const CheckHyctl = (): Promise<HyctlStatus> => backend().CheckHyctl()
 export const InstallHyctl = (): Promise<InstallResult> => backend().InstallHyctl()
 export const GetSecurity = (): Promise<SecurityReport> => backend().GetSecurity()
+export const GetModels = (): Promise<ModelRegistry> => backend().GetModels()
