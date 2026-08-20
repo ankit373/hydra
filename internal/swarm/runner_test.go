@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -101,6 +102,27 @@ func withStubExecutor(t *testing.T, e executor.Executor) {
 	orig := executorFor
 	executorFor = func(provider.Head) executor.Executor { return e }
 	t.Cleanup(func() { executorFor = orig })
+}
+
+// capturingExecutor records the prompt every head actually ran with, so a test
+// can prove content (like an injected A2A handoff) reached execution instead
+// of only checking that Run/RunSPRT returned success.
+type capturingExecutor struct {
+	mu      sync.Mutex
+	prompts []string
+}
+
+func (c *capturingExecutor) Execute(_ context.Context, req executor.Request) (*executor.Response, error) {
+	c.mu.Lock()
+	c.prompts = append(c.prompts, req.Prompt)
+	c.mu.Unlock()
+	return &executor.Response{Output: "ok"}, nil
+}
+
+func (c *capturingExecutor) seen() []string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return append([]string(nil), c.prompts...)
 }
 
 // A hung head must degrade to a clean StatusTimeout — not block wg.Wait forever.

@@ -319,6 +319,113 @@ func TestCLI_Dispatch_ConfidenceDryRunFiresNothing(t *testing.T) {
 	}
 }
 
+// #530: swarm.Options had no A2AFile field at all, so --a2a was silently
+// dropped the instant --swarm or --confidence was combined with it — a bad
+// handoff file must fail the run the same way it already does on plain
+// dispatch, in both --dry-run (Plan) and real (Run/RunSPRT) execution.
+func TestCLI_Dispatch_SwarmA2ABadFileRejectedIdenticallyDryRunAndReal(t *testing.T) {
+	for _, dryRun := range []bool{true, false} {
+		label := "real"
+		if dryRun {
+			label = "dry-run"
+		}
+		t.Run(label, func(t *testing.T) {
+			dispatchable(t, "answered")
+			bad := filepath.Join(t.TempDir(), "absent.json")
+			args := []string{"dispatch", "--swarm", "--swarm-mode", "all", "--tier", "6", "--a2a", bad, "x"}
+			if dryRun {
+				args = append(args, "--dry-run")
+			}
+			_, cobraOut, err := run(t, args...)
+			if err == nil {
+				t.Fatalf("a nonexistent --a2a file was accepted under --swarm (%s): %s", label, cobraOut)
+			}
+			if !strings.Contains(err.Error()+cobraOut, bad) {
+				t.Errorf("error = %v (%s), want it to name the offending path", err, cobraOut)
+			}
+		})
+	}
+}
+
+// Same contract on the --confidence (SPRT) path.
+func TestCLI_Dispatch_ConfidenceA2ABadFileRejectedIdenticallyDryRunAndReal(t *testing.T) {
+	for _, dryRun := range []bool{true, false} {
+		label := "real"
+		if dryRun {
+			label = "dry-run"
+		}
+		t.Run(label, func(t *testing.T) {
+			dispatchable(t, "answered")
+			bad := filepath.Join(t.TempDir(), "absent.json")
+			args := []string{"dispatch", "--confidence", "0.9", "--tier", "6", "--a2a", bad, "x"}
+			if dryRun {
+				args = append(args, "--dry-run")
+			}
+			_, cobraOut, err := run(t, args...)
+			if err == nil {
+				t.Fatalf("a nonexistent --a2a file was accepted under --confidence (%s): %s", label, cobraOut)
+			}
+			if !strings.Contains(err.Error()+cobraOut, bad) {
+				t.Errorf("error = %v (%s), want it to name the offending path", err, cobraOut)
+			}
+		})
+	}
+}
+
+// #530: only the real sw.Run() call set JudgeTierHint, so a bogus
+// --swarm-judge-tier quietly passed --dry-run and only failed for real —
+// defeating the "dry-run previews reality" contract #453 established.
+func TestCLI_Dispatch_SwarmJudgeTierBadValueRejectedIdenticallyDryRunAndReal(t *testing.T) {
+	for _, dryRun := range []bool{true, false} {
+		label := "real"
+		if dryRun {
+			label = "dry-run"
+		}
+		t.Run(label, func(t *testing.T) {
+			dispatchable(t, "answered")
+			args := []string{"dispatch", "--swarm", "--swarm-judge-tier", "99", "--tier", "6", "x"}
+			if dryRun {
+				args = append(args, "--dry-run")
+			}
+			_, cobraOut, err := run(t, args...)
+			if err == nil {
+				t.Fatalf("a bogus --swarm-judge-tier was accepted (%s): %s", label, cobraOut)
+			}
+			if !strings.Contains(err.Error()+cobraOut, "judge") {
+				t.Errorf("error = %v (%s), want it to name the judge tier as the problem", err, cobraOut)
+			}
+		})
+	}
+}
+
+// --swarm-judge-tier is not a no-op on --confidence: RunSPRT's behavioral
+// equivalence judge dispatches through it (sprt.go's judgeEquivalence), so
+// main.go wires it into that Options literal too instead of treating the
+// combination as meaningless. A bogus value must therefore be rejected the
+// same way in both dry-run (Plan) and real (RunSPRT) execution (#530).
+func TestCLI_Dispatch_ConfidenceSwarmJudgeTierBadValueRejectedIdenticallyDryRunAndReal(t *testing.T) {
+	for _, dryRun := range []bool{true, false} {
+		label := "real"
+		if dryRun {
+			label = "dry-run"
+		}
+		t.Run(label, func(t *testing.T) {
+			dispatchable(t, "answered")
+			args := []string{"dispatch", "--confidence", "0.9", "--swarm-judge-tier", "99", "--tier", "6", "x"}
+			if dryRun {
+				args = append(args, "--dry-run")
+			}
+			_, cobraOut, err := run(t, args...)
+			if err == nil {
+				t.Fatalf("a bogus --swarm-judge-tier under --confidence was accepted (%s): %s", label, cobraOut)
+			}
+			if !strings.Contains(err.Error()+cobraOut, "judge") {
+				t.Errorf("error = %v (%s), want it to name the judge tier as the problem", err, cobraOut)
+			}
+		})
+	}
+}
+
 // A swarm that actually runs must bill every head it fired, not just the winner.
 func TestCLI_Dispatch_SwarmBillsEveryHead(t *testing.T) {
 	dispatchable(t, "answered")

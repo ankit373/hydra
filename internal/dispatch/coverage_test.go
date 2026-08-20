@@ -556,46 +556,6 @@ func TestDispatch_NoHeadsErrorIsMatchableAndPhrasesAnEmptyTierClearly(t *testing
 	}
 }
 
-// A2A injection: the handoff's context must reach the prompt when the file is
-// valid, and a missing or corrupt handoff file must fail loudly (#450) rather
-// than silently dispatching without the context the user asked for.
-func TestInjectA2A(t *testing.T) {
-	dir := t.TempDir()
-
-	h := a2a.Handoff{From: "agent-1", Task: "earlier task", PriorOutput: "earlier output"}
-	raw, err := json.Marshal(h)
-	if err != nil {
-		t.Fatal(err)
-	}
-	path := filepath.Join(dir, "handoff.json")
-	if err := os.WriteFile(path, raw, 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	got, err := injectA2A(path, "new instruction")
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, want := range []string{"agent-1", "earlier output", "new instruction", "ADDITIONAL INSTRUCTION"} {
-		if !strings.Contains(got, want) {
-			t.Errorf("injected prompt is missing %q:\n%s", want, got)
-		}
-	}
-
-	// --a2a always names a file the user explicitly asked for, so a missing
-	// file must be an error, not silently treated as "no handoff".
-	if _, err := injectA2A(filepath.Join(dir, "absent.json"), "unchanged"); err == nil {
-		t.Error("a missing --a2a file did not produce an error")
-	}
-
-	if err := os.WriteFile(path, []byte("{truncated"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := injectA2A(path, "unchanged"); err == nil {
-		t.Error("a malformed --a2a file did not produce an error")
-	}
-}
-
 // A dispatch given a bad --a2a path must fail clearly instead of silently
 // running without the handoff context the user explicitly asked for (#450).
 func TestDispatch_BadA2AFileFailsTheRun(t *testing.T) {

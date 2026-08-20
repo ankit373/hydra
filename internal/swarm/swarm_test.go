@@ -522,3 +522,30 @@ func TestPlan_RejectsUnknownModeLikeRun(t *testing.T) {
 		}
 	}
 }
+
+// #530: swarm.Options had no A2AFile field at all, so --a2a was silently
+// dropped the instant --swarm or --confidence was combined with it — a bad
+// handoff file must be rejected by Plan (the --dry-run path), Run and
+// RunSPRT alike, exactly as it already was on plain dispatch.
+func TestPlanRunRunSPRT_RejectBadA2AFileIdentically(t *testing.T) {
+	withTempConfig(t)
+	all := []provider.Head{registryHead("h1", "H1", 90)}
+	s := New(nil, all, fakePricing{per: 0.01})
+	bad := filepath.Join(t.TempDir(), "missing.json")
+
+	if _, _, err := s.Plan("p", Options{A2AFile: bad}); err == nil {
+		t.Error("Plan accepted a nonexistent --a2a file")
+	} else if !strings.Contains(err.Error(), bad) {
+		t.Errorf("Plan error = %v, want it to name the offending path", err)
+	}
+	if _, err := s.Run(context.Background(), "p", Options{A2AFile: bad}); err == nil {
+		t.Error("Run accepted a nonexistent --a2a file")
+	} else if !strings.Contains(err.Error(), bad) {
+		t.Errorf("Run error = %v, want it to name the offending path", err)
+	}
+	if _, err := s.RunSPRT(context.Background(), "p", Options{A2AFile: bad, Confidence: 0.9}); err == nil {
+		t.Error("RunSPRT accepted a nonexistent --a2a file")
+	} else if !strings.Contains(err.Error(), bad) {
+		t.Errorf("RunSPRT error = %v, want it to name the offending path", err)
+	}
+}
