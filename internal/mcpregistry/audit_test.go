@@ -3,10 +3,36 @@
 package mcpregistry
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"testing"
 	"time"
 )
+
+// withStubbedScoringDeps points ComputeScore's external calls (OSV.dev,
+// GitHub) at local httptest servers returning empty/neutral responses, so
+// audit tests that resolve a server stay fast, offline, and deterministic —
+// scoring's own behavior is covered separately in score_test.go.
+func withStubbedScoringDeps(t *testing.T) {
+	t.Helper()
+	osv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	t.Cleanup(osv.Close)
+	origOSV := osvQueryURL
+	osvQueryURL = osv.URL
+	t.Cleanup(func() { osvQueryURL = origOSV })
+
+	gh := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound) // non-GitHub-shaped repo URLs in these fixtures; 404 is fine, just needs to not hang
+	}))
+	t.Cleanup(gh.Close)
+	origGH := githubAPIBase
+	githubAPIBase = gh.URL
+	t.Cleanup(func() { githubAPIBase = origGH })
+}
 
 func TestAudit_NeverSyncedReportsUnresolvedAndZeroSyncTime(t *testing.T) {
 	withTempHydraHome(t)
@@ -16,7 +42,7 @@ func TestAudit_NeverSyncedReportsUnresolvedAndZeroSyncTime(t *testing.T) {
 	writeJSON(t, filepath.Join(home, ".cursor", "mcp.json"),
 		`{"mcpServers": {"fetch": {"type":"stdio","command":"uvx","args":["mcp-server-fetch"]}}}`)
 
-	rpt, err := Audit("")
+	rpt, err := Audit(context.Background(), "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -30,6 +56,7 @@ func TestAudit_NeverSyncedReportsUnresolvedAndZeroSyncTime(t *testing.T) {
 
 func TestAudit_MatchesInstalledPackageAgainstSyncedRegistry(t *testing.T) {
 	withTempHydraHome(t)
+	withStubbedScoringDeps(t)
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
@@ -45,7 +72,7 @@ func TestAudit_MatchesInstalledPackageAgainstSyncedRegistry(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rpt, err := Audit("")
+	rpt, err := Audit(context.Background(), "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,6 +89,51 @@ func TestAudit_MatchesInstalledPackageAgainstSyncedRegistry(t *testing.T) {
 	if got.RegistryName != "io.github.modelcontextprotocol/fetch" {
 		t.Errorf("RegistryName = %q", got.RegistryName)
 	}
+	if got.Score == nil {
+		t.Fatal("expected a Score for a verified entry")
+	}
+	if got.LifecycleState != StateProvisional {
+		t.Errorf("LifecycleState = %q, want provisional (first time seen)", got.LifecycleState)
+	}
+
+	states, err := LoadStates()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if states["io.github.modelcontextprotocol/fetch"].State != StateProvisional {
+		t.Error("lifecycle state should be persisted across the audit run")
+	}
+}
+
+func TestAudit_UnresolvedEntryGetsNearestMatchHint(t *testing.T) {
+	withTempHydraHome(t)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	writeJSON(t, filepath.Join(home, ".cursor", "mcp.json"),
+		`{"mcpServers": {"chrome": {"type":"stdio","command":"npx","args":["-y","chrome-mcp"]}}}`)
+
+	if err := writeCache(&registryCache{
+		FetchedAt: time.Now().UTC(),
+		Servers:   []ServerRecord{{Name: "x", Packages: []Package{{Identifier: "chrome-devtools-mcp"}}}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	rpt, err := Audit(context.Background(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rpt.Entries) != 1 {
+		t.Fatalf("got %d entries, want 1", len(rpt.Entries))
+	}
+	got := rpt.Entries[0]
+	if got.Status != StatusUnresolved {
+		t.Fatalf("Status = %q, want unresolved", got.Status)
+	}
+	if got.NearestMatch != "chrome-devtools-mcp" || got.NearestDist < 0 {
+		t.Errorf("NearestMatch/NearestDist = %q/%d, want a hint toward chrome-devtools-mcp", got.NearestMatch, got.NearestDist)
+	}
 }
 
 func TestAudit_RemoteServerIsNeverMarkedVerified(t *testing.T) {
@@ -76,7 +148,7 @@ func TestAudit_RemoteServerIsNeverMarkedVerified(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rpt, err := Audit("")
+	rpt, err := Audit(context.Background(), "")
 	if err != nil {
 		t.Fatal(err)
 	}

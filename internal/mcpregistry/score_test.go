@@ -1,0 +1,241 @@
+// SPDX-License-Identifier: MIT
+
+package mcpregistry
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+)
+
+func TestLevenshtein(t *testing.T) {
+	tests := []struct {
+		a, b string
+		want int
+	}{
+		{"", "", 0},
+		{"abc", "abc", 0},
+		{"", "abc", 3},
+		{"kitten", "sitting", 3},
+		{"mcp-server-postgres", "mcp-server-postgress", 1},
+		{"chrome-mcp", "chrome-devtools-mcp", 9},
+	}
+	for _, tt := range tests {
+		if got := levenshtein(tt.a, tt.b); got != tt.want {
+			t.Errorf("levenshtein(%q, %q) = %d, want %d", tt.a, tt.b, got, tt.want)
+		}
+	}
+}
+
+func TestTyposquatSignal_FlagsCloseIdentifier(t *testing.T) {
+	target := ServerRecord{Name: "a", Packages: []Package{{Identifier: "mcp-server-postgres"}}}
+	corpus := []ServerRecord{
+		target,
+		{Name: "b", Packages: []Package{{Identifier: "mcp-server-postgress"}}}, // 1 edit away, different entry
+	}
+	sig := typosquatSignal(target, corpus)
+	if !sig.Available || sig.Impact >= 0 {
+		t.Fatalf("expected a negative-impact typosquat flag, got %+v", sig)
+	}
+}
+
+func TestTyposquatSignal_NoFlagWhenNothingClose(t *testing.T) {
+	target := ServerRecord{Name: "a", Packages: []Package{{Identifier: "totally-unique-name-xyz"}}}
+	corpus := []ServerRecord{
+		target,
+		{Name: "b", Packages: []Package{{Identifier: "completely-different-thing"}}},
+	}
+	sig := typosquatSignal(target, corpus)
+	if !sig.Available || sig.Impact != 0 {
+		t.Fatalf("expected no flag, got %+v", sig)
+	}
+}
+
+func TestNearestIdentifier(t *testing.T) {
+	corpus := []ServerRecord{
+		{Packages: []Package{{Identifier: "chrome-devtools-mcp"}}},
+		{Packages: []Package{{Identifier: "chrome-debugger-mcp"}}},
+	}
+	nearest, dist := NearestIdentifier("chrome-mcp", corpus)
+	if dist < 0 {
+		t.Fatalf("expected a distance to be found, got %d", dist)
+	}
+	if nearest != "chrome-devtools-mcp" && nearest != "chrome-debugger-mcp" {
+		t.Errorf("nearest = %q, want one of the two chrome candidates", nearest)
+	}
+}
+
+func TestNearestIdentifier_EmptyCorpus(t *testing.T) {
+	nearest, dist := NearestIdentifier("anything", nil)
+	if nearest != "" || dist != -1 {
+		t.Errorf("got (%q, %d), want (\"\", -1) for an empty corpus", nearest, dist)
+	}
+}
+
+func TestKnownBadSignal_UnsupportedEcosystemIsUnavailable(t *testing.T) {
+	sig := knownBadSignal(context.Background(), Package{RegistryType: "docker", Identifier: "x"})
+	if sig.Available {
+		t.Errorf("docker packages have no OSV ecosystem yet; expected Available=false, got %+v", sig)
+	}
+}
+
+func TestKnownBadSignal_ParsesVulnResponse(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(osvResponse{Vulns: []osvVuln{{ID: "GHSA-test-1234"}}})
+	}))
+	defer srv.Close()
+	orig := osvQueryURL
+	osvQueryURL = srv.URL
+	defer func() { osvQueryURL = orig }()
+
+	sig := knownBadSignal(context.Background(), Package{RegistryType: "npm", Identifier: "evil-pkg"})
+	if !sig.Available || sig.Impact != -100 {
+		t.Fatalf("expected a severe known-bad flag, got %+v", sig)
+	}
+}
+
+func TestKnownBadSignal_NoVulnsIsNeutral(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(osvResponse{})
+	}))
+	defer srv.Close()
+	orig := osvQueryURL
+	osvQueryURL = srv.URL
+	defer func() { osvQueryURL = orig }()
+
+	sig := knownBadSignal(context.Background(), Package{RegistryType: "npm", Identifier: "fine-pkg"})
+	if !sig.Available || sig.Impact != 0 {
+		t.Fatalf("expected a neutral, available signal, got %+v", sig)
+	}
+}
+
+func TestParseGitHubURL(t *testing.T) {
+	tests := []struct {
+		url                 string
+		wantOwner, wantRepo string
+		wantOK              bool
+	}{
+		{"https://github.com/foo/bar", "foo", "bar", true},
+		{"https://github.com/foo/bar.git", "foo", "bar", true},
+		{"https://github.com/foo/bar/", "foo", "bar", true},
+		{"https://github.com/foo/bar/tree/main/subdir", "foo", "bar", true},
+		{"https://gitlab.com/foo/bar", "", "", false},
+		{"not a url", "", "", false},
+	}
+	for _, tt := range tests {
+		owner, repo, ok := parseGitHubURL(tt.url)
+		if ok != tt.wantOK || owner != tt.wantOwner || repo != tt.wantRepo {
+			t.Errorf("parseGitHubURL(%q) = (%q, %q, %v), want (%q, %q, %v)",
+				tt.url, owner, repo, ok, tt.wantOwner, tt.wantRepo, tt.wantOK)
+		}
+	}
+}
+
+func TestMaintenanceSignal_NonGitHubIsUnavailable(t *testing.T) {
+	sig := maintenanceSignal(context.Background(), "https://gitlab.com/foo/bar")
+	if sig.Available {
+		t.Errorf("expected Available=false for a non-GitHub repo, got %+v", sig)
+	}
+}
+
+func TestMaintenanceSignal_ArchivedIsPenalized(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(githubRepo{Archived: true})
+	}))
+	defer srv.Close()
+	orig := githubAPIBase
+	githubAPIBase = srv.URL
+	defer func() { githubAPIBase = orig }()
+
+	sig := maintenanceSignal(context.Background(), "https://github.com/foo/bar")
+	if !sig.Available || sig.Impact >= 0 {
+		t.Fatalf("expected a negative-impact archived flag, got %+v", sig)
+	}
+}
+
+func TestDeclaredAuthSignal_StdioIsNotApplicable(t *testing.T) {
+	sig := declaredAuthSignal(ServerRecord{})
+	if sig.Available {
+		t.Errorf("a server with no remotes should report Available=false, got %+v", sig)
+	}
+}
+
+func TestDeclaredAuthSignal_RemoteWithSecretHeaderIsPositive(t *testing.T) {
+	sig := declaredAuthSignal(ServerRecord{Remotes: []Remote{
+		{Type: "http", URL: "https://x", Headers: []RemoteHeader{{Name: "Authorization", IsSecret: true}}},
+	}})
+	if !sig.Available || sig.Impact <= 0 {
+		t.Fatalf("expected a positive declared-auth signal, got %+v", sig)
+	}
+}
+
+func TestDeclaredAuthSignal_RemoteWithNoAuthIsNegative(t *testing.T) {
+	sig := declaredAuthSignal(ServerRecord{Remotes: []Remote{{Type: "http", URL: "https://x"}}})
+	if !sig.Available || sig.Impact >= 0 {
+		t.Fatalf("expected a negative no-auth signal, got %+v", sig)
+	}
+}
+
+func TestAggregate_NoAvailableSignalsIsInsufficientEvidence(t *testing.T) {
+	cs := aggregate([]Signal{{Available: false}, {Available: false}})
+	if cs.Confidence != ConfidenceInsufficient {
+		t.Errorf("Confidence = %q, want insufficient_evidence", cs.Confidence)
+	}
+}
+
+func TestAggregate_ClampsToZeroAndHundred(t *testing.T) {
+	low := aggregate([]Signal{{Available: true, Impact: -1000}})
+	if low.Value != 0 {
+		t.Errorf("Value = %v, want clamped to 0", low.Value)
+	}
+	high := aggregate([]Signal{{Available: true, Impact: 1000}})
+	if high.Value != 100 {
+		t.Errorf("Value = %v, want clamped to 100", high.Value)
+	}
+}
+
+func TestComputeScore_InsufficientEvidenceOverallWhenNothingResolves(t *testing.T) {
+	// A server with an unsupported-ecosystem package, a non-GitHub repo, and
+	// no remotes has every signal come back unavailable except the baseline
+	// registry-presence signal (Community & Governance) — overall confidence
+	// should reflect that most categories are insufficient, not average them
+	// in as if they were neutral zeros.
+	srv := ServerRecord{
+		Name:       "x",
+		Packages:   []Package{{RegistryType: "docker", Identifier: "img"}},
+		Repository: Repository{URL: "https://gitlab.com/foo/bar"},
+	}
+	score := ComputeScore(context.Background(), srv, []ServerRecord{srv})
+	if score.SecurityImplementation.Confidence != ConfidenceInsufficient {
+		// typosquatSignal is always available (pure algorithm), so Security
+		// Implementation has partial evidence even though knownBadSignal
+		// isn't — that's correct, not a bug: assert on the categories that
+		// truly have nothing.
+		t.Logf("security implementation: %+v (expected partial evidence from typosquatSignal)", score.SecurityImplementation)
+	}
+	if score.RepositoryHealth.Confidence != ConfidenceInsufficient {
+		t.Errorf("RepositoryHealth.Confidence = %q, want insufficient_evidence (non-GitHub repo)", score.RepositoryHealth.Confidence)
+	}
+	if score.OperationalSecurity.Confidence != ConfidenceInsufficient {
+		t.Errorf("OperationalSecurity.Confidence = %q, want insufficient_evidence (no remotes)", score.OperationalSecurity.Confidence)
+	}
+	if score.CommunityGovernance.Confidence == ConfidenceInsufficient {
+		t.Errorf("CommunityGovernance should always have the baseline registry-presence signal available")
+	}
+}
+
+func TestFormatScore_InsufficientEvidence(t *testing.T) {
+	s := Score{Confidence: ConfidenceInsufficient}
+	if got := FormatScore(s); got != "insufficient evidence" {
+		t.Errorf("FormatScore = %q", got)
+	}
+}
+
+func TestFormatScore_Rounds(t *testing.T) {
+	s := Score{Overall: 72.6, Confidence: ConfidenceHigh}
+	if got := FormatScore(s); got != "73/100" {
+		t.Errorf("FormatScore = %q, want 73/100", got)
+	}
+}

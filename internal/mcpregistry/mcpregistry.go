@@ -13,16 +13,44 @@ import (
 	"github.com/ankit373/hydra/internal/config"
 )
 
+// EnvVar is one environment variable a package declares it needs, as
+// published in the registry's server.json. Identity/shape only — a
+// variable's name and whether it's secret-shaped, never a value — this is
+// registry metadata about what the package asks for, not a real config
+// file, so it carries none of the privacy risk scan.go's clientServerConfig
+// deliberately avoids.
+type EnvVar struct {
+	Name     string `json:"name"`
+	IsSecret bool   `json:"isSecret"`
+}
+
 // Package is one distribution channel a server ships through (npm, pypi,
 // docker, ...), as published in the registry's server.json.
 type Package struct {
-	RegistryType string `json:"registryType"`
-	Identifier   string `json:"identifier"`
+	RegistryType         string   `json:"registryType"`
+	Identifier           string   `json:"identifier"`
+	EnvironmentVariables []EnvVar `json:"environmentVariables"`
 }
 
 // Repository is the source repo a server's registry entry points at.
 type Repository struct {
 	URL string `json:"url"`
+}
+
+// RemoteHeader is one HTTP header a remote (URL-based) server declares it
+// needs — the registry's mechanism for a server to say "call me with this
+// auth header". IsSecret is what marks it as a credential rather than an
+// arbitrary header.
+type RemoteHeader struct {
+	Name     string `json:"name"`
+	IsSecret bool   `json:"isSecret"`
+}
+
+// Remote is one network endpoint a server exposes.
+type Remote struct {
+	Type    string         `json:"type"`
+	URL     string         `json:"url"`
+	Headers []RemoteHeader `json:"headers"`
 }
 
 // ServerRecord is one server as published by the official MCP registry.
@@ -34,6 +62,7 @@ type ServerRecord struct {
 	Version    string     `json:"version"`
 	Repository Repository `json:"repository"`
 	Packages   []Package  `json:"packages"`
+	Remotes    []Remote   `json:"remotes"`
 }
 
 // InstalledServer is one MCP server found configured on this machine.
