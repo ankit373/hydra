@@ -6,6 +6,18 @@ Format: [Semantic Versioning](https://semver.org). Entries from v1.0.1 onward ar
 
 ---
 
+## [1.3.1](https://github.com/ankit373/hydra/compare/v1.2.0...v1.3.1) (2026-08-20)
+
+
+### Features
+
+* **release:** v1.3.0 — ARM64 desktop builds, HUD Dashboard, Fleet fixes, security dashboard, calibration leaderboard, agent-tree fix ([#441](https://github.com/ankit373/hydra/issues/441)) ([4ad3d78](https://github.com/ankit373/hydra/commit/4ad3d7877eeb0df5f2e398d62cdc9426d9f11922))
+
+
+### Miscellaneous Chores
+
+* retrigger release-please as 1.3.1 ([65e4275](https://github.com/ankit373/hydra/commit/65e427542b64a3f428d0bfcddc35e7a1dc381488))
+
 ## [1.2.0](https://github.com/ankit373/hydra/compare/v1.2.0-rc.3...v1.2.0) (2026-08-07)
 
 
