@@ -35,12 +35,15 @@ const (
 const provisionalCooldown = 14 * 24 * time.Hour
 
 // ServerState is what's persisted per server between audit runs, keyed by
-// the server's registry Name.
+// the server's registry Name. LastScore is the most recent ComputeScore
+// result — persisted so a later export or report doesn't have to re-run
+// the network-calling signals just to redisplay a score already computed.
 type ServerState struct {
 	State          LifecycleState `json:"state"`
 	ManifestHash   string         `json:"manifest_hash"`
 	FirstSeenAt    time.Time      `json:"first_seen_at"`
 	StateChangedAt time.Time      `json:"state_changed_at"`
+	LastScore      Score          `json:"last_score"`
 }
 
 // ManifestHash fingerprints the parts of a server record that matter for

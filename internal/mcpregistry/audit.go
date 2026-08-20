@@ -95,6 +95,7 @@ func Audit(ctx context.Context, cwd string) (*AuditReport, error) {
 					prevPtr = &prev
 				}
 				next := Advance(prevPtr, match, score, now)
+				next.LastScore = score
 				states[match.Name] = next
 				statesChanged = true
 				entry.LifecycleState = next.State
