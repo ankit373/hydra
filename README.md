@@ -75,42 +75,27 @@ Hydra discovers and routes to all of these automatically — no plugins, no manu
 
 ## Architecture
 
-```
-  ┌───────────────────────────────────────────────────────────────────────┐
-  │   hyctl dispatch  [--local | --swarm | --confidence 0.95]               │
-  └───────────────────────────────────┬─────────────────────────────────────┘
-                                       │
-                     ┌─────────────────▼─────────────────┐
-                     │  Policy Engine                     │  PII detection
-                     │  (blocks before any network call)  │  cost ceiling · local-only
-                     └─────────────────┬─────────────────┘
-                                       │
-                     ┌─────────────────▼─────────────────┐
-                     │  Router                            │  CapScore → tier
-                     │  score → tier → fallback chain     │  ~1.1 µs/dispatch
-                     └───┬───────────────┬───────────────┬─┘
-             single      │        swarm  │    confidence │  (SPRT)
-          ┌──────────────▼┐  ┌───────────▼──┐  ┌──────────▼───────────┐
-          │ best available│  │ race/best/all│  │ Trust Control Plane   │
-          │ head + fallbk │  │ + LLM judge  │  │ calibration → LLR/D    │
-          └──────┬────────┘  └──────┬───────┘  │ SPRT optimal-stopping  │
-                 │                  │          │ defect-cost model      │
-                 │                  │          └──────────┬────────────┘
-                 └──────────────────┴─────────────────────┘
-                                       │
-              ┌────────────────────────┼────────────────────────┐
-       ┌──────▼──────┐          ┌──────▼──────┐          ┌───────▼─────┐
-       │  CLI Heads  │          │  API Heads  │          │ Local Heads │
-       │ Claude Code │          │   OpenAI    │          │   Ollama    │
-       │   Codex     │          │  Anthropic  │          │  LM Studio  │
-       │  Cursor …   │          │  Groq … +12 │          │             │
-       └─────────────┘          └─────────────┘          └─────────────┘
-         score 60–95              score 70–95              score 50–72
-                                       │
-                     ┌─────────────────▼─────────────────┐
-                     │  Observability                     │  cost.jsonl (est/actual)
-                     │  cost + calibration + trust ledgers│  calibration.jsonl · trust.jsonl
-                     └────────────────────────────────────┘
+```mermaid
+flowchart TD
+    A["<b>hyctl dispatch</b><br/>--local · --swarm · --confidence 0.95"] --> B
+    B["<b>Policy Engine</b><br/>PII detection · cost ceiling · local-only<br/><i>blocks before any network call</i>"] --> C
+    C["<b>Router</b><br/>CapScore → tier → fallback chain<br/><i>~1.1 µs/dispatch</i>"]
+
+    C -->|single| E["best available head<br/>+ fallback chain"]
+    C -->|swarm| F["race / best / all<br/>+ LLM judge"]
+    C -->|confidence| G["<b>Trust Control Plane</b><br/>calibration → LLR/D<br/>SPRT optimal-stopping<br/>defect-cost model"]
+
+    subgraph Heads [" "]
+        direction LR
+        CLI["<b>CLI Heads</b><br/>Claude Code · Codex · Cursor …<br/>score 60–95"]
+        API["<b>API Heads</b><br/>OpenAI · Anthropic · Groq … +12<br/>score 70–95"]
+        LOC["<b>Local Heads</b><br/>Ollama · LM Studio<br/>score 50–72"]
+    end
+
+    E --> Heads
+    F --> Heads
+    G --> Heads
+    Heads --> J["<b>Observability</b><br/>cost.jsonl · calibration.jsonl · trust.jsonl<br/><i>est/actual labeled</i>"]
 ```
 
 Every executor is **native Go** — `agy`, Ollama, per-provider HTTP (OpenAI-compatible + Anthropic/Gemini/Cohere/Azure/Bedrock/Replicate), and generic CLI. No shell scripts in the hot path.
@@ -403,7 +388,7 @@ hyctl dispatch --confidence 0.90 --file internal/auth/token.go "rotate the signi
 
 In synthetic benchmarks this cuts model calls **~49% on easy tasks** and **~24% on a blended workload** at ≥98% accuracy — while deliberately sampling *more* than a fixed swarm on genuinely hard tasks, which a fixed-N ensemble cannot do. Calibration is cold-start conservative: with no history, sources are treated as uninformative and Hydra falls back to sampling broadly.
 
-> The SPRT ensemble, calibration engine, defect-cost model, graph-aware (blast-radius) routing, the local MCP accountability ledger, and verification oracles have all shipped. A central security agent and a web dashboard are on the [roadmap](#roadmap).
+> The SPRT ensemble, calibration engine, defect-cost model, graph-aware (blast-radius) routing, the local MCP accountability ledger, verification oracles, security posture assessment (`hyctl security`), and the native desktop app have all shipped. A browser-based Web UI and a central MCP server registry are on the [roadmap](#roadmap).
 
 ---
 
@@ -422,7 +407,8 @@ In synthetic benchmarks this cuts model calls **~49% on easy tasks** and **~24% 
 | Route to a **confidence of correctness** (SPRT) | ✅ | ❌ | ❌ | ❌ |
 | Per-source calibration (sensitivity / specificity / D) | ✅ | ❌ | ❌ | ❌ |
 | MCP accountability ledger | ✅ | ❌ | ❌ | ❌ |
-| Central security agent *(roadmap)* | 🔨 | ❌ | ❌ | ❌ |
+| Security posture + correlated incident detection (`hyctl security`) | ✅ | ❌ | ❌ | ❌ |
+| Native desktop app (Dashboard / Fleet / Session / Code) | ✅ | ❌ | ❌ | ❌ |
 
 ---
 
@@ -476,11 +462,10 @@ Every release builds `hyctl` for all six targets below. This table is kept in st
 
 Windows has no Homebrew; use npm, pip, `install.ps1`, or download the archive directly.
 
-The **desktop app** ships for macOS (universal), Windows x86-64 and Linux x86-64. Windows ARM64 and
-Linux ARM64 build on hosted ARM runners as of [#263](https://github.com/ankit373/hydra/issues/263),
-but were added after v1.2.0 was cut — the first release carrying them is the one after v1.2.0, and
-`install-app.sh` picks them up automatically once published. The CLI has covered ARM64 on all three
-OSes all along.
+The **desktop app** ships for macOS (universal), Windows x86-64/ARM64, and Linux x86-64/ARM64 — five
+targets total ([#263](https://github.com/ankit373/hydra/issues/263)), each built on a native runner
+(including two hosted ARM runners) and uploaded on every RC and stable release. `install-app.sh`
+resolves the right archive for your OS/arch automatically — nothing to configure per-arch.
 
 **From source** (Go 1.22+):
 ```bash
@@ -506,7 +491,9 @@ The wizard scans your machine, ranks every model it finds, walks you through pic
 hyctl init                              # first-run wizard
 hyctl probe                             # scan and display all available models
 hyctl status                            # live system state (heads, budget bars, burn-rate risk)
-hyctl tui                               # interactive cockpit — chat+code / dashboard / agent-tree / security (Tab cycles)
+hyctl tui                               # interactive cockpit — chat+code / dashboard / agent-tree (Tab cycles)
+hyctl version                           # version, commit, build info
+hyctl upgrade                           # self-update via install.sh (curl installs only; brew installs: `brew upgrade hyctl`)
 
 # Model registry (add a new model at runtime — no rebuild)
 hyctl models list                       # built-in + your models, by capability score
@@ -543,6 +530,7 @@ hyctl mcp check <tool> --agent A --resource R --action write  # gate + record an
 hyctl mcp check <tool> --content "$DATA" --action network      # PII auto-classified; policy can deny egress
 hyctl mcp check <tool> --params '{"amount":500}'               # bind a hash of the params to the decision
 hyctl mcp verify <tool> --resource R --params '{"amount":500}' # prove executed params == approved params
+hyctl mcp verify-chain                  # confirm the ledger's hash chain hasn't been tampered with
 hyctl mcp log --denied                  # what got blocked
 hyctl mcp report                        # allowed/denied by agent and tool
 hyctl security                          # what the agents did, and can the record be trusted
@@ -642,8 +630,10 @@ For Ollama models, add a family pattern:
 | **Runtime model registry** — `hyctl models add` merges a `~/.hydra/models.json` overlay, no rebuild | ✅ Shipped |
 | **Percolation-κ blast radius** — Molloy–Reed core detection weights hub files higher | ✅ Shipped |
 | **Rate-aware budget governor** — first-passage-time risk on `claude_pct`, escalates before a threshold | ✅ Shipped |
-| MCP server registry + central security agent | 📋 [#9](https://github.com/ankit373/hydra/issues/9)/[#10](https://github.com/ankit373/hydra/issues/10) |
-| Web UI + real-time cost dashboard | 📋 [#11](https://github.com/ankit373/hydra/issues/11)/[#12](https://github.com/ankit373/hydra/issues/12) |
+| **Security posture** (`hyctl security`) — verdict, correlated incidents, risk register, OWASP LLM Top-10 coverage | ✅ Shipped |
+| **Native desktop app** — HUD Dashboard, Fleet workflow graph, Session, Code views over a persistent chat dock | ✅ Shipped |
+| MCP server registry — central connection/authorization plane across every MCP server | 📋 [#9](https://github.com/ankit373/hydra/issues/9) |
+| Browser-based Web UI | 📋 [#12](https://github.com/ankit373/hydra/issues/12) |
 
 See the full [Hydra Roadmap project board](https://github.com/users/ankit373/projects/2).
 
@@ -699,9 +689,10 @@ hydra/
 
 ### The desktop app
 
-A native window over the same engine: **Dashboard** (spend, governor pressure, trust record),
-**Fleet** (runs in flight and the agents inside them), **Session** (one run's timeline, plus a
-layered graph when it fanned out), and **Code** (the file edits a run made, as diffs) — over a
+A native window over the same engine: **Dashboard** (HUD-style — arc gauges, glow chart, drill-down
+— spend, governor pressure, trust record, and a calibration leaderboard), **Fleet** (a dynamic
+workflow graph of runs in flight and the agents inside them), **Session** (one run's timeline, plus
+a layered graph when it fanned out), and **Code** (the file edits a run made, as diffs) — over a
 persistent chat dock.
 
 It reads `~/.hydra/logs/` directly. No daemon, no telemetry, and its numbers are the CLI's numbers:
