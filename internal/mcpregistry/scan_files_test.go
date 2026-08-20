@@ -3,6 +3,7 @@
 package mcpregistry
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -78,12 +79,28 @@ func TestScanClaudeCode_UserAndProjectScope(t *testing.T) {
 	t.Setenv("USERPROFILE", home) // os.UserHomeDir on Windows
 	claudeJSON := filepath.Join(home, ".claude.json")
 	proj := filepath.Join(home, "myproject")
-	writeJSON(t, claudeJSON, `{
-		"mcpServers": {"grafana": {"type":"stdio","command":"npx","args":["-y","mcp-grafana"]}},
-		"projects": {
-			"`+proj+`": {"mcpServers": {"custom": {"type":"stdio","command":"node","args":["./server.js"]}}}
-		}
-	}`)
+
+	// Built structurally, not by string-interpolating proj into a JSON
+	// literal: proj is a Windows path on Windows CI, and an unescaped
+	// backslash inside a hand-written JSON string corrupts the document —
+	// this is exactly the bug that broke this test on windows-latest.
+	cfg := claudeCodeConfig{
+		MCPServers: map[string]clientServerConfig{
+			"grafana": {Type: "stdio", Command: "npx", Args: []string{"-y", "mcp-grafana"}},
+		},
+		Projects: map[string]struct {
+			MCPServers map[string]clientServerConfig `json:"mcpServers"`
+		}{
+			proj: {MCPServers: map[string]clientServerConfig{
+				"custom": {Type: "stdio", Command: "node", Args: []string{"./server.js"}},
+			}},
+		},
+	}
+	raw, err := json.Marshal(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeJSON(t, claudeJSON, string(raw))
 
 	out := scanClaudeCode(proj)
 	if len(out) != 2 {
@@ -110,10 +127,21 @@ func TestScanClaudeCode_DifferentCwdSkipsProjectServers(t *testing.T) {
 	t.Setenv("USERPROFILE", home) // os.UserHomeDir on Windows
 	claudeJSON := filepath.Join(home, ".claude.json")
 	proj := filepath.Join(home, "myproject")
-	writeJSON(t, claudeJSON, `{
-		"mcpServers": {},
-		"projects": {"`+proj+`": {"mcpServers": {"custom": {"type":"stdio","command":"node","args":["./server.js"]}}}}
-	}`)
+
+	cfg := claudeCodeConfig{
+		Projects: map[string]struct {
+			MCPServers map[string]clientServerConfig `json:"mcpServers"`
+		}{
+			proj: {MCPServers: map[string]clientServerConfig{
+				"custom": {Type: "stdio", Command: "node", Args: []string{"./server.js"}},
+			}},
+		},
+	}
+	raw, err := json.Marshal(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeJSON(t, claudeJSON, string(raw))
 
 	out := scanClaudeCode(filepath.Join(home, "other-project"))
 	if len(out) != 0 {
