@@ -126,15 +126,22 @@ export function Timeline({ entries }: { entries: TimelineEntry[] }) {
               "agreed · LLR +1.200 → Λ 1.200" — what actually happened to the
               log-odds, ahead of any narration. */}
           {e.detail && <span className="tl__detail">{e.detail}</span>}
-          <span className="tl__meta">
-            {e.confidence > 0 && `${pct(e.confidence * 100, 1)} · `}
-            {e.durationMs > 0 && `${ms(e.durationMs)} · `}
-            {e.costUsd > 0 && usdExact(e.costUsd)}
-          </span>
+          {/* Joined, not concatenated with trailing separators: an entry with a
+              confidence but no duration or cost used to render "86.0% · ". */}
+          <span className="tl__meta">{meta(e)}</span>
         </li>
       ))}
     </ol>
   )
+}
+
+/** The right-hand facts, with separators only between present values. */
+function meta(e: TimelineEntry): string {
+  const parts: string[] = []
+  if (e.confidence > 0) parts.push(pct(e.confidence * 100, 1))
+  if (e.durationMs > 0) parts.push(ms(e.durationMs))
+  if (e.costUsd > 0) parts.push(usdExact(e.costUsd))
+  return parts.join(' · ')
 }
 
 function kindClass(kind: string): string {
