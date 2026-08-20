@@ -541,3 +541,67 @@ func TestGetDashboard_ConcurrentCallsAreSafe(t *testing.T) {
 		}
 	}
 }
+
+// A single-point (or absent) history gives RiskFromHistory no rate signal, so
+// burn and risk come back zero. Observations must ship alongside them, or a UI
+// cannot tell "measured no risk" from "never measured" (#555).
+func TestGovernor_NoRateSignalIsDistinguishableFromNoRisk(t *testing.T) {
+	home := sandbox(t)
+	state := filepath.Join(home, ".hydra", "logs", "state.json")
+	if err := os.WriteFile(state, []byte(`{"claude_pct": 40, "claude_pct_history": [40]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	d, err := New().GetDashboard()
+	if err != nil {
+		t.Fatal(err)
+	}
+	g := d.Governor
+	if g.BurnRatePct != 0 || g.Risk != 0 {
+		t.Errorf("burn=%v risk=%v; one observation cannot yield a rate", g.BurnRatePct, g.Risk)
+	}
+	if g.Observations != 1 {
+		t.Errorf("Observations = %d, want 1 — without it a zero risk reads as measured", g.Observations)
+	}
+	if g.HorizonObs <= 0 {
+		t.Errorf("HorizonObs = %d; the UI cannot state the horizon it is reporting", g.HorizonObs)
+	}
+	// With no rate signal the governor must fall back to the level band exactly.
+	if g.EffectiveMode != g.Mode {
+		t.Errorf("EffectiveMode = %q, Mode = %q; they must agree with no rate signal",
+			g.EffectiveMode, g.Mode)
+	}
+}
+
+// A climbing trajectory must produce a positive burn rate, and a fast climb must
+// be able to raise the effective mode above the static band — that escalation is
+// the entire point of the rate model.
+func TestGovernor_FastBurnRaisesEffectiveModeAboveTheBand(t *testing.T) {
+	home := sandbox(t)
+	state := filepath.Join(home, ".hydra", "logs", "state.json")
+	// Steady +8pp per observation, ending at 64: ModeFor(64) is "compact", but
+	// at this rate the 80% barrier is about two observations away.
+	body := `{"claude_pct": 64, "claude_pct_history": [24,32,40,48,56,64]}`
+	if err := os.WriteFile(state, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	d, err := New().GetDashboard()
+	if err != nil {
+		t.Fatal(err)
+	}
+	g := d.Governor
+	if g.BurnRatePct <= 0 {
+		t.Errorf("BurnRatePct = %v on a monotonically climbing series", g.BurnRatePct)
+	}
+	if g.Risk <= 0 {
+		t.Errorf("Risk = %v; a fast climb toward 80%% must carry non-zero risk", g.Risk)
+	}
+	if g.Mode != "compact" {
+		t.Fatalf("Mode = %q, want compact — fixture no longer pins the band it means to", g.Mode)
+	}
+	if g.EffectiveMode == g.Mode {
+		t.Errorf("EffectiveMode = %q, same as the static band; the rate floor never applied",
+			g.EffectiveMode)
+	}
+}

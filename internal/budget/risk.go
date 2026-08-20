@@ -13,8 +13,13 @@ import "math"
 // an absorbing barrier; each recorded claude_pct observation is one step.
 const (
 	emergencyFrac = 0.80 // absorbing barrier b (matches ModeEmergency at 80%)
-	riskHorizon   = 3.0  // look-ahead in observations ("within the next ~3 claude_pct updates")
 	MaxPctHistory = 12   // bounded claude_pct series kept in state.json
+
+	// RiskHorizon is the look-ahead RiskFromHistory computes over, in
+	// observations ("within the next ~3 claude_pct updates") — not wall-clock
+	// time and not chat turns. Exported so a UI can state the horizon it is
+	// reporting instead of restating the number and drifting from it.
+	RiskHorizon = 3.0
 
 	// Risk floors: a high probability of hitting the 80% barrier within the
 	// horizon imposes a minimum mode regardless of the current level, so a fast
@@ -74,7 +79,7 @@ func RiskFromHistory(hist []int) (burnRatePct, risk float64) {
 	}
 
 	x := float64(hist[len(hist)-1]) / 100
-	risk = FirstPassageProb(emergencyFrac-x, mu, sigma, riskHorizon)
+	risk = FirstPassageProb(emergencyFrac-x, mu, sigma, RiskHorizon)
 	return mu * 100, risk
 }
 

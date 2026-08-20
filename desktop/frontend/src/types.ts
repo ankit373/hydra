@@ -17,6 +17,17 @@ export interface GovernorPanel {
   known: boolean
   pct: number
   mode: string
+  /** What the router acts on: the level band raised by rate-driven risk.
+   *  Equals `mode` when there is no rate signal. */
+  effectiveMode: string
+  /** Mean percentage-point change per observation, and the probability of
+   *  reaching 80% within `horizonObs`. Both zero when `observations` < 2 —
+   *  that is "no rate signal", not "no risk". */
+  burnRatePct: number
+  risk: number
+  /** Counts of claude_pct *updates* — not wall-clock time, not chat turns. */
+  observations: number
+  horizonObs: number
 }
 
 export interface TrustPanel {
