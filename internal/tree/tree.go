@@ -169,7 +169,19 @@ func Apply(t *Tree, e runlog.Event) *Tree {
 		return t
 	}
 
-	n := t.node(id)
+	// An event with no identity of its own — Agent and Head both empty, e.g.
+	// a KindEdit, which records which file changed, not who changed it — has
+	// nodeID fall back to the raw TaskID. Minting a node under that key would
+	// split one task across two disconnected nodes the moment anything else
+	// (head_selected, dispatch_finished) already claimed it under the real
+	// agent/head identity (#434). Attribute it to that existing node instead.
+	var n *Node
+	if e.Agent == "" && e.Head == "" && e.TaskID != "" {
+		n = t.nodeByTaskID(e.TaskID)
+	}
+	if n == nil {
+		n = t.node(id)
+	}
 	if e.TaskID != "" {
 		n.TaskID = e.TaskID
 	}
@@ -250,6 +262,19 @@ func (t *Tree) node(id string) *Node {
 	t.Order = append(t.Order, id)
 	t.Roots = append(t.Roots, id) // provisional; link() promotes it to a child
 	return n
+}
+
+// nodeByTaskID finds a node already tracking this task, regardless of what
+// key it was created under (a task's first event sets that key; it is
+// usually the agent/head, not the task id itself). Runs are small enough
+// that a scan costs nothing worth indexing for.
+func (t *Tree) nodeByTaskID(taskID string) *Node {
+	for _, id := range t.Order {
+		if n := t.Nodes[id]; n != nil && n.TaskID == taskID {
+			return n
+		}
+	}
+	return nil
 }
 
 // link records an ownership edge, creating either endpoint if needed. A node

@@ -1,6 +1,6 @@
 # Hydra — The Trust Control Plane for AI Development
 
-> Hydra is an open source CLI written in Go that routes developer tasks across every AI model on your machine — not just to the cheapest one, but to a target *confidence of correctness*. It reduces LLM API costs by 70-85% by using cheap or free models for simple tasks and reserving frontier models for work that needs them, and it can route to a calibrated confidence: sampling models adaptively (SPRT) and stopping as soon as the evidence is strong enough, spending more only where accuracy demands it.
+> Hydra is the Trust Control Plane for AI development: an open source CLI written in Go that routes developer tasks across every AI model on your machine to a target *confidence of correctness*, not just the cheapest one — sampling models adaptively (SPRT) and stopping as soon as the evidence is strong enough, spending more only where accuracy demands it. It also reduces LLM API costs by 70-85% along the way, by using cheap or free models for simple tasks and reserving frontier models for work that needs them.
 
 ## What It Does
 
@@ -30,7 +30,8 @@
 - `hyctl trust` — confidence layer: `calibration`, `record`, `defect`, `stats`, `explain`
 - `hyctl graph` — code dependency graph: `blast` (blast radius + percolation-κ), `parallel` (optimal agent count)
 - `hyctl context` — context signal density / entropy governor: `entropy`
-- `hyctl mcp` — local MCP accountability ledger: `check`, `record`, `verify`, `log`, `report`. Access checks can be classification-aware (PII auto-detected from content) and bind a SHA256 hash of the invocation parameters, so `verify` can later prove the executed parameters match the ones that were approved
+- `hyctl mcp` — local MCP accountability ledger: `check`, `record`, `verify`, `log`, `report`, `verify-chain`. Access checks can be classification-aware (PII/prompt-injection-marker auto-detected from content) and bind a SHA256 hash of the invocation parameters, so `verify` can later prove the executed parameters match the ones that were approved. Every event is hash-chained (`verify-chain` detects post-hoc tampering) and can carry an optional MITRE ATLAS/OWASP LLM Top-10 `Framework` tag
+- `hyctl security` — security posture dashboard: a coverage score against the OWASP LLM Top 10 (percentage of applicable categories with a live, evidence-backed mechanism — never a blended/manufactured score, and hard-overridden to "INTEGRITY COMPROMISED" if the ledger chain is tampered with), a trend since the first recorded run, per-head risk (denied/flagged), honest checks (ledger chain integrity, denial-of-wallet refusals, model provenance, framework-tag coverage), and a recommendations list naming every uncovered category — the feedback loop for the next hardening pass
 - `hyctl oracle` — verification oracles (tests/compile/lint) as calibrated evidence: `verify`
 - `hyctl models` — model capability registry: `list`, `add`, `remove`, `sync`
 - `hyctl parallel` — fan N independent tasks out to N heads at once, from a task JSON file
@@ -64,7 +65,7 @@ curl -fsSL https://raw.githubusercontent.com/ankit373/hydra/main/install-app.sh 
 
 It resolves the newest release tag (desktop asset names embed their version, so GitHub's `/latest/download/` shortcut cannot address them), verifies the download against the `.sha256` published beside it, installs the `.app` to `/Applications` on macOS or the binary to `~/.local/share/hydra` with a `~/.local/bin` symlink on Linux, and clears the macOS quarantine flag. `HYDRA_VERSION` pins a release; `HYDRA_APP_DIR` changes the install directory. Windows has no script — download `hydra-desktop_<version>_windows_amd64.zip` from the releases page and unzip it.
 
-Platform support: `hyctl` is built for macOS, Linux and Windows on both x86-64 and ARM64 — six targets, every release. Homebrew covers macOS and Linux; npm/npx and pip cover all three OSes; `install.sh` covers macOS and Linux and `install.ps1` covers Windows (per-user, no admin rights; both verify the release checksum). The desktop app ships for macOS (universal), Windows x86-64 and Linux x86-64; ARM64 desktop builds are not yet available.
+Platform support: `hyctl` is built for macOS, Linux and Windows on both x86-64 and ARM64 — six targets, every release. Homebrew covers macOS and Linux; npm/npx and pip cover all three OSes; `install.sh` covers macOS and Linux and `install.ps1` covers Windows (per-user, no admin rights; both verify the release checksum). The desktop app ships for macOS (universal), Windows x86-64 and Linux x86-64. Windows ARM64 and Linux ARM64 builds were added after v1.2.0 was cut, so the first release carrying them is the one after v1.2.0; `install-app.sh` picks them up automatically once they are published.
 
 Or build from source (requires Go 1.22+):
 
@@ -96,6 +97,7 @@ Typical savings: 75-85% vs routing everything through Claude. Run `hyctl pricing
 - Where Hydra fits (local-first + trust quadrant): https://hydra.uvansa.com/#universe
 - Cost comparison vs gateways: https://hydra.uvansa.com/#compare
 - Changelog: https://github.com/ankit373/hydra/blob/main/CHANGELOG.md
+- Funding — machine-readable funding manifest (fundingjson.org): https://hydra.uvansa.com/funding.json
 
 ## License
 

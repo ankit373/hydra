@@ -40,10 +40,29 @@ body {
   font-size: 15px;
 }
 
-.rail__mark {
-  width: 10px; height: 10px; border-radius: 3px;
-  background: var(--hy-brand);
+.rail__mark { width: 22px; height: 22px; flex: 0 0 auto; }
+
+/* Rotation only — no filter/blur, so it costs nothing on a GPU-less machine.
+   The mark's own SVG has no glow filter baked in (unlike brand/svg/mark.svg)
+   for exactly that reason: fine once as a static icon, wasted looping. */
+.hy-spinner { animation: hy-spin 2.2s linear infinite; transform-origin: 50% 50%; }
+@media (prefers-reduced-motion: reduce) {
+  .hy-spinner { animation: none; }
 }
+@keyframes hy-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 60px 0;
+  color: var(--hy-dim);
+}
+.loading__mark { width: 28px; height: 28px; }
 
 .rail__nav { display: flex; flex-direction: column; gap: 2px; }
 
@@ -92,7 +111,17 @@ body {
 /* ── Headings ──────────────────────────────────────────────────────────── */
 
 .view__head { margin-bottom: 22px; }
+/* Only the views with a back button need a row — plain title+subtitle
+   (Fleet, Dashboard) stack correctly as block siblings with no flex at all. */
+.view__headrow { display: flex; align-items: baseline; gap: 12px; }
 .view__title { margin: 0; font-size: 24px; letter-spacing: -0.03em; }
+.view__title--brand {
+  background: var(--hy-brand);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
 .view__sub { margin: 5px 0 0; color: var(--hy-dim); font-size: 13px; }
 
 .section__title {
@@ -145,14 +174,50 @@ body {
 .gov--warning  { color: var(--hy-gov-warning); }
 .gov--critical { color: var(--hy-gov-critical); }
 
-.gov__track {
-  margin-top: 10px;
-  height: 4px;
-  border-radius: 2px;
-  background: var(--hy-line);
-  overflow: hidden;
+/* ── Arc gauges (Governor / Trust) ─────────────────────────────────────── */
+/* Replaces the old flat .gov__track/.trust-cmp__track progress bars: an SVG
+   ring whose stroke-dashoffset encodes the fraction, transitioned in CSS so
+   the sweep-in is one property change, not a JS animation loop. */
+
+.arc-wrap { display: flex; flex-direction: column; align-items: center; gap: 8px; margin-top: 8px; }
+.arc-gauge { overflow: visible; }
+.arc-track { stroke: var(--hy-line); fill: none; }
+.arc-fill {
+  fill: none;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 1.1s cubic-bezier(.22, .9, .3, 1);
 }
-.gov__fill { height: 100%; border-radius: 2px; background: currentColor; }
+.arc-fill--baseline { stroke: var(--hy-dim); }
+.arc-fill--actual   { stroke: var(--hy-aqua); }
+.arc-num {
+  font-family: var(--hy-font-mono);
+  font-size: 19px;
+  font-weight: 600;
+  fill: var(--hy-ink);
+}
+.arc-lbl {
+  font-family: var(--hy-font-mono);
+  font-size: 8.5px;
+  fill: var(--hy-dim);
+  letter-spacing: .3px;
+  text-transform: uppercase;
+}
+.arc-legend {
+  display: flex;
+  gap: 14px;
+  font-family: var(--hy-font-mono);
+  font-size: 10px;
+  color: var(--hy-dim);
+}
+.arc-legend__dot {
+  display: inline-block;
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  margin-right: 5px;
+  vertical-align: middle;
+}
+.arc-legend__dot--actual   { background: var(--hy-aqua); }
+.arc-legend__dot--baseline { background: var(--hy-dim); }
 
 /* ── Tables ────────────────────────────────────────────────────────────── */
 
@@ -200,6 +265,352 @@ body {
 .cost--mid       { color: var(--hy-mid); }
 .cost--expensive { color: var(--hy-expensive); }
 
+/* ── Dashboard: hero spend chart ──────────────────────────────────────── */
+
+.spend-chart {
+  background: var(--hy-panel);
+  border: 1px solid var(--hy-line);
+  border-radius: var(--hy-radius);
+  padding: 16px 17px 12px;
+  overflow-x: auto;
+}
+
+.spend-bar { cursor: default; }
+.spend-bar:focus-visible { outline: none; }
+
+/* Bars grow in from a zero baseline the first time real data lands
+   (Dashboard.tsx's `useReveal`) — transform, not height, so it's a single
+   composited property and never triggers layout. transform-box: fill-box
+   makes "bottom" mean the rect's own bottom edge, not the SVG viewport's. */
+.spend-bar__rect,
+.spend-bar__halo {
+  transform-box: fill-box;
+  transform-origin: bottom;
+  transform: scaleY(0);
+  transition: transform .55s cubic-bezier(.22, .9, .3, 1), opacity .12s;
+}
+.spend-bar__rect.grown,
+.spend-bar__halo.grown { transform: scaleY(1); }
+
+.spend-bar__rect { opacity: .82; }
+.spend-bar:hover .spend-bar__rect,
+.spend-bar:focus-visible .spend-bar__rect { opacity: 1; }
+
+.spend-bar__rect--free      { fill: var(--hy-dim); }
+.spend-bar__rect--cheap     { fill: var(--hy-cheap); }
+.spend-bar__rect--mid       { fill: var(--hy-mid); }
+.spend-bar__rect--expensive { fill: var(--hy-expensive); }
+
+/* A larger, lower-opacity rect behind the crisp bar — a layered solid fill,
+   never `filter: blur`/`backdrop-filter`, so the glow rasterizes like any
+   other shape instead of costing a compositor blur pass. */
+.spend-bar__halo { opacity: .22; }
+.spend-bar:hover .spend-bar__halo,
+.spend-bar:focus-visible .spend-bar__halo { opacity: .4; }
+
+.spend-bar__halo--free      { fill: var(--hy-dim); }
+.spend-bar__halo--cheap     { fill: var(--hy-cheap); }
+.spend-bar__halo--mid       { fill: var(--hy-mid); }
+.spend-bar__halo--expensive { fill: var(--hy-expensive); }
+
+.spend-tip { pointer-events: none; }
+.spend-tip__bg { fill: var(--hy-bg-2); stroke: var(--hy-line); }
+.spend-tip__value {
+  fill: var(--hy-ink);
+  font-family: var(--hy-font-mono);
+  font-size: 11px;
+  font-weight: 700;
+}
+.spend-tip__meta { fill: var(--hy-dim); font-family: var(--hy-font-mono); font-size: 10px; }
+
+.spend-chart__range {
+  margin-top: 8px;
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--hy-font-mono);
+  font-size: 10px;
+  color: var(--hy-dim);
+}
+
+/* ── Dashboard: inline sparkline (spend stat card) ────────────────────── */
+
+.spend-spark { display: block; margin-top: 9px; }
+.spend-spark__line { stroke: var(--hy-dim); stroke-width: 1.5; }
+.spend-spark__dot  { fill: var(--hy-aqua); }
+
+/* ── Dashboard: ranked bar lists (by model / by tier) ─────────────────── */
+
+.rank { display: flex; flex-direction: column; gap: 9px; }
+
+.rank__row {
+  display: grid;
+  grid-template-columns: minmax(64px, 130px) 1fr auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.rank__name {
+  font-family: var(--hy-font-mono);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rank__track {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--hy-line);
+  overflow: hidden;
+}
+.rank__fill { display: block; height: 100%; border-radius: 4px; }
+.rank__fill--free      { background: var(--hy-dim); }
+.rank__fill--cheap     { background: var(--hy-cheap); }
+.rank__fill--mid       { background: var(--hy-mid); }
+.rank__fill--expensive { background: var(--hy-expensive); }
+
+.rank__value { font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* A "by model" row that opens the drill-down drawer (#408) — a <button>
+   wearing .rank__row's grid layout, so it needs its own reset for the
+   browser's default button chrome plus a hover/focus affordance. */
+.rank__row--detail {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  width: 100%;
+  cursor: pointer;
+  position: relative;
+  padding: 3px 20px 3px 4px;
+  margin: -3px -4px;
+  border-radius: 6px;
+  transition: background .12s;
+}
+.rank__row--detail:hover,
+.rank__row--detail:focus-visible { background: rgba(255, 255, 255, .045); outline: none; }
+.rank__row--detail:focus-visible { box-shadow: 0 0 0 2px var(--hy-aqua) inset; }
+.rank__row--detail::after {
+  content: "\203A";
+  position: absolute; right: 4px; top: 50%;
+  transform: translateY(-50%);
+  color: var(--hy-faint);
+  opacity: 0;
+  transition: opacity .12s, transform .12s;
+}
+.rank__row--detail:hover::after,
+.rank__row--detail:focus-visible::after { opacity: 1; transform: translateY(-50%) translateX(2px); }
+
+/* ── Dashboard: trust comparison bars ──────────────────────────────────── */
+
+.trust-cmp { margin-top: 2px; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+
+.trust-cmp__delta { margin-top: 3px; font-size: 12px; text-align: center; }
+.trust-cmp__delta--good { color: var(--hy-cheap); }
+.trust-cmp__delta--bad  { color: var(--hy-expensive); }
+
+/* ── Dashboard: calibration leaderboard (#409) ─────────────────────────── */
+/* Same row shape as .rank (name / track / value), plus a domain sub-label and
+   an oracle-vs-model color split. Bars use the spend-bar halo treatment
+   (#414) rotated 90° — a fainter halo layered behind a crisp fill, both
+   growing via `transform: scaleX` from a zero baseline the first time real
+   data lands, never `filter: blur`. */
+
+.cal__row {
+  display: grid;
+  grid-template-columns: minmax(90px, 170px) 1fr auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.cal__name {
+  font-family: var(--hy-font-mono);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cal__domain { margin-left: 6px; font-size: 10px; color: var(--hy-faint); }
+
+/* Not `overflow: hidden` — the halo below deliberately bleeds past the track,
+   the same way SpendTrend's SVG halo bleeds HALO_PAD past its crisp bar. */
+.cal__track {
+  position: relative;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--hy-line);
+}
+
+.cal__halo,
+.cal__fill {
+  position: absolute;
+  top: 0; left: 0;
+  height: 100%;
+  border-radius: 4px;
+  transform-origin: left;
+  transform: scaleX(0);
+  transition: transform .55s cubic-bezier(.22, .9, .3, 1);
+}
+.cal__halo.grown, .cal__fill.grown { transform: scaleX(1); }
+
+/* Width/height/inset (the halo's HALO_PAD bleed) are set inline per row from
+   the D-relative fraction; only the reveal grow-in is CSS. */
+.cal__fill { opacity: .95; }
+.cal__halo { opacity: .3; }
+
+.cal__fill--oracle, .cal__halo--oracle { background: linear-gradient(90deg, rgba(0, 230, 195, .5), var(--hy-aqua)); }
+.cal__fill--model,  .cal__halo--model  { background: linear-gradient(90deg, rgba(139, 92, 246, .5), var(--hy-violet)); }
+
+.cal__value {
+  font-family: var(--hy-font-mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.cal-legend {
+  display: flex;
+  gap: 14px;
+  margin-top: 12px;
+  font-family: var(--hy-font-mono);
+  font-size: 10px;
+  color: var(--hy-dim);
+}
+.cal-legend__dot {
+  display: inline-block;
+  width: 7px; height: 7px;
+  border-radius: 2px;
+  margin-right: 5px;
+  vertical-align: middle;
+}
+.cal-legend__dot--oracle { background: var(--hy-aqua); }
+.cal-legend__dot--model  { background: var(--hy-violet); }
+
+/* ── Dashboard: HUD chrome ─────────────────────────────────────────────── */
+/* Corner brackets + scanline + vignette, the same frame language as
+   brand/living/hydra-hud.src.html. Fixed to the viewport but mounted only
+   while the Dashboard component is (#408) — a view-scoped instance of the
+   app-wide chrome rather than a shared-shell change. Pure CSS: a scanline is
+   a repeating gradient and the vignette a radial one, never
+   backdrop-filter/blur, matching this app's no-GPU-blur discipline. */
+
+.hud-corner {
+  position: fixed;
+  width: 22px; height: 22px;
+  border: 1px solid rgba(150, 140, 255, .3);
+  z-index: 1;
+  pointer-events: none;
+}
+.hud-corner--tl { top: 16px; left: 16px; border-right: 0; border-bottom: 0; }
+.hud-corner--tr { top: 16px; right: 16px; border-left: 0; border-bottom: 0; }
+.hud-corner--bl { bottom: 16px; left: 16px; border-right: 0; border-top: 0; }
+.hud-corner--br { bottom: 16px; right: 16px; border-left: 0; border-top: 0; }
+
+.hud-scanline {
+  position: fixed; inset: 0; z-index: 1; pointer-events: none;
+  opacity: .3;
+  mix-blend-mode: overlay;
+  background: repeating-linear-gradient(0deg, rgba(255, 255, 255, .035) 0 1px, transparent 1px 3px);
+}
+.hud-vignette {
+  position: fixed; inset: 0; z-index: 1; pointer-events: none;
+  background: radial-gradient(ellipse at 50% 30%, transparent 55%, rgba(2, 3, 9, .65));
+}
+
+/* ── Dashboard: skeleton loader ────────────────────────────────────────── */
+/* Shown while GetDashboard()'s first call is in flight (dashboard === null
+   in App.tsx) — driven by real React state, not a timer. Shimmer via
+   background-position, never filter/blur. */
+
+.skeleton-block {
+  border-radius: 6px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, .05) 25%, rgba(255, 255, 255, .11) 37%, rgba(255, 255, 255, .05) 63%);
+  background-size: 400% 100%;
+  animation: shimmer 1.6s ease-in-out infinite;
+}
+@keyframes shimmer {
+  0%   { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+.skeleton-block--chart { width: 100%; height: 160px; }
+
+/* Cross-fades in once the skeleton is replaced by the real content subtree. */
+.dashboard-content { animation: dashboardFadeIn .4s ease; }
+@keyframes dashboardFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ── Dashboard: drill-down drawer (By model → Breakdown detail) ──────────── */
+
+.drawer-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(2, 3, 9, .55);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .25s ease;
+  z-index: 40;
+}
+.drawer-backdrop--open { opacity: 1; pointer-events: auto; }
+
+.drawer {
+  position: fixed; top: 0; right: 0; bottom: 0;
+  width: min(400px, 92vw);
+  background: var(--hy-bg-2);
+  border-left: 1px solid var(--hy-line);
+  z-index: 41;
+  transform: translateX(100%);
+  transition: transform .32s cubic-bezier(.22, .9, .3, 1);
+  padding: 24px 24px 30px;
+  overflow-y: auto;
+}
+.drawer--open { transform: translateX(0); }
+
+.drawer__close {
+  position: absolute; top: 16px; right: 18px;
+  background: none;
+  border: none;
+  color: var(--hy-dim);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 4px;
+}
+.drawer__close:hover { color: var(--hy-ink); }
+.drawer__close:focus-visible { outline: 2px solid var(--hy-aqua); outline-offset: 1px; }
+
+.drawer__title {
+  font-family: var(--hy-font-mono);
+  font-size: 10.5px;
+  color: var(--hy-aqua);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  margin: 4px 26px 6px 0;
+}
+.drawer__heading { font-size: 18px; font-weight: 600; margin: 0 0 16px; letter-spacing: -.01em; }
+.drawer__stat { font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.drawer__lbl {
+  font-family: var(--hy-font-mono);
+  font-size: 9.5px;
+  color: var(--hy-dim);
+  text-transform: uppercase;
+  letter-spacing: .8px;
+  margin-top: 3px;
+}
+.drawer__list { margin-top: 14px; display: flex; flex-direction: column; gap: 7px; }
+.drawer__list-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-family: var(--hy-font-mono);
+  font-size: 12px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, .03);
+  border-radius: 6px;
+}
+
 /* ── Empty / error states ──────────────────────────────────────────────── */
 
 .empty {
@@ -219,6 +630,22 @@ body {
   padding: 2px 7px;
   color: var(--hy-aqua);
 }
+.empty__cta {
+  appearance: none;
+  background: var(--hy-aqua);
+  color: var(--hy-bg);
+  border: 0;
+  border-radius: 999px;
+  font: inherit;
+  font-weight: 600;
+  font-size: 13px;
+  padding: 10px 22px;
+  margin: 10px 0 4px;
+  cursor: pointer;
+}
+.empty__cta:hover { filter: brightness(1.08); }
+.empty__cta:focus-visible { outline: 2px solid var(--hy-ink); outline-offset: 2px; }
+.empty__alt { font-size: 12px; opacity: .75; }
 
 .error {
   border: 1px solid var(--hy-expensive);
@@ -227,6 +654,82 @@ body {
   color: var(--hy-expensive);
   font-family: var(--hy-font-mono);
   font-size: 12px;
+}
+
+/* ── Setup banner (#383 — hyctl missing) ──────────────────────────────── */
+
+.setup {
+  background: var(--hy-panel);
+  border: 1px solid var(--hy-line);
+  border-left: 3px solid var(--hy-aqua);
+  border-radius: var(--hy-radius);
+  padding: 15px 17px;
+  margin-bottom: 22px;
+}
+
+.setup__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.setup__title { font-weight: 600; font-size: 14px; }
+
+.setup__dismiss {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: var(--hy-dim);
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+.setup__dismiss:hover { color: var(--hy-ink); }
+.setup__dismiss:focus-visible { outline: 2px solid var(--hy-aqua); outline-offset: 1px; }
+
+.setup__body { margin: 9px 0 0; font-size: 13px; color: var(--hy-dim); line-height: 1.55; }
+.setup__body code {
+  font-family: var(--hy-font-mono);
+  font-size: 12px;
+  background: var(--hy-bg-2);
+  border: 1px solid var(--hy-line);
+  border-radius: var(--hy-radius-sm);
+  padding: 1px 6px;
+  color: var(--hy-aqua);
+}
+
+.setup__install {
+  appearance: none;
+  margin-top: 12px;
+  border: 0;
+  border-radius: var(--hy-radius-sm);
+  background: var(--hy-aqua);
+  color: var(--hy-bg);
+  font: inherit;
+  font-weight: 600;
+  font-size: 13px;
+  padding: 8px 16px;
+  cursor: pointer;
+}
+.setup__install:disabled { opacity: .6; cursor: default; }
+.setup__install:focus-visible { outline: 2px solid var(--hy-ink); outline-offset: 2px; }
+
+.setup__error {
+  margin: 10px 0 0;
+  color: var(--hy-expensive);
+  font-family: var(--hy-font-mono);
+  font-size: 12px;
+}
+
+.setup__log {
+  margin: 10px 0 0;
+  max-height: 160px;
+  overflow-y: auto;
+  background: var(--hy-bg-2);
+  border: 1px solid var(--hy-line);
+  border-radius: var(--hy-radius-sm);
+  padding: 10px 12px;
+  font-family: var(--hy-font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  color: var(--hy-dim);
 }
 
 /* ── Fleet ─────────────────────────────────────────────────────────────── */
@@ -346,6 +849,30 @@ body {
 .agent__meta { margin-left: auto; color: var(--hy-dim); font-size: 12px; font-variant-numeric: tabular-nums; }
 .agent__detail { color: var(--hy-dim); font-size: 12px; }
 
+/* Fleet's inline run graph (RunGraph) reuses .graph/.edge/.gnode from the
+   Session graph below — this modifier only trims the chrome that doesn't fit
+   inside a run card: no legend, tighter margin/padding. */
+.graph--compact { margin-top: 10px; padding: 8px; }
+
+/* Fleet's state heatmap for a run at/above GroupThreshold — one chip per
+   agent, grouped by depth, colored the same as .state-dot/.gnode so "shape of
+   a run" always means the same colours everywhere in the app. */
+.agrid { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
+.agrid__row { display: flex; align-items: flex-start; gap: 8px; }
+.agrid__depth {
+  flex: 0 0 22px;
+  padding-top: 2px;
+  font-family: var(--hy-font-mono);
+  font-size: 10px;
+  color: var(--hy-dim);
+}
+.agrid__chips { display: flex; flex-wrap: wrap; gap: 3px; }
+
+.chip { width: 12px; height: 12px; border-radius: 3px; background: var(--hy-line); flex: 0 0 auto; }
+.chip--running { background: var(--hy-aqua); }
+.chip--ok      { background: var(--hy-cheap); }
+.chip--failed  { background: var(--hy-expensive); }
+
 /* ── Session ───────────────────────────────────────────────────────────── */
 
 .back {
@@ -355,7 +882,7 @@ body {
   color: var(--hy-dim);
   font: inherit;
   font-size: 12px;
-  padding: 0 0 8px;
+  padding: 3px 0;
   cursor: pointer;
 }
 .back:hover { color: var(--hy-aqua); }
@@ -656,6 +1183,22 @@ body {
 .turn__meta:hover { color: var(--hy-aqua); }
 .turn__meta:focus-visible { outline: 2px solid var(--hy-aqua); outline-offset: 2px; }
 
+.turn__probe { display: flex; flex-direction: column; align-items: flex-start; gap: 7px; }
+.turn__retry {
+  appearance: none;
+  background: transparent;
+  border: 1px solid var(--hy-line);
+  border-radius: var(--hy-radius-sm);
+  padding: 5px 12px;
+  color: var(--hy-ink);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.turn__retry:hover:not(:disabled) { border-color: var(--hy-aqua); color: var(--hy-aqua); }
+.turn__retry:disabled { opacity: .5; cursor: default; }
+.turn__retry:focus-visible { outline: 2px solid var(--hy-aqua); outline-offset: 2px; }
+
 .dock__input { border-top: 1px solid var(--hy-line); padding: 9px 11px; }
 .dock__input textarea {
   width: 100%;
@@ -673,3 +1216,85 @@ body {
 
 /* The dock floats over the main column; keep the last rows reachable. */
 .main { padding-bottom: 86px; }
+
+/* ── Update notice ─────────────────────────────────────────────────────── */
+/* Lives in .rail__foot, next to the version string. Renders nothing at all
+   when up to date, so it adds no weight to the common case. */
+
+.update-notice { margin-top: 6px; }
+
+.update-notice__badge {
+  appearance: none;
+  background: transparent;
+  border: 1px solid var(--hy-aqua);
+  border-radius: 999px;
+  color: var(--hy-aqua);
+  font: inherit;
+  font-family: var(--hy-font-mono);
+  font-size: 10px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+.update-notice__badge:hover { background: var(--hy-panel); }
+.update-notice__badge:focus-visible { outline: 2px solid var(--hy-aqua); outline-offset: 2px; }
+
+.update-notice__panel {
+  margin-top: 8px;
+  padding: 9px 10px;
+  background: var(--hy-panel);
+  border: 1px solid var(--hy-line);
+  border-radius: var(--hy-radius-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.update-notice__hint { margin: 0; color: var(--hy-dim); font-size: 11px; line-height: 1.5; }
+.update-notice__error { margin: 0; color: var(--hy-expensive); font-size: 11px; }
+
+.update-notice__cta {
+  appearance: none;
+  align-self: flex-start;
+  background: var(--hy-aqua);
+  border: 0;
+  border-radius: var(--hy-radius-sm);
+  color: var(--hy-bg);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 5px 11px;
+  cursor: pointer;
+}
+.update-notice__cta:hover { opacity: .88; }
+.update-notice__cta:focus-visible { outline: 2px solid var(--hy-ink); outline-offset: 2px; }
+
+.update-notice__log {
+  max-height: 140px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 7px 8px;
+  background: var(--hy-bg);
+  border-radius: var(--hy-radius-sm);
+  color: var(--hy-dim);
+  font-family: var(--hy-font-mono);
+  font-size: 10px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ── Reduced motion ────────────────────────────────────────────────────── */
+/* The Dashboard's reveal state (useReveal in reveal.ts) still flips
+   instantly under reduced motion — these rules just stop it from being
+   animated on the way there. */
+@media (prefers-reduced-motion: reduce) {
+  .spend-bar__rect,
+  .spend-bar__halo,
+  .arc-fill,
+  .drawer,
+  .drawer-backdrop,
+  .rank__row--detail::after {
+    transition: none;
+  }
+  .skeleton-block { animation: none; }
+  .dashboard-content { animation: none; }
+}

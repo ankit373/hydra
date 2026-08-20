@@ -96,6 +96,20 @@ type Event struct {
 	// under (e.g. "pii"). Empty means unclassified.
 	Classification string `json:"classification,omitempty"`
 
+	// Flagged is true when Content matched a heuristic prompt-injection
+	// marker (policy.ContainsInjectionMarkers). A non-blocking audit signal —
+	// it does not itself cause Deny. See FlagReason for which phrase matched.
+	Flagged bool `json:"flagged,omitempty"`
+	// FlagReason is the specific heuristic that matched, when Flagged is true.
+	FlagReason string `json:"flag_reason,omitempty"`
+
+	// PrevHash is the previous event's Hash, and Hash is sha256 of this event
+	// (PrevHash set, Hash cleared) — a local hash chain, so an edited or
+	// deleted line breaks the link and VerifyChain can detect it. Both empty
+	// means this event predates the feature ("unchained"), not tampered.
+	PrevHash string `json:"prev_hash,omitempty"`
+	Hash     string `json:"hash,omitempty"`
+
 	// Config is the deployment-identity breadcrumb (config.Breadcrumb) in
 	// effect when this event was recorded, ties the event to the exact
 	// routing rules that were live.
@@ -188,6 +202,11 @@ func Record(path string, e Event) error {
 			e.Config = bc
 		}
 	}
+	if e.PrevHash == "" {
+		e.PrevHash = readChainHash(chainHashPath(path))
+	}
+	e.Hash = hashEvent(e)
+
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
@@ -200,8 +219,84 @@ func Record(path string, e Event) error {
 	if err != nil {
 		return err
 	}
-	_, err = fmt.Fprintln(f, string(raw))
-	return err
+	if _, err := fmt.Fprintln(f, string(raw)); err != nil {
+		return err
+	}
+	// Best-effort: a failed chainhash write costs the next Record a fresh
+	// chain start (reported as a false break at verify time, never a false
+	// all-clear) rather than failing the access decision it was recording.
+	_ = writeChainHash(chainHashPath(path), e.Hash)
+	return nil
+}
+
+// hashEvent computes e's chain hash: sha256 of e's canonical JSON with Hash
+// cleared (PrevHash, being an ordinary field, is covered by the same hash —
+// no separate prefix needed). Event holds only strings and typed strings, so
+// json.Marshal cannot fail here.
+func hashEvent(e Event) string {
+	e.Hash = ""
+	raw, _ := json.Marshal(e)
+	sum := sha256.Sum256(raw)
+	return hex.EncodeToString(sum[:])
+}
+
+func chainHashPath(ledgerPath string) string { return ledgerPath + ".chainhash" }
+
+func readChainHash(path string) string {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(raw))
+}
+
+func writeChainHash(path, hash string) error {
+	return os.WriteFile(path, []byte(hash+"\n"), 0o600)
+}
+
+// ChainResult is VerifyChain's report.
+type ChainResult struct {
+	// Chained is the number of events that carry a hash (post-migration).
+	Chained int `json:"chained"`
+	// Unchained is the number of events with no hash — they predate this
+	// feature, not tampered.
+	Unchained int  `json:"unchained"`
+	Intact    bool `json:"intact"`
+	// BrokenAt is the index into the events slice VerifyChain read, of the
+	// first event whose hash doesn't match — 0 when Intact.
+	BrokenAt int `json:"broken_at,omitempty"`
+}
+
+// VerifyChain walks path's events in order, recomputing each chained event's
+// hash and confirming it links to the one before it. An event with no Hash is
+// treated as pre-migration and excluded from verification, not flagged
+// broken — the chain only covers events recorded since this feature shipped.
+func VerifyChain(path string) (ChainResult, error) {
+	events, _, err := LoadCounted(path)
+	if err != nil {
+		return ChainResult{}, err
+	}
+	res := ChainResult{Intact: true}
+	prevHash := ""
+	chainStarted := false
+	for i, e := range events {
+		if e.Hash == "" {
+			res.Unchained++
+			continue
+		}
+		res.Chained++
+		broken := hashEvent(e) != e.Hash
+		if chainStarted && e.PrevHash != prevHash {
+			broken = true
+		}
+		if broken && res.Intact {
+			res.Intact = false
+			res.BrokenAt = i
+		}
+		prevHash = e.Hash
+		chainStarted = true
+	}
+	return res, nil
 }
 
 // Load reads all events; a missing ledger yields no events. Unparseable lines
@@ -259,6 +354,13 @@ type Rule struct {
 	Action         Action   `json:"action,omitempty"`
 	Classification string   `json:"classification,omitempty"`
 	Decision       Decision `json:"decision"`
+
+	// Framework optionally tags which recognized security framework category
+	// this rule covers (e.g. "owasp:llm06", "atlas:ai-ml-attack-staging") —
+	// freeform, normalized like Classification. Purely a label for
+	// FrameworksCovered's coverage report: it plays no part in Decide's
+	// matching, since an access attempt carries no "framework" of its own.
+	Framework string `json:"framework,omitempty"`
 }
 
 // Policy is an ordered rule set with a default decision. First matching rule wins.
@@ -373,8 +475,29 @@ func (p *Policy) validate() error {
 			return fmt.Errorf("rule %d: invalid resource pattern %q: %w", i, r.Resource, err)
 		}
 		r.Classification = NormalizeClassification(r.Classification)
+		r.Framework = NormalizeClassification(r.Framework)
 	}
 	return nil
+}
+
+// FrameworksCovered returns the distinct, non-empty Framework tags present
+// across p's rules, sorted — hyctl security's coverage list: which
+// recognized categories (e.g. "owasp:llm06", "atlas:ai-ml-attack-staging")
+// have at least one rule, versus which don't. Never a manufactured score —
+// only what a user has actually tagged and configured.
+func (p Policy) FrameworksCovered() []string {
+	seen := map[string]bool{}
+	for _, r := range p.Rules {
+		if r.Framework != "" {
+			seen[r.Framework] = true
+		}
+	}
+	out := make([]string, 0, len(seen))
+	for f := range seen {
+		out = append(out, f)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // CheckRequest describes one access-check request: what's being accessed, by
@@ -394,7 +517,10 @@ type CheckRequest struct {
 	// Classification is the data-sensitivity tag (e.g. "pii"). If empty and
 	// Content is non-empty, it is derived via policy.ContainsPII(Content).
 	Classification string
-	Content        string
+	// FlagReason is the injection-marker reason, if already known. If empty
+	// and Content is non-empty, it is derived via policy.InjectionMarker(Content).
+	FlagReason string
+	Content    string
 }
 
 // Check evaluates the policy AND records the resulting event to the ledger —
@@ -409,6 +535,14 @@ func Check(path string, p Policy, req CheckRequest) (Decision, error) {
 		classification = "pii"
 	}
 
+	flagReason := req.FlagReason
+	if flagReason == "" && req.Content != "" {
+		if reason, ok := policy.InjectionMarker(policy.Request{Prompt: req.Content}); ok {
+			flagReason = reason
+		}
+	}
+	flagged := flagReason != ""
+
 	var hash string
 	if req.Params != nil {
 		h, err := HashParams(req.Params)
@@ -418,6 +552,7 @@ func Check(path string, p Policy, req CheckRequest) (Decision, error) {
 			_ = Record(path, Event{
 				Agent: req.Agent, Tool: req.Tool, Resource: req.Resource,
 				Action: req.Action, Decision: Deny, Classification: classification,
+				Flagged: flagged, FlagReason: flagReason,
 				Reason: "unhashable parameters: " + err.Error(),
 			})
 			return Deny, err
@@ -430,8 +565,26 @@ func Check(path string, p Policy, req CheckRequest) (Decision, error) {
 		Agent: req.Agent, Tool: req.Tool, Resource: req.Resource,
 		Action: req.Action, Decision: decision, Reason: reason,
 		ParametersHash: hash, Classification: classification,
+		Flagged: flagged, FlagReason: flagReason,
 	})
 	return decision, err
+}
+
+// CheckAndRecordDispatch is the automatic-dispatch-path counterpart to the
+// manual `hyctl mcp check`: it loads the default policy, evaluates one head
+// call as a tool/resource access (Action=Exec), and records the decision —
+// so a real dispatch produces a ledger event without anyone invoking
+// `hyctl mcp` by hand. Default (no rules configured) policy is Allow, so this
+// only changes behavior for an install that has deliberately configured a
+// deny rule.
+func CheckAndRecordDispatch(agent, headID, resource, content string) (Decision, error) {
+	pol, err := LoadPolicy(DefaultPolicyPath())
+	if err != nil {
+		return "", err
+	}
+	return Check(DefaultPath(), pol, CheckRequest{
+		Agent: agent, Tool: headID, Resource: resource, Action: Exec, Content: content,
+	})
 }
 
 // Summary is the aggregate accountability report.
@@ -439,6 +592,7 @@ type Summary struct {
 	Total   int            `json:"total"`
 	Allowed int            `json:"allowed"`
 	Denied  int            `json:"denied"`
+	Flagged int            `json:"flagged"`
 	ByAgent map[string]int `json:"by_agent"`
 	ByTool  map[string]int `json:"by_tool"`
 }
@@ -453,6 +607,9 @@ func Summarize(events []Event) Summary {
 			s.Allowed++
 		case Deny:
 			s.Denied++
+		}
+		if e.Flagged {
+			s.Flagged++
 		}
 		s.ByAgent[e.Agent]++
 		s.ByTool[e.Tool]++
@@ -472,6 +629,50 @@ func Filter(events []Event, agent string, deniedOnly bool) []Event {
 		}
 		out = append(out, e)
 	}
+	return out
+}
+
+// HeadRisk is one head's denied/flagged activity — the "top-N riskiest
+// entity" panel a security dashboard reports on.
+type HeadRisk struct {
+	Head    string `json:"head"`
+	Denied  int    `json:"denied"`
+	Flagged int    `json:"flagged"`
+}
+
+// ByHeadRisk groups denied and flagged counts by Tool (head), sorted by
+// denied+flagged descending then Head ascending. Heads with neither are
+// omitted — this is a risk list, not a full inventory.
+func ByHeadRisk(events []Event) []HeadRisk {
+	type acc struct{ denied, flagged int }
+	byHead := map[string]*acc{}
+	for _, e := range events {
+		if e.Decision != Deny && !e.Flagged {
+			continue
+		}
+		a, ok := byHead[e.Tool]
+		if !ok {
+			a = &acc{}
+			byHead[e.Tool] = a
+		}
+		if e.Decision == Deny {
+			a.denied++
+		}
+		if e.Flagged {
+			a.flagged++
+		}
+	}
+	out := make([]HeadRisk, 0, len(byHead))
+	for head, a := range byHead {
+		out = append(out, HeadRisk{Head: head, Denied: a.denied, Flagged: a.flagged})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		ri, rj := out[i].Denied+out[i].Flagged, out[j].Denied+out[j].Flagged
+		if ri != rj {
+			return ri > rj
+		}
+		return out[i].Head < out[j].Head
+	})
 	return out
 }
 

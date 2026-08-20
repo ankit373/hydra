@@ -3,13 +3,16 @@
 package review
 
 import (
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/testutil"
+	"github.com/ankit373/hydra/internal/trust"
 )
 
 // internal/review was at 0%. Approve and Reject are the other half of the
@@ -91,6 +94,38 @@ func write(t *testing.T, path, content string) {
 	}
 }
 
+// writeLastEditFixture stands in for editor.writeLastEdit without importing
+// the editor package — same file, same shape.
+func writeLastEditFixture(t *testing.T, file, headID string) {
+	t.Helper()
+	raw, err := json.Marshal(map[string]any{"file": file, "head_id": headID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	logDir := filepath.Join(config.Dir(), "logs")
+	if err := os.MkdirAll(logDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(logDir, "last_edit.json"), raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// calibrationObservation reports N for (source, domain), or -1 if absent.
+func calibrationObservation(t *testing.T, source, domain string) float64 {
+	t.Helper()
+	cal, err := trust.New(trust.DefaultPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range cal.Report() {
+		if s.Source == source && s.Domain == domain {
+			return s.N
+		}
+	}
+	return -1
+}
+
 // ── Approve ───────────────────────────────────────────────────────────────────
 
 // Approving a non-git edit consumes the backup. Leaving it behind means the
@@ -119,6 +154,23 @@ func TestApprove_ConsumesTheBackup(t *testing.T) {
 	}
 	if string(body) != "new" {
 		t.Errorf("file = %q after approve, want the edited content", body)
+	}
+}
+
+// Approve is a real ground-truth signal for calibration — the head that
+// produced the edit gets a "correct" observation, without a human ever
+// running `hyctl trust record`.
+func TestApprove_RecordsACalibrationObservation(t *testing.T) {
+	repo := repoSandbox(t, false)
+	file := filepath.Join(repo, "src", "a.go")
+	write(t, file, "new")
+	writeLastEditFixture(t, file, "cody")
+
+	if _, err := Approve(file); err != nil {
+		t.Fatal(err)
+	}
+	if n := calibrationObservation(t, "cody", "go"); n != 1 {
+		t.Errorf("observations for cody/go = %v, want 1", n)
 	}
 }
 
@@ -167,6 +219,24 @@ func TestReject_RestoresFromTheBackup(t *testing.T) {
 	}
 	if _, err := os.Stat(backup); !os.IsNotExist(err) {
 		t.Error("the backup was left behind after being consumed")
+	}
+}
+
+// Reject is the negative ground-truth signal: the head's edit was bad enough
+// to undo, so it must reach calibration as an incorrect observation.
+func TestReject_RecordsACalibrationObservation(t *testing.T) {
+	repo := repoSandbox(t, false)
+	file := filepath.Join(repo, "src", "a.go")
+	backup := file + ".hydra-bak"
+	write(t, file, "BROKEN")
+	write(t, backup, "ORIGINAL")
+	writeLastEditFixture(t, file, "cody")
+
+	if _, err := Reject(file); err != nil {
+		t.Fatal(err)
+	}
+	if n := calibrationObservation(t, "cody", "go"); n != 1 {
+		t.Errorf("observations for cody/go = %v, want 1", n)
 	}
 }
 

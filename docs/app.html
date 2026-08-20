@@ -110,8 +110,11 @@ a:hover{text-decoration:underline;}
 .side{border-right:1px solid var(--line);padding:14px 10px;background:rgba(6,7,15,.5);}
 .side .lbl{font-family:var(--mono);font-size:9.5px;letter-spacing:1.6px;color:var(--faint);
   text-transform:uppercase;padding:0 8px 10px;}
-.nav-item{display:flex;align-items:center;gap:8px;padding:7px 9px;border-radius:6px;
-  font-family:var(--mono);font-size:12px;color:var(--dim);margin-bottom:2px;}
+.nav-item{display:flex;align-items:center;gap:8px;width:100%;padding:7px 9px;border-radius:6px;
+  font:inherit;font-family:var(--mono);font-size:12px;color:var(--dim);margin-bottom:2px;
+  background:none;border:none;text-align:left;cursor:pointer;-webkit-appearance:none;appearance:none;}
+.nav-item:hover{background:var(--line);color:var(--ink);}
+.nav-item:focus-visible{outline:2px solid var(--aqua);outline-offset:1px;}
 .nav-item i{width:5px;height:5px;border-radius:50%;background:currentColor;opacity:.5;font-style:normal;}
 .pane{padding:18px 20px;position:relative;}
 
@@ -137,6 +140,12 @@ a:hover{text-decoration:underline;}
   3%,23%  {background:rgba(0,230,195,.10);color:var(--aqua);}
   25%,100%{background:transparent;color:var(--dim);}
 }
+/* Once nav.js confirms click handling is wired, it swaps the autoplay loop
+   above for direct control: exactly one view/nav-item active, no timer. */
+.win-body.js-active .view{animation:none;}
+.win-body.js-active .view.active{opacity:1;}
+.win-body.js-active .nav-item{animation:none;}
+.win-body.js-active .nav-item.active{background:rgba(0,230,195,.10);color:var(--aqua);}
 /* Anyone who has asked the OS to stop moving things gets a static first view. */
 @media(prefers-reduced-motion:reduce){
   .view,.nav-item{animation:none;}
@@ -277,10 +286,10 @@ footer a{color:var(--dim);}
       <div class="win-body">
         <div class="side">
           <div class="lbl">Views</div>
-          <div class="nav-item"><i></i>Dashboard</div>
-          <div class="nav-item"><i></i>Fleet</div>
-          <div class="nav-item"><i></i>Session</div>
-          <div class="nav-item"><i></i>Code</div>
+          <button type="button" class="nav-item"><i></i>Dashboard</button>
+          <button type="button" class="nav-item"><i></i>Fleet</button>
+          <button type="button" class="nav-item"><i></i>Session</button>
+          <button type="button" class="nav-item"><i></i>Code</button>
         </div>
 
         <div class="pane">
@@ -504,14 +513,15 @@ footer a{color:var(--dim);}
     </div>
     <div class="row off">
       <div class="os">Linux ARM64</div>
-      <div class="meta">not built yet — <a href="https://github.com/ankit373/hydra/issues/263">#263</a></div>
+      <div class="meta">Windows ARM64 too — both build now (<a href="https://github.com/ankit373/hydra/issues/263">#263</a>), first release carrying them is the one after v1.2.0</div>
       <div class="sz">—</div>
       <div class="sum"></div>
       <div class="sum"></div>
     </div>
   </div>
   <p style="font-size:13px;color:var(--faint);margin-top:12px;font-family:var(--mono);">
-    v1.1.0 · <a href="https://github.com/ankit373/hydra/releases">all releases</a>
+    links pinned to v1.1.0 · <a href="https://github.com/ankit373/hydra/releases">all releases</a> ·
+    the command above always takes the newest
   </p>
 
   <div class="note">
@@ -564,6 +574,36 @@ footer a{color:var(--dim);}
     el.addEventListener('click',fire);
     el.addEventListener('keydown',function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();fire();}});
   });
+})();
+
+// The app preview sidebar: click a view name, see that view — matched by
+// position, since the nav-items and .view panes share the same markup order.
+(function(){
+  var winBody=document.querySelector('.stage .win-body');
+  if(!winBody)return;
+  var navItems=winBody.querySelectorAll('.nav-item');
+  var views=winBody.querySelectorAll('.view');
+  if(!navItems.length||navItems.length!==views.length)return;
+
+  function activate(index){
+    Array.prototype.forEach.call(navItems,function(item,i){
+      var on=i===index;
+      item.classList.toggle('active',on);
+      item.setAttribute('aria-pressed',on?'true':'false');
+    });
+    Array.prototype.forEach.call(views,function(view,i){
+      var on=i===index;
+      view.classList.toggle('active',on);
+      view.setAttribute('aria-hidden',on?'false':'true');
+    });
+  }
+
+  Array.prototype.forEach.call(navItems,function(item,i){
+    item.addEventListener('click',function(){activate(i);});
+  });
+
+  winBody.classList.add('js-active');
+  activate(0);
 })();
 </script>
 

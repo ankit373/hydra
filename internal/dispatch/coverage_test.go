@@ -15,6 +15,7 @@ import (
 	"github.com/ankit373/hydra/internal/budget"
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/executor"
+	"github.com/ankit373/hydra/internal/ledger"
 	"github.com/ankit373/hydra/internal/policy"
 	"github.com/ankit373/hydra/internal/pricing"
 	"github.com/ankit373/hydra/internal/provider"
@@ -178,6 +179,148 @@ func TestDispatch_FallsThroughToTheNextHead(t *testing.T) {
 	if res.Retries != 1 {
 		t.Errorf("Retries = %d, want 1 — the user is told how far the chain fell",
 			res.Retries)
+	}
+}
+
+// A ledger deny rule must actually block a real dispatch to that head, not
+// just log it — the entire point of a policy gate over an accountability log.
+func TestDispatch_LedgerDenyRuleBlocksTheHead(t *testing.T) {
+	s := testutil.NewSandbox(t)
+	writeLedgerPolicy(t, ledger.Policy{Rules: []ledger.Rule{{Tool: "denied", Decision: ledger.Deny}}})
+
+	res, err := liveDispatcher(echoHead(t, s, "denied", 95), echoHead(t, s, "ok", 90)).
+		Dispatch(context.Background(), "go", Options{})
+	if err != nil {
+		t.Fatalf("dispatch gave up instead of falling back past the denied head: %v", err)
+	}
+	if res.Head.ID != "ok" {
+		t.Errorf("answered by %q, want the fallback head — the denied one must never run", res.Head.ID)
+	}
+
+	events, err := ledger.Load(ledger.DefaultPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var sawDeny bool
+	for _, e := range events {
+		if e.Tool == "denied" && e.Decision == ledger.Deny {
+			sawDeny = true
+		}
+	}
+	if !sawDeny {
+		t.Errorf("no deny event recorded for the denied head: %+v", events)
+	}
+}
+
+// With no policy configured, the ledger's default-allow must leave dispatch
+// behavior unchanged — but it must still record the access.
+func TestDispatch_DefaultLedgerPolicyRecordsButNeverBlocks(t *testing.T) {
+	s := testutil.NewSandbox(t)
+
+	res, err := liveDispatcher(echoHead(t, s, "h1", 90)).Dispatch(context.Background(), "go", Options{})
+	if err != nil {
+		t.Fatalf("a dispatch with no ledger policy configured must succeed: %v", err)
+	}
+	if res.Head.ID != "h1" {
+		t.Errorf("Head = %q, want h1", res.Head.ID)
+	}
+
+	events, err := ledger.Load(ledger.DefaultPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var sawAllow bool
+	for _, e := range events {
+		if e.Tool == "h1" && e.Decision == ledger.Allow {
+			sawAllow = true
+		}
+	}
+	if !sawAllow {
+		t.Errorf("no allow event recorded for a real dispatch: %+v", events)
+	}
+}
+
+// A ledger rule keyed on Resource must scope by the file a dispatch acts on,
+// not just by head — the concrete "excessive agency" containment: a head may
+// be trusted in general but still denied write access to a specific path.
+func TestDispatch_LedgerResourceScopingBlocksOnlyMatchingFiles(t *testing.T) {
+	s := testutil.NewSandbox(t)
+	writeLedgerPolicy(t, ledger.Policy{Rules: []ledger.Rule{{Resource: "internal/auth/*", Decision: ledger.Deny}}})
+
+	if _, err := liveDispatcher(echoHead(t, s, "h1", 90)).
+		Dispatch(context.Background(), "go", Options{Resource: "internal/auth/token.go"}); err == nil {
+		t.Error("dispatch touching internal/auth/token.go should have been denied by the resource rule")
+	}
+
+	res, err := liveDispatcher(echoHead(t, s, "h1", 90)).
+		Dispatch(context.Background(), "go", Options{Resource: "internal/api/handler.go"})
+	if err != nil {
+		t.Fatalf("dispatch touching a non-matching resource should succeed: %v", err)
+	}
+	if res.Head.ID != "h1" {
+		t.Errorf("Head = %q, want h1", res.Head.ID)
+	}
+}
+
+// A denial-of-wallet guard: a candidate head whose estimated cost exceeds
+// MaxCostUSD must never execute — mirrors swarm's own preflight-cost pattern,
+// extended to ordinary dispatch (which had no ceiling at all before this).
+func TestDispatch_MaxCostUSDRefusesAnExpensiveHead(t *testing.T) {
+	s := testutil.NewSandbox(t)
+	dd := liveDispatcher(echoHead(t, s, "expensive", 95))
+	dd.pricing = pricing.Load()
+
+	// A prompt with real length, so the char-count/4 token estimate is
+	// nonzero — tier 1's $15/$75-per-million rate then prices well above the
+	// ceiling below.
+	prompt := strings.Repeat("x", 400)
+	if _, err := dd.Dispatch(context.Background(), prompt, Options{MaxCostUSD: 0.0000001}); err == nil {
+		t.Error("dispatch should have been refused: the only head's estimated cost exceeds the ceiling")
+	}
+
+	events, err := ledger.Load(ledger.DefaultPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var sawCostDenial bool
+	for _, e := range events {
+		if e.Decision == ledger.Deny && strings.Contains(e.Reason, "cost ceiling") {
+			sawCostDenial = true
+		}
+	}
+	if !sawCostDenial {
+		t.Errorf("no cost-ceiling denial recorded in the ledger: %+v", events)
+	}
+}
+
+// MaxCostUSD: 0 (the default) must change nothing — a ceiling that silently
+// activates itself would refuse dispatches nobody asked to bound.
+func TestDispatch_ZeroMaxCostUSDIsNoLimit(t *testing.T) {
+	s := testutil.NewSandbox(t)
+	dd := liveDispatcher(echoHead(t, s, "h1", 95))
+	dd.pricing = pricing.Load()
+
+	res, err := dd.Dispatch(context.Background(), "go", Options{MaxCostUSD: 0})
+	if err != nil {
+		t.Fatalf("MaxCostUSD: 0 should not refuse anything: %v", err)
+	}
+	if res.Head.ID != "h1" {
+		t.Errorf("Head = %q, want h1", res.Head.ID)
+	}
+}
+
+func writeLedgerPolicy(t *testing.T, p ledger.Policy) {
+	t.Helper()
+	raw, err := json.Marshal(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := ledger.DefaultPolicyPath()
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
+		t.Fatal(err)
 	}
 }
 

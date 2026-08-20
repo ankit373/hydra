@@ -199,8 +199,8 @@ func TestGetEdits_ListsAppliedEditsInOrder(t *testing.T) {
 
 	writeRun(t, "20260802T100000Z-edits",
 		runlog.Event{Kind: runlog.KindHeadSelected, Head: "h"},
-		runlog.Event{Kind: runlog.KindEdit, Agent: "/src/a.go", Ref: "000001", Detail: "+12/-3"},
-		runlog.Event{Kind: runlog.KindEdit, Agent: "/src/b.go", Ref: "000002", Detail: "+1/-0"},
+		runlog.Event{Kind: runlog.KindEdit, File: "/src/a.go", Ref: "000001", Detail: "+12/-3"},
+		runlog.Event{Kind: runlog.KindEdit, File: "/src/b.go", Ref: "000002", Detail: "+1/-0"},
 	)
 
 	edits, err := New().GetEdits("20260802T100000Z-edits")

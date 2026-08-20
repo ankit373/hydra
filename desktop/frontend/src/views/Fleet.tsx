@@ -1,8 +1,17 @@
 import { useState } from 'react'
 import type { Agent, Fleet as FleetData, Run } from '../types'
 import { ms, pct, usdExact } from '../format'
+import { RunGraph } from './RunGraph'
 
-export function Fleet({ data, onOpen }: { data: FleetData; onOpen: (runID: string) => void }) {
+export function Fleet({
+  data,
+  onOpen,
+  onStartTask,
+}: {
+  data: FleetData
+  onOpen: (runID: string) => void
+  onStartTask: () => void
+}) {
   return (
     <>
       <header className="view__head">
@@ -17,8 +26,12 @@ export function Fleet({ data, onOpen }: { data: FleetData; onOpen: (runID: strin
       {!data.hasRuns ? (
         <div className="empty">
           <p className="empty__title">No runs yet</p>
-          <p>
-            Run <code>hyctl dispatch --enum SIMPLE "…"</code> and it appears here while it works.
+          <p>Start one from here, or run it from a terminal instead:</p>
+          <button className="empty__cta" onClick={onStartTask}>
+            Start a task
+          </button>
+          <p className="empty__alt">
+            <code>hyctl dispatch --enum SIMPLE "…"</code>
           </p>
         </div>
       ) : (
@@ -41,9 +54,10 @@ function RunCard({
   groupThreshold: number
   onOpen: (runID: string) => void
 }) {
-  // Past the threshold a fan-out stops being readable as cards, so it collapses
-  // to its state counts until asked to expand. A live run starts expanded —
-  // it is the one you opened the app to watch.
+  // Past the threshold a node-link graph is a hairball, not a picture (mirrors
+  // Airflow's separate Grid view for large DAGs), so it collapses to a state
+  // heatmap until asked to expand. A live run starts expanded — it is the one
+  // you opened the app to watch.
   const large = run.allCount > groupThreshold
   const [expanded, setExpanded] = useState(!large)
 
@@ -80,17 +94,31 @@ function RunCard({
             </button>
           )}
 
-          {expanded && run.agents.length > 0 && (
-            <ul className="agents">
-              {run.agents.map((a) => (
-                <AgentRow key={a.id} agent={a} />
-              ))}
-            </ul>
-          )}
+          {/* Below the threshold: a single agent needs no graph, and 2..N draw
+              the same dagre DAG SessionGraph uses, just smaller. At/above the
+              threshold the toggle above reveals a heatmap grid instead. */}
+          {!large && <RunShape agents={run.agents} />}
+          {large && expanded && run.agents.length > 0 && <AgentGrid agents={run.agents} />}
         </>
       )}
     </section>
   )
+}
+
+/** The 0/1/2..N shape for a run below GroupThreshold. */
+function RunShape({ agents }: { agents: Agent[] }) {
+  if (agents.length === 0) return null
+  // A single node is trivially linear — the same reasoning Session.tsx uses
+  // to decide nonLinear (isNonLinear is false whenever there's nothing to
+  // branch from). Drawing a graph of one box is worse than a line of text.
+  if (agents.length === 1) {
+    return (
+      <ul className="agents">
+        <AgentRow agent={agents[0]} />
+      </ul>
+    )
+  }
+  return <RunGraph agents={agents} />
 }
 
 function StateBar({ run }: { run: Run }) {
@@ -127,4 +155,51 @@ function AgentRow({ agent }: { agent: Agent }) {
       {agent.detail && <span className="agent__detail">{agent.detail}</span>}
     </li>
   )
+}
+
+/**
+ * At/above GroupThreshold a node-link graph is a hairball, not a picture —
+ * Airflow ships a separate Grid view for exactly this reason instead of
+ * scaling its Graph view. One chip per agent, colored by state, grouped by
+ * depth: "mostly green with a cluster of red" has to read in under a second.
+ */
+function AgentGrid({ agents }: { agents: Agent[] }) {
+  const byDepth = new Map<number, Agent[]>()
+  for (const a of agents) {
+    const row = byDepth.get(a.depth)
+    if (row) row.push(a)
+    else byDepth.set(a.depth, [a])
+  }
+  const depths = [...byDepth.keys()].sort((x, y) => x - y)
+
+  return (
+    <div className="agrid">
+      {depths.map((d) => (
+        <div className="agrid__row" key={d}>
+          <span className="agrid__depth">D{d}</span>
+          <div className="agrid__chips">
+            {byDepth.get(d)!.map((a) => (
+              <span
+                key={a.id}
+                className={`chip chip--${a.state || 'pending'}`}
+                title={chipTitle(a)}
+              />
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function chipTitle(a: Agent): string {
+  return [
+    a.model || a.head || a.id,
+    a.tier > 0 ? `T${a.tier}` : null,
+    a.state,
+    a.durationMs > 0 ? ms(a.durationMs) : null,
+    a.costUsd > 0 ? usdExact(a.costUsd) : null,
+  ]
+    .filter(Boolean)
+    .join(' · ')
 }

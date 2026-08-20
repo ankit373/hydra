@@ -22,6 +22,7 @@ import (
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/cost"
 	"github.com/ankit373/hydra/internal/executor"
+	"github.com/ankit373/hydra/internal/ledger"
 	"github.com/ankit373/hydra/internal/policy"
 	"github.com/ankit373/hydra/internal/pricing"
 	"github.com/ankit373/hydra/internal/probe"
@@ -40,6 +41,18 @@ type Options struct {
 	DryRun    bool   // print selected head without executing
 	A2AFile   string // path to A2A handoff JSON; prepends structured context to prompt
 	Enum      string // enum key (e.g. "SIMPLE") for cost logging
+
+	// Resource is the file (or other resource) this dispatch acts on, if any —
+	// e.g. the path editor.Edit is about to write. Passed to the ledger so a
+	// policy rule can express least-privilege file scoping ("deny writes under
+	// internal/auth/**"), not just per-head rules. Empty means no resource
+	// concept applies (e.g. a plain text dispatch with no target file).
+	Resource string
+
+	// MaxCostUSD refuses a candidate whose estimated cost exceeds it before
+	// executing — the same preflight guard swarm.Options.MaxEstCostUSD already
+	// gives fan-out mode, extended to ordinary dispatch. 0 = no limit.
+	MaxCostUSD float64
 
 	// RunID groups every log row produced by one user-facing invocation;
 	// TaskID groups the rows for one logical task inside it. Empty means
@@ -179,6 +192,35 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 			Head: h.ID, Model: h.Name, Tier: rank.UITier(h),
 			Detail: fmt.Sprintf("candidate %d of %d", i+1, len(candidates)),
 		})
+		if decision, lerr := ledger.CheckAndRecordDispatch("hydra-dispatch", h.ID, opts.Resource, prompt); lerr == nil && decision == ledger.Deny {
+			lastErr = fmt.Errorf("denied by ledger policy: head %s", h.ID)
+			_ = rl.Append(runlog.Event{
+				Kind: runlog.KindError, TaskID: taskID,
+				Head: h.ID, Model: h.Name, Tier: rank.UITier(h),
+				Status: "denied", Detail: "denied by ledger policy",
+			})
+			continue
+		}
+		if opts.MaxCostUSD > 0 {
+			estInputTokens := len(prompt) / 4
+			estCost := d.estimateCost(rank.UITier(h), estInputTokens, estInputTokens/2)
+			if estCost > opts.MaxCostUSD {
+				lastErr = fmt.Errorf("estimated cost $%.4f for head %s exceeds limit $%.4f", estCost, h.ID, opts.MaxCostUSD)
+				_ = rl.Append(runlog.Event{
+					Kind: runlog.KindError, TaskID: taskID,
+					Head: h.ID, Model: h.Name, Tier: rank.UITier(h),
+					Status: "denied", Detail: "exceeds cost ceiling",
+				})
+				// Shares the ledger's accountability trail with policy denials
+				// (Reason distinguishes them) so `hyctl security` has one place
+				// to find every kind of refused access, cost or policy.
+				_ = ledger.Record(ledger.DefaultPath(), ledger.Event{
+					Agent: "hydra-dispatch", Tool: h.ID, Decision: ledger.Deny,
+					Reason: fmt.Sprintf("exceeds cost ceiling: estimated $%.4f > limit $%.4f", estCost, opts.MaxCostUSD),
+				})
+				continue
+			}
+		}
 		started := time.Now()
 		exec := executor.For(h)
 		resp, err := exec.Execute(ctx, executor.Request{

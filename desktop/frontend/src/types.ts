@@ -39,6 +39,17 @@ export interface Breakdown {
   wallMs: number
 }
 
+/** One (source, domain) row of the calibration leaderboard — mirrors Go's
+ * desktop/api.CalibrationRow, itself a mapping of internal/trust.Stat. */
+export interface CalibrationRow {
+  source: string
+  domain: string
+  d: number
+  se: number
+  sp: number
+  n: number
+}
+
 export interface RecentCall {
   ts: string
   model: string
@@ -59,12 +70,27 @@ export interface Dashboard {
   byTier: Breakdown[] | null
   byDay: Breakdown[] | null
   recent: RecentCall[] | null
+  /** Never null — an empty leaderboard is a real, renderable state. */
+  calibration: CalibrationRow[]
 }
 
 export interface Version {
   version: string
   commit: string
   date: string
+}
+
+export interface UpdateStatus {
+  current: string
+  /** Empty unless available is true. */
+  latest?: string
+  available: boolean
+}
+
+export interface UpgradeResult {
+  ok: boolean
+  /** Combined stdout+stderr of install-app.sh, for troubleshooting a failure. */
+  output: string
 }
 
 export interface Agent {
@@ -176,6 +202,22 @@ export interface Diff {
   removed: number
 }
 
+export interface HyctlStatus {
+  found: boolean
+  path?: string
+  version?: string
+  /** False on platforms InstallHyctl cannot drive (Windows) — see its Go doc. */
+  supported: boolean
+}
+
+export interface InstallResult {
+  ok: boolean
+  version?: string
+  /** The installer's combined stdout/stderr, shown on both success and failure. */
+  log: string
+  error?: string
+}
+
 export interface ChatReply {
   output: string
   head: string
@@ -186,4 +228,7 @@ export interface ChatReply {
   /** Links the reply into Session — "why did it say that" is one click. */
   runId: string
   error?: string
+  /** No heads discoverable at all — the dock offers to retry instead of
+   *  showing a raw dispatch error. */
+  needsProbe?: boolean
 }

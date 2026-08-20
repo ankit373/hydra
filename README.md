@@ -35,9 +35,9 @@ You have Claude Code for complex problems, Codex for code generation, Ollama run
 
 **Hydra is the control plane that sits in front of all of it.**
 
-It discovers every AI model on your machine, assigns each a capability score, routes tasks to the right model by complexity and cost, enforces PII policy so sensitive data never leaves your machine, and logs every dispatch with token counts and cost — without any manual configuration.
+It discovers every AI model on your machine, assigns each a capability score, and routes tasks not just to the cheapest one but to a *target confidence of correctness* — enforcing PII policy so sensitive data never leaves your machine, and logging every dispatch with token counts and cost, without any manual configuration.
 
-And it's growing into a **Trust Control Plane**: route not just to the cheapest model, but to a *target confidence of correctness* — sampling models adaptively and stopping the moment you're sure enough (see **Confidence Routing** under [Features](#features)).
+**Confidence routing** samples models adaptively (SPRT) and stops the moment you're sure enough, using per-model calibration built from real outcomes (see **Confidence Routing** under [Features](#features)) — and because cheap or local models handle the tasks that don't need a frontier model, this typically cuts LLM spend 70-85% along the way.
 
 ```bash
 brew install ankit373/hydra/hyctl && hyctl init
@@ -443,9 +443,11 @@ Every release builds `hyctl` for all six targets below. This table is kept in st
 
 Windows has no Homebrew; use npm, pip, `install.ps1`, or download the archive directly.
 
-The **desktop app** ships for macOS (universal), Windows x86-64 and Linux x86-64. ARM64 desktop
-builds are [not yet available](https://github.com/ankit373/hydra/issues/263) — the CLI covers ARM64
-on all three OSes.
+The **desktop app** ships for macOS (universal), Windows x86-64 and Linux x86-64. Windows ARM64 and
+Linux ARM64 build on hosted ARM runners as of [#263](https://github.com/ankit373/hydra/issues/263),
+but were added after v1.2.0 was cut — the first release carrying them is the one after v1.2.0, and
+`install-app.sh` picks them up automatically once published. The CLI has covered ARM64 on all three
+OSes all along.
 
 **From source** (Go 1.22+):
 ```bash

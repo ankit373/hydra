@@ -2,20 +2,21 @@
 # Provider-neutral, local-first control plane. The orchestrator delegates; cheaper/local heads do the work.
 
 ## What Hydra Is
-A **local-first, multi-vendor AI control plane** shipped as a Go CLI (`hyctl`). It discovers every
-model on your machine (CLI agents, API keys, local servers), scores each, and routes tasks by
-complexity/cost with automatic fallback — enforcing policy (PII/local-only) and logging spend.
+A **local-first, multi-vendor Trust Control Plane** shipped as a Go CLI (`hyctl`). It discovers
+every model on your machine (CLI agents, API keys, local servers), scores each, and routes tasks by
+complexity/cost with automatic fallback — enforcing policy (PII/local-only) and logging spend. It
+also routes to a target *confidence of correctness*: calibration (`internal/trust`) + an
+optimal-stopping SPRT ensemble (`hyctl dispatch --confidence`), graph-aware routing
+(`internal/graph`), causal A2A handoffs (`internal/a2a`), a context-entropy governor
+(`internal/entropy`), a local MCP accountability ledger (`internal/ledger`), and a pluggable
+verification-oracle interface (`internal/oracle`) — all shipped, not roadmap. See the package map
+below, and the private planning docs (`ROADMAP_TRUST_CONTROL_PLANE.md`, `HYDRA_MANIFESTO.md`,
+`SPEC_TRUST_V1.md`) for the theory/math behind it.
 
 Whatever model you drive Hydra with acts as the **orchestrator**; Antigravity (agy), API providers,
 and Ollama are interchangeable **heads**. No single vendor is privileged — the whole point is
 routing *across* providers (and *away* from expensive ones), so keep it provider-neutral.
 Never do work yourself that belongs to a lower tier. Never escalate work to yourself that a cheaper head can handle.
-
-> **Direction (roadmap, not yet shipped):** Hydra is evolving from a cost router into a *Trust
-> Control Plane* — routing to a target *confidence of correctness* (calibration + optimal-stopping
-> ensembles), graph-aware routing, and a local MCP accountability ledger. See the private planning
-> docs (`ROADMAP_TRUST_CONTROL_PLANE.md`, `HYDRA_MANIFESTO.md`, `SPEC_TRUST_V1.md`). Do not describe
-> those features as shipped until they land.
 
 ---
 
@@ -746,7 +747,8 @@ docs/robots.txt    ← AI crawler rules (only change if bot policy changes)
 |---|---|
 | New CLI subcommand (`hyctl foo`) | `index.html` (CLI tab), `llms.txt` (What It Does) |
 | New feature shipped | `index.html` (What's New section), `llms.txt` |
-| Version bump (e.g. 1.0 → 1.1) | `index.html` (badge, structured data), `llms.txt`, `sitemap.xml` lastmod |
+| Version bump (e.g. 1.0 → 1.1) | `index.html` (badge, structured data), `llms.txt`, `sitemap.xml` lastmod, **`app.html` download links** |
+| New desktop build target | `app.html` download table, `README.md` platform table, `llms.txt` platform support |
 | Pricing change (model rates) | `pricing.md`, cost comparison table in `index.html`, `llms.txt` |
 | New public page or anchor | `sitemap.xml` |
 | AI crawler policy change | `robots.txt` |
@@ -755,6 +757,10 @@ docs/robots.txt    ← AI crawler rules (only change if bot policy changes)
 - `llms.txt` must always reflect what `hyctl --help` and `hyctl stats` actually do — no aspirational features
 - `pricing.md` costs must match `hyctl pricing list` live output — never hardcode stale rates without noting the date
 - `sitemap.xml` `lastmod` must be updated whenever `index.html` changes
+- `app.html`'s direct download links are **version-pinned by necessity** — desktop asset names embed
+  their version, so GitHub's `/releases/latest/download/` shortcut cannot address them. They go stale
+  every release and must be bumped by hand; the `install-app.sh` command beside them resolves the
+  newest tag at runtime and never goes stale, which is why it is the primary path on the page
 - Do not add features to `llms.txt` that haven't shipped to `main` yet
 
 ---

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -31,6 +32,7 @@ import (
 	"github.com/ankit373/hydra/internal/optimal"
 	"github.com/ankit373/hydra/internal/oracle"
 	"github.com/ankit373/hydra/internal/parallel"
+	"github.com/ankit373/hydra/internal/policy"
 	"github.com/ankit373/hydra/internal/pricing"
 	"github.com/ankit373/hydra/internal/probe"
 	"github.com/ankit373/hydra/internal/provider"
@@ -38,10 +40,12 @@ import (
 	"github.com/ankit373/hydra/internal/review"
 	"github.com/ankit373/hydra/internal/runid"
 	"github.com/ankit373/hydra/internal/runlog"
+	"github.com/ankit373/hydra/internal/security"
 	"github.com/ankit373/hydra/internal/swarm"
 	"github.com/ankit373/hydra/internal/trust"
 	"github.com/ankit373/hydra/internal/tui"
 	"github.com/ankit373/hydra/internal/update"
+	"github.com/ankit373/hydra/internal/util"
 
 	_ "github.com/ankit373/hydra/internal/provider/agy"
 	_ "github.com/ankit373/hydra/internal/provider/cli"
@@ -90,7 +94,7 @@ func rootCmd() *cobra.Command {
 		cmdInit(), cmdProbe(), cmdStatus(), cmdTui(), cmdDispatch(),
 		cmdEdit(), cmdReview(), cmdParallel(), cmdCost(), cmdStats(),
 		cmdPricing(), cmdTrust(), cmdGraph(), cmdContext(), cmdMCP(), cmdOracle(), cmdModels(),
-		cmdVersion(),
+		cmdSecurity(), cmdVersion(), cmdUpgrade(),
 	)
 	return root
 }
@@ -113,6 +117,69 @@ func cmdVersion() *cobra.Command {
 			// Update notice is printed by main() after Execute returns.
 		},
 	}
+}
+
+// ── upgrade ───────────────────────────────────────────────────────────────────
+
+// installScriptCommand is a var so a test can override it without touching
+// the network, matching the pattern update.ReleaseURL uses for the same
+// reason.
+var installScriptCommand = "curl -fsSL https://raw.githubusercontent.com/ankit373/hydra/main/install.sh | sh"
+
+func cmdUpgrade() *cobra.Command {
+	return &cobra.Command{
+		Use:   "upgrade",
+		Short: "Upgrade hyctl to the latest release",
+		Long: "Re-runs install.sh, the same curl installer documented for a fresh " +
+			"install. It downloads the latest release, verifies its checksum, and " +
+			"mv's the new binary over the old one — a rename, not a rewrite, so " +
+			"this process keeps running on its already-loaded pages until it exits " +
+			"and the new binary takes effect on the next invocation.\n\n" +
+			"Skipped for a Homebrew install: overwriting Homebrew's symlink here " +
+			"would desync it from `brew`'s own bookkeeping. Run `brew upgrade " +
+			"hyctl` there instead — the same command the update banner already " +
+			"recommends.",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return runUpgrade(cmd.OutOrStdout())
+		},
+	}
+}
+
+// executablePath is a var so a test can point runUpgrade at a fake path
+// (e.g. one inside a fake Cellar) without depending on where the test binary
+// itself happens to live.
+var executablePath = os.Executable
+
+// runUpgrade re-runs install.sh in place. HYDRA_BIN is pointed at the
+// currently running binary's own directory so the exact binary on PATH gets
+// replaced, rather than install.sh falling back to its own default (which may
+// not be the same directory this process was launched from).
+func runUpgrade(w io.Writer) error {
+	exe, exeErr := executablePath()
+	if exeErr == nil && isHomebrewInstall(exe) {
+		fmt.Fprintln(w, dimStyle.Render("  hyctl was installed via Homebrew — run: brew upgrade hyctl"))
+		return nil
+	}
+
+	fmt.Fprintln(w, dimStyle.Render("  Running install.sh..."))
+	c := exec.Command("sh", "-c", installScriptCommand)
+	c.Stdout = w
+	c.Stderr = w
+	if exeErr == nil {
+		c.Env = append(os.Environ(), "HYDRA_BIN="+filepath.Dir(exe))
+	}
+	return c.Run()
+}
+
+// isHomebrewInstall reports whether exePath resolves into a Homebrew Cellar —
+// true for both /usr/local/Cellar and /opt/homebrew/Cellar on macOS, and
+// Linuxbrew's /home/linuxbrew/.linuxbrew/Cellar.
+func isHomebrewInstall(exePath string) bool {
+	real, err := filepath.EvalSymlinks(exePath)
+	if err != nil {
+		real = exePath
+	}
+	return strings.Contains(real, "/Cellar/")
 }
 
 // ── tui (interactive cockpit) ───────────────────────────────────────────────────
@@ -437,6 +504,7 @@ func cmdDispatch() *cobra.Command {
 		system    string
 		a2aFile   string
 		enumKey   string
+		maxCost   float64
 		// swarm flags
 		doSwarm       bool
 		swarmMode     string
@@ -445,10 +513,12 @@ func cmdDispatch() *cobra.Command {
 		swarmMaxCost  float64
 		swarmJudge    string
 		// trust / SPRT flags
-		confidence float64
-		domain     string
-		file       string
-		graphPath  string
+		confidence   float64
+		domain       string
+		file         string
+		graphPath    string
+		irreversible bool
+		production   bool
 	)
 
 	cmd := &cobra.Command{
@@ -472,14 +542,22 @@ func cmdDispatch() *cobra.Command {
 			// Mark the run live for its whole duration. Without this
 			// runlog.LiveRuns() is always empty and nothing — cockpit or desktop
 			// Fleet — can distinguish a running agent from a finished one.
-			hb := runlog.StartHeartbeat(ctx, runID, runlog.HeartbeatInterval)
-			defer hb.Stop()
+			//
+			// --dry-run executes nothing in every mode it combines with (plain,
+			// --swarm, --confidence): no head is chosen, no output produced.
+			// Logging one anyway leaves a permanent, contentless Fleet card
+			// behind on every preview — 0ms elapsed, $0.00, no agents, nothing
+			// to say why — indistinguishable from a broken reconstruction (#379).
+			if !dryRun {
+				hb := runlog.StartHeartbeat(ctx, runID, runlog.HeartbeatInterval)
+				defer hb.Stop()
 
-			rl := runlog.New(runID)
-			_ = rl.Append(runlog.Event{Kind: runlog.KindRunStarted, TaskID: taskID, Detail: promptPreview(prompt)})
-			defer func() {
-				_ = rl.Append(runlog.Event{Kind: runlog.KindRunFinished, TaskID: taskID})
-			}()
+				rl := runlog.New(runID)
+				_ = rl.Append(runlog.Event{Kind: runlog.KindRunStarted, TaskID: taskID, Detail: promptPreview(prompt)})
+				defer func() {
+					_ = rl.Append(runlog.Event{Kind: runlog.KindRunFinished, TaskID: taskID})
+				}()
+			}
 
 			d, err := dispatch.New(ctx)
 			if err != nil {
@@ -496,30 +574,42 @@ func cmdDispatch() *cobra.Command {
 			}
 
 			// ── SPRT confidence mode ──────────────────────────────────────
-			// Triggered by --confidence, or by --file (blast radius derives a
-			// target on its own). Blast radius raises the bar but never lowers a
-			// target the user explicitly asked for.
+			// Triggered by --confidence, or by any real risk signal (--file's
+			// blast radius, --irreversible, --production, or PII auto-detected
+			// in the prompt). Risk raises the bar but never lowers a target the
+			// user explicitly asked for.
 			effectiveConf := confidence
-			if file != "" {
-				g, err := graph.Load(graphPath)
-				if err != nil {
-					return err
+			touchesPII := policy.ContainsPII(policy.Request{Prompt: prompt})
+			if file != "" || irreversible || production || touchesPII {
+				radius := 1.0
+				if file != "" {
+					g, err := graph.Load(graphPath)
+					if err != nil {
+						return err
+					}
+					radius = g.BlastRadiusForFile(file)
+					// --file exists to RAISE the bar for risky files. With no graph
+					// it silently never raises, while printing a line that reads
+					// exactly like blast-radius-aware routing happened (#251). The
+					// bar itself is unchanged — only the claim about it.
+					if g.Empty() {
+						fmt.Printf("  %s\n", warnStyle.Render(
+							"graph: no graph at "+graphPath+" — radius 1.00 is a default, not a measurement"))
+					} else if !g.Knows(file) {
+						fmt.Printf("  %s\n", warnStyle.Render(
+							"graph: "+file+" is not in the graph — radius 1.00 is a default, not a measurement"))
+					}
 				}
-				task := trust.Task{Domain: domain, BlastRadius: g.BlastRadiusForFile(file)}
+				task := trust.Task{
+					Domain:       domain,
+					BlastRadius:  radius,
+					Irreversible: irreversible,
+					TouchesPII:   touchesPII,
+					Production:   production,
+				}
 				derived := trust.NewDefectModel().RequiredConfidence(task)
-				fmt.Printf("  %s blast radius %.2f → demands confidence ≥ %.1f%%\n",
-					dimStyle.Render("graph:"), task.BlastRadius, derived*100)
-				// --file exists to RAISE the bar for risky files. With no graph
-				// it silently never raises, while printing a line that reads
-				// exactly like blast-radius-aware routing happened (#251). The
-				// bar itself is unchanged — only the claim about it.
-				if g.Empty() {
-					fmt.Printf("  %s\n", warnStyle.Render(
-						"graph: no graph at "+graphPath+" — radius 1.00 is a default, not a measurement"))
-				} else if !g.Knows(file) {
-					fmt.Printf("  %s\n", warnStyle.Render(
-						"graph: "+file+" is not in the graph — radius 1.00 is a default, not a measurement"))
-				}
+				fmt.Printf("  %s blast=%.2f irreversible=%v pii=%v prod=%v → demands confidence ≥ %.1f%%\n",
+					dimStyle.Render("defect:"), task.BlastRadius, irreversible, touchesPII, production, derived*100)
 				if derived > effectiveConf {
 					effectiveConf = derived
 				}
@@ -609,14 +699,15 @@ func cmdDispatch() *cobra.Command {
 				tierHint = dispatch.EnumToTier(enumKey)
 			}
 			opts := dispatch.Options{
-				TierHint:  tierHint,
-				LocalOnly: localOnly,
-				DryRun:    dryRun,
-				System:    system,
-				A2AFile:   a2aFile,
-				Enum:      enumKey,
-				RunID:     runID,
-				TaskID:    taskID,
+				TierHint:   tierHint,
+				LocalOnly:  localOnly,
+				DryRun:     dryRun,
+				System:     system,
+				A2AFile:    a2aFile,
+				Enum:       enumKey,
+				RunID:      runID,
+				TaskID:     taskID,
+				MaxCostUSD: maxCost,
 			}
 
 			result, err := d.Dispatch(ctx, prompt, opts)
@@ -659,6 +750,7 @@ func cmdDispatch() *cobra.Command {
 	cmd.Flags().StringVarP(&system, "system", "s", "", "system prompt")
 	cmd.Flags().StringVar(&a2aFile, "a2a", "", "path to A2A handoff JSON (prepends structured context to prompt)")
 	cmd.Flags().StringVar(&enumKey, "enum", "", "routing enum key, e.g. SIMPLE — selects the tier when --tier is unset")
+	cmd.Flags().Float64Var(&maxCost, "max-cost", 0, "refuse a candidate head if its estimated cost exceeds this USD (denial-of-wallet guard)")
 	// swarm flags
 	cmd.Flags().BoolVar(&doSwarm, "swarm", false, "fan prompt out to multiple heads simultaneously")
 	cmd.Flags().StringVar(&swarmMode, "swarm-mode", "best", "response strategy: best|race|all")
@@ -671,6 +763,8 @@ func cmdDispatch() *cobra.Command {
 	cmd.Flags().StringVar(&domain, "domain", "", "calibration domain for --confidence (default: \"default\")")
 	cmd.Flags().StringVar(&file, "file", "", "target file — derives a confidence target from its blast radius, so this alone selects the SPRT ensemble")
 	cmd.Flags().StringVar(&graphPath, "graph", "graph.json", "path to the dependency graph used with --file")
+	cmd.Flags().BoolVar(&irreversible, "irreversible", false, "change cannot be cheaply undone — raises the required confidence")
+	cmd.Flags().BoolVar(&production, "production", false, "target is production — raises the required confidence")
 	return cmd
 }
 
@@ -909,8 +1003,13 @@ func cmdMCP() *cobra.Command {
 				return nil
 			}
 			for _, e := range events {
-				fmt.Printf("  %s  %-6s  %-12s %s/%s %s\n", e.TS, strings.ToUpper(string(e.Decision)),
-					e.Agent, e.Tool, e.Resource, dimStyle.Render(string(e.Action)))
+				line := fmt.Sprintf("  %s  %-6s  %-12s %s/%s %s", e.TS, strings.ToUpper(string(e.Decision)),
+					util.SafeTerminal(e.Agent), util.SafeTerminal(e.Tool), util.SafeTerminal(e.Resource),
+					dimStyle.Render(string(e.Action)))
+				if e.Flagged {
+					line += dimStyle.Render(fmt.Sprintf("  [flagged: %s]", util.SafeTerminal(e.FlagReason)))
+				}
+				fmt.Println(line)
 			}
 			return nil
 		},
@@ -932,7 +1031,7 @@ func cmdMCP() *cobra.Command {
 			if repJSON {
 				return json.NewEncoder(os.Stdout).Encode(s)
 			}
-			fmt.Printf("\n  ledger events   %d  (%d allowed · %d denied)\n", s.Total, s.Allowed, s.Denied)
+			fmt.Printf("\n  ledger events   %d  (%d allowed · %d denied · %d flagged)\n", s.Total, s.Allowed, s.Denied, s.Flagged)
 			if len(s.ByAgent) > 0 {
 				fmt.Println("  by agent:")
 				for _, kc := range ledger.SortedCounts(s.ByAgent) {
@@ -951,8 +1050,181 @@ func cmdMCP() *cobra.Command {
 	}
 	report.Flags().BoolVar(&repJSON, "json", false, "machine-readable JSON output")
 
-	cmd.AddCommand(check, record, verify, logCmd, report)
+	// verify-chain: confirm the ledger's hash chain hasn't been tampered with.
+	var chainJSON bool
+	verifyChain := &cobra.Command{
+		Use:   "verify-chain",
+		Short: "Confirm the ledger's hash chain is intact (tamper-evidence)",
+		RunE: func(_ *cobra.Command, _ []string) error {
+			res, err := ledger.VerifyChain(ledger.DefaultPath())
+			if err != nil {
+				return err
+			}
+			if chainJSON {
+				return json.NewEncoder(os.Stdout).Encode(res)
+			}
+			if res.Intact {
+				fmt.Printf("  %s  chain intact — %d chained event(s), %d unchained (pre-dates this feature)\n",
+					okStyle.Render("OK"), res.Chained, res.Unchained)
+				return nil
+			}
+			fmt.Printf("  %s  chain broken at event index %d — the ledger was modified after recording\n",
+				strings.ToUpper(string(ledger.Deny)), res.BrokenAt)
+			os.Exit(3) // non-zero so callers can gate on it
+			return nil
+		},
+	}
+	verifyChain.Flags().BoolVar(&chainJSON, "json", false, "machine-readable JSON output")
+
+	cmd.AddCommand(check, record, verify, logCmd, report, verifyChain)
 	return cmd
+}
+
+// cmdSecurity is the security posture dashboard: ledger accountability,
+// per-head risk, and a short list of honest checks — never a manufactured
+// score, only what's actually configured and observed.
+func cmdSecurity() *cobra.Command {
+	var jsonOut bool
+	cmd := &cobra.Command{
+		Use:   "security",
+		Short: "Security posture dashboard: ledger accountability, risk by head, and honest checks",
+		RunE: func(_ *cobra.Command, _ []string) error {
+			heads := probe.Run(context.Background()).Heads
+			rep, err := security.Build(heads)
+			if err != nil {
+				return err
+			}
+			if jsonOut {
+				return json.NewEncoder(os.Stdout).Encode(rep)
+			}
+			printSecurityReport(rep)
+			return nil
+		},
+	}
+	cmd.Flags().BoolVar(&jsonOut, "json", false, "machine-readable JSON output")
+	return cmd
+}
+
+func printSecurityReport(r *security.Report) {
+	fmt.Println()
+	printCoverageHeadline(r)
+
+	if !r.HasData {
+		fmt.Println(dimStyle.Render("  no ledger events yet — nothing has dispatched through hyctl on this machine"))
+	} else {
+		fmt.Printf("  %s  %d  (%d allowed · %d denied · %d flagged)\n",
+			cortexStyle.Render("ledger events"), r.Ledger.Total, r.Ledger.Allowed, r.Ledger.Denied, r.Ledger.Flagged)
+	}
+
+	if len(r.ByHead) > 0 {
+		fmt.Println()
+		fmt.Println(dimStyle.Render("  " + strings.Repeat("─", 48)))
+		fmt.Printf("  %-24s %8s %8s\n", "HEAD", "DENIED", "FLAGGED")
+		fmt.Println(dimStyle.Render("  " + strings.Repeat("─", 48)))
+		for _, h := range r.ByHead {
+			fmt.Printf("  %-24.24s %8d %8d\n", util.SafeTerminal(h.Head), h.Denied, h.Flagged)
+		}
+	}
+
+	fmt.Println()
+	fmt.Println(dimStyle.Render("  " + strings.Repeat("─", 48)))
+	fmt.Println("  checks:")
+	for _, c := range r.Checks {
+		status := c.Status
+		if strings.Contains(strings.ToLower(status), "broken") {
+			status = warnStyle.Render(status)
+		} else if status == "intact" || strings.HasSuffix(status, "refusal(s)") {
+			status = okStyle.Render(status)
+		}
+		fmt.Printf("    %-26s %s\n", c.Name, status)
+		fmt.Println(dimStyle.Render("      " + util.SafeTerminal(c.Detail)))
+	}
+
+	if len(r.Recommendations) > 0 {
+		fmt.Println()
+		fmt.Println(dimStyle.Render("  " + strings.Repeat("─", 48)))
+		fmt.Println(warnStyle.Render("  recommendations (next hardening backlog):"))
+		for _, rec := range r.Recommendations {
+			fmt.Printf("    - %s\n", rec)
+		}
+	}
+	fmt.Println()
+}
+
+// printCoverageHeadline is the KPI tile: coverage against the OWASP LLM Top
+// 10, never presented as "you are X% secure" — always labeled against the
+// named taxonomy it measures. A broken ledger chain hard-overrides it,
+// since none of the other evidence can be trusted once the ledger itself
+// might have been tampered with.
+func printCoverageHeadline(r *security.Report) {
+	if !r.IntegrityIntact {
+		fmt.Printf("  %s  %s\n", cortexStyle.Render("OWASP LLM Top-10 coverage"),
+			warnStyle.Render("INTEGRITY COMPROMISED — ledger tampering detected, score withheld"))
+		fmt.Println()
+		return
+	}
+	cov := r.Coverage
+	pct := fmt.Sprintf("%.0f%%", cov.PercentCovered)
+	fmt.Printf("  %s  %s  (%d/%d applicable categories)\n",
+		cortexStyle.Render("OWASP LLM Top-10 coverage"), okStyle.Render(pct), cov.Covered, cov.Applicable)
+	if r.Trend.Available {
+		arrow := "→"
+		style := dimStyle
+		if r.Trend.DeltaPct > 0 {
+			arrow, style = "↑", okStyle
+		} else if r.Trend.DeltaPct < 0 {
+			arrow, style = "↓", warnStyle
+		}
+		fmt.Println(style.Render(fmt.Sprintf("    %s %+.0f%% since %s (was %.0f%%)",
+			arrow, r.Trend.DeltaPct, relativeTime(r.Trend.FirstTS), r.Trend.FirstPct)))
+	}
+	fmt.Println(dimStyle.Render("  " + strings.Repeat("─", 48)))
+	for _, c := range cov.Categories {
+		if c.Status == security.NotApplicable {
+			continue
+		}
+		label := string(c.Status)
+		switch c.Status {
+		case security.Enforced:
+			label = okStyle.Render(label)
+		case security.Gap:
+			label = warnStyle.Render(label)
+		}
+		fmt.Printf("    %-6s %-32s %s\n", c.ID, c.Name, label)
+	}
+	fmt.Println()
+}
+
+// relativeTime renders an RFC3339 timestamp as a human-relative duration
+// ("3 hours ago"). Falls back to the raw string if it doesn't parse — a
+// display glitch, never a crash, over a timestamp some future format change
+// didn't anticipate.
+func relativeTime(ts string) string {
+	t, err := time.Parse(time.RFC3339, ts)
+	if err != nil {
+		return ts
+	}
+	d := time.Since(t)
+	switch {
+	case d < time.Minute:
+		return "just now"
+	case d < time.Hour:
+		n := int(d / time.Minute)
+		return fmt.Sprintf("%d minute%s ago", n, plural(n))
+	case d < 24*time.Hour:
+		n := int(d / time.Hour)
+		return fmt.Sprintf("%d hour%s ago", n, plural(n))
+	default:
+		n := int(d / (24 * time.Hour))
+		return fmt.Sprintf("%d day%s ago", n, plural(n))
+	}
+}
+
+func plural(n int) string {
+	if n == 1 {
+		return ""
+	}
+	return "s"
 }
 
 // cmdModels manages the runtime-extensible model capability registry.
@@ -1265,7 +1537,45 @@ func cmdGraph() *cobra.Command {
 	parallelCmd.Flags().BoolVar(&parJSON, "json", false, "machine-readable JSON output")
 	parallelCmd.Flags().Float64Var(&serial, "serial", optimal.DefaultSerialFraction, "serial (non-parallelizable) work fraction s")
 
-	cmd.AddCommand(blast, parallelCmd)
+	var genOut, genExclude string
+	generate := &cobra.Command{
+		Use:   "generate [path]",
+		Short: "Generate graph.json from a Go module's package-import graph (go list -json)",
+		Long: "Generate graph.json from a Go module's package-import graph via `go list -json`.\n" +
+			"Go package granularity only — not a general tree-sitter indexer. For other\n" +
+			"languages, use Graphify or any indexer that produces the same {nodes,edges} schema.",
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			dir := "."
+			if len(args) == 1 {
+				dir = args[0]
+			}
+			var exclude []string
+			for _, e := range strings.Split(genExclude, ",") {
+				if e = strings.TrimSpace(e); e != "" {
+					exclude = append(exclude, e)
+				}
+			}
+			doc, err := graph.GenerateGo(dir, exclude)
+			if err != nil {
+				return err
+			}
+			raw, err := json.MarshalIndent(doc, "", "  ")
+			if err != nil {
+				return err
+			}
+			if err := os.WriteFile(genOut, raw, 0o644); err != nil {
+				return err
+			}
+			fmt.Printf("  %s %d nodes, %d edges → %s\n",
+				cortexStyle.Render("graph:"), len(doc.Nodes), len(doc.Edges), genOut)
+			return nil
+		},
+	}
+	generate.Flags().StringVar(&genOut, "out", "graph.json", "output path")
+	generate.Flags().StringVar(&genExclude, "exclude", "", "comma-separated module-relative path prefixes to skip (e.g. bench,cmd/specstest)")
+
+	cmd.AddCommand(blast, parallelCmd, generate)
 	return cmd
 }
 
@@ -2171,6 +2481,15 @@ func cmdTrustCalibration() *cobra.Command {
 				fmt.Printf("  %-28.28s %-10.10s %6.0f %7.3f %7.3f %8.3f\n",
 					s.Source, s.Domain, s.N, s.Se, s.Sp, s.D)
 			}
+			// A family whose members have converged on effectively one vote is a
+			// coordination risk the se/sp table above cannot show — two "sources"
+			// that always agree are one opinion, not confirming evidence.
+			for _, fam := range trust.KnownFamilies(trust.DefaultCoAgreementPath()) {
+				if j, warn := trust.FalseConsensusWarning(trust.DefaultCoAgreementPath(), fam); warn {
+					fmt.Printf("\n  %s\n", warnStyle.Render(fmt.Sprintf(
+						"false-consensus warning: %q's members measured J=%.2f — effectively one vote, not independent confirmation", fam, j)))
+				}
+			}
 			fmt.Println()
 			return nil
 		},
@@ -2265,6 +2584,7 @@ var (
 	cortexStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
 	dimStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 	warnStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
+	okStyle     = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("42"))
 )
 
 // promptPreview shortens a prompt for a log Detail field. Run events carry a

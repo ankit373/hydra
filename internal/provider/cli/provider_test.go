@@ -58,6 +58,26 @@ func TestDiscover_FindsPlantedBinaryOnEveryOS(t *testing.T) {
 	}
 }
 
+// A discovered head must carry whether its capability entry is embedded or
+// user-added (Meta["model_source"]) — the "managed vs. discovered" split a
+// security dashboard reports on, otherwise invisible once discovery discards
+// the capabilities.Entry it came from.
+func TestDiscover_StampsModelSource(t *testing.T) {
+	s := testutil.NewSandbox(t)
+	s.FakeBinary(t, "claude")
+
+	heads, err := (&Provider{}).Discover(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(heads) != 1 {
+		t.Fatalf("got %d heads, want 1: %+v", len(heads), heads)
+	}
+	if got := heads[0].Meta["model_source"]; got != "builtin" {
+		t.Errorf("Meta[model_source] = %q, want builtin — claude is in the embedded catalog", got)
+	}
+}
+
 // LocalOnly drives tier-10 placement in rank.UITier (#248) and the --local
 // routing gate. Getting it wrong sends work that must stay local to a paid API.
 func TestDiscover_LocalOnlyMatchesTheTable(t *testing.T) {

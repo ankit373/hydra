@@ -10,11 +10,6 @@ import (
 	"strings"
 )
 
-// correlationDiscount caps the evidence from a model family that has already
-// voted: two heads backed by the same base model are not independent, so a
-// repeat vote counts for half. Prevents false agreement from inflating Λ.
-const correlationDiscount = 0.5
-
 // Target configures an SPRT run. The domain used for calibration lookups comes
 // from the Task, not here, so there is exactly one source of truth for it.
 type Target struct {
@@ -123,6 +118,7 @@ func Run(ctx context.Context, task Task, sources []Source, exec Executor, cal *C
 	var lambda float64
 	candidate := ""
 	familySeen := map[string]bool{}
+	var seenIDs, seenFamilies, seenTexts []string
 
 	for _, src := range order {
 		cost := src.EstCostUSD
@@ -138,6 +134,9 @@ func Run(ctx context.Context, task Task, sources []Source, exec Executor, cal *C
 		}
 		res.SpentUSD += cost
 		res.Samples++
+		seenIDs = append(seenIDs, src.ID)
+		seenFamilies = append(seenFamilies, src.Family)
+		seenTexts = append(seenTexts, ans.Text)
 
 		if candidate == "" {
 			candidate = ans.Text // first answer seeds the candidate
@@ -146,7 +145,7 @@ func Run(ctx context.Context, task Task, sources []Source, exec Executor, cal *C
 
 		llr := cal.LLR(src.ID, task.Domain, agreed)
 		if src.Family != "" && familySeen[src.Family] {
-			llr *= correlationDiscount
+			llr *= FamilyDiscount(DefaultCoAgreementPath(), src.Family)
 		}
 		familySeen[src.Family] = true
 
@@ -171,6 +170,8 @@ func Run(ctx context.Context, task Task, sources []Source, exec Executor, cal *C
 			res.Ledger[len(res.Ledger)-1].LambdaAfter = lambda
 		}
 	}
+
+	RecordCoAgreement(DefaultCoAgreementPath(), task.Domain, seenIDs, seenFamilies, seenTexts, cfg.equiv)
 
 	res.Candidate = candidate
 	res.Lambda = lambda

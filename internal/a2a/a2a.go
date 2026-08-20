@@ -10,6 +10,8 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+
+	"github.com/ankit373/hydra/internal/util"
 )
 
 // Clock is a vector clock: agent ID → event counter.
@@ -164,9 +166,9 @@ func (h *Handoff) PromptBlock(task string) string {
 	}
 	return "A2A HANDOFF from: " + h.From +
 		"\nFiles in scope: " + files +
-		"\nConventions:\n" + h.Conventions +
-		"\nPrior output:\n" + h.PriorOutput +
-		"\nContext:\n" + h.Context +
+		"\n\n" + util.WrapUntrusted("CONVENTIONS", h.Conventions) +
+		"\n\n" + util.WrapUntrusted("PRIOR OUTPUT", h.PriorOutput) +
+		"\n\n" + util.WrapUntrusted("CONTEXT", h.Context) +
 		"\n\nTASK:\n" + task
 }
 

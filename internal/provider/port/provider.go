@@ -139,6 +139,7 @@ func (s *ollamaService) probe(ctx context.Context, caps *capabilities.DB) ([]pro
 			CapScore:  caps.ScoreOllama(m.Name),
 			LocalOnly: true,
 			AuthReady: true,
+			Meta:      map[string]string{"model_source": caps.SourceOllama(m.Name)},
 		})
 	}
 	return heads, nil
@@ -190,6 +191,7 @@ func (s *lmStudioService) probe(ctx context.Context, caps *capabilities.DB) ([]p
 			CapScore:  caps.ScoreOllama(m.ID),
 			LocalOnly: true,
 			AuthReady: true,
+			Meta:      map[string]string{"model_source": caps.SourceOllama(m.ID)},
 		})
 	}
 	return heads, nil

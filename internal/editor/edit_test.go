@@ -13,8 +13,10 @@ import (
 	"testing"
 
 	"github.com/ankit373/hydra/internal/config"
+	"github.com/ankit373/hydra/internal/ledger"
 	"github.com/ankit373/hydra/internal/runlog"
 	"github.com/ankit373/hydra/internal/testutil"
+	"github.com/ankit373/hydra/internal/trust"
 
 	// Providers register themselves in init(), and this package does not import
 	// them — without these blanks provider.All() is empty in the test binary and
@@ -134,6 +136,58 @@ func TestEdit_WritesTheContentAndRecordsTheEdit(t *testing.T) {
 	}
 	if !sawEdit {
 		t.Errorf("no edit event in the run log: %+v", events)
+	}
+}
+
+// A ledger rule keyed on a file glob must block an edit to a matching path —
+// the concrete "excessive agency" containment: a head may be trusted in
+// general but still denied write access to a specific subtree.
+func TestEdit_LedgerResourceRuleBlocksAMatchingFile(t *testing.T) {
+	repo := editSandbox(t, marked("package main\n\nfunc main() {}"))
+	writeLedgerPolicy(t, ledger.Policy{Rules: []ledger.Rule{{Resource: "**/secrets/**", Decision: ledger.Deny}}})
+
+	blocked := filepath.Join(repo, "secrets", "key.go")
+	if err := os.MkdirAll(filepath.Dir(blocked), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(blocked, []byte("package secrets\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := Edit(context.Background(), Request{
+		File: blocked, Enum: "MODERATE", Prompt: "add a helper",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Status != "fail" {
+		t.Errorf("status = %q, want fail — the resource rule should have blocked this edit", res.Status)
+	}
+
+	allowed := filepath.Join(repo, "main.go")
+	res, err = Edit(context.Background(), Request{
+		File: allowed, Enum: "MODERATE", Prompt: "add an empty main",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Status != "ok" {
+		t.Errorf("status = %q, want ok — a non-matching path must not be blocked: %q", res.Status, res.Error)
+	}
+}
+
+func writeLedgerPolicy(t *testing.T, p ledger.Policy) {
+	t.Helper()
+	raw, err := json.Marshal(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := ledger.DefaultPolicyPath()
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -274,6 +328,51 @@ func TestEdit_PassingValidationKeepsTheEdit(t *testing.T) {
 	}
 	if raw, _ := os.ReadFile(file); !strings.Contains(string(raw), "validated") {
 		t.Errorf("the edit was rolled back despite passing: %q", raw)
+	}
+	if res.Head != "cody" {
+		t.Errorf("Head = %q, want cody", res.Head)
+	}
+}
+
+// A validator's exit code is real ground truth — it must reach calibration
+// automatically, both when it passes and when it fails, without a human
+// ever running `hyctl trust record`.
+func TestEdit_ValidationOutcomeReachesCalibration(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the workspace validator template is a POSIX command line here")
+	}
+	for _, tt := range []struct {
+		name      string
+		validator string
+	}{
+		{"pass", "/usr/bin/true {file}"},
+		{"fail", "/usr/bin/false {file}"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := editSandbox(t, marked("content"))
+			writeWorkspaceYAML(t, repo, tt.validator)
+			file := filepath.Join(repo, "a.go")
+			if err := os.WriteFile(file, []byte("package main\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+
+			if _, err := Edit(context.Background(), Request{
+				File: file, Enum: "MODERATE", Prompt: "x", Validate: true,
+			}); err != nil {
+				t.Fatal(err)
+			}
+
+			cal, err := trust.New(trust.DefaultPath())
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, s := range cal.Report() {
+				if s.Source == "cody" && s.Domain == "go" && s.N == 1 {
+					return
+				}
+			}
+			t.Errorf("no calibration observation recorded for cody/go: %+v", cal.Report())
+		})
 	}
 }
 
@@ -482,7 +581,7 @@ func TestDiffStats_CountsFromTheBackupWhenGitIsUnavailable(t *testing.T) {
 func TestWriteLastEdit_IsReadableByReview(t *testing.T) {
 	testutil.NewSandbox(t)
 
-	if err := writeLastEdit("/abs/file.go", "SIMPLE", "ws", 3, 1); err != nil {
+	if err := writeLastEdit("/abs/file.go", "SIMPLE", "ws", "claude", 3, 1); err != nil {
 		t.Fatal(err)
 	}
 	raw, err := os.ReadFile(filepath.Join(config.Dir(), "logs", "last_edit.json"))
@@ -499,6 +598,10 @@ func TestWriteLastEdit_IsReadableByReview(t *testing.T) {
 	}
 	if got["lines_added"] != float64(3) || got["lines_removed"] != float64(1) {
 		t.Errorf("line counts = %v/%v", got["lines_added"], got["lines_removed"])
+	}
+	// review reads this back to attribute an approve/reject to the right head.
+	if got["head_id"] != "claude" {
+		t.Errorf("last_edit.json head_id = %v, want claude", got["head_id"])
 	}
 }
 
@@ -789,7 +892,7 @@ func TestWriteLastEdit_UnwritableLogDirIsAnError(t *testing.T) {
 	if err := os.WriteFile(config.Dir(), []byte("not a dir"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := writeLastEdit("/abs/f.go", "SIMPLE", "ws", 1, 0); err == nil {
+	if err := writeLastEdit("/abs/f.go", "SIMPLE", "ws", "claude", 1, 0); err == nil {
 		t.Error("writeLastEdit reported success with an uncreatable logs directory")
 	}
 }

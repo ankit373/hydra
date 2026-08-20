@@ -18,6 +18,7 @@ import (
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/diff"
 	"github.com/ankit373/hydra/internal/dispatch"
+	"github.com/ankit373/hydra/internal/trust"
 	"github.com/ankit373/hydra/internal/workspace"
 )
 
@@ -172,6 +173,7 @@ func Approve(file string) (*ApproveResult, error) {
 		}
 	}
 
+	recordReviewOutcome(file, true)
 	return &ApproveResult{Status: "approved", File: file}, nil
 }
 
@@ -190,6 +192,7 @@ func Reject(file string) (*RejectResult, error) {
 		resolved, _ = reg.Resolve(file)
 	}
 
+	var result *RejectResult
 	gitRoot := resolved.GitRoot
 	if gitUsable(gitRoot) {
 		err := exec.Command("git", "-C", gitRoot, "ls-files", "--error-unmatch", file).Run()
@@ -197,29 +200,36 @@ func Reject(file string) (*RejectResult, error) {
 			if err := exec.Command("git", "-C", gitRoot, "checkout", "--", file).Run(); err != nil {
 				return nil, fmt.Errorf("git checkout failed: %w", err)
 			}
-			return &RejectResult{Status: "rejected", File: file, Method: "git_checkout"}, nil
-		}
-		// Only a clean exit status of 1 means "this path is not tracked". Any
-		// other failure — git missing, .git present but not a repository, a
-		// permissions error — means we do not know, and deleting a file we
-		// cannot prove is disposable is unrecoverable data loss. Before this,
-		// every one of those took the branch below and removed the file.
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 && fileExists(file) {
-			_ = os.Remove(file)
-			return &RejectResult{Status: "rejected", File: file, Method: "rm_untracked"}, nil
+			result = &RejectResult{Status: "rejected", File: file, Method: "git_checkout"}
+		} else {
+			// Only a clean exit status of 1 means "this path is not tracked". Any
+			// other failure — git missing, .git present but not a repository, a
+			// permissions error — means we do not know, and deleting a file we
+			// cannot prove is disposable is unrecoverable data loss. Before this,
+			// every one of those took the branch below and removed the file.
+			var exitErr *exec.ExitError
+			if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 && fileExists(file) {
+				_ = os.Remove(file)
+				result = &RejectResult{Status: "rejected", File: file, Method: "rm_untracked"}
+			}
 		}
 	}
 
-	backup := file + ".hydra-bak"
-	if fileExists(backup) {
-		if err := os.Rename(backup, file); err != nil {
-			return nil, fmt.Errorf("backup restore failed: %w", err)
+	if result == nil {
+		backup := file + ".hydra-bak"
+		if fileExists(backup) {
+			if err := os.Rename(backup, file); err != nil {
+				return nil, fmt.Errorf("backup restore failed: %w", err)
+			}
+			result = &RejectResult{Status: "rejected", File: file, Method: "backup_restore"}
 		}
-		return &RejectResult{Status: "rejected", File: file, Method: "backup_restore"}, nil
 	}
 
-	return nil, fmt.Errorf("nothing to roll back for %s", file)
+	if result == nil {
+		return nil, fmt.Errorf("nothing to roll back for %s", file)
+	}
+	recordReviewOutcome(file, false)
+	return result, nil
 }
 
 // QA sends a file's diff to a Hydra Head for LLM review.
@@ -371,4 +381,41 @@ func filesFromLogs() []string {
 	}
 
 	return files
+}
+
+// headIDForLastEdit returns the head that produced file's last edit, or ""
+// if last_edit.json's own file doesn't match — its single slot can only
+// answer for whichever file was edited most recently.
+func headIDForLastEdit(file string) string {
+	raw, err := os.ReadFile(filepath.Join(config.Dir(), "logs", "last_edit.json"))
+	if err != nil {
+		return ""
+	}
+	var e struct {
+		File   string `json:"file"`
+		HeadID string `json:"head_id"`
+	}
+	if json.Unmarshal(raw, &e) != nil || e.File != file {
+		return ""
+	}
+	return e.HeadID
+}
+
+// recordReviewOutcome is a best-effort calibration observation: a human's
+// approve/reject is stronger ground truth than editor's own syntax-check.
+func recordReviewOutcome(file string, correct bool) {
+	headID := headIDForLastEdit(file)
+	if headID == "" {
+		return
+	}
+	cal, err := trust.New(trust.DefaultPath())
+	if err != nil {
+		return
+	}
+	outcome := trust.OutcomeIncorrect
+	if correct {
+		outcome = trust.OutcomeCorrect
+	}
+	domain := strings.TrimPrefix(filepath.Ext(file), ".")
+	_ = cal.Update(headID, domain, true, outcome)
 }

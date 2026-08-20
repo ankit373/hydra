@@ -72,6 +72,137 @@ func populated(t *testing.T) *testutil.Sandbox {
 	return s
 }
 
+// ── mcp ───────────────────────────────────────────────────────────────────────
+
+// A flagged event (heuristic prompt-injection marker matched) must be visible
+// in both `mcp log` and `mcp report` — otherwise the signal lands in the
+// JSONL and is invisible everywhere an operator actually looks.
+func TestCLI_MCPLogAndReport_SurfaceFlaggedEvents(t *testing.T) {
+	testutil.NewSandbox(t)
+	now := time.Now().UTC().Format(time.RFC3339)
+	seed(t, "mcp_ledger.jsonl", strings.Join([]string{
+		`{"ts":"` + now + `","agent":"hydra-dispatch","tool":"claude","resource":"","action":"exec","decision":"allow","flagged":true,"flag_reason":"ignore previous instructions"}`,
+		`{"ts":"` + now + `","agent":"hydra-dispatch","tool":"claude","resource":"","action":"exec","decision":"allow"}`,
+	}, "\n")+"\n")
+
+	logOut, logCobraOut, err := run(t, "mcp", "log")
+	if err != nil {
+		t.Fatalf("`hyctl mcp log` failed: %v", err)
+	}
+	combined := logOut + logCobraOut
+	if !strings.Contains(combined, "flagged") || !strings.Contains(combined, "ignore previous instructions") {
+		t.Errorf("`mcp log` does not surface the flagged event:\n%s", combined)
+	}
+
+	repOut, repCobraOut, err := run(t, "mcp", "report", "--json")
+	if err != nil {
+		t.Fatalf("`hyctl mcp report --json` failed: %v", err)
+	}
+	var s struct {
+		Flagged int `json:"flagged"`
+	}
+	if err := json.Unmarshal([]byte(repOut+repCobraOut), &s); err != nil {
+		t.Fatalf("report --json did not parse: %v\n%s", err, repOut+repCobraOut)
+	}
+	if s.Flagged != 1 {
+		t.Errorf("report flagged count = %d, want 1", s.Flagged)
+	}
+}
+
+// `hyctl mcp verify-chain` is the tamper-evidence check over the ledger —
+// it must report intact after ordinary recording and confirm gate-ability
+// (a non-zero exit) when it isn't, matching the other ledger verify commands.
+func TestCLI_MCPVerifyChain_ReportsIntactAfterOrdinaryRecording(t *testing.T) {
+	testutil.NewSandbox(t)
+
+	for i := 0; i < 3; i++ {
+		if _, cobraOut, err := run(t, "mcp", "record", "--agent", "a", "--tool", "t", "--decision", "allow"); err != nil {
+			t.Fatalf("`hyctl mcp record` failed: %v (%s)", err, cobraOut)
+		}
+	}
+
+	out, cobraOut, err := run(t, "mcp", "verify-chain")
+	if err != nil {
+		t.Fatalf("`hyctl mcp verify-chain` failed on an untampered ledger: %v", err)
+	}
+	combined := out + cobraOut
+	if !strings.Contains(strings.ToLower(combined), "intact") {
+		t.Errorf("verify-chain did not report intact:\n%s", combined)
+	}
+}
+
+// `hyctl security` is the security posture dashboard — it must run clean on
+// an empty machine (no ledger yet) and surface real data once the ledger has
+// events, never panicking on either state.
+func TestCLI_Security_HandlesEmptyAndSeededLedger(t *testing.T) {
+	testutil.NewSandbox(t)
+
+	emptyOut, emptyCobraOut, err := run(t, "security")
+	if err != nil {
+		t.Fatalf("`hyctl security` failed on an empty machine: %v", err)
+	}
+	if !strings.Contains(strings.ToLower(emptyOut+emptyCobraOut), "no ledger events") {
+		t.Errorf("`security` on an empty machine should say so plainly:\n%s", emptyOut+emptyCobraOut)
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	seed(t, "mcp_ledger.jsonl", strings.Join([]string{
+		`{"ts":"` + now + `","agent":"hydra-dispatch","tool":"claude","resource":"","action":"exec","decision":"allow"}`,
+		`{"ts":"` + now + `","agent":"hydra-dispatch","tool":"sketchy","resource":"","action":"exec","decision":"deny","reason":"denied by ledger policy"}`,
+	}, "\n")+"\n")
+
+	out, cobraOut, err := run(t, "security", "--json")
+	if err != nil {
+		t.Fatalf("`hyctl security --json` failed: %v", err)
+	}
+	var rep struct {
+		Ledger struct{ Total, Denied int } `json:"ledger"`
+		ByHead []struct {
+			Head   string `json:"head"`
+			Denied int    `json:"denied"`
+		} `json:"byHead"`
+		IntegrityIntact bool `json:"integrityIntact"`
+		Coverage        struct {
+			Applicable     int     `json:"applicable"`
+			Covered        int     `json:"covered"`
+			PercentCovered float64 `json:"percentCovered"`
+		} `json:"coverage"`
+		Recommendations []string `json:"recommendations"`
+	}
+	if err := json.Unmarshal([]byte(out+cobraOut), &rep); err != nil {
+		t.Fatalf("security --json did not parse: %v\n%s", err, out+cobraOut)
+	}
+	if rep.Ledger.Total != 2 || rep.Ledger.Denied != 1 {
+		t.Errorf("Ledger = %+v, want Total=2 Denied=1", rep.Ledger)
+	}
+	if len(rep.ByHead) != 1 || rep.ByHead[0].Head != "sketchy" {
+		t.Errorf("ByHead = %+v, want exactly the denied head", rep.ByHead)
+	}
+	if !rep.IntegrityIntact {
+		t.Error("IntegrityIntact = false on an untampered ledger")
+	}
+	if rep.Coverage.Applicable != 8 {
+		t.Errorf("Coverage.Applicable = %d, want 8", rep.Coverage.Applicable)
+	}
+	if len(rep.Recommendations) == 0 {
+		t.Error("Recommendations is empty despite real coverage gaps existing")
+	}
+
+	// Text output must show the headline coverage score and the recommendations
+	// section — the KPI/feedback-loop surface, not just the raw tables.
+	textOut, textCobraOut, err := run(t, "security")
+	if err != nil {
+		t.Fatalf("`hyctl security` failed: %v", err)
+	}
+	combined := textOut + textCobraOut
+	if !strings.Contains(combined, "OWASP LLM Top-10 coverage") {
+		t.Errorf("text output missing the coverage headline:\n%s", combined)
+	}
+	if !strings.Contains(combined, "recommendations") {
+		t.Errorf("text output missing the recommendations section:\n%s", combined)
+	}
+}
+
 // ── trust ─────────────────────────────────────────────────────────────────────
 
 // `hyctl trust explain` is the audit trail behind a confidence number: it must
@@ -226,6 +357,51 @@ func TestCLI_GraphParallel_ScalesWithTheWork(t *testing.T) {
 	}
 	if strings.TrimSpace(many) == "" {
 		t.Fatal("`hyctl graph parallel` printed nothing for three files")
+	}
+}
+
+// `hyctl graph generate` must produce a graph.json that `hyctl graph blast`
+// can actually read — against a real Go module, not a hand-built fixture.
+func TestCLI_GraphGenerate_ProducesAGraphBlastCanRead(t *testing.T) {
+	s := populated(t)
+	if !s.AllowHostBinary(t, "go") {
+		t.Skip("go is not on the host PATH, which should be impossible here")
+	}
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module example.com/gentest\n\ngo 1.21\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for rel, body := range map[string]string{
+		"a/a.go": "package a\n",
+		"b/b.go": "package b\n\nimport _ \"example.com/gentest/a\"\n",
+	} {
+		full := filepath.Join(dir, rel)
+		if err := os.MkdirAll(filepath.Dir(full), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	out := filepath.Join(dir, "graph.json")
+
+	genOut, cobraOut, err := run(t, "graph", "generate", dir, "--out", out)
+	if err != nil {
+		t.Fatalf("`hyctl graph generate` failed: %v (%s)", err, cobraOut)
+	}
+	if !strings.Contains(genOut+cobraOut, "nodes") {
+		t.Errorf("generate did not report a node count:\n%s", genOut+cobraOut)
+	}
+	if _, err := os.Stat(out); err != nil {
+		t.Fatalf("no graph.json was written: %v", err)
+	}
+
+	blastOut, cobraOut, err := run(t, "graph", "blast", "b", "--graph", out)
+	if err != nil {
+		t.Fatalf("`hyctl graph blast` could not read the generated graph: %v (%s)", err, cobraOut)
+	}
+	if strings.Contains(strings.ToLower(blastOut+cobraOut), "not in the graph") {
+		t.Errorf("blast did not recognize a node generate produced:\n%s", blastOut+cobraOut)
 	}
 }
 

@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
-import { GetDashboard, GetEdits, GetFleet, GetSession, GetVersion } from './bindings'
+import { CheckHyctl, GetDashboard, GetEdits, GetFleet, GetSession, GetVersion } from './bindings'
 import type {
   Dashboard as DashboardData,
   Edit,
   Fleet as FleetData,
+  HyctlStatus,
   Session as SessionData,
   Version,
 } from './types'
@@ -12,6 +13,9 @@ import { Fleet } from './views/Fleet'
 import { Session } from './views/Session'
 import { Code } from './views/Code'
 import { ChatDock } from './views/ChatDock'
+import { UpdateNotice } from './views/UpdateNotice'
+import { SetupBanner } from './views/SetupBanner'
+import { HydraMark, HydraSpinner } from './brand'
 
 /** Dashboard is retrospective — a slow refresh is enough and costs nothing. */
 const DASHBOARD_MS = 5000
@@ -41,6 +45,20 @@ export default function App() {
   const [edits, setEdits] = useState<Edit[] | null>(null)
   const [version, setVersion] = useState<Version | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [hyctlStatus, setHyctlStatus] = useState<HyctlStatus | null>(null)
+
+  // ChatDock's open state lives here, not inside ChatDock, so other views
+  // (Fleet's empty state) can open it — the app already has a way to start a
+  // task without a terminal, it just wasn't reachable from anywhere that
+  // needed it. focusSignal is a counter rather than a boolean so opening it
+  // twice in a row (already open, click "start a task" again) still refocuses
+  // the input instead of no-oping on an unchanged value.
+  const [dockOpen, setDockOpen] = useState(false)
+  const [dockFocusSignal, setDockFocusSignal] = useState(0)
+  const startTask = useCallback(() => {
+    setDockOpen(true)
+    setDockFocusSignal((n) => n + 1)
+  }, [])
 
   const load = useCallback(async (which: ViewID, id: string) => {
     try {
@@ -66,6 +84,15 @@ export default function App() {
   useEffect(() => {
     GetVersion().then(setVersion).catch(() => {
       /* Version is decoration; failing to read it must not blank the window. */
+    })
+  }, [])
+
+  // One-shot, not polled: this is a first-run check (#383), not a live value.
+  // A machine with hyctl already on PATH — the common case — never shows
+  // anything, since the banner below renders only when Found is false.
+  useEffect(() => {
+    CheckHyctl().then(setHyctlStatus).catch(() => {
+      /* Same as GetVersion: decoration, not worth blanking the window over. */
     })
   }, [])
 
@@ -96,17 +123,17 @@ export default function App() {
     [fleet, runID, openSession],
   )
 
+  // Dashboard handles its own loading state (a skeleton, not this fallback
+  // text) so its first-load window can look like the rest of the view
+  // instead of a plain sentence.
   const loading =
-    (view === 'dashboard' && !dashboard) ||
-    (view === 'fleet' && !fleet) ||
-    (view === 'session' && !session) ||
-    (view === 'code' && !edits)
+    (view === 'fleet' && !fleet) || (view === 'session' && !session) || (view === 'code' && !edits)
 
   return (
     <div className="shell">
       <nav className="rail">
         <div className="rail__brand">
-          <span className="rail__mark" />
+          <HydraMark className="rail__mark" />
           Hydra
         </div>
         <div className="rail__nav">
@@ -131,34 +158,55 @@ export default function App() {
         </div>
         <div className="rail__foot">
           {version ? `${version.version} · ${version.commit}` : ''}
+          <UpdateNotice />
         </div>
       </nav>
 
       <main className="main">
+        {/* Non-blocking: it sits above whichever view is open rather than
+            replacing it, and renders nothing at all once hyctl is found. */}
+        {hyctlStatus && !hyctlStatus.found && (
+          <SetupBanner status={hyctlStatus} onChanged={setHyctlStatus} />
+        )}
+
         {/* An error replaces the body but never the shell — a broken read
             should not look like a crashed app. */}
         {error && <div className="error">{error}</div>}
-        {!error && view === 'dashboard' && dashboard && <Dashboard data={dashboard} />}
-        {!error && view === 'fleet' && fleet && <Fleet data={fleet} onOpen={openSession} />}
+        {!error && view === 'dashboard' && <Dashboard data={dashboard} />}
+        {!error && view === 'fleet' && fleet && (
+          <Fleet data={fleet} onOpen={openSession} onStartTask={startTask} />
+        )}
         {!error && view === 'session' && session && (
           <Session session={session} onBack={() => setView('fleet')} />
         )}
         {!error && view === 'code' && edits && (
           <>
             <header className="view__head">
-              <button className="back" onClick={() => setView('session')}>
-                ← Session
-              </button>
-              <h1 className="view__title">Code</h1>
+              <div className="view__headrow">
+                <button className="back" onClick={() => setView('session')}>
+                  ← Session
+                </button>
+                <h1 className="view__title">Code</h1>
+              </div>
               <p className="view__sub">What this run changed on disk.</p>
             </header>
             <Code runID={runID} edits={edits} />
           </>
         )}
-        {!error && loading && <p style={{ color: 'var(--hy-dim)' }}>Reading logs…</p>}
+        {!error && loading && (
+          <div className="loading">
+            <HydraSpinner className="loading__mark" />
+            <p>Reading logs…</p>
+          </div>
+        )}
       </main>
 
-      <ChatDock onOpenRun={openSession} />
+      <ChatDock
+        onOpenRun={openSession}
+        open={dockOpen}
+        onOpenChange={setDockOpen}
+        focusSignal={dockFocusSignal}
+      />
     </div>
   )
 }
