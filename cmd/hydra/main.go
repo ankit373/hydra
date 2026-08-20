@@ -32,6 +32,7 @@ import (
 	"github.com/ankit373/hydra/internal/executor"
 	"github.com/ankit373/hydra/internal/graph"
 	"github.com/ankit373/hydra/internal/ledger"
+	"github.com/ankit373/hydra/internal/mcpregistry"
 	"github.com/ankit373/hydra/internal/optimal"
 	"github.com/ankit373/hydra/internal/oracle"
 	"github.com/ankit373/hydra/internal/parallel"
@@ -1245,7 +1246,93 @@ func cmdMCP() *cobra.Command {
 	}
 	verifyChain.Flags().BoolVar(&chainJSON, "json", false, "machine-readable JSON output")
 
-	cmd.AddCommand(check, record, verify, logCmd, report, verifyChain)
+	cmd.AddCommand(check, record, verify, logCmd, report, verifyChain, cmdMCPRegistry())
+	return cmd
+}
+
+// cmdMCPRegistry is the Phase 1 CLI wedge: identity-only sync of the
+// official MCP registry, a scan of what's installed on this machine, and an
+// audit that resolves one against the other. No trust scoring yet.
+func cmdMCPRegistry() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "registry",
+		Short: "Sync the official MCP registry and audit what's installed on this machine",
+	}
+
+	sync := &cobra.Command{
+		Use:   "sync",
+		Short: "Pull server metadata from the official MCP registry into a local cache",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			fmt.Println("  syncing the official MCP registry — thousands of servers, this can take a minute or two...")
+			n, err := mcpregistry.Sync(cmd.Context(), func(page, soFar int) {
+				fmt.Printf("\r  page %-4d  %d servers so far...", page, soFar)
+			})
+			fmt.Println()
+			if err != nil {
+				return err
+			}
+			fmt.Printf("  synced %d servers from the official MCP registry\n", n)
+			return nil
+		},
+	}
+
+	var scanJSON bool
+	scanCmd := &cobra.Command{
+		Use:   "scan",
+		Short: "List MCP servers installed across this machine's clients",
+		RunE: func(_ *cobra.Command, _ []string) error {
+			cwd, _ := os.Getwd()
+			installed := mcpregistry.Scan(cwd)
+			if scanJSON {
+				return json.NewEncoder(os.Stdout).Encode(installed)
+			}
+			if len(installed) == 0 {
+				fmt.Println("  no MCP servers found on this machine")
+				return nil
+			}
+			for _, s := range installed {
+				fmt.Printf("  %-16s %-8s %s\n", s.Client, s.Scope, s.Name)
+			}
+			return nil
+		},
+	}
+	scanCmd.Flags().BoolVar(&scanJSON, "json", false, "machine-readable JSON output")
+
+	var auditJSON bool
+	audit := &cobra.Command{
+		Use:   "audit",
+		Short: "Resolve installed MCP servers against the synced registry",
+		RunE: func(_ *cobra.Command, _ []string) error {
+			cwd, _ := os.Getwd()
+			rpt, err := mcpregistry.Audit(cwd)
+			if err != nil {
+				return err
+			}
+			if auditJSON {
+				return json.NewEncoder(os.Stdout).Encode(rpt)
+			}
+			if rpt.RegistrySync.IsZero() {
+				fmt.Println("  registry never synced — run `hyctl mcp registry sync` first for verification")
+			}
+			if len(rpt.Entries) == 0 {
+				fmt.Println("  no MCP servers found on this machine")
+				return nil
+			}
+			for _, e := range rpt.Entries {
+				status := strings.ToUpper(string(e.Status))
+				if e.Status == mcpregistry.StatusVerified {
+					status = okStyle.Render(status)
+				} else {
+					status = warnStyle.Render(status)
+				}
+				fmt.Printf("  %-9s %-16s %-8s %s\n", status, e.Client, e.Scope, e.Name)
+			}
+			return nil
+		},
+	}
+	audit.Flags().BoolVar(&auditJSON, "json", false, "machine-readable JSON output")
+
+	cmd.AddCommand(sync, scanCmd, audit)
 	return cmd
 }
 
