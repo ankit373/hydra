@@ -1429,7 +1429,42 @@ func cmdMCPRegistry() *cobra.Command {
 	}
 	backtest.Flags().BoolVar(&backtestJSON, "json", false, "machine-readable JSON output")
 
-	cmd.AddCommand(sync, scanCmd, audit, export, backtest)
+	var listJSON bool
+	list := &cobra.Command{
+		Use:   "list",
+		Short: "List every MCP server this machine has audited, by trust score",
+		RunE: func(_ *cobra.Command, _ []string) error {
+			entries, err := mcpregistry.Directory()
+			if err != nil {
+				return err
+			}
+			if listJSON {
+				return json.NewEncoder(os.Stdout).Encode(entries)
+			}
+			if len(entries) == 0 {
+				fmt.Println("  no audited servers yet — run `hyctl mcp registry audit` first")
+				return nil
+			}
+			fmt.Printf("\n  %-40s %-12s %6s  %s\n", "SERVER", "STATE", "SCORE", "CONFIDENCE")
+			fmt.Println("  " + strings.Repeat("─", 78))
+			for _, e := range entries {
+				state := string(e.LifecycleState)
+				switch e.LifecycleState {
+				case mcpregistry.StateTrusted:
+					state = okStyle.Render(state)
+				case mcpregistry.StateFlagged, mcpregistry.StateQuarantined, mcpregistry.StateDelisted:
+					state = warnStyle.Render(state)
+				}
+				fmt.Printf("  %-40.40s %-12s %6s  %s\n", e.Name, state,
+					mcpregistry.FormatScore(e.Score), mcpregistry.FormatConfidence(e.Score.Confidence))
+			}
+			fmt.Println()
+			return nil
+		},
+	}
+	list.Flags().BoolVar(&listJSON, "json", false, "machine-readable JSON output")
+
+	cmd.AddCommand(sync, scanCmd, audit, export, backtest, list)
 	return cmd
 }
 

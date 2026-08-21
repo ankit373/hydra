@@ -11,6 +11,51 @@ import (
 	"time"
 )
 
+func TestDirectory_NoStatesIsEmptyNotNil(t *testing.T) {
+	withTempHydraHome(t)
+	entries, err := Directory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Errorf("got %d entries, want 0", len(entries))
+	}
+}
+
+func TestDirectory_MatchesWhatExportWrites(t *testing.T) {
+	withTempHydraHome(t)
+	if err := SaveStates(map[string]ServerState{
+		"io.github.foo/bar": {State: StateTrusted, LastScore: Score{Overall: 91, Confidence: ConfidenceHigh}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	viaDirectory, err := Directory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := t.TempDir()
+	n, err := ExportDirectory(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != len(viaDirectory) {
+		t.Errorf("ExportDirectory wrote %d entries, Directory() returned %d — they should agree", n, len(viaDirectory))
+	}
+
+	raw, err := os.ReadFile(filepath.Join(out, "index.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var exported []DirectoryEntry
+	if err := json.Unmarshal(raw, &exported); err != nil {
+		t.Fatal(err)
+	}
+	if len(exported) != 1 || exported[0].Name != viaDirectory[0].Name || exported[0].Score.Overall != viaDirectory[0].Score.Overall {
+		t.Errorf("exported = %+v, Directory() = %+v — should be the same data", exported, viaDirectory)
+	}
+}
+
 func TestExportDirectory_NoStatesWritesEmptyDirectory(t *testing.T) {
 	withTempHydraHome(t)
 	out := t.TempDir()
