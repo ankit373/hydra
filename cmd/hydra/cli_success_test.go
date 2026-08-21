@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/ankit373/hydra/internal/config"
+	"github.com/ankit373/hydra/internal/mcpregistry"
 	"github.com/ankit373/hydra/internal/runlog"
 	"github.com/ankit373/hydra/internal/testutil"
 )
@@ -1314,6 +1315,46 @@ func TestCLI_MCPCheck_ClassificationFromQuarantinedMCPServer(t *testing.T) {
 		"--action", "exec", "--resource", "x", "--agent", "a")
 	if code != 0 {
 		t.Errorf("an unaudited MCP server's tool exited %d, want the permissive default 0:\n%s", code, out)
+	}
+}
+
+func TestCLI_MCPRegistryList_ShowsAuditedServersByScore(t *testing.T) {
+	populated(t)
+
+	seed(t, "mcp_registry_state.json", `{
+		"io.github.x/good": {"state":"trusted","manifest_hash":"a","first_seen_at":"2026-01-01T00:00:00Z","state_changed_at":"2026-01-01T00:00:00Z","last_score":{"security_implementation":{},"repository_health":{},"operational_security":{},"community_governance":{},"overall":91,"confidence":"high"}},
+		"io.github.x/bad": {"state":"quarantined","manifest_hash":"b","first_seen_at":"2026-01-01T00:00:00Z","state_changed_at":"2026-01-01T00:00:00Z","last_score":{"security_implementation":{},"repository_health":{},"operational_security":{},"community_governance":{},"overall":5,"confidence":"high"}}
+	}`)
+
+	out, cobraOut, err := run(t, "mcp", "registry", "list")
+	if err != nil {
+		t.Fatal(err)
+	}
+	combined := out + cobraOut
+	if !strings.Contains(combined, "io.github.x/good") || !strings.Contains(combined, "io.github.x/bad") {
+		t.Errorf("both audited servers should be listed:\n%s", combined)
+	}
+	if !strings.Contains(combined, "trusted") || !strings.Contains(combined, "quarantined") {
+		t.Errorf("lifecycle states should be shown:\n%s", combined)
+	}
+
+	jsonOut, _, err := run(t, "mcp", "registry", "list", "--json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var entries []mcpregistry.DirectoryEntry
+	if err := json.Unmarshal([]byte(jsonOut), &entries); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, jsonOut)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("got %d entries, want 2", len(entries))
+	}
+}
+
+func TestCLI_MCPRegistryList_EmptyIsNotAnError(t *testing.T) {
+	populated(t)
+	if _, _, err := run(t, "mcp", "registry", "list"); err != nil {
+		t.Fatalf("an empty registry list should not error: %v", err)
 	}
 }
 

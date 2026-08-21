@@ -22,25 +22,18 @@ type DirectoryEntry struct {
 	LastCheckedAt  time.Time      `json:"last_checked_at"`
 }
 
-// ExportDirectory renders every server this machine has ever audited into a
-// self-contained static site under outDir: index.json (the raw data, for
-// anyone building their own frontend against it) and index.html (a plain,
-// dependency-free page). Returns the number of entries written.
-//
-// Deliberately bounded to what's actually been scored on this machine, not
-// an attempt to cover the full synced registry: the design doc's own
-// non-goals rule out a fifth undifferentiated full-corpus index, and eagerly
-// scoring tens of thousands of servers would exhaust GitHub's unauthenticated
-// rate limit before a single run finished. This grows organically as `audit`
-// runs, the same way the registry itself is meant to.
-//
-// This produces static files only — it does not publish, host, or deploy
-// anything anywhere. Where these files end up (if anywhere) is a decision
-// for whoever runs this, not something this function makes on its own.
-func ExportDirectory(outDir string) (int, error) {
+// Directory gathers every server this machine has ever audited (via
+// `hyctl mcp registry audit`) into the display shape both the static export
+// and `hyctl mcp registry list` use — one source of truth for "what has
+// this machine scored," sorted by name. Deliberately bounded to what's
+// actually been scored, not an attempt to cover the full synced registry:
+// the design doc's own non-goals rule out a fifth undifferentiated
+// full-corpus index, and eagerly scoring tens of thousands of servers would
+// exhaust GitHub's unauthenticated rate limit before a single run finished.
+func Directory() ([]DirectoryEntry, error) {
 	states, err := LoadStates()
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 
 	cache, err := loadCache()
@@ -66,6 +59,22 @@ func ExportDirectory(outDir string) (int, error) {
 		entries = append(entries, entry)
 	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].Name < entries[j].Name })
+	return entries, nil
+}
+
+// ExportDirectory renders Directory() into a self-contained static site
+// under outDir: index.json (the raw data, for anyone building their own
+// frontend against it) and index.html (a plain, dependency-free page).
+// Returns the number of entries written.
+//
+// This produces static files only — it does not publish, host, or deploy
+// anything anywhere. Where these files end up (if anywhere) is a decision
+// for whoever runs this, not something this function makes on its own.
+func ExportDirectory(outDir string) (int, error) {
+	entries, err := Directory()
+	if err != nil {
+		return 0, err
+	}
 
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
 		return 0, err
