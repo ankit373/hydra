@@ -179,11 +179,8 @@ var osvEcosystem = map[string]string{
 var osvQueryURL = "https://api.osv.dev/v1/query"
 
 type osvVuln struct {
-	ID       string `json:"id"`
-	Summary  string `json:"summary"`
-	Severity []struct {
-		Score string `json:"score"`
-	} `json:"database_specific,omitempty"`
+	ID      string `json:"id"`
+	Summary string `json:"summary"`
 }
 
 type osvResponse struct {
