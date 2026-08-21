@@ -533,6 +533,11 @@ hyctl mcp verify <tool> --resource R --params '{"amount":500}' # prove executed 
 hyctl mcp verify-chain                  # confirm the ledger's hash chain hasn't been tampered with
 hyctl mcp log --denied                  # what got blocked
 hyctl mcp report                        # allowed/denied by agent and tool
+hyctl mcp registry sync                 # pull the official MCP registry into a local cache
+hyctl mcp registry scan                 # list MCP servers installed on this machine (identity only)
+hyctl mcp registry audit                # resolve + score installed servers, advance lifecycle state
+hyctl mcp registry export --out DIR     # static index.html/index.json of audited servers
+hyctl mcp registry backtest             # validate scoring against known real incidents
 hyctl security                          # what the agents did, and can the record be trusted
 hyctl security --why                    # the full programme: register, coverage, policy, exposure
 hyctl security --attest                 # checkable attestation: posture + evidence + digest
