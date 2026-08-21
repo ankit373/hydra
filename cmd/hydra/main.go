@@ -1382,7 +1382,54 @@ func cmdMCPRegistry() *cobra.Command {
 	}
 	export.Flags().StringVar(&exportOut, "out", "mcp-directory", "output directory for index.html/index.json")
 
-	cmd.AddCommand(sync, scanCmd, audit, export)
+	var backtestJSON bool
+	backtest := &cobra.Command{
+		Use:   "backtest",
+		Short: "Validate the scoring pipeline against known real MCP-security incidents",
+		Long: "Checks whether the live pipeline still catches the documented real incidents that\n" +
+			"justified building it — the gate this repo's design doc names before a public directory\n" +
+			"(Phase 3) can go live. Re-run before any launch decision; this is a point-in-time proof,\n" +
+			"not a permanent guarantee.",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			known := mcpregistry.Backtest(cmd.Context())
+			typo := mcpregistry.BacktestTyposquat()
+			if backtestJSON {
+				return json.NewEncoder(os.Stdout).Encode(map[string]any{"known_incidents": known, "typosquat_pairs": typo})
+			}
+			allPassed := true
+			fmt.Println("  known-vulnerability match (live OSV.dev check):")
+			for _, r := range known {
+				status := okStyle.Render("CAUGHT")
+				if !r.Caught {
+					status = warnStyle.Render("MISSED")
+					allPassed = false
+				}
+				fmt.Printf("    %-8s %s\n", status, r.Incident.Name)
+				fmt.Printf("             %s\n", dimStyle.Render(r.Incident.Description))
+				if r.Detail != "" {
+					fmt.Printf("             %s\n", dimStyle.Render(r.Detail))
+				}
+			}
+			fmt.Println("  typosquat detector (constructed pairs, not a live-registry probe):")
+			for _, r := range typo {
+				status := okStyle.Render("CAUGHT")
+				if !r.Detected {
+					status = warnStyle.Render("MISSED")
+					allPassed = false
+				}
+				fmt.Printf("    %-8s %s vs %s (%d edits)\n", status, r.Pair.Registered, r.Pair.Typosquat, r.Distance)
+			}
+			if !allPassed {
+				fmt.Println("\n  backtest FAILED — do not treat the pipeline as launch-ready")
+				os.Exit(1)
+			}
+			fmt.Println("\n  backtest passed")
+			return nil
+		},
+	}
+	backtest.Flags().BoolVar(&backtestJSON, "json", false, "machine-readable JSON output")
+
+	cmd.AddCommand(sync, scanCmd, audit, export, backtest)
 	return cmd
 }
 

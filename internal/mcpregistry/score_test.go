@@ -96,6 +96,36 @@ func TestKnownBadSignal_ParsesVulnResponse(t *testing.T) {
 	}
 }
 
+// A real OSV.dev response's database_specific field is an OBJECT
+// (malicious-packages-origins, severity, cwe_ids, ...), not the array an
+// earlier version of osvVuln mistakenly declared it as — which made
+// json.Decode fail on every real advisory carrying that field, silently
+// turning the single highest-value signal in this whole scoring engine into
+// a permanent no-op. This test uses the real shape (verbatim from a live
+// query against postmark-mcp) precisely so that regression can't recur
+// silently: TestKnownBadSignal_ParsesVulnResponse alone couldn't catch it
+// because its synthetic fixture never included the field the real API does.
+func TestKnownBadSignal_ToleratesRealOSVResponseShape(t *testing.T) {
+	const realWorldShape = `{"vulns":[{"id":"MAL-2025-47604","summary":"Malicious code in postmark-mcp (npm)",
+		"details":"turned malicious in v1.0.16","modified":"2025-09-26T04:14:45Z","published":"2025-09-26T04:14:45Z",
+		"database_specific":{"malicious-packages-origins":[{"modified_time":"2025-09-26T04:14:45Z",
+		"ranges":[{"events":[{"introduced":"1.0.16"}],"type":"SEMVER"}],"source":"google-open-source-security"}]},
+		"references":[{"type":"ARTICLE","url":"https://example.com"}],"schema_version":"1.7.3"}]}`
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(realWorldShape))
+	}))
+	defer srv.Close()
+	orig := osvQueryURL
+	osvQueryURL = srv.URL
+	defer func() { osvQueryURL = orig }()
+
+	sig := knownBadSignal(context.Background(), Package{RegistryType: "npm", Identifier: "postmark-mcp"})
+	if !sig.Available || sig.Impact != -100 {
+		t.Fatalf("real-shaped OSV response should still be caught as severe, got %+v", sig)
+	}
+}
+
 func TestKnownBadSignal_NoVulnsIsNeutral(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(osvResponse{})
