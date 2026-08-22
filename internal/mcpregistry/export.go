@@ -5,11 +5,25 @@ package mcpregistry
 import (
 	"encoding/json"
 	"html/template"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
 	"time"
 )
+
+// disputeIssueURL is the launch requirement from the design doc's §13.5:
+// publishing a public negative signal about a real project needs a
+// publisher-facing correction path before it ships, not as a later
+// afterthought. There's no backend to run a live dispute flow against, so
+// the honest, buildable version is a pre-filled issue against this repo —
+// matches how the rest of this repo's process already works (issue-first).
+func disputeIssueURL(serverName string) string {
+	v := url.Values{}
+	v.Set("template", "mcp_registry_dispute.md")
+	v.Set("title", "[mcp-registry] "+serverName)
+	return "https://github.com/ankit373/hydra/issues/new?" + v.Encode()
+}
 
 // DirectoryEntry is one server's public-facing record for the Phase 3
 // static export — every field a reader needs to see the score with its
@@ -20,6 +34,7 @@ type DirectoryEntry struct {
 	LifecycleState LifecycleState `json:"lifecycle_state"`
 	Score          Score          `json:"score"`
 	LastCheckedAt  time.Time      `json:"last_checked_at"`
+	DisputeURL     string         `json:"dispute_url"`
 }
 
 // Directory gathers every server this machine has ever audited (via
@@ -52,6 +67,7 @@ func Directory() ([]DirectoryEntry, error) {
 			LifecycleState: st.State,
 			Score:          st.LastScore,
 			LastCheckedAt:  st.StateChangedAt,
+			DisputeURL:     disputeIssueURL(name),
 		}
 		if srv, ok := byName[name]; ok {
 			entry.RepositoryURL = srv.Repository.URL
@@ -120,11 +136,14 @@ th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #ddd; verti
 .state-provisional { color: #8a6d00; }
 .state-flagged, .state-quarantined, .state-delisted { color: #b00020; }
 .signals { font-size: 0.85em; color: #555; }
+.disclaimer { background: #fff8e1; border: 1px solid #e0c46c; border-radius: 6px; padding: 0.75rem 1rem; font-size: 0.9em; }
+.dispute { font-size: 0.8em; }
 </style>
 </head>
 <body>
 <h1>Hydra MCP Trust Directory</h1>
 <p>Locally exported — servers this machine has audited via <code>hyctl mcp registry audit</code>, not the full official registry.</p>
+<p class="disclaimer"><b>This is a probabilistic signal from automated checks, not a guarantee of safety and not a claim about a publisher's intent.</b> Every signal behind a score is shown below it — nothing here is a bare number with no reasoning. Believe a score is wrong, stale, or unfair? Use the "dispute" link on that row.</p>
 <table>
 <thead><tr><th>Server</th><th>State</th><th>Score</th><th>Signals</th><th>Last checked</th></tr></thead>
 <tbody>
@@ -137,6 +156,7 @@ th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #ddd; verti
 {{range .Score.SecurityImplementation.Signals}}{{if .Available}}{{.Detail}}<br>{{end}}{{end}}
 {{range .Score.RepositoryHealth.Signals}}{{if .Available}}{{.Detail}}<br>{{end}}{{end}}
 {{range .Score.OperationalSecurity.Signals}}{{if .Available}}{{.Detail}}<br>{{end}}{{end}}
+<a class="dispute" href="{{.DisputeURL}}">dispute this score →</a>
 </td>
 <td>{{.LastCheckedAt.Format "2006-01-02"}}</td>
 </tr>
