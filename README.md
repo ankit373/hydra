@@ -538,6 +538,7 @@ hyctl mcp registry scan                 # list MCP servers installed on this mac
 hyctl mcp registry audit                # resolve + score installed servers, advance lifecycle state
 hyctl mcp registry export --out DIR     # static index.html/index.json of audited servers
 hyctl mcp registry backtest             # validate scoring against known real incidents
+hyctl mcp registry list                 # audited servers by trust score
 hyctl security                          # what the agents did, and can the record be trusted
 hyctl security --why                    # the full programme: register, coverage, policy, exposure
 hyctl security --attest                 # checkable attestation: posture + evidence + digest

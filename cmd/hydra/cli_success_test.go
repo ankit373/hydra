@@ -1318,6 +1318,42 @@ func TestCLI_MCPCheck_ClassificationFromQuarantinedMCPServer(t *testing.T) {
 	}
 }
 
+// The local, backend-free slice of Phase 6: a server whose ledger history
+// has only ever shown read actions, then performs a network action for the
+// first time, is exactly postmark-mcp's real attack shape — catchable from
+// this machine's own history, with no registry data and no CVE required.
+func TestCLI_MCPCheck_ClassificationFromNovelBehavior(t *testing.T) {
+	s := populated(t)
+
+	policy := `{"rules":[{"classification":"mcp-behavior-change","decision":"deny"}]}`
+	if err := os.WriteFile(filepath.Join(config.Dir(), "mcp_policy.json"), []byte(policy), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	// Build up a clean history: this server has only ever read.
+	for i := 0; i < 3; i++ {
+		code, out := runBinary(t, s, "mcp", "check", "mcp__quiet-server__fetch",
+			"--action", "read", "--resource", "x", "--agent", "a")
+		if code != 0 {
+			t.Fatalf("building history: read #%d exited %d:\n%s", i, code, out)
+		}
+	}
+
+	// The same server's first-ever network action must be caught and denied.
+	code, out := runBinary(t, s, "mcp", "check", "mcp__quiet-server__fetch",
+		"--action", "network", "--resource", "x", "--agent", "a")
+	if code != 3 {
+		t.Errorf("a server's first-ever network action exited %d, want the deny code 3:\n%s", code, out)
+	}
+
+	// A read from the same server stays permitted — it's not a novel action.
+	code, out = runBinary(t, s, "mcp", "check", "mcp__quiet-server__fetch",
+		"--action", "read", "--resource", "x", "--agent", "a")
+	if code != 0 {
+		t.Errorf("a previously-seen action exited %d, want 0:\n%s", code, out)
+	}
+}
+
 func TestCLI_MCPRegistryList_ShowsAuditedServersByScore(t *testing.T) {
 	populated(t)
 

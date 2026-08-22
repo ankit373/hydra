@@ -992,6 +992,13 @@ func cmdMCP() *cobra.Command {
 			if classification == "" && chkContent == "" {
 				if c, ok := mcpregistry.ClassificationForTool(args[0]); ok {
 					classification = c
+				} else if priorEvents, loadErr := ledger.Load(ledger.DefaultPath()); loadErr == nil {
+					// Lower priority than a registry-derived classification —
+					// a confirmed quarantine/flag is a stronger claim than
+					// "this server hasn't done this before on this machine".
+					if c, ok := mcpregistry.BehaviorClassification(priorEvents, args[0], action); ok {
+						classification = c
+					}
 				}
 			}
 			decision, checkErr := ledger.Check(ledger.DefaultPath(), pol, ledger.CheckRequest{
