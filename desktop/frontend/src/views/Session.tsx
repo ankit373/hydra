@@ -3,6 +3,7 @@ import type { Edit, Session as SessionData, TimelineEntry } from '../types'
 import { clockTime, ms, pct, usdExact } from '../format'
 import { SessionGraph } from './SessionGraph'
 import { Code } from './Code'
+import { TierTrack } from './TierTrack'
 
 export function Session({
   session,
@@ -102,7 +103,10 @@ export function Session({
               }}
             />
           ) : (
-            <Timeline entries={session.timeline} />
+            <>
+              <TierTrack entries={session.timeline} />
+              <Timeline entries={session.timeline} />
+            </>
           )}
         </>
       )}

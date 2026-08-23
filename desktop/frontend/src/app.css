@@ -1746,3 +1746,47 @@ body {
   font-size: 12px; font-weight: 600;
   border: 1px solid var(--hy-aqua); background: var(--hy-aqua); color: #00251C;
 }
+
+/* ── Tier movement track ───────────────────────────────────────────────── */
+/* Renders only when the router actually changed tier, and never for swarm or
+   SPRT runs — see tierSteps for why a step line would misstate those. */
+
+.tt {
+  margin: 16px 0 0;
+  padding: 11px 14px 9px;
+  background: var(--hy-panel);
+  border: 1px solid var(--hy-line);
+  border-radius: var(--hy-radius);
+}
+.tt__head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 7px; }
+.tt__lbl {
+  font-family: var(--hy-font-mono);
+  font-size: 9px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--hy-faint);
+}
+.tt__sum { margin-left: auto; font-family: var(--hy-font-mono); font-size: 10px; color: var(--hy-dim); }
+/* The plot is the positioning context: the line is a stretched SVG, the dots are
+   HTML on top so they stay round (see TierTrack for why they cannot be circles
+   inside a non-uniformly scaled viewBox). */
+.tt__plot { position: relative; height: 44px; max-width: 560px; }
+.tt__svg { display: block; width: 100%; height: 100%; }
+.tt__line { fill: none; stroke: var(--hy-line-2); stroke-width: 1.2; vector-effect: non-scaling-stroke; }
+.tt__dot {
+  position: absolute;
+  width: 7px; height: 7px;
+  margin: -3.5px 0 0 -3.5px;   /* centre on its own point */
+  border-radius: 50%;
+  box-shadow: 0 0 0 1.5px var(--hy-bg-2);
+}
+.tt__dot--start { background: var(--hy-dim); }
+/* Escalation costs more, so it reads in the expensive colour; easing off reads
+   as the cheap one. Same semantic ramp the cost tables use. */
+.tt__dot--up   { background: var(--hy-expensive); }
+.tt__dot--down { background: var(--hy-cheap); }
+.tt__axis { display: flex; justify-content: space-between; margin-top: 3px; max-width: 560px; }
+.tt__tick { font-family: var(--hy-font-mono); font-size: 9px; font-variant-numeric: tabular-nums; }
+.tt__tick--start { color: var(--hy-dim); }
+.tt__tick--up    { color: var(--hy-expensive); }
+.tt__tick--down  { color: var(--hy-cheap); }
