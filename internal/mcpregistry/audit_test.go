@@ -6,6 +6,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -140,6 +141,45 @@ func TestAudit_PersistsAliasesSoClassificationForToolWorksAfterward(t *testing.T
 	}
 	if _, flagged := ClassificationForTool("mcp__fetch__something"); flagged {
 		t.Error("a freshly-provisional server should not be flagged")
+	}
+}
+
+func TestAudit_CorruptCacheFileIsAnError(t *testing.T) {
+	withTempHydraHome(t)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	if err := os.WriteFile(cachePath(), []byte("{not valid json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Audit(context.Background(), ""); err == nil {
+		t.Fatal("a corrupt registry cache must fail the audit, not silently proceed with no registry data")
+	}
+}
+
+func TestAudit_CorruptStateFileIsAnError(t *testing.T) {
+	withTempHydraHome(t)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	if err := os.WriteFile(statePath(), []byte("{not valid json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Audit(context.Background(), ""); err == nil {
+		t.Fatal("a corrupt lifecycle-state file must fail the audit, not silently discard history")
+	}
+}
+
+func TestAudit_CorruptAliasesFileIsAnError(t *testing.T) {
+	withTempHydraHome(t)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	if err := os.WriteFile(aliasPath(), []byte("{not valid json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Audit(context.Background(), ""); err == nil {
+		t.Fatal("a corrupt aliases file must fail the audit, not silently discard history")
 	}
 }
 
