@@ -43,6 +43,15 @@ type Decision string
 const (
 	Allow Decision = "allow"
 	Deny  Decision = "deny"
+
+	// Ask means the access needs a human's confirmation before it happens: not
+	// permitted, not refused, pending. It is never a fallback — only an explicit
+	// rule match produces it, because a failure path that returned Ask would
+	// turn a policy bug into a prompt instead of a block (#580).
+	//
+	// Callers must treat it as "do not proceed". Every gate here admits only
+	// Allow, so an unanswered Ask can never read as consent.
+	Ask Decision = "ask"
 )
 
 // ParseAction normalizes and validates an action string. Matching is exact, so
@@ -61,16 +70,16 @@ func ParseAction(s string) (Action, error) {
 }
 
 // ParseDecision normalizes and validates a decision string. An unrecognized
-// value is rejected because callers gate on Deny exactly: a decision of "DENY"
-// or "block" would print like a denial while comparing unequal to Deny.
+// value is rejected because callers gate on the exact value: a decision of
+// "DENY" or "block" would print like a denial while comparing unequal to Deny.
 func ParseDecision(s string) (Decision, error) {
 	switch d := Decision(strings.ToLower(strings.TrimSpace(s))); d {
-	case Allow, Deny:
+	case Allow, Deny, Ask:
 		return d, nil
 	case "":
-		return "", fmt.Errorf("decision is required (allow|deny)")
+		return "", fmt.Errorf("decision is required (allow|deny|ask)")
 	default:
-		return "", fmt.Errorf("unknown decision %q (want allow|deny)", s)
+		return "", fmt.Errorf("unknown decision %q (want allow|deny|ask)", s)
 	}
 }
 
@@ -666,8 +675,11 @@ var (
 // the accountability gate. It returns the decision.
 //
 // Check fails closed: if the request's parameters cannot be hashed, it returns
-// Deny (and records that denial) rather than a zero Decision, so a caller that
-// only tests `decision == Deny` can never be tricked into proceeding.
+// Deny (and records that denial) rather than a zero Decision.
+//
+// Callers must gate on `decision != Allow`, not `== Deny`. Deny is no longer
+// the only verdict that withholds permission — Ask does too — so testing for
+// Deny alone would let a pending question through as if it were approval.
 func Check(path string, p Policy, req CheckRequest) (Decision, error) {
 	classification := NormalizeClassification(req.Classification)
 	piiTypes := req.PIITypes

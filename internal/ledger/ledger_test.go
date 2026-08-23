@@ -1014,3 +1014,64 @@ func TestRecord_SanitizesFreeTextFieldsAtIngest(t *testing.T) {
 		})
 	}
 }
+
+// Ask is a real verdict a policy file can carry, so it has to survive parsing
+// and normalisation the same way allow/deny do (#580).
+func TestParseDecision_AcceptsAskAndNormalisesCase(t *testing.T) {
+	for _, in := range []string{"ask", "ASK", " Ask "} {
+		got, err := ParseDecision(in)
+		if err != nil {
+			t.Fatalf("ParseDecision(%q) errored: %v", in, err)
+		}
+		if got != Ask {
+			t.Errorf("ParseDecision(%q) = %q, want %q", in, got, Ask)
+		}
+	}
+	if _, err := ParseDecision("maybe"); err == nil {
+		t.Error("an unknown decision was accepted; rules gate on the exact value")
+	}
+}
+
+// The whole point of Ask is that it is NOT approval. LatestBound is what finds
+// the approval a later execution is verified against, and it admits Allow only.
+// If that ever loosened, an unanswered question would become consent.
+func TestLatestBound_AskIsNotAnApproval(t *testing.T) {
+	hash, err := HashParams(map[string]any{"file": "/etc/hosts"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	events := []Event{{
+		Agent: "a", Tool: "read_file", Resource: "/etc/hosts", Action: Read,
+		Decision: Ask, ParametersHash: hash,
+	}}
+
+	if _, ok := LatestBound(events, "read_file", "/etc/hosts"); ok {
+		t.Fatal("an Ask event was returned as the binding approval — a pending question read as consent")
+	}
+
+	// Control: the same event as an Allow is found, so the test is proving the
+	// decision filter and not something incidental about the fixture.
+	events[0].Decision = Allow
+	if _, ok := LatestBound(events, "read_file", "/etc/hosts"); !ok {
+		t.Fatal("an Allow event was not found; the fixture is wrong, not the filter")
+	}
+}
+
+// Ask must never come out of a failure path. Unhashable params still deny, so a
+// policy or plumbing bug cannot degrade into an interactive prompt.
+func TestCheck_UnhashableParamsStillDeniesNeverAsks(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "ledger.jsonl")
+
+	// A channel cannot be marshalled, so HashParams fails.
+	got, err := Check(path, Policy{Default: Ask}, CheckRequest{
+		Agent: "a", Tool: "t", Resource: "r", Action: Read,
+		Params: map[string]any{"bad": make(chan int)},
+	})
+	if err == nil {
+		t.Fatal("expected an error for unhashable params")
+	}
+	if got != Deny {
+		t.Errorf("Check = %q on unhashable params, want %q — a failure path must not ask", got, Deny)
+	}
+}
