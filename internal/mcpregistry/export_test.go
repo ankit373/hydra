@@ -188,6 +188,87 @@ func TestExportDirectory_EscapesUntrustedSignalDetail(t *testing.T) {
 	}
 }
 
+// §13.5 of the design doc: publishing a public negative signal about a real
+// project needs a disclaimer and a correction path before it ships, not as
+// an afterthought.
+func TestExportDirectory_IncludesDisclaimerBanner(t *testing.T) {
+	withTempHydraHome(t)
+	out := t.TempDir()
+	if _, err := ExportDirectory(out); err != nil {
+		t.Fatal(err)
+	}
+	html, err := os.ReadFile(filepath.Join(out, "index.html"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(html), "not a guarantee of safety") {
+		t.Error("exported page must carry the probabilistic-signal disclaimer")
+	}
+}
+
+func TestExportDirectory_EachEntryHasADisputeLink(t *testing.T) {
+	withTempHydraHome(t)
+	if err := SaveStates(map[string]ServerState{
+		"io.github.foo/bar": {State: StateFlagged, LastScore: Score{Confidence: ConfidenceInsufficient}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	out := t.TempDir()
+	if _, err := ExportDirectory(out); err != nil {
+		t.Fatal(err)
+	}
+
+	raw, err := os.ReadFile(filepath.Join(out, "index.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var entries []DirectoryEntry
+	if err := json.Unmarshal(raw, &entries); err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].DisputeURL == "" {
+		t.Fatalf("expected a non-empty DisputeURL, got %+v", entries)
+	}
+	if !strings.Contains(entries[0].DisputeURL, "github.com/ankit373/hydra/issues/new") {
+		t.Errorf("DisputeURL = %q, expected a link to this repo's issue tracker", entries[0].DisputeURL)
+	}
+	if !strings.Contains(entries[0].DisputeURL, "template=mcp_registry_dispute.md") {
+		t.Errorf("DisputeURL = %q, expected it to use the dispute issue template", entries[0].DisputeURL)
+	}
+
+	html, err := os.ReadFile(filepath.Join(out, "index.html"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(html), "dispute this score") {
+		t.Error("exported page should render a dispute link per row")
+	}
+}
+
+// A malicious server name flows into the dispute URL's query string too —
+// html/template's URL-context escaping must hold there as well, not just in
+// the visible table cell.
+func TestExportDirectory_DisputeURLEscapesUntrustedServerName(t *testing.T) {
+	withTempHydraHome(t)
+	malicious := `foo"><script>alert(1)</script>`
+	if err := SaveStates(map[string]ServerState{
+		malicious: {State: StateFlagged, LastScore: Score{Confidence: ConfidenceInsufficient}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	out := t.TempDir()
+	if _, err := ExportDirectory(out); err != nil {
+		t.Fatal(err)
+	}
+	html, err := os.ReadFile(filepath.Join(out, "index.html"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(html), "<script>alert(1)</script>") {
+		t.Fatal("a malicious server name leaked unescaped into the dispute link's href")
+	}
+}
+
 func TestExportDirectory_SortedByName(t *testing.T) {
 	withTempHydraHome(t)
 	out := t.TempDir()
