@@ -56,6 +56,26 @@ func TestScanMCPServersFile_ParsesEntries(t *testing.T) {
 	}
 }
 
+func TestScanMCPServersFile_MalformedJSONIsNotAnError(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "mcp.json")
+	writeJSON(t, path, `{not valid json`)
+	out := scanMCPServersFile(path, "cursor", "user")
+	if out != nil {
+		t.Errorf("expected nil for a malformed config file, got %v", out)
+	}
+}
+
+func TestScanVSCodeFile_MalformedJSONIsNotAnError(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "mcp.json")
+	writeJSON(t, path, `{not valid json`)
+	out := scanVSCodeFile(path)
+	if out != nil {
+		t.Errorf("expected nil for a malformed config file, got %v", out)
+	}
+}
+
 func TestScanVSCodeFile_UsesServersKey(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "mcp.json")
@@ -70,6 +90,38 @@ func TestScanVSCodeFile_UsesServersKey(t *testing.T) {
 	}
 	if out[0].Client != "vscode" {
 		t.Errorf("Client = %q, want vscode", out[0].Client)
+	}
+}
+
+func TestScan_ProjectScopedCwdIncludesCursorAndVSCodeProjectConfigs(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	proj := t.TempDir()
+	writeJSON(t, filepath.Join(proj, ".cursor", "mcp.json"),
+		`{"mcpServers": {"proj-cursor": {"type":"stdio","command":"npx","args":["-y","proj-cursor-pkg"]}}}`)
+	writeJSON(t, filepath.Join(proj, ".vscode", "mcp.json"),
+		`{"servers": {"proj-vscode": {"type":"stdio","command":"npx","args":["-y","proj-vscode-pkg"]}}}`)
+
+	withCwd := Scan(proj)
+	withoutCwd := Scan("")
+
+	var sawCursor, sawVSCode bool
+	for _, s := range withCwd {
+		if s.Name == "proj-cursor" && s.Scope == "project" {
+			sawCursor = true
+		}
+		if s.Name == "proj-vscode" {
+			sawVSCode = true
+		}
+	}
+	if !sawCursor || !sawVSCode {
+		t.Errorf("expected project-scoped cursor and vscode entries when cwd is set, got %+v", withCwd)
+	}
+	for _, s := range withoutCwd {
+		if s.Name == "proj-cursor" || s.Name == "proj-vscode" {
+			t.Errorf("project-scoped entries must not appear when cwd is empty, got %+v", withoutCwd)
+		}
 	}
 }
 

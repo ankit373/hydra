@@ -3,6 +3,8 @@
 package mcpregistry
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -138,6 +140,20 @@ func TestAdvance_StateChangedAtOnlyUpdatesOnTransition(t *testing.T) {
 	next := Advance(&prev, srv, cleanScore(), time.Now())
 	if !next.StateChangedAt.Equal(changedAt) {
 		t.Errorf("StateChangedAt should be unchanged when the state doesn't transition")
+	}
+}
+
+func TestLoadStates_CorruptFileIsAnError(t *testing.T) {
+	withTempHydraHome(t)
+	path := statePath()
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("{not valid json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadStates(); err == nil {
+		t.Fatal("a corrupt state file must surface as an error, not silently yield an empty map")
 	}
 }
 

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 )
 
 func TestLevenshtein(t *testing.T) {
@@ -53,6 +54,19 @@ func TestTyposquatSignal_NoFlagWhenNothingClose(t *testing.T) {
 	}
 }
 
+func TestTyposquatSignal_SkipsEmptyIdentifiersOnBothSides(t *testing.T) {
+	target := ServerRecord{Name: "a", Packages: []Package{{Identifier: ""}, {Identifier: "real-name"}}}
+	corpus := []ServerRecord{
+		target,
+		{Name: "b", Packages: []Package{{Identifier: ""}}},
+		{Name: "c", Packages: []Package{{Identifier: "totally-different-string"}}},
+	}
+	sig := typosquatSignal(target, corpus)
+	if !sig.Available || sig.Impact != 0 {
+		t.Fatalf("empty identifiers on either side must never be compared, got %+v", sig)
+	}
+}
+
 func TestNearestIdentifier(t *testing.T) {
 	corpus := []ServerRecord{
 		{Packages: []Package{{Identifier: "chrome-devtools-mcp"}}},
@@ -67,6 +81,17 @@ func TestNearestIdentifier(t *testing.T) {
 	}
 }
 
+func TestNearestIdentifier_SkipsEmptyIdentifiersInCorpus(t *testing.T) {
+	corpus := []ServerRecord{
+		{Packages: []Package{{Identifier: ""}}},
+		{Packages: []Package{{Identifier: "real-candidate"}}},
+	}
+	nearest, dist := NearestIdentifier("real-candidat", corpus)
+	if nearest != "real-candidate" || dist != 1 {
+		t.Errorf("got (%q, %d), want (\"real-candidate\", 1) — the empty identifier must never be returned as the nearest match", nearest, dist)
+	}
+}
+
 func TestNearestIdentifier_EmptyCorpus(t *testing.T) {
 	nearest, dist := NearestIdentifier("anything", nil)
 	if nearest != "" || dist != -1 {
@@ -78,6 +103,43 @@ func TestKnownBadSignal_UnsupportedEcosystemIsUnavailable(t *testing.T) {
 	sig := knownBadSignal(context.Background(), Package{RegistryType: "docker", Identifier: "x"})
 	if sig.Available {
 		t.Errorf("docker packages have no OSV ecosystem yet; expected Available=false, got %+v", sig)
+	}
+}
+
+func TestKnownBadSignal_EmptyIdentifierIsUnavailable(t *testing.T) {
+	sig := knownBadSignal(context.Background(), Package{RegistryType: "npm", Identifier: ""})
+	if sig.Available {
+		t.Errorf("an unresolved (empty) identifier has nothing to query; expected Available=false, got %+v", sig)
+	}
+}
+
+func TestKnownBadSignal_NonOKStatusIsUnavailable(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+	orig := osvQueryURL
+	osvQueryURL = srv.URL
+	defer func() { osvQueryURL = orig }()
+
+	sig := knownBadSignal(context.Background(), Package{RegistryType: "npm", Identifier: "x"})
+	if sig.Available {
+		t.Errorf("a 500 from OSV.dev must not be treated as evaluated evidence, got %+v", sig)
+	}
+}
+
+func TestKnownBadSignal_MalformedResponseIsUnavailable(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("not json"))
+	}))
+	defer srv.Close()
+	orig := osvQueryURL
+	osvQueryURL = srv.URL
+	defer func() { osvQueryURL = orig }()
+
+	sig := knownBadSignal(context.Background(), Package{RegistryType: "npm", Identifier: "x"})
+	if sig.Available {
+		t.Errorf("a malformed response body must not be treated as evaluated evidence, got %+v", sig)
 	}
 }
 
@@ -185,6 +247,70 @@ func TestMaintenanceSignal_ArchivedIsPenalized(t *testing.T) {
 	}
 }
 
+func TestMaintenanceSignal_RateLimitedIsUnavailableWithDetail(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-RateLimit-Remaining", "0")
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer srv.Close()
+	orig := githubAPIBase
+	githubAPIBase = srv.URL
+	defer func() { githubAPIBase = orig }()
+
+	sig := maintenanceSignal(context.Background(), "https://github.com/foo/bar")
+	if sig.Available {
+		t.Errorf("a rate-limited response must not be treated as evaluated evidence, got %+v", sig)
+	}
+	if sig.Detail == "" {
+		t.Error("expected a detail explaining why this signal is unavailable")
+	}
+}
+
+func TestMaintenanceSignal_RecentPushIsNeutral(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(githubRepo{PushedAt: time.Now().Add(-24 * time.Hour)})
+	}))
+	defer srv.Close()
+	orig := githubAPIBase
+	githubAPIBase = srv.URL
+	defer func() { githubAPIBase = orig }()
+
+	sig := maintenanceSignal(context.Background(), "https://github.com/foo/bar")
+	if !sig.Available || sig.Impact != 0 {
+		t.Fatalf("a recently-pushed, non-archived repo should be a neutral available signal, got %+v", sig)
+	}
+}
+
+func TestMaintenanceSignal_StalePushIsPenalized(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(githubRepo{PushedAt: time.Now().Add(-365 * 24 * time.Hour)})
+	}))
+	defer srv.Close()
+	orig := githubAPIBase
+	githubAPIBase = srv.URL
+	defer func() { githubAPIBase = orig }()
+
+	sig := maintenanceSignal(context.Background(), "https://github.com/foo/bar")
+	if !sig.Available || sig.Impact >= 0 {
+		t.Fatalf("a year-stale repo should be penalized, got %+v", sig)
+	}
+}
+
+func TestMaintenanceSignal_NonOKStatusIsUnavailable(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+	orig := githubAPIBase
+	githubAPIBase = srv.URL
+	defer func() { githubAPIBase = orig }()
+
+	sig := maintenanceSignal(context.Background(), "https://github.com/foo/bar")
+	if sig.Available {
+		t.Errorf("a 404 (e.g. deleted repo) must not be treated as evaluated evidence, got %+v", sig)
+	}
+}
+
 func TestDeclaredAuthSignal_StdioIsNotApplicable(t *testing.T) {
 	sig := declaredAuthSignal(ServerRecord{})
 	if sig.Available {
@@ -253,6 +379,27 @@ func TestComputeScore_InsufficientEvidenceOverallWhenNothingResolves(t *testing.
 	}
 	if score.CommunityGovernance.Confidence == ConfidenceInsufficient {
 		t.Errorf("CommunityGovernance should always have the baseline registry-presence signal available")
+	}
+}
+
+func TestOverallConfidence_AllFourBands(t *testing.T) {
+	tests := []struct {
+		weightSum float64
+		want      Confidence
+	}{
+		{0, ConfidenceInsufficient},
+		{-1, ConfidenceInsufficient},
+		{weightCommunityGovernance, ConfidenceLow},                                                          // 0.15
+		{weightSecurityImplementation, ConfidenceLow},                                                       // 0.35
+		{weightSecurityImplementation + weightCommunityGovernance, ConfidenceModerate},                      // 0.50
+		{weightSecurityImplementation + weightRepositoryHealth, ConfidenceModerate},                         // 0.60
+		{weightSecurityImplementation + weightRepositoryHealth + weightOperationalSecurity, ConfidenceHigh}, // 0.85
+		{1.0, ConfidenceHigh},
+	}
+	for _, tt := range tests {
+		if got := overallConfidence(tt.weightSum); got != tt.want {
+			t.Errorf("overallConfidence(%v) = %q, want %q", tt.weightSum, got, tt.want)
+		}
 	}
 }
 

@@ -2,7 +2,11 @@
 
 package mcpregistry
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 func TestParseMCPToolName(t *testing.T) {
 	tests := []struct {
@@ -49,6 +53,62 @@ func TestSaveLoadAliases_RoundTrip(t *testing.T) {
 	}
 	if got["grafana"].RegistryName != "docker.io/grafana/mcp-grafana" {
 		t.Errorf("round-tripped alias = %+v", got["grafana"])
+	}
+}
+
+func TestLoadAliases_CorruptFileIsAnError(t *testing.T) {
+	withTempHydraHome(t)
+	path := aliasPath()
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("{not valid json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadAliases(); err == nil {
+		t.Fatal("a corrupt aliases file must surface as an error, not silently yield an empty map")
+	}
+}
+
+func TestClassificationForTool_DelistedServerIsClassifiedAsQuarantined(t *testing.T) {
+	withTempHydraHome(t)
+	if err := SaveAliases(map[string]aliasEntry{"gone": {RegistryName: "io.github.x/gone", Status: StatusVerified}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveStates(map[string]ServerState{"io.github.x/gone": {State: StateDelisted}}); err != nil {
+		t.Fatal(err)
+	}
+	got, ok := ClassificationForTool("mcp__gone__do_thing")
+	if !ok || got != ClassMCPQuarantined {
+		t.Errorf("got (%q, %v), want (%q, true) — delisted is grouped with quarantined", got, ok, ClassMCPQuarantined)
+	}
+}
+
+func TestClassificationForTool_CorruptAliasesFileFailsClosed(t *testing.T) {
+	withTempHydraHome(t)
+	path := aliasPath()
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("{not valid json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := ClassificationForTool("mcp__anything__tool"); ok {
+		t.Error("a corrupt aliases file must fail closed (no classification), not error out of the ledger check path")
+	}
+}
+
+func TestClassificationForTool_CorruptStatesFileFailsClosed(t *testing.T) {
+	withTempHydraHome(t)
+	if err := SaveAliases(map[string]aliasEntry{"x": {RegistryName: "io.github.x/x", Status: StatusVerified}}); err != nil {
+		t.Fatal(err)
+	}
+	path := statePath()
+	if err := os.WriteFile(path, []byte("{not valid json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := ClassificationForTool("mcp__x__tool"); ok {
+		t.Error("a corrupt states file must fail closed (no classification), not error out of the ledger check path")
 	}
 }
 

@@ -56,6 +56,34 @@ func TestDirectory_MatchesWhatExportWrites(t *testing.T) {
 	}
 }
 
+func TestExportDirectory_PropagatesDirectoryError(t *testing.T) {
+	withTempHydraHome(t)
+	if err := os.WriteFile(statePath(), []byte("{not valid json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ExportDirectory(t.TempDir()); err == nil {
+		t.Fatal("a corrupt state file should fail the export, not silently write an empty directory")
+	}
+}
+
+// A file sitting where the output directory needs to go is a portable way
+// to make MkdirAll fail on every OS, without relying on permission bits
+// (which Windows doesn't enforce the same way — see internal/config's
+// equivalent test for the same reasoning).
+func TestExportDirectory_MkdirAllFailureIsAnError(t *testing.T) {
+	withTempHydraHome(t)
+	parent := t.TempDir()
+	blocked := filepath.Join(parent, "blocked")
+	if err := os.WriteFile(blocked, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// outDir itself is a file, so MkdirAll(outDir, ...) must fail: it can't
+	// turn a file into a directory.
+	if _, err := ExportDirectory(blocked); err == nil {
+		t.Fatal("expected an error when outDir already exists as a regular file")
+	}
+}
+
 func TestExportDirectory_NoStatesWritesEmptyDirectory(t *testing.T) {
 	withTempHydraHome(t)
 	out := t.TempDir()

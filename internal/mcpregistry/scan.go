@@ -83,11 +83,18 @@ func claudeDesktopConfigPath() string {
 	if err != nil {
 		return ""
 	}
-	switch runtime.GOOS {
+	return claudeDesktopConfigPathFor(runtime.GOOS, home, os.Getenv("APPDATA"))
+}
+
+// claudeDesktopConfigPathFor is the pure, OS-parameterized core of
+// claudeDesktopConfigPath — split out so all three platform branches are
+// unit-testable on every CI runner, not just whichever OS happens to be
+// running the test (goos/appData wouldn't otherwise vary within one job).
+func claudeDesktopConfigPathFor(goos, home, appData string) string {
+	switch goos {
 	case "darwin":
 		return filepath.Join(home, "Library", "Application Support", "Claude", "claude_desktop_config.json")
 	case "windows":
-		appData := os.Getenv("APPDATA")
 		if appData == "" {
 			return ""
 		}
@@ -166,6 +173,11 @@ func toInstalledServers(servers map[string]clientServerConfig, client, scope str
 	return out
 }
 
+// dockerSubcommands are bare tokens that appear in a docker invocation but
+// are never the image — excluded so a config with only flags and no real
+// image argument doesn't misresolve one of these as if it were the image.
+var dockerSubcommands = map[string]bool{"run": true, "exec": true, "start": true}
+
 // resolvePackage makes a best-effort guess at the package identifier a
 // stdio launcher command runs, so it can be matched against the registry's
 // packages[].identifier. Deliberately conservative: an unresolved package
@@ -181,11 +193,14 @@ func resolvePackage(command string, args []string) string {
 		}
 	case "docker":
 		// Best-effort: the image is usually the last bare token that isn't
-		// a flag and doesn't look like an env-style KEY=VALUE pair passed
-		// to a preceding -e/--env flag.
+		// a flag, doesn't look like an env-style KEY=VALUE pair passed to a
+		// preceding -e/--env flag, and isn't the docker subcommand itself
+		// ("run"/"exec"/"start" are bare tokens too — a config with only
+		// flags and no real image argument would otherwise misresolve one
+		// of these as if it were the image).
 		for i := len(args) - 1; i >= 0; i-- {
 			a := args[i]
-			if strings.HasPrefix(a, "-") || strings.Contains(a, "=") {
+			if strings.HasPrefix(a, "-") || strings.Contains(a, "=") || dockerSubcommands[a] {
 				continue
 			}
 			return a
