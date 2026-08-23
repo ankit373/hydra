@@ -4,13 +4,13 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Hydra Desktop — watch every agent, every dollar, live</title>
-  <meta name="description" content="The Hydra desktop app: four views over your local control plane — Dashboard, Fleet, Session, Code. See what each agent is doing and what it costs, as it happens. macOS, Linux and Windows.">
+  <meta name="description" content="The Hydra desktop app: ask for work in a chat, and every reply says which model answered, at which tier, and what it cost. Plus Dashboard, Fleet, Session and Security views. macOS, Linux and Windows.">
   <meta name="keywords" content="AI agent dashboard, LLM cost dashboard, desktop app, multi-model orchestration UI, agent monitoring, Hydra desktop">
 
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://hydra.uvansa.com/app.html">
   <meta property="og:title" content="Hydra Desktop — watch every agent, every dollar, live">
-  <meta property="og:description" content="Four views over your local control plane: Dashboard, Fleet, Session, Code. Free, open source, runs entirely on your machine.">
+  <meta property="og:description" content="Chat-first, over your local control plane: every reply names the model, the tier and the cost. Free, open source, runs entirely on your machine.">
   <meta property="og:image" content="https://hydra.uvansa.com/logo.png">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:site" content="@ankit373">
@@ -118,27 +118,31 @@ a:hover{text-decoration:underline;}
 .nav-item i{width:5px;height:5px;border-radius:50%;background:currentColor;opacity:.5;font-style:normal;}
 .pane{padding:18px 20px;position:relative;}
 
-/* Each pane fades in on its own slice of one 24s loop. Four views, 6s each. */
-.view{position:absolute;inset:18px 20px;opacity:0;animation:cycle 24s infinite;}
+/* Each pane fades in on its own slice of one 30s loop. Five views, 6s each —
+   a slot is 20% of the loop, which is why the percentages below are not the
+   25%-slot ones this had when there were four. */
+.view{position:absolute;inset:18px 20px;opacity:0;animation:cycle 30s infinite;}
 .view:nth-child(1){animation-delay:0s;}
 .view:nth-child(2){animation-delay:6s;}
 .view:nth-child(3){animation-delay:12s;}
 .view:nth-child(4){animation-delay:18s;}
+.view:nth-child(5){animation-delay:24s;}
 @keyframes cycle{
-  0%,1%   {opacity:0;transform:translateY(6px);}
-  3%,23%  {opacity:1;transform:none;}
-  25%,100%{opacity:0;transform:translateY(-4px);}
+  0%,1%    {opacity:0;transform:translateY(6px);}
+  2.5%,18% {opacity:1;transform:none;}
+  20%,100% {opacity:0;transform:translateY(-4px);}
 }
-/* The sidebar highlight tracks the same 24s clock. */
-.nav-item{animation:navlit 24s infinite;}
+/* The sidebar highlight tracks the same 30s clock. */
+.nav-item{animation:navlit 30s infinite;}
 .nav-item:nth-of-type(1){animation-delay:0s;}
 .nav-item:nth-of-type(2){animation-delay:6s;}
 .nav-item:nth-of-type(3){animation-delay:12s;}
 .nav-item:nth-of-type(4){animation-delay:18s;}
+.nav-item:nth-of-type(5){animation-delay:24s;}
 @keyframes navlit{
-  0%,1%   {background:transparent;color:var(--dim);}
-  3%,23%  {background:rgba(0,230,195,.10);color:var(--aqua);}
-  25%,100%{background:transparent;color:var(--dim);}
+  0%,1%    {background:transparent;color:var(--dim);}
+  2.5%,18% {background:rgba(0,230,195,.10);color:var(--aqua);}
+  20%,100% {background:transparent;color:var(--dim);}
 }
 /* Once nav.js confirms click handling is wired, it swaps the autoplay loop
    above for direct control: exactly one view/nav-item active, no timer. */
@@ -153,6 +157,27 @@ a:hover{text-decoration:underline;}
   .view:nth-child(1){opacity:1;}
   .nav-item:nth-of-type(1){background:rgba(0,230,195,.10);color:var(--aqua);}
 }
+
+/* Chat view: thread on the left, the glanceable companion pane on the right —
+   the same split the app ships. */
+.chat-split{display:grid;grid-template-columns:1fr 150px;gap:14px;align-items:start;}
+.said{margin-left:auto;max-width:78%;background:var(--panel);border:1px solid var(--line);
+  border-radius:10px 10px 3px 10px;padding:7px 11px;font-size:12px;margin-bottom:9px;width:fit-content;}
+.prov{font-family:var(--mono);font-size:9.5px;color:var(--faint);display:flex;align-items:center;
+  gap:6px;margin-bottom:12px;}
+.composer{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:9px;
+  background:var(--panel);padding:8px 10px;font-size:11.5px;}
+.chip{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line);border-radius:999px;
+  padding:2px 8px;font-size:10px;color:var(--ink);white-space:nowrap;}
+.chip i{width:5px;height:5px;border-radius:50%;background:var(--aqua);font-style:normal;}
+.ckpane{border-left:1px solid var(--line);padding-left:12px;}
+.cklbl{font-family:var(--mono);font-size:8.5px;letter-spacing:.09em;color:var(--faint);margin-bottom:4px;}
+.ckrow{display:flex;justify-content:space-between;align-items:baseline;font-size:10.5px;}
+/* Session's tab strip. */
+.tabs{display:flex;gap:4px;margin-bottom:10px;}
+.tab{font-family:var(--mono);font-size:10px;padding:3px 9px;border-radius:5px;
+  border:1px solid var(--line);color:var(--dim);}
+.tab.on{color:var(--aqua);border-color:var(--aqua);background:rgba(0,230,195,.08);}
 
 .vhead{font-family:var(--display);font-size:15px;margin-bottom:2px;}
 .vsub{font-family:var(--mono);font-size:10.5px;color:var(--faint);margin-bottom:14px;}
@@ -269,7 +294,7 @@ footer a{color:var(--dim);}
     </p>
     <div class="cta">
       <a class="btn primary" href="#download">Download for your platform</a>
-      <a class="btn" href="#views">See the four views</a>
+      <a class="btn" href="#views">See the views</a>
     </div>
   </div>
 
@@ -286,14 +311,50 @@ footer a{color:var(--dim);}
       <div class="win-body">
         <div class="side">
           <div class="lbl">Views</div>
+          <button type="button" class="nav-item"><i></i>Chat</button>
           <button type="button" class="nav-item"><i></i>Dashboard</button>
           <button type="button" class="nav-item"><i></i>Fleet</button>
           <button type="button" class="nav-item"><i></i>Session</button>
-          <button type="button" class="nav-item"><i></i>Code</button>
+          <button type="button" class="nav-item"><i></i>Security</button>
         </div>
 
         <div class="pane">
-          <!-- 1 · Dashboard -->
+          <!-- 1 · Chat · the default surface -->
+          <div class="view">
+            <div class="vhead">Chat</div>
+            <div class="vsub">ask for work — the reply says who answered, and what it cost</div>
+            <div class="chat-split">
+              <div>
+                <div class="said">add pagination to /users</div>
+                <div class="row" style="border:0;padding:2px 0 8px">
+                  <span style="flex:1;color:var(--dim)">Read <span class="mono">internal/api/users.go</span>,
+                    added page/size parsing and an <span class="mono">X-Total-Count</span> header.</span>
+                </div>
+                <div class="prov">
+                  <span class="pill ok">T6</span> gemini-flash
+                  <span style="color:var(--line)">·</span> 2.9s
+                  <span style="color:var(--line)">·</span> $0.004
+                  <span style="color:var(--line)">·</span> <span style="color:var(--aqua)">session →</span>
+                </div>
+                <div class="composer">
+                  <span style="flex:1;color:var(--faint)">Ask anything about this repo…</span>
+                  <span class="chip"><i></i>Auto-route</span>
+                </div>
+              </div>
+              <div class="ckpane">
+                <div class="cklbl">ACTIVE</div>
+                <div style="font-size:11.5px;margin-bottom:2px">gemini-flash <span style="color:var(--faint)">T6</span></div>
+                <div style="font-family:var(--mono);font-size:9.5px;color:var(--faint)">flash pool · 37 calls</div>
+                <div class="cklbl" style="margin-top:12px">MEASURED AT THIS</div>
+                <div class="ckrow"><span>gemini-flash</span><span style="color:var(--cheap)">1.18</span></div>
+                <div style="font-family:var(--mono);font-size:9px;color:var(--faint)">go · 41 obs</div>
+                <div class="ckrow" style="margin-top:7px"><span>qwen2.5</span><span style="color:var(--mid)">0.31</span></div>
+                <div style="font-family:var(--mono);font-size:9px;color:var(--mid)">yaml · 5 obs · thin</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 2 · Dashboard -->
           <div class="view">
             <div class="vhead">Dashboard</div>
             <div class="vsub">spend, grouped by model · tier · day</div>
@@ -310,7 +371,7 @@ footer a{color:var(--dim);}
             </table>
           </div>
 
-          <!-- 2 · Fleet -->
+          <!-- 3 · Fleet -->
           <div class="view">
             <div class="vhead">Fleet</div>
             <div class="vsub">every run on this machine, newest first</div>
@@ -329,10 +390,13 @@ footer a{color:var(--dim);}
             </div>
           </div>
 
-          <!-- 3 · Session -->
+          <!-- 4 · Session -->
           <div class="view">
             <div class="vhead">Session <span class="pill live" style="margin-left:6px">live</span></div>
-            <div class="vsub">run-4b1 · what this agent is doing, in order</div>
+            <div class="vsub">run-4b1 · timeline, the diffs, and a graph when it fans out</div>
+            <div class="tabs">
+              <span class="tab on">Timeline</span><span class="tab">Code</span><span class="tab">Graph</span>
+            </div>
             <div class="row"><span style="color:var(--faint);width:52px">00:00.0</span>
               <span style="flex:1">head selected — <span style="color:var(--aqua)">gemini-flash</span> (tier 6)</span></div>
             <div class="row"><span style="color:var(--faint);width:52px">00:01.2</span>
@@ -344,33 +408,32 @@ footer a{color:var(--dim);}
             <div class="row"><span style="color:var(--faint);width:52px">00:03.4</span>
               <span style="flex:1">edited <span class="mono">internal/api/users.go</span></span>
               <span style="color:var(--cheap)">+18</span><span style="color:var(--exp)">−4</span></div>
-            <div style="margin-top:12px;font-family:var(--mono);font-size:10px;color:var(--faint)">
-              TIMELINE · a layered graph appears here when a run fans out</div>
+            <div class="diff" style="margin-top:9px">
+              <div class="del">-   users := store.All()</div>
+              <div class="add">+   users, total := store.Page(page, size)</div>
+            </div>
           </div>
 
-          <!-- 4 · Code -->
+          <!-- 5 · Security -->
           <div class="view">
-            <div class="vhead">Code</div>
-            <div class="vsub">what this run actually changed on disk</div>
-            <div style="font-family:var(--mono);font-size:11px;color:var(--dim);margin-bottom:10px">
-              internal/api/users.go <span style="color:var(--cheap)">+18</span>
-              <span style="color:var(--exp)">−4</span></div>
-            <div class="diff">
-              <div class="ctx">  func ListUsers(w http.ResponseWriter, r *http.Request) {</div>
-              <div class="del">-   users := store.All()</div>
-              <div class="add">+   page, size := paging.FromQuery(r.URL.Query())</div>
-              <div class="add">+   users, total := store.Page(page, size)</div>
-              <div class="ctx">  </div>
-              <div class="add">+   w.Header().Set("X-Total-Count", strconv.Itoa(total))</div>
-              <div class="ctx">    json.NewEncoder(w).Encode(users)</div>
-              <div class="ctx">  }</div>
+            <div class="vhead">Security</div>
+            <div class="vsub">what agents touched, and whether policy allowed it</div>
+            <div class="cards">
+              <div class="card"><div class="k">Allowed</div><div class="v">1,204</div></div>
+              <div class="card"><div class="k">Denied</div><div class="v" style="color:var(--exp)">7</div></div>
+              <div class="card"><div class="k">Flagged</div><div class="v" style="color:var(--mid)">2</div></div>
             </div>
+            <div class="row"><span style="flex:1">Ledger chain intact</span><span class="pill ok">verified</span></div>
+            <div class="row"><span style="flex:1">OWASP LLM Top-10 coverage</span><span style="color:var(--dim)">8 / 10 rules</span></div>
+            <div class="row"><span style="flex:1">Prompt-injection markers seen</span><span style="color:var(--mid)">2 blocked</span></div>
+            <div style="margin-top:12px;font-family:var(--mono);font-size:10px;color:var(--faint)">
+              EVERY DECISION IS APPEND-ONLY AND HASH-CHAINED · NOTHING LEAVES THE MACHINE</div>
           </div>
         </div>
       </div>
     </div>
     <p class="caption">
-      A live rendering of the app's four views, built from its own design tokens.
+      A live rendering of the app's views, built from its own design tokens.
       Not a screenshot — the numbers are sample data.
     </p>
   </div>
@@ -378,7 +441,7 @@ footer a{color:var(--dim);}
 
 <!-- ══ THE FOUR VIEWS ══════════════════════════════════════════════════ -->
 <section class="blk wrap" id="views">
-  <div class="klabel"><span>What's in it</span><b>four views, one question each</b></div>
+  <div class="klabel"><span>What's in it</span><b>five views, one question each</b></div>
   <h2>Each screen answers something you'd otherwise <span class="grad">grep the logs for</span>.</h2>
   <p>
     The app is a reader, not a second brain. Everything it shows comes from the
@@ -389,6 +452,14 @@ footer a{color:var(--dim);}
   </p>
 
   <div class="grid4">
+    <div class="feat">
+      <div class="tag">Chat</div>
+      <h3>Ask, and see what answered</h3>
+      <p>The window opens here. Ask for work and the reply names the model, the tier
+        and the cost, with the run narrating itself as it goes rather than after.
+        The model picker groups by shared quota, so it shows when choosing one model
+        spends the budget another will need.</p>
+    </div>
     <div class="feat">
       <div class="tag">Dashboard</div>
       <h3>Where the money went</h3>
@@ -409,20 +480,24 @@ footer a{color:var(--dim);}
       <p>One run's timeline in order: which head was selected, which candidates
         failed and why it fell through, how long each step took, where it handed
         off — and a layered graph when the run fanned out, so a swarm reads as a
-        shape rather than a list.</p>
+        shape rather than a list. Its <b>Code</b> tab carries the diffs for the same
+        run, and clicking a file in the graph opens it there.</p>
     </div>
     <div class="feat">
-      <div class="tag">Code</div>
-      <h3>What changed on disk</h3>
-      <p>The files a run touched and the diff for each. If a run says it edited
-        something, this is where you check what it actually wrote.</p>
+      <div class="tag">Security</div>
+      <h3>What it was allowed to touch</h3>
+      <p>Every tool call an agent made, whether policy allowed it, and what got
+        blocked or flagged — over an append-only, hash-chained ledger, mapped
+        against the OWASP LLM Top 10.</p>
     </div>
   </div>
 
   <div class="note">
-    <b>Plus a chat dock.</b> Collapsed by default, on every screen. Type a task,
-    let Hydra auto-route it, and watch the run appear in Fleet — without leaving
-    the view you were reading.
+    <b>Beside the chat, a pane you glance at.</b> The model working now and the
+    quota it draws from, this run's confidence, the files it changed, and how
+    accurate each model has actually measured at this kind of work — with the
+    sample size beside every score, because a number from five observations is not
+    a measurement.
   </div>
 </section>
 
