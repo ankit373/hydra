@@ -280,13 +280,18 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 			Head: h.ID, Model: h.Name, Tier: tier,
 			Detail: fmt.Sprintf("candidate %d of %d", i+1, len(candidates)),
 		})
-		// Fails closed like ledger.Check itself: a policy-check error (unreadable
+		// Proceeds only on an explicit Allow. Testing `== Deny` instead would
+		// let any other verdict through, which stopped being safe the moment
+		// Deny was not the only one that withholds permission — a pending
+		// ledger.Ask would have read as approval (#580).
+		//
+		// Fails closed the same way on error: a policy-check failure (unreadable
 		// policy file, ledger write failure) must deny, not silently let the
 		// candidate through just because the decision couldn't be computed.
 		// CheckAndRecordDispatch's LoadPolicy is itself mtime-cached, so trying
 		// every candidate against the same prompt no longer re-reads and
 		// re-parses the identical policy file from disk once per candidate.
-		if decision, lerr := ledger.CheckAndRecordDispatch("hydra-dispatch", h.ID, opts.Resource, prompt, class); lerr != nil || decision == ledger.Deny {
+		if decision, lerr := ledger.CheckAndRecordDispatch("hydra-dispatch", h.ID, opts.Resource, prompt, class); lerr != nil || decision != ledger.Allow {
 			detail := "denied by ledger policy"
 			if lerr != nil {
 				detail = "ledger policy check failed: " + lerr.Error()

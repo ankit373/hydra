@@ -966,3 +966,37 @@ func TestTruncate(t *testing.T) {
 		t.Errorf("truncate(\"\") = %q", got)
 	}
 }
+
+// An Ask rule must withhold permission exactly like a deny does, until the
+// pause-and-resume path exists to act on it (#582).
+//
+// This is the regression that made #580 more than a new constant: this gate used
+// to test `decision == ledger.Deny`, so any other verdict fell straight through
+// and the head ran. A pending question would have been an approval.
+func TestDispatch_LedgerAskRuleDoesNotLetTheHeadRun(t *testing.T) {
+	s := testutil.NewSandbox(t)
+	writeLedgerPolicy(t, ledger.Policy{Rules: []ledger.Rule{{Tool: "pending", Decision: ledger.Ask}}})
+
+	res, err := liveDispatcher(echoHead(t, s, "pending", 95), echoHead(t, s, "ok", 90)).
+		Dispatch(context.Background(), "go", Options{})
+	if err != nil {
+		t.Fatalf("dispatch gave up instead of falling back past the asked head: %v", err)
+	}
+	if res.Head.ID != "ok" {
+		t.Errorf("answered by %q, want the fallback head — an unanswered Ask must not run", res.Head.ID)
+	}
+
+	events, err := ledger.Load(ledger.DefaultPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var sawAsk bool
+	for _, e := range events {
+		if e.Tool == "pending" && e.Decision == ledger.Ask {
+			sawAsk = true
+		}
+	}
+	if !sawAsk {
+		t.Errorf("no ask event recorded for the pending head: %+v", events)
+	}
+}
