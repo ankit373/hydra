@@ -111,7 +111,7 @@ func (m Cockpit) statusBar() string {
 func (m Cockpit) statusFact() string {
 	switch m.view {
 	case ckViewChat:
-		s := "mode " + m.mode
+		s := "mode " + m.mode + " · " + m.override.label()
 		if m.pinnedTier > 0 {
 			s += fmt.Sprintf(" · pinned T%d", m.pinnedTier)
 		}

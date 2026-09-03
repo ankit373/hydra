@@ -67,7 +67,7 @@ func testRun(id, status, task string) ckRun {
 // without touching the machine.
 func testCockpit() Cockpit {
 	m := Cockpit{
-		mode:         "dispatch",
+		mode:         "auto",
 		heads:        testHeads(),
 		collapsed:    map[string]bool{},
 		auditIgnored: map[string]bool{},

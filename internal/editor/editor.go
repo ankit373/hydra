@@ -39,6 +39,10 @@ type Request struct {
 	// could tell which run touched which file. Empty derives one, as elsewhere.
 	RunID  string
 	TaskID string
+
+	// LocalOnly forces the inner dispatch onto local heads — how a caller's
+	// "nothing leaves this machine" override reaches an edit (#597).
+	LocalOnly bool
 }
 
 // Result is the JSON output emitted by Edit.
@@ -119,10 +123,11 @@ func Edit(ctx context.Context, req Request) (*Result, error) {
 	}
 	tierHint := enumToTier(req.Enum)
 	dispResult, err := d.Dispatch(ctx, editPrompt, dispatch.Options{
-		TierHint: tierHint,
-		RunID:    req.RunID,
-		TaskID:   req.TaskID,
-		Resource: req.File,
+		TierHint:  tierHint,
+		LocalOnly: req.LocalOnly,
+		RunID:     req.RunID,
+		TaskID:    req.TaskID,
+		Resource:  req.File,
 	})
 	if err != nil {
 		cleanupBackup()
