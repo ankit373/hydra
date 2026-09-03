@@ -42,6 +42,7 @@ internal/mcpregistry/   ← MCP server trust registry: sync official registry, s
                           score (CSA-shaped categories), version-bump trust automaton, backtest against
                           known incidents. `hyctl mcp registry`.
 internal/oracle/        ← Verification oracles (tests/compile/lint) as calibrated evidence sources. `hyctl oracle`.
+internal/ope/           ← Off-policy estimation: inverse-probability weighting over sampled logs.
 internal/pricing/       ← Live pricing DB (OpenRouter fetch + 24h cache + tier fallback).
 internal/policy/        ← PII detection + local-only enforcement.
 internal/{cost,budget}/ ← Spend reporting (est/actual labeling) + token-budget governor (static bands + rate-aware first-passage on claude_pct).
@@ -244,6 +245,14 @@ hyctl trust defect --pii --production ; hyctl trust stats ; hyctl trust explain 
 # Add a model at runtime (no rebuild) — merges into ~/.hydra/models.json overlay
 hyctl models add kimi-k3 --name "Kimi K3" --provider moonshot --cap-score 85
 hyctl models list ; hyctl models remove kimi-k3 ; hyctl models sync   # import OpenRouter catalog
+
+# Routing propensity: every dispatch row carries act_prob (probability the router
+# chose that head) and keep_prob (probability the row was retained). Both are
+# always written - an absent propensity is unusable and a zero one divides by
+# zero. `explore_rate` in config.toml (default 0 = pure argmax) is what gives
+# non-chosen heads a non-zero probability at all; without it, counterfactual
+# "what would another head have done" questions are unidentifiable, not merely
+# hard (#605).
 
 # System state / discovered heads / spend
 # `hyctl status` shows the rate-aware claude_pct governor (first-passage risk toward 80%).
@@ -792,6 +801,7 @@ All Go source lives under `cmd/` and `internal/`. Key packages:
 | `internal/ledger` | Local MCP accountability ledger: append-only access events + glob allow/deny `Policy.Decide` gate (records every decision), classification-aware (`Rule.Classification`, auto-derived from content via `policy.ContainsPII` or set explicitly) + `HashParams`/`VerifyParams` SHA256 parameter-hash binding for tamper-evidence between a decision and its execution. `Check` fails **closed** (unhashable params → `Deny`, recorded); `LoadPolicy` rejects unparseable decisions/actions/globs rather than silently voiding a rule, actions/classifications are case-normalized, and only **Allow** events count as approvals for `verify`. Drives `hyctl mcp check\|record\|verify\|log\|report`. |
 | `internal/mcpregistry` | Local-first MCP server trust registry — identity-only sync/scan/audit of what's installed (never reads secret/env values from client configs, by construction), a CSA MCP Selection Scorecard-shaped score (known-CVE cross-reference via OSV.dev, edit-distance typosquat detection, GitHub maintenance recency, declared-not-verified auth posture — each category renders "insufficient evidence" rather than a fabricated number), and a trust lifecycle automaton (new/provisional/trusted/flagged/quarantined/delisted) where every version bump — a content-hash diff of the manifest — drops a server back to provisional. Only a *confirmed* finding quarantines (`quarantineThreshold`, -80): the near-duplicate heuristic scores -40 and deliberately sits above it, because it false-positived on 0.7% of the live registry and quarantine has no automatic exit — `Clear` is the manual recovery path. An unevaluated category contributes `neutralBaseline` rather than dropping out of the weighted average, so missing evidence can never raise a score, and a server with no substantive category reads "insufficient evidence" instead of a number. `ClassificationForTool` feeds `mcp-unverified`/`mcp-flagged`/`mcp-quarantined` into `internal/ledger`'s classification, the same mechanism `policy.ContainsPII` uses for content. `BehaviorClassification` adds `mcp-behavior-change` from local ledger history alone — a server whose recorded `Action`s have only ever been one kind performing another for the first time — no cross-user aggregation or registry-declared capability data needed (neither exists yet). `Backtest` validates the pipeline against real documented incidents (`postmark-mcp`'s rug-pull, CVE-2025-6514) before any public directory export is trusted. Drives `hyctl mcp registry sync\|scan\|audit\|export\|backtest\|list\|clear`. |
 | `internal/oracle` | Verification oracles: `Oracle`/`CommandOracle` run tests/compile/lint (exit 0 = pass) and map the verdict to a calibrated LLR (`oracle.LLR`) — a high-`D` evidence source. Drives `hyctl oracle verify`. |
+| `internal/ope` | Off-policy estimation. `SelfNormalized` recovers a population rate from a non-uniformly sampled log by weighting each row by the inverse of its inclusion probability. A non-positive probability is skipped and counted, never treated as certain. Exists because averaging a sampled log inverted the true ranking of two heads in simulation, which would then change routing (#605). |
 | `internal/tui` | Bubble Tea TUI: init wizard, install flow |
 | `internal/review` | Code review subcommand |
 | `internal/editor` | Editor integration |

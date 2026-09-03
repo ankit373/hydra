@@ -259,6 +259,11 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 			ErrNoHeads, tierClause(tier), localOnly)
 	}
 
+	// Reorders candidates so the head to try first is at index 0 and reports
+	// the probability it was chosen. At the default ExploreRate of 0 this is
+	// the identity and actProb is 1.
+	candidates, actProb := d.pick(candidates, opts)
+
 	if opts.DryRun {
 		return &Result{Head: candidates[0], Fallbacks: candidates[1:]}, nil
 	}
@@ -351,7 +356,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 			CostUSD:    d.estimateCost(tier, resp.InputTokens, resp.OutputTokens),
 			DurationMS: resp.Duration.Milliseconds(),
 		})
-		_ = d.logDispatch(r, prompt, opts)
+		_ = d.logDispatch(r, prompt, opts, actProb)
 		if from, err := d.writeHandoff(r, prompt); err == nil {
 			// last_handoff.json keeps only the newest. Appending the handoff
 			// here is what makes a *chain* of them reconstructable, which is
@@ -782,7 +787,7 @@ func (d *Dispatcher) syncStateJSON(r *Result) {
 }
 
 // logDispatch writes to dispatch.jsonl and cost.jsonl.
-func (d *Dispatcher) logDispatch(r *Result, prompt string, opts Options) error {
+func (d *Dispatcher) logDispatch(r *Result, prompt string, opts Options, actProb float64) error {
 	tier := rank.UITier(r.Head)
 	wallMs := r.Response.Duration.Milliseconds()
 	estCost := d.estimateCost(tier, r.Response.InputTokens, r.Response.OutputTokens)
@@ -808,6 +813,11 @@ func (d *Dispatcher) logDispatch(r *Result, prompt string, opts Options) error {
 		"prompt_preview": truncate(prompt, 80),
 		"task_id":        taskID,
 		"run_id":         runID,
+		// keep_prob is 1: nothing samples these rows yet. Written anyway so a
+		// reader never has to guess whether an absent field means "certain" or
+		// "unrecorded" (#605).
+		"act_prob":  actProb,
+		"keep_prob": 1.0,
 	}
 	if err := appendJSONL(filepath.Join(logDir, "dispatch.jsonl"), dispatchEntry); err != nil {
 		return err
@@ -838,6 +848,8 @@ func (d *Dispatcher) logDispatch(r *Result, prompt string, opts Options) error {
 			"source":          legacySource,
 			"task_id":         taskID,
 			"run_id":          runID,
+			"act_prob":        actProb,
+			"keep_prob":       1.0,
 		}
 		if breadcrumb != "" { // match the omitempty on cost.Row.Config
 			costEntry["config"] = breadcrumb

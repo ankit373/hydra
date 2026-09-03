@@ -45,6 +45,13 @@ type Row struct {
 	SwarmMode      string  `json:"swarm_mode"`
 	SwarmWinner    bool    `json:"swarm_winner"`
 	Config         string  `json:"config,omitempty"` // deployment-identity breadcrumb (config.Breadcrumb)
+
+	// ActProb is the probability the router chose this head; KeepProb the
+	// probability this row was retained by sampling. Never omitempty: an
+	// absent propensity is unusable and a zero one divides by zero, so both
+	// must be distinguishable from "not recorded". See internal/ope.
+	ActProb  float64 `json:"act_prob"`
+	KeepProb float64 `json:"keep_prob"`
 }
 
 // Totals is an aggregate summary.

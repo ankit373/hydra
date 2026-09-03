@@ -29,6 +29,11 @@ type Config struct {
 	Tiers    []Tier            `toml:"tiers"`  // ordered by capability (high → low)
 	Skills   []string          `toml:"skills"` // enabled skill IDs
 	Policies map[string]Policy `toml:"policies,omitempty"`
+
+	// ExploreRate is the probability a dispatch tries a head other than the
+	// top-ranked one, so the logs carry the counterfactual evidence off-policy
+	// evaluation needs. 0 (the default) is pure argmax and changes nothing.
+	ExploreRate float64 `toml:"explore_rate,omitempty"`
 }
 
 // Dir returns the Hydra state directory: $HYDRA_HOME if set, else ~/.hydra.
