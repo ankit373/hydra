@@ -17,6 +17,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/ankit373/hydra/internal/config"
+	"github.com/ankit373/hydra/internal/dispatch"
 	"github.com/ankit373/hydra/internal/executor"
 	"github.com/ankit373/hydra/internal/pricing"
 	"github.com/ankit373/hydra/internal/probe"
@@ -105,17 +106,29 @@ type Cockpit struct {
 	glossary bool
 	flash    string // transient status-bar note, replaced by the next action
 
-	// chat (view 0) — routing preview only in this phase; execution is #597.
+	// chat (view 0) — executes for real (#597): modes, gates, and the override.
 	input      string
 	log        []string
-	mode       string
-	runs       int
-	pinnedTier int // session default tier for chat, set from the models view
-	chatScroll int // 0 = follow the live tail; L+1 = scrollback anchored at line L
+	mode       string // chat mode name: ask/edit/plan/auto + advanced (modes.go)
+	pinnedTier int    // session default tier for chat, set from the models view
+	chatScroll int    // 0 = follow the live tail; L+1 = scrollback anchored at line L
+	piiLocal   bool   // config's pii policy forces local-only routing
+	override   ckOverride
+	exec       *ckExecState // the running task; nil when idle
+	planWait   *ckWait      // plan awaiting approval
+	confirm    *ckWait      // careful-mode write/fix confirm
+	lastDone   *ckTask      // last finished task, for d/x/o and the trace jump
+	modePick   bool         // `m` mode-picker overlay
+	modeSel    int
+	ovOpen     bool // ctrl+o override modal
+	ovSel      int
+	ovStage    byte // 0 list · 'T' tier digit · 'C' confidence pick
+	ovConfSel  int
 	codeLang   string
 	codeLines  []string
 	codeShown  int
-	codeGen    int // generation guard so a new run cancels stale tick loops
+	codeGen    int  // generation guard so a new run cancels stale tick loops
+	codeDiff   bool // the panel currently shows the last edit's diff
 
 	claudePct  int
 	pctKnown   bool // false when state.json has no claude_pct to read
@@ -172,7 +185,7 @@ func NewCockpit() Cockpit {
 	metrics := ckLoadMetrics(pr)
 
 	m := Cockpit{
-		mode:         "dispatch",
+		mode:         "auto",
 		claudePct:    pct,
 		pctKnown:     known,
 		pctHist:      hist,
@@ -187,6 +200,11 @@ func NewCockpit() Cockpit {
 		auditIgnored: map[string]bool{},
 	}
 	m.runsToday = ckLoadRuns(time.Now().UTC())
+	// The route badge mirrors what dispatch will enforce; with no config there
+	// is no pii policy to mirror.
+	if cfg, err := config.Load(); err == nil {
+		m.piiLocal = dispatch.PIILocalOnly(cfg)
+	}
 
 	switch len(heads) {
 	case 0:
@@ -198,7 +216,7 @@ func NewCockpit() Cockpit {
 		m.log = []string{
 			ckDimS.Render(fmt.Sprintf("🐉 Hydra initialised · %d model%s scanned · routing engine ready.",
 				len(heads), plural(len(heads)))),
-			ckDimS.Render("Type a task and press enter. tab cycles views · ? shortcuts · :q quits."),
+			ckDimS.Render("Type a task and press enter. shift+tab mode · ctrl+o route · ? shortcuts · :q quits."),
 		}
 	}
 	return m
@@ -241,6 +259,16 @@ func (m Cockpit) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case ckRescanMsg:
 		return m.applyRescan(msg), nil
+	case ckExecDoneMsg:
+		return m.finishTask(msg)
+	case ckGateMsg:
+		return m.gateTask(msg)
+	case ckSpinTickMsg:
+		// Keep repainting elapsed/stage while this exact task runs; a stale
+		// tick from a superseded task schedules nothing.
+		if msg.exec == m.exec && m.exec != nil {
+			return m, ckSpinTick(m.exec)
+		}
 	case tea.MouseMsg:
 		switch tea.MouseEvent(msg).Button {
 		case tea.MouseButtonWheelUp:
@@ -249,6 +277,21 @@ func (m Cockpit) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.scrollBy(3), nil
 		}
 	case tea.KeyMsg:
+		// Terminals coalesce fast keystrokes into one multi-rune message;
+		// handlers are written for one key at a time, so replay individually.
+		// Bracketed paste stays one message: pasted text is never shortcuts.
+		if msg.Type == tea.KeyRunes && len(msg.Runes) > 1 && !msg.Paste {
+			var cur tea.Model = m
+			var cmds []tea.Cmd
+			for _, r := range msg.Runes {
+				var c tea.Cmd
+				cur, c = cur.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+				if c != nil {
+					cmds = append(cmds, c)
+				}
+			}
+			return cur, tea.Batch(cmds...)
+		}
 		return m.key(msg)
 	}
 	return m, nil
@@ -269,6 +312,10 @@ func (m Cockpit) View() string {
 	switch {
 	case m.glossary:
 		body = m.viewGlossary(w, bodyH)
+	case m.modePick:
+		body = m.viewModePicker(w, bodyH)
+	case m.ovOpen:
+		body = m.viewOverride(w, bodyH)
 	case m.view == ckViewAgents:
 		body = m.viewAgents(w, bodyH)
 	case m.view == ckViewModels:
@@ -316,15 +363,40 @@ func CockpitSnapshotView(view int) string {
 }
 
 // ckSnapshotModel builds the one demo Cockpit state every snapshot view
-// renders from. Built once instead of once per view — NewCockpit alone does a
-// machine scan and a cost.jsonl read. The audit report stays lazy (#524):
-// jump() builds it only for the frame that shows it.
+// renders from (NewCockpit alone scans the machine; the audit stays lazy,
+// #524). The transcript uses the real renderers — a snapshot never dispatches.
 func ckSnapshotModel() Cockpit {
 	m := NewCockpit()
-	m = m.run("write a User DTO for profile settings")            // SIMPLE → TS interface
-	m = m.run("rotate the signing key in internal/auth/token.go") // CORE   → Go key-rotation
-	m.codeShown = len(m.codeLines)                                // reveal the whole snippet
 	m.w, m.h, m.ready = 100, 30, true
+
+	demo := ckTask{
+		prompt: "add pagination to the users endpoint",
+		mode:   ckModeByName("auto"), file: "internal/api/users.go",
+		runID:     "20260904T100000Z-demo0000",
+		planSteps: 3, edited: true, added: 24, removed: 6,
+		rounds:      []ckVerifyRound{{passed: true}},
+		verifyLabel: "go test ./...",
+		headName:    "qwen2.5-coder", tier: 7,
+		costUSD: 0.0041, elapsed: 3200 * time.Millisecond,
+	}
+	m.log = append(m.log, ckYouS.Render("❯ "+demo.prompt))
+	m.log = append(m.log, m.routeLines(demo, ckHead{name: demo.headName, tier: demo.tier}, "STANDARD", ckOverride{}, false)...)
+	m.log = append(m.log, ckResultLines(demo)...)
+
+	m.codeLang = "go"
+	m.codeLines = []string{
+		"// paginated users endpoint",
+		"func (s *Server) ListUsers(w http.ResponseWriter, r *http.Request) {",
+		"    page := parsePage(r.URL.Query())",
+		"    users, err := s.repo.Users(r.Context(), page)",
+		"    if err != nil {",
+		"        http.Error(w, err.Error(), 500)",
+		"        return",
+		"    }",
+		"    json.NewEncoder(w).Encode(users)",
+		"}",
+	}
+	m.codeShown = len(m.codeLines)
 	return m
 }
 

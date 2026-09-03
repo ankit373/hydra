@@ -30,9 +30,17 @@ var ckKeymap = []ckBinding{
 	{"home/end", "top / bottom · chat: end returns to live", "EVERYWHERE", nil},
 	{"ctrl+c", "quit", "EVERYWHERE", nil},
 
-	{"enter", "send", "CHAT", []int{ckViewChat}},
-	{"tab", "views", "", []int{ckViewChat}},
-	{"/dispatch /trust /swarm /local", "set mode", "CHAT", nil},
+	{"enter", "send · approve a plan · empty input: open the last trace", "CHAT", nil},
+	{"enter", "send", "", []int{ckViewChat}},
+	{"shift+tab", "cycle the basic modes: ask · edit · plan · auto", "CHAT", nil},
+	{"shift+tab", "mode", "", []int{ckViewChat}},
+	{"m", "mode picker, advanced modes included (empty input)", "CHAT", nil},
+	{"ctrl+o", "routing override for the next task — where it runs", "CHAT", nil},
+	{"ctrl+o", "route", "", []int{ckViewChat}},
+	{"esc", "cancel the running task · discard a plan · clear the input", "CHAT", nil},
+	{"y/n", "approve / refuse a pending plan or file write", "CHAT", nil},
+	{"d · x · o", "after an edit: diff · undo · open in $EDITOR (empty input)", "CHAT", nil},
+	{"/ask /edit /plan /auto…", "set the mode by name (/architect /careful /unattended too)", "CHAT", nil},
 	{":chat :agents :models :activity :usage :audit", "jump · :q quit", "CHAT", nil},
 
 	{"j/k · ↑/↓", "move (the window follows the selection)", "LISTS", nil},
@@ -80,7 +88,8 @@ func (m Cockpit) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case tea.KeyTab:
 		return m.jump((m.view + 1) % ckViewCount()), nil
 	case tea.KeyEsc:
-		return m.escape(), nil
+		nm, cmd := m.escape()
+		return nm, cmd
 	case tea.KeyPgUp:
 		return m.scrollBy(-m.pageSize()), nil
 	case tea.KeyPgDown:
@@ -161,8 +170,9 @@ func ckClampOff(off, n int) int {
 	return off
 }
 
-// jump switches to view v, closing any overlay and running the view's
-// on-entry hook (the audit rebuild).
+// jump switches to view v, closing transient overlays (glossary, picker,
+// override) and running the on-entry hook. A pending plan/confirm survives —
+// a question must not be lost by looking at activity.
 func (m Cockpit) jump(v int) Cockpit {
 	if !ckValidView(v) {
 		return m
@@ -170,6 +180,8 @@ func (m Cockpit) jump(v int) Cockpit {
 	m.view = v
 	m.glossary = false
 	m.glossOff = 0
+	m.modePick = false
+	m.ovOpen, m.ovStage = false, 0
 	m.flash = ""
 	if v == ckViewAudit {
 		m = m.loadAudit()
@@ -177,22 +189,44 @@ func (m Cockpit) jump(v int) Cockpit {
 	return m
 }
 
-// escape closes the glossary first; otherwise it means "back" in the active
-// view (clear input, leave drill/detail focus).
-func (m Cockpit) escape() Cockpit {
+// escape closes the topmost thing first: overlay, then modal stage, then a
+// pending question, then typed input, then the running task itself.
+func (m Cockpit) escape() (Cockpit, tea.Cmd) {
 	switch {
 	case m.glossary:
 		m.glossary = false
 		m.glossOff = 0
-	case m.view == ckViewChat:
+	case m.modePick:
+		m.modePick = false
+	case m.ovOpen:
+		if m.ovStage != 0 {
+			m.ovStage = 0 // back to the option list
+		} else {
+			m.ovOpen = false
+		}
+	case m.view == ckViewChat && m.confirm != nil:
+		w := *m.confirm
+		note := "stopped before writing — nothing changed"
+		if w.phase == ckPhaseFix {
+			note = "fix declined — the file keeps its last write"
+		}
+		return m.stopWait(w, note)
+	case m.view == ckViewChat && m.planWait != nil:
+		return m.stopWait(*m.planWait, "plan discarded — nothing ran")
+	case m.view == ckViewChat && m.input != "":
 		m.input = ""
+	case m.view == ckViewChat && m.exec != nil:
+		// Context cancellation through dispatch: the worker returns with a
+		// cancelled result; exec clears when that message lands.
+		m.exec.cancel()
+		m.exec.setStage("cancelling…")
 	case m.view == ckViewActivity && m.actDrill:
 		m.actDrill = false
 		m.traceOff = 0
 	case m.view == ckViewModels && m.modelFocus:
 		m.modelFocus = false
 	}
-	return m
+	return m, nil
 }
 
 // viewKey handles keys on the non-chat views, where no text input exists so

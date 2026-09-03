@@ -259,6 +259,11 @@ func cachedProbe(ctx context.Context) *probe.Result {
 	return probeCacheResult
 }
 
+// PIILocalOnly reports whether cfg's pii policy forces local-only routing —
+// the config-level check for callers with no Dispatcher yet (the TUI's route
+// badge), so the rule is never restated (#597).
+func PIILocalOnly(cfg *config.Config) bool { return piiLocalOnly(cfg) }
+
 // piiLocalOnly reports whether cfg's pii policy forces local-only routing.
 func piiLocalOnly(cfg *config.Config) bool {
 	p, ok := cfg.Policies["pii"]

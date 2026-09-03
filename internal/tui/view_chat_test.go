@@ -36,10 +36,11 @@ func TestChat_QuitCommands(t *testing.T) {
 	}
 }
 
-// Mode commands change where the next task routes, so the change must be
-// visible in the log; case-insensitive (#465); unknown ones reported.
+// The /mode commands mirror the picker: every defined mode by name,
+// case-insensitive (#465), unknown ones reported. The phase-1 strategy
+// commands (/dispatch /swarm /trust /local) are gone — strategy is ctrl+o now.
 func TestChat_ModeCommands(t *testing.T) {
-	for _, cmd := range []string{"/dispatch", "/swarm", "/trust", "/local", "/Trust"} {
+	for _, cmd := range []string{"/ask", "/edit", "/plan", "/auto", "/architect", "/careful", "/unattended", "/Ask"} {
 		m, _ := enter(typed(testCockpit(), cmd))
 		want := strings.ToLower(cmd[1:])
 		if m.mode != want {
@@ -49,16 +50,19 @@ func TestChat_ModeCommands(t *testing.T) {
 			t.Errorf("%s was not acknowledged in the log", cmd)
 		}
 	}
-	m, _ := enter(typed(testCockpit(), "/nonsense"))
-	if m.mode == "nonsense" {
-		t.Error("an unknown command was accepted as a mode")
-	}
-	if !strings.Contains(strings.Join(m.log, "\n"), "unknown") {
-		t.Error("the unknown command was not reported")
+	for _, cmd := range []string{"/nonsense", "/swarm", "/dispatch"} {
+		m, _ := enter(typed(testCockpit(), cmd))
+		if m.mode == strings.ToLower(cmd[1:]) {
+			t.Errorf("%s was accepted as a mode", cmd)
+		}
+		if !strings.Contains(strings.Join(m.log, "\n"), "unknown") {
+			t.Errorf("%s was not reported as unknown", cmd)
+		}
 	}
 }
 
-// An empty submit is a no-op, not a request of the empty string.
+// An empty submit is a no-op with nothing finished; after a finished task it
+// opens the trace (tested in chat_exec_test.go).
 func TestChat_EmptySubmitDoesNothing(t *testing.T) {
 	before := testCockpit()
 	m, cmd := enter(before)
@@ -71,12 +75,12 @@ func TestChat_EmptySubmitDoesNothing(t *testing.T) {
 	}
 }
 
-// With no models scanned there is no route to preview. Inventing one is
-// exactly what #189 removed.
-func TestChat_NoModelsSaysSoAndStreamsNothing(t *testing.T) {
+// With no models scanned there is no route, so nothing must execute. Inventing
+// one is exactly what #189 removed.
+func TestChat_NoModelsSaysSoAndRunsNothing(t *testing.T) {
 	m := testCockpit()
 	m.heads = nil
-	m, _ = enter(typed(m, "add pagination"))
+	m, cmd := enter(typed(m, "add pagination"))
 	joined := strings.Join(m.log, "\n")
 	if !strings.Contains(joined, "no routable model") {
 		t.Errorf("the log does not say why nothing was routed:\n%s", joined)
@@ -84,107 +88,44 @@ func TestChat_NoModelsSaysSoAndStreamsNothing(t *testing.T) {
 	if !strings.Contains(joined, "hyctl probe") {
 		t.Error("the message does not tell the user how to find out why")
 	}
-	if len(m.codeLines) != 0 {
-		t.Error("a code stream started with nothing to route to")
+	if m.exec != nil || cmd != nil {
+		t.Error("a task started with nothing to route to")
 	}
 }
 
-// Submitting a task previews the route and starts the code stream — and the
-// per-line "vs all-frontier" comparison is gone (it lives in usage now).
-func TestChat_TaskPreviewStreamsAndCarriesNoComparison(t *testing.T) {
-	before := testCockpit()
-	m, cmd := enter(typed(before, "add pagination to the users endpoint"))
-
-	if len(m.log) <= len(before.log) {
-		t.Fatal("submitting a task produced no log output")
-	}
-	if cmd == nil {
-		t.Error("no code-stream tick was scheduled")
-	}
-	if m.codeGen == before.codeGen {
-		t.Error("the stream generation did not advance")
-	}
-	if m.runs != before.runs+1 {
-		t.Errorf("runs = %d, want incremented", m.runs)
-	}
-	joined := stripANSI(strings.Join(m.log, "\n"))
-	if !strings.Contains(joined, "routing preview only") {
-		t.Errorf("the log does not say nothing was sent:\n%s", joined)
-	}
-	if !strings.Contains(joined, "add pagination") {
-		t.Error("the log does not echo what was asked")
-	}
-	if strings.Contains(joined, "vs all-") {
-		t.Errorf("the per-line cost comparison is back — it moved to the usage view:\n%s", joined)
-	}
-}
-
-// The route line's cost claim must be honest: a real price, "free (local)"
-// only for a local model, and "cost unknown" otherwise.
-func TestChat_RouteCostClaims(t *testing.T) {
-	m := testCockpit()
-	m.heads = []ckHead{{id: "q", name: "qwen", tier: 10, up: true, local: true}}
-	m, _ = enter(typed(m, "rename x to y"))
-	if !strings.Contains(strings.Join(m.log, "\n"), "free (local)") {
-		t.Errorf("a local model's preview does not say free:\n%s", strings.Join(m.log, "\n"))
-	}
-
-	m = testCockpit()
-	m.heads = []ckHead{{id: "c", name: "claude", tier: 1, up: true}}
-	m, _ = enter(typed(m, "rotate the signing key")) // CORE → T1, the only head
-	if !strings.Contains(strings.Join(m.log, "\n"), "cost unknown") {
-		t.Errorf("an unpriced remote model's preview does not say unknown:\n%s", strings.Join(m.log, "\n"))
-	}
-}
-
-// A pinned tier (set from the models view) overrides classification and is
-// visible in the preview.
-func TestChat_PinnedTierOverridesClassification(t *testing.T) {
-	m := testCockpit()
-	m.pinnedTier = 3
-	m, _ = enter(typed(m, "rename x to y")) // SIMPLE → T8 normally
-	joined := stripANSI(strings.Join(m.log, "\n"))
-	if !strings.Contains(joined, "pinned T3") {
-		t.Errorf("the preview does not show the pin:\n%s", joined)
-	}
-	if !strings.Contains(joined, "claude-sonnet") {
-		t.Errorf("the pin did not route to the T3 head:\n%s", joined)
-	}
-	// --local mode still wins over the pin: nothing leaves the machine.
-	m = testCockpit()
-	m.pinnedTier = 1
-	m.mode = "local"
-	m, _ = enter(typed(m, "rename x to y"))
-	if !strings.Contains(stripANSI(strings.Join(m.log, "\n")), "qwen") {
-		t.Error("local mode did not override the pin")
-	}
-}
-
-// pickHead is the cockpit's own routing: cheapest at or below the wanted
-// strength, never answering "cheapest" with "most expensive" (#165's shape).
+// pickHead is the cockpit's route preview: cheapest at or below the wanted
+// strength, never answering "cheapest" with "most expensive" (#165's shape),
+// and localOnly restricts the whole search to local heads.
 func TestPickHead_NeverAnswersCheapestWithStrongest(t *testing.T) {
 	m := testCockpit()
-	if got := m.pickHead(10); got < 0 || m.heads[got].id != "qwen" {
+	if got := m.pickHead(10, false); got < 0 || m.heads[got].id != "qwen" {
 		t.Errorf("pickHead(10) = %d, want the local head", got)
 	}
-	if got := m.pickHead(3); m.heads[got].tier < 3 {
+	if got := m.pickHead(3, false); m.heads[got].tier < 3 {
 		t.Errorf("pickHead(3) selected tier %d — stronger than requested", m.heads[got].tier)
 	}
-	if got := m.pickHead(1); m.heads[got].id != "opus" {
+	if got := m.pickHead(1, false); m.heads[got].id != "opus" {
 		t.Errorf("pickHead(1) = %s", m.heads[got].id)
 	}
+	// localOnly: the strongest local head wins even when asked for T1.
+	if got := m.pickHead(1, true); got < 0 || m.heads[got].id != "qwen" {
+		t.Errorf("pickHead(1, localOnly) = %d, want the local head", got)
+	}
 	m.heads[2].up = false
-	if got := m.pickHead(10); got >= 0 && m.heads[got].id == "qwen" {
+	if got := m.pickHead(10, false); got >= 0 && m.heads[got].id == "qwen" {
 		t.Error("pickHead selected a head that is down")
+	}
+	if got := m.pickHead(1, true); got >= 0 {
+		t.Errorf("pickHead(localOnly) = %d with the only local head down", got)
 	}
 	for i := range m.heads {
 		m.heads[i].up = false
 	}
-	if got := m.pickHead(1); got >= 0 {
+	if got := m.pickHead(1, false); got >= 0 {
 		t.Errorf("pickHead = %d with every head down (#248's shape)", got)
 	}
 	m.heads = nil
-	if got := m.pickHead(1); got >= 0 {
+	if got := m.pickHead(1, false); got >= 0 {
 		t.Errorf("pickHead on an empty roster = %d", got)
 	}
 }
@@ -192,32 +133,30 @@ func TestPickHead_NeverAnswersCheapestWithStrongest(t *testing.T) {
 func TestClassifyTask_RoutesByWhatTheWorkActuallyIs(t *testing.T) {
 	tests := []struct {
 		task     string
-		mode     string
 		wantEnum string
 		wantTier int
 	}{
-		{"design a multi-tenant security model", "local", "LOCAL", 10},
-		{"rotate the signing key without breaking live tokens", "", "CORE", 1},
-		{"refactor this for a data race", "", "COMPLEX", 3},
-		{"add pagination to the users endpoint", "", "STANDARD", 6},
-		{"rename x to y", "", "SIMPLE", 8},
-		{"", "", "SIMPLE", 8},
+		{"rotate the signing key without breaking live tokens", "CORE", 1},
+		{"refactor this for a data race", "COMPLEX", 3},
+		{"add pagination to the users endpoint", "STANDARD", 6},
+		{"rename x to y", "SIMPLE", 8},
+		{"", "SIMPLE", 8},
 	}
 	for _, tt := range tests {
-		enum, tier := classifyTask(tt.task, tt.mode)
+		enum, tier := classifyTask(tt.task)
 		if enum != tt.wantEnum || tier != tt.wantTier {
-			t.Errorf("classifyTask(%q, %q) = (%s, %d), want (%s, %d)",
-				tt.task, tt.mode, enum, tier, tt.wantEnum, tt.wantTier)
+			t.Errorf("classifyTask(%q) = (%s, %d), want (%s, %d)",
+				tt.task, enum, tier, tt.wantEnum, tt.wantTier)
 		}
 	}
 	long := strings.Repeat("please do the thing carefully ", 5)
-	if _, tier := classifyTask(long, ""); tier >= 8 {
+	if _, tier := classifyTask(long); tier >= 8 {
 		t.Errorf("a long prompt classified at tier %d — length should lift it", tier)
 	}
 }
 
 // The change-impact line renders only for files a graph actually knows (#193).
-func TestChatRun_ImpactOnlyForFilesTheGraphKnows(t *testing.T) {
+func TestChatStart_ImpactOnlyForFilesTheGraphKnows(t *testing.T) {
 	testutil.NewSandbox(t)
 	m := testCockpit()
 	m, _ = enter(typed(m, "rotate the key in internal/nowhere/absent.go"))
@@ -225,13 +164,13 @@ func TestChatRun_ImpactOnlyForFilesTheGraphKnows(t *testing.T) {
 	if strings.Contains(joined, "κ=") {
 		t.Errorf("an impact figure was printed with no graph loaded:\n%s", joined)
 	}
-	if !strings.Contains(joined, "routing preview only") {
-		t.Errorf("the run did not complete:\n%s", joined)
+	if !strings.Contains(stripANSI(joined), "auto-routed") {
+		t.Errorf("the route line is missing:\n%s", joined)
 	}
 }
 
 // chatMain's total output must be exactly h lines (#445), and one overlong
-// entry must not push the input off-frame (#506).
+// entry must not push the input bar off-frame (#506).
 func TestChatMain_GeometryHolds(t *testing.T) {
 	m := testCockpit()
 	for _, h := range []int{10, 24, 30, 60} {
@@ -254,7 +193,8 @@ func TestChatMain_GeometryHolds(t *testing.T) {
 	}
 }
 
-// The chat pane keeps only the newest lines that fit when live.
+// The chat pane keeps only the newest lines that fit when live, and the input
+// bar always shows the typed text and the mode chip.
 func TestChatMain_KeepsTheNewestLinesAndTheInput(t *testing.T) {
 	m := testCockpit()
 	m.input = "half-typed prompt"
@@ -262,19 +202,39 @@ func TestChatMain_KeepsTheNewestLinesAndTheInput(t *testing.T) {
 	for i := 0; i < 200; i++ {
 		m.log = append(m.log, fmt.Sprintf("log line %d", i))
 	}
-	got := stripANSI(m.chatMain(60, 10))
+	got := stripANSI(m.chatMain(60, 12))
 	if !strings.Contains(got, "log line 199") {
 		t.Errorf("the newest line is not shown:\n%s", got)
 	}
 	if strings.Contains(got, "log line 100") {
-		t.Errorf("an old line survived a 10-row window:\n%s", got)
+		t.Errorf("an old line survived a 12-row window:\n%s", got)
 	}
-	if !strings.Contains(got, "half-typed prompt") || !strings.Contains(got, "dispatch") {
-		t.Errorf("the input line or mode prompt is missing:\n%s", got)
+	if !strings.Contains(got, "half-typed prompt") || !strings.Contains(got, "Auto") {
+		t.Errorf("the input line or mode chip is missing:\n%s", got)
 	}
-	tiny := stripANSI(m.chatMain(20, 0))
-	if !strings.Contains(tiny, "half-typed prompt") {
-		t.Errorf("at height 0 the input is gone:\n%s", tiny)
+	// Even with no room for the border, the input itself survives.
+	tiny := stripANSI(m.chatMain(30, 3))
+	if !strings.Contains(tiny, "prompt") {
+		t.Errorf("at height 3 the input is gone:\n%s", tiny)
+	}
+}
+
+// A very long input wraps inside the bar, keeps its newest characters visible,
+// and never grows past the wrap cap.
+func TestInputBar_WrapsAndKeepsTheTail(t *testing.T) {
+	m := testCockpit()
+	m.input = strings.Repeat("word ", 200) + "FINAL"
+	bar := m.inputBar(60)
+	if got := strings.Count(bar, "\n") + 1; got > ckInputWrapCap+2 {
+		t.Errorf("input bar grew to %d lines", got)
+	}
+	if !strings.Contains(stripANSI(bar), "FINAL") {
+		t.Errorf("the input's tail (cursor region) is not visible:\n%s", stripANSI(bar))
+	}
+	// Placeholder when idle and empty.
+	m.input = ""
+	if got := stripANSI(m.inputBar(60)); !strings.Contains(got, "what do you need done?") {
+		t.Errorf("no placeholder on an empty idle input:\n%s", got)
 	}
 }
 
@@ -319,22 +279,52 @@ func TestSidebar_UnknownContextSaysNoData(t *testing.T) {
 	}
 }
 
-// The code panel renders whether or not anything has streamed yet, at any width.
+// The code panel renders whether or not anything has streamed yet, at any
+// width — and in diff mode it colours by prefix instead of syntax.
 func TestCodePanel_RendersAtEverySize(t *testing.T) {
 	m := testCockpit()
-	if got := m.codePanel(40, 20); !strings.Contains(got, "awaiting a request") {
+	if got := m.codePanel(40, 20); !strings.Contains(got, "no edits yet") {
 		t.Errorf("the empty state does not say what it is waiting for:\n%s", got)
 	}
-	after, _ := enter(typed(m, "write a handler"))
-	after.codeShown = len(after.codeLines)
+	m.codeLang = "go"
+	m.codeLines = []string{"package main", "func main() {}", "// done"}
+	m.codeShown = len(m.codeLines)
 	for _, w := range []int{0, 1, 5, 40, 200} {
-		if got := after.codePanel(w, 20); strings.TrimSpace(got) == "" {
+		if got := m.codePanel(w, 20); strings.TrimSpace(got) == "" {
 			t.Errorf("codePanel(%d) rendered nothing", w)
 		}
 	}
-	after.codeShown = len(after.codeLines) + 50
-	if got := after.codePanel(60, 20); strings.TrimSpace(got) == "" {
+	m.codeShown = len(m.codeLines) + 50
+	if got := m.codePanel(60, 20); strings.TrimSpace(got) == "" {
 		t.Error("codePanel rendered nothing with codeShown past the end")
+	}
+	// A long file shows its newest lines rather than only the top of the file.
+	m.codeLines = nil
+	for i := 0; i < 100; i++ {
+		m.codeLines = append(m.codeLines, fmt.Sprintf("line%d", i))
+	}
+	m.codeShown = 100
+	if got := stripANSI(m.codePanel(60, 12)); !strings.Contains(got, "line99") {
+		t.Errorf("the panel does not show the newest streamed lines:\n%s", got)
+	}
+
+	m.codeDiff = true
+	m.codeLang = "diff"
+	m.codeLines = []string{"@@ -1,2 +1,2 @@", "-old line", "+new line", " ctx"}
+	m.codeShown = len(m.codeLines)
+	if got := stripANSI(m.codePanel(60, 20)); !strings.Contains(got, "DIFF") || !strings.Contains(got, "+new line") {
+		t.Errorf("diff mode did not render the diff:\n%s", got)
+	}
+}
+
+func TestCkCodeLine_DiffColoursByPrefix(t *testing.T) {
+	for _, line := range []string{"+added", "-removed", "@@ hunk @@", " context"} {
+		if got := stripANSI(ckCodeLine(line, true)); got != line {
+			t.Errorf("diff colouring changed the text: %q → %q", line, got)
+		}
+	}
+	if got := stripANSI(ckCodeLine("func main() {}", false)); got != "func main() {}" {
+		t.Errorf("code colouring changed the text: %q", got)
 	}
 }
 
@@ -366,22 +356,6 @@ func TestIsWordChar(t *testing.T) {
 	for _, r := range []rune{' ', '(', '.', '"', '·', '日'} {
 		if isWordChar(r) {
 			t.Errorf("isWordChar(%q) = true", r)
-		}
-	}
-}
-
-// ckSnippet must return a language tag and at least one newline-free line for
-// every enum, including one it has never seen.
-func TestCkSnippet_EveryEnumYieldsRenderableCode(t *testing.T) {
-	for _, enum := range []string{"CORE", "COMPLEX", "STANDARD", "SIMPLE", "GRUNT", "", "NOT_AN_ENUM"} {
-		lang, lines := ckSnippet(enum)
-		if lang == "" || len(lines) == 0 {
-			t.Errorf("ckSnippet(%q) = (%q, %d lines)", enum, lang, len(lines))
-		}
-		for i, l := range lines {
-			if strings.Contains(l, "\n") {
-				t.Errorf("ckSnippet(%q) line %d contains a newline", enum, i)
-			}
 		}
 	}
 }

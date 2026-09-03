@@ -594,12 +594,26 @@ Six views, cycled with `tab` (or jump with `1–6`); `?` opens the shortcut glos
 
 | View | What it shows |
 |---|---|
-| **chat** | Route a task and watch the decision: class → tier → model, cost, change impact (routing preview in this phase) |
+| **chat** | Type a task and it **executes**: a route line first (class → tier → model · strategy · plain-words why, with a `local-only (pii)` badge and change impact when they apply), then the real answer or edit. `esc` cancels mid-run; failures link to their trace; session cost accrues in the header |
 | **agents** | Live runs and today's finished ones — `enter` opens a run's trace |
 | **models** | Every scanned model nested under its provider/server, with per-model detail: tier, capability, p50 latency, requests/cost today, calibration scorecard. A down server grays its models; embedding-only models say `embeddings only — never routed` |
 | **activity** | Today's runs with a full trace per run: routed → policy → request → stream → edits → done, fallbacks included |
 | **usage** | Spend today / this month / saved vs all-frontier, by model/tier/day breakdowns, and the orchestrator's context budget |
 | **audit** | Calibration scorecard, audit-log chain integrity, guardrails (PII local-only, injection markers, MCP server trust), and a needs-a-human queue |
+
+Chat has **modes** — what a task does (`shift+tab` cycles the basics, `m` opens the full picker):
+
+| Mode | What it does |
+|---|---|
+| **Ask** | Answer only — never writes files |
+| **Edit** | Direct change when the prompt names an existing file (validated, rollback-safe, snapshotted); otherwise answers and says so |
+| **Plan** | Drafts numbered steps on a cheap tier and waits — `enter`/`y` runs them, `esc` discards |
+| **Auto** | Plan → edit → **verify**: runs `go test ./...` (or your workspace.yaml validator) through the oracle, feeds failures back for up to 2 fixes, and renders a proof strip: `plan ✓ · edit ✓ file +A/−R · tests ✓/✗` |
+| **Architect** | Auto, but plans on a strong tier and implements on a cheap one |
+| **Careful** | Auto, but every file write needs a `y/n` confirm before it lands |
+| **Unattended** | Auto with no confirms and a hard $0.50 per-task cost cap — it stops visibly at the cap |
+
+Where a task runs is separate: `ctrl+o` overrides the **next** task's routing (auto / force tier / local only / best of 3 / consensus check at 90–99.9%). After an edit: `d` shows the diff, `x` restores the pre-task snapshot exactly, `o` opens the file, and the footer's trace id jumps into the activity view.
 
 Everything shown is measured from the machine's real logs — a figure that cannot be computed renders `—`, never an invented number. Lists scroll (`j/k`, `pgup/pgdn`, mouse wheel); `hyctl tui --snapshot [--view 0..5]` prints static frames for docs and bug reports.
 

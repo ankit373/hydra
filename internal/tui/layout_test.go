@@ -260,9 +260,25 @@ func TestCkClipToLines_MarksTruncationAndBoundsLength(t *testing.T) {
 	if !strings.Contains(rows[len(rows)-1], "truncated") {
 		t.Errorf("the last row does not disclose the truncation: %q", rows[len(rows)-1])
 	}
+	// A short entry keeps its text and is returned WRAPPED (padded to width):
+	// the window counts these lines and the renderer paints them, so the two
+	// must be the same string — returning the original un-wrapped entry made
+	// the count 1 where the render was 3 (#597's off-frame input bar).
 	short := "a short line"
-	if got := ckClipToLines(short, 60, 4); got != short {
-		t.Errorf("a short entry was altered: %q", got)
+	got = ckClipToLines(short, 60, 4)
+	if stripANSI(strings.TrimRight(got, " ")) != short {
+		t.Errorf("a short entry lost its text: %q", got)
+	}
+	if strings.Contains(got, "\n") {
+		t.Errorf("a fitting entry was split: %q", got)
+	}
+	// A moderately long entry (wider than the pane, within the cap) must come
+	// back as real display lines, none wider than the pane.
+	mid := strings.Repeat("word ", 14) // 70 cells at width 28
+	for i, l := range strings.Split(ckClipToLines(mid, 28, 6), "\n") {
+		if w := lipgloss.Width(l); w > 28 {
+			t.Errorf("line %d is %d cells wide, want <= 28", i, w)
+		}
 	}
 }
 
