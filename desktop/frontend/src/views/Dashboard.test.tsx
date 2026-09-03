@@ -1,7 +1,7 @@
-import { afterEach, describe, expect, it } from 'vitest'
-import { cleanup, render, screen } from '@testing-library/react'
-import { CalibrationLeaderboard, calBarWidths } from './Dashboard'
-import type { CalibrationRow } from '../types'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { CalibrationLeaderboard, RecentTable, calBarWidths } from './Dashboard'
+import type { CalibrationRow, RecentCall } from '../types'
 
 afterEach(cleanup)
 
@@ -87,5 +87,32 @@ describe('the leaderboard reads correctly on weak real data', () => {
   it('renders the empty state rather than an empty track', () => {
     render(<CalibrationLeaderboard rows={[]} />)
     expect(screen.getByText('No calibration recorded yet')).toBeTruthy()
+  })
+})
+
+describe('the Recent panel is a way in, not decoration', () => {
+  const recent: RecentCall[] = [
+    { ts: '2026-09-03T16:52:18Z', model: 'Gemini 3.5 Flash', tier: 8, costUsd: 0.0009, wallMs: 31300, runId: 'r-1', taskId: 't1' },
+    // No run id: there is no run to open, so the row must stay inert.
+    { ts: '2026-09-03T16:51:46Z', model: 'Antigravity', tier: 4, costUsd: 0, wallMs: 14300, runId: '', taskId: 't2' },
+  ]
+
+  it('opens the run behind a row', () => {
+    const onOpenRun = vi.fn()
+    render(<RecentTable rows={recent} onOpenRun={onOpenRun} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Open r-1' }))
+    expect(onOpenRun).toHaveBeenCalledWith('r-1')
+  })
+
+  it('leaves a row with no run id inert rather than offering a dead control', () => {
+    const onOpenRun = vi.fn()
+    render(<RecentTable rows={recent} onOpenRun={onOpenRun} />)
+    // Exactly one openable row, not two.
+    expect(screen.getAllByRole('button', { name: /^Open / })).toHaveLength(1)
+  })
+
+  it('stays inert entirely when nothing can handle an open', () => {
+    render(<RecentTable rows={recent} />)
+    expect(screen.queryByRole('button', { name: /^Open / })).not.toBeInTheDocument()
   })
 })
