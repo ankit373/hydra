@@ -735,6 +735,8 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
   <p class="cmp-note"><b>hyctl security --why</b> opens the whole programme underneath: a risk register on an SLA clock, crosswalked to OWASP LLM / NIST AI RMF / ISO 42001 / MITRE ATLAS / SOC 2 · OWASP LLM Top-10 coverage · a policy audit that finds rules which can <em>never</em> fire · PII exposure resolved against real heads, so a local model is not reported as a leak · control effectiveness, where a control that is configured but never applied reads as <b>inert</b> rather than as protection · head-binary integrity · edit blast radius.</p>
 
   <p class="cmp-note"><b>Honest about its own limits.</b> Framework mappings are marked <em>curated</em> assertions, not measurements. Defect cost is per-occurrence, not annualised. A file the dependency graph does not index is <em>unknown</em>, never “low-risk”. The attestation is unsigned, because Hydra has no key management and a signature without one is theatre.</p>
+
+  <p class="lede" style="margin-top:26px">The ledger records what an agent did. <b>hyctl mcp registry</b> scores whether the MCP server it was talking to was ever safe to trust in the first place — every existing MCP directory answers “does this exist”, none answer “is it safe to run with my credentials right now”, and star counts are actively misleading (the most-starred servers score worst on quality in independent research). <code>audit</code> resolves what's installed against the official registry and scores it; every trust state drops back to <em>provisional</em> on a version bump, the direct fix for a server that ships clean for months then turns malicious in one release.</p>
 </section>
 
 <!-- ══ 5 · CRAZY NUMBERS ════════════════════════════════════════════════════ -->
@@ -809,12 +811,13 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
         <tr><th scope="row">Spend logging &amp; cost reporting</th><td class="hydcol"><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
         <tr><th scope="row">Confidence / trust routing (calibrated + optimal-stopping)</th><td class="hydcol"><span class="yes">✓</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td></tr>
         <tr><th scope="row">On-device accountability ledger (PII / local-only policy)</th><td class="hydcol"><span class="yes">✓</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td></tr>
+        <tr><th scope="row">MCP server trust scoring (not just an index)</th><td class="hydcol"><span class="yes">✓</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td></tr>
         <tr><th scope="row">Runs fully offline (0 network to route)</th><td class="hydcol"><span class="yes">✓</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td></tr>
       </tbody>
     </table>
   </div>
   </div>
-  <p class="cmp-note"><b>Every row checked above ships today</b> — <code>hyctl dispatch --confidence</code>, <code>hyctl graph blast</code>, <code>hyctl mcp</code>. The agent-tree cockpit (<code>hyctl tui</code>) now renders real runs from the per-run event log, and the desktop app ships as a download for macOS, Windows and Linux with every release — not yet code-signed, so macOS needs right-click → Open on first launch.</p>
+  <p class="cmp-note"><b>Every row checked above ships today</b> — <code>hyctl dispatch --confidence</code>, <code>hyctl graph blast</code>, <code>hyctl mcp</code>, <code>hyctl mcp registry</code>. The agent-tree cockpit (<code>hyctl tui</code>) now renders real runs from the per-run event log, and the desktop app ships as a download for macOS, Windows and Linux with every release — not yet code-signed, so macOS needs right-click → Open on first launch.</p>
 </section>
 
 <!-- ══ 6b · DESKTOP APP NUDGE ═══════════════════════════════════════════════ -->

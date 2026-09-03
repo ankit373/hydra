@@ -360,6 +360,31 @@ assertions rather than measurements, defect cost is **per-occurrence and not
 annualised**, a file the dependency graph does not index is **unknown** and never
 "low-risk", and the attestation is **unsigned** because Hydra has no key management.
 
+### 🧩 MCP Server Trust Registry (`hyctl mcp registry`)
+
+The ledger above records what an agent *did*. This scores whether the MCP server it
+was talking to was ever safe to trust in the first place. Every existing MCP directory
+answers "does this server exist" — none answer "is it safe to run with my credentials
+right now," and star/download counts are actively misleading (the most-starred
+servers score worst on quality in independent research).
+
+```
+hyctl mcp registry sync       # pull the official MCP registry into a local cache
+hyctl mcp registry scan       # find servers installed across Claude Code/Desktop, Cursor, Windsurf, VS Code
+hyctl mcp registry audit      # resolve + score them, advance lifecycle state
+hyctl mcp registry backtest   # prove the pipeline still catches real incidents (postmark-mcp, CVE-2025-6514)
+```
+
+Scoring follows the CSA MCP Selection Scorecard's four categories — automating a
+taxonomy the MCP Security Working Group already endorsed, not inventing a competing
+one. Every version bump drops a server's trust state back to **provisional** until it
+re-earns it, detected via a content-hash diff of the manifest — the direct fix for a
+server that ships clean for months, then turns malicious in one release. `scan` never
+reads env-var or secret values from client configs, only server identity. Feeds back
+into the ledger: a flagged or quarantined server auto-classifies its own tool calls,
+the same mechanism PII is auto-detected from content, so a policy rule can gate on it
+without any extra configuration.
+
 ### 🧭 Confidence Routing (Trust Control Plane)
 
 Most routers optimize *cost*. Hydra is growing a second axis: **verified correctness**. Instead of always firing a fixed number of models, `--confidence` runs a **sequential probability ratio test (SPRT)** — it samples models adaptively, in most-diagnostic-per-dollar order, and stops the moment the calibrated log-odds cross the target confidence.
