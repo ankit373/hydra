@@ -95,8 +95,8 @@ export function Security({ data }: { data: SecurityReport }) {
 
       {!data.integrityIntact && (
         <div className="error">
-          INTEGRITY COMPROMISED — the ledger chain has been tampered with. Nothing else in this
-          report can be trusted until this is resolved.
+          INTEGRITY COMPROMISED — the audit log's hash chain has been tampered with. Nothing else
+          in this report can be trusted until this is resolved.
         </div>
       )}
 
@@ -316,7 +316,7 @@ function Hero({ data }: { data: SecurityReport }) {
             )}
             {adherence && (
               <div className="card">
-                <div className="card__label">Policy adherence</div>
+                <div className="card__label">Guardrails</div>
                 <div className="card__value--sm">{adherence}</div>
               </div>
             )}
@@ -374,7 +374,7 @@ const DETAIL_TABS = [
   { id: 'register', label: 'Register' },
   { id: 'coverage', label: 'Coverage' },
   { id: 'controls', label: 'Controls' },
-  { id: 'policy', label: 'Policy' },
+  { id: 'policy', label: 'Guardrails' },
   { id: 'exposure', label: 'Exposure' },
   { id: 'threats', label: 'Threats' },
   { id: 'access', label: 'Access' },
@@ -455,7 +455,7 @@ function Detailed({ data }: { data: SecurityReport }) {
 // An unscoped agent that changes state leads, because that is the finding.
 function PrivilegeView({ rows }: { rows: AgentPrivilege[] }) {
   if (rows.length === 0) {
-    return <p className="card__note">No ledger event names an agent, so there is no footprint to review.</p>
+    return <p className="card__note">No recorded event names an agent, so there is no footprint to review.</p>
   }
   return (
     <section>
@@ -672,7 +672,7 @@ function BlastView({ blast }: { blast: BlastReport }) {
   if (!blast?.graphPresent) {
     return (
       <section>
-        <h2 className="section__title">Edit blast radius</h2>
+        <h2 className="section__title">Reach of what was changed</h2>
         <p className="card__note">
           No <code>graph.json</code>, so the reach of an agent's edits cannot be scored. Generate one
           with <code>hyctl graph</code>.
@@ -684,7 +684,7 @@ function BlastView({ blast }: { blast: BlastReport }) {
   if (files.length === 0) {
     return (
       <section>
-        <h2 className="section__title">Edit blast radius</h2>
+        <h2 className="section__title">Reach of what was changed</h2>
         <p className="card__note">No agent edit was found in the {blast.runsScanned} most recent run(s).</p>
       </section>
     )
@@ -692,7 +692,7 @@ function BlastView({ blast }: { blast: BlastReport }) {
   const max = Math.max(...files.map((f) => f.radius ?? 0), 1)
   return (
     <section>
-      <h2 className="section__title">Edit blast radius</h2>
+      <h2 className="section__title">Reach of what was changed</h2>
       {blast.percolates && (
         <p className="card__note">
           The dependency graph percolates (kappa {blast.kappa?.toFixed(1)}), so an edit to a hub can
@@ -945,7 +945,7 @@ function FailOpenBanner({ audit }: { audit: PolicyAudit }) {
   return (
     <div className="error">
       FAIL-OPEN — the default decision is allow, so anything no rule names is permitted. Set
-      "default": "deny" in the policy to invert that.
+      "default": "deny" in <code>~/.hydra/mcp_policy.json</code> to invert that.
     </div>
   )
 }
@@ -1048,15 +1048,15 @@ function CountBars({ title, rows }: { title: string; rows?: SecurityCount[] }) {
 // until now.
 function EvidenceView({ events, truncated }: { events: LedgerEvent[]; truncated: boolean }) {
   if (events.length === 0) {
-    return <p className="card__note">The ledger is empty — nothing has been recorded on this machine.</p>
+    return <p className="card__note">The audit log is empty — nothing has been recorded on this machine.</p>
   }
   const rows = [...events].reverse() // newest first
   return (
     <section>
-      <h2 className="section__title">Ledger evidence</h2>
+      <h2 className="section__title">Recorded evidence</h2>
       {truncated && (
         <p className="card__note">
-          Showing the most recent {events.length} events. The full ledger is longer — read it with{' '}
+          Showing the most recent {events.length} events. The full audit log is longer — read it with{' '}
           <code>hyctl mcp log</code>.
         </p>
       )}
@@ -1101,7 +1101,7 @@ function LedgerCard({ data }: { data: SecurityReport }) {
   if (!hasData) {
     return (
       <div className="card">
-        <div className="card__label">Ledger activity</div>
+        <div className="card__label">Recorded activity</div>
         <div className="card__value card__value--unknown">no data yet</div>
         <div className="card__note">No MCP access has been recorded on this machine.</div>
       </div>
@@ -1109,7 +1109,7 @@ function LedgerCard({ data }: { data: SecurityReport }) {
   }
   return (
     <div className="card">
-      <div className="card__label">Ledger activity</div>
+      <div className="card__label">Recorded activity</div>
       <div className="card__value">{ledger.total}</div>
       <StatusDonut segments={ledgerSegments(ledger)} />
       {ledger.flagged > 0 && (
