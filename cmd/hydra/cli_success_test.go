@@ -1387,6 +1387,41 @@ func TestCLI_MCPRegistryList_ShowsAuditedServersByScore(t *testing.T) {
 	}
 }
 
+func TestCLI_MCPRegistryClear_RecoversAQuarantinedServer(t *testing.T) {
+	populated(t)
+
+	seed(t, "mcp_registry_state.json", `{
+		"io.github.x/wrongly-flagged": {"state":"quarantined","manifest_hash":"a","first_seen_at":"2026-01-01T00:00:00Z","state_changed_at":"2026-01-01T00:00:00Z","last_score":{"overall":5,"confidence":"high"}}
+	}`)
+
+	out, cobraOut, err := run(t, "mcp", "registry", "clear", "io.github.x/wrongly-flagged")
+	if err != nil {
+		t.Fatalf("clear failed: %v\n%s", err, out+cobraOut)
+	}
+	if !strings.Contains(out+cobraOut, "provisional") {
+		t.Errorf("expected the new state in the output:\n%s", out+cobraOut)
+	}
+
+	// It must actually be recoverable, which is the whole point.
+	listOut, listCobra, err := run(t, "mcp", "registry", "list")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(listOut+listCobra, "quarantined") {
+		t.Errorf("server is still quarantined after clear:\n%s", listOut+listCobra)
+	}
+}
+
+func TestCLI_MCPRegistryClear_RefusesANonQuarantinedServer(t *testing.T) {
+	populated(t)
+	seed(t, "mcp_registry_state.json", `{
+		"io.github.x/fine": {"state":"trusted","manifest_hash":"a","first_seen_at":"2026-01-01T00:00:00Z","state_changed_at":"2026-01-01T00:00:00Z","last_score":{"overall":91,"confidence":"high"}}
+	}`)
+	if _, _, err := run(t, "mcp", "registry", "clear", "io.github.x/fine"); err == nil {
+		t.Error("clearing a trusted server should be refused, not silently accepted")
+	}
+}
+
 func TestCLI_MCPRegistryList_EmptyIsNotAnError(t *testing.T) {
 	populated(t)
 	if _, _, err := run(t, "mcp", "registry", "list"); err != nil {

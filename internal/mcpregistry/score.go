@@ -65,6 +65,11 @@ const (
 	weightCommunityGovernance    = 0.15
 )
 
+// neutralBaseline is where a category starts before any signal moves it, and
+// what an unevaluated category contributes to the overall score. Risk
+// evidence subtracts from it; absence of evidence never adds.
+const neutralBaseline = 70.0
+
 // ComputeScore scores one resolved registry server. corpus is the full
 // synced dataset, used for the typosquat/near-duplicate check. A server with
 // no computable signals in a category returns that category at
@@ -88,8 +93,14 @@ func ComputeScore(ctx context.Context, srv ServerRecord, corpus []ServerRecord) 
 	op := aggregate(opSignals)
 	comm := aggregate(commSignals)
 
+	// Fixed denominator, with an unevaluated category contributing the same
+	// neutral baseline a checked-and-clean one would. Renormalising over only
+	// the available categories made missing evidence *raise* the score: an
+	// identical server scored 73 when GitHub was rate-limited and 72 when
+	// GitHub answered and confirmed a recent push. Absence of evidence must
+	// never beat presence of good evidence.
 	overall := 0.0
-	weightSum := 0.0
+	substantive := 0
 	for _, cs := range []struct {
 		score  CategoryScore
 		weight float64
@@ -99,14 +110,13 @@ func ComputeScore(ctx context.Context, srv ServerRecord, corpus []ServerRecord) 
 		{op, weightOperationalSecurity},
 		{comm, weightCommunityGovernance},
 	} {
+		value := cs.score.Value
 		if cs.score.Confidence == ConfidenceInsufficient {
-			continue
+			value = neutralBaseline
+		} else {
+			substantive++
 		}
-		overall += cs.score.Value * cs.weight
-		weightSum += cs.weight
-	}
-	if weightSum > 0 {
-		overall /= weightSum
+		overall += value * cs.weight
 	}
 
 	return Score{
@@ -115,7 +125,7 @@ func ComputeScore(ctx context.Context, srv ServerRecord, corpus []ServerRecord) 
 		OperationalSecurity:    op,
 		CommunityGovernance:    comm,
 		Overall:                overall,
-		Confidence:             overallConfidence(weightSum),
+		Confidence:             overallConfidence(substantive),
 	}
 }
 
@@ -124,7 +134,7 @@ func ComputeScore(ctx context.Context, srv ServerRecord, corpus []ServerRecord) 
 // "how many of the signals were computable" measure the design doc uses in
 // place of a borrowed calibration engine with no training data (§12/§13).
 func aggregate(signals []Signal) CategoryScore {
-	base := 70.0 // neutral starting point: no evidence either way
+	base := neutralBaseline
 	total := 0.0
 	available := 0
 	for _, s := range signals {
@@ -155,13 +165,19 @@ func aggregate(signals []Signal) CategoryScore {
 	return CategoryScore{Value: value, Confidence: conf, Signals: signals}
 }
 
-func overallConfidence(weightSum float64) Confidence {
+// overallConfidence keys off how many of the four categories actually
+// produced evidence, not their summed weight. Weight-summing let a single
+// always-on baseline signal manufacture "moderate" confidence for a server
+// nothing had been checked about, which made the insufficient-evidence state
+// unreachable in practice — the one thing the design doc calls a hard
+// requirement.
+func overallConfidence(substantiveCategories int) Confidence {
 	switch {
-	case weightSum <= 0:
+	case substantiveCategories <= 0:
 		return ConfidenceInsufficient
-	case weightSum < 0.5:
+	case substantiveCategories == 1:
 		return ConfidenceLow
-	case weightSum < 0.85:
+	case substantiveCategories == 2:
 		return ConfidenceModerate
 	default:
 		return ConfidenceHigh
@@ -170,10 +186,16 @@ func overallConfidence(weightSum float64) Confidence {
 
 // ── Security Implementation signals ─────────────────────────────────────
 
+// osvEcosystem maps a registry registryType to OSV.dev's ecosystem name.
+// The live registry uses five types (npm, pypi, oci, nuget, mcpb); an
+// unmapped one reports unavailable rather than a fabricated clean result.
+// OSV has no ecosystem for oci (a container digest) or mcpb (an MCP bundle),
+// so those stay unmapped deliberately. Casing is exact — OSV rejects
+// "pypi" with HTTP 400.
 var osvEcosystem = map[string]string{
-	"npm":    "npm",
-	"pypi":   "PyPI",
-	"docker": "", // OSV has no generic Docker-image ecosystem; skip, Available=false
+	"npm":   "npm",
+	"pypi":  "PyPI",
+	"nuget": "NuGet",
 }
 
 var osvQueryURL = "https://api.osv.dev/v1/query"
@@ -193,7 +215,7 @@ type osvResponse struct {
 // review. This is the check that would have caught it.
 func knownBadSignal(ctx context.Context, pkg Package) Signal {
 	eco, ok := osvEcosystem[pkg.RegistryType]
-	if !ok || eco == "" || pkg.Identifier == "" {
+	if !ok || pkg.Identifier == "" {
 		return Signal{Name: "known-vulnerability match", Available: false}
 	}
 
@@ -242,12 +264,26 @@ func knownBadSignal(ctx context.Context, pkg Package) Signal {
 // compares against the whole synced corpus rather than a "popular names"
 // list.
 func typosquatSignal(srv ServerRecord, corpus []ServerRecord) Signal {
+	// Nothing to compare is not the same as compared-and-clean. With no
+	// identifier of our own, or no synced corpus to compare against, this
+	// check did not run — reporting "no close match found" would claim a
+	// clean result for a comparison that never happened, and it was enough
+	// on its own to keep a wholly-unknown server out of the
+	// insufficient-evidence state.
+	if !hasComparableIdentifier(srv) || !anyIdentifierIn(corpus) {
+		return Signal{Name: "near-duplicate identifier", Detail: "nothing to compare against", Available: false}
+	}
+
 	for _, pkg := range srv.Packages {
 		if pkg.Identifier == "" {
 			continue
 		}
+		ourNamespace := publisherNamespace(srv.Name)
 		for _, other := range corpus {
-			if other.Name == srv.Name {
+			// Same publisher can't typosquat itself: ai.dinglebear publishes
+			// both unraid-mcp and unraid-rmcp, one edit apart, and comparing
+			// full names instead of namespaces had them accusing each other.
+			if publisherNamespace(other.Name) == ourNamespace {
 				continue
 			}
 			for _, otherPkg := range other.Packages {
@@ -258,7 +294,7 @@ func typosquatSignal(srv ServerRecord, corpus []ServerRecord) Signal {
 				if d > 0 && d <= 2 && d < len(pkg.Identifier)/3+1 {
 					return Signal{
 						Name:      "near-duplicate identifier",
-						Detail:    fmt.Sprintf("%q is %d edit(s) from %q (published by a different entry) — verify this isn't a typosquat", pkg.Identifier, d, otherPkg.Identifier),
+						Detail:    fmt.Sprintf("%q is %d edit(s) from %q, published under a different namespace (%s) — verify this isn't a typosquat", pkg.Identifier, d, otherPkg.Identifier, publisherNamespace(other.Name)),
 						Impact:    -40,
 						Available: true,
 					}
@@ -267,6 +303,34 @@ func typosquatSignal(srv ServerRecord, corpus []ServerRecord) Signal {
 		}
 	}
 	return Signal{Name: "near-duplicate identifier", Detail: "no close match found", Impact: 0, Available: true}
+}
+
+func hasComparableIdentifier(srv ServerRecord) bool {
+	for _, p := range srv.Packages {
+		if p.Identifier != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func anyIdentifierIn(corpus []ServerRecord) bool {
+	for _, srv := range corpus {
+		if hasComparableIdentifier(srv) {
+			return true
+		}
+	}
+	return false
+}
+
+// publisherNamespace is the reverse-DNS namespace a registry name is
+// published under — "ai.dinglebear" for "ai.dinglebear/unraid-mcp". Two
+// entries sharing a namespace are the same publisher.
+func publisherNamespace(name string) string {
+	if i := strings.Index(name, "/"); i >= 0 {
+		return name[:i]
+	}
+	return name
 }
 
 // NearestIdentifier finds the closest package identifier in corpus to
@@ -396,10 +460,13 @@ func maintenanceSignal(ctx context.Context, repoURL string) Signal {
 			Available: true,
 		}
 	}
+	// Positive, not neutral: an unevaluated category contributes the neutral
+	// baseline, so a repo confirmed to be actively maintained has to score
+	// above that or "checked and healthy" would tie with "never checked".
 	return Signal{
 		Name:      "maintenance recency",
 		Detail:    fmt.Sprintf("last push %s ago", age.Round(24*time.Hour)),
-		Impact:    0,
+		Impact:    10,
 		Available: true,
 	}
 }
@@ -459,12 +526,19 @@ func declaredAuthSignal(srv ServerRecord) Signal {
 
 // ── Community & Governance signals ───────────────────────────────────────
 
-// registryPresenceSignal is the baseline: this function is only called for
-// servers already resolved against the namespace-verified official
-// registry (Phase 1's StatusVerified), which is itself a weak-but-real
-// positive per §2 (identity is verified, safety is not).
+// registryPresenceSignal is context, not evidence. It is true of every
+// server this function is ever called for (scoring only runs on entries
+// already resolved against the official registry), so it discriminates
+// nothing — a constant cannot separate a good server from a bad one.
+// Available is false so it renders in the signal list for the reader without
+// contributing confidence or moving the score; counting it was what made
+// "insufficient evidence" unreachable for real servers.
 func registryPresenceSignal() Signal {
-	return Signal{Name: "namespace-verified registry presence", Detail: "publisher identity verified by the official registry", Impact: 10, Available: true}
+	return Signal{
+		Name:      "namespace-verified registry presence",
+		Detail:    "publisher identity verified by the official registry (context, not evidence of safety)",
+		Available: false,
+	}
 }
 
 // FormatConfidence renders a Confidence for CLI output.

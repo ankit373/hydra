@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/csv"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -1471,7 +1472,28 @@ func cmdMCPRegistry() *cobra.Command {
 	}
 	list.Flags().BoolVar(&listJSON, "json", false, "machine-readable JSON output")
 
-	cmd.AddCommand(sync, scanCmd, audit, export, backtest, list)
+	clear := &cobra.Command{
+		Use:   "clear <server>",
+		Short: "Clear a quarantined server back to provisional (false-positive recovery)",
+		Long: "Quarantine has no automatic way out by design — an audit run must not un-condemn a\n" +
+			"server on its own. This is the manual path the automaton documents, for a server\n" +
+			"that was quarantined in error. The cooldown clock resets, so a cleared server\n" +
+			"re-earns trust rather than being handed it back.",
+		Args: cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			state, err := mcpregistry.Clear(args[0], time.Now().UTC())
+			if errors.Is(err, mcpregistry.ErrNotQuarantined) {
+				return fmt.Errorf("%s is %s, not quarantined — nothing to clear", args[0], state)
+			}
+			if err != nil {
+				return err
+			}
+			fmt.Printf("  %s  %s -> %s\n", okStyle.Render("CLEARED"), args[0], state)
+			return nil
+		},
+	}
+
+	cmd.AddCommand(sync, scanCmd, audit, export, backtest, list, clear)
 	return cmd
 }
 

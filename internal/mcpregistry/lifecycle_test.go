@@ -3,6 +3,7 @@
 package mcpregistry
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -140,6 +141,100 @@ func TestAdvance_StateChangedAtOnlyUpdatesOnTransition(t *testing.T) {
 	next := Advance(&prev, srv, cleanScore(), time.Now())
 	if !next.StateChangedAt.Equal(changedAt) {
 		t.Errorf("StateChangedAt should be unchanged when the state doesn't transition")
+	}
+}
+
+func typosquatFlaggedScore() Score {
+	return Score{SecurityImplementation: CategoryScore{Confidence: ConfidenceHigh, Signals: []Signal{
+		{Name: "near-duplicate identifier", Available: true, Impact: -40},
+	}}}
+}
+
+// A name-similarity heuristic is not a confirmation, and quarantine has no
+// automatic way out. Measured against the live registry the heuristic flagged
+// 0.7% of servers and every one was a false positive, so it must lower the
+// score without condemning the server.
+func TestAdvance_TyposquatFlagDoesNotQuarantine(t *testing.T) {
+	next := Advance(nil, srvV("x", "1.0.0"), typosquatFlaggedScore(), time.Now())
+	if next.State == StateQuarantined {
+		t.Error("a near-duplicate-name heuristic must not put a server in an unrecoverable state on first sight")
+	}
+	if next.State != StateProvisional {
+		t.Errorf("State = %q, want provisional", next.State)
+	}
+}
+
+func TestAdvance_ConfirmedKnownBadStillQuarantines(t *testing.T) {
+	next := Advance(nil, srvV("x", "1.0.0"), badScore(), time.Now())
+	if next.State != StateQuarantined {
+		t.Errorf("State = %q, want quarantined — a confirmed advisory match is a confirmation", next.State)
+	}
+}
+
+func TestAdvance_RecordsTheScoreThatProducedTheState(t *testing.T) {
+	score := cleanScore()
+	score.Overall = 87
+	first := Advance(nil, srvV("x", "1.0.0"), score, time.Now())
+	if first.LastScore.Overall != 87 {
+		t.Errorf("first sight: LastScore.Overall = %v, want 87 — the type must own this, not the caller", first.LastScore.Overall)
+	}
+	next := cleanScore()
+	next.Overall = 42
+	after := Advance(&first, srvV("x", "1.0.0"), next, time.Now())
+	if after.LastScore.Overall != 42 {
+		t.Errorf("subsequent run: LastScore.Overall = %v, want 42 (stale score would be published by export)", after.LastScore.Overall)
+	}
+}
+
+func TestClear_MovesQuarantinedBackToProvisionalAndResetsCooldown(t *testing.T) {
+	withTempHydraHome(t)
+	longAgo := time.Now().Add(-365 * 24 * time.Hour)
+	if err := SaveStates(map[string]ServerState{
+		"io.github.x/y": {State: StateQuarantined, ManifestHash: "h", StateChangedAt: longAgo},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	state, err := Clear("io.github.x/y", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state != StateProvisional {
+		t.Errorf("Clear returned %q, want provisional", state)
+	}
+	states, err := LoadStates()
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := states["io.github.x/y"]
+	if got.State != StateProvisional {
+		t.Errorf("persisted state = %q, want provisional", got.State)
+	}
+	// The cooldown clock must restart, or a cleared server is instantly
+	// promoted to trusted on the next audit by its year-old timestamp.
+	if !got.StateChangedAt.Equal(now) {
+		t.Errorf("StateChangedAt = %v, want the clear time %v — a cleared server must re-earn trust", got.StateChangedAt, now)
+	}
+}
+
+func TestClear_RefusesAServerThatIsNotQuarantined(t *testing.T) {
+	withTempHydraHome(t)
+	if err := SaveStates(map[string]ServerState{"a/b": {State: StateTrusted}}); err != nil {
+		t.Fatal(err)
+	}
+	state, err := Clear("a/b", time.Now())
+	if !errors.Is(err, ErrNotQuarantined) {
+		t.Fatalf("err = %v, want ErrNotQuarantined", err)
+	}
+	if state != StateTrusted {
+		t.Errorf("should report the actual state (%q) so the message can name it", state)
+	}
+}
+
+func TestClear_UnknownServerIsAnError(t *testing.T) {
+	withTempHydraHome(t)
+	if _, err := Clear("never/audited", time.Now()); err == nil {
+		t.Fatal("clearing a server with no recorded state must be an error, not a silent no-op")
 	}
 }
 
