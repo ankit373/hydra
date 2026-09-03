@@ -380,3 +380,76 @@ func TestGetFleet_ConcurrentCallsAreSafe(t *testing.T) {
 		}
 	}
 }
+
+// A list of runs identified only by timestamp id is a list of timestamps. The
+// prompt is recorded on the run-started event, but tree.Reconstruct drops
+// run-level events, so it never reached the view until this read (#603).
+func TestGetFleet_CarriesWhatTheRunWasAskedToDo(t *testing.T) {
+	sandbox(t)
+	const id = "20260903T120000Z-goaltest"
+	writeRun(t, id,
+		runlog.Event{Kind: runlog.KindRunStarted, TaskID: "t1", Detail: "add pagination to /users"},
+		runlog.Event{Kind: runlog.KindHeadSelected, TaskID: "t1", Head: "h", Tier: 6},
+		runlog.Event{Kind: runlog.KindRunFinished, TaskID: "t1"},
+	)
+
+	f, err := New().GetFleet()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := findRun(t, f, id).Goal; got != "add pagination to /users" {
+		t.Errorf("Goal = %q, want the run-started detail", got)
+	}
+}
+
+// An external orchestrator can supply a run id and never a prompt. That is an
+// absent goal, not an error, and must not be fabricated from another event.
+func TestGetFleet_NoPromptLeavesTheGoalEmpty(t *testing.T) {
+	sandbox(t)
+	const id = "20260903T120001Z-nogoal"
+	writeRun(t, id,
+		runlog.Event{Kind: runlog.KindRunStarted, TaskID: "t1"},
+		runlog.Event{Kind: runlog.KindHeadSelected, TaskID: "t1", Head: "h", Tier: 6,
+			Detail: "candidate 1 of 2"},
+	)
+
+	f, err := New().GetFleet()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := findRun(t, f, id).Goal; got != "" {
+		t.Errorf("Goal = %q, want empty — a head_selected detail is not the goal", got)
+	}
+}
+
+// One run, one goal: the first statement of it is what was actually requested.
+func TestGetFleet_FirstGoalWinsOverALaterRunStarted(t *testing.T) {
+	sandbox(t)
+	const id = "20260903T120002Z-twogoals"
+	writeRun(t, id,
+		runlog.Event{Kind: runlog.KindRunStarted, TaskID: "t1", Detail: "the real request"},
+		runlog.Event{Kind: runlog.KindHeadSelected, TaskID: "t1", Head: "h", Tier: 6},
+		// A second writer sharing the run appends its own run_started (runlog's
+		// own docs note several writers share one run).
+		runlog.Event{Kind: runlog.KindRunStarted, TaskID: "t2", Detail: "a second writer's idea"},
+	)
+
+	f, err := New().GetFleet()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := findRun(t, f, id).Goal; got != "the real request" {
+		t.Errorf("Goal = %q, want the first run_started detail", got)
+	}
+}
+
+func findRun(t *testing.T, f *Fleet, id string) Run {
+	t.Helper()
+	for _, r := range f.Runs {
+		if r.ID == id {
+			return r
+		}
+	}
+	t.Fatalf("run %q not in fleet of %d", id, len(f.Runs))
+	return Run{}
+}

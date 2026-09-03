@@ -322,3 +322,37 @@ func TestGetSession_ConcurrentCallsAreSafe(t *testing.T) {
 		}
 	}
 }
+
+// Session's header is otherwise titled by run id alone, which says nothing
+// about what the run was for (#603).
+func TestGetSession_CarriesTheGoal(t *testing.T) {
+	sandbox(t)
+	const id = "20260903T130000Z-sessgoal"
+	writeRun(t, id,
+		runlog.Event{Kind: runlog.KindRunStarted, TaskID: "t1", Detail: "rotate the signing key"},
+		runlog.Event{Kind: runlog.KindHeadSelected, TaskID: "t1", Head: "h", Tier: 2},
+	)
+
+	s, err := New().GetSession(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !s.Found {
+		t.Fatal("Found = false for a run that exists")
+	}
+	if s.Goal != "rotate the signing key" {
+		t.Errorf("Goal = %q, want the run-started detail", s.Goal)
+	}
+}
+
+// A run id that names no log has no goal to report, and must not invent one.
+func TestGetSession_MissingRunHasNoGoal(t *testing.T) {
+	sandbox(t)
+	s, err := New().GetSession("20260903T130001Z-absent")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.Found || s.Goal != "" {
+		t.Errorf("Found=%v Goal=%q; an absent run has neither", s.Found, s.Goal)
+	}
+}

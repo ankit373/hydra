@@ -134,6 +134,9 @@ export interface Run {
   allCount: number
   /** Events the reconstruction could not attribute — surfaced, never hidden. */
   skipped: number
+  /** What was asked, in the requester's words. Empty when the run recorded no
+   *  prompt; a preview, because that is what the log stores. */
+  goal?: string
   /** Set when this run's log could not be read; the row still renders. */
   error?: string
 }
@@ -176,6 +179,8 @@ export interface Session {
   /** False when the run id names no log — different from a run that did nothing. */
   found: boolean
   error?: string
+  /** What this run was asked to do. Empty when it recorded no prompt. */
+  goal?: string
   timeline: TimelineEntry[]
   agents: Agent[]
   edges: Edge[]
