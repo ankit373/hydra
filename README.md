@@ -539,6 +539,13 @@ hyctl dispatch --local "..."   # local models only, no API calls
 hyctl dispatch --swarm --swarm-mode best "..."   # fan out to many heads, judge best
 hyctl dispatch --confidence 0.95 "..."  # SPRT: sample until this P(correct) is reached
 
+# Tasks waiting on you
+# A ledger policy can answer `ask` instead of allow or deny. Dispatch then stops
+# before running anything and parks the task until you answer it.
+hyctl ask list                          # what is waiting, and what it wants to know
+hyctl ask answer <task-id> "go ahead"   # answer it and run the task
+hyctl ask decline <task-id> "not prod"  # refuse it; nothing runs
+
 # Cost & pricing
 hyctl cost                              # spend summary (est. vs actual labeled)
 hyctl stats                             # rollup by model / tier / day
