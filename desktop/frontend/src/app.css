@@ -1344,6 +1344,17 @@ body {
 /* ── Code view ─────────────────────────────────────────────────────────── */
 
 .code { display: grid; grid-template-columns: minmax(180px, 250px) 1fr; gap: 12px; align-items: start; }
+.code__side { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.code__tot {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+  padding-bottom: 7px;
+  border-bottom: 1px solid var(--hy-line);
+}
+.code__totN {
+  font-size: 10.5px; font-weight: 700;
+  letter-spacing: .08em; text-transform: uppercase;
+  color: var(--hy-dim);
+}
 
 .files { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 
@@ -1399,7 +1410,13 @@ body {
   border-bottom: 1px solid var(--hy-line);
 }
 .diff__file { font-family: var(--hy-font-mono); font-size: 12px; overflow: hidden; text-overflow: ellipsis; }
-.diff__body { margin: 0; padding: 8px 0; overflow-x: auto; font-family: var(--hy-font-mono); font-size: 12px; line-height: 1.55; }
+.diff__body {
+  margin: 0; padding: 8px 0; overflow-x: auto;
+  font-family: var(--hy-font-mono); font-size: 12px; line-height: 1.55;
+  /* Go indents with tabs and the 8-column default pushed anything three
+     levels deep off the right edge before it could be read. */
+  tab-size: 4; -moz-tab-size: 4;
+}
 
 .dl { display: flex; gap: 0; white-space: pre; }
 .dl--add { background: color-mix(in srgb, var(--hy-cheap) 12%, transparent); }
@@ -1417,6 +1434,24 @@ body {
 .dl--add .dl__op { color: var(--hy-cheap); }
 .dl--del .dl__op { color: var(--hy-expensive); }
 .dl__text { flex: 1 1 auto; padding-right: 14px; }
+
+/* The row colour says the line changed; this says what on it moved.
+   Deliberately a stronger tint of the row's own colour rather than a
+   third hue, so it reads as emphasis and not as a new category. */
+.dl__moved {
+  background: transparent;
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+.dl--add .dl__moved {
+  background: color-mix(in srgb, var(--hy-cheap) 30%, transparent);
+  color: var(--hy-ink);
+}
+.dl--del .dl__moved {
+  background: color-mix(in srgb, var(--hy-expensive) 30%, transparent);
+  color: var(--hy-ink);
+}
 
 /* ── Chat view ─────────────────────────────────────────────────────────── */
 /* Was a fixed-position dock. It is the default surface now (#520), so it fills

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { GetDiff } from '../bindings'
-import type { Diff, Edit } from '../types'
+import type { Diff, DiffLine, Edit } from '../types'
 
 export function Code({
   runID,
@@ -58,7 +58,19 @@ export function Code({
 
   return (
     <div className="code">
-      <ul className="files">
+      <div className="code__side">
+        {/* The per-file counts were there; the total was not, so "how big is
+            this change" meant adding the column up by eye. */}
+        <div className="code__tot">
+          <span className="code__totN">
+            {edits.length} {edits.length === 1 ? 'file' : 'files'}
+          </span>
+          <span className="file__counts">
+            <span className="add">+{total(edits, 'added')}</span>{' '}
+            <span className="del">&minus;{total(edits, 'removed')}</span>
+          </span>
+        </div>
+        <ul className="files">
         {edits.map((e, i) => (
           <li key={`${e.file}-${i}`}>
             <button
@@ -74,7 +86,8 @@ export function Code({
             </button>
           </li>
         ))}
-      </ul>
+        </ul>
+      </div>
 
       <div className="diff">
         {!diff && <p className="diff__note">Reading snapshot…</p>}
@@ -102,7 +115,9 @@ function DiffBody({ diff }: { diff: Diff }) {
             <span className="dl__n">{l.oldLine || ''}</span>
             <span className="dl__n">{l.newLine || ''}</span>
             <span className="dl__op">{l.op}</span>
-            <span className="dl__text">{l.text}</span>
+            <span className="dl__text">
+              <LineText line={l} />
+            </span>
           </div>
         ))}
       </pre>
@@ -119,4 +134,40 @@ function opClass(op: string): string {
 function basename(p: string): string {
   const i = Math.max(p.lastIndexOf('/'), p.lastIndexOf('\\'))
   return i < 0 ? p : p.slice(i + 1)
+}
+
+/**
+ * A changed line, with the part that actually changed emphasised.
+ *
+ * The line's own colour says it changed; the spans say what on it moved, which
+ * is the question a reviewer is actually asking. Without spans this is the
+ * plain text it always was, so an added line, a removed line and a block
+ * replacement all render exactly as before.
+ */
+function LineText({ line }: { line: DiffLine }) {
+  const spans = line.spans
+  if (!spans || spans.length === 0) return <>{line.text}</>
+
+  const out: React.ReactNode[] = []
+  let at = 0
+  spans.forEach((s, i) => {
+    // Defensive: a span outside the line would throw on slice. The backend
+    // bounds these, but a stale bridge must degrade to plain text, not a
+    // blank pane.
+    if (s.start < at || s.end > line.text.length || s.start >= s.end) return
+    if (s.start > at) out.push(line.text.slice(at, s.start))
+    out.push(
+      <mark className="dl__moved" key={i}>
+        {line.text.slice(s.start, s.end)}
+      </mark>,
+    )
+    at = s.end
+  })
+  if (at < line.text.length) out.push(line.text.slice(at))
+  return <>{out}</>
+}
+
+/** Sums one count across every edit, so the header states a real total. */
+export function total(edits: Edit[], key: 'added' | 'removed'): number {
+  return edits.reduce((n, e) => n + (e[key] || 0), 0)
 }

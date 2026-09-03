@@ -211,6 +211,17 @@ export interface DiffLine {
   oldLine: number
   /** 0 when the line is a removal. */
   newLine: number
+  /** Byte ranges on this line that actually changed, for a 1:1 replacement.
+   *  Absent means no intra-line detail — the line was added or removed
+   *  outright, or it is part of a block replacement where pairing would
+   *  invent a relationship the diff never established. */
+  spans?: Span[]
+}
+
+/** A byte range within DiffLine.text. */
+export interface Span {
+  start: number
+  end: number
 }
 
 export interface Diff {
