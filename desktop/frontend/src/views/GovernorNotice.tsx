@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { GovernorPanel } from '../types'
+import { contextHeadroom } from '../format'
 
 /**
  * Fires when the orchestrator's context pressure reaches a band worth
@@ -39,10 +40,9 @@ export function GovernorNotice({
   if (!show || !governor) return null
 
   const g = governor
-  // Only claimed when there is a real rate signal: RiskFromHistory returns zero
-  // below two observations, and presenting that as "no risk" would be a lie.
-  const hasRate = g.observations >= 2 && g.burnRatePct > 0
-  const headroom = hasRate ? Math.max(0, Math.ceil((80 - g.pct) / g.burnRatePct)) : 0
+  const projected = contextHeadroom(g)
+  const hasRate = projected !== null
+  const headroom = projected ?? 0
 
   return (
     <div className="gn" role="dialog" aria-modal="true" aria-labelledby="gnTitle">

@@ -1,10 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
-import type { Breakdown, CalibrationRow, Dashboard as DashboardData, TrustPanel } from '../types'
+import type {
+  Breakdown,
+  CalibrationRow,
+  Dashboard as DashboardData,
+  RecentCall,
+  TrustPanel,
+} from '../types'
 import {
   calibrationLabel,
   calibrationStrength,
   calibrationWidthPct,
   clockTime,
+  contextHeadroom,
+  contextModeText,
   costBand,
   govBand,
   ms,
@@ -32,14 +40,17 @@ import { useCountUp, useReveal } from '../reveal'
  */
 export function Dashboard({
   data,
+  onOpenRun,
 }: {
   data: DashboardData | null
+  /** Opens one recent request's run. Absent means the rows stay inert. */
+  onOpenRun?: (runID: string) => void
 }) {
   return (
     <>
       <HudChrome />
       {data ? (
-        <DashboardContent data={data} />
+        <DashboardContent data={data} onOpenRun={onOpenRun} />
       ) : (
         <DashboardSkeleton />
       )}
@@ -102,8 +113,10 @@ function SkeletonCard() {
 
 function DashboardContent({
   data,
+  onOpenRun,
 }: {
   data: DashboardData
+  onOpenRun?: (runID: string) => void
 }) {
   const [drawerRow, setDrawerRow] = useState<Breakdown | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -133,7 +146,7 @@ function DashboardContent({
         <TrustCard data={data} />
       </div>
 
-      {data.hasData ? <Breakdowns data={data} onSelectModel={openDrawer} /> : <EmptyState />}
+      {data.hasData ? <Breakdowns data={data} onSelectModel={openDrawer} onOpenRun={onOpenRun} /> : <EmptyState />}
 
       <CalibrationLeaderboard rows={data.calibration} />
 
@@ -180,29 +193,52 @@ function GovernorCard({ data }: { data: DashboardData }) {
   if (!governor.known) {
     return (
       <div className="card">
-        <div className="card__label">Orchestrator context</div>
+        <div className="card__label">Context budget</div>
         <div className="card__value card__value--unknown">unknown</div>
         {/* Not 0%. Nothing has reported usage, and 0% would read as headroom. */}
-        <div className="card__note">No orchestrator has reported its usage.</div>
+        <div className="card__note">Nothing has reported how much context it is using.</div>
       </div>
     )
   }
   const band = govBand(governor.pct)
+  const headroom = contextHeadroom(governor)
   return (
     <div className={`card gov--${band}`}>
-      <div className="card__label">Orchestrator context</div>
+      <div className="card__label">Context budget</div>
       <div className="arc-wrap">
         <ArcGauge
           fraction={Math.min(governor.pct, 100) / 100}
           color={`var(--hy-gov-${band})`}
           centerValue={`${Math.round(displayPct)}%`}
-          centerLabel={governor.mode}
+          centerLabel={governor.effectiveMode || governor.mode}
           revealed={revealed}
         />
       </div>
-      <div className="card__note">mode: {governor.mode}</div>
+      {/* "mode: warning" names a band from a table the reader has never seen.
+          Say what it means, and add the headroom the rate model has computed
+          since #557 and nothing surfaced. */}
+      <div className="card__note">
+        {contextModeText(governor.effectiveMode || governor.mode)}
+        {headroom !== null && (
+          <>
+            {' \u00B7 about '}
+            {headroom} update{headroom === 1 ? '' : 's'} of room
+          </>
+        )}
+      </div>
     </div>
   )
+}
+
+/**
+ * What the consensus machinery actually bought, in a sentence. The ring beside
+ * it shows the same comparison; this says which direction is good.
+ */
+function consensusNote(t: TrustPanel): string {
+  const runs = `${t.runs} check${t.runs === 1 ? '' : 's'}`
+  if (t.meanSamples <= 0 || t.fixedSwarmN <= 0) return runs
+  const asked = t.meanSamples.toFixed(1)
+  return `${runs} \u00B7 asked ${asked} models on average instead of a fixed ${t.fixedSwarmN}`
 }
 
 function TrustCard({ data }: { data: DashboardData }) {
@@ -212,21 +248,20 @@ function TrustCard({ data }: { data: DashboardData }) {
   if (trust.runs === 0) {
     return (
       <div className="card">
-        <div className="card__label">Trust ensemble</div>
-        <div className="card__value card__value--unknown">no runs</div>
+        <div className="card__label">Consensus checks</div>
+        <div className="card__value card__value--unknown">none yet</div>
         <div className="card__note">
-          Try <code>hyctl dispatch --confidence 0.95</code>
+          Asking several models the same question, and stopping once they agree. Try{' '}
+          <code>hyctl dispatch --confidence 0.95</code>
         </div>
       </div>
     )
   }
   return (
     <div className="card">
-      <div className="card__label">Trust ensemble</div>
+      <div className="card__label">Consensus checks</div>
       <TrustCompare trust={trust} revealed={revealed} />
-      <div className="card__note">
-        {trust.runs} run{trust.runs === 1 ? '' : 's'}
-      </div>
+      <div className="card__note">{consensusNote(trust)}</div>
     </div>
   )
 }
@@ -262,9 +297,11 @@ function TrustCompare({ trust, revealed }: { trust: TrustPanel; revealed: boolea
 function Breakdowns({
   data,
   onSelectModel,
+  onOpenRun,
 }: {
   data: DashboardData
   onSelectModel: (row: Breakdown) => void
+  onOpenRun?: (runID: string) => void
 }) {
   return (
     <>
@@ -278,7 +315,7 @@ function Breakdowns({
         <RankedBars title="By model · click a row for detail" rows={data.byModel} onSelect={onSelectModel} />
         <RankedBars title="By tier" rows={data.byTier} />
       </div>
-      <RecentTable data={data} />
+      <RecentTable rows={data.recent} onOpenRun={onOpenRun} />
     </>
   )
 }
@@ -361,7 +398,7 @@ export function CalibrationLeaderboard({ rows }: { rows: CalibrationRow[] }) {
   if (rows.length === 0) {
     return (
       <section>
-        <h2 className="section__title">Calibration leaderboard</h2>
+        <h2 className="section__title">Which models earned their answers</h2>
         <div className="empty" style={{ marginTop: 0 }}>
           <p className="empty__title">No calibration recorded yet</p>
           <p>
@@ -374,7 +411,7 @@ export function CalibrationLeaderboard({ rows }: { rows: CalibrationRow[] }) {
 
   return (
     <section>
-      <h2 className="section__title">Calibration leaderboard · who to trust</h2>
+      <h2 className="section__title">Which models earned their answers</h2>
       <div className="table__wrap">
         <div className="rank">
           {rows.map((r) => (
@@ -519,13 +556,30 @@ function ModelDetailDrawer({
   )
 }
 
-function RecentTable({ data }: { data: DashboardData }) {
-  const rows = data.recent
+/**
+ * The last few requests, each one a way into the run that produced it.
+ *
+ * These rows used to be inert with a bare run id in the last column, which is
+ * why the panel read as decoration: nothing here could be acted on, and the
+ * one identifier shown led nowhere.
+ */
+export function RecentTable({
+  rows,
+  onOpenRun,
+}: {
+  rows: RecentCall[] | null
+  onOpenRun?: (runID: string) => void
+}) {
   if (!rows || rows.length === 0) return null
   const max = Math.max(...rows.map((r) => r.costUsd))
   return (
     <section>
-      <h2 className="section__title">Recent</h2>
+      <div className="section__head">
+        <h2 className="section__title">Recent requests</h2>
+        {onOpenRun && (
+          <span className="section__hint">Open one to see what it was asked and what it did.</span>
+        )}
+      </div>
       <div className="table__wrap">
         <table className="table">
           <thead>
@@ -535,20 +589,42 @@ function RecentTable({ data }: { data: DashboardData }) {
               <th className="num">Tier</th>
               <th className="num">Wall</th>
               <th className="num">Cost</th>
-              <th>Run</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
-            {rows.map((r, i) => (
-              <tr key={`${r.ts}-${i}`}>
-                <td className="mono">{clockTime(r.ts)}</td>
-                <td>{r.model}</td>
-                <td className="num">{r.tier === 0 ? '—' : r.tier}</td>
-                <td className="num">{ms(r.wallMs)}</td>
-                <td className={`num cost--${costBand(r.costUsd, max)}`}>{usdExact(r.costUsd)}</td>
-                <td className="mono">{r.runId || '—'}</td>
-              </tr>
-            ))}
+            {rows.map((r, i) => {
+              const openable = !!(onOpenRun && r.runId)
+              return (
+                <tr
+                  key={`${r.ts}-${i}`}
+                  className={openable ? 'row--open' : undefined}
+                  tabIndex={openable ? 0 : undefined}
+                  role={openable ? 'button' : undefined}
+                  aria-label={openable ? `Open ${r.runId}` : undefined}
+                  onClick={openable ? () => onOpenRun!(r.runId) : undefined}
+                  onKeyDown={
+                    openable
+                      ? (e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault()
+                            onOpenRun!(r.runId)
+                          }
+                        }
+                      : undefined
+                  }
+                >
+                  <td className="mono">{clockTime(r.ts)}</td>
+                  <td>{r.model}</td>
+                  <td className="num">{r.tier === 0 ? '—' : r.tier}</td>
+                  <td className="num">{ms(r.wallMs)}</td>
+                  <td className={`num cost--${costBand(r.costUsd, max)}`}>{usdExact(r.costUsd)}</td>
+                  {/* A request with no run id has no run to open — say so rather
+                      than rendering a control that does nothing. */}
+                  <td className="mono">{openable ? 'open →' : '—'}</td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       </div>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { calibrationLabel, calibrationStrength, calibrationWidthPct, costBand } from './format'
+import { calibrationLabel, calibrationStrength, calibrationWidthPct, contextHeadroom, contextModeText, costBand } from './format'
 
 describe('costBand does not alarm about sub-cent spend', () => {
   // The real defect (#594): $0.0009 was the largest figure in the table, so
@@ -86,5 +86,37 @@ describe('calibration strength says in words what the nats mean', () => {
   it('reads as plain language', () => {
     expect(calibrationLabel('weak')).toBe('weak evidence')
     expect(calibrationLabel('thin')).toBe('too few samples')
+  })
+})
+
+describe('contextHeadroom', () => {
+  // budget.RiskFromHistory returns zero below two observations, so a zero burn
+  // rate means "never measured". Projecting from it would invent headroom.
+  it('refuses to project without a rate signal', () => {
+    expect(contextHeadroom({ pct: 40, burnRatePct: 0, observations: 1 })).toBeNull()
+    expect(contextHeadroom({ pct: 40, burnRatePct: 8, observations: 1 })).toBeNull()
+    expect(contextHeadroom({ pct: 40, burnRatePct: 0, observations: 9 })).toBeNull()
+  })
+
+  it('counts updates to the 80% ceiling, not to 100%', () => {
+    // 64% climbing 8 points per update: 16 points of room, two updates.
+    expect(contextHeadroom({ pct: 64, burnRatePct: 8, observations: 6 })).toBe(2)
+  })
+
+  it('never reports negative room once past the ceiling', () => {
+    expect(contextHeadroom({ pct: 92, burnRatePct: 5, observations: 6 })).toBe(0)
+  })
+})
+
+describe('contextModeText', () => {
+  it('says what each band means rather than naming it', () => {
+    expect(contextModeText('normal')).toMatch(/room/i)
+    expect(contextModeText('caution')).toMatch(/compact/i)
+    expect(contextModeText('emergency')).toMatch(/local/i)
+  })
+
+  // An unrecognised band must still render something truthful.
+  it('falls back to the raw value it was given', () => {
+    expect(contextModeText('something-new')).toBe('something-new')
   })
 })

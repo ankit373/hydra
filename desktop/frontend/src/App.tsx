@@ -222,7 +222,7 @@ export default function App() {
         )}
         {!error && view === "usage" && (
           <ErrorBoundary label="Usage">
-            <Dashboard data={dashboard} />
+            <Dashboard data={dashboard} onOpenRun={openSession} />
           </ErrorBoundary>
         )}
         {!error && view === "activity" && fleet && (

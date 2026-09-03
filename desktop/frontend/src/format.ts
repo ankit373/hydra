@@ -137,3 +137,41 @@ export function clockTime(ts: string): string {
   if (t < 0) return ts
   return ts.slice(t + 1, t + 9) || ts
 }
+
+/**
+ * Updates of headroom before the orchestrator's context hits the 80% ceiling,
+ * or null when there is no rate signal to project from.
+ *
+ * budget.RiskFromHistory returns zero below two observations, so a zero burn
+ * rate means "never measured", not "not burning" — presenting that as headroom
+ * would be a lie. Counts claude_pct *updates*, which are not chat turns and not
+ * wall-clock time.
+ */
+export function contextHeadroom(g: {
+  pct: number
+  burnRatePct: number
+  observations: number
+}): number | null {
+  if (g.observations < 2 || g.burnRatePct <= 0) return null
+  return Math.max(0, Math.ceil((80 - g.pct) / g.burnRatePct))
+}
+
+/** What a context-budget mode means, for a reader who does not know the table. */
+export function contextModeText(mode: string): string {
+  switch (mode) {
+    case 'normal':
+      return 'plenty of room'
+    case 'compact':
+      return 'worth compacting soon'
+    case 'caution':
+      return 'compact now'
+    case 'warning':
+      return 'work is being downgraded a tier'
+    case 'critical':
+      return 'only the cheapest models from here'
+    case 'emergency':
+      return 'local models only'
+    default:
+      return mode
+  }
+}
