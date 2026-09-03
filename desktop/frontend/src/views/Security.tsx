@@ -82,7 +82,7 @@ export function Security({ data }: { data: SecurityReport }) {
       <header className="view__head">
         <div className="sec-headrow">
           <div>
-            <h1 className="view__title">Security</h1>
+            <h1 className="view__title">Audit</h1>
             <p className="view__sub">
               What the agents on this machine did, and whether you need to act today.
             </p>

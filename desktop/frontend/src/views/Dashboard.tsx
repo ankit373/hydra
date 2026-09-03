@@ -65,8 +65,8 @@ function HudChrome() {
 function DashboardHeader() {
   return (
     <header className="view__head">
-      <h1 className="view__title view__title--brand">Dashboard</h1>
-      <p className="view__sub">Spend, governor pressure, and the trust ensemble's record.</p>
+      <h1 className="view__title view__title--brand">Usage</h1>
+      <p className="view__sub">What you spent, how much context budget is left, and which models earned their answers.</p>
     </header>
   )
 }
@@ -152,7 +152,7 @@ function SpendCard({ data }: { data: DashboardData }) {
       <div className="card">
         <div className="card__label">Spend today</div>
         <div className="card__value card__value--unknown">no data yet</div>
-        <div className="card__note">Nothing has dispatched on this machine.</div>
+        <div className="card__note">No requests on this machine yet.</div>
       </div>
     )
   }
@@ -559,7 +559,7 @@ function RecentTable({ data }: { data: DashboardData }) {
 function EmptyState() {
   return (
     <div className="empty" style={{ marginTop: 26 }}>
-      <p className="empty__title">Nothing has dispatched yet</p>
+      <p className="empty__title">No requests yet</p>
       <p>
         Run <code>hyctl dispatch --enum SIMPLE "…"</code> and this fills in.
       </p>

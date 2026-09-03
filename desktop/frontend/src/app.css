@@ -1815,3 +1815,87 @@ body {
 .tt__tick--start { color: var(--hy-dim); }
 .tt__tick--up    { color: var(--hy-expensive); }
 .tt__tick--down  { color: var(--hy-cheap); }
+
+/* ── Models ────────────────────────────────────────────────────────────── */
+/* The registry shipped in #553 and fed only the composer picker; this is the
+   first surface that shows what the machine can actually route to. */
+
+.models { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 18px; align-items: start; }
+@media (max-width: 900px) { .models { grid-template-columns: 1fr; } }
+
+.models__tree { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+
+.pool-g { display: flex; flex-direction: column; }
+.pool-g__head { display: flex; align-items: baseline; gap: 9px; padding: 0 0 6px; }
+.pool-g__name {
+  font-family: var(--hy-font-mono); font-size: 10px; letter-spacing: .09em;
+  text-transform: uppercase; color: var(--hy-dim);
+}
+.pool-g__shared {
+  font-family: var(--hy-font-mono); font-size: 8.5px; letter-spacing: .05em; text-transform: uppercase;
+  color: var(--hy-mid); border: 1px solid rgba(224,169,58,.4); border-radius: 3px; padding: 0 4px;
+}
+.pool-g__spend {
+  margin-left: auto; font-family: var(--hy-font-mono); font-size: 9.5px;
+  color: var(--hy-faint); font-variant-numeric: tabular-nums;
+}
+
+.mrow {
+  display: grid; grid-template-columns: 9px minmax(0,1fr) 34px 84px 46px;
+  gap: 10px; align-items: center;
+  width: 100%; text-align: left;
+  padding: 8px 10px; border: 1px solid transparent; border-radius: var(--hy-radius-sm);
+  background: none; color: var(--hy-ink); font: inherit; font-size: 13px; cursor: pointer;
+}
+.mrow:hover { background: var(--hy-panel); }
+.mrow[aria-current="true"] { background: var(--hy-panel); border-color: var(--hy-line-2); }
+.mrow:focus-visible { outline: 2px solid var(--hy-aqua); outline-offset: 1px; }
+.mrow__dot { width: 7px; height: 7px; border-radius: 50%; }
+.mrow__dot--on { background: var(--hy-cheap); }
+.mrow__dot--off { background: var(--hy-faint); }
+.mrow__name { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mrow__tier, .mrow__band, .mrow__cost {
+  font-family: var(--hy-font-mono); font-size: 10.5px; font-variant-numeric: tabular-nums;
+}
+.mrow__tier { color: var(--hy-faint); }
+.mrow__band { color: var(--hy-dim); }
+.mrow__cost { text-align: right; font-weight: 700; }
+.mrow__cost--free { color: var(--hy-cheap); }
+.mrow__cost--low  { color: var(--hy-cheap); }
+.mrow__cost--mid  { color: var(--hy-mid); }
+.mrow__cost--high { color: var(--hy-expensive); }
+
+.scard {
+  background: var(--hy-panel); border: 1px solid var(--hy-line);
+  border-radius: var(--hy-radius); padding: 15px 16px;
+  display: flex; flex-direction: column; gap: 7px;
+}
+.scard__name { font-size: 14.5px; font-weight: 600; letter-spacing: -.01em; }
+.scard__sub { font-size: 11.5px; color: var(--hy-dim); }
+.scard__hl { color: var(--hy-aqua); font-family: var(--hy-font-mono); }
+.scard__off { color: var(--hy-expensive); }
+.scard__rule { height: 1px; background: var(--hy-line); margin: 4px 0 2px; }
+.scard__lbl {
+  font-family: var(--hy-font-mono); font-size: 9.5px; letter-spacing: .09em;
+  text-transform: uppercase; color: var(--hy-faint);
+}
+.scard__line { display: flex; align-items: baseline; gap: 10px; font-size: 12px; }
+.scard__k { color: var(--hy-dim); }
+.scard__v { margin-left: auto; font-family: var(--hy-font-mono); font-size: 11.5px; }
+.scard__none { margin: 2px 0 0; font-size: 11.5px; color: var(--hy-dim); line-height: 1.5; }
+
+.scard__cal { display: flex; flex-direction: column; gap: 1px; padding: 5px 0; border-bottom: 1px solid var(--hy-line); }
+.scard__cal:last-child { border-bottom: none; }
+.scard__calTop { display: flex; align-items: baseline; gap: 8px; }
+.scard__calDom { font-family: var(--hy-font-mono); font-size: 11.5px; }
+.scard__calD {
+  margin-left: auto; font-family: var(--hy-font-mono); font-size: 13px;
+  font-weight: 700; font-variant-numeric: tabular-nums;
+}
+.scard__calD--strong   { color: var(--hy-cheap); }
+.scard__calD--moderate { color: var(--hy-mid); }
+.scard__calD--weak     { color: var(--hy-expensive); }
+/* Muted, not coloured: a score on too few outcomes must not read as a finding. */
+.scard__calD--thin     { color: var(--hy-faint); }
+.scard__calSub { font-family: var(--hy-font-mono); font-size: 9.5px; color: var(--hy-faint); }
+.scard__thin { color: var(--hy-mid); }
