@@ -17,18 +17,18 @@ export function Fleet({
   return (
     <>
       <header className="view__head">
-        <h1 className="view__title">Fleet</h1>
+        <h1 className="view__title">Activity</h1>
         <p className="view__sub">
           {data.liveCount > 0
-            ? `${data.liveCount} run${data.liveCount === 1 ? '' : 's'} in flight`
-            : 'Nothing running right now.'}
+            ? `${data.liveCount} request${data.liveCount === 1 ? '' : 's'} running now`
+            : 'Every request this machine has handled, newest first.'}
         </p>
       </header>
 
       {!data.hasRuns ? (
         <div className="empty">
-          <p className="empty__title">No runs yet</p>
-          <p>Start one from here, or run it from a terminal instead:</p>
+          <p className="empty__title">Nothing has run yet</p>
+          <p>Ask for something in Chat, or run it from a terminal instead:</p>
           <button className="empty__cta" onClick={onStartTask}>
             Start a task
           </button>
