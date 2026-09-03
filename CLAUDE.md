@@ -547,7 +547,14 @@ that token start no workflow, so a trigger-based sweep would never fire at all.
 
 `main` carries only one squash commit per release, so its own log names just the release PRs.
 The workflow follows each one's `refs/pull/<n>/head` into the develop lineage that actually
-shipped, recovers `Closes #n` from those PR bodies, and closes what is still open. Verify:
+shipped, and reads the trailing `(#n)` off every commit subject there.
+
+**That `(#n)` is not always a PR.** GitHub's squash default appends the PR number, but the
+Quick Start below prescribes `(#${ISSUE})` in the commit subject, and both conventions are in
+the history. So each number is resolved to whichever it is: a PR means read `Closes #m` out of
+its body, an issue means the commit names the issue it shipped. Only issues still open are
+touched. Handling just one convention silently loses most of the release — that is what the
+first cut of this workflow did. Verify:
 
 ```bash
 gh run list --workflow "Close shipped issues" --limit 1
