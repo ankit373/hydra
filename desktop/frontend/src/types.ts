@@ -649,6 +649,29 @@ export interface ChatReply {
   /** No heads discoverable at all — the dock offers to retry instead of
    *  showing a raw dispatch error. */
   needsProbe?: boolean
+  /** Set when the task parked waiting on a human decision. Not an error: it
+   *  needs you, it did not break. `taskId` is what answers it. */
+  question?: string
+  taskId?: string
+}
+
+/** One task parked waiting on a human decision. */
+export interface PendingQuestion {
+  taskId: string
+  runId: string
+  question: string
+  head: string
+  resource?: string
+  prompt: string
+  /** Epoch ms — the frontend formats the age itself. */
+  askedAtMs: number
+}
+
+/** The parked queue, plus whether it could be read in full. */
+export interface QuestionQueue {
+  questions: PendingQuestion[]
+  /** One unreadable file must not hide the answerable ones. */
+  error?: string
 }
 
 /** One routable head as registry/models.yaml declares it. */

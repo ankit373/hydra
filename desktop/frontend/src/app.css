@@ -1023,6 +1023,20 @@ body {
   font-weight: 700;
 }
 
+/* Amber, not aqua: aqua means "running by itself", this means "stopped, and
+   only you can clear it". Different states must not read alike. */
+.rail__wait {
+  margin-left: auto;
+  font-family: var(--hy-font-mono);
+  font-size: 10px;
+  background: var(--hy-mid);
+  color: #1A1204;
+  border-radius: 999px;
+  padding: 1px 6px;
+  font-weight: 700;
+  box-shadow: 0 0 12px color-mix(in srgb, var(--hy-mid) 55%, transparent);
+}
+
 .runs { display: flex; flex-direction: column; gap: 11px; }
 
 .run {
@@ -1724,6 +1738,62 @@ body {
 .shift__ico { color: var(--hy-mid); }
 .shift__txt { color: var(--hy-dim); }
 .shift__txt b { color: var(--hy-ink); font-weight: 600; }
+
+/* ── Waiting on you (a parked task) ────────────────────────────────────── */
+
+/* Louder than .shift on purpose: a tier change is something that happened,
+   this is something only the user can clear. */
+.waiting {
+  margin: 6px 0 8px;
+  padding: 12px 14px 13px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--hy-mid) 11%, transparent), rgba(224, 169, 58, 0)),
+    var(--hy-bg-2);
+  border: 1px solid color-mix(in srgb, var(--hy-mid) 38%, transparent);
+  border-left: 2px solid var(--hy-mid);
+  border-radius: 0 var(--hy-radius-sm) var(--hy-radius-sm) 0;
+  box-shadow: 0 0 22px color-mix(in srgb, var(--hy-mid) 13%, transparent);
+}
+.waiting__head { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
+.waiting__ico { color: var(--hy-mid); font-size: 12px; }
+.waiting__lbl {
+  color: var(--hy-mid);
+  font-size: 10.5px; font-weight: 700;
+  letter-spacing: .09em; text-transform: uppercase;
+  text-shadow: 0 0 14px color-mix(in srgb, var(--hy-mid) 45%, transparent);
+}
+.waiting__who { color: var(--hy-dim); font-size: 11px; font-family: var(--hy-mono, monospace); }
+.waiting__q { color: var(--hy-ink); font-size: 13px; line-height: 1.5; margin: 0 0 10px; }
+.waiting__row { display: flex; gap: 7px; align-items: center; }
+.waiting__in {
+  flex: 1 1 auto; min-width: 0;
+  padding: 7px 10px;
+  background: var(--hy-bg-1, #06070F);
+  border: 1px solid var(--hy-line-2);
+  border-radius: var(--hy-radius-sm);
+  color: var(--hy-ink); font-size: 12.5px;
+}
+.waiting__in:focus-visible { outline: 2px solid var(--hy-aqua); outline-offset: 1px; }
+.waiting__in:disabled { opacity: .55; }
+.waiting__go, .waiting__no {
+  flex: 0 0 auto;
+  padding: 7px 13px;
+  border-radius: var(--hy-radius-sm);
+  font-size: 12px; font-weight: 600;
+  cursor: pointer;
+}
+.waiting__go {
+  background: var(--hy-aqua); border: 1px solid var(--hy-aqua); color: #04121A;
+  box-shadow: 0 0 18px color-mix(in srgb, var(--hy-aqua) 30%, transparent);
+}
+.waiting__no { background: transparent; border: 1px solid var(--hy-line-2); color: var(--hy-dim); }
+.waiting__no:hover:not(:disabled) { color: var(--hy-expensive); border-color: color-mix(in srgb, var(--hy-expensive) 50%, transparent); }
+.waiting__go:disabled, .waiting__no:disabled { opacity: .45; cursor: default; box-shadow: none; }
+.waiting__go:focus-visible, .waiting__no:focus-visible { outline: 2px solid var(--hy-aqua); outline-offset: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .waiting { box-shadow: none; }
+}
 
 /* ── Governor notice ───────────────────────────────────────────────────── */
 
