@@ -1899,3 +1899,25 @@ body {
 .scard__calD--thin     { color: var(--hy-faint); }
 .scard__calSub { font-family: var(--hy-font-mono); font-size: 9.5px; color: var(--hy-faint); }
 .scard__thin { color: var(--hy-mid); }
+
+/* ── Run identity ──────────────────────────────────────────────────────── */
+/* A run is led by what it was asked to do; its id is the correlation handle,
+   not the headline (#603). */
+
+.run__open {
+  display: flex; align-items: baseline; gap: 9px; min-width: 0; flex: 1;
+  background: none; border: 0; padding: 0; text-align: left;
+  color: var(--hy-ink); font: inherit; cursor: pointer;
+}
+.run__open:hover .run__goal { color: var(--hy-aqua); }
+.run__open:focus-visible { outline: 2px solid var(--hy-aqua); outline-offset: 2px; border-radius: 3px; }
+.run__goal {
+  font-size: 13.5px; font-weight: 600; letter-spacing: -.01em;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* No prompt was recorded, so the id IS the title — set in mono, because that
+   is what it is. */
+.run__goal--id { font-family: var(--hy-font-mono); font-size: 12px; font-weight: 500; color: var(--hy-dim); }
+.run__id { font-family: var(--hy-font-mono); font-size: 10px; color: var(--hy-faint); flex: 0 0 auto; }
+
+.session__goal { font-size: 20px; font-weight: 600; letter-spacing: -.02em; }
