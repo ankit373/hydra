@@ -65,14 +65,54 @@ export function toSecurityCSV(
   return ['id,name,status,gap_age_days,detail', ...rows].join('\n')
 }
 
-/** Cost ramp for a per-row figure, relative to the largest row in its table. */
+const COST_FLOOR_USD = 0.01
+
+/** Cost ramp relative to the largest row, floored: sub-cent spend earns no
+ * mid/expensive colour, because `usd()` already prints it "<$0.01" and the
+ * biggest tenth of a cent is not expensive. */
 export function costBand(v: number, max: number): 'free' | 'cheap' | 'mid' | 'expensive' {
   if (v <= 0) return 'free'
-  if (max <= 0) return 'cheap'
+  if (max <= 0 || v < COST_FLOOR_USD) return 'cheap'
   const share = v / max
   if (share >= 0.6) return 'expensive'
   if (share >= 0.25) return 'mid'
   return 'cheap'
+}
+
+/** internal/trust's D is expected |LLR| in nats — 0 is a coin flip. ln(.95/.05)
+ * is what one verdict must carry to move a 50/50 prior to the 95% the SPRT
+ * ensemble targets, so it is the honest full scale for a bar. */
+const CAL_FULL_SCALE_NATS = Math.log(0.95 / 0.05)
+
+/** A source with observations but no diagnostic power keeps a sliver: the row
+ * is real even when the measurement says coin flip. */
+const CAL_SLIVER_PCT = 2
+
+/** Absolute, never share-of-max: a leaderboard of weak sources must look weak.
+ * At D=0.28 nats this is ~10% of the track, not the 100% a set-relative scale
+ * gave the best of a bad field. */
+export function calibrationWidthPct(d: number, n: number): number {
+  if (d <= 0) return n > 0 ? CAL_SLIVER_PCT : 0
+  return Math.min(100, Math.max(CAL_SLIVER_PCT, (d / CAL_FULL_SCALE_NATS) * 100))
+}
+
+export type CalStrength = 'thin' | 'weak' | 'moderate' | 'strong'
+
+/** The bands Cockpit's per-model rows already read D by, in one place. n is
+ * trust.Stat.N, which excludes the Laplace prior — under ten observations the
+ * number is a guess whatever it says, so that outranks the value. */
+export function calibrationStrength(d: number, n: number): CalStrength {
+  if (n < 10) return 'thin'
+  if (d >= 1) return 'strong'
+  if (d >= 0.5) return 'moderate'
+  return 'weak'
+}
+
+/** Plain words for the band. A nat figure is unreadable to anyone who has not
+ * read internal/trust; the bar and the number both lean on this. */
+export function calibrationLabel(s: CalStrength): string {
+  if (s === 'thin') return 'too few samples'
+  return `${s} evidence`
 }
 
 /** internal/trust calibration keys are "verifier:go-test" / "model:claude-sonnet"

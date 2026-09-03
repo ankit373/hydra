@@ -687,8 +687,9 @@ body {
 }
 .cal__domain { margin-left: 6px; font-size: 10px; color: var(--hy-faint); }
 
-/* Not `overflow: hidden` — the halo below deliberately bleeds past the track,
-   the same way SpendTrend's SVG halo bleeds HALO_PAD past its crisp bar. */
+/* Not `overflow: hidden` — the halo bleeds vertically past the track, the same
+   way SpendTrend's SVG halo bleeds HALO_PAD past its crisp bar. Horizontally
+   it cannot: calBarWidths lays the pair out inside the track less the bleed. */
 .cal__track {
   position: relative;
   height: 8px;
@@ -709,19 +710,42 @@ body {
 .cal__halo.grown, .cal__fill.grown { transform: scaleX(1); }
 
 /* Width/height/inset (the halo's HALO_PAD bleed) are set inline per row from
-   the D-relative fraction; only the reveal grow-in is CSS. */
+   the absolute nat scale; only the reveal grow-in is CSS. */
 .cal__fill { opacity: .95; }
 .cal__halo { opacity: .3; }
+
+/* Under ten observations D is a guess, so the bar is drawn as provisional
+   rather than left to look like a measurement (#593). */
+.cal__fill--thin { opacity: .38; }
+.cal__halo--thin { opacity: .12; }
 
 .cal__fill--oracle, .cal__halo--oracle { background: linear-gradient(90deg, rgba(0, 230, 195, .5), var(--hy-aqua)); }
 .cal__fill--model,  .cal__halo--model  { background: linear-gradient(90deg, rgba(139, 92, 246, .5), var(--hy-violet)); }
 
 .cal__value {
+  display: inline-flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 9px;
   font-family: var(--hy-font-mono);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+
+/* Words, not just nats: the band reads without knowing what a nat is. Fixed
+   width so the D column stays aligned down the list. Same colour ramp as the
+   Cockpit's per-model D. */
+.cal__strength {
+  min-width: 98px;
+  text-align: right;
+  font-size: 10px;
+  letter-spacing: .02em;
+}
+.cal__strength--strong   { color: var(--hy-cheap); }
+.cal__strength--moderate { color: var(--hy-cyan); }
+.cal__strength--weak     { color: var(--hy-mid); }
+.cal__strength--thin     { color: var(--hy-dim); }
 
 .cal-legend {
   display: flex;
@@ -740,6 +764,7 @@ body {
 }
 .cal-legend__dot--oracle { background: var(--hy-aqua); }
 .cal-legend__dot--model  { background: var(--hy-violet); }
+.cal-legend__scale { margin-left: auto; color: var(--hy-faint); }
 
 /* ── Dashboard: HUD chrome ─────────────────────────────────────────────── */
 /* Corner brackets + scanline + vignette, the same frame language as
@@ -1668,7 +1693,7 @@ body {
 .mr__name { font-size: 11.5px; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mr__d { margin-left: auto; font-family: var(--hy-font-mono); font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .mr__d--strong { color: var(--hy-cheap); }
-.mr__d--ok     { color: var(--hy-cyan); }
+.mr__d--moderate { color: var(--hy-cyan); }
 .mr__d--weak   { color: var(--hy-mid); }
 /* Thin evidence is amber regardless of the value: trust.Stat.N excludes the
    prior, so a high D on few observations is not a strong measurement. */
