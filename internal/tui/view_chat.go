@@ -329,9 +329,8 @@ func (m Cockpit) chatMain(w, h int) string {
 const ckInputWrapCap = 3
 
 // inputBar renders the bordered input with the mode chip: idle placeholder,
-// wrapped typing, the running spinner, or the pending question. At heights too
-// small for a border it degrades to one bare line, so the input can never
-// disappear (#506's discipline).
+// wrapped typing, the running spinner, or the pending question. Heights too
+// small for a border degrade to one bare line — the input never disappears.
 func (m Cockpit) inputBar(w int) string {
 	chip := ckChipS.Render(ckModeByName(m.mode).chip + " ▾")
 	var body string

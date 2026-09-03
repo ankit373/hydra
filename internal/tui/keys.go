@@ -170,10 +170,9 @@ func ckClampOff(off, n int) int {
 	return off
 }
 
-// jump switches to view v, closing any overlay and running the view's
-// on-entry hook (the audit rebuild). A pending plan/confirm survives a view
-// switch — a question must not be lost by looking at activity — but the
-// transient overlays (glossary, picker, override) close.
+// jump switches to view v, closing transient overlays (glossary, picker,
+// override) and running the on-entry hook. A pending plan/confirm survives —
+// a question must not be lost by looking at activity.
 func (m Cockpit) jump(v int) Cockpit {
 	if !ckValidView(v) {
 		return m

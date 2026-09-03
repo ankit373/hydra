@@ -94,10 +94,9 @@ func ckIsMode(name string) bool {
 
 // ── picker overlay ────────────────────────────────────────────────────────────
 
-// modePickerKey handles keys while the `m` picker is open. It is forgiving,
-// not modal: the picker opened on a bare 'm', so a user typing a word that
-// starts with m ("make a helper…") closes it and keeps typing — the m
-// included. Only j/k/arrows/enter/esc/m are picker keys.
+// modePickerKey is forgiving, not modal: the picker opened on a bare 'm', so
+// typing a word that starts with m ("make a helper…") closes it and keeps
+// typing, the m included. Only j/k/arrows/enter/esc/m are picker keys.
 func (m Cockpit) modePickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyEsc:

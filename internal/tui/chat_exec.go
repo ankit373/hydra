@@ -2,11 +2,9 @@
 
 package tui
 
-// chat_exec.go — the chat's execution pipeline: plan → edit → verify, run as
+// chat_exec.go — the chat's execution pipeline (plan → edit → verify), run as
 // tea.Cmds through internal/dispatch, internal/editor and internal/oracle.
-// Modes (modes.go) set the knobs; the ctrl+o override (override.go) sets where
-// the primary dispatch runs. The stage funcs are seams so tests fake the
-// providers, never the pipeline.
+// The stage funcs are seams: tests fake the providers, never the pipeline.
 
 import (
 	"context"

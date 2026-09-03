@@ -119,8 +119,7 @@ func (m Cockpit) startTask(task string) (Cockpit, tea.Cmd) {
 
 // ckEditEnum picks the editor path's routing enum: the classification, the
 // cheap tier for architect's implement half, or a forced tier's equivalent.
-// CORE maps to EXPERT — the editor refuses CORE by design, and a task that
-// classified there still deserves the strongest tier an edit can use.
+// CORE maps to EXPERT — the editor refuses CORE by design.
 func ckEditEnum(classified string, md ckModeDef, ov ckOverride) string {
 	enum := classified
 	if md.cheapImpl {

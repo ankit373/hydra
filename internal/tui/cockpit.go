@@ -277,10 +277,9 @@ func (m Cockpit) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.scrollBy(3), nil
 		}
 	case tea.KeyMsg:
-		// Real terminals coalesce fast keystrokes into one multi-rune message;
-		// every handler is written for one key at a time, so replay them
-		// individually. Bracketed paste stays one message — pasted text is
-		// literal input, never a run of shortcuts.
+		// Terminals coalesce fast keystrokes into one multi-rune message;
+		// handlers are written for one key at a time, so replay individually.
+		// Bracketed paste stays one message: pasted text is never shortcuts.
 		if msg.Type == tea.KeyRunes && len(msg.Runes) > 1 && !msg.Paste {
 			var cur tea.Model = m
 			var cmds []tea.Cmd
@@ -364,10 +363,8 @@ func CockpitSnapshotView(view int) string {
 }
 
 // ckSnapshotModel builds the one demo Cockpit state every snapshot view
-// renders from. Built once instead of once per view — NewCockpit alone does a
-// machine scan and a cost.jsonl read. The audit report stays lazy (#524):
-// jump() builds it only for the frame that shows it. The transcript is drawn
-// by the real task renderers but never executed: a snapshot must not dispatch.
+// renders from (NewCockpit alone scans the machine; the audit stays lazy,
+// #524). The transcript uses the real renderers — a snapshot never dispatches.
 func ckSnapshotModel() Cockpit {
 	m := NewCockpit()
 	m.w, m.h, m.ready = 100, 30, true

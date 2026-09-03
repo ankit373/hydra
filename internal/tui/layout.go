@@ -303,12 +303,9 @@ func ckVisibleLog(log []string, w, logH, scroll int) string {
 	return strings.Join(out, "\n")
 }
 
-// ckClipToLines wraps one log entry to width w and truncates it to at most
-// maxLines rendered lines, marking the cut — a single overlong entry must
-// never be able to exceed the whole pane on its own. It always returns the
-// WRAPPED text: returning the original when it happened to fit made the
-// scroll window count one line where the renderer would paint three, which
-// pushed the input bar off-frame the moment entries got longer (#597).
+// ckClipToLines wraps one log entry to width w, truncated to maxLines with the
+// cut marked (#506). Always returns the WRAPPED text: returning the original
+// made the window count 1 line where the render painted 3 (#597).
 func ckClipToLines(s string, w, maxLines int) string {
 	if w < 1 {
 		w = 1
