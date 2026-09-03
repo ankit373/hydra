@@ -46,7 +46,10 @@ func SelectionProb(i, n int, eps float64) float64 {
 	if n <= 0 || i < 0 || i >= n {
 		return 0
 	}
-	if eps <= 0 || eps > 1 || n == 1 {
+	// Written as a positive test so NaN falls through to "not exploring".
+	// NaN passes `eps <= 0 || eps > 1`, and a NaN propensity fails
+	// json.Marshal, which silently drops the log row it was meant to describe.
+	if !(eps > 0 && eps <= 1) || n == 1 {
 		if i == 0 {
 			return 1
 		}
@@ -66,7 +69,7 @@ func SelectionProb(i, n int, eps float64) float64 {
 // dispatch loop, so exploration cannot walk past a policy gate.
 func explorable(candidates []provider.Head, opts Options, eps float64) bool {
 	switch {
-	case eps <= 0 || eps > 1:
+	case !(eps > 0 && eps <= 1): // positive test so NaN lands here too
 		return false
 	case len(candidates) < 2:
 		return false

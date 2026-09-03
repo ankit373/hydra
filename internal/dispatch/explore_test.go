@@ -3,6 +3,7 @@
 package dispatch
 
 import (
+	"encoding/json"
 	"math"
 	"testing"
 
@@ -198,5 +199,33 @@ func TestLogDispatchWritesPropensity(t *testing.T) {
 		if f, _ := keep.(float64); f != 1 {
 			t.Errorf("%s: keep_prob %v, want 1 (nothing samples these rows yet)", name, keep)
 		}
+	}
+}
+
+// explore_rate = nan is valid TOML. NaN passes an `eps <= 0 || eps > 1` range
+// check, and a NaN act_prob fails json.Marshal — which silently drops the very
+// row it was supposed to describe. It must fail closed to pure argmax instead.
+func TestPickNaNRateFailsClosed(t *testing.T) {
+	nan := math.NaN()
+	d := exploreDispatcher(nan)
+	in := exploreHeads(4)
+	for i := 0; i < 200; i++ {
+		got, p := d.pick(in, Options{})
+		if math.IsNaN(p) || p != 1 {
+			t.Fatalf("act_prob = %v, want exactly 1", p)
+		}
+		if got[0].ID != in[0].ID {
+			t.Fatalf("explored under a NaN rate")
+		}
+	}
+	if p := SelectionProb(0, 4, nan); p != 1 {
+		t.Errorf("SelectionProb greedy under NaN = %v, want 1", p)
+	}
+	if p := SelectionProb(2, 4, nan); p != 0 {
+		t.Errorf("SelectionProb non-greedy under NaN = %v, want 0", p)
+	}
+	// The propensity must survive the encoder that writes it.
+	if _, err := json.Marshal(map[string]any{"act_prob": SelectionProb(0, 4, nan)}); err != nil {
+		t.Errorf("propensity is not JSON-encodable: %v", err)
 	}
 }
