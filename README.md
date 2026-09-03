@@ -522,7 +522,7 @@ The wizard scans your machine, ranks every model it finds, walks you through pic
 hyctl init                              # first-run wizard
 hyctl probe                             # scan and display all available models
 hyctl status                            # live system state (heads, budget bars, burn-rate risk)
-hyctl tui                               # interactive cockpit — chat+code / dashboard / agent-tree (Tab cycles)
+hyctl tui                               # interactive cockpit — six views (see below), `?` for shortcuts
 hyctl version                           # version, commit, build info
 hyctl upgrade                           # self-update via install.sh (curl installs only; brew installs: `brew upgrade hyctl`)
 
@@ -587,6 +587,21 @@ hyctl edit --file ... --prompt "..."    # scoped, validated, rollback-safe file 
 hyctl review ...                        # code review / approve / reject / QA
 hyctl parallel ...                      # fan independent tasks across heads
 ```
+
+### The Cockpit (`hyctl tui`)
+
+Six views, cycled with `tab` (or jump with `1–6`); `?` opens the shortcut glossary from anywhere:
+
+| View | What it shows |
+|---|---|
+| **chat** | Route a task and watch the decision: class → tier → model, cost, change impact (routing preview in this phase) |
+| **agents** | Live runs and today's finished ones — `enter` opens a run's trace |
+| **models** | Every scanned model nested under its provider/server, with per-model detail: tier, capability, p50 latency, requests/cost today, calibration scorecard. A down server grays its models; embedding-only models say `embeddings only — never routed` |
+| **activity** | Today's runs with a full trace per run: routed → policy → request → stream → edits → done, fallbacks included |
+| **usage** | Spend today / this month / saved vs all-frontier, by model/tier/day breakdowns, and the orchestrator's context budget |
+| **audit** | Calibration scorecard, audit-log chain integrity, guardrails (PII local-only, injection markers, MCP server trust), and a needs-a-human queue |
+
+Everything shown is measured from the machine's real logs — a figure that cannot be computed renders `—`, never an invented number. Lists scroll (`j/k`, `pgup/pgdn`, mouse wheel); `hyctl tui --snapshot [--view 0..5]` prints static frames for docs and bug reports.
 
 ---
 

@@ -226,13 +226,15 @@ func cmdTui() *cobra.Command {
 			if err := requireTerminal("hyctl tui"); err != nil {
 				return err
 			}
-			p := tea.NewProgram(tui.NewCockpit(), tea.WithAltScreen())
+			// Mouse support is for wheel scrolling; the keyboard remains
+			// fully sufficient on terminals without it.
+			p := tea.NewProgram(tui.NewCockpit(), tea.WithAltScreen(), tea.WithMouseCellMotion())
 			_, err := p.Run()
 			return err
 		},
 	}
 	c.Flags().BoolVar(&snapshot, "snapshot", false, "Render one static frame and exit (docs/preview)")
-	c.Flags().IntVar(&snapView, "view", 0, "With --snapshot: render a single view (0 chat+code, 1 dashboard, 2 agent-tree, 3 security)")
+	c.Flags().IntVar(&snapView, "view", 0, "With --snapshot: render a single view (0 chat, 1 agents, 2 models, 3 activity, 4 usage, 5 audit)")
 	return c
 }
 

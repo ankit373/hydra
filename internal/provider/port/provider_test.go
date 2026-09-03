@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/ankit373/hydra/internal/capabilities"
+	"github.com/ankit373/hydra/internal/executor"
 	"github.com/ankit373/hydra/internal/provider"
 	"github.com/ankit373/hydra/internal/testutil"
 )
@@ -94,10 +95,11 @@ func TestLMStudio_DiscoversModelsOnANonDefaultAddress(t *testing.T) {
 }
 
 // Embedding-only models report capabilities but never "completion", so they
-// were discovered as normal routable heads and failed every dispatch (#532).
-// The fix must exclude only the positively-non-completion case and keep every
-// other shape — including no capabilities field at all, for older servers.
-func TestOllama_ExcludesEmbeddingOnlyModels(t *testing.T) {
+// failed every dispatch (#532). They are now discovered but MARKED, so
+// executor.Unroutable keeps them out of routing while surfaces can still show
+// them; only the positively-non-completion case is marked — no capabilities
+// field at all (older servers) stays routable.
+func TestOllama_MarksEmbeddingOnlyModels(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/tags" {
 			http.NotFound(w, r)
@@ -122,16 +124,31 @@ func TestOllama_ExcludesEmbeddingOnlyModels(t *testing.T) {
 		ids[h.ID] = true
 	}
 
-	for _, want := range []string{"ollama/qwen3:0.6b", "ollama/llama3.2:3b", "ollama/qwen2.5-coder:7b"} {
+	for _, want := range []string{"ollama/qwen3:0.6b", "ollama/llama3.2:3b", "ollama/qwen2.5-coder:7b", "ollama/nomic-embed-text:latest"} {
 		if !ids[want] {
 			t.Errorf("missing expected head %q among %+v", want, ids)
 		}
 	}
-	if ids["ollama/nomic-embed-text:latest"] {
-		t.Error("nomic-embed-text is embedding-only and must not be offered as a dispatch candidate")
+	if len(heads) != 4 {
+		t.Errorf("got %d heads, want 4 (embedding-only included but marked): %+v", len(heads), heads)
 	}
-	if len(heads) != 3 {
-		t.Errorf("got %d heads, want 3 (embedding-only excluded): %+v", len(heads), heads)
+	for _, h := range heads {
+		marked := h.Meta["embedding_only"] == "true"
+		if h.ID == "ollama/nomic-embed-text:latest" {
+			if !marked {
+				t.Error("the embedding-only model is not marked — dispatch would try it and fail (#532)")
+			}
+			if executor.Supports(h) {
+				t.Error("an embedding-only model must never be a dispatch candidate (#532)")
+			}
+			continue
+		}
+		if marked {
+			t.Errorf("%s is completion-capable but marked embedding-only", h.ID)
+		}
+		if !executor.Supports(h) {
+			t.Errorf("%s became unroutable: %s", h.ID, executor.Unroutable(h))
+		}
 	}
 }
 
