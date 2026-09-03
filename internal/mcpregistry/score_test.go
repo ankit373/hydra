@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -39,6 +40,68 @@ func TestTyposquatSignal_FlagsCloseIdentifier(t *testing.T) {
 	sig := typosquatSignal(target, corpus)
 	if !sig.Available || sig.Impact >= 0 {
 		t.Fatalf("expected a negative-impact typosquat flag, got %+v", sig)
+	}
+}
+
+// Real live-registry data: ai.dinglebear publishes both unraid-mcp and
+// unraid-rmcp, one edit apart. Comparing full server names instead of
+// publisher namespaces had them accusing each other of typosquatting.
+func TestTyposquatSignal_SamePublisherSiblingsDoNotFlagEachOther(t *testing.T) {
+	target := ServerRecord{Name: "ai.dinglebear/unraid-mcp", Packages: []Package{{Identifier: "unraid-mcp"}}}
+	corpus := []ServerRecord{
+		target,
+		{Name: "ai.dinglebear/unraid-rmcp", Packages: []Package{{Identifier: "unraid-rmcp"}}},
+	}
+	sig := typosquatSignal(target, corpus)
+	if sig.Impact < 0 {
+		t.Errorf("a publisher's own sibling package must not be flagged as a typosquat: %+v", sig)
+	}
+}
+
+func TestTyposquatSignal_DifferentPublisherStillFlags(t *testing.T) {
+	target := ServerRecord{Name: "io.evil/pg", Packages: []Package{{Identifier: "mcp-server-postgress"}}}
+	corpus := []ServerRecord{
+		target,
+		{Name: "io.github.real/pg", Packages: []Package{{Identifier: "mcp-server-postgres"}}},
+	}
+	sig := typosquatSignal(target, corpus)
+	if !sig.Available || sig.Impact >= 0 {
+		t.Fatalf("a different publisher's near-duplicate must still flag: %+v", sig)
+	}
+	if !strings.Contains(sig.Detail, "io.github.real") {
+		t.Errorf("detail should name the other namespace so the claim is checkable, got %q", sig.Detail)
+	}
+}
+
+func TestPublisherNamespace(t *testing.T) {
+	for in, want := range map[string]string{
+		"ai.dinglebear/unraid-mcp": "ai.dinglebear",
+		"io.github.foo/bar":        "io.github.foo",
+		"no-slash":                 "no-slash",
+		"":                         "",
+	} {
+		if got := publisherNamespace(in); got != want {
+			t.Errorf("publisherNamespace(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestOSVEcosystem_CoversWhatTheRegistryActuallyPublishes(t *testing.T) {
+	// Measured over a 6,000-server live sample: npm 1464, pypi 753, oci 101,
+	// nuget 20, mcpb 17. nuget was silently unchecked despite OSV supporting
+	// it, and "docker" was a key that matched nothing (the real value is oci).
+	for _, supported := range []string{"npm", "pypi", "nuget"} {
+		if _, ok := osvEcosystem[supported]; !ok {
+			t.Errorf("registryType %q is published by the real registry and OSV supports it, but it is unmapped", supported)
+		}
+	}
+	if _, ok := osvEcosystem["docker"]; ok {
+		t.Error(`"docker" is not a registryType the registry emits — the real value is "oci"`)
+	}
+	for _, unsupported := range []string{"oci", "mcpb"} {
+		if _, ok := osvEcosystem[unsupported]; ok {
+			t.Errorf("OSV has no ecosystem for %q; mapping it would query a name OSV rejects", unsupported)
+		}
 	}
 }
 
@@ -266,7 +329,10 @@ func TestMaintenanceSignal_RateLimitedIsUnavailableWithDetail(t *testing.T) {
 	}
 }
 
-func TestMaintenanceSignal_RecentPushIsNeutral(t *testing.T) {
+// An unevaluated category contributes the neutral baseline, so a repo
+// confirmed to be actively maintained must score strictly above it —
+// otherwise "checked and healthy" ties with "never checked".
+func TestMaintenanceSignal_RecentPushIsPositive(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(githubRepo{PushedAt: time.Now().Add(-24 * time.Hour)})
 	}))
@@ -276,8 +342,37 @@ func TestMaintenanceSignal_RecentPushIsNeutral(t *testing.T) {
 	defer func() { githubAPIBase = orig }()
 
 	sig := maintenanceSignal(context.Background(), "https://github.com/foo/bar")
-	if !sig.Available || sig.Impact != 0 {
-		t.Fatalf("a recently-pushed, non-archived repo should be a neutral available signal, got %+v", sig)
+	if !sig.Available || sig.Impact <= 0 {
+		t.Fatalf("a recently-pushed, non-archived repo should score above the neutral baseline, got %+v", sig)
+	}
+}
+
+// "Nothing to compare against" is not "compared and clean" — claiming the
+// latter was enough on its own to keep a wholly-unknown server out of the
+// insufficient-evidence state.
+func TestTyposquatSignal_UnavailableWhenThereIsNothingToCompare(t *testing.T) {
+	noCorpus := typosquatSignal(ServerRecord{Name: "a", Packages: []Package{{Identifier: "x"}}}, nil)
+	if noCorpus.Available {
+		t.Errorf("with no synced corpus the check did not run; got %+v", noCorpus)
+	}
+	noIdentifier := typosquatSignal(ServerRecord{Name: "a"}, []ServerRecord{
+		{Name: "b", Packages: []Package{{Identifier: "y"}}},
+	})
+	if noIdentifier.Available {
+		t.Errorf("with no identifier of our own there is nothing to compare; got %+v", noIdentifier)
+	}
+}
+
+// The whole point of the third state: a server nothing could be checked
+// about must say so, not render a number. This was unreachable in production
+// before — every scored server got at least one always-on signal.
+func TestComputeScore_TrulyUnknownServerSaysInsufficientEvidence(t *testing.T) {
+	score := ComputeScore(context.Background(), ServerRecord{Name: "io.example/unknown"}, nil)
+	if score.Confidence != ConfidenceInsufficient {
+		t.Errorf("Confidence = %q, want insufficient_evidence", score.Confidence)
+	}
+	if got := FormatScore(score); got != "insufficient evidence" {
+		t.Errorf("FormatScore = %q, want %q — a number here would be a claim we cannot support", got, "insufficient evidence")
 	}
 }
 
@@ -377,28 +472,75 @@ func TestComputeScore_InsufficientEvidenceOverallWhenNothingResolves(t *testing.
 	if score.OperationalSecurity.Confidence != ConfidenceInsufficient {
 		t.Errorf("OperationalSecurity.Confidence = %q, want insufficient_evidence (no remotes)", score.OperationalSecurity.Confidence)
 	}
-	if score.CommunityGovernance.Confidence == ConfidenceInsufficient {
-		t.Errorf("CommunityGovernance should always have the baseline registry-presence signal available")
+	// The registry-presence signal is context, not evidence: it is true of
+	// every scored server, so counting it manufactured confidence about a
+	// server nothing had actually been checked about.
+	if score.CommunityGovernance.Confidence != ConfidenceInsufficient {
+		t.Errorf("CommunityGovernance.Confidence = %q, want insufficient_evidence — a constant every server gets is not evidence", score.CommunityGovernance.Confidence)
+	}
+	if len(score.CommunityGovernance.Signals) == 0 {
+		t.Error("the presence signal should still be listed for the reader, just not counted")
+	}
+}
+
+// The bug this guards: renormalising over available categories only meant an
+// identical server scored HIGHER when GitHub was rate-limited (73) than when
+// GitHub answered and confirmed a recent push (72). Absence of evidence must
+// never beat presence of good evidence.
+func TestComputeScore_MissingEvidenceNeverBeatsGoodEvidence(t *testing.T) {
+	srv := ServerRecord{
+		Name:       "io.github.x/y",
+		Packages:   []Package{{RegistryType: "npm", Identifier: "pkg"}},
+		Repository: Repository{URL: "https://github.com/x/y"},
+	}
+	osv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte(`{}`)) }))
+	defer osv.Close()
+	origOSV := osvQueryURL
+	osvQueryURL = osv.URL
+	defer func() { osvQueryURL = origOSV }()
+
+	healthy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(githubRepo{PushedAt: time.Now().Add(-24 * time.Hour)})
+	}))
+	defer healthy.Close()
+	limited := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-RateLimit-Remaining", "0")
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer limited.Close()
+
+	orig := githubAPIBase
+	defer func() { githubAPIBase = orig }()
+
+	githubAPIBase = healthy.URL
+	checked := ComputeScore(context.Background(), srv, nil)
+	githubAPIBase = limited.URL
+	unchecked := ComputeScore(context.Background(), srv, nil)
+
+	if unchecked.Overall > checked.Overall {
+		t.Errorf("rate-limited score %.1f beats verified-healthy score %.1f — failing to check must not raise the score",
+			unchecked.Overall, checked.Overall)
+	}
+	if unchecked.Confidence == checked.Confidence {
+		t.Errorf("confidence should differ: verified=%q rate-limited=%q", checked.Confidence, unchecked.Confidence)
 	}
 }
 
 func TestOverallConfidence_AllFourBands(t *testing.T) {
 	tests := []struct {
-		weightSum float64
-		want      Confidence
+		substantive int
+		want        Confidence
 	}{
 		{0, ConfidenceInsufficient},
 		{-1, ConfidenceInsufficient},
-		{weightCommunityGovernance, ConfidenceLow},                                                          // 0.15
-		{weightSecurityImplementation, ConfidenceLow},                                                       // 0.35
-		{weightSecurityImplementation + weightCommunityGovernance, ConfidenceModerate},                      // 0.50
-		{weightSecurityImplementation + weightRepositoryHealth, ConfidenceModerate},                         // 0.60
-		{weightSecurityImplementation + weightRepositoryHealth + weightOperationalSecurity, ConfidenceHigh}, // 0.85
-		{1.0, ConfidenceHigh},
+		{1, ConfidenceLow},
+		{2, ConfidenceModerate},
+		{3, ConfidenceHigh},
+		{4, ConfidenceHigh},
 	}
 	for _, tt := range tests {
-		if got := overallConfidence(tt.weightSum); got != tt.want {
-			t.Errorf("overallConfidence(%v) = %q, want %q", tt.weightSum, got, tt.want)
+		if got := overallConfidence(tt.substantive); got != tt.want {
+			t.Errorf("overallConfidence(%d) = %q, want %q", tt.substantive, got, tt.want)
 		}
 	}
 }

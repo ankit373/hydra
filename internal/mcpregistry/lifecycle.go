@@ -6,6 +6,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"time"
@@ -65,13 +67,22 @@ func ManifestHash(srv ServerRecord) string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
+// quarantineThreshold is deliberately below the near-duplicate signal's
+// -40: only a *confirmed* finding (a known-bad advisory match, -100) puts a
+// server in quarantine, because quarantine has no automatic way out. A
+// name-similarity heuristic is not a confirmation — measured against the
+// live registry it flagged 0.7% of servers and every single one of those was
+// a false positive, so wiring it to an unrecoverable state would have
+// stranded roughly 550 legitimately-published servers. It still subtracts
+// from the score; it just doesn't condemn.
+const quarantineThreshold = -80.0
+
 // severeSecuritySignal reports whether score's Security Implementation
-// category carries a signal severe enough to force quarantine (a known-bad
-// match, or a flagged near-duplicate identifier) — the automaton's trigger
-// for NEW/PROVISIONAL -> QUARANTINED.
+// category carries a confirmed finding severe enough to force quarantine —
+// the automaton's trigger for NEW/PROVISIONAL -> QUARANTINED.
 func severeSecuritySignal(s Score) bool {
 	for _, sig := range s.SecurityImplementation.Signals {
-		if sig.Available && sig.Impact <= -40 {
+		if sig.Available && sig.Impact <= quarantineThreshold {
 			return true
 		}
 	}
@@ -90,10 +101,14 @@ func Advance(prev *ServerState, srv ServerRecord, score Score, now time.Time) Se
 		if quarantineTriggered {
 			state = StateQuarantined
 		}
-		return ServerState{State: state, ManifestHash: hash, FirstSeenAt: now, StateChangedAt: now}
+		return ServerState{State: state, ManifestHash: hash, FirstSeenAt: now, StateChangedAt: now, LastScore: score}
 	}
 
 	next := *prev
+	// Set here, not by the caller: LastScore is what `export` publishes, and
+	// leaving it to each call site meant one that forgot would carry a stale
+	// score into the public directory.
+	next.LastScore = score
 	switch prev.State {
 	case StateTrusted:
 		switch {
@@ -125,6 +140,37 @@ func Advance(prev *ServerState, srv ServerRecord, score Score, now time.Time) Se
 	}
 	next.ManifestHash = hash
 	return next
+}
+
+// ErrNotQuarantined is returned by Clear for a server that isn't in a state
+// a manual clear applies to.
+var ErrNotQuarantined = errors.New("server is not quarantined or delisted")
+
+// Clear is the manual path out of quarantine — the "false positive, manually
+// cleared" edge the automaton documents. Advance deliberately never takes
+// this edge on its own; without a way to invoke it, a wrongly-quarantined
+// server was unrecoverable short of hand-editing the state file. Returns the
+// state it moved to, and resets the cooldown clock so a cleared server
+// re-earns trust rather than being handed it back.
+func Clear(name string, now time.Time) (LifecycleState, error) {
+	states, err := LoadStates()
+	if err != nil {
+		return "", err
+	}
+	st, ok := states[name]
+	if !ok {
+		return "", fmt.Errorf("no recorded state for %q — run `hyctl mcp registry audit` first", name)
+	}
+	if st.State != StateQuarantined && st.State != StateDelisted {
+		return st.State, ErrNotQuarantined
+	}
+	st.State = StateProvisional
+	st.StateChangedAt = now
+	states[name] = st
+	if err := SaveStates(states); err != nil {
+		return "", err
+	}
+	return st.State, nil
 }
 
 func statePath() string {

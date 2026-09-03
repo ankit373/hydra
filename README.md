@@ -375,6 +375,12 @@ hyctl mcp registry audit      # resolve + score them, advance lifecycle state
 hyctl mcp registry backtest   # prove the pipeline still catches real incidents (postmark-mcp, CVE-2025-6514)
 ```
 
+Only a *confirmed* finding (a known advisory match) quarantines a server — a name-similarity
+heuristic lowers the score without condemning it, since quarantine has no automatic way out and
+`clear` is the manual recovery path. A category that could not be checked contributes a neutral
+baseline rather than dropping out of the average, so failing to reach GitHub can never *raise* a
+score, and a server nothing is known about reads "insufficient evidence" instead of a number.
+
 Scoring follows the CSA MCP Selection Scorecard's four categories — automating a
 taxonomy the MCP Security Working Group already endorsed, not inventing a competing
 one. Every version bump drops a server's trust state back to **provisional** until it
@@ -564,6 +570,7 @@ hyctl mcp registry audit                # resolve + score installed servers, adv
 hyctl mcp registry export --out DIR     # static index.html/index.json of audited servers
 hyctl mcp registry backtest             # validate scoring against known real incidents
 hyctl mcp registry list                 # audited servers by trust score
+hyctl mcp registry clear <server>       # recover a server quarantined in error
 hyctl security                          # what the agents did, and can the record be trusted
 hyctl security --why                    # the full programme: register, coverage, policy, exposure
 hyctl security --attest                 # checkable attestation: posture + evidence + digest
