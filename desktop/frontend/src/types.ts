@@ -121,6 +121,8 @@ export interface Agent {
 export interface Run {
   id: string
   live: boolean
+  /** A question for this run is still parked. */
+  waiting: boolean
   startedAt: string
   elapsedMs: number
   costUsd: number
@@ -144,6 +146,9 @@ export interface Run {
 export interface Fleet {
   hasRuns: boolean
   liveCount: number
+  /** Runs parked on a question. The opposite of liveCount: stopped, and only
+   *  a person can restart them. */
+  waitingCount: number
   runs: Run[]
   /** Agent count past which a run collapses. Defined in Go, not the view. */
   groupThreshold: number

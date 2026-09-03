@@ -6,6 +6,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/ankit373/hydra/internal/pending"
 	"github.com/ankit373/hydra/internal/runlog"
 	"github.com/ankit373/hydra/internal/tree"
 )
@@ -27,6 +28,11 @@ type Fleet struct {
 	LiveCount int   `json:"liveCount"`
 	Runs      []Run `json:"runs"`
 
+	// WaitingCount is runs parked on a question. Counted separately from
+	// LiveCount because they are opposites: one is working, the other has
+	// stopped and only a person can restart it.
+	WaitingCount int `json:"waitingCount"`
+
 	// GroupThreshold is served to the frontend so the collapse point is defined
 	// once, in Go, rather than duplicated as a magic number in the view.
 	GroupThreshold int `json:"groupThreshold"`
@@ -36,6 +42,13 @@ type Fleet struct {
 type Run struct {
 	ID   string `json:"id"`
 	Live bool   `json:"live"`
+
+	// Waiting is true while a question for this run is still parked. Taken
+	// from the pending store, not from the run log: the log records that a
+	// question was asked (KindQuestionAsked) but never that it was answered,
+	// so only the presence of the file distinguishes "still parked" from
+	// "asked and since resumed".
+	Waiting bool `json:"waiting"`
 
 	StartedAt string `json:"startedAt"`
 	ElapsedMS int64  `json:"elapsedMs"`
@@ -121,11 +134,29 @@ func (a *API) GetFleet() (*Fleet, error) {
 		}
 	}
 
+	// Errors ignored deliberately: a queue that cannot be read must not fail
+	// the whole Activity list. GetPendingQuestions is where an unreadable
+	// question is reported.
+	// List returns what it could read alongside any error, and the partial
+	// answer is the right one to use here: an unreadable question must not
+	// blank the whole Activity list. GetPendingQuestions reports the error.
+	waiting := map[string]bool{}
+	parked, _ := pending.List()
+	for _, q := range parked {
+		if q.RunID != "" {
+			waiting[q.RunID] = true
+		}
+	}
+
 	now := time.Now()
 	for _, id := range ids {
 		r := buildRun(id, live[id], now)
+		r.Waiting = waiting[id]
 		if r.Live {
 			f.LiveCount++
+		}
+		if r.Waiting {
+			f.WaitingCount++
 		}
 		// A finished run with zero agents and no error carries no information —
 		// dispatch never reached a head, most commonly a --dry-run preview
@@ -135,7 +166,10 @@ func (a *API) GetFleet() (*Fleet, error) {
 		// history and makes Fleet look empty even when hasRuns is technically
 		// true. A live run is never filtered — it may not have picked a head
 		// yet, and it is the one the user opened the app to watch.
-		if !r.Live && r.AllCount == 0 && r.Error == "" {
+		// A parked run has exactly this shape — nothing executed, so no agents,
+		// and no error because nothing failed. Without the exemption the one
+		// run that actually needs a person would be the one filtered out.
+		if !r.Live && !r.Waiting && r.AllCount == 0 && r.Error == "" {
 			continue
 		}
 		f.Runs = append(f.Runs, r)
@@ -146,7 +180,12 @@ func (a *API) GetFleet() (*Fleet, error) {
 	// reverse lexical compare is a reverse chronological one — no parsing, and
 	// it stays correct for ids minted by an external orchestrator that followed
 	// the same format.
+	// Waiting first, then live, then most recent. A parked run outranks a
+	// running one because it is the only kind that cannot progress on its own.
 	sort.SliceStable(f.Runs, func(i, j int) bool {
+		if f.Runs[i].Waiting != f.Runs[j].Waiting {
+			return f.Runs[i].Waiting
+		}
 		if f.Runs[i].Live != f.Runs[j].Live {
 			return f.Runs[i].Live
 		}

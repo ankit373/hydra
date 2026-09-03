@@ -1039,6 +1039,51 @@ body {
 
 .runs { display: flex; flex-direction: column; gap: 11px; }
 
+/* ── Activity groups (by who has to act) ───────────────────────────────── */
+
+.rgroup { display: flex; flex-direction: column; gap: 11px; }
+.rgroup + .rgroup { margin-top: 18px; }
+.rgroup__head {
+  display: flex; align-items: center; gap: 9px;
+  padding-bottom: 7px;
+  border-bottom: 1px solid var(--hy-line);
+}
+.rgroup__lbl {
+  font-size: 10.5px; font-weight: 700;
+  letter-spacing: .09em; text-transform: uppercase;
+  color: var(--hy-dim);
+}
+.rgroup__n {
+  font-family: var(--hy-font-mono);
+  font-size: 10px; font-weight: 700;
+  color: var(--hy-dim);
+  border: 1px solid var(--hy-line-2);
+  border-radius: 999px;
+  padding: 0 6px;
+}
+.rgroup__note { color: var(--hy-dim); font-size: 11px; opacity: .8; }
+
+/* Each group takes the colour its state already uses elsewhere, so the same
+   thing never means two colours across views. */
+.rgroup__head--waiting .rgroup__lbl {
+  color: var(--hy-mid);
+  text-shadow: 0 0 14px color-mix(in srgb, var(--hy-mid) 45%, transparent);
+}
+.rgroup__head--waiting { border-bottom-color: color-mix(in srgb, var(--hy-mid) 40%, transparent); }
+.rgroup__head--waiting .rgroup__n { color: var(--hy-mid); border-color: color-mix(in srgb, var(--hy-mid) 45%, transparent); }
+
+.rgroup__head--running .rgroup__lbl { color: var(--hy-aqua); }
+.rgroup__head--running { border-bottom-color: color-mix(in srgb, var(--hy-aqua) 34%, transparent); }
+.rgroup__head--running .rgroup__n { color: var(--hy-aqua); border-color: color-mix(in srgb, var(--hy-aqua) 40%, transparent); }
+
+.rgroup__head--attention .rgroup__lbl { color: var(--hy-expensive); }
+.rgroup__head--attention { border-bottom-color: color-mix(in srgb, var(--hy-expensive) 34%, transparent); }
+.rgroup__head--attention .rgroup__n { color: var(--hy-expensive); border-color: color-mix(in srgb, var(--hy-expensive) 40%, transparent); }
+
+@media (prefers-reduced-motion: reduce) {
+  .rgroup__head--waiting .rgroup__lbl { text-shadow: none; }
+}
+
 .run {
   background: var(--hy-panel);
   border: 1px solid var(--hy-line);
