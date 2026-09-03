@@ -33,13 +33,16 @@ export function Session({
       <header className="view__head">
         <div className="view__headrow">
           <button className="back" onClick={onBack}>
-            ← Fleet
+            ← Activity
           </button>
           <h1 className="view__title">
-            <span className="session__id">{session.runId}</span>
+            <span className={session.goal ? 'session__goal' : 'session__id'}>
+              {session.goal || session.runId}
+            </span>
             {session.live && <span className="session__live">live</span>}
           </h1>
         </div>
+        {session.goal && <p className="view__sub session__id">{session.runId}</p>}
       </header>
 
       {session.error && <div className="error">unreadable: {session.error}</div>}

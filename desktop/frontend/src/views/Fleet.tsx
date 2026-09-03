@@ -75,8 +75,13 @@ function RunCard({
     <section className={`run ${run.live ? 'run--live' : ''}`}>
       <header className="run__head">
         <span className={`run__dot ${run.live ? 'run__dot--live' : ''}`} />
-        <button className="run__id run__id--link" onClick={() => onOpen(run.id)}>
-          {run.id}
+        <button className="run__open" onClick={() => onOpen(run.id)}>
+          {/* A run with no recorded prompt falls back to its id, which is all
+              it has. Saying "untitled" would hide the one handle that works. */}
+          <span className={run.goal ? 'run__goal' : 'run__goal run__goal--id'}>
+            {run.goal || run.id}
+          </span>
+          {run.goal && <span className="run__id">{run.id}</span>}
         </button>
         <span className="run__meta">
           {ms(run.elapsedMs)} · {usdExact(run.costUsd)}

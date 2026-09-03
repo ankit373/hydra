@@ -80,6 +80,8 @@ func TestTypesTS_MirrorsEveryFieldOnTheWire(t *testing.T) {
 		{"Pool", Pool{}},
 		{"ModelRegistry", ModelRegistry{}},
 		{"GovernorPanel", GovernorPanel{}},
+		{"Run", Run{}},
+		{"Session", Session{}},
 	} {
 		t.Run(c.iface, func(t *testing.T) {
 			ts := tsInterface(t, src, c.iface)
@@ -110,6 +112,8 @@ func TestTypesTS_DeclaresNoFieldTheBackendNeverSends(t *testing.T) {
 		{"Pool", Pool{}},
 		{"ModelRegistry", ModelRegistry{}},
 		{"GovernorPanel", GovernorPanel{}},
+		{"Run", Run{}},
+		{"Session", Session{}},
 	} {
 		t.Run(c.iface, func(t *testing.T) {
 			g := jsonFields(c.goVal)

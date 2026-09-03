@@ -59,6 +59,14 @@ type Run struct {
 	// as a complete one.
 	Skipped int `json:"skipped"`
 
+	// Goal is what was asked, in the requester's words — the run-started
+	// event's own detail. It is the only human-readable identifier a run has;
+	// without it a list of runs is a list of timestamps. Empty when the run
+	// recorded no prompt (an external orchestrator can supply the id and
+	// nothing else), and a preview rather than the full text, because the log
+	// stores a preview.
+	Goal string `json:"goal,omitempty"`
+
 	// Error is set when this run's log could not be read. The run still appears
 	// as a row — a bad file must not blank the whole view.
 	Error string `json:"error,omitempty"`
@@ -162,6 +170,11 @@ func buildRun(id string, live bool, now time.Time) Run {
 		return r
 	}
 
+	// tree.Reconstruct drops run-level events by design — they describe the
+	// invocation, not a node in it — so the prompt has to be read here, before
+	// the events are handed over, or it is lost to the view entirely.
+	r.Goal = runGoal(events)
+
 	t, _ := tree.Reconstruct(events)
 	r.Skipped = t.Skipped
 
@@ -212,6 +225,18 @@ func buildRun(id string, live bool, now time.Time) Run {
 }
 
 // eventSpan returns the earliest start and latest finish across a run's nodes.
+// runGoal returns what the run was asked to do, from the first run-started
+// event carrying a detail. Later events are ignored: a run has one goal, and
+// the first statement of it is the one that was actually requested.
+func runGoal(events []runlog.Event) string {
+	for _, e := range events {
+		if e.Kind == runlog.KindRunStarted && e.Detail != "" {
+			return e.Detail
+		}
+	}
+	return ""
+}
+
 func eventSpan(t *tree.Tree) (first, last time.Time) {
 	for _, id := range t.Order {
 		n := t.Nodes[id]
