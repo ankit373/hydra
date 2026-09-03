@@ -4,6 +4,7 @@ import {
   GetDashboard,
   GetEdits,
   GetFleet,
+  GetPendingQuestions,
   GetSecurity,
   GetSession,
   GetVersion,
@@ -66,6 +67,9 @@ export default function App() {
   const [runID, setRunID] = useState<string>("");
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [fleet, setFleet] = useState<FleetData | null>(null);
+  // Parked tasks are visible from every view, not only the thread that
+  // started one: a question nobody is looking at is the case this exists for.
+  const [waiting, setWaiting] = useState(0);
   const [session, setSession] = useState<SessionData | null>(null);
   const [edits, setEdits] = useState<Edit[] | null>(null);
   const [security, setSecurity] = useState<SecurityReport | null>(null);
@@ -110,6 +114,20 @@ export default function App() {
     const t = setInterval(() => void load(view, runID), every);
     return () => clearInterval(t);
   }, [load, view, runID]);
+
+  // Polled regardless of the visible view, unlike the per-view reads above:
+  // the badge's whole job is to be seen from somewhere else.
+  useEffect(() => {
+    const tick = () =>
+      void GetPendingQuestions()
+        .then((q) => setWaiting(q.questions.length))
+        .catch(() => {
+          /* A failed read must not clear a badge that was correct. */
+        });
+    tick();
+    const t = setInterval(tick, DASHBOARD_MS);
+    return () => clearInterval(t);
+  }, []);
 
   useEffect(() => {
     GetVersion()
@@ -185,6 +203,14 @@ export default function App() {
               <span aria-hidden="true">{n.glyph}</span>
               {n.id === "activity" && (fleet?.liveCount ?? 0) > 0 && (
                 <span className="rail__live">{fleet?.liveCount}</span>
+              )}
+              {n.id === "chat" && waiting > 0 && (
+                <span
+                  className="rail__wait"
+                  title={`${waiting} ${waiting === 1 ? "task" : "tasks"} waiting on you`}
+                >
+                  {waiting}
+                </span>
               )}
             </button>
           ))}

@@ -1,7 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { ChatView } from './ChatView'
-import { Chat, GetDashboard, GetEdits, GetModels, GetSession, NewRunID } from '../bindings'
+import {
+  AnswerQuestion,
+  Chat,
+  DeclineQuestion,
+  GetDashboard,
+  GetEdits,
+  GetModels,
+  GetSession,
+  NewRunID,
+} from '../bindings'
 import type { ChatReply, Session as SessionData } from '../types'
 
 // ChatView talks to the Go backend only through these bindings — mocking the
@@ -9,7 +18,9 @@ import type { ChatReply, Session as SessionData } from '../types'
 // one that finished while the view was away, a plain dispatch failure) without
 // a real Wails runtime.
 vi.mock('../bindings', () => ({
+  AnswerQuestion: vi.fn(),
   Chat: vi.fn(),
+  DeclineQuestion: vi.fn(),
   GetDashboard: vi.fn(),
   GetEdits: vi.fn(),
   GetModels: vi.fn(),
@@ -18,6 +29,8 @@ vi.mock('../bindings', () => ({
 }))
 
 const mockChat = vi.mocked(Chat)
+const mockAnswer = vi.mocked(AnswerQuestion)
+const mockDecline = vi.mocked(DeclineQuestion)
 const mockGetModels = vi.mocked(GetModels)
 const mockGetDashboard = vi.mocked(GetDashboard)
 const mockGetEdits = vi.mocked(GetEdits)
@@ -227,5 +240,107 @@ describe('recovery after the view closes (#533)', () => {
     renderDock()
 
     expect(await screen.findByText(/check fleet/i)).toBeInTheDocument()
+  })
+})
+
+// A ledger policy can answer `ask`, which parks the task before anything runs
+// (#582). The transcript is where that has to surface: a modal that vanishes
+// leaves the task silently parked.
+describe('a task parked waiting on a human (#583)', () => {
+  function parked(over: Partial<ChatReply> = {}): ChatReply {
+    return {
+      output: '',
+      head: 'gated',
+      model: '',
+      tier: 0,
+      costUsd: 0,
+      durationMs: 0,
+      runId: 'run-1',
+      question: 'Allow gated to run this task? It would act on internal/auth/token.go.',
+      taskId: 'task-1',
+      ...over,
+    }
+  }
+
+  async function askAndPark(over: Partial<ChatReply> = {}) {
+    mockChat.mockResolvedValue(parked(over))
+    renderDock()
+    const textarea = screen.getByPlaceholderText(/ask anything/i)
+    fireEvent.change(textarea, { target: { value: 'rotate the signing key' } })
+    fireEvent.keyDown(textarea, { key: 'Enter' })
+    return screen.findByText(/Allow gated to run this task/)
+  }
+
+  it('shows the question in the transcript rather than as an error', async () => {
+    await askAndPark()
+    expect(screen.getByText(/waiting on you/i)).toBeInTheDocument()
+    // The distinction that matters: this needs you, it did not break.
+    expect(screen.queryByText(/dispatch/i)).not.toBeInTheDocument()
+  })
+
+  it('answers the task and replaces the question with the result', async () => {
+    await askAndPark()
+    mockAnswer.mockResolvedValue({
+      output: 'rotated', head: 'gated', model: 'Gated', tier: 3,
+      costUsd: 0.01, durationMs: 12, runId: 'run-1',
+    })
+
+    fireEvent.change(screen.getByLabelText(/your answer/i), { target: { value: 'yes, go ahead' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Answer' }))
+
+    await waitFor(() => expect(mockAnswer).toHaveBeenCalledWith('task-1', 'yes, go ahead'))
+    expect(await screen.findByText('rotated')).toBeInTheDocument()
+    expect(screen.queryByText(/waiting on you/i)).not.toBeInTheDocument()
+  })
+
+  // No default action, nothing that resolves on dismiss: an unanswered
+  // question is not an approval.
+  it('will not answer with an empty box', async () => {
+    await askAndPark()
+    const go = screen.getByRole('button', { name: 'Answer' })
+    expect(go).toBeDisabled()
+
+    fireEvent.change(screen.getByLabelText(/your answer/i), { target: { value: '   ' } })
+    expect(go).toBeDisabled()
+    fireEvent.click(go)
+    expect(mockAnswer).not.toHaveBeenCalled()
+  })
+
+  it('declines without running anything', async () => {
+    await askAndPark()
+    mockDecline.mockResolvedValue(undefined)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Decline' }))
+
+    await waitFor(() => expect(mockDecline).toHaveBeenCalledWith('task-1', ''))
+    expect(await screen.findByText(/declined\. nothing ran\./i)).toBeInTheDocument()
+    expect(mockAnswer).not.toHaveBeenCalled()
+  })
+
+  // Approval is per head, so a resumed dispatch can land on a head the human
+  // was never shown and park again. That has to read as a new question.
+  it('shows a second question when answering parks again', async () => {
+    await askAndPark()
+    mockAnswer.mockResolvedValue(parked({ question: 'Allow other to run this task?', taskId: 'task-2' }))
+
+    fireEvent.change(screen.getByLabelText(/your answer/i), { target: { value: 'yes' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Answer' }))
+
+    expect(await screen.findByText('Allow other to run this task?')).toBeInTheDocument()
+    expect(screen.getByText(/waiting on you/i)).toBeInTheDocument()
+  })
+
+  it('answers on Enter as well as the button', async () => {
+    await askAndPark()
+    mockAnswer.mockResolvedValue({
+      output: 'done', head: 'gated', model: 'Gated', tier: 3,
+      costUsd: 0, durationMs: 1, runId: 'run-1',
+    })
+
+    const box = screen.getByLabelText(/your answer/i)
+    fireEvent.change(box, { target: { value: 'go' } })
+    fireEvent.keyDown(box, { key: 'Enter' })
+
+    await waitFor(() => expect(mockAnswer).toHaveBeenCalledWith('task-1', 'go'))
   })
 })
