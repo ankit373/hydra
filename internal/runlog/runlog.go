@@ -83,6 +83,11 @@ const (
 	// last_handoff.json; appending it here is what makes a chain reconstructable.
 	KindHandoff Kind = "handoff"
 
+	// KindQuestionAsked is a task parked waiting on a human. Detail carries the
+	// question, which Session's Timeline already renders, so a parked task is
+	// visible with no new view.
+	KindQuestionAsked Kind = "question_asked"
+
 	// KindEdit is a file edit. File is the path changed; Ref points at the
 	// content, which is never inlined.
 	KindEdit Kind = "edit"

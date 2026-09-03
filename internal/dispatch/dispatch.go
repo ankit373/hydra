@@ -24,6 +24,7 @@ import (
 	"github.com/ankit373/hydra/internal/cost"
 	"github.com/ankit373/hydra/internal/executor"
 	"github.com/ankit373/hydra/internal/ledger"
+	"github.com/ankit373/hydra/internal/pending"
 	"github.com/ankit373/hydra/internal/policy"
 	"github.com/ankit373/hydra/internal/pricing"
 	"github.com/ankit373/hydra/internal/probe"
@@ -69,6 +70,12 @@ type Options struct {
 	RunID  string
 	TaskID string
 
+	// AnsweredHead is the head a human has already approved for this task, set
+	// only by Resume. An Ask verdict counts as approval for that head alone —
+	// approving one head must never authorize a different one, or a resume
+	// silently re-routes to a head the human was never shown.
+	AnsweredHead string
+
 	// Classification is prompt's already-computed PII/injection verdict
 	// (policy.Classify) — cmdDispatch computes this once for its own
 	// defect-cost/local-only decisions and passes it here so Dispatch and
@@ -84,6 +91,106 @@ type Result struct {
 	Fallbacks []provider.Head // remaining candidates after the selected head
 	Retries   int
 	*executor.Response
+}
+
+// ParkedError reports a task stopped before the executor ran because the
+// ledger policy asked for a human decision. It is not a failure: the task is
+// durable and resumable, which is what distinguishes it from a denial.
+type ParkedError struct {
+	TaskID   string
+	Head     string
+	Question string
+}
+
+func (e *ParkedError) Error() string {
+	return fmt.Sprintf("task %s is waiting on an answer: %s", e.TaskID, e.Question)
+}
+
+// askText is the question a human actually sees. The ledger's own reason
+// ("rule 3 (ask claude/**)") names the rule that fired, which answers a
+// different question than the one being asked.
+func askText(h provider.Head, resource string, class *policy.Classification) string {
+	name := h.Name
+	if name == "" {
+		name = h.ID
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "Allow %s to run this task?", name)
+	if resource != "" {
+		fmt.Fprintf(&b, " It would act on %s.", resource)
+	}
+	if class != nil {
+		if class.PII {
+			b.WriteString(" The prompt contains personal data.")
+		}
+		if class.FlagReason != "" {
+			fmt.Fprintf(&b, " Flagged: %s.", class.FlagReason)
+		}
+	}
+	return b.String()
+}
+
+// Resume answers a parked task and dispatches it.
+//
+// The stored prompt is reused rather than rebuilt: the head list, policy and
+// budget can all move between question and answer, and the task that runs must
+// be the task the human agreed to.
+func (d *Dispatcher) Resume(ctx context.Context, taskID, answer string) (*Result, error) {
+	if strings.TrimSpace(answer) == "" {
+		return nil, errors.New("an empty answer is not an answer: the task stays parked")
+	}
+	q, err := pending.Load(taskID)
+	if err != nil {
+		return nil, err
+	}
+	// Consumed before dispatching, so the file is the idempotency token: a
+	// second answer for the same task finds nothing to resume rather than
+	// running the work twice.
+	if err := pending.Delete(taskID); err != nil {
+		return nil, err
+	}
+	prompt := fmt.Sprintf("%s\n\nYou asked: %s\nThe user answered: %s", q.Prompt, q.Question, answer)
+	return d.Dispatch(ctx, prompt, Options{
+		TierHint: q.TierHint, LocalOnly: q.LocalOnly, MaxTokens: q.MaxTokens,
+		System: q.System, Enum: q.Enum, Resource: q.Resource,
+		RunID: q.RunID, TaskID: q.TaskID,
+		AnsweredHead: q.Head,
+		// A2A context is already inside q.Prompt — Dispatch injected it before
+		// the gate parked the task, so naming the file again would double it.
+	})
+}
+
+// Decline refuses a parked task without running it.
+//
+// Free-text answers cannot carry a refusal reliably: folding "no, don't" into
+// the prompt still dispatches and leaves it to the head to notice. A refusal
+// has to be a separate path that never reaches an executor.
+//
+// Not a Dispatcher method: refusing touches only the pending store, the ledger
+// and the run log, so requiring a resolved config and a probed head list would
+// mean a machine with no working config could park a task and then not be
+// allowed to decline it.
+func Decline(taskID, reason string) error {
+	q, err := pending.Load(taskID)
+	if err != nil {
+		return err
+	}
+	if err := pending.Delete(taskID); err != nil {
+		return err
+	}
+	if reason == "" {
+		reason = "no reason given"
+	}
+	_ = ledger.Record(ledger.DefaultPath(), ledger.Event{
+		Agent: "hydra-dispatch", Tool: q.Head, Resource: q.Resource,
+		Action: ledger.Exec, Decision: ledger.Deny,
+		Reason: "declined by user: " + reason,
+	})
+	_ = runlog.New(q.RunID).Append(runlog.Event{
+		Kind: runlog.KindTaskFinished, TaskID: q.TaskID,
+		Head: q.Head, Status: "declined", Detail: "declined by user: " + reason,
+	})
+	return nil
 }
 
 // stateMu protects concurrent read-modify-write on state.json across goroutines.
@@ -291,17 +398,53 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		// CheckAndRecordDispatch's LoadPolicy is itself mtime-cached, so trying
 		// every candidate against the same prompt no longer re-reads and
 		// re-parses the identical policy file from disk once per candidate.
-		if decision, lerr := ledger.CheckAndRecordDispatch("hydra-dispatch", h.ID, opts.Resource, prompt, class); lerr != nil || decision != ledger.Allow {
-			detail := "denied by ledger policy"
-			if lerr != nil {
-				detail = "ledger policy check failed: " + lerr.Error()
-			}
+		decision, lerr := ledger.CheckAndRecordDispatch("hydra-dispatch", h.ID, opts.Resource, prompt, class)
+		refuse := func(detail string) {
 			lastErr = fmt.Errorf("%s: head %s", detail, h.ID)
 			_ = rl.Append(runlog.Event{
 				Kind: runlog.KindError, TaskID: taskID,
 				Head: h.ID, Model: h.Name, Tier: tier,
 				Status: "denied", Detail: detail,
 			})
+		}
+		// Approval is per head. An Ask answered for one head must not authorize
+		// a different one, or a resume silently re-routes to a head the human
+		// was never shown.
+		approved := decision == ledger.Allow || (decision == ledger.Ask && opts.AnsweredHead == h.ID)
+		switch {
+		case lerr != nil:
+			// Fails closed: a policy-check failure (unreadable policy file,
+			// ledger write failure) must deny, not let the candidate through
+			// just because the decision could not be computed.
+			refuse("ledger policy check failed: " + lerr.Error())
+			continue
+
+		// An Ask is not a denial, and must not fall through to the next
+		// candidate the way one does. Continuing would skip the head that
+		// needs permission and run a cheaper one instead — routing around the
+		// question rather than asking it.
+		case decision == ledger.Ask && !approved:
+			q := pending.Question{
+				TaskID: taskID, RunID: rl.RunID(),
+				Question: askText(h, opts.Resource, class),
+				Prompt:   prompt, Head: h.ID, Resource: opts.Resource,
+				Enum: opts.Enum, TierHint: opts.TierHint, System: opts.System,
+				LocalOnly: localOnly, MaxTokens: opts.MaxTokens,
+			}
+			// A question that cannot be stored has not been asked, so this
+			// fails the dispatch rather than proceeding unapproved.
+			if sErr := pending.Save(q); sErr != nil {
+				return nil, fmt.Errorf("cannot park task %s waiting on an answer: %w", taskID, sErr)
+			}
+			_ = rl.Append(runlog.Event{
+				Kind: runlog.KindQuestionAsked, TaskID: taskID,
+				Head: h.ID, Model: h.Name, Tier: tier,
+				Status: "waiting", Detail: q.Question,
+			})
+			return nil, &ParkedError{TaskID: taskID, Head: h.ID, Question: q.Question}
+
+		case !approved:
+			refuse("denied by ledger policy")
 			continue
 		}
 		if opts.MaxCostUSD > 0 {
