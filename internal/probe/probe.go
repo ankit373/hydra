@@ -6,6 +6,8 @@ package probe
 
 import (
 	"context"
+	"fmt"
+	"sort"
 	"sync"
 
 	"github.com/ankit373/hydra/internal/provider"
@@ -14,8 +16,9 @@ import (
 
 // Result is the output of a full machine scan.
 type Result struct {
-	Heads  []provider.Head // all discovered heads, ranked best → worst
-	Cortex *provider.Head  // highest-ranked head, recommended as Cortex
+	Heads    []provider.Head // all discovered heads, ranked best → worst
+	Cortex   *provider.Head  // highest-ranked head, recommended as Cortex
+	Warnings []string        // non-fatal provider failures — e.g. a corrupted models.json overlay
 }
 
 // Run concurrently queries every registered provider and returns a ranked Result.
@@ -32,6 +35,7 @@ func RunWith(ctx context.Context, providers []provider.Provider) *Result {
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	var all []provider.Head
+	var warnings []string
 
 	for _, p := range providers {
 		wg.Add(1)
@@ -46,6 +50,15 @@ func RunWith(ctx context.Context, providers []provider.Provider) *Result {
 
 			heads, err := p.Discover(ctx)
 			if err != nil {
+				// The failure itself must stay non-fatal — one broken provider
+				// (e.g. a corrupted ~/.hydra/models.json overlay) must not hide
+				// every other head — but silently dropping it entirely
+				// contradicts hyctl probe's own "✗ marks unroutable heads with
+				// the reason" promise (#248): this provider's heads don't even
+				// get that far. Recording it here is the only visible trace.
+				mu.Lock()
+				warnings = append(warnings, fmt.Sprintf("%s: %v", p.ID(), err))
+				mu.Unlock()
 				return
 			}
 			mu.Lock()
@@ -54,10 +67,13 @@ func RunWith(ctx context.Context, providers []provider.Provider) *Result {
 		}(p)
 	}
 	wg.Wait()
+	// Providers run concurrently, so append order is nondeterministic — sort so
+	// a repeated probe on the same broken machine reports the same order.
+	sort.Strings(warnings)
 
 	ranked := rank.ByCapScore(all)
 
-	r := &Result{Heads: ranked}
+	r := &Result{Heads: ranked, Warnings: warnings}
 	if len(ranked) > 0 {
 		r.Cortex = &ranked[0]
 	}

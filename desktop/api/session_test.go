@@ -146,22 +146,53 @@ func TestGetSession_FanOutIsNonLinear(t *testing.T) {
 	}
 }
 
-// An A2A cross-edge makes a run non-linear even when the ownership tree is a
-// chain — that edge is precisely the thing a timeline cannot draw.
-func TestGetSession_HandoffAloneMakesItNonLinear(t *testing.T) {
+// A real hyctl dispatch always crosses runs for its A2A handoff — the target
+// picks up last_handoff.json in a later, separate invocation with its own
+// run_id — so writeHandoff's ref (e.g. "hydra-tier-4") never names a node in
+// this run's own tree. Every successful dispatch writes one of these
+// unconditionally, so treating it as same-run graph structure made ordinary,
+// single-head runs non-linear 100% of the time (#485): the Graph tab always
+// appeared, and always showed one isolated node with no visible edge, since
+// SessionGraph can't place a node it has no Agent for either.
+func TestGetSession_DanglingHandoffIsNotNonLinear(t *testing.T) {
 	sandbox(t)
 
 	writeRun(t, "20260802T100000Z-a2a",
 		runlog.Event{Kind: runlog.KindHeadSelected, Head: "a"},
-		runlog.Event{Kind: runlog.KindHandoff, Agent: "a", Ref: "b", Detail: "context"},
+		runlog.Event{Kind: runlog.KindHandoff, Agent: "a", Ref: "hydra-tier-4", Detail: "context handed to hydra-tier-4"},
 	)
 
 	s, err := New().GetSession("20260802T100000Z-a2a")
 	if err != nil {
 		t.Fatal(err)
 	}
+	if s.NonLinear {
+		t.Error("NonLinear = true for a handoff whose target is not a node in this run")
+	}
+	if len(s.Edges) != 0 {
+		t.Errorf("%d edges, want 0 — the target does not exist in this session", len(s.Edges))
+	}
+}
+
+// A handoff whose target IS a node in the same run — the one shape the
+// current architecture never actually produces, but the graph must still
+// render correctly if it ever does — is real structure a timeline cannot
+// draw, and must still make the run non-linear.
+func TestGetSession_ResolvableHandoffMakesItNonLinear(t *testing.T) {
+	sandbox(t)
+
+	writeRun(t, "20260802T100000Z-a2a-resolvable",
+		runlog.Event{Kind: runlog.KindTaskStarted, Agent: "a"},
+		runlog.Event{Kind: runlog.KindTaskStarted, Agent: "b"},
+		runlog.Event{Kind: runlog.KindHandoff, Agent: "a", Ref: "b", Detail: "context"},
+	)
+
+	s, err := New().GetSession("20260802T100000Z-a2a-resolvable")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !s.NonLinear {
-		t.Error("NonLinear = false despite an A2A edge")
+		t.Error("NonLinear = false despite an A2A edge resolving to a real node")
 	}
 	if len(s.Edges) != 1 {
 		t.Fatalf("%d edges, want 1", len(s.Edges))
@@ -289,5 +320,39 @@ func TestGetSession_ConcurrentCallsAreSafe(t *testing.T) {
 		if err := <-done; err != nil {
 			t.Errorf("concurrent GetSession: %v", err)
 		}
+	}
+}
+
+// Session's header is otherwise titled by run id alone, which says nothing
+// about what the run was for (#603).
+func TestGetSession_CarriesTheGoal(t *testing.T) {
+	sandbox(t)
+	const id = "20260903T130000Z-sessgoal"
+	writeRun(t, id,
+		runlog.Event{Kind: runlog.KindRunStarted, TaskID: "t1", Detail: "rotate the signing key"},
+		runlog.Event{Kind: runlog.KindHeadSelected, TaskID: "t1", Head: "h", Tier: 2},
+	)
+
+	s, err := New().GetSession(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !s.Found {
+		t.Fatal("Found = false for a run that exists")
+	}
+	if s.Goal != "rotate the signing key" {
+		t.Errorf("Goal = %q, want the run-started detail", s.Goal)
+	}
+}
+
+// A run id that names no log has no goal to report, and must not invent one.
+func TestGetSession_MissingRunHasNoGoal(t *testing.T) {
+	sandbox(t)
+	s, err := New().GetSession("20260903T130001Z-absent")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.Found || s.Goal != "" {
+		t.Errorf("Found=%v Goal=%q; an absent run has neither", s.Found, s.Goal)
 	}
 }

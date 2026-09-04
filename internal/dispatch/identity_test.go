@@ -69,7 +69,7 @@ func TestLogDispatch_IdentityIsNeverEmpty(t *testing.T) {
 	t.Setenv("HYDRA_TASK_ID", "")
 
 	d := newTestDispatcher()
-	if err := d.logDispatch(logResult(), "a prompt", Options{}); err != nil {
+	if err := d.logDispatch(logResult(), "a prompt", Options{}, 1); err != nil {
 		t.Fatal(err)
 	}
 
@@ -95,7 +95,7 @@ func TestLogDispatch_BothLogsShareOneIdentity(t *testing.T) {
 	t.Setenv("USERPROFILE", home)
 
 	d := newTestDispatcher()
-	if err := d.logDispatch(logResult(), "p", Options{RunID: "run-9", TaskID: "task-9"}); err != nil {
+	if err := d.logDispatch(logResult(), "p", Options{RunID: "run-9", TaskID: "task-9"}, 1); err != nil {
 		t.Fatal(err)
 	}
 
@@ -121,11 +121,14 @@ func TestLogDispatch_ExplicitBeatsEnv(t *testing.T) {
 	t.Setenv("HYDRA_RUN_ID", "env-run")
 
 	d := newTestDispatcher()
-	if err := d.logDispatch(logResult(), "p", Options{RunID: "explicit-run"}); err != nil {
+	if err := d.logDispatch(logResult(), "p", Options{RunID: "explicit-run"}, 1); err != nil {
 		t.Fatal(err)
 	}
 	rows := readLog(t, home, "cost.jsonl")
-	if len(rows) != 1 || rows[0]["run_id"] != "explicit-run" {
+	if len(rows) != 1 {
+		t.Fatalf("cost.jsonl: got %d rows, want 1", len(rows))
+	}
+	if rows[0]["run_id"] != "explicit-run" {
 		t.Errorf("run_id = %v, want the explicit Options value to win over env", rows[0]["run_id"])
 	}
 }
@@ -139,11 +142,14 @@ func TestLogDispatch_EnvUsedWhenNoExplicit(t *testing.T) {
 	t.Setenv("HYDRA_RUN_ID", "orchestrator-run")
 
 	d := newTestDispatcher()
-	if err := d.logDispatch(logResult(), "p", Options{}); err != nil {
+	if err := d.logDispatch(logResult(), "p", Options{}, 1); err != nil {
 		t.Fatal(err)
 	}
 	rows := readLog(t, home, "cost.jsonl")
-	if len(rows) != 1 || rows[0]["run_id"] != "orchestrator-run" {
+	if len(rows) != 1 {
+		t.Fatalf("cost.jsonl: got %d rows, want 1", len(rows))
+	}
+	if rows[0]["run_id"] != "orchestrator-run" {
 		t.Errorf("run_id = %v, want the env value", rows[0]["run_id"])
 	}
 }

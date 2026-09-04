@@ -69,6 +69,25 @@ type GovernorPanel struct {
 	Known bool   `json:"known"`
 	Pct   int    `json:"pct"`
 	Mode  string `json:"mode"`
+
+	// EffectiveMode is what the router actually acts on: the level band raised
+	// by rate-driven risk when a fast burn would cross 80% before a static
+	// threshold catches it. Equals Mode when there is no rate signal.
+	EffectiveMode string `json:"effectiveMode"`
+
+	// BurnRatePct is the mean change in percentage points per observation, and
+	// Risk the probability of reaching the 80% emergency line within
+	// HorizonObs observations. Both are zero when Observations < 2 — that is
+	// "no rate signal", not "no risk", which is why Observations ships too: a
+	// bare 0 would read as a measurement.
+	BurnRatePct float64 `json:"burnRatePct"`
+	Risk        float64 `json:"risk"`
+
+	// Observations is how many points the trajectory estimate rests on, and
+	// HorizonObs the look-ahead Risk is computed over. Both are counts of
+	// claude_pct *updates*, not wall-clock time and not chat turns.
+	Observations int `json:"observations"`
+	HorizonObs   int `json:"horizonObs"`
 }
 
 // TrustPanel summarises the SPRT ensemble's record.
@@ -118,8 +137,8 @@ type RecentCall struct {
 
 // GetDashboard assembles the Dashboard view.
 //
-// Every figure routes through the same cost/trust calls the CLI makes —
-// cost.Summary for the headline, cost.ByModel/ByDay/GroupBy for the
+// Every figure routes through the same cost/trust logic the CLI uses —
+// cost.SummaryFromRows for the headline, cost.ByModel/ByDay/GroupBy for the
 // breakdowns, trust.Aggregate for the ensemble record. Reimplementing any of
 // them here would let `hyctl cost` and this view disagree about one file.
 func (a *API) GetDashboard() (*Dashboard, error) {
@@ -144,10 +163,9 @@ func (a *API) GetDashboard() (*Dashboard, error) {
 		return d, nil
 	}
 
-	sum, err := cost.Summary()
-	if err != nil {
-		return nil, err
-	}
+	// rows is already loaded above — cost.Summary would reload cost.jsonl a
+	// second time for the same data, doubling this call's I/O (#524).
+	sum := cost.SummaryFromRows(rows)
 	d.Spend = spendPanel(sum)
 
 	d.ByModel = toBreakdowns(cost.ByModel(rows))
@@ -188,14 +206,28 @@ func governorPanel() GovernorPanel {
 	if err != nil {
 		return GovernorPanel{}
 	}
+	// One read for both: the level and the trajectory live in the same file,
+	// and dispatch already pairs them the same way (dispatch.go:375).
 	var s struct {
-		ClaudePct *int `json:"claude_pct"`
+		ClaudePct *int  `json:"claude_pct"`
+		History   []int `json:"claude_pct_history"`
 	}
 	if err := json.Unmarshal(raw, &s); err != nil || s.ClaudePct == nil {
 		return GovernorPanel{}
 	}
 	pct := *s.ClaudePct
-	return GovernorPanel{Known: true, Pct: pct, Mode: budget.ModeFor(pct).String()}
+
+	burn, risk := budget.RiskFromHistory(s.History)
+	return GovernorPanel{
+		Known:         true,
+		Pct:           pct,
+		Mode:          budget.ModeFor(pct).String(),
+		EffectiveMode: budget.EffectiveMode(pct, risk).String(),
+		BurnRatePct:   burn,
+		Risk:          risk,
+		Observations:  len(s.History),
+		HorizonObs:    int(budget.RiskHorizon),
+	}
 }
 
 func trustPanel() TrustPanel {

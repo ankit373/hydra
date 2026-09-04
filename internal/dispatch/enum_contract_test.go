@@ -90,6 +90,22 @@ func TestEnumToTier_UnknownEnumDoesNotRoute(t *testing.T) {
 	}
 }
 
+// EnumToTier's "" result is ambiguous between "no enum given" and
+// "unrecognized key" — IsKnownEnum is how a caller (cmd/hydra's --enum flag)
+// tells the two apart instead of silently routing a typo unrestricted (#501).
+func TestIsKnownEnum(t *testing.T) {
+	for _, enum := range knownEnums() {
+		if !IsKnownEnum(enum) {
+			t.Errorf("IsKnownEnum(%q) = false, want true", enum)
+		}
+	}
+	for _, bad := range []string{"", "simple", "NOPE", "TRIVIALX"} {
+		if IsKnownEnum(bad) {
+			t.Errorf("IsKnownEnum(%q) = true, want false", bad)
+		}
+	}
+}
+
 // The ordering the enum names promise must hold: a harder task must never
 // resolve to a cheaper (higher-numbered) tier than an easier one.
 func TestEnumToTier_HarderWorkGetsAStrongerTier(t *testing.T) {

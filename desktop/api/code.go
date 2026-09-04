@@ -44,6 +44,20 @@ type DiffLine struct {
 	Text    string `json:"text"`
 	OldLine int    `json:"oldLine"` // 0 when the line is an addition
 	NewLine int    `json:"newLine"` // 0 when the line is a removal
+
+	// Spans are the byte ranges on this line that actually changed, set only
+	// for a 1:1 replacement. Empty means "no intra-line detail" — either the
+	// line was added or removed outright, or it belongs to a multi-line block
+	// where pairing removed lines to added ones would invent a relationship
+	// the diff never established.
+	Spans []Span `json:"spans,omitempty"`
+}
+
+// Span is a byte range within DiffLine.Text. Bytes, not runes: Text crosses
+// the bridge as a JSON string and the view slices it the same way.
+type Span struct {
+	Start int `json:"start"`
+	End   int `json:"end"`
 }
 
 // GetEdits lists the edits a run applied, newest last.
@@ -90,6 +104,7 @@ func (a *API) GetDiff(runID, ref, file string) (*Diff, error) {
 
 	d.Found = true
 	d.Lines = diffLines(splitLines(string(before)), splitLines(string(after)))
+	markPairs(d.Lines)
 	for _, l := range d.Lines {
 		switch l.Op {
 		case "+":

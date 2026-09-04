@@ -84,6 +84,15 @@ a{color:inherit;text-decoration:none;}
 .side{position:sticky;top:52px;align-self:start;height:calc(100vh - 52px);overflow-y:auto;
   padding:24px 14px 60px 24px;border-right:1px solid var(--line);}
 @media(max-width:960px){.side{position:static;height:auto;border-right:0;border-bottom:1px solid var(--line);}}
+.side-toggle{display:none;width:100%;text-align:left;background:rgba(150,140,255,.06);border:1px solid var(--line);
+  color:var(--ink);font-family:var(--mono);font-size:13px;padding:10px 14px;border-radius:9px;margin-bottom:14px;cursor:pointer;}
+.side-toggle .chev{float:right;transition:transform .15s;}
+.side-toggle[aria-expanded="true"] .chev{transform:rotate(180deg);}
+@media(max-width:960px){
+  .side-toggle{display:block;}
+  #toc{display:none;}
+  .side.open #toc{display:block;}
+}
 .search{width:100%;font-family:var(--mono);font-size:13px;color:var(--ink);background:rgba(20,22,44,.6);
   border:1px solid var(--line-2);border-radius:9px;padding:10px 12px;margin-bottom:18px;}
 .search::placeholder{color:var(--faint);}
@@ -256,6 +265,7 @@ footer a{color:var(--dim);} footer a:hover{color:var(--aqua);}
 
 <div class="shell">
   <aside class="side">
+    <button type="button" id="sideToggle" class="side-toggle" aria-expanded="false" aria-controls="toc">Menu <span class="chev">▾</span></button>
     <input id="q" class="search" type="search" placeholder="Search docs…  (press /)" aria-label="Search documentation">
     <nav id="toc">
       <div class="grp" data-grp>Start here</div>
@@ -294,6 +304,7 @@ footer a{color:var(--dim);} footer a:hover{color:var(--aqua);}
 
       <div class="grp" data-grp>Accountability</div>
       <a href="#mcp"><code>hyctl mcp</code></a>
+      <a href="#mcp-registry"><code>mcp registry</code></a>
       <a href="#oracle"><code>hyctl oracle</code></a>
 
       <div class="grp" data-grp>Cost &amp; registry</div>
@@ -373,7 +384,7 @@ go build -o hyctl ./cmd/hydra</pre>
     <!-- ══ TUI ══ -->
     <section class="doc" id="tui">
       <h2><span class="cmd">hyctl tui</span> <span class="badge ship">shipped</span> <span class="tagline">interactive cockpit</span></h2>
-      <p class="sum">A terminal cockpit you <b>operate</b> — type a task, press enter, watch it route. <b>Tab</b> cycles three views. Everything below is a real <span class="fx">hyctl tui --snapshot</span> frame.</p>
+      <p class="sum">A terminal cockpit you <b>operate</b> — type a task, press enter, watch it route. <b>Tab</b> cycles four views. Everything below is a real <span class="fx">hyctl tui --snapshot</span> frame.</p>
       <div class="tabs" role="tablist">
         <button class="tab on" data-pane="tui0" role="tab">chat + code</button>
         <button class="tab" data-pane="tui1" role="tab">dashboard</button>
@@ -442,13 +453,13 @@ hyctl tui <span class="fl">--snapshot</span> <span class="fl">--view</span> 0|1|
     <!-- ══ APP ══ -->
     <section class="doc" id="app">
       <h2>The desktop app <span class="badge ship">download</span> <span class="tagline">point-and-click cockpit</span></h2>
-      <p class="sum">A native window over the same engine — Wails v2 + React, in <span class="fx">desktop/</span>. Four views over a persistent chat dock. <b>Every release ships a build for macOS, Windows and Linux.</b> <b>Click the sidebar</b> — the views swap live.</p>
+      <p class="sum">A native window over the same engine — Wails v2 + React, in <span class="fx">desktop/</span>. It opens on the chat, with the other views behind an icon rail. <b>Every release ships a build for macOS, Windows and Linux.</b> <b>Click the sidebar</b> — the views swap live.</p>
       <div class="appwin">
-        <div class="tb"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i><span class="ttl" id="appTitle">Hydra.app — Dashboard</span></div>
+        <div class="tb"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i><span class="ttl" id="appTitle">Hydra.app — Usage</span></div>
         <div class="appbody">
           <div class="appnav" id="appNav" role="tablist">
-            <div class="item on" data-av="av-dash" data-title="Dashboard" role="tab" tabindex="0"><span class="dot"></span>Dashboard</div>
-            <div class="item" data-av="av-cockpit" data-title="Fleet" role="tab" tabindex="0"><span class="dot"></span>Fleet</div>
+            <div class="item on" data-av="av-dash" data-title="Usage" role="tab" tabindex="0"><span class="dot"></span>Usage</div>
+            <div class="item" data-av="av-cockpit" data-title="Activity" role="tab" tabindex="0"><span class="dot"></span>Activity</div>
             <div class="item" data-av="av-tree" data-title="Session" role="tab" tabindex="0"><span class="dot"></span>Session</div>
             <div class="item" data-av="av-code" data-title="Code" role="tab" tabindex="0"><span class="dot"></span>Code</div>
           </div>
@@ -516,7 +527,7 @@ $f = "hydra-desktop_&lt;version&gt;_windows_amd64.zip"
 go install github.com/wailsapp/wails/v2/cmd/wails@latest
 cd desktop &amp;&amp; wails build                <span class="c"># → desktop/build/bin/Hydra.app</span></pre></div>
       <div class="callout"><b>The builds are not code-signed yet</b>, so the published <span class="fx">.sha256</span> is the only integrity check available — worth the one command above. The first launch also takes one extra step. <b>macOS:</b> Gatekeeper reports an unidentified developer — right-click the app → <b>Open</b> → <b>Open</b>, once. If it still refuses after unzipping from a terminal, run <span class="fx">xattr -dr com.apple.quarantine Hydra.app</span>. <b>Windows:</b> SmartScreen may warn — <b>More info</b> → <b>Run anyway</b>. <b>Linux:</b> needs <span class="fx">libgtk-3-0</span> and <span class="fx">libwebkit2gtk-4.1-0</span>, then <span class="fx">chmod +x Hydra</span>.</div>
-      <div class="callout">The app reads the same logs the CLI writes, so its numbers are the CLI's numbers — Dashboard totals match <span class="fx">hyctl cost</span> and <span class="fx">hyctl stats</span> for the same data. There is no separate daemon and no telemetry: it reads <span class="fx">~/.hydra/logs/</span> on your machine.</div>
+      <div class="callout">The app reads the same logs the CLI writes, so its numbers are the CLI's numbers — Usage totals match <span class="fx">hyctl cost</span> and <span class="fx">hyctl stats</span> for the same data. There is no separate daemon and no telemetry: it reads <span class="fx">~/.hydra/logs/</span> on your machine.</div>
     </section>
 
     <!-- ══ INTEGRATIONS ══ -->
@@ -697,6 +708,22 @@ hyctl mcp log <span class="fl">--denied</span>     <span class="c"># what got bl
 hyctl mcp report          <span class="c"># allowed / denied by agent &amp; tool</span></pre></div>
     </section>
 
+    <section class="doc" id="mcp-registry">
+      <h2><span class="cmd">hyctl mcp registry</span> <span class="tagline">trust score for the MCP servers on your machine</span></h2>
+      <p class="sum">Every existing MCP directory answers "does this server exist" — none answer "is it safe to run with my credentials right now," and star/download counts are actively misleading (the most-starred servers score worst on quality in independent research). This scores what's actually installed instead of indexing everything that exists.</p>
+      <div class="sub"><div class="lbl">Subcommands</div>
+        <pre>hyctl mcp registry sync             <span class="c"># pull the official MCP registry into a local cache</span>
+hyctl mcp registry scan             <span class="c"># list servers installed across Claude Code/Desktop, Cursor, Windsurf, VS Code</span>
+hyctl mcp registry audit            <span class="c"># resolve + score installed servers, update lifecycle state</span>
+hyctl mcp registry export <span class="fl">--out</span> DIR  <span class="c"># static index.html/index.json of audited servers</span>
+hyctl mcp registry backtest         <span class="c"># validate scoring against known real incidents (postmark-mcp, CVE-2025-6514)</span>
+hyctl mcp registry list             <span class="c"># audited servers by trust score</span>
+hyctl mcp registry clear &lt;server&gt;   <span class="c"># recover a server quarantined in error</span></pre></div>
+      <p class="sum">Scoring is shaped around the CSA MCP Selection Scorecard's four categories (Security Implementation, Repository Health, Operational Security, Community &amp; Governance) — automating a taxonomy the MCP Security Working Group already endorsed, not inventing a new one. Only a <em>confirmed</em> finding (a known advisory match) quarantines a server; a name-similarity heuristic lowers the score without condemning it, because quarantine has no automatic way out — <code>clear</code> is the manual recovery path. A category nothing could be checked in contributes a neutral baseline rather than being dropped from the average, so failing to reach GitHub can never <em>raise</em> a score, and a server nothing is known about reads "insufficient evidence" rather than a number. A server's trust state (new → provisional → trusted → flagged → quarantined) drops back to provisional on <b>every version bump</b>, detected via a content-hash diff of the manifest — the direct fix for the <code>postmark-mcp</code> rug-pull pattern (15 clean npm versions, then a malicious one). <code>scan</code> never reads env-var or secret values from client configs, only server identity.</p>
+      <p class="sum">Feeds back into the ledger: <code>hyctl mcp check</code> auto-classifies a tool call as <span class="fx">mcp-unverified</span>, <span class="fx">mcp-flagged</span>, or <span class="fx">mcp-quarantined</span> from a server's registry state, the same way PII is auto-detected from content — so a policy rule can gate on it automatically. Below that: <span class="fx">mcp-behavior-change</span> — a server whose ledger history has only ever shown one kind of access (read, say) suddenly performing another (network) is flagged from local history alone, no registry data or CVE required. A server's first-ever call is never flagged — there's nothing yet to compare it against.</p>
+      <p class="sum">The exported page (<code>export</code>) carries a disclaimer — this is a probabilistic signal from automated checks, not a guarantee of safety or a claim about a publisher's intent — and every row links a pre-filled dispute issue against this repo, since a public negative signal about a real project needs a correction path before it ships, not as an afterthought.</p>
+    </section>
+
     <section class="doc" id="oracle">
       <h2><span class="cmd">hyctl oracle verify</span> <span class="tagline">tests as evidence</span></h2>
       <p class="sum">Turns a verifier (tests/compile/lint) into a <b>high-D evidence source</b> whose verdict can outweigh a model's opinion.</p>
@@ -796,6 +823,20 @@ hyctl models sync   <span class="c"># import the OpenRouter catalog</span></pre>
       docs=Array.prototype.slice.call(document.querySelectorAll('.doc'));
 
   var REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // ── mobile nav: sidebar starts collapsed under 960px so the link list
+  //    doesn't push the actual doc content off the first screen ──
+  var sideToggle=document.getElementById('sideToggle'), side=document.querySelector('.side');
+  if(sideToggle && side){
+    sideToggle.addEventListener('click', function(){
+      var open=side.classList.toggle('open');
+      sideToggle.setAttribute('aria-expanded', open?'true':'false');
+    });
+    q.addEventListener('focus', function(){
+      side.classList.add('open');
+      sideToggle.setAttribute('aria-expanded','true');
+    });
+  }
 
   // ── copy-to-clipboard on command blocks (skip terminal renders) ──
   document.querySelectorAll('.content pre').forEach(function(pre){

@@ -56,9 +56,21 @@ func (j *CalibratedJudge) Judge(_ context.Context, _ string, attempts []Attempt)
 	groups := clusterByAgreement(attempts, successful, j.equiv)
 	recordSwarmCoAgreement(j.domain, successful, attempts, j.equiv)
 
+	// Each successful attempt's LLR only ever takes one of two values — agree
+	// or disagree with whichever hypothesis is being scored — so both are
+	// precomputed once per attempt here instead of lambdaFor calling the
+	// calibrator (an RWMutex-guarded map lookup) once per (hypothesis, attempt)
+	// pair: O(N) lookups total instead of O(N×K) for K hypotheses.
+	llrTrue := make(map[int]float64, len(successful))
+	llrFalse := make(map[int]float64, len(successful))
+	for _, idx := range successful {
+		llrTrue[idx] = j.cal.LLR(attempts[idx].Head.ID, j.domain, true)
+		llrFalse[idx] = j.cal.LLR(attempts[idx].Head.ID, j.domain, false)
+	}
+
 	lambda := make([]float64, len(groups))
 	for k := range groups {
-		lambda[k] = j.lambdaFor(groups[k], successful, attempts)
+		lambda[k] = j.lambdaFor(groups[k], successful, attempts, llrTrue, llrFalse)
 	}
 
 	best := 0
@@ -71,7 +83,7 @@ func (j *CalibratedJudge) Judge(_ context.Context, _ string, attempts []Attempt)
 		return nil, fmt.Errorf("calibrated judge: no calibration data for any candidate in domain %q", j.domain)
 	}
 
-	winner := representative(groups[best], attempts, j.cal, j.domain)
+	winner := representative(groups[best], attempts, llrTrue)
 	probs := softmax(lambda)
 
 	scores := make([]int, len(attempts))
@@ -93,8 +105,9 @@ func (j *CalibratedJudge) Judge(_ context.Context, _ string, attempts []Attempt)
 }
 
 // lambdaFor computes Λ_k: every attempt votes agree/disagree with hypothesis,
-// weighted by its calibrated LLR, same-family repeats discounted.
-func (j *CalibratedJudge) lambdaFor(hypothesis agreementGroup, successful []int, attempts []Attempt) float64 {
+// weighted by its calibrated LLR (precomputed once per attempt by Judge, not
+// recomputed here), same-family repeats discounted.
+func (j *CalibratedJudge) lambdaFor(hypothesis agreementGroup, successful []int, attempts []Attempt, llrTrue, llrFalse map[int]float64) float64 {
 	inGroup := make(map[int]bool, len(hypothesis.members))
 	for _, idx := range hypothesis.members {
 		inGroup[idx] = true
@@ -102,7 +115,10 @@ func (j *CalibratedJudge) lambdaFor(hypothesis agreementGroup, successful []int,
 	seenFamily := map[string]bool{}
 	var lambda float64
 	for _, idx := range successful {
-		llr := j.cal.LLR(attempts[idx].Head.ID, j.domain, inGroup[idx])
+		llr := llrFalse[idx]
+		if inGroup[idx] {
+			llr = llrTrue[idx]
+		}
 		if fam := attempts[idx].Head.Provider; fam != "" {
 			if seenFamily[fam] {
 				llr *= trust.FamilyDiscount(trust.DefaultCoAgreementPath(), fam)
@@ -115,12 +131,14 @@ func (j *CalibratedJudge) lambdaFor(hypothesis agreementGroup, successful []int,
 }
 
 // representative breaks the tie among a hypothesis's equally-valid members by
-// individual evidence, then CapScore.
-func representative(g agreementGroup, attempts []Attempt, cal *trust.Calibrator, domain string) int {
+// individual evidence, then CapScore. llrTrue is Judge's precomputed
+// LLR(id, domain, true) per attempt — always the "true" branch here since
+// representative asks who best supports having actually said the right thing.
+func representative(g agreementGroup, attempts []Attempt, llrTrue map[int]float64) int {
 	best := g.members[0]
-	bestLLR := cal.LLR(attempts[best].Head.ID, domain, true)
+	bestLLR := llrTrue[best]
 	for _, idx := range g.members[1:] {
-		llr := cal.LLR(attempts[idx].Head.ID, domain, true)
+		llr := llrTrue[idx]
 		if llr > bestLLR || (llr == bestLLR && attempts[idx].Head.CapScore > attempts[best].Head.CapScore) {
 			best, bestLLR = idx, llr
 		}

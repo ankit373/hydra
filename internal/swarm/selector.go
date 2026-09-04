@@ -5,10 +5,12 @@ package swarm
 import (
 	"fmt"
 	"sort"
+	"strconv"
 
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/executor"
 	"github.com/ankit373/hydra/internal/provider"
+	"github.com/ankit373/hydra/internal/rank"
 )
 
 const defaultMaxHeads = 5
@@ -20,15 +22,60 @@ type HeadSelector interface {
 }
 
 // resolveSelector picks the right HeadSelector from Options.
-// Priority: explicit HeadIDs > TierHint > top-N by CapScore.
+// Priority: explicit HeadIDs > TierHint (numeric or named) > top-N by CapScore.
 func resolveSelector(opts Options, cfg *config.Config) HeadSelector {
 	if len(opts.HeadIDs) > 0 {
 		return &IDSelector{}
 	}
 	if opts.TierHint != "" {
+		if _, err := strconv.Atoi(opts.TierHint); err == nil {
+			return &NumericTierSelector{}
+		}
 		return &TierSelector{cfg: cfg}
 	}
 	return &CapScoreSelector{}
+}
+
+// ── NumericTierSelector ──────────────────────────────────────────────────────
+
+// NumericTierSelector filters to heads at or below the requested capability
+// tier (rank.UITier), mirroring dispatch.selectHeads' numeric branch so a
+// numeric --tier restricts --swarm/--confidence the same way it restricts a
+// plain dispatch. Before this existed a numeric TierHint matched no config
+// tier name and always fell through to CapScoreSelector's top-N fan-out,
+// silently ignoring the requested tier (#501).
+type NumericTierSelector struct{}
+
+func (s *NumericTierSelector) Select(all []provider.Head, opts Options) ([]provider.Head, error) {
+	want, err := strconv.Atoi(opts.TierHint)
+	if err != nil {
+		return nil, fmt.Errorf("swarm: tier hint %q is not numeric", opts.TierHint)
+	}
+
+	var candidates []provider.Head
+	for _, h := range all {
+		if executable(h) && rank.UITier(h) >= want {
+			candidates = append(candidates, h)
+		}
+	}
+	if len(candidates) > 0 {
+		sort.Slice(candidates, func(i, j int) bool { return candidates[i].CapScore > candidates[j].CapScore })
+		return applyFiltersAndCap(candidates, opts), nil
+	}
+
+	// Nothing at or below the requested tier — degrade to the cheapest
+	// executable heads available, never the most expensive (matches
+	// dispatch.selectHeads' own degrade path).
+	for _, h := range all {
+		if executable(h) {
+			candidates = append(candidates, h)
+		}
+	}
+	if len(candidates) == 0 {
+		return nil, fmt.Errorf("swarm: no executable heads found")
+	}
+	sort.Slice(candidates, func(i, j int) bool { return candidates[i].CapScore < candidates[j].CapScore })
+	return applyFiltersAndCap(candidates, opts), nil
 }
 
 // ── TierSelector ─────────────────────────────────────────────────────────────

@@ -102,6 +102,117 @@ func TestVerify_ExitStatusDecidesTheVerdict(t *testing.T) {
 	}
 }
 
+// Args holds real argv (e.g. straight from cobra). An element containing a
+// space, like a shell -c script, must reach exec.Command as one atomic
+// argument — not get re-split by whitespace the way joining argv into
+// Template and re-tokenizing it would (#444). Before the fix, "sh -c \"exit
+// 1\"" (3 argv elements) silently became "sh -c exit 1" (4 elements), which
+// bash parses as `sh -c 'exit'` — a false PASS for a command that fails.
+func TestVerify_ArgsElementWithSpaceIsNotReTokenized(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Log("windows: no /bin/sh-style true/false to drive exit codes here")
+		return
+	}
+	o := &CommandOracle{Args: []string{"sh", "-c", "exit 1"}, Source: "verifier:test"}
+	v, err := o.Verify(context.Background(), "candidate", trust.Task{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.Passed {
+		t.Error("Passed = true for a command that exits 1 — the -c script's " +
+			"space was re-tokenized, splitting \"exit 1\" into two argv elements")
+	}
+}
+
+// buildArgsFromArgv must substitute {answer}/{file} into Args elements in
+// place, exactly like buildArgs does for Template — Args is an additional
+// input shape, not a reason to drop placeholder support.
+func TestBuildArgsFromArgv_SubstitutesAnswerAndFile(t *testing.T) {
+	const spaced = "/tmp/expected output.txt"
+	o := &CommandOracle{
+		Args:      []string{"diff", "{answer}", "{file}"},
+		Source:    "v",
+		writeTemp: func(string) (string, func(), error) { return spaced, func() {}, nil },
+	}
+	parts, cleanup, err := o.buildArgs("the-answer")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cleanup != nil {
+		cleanup()
+	}
+	want := []string{"diff", "the-answer", spaced}
+	if len(parts) != len(want) {
+		t.Fatalf("buildArgs = %q, want %q", parts, want)
+	}
+	for i := range want {
+		if parts[i] != want[i] {
+			t.Errorf("parts[%d] = %q, want %q", i, parts[i], want[i])
+		}
+	}
+}
+
+// A candidate file written the ordinary way (echo, any text editor) ends in
+// a trailing newline by convention. That newline is not part of the answer,
+// so a verifier doing plain string equality on {answer} must not see it —
+// while {file} still gets the exact original bytes, since a verifier that
+// reads the file itself (compiler, linter) needs the real content (#487).
+func TestBuildArgsFromArgv_AnswerDropsTrailingNewlineButFileKeepsIt(t *testing.T) {
+	var gotFileContent string
+	o := &CommandOracle{
+		Args:   []string{"diff", "{answer}", "{file}"},
+		Source: "v",
+		writeTemp: func(content string) (string, func(), error) {
+			gotFileContent = content
+			return "/tmp/f", func() {}, nil
+		},
+	}
+	parts, cleanup, err := o.buildArgs("42\r\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cleanup != nil {
+		cleanup()
+	}
+	if parts[1] != "42" {
+		t.Errorf("{answer} = %q, want the trailing newline trimmed", parts[1])
+	}
+	if gotFileContent != "42\r\n" {
+		t.Errorf("{file} was materialized from %q, want the untrimmed candidate", gotFileContent)
+	}
+}
+
+// {file} materialization failing through the Args path must abort the same
+// way it does through Template — an oracle that ran against a stale or
+// missing file would misreport the candidate as wrong.
+func TestBuildArgsFromArgv_WriteTempFailureIsAnError(t *testing.T) {
+	o := &CommandOracle{
+		Args: []string{"cat", "{file}"},
+		writeTemp: func(string) (string, func(), error) {
+			return "", nil, errors.New("disk full")
+		},
+	}
+	if _, _, err := o.buildArgs("x"); err == nil {
+		t.Error("a materialization failure through Args produced no error")
+	}
+}
+
+// An Args element with no placeholders needs no materialization at all, and
+// therefore no cleanup to run.
+func TestBuildArgsFromArgv_NoPlaceholdersNoCleanup(t *testing.T) {
+	o := &CommandOracle{Args: []string{"go", "test", "./..."}}
+	parts, cleanup, err := o.buildArgs("x")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cleanup != nil {
+		t.Error("no {file} placeholder present, but a cleanup function was returned")
+	}
+	if len(parts) != 3 || parts[0] != "go" {
+		t.Errorf("buildArgs = %q", parts)
+	}
+}
+
 // A missing binary must not be read as "the candidate is wrong" — that is the
 // oracle being unavailable, and treating it as evidence would let a broken
 // toolchain veto correct answers.
@@ -173,6 +284,33 @@ func TestBuildArgs_SubstitutionAndSpacing(t *testing.T) {
 	}
 	if len(p2) < 2 || p2[0] != "go" {
 		t.Errorf("buildArgs = %q", p2)
+	}
+}
+
+// The Template path must trim {answer}'s trailing newline exactly like Args
+// does — the two substitution paths must not diverge on this (#487).
+func TestBuildArgs_AnswerDropsTrailingNewlineButFileKeepsIt(t *testing.T) {
+	var gotFileContent string
+	o := &CommandOracle{
+		Template: "diff {answer} {file}",
+		Source:   "v",
+		writeTemp: func(content string) (string, func(), error) {
+			gotFileContent = content
+			return "/tmp/f", func() {}, nil
+		},
+	}
+	parts, cleanup, err := o.buildArgs("42\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cleanup != nil {
+		cleanup()
+	}
+	if parts[1] != "42" {
+		t.Errorf("{answer} = %q, want the trailing newline trimmed", parts[1])
+	}
+	if gotFileContent != "42\n" {
+		t.Errorf("{file} was materialized from %q, want the untrimmed candidate", gotFileContent)
 	}
 }
 
@@ -323,5 +461,72 @@ func TestDefaultWriteTemp_EmptyCandidateStillMaterializes(t *testing.T) {
 	}
 	if info.Size() != 0 {
 		t.Errorf("empty candidate wrote %d bytes", info.Size())
+	}
+}
+
+// A verifier that writes far more than outputCap to stdout, on one line with
+// no newline, must not have that output captured or displayed unbounded: the
+// Accumulator caps memory at outputCap, and firstLine caps the displayed
+// Detail independently at detailMaxLen — a truncation marker inside the
+// captured buffer supplies the newline firstLine slices on (#504).
+func TestVerify_LargeOutputIsBoundedAndTruncated(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Log("windows: no yes/head/tr pipeline to generate the fixture")
+		return
+	}
+	// Generated via a pipeline, not embedded in argv, so this never touches
+	// the {answer}/argv size guard tested separately below.
+	script := `yes | head -c 300000 | tr -d '\n'; exit 1`
+	o := &CommandOracle{Args: []string{"sh", "-c", script}, Source: "v"}
+
+	v, err := o.Verify(context.Background(), "x", trust.Task{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.Passed {
+		t.Fatal("a command exiting 1 reported a pass")
+	}
+	if got, max := len(v.Detail), detailMaxLen+len("...(truncated)"); got > max {
+		t.Errorf("Detail is %d bytes, want <= %d — a ~150000-byte verifier line reached the caller unbounded", got, max)
+	}
+	if !strings.HasSuffix(v.Detail, "...(truncated)") {
+		t.Errorf("Detail = %q, want it to end with the truncation marker", v.Detail)
+	}
+}
+
+// A candidate too large to pass via {answer} must fail with a clear,
+// actionable error before exec is ever attempted — not the raw OS
+// "fork/exec: argument list too long" (#504).
+func TestVerify_OversizedAnswerCandidateReturnsCleanError(t *testing.T) {
+	o := &CommandOracle{Template: "echo {answer}", Source: "v"}
+	huge := strings.Repeat("a", maxArgvBytes+1)
+
+	_, err := o.Verify(context.Background(), huge, trust.Task{})
+	if err == nil {
+		t.Fatal("an oversized {answer} candidate verified without error")
+	}
+	if !strings.Contains(err.Error(), "candidate too large to pass via {answer}") {
+		t.Errorf("error = %q, want a clear oversized-candidate message naming {answer}", err)
+	}
+	if !strings.Contains(err.Error(), "{file}") {
+		t.Errorf("error = %q, want it to suggest {file} as the alternative", err)
+	}
+	if strings.Contains(err.Error(), "argument list too long") {
+		t.Error("the raw OS fork/exec error leaked through instead of a clean message")
+	}
+}
+
+// The same guard must apply through the Args path (buildArgsFromArgv), not
+// just Template — both substitution shapes reach the same exec.Command call.
+func TestVerify_OversizedAnswerViaArgsReturnsCleanError(t *testing.T) {
+	o := &CommandOracle{Args: []string{"echo", "{answer}"}, Source: "v"}
+	huge := strings.Repeat("b", maxArgvBytes+1)
+
+	_, err := o.Verify(context.Background(), huge, trust.Task{})
+	if err == nil {
+		t.Fatal("an oversized {answer} candidate via Args verified without error")
+	}
+	if !strings.Contains(err.Error(), "candidate too large to pass via {answer}") {
+		t.Errorf("error = %q, want a clear oversized-candidate message", err)
 	}
 }

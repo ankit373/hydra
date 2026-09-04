@@ -7,6 +7,7 @@ package dispatch
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -23,6 +24,7 @@ import (
 	"github.com/ankit373/hydra/internal/cost"
 	"github.com/ankit373/hydra/internal/executor"
 	"github.com/ankit373/hydra/internal/ledger"
+	"github.com/ankit373/hydra/internal/pending"
 	"github.com/ankit373/hydra/internal/policy"
 	"github.com/ankit373/hydra/internal/pricing"
 	"github.com/ankit373/hydra/internal/probe"
@@ -31,6 +33,12 @@ import (
 	"github.com/ankit373/hydra/internal/runid"
 	"github.com/ankit373/hydra/internal/runlog"
 )
+
+// ErrNoHeads marks a dispatch with no head to run, discovered or routable.
+// Callers match it with errors.Is instead of the formatted message, so a
+// CLI-flavored string (backtick-quoted `hyctl probe`, etc.) never has to leak
+// into a GUI caller that has no terminal to point at (#452).
+var ErrNoHeads = errors.New("no dispatchable heads")
 
 // Options controls dispatch behaviour.
 type Options struct {
@@ -61,6 +69,19 @@ type Options struct {
 	// swarm does, otherwise each call is its own run.
 	RunID  string
 	TaskID string
+
+	// AnsweredHead is the head a human has already approved for this task, set
+	// only by Resume. An Ask verdict counts as approval for that head alone —
+	// approving one head must never authorize a different one, or a resume
+	// silently re-routes to a head the human was never shown.
+	AnsweredHead string
+
+	// Classification is prompt's already-computed PII/injection verdict
+	// (policy.Classify) — cmdDispatch computes this once for its own
+	// defect-cost/local-only decisions and passes it here so Dispatch and
+	// every fallback candidate's ledger check reuse it instead of re-scanning
+	// prompt once per candidate. Nil means "not computed yet; derive it here."
+	Classification *policy.Classification
 }
 
 // Result is the outcome of a successful dispatch.
@@ -70,6 +91,106 @@ type Result struct {
 	Fallbacks []provider.Head // remaining candidates after the selected head
 	Retries   int
 	*executor.Response
+}
+
+// ParkedError reports a task stopped before the executor ran because the
+// ledger policy asked for a human decision. It is not a failure: the task is
+// durable and resumable, which is what distinguishes it from a denial.
+type ParkedError struct {
+	TaskID   string
+	Head     string
+	Question string
+}
+
+func (e *ParkedError) Error() string {
+	return fmt.Sprintf("task %s is waiting on an answer: %s", e.TaskID, e.Question)
+}
+
+// askText is the question a human actually sees. The ledger's own reason
+// ("rule 3 (ask claude/**)") names the rule that fired, which answers a
+// different question than the one being asked.
+func askText(h provider.Head, resource string, class *policy.Classification) string {
+	name := h.Name
+	if name == "" {
+		name = h.ID
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "Allow %s to run this task?", name)
+	if resource != "" {
+		fmt.Fprintf(&b, " It would act on %s.", resource)
+	}
+	if class != nil {
+		if class.PII {
+			b.WriteString(" The prompt contains personal data.")
+		}
+		if class.FlagReason != "" {
+			fmt.Fprintf(&b, " Flagged: %s.", class.FlagReason)
+		}
+	}
+	return b.String()
+}
+
+// Resume answers a parked task and dispatches it.
+//
+// The stored prompt is reused rather than rebuilt: the head list, policy and
+// budget can all move between question and answer, and the task that runs must
+// be the task the human agreed to.
+func (d *Dispatcher) Resume(ctx context.Context, taskID, answer string) (*Result, error) {
+	if strings.TrimSpace(answer) == "" {
+		return nil, errors.New("an empty answer is not an answer: the task stays parked")
+	}
+	q, err := pending.Load(taskID)
+	if err != nil {
+		return nil, err
+	}
+	// Consumed before dispatching, so the file is the idempotency token: a
+	// second answer for the same task finds nothing to resume rather than
+	// running the work twice.
+	if err := pending.Delete(taskID); err != nil {
+		return nil, err
+	}
+	prompt := fmt.Sprintf("%s\n\nYou asked: %s\nThe user answered: %s", q.Prompt, q.Question, answer)
+	return d.Dispatch(ctx, prompt, Options{
+		TierHint: q.TierHint, LocalOnly: q.LocalOnly, MaxTokens: q.MaxTokens,
+		System: q.System, Enum: q.Enum, Resource: q.Resource,
+		RunID: q.RunID, TaskID: q.TaskID,
+		AnsweredHead: q.Head,
+		// A2A context is already inside q.Prompt — Dispatch injected it before
+		// the gate parked the task, so naming the file again would double it.
+	})
+}
+
+// Decline refuses a parked task without running it.
+//
+// Free-text answers cannot carry a refusal reliably: folding "no, don't" into
+// the prompt still dispatches and leaves it to the head to notice. A refusal
+// has to be a separate path that never reaches an executor.
+//
+// Not a Dispatcher method: refusing touches only the pending store, the ledger
+// and the run log, so requiring a resolved config and a probed head list would
+// mean a machine with no working config could park a task and then not be
+// allowed to decline it.
+func Decline(taskID, reason string) error {
+	q, err := pending.Load(taskID)
+	if err != nil {
+		return err
+	}
+	if err := pending.Delete(taskID); err != nil {
+		return err
+	}
+	if reason == "" {
+		reason = "no reason given"
+	}
+	_ = ledger.Record(ledger.DefaultPath(), ledger.Event{
+		Agent: "hydra-dispatch", Tool: q.Head, Resource: q.Resource,
+		Action: ledger.Exec, Decision: ledger.Deny,
+		Reason: "declined by user: " + reason,
+	})
+	_ = runlog.New(q.RunID).Append(runlog.Event{
+		Kind: runlog.KindTaskFinished, TaskID: q.TaskID,
+		Head: q.Head, Status: "declined", Detail: "declined by user: " + reason,
+	})
+	return nil
 }
 
 // stateMu protects concurrent read-modify-write on state.json across goroutines.
@@ -87,24 +208,77 @@ type Dispatcher struct {
 // Heads returns the probed head list for external callers (e.g. swarm).
 func (d *Dispatcher) Heads() []provider.Head { return d.heads }
 
+// PIILocalOnly reports whether the configured pii policy forces local-only
+// routing. Exported so callers that bypass Dispatch — the SPRT/swarm branches
+// in cmd/hydra's cmdDispatch — can still enforce it instead of acting only on
+// --local, which was config-blind on that path (#500).
+func (d *Dispatcher) PIILocalOnly() bool { return piiLocalOnly(d.cfg) }
+
 // EstimateCost exposes per-tier cost estimation for external callers.
 func (d *Dispatcher) EstimateCost(tier, inputTokens, outputTokens int) float64 {
 	return d.estimateCost(tier, inputTokens, outputTokens)
 }
 
-// New builds a Dispatcher from the saved config and a fresh machine probe.
+// probeCacheTTL bounds how long a machine probe is reused across calls to New
+// within one process. New is called once per CLI invocation, but also once per
+// task inside a parallel batch and once per view inside a TUI snapshot — with
+// no cache each of those redoes the same ~13 exec.LookPath calls and two
+// network liveness checks. A short TTL collapses those into one real probe
+// without leaving a long-running TUI session blind to a server that started
+// or stopped mid-session.
+const probeCacheTTL = 3 * time.Second
+
+var (
+	probeCacheMu     sync.Mutex
+	probeCacheResult *probe.Result
+	probeCacheAt     time.Time
+	probeCacheEnv    string
+)
+
+// probeEnvFingerprint is HOME+PATH, the two environment variables that change
+// what a probe discovers (CLI binaries on PATH; agy/models overlay under
+// HOME). Any change invalidates the cache immediately regardless of TTL —
+// without this, a cached result from one HOME (e.g. a test's temp dir with
+// its own stub binaries) would be silently reused after HOME changes.
+func probeEnvFingerprint() string {
+	return os.Getenv("HOME") + "\x00" + os.Getenv("PATH")
+}
+
+// cachedProbe returns probe.Run's result, reusing it for probeCacheTTL as long
+// as the environment it depends on hasn't changed.
+func cachedProbe(ctx context.Context) *probe.Result {
+	probeCacheMu.Lock()
+	defer probeCacheMu.Unlock()
+	env := probeEnvFingerprint()
+	if probeCacheResult != nil && env == probeCacheEnv && time.Since(probeCacheAt) < probeCacheTTL {
+		return probeCacheResult
+	}
+	probeCacheResult = probe.Run(ctx)
+	probeCacheAt = time.Now()
+	probeCacheEnv = env
+	return probeCacheResult
+}
+
+// PIILocalOnly reports whether cfg's pii policy forces local-only routing —
+// the config-level check for callers with no Dispatcher yet (the TUI's route
+// badge), so the rule is never restated (#597).
+func PIILocalOnly(cfg *config.Config) bool { return piiLocalOnly(cfg) }
+
+// piiLocalOnly reports whether cfg's pii policy forces local-only routing.
+func piiLocalOnly(cfg *config.Config) bool {
+	p, ok := cfg.Policies["pii"]
+	return ok && p.Action == "local-only"
+}
+
+// New builds a Dispatcher from the saved config and a (possibly cached) machine probe.
 func New(ctx context.Context) (*Dispatcher, error) {
 	cfg, err := config.Load()
 	if err != nil {
 		return nil, fmt.Errorf("no hydra config — run: hyctl init")
 	}
 
-	result := probe.Run(ctx)
-
-	localOnly := false
-	if p, ok := cfg.Policies["pii"]; ok && p.Action == "local-only" {
-		localOnly = true
-	}
+	result := cachedProbe(ctx)
+	localOnly := piiLocalOnly(cfg)
 
 	budgetReg := budget.NewRegistry(budget.LoadWindows(config.ScriptHome()))
 
@@ -119,11 +293,20 @@ func New(ctx context.Context) (*Dispatcher, error) {
 
 // Dispatch routes prompt through policy + tier selection + execution with fallback.
 func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) (*Result, error) {
+	if err := ValidateTierHint(d.cfg, opts.TierHint); err != nil {
+		return nil, err
+	}
+
 	// Resolve the hint to a capability number BEFORE the governor runs. A named
 	// config tier ("expert") is otherwise opaque to claudeMode's Atoi, which
 	// left the whole token-preservation table inert for every non-numeric hint
-	// (#165).
-	hint := d.resolveTierHint(opts.TierHint)
+	// (#165). A hint that is invalid on its face — an unconfigured name or an
+	// out-of-range number — is rejected here, before routability ever enters
+	// the picture, so the error blames the actual cause (#451, #454).
+	hint, err := d.resolveTierHint(opts.TierHint)
+	if err != nil {
+		return nil, err
+	}
 
 	// Apply claude% preservation — may downgrade tier or abort.
 	tier, mode, pct := d.claudeMode(hint)
@@ -142,15 +325,27 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		log.Printf("ℹ️  Claude at %d%% — Consider running /compact.", pct)
 	}
 
-	// Inject A2A handoff context into prompt if provided.
+	// Inject A2A handoff context into prompt if provided. --a2a names a file the
+	// user explicitly asked for, so a read/parse failure must fail the dispatch
+	// rather than silently running without the handoff context (#450).
 	if opts.A2AFile != "" {
-		injected, err := injectA2A(opts.A2AFile, prompt)
-		if err == nil {
-			prompt = injected
+		injected, err := a2a.Inject(opts.A2AFile, prompt)
+		if err != nil {
+			return nil, fmt.Errorf("--a2a %s: %w", opts.A2AFile, err)
 		}
+		prompt = injected
 	}
 
-	req := policy.Request{Prompt: prompt, TierHint: tier}
+	// Classify once and reuse for both the policy engine below and every
+	// fallback candidate's ledger check — DetectPII/InjectionMarker are pure
+	// functions of prompt, so re-running them per candidate repeats the same
+	// answer at the same cost (#522).
+	class := opts.Classification
+	if class == nil {
+		c := policy.Classify(prompt)
+		class = &c
+	}
+	req := policy.Request{Prompt: prompt, TierHint: tier, PII: &class.PII}
 	action := d.policy.Evaluate(req)
 
 	if action.Deny {
@@ -168,12 +363,18 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		// the user looks, sees the head, and learns nothing (#248). Name the
 		// blocked heads and why instead.
 		if blocked := d.blockedHeads(localOnly); blocked != "" {
-			return nil, fmt.Errorf("no routable heads for tier %q (localOnly=%v).\n%s",
-				tier, localOnly, blocked)
+			return nil, fmt.Errorf("%w: no routable heads for %s (localOnly=%v).\n%s",
+				ErrNoHeads, tierClause(tier), localOnly, blocked)
 		}
-		return nil, fmt.Errorf("no available heads for tier %q (localOnly=%v); "+
-			"check `hyctl probe` and the tier names in your config", tier, localOnly)
+		return nil, fmt.Errorf("%w: no available heads for %s (localOnly=%v); "+
+			"check `hyctl probe` and the tier names in your config",
+			ErrNoHeads, tierClause(tier), localOnly)
 	}
+
+	// Reorders candidates so the head to try first is at index 0 and reports
+	// the probability it was chosen. At the default ExploreRate of 0 this is
+	// the identity and actProb is 1.
+	candidates, actProb := d.pick(candidates, opts)
 
 	if opts.DryRun {
 		return &Result{Head: candidates[0], Fallbacks: candidates[1:]}, nil
@@ -187,28 +388,83 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 
 	var lastErr error
 	for i, h := range candidates {
+		// Computed once per candidate instead of once per use below (event
+		// logging, cost estimation): rank.UITier re-derives the same int for
+		// the identical head every time it's called.
+		tier := rank.UITier(h)
 		_ = rl.Append(runlog.Event{
 			Kind: runlog.KindHeadSelected, TaskID: taskID,
-			Head: h.ID, Model: h.Name, Tier: rank.UITier(h),
+			Head: h.ID, Model: h.Name, Tier: tier,
 			Detail: fmt.Sprintf("candidate %d of %d", i+1, len(candidates)),
 		})
-		if decision, lerr := ledger.CheckAndRecordDispatch("hydra-dispatch", h.ID, opts.Resource, prompt); lerr == nil && decision == ledger.Deny {
-			lastErr = fmt.Errorf("denied by ledger policy: head %s", h.ID)
+		// Proceeds only on an explicit Allow. Testing `== Deny` instead would
+		// let any other verdict through, which stopped being safe the moment
+		// Deny was not the only one that withholds permission — a pending
+		// ledger.Ask would have read as approval (#580).
+		//
+		// Fails closed the same way on error: a policy-check failure (unreadable
+		// policy file, ledger write failure) must deny, not silently let the
+		// candidate through just because the decision couldn't be computed.
+		// CheckAndRecordDispatch's LoadPolicy is itself mtime-cached, so trying
+		// every candidate against the same prompt no longer re-reads and
+		// re-parses the identical policy file from disk once per candidate.
+		decision, lerr := ledger.CheckAndRecordDispatch("hydra-dispatch", h.ID, opts.Resource, prompt, class)
+		refuse := func(detail string) {
+			lastErr = fmt.Errorf("%s: head %s", detail, h.ID)
 			_ = rl.Append(runlog.Event{
 				Kind: runlog.KindError, TaskID: taskID,
-				Head: h.ID, Model: h.Name, Tier: rank.UITier(h),
-				Status: "denied", Detail: "denied by ledger policy",
+				Head: h.ID, Model: h.Name, Tier: tier,
+				Status: "denied", Detail: detail,
 			})
+		}
+		// Approval is per head. An Ask answered for one head must not authorize
+		// a different one, or a resume silently re-routes to a head the human
+		// was never shown.
+		approved := decision == ledger.Allow || (decision == ledger.Ask && opts.AnsweredHead == h.ID)
+		switch {
+		case lerr != nil:
+			// Fails closed: a policy-check failure (unreadable policy file,
+			// ledger write failure) must deny, not let the candidate through
+			// just because the decision could not be computed.
+			refuse("ledger policy check failed: " + lerr.Error())
+			continue
+
+		// An Ask is not a denial, and must not fall through to the next
+		// candidate the way one does. Continuing would skip the head that
+		// needs permission and run a cheaper one instead — routing around the
+		// question rather than asking it.
+		case decision == ledger.Ask && !approved:
+			q := pending.Question{
+				TaskID: taskID, RunID: rl.RunID(),
+				Question: askText(h, opts.Resource, class),
+				Prompt:   prompt, Head: h.ID, Resource: opts.Resource,
+				Enum: opts.Enum, TierHint: opts.TierHint, System: opts.System,
+				LocalOnly: localOnly, MaxTokens: opts.MaxTokens,
+			}
+			// A question that cannot be stored has not been asked, so this
+			// fails the dispatch rather than proceeding unapproved.
+			if sErr := pending.Save(q); sErr != nil {
+				return nil, fmt.Errorf("cannot park task %s waiting on an answer: %w", taskID, sErr)
+			}
+			_ = rl.Append(runlog.Event{
+				Kind: runlog.KindQuestionAsked, TaskID: taskID,
+				Head: h.ID, Model: h.Name, Tier: tier,
+				Status: "waiting", Detail: q.Question,
+			})
+			return nil, &ParkedError{TaskID: taskID, Head: h.ID, Question: q.Question}
+
+		case !approved:
+			refuse("denied by ledger policy")
 			continue
 		}
 		if opts.MaxCostUSD > 0 {
 			estInputTokens := len(prompt) / 4
-			estCost := d.estimateCost(rank.UITier(h), estInputTokens, estInputTokens/2)
+			estCost := d.estimateCost(tier, estInputTokens, estInputTokens/2)
 			if estCost > opts.MaxCostUSD {
 				lastErr = fmt.Errorf("estimated cost $%.4f for head %s exceeds limit $%.4f", estCost, h.ID, opts.MaxCostUSD)
 				_ = rl.Append(runlog.Event{
 					Kind: runlog.KindError, TaskID: taskID,
-					Head: h.ID, Model: h.Name, Tier: rank.UITier(h),
+					Head: h.ID, Model: h.Name, Tier: tier,
 					Status: "denied", Detail: "exceeds cost ceiling",
 				})
 				// Shares the ledger's accountability trail with policy denials
@@ -235,7 +491,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 			// fallback chain advanced, and nothing else records it.
 			_ = rl.Append(runlog.Event{
 				Kind: runlog.KindError, TaskID: taskID,
-				Head: h.ID, Model: h.Name, Tier: rank.UITier(h),
+				Head: h.ID, Model: h.Name, Tier: tier,
 				Status: "failed", DurationMS: time.Since(started).Milliseconds(),
 				Detail: truncate(err.Error(), 200),
 			})
@@ -244,11 +500,11 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		r := &Result{Output: resp.Output, Head: h, Retries: i, Response: resp}
 		_ = rl.Append(runlog.Event{
 			Kind: runlog.KindDispatchFinished, TaskID: taskID,
-			Head: h.ID, Model: resp.Model, Tier: rank.UITier(h), Status: "ok",
-			CostUSD:    d.estimateCost(rank.UITier(h), resp.InputTokens, resp.OutputTokens),
+			Head: h.ID, Model: resp.Model, Tier: tier, Status: "ok",
+			CostUSD:    d.estimateCost(tier, resp.InputTokens, resp.OutputTokens),
 			DurationMS: resp.Duration.Milliseconds(),
 		})
-		_ = d.logDispatch(r, prompt, opts)
+		_ = d.logDispatch(r, prompt, opts, actProb)
 		if from, err := d.writeHandoff(r, prompt); err == nil {
 			// last_handoff.json keeps only the newest. Appending the handoff
 			// here is what makes a *chain* of them reconstructable, which is
@@ -291,8 +547,11 @@ func (d *Dispatcher) claudeMode(tierHint string) (tier string, mode string, pct 
 	case "warning":
 		t++
 	}
-	if t > 10 {
-		t = 10
+	// Only escalation overflow reaches this — resolveTierHint already rejects
+	// any raw hint outside 1-10, so this clamps e.g. 9+2=11, never user input
+	// silently getting relabelled as "10" (#454).
+	if t > maxTier {
+		t = maxTier
 	}
 	return strconv.Itoa(t), mode, pct
 }
@@ -353,18 +612,6 @@ func asIntSlice(v any) []int {
 	return out
 }
 
-// injectA2A reads a handoff JSON file and prepends a structured block to the prompt.
-func injectA2A(path, prompt string) (string, error) {
-	h, err := a2a.Load(path)
-	if err != nil {
-		return prompt, fmt.Errorf("a2a: %w", err)
-	}
-	if h == nil {
-		return prompt, nil // no handoff → prompt unchanged
-	}
-	return h.PromptBlock(prompt) + "\n\nADDITIONAL INSTRUCTION:\n" + prompt, nil
-}
-
 // writeHandoff saves last_handoff.json after a successful dispatch, advancing
 // the vector clock so downstream agents inherit this dispatch's causal history.
 // It returns the handoff's From identity so the caller can record the edge.
@@ -377,30 +624,79 @@ func (d *Dispatcher) writeHandoff(r *Result, prompt string) (string, error) {
 		base = prior.Clock
 	}
 	from := fmt.Sprintf("hydra-tier-%d", rank.UITier(r.Head))
+	// The clock is keyed on the head's own identity, not its tier bucket:
+	// every LocalOnly head shares tier 10, so two different local models
+	// would otherwise tick the same "hydra-tier-10" key and become
+	// indistinguishable under Clock.Compare (#503). "From" keeps the
+	// tier-bucket string — it is display text, not a clock key.
+	agentKey := r.Head.ID
 
 	h := a2a.Handoff{
 		From:        from,
 		Model:       r.Head.Name,
 		Task:        prompt,
 		PriorOutput: r.Response.Output,
-		Clock:       base.Tick(from),
+		Clock:       base.Tick(agentKey),
 	}
 	return from, h.Save(handoffPath)
 }
 
-// resolveTierHint normalizes a tier hint to a capability number ("1".."10").
+// minTier and maxTier bound the numeric --tier flag: rank.UITier never
+// produces a value outside this range, so nothing above or below it could
+// ever be routable (#454).
+const (
+	minTier = 1
+	maxTier = 10
+)
+
+// ValidateTierHint rejects a --tier value that cannot resolve to anything: a
+// numeric value outside [minTier,maxTier], or a name that matches no
+// configured tier. A name that matches a configured tier but currently has no
+// live heads is NOT an error here — that is a runtime availability gap
+// selectHeads reports on its own, distinct from a malformed hint.
 //
-// An empty hint stays empty. A numeric hint passes through. A named config
-// tier resolves to the strongest capability tier among its live heads, so the
-// budget governor can reason about — and downgrade — named tiers too. An
-// unrecognized name is returned unchanged so selectHeads yields nothing and
-// the caller can report the bad hint instead of silently widening.
-func (d *Dispatcher) resolveTierHint(hint string) string {
+// Plain dispatch, --swarm and --confidence (SPRT) all call this before
+// selecting heads, so an invalid --tier/--swarm-judge-tier value fails the
+// same way in every mode instead of silently widening to a broader, pricier
+// selection (#501).
+func ValidateTierHint(cfg *config.Config, hint string) error {
 	if hint == "" {
-		return ""
+		return nil
 	}
-	if _, err := strconv.Atoi(hint); err == nil {
-		return hint
+	if n, err := strconv.Atoi(hint); err == nil {
+		if n < minTier || n > maxTier {
+			return fmt.Errorf("tier %d is out of range (valid: %d-%d)", n, minTier, maxTier)
+		}
+		return nil
+	}
+	for _, t := range cfg.Tiers {
+		if t.Name == hint {
+			return nil
+		}
+	}
+	return fmt.Errorf("unknown tier %q: not a number %d-%d and not a configured tier name", hint, minTier, maxTier)
+}
+
+// resolveTierHint normalizes a tier hint to a capability number ("1".."10"),
+// and reports the two ways a hint can be invalid on its face:
+//   - numeric but outside [minTier,maxTier] — e.g. "0" and "15" both silently
+//     behaved as "no tier" or got clamped to 10 with no indication anything
+//     was wrong (#454).
+//   - named but absent from cfg.Tiers entirely — a config/typo problem, not a
+//     routability one, so the caller must not blame the head pool for it (#451).
+//
+// A name that IS configured but currently has no live heads is deliberately
+// NOT an error here: it resolves unchanged, and selectHeads/blockedHeads
+// report the routability gap instead — the tier itself was valid.
+func (d *Dispatcher) resolveTierHint(hint string) (string, error) {
+	if hint == "" {
+		return "", nil
+	}
+	if n, err := strconv.Atoi(hint); err == nil {
+		if n < minTier || n > maxTier {
+			return "", fmt.Errorf("tier %d is out of range — valid tiers are %d-%d", n, minTier, maxTier)
+		}
+		return hint, nil
 	}
 	for _, t := range d.cfg.Tiers {
 		if t.Name != hint {
@@ -420,11 +716,34 @@ func (d *Dispatcher) resolveTierHint(hint string) string {
 			}
 		}
 		if strongest > 0 {
-			return strconv.Itoa(strongest)
+			return strconv.Itoa(strongest), nil
 		}
-		return hint // named tier has no live heads; let the caller report it
+		return hint, nil // named tier has no live heads; let the caller report it
 	}
-	return hint
+	return "", fmt.Errorf("unknown tier %q — configured tiers: %s", hint, d.tierNameList())
+}
+
+// tierNameList formats cfg.Tiers' names for the "unknown tier" error, so the
+// user sees what they could have typed instead of just what they got wrong.
+func (d *Dispatcher) tierNameList() string {
+	if len(d.cfg.Tiers) == 0 {
+		return "(none configured — run `hyctl init`)"
+	}
+	names := make([]string, len(d.cfg.Tiers))
+	for i, t := range d.cfg.Tiers {
+		names[i] = t.Name
+	}
+	return strings.Join(names, ", ")
+}
+
+// tierClause phrases the tier for a no-heads error. An empty tier (no hint
+// given at all — e.g. the desktop dock's "auto-route" default) would
+// otherwise print as tier "" — a confusing artifact, not a routing outcome.
+func tierClause(tier string) string {
+	if tier == "" {
+		return "no tier hint given"
+	}
+	return fmt.Sprintf("tier %q", tier)
 }
 
 // blockedHeads describes discovered heads that were excluded because no
@@ -579,11 +898,17 @@ func (d *Dispatcher) syncStateJSON(r *Result) {
 			asIntSlice(existing["claude_pct_history"]), pct, budget.MaxPctHistory)
 	}
 
-	// Persist per-model budget snapshots so the TUI and status command can read them.
+	// Persist per-model budget snapshots so the TUI and status command can read
+	// them. Merge into whatever is already on disk instead of replacing it — each
+	// `hyctl` invocation is a fresh process, so d.budget only knows about models
+	// dispatched to in this run, and overwriting would erase every other model's
+	// entry (#502).
 	if d.budget != nil {
-		snaps := d.budget.All()
-		budgetMap := map[string]any{}
-		for _, s := range snaps {
+		budgetMap, ok := existing["budget"].(map[string]any)
+		if !ok {
+			budgetMap = map[string]any{}
+		}
+		for _, s := range d.budget.All() {
 			budgetMap[s.ModelID] = map[string]any{
 				"pct":        s.Pct,
 				"used":       s.Used,
@@ -610,7 +935,7 @@ func (d *Dispatcher) syncStateJSON(r *Result) {
 }
 
 // logDispatch writes to dispatch.jsonl and cost.jsonl.
-func (d *Dispatcher) logDispatch(r *Result, prompt string, opts Options) error {
+func (d *Dispatcher) logDispatch(r *Result, prompt string, opts Options, actProb float64) error {
 	tier := rank.UITier(r.Head)
 	wallMs := r.Response.Duration.Milliseconds()
 	estCost := d.estimateCost(tier, r.Response.InputTokens, r.Response.OutputTokens)
@@ -636,6 +961,11 @@ func (d *Dispatcher) logDispatch(r *Result, prompt string, opts Options) error {
 		"prompt_preview": truncate(prompt, 80),
 		"task_id":        taskID,
 		"run_id":         runID,
+		// keep_prob is 1: nothing samples these rows yet. Written anyway so a
+		// reader never has to guess whether an absent field means "certain" or
+		// "unrecorded" (#605).
+		"act_prob":  actProb,
+		"keep_prob": 1.0,
 	}
 	if err := appendJSONL(filepath.Join(logDir, "dispatch.jsonl"), dispatchEntry); err != nil {
 		return err
@@ -666,6 +996,8 @@ func (d *Dispatcher) logDispatch(r *Result, prompt string, opts Options) error {
 			"source":          legacySource,
 			"task_id":         taskID,
 			"run_id":          runID,
+			"act_prob":        actProb,
+			"keep_prob":       1.0,
 		}
 		if breadcrumb != "" { // match the omitempty on cost.Row.Config
 			costEntry["config"] = breadcrumb
@@ -705,43 +1037,34 @@ func truncate(s string, n int) string {
 	return s[:n] + "…"
 }
 
+// enumTiers maps each routing enum key to its tier number — the single
+// source of truth EnumToTier and IsKnownEnum both read, so editor, parallel,
+// and cmd/hydra's --enum validation can never drift apart.
+var enumTiers = map[string]string{
+	"GRUNT":     "10",
+	"TRIVIAL":   "9",
+	"SIMPLE":    "8",
+	"STANDARD":  "7",
+	"MODERATE":  "6",
+	"COMPLEX":   "5",
+	"HARD":      "4",
+	"VERY_HARD": "3",
+	"EXPERT":    "2",
+	"CORE":      "1",
+}
+
 // EnumToTier maps a routing enum key (e.g. "SIMPLE") to a tier number string.
-// Single source of truth — editor and parallel both delegate here.
+// An unrecognized key returns "" — the same value as an empty enum, which is
+// why a caller that must reject a typo instead of silently routing
+// unrestricted checks IsKnownEnum first (#501).
 func EnumToTier(enum string) string {
-	const (
-		GRUNT     = "10"
-		TRIVIAL   = "9"
-		SIMPLE    = "8"
-		STANDARD  = "7"
-		MODERATE  = "6"
-		COMPLEX   = "5"
-		HARD      = "4"
-		VERY_HARD = "3"
-		EXPERT    = "2"
-		CORE      = "1"
-	)
-	switch enum {
-	case "GRUNT":
-		return GRUNT
-	case "TRIVIAL":
-		return TRIVIAL
-	case "SIMPLE":
-		return SIMPLE
-	case "STANDARD":
-		return STANDARD
-	case "MODERATE":
-		return MODERATE
-	case "COMPLEX":
-		return COMPLEX
-	case "HARD":
-		return HARD
-	case "VERY_HARD":
-		return VERY_HARD
-	case "EXPERT":
-		return EXPERT
-	case "CORE":
-		return CORE
-	default:
-		return ""
-	}
+	return enumTiers[enum]
+}
+
+// IsKnownEnum reports whether enum is a recognized routing enum key.
+// EnumToTier's "" result is ambiguous between "no enum given" and
+// "unrecognized key" — this is how a caller tells the two apart.
+func IsKnownEnum(enum string) bool {
+	_, ok := enumTiers[enum]
+	return ok
 }

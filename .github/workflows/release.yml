@@ -18,3 +18,14 @@ jobs:
     with:
       tag: ${{ github.ref_name }}
     secrets: inherit
+
+  # Stable tags only — an RC tag points at a release branch that has not shipped.
+  close-issues:
+    name: Close shipped issues
+    if: ${{ !contains(github.ref_name, '-') }}
+    permissions:
+      contents: read
+      issues: write
+    uses: ./.github/workflows/close-shipped-issues.yml
+    with:
+      tag: ${{ github.ref_name }}

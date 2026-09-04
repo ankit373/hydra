@@ -2,20 +2,16 @@
 
 package tui
 
-// cockpit_metrics.go — the real numbers behind the dashboard.
-//
-// These panels previously showed invented values (an LCG-hashed "sparkline", a
-// confidence bucketed by tier, savings from a made-up price table, a literal
-// "κ=3.1 ⚠ 12 dependents"). #189 deleted them for being fake; that was half a
-// fix, because every one of them is computable from data Hydra already stores.
-// This file computes them for real. The rule is unchanged — never invent a
-// figure — but a figure that exists must be shown, not dropped.
+// cockpit_metrics.go — the real numbers behind the views, computed once at
+// startup so the render path stays pure and does no I/O. The rule (#189):
+// never invent a figure — but a figure that exists must be shown, not dropped.
 
 import (
-	"fmt"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/cost"
@@ -24,87 +20,171 @@ import (
 	"github.com/ankit373/hydra/internal/trust"
 )
 
-// ckMetrics is everything the dashboard needs, computed once at startup so the
-// render path stays pure and does no I/O.
+// ckMetrics is everything the views need from cost.jsonl, trust, and the code
+// graph. Every field degrades to empty rather than to a placeholder value, so
+// a renderer can tell "no data" from "zero".
 type ckMetrics struct {
-	latency  map[string][]float64 // model → recent wall_ms, oldest first
-	lastMS   map[string]int64     // model → most recent wall_ms
-	savedUSD float64              // real spend vs a top-tier baseline
-	baseUSD  float64              // what that baseline would have cost
-	spendUSD float64              // today's real spend
-	graph    *graph.Graph         // nil when graph.json is absent
+	stats map[string]*ckModelStat // cost-row model name → per-model aggregates
 
-	// calibrator is nil when no calibration ledger exists yet.
+	spendUSD  float64 // today
+	monthUSD  float64
+	monthReqs int
+	todayReqs int
+
+	todayActualTok, todayEstTok int
+	savedTodayUSD, baseTodayUSD float64
+
+	byModelToday []cost.GroupRow
+	byTierToday  []cost.GroupRow
+	byDay        []cost.GroupRow // last 14 days
+	localModels  map[string]bool // model → only ever routed to a local provider
+
+	runCost map[string]ckRunCost // run_id → what cost.jsonl knows about the run
+
+	graph      *graph.Graph // nil when graph.json is absent
 	calibrator *trust.Calibrator
+	trustStats *trust.Stats // nil when no consensus run was ever recorded
 }
 
-// ckSparkWidth is how many samples a sparkline shows.
-const ckSparkWidth = 14
+// ckModelStat aggregates one model's cost rows for the detail panel.
+type ckModelStat struct {
+	wall      []int64 // all wall_ms samples, for p50
+	reqsToday int
+	costToday float64
+	lastRunID string
+	lastTS    string
+}
 
-// ckPricer is the per-tier cost lookup the savings panel needs. Taking an
-// interface rather than *pricing.DB keeps the arithmetic testable without a
-// resolvable registry/pricing.yaml on disk — the same reason internal/swarm
-// defines PricingReader.
+// ckRunCost is the cost-side of a run, joined by run_id into activity traces.
+type ckRunCost struct {
+	enum     string
+	strategy string // swarm mode when the run fanned out
+	prompt   int
+	resp     int
+	actual   int // tokens the provider reported
+	est      int // tokens Hydra estimated
+	costUSD  float64
+}
+
+// ckFixedSwarmN is the fixed-N swarm baseline trust.Aggregate compares the
+// real consensus sample counts against.
+const ckFixedSwarmN = 5
+
+// ckPricer is the per-tier cost lookup the savings math needs. An interface
+// rather than *pricing.DB keeps the arithmetic testable without a resolvable
+// registry/pricing.yaml on disk.
 type ckPricer interface {
 	EstimateCost(tier, inputTokens, outputTokens int) float64
 }
 
-// ckLoadMetrics reads the real logs once. Every field degrades to empty rather
-// than to a placeholder value, so the renderer can tell "no data" from "zero".
+// ckLoadMetrics reads the real logs once — one cost.jsonl pass feeds spend,
+// per-model stats, usage groupings, and the run join.
 func ckLoadMetrics(pr *pricing.DB) ckMetrics {
 	m := ckMetrics{
-		latency: map[string][]float64{},
-		lastMS:  map[string]int64{},
+		stats:       map[string]*ckModelStat{},
+		localModels: map[string]bool{},
+		runCost:     map[string]ckRunCost{},
 	}
-
-	rows, err := cost.LoadAll()
-	if err == nil && len(rows) > 0 {
-		m.latency, m.lastMS = ckLatencySeries(rows)
-		m.savedUSD, m.baseUSD = ckSavings(rows, pr)
-	}
-	if s, err := cost.Summary(); err == nil && s != nil {
-		m.spendUSD = s.Today.EstCostUSD
+	if rows, err := cost.LoadAll(); err == nil {
+		m.fold(rows, pr, time.Now().UTC())
 	}
 	if cal, err := trust.New(trust.DefaultPath()); err == nil {
 		m.calibrator = cal
 	}
-	// graph.json is optional; a missing one simply means no blast radius.
+	if runs, err := trust.LoadRuns(trust.DefaultLogPath()); err == nil && len(runs) > 0 {
+		st := trust.Aggregate(runs, ckFixedSwarmN)
+		m.trustStats = &st
+	}
+	// graph.json is optional; a missing one simply means no change impact.
 	if g, err := graph.Load(ckGraphPath()); err == nil {
 		m.graph = g
 	}
 	return m
 }
 
+// fold aggregates the cost rows relative to now (UTC, matching cost.Summary's
+// day boundary).
+func (m *ckMetrics) fold(rows []cost.Row, pr ckPricer, now time.Time) {
+	day := now.Format("2006-01-02")
+	month := now.Format("2006-01")
+	var today []cost.Row
+	nonLocal := map[string]bool{}
+
+	for _, r := range rows {
+		if r.Model != "" {
+			st := m.stats[r.Model]
+			if st == nil {
+				st = &ckModelStat{}
+				m.stats[r.Model] = st
+			}
+			if r.WallMS > 0 {
+				st.wall = append(st.wall, r.WallMS)
+			}
+			if r.RunID != "" {
+				st.lastRunID = r.RunID
+			}
+			st.lastTS = r.TS
+			if strings.HasPrefix(r.TS, day) {
+				st.reqsToday++
+				st.costToday += r.EstCostUSD
+			}
+			if ckLocalExecutor(r.Executor) {
+				m.localModels[r.Model] = true
+			} else {
+				nonLocal[r.Model] = true
+			}
+		}
+		if r.RunID != "" {
+			rc := m.runCost[r.RunID]
+			if r.Enum != "" {
+				rc.enum = r.Enum
+			}
+			if r.SwarmMode != "" {
+				rc.strategy = r.SwarmMode
+			}
+			rc.prompt += r.PromptTokens
+			rc.resp += r.ResponseTokens
+			a, e := cost.TokenSourceShare([]cost.Row{r})
+			rc.actual += a
+			rc.est += e
+			rc.costUSD += r.EstCostUSD
+			m.runCost[r.RunID] = rc
+		}
+		if strings.HasPrefix(r.TS, month) {
+			m.monthUSD += r.EstCostUSD
+			m.monthReqs++
+		}
+		if strings.HasPrefix(r.TS, day) {
+			today = append(today, r)
+		}
+	}
+	// A model with any non-local row must not claim "local · free".
+	for model := range nonLocal {
+		delete(m.localModels, model)
+	}
+
+	m.todayReqs = len(today)
+	m.spendUSD = cost.SummaryFromRows(rows).Today.EstCostUSD
+	m.todayActualTok, m.todayEstTok = cost.TokenSourceShare(today)
+	m.savedTodayUSD, m.baseTodayUSD = ckSavings(today, pr)
+	m.byModelToday = cost.ByModel(today)
+	m.byTierToday = cost.GroupBy(today, func(r cost.Row) string { return "T" + strconv.Itoa(r.Tier) })
+	m.byDay = cost.ByDay(cost.FilterDays(rows, 14))
+}
+
+// ckLocalExecutor reports whether a cost row's executor field names a local
+// provider — dispatch stamps Head.Provider there ("local" for port heads,
+// "ollama" in older rows).
+func ckLocalExecutor(e string) bool { return e == "local" || e == "ollama" }
+
 // ckGraphPath locates graph.json the same way the CLI does.
 func ckGraphPath() string { return filepath.Join(config.ScriptHome(), "graph.json") }
 
-// ckLatencySeries turns cost rows into a per-model wall_ms history, oldest
-// first, capped at ckSparkWidth. cost.jsonl carries wall_ms on every row, so
-// this is a genuine latency trace — the thing the old LCG "sparkline" was
-// pretending to be.
-func ckLatencySeries(rows []cost.Row) (map[string][]float64, map[string]int64) {
-	byModel := map[string][]float64{}
-	last := map[string]int64{}
-	for _, r := range rows {
-		if r.WallMS <= 0 || r.Model == "" {
-			continue
-		}
-		byModel[r.Model] = append(byModel[r.Model], float64(r.WallMS))
-		last[r.Model] = r.WallMS
-	}
-	for k, v := range byModel {
-		if len(v) > ckSparkWidth {
-			byModel[k] = v[len(v)-ckSparkWidth:]
-		}
-	}
-	return byModel, last
-}
-
-// ckSavings compares what was actually spent against what the same work would
-// have cost routed entirely to tier 1 — the "one expensive model for
-// everything" baseline Hydra exists to beat. Both sides come from real rows;
-// the baseline is priced with the same pricing DB used for the real cost, so
-// the two are comparable.
+// ckSavings compares what was actually spent against what the same tokens
+// would have cost routed entirely to tier 1 — the "one frontier model for
+// everything" baseline Hydra exists to beat. Both sides come from real rows
+// priced through the same pricing DB, so the comparison is like-for-like.
+// saved may be ≤ 0; the renderer decides how to say that honestly.
 func ckSavings(rows []cost.Row, pr ckPricer) (saved, baseline float64) {
 	if pr == nil {
 		return 0, 0
@@ -114,60 +194,18 @@ func ckSavings(rows []cost.Row, pr ckPricer) (saved, baseline float64) {
 		actual += r.EstCostUSD
 		baseline += pr.EstimateCost(1, r.PromptTokens, r.ResponseTokens)
 	}
-	saved = baseline - actual
-	if saved < 0 {
-		saved = 0 // never claim a saving that did not happen
-	}
-	return saved, baseline
+	return baseline - actual, baseline
 }
 
-// ckSpark renders values as block glyphs, scaled to the series' own range so a
-// flat-but-slow head still reads as flat. Fewer than two samples is not a
-// trace, so it renders as "—" rather than a misleading single bar.
-func ckSpark(vals []float64) string {
-	if len(vals) < 2 {
-		return "—"
-	}
-	lo, hi := vals[0], vals[0]
-	for _, v := range vals {
-		if v < lo {
-			lo = v
-		}
-		if v > hi {
-			hi = v
-		}
-	}
-	blocks := []rune("▁▂▃▄▅▆▇█")
-	var b strings.Builder
-	for _, v := range vals {
-		idx := 0
-		if hi > lo {
-			idx = int((v - lo) / (hi - lo) * float64(len(blocks)-1))
-		}
-		if idx < 0 {
-			idx = 0
-		}
-		if idx >= len(blocks) {
-			idx = len(blocks) - 1
-		}
-		b.WriteRune(blocks[idx])
-	}
-	return b.String()
-}
-
-// ckBlastFor computes the real blast radius of a file: the dependent count and
+// ckBlastFor computes the real change impact of a file: the dependent count and
 // percolation factor from the code graph. Returns ok=false when there is no
-// graph or the file is not in it — the caller then says nothing, rather than
-// printing the fixed "κ=3.1 ⚠ 12 dependents" this replaced.
+// graph or the file is not in it — the caller then says nothing (#193).
 func (m ckMetrics) ckBlastFor(file string) (radius float64, dependents int, kappa float64, ok bool) {
 	if m.graph == nil || file == "" {
 		return 0, 0, 0, false
 	}
-	radius = m.graph.BlastRadiusForFile(file)
-	kappa = m.graph.PercolationFactor(file)
-	for _, id := range m.graph.NodesInFile(file) {
-		dependents += m.graph.DependentCount(id)
-	}
+	impact := m.graph.Impact(file)
+	radius, kappa, dependents = impact.Radius, impact.Percolation, impact.Dependents
 	// A file absent from the graph yields the neutral radius; saying nothing is
 	// more honest than reporting a floor value as a measurement.
 	if radius <= 1.0 && dependents == 0 {
@@ -176,69 +214,59 @@ func (m ckMetrics) ckBlastFor(file string) (radius float64, dependents int, kapp
 	return radius, dependents, kappa, true
 }
 
-// ckDiagnosticity is a head's calibrated information content in nats, from the
-// trust ledger. Zero means uncalibrated, which the renderer shows as "—" —
-// this replaced a confidence hardcoded by tier band.
-func (m ckMetrics) ckDiagnosticity(headName, domain string) float64 {
-	if m.calibrator == nil {
-		return 0
-	}
-	if domain == "" {
-		domain = "default"
-	}
-	return m.calibrator.D(headName, domain)
-}
-
-// ckSeriesFor finds a head's latency history. cost.jsonl records the model as
-// the executor reported it ("Qwen2.5-Coder:7b (Ollama)") while probe names the
-// head after its provider ("Ollama"), so an exact match silently misses — the
-// bug that showed a busy local head as having never run. Matching is therefore
+// ckStatFor finds a model's cost aggregates. cost.jsonl records the model as
+// the executor reported it ("Qwen2.5-Coder:7b (Ollama)") while the scan names
+// it differently, so an exact match silently misses — matching is therefore
 // tolerant: exact, then either string containing the other, case-insensitively.
-func (m ckMetrics) ckSeriesFor(name, id string) ([]float64, int64) {
-	if v, ok := m.latency[name]; ok {
-		return v, m.lastMS[name]
+func (m ckMetrics) ckStatFor(name, id string) ckModelStat {
+	if v, ok := m.stats[name]; ok {
+		return *v
 	}
-	if v, ok := m.latency[id]; ok {
-		return v, m.lastMS[id]
+	if v, ok := m.stats[id]; ok {
+		return *v
 	}
 	for _, key := range []string{name, id} {
 		if key == "" {
 			continue
 		}
 		lk := strings.ToLower(key)
-		for model, v := range m.latency {
+		for model, v := range m.stats {
 			lm := strings.ToLower(model)
 			if strings.Contains(lm, lk) || strings.Contains(lk, lm) {
-				return v, m.lastMS[model]
+				return *v
 			}
 		}
 	}
-	return nil, 0
+	return ckModelStat{}
 }
 
-// ckSortedModels lists models with latency history, most-sampled first, so the
-// dashboard's own ordering is stable rather than map-random.
-func (m ckMetrics) ckSortedModels() []string {
-	out := make([]string, 0, len(m.latency))
-	for k := range m.latency {
-		out = append(out, k)
+// ckScorecardFor returns the calibration rows recorded against this model,
+// most-observed first. Trust keys sources by id, so the id is matched first
+// and the display name tolerantly after it.
+func (m ckMetrics) ckScorecardFor(id, name string) []trust.Stat {
+	if m.calibrator == nil {
+		return nil
+	}
+	var out []trust.Stat
+	for _, s := range m.calibrator.Report() {
+		if ckSourceMatches(s.Source, id) || ckSourceMatches(s.Source, name) {
+			out = append(out, s)
+		}
 	}
 	sort.Slice(out, func(i, j int) bool {
-		if len(m.latency[out[i]]) != len(m.latency[out[j]]) {
-			return len(m.latency[out[i]]) > len(m.latency[out[j]])
+		if out[i].N != out[j].N {
+			return out[i].N > out[j].N
 		}
-		return out[i] < out[j]
+		return out[i].Domain < out[j].Domain
 	})
 	return out
 }
 
-// ckFmtMS renders a latency for the dashboard.
-func ckFmtMS(ms int64) string {
-	if ms <= 0 {
-		return "—"
+// ckSourceMatches is the tolerant source↔model comparison.
+func ckSourceMatches(source, key string) bool {
+	if key == "" || source == "" {
+		return false
 	}
-	if ms >= 10000 {
-		return fmt.Sprintf("%.1fs", float64(ms)/1000)
-	}
-	return fmt.Sprintf("%dms", ms)
+	ls, lk := strings.ToLower(source), strings.ToLower(key)
+	return ls == lk || strings.Contains(ls, lk) || strings.Contains(lk, ls)
 }

@@ -194,8 +194,20 @@ func NewSandbox(t *testing.T) *Sandbox {
 		t.Setenv(v, "")
 	}
 	for _, v := range tuningVars {
-		if v == "HYDRA_HOME" {
+		switch v {
+		case "HYDRA_HOME":
 			continue // set above
+		case "OLLAMA_HOST":
+			// Clearing to "" falls back to the built-in localhost:11434
+			// default — indistinguishable from "no override" but not from
+			// "no Ollama". A machine that actually runs Ollama there (this
+			// is not hypothetical: it broke TestCLI_Dispatch_
+			// LocalOnlyRefusesWhenNothingIsLocal on a real laptop, #539) gets
+			// a genuine local head CI never sees. Point at a dead address —
+			// same convention as the package init()'s proxy blackhole below —
+			// so port discovery fails deterministically everywhere.
+			t.Setenv(v, "127.0.0.1:1")
+			continue
 		}
 		t.Setenv(v, "")
 	}

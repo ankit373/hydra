@@ -4,6 +4,8 @@ package security
 
 import (
 	"fmt"
+	"slices"
+	"time"
 
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/ledger"
@@ -33,6 +35,13 @@ type Category struct {
 	Name   string         `json:"name"`
 	Status CoverageStatus `json:"status"`
 	Detail string         `json:"detail"`
+
+	// GapSince/GapAgeDays are set only when Status is Gap, from the score
+	// history Build already persists — the earliest recorded run where this
+	// category was already a gap. A brand-new gap (no matching history) gets
+	// age 0: this run is the first evidence of it.
+	GapSince   string `json:"gapSince,omitempty"`
+	GapAgeDays int    `json:"gapAgeDays,omitempty"`
 }
 
 // Coverage is Hydra's posture against the OWASP LLM Top 10: a percentage of
@@ -47,16 +56,18 @@ type Coverage struct {
 }
 
 // computeCoverage classifies all 10 OWASP LLM Top-10 categories against
-// Hydra's real, currently-observable state. pol and events are what Build
-// already loaded — passed in rather than reloaded here.
-func computeCoverage(pol ledger.Policy, events []ledger.Event) Coverage {
+// Hydra's real, currently-observable state. pol, runs, and costCeilingDenials
+// are what Build already loaded/computed — passed in rather than rederived
+// here (AssessEvidence needs the identical trust runs, and costCeilingCheck
+// needs the identical cost-ceiling-denial count, so Build computes each once
+// for both consumers).
+func computeCoverage(pol ledger.Policy, sc SupplyChain, runs []trust.RunLog, costCeilingDenials int) Coverage {
 	cats := []Category{
 		{ID: "LLM01", Name: "Prompt Injection", Status: Enforced,
 			Detail: "untrusted content is framed as data (a2a/editor/parallel) and scanned for injection markers automatically"},
 		{ID: "LLM02", Name: "Sensitive Information Disclosure", Status: Enforced,
 			Detail: "PII detection forces local-only routing automatically"},
-		{ID: "LLM03", Name: "Supply Chain", Status: Gap,
-			Detail: "no provider/binary integrity verification exists yet"},
+		llm03SupplyChain(sc),
 		{ID: "LLM04", Name: "Data and Model Poisoning", Status: NotApplicable,
 			Detail: "Hydra routes prompts to models — it does not train or fine-tune any"},
 		llm05OutputHandling(),
@@ -65,8 +76,8 @@ func computeCoverage(pol ledger.Policy, events []ledger.Event) Coverage {
 			Detail: "no protection exists for --system content today"},
 		{ID: "LLM08", Name: "Vector and Embedding Weaknesses", Status: NotApplicable,
 			Detail: "Hydra has no RAG pipeline or vector store of its own"},
-		llm09Misinformation(),
-		llm10UnboundedConsumption(events),
+		llm09Misinformation(runs),
+		llm10UnboundedConsumption(costCeilingDenials),
 	}
 
 	var applicable, covered int
@@ -84,6 +95,21 @@ func computeCoverage(pol ledger.Policy, events []ledger.Event) Coverage {
 		pct = 100 * float64(covered) / float64(applicable)
 	}
 	return Coverage{Categories: cats, Applicable: applicable, Covered: covered, PercentCovered: pct}
+}
+
+// Detection, not provenance, and the baseline is a plain file — so this is
+// Configured once binaries are tracked, never Enforced. See supplychain.go.
+func llm03SupplyChain(sc SupplyChain) Category {
+	c := Category{ID: "LLM03", Name: "Supply Chain"}
+	if len(sc.Binaries) == 0 {
+		c.Status = Gap
+		c.Detail = "no CLI head binary is being fingerprinted, so a replaced agent binary would go unnoticed"
+		return c
+	}
+	c.Status = Configured
+	c.Detail = fmt.Sprintf("%d head binary(ies) fingerprinted; a replacement is detected, though origin is not "+
+		"verified and the stored baseline is not itself tamper-evident", len(sc.Binaries))
+	return c
 }
 
 // llm05OutputHandling: Hydra ships default workspace validators (js, py,
@@ -122,10 +148,9 @@ func llm06ExcessiveAgency(pol ledger.Policy) Category {
 
 // llm09Misinformation: the SPRT confidence ensemble is Hydra's real mitigation
 // for hallucinated/wrong answers — Configured once it's actually been used.
-func llm09Misinformation() Category {
+func llm09Misinformation(runs []trust.RunLog) Category {
 	c := Category{ID: "LLM09", Name: "Misinformation"}
-	runs, err := trust.LoadRuns(trust.DefaultLogPath())
-	if err != nil || len(runs) == 0 {
+	if len(runs) == 0 {
 		c.Status = Gap
 		c.Detail = "the SPRT confidence ensemble (hyctl dispatch --confidence) has never been used"
 		return c
@@ -138,16 +163,92 @@ func llm09Misinformation() Category {
 // llm10UnboundedConsumption: Configured once a --max-cost ceiling has
 // actually refused a dispatch — the ledger is the only durable record that
 // the guard was ever exercised.
-func llm10UnboundedConsumption(events []ledger.Event) Category {
+func llm10UnboundedConsumption(costCeilingDenials int) Category {
 	c := Category{ID: "LLM10", Name: "Unbounded Consumption"}
-	for _, e := range events {
-		if costCeilingReason(e) {
-			c.Status = Configured
-			c.Detail = "a --max-cost ceiling has refused at least one dispatch"
-			return c
-		}
+	if costCeilingDenials > 0 {
+		c.Status = Configured
+		c.Detail = "a --max-cost ceiling has refused at least one dispatch"
+		return c
 	}
 	c.Status = Gap
 	c.Detail = "no dispatch has ever been refused for exceeding a cost ceiling — set one with --max-cost"
 	return c
+}
+
+// firstGapSeen scans history once and indexes, per category ID, the index of
+// the earliest entry naming it as a gap — history is oldest-first, so the
+// first entry recording an ID wins and later ones are skipped. It does not
+// parse timestamps: that cost belongs at lookup time, scoped to the fixed,
+// small set of categories actually being annotated, not to every one of
+// potentially hundreds of thousands of history entries regardless of
+// whether anything ever looks them up.
+func firstGapSeen(history []scoreEntry) map[string]int {
+	out := make(map[string]int, 8)
+	for i, h := range history {
+		for _, id := range h.Gaps {
+			if _, ok := out[id]; ok {
+				continue
+			}
+			out[id] = i
+		}
+	}
+	return out
+}
+
+// firstParseableGapSince is the fallback for the one case the index above
+// can't resolve on its own: the earliest entry naming id as a gap has a
+// corrupt TS. It mirrors the pre-#524 scan's behavior of skipping a bad
+// timestamp and continuing to look for the next-oldest match — scoped to
+// this single category rather than re-scanning history for every category,
+// since a malformed timestamp is not the common case.
+func firstParseableGapSince(history []scoreEntry, id string) (string, time.Time, bool) {
+	for _, h := range history {
+		if !slices.Contains(h.Gaps, id) {
+			continue
+		}
+		if ts, err := time.Parse(time.RFC3339, h.TS); err == nil {
+			return h.TS, ts, true
+		}
+	}
+	return "", time.Time{}, false
+}
+
+// annotateGapAge fills in GapSince/GapAgeDays for every currently-Gap
+// category, using score history that Build already loads and persists
+// (security_score.jsonl, since #396) — no new logging, just reading data
+// that already exists. history must be oldest-first, which
+// loadScoreHistory/appendScoreHistory already guarantee (the log is
+// append-only).
+//
+// firstGapSeen does one pass over history to index every category's
+// earliest gap sighting; this then does one pass over cats (bounded by the
+// fixed OWASP LLM Top-10 list) to look values up — linear in history size,
+// where the previous nested scan (categories × history × gaps-per-entry)
+// was worse than linear.
+func annotateGapAge(cats []Category, history []scoreEntry, now time.Time) []Category {
+	firstIdx := firstGapSeen(history)
+	out := make([]Category, len(cats))
+	copy(out, cats)
+	for i, c := range out {
+		if c.Status != Gap {
+			continue
+		}
+		idx, ok := firstIdx[c.ID]
+		if !ok {
+			continue
+		}
+		tsStr := history[idx].TS
+		ts, err := time.Parse(time.RFC3339, tsStr)
+		if err != nil {
+			// The indexed entry's own timestamp is corrupt — fall back to a
+			// linear scan for this one category only.
+			tsStr, ts, ok = firstParseableGapSince(history, c.ID)
+			if !ok {
+				continue
+			}
+		}
+		out[i].GapSince = tsStr
+		out[i].GapAgeDays = int(now.Sub(ts).Hours() / 24)
+	}
+	return out
 }

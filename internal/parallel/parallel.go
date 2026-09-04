@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -110,6 +111,14 @@ func Run(ctx context.Context, tasks []Task, opts Options) ([]Result, error) {
 		seen[t.File] = t.Label
 	}
 
+	// One Dispatcher shared by the whole batch: every task in a `hyctl parallel`
+	// run wants the same machine probe and config, not N independent ones. A
+	// failure here must still surface as a per-task result rather than abort
+	// the batch outright — the run-log tree below gets written either way, and
+	// each task's own JSON result carries the same "dispatcher init" error every
+	// task used to hit independently.
+	d, dispatchErr := dispatch.New(ctx)
+
 	results := make([]Result, len(tasks))
 	var mu sync.Mutex
 
@@ -139,9 +148,9 @@ func Run(ctx context.Context, tasks []Task, opts Options) ([]Result, error) {
 			started := time.Now()
 			var raw json.RawMessage
 			if task.File != "" {
-				raw = runEditTask(gctx, task, runID, taskID)
+				raw = runEditTask(gctx, d, dispatchErr, task, runID, taskID)
 			} else {
-				raw = runTextTask(gctx, task, runID, taskID)
+				raw = runTextTask(gctx, d, dispatchErr, task, runID, taskID)
 			}
 			mu.Lock()
 			results[i] = Result{raw: raw}
@@ -182,10 +191,9 @@ func statusOf(raw json.RawMessage) string {
 }
 
 // runTextTask dispatches a prompt and returns the raw JSON result.
-func runTextTask(ctx context.Context, task Task, runID, taskID string) json.RawMessage {
-	d, err := dispatch.New(ctx)
-	if err != nil {
-		return failText(task, "dispatcher init: "+err.Error())
+func runTextTask(ctx context.Context, d *dispatch.Dispatcher, dispatchErr error, task Task, runID, taskID string) json.RawMessage {
+	if dispatchErr != nil {
+		return failText(task, "dispatcher init: "+dispatchErr.Error())
 	}
 
 	prompt := task.Prompt
@@ -215,9 +223,10 @@ func runTextTask(ctx context.Context, task Task, runID, taskID string) json.RawM
 }
 
 // runEditTask performs an atomic file edit and returns the raw JSON result.
-// Self-contained port of the edit.sh flow so this package compiles on develop
-// before internal/editor merges. Once editor merges, this can delegate to editor.Edit.
-func runEditTask(ctx context.Context, task Task, runID, taskID string) json.RawMessage {
+// Self-contained port of edit.sh — its tests target this package's own
+// extractContent/diffStats/rollback — but shares the KindEdit emission with
+// internal/editor via runlog.LogEdit rather than reimplementing it (#531).
+func runEditTask(ctx context.Context, d *dispatch.Dispatcher, dispatchErr error, task Task, runID, taskID string) json.RawMessage {
 	file := task.File
 	if !filepath.IsAbs(file) {
 		return failEdit(task, "file path must be absolute")
@@ -237,16 +246,9 @@ func runEditTask(ctx context.Context, task Task, runID, taskID string) json.RawM
 	}
 	resolved, _ := reg.Resolve(file)
 
-	// Policy (Phase 1)
-	if eng, pErr := policy.LoadFilePolicy(config.ScriptHome()); pErr == nil {
-		_ = eng.Decide(policy.Spec{
-			File:          file,
-			FileExtension: fileExt(file),
-			Workspace:     wsName,
-		})
-	}
-
-	// Snapshot
+	// Snapshot — read before Decide, so the file-policy engine's line-count
+	// and diff-size rules see the file's real shape instead of always
+	// matching on the zero value.
 	origContent, origExisted := readFile(file)
 	backup := file + ".hydra-bak"
 	createdBackup := false
@@ -260,6 +262,24 @@ func runEditTask(ctx context.Context, task Task, runID, taskID string) json.RawM
 		}
 	}
 
+	// Policy (Phase 1). The diff-size cap is enforced below, after the write —
+	// a Decide result that is only ever discarded is not a policy, and the
+	// Security view's own "file-policy caps declared but never run" finding
+	// traced to this exact line (#501).
+	fp := policy.FilePolicy{DiffSizeCapPct: 90} // matches defaultFilePolicy's cap if policy.yaml can't load
+	if eng, pErr := policy.LoadFilePolicy(config.ScriptHome()); pErr == nil {
+		enumTier, _ := strconv.Atoi(enumToTier(task.Enum))
+		fp = eng.Decide(policy.Spec{
+			File:          file,
+			FileLines:     strings.Count(origContent, "\n") + 1,
+			FileCount:     1,
+			FileExtension: fileExt(file),
+			HasGit:        resolved.GitRoot != "",
+			EnumTier:      enumTier,
+			Workspace:     wsName,
+		})
+	}
+
 	// Build prompt
 	ctxNote := "The file currently exists. Modify it per the instruction below."
 	currentBlock := origContent
@@ -270,10 +290,9 @@ func runEditTask(ctx context.Context, task Task, runID, taskID string) json.RawM
 	editPrompt := buildEditPrompt(file, ctxNote, task.Prompt, currentBlock)
 
 	// Dispatch
-	d, err := dispatch.New(ctx)
-	if err != nil {
+	if dispatchErr != nil {
 		cleanupBackup()
-		return failEdit(task, "dispatcher init: "+err.Error())
+		return failEdit(task, "dispatcher init: "+dispatchErr.Error())
 	}
 	dispResult, err := d.Dispatch(ctx, editPrompt, dispatch.Options{
 		TierHint: enumToTier(task.Enum),
@@ -322,6 +341,26 @@ func runEditTask(ctx context.Context, task Task, runID, taskID string) json.RawM
 		return failEdit(task, "rename_failed: "+err.Error())
 	}
 
+	added, removed := diffStats(file, origContent, resolved.GitRoot, backup, origExisted)
+
+	// Enforce the diff-size cap policy declared: registry/policy.yaml's own
+	// doc comment calls it "reject edits changing > N% of file", and nothing
+	// rejected anything before this. A brand-new file has no "percent of
+	// itself changed" to measure, so the cap only applies to modifications.
+	if origExisted && fp.DiffSizeCapPct > 0 {
+		if total := strings.Count(origContent, "\n") + 1; total > 0 {
+			if pct := float64(added+removed) / float64(total) * 100; pct > float64(fp.DiffSizeCapPct) {
+				rollback(file, origContent, origExisted, resolved.GitRoot, backup)
+				return mustMarshal(EditResult{
+					Label: task.Label, Enum: task.Enum, Mode: "edit",
+					Status: "fail", File: file, Workspace: wsName, GitRoot: resolved.GitRoot,
+					RolledBack: true,
+					Error:      fmt.Sprintf("diff_size_cap_exceeded: changed %.0f%% of file (cap %d%%)", pct, fp.DiffSizeCapPct),
+				})
+			}
+		}
+	}
+
 	// Validate
 	validate := true
 	if task.Validate != nil {
@@ -345,7 +384,10 @@ func runEditTask(ctx context.Context, task Task, runID, taskID string) json.RawM
 		}
 	}
 
-	added, removed := diffStats(file, origContent, resolved.GitRoot, backup, origExisted)
+	// Same KindEdit shape hyctl edit produces (internal/editor/runlog.go), via
+	// the shared runlog.LogEdit — a parallel batch was writing files with no
+	// trace in the run log at all (#531).
+	runlog.LogEdit(runID, taskID, file, []byte(origContent), []byte(newContent+"\n"), added, removed)
 	return mustMarshal(EditResult{
 		Label: task.Label, Enum: task.Enum, Mode: "edit",
 		Status: "ok", File: file, Workspace: wsName, GitRoot: resolved.GitRoot,

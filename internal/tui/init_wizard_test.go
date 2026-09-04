@@ -107,6 +107,28 @@ func TestInitWizard_FullWalkWritesALoadableConfig(t *testing.T) {
 	}
 }
 
+// The done screen must not have a stray whitespace-only line between "ready"
+// and "Cortex :" — lipgloss pads every line of a multi-line Render to its
+// widest line, so a blank line written *inside* the styled block became a row
+// of spaces glued onto the next line instead of a real newline (#465).
+func TestInitWizard_DoneScreenHasNoStrayWhitespaceLine(t *testing.T) {
+	testutil.NewSandbox(t)
+
+	m := tea.Model(NewInitModel(wizardHeads()))
+	m, _ = send(m, "enter", "enter", "enter", "enter")
+
+	im := m.(InitModel)
+	if im.err != nil {
+		t.Fatalf("the wizard reported an error: %v", im.err)
+	}
+	for _, line := range strings.Split(im.View(), "\n") {
+		if strings.TrimSpace(line) == "" && strings.Trim(line, " ") != line {
+			t.Errorf("done screen has a whitespace-only (not empty) line: %q\nfull view:\n%s",
+				line, im.View())
+		}
+	}
+}
+
 // Declining local-only must leave no PII policy, rather than writing one that
 // says something else.
 func TestInitWizard_DecliningLocalOnlyWritesNoPIIPolicy(t *testing.T) {
@@ -381,10 +403,14 @@ func TestExportToRoutingYAML_NoFileOnDiskIsNotAnError(t *testing.T) {
 // A save that cannot write must surface on the done screen rather than showing
 // a success the user will act on.
 func TestInitWizard_SaveFailureIsSurfaced(t *testing.T) {
-	s := testutil.NewSandbox(t)
+	testutil.NewSandbox(t)
 
-	// ~/.hydra is a regular file, so the config directory cannot be created.
-	if err := os.WriteFile(filepath.Join(s.Home, ".hydra"), []byte("not a dir"), 0o600); err != nil {
+	// Dir() is a regular file, so the config directory cannot be created. The
+	// sandbox pre-creates it as an empty directory, so remove that first.
+	if err := os.RemoveAll(config.Dir()); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(config.Dir(), []byte("not a dir"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 

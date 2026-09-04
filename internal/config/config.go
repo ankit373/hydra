@@ -29,10 +29,22 @@ type Config struct {
 	Tiers    []Tier            `toml:"tiers"`  // ordered by capability (high → low)
 	Skills   []string          `toml:"skills"` // enabled skill IDs
 	Policies map[string]Policy `toml:"policies,omitempty"`
+
+	// ExploreRate is the probability a dispatch tries a head other than the
+	// top-ranked one, so the logs carry the counterfactual evidence off-policy
+	// evaluation needs. 0 (the default) is pure argmax and changes nothing.
+	ExploreRate float64 `toml:"explore_rate,omitempty"`
 }
 
-// Dir returns the Hydra config directory (~/.hydra).
+// Dir returns the Hydra state directory: $HYDRA_HOME if set, else ~/.hydra.
+// Every subsystem that persists Hydra state (cost, trust, ledger, security,
+// run logs, config.toml) must resolve its path through this function rather
+// than calling os.UserHomeDir() directly, or $HYDRA_HOME silently stops being
+// an isolation boundary for it (#442).
 func Dir() string {
+	if h := os.Getenv("HYDRA_HOME"); h != "" {
+		return filepath.Clean(h)
+	}
 	home, _ := os.UserHomeDir()
 	return filepath.Join(home, ".hydra")
 }

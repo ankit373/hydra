@@ -119,6 +119,42 @@ func TestSnapshot_OffsetPastFileSizeIsRejected(t *testing.T) {
 	}
 }
 
+// A schema-valid, in-bounds offset that lands mid-line (not on a JSONL line
+// boundary) must be rejected, not seeked-to — otherwise the split first line
+// silently drops a real record instead of triggering a full replay.
+func TestSnapshot_MisalignedOffsetFallsBackToFullReplay(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "calibration.jsonl")
+
+	c1, err := New(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	feed(t, c1, "model:good", "go", 150, 50, 0, 0)
+	want := c1.D("model:good", "go")
+
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A few bytes short of EOF lands inside the last line's JSON, not on a
+	// newline — schema-valid and in-bounds, but not a real line boundary.
+	if err := saveSnapshot(snapshotPath(path), map[calibKey]*confusion{}, info.Size()-5); err != nil {
+		t.Fatal(err)
+	}
+
+	c2, err := New(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := c2.D("model:good", "go")
+	if math.Abs(got-want) > 1e-9 {
+		t.Errorf("D after rejecting a misaligned snapshot = %.6f, want %.6f (a record was silently dropped)", got, want)
+	}
+	if n := c2.Report()[0].N; n != 200 {
+		t.Errorf("observations after rejecting a misaligned snapshot = %v, want 200 (a record was silently dropped)", n)
+	}
+}
+
 // Below snapshotThreshold, load() must not write a snapshot file at all.
 func TestSnapshot_NotWrittenBelowThreshold(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "calibration.jsonl")

@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/ankit373/hydra/internal/config"
 )
 
 // scoreEntry is one line of ~/.hydra/security_score.jsonl — one hyctl
@@ -33,10 +35,25 @@ type Trend struct {
 	FirstTS   string  `json:"firstTs"`
 }
 
+// HistoryPoint is one persisted coverage snapshot, exposed raw so a chart can
+// show the real series instead of the single collapsed delta Trend reports.
+type HistoryPoint struct {
+	TS             string  `json:"ts"`
+	PercentCovered float64 `json:"percentCovered"`
+}
+
+// toHistoryPoints strips scoreEntry down to what a chart needs.
+func toHistoryPoints(entries []scoreEntry) []HistoryPoint {
+	out := make([]HistoryPoint, 0, len(entries))
+	for _, e := range entries {
+		out = append(out, HistoryPoint{TS: e.TS, PercentCovered: e.PercentCovered})
+	}
+	return out
+}
+
 // DefaultScoreHistoryPath is where the coverage trend is persisted.
 func DefaultScoreHistoryPath() string {
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".hydra", "security_score.jsonl")
+	return filepath.Join(config.Dir(), "security_score.jsonl")
 }
 
 // loadScoreHistory reads all entries; a missing file yields none.

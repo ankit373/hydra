@@ -10,13 +10,15 @@ import (
 
 // withEmptyHome points the process at a home directory containing no ~/.hydra,
 // which is the state of a machine that has just downloaded the app and never
-// run hyctl. config.Dir() resolves through os.UserHomeDir, so setting HOME
-// (USERPROFILE on Windows) is enough to isolate it.
+// run hyctl. config.Dir() checks $HYDRA_HOME before $HOME (#442), so a
+// developer or CI runner with one already exported must not leak through —
+// clearing it is as much a part of isolating this as setting HOME/USERPROFILE.
 func withEmptyHome(t *testing.T) string {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
+	t.Setenv("HYDRA_HOME", "")
 	return home
 }
 

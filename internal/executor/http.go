@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/ankit373/hydra/internal/provider"
+	"github.com/ankit373/hydra/internal/util"
 )
 
 // HTTPExecutor runs prompts against HTTP-based providers.
@@ -144,7 +145,7 @@ func (e *HTTPExecutor) executeOpenAICompatible(ctx context.Context, req Request,
 	}
 
 	var cr openAIChatResponse
-	if err := json.NewDecoder(resp.Body).Decode(&cr); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, int64(util.DefaultMaxBytes)+1)).Decode(&cr); err != nil {
 		return nil, fmt.Errorf("http exec %s: decode: %w", req.Head.ID, err)
 	}
 	if len(cr.Choices) == 0 {
@@ -207,7 +208,7 @@ func (e *HTTPExecutor) executeAnthropic(ctx context.Context, req Request) (*Resp
 			OutputTokens int `json:"output_tokens"`
 		} `json:"usage"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, int64(util.DefaultMaxBytes)+1)).Decode(&out); err != nil {
 		return nil, fmt.Errorf("http exec %s: decode: %w", req.Head.ID, err)
 	}
 
@@ -278,7 +279,7 @@ func (e *HTTPExecutor) executeGemini(ctx context.Context, req Request) (*Respons
 		} `json:"usageMetadata"`
 		ModelVersion string `json:"modelVersion"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, int64(util.DefaultMaxBytes)+1)).Decode(&out); err != nil {
 		return nil, fmt.Errorf("http exec %s: decode: %w", req.Head.ID, err)
 	}
 	if len(out.Candidates) == 0 {
@@ -341,7 +342,7 @@ func (e *HTTPExecutor) executeCohere(ctx context.Context, req Request) (*Respons
 			} `json:"tokens"`
 		} `json:"usage"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, int64(util.DefaultMaxBytes)+1)).Decode(&out); err != nil {
 		return nil, fmt.Errorf("http exec %s: decode: %w", req.Head.ID, err)
 	}
 
@@ -385,7 +386,7 @@ func (e *HTTPExecutor) executeAzureOpenAI(ctx context.Context, req Request) (*Re
 	}
 
 	var out openAIChatResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, int64(util.DefaultMaxBytes)+1)).Decode(&out); err != nil {
 		return nil, fmt.Errorf("http exec %s: decode: %w", req.Head.ID, err)
 	}
 	if len(out.Choices) == 0 {
@@ -438,7 +439,7 @@ func (e *HTTPExecutor) executeBedrock(ctx context.Context, req Request) (*Respon
 	}
 
 	var out openAIChatResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, int64(util.DefaultMaxBytes)+1)).Decode(&out); err != nil {
 		return nil, fmt.Errorf("http exec %s: decode: %w", req.Head.ID, err)
 	}
 	if len(out.Choices) == 0 {
@@ -490,7 +491,7 @@ func (e *HTTPExecutor) executeReplicate(ctx context.Context, req Request) (*Resp
 	}
 
 	var pred replicatePrediction
-	if err := json.NewDecoder(resp.Body).Decode(&pred); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, int64(util.DefaultMaxBytes)+1)).Decode(&pred); err != nil {
 		return nil, fmt.Errorf("http exec %s: decode: %w", req.Head.ID, err)
 	}
 
@@ -556,7 +557,7 @@ func (e *HTTPExecutor) getReplicatePrediction(ctx context.Context, headID, getUR
 	}
 
 	var pred replicatePrediction
-	if err := json.NewDecoder(resp.Body).Decode(&pred); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, int64(util.DefaultMaxBytes)+1)).Decode(&pred); err != nil {
 		return replicatePrediction{}, fmt.Errorf("http exec %s: decode: %w", headID, err)
 	}
 	return pred, nil

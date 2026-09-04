@@ -14,6 +14,13 @@ import type {
   Fleet,
   HyctlStatus,
   InstallResult,
+  MCPPanel,
+  MCPSyncResult,
+  HeadPanel,
+  ModelRegistry,
+  ReviewOutcome,
+  QuestionQueue,
+  SecurityReport,
   Session,
   UpdateStatus,
   UpgradeResult,
@@ -27,14 +34,25 @@ interface WailsGo {
       GetFleet(): Promise<Fleet>
       GetSession(runID: string): Promise<Session>
       GetEdits(runID: string): Promise<Edit[]>
-      Chat(prompt: string, enumKey: string): Promise<ChatReply>
+      Chat(prompt: string, enumKey: string, runID: string, tier: string): Promise<ChatReply>
+      ApproveEdit(file: string): Promise<ReviewOutcome>
+      RejectEdit(file: string): Promise<ReviewOutcome>
+      GetMCPServers(): Promise<MCPPanel>
+      SyncMCPRegistry(): Promise<MCPSyncResult>
+      GetHeads(): Promise<HeadPanel>
+      GetPendingQuestions(): Promise<QuestionQueue>
+      AnswerQuestion(taskID: string, answer: string): Promise<ChatReply>
+      DeclineQuestion(taskID: string, reason: string): Promise<void>
       ChatEnums(): Promise<string[]>
+      NewRunID(): Promise<string>
       GetDiff(runID: string, ref: string, file: string): Promise<Diff>
       GetVersion(): Promise<Version>
       GetUpdateStatus(): Promise<UpdateStatus>
       TriggerUpgrade(): Promise<UpgradeResult>
       CheckHyctl(): Promise<HyctlStatus>
       InstallHyctl(): Promise<InstallResult>
+      GetSecurity(): Promise<SecurityReport>
+      GetModels(): Promise<ModelRegistry>
     }
   }
 }
@@ -59,11 +77,35 @@ export const GetSession = (runID: string): Promise<Session> => backend().GetSess
 export const GetEdits = (runID: string): Promise<Edit[]> => backend().GetEdits(runID)
 export const GetDiff = (runID: string, ref: string, file: string): Promise<Diff> =>
   backend().GetDiff(runID, ref, file)
-export const Chat = (prompt: string, enumKey: string): Promise<ChatReply> =>
-  backend().Chat(prompt, enumKey)
+export const Chat = (
+  prompt: string,
+  enumKey: string,
+  runID: string,
+  tier: string,
+): Promise<ChatReply> => backend().Chat(prompt, enumKey, runID, tier)
+
+export const ApproveEdit = (file: string): Promise<ReviewOutcome> => backend().ApproveEdit(file)
+
+export const RejectEdit = (file: string): Promise<ReviewOutcome> => backend().RejectEdit(file)
+
+export const GetMCPServers = (): Promise<MCPPanel> => backend().GetMCPServers()
+
+export const SyncMCPRegistry = (): Promise<MCPSyncResult> => backend().SyncMCPRegistry()
+export const GetHeads = (): Promise<HeadPanel> => backend().GetHeads()
+
+export const GetPendingQuestions = (): Promise<QuestionQueue> => backend().GetPendingQuestions()
+
+export const AnswerQuestion = (taskID: string, answer: string): Promise<ChatReply> =>
+  backend().AnswerQuestion(taskID, answer)
+
+export const DeclineQuestion = (taskID: string, reason: string): Promise<void> =>
+  backend().DeclineQuestion(taskID, reason)
 export const ChatEnums = (): Promise<string[]> => backend().ChatEnums()
+export const NewRunID = (): Promise<string> => backend().NewRunID()
 export const GetVersion = (): Promise<Version> => backend().GetVersion()
 export const GetUpdateStatus = (): Promise<UpdateStatus> => backend().GetUpdateStatus()
 export const TriggerUpgrade = (): Promise<UpgradeResult> => backend().TriggerUpgrade()
 export const CheckHyctl = (): Promise<HyctlStatus> => backend().CheckHyctl()
 export const InstallHyctl = (): Promise<InstallResult> => backend().InstallHyctl()
+export const GetSecurity = (): Promise<SecurityReport> => backend().GetSecurity()
+export const GetModels = (): Promise<ModelRegistry> => backend().GetModels()

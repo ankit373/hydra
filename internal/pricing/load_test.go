@@ -240,7 +240,11 @@ func TestFetchAndSave_UnwritableCacheStillReturnsThePrices(t *testing.T) {
 	testutil.NewSandbox(t)
 	stubOpenRouter(t, map[string]orPricing{"a/one": {Prompt: "0.000001", Completion: "0.000002"}})
 
-	// ~/.hydra is a regular file, so the cache directory cannot be created.
+	// Dir() is a regular file, so the cache directory cannot be created. The
+	// sandbox pre-creates it as an empty directory, so remove that first.
+	if err := os.RemoveAll(filepath.Dir(cachePath())); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(filepath.Dir(cachePath()), []byte("not a dir"), 0o600); err != nil {
 		t.Fatal(err)
 	}

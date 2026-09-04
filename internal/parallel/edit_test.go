@@ -5,6 +5,7 @@ package parallel
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,6 +16,7 @@ import (
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/dispatch"
 	"github.com/ankit373/hydra/internal/ledger"
+	"github.com/ankit373/hydra/internal/runlog"
 	"github.com/ankit373/hydra/internal/testutil"
 
 	// Providers register themselves in init(), and this package does not import
@@ -172,6 +174,70 @@ func writeLedgerPolicy(t *testing.T, p ledger.Policy) {
 	}
 	if err := os.WriteFile(path, raw, 0o600); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// A batch's edit task must leave the same KindEdit run-log trail a standalone
+// `hyctl edit` leaves for the same change (#531) — the agent-tree view,
+// blast.go's recent-edit signal, and the desktop live-code panel all key off
+// it, and runEditTask used to write the file but never emit the event.
+func TestEdit_EmitsAKindEditRunLogEvent(t *testing.T) {
+	repo := editSandbox(t, marked("package main\n\nfunc main() {}"))
+	file := filepath.Join(repo, "main.go")
+	if err := os.WriteFile(file, []byte("package main\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	results, err := Run(context.Background(), []Task{{
+		Label: "edit main", Enum: "MODERATE", File: file,
+		Prompt: "add an empty main", Validate: boolPtr(false),
+	}}, Options{RunID: "run-parallel-edit"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got EditResult
+	if err := json.Unmarshal(results[0].raw, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != "ok" {
+		t.Fatalf("status = %q, error %q", got.Status, got.Error)
+	}
+
+	events, err := runlog.Load("run-parallel-edit")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var edit *runlog.Event
+	for i := range events {
+		if events[i].Kind == runlog.KindEdit {
+			edit = &events[i]
+			break
+		}
+	}
+	if edit == nil {
+		t.Fatalf("no KindEdit event in the run log: %+v", events)
+	}
+	if edit.File != file {
+		t.Errorf("edit.File = %q, want the file path %q — the same field hyctl edit keys the "+
+			"agent-tree node on", edit.File, file)
+	}
+	if edit.Ref == "" {
+		t.Error("the edit event carries no snapshot ref, so the diff cannot be rendered")
+	}
+	wantDetail := fmt.Sprintf("+%d/-%d", got.LinesAdded, got.LinesRemoved)
+	if edit.Detail != wantDetail {
+		t.Errorf("edit.Detail = %q, want %q — the same +N/-M format hyctl edit produces", edit.Detail, wantDetail)
+	}
+
+	before, after, err := runlog.LoadEdit("run-parallel-edit", edit.Ref)
+	if err != nil {
+		t.Fatalf("the snapshot the ref points at could not be loaded: %v", err)
+	}
+	if string(before) != "package main\n" {
+		t.Errorf("before snapshot = %q, want the file's original content", before)
+	}
+	if !strings.Contains(string(after), "func main() {}") {
+		t.Errorf("after snapshot = %q, want the model's content", after)
 	}
 }
 
@@ -348,6 +414,73 @@ func TestEdit_FailedValidationRollsTheFileBack(t *testing.T) {
 	}
 	if _, err := os.Stat(file + ".hydra-bak"); err == nil {
 		t.Error("the backup survived the rollback, so the next edit sees a stale baseline")
+	}
+}
+
+// The file-policy engine's Decide result was previously discarded outright
+// (`_ = eng.Decide(...)`), so a declared diff_size_cap_pct never rejected
+// anything. A cap this low must now reject and roll back a real edit.
+func TestEdit_DiffSizeCapExceededRollsTheFileBack(t *testing.T) {
+	repo := editSandbox(t, marked("package main\n\nfunc main() {\n\tprintln(\"hello\")\n}\n"))
+	writePolicyYAML(t, 1) // 1% cap — any real growth trips it
+
+	file := filepath.Join(repo, "a.go")
+	original := "package main\n"
+	if err := os.WriteFile(file, []byte(original), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got := runEdit(t, Task{
+		Label: "cap", Enum: "MODERATE", File: file,
+		Prompt: "grow this file", Validate: boolPtr(false),
+	})
+
+	if got.Status != "fail" || !strings.Contains(got.Error, "diff_size_cap_exceeded") {
+		t.Fatalf("result = %+v, want a diff_size_cap_exceeded failure", got)
+	}
+	if !got.RolledBack {
+		t.Error("RolledBack = false; the caller cannot tell whether the file changed")
+	}
+	raw, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(raw) != original {
+		t.Errorf("the file was left changed despite exceeding the cap:\n%q", raw)
+	}
+	if _, err := os.Stat(file + ".hydra-bak"); err == nil {
+		t.Error("the backup survived the rollback, so the next edit sees a stale baseline")
+	}
+}
+
+// A generous cap must not reject an edit that easily fits within it — the cap
+// is a ceiling, not a trigger on every change. Uses a file large enough that a
+// one-line addition stays well under the default 90% cap; a tiny file would
+// trip even a legitimate small edit (which is exactly why policy.yaml itself
+// raises the cap to 200% for files under 50 lines).
+func TestEdit_DiffWithinCapIsAccepted(t *testing.T) {
+	original := "package main\n" + strings.Repeat("// filler line\n", 20)
+	repo := editSandbox(t, marked(original+"func main() {}\n"))
+	writePolicyYAML(t, 90) // the shipped default
+
+	file := filepath.Join(repo, "a.go")
+	if err := os.WriteFile(file, []byte(original), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got := runEdit(t, Task{
+		Label: "ok", Enum: "MODERATE", File: file,
+		Prompt: "add main", Validate: boolPtr(false),
+	})
+	if got.Status != "ok" {
+		t.Fatalf("result = %+v, want ok", got)
+	}
+	raw, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), "func main() {}") {
+		t.Errorf("file = %q, want the model's content", raw)
 	}
 }
 
@@ -661,6 +794,21 @@ func writeWorkspaceYAML(t *testing.T, root, goValidator string) {
 	}
 }
 
+// writePolicyYAML points $HYDRA_HOME's registry at a policy.yaml with one
+// always-matching rule, so a test can force a specific diff_size_cap_pct
+// regardless of the file it edits.
+func writePolicyYAML(t *testing.T, capPct int) {
+	t.Helper()
+	dir := filepath.Join(os.Getenv("HYDRA_HOME"), "registry")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	body := fmt.Sprintf("version: \"1.0\"\nrules:\n  - name: test_cap\n    when:\n      always: true\n    apply:\n      diff_size_cap_pct: %d\n", capPct)
+	if err := os.WriteFile(filepath.Join(dir, "policy.yaml"), []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // Replaces the two single-case tests that were in parallel_test.go: these are
 // strict supersets of them, and two partial tests of one function is how a
 // shape goes uncovered while looking covered.
@@ -782,7 +930,11 @@ func TestTSCTemplate_OnlyWhenTSCIsInstalled(t *testing.T) {
 func TestPersistResults_UnwritableLogDirIsReportedNotFatal(t *testing.T) {
 	testutil.NewSandbox(t)
 
-	// ~/.hydra is a regular file, so logs/ cannot be created.
+	// Dir() is a regular file, so logs/ cannot be created. The sandbox
+	// pre-creates it as an empty directory, so remove that first.
+	if err := os.RemoveAll(config.Dir()); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(config.Dir(), []byte("not a dir"), 0o600); err != nil {
 		t.Fatal(err)
 	}

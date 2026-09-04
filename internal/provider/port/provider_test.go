@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/ankit373/hydra/internal/capabilities"
+	"github.com/ankit373/hydra/internal/executor"
 	"github.com/ankit373/hydra/internal/provider"
 	"github.com/ankit373/hydra/internal/testutil"
 )
@@ -90,6 +91,64 @@ func TestLMStudio_DiscoversModelsOnANonDefaultAddress(t *testing.T) {
 	}
 	if heads[0].Endpoint != srv.URL {
 		t.Errorf("Endpoint = %q, want %q", heads[0].Endpoint, srv.URL)
+	}
+}
+
+// Embedding-only models report capabilities but never "completion", so they
+// failed every dispatch (#532). They are now discovered but MARKED, so
+// executor.Unroutable keeps them out of routing while surfaces can still show
+// them; only the positively-non-completion case is marked — no capabilities
+// field at all (older servers) stays routable.
+func TestOllama_MarksEmbeddingOnlyModels(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/tags" {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = w.Write([]byte(`{"models":[
+			{"name":"qwen3:0.6b","capabilities":["completion"]},
+			{"name":"nomic-embed-text:latest","capabilities":["embedding"]},
+			{"name":"llama3.2:3b"},
+			{"name":"qwen2.5-coder:7b","capabilities":["completion","tools","insert"]}
+		]}`))
+	}))
+	defer srv.Close()
+
+	heads, err := (&ollamaService{base: srv.URL}).probe(context.Background(), caps(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ids := make(map[string]bool, len(heads))
+	for _, h := range heads {
+		ids[h.ID] = true
+	}
+
+	for _, want := range []string{"ollama/qwen3:0.6b", "ollama/llama3.2:3b", "ollama/qwen2.5-coder:7b", "ollama/nomic-embed-text:latest"} {
+		if !ids[want] {
+			t.Errorf("missing expected head %q among %+v", want, ids)
+		}
+	}
+	if len(heads) != 4 {
+		t.Errorf("got %d heads, want 4 (embedding-only included but marked): %+v", len(heads), heads)
+	}
+	for _, h := range heads {
+		marked := h.Meta["embedding_only"] == "true"
+		if h.ID == "ollama/nomic-embed-text:latest" {
+			if !marked {
+				t.Error("the embedding-only model is not marked — dispatch would try it and fail (#532)")
+			}
+			if executor.Supports(h) {
+				t.Error("an embedding-only model must never be a dispatch candidate (#532)")
+			}
+			continue
+		}
+		if marked {
+			t.Errorf("%s is completion-capable but marked embedding-only", h.ID)
+		}
+		if !executor.Supports(h) {
+			t.Errorf("%s became unroutable: %s", h.ID, executor.Unroutable(h))
+		}
 	}
 }
 
@@ -197,9 +256,12 @@ func TestDiscovery_ResolvesTheSameHostTheExecutorWill(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.env, func(t *testing.T) {
 			s := testutil.NewSandbox(t)
-			if tc.env != "" {
-				s.SetKey(t, "OLLAMA_HOST", tc.env)
-			}
+			// Explicit even for "", rather than relying on the sandbox's own
+			// baseline: NewSandbox points OLLAMA_HOST at a dead address by
+			// default so an unrelated test never discovers a real local
+			// Ollama server (#539), so "no override" has to be asserted here,
+			// not borrowed from whatever the sandbox happens to leave behind.
+			s.SetKey(t, "OLLAMA_HOST", tc.env)
 			got := provider.OllamaHost()
 			if got != tc.want {
 				t.Errorf("OllamaHost() = %q with OLLAMA_HOST=%q, want %q", got, tc.env, tc.want)

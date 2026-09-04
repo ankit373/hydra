@@ -165,6 +165,42 @@ func TestTokensEstimated_Precedence(t *testing.T) {
 	}
 }
 
+// Equal-cost groups (commonly several $0 rows) must sort in a fixed order —
+// otherwise the dashboard's "by model"/"by tier" rows reorder on every ~5s
+// poll with no underlying data change, since groups is built from a map whose
+// iteration order is randomized (#506).
+func TestGroupBy_StableTiebreakOnEqualCost(t *testing.T) {
+	rows := []Row{
+		makeRow("zebra", 1, 0, 0, 0, 0, "", false),
+		makeRow("apple", 1, 0, 0, 0, 0, "", false),
+		makeRow("mango", 1, 0, 0, 0, 0, "", false),
+		makeRow("kiwi", 1, 0, 0, 5, 0, "", false), // only non-zero cost, must sort first
+	}
+	var first []string
+	for i := 0; i < 20; i++ {
+		groups := GroupBy(rows, func(r Row) string { return r.Model })
+		got := make([]string, len(groups))
+		for j, g := range groups {
+			got[j] = g.Key
+		}
+		if first == nil {
+			first = got
+		} else {
+			for j := range got {
+				if got[j] != first[j] {
+					t.Fatalf("ordering changed between calls: %v then %v", first, got)
+				}
+			}
+		}
+	}
+	want := []string{"kiwi", "apple", "mango", "zebra"}
+	for i := range want {
+		if first[i] != want[i] {
+			t.Fatalf("order = %v, want %v (cost desc, then key ascending)", first, want)
+		}
+	}
+}
+
 func TestGroupBy_Exported(t *testing.T) {
 	rows := []Row{
 		makeRow("a", 1, 0, 0, 0.5, 0, "", false),
