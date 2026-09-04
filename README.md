@@ -735,6 +735,7 @@ hydra/
 │   ├── pricing/                 # Live cost DB (OpenRouter fetch + 24h cache + YAML fallback)
 │   ├── cost/                    # cost.jsonl reader + spend summaries + source labeling
 │   ├── ope/                     # Off-policy estimation: inverse-probability weighting over sampled logs
+│   ├── evalset/                 # Oracle-verified labelled examples — kept verbatim, never pruned
 │   ├── budget/                  # Token-budget governor: 6 static pressure modes + rate-aware first-passage risk on claude_pct
 │   ├── rank/                    # Deduplication + CapScore ranking
 │   ├── editor/                  # Scoped, validated, rollback-safe file edits
