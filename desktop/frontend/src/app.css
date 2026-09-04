@@ -1453,6 +1453,47 @@ body {
   color: var(--hy-ink);
 }
 
+/* ── Accept / undo a change ────────────────────────────────────────────── */
+
+.rev {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 10px 14px;
+  border-top: 1px solid var(--hy-line);
+}
+.rev__msg { color: var(--hy-ink); font-size: 12.5px; flex: 1 1 220px; min-width: 0; }
+.rev__note { color: var(--hy-dim); font-size: 11px; opacity: .85; }
+
+.rev__go, .rev__undo, .rev__cancel {
+  flex: 0 0 auto;
+  padding: 6px 13px;
+  border-radius: var(--hy-radius-sm);
+  font-size: 12px; font-weight: 600;
+  cursor: pointer;
+}
+.rev__go {
+  background: var(--hy-aqua); border: 1px solid var(--hy-aqua); color: #04121A;
+  box-shadow: 0 0 16px color-mix(in srgb, var(--hy-aqua) 28%, transparent);
+}
+/* Undo overwrites the file, so it carries the same colour the diff already
+   uses for removed lines rather than reading as a neutral secondary action. */
+.rev__undo {
+  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--hy-expensive) 45%, transparent);
+  color: var(--hy-expensive);
+}
+.rev__cancel { background: transparent; border: 1px solid var(--hy-line-2); color: var(--hy-dim); }
+.rev__go:disabled, .rev__undo:disabled, .rev__cancel:disabled { opacity: .45; cursor: default; box-shadow: none; }
+.rev__go:focus-visible, .rev__undo:focus-visible, .rev__cancel:focus-visible {
+  outline: 2px solid var(--hy-aqua); outline-offset: 2px;
+}
+
+.rev--confirm { background: color-mix(in srgb, var(--hy-mid) 9%, transparent); }
+.rev--approved .rev__msg { color: var(--hy-cheap); }
+.rev--rejected .rev__msg { color: var(--hy-expensive); }
+.rev--err .rev__msg { color: var(--hy-expensive); }
+
+@media (prefers-reduced-motion: reduce) { .rev__go { box-shadow: none; } }
+
 /* ── Chat view ─────────────────────────────────────────────────────────── */
 /* Was a fixed-position dock. It is the default surface now (#520), so it fills
    its grid cell instead of floating over another view. */
