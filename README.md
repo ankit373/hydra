@@ -800,7 +800,7 @@ curl -fsSL https://raw.githubusercontent.com/ankit373/hydra/main/install-app.sh 
 It resolves the newest release (the asset names embed their version, so GitHub's `/latest/download/`
 shortcut cannot address them), verifies the download against the published `.sha256`, installs the
 `.app` to `/Applications` — or the binary to `~/.local/share/hydra` with a `~/.local/bin` symlink on
-Linux — and clears the macOS quarantine flag so the first launch works. `HYDRA_VERSION=v1.1.0` pins
+Linux — and clears the macOS quarantine flag so the first launch works. `HYDRA_VERSION=v1.4.0` pins
 a release; `HYDRA_APP_DIR` changes where it lands.
 
 **Or take the artifact directly**, from the
@@ -809,8 +809,10 @@ a release; `HYDRA_APP_DIR` changes where it lands.
 | platform | artifact |
 |---|---|
 | macOS (Intel + Apple Silicon) | `hydra-desktop_<version>_darwin_universal.zip` |
-| Windows | `hydra-desktop_<version>_windows_amd64.zip` |
-| Linux | `hydra-desktop_<version>_linux_amd64.tar.gz` |
+| Windows x86-64 | `hydra-desktop_<version>_windows_amd64.zip` |
+| Windows ARM64 | `hydra-desktop_<version>_windows_arm64.zip` |
+| Linux x86-64 | `hydra-desktop_<version>_linux_amd64.tar.gz` |
+| Linux ARM64 | `hydra-desktop_<version>_linux_arm64.tar.gz` |
 
 Each artifact ships a `.sha256` next to it. Until the builds are signed this is the only integrity
 check available, so it is worth the one command:
