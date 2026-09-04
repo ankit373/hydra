@@ -115,6 +115,9 @@ func (m Cockpit) statusFact() string {
 		if m.pinnedTier > 0 {
 			s += fmt.Sprintf(" · pinned T%d", m.pinnedTier)
 		}
+		if att := m.attentionFact(); att != "" {
+			s = att + " · " + s
+		}
 		return s
 	case ckViewAgents:
 		live, done := m.agentCounts()

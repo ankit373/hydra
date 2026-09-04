@@ -178,6 +178,42 @@ func (g *Graph) DependentCount(nodeID string) int {
 	return len(g.transitiveDependents([]string{nodeID}))
 }
 
+// Coupled reports whether two files are graph-coupled: a node of one
+// transitively depends on a node of the other, in either direction. Unindexed
+// files read as uncoupled — no graph evidence, no fabricated verdict (#598).
+func (g *Graph) Coupled(fileA, fileB string) bool {
+	if g == nil {
+		return false
+	}
+	sa, sb := g.seedsForFile(fileA), g.seedsForFile(fileB)
+	if len(sa) == 0 || len(sb) == 0 {
+		return false
+	}
+	// Shared seeds mean the same node (package-granularity graphs): coupled.
+	inA := make(map[string]bool, len(sa))
+	for _, s := range sa {
+		inA[s] = true
+	}
+	for _, s := range sb {
+		if inA[s] {
+			return true
+		}
+	}
+	depA := g.transitiveDependents(sa)
+	for _, s := range sb {
+		if depA[s] {
+			return true
+		}
+	}
+	depB := g.transitiveDependents(sb)
+	for _, s := range sa {
+		if depB[s] {
+			return true
+		}
+	}
+	return false
+}
+
 // DependentCountForFile returns the number of nodes that transitively depend
 // on any node declared in file, using the same seed set as BlastRadiusForFile.
 // Callers must use this instead of looping NodesInFile+DependentCount per

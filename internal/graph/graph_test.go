@@ -466,6 +466,36 @@ func TestPercolation_SubcriticalIsNeutral(t *testing.T) {
 	}
 }
 
+// Coupled is the queue-on-overlap gate's indirect-collision check (#598):
+// dependency in either direction couples, shared nodes couple, and an
+// unindexed file reads as uncoupled rather than inventing a verdict.
+func TestCoupled_EitherDirectionSharedNodeAndUnknown(t *testing.T) {
+	g := fromDoc(Doc{
+		Nodes: []Node{
+			{ID: "a", File: "a.go"}, {ID: "b", File: "b.go"},
+			{ID: "c", File: "c.go"}, {ID: "p", File: "pkg"},
+		},
+		Edges: []Edge{{From: "b", To: "a"}}, // b depends on a
+	})
+	if !g.Coupled("a.go", "b.go") || !g.Coupled("b.go", "a.go") {
+		t.Error("dependency coupling must hold in both directions")
+	}
+	if g.Coupled("a.go", "c.go") {
+		t.Error("unrelated files read as coupled")
+	}
+	// Package-granularity graphs seed two files onto the same node: coupled.
+	if !g.Coupled("pkg/x.go", "pkg/y.go") {
+		t.Error("files sharing a node read as uncoupled")
+	}
+	if g.Coupled("a.go", "never-indexed.go") {
+		t.Error("an unindexed file fabricated a coupling verdict")
+	}
+	var nilG *Graph
+	if nilG.Coupled("a.go", "b.go") {
+		t.Error("a nil graph fabricated a coupling verdict")
+	}
+}
+
 func TestLoad_RoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "graph.json")
 	data := `{"nodes":[{"id":"a","file":"a.go"},{"id":"b","file":"b.go"}],"edges":[{"from":"b","to":"a"}]}`

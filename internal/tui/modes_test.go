@@ -63,8 +63,8 @@ func TestModes_PickerOpensSelectsAndCloses(t *testing.T) {
 	if m.modePick {
 		t.Fatal("m typed mid-sentence opened the picker")
 	}
-	if m.input != "make a helper for m" {
-		t.Errorf("input = %q — typing a word starting with m must pass through the picker intact", m.input)
+	if m.th().input != "make a helper for m" {
+		t.Errorf("input = %q — typing a word starting with m must pass through the picker intact", m.th().input)
 	}
 	if m.mode != "unattended" {
 		t.Errorf("typing through the picker changed the mode to %q", m.mode)
@@ -89,15 +89,15 @@ func TestKeys_CoalescedRunesReplayIndividually(t *testing.T) {
 	// Typing coalesced into the input still types everything.
 	chat := testCockpit()
 	next, _ = chat.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("fix the bug")})
-	if got := next.(Cockpit).input; got != "fix the bug" {
+	if got := next.(Cockpit).th().input; got != "fix the bug" {
 		t.Errorf("coalesced typing lost characters: %q", got)
 	}
 	// A bracketed paste is literal input, never a run of shortcuts — even when
 	// it starts with a command letter on an empty input.
 	next, _ = testCockpit().Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("make it so"), Paste: true})
 	pasted := next.(Cockpit)
-	if pasted.modePick || pasted.input != "make it so" {
-		t.Errorf("paste triggered commands: pick=%v input=%q", pasted.modePick, pasted.input)
+	if pasted.modePick || pasted.th().input != "make it so" {
+		t.Errorf("paste triggered commands: pick=%v input=%q", pasted.modePick, pasted.th().input)
 	}
 }
 
@@ -110,13 +110,13 @@ func TestModes_PickerForgivesTyping(t *testing.T) {
 		t.Fatal("picker did not open")
 	}
 	m = press(m, tea.KeyBackspace)
-	if m.modePick || m.input != "" {
-		t.Fatalf("backspace did not un-type the m: pick=%v input=%q", m.modePick, m.input)
+	if m.modePick || m.th().input != "" {
+		t.Fatalf("backspace did not un-type the m: pick=%v input=%q", m.modePick, m.th().input)
 	}
 	m = typed(m, "m")
 	m = press(m, tea.KeySpace)
-	if m.modePick || m.input != "m " {
-		t.Fatalf("space did not type through: pick=%v input=%q", m.modePick, m.input)
+	if m.modePick || m.th().input != "m " {
+		t.Fatalf("space did not type through: pick=%v input=%q", m.modePick, m.th().input)
 	}
 }
 

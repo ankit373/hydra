@@ -23,6 +23,7 @@ import (
 	"github.com/ankit373/hydra/internal/probe"
 	"github.com/ankit373/hydra/internal/provider"
 	"github.com/ankit373/hydra/internal/rank"
+	"github.com/ankit373/hydra/internal/workspace"
 )
 
 // Cockpit views. The name table is the single source of truth — deriving the
@@ -106,29 +107,27 @@ type Cockpit struct {
 	glossary bool
 	flash    string // transient status-bar note, replaced by the next action
 
-	// chat (view 0) — executes for real (#597): modes, gates, and the override.
-	input      string
-	log        []string
+	// chat (view 0) — executes for real (#597) across parallel threads (#598).
+	// Per-task state (input, log, pipeline, code panel) lives on each thread;
+	// the mode, override, and overlays are session-level.
+	threads    []*ckThread
+	cur        int // index into threads — the thread owning the input
+	nextID     int
+	queueSeq   int    // ordering for queued tasks — see overlapBlocker
+	prevCur    int    // previously active thread id — the split's default pin
+	split      bool   // ctrl+\ split: pinned thread beside the active one
+	splitID    int    // the pinned (watch-only) side's thread id
+	repoRoot   string // CWD repo root; "" = no repo, edit isolation degrades
 	mode       string // chat mode name: ask/edit/plan/auto + advanced (modes.go)
 	pinnedTier int    // session default tier for chat, set from the models view
-	chatScroll int    // 0 = follow the live tail; L+1 = scrollback anchored at line L
 	piiLocal   bool   // config's pii policy forces local-only routing
 	override   ckOverride
-	exec       *ckExecState // the running task; nil when idle
-	planWait   *ckWait      // plan awaiting approval
-	confirm    *ckWait      // careful-mode write/fix confirm
-	lastDone   *ckTask      // last finished task, for d/x/o and the trace jump
-	modePick   bool         // `m` mode-picker overlay
+	modePick   bool // `m` mode-picker overlay
 	modeSel    int
 	ovOpen     bool // ctrl+o override modal
 	ovSel      int
 	ovStage    byte // 0 list · 'T' tier digit · 'C' confidence pick
 	ovConfSel  int
-	codeLang   string
-	codeLines  []string
-	codeShown  int
-	codeGen    int  // generation guard so a new run cancels stale tick loops
-	codeDiff   bool // the panel currently shows the last edit's diff
 
 	claudePct  int
 	pctKnown   bool // false when state.json has no claude_pct to read
@@ -205,19 +204,31 @@ func NewCockpit() Cockpit {
 	if cfg, err := config.Load(); err == nil {
 		m.piiLocal = dispatch.PIILocalOnly(cfg)
 	}
+	if cwd, err := os.Getwd(); err == nil {
+		m.repoRoot = workspace.GitRoot(cwd)
+	}
 
+	m = m.withThreads()
+	t := m.th()
 	switch len(heads) {
 	case 0:
-		m.log = []string{
+		t.log = []string{
 			ckDimS.Render("🐉 Hydra initialised · no models found by the scan."),
 			ckDimS.Render("Run `hyctl probe` to see what was scanned, or `hyctl init` to configure."),
 		}
 	default:
-		m.log = []string{
+		t.log = []string{
 			ckDimS.Render(fmt.Sprintf("🐉 Hydra initialised · %d model%s scanned · routing engine ready.",
 				len(heads), plural(len(heads)))),
-			ckDimS.Render("Type a task and press enter. shift+tab mode · ctrl+o route · ? shortcuts · :q quits."),
+			ckDimS.Render("Type a task and press enter. shift+tab mode · ctrl+t thread · ? shortcuts · :q quits."),
 		}
+	}
+	if stale := ckStaleWorktrees(); len(stale) > 0 {
+		t.log = append(t.log,
+			ckMidS.Render(fmt.Sprintf("⚠ %d stale worktree%s from a previous session under %s:",
+				len(stale), plural(len(stale)), ckWorktreeBase())),
+			ckDimS.Render("  "+truncate(strings.Join(stale, " · "), 90)),
+			ckDimS.Render("  recover with `git diff` there, or remove with `git worktree remove <dir>` — nothing is auto-deleted."))
 	}
 	return m
 }
@@ -246,19 +257,23 @@ func ckClaudePct() (pct int, hist []int, ok bool) {
 func (m Cockpit) Init() tea.Cmd { return nil }
 
 func (m Cockpit) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	m = m.withThreads()
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.w, m.h, m.ready = msg.Width, msg.Height, true
+		m = m.dropSplitIfNarrow()
 	case ckCodeTickMsg:
 		// Reveal one more code line; ignore ticks from a superseded run.
-		if msg.gen == m.codeGen && m.codeShown < len(m.codeLines) {
-			m.codeShown++
-			if m.codeShown < len(m.codeLines) {
-				return m, ckCodeTick(m.codeGen)
+		if t := m.threadByID(msg.thread); t != nil && msg.gen == t.codeGen && t.codeShown < len(t.codeLines) {
+			t.codeShown++
+			if t.codeShown < len(t.codeLines) {
+				return m, ckCodeTick(msg.thread, t.codeGen)
 			}
 		}
 	case ckRescanMsg:
 		return m.applyRescan(msg), nil
+	case ckWtReadyMsg:
+		return m.worktreeReady(msg)
 	case ckExecDoneMsg:
 		return m.finishTask(msg)
 	case ckGateMsg:
@@ -266,8 +281,10 @@ func (m Cockpit) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case ckSpinTickMsg:
 		// Keep repainting elapsed/stage while this exact task runs; a stale
 		// tick from a superseded task schedules nothing.
-		if msg.exec == m.exec && m.exec != nil {
-			return m, ckSpinTick(m.exec)
+		for _, t := range m.threads {
+			if t.exec == msg.exec && t.exec != nil {
+				return m, ckSpinTick(t.exec)
+			}
 		}
 	case tea.MouseMsg:
 		switch tea.MouseEvent(msg).Button {
@@ -300,6 +317,7 @@ func (m Cockpit) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // ── frame ─────────────────────────────────────────────────────────────────────
 
 func (m Cockpit) View() string {
+	m = m.withThreads()
 	if !m.ready {
 		return "\n  starting hydra cockpit…\n"
 	}
@@ -337,12 +355,12 @@ func (m Cockpit) View() string {
 
 // ── code-stream ticker ─────────────────────────────────────────────────────────
 
-type ckCodeTickMsg struct{ gen int }
+type ckCodeTickMsg struct{ thread, gen int }
 
-// ckCodeTick schedules the next code line to reveal. gen tags the current run so
-// a fresh preview cancels the previous stream instead of double-speeding it.
-func ckCodeTick(gen int) tea.Cmd {
-	return tea.Tick(time.Second/20, func(time.Time) tea.Msg { return ckCodeTickMsg{gen} })
+// ckCodeTick schedules the next code line to reveal on one thread's panel. gen
+// tags the current run so a fresh stream cancels the previous one.
+func ckCodeTick(thread, gen int) tea.Cmd {
+	return tea.Tick(time.Second/20, func(time.Time) tea.Msg { return ckCodeTickMsg{thread, gen} })
 }
 
 // ── snapshot (static render for docs / non-tty preview) ─────────────────────────
@@ -379,12 +397,14 @@ func ckSnapshotModel() Cockpit {
 		headName:    "qwen2.5-coder", tier: 7,
 		costUSD: 0.0041, elapsed: 3200 * time.Millisecond,
 	}
-	m.log = append(m.log, ckYouS.Render("❯ "+demo.prompt))
-	m.log = append(m.log, m.routeLines(demo, ckHead{name: demo.headName, tier: demo.tier}, "STANDARD", ckOverride{}, false)...)
-	m.log = append(m.log, ckResultLines(demo)...)
+	t := m.th()
+	t.name = ckThreadName(demo.prompt)
+	t.log = append(t.log, ckYouS.Render("❯ "+demo.prompt))
+	t.log = append(t.log, m.routeLines(demo, ckHead{name: demo.headName, tier: demo.tier}, "STANDARD", ckOverride{}, false)...)
+	t.log = append(t.log, ckResultLines(demo)...)
 
-	m.codeLang = "go"
-	m.codeLines = []string{
+	t.codeLang = "go"
+	t.codeLines = []string{
 		"// paginated users endpoint",
 		"func (s *Server) ListUsers(w http.ResponseWriter, r *http.Request) {",
 		"    page := parsePage(r.URL.Query())",
@@ -396,7 +416,7 @@ func ckSnapshotModel() Cockpit {
 		"    json.NewEncoder(w).Encode(users)",
 		"}",
 	}
-	m.codeShown = len(m.codeLines)
+	t.codeShown = len(t.codeLines)
 	return m
 }
 

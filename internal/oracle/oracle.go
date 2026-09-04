@@ -88,6 +88,9 @@ type CommandOracle struct {
 	Template string
 	// Source is the calibration key for this oracle, e.g. "verifier:go-test".
 	Source string
+	// Dir is the command's working directory; empty inherits the process CWD.
+	// Set when the verified change lives elsewhere, e.g. a task's git worktree.
+	Dir string
 	// writeTemp allows tests to stub file materialization; nil uses the real one.
 	writeTemp func(content string) (path string, cleanup func(), err error)
 }
@@ -116,6 +119,7 @@ func (o *CommandOracle) Verify(ctx context.Context, candidate string, _ trust.Ta
 		return Verdict{}, err
 	}
 	cmd := exec.CommandContext(ctx, parts[0], parts[1:]...)
+	cmd.Dir = o.Dir
 	// Both streams share one bounded Accumulator, matching CombinedOutput's
 	// interleaving — but capped, unlike the bytes.Buffer it replaces.
 	out := util.NewAccumulator(outputCap)
