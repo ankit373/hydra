@@ -453,13 +453,13 @@ hyctl tui <span class="fl">--snapshot</span> <span class="fl">--view</span> 0|1|
     <!-- ══ APP ══ -->
     <section class="doc" id="app">
       <h2>The desktop app <span class="badge ship">download</span> <span class="tagline">point-and-click cockpit</span></h2>
-      <p class="sum">A native window over the same engine — Wails v2 + React, in <span class="fx">desktop/</span>. Four views over a persistent chat dock. <b>Every release ships a build for macOS, Windows and Linux.</b> <b>Click the sidebar</b> — the views swap live.</p>
+      <p class="sum">A native window over the same engine — Wails v2 + React, in <span class="fx">desktop/</span>. It opens on the chat, with the other views behind an icon rail. <b>Every release ships a build for macOS, Windows and Linux.</b> <b>Click the sidebar</b> — the views swap live.</p>
       <div class="appwin">
-        <div class="tb"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i><span class="ttl" id="appTitle">Hydra.app — Dashboard</span></div>
+        <div class="tb"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i><span class="ttl" id="appTitle">Hydra.app — Usage</span></div>
         <div class="appbody">
           <div class="appnav" id="appNav" role="tablist">
-            <div class="item on" data-av="av-dash" data-title="Dashboard" role="tab" tabindex="0"><span class="dot"></span>Dashboard</div>
-            <div class="item" data-av="av-cockpit" data-title="Fleet" role="tab" tabindex="0"><span class="dot"></span>Fleet</div>
+            <div class="item on" data-av="av-dash" data-title="Usage" role="tab" tabindex="0"><span class="dot"></span>Usage</div>
+            <div class="item" data-av="av-cockpit" data-title="Activity" role="tab" tabindex="0"><span class="dot"></span>Activity</div>
             <div class="item" data-av="av-tree" data-title="Session" role="tab" tabindex="0"><span class="dot"></span>Session</div>
             <div class="item" data-av="av-code" data-title="Code" role="tab" tabindex="0"><span class="dot"></span>Code</div>
           </div>
@@ -527,7 +527,7 @@ $f = "hydra-desktop_&lt;version&gt;_windows_amd64.zip"
 go install github.com/wailsapp/wails/v2/cmd/wails@latest
 cd desktop &amp;&amp; wails build                <span class="c"># → desktop/build/bin/Hydra.app</span></pre></div>
       <div class="callout"><b>The builds are not code-signed yet</b>, so the published <span class="fx">.sha256</span> is the only integrity check available — worth the one command above. The first launch also takes one extra step. <b>macOS:</b> Gatekeeper reports an unidentified developer — right-click the app → <b>Open</b> → <b>Open</b>, once. If it still refuses after unzipping from a terminal, run <span class="fx">xattr -dr com.apple.quarantine Hydra.app</span>. <b>Windows:</b> SmartScreen may warn — <b>More info</b> → <b>Run anyway</b>. <b>Linux:</b> needs <span class="fx">libgtk-3-0</span> and <span class="fx">libwebkit2gtk-4.1-0</span>, then <span class="fx">chmod +x Hydra</span>.</div>
-      <div class="callout">The app reads the same logs the CLI writes, so its numbers are the CLI's numbers — Dashboard totals match <span class="fx">hyctl cost</span> and <span class="fx">hyctl stats</span> for the same data. There is no separate daemon and no telemetry: it reads <span class="fx">~/.hydra/logs/</span> on your machine.</div>
+      <div class="callout">The app reads the same logs the CLI writes, so its numbers are the CLI's numbers — Usage totals match <span class="fx">hyctl cost</span> and <span class="fx">hyctl stats</span> for the same data. There is no separate daemon and no telemetry: it reads <span class="fx">~/.hydra/logs/</span> on your machine.</div>
     </section>
 
     <!-- ══ INTEGRATIONS ══ -->
