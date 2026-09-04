@@ -1,0 +1,79 @@
+name: Close shipped issues
+
+# GitHub only fires a closing keyword on merges into the default branch, and every
+# feature PR here targets develop — so `Closes #n` links but never closes (#217).
+# This closes them at release time instead.
+#
+# Called by release-please.yml and release.yml; workflow_dispatch backfills a tag.
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to sweep (e.g. v1.3.1)"
+        required: true
+        type: string
+      dry_run:
+        description: "List what would be closed without closing anything"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: close-shipped-issues
+  cancel-in-progress: false
+
+jobs:
+  sweep:
+    name: Close issues shipped in ${{ inputs.tag }}
+    runs-on: ubuntu-latest
+    steps:
+      # Deliberately NOT checked out at the tag: the resolver script must be the
+      # current one, or backfilling a tag from before it existed finds no script.
+      # fetch-depth 0 brings the tag along anyway.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # main carries one squash commit per release, so its own log names only the
+      # release PRs. Their refs/pull/N/head is the develop lineage that shipped —
+      # the individual feature PRs live there, and nowhere on main.
+      - name: Collect the PRs in this release
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          git rev-parse -q --verify "refs/tags/${TAG}^{commit}" >/dev/null \
+            || { echo "::error::Tag ${TAG} does not exist."; exit 1; }
+          subjects_to_prs() { sed -nE 's/.*\(#([0-9]+)\)[[:space:]]*$/\1/p'; }
+
+          git log --format='%s' "refs/tags/${TAG}" | subjects_to_prs | sort -un > release_prs.txt
+          echo "Release PRs on main: $(tr '\n' ' ' < release_prs.txt)"
+
+          cp release_prs.txt shipped_prs.txt
+          while read -r pr; do
+            if git fetch --quiet --no-tags origin "refs/pull/${pr}/head:refs/shipped/${pr}" 2>/dev/null; then
+              git log --format='%s' "refs/shipped/${pr}" | subjects_to_prs >> shipped_prs.txt
+            else
+              echo "::warning::refs/pull/${pr}/head is unavailable — skipping its lineage."
+            fi
+          done < release_prs.txt
+
+          sort -un -o shipped_prs.txt shipped_prs.txt
+          echo "Shipped PRs: $(wc -l < shipped_prs.txt)"
+
+      - name: Close their issues
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ inputs.tag }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: python3 .github/workflows/close_shipped_issues.py
