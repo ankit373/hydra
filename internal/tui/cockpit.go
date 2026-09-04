@@ -164,7 +164,7 @@ type Cockpit struct {
 	// entry; nil until then or when the build failed.
 	audit        *ckAudit
 	auditSel     int
-	scoreOff     int // scorecard table scroll
+	auditOff     int // audit view scroll (the whole view is one document)
 	auditIgnored map[string]bool
 
 	glossOff int // glossary overlay scroll, for short terminals

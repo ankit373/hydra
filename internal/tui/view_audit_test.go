@@ -318,9 +318,11 @@ func TestAuditFamilyFact(t *testing.T) {
 	}
 }
 
-// The scorecard table scrolls (pgup/pgdn) instead of truncating silently.
-func TestAuditScorecard_Scrolls(t *testing.T) {
+// The audit view scrolls as one document: content past the fold is reachable,
+// never hidden behind "enlarge the terminal" (#630).
+func TestAuditView_ScrollsToEverything(t *testing.T) {
 	m := testCockpit()
+	m.w, m.h = 80, 24
 	a := testAudit(nil, nil)
 	for i := 0; i < 20; i++ {
 		a.scorecard = append(a.scorecard, trust.Stat{
@@ -328,13 +330,53 @@ func TestAuditScorecard_Scrolls(t *testing.T) {
 		})
 	}
 	m.audit = a
-	out := stripANSI(m.auditScorecard(6))
+	m.view = ckViewAudit
+
+	out := stripANSI(m.viewAudit(80, 21))
 	if !strings.Contains(out, "↓") {
-		t.Errorf("an overflowing scorecard shows no scroll cue:\n%s", out)
+		t.Errorf("an overflowing audit view shows no scroll cue:\n%s", out)
 	}
-	m.scoreOff = 8
-	out = stripANSI(m.auditScorecard(6))
+	if strings.Contains(out, "enlarge the terminal") {
+		t.Errorf("audit told the user to resize instead of scrolling:\n%s", out)
+	}
+
+	m = m.scrollBy(ckScrollAll)
+	out = stripANSI(m.viewAudit(80, 21))
+	if !strings.Contains(out, "NEEDS A HUMAN") {
+		t.Errorf("scrolling to the end never reaches the last tile:\n%s", out)
+	}
 	if !strings.Contains(out, "↑") {
-		t.Errorf("a scrolled scorecard shows no top cue:\n%s", out)
+		t.Errorf("a scrolled audit view shows no top cue:\n%s", out)
+	}
+}
+
+// j/k are the keys the status bar advertises: with no queue to pick through
+// they scroll the view rather than doing nothing at all (#630).
+func TestAuditView_JKScrollsWhenTheQueueIsEmpty(t *testing.T) {
+	m := testCockpit()
+	m.w, m.h = 80, 24
+	m.view = ckViewAudit
+	a := testAudit(nil, nil)
+	a.items = nil
+	for i := 0; i < 20; i++ {
+		a.scorecard = append(a.scorecard, trust.Stat{
+			Source: "src-" + string(rune('a'+i)), Domain: "go", N: float64(i),
+		})
+	}
+	m.audit = a
+
+	moved := m.move(4)
+	if moved.auditOff != 4 {
+		t.Errorf("j did not scroll an audit view with no queue: off=%d", moved.auditOff)
+	}
+	if stripANSI(moved.viewAudit(80, 21)) == stripANSI(m.viewAudit(80, 21)) {
+		t.Error("j left the audit view unchanged")
+	}
+
+	// With a queue, j/k keep picking items — that is what enter/i act on.
+	withQueue := m
+	withQueue.audit.items = []ckAuditItem{{text: "one"}, {text: "two"}}
+	if got := withQueue.move(1); got.auditSel != 1 || got.auditOff != 0 {
+		t.Errorf("j with a queue moved the wrong thing: sel=%d off=%d", got.auditSel, got.auditOff)
 	}
 }

@@ -168,8 +168,10 @@ func TestEveryView_LayoutInvariantsAtEverySize(t *testing.T) {
 				m.w, m.h, m.ready = sz.w, sz.h, true
 				out := m.View()
 				lines := strings.Split(out, "\n")
-				if len(lines) > sz.h {
-					t.Errorf("view %d at %dx%d renders %d lines, want <= %d",
+				// Exactly h: a short body must be padded, or the status bar
+				// renders in the middle of the terminal (#630).
+				if len(lines) != sz.h {
+					t.Errorf("view %d at %dx%d renders %d lines, want %d",
 						view, sz.w, sz.h, len(lines), sz.h)
 				}
 				for i, l := range lines {
@@ -187,19 +189,28 @@ func TestEveryView_LayoutInvariantsAtEverySize(t *testing.T) {
 		}
 	}
 
-	// The glossary overlay obeys the same frame.
-	for _, sz := range sizes {
-		g := base
-		g.glossary = true
-		g.w, g.h, g.ready = sz.w, sz.h, true
-		out := g.View()
-		lines := strings.Split(out, "\n")
-		if len(lines) > sz.h {
-			t.Errorf("glossary at %dx%d renders %d lines", sz.w, sz.h, len(lines))
-		}
-		for i, l := range lines {
-			if got := lipgloss.Width(l); got > sz.w {
-				t.Errorf("glossary at %dx%d: line %d is %d cells", sz.w, sz.h, i, got)
+	// Every overlay obeys the same frame — a short one (the override modal) is
+	// where the status bar used to float mid-screen.
+	overlays := map[string]func(Cockpit) Cockpit{
+		"glossary": func(c Cockpit) Cockpit { c.glossary = true; return c },
+		"override": func(c Cockpit) Cockpit { c.ovOpen = true; return c },
+		"modes":    func(c Cockpit) Cockpit { c.modePick = true; return c },
+	}
+	for name, open := range overlays {
+		for _, sz := range sizes {
+			g := open(base)
+			g.w, g.h, g.ready = sz.w, sz.h, true
+			lines := strings.Split(g.View(), "\n")
+			if len(lines) != sz.h {
+				t.Errorf("%s at %dx%d renders %d lines, want %d", name, sz.w, sz.h, len(lines), sz.h)
+			}
+			for i, l := range lines {
+				if got := lipgloss.Width(l); got > sz.w {
+					t.Errorf("%s at %dx%d: line %d is %d cells", name, sz.w, sz.h, i, got)
+				}
+			}
+			if last := stripANSI(lines[len(lines)-1]); !strings.Contains(last, "shortcuts") {
+				t.Errorf("%s at %dx%d: the status bar is not the final line: %q", name, sz.w, sz.h, last)
 			}
 		}
 	}

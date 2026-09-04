@@ -28,7 +28,20 @@ func TestHeader_TabsSessionAndContext(t *testing.T) {
 		t.Error("the header wrapped")
 	}
 
-	// Narrow: only the active view survives, the frame still holds.
+	// Narrow: the strip goes, but the position and the key that moves between
+	// views stay — otherwise nothing at 80 columns says they exist (#630).
+	m.w = 80
+	got = stripANSI(m.header())
+	if strings.Contains(got, "activity") {
+		t.Errorf("80-col header still renders the whole strip: %q", got)
+	}
+	for _, want := range []string{"models", "3/6", "tab"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("80-col header missing %q: %q", want, got)
+		}
+	}
+
+	// Narrower still: only the active view survives, the frame still holds.
 	m.w = 46
 	got = stripANSI(m.header())
 	if !strings.Contains(got, "models") {

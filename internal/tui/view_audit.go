@@ -202,25 +202,42 @@ func (m Cockpit) viewAudit(w, h int) string {
 		return lipgloss.NewStyle().Width(w).Height(h).Render(
 			ckFaintS.Render(" audit not built yet — press v to verify now"))
 	}
-	// Row caps adapt to the height so the four tiles share a 24-row terminal
-	// instead of pushing the status bar off-frame.
-	scoreRows := h - 14
-	if scoreRows > 8 {
-		scoreRows = 8
+	out, _ := ckScrollLines(strings.Split(m.auditBody(w), "\n"), m.auditOff, h)
+	return strings.Join(out, "\n")
+}
+
+// auditBody composes the four tiles into one document. The view scrolls it as
+// a whole, so the scorecard shows every source instead of paging inside a body
+// that also pages, and nothing is unreachable at 80×24 (#630).
+func (m Cockpit) auditBody(w int) string {
+	score := ckBoxS.Render(m.auditScorecard())
+	log := ckBoxS.Render(m.auditLogTile())
+	rails := ckBoxS.Render(m.auditGuardrails())
+
+	// Widest arrangement that fits without wrapping a tile: two columns, else
+	// the two small tiles paired under the scorecard, else one column. A tile
+	// squeezed narrower than its content wraps sentences mid-line, which reads
+	// worse than the empty columns it saves (#630).
+	var top string
+	switch stack := lipgloss.JoinVertical(lipgloss.Left, log, rails); {
+	case lipgloss.Width(score)+1+lipgloss.Width(stack) <= w:
+		top = lipgloss.JoinHorizontal(lipgloss.Top, score, " ", stack)
+	case lipgloss.Width(log)+1+lipgloss.Width(rails) <= w:
+		top = lipgloss.JoinVertical(lipgloss.Left, score,
+			lipgloss.JoinHorizontal(lipgloss.Top, log, " ", rails))
+	default:
+		top = lipgloss.JoinVertical(lipgloss.Left, score, stack)
 	}
-	if scoreRows < 3 {
-		scoreRows = 3
+	return lipgloss.JoinVertical(lipgloss.Left, top, ckBoxS.Render(m.auditQueue()))
+}
+
+// auditLines is the body's height at the current width — what a scroll offset
+// is clamped against.
+func (m Cockpit) auditLines() int {
+	if m.audit == nil {
+		return 0
 	}
-	left := ckBoxS.Render(m.auditScorecard(scoreRows))
-	right := lipgloss.JoinVertical(lipgloss.Left,
-		ckBoxS.Render(m.auditLogTile()), ckBoxS.Render(m.auditGuardrails()))
-	top := ckSplit(w, left, right, false)
-	if lipgloss.Width(left)+1+lipgloss.Width(right) > w {
-		top = lipgloss.JoinVertical(lipgloss.Left, left, right)
-	}
-	queue := ckBoxS.Render(m.auditQueue())
-	return lipgloss.NewStyle().Width(w).Height(h).
-		Render(lipgloss.JoinVertical(lipgloss.Left, top, queue))
+	return len(strings.Split(m.auditBody(max(1, m.w)), "\n"))
 }
 
 // ckScorecardCols are the table's fixed column budgets: source, domain, and
@@ -233,7 +250,7 @@ const (
 // auditScorecard is the per-source calibration table. No history is persisted
 // for these figures yet, so no trend arrows are drawn — a fabricated trend is
 // worse than none.
-func (m Cockpit) auditScorecard(rowCap int) string {
+func (m Cockpit) auditScorecard() string {
 	a := m.audit
 	var b strings.Builder
 	b.WriteString(ckLabelS.Render("MODEL SCORECARD") + ckDimS.Render(" · calibration") + "\n\n")
@@ -252,8 +269,7 @@ func (m Cockpit) auditScorecard(rowCap int) string {
 				ckRCell(fmt.Sprintf("%.2f", s.Sp), 5) + " " +
 				ckCyanS.Render(ckRCell(fmt.Sprintf("%.2f", s.D), 7))
 		}
-		window, _ := ckScrollLines(lines, m.scoreOff, rowCap)
-		b.WriteString(strings.Join(window, "\n") + "\n")
+		b.WriteString(strings.Join(lines, "\n") + "\n")
 	}
 	b.WriteString("\n")
 	if st := m.metrics.trustStats; st != nil {

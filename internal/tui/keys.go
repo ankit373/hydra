@@ -124,7 +124,13 @@ func (m Cockpit) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	if m.glossary {
 		// The overlay keeps scrolling (above) and closes on esc or ?; every
-		// other key is swallowed. j/k scroll it too.
+		// other key is swallowed. j/k and the arrows scroll it too.
+		switch msg.Type {
+		case tea.KeyDown:
+			return m.scrollBy(1), nil
+		case tea.KeyUp:
+			return m.scrollBy(-1), nil
+		}
 		if msg.Type == tea.KeyRunes && len(msg.Runes) == 1 {
 			switch msg.Runes[0] {
 			case '?':
@@ -168,9 +174,7 @@ func (m Cockpit) scrollBy(delta int) Cockpit {
 	case m.view == ckViewUsage:
 		m.usageOff = ckClampOff(m.usageOff+delta, len(m.usageRows()))
 	case m.view == ckViewAudit:
-		if m.audit != nil {
-			m.scoreOff = ckClampOff(m.scoreOff+delta, len(m.audit.scorecard))
-		}
+		m.auditOff = ckClampOff(m.auditOff+delta, m.auditLines())
 	default:
 		m = m.move(delta)
 	}
@@ -370,7 +374,13 @@ func (m Cockpit) move(delta int) Cockpit {
 			m.actSel = clamp(m.actSel+delta, len(m.activityRuns()))
 		}
 	case ckViewAudit:
-		m.auditSel = clamp(m.auditSel+delta, len(m.auditItems()))
+		// With a queue to pick through, j/k pick; with none — the usual case —
+		// they scroll the view, which is what the "↓ N more" cue invites (#630).
+		if len(m.auditItems()) > 1 {
+			m.auditSel = clamp(m.auditSel+delta, len(m.auditItems()))
+		} else {
+			m.auditOff = ckClampOff(m.auditOff+delta, m.auditLines())
+		}
 	}
 	return m
 }
