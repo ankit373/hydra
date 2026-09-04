@@ -12,7 +12,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-var ckGlossaryGroups = []string{"EVERYWHERE", "CHAT", "LISTS"}
+var ckGlossaryGroups = []string{"EVERYWHERE", "THREADS", "CHAT", "LISTS"}
 
 // ckGlossaryLines builds the glossary rows from ckKeymap — the single source
 // of every binding, so the overlay cannot document a key that does not exist.

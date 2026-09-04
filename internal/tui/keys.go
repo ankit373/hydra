@@ -30,6 +30,15 @@ var ckKeymap = []ckBinding{
 	{"home/end", "top / bottom · chat: end returns to live", "EVERYWHERE", nil},
 	{"ctrl+c", "quit", "EVERYWHERE", nil},
 
+	{"ctrl+t", "new thread", "THREADS", nil},
+	{"ctrl+t", "thread", "", []int{ckViewChat}},
+	{"alt+1–9", "jump to that thread (foregrounds a backgrounded one)", "THREADS", nil},
+	{"ctrl+←/→", "cycle threads · in a split: move focus between the sides", "THREADS", nil},
+	{"ctrl+\\", "split: pin a second thread beside this one (≥100 cols) · again closes", "THREADS", nil},
+	{"ctrl+b", "background the thread — it keeps running in agents, pings chat when done", "THREADS", nil},
+	{"ctrl+g", "jump to the next thread needing you (confirms, plan gates, failures)", "THREADS", nil},
+	{"a · x", "after an isolated edit: apply the worktree to your tree · x x discards it", "THREADS", nil},
+
 	{"enter", "send · approve a plan · empty input: open the last trace", "CHAT", nil},
 	{"enter", "send", "", []int{ckViewChat}},
 	{"shift+tab", "cycle the basic modes: ask · edit · plan · auto", "CHAT", nil},
@@ -80,7 +89,8 @@ func ckBarBindings(v int) []ckBinding {
 }
 
 // key routes one keypress. Chat keeps every binding it always had — new shell
-// keys apply only where they collide with nothing (#465's discipline).
+// keys apply only where they collide with nothing (#465's discipline); all
+// thread keys are modifier-based so typing is never broken.
 func (m Cockpit) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyCtrlC:
@@ -102,6 +112,15 @@ func (m Cockpit) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.scrollBy(-ckScrollAll), nil
 	case tea.KeyEnd:
 		return m.scrollBy(ckScrollAll), nil
+	case tea.KeyCtrlT:
+		return m.addThread(), nil
+	case tea.KeyCtrlG:
+		return m.nextAttention(), nil
+	}
+	// alt+1–9 jumps to that thread from anywhere.
+	if msg.Alt && msg.Type == tea.KeyRunes && len(msg.Runes) == 1 &&
+		msg.Runes[0] >= '1' && msg.Runes[0] <= '9' {
+		return m.focusThread(int(msg.Runes[0] - '0')), nil
 	}
 	if m.glossary {
 		// The overlay keeps scrolling (above) and closes on esc or ?; every
@@ -171,8 +190,8 @@ func ckClampOff(off, n int) int {
 }
 
 // jump switches to view v, closing transient overlays (glossary, picker,
-// override) and running the on-entry hook. A pending plan/confirm survives —
-// a question must not be lost by looking at activity.
+// override) and running the on-entry hook. A pending plan/confirm survives on
+// its thread — a question must not be lost by looking at activity.
 func (m Cockpit) jump(v int) Cockpit {
 	if !ckValidView(v) {
 		return m
@@ -190,8 +209,10 @@ func (m Cockpit) jump(v int) Cockpit {
 }
 
 // escape closes the topmost thing first: overlay, then modal stage, then a
-// pending question, then typed input, then the running task itself.
+// pending question, then typed input, then the running task itself — always on
+// the ACTIVE thread; other threads keep running untouched.
 func (m Cockpit) escape() (Cockpit, tea.Cmd) {
+	t := m.th()
 	switch {
 	case m.glossary:
 		m.glossary = false
@@ -204,22 +225,26 @@ func (m Cockpit) escape() (Cockpit, tea.Cmd) {
 		} else {
 			m.ovOpen = false
 		}
-	case m.view == ckViewChat && m.confirm != nil:
-		w := *m.confirm
+	case m.view == ckViewChat && t.confirm != nil:
+		w := *t.confirm
 		note := "stopped before writing — nothing changed"
 		if w.phase == ckPhaseFix {
 			note = "fix declined — the file keeps its last write"
 		}
-		return m.stopWait(w, note)
-	case m.view == ckViewChat && m.planWait != nil:
-		return m.stopWait(*m.planWait, "plan discarded — nothing ran")
-	case m.view == ckViewChat && m.input != "":
-		m.input = ""
-	case m.view == ckViewChat && m.exec != nil:
+		return m.stopWait(t, w, note)
+	case m.view == ckViewChat && t.planWait != nil:
+		return m.stopWait(t, *t.planWait, "plan discarded — nothing ran")
+	case m.view == ckViewChat && t.input != "":
+		t.input = ""
+	case m.view == ckViewChat && t.queued != nil:
+		t.queued = nil
+		t.log = append(t.log, ckDimS.Render("  queued task discarded"))
+		return m.releaseThreads(nil) // anything chained behind it re-checks
+	case m.view == ckViewChat && t.exec != nil:
 		// Context cancellation through dispatch: the worker returns with a
 		// cancelled result; exec clears when that message lands.
-		m.exec.cancel()
-		m.exec.setStage("cancelling…")
+		t.exec.cancel()
+		t.exec.setStage("cancelling…")
 	case m.view == ckViewActivity && m.actDrill:
 		m.actDrill = false
 		m.traceOff = 0
@@ -357,6 +382,11 @@ func (m Cockpit) enterRow() (tea.Model, tea.Cmd) {
 	case ckViewAgents:
 		rows := m.agentRows()
 		if m.agentSel >= 0 && m.agentSel < len(rows) {
+			// A backgrounded thread's run re-foregrounds the thread (#598);
+			// every other run opens its trace.
+			if t := m.threadForRun(rows[m.agentSel].id); t != nil && t.bg {
+				return m.focusThread(t.id), nil
+			}
 			m = m.focusRun(rows[m.agentSel].id)
 		}
 	case ckViewModels:
