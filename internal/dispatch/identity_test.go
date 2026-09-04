@@ -69,7 +69,7 @@ func TestLogDispatch_IdentityIsNeverEmpty(t *testing.T) {
 	t.Setenv("HYDRA_TASK_ID", "")
 
 	d := newTestDispatcher()
-	if err := d.logDispatch(logResult(), "a prompt", Options{}); err != nil {
+	if err := d.logDispatch(logResult(), "a prompt", Options{}, 1); err != nil {
 		t.Fatal(err)
 	}
 
@@ -95,7 +95,7 @@ func TestLogDispatch_BothLogsShareOneIdentity(t *testing.T) {
 	t.Setenv("USERPROFILE", home)
 
 	d := newTestDispatcher()
-	if err := d.logDispatch(logResult(), "p", Options{RunID: "run-9", TaskID: "task-9"}); err != nil {
+	if err := d.logDispatch(logResult(), "p", Options{RunID: "run-9", TaskID: "task-9"}, 1); err != nil {
 		t.Fatal(err)
 	}
 
@@ -121,7 +121,7 @@ func TestLogDispatch_ExplicitBeatsEnv(t *testing.T) {
 	t.Setenv("HYDRA_RUN_ID", "env-run")
 
 	d := newTestDispatcher()
-	if err := d.logDispatch(logResult(), "p", Options{RunID: "explicit-run"}); err != nil {
+	if err := d.logDispatch(logResult(), "p", Options{RunID: "explicit-run"}, 1); err != nil {
 		t.Fatal(err)
 	}
 	rows := readLog(t, home, "cost.jsonl")
@@ -142,7 +142,7 @@ func TestLogDispatch_EnvUsedWhenNoExplicit(t *testing.T) {
 	t.Setenv("HYDRA_RUN_ID", "orchestrator-run")
 
 	d := newTestDispatcher()
-	if err := d.logDispatch(logResult(), "p", Options{}); err != nil {
+	if err := d.logDispatch(logResult(), "p", Options{}, 1); err != nil {
 		t.Fatal(err)
 	}
 	rows := readLog(t, home, "cost.jsonl")

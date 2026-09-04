@@ -4,6 +4,7 @@ package formats
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -17,6 +18,7 @@ import (
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/cost"
 	"github.com/ankit373/hydra/internal/graph"
+	"github.com/ankit373/hydra/internal/ope"
 	"github.com/ankit373/hydra/internal/runlog"
 	"github.com/ankit373/hydra/internal/testutil"
 	"github.com/ankit373/hydra/internal/trust"
@@ -119,7 +121,40 @@ func TestCostRow_Schema(t *testing.T) {
 		"swarm_mode":      reflect.String,
 		"swarm_winner":    reflect.Bool,
 		"config":          reflect.String,
+		"act_prob":        reflect.Float64,
+		"keep_prob":       reflect.Float64,
 	})
+}
+
+// A row written before #605 has no propensity, so both fields decode to 0.
+// Zero is not a probability: weighting by 1/0 is a divide by zero, so every
+// consumer must treat it as "unrecorded" and skip the row rather than assume
+// certainty. internal/ope.SelfNormalized is the reference for that handling.
+func TestCostRow_PrePropensityRowsDecodeToZero(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("testdata", "cost.v1.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var n int
+	for _, line := range strings.Split(strings.TrimRight(string(raw), "\n"), "\n") {
+		if line == "" {
+			continue
+		}
+		var r cost.Row
+		if err := json.Unmarshal([]byte(line), &r); err != nil {
+			t.Fatalf("pre-#605 row stopped parsing: %v", err)
+		}
+		if r.ActProb != 0 || r.KeepProb != 0 {
+			t.Errorf("expected 0 propensity on a pre-#605 row, got %v/%v", r.ActProb, r.KeepProb)
+		}
+		n++
+	}
+	if n == 0 {
+		t.Fatal("fixture is empty")
+	}
+	if _, _, err := ope.SelfNormalized([]ope.Sample{{Value: 1, Prob: 0}}); !errors.Is(err, ope.ErrNoUsableSamples) {
+		t.Errorf("a zero propensity must be unusable, got err=%v", err)
+	}
 }
 
 func TestTrustRunLog_Schema(t *testing.T) {

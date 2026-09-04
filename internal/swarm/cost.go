@@ -118,6 +118,10 @@ func logAttempts(attempts []Attempt, mode SwarmMode, opts Options, promptPreview
 			"task_id":         taskID,
 			"run_id":          runID,
 			"prompt_preview":  promptPreview,
+			// 1 for both: a swarm runs the heads it fans out to rather than
+			// drawing one, so every attempt logged here was certain to appear.
+			"act_prob":  1.0,
+			"keep_prob": 1.0,
 		}
 		if breadcrumb != "" { // match the omitempty on cost.Row.Config
 			entry["config"] = breadcrumb
