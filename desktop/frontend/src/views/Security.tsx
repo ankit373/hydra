@@ -254,8 +254,11 @@ function RegisterTable({ register }: { register: RiskRegister }) {
 
 function Hero({ data }: { data: SecurityReport }) {
   const band = coverageBand(data.coverage.percentCovered)
-  const pii = findCheckStatus(data.checks, 'PII/sensitive-data detections')
-  const adherence = findCheckStatus(data.checks, 'Policy adherence')
+  // These must be the names internal/security actually emits. Both were wrong,
+  // so findCheckStatus returned undefined and neither card had ever rendered;
+  // checkNamesAreReal in internal/security now fails if they drift again.
+  const pii = findCheckStatus(data.checks, 'Sensitive data exposure')
+  const adherence = findCheckStatus(data.checks, 'Policy posture')
 
   // The verdict already quotes the incident that produced it, so re-rendering
   // that incident underneath prints the same sentence twice in the most
