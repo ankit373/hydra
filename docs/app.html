@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Hydra Desktop — watch every agent, every dollar, live</title>
-  <meta name="description" content="The Hydra desktop app: ask for work in a chat, and every reply says which model answered, at which tier, and what it cost. Plus Dashboard, Fleet, Session and Security views. macOS, Linux and Windows.">
+  <meta name="description" content="The Hydra desktop app: ask for work in a chat, and every reply says which model answered, at which tier, and what it cost. Plus Models, Activity, Usage and Audit views. macOS, Linux and Windows.">
   <meta name="keywords" content="AI agent dashboard, LLM cost dashboard, desktop app, multi-model orchestration UI, agent monitoring, Hydra desktop">
 
   <meta property="og:type" content="website">
@@ -312,10 +312,10 @@ footer a{color:var(--dim);}
         <div class="side">
           <div class="lbl">Views</div>
           <button type="button" class="nav-item"><i></i>Chat</button>
-          <button type="button" class="nav-item"><i></i>Dashboard</button>
-          <button type="button" class="nav-item"><i></i>Fleet</button>
-          <button type="button" class="nav-item"><i></i>Session</button>
-          <button type="button" class="nav-item"><i></i>Security</button>
+          <button type="button" class="nav-item"><i></i>Models</button>
+          <button type="button" class="nav-item"><i></i>Activity</button>
+          <button type="button" class="nav-item"><i></i>Usage</button>
+          <button type="button" class="nav-item"><i></i>Audit</button>
         </div>
 
         <div class="pane">
@@ -354,9 +354,50 @@ footer a{color:var(--dim);}
             </div>
           </div>
 
-          <!-- 2 · Dashboard -->
+          <!-- 2 · Models -->
           <div class="view">
-            <div class="vhead">Dashboard</div>
+            <div class="vhead">Models</div>
+            <div class="vsub">what this machine can route to, and whether anything can drive it now</div>
+            <table class="mini">
+              <tr><th>Model</th><th>Tier</th><th>Reachable now</th><th style="text-align:right">Measured</th></tr>
+              <tr><td>claude-opus</td><td>1</td><td style="color:var(--cheap)">yes</td><td class="n">1.42 · 62 outcomes</td></tr>
+              <tr><td>claude-sonnet</td><td>3</td><td style="color:var(--cheap)">yes</td><td class="n">0.91 · 38 outcomes</td></tr>
+              <tr><td>gemini-flash</td><td>6</td><td style="color:var(--dim)">no API key for google</td><td class="n" style="color:var(--faint)">not measured</td></tr>
+              <tr><td>qwen2.5-coder:7b</td><td>10</td><td style="color:var(--dim)">start ollama serve</td><td class="n">0.34 · 77 outcomes</td></tr>
+            </table>
+            <div style="margin-top:12px;font-size:11px;color:var(--dim)">
+              The dot means reachable, not enabled in a config file. A score never
+              appears without the number of outcomes behind it.
+            </div>
+          </div>
+
+          <!-- 3 · Activity -->
+          <div class="view">
+            <div class="vhead">Activity</div>
+            <div class="vsub">grouped by who has to act, not by time alone</div>
+            <div style="font-family:var(--mono);font-size:10px;color:#E0A93A;margin:2px 0 6px">
+              WAITING ON YOU · 1</div>
+            <div class="row"><span style="width:6px"></span><span style="flex:1">rotate the signing key</span>
+              <span class="pill">answer</span><span style="color:var(--dim)">tier 1</span></div>
+            <div style="font-family:var(--mono);font-size:10px;color:var(--aqua);margin:10px 0 6px">
+              RUNNING NOW · 1</div>
+            <div class="row"><span class="blink"></span><span style="flex:1">add pagination to /users</span>
+              <span class="pill live">live</span><span style="color:var(--dim)">tier 6</span></div>
+            <div style="font-family:var(--mono);font-size:10px;color:#FF5A6E;margin:10px 0 6px">
+              SOMETHING FAILED · 1</div>
+            <div class="row"><span style="width:6px"></span><span style="flex:1">refactor the ledger globs</span>
+              <span class="pill fail">failed</span><span style="color:var(--dim)">tier 3</span></div>
+            <div style="font-family:var(--mono);font-size:10px;color:var(--faint);margin:10px 0 6px">
+              DONE · 2</div>
+            <div class="row"><span style="width:6px"></span><span style="flex:1">write DTO tests</span>
+              <span class="pill ok">done</span><span style="color:var(--cheap)">local</span></div>
+            <div class="row"><span style="width:6px"></span><span style="flex:1">add a User DTO</span>
+              <span class="pill ok">done</span><span style="color:var(--dim)">tier 8</span></div>
+          </div>
+
+          <!-- 4 · Usage -->
+          <div class="view">
+            <div class="vhead">Usage</div>
             <div class="vsub">spend, grouped by model · tier · day</div>
             <div class="cards">
               <div class="card"><div class="k">Calls today</div><div class="v">128</div></div>
@@ -371,52 +412,9 @@ footer a{color:var(--dim);}
             </table>
           </div>
 
-          <!-- 3 · Fleet -->
+          <!-- 5 · Audit -->
           <div class="view">
-            <div class="vhead">Fleet</div>
-            <div class="vsub">every run on this machine, newest first</div>
-            <div class="row"><span class="blink"></span><span style="flex:1">add pagination to /users</span>
-              <span class="pill live">live</span><span style="color:var(--dim)">tier 6</span></div>
-            <div class="row"><span style="width:6px"></span><span style="flex:1">rotate the signing key</span>
-              <span class="pill ok">done</span><span style="color:var(--dim)">tier 1</span></div>
-            <div class="row"><span style="width:6px"></span><span style="flex:1">write DTO tests</span>
-              <span class="pill ok">done</span><span style="color:var(--cheap)">local</span></div>
-            <div class="row"><span style="width:6px"></span><span style="flex:1">refactor the ledger globs</span>
-              <span class="pill fail">failed</span><span style="color:var(--dim)">tier 3</span></div>
-            <div style="margin-top:14px">
-              <div style="font-family:var(--mono);font-size:10px;color:var(--faint);margin-bottom:5px">
-                CONTEXT USED · 52%</div>
-              <div class="bar"><i style="width:52%;background:var(--cheap)"></i></div>
-            </div>
-          </div>
-
-          <!-- 4 · Session -->
-          <div class="view">
-            <div class="vhead">Session <span class="pill live" style="margin-left:6px">live</span></div>
-            <div class="vsub">run-4b1 · timeline, the diffs, and a graph when it fans out</div>
-            <div class="tabs">
-              <span class="tab on">Timeline</span><span class="tab">Code</span><span class="tab">Graph</span>
-            </div>
-            <div class="row"><span style="color:var(--faint);width:52px">00:00.0</span>
-              <span style="flex:1">head selected — <span style="color:var(--aqua)">gemini-flash</span> (tier 6)</span></div>
-            <div class="row"><span style="color:var(--faint);width:52px">00:01.2</span>
-              <span style="flex:1">candidate 1 failed — falling through</span><span class="pill fail">retry</span></div>
-            <div class="row"><span style="color:var(--faint);width:52px">00:02.9</span>
-              <span style="flex:1">dispatch finished — 1.4k tok</span><span class="pill ok">ok</span></div>
-            <div class="row"><span style="color:var(--faint);width:52px">00:03.1</span>
-              <span style="flex:1">handed off to hydra-tier-6</span></div>
-            <div class="row"><span style="color:var(--faint);width:52px">00:03.4</span>
-              <span style="flex:1">edited <span class="mono">internal/api/users.go</span></span>
-              <span style="color:var(--cheap)">+18</span><span style="color:var(--exp)">−4</span></div>
-            <div class="diff" style="margin-top:9px">
-              <div class="del">-   users := store.All()</div>
-              <div class="add">+   users, total := store.Page(page, size)</div>
-            </div>
-          </div>
-
-          <!-- 5 · Security -->
-          <div class="view">
-            <div class="vhead">Security</div>
+            <div class="vhead">Audit</div>
             <div class="vsub">what agents touched, and whether policy allowed it</div>
             <div class="cards">
               <div class="card"><div class="k">Allowed</div><div class="v">1,204</div></div>
@@ -461,34 +459,50 @@ footer a{color:var(--dim);}
         spends the budget another will need.</p>
     </div>
     <div class="feat">
-      <div class="tag">Dashboard</div>
+      <div class="tag">Models</div>
+      <h3>What you can actually route to</h3>
+      <p>Every head this machine found, grouped by the token pool it spends, each
+        marked with whether anything can drive it <i>right now</i> and, when it
+        cannot, why — no API key, or a local server that is not running. Beside
+        it, the accuracy each model has actually earned, never shown without the
+        number of outcomes behind it.</p>
+    </div>
+    <div class="feat">
+      <div class="tag">Usage</div>
       <h3>Where the money went</h3>
       <p>Spend grouped by model, by tier and by day, with call counts beside each —
         alongside the governor's context pressure and your trust record, so cost
         and confidence sit on one screen.</p>
     </div>
     <div class="feat">
-      <div class="tag">Fleet</div>
-      <h3>What's running right now</h3>
-      <p>Runs in flight and the agents inside them, newest first, with the live
-        ones marked. Answers "is something still going, and should I be worried
-        about it".</p>
+      <div class="tag">Activity</div>
+      <h3>What needs you</h3>
+      <p>Every request, grouped by who has to act rather than by time alone:
+        waiting on you, running now, something failed, done. A flat newest-first
+        list gave a parked request, a live one and a month-old success the same
+        weight, so nothing read as needing attention.</p>
     </div>
     <div class="feat">
       <div class="tag">Session</div>
       <h3>Why it did that</h3>
+      <p class="app-note">Opened from a request in Activity, not from the rail.</p>
       <p>One run's timeline in order: which head was selected, which candidates
         failed and why it fell through, how long each step took, where it handed
         off — and a layered graph when the run fanned out, so a swarm reads as a
         shape rather than a list. Its <b>Code</b> tab carries the diffs for the same
-        run, and clicking a file in the graph opens it there.</p>
+        run — marking what changed <i>within</i> a modified line, not just which
+        lines moved — and lets you accept or undo the change on disk. Clicking a
+        file in the graph opens it there.</p>
     </div>
     <div class="feat">
-      <div class="tag">Security</div>
+      <div class="tag">Audit</div>
       <h3>What it was allowed to touch</h3>
-      <p>Every tool call an agent made, whether policy allowed it, and what got
-        blocked or flagged — over an append-only, hash-chained ledger, mapped
-        against the OWASP LLM Top 10.</p>
+      <p>Every tool call an agent made, whether the guardrails allowed it, and
+        what got blocked or flagged — over an append-only, hash-chained audit
+        log, mapped against the OWASP LLM Top 10. Its <b>MCP servers</b> tab
+        carries a trust verdict for each server installed on this machine, and
+        says plainly when nothing has been compared against the official
+        registry yet.</p>
     </div>
   </div>
 
