@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { GetDashboard, GetModels } from '../bindings'
-import type { CalibrationRow, Model, ModelRegistry, Pool } from '../types'
+import { GetDashboard, GetHeads, GetModels } from '../bindings'
+import type { CalibrationRow, Head, Model, ModelRegistry, Pool } from '../types'
 import { sourceLabel, usdExact } from '../format'
 
 /** Retrospective, like the other reference views. Mirrors App's DASHBOARD_MS. */
@@ -18,12 +18,17 @@ export function Models() {
   const [reg, setReg] = useState<ModelRegistry | null>(null)
   const [cal, setCal] = useState<CalibrationRow[]>([])
   const [selected, setSelected] = useState<string>('')
+  // What is actually reachable, as opposed to what models.yaml declares.
+  const [heads, setHeads] = useState<Head[] | null>(null)
 
   useEffect(() => {
     const load = () => {
       void GetModels().then(setReg).catch(() => {})
       void GetDashboard()
         .then((d) => setCal(d.calibration ?? []))
+        .catch(() => {})
+      void GetHeads()
+        .then((p) => setHeads(p.heads))
         .catch(() => {})
     }
     load()
@@ -57,12 +62,13 @@ export function Models() {
             <PoolGroup
               key={p.name}
               pool={p}
+              heads={heads}
               selected={current?.id ?? ''}
               onSelect={setSelected}
             />
           ))}
         </div>
-        {current && <Scorecard model={current} cal={cal} />}
+        {current && <Scorecard model={current} cal={cal} heads={heads} />}
       </div>
     </>
   )
@@ -79,10 +85,12 @@ function Head() {
 
 function PoolGroup({
   pool,
+  heads,
   selected,
   onSelect,
 }: {
   pool: Pool
+  heads: Head[] | null
   selected: string
   onSelect: (id: string) => void
 }) {
@@ -108,7 +116,10 @@ function PoolGroup({
           aria-current={m.id === selected ? 'true' : undefined}
           onClick={() => onSelect(m.id)}
         >
-          <span className={`mrow__dot ${m.enabled ? 'mrow__dot--on' : 'mrow__dot--off'}`} />
+          <span
+            className={`mrow__dot mrow__dot--${reachClass(m, heads)}`}
+            title={reachText(m, heads)}
+          />
           <span className="mrow__name">{m.name || m.id}</span>
           <span className="mrow__tier">T{m.tier}</span>
           <span className="mrow__band">{complexity(m)}</span>
@@ -124,7 +135,7 @@ function PoolGroup({
  * below it is what was measured — and it never shows a score without the
  * sample count that decides whether the score means anything (#593).
  */
-function Scorecard({ model, cal }: { model: Model; cal: CalibrationRow[] }) {
+function Scorecard({ model, cal, heads }: { model: Model; cal: CalibrationRow[]; heads: Head[] | null }) {
   const rows = cal.filter((r) => matches(r.source, model))
 
   return (
@@ -132,10 +143,11 @@ function Scorecard({ model, cal }: { model: Model; cal: CalibrationRow[] }) {
       <div className="scard__name">{model.name || model.id}</div>
       <div className="scard__sub">
         {model.provider} &middot; tier <span className="scard__hl">T{model.tier}</span>
-        {!model.enabled && <span className="scard__off"> &middot; switched off</span>}
       </div>
 
       <div className="scard__rule" />
+      {/* First, because it decides whether anything below is actionable. */}
+      <Line k="Reachable now" v={reachText(model, heads)} />
       <Line k="Handles complexity" v={complexity(model)} />
       <Line k="Speed" v={model.speed ? model.speed.replace(/_/g, ' ') : '—'} />
       <Line k="Accuracy claimed" v={model.accuracy ? model.accuracy.replace(/_/g, ' ') : '—'} />
@@ -222,4 +234,35 @@ export function poolLabel(name: string): string {
     .replace(/^local_/, '')
     .replace(/_/g, ' ')
     .replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
+/**
+ * Whether this model is reachable right now, as opposed to declared.
+ *
+ * The dot used to come from models.yaml's `enabled` flag, which CLAUDE.md
+ * calls an install-specific default — so a head with no API key, or an Ollama
+ * model whose server is down, rendered as on. The view's own subtitle says
+ * "what this machine can route to", which the registry alone cannot support.
+ *
+ * The agy provider emits one head per *enabled* tier keyed by the same id, so
+ * a registry model with no matching head is either switched off or was not
+ * discovered — and those need different fixes, so they are not merged.
+ */
+function headFor(m: Model, heads: Head[] | null): Head | undefined {
+  return heads?.find((h) => h.id === m.id)
+}
+
+export function reachClass(m: Model, heads: Head[] | null): 'on' | 'off' | 'unknown' {
+  if (!heads) return 'unknown' // not probed yet; a dot either way would be a guess
+  const h = headFor(m, heads)
+  if (!h) return 'off'
+  return h.routable ? 'on' : 'off'
+}
+
+export function reachText(m: Model, heads: Head[] | null): string {
+  if (!heads) return 'checking…'
+  const h = headFor(m, heads)
+  if (h) return h.routable ? 'yes' : h.reason || 'no'
+  if (!m.enabled) return 'no — switched off in models.yaml'
+  return 'no — the last scan did not find it'
 }

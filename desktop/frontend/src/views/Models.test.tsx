@@ -1,12 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
-import { Models } from './Models'
-import { GetDashboard, GetModels } from '../bindings'
+import { Models, reachClass, reachText } from './Models'
+import { GetDashboard, GetHeads, GetModels } from '../bindings'
 import type { CalibrationRow, Model, ModelRegistry } from '../types'
 
-vi.mock('../bindings', () => ({ GetModels: vi.fn(), GetDashboard: vi.fn() }))
+vi.mock('../bindings', () => ({ GetModels: vi.fn(), GetDashboard: vi.fn(), GetHeads: vi.fn() }))
 const mockModels = vi.mocked(GetModels)
 const mockDash = vi.mocked(GetDashboard)
+const mockHeads = vi.mocked(GetHeads)
 
 function model(over: Partial<Model> = {}): Model {
   return {
@@ -49,6 +50,7 @@ function cal(over: Partial<CalibrationRow> = {}): CalibrationRow {
 beforeEach(() => {
   mockModels.mockResolvedValue(registry())
   mockDash.mockResolvedValue({ calibration: [] } as never)
+  mockHeads.mockResolvedValue({ heads: [], routable: 0 })
 })
 afterEach(() => {
   cleanup()
@@ -134,7 +136,9 @@ describe('the model list', () => {
     )
     render(<Models />)
     expect(await screen.findAllByText('Claude Sonnet (Thinking)')).toHaveLength(2)
-    expect(screen.getByText(/switched off/)).toBeInTheDocument()
+    // Stated once, on the reachability line, which also gives the reason. It
+    // used to be said twice — a separate badge plus that line.
+    expect(screen.getByText(/switched off in models\.yaml/)).toBeInTheDocument()
   })
 })
 
@@ -190,5 +194,47 @@ describe('when the registry cannot be read', () => {
     expect(container).toBeEmptyDOMElement()
     release(registry())
     await waitFor(() => expect(container).not.toBeEmptyDOMElement())
+  })
+})
+
+// The dot used to come from models.yaml's `enabled` flag, an install-specific
+// default that says nothing about reachability — so a head with no API key, or
+// an Ollama model whose server is down, rendered as live. The view's own
+// subtitle claims "what this machine can route to".
+describe('reachable now, as opposed to declared', () => {
+  const model_ = model()
+
+  it('is unknown before the probe answers, rather than guessing a dot', () => {
+    expect(reachClass(model_, null)).toBe('unknown')
+    expect(reachText(model_, null)).toBe('checking…')
+  })
+
+  it('is live only when a probed head for it is routable', () => {
+    const heads = [{ id: model_.id, name: 'x', provider: 'agy', source: 'registry', tier: 3, capScore: 90, routable: true, localOnly: false }]
+    expect(reachClass(model_, heads)).toBe('on')
+    expect(reachText(model_, heads)).toBe('yes')
+  })
+
+  it('gives the reason instead of a bare no', () => {
+    const heads = [{
+      id: model_.id, name: 'x', provider: 'ollama', source: 'cli', tier: 10,
+      capScore: 40, routable: false, localOnly: true,
+      reason: 'binary only — start its local server (e.g. `ollama serve`) to route to its models',
+    }]
+    expect(reachClass(model_, heads)).toBe('off')
+    expect(reachText(model_, heads)).toMatch(/ollama serve/)
+  })
+
+  // A model with no matching head is switched off or was not discovered, and
+  // those need different fixes, so they must not collapse into one message.
+  it('tells a switched-off model apart from one the scan missed', () => {
+    expect(reachText(model({ enabled: false }), [])).toMatch(/switched off in models\.yaml/)
+    expect(reachText(model({ enabled: true }), [])).toMatch(/last scan did not find it/)
+  })
+
+  it('reports reachability in the scorecard', async () => {
+    mockHeads.mockResolvedValue({ heads: [], routable: 0 })
+    render(<Models />)
+    expect(await screen.findByText('Reachable now')).toBeInTheDocument()
   })
 })
