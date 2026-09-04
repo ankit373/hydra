@@ -338,12 +338,19 @@ func (m Cockpit) sidebar(h int) string {
 	}
 
 	lines := append([]string{}, head...)
-	for _, hd := range shown {
+	raw := make([]string, len(shown))
+	for i, hd := range shown {
+		raw[i] = hd.name
+	}
+	// Family-aware, so a column of Gemini variants does not read as three
+	// identical "Gemini 3.5 Fla…" rows (#630).
+	labels := ckDistinctTruncate(raw, 15)
+	for i, hd := range shown {
 		st := ckCheapS.Render("✓")
 		if !hd.up {
 			st = ckExpS.Render("✗")
 		}
-		name := lipgloss.NewStyle().Foreground(ckTierColor(hd.tier)).Render(truncate(hd.name, 15))
+		name := lipgloss.NewStyle().Foreground(ckTierColor(hd.tier)).Render(labels[i])
 		lines = append(lines, " "+st+" "+name)
 	}
 	if more > 0 {

@@ -69,6 +69,7 @@ var ckKeymap = []ckBinding{
 	{"l", "audit log", "", []int{ckViewActivity}},
 	{"m · t · d", "usage: by model · by tier · by day", "LISTS", nil},
 	{"m/t/d", "group", "", []int{ckViewUsage}},
+	{"j/k", "scroll", "", []int{ckViewUsage}},
 	{"v · i", "audit: verify chain · ignore item", "LISTS", nil},
 	{"v", "verify", "", []int{ckViewAudit}},
 	{"i", "ignore", "", []int{ckViewAudit}},
@@ -124,7 +125,13 @@ func (m Cockpit) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	if m.glossary {
 		// The overlay keeps scrolling (above) and closes on esc or ?; every
-		// other key is swallowed. j/k scroll it too.
+		// other key is swallowed. j/k and the arrows scroll it too.
+		switch msg.Type {
+		case tea.KeyDown:
+			return m.scrollBy(1), nil
+		case tea.KeyUp:
+			return m.scrollBy(-1), nil
+		}
 		if msg.Type == tea.KeyRunes && len(msg.Runes) == 1 {
 			switch msg.Runes[0] {
 			case '?':
@@ -166,11 +173,9 @@ func (m Cockpit) scrollBy(delta int) Cockpit {
 	case m.view == ckViewChat:
 		m = m.chatScrollBy(delta)
 	case m.view == ckViewUsage:
-		m.usageOff = ckClampOff(m.usageOff+delta, len(m.usageRows()))
+		m.usageOff = ckClampOff(m.usageOff+delta, m.usageLines())
 	case m.view == ckViewAudit:
-		if m.audit != nil {
-			m.scoreOff = ckClampOff(m.scoreOff+delta, len(m.audit.scorecard))
-		}
+		m.auditOff = ckClampOff(m.auditOff+delta, m.auditLines())
 	default:
 		m = m.move(delta)
 	}
@@ -369,8 +374,17 @@ func (m Cockpit) move(delta int) Cockpit {
 		} else {
 			m.actSel = clamp(m.actSel+delta, len(m.activityRuns()))
 		}
+	case ckViewUsage:
+		// Nothing to select on a dashboard, so j/k scroll it (#630).
+		m.usageOff = ckClampOff(m.usageOff+delta, m.usageLines())
 	case ckViewAudit:
-		m.auditSel = clamp(m.auditSel+delta, len(m.auditItems()))
+		// With a queue to pick through, j/k pick; with none — the usual case —
+		// they scroll the view, which is what the "↓ N more" cue invites (#630).
+		if len(m.auditItems()) > 1 {
+			m.auditSel = clamp(m.auditSel+delta, len(m.auditItems()))
+		} else {
+			m.auditOff = ckClampOff(m.auditOff+delta, m.auditLines())
+		}
 	}
 	return m
 }

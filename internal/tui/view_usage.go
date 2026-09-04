@@ -17,6 +17,14 @@ import (
 )
 
 func (m Cockpit) viewUsage(w, h int) string {
+	out, _ := ckScrollLines(strings.Split(m.usageBody(w, h), "\n"), m.usageOff, h)
+	return strings.Join(out, "\n")
+}
+
+// usageBody composes the tiles, the breakdown and the context-budget panel.
+// The view scrolls it as one document, so the breakdown lists every model
+// instead of paging inside a body that also pages (#630).
+func (m Cockpit) usageBody(w, h int) string {
 	tiles := lipgloss.JoinHorizontal(lipgloss.Top,
 		ckBoxS.Render(m.usageToday()), " ",
 		ckBoxS.Render(m.usageMonth()), " ",
@@ -27,22 +35,21 @@ func (m Cockpit) viewUsage(w, h int) string {
 		tiles = m.usageTilesCompact(w)
 	}
 
-	// The row cap adapts to what is left below the tiles, so the view fits a
-	// 24-row terminal instead of pushing the status bar off-frame.
-	rowCap := h - lipgloss.Height(tiles) - 2 - 8
-	if rowCap < 3 {
-		rowCap = 3
-	}
-	breakdown := ckBoxS.Render(m.usageBreakdown(rowCap))
+	breakdown := ckBoxS.Render(m.usageBreakdown())
 	budgetBox := ckBoxS.Render(m.usageContextBudget())
 	bottom := lipgloss.JoinHorizontal(lipgloss.Top, breakdown, " ", budgetBox)
 	if lipgloss.Width(bottom) > w {
-		// Stack rather than drop a panel; the frame clamp discloses any
-		// remaining overflow.
+		// Stack rather than drop a panel — and the stack scrolls, so a short
+		// terminal hides nothing behind "enlarge the terminal" (#630).
 		bottom = lipgloss.JoinVertical(lipgloss.Left, breakdown, budgetBox)
 	}
-	return lipgloss.NewStyle().Width(w).Height(h).
-		Render(lipgloss.JoinVertical(lipgloss.Left, tiles, bottom))
+	return lipgloss.JoinVertical(lipgloss.Left, tiles, bottom)
+}
+
+// usageLines is the body's height at the current width — what a scroll offset
+// is clamped against.
+func (m Cockpit) usageLines() int {
+	return len(strings.Split(m.usageBody(max(1, m.w), max(1, m.h)), "\n"))
 }
 
 // usageTilesCompact is the tiles' narrow form: one line per tile, identical
@@ -138,7 +145,7 @@ func (m Cockpit) usageRows() []cost.GroupRow {
 
 // usageBreakdown is the BY MODEL / BY TIER / BY DAY bar list (m/t/d), shown
 // through a rowCap-line scroll window (pgup/pgdn · wheel).
-func (m Cockpit) usageBreakdown(rowCap int) string {
+func (m Cockpit) usageBreakdown() string {
 	rows := m.usageRows()
 	title := map[byte]string{'t': "BY TIER · today", 'd': "BY DAY · last 14 days"}[m.usageGroup]
 	if title == "" {
@@ -198,8 +205,7 @@ func (m Cockpit) usageBreakdown(rowCap int) string {
 			ckDimS.Render(ckRCell(costStr, 12)) + " " +
 			ckFaintS.Render(ckRCell(fmt.Sprintf("%d call%s", r.Calls, plural(r.Calls)), 9))
 	}
-	window, _ := ckScrollLines(lines, m.usageOff, rowCap)
-	b.WriteString(strings.Join(window, "\n"))
+	b.WriteString(strings.Join(lines, "\n"))
 	return b.String()
 }
 

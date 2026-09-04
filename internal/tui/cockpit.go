@@ -158,13 +158,13 @@ type Cockpit struct {
 
 	// usage (view 4)
 	usageGroup byte // 'm' model · 't' tier · 'd' day
-	usageOff   int  // breakdown table scroll
+	usageOff   int  // usage view scroll (the whole view is one document)
 
 	// audit (view 5) — built lazily on entry (#524) and refreshed on each
 	// entry; nil until then or when the build failed.
 	audit        *ckAudit
 	auditSel     int
-	scoreOff     int // scorecard table scroll
+	auditOff     int // audit view scroll (the whole view is one document)
 	auditIgnored map[string]bool
 
 	glossOff int // glossary overlay scroll, for short terminals

@@ -32,6 +32,13 @@ func (m Cockpit) header() string {
 	full := strings.Join(tabs, "")
 	gap := m.w - lipgloss.Width(left) - lipgloss.Width(full) - lipgloss.Width(right)
 	if gap < 1 {
+		// Narrow: the chip alone would say nothing about the other views, so
+		// keep the position and the key that moves between them (#630).
+		full = ckChipS.Render(ckViewName(m.view)) +
+			ckFaintS.Render(fmt.Sprintf(" %d/%d tab", m.view+1, ckViewCount()))
+		gap = m.w - lipgloss.Width(left) - lipgloss.Width(full) - lipgloss.Width(right)
+	}
+	if gap < 1 {
 		full = ckChipS.Render(ckViewName(m.view))
 		gap = m.w - lipgloss.Width(left) - lipgloss.Width(full) - lipgloss.Width(right)
 	}

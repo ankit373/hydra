@@ -110,10 +110,13 @@ func TestCkFrame_ClampsAndDiscloses(t *testing.T) {
 		}
 	}
 
-	// Content that already fits passes through unchanged.
-	ok := "a\nb"
-	if got := ckFrame(ok, 20, 5); got != ok {
-		t.Errorf("ckFrame altered fitting content: %q", got)
+	// Content that already fits keeps its lines, padded to exactly h so the
+	// status bar below it always lands on the last row (#630).
+	padded := ckFrame("a\nb", 20, 5)
+	if lines := strings.Split(padded, "\n"); len(lines) != 5 {
+		t.Errorf("ckFrame padded to %d lines, want 5: %q", len(lines), padded)
+	} else if lines[0] != "a" || lines[1] != "b" {
+		t.Errorf("ckFrame altered fitting content: %q", padded)
 	}
 	// Degenerate budgets must not panic.
 	if got := ckFrame("x", 0, 0); got == "" {

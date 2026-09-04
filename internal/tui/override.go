@@ -65,7 +65,7 @@ type ckOvRow struct {
 
 var ckOvRows = []ckOvRow{
 	{"auto (recommended)", "the router decides — classification picks the tier", 0, 0},
-	{"force tier…", "pin the next task to a tier (1 strongest … 10 cheapest local)", 'T', 'T'},
+	{"force tier…", "pin the next task to a tier — 1 strongest, 10 cheapest", 'T', 'T'},
 	{"local only", "nothing leaves this machine", 'L', 0},
 	{"best of 3", "three heads answer, a judge picks the best", 'B', 0},
 	{"consensus check…", "sample heads until they agree at a target confidence", 'C', 'C'},
