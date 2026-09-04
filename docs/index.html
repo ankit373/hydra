@@ -44,9 +44,9 @@
     "description": "Hydra is the Trust Control Plane for AI development: it routes tasks across every model on your machine to a target confidence of correctness — sampling models adaptively (SPRT) and stopping once the evidence is strong enough — while cutting AI API costs 70-85% along the way.",
     "url": "https://hydra.uvansa.com/",
     "downloadUrl": "https://github.com/ankit373/hydra",
-    "softwareVersion": "1.0.0",
+    "softwareVersion": "1.4.0",
     "datePublished": "2026-01-01",
-    "dateModified": "2026-08-09",
+    "dateModified": "2026-09-04",
     "license": "https://github.com/ankit373/hydra/blob/main/LICENSE",
     "author": {
       "@type": "Person",
@@ -77,6 +77,10 @@
       "Token budget enforcement — per-model context window tracking with pressure modes",
       "Dynamic live pricing — OpenRouter API pricing with 24h cache and tier fallback",
       "hyctl stats — real-time session cost rollup by model, tier, and day",
+      "hyctl stats --latency — p50/p90/p99 per model from mergeable sketches, not a rescan of the cost log",
+      "Oracle-verified eval corpus (hyctl eval) — labelled examples kept verbatim and exempt from retention",
+      "hyctl trace seal — folds old run logs into compressed monthly segments, losslessly and invisibly to readers",
+      "hyctl ask — tasks parked waiting on a human, when a ledger rule answers ask rather than allow or deny",
       "A2A agent-to-agent handoff protocol with vector clocks for causal ordering",
       "Homebrew installable on macOS and Linux"
     ]
