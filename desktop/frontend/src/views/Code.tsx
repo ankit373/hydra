@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { GetDiff } from '../bindings'
-import type { Diff, DiffLine, Edit } from '../types'
+import { ApproveEdit, GetDiff, RejectEdit } from '../bindings'
+import type { Diff, DiffLine, Edit, ReviewOutcome } from '../types'
 
 export function Code({
   runID,
@@ -15,6 +15,11 @@ export function Code({
 }) {
   const [selected, setSelected] = useState(0)
   const [diff, setDiff] = useState<Diff | null>(null)
+  // Keyed by file, not index: the edit list can reorder under a poll.
+  // Session-only, deliberately — nothing persists a per-file review
+  // state, and inventing one here would claim more than Hydra records.
+  const [acted, setActed] = useState<Record<string, ReviewOutcome>>({})
+  const [busy, setBusy] = useState(false)
 
   // Re-selects on every new value, not just at mount — Session stays mounted
   // across clicking different artifact nodes in the same run, so this has to
@@ -26,6 +31,20 @@ export function Code({
   }, [initialFile, edits])
 
   const current = edits[selected]
+
+  async function act(file: string, kind: 'approve' | 'reject') {
+    if (busy) return
+    setBusy(true)
+    try {
+      const out = kind === 'approve' ? await ApproveEdit(file) : await RejectEdit(file)
+      setActed((a) => ({ ...a, [file]: out }))
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e)
+      setActed((a) => ({ ...a, [file]: { file, error: message } }))
+    } finally {
+      setBusy(false)
+    }
+  }
 
   useEffect(() => {
     if (!current) {
@@ -95,6 +114,15 @@ export function Code({
             otherwise, or showing a blank pane, would both misrepresent it. */}
         {diff && !diff.found && <p className="diff__note">Diff unavailable — {diff.reason}</p>}
         {diff?.found && <DiffBody diff={diff} />}
+        {current && diff?.found && (
+          <ReviewBar
+            file={current.file}
+            outcome={acted[current.file]}
+            busy={busy}
+            onApprove={() => void act(current.file, 'approve')}
+            onReject={() => void act(current.file, 'reject')}
+          />
+        )}
       </div>
     </div>
   )
@@ -170,4 +198,87 @@ function LineText({ line }: { line: DiffLine }) {
 /** Sums one count across every edit, so the header states a real total. */
 export function total(edits: Edit[], key: 'added' | 'removed'): number {
   return edits.reduce((n, e) => n + (e[key] || 0), 0)
+}
+
+/**
+ * Accept or undo the change on screen.
+ *
+ * Both actions are confirmed because neither is undoable from here: approving
+ * drops the backup that made rolling back possible, and rejecting overwrites
+ * the file. The confirm is inline rather than a dialog, so what is about to
+ * happen stays next to the diff it applies to.
+ */
+function ReviewBar({
+  file,
+  outcome,
+  busy,
+  onApprove,
+  onReject,
+}: {
+  file: string
+  outcome?: ReviewOutcome
+  busy: boolean
+  onApprove: () => void
+  onReject: () => void
+}) {
+  const [confirming, setConfirming] = useState<'approve' | 'reject' | null>(null)
+
+  // Reset when the pane moves to a different file, or a confirm started on one
+  // file would still be armed on the next.
+  useEffect(() => setConfirming(null), [file])
+
+  if (outcome?.error) {
+    return (
+      <div className="rev rev--err">
+        <span className="rev__msg">{outcome.error}</span>
+      </div>
+    )
+  }
+  if (outcome?.status) {
+    return (
+      <div className={`rev rev--${outcome.status}`}>
+        <span className="rev__msg">
+          {outcome.status === 'approved' ? 'Accepted.' : 'Rolled back.'}
+          {outcome.method && ` (${outcome.method.replace(/_/g, ' ')})`}
+        </span>
+        {/* Reviewing an edit is also the signal that trains routing, which is
+            not obvious from a button that looks like a code-review control. */}
+        <span className="rev__note">Recorded against the model that wrote it.</span>
+      </div>
+    )
+  }
+
+  if (confirming) {
+    const approving = confirming === 'approve'
+    return (
+      <div className="rev rev--confirm">
+        <span className="rev__msg">
+          {approving
+            ? 'Accept this change? The backup that would undo it is removed.'
+            : 'Undo this change? The file goes back to its pre-edit contents.'}
+        </span>
+        <button
+          className={approving ? 'rev__go' : 'rev__undo'}
+          onClick={approving ? onApprove : onReject}
+          disabled={busy}
+        >
+          {approving ? 'Accept' : 'Undo'}
+        </button>
+        <button className="rev__cancel" onClick={() => setConfirming(null)} disabled={busy}>
+          Cancel
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="rev">
+      <button className="rev__go" onClick={() => setConfirming('approve')} disabled={busy}>
+        Accept
+      </button>
+      <button className="rev__undo" onClick={() => setConfirming('reject')} disabled={busy}>
+        Undo
+      </button>
+    </div>
+  )
 }

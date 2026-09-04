@@ -218,6 +218,16 @@ export interface DiffLine {
   spans?: Span[]
 }
 
+/** The result of accepting or undoing one edit. */
+export interface ReviewOutcome {
+  file: string
+  status?: string
+  /** How the rollback was done — git_checkout, rm_untracked or
+   *  backup_restore. Shown because the three are not equally recoverable. */
+  method?: string
+  error?: string
+}
+
 /** A byte range within DiffLine.text. */
 export interface Span {
   start: number
