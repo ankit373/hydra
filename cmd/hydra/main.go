@@ -109,7 +109,7 @@ func rootCmd() *cobra.Command {
 	root.AddCommand(
 		cmdInit(), cmdProbe(), cmdStatus(), cmdTui(), cmdDispatch(),
 		cmdEdit(), cmdReview(), cmdParallel(), cmdCost(), cmdStats(),
-		cmdPricing(), cmdTrust(), cmdGraph(), cmdContext(), cmdMCP(), cmdOracle(), cmdEval(), cmdModels(),
+		cmdPricing(), cmdTrust(), cmdGraph(), cmdContext(), cmdMCP(), cmdOracle(), cmdEval(), cmdTrace(), cmdModels(),
 		cmdSecurity(), cmdAsk(), cmdVersion(), cmdUpgrade(),
 	)
 	return root
@@ -1001,6 +1001,91 @@ improved against.`,
 
 	cmd.AddCommand(list, stats)
 	return cmd
+}
+
+// cmdTrace manages the run-log store.
+func cmdTrace() *cobra.Command {
+	var olderThan time.Duration
+	var jsonOut bool
+	var dryRun bool
+
+	cmd := &cobra.Command{
+		Use:   "trace",
+		Short: "Run-log storage: seal old runs into compressed segments",
+	}
+
+	seal := &cobra.Command{
+		Use:   "seal",
+		Short: "Fold old run logs into compressed monthly segments",
+		Long: `hyctl trace seal folds run logs older than --older-than into one
+compressed segment per month.
+
+This is lossless relocation, not retention: every event is still readable
+through the same ` + "`hyctl`" + ` and desktop views afterwards. What it recovers is
+disk. One file per run is charged a whole filesystem block, so 60 short runs
+holding ~30 KB of events can occupy 240 KB.`,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			if dryRun {
+				ids, err := runlog.SealCandidates(olderThan)
+				if err != nil {
+					return err
+				}
+				if jsonOut {
+					raw, _ := json.MarshalIndent(map[string]any{"would_seal": len(ids), "runs": ids}, "", "  ")
+					fmt.Println(string(raw))
+					return nil
+				}
+				fmt.Printf("Would seal %d run%s older than %s.\n", len(ids), plural(len(ids)), olderThan)
+				return nil
+			}
+			res, err := runlog.Seal(olderThan)
+			if err != nil {
+				return err
+			}
+			if jsonOut {
+				raw, _ := json.MarshalIndent(res, "", "  ")
+				fmt.Println(string(raw))
+				return nil
+			}
+			if res.Runs == 0 {
+				fmt.Printf("Nothing to seal — no run logs older than %s.\n", olderThan)
+				return nil
+			}
+			fmt.Printf("  sealed %d run%s (%d events) across %d month%s\n",
+				res.Runs, plural(res.Runs), res.Events, res.Months, plural(res.Months))
+			fmt.Printf("  %s\n", dimStyle.Render(fmt.Sprintf(
+				"%s on disk -> %s (%.1fx)", humanBytes(res.BytesBefore), humanBytes(res.BytesAfter),
+				ratioOf(res.BytesBefore, res.BytesAfter))))
+			return nil
+		},
+	}
+	seal.Flags().DurationVar(&olderThan, "older-than", 7*24*time.Hour, "seal runs older than this")
+	seal.Flags().BoolVar(&jsonOut, "json", false, "machine-readable output")
+	seal.Flags().BoolVar(&dryRun, "dry-run", false, "list what would be sealed without writing")
+
+	cmd.AddCommand(seal)
+	return cmd
+}
+
+// ratioOf guards the division so an empty seal cannot print Inf or NaN.
+func ratioOf(before, after int64) float64 {
+	if after <= 0 {
+		return 0
+	}
+	return float64(before) / float64(after)
+}
+
+func humanBytes(n int64) string {
+	const unit = 1024
+	if n < unit {
+		return fmt.Sprintf("%d B", n)
+	}
+	div, exp := int64(unit), 0
+	for x := n / unit; x >= unit && exp < 3; x /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(n)/float64(div), "KMGT"[exp])
 }
 
 func cmdOracle() *cobra.Command {

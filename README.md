@@ -746,6 +746,7 @@ hydra/
 │   ├── util/                    # Shared utilities (bounded Accumulator, 33 MB cap)
 │   ├── sysinfo/                 # Hardware detection + 7-day memory history
 │   ├── runlog/                  # Per-run event log (~/.hydra/logs/runs/) + liveness heartbeat + edit snapshots
+│   │                            # Old runs seal into compressed monthly segments (logs/seg/)
 │   ├── tree/                    # Reconstructs a run: supervision tree + timeline, framework-free
 │   ├── runid/                   # Run/task identity — correlates every log a run produces
 │   ├── a2a/                     # Agent handoffs with vector clocks (causal ordering + conflict detection)
