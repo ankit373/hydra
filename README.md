@@ -737,6 +737,7 @@ hydra/
 │   ├── ope/                     # Off-policy estimation: inverse-probability weighting over sampled logs
 │   ├── sketch/                  # Mergeable relative-error quantile sketch (bounded memory)
 │   ├── rollup/                  # Per-day aggregates: calls, tokens, spend, latency sketch
+│   ├── evalset/                 # Oracle-verified labelled examples — kept verbatim, never pruned
 │   ├── budget/                  # Token-budget governor: 6 static pressure modes + rate-aware first-passage risk on claude_pct
 │   ├── rank/                    # Deduplication + CapScore ranking
 │   ├── editor/                  # Scoped, validated, rollback-safe file edits

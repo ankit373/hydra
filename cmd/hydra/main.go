@@ -31,6 +31,7 @@ import (
 	"github.com/ankit373/hydra/internal/dispatch"
 	"github.com/ankit373/hydra/internal/editor"
 	"github.com/ankit373/hydra/internal/entropy"
+	"github.com/ankit373/hydra/internal/evalset"
 	"github.com/ankit373/hydra/internal/executor"
 	"github.com/ankit373/hydra/internal/graph"
 	"github.com/ankit373/hydra/internal/ledger"
@@ -108,7 +109,7 @@ func rootCmd() *cobra.Command {
 	root.AddCommand(
 		cmdInit(), cmdProbe(), cmdStatus(), cmdTui(), cmdDispatch(),
 		cmdEdit(), cmdReview(), cmdParallel(), cmdCost(), cmdStats(),
-		cmdPricing(), cmdTrust(), cmdGraph(), cmdContext(), cmdMCP(), cmdOracle(), cmdModels(),
+		cmdPricing(), cmdTrust(), cmdGraph(), cmdContext(), cmdMCP(), cmdOracle(), cmdEval(), cmdModels(),
 		cmdSecurity(), cmdAsk(), cmdVersion(), cmdUpgrade(),
 	)
 	return root
@@ -901,6 +902,107 @@ func cmdDispatch() *cobra.Command {
 }
 
 // cmdOracle runs a verification oracle and reports its calibrated evidence.
+// cmdEval inspects the corpus of oracle-verified examples.
+func cmdEval() *cobra.Command {
+	var jsonOut bool
+	var failedOnly bool
+	var limit int
+
+	cmd := &cobra.Command{
+		Use:   "eval",
+		Short: "Oracle-verified examples — the labelled corpus, exempt from retention",
+		Long: `hyctl eval inspects examples recorded by ` + "`hyctl oracle verify`" + `.
+
+An oracle verdict on a real candidate is ground truth. Unlike traces, these are
+kept verbatim and never expire: they are the only corpus the router can be
+improved against.`,
+	}
+
+	list := &cobra.Command{
+		Use:   "list",
+		Short: "List recorded examples, newest first",
+		RunE: func(_ *cobra.Command, _ []string) error {
+			all, err := evalset.Load(evalset.DefaultPath())
+			if err != nil {
+				return err
+			}
+			if failedOnly {
+				var f []evalset.Example
+				for _, e := range all {
+					if !e.Passed {
+						f = append(f, e)
+					}
+				}
+				all = f
+			}
+			// Newest first: the recent ones are what a person is looking for.
+			for i, j := 0, len(all)-1; i < j; i, j = i+1, j-1 {
+				all[i], all[j] = all[j], all[i]
+			}
+			if limit > 0 && len(all) > limit {
+				all = all[:limit]
+			}
+			if jsonOut {
+				raw, _ := json.MarshalIndent(all, "", "  ")
+				fmt.Println(string(raw))
+				return nil
+			}
+			if len(all) == 0 {
+				fmt.Println("No verified examples yet. Run `hyctl oracle verify --candidate <file> ...` to record one.")
+				return nil
+			}
+			for _, e := range all {
+				status := cortexStyle.Render("PASS")
+				if !e.Passed {
+					status = "FAIL"
+				}
+				pii := ""
+				if e.PII {
+					pii = " " + dimStyle.Render("[pii]")
+				}
+				fmt.Printf("  %s  %-14s %-22s %s%s\n", status, e.Domain, e.Source,
+					dimStyle.Render(e.CandidateHash[:8]), pii)
+			}
+			return nil
+		},
+	}
+	list.Flags().BoolVar(&jsonOut, "json", false, "machine-readable output")
+	list.Flags().BoolVar(&failedOnly, "failed", false, "only examples the oracle rejected")
+	list.Flags().IntVar(&limit, "limit", 20, "maximum examples to show (0 = all)")
+
+	stats := &cobra.Command{
+		Use:   "stats",
+		Short: "Corpus size and pass rate by domain",
+		RunE: func(_ *cobra.Command, _ []string) error {
+			all, err := evalset.Load(evalset.DefaultPath())
+			if err != nil {
+				return err
+			}
+			st := evalset.Stats(all)
+			if jsonOut {
+				raw, _ := json.MarshalIndent(st, "", "  ")
+				fmt.Println(string(raw))
+				return nil
+			}
+			if len(st) == 0 {
+				fmt.Println("No verified examples yet.")
+				return nil
+			}
+			fmt.Printf("%-20s %8s %8s %8s %10s %6s\n", "DOMAIN", "TOTAL", "PASSED", "FAILED", "PASS RATE", "PII")
+			for _, s := range st {
+				fmt.Printf("%-20s %8d %8d %8d %9.1f%% %6d\n",
+					s.Domain, s.Total, s.Passed, s.Failed, s.PassRate*100, s.WithPII)
+			}
+			fmt.Printf("\n%s\n", dimStyle.Render(fmt.Sprintf("%d example%s at %s — never pruned", len(all), plural(len(all)), evalset.DefaultPath())))
+			return nil
+		},
+	}
+	stats.Flags().BoolVar(&jsonOut, "json", false, "machine-readable output")
+
+	cmd.AddCommand(list, stats)
+	return cmd
+}
+
 func cmdOracle() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "oracle",
@@ -951,6 +1053,25 @@ func cmdOracle() *cobra.Command {
 				_ = cal.Update(src, domain, v.Passed, recordOutcome)
 			}
 			llr := oracle.LLR(cal, src, domain, v)
+
+			// An oracle verdict on a real candidate is ground truth, and the
+			// rarest thing Hydra produces. It is kept outside the trace store
+			// so no retention pass can ever reach it (#625).
+			if candidate != "" {
+				breadcrumb, _ := config.Breadcrumb()
+				added, aerr := evalset.Add(evalset.DefaultPath(), evalset.Example{
+					Domain: domain, Source: src, Candidate: candidate,
+					Passed: v.Passed, Detail: v.Detail, Config: breadcrumb,
+				})
+				switch {
+				case aerr != nil:
+					// Never fail a verification because its example could not
+					// be filed; report it so the loss is visible.
+					fmt.Printf("  %s\n", dimStyle.Render("eval set: "+aerr.Error()))
+				case added:
+					fmt.Printf("  %s\n", dimStyle.Render("recorded to the eval set"))
+				}
+			}
 
 			status := cortexStyle.Render("PASS")
 			if !v.Passed {

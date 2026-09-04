@@ -46,6 +46,7 @@ internal/oracle/        ← Verification oracles (tests/compile/lint) as calibra
 internal/ope/           ← Off-policy estimation: inverse-probability weighting over sampled logs.
 internal/sketch/        ← Mergeable relative-error quantile sketch (DDSketch-style). Bounded memory.
 internal/rollup/        ← Per-day aggregates of cost.jsonl (calls, tokens, spend, latency sketch).
+internal/evalset/       ← Oracle-verified labelled examples. Outside logs/, exempt from retention. `hyctl eval`.
 internal/pricing/       ← Live pricing DB (OpenRouter fetch + 24h cache + tier fallback).
 internal/policy/        ← PII detection + local-only enforcement.
 internal/{cost,budget}/ ← Spend reporting (est/actual labeling) + token-budget governor (static bands + rate-aware first-passage on claude_pct).
@@ -262,6 +263,10 @@ hyctl ask list ; hyctl ask answer <task-id> "go ahead" ; hyctl ask decline <task
 
 # Latency percentiles from mergeable sketches, not a full rescan of cost.jsonl
 hyctl stats --latency ; hyctl stats --latency --json
+
+# Oracle-verified examples — the labelled corpus, never pruned
+hyctl oracle verify --candidate out.go --domain go -- go test ./...
+hyctl eval stats ; hyctl eval list --failed
 
 # System state / discovered heads / spend
 # `hyctl status` shows the rate-aware claude_pct governor (first-passage risk toward 80%).
@@ -848,6 +853,7 @@ All Go source lives under `cmd/` and `internal/`. Key packages:
 | `internal/oracle` | Verification oracles: `Oracle`/`CommandOracle` run tests/compile/lint (exit 0 = pass) and map the verdict to a calibrated LLR (`oracle.LLR`) — a high-`D` evidence source. Drives `hyctl oracle verify`. |
 | `internal/sketch` | Mergeable relative-error quantile sketch. Logarithmic buckets give a *relative* bound (not rank), which is what makes it usable on skewed latency where a rank-error sketch is arbitrarily wrong in the tail. Measured: p99 within 0.45% in ~4 KB vs 1.6 MB of raw values. Merging two sketches is as accurate as one sketch of the union, so machines can combine stats without shipping traces. Past the bucket cap the guarantee is directional — the tail keeps its bound, the small end inflates. |
 | `internal/rollup` | Per-day aggregates keyed by `(date, model, executor, enum, tier)`: calls, tokens, spend, a latency sketch, and propensity sums. What `hyctl stats --latency` reads instead of rescanning `cost.jsonl`, and what must be written *before* any retention deletes raw rows. |
+| `internal/evalset` | Oracle-verified examples: task, candidate, and ground truth from `internal/oracle`. The only trace-adjacent data kept verbatim and forever, because it is the only corpus the router can be improved against. Lives at `~/.hydra/evalset/`, deliberately outside `logs/` so nothing that prunes logs can reach it. Deduplicated on `(task_hash, candidate_hash)`; PII is marked rather than dropped, since dropping it would bias the corpus. Drives `hyctl eval list\|stats`. |
 | `internal/ope` | Off-policy estimation. `SelfNormalized` recovers a population rate from a non-uniformly sampled log by weighting each row by the inverse of its inclusion probability. A non-positive probability is skipped and counted, never treated as certain. Exists because averaging a sampled log inverted the true ranking of two heads in simulation, which would then change routing (#605). |
 | `internal/tui` | Bubble Tea TUI: init wizard, install flow |
 | `internal/review` | Code review subcommand |
