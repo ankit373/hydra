@@ -45,11 +45,29 @@ func executeHead(ctx context.Context, h provider.Head, prompt string, opts Optio
 		StartedAt: time.Now(),
 	}
 
-	if decision, err := ledger.CheckAndRecordDispatch("hydra-swarm", h.ID, "", prompt); err == nil && decision == ledger.Deny {
+	// Proceeds only on an explicit Allow — see the same gate in dispatch.go for
+	// why `== Deny` is not sufficient now that Ask also withholds permission.
+	//
+	// Fails closed the same way on error: a policy-check failure must deny, not
+	// silently let the head run because the decision couldn't be computed.
+	// opts.Classification is resolved once by Run/RunSPRT before any head fires,
+	// so concurrent calls here reuse it instead of each re-scanning prompt (#522).
+	if decision, err := ledger.CheckAndRecordDispatch("hydra-swarm", h.ID, "", prompt, opts.Classification); err != nil || decision != ledger.Allow {
 		a.FinishedAt = time.Now()
 		a.Duration = a.FinishedAt.Sub(a.StartedAt)
 		a.Status = StatusFailed
-		a.Err = fmt.Errorf("denied by ledger policy: head %s", h.ID)
+		switch {
+		case err != nil:
+			a.Err = fmt.Errorf("ledger policy check failed: %w: head %s", err, h.ID)
+		// Reporting an Ask as "denied" describes the wrong policy. The head is
+		// skipped either way — a fan-out cannot hold a subprocess open waiting
+		// on a human — but the operator who wrote "ask" should be told the
+		// question went unasked, not that their rule refused the head.
+		case decision == ledger.Ask:
+			a.Err = fmt.Errorf("waiting on a human decision, so skipped in fan-out: head %s", h.ID)
+		default:
+			a.Err = fmt.Errorf("denied by ledger policy: head %s", h.ID)
+		}
 		return a
 	}
 

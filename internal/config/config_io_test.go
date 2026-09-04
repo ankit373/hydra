@@ -22,8 +22,23 @@ import (
 // write loses the user's whole setup, and Save is the only thing standing
 // between them and that.
 
-func TestDirAndPath_LiveUnderTheUsersHome(t *testing.T) {
+// Dir prefers $HYDRA_HOME over $HOME/.hydra (#442) — the sandbox sets both to
+// distinct directories, so this only passes if HYDRA_HOME actually wins.
+func TestDirAndPath_PrefersHydraHomeOverUsersHome(t *testing.T) {
 	s := testutil.NewSandbox(t)
+
+	if got, want := Dir(), s.HydraHome; got != want {
+		t.Errorf("Dir() = %q, want $HYDRA_HOME %q", got, want)
+	}
+	if got, want := Path(), filepath.Join(s.HydraHome, "config.toml"); got != want {
+		t.Errorf("Path() = %q, want %q", got, want)
+	}
+}
+
+// With no $HYDRA_HOME at all, Dir falls back to $HOME/.hydra.
+func TestDirAndPath_FallBackToUsersHomeWithNoHydraHome(t *testing.T) {
+	s := testutil.NewSandbox(t)
+	t.Setenv("HYDRA_HOME", "")
 
 	if got, want := Dir(), filepath.Join(s.Home, ".hydra"); got != want {
 		t.Errorf("Dir() = %q, want %q", got, want)

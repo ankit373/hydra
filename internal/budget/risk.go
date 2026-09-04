@@ -13,8 +13,13 @@ import "math"
 // an absorbing barrier; each recorded claude_pct observation is one step.
 const (
 	emergencyFrac = 0.80 // absorbing barrier b (matches ModeEmergency at 80%)
-	riskHorizon   = 3.0  // look-ahead in observations ("within the next ~3 claude_pct updates")
 	MaxPctHistory = 12   // bounded claude_pct series kept in state.json
+
+	// RiskHorizon is the look-ahead RiskFromHistory computes over, in
+	// observations ("within the next ~3 claude_pct updates") — not wall-clock
+	// time and not chat turns. Exported so a UI can state the horizon it is
+	// reporting instead of restating the number and drifting from it.
+	RiskHorizon = 3.0
 
 	// Risk floors: a high probability of hitting the 80% barrier within the
 	// horizon imposes a minimum mode regardless of the current level, so a fast
@@ -63,10 +68,18 @@ func RiskFromHistory(hist []int) (burnRatePct, risk float64) {
 	for _, d := range deltas {
 		ss += (d - mu) * (d - mu)
 	}
-	sigma := math.Sqrt(ss / float64(n)) // population stddev of increments
+	// Sample stddev (Bessel's correction, n-1): this governor always runs at
+	// small n (MaxPctHistory=12 caps n at 11), where population variance (÷n)
+	// systematically understates volatility. With n==1 there is no way to
+	// estimate spread from a single delta, so sigma stays 0 (ss is trivially 0
+	// there too — no divide-by-zero, no behavior change from before at n==1).
+	var sigma float64
+	if n > 1 {
+		sigma = math.Sqrt(ss / float64(n-1))
+	}
 
 	x := float64(hist[len(hist)-1]) / 100
-	risk = FirstPassageProb(emergencyFrac-x, mu, sigma, riskHorizon)
+	risk = FirstPassageProb(emergencyFrac-x, mu, sigma, RiskHorizon)
 	return mu * 100, risk
 }
 

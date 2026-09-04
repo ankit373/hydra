@@ -39,6 +39,10 @@ type Request struct {
 	// could tell which run touched which file. Empty derives one, as elsewhere.
 	RunID  string
 	TaskID string
+
+	// LocalOnly forces the inner dispatch onto local heads — how a caller's
+	// "nothing leaves this machine" override reaches an edit (#597).
+	LocalOnly bool
 }
 
 // Result is the JSON output emitted by Edit.
@@ -61,20 +65,20 @@ type Result struct {
 // fallback chain and cost logging.
 func Edit(ctx context.Context, req Request) (*Result, error) {
 	if !filepath.IsAbs(req.File) {
-		return failResult(req, "file path must be absolute"), nil
+		return failResult(req, "", "", "file path must be absolute"), nil
 	}
 	if req.Enum == "CORE" {
-		return failResult(req, "CORE tier: use Claude's native Edit/Write directly"), nil
+		return failResult(req, "", "", "CORE tier: use Claude's native Edit/Write directly"), nil
 	}
 
 	// ── Scope check ──────────────────────────────────────────────────────────
 	reg, err := workspace.Load(config.ScriptHome())
 	if err != nil {
-		return failResult(req, "workspace registry load failed: "+err.Error()), nil
+		return failResult(req, "", "", "workspace registry load failed: "+err.Error()), nil
 	}
 	wsName, err := reg.Check(req.File)
 	if err != nil {
-		return failResult(req, "scope_rejected: "+err.Error()), nil
+		return failResult(req, "", "", "scope_rejected: "+err.Error()), nil
 	}
 	resolved, _ := reg.Resolve(req.File)
 
@@ -115,18 +119,19 @@ func Edit(ctx context.Context, req Request) (*Result, error) {
 	d, err := dispatch.New(ctx)
 	if err != nil {
 		cleanupBackup()
-		return failResult(req, "dispatcher init failed: "+err.Error()), nil
+		return failResult(req, wsName, resolved.GitRoot, "dispatcher init failed: "+err.Error()), nil
 	}
 	tierHint := enumToTier(req.Enum)
 	dispResult, err := d.Dispatch(ctx, editPrompt, dispatch.Options{
-		TierHint: tierHint,
-		RunID:    req.RunID,
-		TaskID:   req.TaskID,
-		Resource: req.File,
+		TierHint:  tierHint,
+		LocalOnly: req.LocalOnly,
+		RunID:     req.RunID,
+		TaskID:    req.TaskID,
+		Resource:  req.File,
 	})
 	if err != nil {
 		cleanupBackup()
-		return failResult(req, "route_failed: "+err.Error()), nil
+		return failResult(req, wsName, resolved.GitRoot, "route_failed: "+err.Error()), nil
 	}
 
 	// ── Parse response ────────────────────────────────────────────────────────
@@ -135,20 +140,20 @@ func Edit(ctx context.Context, req Request) (*Result, error) {
 
 	if strings.Contains(newContent, markerStart) || strings.Contains(newContent, markerEnd) {
 		cleanupBackup()
-		return failResult(req, "marker_leakage"), nil
+		return failResult(req, wsName, resolved.GitRoot, "marker_leakage"), nil
 	}
 	if newContent == "" {
 		cleanupBackup()
 		if origExisted {
-			return failResult(req, "empty_replacement"), nil
+			return failResult(req, wsName, resolved.GitRoot, "empty_replacement"), nil
 		}
-		return failResult(req, "marker_parse_failed"), nil
+		return failResult(req, wsName, resolved.GitRoot, "marker_parse_failed"), nil
 	}
 
 	// ── Atomic write ──────────────────────────────────────────────────────────
 	if err := atomicWrite(req.File, newContent+"\n"); err != nil {
 		cleanupBackup()
-		return failResult(req, "write_failed: "+err.Error()), nil
+		return failResult(req, wsName, resolved.GitRoot, "write_failed: "+err.Error()), nil
 	}
 
 	// ── Validate ──────────────────────────────────────────────────────────────
@@ -268,12 +273,19 @@ snippet) between these exact markers and nothing else:
 	)
 }
 
-func failResult(req Request, errMsg string) *Result {
+// failResult builds a failure Result. wsName/gitRoot are whatever scope
+// resolution had already determined before the failure — empty for the
+// handful of failures that happen before Edit resolves scope at all. Zeroing
+// them unconditionally used to hide that resolution had succeeded and the
+// real failure was downstream, e.g. response-parsing (#464).
+func failResult(req Request, wsName, gitRoot, errMsg string) *Result {
 	return &Result{
-		Status: "fail",
-		File:   req.File,
-		Enum:   req.Enum,
-		Error:  errMsg,
+		Status:    "fail",
+		File:      req.File,
+		Workspace: wsName,
+		GitRoot:   gitRoot,
+		Enum:      req.Enum,
+		Error:     errMsg,
 	}
 }
 

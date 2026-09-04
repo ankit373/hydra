@@ -8,8 +8,10 @@
   /* ── Surfaces ── */
   --hy-bg:        #06070F;              /* base — near-black, faint blue-violet bias */
   --hy-bg-2:      #0A0C18;              /* raised surface */
+  --hy-bg-3:      #0E1122;              /* raised twice — input wells, selected rows */
   --hy-panel:     rgba(18, 20, 38, .62);/* cards / TUI panels (over bg) */
   --hy-line:      rgba(150, 140, 255, .16); /* borders, hairlines, grid */
+  --hy-line-2:    rgba(150, 140, 255, .28); /* the same hairline, one step up: focusable edges */
 
   /* ── Ink ── */
   --hy-ink:       #E7E9F5;              /* primary text */

@@ -76,7 +76,9 @@ type Tracker struct {
 func (t *Tracker) Update(used, window int, source string) Snapshot {
 	pct := 0
 	if window > 0 {
-		pct = used * 100 / window
+		// Round to nearest, not truncate: a true 74.95% must round to 75 so it
+		// isn't silently reported one point under the ModeCritical boundary.
+		pct = (used*100 + window/2) / window
 	}
 	if pct > 100 {
 		pct = 100

@@ -5,11 +5,13 @@ package swarm
 import (
 	"context"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/dispatch"
+	"github.com/ankit373/hydra/internal/policy"
 	"github.com/ankit373/hydra/internal/provider"
 	"github.com/ankit373/hydra/internal/rank"
 	"github.com/ankit373/hydra/internal/trust"
@@ -31,12 +33,19 @@ type SPRTResult struct {
 // soon as the calibrated confidence reaches opts.Confidence. It is the production
 // caller of trust.Run — the swarm executor is adapted to trust.Executor here.
 func (s *Swarm) RunSPRT(ctx context.Context, prompt string, opts Options) (*SPRTResult, error) {
-	if opts.Confidence <= 0 || opts.Confidence >= 1 {
+	if math.IsNaN(opts.Confidence) || opts.Confidence <= 0 || opts.Confidence >= 1 {
 		return nil, fmt.Errorf("swarm sprt: confidence must be in (0,1), got %v", opts.Confidence)
 	}
 	cfg, err := config.Load()
 	if err != nil {
 		return nil, fmt.Errorf("swarm sprt: config load: %w", err)
+	}
+	if err := validateSwarmTiers(cfg, opts); err != nil {
+		return nil, err
+	}
+	prompt, err = injectA2A(prompt, opts)
+	if err != nil {
+		return nil, err
 	}
 
 	selected, err := resolveSelector(opts, cfg).Select(s.heads, opts)
@@ -45,6 +54,13 @@ func (s *Swarm) RunSPRT(ctx context.Context, prompt string, opts Options) (*SPRT
 	}
 	if len(selected) == 0 {
 		return nil, fmt.Errorf("swarm sprt: no heads available")
+	}
+
+	// Classify once, before any head is sampled — every executeHead call the
+	// adapter makes below reuses this instead of each re-scanning prompt (#522).
+	if opts.Classification == nil {
+		c := policy.Classify(prompt)
+		opts.Classification = &c
 	}
 
 	domain := opts.Domain

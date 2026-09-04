@@ -240,6 +240,13 @@ func TestEdit_EmptyReplacementLeavesTheFileUntouched(t *testing.T) {
 	if _, err := os.Stat(file + ".hydra-bak"); err == nil {
 		t.Error("a backup survived a refused edit")
 	}
+	// Scope resolution ran and succeeded well before the empty-replacement
+	// check — failResult used to zero Workspace/GitRoot regardless, making a
+	// downstream failure indistinguishable from "scope was never resolved"
+	// (#464).
+	if res.Workspace == "" {
+		t.Error("Workspace is empty on a failure that happened after scope resolution succeeded")
+	}
 }
 
 func TestEdit_RefusesBeforeDispatching(t *testing.T) {
@@ -889,6 +896,11 @@ func TestWriteLastEdit_UnwritableLogDirIsAnError(t *testing.T) {
 	testutil.NewSandbox(t)
 
 	// ~/.hydra is a regular file, so logs/ cannot be created.
+	// The sandbox pre-creates config.Dir() as an empty directory, so it must
+	// be removed before a file can occupy that path instead.
+	if err := os.RemoveAll(config.Dir()); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(config.Dir(), []byte("not a dir"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -903,6 +915,11 @@ func TestLogEdit_IsBestEffort(t *testing.T) {
 	testutil.NewSandbox(t)
 
 	// Nothing to write into, and nothing may panic or block.
+	// The sandbox pre-creates config.Dir() as an empty directory, so it must
+	// be removed before a file can occupy that path instead.
+	if err := os.RemoveAll(config.Dir()); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(config.Dir(), []byte("not a dir"), 0o600); err != nil {
 		t.Fatal(err)
 	}

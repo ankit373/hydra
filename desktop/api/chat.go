@@ -4,6 +4,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/ankit373/hydra/internal/dispatch"
@@ -39,21 +40,51 @@ type ChatReply struct {
 
 	Error string `json:"error,omitempty"`
 
-	// NeedsProbe is true when the machine has zero discoverable heads at all —
-	// distinct from an ordinary dispatch failure. dispatch.New already probes
-	// fresh on every call, so there is no separate "go discover models" step
-	// to point at; the dock offers to retry (which re-probes) instead of
-	// surfacing a CLI instruction a GUI user has no terminal for (#434).
+	// Question is set when the task parked waiting on a human decision, and
+	// TaskID is what answers it. A parked task is not a failure: routed through
+	// Error it rendered as a red dispatch error, which reads as "this broke"
+	// rather than "this needs you" (#583).
+	Question string `json:"question,omitempty"`
+	TaskID   string `json:"taskId,omitempty"`
+
+	// NeedsProbe is true when there is nothing to route this chat to — zero
+	// heads discovered at all, or heads discovered but none dispatchable for
+	// this request (dispatch.ErrNoHeads, e.g. the dock's "auto-route" default
+	// left every candidate filtered out). dispatch.New probes fresh on every
+	// call, so there is no separate "go discover models" step to point at;
+	// the dock offers to retry (which re-probes) instead of surfacing a CLI
+	// instruction a GUI user has no terminal for (#434, #452).
 	NeedsProbe bool `json:"needsProbe,omitempty"`
 }
+
+// NewRunID mints a run id for the caller to hold before a dispatch starts.
+//
+// The frontend uses this to poll GetSession(runId) for an in-flight chat turn
+// instead of waiting for Chat to return — the run's log exists and is being
+// appended to from the moment Chat begins, not just once it finishes. A thin
+// wrapper rather than the frontend minting its own: the timestamp-prefix +
+// hex format is a contract Fleet's sort depends on (see fleet.go), so there is
+// exactly one place allowed to generate it.
+func (a *API) NewRunID() string { return runid.New() }
 
 // Chat dispatches one prompt and returns the reply.
 //
 // enum is a routing key ("SIMPLE", "STANDARD", …); empty lets dispatch pick.
+// runID lets the caller supply an id minted via NewRunID so it can watch the
+// run live; empty mints a fresh one, same as before NewRunID existed.
+//
+// tier pins the starting tier ("1".."10"), which is how the model picker
+// expresses "answer this with Opus Thinking": every registry model declares a
+// tier, so choosing a model chooses its tier. It is a *starting point*, not a
+// guarantee — the governor can still downgrade it and fallback can still move
+// off it, exactly as for any other dispatch. It outranks enum, since an
+// explicit choice should beat an inferred one. Invalid values are rejected by
+// dispatch's own resolveTierHint rather than silently coerced.
+//
 // Errors come back inside the reply rather than as a Go error: a failed
-// dispatch is a normal outcome the dock renders as a message, not an exception
+// dispatch is a normal outcome the view renders as a message, not an exception
 // that should blank the window.
-func (a *API) Chat(prompt, enum string) (*ChatReply, error) {
+func (a *API) Chat(prompt, enum, runID, tier string) (*ChatReply, error) {
 	if prompt == "" {
 		return &ChatReply{Error: "empty prompt"}, nil
 	}
@@ -61,7 +92,7 @@ func (a *API) Chat(prompt, enum string) (*ChatReply, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), ChatTimeout)
 	defer cancel()
 
-	runID, taskID := runid.New(), runid.New()
+	runID, taskID := runid.ResolveRun(runID), runid.New()
 	r := &ChatReply{RunID: runID}
 
 	// The dock's dispatch is a run like any other: it appears in Fleet while it
@@ -87,8 +118,19 @@ func (a *API) Chat(prompt, enum string) (*ChatReply, error) {
 		return r, nil
 	}
 
-	tierHint := ""
-	if enum != "" {
+	// An explicit tier outranks an inferred one: picking a model is a stronger
+	// statement than the complexity band a routing key implies. Left unvalidated
+	// here on purpose — dispatch's resolveTierHint already rejects anything
+	// outside 1-10, and duplicating that bound is how the two drift apart.
+	tierHint := tier
+	if tierHint == "" && enum != "" {
+		// A garbage enum must not fall through to unrestricted auto-routing —
+		// EnumToTier's "" is ambiguous with "no enum given" (#501's fix,
+		// applied here too since the dock is a second caller of the same map).
+		if !dispatch.IsKnownEnum(enum) {
+			r.Error = "unknown routing key: " + enum
+			return r, nil
+		}
 		tierHint = dispatch.EnumToTier(enum)
 	}
 
@@ -99,10 +141,30 @@ func (a *API) Chat(prompt, enum string) (*ChatReply, error) {
 		TaskID:   taskID,
 	})
 	if err != nil {
+		if errors.Is(err, dispatch.ErrNoHeads) {
+			// Same dead end as zero heads at all — same friendly retry reply
+			// instead of dispatch's raw, CLI-flavored error text (#452).
+			r.Error = "No model is available to answer this yet."
+			r.NeedsProbe = true
+			return r, nil
+		}
+		var parked *dispatch.ParkedError
+		if errors.As(err, &parked) {
+			r.Question, r.TaskID, r.Head = parked.Question, parked.TaskID, parked.Head
+			return r, nil
+		}
 		r.Error = err.Error()
 		return r, nil
 	}
 
+	fill(r, res)
+	return r, nil
+}
+
+// fill copies a dispatch result onto a reply. Shared by Chat and
+// AnswerQuestion so a resumed task reports its head, tier and cost the same
+// way a first-time one does.
+func fill(r *ChatReply, res *dispatch.Result) {
 	r.Output = res.Output
 	r.Head = res.Head.ID
 	r.Model = res.Head.Name
@@ -110,7 +172,6 @@ func (a *API) Chat(prompt, enum string) (*ChatReply, error) {
 	if res.Response != nil {
 		r.DurationMS = res.Response.Duration.Milliseconds()
 	}
-	return r, nil
 }
 
 // preview shortens a prompt for a log Detail. Entries stay small because the

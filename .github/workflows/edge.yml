@@ -72,6 +72,7 @@ jobs:
       - name: Publish edge release
         run: |
           gh release create edge dist/*.tar.gz dist/*.zip dist/checksums.txt \
+            --target "${{ github.sha }}" \
             --title "Edge — ${{ steps.ver.outputs.version }}" \
             --notes "$(cat <<'EOF'
           > ⚠️ **This is an edge/nightly build** — built from the latest commit on \`develop\`.

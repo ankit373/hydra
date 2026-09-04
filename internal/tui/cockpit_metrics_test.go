@@ -5,233 +5,127 @@ package tui
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/ankit373/hydra/internal/cost"
 	"github.com/ankit373/hydra/internal/graph"
 )
 
-// cost.jsonl carries wall_ms on every row, so a per-head latency trace is real
-// data — the thing the old LCG-hashed "sparkline" was imitating.
-func TestLatencySeries_FromRealRows(t *testing.T) {
-	rows := []cost.Row{
-		{Model: "A", WallMS: 100},
-		{Model: "B", WallMS: 900},
-		{Model: "A", WallMS: 200},
-		{Model: "A", WallMS: 300},
-		{Model: "C"}, // no timing — must not create a series
-	}
-	series, last := ckLatencySeries(rows)
+// One fold of the cost rows feeds every consumer: per-model stats, the run
+// join, the usage aggregates, and the local-model set.
+func TestFold_PerModelStatsAndRunJoin(t *testing.T) {
+	now := fixedNow()
+	day := now.Format("2006-01-02")
+	m := ckMetrics{stats: map[string]*ckModelStat{}, localModels: map[string]bool{}, runCost: map[string]ckRunCost{}}
+	m.fold([]cost.Row{
+		{TS: day + "T09:00:00Z", Model: "qwen (Ollama)", Executor: "local", Tier: 10,
+			WallMS: 300, PromptTokens: 100, ResponseTokens: 50, TokensSource: "actual", RunID: "r1", Enum: "SIMPLE"},
+		{TS: day + "T10:00:00Z", Model: "qwen (Ollama)", Executor: "local", Tier: 10,
+			WallMS: 500, PromptTokens: 100, ResponseTokens: 50, TokensSource: "actual", RunID: "r1", SwarmMode: "best"},
+		{TS: "2020-01-01T00:00:00Z", Model: "qwen (Ollama)", Executor: "local", Tier: 10, WallMS: 100},
+	}, stubPricer{}, now)
 
-	if got := series["A"]; len(got) != 3 || got[0] != 100 || got[2] != 300 {
-		t.Errorf("A series = %v, want [100 200 300] oldest-first", got)
+	st := m.stats["qwen (Ollama)"]
+	if st == nil {
+		t.Fatal("no per-model stat folded")
 	}
-	if last["A"] != 300 {
-		t.Errorf("A last = %d, want the most recent (300)", last["A"])
+	if len(st.wall) != 3 {
+		t.Errorf("wall samples = %d, want all 3 (p50 uses history)", len(st.wall))
 	}
-	if _, ok := series["C"]; ok {
-		t.Error("a row with no wall_ms produced a series")
+	if st.reqsToday != 2 {
+		t.Errorf("reqsToday = %d, want 2 (the 2020 row is not today)", st.reqsToday)
+	}
+	if st.lastRunID != "r1" {
+		t.Errorf("lastRunID = %q", st.lastRunID)
+	}
+	if !m.localModels["qwen (Ollama)"] {
+		t.Error("a purely-local model is not marked local")
+	}
+
+	rc, ok := m.runCost["r1"]
+	if !ok {
+		t.Fatal("no run join folded")
+	}
+	if rc.enum != "SIMPLE" || rc.strategy != "best" {
+		t.Errorf("run join = %+v", rc)
+	}
+	if rc.prompt != 200 || rc.resp != 100 || rc.actual != 300 || rc.est != 0 {
+		t.Errorf("run tokens = %+v", rc)
 	}
 }
 
-func TestLatencySeries_CapsToSparkWidth(t *testing.T) {
-	var rows []cost.Row
-	for i := 0; i < ckSparkWidth*3; i++ {
-		rows = append(rows, cost.Row{Model: "A", WallMS: int64(i + 1)})
-	}
-	series, _ := ckLatencySeries(rows)
-	got := series["A"]
-	if len(got) != ckSparkWidth {
-		t.Fatalf("series length = %d, want %d", len(got), ckSparkWidth)
-	}
-	// Must keep the newest samples, not the oldest.
-	if got[len(got)-1] != float64(ckSparkWidth*3) {
-		t.Errorf("last sample = %v, want the most recent", got[len(got)-1])
+// A model that ever routed to a remote provider must not claim "local · free".
+func TestFold_MixedProvidersAreNotLocal(t *testing.T) {
+	now := fixedNow()
+	day := now.Format("2006-01-02")
+	m := ckMetrics{stats: map[string]*ckModelStat{}, localModels: map[string]bool{}, runCost: map[string]ckRunCost{}}
+	m.fold([]cost.Row{
+		{TS: day + "T09:00:00Z", Model: "m", Executor: "local"},
+		{TS: day + "T10:00:00Z", Model: "m", Executor: "openrouter"},
+	}, nil, now)
+	if m.localModels["m"] {
+		t.Error("a model with a remote row is marked local · free")
 	}
 }
 
-// One sample is not a trace. Rendering a single bar would imply a trend that
-// was never measured.
-func TestSpark_TooFewSamplesRendersDash(t *testing.T) {
-	if got := ckSpark(nil); got != "—" {
-		t.Errorf("ckSpark(nil) = %q, want —", got)
-	}
-	if got := ckSpark([]float64{5}); got != "—" {
-		t.Errorf("ckSpark(one sample) = %q, want —", got)
-	}
-}
-
-func TestSpark_ScalesToSeriesRange(t *testing.T) {
-	got := ckSpark([]float64{10, 20, 30})
-	if len([]rune(got)) != 3 {
-		t.Fatalf("ckSpark produced %d glyphs, want 3", len([]rune(got)))
-	}
-	r := []rune(got)
-	if r[0] != '▁' {
-		t.Errorf("minimum sample rendered %q, want the lowest block", string(r[0]))
-	}
-	if r[2] != '█' {
-		t.Errorf("maximum sample rendered %q, want the highest block", string(r[2]))
-	}
-	// A flat series must not render as noise.
-	flat := ckSpark([]float64{7, 7, 7, 7})
-	for _, g := range flat {
-		if g != '▁' {
-			t.Errorf("flat series rendered %q — a constant latency must look constant", flat)
-			break
+func TestCkLocalExecutor(t *testing.T) {
+	for e, want := range map[string]bool{"local": true, "ollama": true, "agy": false, "openai": false, "": false} {
+		if got := ckLocalExecutor(e); got != want {
+			t.Errorf("ckLocalExecutor(%q) = %v", e, got)
 		}
 	}
 }
 
-// Savings compares real spend against the same work priced at tier 1. Both
-// sides come from real rows, so the comparison is like-for-like.
-func TestSavings_RealComparison(t *testing.T) {
-	rows := []cost.Row{
-		{Tier: 10, PromptTokens: 1000, ResponseTokens: 500, EstCostUSD: 0.0001},
-		{Tier: 8, PromptTokens: 2000, ResponseTokens: 1000, EstCostUSD: 0.0004},
+// ckStatFor matches tolerantly: cost.jsonl records the model as the executor
+// reported it while the scan names it differently, so an exact match silently
+// misses and a busy local head would show as never having run.
+func TestCkStatFor_ToleratesTheNamingMismatch(t *testing.T) {
+	m := ckMetrics{stats: map[string]*ckModelStat{
+		"Qwen2.5-Coder:7b (Ollama)": {wall: []int64{120, 130, 118}, reqsToday: 3},
+		"claude-opus":               {wall: []int64{2100, 1900}},
+	}}
+	tests := []struct {
+		label    string
+		name, id string
+		wantN    int
+	}{
+		{"exact model name", "Qwen2.5-Coder:7b (Ollama)", "", 3},
+		{"exact by id", "", "claude-opus", 2},
+		{"head name contained in the model", "Ollama", "", 3},
+		{"case-insensitive", "OLLAMA", "", 3},
+		{"model contained in the id", "", "claude-opus-4-20250101", 2},
+		{"no match at all", "gemini", "gemini", 0},
+		{"both empty", "", "", 0},
 	}
-	saved, baseline := ckSavings(rows, testPricing(t))
-
-	if baseline <= 0 {
-		t.Fatal("baseline is zero — tier-1 pricing did not resolve")
+	for _, tt := range tests {
+		t.Run(tt.label, func(t *testing.T) {
+			if got := m.ckStatFor(tt.name, tt.id); len(got.wall) != tt.wantN {
+				t.Errorf("ckStatFor(%q, %q) = %d samples, want %d", tt.name, tt.id, len(got.wall), tt.wantN)
+			}
+		})
 	}
-	if saved <= 0 {
-		t.Errorf("saved = %v, want positive (cheap tiers vs a tier-1 baseline)", saved)
-	}
-	if saved > baseline {
-		t.Errorf("saved (%v) exceeds the baseline (%v)", saved, baseline)
-	}
-}
-
-// Routing everything to tier 1 saves nothing. The panel must never claim a
-// saving that did not happen.
-func TestSavings_NeverNegative(t *testing.T) {
-	rows := []cost.Row{
-		{Tier: 1, PromptTokens: 1000, ResponseTokens: 500, EstCostUSD: 999.0},
-	}
-	saved, _ := ckSavings(rows, testPricing(t))
-	if saved != 0 {
-		t.Errorf("saved = %v, want 0 — spending more than baseline is not a saving", saved)
-	}
-}
-
-func TestSavings_NilPricingIsZero(t *testing.T) {
-	saved, base := ckSavings([]cost.Row{{Tier: 1, EstCostUSD: 1}}, nil)
-	if saved != 0 || base != 0 {
-		t.Errorf("with no pricing DB got saved=%v base=%v, want 0/0", saved, base)
+	if got := (ckMetrics{}).ckStatFor("x", "y"); len(got.wall) != 0 {
+		t.Errorf("empty metrics returned %v", got)
 	}
 }
 
-// With no graph loaded there is no blast radius to report — and reporting one
-// anyway is exactly the bug this replaced.
+// With no graph loaded there is no change impact to report — and reporting
+// one anyway is exactly the bug #193 removed.
 func TestBlastFor_NoGraphSaysNothing(t *testing.T) {
 	var m ckMetrics
 	if _, _, _, ok := m.ckBlastFor("internal/auth/token.go"); ok {
-		t.Error("reported a blast radius with no graph loaded")
+		t.Error("reported an impact with no graph loaded")
 	}
 	if _, _, _, ok := m.ckBlastFor(""); ok {
-		t.Error("reported a blast radius for an empty path")
+		t.Error("reported an impact for an empty path")
 	}
 }
 
-// An uncalibrated head has no diagnosticity to show.
-func TestDiagnosticity_UncalibratedIsZero(t *testing.T) {
-	var m ckMetrics
-	if d := m.ckDiagnosticity("some-head", ""); d != 0 {
-		t.Errorf("uncalibrated head reported D=%v, want 0 so the view renders —", d)
-	}
-}
-
-func TestFmtMS(t *testing.T) {
-	for _, tt := range []struct {
-		in   int64
-		want string
-	}{
-		{0, "—"}, {-1, "—"}, {250, "250ms"}, {9999, "9999ms"}, {10000, "10.0s"}, {37654, "37.7s"},
-	} {
-		if got := ckFmtMS(tt.in); got != tt.want {
-			t.Errorf("ckFmtMS(%d) = %q, want %q", tt.in, got, tt.want)
-		}
-	}
-}
-
-func TestSortedModels_MostSampledFirstAndStable(t *testing.T) {
-	m := ckMetrics{latency: map[string][]float64{
-		"few":  {1, 2},
-		"many": {1, 2, 3, 4},
-		"mid":  {1, 2, 3},
-	}}
-	got := m.ckSortedModels()
-	want := []string{"many", "mid", "few"}
-	for i := range want {
-		if got[i] != want[i] {
-			t.Fatalf("order = %v, want %v", got, want)
-		}
-	}
-	// Stable across calls — not map-random.
-	for i := 0; i < 20; i++ {
-		if strings.Join(m.ckSortedModels(), ",") != strings.Join(got, ",") {
-			t.Fatal("ordering is not stable between calls")
-		}
-	}
-}
-
-// A head with no recorded runs must render "—", never a zero-filled chart that
-// implies it ran and was instant.
-func TestDashboard_HeadWithNoHistoryRendersDash(t *testing.T) {
-	m := Cockpit{
-		w: 120, h: 30, ready: true, mode: "dispatch",
-		heads:   []ckHead{{name: "never-ran", tier: 5, up: true, color: ckCyan}},
-		metrics: ckMetrics{latency: map[string][]float64{}, lastMS: map[string]int64{}},
-	}
-	out := m.dash(120, 30)
-	if !strings.Contains(out, "—") {
-		t.Errorf("a head with no history did not render an em dash:\n%s", out)
-	}
-}
-
-// The real series must actually reach the rendered dashboard.
-func TestDashboard_RendersRealLatency(t *testing.T) {
-	m := Cockpit{
-		w: 120, h: 30, ready: true, mode: "dispatch",
-		heads: []ckHead{{name: "busy", tier: 3, up: true, color: ckCyan}},
-		metrics: ckMetrics{
-			latency: map[string][]float64{"busy": {100, 500, 200, 900}},
-			lastMS:  map[string]int64{"busy": 900},
-		},
-	}
-	out := m.dash(120, 30)
-	if !strings.Contains(out, "900ms") {
-		t.Errorf("real last-latency not rendered:\n%s", out)
-	}
-	if !strings.ContainsAny(out, "▁▂▃▄▅▆▇█") {
-		t.Errorf("real sparkline not rendered:\n%s", out)
-	}
-}
-
-// stubPricer prices tiers deterministically, so the savings arithmetic is
-// tested without depending on a resolvable registry/pricing.yaml.
-type stubPricer struct{}
-
-func (stubPricer) EstimateCost(tier, in, out int) float64 {
-	// Cheap tiers cost proportionally less, mirroring the real ramp.
-	perTok := 0.00002 / float64(tier)
-	return float64(in+out) * perTok
-}
-
-func testPricing(t *testing.T) ckPricer {
-	t.Helper()
-	return stubPricer{}
-}
-
-// A graph that does contain the file must yield real numbers — dependents and
-// κ walked from the graph, never a literal. This is the wiring that replaced
-// the hardcoded "κ=3.1 ⚠ 12 dependents".
+// A graph that does contain the file yields real numbers — dependents and κ
+// walked from the graph, never a literal.
 func TestBlastFor_RealGraphYieldsRealNumbers(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "graph.json")
-	// hub.go is depended on by three others; leaf.go by none.
 	doc := `{"nodes":[
 	  {"id":"hub","file":"hub.go"},
 	  {"id":"a","file":"a.go"},
@@ -254,21 +148,18 @@ func TestBlastFor_RealGraphYieldsRealNumbers(t *testing.T) {
 
 	radius, deps, _, ok := m.ckBlastFor("hub.go")
 	if !ok {
-		t.Fatal("a file with real dependents reported no blast radius")
+		t.Fatal("a file with real dependents reported no impact")
 	}
 	if deps != 3 {
-		t.Errorf("dependents = %d, want 3 — walked from the graph, not a literal", deps)
+		t.Errorf("dependents = %d, want 3", deps)
 	}
 	if radius <= 1.0 {
-		t.Errorf("radius = %v, want >1 for a file with dependents", radius)
+		t.Errorf("radius = %v, want >1", radius)
 	}
-
-	// A file nobody depends on must not be dressed up as risky.
 	if _, _, _, ok := m.ckBlastFor("leaf.go"); ok {
-		t.Error("a leaf file reported a blast radius")
+		t.Error("a leaf file reported an impact")
 	}
-	// A file absent from the graph reports nothing at all.
 	if _, _, _, ok := m.ckBlastFor("not-in-graph.go"); ok {
-		t.Error("a file absent from the graph reported a blast radius")
+		t.Error("a file absent from the graph reported an impact")
 	}
 }

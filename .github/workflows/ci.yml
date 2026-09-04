@@ -276,6 +276,10 @@ jobs:
         working-directory: desktop/frontend
         run: npm run typecheck
 
+      - name: Test
+        working-directory: desktop/frontend
+        run: npm test
+
       # The production bundle must build, not merely typecheck — `wails build`
       # runs this exact command before it compiles any Go.
       - name: Build

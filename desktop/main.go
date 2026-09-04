@@ -27,6 +27,15 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/options/mac"
 
 	"github.com/ankit373/hydra/desktop/api"
+
+	// Self-registering discovery plugins. Without these, provider.All() is
+	// empty and every chat dispatch reports zero heads, no matter what is
+	// actually installed on the machine (#495) — cmd/hydra/main.go imports
+	// the same four for the same reason.
+	_ "github.com/ankit373/hydra/internal/provider/agy"
+	_ "github.com/ankit373/hydra/internal/provider/cli"
+	_ "github.com/ankit373/hydra/internal/provider/env"
+	_ "github.com/ankit373/hydra/internal/provider/port"
 )
 
 //go:embed all:frontend/dist

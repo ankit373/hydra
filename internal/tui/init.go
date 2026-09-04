@@ -53,10 +53,17 @@ type InitModel struct {
 	localOnly bool
 	skills    []string
 	err       error
+
+	// specs is detected once here, not per render — viewTiers used to call
+	// sysinfo.Detect() (subprocess spawns: sysctl/vm_stat/nvidia-smi) fresh on
+	// every re-render of the Tiers step, re-probing hardware on every
+	// arrow-key press. install.go's NewInstallModel already gets this right;
+	// this mirrors it.
+	specs *sysinfo.Specs
 }
 
 func NewInitModel(result *probe.Result) InitModel {
-	return InitModel{result: result}
+	return InitModel{result: result, specs: sysinfo.Detect()}
 }
 
 func (m InitModel) Init() tea.Cmd { return nil }
@@ -144,7 +151,10 @@ func (m InitModel) View() string {
 		m.viewDone(&b)
 	}
 
-	b.WriteString(sHint.Render("\n  ↑↓ navigate   enter select   q quit\n"))
+	// Same lipgloss gotcha as viewDone (#465): a blank line written inside
+	// Render gets padded to the block's widest line instead of staying a real
+	// newline, so both surrounding newlines stay outside the styled text.
+	b.WriteString("\n" + sHint.Render("  ↑↓ navigate   enter select   q quit") + "\n")
 	return b.String()
 }
 
@@ -180,11 +190,10 @@ func (m InitModel) viewTiers(b *strings.Builder) {
 		}
 	}
 	if hasLocal {
-		specs := sysinfo.Detect()
-		best := specs.BestOllamaModel()
+		best := m.specs.BestOllamaModel()
 		b.WriteString(sDim.Render(fmt.Sprintf(
 			"\n  Hardware: %s\n  Best local model for your machine: %s\n",
-			specs.Summary(), best.DisplayName,
+			m.specs.Summary(), best.DisplayName,
 		)))
 	}
 
@@ -219,7 +228,11 @@ func (m InitModel) viewDone(b *strings.Builder) {
 		b.WriteString(sError.Render(fmt.Sprintf("  ✗ Setup failed: %v\n", m.err)))
 		return
 	}
-	b.WriteString(sSelected.Render("  ✓ Hydra is ready\n\n"))
+	// The blank line must stay outside Render: lipgloss pads every line of a
+	// multi-line render to its widest line, turning a trailing blank segment
+	// into a row of spaces glued directly onto the next line with no real
+	// newline between them (#465).
+	b.WriteString(sSelected.Render("  ✓ Hydra is ready") + "\n\n")
 	b.WriteString(fmt.Sprintf("  Cortex : %s\n", m.cortex.Name))
 	b.WriteString(fmt.Sprintf("  Config : %s\n", config.Path()))
 }

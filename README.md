@@ -75,42 +75,27 @@ Hydra discovers and routes to all of these automatically — no plugins, no manu
 
 ## Architecture
 
-```
-  ┌───────────────────────────────────────────────────────────────────────┐
-  │   hyctl dispatch  [--local | --swarm | --confidence 0.95]               │
-  └───────────────────────────────────┬─────────────────────────────────────┘
-                                       │
-                     ┌─────────────────▼─────────────────┐
-                     │  Policy Engine                     │  PII detection
-                     │  (blocks before any network call)  │  cost ceiling · local-only
-                     └─────────────────┬─────────────────┘
-                                       │
-                     ┌─────────────────▼─────────────────┐
-                     │  Router                            │  CapScore → tier
-                     │  score → tier → fallback chain     │  ~1.1 µs/dispatch
-                     └───┬───────────────┬───────────────┬─┘
-             single      │        swarm  │    confidence │  (SPRT)
-          ┌──────────────▼┐  ┌───────────▼──┐  ┌──────────▼───────────┐
-          │ best available│  │ race/best/all│  │ Trust Control Plane   │
-          │ head + fallbk │  │ + LLM judge  │  │ calibration → LLR/D    │
-          └──────┬────────┘  └──────┬───────┘  │ SPRT optimal-stopping  │
-                 │                  │          │ defect-cost model      │
-                 │                  │          └──────────┬────────────┘
-                 └──────────────────┴─────────────────────┘
-                                       │
-              ┌────────────────────────┼────────────────────────┐
-       ┌──────▼──────┐          ┌──────▼──────┐          ┌───────▼─────┐
-       │  CLI Heads  │          │  API Heads  │          │ Local Heads │
-       │ Claude Code │          │   OpenAI    │          │   Ollama    │
-       │   Codex     │          │  Anthropic  │          │  LM Studio  │
-       │  Cursor …   │          │  Groq … +12 │          │             │
-       └─────────────┘          └─────────────┘          └─────────────┘
-         score 60–95              score 70–95              score 50–72
-                                       │
-                     ┌─────────────────▼─────────────────┐
-                     │  Observability                     │  cost.jsonl (est/actual)
-                     │  cost + calibration + trust ledgers│  calibration.jsonl · trust.jsonl
-                     └────────────────────────────────────┘
+```mermaid
+flowchart TD
+    A["<b>hyctl dispatch</b><br/>--local · --swarm · --confidence 0.95"] --> B
+    B["<b>Policy Engine</b><br/>PII detection · cost ceiling · local-only<br/><i>blocks before any network call</i>"] --> C
+    C["<b>Router</b><br/>CapScore → tier → fallback chain<br/><i>~1.1 µs/dispatch</i>"]
+
+    C -->|single| E["best available head<br/>+ fallback chain"]
+    C -->|swarm| F["race / best / all<br/>+ LLM judge"]
+    C -->|confidence| G["<b>Trust Control Plane</b><br/>calibration → LLR/D<br/>SPRT optimal-stopping<br/>defect-cost model"]
+
+    subgraph Heads [" "]
+        direction LR
+        CLI["<b>CLI Heads</b><br/>Claude Code · Codex · Cursor …<br/>score 60–95"]
+        API["<b>API Heads</b><br/>OpenAI · Anthropic · Groq … +12<br/>score 70–95"]
+        LOC["<b>Local Heads</b><br/>Ollama · LM Studio<br/>score 50–72"]
+    end
+
+    E --> Heads
+    F --> Heads
+    G --> Heads
+    Heads --> J["<b>Observability</b><br/>cost.jsonl · calibration.jsonl · trust.jsonl<br/><i>est/actual labeled</i>"]
 ```
 
 Every executor is **native Go** — `agy`, Ollama, per-provider HTTP (OpenAI-compatible + Anthropic/Gemini/Cohere/Azure/Bedrock/Replicate), and generic CLI. No shell scripts in the hot path.
@@ -284,7 +269,7 @@ $ hyctl dispatch "process payment for card 4111-1111-1111-1111"
 
 ### 💰 Full Cost Visibility
 
-Every dispatch is logged to `~/.hydra/cost.jsonl` with model, tier, token counts, estimated cost, and fallback chain. Costs are **honestly labeled**: `tokens_source` marks whether a provider reported real usage or Hydra estimated it, and `cost_source` is always `estimated` (pricing × tokens, never a billed figure). Run `hyctl cost` or `hyctl stats` to see where your budget is going.
+Every dispatch is logged to `~/.hydra/cost.jsonl` with model, tier, token counts, estimated cost, and fallback chain. Costs are **honestly labeled**: `tokens_source` marks whether a provider reported real usage or Hydra estimated it, and `cost_source` is always `estimated` (pricing × tokens, never a billed figure). Run `hyctl cost` or `hyctl stats` to see where your budget is going, or `hyctl stats --latency` for p50/p90/p99 per model — computed from mergeable sketches accurate to within 1%, so percentiles survive even after the raw rows are gone. Each row also carries `act_prob` (the probability the router picked that head) and `keep_prob` (the probability the row was kept), so a sampled log can still be read without bias — averaging a non-uniformly sampled log understates rates badly enough to reverse which head looks better.
 
 ```
 $ hyctl cost
@@ -342,6 +327,70 @@ hyctl dispatch --swarm --swarm-mode all  "prompt"   # every answer, ranked by Ca
 
 `--swarm-max-heads`, `--swarm-max-cost` (pre-flight cost guard), and `--swarm-heads id1,id2` give you fine control over fan-out.
 
+### 🛡️ Security Posture (`hyctl security`)
+
+Every access an agent makes is already recorded in the local MCP ledger, hash-chained
+and anchored. `hyctl security` reads that log and answers the question you actually
+have:
+
+```
+  VERDICT  ACT NOW
+    critical incident — gpt-4o: the same resource was denied repeatedly, then it
+    escalated to an exec/network action, then it targeted the audit trail itself.
+    recon → escalation → audit-tampering · 4 event(s) · likelihood 8 × impact 8
+
+  activity  4 blocked · 0 flagged
+  evidence  4 event(s), 4 hash-chained, intact
+```
+
+Counts hide the sequence. "4 denied, 2 flagged" and "injection → recon → escalation →
+an attempt on the audit trail" are the same rows read twice; only the second is an
+incident. Severity is OWASP Risk Rating (likelihood × impact), never a blended score.
+
+`--why` opens the full programme underneath: a risk register with an SLA clock and a
+curated crosswalk to OWASP LLM / NIST AI RMF / ISO 42001 / MITRE ATLAS / SOC 2, OWASP
+LLM Top-10 coverage, a policy audit that finds rules which can never fire, PII exposure
+resolved against real heads, control-effectiveness (a control that is configured but
+never applied is reported as **inert**, not as protection), head-binary integrity, and
+edit blast radius. `--attest` emits a checkable attestation that states plainly when
+the underlying log is not tamper-evident, rather than blessing it.
+
+Deliberately honest about its own limits: framework mappings are marked **curated**
+assertions rather than measurements, defect cost is **per-occurrence and not
+annualised**, a file the dependency graph does not index is **unknown** and never
+"low-risk", and the attestation is **unsigned** because Hydra has no key management.
+
+### 🧩 MCP Server Trust Registry (`hyctl mcp registry`)
+
+The ledger above records what an agent *did*. This scores whether the MCP server it
+was talking to was ever safe to trust in the first place. Every existing MCP directory
+answers "does this server exist" — none answer "is it safe to run with my credentials
+right now," and star/download counts are actively misleading (the most-starred
+servers score worst on quality in independent research).
+
+```
+hyctl mcp registry sync       # pull the official MCP registry into a local cache
+hyctl mcp registry scan       # find servers installed across Claude Code/Desktop, Cursor, Windsurf, VS Code
+hyctl mcp registry audit      # resolve + score them, advance lifecycle state
+hyctl mcp registry backtest   # prove the pipeline still catches real incidents (postmark-mcp, CVE-2025-6514)
+```
+
+Only a *confirmed* finding (a known advisory match) quarantines a server — a name-similarity
+heuristic lowers the score without condemning it, since quarantine has no automatic way out and
+`clear` is the manual recovery path. A category that could not be checked contributes a neutral
+baseline rather than dropping out of the average, so failing to reach GitHub can never *raise* a
+score, and a server nothing is known about reads "insufficient evidence" instead of a number.
+
+Scoring follows the CSA MCP Selection Scorecard's four categories — automating a
+taxonomy the MCP Security Working Group already endorsed, not inventing a competing
+one. Every version bump drops a server's trust state back to **provisional** until it
+re-earns it, detected via a content-hash diff of the manifest — the direct fix for a
+server that ships clean for months, then turns malicious in one release. `scan` never
+reads env-var or secret values from client configs, only server identity. Feeds back
+into the ledger: a flagged or quarantined server auto-classifies its own tool calls,
+the same mechanism PII is auto-detected from content, so a policy rule can gate on it
+without any extra configuration.
+
 ### 🧭 Confidence Routing (Trust Control Plane)
 
 Most routers optimize *cost*. Hydra is growing a second axis: **verified correctness**. Instead of always firing a fixed number of models, `--confidence` runs a **sequential probability ratio test (SPRT)** — it samples models adaptively, in most-diagnostic-per-dollar order, and stops the moment the calibrated log-odds cross the target confidence.
@@ -370,7 +419,7 @@ hyctl dispatch --confidence 0.90 --file internal/auth/token.go "rotate the signi
 
 In synthetic benchmarks this cuts model calls **~49% on easy tasks** and **~24% on a blended workload** at ≥98% accuracy — while deliberately sampling *more* than a fixed swarm on genuinely hard tasks, which a fixed-N ensemble cannot do. Calibration is cold-start conservative: with no history, sources are treated as uninformative and Hydra falls back to sampling broadly.
 
-> The SPRT ensemble, calibration engine, defect-cost model, graph-aware (blast-radius) routing, the local MCP accountability ledger, and verification oracles have all shipped. A central security agent and a web dashboard are on the [roadmap](#roadmap).
+> The SPRT ensemble, calibration engine, defect-cost model, graph-aware (blast-radius) routing, the local MCP accountability ledger, verification oracles, security posture assessment (`hyctl security`), and the native desktop app have all shipped. A browser-based Web UI and a central MCP server registry are on the [roadmap](#roadmap).
 
 ---
 
@@ -389,7 +438,8 @@ In synthetic benchmarks this cuts model calls **~49% on easy tasks** and **~24% 
 | Route to a **confidence of correctness** (SPRT) | ✅ | ❌ | ❌ | ❌ |
 | Per-source calibration (sensitivity / specificity / D) | ✅ | ❌ | ❌ | ❌ |
 | MCP accountability ledger | ✅ | ❌ | ❌ | ❌ |
-| Central security agent *(roadmap)* | 🔨 | ❌ | ❌ | ❌ |
+| Security posture + correlated incident detection (`hyctl security`) | ✅ | ❌ | ❌ | ❌ |
+| Native desktop app (Models / Activity / Usage / Audit) | ✅ | ❌ | ❌ | ❌ |
 
 ---
 
@@ -443,11 +493,10 @@ Every release builds `hyctl` for all six targets below. This table is kept in st
 
 Windows has no Homebrew; use npm, pip, `install.ps1`, or download the archive directly.
 
-The **desktop app** ships for macOS (universal), Windows x86-64 and Linux x86-64. Windows ARM64 and
-Linux ARM64 build on hosted ARM runners as of [#263](https://github.com/ankit373/hydra/issues/263),
-but were added after v1.2.0 was cut — the first release carrying them is the one after v1.2.0, and
-`install-app.sh` picks them up automatically once published. The CLI has covered ARM64 on all three
-OSes all along.
+The **desktop app** ships for macOS (universal), Windows x86-64/ARM64, and Linux x86-64/ARM64 — five
+targets total ([#263](https://github.com/ankit373/hydra/issues/263)), each built on a native runner
+(including two hosted ARM runners) and uploaded on every RC and stable release. `install-app.sh`
+resolves the right archive for your OS/arch automatically — nothing to configure per-arch.
 
 **From source** (Go 1.22+):
 ```bash
@@ -473,7 +522,9 @@ The wizard scans your machine, ranks every model it finds, walks you through pic
 hyctl init                              # first-run wizard
 hyctl probe                             # scan and display all available models
 hyctl status                            # live system state (heads, budget bars, burn-rate risk)
-hyctl tui                               # interactive cockpit — chat+code / dashboard / agent-tree (Tab cycles)
+hyctl tui                               # interactive cockpit — six views (see below), `?` for shortcuts
+hyctl version                           # version, commit, build info
+hyctl upgrade                           # self-update via install.sh (curl installs only; brew installs: `brew upgrade hyctl`)
 
 # Model registry (add a new model at runtime — no rebuild)
 hyctl models list                       # built-in + your models, by capability score
@@ -487,6 +538,13 @@ hyctl dispatch --dry-run "..." # preview routing without executing
 hyctl dispatch --local "..."   # local models only, no API calls
 hyctl dispatch --swarm --swarm-mode best "..."   # fan out to many heads, judge best
 hyctl dispatch --confidence 0.95 "..."  # SPRT: sample until this P(correct) is reached
+
+# Tasks waiting on you
+# A ledger policy can answer `ask` instead of allow or deny. Dispatch then stops
+# before running anything and parks the task until you answer it.
+hyctl ask list                          # what is waiting, and what it wants to know
+hyctl ask answer <task-id> "go ahead"   # answer it and run the task
+hyctl ask decline <task-id> "not prod"  # refuse it; nothing runs
 
 # Cost & pricing
 hyctl cost                              # spend summary (est. vs actual labeled)
@@ -510,14 +568,54 @@ hyctl mcp check <tool> --agent A --resource R --action write  # gate + record an
 hyctl mcp check <tool> --content "$DATA" --action network      # PII auto-classified; policy can deny egress
 hyctl mcp check <tool> --params '{"amount":500}'               # bind a hash of the params to the decision
 hyctl mcp verify <tool> --resource R --params '{"amount":500}' # prove executed params == approved params
+hyctl mcp verify-chain                  # confirm the ledger's hash chain hasn't been tampered with
 hyctl mcp log --denied                  # what got blocked
 hyctl mcp report                        # allowed/denied by agent and tool
+hyctl mcp registry sync                 # pull the official MCP registry into a local cache
+hyctl mcp registry scan                 # list MCP servers installed on this machine (identity only)
+hyctl mcp registry audit                # resolve + score installed servers, advance lifecycle state
+hyctl mcp registry export --out DIR     # static index.html/index.json of audited servers
+hyctl mcp registry backtest             # validate scoring against known real incidents
+hyctl mcp registry list                 # audited servers by trust score
+hyctl mcp registry clear <server>       # recover a server quarantined in error
+hyctl security                          # what the agents did, and can the record be trusted
+hyctl security --why                    # the full programme: register, coverage, policy, exposure
+hyctl security --attest                 # checkable attestation: posture + evidence + digest
 
 # Editing & batch
 hyctl edit --file ... --prompt "..."    # scoped, validated, rollback-safe file edit
 hyctl review ...                        # code review / approve / reject / QA
 hyctl parallel ...                      # fan independent tasks across heads
 ```
+
+### The Cockpit (`hyctl tui`)
+
+Six views, cycled with `tab` (or jump with `1–6`); `?` opens the shortcut glossary from anywhere:
+
+| View | What it shows |
+|---|---|
+| **chat** | Type a task and it **executes**: a route line first (class → tier → model · strategy · plain-words why, with a `local-only (pii)` badge and change impact when they apply), then the real answer or edit. `esc` cancels mid-run; failures link to their trace; session cost accrues in the header |
+| **agents** | Live runs and today's finished ones — `enter` opens a run's trace |
+| **models** | Every scanned model nested under its provider/server, with per-model detail: tier, capability, p50 latency, requests/cost today, calibration scorecard. A down server grays its models; embedding-only models say `embeddings only — never routed` |
+| **activity** | Today's runs with a full trace per run: routed → policy → request → stream → edits → done, fallbacks included |
+| **usage** | Spend today / this month / saved vs all-frontier, by model/tier/day breakdowns, and the orchestrator's context budget |
+| **audit** | Calibration scorecard, audit-log chain integrity, guardrails (PII local-only, injection markers, MCP server trust), and a needs-a-human queue |
+
+Chat has **modes** — what a task does (`shift+tab` cycles the basics, `m` opens the full picker):
+
+| Mode | What it does |
+|---|---|
+| **Ask** | Answer only — never writes files |
+| **Edit** | Direct change when the prompt names an existing file (validated, rollback-safe, snapshotted); otherwise answers and says so |
+| **Plan** | Drafts numbered steps on a cheap tier and waits — `enter`/`y` runs them, `esc` discards |
+| **Auto** | Plan → edit → **verify**: runs `go test ./...` (or your workspace.yaml validator) through the oracle, feeds failures back for up to 2 fixes, and renders a proof strip: `plan ✓ · edit ✓ file +A/−R · tests ✓/✗` |
+| **Architect** | Auto, but plans on a strong tier and implements on a cheap one |
+| **Careful** | Auto, but every file write needs a `y/n` confirm before it lands |
+| **Unattended** | Auto with no confirms and a hard $0.50 per-task cost cap — it stops visibly at the cap |
+
+Where a task runs is separate: `ctrl+o` overrides the **next** task's routing (auto / force tier / local only / best of 3 / consensus check at 90–99.9%). After an edit: `d` shows the diff, `x` restores the pre-task snapshot exactly, `o` opens the file, and the footer's trace id jumps into the activity view.
+
+Everything shown is measured from the machine's real logs — a figure that cannot be computed renders `—`, never an invented number. Lists scroll (`j/k`, `pgup/pgdn`, mouse wheel); `hyctl tui --snapshot [--view 0..5]` prints static frames for docs and bug reports.
 
 ---
 
@@ -598,6 +696,7 @@ For Ollama models, add a family pattern:
 | **SPRT confidence routing** (`hyctl dispatch --confidence`) | ✅ Shipped |
 | **Graph-aware routing** — blast-radius → defect cost → confidence | ✅ Shipped |
 | **Optimal parallelism** — `n* = √((1−s)/k)` from graph coupling (Law 4) | ✅ Shipped |
+| **Security posture** (`hyctl security`) — verdict, correlated incidents, risk register | ✅ Shipped |
 | **Causal A2A handoffs** — vector clocks, concurrent-edit conflict detection | ✅ Shipped |
 | **Context-entropy governor** — compact on falling signal density, not length | ✅ Shipped |
 | **MCP accountability ledger** — record + gate what every agent touches | ✅ Shipped |
@@ -605,8 +704,10 @@ For Ollama models, add a family pattern:
 | **Runtime model registry** — `hyctl models add` merges a `~/.hydra/models.json` overlay, no rebuild | ✅ Shipped |
 | **Percolation-κ blast radius** — Molloy–Reed core detection weights hub files higher | ✅ Shipped |
 | **Rate-aware budget governor** — first-passage-time risk on `claude_pct`, escalates before a threshold | ✅ Shipped |
-| MCP server registry + central security agent | 📋 [#9](https://github.com/ankit373/hydra/issues/9)/[#10](https://github.com/ankit373/hydra/issues/10) |
-| Web UI + real-time cost dashboard | 📋 [#11](https://github.com/ankit373/hydra/issues/11)/[#12](https://github.com/ankit373/hydra/issues/12) |
+| **Security posture** (`hyctl security`) — verdict, correlated incidents, risk register, OWASP LLM Top-10 coverage | ✅ Shipped |
+| **Native desktop app** — chat-first, with a pool-aware model picker and a routing pane; plus Models, Activity, Usage and Audit views | ✅ Shipped |
+| MCP server registry — central connection/authorization plane across every MCP server | 📋 [#9](https://github.com/ankit373/hydra/issues/9) |
+| Browser-based Web UI | 📋 [#12](https://github.com/ankit373/hydra/issues/12) |
 
 See the full [Hydra Roadmap project board](https://github.com/users/ankit373/projects/2).
 
@@ -633,6 +734,10 @@ hydra/
 │   ├── trust/                   # Trust Control Plane: calibration · defect-cost · SPRT ensemble
 │   ├── pricing/                 # Live cost DB (OpenRouter fetch + 24h cache + YAML fallback)
 │   ├── cost/                    # cost.jsonl reader + spend summaries + source labeling
+│   ├── ope/                     # Off-policy estimation: inverse-probability weighting over sampled logs
+│   ├── sketch/                  # Mergeable relative-error quantile sketch (bounded memory)
+│   ├── rollup/                  # Per-day aggregates: calls, tokens, spend, latency sketch
+│   ├── evalset/                 # Oracle-verified labelled examples — kept verbatim, never pruned
 │   ├── budget/                  # Token-budget governor: 6 static pressure modes + rate-aware first-passage risk on claude_pct
 │   ├── rank/                    # Deduplication + CapScore ranking
 │   ├── editor/                  # Scoped, validated, rollback-safe file edits
@@ -641,6 +746,7 @@ hydra/
 │   ├── util/                    # Shared utilities (bounded Accumulator, 33 MB cap)
 │   ├── sysinfo/                 # Hardware detection + 7-day memory history
 │   ├── runlog/                  # Per-run event log (~/.hydra/logs/runs/) + liveness heartbeat + edit snapshots
+│   │                            # Old runs seal into compressed monthly segments (logs/seg/)
 │   ├── tree/                    # Reconstructs a run: supervision tree + timeline, framework-free
 │   ├── runid/                   # Run/task identity — correlates every log a run produces
 │   ├── a2a/                     # Agent handoffs with vector clocks (causal ordering + conflict detection)
@@ -651,7 +757,7 @@ hydra/
 │   ├── build/ · update/         # Version stamping + startup update check
 │   └── tui/                     # Bubbletea cockpit + init wizard
 ├── desktop/                     # Desktop app (own Go module) — Wails v2 + React/TS
-│   ├── api/                     # Go backend: Dashboard · Fleet · Session · Code · chat (no Wails imports)
+│   ├── api/                     # Go backend: Models · Activity · Usage · Audit · Session · chat (no Wails imports)
 │   └── frontend/                # React views over the same logs the CLI writes
 ├── registry/                    # routing · models · domains · pricing · policy — go:embed'd into
 │                                #   the binary; $HYDRA_HOME/registry/<file> overrides it
@@ -662,13 +768,29 @@ hydra/
 
 ### The desktop app
 
-A native window over the same engine: **Dashboard** (spend, governor pressure, trust record),
-**Fleet** (runs in flight and the agents inside them), **Session** (one run's timeline, plus a
-layered graph when it fanned out), and **Code** (the file edits a run made, as diffs) — over a
-persistent chat dock.
+A native window over the same engine, opening on **Chat**: ask for work, and each reply says which
+model answered, at which tier, and what it cost — with the run's timeline narrated live rather than
+after the fact. The composer's model picker groups models by **token pool**, so it shows when a
+choice spends a quota another model shares (Opus and Sonnet draw from the same one). A companion
+pane beside the thread carries the active head, this run's confidence, per-model measured accuracy
+from the calibration record, and the files the run changed.
+
+Four more views sit behind an icon rail: **Models** (every head this machine can route to, grouped
+by the token pool it spends, each marked with whether anything can actually drive it right now and
+why not — plus the accuracy each has earned, never a score without its outcome count), **Activity**
+(every request, grouped by who has to act: waiting on you, running now, something failed, done),
+**Usage** (spend, remaining context budget with the headroom in updates rather than a band name,
+and how many models a consensus check actually asked), and **Audit** (what the agents did and
+whether the record can be trusted — OWASP LLM Top-10 coverage over the MCP audit log, the guardrail
+rules in force, and a trust verdict for every MCP server installed on this machine).
+
+Opening a request from Activity drills into **Session**: that run's timeline, a layered graph when
+it fanned out, and a **Code** tab whose diff marks what changed *within* a modified line and lets
+you accept or undo the change on disk. A guardrail rule that answers `ask` parks the task, and the
+question appears inline in the chat transcript, answerable there.
 
 It reads `~/.hydra/logs/` directly. No daemon, no telemetry, and its numbers are the CLI's numbers:
-Dashboard totals are asserted equal to `hyctl cost` and `hyctl stats` for the same data.
+Usage totals are asserted equal to `hyctl cost` and `hyctl stats` for the same data.
 
 **Install** — macOS and Linux:
 
@@ -679,7 +801,7 @@ curl -fsSL https://raw.githubusercontent.com/ankit373/hydra/main/install-app.sh 
 It resolves the newest release (the asset names embed their version, so GitHub's `/latest/download/`
 shortcut cannot address them), verifies the download against the published `.sha256`, installs the
 `.app` to `/Applications` — or the binary to `~/.local/share/hydra` with a `~/.local/bin` symlink on
-Linux — and clears the macOS quarantine flag so the first launch works. `HYDRA_VERSION=v1.1.0` pins
+Linux — and clears the macOS quarantine flag so the first launch works. `HYDRA_VERSION=v1.4.0` pins
 a release; `HYDRA_APP_DIR` changes where it lands.
 
 **Or take the artifact directly**, from the
@@ -688,8 +810,10 @@ a release; `HYDRA_APP_DIR` changes where it lands.
 | platform | artifact |
 |---|---|
 | macOS (Intel + Apple Silicon) | `hydra-desktop_<version>_darwin_universal.zip` |
-| Windows | `hydra-desktop_<version>_windows_amd64.zip` |
-| Linux | `hydra-desktop_<version>_linux_amd64.tar.gz` |
+| Windows x86-64 | `hydra-desktop_<version>_windows_amd64.zip` |
+| Windows ARM64 | `hydra-desktop_<version>_windows_arm64.zip` |
+| Linux x86-64 | `hydra-desktop_<version>_linux_amd64.tar.gz` |
+| Linux ARM64 | `hydra-desktop_<version>_linux_arm64.tar.gz` |
 
 Each artifact ships a `.sha256` next to it. Until the builds are signed this is the only integrity
 check available, so it is worth the one command:

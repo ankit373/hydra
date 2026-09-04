@@ -5,6 +5,7 @@ package dispatch
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -140,6 +141,51 @@ func TestDispatch_HandoffClockAdvancesAcrossCalls(t *testing.T) {
 	}
 }
 
+// Every LocalOnly head maps to rank.UITier 10 (#248), so two different local
+// models used to tick the identical "hydra-tier-10" clock key. The clock must
+// key on the head's own identity instead, or two genuinely different agents'
+// handoffs are indistinguishable from one agent dispatching twice (#503). The
+// display "From" string is untouched — it still reads as the tier bucket.
+func TestDispatch_HandoffClockDistinguishesSameTierHeads(t *testing.T) {
+	s := testutil.NewSandbox(t)
+	path := filepath.Join(config.Dir(), "logs", "last_handoff.json")
+
+	localHead := func(id string) provider.Head {
+		h := echoHead(t, s, id, 50)
+		h.LocalOnly = true
+		return h
+	}
+
+	if _, err := liveDispatcher(localHead("model-a")).Dispatch(context.Background(), "first", Options{}); err != nil {
+		t.Fatal(err)
+	}
+	first, err := a2a.Load(path)
+	if err != nil || first == nil {
+		t.Fatal(err)
+	}
+
+	if _, err := liveDispatcher(localHead("model-b")).Dispatch(context.Background(), "second", Options{}); err != nil {
+		t.Fatal(err)
+	}
+	second, err := a2a.Load(path)
+	if err != nil || second == nil {
+		t.Fatal(err)
+	}
+
+	if _, ok := first.Clock["model-a"]; !ok {
+		t.Errorf("first handoff clock %v has no entry for model-a's own identity", first.Clock)
+	}
+	if _, ok := second.Clock["model-b"]; !ok {
+		t.Errorf("second handoff clock %v has no entry for model-b's own identity", second.Clock)
+	}
+	if _, ok := second.Clock["hydra-tier-10"]; ok {
+		t.Errorf("clock keyed on the shared tier bucket instead of head identity: %v", second.Clock)
+	}
+	if first.From != "hydra-tier-10" || second.From != "hydra-tier-10" {
+		t.Errorf("display From must stay the tier-bucket string, got %q and %q", first.From, second.From)
+	}
+}
+
 // A dry run must resolve the chain without executing anything.
 func TestDispatch_DryRunResolvesTheChainWithoutRunningIt(t *testing.T) {
 	s := testutil.NewSandbox(t)
@@ -209,6 +255,57 @@ func TestDispatch_LedgerDenyRuleBlocksTheHead(t *testing.T) {
 	}
 	if !sawDeny {
 		t.Errorf("no deny event recorded for the denied head: %+v", events)
+	}
+}
+
+// dispatch.go's fallback loop calls ledger.CheckAndRecordDispatch once per
+// candidate against the same prompt. A precomputed Classification must be
+// reused for every one of them, not re-derived from Content — a deliberately
+// "clean" Classification recorded on every candidate despite the prompt
+// containing an email proves it was reused, not recomputed (#522).
+func TestDispatch_ReusesPrecomputedClassificationAcrossFallbackCandidates(t *testing.T) {
+	s := testutil.NewSandbox(t)
+
+	broken1 := echoHead(t, s, "h1", 95)
+	broken1.Executable = filepath.Join(s.BinDir, "does-not-exist")
+	broken2 := echoHead(t, s, "h2", 90)
+	broken2.Executable = filepath.Join(s.BinDir, "does-not-exist")
+	working := echoHead(t, s, "h3", 85)
+
+	prompt := "please contact admin@example.com about this"
+	clean := policy.Classification{}
+	res, err := liveDispatcher(broken1, broken2, working).Dispatch(context.Background(), prompt, Options{
+		Classification: &clean,
+	})
+	if err != nil {
+		t.Fatalf("dispatch gave up instead of falling back to the working head: %v", err)
+	}
+	if res.Head.ID != "h3" {
+		t.Fatalf("answered by %q, want h3 after 2 fallbacks", res.Head.ID)
+	}
+	if res.Retries != 2 {
+		t.Fatalf("Retries = %d, want 2 — three candidates should have been tried", res.Retries)
+	}
+
+	events, err := ledger.Load(ledger.DefaultPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var dispatchEvents int
+	for _, e := range events {
+		if e.Agent != "hydra-dispatch" {
+			continue
+		}
+		dispatchEvents++
+		if e.Classification != "" || len(e.PIITypes) != 0 {
+			t.Errorf("head %s: Classification=%q PIITypes=%v, want both empty — the "+
+				"precomputed clean Classification must be reused for every candidate, "+
+				"not re-derived from a prompt that plainly contains an email",
+				e.Tool, e.Classification, e.PIITypes)
+		}
+	}
+	if dispatchEvents != 3 {
+		t.Fatalf("recorded %d hydra-dispatch ledger events, want 3 (one per candidate)", dispatchEvents)
 	}
 }
 
@@ -340,6 +437,45 @@ func TestDispatch_AllHeadsFailingReportsWhy(t *testing.T) {
 	}
 }
 
+// The end-to-end repro for #451: a documented tier name ("expert") that does
+// not exist in cfg.Tiers must fail with an error naming the bad tier, not the
+// generic "no routable heads" message that blames the head pool for a config
+// problem. A live, perfectly routable head is present, so a regression back to
+// the old behavior would still dispatch successfully rather than error at all.
+func TestDispatch_UnknownNamedTierIsDistinctFromNoRoutableHeads(t *testing.T) {
+	s := testutil.NewSandbox(t)
+	dd := liveDispatcher(echoHead(t, s, "cloud", 90))
+
+	_, err := dd.Dispatch(context.Background(), "go", Options{TierHint: "expert"})
+	if err == nil {
+		t.Fatal("dispatch succeeded with a tier name absent from config")
+	}
+	if !strings.Contains(err.Error(), "unknown tier") || !strings.Contains(err.Error(), "expert") {
+		t.Errorf("error = %v, want it to name \"expert\" as an unknown tier", err)
+	}
+	if strings.Contains(err.Error(), "no routable heads") || strings.Contains(err.Error(), "no available heads") {
+		t.Errorf("error = %v, blames routability for a config problem", err)
+	}
+}
+
+// The end-to-end repro for #454: an out-of-range numeric --tier must fail
+// clearly, naming the requested value, rather than silently behaving as "no
+// tier" (0, negative) or getting clamped to 10 with no trace of the input.
+func TestDispatch_OutOfRangeNumericTierIsRejected(t *testing.T) {
+	s := testutil.NewSandbox(t)
+	dd := liveDispatcher(echoHead(t, s, "cloud", 90))
+
+	for _, hint := range []string{"0", "-1", "11", "20"} {
+		_, err := dd.Dispatch(context.Background(), "go", Options{TierHint: hint})
+		if err == nil {
+			t.Fatalf("dispatch succeeded with out-of-range tier %q", hint)
+		}
+		if !strings.Contains(err.Error(), hint) {
+			t.Errorf("tier %q: error = %v, want it to name the requested value", hint, err)
+		}
+	}
+}
+
 // PII in the prompt forces local-only routing. With no local head that must be
 // a refusal naming the cause, not a quiet escalation to a paid API head — the
 // whole point of the policy.
@@ -362,65 +498,113 @@ func TestDispatch_PIIForcesLocalOnlyAndSaysSoWhenNothingIsLocal(t *testing.T) {
 	}
 }
 
-// A2A injection: the handoff's context must reach the prompt, and a missing or
-// corrupt handoff file must leave the prompt untouched rather than failing the
-// dispatch.
-func TestInjectA2A(t *testing.T) {
-	dir := t.TempDir()
+// A precomputed Classification must be trusted over a fresh scan: cmdDispatch
+// computes it once (see main.go) so Dispatch's own policy.Evaluate call reuses
+// it instead of re-scanning prompt. A Dispatch that recomputed anyway would
+// force local-only here (an SSN is in the prompt) and fail with no local
+// head — succeeding proves the override was actually used, not ignored (#522).
+func TestDispatch_PrecomputedClassificationOverridesFreshDetection(t *testing.T) {
+	s := testutil.NewSandbox(t)
 
-	h := a2a.Handoff{From: "agent-1", Task: "earlier task", PriorOutput: "earlier output"}
-	raw, err := json.Marshal(h)
+	dd := &Dispatcher{
+		cfg:    &config.Config{},
+		heads:  []provider.Head{echoHead(t, s, "cloud", 90)},
+		policy: policy.New(policy.DefaultRules(true)), // local-only PII rule armed
+		budget: budget.NewRegistry(nil),
+	}
+
+	clean := policy.Classification{} // PII: false, despite the SSN below
+	res, err := dd.Dispatch(context.Background(), "my SSN is 123-45-6789", Options{
+		Classification: &clean,
+	})
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("dispatch failed even though the precomputed classification says clean: %v", err)
 	}
-	path := filepath.Join(dir, "handoff.json")
-	if err := os.WriteFile(path, raw, 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	got, err := injectA2A(path, "new instruction")
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, want := range []string{"agent-1", "earlier output", "new instruction", "ADDITIONAL INSTRUCTION"} {
-		if !strings.Contains(got, want) {
-			t.Errorf("injected prompt is missing %q:\n%s", want, got)
-		}
-	}
-
-	// An absent file is "no handoff", not a failure: a2a.Load reports it as
-	// (nil, nil) and the prompt goes through untouched. That distinction is why
-	// a first dispatch with --a2a pointed at a not-yet-written file still runs.
-	got, err = injectA2A(filepath.Join(dir, "absent.json"), "unchanged")
-	if err != nil {
-		t.Errorf("a missing handoff file was an error: %v", err)
-	}
-	if got != "unchanged" {
-		t.Errorf("prompt = %q with no handoff, want it untouched", got)
-	}
-
-	if err := os.WriteFile(path, []byte("{truncated"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if got, err := injectA2A(path, "unchanged"); err == nil || got != "unchanged" {
-		t.Errorf("corrupt handoff = (%q, %v), want the prompt untouched and an error", got, err)
+	if res.Head.ID != "cloud" {
+		t.Errorf("Head = %q, want the non-local head — the precomputed classification "+
+			"should have let it through instead of forcing local-only", res.Head.ID)
 	}
 }
 
-// A dispatch given --a2a must not be derailed by a broken handoff file.
-func TestDispatch_BrokenA2AFileDoesNotFailTheRun(t *testing.T) {
+// A no-heads dispatch failure must be matchable by errors.Is(err, ErrNoHeads)
+// so a caller with no terminal to point at (the desktop dock) can render a
+// friendly message instead of dispatch's CLI-flavored text (#452). An empty
+// tier hint — the dock's "auto-route" default — must read as "no tier hint
+// given", not a literal `tier ""`.
+func TestDispatch_NoHeadsErrorIsMatchableAndPhrasesAnEmptyTierClearly(t *testing.T) {
 	s := testutil.NewSandbox(t)
-	dd := liveDispatcher(echoHead(t, s, "h1", 90))
 
-	res, err := dd.Dispatch(context.Background(), "work", Options{
-		A2AFile: filepath.Join(t.TempDir(), "nope.json"),
+	dd := &Dispatcher{
+		cfg:    &config.Config{},
+		heads:  []provider.Head{echoHead(t, s, "cloud", 90)},
+		policy: policy.New(policy.DefaultRules(true)),
+		budget: budget.NewRegistry(nil),
+	}
+
+	_, err := dd.Dispatch(context.Background(), "my SSN is 123-45-6789", Options{})
+	if err == nil {
+		t.Fatal("a PII prompt was dispatched to a non-local head")
+	}
+	if !errors.Is(err, ErrNoHeads) {
+		t.Errorf("error = %v, want it to satisfy errors.Is(err, ErrNoHeads)", err)
+	}
+	if strings.Contains(err.Error(), `tier ""`) {
+		t.Errorf(`error = %v, an empty tier hint printed as the literal tier "" instead of being phrased`, err)
+	}
+	if !strings.Contains(err.Error(), "no tier hint given") {
+		t.Errorf("error = %v, want it to say no tier hint was given", err)
+	}
+}
+
+// A dispatch given a bad --a2a path must fail clearly instead of silently
+// running without the handoff context the user explicitly asked for (#450).
+func TestDispatch_BadA2AFileFailsTheRun(t *testing.T) {
+	s := testutil.NewSandbox(t)
+
+	t.Run("nonexistent file", func(t *testing.T) {
+		dd := liveDispatcher(echoHead(t, s, "h1", 90))
+		_, err := dd.Dispatch(context.Background(), "work", Options{
+			A2AFile: filepath.Join(t.TempDir(), "nope.json"),
+		})
+		if err == nil {
+			t.Fatal("a nonexistent --a2a file did not fail the dispatch")
+		}
+		if !strings.Contains(err.Error(), "nope.json") {
+			t.Errorf("error = %v, want it to name the offending path", err)
+		}
 	})
-	if err != nil {
-		t.Fatalf("an unreadable --a2a file failed the whole dispatch: %v", err)
-	}
-	if res.Output == "" {
-		t.Error("no output despite a working head")
-	}
+
+	t.Run("malformed JSON", func(t *testing.T) {
+		dd := liveDispatcher(echoHead(t, s, "h2", 90))
+		path := filepath.Join(t.TempDir(), "bad.json")
+		if err := os.WriteFile(path, []byte("{not json"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		_, err := dd.Dispatch(context.Background(), "work", Options{A2AFile: path})
+		if err == nil {
+			t.Fatal("a malformed --a2a file did not fail the dispatch")
+		}
+	})
+
+	t.Run("valid file still dispatches", func(t *testing.T) {
+		dd := liveDispatcher(echoHead(t, s, "h3", 90))
+		h := a2a.Handoff{From: "agent-1", Task: "earlier task"}
+		raw, err := json.Marshal(h)
+		if err != nil {
+			t.Fatal(err)
+		}
+		path := filepath.Join(t.TempDir(), "handoff.json")
+		if err := os.WriteFile(path, raw, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		res, err := dd.Dispatch(context.Background(), "work", Options{A2AFile: path})
+		if err != nil {
+			t.Fatalf("a valid --a2a file failed the dispatch: %v", err)
+		}
+		if res.Output == "" {
+			t.Error("no output despite a working head")
+		}
+	})
 }
 
 // claudeMode is the token-preservation governor. Its whole purpose is to
@@ -553,6 +737,35 @@ func TestSyncStateJSON_PreservesForeignKeysAndExtendsHistory(t *testing.T) {
 	}
 }
 
+// Each `hyctl dispatch` is a fresh process with its own in-memory
+// budget.Registry, so it only ever knows about the head(s) it just ran.
+// Replacing state.json's "budget" map wholesale — instead of merging into it —
+// erased every other model's entry on the very next dispatch (#502).
+func TestSyncStateJSON_MergesBudgetAcrossDispatchesInsteadOfReplacing(t *testing.T) {
+	s := testutil.NewSandbox(t)
+
+	d1 := liveDispatcher(echoHead(t, s, "tier4-head", 90))
+	if _, err := d1.Dispatch(context.Background(), "work", Options{}); err != nil {
+		t.Fatal(err)
+	}
+	d2 := liveDispatcher(echoHead(t, s, "tier8-head", 40))
+	if _, err := d2.Dispatch(context.Background(), "work", Options{}); err != nil {
+		t.Fatal(err)
+	}
+
+	budgetMap, ok := readState(t)["budget"].(map[string]any)
+	if !ok {
+		t.Fatalf("state[\"budget\"] = %#v, want a map", readState(t)["budget"])
+	}
+	if _, ok := budgetMap["tier4-head"]; !ok {
+		t.Errorf("budget map = %v, missing tier4-head — the first dispatch's entry "+
+			"was overwritten by the second", budgetMap)
+	}
+	if _, ok := budgetMap["tier8-head"]; !ok {
+		t.Errorf("budget map = %v, missing tier8-head", budgetMap)
+	}
+}
+
 // asInt / asIntSlice bridge JSON's float64 numbers back to ints. A wrong answer
 // here silently zeroes the governor's history.
 func TestAsIntAndAsIntSlice(t *testing.T) {
@@ -635,6 +848,41 @@ func TestNew_LoadsTheConfigAndArmsThePIIPolicy(t *testing.T) {
 	if action := dd.policy.Evaluate(policy.Request{Prompt: "SSN 123-45-6789", TierHint: "1"}); !action.LocalOnly {
 		t.Error("the pii=local-only config policy did not arm the local-only rule")
 	}
+	// Exported so cmd/hydra's SPRT/swarm dispatch branches — which bypass
+	// Dispatch entirely — can still enforce the same config policy (#500).
+	if !dd.PIILocalOnly() {
+		t.Error("PIILocalOnly() = false, want true for a pii:local-only config")
+	}
+}
+
+// PIILocalOnly is the single source of truth cmd/hydra's SPRT/swarm branches
+// rely on to fold the config policy into their own LocalOnly bool. A wrong
+// answer here reopens #500 regardless of what cmd/hydra does with it.
+func TestDispatcher_PIILocalOnly(t *testing.T) {
+	cases := []struct {
+		name string
+		cfg  *config.Config
+		want bool
+	}{
+		{"no policies configured", &config.Config{}, false},
+		{"pii policy set to something else", &config.Config{
+			Policies: map[string]config.Policy{"pii": {Action: "budget-cap"}},
+		}, false},
+		{"unrelated policy present, pii absent", &config.Config{
+			Policies: map[string]config.Policy{"budget": {Action: "budget-cap"}},
+		}, false},
+		{"pii local-only armed", &config.Config{
+			Policies: map[string]config.Policy{"pii": {Action: "local-only"}},
+		}, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dd := &Dispatcher{cfg: tc.cfg}
+			if got := dd.PIILocalOnly(); got != tc.want {
+				t.Errorf("PIILocalOnly() = %v, want %v", got, tc.want)
+			}
+		})
+	}
 }
 
 // writeStatePct seeds logs/state.json with a claude_pct and optional history.
@@ -716,5 +964,47 @@ func TestTruncate(t *testing.T) {
 	}
 	if got := truncate("", 200); got != "" {
 		t.Errorf("truncate(\"\") = %q", got)
+	}
+}
+
+// An Ask rule must withhold permission, and since #582 it parks the task rather
+// than falling back past the asked head.
+//
+// This is the regression that made #580 more than a new constant: this gate used
+// to test `decision == ledger.Deny`, so any other verdict fell straight through
+// and the head ran. A pending question would have been an approval.
+//
+// Falling back was the interim behaviour while nothing could act on an Ask. It
+// withheld permission correctly but meant a task with any fallback quietly ran
+// elsewhere and the question was never put to anyone, so #582 stops instead.
+func TestDispatch_LedgerAskRuleDoesNotLetTheHeadRun(t *testing.T) {
+	s := testutil.NewSandbox(t)
+	writeLedgerPolicy(t, ledger.Policy{Rules: []ledger.Rule{{Tool: "pending", Decision: ledger.Ask}}})
+
+	res, err := liveDispatcher(echoHead(t, s, "pending", 95), echoHead(t, s, "ok", 90)).
+		Dispatch(context.Background(), "go", Options{})
+
+	var parked *ParkedError
+	if !errors.As(err, &parked) {
+		t.Fatalf("an Ask should park the task, got res=%v err=%v", res, err)
+	}
+	// Both heads really execute, so a result at all would mean work ran while
+	// the question was outstanding.
+	if res != nil {
+		t.Errorf("answered by %q — an unanswered Ask must not run, on any head", res.Head.ID)
+	}
+
+	events, err := ledger.Load(ledger.DefaultPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var sawAsk bool
+	for _, e := range events {
+		if e.Tool == "pending" && e.Decision == ledger.Ask {
+			sawAsk = true
+		}
+	}
+	if !sawAsk {
+		t.Errorf("no ask event recorded for the pending head: %+v", events)
 	}
 }

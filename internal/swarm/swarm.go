@@ -9,8 +9,10 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/ankit373/hydra/internal/a2a"
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/dispatch"
+	"github.com/ankit373/hydra/internal/policy"
 	"github.com/ankit373/hydra/internal/provider"
 	"github.com/ankit373/hydra/internal/trust"
 )
@@ -48,6 +50,14 @@ type Options struct {
 	System    string
 	MaxTokens int
 
+	// A2AFile is a path to an A2A handoff JSON file (--a2a): its structured
+	// context is prepended to the prompt before any head fires. Mirrors the
+	// fail-loudly contract dispatch.Options.A2AFile gives plain dispatch — a
+	// missing or malformed file fails Plan/Run/RunSPRT instead of silently
+	// dropping the handoff, which is what happened before this field existed
+	// at all (#530).
+	A2AFile string
+
 	// Judge (ModeBest only).
 	JudgeTierHint string        // "" → use config.Cortex head
 	JudgeTimeout  time.Duration // 0 → 30 s
@@ -62,6 +72,13 @@ type Options struct {
 	// tell "5 heads on one task" from "5 separate tasks" (#181).
 	RunID  string
 	TaskID string
+
+	// Classification is prompt's already-computed PII/injection verdict
+	// (policy.Classify) — cmdDispatch computes this once and passes it here so
+	// Run/RunSPRT resolve it once, before firing any head, instead of every
+	// concurrent executeHead call re-scanning the same prompt. Nil means "not
+	// computed yet"; Run/RunSPRT derive and fill it in before dispatching.
+	Classification *policy.Classification
 }
 
 // SwarmResult is the complete outcome of a swarm dispatch.
@@ -102,6 +119,18 @@ func New(d *dispatch.Dispatcher, heads []provider.Head, pricing PricingReader) *
 	return &Swarm{d: d, heads: heads, pricing: pricing}
 }
 
+// validateMode rejects any SwarmMode Run does not know how to execute. Plan
+// calls this too, so a `--dry-run` reports a plan only for a mode Run would
+// actually accept, instead of previewing a run that Run then refuses (#453).
+func validateMode(m SwarmMode) error {
+	switch m {
+	case ModeRace, ModeBest, ModeAll:
+		return nil
+	default:
+		return fmt.Errorf("swarm: unknown mode %q", m)
+	}
+}
+
 // Plan reports what Run or RunSPRT would do without executing anything: which
 // heads would be engaged, and what one round of fan-out is estimated to cost.
 //
@@ -114,9 +143,23 @@ func New(d *dispatch.Dispatcher, heads []provider.Head, pricing PricingReader) *
 // selector against the same options; a plan that picked different heads from the
 // run it describes would be worse than no plan.
 func (s *Swarm) Plan(prompt string, opts Options) (heads []provider.Head, estUSD float64, err error) {
+	if opts.Mode == "" {
+		opts.Mode = ModeBest
+	}
+	if err := validateMode(opts.Mode); err != nil {
+		return nil, 0, err
+	}
+
 	cfg, err := config.Load()
 	if err != nil {
 		return nil, 0, fmt.Errorf("swarm: config load: %w", err)
+	}
+	if err := validateSwarmTiers(cfg, opts); err != nil {
+		return nil, 0, err
+	}
+	prompt, err = injectA2A(prompt, opts)
+	if err != nil {
+		return nil, 0, err
 	}
 	selected, err := resolveSelector(opts, cfg).Select(s.heads, opts)
 	if err != nil {
@@ -134,10 +177,23 @@ func (s *Swarm) Run(ctx context.Context, prompt string, opts Options) (*SwarmRes
 	if opts.Mode == "" {
 		opts.Mode = ModeBest
 	}
+	if err := validateMode(opts.Mode); err != nil {
+		return nil, err
+	}
 
 	cfg, err := config.Load()
 	if err != nil {
 		return nil, fmt.Errorf("swarm: config load: %w", err)
+	}
+	// An invalid --tier/--swarm-judge-tier must fail here, before any heads
+	// are fired or judged — never silently widen to CapScoreSelector's top-N
+	// fan-out (#501).
+	if err := validateSwarmTiers(cfg, opts); err != nil {
+		return nil, err
+	}
+	prompt, err = injectA2A(prompt, opts)
+	if err != nil {
+		return nil, err
 	}
 
 	// 1. Head selection.
@@ -148,6 +204,13 @@ func (s *Swarm) Run(ctx context.Context, prompt string, opts Options) (*SwarmRes
 	}
 	if len(selected) == 0 {
 		return nil, fmt.Errorf("swarm: no heads available for the requested configuration")
+	}
+
+	// Classify once, before any head fires — every concurrent executeHead call
+	// below reuses this instead of each re-scanning the same prompt (#522).
+	if opts.Classification == nil {
+		c := policy.Classify(prompt)
+		opts.Classification = &c
 	}
 
 	// 2. Pre-flight cost guard.
@@ -165,8 +228,6 @@ func (s *Swarm) Run(ctx context.Context, prompt string, opts Options) (*SwarmRes
 		attempts = runRace(ctx, selected, prompt, opts)
 	case ModeBest, ModeAll:
 		attempts = runAll(ctx, selected, prompt, opts)
-	default:
-		return nil, fmt.Errorf("swarm: unknown mode %q", opts.Mode)
 	}
 
 	wallDuration := time.Since(startedAt)
@@ -222,6 +283,37 @@ func (s *Swarm) Run(ctx context.Context, prompt string, opts Options) (*SwarmRes
 }
 
 // ── private helpers ───────────────────────────────────────────────────────────
+
+// validateSwarmTiers rejects an invalid TierHint or JudgeTierHint before any
+// selection or judging happens, using the identical rule dispatch.Dispatch
+// applies. Run, RunSPRT and Plan all call this so --tier/--swarm-judge-tier
+// fail the same way regardless of mode (#501).
+func validateSwarmTiers(cfg *config.Config, opts Options) error {
+	if err := dispatch.ValidateTierHint(cfg, opts.TierHint); err != nil {
+		return fmt.Errorf("swarm: %w", err)
+	}
+	if err := dispatch.ValidateTierHint(cfg, opts.JudgeTierHint); err != nil {
+		return fmt.Errorf("swarm: judge tier: %w", err)
+	}
+	return nil
+}
+
+// injectA2A prepends opts.A2AFile's handoff context to prompt when set, using
+// the identical fail-loudly contract dispatch.Dispatch applies to --a2a. Plan,
+// Run and RunSPRT all call this so a bad handoff file is rejected the same way
+// regardless of mode — before this, swarm.Options had no A2AFile field at all,
+// so --a2a was silently dropped the moment --swarm or --confidence was
+// combined with it (#530).
+func injectA2A(prompt string, opts Options) (string, error) {
+	if opts.A2AFile == "" {
+		return prompt, nil
+	}
+	injected, err := a2a.Inject(opts.A2AFile, prompt)
+	if err != nil {
+		return prompt, fmt.Errorf("swarm: --a2a %s: %w", opts.A2AFile, err)
+	}
+	return injected, nil
+}
 
 func buildJudge(d *dispatch.Dispatcher, opts Options, cfg *config.Config) Judge {
 	tierHint := opts.JudgeTierHint

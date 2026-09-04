@@ -8,7 +8,10 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
+
+	"github.com/ankit373/hydra/internal/config"
 )
 
 // defaultCorrelationDiscount is FamilyDiscount's fallback below minCoAgreementSamples.
@@ -61,8 +64,7 @@ type coAgreementRecord struct {
 
 // DefaultCoAgreementPath is where co-agreement observations are persisted.
 func DefaultCoAgreementPath() string {
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".hydra", "coagreement.jsonl")
+	return filepath.Join(config.Dir(), "coagreement.jsonl")
 }
 
 // RecordCoAgreement clusters one task's answers by agreement and appends the
@@ -106,7 +108,35 @@ func RecordCoAgreement(path, domain string, ids, families, texts []string, equiv
 	_, _ = f.WriteString(string(raw) + "\n")
 }
 
+type coAgreementCacheEntry struct {
+	records []coAgreementRecord
+	modTime time.Time
+	size    int64
+}
+
+var (
+	coAgreementCacheMu sync.Mutex
+	coAgreementCache   = map[string]coAgreementCacheEntry{}
+)
+
+// loadCoAgreement reads and caches coagreement.jsonl per path, keyed on
+// mtime+size. One SPRT run can call FamilyDiscount/FamilyCoupling once per
+// repeated-family source while the file is otherwise untouched (the run's own
+// RecordCoAgreement append happens only after sampling finishes), and swarm's
+// judge does the same — without this, every one of those calls re-reads and
+// re-parses the same file from scratch. A real append (mtime or size changes)
+// invalidates the cache on the next call.
 func loadCoAgreement(path string) []coAgreementRecord {
+	info, statErr := os.Stat(path)
+	if statErr == nil {
+		coAgreementCacheMu.Lock()
+		if cached, ok := coAgreementCache[path]; ok && cached.modTime.Equal(info.ModTime()) && cached.size == info.Size() {
+			coAgreementCacheMu.Unlock()
+			return cached.records
+		}
+		coAgreementCacheMu.Unlock()
+	}
+
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return nil
@@ -122,6 +152,12 @@ func loadCoAgreement(path string) []coAgreementRecord {
 			continue
 		}
 		out = append(out, r)
+	}
+
+	if statErr == nil {
+		coAgreementCacheMu.Lock()
+		coAgreementCache[path] = coAgreementCacheEntry{records: out, modTime: info.ModTime(), size: info.Size()}
+		coAgreementCacheMu.Unlock()
 	}
 	return out
 }
@@ -168,6 +204,80 @@ func FamilyCoupling(path, family string) (j float64, ok bool) {
 		j = 1
 	}
 	return j, true
+}
+
+// FamilyCouplingResult is one family's measured coupling, as returned by
+// AllFamilyCoupling. Warn mirrors FalseConsensusWarning's threshold check
+// (OK && J >= criticalCoupling) so callers don't need criticalCoupling
+// exported to reproduce it themselves.
+type FamilyCouplingResult struct {
+	J    float64
+	OK   bool
+	Warn bool
+}
+
+// AllFamilyCoupling computes FamilyCoupling for every family observed in the
+// co-agreement log in a single pass, instead of the F full rescans a caller
+// gets from calling FamilyCoupling once per KnownFamilies entry (every real
+// caller of FalseConsensusWarning does exactly that today).
+//
+// The key simplification: family F's "diff" bucket (rate at which anything
+// NOT a same-F pair agrees) is, by construction, every pair that isn't a
+// same-F pair — so diffTotal[F] = (all pairs) - sameTotal[F], and likewise
+// for the agreed counts. That means one global pass collecting each family's
+// own same-family tally, plus one grand total, is enough to derive every
+// family's J — no per-family rescan needed.
+func AllFamilyCoupling(path string) map[string]FamilyCouplingResult {
+	type tally struct{ sameAgree, sameTotal int }
+	same := map[string]*tally{}
+	var totalPairs, totalAgree int
+
+	for _, r := range loadCoAgreement(path) {
+		for i := 0; i < len(r.Sources); i++ {
+			for k := i + 1; k < len(r.Sources); k++ {
+				a, b := r.Sources[i], r.Sources[k]
+				agreed := a.Cluster == b.Cluster
+				totalPairs++
+				if agreed {
+					totalAgree++
+				}
+				if a.Family == b.Family {
+					t := same[a.Family]
+					if t == nil {
+						t = &tally{}
+						same[a.Family] = t
+					}
+					t.sameTotal++
+					if agreed {
+						t.sameAgree++
+					}
+				}
+			}
+		}
+	}
+
+	out := make(map[string]FamilyCouplingResult, len(same))
+	for fam, t := range same {
+		if t.sameTotal < minCoAgreementSamples {
+			out[fam] = FamilyCouplingResult{}
+			continue
+		}
+		sameRate := float64(t.sameAgree) / float64(t.sameTotal)
+		diffTotal := totalPairs - t.sameTotal
+		diffRate := 0.0
+		if diffTotal > 0 {
+			diffRate = float64(totalAgree-t.sameAgree) / float64(diffTotal)
+		}
+		j := sameRate - diffRate
+		switch {
+		case j < 0:
+			j = 0
+		case j > 1:
+			j = 1
+		}
+		out[fam] = FamilyCouplingResult{J: j, OK: true, Warn: j >= criticalCoupling}
+	}
+	return out
 }
 
 // FamilyDiscount replaces the flat correlation constant: 1-J, so a family

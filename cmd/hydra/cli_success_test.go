@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/ankit373/hydra/internal/config"
+	"github.com/ankit373/hydra/internal/mcpregistry"
 	"github.com/ankit373/hydra/internal/runlog"
 	"github.com/ankit373/hydra/internal/testutil"
 )
@@ -107,14 +108,24 @@ func TestCLI_Dispatch_SucceedsAndLogsTheSpend(t *testing.T) {
 		t.Errorf("the dispatch row carries no run_id, so nothing correlates it: %v", row)
 	}
 
-	// cost.jsonl is deliberately *not* written here. A CLI-agent head reports no
-	// token usage, so there is no basis to price the call — and a $0.00 row
-	// would read as "this was free", which is the #258/#261 defect class. The
-	// call is still recorded above; only the price is withheld.
-	if _, statErr := os.Stat(filepath.Join(config.Dir(), "logs", "cost.jsonl")); statErr == nil {
-		billed, _ := os.ReadFile(filepath.Join(config.Dir(), "logs", "cost.jsonl"))
-		t.Errorf("a head that reported no tokens was given a cost row, which reads "+
-			"as a free call:\n%s", billed)
+	// A CLI-agent head reports no real token usage, so Hydra estimates from
+	// char/4 (#502) — cost.jsonl must carry that row, clearly labelled as an
+	// estimate rather than a measurement, or the call is silently invisible to
+	// spend tracking despite having actually run.
+	raw, err = os.ReadFile(filepath.Join(config.Dir(), "logs", "cost.jsonl"))
+	if err != nil {
+		t.Fatalf("no cost row for a CLI-head dispatch: %v", err)
+	}
+	var costRow map[string]any
+	if err := json.Unmarshal([]byte(strings.Split(strings.TrimSpace(string(raw)), "\n")[0]), &costRow); err != nil {
+		t.Fatal(err)
+	}
+	if costRow["tokens_source"] != "estimated" {
+		t.Errorf("tokens_source = %v, want \"estimated\" — a char/4 guess must never "+
+			"be presented as measured usage", costRow["tokens_source"])
+	}
+	if pt, _ := costRow["prompt_tokens"].(float64); pt <= 0 {
+		t.Errorf("prompt_tokens = %v, want > 0", costRow["prompt_tokens"])
 	}
 
 	// And the handoff, which is what the next agent's --a2a reads.
@@ -132,11 +143,24 @@ func TestCLI_Dispatch_TierAndSystemPromptAndA2A(t *testing.T) {
 		t.Fatalf("`--tier 6 --system` failed: %v (%s)", err, cobraOut)
 	}
 
-	// --a2a prepends a prior handoff. A file that is not there must not fail the
-	// run: a first dispatch pointed at a not-yet-written handoff still runs.
-	if _, _, err := run(t, "dispatch", "--tier", "6",
-		"--a2a", filepath.Join(repo, "absent.json"), "hello"); err != nil {
-		t.Errorf("an absent --a2a file failed the dispatch: %v", err)
+	// --a2a names a file the user explicitly asked for: an absent one must fail
+	// the dispatch with a clear message, not silently proceed without it (#450).
+	absent := filepath.Join(repo, "absent.json")
+	if _, cobraOut, err := run(t, "dispatch", "--tier", "6",
+		"--a2a", absent, "hello"); err == nil {
+		t.Error("an absent --a2a file did not fail the dispatch")
+	} else if !strings.Contains(err.Error()+cobraOut, absent) {
+		t.Errorf("error = %v (%s), want it to name the offending path", err, cobraOut)
+	}
+
+	// Malformed JSON must fail the same way.
+	bad := filepath.Join(repo, "bad.json")
+	if err := os.WriteFile(bad, []byte("{not json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, cobraOut, err := run(t, "dispatch", "--tier", "6",
+		"--a2a", bad, "hello"); err == nil {
+		t.Errorf("a malformed --a2a file did not fail the dispatch (%s)", cobraOut)
 	}
 
 	// A real handoff is read and injected.
@@ -163,6 +187,43 @@ func TestCLI_Dispatch_LocalOnlyRefusesWhenNothingIsLocal(t *testing.T) {
 	}
 }
 
+// The pii:local-only config policy must be enforced on the SPRT path exactly
+// like it is on the plain dispatch path, even though nobody passed --local.
+// Before #500, touchesPII alone routed a PII prompt into sw.RunSPRT with
+// LocalOnly bound only to --local, so it silently reached "cody" — a remote
+// CLI head — instead of being refused for lack of a local one.
+func TestCLI_Dispatch_PIIPolicyForcesLocalOnlyOnTheSPRTPath(t *testing.T) {
+	s := testutil.NewSandbox(t)
+	if err := config.Save(&config.Config{
+		Cortex:   "cody",
+		Policies: map[string]config.Policy{"pii": {Action: "local-only"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	s.FakeBinary(t, "cody", testutil.EchoScript("cody's answer"))
+	// The sandbox clears $OLLAMA_HOST but an empty value falls back to the real
+	// default (localhost:11434) — on a machine that actually has Ollama running,
+	// the port provider would discover it for real and the test would pass for
+	// the wrong reason (a real local head, not the policy under test). Point it
+	// at a dead loopback port so the only local-only head is whichever tests set.
+	t.Setenv("OLLAMA_HOST", "http://127.0.0.1:1")
+
+	// A PII-detecting prompt alone triggers the SPRT branch (RequiredConfidence
+	// derives a target > 0 from touchesPII), with no --confidence flag needed —
+	// exactly the reproduction in #500.
+	out, cobraOut, err := run(t, "dispatch", "my SSN is 123-45-6789")
+	combined := out + cobraOut
+	if err == nil {
+		t.Fatalf("a PII prompt reached a non-local head via the SPRT path despite pii:local-only:\n%s", combined)
+	}
+	if !strings.Contains(err.Error()+combined, "no heads available") {
+		t.Errorf("error = %v (%s), want the SPRT path to report no (local) heads available", err, combined)
+	}
+	if strings.Contains(combined, "cody's answer") {
+		t.Error("the remote head actually ran despite the pii:local-only policy")
+	}
+}
+
 // A swarm dry run must name the heads and the estimated cost without firing
 // anything — #167 made --dry-run mean the same thing in every mode.
 func TestCLI_Dispatch_SwarmDryRunFiresNothing(t *testing.T) {
@@ -181,6 +242,28 @@ func TestCLI_Dispatch_SwarmDryRunFiresNothing(t *testing.T) {
 	}
 	if ids, runErr := runlog.Runs(); runErr != nil || len(ids) != 0 {
 		t.Errorf("a swarm dry run left run log entries: ids=%v err=%v", ids, runErr)
+	}
+}
+
+// Every real swarm mode must still plan cleanly under --dry-run — #453 fixed
+// dry-run to validate --swarm-mode, and that must not catch valid modes too.
+func TestCLI_Dispatch_SwarmDryRunValidModesFireNothing(t *testing.T) {
+	for _, mode := range []string{"race", "best", "all"} {
+		t.Run(mode, func(t *testing.T) {
+			dispatchable(t, "answered")
+
+			out, cobraOut, err := run(t, "dispatch", "--swarm", "--swarm-mode", mode,
+				"--dry-run", "--tier", "6", "implement a rate limiter")
+			if err != nil {
+				t.Fatalf("a %s dry run failed: %v (%s)", mode, err, cobraOut)
+			}
+			if !strings.Contains(out+cobraOut, "DRY RUN") {
+				t.Errorf("the plan is not labelled as a dry run:\n%s", out+cobraOut)
+			}
+			if _, statErr := os.Stat(filepath.Join(config.Dir(), "logs", "cost.jsonl")); statErr == nil {
+				t.Errorf("a %s dry run wrote cost rows", mode)
+			}
+		})
 	}
 }
 
@@ -234,6 +317,113 @@ func TestCLI_Dispatch_ConfidenceDryRunFiresNothing(t *testing.T) {
 	}
 	if ids, runErr := runlog.Runs(); runErr != nil || len(ids) != 0 {
 		t.Errorf("an SPRT dry run left run log entries: ids=%v err=%v", ids, runErr)
+	}
+}
+
+// #530: swarm.Options had no A2AFile field at all, so --a2a was silently
+// dropped the instant --swarm or --confidence was combined with it — a bad
+// handoff file must fail the run the same way it already does on plain
+// dispatch, in both --dry-run (Plan) and real (Run/RunSPRT) execution.
+func TestCLI_Dispatch_SwarmA2ABadFileRejectedIdenticallyDryRunAndReal(t *testing.T) {
+	for _, dryRun := range []bool{true, false} {
+		label := "real"
+		if dryRun {
+			label = "dry-run"
+		}
+		t.Run(label, func(t *testing.T) {
+			dispatchable(t, "answered")
+			bad := filepath.Join(t.TempDir(), "absent.json")
+			args := []string{"dispatch", "--swarm", "--swarm-mode", "all", "--tier", "6", "--a2a", bad, "x"}
+			if dryRun {
+				args = append(args, "--dry-run")
+			}
+			_, cobraOut, err := run(t, args...)
+			if err == nil {
+				t.Fatalf("a nonexistent --a2a file was accepted under --swarm (%s): %s", label, cobraOut)
+			}
+			if !strings.Contains(err.Error()+cobraOut, bad) {
+				t.Errorf("error = %v (%s), want it to name the offending path", err, cobraOut)
+			}
+		})
+	}
+}
+
+// Same contract on the --confidence (SPRT) path.
+func TestCLI_Dispatch_ConfidenceA2ABadFileRejectedIdenticallyDryRunAndReal(t *testing.T) {
+	for _, dryRun := range []bool{true, false} {
+		label := "real"
+		if dryRun {
+			label = "dry-run"
+		}
+		t.Run(label, func(t *testing.T) {
+			dispatchable(t, "answered")
+			bad := filepath.Join(t.TempDir(), "absent.json")
+			args := []string{"dispatch", "--confidence", "0.9", "--tier", "6", "--a2a", bad, "x"}
+			if dryRun {
+				args = append(args, "--dry-run")
+			}
+			_, cobraOut, err := run(t, args...)
+			if err == nil {
+				t.Fatalf("a nonexistent --a2a file was accepted under --confidence (%s): %s", label, cobraOut)
+			}
+			if !strings.Contains(err.Error()+cobraOut, bad) {
+				t.Errorf("error = %v (%s), want it to name the offending path", err, cobraOut)
+			}
+		})
+	}
+}
+
+// #530: only the real sw.Run() call set JudgeTierHint, so a bogus
+// --swarm-judge-tier quietly passed --dry-run and only failed for real —
+// defeating the "dry-run previews reality" contract #453 established.
+func TestCLI_Dispatch_SwarmJudgeTierBadValueRejectedIdenticallyDryRunAndReal(t *testing.T) {
+	for _, dryRun := range []bool{true, false} {
+		label := "real"
+		if dryRun {
+			label = "dry-run"
+		}
+		t.Run(label, func(t *testing.T) {
+			dispatchable(t, "answered")
+			args := []string{"dispatch", "--swarm", "--swarm-judge-tier", "99", "--tier", "6", "x"}
+			if dryRun {
+				args = append(args, "--dry-run")
+			}
+			_, cobraOut, err := run(t, args...)
+			if err == nil {
+				t.Fatalf("a bogus --swarm-judge-tier was accepted (%s): %s", label, cobraOut)
+			}
+			if !strings.Contains(err.Error()+cobraOut, "judge") {
+				t.Errorf("error = %v (%s), want it to name the judge tier as the problem", err, cobraOut)
+			}
+		})
+	}
+}
+
+// --swarm-judge-tier is not a no-op on --confidence: RunSPRT's behavioral
+// equivalence judge dispatches through it (sprt.go's judgeEquivalence), so
+// main.go wires it into that Options literal too instead of treating the
+// combination as meaningless. A bogus value must therefore be rejected the
+// same way in both dry-run (Plan) and real (RunSPRT) execution (#530).
+func TestCLI_Dispatch_ConfidenceSwarmJudgeTierBadValueRejectedIdenticallyDryRunAndReal(t *testing.T) {
+	for _, dryRun := range []bool{true, false} {
+		label := "real"
+		if dryRun {
+			label = "dry-run"
+		}
+		t.Run(label, func(t *testing.T) {
+			dispatchable(t, "answered")
+			args := []string{"dispatch", "--confidence", "0.9", "--swarm-judge-tier", "99", "--tier", "6", "x"}
+			if dryRun {
+				args = append(args, "--dry-run")
+			}
+			_, cobraOut, err := run(t, args...)
+			if err == nil {
+				t.Fatalf("a bogus --swarm-judge-tier under --confidence was accepted (%s): %s", label, cobraOut)
+			}
+			if !strings.Contains(err.Error()+cobraOut, "judge") {
+				t.Errorf("error = %v (%s), want it to name the judge tier as the problem", err, cobraOut)
+			}
+		})
 	}
 }
 
@@ -372,6 +562,34 @@ func TestCLI_OracleVerify_PassingVerdictReportsEvidence(t *testing.T) {
 	}
 }
 
+// A garbage --record used to be silently ignored — no error, no calibration
+// write, discovered only by its absence from `trust calibration` later.
+// `trust record --outcome` already validates this strictly; `oracle verify
+// --record` now does too, and before running the verifier at all (#464).
+func TestCLI_OracleVerify_GarbageRecordIsRejected(t *testing.T) {
+	// --record is validated before the verifier command ever runs (see the
+	// fix itself), so this never actually executes /usr/bin/true — safe on
+	// every platform, no skip needed.
+	populated(t)
+
+	_, cobraOut, err := run(t, "oracle", "verify", "/usr/bin/true",
+		"--source", "verifier:test", "--domain", "go", "--record", "maybe")
+	if err == nil {
+		t.Fatalf("--record maybe was accepted:\n%s", cobraOut)
+	}
+	if !strings.Contains(err.Error()+cobraOut, "--record") {
+		t.Errorf("error = %v, want it to name --record", err)
+	}
+
+	cal, _, calErr := run(t, "trust", "calibration")
+	if calErr != nil {
+		t.Fatal(calErr)
+	}
+	if strings.Contains(cal, "verifier:test") {
+		t.Errorf("a rejected --record still wrote to calibration:\n%s", cal)
+	}
+}
+
 // ── mcp check, allowed ────────────────────────────────────────────────────────
 
 // An allowed check exits 0, so its body runs in process. The decision must be
@@ -406,6 +624,47 @@ func TestCLI_MCPCheck_AllowedDecisionIsRecorded(t *testing.T) {
 	if !strings.Contains(log+logCobra, "test-agent") {
 		t.Errorf("the allow was not recorded; an unlogged decision is not "+
 			"accountability:\n%s", log+logCobra)
+	}
+}
+
+// tool+"/"+resource used to read as one run-together path whenever resource
+// was itself absolute — "fs.read" + "/tmp/x.txt" rendered as
+// "fs.read//tmp/x.txt", indistinguishable from a single garbled field (#464).
+func TestCLI_MCPCheckAndLog_ToolResourceSeparatorDoesNotCollideWithPaths(t *testing.T) {
+	s := populated(t)
+
+	policy := `{"rules":[{"action":"read","resource":"/tmp/**","decision":"allow"}]}`
+	if err := os.MkdirAll(config.Dir(), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(config.Dir(), "mcp_policy.json"), []byte(policy), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_ = s
+
+	checkOut, checkCobra, err := run(t, "mcp", "check", "fs.read",
+		"--action", "read", "--resource", "/tmp/allowed.txt", "--agent", "test-agent")
+	if err != nil {
+		t.Fatalf("check errored: %v (%s)", err, checkCobra)
+	}
+	combined := checkOut + checkCobra
+	if strings.Contains(combined, "fs.read//tmp") {
+		t.Errorf("mcp check: tool and an absolute resource ran together:\n%s", combined)
+	}
+	if !strings.Contains(combined, "fs.read -> /tmp/allowed.txt") {
+		t.Errorf("mcp check: want tool and resource joined by \" -> \":\n%s", combined)
+	}
+
+	logOut, logCobra, err := run(t, "mcp", "log")
+	if err != nil {
+		t.Fatal(err)
+	}
+	logCombined := logOut + logCobra
+	if strings.Contains(logCombined, "fs.read//tmp") {
+		t.Errorf("mcp log: tool and an absolute resource ran together:\n%s", logCombined)
+	}
+	if !strings.Contains(logCombined, "fs.read -> /tmp/allowed.txt") {
+		t.Errorf("mcp log: want tool and resource joined by \" -> \":\n%s", logCombined)
 	}
 }
 
@@ -495,16 +754,21 @@ func TestCLI_PricingList_FilterAndJSON(t *testing.T) {
 
 	// The JSON surface must be an array even when the filter matches nothing —
 	// a jq pipeline iterating it should get zero elements, not a parse error.
+	// Tier pricing (registry/pricing.yaml, embedded) means this is never
+	// actually empty, but it must never be the literal `null` either (#505):
+	// see TestCLI_PricingListJSON_EmitsEmptyArrayNotNullWhenNothingMatches for
+	// the filtered-to-nothing case this used to regress on.
 	out, _, err := run(t, "pricing", "list", "--json")
 	if err != nil {
 		t.Fatalf("`pricing list --json` failed: %v", err)
 	}
 	trimmed := strings.TrimSpace(out)
-	if trimmed != "null" {
-		var rows []map[string]any
-		if jerr := json.Unmarshal([]byte(trimmed), &rows); jerr != nil {
-			t.Fatalf("not a JSON array: %v\n%s", jerr, trimmed)
-		}
+	if trimmed == "null" {
+		t.Fatal("emitted the literal null instead of a JSON array")
+	}
+	var rows []map[string]any
+	if jerr := json.Unmarshal([]byte(trimmed), &rows); jerr != nil {
+		t.Fatalf("not a JSON array: %v\n%s", jerr, trimmed)
 	}
 
 	// A filter narrows the table rather than emptying it.
@@ -862,6 +1126,94 @@ func TestCLI_Probe_MarksUnroutableHeads(t *testing.T) {
 	}
 }
 
+// `hyctl probe --json` is the one data-producing command that lacked machine-
+// readable output — every sibling (models/cost/stats/pricing/mcp report/
+// security/graph/context entropy) has one (#464).
+func TestCLI_Probe_JSONIsValidAndMarksRoutability(t *testing.T) {
+	s, _ := dispatchable(t, "answered")
+	s.FakeBinary(t, "ollama")
+
+	out, cobraOut, err := run(t, "probe", "--json")
+	if err != nil {
+		t.Fatalf("`hyctl probe --json` failed: %v (%s)", err, cobraOut)
+	}
+
+	var parsed struct {
+		Cortex string `json:"cortex"`
+		Heads  []struct {
+			ID               string `json:"id"`
+			Routable         bool   `json:"routable"`
+			UnroutableReason string `json:"unroutable_reason"`
+		} `json:"heads"`
+	}
+	if err := json.Unmarshal([]byte(out+cobraOut), &parsed); err != nil {
+		t.Fatalf("probe --json did not parse: %v\n%s", err, out+cobraOut)
+	}
+	if len(parsed.Heads) == 0 {
+		t.Fatal("probe --json reported no heads")
+	}
+
+	var sawRoutable, sawUnroutable bool
+	for _, h := range parsed.Heads {
+		if h.Routable {
+			sawRoutable = true
+		} else {
+			sawUnroutable = true
+			if h.UnroutableReason == "" {
+				t.Errorf("head %q is unroutable with no reason given", h.ID)
+			}
+		}
+	}
+	if !sawRoutable {
+		t.Error("no routable head reported")
+	}
+	if !sawUnroutable {
+		t.Error("the unroutable ollama binary is missing from --json output")
+	}
+}
+
+// A corrupted ~/.hydra/models.json overlay makes capabilities.Load fail, which
+// the cli/env/port providers treat as "this whole provider found nothing" —
+// by design, so one broken provider doesn't block the others. But that used to
+// be completely invisible: every head that provider would have found just
+// vanished with no `✗` and no reason, contradicting probe's own "marks
+// unroutable heads with the reason" promise (#248). This drives that failure
+// end to end and checks the warning actually surfaces (#505).
+func TestCLI_Probe_SurfacesACorruptedOverlayAsAWarning(t *testing.T) {
+	s, _ := dispatchable(t, "answered")
+
+	overlay := filepath.Join(s.HydraHome, "models.json")
+	if err := os.WriteFile(overlay, []byte("{not valid json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	out, cobraOut, err := run(t, "probe")
+	if err != nil {
+		t.Fatalf("`hyctl probe` failed: %v (%s)", err, cobraOut)
+	}
+	combined := out + cobraOut
+	if !strings.Contains(combined, "cli") {
+		t.Errorf("no warning naming the failing provider:\n%s", combined)
+	}
+	if strings.Contains(combined, "cody") {
+		t.Errorf("cody (found by the broken cli provider) should not appear at all:\n%s", combined)
+	}
+
+	jsonOut, jsonCobra, err := run(t, "probe", "--json")
+	if err != nil {
+		t.Fatalf("`hyctl probe --json` failed: %v (%s)", err, jsonCobra)
+	}
+	var parsed struct {
+		Warnings []string `json:"warnings"`
+	}
+	if err := json.Unmarshal([]byte(jsonOut+jsonCobra), &parsed); err != nil {
+		t.Fatalf("probe --json did not parse: %v\n%s", err, jsonOut+jsonCobra)
+	}
+	if len(parsed.Warnings) == 0 {
+		t.Fatal("probe --json reported no warnings for a provider that failed outright")
+	}
+}
+
 // The policy's default is permissive by design: Hydra records every access but
 // blocks nothing unless a rule says so. That is a deliberate choice and worth
 // pinning, because the opposite default would silently break every agent the
@@ -932,6 +1284,148 @@ func TestCLI_MCPCheck_ClassificationFromContentAndExplicit(t *testing.T) {
 	if code != 3 {
 		t.Errorf("an explicit --classification pii exited %d, want 3 — the "+
 			"explicit tag must beat the content scan:\n%s", code, out)
+	}
+}
+
+// A quarantined MCP server's tools must be classified without the caller
+// having to know that server is quarantined — the whole point of Phase 4's
+// wiring is that a policy author writing "deny mcp-quarantined" gets that
+// enforcement automatically off the registry's own state, the same way a
+// PII rule applies to unlabeled content.
+func TestCLI_MCPCheck_ClassificationFromQuarantinedMCPServer(t *testing.T) {
+	s := populated(t)
+
+	seed(t, "mcp_registry_aliases.json", `{"evil-server":{"registry_name":"io.github.x/evil","status":"verified"}}`)
+	seed(t, "mcp_registry_state.json", `{"io.github.x/evil":{"state":"quarantined","manifest_hash":"x","first_seen_at":"2026-01-01T00:00:00Z","state_changed_at":"2026-01-01T00:00:00Z"}}`)
+
+	policy := `{"rules":[{"classification":"mcp-quarantined","decision":"deny"}]}`
+	if err := os.WriteFile(filepath.Join(config.Dir(), "mcp_policy.json"), []byte(policy), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	code, out := runBinary(t, s, "mcp", "check", "mcp__evil-server__do_something",
+		"--action", "exec", "--resource", "x", "--agent", "a")
+	if code != 3 {
+		t.Errorf("a quarantined MCP server's tool exited %d, want the deny code 3:\n%s", code, out)
+	}
+
+	// A tool from a server with no recorded state at all must not be
+	// affected — "never audited" is not the same claim as "quarantined".
+	code, out = runBinary(t, s, "mcp", "check", "mcp__unknown-server__do_something",
+		"--action", "exec", "--resource", "x", "--agent", "a")
+	if code != 0 {
+		t.Errorf("an unaudited MCP server's tool exited %d, want the permissive default 0:\n%s", code, out)
+	}
+}
+
+// The local, backend-free slice of Phase 6: a server whose ledger history
+// has only ever shown read actions, then performs a network action for the
+// first time, is exactly postmark-mcp's real attack shape — catchable from
+// this machine's own history, with no registry data and no CVE required.
+func TestCLI_MCPCheck_ClassificationFromNovelBehavior(t *testing.T) {
+	s := populated(t)
+
+	policy := `{"rules":[{"classification":"mcp-behavior-change","decision":"deny"}]}`
+	if err := os.WriteFile(filepath.Join(config.Dir(), "mcp_policy.json"), []byte(policy), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	// Build up a clean history: this server has only ever read.
+	for i := 0; i < 3; i++ {
+		code, out := runBinary(t, s, "mcp", "check", "mcp__quiet-server__fetch",
+			"--action", "read", "--resource", "x", "--agent", "a")
+		if code != 0 {
+			t.Fatalf("building history: read #%d exited %d:\n%s", i, code, out)
+		}
+	}
+
+	// The same server's first-ever network action must be caught and denied.
+	code, out := runBinary(t, s, "mcp", "check", "mcp__quiet-server__fetch",
+		"--action", "network", "--resource", "x", "--agent", "a")
+	if code != 3 {
+		t.Errorf("a server's first-ever network action exited %d, want the deny code 3:\n%s", code, out)
+	}
+
+	// A read from the same server stays permitted — it's not a novel action.
+	code, out = runBinary(t, s, "mcp", "check", "mcp__quiet-server__fetch",
+		"--action", "read", "--resource", "x", "--agent", "a")
+	if code != 0 {
+		t.Errorf("a previously-seen action exited %d, want 0:\n%s", code, out)
+	}
+}
+
+func TestCLI_MCPRegistryList_ShowsAuditedServersByScore(t *testing.T) {
+	populated(t)
+
+	seed(t, "mcp_registry_state.json", `{
+		"io.github.x/good": {"state":"trusted","manifest_hash":"a","first_seen_at":"2026-01-01T00:00:00Z","state_changed_at":"2026-01-01T00:00:00Z","last_score":{"security_implementation":{},"repository_health":{},"operational_security":{},"community_governance":{},"overall":91,"confidence":"high"}},
+		"io.github.x/bad": {"state":"quarantined","manifest_hash":"b","first_seen_at":"2026-01-01T00:00:00Z","state_changed_at":"2026-01-01T00:00:00Z","last_score":{"security_implementation":{},"repository_health":{},"operational_security":{},"community_governance":{},"overall":5,"confidence":"high"}}
+	}`)
+
+	out, cobraOut, err := run(t, "mcp", "registry", "list")
+	if err != nil {
+		t.Fatal(err)
+	}
+	combined := out + cobraOut
+	if !strings.Contains(combined, "io.github.x/good") || !strings.Contains(combined, "io.github.x/bad") {
+		t.Errorf("both audited servers should be listed:\n%s", combined)
+	}
+	if !strings.Contains(combined, "trusted") || !strings.Contains(combined, "quarantined") {
+		t.Errorf("lifecycle states should be shown:\n%s", combined)
+	}
+
+	jsonOut, _, err := run(t, "mcp", "registry", "list", "--json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var entries []mcpregistry.DirectoryEntry
+	if err := json.Unmarshal([]byte(jsonOut), &entries); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, jsonOut)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("got %d entries, want 2", len(entries))
+	}
+}
+
+func TestCLI_MCPRegistryClear_RecoversAQuarantinedServer(t *testing.T) {
+	populated(t)
+
+	seed(t, "mcp_registry_state.json", `{
+		"io.github.x/wrongly-flagged": {"state":"quarantined","manifest_hash":"a","first_seen_at":"2026-01-01T00:00:00Z","state_changed_at":"2026-01-01T00:00:00Z","last_score":{"overall":5,"confidence":"high"}}
+	}`)
+
+	out, cobraOut, err := run(t, "mcp", "registry", "clear", "io.github.x/wrongly-flagged")
+	if err != nil {
+		t.Fatalf("clear failed: %v\n%s", err, out+cobraOut)
+	}
+	if !strings.Contains(out+cobraOut, "provisional") {
+		t.Errorf("expected the new state in the output:\n%s", out+cobraOut)
+	}
+
+	// It must actually be recoverable, which is the whole point.
+	listOut, listCobra, err := run(t, "mcp", "registry", "list")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(listOut+listCobra, "quarantined") {
+		t.Errorf("server is still quarantined after clear:\n%s", listOut+listCobra)
+	}
+}
+
+func TestCLI_MCPRegistryClear_RefusesANonQuarantinedServer(t *testing.T) {
+	populated(t)
+	seed(t, "mcp_registry_state.json", `{
+		"io.github.x/fine": {"state":"trusted","manifest_hash":"a","first_seen_at":"2026-01-01T00:00:00Z","state_changed_at":"2026-01-01T00:00:00Z","last_score":{"overall":91,"confidence":"high"}}
+	}`)
+	if _, _, err := run(t, "mcp", "registry", "clear", "io.github.x/fine"); err == nil {
+		t.Error("clearing a trusted server should be refused, not silently accepted")
+	}
+}
+
+func TestCLI_MCPRegistryList_EmptyIsNotAnError(t *testing.T) {
+	populated(t)
+	if _, _, err := run(t, "mcp", "registry", "list"); err != nil {
+		t.Fatalf("an empty registry list should not error: %v", err)
 	}
 }
 

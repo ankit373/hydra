@@ -8,6 +8,7 @@ package a2a
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -140,6 +141,22 @@ func Load(path string) (*Handoff, error) {
 		return nil, err
 	}
 	return &h, nil
+}
+
+// Inject reads a handoff JSON file at path and prepends its structured context
+// to prompt. Unlike Load's "missing file = no prior handoff" contract for
+// other callers, path here always comes from an explicit --a2a flag, so a
+// missing or malformed file is a mistake the caller needs to hear about
+// rather than something to silently skip (#450, #530).
+func Inject(path, prompt string) (string, error) {
+	h, err := Load(path)
+	if err != nil {
+		return prompt, fmt.Errorf("malformed handoff file %s: %w", path, err)
+	}
+	if h == nil {
+		return prompt, fmt.Errorf("handoff file not found: %s", path)
+	}
+	return h.PromptBlock(prompt) + "\n\nADDITIONAL INSTRUCTION:\n" + prompt, nil
 }
 
 // Save writes the handoff atomically-ish (dir created, 0600).

@@ -129,6 +129,75 @@ func TestDB_Models_Sorted(t *testing.T) {
 	}
 }
 
+// ── DB.TierEntries ────────────────────────────────────────────────────────────
+
+// TierEntries is what lets `pricing list` show CLI-agent heads (claude-core,
+// opus-thinking, …) at all — they're keyed by tier number, not a model name,
+// so without this they can never appear in Models() (#505).
+func TestDB_TierEntries_SortedByTierNumber(t *testing.T) {
+	db := &DB{
+		models: map[string]ModelPrice{},
+		tiers: map[int]TierPrice{
+			3:  {ID: "sonnet-thinking", InputPerMillion: 3, OutputPerMillion: 15},
+			1:  {ID: "claude-core", InputPerMillion: 15, OutputPerMillion: 75},
+			10: {ID: "qwen-grunt", InputPerMillion: 0, OutputPerMillion: 0},
+		},
+	}
+	got := db.TierEntries()
+	if len(got) != 3 {
+		t.Fatalf("got %d entries, want 3: %+v", len(got), got)
+	}
+	wantOrder := []string{"claude-core", "sonnet-thinking", "qwen-grunt"}
+	for i, want := range wantOrder {
+		if got[i].ID != want {
+			t.Errorf("entry %d = %q, want %q (tier-ascending order)", i, got[i].ID, want)
+		}
+	}
+}
+
+// A tier with no id in pricing.yaml has nothing meaningful to show as a
+// "model" name in `pricing list` — it must be skipped, not surfaced as an
+// empty-string row.
+func TestDB_TierEntries_SkipsTiersWithNoID(t *testing.T) {
+	db := &DB{
+		models: map[string]ModelPrice{},
+		tiers: map[int]TierPrice{
+			1: {ID: "claude-core", InputPerMillion: 15, OutputPerMillion: 75},
+			2: {InputPerMillion: 1, OutputPerMillion: 2}, // no ID
+		},
+	}
+	got := db.TierEntries()
+	if len(got) != 1 || got[0].ID != "claude-core" {
+		t.Errorf("got %+v, want only the tier carrying an id", got)
+	}
+}
+
+func TestDB_TierEntries_EmptyWhenNoTiersLoaded(t *testing.T) {
+	db := &DB{models: map[string]ModelPrice{}, tiers: map[int]TierPrice{}}
+	got := db.TierEntries()
+	if len(got) != 0 {
+		t.Errorf("got %+v, want none", got)
+	}
+}
+
+// registry/pricing.yaml's own ids must round-trip through the YAML tag,
+// since `pricing list` keys tier rows off TierPrice.ID.
+func TestLoadFallbackTiers_CarriesTheRegistryID(t *testing.T) {
+	t.Setenv("HYDRA_HOME", t.TempDir())
+
+	tiers, err := loadFallbackTiers()
+	if err != nil {
+		t.Fatal(err)
+	}
+	tp, ok := tiers[1]
+	if !ok {
+		t.Fatal("tier 1 missing")
+	}
+	if tp.ID != "claude-core" {
+		t.Errorf("tier 1 id = %q, want %q", tp.ID, "claude-core")
+	}
+}
+
 // ── OpenRouter fetch ──────────────────────────────────────────────────────────
 
 func TestFetchFromOpenRouter(t *testing.T) {

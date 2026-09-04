@@ -34,8 +34,7 @@ type RunLog struct {
 
 // DefaultLogPath is where SPRT runs are persisted (~/.hydra/trust.jsonl).
 func DefaultLogPath() string {
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".hydra", "trust.jsonl")
+	return filepath.Join(config.Dir(), "trust.jsonl")
 }
 
 // TaskHash is a short stable identifier for a prompt, used to correlate a run

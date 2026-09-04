@@ -45,3 +45,16 @@ jobs:
     with:
       tag: ${{ needs.release-please.outputs.tag_name }}
     secrets: inherit
+
+  # The tag release-please creates is made with GITHUB_TOKEN, and events raised by
+  # that token start no workflow — so this has to hang off the job graph, like publish.
+  close-issues:
+    name: Close shipped issues
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    permissions:
+      contents: read
+      issues: write
+    uses: ./.github/workflows/close-shipped-issues.yml
+    with:
+      tag: ${{ needs.release-please.outputs.tag_name }}

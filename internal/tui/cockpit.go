@@ -2,87 +2,42 @@
 
 package tui
 
-// cockpit.go — the interactive terminal cockpit (`hyctl tui`).
-// A real Bubble Tea program: chat/console + heads sidebar + live routing
-// decisions, with a dashboard view (Tab). Neon identity, aqua interaction.
+// cockpit.go — the interactive terminal cockpit (`hyctl tui`): the model, the
+// six-view table, and the frame loop. Chrome lives in chrome.go, bindings in
+// keys.go, layout helpers in layout.go, and each view in view_<name>.go.
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 
-	"github.com/ankit373/hydra/internal/budget"
 	"github.com/ankit373/hydra/internal/config"
-	"github.com/ankit373/hydra/internal/cost"
+	"github.com/ankit373/hydra/internal/dispatch"
 	"github.com/ankit373/hydra/internal/executor"
 	"github.com/ankit373/hydra/internal/pricing"
 	"github.com/ankit373/hydra/internal/probe"
 	"github.com/ankit373/hydra/internal/provider"
 	"github.com/ankit373/hydra/internal/rank"
-	"github.com/ankit373/hydra/internal/runlog"
-	"github.com/ankit373/hydra/internal/tree"
 )
-
-// ── palette (ck-prefixed to avoid clashing with splash.go/init.go) ──────────────
-
-var (
-	ckAqua    = lipgloss.Color("#00E6C3")
-	ckCyan    = lipgloss.Color("#2AF0E0")
-	ckViolet  = lipgloss.Color("#8B5CF6")
-	ckMagenta = lipgloss.Color("#E852C8")
-	ckInk     = lipgloss.Color("#E7E9F5")
-	ckDimc    = lipgloss.Color("#9AA0C4")
-	ckFaint   = lipgloss.Color("#5A5F85")
-	ckCheap   = lipgloss.Color("#3FD98A")
-	ckMid     = lipgloss.Color("#E0A93A")
-	ckExp     = lipgloss.Color("#FF5A6E")
-	ckLineC   = lipgloss.Color("#2A2E52")
-
-	ckAquaS   = lipgloss.NewStyle().Foreground(ckAqua)
-	ckCyanS   = lipgloss.NewStyle().Foreground(ckCyan)
-	ckVioletS = lipgloss.NewStyle().Foreground(ckViolet)
-	ckInkS    = lipgloss.NewStyle().Foreground(ckInk)
-	ckDimS    = lipgloss.NewStyle().Foreground(ckDimc)
-	ckFaintS  = lipgloss.NewStyle().Foreground(ckFaint)
-	ckCheapS  = lipgloss.NewStyle().Foreground(ckCheap)
-	ckMidS    = lipgloss.NewStyle().Foreground(ckMid)
-	ckExpS    = lipgloss.NewStyle().Foreground(ckExp)
-	ckLabelS  = lipgloss.NewStyle().Foreground(ckFaint).Bold(true)
-	ckYouS    = lipgloss.NewStyle().Foreground(ckInk).Bold(true)
-	ckBoxS    = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(ckLineC).Padding(0, 1)
-)
-
-var ckFileRe = regexp.MustCompile(`[\w/]+\.(go|ts|js|py|rs|java)`)
-
-// ── model ───────────────────────────────────────────────────────────────────────
-
-type ckHead struct {
-	id    string
-	name  string
-	tier  int
-	price float64
-	up    bool
-	color lipgloss.Color
-}
 
 // Cockpit views. The name table is the single source of truth — deriving the
-// count and the bounds check from it keeps the Tab cycle, the header label, and
+// count and the bounds check from it keeps the Tab cycle, the header tabs, and
 // the --view validation from drifting apart when a view is added.
 const (
-	ckViewChatCode = iota
-	ckViewDashboard
-	ckViewAgentTree
+	ckViewChat = iota
+	ckViewAgents
+	ckViewModels
+	ckViewActivity
+	ckViewUsage
+	ckViewAudit
 )
 
-var ckViewNames = []string{"chat+code", "dashboard", "agent-tree"}
+var ckViewNames = []string{"chat", "agents", "models", "activity", "usage", "audit"}
 
 // ckViewCount is how many views exist.
 func ckViewCount() int { return len(ckViewNames) }
@@ -91,7 +46,7 @@ func ckViewCount() int { return len(ckViewNames) }
 // than panicking. `--snapshot --view N` reaches the header with unvalidated N.
 func ckViewName(v int) string {
 	if !ckValidView(v) {
-		return ckViewNames[ckViewChatCode]
+		return ckViewNames[ckViewChat]
 	}
 	return ckViewNames[v]
 }
@@ -105,10 +60,21 @@ func ValidSnapshotView(view int) (ok bool, names []string) {
 	return ckValidView(view), append([]string(nil), ckViewNames...)
 }
 
-// ckHeadsFrom converts a real probe result into display rows, ranked the way
+// ── heads (chat routing preview) ─────────────────────────────────────────────────
+
+type ckHead struct {
+	id    string
+	name  string
+	tier  int
+	price float64
+	up    bool
+	local bool
+}
+
+// ckHeadsFrom converts a real scan result into display rows, ranked the way
 // dispatch ranks them so the cockpit shows the order routing would actually
 // use. price comes from the live pricing DB; a head with no known price shows
-// 0, which renders as "—" rather than a fabricated figure.
+// 0, which renders as unknown rather than a fabricated figure.
 func ckHeadsFrom(heads []provider.Head, pr *pricing.DB) []ckHead {
 	out := make([]ckHead, 0, len(heads))
 	for _, h := range heads {
@@ -124,89 +90,133 @@ func ckHeadsFrom(heads []provider.Head, pr *pricing.DB) []ckHead {
 			tier:  tier,
 			price: price,
 			up:    executor.Supports(h),
-			color: ckTierColor(tier),
+			local: h.LocalOnly,
 		})
 	}
 	return out
 }
 
-// ckTierColor maps a capability tier onto the cost ramp: cheap local heads
-// green, mid amber, expensive frontier heads violet/red.
-func ckTierColor(tier int) lipgloss.Color {
-	switch {
-	case tier <= 2:
-		return ckViolet
-	case tier <= 6:
-		return ckCyan
-	default:
-		return ckCheap
-	}
-}
+// ── model ───────────────────────────────────────────────────────────────────────
 
 // Cockpit is the interactive `hyctl tui` model.
 type Cockpit struct {
-	w, h      int
-	ready     bool
-	view      int // one of the ckView* constants
-	input     string
-	log       []string
-	heads     []ckHead
-	mode      string
-	runs      int
-	claudePct int
-	spend     float64   // today's real estimated spend, from cost.jsonl
-	metrics   ckMetrics // real latency/savings/blast/calibration, loaded once
+	w, h     int
+	ready    bool
+	view     int // one of the ckView* constants
+	glossary bool
+	flash    string // transient status-bar note, replaced by the next action
 
-	// live code panel (chat+code view): a snippet streamed line-by-line.
-	codeLang  string
-	codeLines []string
-	codeShown int
-	codeGen   int // generation guard so a new run cancels stale tick loops
+	// chat (view 0) — executes for real (#597): modes, gates, and the override.
+	input      string
+	log        []string
+	mode       string // chat mode name: ask/edit/plan/auto + advanced (modes.go)
+	pinnedTier int    // session default tier for chat, set from the models view
+	chatScroll int    // 0 = follow the live tail; L+1 = scrollback anchored at line L
+	piiLocal   bool   // config's pii policy forces local-only routing
+	override   ckOverride
+	exec       *ckExecState // the running task; nil when idle
+	planWait   *ckWait      // plan awaiting approval
+	confirm    *ckWait      // careful-mode write/fix confirm
+	lastDone   *ckTask      // last finished task, for d/x/o and the trace jump
+	modePick   bool         // `m` mode-picker overlay
+	modeSel    int
+	ovOpen     bool // ctrl+o override modal
+	ovSel      int
+	ovStage    byte // 0 list · 'T' tier digit · 'C' confidence pick
+	ovConfSel  int
+	codeLang   string
+	codeLines  []string
+	codeShown  int
+	codeGen    int  // generation guard so a new run cancels stale tick loops
+	codeDiff   bool // the panel currently shows the last edit's diff
 
-	// agent-tree view: the reconstructed run and its flattened rows.
-	treeSel  int
-	runID    string
-	runLive  bool
-	treeRows []tree.Row
+	claudePct  int
+	pctKnown   bool // false when state.json has no claude_pct to read
+	pctHist    []int
+	spend      float64 // today's real estimated spend, from cost.jsonl
+	sessionUSD float64 // est cost accrued by THIS process — zero until chat executes
+	metrics    ckMetrics
+	heads      []ckHead
+	// probedHeads is kept from the startup scan so the models view and the
+	// audit build can reuse it without re-scanning the machine.
+	probedHeads []provider.Head
+
+	// models (view 2)
+	groups     []ckModelGroup
+	collapsed  map[string]bool
+	modelSel   int
+	modelFocus bool
+	scannedAt  time.Time
+	scanning   bool
+
+	// agents (1) + activity (3) share today's runs, loaded once (runs.go).
+	runsToday   []ckRun
+	agentSel    int
+	actSel      int
+	actDrill    bool
+	actFailOnly bool
+	traceOff    int
+
+	// usage (view 4)
+	usageGroup byte // 'm' model · 't' tier · 'd' day
+	usageOff   int  // breakdown table scroll
+
+	// audit (view 5) — built lazily on entry (#524) and refreshed on each
+	// entry; nil until then or when the build failed.
+	audit        *ckAudit
+	auditSel     int
+	scoreOff     int // scorecard table scroll
+	auditIgnored map[string]bool
+
+	glossOff int // glossary overlay scroll, for short terminals
 }
 
-// NewCockpit builds the cockpit from the machine's real state: heads from a
-// probe, the governor from state.json, spend from cost.jsonl.
-//
-// It previously shipped a hardcoded roster of five heads that may not exist on
-// this machine, a governor that counted up from 52 as you typed, and a price
-// table used to compute "savings" — all presented as live telemetry, and all
-// reachable by `--snapshot`, which generates imagery for the docs site (#189).
-// Anything not yet measurable is now omitted rather than simulated.
+// NewCockpit builds the cockpit from the machine's real state: models from a
+// scan, the context budget from state.json, spend from cost.jsonl. Anything
+// not yet measurable is omitted rather than simulated (#189).
 func NewCockpit() Cockpit {
-	ctx, cancel := context.WithTimeout(context.Background(), ckProbeTimeout)
+	ctx, cancel := probeContext()
 	defer cancel()
 	probed := probe.Run(ctx)
 
 	pr := pricing.Load()
 	heads := ckHeadsFrom(probed.Heads, pr)
+	pct, hist, known := ckClaudePct()
+	metrics := ckLoadMetrics(pr)
 
-	pct := ckClaudePct()
 	m := Cockpit{
-		mode:      "dispatch",
-		claudePct: pct,
-		heads:     heads,
-		spend:     ckSpendToday(),
-		metrics:   ckLoadMetrics(pr),
+		mode:         "auto",
+		claudePct:    pct,
+		pctKnown:     known,
+		pctHist:      hist,
+		heads:        heads,
+		spend:        metrics.spendUSD,
+		metrics:      metrics,
+		probedHeads:  probed.Heads,
+		groups:       ckGroupHeads(probed.Heads),
+		collapsed:    map[string]bool{},
+		scannedAt:    time.Now(),
+		usageGroup:   'm',
+		auditIgnored: map[string]bool{},
 	}
-	m.runID, m.runLive, m.treeRows = ckLoadTree()
+	m.runsToday = ckLoadRuns(time.Now().UTC())
+	// The route badge mirrors what dispatch will enforce; with no config there
+	// is no pii policy to mirror.
+	if cfg, err := config.Load(); err == nil {
+		m.piiLocal = dispatch.PIILocalOnly(cfg)
+	}
 
 	switch len(heads) {
 	case 0:
 		m.log = []string{
-			ckDimS.Render("🐉 Hydra initialised · no heads discovered."),
-			ckDimS.Render("Run `hyctl probe` to see what was found, or `hyctl init` to configure."),
+			ckDimS.Render("🐉 Hydra initialised · no models found by the scan."),
+			ckDimS.Render("Run `hyctl probe` to see what was scanned, or `hyctl init` to configure."),
 		}
 	default:
 		m.log = []string{
-			ckDimS.Render(fmt.Sprintf("🐉 Hydra initialised · %d head%s discovered · routing engine ready.",
+			ckDimS.Render(fmt.Sprintf("🐉 Hydra initialised · %d model%s scanned · routing engine ready.",
 				len(heads), plural(len(heads)))),
-			ckDimS.Render("Type a task and press enter. Tab = chat/dash/tree · /trust /swarm /local · :q quits."),
+			ckDimS.Render("Type a task and press enter. shift+tab mode · ctrl+o route · ? shortcuts · :q quits."),
 		}
 	}
 	return m
@@ -216,36 +226,21 @@ func NewCockpit() Cockpit {
 // before it can draw anything.
 const ckProbeTimeout = 5 * time.Second
 
-// ckClaudePct reads the orchestrator's real context usage from state.json.
-// Absent state means unknown, which renders as unknown — not as a number.
-func ckClaudePct() int {
+// ckClaudePct reads the orchestrator's real context usage and its history from
+// state.json. Absent state reads as unknown, which renders as "—", not as 0%.
+func ckClaudePct() (pct int, hist []int, ok bool) {
 	raw, err := os.ReadFile(filepath.Join(config.Dir(), "logs", "state.json"))
 	if err != nil {
-		return 0
+		return 0, nil, false
 	}
 	var s struct {
-		ClaudePct int `json:"claude_pct"`
+		ClaudePct        *int  `json:"claude_pct"`
+		ClaudePctHistory []int `json:"claude_pct_history"`
 	}
-	if err := json.Unmarshal(raw, &s); err != nil {
-		return 0
+	if err := json.Unmarshal(raw, &s); err != nil || s.ClaudePct == nil {
+		return 0, nil, false
 	}
-	return s.ClaudePct
-}
-
-// ckSpendToday returns today's real estimated spend from cost.jsonl.
-func ckSpendToday() float64 {
-	summary, err := cost.Summary()
-	if err != nil || summary == nil {
-		return 0
-	}
-	return summary.Today.EstCostUSD
-}
-
-func plural(n int) string {
-	if n == 1 {
-		return ""
-	}
-	return "s"
+	return *s.ClaudePct, s.ClaudePctHistory, true
 }
 
 func (m Cockpit) Init() tea.Cmd { return nil }
@@ -262,204 +257,47 @@ func (m Cockpit) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, ckCodeTick(m.codeGen)
 			}
 		}
-	case tea.KeyMsg:
-		switch msg.Type {
-		case tea.KeyCtrlC:
-			return m, tea.Quit
-		case tea.KeyTab:
-			m.view = (m.view + 1) % ckViewCount()
-		case tea.KeyUp:
-			if m.view == 2 && m.treeSel > 0 {
-				m.treeSel--
-			}
-		case tea.KeyDown:
-			if m.view == 2 && m.treeSel < len(m.treeRows)-1 {
-				m.treeSel++
-			}
-		case tea.KeyEnter:
-			return m.submit()
-		case tea.KeyBackspace:
-			if n := len(m.input); n > 0 {
-				m.input = m.input[:n-1]
-			}
-		case tea.KeyEsc:
-			m.input = ""
-		case tea.KeySpace:
-			m.input += " "
-		case tea.KeyRunes:
-			m.input += string(msg.Runes)
+	case ckRescanMsg:
+		return m.applyRescan(msg), nil
+	case ckExecDoneMsg:
+		return m.finishTask(msg)
+	case ckGateMsg:
+		return m.gateTask(msg)
+	case ckSpinTickMsg:
+		// Keep repainting elapsed/stage while this exact task runs; a stale
+		// tick from a superseded task schedules nothing.
+		if msg.exec == m.exec && m.exec != nil {
+			return m, ckSpinTick(m.exec)
 		}
+	case tea.MouseMsg:
+		switch tea.MouseEvent(msg).Button {
+		case tea.MouseButtonWheelUp:
+			return m.scrollBy(-3), nil
+		case tea.MouseButtonWheelDown:
+			return m.scrollBy(3), nil
+		}
+	case tea.KeyMsg:
+		// Terminals coalesce fast keystrokes into one multi-rune message;
+		// handlers are written for one key at a time, so replay individually.
+		// Bracketed paste stays one message: pasted text is never shortcuts.
+		if msg.Type == tea.KeyRunes && len(msg.Runes) > 1 && !msg.Paste {
+			var cur tea.Model = m
+			var cmds []tea.Cmd
+			for _, r := range msg.Runes {
+				var c tea.Cmd
+				cur, c = cur.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+				if c != nil {
+					cmds = append(cmds, c)
+				}
+			}
+			return cur, tea.Batch(cmds...)
+		}
+		return m.key(msg)
 	}
 	return m, nil
 }
 
-// ── code-stream ticker ─────────────────────────────────────────────────────────
-
-type ckCodeTickMsg struct{ gen int }
-
-// ckCodeTick schedules the next code line to reveal. gen tags the current run so
-// a fresh dispatch cancels the previous stream instead of double-speeding it.
-func ckCodeTick(gen int) tea.Cmd {
-	return tea.Tick(time.Second/20, func(time.Time) tea.Msg { return ckCodeTickMsg{gen} })
-}
-
-func (m Cockpit) submit() (tea.Model, tea.Cmd) {
-	t := strings.TrimSpace(m.input)
-	m.input = ""
-	switch {
-	case t == "":
-		return m, nil
-	case t == ":q" || t == ":quit":
-		return m, tea.Quit
-	case t == ":dash":
-		m.view = 1
-		return m, nil
-	case t == ":chat":
-		m.view = 0
-		return m, nil
-	case t == ":tree":
-		m.view = 2
-		return m, nil
-	case strings.HasPrefix(t, "/"):
-		switch t {
-		case "/dispatch", "/swarm", "/trust", "/local":
-			m.mode = t[1:]
-			m.log = append(m.log, ckDimS.Render("mode → ")+ckCyanS.Render(m.mode))
-		default:
-			m.log = append(m.log, ckDimS.Render("unknown command "+t))
-		}
-		return m, nil
-	}
-	nm := m.run(t)
-	return nm, ckCodeTick(nm.codeGen)
-}
-
-// baseline returns the cost and short model name of the priciest available head —
-// the "route everything to the top tier" reference the savings are measured against.
-// Provider-neutral by construction: it reflects whatever the most expensive
-// discovered head happens to be, never a hardcoded vendor.
-func (m Cockpit) baseline() (float64, string) {
-	base, name := 0.0, "frontier"
-	for _, h := range m.heads {
-		if h.up && h.price > base {
-			base, name = h.price, ckBaseName(h.name)
-		}
-	}
-	return base, name
-}
-
-// ckBaseName trims a "provider · model" head label down to the model part.
-func ckBaseName(n string) string {
-	if i := strings.LastIndex(n, "· "); i >= 0 {
-		return strings.TrimSpace(n[i+len("· "):])
-	}
-	return n
-}
-
-// run previews the routing decision for a task and appends it to the log.
-// It does not execute anything — see the note it prints.
-func (m Cockpit) run(task string) Cockpit {
-	m.runs++
-	m.log = append(m.log, ckYouS.Render("❯ "+task))
-
-	enum, wantTier := classifyTask(task, m.mode)
-	idx := m.pickHead(wantTier)
-	// Since #189 the roster is a real probe, so it can legitimately be empty on
-	// a machine with nothing installed. There is no route to preview then, and
-	// inventing one is exactly what this PR removes.
-	if idx < 0 {
-		m.log = append(m.log, ckDimS.Render("  no routable head — run `hyctl probe` to see why"))
-		return m
-	}
-	h := m.heads[idx]
-	fell := m.mode != "local" && h.tier > wantTier
-
-	// Load a class-appropriate snippet and (re)start the code stream.
-	m.codeLang, m.codeLines = ckSnippet(enum)
-	m.codeShown = 0
-	m.codeGen++
-
-	cost := h.price
-	base, baseName := m.baseline()
-
-	flow := ckDimS.Render("  prompt ") + ckAquaS.Render("→ ") + ckInkS.Render(enum) +
-		ckAquaS.Render(" → ") + ckDimS.Render(fmt.Sprintf("T%d", wantTier))
-	if fell {
-		flow += ckAquaS.Render(" → ") + ckMidS.Render("no head at that tier") +
-			ckAquaS.Render(" → ") + ckCyanS.Render(fmt.Sprintf("T%d", h.tier))
-	}
-	flow += ckAquaS.Render(" → ") + lipgloss.NewStyle().Foreground(h.color).Render(h.name)
-	m.log = append(m.log, flow)
-
-	costStr := "free (local)"
-	if cost > 0 {
-		costStr = fmt.Sprintf("~$%.4f", cost)
-	} else if base == 0 {
-		// No pricing data loaded — say so rather than implying "free".
-		costStr = "cost unknown"
-	}
-	line := ckDimS.Render("  route  ") +
-		lipgloss.NewStyle().Foreground(h.color).Render(h.name) +
-		ckDimS.Render("  "+costStr)
-	if base > 0 {
-		line += ckDimS.Render(fmt.Sprintf("  vs all-%s ~$%.4f", baseName, base))
-	}
-	m.log = append(m.log, line)
-
-	// Real blast radius, walked from graph.json, when the prompt names a file
-	// that is actually in the graph. This replaced a literal "κ=3.1 ⚠ 12
-	// dependents" printed for any prompt containing a file path (#193).
-	if f := ckFileRe.FindString(task); f != "" {
-		if radius, deps, kappa, ok := m.metrics.ckBlastFor(f); ok {
-			risk := ckCheapS
-			if kappa >= 2 {
-				risk = ckExpS
-			}
-			m.log = append(m.log, ckDimS.Render("  blast  ")+
-				risk.Render(fmt.Sprintf("κ=%.1f", kappa))+
-				ckDimS.Render(fmt.Sprintf("  %d dependent%s · radius %.2f×  → %s",
-					deps, plural(deps), radius, truncate(f, 40))))
-		}
-	}
-
-	// Confidence is still absent: it requires actually running the SPRT
-	// ensemble, which the cockpit cannot do until it executes dispatches. Blast
-	// radius above is different — it is a static graph property, computable
-	// without running anything.
-	m.log = append(m.log, ckDimS.Render("  plan   ")+
-		ckDimS.Render("routing preview only — the cockpit does not execute dispatches yet"))
-
-	return m
-}
-
-// pickHead finds the cheapest available head at or below the wanted strength,
-// falling back down the ladder to local qwen when heads are down.
-func (m Cockpit) pickHead(wantTier int) int {
-	best := -1
-	for i, h := range m.heads {
-		if h.tier >= wantTier && h.up {
-			if best == -1 || h.tier < m.heads[best].tier {
-				best = i
-			}
-		}
-	}
-	if best == -1 {
-		for i, h := range m.heads {
-			if h.tier >= 10 && h.up {
-				return i
-			}
-		}
-		// Nothing is routable. This used to fall back to the last head in the
-		// roster whether or not it was up, so a machine with only an
-		// unroutable head — the ollama binary with no server behind it — got a
-		// routing preview naming a head nothing can drive. Same shape as #248:
-		// a surface claiming a head is usable when it is not.
-		return -1
-	}
-	return best
-}
-
-// ── view ──────────────────────────────────────────────────────────────────────
+// ── frame ─────────────────────────────────────────────────────────────────────
 
 func (m Cockpit) View() string {
 	if !m.ready {
@@ -469,260 +307,111 @@ func (m Cockpit) View() string {
 	if bodyH < 6 {
 		bodyH = 6
 	}
+	w := max(1, m.w)
 	var body string
-	switch m.view {
-	case 1:
-		body = m.dash(m.w, bodyH)
-	case 2:
-		body = m.tree(m.w, bodyH)
+	switch {
+	case m.glossary:
+		body = m.viewGlossary(w, bodyH)
+	case m.modePick:
+		body = m.viewModePicker(w, bodyH)
+	case m.ovOpen:
+		body = m.viewOverride(w, bodyH)
+	case m.view == ckViewAgents:
+		body = m.viewAgents(w, bodyH)
+	case m.view == ckViewModels:
+		body = m.viewModels(w, bodyH)
+	case m.view == ckViewActivity:
+		body = m.viewActivity(w, bodyH)
+	case m.view == ckViewUsage:
+		body = m.viewUsage(w, bodyH)
+	case m.view == ckViewAudit:
+		body = m.viewAudit(w, bodyH)
 	default:
 		body = m.chatCode(bodyH)
 	}
-	return m.header() + "\n" + ckFaintS.Render(strings.Repeat("─", max(1, m.w))) + "\n" + body + "\n" + m.hint()
+	// ckFrame is the shell's guarantee: no view can push the status bar
+	// off-frame or bleed past the terminal's width, whatever its content.
+	return m.header() + "\n" + ckFaintS.Render(strings.Repeat("─", w)) + "\n" +
+		ckFrame(body, w, bodyH) + "\n" + m.statusBar()
 }
 
-// chatCode lays out the chat console beside the live code panel (view 0).
-// It falls back to chat-only when the terminal is too narrow to split.
-func (m Cockpit) chatCode(bodyH int) string {
-	mainW := m.w - 23 // sidebar (21) + right border + gap
-	if mainW < 20 {
-		mainW = 20
-	}
-	sidebar := m.sidebar(bodyH)
-	chatW := mainW / 2
-	codeW := mainW - chatW
-	if codeW < 22 {
-		// too tight to split — give the whole main pane to chat.
-		return lipgloss.JoinHorizontal(lipgloss.Top, sidebar, " ", m.chatMain(mainW, bodyH))
-	}
-	return lipgloss.JoinHorizontal(lipgloss.Top,
-		sidebar, " ", m.chatMain(chatW, bodyH), m.codePanel(codeW, bodyH))
-}
+// ── code-stream ticker ─────────────────────────────────────────────────────────
 
-func (m Cockpit) header() string {
-	viewName := ckViewName(m.view)
-	left := ckWordmark("HYDRA") + ckDimS.Render(" ▸ ") + ckCyanS.Render(viewName) +
-		ckDimS.Render(" · "+m.headSummary())
+type ckCodeTickMsg struct{ gen int }
 
-	// budget.ModeFor is the single source of truth for the band. This used to
-	// re-implement the thresholds inline — a fourth copy, alongside the two in
-	// cockpit_views.go and the real one in internal/budget (#189).
-	mode := budget.ModeFor(m.claudePct)
-	mc := ckCheapS
-	switch mode.String() {
-	case "critical", "emergency":
-		mc = ckExpS
-	case "warning", "caution", "compact":
-		mc = ckMidS
-	}
-	right := ckDimS.Render("MODE ") + mc.Render(mode.String()) +
-		ckDimS.Render(fmt.Sprintf(" %d%%   ", m.claudePct)) +
-		ckDimS.Render("today ") + ckCheapS.Render(fmt.Sprintf("$%.4f", m.spend))
-	gap := m.w - lipgloss.Width(left) - lipgloss.Width(right) - 2
-	if gap < 1 {
-		gap = 1
-	}
-	return " " + left + strings.Repeat(" ", gap) + right
-}
-
-func (m Cockpit) sidebar(h int) string {
-	var b strings.Builder
-	b.WriteString(ckLabelS.Render("GOVERNOR") + "\n")
-	b.WriteString(ckBar(m.claudePct, 15) + "\n")
-	b.WriteString(ckDimS.Render(fmt.Sprintf("claude %d%%", m.claudePct)) + "\n\n")
-	b.WriteString(ckLabelS.Render("HEADS") + "\n")
-	for _, hd := range m.heads {
-		st := ckCheapS.Render("✓")
-		if !hd.up {
-			st = ckExpS.Render("✗")
-		}
-		name := lipgloss.NewStyle().Foreground(hd.color).Render(truncate(hd.name, 15))
-		b.WriteString(" " + st + " " + name + "\n")
-	}
-	b.WriteString("\n" + ckLabelS.Render("MODE") + "\n " + ckCyanS.Render(m.mode) + "\n")
-	return lipgloss.NewStyle().Width(21).Height(h).
-		BorderStyle(lipgloss.NormalBorder()).BorderRight(true).BorderForeground(ckLineC).
-		Render(b.String())
-}
-
-func (m Cockpit) chatMain(w, h int) string {
-	logH := h - 1
-	if logH < 1 {
-		logH = 1
-	}
-	lines := m.log
-	if len(lines) > logH {
-		lines = lines[len(lines)-logH:]
-	}
-	logBox := lipgloss.NewStyle().Width(w).Height(logH).Render(strings.Join(lines, "\n"))
-	input := ckCyanS.Render(m.mode+" ❯ ") + ckInkS.Render(m.input) + ckAquaS.Render("▏")
-	return lipgloss.JoinVertical(lipgloss.Left, logBox, ckFaintS.Render(strings.Repeat("╌", max(1, w))), input)
-}
-
-func (m Cockpit) hint() string {
-	k := func(s string) string { return ckAquaS.Render(s) }
-	return ckFaintS.Render(" ") + k("enter") + ckFaintS.Render(" dispatch   ") +
-		k("tab") + ckFaintS.Render(" chat/dash/tree   ") +
-		k("↑↓") + ckFaintS.Render(" select   ") +
-		k("/trust /swarm /local") + ckFaintS.Render(" mode   ") +
-		k(":q") + ckFaintS.Render(" quit")
+// ckCodeTick schedules the next code line to reveal. gen tags the current run so
+// a fresh preview cancels the previous stream instead of double-speeding it.
+func ckCodeTick(gen int) tea.Cmd {
+	return tea.Tick(time.Second/20, func(time.Time) tea.Msg { return ckCodeTickMsg{gen} })
 }
 
 // ── snapshot (static render for docs / non-tty preview) ─────────────────────────
 
-// CockpitSnapshotView renders one static frame of the given view (0 chat+code,
-// 1 dashboard, 2 agent-tree) after two demo dispatches, with the code stream and
-// tree selection settled so the frame is fully populated. An out-of-range view
-// falls back to the default instead of panicking; callers that can report an
-// error to the user should reject it up front with ValidSnapshotView.
+// CockpitSnapshotView renders one static frame of the given view (0 chat,
+// 1 agents, 2 models, 3 activity, 4 usage, 5 audit) after two demo previews,
+// with the code stream settled so the frame is fully populated. An
+// out-of-range view falls back to the default instead of panicking; callers
+// that can report an error to the user should reject it up front with
+// ValidSnapshotView.
 func CockpitSnapshotView(view int) string {
-	m := NewCockpit()
-	m = m.run("write a User DTO for profile settings")            // SIMPLE → TS interface
-	m = m.run("rotate the signing key in internal/auth/token.go") // CORE   → Go key-rotation
-	m.codeShown = len(m.codeLines)                                // reveal the whole snippet
-	m.treeSel = 2                                                 // highlight the token-rotation node
+	m := ckSnapshotModel()
 	if !ckValidView(view) {
-		view = ckViewChatCode
+		view = ckViewChat
 	}
-	m.view = view
-	m.w, m.h, m.ready = 100, 30, true
+	m = m.jump(view)
 	return m.View()
 }
 
-// CockpitSnapshot renders all three views stacked, each labelled — the
-// representative frame shown by `hyctl tui --snapshot`.
+// ckSnapshotModel builds the one demo Cockpit state every snapshot view
+// renders from (NewCockpit alone scans the machine; the audit stays lazy,
+// #524). The transcript uses the real renderers — a snapshot never dispatches.
+func ckSnapshotModel() Cockpit {
+	m := NewCockpit()
+	m.w, m.h, m.ready = 100, 30, true
+
+	demo := ckTask{
+		prompt: "add pagination to the users endpoint",
+		mode:   ckModeByName("auto"), file: "internal/api/users.go",
+		runID:     "20260904T100000Z-demo0000",
+		planSteps: 3, edited: true, added: 24, removed: 6,
+		rounds:      []ckVerifyRound{{passed: true}},
+		verifyLabel: "go test ./...",
+		headName:    "qwen2.5-coder", tier: 7,
+		costUSD: 0.0041, elapsed: 3200 * time.Millisecond,
+	}
+	m.log = append(m.log, ckYouS.Render("❯ "+demo.prompt))
+	m.log = append(m.log, m.routeLines(demo, ckHead{name: demo.headName, tier: demo.tier}, "STANDARD", ckOverride{}, false)...)
+	m.log = append(m.log, ckResultLines(demo)...)
+
+	m.codeLang = "go"
+	m.codeLines = []string{
+		"// paginated users endpoint",
+		"func (s *Server) ListUsers(w http.ResponseWriter, r *http.Request) {",
+		"    page := parsePage(r.URL.Query())",
+		"    users, err := s.repo.Users(r.Context(), page)",
+		"    if err != nil {",
+		"        http.Error(w, err.Error(), 500)",
+		"        return",
+		"    }",
+		"    json.NewEncoder(w).Encode(users)",
+		"}",
+	}
+	m.codeShown = len(m.codeLines)
+	return m
+}
+
+// CockpitSnapshot renders all six views stacked plus the shortcut glossary,
+// each labelled — the representative frame shown by `hyctl tui --snapshot`.
 func CockpitSnapshot() string {
 	label := func(s string) string { return ckLabelS.Render("── " + s + " " + strings.Repeat("─", 40)) }
-	return label("VIEW 1/3 · CHAT + CODE (tab)") + "\n" + CockpitSnapshotView(0) + "\n\n" +
-		label("VIEW 2/3 · DASHBOARD (tab)") + "\n" + CockpitSnapshotView(1) + "\n\n" +
-		label("VIEW 3/3 · AGENT TREE (tab · ↑↓ select)") + "\n" + CockpitSnapshotView(2)
-}
-
-// ── helpers ─────────────────────────────────────────────────────────────────────
-
-func ckWordmark(s string) string {
-	rs := []rune(s)
-	n := len(rs)
+	base := ckSnapshotModel()
 	var b strings.Builder
-	for i, r := range rs {
-		t := 0.0
-		if n > 1 {
-			t = float64(i) / float64(n-1)
-		}
-		b.WriteString(lipgloss.NewStyle().Foreground(ckLerpHex(t)).Bold(true).Render(string(r)))
+	for v, name := range ckViewNames {
+		b.WriteString(label(fmt.Sprintf("VIEW %d/%d · %s (tab · %d)", v+1, len(ckViewNames), strings.ToUpper(name), v+1)))
+		b.WriteString("\n" + base.jump(v).View() + "\n\n")
 	}
+	g := base
+	g.glossary = true
+	b.WriteString(label("GLOSSARY (?)") + "\n" + g.View())
 	return b.String()
-}
-
-// ckLerpHex blends cyan → violet → magenta across t∈[0,1].
-func ckLerpHex(t float64) lipgloss.Color {
-	var a, b [3]int
-	if t < 0.5 {
-		a, b, t = [3]int{0x2A, 0xF0, 0xE0}, [3]int{0x8B, 0x5C, 0xF6}, t/0.5
-	} else {
-		a, b, t = [3]int{0x8B, 0x5C, 0xF6}, [3]int{0xE8, 0x52, 0xC8}, (t-0.5)/0.5
-	}
-	l := func(x, y int) int { return int(float64(x) + float64(y-x)*t) }
-	return lipgloss.Color(fmt.Sprintf("#%02X%02X%02X", l(a[0], b[0]), l(a[1], b[1]), l(a[2], b[2])))
-}
-
-func ckBar(pct, width int) string {
-	fill := pct * width / 100
-	if fill > width {
-		fill = width
-	}
-	if fill < 0 {
-		fill = 0
-	}
-	col := ckCheap
-	switch {
-	case pct >= 75:
-		col = ckExp
-	case pct >= 50:
-		col = ckMid
-	}
-	return lipgloss.NewStyle().Foreground(col).Render(strings.Repeat("█", fill)) +
-		ckFaintS.Render(strings.Repeat("░", width-fill))
-}
-
-func classifyTask(task, mode string) (string, int) {
-	if mode == "local" {
-		return "LOCAL", 10
-	}
-	t := strings.ToLower(task)
-	switch {
-	case containsAny(t, "architect", "design", "multi-tenant", "security", "migration", "rotate", "signing", "distributed"):
-		return "CORE", 1
-	case containsAny(t, "refactor", "review", "debug", "optimi", "concurren", "race"):
-		return "COMPLEX", 3
-	case containsAny(t, "api", "endpoint", "crud", "pagination", "schema", "handler", "test", "users"):
-		return "STANDARD", 6
-	}
-	if len(task) > 90 {
-		return "MODERATE", 5
-	}
-	return "SIMPLE", 8
-}
-
-func containsAny(s string, subs ...string) bool {
-	for _, sub := range subs {
-		if strings.Contains(s, sub) {
-			return true
-		}
-	}
-	return false
-}
-
-// truncate bounds a label to n display cells.
-//
-// Counted in runes, not bytes. Slicing a string at a byte offset cuts a
-// multi-byte rune in half: "日本語モデル" truncated to 8 came out as
-// "日本\xe8…", which a terminal draws as a replacement character in the header
-// bar. cmd/hydra's truncLabel already counted runes; this one did not.
-func truncate(s string, n int) string {
-	r := []rune(s)
-	if len(r) <= n {
-		return s
-	}
-	if n <= 1 {
-		return string(r[:n])
-	}
-	return string(r[:n-1]) + "…"
-}
-
-// headSummary names the discovered heads for the header, truncated to keep the
-// bar from wrapping. It replaced a hardcoded "agy·gemini·openrouter·qwen"
-// string that named heads the machine may not have (#189).
-func (m Cockpit) headSummary() string {
-	if len(m.heads) == 0 {
-		return "no heads"
-	}
-	names := make([]string, 0, len(m.heads))
-	for _, h := range m.heads {
-		names = append(names, ckBaseName(h.name))
-	}
-	s := "heads: " + strings.Join(names, "·")
-	return truncate(s, 46)
-}
-
-// ckLoadTree reconstructs the run to display: the live one if a heartbeat is
-// fresh, else the most recent. Returns no rows when nothing has been recorded,
-// which the view renders as an honest empty state rather than an example (#191).
-func ckLoadTree() (runID string, live bool, rows []tree.Row) {
-	if ids, err := runlog.LiveRuns(); err == nil && len(ids) > 0 {
-		runID, live = ids[0], true
-	} else {
-		ids, err := runlog.Runs()
-		if err != nil || len(ids) == 0 {
-			return "", false, nil
-		}
-		runID = ids[0]
-	}
-
-	events, err := runlog.Load(runID)
-	if err != nil || len(events) == 0 {
-		return runID, live, nil
-	}
-	t, _ := tree.Reconstruct(events)
-	return runID, live, t.Rows()
 }
