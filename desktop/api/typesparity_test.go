@@ -142,3 +142,78 @@ func TestTypesTS_DeclaresNoFieldTheBackendNeverSends(t *testing.T) {
 		})
 	}
 }
+
+// The tests above guard field *names*. They say nothing about the *values* a
+// string enum carries, and a value is just as load-bearing: the Audit view
+// looked two checks up by names internal/security never emitted, and both
+// cards silently never rendered (#634). Those were free strings rather than a
+// declared union, but a union can drift the same way — a TypeScript union is
+// only a compile-time promise about the frontend, never a claim about Go.
+//
+// So: every union in types.ts that mirrors a Go string type must hold exactly
+// that type's values.
+
+var tsUnionRE = func(name string) *regexp.Regexp {
+	return regexp.MustCompile(`export type ` + regexp.QuoteMeta(name) + ` =([^\n]+)`)
+}
+
+// tsUnionValues returns the quoted members of a TypeScript string union.
+func tsUnionValues(t *testing.T, src, name string) map[string]bool {
+	t.Helper()
+	m := tsUnionRE(name).FindStringSubmatch(src)
+	if m == nil {
+		t.Fatalf("types.ts declares no union %q", name)
+	}
+	out := map[string]bool{}
+	for _, q := range regexp.MustCompile(`'([^']+)'`).FindAllStringSubmatch(m[1], -1) {
+		out[q[1]] = true
+	}
+	return out
+}
+
+func TestTypesTS_UnionValuesMatchGo(t *testing.T) {
+	src := readTypesTS(t)
+
+	for _, c := range []struct {
+		union  string
+		goVals []string
+	}{
+		{"Verdict", []string{
+			string(security.VerdictActNow),
+			string(security.VerdictAttention),
+			string(security.VerdictOK),
+		}},
+		{"Severity", []string{
+			string(security.SeverityCritical),
+			string(security.SeverityHigh),
+			string(security.SeverityMedium),
+			string(security.SeverityLow),
+		}},
+		{"CoverageStatus", []string{
+			string(security.Enforced),
+			string(security.Configured),
+			string(security.Gap),
+			string(security.NotApplicable),
+		}},
+		{"ActionPriority", []string{
+			string(security.PriorityNow),
+			string(security.PrioritySoon),
+			string(security.PriorityWatch),
+		}},
+	} {
+		t.Run(c.union, func(t *testing.T) {
+			ts := tsUnionValues(t, src, c.union)
+			for _, v := range c.goVals {
+				if !ts[v] {
+					t.Errorf("Go emits %s %q but types.ts does not list it — "+
+						"a value the view can receive and never match", c.union, v)
+				}
+				delete(ts, v)
+			}
+			for extra := range ts {
+				t.Errorf("types.ts lists %s %q, which Go never emits — "+
+					"any branch on it is unreachable", c.union, extra)
+			}
+		})
+	}
+}

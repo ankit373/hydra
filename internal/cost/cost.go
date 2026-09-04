@@ -128,6 +128,15 @@ func LoadAll() ([]Row, error) {
 	return loadRows(costLogPath())
 }
 
+// DefaultLogPath is where cost.jsonl lives. Exported so callers that aggregate
+// it (internal/rollup) name the same file this package reads.
+func DefaultLogPath() string { return costLogPath() }
+
+// LoadRows reads rows from an explicit path. Exported so callers that
+// aggregate the log (internal/rollup) can be tested against a fixture instead
+// of the real ~/.hydra.
+func LoadRows(path string) ([]Row, error) { return loadRows(path) }
+
 // Summary returns today + all-time totals and last 5 recent rows.
 func Summary() (*SummaryResult, error) {
 	all, err := LoadAll()

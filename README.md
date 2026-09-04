@@ -269,7 +269,7 @@ $ hyctl dispatch "process payment for card 4111-1111-1111-1111"
 
 ### 💰 Full Cost Visibility
 
-Every dispatch is logged to `~/.hydra/cost.jsonl` with model, tier, token counts, estimated cost, and fallback chain. Costs are **honestly labeled**: `tokens_source` marks whether a provider reported real usage or Hydra estimated it, and `cost_source` is always `estimated` (pricing × tokens, never a billed figure). Run `hyctl cost` or `hyctl stats` to see where your budget is going. Each row also carries `act_prob` (the probability the router picked that head) and `keep_prob` (the probability the row was kept), so a sampled log can still be read without bias — averaging a non-uniformly sampled log understates rates badly enough to reverse which head looks better.
+Every dispatch is logged to `~/.hydra/cost.jsonl` with model, tier, token counts, estimated cost, and fallback chain. Costs are **honestly labeled**: `tokens_source` marks whether a provider reported real usage or Hydra estimated it, and `cost_source` is always `estimated` (pricing × tokens, never a billed figure). Run `hyctl cost` or `hyctl stats` to see where your budget is going, or `hyctl stats --latency` for p50/p90/p99 per model — computed from mergeable sketches accurate to within 1%, so percentiles survive even after the raw rows are gone. Each row also carries `act_prob` (the probability the router picked that head) and `keep_prob` (the probability the row was kept), so a sampled log can still be read without bias — averaging a non-uniformly sampled log understates rates badly enough to reverse which head looks better.
 
 ```
 $ hyctl cost
@@ -735,7 +735,8 @@ hydra/
 │   ├── pricing/                 # Live cost DB (OpenRouter fetch + 24h cache + YAML fallback)
 │   ├── cost/                    # cost.jsonl reader + spend summaries + source labeling
 │   ├── ope/                     # Off-policy estimation: inverse-probability weighting over sampled logs
-│   │                            # runlog/ also seals old runs into compressed monthly segments
+│   ├── sketch/                  # Mergeable relative-error quantile sketch (bounded memory)
+│   ├── rollup/                  # Per-day aggregates: calls, tokens, spend, latency sketch
 │   ├── budget/                  # Token-budget governor: 6 static pressure modes + rate-aware first-passage risk on claude_pct
 │   ├── rank/                    # Deduplication + CapScore ranking
 │   ├── editor/                  # Scoped, validated, rollback-safe file edits
@@ -744,6 +745,7 @@ hydra/
 │   ├── util/                    # Shared utilities (bounded Accumulator, 33 MB cap)
 │   ├── sysinfo/                 # Hardware detection + 7-day memory history
 │   ├── runlog/                  # Per-run event log (~/.hydra/logs/runs/) + liveness heartbeat + edit snapshots
+│   │                            # Old runs seal into compressed monthly segments (logs/seg/)
 │   ├── tree/                    # Reconstructs a run: supervision tree + timeline, framework-free
 │   ├── runid/                   # Run/task identity — correlates every log a run produces
 │   ├── a2a/                     # Agent handoffs with vector clocks (causal ordering + conflict detection)
