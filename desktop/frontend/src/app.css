@@ -2074,6 +2074,10 @@ body {
 .mrow:focus-visible { outline: 2px solid var(--hy-aqua); outline-offset: 1px; }
 .mrow__dot { width: 7px; height: 7px; border-radius: 50%; }
 .mrow__dot--on { background: var(--hy-cheap); }
+/* Hollow, not grey-filled: "not reachable" and "not yet checked" must not
+   look the same, and before the probe reached the UI every dot was filled
+   from a models.yaml flag that says nothing about reachability. */
+.mrow__dot--unknown { background: transparent; box-shadow: inset 0 0 0 1px var(--hy-dim); }
 .mrow__dot--off { background: var(--hy-faint); }
 .mrow__name { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mrow__tier, .mrow__band, .mrow__cost {

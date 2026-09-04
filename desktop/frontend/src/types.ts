@@ -254,6 +254,28 @@ export interface MCPSyncResult {
   error?: string
 }
 
+/** One discovered head and whether anything can actually drive it. */
+export interface Head {
+  id: string
+  name: string
+  provider: string
+  source: string
+  tier: number
+  capScore: number
+  routable: boolean
+  localOnly: boolean
+  /** Why nothing can drive it, in words. Empty when routable. */
+  reason?: string
+}
+
+/** What this machine can route to right now. */
+export interface HeadPanel {
+  heads: Head[]
+  /** Counted in Go so a view need not re-derive it, and so "none discovered"
+   *  is distinguishable from "discovered, none usable". */
+  routable: number
+}
+
 /** The result of accepting or undoing one edit. */
 export interface ReviewOutcome {
   file: string

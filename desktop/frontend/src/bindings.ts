@@ -16,6 +16,7 @@ import type {
   InstallResult,
   MCPPanel,
   MCPSyncResult,
+  HeadPanel,
   ModelRegistry,
   ReviewOutcome,
   QuestionQueue,
@@ -38,6 +39,7 @@ interface WailsGo {
       RejectEdit(file: string): Promise<ReviewOutcome>
       GetMCPServers(): Promise<MCPPanel>
       SyncMCPRegistry(): Promise<MCPSyncResult>
+      GetHeads(): Promise<HeadPanel>
       GetPendingQuestions(): Promise<QuestionQueue>
       AnswerQuestion(taskID: string, answer: string): Promise<ChatReply>
       DeclineQuestion(taskID: string, reason: string): Promise<void>
@@ -89,6 +91,7 @@ export const RejectEdit = (file: string): Promise<ReviewOutcome> => backend().Re
 export const GetMCPServers = (): Promise<MCPPanel> => backend().GetMCPServers()
 
 export const SyncMCPRegistry = (): Promise<MCPSyncResult> => backend().SyncMCPRegistry()
+export const GetHeads = (): Promise<HeadPanel> => backend().GetHeads()
 
 export const GetPendingQuestions = (): Promise<QuestionQueue> => backend().GetPendingQuestions()
 
