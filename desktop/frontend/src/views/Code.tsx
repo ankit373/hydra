@@ -116,7 +116,7 @@ export function Code({
         {diff?.found && <DiffBody diff={diff} />}
         {current && diff?.found && (
           <ReviewBar
-            file={current.file}
+            key={current.file}
             outcome={acted[current.file]}
             busy={busy}
             onApprove={() => void act(current.file, 'approve')}
@@ -209,13 +209,11 @@ export function total(edits: Edit[], key: 'added' | 'removed'): number {
  * happen stays next to the diff it applies to.
  */
 function ReviewBar({
-  file,
   outcome,
   busy,
   onApprove,
   onReject,
 }: {
-  file: string
   outcome?: ReviewOutcome
   busy: boolean
   onApprove: () => void
@@ -223,9 +221,10 @@ function ReviewBar({
 }) {
   const [confirming, setConfirming] = useState<'approve' | 'reject' | null>(null)
 
-  // Reset when the pane moves to a different file, or a confirm started on one
-  // file would still be armed on the next.
-  useEffect(() => setConfirming(null), [file])
+  // No reset effect: the parent keys this component by file, so moving to
+  // another file remounts it and the confirm cannot survive the move. The
+  // effect also ran on mount, where it could wipe a confirm armed in the
+  // window between commit and the effect flush.
 
   if (outcome?.error) {
     return (
