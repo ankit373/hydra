@@ -439,7 +439,7 @@ In synthetic benchmarks this cuts model calls **~49% on easy tasks** and **~24% 
 | Per-source calibration (sensitivity / specificity / D) | ✅ | ❌ | ❌ | ❌ |
 | MCP accountability ledger | ✅ | ❌ | ❌ | ❌ |
 | Security posture + correlated incident detection (`hyctl security`) | ✅ | ❌ | ❌ | ❌ |
-| Native desktop app (Dashboard / Fleet / Session / Code) | ✅ | ❌ | ❌ | ❌ |
+| Native desktop app (Models / Activity / Usage / Audit) | ✅ | ❌ | ❌ | ❌ |
 
 ---
 
@@ -705,7 +705,7 @@ For Ollama models, add a family pattern:
 | **Percolation-κ blast radius** — Molloy–Reed core detection weights hub files higher | ✅ Shipped |
 | **Rate-aware budget governor** — first-passage-time risk on `claude_pct`, escalates before a threshold | ✅ Shipped |
 | **Security posture** (`hyctl security`) — verdict, correlated incidents, risk register, OWASP LLM Top-10 coverage | ✅ Shipped |
-| **Native desktop app** — chat-first, with a pool-aware model picker and a routing/confidence pane; plus Dashboard, Fleet, Session and Security views | ✅ Shipped |
+| **Native desktop app** — chat-first, with a pool-aware model picker and a routing pane; plus Models, Activity, Usage and Audit views | ✅ Shipped |
 | MCP server registry — central connection/authorization plane across every MCP server | 📋 [#9](https://github.com/ankit373/hydra/issues/9) |
 | Browser-based Web UI | 📋 [#12](https://github.com/ankit373/hydra/issues/12) |
 
@@ -737,6 +737,7 @@ hydra/
 │   ├── ope/                     # Off-policy estimation: inverse-probability weighting over sampled logs
 │   ├── sketch/                  # Mergeable relative-error quantile sketch (bounded memory)
 │   ├── rollup/                  # Per-day aggregates: calls, tokens, spend, latency sketch
+│   ├── evalset/                 # Oracle-verified labelled examples — kept verbatim, never pruned
 │   ├── budget/                  # Token-budget governor: 6 static pressure modes + rate-aware first-passage risk on claude_pct
 │   ├── rank/                    # Deduplication + CapScore ranking
 │   ├── editor/                  # Scoped, validated, rollback-safe file edits
@@ -756,7 +757,7 @@ hydra/
 │   ├── build/ · update/         # Version stamping + startup update check
 │   └── tui/                     # Bubbletea cockpit + init wizard
 ├── desktop/                     # Desktop app (own Go module) — Wails v2 + React/TS
-│   ├── api/                     # Go backend: Dashboard · Fleet · Session · Code · chat (no Wails imports)
+│   ├── api/                     # Go backend: Models · Activity · Usage · Audit · Session · chat (no Wails imports)
 │   └── frontend/                # React views over the same logs the CLI writes
 ├── registry/                    # routing · models · domains · pricing · policy — go:embed'd into
 │                                #   the binary; $HYDRA_HOME/registry/<file> overrides it
@@ -774,14 +775,22 @@ choice spends a quota another model shares (Opus and Sonnet draw from the same o
 pane beside the thread carries the active head, this run's confidence, per-model measured accuracy
 from the calibration record, and the files the run changed.
 
-Four more views sit behind an icon rail: **Dashboard** (HUD-style — arc gauges, glow chart,
-drill-down — spend, governor pressure, trust record, and a calibration leaderboard), **Fleet** (a
-dynamic workflow graph of runs in flight and the agents inside them), **Session** (one run's
-timeline, its file diffs, and a layered graph when it fanned out), and **Security** (OWASP LLM
-Top-10 coverage over the MCP ledger).
+Four more views sit behind an icon rail: **Models** (every head this machine can route to, grouped
+by the token pool it spends, each marked with whether anything can actually drive it right now and
+why not — plus the accuracy each has earned, never a score without its outcome count), **Activity**
+(every request, grouped by who has to act: waiting on you, running now, something failed, done),
+**Usage** (spend, remaining context budget with the headroom in updates rather than a band name,
+and how many models a consensus check actually asked), and **Audit** (what the agents did and
+whether the record can be trusted — OWASP LLM Top-10 coverage over the MCP audit log, the guardrail
+rules in force, and a trust verdict for every MCP server installed on this machine).
+
+Opening a request from Activity drills into **Session**: that run's timeline, a layered graph when
+it fanned out, and a **Code** tab whose diff marks what changed *within* a modified line and lets
+you accept or undo the change on disk. A guardrail rule that answers `ask` parks the task, and the
+question appears inline in the chat transcript, answerable there.
 
 It reads `~/.hydra/logs/` directly. No daemon, no telemetry, and its numbers are the CLI's numbers:
-Dashboard totals are asserted equal to `hyctl cost` and `hyctl stats` for the same data.
+Usage totals are asserted equal to `hyctl cost` and `hyctl stats` for the same data.
 
 **Install** — macOS and Linux:
 
