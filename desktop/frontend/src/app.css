@@ -1494,6 +1494,37 @@ body {
 
 @media (prefers-reduced-motion: reduce) { .rev__go { box-shadow: none; } }
 
+/* ── MCP servers ───────────────────────────────────────────────────────── */
+
+.mcp__head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.mcp__sync {
+  flex: 0 0 auto;
+  padding: 6px 12px;
+  background: transparent;
+  border: 1px solid var(--hy-line-2);
+  border-radius: var(--hy-radius-sm);
+  color: var(--hy-dim);
+  font-size: 12px; font-weight: 600;
+  cursor: pointer;
+}
+.mcp__sync:hover:not(:disabled) { color: var(--hy-aqua); border-color: color-mix(in srgb, var(--hy-aqua) 50%, transparent); }
+.mcp__sync:disabled { opacity: .5; cursor: default; }
+.mcp__sync:focus-visible { outline: 2px solid var(--hy-aqua); outline-offset: 2px; }
+
+.mcp__name { display: block; font-family: var(--hy-font-mono); font-size: 12px; color: var(--hy-ink); }
+.mcp__pkg { display: block; font-size: 10.5px; color: var(--hy-dim); opacity: .8; }
+.mcp__near { display: block; font-size: 10.5px; color: var(--hy-mid); }
+
+.mcp__state { font-size: 11px; font-weight: 600; }
+/* Only a confirmed finding is loud. The near-duplicate heuristic sits
+   deliberately above the quarantine threshold because it false-positived on
+   0.7% of the live registry, so its colour must not read as a verdict. */
+.mcp__state--trusted { color: var(--hy-cheap); }
+.mcp__state--provisional, .mcp__state--new { color: var(--hy-dim); }
+.mcp__state--flagged { color: var(--hy-mid); }
+.mcp__state--quarantined, .mcp__state--delisted { color: var(--hy-expensive); }
+.mcp__state--unresolved, .mcp__state--verified { color: var(--hy-dim); }
+
 /* ── Chat view ─────────────────────────────────────────────────────────── */
 /* Was a fixed-position dock. It is the default surface now (#520), so it fills
    its grid cell instead of floating over another view. */
