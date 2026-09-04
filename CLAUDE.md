@@ -47,6 +47,8 @@ internal/ope/           ← Off-policy estimation: inverse-probability weighting
 internal/sketch/        ← Mergeable relative-error quantile sketch (DDSketch-style). Bounded memory.
 internal/rollup/        ← Per-day aggregates of cost.jsonl (calls, tokens, spend, latency sketch).
 internal/evalset/       ← Oracle-verified labelled examples. Outside logs/, exempt from retention. `hyctl eval`.
+internal/payload/       ← Opt-in store for prompt/response text. Packed, dictionary-compressed,
+                          redacted before write. `hyctl trace payloads`.
 internal/runlog/        ← Per-run event log. Old runs seal into ~/.hydra/logs/seg/YYYY-MM.zst
                           (+ .idx), lossless and invisible to readers. `hyctl trace seal`.
 internal/pricing/       ← Live pricing DB (OpenRouter fetch + 24h cache + tier fallback).
@@ -272,6 +274,9 @@ hyctl eval stats ; hyctl eval list --failed
 
 # Fold old run logs into compressed monthly segments (lossless; readers unaffected)
 hyctl trace seal --dry-run ; hyctl trace seal --older-than 168h
+
+# The opt-in payload store (off unless chosen at init)
+hyctl trace payloads ; hyctl trace payloads --json
 
 # System state / discovered heads / spend
 # `hyctl status` shows the rate-aware claude_pct governor (first-passage risk toward 80%).
@@ -859,6 +864,7 @@ All Go source lives under `cmd/` and `internal/`. Key packages:
 | `internal/sketch` | Mergeable relative-error quantile sketch. Logarithmic buckets give a *relative* bound (not rank), which is what makes it usable on skewed latency where a rank-error sketch is arbitrarily wrong in the tail. Measured: p99 within 0.45% in ~4 KB vs 1.6 MB of raw values. Merging two sketches is as accurate as one sketch of the union, so machines can combine stats without shipping traces. Past the bucket cap the guarantee is directional — the tail keeps its bound, the small end inflates. |
 | `internal/rollup` | Per-day aggregates keyed by `(date, model, executor, enum, tier)`: calls, tokens, spend, a latency sketch, and propensity sums. What `hyctl stats --latency` reads instead of rescanning `cost.jsonl`, and what must be written *before* any retention deletes raw rows. |
 | `internal/evalset` | Oracle-verified examples: task, candidate, and ground truth from `internal/oracle`. The only trace-adjacent data kept verbatim and forever, because it is the only corpus the router can be improved against. Lives at `~/.hydra/evalset/`, deliberately outside `logs/` so nothing that prunes logs can reach it. Deduplicated on `(task_hash, candidate_hash)`; PII is marked rather than dropped, since dropping it would bias the corpus. Drives `hyctl eval list\|stats`. |
+| `internal/payload` | Opt-in store for prompt and response text — the only trace class with real privacy risk, so off by default and gated behind an explicit `hyctl init` question. Content-addressed but **packed, not loose**: one file per blob is charged a whole filesystem block, measured 22.2x more on disk for 200 small blobs. Compressed with a dictionary trained from the user's own corpus, since the gain comes from the structure *these* prompts share. `DictPath` is store-relative on purpose — a frame written with a dictionary cannot be decoded without that exact dictionary, so a store that trains into one path and reads from another loses its contents irrecoverably. `policy.Redact` runs **before hashing**, so the content address names what was stored rather than leaving a fingerprint of the secret in the index. Every blob records `KeepProb`; a probability outside (0,1] is refused rather than defaulted, because a stored payload with an unknown admission probability silently biases anything computed from the set. `TrainDict` recovers from `zstd.BuildDict`, which panics with an integer divide by zero on a corpus that compresses to no literals — not a hypothetical input here but the expected one, since a young store is one system prompt repeated. |
 | `internal/runlog` (sealing) | `Seal` folds runs older than an age into one zstd frame per run inside `logs/seg/YYYY-MM.zst`, with a sidecar `.idx`. One frame per run rather than one per month, so reading one run seeks and decodes one frame instead of a month. `Load`/`Runs` read sealed segments transparently — `internal/tree`, the cockpit and the desktop app need no change. Lossless relocation, not retention: nothing is discarded. Measured 16.5x on disk in test, 8.53x amplification confirmed on a real machine (58 files, 27,835 bytes logical, 237,568 on disk). |
 | `internal/ope` | Off-policy estimation. `SelfNormalized` recovers a population rate from a non-uniformly sampled log by weighting each row by the inverse of its inclusion probability. A non-positive probability is skipped and counted, never treated as certain. Exists because averaging a sampled log inverted the true ranking of two heads in simulation, which would then change routing (#605). |
 | `internal/tui` | Bubble Tea TUI: init wizard, install flow |
