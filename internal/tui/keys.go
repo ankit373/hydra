@@ -69,6 +69,7 @@ var ckKeymap = []ckBinding{
 	{"l", "audit log", "", []int{ckViewActivity}},
 	{"m · t · d", "usage: by model · by tier · by day", "LISTS", nil},
 	{"m/t/d", "group", "", []int{ckViewUsage}},
+	{"j/k", "scroll", "", []int{ckViewUsage}},
 	{"v · i", "audit: verify chain · ignore item", "LISTS", nil},
 	{"v", "verify", "", []int{ckViewAudit}},
 	{"i", "ignore", "", []int{ckViewAudit}},
@@ -172,7 +173,7 @@ func (m Cockpit) scrollBy(delta int) Cockpit {
 	case m.view == ckViewChat:
 		m = m.chatScrollBy(delta)
 	case m.view == ckViewUsage:
-		m.usageOff = ckClampOff(m.usageOff+delta, len(m.usageRows()))
+		m.usageOff = ckClampOff(m.usageOff+delta, m.usageLines())
 	case m.view == ckViewAudit:
 		m.auditOff = ckClampOff(m.auditOff+delta, m.auditLines())
 	default:
@@ -373,6 +374,9 @@ func (m Cockpit) move(delta int) Cockpit {
 		} else {
 			m.actSel = clamp(m.actSel+delta, len(m.activityRuns()))
 		}
+	case ckViewUsage:
+		// Nothing to select on a dashboard, so j/k scroll it (#630).
+		m.usageOff = ckClampOff(m.usageOff+delta, m.usageLines())
 	case ckViewAudit:
 		// With a queue to pick through, j/k pick; with none — the usual case —
 		// they scroll the view, which is what the "↓ N more" cue invites (#630).
