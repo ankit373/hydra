@@ -6,6 +6,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/ankit373/hydra/internal/pending"
 	"github.com/ankit373/hydra/internal/runlog"
 	"github.com/ankit373/hydra/internal/tree"
 )
@@ -27,6 +28,11 @@ type Fleet struct {
 	LiveCount int   `json:"liveCount"`
 	Runs      []Run `json:"runs"`
 
+	// WaitingCount is runs parked on a question. Counted separately from
+	// LiveCount because they are opposites: one is working, the other has
+	// stopped and only a person can restart it.
+	WaitingCount int `json:"waitingCount"`
+
 	// GroupThreshold is served to the frontend so the collapse point is defined
 	// once, in Go, rather than duplicated as a magic number in the view.
 	GroupThreshold int `json:"groupThreshold"`
@@ -36,6 +42,13 @@ type Fleet struct {
 type Run struct {
 	ID   string `json:"id"`
 	Live bool   `json:"live"`
+
+	// Waiting is true while a question for this run is still parked. Taken
+	// from the pending store, not from the run log: the log records that a
+	// question was asked (KindQuestionAsked) but never that it was answered,
+	// so only the presence of the file distinguishes "still parked" from
+	// "asked and since resumed".
+	Waiting bool `json:"waiting"`
 
 	StartedAt string `json:"startedAt"`
 	ElapsedMS int64  `json:"elapsedMs"`
@@ -58,6 +71,14 @@ type Run struct {
 	// Surfaced rather than hidden: silently dropping them renders a partial run
 	// as a complete one.
 	Skipped int `json:"skipped"`
+
+	// Goal is what was asked, in the requester's words — the run-started
+	// event's own detail. It is the only human-readable identifier a run has;
+	// without it a list of runs is a list of timestamps. Empty when the run
+	// recorded no prompt (an external orchestrator can supply the id and
+	// nothing else), and a preview rather than the full text, because the log
+	// stores a preview.
+	Goal string `json:"goal,omitempty"`
 
 	// Error is set when this run's log could not be read. The run still appears
 	// as a row — a bad file must not blank the whole view.
@@ -113,11 +134,29 @@ func (a *API) GetFleet() (*Fleet, error) {
 		}
 	}
 
+	// Errors ignored deliberately: a queue that cannot be read must not fail
+	// the whole Activity list. GetPendingQuestions is where an unreadable
+	// question is reported.
+	// List returns what it could read alongside any error, and the partial
+	// answer is the right one to use here: an unreadable question must not
+	// blank the whole Activity list. GetPendingQuestions reports the error.
+	waiting := map[string]bool{}
+	parked, _ := pending.List()
+	for _, q := range parked {
+		if q.RunID != "" {
+			waiting[q.RunID] = true
+		}
+	}
+
 	now := time.Now()
 	for _, id := range ids {
 		r := buildRun(id, live[id], now)
+		r.Waiting = waiting[id]
 		if r.Live {
 			f.LiveCount++
+		}
+		if r.Waiting {
+			f.WaitingCount++
 		}
 		// A finished run with zero agents and no error carries no information —
 		// dispatch never reached a head, most commonly a --dry-run preview
@@ -127,7 +166,10 @@ func (a *API) GetFleet() (*Fleet, error) {
 		// history and makes Fleet look empty even when hasRuns is technically
 		// true. A live run is never filtered — it may not have picked a head
 		// yet, and it is the one the user opened the app to watch.
-		if !r.Live && r.AllCount == 0 && r.Error == "" {
+		// A parked run has exactly this shape — nothing executed, so no agents,
+		// and no error because nothing failed. Without the exemption the one
+		// run that actually needs a person would be the one filtered out.
+		if !r.Live && !r.Waiting && r.AllCount == 0 && r.Error == "" {
 			continue
 		}
 		f.Runs = append(f.Runs, r)
@@ -138,7 +180,12 @@ func (a *API) GetFleet() (*Fleet, error) {
 	// reverse lexical compare is a reverse chronological one — no parsing, and
 	// it stays correct for ids minted by an external orchestrator that followed
 	// the same format.
+	// Waiting first, then live, then most recent. A parked run outranks a
+	// running one because it is the only kind that cannot progress on its own.
 	sort.SliceStable(f.Runs, func(i, j int) bool {
+		if f.Runs[i].Waiting != f.Runs[j].Waiting {
+			return f.Runs[i].Waiting
+		}
 		if f.Runs[i].Live != f.Runs[j].Live {
 			return f.Runs[i].Live
 		}
@@ -161,6 +208,11 @@ func buildRun(id string, live bool, now time.Time) Run {
 	if len(events) == 0 {
 		return r
 	}
+
+	// tree.Reconstruct drops run-level events by design — they describe the
+	// invocation, not a node in it — so the prompt has to be read here, before
+	// the events are handed over, or it is lost to the view entirely.
+	r.Goal = runGoal(events)
 
 	t, _ := tree.Reconstruct(events)
 	r.Skipped = t.Skipped
@@ -212,6 +264,18 @@ func buildRun(id string, live bool, now time.Time) Run {
 }
 
 // eventSpan returns the earliest start and latest finish across a run's nodes.
+// runGoal returns what the run was asked to do, from the first run-started
+// event carrying a detail. Later events are ignored: a run has one goal, and
+// the first statement of it is the one that was actually requested.
+func runGoal(events []runlog.Event) string {
+	for _, e := range events {
+		if e.Kind == runlog.KindRunStarted && e.Detail != "" {
+			return e.Detail
+		}
+	}
+	return ""
+}
+
 func eventSpan(t *tree.Tree) (first, last time.Time) {
 	for _, id := range t.Order {
 		n := t.Nodes[id]

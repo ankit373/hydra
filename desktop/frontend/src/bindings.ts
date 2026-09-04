@@ -15,6 +15,7 @@ import type {
   HyctlStatus,
   InstallResult,
   ModelRegistry,
+  QuestionQueue,
   SecurityReport,
   Session,
   UpdateStatus,
@@ -30,6 +31,9 @@ interface WailsGo {
       GetSession(runID: string): Promise<Session>
       GetEdits(runID: string): Promise<Edit[]>
       Chat(prompt: string, enumKey: string, runID: string, tier: string): Promise<ChatReply>
+      GetPendingQuestions(): Promise<QuestionQueue>
+      AnswerQuestion(taskID: string, answer: string): Promise<ChatReply>
+      DeclineQuestion(taskID: string, reason: string): Promise<void>
       ChatEnums(): Promise<string[]>
       NewRunID(): Promise<string>
       GetDiff(runID: string, ref: string, file: string): Promise<Diff>
@@ -70,6 +74,14 @@ export const Chat = (
   runID: string,
   tier: string,
 ): Promise<ChatReply> => backend().Chat(prompt, enumKey, runID, tier)
+
+export const GetPendingQuestions = (): Promise<QuestionQueue> => backend().GetPendingQuestions()
+
+export const AnswerQuestion = (taskID: string, answer: string): Promise<ChatReply> =>
+  backend().AnswerQuestion(taskID, answer)
+
+export const DeclineQuestion = (taskID: string, reason: string): Promise<void> =>
+  backend().DeclineQuestion(taskID, reason)
 export const ChatEnums = (): Promise<string[]> => backend().ChatEnums()
 export const NewRunID = (): Promise<string> => backend().NewRunID()
 export const GetVersion = (): Promise<Version> => backend().GetVersion()

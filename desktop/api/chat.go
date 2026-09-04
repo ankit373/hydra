@@ -40,6 +40,13 @@ type ChatReply struct {
 
 	Error string `json:"error,omitempty"`
 
+	// Question is set when the task parked waiting on a human decision, and
+	// TaskID is what answers it. A parked task is not a failure: routed through
+	// Error it rendered as a red dispatch error, which reads as "this broke"
+	// rather than "this needs you" (#583).
+	Question string `json:"question,omitempty"`
+	TaskID   string `json:"taskId,omitempty"`
+
 	// NeedsProbe is true when there is nothing to route this chat to — zero
 	// heads discovered at all, or heads discovered but none dispatchable for
 	// this request (dispatch.ErrNoHeads, e.g. the dock's "auto-route" default
@@ -141,10 +148,23 @@ func (a *API) Chat(prompt, enum, runID, tier string) (*ChatReply, error) {
 			r.NeedsProbe = true
 			return r, nil
 		}
+		var parked *dispatch.ParkedError
+		if errors.As(err, &parked) {
+			r.Question, r.TaskID, r.Head = parked.Question, parked.TaskID, parked.Head
+			return r, nil
+		}
 		r.Error = err.Error()
 		return r, nil
 	}
 
+	fill(r, res)
+	return r, nil
+}
+
+// fill copies a dispatch result onto a reply. Shared by Chat and
+// AnswerQuestion so a resumed task reports its head, tier and cost the same
+// way a first-time one does.
+func fill(r *ChatReply, res *dispatch.Result) {
 	r.Output = res.Output
 	r.Head = res.Head.ID
 	r.Model = res.Head.Name
@@ -152,7 +172,6 @@ func (a *API) Chat(prompt, enum, runID, tier string) (*ChatReply, error) {
 	if res.Response != nil {
 		r.DurationMS = res.Response.Duration.Milliseconds()
 	}
-	return r, nil
 }
 
 // preview shortens a prompt for a log Detail. Entries stay small because the

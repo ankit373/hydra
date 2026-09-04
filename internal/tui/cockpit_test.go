@@ -3,88 +3,134 @@
 package tui
 
 import (
+	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/ankit373/hydra/internal/config"
+	"github.com/ankit373/hydra/internal/provider"
+	"github.com/ankit373/hydra/internal/rank"
+	"github.com/ankit373/hydra/internal/runlog"
+	"github.com/ankit373/hydra/internal/testutil"
 )
 
-// `hyctl tui --snapshot --view 3` used to panic with an index-out-of-range:
-// header() indexed a 3-element slice literal with an unvalidated m.view.
-func TestCockpitSnapshotView_OutOfRangeDoesNotPanic(t *testing.T) {
-	for _, view := range []int{-1, -100, len(ckViewNames), 99} {
-		t.Run(strings.TrimSpace(viewLabel(view)), func(t *testing.T) {
-			defer func() {
-				if r := recover(); r != nil {
-					t.Fatalf("--view %d panicked: %v", view, r)
-				}
-			}()
-			out := CockpitSnapshotView(view)
-			if out == "" {
-				t.Errorf("--view %d rendered nothing", view)
-			}
-		})
+// ── shared fixtures ─────────────────────────────────────────────────────────────
+
+func typed(m Cockpit, s string) Cockpit {
+	for _, r := range s {
+		next, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = next.(Cockpit)
+	}
+	return m
+}
+
+func enter(m Cockpit) (Cockpit, tea.Cmd) {
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	return next.(Cockpit), cmd
+}
+
+func press(m Cockpit, k tea.KeyType) Cockpit {
+	next, _ := m.Update(tea.KeyMsg{Type: k})
+	return next.(Cockpit)
+}
+
+// testHeads is a fixed roster so routing assertions do not depend on what
+// happens to be installed on the machine running the test.
+func testHeads() []ckHead {
+	return []ckHead{
+		{id: "opus", name: "anthropic · claude-opus", tier: 1, price: 15, up: true},
+		{id: "sonnet", name: "anthropic · claude-sonnet", tier: 3, price: 3, up: true},
+		{id: "qwen", name: "ollama · qwen2.5-coder", tier: 10, price: 0, up: true, local: true},
 	}
 }
 
-func viewLabel(v int) string {
-	if v < 0 {
-		return "negative"
+// testRun builds one recorded run for list fixtures.
+func testRun(id, status, task string) ckRun {
+	r := ckRun{id: id, status: status, task: task, durMS: 1200}
+	if status == "running" {
+		r.live = true
 	}
-	return "too-large"
+	if status == "failed" {
+		r.fails = 1
+	}
+	r.events = []runlog.Event{{Kind: runlog.KindRunStarted, TS: "2026-09-04T10:00:00Z", Detail: task}}
+	return r
 }
 
-func TestCockpitSnapshotView_ValidViewsRender(t *testing.T) {
-	for view, name := range ckViewNames {
-		out := CockpitSnapshotView(view)
-		if out == "" {
-			t.Fatalf("view %d (%s) rendered nothing", view, name)
+// testCockpit is a deterministic model with fixtures on every view, built
+// without touching the machine.
+func testCockpit() Cockpit {
+	m := Cockpit{
+		mode:         "auto",
+		heads:        testHeads(),
+		collapsed:    map[string]bool{},
+		auditIgnored: map[string]bool{},
+		usageGroup:   'm',
+		scannedAt:    time.Now(),
+		w:            100, h: 30, ready: true,
+	}
+	m.groups = ckGroupHeads(testProbedHeads())
+	m.runsToday = []ckRun{
+		testRun("20260904T100000Z-aaaa", "ok", "add pagination"),
+		testRun("20260904T100100Z-bbbb", "failed", "rotate signing key"),
+		testRun("20260904T100200Z-cccc", "running", "write tests"),
+	}
+	m.log = []string{"welcome"}
+	return m
+}
+
+func testProbedHeads() []provider.Head {
+	return []provider.Head{
+		{ID: "claude", Name: "Claude Code", Provider: "anthropic", Source: "cli", CapScore: 95, AuthReady: true},
+		{ID: "ollama/qwen2.5-coder:7b", Name: "qwen2.5-coder:7b (Ollama)", Provider: "local",
+			Source: "port", Endpoint: "http://localhost:11434", CapScore: 60, LocalOnly: true, AuthReady: true},
+		{ID: "ollama/nomic-embed-text", Name: "nomic-embed-text (Ollama)", Provider: "local",
+			Source: "port", Endpoint: "http://localhost:11434", CapScore: 0, LocalOnly: true, AuthReady: true,
+			Meta: map[string]string{"embedding_only": "true"}},
+		{ID: "ollama", Name: "Ollama", Provider: "local", Source: "cli", CapScore: 60, LocalOnly: true},
+	}
+}
+
+// ── view table ──────────────────────────────────────────────────────────────────
+
+func TestViewTable_SixViews(t *testing.T) {
+	want := []string{"chat", "agents", "models", "activity", "usage", "audit"}
+	if len(ckViewNames) != len(want) {
+		t.Fatalf("ckViewNames = %v, want %v", ckViewNames, want)
+	}
+	for i, name := range want {
+		if ckViewNames[i] != name {
+			t.Errorf("view %d = %q, want %q", i, ckViewNames[i], name)
 		}
-		// The header labels the active view — the frame really is the one asked for.
-		if !strings.Contains(out, name) {
-			t.Errorf("view %d frame does not mention %q", view, name)
-		}
+	}
+	if got := ckViewName(-1); got != "chat" {
+		t.Errorf("ckViewName(-1) = %q, want the default", got)
+	}
+	if got := ckViewName(len(ckViewNames)); got != "chat" {
+		t.Errorf("ckViewName(out of range) = %q, want the default", got)
 	}
 }
 
-func TestCkViewName_IsTotal(t *testing.T) {
-	if got := ckViewName(-1); got != ckViewNames[ckViewChatCode] {
-		t.Errorf("ckViewName(-1) = %q, want the default label", got)
-	}
-	if got := ckViewName(len(ckViewNames)); got != ckViewNames[ckViewChatCode] {
-		t.Errorf("ckViewName(out of range) = %q, want the default label", got)
-	}
-	for i, want := range ckViewNames {
-		if got := ckViewName(i); got != want {
-			t.Errorf("ckViewName(%d) = %q, want %q", i, got, want)
-		}
-	}
-}
-
-// ValidSnapshotView is what the CLI uses to reject a bad --view before
-// rendering, so it must agree with the internal bounds check.
 func TestValidSnapshotView(t *testing.T) {
 	for i := range ckViewNames {
 		if ok, _ := ValidSnapshotView(i); !ok {
-			t.Errorf("ValidSnapshotView(%d) = false, want true", i)
+			t.Errorf("ValidSnapshotView(%d) = false", i)
 		}
 	}
 	for _, bad := range []int{-1, len(ckViewNames), 99} {
 		if ok, _ := ValidSnapshotView(bad); ok {
-			t.Errorf("ValidSnapshotView(%d) = true, want false", bad)
+			t.Errorf("ValidSnapshotView(%d) = true", bad)
 		}
 	}
-	if _, names := ValidSnapshotView(0); len(names) != len(ckViewNames) {
-		t.Errorf("ValidSnapshotView returned %d names, want %d", len(names), len(ckViewNames))
-	}
-}
-
-// The returned name slice must be a copy — a caller mutating it must not
-// corrupt the package's view table.
-func TestValidSnapshotView_ReturnsCopy(t *testing.T) {
 	_, names := ValidSnapshotView(0)
-	if len(names) == 0 {
-		t.Fatal("no names returned")
+	if len(names) != len(ckViewNames) {
+		t.Fatalf("returned %d names", len(names))
 	}
 	names[0] = "mutated"
 	if ckViewNames[0] == "mutated" {
@@ -92,161 +138,253 @@ func TestValidSnapshotView_ReturnsCopy(t *testing.T) {
 	}
 }
 
-// Tab cycles through every view and always lands in range.
-func TestTabCycleStaysInRange(t *testing.T) {
-	view := 0
-	for i := 0; i < ckViewCount()*3; i++ {
-		view = (view + 1) % ckViewCount()
-		if !ckValidView(view) {
-			t.Fatalf("after %d tabs view = %d, out of range", i+1, view)
-		}
-	}
-	if view != 0 {
-		t.Errorf("cycling %d times should return to view 0, got %d", ckViewCount()*3, view)
-	}
-}
+// ── layout regression: the shell's hard invariants ─────────────────────────────
+//
+// For every view (plus the glossary) at every mandated size: the output is at
+// most h lines, no line exceeds w cells, and the status bar is the final line
+// — even with pathological content (a 3000-char task, embedded newlines).
 
-// chatMain's total output must be exactly h lines. It previously forgot the
-// divider row stacked below the log box, coming out h+1 lines — Bubble Tea's
-// renderer crops overflow off the TOP, silently deleting the header on every
-// launch of the default tab (#445).
-func TestChatMain_OutputIsExactlyHLines(t *testing.T) {
-	m := Cockpit{w: 120, h: 40, ready: true, mode: "dispatch"}
-	for _, h := range []int{10, 24, 30, 60} {
-		out := m.chatMain(60, h)
-		if got := strings.Count(out, "\n") + 1; got != h {
-			t.Errorf("chatMain(60, %d) produced %d lines, want %d", h, got, h)
-		}
-	}
-}
+func TestEveryView_LayoutInvariantsAtEverySize(t *testing.T) {
+	testutil.NewSandbox(t)
 
-// One overlong entry (a pasted stack trace, a 3000-char task) must not wrap
-// past the log pane and push the input/divider off-frame — the log renderer
-// used to tail-slice by logical entry count, not rendered visual-line count,
-// and Style.Height only pads short content, it never truncates tall (#506).
-func TestChatMain_OneOverlongEntryDoesNotPushInputOffFrame(t *testing.T) {
-	m := Cockpit{w: 120, h: 40, ready: true, mode: "dispatch", input: "still typing"}
-	m.log = []string{strings.Repeat("x", 3000)}
+	long := strings.Repeat("x", 3000)
+	base := testCockpit()
+	base.runsToday = append(base.runsToday,
+		testRun("20260904T100300Z-dddd", "ok", long),
+		testRun("20260904T100400Z-eeee", "failed", "first\nsecond\nthird lines embedded"),
+	)
+	base.pctKnown, base.claudePct, base.pctHist = true, 52, []int{40, 45, 52}
+	base = typed(base, "add pagination to the users endpoint")
+	next, _ := enter(base)
+	base = next
+	base.log = append(base.log, long, "tail\nwith\nnewlines")
 
-	for _, h := range []int{10, 24, 30} {
-		out := m.chatMain(60, h)
-		if got := strings.Count(out, "\n") + 1; got != h {
-			t.Errorf("chatMain(60, %d) with one huge entry produced %d lines, want %d", h, got, h)
-		}
-		if !strings.Contains(stripANSI(out), "still typing") {
-			t.Errorf("the input line was pushed off frame by one long entry:\n%s", stripANSI(out))
-		}
-	}
-}
-
-// A single overlong entry must be visibly truncated, not silently dropped —
-// the user should see something was cut, not just less log (#506).
-func TestCkClipToLines_MarksTruncationAndBoundsLength(t *testing.T) {
-	long := strings.Repeat("word ", 400)
-	got := stripANSI(ckClipToLines(long, 20, 4))
-	rows := strings.Split(got, "\n")
-	if len(rows) != 4 {
-		t.Fatalf("ckClipToLines produced %d rows, want 4", len(rows))
-	}
-	if !strings.Contains(rows[len(rows)-1], "truncated") {
-		t.Errorf("the last row does not disclose the truncation: %q", rows[len(rows)-1])
-	}
-
-	short := "a short line"
-	if got := ckClipToLines(short, 60, 4); got != short {
-		t.Errorf("a short entry was altered: %q", got)
-	}
-}
-
-// The visible-log window must size itself in wrapped lines, not logical
-// entries, and always keep the newest entry (#506).
-func TestCkVisibleLog_CapsEachEntryAndFillsFromTheTail(t *testing.T) {
-	log := []string{
-		"short one",
-		strings.Repeat("word ", 400), // would wrap past the whole pane alone
-		"short two",
-	}
-	got := stripANSI(ckVisibleLog(log, 20, 8))
-	if n := len(strings.Split(got, "\n")); n > 8 {
-		t.Errorf("ckVisibleLog produced %d lines, want <= 8:\n%s", n, got)
-	}
-	if !strings.Contains(got, "short two") {
-		t.Errorf("the newest entry is missing:\n%s", got)
-	}
-}
-
-// The sidebar must never exceed the height it's given, however many heads
-// were discovered — an uncapped list let a busy machine's real head count
-// dictate the whole view's height once JoinHorizontal pads every other
-// column to match it (#446).
-func TestSidebar_NeverExceedsGivenHeight(t *testing.T) {
-	heads := make([]ckHead, 30)
-	for i := range heads {
-		heads[i] = ckHead{id: strings.Repeat("x", i%5+1), name: "head", tier: 1}
-	}
-	m := Cockpit{w: 120, h: 40, ready: true, heads: heads, mode: "dispatch"}
-
-	// The GOVERNOR/MODE chrome above and below the head list is fixed at 8
-	// lines regardless of h — h below that floor is asking for something the
-	// layout cannot do. The bug this guards is a large head list blowing past
-	// h once h is at least big enough for that fixed chrome to fit.
-	for _, h := range []int{10, 15, 20} {
-		out := m.sidebar(h)
-		if got := strings.Count(out, "\n") + 1; got > h {
-			t.Errorf("sidebar(%d) with 30 heads produced %d lines, want <= %d", h, got, h)
-		}
-	}
-
-	// With more heads than fit, the overflow must be disclosed, not silently
-	// dropped.
-	out := m.sidebar(10)
-	if !strings.Contains(out, "more") {
-		t.Errorf("sidebar(10) with 30 heads does not disclose the hidden ones:\n%s", out)
-	}
-}
-
-// At terminal heights too short for even one head row, the sidebar used to
-// show zero heads and no "+N more" line, contradicting the header directly
-// above it, which still states the real count (#506).
-func TestSidebar_DisclosesCountWhenNoRoomForAnyHeadRow(t *testing.T) {
-	heads := make([]ckHead, 12)
-	for i := range heads {
-		heads[i] = ckHead{id: strings.Repeat("x", i%5+1), name: "head", tier: 1}
-	}
-	m := Cockpit{w: 120, h: 40, ready: true, heads: heads, mode: "dispatch"}
-
-	// The fixed GOVERNOR/MODE chrome is 8 lines; h=6 leaves no room for a
-	// single head row (avail <= 0) — exactly the state this bug is about.
-	got := stripANSI(m.sidebar(6))
-	if !strings.Contains(got, "12") {
-		t.Errorf("sidebar(6) with 12 heads does not disclose the real count:\n%s", got)
-	}
-
-	// With no heads at all there is nothing to disclose.
-	empty := Cockpit{w: 120, h: 40, ready: true, mode: "dispatch"}
-	if got := empty.sidebar(6); strings.Contains(got, "not enough room") {
-		t.Errorf("sidebar with zero heads still printed a count line:\n%s", got)
-	}
-}
-
-// Below the width the two-column layout needs, dash and dashSecurity must
-// stack into a single column rather than corrupt: join-then-clamp-to-w splits
-// box borders across the wrong rows once a box's real width exceeds what's
-// left after clamping (#447).
-func TestDashAndDashSecurity_NoLineExceedsWidthWhenNarrow(t *testing.T) {
-	m := Cockpit{w: 40, h: 30, ready: true, mode: "dispatch"}
-
-	for name, render := range map[string]func(w, h int) string{
-		"dash":         m.dash,
-		"dashSecurity": m.dashSecurity,
-	} {
-		t.Run(name, func(t *testing.T) {
-			out := render(40, 20)
-			for i, line := range strings.Split(out, "\n") {
-				if got := lipgloss.Width(line); got > 40 {
-					t.Errorf("line %d is %d cells wide, want <= 40:\n%q", i, got, line)
+	sizes := []struct{ w, h int }{{60, 15}, {80, 24}, {100, 30}, {120, 40}}
+	for view := 0; view < ckViewCount(); view++ {
+		for _, sz := range sizes {
+			t.Run(fmt.Sprintf("view%d_%dx%d", view, sz.w, sz.h), func(t *testing.T) {
+				m := base.jump(view)
+				m.w, m.h, m.ready = sz.w, sz.h, true
+				out := m.View()
+				lines := strings.Split(out, "\n")
+				if len(lines) > sz.h {
+					t.Errorf("view %d at %dx%d renders %d lines, want <= %d",
+						view, sz.w, sz.h, len(lines), sz.h)
 				}
+				for i, l := range lines {
+					if got := lipgloss.Width(l); got > sz.w {
+						t.Errorf("view %d at %dx%d: line %d is %d cells wide:\n%q",
+							view, sz.w, sz.h, i, got, l)
+					}
+				}
+				last := stripANSI(lines[len(lines)-1])
+				if !strings.Contains(last, "shortcuts") {
+					t.Errorf("view %d at %dx%d: the status bar is not the final line: %q",
+						view, sz.w, sz.h, last)
+				}
+			})
+		}
+	}
+
+	// The glossary overlay obeys the same frame.
+	for _, sz := range sizes {
+		g := base
+		g.glossary = true
+		g.w, g.h, g.ready = sz.w, sz.h, true
+		out := g.View()
+		lines := strings.Split(out, "\n")
+		if len(lines) > sz.h {
+			t.Errorf("glossary at %dx%d renders %d lines", sz.w, sz.h, len(lines))
+		}
+		for i, l := range lines {
+			if got := lipgloss.Width(l); got > sz.w {
+				t.Errorf("glossary at %dx%d: line %d is %d cells", sz.w, sz.h, i, got)
 			}
-		})
+		}
+	}
+}
+
+// Before the first WindowSizeMsg the model is not ready; it must still render
+// something rather than a blank terminal.
+func TestView_RendersBeforeFirstResize(t *testing.T) {
+	fresh := Cockpit{}
+	if strings.TrimSpace(fresh.View()) == "" {
+		t.Error("the cockpit renders nothing before its first resize")
+	}
+}
+
+// Tab cycles through every view and always lands in range; entering the audit
+// view builds its data.
+func TestTabCycle_VisitsEveryViewInRange(t *testing.T) {
+	testutil.NewSandbox(t)
+	m := testCockpit()
+	seen := map[int]bool{}
+	for i := 0; i < ckViewCount()*2; i++ {
+		m = press(m, tea.KeyTab)
+		if !ckValidView(m.view) {
+			t.Fatalf("after %d tabs view = %d", i+1, m.view)
+		}
+		seen[m.view] = true
+	}
+	if len(seen) != ckViewCount() {
+		t.Errorf("tab visited %d views, want %d", len(seen), ckViewCount())
+	}
+}
+
+// ── snapshot ───────────────────────────────────────────────────────────────────
+
+// The snapshot is what `hyctl tui --snapshot` prints. All six views plus the
+// glossary must render and be labelled, or the output is unreadable in a bug
+// report.
+func TestCockpitSnapshot_RendersAllViewsAndGlossary(t *testing.T) {
+	testutil.NewSandbox(t)
+	got := CockpitSnapshot()
+	if strings.TrimSpace(got) == "" {
+		t.Fatal("CockpitSnapshot rendered nothing")
+	}
+	n := len(ckViewNames)
+	for i := 1; i <= n; i++ {
+		want := fmt.Sprintf("VIEW %d/%d", i, n)
+		if !strings.Contains(got, want) {
+			t.Errorf("the snapshot is missing %q", want)
+		}
+	}
+	if !strings.Contains(got, "GLOSSARY") {
+		t.Error("the snapshot is missing the glossary frame")
+	}
+}
+
+// `--view N` renders exactly the requested frame, never panicking on an
+// out-of-range value — the CLI validates, but the function must be total.
+func TestCockpitSnapshotView_AllViewsAndOutOfRange(t *testing.T) {
+	testutil.NewSandbox(t)
+	for view, name := range ckViewNames {
+		out := CockpitSnapshotView(view)
+		if out == "" {
+			t.Fatalf("view %d (%s) rendered nothing", view, name)
+		}
+		if !strings.Contains(stripANSI(out), name) {
+			t.Errorf("view %d frame does not name %q in its header", view, name)
+		}
+	}
+	for _, view := range []int{-1, -100, len(ckViewNames), 99} {
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					t.Fatalf("--view %d panicked: %v", view, r)
+				}
+			}()
+			if CockpitSnapshotView(view) == "" {
+				t.Errorf("--view %d rendered nothing", view)
+			}
+		}()
+	}
+}
+
+// ── shell plumbing ─────────────────────────────────────────────────────────────
+
+func TestResizeAndInit(t *testing.T) {
+	next, _ := (Cockpit{}).Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	m := next.(Cockpit)
+	if m.w != 120 || m.h != 40 || !m.ready {
+		t.Errorf("resize left w=%d h=%d ready=%v", m.w, m.h, m.ready)
+	}
+	if (Cockpit{}).Init() != nil {
+		t.Error("Init() returned a command")
+	}
+}
+
+// ckHeadsFrom must rank heads the way dispatch does, mark unroutable ones
+// down, and never fabricate a price for a head whose cost is unknown (#189).
+func TestCkHeadsFrom_MirrorsRoutingAndDoesNotFabricatePrices(t *testing.T) {
+	heads := testProbedHeads()
+	rows := ckHeadsFrom(heads, nil)
+	if len(rows) != len(heads) {
+		t.Fatalf("got %d rows for %d heads", len(rows), len(heads))
+	}
+	byID := map[string]ckHead{}
+	for _, r := range rows {
+		if r.price != 0 {
+			t.Errorf("%s priced at %v with no pricing DB loaded", r.id, r.price)
+		}
+		byID[r.id] = r
+	}
+	if !byID["claude"].up {
+		t.Error("a routable head is shown as down")
+	}
+	// The ollama binary alone is not routable (#248); the embedding-only model
+	// never is (#532).
+	if byID["ollama"].up {
+		t.Error("the binary-only head is shown as up")
+	}
+	if byID["ollama/nomic-embed-text"].up {
+		t.Error("an embedding-only model is shown as routable")
+	}
+	if got := byID["ollama/qwen2.5-coder:7b"].tier; got != rank.UITier(heads[1]) {
+		t.Errorf("tier %d disagrees with routing", got)
+	}
+	if got := ckHeadsFrom(nil, nil); len(got) != 0 {
+		t.Errorf("ckHeadsFrom(nil) = %v", got)
+	}
+}
+
+// The code-stream tick carries its generation so a superseded stream cannot
+// double-speed the current one.
+func TestCodeTick_GenerationGuard(t *testing.T) {
+	cmd := ckCodeTick(7)
+	if cmd == nil {
+		t.Fatal("ckCodeTick returned no command")
+	}
+	if tick, ok := cmd().(ckCodeTickMsg); !ok || tick.gen != 7 {
+		t.Fatalf("tick = %#v, want gen 7", cmd())
+	}
+
+	m := testCockpit()
+	m.codeLines = []string{"a", "b", "c"}
+	m.codeGen = 3
+	next, cmd2 := m.Update(ckCodeTickMsg{gen: 3})
+	if got := next.(Cockpit).codeShown; got != 1 {
+		t.Errorf("codeShown = %d after one tick", got)
+	}
+	if cmd2 == nil {
+		t.Error("mid-stream tick scheduled nothing")
+	}
+	stale, _ := next.Update(ckCodeTickMsg{gen: 2})
+	if got := stale.(Cockpit).codeShown; got != 1 {
+		t.Errorf("a stale tick advanced the stream to %d", got)
+	}
+}
+
+// state.json readers: absent or corrupt state renders as unknown, never as a
+// number the user would act on (#189).
+func TestCkClaudePct_AbsentIsUnknownNotZero(t *testing.T) {
+	testutil.NewSandbox(t)
+
+	if _, _, ok := ckClaudePct(); ok {
+		t.Error("no state.json read as known")
+	}
+	dir := filepath.Join(config.Dir(), "logs")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	writeState := func(body string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(dir, "state.json"), []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeState("{truncated")
+	if _, _, ok := ckClaudePct(); ok {
+		t.Error("corrupt state.json read as known")
+	}
+	writeState(`{"claude_pct":73,"claude_pct_history":[60,66,73]}`)
+	pct, hist, ok := ckClaudePct()
+	if !ok || pct != 73 || len(hist) != 3 {
+		t.Errorf("got pct=%d hist=%v ok=%v, want 73/[60 66 73]/true", pct, hist, ok)
+	}
+	// A state.json without the field is unknown, not 0%.
+	writeState(`{"other":1}`)
+	if _, _, ok := ckClaudePct(); ok {
+		t.Error("state.json without claude_pct read as known")
 	}
 }

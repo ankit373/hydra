@@ -687,8 +687,9 @@ body {
 }
 .cal__domain { margin-left: 6px; font-size: 10px; color: var(--hy-faint); }
 
-/* Not `overflow: hidden` — the halo below deliberately bleeds past the track,
-   the same way SpendTrend's SVG halo bleeds HALO_PAD past its crisp bar. */
+/* Not `overflow: hidden` — the halo bleeds vertically past the track, the same
+   way SpendTrend's SVG halo bleeds HALO_PAD past its crisp bar. Horizontally
+   it cannot: calBarWidths lays the pair out inside the track less the bleed. */
 .cal__track {
   position: relative;
   height: 8px;
@@ -709,19 +710,42 @@ body {
 .cal__halo.grown, .cal__fill.grown { transform: scaleX(1); }
 
 /* Width/height/inset (the halo's HALO_PAD bleed) are set inline per row from
-   the D-relative fraction; only the reveal grow-in is CSS. */
+   the absolute nat scale; only the reveal grow-in is CSS. */
 .cal__fill { opacity: .95; }
 .cal__halo { opacity: .3; }
+
+/* Under ten observations D is a guess, so the bar is drawn as provisional
+   rather than left to look like a measurement (#593). */
+.cal__fill--thin { opacity: .38; }
+.cal__halo--thin { opacity: .12; }
 
 .cal__fill--oracle, .cal__halo--oracle { background: linear-gradient(90deg, rgba(0, 230, 195, .5), var(--hy-aqua)); }
 .cal__fill--model,  .cal__halo--model  { background: linear-gradient(90deg, rgba(139, 92, 246, .5), var(--hy-violet)); }
 
 .cal__value {
+  display: inline-flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 9px;
   font-family: var(--hy-font-mono);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+
+/* Words, not just nats: the band reads without knowing what a nat is. Fixed
+   width so the D column stays aligned down the list. Same colour ramp as the
+   Cockpit's per-model D. */
+.cal__strength {
+  min-width: 98px;
+  text-align: right;
+  font-size: 10px;
+  letter-spacing: .02em;
+}
+.cal__strength--strong   { color: var(--hy-cheap); }
+.cal__strength--moderate { color: var(--hy-cyan); }
+.cal__strength--weak     { color: var(--hy-mid); }
+.cal__strength--thin     { color: var(--hy-dim); }
 
 .cal-legend {
   display: flex;
@@ -740,6 +764,7 @@ body {
 }
 .cal-legend__dot--oracle { background: var(--hy-aqua); }
 .cal-legend__dot--model  { background: var(--hy-violet); }
+.cal-legend__scale { margin-left: auto; color: var(--hy-faint); }
 
 /* ── Dashboard: HUD chrome ─────────────────────────────────────────────── */
 /* Corner brackets + scanline + vignette, the same frame language as
@@ -998,7 +1023,66 @@ body {
   font-weight: 700;
 }
 
+/* Amber, not aqua: aqua means "running by itself", this means "stopped, and
+   only you can clear it". Different states must not read alike. */
+.rail__wait {
+  margin-left: auto;
+  font-family: var(--hy-font-mono);
+  font-size: 10px;
+  background: var(--hy-mid);
+  color: #1A1204;
+  border-radius: 999px;
+  padding: 1px 6px;
+  font-weight: 700;
+  box-shadow: 0 0 12px color-mix(in srgb, var(--hy-mid) 55%, transparent);
+}
+
 .runs { display: flex; flex-direction: column; gap: 11px; }
+
+/* ── Activity groups (by who has to act) ───────────────────────────────── */
+
+.rgroup { display: flex; flex-direction: column; gap: 11px; }
+.rgroup + .rgroup { margin-top: 18px; }
+.rgroup__head {
+  display: flex; align-items: center; gap: 9px;
+  padding-bottom: 7px;
+  border-bottom: 1px solid var(--hy-line);
+}
+.rgroup__lbl {
+  font-size: 10.5px; font-weight: 700;
+  letter-spacing: .09em; text-transform: uppercase;
+  color: var(--hy-dim);
+}
+.rgroup__n {
+  font-family: var(--hy-font-mono);
+  font-size: 10px; font-weight: 700;
+  color: var(--hy-dim);
+  border: 1px solid var(--hy-line-2);
+  border-radius: 999px;
+  padding: 0 6px;
+}
+.rgroup__note { color: var(--hy-dim); font-size: 11px; opacity: .8; }
+
+/* Each group takes the colour its state already uses elsewhere, so the same
+   thing never means two colours across views. */
+.rgroup__head--waiting .rgroup__lbl {
+  color: var(--hy-mid);
+  text-shadow: 0 0 14px color-mix(in srgb, var(--hy-mid) 45%, transparent);
+}
+.rgroup__head--waiting { border-bottom-color: color-mix(in srgb, var(--hy-mid) 40%, transparent); }
+.rgroup__head--waiting .rgroup__n { color: var(--hy-mid); border-color: color-mix(in srgb, var(--hy-mid) 45%, transparent); }
+
+.rgroup__head--running .rgroup__lbl { color: var(--hy-aqua); }
+.rgroup__head--running { border-bottom-color: color-mix(in srgb, var(--hy-aqua) 34%, transparent); }
+.rgroup__head--running .rgroup__n { color: var(--hy-aqua); border-color: color-mix(in srgb, var(--hy-aqua) 40%, transparent); }
+
+.rgroup__head--attention .rgroup__lbl { color: var(--hy-expensive); }
+.rgroup__head--attention { border-bottom-color: color-mix(in srgb, var(--hy-expensive) 34%, transparent); }
+.rgroup__head--attention .rgroup__n { color: var(--hy-expensive); border-color: color-mix(in srgb, var(--hy-expensive) 40%, transparent); }
+
+@media (prefers-reduced-motion: reduce) {
+  .rgroup__head--waiting .rgroup__lbl { text-shadow: none; }
+}
 
 .run {
   background: var(--hy-panel);
@@ -1260,6 +1344,17 @@ body {
 /* ── Code view ─────────────────────────────────────────────────────────── */
 
 .code { display: grid; grid-template-columns: minmax(180px, 250px) 1fr; gap: 12px; align-items: start; }
+.code__side { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.code__tot {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+  padding-bottom: 7px;
+  border-bottom: 1px solid var(--hy-line);
+}
+.code__totN {
+  font-size: 10.5px; font-weight: 700;
+  letter-spacing: .08em; text-transform: uppercase;
+  color: var(--hy-dim);
+}
 
 .files { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 
@@ -1315,7 +1410,13 @@ body {
   border-bottom: 1px solid var(--hy-line);
 }
 .diff__file { font-family: var(--hy-font-mono); font-size: 12px; overflow: hidden; text-overflow: ellipsis; }
-.diff__body { margin: 0; padding: 8px 0; overflow-x: auto; font-family: var(--hy-font-mono); font-size: 12px; line-height: 1.55; }
+.diff__body {
+  margin: 0; padding: 8px 0; overflow-x: auto;
+  font-family: var(--hy-font-mono); font-size: 12px; line-height: 1.55;
+  /* Go indents with tabs and the 8-column default pushed anything three
+     levels deep off the right edge before it could be read. */
+  tab-size: 4; -moz-tab-size: 4;
+}
 
 .dl { display: flex; gap: 0; white-space: pre; }
 .dl--add { background: color-mix(in srgb, var(--hy-cheap) 12%, transparent); }
@@ -1333,6 +1434,24 @@ body {
 .dl--add .dl__op { color: var(--hy-cheap); }
 .dl--del .dl__op { color: var(--hy-expensive); }
 .dl__text { flex: 1 1 auto; padding-right: 14px; }
+
+/* The row colour says the line changed; this says what on it moved.
+   Deliberately a stronger tint of the row's own colour rather than a
+   third hue, so it reads as emphasis and not as a new category. */
+.dl__moved {
+  background: transparent;
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+.dl--add .dl__moved {
+  background: color-mix(in srgb, var(--hy-cheap) 30%, transparent);
+  color: var(--hy-ink);
+}
+.dl--del .dl__moved {
+  background: color-mix(in srgb, var(--hy-expensive) 30%, transparent);
+  color: var(--hy-ink);
+}
 
 /* ── Chat view ─────────────────────────────────────────────────────────── */
 /* Was a fixed-position dock. It is the default surface now (#520), so it fills
@@ -1668,7 +1787,7 @@ body {
 .mr__name { font-size: 11.5px; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mr__d { margin-left: auto; font-family: var(--hy-font-mono); font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .mr__d--strong { color: var(--hy-cheap); }
-.mr__d--ok     { color: var(--hy-cyan); }
+.mr__d--moderate { color: var(--hy-cyan); }
 .mr__d--weak   { color: var(--hy-mid); }
 /* Thin evidence is amber regardless of the value: trust.Stat.N excludes the
    prior, so a high D on few observations is not a strong measurement. */
@@ -1699,6 +1818,62 @@ body {
 .shift__ico { color: var(--hy-mid); }
 .shift__txt { color: var(--hy-dim); }
 .shift__txt b { color: var(--hy-ink); font-weight: 600; }
+
+/* ── Waiting on you (a parked task) ────────────────────────────────────── */
+
+/* Louder than .shift on purpose: a tier change is something that happened,
+   this is something only the user can clear. */
+.waiting {
+  margin: 6px 0 8px;
+  padding: 12px 14px 13px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--hy-mid) 11%, transparent), rgba(224, 169, 58, 0)),
+    var(--hy-bg-2);
+  border: 1px solid color-mix(in srgb, var(--hy-mid) 38%, transparent);
+  border-left: 2px solid var(--hy-mid);
+  border-radius: 0 var(--hy-radius-sm) var(--hy-radius-sm) 0;
+  box-shadow: 0 0 22px color-mix(in srgb, var(--hy-mid) 13%, transparent);
+}
+.waiting__head { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
+.waiting__ico { color: var(--hy-mid); font-size: 12px; }
+.waiting__lbl {
+  color: var(--hy-mid);
+  font-size: 10.5px; font-weight: 700;
+  letter-spacing: .09em; text-transform: uppercase;
+  text-shadow: 0 0 14px color-mix(in srgb, var(--hy-mid) 45%, transparent);
+}
+.waiting__who { color: var(--hy-dim); font-size: 11px; font-family: var(--hy-mono, monospace); }
+.waiting__q { color: var(--hy-ink); font-size: 13px; line-height: 1.5; margin: 0 0 10px; }
+.waiting__row { display: flex; gap: 7px; align-items: center; }
+.waiting__in {
+  flex: 1 1 auto; min-width: 0;
+  padding: 7px 10px;
+  background: var(--hy-bg-1, #06070F);
+  border: 1px solid var(--hy-line-2);
+  border-radius: var(--hy-radius-sm);
+  color: var(--hy-ink); font-size: 12.5px;
+}
+.waiting__in:focus-visible { outline: 2px solid var(--hy-aqua); outline-offset: 1px; }
+.waiting__in:disabled { opacity: .55; }
+.waiting__go, .waiting__no {
+  flex: 0 0 auto;
+  padding: 7px 13px;
+  border-radius: var(--hy-radius-sm);
+  font-size: 12px; font-weight: 600;
+  cursor: pointer;
+}
+.waiting__go {
+  background: var(--hy-aqua); border: 1px solid var(--hy-aqua); color: #04121A;
+  box-shadow: 0 0 18px color-mix(in srgb, var(--hy-aqua) 30%, transparent);
+}
+.waiting__no { background: transparent; border: 1px solid var(--hy-line-2); color: var(--hy-dim); }
+.waiting__no:hover:not(:disabled) { color: var(--hy-expensive); border-color: color-mix(in srgb, var(--hy-expensive) 50%, transparent); }
+.waiting__go:disabled, .waiting__no:disabled { opacity: .45; cursor: default; box-shadow: none; }
+.waiting__go:focus-visible, .waiting__no:focus-visible { outline: 2px solid var(--hy-aqua); outline-offset: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .waiting { box-shadow: none; }
+}
 
 /* ── Governor notice ───────────────────────────────────────────────────── */
 
@@ -1790,3 +1965,121 @@ body {
 .tt__tick--start { color: var(--hy-dim); }
 .tt__tick--up    { color: var(--hy-expensive); }
 .tt__tick--down  { color: var(--hy-cheap); }
+
+/* ── Models ────────────────────────────────────────────────────────────── */
+/* The registry shipped in #553 and fed only the composer picker; this is the
+   first surface that shows what the machine can actually route to. */
+
+.models { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 18px; align-items: start; }
+@media (max-width: 900px) { .models { grid-template-columns: 1fr; } }
+
+.models__tree { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+
+.pool-g { display: flex; flex-direction: column; }
+.pool-g__head { display: flex; align-items: baseline; gap: 9px; padding: 0 0 6px; }
+.pool-g__name {
+  font-family: var(--hy-font-mono); font-size: 10px; letter-spacing: .09em;
+  text-transform: uppercase; color: var(--hy-dim);
+}
+.pool-g__shared {
+  font-family: var(--hy-font-mono); font-size: 8.5px; letter-spacing: .05em; text-transform: uppercase;
+  color: var(--hy-mid); border: 1px solid rgba(224,169,58,.4); border-radius: 3px; padding: 0 4px;
+}
+.pool-g__spend {
+  margin-left: auto; font-family: var(--hy-font-mono); font-size: 9.5px;
+  color: var(--hy-faint); font-variant-numeric: tabular-nums;
+}
+
+.mrow {
+  display: grid; grid-template-columns: 9px minmax(0,1fr) 34px 84px 46px;
+  gap: 10px; align-items: center;
+  width: 100%; text-align: left;
+  padding: 8px 10px; border: 1px solid transparent; border-radius: var(--hy-radius-sm);
+  background: none; color: var(--hy-ink); font: inherit; font-size: 13px; cursor: pointer;
+}
+.mrow:hover { background: var(--hy-panel); }
+.mrow[aria-current="true"] { background: var(--hy-panel); border-color: var(--hy-line-2); }
+.mrow:focus-visible { outline: 2px solid var(--hy-aqua); outline-offset: 1px; }
+.mrow__dot { width: 7px; height: 7px; border-radius: 50%; }
+.mrow__dot--on { background: var(--hy-cheap); }
+.mrow__dot--off { background: var(--hy-faint); }
+.mrow__name { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mrow__tier, .mrow__band, .mrow__cost {
+  font-family: var(--hy-font-mono); font-size: 10.5px; font-variant-numeric: tabular-nums;
+}
+.mrow__tier { color: var(--hy-faint); }
+.mrow__band { color: var(--hy-dim); }
+.mrow__cost { text-align: right; font-weight: 700; }
+.mrow__cost--free { color: var(--hy-cheap); }
+.mrow__cost--low  { color: var(--hy-cheap); }
+.mrow__cost--mid  { color: var(--hy-mid); }
+.mrow__cost--high { color: var(--hy-expensive); }
+
+.scard {
+  background: var(--hy-panel); border: 1px solid var(--hy-line);
+  border-radius: var(--hy-radius); padding: 15px 16px;
+  display: flex; flex-direction: column; gap: 7px;
+}
+.scard__name { font-size: 14.5px; font-weight: 600; letter-spacing: -.01em; }
+.scard__sub { font-size: 11.5px; color: var(--hy-dim); }
+.scard__hl { color: var(--hy-aqua); font-family: var(--hy-font-mono); }
+.scard__off { color: var(--hy-expensive); }
+.scard__rule { height: 1px; background: var(--hy-line); margin: 4px 0 2px; }
+.scard__lbl {
+  font-family: var(--hy-font-mono); font-size: 9.5px; letter-spacing: .09em;
+  text-transform: uppercase; color: var(--hy-faint);
+}
+.scard__line { display: flex; align-items: baseline; gap: 10px; font-size: 12px; }
+.scard__k { color: var(--hy-dim); }
+.scard__v { margin-left: auto; font-family: var(--hy-font-mono); font-size: 11.5px; }
+.scard__none { margin: 2px 0 0; font-size: 11.5px; color: var(--hy-dim); line-height: 1.5; }
+
+.scard__cal { display: flex; flex-direction: column; gap: 1px; padding: 5px 0; border-bottom: 1px solid var(--hy-line); }
+.scard__cal:last-child { border-bottom: none; }
+.scard__calTop { display: flex; align-items: baseline; gap: 8px; }
+.scard__calDom { font-family: var(--hy-font-mono); font-size: 11.5px; }
+.scard__calD {
+  margin-left: auto; font-family: var(--hy-font-mono); font-size: 13px;
+  font-weight: 700; font-variant-numeric: tabular-nums;
+}
+.scard__calD--strong   { color: var(--hy-cheap); }
+.scard__calD--moderate { color: var(--hy-mid); }
+.scard__calD--weak     { color: var(--hy-expensive); }
+/* Muted, not coloured: a score on too few outcomes must not read as a finding. */
+.scard__calD--thin     { color: var(--hy-faint); }
+.scard__calSub { font-family: var(--hy-font-mono); font-size: 9.5px; color: var(--hy-faint); }
+.scard__thin { color: var(--hy-mid); }
+
+/* ── Run identity ──────────────────────────────────────────────────────── */
+/* A run is led by what it was asked to do; its id is the correlation handle,
+   not the headline (#603). */
+
+.run__open {
+  display: flex; align-items: baseline; gap: 9px; min-width: 0; flex: 1;
+  background: none; border: 0; padding: 0; text-align: left;
+  color: var(--hy-ink); font: inherit; cursor: pointer;
+}
+.run__open:hover .run__goal { color: var(--hy-aqua); }
+.run__open:focus-visible { outline: 2px solid var(--hy-aqua); outline-offset: 2px; border-radius: 3px; }
+.run__goal {
+  font-size: 13.5px; font-weight: 600; letter-spacing: -.01em;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* No prompt was recorded, so the id IS the title — set in mono, because that
+   is what it is. */
+.run__goal--id { font-family: var(--hy-font-mono); font-size: 12px; font-weight: 500; color: var(--hy-dim); }
+.run__id { font-family: var(--hy-font-mono); font-size: 10px; color: var(--hy-faint); flex: 0 0 auto; }
+
+.session__goal { font-size: 20px; font-weight: 600; letter-spacing: -.02em; }
+
+/* ── Section heads and openable rows ──────────────────────────────────── */
+
+.section__head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.section__hint { font-size: 11.5px; color: var(--hy-dim); }
+
+/* A row that opens something has to look like it does, or the affordance is a
+   secret. Rows without a run id stay inert and say so in the last cell. */
+.row--open { cursor: pointer; }
+.row--open:hover { background: var(--hy-panel); }
+.row--open:hover td:last-child { color: var(--hy-aqua); }
+.row--open:focus-visible { outline: 2px solid var(--hy-aqua); outline-offset: -2px; }

@@ -8,7 +8,7 @@ import type {
   ModelRegistry,
   Session as SessionData,
 } from '../types'
-import { pct, usd } from '../format'
+import { calibrationStrength, pct, usd } from '../format'
 
 /** Dashboard is retrospective; a slow tick is enough. Mirrors App's DASHBOARD_MS. */
 const SLOW_MS = 5000
@@ -202,7 +202,7 @@ function ModelRows({ dash }: { dash: DashboardData | null }) {
               <span className="mr__name" title={r.key}>
                 {r.key}
               </span>
-              <span className={`mr__d ${best ? band(best) : 'mr__d--none'}`}>
+              <span className={`mr__d ${best ? `mr__d--${calibrationStrength(best.d, best.n)}` : 'mr__d--none'}`}>
                 {best ? best.d.toFixed(2) : '—'}
               </span>
             </div>
@@ -224,15 +224,6 @@ function bestFor(cal: CalibrationRow[], key: string): CalibrationRow | undefined
   const mine = cal.filter((c) => c.source === key || c.source.endsWith(key))
   if (mine.length === 0) return undefined
   return mine.reduce((a, b) => (b.d > a.d ? b : a))
-}
-
-// Bands, not a gradient: D is in nats and ~1 is strong discrimination, so three
-// buckets say more than a continuous scale nobody can read.
-function band(c: CalibrationRow): string {
-  if (c.n < 10) return 'mr__d--thin'
-  if (c.d >= 1) return 'mr__d--strong'
-  if (c.d >= 0.5) return 'mr__d--ok'
-  return 'mr__d--weak'
 }
 
 function Gauge({ value }: { value: number }) {

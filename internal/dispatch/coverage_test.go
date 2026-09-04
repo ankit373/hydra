@@ -967,23 +967,31 @@ func TestTruncate(t *testing.T) {
 	}
 }
 
-// An Ask rule must withhold permission exactly like a deny does, until the
-// pause-and-resume path exists to act on it (#582).
+// An Ask rule must withhold permission, and since #582 it parks the task rather
+// than falling back past the asked head.
 //
 // This is the regression that made #580 more than a new constant: this gate used
 // to test `decision == ledger.Deny`, so any other verdict fell straight through
 // and the head ran. A pending question would have been an approval.
+//
+// Falling back was the interim behaviour while nothing could act on an Ask. It
+// withheld permission correctly but meant a task with any fallback quietly ran
+// elsewhere and the question was never put to anyone, so #582 stops instead.
 func TestDispatch_LedgerAskRuleDoesNotLetTheHeadRun(t *testing.T) {
 	s := testutil.NewSandbox(t)
 	writeLedgerPolicy(t, ledger.Policy{Rules: []ledger.Rule{{Tool: "pending", Decision: ledger.Ask}}})
 
 	res, err := liveDispatcher(echoHead(t, s, "pending", 95), echoHead(t, s, "ok", 90)).
 		Dispatch(context.Background(), "go", Options{})
-	if err != nil {
-		t.Fatalf("dispatch gave up instead of falling back past the asked head: %v", err)
+
+	var parked *ParkedError
+	if !errors.As(err, &parked) {
+		t.Fatalf("an Ask should park the task, got res=%v err=%v", res, err)
 	}
-	if res.Head.ID != "ok" {
-		t.Errorf("answered by %q, want the fallback head — an unanswered Ask must not run", res.Head.ID)
+	// Both heads really execute, so a result at all would mean work ran while
+	// the question was outstanding.
+	if res != nil {
+		t.Errorf("answered by %q — an unanswered Ask must not run, on any head", res.Head.ID)
 	}
 
 	events, err := ledger.Load(ledger.DefaultPath())

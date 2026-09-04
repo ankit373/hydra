@@ -37,6 +37,7 @@ import (
 	"github.com/ankit373/hydra/internal/optimal"
 	"github.com/ankit373/hydra/internal/oracle"
 	"github.com/ankit373/hydra/internal/parallel"
+	"github.com/ankit373/hydra/internal/pending"
 	"github.com/ankit373/hydra/internal/policy"
 	"github.com/ankit373/hydra/internal/pricing"
 	"github.com/ankit373/hydra/internal/probe"
@@ -106,7 +107,7 @@ func rootCmd() *cobra.Command {
 		cmdInit(), cmdProbe(), cmdStatus(), cmdTui(), cmdDispatch(),
 		cmdEdit(), cmdReview(), cmdParallel(), cmdCost(), cmdStats(),
 		cmdPricing(), cmdTrust(), cmdGraph(), cmdContext(), cmdMCP(), cmdOracle(), cmdModels(),
-		cmdSecurity(), cmdVersion(), cmdUpgrade(),
+		cmdSecurity(), cmdAsk(), cmdVersion(), cmdUpgrade(),
 	)
 	return root
 }
@@ -225,13 +226,15 @@ func cmdTui() *cobra.Command {
 			if err := requireTerminal("hyctl tui"); err != nil {
 				return err
 			}
-			p := tea.NewProgram(tui.NewCockpit(), tea.WithAltScreen())
+			// Mouse support is for wheel scrolling; the keyboard remains
+			// fully sufficient on terminals without it.
+			p := tea.NewProgram(tui.NewCockpit(), tea.WithAltScreen(), tea.WithMouseCellMotion())
 			_, err := p.Run()
 			return err
 		},
 	}
 	c.Flags().BoolVar(&snapshot, "snapshot", false, "Render one static frame and exit (docs/preview)")
-	c.Flags().IntVar(&snapView, "view", 0, "With --snapshot: render a single view (0 chat+code, 1 dashboard, 2 agent-tree, 3 security)")
+	c.Flags().IntVar(&snapView, "view", 0, "With --snapshot: render a single view (0 chat, 1 agents, 2 models, 3 activity, 4 usage, 5 audit)")
 	return c
 }
 
@@ -824,6 +827,20 @@ func cmdDispatch() *cobra.Command {
 			}
 
 			result, err := d.Dispatch(ctx, prompt, opts)
+			// A parked task is not a failure, but it is not success either:
+			// nothing ran. Print what is being asked and how to answer, then
+			// exit non-zero so a script cannot mistake it for completed work.
+			// The question is not repeated in the returned error.
+			var parked *dispatch.ParkedError
+			if errors.As(err, &parked) {
+				fmt.Println()
+				fmt.Printf("  %s %s\n", warnStyle.Render("⏸ waiting on you"), dimStyle.Render(parked.Head))
+				fmt.Println(dimStyle.Render("  " + strings.Repeat("─", 56)))
+				fmt.Printf("\n  %s\n\n", parked.Question)
+				fmt.Printf("  %s\n", dimStyle.Render("answer:  hyctl ask answer "+parked.TaskID+" \"...\""))
+				fmt.Printf("  %s\n\n", dimStyle.Render("refuse:  hyctl ask decline "+parked.TaskID))
+				return fmt.Errorf("task %s is waiting on an answer", parked.TaskID)
+			}
 			if err != nil {
 				return err
 			}
@@ -3484,4 +3501,115 @@ func promptPreview(s string) string {
 		return s
 	}
 	return s[:max] + "…"
+}
+
+// ── ask ───────────────────────────────────────────────────────────────────────
+
+// cmdAsk answers the tasks Hydra parked waiting on a human.
+//
+// The desktop app grows its own surface for these (#583), but hyctl is the
+// whole interface for anyone not running the app — without this a policy that
+// asks can park a task nothing is able to resume.
+func cmdAsk() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "ask",
+		Short: "See and answer tasks waiting on your decision",
+		Long: "A ledger policy can answer `ask` instead of allow or deny. Dispatch then stops\n" +
+			"before running anything and parks the task until you answer it here.",
+	}
+
+	var jsonOut bool
+	list := &cobra.Command{
+		Use:   "list",
+		Short: "List tasks waiting on an answer",
+		Args:  cobra.NoArgs,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			qs, err := pending.List()
+			// Reported, not returned: an unreadable file must not hide the
+			// questions that are readable, or a parked task gets forgotten
+			// because a different one is corrupt.
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "  %s %v\n", warnStyle.Render("⚠"), err)
+			}
+			if jsonOut {
+				if qs == nil {
+					qs = []pending.Question{}
+				}
+				return json.NewEncoder(os.Stdout).Encode(qs)
+			}
+			if len(qs) == 0 {
+				fmt.Printf("\n  %s\n\n", dimStyle.Render("nothing is waiting on you"))
+				return nil
+			}
+			fmt.Println()
+			for _, q := range qs {
+				fmt.Printf("  %s  %s  %s\n",
+					cortexStyle.Render(q.TaskID),
+					dimStyle.Render(q.Head),
+					dimStyle.Render("asked "+humanAge(time.Since(q.AskedAt))))
+				fmt.Printf("    %s\n\n", q.Question)
+			}
+			fmt.Printf("  %s\n\n", dimStyle.Render("answer with: hyctl ask answer <task-id> \"...\""))
+			return nil
+		},
+	}
+	list.Flags().BoolVar(&jsonOut, "json", false, "machine-readable JSON output")
+
+	answer := &cobra.Command{
+		Use:   "answer <task-id> <answer>",
+		Short: "Answer a parked task and run it",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			d, err := dispatch.New(cmd.Context())
+			if err != nil {
+				return err
+			}
+			res, err := d.Resume(cmd.Context(), args[0], args[1])
+			if err != nil {
+				return err
+			}
+			fmt.Println()
+			fmt.Printf("  %s %s  %dms\n",
+				cortexStyle.Render("▶"),
+				dimStyle.Render(res.Head.Name),
+				res.Duration.Milliseconds())
+			fmt.Println(dimStyle.Render("  " + strings.Repeat("─", 56)))
+			fmt.Printf("\n%s\n\n", res.Output)
+			return nil
+		},
+	}
+
+	decline := &cobra.Command{
+		Use:   "decline <task-id> [reason]",
+		Short: "Refuse a parked task without running it",
+		Args:  cobra.RangeArgs(1, 2),
+		RunE: func(_ *cobra.Command, args []string) error {
+			reason := ""
+			if len(args) == 2 {
+				reason = args[1]
+			}
+			if err := dispatch.Decline(args[0], reason); err != nil {
+				return err
+			}
+			fmt.Printf("\n  %s %s\n\n", dimStyle.Render("declined"), args[0])
+			return nil
+		},
+	}
+
+	cmd.AddCommand(list, answer, decline)
+	return cmd
+}
+
+// humanAge renders a duration the way a person reads an age, not a Go Duration.
+func humanAge(d time.Duration) string {
+	switch {
+	case d < time.Minute:
+		return "just now"
+	case d < time.Hour:
+		return fmt.Sprintf("%dm ago", int(d.Minutes()))
+	case d < 24*time.Hour:
+		return fmt.Sprintf("%dh ago", int(d.Hours()))
+	default:
+		return fmt.Sprintf("%dd ago", int(d.Hours()/24))
+	}
 }

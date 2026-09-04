@@ -38,6 +38,7 @@ internal/a2a/           ← Causal agent handoffs: vector clocks + concurrent-ed
 internal/optimal/       ← Optimal parallel-agent count n*=√((1-s)/k) (Amdahl+coordination, Law 4).
 internal/entropy/       ← Context signal density (gzip proxy) → useful_tokens=L·ρ; compaction governor (Law 5).
 internal/ledger/        ← MCP accountability ledger: record + policy-gate what agents touch. `hyctl mcp`.
+internal/pending/       ← Tasks parked on a ledger `ask` verdict (logs/pending/<task-id>.json). `hyctl ask`.
 internal/mcpregistry/   ← MCP server trust registry: sync official registry, scan installed servers,
                           score (CSA-shaped categories), version-bump trust automaton, backtest against
                           known incidents. `hyctl mcp registry`.
@@ -246,6 +247,9 @@ hyctl trust defect --pii --production ; hyctl trust stats ; hyctl trust explain 
 hyctl models add kimi-k3 --name "Kimi K3" --provider moonshot --cap-score 85
 hyctl models list ; hyctl models remove kimi-k3 ; hyctl models sync   # import OpenRouter catalog
 
+# Tasks parked waiting on a human (ledger `ask` verdict)
+hyctl ask list ; hyctl ask answer <task-id> "go ahead" ; hyctl ask decline <task-id> "not prod"
+
 # Routing propensity: every dispatch row carries act_prob (probability the router
 # chose that head) and keep_prob (probability the row was retained). Both are
 # always written - an absent propensity is unusable and a zero one divides by
@@ -305,7 +309,7 @@ Every issue must be:
 2. **Linked to its branch** — GitHub auto-links when branch name contains the issue number (`feature/54-hydra-stats` links to #54)
 3. **Linked to its PR** — PR body must contain `Closes #<issue>` so the PR shows on the issue
 4. **Moving through board states** at every transition (Todo → In Progress → In Review → Done)
-5. **Closed by hand once the release carrying it reaches `main`** — see below; nothing closes it for you
+5. **Closed once the release carrying it reaches `main`** — automated by `close-shipped-issues.yml`, see below
 
 ### Link a branch to an issue (GitHub auto-detection)
 GitHub automatically links a branch to an issue when the branch name contains the issue number.
@@ -317,23 +321,30 @@ gh issue view 54 --json linkedBranches
 ```
 
 ### Link a PR to an issue
-Always include `Closes #<n>` in the PR body. This shows the PR on the issue page and creates the
-link — that is the whole reason to keep writing it.
+Always include `Closes #<n>` in the PR body.
 
-**It does not close the issue.** GitHub only honours the closing keyword when the PR merges into the
-**default branch**, which here is `main`. Every feature/fix PR targets `develop` by design, so the
-keyword links but never fires — and it fails silently: the PR merges green and the issue stays open.
-17 issues accumulated this way before anyone noticed (#217).
+GitHub only honours the closing keyword when the PR merges into the **default branch**, which here
+is `main`. Every feature/fix PR targets `develop` by design, so the keyword links but never fires —
+and it fails silently: the PR merges green and the issue stays open. 17 issues accumulated this way
+before anyone noticed (#217), and 96 more before the sweep below existed.
 
-Close issues explicitly when the release carrying them lands on `main`, which is the board's
-existing `Deploy` → `Done` transition:
+**Write the keyword anyway — it is now the thing that closes the issue.** At release time
+`close-shipped-issues.yml` reads `Closes #n` back out of the body of every PR in the release and
+closes each one with `Shipped in vX.Y.Z.` GitHub's own link API (`closingIssuesReferences`) is
+**empty** for develop-targeted PRs, so the PR body is the only record of the link that survives:
+a PR body without the keyword is an issue that never closes.
+
+If an issue is still open after a release, sweep it by hand:
 
 ```bash
-gh issue close <n> --comment "Shipped in v1.1.0."
+gh workflow run close-shipped-issues.yml -f tag=v1.3.1 -f dry_run=true   # what would close
+gh workflow run close-shipped-issues.yml -f tag=v1.3.1                   # close it
 ```
 
-(This is unrelated to the project-board columns, which need a `read:project` OAuth scope. Closing
-an issue needs no extra scope.)
+Re-running is safe: it only ever closes issues that are open, and never reopens anything.
+
+(Board columns are untouched — they need a `read:project` scope `GITHUB_TOKEN` does not have, so
+`Deploy` → `Done` stays a manual move.)
 
 ---
 
@@ -446,8 +457,8 @@ gh project item-edit --project-id PVT_kwHOAL1qLc4BZbZZ --id "$ITEM_ID" \
 
 **PR rules:**
 - Title must be a valid conventional commit (e.g. `feat(scope): description`)
-- Body must contain `Closes #<issue>` — this links the PR to the issue. It does **not** close it:
-  the keyword only fires on merge into the default branch (`main`). Close it by hand at release.
+- Body must contain `Closes #<issue>`. The keyword does not fire on a develop-targeted PR, but
+  `close-shipped-issues.yml` reads it at release time and closes the issue then. No keyword, no close.
 - All features/fixes target `develop`. Hotfixes target `main` — and there the keyword *does* fire.
 - Never open a PR directly to `main` from a feature branch.
 
@@ -488,9 +499,11 @@ PR: release/v1.2.0 → main  (squash merge — MUST carry a Release-As footer, s
         ↓
 release-please opens Release PR on main (bumps version, updates CHANGELOG)
         ↓
-Merge Release PR → tag v1.2.0 created → release.yml fires
+Merge Release PR → tag v1.2.0 created → release-please.yml fans the release out
         ↓
 GoReleaser builds all platforms, publishes stable release, updates Homebrew tap
+        ↓
+close-shipped-issues.yml closes every issue in the release ("Shipped in v1.2.0.")
         ↓
 Cherry-pick any release-branch fixes back to develop
 ```
@@ -538,6 +551,29 @@ If no Release PR appears, the footer was missing. Fix it by pushing another PR t
 carrying the footer; do **not** create the tag by hand — a manual tag leaves
 `.release-please-manifest.json` behind at the old version, and the next release is then
 computed off the wrong base (#215).
+
+### Closing the issues the release shipped
+
+`close-shipped-issues.yml` does this, hung off release-please.yml's job graph rather than a
+`release` or tag-push trigger: release-please tags with `GITHUB_TOKEN`, and events raised by
+that token start no workflow, so a trigger-based sweep would never fire at all.
+
+`main` carries only one squash commit per release, so its own log names just the release PRs.
+The workflow follows each one's `refs/pull/<n>/head` into the develop lineage that actually
+shipped, and reads the trailing `(#n)` off every commit subject there.
+
+**That `(#n)` is not always a PR.** GitHub's squash default appends the PR number, but the
+Quick Start below prescribes `(#${ISSUE})` in the commit subject, and both conventions are in
+the history. So each number is resolved to whichever it is: a PR means read `Closes #m` out of
+its body, an issue means the commit names the issue it shipped. Only issues still open are
+touched. Handling just one convention silently loses most of the release — that is what the
+first cut of this workflow did. Verify:
+
+```bash
+gh run list --workflow "Close shipped issues" --limit 1
+```
+
+If it did not fire, re-run it by hand — see **Link a PR to an issue** above.
 
 ### Cutting a release branch
 
@@ -689,9 +725,8 @@ gh project item-edit --project-id PVT_kwHOAL1qLc4BZbZZ --id "$ITEM_ID" \
 gh project item-edit --project-id PVT_kwHOAL1qLc4BZbZZ --id "$ITEM_ID" \
   --field-id PVTSSF_lAHOAL1qLc4BZbZZzhUaGlE --single-select-option-id bcafa7ca
 
-# 6. After the release carrying it lands on main — close the issue, then move to Done.
-#    Nothing does this for you: "Closes #n" does not fire on a develop-targeted PR (#217).
-gh issue close "${ISSUE}" --comment "Shipped in v1.1.0."
+# 6. The release carrying it lands on main → close-shipped-issues.yml closes the issue from
+#    the "Closes #n" in the PR body. Only the board move is left to do by hand.
 gh project item-edit --project-id PVT_kwHOAL1qLc4BZbZZ --id "$ITEM_ID" \
   --field-id PVTSSF_lAHOAL1qLc4BZbZZzhUaGlE --single-select-option-id 98236657
 ```
@@ -729,7 +764,11 @@ internal/update/update.go     ← startup update checker (24h cache)
 .github/workflows/edge.yml    ← fires on develop push → edge build
 .github/workflows/rc.yml      ← fires on release/v* push → RC pre-release
 .github/workflows/publish.yml ← fans a release out to brew/npm/pip
-.github/workflows/release-please.yml ← fires on main push → release PR
+.github/workflows/release-please.yml ← fires on main push → release PR, then fans out to
+                                       publish.yml and close-shipped-issues.yml
+.github/workflows/close-shipped-issues.yml ← closes the issues a release shipped, read back
+                                       from "Closes #n" in each PR body (#217). Its resolver
+                                       is close_shipped_issues.py beside it.
 .github/workflows/sync-develop.yml   ← fires on main push → back-merge PR (main → develop).
                                        FAILS loudly on conflict; a red run here means develop
                                        is behind main and a release cut will not merge cleanly.
@@ -800,6 +839,7 @@ All Go source lives under `cmd/` and `internal/`. Key packages:
 | `internal/entropy` | Context signal density ρ (gzip-ratio proxy) → `useful_tokens = L·ρ` + a compaction governor (Manifesto Law 5). Drives `hyctl context entropy`. |
 | `internal/ledger` | Local MCP accountability ledger: append-only access events + glob allow/deny `Policy.Decide` gate (records every decision), classification-aware (`Rule.Classification`, auto-derived from content via `policy.ContainsPII` or set explicitly) + `HashParams`/`VerifyParams` SHA256 parameter-hash binding for tamper-evidence between a decision and its execution. `Check` fails **closed** (unhashable params → `Deny`, recorded); `LoadPolicy` rejects unparseable decisions/actions/globs rather than silently voiding a rule, actions/classifications are case-normalized, and only **Allow** events count as approvals for `verify`. Drives `hyctl mcp check\|record\|verify\|log\|report`. |
 | `internal/mcpregistry` | Local-first MCP server trust registry — identity-only sync/scan/audit of what's installed (never reads secret/env values from client configs, by construction), a CSA MCP Selection Scorecard-shaped score (known-CVE cross-reference via OSV.dev, edit-distance typosquat detection, GitHub maintenance recency, declared-not-verified auth posture — each category renders "insufficient evidence" rather than a fabricated number), and a trust lifecycle automaton (new/provisional/trusted/flagged/quarantined/delisted) where every version bump — a content-hash diff of the manifest — drops a server back to provisional. Only a *confirmed* finding quarantines (`quarantineThreshold`, -80): the near-duplicate heuristic scores -40 and deliberately sits above it, because it false-positived on 0.7% of the live registry and quarantine has no automatic exit — `Clear` is the manual recovery path. An unevaluated category contributes `neutralBaseline` rather than dropping out of the weighted average, so missing evidence can never raise a score, and a server with no substantive category reads "insufficient evidence" instead of a number. `ClassificationForTool` feeds `mcp-unverified`/`mcp-flagged`/`mcp-quarantined` into `internal/ledger`'s classification, the same mechanism `policy.ContainsPII` uses for content. `BehaviorClassification` adds `mcp-behavior-change` from local ledger history alone — a server whose recorded `Action`s have only ever been one kind performing another for the first time — no cross-user aggregation or registry-declared capability data needed (neither exists yet). `Backtest` validates the pipeline against real documented incidents (`postmark-mcp`'s rug-pull, CVE-2025-6514) before any public directory export is trusted. Drives `hyctl mcp registry sync\|scan\|audit\|export\|backtest\|list\|clear`. |
+| `internal/pending` | Tasks parked on a ledger `ask` verdict, under `logs/pending/<task-id>.json`. An `ask` stops dispatch **before any executor runs** and does not fall through to the next fallback candidate — skipping the head that needs permission and running a cheaper one would mean the question is never asked, and for a resource-scoped rule would reach the gated resource anyway. `Save` is temp-then-rename; `Load` fails loudly on a corrupt or incomplete file rather than resuming on a zero value; the bound refuses new work instead of pruning, since discarding a question drops work someone is waiting on. `dispatch.Resume` consumes the file before dispatching, which is what makes answering idempotent, and re-approves **only the stored head** (`Options.AnsweredHead`). `dispatch.Decline` is a package function, not a Dispatcher method, so a machine with no working config can still refuse a task it parked. Drives `hyctl ask list\|answer\|decline`. |
 | `internal/oracle` | Verification oracles: `Oracle`/`CommandOracle` run tests/compile/lint (exit 0 = pass) and map the verdict to a calibrated LLR (`oracle.LLR`) — a high-`D` evidence source. Drives `hyctl oracle verify`. |
 | `internal/ope` | Off-policy estimation. `SelfNormalized` recovers a population rate from a non-uniformly sampled log by weighting each row by the inverse of its inclusion probability. A non-positive probability is skipped and counted, never treated as certain. Exists because averaging a sampled log inverted the true ranking of two heads in simulation, which would then change routing (#605). |
 | `internal/tui` | Bubble Tea TUI: init wizard, install flow |

@@ -19,6 +19,11 @@ type Session struct {
 	Found bool   `json:"found"`
 	Error string `json:"error,omitempty"`
 
+	// Goal is what this run was asked to do, in the requester's words. Same
+	// read as Fleet's: tree.Reconstruct discards run-level events, so a view
+	// titled only by run id has no way to say what the run was for.
+	Goal string `json:"goal,omitempty"`
+
 	Timeline []TimelineEntry `json:"timeline"`
 	Agents   []Agent         `json:"agents"`
 	Edges    []Edge          `json:"edges"`
@@ -91,6 +96,7 @@ func (a *API) GetSession(runID string) (*Session, error) {
 		return s, nil
 	}
 	s.Found = true
+	s.Goal = runGoal(events)
 
 	t, tl := tree.Reconstruct(events)
 	s.Skipped = t.Skipped

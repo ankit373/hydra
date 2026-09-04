@@ -56,9 +56,16 @@ func executeHead(ctx context.Context, h provider.Head, prompt string, opts Optio
 		a.FinishedAt = time.Now()
 		a.Duration = a.FinishedAt.Sub(a.StartedAt)
 		a.Status = StatusFailed
-		if err != nil {
+		switch {
+		case err != nil:
 			a.Err = fmt.Errorf("ledger policy check failed: %w: head %s", err, h.ID)
-		} else {
+		// Reporting an Ask as "denied" describes the wrong policy. The head is
+		// skipped either way — a fan-out cannot hold a subprocess open waiting
+		// on a human — but the operator who wrote "ask" should be told the
+		// question went unasked, not that their rule refused the head.
+		case decision == ledger.Ask:
+			a.Err = fmt.Errorf("waiting on a human decision, so skipped in fan-out: head %s", h.ID)
+		default:
 			a.Err = fmt.Errorf("denied by ledger policy: head %s", h.ID)
 		}
 		return a

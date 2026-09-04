@@ -121,6 +121,8 @@ export interface Agent {
 export interface Run {
   id: string
   live: boolean
+  /** A question for this run is still parked. */
+  waiting: boolean
   startedAt: string
   elapsedMs: number
   costUsd: number
@@ -134,6 +136,9 @@ export interface Run {
   allCount: number
   /** Events the reconstruction could not attribute — surfaced, never hidden. */
   skipped: number
+  /** What was asked, in the requester's words. Empty when the run recorded no
+   *  prompt; a preview, because that is what the log stores. */
+  goal?: string
   /** Set when this run's log could not be read; the row still renders. */
   error?: string
 }
@@ -141,6 +146,9 @@ export interface Run {
 export interface Fleet {
   hasRuns: boolean
   liveCount: number
+  /** Runs parked on a question. The opposite of liveCount: stopped, and only
+   *  a person can restart them. */
+  waitingCount: number
   runs: Run[]
   /** Agent count past which a run collapses. Defined in Go, not the view. */
   groupThreshold: number
@@ -176,6 +184,8 @@ export interface Session {
   /** False when the run id names no log — different from a run that did nothing. */
   found: boolean
   error?: string
+  /** What this run was asked to do. Empty when it recorded no prompt. */
+  goal?: string
   timeline: TimelineEntry[]
   agents: Agent[]
   edges: Edge[]
@@ -201,6 +211,17 @@ export interface DiffLine {
   oldLine: number
   /** 0 when the line is a removal. */
   newLine: number
+  /** Byte ranges on this line that actually changed, for a 1:1 replacement.
+   *  Absent means no intra-line detail — the line was added or removed
+   *  outright, or it is part of a block replacement where pairing would
+   *  invent a relationship the diff never established. */
+  spans?: Span[]
+}
+
+/** A byte range within DiffLine.text. */
+export interface Span {
+  start: number
+  end: number
 }
 
 export interface Diff {
@@ -644,6 +665,29 @@ export interface ChatReply {
   /** No heads discoverable at all — the dock offers to retry instead of
    *  showing a raw dispatch error. */
   needsProbe?: boolean
+  /** Set when the task parked waiting on a human decision. Not an error: it
+   *  needs you, it did not break. `taskId` is what answers it. */
+  question?: string
+  taskId?: string
+}
+
+/** One task parked waiting on a human decision. */
+export interface PendingQuestion {
+  taskId: string
+  runId: string
+  question: string
+  head: string
+  resource?: string
+  prompt: string
+  /** Epoch ms — the frontend formats the age itself. */
+  askedAtMs: number
+}
+
+/** The parked queue, plus whether it could be read in full. */
+export interface QuestionQueue {
+  questions: PendingQuestion[]
+  /** One unreadable file must not hide the answerable ones. */
+  error?: string
 }
 
 /** One routable head as registry/models.yaml declares it. */

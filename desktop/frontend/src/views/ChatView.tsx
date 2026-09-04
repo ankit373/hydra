@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Chat, GetDashboard, GetSession, NewRunID } from '../bindings'
+import { AnswerQuestion, Chat, DeclineQuestion, GetDashboard, GetSession, NewRunID } from '../bindings'
 import type { ChatReply, GovernorPanel, Session as SessionData } from '../types'
 import { ms, usdExact } from '../format'
 import { Timeline } from './Session'
@@ -222,6 +222,53 @@ export function ChatView({
     }
   }
 
+  // Answering a parked task is a dispatch like any other: same busy flag, same
+  // live timeline, and the answer replaces the question in place so the
+  // transcript reads as one exchange rather than two unrelated entries.
+  async function answer(i: number, text: string) {
+    const t = turns[i]
+    const taskId = t.reply?.taskId
+    if (!taskId || busy || !text.trim()) return
+    setBusy(true)
+    if (t.runId) watchRun(t.runId)
+    try {
+      const reply = await AnswerQuestion(taskId, text)
+      setTurns((ts) => ts.map((turn, idx) => (idx === i ? { ...turn, reply } : turn)))
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e)
+      setTurns((ts) =>
+        ts.map((turn, idx) => (idx === i ? { ...turn, reply: { ...emptyReply(), error: message } } : turn)),
+      )
+    } finally {
+      stopPolling()
+      setLiveSession(null)
+      setBusy(false)
+    }
+  }
+
+  // Refusing is a separate path that never reaches an executor, so it is not
+  // an answer of "no" — nothing runs at all.
+  async function decline(i: number) {
+    const taskId = turns[i].reply?.taskId
+    if (!taskId || busy) return
+    setBusy(true)
+    try {
+      await DeclineQuestion(taskId, '')
+      setTurns((ts) =>
+        ts.map((turn, idx) =>
+          idx === i ? { ...turn, reply: { ...emptyReply(), output: 'Declined. Nothing ran.' } } : turn,
+        ),
+      )
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e)
+      setTurns((ts) =>
+        ts.map((turn, idx) => (idx === i ? { ...turn, reply: { ...emptyReply(), error: message } } : turn)),
+      )
+    } finally {
+      setBusy(false)
+    }
+  }
+
   // Focus on mount, and again whenever something asks for the caret.
   useEffect(() => {
     inputRef.current?.focus()
@@ -268,6 +315,15 @@ export function ChatView({
                   <Timeline entries={liveSession.timeline} />
                 )}
               </>
+            )}
+            {t.reply?.question && (
+              <Waiting
+                question={t.reply.question}
+                head={t.reply.head}
+                busy={busy}
+                onAnswer={(text) => void answer(i, text)}
+                onDecline={() => void decline(i)}
+              />
             )}
             {t.reply?.error && !t.reply.needsProbe && (
               <>
@@ -393,4 +449,64 @@ function tierShift(turns: Turn[], i: number): boolean {
   const prev = turns[i - 1].reply
   const cur = turns[i].reply
   return !!prev && !!cur && prev.tier > 0 && cur.tier > 0 && prev.tier !== cur.tier
+}
+
+/**
+ * A task parked waiting on a human decision, shown inline in the transcript.
+ *
+ * Not a modal: a modal that vanishes leaves the task silently parked, and the
+ * question is part of the conversation's record. The task stays parked until
+ * it is answered or declined — there is deliberately no default action and
+ * nothing that resolves on dismiss or timeout.
+ */
+function Waiting({
+  question,
+  head,
+  busy,
+  onAnswer,
+  onDecline,
+}: {
+  question: string
+  head: string
+  busy: boolean
+  onAnswer: (text: string) => void
+  onDecline: () => void
+}) {
+  const [text, setText] = useState('')
+  return (
+    <div className="waiting">
+      <div className="waiting__head">
+        <span className="waiting__ico" aria-hidden="true">&#10073;&#10073;</span>
+        <span className="waiting__lbl">Waiting on you</span>
+        {head && <span className="waiting__who">{head}</span>}
+      </div>
+      <p className="waiting__q">{question}</p>
+      <div className="waiting__row">
+        <input
+          className="waiting__in"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && text.trim() && !busy) {
+              e.preventDefault()
+              onAnswer(text)
+            }
+          }}
+          placeholder="Answer, and it runs"
+          aria-label="Your answer"
+          disabled={busy}
+        />
+        <button
+          className="waiting__go"
+          onClick={() => onAnswer(text)}
+          disabled={busy || !text.trim()}
+        >
+          Answer
+        </button>
+        <button className="waiting__no" onClick={onDecline} disabled={busy}>
+          Decline
+        </button>
+      </div>
+    </div>
+  )
 }

@@ -107,6 +107,29 @@ func TestUnroutable_LocalBinaryWithoutAServerSaysWhatToDo(t *testing.T) {
 	}
 }
 
+// An embedding-only model (marked by the port provider, #532) is discovered
+// but never routable — and the reason wins over every source-based branch, so
+// no discovery path can accidentally re-admit one.
+func TestUnroutable_EmbeddingOnlyIsNeverRouted(t *testing.T) {
+	head := provider.Head{
+		ID: "ollama/nomic-embed-text", Provider: "local", Source: "port",
+		Endpoint: "http://localhost:11434", LocalOnly: true, AuthReady: true,
+		Meta: map[string]string{"embedding_only": "true"},
+	}
+	why := Unroutable(head)
+	if why == "" {
+		t.Fatal("an embedding-only model is routable; every dispatch to it fails (#532)")
+	}
+	if !strings.Contains(why, "embeddings only") {
+		t.Errorf("reason %q does not say the model is embeddings-only", why)
+	}
+	// The marker must dominate even a shape that would otherwise route.
+	head.Source = "registry"
+	if Supports(head) {
+		t.Error("a registry-shaped embedding-only head slipped past the marker")
+	}
+}
+
 // Supports is defined as Unroutable == "", so this holds by construction today.
 // It is pinned because the previous shape — two functions each walking the same
 // branches — is exactly how a listing surface and a routing surface drift apart.
