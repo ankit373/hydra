@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -44,6 +45,7 @@ import (
 	"github.com/ankit373/hydra/internal/provider"
 	"github.com/ankit373/hydra/internal/rank"
 	"github.com/ankit373/hydra/internal/review"
+	"github.com/ankit373/hydra/internal/rollup"
 	"github.com/ankit373/hydra/internal/runid"
 	"github.com/ankit373/hydra/internal/runlog"
 	"github.com/ankit373/hydra/internal/security"
@@ -2976,6 +2978,90 @@ func cmdCost() *cobra.Command {
 
 // ── stats ─────────────────────────────────────────────────────────────────────
 
+// latencyRow is the shape --latency --json emits. Percentiles come from a
+// sketch, so they are estimates with a stated relative-error bound rather than
+// exact values — the field names say so.
+type latencyRow struct {
+	Model    string  `json:"model"`
+	Tier     int     `json:"tier"`
+	Calls    int64   `json:"calls"`
+	P50Est   float64 `json:"p50_ms_est"`
+	P90Est   float64 `json:"p90_ms_est"`
+	P99Est   float64 `json:"p99_ms_est"`
+	RelErr   float64 `json:"relative_error_bound"`
+	Explored int64   `json:"explored"`
+}
+
+// mergeByModel folds every day's rollup into one per (model, tier). Sketches
+// merge, which is the only reason a per-day store can answer an all-time p99.
+func mergeByModel(rows []rollup.Row) []latencyRow {
+	type key struct {
+		model string
+		tier  int
+	}
+	acc := map[key]*rollup.Row{}
+	for i := range rows {
+		r := rows[i]
+		k := key{r.Model, r.Tier}
+		cur := acc[k]
+		if cur == nil {
+			c := r
+			if c.Latency != nil {
+				c.Latency = c.Latency.Clone()
+			}
+			acc[k] = &c
+			continue
+		}
+		cur.Calls += r.Calls
+		cur.Explored += r.Explored
+		if cur.Latency != nil && r.Latency != nil {
+			_ = cur.Latency.Merge(r.Latency)
+		}
+	}
+	out := make([]latencyRow, 0, len(acc))
+	for k, v := range acc {
+		lr := latencyRow{Model: k.model, Tier: k.tier, Calls: v.Calls, Explored: v.Explored}
+		if v.Latency != nil {
+			lr.P50Est, lr.P90Est, lr.P99Est = v.Latency.Quantile(0.5), v.Latency.Quantile(0.9), v.Latency.Quantile(0.99)
+			lr.RelErr = v.Latency.Alpha
+		}
+		out = append(out, lr)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Calls > out[j].Calls })
+	return out
+}
+
+func rollupLatencyJSON(rows []rollup.Row) []latencyRow { return mergeByModel(rows) }
+
+func renderLatency(rows []rollup.Row) {
+	merged := mergeByModel(rows)
+	if len(merged) == 0 {
+		fmt.Println("No dispatches recorded yet.")
+		return
+	}
+	fmt.Printf("%-28s %5s %8s %10s %10s %10s %9s\n", "MODEL", "TIER", "CALLS", "P50 ms", "P90 ms", "P99 ms", "EXPLORED")
+	for _, r := range merged {
+		fmt.Printf("%-28s %5d %8d %10.0f %10.0f %10.0f %9d\n",
+			truncateMiddle(r.Model, 28), r.Tier, r.Calls, r.P50Est, r.P90Est, r.P99Est, r.Explored)
+	}
+	if len(merged) > 0 {
+		fmt.Printf("\nPercentiles are sketch estimates, accurate to +/-%.1f%% relative.\n", merged[0].RelErr*100)
+	}
+}
+
+// truncateMiddle keeps both ends of a model id, which is where the
+// distinguishing parts live (provider prefix and version suffix).
+func truncateMiddle(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	if n < 5 {
+		return s[:n]
+	}
+	half := (n - 1) / 2
+	return s[:half] + "\u2026" + s[len(s)-(n-half-1):]
+}
+
 func cmdStats() *cobra.Command {
 	var (
 		days      int
@@ -2985,6 +3071,7 @@ func cmdStats() *cobra.Command {
 		swarmOnly bool
 		sessionID string
 		jsonOut   bool
+		latency   bool
 	)
 
 	printJSON := func(v any) {
@@ -3007,6 +3094,22 @@ Examples:
   hyctl stats --session <id>   # single session/task breakdown
   hyctl stats --json           # machine-readable output`,
 		RunE: func(_ *cobra.Command, _ []string) error {
+			// Percentiles come from rollups, not raw rows: a mean latency
+			// answers nothing, and keeping every wall_ms to compute p99 is
+			// what internal/sketch exists to avoid (#624).
+			if latency {
+				rows, err := rollup.Refresh(cost.DefaultLogPath(), rollup.DefaultPath())
+				if err != nil {
+					return err
+				}
+				if jsonOut {
+					printJSON(rollupLatencyJSON(rows))
+					return nil
+				}
+				renderLatency(rows)
+				return nil
+			}
+
 			all, err := cost.LoadAll()
 			if err != nil {
 				return err
@@ -3101,6 +3204,7 @@ Examples:
 	cmd.Flags().BoolVar(&byDay, "day", false, "group by calendar day")
 	cmd.Flags().BoolVar(&swarmOnly, "swarm", false, "swarm-only stats: winner rate, avg wall time, mode breakdown")
 	cmd.Flags().StringVar(&sessionID, "session", "", "filter to a single task_id or run_id")
+	cmd.Flags().BoolVar(&latency, "latency", false, "latency percentiles per model, from mergeable sketches (see internal/rollup)")
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "machine-readable JSON output")
 	return cmd
 }
