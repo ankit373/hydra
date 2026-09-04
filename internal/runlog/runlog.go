@@ -38,10 +38,13 @@ package runlog
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -186,11 +189,25 @@ func (l *Logger) Append(e Event) error {
 	return err
 }
 
-// Load reads a run's events in append order. A missing run yields no events and
-// no error — a run that logged nothing is not a failure.
+// Load reads a run's events in append order, from the live file if it is still
+// loose and from its sealed segment otherwise. A missing run yields no events
+// and no error — a run that logged nothing is not a failure.
+//
+// Sealing is invisible here on purpose: internal/tree, the cockpit and the
+// desktop app all call this, and none of them should learn about segments.
 func Load(runID string) ([]Event, error) {
 	events, _, err := LoadCounted(Path(runID))
-	return events, err
+	if err != nil {
+		return nil, err
+	}
+	if len(events) > 0 {
+		return events, nil
+	}
+	sealed, ok, serr := loadSealed(runID)
+	if serr != nil || !ok {
+		return events, nil
+	}
+	return sealed, nil
 }
 
 // LoadCounted is Load for an explicit path, plus the number of unparseable
@@ -207,11 +224,21 @@ func LoadCounted(path string) ([]Event, int, error) {
 	}
 	defer f.Close()
 
+	raw, err := io.ReadAll(f)
+	if err != nil {
+		return nil, 0, err
+	}
+	return parseEvents(raw)
+}
+
+// parseEvents decodes an events file. Shared by the live and sealed readers so
+// a sealed run cannot parse differently from a loose one.
+func parseEvents(raw []byte) ([]Event, int, error) {
 	var (
 		events  []Event
 		skipped int
 	)
-	sc := bufio.NewScanner(f)
+	sc := bufio.NewScanner(bytes.NewReader(raw))
 	sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
 	for sc.Scan() {
 		line := strings.TrimSpace(sc.Text())
@@ -245,9 +272,29 @@ func Runs() ([]string, error) {
 		}
 		ids = append(ids, strings.TrimSuffix(e.Name(), ".jsonl"))
 	}
-	// ReadDir returns sorted ascending; reverse for newest-first.
-	for i, j := 0, len(ids)-1; i < j; i, j = i+1, j-1 {
-		ids[i], ids[j] = ids[j], ids[i]
+	// Sealed runs are still runs. A reader listing only loose files would show
+	// history silently shrinking as retention advances.
+	months, err := Months()
+	if err != nil {
+		return nil, err
 	}
+	seen := map[string]bool{}
+	for _, id := range ids {
+		seen[id] = true
+	}
+	for _, m := range months {
+		idx, err := LoadIndex(m)
+		if err != nil {
+			return nil, err
+		}
+		for _, e := range idx {
+			if !seen[e.RunID] {
+				seen[e.RunID] = true
+				ids = append(ids, e.RunID)
+			}
+		}
+	}
+	// IDs are timestamp-prefixed, so lexical descending is chronological.
+	sort.Sort(sort.Reverse(sort.StringSlice(ids)))
 	return ids, nil
 }

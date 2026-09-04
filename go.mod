@@ -9,6 +9,7 @@ require (
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/charmbracelet/x/ansi v0.10.1
+	github.com/klauspost/compress v1.19.0
 	github.com/mattn/go-isatty v0.0.22
 	github.com/spf13/cobra v1.10.2
 	golang.org/x/sync v0.19.0
