@@ -142,7 +142,7 @@ pre .c{color:var(--faint);} pre .fl{color:var(--aqua);} pre .k{color:var(--viole
 .term .bar i{width:11px;height:11px;border-radius:50%;display:inline-block;}
 .term .bar .d1{background:#ff5f57;}.term .bar .d2{background:#febc2e;}.term .bar .d3{background:#28c840;}
 .term .bar .ttl{margin-left:10px;font-family:var(--mono);font-size:11.5px;color:var(--faint);}
-.term pre{margin:0;border:0;border-radius:0;background:transparent;font-size:12.5px;line-height:1.62;}
+.term pre{margin:0;border:0;border-radius:0;background:transparent;font-size:12.5px;line-height:1.62;overflow-x:auto;}
 .tg{color:var(--cheap);}.tc{color:var(--cyan);}.tv{color:var(--violet);}.ta{color:var(--aqua);}
 .td{color:var(--dim);}.tm{color:var(--magenta);}.tr{color:var(--exp);}.tf{color:var(--faint);}.ty{color:var(--mid);}
 .tabs{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap;}
@@ -384,69 +384,130 @@ go build -o hyctl ./cmd/hydra</pre>
     <!-- ══ TUI ══ -->
     <section class="doc" id="tui">
       <h2><span class="cmd">hyctl tui</span> <span class="badge ship">shipped</span> <span class="tagline">interactive cockpit</span></h2>
-      <p class="sum">A terminal cockpit you <b>operate</b> — type a task, press enter, watch it route. <b>Tab</b> cycles four views. Everything below is a real <span class="fx">hyctl tui --snapshot</span> frame.</p>
+      <p class="sum">A terminal cockpit you <b>operate</b> — type a task, press enter, and it runs. <b>Tab</b> cycles six views: Chat, Agents, Models, Activity, Usage, Audit. Every frame below is a real <span class="fx">hyctl tui --snapshot</span>, rendered by the binary itself.</p>
       <div class="tabs" role="tablist">
-        <button class="tab on" data-pane="tui0" role="tab">chat + code</button>
-        <button class="tab" data-pane="tui1" role="tab">dashboard</button>
-        <button class="tab" data-pane="tui2" role="tab">agent tree</button>
+        <button class="tab on" data-pane="tui0" role="tab">chat</button>
+        <button class="tab" data-pane="tui1" role="tab">models</button>
+        <button class="tab" data-pane="tui2" role="tab">audit</button>
       </div>
 
       <div class="panes" id="tuiPanes">
       <div class="pane on" id="tui0">
         <div class="term">
-          <div class="bar"><i class="d1"></i><i class="d2"></i><i class="d3"></i><span class="ttl">HYDRA ▸ chat + code</span></div>
-<pre><span class="ty">❯</span> rotate the signing key in internal/auth/token.go
-  <span class="td">prompt</span> <span class="ta">→</span> CORE <span class="ta">→</span> <span class="td">T1</span> <span class="ta">→</span> <span class="tv">agy · claude</span>
-  <span class="td">blast</span>  <span class="tr">κ=3.1 ⚠</span>  12 dependents <span class="ta">→</span> confidence bar raised to 0.95
-  <span class="td">conf</span>   <span class="tc">0.98</span> <span class="tf">/ target 0.95 · SPRT</span> <span class="tg">accept</span>
-  <span class="tg">✔ done</span> <span class="tf">· saved</span> <span class="tg">$0.0149</span> <span class="tf">vs all-frontier</span>
-
-  <span class="tf">CODE · go ─────────────────────────────</span>
-  <span class="tv">func</span> <span class="tc">RotateSigningKey</span>(ctx <span class="tv">context</span>.Context) <span class="tv">error</span> {
-      next, err := <span class="tc">GenerateKey</span>()
-      ks.<span class="tc">Stage</span>(next)          <span class="tf">// new key live</span>
-      ks.<span class="tc">Retire</span>(ks.<span class="tc">Active</span>()) <span class="tf">// old key out</span>
-      <span class="tv">return</span> ks.<span class="tc">Commit</span>(ctx)
-  }</pre>
+          <div class="bar"><i class="d1"></i><i class="d2"></i><i class="d3"></i><span class="ttl">HYDRA ▸ chat</span></div>
+<pre> <span class="tv">HYDRA</span>  chat  agents  models  activity  usage  audit          session <span class="tg">$0.0000</span> · context <span class="tf">▱▱▱▱▱▱▱▱</span> 0%
+<span class="tf">────────────────────────────────────────────────────────────────────────────────────────────────────</span>
+CONTEXT BUDGET       <span class="tf">│</span> 🐉 Hydra initialised · 15 models      <span class="tf">│</span> CODE · go
+<span class="tf">░░░░░░░░░░░░░░░</span>      <span class="tf">│</span> scanned · routing engine ready.       <span class="tf">│</span>   1 // paginated users endpoint
+claude 0%            <span class="tf">│</span> Type a task and press <span class="ta">enter</span>. <span class="ta">shift+tab</span><span class="tf">│</span>   2 func (s *Server) ListUsers(w ht…
+                     <span class="tf">│</span> mode · <span class="ta">ctrl+o</span> route · ? shortcuts · :q<span class="tf">│</span>   3     page := parsePage(r.URL.Que…
+MODELS               <span class="tf">│</span> quits.                                <span class="tf">│</span>   4     users, err := s.repo.Users(…
+ <span class="tg">✓</span> Claude Code       <span class="tf">│</span> ❯ add pagination to the users endpoint<span class="tf">│</span>   5     if err != nil {
+ <span class="tg">✓</span> Claude Opus 4.…   <span class="tf">│</span>   auto-routed · standard work → <span class="tv">T7</span>    <span class="tf">│</span>   6         http.Error(w, err.Error…
+ <span class="tg">✓</span> OpenAI Codex      <span class="tf">│</span> qwen2.5-coder · single                <span class="tf">│</span>   7         return
+ <span class="tg">✓</span> Claude Sonnet …   <span class="tf">│</span>   why code edit, standard scope, no   <span class="tf">│</span>   8     }
+ <span class="tg">✓</span> Gemini 2.0 Fla…   <span class="tf">│</span> PII                                   <span class="tf">│</span>   9     json.NewEncoder(w).Encode(u…
+ <span class="tg">✓</span> Antigravity       <span class="tf">│</span>   plan <span class="tg">✓</span> 3 steps · edit <span class="tg">✓</span> users.go    <span class="tf">│</span>  10 }
+ <span class="tg">✓</span> …1 Pro (High)     <span class="tf">│</span> +24/−6 · tests <span class="tg">✓</span> go test ./...        <span class="tf">│</span>
+ <span class="tg">✓</span> …1 Pro (Low)      <span class="tf">│</span>   d diff · x undo · o open — on an    <span class="tf">│</span>
+ <span class="tg">✓</span> …5 Flash (High)   <span class="tf">│</span> empty input                           <span class="tf">│</span>
+ <span class="tg">✓</span> …5 Flash (Medi…   <span class="tf">│</span>   <span class="tg">✓</span> done 3.2s · <span class="tg">$0.0041</span> est · trace   <span class="tf">│</span>
+ <span class="tg">✓</span> …5 Flash (Low)    <span class="tf">│</span> demo0000 — <span class="ta">enter</span> opens the trace      <span class="tf">│</span>
+ <span class="tg">✓</span> Qwen2.5-Coder:…   <span class="tf">│</span>                                       <span class="tf">│</span>
+ <span class="tg">✓</span> qwen3:0.6b (Ol…   <span class="tf">│</span>                                       <span class="tf">│</span>
+ <span class="tr">✗</span> Ollama            <span class="tf">│</span>                                       <span class="tf">│</span>
+ <span class="tr">✗</span> nomic-embed-te…   <span class="tf">│</span>                                       <span class="tf">│</span>
+                     <span class="tf">│</span>                                       <span class="tf">│</span>
+MODE                 <span class="tf">│</span>                                       <span class="tf">│</span>
+ auto                <span class="tf">│</span>                                       <span class="tf">│</span>
+                     <span class="tf">│</span> <span class="tf">╭────────────────────────────────────╮│</span>
+                     <span class="tf">│</span> <span class="tf">│</span>  Auto <span class="tf">▾</span>  what do you need done? —  <span class="tf">││</span>
+                     <span class="tf">│</span> <span class="tf">│</span> <span class="ta">enter</span> runs it                      <span class="tf">││</span>
+                     <span class="tf">│</span> <span class="tf">╰────────────────────────────────────╯│</span>
+ <span class="ta">enter</span> send  <span class="ta">shift+tab</span> mode  <span class="ta">ctrl+o</span> route  ? shortcuts                       mode auto · route auto</pre>
         </div>
       </div>
 
       <div class="pane" id="tui1">
         <div class="term">
-          <div class="bar"><i class="d1"></i><i class="d2"></i><i class="d3"></i><span class="ttl">HYDRA ▸ dashboard</span></div>
-<pre><span class="tf">FLEET PULSE · heads</span>
- <span class="tv">agy · claude</span>   <span class="tg">● up</span>  T1   ▇▁▄▃▆▄▆▃▅▅▄▆  <span class="tc">0.94</span>
- <span class="tc">gemini pro</span>     <span class="tg">● up</span>  T5   ▂▅▂▂▇▁█▅▆▆█▄  <span class="tc">0.80</span>
- <span class="tc">gemini flash</span>   <span class="tg">● up</span>  T8   ▆▅▁█▂▁▅▇▆▇▄▃  <span class="tc">0.80</span>
- <span class="tg">qwen · local</span>   <span class="tg">● up</span>  T10  ▃█▂▇▅▅▅▂▇▁▁▃  <span class="tc">0.74</span>
+          <div class="bar"><i class="d1"></i><i class="d2"></i><i class="d3"></i><span class="ttl">HYDRA ▸ models</span></div>
+<pre> <span class="tv">HYDRA</span>  chat  agents  models  activity  usage  audit          session <span class="tg">$0.0000</span> · context <span class="tf">▱▱▱▱▱▱▱▱</span> 0%
+<span class="tf">────────────────────────────────────────────────────────────────────────────────────────────────────</span>
+<span class="tf">╭──────────────────────────────────────────────────────────────────╮</span> <span class="tf">╭─────────────────────────────╮</span>
+<span class="tf">│</span> MODELS · by provider/server                                      <span class="tf">│</span> <span class="tf">│</span> SERVER                      <span class="tf">│</span>
+<span class="tf">│</span>                                                                  <span class="tf">│</span> <span class="tf">│</span>                             <span class="tf">│</span>
+<span class="tf">│</span> <span class="tf">▸</span> <span class="tf">▾</span> <span class="ta">●</span> anthropic                  1 model                         <span class="tf">│</span> <span class="tf">│</span>  anthropic                  <span class="tf">│</span>
+<span class="tf">│</span>      <span class="ta">●</span> Claude Code             <span class="tv">T1</span>                                <span class="tf">│</span> <span class="tf">│</span>                             <span class="tf">│</span>
+<span class="tf">│</span>   <span class="tf">▾</span> <span class="ta">●</span> antigravity                9 models                        <span class="tf">│</span> <span class="tf">│</span>  models      1 (1 routable) <span class="tf">│</span>
+<span class="tf">│</span>      <span class="ta">●</span> Claude Opus 4.6 (Thin…  <span class="tv">T2</span>                                <span class="tf">│</span> <span class="tf">│</span>  state       up             <span class="tf">│</span>
+<span class="tf">│</span>      <span class="ta">●</span> Claude Sonnet 4.6 (Th…  <span class="tv">T3</span>                                <span class="tf">│</span> <span class="tf">╰─────────────────────────────╯</span>
+<span class="tf">│</span>      <span class="ta">●</span> Gemini 2.0 Flash Thin…  <span class="tv">T4</span>                                <span class="tf">│</span>
+<span class="tf">│</span>      <span class="ta">●</span> Antigravity             <span class="tv">T4</span>                                <span class="tf">│</span>
+<span class="tf">│</span>      <span class="ta">●</span> Gemini 3.1 Pro (High)   <span class="tv">T5</span>                                <span class="tf">│</span>
+<span class="tf">│</span>      <span class="ta">●</span> Gemini 3.1 Pro (Low)    <span class="tv">T6</span>                                <span class="tf">│</span>
+<span class="tf">│</span>      <span class="ta">●</span> …3.5 Flash (High)       <span class="tv">T7</span>                                <span class="tf">│</span>
+<span class="tf">│</span>      <span class="ta">●</span> …3.5 Flash (Medium)     <span class="tv">T8</span>                                <span class="tf">│</span>
+<span class="tf">│</span>      <span class="ta">●</span> …3.5 Flash (Low)        <span class="tv">T9</span>                                <span class="tf">│</span>
+<span class="tf">│</span>   <span class="tf">▾</span> <span class="ta">●</span> openai                     1 model                         <span class="tf">│</span>
+<span class="tf">│</span>      <span class="ta">●</span> OpenAI Codex            <span class="tv">T3</span>                                <span class="tf">│</span>
+<span class="tf">│</span>   <span class="tf">▾</span> <span class="ta">●</span> Ollama                     3 models                        <span class="tf">│</span>
+<span class="tf">│</span>      <span class="ta">●</span> Qwen2.5-Coder:7b       <span class="tv">T10</span>                                <span class="tf">│</span>
+<span class="tf">│</span>      <span class="ta">●</span> qwen3:0.6b             <span class="tv">T10</span>                                <span class="tf">│</span>
+<span class="tf">│</span>      <span class="tf">◌</span> nomic-embed-text:late… <span class="tv">T10</span> embeddings only — never routed <span class="tf">│</span>
+<span class="tf">│</span>                                                                  <span class="tf">│</span>
+<span class="tf">│</span> <span class="ta">●</span> up · ○ down (children unavailable) · <span class="tf">◌</span> not routable            <span class="tf">│</span>
+<span class="tf">╰──────────────────────────────────────────────────────────────────╯</span>
 
- <span class="tf">SAVED vs all-frontier</span>   <span class="tg">$0.0149</span>      <span class="tf">CONFIDENCE</span>  <span class="tc">0.98</span> <span class="tf">/ 0.95</span>
- <span class="tf">GOVERNOR · claude_pct</span>   ███████████░░░░░░  <span class="ty">58%</span>  <span class="tf">band compact</span></pre>
+
+
+ <span class="ta">j/k</span> move  <span class="ta">enter</span> detail  space collapse  p pin  ? shortcuts               scanned 0s ago · r rescan</pre>
         </div>
       </div>
 
       <div class="pane" id="tui2">
         <div class="term">
-          <div class="bar"><i class="d1"></i><i class="d2"></i><i class="d3"></i><span class="ttl">HYDRA ▸ agent tree</span></div>
-<pre><span class="tf">AGENT TREE · supervision      ownership ─   A2A ┄</span>
-  <span class="tv">orchestrator</span>       T1   <span class="td">cortex · you · await ·</span> <span class="tc">0.71</span>
-  ├─ design          T3   <span class="tv">agy · claude</span> <span class="td">· returned ·</span> <span class="tc">0.93</span>
-<span class="ta">▸</span> ├─ token-rotation  T3   <span class="tv">agy · claude</span> <span class="td">· running  ·</span> <span class="tc">0.88</span>
-  │  ├─ worker-1     T6   <span class="tc">gemini pro</span> <span class="td">· returned ·</span> <span class="tc">0.91</span>
-  │  └─ worker-2     T8   <span class="tc">gemini flash</span> <span class="td">· running ·</span> <span class="ty">0.62</span>
-  └─ docs            T10  <span class="tg">qwen · local</span> <span class="td">· returned ·</span> <span class="tc">0.87</span>
-     <span class="tf">┄┄▶ A2A  token-rotation → tests  (files resolved +1 · context compacted)</span></pre>
+          <div class="bar"><i class="d1"></i><i class="d2"></i><i class="d3"></i><span class="ttl">HYDRA ▸ audit</span></div>
+<pre> <span class="tv">HYDRA</span>  chat  agents  models  activity  usage  audit          session <span class="tg">$0.0000</span> · context <span class="tf">▱▱▱▱▱▱▱▱</span> 0%
+<span class="tf">────────────────────────────────────────────────────────────────────────────────────────────────────</span>
+<span class="tf">╭──────────────────────────────────────────────────────────────────╮</span>
+<span class="tf">│</span> MODEL SCORECARD · calibration                                    <span class="tf">│</span>
+<span class="tf">│</span>                                                                  <span class="tf">│</span>
+<span class="tf">│</span>  source               domain      n  sens  spec  D nats          <span class="tf">│</span>
+<span class="tf">│</span>  claude               trust-b…   10  0.83  0.50    0.24          <span class="tf">│</span>
+<span class="tf">│</span>  qwen                 trust-b…    9  0.88  0.20    0.02          <span class="tf">│</span>
+<span class="tf">│</span>  claude               trust-b…    5  0.86  0.50    0.28          <span class="tf">│</span>
+<span class="tf">│</span>  ollama/Qwen2.5-Code… trust-b…    5  0.86  0.50    0.28          <span class="tf">│</span>
+<span class="tf">│</span>  qwen                 trust-b…    5  0.86  0.50    0.28          <span class="tf">│</span>
+<span class="tf">│</span>  test-src             test-do…    1  0.67  0.50    0.06          <span class="tf">│</span>
+<span class="tf">│</span>  verifier:go          gotest      1  0.67  0.50    0.06          <span class="tf">│</span>
+<span class="tf">│</span>                                                                  <span class="tf">│</span>
+<span class="tf">│</span>  consensus checks       0.50 mean confidence over 16             <span class="tf">│</span>
+<span class="tf">│</span>  cleared without review 0%                                       <span class="tf">│</span>
+<span class="tf">│</span>  same-family agreement  acme ×0.14 (J=0.86) — echo, not evidence <span class="tf">│</span>
+<span class="tf">╰──────────────────────────────────────────────────────────────────╯</span>
+<span class="tf">╭────────────────────────────────────────────╮</span>
+<span class="tf">│</span> AUDIT LOG                                  <span class="tf">│</span>
+<span class="tf">│</span>                                            <span class="tf">│</span>
+<span class="tf">│</span>  chain    <span class="tr">BROKEN</span> · 522 events, 486 chained <span class="tf">│</span>
+<span class="tf">│</span>  today    72 allowed · 0 denied            <span class="tf">│</span>
+<span class="tf">│</span>  all-time <span class="tf">████████████████████</span> 522         <span class="tf">│</span>
+<span class="tf">╰────────────────────────────────────────────╯</span>
+<span class="tf">╭──────────────────────────────────────────────────────────────╮</span>
+<span class="tf">│</span> GUARDRAILS                                                   <span class="tf">│</span>
+<span class="tf">│</span>                                                              <span class="tf">│</span>
+<span class="tf">↓ 9 more</span>
+ <span class="ta">j/k</span> move  <span class="ta">enter</span> resolve  v verify  i ignore  ? shortcuts           chain <span class="tr">BROKEN</span> · checked 07:33:20</pre>
         </div>
       </div>
       </div>
 
       <div class="sub"><div class="lbl">How it works</div>
-        <p><b>chat + code</b> shows the live routing decision and streams a snippet as the chosen head "writes." <b>dashboard</b> shows per-head sparklines, cost saved vs your priciest head, confidence, and a band-colored governor gauge. <b>agent tree</b> is the recursive supervision tree with A2A handoffs and <span class="fx">↑/↓</span> node inspection.</p>
+        <p><b>Chat</b> executes: the route line names the tier, model and strategy the router picked and why, then the proof strip reports what the run planned, edited and verified. <span class="fx">shift+tab</span> cycles the modes — Auto (plan → edit → run your tests → fix → repeat), Plan, Edit, Ask — and <span class="fx">ctrl+o</span> overrides where the next task runs without changing what it does. <b>Models</b> is the discovered estate by provider, each head at its routing tier, with a server's children greyed when the server itself is down. <b>Audit</b> carries the calibration scorecard, the hash-chained log's integrity, the guardrails actually in force, and anything waiting on a human. <b>Agents</b>, <b>Activity</b> and <b>Usage</b> cover work in flight, per-run traces, and where the money went. <span class="fx">?</span> lists every key, rendered from the keymap itself so it cannot drift.</p>
       </div>
       <div class="sub"><div class="lbl">Keys &amp; usage</div>
         <pre>hyctl tui
-<span class="c"># Tab cycle views · ↑/↓ select tree node · : commands · :q quit</span>
-hyctl tui <span class="fl">--snapshot</span> <span class="fl">--view</span> 0|1|2   <span class="c"># render one static frame</span></pre>
+<span class="c"># tab cycles views · shift+tab modes · ctrl+o routing · ? all keys · :q quit</span>
+hyctl tui <span class="fl">--snapshot</span> <span class="fl">--view</span> 0..5   <span class="c"># render one static frame</span></pre>
       </div>
     </section>
 
