@@ -203,8 +203,14 @@ func Load(runID string) ([]Event, error) {
 	if len(events) > 0 {
 		return events, nil
 	}
-	sealed, ok, serr := loadSealed(runID)
-	if serr != nil || !ok {
+	sealed, ok, err := loadSealed(runID)
+	if err != nil {
+		// A damaged segment must not read back as a run that did nothing —
+		// that is the "incomplete rendered as complete" failure LoadCounted
+		// exists to avoid, and sealing must not reintroduce it.
+		return nil, err
+	}
+	if !ok {
 		return events, nil
 	}
 	return sealed, nil

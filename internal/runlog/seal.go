@@ -80,29 +80,14 @@ func isDigits(s string) bool {
 // month is left alone rather than filed somewhere arbitrary.
 func Seal(age time.Duration) (SealResult, error) {
 	var res SealResult
-	entries, err := os.ReadDir(Dir())
+	candidates, err := SealCandidates(age)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return res, nil
-		}
 		return res, err
 	}
-	cutoff := time.Now().Add(-age)
 
 	byMonth := map[string][]string{}
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".jsonl") {
-			continue
-		}
-		info, err := e.Info()
-		if err != nil || info.ModTime().After(cutoff) {
-			continue // still recent, or unreadable: leave it alone
-		}
-		runID := strings.TrimSuffix(e.Name(), ".jsonl")
+	for _, runID := range candidates {
 		m := monthOf(runID)
-		if m == "" {
-			continue
-		}
 		byMonth[m] = append(byMonth[m], runID)
 	}
 	if len(byMonth) == 0 {
@@ -324,9 +309,9 @@ func loadSealed(runID string) ([]Event, bool, error) {
 	return nil, false, nil
 }
 
-// SealCandidates lists loose runs older than age — exactly what a Seal would
-// act on. Exposed so `--dry-run` reports the real selection rather than a
-// re-implementation that could drift from it.
+// SealCandidates lists loose runs older than age. Seal calls it to choose what
+// to fold in, so `--dry-run` reporting the same list is the same code, not a
+// mirror of it that could drift.
 //
 // Not to be confused with LiveRuns in heartbeat.go, which reports runs that are
 // currently *active*; these are the opposite, the ones old enough to archive.

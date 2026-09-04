@@ -265,3 +265,200 @@ func TestSegmentFilesLandInSegDir(t *testing.T) {
 		}
 	}
 }
+
+// The dry-run listing and the seal itself must never disagree about what is old
+// enough to archive — they are one function precisely so they cannot.
+func TestSealCandidatesAreExactlyWhatSealActsOn(t *testing.T) {
+	tempHome(t)
+	old := []string{runID("202601", 1), runID("202602", 2), runID("202603", 3)}
+	for _, id := range old {
+		writeRun(t, id, 2, 48*time.Hour)
+	}
+	fresh := runID("202604", 4)
+	writeRun(t, fresh, 2, 0)
+
+	got, err := SealCandidates(24 * time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != len(old) {
+		t.Fatalf("candidates = %v, want the %d back-dated runs", got, len(old))
+	}
+	for i, id := range old {
+		if got[i] != id {
+			t.Errorf("candidate %d = %q, want %q (sorted)", i, got[i], id)
+		}
+	}
+
+	res, err := Seal(24 * time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Runs != len(got) {
+		t.Errorf("Seal folded %d runs but SealCandidates listed %d", res.Runs, len(got))
+	}
+	if res.Months != 3 {
+		t.Errorf("Months = %d, want 3 — one segment per calendar month", res.Months)
+	}
+	if _, err := os.Stat(Path(fresh)); err != nil {
+		t.Errorf("the fresh run was sealed: %v", err)
+	}
+}
+
+func TestSealCandidatesSkipsRecentAndUnparseable(t *testing.T) {
+	tempHome(t)
+	writeRun(t, runID("202601", 1), 1, 48*time.Hour)
+	writeRun(t, "no-month-prefix", 1, 48*time.Hour)
+	writeRun(t, runID("202601", 2), 1, 0)
+
+	got, err := SealCandidates(24 * time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0] != runID("202601", 1) {
+		t.Fatalf("candidates = %v, want only the back-dated well-formed run", got)
+	}
+}
+
+func TestSealCandidatesNoDirectoryIsEmpty(t *testing.T) {
+	tempHome(t)
+	got, err := SealCandidates(time.Hour)
+	if err != nil {
+		t.Fatalf("a machine that has never run anything is not an error: %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("candidates = %v, want none", got)
+	}
+}
+
+// Months backs the segment listing; newest-first is what a reader renders.
+func TestMonthsListsSegmentsNewestFirst(t *testing.T) {
+	tempHome(t)
+	for i, m := range []string{"202601", "202603", "202602"} {
+		writeRun(t, runID(m, i), 1, 48*time.Hour)
+	}
+	if _, err := Seal(24 * time.Hour); err != nil {
+		t.Fatal(err)
+	}
+	got, err := Months()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"2026-03", "2026-02", "2026-01"}
+	if len(got) != len(want) {
+		t.Fatalf("Months = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("Months = %v, want %v", got, want)
+		}
+	}
+}
+
+func TestMonthsNoSegDirIsEmpty(t *testing.T) {
+	tempHome(t)
+	got, err := Months()
+	if err != nil {
+		t.Fatalf("no segments yet is not an error: %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("Months = %v, want none", got)
+	}
+}
+
+// A torn index line must cost only its own run, not the whole month. The index
+// is appended to per run, so a crash mid-write leaves exactly this.
+func TestLoadIndexSkipsATornLineAndKeepsTheRest(t *testing.T) {
+	tempHome(t)
+	id := runID("202601", 1)
+	writeRun(t, id, 3, 48*time.Hour)
+	if _, err := Seal(24 * time.Hour); err != nil {
+		t.Fatal(err)
+	}
+	f, err := os.OpenFile(filepath.Join(SegDir(), "2026-01.idx"), os.O_APPEND|os.O_WRONLY, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.WriteString("{\"run_id\": tru\n\n"); err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+
+	idx, err := LoadIndex("2026-01")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(idx) != 1 || idx[0].RunID != id {
+		t.Fatalf("index = %+v, want just the one intact entry for %q", idx, id)
+	}
+	// The intact run must still read back, which is the point of skipping.
+	events, err := Load(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 3 {
+		t.Errorf("got %d events, want 3", len(events))
+	}
+}
+
+func TestLoadIndexMissingMonthIsNotAnError(t *testing.T) {
+	tempHome(t)
+	idx, err := LoadIndex("1999-12")
+	if err != nil {
+		t.Fatalf("a month never sealed is not an error: %v", err)
+	}
+	if idx != nil {
+		t.Errorf("index = %+v, want nil", idx)
+	}
+}
+
+// A corrupt segment must surface as an error, never as a run with no events —
+// silently rendering a sealed run as empty is the failure mode that matters.
+func TestLoadReportsACorruptSegmentRatherThanEmptyingIt(t *testing.T) {
+	tempHome(t)
+	id := runID("202601", 1)
+	writeRun(t, id, 4, 48*time.Hour)
+	if _, err := Seal(24 * time.Hour); err != nil {
+		t.Fatal(err)
+	}
+	seg := filepath.Join(SegDir(), "2026-01.zst")
+	raw, err := os.ReadFile(seg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := range raw {
+		raw[i] ^= 0xFF
+	}
+	if err := os.WriteFile(seg, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(id); err == nil {
+		t.Error("Load returned no error for a corrupt segment; a truncated history must be loud")
+	}
+}
+
+// The index says a run is in the segment; the segment file is gone. Reporting
+// that is the difference between "history is damaged" and "this run was empty".
+func TestLoadReportsAMissingSegmentBehindAnIndex(t *testing.T) {
+	tempHome(t)
+	id := runID("202601", 1)
+	writeRun(t, id, 2, 48*time.Hour)
+	if _, err := Seal(24 * time.Hour); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(SegDir(), "2026-01.zst")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(id); err == nil {
+		t.Error("Load returned no error when the segment behind the index was gone")
+	}
+}
+
+// onDiskSize feeds the reclaimed-bytes figure the CLI prints; a vanished file
+// must contribute nothing rather than a garbage number.
+func TestOnDiskSizeOfAMissingFileIsZero(t *testing.T) {
+	tempHome(t)
+	if got := onDiskSize(filepath.Join(t.TempDir(), "absent")); got != 0 {
+		t.Errorf("onDiskSize = %d, want 0", got)
+	}
+}
