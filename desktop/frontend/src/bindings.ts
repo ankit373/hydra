@@ -15,6 +15,7 @@ import type {
   HyctlStatus,
   InstallResult,
   ModelRegistry,
+  ReviewOutcome,
   QuestionQueue,
   SecurityReport,
   Session,
@@ -31,6 +32,8 @@ interface WailsGo {
       GetSession(runID: string): Promise<Session>
       GetEdits(runID: string): Promise<Edit[]>
       Chat(prompt: string, enumKey: string, runID: string, tier: string): Promise<ChatReply>
+      ApproveEdit(file: string): Promise<ReviewOutcome>
+      RejectEdit(file: string): Promise<ReviewOutcome>
       GetPendingQuestions(): Promise<QuestionQueue>
       AnswerQuestion(taskID: string, answer: string): Promise<ChatReply>
       DeclineQuestion(taskID: string, reason: string): Promise<void>
@@ -74,6 +77,10 @@ export const Chat = (
   runID: string,
   tier: string,
 ): Promise<ChatReply> => backend().Chat(prompt, enumKey, runID, tier)
+
+export const ApproveEdit = (file: string): Promise<ReviewOutcome> => backend().ApproveEdit(file)
+
+export const RejectEdit = (file: string): Promise<ReviewOutcome> => backend().RejectEdit(file)
 
 export const GetPendingQuestions = (): Promise<QuestionQueue> => backend().GetPendingQuestions()
 
