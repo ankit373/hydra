@@ -218,6 +218,42 @@ export interface DiffLine {
   spans?: Span[]
 }
 
+/** One MCP server installed on this machine. Identity only, by construction. */
+export interface MCPServer {
+  name: string
+  client: string
+  scope: string
+  command?: string
+  package?: string
+  remote: boolean
+  /** "verified" or "unresolved". With no sync, everything is unresolved. */
+  status: string
+  state?: string
+  /** False when no score exists, so the view says "not scored" rather than 0. */
+  scored: boolean
+  score: number
+  confidence?: string
+  /** Closest known identifier and its edit distance — the typosquat signal. */
+  nearestMatch?: string
+  nearestDist?: number
+}
+
+/** What this machine can let an agent call, and what is known about it. */
+export interface MCPPanel {
+  servers: MCPServer[]
+  /** When the official registry was last pulled; empty means never, and then
+   *  every server reads unresolved for that reason alone. */
+  synced?: string
+  /** False when the audit could not run, so [] does not read as "none installed". */
+  scanned: boolean
+  error?: string
+}
+
+export interface MCPSyncResult {
+  servers: number
+  error?: string
+}
+
 /** The result of accepting or undoing one edit. */
 export interface ReviewOutcome {
   file: string

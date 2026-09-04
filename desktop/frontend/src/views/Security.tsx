@@ -27,6 +27,7 @@ import type {
   Trend,
 } from '../types'
 import { clockTime, coverageBand, costBand, toSecurityCSV } from '../format'
+import { MCPServers } from './MCPServers'
 import {
   CategoryGrid,
   CoverageHistory,
@@ -382,6 +383,7 @@ const DETAIL_TABS = [
   { id: 'threats', label: 'Threats' },
   { id: 'access', label: 'Access' },
   { id: 'estate', label: 'Estate' },
+  { id: 'mcp', label: 'MCP servers' },
   { id: 'evidence', label: 'Evidence' },
   { id: 'attest', label: 'Attestation' },
 ] as const
@@ -448,6 +450,7 @@ function Detailed({ data }: { data: SecurityReport }) {
       {tab === 'threats' && <ThreatsView threats={data.threats} />}
       {tab === 'access' && <PrivilegeView rows={data.privilege ?? []} />}
       {tab === 'estate' && <BOMView entries={data.bom ?? []} />}
+      {tab === 'mcp' && <MCPServers />}
       {tab === 'evidence' && <EvidenceView events={data.events ?? []} truncated={!!data.truncated} />}
       {tab === 'attest' && <AttestationView a={data.attestation} />}
     </>

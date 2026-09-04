@@ -14,6 +14,8 @@ import type {
   Fleet,
   HyctlStatus,
   InstallResult,
+  MCPPanel,
+  MCPSyncResult,
   ModelRegistry,
   ReviewOutcome,
   QuestionQueue,
@@ -34,6 +36,8 @@ interface WailsGo {
       Chat(prompt: string, enumKey: string, runID: string, tier: string): Promise<ChatReply>
       ApproveEdit(file: string): Promise<ReviewOutcome>
       RejectEdit(file: string): Promise<ReviewOutcome>
+      GetMCPServers(): Promise<MCPPanel>
+      SyncMCPRegistry(): Promise<MCPSyncResult>
       GetPendingQuestions(): Promise<QuestionQueue>
       AnswerQuestion(taskID: string, answer: string): Promise<ChatReply>
       DeclineQuestion(taskID: string, reason: string): Promise<void>
@@ -81,6 +85,10 @@ export const Chat = (
 export const ApproveEdit = (file: string): Promise<ReviewOutcome> => backend().ApproveEdit(file)
 
 export const RejectEdit = (file: string): Promise<ReviewOutcome> => backend().RejectEdit(file)
+
+export const GetMCPServers = (): Promise<MCPPanel> => backend().GetMCPServers()
+
+export const SyncMCPRegistry = (): Promise<MCPSyncResult> => backend().SyncMCPRegistry()
 
 export const GetPendingQuestions = (): Promise<QuestionQueue> => backend().GetPendingQuestions()
 
