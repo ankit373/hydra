@@ -798,9 +798,29 @@ internal/update/update.go     ← startup update checker (24h cache)
                                        from "Closes #n" in each PR body (#217). Its resolver
                                        is close_shipped_issues.py beside it.
 .github/workflows/sync-develop.yml   ← fires on main push → back-merge PR (main → develop).
-                                       FAILS loudly on conflict; a red run here means develop
+                                       FAILS loudly on conflict, and also when the PR it opened
+                                       cannot merge (#670). Either way a red run means develop
                                        is behind main and a release cut will not merge cleanly.
 ```
+
+**The back-merge PR cannot merge itself, and needs one of your commits.** Two independent
+reasons, both invisible on the PR: it is opened by `github-actions[bot]`, whose events start no
+workflow runs, so its required checks are *expected* and never arrive; and it carries
+release-please's **unsigned** commit, which `develop` rejects — `required_signatures` with
+`enforce_admins: true`, so `--admin` does not help and the refusal reads "the base branch policy
+prohibits the merge" while every check is green.
+
+Until a `BACK_MERGE_TOKEN` secret exists (a PAT whose account also signs), land it by hand:
+
+```bash
+git fetch origin chore/back-merge-main
+git checkout -B backmerge origin/chore/back-merge-main
+git commit -S --allow-empty -m "chore: sign and trigger the back-merge"
+git push origin HEAD:chore/back-merge-main
+```
+
+Skipping it leaves develop without the version bump, and the next release computes off a stale
+manifest — the #215 failure mode.
 
 ---
 
