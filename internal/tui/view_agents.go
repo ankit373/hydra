@@ -55,6 +55,11 @@ func (m Cockpit) viewAgents(w, h int) string {
 		if task == "" {
 			task = "(task not recorded)"
 		}
+		// A run owned by a backgrounded chat thread is that thread, re-parented
+		// here (#598) — name it, and let enter pull it back into chat.
+		if t := m.threadForRun(r.id); t != nil && t.bg {
+			task = fmt.Sprintf("thread %d · %s", t.id, task)
+		}
 		line := marker + ckStatusGlyph(r.status) + " " + section + ckFaintS.Render(ckCell(ckShortID(r.id), 8)) + " " +
 			ckInkS.Bold(i == sel).Render(ckCell(ckSafe(task), ckAgentTaskW)) + " "
 		if r.live {
@@ -65,7 +70,7 @@ func (m Cockpit) viewAgents(w, h int) string {
 		lines[i] = line
 	}
 	b.WriteString(strings.Join(ckSelScroll(lines, sel, avail), "\n"))
-	b.WriteString("\n\n" + ckFaintS.Render(" enter opens the run's trace in activity"))
+	b.WriteString("\n\n" + ckFaintS.Render(" enter opens the run's trace · a backgrounded thread's run returns to chat"))
 	return lipgloss.NewStyle().Width(w).Height(h).Padding(0, 1).Render(b.String())
 }
 

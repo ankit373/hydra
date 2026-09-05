@@ -71,6 +71,11 @@ func ckFrame(body string, w, h int) string {
 			lines[i] = ansi.Truncate(l, w, "…")
 		}
 	}
+	// Pad as well as clamp: a body shorter than the frame would otherwise let
+	// the status bar render wherever the content happened to end (#630).
+	for len(lines) < h {
+		lines = append(lines, "")
+	}
 	return strings.Join(lines, "\n")
 }
 
@@ -123,16 +128,53 @@ func ckDistinctTruncate(names []string, width int) []string {
 		for j, i := range fam {
 			set[j] = names[i]
 		}
-		prefix := ckCommonPrefix(set)
+		cut := ckFamilyCut(set, ckCommonPrefix(set), width)
+		if cut <= 0 {
+			continue
+		}
+		// One cut for the whole family: a sibling that happens to fit keeps its
+		// full name otherwise, and the column reads as unrelated fragments.
 		for _, i := range fam {
-			r := []rune(names[i])
-			if lipgloss.Width(names[i]) <= width || prefix <= 0 || prefix >= len(r) {
-				continue // fits, or duplicates that cannot be told apart
-			}
-			out[i] = truncate("…"+string(r[prefix:]), width)
+			out[i] = truncate("…"+string([]rune(names[i])[cut:]), width)
 		}
 	}
 	return out
+}
+
+// ckFamilyCut is how many leading runes to drop from every member of a family
+// so its longest member fits. It prefers a word boundary inside the shared
+// prefix — "…3.5 Flash (Medium)" identifies the family, "…Medium)" does not —
+// and returns 0 when the family already fits or nothing can be cut.
+func ckFamilyCut(set []string, prefix, width int) int {
+	longest, shortest := 0, 1<<30
+	for _, s := range set {
+		if w := lipgloss.Width(s); w > longest {
+			longest = w
+		}
+		if n := len([]rune(s)); n < shortest {
+			shortest = n
+		}
+	}
+	if longest <= width || prefix <= 0 || prefix >= shortest {
+		return 0
+	}
+	// The ellipsis costs a cell, so the cut must free longest-width+1 cells.
+	need := longest - width + 1
+	r := []rune(set[0])
+	best := 0
+	for i := 1; i <= prefix; i++ {
+		if r[i-1] == ' ' && lipgloss.Width(string(r[:i])) >= need {
+			best = i
+			break
+		}
+	}
+	if best == 0 {
+		best = prefix // no word boundary deep enough — fall back to the prefix
+	}
+	if best >= shortest {
+		return 0
+	}
+	return best
 }
 
 // ckCommonPrefix is the rune length of the prefix every name shares.

@@ -615,7 +615,20 @@ Chat has **modes** — what a task does (`shift+tab` cycles the basics, `m` open
 
 Where a task runs is separate: `ctrl+o` overrides the **next** task's routing (auto / force tier / local only / best of 3 / consensus check at 90–99.9%). After an edit: `d` shows the diff, `x` restores the pre-task snapshot exactly, `o` opens the file, and the footer's trace id jumps into the activity view.
 
-Everything shown is measured from the machine's real logs — a figure that cannot be computed renders `—`, never an invented number. Lists scroll (`j/k`, `pgup/pgdn`, mouse wheel); `hyctl tui --snapshot [--view 0..5]` prints static frames for docs and bug reports.
+Chat runs **parallel threads** — several tasks at once, safely:
+
+| Key | What it does |
+|---|---|
+| `ctrl+t` | New thread (a chip strip appears under the header: `⠸` running · `●` needs you · `✓` done · `◱` queued) |
+| `alt+1–9` | Jump to that thread; `ctrl+←/→` cycles them; the input bar labels its target (`→ thread 2`) |
+| `ctrl+\` | Split: pin a second thread beside the active one (needs ≥100 cols); `ctrl+←/→` moves focus, each side scrolls on its own |
+| `ctrl+b` | Background the thread into the **agents** view — it keeps running and pings chat (`hydra ▸`) when it finishes or needs you |
+| `ctrl+g` | Jump to the next thread needing input (plan gates, confirms, failures); the status bar counts `⠸ running · ● needs you · ◱ queued` |
+| `a` / `x x` | Apply an isolated thread's worktree back to your tree / discard it (twice — it deletes the thread's edits) |
+
+**Isolation**: read-only work shares your checkout; each edit-capable thread gets its own git worktree (`~/.hydra/worktrees/tN-…`, branch `hydra/task-tN-…`) cut from your repo — the header shows `worktree tN-… · merges on apply`. `a` merges it back with standard git: clean applies stage the diff; a divergence leaves ordinary `<<<<<<<` conflict markers (the branch is kept until you resolve); and **unsaved** edits of your own to a file the thread touched block the merge before it starts — nothing half-lands, and work that exists only in your editor is never merged over. Two threads editing the same (or graph-coupled) files never race: the second queues visibly (`◱ queued behind 1 · both touch <path>`) and auto-starts when the first applies or discards. Outside a git repo the TUI says so and runs edits one at a time, in place. Worktrees left behind by a crash are listed at startup, never auto-deleted. Terminal note: `alt+1–9` needs the option/alt key sending ESC (iTerm2: "Esc+"; Terminal.app: "Use Option as Meta key"), and `ctrl+b` is tmux's default prefix — rebind tmux or press `ctrl+b ctrl+b`.
+
+Everything shown is measured from the machine's real logs — a figure that cannot be computed renders `—`, never an invented number. Lists, overlays and the audit view all scroll (`j/k`, `↑/↓`, `pgup/pgdn`, mouse wheel), so nothing is reachable only by resizing the terminal; `hyctl tui --snapshot [--view 0..5]` prints static frames for docs and bug reports.
 
 ---
 
@@ -746,6 +759,7 @@ hydra/
 │   ├── review/                  # Code review / approve / reject / QA
 │   ├── util/                    # Shared utilities (bounded Accumulator, 33 MB cap)
 │   ├── sysinfo/                 # Hardware detection + 7-day memory history
+│   ├── payload/                 # Opt-in prompt/response store — packed, dictionary-compressed, redacted
 │   ├── runlog/                  # Per-run event log (~/.hydra/logs/runs/) + liveness heartbeat + edit snapshots
 │   │                            # Old runs seal into compressed monthly segments (logs/seg/)
 │   ├── tree/                    # Reconstructs a run: supervision tree + timeline, framework-free

@@ -38,7 +38,7 @@ func stubExec(t *testing.T) {
 		t.Fatal("ckEditStage used without a stub")
 		return nil, nil
 	}
-	ckVerifyStage = func(context.Context, []string) (oracle.Verdict, error) {
+	ckVerifyStage = func(context.Context, []string, string) (oracle.Verdict, error) {
 		t.Fatal("ckVerifyStage used without a stub")
 		return oracle.Verdict{}, nil
 	}
@@ -139,10 +139,10 @@ func TestExec_AskAnswersAccruesCostAndLinksTrace(t *testing.T) {
 
 	m := chatFixture("ask")
 	m, cmd := enter(typed(m, "explain the users endpoint"))
-	if m.exec == nil || cmd == nil {
+	if m.th().exec == nil || cmd == nil {
 		t.Fatal("submitting did not start a task")
 	}
-	joined := stripANSI(strings.Join(m.log, "\n"))
+	joined := stripANSI(strings.Join(m.th().log, "\n"))
 	if !strings.Contains(joined, "auto-routed") || !strings.Contains(joined, "single") {
 		t.Errorf("no route line before execution:\n%s", joined)
 	}
@@ -151,10 +151,10 @@ func TestExec_AskAnswersAccruesCostAndLinksTrace(t *testing.T) {
 	}
 
 	m = runCmds(t, m, cmd)
-	if m.exec != nil {
+	if m.th().exec != nil {
 		t.Fatal("exec still set after completion")
 	}
-	joined = stripANSI(strings.Join(m.log, "\n"))
+	joined = stripANSI(strings.Join(m.th().log, "\n"))
 	for _, want := range []string{"goroutines are cheap", "use them", "✓ done", "$0.0100", "trace"} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("result is missing %q:\n%s", want, joined)
@@ -163,7 +163,7 @@ func TestExec_AskAnswersAccruesCostAndLinksTrace(t *testing.T) {
 	if m.sessionUSD != 0.01 {
 		t.Errorf("sessionUSD = %v, want 0.01", m.sessionUSD)
 	}
-	if m.lastDone == nil || m.lastDone.answer == "" {
+	if m.th().lastDone == nil || m.th().lastDone.answer == "" {
 		t.Fatal("lastDone not recorded")
 	}
 
@@ -172,8 +172,8 @@ func TestExec_AskAnswersAccruesCostAndLinksTrace(t *testing.T) {
 	if m.view != ckViewActivity || !m.actDrill {
 		t.Fatalf("empty enter did not open the trace (view=%d drill=%v)", m.view, m.actDrill)
 	}
-	if got := m.activityRuns()[m.actSel].id; got != m.lastDone.runID {
-		t.Errorf("trace focused run %s, want %s", got, m.lastDone.runID)
+	if got := m.activityRuns()[m.actSel].id; got != m.th().lastDone.runID {
+		t.Errorf("trace focused run %s, want %s", got, m.th().lastDone.runID)
 	}
 }
 
@@ -187,7 +187,7 @@ func TestExec_FailureRendersErrorAndTrace(t *testing.T) {
 	m := chatFixture("ask")
 	m, cmd := enter(typed(m, "explain this"))
 	m = runCmds(t, m, cmd)
-	joined := stripANSI(strings.Join(m.log, "\n"))
+	joined := stripANSI(strings.Join(m.th().log, "\n"))
 	if !strings.Contains(joined, "✗ failed") || !strings.Contains(joined, "no heads answered") {
 		t.Errorf("failure not rendered:\n%s", joined)
 	}
@@ -207,21 +207,21 @@ func TestExec_EscCancelsRunningTask(t *testing.T) {
 	}
 	m := chatFixture("ask")
 	m, cmd := enter(typed(m, "explain this"))
-	if m.exec == nil {
+	if m.th().exec == nil {
 		t.Fatal("no task started")
 	}
 	m = press(m, tea.KeyEsc) // cancel — exec stays until the worker reports back
-	if m.exec == nil {
+	if m.th().exec == nil {
 		t.Fatal("esc cleared exec before the worker returned")
 	}
-	if got := m.exec.Stage(); !strings.Contains(got, "cancelling") {
+	if got := m.th().exec.Stage(); !strings.Contains(got, "cancelling") {
 		t.Errorf("stage = %q after esc", got)
 	}
 	m = runCmds(t, m, cmd)
-	if m.exec != nil {
+	if m.th().exec != nil {
 		t.Fatal("exec still set after the cancelled worker returned")
 	}
-	joined := stripANSI(strings.Join(m.log, "\n"))
+	joined := stripANSI(strings.Join(m.th().log, "\n"))
 	if !strings.Contains(joined, "✗ cancelled") {
 		t.Errorf("cancellation not rendered:\n%s", joined)
 	}
@@ -240,18 +240,18 @@ func TestExec_SubmitWhileRunningRefusesAndKeepsInput(t *testing.T) {
 	m, _ = enter(typed(m, "first task"))
 	m = typed(m, "second task")
 	m, _ = enter(m)
-	if m.input != "second task" {
-		t.Errorf("the queued text was lost: %q", m.input)
+	if m.th().input != "second task" {
+		t.Errorf("the queued text was lost: %q", m.th().input)
 	}
 	if m.flash == "" {
 		t.Error("no explanation for the refusal")
 	}
 	// esc with text clears the text; the task keeps running.
 	m = press(m, tea.KeyEsc)
-	if m.input != "" {
-		t.Errorf("esc did not clear the input: %q", m.input)
+	if m.th().input != "" {
+		t.Errorf("esc did not clear the input: %q", m.th().input)
 	}
-	if got := m.exec.Stage(); strings.Contains(got, "cancelling") {
+	if got := m.th().exec.Stage(); strings.Contains(got, "cancelling") {
 		t.Error("esc cancelled the task while clearing typed input")
 	}
 }
@@ -269,7 +269,7 @@ func TestExec_PIIForcesLocalBadgeAndOption(t *testing.T) {
 	m := chatFixture("ask")
 	m.piiLocal = true
 	m, cmd := enter(typed(m, "email bob@example.com the users report"))
-	joined := stripANSI(strings.Join(m.log, "\n"))
+	joined := stripANSI(strings.Join(m.th().log, "\n"))
 	if !strings.Contains(joined, "local-only (pii)") {
 		t.Errorf("no local-only badge on a PII prompt:\n%s", joined)
 	}
@@ -283,7 +283,7 @@ func TestExec_PIIForcesLocalBadgeAndOption(t *testing.T) {
 	// Without the config policy, the same prompt routes normally: no badge.
 	m2 := chatFixture("ask")
 	m2, _ = enter(typed(m2, "email bob@example.com the users report"))
-	if strings.Contains(stripANSI(strings.Join(m2.log, "\n")), "local-only (pii)") {
+	if strings.Contains(stripANSI(strings.Join(m2.th().log, "\n")), "local-only (pii)") {
 		t.Error("the badge showed with no local-only pii policy configured")
 	}
 }
@@ -307,7 +307,7 @@ func TestExec_EditModeEditsAndDXOWorkOffSnapshots(t *testing.T) {
 	if edits != 1 {
 		t.Fatalf("edit mode ran %d edits, want 1 (no plan step)", edits)
 	}
-	joined := stripANSI(strings.Join(m.log, "\n"))
+	joined := stripANSI(strings.Join(m.th().log, "\n"))
 	for _, want := range []string{"edit ✓ main.go +1/−1", "tests — skipped (edit mode)", "d diff · x undo · o open"} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("proof strip missing %q:\n%s", want, joined)
@@ -317,21 +317,21 @@ func TestExec_EditModeEditsAndDXOWorkOffSnapshots(t *testing.T) {
 		t.Fatalf("the file was not written: %q", raw)
 	}
 	// The code panel streams the real new content — the fake snippets are gone.
-	if !strings.Contains(strings.Join(m.codeLines, "\n"), "var new = 2") {
-		t.Errorf("the code panel does not hold the edited content: %v", m.codeLines)
+	if !strings.Contains(strings.Join(m.th().codeLines, "\n"), "var new = 2") {
+		t.Errorf("the code panel does not hold the edited content: %v", m.th().codeLines)
 	}
 
 	// d: diff on, from the snapshots; d again: back to the file.
 	m, _ = keyRune(m, 'd')
-	if !m.codeDiff {
+	if !m.th().codeDiff {
 		t.Fatal("d did not open the diff")
 	}
-	diffText := strings.Join(m.codeLines, "\n")
+	diffText := strings.Join(m.th().codeLines, "\n")
 	if !strings.Contains(diffText, "-var old = 1") || !strings.Contains(diffText, "+var new = 2") {
 		t.Errorf("the diff does not show the change:\n%s", diffText)
 	}
 	m, _ = keyRune(m, 'd')
-	if m.codeDiff {
+	if m.th().codeDiff {
 		t.Fatal("d did not toggle the diff off")
 	}
 
@@ -365,15 +365,15 @@ func TestExec_EditModeEditsAndDXOWorkOffSnapshots(t *testing.T) {
 func TestExec_DXOTypeWhenNothingToActOn(t *testing.T) {
 	m := testCockpit()
 	m = typed(m, "d")
-	if m.input != "d" || m.codeDiff {
-		t.Errorf("d with no last edit did not type: input=%q", m.input)
+	if m.th().input != "d" || m.th().codeDiff {
+		t.Errorf("d with no last edit did not type: input=%q", m.th().input)
 	}
-	m.input = ""
+	m.th().input = ""
 	ans := chatFixture("ask")
-	ans.lastDone = &ckTask{answer: "text only"} // finished, but nothing edited
+	ans.th().lastDone = &ckTask{answer: "text only"} // finished, but nothing edited
 	ans = typed(ans, "x")
-	if ans.input != "x" {
-		t.Errorf("x with an answer-only result did not type: %q", ans.input)
+	if ans.th().input != "x" {
+		t.Errorf("x with an answer-only result did not type: %q", ans.th().input)
 	}
 }
 
@@ -384,7 +384,7 @@ func TestExec_EditModeWithoutFileAnswersWithNote(t *testing.T) {
 	m := chatFixture("edit")
 	m, cmd := enter(typed(m, "rename the variable"))
 	m = runCmds(t, m, cmd)
-	joined := stripANSI(strings.Join(m.log, "\n"))
+	joined := stripANSI(strings.Join(m.th().log, "\n"))
 	if !strings.Contains(joined, "no file named — answered instead") {
 		t.Errorf("the no-file note is missing:\n%s", joined)
 	}
@@ -402,7 +402,7 @@ func TestExec_PlanApproveRunsTheRest(t *testing.T) {
 	ckDispatchStage = stubAnswer("1. read the file\n2. change it", 0)
 	ckEditStage = stubEdit("package main\n", "package main // edited\n")
 	verifies := 0
-	ckVerifyStage = func(context.Context, []string) (oracle.Verdict, error) {
+	ckVerifyStage = func(context.Context, []string, string) (oracle.Verdict, error) {
 		verifies++
 		return oracle.Verdict{Passed: true}, nil
 	}
@@ -410,23 +410,23 @@ func TestExec_PlanApproveRunsTheRest(t *testing.T) {
 	m := chatFixture("plan")
 	m, cmd := enter(typed(m, "add a comment to "+rel))
 	m = runCmds(t, m, cmd)
-	if m.planWait == nil {
+	if m.th().planWait == nil {
 		t.Fatal("no plan approval gate")
 	}
-	if m.exec != nil {
+	if m.th().exec != nil {
 		t.Fatal("exec still set while waiting on approval")
 	}
-	joined := stripANSI(strings.Join(m.log, "\n"))
+	joined := stripANSI(strings.Join(m.th().log, "\n"))
 	if !strings.Contains(joined, "PLAN — 2 steps") || !strings.Contains(joined, "1. read the file") {
 		t.Errorf("the plan is not rendered:\n%s", joined)
 	}
 
 	m, cmd = enter(m) // approve
-	if m.planWait != nil || m.exec == nil {
+	if m.th().planWait != nil || m.th().exec == nil {
 		t.Fatal("approval did not resume the pipeline")
 	}
 	m = runCmds(t, m, cmd)
-	joined = stripANSI(strings.Join(m.log, "\n"))
+	joined = stripANSI(strings.Join(m.th().log, "\n"))
 	for _, want := range []string{"plan ✓ 2 steps", "edit ✓ main.go", "tests ✓ go test ./..."} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("proof strip missing %q:\n%s", want, joined)
@@ -445,15 +445,15 @@ func TestExec_PlanApplyKeyApproves(t *testing.T) {
 	m := chatFixture("plan")
 	m, cmd := enter(typed(m, "outline a users endpoint"))
 	m = runCmds(t, m, cmd)
-	if m.planWait == nil {
+	if m.th().planWait == nil {
 		t.Fatal("no plan gate")
 	}
 	m, cmd = keyRune(m, 'a')
-	if m.planWait != nil || m.exec == nil {
+	if m.th().planWait != nil || m.th().exec == nil {
 		t.Fatal("a did not approve the plan")
 	}
 	m = runCmds(t, m, cmd)
-	if !strings.Contains(stripANSI(strings.Join(m.log, "\n")), "✓ done") {
+	if !strings.Contains(stripANSI(strings.Join(m.th().log, "\n")), "✓ done") {
 		t.Error("the approved plan did not finish")
 	}
 }
@@ -468,21 +468,21 @@ func TestExec_PlanDiscardRunsNothing(t *testing.T) {
 	m := chatFixture("plan")
 	m, cmd := enter(typed(m, "rewrite "+rel))
 	m = runCmds(t, m, cmd)
-	if m.planWait == nil {
+	if m.th().planWait == nil {
 		t.Fatal("no plan gate")
 	}
 	m = press(m, tea.KeyEsc)
-	if m.planWait != nil {
+	if m.th().planWait != nil {
 		t.Fatal("esc did not discard the plan")
 	}
-	joined := stripANSI(strings.Join(m.log, "\n"))
+	joined := stripANSI(strings.Join(m.th().log, "\n"))
 	if !strings.Contains(joined, "plan discarded — nothing ran") || !strings.Contains(joined, "◼ stopped") {
 		t.Errorf("the discard is not disclosed:\n%s", joined)
 	}
 	if raw, _ := os.ReadFile(abs); string(raw) != "package main\n" {
 		t.Error("discarding a plan changed the file")
 	}
-	if m.lastDone == nil || !m.lastDone.stopped {
+	if m.th().lastDone == nil || !m.th().lastDone.stopped {
 		t.Error("the discarded task did not settle as stopped")
 	}
 }
@@ -504,7 +504,7 @@ func TestExec_AutoVerifyLoopFixesThenPasses(t *testing.T) {
 		return stubEdit("package main\n", "package main // v"+fmt.Sprint(edits)+"\n")(ctx, tk, prompt)
 	}
 	verifies := 0
-	ckVerifyStage = func(context.Context, []string) (oracle.Verdict, error) {
+	ckVerifyStage = func(context.Context, []string, string) (oracle.Verdict, error) {
 		verifies++
 		if verifies == 1 {
 			return oracle.Verdict{Passed: false, Detail: "TestBoom failed"}, nil
@@ -521,13 +521,13 @@ func TestExec_AutoVerifyLoopFixesThenPasses(t *testing.T) {
 	if !strings.Contains(fixPrompt, "TestBoom failed") {
 		t.Errorf("the fix re-dispatch does not carry the failure output:\n%s", fixPrompt)
 	}
-	joined := stripANSI(strings.Join(m.log, "\n"))
+	joined := stripANSI(strings.Join(m.th().log, "\n"))
 	if !strings.Contains(joined, "tests ✓ go test ./... (after 1 fix)") {
 		t.Errorf("the strip does not credit the fix loop:\n%s", joined)
 	}
 	// The task's diff spans first-before → last-after, collapsing the fix hops.
 	m, _ = keyRune(m, 'd')
-	diffText := strings.Join(m.codeLines, "\n")
+	diffText := strings.Join(m.th().codeLines, "\n")
 	if !strings.Contains(diffText, "+package main // v2") {
 		t.Errorf("the diff does not end at the final content:\n%s", diffText)
 	}
@@ -544,7 +544,7 @@ func TestExec_AutoVerifyLoopCapsAtTwoFixes(t *testing.T) {
 		return stubEdit("package main\n", "package main // still wrong\n")(ctx, tk, prompt)
 	}
 	verifies := 0
-	ckVerifyStage = func(context.Context, []string) (oracle.Verdict, error) {
+	ckVerifyStage = func(context.Context, []string, string) (oracle.Verdict, error) {
 		verifies++
 		return oracle.Verdict{Passed: false, Detail: "still broken"}, nil
 	}
@@ -555,7 +555,7 @@ func TestExec_AutoVerifyLoopCapsAtTwoFixes(t *testing.T) {
 	if edits != 1+ckMaxFixes || verifies != 1+ckMaxFixes {
 		t.Fatalf("loop ran %d edits / %d verifies, want %d/%d", edits, verifies, 1+ckMaxFixes, 1+ckMaxFixes)
 	}
-	joined := stripANSI(strings.Join(m.log, "\n"))
+	joined := stripANSI(strings.Join(m.th().log, "\n"))
 	if !strings.Contains(joined, "tests ✗") || !strings.Contains(joined, "after 2 fixes") {
 		t.Errorf("the capped failure is not disclosed:\n%s", joined)
 	}
@@ -582,7 +582,7 @@ func TestExec_AutoWithoutVerifierSaysSo(t *testing.T) {
 	// plan → answer, with the answer rendered.
 	m, cmd := enter(typed(m, "tidy the notes file"))
 	m = runCmds(t, m, cmd)
-	if !strings.Contains(stripANSI(strings.Join(m.log, "\n")), "✓ done") {
+	if !strings.Contains(stripANSI(strings.Join(m.th().log, "\n")), "✓ done") {
 		t.Error("auto without a file did not settle as an answer")
 	}
 	// And with a named .go file but no verifier anywhere: the strip says so.
@@ -604,7 +604,7 @@ func TestExec_CarefulConfirmsEveryWrite(t *testing.T) {
 		return stubEdit("package main\n", "package main // careful\n")(ctx, tk, prompt)
 	}
 	verifies := 0
-	ckVerifyStage = func(context.Context, []string) (oracle.Verdict, error) {
+	ckVerifyStage = func(context.Context, []string, string) (oracle.Verdict, error) {
 		verifies++
 		if verifies == 1 {
 			return oracle.Verdict{Passed: false, Detail: "not yet"}, nil
@@ -616,15 +616,15 @@ func TestExec_CarefulConfirmsEveryWrite(t *testing.T) {
 	m := chatFixture("careful")
 	m, cmd := enter(typed(m, "change "+rel))
 	m = runCmds(t, m, cmd)
-	if m.confirm == nil || !strings.Contains(m.confirm.question, "write main.go?") {
-		t.Fatalf("no write confirm: %+v", m.confirm)
+	if m.th().confirm == nil || !strings.Contains(m.th().confirm.question, "write main.go?") {
+		t.Fatalf("no write confirm: %+v", m.th().confirm)
 	}
 	m, cmd = keyRune(m, 'n')
 	m = runCmds(t, m, cmd)
 	if edits != 0 {
 		t.Fatal("n still wrote the file")
 	}
-	if !strings.Contains(stripANSI(strings.Join(m.log, "\n")), "stopped before writing") {
+	if !strings.Contains(stripANSI(strings.Join(m.th().log, "\n")), "stopped before writing") {
 		t.Error("the refusal is not disclosed")
 	}
 
@@ -634,22 +634,22 @@ func TestExec_CarefulConfirmsEveryWrite(t *testing.T) {
 	m = runCmds(t, m, cmd)
 	m, cmd = keyRune(m, 'y')
 	m = runCmds(t, m, cmd)
-	if m.confirm == nil || !strings.Contains(m.confirm.question, "fix 1/2") {
-		t.Fatalf("no fix confirm after a failing verify: %+v", m.confirm)
+	if m.th().confirm == nil || !strings.Contains(m.th().confirm.question, "fix 1/2") {
+		t.Fatalf("no fix confirm after a failing verify: %+v", m.th().confirm)
 	}
 	m, cmd = keyRune(m, 'y')
 	m = runCmds(t, m, cmd)
 	if edits != 2 || verifies != 2 {
 		t.Fatalf("confirmed flow ran %d edits / %d verifies, want 2/2", edits, verifies)
 	}
-	if !strings.Contains(stripANSI(strings.Join(m.log, "\n")), "tests ✓") {
+	if !strings.Contains(stripANSI(strings.Join(m.th().log, "\n")), "tests ✓") {
 		t.Error("the confirmed fix did not pass")
 	}
 
 	// esc at a fix gate: the landed edit stays, disclosed as declined.
 	m = chatFixture("careful")
 	verifies, edits = 0, 0
-	ckVerifyStage = func(context.Context, []string) (oracle.Verdict, error) {
+	ckVerifyStage = func(context.Context, []string, string) (oracle.Verdict, error) {
 		verifies++
 		return oracle.Verdict{Passed: false, Detail: "always red"}, nil
 	}
@@ -657,11 +657,11 @@ func TestExec_CarefulConfirmsEveryWrite(t *testing.T) {
 	m = runCmds(t, m, cmd)
 	m, cmd = keyRune(m, 'y')
 	m = runCmds(t, m, cmd)
-	if m.confirm == nil {
+	if m.th().confirm == nil {
 		t.Fatal("no fix gate")
 	}
 	m = press(m, tea.KeyEsc)
-	joined := stripANSI(strings.Join(m.log, "\n"))
+	joined := stripANSI(strings.Join(m.th().log, "\n"))
 	if !strings.Contains(joined, "fix declined") || !strings.Contains(joined, "tests ✗") {
 		t.Errorf("the declined fix is not honest:\n%s", joined)
 	}
@@ -682,7 +682,7 @@ func TestExec_UnattendedStopsVisiblyAtTheCostCap(t *testing.T) {
 	m := chatFixture("unattended")
 	m, cmd := enter(typed(m, "refactor "+rel))
 	m = runCmds(t, m, cmd)
-	joined := stripANSI(strings.Join(m.log, "\n"))
+	joined := stripANSI(strings.Join(m.th().log, "\n"))
 	if !strings.Contains(joined, "✗ failed") || !strings.Contains(joined, "cost cap $0.50 reached") {
 		t.Errorf("the cap stop is not visible:\n%s", joined)
 	}
@@ -719,7 +719,7 @@ func TestExec_OverrideWiresIntoTheNextDispatchOnly(t *testing.T) {
 	m = typed(m, "jj")
 	m, _ = enter(m)
 	m, cmd := enter(typed(m, "explain the endpoint"))
-	if !strings.Contains(stripANSI(strings.Join(m.log, "\n")), "local only") {
+	if !strings.Contains(stripANSI(strings.Join(m.th().log, "\n")), "local only") {
 		t.Error("the route line does not show the local-only override")
 	}
 	m = runCmds(t, m, cmd)
@@ -737,7 +737,7 @@ func TestExec_OverrideWiresIntoTheNextDispatchOnly(t *testing.T) {
 	m, _ = enter(m)
 	m = typed(m, "3")
 	m, cmd = enter(typed(m, "explain the endpoint"))
-	if !strings.Contains(stripANSI(strings.Join(m.log, "\n")), "forced") {
+	if !strings.Contains(stripANSI(strings.Join(m.th().log, "\n")), "forced") {
 		t.Error("the route line does not show the forced tier")
 	}
 	m = runCmds(t, m, cmd)
@@ -763,14 +763,14 @@ func TestExec_OverrideWiresIntoTheNextDispatchOnly(t *testing.T) {
 	m, _ = enter(m)
 	m = typed(m, "2") // ≥95%
 	m, cmd = enter(typed(m, "is this migration safe?"))
-	if !strings.Contains(stripANSI(strings.Join(m.log, "\n")), "consensus ≥95%") {
+	if !strings.Contains(stripANSI(strings.Join(m.th().log, "\n")), "consensus ≥95%") {
 		t.Error("the route line does not show the consensus strategy")
 	}
 	m = runCmds(t, m, cmd)
 	if strat != 'C' || seen.confidence != 0.95 {
 		t.Errorf("consensus not wired: strat=%q conf=%v", strat, seen.confidence)
 	}
-	if !strings.Contains(stripANSI(strings.Join(m.log, "\n")), "confidence 97%") {
+	if !strings.Contains(stripANSI(strings.Join(m.th().log, "\n")), "confidence 97%") {
 		t.Error("the achieved confidence is not in the footer")
 	}
 }
@@ -786,7 +786,7 @@ func TestExec_OverrideFanoutFallsBackToSingleForEdits(t *testing.T) {
 		return ckStageOut{output: "1. plan", head: "h", tier: 8}, nil
 	}
 	ckEditStage = stubEdit("package main\n", "package main // x\n")
-	ckVerifyStage = func(context.Context, []string) (oracle.Verdict, error) {
+	ckVerifyStage = func(context.Context, []string, string) (oracle.Verdict, error) {
 		return oracle.Verdict{Passed: true}, nil
 	}
 
@@ -795,7 +795,7 @@ func TestExec_OverrideFanoutFallsBackToSingleForEdits(t *testing.T) {
 	m = typed(m, "jjj") // best of 3
 	m, _ = enter(m)
 	m, cmd := enter(typed(m, "improve "+rel))
-	if !strings.Contains(stripANSI(strings.Join(m.log, "\n")), "edits can't fan out") {
+	if !strings.Contains(stripANSI(strings.Join(m.th().log, "\n")), "edits can't fan out") {
 		t.Error("the single fallback is not disclosed on the route line")
 	}
 	m = runCmds(t, m, cmd)
@@ -821,7 +821,7 @@ func TestExec_ArchitectSplitsPlanAndImplementTiers(t *testing.T) {
 		editTask = tk
 		return stubEdit("package main\n", "package main // built\n")(ctx, tk, prompt)
 	}
-	ckVerifyStage = func(context.Context, []string) (oracle.Verdict, error) {
+	ckVerifyStage = func(context.Context, []string, string) (oracle.Verdict, error) {
 		return oracle.Verdict{Passed: true}, nil
 	}
 
@@ -834,7 +834,7 @@ func TestExec_ArchitectSplitsPlanAndImplementTiers(t *testing.T) {
 	if editTask == nil || editTask.editEnum != "SIMPLE" {
 		t.Errorf("the implement half is not on the cheap tier: %+v", editTask)
 	}
-	if !strings.Contains(stripANSI(strings.Join(m.log, "\n")), "tests ✓") {
+	if !strings.Contains(stripANSI(strings.Join(m.th().log, "\n")), "tests ✓") {
 		t.Error("architect did not verify")
 	}
 }
@@ -844,15 +844,15 @@ func TestExec_ArchitectSplitsPlanAndImplementTiers(t *testing.T) {
 func TestExec_StaleWorkerMessagesAreIgnored(t *testing.T) {
 	m := testCockpit()
 	ghost := &ckExecState{}
-	before := len(m.log)
+	before := len(m.th().log)
 	next, _ := m.Update(ckExecDoneMsg{exec: ghost, task: ckTask{answer: "ghost"}})
 	m = next.(Cockpit)
-	if len(m.log) != before || m.lastDone != nil {
+	if len(m.th().log) != before || m.th().lastDone != nil {
 		t.Error("a stale done message landed")
 	}
 	next, _ = m.Update(ckGateMsg{exec: ghost, task: ckTask{}, gate: 'p'})
 	m = next.(Cockpit)
-	if m.planWait != nil {
+	if m.th().planWait != nil {
 		t.Error("a stale gate message landed")
 	}
 	// A stale spin tick schedules nothing.
@@ -1045,33 +1045,33 @@ func TestChatStates_LayoutInvariantsAtEverySize(t *testing.T) {
 
 	states := map[string]func(Cockpit) Cockpit{
 		"running": func(m Cockpit) Cockpit {
-			m.exec = &ckExecState{stage: "verifying — go test ./... with a very long stage line " + long[:200], started: time.Now()}
+			m.th().exec = &ckExecState{stage: "verifying — go test ./... with a very long stage line " + long[:200], started: time.Now()}
 			return m
 		},
 		"plan_pending": func(m Cockpit) Cockpit {
 			t := ckTask{plan: "1. first\n2. second\n3. " + long, planSteps: 3, headName: "stub"}
-			m.log = append(m.log, ckPlanLines(t)...)
-			m.planWait = &ckWait{task: t, phase: ckPhaseTail}
+			m.th().log = append(m.th().log, ckPlanLines(t)...)
+			m.th().planWait = &ckWait{task: t, phase: ckPhaseTail}
 			return m
 		},
 		"confirm": func(m Cockpit) Cockpit {
-			m.confirm = &ckWait{question: "write " + long[:120] + "? y/n"}
+			m.th().confirm = &ckWait{question: "write " + long[:120] + "? y/n"}
 			return m
 		},
 		"proof_strip_long_answer": func(m Cockpit) Cockpit {
-			m.log = append(m.log, ckResultLines(longAnswer)...)
-			m.lastDone = &longAnswer
+			m.th().log = append(m.th().log, ckResultLines(longAnswer)...)
+			m.th().lastDone = &longAnswer
 			return m
 		},
 		"mode_picker":    func(m Cockpit) Cockpit { m.modePick = true; return m },
 		"override_modal": func(m Cockpit) Cockpit { m.ovOpen = true; return m },
-		"long_input":     func(m Cockpit) Cockpit { m.input = long; return m },
+		"long_input":     func(m Cockpit) Cockpit { m.th().input = long; return m },
 		"diff_panel": func(m Cockpit) Cockpit {
-			m.codeDiff, m.codeLang = true, "diff"
+			m.th().codeDiff, m.th().codeLang = true, "diff"
 			for i := 0; i < 80; i++ {
-				m.codeLines = append(m.codeLines, "+"+long[:80])
+				m.th().codeLines = append(m.th().codeLines, "+"+long[:80])
 			}
-			m.codeShown = len(m.codeLines)
+			m.th().codeShown = len(m.th().codeLines)
 			return m
 		},
 	}
@@ -1108,16 +1108,16 @@ func TestChatScrollback_SurvivesLongAnswers(t *testing.T) {
 	m := testCockpit()
 	m.w, m.h, m.ready = 100, 24, true
 	for i := 0; i < 60; i++ {
-		m.log = append(m.log, fmt.Sprintf("history %d", i))
+		m.th().log = append(m.th().log, fmt.Sprintf("history %d", i))
 	}
 	m = press(m, tea.KeyPgUp)
-	anchor := m.chatScroll
+	anchor := m.th().scroll
 	if anchor == 0 {
 		t.Fatal("pgup did not anchor")
 	}
 	big := ckTask{runID: "r", answer: strings.Repeat("new answer line\n", 200), elapsed: time.Second}
-	m.log = append(m.log, ckResultLines(big)...)
-	if m.chatScroll != anchor {
+	m.th().log = append(m.th().log, ckResultLines(big)...)
+	if m.th().scroll != anchor {
 		t.Error("a long answer yanked the anchored reader")
 	}
 	if out := stripANSI(m.View()); strings.Contains(out, "new answer line") {
@@ -1175,15 +1175,15 @@ func TestCkRealEditStage_OutsideWorkspaceIsRejected(t *testing.T) {
 
 // The real verify stage maps exit codes to verdicts and launch failures to errors.
 func TestCkRealVerifyStage_ExitCodesBecomeVerdicts(t *testing.T) {
-	v, err := ckRealVerifyStage(context.Background(), []string{"go", "version"})
+	v, err := ckRealVerifyStage(context.Background(), []string{"go", "version"}, "")
 	if err != nil || !v.Passed {
 		t.Fatalf("`go version` did not pass: v=%+v err=%v", v, err)
 	}
-	v, err = ckRealVerifyStage(context.Background(), []string{"go", "tool", "definitely-not-a-tool"})
+	v, err = ckRealVerifyStage(context.Background(), []string{"go", "tool", "definitely-not-a-tool"}, "")
 	if err != nil || v.Passed {
 		t.Fatalf("a failing command did not fail: v=%+v err=%v", v, err)
 	}
-	if _, err = ckRealVerifyStage(context.Background(), []string{"/nonexistent-hydra-verifier"}); err == nil {
+	if _, err = ckRealVerifyStage(context.Background(), []string{"/nonexistent-hydra-verifier"}, ""); err == nil {
 		t.Fatal("an unlaunchable verifier must be an error, not a verdict")
 	}
 }
@@ -1197,13 +1197,13 @@ func TestExec_VerifierErrorIsHonest(t *testing.T) {
 	rel, _ := namedFile(t, "package main\n")
 	ckDispatchStage = stubAnswer("1. edit", 0)
 	ckEditStage = stubEdit("package main\n", "package main // v\n")
-	ckVerifyStage = func(context.Context, []string) (oracle.Verdict, error) {
+	ckVerifyStage = func(context.Context, []string, string) (oracle.Verdict, error) {
 		return oracle.Verdict{}, errors.New("exec: go not found")
 	}
 	m := chatFixture("auto")
 	m, cmd := enter(typed(m, "touch "+rel))
 	m = runCmds(t, m, cmd)
-	joined := stripANSI(strings.Join(m.log, "\n"))
+	joined := stripANSI(strings.Join(m.th().log, "\n"))
 	if !strings.Contains(joined, "tests ? ") || !strings.Contains(joined, "verifier failed") {
 		t.Errorf("a broken verifier is not disclosed:\n%s", joined)
 	}
@@ -1225,13 +1225,13 @@ func TestExec_EditFailureRendersReason(t *testing.T) {
 	m := chatFixture("edit")
 	m, cmd := enter(typed(m, "break "+rel))
 	m = runCmds(t, m, cmd)
-	if joined := stripANSI(strings.Join(m.log, "\n")); !strings.Contains(joined, "validation_failed") {
+	if joined := stripANSI(strings.Join(m.th().log, "\n")); !strings.Contains(joined, "validation_failed") {
 		t.Errorf("the editor's reason is missing:\n%s", joined)
 	}
 	m2 := chatFixture("edit")
 	m2, cmd = enter(typed(m2, "break "+rel))
 	m2 = runCmds(t, m2, cmd)
-	if joined := stripANSI(strings.Join(m2.log, "\n")); !strings.Contains(joined, "dispatcher exploded") {
+	if joined := stripANSI(strings.Join(m2.th().log, "\n")); !strings.Contains(joined, "dispatcher exploded") {
 		t.Errorf("the edit error is missing:\n%s", joined)
 	}
 }
@@ -1244,10 +1244,10 @@ func TestResultActions_DegradeWithoutSnapshots(t *testing.T) {
 	}
 	m := testCockpit()
 	tk := &ckTask{edited: true, file: "x.go", runID: "never-ran"}
-	m.lastDone = tk
+	m.th().lastDone = tk
 	m, _, ok := m.resultKey('d')
-	if !ok || m.codeDiff {
-		t.Errorf("d with no snapshot: ok=%v diff=%v", ok, m.codeDiff)
+	if !ok || m.th().codeDiff {
+		t.Errorf("d with no snapshot: ok=%v diff=%v", ok, m.th().codeDiff)
 	}
 	if !strings.Contains(m.flash, "no snapshot") {
 		t.Errorf("flash = %q", m.flash)
@@ -1314,24 +1314,24 @@ func TestChatScrollGeom_MirrorsInputBarHeight(t *testing.T) {
 	m := testCockpit()
 	m.w, m.h = 100, 24
 	_, logH := m.chatLogGeom()
-	m.input = strings.Repeat("wrap me ", 40)
+	m.th().input = strings.Repeat("wrap me ", 40)
 	_, logHWrapped := m.chatLogGeom()
 	if logHWrapped >= logH {
 		t.Errorf("a wrapped input did not shrink the log window: %d → %d", logH, logHWrapped)
 	}
 	for i := 0; i < 50; i++ {
-		m.log = append(m.log, "line")
+		m.th().log = append(m.th().log, "line")
 	}
 	m = m.chatScrollBy(-1000)
-	if m.chatScroll != 1 {
-		t.Errorf("scrollback did not clamp at the top: %d", m.chatScroll)
+	if m.th().scroll != 1 {
+		t.Errorf("scrollback did not clamp at the top: %d", m.th().scroll)
 	}
 	m = m.chatScrollBy(1000)
-	if m.chatScroll != 0 {
-		t.Errorf("scrollback did not return to live: %d", m.chatScroll)
+	if m.th().scroll != 0 {
+		t.Errorf("scrollback did not return to live: %d", m.th().scroll)
 	}
-	m.log = []string{"one"}
-	if m = m.chatScrollBy(-3); m.chatScroll != 0 {
+	m.th().log = []string{"one"}
+	if m = m.chatScrollBy(-3); m.th().scroll != 0 {
 		t.Error("a fitting log entered scrollback")
 	}
 }

@@ -43,6 +43,7 @@ import (
 	"github.com/ankit373/hydra/internal/oracle"
 	"github.com/ankit373/hydra/internal/otlp"
 	"github.com/ankit373/hydra/internal/parallel"
+	"github.com/ankit373/hydra/internal/payload"
 	"github.com/ankit373/hydra/internal/pending"
 	"github.com/ankit373/hydra/internal/policy"
 	"github.com/ankit373/hydra/internal/pricing"
@@ -1258,7 +1259,61 @@ place for — are carried under hydra.* rather than dropped.`,
 	export.Flags().IntVar(&expDays, "days", 0, "only dispatches from the last N days (0 = all)")
 	export.Flags().IntVar(&limit, "limit", 0, "export at most N of the newest dispatches (0 = all)")
 
-	cmd.AddCommand(seal, evaluate, export)
+	payloads := &cobra.Command{
+		Use:   "payloads",
+		Short: "Payload store: what is captured, how much it costs, and what it holds",
+		Long: `hyctl trace payloads reports the opt-in store of prompt and response text.
+
+Capture is off unless it was chosen at ` + "`hyctl init`" + ` or set with
+capture_payloads in config.toml. Stored text is sampled — every blob records the
+probability it was admitted — and anything matching a secret detector is
+replaced before it is written.`,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			// A machine that has never run `hyctl init` has no config, and the
+			// answer is knowable anyway: no config means capture was never
+			// opted into. Reporting a missing file instead would be an error
+			// about Hydra's plumbing in place of the answer asked for.
+			cfg, err := config.Load()
+			if err != nil {
+				cfg = &config.Config{}
+			}
+			store, err := payload.Open(payload.Dir())
+			if err != nil {
+				return err
+			}
+			st := store.Stat()
+			if jsonOut {
+				raw, _ := json.MarshalIndent(map[string]any{
+					"capture_enabled": cfg.CapturePayloads,
+					"keep_rate":       payloadKeepRate(cfg),
+					"stats":           st,
+				}, "", "  ")
+				fmt.Println(string(raw))
+				return nil
+			}
+			if !cfg.CapturePayloads {
+				fmt.Println("Payload capture is off. Hydra keeps the statistics either way;")
+				fmt.Println("turn capture on with capture_payloads = true in config.toml.")
+				if st.Blobs == 0 {
+					return nil
+				}
+				fmt.Println()
+			}
+			if st.Blobs == 0 {
+				fmt.Println("No payloads stored.")
+				return nil
+			}
+			fmt.Printf("  %d blob%s, admitted at %.0f%%\n", st.Blobs, plural(st.Blobs), payloadKeepRate(cfg)*100)
+			fmt.Printf("  %s of text in %s on disk (%.1fx)\n",
+				humanBytes(st.RawBytes), humanBytes(st.DiskBytes), ratioOf(st.RawBytes, st.DiskBytes))
+			fmt.Printf("  %s\n", dimStyle.Render(fmt.Sprintf(
+				"%d dictionary-compressed · %d contained redacted secrets", st.WithDict, st.WithPII)))
+			return nil
+		},
+	}
+	payloads.Flags().BoolVar(&jsonOut, "json", false, "machine-readable output")
+
+	cmd.AddCommand(seal, evaluate, export, payloads)
 	return cmd
 }
 
@@ -1308,6 +1363,21 @@ func rowsWithinDays(rows []cost.Row, days int) []cost.Row {
 		}
 	}
 	return out
+}
+
+// DefaultPayloadKeepRate is how often a payload is admitted when capture is on
+// but no rate was configured. Sampling is what bounds the store; the rate is
+// recorded on every blob so the set stays correctable to the population.
+const DefaultPayloadKeepRate = 0.1
+
+// payloadKeepRate resolves the configured rate, treating an unset or nonsensical
+// value as the default rather than as "keep nothing" — a zero rate would
+// silently disable capture the user had explicitly turned on.
+func payloadKeepRate(cfg *config.Config) float64 {
+	if cfg != nil && cfg.PayloadKeepRate > 0 && cfg.PayloadKeepRate <= 1 {
+		return cfg.PayloadKeepRate
+	}
+	return DefaultPayloadKeepRate
 }
 
 // ratioOf guards the division so an empty seal cannot print Inf or NaN.

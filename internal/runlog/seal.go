@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"github.com/klauspost/compress/zstd"
+
+	"github.com/ankit373/hydra/internal/util"
 )
 
 // One file per run is right while a run is live and wrong once it is not.
@@ -225,7 +227,7 @@ func onDiskSize(path string) int64 {
 	if err != nil {
 		return 0
 	}
-	return blocksFor(info)
+	return util.DiskBytes(info)
 }
 
 // LoadIndex reads one month's index. A missing index is not an error.

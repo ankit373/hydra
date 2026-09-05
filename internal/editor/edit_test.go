@@ -280,6 +280,55 @@ func TestEdit_RefusesBeforeDispatching(t *testing.T) {
 	}
 }
 
+// Root scopes an edit to a Hydra-managed worktree that lives outside every
+// registered workspace (#598) — accepted under the root, still refused for
+// denied globs and for paths outside it.
+func TestEdit_RootScopesAHydraWorktree(t *testing.T) {
+	editSandbox(t, marked("package wt"))
+	wt := t.TempDir() // stands in for ~/.hydra/worktrees/t1-xxxx
+
+	file := filepath.Join(wt, "a.go")
+	if err := os.WriteFile(file, []byte("package old\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	res, err := Edit(context.Background(), Request{
+		File: file, Enum: "MODERATE", Prompt: "x", Root: wt,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Status != "ok" || res.Workspace != "hydra-worktree" {
+		t.Fatalf("rooted edit: status=%q ws=%q err=%q", res.Status, res.Workspace, res.Error)
+	}
+	if raw, _ := os.ReadFile(file); string(raw) != "package wt\n" {
+		t.Errorf("the rooted edit did not land: %q", raw)
+	}
+
+	env := filepath.Join(wt, ".env")
+	if err := os.WriteFile(env, []byte("SECRET=1\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	res, err = Edit(context.Background(), Request{File: env, Enum: "MODERATE", Prompt: "x", Root: wt})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Status != "fail" || !strings.Contains(res.Error, "scope_rejected") {
+		t.Errorf("a denied glob under Root was not refused: %+v", res)
+	}
+
+	outside := filepath.Join(t.TempDir(), "b.go")
+	if err := os.WriteFile(outside, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	res, err = Edit(context.Background(), Request{File: outside, Enum: "MODERATE", Prompt: "x", Root: wt})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Status != "fail" || !strings.Contains(res.Error, "scope_rejected") {
+		t.Errorf("a file outside Root was not refused: %+v", res)
+	}
+}
+
 // A validator that rejects the edit rolls the file back. An edit that fails
 // validation and stays on disk is worse than no edit at all.
 func TestEdit_FailedValidationRollsBack(t *testing.T) {

@@ -26,6 +26,25 @@ func TestCommandOracle_PassFail(t *testing.T) {
 	}
 }
 
+// Dir must run the verifier in that directory — an isolated worktree's tests
+// must check the worktree's copy, not whatever the process CWD holds (#598).
+func TestCommandOracle_DirSetsTheWorkingDirectory(t *testing.T) {
+	ctx := context.Background()
+	mod := t.TempDir()
+	if err := os.WriteFile(filepath.Join(mod, "go.mod"), []byte("module oracledir\n\ngo 1.21\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// `go mod verify` exits 0 only inside a module — a portable dir-sensitive probe.
+	in := &CommandOracle{Template: "go mod verify", Dir: mod}
+	if v, err := in.Verify(ctx, "", trust.Task{}); err != nil || !v.Passed {
+		t.Errorf("inside the module: v=%+v err=%v", v, err)
+	}
+	out := &CommandOracle{Template: "go mod verify", Dir: t.TempDir()}
+	if v, err := out.Verify(ctx, "", trust.Task{}); err != nil || v.Passed {
+		t.Errorf("outside a module should fail, not error: v=%+v err=%v", v, err)
+	}
+}
+
 // {file} must be substituted with a real path holding the candidate content,
 // without fragmenting on spaces.
 func TestCommandOracle_FileSubstitution(t *testing.T) {

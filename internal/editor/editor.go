@@ -43,6 +43,11 @@ type Request struct {
 	// LocalOnly forces the inner dispatch onto local heads — how a caller's
 	// "nothing leaves this machine" override reaches an edit (#597).
 	LocalOnly bool
+
+	// Root, when set, scope-checks File against this directory instead of the
+	// workspace registry — for Hydra-managed git worktrees, which live outside
+	// every registered root by design (#598). The default deny globs still apply.
+	Root string
 }
 
 // Result is the JSON output emitted by Edit.
@@ -76,11 +81,19 @@ func Edit(ctx context.Context, req Request) (*Result, error) {
 	if err != nil {
 		return failResult(req, "", "", "workspace registry load failed: "+err.Error()), nil
 	}
-	wsName, err := reg.Check(req.File)
+	var wsName string
+	var resolved workspace.Resolved
+	if req.Root != "" {
+		wsName, err = workspace.CheckRooted(req.Root, req.File)
+		resolved = workspace.Resolved{Workspace: wsName, Root: req.Root, Git: "auto",
+			GitRoot: workspace.GitRoot(req.File)}
+	} else {
+		wsName, err = reg.Check(req.File)
+		resolved, _ = reg.Resolve(req.File)
+	}
 	if err != nil {
 		return failResult(req, "", "", "scope_rejected: "+err.Error()), nil
 	}
-	resolved, _ := reg.Resolve(req.File)
 
 	// ── Snapshot ──────────────────────────────────────────────────────────────
 	origContent, origExisted := readFile(req.File)

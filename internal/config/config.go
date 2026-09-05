@@ -34,6 +34,18 @@ type Config struct {
 	// top-ranked one, so the logs carry the counterfactual evidence off-policy
 	// evaluation needs. 0 (the default) is pure argmax and changes nothing.
 	ExploreRate float64 `toml:"explore_rate,omitempty"`
+
+	// CapturePayloads opts into storing prompt and response text. Off by
+	// default and deliberately not inferable from anything else: payloads are
+	// verbatim source and prompts, the only trace class with real privacy risk,
+	// so capture is a decision someone makes rather than a default they inherit.
+	CapturePayloads bool `toml:"capture_payloads,omitempty"`
+
+	// PayloadKeepRate is the probability a payload is admitted when capture is
+	// on. Sampling is what keeps the store bounded; the rate is recorded on
+	// every stored blob so the set can still be weighted back to the population.
+	// 0 means the built-in default rather than "keep nothing".
+	PayloadKeepRate float64 `toml:"payload_keep_rate,omitempty"`
 }
 
 // Dir returns the Hydra state directory: $HYDRA_HOME if set, else ~/.hydra.
