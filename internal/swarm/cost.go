@@ -14,6 +14,7 @@ import (
 	"github.com/ankit373/hydra/internal/provider"
 	"github.com/ankit373/hydra/internal/rank"
 	"github.com/ankit373/hydra/internal/runid"
+	"github.com/ankit373/hydra/registry"
 )
 
 // PricingReader abstracts the per-tier cost lookup so swarm doesn't need to
@@ -105,7 +106,7 @@ func logAttempts(attempts []Attempt, mode SwarmMode, opts Options, promptPreview
 			"tier":            rank.UITier(a.Head),
 			"model":           a.Head.Name,
 			"executor":        a.Head.Provider,
-			"pool":            a.Head.Meta["token_pool"],
+			"pool":            headPool(a.Head),
 			"prompt_tokens":   a.InputTokens,
 			"response_tokens": a.OutputTokens,
 			"est_cost_usd":    a.EstCostUSD,
@@ -133,4 +134,13 @@ func logAttempts(attempts []Attempt, mode SwarmMode, opts Options, promptPreview
 
 func round6(f float64) float64 {
 	return math.Round(f*1_000_000) / 1_000_000
+}
+
+// headPool mirrors dispatch's: provider metadata when present, else the
+// registry, since only the agy provider ever attached it (#681).
+func headPool(h provider.Head) string {
+	if p := h.Meta["token_pool"]; p != "" {
+		return p
+	}
+	return registry.TokenPoolFor(config.ScriptHome(), h.ID)
 }
