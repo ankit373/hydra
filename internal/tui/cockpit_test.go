@@ -81,7 +81,8 @@ func testCockpit() Cockpit {
 		testRun("20260904T100100Z-bbbb", "failed", "rotate signing key"),
 		testRun("20260904T100200Z-cccc", "running", "write tests"),
 	}
-	m.log = []string{"welcome"}
+	m = m.withThreads()
+	m.th().log = []string{"welcome"}
 	return m
 }
 
@@ -157,7 +158,7 @@ func TestEveryView_LayoutInvariantsAtEverySize(t *testing.T) {
 	base = typed(base, "add pagination to the users endpoint")
 	next, _ := enter(base)
 	base = next
-	base.log = append(base.log, long, "tail\nwith\nnewlines")
+	base.th().log = append(base.th().log, long, "tail\nwith\nnewlines")
 
 	sizes := []struct{ w, h int }{{60, 15}, {80, 24}, {100, 30}, {120, 40}}
 	for view := 0; view < ckViewCount(); view++ {
@@ -167,8 +168,10 @@ func TestEveryView_LayoutInvariantsAtEverySize(t *testing.T) {
 				m.w, m.h, m.ready = sz.w, sz.h, true
 				out := m.View()
 				lines := strings.Split(out, "\n")
-				if len(lines) > sz.h {
-					t.Errorf("view %d at %dx%d renders %d lines, want <= %d",
+				// Exactly h: a short body must be padded, or the status bar
+				// renders in the middle of the terminal (#630).
+				if len(lines) != sz.h {
+					t.Errorf("view %d at %dx%d renders %d lines, want %d",
 						view, sz.w, sz.h, len(lines), sz.h)
 				}
 				for i, l := range lines {
@@ -186,19 +189,28 @@ func TestEveryView_LayoutInvariantsAtEverySize(t *testing.T) {
 		}
 	}
 
-	// The glossary overlay obeys the same frame.
-	for _, sz := range sizes {
-		g := base
-		g.glossary = true
-		g.w, g.h, g.ready = sz.w, sz.h, true
-		out := g.View()
-		lines := strings.Split(out, "\n")
-		if len(lines) > sz.h {
-			t.Errorf("glossary at %dx%d renders %d lines", sz.w, sz.h, len(lines))
-		}
-		for i, l := range lines {
-			if got := lipgloss.Width(l); got > sz.w {
-				t.Errorf("glossary at %dx%d: line %d is %d cells", sz.w, sz.h, i, got)
+	// Every overlay obeys the same frame — a short one (the override modal) is
+	// where the status bar used to float mid-screen.
+	overlays := map[string]func(Cockpit) Cockpit{
+		"glossary": func(c Cockpit) Cockpit { c.glossary = true; return c },
+		"override": func(c Cockpit) Cockpit { c.ovOpen = true; return c },
+		"modes":    func(c Cockpit) Cockpit { c.modePick = true; return c },
+	}
+	for name, open := range overlays {
+		for _, sz := range sizes {
+			g := open(base)
+			g.w, g.h, g.ready = sz.w, sz.h, true
+			lines := strings.Split(g.View(), "\n")
+			if len(lines) != sz.h {
+				t.Errorf("%s at %dx%d renders %d lines, want %d", name, sz.w, sz.h, len(lines), sz.h)
+			}
+			for i, l := range lines {
+				if got := lipgloss.Width(l); got > sz.w {
+					t.Errorf("%s at %dx%d: line %d is %d cells", name, sz.w, sz.h, i, got)
+				}
+			}
+			if last := stripANSI(lines[len(lines)-1]); !strings.Contains(last, "shortcuts") {
+				t.Errorf("%s at %dx%d: the status bar is not the final line: %q", name, sz.w, sz.h, last)
 			}
 		}
 	}
@@ -328,30 +340,34 @@ func TestCkHeadsFrom_MirrorsRoutingAndDoesNotFabricatePrices(t *testing.T) {
 	}
 }
 
-// The code-stream tick carries its generation so a superseded stream cannot
-// double-speed the current one.
+// The code-stream tick carries its thread and generation so a superseded
+// stream — or another thread's — cannot double-speed the current one.
 func TestCodeTick_GenerationGuard(t *testing.T) {
-	cmd := ckCodeTick(7)
+	cmd := ckCodeTick(1, 7)
 	if cmd == nil {
 		t.Fatal("ckCodeTick returned no command")
 	}
-	if tick, ok := cmd().(ckCodeTickMsg); !ok || tick.gen != 7 {
-		t.Fatalf("tick = %#v, want gen 7", cmd())
+	if tick, ok := cmd().(ckCodeTickMsg); !ok || tick.gen != 7 || tick.thread != 1 {
+		t.Fatalf("tick = %#v, want thread 1 gen 7", cmd())
 	}
 
 	m := testCockpit()
-	m.codeLines = []string{"a", "b", "c"}
-	m.codeGen = 3
-	next, cmd2 := m.Update(ckCodeTickMsg{gen: 3})
-	if got := next.(Cockpit).codeShown; got != 1 {
+	m.th().codeLines = []string{"a", "b", "c"}
+	m.th().codeGen = 3
+	next, cmd2 := m.Update(ckCodeTickMsg{thread: m.th().id, gen: 3})
+	if got := next.(Cockpit).th().codeShown; got != 1 {
 		t.Errorf("codeShown = %d after one tick", got)
 	}
 	if cmd2 == nil {
 		t.Error("mid-stream tick scheduled nothing")
 	}
-	stale, _ := next.Update(ckCodeTickMsg{gen: 2})
-	if got := stale.(Cockpit).codeShown; got != 1 {
+	stale, _ := next.Update(ckCodeTickMsg{thread: m.th().id, gen: 2})
+	if got := stale.(Cockpit).th().codeShown; got != 1 {
 		t.Errorf("a stale tick advanced the stream to %d", got)
+	}
+	other, _ := next.Update(ckCodeTickMsg{thread: 99, gen: 3})
+	if got := other.(Cockpit).th().codeShown; got != 1 {
+		t.Errorf("another thread's tick advanced this stream to %d", got)
 	}
 }
 

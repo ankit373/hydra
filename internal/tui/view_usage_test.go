@@ -159,7 +159,7 @@ func TestUsageBreakdown_LocalFreeAndGroupings(t *testing.T) {
 	m := testCockpit()
 	m.metrics = usageMetrics(t)
 
-	out := stripANSI(m.usageBreakdown(10))
+	out := stripANSI(m.usageBreakdown())
 	if !strings.Contains(out, "local · free") {
 		t.Errorf("the local model is not marked free:\n%s", out)
 	}
@@ -171,12 +171,12 @@ func TestUsageBreakdown_LocalFreeAndGroupings(t *testing.T) {
 	}
 
 	m.usageGroup = 't'
-	out = stripANSI(m.usageBreakdown(10))
+	out = stripANSI(m.usageBreakdown())
 	if !strings.Contains(out, "BY TIER · today") || !strings.Contains(out, "T7") {
 		t.Errorf("tier grouping wrong:\n%s", out)
 	}
 	m.usageGroup = 'd'
-	out = stripANSI(m.usageBreakdown(10))
+	out = stripANSI(m.usageBreakdown())
 	if !strings.Contains(out, "BY DAY · last 14 days") {
 		t.Errorf("day grouping wrong:\n%s", out)
 	}
@@ -187,7 +187,7 @@ func TestUsageBreakdown_LocalFreeAndGroupings(t *testing.T) {
 		byModelToday: []cost.GroupRow{{Key: "qwen", Calls: 5, EstCostUSD: 0}},
 		localModels:  map[string]bool{"qwen": true},
 	}
-	out = stripANSI(free.usageBreakdown(10))
+	out = stripANSI(free.usageBreakdown())
 	if !strings.Contains(out, "bars by calls — everything was free") {
 		t.Errorf("the by-calls fallback is not disclosed:\n%s", out)
 	}
@@ -198,7 +198,7 @@ func TestUsageBreakdown_LocalFreeAndGroupings(t *testing.T) {
 	// Empty is empty.
 	none := testCockpit()
 	none.metrics = ckMetrics{}
-	if out := stripANSI(none.usageBreakdown(10)); !strings.Contains(out, "no requests recorded") {
+	if out := stripANSI(none.usageBreakdown()); !strings.Contains(out, "no requests recorded") {
 		t.Errorf("empty breakdown not honest:\n%s", out)
 	}
 }
@@ -235,19 +235,34 @@ func TestUsageContextBudget(t *testing.T) {
 	}
 }
 
-// The breakdown scrolls rather than truncating silently.
-func TestUsageBreakdown_Scrolls(t *testing.T) {
+// The usage view scrolls as one document: a long breakdown never buries the
+// context-budget panel beyond reach (#630).
+func TestUsageView_ScrollsToEverything(t *testing.T) {
 	m := testCockpit()
+	m.w, m.h = 80, 24
+	m.view = ckViewUsage
 	m.metrics.byModelToday = manyGroupRows(30)
 	m.usageGroup = 'm'
-	out := stripANSI(m.usageBreakdown(8))
+
+	out := stripANSI(m.viewUsage(80, 21))
 	if !strings.Contains(out, "↓") {
-		t.Errorf("an overflowing table shows no scroll cue:\n%s", out)
+		t.Errorf("an overflowing usage view shows no scroll cue:\n%s", out)
 	}
-	m.usageOff = 10
-	out = stripANSI(m.usageBreakdown(8))
+	if strings.Contains(out, "enlarge the terminal") {
+		t.Errorf("usage told the user to resize instead of scrolling:\n%s", out)
+	}
+	// Every model listed, not a window of them.
+	if !strings.Contains(stripANSI(m.usageBreakdown()), "model-d") {
+		t.Error("the breakdown dropped rows instead of letting the view scroll")
+	}
+
+	m = m.scrollBy(ckScrollAll)
+	out = stripANSI(m.viewUsage(80, 21))
+	if !strings.Contains(out, "CONTEXT BUDGET") {
+		t.Errorf("scrolling to the end never reaches the context budget:\n%s", out)
+	}
 	if !strings.Contains(out, "↑") {
-		t.Errorf("a scrolled table shows no top cue:\n%s", out)
+		t.Errorf("a scrolled usage view shows no top cue:\n%s", out)
 	}
 }
 

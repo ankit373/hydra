@@ -648,3 +648,26 @@ func sameDir(t *testing.T, a, b string) bool {
 	}
 	return filepath.Clean(ra) == filepath.Clean(rb)
 }
+
+// CheckRooted scopes a path against a synthesized root — the escape hatch for
+// Hydra-managed worktrees, which live outside every registered workspace. It
+// must keep the default deny globs and refuse anything outside the root.
+func TestCheckRooted_ContainsAndStillDenies(t *testing.T) {
+	root := t.TempDir()
+
+	if ws, err := CheckRooted(root, filepath.Join(root, "pkg", "main.go")); err != nil || ws == "" {
+		t.Errorf("a file under the root was refused: ws=%q err=%v", ws, err)
+	}
+	if _, err := CheckRooted(root, filepath.Join(root, ".env")); err == nil {
+		t.Error("a denied glob was allowed under a rooted check")
+	}
+	if _, err := CheckRooted(root, filepath.Join(t.TempDir(), "outside.go")); err == nil {
+		t.Error("a file outside the root was allowed")
+	}
+	if _, err := CheckRooted(root, filepath.Join(root, "..", "escape.go")); err == nil {
+		t.Error("a ..-escape from the root was allowed")
+	}
+	if _, err := CheckRooted("relative", filepath.Join(root, "a.go")); err == nil {
+		t.Error("a relative root was accepted")
+	}
+}

@@ -84,8 +84,8 @@ func TestGlossary_QuestionMarkSemantics(t *testing.T) {
 	if chat.glossary {
 		t.Error("? mid-sentence opened the glossary instead of typing")
 	}
-	if chat.input != "what is 2?" {
-		t.Errorf("input = %q, want the ? appended", chat.input)
+	if chat.th().input != "what is 2?" {
+		t.Errorf("input = %q, want the ? appended", chat.th().input)
 	}
 }
 
@@ -108,8 +108,8 @@ func TestDigits_JumpOutsideChatTypeInsideChat(t *testing.T) {
 	if chat.view != ckViewChat {
 		t.Fatal("typing a digit in chat switched views")
 	}
-	if chat.input != "add 2 retries" {
-		t.Errorf("input = %q", chat.input)
+	if chat.th().input != "add 2 retries" {
+		t.Errorf("input = %q", chat.th().input)
 	}
 }
 
@@ -123,18 +123,18 @@ func TestInput_IsScopedToTheChatView(t *testing.T) {
 	m.view = ckViewUsage
 	m = typed(m, "x")
 	m = press(m, tea.KeyBackspace)
-	if m.input != "half a prompt" {
-		t.Errorf("input on a non-chat view = %q, want untouched", m.input)
+	if m.th().input != "half a prompt" {
+		t.Errorf("input on a non-chat view = %q, want untouched", m.th().input)
 	}
-	before := len(m.log)
+	before := len(m.th().log)
 	m, cmd := enter(m)
-	if len(m.log) != before || cmd != nil {
+	if len(m.th().log) != before || cmd != nil {
 		t.Error("enter on a non-chat view ran a chat submit")
 	}
 
 	m.view = ckViewChat
 	m, cmd = enter(m)
-	if len(m.log) <= before {
+	if len(m.th().log) <= before {
 		t.Error("enter on chat did not submit the preserved input")
 	}
 	if cmd == nil {
@@ -172,8 +172,8 @@ func TestEsc_Semantics(t *testing.T) {
 	chat.view = ckViewChat
 	chat = typed(chat, "abc")
 	chat = press(chat, tea.KeyEsc)
-	if chat.input != "" {
-		t.Errorf("esc did not clear the input: %q", chat.input)
+	if chat.th().input != "" {
+		t.Errorf("esc did not clear the input: %q", chat.th().input)
 	}
 }
 
@@ -277,16 +277,16 @@ func TestChatScrollback_NoYankAndEndReturnsToLive(t *testing.T) {
 	m.view = ckViewChat
 	m.w, m.h, m.ready = 100, 24, true
 	for i := 0; i < 80; i++ {
-		m.log = append(m.log, strings.Repeat("history ", 2)+"line")
+		m.th().log = append(m.th().log, strings.Repeat("history ", 2)+"line")
 	}
 
 	m = press(m, tea.KeyPgUp)
-	if m.chatScroll == 0 {
+	if m.th().scroll == 0 {
 		t.Fatal("pgup did not enter scrollback")
 	}
-	anchored := m.chatScroll
-	m.log = append(m.log, "NEW OUTPUT")
-	if m.chatScroll != anchored {
+	anchored := m.th().scroll
+	m.th().log = append(m.th().log, "NEW OUTPUT")
+	if m.th().scroll != anchored {
 		t.Error("an append moved the scrollback anchor")
 	}
 	if out := stripANSI(m.View()); strings.Contains(out, "NEW OUTPUT") {
@@ -296,7 +296,7 @@ func TestChatScrollback_NoYankAndEndReturnsToLive(t *testing.T) {
 	}
 
 	m = press(m, tea.KeyEnd)
-	if m.chatScroll != 0 {
+	if m.th().scroll != 0 {
 		t.Error("end did not return to live")
 	}
 	if out := stripANSI(m.View()); !strings.Contains(out, "NEW OUTPUT") {
@@ -307,7 +307,7 @@ func TestChatScrollback_NoYankAndEndReturnsToLive(t *testing.T) {
 	m = press(m, tea.KeyPgUp)
 	m = typed(m, "a new task")
 	m, _ = enter(m)
-	if m.chatScroll != 0 {
+	if m.th().scroll != 0 {
 		t.Error("sending a message did not return the view to live")
 	}
 }
@@ -318,13 +318,13 @@ func TestChatWheel_ScrollsLog(t *testing.T) {
 	m.view = ckViewChat
 	m.w, m.h, m.ready = 100, 24, true
 	for i := 0; i < 80; i++ {
-		m.log = append(m.log, "line")
+		m.th().log = append(m.th().log, "line")
 	}
 	next, _ := m.Update(tea.MouseMsg{Button: tea.MouseButtonWheelUp, Action: tea.MouseActionPress})
-	if next.(Cockpit).chatScroll == 0 {
+	if next.(Cockpit).th().scroll == 0 {
 		t.Error("wheel up did not scroll the chat log")
 	}
-	if next.(Cockpit).input != "" {
+	if next.(Cockpit).th().input != "" {
 		t.Error("the wheel touched the input")
 	}
 }

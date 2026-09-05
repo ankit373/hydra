@@ -58,7 +58,11 @@ type ckVerifyRound struct {
 type ckTask struct {
 	prompt      string
 	mode        ckModeDef
-	file        string // absolute path of the named existing file; "" = none
+	file        string // absolute path being edited — inside the worktree when isolated
+	rel         string // repo-relative display path; "" when outside the repo
+	root        string // editor scope-root override: the thread's worktree dir
+	dir         string // verify working directory; "" = the process CWD
+	threadID    int    // the owning thread — tea.Cmd results route back by this
 	runID       string
 	taskID      string
 	answerTier  string
@@ -233,19 +237,21 @@ func ckRealDispatchStage(ctx context.Context, t *ckTask, prompt, tierHint string
 }
 
 // ckRealEditStage runs the editor path: scoped, validated, rollback-safe, with
-// the runlog KindEdit snapshot the d/x keys read back.
+// the runlog KindEdit snapshot the d/x keys read back. Root carries a worktree
+// thread's scope override — its files live outside every registered workspace.
 func ckRealEditStage(ctx context.Context, t *ckTask, prompt string) (*editor.Result, error) {
 	return editor.Edit(ctx, editor.Request{
 		File: t.file, Enum: t.editEnum, Prompt: prompt, Validate: true,
-		RunID: t.runID, TaskID: t.taskID, LocalOnly: t.localOnly,
+		RunID: t.runID, TaskID: t.taskID, LocalOnly: t.localOnly, Root: t.root,
 	})
 }
 
 // ckRealVerifyStage runs the workspace's verify command through the oracle.
 // argv carries no placeholders — the file argument was substituted with the
-// real on-disk path, which is what is being verified.
-func ckRealVerifyStage(ctx context.Context, argv []string) (oracle.Verdict, error) {
-	o := &oracle.CommandOracle{Args: argv, Source: "verifier:tui"}
+// real on-disk path, which is what is being verified. dir is the worktree for
+// isolated threads, so the verifier checks the thread's copy, not the user's.
+func ckRealVerifyStage(ctx context.Context, argv []string, dir string) (oracle.Verdict, error) {
+	o := &oracle.CommandOracle{Args: argv, Source: "verifier:tui", Dir: dir}
 	return o.Verify(ctx, "", trust.Task{})
 }
 
@@ -413,7 +419,7 @@ func ckEditAndVerify(ctx context.Context, ex *ckExecState, t *ckTask) byte {
 
 	for {
 		ex.setStage("verifying — " + t.verifyLabel)
-		v, verr := ckVerifyStage(ctx, t.verifyArgv)
+		v, verr := ckVerifyStage(ctx, t.verifyArgv, t.dir)
 		if verr != nil {
 			t.verifyErr = verr.Error()
 			return 0

@@ -3,6 +3,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/csv"
 	"encoding/json"
@@ -10,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -36,9 +38,12 @@ import (
 	"github.com/ankit373/hydra/internal/graph"
 	"github.com/ankit373/hydra/internal/ledger"
 	"github.com/ankit373/hydra/internal/mcpregistry"
+	"github.com/ankit373/hydra/internal/ope"
 	"github.com/ankit373/hydra/internal/optimal"
 	"github.com/ankit373/hydra/internal/oracle"
+	"github.com/ankit373/hydra/internal/otlp"
 	"github.com/ankit373/hydra/internal/parallel"
+	"github.com/ankit373/hydra/internal/payload"
 	"github.com/ankit373/hydra/internal/pending"
 	"github.com/ankit373/hydra/internal/policy"
 	"github.com/ankit373/hydra/internal/pricing"
@@ -1063,8 +1068,316 @@ holding ~30 KB of events can occupy 240 KB.`,
 	seal.Flags().BoolVar(&jsonOut, "json", false, "machine-readable output")
 	seal.Flags().BoolVar(&dryRun, "dry-run", false, "list what would be sealed without writing")
 
-	cmd.AddCommand(seal)
+	var (
+		policySpec string
+		level      float64
+		clipAt     float64
+		days       int
+	)
+	evaluate := &cobra.Command{
+		Use:   "evaluate",
+		Short: "What a different routing policy would have cost, from the log alone",
+		Long: `hyctl trace evaluate estimates the cost of a routing policy you did not run,
+from the dispatches you did.
+
+Every dispatch row records the probability the router assigned to the head it
+chose. Weighting each row by the ratio of what a candidate policy would have
+done to what the router actually did recovers that policy's average cost
+without running it.
+
+It only works where the router had some chance of doing what the candidate
+policy would do. Where it had none the question is not hard but unanswerable,
+and this refuses rather than returning a confident wrong number. Setting
+explore_rate in config.toml above 0 is what creates that overlap.`,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			rows, err := cost.LoadRows(cost.DefaultLogPath())
+			if err != nil {
+				return err
+			}
+			if days > 0 {
+				rows = rowsWithinDays(rows, days)
+			}
+			if len(rows) == 0 {
+				return fmt.Errorf("no dispatches in the cost log — nothing to evaluate")
+			}
+
+			tiers := make([]int, 0, len(rows))
+			for _, r := range rows {
+				tiers = append(tiers, r.Tier)
+			}
+			tierSet := ope.TiersIn(tiers)
+			policy, err := ope.ParsePolicy(policySpec, tierSet)
+			if err != nil {
+				return err
+			}
+
+			samples := make([]ope.CounterfactualSample, 0, len(rows))
+			for _, r := range rows {
+				samples = append(samples, ope.CounterfactualSample{
+					Value:      r.EstCostUSD,
+					LoggedProb: r.ActProb,
+					TargetProb: policy.Would(ope.Decision{
+						Enum: r.Enum, Tier: r.Tier, Model: r.Model,
+						Executor: r.Executor, Pool: r.Pool,
+					}),
+				})
+			}
+			est, evalErr := ope.Evaluate(samples, ope.Options{Level: level, ClipAt: clipAt})
+
+			// The logged policy's own average, for comparison. Self-normalised
+			// over the same rows so the two numbers are computed the same way.
+			var loggedSamples []ope.Sample
+			for _, r := range rows {
+				loggedSamples = append(loggedSamples, ope.Sample{Value: r.EstCostUSD, Prob: r.KeepProb})
+			}
+			logged, _, loggedErr := ope.SelfNormalized(loggedSamples)
+
+			if jsonOut {
+				out := map[string]any{
+					"policy":     policy.Name(),
+					"rows":       len(rows),
+					"tiers_seen": ope.SortedTiers(tierSet),
+					"estimate":   est,
+				}
+				if evalErr != nil {
+					out["refused"] = evalErr.Error()
+				}
+				if loggedErr == nil {
+					out["logged_policy_mean"] = logged
+				}
+				raw, _ := json.MarshalIndent(out, "", "  ")
+				fmt.Println(string(raw))
+				return nil
+			}
+
+			fmt.Printf("  Policy   %s\n", policy.Name())
+			fmt.Printf("  Log      %d dispatches across tiers %v\n", len(rows), ope.SortedTiers(tierSet))
+			if loggedErr == nil {
+				fmt.Printf("  Actual   $%.5f per dispatch under the policy that ran\n", logged)
+			}
+			fmt.Println()
+			if evalErr != nil {
+				fmt.Printf("  %s\n", warnStyle.Render("No answer: "+evalErr.Error()))
+				// The two refusals have different remedies, and telling someone
+				// with a pre-propensity log to set explore_rate would send them
+				// after a setting that cannot fix rows already written.
+				if errors.Is(evalErr, ope.ErrNoPropensity) {
+					fmt.Printf("  %s\n", dimStyle.Render(
+						"These dispatches were logged before Hydra recorded routing propensity. "+
+							"Rows written from now on carry it; nothing recovers it for old ones."))
+				} else {
+					fmt.Printf("  %s\n", dimStyle.Render(
+						"The router is argmax by default, so heads it did not pick have probability 0 "+
+							"and no amount of logging answers this. Set explore_rate in config.toml above 0."))
+				}
+				return nil
+			}
+			fmt.Printf("  Estimate $%.5f per dispatch  [$%.5f, $%.5f] at %.0f%%\n",
+				est.Mean, est.Lo, est.Hi, est.Level*100)
+			if loggedErr == nil && logged > 0 {
+				fmt.Printf("  %s\n", dimStyle.Render(fmt.Sprintf("%.1f%% of what actually ran", est.Mean/logged*100)))
+			}
+			fmt.Println()
+			fmt.Printf("  %s\n", dimStyle.Render(fmt.Sprintf(
+				"%d of %d rows support this policy · effective sample size %.1f · %d weights clipped",
+				est.Supporting, est.N, est.ESS, est.Clipped)))
+			fmt.Printf("  %s\n", dimStyle.Render(est.Method))
+			if est.Skipped > 0 {
+				fmt.Printf("  %s\n", dimStyle.Render(fmt.Sprintf(
+					"%d rows skipped for an unusable propensity", est.Skipped)))
+			}
+			return nil
+		},
+	}
+	evaluate.Flags().StringVar(&policySpec, "policy", "cheaper",
+		"policy to evaluate: "+strings.Join(ope.PolicyNames(), ", "))
+	evaluate.Flags().Float64Var(&level, "confidence", ope.DefaultLevel, "confidence level for the interval")
+	evaluate.Flags().Float64Var(&clipAt, "clip", ope.DefaultClip, "cap importance weights here (negative = no clipping)")
+	evaluate.Flags().IntVar(&days, "days", 0, "only dispatches from the last N days (0 = all)")
+	evaluate.Flags().BoolVar(&jsonOut, "json", false, "machine-readable output")
+
+	var (
+		endpoint string
+		outFile  string
+		expDays  int
+		limit    int
+	)
+	export := &cobra.Command{
+		Use:   "export",
+		Short: "Render the dispatch log as OpenTelemetry spans",
+		Long: `hyctl trace export renders dispatches as OTLP spans.
+
+Nothing leaves the machine unless --otlp names an endpoint. With no endpoint
+the payload is written to stdout or --out, so you can read exactly what would
+be sent before sending it.
+
+The export is a bridge, not a migration: Hydra's own schema stays
+authoritative. gen_ai.* attributes are populated where they genuinely
+correspond, and tier, enum, cost and routing propensity — which OTel has no
+place for — are carried under hydra.* rather than dropped.`,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			rows, err := cost.LoadRows(cost.DefaultLogPath())
+			if err != nil {
+				return err
+			}
+			if expDays > 0 {
+				rows = rowsWithinDays(rows, expDays)
+			}
+			if limit > 0 && len(rows) > limit {
+				rows = rows[len(rows)-limit:] // newest
+			}
+			if len(rows) == 0 {
+				return fmt.Errorf("no dispatches in the cost log — nothing to export")
+			}
+			payload, err := otlp.Build(rows, "hydra", build.Version)
+			if err != nil {
+				return err
+			}
+			body, err := otlp.Marshal(payload)
+			if err != nil {
+				return err
+			}
+
+			if endpoint == "" {
+				if outFile != "" {
+					if err := os.WriteFile(outFile, body, 0o600); err != nil {
+						return err
+					}
+					fmt.Printf("  %d span%s written to %s\n", len(rows), plural(len(rows)), outFile)
+					fmt.Printf("  %s\n", dimStyle.Render("Nothing was sent. Pass --otlp <endpoint> to export."))
+					return nil
+				}
+				fmt.Println(string(body))
+				return nil
+			}
+			return postOTLP(endpoint, body, len(rows))
+		},
+	}
+	export.Flags().StringVar(&endpoint, "otlp", "",
+		"OTLP/HTTP traces endpoint (e.g. http://localhost:4318/v1/traces). Without it nothing is sent")
+	export.Flags().StringVar(&outFile, "out", "", "write the payload to a file instead of stdout")
+	export.Flags().IntVar(&expDays, "days", 0, "only dispatches from the last N days (0 = all)")
+	export.Flags().IntVar(&limit, "limit", 0, "export at most N of the newest dispatches (0 = all)")
+
+	payloads := &cobra.Command{
+		Use:   "payloads",
+		Short: "Payload store: what is captured, how much it costs, and what it holds",
+		Long: `hyctl trace payloads reports the opt-in store of prompt and response text.
+
+Capture is off unless it was chosen at ` + "`hyctl init`" + ` or set with
+capture_payloads in config.toml. Stored text is sampled — every blob records the
+probability it was admitted — and anything matching a secret detector is
+replaced before it is written.`,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			// A machine that has never run `hyctl init` has no config, and the
+			// answer is knowable anyway: no config means capture was never
+			// opted into. Reporting a missing file instead would be an error
+			// about Hydra's plumbing in place of the answer asked for.
+			cfg, err := config.Load()
+			if err != nil {
+				cfg = &config.Config{}
+			}
+			store, err := payload.Open(payload.Dir())
+			if err != nil {
+				return err
+			}
+			st := store.Stat()
+			if jsonOut {
+				raw, _ := json.MarshalIndent(map[string]any{
+					"capture_enabled": cfg.CapturePayloads,
+					"keep_rate":       payloadKeepRate(cfg),
+					"stats":           st,
+				}, "", "  ")
+				fmt.Println(string(raw))
+				return nil
+			}
+			if !cfg.CapturePayloads {
+				fmt.Println("Payload capture is off. Hydra keeps the statistics either way;")
+				fmt.Println("turn capture on with capture_payloads = true in config.toml.")
+				if st.Blobs == 0 {
+					return nil
+				}
+				fmt.Println()
+			}
+			if st.Blobs == 0 {
+				fmt.Println("No payloads stored.")
+				return nil
+			}
+			fmt.Printf("  %d blob%s, admitted at %.0f%%\n", st.Blobs, plural(st.Blobs), payloadKeepRate(cfg)*100)
+			fmt.Printf("  %s of text in %s on disk (%.1fx)\n",
+				humanBytes(st.RawBytes), humanBytes(st.DiskBytes), ratioOf(st.RawBytes, st.DiskBytes))
+			fmt.Printf("  %s\n", dimStyle.Render(fmt.Sprintf(
+				"%d dictionary-compressed · %d contained redacted secrets", st.WithDict, st.WithPII)))
+			return nil
+		},
+	}
+	payloads.Flags().BoolVar(&jsonOut, "json", false, "machine-readable output")
+
+	cmd.AddCommand(seal, evaluate, export, payloads)
 	return cmd
+}
+
+// postOTLP sends the payload to an OTLP/HTTP endpoint.
+//
+// Sending is the one thing here that leaves the machine, so it is explicit
+// about where it went and refuses to report success on a non-2xx.
+func postOTLP(endpoint string, body []byte, spans int) error {
+	req, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if key := os.Getenv("HYDRA_OTLP_HEADERS"); key != "" {
+		// "k=v,k=v", the same shape OTEL_EXPORTER_OTLP_HEADERS uses, so an
+		// existing collector's auth config transfers unchanged.
+		for _, pair := range strings.Split(key, ",") {
+			k, v, ok := strings.Cut(strings.TrimSpace(pair), "=")
+			if ok {
+				req.Header.Set(k, v)
+			}
+		}
+	}
+	resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
+	if err != nil {
+		return fmt.Errorf("otlp export to %s: %w", endpoint, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		snippet, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return fmt.Errorf("otlp export to %s: %s: %s", endpoint, resp.Status, strings.TrimSpace(string(snippet)))
+	}
+	fmt.Printf("  %d span%s exported to %s\n", spans, plural(spans), endpoint)
+	return nil
+}
+
+// rowsWithinDays keeps rows whose timestamp is inside the window. A row whose
+// timestamp will not parse is kept rather than dropped: silently shrinking the
+// corpus a estimate is computed from is worse than including one stale row.
+func rowsWithinDays(rows []cost.Row, days int) []cost.Row {
+	cutoff := time.Now().AddDate(0, 0, -days)
+	out := make([]cost.Row, 0, len(rows))
+	for _, r := range rows {
+		ts, err := time.Parse(time.RFC3339, r.TS)
+		if err != nil || !ts.Before(cutoff) {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// DefaultPayloadKeepRate is how often a payload is admitted when capture is on
+// but no rate was configured. Sampling is what bounds the store; the rate is
+// recorded on every blob so the set stays correctable to the population.
+const DefaultPayloadKeepRate = 0.1
+
+// payloadKeepRate resolves the configured rate, treating an unset or nonsensical
+// value as the default rather than as "keep nothing" — a zero rate would
+// silently disable capture the user had explicitly turned on.
+func payloadKeepRate(cfg *config.Config) float64 {
+	if cfg != nil && cfg.PayloadKeepRate > 0 && cfg.PayloadKeepRate <= 1 {
+		return cfg.PayloadKeepRate
+	}
+	return DefaultPayloadKeepRate
 }
 
 // ratioOf guards the division so an empty seal cannot print Inf or NaN.

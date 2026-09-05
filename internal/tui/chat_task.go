@@ -2,9 +2,10 @@
 
 package tui
 
-// chat_task.go — the UI side of a chat task's life: launch with its route
-// line, the plan/confirm gates, the finished rendering (answer block, proof
-// strip, footer), and the d/x/o result actions over runlog edit snapshots.
+// chat_task.go — the UI side of a chat task's life on its thread: launch with
+// the route line (through the overlap gate and worktree isolation), the
+// plan/confirm gates, the finished rendering (answer block, proof strip,
+// footer), and the a/d/x/o result actions.
 
 import (
 	"context"
@@ -34,13 +35,23 @@ var ckTierEnum = map[int]string{
 
 // ── launch ────────────────────────────────────────────────────────────────────
 
-// startTask classifies the task, prints the route line, and spawns the
-// pipeline worker. The ctrl+o override is consumed here — next task only.
+// startTask echoes the prompt on the active thread and begins it.
 func (m Cockpit) startTask(task string) (Cockpit, tea.Cmd) {
-	m.flash = "" // an override's "next task" note is consumed by this task
-	m.log = append(m.log, ckYouS.Render("❯ "+ckSafe(task)))
+	th := m.th()
+	if th.name == "" {
+		th.name = ckThreadName(task)
+	}
+	th.log = append(th.log, ckYouS.Render("❯ "+ckSafe(task)))
+	return m.beginTask(th, task, m.mode)
+}
 
-	md := ckModeByName(m.mode)
+// beginTask classifies the task, gates it on file overlap, prints the route
+// line, and spawns the pipeline — behind worktree creation when the thread
+// needs isolation. The ctrl+o override is consumed here — next task only.
+// modeName is captured at submit time, so a queued task keeps its mode.
+func (m Cockpit) beginTask(th *ckThread, task, modeName string) (Cockpit, tea.Cmd) {
+	m.flash = "" // an override's "next task" note is consumed by this task
+	md := ckModeByName(modeName)
 	enum, wantTier := classifyTask(task)
 	ov := m.override
 	m.override = ckOverride{}
@@ -60,15 +71,44 @@ func (m Cockpit) startTask(task string) (Cockpit, tea.Cmd) {
 	// A real scan can legitimately find nothing; inventing a route is exactly
 	// what #189 removed, and dispatching would only fail later and worse.
 	if idx < 0 {
-		m.log = append(m.log, ckDimS.Render("  no routable model — run `hyctl probe` to see why"))
+		th.log = append(th.log, ckDimS.Render("  no routable model — run `hyctl probe` to see why"))
 		return m, nil
 	}
 	h := m.heads[idx]
 
 	file := ckNamedFile(task)
+	editCapable := file != "" && md.name != "ask"
+	rel := ckRepoRel(m.repoRoot, file)
+
+	// Overlap gate (#598): the same duplicate-target pre-flight
+	// internal/parallel runs, against every other thread's holds. A thread
+	// re-checked after a release keeps its original place in the queue.
+	if editCapable {
+		key := rel
+		if key == "" {
+			key = file
+		}
+		if blocker, overlap := m.overlapBlocker(th, key); blocker != nil {
+			if th.queued != nil {
+				th.requeueBehind(blocker, overlap)
+				return m, nil
+			}
+			th.queueTask(task, key, blocker, overlap)
+			th.queued.mode, th.queued.seq = modeName, m.queueSeq
+			m.queueSeq++
+			return m, nil
+		}
+		if th.queued != nil {
+			th.queued = nil
+			th.log = append(th.log, ckDimS.Render("  ▶ unblocked — starting"))
+		}
+		th.files = ckAppendUnique(th.files, key)
+	}
+
 	t := ckTask{
-		prompt: task, mode: md, file: file,
-		runID: runid.New(), taskID: runid.New(),
+		prompt: task, mode: md, file: file, rel: rel,
+		threadID: th.id,
+		runID:    runid.New(), taskID: runid.New(),
 		answerTier: strconv.Itoa(wantTier),
 		planTier:   md.planTier,
 		editEnum:   ckEditEnum(enum, md, ov),
@@ -86,18 +126,17 @@ func (m Cockpit) startTask(task string) (Cockpit, tea.Cmd) {
 			t.strategy, t.confidence = ov.kind, ov.conf
 		}
 	}
-	if md.verify {
-		t.verifyArgv, t.verifyLabel = ckVerifyArgs(file)
-	}
+	th.lastRunID = t.runID
+	th.clock = th.clock.Tick(ckThreadAgent(th.id))
 
-	m.log = append(m.log, m.routeLines(t, h, enum, ov, pinned)...)
+	th.log = append(th.log, m.routeLines(t, h, enum, ov, pinned)...)
 	if f := ckFileRe.FindString(task); f != "" {
 		if radius, deps, kappa, ok := m.metrics.ckBlastFor(f); ok {
 			risk := ckCheapS
 			if kappa >= 2 {
 				risk = ckExpS
 			}
-			m.log = append(m.log, ckDimS.Render("  impact ")+
+			th.log = append(th.log, ckDimS.Render("  impact ")+
 				risk.Render(fmt.Sprintf("κ=%.1f", kappa))+
 				ckDimS.Render(fmt.Sprintf("  %d dependent%s · radius %.2f×  → %s",
 					deps, plural(deps), radius, truncate(f, 40))))
@@ -106,15 +145,124 @@ func (m Cockpit) startTask(task string) (Cockpit, tea.Cmd) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), ckTaskTimeout)
 	ex := &ckExecState{ctx: ctx, cancel: cancel, started: t.startedAt, stage: "routing"}
-	m.exec = ex
-	m.lastDone = nil
-	m.chatScroll = 0
+	th.exec = ex
+	th.lastDone = nil
+	th.scroll = 0
 
+	// Isolation (#598): an edit thread inside a repo works in its own worktree.
+	if editCapable && rel != "" {
+		if th.wt == nil {
+			ex.setStage("isolating — creating worktree")
+			th.log = append(th.log, ckDimS.Render("  ⎇ isolating — cutting a worktree of ")+
+				ckDimS.Render(truncate(m.repoRoot, 40)))
+			return m, tea.Batch(ckWtCreate(ex, t, m.repoRoot), ckSpinTick(ex))
+		}
+		th.log = append(th.log, ckDimS.Render("  ⎇ worktree ")+ckVioletS.Render(th.wt.tag)+
+			ckDimS.Render(" · merges on apply"))
+		return m.launchTask(th, t, ex)
+	}
+	if editCapable {
+		// No repo (or the file lives outside it): edits land in place, one at a
+		// time — said out loud, never pretended isolation (#598).
+		th.inEdit = true
+		th.log = append(th.log, ckMidS.Render("  ⚠ no isolation ")+
+			ckDimS.Render("— editing your files directly (no git repo here); edits run one at a time"))
+	}
+	return m.launchTask(th, t, ex)
+}
+
+// launchTask finalizes the task against its working tree (worktree or CWD) and
+// spawns the right pipeline phase.
+func (m Cockpit) launchTask(th *ckThread, t ckTask, ex *ckExecState) (Cockpit, tea.Cmd) {
+	if th.wt != nil && t.rel != "" {
+		t.file = filepath.Join(th.wt.dir, filepath.FromSlash(t.rel))
+		t.root = th.wt.dir
+		t.dir = th.wt.dir
+	}
+	if t.mode.verify {
+		t.verifyArgv, t.verifyLabel = ckVerifyArgs(t.file)
+	}
 	phase := ckPhaseFull
-	if md.name == "plan" || (md.confirm && file != "") {
+	if t.mode.name == "plan" || (t.mode.confirm && t.file != "") {
 		phase = ckPhaseHead
 	}
 	return m, tea.Batch(ckWorker(ex, t, phase), ckSpinTick(ex))
+}
+
+// worktreeReady lands the async `git worktree add`: attach it and launch the
+// pending task, or fail the task honestly — never fall back to editing the
+// user's tree when isolation was promised.
+func (m Cockpit) worktreeReady(msg ckWtReadyMsg) (tea.Model, tea.Cmd) {
+	th := m.threadByID(msg.task.threadID)
+	if th == nil || th.exec != msg.exec {
+		if msg.wt != nil { // superseded — do not litter the worktree dir
+			_ = ckDiscardWorktree(msg.wt)
+		}
+		return m, nil
+	}
+	t := msg.task
+	if err := msg.exec.ctx.Err(); err != nil {
+		if msg.wt != nil {
+			_ = ckDiscardWorktree(msg.wt)
+		}
+		t.errText = "worktree creation cancelled"
+		t.canceled = true
+		return m.failBeforeRun(th, t)
+	}
+	if msg.err != nil {
+		t.errText = "worktree creation failed: " + msg.err.Error()
+		return m.failBeforeRun(th, t)
+	}
+	th.wt = msg.wt
+	th.log = append(th.log, ckDimS.Render("  ⎇ worktree ")+ckVioletS.Render(th.wt.tag)+
+		ckDimS.Render(" · branch "+th.wt.branch+" · merges on apply"))
+	return m.launchTask(th, t, msg.exec)
+}
+
+// failBeforeRun settles a task that never reached the pipeline, releasing the
+// thread's fresh hold so queued threads are not blocked by a task that never ran.
+func (m Cockpit) failBeforeRun(th *ckThread, t ckTask) (Cockpit, tea.Cmd) {
+	th.exec = nil
+	key := t.rel
+	if key == "" {
+		key = t.file
+	}
+	th.files = ckRemove(th.files, key)
+	ckFinalize(&t, context.Background())
+	nm, cmd := m.settleTask(th, t)
+	nm, rcmd := nm.releaseThreads(th)
+	return nm, tea.Batch(cmd, rcmd)
+}
+
+// ckRepoRel is file's repo-relative path, or "" when it is not under root.
+func ckRepoRel(root, file string) string {
+	if root == "" || file == "" {
+		return ""
+	}
+	rel, err := filepath.Rel(root, file)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return ""
+	}
+	return filepath.ToSlash(rel)
+}
+
+func ckAppendUnique(files []string, f string) []string {
+	for _, x := range files {
+		if x == f {
+			return files
+		}
+	}
+	return append(files, f)
+}
+
+func ckRemove(files []string, f string) []string {
+	out := files[:0]
+	for _, x := range files {
+		if x != f {
+			out = append(out, x)
+		}
+	}
+	return out
 }
 
 // ckEditEnum picks the editor path's routing enum: the classification, the
@@ -218,30 +366,57 @@ func ckWhyWords(t ckTask, enum string) string {
 
 // ── gates ─────────────────────────────────────────────────────────────────────
 
-// gateTask handles a pipeline paused for the user: render what is waiting and
-// arm the matching wait state.
+// gateTask handles a pipeline paused for the user: render what is waiting on
+// its own thread, arm the matching wait state, and ping chat when that thread
+// is not the one in front of the user.
 func (m Cockpit) gateTask(msg ckGateMsg) (Cockpit, tea.Cmd) {
-	if msg.exec != m.exec || m.exec == nil {
+	th := m.threadByID(msg.task.threadID)
+	if th == nil || th.exec != msg.exec {
 		return m, nil
 	}
-	m.exec = nil
+	th.exec = nil
 	t := msg.task
 	switch msg.gate {
 	case 'p':
-		m.log = append(m.log, ckPlanLines(t)...)
-		m.log = append(m.log, ckFaintS.Render("  enter/y runs it · esc discards"))
-		m.planWait = &ckWait{task: t, phase: ckPhaseTail}
+		th.log = append(th.log, ckPlanLines(t)...)
+		th.log = append(th.log, ckFaintS.Render("  enter/y runs it · esc discards"))
+		th.planWait = &ckWait{task: t, phase: ckPhaseTail}
 	case 'w':
-		m.log = append(m.log, ckPlanLines(t)...)
-		m.confirm = &ckWait{task: t, phase: ckPhaseTail,
+		th.log = append(th.log, ckPlanLines(t)...)
+		th.confirm = &ckWait{task: t, phase: ckPhaseTail,
 			question: "write " + filepath.Base(t.file) + "? y writes · n stops"}
 	case 'f':
-		m.log = append(m.log, ckExpS.Render("  ✗ verify failed ")+
+		th.log = append(th.log, ckExpS.Render("  ✗ verify failed ")+
 			ckDimS.Render(truncate(ckSafe(t.fixDetail), 70)))
-		m.confirm = &ckWait{task: t, phase: ckPhaseFix,
+		th.confirm = &ckWait{task: t, phase: ckPhaseFix,
 			question: fmt.Sprintf("write fix %d/%d to %s? y/n", t.fixRound, ckMaxFixes, filepath.Base(t.file))}
 	}
+	m.pingIfElsewhere(th, "needs you — "+ckGateWord(msg.gate))
 	return m, nil
+}
+
+func ckGateWord(gate byte) string {
+	switch gate {
+	case 'p':
+		return "a plan waits for approval"
+	case 'f':
+		return "a fix wants a y/n"
+	default:
+		return "a write wants a y/n"
+	}
+}
+
+// pingIfElsewhere drops a hydra ▸ line into the ACTIVE thread when th is
+// backgrounded or simply not the one on screen — the spec's completion ping.
+func (m *Cockpit) pingIfElsewhere(th *ckThread, what string) {
+	active := m.th()
+	if th.id == active.id {
+		return
+	}
+	th.attn = th.planWait != nil || th.confirm != nil || th.attn
+	active.log = append(active.log, ckAquaS.Render("hydra ▸ ")+
+		ckDimS.Render(fmt.Sprintf("thread %d %s · alt+%d opens it · ctrl+g next", th.id, what, th.id)))
+	m.flash = fmt.Sprintf("thread %d %s", th.id, what)
 }
 
 // ckPlanLines renders a drafted plan into the log, capped so a rambling plan
@@ -267,67 +442,157 @@ func ckPlanLines(t ckTask) []string {
 
 // resumeTask restarts a gated pipeline at its stored phase with a fresh
 // context; elapsed time keeps counting from the original start.
-func (m Cockpit) resumeTask(w ckWait) (Cockpit, tea.Cmd) {
+func (m Cockpit) resumeTask(th *ckThread, w ckWait) (Cockpit, tea.Cmd) {
 	ctx, cancel := context.WithTimeout(context.Background(), ckTaskTimeout)
 	ex := &ckExecState{ctx: ctx, cancel: cancel, started: w.task.startedAt, stage: "resuming"}
-	m.exec = ex
-	m.planWait, m.confirm = nil, nil
+	th.exec = ex
+	th.planWait, th.confirm = nil, nil
 	return m, tea.Batch(ckWorker(ex, w.task, w.phase), ckSpinTick(ex))
 }
 
 // stopWait ends a gated task without resuming it: the run closes, and what
 // already happened (plan cost, a landed edit) is settled honestly.
-func (m Cockpit) stopWait(w ckWait, note string) (Cockpit, tea.Cmd) {
-	m.planWait, m.confirm = nil, nil
+func (m Cockpit) stopWait(th *ckThread, w ckWait, note string) (Cockpit, tea.Cmd) {
+	th.planWait, th.confirm = nil, nil
 	t := w.task
 	_ = runlog.New(t.runID).Append(runlog.Event{Kind: runlog.KindRunFinished, TaskID: t.taskID})
 	t.stopped = true
 	t.note = note
 	ckFinalize(&t, context.Background())
-	return m.settleTask(t)
+	return m.settleTask(th, t)
 }
 
 // ── completion ────────────────────────────────────────────────────────────────
 
-// finishTask lands a worker's final message.
+// finishTask lands a worker's final message on its thread — routed by the
+// task's thread id, never by whichever thread is current.
 func (m Cockpit) finishTask(msg ckExecDoneMsg) (Cockpit, tea.Cmd) {
-	if msg.exec != m.exec || m.exec == nil {
+	th := m.threadByID(msg.task.threadID)
+	if th == nil || th.exec != msg.exec {
 		return m, nil
 	}
-	m.exec = nil
-	return m.settleTask(msg.task)
+	th.exec = nil
+	return m.settleTask(th, msg.task)
 }
 
-// settleTask renders a finished task and updates everything that watched it:
-// session cost, the run list, the last-result actions, and the code panel.
-func (m Cockpit) settleTask(t ckTask) (Cockpit, tea.Cmd) {
+// settleTask renders a finished task on its thread and updates everything that
+// watched it: session cost, the run list, the result actions, the code panel,
+// held-file release, and the elsewhere ping.
+func (m Cockpit) settleTask(th *ckThread, t ckTask) (Cockpit, tea.Cmd) {
 	m.sessionUSD += t.costUSD
 	m.runsToday = ckLoadRuns(time.Now().UTC())
-	m.lastDone = &t
-	m.log = append(m.log, ckResultLines(t)...)
-	if t.edited && t.editRefLast != "" {
-		if _, after, err := runlog.LoadEdit(t.runID, t.editRefLast); err == nil {
-			m = m.showCode(t.file, string(after))
-			return m, ckCodeTick(m.codeGen)
+	th.lastDone = &t
+	th.inEdit = false
+	th.log = append(th.log, ckResultLines(t)...)
+	if t.edited && th.wt != nil {
+		th.log = append(th.log, ckFaintS.Render("  a applies it to your tree · x x discards the worktree"))
+	}
+
+	// An untouched worktree from a task that never edited (failed plan, declined
+	// write, cancel) is litter, not work — remove it and say so.
+	if th.wt != nil && !t.edited && len(ckWorktreeChanges(th.wt)) == 0 {
+		if err := ckDiscardWorktree(th.wt); err == nil {
+			th.log = append(th.log, ckDimS.Render("  ⎇ worktree removed — nothing landed in it"))
+			th.wt = nil
+			th.files = nil
+		} else {
+			th.log = append(th.log, ckMidS.Render("  ⚠ empty worktree cleanup failed: "+err.Error()))
 		}
 	}
-	return m, nil
+	if th.wt == nil {
+		th.files = nil // in-place holds end with the task; worktrees hold to apply
+	}
+
+	what := "done"
+	switch {
+	case t.canceled:
+		what = "cancelled"
+	case t.errText != "":
+		what = "failed — " + truncate(ckFirstLine(t.errText), 40)
+	case t.stopped:
+		what = "stopped"
+	}
+	m.pingIfElsewhere(th, what)
+	if th.id != m.th().id && (t.errText != "" && !t.canceled) {
+		th.attn = true // a failure elsewhere needs eyes; ctrl+g finds it
+	}
+
+	nm, rcmd := m.releaseThreads(th)
+	m = nm
+	if t.edited && t.editRefLast != "" {
+		if _, after, err := runlog.LoadEdit(t.runID, t.editRefLast); err == nil {
+			m = m.showCode(th, t.file, string(after))
+			return m, tea.Batch(rcmd, ckCodeTick(th.id, th.codeGen))
+		}
+	}
+	return m, rcmd
 }
 
-// showCode streams content into the code panel (real file content — the fake
-// snippets died with the preview-only chat).
-func (m Cockpit) showCode(file, content string) Cockpit {
-	m.codeLang = strings.TrimPrefix(filepath.Ext(file), ".")
+// ckWorktreeChanges lists what the worktree holds beyond its base: dirty files
+// plus anything already committed on its branch.
+func ckWorktreeChanges(wt *ckWorktree) []string {
+	st, err := ckGit(wt.dir, "", "status", "--porcelain")
+	if err != nil {
+		return []string{"unknown: " + ckFirstLine(st)}
+	}
+	changes := ckSplitLines(st)
+	if names, err := ckGit(wt.repo, "", "diff", "--name-only", wt.base, wt.branch); err == nil {
+		changes = append(changes, ckSplitLines(names)...)
+	}
+	return changes
+}
+
+// showCode streams content into the thread's code panel (real file content —
+// the fake snippets died with the preview-only chat).
+func (m Cockpit) showCode(th *ckThread, file, content string) Cockpit {
+	th.codeLang = strings.TrimPrefix(filepath.Ext(file), ".")
 	lines := strings.Split(strings.TrimRight(content, "\n"), "\n")
 	if len(lines) > ckCodeMaxLines {
 		lines = append(lines[:ckCodeMaxLines], "… (truncated)")
 	}
-	m.codeLines = lines
-	m.codeShown = 0
-	m.codeDiff = false
-	m.codeGen++
+	th.codeLines = lines
+	th.codeShown = 0
+	th.codeDiff = false
+	th.codeGen++
 	return m
 }
+
+// ── background (ctrl+b) ───────────────────────────────────────────────────────
+
+// backgroundThread re-parents the active thread to the agents view. Its
+// pipeline keeps running on its own context; completion pings chat.
+func (m Cockpit) backgroundThread() Cockpit {
+	th := m.th()
+	if len(m.threads) >= ckMaxThreads && len(m.visibleThreads()) == 1 {
+		m.flash = "cannot background the last thread — the thread limit is reached"
+		return m
+	}
+	th.bg = true
+	m.runsToday = ckLoadRuns(time.Now().UTC()) // its live run shows up now
+	if m.split && m.splitID == th.id {
+		m.split = false
+	}
+	// The input needs a foreground owner: the next visible thread, or a new one.
+	if vis := m.visibleThreads(); len(vis) > 0 {
+		m = m.focusThread(vis[0].id)
+	} else {
+		m = m.addThread()
+	}
+	m.flash = fmt.Sprintf("thread %d backgrounded — it lives in agents (2) · alt+%d brings it back", th.id, th.id)
+	return m
+}
+
+// threadForRun maps a run id back to its thread (the agents-view join).
+func (m Cockpit) threadForRun(runID string) *ckThread {
+	for _, t := range m.threads {
+		if t.lastRunID == runID {
+			return t
+		}
+	}
+	return nil
+}
+
+// ── result rendering ──────────────────────────────────────────────────────────
 
 // ckResultLines renders a finished task: answer block, proof strip, footer.
 // A failure always carries its trace link — never a dead end.
@@ -383,8 +648,12 @@ func ckProofStrip(t ckTask) string {
 		parts = append(parts, ckCheapS.Render("plan ✓ ")+
 			ckDimS.Render(fmt.Sprintf("%d step%s", t.planSteps, plural(t.planSteps))))
 	}
+	name := t.rel
+	if name == "" {
+		name = filepath.Base(t.file)
+	}
 	parts = append(parts, ckCheapS.Render("edit ✓ ")+
-		ckDimS.Render(fmt.Sprintf("%s +%d/−%d", filepath.Base(t.file), t.added, t.removed)))
+		ckDimS.Render(fmt.Sprintf("%s +%d/−%d", truncate(name, 30), t.added, t.removed)))
 	parts = append(parts, ckTestsCell(t))
 	return "  " + strings.Join(parts, ckFaintS.Render(" · "))
 }
@@ -435,21 +704,41 @@ func ckFirstLine(s string) string {
 	return s
 }
 
-// ── result actions (d/x/o) ────────────────────────────────────────────────────
+// ── result actions (a/d/x/o) ──────────────────────────────────────────────────
 
-// resultKey acts on the last finished edit from an empty input: d toggles the
-// diff in the code panel, x restores the pre-task snapshot, o opens $EDITOR.
+// resultKey acts on the active thread's last finished edit from an empty
+// input: a applies an isolated thread's worktree, d toggles the diff, x undoes
+// (or, on a worktree thread, discards — pressed twice), o opens $EDITOR.
 // Returns handled=false when there is nothing to act on, so the rune types.
 func (m Cockpit) resultKey(r rune) (Cockpit, tea.Cmd, bool) {
-	t := m.lastDone
+	th := m.th()
+	t := th.lastDone
 	if t == nil || !t.edited {
+		if r == 'a' || r == 'x' {
+			// A held worktree can outlive lastDone (e.g. after a declined fix);
+			// apply/discard must still be reachable.
+			if th.wt != nil && th.exec == nil {
+				if r == 'a' {
+					return m.applyThread(th)
+				}
+				return m.discardKey(th)
+			}
+		}
 		return m, nil, false
 	}
 	switch r {
+	case 'a':
+		if th.wt == nil || th.exec != nil {
+			return m, nil, false
+		}
+		return m.applyThread(th)
 	case 'd':
-		return m.toggleDiff(t), nil, true
+		return m.toggleDiff(th, t), nil, true
 	case 'x':
-		return m.undoEdit(t), nil, true
+		if th.wt != nil {
+			return m.discardKey(th)
+		}
+		return m.undoEdit(th, t), nil, true
 	case 'o':
 		ed := os.Getenv("EDITOR")
 		if ed == "" {
@@ -461,17 +750,18 @@ func (m Cockpit) resultKey(r rune) (Cockpit, tea.Cmd, bool) {
 	return m, nil, false
 }
 
-// toggleDiff swaps the code panel between the task's full diff (first before →
-// last after, so the fix loop's intermediate writes collapse) and the file.
-func (m Cockpit) toggleDiff(t *ckTask) Cockpit {
+// toggleDiff swaps the thread's code panel between the task's full diff (first
+// before → last after, so the fix loop's intermediate writes collapse) and the
+// file.
+func (m Cockpit) toggleDiff(th *ckThread, t *ckTask) Cockpit {
 	if t.editRef == "" || t.editRefLast == "" {
 		m.flash = "no snapshot stored for this edit"
 		return m
 	}
-	if m.codeDiff {
+	if th.codeDiff {
 		if _, after, err := runlog.LoadEdit(t.runID, t.editRefLast); err == nil {
-			m = m.showCode(t.file, string(after))
-			m.codeShown = len(m.codeLines)
+			m = m.showCode(th, t.file, string(after))
+			th.codeShown = len(th.codeLines)
 		}
 		return m
 	}
@@ -490,17 +780,17 @@ func (m Cockpit) toggleDiff(t *ckTask) Cockpit {
 	if len(lines) > ckCodeMaxLines {
 		lines = append(lines[:ckCodeMaxLines], "… (truncated)")
 	}
-	m.codeLang = "diff"
-	m.codeLines = lines
-	m.codeShown = len(lines)
-	m.codeDiff = true
-	m.codeGen++ // cancel any stream in flight
+	th.codeLang = "diff"
+	th.codeLines = lines
+	th.codeShown = len(lines)
+	th.codeDiff = true
+	th.codeGen++ // cancel any stream in flight
 	return m
 }
 
 // undoEdit restores the file to its exact pre-task bytes from the first edit
 // snapshot, preserving the file's permissions. One-shot per task.
-func (m Cockpit) undoEdit(t *ckTask) Cockpit {
+func (m Cockpit) undoEdit(th *ckThread, t *ckTask) Cockpit {
 	if t.undone {
 		m.flash = "already restored"
 		return m
@@ -524,7 +814,7 @@ func (m Cockpit) undoEdit(t *ckTask) Cockpit {
 	}
 	t.undone = true // through the pointer: the second x says "already restored"
 	m.flash = "restored " + filepath.Base(t.file) + " to its pre-task state"
-	m = m.showCode(t.file, string(before))
-	m.codeShown = len(m.codeLines)
+	m = m.showCode(th, t.file, string(before))
+	th.codeShown = len(th.codeLines)
 	return m
 }

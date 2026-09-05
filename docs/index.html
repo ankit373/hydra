@@ -80,6 +80,9 @@
       "hyctl stats --latency — p50/p90/p99 per model from mergeable sketches, not a rescan of the cost log",
       "Oracle-verified eval corpus (hyctl eval) — labelled examples kept verbatim and exempt from retention",
       "hyctl trace seal — folds old run logs into compressed monthly segments, losslessly and invisibly to readers",
+      "Opt-in payload store (hyctl trace payloads) — prompt and response text, off by default, sampled, and redacted before it is written",
+      "Off-policy evaluation (hyctl trace evaluate) — what a routing policy you never ran would have cost, with a confidence interval, refusing where the log cannot answer",
+      "OpenTelemetry export (hyctl trace export --otlp) — dispatches as OTLP spans for Langfuse, Grafana or Jaeger; nothing leaves the machine by default",
       "hyctl ask — tasks parked waiting on a human, when a ledger rule answers ask rather than allow or deny",
       "A2A agent-to-agent handoff protocol with vector clocks for causal ordering",
       "Homebrew installable on macOS and Linux"
@@ -821,7 +824,7 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
     </table>
   </div>
   </div>
-  <p class="cmp-note"><b>Every row checked above ships today</b> — <code>hyctl dispatch --confidence</code>, <code>hyctl graph blast</code>, <code>hyctl mcp</code>, <code>hyctl mcp registry</code>. The agent-tree cockpit (<code>hyctl tui</code>) now renders real runs from the per-run event log, and the desktop app ships as a download for macOS, Windows and Linux with every release — not yet code-signed, so macOS needs right-click → Open on first launch.</p>
+  <p class="cmp-note"><b>Every row checked above ships today</b> — <code>hyctl dispatch --confidence</code>, <code>hyctl graph blast</code>, <code>hyctl mcp</code>, <code>hyctl mcp registry</code>. The cockpit (<code>hyctl tui</code>) runs the work you type and renders real runs from the per-run event log, and the desktop app ships as a download for macOS, Windows and Linux on both x86-64 and ARM64 with every release — not yet code-signed, so macOS needs right-click → Open on first launch.</p>
 </section>
 
 <!-- ══ 6b · DESKTOP APP NUDGE ═══════════════════════════════════════════════ -->

@@ -107,7 +107,7 @@ func (m Cockpit) modePickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case tea.KeySpace:
 		m.modePick = false
-		m.input = "m "
+		m.th().input = "m "
 		return m, nil
 	case tea.KeyUp:
 		return m.moveModeSel(-1), nil
@@ -132,7 +132,7 @@ func (m Cockpit) modePickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		// Anything else — a typed letter or a paste — falls through to input.
 		m.modePick = false
-		m.input = "m" + string(msg.Runes)
+		m.th().input = "m" + string(msg.Runes)
 	}
 	return m, nil
 }

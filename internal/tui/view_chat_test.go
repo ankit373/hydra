@@ -18,12 +18,12 @@ func TestChat_ViewCommandsSwitchViews(t *testing.T) {
 		if m.view != want {
 			t.Errorf(":%s left view = %d, want %d", name, m.view, want)
 		}
-		if m.input != "" {
-			t.Errorf("the input still holds %q after submitting", m.input)
+		if m.th().input != "" {
+			t.Errorf("the input still holds %q after submitting", m.th().input)
 		}
 	}
 	m, _ := enter(typed(testCockpit(), ":nonsense"))
-	if !strings.Contains(strings.Join(m.log, "\n"), "unknown") {
+	if !strings.Contains(strings.Join(m.th().log, "\n"), "unknown") {
 		t.Error("an unknown :command was not reported")
 	}
 }
@@ -46,7 +46,7 @@ func TestChat_ModeCommands(t *testing.T) {
 		if m.mode != want {
 			t.Errorf("%s left mode = %q", cmd, m.mode)
 		}
-		if !strings.Contains(strings.Join(m.log, "\n"), want) {
+		if !strings.Contains(strings.Join(m.th().log, "\n"), want) {
 			t.Errorf("%s was not acknowledged in the log", cmd)
 		}
 	}
@@ -55,7 +55,7 @@ func TestChat_ModeCommands(t *testing.T) {
 		if m.mode == strings.ToLower(cmd[1:]) {
 			t.Errorf("%s was accepted as a mode", cmd)
 		}
-		if !strings.Contains(strings.Join(m.log, "\n"), "unknown") {
+		if !strings.Contains(strings.Join(m.th().log, "\n"), "unknown") {
 			t.Errorf("%s was not reported as unknown", cmd)
 		}
 	}
@@ -66,11 +66,11 @@ func TestChat_ModeCommands(t *testing.T) {
 func TestChat_EmptySubmitDoesNothing(t *testing.T) {
 	before := testCockpit()
 	m, cmd := enter(before)
-	if len(m.log) != len(before.log) || cmd != nil {
+	if len(m.th().log) != len(before.th().log) || cmd != nil {
 		t.Error("an empty submit did something")
 	}
 	m, cmd = enter(typed(testCockpit(), "   "))
-	if len(m.log) != len(before.log) || cmd != nil {
+	if len(m.th().log) != len(before.th().log) || cmd != nil {
 		t.Error("a whitespace-only submit was treated as a task")
 	}
 }
@@ -81,14 +81,14 @@ func TestChat_NoModelsSaysSoAndRunsNothing(t *testing.T) {
 	m := testCockpit()
 	m.heads = nil
 	m, cmd := enter(typed(m, "add pagination"))
-	joined := strings.Join(m.log, "\n")
+	joined := strings.Join(m.th().log, "\n")
 	if !strings.Contains(joined, "no routable model") {
 		t.Errorf("the log does not say why nothing was routed:\n%s", joined)
 	}
 	if !strings.Contains(joined, "hyctl probe") {
 		t.Error("the message does not tell the user how to find out why")
 	}
-	if m.exec != nil || cmd != nil {
+	if m.th().exec != nil || cmd != nil {
 		t.Error("a task started with nothing to route to")
 	}
 }
@@ -160,7 +160,7 @@ func TestChatStart_ImpactOnlyForFilesTheGraphKnows(t *testing.T) {
 	testutil.NewSandbox(t)
 	m := testCockpit()
 	m, _ = enter(typed(m, "rotate the key in internal/nowhere/absent.go"))
-	joined := strings.Join(m.log, "\n")
+	joined := strings.Join(m.th().log, "\n")
 	if strings.Contains(joined, "κ=") {
 		t.Errorf("an impact figure was printed with no graph loaded:\n%s", joined)
 	}
@@ -174,16 +174,16 @@ func TestChatStart_ImpactOnlyForFilesTheGraphKnows(t *testing.T) {
 func TestChatMain_GeometryHolds(t *testing.T) {
 	m := testCockpit()
 	for _, h := range []int{10, 24, 30, 60} {
-		out := m.chatMain(60, h)
+		out := m.chatMain(m.th(), 60, h)
 		if got := strings.Count(out, "\n") + 1; got != h {
 			t.Errorf("chatMain(60, %d) produced %d lines", h, got)
 		}
 	}
 
-	m.input = "still typing"
-	m.log = []string{strings.Repeat("x", 3000)}
+	m.th().input = "still typing"
+	m.th().log = []string{strings.Repeat("x", 3000)}
 	for _, h := range []int{10, 24} {
-		out := m.chatMain(60, h)
+		out := m.chatMain(m.th(), 60, h)
 		if got := strings.Count(out, "\n") + 1; got != h {
 			t.Errorf("one huge entry changed the height to %d", got)
 		}
@@ -197,12 +197,12 @@ func TestChatMain_GeometryHolds(t *testing.T) {
 // bar always shows the typed text and the mode chip.
 func TestChatMain_KeepsTheNewestLinesAndTheInput(t *testing.T) {
 	m := testCockpit()
-	m.input = "half-typed prompt"
-	m.log = nil
+	m.th().input = "half-typed prompt"
+	m.th().log = nil
 	for i := 0; i < 200; i++ {
-		m.log = append(m.log, fmt.Sprintf("log line %d", i))
+		m.th().log = append(m.th().log, fmt.Sprintf("log line %d", i))
 	}
-	got := stripANSI(m.chatMain(60, 12))
+	got := stripANSI(m.chatMain(m.th(), 60, 12))
 	if !strings.Contains(got, "log line 199") {
 		t.Errorf("the newest line is not shown:\n%s", got)
 	}
@@ -213,7 +213,7 @@ func TestChatMain_KeepsTheNewestLinesAndTheInput(t *testing.T) {
 		t.Errorf("the input line or mode chip is missing:\n%s", got)
 	}
 	// Even with no room for the border, the input itself survives.
-	tiny := stripANSI(m.chatMain(30, 3))
+	tiny := stripANSI(m.chatMain(m.th(), 30, 3))
 	if !strings.Contains(tiny, "prompt") {
 		t.Errorf("at height 3 the input is gone:\n%s", tiny)
 	}
@@ -223,7 +223,7 @@ func TestChatMain_KeepsTheNewestLinesAndTheInput(t *testing.T) {
 // and never grows past the wrap cap.
 func TestInputBar_WrapsAndKeepsTheTail(t *testing.T) {
 	m := testCockpit()
-	m.input = strings.Repeat("word ", 200) + "FINAL"
+	m.th().input = strings.Repeat("word ", 200) + "FINAL"
 	bar := m.inputBar(60)
 	if got := strings.Count(bar, "\n") + 1; got > ckInputWrapCap+2 {
 		t.Errorf("input bar grew to %d lines", got)
@@ -232,7 +232,7 @@ func TestInputBar_WrapsAndKeepsTheTail(t *testing.T) {
 		t.Errorf("the input's tail (cursor region) is not visible:\n%s", stripANSI(bar))
 	}
 	// Placeholder when idle and empty.
-	m.input = ""
+	m.th().input = ""
 	if got := stripANSI(m.inputBar(60)); !strings.Contains(got, "what do you need done?") {
 		t.Errorf("no placeholder on an empty idle input:\n%s", got)
 	}
@@ -283,36 +283,36 @@ func TestSidebar_UnknownContextSaysNoData(t *testing.T) {
 // width — and in diff mode it colours by prefix instead of syntax.
 func TestCodePanel_RendersAtEverySize(t *testing.T) {
 	m := testCockpit()
-	if got := m.codePanel(40, 20); !strings.Contains(got, "no edits yet") {
+	if got := m.codePanel(m.th(), 40, 20); !strings.Contains(got, "no edits yet") {
 		t.Errorf("the empty state does not say what it is waiting for:\n%s", got)
 	}
-	m.codeLang = "go"
-	m.codeLines = []string{"package main", "func main() {}", "// done"}
-	m.codeShown = len(m.codeLines)
+	m.th().codeLang = "go"
+	m.th().codeLines = []string{"package main", "func main() {}", "// done"}
+	m.th().codeShown = len(m.th().codeLines)
 	for _, w := range []int{0, 1, 5, 40, 200} {
-		if got := m.codePanel(w, 20); strings.TrimSpace(got) == "" {
+		if got := m.codePanel(m.th(), w, 20); strings.TrimSpace(got) == "" {
 			t.Errorf("codePanel(%d) rendered nothing", w)
 		}
 	}
-	m.codeShown = len(m.codeLines) + 50
-	if got := m.codePanel(60, 20); strings.TrimSpace(got) == "" {
+	m.th().codeShown = len(m.th().codeLines) + 50
+	if got := m.codePanel(m.th(), 60, 20); strings.TrimSpace(got) == "" {
 		t.Error("codePanel rendered nothing with codeShown past the end")
 	}
 	// A long file shows its newest lines rather than only the top of the file.
-	m.codeLines = nil
+	m.th().codeLines = nil
 	for i := 0; i < 100; i++ {
-		m.codeLines = append(m.codeLines, fmt.Sprintf("line%d", i))
+		m.th().codeLines = append(m.th().codeLines, fmt.Sprintf("line%d", i))
 	}
-	m.codeShown = 100
-	if got := stripANSI(m.codePanel(60, 12)); !strings.Contains(got, "line99") {
+	m.th().codeShown = 100
+	if got := stripANSI(m.codePanel(m.th(), 60, 12)); !strings.Contains(got, "line99") {
 		t.Errorf("the panel does not show the newest streamed lines:\n%s", got)
 	}
 
-	m.codeDiff = true
-	m.codeLang = "diff"
-	m.codeLines = []string{"@@ -1,2 +1,2 @@", "-old line", "+new line", " ctx"}
-	m.codeShown = len(m.codeLines)
-	if got := stripANSI(m.codePanel(60, 20)); !strings.Contains(got, "DIFF") || !strings.Contains(got, "+new line") {
+	m.th().codeDiff = true
+	m.th().codeLang = "diff"
+	m.th().codeLines = []string{"@@ -1,2 +1,2 @@", "-old line", "+new line", " ctx"}
+	m.th().codeShown = len(m.th().codeLines)
+	if got := stripANSI(m.codePanel(m.th(), 60, 20)); !strings.Contains(got, "DIFF") || !strings.Contains(got, "+new line") {
 		t.Errorf("diff mode did not render the diff:\n%s", got)
 	}
 }

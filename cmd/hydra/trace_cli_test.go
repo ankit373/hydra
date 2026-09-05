@@ -10,7 +10,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/runlog"
+	"github.com/ankit373/hydra/internal/testutil"
 )
 
 // seedOldRun writes a run and back-dates it so seal considers it.
@@ -171,5 +173,71 @@ func TestHumanBytes(t *testing.T) {
 		if got := humanBytes(c.in); got != c.want {
 			t.Errorf("humanBytes(%d) = %q, want %q", c.in, got, c.want)
 		}
+	}
+}
+
+// A machine that has never run `hyctl init` has no config. The answer is still
+// knowable — no config means capture was never opted into — so reporting a
+// missing file would be an error about plumbing in place of the answer asked for.
+func TestCLI_TracePayloadsWithNoConfigSaysCaptureIsOff(t *testing.T) {
+	testutil.NewSandbox(t) // deliberately no config written
+
+	out, _, err := run(t, "trace", "payloads")
+	if err != nil {
+		t.Fatalf("trace payloads errored with no config: %v", err)
+	}
+	if !strings.Contains(out, "capture is off") {
+		t.Errorf("output = %q, want it to say capture is off", out)
+	}
+	if !strings.Contains(out, "capture_payloads") {
+		t.Errorf("output does not say how to turn capture on:\n%s", out)
+	}
+}
+
+func TestCLI_TracePayloadsJSONReportsCaptureStateAndRate(t *testing.T) {
+	cliSandbox(t)
+
+	out, _, err := run(t, "trace", "payloads", "--json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got struct {
+		CaptureEnabled bool    `json:"capture_enabled"`
+		KeepRate       float64 `json:"keep_rate"`
+		Stats          struct {
+			Blobs int `json:"blobs"`
+		} `json:"stats"`
+	}
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("--json did not emit parseable JSON: %v\n%s", err, out)
+	}
+	if got.CaptureEnabled {
+		t.Error("capture reads as enabled on a config that never opted in")
+	}
+	// A zero rate would divide by zero in any estimator reading these blobs.
+	if !(got.KeepRate > 0 && got.KeepRate <= 1) {
+		t.Errorf("keep_rate = %v, want a usable probability", got.KeepRate)
+	}
+}
+
+// A configured rate outside (0,1] must fall back to the default rather than
+// silently disabling capture the user explicitly turned on.
+func TestPayloadKeepRate_FallsBackRatherThanKeepingNothing(t *testing.T) {
+	for _, c := range []struct {
+		in   float64
+		want float64
+	}{
+		{0, DefaultPayloadKeepRate},
+		{-1, DefaultPayloadKeepRate},
+		{2, DefaultPayloadKeepRate},
+		{0.25, 0.25},
+		{1, 1},
+	} {
+		if got := payloadKeepRate(&config.Config{PayloadKeepRate: c.in}); got != c.want {
+			t.Errorf("payloadKeepRate(%v) = %v, want %v", c.in, got, c.want)
+		}
+	}
+	if got := payloadKeepRate(nil); got != DefaultPayloadKeepRate {
+		t.Errorf("payloadKeepRate(nil) = %v, want the default", got)
 	}
 }
