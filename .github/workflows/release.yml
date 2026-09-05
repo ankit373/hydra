@@ -2,7 +2,7 @@ name: Release
 
 # Fallback path for a manually pushed vX.Y.Z tag (release-please tags are handled
 # by release-please.yml instead). Both paths funnel through publish.yml so every
-# channel — binaries, Homebrew, npm, pip — is updated the same way.
+# channel, binaries, Homebrew, npm, pip, is updated the same way.
 
 on:
   push:
@@ -19,7 +19,7 @@ jobs:
       tag: ${{ github.ref_name }}
     secrets: inherit
 
-  # Stable tags only — an RC tag points at a release branch that has not shipped.
+  # Stable tags only, an RC tag points at a release branch that has not shipped.
   close-issues:
     name: Close shipped issues
     if: ${{ !contains(github.ref_name, '-') }}

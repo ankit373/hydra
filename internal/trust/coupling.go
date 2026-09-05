@@ -26,7 +26,7 @@ const minCoAgreementSamples = 20
 const criticalCoupling = 0.7
 
 // ClusterByAgreement greedily groups indices into texts whose entries equiv
-// treats as the same answer — shared by Run's own co-agreement recording and
+// treats as the same answer, shared by Run's own co-agreement recording and
 // any ensembling caller (e.g. swarm.CalibratedJudge) that needs the same grouping.
 func ClusterByAgreement(texts []string, equiv AnswerEquivalence) [][]int {
 	if equiv == nil {
@@ -68,7 +68,7 @@ func DefaultCoAgreementPath() string {
 }
 
 // RecordCoAgreement clusters one task's answers by agreement and appends the
-// observation — best-effort, since a logging failure must never affect the
+// observation, best-effort, since a logging failure must never affect the
 // ensemble it observes. Sources with an empty Family are dropped: a repeat
 // vote is only ever discounted when a family is known, so an unfamilied
 // source carries no correlation signal to record.
@@ -123,7 +123,7 @@ var (
 // mtime+size. One SPRT run can call FamilyDiscount/FamilyCoupling once per
 // repeated-family source while the file is otherwise untouched (the run's own
 // RecordCoAgreement append happens only after sampling finishes), and swarm's
-// judge does the same — without this, every one of those calls re-reads and
+// judge does the same, without this, every one of those calls re-reads and
 // re-parses the same file from scratch. A real append (mtime or size changes)
 // invalidates the cache on the next call.
 func loadCoAgreement(path string) []coAgreementRecord {
@@ -164,7 +164,7 @@ func loadCoAgreement(path string) []coAgreementRecord {
 
 // FamilyCoupling reports family's measured excess same-family agreement: the
 // empirical rate at which two DIFFERENT same-family sources agree, minus the
-// rate at which two different-family sources agree — the measurable
+// rate at which two different-family sources agree, the measurable
 // definition of "these are correlated, not independently confirming." ok is
 // false below minCoAgreementSamples same-family pairs.
 func FamilyCoupling(path, family string) (j float64, ok bool) {
@@ -223,10 +223,10 @@ type FamilyCouplingResult struct {
 //
 // The key simplification: family F's "diff" bucket (rate at which anything
 // NOT a same-F pair agrees) is, by construction, every pair that isn't a
-// same-F pair — so diffTotal[F] = (all pairs) - sameTotal[F], and likewise
+// same-F pair, so diffTotal[F] = (all pairs) - sameTotal[F], and likewise
 // for the agreed counts. That means one global pass collecting each family's
 // own same-family tally, plus one grand total, is enough to derive every
-// family's J — no per-family rescan needed.
+// family's J, no per-family rescan needed.
 func AllFamilyCoupling(path string) map[string]FamilyCouplingResult {
 	type tally struct{ sameAgree, sameTotal int }
 	same := map[string]*tally{}
@@ -294,14 +294,14 @@ func FamilyDiscount(path, family string) float64 {
 }
 
 // FalseConsensusWarning reports whether family's measured coupling has
-// crossed criticalCoupling — its members are effectively one vote.
+// crossed criticalCoupling, its members are effectively one vote.
 func FalseConsensusWarning(path, family string) (j float64, warn bool) {
 	j, ok := FamilyCoupling(path, family)
 	return j, ok && j >= criticalCoupling
 }
 
 // KnownFamilies returns the distinct families observed in the co-agreement
-// log, sorted — for a caller (e.g. `hyctl trust calibration`) that wants to
+// log, sorted, for a caller (e.g. `hyctl trust calibration`) that wants to
 // check every family's FalseConsensusWarning without knowing names up front.
 func KnownFamilies(path string) []string {
 	seen := map[string]bool{}

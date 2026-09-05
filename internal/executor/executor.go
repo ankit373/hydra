@@ -59,9 +59,9 @@ func Unroutable(h provider.Head) string {
 	case h.Meta["embedding_only"] == "true":
 		// Discovered and shown, never dispatched: it has no completion API,
 		// so every dispatch to it would fail (#532).
-		return "embeddings only — never routed"
+		return "embeddings only, never routed"
 	case h.Source == "registry":
-		return "" // agy tiers — AgyExecutor handles them
+		return "" // agy tiers, AgyExecutor handles them
 	case h.Source == "port" || h.Source == "env" || h.Endpoint != "":
 		if SupportsHTTP(h) {
 			return ""
@@ -75,11 +75,11 @@ func Unroutable(h provider.Head) string {
 		return ""
 	}
 	// ollama and llamafile are found on $PATH but driven over HTTP, so the
-	// binary alone is not routable — the port provider registers the real heads
+	// binary alone is not routable, the port provider registers the real heads
 	// once a server answers. Say that, rather than "no executor", because the
 	// user can act on it.
 	if h.LocalOnly {
-		return "binary only — start its local server (e.g. `ollama serve`) to route to its models"
+		return "binary only, start its local server (e.g. `ollama serve`) to route to its models"
 	}
 	return "no executor for provider " + h.Provider
 }
@@ -93,7 +93,7 @@ func Supports(h provider.Head) bool { return Unroutable(h) == "" }
 //   - env source / port source / explicit endpoint: HTTPExecutor → per-provider REST
 //   - everything else: CLIExecutor → subprocess
 //
-// env-key heads (Source=="env") carry no Executable — they are API providers
+// env-key heads (Source=="env") carry no Executable, they are API providers
 // (anthropic, openai, groq, …). HTTPExecutor.Execute dispatches on Head.Provider
 // and already has an adapter for each, so env heads route to HTTP, not CLI.
 func For(h provider.Head) Executor {

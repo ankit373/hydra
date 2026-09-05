@@ -66,7 +66,7 @@ func (k keySpec) detected() bool {
 	return true
 }
 
-// knownKeys — add new API-key-based providers here.
+// knownKeys, add new API-key-based providers here.
 var knownKeys = []keySpec{
 	{envVars: []string{"ANTHROPIC_API_KEY"}, providerID: "anthropic"},
 	{envVars: []string{"OPENAI_API_KEY"}, providerID: "openai"},

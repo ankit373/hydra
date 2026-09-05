@@ -1,5 +1,5 @@
 // The converging-necks mark, ported inline from brand/svg/mark.svg (a local
-// design-source workspace, deliberately untracked — see brand/render/build.mjs
+// design-source workspace, deliberately untracked, see brand/render/build.mjs
 // for the full asset pipeline). This is the one place that source lands in
 // shipped frontend code, so the sidebar and loading states carry the real
 // Hydra identity instead of a plain colored square (#434).
@@ -61,7 +61,7 @@ export function HydraMark({ className }: { className?: string }) {
 }
 
 // A branded stand-in for a plain spinner. Rotation is a transform, not a
-// filter/blur — cheap on GPU-less machines, unlike the mark's original glow
+// filter/blur, cheap on GPU-less machines, unlike the mark's original glow
 // filter (fine for a static icon shown once, wasted on something looping).
 // Respects prefers-reduced-motion by holding a single frame instead of
 // spinning forever for no informational gain.

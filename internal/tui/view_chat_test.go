@@ -38,7 +38,7 @@ func TestChat_QuitCommands(t *testing.T) {
 
 // The /mode commands mirror the picker: every defined mode by name,
 // case-insensitive (#465), unknown ones reported. The phase-1 strategy
-// commands (/dispatch /swarm /trust /local) are gone — strategy is ctrl+o now.
+// commands (/dispatch /swarm /trust /local) are gone, strategy is ctrl+o now.
 func TestChat_ModeCommands(t *testing.T) {
 	for _, cmd := range []string{"/ask", "/edit", "/plan", "/auto", "/architect", "/careful", "/unattended", "/Ask"} {
 		m, _ := enter(typed(testCockpit(), cmd))
@@ -102,7 +102,7 @@ func TestPickHead_NeverAnswersCheapestWithStrongest(t *testing.T) {
 		t.Errorf("pickHead(10) = %d, want the local head", got)
 	}
 	if got := m.pickHead(3, false); m.heads[got].tier < 3 {
-		t.Errorf("pickHead(3) selected tier %d — stronger than requested", m.heads[got].tier)
+		t.Errorf("pickHead(3) selected tier %d, stronger than requested", m.heads[got].tier)
 	}
 	if got := m.pickHead(1, false); m.heads[got].id != "opus" {
 		t.Errorf("pickHead(1) = %s", m.heads[got].id)
@@ -151,7 +151,7 @@ func TestClassifyTask_RoutesByWhatTheWorkActuallyIs(t *testing.T) {
 	}
 	long := strings.Repeat("please do the thing carefully ", 5)
 	if _, tier := classifyTask(long); tier >= 8 {
-		t.Errorf("a long prompt classified at tier %d — length should lift it", tier)
+		t.Errorf("a long prompt classified at tier %d, length should lift it", tier)
 	}
 }
 
@@ -280,7 +280,7 @@ func TestSidebar_UnknownContextSaysNoData(t *testing.T) {
 }
 
 // The code panel renders whether or not anything has streamed yet, at any
-// width — and in diff mode it colours by prefix instead of syntax.
+// width, and in diff mode it colours by prefix instead of syntax.
 func TestCodePanel_RendersAtEverySize(t *testing.T) {
 	m := testCockpit()
 	if got := m.codePanel(m.th(), 40, 20); !strings.Contains(got, "no edits yet") {

@@ -15,7 +15,7 @@ import (
 // Model is one routable head as the registry declares it.
 //
 // Complexity is the band the registry assigns this model, and it is the honest
-// answer to "how hard can this one think" — Hydra has no thinking-depth dial;
+// answer to "how hard can this one think", Hydra has no thinking-depth dial;
 // depth is a property of which model you pick (Opus Thinking vs Sonnet
 // Thinking, Pro High vs Pro Low), so the band is what a picker should show.
 type Model struct {
@@ -34,7 +34,7 @@ type Model struct {
 
 	ContextWindow int `json:"contextWindow"`
 
-	// Enabled false means the registry has it switched off — still listed, so a
+	// Enabled false means the registry has it switched off, still listed, so a
 	// picker can show it greyed rather than pretending it does not exist.
 	Enabled bool `json:"enabled"`
 }
@@ -48,7 +48,7 @@ type Model struct {
 type Pool struct {
 	Name string `json:"name"`
 	// Shared false means this pool has one member, or the members do not
-	// actually contend — spending here costs nothing elsewhere.
+	// actually contend, spending here costs nothing elsewhere.
 	Shared bool   `json:"shared"`
 	Note   string `json:"note,omitempty"`
 
@@ -65,7 +65,7 @@ type Pool struct {
 
 // ModelRegistry is every pool, and anything the registry declared without one.
 type ModelRegistry struct {
-	// Found is false when models.yaml could not be read or parsed at all — an
+	// Found is false when models.yaml could not be read or parsed at all, an
 	// empty list then means "could not look", not "no models".
 	Found bool   `json:"found"`
 	Error string `json:"error,omitempty"`
@@ -127,7 +127,7 @@ func (a *API) GetModels() ModelRegistry {
 	}
 
 	// Pool order follows the registry's own declaration order via the models
-	// list, so the strongest tiers lead — map iteration would shuffle it.
+	// list, so the strongest tiers lead, map iteration would shuffle it.
 	seen := map[string]int{}
 	for _, m := range reg.Models {
 		model := Model{
@@ -147,8 +147,9 @@ func (a *API) GetModels() ModelRegistry {
 		key := m.TokenPool
 		if key == "" {
 			// A model with no declared pool draws from nothing shared. Group
-			// them together rather than dropping them.
-			key = "unpooled"
+			// them together rather than dropping them, under the same key
+			// internal/cost files their rows by, or the spend reads as zero.
+			key = cost.UnknownPoolKey
 		}
 
 		idx, ok := seen[key]

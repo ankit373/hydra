@@ -21,11 +21,11 @@ export interface GovernorPanel {
    *  Equals `mode` when there is no rate signal. */
   effectiveMode: string
   /** Mean percentage-point change per observation, and the probability of
-   *  reaching 80% within `horizonObs`. Both zero when `observations` < 2 —
+   *  reaching 80% within `horizonObs`. Both zero when `observations` < 2,
    *  that is "no rate signal", not "no risk". */
   burnRatePct: number
   risk: number
-  /** Counts of claude_pct *updates* — not wall-clock time, not chat turns. */
+  /** Counts of claude_pct *updates*, not wall-clock time, not chat turns. */
   observations: number
   horizonObs: number
 }
@@ -50,7 +50,7 @@ export interface Breakdown {
   wallMs: number
 }
 
-/** One (source, domain) row of the calibration leaderboard — mirrors Go's
+/** One (source, domain) row of the calibration leaderboard, mirrors Go's
  * desktop/api.CalibrationRow, itself a mapping of internal/trust.Stat. */
 export interface CalibrationRow {
   source: string
@@ -76,12 +76,12 @@ export interface Dashboard {
   spend: SpendPanel
   governor: GovernorPanel
   trust: TrustPanel
-  /** null — not [] — when nothing has ever dispatched. */
+  /** null, not [], when nothing has ever dispatched. */
   byModel: Breakdown[] | null
   byTier: Breakdown[] | null
   byDay: Breakdown[] | null
   recent: RecentCall[] | null
-  /** Never null — an empty leaderboard is a real, renderable state. */
+  /** Never null, an empty leaderboard is a real, renderable state. */
   calibration: CalibrationRow[]
 }
 
@@ -134,7 +134,7 @@ export interface Run {
   failed: number
   pending: number
   allCount: number
-  /** Events the reconstruction could not attribute — surfaced, never hidden. */
+  /** Events the reconstruction could not attribute, surfaced, never hidden. */
   skipped: number
   /** What was asked, in the requester's words. Empty when the run recorded no
    *  prompt; a preview, because that is what the log stores. */
@@ -166,11 +166,11 @@ export interface TimelineEntry {
   costUsd: number
   durationMs: number
   confidence: number
-  /** The verifiable part — for an SPRT sample, "agreed · LLR +1.2 → Λ 1.2". */
+  /** The verifiable part, for an SPRT sample, "agreed · LLR +1.2 → Λ 1.2". */
   detail?: string
 }
 
-/** An A2A collaboration edge — distinct from Agent.parent, which is ownership. */
+/** An A2A collaboration edge, distinct from Agent.parent, which is ownership. */
 export interface Edge {
   from: string
   to: string
@@ -181,7 +181,7 @@ export interface Edge {
 export interface Session {
   runId: string
   live: boolean
-  /** False when the run id names no log — different from a run that did nothing. */
+  /** False when the run id names no log, different from a run that did nothing. */
   found: boolean
   error?: string
   /** What this run was asked to do. Empty when it recorded no prompt. */
@@ -198,7 +198,7 @@ export interface Edit {
   file: string
   ts: string
   detail?: string
-  /** Empty when no snapshot was stored — the change happened, the diff cannot be shown. */
+  /** Empty when no snapshot was stored, the change happened, the diff cannot be shown. */
   ref?: string
   added: number
   removed: number
@@ -212,7 +212,7 @@ export interface DiffLine {
   /** 0 when the line is a removal. */
   newLine: number
   /** Byte ranges on this line that actually changed, for a 1:1 replacement.
-   *  Absent means no intra-line detail — the line was added or removed
+   *  Absent means no intra-line detail, the line was added or removed
    *  outright, or it is part of a block replacement where pairing would
    *  invent a relationship the diff never established. */
   spans?: Span[]
@@ -233,7 +233,7 @@ export interface MCPServer {
   scored: boolean
   score: number
   confidence?: string
-  /** Closest known identifier and its edit distance — the typosquat signal. */
+  /** Closest known identifier and its edit distance, the typosquat signal. */
   nearestMatch?: string
   nearestDist?: number
 }
@@ -280,7 +280,7 @@ export interface HeadPanel {
 export interface ReviewOutcome {
   file: string
   status?: string
-  /** How the rollback was done — git_checkout, rm_untracked or
+  /** How the rollback was done, git_checkout, rm_untracked or
    *  backup_restore. Shown because the three are not equally recoverable. */
   method?: string
   error?: string
@@ -306,13 +306,17 @@ export interface HyctlStatus {
   found: boolean
   path?: string
   version?: string
-  /** False on platforms InstallHyctl cannot drive (Windows) — see its Go doc. */
+  /** Why version is empty despite hyctl being found, a timeout reads differently from no output. */
+  versionError?: string
+  /** False on platforms InstallHyctl cannot drive (Windows), see its Go doc. */
   supported: boolean
 }
 
 export interface InstallResult {
   ok: boolean
   version?: string
+  /** Set when the post-install probe could not read a version; the install still succeeded. */
+  versionError?: string
   /** The installer's combined stdout/stderr, shown on both success and failure. */
   log: string
   error?: string
@@ -325,7 +329,7 @@ export interface Category {
   name: string
   status: CoverageStatus
   detail: string
-  /** Set only when status is 'gap' — the earliest recorded run where this
+  /** Set only when status is 'gap', the earliest recorded run where this
    *  category was already a gap, from persisted score history. */
   gapSince?: string
   gapAgeDays?: number
@@ -347,7 +351,7 @@ export interface Trend {
   firstTs: string
 }
 
-/** One persisted coverage snapshot — the real series a chart is drawn from. */
+/** One persisted coverage snapshot, the real series a chart is drawn from. */
 export interface HistoryPoint {
   ts: string
   percentCovered: number
@@ -355,7 +359,7 @@ export interface HistoryPoint {
 
 export type ActionPriority = 'now' | 'soon' | 'watch'
 
-/** One item in the prioritized action queue — the feedback loop. Priority
+/** One item in the prioritized action queue, the feedback loop. Priority
  *  comes from real signals (a gap's persisted age, or an actively risky
  *  head), never an invented severity score. */
 export interface Action {
@@ -393,7 +397,7 @@ export interface SecurityReport {
   byHead: HeadRisk[]
   checks: Check[]
   coverage: Coverage
-  /** Hard override: false means the ledger chain was tampered with — the
+  /** Hard override: false means the ledger chain was tampered with, the
    *  coverage percentage above cannot be trusted regardless of its value. */
   integrityIntact: boolean
   trend: Trend
@@ -402,7 +406,7 @@ export interface SecurityReport {
   /** The feedback loop: one item per coverage gap plus one per risky head,
    *  ranked most-urgent first. */
   actions?: Action[]
-  /** Denied/flagged bucketed by day — the "blocked over time" bypass-attempt
+  /** Denied/flagged bucketed by day, the "blocked over time" bypass-attempt
    *  trend, from ledger.ByDayRisk. */
   riskHistory?: DayRisk[]
   /** Per-rule hit counts, dead/unreachable rules, and the fail-open posture. */
@@ -411,7 +415,7 @@ export interface SecurityReport {
   exposures?: Exposure[]
   /** The forensic breakdown behind the blocked/flagged counts. */
   threats: Threats
-  /** A capped tail of the raw ledger — the evidence rows. */
+  /** A capped tail of the raw ledger, the evidence rows. */
   events?: LedgerEvent[]
   /** True when `events` is a partial log, not the whole one. */
   truncated?: boolean
@@ -533,7 +537,7 @@ export interface Exposure {
   resource: string
   /** The specific detectors that matched, e.g. "aws access key id". */
   piiTypes?: string[]
-  /** Not a local-only head — including an undiscovered one (fail-closed). */
+  /** Not a local-only head, including an undiscovered one (fail-closed). */
   remote: boolean
   /** False when the head was not discovered, so `remote` is an assumption
    *  rather than an observation. */
@@ -551,7 +555,7 @@ export interface Control {
   limited?: boolean
   detail: string
   /** False when the claim was established by reading the source rather than
-   *  observed at runtime — the reader deserves to know which kind it is. */
+   *  observed at runtime, the reader deserves to know which kind it is. */
   verified: boolean
 }
 
@@ -563,7 +567,7 @@ export interface Posture {
   /** The single condition that produced the verdict. */
   trigger: string
   because?: string[]
-  /** What was evaluated — so an "ok" states its scope. */
+  /** What was evaluated, so an "ok" states its scope. */
   checked: string[]
 }
 
@@ -600,7 +604,7 @@ export interface Risk {
   ageDays: number
   dueInDays: number
   breached: boolean
-  /** Cost of ONE defect of this class — per-occurrence, not annualised. */
+  /** Cost of ONE defect of this class, per-occurrence, not annualised. */
   defectCostUsd: number
   frameworks?: FrameworkRef[]
   evidence?: string[]
@@ -618,7 +622,7 @@ export interface EditedFile {
   edits: number
   radius?: number
   dependents?: number
-  /** False when the graph does not index this file — unknown, not low-risk. */
+  /** False when the graph does not index this file, unknown, not low-risk. */
   known: boolean
 }
 
@@ -638,7 +642,7 @@ export interface HeadBinary {
   path: string
   sha256: string
   size: number
-  /** No prior fingerprint — a baseline, not a finding. */
+  /** No prior fingerprint, a baseline, not a finding. */
   new?: boolean
   /** Content hash differs from the stored one. */
   changed?: boolean
@@ -663,7 +667,7 @@ export interface FamilyRisk {
 export interface SourcePower {
   source: string
   domain: string
-  /** Diagnostic power in nats — expected |LLR|. ~0 is a coin flip. */
+  /** Diagnostic power in nats, expected |LLR|. ~0 is a coin flip. */
   d: number
   /** Excludes the prior, so 0 means never calibrated. */
   observations: number
@@ -673,7 +677,7 @@ export interface EvidenceQuality {
   runs: number
   families?: FamilyRisk[]
   weakSources?: SourcePower[]
-  /** Used but never calibrated — absence of data, not measured weakness. */
+  /** Used but never calibrated, absence of data, not measured weakness. */
   uncalibratedSources?: string[]
 }
 
@@ -699,13 +703,13 @@ export interface SecurityCount {
 export interface Threats {
   /** Which injection phrase was actually tried. */
   byMarker?: SecurityCount[]
-  /** Resources drawing repeat denials — probing. */
+  /** Resources drawing repeat denials, probing. */
   probedResources?: SecurityCount[]
   /** read / write / exec / network split of risky events. */
   byAction?: SecurityCount[]
 }
 
-/** One raw ledger row — the evidence behind a finding. */
+/** One raw ledger row, the evidence behind a finding. */
 export interface LedgerEvent {
   ts: string
   agent: string
@@ -720,17 +724,27 @@ export interface LedgerEvent {
   flag_reason?: string
 }
 
+/** One model that was tried and did not answer. */
+export interface ChatAttempt {
+  head: string
+  model: string
+  tier: number
+  reason: string
+}
+
 export interface ChatReply {
   output: string
   head: string
   model: string
   tier: number
+  /** Models tried that did not answer, with the reason. Empty on a clean run. */
+  attempts?: ChatAttempt[]
   costUsd: number
   durationMs: number
-  /** Links the reply into Session — "why did it say that" is one click. */
+  /** Links the reply into Session, "why did it say that" is one click. */
   runId: string
   error?: string
-  /** No heads discoverable at all — the dock offers to retry instead of
+  /** No heads discoverable at all, the dock offers to retry instead of
    *  showing a raw dispatch error. */
   needsProbe?: boolean
   /** Set when the task parked waiting on a human decision. Not an error: it
@@ -747,7 +761,7 @@ export interface PendingQuestion {
   head: string
   resource?: string
   prompt: string
-  /** Epoch ms — the frontend formats the age itself. */
+  /** Epoch ms, the frontend formats the age itself. */
   askedAtMs: number
 }
 
@@ -765,7 +779,7 @@ export interface Model {
   tier: number
   provider: string
   pool: string
-  /** The registry's own band. Hydra has no thinking-depth dial — depth is which
+  /** The registry's own band. Hydra has no thinking-depth dial, depth is which
    *  model you pick, so this is what a picker shows in its place. */
   complexityMin: number
   complexityMax: number
@@ -773,7 +787,7 @@ export interface Model {
   speed: string
   accuracy: string
   contextWindow: number
-  /** False means the registry switched it off — still listed, so a picker can
+  /** False means the registry switched it off, still listed, so a picker can
    *  grey it rather than pretend it does not exist. */
   enabled: boolean
 }
@@ -785,7 +799,7 @@ export interface Pool {
   shared: boolean
   note?: string
   models: Model[]
-  /** What Hydra logged against this pool — NOT a provider-reported balance.
+  /** What Hydra logged against this pool, NOT a provider-reported balance.
    *  A floor on usage, never a quota reading. */
   observedCalls: number
   observedCostUsd: number
@@ -793,7 +807,7 @@ export interface Pool {
 }
 
 export interface ModelRegistry {
-  /** False when models.yaml could not be read or parsed — an empty list then
+  /** False when models.yaml could not be read or parsed, an empty list then
    *  means "could not look", not "no models". */
   found: boolean
   error?: string

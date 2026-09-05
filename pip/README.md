@@ -1,6 +1,6 @@
 # hyctl
 
-**Hydra** — a local-first, multi-vendor AI control plane. This package installs the `hyctl` CLI.
+**Hydra**, a local-first, multi-vendor AI control plane. This package installs the `hyctl` CLI.
 
 ```bash
 pip install hyctl

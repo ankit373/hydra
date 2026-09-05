@@ -3,18 +3,18 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Hydra Documentation — CLI, TUI, Trust &amp; Integrations</title>
-  <meta name="description" content="Hydra docs: the CLI, the TUI cockpit, integrations (Claude Code, Codex, Gemini, Ollama…), and every command — what it does, how it works, and how to use it.">
+  <title>Hydra Documentation, CLI, TUI, Trust &amp; Integrations</title>
+  <meta name="description" content="Hydra docs: the CLI, the TUI cockpit, integrations (Claude Code, Codex, Gemini, Ollama…), and every command, what it does, how it works, and how to use it.">
   <meta name="keywords" content="Hydra docs, hyctl tui, hyctl dispatch, Claude Code integration, Codex, Ollama, LM Studio, LLM router documentation, provider-neutral AI orchestration">
 
   <meta property="og:type" content="article">
   <meta property="og:url" content="https://hydra.uvansa.com/docs.html">
-  <meta property="og:title" content="Documentation — Hydra">
-  <meta property="og:description" content="The CLI, the TUI cockpit, the app, and every integration — with visuals. Plus a full command reference.">
+  <meta property="og:title" content="Documentation, Hydra">
+  <meta property="og:description" content="The CLI, the TUI cockpit, the app, and every integration, with visuals. Plus a full command reference.">
   <meta property="og:image" content="https://hydra.uvansa.com/logo.png">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Documentation — Hydra">
-  <meta name="twitter:description" content="The CLI, the TUI cockpit, the app, and every integration — with visuals.">
+  <meta name="twitter:title" content="Documentation, Hydra">
+  <meta name="twitter:description" content="The CLI, the TUI cockpit, the app, and every integration, with visuals.">
   <meta name="twitter:image" content="https://hydra.uvansa.com/logo.png">
 
   <link rel="canonical" href="https://hydra.uvansa.com/docs.html">
@@ -150,7 +150,7 @@ pre .c{color:var(--faint);} pre .fl{color:var(--aqua);} pre .k{color:var(--viole
   padding:7px 14px;cursor:pointer;background:rgba(20,22,44,.4);transition:.14s;}
 .tab:hover{color:var(--ink);border-color:var(--line-2);}
 .tab.on{color:var(--aqua);border-color:var(--aqua);background:rgba(0,230,195,.08);}
-/* animated view swap (TUI tabs + app nav) — crossfade + height morph + neon sweep */
+/* animated view swap (TUI tabs + app nav), crossfade + height morph + neon sweep */
 .panes{position:relative;transition:height .36s cubic-bezier(.4,0,.2,1);overflow:hidden;}
 .pane{position:absolute;top:0;left:0;width:100%;opacity:0;transform:translateY(14px) scale(.985);filter:blur(3px);
   pointer-events:none;transition:opacity .26s ease,transform .42s cubic-bezier(.2,.8,.2,1),filter .26s ease;}
@@ -234,7 +234,7 @@ footer{border-top:1px solid var(--line);padding:36px 44px;color:var(--faint);fon
   display:flex;flex-wrap:wrap;gap:18px;justify-content:space-between;}
 footer a{color:var(--dim);} footer a:hover{color:var(--aqua);}
 
-/* corner widget — the original hero creature, relocated: always alive, just for flavor */
+/* corner widget, the original hero creature, relocated: always alive, just for flavor */
 .hydra-widget{position:fixed;top:66px;right:20px;width:128px;height:128px;z-index:50;
   border:1px solid var(--line);border-radius:14px;overflow:hidden;background:rgba(8,10,20,.5);
   backdrop-filter:blur(6px);box-shadow:0 12px 40px rgba(0,0,0,.4);}
@@ -325,7 +325,7 @@ footer a{color:var(--dim);} footer a:hover{color:var(--aqua);}
 
   <main class="content">
     <h1>Documentation</h1>
-    <p class="intro">Hydra has three surfaces — a <b>CLI</b>, an interactive <b>TUI cockpit</b>, and a <b>desktop app</b> — sitting in front of every AI model on your machine. This covers all three, the tools it plugs into, and every command: <b>what it does, how it works, and how to use it</b>. The deep math lives on <a class="grad" href="/first-principles.html">First Principles</a>.</p>
+    <p class="intro">Hydra has three surfaces, a <b>CLI</b>, an interactive <b>TUI cockpit</b>, and a <b>desktop app</b>: sitting in front of every AI model on your machine. This covers all three, the tools it plugs into, and every command: <b>what it does, how it works, and how to use it</b>. The deep math lives on <a class="grad" href="/first-principles.html">First Principles</a>.</p>
 
     <!-- ══ OVERVIEW ══ -->
     <section class="doc" id="overview">
@@ -370,7 +370,7 @@ go build -o hyctl ./cmd/hydra</pre>
     <!-- ══ CLI ══ -->
     <section class="doc" id="cli">
       <h2>The CLI <span class="badge ship">shipped</span> <span class="tagline">the whole interface</span></h2>
-      <p class="sum">Everything Hydra does runs through the single <span class="fx">hyctl</span> binary — dispatch, discovery, trust, graph, cost. Scriptable, CI-friendly, zero daemon.</p>
+      <p class="sum">Everything Hydra does runs through the single <span class="fx">hyctl</span> binary, dispatch, discovery, trust, graph, cost. Scriptable, CI-friendly, zero daemon.</p>
       <div class="term">
         <div class="bar"><i class="d1"></i><i class="d2"></i><i class="d3"></i><span class="ttl">hyctl dispatch --dry-run "add pagination"</span></div>
 <pre><span class="td">  prompt</span> <span class="ta">→</span> <span class="ta">STANDARD</span> <span class="ta">→</span> <span class="td">T5</span>
@@ -384,7 +384,7 @@ go build -o hyctl ./cmd/hydra</pre>
     <!-- ══ TUI ══ -->
     <section class="doc" id="tui">
       <h2><span class="cmd">hyctl tui</span> <span class="badge ship">shipped</span> <span class="tagline">interactive cockpit</span></h2>
-      <p class="sum">A terminal cockpit you <b>operate</b> — type a task, press enter, and it runs. <b>Tab</b> cycles six views: Chat, Agents, Models, Activity, Usage, Audit. Every frame below is a real <span class="fx">hyctl tui --snapshot</span>, rendered by the binary itself.</p>
+      <p class="sum">A terminal cockpit you <b>operate</b>: type a task, press enter, and it runs. <b>Tab</b> cycles six views: Chat, Agents, Models, Activity, Usage, Audit. Every frame below is a real <span class="fx">hyctl tui --snapshot</span>, rendered by the binary itself.</p>
       <div class="tabs" role="tablist">
         <button class="tab on" data-pane="tui0" role="tab">chat</button>
         <button class="tab" data-pane="tui1" role="tab">models</button>
@@ -400,8 +400,8 @@ go build -o hyctl ./cmd/hydra</pre>
 CONTEXT BUDGET       <span class="tf">│</span> 🐉 Hydra initialised · 15 models      <span class="tf">│</span> CODE · go
 <span class="tf">░░░░░░░░░░░░░░░</span>      <span class="tf">│</span> scanned · routing engine ready.       <span class="tf">│</span>   1 // paginated users endpoint
 claude 0%            <span class="tf">│</span> Type a task and press <span class="ta">enter</span>. <span class="ta">shift+tab</span><span class="tf">│</span>   2 func (s *Server) ListUsers(w ht…
-                     <span class="tf">│</span> mode · <span class="ta">ctrl+o</span> route · ? shortcuts · :q<span class="tf">│</span>   3     page := parsePage(r.URL.Que…
-MODELS               <span class="tf">│</span> quits.                                <span class="tf">│</span>   4     users, err := s.repo.Users(…
+                     <span class="tf">│</span> mode · <span class="ta">ctrl+t</span> thread · ? shortcuts ·  <span class="tf">│</span>   3     page := parsePage(r.URL.Que…
+MODELS               <span class="tf">│</span> :q quits.                             <span class="tf">│</span>   4     users, err := s.repo.Users(…
  <span class="tg">✓</span> Claude Code       <span class="tf">│</span> ❯ add pagination to the users endpoint<span class="tf">│</span>   5     if err != nil {
  <span class="tg">✓</span> Claude Opus 4.…   <span class="tf">│</span>   auto-routed · standard work → <span class="tv">T7</span>    <span class="tf">│</span>   6         http.Error(w, err.Error…
  <span class="tg">✓</span> OpenAI Codex      <span class="tf">│</span> qwen2.5-coder · single                <span class="tf">│</span>   7         return
@@ -409,10 +409,10 @@ MODELS               <span class="tf">│</span> quits.                         
  <span class="tg">✓</span> Gemini 2.0 Fla…   <span class="tf">│</span> PII                                   <span class="tf">│</span>   9     json.NewEncoder(w).Encode(u…
  <span class="tg">✓</span> Antigravity       <span class="tf">│</span>   plan <span class="tg">✓</span> 3 steps · edit <span class="tg">✓</span> users.go    <span class="tf">│</span>  10 }
  <span class="tg">✓</span> …1 Pro (High)     <span class="tf">│</span> +24/−6 · tests <span class="tg">✓</span> go test ./...        <span class="tf">│</span>
- <span class="tg">✓</span> …1 Pro (Low)      <span class="tf">│</span>   d diff · x undo · o open — on an    <span class="tf">│</span>
+ <span class="tg">✓</span> …1 Pro (Low)      <span class="tf">│</span>   d diff · x undo · o open, on an     <span class="tf">│</span>
  <span class="tg">✓</span> …5 Flash (High)   <span class="tf">│</span> empty input                           <span class="tf">│</span>
  <span class="tg">✓</span> …5 Flash (Medi…   <span class="tf">│</span>   <span class="tg">✓</span> done 3.2s · <span class="tg">$0.0041</span> est · trace   <span class="tf">│</span>
- <span class="tg">✓</span> …5 Flash (Low)    <span class="tf">│</span> demo0000 — <span class="ta">enter</span> opens the trace      <span class="tf">│</span>
+ <span class="tg">✓</span> …5 Flash (Low)    <span class="tf">│</span> demo0000, <span class="ta">enter</span> opens the trace       <span class="tf">│</span>
  <span class="tg">✓</span> Qwen2.5-Coder:…   <span class="tf">│</span>                                       <span class="tf">│</span>
  <span class="tg">✓</span> qwen3:0.6b (Ol…   <span class="tf">│</span>                                       <span class="tf">│</span>
  <span class="tr">✗</span> Ollama            <span class="tf">│</span>                                       <span class="tf">│</span>
@@ -421,10 +421,10 @@ MODELS               <span class="tf">│</span> quits.                         
 MODE                 <span class="tf">│</span>                                       <span class="tf">│</span>
  auto                <span class="tf">│</span>                                       <span class="tf">│</span>
                      <span class="tf">│</span> <span class="tf">╭────────────────────────────────────╮│</span>
-                     <span class="tf">│</span> <span class="tf">│</span>  Auto <span class="tf">▾</span>  what do you need done? —  <span class="tf">││</span>
+                     <span class="tf">│</span> <span class="tf">│</span>  Auto <span class="tf">▾</span>  what do you need done?,   <span class="tf">││</span>
                      <span class="tf">│</span> <span class="tf">│</span> <span class="ta">enter</span> runs it                      <span class="tf">││</span>
                      <span class="tf">│</span> <span class="tf">╰────────────────────────────────────╯│</span>
- <span class="ta">enter</span> send  <span class="ta">shift+tab</span> mode  <span class="ta">ctrl+o</span> route  ? shortcuts                       mode auto · route auto</pre>
+ <span class="ta">ctrl+t</span> thread  <span class="ta">enter</span> send  <span class="ta">shift+tab</span> mode  <span class="ta">ctrl+o</span> route  ? shortcuts        mode auto · route auto</pre>
         </div>
       </div>
 
@@ -433,30 +433,30 @@ MODE                 <span class="tf">│</span>                                
           <div class="bar"><i class="d1"></i><i class="d2"></i><i class="d3"></i><span class="ttl">HYDRA ▸ models</span></div>
 <pre> <span class="tv">HYDRA</span>  chat  agents  models  activity  usage  audit          session <span class="tg">$0.0000</span> · context <span class="tf">▱▱▱▱▱▱▱▱</span> 0%
 <span class="tf">────────────────────────────────────────────────────────────────────────────────────────────────────</span>
-<span class="tf">╭──────────────────────────────────────────────────────────────────╮</span> <span class="tf">╭─────────────────────────────╮</span>
-<span class="tf">│</span> MODELS · by provider/server                                      <span class="tf">│</span> <span class="tf">│</span> SERVER                      <span class="tf">│</span>
-<span class="tf">│</span>                                                                  <span class="tf">│</span> <span class="tf">│</span>                             <span class="tf">│</span>
-<span class="tf">│</span> <span class="tf">▸</span> <span class="tf">▾</span> <span class="ta">●</span> anthropic                  1 model                         <span class="tf">│</span> <span class="tf">│</span>  anthropic                  <span class="tf">│</span>
-<span class="tf">│</span>      <span class="ta">●</span> Claude Code             <span class="tv">T1</span>                                <span class="tf">│</span> <span class="tf">│</span>                             <span class="tf">│</span>
-<span class="tf">│</span>   <span class="tf">▾</span> <span class="ta">●</span> antigravity                9 models                        <span class="tf">│</span> <span class="tf">│</span>  models      1 (1 routable) <span class="tf">│</span>
-<span class="tf">│</span>      <span class="ta">●</span> Claude Opus 4.6 (Thin…  <span class="tv">T2</span>                                <span class="tf">│</span> <span class="tf">│</span>  state       up             <span class="tf">│</span>
-<span class="tf">│</span>      <span class="ta">●</span> Claude Sonnet 4.6 (Th…  <span class="tv">T3</span>                                <span class="tf">│</span> <span class="tf">╰─────────────────────────────╯</span>
-<span class="tf">│</span>      <span class="ta">●</span> Gemini 2.0 Flash Thin…  <span class="tv">T4</span>                                <span class="tf">│</span>
-<span class="tf">│</span>      <span class="ta">●</span> Antigravity             <span class="tv">T4</span>                                <span class="tf">│</span>
-<span class="tf">│</span>      <span class="ta">●</span> Gemini 3.1 Pro (High)   <span class="tv">T5</span>                                <span class="tf">│</span>
-<span class="tf">│</span>      <span class="ta">●</span> Gemini 3.1 Pro (Low)    <span class="tv">T6</span>                                <span class="tf">│</span>
-<span class="tf">│</span>      <span class="ta">●</span> …3.5 Flash (High)       <span class="tv">T7</span>                                <span class="tf">│</span>
-<span class="tf">│</span>      <span class="ta">●</span> …3.5 Flash (Medium)     <span class="tv">T8</span>                                <span class="tf">│</span>
-<span class="tf">│</span>      <span class="ta">●</span> …3.5 Flash (Low)        <span class="tv">T9</span>                                <span class="tf">│</span>
-<span class="tf">│</span>   <span class="tf">▾</span> <span class="ta">●</span> openai                     1 model                         <span class="tf">│</span>
-<span class="tf">│</span>      <span class="ta">●</span> OpenAI Codex            <span class="tv">T3</span>                                <span class="tf">│</span>
-<span class="tf">│</span>   <span class="tf">▾</span> <span class="ta">●</span> Ollama                     3 models                        <span class="tf">│</span>
-<span class="tf">│</span>      <span class="ta">●</span> Qwen2.5-Coder:7b       <span class="tv">T10</span>                                <span class="tf">│</span>
-<span class="tf">│</span>      <span class="ta">●</span> qwen3:0.6b             <span class="tv">T10</span>                                <span class="tf">│</span>
-<span class="tf">│</span>      <span class="tf">◌</span> nomic-embed-text:late… <span class="tv">T10</span> embeddings only — never routed <span class="tf">│</span>
-<span class="tf">│</span>                                                                  <span class="tf">│</span>
-<span class="tf">│</span> <span class="ta">●</span> up · ○ down (children unavailable) · <span class="tf">◌</span> not routable            <span class="tf">│</span>
-<span class="tf">╰──────────────────────────────────────────────────────────────────╯</span>
+<span class="tf">╭─────────────────────────────────────────────────────────────────╮</span> <span class="tf">╭─────────────────────────────╮</span>
+<span class="tf">│</span> MODELS · by provider/server                                     <span class="tf">│</span> <span class="tf">│</span> SERVER                      <span class="tf">│</span>
+<span class="tf">│</span>                                                                 <span class="tf">│</span> <span class="tf">│</span>                             <span class="tf">│</span>
+<span class="tf">│</span> <span class="tf">▸</span> <span class="tf">▾</span> <span class="ta">●</span> anthropic                  1 model                        <span class="tf">│</span> <span class="tf">│</span>  anthropic                  <span class="tf">│</span>
+<span class="tf">│</span>      <span class="ta">●</span> Claude Code             <span class="tv">T1</span>                               <span class="tf">│</span> <span class="tf">│</span>                             <span class="tf">│</span>
+<span class="tf">│</span>   <span class="tf">▾</span> <span class="ta">●</span> antigravity                9 models                       <span class="tf">│</span> <span class="tf">│</span>  models      1 (1 routable) <span class="tf">│</span>
+<span class="tf">│</span>      <span class="ta">●</span> Claude Opus 4.6 (Thin…  <span class="tv">T2</span>                               <span class="tf">│</span> <span class="tf">│</span>  state       up             <span class="tf">│</span>
+<span class="tf">│</span>      <span class="ta">●</span> Claude Sonnet 4.6 (Th…  <span class="tv">T3</span>                               <span class="tf">│</span> <span class="tf">╰─────────────────────────────╯</span>
+<span class="tf">│</span>      <span class="ta">●</span> Gemini 2.0 Flash Thin…  <span class="tv">T4</span>                               <span class="tf">│</span>
+<span class="tf">│</span>      <span class="ta">●</span> Antigravity             <span class="tv">T4</span>                               <span class="tf">│</span>
+<span class="tf">│</span>      <span class="ta">●</span> Gemini 3.1 Pro (High)   <span class="tv">T5</span>                               <span class="tf">│</span>
+<span class="tf">│</span>      <span class="ta">●</span> Gemini 3.1 Pro (Low)    <span class="tv">T6</span>                               <span class="tf">│</span>
+<span class="tf">│</span>      <span class="ta">●</span> …3.5 Flash (High)       <span class="tv">T7</span>                               <span class="tf">│</span>
+<span class="tf">│</span>      <span class="ta">●</span> …3.5 Flash (Medium)     <span class="tv">T8</span>                               <span class="tf">│</span>
+<span class="tf">│</span>      <span class="ta">●</span> …3.5 Flash (Low)        <span class="tv">T9</span>                               <span class="tf">│</span>
+<span class="tf">│</span>   <span class="tf">▾</span> <span class="ta">●</span> openai                     1 model                        <span class="tf">│</span>
+<span class="tf">│</span>      <span class="ta">●</span> OpenAI Codex            <span class="tv">T3</span>                               <span class="tf">│</span>
+<span class="tf">│</span>   <span class="tf">▾</span> <span class="ta">●</span> Ollama                     3 models                       <span class="tf">│</span>
+<span class="tf">│</span>      <span class="ta">●</span> Qwen2.5-Coder:7b       <span class="tv">T10</span>                               <span class="tf">│</span>
+<span class="tf">│</span>      <span class="ta">●</span> qwen3:0.6b             <span class="tv">T10</span>                               <span class="tf">│</span>
+<span class="tf">│</span>      <span class="tf">◌</span> nomic-embed-text:late… <span class="tv">T10</span> embeddings only, never routed <span class="tf">│</span>
+<span class="tf">│</span>                                                                 <span class="tf">│</span>
+<span class="tf">│</span> <span class="ta">●</span> up · ○ down (children unavailable) · <span class="tf">◌</span> not routable           <span class="tf">│</span>
+<span class="tf">╰─────────────────────────────────────────────────────────────────╯</span>
 
 
 
@@ -469,40 +469,40 @@ MODE                 <span class="tf">│</span>                                
           <div class="bar"><i class="d1"></i><i class="d2"></i><i class="d3"></i><span class="ttl">HYDRA ▸ audit</span></div>
 <pre> <span class="tv">HYDRA</span>  chat  agents  models  activity  usage  audit          session <span class="tg">$0.0000</span> · context <span class="tf">▱▱▱▱▱▱▱▱</span> 0%
 <span class="tf">────────────────────────────────────────────────────────────────────────────────────────────────────</span>
-<span class="tf">╭──────────────────────────────────────────────────────────────────╮</span>
-<span class="tf">│</span> MODEL SCORECARD · calibration                                    <span class="tf">│</span>
-<span class="tf">│</span>                                                                  <span class="tf">│</span>
-<span class="tf">│</span>  source               domain      n  sens  spec  D nats          <span class="tf">│</span>
-<span class="tf">│</span>  claude               trust-b…   10  0.83  0.50    0.24          <span class="tf">│</span>
-<span class="tf">│</span>  qwen                 trust-b…    9  0.88  0.20    0.02          <span class="tf">│</span>
-<span class="tf">│</span>  claude               trust-b…    5  0.86  0.50    0.28          <span class="tf">│</span>
-<span class="tf">│</span>  ollama/Qwen2.5-Code… trust-b…    5  0.86  0.50    0.28          <span class="tf">│</span>
-<span class="tf">│</span>  qwen                 trust-b…    5  0.86  0.50    0.28          <span class="tf">│</span>
-<span class="tf">│</span>  test-src             test-do…    1  0.67  0.50    0.06          <span class="tf">│</span>
-<span class="tf">│</span>  verifier:go          gotest      1  0.67  0.50    0.06          <span class="tf">│</span>
-<span class="tf">│</span>                                                                  <span class="tf">│</span>
-<span class="tf">│</span>  consensus checks       0.50 mean confidence over 16             <span class="tf">│</span>
-<span class="tf">│</span>  cleared without review 0%                                       <span class="tf">│</span>
-<span class="tf">│</span>  same-family agreement  acme ×0.14 (J=0.86) — echo, not evidence <span class="tf">│</span>
-<span class="tf">╰──────────────────────────────────────────────────────────────────╯</span>
+<span class="tf">╭─────────────────────────────────────────────────────────────────╮</span>
+<span class="tf">│</span> MODEL SCORECARD · calibration                                   <span class="tf">│</span>
+<span class="tf">│</span>                                                                 <span class="tf">│</span>
+<span class="tf">│</span>  source               domain      n  sens  spec  D nats         <span class="tf">│</span>
+<span class="tf">│</span>  claude               trust-b…   10  0.83  0.50    0.24         <span class="tf">│</span>
+<span class="tf">│</span>  qwen                 trust-b…    9  0.88  0.20    0.02         <span class="tf">│</span>
+<span class="tf">│</span>  claude               trust-b…    5  0.86  0.50    0.28         <span class="tf">│</span>
+<span class="tf">│</span>  ollama/Qwen2.5-Code… trust-b…    5  0.86  0.50    0.28         <span class="tf">│</span>
+<span class="tf">│</span>  qwen                 trust-b…    5  0.86  0.50    0.28         <span class="tf">│</span>
+<span class="tf">│</span>  test-src             test-do…    1  0.67  0.50    0.06         <span class="tf">│</span>
+<span class="tf">│</span>  verifier:go          gotest      1  0.67  0.50    0.06         <span class="tf">│</span>
+<span class="tf">│</span>                                                                 <span class="tf">│</span>
+<span class="tf">│</span>  consensus checks       0.50 mean confidence over 16            <span class="tf">│</span>
+<span class="tf">│</span>  cleared without review 0%                                      <span class="tf">│</span>
+<span class="tf">│</span>  same-family agreement  acme ×0.14 (J=0.86), echo, not evidence <span class="tf">│</span>
+<span class="tf">╰─────────────────────────────────────────────────────────────────╯</span>
 <span class="tf">╭────────────────────────────────────────────╮</span>
 <span class="tf">│</span> AUDIT LOG                                  <span class="tf">│</span>
 <span class="tf">│</span>                                            <span class="tf">│</span>
-<span class="tf">│</span>  chain    <span class="tr">BROKEN</span> · 522 events, 486 chained <span class="tf">│</span>
-<span class="tf">│</span>  today    72 allowed · 0 denied            <span class="tf">│</span>
-<span class="tf">│</span>  all-time <span class="tf">████████████████████</span> 522         <span class="tf">│</span>
+<span class="tf">│</span>  chain    <span class="tr">BROKEN</span> · 635 events, 599 chained <span class="tf">│</span>
+<span class="tf">│</span>  today    89 allowed · 0 denied            <span class="tf">│</span>
+<span class="tf">│</span>  all-time <span class="tf">████████████████████</span> 635         <span class="tf">│</span>
 <span class="tf">╰────────────────────────────────────────────╯</span>
-<span class="tf">╭──────────────────────────────────────────────────────────────╮</span>
-<span class="tf">│</span> GUARDRAILS                                                   <span class="tf">│</span>
-<span class="tf">│</span>                                                              <span class="tf">│</span>
+<span class="tf">╭─────────────────────────────────────────────────────────────╮</span>
+<span class="tf">│</span> GUARDRAILS                                                  <span class="tf">│</span>
+<span class="tf">│</span>                                                             <span class="tf">│</span>
 <span class="tf">↓ 9 more</span>
- <span class="ta">j/k</span> move  <span class="ta">enter</span> resolve  v verify  i ignore  ? shortcuts           chain <span class="tr">BROKEN</span> · checked 07:33:20</pre>
+ <span class="ta">j/k</span> move  <span class="ta">enter</span> resolve  v verify  i ignore  ? shortcuts           chain <span class="tr">BROKEN</span> · checked 14:20:08</pre>
         </div>
       </div>
       </div>
 
       <div class="sub"><div class="lbl">How it works</div>
-        <p><b>Chat</b> executes: the route line names the tier, model and strategy the router picked and why, then the proof strip reports what the run planned, edited and verified. <span class="fx">shift+tab</span> cycles the modes — Auto (plan → edit → run your tests → fix → repeat), Plan, Edit, Ask — and <span class="fx">ctrl+o</span> overrides where the next task runs without changing what it does. <b>Models</b> is the discovered estate by provider, each head at its routing tier, with a server's children greyed when the server itself is down. <b>Audit</b> carries the calibration scorecard, the hash-chained log's integrity, the guardrails actually in force, and anything waiting on a human. <b>Agents</b>, <b>Activity</b> and <b>Usage</b> cover work in flight, per-run traces, and where the money went. <span class="fx">?</span> lists every key, rendered from the keymap itself so it cannot drift.</p>
+        <p><b>Chat</b> executes: the route line names the tier, model and strategy the router picked and why, then the proof strip reports what the run planned, edited and verified. <span class="fx">shift+tab</span> cycles the modes, Auto (plan → edit → run your tests → fix → repeat), Plan, Edit, Ask, and <span class="fx">ctrl+o</span> overrides where the next task runs without changing what it does. <b>Models</b> is the discovered estate by provider, each head at its routing tier, with a server's children greyed when the server itself is down. <b>Audit</b> carries the calibration scorecard, the hash-chained log's integrity, the guardrails actually in force, and anything waiting on a human. <b>Agents</b>, <b>Activity</b> and <b>Usage</b> cover work in flight, per-run traces, and where the money went. <span class="fx">?</span> lists every key, rendered from the keymap itself so it cannot drift.</p>
       </div>
       <div class="sub"><div class="lbl">Keys &amp; usage</div>
         <pre>hyctl tui
@@ -514,9 +514,9 @@ hyctl tui <span class="fl">--snapshot</span> <span class="fl">--view</span> 0..5
     <!-- ══ APP ══ -->
     <section class="doc" id="app">
       <h2>The desktop app <span class="badge ship">download</span> <span class="tagline">point-and-click cockpit</span></h2>
-      <p class="sum">A native window over the same engine — Wails v2 + React, in <span class="fx">desktop/</span>. It opens on the chat, with the other views behind an icon rail. <b>Every release ships a build for macOS, Windows and Linux.</b> <b>Click the sidebar</b> — the views swap live.</p>
+      <p class="sum">A native window over the same engine, Wails v2 + React, in <span class="fx">desktop/</span>. It opens on the chat, with the other views behind an icon rail. <b>Every release ships a build for macOS, Windows and Linux.</b> <b>Click the sidebar</b>: the views swap live.</p>
       <div class="appwin">
-        <div class="tb"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i><span class="ttl" id="appTitle">Hydra.app — Usage</span></div>
+        <div class="tb"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i><span class="ttl" id="appTitle">Hydra.app, Usage</span></div>
         <div class="appbody">
           <div class="appnav" id="appNav" role="tablist">
             <div class="item on" data-av="av-dash" data-title="Usage" role="tab" tabindex="0"><span class="dot"></span>Usage</div>
@@ -576,7 +576,7 @@ hydra-desktop_&lt;version&gt;_darwin_universal.zip   <span class="c"># macOS, In
 hydra-desktop_&lt;version&gt;_windows_amd64.zip      <span class="c"># Windows</span>
 hydra-desktop_&lt;version&gt;_linux_amd64.tar.gz     <span class="c"># Linux</span>
 
-<span class="c"># Every artifact ships a .sha256 beside it — verify before you run:</span>
+<span class="c"># Every artifact ships a .sha256 beside it. Verify before you run:</span>
 shasum -a 256 -c hydra-desktop_&lt;version&gt;_darwin_universal.zip.sha256   <span class="c"># macOS</span>
 sha256sum   -c hydra-desktop_&lt;version&gt;_linux_amd64.tar.gz.sha256       <span class="c"># Linux</span>
 
@@ -587,8 +587,8 @@ $f = "hydra-desktop_&lt;version&gt;_windows_amd64.zip"
 <span class="c"># Or build it yourself:</span>
 go install github.com/wailsapp/wails/v2/cmd/wails@latest
 cd desktop &amp;&amp; wails build                <span class="c"># → desktop/build/bin/Hydra.app</span></pre></div>
-      <div class="callout"><b>The builds are not code-signed yet</b>, so the published <span class="fx">.sha256</span> is the only integrity check available — worth the one command above. The first launch also takes one extra step. <b>macOS:</b> Gatekeeper reports an unidentified developer — right-click the app → <b>Open</b> → <b>Open</b>, once. If it still refuses after unzipping from a terminal, run <span class="fx">xattr -dr com.apple.quarantine Hydra.app</span>. <b>Windows:</b> SmartScreen may warn — <b>More info</b> → <b>Run anyway</b>. <b>Linux:</b> needs <span class="fx">libgtk-3-0</span> and <span class="fx">libwebkit2gtk-4.1-0</span>, then <span class="fx">chmod +x Hydra</span>.</div>
-      <div class="callout">The app reads the same logs the CLI writes, so its numbers are the CLI's numbers — Usage totals match <span class="fx">hyctl cost</span> and <span class="fx">hyctl stats</span> for the same data. There is no separate daemon and no telemetry: it reads <span class="fx">~/.hydra/logs/</span> on your machine.</div>
+      <div class="callout"><b>The builds are not code-signed yet</b>, so the published <span class="fx">.sha256</span> is the only integrity check available, worth the one command above. The first launch also takes one extra step. <b>macOS:</b> Gatekeeper reports an unidentified developer, right-click the app → <b>Open</b> → <b>Open</b>, once. If it still refuses after unzipping from a terminal, run <span class="fx">xattr -dr com.apple.quarantine Hydra.app</span>. <b>Windows:</b> SmartScreen may warn, <b>More info</b> → <b>Run anyway</b>. <b>Linux:</b> needs <span class="fx">libgtk-3-0</span> and <span class="fx">libwebkit2gtk-4.1-0</span>, then <span class="fx">chmod +x Hydra</span>.</div>
+      <div class="callout">The app reads the same logs the CLI writes, so its numbers are the CLI's numbers, Usage totals match <span class="fx">hyctl cost</span> and <span class="fx">hyctl stats</span> for the same data. There is no separate daemon and no telemetry: it reads <span class="fx">~/.hydra/logs/</span> on your machine.</div>
     </section>
 
     <!-- ══ INTEGRATIONS ══ -->
@@ -596,7 +596,7 @@ cd desktop &amp;&amp; wails build                <span class="c"># → desktop/b
       <h2>How discovery works <span class="tagline">no plugins, no config</span></h2>
       <p class="sum">Hydra finds every head on your machine across <b>three channels</b> in under two seconds, scores each with a CapScore, and routes across all of them. Provider-neutral: it routes <i>away</i> from expensive heads, never toward a favored vendor.</p>
       <div class="chan-flow">
-        <div class="chan"><span class="cnt">13+</span><h4>PATH scan</h4><div class="how">executables on $PATH</div><p>Finds installed coding agents &amp; CLIs — Claude Code, Codex, Cursor, Gemini CLI, Copilot and more.</p></div>
+        <div class="chan"><span class="cnt">13+</span><h4>PATH scan</h4><div class="how">executables on $PATH</div><p>Finds installed coding agents &amp; CLIs, Claude Code, Codex, Cursor, Gemini CLI, Copilot and more.</p></div>
         <div class="chan"><span class="cnt">14</span><h4>Env vars</h4><div class="how">provider API keys</div><p>Detects keys for the major API providers and registers each as a routable head.</p></div>
         <div class="chan"><span class="cnt">2</span><h4>Port scan</h4><div class="how">localhost servers</div><p>Queries Ollama (11434) and LM Studio (1234) and enumerates every installed local model.</p></div>
       </div>
@@ -606,24 +606,24 @@ cd desktop &amp;&amp; wails build                <span class="c"># → desktop/b
       <h2>Coding agents &amp; CLIs <span class="tagline">discovered on $PATH</span></h2>
       <p class="sum">Whatever agent you drive Hydra with becomes the <b>orchestrator</b>; the rest are interchangeable <b>heads</b>. Hydra shells out to each through its native executor.</p>
       <div class="intg-grid">
-        <div class="intg"><div class="nm"><span class="glyph" style="background:#8b5cf6">C</span>Claude Code</div><div class="meta">cli · <span class="tier">expert · T1</span></div><div class="desc">Anthropic's agent — top reasoning tier.</div></div>
-        <div class="intg"><div class="nm"><span class="glyph" style="background:#00E6C3">A</span>Antigravity (agy)</div><div class="meta">cli · <span class="tier">expert · T1–T3</span></div><div class="desc">Claude-family tier registry; a first-class head.</div></div>
+        <div class="intg"><div class="nm"><span class="glyph" style="background:#8b5cf6">C</span>Claude Code</div><div class="meta">cli · <span class="tier">expert · T1</span></div><div class="desc">Anthropic's agent, top reasoning tier.</div></div>
+        <div class="intg"><div class="nm"><span class="glyph" style="background:#00E6C3">A</span>Antigravity (agy)</div><div class="meta">cli · <span class="tier">expert · T1-T3</span></div><div class="desc">Claude-family tier registry; a first-class head.</div></div>
         <div class="intg"><div class="nm"><span class="glyph" style="background:#412991">Cx</span>OpenAI Codex</div><div class="meta">cli · <span class="tier">complex · T2</span></div><div class="desc">Strong code generation.</div></div>
         <div class="intg"><div class="nm"><span class="glyph" style="background:#111">Cu</span>Cursor</div><div class="meta">cli · <span class="tier">complex</span></div><div class="desc">IDE agent, routable from Hydra.</div></div>
         <div class="intg"><div class="nm"><span class="glyph" style="background:#0ea5e9">W</span>Windsurf</div><div class="meta">cli · <span class="tier">complex</span></div><div class="desc">Agentic IDE.</div></div>
-        <div class="intg"><div class="nm"><span class="glyph" style="background:#4285F4">G</span>Gemini CLI</div><div class="meta">cli · <span class="tier">standard–complex</span></div><div class="desc">Google's coding CLI.</div></div>
+        <div class="intg"><div class="nm"><span class="glyph" style="background:#4285F4">G</span>Gemini CLI</div><div class="meta">cli · <span class="tier">standard-complex</span></div><div class="desc">Google's coding CLI.</div></div>
         <div class="intg"><div class="nm"><span class="glyph" style="background:#24292e">Co</span>GitHub Copilot</div><div class="meta">cli · <span class="tier">standard</span></div><div class="desc">Copilot in the terminal.</div></div>
         <div class="intg"><div class="nm"><span class="glyph" style="background:#FF5543">Cy</span>Sourcegraph Cody</div><div class="meta">cli · <span class="tier">standard</span></div><div class="desc">Context-aware assistant.</div></div>
         <div class="intg"><div class="nm"><span class="glyph" style="background:#10b981">Am</span>Amp</div><div class="meta">cli · <span class="tier">standard</span></div><div class="desc">Agentic coding tool.</div></div>
         <div class="intg"><div class="nm"><span class="glyph" style="background:#6366f1">Ct</span>Continue</div><div class="meta">cli · <span class="tier">standard</span></div><div class="desc">Open-source assistant.</div></div>
         <div class="intg"><div class="nm"><span class="glyph" style="background:#FF9900">K</span>Amazon Kiro</div><div class="meta">cli · <span class="tier">complex</span></div><div class="desc">AWS's agentic IDE.</div></div>
       </div>
-      <div class="callout">Hydra never does work itself that a cheaper head can handle — it delegates down the tier ladder and only escalates when quality demands it.</div>
+      <div class="callout">Hydra never does work itself that a cheaper head can handle, it delegates down the tier ladder and only escalates when quality demands it.</div>
     </section>
 
     <section class="doc" id="providers">
       <h2>API providers <span class="tagline">discovered from env keys</span></h2>
-      <p class="sum">Set a provider's API key and it becomes a routable head automatically — through the OpenAI-compatible or provider-native HTTP executor. No config file to touch.</p>
+      <p class="sum">Set a provider's API key and it becomes a routable head automatically, through the OpenAI-compatible or provider-native HTTP executor. No config file to touch.</p>
       <div class="pill-row">
         <span class="chip">Anthropic</span><span class="chip">OpenAI</span><span class="chip">OpenRouter</span><span class="chip">Google AI</span>
         <span class="chip">Groq</span><span class="chip">Together</span><span class="chip">Fireworks</span><span class="chip">Mistral</span>
@@ -636,10 +636,10 @@ hyctl probe                        <span class="c"># it shows up as a scored hea
 
     <section class="doc" id="local">
       <h2>Local runtimes <span class="tagline">the free floor</span></h2>
-      <p class="sum">Local models are the <b>terminal fallback</b> — always available, always $0, and where PII-flagged prompts are pinned so sensitive data never leaves the machine.</p>
+      <p class="sum">Local models are the <b>terminal fallback</b>: always available, always $0, and where PII-flagged prompts are pinned so sensitive data never leaves the machine.</p>
       <div class="intg-grid">
-        <div class="intg"><div class="nm"><span class="glyph" style="background:#111">Ol</span>Ollama</div><div class="meta">port 11434 · <span class="tier">simple–local · T8–T10</span></div><div class="desc">Every installed model enumerated individually (Qwen, Llama, Phi…).</div></div>
-        <div class="intg"><div class="nm"><span class="glyph" style="background:#8b5cf6">LM</span>LM Studio</div><div class="meta">port 1234 · <span class="tier">simple–local</span></div><div class="desc">Local server; models discovered and routed.</div></div>
+        <div class="intg"><div class="nm"><span class="glyph" style="background:#111">Ol</span>Ollama</div><div class="meta">port 11434 · <span class="tier">simple-local · T8-T10</span></div><div class="desc">Every installed model enumerated individually (Qwen, Llama, Phi…).</div></div>
+        <div class="intg"><div class="nm"><span class="glyph" style="background:#8b5cf6">LM</span>LM Studio</div><div class="meta">port 1234 · <span class="tier">simple-local</span></div><div class="desc">Local server; models discovered and routed.</div></div>
       </div>
     </section>
 
@@ -659,7 +659,7 @@ hyctl probe                        <span class="c"># it shows up as a scored hea
     <section class="doc" id="status">
       <h2><span class="cmd">hyctl status</span> <span class="tagline">live state</span></h2>
       <p class="sum">Heads, budget bars, and the <b>rate-aware</b> governor.</p>
-      <div class="sub"><div class="lbl">How it works</div><p>Models context usage as a drifting process and estimates the <b>first-passage probability</b> of crossing the ceiling before the task ends — escalating <i>before</i> a threshold is hit.</p></div>
+      <div class="sub"><div class="lbl">How it works</div><p>Models context usage as a drifting process and estimates the <b>first-passage probability</b> of crossing the ceiling before the task ends, escalating <i>before</i> a threshold is hit.</p></div>
       <div class="sub"><div class="lbl">Usage</div><pre>hyctl status</pre></div>
       <a class="more" href="#governor">How the governor decides →</a>
     </section>
@@ -737,7 +737,7 @@ hyctl trust benchmark        <span class="c"># measured SPRT numbers</span></pre
     <section class="doc" id="graph-blast">
       <h2><span class="cmd">hyctl graph blast</span> <span class="tagline">how dangerous is this file?</span></h2>
       <p class="sum">Reports a file's blast radius and the confidence a change to it demands.</p>
-      <div class="sub"><div class="lbl">How it works</div><p>From <span class="fx">graph.json</span> it counts transitive dependents and computes <span class="fx">κ = ⟨k²⟩/⟨k⟩</span> (Molloy–Reed). <b>κ ≥ 2</b> ⟹ cascade-capable core ⟹ higher confidence bar.</p></div>
+      <div class="sub"><div class="lbl">How it works</div><p>From <span class="fx">graph.json</span> it counts transitive dependents and computes <span class="fx">κ = ⟨k²⟩/⟨k⟩</span> (Molloy-Reed). <b>κ ≥ 2</b> ⟹ cascade-capable core ⟹ higher confidence bar.</p></div>
       <div class="sub"><div class="lbl">Usage</div><pre>hyctl graph blast internal/auth/token.go</pre></div>
       <a class="more" href="/first-principles.html#percolation">Drag the percolation threshold →</a>
     </section>
@@ -762,7 +762,7 @@ cat notes.md | hyctl context entropy -</pre></div>
     <!-- ══ MCP / ORACLE ══ -->
     <section class="doc" id="mcp">
       <h2><span class="cmd">hyctl mcp</span> <span class="tagline">accountability ledger</span></h2>
-      <p class="sum">A local, append-only ledger that records — and can <b>gate</b> — what every agent touches.</p>
+      <p class="sum">A local, append-only ledger that records, and can <b>gate</b>: what every agent touches.</p>
       <div class="sub"><div class="lbl">Subcommands</div>
         <pre>hyctl mcp check &lt;tool&gt; <span class="fl">--agent</span> A <span class="fl">--resource</span> R <span class="fl">--action</span> write
 hyctl mcp log <span class="fl">--denied</span>     <span class="c"># what got blocked</span>
@@ -771,7 +771,7 @@ hyctl mcp report          <span class="c"># allowed / denied by agent &amp; tool
 
     <section class="doc" id="mcp-registry">
       <h2><span class="cmd">hyctl mcp registry</span> <span class="tagline">trust score for the MCP servers on your machine</span></h2>
-      <p class="sum">Every existing MCP directory answers "does this server exist" — none answer "is it safe to run with my credentials right now," and star/download counts are actively misleading (the most-starred servers score worst on quality in independent research). This scores what's actually installed instead of indexing everything that exists.</p>
+      <p class="sum">Every existing MCP directory answers "does this server exist", none answer "is it safe to run with my credentials right now," and star/download counts are actively misleading (the most-starred servers score worst on quality in independent research). This scores what's actually installed instead of indexing everything that exists.</p>
       <div class="sub"><div class="lbl">Subcommands</div>
         <pre>hyctl mcp registry sync             <span class="c"># pull the official MCP registry into a local cache</span>
 hyctl mcp registry scan             <span class="c"># list servers installed across Claude Code/Desktop, Cursor, Windsurf, VS Code</span>
@@ -780,9 +780,9 @@ hyctl mcp registry export <span class="fl">--out</span> DIR  <span class="c"># s
 hyctl mcp registry backtest         <span class="c"># validate scoring against known real incidents (postmark-mcp, CVE-2025-6514)</span>
 hyctl mcp registry list             <span class="c"># audited servers by trust score</span>
 hyctl mcp registry clear &lt;server&gt;   <span class="c"># recover a server quarantined in error</span></pre></div>
-      <p class="sum">Scoring is shaped around the CSA MCP Selection Scorecard's four categories (Security Implementation, Repository Health, Operational Security, Community &amp; Governance) — automating a taxonomy the MCP Security Working Group already endorsed, not inventing a new one. Only a <em>confirmed</em> finding (a known advisory match) quarantines a server; a name-similarity heuristic lowers the score without condemning it, because quarantine has no automatic way out — <code>clear</code> is the manual recovery path. A category nothing could be checked in contributes a neutral baseline rather than being dropped from the average, so failing to reach GitHub can never <em>raise</em> a score, and a server nothing is known about reads "insufficient evidence" rather than a number. A server's trust state (new → provisional → trusted → flagged → quarantined) drops back to provisional on <b>every version bump</b>, detected via a content-hash diff of the manifest — the direct fix for the <code>postmark-mcp</code> rug-pull pattern (15 clean npm versions, then a malicious one). <code>scan</code> never reads env-var or secret values from client configs, only server identity.</p>
-      <p class="sum">Feeds back into the ledger: <code>hyctl mcp check</code> auto-classifies a tool call as <span class="fx">mcp-unverified</span>, <span class="fx">mcp-flagged</span>, or <span class="fx">mcp-quarantined</span> from a server's registry state, the same way PII is auto-detected from content — so a policy rule can gate on it automatically. Below that: <span class="fx">mcp-behavior-change</span> — a server whose ledger history has only ever shown one kind of access (read, say) suddenly performing another (network) is flagged from local history alone, no registry data or CVE required. A server's first-ever call is never flagged — there's nothing yet to compare it against.</p>
-      <p class="sum">The exported page (<code>export</code>) carries a disclaimer — this is a probabilistic signal from automated checks, not a guarantee of safety or a claim about a publisher's intent — and every row links a pre-filled dispute issue against this repo, since a public negative signal about a real project needs a correction path before it ships, not as an afterthought.</p>
+      <p class="sum">Scoring is shaped around the CSA MCP Selection Scorecard's four categories (Security Implementation, Repository Health, Operational Security, Community &amp; Governance), automating a taxonomy the MCP Security Working Group already endorsed, not inventing a new one. Only a <em>confirmed</em> finding (a known advisory match) quarantines a server; a name-similarity heuristic lowers the score without condemning it, because quarantine has no automatic way out, <code>clear</code> is the manual recovery path. A category nothing could be checked in contributes a neutral baseline rather than being dropped from the average, so failing to reach GitHub can never <em>raise</em> a score, and a server nothing is known about reads "insufficient evidence" rather than a number. A server's trust state (new → provisional → trusted → flagged → quarantined) drops back to provisional on <b>every version bump</b>, detected via a content-hash diff of the manifest, the direct fix for the <code>postmark-mcp</code> rug-pull pattern (15 clean npm versions, then a malicious one). <code>scan</code> never reads env-var or secret values from client configs, only server identity.</p>
+      <p class="sum">Feeds back into the ledger: <code>hyctl mcp check</code> auto-classifies a tool call as <span class="fx">mcp-unverified</span>, <span class="fx">mcp-flagged</span>, or <span class="fx">mcp-quarantined</span> from a server's registry state, the same way PII is auto-detected from content, so a policy rule can gate on it automatically. Below that: <span class="fx">mcp-behavior-change</span>, a server whose ledger history has only ever shown one kind of access (read, say) suddenly performing another (network) is flagged from local history alone, no registry data or CVE required. A server's first-ever call is never flagged, there's nothing yet to compare it against.</p>
+      <p class="sum">The exported page (<code>export</code>) carries a disclaimer, this is a probabilistic signal from automated checks, not a guarantee of safety or a claim about a publisher's intent, and every row links a pre-filled dispute issue against this repo, since a public negative signal about a real project needs a correction path before it ships, not as an afterthought.</p>
     </section>
 
     <section class="doc" id="oracle">
@@ -799,7 +799,7 @@ hyctl mcp registry clear &lt;server&gt;   <span class="c"># recover a server qua
     </section>
     <section class="doc" id="stats">
       <h2><span class="cmd">hyctl stats</span> <span class="tagline">rollup</span></h2>
-      <p class="sum">Cost rollup by <b>model, tier, and day</b> — your real savings.</p>
+      <p class="sum">Cost rollup by <b>model, tier, and day</b>: your real savings.</p>
       <div class="sub"><div class="lbl">Usage</div><pre>hyctl stats</pre></div>
     </section>
     <section class="doc" id="pricing">
@@ -810,7 +810,7 @@ hyctl pricing refresh</pre></div>
     </section>
     <section class="doc" id="models">
       <h2><span class="cmd">hyctl models</span> <span class="tagline">runtime registry</span></h2>
-      <p class="sum">Add a model at runtime — no rebuild. Merges into <span class="fx">~/.hydra/models.json</span>.</p>
+      <p class="sum">Add a model at runtime, no rebuild. Merges into <span class="fx">~/.hydra/models.json</span>.</p>
       <div class="sub"><div class="lbl">Usage</div>
         <pre>hyctl models list
 hyctl models add kimi-k3 <span class="fl">--provider</span> moonshot <span class="fl">--cap-score</span> 85
@@ -820,15 +820,15 @@ hyctl models sync   <span class="c"># import the OpenRouter catalog</span></pre>
     <!-- ══ CONCEPTS ══ -->
     <section class="doc" id="tiers">
       <h2>Tiers &amp; CapScore <span class="tagline">how routing decides</span></h2>
-      <p class="sum">Every head gets a <b>CapScore</b> (0–100); tasks route through named tiers by score. Lower tier number = stronger.</p>
+      <p class="sum">Every head gets a <b>CapScore</b> (0-100); tasks route through named tiers by score. Lower tier number = stronger.</p>
       <table class="ladder">
         <thead><tr><th>Tier</th><th>Score</th><th>Example heads</th></tr></thead>
         <tbody>
-          <tr><td class="k">expert</td><td class="sc">90–100</td><td>Claude Opus, Claude Code</td></tr>
-          <tr><td class="k">complex</td><td class="sc">80–89</td><td>Codex, GPT-class, Gemini Pro</td></tr>
-          <tr><td class="k">standard</td><td class="sc">70–79</td><td>Gemini Flash, Claude Haiku</td></tr>
-          <tr><td class="k">simple</td><td class="sc">60–69</td><td>Qwen3 8B, Qwen2.5-Coder 7B</td></tr>
-          <tr><td class="k">local</td><td class="sc">50–59</td><td>Llama 3.2 3B, Phi-4 Mini</td></tr>
+          <tr><td class="k">expert</td><td class="sc">90-100</td><td>Claude Opus, Claude Code</td></tr>
+          <tr><td class="k">complex</td><td class="sc">80-89</td><td>Codex, GPT-class, Gemini Pro</td></tr>
+          <tr><td class="k">standard</td><td class="sc">70-79</td><td>Gemini Flash, Claude Haiku</td></tr>
+          <tr><td class="k">simple</td><td class="sc">60-69</td><td>Qwen3 8B, Qwen2.5-Coder 7B</td></tr>
+          <tr><td class="k">local</td><td class="sc">50-59</td><td>Llama 3.2 3B, Phi-4 Mini</td></tr>
         </tbody>
       </table>
     </section>
@@ -839,11 +839,11 @@ hyctl models sync   <span class="c"># import the OpenRouter catalog</span></pre>
       <table class="ladder">
         <thead><tr><th>claude_pct</th><th>Mode</th><th>Action</th></tr></thead>
         <tbody>
-          <tr><td class="sc">0–49%</td><td class="k">normal</td><td>full orchestration</td></tr>
-          <tr><td class="sc">50–64%</td><td class="k">compact</td><td>compact recommended</td></tr>
-          <tr><td class="sc">65–69%</td><td class="k">caution</td><td>compact urgently</td></tr>
-          <tr><td class="sc">70–74%</td><td class="k">warning</td><td>downgrade one tier</td></tr>
-          <tr><td class="sc">75–79%</td><td class="k">critical</td><td>routing only</td></tr>
+          <tr><td class="sc">0-49%</td><td class="k">normal</td><td>full orchestration</td></tr>
+          <tr><td class="sc">50-64%</td><td class="k">compact</td><td>compact recommended</td></tr>
+          <tr><td class="sc">65-69%</td><td class="k">caution</td><td>compact urgently</td></tr>
+          <tr><td class="sc">70-74%</td><td class="k">warning</td><td>downgrade one tier</td></tr>
+          <tr><td class="sc">75-79%</td><td class="k">critical</td><td>routing only</td></tr>
           <tr><td class="sc">80%+</td><td class="k">emergency</td><td>route to local, warn</td></tr>
         </tbody>
       </table>
@@ -862,15 +862,15 @@ hyctl models sync   <span class="c"># import the OpenRouter catalog</span></pre>
 
     <section class="doc" id="math">
       <h2>The math <span class="tagline">why the router isn't vibes</span></h2>
-      <p class="sum">Six results run the router: Wald's SPRT, calibration diagnostic power (KL), the Bayes defect-cost bar, Molloy–Reed percolation-κ, Amdahl optimal parallelism, and context entropy — each stated, derived, and interactive.</p>
-      <a class="more" href="/first-principles.html">Open First Principles — six interactive proofs →</a>
+      <p class="sum">Six results run the router: Wald's SPRT, calibration diagnostic power (KL), the Bayes defect-cost bar, Molloy-Reed percolation-κ, Amdahl optimal parallelism, and context entropy, each stated, derived, and interactive.</p>
+      <a class="more" href="/first-principles.html">Open First Principles, six interactive proofs →</a>
     </section>
 
   </main>
 </div>
 
 <footer>
-  <span>© Hydra — MIT. The Trust Control Plane for AI development.</span>
+  <span>© Hydra, MIT. The Trust Control Plane for AI development.</span>
   <span><a href="/">Home</a> · <a href="/first-principles.html">First principles</a> · <a href="/pricing.html">Pricing</a> · <a href="https://github.com/ankit373/hydra">GitHub</a></span>
 </footer>
 
@@ -947,7 +947,7 @@ hyctl models sync   <span class="c"># import the OpenRouter catalog</span></pre>
       function activate(){
         appNav.querySelectorAll('.item').forEach(function(x){ x.classList.toggle('on', x===it); });
         swap(appPanes, it.getAttribute('data-av'));
-        if(appTitle) appTitle.textContent='Hydra.app — '+it.getAttribute('data-title');
+        if(appTitle) appTitle.textContent='Hydra.app, '+it.getAttribute('data-title');
       }
       it.addEventListener('click', activate);
       it.addEventListener('keydown', function(e){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); activate(); } });

@@ -20,7 +20,7 @@ import (
 	"github.com/ankit373/hydra/internal/config"
 )
 
-// ErrNoLog reports that cost.jsonl does not exist — nothing has dispatched yet.
+// ErrNoLog reports that cost.jsonl does not exist, nothing has dispatched yet.
 // It is distinct from a read failure so a caller can tell "never ran" (render an
 // empty state) from "cannot read" (surface the error). Match it with errors.Is.
 var ErrNoLog = errors.New("no cost log")
@@ -39,7 +39,7 @@ type Row struct {
 	WallMS         int64   `json:"wall_ms"`
 	Source         string  `json:"source"`        // legacy, mirrors tokens_source
 	TokensSource   string  `json:"tokens_source"` // "actual" (provider) or "estimated" (agy char/4)
-	CostSource     string  `json:"cost_source"`   // always "estimated" — cost is derived, never billed
+	CostSource     string  `json:"cost_source"`   // always "estimated", cost is derived, never billed
 	TaskID         string  `json:"task_id"`
 	RunID          string  `json:"run_id"`
 	SwarmMode      string  `json:"swarm_mode"`
@@ -89,7 +89,7 @@ type SummaryResult struct {
 // these labels so the dispatch and swarm log paths cannot drift.
 //   - tokensSource: "actual" | "estimated"
 //   - costSource:   always "estimated" (est_cost_usd is pricing × tokens, never billed)
-//   - legacySource: "real" | "estimate" — mirrors tokensSource for older readers
+//   - legacySource: "real" | "estimate", mirrors tokensSource for older readers
 func SourceLabels(estimated bool) (tokensSource, costSource, legacySource string) {
 	if estimated {
 		return "estimated", "estimated", "estimate"
@@ -147,7 +147,7 @@ func Summary() (*SummaryResult, error) {
 }
 
 // SummaryFromRows computes the same result as Summary but from rows the
-// caller already loaded — callers that also need the raw rows (e.g. the
+// caller already loaded, callers that also need the raw rows (e.g. the
 // TUI's latency/savings panels, which call LoadAll for their own purposes)
 // should load once and derive both from that one slice instead of paying for
 // a second full read+parse of cost.jsonl.
@@ -207,6 +207,11 @@ func All() ([]GroupRow, error) {
 }
 
 // ByPool returns per-pool totals.
+// UnknownPoolKey is how ByPool groups a row whose model declared no token pool.
+// Exported because the desktop looked those rows up under its own literal and
+// found nothing; one constant is what stops the two drifting again (#681).
+const UnknownPoolKey = "unknown"
+
 func ByPool() ([]GroupRow, error) {
 	all, err := LoadAll()
 	if err != nil {
@@ -214,7 +219,7 @@ func ByPool() ([]GroupRow, error) {
 	}
 	return groupBy(all, func(r Row) string {
 		if r.Pool == "" {
-			return "unknown"
+			return UnknownPoolKey
 		}
 		return r.Pool
 	}), nil
@@ -268,7 +273,7 @@ func ByRun(runID string) (*ByRunResult, error) {
 
 // Tail returns the last N rows, newest first, via a backward tail-seek rather
 // than loading the whole log. n == 0 returns no rows, matching `tail -n 0`.
-// n < 0 returns everything — see #464 for tightening that UX separately.
+// n < 0 returns everything, see #464 for tightening that UX separately.
 func Tail(n int) ([]Row, error) {
 	if n == 0 {
 		return nil, nil
@@ -423,7 +428,7 @@ func RenderSummary(r *SummaryResult) {
 	fmt.Println()
 	fmt.Println("  Recent (last 5):")
 	for _, row := range r.Recent {
-		fmt.Printf("  %s  %s/%d  %s — %d+%d tok, $%.6f, %dms\n",
+		fmt.Printf("  %s  %s/%d  %s, %d+%d tok, $%.6f, %dms\n",
 			row.TS, row.Enum, row.Tier, row.Model,
 			row.PromptTokens, row.ResponseTokens, row.EstCostUSD, row.WallMS)
 	}
@@ -530,7 +535,7 @@ func RenderTail(rows []Row) {
 		if enum == "" {
 			enum = "?"
 		}
-		fmt.Printf("  %s  %s/%d  %s — %d+%d tok, $%.6f, %dms\n",
+		fmt.Printf("  %s  %s/%d  %s, %d+%d tok, $%.6f, %dms\n",
 			r.TS, enum, r.Tier, r.Model,
 			r.PromptTokens, r.ResponseTokens, r.EstCostUSD, r.WallMS)
 	}
@@ -546,7 +551,7 @@ func loadRows(path string) ([]Row, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("%w at %s — has anything dispatched yet?", ErrNoLog, path)
+			return nil, fmt.Errorf("%w at %s, has anything dispatched yet?", ErrNoLog, path)
 		}
 		return nil, err
 	}
@@ -578,7 +583,7 @@ func tailLines(path string, n int) ([]string, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("%w at %s — has anything dispatched yet?", ErrNoLog, path)
+			return nil, fmt.Errorf("%w at %s, has anything dispatched yet?", ErrNoLog, path)
 		}
 		return nil, err
 	}
@@ -658,7 +663,7 @@ func groupBy(rows []Row, key func(Row) string) []GroupRow {
 		g.EstCostUSD = math.Round(g.EstCostUSD*1_000_000) / 1_000_000
 		result = append(result, *g)
 	}
-	// Ties (often several $0 rows) need a deterministic tiebreaker — result is
+	// Ties (often several $0 rows) need a deterministic tiebreaker, result is
 	// built from a map, whose iteration order is randomized, so without one
 	// equal-cost rows visibly swapped position on every poll (#506).
 	sort.Slice(result, func(i, j int) bool {

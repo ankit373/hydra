@@ -2,9 +2,9 @@
 
 package tui
 
-// override.go — the ctrl+o routing override modal: where the NEXT task runs
+// override.go, the ctrl+o routing override modal: where the NEXT task runs
 // (auto / force tier / local only / best of 3 / consensus check). The mode
-// says what a task does; this says where it runs — one task only, then reset.
+// says what a task does; this says where it runs, one task only, then reset.
 
 import (
 	"fmt"
@@ -64,14 +64,14 @@ type ckOvRow struct {
 }
 
 var ckOvRows = []ckOvRow{
-	{"auto (recommended)", "the router decides — classification picks the tier", 0, 0},
-	{"force tier…", "pin the next task to a tier — 1 strongest, 10 cheapest", 'T', 'T'},
+	{"auto (recommended)", "the router decides, classification picks the tier", 0, 0},
+	{"force tier…", "pin the next task to a tier, 1 strongest, 10 cheapest", 'T', 'T'},
 	{"local only", "nothing leaves this machine", 'L', 0},
 	{"best of 3", "three heads answer, a judge picks the best", 'B', 0},
 	{"consensus check…", "sample heads until they agree at a target confidence", 'C', 'C'},
 }
 
-// ckOvConfChoices are the consensus targets on offer (the design's 90–99.9%).
+// ckOvConfChoices are the consensus targets on offer (the design's 90-99.9%).
 var ckOvConfChoices = []float64{0.90, 0.95, 0.99, 0.999}
 
 // overrideKey handles keys while the ctrl+o modal is open.
@@ -98,7 +98,7 @@ func (m Cockpit) overrideKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		m.override = ckOverride{kind: row.kind}
 		m.ovOpen = false
-		m.flash = m.override.label() + " — next task"
+		m.flash = m.override.label() + ", next task"
 		return m, nil
 	case tea.KeyRunes:
 		if len(msg.Runes) != 1 {
@@ -116,7 +116,7 @@ func (m Cockpit) overrideKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// overrideTierKey reads one digit: 1–9 → T1–T9, 0 → T10.
+// overrideTierKey reads one digit: 1-9 → T1-T9, 0 → T10.
 func (m Cockpit) overrideTierKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyEsc:
@@ -136,17 +136,17 @@ func (m Cockpit) overrideTierKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		m.override = ckOverride{kind: 'T', tier: tier}
 		m.ovOpen, m.ovStage = false, 0
-		m.flash = m.override.label() + " — next task"
+		m.flash = m.override.label() + ", next task"
 	}
 	return m, nil
 }
 
-// overrideConfKey picks a consensus target: j/k + enter, or digits 1–4.
+// overrideConfKey picks a consensus target: j/k + enter, or digits 1-4.
 func (m Cockpit) overrideConfKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	apply := func(i int) (tea.Model, tea.Cmd) {
 		m.override = ckOverride{kind: 'C', conf: ckOvConfChoices[i]}
 		m.ovOpen, m.ovStage, m.ovConfSel = false, 0, 0
-		m.flash = m.override.label() + " — next task"
+		m.flash = m.override.label() + ", next task"
 		return m, nil
 	}
 	switch msg.Type {
@@ -191,14 +191,14 @@ func (m Cockpit) moveOvSel(delta int) Cockpit {
 // ckOverrideLines renders the modal rows for the current stage.
 func (m Cockpit) ckOverrideLines() []string {
 	lines := []string{
-		ckLabelS.Render("ROUTING OVERRIDE — next task only"),
+		ckLabelS.Render("ROUTING OVERRIDE, next task only"),
 		ckFaintS.Render("the mode says what to do; this says where it runs"),
 	}
 	switch m.ovStage {
 	case 'T':
 		lines = append(lines, "",
 			ckInkS.Render(" force tier"),
-			ckDimS.Render(" press 1–9 for T1–T9, 0 for T10 · esc back"))
+			ckDimS.Render(" press 1-9 for T1-T9, 0 for T10 · esc back"))
 	case 'C':
 		lines = append(lines, "", ckInkS.Render(" consensus target"))
 		for i, c := range ckOvConfChoices {
@@ -227,7 +227,7 @@ func (m Cockpit) ckOverrideLines() []string {
 }
 
 // viewOverride renders the modal centred, or as a scroll list on short
-// terminals — the same degradation rule as every other overlay.
+// terminals, the same degradation rule as every other overlay.
 func (m Cockpit) viewOverride(w, h int) string {
 	lines := m.ckOverrideLines()
 	box := ckBoxS.BorderForeground(ckViolet).Render(strings.Join(lines, "\n"))

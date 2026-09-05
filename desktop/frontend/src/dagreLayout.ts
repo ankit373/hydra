@@ -4,7 +4,7 @@ import dagre from '@dagrejs/dagre'
  * Layered (Sugiyama) layout via dagre.
  *
  * Deterministic and near-linear per relayout, and it has a notion of
- * direction — which matches the causal semantics of a run. A force-directed
+ * direction, which matches the causal semantics of a run. A force-directed
  * or stress-majorization model has neither: it treats edges as springs, so
  * the same run lays out differently frame to frame and "downstream" means
  * nothing.
@@ -14,7 +14,7 @@ import dagre from '@dagrejs/dagre'
  * (Brandes-Köpf coordinate assignment included).
  *
  * Shared by SessionGraph (a run's detail view) and Fleet's inline run graph
- * so both surfaces agree on what a run's shape looks like — only node size
+ * so both surfaces agree on what a run's shape looks like, only node size
  * and label content differ per caller.
  */
 
@@ -82,7 +82,7 @@ export function layoutDag(
     if (n.parent && g.hasNode(n.parent)) g.setEdge(n.parent, n.id, { a2a: false })
   }
   // Non-ownership edges (e.g. A2A handoffs) are laid out too, so a target is
-  // placed sensibly rather than floating — but they stay visually distinct.
+  // placed sensibly rather than floating, but they stay visually distinct.
   for (const e of edges) {
     if (g.hasNode(e.from) && g.hasNode(e.to)) g.setEdge(e.from, e.to, { a2a: Boolean(e.a2a) })
   }

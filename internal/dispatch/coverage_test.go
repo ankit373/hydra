@@ -112,7 +112,7 @@ func TestDispatch_SuccessWritesHandoffAndState(t *testing.T) {
 	}
 }
 
-// The handoff's vector clock must advance across dispatches — that is what
+// The handoff's vector clock must advance across dispatches, that is what
 // makes a chain reconstructable rather than a sequence of unrelated files.
 func TestDispatch_HandoffClockAdvancesAcrossCalls(t *testing.T) {
 	s := testutil.NewSandbox(t)
@@ -136,7 +136,7 @@ func TestDispatch_HandoffClockAdvancesAcrossCalls(t *testing.T) {
 	}
 
 	if got := first.Clock.Compare(second.Clock); got != a2a.Before {
-		t.Errorf("clock %v vs %v = %v, want happens-before — the second dispatch did "+
+		t.Errorf("clock %v vs %v = %v, want happens-before, the second dispatch did "+
 			"not inherit the first's history", first.Clock, second.Clock, got)
 	}
 }
@@ -145,7 +145,7 @@ func TestDispatch_HandoffClockAdvancesAcrossCalls(t *testing.T) {
 // models used to tick the identical "hydra-tier-10" clock key. The clock must
 // key on the head's own identity instead, or two genuinely different agents'
 // handoffs are indistinguishable from one agent dispatching twice (#503). The
-// display "From" string is untouched — it still reads as the tier bucket.
+// display "From" string is untouched, it still reads as the tier bucket.
 func TestDispatch_HandoffClockDistinguishesSameTierHeads(t *testing.T) {
 	s := testutil.NewSandbox(t)
 	path := filepath.Join(config.Dir(), "logs", "last_handoff.json")
@@ -196,7 +196,7 @@ func TestDispatch_DryRunResolvesTheChainWithoutRunningIt(t *testing.T) {
 		t.Fatal(err)
 	}
 	if res.Output != "" {
-		t.Errorf("a dry run produced output %q — it executed a head", res.Output)
+		t.Errorf("a dry run produced output %q, it executed a head", res.Output)
 	}
 	if res.Head.ID == "" {
 		t.Error("a dry run named no primary head")
@@ -223,13 +223,13 @@ func TestDispatch_FallsThroughToTheNextHead(t *testing.T) {
 		t.Errorf("answered by %q, want the fallback head", res.Head.ID)
 	}
 	if res.Retries != 1 {
-		t.Errorf("Retries = %d, want 1 — the user is told how far the chain fell",
+		t.Errorf("Retries = %d, want 1, the user is told how far the chain fell",
 			res.Retries)
 	}
 }
 
 // A ledger deny rule must actually block a real dispatch to that head, not
-// just log it — the entire point of a policy gate over an accountability log.
+// just log it, the entire point of a policy gate over an accountability log.
 func TestDispatch_LedgerDenyRuleBlocksTheHead(t *testing.T) {
 	s := testutil.NewSandbox(t)
 	writeLedgerPolicy(t, ledger.Policy{Rules: []ledger.Rule{{Tool: "denied", Decision: ledger.Deny}}})
@@ -240,7 +240,7 @@ func TestDispatch_LedgerDenyRuleBlocksTheHead(t *testing.T) {
 		t.Fatalf("dispatch gave up instead of falling back past the denied head: %v", err)
 	}
 	if res.Head.ID != "ok" {
-		t.Errorf("answered by %q, want the fallback head — the denied one must never run", res.Head.ID)
+		t.Errorf("answered by %q, want the fallback head, the denied one must never run", res.Head.ID)
 	}
 
 	events, err := ledger.Load(ledger.DefaultPath())
@@ -260,7 +260,7 @@ func TestDispatch_LedgerDenyRuleBlocksTheHead(t *testing.T) {
 
 // dispatch.go's fallback loop calls ledger.CheckAndRecordDispatch once per
 // candidate against the same prompt. A precomputed Classification must be
-// reused for every one of them, not re-derived from Content — a deliberately
+// reused for every one of them, not re-derived from Content, a deliberately
 // "clean" Classification recorded on every candidate despite the prompt
 // containing an email proves it was reused, not recomputed (#522).
 func TestDispatch_ReusesPrecomputedClassificationAcrossFallbackCandidates(t *testing.T) {
@@ -284,7 +284,7 @@ func TestDispatch_ReusesPrecomputedClassificationAcrossFallbackCandidates(t *tes
 		t.Fatalf("answered by %q, want h3 after 2 fallbacks", res.Head.ID)
 	}
 	if res.Retries != 2 {
-		t.Fatalf("Retries = %d, want 2 — three candidates should have been tried", res.Retries)
+		t.Fatalf("Retries = %d, want 2, three candidates should have been tried", res.Retries)
 	}
 
 	events, err := ledger.Load(ledger.DefaultPath())
@@ -298,7 +298,7 @@ func TestDispatch_ReusesPrecomputedClassificationAcrossFallbackCandidates(t *tes
 		}
 		dispatchEvents++
 		if e.Classification != "" || len(e.PIITypes) != 0 {
-			t.Errorf("head %s: Classification=%q PIITypes=%v, want both empty — the "+
+			t.Errorf("head %s: Classification=%q PIITypes=%v, want both empty, the "+
 				"precomputed clean Classification must be reused for every candidate, "+
 				"not re-derived from a prompt that plainly contains an email",
 				e.Tool, e.Classification, e.PIITypes)
@@ -310,7 +310,7 @@ func TestDispatch_ReusesPrecomputedClassificationAcrossFallbackCandidates(t *tes
 }
 
 // With no policy configured, the ledger's default-allow must leave dispatch
-// behavior unchanged — but it must still record the access.
+// behavior unchanged, but it must still record the access.
 func TestDispatch_DefaultLedgerPolicyRecordsButNeverBlocks(t *testing.T) {
 	s := testutil.NewSandbox(t)
 
@@ -338,7 +338,7 @@ func TestDispatch_DefaultLedgerPolicyRecordsButNeverBlocks(t *testing.T) {
 }
 
 // A ledger rule keyed on Resource must scope by the file a dispatch acts on,
-// not just by head — the concrete "excessive agency" containment: a head may
+// not just by head, the concrete "excessive agency" containment: a head may
 // be trusted in general but still denied write access to a specific path.
 func TestDispatch_LedgerResourceScopingBlocksOnlyMatchingFiles(t *testing.T) {
 	s := testutil.NewSandbox(t)
@@ -360,7 +360,7 @@ func TestDispatch_LedgerResourceScopingBlocksOnlyMatchingFiles(t *testing.T) {
 }
 
 // A denial-of-wallet guard: a candidate head whose estimated cost exceeds
-// MaxCostUSD must never execute — mirrors swarm's own preflight-cost pattern,
+// MaxCostUSD must never execute, mirrors swarm's own preflight-cost pattern,
 // extended to ordinary dispatch (which had no ceiling at all before this).
 func TestDispatch_MaxCostUSDRefusesAnExpensiveHead(t *testing.T) {
 	s := testutil.NewSandbox(t)
@@ -368,7 +368,7 @@ func TestDispatch_MaxCostUSDRefusesAnExpensiveHead(t *testing.T) {
 	dd.pricing = pricing.Load()
 
 	// A prompt with real length, so the char-count/4 token estimate is
-	// nonzero — tier 1's $15/$75-per-million rate then prices well above the
+	// nonzero, tier 1's $15/$75-per-million rate then prices well above the
 	// ceiling below.
 	prompt := strings.Repeat("x", 400)
 	if _, err := dd.Dispatch(context.Background(), prompt, Options{MaxCostUSD: 0.0000001}); err == nil {
@@ -390,7 +390,7 @@ func TestDispatch_MaxCostUSDRefusesAnExpensiveHead(t *testing.T) {
 	}
 }
 
-// MaxCostUSD: 0 (the default) must change nothing — a ceiling that silently
+// MaxCostUSD: 0 (the default) must change nothing, a ceiling that silently
 // activates itself would refuse dispatches nobody asked to bound.
 func TestDispatch_ZeroMaxCostUSDIsNoLimit(t *testing.T) {
 	s := testutil.NewSandbox(t)
@@ -421,7 +421,7 @@ func writeLedgerPolicy(t *testing.T, p ledger.Policy) {
 	}
 }
 
-// Every head failing must report the last error, not a generic one — that
+// Every head failing must report the last error, not a generic one, that
 // error is the only diagnostic the user gets.
 func TestDispatch_AllHeadsFailingReportsWhy(t *testing.T) {
 	s := testutil.NewSandbox(t)
@@ -477,7 +477,7 @@ func TestDispatch_OutOfRangeNumericTierIsRejected(t *testing.T) {
 }
 
 // PII in the prompt forces local-only routing. With no local head that must be
-// a refusal naming the cause, not a quiet escalation to a paid API head — the
+// a refusal naming the cause, not a quiet escalation to a paid API head, the
 // whole point of the policy.
 func TestDispatch_PIIForcesLocalOnlyAndSaysSoWhenNothingIsLocal(t *testing.T) {
 	s := testutil.NewSandbox(t)
@@ -502,7 +502,7 @@ func TestDispatch_PIIForcesLocalOnlyAndSaysSoWhenNothingIsLocal(t *testing.T) {
 // computes it once (see main.go) so Dispatch's own policy.Evaluate call reuses
 // it instead of re-scanning prompt. A Dispatch that recomputed anyway would
 // force local-only here (an SSN is in the prompt) and fail with no local
-// head — succeeding proves the override was actually used, not ignored (#522).
+// head, succeeding proves the override was actually used, not ignored (#522).
 func TestDispatch_PrecomputedClassificationOverridesFreshDetection(t *testing.T) {
 	s := testutil.NewSandbox(t)
 
@@ -521,7 +521,7 @@ func TestDispatch_PrecomputedClassificationOverridesFreshDetection(t *testing.T)
 		t.Fatalf("dispatch failed even though the precomputed classification says clean: %v", err)
 	}
 	if res.Head.ID != "cloud" {
-		t.Errorf("Head = %q, want the non-local head — the precomputed classification "+
+		t.Errorf("Head = %q, want the non-local head, the precomputed classification "+
 			"should have let it through instead of forcing local-only", res.Head.ID)
 	}
 }
@@ -529,7 +529,7 @@ func TestDispatch_PrecomputedClassificationOverridesFreshDetection(t *testing.T)
 // A no-heads dispatch failure must be matchable by errors.Is(err, ErrNoHeads)
 // so a caller with no terminal to point at (the desktop dock) can render a
 // friendly message instead of dispatch's CLI-flavored text (#452). An empty
-// tier hint — the dock's "auto-route" default — must read as "no tier hint
+// tier hint, the dock's "auto-route" default, must read as "no tier hint
 // given", not a literal `tier ""`.
 func TestDispatch_NoHeadsErrorIsMatchableAndPhrasesAnEmptyTierClearly(t *testing.T) {
 	s := testutil.NewSandbox(t)
@@ -609,7 +609,7 @@ func TestDispatch_BadA2AFileFailsTheRun(t *testing.T) {
 
 // claudeMode is the token-preservation governor. Its whole purpose is to
 // downgrade before the orchestrator runs out, so each band's downgrade is
-// pinned — this table was inert for every non-numeric hint before #165.
+// pinned, this table was inert for every non-numeric hint before #165.
 func TestClaudeMode_DowngradesByBand(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -739,7 +739,7 @@ func TestSyncStateJSON_PreservesForeignKeysAndExtendsHistory(t *testing.T) {
 
 // Each `hyctl dispatch` is a fresh process with its own in-memory
 // budget.Registry, so it only ever knows about the head(s) it just ran.
-// Replacing state.json's "budget" map wholesale — instead of merging into it —
+// Replacing state.json's "budget" map wholesale, instead of merging into it,
 // erased every other model's entry on the very next dispatch (#502).
 func TestSyncStateJSON_MergesBudgetAcrossDispatchesInsteadOfReplacing(t *testing.T) {
 	s := testutil.NewSandbox(t)
@@ -758,7 +758,7 @@ func TestSyncStateJSON_MergesBudgetAcrossDispatchesInsteadOfReplacing(t *testing
 		t.Fatalf("state[\"budget\"] = %#v, want a map", readState(t)["budget"])
 	}
 	if _, ok := budgetMap["tier4-head"]; !ok {
-		t.Errorf("budget map = %v, missing tier4-head — the first dispatch's entry "+
+		t.Errorf("budget map = %v, missing tier4-head, the first dispatch's entry "+
 			"was overwritten by the second", budgetMap)
 	}
 	if _, ok := budgetMap["tier8-head"]; !ok {
@@ -770,7 +770,7 @@ func TestSyncStateJSON_MergesBudgetAcrossDispatchesInsteadOfReplacing(t *testing
 // here silently zeroes the governor's history.
 func TestAsIntAndAsIntSlice(t *testing.T) {
 	if got := asInt(float64(52)); got != 52 {
-		t.Errorf("asInt(float64) = %d, want 52 — JSON numbers arrive as float64", got)
+		t.Errorf("asInt(float64) = %d, want 52, JSON numbers arrive as float64", got)
 	}
 	if got := asInt(52); got != 52 {
 		t.Errorf("asInt(int) = %d, want 52", got)
@@ -788,7 +788,7 @@ func TestAsIntAndAsIntSlice(t *testing.T) {
 	if got := asIntSlice("not an array"); got != nil {
 		t.Errorf("asIntSlice(string) = %v, want nil", got)
 	}
-	// A mixed array must not drop elements — the history's length is its rate
+	// A mixed array must not drop elements, the history's length is its rate
 	// signal, so a silently shortened slice changes the risk estimate.
 	if got := asIntSlice([]any{float64(1), "x", float64(3)}); len(got) != 3 || got[1] != 0 {
 		t.Errorf("asIntSlice with a bad element = %v, want [1 0 3]", got)
@@ -808,7 +808,7 @@ func TestHeadsAndEstimateCost_AreExposedToCallers(t *testing.T) {
 	cheap := dd.EstimateCost(10, 1_000_000, 1_000_000)
 	dear := dd.EstimateCost(1, 1_000_000, 1_000_000)
 	if dear <= cheap {
-		t.Errorf("EstimateCost: tier 1 = %v is not dearer than tier 10 = %v — cost "+
+		t.Errorf("EstimateCost: tier 1 = %v is not dearer than tier 10 = %v, cost "+
 			"routing has nothing to route on", dear, cheap)
 	}
 }
@@ -848,8 +848,8 @@ func TestNew_LoadsTheConfigAndArmsThePIIPolicy(t *testing.T) {
 	if action := dd.policy.Evaluate(policy.Request{Prompt: "SSN 123-45-6789", TierHint: "1"}); !action.LocalOnly {
 		t.Error("the pii=local-only config policy did not arm the local-only rule")
 	}
-	// Exported so cmd/hydra's SPRT/swarm dispatch branches — which bypass
-	// Dispatch entirely — can still enforce the same config policy (#500).
+	// Exported so cmd/hydra's SPRT/swarm dispatch branches, which bypass
+	// Dispatch entirely, can still enforce the same config policy (#500).
 	if !dd.PIILocalOnly() {
 		t.Error("PIILocalOnly() = false, want true for a pii:local-only config")
 	}
@@ -925,7 +925,7 @@ func TestRecordBudget_LabelsEstimatedTokensAsEstimated(t *testing.T) {
 		t.Errorf("measured tokens booked as %+v, want 1000 from a real source", got)
 	}
 	if got := dd.budget.Get("guessed"); got.Source != "estimate" {
-		t.Errorf("estimated tokens booked as source %q — the governor would treat a "+
+		t.Errorf("estimated tokens booked as source %q, the governor would treat a "+
 			"char/4 guess as a measurement", got.Source)
 	}
 
@@ -991,7 +991,7 @@ func TestDispatch_LedgerAskRuleDoesNotLetTheHeadRun(t *testing.T) {
 	// Both heads really execute, so a result at all would mean work ran while
 	// the question was outstanding.
 	if res != nil {
-		t.Errorf("answered by %q — an unanswered Ask must not run, on any head", res.Head.ID)
+		t.Errorf("answered by %q, an unanswered Ask must not run, on any head", res.Head.ID)
 	}
 
 	events, err := ledger.Load(ledger.DefaultPath())

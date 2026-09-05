@@ -38,7 +38,7 @@ func (e *CLIExecutor) Execute(ctx context.Context, req Request) (*Response, erro
 
 	start := time.Now()
 	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("cli exec %s: %w — stderr: %s", req.Head.ID, err, stderr.String())
+		return nil, fmt.Errorf("cli exec %s: %w, stderr: %s", req.Head.ID, err, stderr.String())
 	}
 
 	output := strings.TrimSpace(stdout.String())
@@ -54,7 +54,7 @@ func (e *CLIExecutor) Execute(ctx context.Context, req Request) (*Response, erro
 		InputTokens:  promptTokens,
 		OutputTokens: responseTokens,
 		Truncated:    stdout.Truncated(),
-		// CLI tools (claude, codex, cursor, ...) report no token usage — these
+		// CLI tools (claude, codex, cursor, ...) report no token usage, these
 		// are char/4 estimates, same heuristic as the agy executor.
 		TokensEstimated: true,
 	}, nil
@@ -82,9 +82,9 @@ func (t cliTemplate) buildArgs(prompt string) []string {
 // To add a new CLI tool, add an entry here and in capabilities/data.json.
 var cliTemplates = map[string]cliTemplate{
 	"anthropic":   {args: []string{"--print", ""}}, // claude --print "<prompt>"
-	"openai":      {args: []string{"exec", ""}},    // codex exec "<prompt>" — bare codex launches its interactive TUI (#491)
+	"openai":      {args: []string{"exec", ""}},    // codex exec "<prompt>", bare codex launches its interactive TUI (#491)
 	"google":      {args: []string{""}},            // gemini "<prompt>"
-	"antigravity": {args: []string{"--print", ""}}, // agy --print "<prompt>" — bare agy launches its interactive TUI and, unlike codex, still exits 0 (#492)
+	"antigravity": {args: []string{"--print", ""}}, // agy --print "<prompt>", bare agy launches its interactive TUI and, unlike codex, still exits 0 (#492)
 	"cursor":      {args: []string{"--stdio"}, stdinPrompt: true},
 	"amazon":      {args: []string{""}},                       // kiro "<prompt>"
 	"codeium":     {args: []string{""}},                       // windsurf "<prompt>"

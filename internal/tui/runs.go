@@ -2,7 +2,7 @@
 
 package tui
 
-// runs.go — the run-list data layer shared by the agents and activity views:
+// runs.go, the run-list data layer shared by the agents and activity views:
 // loading today's runs from the run log and folding each event stream into a
 // status the header counts can trust (running is never counted as ok).
 
@@ -103,7 +103,7 @@ func ckRunFromEvents(id string, events []runlog.Event, live bool) ckRun {
 			r.fails++
 		}
 	}
-	// Swarm attempts and their dispatch rows describe the same spend — take
+	// Swarm attempts and their dispatch rows describe the same spend, take
 	// one, never the sum of both.
 	r.costUSD = dispCost
 	if r.costUSD == 0 {
@@ -123,13 +123,13 @@ func ckRunFromEvents(id string, events []runlog.Event, live bool) ckRun {
 	case finished:
 		r.status = "ok"
 	default:
-		r.status = "failed" // never finished, no heartbeat — interrupted
+		r.status = "failed" // never finished, no heartbeat, interrupted
 	}
 	return r
 }
 
 // runCostUSD is the one figure both a list row and the trace's done row show:
-// runlog-recorded cost, else the cost.jsonl join — never both summed.
+// runlog-recorded cost, else the cost.jsonl join, never both summed.
 func (m Cockpit) runCostUSD(r ckRun) float64 {
 	if r.costUSD > 0 {
 		return r.costUSD
@@ -175,7 +175,7 @@ func (m Cockpit) agentCounts() (live, done int) {
 	return live, done
 }
 
-// ckRunCounts tallies a list so headers stay consistent — a running run is
+// ckRunCounts tallies a list so headers stay consistent, a running run is
 // counted as running, never as ok.
 func ckRunCounts(runs []ckRun) (ok, failed, running int) {
 	for _, r := range runs {
@@ -202,7 +202,7 @@ func ckStatusGlyph(status string) string {
 	}
 }
 
-// ckShortID is the tail of a run id — the hex part is what tells runs apart;
+// ckShortID is the tail of a run id, the hex part is what tells runs apart;
 // the timestamp prefix is already visible as the list's order.
 func ckShortID(id string) string {
 	if i := strings.LastIndex(id, "-"); i >= 0 && i+1 < len(id) {

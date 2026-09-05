@@ -5,7 +5,7 @@
 // These YAML files used to be read from disk only. That works from a repo
 // checkout and fails everywhere else: goreleaser archives just the binary plus
 // LICENSE/NOTICE/README/CHANGELOG, and brew, npm, pip and curl all install the
-// binary alone — so every real install ran with no registry at all. Tier prices
+// binary alone, so every real install ran with no registry at all. Tier prices
 // silently became $0.00, agy heads silently vanished, and the deployment
 // breadcrumb silently stopped being stamped (#238).
 //
@@ -31,7 +31,7 @@ var embedded embed.FS
 // Read returns the contents of registry file name (e.g. "pricing.yaml").
 //
 // A copy on disk at home/registry/name wins, so operators can still edit
-// routing rules without rebuilding — that is the whole point of the registry
+// routing rules without rebuilding, that is the whole point of the registry
 // being YAML. The embedded copy is the fallback, which is what an installed
 // binary uses.
 func Read(home, name string) ([]byte, error) {

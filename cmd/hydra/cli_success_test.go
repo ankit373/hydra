@@ -17,7 +17,7 @@ import (
 	"github.com/ankit373/hydra/internal/testutil"
 )
 
-// The commands that call os.Exit do so only on their *failure* paths — `hyctl
+// The commands that call os.Exit do so only on their *failure* paths, `hyctl
 // edit` exits 2 when the edit fails, the MCP gate exits 3 on a deny, the oracle
 // exits 1 on a failing verdict, `parallel` exits 1 when a task fails. Their
 // success paths are the larger bodies and run cleanly in process, so this drives
@@ -109,7 +109,7 @@ func TestCLI_Dispatch_SucceedsAndLogsTheSpend(t *testing.T) {
 	}
 
 	// A CLI-agent head reports no real token usage, so Hydra estimates from
-	// char/4 (#502) — cost.jsonl must carry that row, clearly labelled as an
+	// char/4 (#502), cost.jsonl must carry that row, clearly labelled as an
 	// estimate rather than a measurement, or the call is silently invisible to
 	// spend tracking despite having actually run.
 	raw, err = os.ReadFile(filepath.Join(config.Dir(), "logs", "cost.jsonl"))
@@ -121,7 +121,7 @@ func TestCLI_Dispatch_SucceedsAndLogsTheSpend(t *testing.T) {
 		t.Fatal(err)
 	}
 	if costRow["tokens_source"] != "estimated" {
-		t.Errorf("tokens_source = %v, want \"estimated\" — a char/4 guess must never "+
+		t.Errorf("tokens_source = %v, want \"estimated\", a char/4 guess must never "+
 			"be presented as measured usage", costRow["tokens_source"])
 	}
 	if pt, _ := costRow["prompt_tokens"].(float64); pt <= 0 {
@@ -174,7 +174,7 @@ func TestCLI_Dispatch_TierAndSystemPromptAndA2A(t *testing.T) {
 }
 
 // --local forces the local tier. With no local head it must refuse rather than
-// quietly using a paid one — that is the entire point of the flag.
+// quietly using a paid one, that is the entire point of the flag.
 func TestCLI_Dispatch_LocalOnlyRefusesWhenNothingIsLocal(t *testing.T) {
 	dispatchable(t, "answered")
 
@@ -190,8 +190,8 @@ func TestCLI_Dispatch_LocalOnlyRefusesWhenNothingIsLocal(t *testing.T) {
 // The pii:local-only config policy must be enforced on the SPRT path exactly
 // like it is on the plain dispatch path, even though nobody passed --local.
 // Before #500, touchesPII alone routed a PII prompt into sw.RunSPRT with
-// LocalOnly bound only to --local, so it silently reached "cody" — a remote
-// CLI head — instead of being refused for lack of a local one.
+// LocalOnly bound only to --local, so it silently reached "cody", a remote
+// CLI head, instead of being refused for lack of a local one.
 func TestCLI_Dispatch_PIIPolicyForcesLocalOnlyOnTheSPRTPath(t *testing.T) {
 	s := testutil.NewSandbox(t)
 	if err := config.Save(&config.Config{
@@ -202,14 +202,14 @@ func TestCLI_Dispatch_PIIPolicyForcesLocalOnlyOnTheSPRTPath(t *testing.T) {
 	}
 	s.FakeBinary(t, "cody", testutil.EchoScript("cody's answer"))
 	// The sandbox clears $OLLAMA_HOST but an empty value falls back to the real
-	// default (localhost:11434) — on a machine that actually has Ollama running,
+	// default (localhost:11434), on a machine that actually has Ollama running,
 	// the port provider would discover it for real and the test would pass for
 	// the wrong reason (a real local head, not the policy under test). Point it
 	// at a dead loopback port so the only local-only head is whichever tests set.
 	t.Setenv("OLLAMA_HOST", "http://127.0.0.1:1")
 
 	// A PII-detecting prompt alone triggers the SPRT branch (RequiredConfidence
-	// derives a target > 0 from touchesPII), with no --confidence flag needed —
+	// derives a target > 0 from touchesPII), with no --confidence flag needed,
 	// exactly the reproduction in #500.
 	out, cobraOut, err := run(t, "dispatch", "my SSN is 123-45-6789")
 	combined := out + cobraOut
@@ -225,7 +225,7 @@ func TestCLI_Dispatch_PIIPolicyForcesLocalOnlyOnTheSPRTPath(t *testing.T) {
 }
 
 // A swarm dry run must name the heads and the estimated cost without firing
-// anything — #167 made --dry-run mean the same thing in every mode.
+// anything, #167 made --dry-run mean the same thing in every mode.
 func TestCLI_Dispatch_SwarmDryRunFiresNothing(t *testing.T) {
 	dispatchable(t, "answered")
 
@@ -245,7 +245,7 @@ func TestCLI_Dispatch_SwarmDryRunFiresNothing(t *testing.T) {
 	}
 }
 
-// Every real swarm mode must still plan cleanly under --dry-run — #453 fixed
+// Every real swarm mode must still plan cleanly under --dry-run, #453 fixed
 // dry-run to validate --swarm-mode, and that must not catch valid modes too.
 func TestCLI_Dispatch_SwarmDryRunValidModesFireNothing(t *testing.T) {
 	for _, mode := range []string{"race", "best", "all"} {
@@ -267,7 +267,7 @@ func TestCLI_Dispatch_SwarmDryRunValidModesFireNothing(t *testing.T) {
 	}
 }
 
-// A real risk signal — PII in the prompt, or --irreversible/--production —
+// A real risk signal, PII in the prompt, or --irreversible/--production,
 // must trigger SPRT mode on its own, not just --file's blast radius.
 func TestCLI_Dispatch_RiskSignalsTriggerSPRTWithoutFileOrConfidence(t *testing.T) {
 	dispatchable(t, "answered")
@@ -321,7 +321,7 @@ func TestCLI_Dispatch_ConfidenceDryRunFiresNothing(t *testing.T) {
 }
 
 // #530: swarm.Options had no A2AFile field at all, so --a2a was silently
-// dropped the instant --swarm or --confidence was combined with it — a bad
+// dropped the instant --swarm or --confidence was combined with it, a bad
 // handoff file must fail the run the same way it already does on plain
 // dispatch, in both --dry-run (Plan) and real (Run/RunSPRT) execution.
 func TestCLI_Dispatch_SwarmA2ABadFileRejectedIdenticallyDryRunAndReal(t *testing.T) {
@@ -374,7 +374,7 @@ func TestCLI_Dispatch_ConfidenceA2ABadFileRejectedIdenticallyDryRunAndReal(t *te
 }
 
 // #530: only the real sw.Run() call set JudgeTierHint, so a bogus
-// --swarm-judge-tier quietly passed --dry-run and only failed for real —
+// --swarm-judge-tier quietly passed --dry-run and only failed for real,
 // defeating the "dry-run previews reality" contract #453 established.
 func TestCLI_Dispatch_SwarmJudgeTierBadValueRejectedIdenticallyDryRunAndReal(t *testing.T) {
 	for _, dryRun := range []bool{true, false} {
@@ -562,13 +562,13 @@ func TestCLI_OracleVerify_PassingVerdictReportsEvidence(t *testing.T) {
 	}
 }
 
-// A garbage --record used to be silently ignored — no error, no calibration
+// A garbage --record used to be silently ignored, no error, no calibration
 // write, discovered only by its absence from `trust calibration` later.
 // `trust record --outcome` already validates this strictly; `oracle verify
 // --record` now does too, and before running the verifier at all (#464).
 func TestCLI_OracleVerify_GarbageRecordIsRejected(t *testing.T) {
 	// --record is validated before the verifier command ever runs (see the
-	// fix itself), so this never actually executes /usr/bin/true — safe on
+	// fix itself), so this never actually executes /usr/bin/true, safe on
 	// every platform, no skip needed.
 	populated(t)
 
@@ -593,7 +593,7 @@ func TestCLI_OracleVerify_GarbageRecordIsRejected(t *testing.T) {
 // ── mcp check, allowed ────────────────────────────────────────────────────────
 
 // An allowed check exits 0, so its body runs in process. The decision must be
-// recorded either way — an unlogged allow is not accountability.
+// recorded either way, an unlogged allow is not accountability.
 func TestCLI_MCPCheck_AllowedDecisionIsRecorded(t *testing.T) {
 	s := populated(t)
 
@@ -628,7 +628,7 @@ func TestCLI_MCPCheck_AllowedDecisionIsRecorded(t *testing.T) {
 }
 
 // tool+"/"+resource used to read as one run-together path whenever resource
-// was itself absolute — "fs.read" + "/tmp/x.txt" rendered as
+// was itself absolute, "fs.read" + "/tmp/x.txt" rendered as
 // "fs.read//tmp/x.txt", indistinguishable from a single garbled field (#464).
 func TestCLI_MCPCheckAndLog_ToolResourceSeparatorDoesNotCollideWithPaths(t *testing.T) {
 	s := populated(t)
@@ -752,7 +752,7 @@ func TestCLI_Stats_EveryGrouping(t *testing.T) {
 func TestCLI_PricingList_FilterAndJSON(t *testing.T) {
 	populated(t)
 
-	// The JSON surface must be an array even when the filter matches nothing —
+	// The JSON surface must be an array even when the filter matches nothing,
 	// a jq pipeline iterating it should get zero elements, not a parse error.
 	// Tier pricing (registry/pricing.yaml, embedded) means this is never
 	// actually empty, but it must never be the literal `null` either (#505):
@@ -923,8 +923,8 @@ func TestCLI_MCP_EverySurfaceAgainstRealEvents(t *testing.T) {
 	// A policy that allows reads under /tmp and denies everything else.
 	//
 	// "default":"deny" is required: a zero Default is treated as Allow by
-	// design — Hydra records everything but blocks nothing unless a rule says
-	// so — so without it a non-matching resource falls through to allowed.
+	// design, Hydra records everything but blocks nothing unless a rule says
+	// so, so without it a non-matching resource falls through to allowed.
 	policy := `{"default":"deny","rules":[` +
 		`{"action":"read","resource":"/tmp/**","decision":"allow"}]}`
 	if err := os.WriteFile(filepath.Join(config.Dir(), "mcp_policy.json"),
@@ -1119,7 +1119,7 @@ func TestCLI_Probe_MarksUnroutableHeads(t *testing.T) {
 	if !strings.Contains(combined, "cody") && !strings.Contains(strings.ToLower(combined), "cody") {
 		t.Errorf("probe does not list the routable head:\n%s", combined)
 	}
-	// The unroutable one must be marked, and the reason given — pointing at
+	// The unroutable one must be marked, and the reason given, pointing at
 	// probe is only useful if probe explains itself (#248).
 	if strings.Contains(combined, "ollama") && !strings.Contains(combined, "✗") {
 		t.Errorf("the unroutable ollama binary is listed without being marked:\n%s", combined)
@@ -1127,7 +1127,7 @@ func TestCLI_Probe_MarksUnroutableHeads(t *testing.T) {
 }
 
 // `hyctl probe --json` is the one data-producing command that lacked machine-
-// readable output — every sibling (models/cost/stats/pricing/mcp report/
+// readable output, every sibling (models/cost/stats/pricing/mcp report/
 // security/graph/context entropy) has one (#464).
 func TestCLI_Probe_JSONIsValidAndMarksRoutability(t *testing.T) {
 	s, _ := dispatchable(t, "answered")
@@ -1173,7 +1173,7 @@ func TestCLI_Probe_JSONIsValidAndMarksRoutability(t *testing.T) {
 }
 
 // A corrupted ~/.hydra/models.json overlay makes capabilities.Load fail, which
-// the cli/env/port providers treat as "this whole provider found nothing" —
+// the cli/env/port providers treat as "this whole provider found nothing",
 // by design, so one broken provider doesn't block the others. But that used to
 // be completely invisible: every head that provider would have found just
 // vanished with no `✗` and no reason, contradicting probe's own "marks
@@ -1263,7 +1263,7 @@ func TestCLI_MCPCheck_ClassificationFromContentAndExplicit(t *testing.T) {
 		"--action", "read", "--resource", "/tmp/customers.csv", "--agent", "a",
 		"--content", "name,ssn\nAda Lovelace,123-45-6789")
 	if code != 3 {
-		t.Errorf("PII content exited %d, want the deny code 3 — the classification "+
+		t.Errorf("PII content exited %d, want the deny code 3, the classification "+
 			"was not derived from the content:\n%s", code, out)
 	}
 
@@ -1282,13 +1282,13 @@ func TestCLI_MCPCheck_ClassificationFromContentAndExplicit(t *testing.T) {
 		"--action", "read", "--resource", "/tmp/notes.txt", "--agent", "a",
 		"--content", "nothing sensitive here", "--classification", "pii")
 	if code != 3 {
-		t.Errorf("an explicit --classification pii exited %d, want 3 — the "+
+		t.Errorf("an explicit --classification pii exited %d, want 3, the "+
 			"explicit tag must beat the content scan:\n%s", code, out)
 	}
 }
 
 // A quarantined MCP server's tools must be classified without the caller
-// having to know that server is quarantined — the whole point of Phase 4's
+// having to know that server is quarantined, the whole point of Phase 4's
 // wiring is that a policy author writing "deny mcp-quarantined" gets that
 // enforcement automatically off the registry's own state, the same way a
 // PII rule applies to unlabeled content.
@@ -1310,7 +1310,7 @@ func TestCLI_MCPCheck_ClassificationFromQuarantinedMCPServer(t *testing.T) {
 	}
 
 	// A tool from a server with no recorded state at all must not be
-	// affected — "never audited" is not the same claim as "quarantined".
+	// affected, "never audited" is not the same claim as "quarantined".
 	code, out = runBinary(t, s, "mcp", "check", "mcp__unknown-server__do_something",
 		"--action", "exec", "--resource", "x", "--agent", "a")
 	if code != 0 {
@@ -1320,7 +1320,7 @@ func TestCLI_MCPCheck_ClassificationFromQuarantinedMCPServer(t *testing.T) {
 
 // The local, backend-free slice of Phase 6: a server whose ledger history
 // has only ever shown read actions, then performs a network action for the
-// first time, is exactly postmark-mcp's real attack shape — catchable from
+// first time, is exactly postmark-mcp's real attack shape, catchable from
 // this machine's own history, with no registry data and no CVE required.
 func TestCLI_MCPCheck_ClassificationFromNovelBehavior(t *testing.T) {
 	s := populated(t)
@@ -1346,7 +1346,7 @@ func TestCLI_MCPCheck_ClassificationFromNovelBehavior(t *testing.T) {
 		t.Errorf("a server's first-ever network action exited %d, want the deny code 3:\n%s", code, out)
 	}
 
-	// A read from the same server stays permitted — it's not a novel action.
+	// A read from the same server stays permitted, it's not a novel action.
 	code, out = runBinary(t, s, "mcp", "check", "mcp__quiet-server__fetch",
 		"--action", "read", "--resource", "x", "--agent", "a")
 	if code != 0 {
@@ -1485,7 +1485,7 @@ func TestCLI_ModelsAdd_ValidatesTheCapabilityScore(t *testing.T) {
 		}
 	}
 
-	// The name defaults to the id rather than being written empty — an unnamed
+	// The name defaults to the id rather than being written empty, an unnamed
 	// model renders as a blank row in `hyctl models list`.
 	if _, _, err := run(t, "models", "add", "unnamed-model",
 		"--provider", "p", "--cap-score", "50"); err != nil {
@@ -1500,8 +1500,8 @@ func TestCLI_ModelsAdd_ValidatesTheCapabilityScore(t *testing.T) {
 	}
 }
 
-// Overriding a built-in is allowed — that is how a user retunes a score without
-// a rebuild — but removing one is not, since the built-in would come straight
+// Overriding a built-in is allowed, that is how a user retunes a score without
+// a rebuild, but removing one is not, since the built-in would come straight
 // back and the removal would look like it worked.
 func TestCLI_ModelsRemove_CannotRemoveABuiltIn(t *testing.T) {
 	populated(t)
@@ -1597,8 +1597,8 @@ func TestCLI_ReviewQA_RefusesWithNoDiff(t *testing.T) {
 
 // `hyctl init` and the bare `hyctl` on a fresh install both open an interactive
 // wizard. There is no unit test for "the wizard rendered", but there is one for
-// the thing that actually goes wrong in practice: run non-interactively — from
-// a CI job, a Dockerfile, a script — it must fail fast with a message naming the
+// the thing that actually goes wrong in practice: run non-interactively, from
+// a CI job, a Dockerfile, a script, it must fail fast with a message naming the
 // cause, not hang waiting for input nobody is going to give it.
 func TestCLI_Init_FailsFastWithNoTerminal(t *testing.T) {
 	testutil.NewSandbox(t) // no config: this is a fresh install
@@ -1632,7 +1632,7 @@ func TestCLI_Init_FailsFastWithNoTerminal(t *testing.T) {
 	}
 }
 
-// The bare `hyctl` with no config runs the wizard rather than printing help —
+// The bare `hyctl` with no config runs the wizard rather than printing help,
 // a first-run user who types just the binary name should be set up, not handed
 // a flag list. With a config it prints help instead.
 func TestCLI_BareInvocation_WizardOnFirstRunHelpAfterwards(t *testing.T) {
@@ -1676,7 +1676,7 @@ func TestCLI_BareInvocation_WizardOnFirstRunHelpAfterwards(t *testing.T) {
 	})
 }
 
-// `hyctl tui` opens the same kind of interactive UI and needs the same guard —
+// `hyctl tui` opens the same kind of interactive UI and needs the same guard,
 // otherwise it is the second command that hangs a script.
 func TestCLI_Tui_FailsFastWithNoTerminal(t *testing.T) {
 	cliSandbox(t)

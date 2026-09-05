@@ -39,7 +39,7 @@ type serverListResponse struct {
 
 // Sync fetches the full official MCP registry (paginated) and writes it to
 // the local cache. Returns the number of servers written. onProgress, if
-// non-nil, is called after every page — the full registry is thousands of
+// non-nil, is called after every page, the full registry is thousands of
 // servers over dozens of sequential requests, easily a minute or two, and a
 // caller driving a CLI needs that to show something rather than sit silent.
 func Sync(ctx context.Context, onProgress func(page, serversSoFar int)) (int, error) {

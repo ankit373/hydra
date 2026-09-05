@@ -16,7 +16,7 @@ import (
 )
 
 // internal/review was at 0%. Approve and Reject are the other half of the
-// rollback story — Reject is the only user-facing way to undo an edit, and it
+// rollback story, Reject is the only user-facing way to undo an edit, and it
 // runs `git checkout --` on whatever it resolves.
 //
 // Every test below chdirs into its own temp repository first. That is not
@@ -76,7 +76,7 @@ func repoSandbox(t *testing.T, gitInit bool) string {
 	// the two spellings differ in practice: macOS gives /var symlinks for temp
 	// dirs, and Windows normalises casing and short (8.3) components. Comparing
 	// against anything else makes every containment check fail with
-	// "no workspace contains …" — which is exactly what the Windows leg caught.
+	// "no workspace contains …", which is exactly what the Windows leg caught.
 	cwd, err := os.Getwd()
 	if err != nil {
 		return repo
@@ -95,7 +95,7 @@ func write(t *testing.T, path, content string) {
 }
 
 // writeLastEditFixture stands in for editor.writeLastEdit without importing
-// the editor package — same file, same shape.
+// the editor package, same file, same shape.
 func writeLastEditFixture(t *testing.T, file, headID string) {
 	t.Helper()
 	raw, err := json.Marshal(map[string]any{"file": file, "head_id": headID})
@@ -145,7 +145,7 @@ func TestApprove_ConsumesTheBackup(t *testing.T) {
 		t.Errorf("Approve = %+v", got)
 	}
 	if _, err := os.Stat(backup); !os.IsNotExist(err) {
-		t.Error("the backup survived approval — a later Reject would restore stale bytes")
+		t.Error("the backup survived approval, a later Reject would restore stale bytes")
 	}
 	// The edited content is untouched: approving is not a write.
 	body, err := os.ReadFile(file)
@@ -157,7 +157,7 @@ func TestApprove_ConsumesTheBackup(t *testing.T) {
 	}
 }
 
-// Approve is a real ground-truth signal for calibration — the head that
+// Approve is a real ground-truth signal for calibration, the head that
 // produced the edit gets a "correct" observation, without a human ever
 // running `hyctl trust record`.
 func TestApprove_RecordsACalibrationObservation(t *testing.T) {
@@ -193,7 +193,7 @@ func TestApprove_RefusesAPathOutsideTheWorkspace(t *testing.T) {
 	}
 }
 
-// scopeCheck only validates the path against workspace globs — it never stats
+// scopeCheck only validates the path against workspace globs, it never stats
 // the file. Approving a file that never existed must error, not report
 // "approved" for an accountability trail nobody can trust (#449).
 func TestApprove_RefusesANonexistentFile(t *testing.T) {
@@ -319,7 +319,7 @@ func TestReject_UntrackedFileIsRemoved(t *testing.T) {
 
 // A file that was never created and never tracked has nothing to roll back
 // to, in a real git repo as much as a backup-only workspace (#449 sibling
-// case for Reject — the "nothing to roll back" gate already covers it).
+// case for Reject, the "nothing to roll back" gate already covers it).
 func TestReject_RefusesANonexistentFileInAGitRepo(t *testing.T) {
 	repo := repoSandbox(t, true)
 	file := filepath.Join(repo, "never-existed.go")
@@ -352,7 +352,7 @@ func TestReject_RefusesRelativeAndOutOfScopePaths(t *testing.T) {
 // ── Summary / numstat ─────────────────────────────────────────────────────────
 
 // numstat drives what `hyctl review` reports. Reporting 0/0 for a modified file
-// is the #260 failure mode — it reads as "nothing changed" and gets approved.
+// is the #260 failure mode, it reads as "nothing changed" and gets approved.
 func TestSummary_CountsAModifiedFile(t *testing.T) {
 	repo := repoSandbox(t, false)
 	file := filepath.Join(repo, "src", "a.go")
@@ -371,7 +371,7 @@ func TestSummary_CountsAModifiedFile(t *testing.T) {
 		t.Errorf("status = %q, want modified", e.Status)
 	}
 	if e.Added == 0 {
-		t.Error("added = 0 for a file with two new lines — this is the #260 symptom")
+		t.Error("added = 0 for a file with two new lines, this is the #260 symptom")
 	}
 	if res.Totals.Count != 1 || res.Totals.Added != e.Added {
 		t.Errorf("totals %+v do not aggregate the single entry", res.Totals)
@@ -392,7 +392,7 @@ func TestSummary_NoBaselineIsItsOwnStatus(t *testing.T) {
 		t.Fatalf("got %d entries", len(res.Files))
 	}
 	if s := res.Files[0].Status; s == "modified" {
-		t.Errorf("status = %q for a file with no baseline — that claims a change nobody measured", s)
+		t.Errorf("status = %q for a file with no baseline, that claims a change nobody measured", s)
 	}
 }
 
@@ -411,7 +411,7 @@ func TestSummary_SkipsRelativePaths(t *testing.T) {
 
 // ── Diff ──────────────────────────────────────────────────────────────────────
 
-// Diff must distinguish "no changes" from "could not produce a diff" — the two
+// Diff must distinguish "no changes" from "could not produce a diff", the two
 // were the same value before #260, so a reviewer approved changes never shown.
 func TestDiff_NoBaselineIsAnErrorNotAnEmptyDiff(t *testing.T) {
 	repo := repoSandbox(t, false)
@@ -448,7 +448,7 @@ func TestDiff_RefusesRelativePaths(t *testing.T) {
 
 // git diff on a pathspec it doesn't track exits 0 with empty output, exactly
 // like a real "no changes" result. Both a file that never existed and one
-// that exists but was never git-added hit this — Diff must error on both
+// that exists but was never git-added hit this, Diff must error on both
 // instead of returning the same blank string a genuine no-op diff gives (#459).
 func TestDiff_UntrackedOrNonexistentFileInAGitRepoErrorsClearly(t *testing.T) {
 	repo := repoSandbox(t, true)
@@ -471,7 +471,7 @@ func TestDiff_UntrackedOrNonexistentFileInAGitRepoErrorsClearly(t *testing.T) {
 	})
 }
 
-// The real "no changes" case — a tracked, committed, untouched file — must
+// The real "no changes" case, a tracked, committed, untouched file, must
 // stay a non-error empty diff, distinct from the untracked/nonexistent error.
 func TestDiff_RealNoChangesIsNotAnError(t *testing.T) {
 	repo := repoSandbox(t, true)

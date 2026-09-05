@@ -196,7 +196,7 @@ func TestIDSelector(t *testing.T) {
 	}
 }
 
-// An explicitly pinned list must survive the default cap — otherwise pinning
+// An explicitly pinned list must survive the default cap, otherwise pinning
 // heads to escape the top-N CapScore crowding silently gets trimmed back to N.
 func TestIDSelector_DefaultCapDoesNotTrimExplicitPins(t *testing.T) {
 	var all []provider.Head
@@ -212,7 +212,7 @@ func TestIDSelector_DefaultCapDoesNotTrimExplicitPins(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(got) != len(ids) {
-		t.Errorf("pinned %d heads, got %d — the default cap trimmed an explicit list", len(ids), len(got))
+		t.Errorf("pinned %d heads, got %d, the default cap trimmed an explicit list", len(ids), len(got))
 	}
 
 	// An explicit MaxHeads is a deliberate instruction and must still cap.
@@ -277,7 +277,7 @@ func TestCapScoreSelector_MaxHeadsCap(t *testing.T) {
 // ── NumericTierSelector ──────────────────────────────────────────────────────
 
 // A numeric --tier used to match no config tier name and always fall through
-// to CapScoreSelector's top-N fan-out — silently firing every head regardless
+// to CapScoreSelector's top-N fan-out, silently firing every head regardless
 // of the requested tier. NumericTierSelector is what resolveSelector now picks
 // for a numeric hint, mirroring dispatch.selectHeads' own semantics (#501).
 func TestResolveSelector_PicksNumericTierSelectorForANumericHint(t *testing.T) {
@@ -321,7 +321,7 @@ func TestNumericTierSelector_MatchesDispatchSemantics(t *testing.T) {
 	}
 }
 
-// Nothing matches the requested tier — degrade to the cheapest heads
+// Nothing matches the requested tier, degrade to the cheapest heads
 // available, never silently escalate to the strongest (most expensive) one.
 func TestNumericTierSelector_DegradesToCheapestNeverStrongest(t *testing.T) {
 	all := []provider.Head{
@@ -336,7 +336,7 @@ func TestNumericTierSelector_DegradesToCheapestNeverStrongest(t *testing.T) {
 		t.Fatal("degrade path selected nothing")
 	}
 	if got[0].ID == "strongest" {
-		t.Errorf("fell back to the STRONGEST head %q — must degrade to the cheapest", got[0].ID)
+		t.Errorf("fell back to the STRONGEST head %q, must degrade to the cheapest", got[0].ID)
 	}
 	if got[0].ID != "expert" {
 		t.Errorf("fallback primary = %q, want cheapest (\"expert\")", got[0].ID)
@@ -354,7 +354,7 @@ func ids(heads []provider.Head) []string {
 // ── validateSwarmTiers ────────────────────────────────────────────────────────
 
 // Run, RunSPRT and Plan all reject an invalid --tier/--swarm-judge-tier via
-// the identical rule dispatch.Dispatch applies — before this, an invalid
+// the identical rule dispatch.Dispatch applies, before this, an invalid
 // value under --swarm/--confidence fell straight through to CapScoreSelector
 // instead of erroring (#501).
 func TestValidateSwarmTiers(t *testing.T) {
@@ -396,7 +396,7 @@ func TestEstimateFanoutCost_IndependentOfAnyLimit(t *testing.T) {
 	if got := estimateFanoutCost(heads, "some prompt", pr); got != 0.03 {
 		t.Errorf("estimateFanoutCost = %v, want 0.03", got)
 	}
-	// The guard reports nothing here — that difference is the whole point.
+	// The guard reports nothing here, that difference is the whole point.
 	if total, _ := preflightCost(heads, "some prompt", pr, 0); total != 0 {
 		t.Errorf("preflightCost with no limit = %v, want 0", total)
 	}
@@ -408,7 +408,7 @@ func TestEstimateFanoutCost_IndependentOfAnyLimit(t *testing.T) {
 // withTempConfig points config.Dir() at a throwaway home containing a minimal
 // config.toml. config.Load fails outright when the file is missing, so any test
 // touching the selection path is otherwise green only on a machine that happens
-// to have run `hyctl init` — which is exactly how this test passed locally and
+// to have run `hyctl init`, which is exactly how this test passed locally and
 // failed on a clean CI runner.
 func withTempConfig(t *testing.T) {
 	t.Helper()
@@ -437,7 +437,7 @@ func TestPlan_SelectsSameHeadsAsRunAndExecutesNothing(t *testing.T) {
 		t.Fatalf("Plan: %v", err)
 	}
 
-	// Same selector, same options — Plan must not diverge from the run path.
+	// Same selector, same options, Plan must not diverge from the run path.
 	cfg, err := config.Load()
 	if err != nil {
 		t.Fatalf("config: %v", err)
@@ -464,7 +464,7 @@ func TestPlan_SelectsSameHeadsAsRunAndExecutesNothing(t *testing.T) {
 
 // Plan must never report "here is your plan" with nothing in it. Two distinct
 // paths reach that state, so both are pinned: the selector rejecting an empty
-// roster outright, and a filter emptying a non-empty one — the latter returns
+// roster outright, and a filter emptying a non-empty one, the latter returns
 // (empty, nil), which is what Plan's own length check exists to catch.
 func TestPlan_EmptyResultIsAlwaysAnError(t *testing.T) {
 	// Without a config the error would come from config.Load instead, and these
@@ -524,7 +524,7 @@ func TestPlan_RejectsUnknownModeLikeRun(t *testing.T) {
 }
 
 // #530: swarm.Options had no A2AFile field at all, so --a2a was silently
-// dropped the instant --swarm or --confidence was combined with it — a bad
+// dropped the instant --swarm or --confidence was combined with it, a bad
 // handoff file must be rejected by Plan (the --dry-run path), Run and
 // RunSPRT alike, exactly as it already was on plain dispatch.
 func TestPlanRunRunSPRT_RejectBadA2AFileIdentically(t *testing.T) {

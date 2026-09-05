@@ -13,7 +13,7 @@ import (
 //
 // Routable is the distinction the app was missing entirely. Models rendered a
 // live/off dot from models.yaml's `enabled` flag, which is an install-specific
-// default and says nothing about reachability — so a head with no API key, or
+// default and says nothing about reachability, so a head with no API key, or
 // an Ollama model whose server is down, still showed as on.
 type Head struct {
 	ID       string `json:"id"`
@@ -36,7 +36,7 @@ type HeadPanel struct {
 	Heads []Head `json:"heads"`
 	// Routable is counted separately so a view can say "3 of 12 reachable"
 	// without re-deriving it, and can tell "none discovered" apart from
-	// "discovered, none usable" — which have completely different fixes.
+	// "discovered, none usable", which have completely different fixes.
 	Routable int `json:"routable"`
 }
 
@@ -56,7 +56,7 @@ func (a *API) GetHeads() HeadPanel {
 // headsFrom is the mapping, split out from the probe so it can be tested
 // against real routable and unroutable heads. Driven only through GetHeads it
 // was exercised against whatever the machine happened to have, which in a
-// sandbox is nothing at all — a test that iterates an empty list asserts
+// sandbox is nothing at all, a test that iterates an empty list asserts
 // nothing while passing.
 func headsFrom(discovered []provider.Head) HeadPanel {
 	out := HeadPanel{Heads: make([]Head, 0, len(discovered))}

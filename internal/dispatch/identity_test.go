@@ -79,7 +79,7 @@ func TestLogDispatch_IdentityIsNeverEmpty(t *testing.T) {
 			t.Fatalf("%s: got %d rows, want 1", name, len(rows))
 		}
 		if id, _ := rows[0]["run_id"].(string); id == "" {
-			t.Errorf("%s: run_id is empty — this is exactly the #181 bug", name)
+			t.Errorf("%s: run_id is empty, this is exactly the #181 bug", name)
 		}
 		if id, _ := rows[0]["task_id"].(string); id == "" {
 			t.Errorf("%s: task_id is empty", name)
@@ -87,7 +87,7 @@ func TestLogDispatch_IdentityIsNeverEmpty(t *testing.T) {
 	}
 }
 
-// dispatch.jsonl and cost.jsonl describe the same call, so they must agree —
+// dispatch.jsonl and cost.jsonl describe the same call, so they must agree,
 // otherwise a reader joining the two logs sees two different runs.
 func TestLogDispatch_BothLogsShareOneIdentity(t *testing.T) {
 	home := t.TempDir()

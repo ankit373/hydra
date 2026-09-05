@@ -44,7 +44,7 @@ func TestAuditPolicy_HitCountsAndDeadRules(t *testing.T) {
 }
 
 // A zero Default is treated as Allow by Policy.Decide, so the audit has to
-// read it the same way — otherwise the dashboard reports fail-closed on a
+// read it the same way, otherwise the dashboard reports fail-closed on a
 // policy that is actually fail-open.
 func TestAuditPolicy_ZeroDefaultIsFailOpen(t *testing.T) {
 	a := AuditPolicy(ledger.Policy{}, nil)
@@ -76,8 +76,8 @@ func TestAuditPolicy_NoFalseShadowOnDisjointRules(t *testing.T) {
 	pol := ledger.Policy{
 		Rules: []ledger.Rule{
 			{Tool: "fs", Decision: ledger.Deny},
-			{Tool: "net", Decision: ledger.Deny},    // different tool — reachable
-			{Resource: "/x", Decision: ledger.Deny}, // different dimension — reachable
+			{Tool: "net", Decision: ledger.Deny},    // different tool, reachable
+			{Resource: "/x", Decision: ledger.Deny}, // different dimension, reachable
 		},
 	}
 	a := AuditPolicy(pol, nil)

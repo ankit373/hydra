@@ -16,7 +16,7 @@ permissions:
 # creates second then finds the tag the first run just made and fails (#337).
 # Worse, an older commit's run finishing after a newer one's would silently
 # publish a stale edge build under a "successful" green check. Cancelling an
-# in-flight run for a superseded commit is correct here — this is a nightly
+# in-flight run for a superseded commit is correct here, this is a nightly
 # convenience build, not a gated release, so there is nothing worth finishing.
 concurrency:
   group: edge-build-${{ github.ref }}
@@ -48,7 +48,7 @@ jobs:
           echo "sha=${SHA}" >> "$GITHUB_OUTPUT"
 
       # Delete existing edge release + tag so we can overwrite it.
-      # Must delete local tag too — fetch-depth:0 pulls it into the checkout,
+      # Must delete local tag too, fetch-depth:0 pulls it into the checkout,
       # and gh release create refuses to create a tag that exists locally but
       # not on remote.
       - name: Delete previous edge release
@@ -73,9 +73,9 @@ jobs:
         run: |
           gh release create edge dist/*.tar.gz dist/*.zip dist/checksums.txt \
             --target "${{ github.sha }}" \
-            --title "Edge — ${{ steps.ver.outputs.version }}" \
+            --title "Edge, ${{ steps.ver.outputs.version }}" \
             --notes "$(cat <<'EOF'
-          > ⚠️ **This is an edge/nightly build** — built from the latest commit on \`develop\`.
+          > ⚠️ **This is an edge/nightly build**, built from the latest commit on \`develop\`.
           > It may be unstable. Use the [stable release](https://github.com/ankit373/hydra/releases/latest) for production.
 
           **Commit**: \`${{ steps.ver.outputs.sha }}\`

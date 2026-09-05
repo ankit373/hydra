@@ -52,8 +52,8 @@ func (f *fakeProvider) Discover(ctx context.Context) ([]provider.Head, error) {
 }
 
 // head builds a distinct cloud head. The provider name matters: rank.ByCapScore
-// dedupes non-local heads by Provider — deliberately, so a vendor with fifty
-// models shows as one head — so fakes sharing a provider name collapse into one.
+// dedupes non-local heads by Provider, deliberately, so a vendor with fifty
+// models shows as one head, so fakes sharing a provider name collapse into one.
 // The first version of these tests used Provider:"test" throughout and saw
 // three heads become two, which is the dedup contract working, not a bug.
 func head(id string, score int, local bool) provider.Head {
@@ -178,7 +178,7 @@ func TestRunWith_ConcurrentProvidersAreRaceFree(t *testing.T) {
 
 // The dedup contract itself, asserted rather than stumbled into: several heads
 // from one cloud provider collapse to the strongest, while local heads each
-// stay — a machine with four Ollama models has four usable heads, but a vendor
+// stay, a machine with four Ollama models has four usable heads, but a vendor
 // with forty API models is still one entry.
 func TestRunWith_CloudHeadsDedupePerProviderButLocalOnesDoNot(t *testing.T) {
 	cloud := []provider.Head{
@@ -208,10 +208,10 @@ func TestRunWith_CloudHeadsDedupePerProviderButLocalOnesDoNot(t *testing.T) {
 		}
 	}
 	if gotCloud != 1 {
-		t.Errorf("got %d cloud heads, want 1 — one entry per cloud provider", gotCloud)
+		t.Errorf("got %d cloud heads, want 1, one entry per cloud provider", gotCloud)
 	}
 	if gotLocal != 2 {
-		t.Errorf("got %d local heads, want 2 — each local model is its own head", gotLocal)
+		t.Errorf("got %d local heads, want 2, each local model is its own head", gotLocal)
 	}
 }
 
@@ -236,7 +236,7 @@ func TestRunWith_CancelledContextReturnsPromptly(t *testing.T) {
 	}
 }
 
-// Every provider is asked exactly once — a double call would double-count heads
+// Every provider is asked exactly once, a double call would double-count heads
 // and, for the port provider, double the network probes.
 func TestRunWith_EachProviderIsAskedOnce(t *testing.T) {
 	p := &fakeProvider{id: "once", heads: []provider.Head{head("h", 50, false)}}
@@ -248,8 +248,8 @@ func TestRunWith_EachProviderIsAskedOnce(t *testing.T) {
 }
 
 // A provider failure (e.g. cli/env/port's capabilities.Load choking on a
-// corrupted ~/.hydra/models.json overlay) must stay non-fatal — the documented
-// contract every other test in this file exercises — but silently dropping it
+// corrupted ~/.hydra/models.json overlay) must stay non-fatal, the documented
+// contract every other test in this file exercises, but silently dropping it
 // with no trace at all contradicts hyctl probe's own "✗ marks unroutable heads
 // with the reason" promise (#248): this provider's heads never even reached
 // that accounting. Warnings is the visible signal (#505).
@@ -270,7 +270,7 @@ func TestRunWith_AFailingProviderIsRecordedAsAWarning(t *testing.T) {
 	}
 }
 
-// A provider that returns no error must not manufacture a warning — Warnings
+// A provider that returns no error must not manufacture a warning, Warnings
 // is specifically about failures, not an audit log of every provider run.
 func TestRunWith_NoWarningsWhenEveryProviderSucceeds(t *testing.T) {
 	res := RunWith(context.Background(), []provider.Provider{

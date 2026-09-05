@@ -2,7 +2,7 @@
 
 package tui
 
-// view_usage.go — view 4: spend tiles, the by-model/tier/day breakdown, and
+// view_usage.go, view 4: spend tiles, the by-model/tier/day breakdown, and
 // the context budget panel. Every figure on this screen must cohere with every
 // other; a value that cannot be computed renders "—", never an invention.
 
@@ -39,14 +39,14 @@ func (m Cockpit) usageBody(w, h int) string {
 	budgetBox := ckBoxS.Render(m.usageContextBudget())
 	bottom := lipgloss.JoinHorizontal(lipgloss.Top, breakdown, " ", budgetBox)
 	if lipgloss.Width(bottom) > w {
-		// Stack rather than drop a panel — and the stack scrolls, so a short
+		// Stack rather than drop a panel, and the stack scrolls, so a short
 		// terminal hides nothing behind "enlarge the terminal" (#630).
 		bottom = lipgloss.JoinVertical(lipgloss.Left, breakdown, budgetBox)
 	}
 	return lipgloss.JoinVertical(lipgloss.Left, tiles, bottom)
 }
 
-// usageLines is the body's height at the current width — what a scroll offset
+// usageLines is the body's height at the current width, what a scroll offset
 // is clamped against.
 func (m Cockpit) usageLines() int {
 	return len(strings.Split(m.usageBody(max(1, m.w), max(1, m.h)), "\n"))
@@ -130,7 +130,7 @@ const (
 	ckUsageBarW  = 16
 )
 
-// usageRows is the active grouping's data — also what the scroll offset is
+// usageRows is the active grouping's data, also what the scroll offset is
 // clamped against.
 func (m Cockpit) usageRows() []cost.GroupRow {
 	switch m.usageGroup {
@@ -165,11 +165,11 @@ func (m Cockpit) usageBreakdown() string {
 			maxCalls = r.Calls
 		}
 	}
-	// An all-local day has nothing to scale a cost bar by — scale by calls
+	// An all-local day has nothing to scale a cost bar by, scale by calls
 	// instead and say so, rather than rendering a blank chart.
 	byCalls := totalCost == 0 && len(rows) > 0
 	if byCalls {
-		b.WriteString(ckDimS.Render(" · bars by calls — everything was free"))
+		b.WriteString(ckDimS.Render(" · bars by calls, everything was free"))
 	}
 	b.WriteString("\n\n")
 
@@ -216,7 +216,7 @@ func (m Cockpit) usageContextBudget() string {
 	b.WriteString(ckLabelS.Render("CONTEXT BUDGET") + ckDimS.Render(" · orchestrator") + "\n\n")
 
 	if !m.pctKnown {
-		b.WriteString(ckFaintS.Render(" no context data yet — logs/state.json") + "\n" +
+		b.WriteString(ckFaintS.Render(" no context data yet, logs/state.json") + "\n" +
 			ckFaintS.Render(" has no claude_pct to read") + "\n")
 	} else {
 		mode := budget.ModeFor(m.claudePct)
@@ -224,14 +224,14 @@ func (m Cockpit) usageContextBudget() string {
 			ckDimS.Render(fmt.Sprintf("  %d%% · ", m.claudePct)) +
 			ckBandStyle(m.claudePct).Render(mode.String()) + "\n")
 		if len(m.pctHist) < 2 {
-			b.WriteString(" " + ckFaintS.Render("burn — · not enough history for a rate") + "\n")
+			b.WriteString(" " + ckFaintS.Render("burn, · not enough history for a rate") + "\n")
 		} else {
 			burn, risk := budget.RiskFromHistory(m.pctHist)
 			b.WriteString(" " + ckDimS.Render(fmt.Sprintf("burn %+.1f%%/step · risk of hitting 80%%: ", burn)) +
 				ckBandStyle(m.claudePct).Render(fmt.Sprintf("%.0f%%", risk*100)) + "\n")
 		}
 	}
-	b.WriteString("\n " + ckFaintS.Render("bands 0–49 normal · 50 compact · 65 caution") + "\n " +
+	b.WriteString("\n " + ckFaintS.Render("bands 0-49 normal · 50 compact · 65 caution") + "\n " +
 		ckFaintS.Render("      70 downgrade · 75 critical · 80 stop"))
 	return b.String()
 }

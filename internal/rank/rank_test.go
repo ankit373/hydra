@@ -56,7 +56,7 @@ func TestOllamaCLIKeptWhenNoPortModels(t *testing.T) {
 
 // Hydra routes by cost, and a local head costs nothing, so it belongs at the
 // cheapest tier however capable it is. Ollama scores exactly 60, which the score
-// ladder put at tier 9 — one short of the bottom — so `--enum GRUNT` degraded
+// ladder put at tier 9, one short of the bottom, so `--enum GRUNT` degraded
 // straight past it to a paid cloud head (#248). CLAUDE.md promises tier 10 is
 // the always-available terminal fallback; this is what makes that true.
 func TestUITier_LocalHeadsAreAlwaysTheCheapestTier(t *testing.T) {

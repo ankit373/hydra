@@ -12,13 +12,13 @@ import (
 )
 
 // A machine with nothing installed must still answer, and the empty list must
-// marshal as [] rather than null — types.ts declares heads as Head[].
+// marshal as [] rather than null, types.ts declares heads as Head[].
 func TestGetHeads_EmptyMachineAnswersWithAList(t *testing.T) {
 	testutil.NewSandbox(t)
 
 	got := New().GetHeads()
 	if got.Heads == nil {
-		t.Error("Heads is nil — the bridge must send [] for an empty list")
+		t.Error("Heads is nil, the bridge must send [] for an empty list")
 	}
 	raw, err := json.Marshal(got)
 	if err != nil {
@@ -48,7 +48,7 @@ func TestGetHeads_RoutableCountMatchesTheRows(t *testing.T) {
 			t.Errorf("head %s is routable but carries a reason %q", h.ID, h.Reason)
 		}
 		if !h.Routable && h.Reason == "" {
-			t.Errorf("head %s is unroutable with no reason — the user learns nothing", h.ID)
+			t.Errorf("head %s is unroutable with no reason, the user learns nothing", h.ID)
 		}
 	}
 	if n != got.Routable {
@@ -68,7 +68,7 @@ func TestHeadsFrom_MarksRoutabilityAndSaysWhyNot(t *testing.T) {
 	}
 	// A CLI-sourced head for a provider with no template and no endpoint: no
 	// executor can drive it. Deliberately not an HTTP head with a missing key
-	// — Hydra speaks OpenAI-compat to any endpoint, so that is routable, and
+	//, Hydra speaks OpenAI-compat to any endpoint, so that is routable, and
 	// asserting otherwise made the fixture wrong rather than the code.
 	noExec := provider.Head{ID: "mystery", Name: "Mystery", Provider: "nobody-at-all", Source: "cli"}
 
@@ -87,7 +87,7 @@ func TestHeadsFrom_MarksRoutabilityAndSaysWhyNot(t *testing.T) {
 	if !by["opus"].Routable || by["opus"].Reason != "" {
 		t.Errorf("the agy head should be routable with no reason: %+v", by["opus"])
 	}
-	// Discovered and shown, never dispatched — the user must be told which.
+	// Discovered and shown, never dispatched, the user must be told which.
 	if by["embed"].Routable {
 		t.Error("an embedding-only head must not be marked routable")
 	}
@@ -103,7 +103,7 @@ func TestHeadsFrom_MarksRoutabilityAndSaysWhyNot(t *testing.T) {
 }
 
 // A routable head must never carry a reason, and an unroutable one must always
-// carry one — the view renders the reason instead of the tier.
+// carry one, the view renders the reason instead of the tier.
 func TestHeadsFrom_ReasonAndRoutableAreNeverBothSet(t *testing.T) {
 	got := headsFrom([]provider.Head{
 		{ID: "a", Source: "registry"},
@@ -122,7 +122,7 @@ func TestHeadsFrom_ReasonAndRoutableAreNeverBothSet(t *testing.T) {
 func TestHeadsFrom_EmptyIsAListNotNull(t *testing.T) {
 	got := headsFrom(nil)
 	if got.Heads == nil {
-		t.Error("Heads is nil — types.ts declares Head[]")
+		t.Error("Heads is nil, types.ts declares Head[]")
 	}
 	if got.Routable != 0 {
 		t.Errorf("Routable = %d with no heads", got.Routable)

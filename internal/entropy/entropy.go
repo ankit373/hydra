@@ -3,7 +3,7 @@
 // Package entropy measures the useful information in a context window, not just
 // its length. Manifesto Law 5: useful_tokens = length × signal_density. A big
 // noisy window can carry less usable context than a small dense one, so
-// compaction should trigger on falling signal density — not token count alone.
+// compaction should trigger on falling signal density, not token count alone.
 package entropy
 
 import (
@@ -98,7 +98,7 @@ func (g Governor) Assess(text string) Recommendation {
 	if snap.Density < floor {
 		return Recommendation{
 			Compact: true,
-			Reason:  "signal density below floor — window is mostly redundant context",
+			Reason:  "signal density below floor, window is mostly redundant context",
 			Snap:    snap,
 		}
 	}
@@ -106,7 +106,7 @@ func (g Governor) Assess(text string) Recommendation {
 }
 
 // Regressed reports whether growing the context from prev to cur added length
-// but not useful information — i.e. the window got bigger and *less* useful, the
+// but not useful information, i.e. the window got bigger and *less* useful, the
 // clearest signal to compact.
 func Regressed(prev, cur Snapshot) bool {
 	return cur.Tokens > prev.Tokens && cur.UsefulTokens <= prev.UsefulTokens

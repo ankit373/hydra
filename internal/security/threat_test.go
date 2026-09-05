@@ -16,7 +16,7 @@ func TestThreatBreakdown_GroupsMarkersResourcesAndActions(t *testing.T) {
 		{Decision: ledger.Deny, Resource: "/etc/passwd", Action: ledger.Read},
 		{Decision: ledger.Deny, Resource: "/etc/passwd", Action: ledger.Read},
 		{Decision: ledger.Deny, Resource: "/tmp/once", Action: ledger.Write},
-		{Decision: ledger.Allow, Action: ledger.Read}, // clean — must not appear anywhere
+		{Decision: ledger.Allow, Action: ledger.Read}, // clean, must not appear anywhere
 	}
 
 	th := ThreatBreakdown(events)

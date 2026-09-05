@@ -7,11 +7,11 @@
 //
 // It imports nothing from Wails. Every method is an ordinary Go function over
 // ordinary structs, so the whole backend is unit-testable with no webview in
-// the loop — `desktop/main.go` is the only file that knows Wails exists.
+// the loop, `desktop/main.go` is the only file that knows Wails exists.
 //
 // It never recomputes a number Hydra already computes. Dashboard totals come
-// from cost.Summary, cost.ByModel, and cost.GroupBy — the same calls `hyctl
-// cost` and `hyctl stats` make — so the GUI and the CLI cannot drift into
+// from cost.Summary, cost.ByModel, and cost.GroupBy, the same calls `hyctl
+// cost` and `hyctl stats` make, so the GUI and the CLI cannot drift into
 // disagreeing about the same file. A test asserts exactly that.
 package api
 

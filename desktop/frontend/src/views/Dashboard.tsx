@@ -27,7 +27,7 @@ import { ArcGauge, Sparkline, SpendTrend, TrustArc } from './DashboardCharts'
 import { useCountUp, useReveal } from '../reveal'
 
 /**
- * `data` is null until App.tsx's first `GetDashboard()` resolves — the
+ * `data` is null until App.tsx's first `GetDashboard()` resolves, the
  * skeleton below covers exactly that window, driven by real state rather
  * than a fake timeout. Once data lands the HUD chrome (corner brackets,
  * scanline, vignette) stays mounted for the lifetime of the view; only the
@@ -58,7 +58,7 @@ export function Dashboard({
   )
 }
 
-/** Corner brackets, scanline, vignette — brand/living/hydra-hud.src.html's
+/** Corner brackets, scanline, vignette, brand/living/hydra-hud.src.html's
  * frame language, scoped to this view rather than the shared app shell. */
 function HudChrome() {
   return (
@@ -321,9 +321,9 @@ function Breakdowns({
 }
 
 /** A ranked horizontal bar list: name, a proportional bar, and the exact
- * dollar amount — replaces the plain by-model/by-tier tables. Passing
+ * dollar amount, replaces the plain by-model/by-tier tables. Passing
  * `onSelect` turns each row into a button that opens the drill-down drawer
- * (used for "By model" only — one list is enough to prove the pattern out). */
+ * (used for "By model" only, one list is enough to prove the pattern out). */
 function RankedBars({
   title,
   rows,
@@ -381,14 +381,14 @@ function RankedBars({
 }
 
 /**
- * Which sources actually earn their stated confidence — one row per
+ * Which sources actually earn their stated confidence, one row per
  * (source, domain), sorted by D descending (the order internal/trust's
  * Calibrator.Report already returns, same as `hyctl trust calibration`).
  * Bars are on an absolute nat scale, never share-of-max (#593): "who to
  * trust" has to draw a weak field as weak, and the strongest of three coin
  * flips is still a coin flip. They use the SpendTrend halo treatment (#414)
  * turned sideways: a fainter halo behind a crisp fill, both growing in via
- * `transform: scaleX` once `useReveal` fires. Independent of `hasData` —
+ * `transform: scaleX` once `useReveal` fires. Independent of `hasData`,
  * calibration history comes from `hyctl trust record`, not the cost log, so
  * it can be populated (or empty) regardless of whether anything dispatched.
  */
@@ -434,7 +434,7 @@ export function CalibrationLeaderboard({ rows }: { rows: CalibrationRow[] }) {
   )
 }
 
-// How far the halo bleeds past the crisp bar it sits behind, on each edge —
+// How far the halo bleeds past the crisp bar it sits behind, on each edge,
 // matches SpendTrend's HALO_PAD.
 const CAL_HALO_PAD = 3
 
@@ -484,7 +484,7 @@ function CalibrationBar({ row, revealed }: { row: CalibrationRow; revealed: bool
   )
 }
 
-/** Slide-in detail panel for a "By model" row — the exact Breakdown fields
+/** Slide-in detail panel for a "By model" row, the exact Breakdown fields
  * GetDashboard already computes (Calls/PromptTokens/ResponseTokens/CostUSD/
  * WallMS), not a stub. `row` is kept around after close so the panel doesn't
  * blank out mid-slide-out; `open` alone drives the transform. */
@@ -619,7 +619,7 @@ export function RecentTable({
                   <td className="num">{r.tier === 0 ? '—' : r.tier}</td>
                   <td className="num">{ms(r.wallMs)}</td>
                   <td className={`num cost--${costBand(r.costUsd, max)}`}>{usdExact(r.costUsd)}</td>
-                  {/* A request with no run id has no run to open — say so rather
+                  {/* A request with no run id has no run to open, say so rather
                       than rendering a control that does nothing. */}
                   <td className="mono">{openable ? 'open →' : '—'}</td>
                 </tr>

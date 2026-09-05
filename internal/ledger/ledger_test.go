@@ -38,7 +38,7 @@ func TestRecord_StampsConfigBreadcrumbWhenBlank(t *testing.T) {
 
 // The ledger is an accountability record: an event that cannot say which
 // routing rules were in effect is materially weaker evidence. This used to
-// assert Config stays *empty* without an on-disk registry — which was every
+// assert Config stays *empty* without an on-disk registry, which was every
 // installed binary, so the field the breadcrumb was built for was blank in
 // practice (#238). With the registry embedded, it must always be stamped.
 func TestRecord_StampsConfigEvenWithNoOnDiskRegistry(t *testing.T) {
@@ -53,7 +53,7 @@ func TestRecord_StampsConfigEvenWithNoOnDiskRegistry(t *testing.T) {
 		t.Fatalf("want 1 event, got %d", len(events))
 	}
 	if events[0].Config == "" {
-		t.Error("Config is empty — the event cannot be tied back to the rules that produced it")
+		t.Error("Config is empty, the event cannot be tied back to the rules that produced it")
 	}
 }
 
@@ -119,7 +119,7 @@ func TestPolicy_Decide_MatchesOnClassification(t *testing.T) {
 
 func TestFrameworksCovered_ReturnsDistinctSortedNonEmptyTags(t *testing.T) {
 	// Rules built directly (not through LoadPolicy) already carry normalized
-	// tags here — case normalization is validate()'s job, covered separately
+	// tags here, case normalization is validate()'s job, covered separately
 	// by TestLoadPolicy_NormalizesFramework.
 	p := Policy{Rules: []Rule{
 		{Tool: "a", Framework: "owasp:llm06", Decision: Deny},
@@ -147,7 +147,7 @@ func TestFrameworksCovered_EmptyWhenNoRuleIsTagged(t *testing.T) {
 }
 
 // LoadPolicy must normalize Framework the same way it normalizes
-// Classification — a rule authored as "OWASP:LLM06" and one authored as
+// Classification: a rule authored as "OWASP:LLM06" and one authored as
 // "owasp:llm06" are the same tag.
 func TestLoadPolicy_NormalizesFramework(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "policy.json")
@@ -325,7 +325,7 @@ func TestCheck_FlaggedFromContent(t *testing.T) {
 		t.Fatal(err)
 	}
 	if d != Allow {
-		t.Errorf("flagging is a non-blocking audit signal, not a Deny — got %v", d)
+		t.Errorf("flagging is a non-blocking audit signal, not a Deny, got %v", d)
 	}
 	events, _ := Load(path)
 	if len(events) != 1 || !events[0].Flagged || events[0].FlagReason != "ignore previous instructions" {
@@ -334,7 +334,7 @@ func TestCheck_FlaggedFromContent(t *testing.T) {
 }
 
 // An unflagged event's JSON must stay byte-identical to before this field
-// existed — omitempty is what makes that true.
+// existed, omitempty is what makes that true.
 func TestCheck_UnflaggedEventOmitsTheFieldEntirely(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "mcp_ledger.jsonl")
 	p := Policy{Default: Allow}
@@ -390,7 +390,7 @@ func TestCheck_ClassifiedTrustsCallerEvenWhenContentLooksLikePII(t *testing.T) {
 // DetectPII/InjectionMarker regardless of how many candidates share it (#522).
 func TestCheckAndRecordDispatch_ClassifiesOncePerDispatchNotPerCandidate(t *testing.T) {
 	testutil.NewSandbox(t)
-	prompt := strings.Repeat("email me at jane.doe@example.com — ", 50)
+	prompt := strings.Repeat("email me at jane.doe@example.com, ", 50)
 
 	origDetect, origInj := detectPII, injectionMarker
 	var detectCalls, injCalls int32
@@ -423,7 +423,7 @@ func TestCheckAndRecordDispatch_ClassifiesOncePerDispatchNotPerCandidate(t *test
 		}
 	}
 	if detectCalls != 0 || injCalls != 0 {
-		t.Errorf("with a precomputed classification: detectPII=%d injectionMarker=%d calls for %d candidates, want 0 each — "+
+		t.Errorf("with a precomputed classification: detectPII=%d injectionMarker=%d calls for %d candidates, want 0 each, "+
 			"the whole point of threading it through is that Check never re-runs either detector",
 			detectCalls, injCalls, nCandidates)
 	}
@@ -440,7 +440,7 @@ func TestCheck_FailsClosedOnUnhashableParams(t *testing.T) {
 		t.Fatal("unhashable params should surface an error")
 	}
 	if d != Deny {
-		t.Errorf("Check must fail CLOSED on hash failure, got %q — a caller testing `d == Deny` would proceed", d)
+		t.Errorf("Check must fail CLOSED on hash failure, got %q, a caller testing `d == Deny` would proceed", d)
 	}
 	// The refused attempt must still be accounted for.
 	events, _ := Load(path)
@@ -452,7 +452,7 @@ func TestCheck_FailsClosedOnUnhashableParams(t *testing.T) {
 func TestLatestBound(t *testing.T) {
 	events := []Event{
 		{Tool: "fs", Resource: "a", ParametersHash: "h1", Decision: Allow},
-		{Tool: "fs", Resource: "a", Decision: Allow}, // no hash — must be skipped
+		{Tool: "fs", Resource: "a", Decision: Allow}, // no hash, must be skipped
 		{Tool: "fs", Resource: "a", ParametersHash: "h2", Decision: Allow},
 		{Tool: "net", Resource: "b", ParametersHash: "h3", Decision: Allow},
 	}
@@ -490,7 +490,7 @@ func TestLatestBound_DeniedEventIsNotAnApproval(t *testing.T) {
 }
 
 // Decoding params into a bare `any` turns every number into float64, which
-// collapses integers above 2^53 — two different amounts would share a hash.
+// collapses integers above 2^53, two different amounts would share a hash.
 func TestDecodeParams_PreservesLargeIntegerPrecision(t *testing.T) {
 	a, err := DecodeParams(`{"amount":1000000000000000001}`)
 	if err != nil {
@@ -547,7 +547,7 @@ func TestParseAction_RejectsCaseAndTypos(t *testing.T) {
 	}
 	for _, bad := range []string{"", "bogus", "yolo"} {
 		if _, err := ParseAction(bad); err == nil {
-			t.Errorf("ParseAction(%q) should error — an unmatched action silently bypasses every action rule", bad)
+			t.Errorf("ParseAction(%q) should error, an unmatched action silently bypasses every action rule", bad)
 		}
 	}
 }
@@ -558,7 +558,7 @@ func TestParseDecision_RejectsLookalikes(t *testing.T) {
 	}
 	for _, bad := range []string{"", "block", "reject", "totally-fine"} {
 		if _, err := ParseDecision(bad); err == nil {
-			t.Errorf("ParseDecision(%q) should error — it would print like a deny but compare unequal to Deny", bad)
+			t.Errorf("ParseDecision(%q) should error, it would print like a deny but compare unequal to Deny", bad)
 		}
 	}
 }
@@ -635,7 +635,7 @@ func TestLoadCounted_ReportsUnparseableLines(t *testing.T) {
 		t.Errorf("parseable events = %d, want 1", len(events))
 	}
 	if skipped != 1 {
-		t.Errorf("skipped = %d, want 1 — a discarded record must be reported", skipped)
+		t.Errorf("skipped = %d, want 1, a discarded record must be reported", skipped)
 	}
 }
 
@@ -698,7 +698,7 @@ func TestVerifyChain_RoundTripIsIntact(t *testing.T) {
 }
 
 // Deleting the TAIL of the ledger leaves every surviving PrevHash link valid,
-// so walking the chain cannot see it — and for a while this returned "intact"
+// so walking the chain cannot see it, and for a while this returned "intact"
 // on a log that had just had its most recent records removed, which is
 // precisely what someone covering their tracks deletes. The sidecar anchor is
 // the only witness.
@@ -716,7 +716,7 @@ func TestVerifyChain_DetectsTailTruncation(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !res.Truncated {
-		t.Errorf("ChainResult = %+v, want Truncated — the anchor names a removed event", res)
+		t.Errorf("ChainResult = %+v, want Truncated, the anchor names a removed event", res)
 	}
 	if res.Intact {
 		t.Error("a truncated ledger reported Intact")
@@ -724,7 +724,7 @@ func TestVerifyChain_DetectsTailTruncation(t *testing.T) {
 }
 
 // An anchor that lags the log means a best-effort writeChainHash did not land.
-// Nothing was removed, so this must not be reported as tampering — a security
+// Nothing was removed, so this must not be reported as tampering, a security
 // tool that cries wolf over its own dropped write gets ignored.
 func TestVerifyChain_StaleAnchorIsNotTampering(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "mcp_ledger.jsonl")
@@ -776,7 +776,7 @@ func TestVerifyChain_MissingAnchorIsNotAnAllClear(t *testing.T) {
 }
 
 // The ledger must never persist the content it was given to scan. That has
-// always been true structurally — Event has no content field — but nothing
+// always been true structurally, Event has no content field, but nothing
 // asserted it, so a future refactor could start logging prompt bodies (and
 // therefore the very secrets the scan exists to detect) without a single test
 // going red.
@@ -827,7 +827,7 @@ func keepFirstLines(t *testing.T, path string, n int) {
 	}
 }
 
-// Editing a line after the fact must be detectable — the entire point of a
+// Editing a line after the fact must be detectable, the entire point of a
 // hash chain over a plain append-only file.
 func TestVerifyChain_DetectsATamperedLine(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "mcp_ledger.jsonl")
@@ -867,7 +867,7 @@ func TestVerifyChain_DetectsATamperedLine(t *testing.T) {
 	}
 }
 
-// A ledger written before this feature has no Hash on any event — that must
+// A ledger written before this feature has no Hash on any event, that must
 // report as fully unchained, not as a broken chain.
 func TestVerifyChain_PreExistingLedgerIsUnchainedNotBroken(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "mcp_ledger.jsonl")
@@ -897,7 +897,7 @@ func TestVerifyChain_PreExistingLedgerIsUnchainedNotBroken(t *testing.T) {
 }
 
 // A ledger that mixes pre-feature (unchained) events with new (chained) ones
-// — the real-world shape every existing installation will have — must verify
+// , the real-world shape every existing installation will have, must verify
 // the chained tail without complaining about the unchained head.
 func TestVerifyChain_MixedUnchainedThenChainedIsIntact(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "mcp_ledger.jsonl")
@@ -961,7 +961,7 @@ func TestRecord_ConcurrentCallsDoNotForkTheChain(t *testing.T) {
 }
 
 // Agent/Tool/Resource are supplied by whatever's on the other end of an MCP
-// call — a local tool or a misbehaving agent — and every consumer (`mcp log`,
+// call, a local tool or a misbehaving agent, and every consumer (`mcp log`,
 // `mcp report`, the TUI Security view) prints them verbatim. A raw ESC[2K CR
 // in one of these fields erases the line it prints on and can forge a
 // verdict. Sanitising once at Record makes every consumer safe by
@@ -1046,7 +1046,7 @@ func TestLatestBound_AskIsNotAnApproval(t *testing.T) {
 	}}
 
 	if _, ok := LatestBound(events, "read_file", "/etc/hosts"); ok {
-		t.Fatal("an Ask event was returned as the binding approval — a pending question read as consent")
+		t.Fatal("an Ask event was returned as the binding approval, a pending question read as consent")
 	}
 
 	// Control: the same event as an Allow is found, so the test is proving the
@@ -1072,6 +1072,6 @@ func TestCheck_UnhashableParamsStillDeniesNeverAsks(t *testing.T) {
 		t.Fatal("expected an error for unhashable params")
 	}
 	if got != Deny {
-		t.Errorf("Check = %q on unhashable params, want %q — a failure path must not ask", got, Deny)
+		t.Errorf("Check = %q on unhashable params, want %q, a failure path must not ask", got, Deny)
 	}
 }

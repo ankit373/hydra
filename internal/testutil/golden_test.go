@@ -13,7 +13,7 @@ import (
 
 // Normalise is what makes a golden file comparable across a maintainer's
 // laptop, a Linux runner and a Windows one. Every substitution it misses is a
-// golden test that passes on one machine and fails on another — and every one
+// golden test that passes on one machine and fails on another, and every one
 // it over-applies hides a real change.
 
 func TestNormalise_ReplacesWhatDiffersByMachine(t *testing.T) {
@@ -140,7 +140,7 @@ func TestGolden_MatchesAndReportsADifference(t *testing.T) {
 		t.Error("Golden passed on genuinely different output")
 	}
 
-	// A missing golden file must fail rather than silently passing — a contract
+	// A missing golden file must fail rather than silently passing, a contract
 	// with no fixture is not a contract.
 	if !goldenFails(t, "never-blessed", "anything") {
 		t.Error("Golden passed with no fixture on disk")
@@ -153,7 +153,7 @@ func TestGolden_MatchesAndReportsADifference(t *testing.T) {
 // with t.Fatalf, and FailNow calls runtime.Goexit, which unwinds whichever
 // goroutine it runs on: on the test's own goroutine that would abort this test,
 // and on a synthetic *testing.T never started by the framework it panics.
-// Golden's failure *text* is not asserted here — testing.T does not expose what
+// Golden's failure *text* is not asserted here, testing.T does not expose what
 // a throwaway T recorded, and an assertion that cannot fail is worse than none.
 func goldenFails(t *testing.T, name, got string) bool {
 	t.Helper()
@@ -189,7 +189,7 @@ func TestFakeBinary_IsExecutableAndOnPath(t *testing.T) {
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("FakeBinary wrote nothing: %v", err)
 	}
-	// The point of the helper is that exec.LookPath finds it — a discovery test
+	// The point of the helper is that exec.LookPath finds it, a discovery test
 	// asserting "this CLI is installed" depends on that and nothing else.
 	if !strings.HasPrefix(path, s.BinDir) {
 		t.Errorf("the binary is at %q, outside the sandbox's PATH dir %q", path, s.BinDir)
@@ -220,7 +220,7 @@ func TestWriteRegistry_WritesEveryBreadcrumbFile(t *testing.T) {
 		t.Fatal("the registry directory is empty")
 	}
 
-	// With explicit contents, each file gets its own — which is what lets a
+	// With explicit contents, each file gets its own, which is what lets a
 	// breadcrumb test show that changing one file changes the fingerprint.
 	dir2 := t.TempDir()
 	WriteRegistry(t, dir2, "a", "b", "c", "d")
@@ -380,7 +380,7 @@ func TestAllowHostBinary_AdmitsARealToolAndRefusesAnAbsentOne(t *testing.T) {
 }
 
 // WriteRegistry's argument check exists so a caller cannot silently write a
-// partial registry — a breadcrumb over three of four files is not the
+// partial registry, a breadcrumb over three of four files is not the
 // deployment's identity.
 func TestWriteRegistry_RejectsAPartialContentList(t *testing.T) {
 	dir := t.TempDir()

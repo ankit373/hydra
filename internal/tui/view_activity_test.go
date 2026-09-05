@@ -16,7 +16,7 @@ import (
 
 // Status is derived from the recorded events, never assumed: a live heartbeat
 // means running, a successful completion (or a clean finish with no errors)
-// means ok, anything else failed — the counts must never call running "ok".
+// means ok, anything else failed, the counts must never call running "ok".
 func TestCkRunFromEvents_StatusDerivation(t *testing.T) {
 	ok := []runlog.Event{
 		{Kind: runlog.KindRunStarted, TS: "2026-09-04T10:00:00Z", Detail: "add pagination"},
@@ -58,7 +58,7 @@ func TestCkRunFromEvents_StatusDerivation(t *testing.T) {
 		t.Errorf("a live run read as %q", r.status)
 	}
 
-	// Started, no finish, no heartbeat: interrupted — never ok.
+	// Started, no finish, no heartbeat: interrupted, never ok.
 	dead := []runlog.Event{{Kind: runlog.KindRunStarted, TS: "2026-09-04T10:00:00Z", Detail: "t"}}
 	if r := ckRunFromEvents("r5", dead, false); r.status != "failed" {
 		t.Errorf("an interrupted run read as %q", r.status)
@@ -73,7 +73,7 @@ func TestCkRunFromEvents_StatusDerivation(t *testing.T) {
 		t.Errorf("a clean empty run read as %q", r.status)
 	}
 
-	// Swarm attempts and dispatch rows describe the same spend — never summed.
+	// Swarm attempts and dispatch rows describe the same spend, never summed.
 	swarm := []runlog.Event{
 		{Kind: runlog.KindAttempt, TS: "2026-09-04T10:00:00Z", Head: "a", Model: "A", Status: "ok", CostUSD: 0.01},
 		{Kind: runlog.KindDispatchFinished, TS: "2026-09-04T10:00:01Z", Head: "a", Model: "A", Status: "ok", CostUSD: 0.01},
@@ -93,7 +93,7 @@ func TestCkRunFromEvents_StatusDerivation(t *testing.T) {
 	}
 }
 
-// The header counts are the same buckets the glyphs use — consistent.
+// The header counts are the same buckets the glyphs use, consistent.
 func TestCkRunCounts_Consistent(t *testing.T) {
 	runs := []ckRun{
 		{status: "ok"}, {status: "ok"}, {status: "failed"}, {status: "running"},
@@ -107,7 +107,7 @@ func TestCkRunCounts_Consistent(t *testing.T) {
 	}
 }
 
-// With nothing recorded the loader returns nothing — an honest empty state,
+// With nothing recorded the loader returns nothing, an honest empty state,
 // not an example (#191). With a run file written, it loads today's runs and
 // skips other days by the id's date prefix.
 func TestCkLoadRuns_EmptyThenRealMachine(t *testing.T) {
@@ -148,7 +148,7 @@ func writeRunFile(t *testing.T, id string, lines []string) {
 // ── trace ───────────────────────────────────────────────────────────────────────
 
 // The trace renders the run's real shape: routed (with the class and the why
-// sub-line), the inferred guardrail outcome, request, stream, and done — and
+// sub-line), the inferred guardrail outcome, request, stream, and done, and
 // the fallbacks line only when the first candidate answered.
 func TestCkTrace_SingleCleanRun(t *testing.T) {
 	run := ckRunFromEvents("r1", []runlog.Event{
@@ -167,7 +167,7 @@ func TestCkTrace_SingleCleanRun(t *testing.T) {
 		"policy", "allowed", "recorded in the audit log",
 		"request", "ollama/qwen → qwen",
 		"stream", "1200 + 400 tokens", "provider-reported",
-		"fallbacks", "none — first candidate answered",
+		"fallbacks", "none, first candidate answered",
 		"done", "$0.0020 est",
 	} {
 		if !strings.Contains(joined, want) {
@@ -177,7 +177,7 @@ func TestCkTrace_SingleCleanRun(t *testing.T) {
 }
 
 // A guardrail denial renders as the policy row with its reason, in the UI
-// vocabulary (audit log, guardrails — not ledger), and is not duplicated as a
+// vocabulary (audit log, guardrails, not ledger), and is not duplicated as a
 // separate error row.
 func TestCkTrace_DeniedCandidate(t *testing.T) {
 	run := ckRunFromEvents("r1", []runlog.Event{
@@ -189,7 +189,7 @@ func TestCkTrace_DeniedCandidate(t *testing.T) {
 	rows := ckTrace(run, ckRunCost{}, false, 0)
 	joined := renderTrace(rows)
 
-	if !strings.Contains(joined, "denied — denied by guardrails") {
+	if !strings.Contains(joined, "denied, denied by guardrails") {
 		t.Errorf("the denial is not worded via guardrails:\n%s", joined)
 	}
 	if strings.Contains(joined, "ledger") {
@@ -198,7 +198,7 @@ func TestCkTrace_DeniedCandidate(t *testing.T) {
 	if !strings.Contains(joined, "fallback") {
 		t.Errorf("the second candidate is not labelled a fallback:\n%s", joined)
 	}
-	if strings.Contains(joined, "none — first candidate answered") {
+	if strings.Contains(joined, "none, first candidate answered") {
 		t.Errorf("the fallbacks-none line rendered on a run WITH fallbacks:\n%s", joined)
 	}
 	// The denied error must appear exactly once (as the policy row).
@@ -233,7 +233,7 @@ func TestCkTrace_EditsSamplesAndHonestTokens(t *testing.T) {
 	}
 }
 
-// A running run ends its trace with live, a failed one with failed — never a
+// A running run ends its trace with live, a failed one with failed, never a
 // fabricated done row.
 func TestCkTrace_TerminalRow(t *testing.T) {
 	live := ckRunFromEvents("r", []runlog.Event{
@@ -263,7 +263,7 @@ func renderTrace(rows []ckTraceRow) string {
 	return b.String()
 }
 
-// ckPolicyOutcome infers the gate decision from what followed — and invents
+// ckPolicyOutcome infers the gate decision from what followed, and invents
 // nothing when nothing followed.
 func TestCkPolicyOutcome(t *testing.T) {
 	events := []runlog.Event{
@@ -307,7 +307,7 @@ func TestViewActivity_ListTraceAndFilter(t *testing.T) {
 	m.view = ckViewActivity
 	out := stripANSI(m.viewActivity(120, 26))
 	for _, want := range []string{
-		"RUNS · today — 3", "1 ok · 1 failed · 1 running",
+		"RUNS · today, 3", "1 ok · 1 failed · 1 running",
 		"add pagination", "rotate signing key", "write tests",
 		"TRACE",
 	} {
@@ -318,7 +318,7 @@ func TestViewActivity_ListTraceAndFilter(t *testing.T) {
 
 	m.actFailOnly = true
 	out = stripANSI(m.viewActivity(120, 26))
-	if !strings.Contains(out, "RUNS · failures — 1") {
+	if !strings.Contains(out, "RUNS · failures, 1") {
 		t.Errorf("failures filter header wrong:\n%s", out)
 	}
 	if strings.Contains(out, "add pagination") {
@@ -359,7 +359,7 @@ func TestViewActivity_DrillFocus(t *testing.T) {
 	}
 }
 
-// `o` opens the first edited file — or says honestly why it cannot.
+// `o` opens the first edited file, or says honestly why it cannot.
 func TestActivity_OpenEditedFile(t *testing.T) {
 	m := testCockpit()
 	m.view = ckViewActivity

@@ -29,8 +29,8 @@ func stripANSI(s string) string {
 }
 
 // truncate bounds every label in the cockpit. It must never exceed its budget
-// in *display cells* — rune or byte counts misalign the moment a name carries
-// wide characters — and must never cut a rune or an escape in half.
+// in *display cells*, rune or byte counts misalign the moment a name carries
+// wide characters, and must never cut a rune or an escape in half.
 func TestTruncate_CountsDisplayCells(t *testing.T) {
 	inputs := []string{
 		"",
@@ -49,7 +49,7 @@ func TestTruncate_CountsDisplayCells(t *testing.T) {
 			}
 			for _, r := range got {
 				if r == '�' {
-					t.Errorf("truncate(%q, %d) = %q — it cut a rune in half", s, n, got)
+					t.Errorf("truncate(%q, %d) = %q, it cut a rune in half", s, n, got)
 					break
 				}
 			}
@@ -70,7 +70,7 @@ func TestTruncate_CountsDisplayCells(t *testing.T) {
 }
 
 // ckCell/ckRCell are the table cells every column is built from: exactly w
-// cells, whatever the content — a long value must never shift its neighbours.
+// cells, whatever the content, a long value must never shift its neighbours.
 func TestCkCell_ExactWidthAndAlignment(t *testing.T) {
 	for _, s := range []string{"", "x", "abcdef", "日本語モデル", ckCheapS.Render("styled"), strings.Repeat("y", 99)} {
 		for _, w := range []int{1, 4, 8, 20} {
@@ -124,7 +124,7 @@ func TestCkFrame_ClampsAndDiscloses(t *testing.T) {
 	}
 }
 
-// ckSplit shows two whole panes or one whole pane — never two broken ones.
+// ckSplit shows two whole panes or one whole pane, never two broken ones.
 func TestCkSplit_JoinsWideAndFallsBackNarrow(t *testing.T) {
 	a, b := "aaaa\naaaa", "bbbb\nbbbb"
 	joined := ckSplit(40, a, b, false)
@@ -173,7 +173,7 @@ func TestCkDistinctTruncate_KeepsTheDistinguishingPart(t *testing.T) {
 	if got := ckDistinctTruncate(short, 12); got[0] != "qwen" || got[1] != "llama" {
 		t.Errorf("short names were altered: %v", got)
 	}
-	// A single name has no sibling prefix to drop — plain right truncation.
+	// A single name has no sibling prefix to drop, plain right truncation.
 	one := ckDistinctTruncate([]string{"Gemini 3.5 Flash (High)"}, 10)
 	if strings.HasPrefix(one[0], "…") {
 		t.Errorf("a lone name was prefix-cut: %q", one[0])
@@ -216,7 +216,7 @@ func TestCkDistinctTruncate_KeepsTheDistinguishingPart(t *testing.T) {
 		t.Errorf("an unrelated short sibling was altered: %q", got2[4])
 	}
 
-	// Genuine duplicates cannot be told apart — and must not loop forever.
+	// Genuine duplicates cannot be told apart, and must not loop forever.
 	dup := ckDistinctTruncate([]string{"same-long-name-here-x", "same-long-name-here-x"}, 10)
 	if len(dup) != 2 {
 		t.Fatalf("dup = %v", dup)
@@ -265,7 +265,7 @@ func TestCkClipToLines_MarksTruncationAndBoundsLength(t *testing.T) {
 	}
 	// A short entry keeps its text and is returned WRAPPED (padded to width):
 	// the window counts these lines and the renderer paints them, so the two
-	// must be the same string — returning the original un-wrapped entry made
+	// must be the same string, returning the original un-wrapped entry made
 	// the count 1 where the render was 3 (#597's off-frame input bar).
 	short := "a short line"
 	got = ckClipToLines(short, 60, 4)
@@ -303,7 +303,7 @@ func TestCkVisibleLog_CapsEachEntryAndFillsFromTheTail(t *testing.T) {
 }
 
 // Chat scrollback semantics: an anchored window must not move when new lines
-// append below it — the arrivals only grow the "below" cue — and the tail
+// append below it, the arrivals only grow the "below" cue, and the tail
 // window follows appends when live.
 func TestCkVisibleLog_AnchoredWindowDoesNotYankOnAppend(t *testing.T) {
 	var log []string
@@ -340,7 +340,7 @@ func TestCkVisibleLog_AnchoredWindowDoesNotYankOnAppend(t *testing.T) {
 }
 
 // ckWindowSel keeps the selection visible and clear of the cue rows at every
-// position — the "selection can never walk off-screen" rule.
+// position, the "selection can never walk off-screen" rule.
 func TestCkWindowSel_SelectionAlwaysRendered(t *testing.T) {
 	rows := make([]string, 40)
 	for i := range rows {
@@ -409,7 +409,7 @@ func TestFormatters(t *testing.T) {
 	if got := ckTokens(999); got != "999" {
 		t.Errorf("ckTokens(999) = %q", got)
 	}
-	// Small counts must not truncate to "0.0k" — user-visible zeros lie.
+	// Small counts must not truncate to "0.0k", user-visible zeros lie.
 	if got := ckTokens(12345); got != "12.3k" {
 		t.Errorf("ckTokens(12345) = %q", got)
 	}
@@ -456,7 +456,7 @@ func TestPlural(t *testing.T) {
 }
 
 // The tier colour ramp must be defined for every tier, including ones outside
-// the documented 1–10 range.
+// the documented 1-10 range.
 func TestCkTierColor_CoversEveryTier(t *testing.T) {
 	seen := map[lipgloss.Color]bool{}
 	for tier := -1; tier <= 12; tier++ {

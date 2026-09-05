@@ -54,7 +54,7 @@ func TestCLI_TuiSnapshot_FlagValidation(t *testing.T) {
 	}
 
 	// An out-of-range view must be refused with the valid range named. Before
-	// this was checked it was an unchecked slice index — a panic.
+	// this was checked it was an unchecked slice index, a panic.
 	for _, v := range []string{"-1", "6", "99"} {
 		_, cobraOut, err := run(t, "tui", "--snapshot", "--view", v)
 		if err == nil {
@@ -106,14 +106,14 @@ func TestCLI_MCPRecordThenVerify_BindsParameters(t *testing.T) {
 	code, out = runBinary(t, s, "mcp", "verify", "fs.read",
 		"--resource", "/etc/hosts", "--params", tampered)
 	if code == 0 {
-		t.Errorf("verify passed on parameters that were never approved — the "+
+		t.Errorf("verify passed on parameters that were never approved, the "+
 			"binding is not a binding:\n%s", out)
 	}
 }
 
 // `mcp verify` used to trust the on-disk parameters_hash verbatim: hand-edit
 // it to the hash of parameters that were never actually approved, and it
-// reported MATCH — only `mcp verify-chain` caught the tamper, and the two
+// reported MATCH, only `mcp verify-chain` caught the tamper, and the two
 // were never composed. Recomputing/validating against the hash chain here
 // closes that (#500).
 func TestCLI_MCPVerify_DetectsTamperedParametersHash(t *testing.T) {
@@ -129,7 +129,7 @@ func TestCLI_MCPVerify_DetectsTamperedParametersHash(t *testing.T) {
 
 	// Simulate an attacker hand-editing the ledger line: retarget
 	// parameters_hash to the hash of parameters that were never approved,
-	// without touching the event's own chain hash — exactly what a raw text
+	// without touching the event's own chain hash, exactly what a raw text
 	// edit (not a re-recording) would do.
 	malicious := map[string]any{"path": "/etc/shadow", "mode": "write"}
 	maliciousHash, err := ledger.HashParams(malicious)
@@ -208,7 +208,7 @@ func TestCLI_MCPRecord_RefusesMalformedInput(t *testing.T) {
 // ── pricing refresh ───────────────────────────────────────────────────────────
 
 // `hyctl pricing refresh` is a synchronous network fetch. With no network it
-// must fail and say so, not report a successful refresh of nothing — the
+// must fail and say so, not report a successful refresh of nothing, the
 // cached prices are what every cost figure is computed from.
 func TestCLI_PricingRefresh_ReportsAFailedFetch(t *testing.T) {
 	cliSandbox(t) // sandbox points the proxy at a dead port

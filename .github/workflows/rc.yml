@@ -58,9 +58,9 @@ jobs:
         run: |
           gh release create "${{ steps.ver.outputs.tag }}" dist/*.tar.gz dist/*.zip dist/checksums.txt \
             --target "${{ github.sha }}" \
-            --title "RC — ${{ steps.ver.outputs.version }}" \
+            --title "RC, ${{ steps.ver.outputs.version }}" \
             --notes "$(cat <<'EOF'
-          > 🧪 **This is a release candidate** — built from \`${{ github.ref_name }}\` for UAT testing.
+          > 🧪 **This is a release candidate**, built from \`${{ github.ref_name }}\` for UAT testing.
           > Do not use in production. Stable release pending sign-off.
 
           **Branch**: \`${{ github.ref_name }}\`

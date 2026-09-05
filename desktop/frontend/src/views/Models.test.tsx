@@ -137,7 +137,7 @@ describe('the model list', () => {
     render(<Models />)
     expect(await screen.findAllByText('Claude Sonnet (Thinking)')).toHaveLength(2)
     // Stated once, on the reachability line, which also gives the reason. It
-    // used to be said twice — a separate badge plus that line.
+    // used to be said twice, a separate badge plus that line.
     expect(screen.getByText(/switched off in models\.yaml/)).toBeInTheDocument()
   })
 })
@@ -198,7 +198,7 @@ describe('when the registry cannot be read', () => {
 })
 
 // The dot used to come from models.yaml's `enabled` flag, an install-specific
-// default that says nothing about reachability — so a head with no API key, or
+// default that says nothing about reachability, so a head with no API key, or
 // an Ollama model whose server is down, rendered as live. The view's own
 // subtitle claims "what this machine can route to".
 describe('reachable now, as opposed to declared', () => {
@@ -219,7 +219,7 @@ describe('reachable now, as opposed to declared', () => {
     const heads = [{
       id: model_.id, name: 'x', provider: 'ollama', source: 'cli', tier: 10,
       capScore: 40, routable: false, localOnly: true,
-      reason: 'binary only — start its local server (e.g. `ollama serve`) to route to its models',
+      reason: 'binary only, start its local server (e.g. `ollama serve`) to route to its models',
     }]
     expect(reachClass(model_, heads)).toBe('off')
     expect(reachText(model_, heads)).toMatch(/ollama serve/)

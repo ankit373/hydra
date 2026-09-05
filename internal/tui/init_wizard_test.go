@@ -95,7 +95,7 @@ func TestInitWizard_FullWalkWritesALoadableConfig(t *testing.T) {
 	}
 	// Cursor 0 on the privacy step is "yes, keep PII local".
 	if cfg.Policies["pii"].Action != "local-only" {
-		t.Errorf("pii policy = %q, want local-only — the user chose it and every "+
+		t.Errorf("pii policy = %q, want local-only, the user chose it and every "+
 			"PII dispatch depends on it", cfg.Policies["pii"].Action)
 	}
 	// The Cortex is the orchestrator; it must not also be listed as a delegate
@@ -110,7 +110,7 @@ func TestInitWizard_FullWalkWritesALoadableConfig(t *testing.T) {
 }
 
 // The done screen must not have a stray whitespace-only line between "ready"
-// and "Cortex :" — lipgloss pads every line of a multi-line Render to its
+// and "Cortex :", lipgloss pads every line of a multi-line Render to its
 // widest line, so a blank line written *inside* the styled block became a row
 // of spaces glued onto the next line instead of a real newline (#465).
 func TestInitWizard_DoneScreenHasNoStrayWhitespaceLine(t *testing.T) {
@@ -152,7 +152,7 @@ func TestInitWizard_DecliningLocalOnlyWritesNoPIIPolicy(t *testing.T) {
 	}
 }
 
-// The cursor must not run off either end of a list — an out-of-range index is
+// The cursor must not run off either end of a list, an out-of-range index is
 // a panic in confirm(), which indexes m.result.Heads directly.
 func TestInitWizard_CursorStaysInRange(t *testing.T) {
 	testutil.NewSandbox(t)
@@ -196,7 +196,7 @@ func TestInitWizard_PrivacyStepIsATwoOptionList(t *testing.T) {
 	}
 }
 
-// Quitting must not write a partial config — a half-configured Hydra is worse
+// Quitting must not write a partial config, a half-configured Hydra is worse
 // than an unconfigured one, because Exists() then reports it as set up.
 func TestInitWizard_QuittingWritesNothing(t *testing.T) {
 	testutil.NewSandbox(t)
@@ -391,14 +391,14 @@ func TestExportToRoutingYAML_ReplacesItsOwnBlockAndKeepsTheRest(t *testing.T) {
 	}
 }
 
-// An install layout with no routing.yaml on disk is the normal case — the
+// An install layout with no routing.yaml on disk is the normal case, the
 // registry is embedded in the binary. Skipping silently is correct; failing
 // would make `hyctl init` error on every installed build.
 func TestExportToRoutingYAML_NoFileOnDiskIsNotAnError(t *testing.T) {
 	testutil.NewSandbox(t)
 
 	if err := exportToRoutingYAML(nil, nil); err != nil {
-		t.Errorf("exportToRoutingYAML errored with no on-disk routing.yaml: %v — "+
+		t.Errorf("exportToRoutingYAML errored with no on-disk routing.yaml: %v, "+
 			"that is every installed binary (#238)", err)
 	}
 }

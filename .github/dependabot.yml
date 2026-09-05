@@ -1,7 +1,7 @@
 version: 2
 
 # target-branch: develop on every entry, and NOT the omit-and-let-it-default
-# option. Dependabot's default is the repo's default branch — main here — which
+# option. Dependabot's default is the repo's default branch, main here, which
 # is exactly what CLAUDE.md's branch policy forbids: "Never open a PR directly
 # to main from a feature branch." Every dependency PR was landing on main
 # unreviewed by that policy until this was noticed (#334). main only ever moves
@@ -17,7 +17,7 @@ updates:
       prefix: "chore(ci)"
 
   # The desktop app is its own Go module (see desktop/go.mod), so the root
-  # ecosystem entry does not reach it. Grouped into one PR per week — Wails
+  # ecosystem entry does not reach it. Grouped into one PR per week, Wails
   # pulls ~25 transitive deps and ungrouped updates would bury the queue.
   - package-ecosystem: "gomod"
     directory: "/desktop"

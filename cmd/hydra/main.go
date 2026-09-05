@@ -68,7 +68,7 @@ import (
 )
 
 func main() {
-	// Fire update check in the background — never blocks startup.
+	// Fire update check in the background, never blocks startup.
 	updateCh := update.CheckAsync()
 
 	if err := rootCmd().Execute(); err != nil {
@@ -84,21 +84,21 @@ func main() {
 			)
 		}
 	default:
-		// Check still in flight — skip notification rather than block.
+		// Check still in flight, skip notification rather than block.
 	}
 }
 
 func rootCmd() *cobra.Command {
 	root := &cobra.Command{
 		Use:   "hyctl",
-		Short: "Multi-model AI orchestration — one Cortex, many Heads",
+		Short: "Multi-model AI orchestration, one Cortex, many Heads",
 		// `hyctl --version` used to answer "unknown flag" even though a version
 		// subcommand existed. It is the near-universal convention, so people
 		// type it first. Same text as the subcommand, from one function.
 		Version: build.Version,
 		// A runtime error (e.g. "no hydra config") used to dump the full flags
 		// block for every one of ~25 subcommands, drowning the one line that
-		// actually mattered. Propagates to every subcommand — including a
+		// actually mattered. Propagates to every subcommand, including a
 		// flag-parsing error (unknown flag, bad value), which now reads the
 		// same way: one line naming the problem. Run --help for the flag list
 		// (#464).
@@ -153,12 +153,12 @@ func cmdUpgrade() *cobra.Command {
 		Short: "Upgrade hyctl to the latest release",
 		Long: "Re-runs install.sh, the same curl installer documented for a fresh " +
 			"install. It downloads the latest release, verifies its checksum, and " +
-			"mv's the new binary over the old one — a rename, not a rewrite, so " +
+			"mv's the new binary over the old one, a rename, not a rewrite, so " +
 			"this process keeps running on its already-loaded pages until it exits " +
 			"and the new binary takes effect on the next invocation.\n\n" +
 			"Skipped for a Homebrew install: overwriting Homebrew's symlink here " +
 			"would desync it from `brew`'s own bookkeeping. Run `brew upgrade " +
-			"hyctl` there instead — the same command the update banner already " +
+			"hyctl` there instead, the same command the update banner already " +
 			"recommends.",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return runUpgrade(cmd.OutOrStdout())
@@ -178,7 +178,7 @@ var executablePath = os.Executable
 func runUpgrade(w io.Writer) error {
 	exe, exeErr := executablePath()
 	if exeErr == nil && isHomebrewInstall(exe) {
-		fmt.Fprintln(w, dimStyle.Render("  hyctl was installed via Homebrew — run: brew upgrade hyctl"))
+		fmt.Fprintln(w, dimStyle.Render("  hyctl was installed via Homebrew, run: brew upgrade hyctl"))
 		return nil
 	}
 
@@ -192,7 +192,7 @@ func runUpgrade(w io.Writer) error {
 	return c.Run()
 }
 
-// isHomebrewInstall reports whether exePath resolves into a Homebrew Cellar —
+// isHomebrewInstall reports whether exePath resolves into a Homebrew Cellar,
 // true for both /usr/local/Cellar and /opt/homebrew/Cellar on macOS, and
 // Linuxbrew's /home/linuxbrew/.linuxbrew/Cellar.
 func isHomebrewInstall(exePath string) bool {
@@ -210,7 +210,7 @@ func cmdTui() *cobra.Command {
 	var snapView int
 	c := &cobra.Command{
 		Use:   "tui",
-		Short: "Interactive cockpit — chat, route work, and watch spend live",
+		Short: "Interactive cockpit, chat, route work, and watch spend live",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			viewSet := cmd.Flags().Changed("view")
 			if viewSet {
@@ -261,7 +261,7 @@ func cmdInit() *cobra.Command {
 //
 // Without this the wizard hangs. On unix Bubble Tea fails opening /dev/tty, so
 // the symptom is at least an error; on Windows there is no equivalent failure
-// and it blocks reading stdin forever — so `hyctl init` in a Dockerfile, a CI
+// and it blocks reading stdin forever, so `hyctl init` in a Dockerfile, a CI
 // job, or any piped invocation wedges the build with no output. Found by the
 // Windows leg of the test matrix, which is the only place the difference shows.
 //
@@ -284,7 +284,7 @@ func runInit() error {
 	result := probe.Run(context.Background())
 
 	if len(result.Heads) == 0 {
-		// Nothing found — guide the user through installing something.
+		// Nothing found, guide the user through installing something.
 		p := tea.NewProgram(tui.NewInstallModel(), tea.WithAltScreen())
 		_, err := p.Run()
 		return err
@@ -299,7 +299,7 @@ func runInit() error {
 // ── probe ─────────────────────────────────────────────────────────────────────
 
 // probeHeadJSON is probe --json's per-head shape. provider.Head has no json
-// tags of its own — it is an internal discovery record, not a wire format —
+// tags of its own, it is an internal discovery record, not a wire format,
 // so this stays a local, deliberately-chosen subset rather than exposing
 // every internal field probe.Run happens to populate.
 type probeHeadJSON struct {
@@ -311,7 +311,7 @@ type probeHeadJSON struct {
 	LocalOnly bool   `json:"local_only"`
 	IsCortex  bool   `json:"is_cortex"`
 	// Routable is false when discovery found the head but no executor can
-	// drive it (e.g. the Ollama binary with its server not running) — the
+	// drive it (e.g. the Ollama binary with its server not running), the
 	// same distinction the human table marks with ✗ (#248).
 	Routable         bool   `json:"routable"`
 	UnroutableReason string `json:"unroutable_reason,omitempty"`
@@ -352,8 +352,8 @@ func cmdProbe() *cobra.Command {
 			}
 			fmt.Println(tui.Splash(cortexName))
 			// A provider that failed outright (e.g. a corrupted models.json
-			// overlay) doesn't even reach the unroutable-head accounting below —
-			// its heads never existed here — so without this it degrades to a
+			// overlay) doesn't even reach the unroutable-head accounting below,
+			// its heads never existed here, so without this it degrades to a
 			// silently smaller head list, contradicting probe's own "marks
 			// unroutable heads with the reason" promise (#248).
 			for _, w := range result.Warnings {
@@ -390,7 +390,7 @@ func cmdProbe() *cobra.Command {
 			}
 			if unroutable > 0 {
 				fmt.Printf("\n  %s\n", dimStyle.Render(fmt.Sprintf(
-					"✗ = discovered but not routable (%d of %d) — dispatch will skip these.",
+					"✗ = discovered but not routable (%d of %d), dispatch will skip these.",
 					unroutable, len(result.Heads))))
 			}
 			return nil
@@ -409,7 +409,7 @@ func cmdStatus() *cobra.Command {
 		RunE: func(_ *cobra.Command, _ []string) error {
 			cfg, err := config.Load()
 			if err != nil {
-				return fmt.Errorf("no config found — run: hyctl init")
+				return fmt.Errorf("no config found, run: hyctl init")
 			}
 
 			fmt.Println()
@@ -438,7 +438,7 @@ func cmdStatus() *cobra.Command {
 			}
 			fmt.Println()
 
-			// Budget section — read from state.json (written by dispatcher).
+			// Budget section, read from state.json (written by dispatcher).
 			printBudgetStatus()
 			return nil
 		},
@@ -461,7 +461,7 @@ func printBudgetStatus() {
 	}
 
 	// claude_pct block (orchestrator context window). When enough history has
-	// accumulated, show the rate-aware effective mode (first-passage risk) — a
+	// accumulated, show the rate-aware effective mode (first-passage risk), a
 	// fast burn escalates above the static level band before it crosses a line.
 	if state.ClaudePct > 0 {
 		burnRate, risk := budget.RiskFromHistory(state.ClaudePctHistory)
@@ -518,7 +518,7 @@ func budgetBar(pct int) string {
 	if filled > width {
 		filled = width
 	}
-	// state.json is written by another process — and by hand, per the
+	// state.json is written by another process, and by hand, per the
 	// orchestrator protocol's `jq '.claude_pct = 52'`. A negative value there
 	// reached strings.Repeat with a negative count, which panics: `hyctl status`
 	// crashed on a malformed field it only meant to display.
@@ -612,7 +612,7 @@ func cmdDispatch() *cobra.Command {
 			ctx := context.Background()
 
 			// One invocation is one run with one logical task, whichever path
-			// below handles it — so a swarm's attempts and the dispatch that
+			// below handles it, so a swarm's attempts and the dispatch that
 			// drove them share an identity in the logs (#181).
 			//
 			// Resolve rather than mint: runid ranks explicit > env > generated,
@@ -622,14 +622,14 @@ func cmdDispatch() *cobra.Command {
 			runID, taskID := runid.ResolveRun(""), runid.ResolveTask("")
 
 			// Mark the run live for its whole duration. Without this
-			// runlog.LiveRuns() is always empty and nothing — cockpit or desktop
-			// Fleet — can distinguish a running agent from a finished one.
+			// runlog.LiveRuns() is always empty and nothing, cockpit or desktop
+			// Fleet: can distinguish a running agent from a finished one.
 			//
 			// --dry-run executes nothing in every mode it combines with (plain,
 			// --swarm, --confidence): no head is chosen, no output produced.
 			// Logging one anyway leaves a permanent, contentless Fleet card
-			// behind on every preview — 0ms elapsed, $0.00, no agents, nothing
-			// to say why — indistinguishable from a broken reconstruction (#379).
+			// behind on every preview, 0ms elapsed, $0.00, no agents, nothing
+			// to say why, indistinguishable from a broken reconstruction (#379).
 			if !dryRun {
 				hb := runlog.StartHeartbeat(ctx, runID, runlog.HeartbeatInterval)
 				defer hb.Stop()
@@ -661,7 +661,7 @@ func cmdDispatch() *cobra.Command {
 			// in the prompt). Risk raises the bar but never lowers a target the
 			// user explicitly asked for.
 			//
-			// Validate the raw flag the moment it was set — before --file's
+			// Validate the raw flag the moment it was set, before --file's
 			// derived target (always in [0.5, maxConfidence]) can override an
 			// invalid explicit value and mask it. `> 0` alone let NaN/negative
 			// values slip through in both dry-run and real execution, since NaN
@@ -673,14 +673,14 @@ func cmdDispatch() *cobra.Command {
 				return fmt.Errorf("--confidence must be in (0,1), got %v", confidence)
 			}
 			effectiveConf := confidence
-			// Classified once, here — the only place a plain, swarm, or SPRT
-			// dispatch first needs it — and threaded through so nothing downstream
+			// Classified once, here, the only place a plain, swarm, or SPRT
+			// dispatch first needs it, and threaded through so nothing downstream
 			// re-runs DetectPII/InjectionMarker on the same prompt (#522).
 			promptClass := policy.Classify(prompt)
 			touchesPII := promptClass.PII
 			// The plain dispatch path (d.Dispatch) reads cfg.Policies["pii"] itself
 			// and forces LocalOnly. The SPRT/swarm branches below take a shortcut
-			// straight past it and only ever saw --local — so a PII-touching prompt
+			// straight past it and only ever saw --local, so a PII-touching prompt
 			// silently went out to remote heads the instant touchesPII made
 			// effectiveConf > 0 and picked one of those branches instead (#500).
 			if d.PIILocalOnly() && touchesPII {
@@ -697,13 +697,13 @@ func cmdDispatch() *cobra.Command {
 					// --file exists to RAISE the bar for risky files. With no graph
 					// it silently never raises, while printing a line that reads
 					// exactly like blast-radius-aware routing happened (#251). The
-					// bar itself is unchanged — only the claim about it.
+					// bar itself is unchanged, only the claim about it.
 					if g.Empty() {
 						fmt.Printf("  %s\n", warnStyle.Render(
-							"graph: no graph at "+graphPath+" — radius 1.00 is a default, not a measurement"))
+							"graph: no graph at "+graphPath+", radius 1.00 is a default, not a measurement"))
 					} else if !g.Knows(file) {
 						fmt.Printf("  %s\n", warnStyle.Render(
-							"graph: "+file+" is not in the graph — radius 1.00 is a default, not a measurement"))
+							"graph: "+file+" is not in the graph, radius 1.00 is a default, not a measurement"))
 					}
 				}
 				task := trust.Task{
@@ -722,7 +722,7 @@ func cmdDispatch() *cobra.Command {
 			}
 			// --dry-run must mean "spend nothing" in every mode. It was read only
 			// by the single-dispatch path far below, which neither ensemble
-			// branch reaches — so `--dry-run --confidence 0.95` fired a paid
+			// branch reaches, so `--dry-run --confidence 0.95` fired a paid
 			// ensemble and printed no plan at all (#167).
 			if dryRun && (effectiveConf > 0 || doSwarm) {
 				mode := swarm.SwarmMode(swarmMode)
@@ -732,7 +732,7 @@ func cmdDispatch() *cobra.Command {
 				sw := swarm.New(d, d.Heads(), d)
 				// Every field a real Run()/RunSPRT() call reads must appear here too,
 				// or --dry-run previews something other than what execution does
-				// (#167, #501, #530) — this literal backs both the --swarm and the
+				// (#167, #501, #530), this literal backs both the --swarm and the
 				// --confidence dry-run preview.
 				planOpts := swarm.Options{
 					Mode:          mode,
@@ -887,7 +887,7 @@ func cmdDispatch() *cobra.Command {
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "show selected head without executing")
 	cmd.Flags().StringVarP(&system, "system", "s", "", "system prompt")
 	cmd.Flags().StringVar(&a2aFile, "a2a", "", "path to A2A handoff JSON (prepends structured context to prompt)")
-	cmd.Flags().StringVar(&enumKey, "enum", "", "routing enum key, e.g. SIMPLE — selects the tier when --tier is unset")
+	cmd.Flags().StringVar(&enumKey, "enum", "", "routing enum key, e.g. SIMPLE, selects the tier when --tier is unset")
 	cmd.Flags().Float64Var(&maxCost, "max-cost", 0, "refuse a candidate head if its estimated cost exceeds this USD (denial-of-wallet guard)")
 	// swarm flags
 	cmd.Flags().BoolVar(&doSwarm, "swarm", false, "fan prompt out to multiple heads simultaneously")
@@ -899,10 +899,10 @@ func cmdDispatch() *cobra.Command {
 	// trust / SPRT flags
 	cmd.Flags().Float64Var(&confidence, "confidence", 0, "route via SPRT ensemble until this P(correct) is reached, e.g. 0.95")
 	cmd.Flags().StringVar(&domain, "domain", "", "calibration domain for --confidence (default: \"default\")")
-	cmd.Flags().StringVar(&file, "file", "", "target file — derives a confidence target from its blast radius, so this alone selects the SPRT ensemble")
+	cmd.Flags().StringVar(&file, "file", "", "target file, derives a confidence target from its blast radius, so this alone selects the SPRT ensemble")
 	cmd.Flags().StringVar(&graphPath, "graph", "graph.json", "path to the dependency graph used with --file")
-	cmd.Flags().BoolVar(&irreversible, "irreversible", false, "change cannot be cheaply undone — raises the required confidence")
-	cmd.Flags().BoolVar(&production, "production", false, "target is production — raises the required confidence")
+	cmd.Flags().BoolVar(&irreversible, "irreversible", false, "change cannot be cheaply undone, raises the required confidence")
+	cmd.Flags().BoolVar(&production, "production", false, "target is production, raises the required confidence")
 	return cmd
 }
 
@@ -915,7 +915,7 @@ func cmdEval() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "eval",
-		Short: "Oracle-verified examples — the labelled corpus, exempt from retention",
+		Short: "Oracle-verified examples, the labelled corpus, exempt from retention",
 		Long: `hyctl eval inspects examples recorded by ` + "`hyctl oracle verify`" + `.
 
 An oracle verdict on a real candidate is ground truth. Unlike traces, these are
@@ -998,7 +998,7 @@ improved against.`,
 				fmt.Printf("%-20s %8d %8d %8d %9.1f%% %6d\n",
 					s.Domain, s.Total, s.Passed, s.Failed, s.PassRate*100, s.WithPII)
 			}
-			fmt.Printf("\n%s\n", dimStyle.Render(fmt.Sprintf("%d example%s at %s — never pruned", len(all), plural(len(all)), evalset.DefaultPath())))
+			fmt.Printf("\n%s\n", dimStyle.Render(fmt.Sprintf("%d example%s at %s, never pruned", len(all), plural(len(all)), evalset.DefaultPath())))
 			return nil
 		},
 	}
@@ -1053,7 +1053,7 @@ holding ~30 KB of events can occupy 240 KB.`,
 				return nil
 			}
 			if res.Runs == 0 {
-				fmt.Printf("Nothing to seal — no run logs older than %s.\n", olderThan)
+				fmt.Printf("Nothing to seal, no run logs older than %s.\n", olderThan)
 				return nil
 			}
 			fmt.Printf("  sealed %d run%s (%d events) across %d month%s\n",
@@ -1098,7 +1098,7 @@ explore_rate in config.toml above 0 is what creates that overlap.`,
 				rows = rowsWithinDays(rows, days)
 			}
 			if len(rows) == 0 {
-				return fmt.Errorf("no dispatches in the cost log — nothing to evaluate")
+				return fmt.Errorf("no dispatches in the cost log, nothing to evaluate")
 			}
 
 			tiers := make([]int, 0, len(rows))
@@ -1213,8 +1213,8 @@ be sent before sending it.
 
 The export is a bridge, not a migration: Hydra's own schema stays
 authoritative. gen_ai.* attributes are populated where they genuinely
-correspond, and tier, enum, cost and routing propensity — which OTel has no
-place for — are carried under hydra.* rather than dropped.`,
+correspond, and tier, enum, cost and routing propensity, which OTel has no
+place for, are carried under hydra.* rather than dropped.`,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			rows, err := cost.LoadRows(cost.DefaultLogPath())
 			if err != nil {
@@ -1227,7 +1227,7 @@ place for — are carried under hydra.* rather than dropped.`,
 				rows = rows[len(rows)-limit:] // newest
 			}
 			if len(rows) == 0 {
-				return fmt.Errorf("no dispatches in the cost log — nothing to export")
+				return fmt.Errorf("no dispatches in the cost log, nothing to export")
 			}
 			payload, err := otlp.Build(rows, "hydra", build.Version)
 			if err != nil {
@@ -1265,8 +1265,8 @@ place for — are carried under hydra.* rather than dropped.`,
 		Long: `hyctl trace payloads reports the opt-in store of prompt and response text.
 
 Capture is off unless it was chosen at ` + "`hyctl init`" + ` or set with
-capture_payloads in config.toml. Stored text is sampled — every blob records the
-probability it was admitted — and anything matching a secret detector is
+capture_payloads in config.toml. Stored text is sampled, every blob records the
+probability it was admitted, and anything matching a secret detector is
 replaced before it is written.`,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			// A machine that has never run `hyctl init` has no config, and the
@@ -1371,7 +1371,7 @@ func rowsWithinDays(rows []cost.Row, days int) []cost.Row {
 const DefaultPayloadKeepRate = 0.1
 
 // payloadKeepRate resolves the configured rate, treating an unset or nonsensical
-// value as the default rather than as "keep nothing" — a zero rate would
+// value as the default rather than as "keep nothing", a zero rate would
 // silently disable capture the user had explicitly turned on.
 func payloadKeepRate(cfg *config.Config) float64 {
 	if cfg != nil && cfg.PayloadKeepRate > 0 && cfg.PayloadKeepRate <= 1 {
@@ -1413,7 +1413,7 @@ func cmdOracle() *cobra.Command {
 		Args:  cobra.MinimumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			// Validated before running the verifier at all: a garbage --record
-			// used to be silently ignored — no error, no calibration write, no
+			// used to be silently ignored, no error, no calibration write, no
 			// indication anything was wrong, discovered only after the command
 			// had already done its real work. Same check `trust record
 			// --outcome` already has (#464).
@@ -1526,13 +1526,13 @@ func cmdMCP() *cobra.Command {
 			// priority; only fall back to the MCP registry's view of this
 			// tool's server when the caller supplied neither. Auto-derived
 			// the same way policy.ContainsPII already derives "pii" from
-			// --content — this is that same mechanism, for MCP server risk.
+			// --content, this is that same mechanism, for MCP server risk.
 			classification := chkClassification
 			if classification == "" && chkContent == "" {
 				if c, ok := mcpregistry.ClassificationForTool(args[0]); ok {
 					classification = c
 				} else if priorEvents, loadErr := ledger.Load(ledger.DefaultPath()); loadErr == nil {
-					// Lower priority than a registry-derived classification —
+					// Lower priority than a registry-derived classification,
 					// a confirmed quarantine/flag is a stronger claim than
 					// "this server hasn't done this before on this machine".
 					if c, ok := mcpregistry.BehaviorClassification(priorEvents, args[0], action); ok {
@@ -1548,7 +1548,7 @@ func cmdMCP() *cobra.Command {
 			// to the ledger is still a Deny, and callers gate on exit 3.
 			if decision != "" {
 				// tool+"/"+resource used to read as one run-together path when
-				// resource was itself absolute (e.g. "shell//bin/rm -rf /") —
+				// resource was itself absolute (e.g. "shell//bin/rm -rf /"),
 				// "->" can't collide with path syntax the way "/" does (#464).
 				fmt.Printf("  %s  %s %s -> %s (%s)\n", strings.ToUpper(string(decision)),
 					chkAgent, args[0], chkResource, action)
@@ -1590,7 +1590,7 @@ func cmdMCP() *cobra.Command {
 			if recAgent == "" {
 				return fmt.Errorf("--agent is required")
 			}
-			// Bind whenever --params was supplied — including "{}" — so this
+			// Bind whenever --params was supplied, including "{}", so this
 			// agrees with `check`, whose binding keys off a non-nil map.
 			var hash string
 			if recParams != "" {
@@ -1646,16 +1646,16 @@ func cmdMCP() *cobra.Command {
 				return err
 			}
 			if skipped > 0 {
-				fmt.Fprintf(os.Stderr, "  warning: %d unparseable ledger line(s) skipped — "+
+				fmt.Fprintf(os.Stderr, "  warning: %d unparseable ledger line(s) skipped, "+
 					"verification may be against an older approval\n", skipped)
 			}
 			approval, ok := ledger.LatestBound(events, tool, verResource)
 			if !ok {
-				return fmt.Errorf("no allowed, parameter-bound ledger event for %s/%s — nothing to verify against", tool, verResource)
+				return fmt.Errorf("no allowed, parameter-bound ledger event for %s/%s, nothing to verify against", tool, verResource)
 			}
 
 			// A parameters_hash read straight off disk proves nothing if the
-			// ledger itself was edited after recording — comparing against it
+			// ledger itself was edited after recording, comparing against it
 			// verbatim previously reported MATCH even on a hand-tampered hash.
 			// `verify-chain` already recomputes and links every chained event;
 			// compose it here so a broken chain refuses the approval instead of
@@ -1667,7 +1667,7 @@ func cmdMCP() *cobra.Command {
 					return err
 				}
 				if !chain.Intact {
-					fmt.Printf("  %s  ledger hash chain is broken (event index %d) — the recorded "+
+					fmt.Printf("  %s  ledger hash chain is broken (event index %d), the recorded "+
 						"approval cannot be trusted; refusing to verify against it. Run `hyctl mcp verify-chain` for details.\n",
 						strings.ToUpper(string(ledger.Deny)), chain.BrokenAt)
 					os.Exit(3)
@@ -1713,7 +1713,7 @@ func cmdMCP() *cobra.Command {
 				return nil
 			}
 			for _, e := range events {
-				// Same "->" separator as `mcp check` (#464) — a "/" read as
+				// Same "->" separator as `mcp check` (#464), a "/" read as
 				// one run-together path when the resource was itself absolute.
 				line := fmt.Sprintf("  %s  %-6s  %-12s %s -> %s %s", e.TS, strings.ToUpper(string(e.Decision)),
 					util.SafeTerminal(e.Agent), util.SafeTerminal(e.Tool), util.SafeTerminal(e.Resource),
@@ -1780,22 +1780,22 @@ func cmdMCP() *cobra.Command {
 			// surviving event verifies and the missing ones left no gap.
 			switch {
 			case res.Truncated:
-				fmt.Printf("  %s  ledger TRUNCATED — the chain anchor names an event that is no longer "+
+				fmt.Printf("  %s  ledger TRUNCATED, the chain anchor names an event that is no longer "+
 					"in the log, so records were deleted from the end\n", strings.ToUpper(string(ledger.Deny)))
 				os.Exit(3)
 			case !res.Intact:
-				fmt.Printf("  %s  chain broken at event index %d — the ledger was modified after recording\n",
+				fmt.Printf("  %s  chain broken at event index %d, the ledger was modified after recording\n",
 					strings.ToUpper(string(ledger.Deny)), res.BrokenAt)
 				os.Exit(3)
 			case res.AnchorMissing:
-				fmt.Printf("  %s  %d chained event(s) all verify, but the chain anchor (%s) is missing — "+
+				fmt.Printf("  %s  %d chained event(s) all verify, but the chain anchor (%s) is missing, "+
 					"deletion from the end cannot be ruled out\n",
 					warnStyle.Render("WARN"), res.Chained, filepath.Base(ledger.DefaultPath())+".chainhash")
 			case res.AnchorStale:
-				fmt.Printf("  %s  chain intact — %d chained event(s); the anchor lags the log "+
+				fmt.Printf("  %s  chain intact, %d chained event(s); the anchor lags the log "+
 					"(a dropped anchor write, not a deletion)\n", okStyle.Render("OK"), res.Chained)
 			default:
-				fmt.Printf("  %s  chain intact — %d chained event(s), %d unchained (pre-dates this feature)\n",
+				fmt.Printf("  %s  chain intact, %d chained event(s), %d unchained (pre-dates this feature)\n",
 					okStyle.Render("OK"), res.Chained, res.Unchained)
 			}
 			return nil
@@ -1820,7 +1820,7 @@ func cmdMCPRegistry() *cobra.Command {
 		Use:   "sync",
 		Short: "Pull server metadata from the official MCP registry into a local cache",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			fmt.Println("  syncing the official MCP registry — thousands of servers, this can take a minute or two...")
+			fmt.Println("  syncing the official MCP registry, thousands of servers, this can take a minute or two...")
 			n, err := mcpregistry.Sync(cmd.Context(), func(page, soFar int) {
 				fmt.Printf("\r  page %-4d  %d servers so far...", page, soFar)
 			})
@@ -1869,7 +1869,7 @@ func cmdMCPRegistry() *cobra.Command {
 				return json.NewEncoder(os.Stdout).Encode(rpt)
 			}
 			if rpt.RegistrySync.IsZero() {
-				fmt.Println("  registry never synced — run `hyctl mcp registry sync` first for verification")
+				fmt.Println("  registry never synced, run `hyctl mcp registry sync` first for verification")
 			}
 			if len(rpt.Entries) == 0 {
 				fmt.Println("  no MCP servers found on this machine")
@@ -1902,7 +1902,7 @@ func cmdMCPRegistry() *cobra.Command {
 						}
 					}
 				} else if e.NearestMatch != "" {
-					fmt.Printf("             %s\n", dimStyle.Render(fmt.Sprintf("nearest known identifier: %q (%d edits away) — verify this isn't a typosquat", e.NearestMatch, e.NearestDist)))
+					fmt.Printf("             %s\n", dimStyle.Render(fmt.Sprintf("nearest known identifier: %q (%d edits away), verify this isn't a typosquat", e.NearestMatch, e.NearestDist)))
 				}
 			}
 			return nil
@@ -1915,7 +1915,7 @@ func cmdMCPRegistry() *cobra.Command {
 		Use:   "export",
 		Short: "Render every audited server into a static index.html/index.json (no hosting or publishing)",
 		Long: "Writes index.json and index.html to --out, covering only the servers this machine has\n" +
-			"audited via `hyctl mcp registry audit` — not the full synced registry. This produces static\n" +
+			"audited via `hyctl mcp registry audit`, not the full synced registry. This produces static\n" +
 			"files only; it does not publish, host, or deploy anything anywhere.",
 		RunE: func(_ *cobra.Command, _ []string) error {
 			n, err := mcpregistry.ExportDirectory(exportOut)
@@ -1933,7 +1933,7 @@ func cmdMCPRegistry() *cobra.Command {
 		Use:   "backtest",
 		Short: "Validate the scoring pipeline against known real MCP-security incidents",
 		Long: "Checks whether the live pipeline still catches the documented real incidents that\n" +
-			"justified building it — the gate this repo's design doc names before a public directory\n" +
+			"justified building it, the gate this repo's design doc names before a public directory\n" +
 			"(Phase 3) can go live. Re-run before any launch decision; this is a point-in-time proof,\n" +
 			"not a permanent guarantee.",
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -1966,7 +1966,7 @@ func cmdMCPRegistry() *cobra.Command {
 				fmt.Printf("    %-8s %s vs %s (%d edits)\n", status, r.Pair.Registered, r.Pair.Typosquat, r.Distance)
 			}
 			if !allPassed {
-				fmt.Println("\n  backtest FAILED — do not treat the pipeline as launch-ready")
+				fmt.Println("\n  backtest FAILED, do not treat the pipeline as launch-ready")
 				os.Exit(1)
 			}
 			fmt.Println("\n  backtest passed")
@@ -1988,7 +1988,7 @@ func cmdMCPRegistry() *cobra.Command {
 				return json.NewEncoder(os.Stdout).Encode(entries)
 			}
 			if len(entries) == 0 {
-				fmt.Println("  no audited servers yet — run `hyctl mcp registry audit` first")
+				fmt.Println("  no audited servers yet, run `hyctl mcp registry audit` first")
 				return nil
 			}
 			fmt.Printf("\n  %-40s %-12s %6s  %s\n", "SERVER", "STATE", "SCORE", "CONFIDENCE")
@@ -2013,7 +2013,7 @@ func cmdMCPRegistry() *cobra.Command {
 	clear := &cobra.Command{
 		Use:   "clear <server>",
 		Short: "Clear a quarantined server back to provisional (false-positive recovery)",
-		Long: "Quarantine has no automatic way out by design — an audit run must not un-condemn a\n" +
+		Long: "Quarantine has no automatic way out by design, an audit run must not un-condemn a\n" +
 			"server on its own. This is the manual path the automaton documents, for a server\n" +
 			"that was quarantined in error. The cooldown clock resets, so a cleared server\n" +
 			"re-earns trust rather than being handed it back.",
@@ -2021,7 +2021,7 @@ func cmdMCPRegistry() *cobra.Command {
 		RunE: func(_ *cobra.Command, args []string) error {
 			state, err := mcpregistry.Clear(args[0], time.Now().UTC())
 			if errors.Is(err, mcpregistry.ErrNotQuarantined) {
-				return fmt.Errorf("%s is %s, not quarantined — nothing to clear", args[0], state)
+				return fmt.Errorf("%s is %s, not quarantined, nothing to clear", args[0], state)
 			}
 			if err != nil {
 				return err
@@ -2036,7 +2036,7 @@ func cmdMCPRegistry() *cobra.Command {
 }
 
 // cmdSecurity is the security posture dashboard: ledger accountability,
-// per-head risk, and a short list of honest checks — never a manufactured
+// per-head risk, and a short list of honest checks, never a manufactured
 // score, only what's actually configured and observed.
 func cmdSecurity() *cobra.Command {
 	var jsonOut, csvOut, execOut, attestOut, whyOut bool
@@ -2073,8 +2073,8 @@ func cmdSecurity() *cobra.Command {
 	return cmd
 }
 
-// securityCSV emits the coverage table as one row per finding — the same
-// shape GitHub's and AWS Security Hub's security-overview CSV exports use —
+// securityCSV emits the coverage table as one row per finding, the same
+// shape GitHub's and AWS Security Hub's security-overview CSV exports use,
 // so it can be dropped straight into a tracker or spreadsheet.
 func securityCSV(w io.Writer, r *security.Report) error {
 	cw := csv.NewWriter(w)
@@ -2095,8 +2095,8 @@ func securityCSV(w io.Writer, r *security.Report) error {
 	return cw.Error()
 }
 
-// printSecurityReport answers one question by default — what did the agents
-// on this machine do, and can the record be trusted — and everything else
+// printSecurityReport answers one question by default, what did the agents
+// on this machine do, and can the record be trusted, and everything else
 // only under --why. Nine analyses printed unconditionally is an engineer's
 // dashboard, not an answer.
 func printSecurityReport(r *security.Report, why bool) {
@@ -2121,7 +2121,7 @@ func printSecurityReport(r *security.Report, why bool) {
 	printCoverageHeadline(r)
 
 	if !r.HasData {
-		fmt.Println(dimStyle.Render("  no ledger events yet — nothing has dispatched through hyctl on this machine"))
+		fmt.Println(dimStyle.Render("  no ledger events yet, nothing has dispatched through hyctl on this machine"))
 	} else {
 		fmt.Printf("  %s  %d  (%d allowed · %d denied · %d flagged)\n",
 			cortexStyle.Render("ledger events"), r.Ledger.Total, r.Ledger.Allowed, r.Ledger.Denied, r.Ledger.Flagged)
@@ -2165,7 +2165,7 @@ func printSecurityReport(r *security.Report, why bool) {
 			if a.AgeDays > 0 {
 				age = dimStyle.Render(fmt.Sprintf(" · %dd", a.AgeDays))
 			}
-			fmt.Printf("    %s %s%s — %s\n", actionPriorityTag(a.Priority),
+			fmt.Printf("    %s %s%s, %s\n", actionPriorityTag(a.Priority),
 				util.SafeTerminal(a.Title), age, util.SafeTerminal(a.Detail))
 		}
 	}
@@ -2173,7 +2173,7 @@ func printSecurityReport(r *security.Report, why bool) {
 }
 
 // printVerdict is the single line a CISO reads, plus the condition that
-// produced it. Never a blended score — a state with its trigger named.
+// produced it. Never a blended score, a state with its trigger named.
 func printVerdict(r *security.Report) {
 	p := r.Posture
 	label := okStyle.Render("OK")
@@ -2185,7 +2185,7 @@ func printVerdict(r *security.Report) {
 	}
 	fmt.Printf("  %s  %s\n", cortexStyle.Render("VERDICT"), label)
 	// The trigger quotes an incident narrative, which carries an attacker's
-	// own tool name — the one line on this screen most worth forging.
+	// own tool name, the one line on this screen most worth forging.
 	fmt.Println(dimStyle.Render("    " + util.SafeTerminal(p.Trigger)))
 	// Stages of the incident the verdict quotes, so the shape of the attack
 	// rides with the sentence instead of being repeated under it.
@@ -2209,7 +2209,7 @@ func printEvidenceState(r *security.Report) {
 	// clean bill of health. Nothing recorded is not the same as nothing wrong.
 	if !r.HasData {
 		fmt.Println(dimStyle.Render(
-			"  no ledger events yet — nothing has dispatched through hyctl on this machine,"))
+			"  no ledger events yet, nothing has dispatched through hyctl on this machine,"))
 		fmt.Println(dimStyle.Render(
 			"  so there is no record to judge and this is not a clean result"))
 		return
@@ -2218,13 +2218,13 @@ func printEvidenceState(r *security.Report) {
 	chain := okStyle.Render("intact")
 	switch {
 	case ev.Truncated:
-		chain = warnStyle.Render("TRUNCATED — records were deleted from the end")
+		chain = warnStyle.Render("TRUNCATED, records were deleted from the end")
 	case !ev.ChainIntact:
-		chain = warnStyle.Render("BROKEN — the log was modified after recording")
+		chain = warnStyle.Render("BROKEN, the log was modified after recording")
 	case ev.Events > 0 && ev.ChainedEvents == 0:
-		chain = warnStyle.Render("unverifiable — no hash chain on any record")
+		chain = warnStyle.Render("unverifiable, no hash chain on any record")
 	case ev.AnchorMissing:
-		chain = warnStyle.Render("unanchored — truncation would not be detected")
+		chain = warnStyle.Render("unanchored, truncation would not be detected")
 	}
 	fmt.Printf("  %s  %d blocked · %d flagged\n",
 		cortexStyle.Render("activity"), r.Ledger.Denied, r.Ledger.Flagged)
@@ -2251,7 +2251,7 @@ func stagesText(stages []security.Stage) string {
 	return strings.Join(out, " → ")
 }
 
-// printIncidents lists the incidents the verdict does NOT already quote —
+// printIncidents lists the incidents the verdict does NOT already quote,
 // printing the cited one again puts the same sentence on screen twice.
 func printIncidents(r *security.Report) {
 	cited, hasCited := citedIncident(r)
@@ -2340,7 +2340,7 @@ func shortTS(ts string) string {
 	return ts
 }
 
-// printControls answers "does each declared control actually run" — the
+// printControls answers "does each declared control actually run", the
 // question a config file cannot answer about itself. A control that is
 // configured but cannot fire reads as protection everywhere it is listed
 // while doing nothing, which is worse than a control that is simply absent.
@@ -2389,7 +2389,7 @@ func printPolicyAudit(r *security.Report) {
 	fmt.Printf("    %-26s %s\n", "posture", posture)
 
 	if len(a.Rules) == 0 {
-		fmt.Println(dimStyle.Render("    no rules defined — nothing is scoped"))
+		fmt.Println(dimStyle.Render("    no rules defined, nothing is scoped"))
 		return
 	}
 	fmt.Printf("    %-4s %-30s %-7s %6s  %s\n", "#", "RULE", "DECIDES", "HITS", "")
@@ -2397,7 +2397,7 @@ func printPolicyAudit(r *security.Report) {
 		note := ""
 		switch {
 		case rule.ShadowedBy != nil:
-			note = warnStyle.Render(fmt.Sprintf("UNREACHABLE — rule %d always matches first", *rule.ShadowedBy))
+			note = warnStyle.Render(fmt.Sprintf("UNREACHABLE, rule %d always matches first", *rule.ShadowedBy))
 		case rule.Dead:
 			note = dimStyle.Render("never matched")
 		}
@@ -2422,7 +2422,7 @@ func printExposures(r *security.Report) {
 		case e.Remote && e.Known:
 			where = warnStyle.Render("REMOTE")
 		case e.Remote:
-			// Treated as remote (fail-closed) but not observed as such —
+			// Treated as remote (fail-closed) but not observed as such,
 			// distinguished so an offline head can't read as a real leak.
 			where = dimStyle.Render("UNKNOWN")
 		}
@@ -2476,14 +2476,14 @@ func actionPriorityTag(p security.ActionPriority) string {
 }
 
 // printCoverageHeadline is the KPI tile: coverage against the OWASP LLM Top
-// 10, never presented as "you are X% secure" — always labeled against the
+// 10, never presented as "you are X% secure", always labeled against the
 // named taxonomy it measures. A broken ledger chain hard-overrides it,
 // since none of the other evidence can be trusted once the ledger itself
 // might have been tampered with.
 func printCoverageHeadline(r *security.Report) {
 	if !r.IntegrityIntact {
 		fmt.Printf("  %s  %s\n", cortexStyle.Render("OWASP LLM Top-10 coverage"),
-			warnStyle.Render("INTEGRITY COMPROMISED — ledger tampering detected, score withheld"))
+			warnStyle.Render("INTEGRITY COMPROMISED, ledger tampering detected, score withheld"))
 		fmt.Println()
 		return
 	}
@@ -2523,7 +2523,7 @@ func printCoverageHeadline(r *security.Report) {
 }
 
 // relativeTime renders an RFC3339 timestamp as a human-relative duration
-// ("3 hours ago"). Falls back to the raw string if it doesn't parse — a
+// ("3 hours ago"). Falls back to the raw string if it doesn't parse, a
 // display glitch, never a crash, over a timestamp some future format change
 // didn't anticipate.
 func relativeTime(ts string) string {
@@ -2558,7 +2558,7 @@ func plural(n int) string {
 func cmdModels() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "models",
-		Short: "Manage the model registry — add new models (e.g. Kimi K2) without recompiling",
+		Short: "Manage the model registry, add new models (e.g. Kimi K2) without recompiling",
 	}
 	overlay := capabilities.DefaultOverlayPath()
 
@@ -2598,14 +2598,14 @@ func cmdModels() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			if addScore < 0 || addScore > 100 {
-				return fmt.Errorf("--cap-score must be 0–100, got %d", addScore)
+				return fmt.Errorf("--cap-score must be 0-100, got %d", addScore)
 			}
 			e := capabilities.Entry{ID: args[0], Name: addName, Provider: addProvider, CapScore: addScore}
 			if e.Name == "" {
 				e.Name = args[0]
 			}
 
-			// Check against the built-in catalog alone (no overlay) — this is
+			// Check against the built-in catalog alone (no overlay), this is
 			// "does this id shadow a curated entry", which is a different
 			// question from AddModel's "did the overlay already have it".
 			builtin, err := capabilities.Load("")
@@ -2632,7 +2632,7 @@ func cmdModels() *cobra.Command {
 	}
 	add.Flags().StringVar(&addName, "name", "", "display name (default: the id)")
 	add.Flags().StringVar(&addProvider, "provider", "", "provider, e.g. moonshot / openai / local")
-	add.Flags().IntVar(&addScore, "cap-score", 70, "capability score 0–100")
+	add.Flags().IntVar(&addScore, "cap-score", 70, "capability score 0-100")
 
 	remove := &cobra.Command{
 		Use:   "remove <id>",
@@ -2659,7 +2659,7 @@ func cmdModels() *cobra.Command {
 		RunE: func(_ *cobra.Command, _ []string) error {
 			db := pricing.Load()
 			models := db.Models()
-			// An empty live catalogue is not "nothing new to import" — it means
+			// An empty live catalogue is not "nothing new to import", it means
 			// no model pricing was available at all, which can only happen when
 			// there is no cache and the fetch did not land. Reporting
 			// "imported 0 models" for that reads as a completed sync against an
@@ -2667,12 +2667,12 @@ func cmdModels() *cobra.Command {
 			// failed. Tier pricing is still loaded, which is why Load() itself
 			// cannot report this.
 			if len(models) == 0 {
-				return fmt.Errorf("no model catalogue available — the OpenRouter " +
+				return fmt.Errorf("no model catalogue available, the OpenRouter " +
 					"fetch has not landed. Run `hyctl pricing refresh` first, or " +
 					"check network access")
 			}
 			added, skipped := 0, 0
-			// Must include the overlay, not just the embedded catalog — otherwise
+			// Must include the overlay, not just the embedded catalog, otherwise
 			// a model the user already synced and hand-tuned via `models add`
 			// looks "unknown" here and gets silently overwritten back to a fresh
 			// heuristic capScore on every re-run (#505).
@@ -2708,7 +2708,7 @@ func cmdModels() *cobra.Command {
 			if syncDry {
 				word = "would import"
 			}
-			fmt.Printf("\n  %s %d models (%d already known, skipped). capScores are provisional — refine with `hyctl models add`.\n\n", word, added, skipped)
+			fmt.Printf("\n  %s %d models (%d already known, skipped). capScores are provisional, refine with `hyctl models add`.\n\n", word, added, skipped)
 			return nil
 		},
 	}
@@ -2723,7 +2723,7 @@ func cmdModels() *cobra.Command {
 func cmdContext() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "context",
-		Short: "Measure context-window quality — signal density, not just length",
+		Short: "Measure context-window quality, signal density, not just length",
 	}
 	var jsonOut bool
 	var minDensity float64
@@ -2792,9 +2792,9 @@ func cmdGraph() *cobra.Command {
 			deps := impact.Dependents
 			pFactor := impact.Percolation
 			// A radius of 1.0 means either "nothing depends on this" or "I have
-			// no idea" — opposite conclusions that used to render identically.
+			// no idea", opposite conclusions that used to render identically.
 			// internal/a2a reported 6 dependents and 97.4% required confidence
-			// with the graph, and "subcritical — edits stay local" at 90.0%
+			// with the graph, and "subcritical, edits stay local" at 90.0%
 			// without it (#251).
 			loaded, known := !g.Empty(), impact.Known
 			if jsonOut {
@@ -2807,9 +2807,9 @@ func cmdGraph() *cobra.Command {
 			}
 			fmt.Printf("\n  %s\n", cortexStyle.Render(file))
 			if !loaded {
-				fmt.Printf("    %s\n", warnStyle.Render("no graph at "+graphPath+" — nothing was analysed"))
+				fmt.Printf("    %s\n", warnStyle.Render("no graph at "+graphPath+", nothing was analysed"))
 			} else if !known {
-				fmt.Printf("    %s\n", warnStyle.Render("not in the graph — check the path, or reindex"))
+				fmt.Printf("    %s\n", warnStyle.Render("not in the graph, check the path, or reindex"))
 			}
 			measured := loaded && known
 			suffix := func() string {
@@ -2821,7 +2821,7 @@ func cmdGraph() *cobra.Command {
 			fmt.Printf("    transitive dependents  %d%s\n", deps, suffix)
 			fmt.Printf("    blast radius           %.2f×%s\n", radius, suffix)
 			// κ is a property of the whole graph, so it stays meaningful for an
-			// unknown file — but with no graph at all it is 0.0, and rendering
+			// unknown file, but with no graph at all it is 0.0, and rendering
 			// that as "edits stay local" is a safety claim from no data.
 			if loaded {
 				if g.Percolates() {
@@ -2830,17 +2830,17 @@ func cmdGraph() *cobra.Command {
 						core = fmt.Sprintf("core (+%.0f%%)", (pFactor-1)*100)
 					}
 					fmt.Printf("    graph κ                %.2f  %s\n",
-						g.Kappa(), dimStyle.Render("supercritical — cascades possible; this file is "+core))
+						g.Kappa(), dimStyle.Render("supercritical, cascades possible; this file is "+core))
 				} else {
 					fmt.Printf("    graph κ                %.2f  %s\n",
-						g.Kappa(), dimStyle.Render("subcritical — edits stay local"))
+						g.Kappa(), dimStyle.Render("subcritical, edits stay local"))
 				}
 			}
 			fmt.Printf("    defect cost            $%.2f%s\n", dm.CostUSD(task), suffix)
 			fmt.Printf("    demands confidence     %.1f%%%s\n\n", dm.RequiredConfidence(task)*100, suffix)
 			if !measured {
 				fmt.Printf("  %s\n\n", dimStyle.Render(
-					"A radius of 1.00× here means \"unknown\", not \"safe\" — generate a graph to get a real bar."))
+					"A radius of 1.00× here means \"unknown\", not \"safe\", generate a graph to get a real bar."))
 			}
 			return nil
 		},
@@ -2880,14 +2880,14 @@ func cmdGraph() *cobra.Command {
 			}
 			fmt.Printf("\n  %s\n", cortexStyle.Render(fmt.Sprintf("%d file(s)", len(args))))
 			// Coupling silently treats an unmatched file as having no impact set,
-			// which biases k toward kMin (looks "safe to parallelize") — say so
+			// which biases k toward kMin (looks "safe to parallelize"), say so
 			// rather than let a default read as a measurement (#448).
 			if !loaded {
 				fmt.Printf("    %s\n", warnStyle.Render(
-					"no graph at "+parGraph+" — coordination cost k is a default, not a measurement"))
+					"no graph at "+parGraph+", coordination cost k is a default, not a measurement"))
 			} else if len(unknown) > 0 {
 				fmt.Printf("    %s\n", warnStyle.Render(
-					"not in the graph: "+strings.Join(unknown, ", ")+" — their contribution to k is a default, not a measurement"))
+					"not in the graph: "+strings.Join(unknown, ", ")+", their contribution to k is a default, not a measurement"))
 			}
 			suffix := ""
 			if !loaded || len(unknown) > 0 {
@@ -2897,7 +2897,7 @@ func cmdGraph() *cobra.Command {
 			fmt.Printf("    optimal agents n*      %d\n", n)
 			fmt.Printf("    speedup S(n*)          %.2f×\n", speedup)
 			if speedup < 1 {
-				fmt.Printf("    %s\n", dimStyle.Render("→ heavily coupled — parallelism doesn't pay; edit serially"))
+				fmt.Printf("    %s\n", dimStyle.Render("→ heavily coupled, parallelism doesn't pay; edit serially"))
 			}
 			fmt.Println()
 			return nil
@@ -2912,7 +2912,7 @@ func cmdGraph() *cobra.Command {
 		Use:   "generate [path]",
 		Short: "Generate graph.json from a Go module's package-import graph (go list -json)",
 		Long: "Generate graph.json from a Go module's package-import graph via `go list -json`.\n" +
-			"Go package granularity only — not a general tree-sitter indexer. For other\n" +
+			"Go package granularity only, not a general tree-sitter indexer. For other\n" +
 			"languages, use Graphify or any indexer that produces the same {nodes,edges} schema.",
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
@@ -3108,7 +3108,7 @@ func printSwarmResult(r *swarm.SwarmResult) {
 			fmt.Printf("  %s\n", dimStyle.Render(`"`+r.Verdict.Reason+`"`))
 		}
 		// A fallback with no reason shown is indistinguishable from a healthy
-		// LLM judge run — surface why the primary judge was skipped (#501).
+		// LLM judge run, surface why the primary judge was skipped (#501).
 		if r.Verdict.Meta.UsedFallback && r.Verdict.Meta.FallbackReason != "" {
 			fmt.Printf("  %s\n", warnStyle.Render("judge fallback: "+r.Verdict.Meta.FallbackReason))
 		}
@@ -3454,7 +3454,7 @@ func cmdCost() *cobra.Command {
 		Short: "Last N calls (default 10)",
 		// A bare negative N (`cost tail -5`) is indistinguishable from an
 		// unrecognized flag to cobra's parser, which rejects it before this
-		// RunE ever sees it — hence the escape hatch below (#464).
+		// RunE ever sees it, hence the escape hatch below (#464).
 		Long: "Last N calls (default 10). A negative N needs the flag " +
 			"terminator: `hyctl cost tail -- -5`, or cobra reads it as a flag.",
 		Args: cobra.MaximumNArgs(1),
@@ -3499,7 +3499,7 @@ func cmdCost() *cobra.Command {
 
 // latencyRow is the shape --latency --json emits. Percentiles come from a
 // sketch, so they are estimates with a stated relative-error bound rather than
-// exact values — the field names say so.
+// exact values, the field names say so.
 type latencyRow struct {
 	Model    string  `json:"model"`
 	Tier     int     `json:"tier"`
@@ -3600,7 +3600,7 @@ func cmdStats() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "stats",
-		Short: "Spend analytics — model, tier, day, and swarm breakdowns",
+		Short: "Spend analytics, model, tier, day, and swarm breakdowns",
 		Long: `hyctl stats shows cost.jsonl summaries with rich grouping options.
 
 Examples:
@@ -3762,7 +3762,7 @@ func cmdPricingList() *cobra.Command {
 		Short: "List all models and their $/1M token rates (sorted alphabetically)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			db := pricing.Load()
-			// Hoist filter once — db.Models() is already sorted.
+			// Hoist filter once, db.Models() is already sorted.
 			filter := strings.ToLower(strings.Join(args, " "))
 
 			type row struct {
@@ -3783,7 +3783,7 @@ func cmdPricingList() *cobra.Command {
 				rows = append(rows, row{m, p.InputPerMillion, p.OutputPerMillion, "openrouter"})
 			}
 			// Tier pricing is what prices CLI-agent heads (claude-core,
-			// opus-thinking, …) — they never appear in OpenRouter's catalog, so
+			// opus-thinking, …), they never appear in OpenRouter's catalog, so
 			// without this merge they can never show up here at all, and a
 			// fresh/offline install (no cache, no network) shows a fully empty
 			// table instead of the tier fallback that's actually pricing calls.
@@ -3838,7 +3838,7 @@ func cmdTrustBenchmark() *cobra.Command {
 			if jsonOut {
 				return json.NewEncoder(os.Stdout).Encode(r)
 			}
-			fmt.Printf("\n  Hydra Trust Benchmark — %d trials/case (vs fixed-%d swarm)\n", r.Trials, r.FixedN)
+			fmt.Printf("\n  Hydra Trust Benchmark, %d trials/case (vs fixed-%d swarm)\n", r.Trials, r.FixedN)
 			fmt.Println("  " + strings.Repeat("─", 62))
 			fmt.Printf("  %-18s %10s %10s %12s\n", "workload", "samples", "accuracy", "vs fixed-N")
 			row := func(c trust.BenchCase) {
@@ -3907,7 +3907,7 @@ func cmdTrustStats() *cobra.Command {
 func cmdTrustExplain() *cobra.Command {
 	return &cobra.Command{
 		Use:   "explain <task_hash>",
-		Short: "Show the LLR ledger for a past SPRT run — why it stopped where it did",
+		Short: "Show the LLR ledger for a past SPRT run, why it stopped where it did",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			runs, err := trust.LoadRuns(trust.DefaultLogPath())
@@ -3974,14 +3974,14 @@ func cmdTrustCalibration() *cobra.Command {
 					s.Source, truncLabel(s.Domain, 16), s.N, s.Se, s.Sp, s.D)
 			}
 			// A family whose members have converged on effectively one vote is a
-			// coordination risk the se/sp table above cannot show — two "sources"
+			// coordination risk the se/sp table above cannot show, two "sources"
 			// that always agree are one opinion, not confirming evidence.
 			coPath := trust.DefaultCoAgreementPath()
 			coupling := trust.AllFamilyCoupling(coPath)
 			for _, fam := range trust.KnownFamilies(coPath) {
 				if r := coupling[fam]; r.Warn {
 					fmt.Printf("\n  %s\n", warnStyle.Render(fmt.Sprintf(
-						"false-consensus warning: %q's members measured J=%.2f — effectively one vote, not independent confirmation", fam, r.J)))
+						"false-consensus warning: %q's members measured J=%.2f, effectively one vote, not independent confirmation", fam, r.J)))
 				}
 			}
 			fmt.Println()
@@ -4114,7 +4114,7 @@ var (
 )
 
 // promptPreview shortens a prompt for a log Detail field. Run events carry a
-// short human label, never the full text — the atomic-append guarantee that
+// short human label, never the full text, the atomic-append guarantee that
 // makes the run log safe under concurrency is per write() call, so entries must
 // stay small.
 func promptPreview(s string) string {
@@ -4131,7 +4131,7 @@ func promptPreview(s string) string {
 // cmdAsk answers the tasks Hydra parked waiting on a human.
 //
 // The desktop app grows its own surface for these (#583), but hyctl is the
-// whole interface for anyone not running the app — without this a policy that
+// whole interface for anyone not running the app, without this a policy that
 // asks can park a task nothing is able to resume.
 func cmdAsk() *cobra.Command {
 	cmd := &cobra.Command{

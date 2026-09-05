@@ -33,14 +33,14 @@ type PolicyAudit struct {
 	Rules   []RuleStat `json:"rules"`
 	Default string     `json:"default"`
 	// FailOpen is true when the default decision is Allow: anything no rule
-	// names is permitted. Not automatically wrong — it is Hydra's shipped
-	// default — but it is the single most consequential line in a policy and
+	// names is permitted. Not automatically wrong, it is Hydra's shipped
+	// default, but it is the single most consequential line in a policy and
 	// belongs on the dashboard rather than buried in a JSON file.
 	FailOpen bool `json:"failOpen"`
 	// DefaultHits counts accesses that fell through every rule.
 	DefaultHits int `json:"defaultHits"`
 	// Evaluated is the number of events that went through Policy.Decide at
-	// all — the denominator for the two counts above.
+	// all, the denominator for the two counts above.
 	Evaluated int `json:"evaluated"`
 }
 
@@ -141,7 +141,7 @@ func ruleSummary(r ledger.Rule) string {
 
 // shadowedBy reports an earlier rule that makes rule i unreachable. Sufficient,
 // not complete: misses glob subsumption, never reports a shadow that is not
-// real — inventing a policy bug is worse than missing a subtle one.
+// real, inventing a policy bug is worse than missing a subtle one.
 func shadowedBy(rules []ledger.Rule, i int) (int, bool) {
 	b := rules[i]
 	for j := 0; j < i; j++ {

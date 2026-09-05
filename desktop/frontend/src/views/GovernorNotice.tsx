@@ -10,7 +10,7 @@ import { contextHeadroom } from '../format'
  * Once per band, never mid-answer: an interruption that repeats on every poll
  * is noise, and one that lands mid-dispatch cannot be acted on anyway.
  *
- * The numbers are budget.RiskFromHistory's own — burn rate in percentage points
+ * The numbers are budget.RiskFromHistory's own, burn rate in percentage points
  * per observation, and the first-passage probability of reaching 80% within
  * budget.RiskHorizon observations. An observation is a claude_pct *update*, not
  * a wall-clock interval and not a chat turn, so the copy says "updates".
@@ -65,7 +65,7 @@ export function GovernorNotice({
               {g.risk > 0 && (
                 <>
                   {' '}
-                  — a <b>{pctText(g.risk)}</b> chance of reaching it within the next{' '}
+                 , a <b>{pctText(g.risk)}</b> chance of reaching it within the next{' '}
                   {g.horizonObs} update{g.horizonObs === 1 ? '' : 's'}
                 </>
               )}
@@ -110,7 +110,7 @@ export function GovernorNotice({
 
 function pctText(p: number): string {
   const v = Math.round(p * 100)
-  // Never round a real probability to a flat 0% — "<1%" is honest, "0%" is not.
+  // Never round a real probability to a flat 0%, "<1%" is honest, "0%" is not.
   if (v === 0) return '<1%'
   return `${v}%`
 }

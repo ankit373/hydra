@@ -2,7 +2,7 @@
 
 package tui
 
-// view_agents.go — view 1, minimal in this phase: live runs plus today's
+// view_agents.go, view 1, minimal in this phase: live runs plus today's
 // finished ones, enter opens the run's trace. Fleet machinery lands in a later
 // phase; nothing here pretends it already exists.
 
@@ -14,7 +14,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// ckAgentTaskW is the task column budget — fixed so the right-hand facts align.
+// ckAgentTaskW is the task column budget, fixed so the right-hand facts align.
 const ckAgentTaskW = 30
 
 func (m Cockpit) viewAgents(w, h int) string {
@@ -31,7 +31,7 @@ func (m Cockpit) viewAgents(w, h int) string {
 	if len(rows) == 0 {
 		b.WriteString(ckFaintS.Render(" no agents running") + "\n\n" +
 			ckDimS.Render(" This view lists live runs and today's finished ones.") + "\n" +
-			ckDimS.Render(" Start one from chat, or `hyctl dispatch \"…\"` — enter opens its trace."))
+			ckDimS.Render(" Start one from chat, or `hyctl dispatch \"…\"`, enter opens its trace."))
 		return lipgloss.NewStyle().Width(w).Height(h).Padding(0, 1).Render(b.String())
 	}
 
@@ -56,7 +56,7 @@ func (m Cockpit) viewAgents(w, h int) string {
 			task = "(task not recorded)"
 		}
 		// A run owned by a backgrounded chat thread is that thread, re-parented
-		// here (#598) — name it, and let enter pull it back into chat.
+		// here (#598), name it, and let enter pull it back into chat.
 		if t := m.threadForRun(r.id); t != nil && t.bg {
 			task = fmt.Sprintf("thread %d · %s", t.id, task)
 		}

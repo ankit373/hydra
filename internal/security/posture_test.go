@@ -9,7 +9,7 @@ import (
 	"github.com/ankit373/hydra/internal/ledger"
 )
 
-// Every verdict must name the condition that produced it — a top line nobody
+// Every verdict must name the condition that produced it, a top line nobody
 // can interrogate is just a mood.
 func TestAssessPosture_TriggersAreNamed(t *testing.T) {
 	cases := []struct {
@@ -43,7 +43,7 @@ func TestAssessPosture_TriggersAreNamed(t *testing.T) {
 }
 
 // A fail-open default on a machine denying nothing is a default, not a
-// finding — otherwise every fresh install cries wolf on first run.
+// finding, otherwise every fresh install cries wolf on first run.
 func TestAssessPosture_FailOpenOnlyMattersWithDenials(t *testing.T) {
 	quiet := AssessPosture(&Report{PolicyAudit: PolicyAudit{FailOpen: true, Rules: []RuleStat{{}}}},
 		ledger.ChainResult{Intact: true})

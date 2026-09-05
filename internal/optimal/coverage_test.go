@@ -11,7 +11,7 @@ import (
 // prints as advice. A nonsense answer there wastes money on agents that only
 // coordinate with each other.
 
-// k ≤ 0 means coordination is free, so there is no finite optimum — the model
+// k ≤ 0 means coordination is free, so there is no finite optimum, the model
 // returns the Amdahl ceiling rather than a made-up agent count.
 func TestAgents_FreeCoordinationHasNoFiniteOptimum(t *testing.T) {
 	for _, k := range []float64{0, -0.1, -1} {
@@ -75,7 +75,7 @@ func TestAgents_MatchesTheClosedForm(t *testing.T) {
 }
 
 // Speedup's hard ceiling. The model is Amdahl-with-linear-coordination and
-// cannot represent superlinear speedup — the benchmark measured S > n, which
+// cannot represent superlinear speedup, the benchmark measured S > n, which
 // this form falsifiably does not cover. A test that let S > n through would
 // hide exactly that limitation.
 func TestSpeedup_CeilingIsNeverExceeded(t *testing.T) {
@@ -87,7 +87,7 @@ func TestSpeedup_CeilingIsNeverExceeded(t *testing.T) {
 					t.Fatalf("Speedup(%v,%v,%v) = NaN", s, k, n)
 				}
 				if got > n+1e-9 {
-					t.Errorf("Speedup(%v,%v,%v) = %v, above the hard ceiling of n — "+
+					t.Errorf("Speedup(%v,%v,%v) = %v, above the hard ceiling of n, "+
 						"this model cannot represent superlinear speedup", s, k, n, got)
 				}
 			}
@@ -105,7 +105,7 @@ func TestSpeedup_NonPositiveAgentsIsUnity(t *testing.T) {
 	}
 }
 
-// More agents helps up to n* and hurts after it — that peak is the entire point
+// More agents helps up to n* and hurts after it, that peak is the entire point
 // of computing n*, so it must actually be a peak.
 func TestSpeedup_PeaksAtTheAdvisedAgentCount(t *testing.T) {
 	const s, k = 0.1, 0.02
@@ -115,7 +115,7 @@ func TestSpeedup_PeaksAtTheAdvisedAgentCount(t *testing.T) {
 	above := Speedup(s, k, float64(nStar)+1)
 
 	if atStar < below || atStar < above {
-		t.Errorf("speedup at n*=%d is %v, but %v at n-1 and %v at n+1 — n* is not "+
+		t.Errorf("speedup at n*=%d is %v, but %v at n-1 and %v at n+1, n* is not "+
 			"the optimum it claims to be", nStar, atStar, below, above)
 	}
 }

@@ -76,7 +76,7 @@ func TestCalibratedJudge_NoCalibrationData_ErrorsForFallback(t *testing.T) {
 	j := newCalibratedJudge(cal, testDomain, nil)
 	_, err := j.Judge(context.Background(), "prompt", attempts)
 	if err == nil {
-		t.Fatal("expected an error with zero calibration data, got a verdict — CompositeJudge cannot fall back")
+		t.Fatal("expected an error with zero calibration data, got a verdict, CompositeJudge cannot fall back")
 	}
 }
 
@@ -167,7 +167,7 @@ func TestRankByCalibratedScore_PrefersCalibratedOverCapScore(t *testing.T) {
 
 	for _, a := range attempts {
 		if a.Head.ID == "model:reliable" && a.Rank != 1 {
-			t.Errorf("model:reliable Rank = %d, want 1 — calibration must outrank a bare CapScore lead", a.Rank)
+			t.Errorf("model:reliable Rank = %d, want 1, calibration must outrank a bare CapScore lead", a.Rank)
 		}
 	}
 }

@@ -27,7 +27,7 @@ func TestMode_StringCoversEveryBand(t *testing.T) {
 			t.Errorf("Mode(%d).String() = %q, want %q", int(m), got, s)
 		}
 		if seen[got] {
-			t.Errorf("two bands share the label %q — the user cannot tell them apart", got)
+			t.Errorf("two bands share the label %q, the user cannot tell them apart", got)
 		}
 		seen[got] = true
 	}
@@ -68,7 +68,7 @@ func TestLoadWindows_DegradesToAnEmptyMap(t *testing.T) {
 func TestLoadWindows_EmbeddedRegistryHasUsableWindows(t *testing.T) {
 	got := LoadWindows("")
 	if len(got) == 0 {
-		t.Fatal("no context windows from the embedded registry — the governor " +
+		t.Fatal("no context windows from the embedded registry, the governor " +
 			"cannot compute a percentage without them")
 	}
 	for id, w := range got {
@@ -110,7 +110,7 @@ models:
 	}
 }
 
-// logNormCDF returns the LOG of the standard normal CDF, not the CDF — the
+// logNormCDF returns the LOG of the standard normal CDF, not the CDF, the
 // name says so and I read it as the latter first. It is computed in log space
 // precisely so the deep tail stays finite instead of underflowing to zero,
 // which is what would make the governor's risk estimate collapse to "no risk"
@@ -123,7 +123,7 @@ func TestLogNormCDF_IsAWellFormedLogCDF(t *testing.T) {
 	for _, x := range []float64{-1e9, -100, -3, -1, 0, 1, 3, 100, 1e9} {
 		got := logNormCDF(x)
 		if math.IsNaN(got) || math.IsInf(got, 0) {
-			t.Fatalf("logNormCDF(%v) = %v — the log-space form exists to keep this finite", x, got)
+			t.Fatalf("logNormCDF(%v) = %v, the log-space form exists to keep this finite", x, got)
 		}
 		if got > 0 {
 			t.Errorf("logNormCDF(%v) = %v; a log-probability cannot be positive", x, got)

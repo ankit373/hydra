@@ -7,8 +7,8 @@ import (
 	"github.com/ankit373/hydra/internal/provider"
 )
 
-// An Exposure is one recorded access to sensitive data, and — the part that
-// matters — whether it went to a head that leaves this machine.
+// An Exposure is one recorded access to sensitive data, and, the part that
+// matters, whether it went to a head that leaves this machine.
 //
 // "N PII detections" on its own is not a security finding: PII routed to a
 // local head is the control working exactly as designed (that is what LLM02's
@@ -21,7 +21,7 @@ type Exposure struct {
 	Head     string   `json:"head"`
 	Resource string   `json:"resource"`
 	PIITypes []string `json:"piiTypes,omitempty"`
-	// Remote is true when Head is not a local-only head — including when the
+	// Remote is true when Head is not a local-only head, including when the
 	// head is not in the discovered list at all, which is read as remote: an
 	// unrecognised destination is the fail-closed assumption.
 	Remote bool `json:"remote"`
@@ -60,7 +60,7 @@ func Exposures(events []ledger.Event, heads []provider.Head) []Exposure {
 	return out
 }
 
-// RemoteCount is how many exposures left the machine — including the ones
+// RemoteCount is how many exposures left the machine, including the ones
 // only assumed to have, since the decision is fail-closed. ConfirmedRemote
 // narrows that to the ones actually observed on a known remote head.
 func RemoteCount(exps []Exposure) int {
@@ -74,7 +74,7 @@ func RemoteCount(exps []Exposure) int {
 }
 
 // ConfirmedRemote counts exposures to a head that was discovered and is known
-// not to be local-only — a leak observed rather than assumed.
+// not to be local-only, a leak observed rather than assumed.
 func ConfirmedRemote(exps []Exposure) int {
 	n := 0
 	for _, e := range exps {

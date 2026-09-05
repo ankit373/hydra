@@ -44,7 +44,7 @@ func TestFileExt(t *testing.T) {
 	}
 }
 
-// The file's own on-disk content rides into this prompt unsanitized — it must
+// The file's own on-disk content rides into this prompt unsanitized, it must
 // be explicitly framed as data, not an instruction (mirrors editor.go's copy
 // of this same construction).
 func TestBuildEditPrompt_FramesCurrentContentAsUntrustedData(t *testing.T) {
@@ -124,7 +124,7 @@ func TestRun_EmitsBatchTree(t *testing.T) {
 	}
 }
 
-// Every task in a batch shares the batch's run but gets its own task id — that
+// Every task in a batch shares the batch's run but gets its own task id, that
 // is what lets a reader tell "one batch of three" from "three unrelated runs".
 func TestRun_TasksShareRunAndGetDistinctTaskIDs(t *testing.T) {
 	home := t.TempDir()
@@ -163,7 +163,7 @@ func TestRun_TasksShareRunAndGetDistinctTaskIDs(t *testing.T) {
 	seen := map[string]bool{}
 	for label, id := range taskIDs {
 		if seen[id] {
-			t.Errorf("task %q reused task id %q — tasks must be distinguishable", label, id)
+			t.Errorf("task %q reused task id %q, tasks must be distinguishable", label, id)
 		}
 		seen[id] = true
 	}

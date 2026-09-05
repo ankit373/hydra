@@ -16,7 +16,7 @@ func TestParseYesNo(t *testing.T) {
 		{"yes", true},
 		{"Yes, they are equivalent.", true},
 		{"NO", false},
-		{"no — different behavior", false},
+		{"no, different behavior", false},
 		{"  yes\n", true},
 		{"They are equivalent, yes", true}, // first decisive token wins
 		{"maybe, but leaning yes", true},   // skips non-decisive words

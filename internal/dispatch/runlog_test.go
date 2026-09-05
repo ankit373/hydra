@@ -41,7 +41,7 @@ func TestDispatch_WritesRunLog(t *testing.T) {
 
 	d := rlDispatcher(rlHead("h1", 90))
 	// The head is selectable but cannot actually execute in a test environment,
-	// so this exercises the select-then-fail path — which is the one nothing
+	// so this exercises the select-then-fail path, which is the one nothing
 	// else in Hydra records.
 	_, err := d.Dispatch(context.Background(), "hello", Options{
 		RunID: "run-rl", TaskID: "task-rl",
@@ -74,7 +74,7 @@ func TestDispatch_WritesRunLog(t *testing.T) {
 		}
 	}
 	if !sawSelected {
-		t.Error("no head_selected event — the routing decision was not recorded")
+		t.Error("no head_selected event, the routing decision was not recorded")
 	}
 }
 
@@ -109,7 +109,7 @@ func TestDispatch_RecordsFailedCandidates(t *testing.T) {
 	// Each attempted candidate should produce a selection and, since none can
 	// run here, a matching failure.
 	if failed != selected {
-		t.Errorf("%d selections but %d failures — every attempted candidate should record its outcome",
+		t.Errorf("%d selections but %d failures, every attempted candidate should record its outcome",
 			selected, failed)
 	}
 	// Events must be in append order with monotonic sequence.
@@ -120,7 +120,7 @@ func TestDispatch_RecordsFailedCandidates(t *testing.T) {
 	}
 }
 
-// Two runs must never contaminate each other — the per-run-file design exists
+// Two runs must never contaminate each other, the per-run-file design exists
 // precisely so a reader of one run never sees another's events.
 func TestDispatch_RunsAreIsolated(t *testing.T) {
 	home := t.TempDir()

@@ -80,7 +80,7 @@ func TestClassificationForTool_DelistedServerIsClassifiedAsQuarantined(t *testin
 	}
 	got, ok := ClassificationForTool("mcp__gone__do_thing")
 	if !ok || got != ClassMCPQuarantined {
-		t.Errorf("got (%q, %v), want (%q, true) — delisted is grouped with quarantined", got, ok, ClassMCPQuarantined)
+		t.Errorf("got (%q, %v), want (%q, true), delisted is grouped with quarantined", got, ok, ClassMCPQuarantined)
 	}
 }
 
@@ -122,7 +122,7 @@ func TestClassificationForTool_NonMCPToolIsUnclassified(t *testing.T) {
 func TestClassificationForTool_NeverAuditedIsUnclassified(t *testing.T) {
 	withTempHydraHome(t)
 	if _, ok := ClassificationForTool("mcp__never-seen__tool"); ok {
-		t.Error("a server that's never been audited should not be classified — that's not the same claim as 'unverified'")
+		t.Error("a server that's never been audited should not be classified, that's not the same claim as 'unverified'")
 	}
 }
 

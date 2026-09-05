@@ -182,7 +182,7 @@ func latencyRollup(t *testing.T, model string, tier int, calls int64, vals ...fl
 // computed from a fraction of the data.
 func TestMergeByModel_FoldsEveryDayIntoOneRow(t *testing.T) {
 	// Two days of one model: a fast day and a slow one. Split evenly so the
-	// merged p99 must sit in the slow day — a merge that dropped it would read
+	// merged p99 must sit in the slow day, a merge that dropped it would read
 	// as ~100ms. (Percentiles need a real sample; with three points p99 is not
 	// a meaningful question to ask of any sketch.)
 	fast := make([]float64, 100)
@@ -207,10 +207,10 @@ func TestMergeByModel_FoldsEveryDayIntoOneRow(t *testing.T) {
 		t.Fatalf("first row = %+v, want claude-sonnet-5 with 200 calls", got[0])
 	}
 	if got[0].P99Est < 4000 {
-		t.Errorf("p99 = %.0f, want the merged tail near 5000 — the slow day was dropped", got[0].P99Est)
+		t.Errorf("p99 = %.0f, want the merged tail near 5000, the slow day was dropped", got[0].P99Est)
 	}
 	if got[0].P50Est > 200 {
-		t.Errorf("p50 = %.0f, want the fast day near 100 — the merge lost the small end", got[0].P50Est)
+		t.Errorf("p50 = %.0f, want the fast day near 100, the merge lost the small end", got[0].P50Est)
 	}
 	if got[0].RelErr <= 0 {
 		t.Error("merged row reports no relative-error bound, so the estimate reads as exact")

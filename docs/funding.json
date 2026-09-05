@@ -15,7 +15,7 @@
     {
       "guid": "hydra",
       "name": "Hydra",
-      "description": "Hydra is the Trust Control Plane for AI development: an open source CLI (hyctl), written in Go, that discovers every AI model on your machine — CLI coding agents, API keys, local servers — scores each, and routes work to a target confidence of correctness rather than always to the most expensive model. A sequential probability ratio test samples models adaptively and stops as soon as per-model calibration says the evidence is strong enough, so cheap and local heads handle what they can and frontier models are reserved for work that needs them. That typically cuts LLM API spend 70-85%.\n\nBeyond routing, Hydra is the accountability layer for agentic development. It enforces PII and local-only policy so sensitive data never leaves the machine, and logs every dispatch with token counts and cost. `hyctl security` answers what the agents on this machine actually did and whether the record can be trusted: a hash-chained tamper-evident MCP ledger, correlated incident detection, OWASP LLM Top-10 coverage, and a governed risk register with SLA clocks crosswalked to NIST AI RMF, ISO 42001 and MITRE ATLAS. `hyctl mcp registry` scores the MCP servers you actually have installed against the CSA MCP Selection Scorecard — known-CVE cross-reference, typosquat detection, and a trust automaton that drops a server back to provisional on every version bump, the direct answer to a server that ships clean for months and then turns malicious.\n\nEvery run writes a per-run event trace — head selection, swarm attempts, SPRT samples with running confidence, agent-to-agent handoffs and file edits — which the TUI cockpit and the desktop app replay as a live timeline. Ships as a single static binary for macOS, Linux and Windows.",
+      "description": "Hydra is the Trust Control Plane for AI development: an open source CLI (hyctl), written in Go, that discovers every AI model on your machine, CLI coding agents, API keys, local servers, scores each, and routes work to a target confidence of correctness rather than always to the most expensive model. A sequential probability ratio test samples models adaptively and stops as soon as per-model calibration says the evidence is strong enough, so cheap and local heads handle what they can and frontier models are reserved for work that needs them. That typically cuts LLM API spend 70-85%.\n\nBeyond routing, Hydra is the accountability layer for agentic development. It enforces PII and local-only policy so sensitive data never leaves the machine, and logs every dispatch with token counts and cost. `hyctl security` answers what the agents on this machine actually did and whether the record can be trusted: a hash-chained tamper-evident MCP ledger, correlated incident detection, OWASP LLM Top-10 coverage, and a governed risk register with SLA clocks crosswalked to NIST AI RMF, ISO 42001 and MITRE ATLAS. `hyctl mcp registry` scores the MCP servers you actually have installed against the CSA MCP Selection Scorecard, known-CVE cross-reference, typosquat detection, and a trust automaton that drops a server back to provisional on every version bump, the direct answer to a server that ships clean for months and then turns malicious.\n\nEvery run writes a per-run event trace, head selection, swarm attempts, SPRT samples with running confidence, agent-to-agent handoffs and file edits, which the TUI cockpit and the desktop app replay as a live timeline. Ships as a single static binary for macOS, Linux and Windows.",
       "webpageUrl": {
         "url": "https://hydra.uvansa.com/"
       },
@@ -44,12 +44,12 @@
         "guid": "github-sponsors",
         "type": "payment-provider",
         "address": "https://github.com/sponsors/ankit373",
-        "description": "GitHub Sponsors — one-time or recurring, covering Hydra and the other Uvansa open-source projects."
+        "description": "GitHub Sponsors, one-time or recurring, covering Hydra and the other Uvansa open-source projects."
       },
       {
         "guid": "open-collective",
         "type": "payment-provider",
-        "description": "Open Collective, hosted by Open Source Collective — not yet created. Reserved slug: opencollective.com/hyctl."
+        "description": "Open Collective, hosted by Open Source Collective, not yet created. Reserved slug: opencollective.com/hyctl."
       }
     ],
     "plans": [
@@ -57,7 +57,7 @@
         "guid": "sponsor-hydra",
         "status": "active",
         "name": "Sponsor Hydra development",
-        "description": "Recurring or one-time support for Hydra's development — the routing engine, trust control plane, security posture and MCP trust registry, and the desktop app.",
+        "description": "Recurring or one-time support for Hydra's development, the routing engine, trust control plane, security posture and MCP trust registry, and the desktop app.",
         "amount": 0,
         "currency": "USD",
         "frequency": "monthly",

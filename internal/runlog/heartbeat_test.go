@@ -16,7 +16,7 @@ func TestHeartbeat_LiveRunIsAlive(t *testing.T) {
 	defer h.Stop()
 
 	if !IsAlive("run-live") {
-		t.Fatal("a just-started heartbeat is not alive — the marker should be touched immediately")
+		t.Fatal("a just-started heartbeat is not alive, the marker should be touched immediately")
 	}
 }
 
@@ -32,7 +32,7 @@ func TestIsAlive_MissingMarkerIsDead(t *testing.T) {
 // permanent ghost it can never clear.
 func TestIsAlive_StaleMarkerFromCrashAgesOut(t *testing.T) {
 	tempHome(t)
-	// Interval long enough that it never ticks again — the marker is written
+	// Interval long enough that it never ticks again, the marker is written
 	// once at start and then, as in a crash, never touched.
 	StartHeartbeat(context.Background(), "run-crashed", time.Hour)
 	path := HeartbeatPath("run-crashed")
@@ -49,7 +49,7 @@ func TestIsAlive_StaleMarkerFromCrashAgesOut(t *testing.T) {
 	}
 
 	if IsAlive("run-crashed") {
-		t.Error("a marker left behind by a crash still reports alive — it must age out")
+		t.Error("a marker left behind by a crash still reports alive, it must age out")
 	}
 	// The file is still there; deletion is not what makes it dead.
 	if _, err := os.Stat(path); err != nil {
@@ -80,7 +80,7 @@ func TestAliveAt_Boundary(t *testing.T) {
 	}
 }
 
-// A busy process that misses a tick must not flicker to dead — hence
+// A busy process that misses a tick must not flicker to dead, hence
 // StaleAfter being a multiple of the interval.
 func TestStaleAfter_ToleratesMissedTicks(t *testing.T) {
 	if StaleAfter <= HeartbeatInterval {
@@ -88,7 +88,7 @@ func TestStaleAfter_ToleratesMissedTicks(t *testing.T) {
 			StaleAfter, HeartbeatInterval)
 	}
 	if StaleAfter < 3*HeartbeatInterval {
-		t.Errorf("StaleAfter (%v) tolerates fewer than 3 missed ticks at interval %v — too twitchy",
+		t.Errorf("StaleAfter (%v) tolerates fewer than 3 missed ticks at interval %v, too twitchy",
 			StaleAfter, HeartbeatInterval)
 	}
 }
@@ -99,7 +99,7 @@ func TestStaleAfter_ToleratesMissedTicks(t *testing.T) {
 //
 // Polled rather than asserted after one fixed sleep (#274). Windows' system
 // clock and timer granularity are both ~15.6ms, so a single 60ms window is
-// within noise there — and a flaky assertion on a real invariant is worse than
+// within noise there, and a flaky assertion on a real invariant is worse than
 // no assertion, because it gets deleted. Polling keeps the invariant exact (it
 // still fails if the heartbeat genuinely stops) while removing the dependency on
 // how coarse the platform's clock is. On failure it prints the observed
@@ -128,7 +128,7 @@ func TestHeartbeat_KeepsMarkerFresh(t *testing.T) {
 			return
 		}
 	}
-	t.Errorf("marker mtime did not advance in 3s at a %v interval — the heartbeat is not ticking.\n"+
+	t.Errorf("marker mtime did not advance in 3s at a %v interval, the heartbeat is not ticking.\n"+
 		"  first = %s\n  last  = %s\n  delta = %v",
 		interval, first.ModTime().Format(time.RFC3339Nano), last.Format(time.RFC3339Nano),
 		last.Sub(first.ModTime()))
@@ -178,7 +178,7 @@ func TestHeartbeat_NoGoroutineLeak(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 	after := runtime.NumGoroutine()
 	if after > before+2 { // small slack for the test runtime itself
-		t.Errorf("goroutines grew from %d to %d — heartbeat goroutines leaked", before, after)
+		t.Errorf("goroutines grew from %d to %d, heartbeat goroutines leaked", before, after)
 	}
 }
 

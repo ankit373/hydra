@@ -75,7 +75,7 @@ func populated(t *testing.T) *testutil.Sandbox {
 // ── mcp ───────────────────────────────────────────────────────────────────────
 
 // A flagged event (heuristic prompt-injection marker matched) must be visible
-// in both `mcp log` and `mcp report` — otherwise the signal lands in the
+// in both `mcp log` and `mcp report`, otherwise the signal lands in the
 // JSONL and is invisible everywhere an operator actually looks.
 func TestCLI_MCPLogAndReport_SurfaceFlaggedEvents(t *testing.T) {
 	testutil.NewSandbox(t)
@@ -112,7 +112,7 @@ func TestCLI_MCPLogAndReport_SurfaceFlaggedEvents(t *testing.T) {
 // Agent/Tool are attacker/agent-controlled: any local MCP tool or misbehaving
 // agent can set them via `hyctl mcp record` or a real dispatch. `mcp log`
 // already sanitized them at render (util.SafeTerminal), but `mcp report`
-// printed them raw — and a control-heavy value forges a fake verdict line on
+// printed them raw, and a control-heavy value forges a fake verdict line on
 // the terminal. Sanitizing once at Record ingest fixes both by construction,
 // so nobody has to remember to do it at every render site (#500).
 func TestCLI_MCPRecord_SanitizesEscapesForBothLogAndReport(t *testing.T) {
@@ -143,14 +143,14 @@ func TestCLI_MCPRecord_SanitizesEscapesForBothLogAndReport(t *testing.T) {
 	}
 	repCombined := repOut + repCobraOut
 	if strings.Contains(repCombined, "\x1b[2K") || strings.Contains(repCombined, "\rFAKE OK") {
-		t.Errorf("`mcp report` printed a raw escape/CR sequence — the exact defect #500 reports:\n%q", repCombined)
+		t.Errorf("`mcp report` printed a raw escape/CR sequence, the exact defect #500 reports:\n%q", repCombined)
 	}
 	if !strings.Contains(repCombined, "FAKE OK") {
 		t.Errorf("`mcp report` lost the tool name's ordinary text entirely:\n%q", repCombined)
 	}
 }
 
-// `hyctl mcp verify-chain` is the tamper-evidence check over the ledger —
+// `hyctl mcp verify-chain` is the tamper-evidence check over the ledger,
 // it must report intact after ordinary recording and confirm gate-ability
 // (a non-zero exit) when it isn't, matching the other ledger verify commands.
 func TestCLI_MCPVerifyChain_ReportsIntactAfterOrdinaryRecording(t *testing.T) {
@@ -172,7 +172,7 @@ func TestCLI_MCPVerifyChain_ReportsIntactAfterOrdinaryRecording(t *testing.T) {
 	}
 }
 
-// `hyctl security` is the security posture dashboard — it must run clean on
+// `hyctl security` is the security posture dashboard, it must run clean on
 // an empty machine (no ledger yet) and surface real data once the ledger has
 // events, never panicking on either state.
 func TestCLI_Security_HandlesEmptyAndSeededLedger(t *testing.T) {
@@ -233,7 +233,7 @@ func TestCLI_Security_HandlesEmptyAndSeededLedger(t *testing.T) {
 	}
 
 	// Text output must show the headline coverage score and the action queue
-	// — the KPI/feedback-loop surface, not just the raw tables.
+	//, the KPI/feedback-loop surface, not just the raw tables.
 	textOut, textCobraOut, err := run(t, "security")
 	if err != nil {
 		t.Fatalf("`hyctl security` failed: %v", err)
@@ -341,7 +341,7 @@ func TestCLI_TrustRecord_RequiresDomain(t *testing.T) {
 }
 
 // Two domains sharing a ten-character prefix (e.g. "trust-bench" and
-// "trust-bench-v2") must not render as the identical truncated label — that
+// "trust-bench-v2") must not render as the identical truncated label, that
 // makes rows with different n/D visually indistinguishable.
 func TestCLI_TrustCalibration_DistinguishesDomainsWithSharedPrefix(t *testing.T) {
 	populated(t)
@@ -378,13 +378,13 @@ func TestCLI_TrustCalibration_DistinguishesDomainsWithSharedPrefix(t *testing.T)
 		t.Fatalf("want 2 rows for model:x, got %d (%v):\n%s", len(domains), domains, table)
 	}
 	if domains[0] == domains[1] {
-		t.Errorf("both domains rendered as the same label %q — the rows are "+
+		t.Errorf("both domains rendered as the same label %q, the rows are "+
 			"visually indistinguishable:\n%s", domains[0], table)
 	}
 }
 
 // The defect model sets how much confidence a task needs. PII and production
-// must both raise the bar — that is the whole point of the flags.
+// must both raise the bar, that is the whole point of the flags.
 func TestCLI_TrustDefect_RaisesTheBarForRiskyWork(t *testing.T) {
 	populated(t)
 
@@ -525,7 +525,7 @@ func TestCLI_GraphParallel_ScalesWithTheWork(t *testing.T) {
 }
 
 // `hyctl graph generate` must produce a graph.json that `hyctl graph blast`
-// can actually read — against a real Go module, not a hand-built fixture.
+// can actually read, against a real Go module, not a hand-built fixture.
 func TestCLI_GraphGenerate_ProducesAGraphBlastCanRead(t *testing.T) {
 	s := populated(t)
 	if !s.AllowHostBinary(t, "go") {
@@ -648,7 +648,7 @@ func TestCLI_Stats_AgainstRealRows(t *testing.T) {
 	}
 }
 
-// `hyctl status` against a populated state.json runs the governor readout —
+// `hyctl status` against a populated state.json runs the governor readout,
 // the budget table, the bar and the rate-aware mode.
 func TestCLI_Status_RendersTheGovernor(t *testing.T) {
 	populated(t)
@@ -669,7 +669,7 @@ func TestCLI_Status_RendersTheGovernor(t *testing.T) {
 // ── mcp ledger ────────────────────────────────────────────────────────────────
 
 // The MCP gate is what stops an agent touching a file it should not, and its
-// exit code is what a caller branches on — so it runs as a real binary.
+// exit code is what a caller branches on, so it runs as a real binary.
 func TestCLI_MCP_GateRecordsItsDecision(t *testing.T) {
 	s := populated(t)
 
@@ -762,7 +762,7 @@ func TestCLI_ModelsAdd_WarnsWhenShadowingABuiltin(t *testing.T) {
 }
 
 // `models sync` re-run used to look up "already known" against the embedded
-// catalog only, never the overlay — so a model the user had already synced
+// catalog only, never the overlay, so a model the user had already synced
 // and hand-tuned via `models add` looked unrecognized and was silently
 // overwritten back to a fresh heuristic capScore on every re-run, all while
 // the printed message claimed it was "already known, skipped" (#505).
@@ -809,7 +809,7 @@ func TestCLI_ModelsSync_DoesNotRevertUserTunedCapScore(t *testing.T) {
 		if e.ID == "testvendor/test-model-xyz" {
 			found = true
 			if e.CapScore != 99 {
-				t.Errorf("capScore = %d after re-sync, want 99 (the user's tuning) — "+
+				t.Errorf("capScore = %d after re-sync, want 99 (the user's tuning), "+
 					"sync silently reverted it", e.CapScore)
 			}
 		}
@@ -840,8 +840,8 @@ func seedPricingCache(t *testing.T, models map[string]struct{ In, Out float64 })
 
 // ── oracle ────────────────────────────────────────────────────────────────────
 
-// An oracle is a high-D evidence source — its verdict can outweigh several
-// models' votes — so a pass and a fail must be distinguishable by exit code,
+// An oracle is a high-D evidence source, its verdict can outweigh several
+// models' votes, so a pass and a fail must be distinguishable by exit code,
 // which is what a caller gates on.
 func TestCLI_OracleVerify_PassAndFailDifferByExitCode(t *testing.T) {
 	if runtime.GOOS == "windows" {
@@ -868,7 +868,7 @@ func TestCLI_OracleVerify_PassAndFailDifferByExitCode(t *testing.T) {
 // A verifier argument containing a space (a shell -c script) must reach the
 // verifier exactly as typed, not get corrupted by joining argv into a string
 // and re-splitting it on whitespace (#444). Before the fix, `sh -c "exit 1"`
-// silently became `sh -c exit 1`, which bash runs as `sh -c 'exit'` — a false
+// silently became `sh -c exit 1`, which bash runs as `sh -c 'exit'`, a false
 // PASS for a command that actually exits 1.
 func TestCLI_OracleVerify_ArgumentWithSpaceIsNotCorrupted(t *testing.T) {
 	if runtime.GOOS == "windows" {
@@ -879,7 +879,7 @@ func TestCLI_OracleVerify_ArgumentWithSpaceIsNotCorrupted(t *testing.T) {
 
 	code, out := runBinary(t, s, "oracle", "verify", "--", "sh", "-c", "exit 1")
 	if code == 0 {
-		t.Errorf("`sh -c \"exit 1\"` exited 0 — the quoted argument's space was "+
+		t.Errorf("`sh -c \"exit 1\"` exited 0, the quoted argument's space was "+
 			"re-tokenized into two argv elements:\n%s", out)
 	}
 }
@@ -938,7 +938,7 @@ func TestCLI_ContextEntropy_DistinguishesDenseFromRepetitive(t *testing.T) {
 // ── parallel ──────────────────────────────────────────────────────────────────
 
 // `hyctl parallel` takes a batch spec. A malformed one must be refused before
-// anything is dispatched — a partially-parsed batch would run some tasks.
+// anything is dispatched, a partially-parsed batch would run some tasks.
 func TestCLI_Parallel_RefusesAMalformedSpec(t *testing.T) {
 	s := populated(t)
 
@@ -981,8 +981,8 @@ func TestCLI_ReviewSummary_WithNothingRecorded(t *testing.T) {
 }
 
 // Every --json surface must emit parseable JSON once there is data behind it.
-// A jq pipeline that works on a populated machine and breaks on a fresh one —
-// or vice versa — is a broken contract either way.
+// A jq pipeline that works on a populated machine and breaks on a fresh one,
+// or vice versa, is a broken contract either way.
 func TestCLI_JSONSurfaces_ParseAgainstRealData(t *testing.T) {
 	g := ""
 	for _, tc := range []struct {
@@ -1032,7 +1032,7 @@ func TestCLI_JSONSurfaces_ParseAgainstRealData(t *testing.T) {
 			switch tc.want {
 			case "array":
 				if _, ok := v.([]any); !ok {
-					t.Errorf("emitted %T, want a JSON array — a jq pipeline iterating "+
+					t.Errorf("emitted %T, want a JSON array, a jq pipeline iterating "+
 						"it would break", v)
 				}
 			case "object":
@@ -1066,7 +1066,7 @@ func TestCLI_PricingList_WorksOffline(t *testing.T) {
 }
 
 // `pricing list --json` used to emit `null` (a nil slice) instead of `[]` when
-// a filter matched nothing — valid JSON, but a script/agent iterating the
+// a filter matched nothing, valid JSON, but a script/agent iterating the
 // result as an array breaks on it (#505). docs/pricing.md exists precisely
 // because this output is meant to be machine-consumed.
 func TestCLI_PricingListJSON_EmitsEmptyArrayNotNullWhenNothingMatches(t *testing.T) {
@@ -1085,7 +1085,7 @@ func TestCLI_PricingListJSON_EmitsEmptyArrayNotNullWhenNothingMatches(t *testing
 		t.Fatalf("not a JSON array: %v\n%s", err, trimmed)
 	}
 	if v == nil {
-		t.Error("json.Unmarshal produced a nil slice — the wire form was null, not []")
+		t.Error("json.Unmarshal produced a nil slice, the wire form was null, not []")
 	}
 	if len(v) != 0 {
 		t.Errorf("got %d rows for a filter that should match nothing: %v", len(v), v)
@@ -1093,8 +1093,8 @@ func TestCLI_PricingListJSON_EmitsEmptyArrayNotNullWhenNothingMatches(t *testing
 }
 
 // `pricing list` used to only walk the OpenRouter-fetched map, so CLI-agent
-// heads (claude-core, opus-thinking, …) — priced from registry/pricing.yaml,
-// keyed by tier rather than a model name — could never appear here at all,
+// heads (claude-core, opus-thinking, …), priced from registry/pricing.yaml,
+// keyed by tier rather than a model name, could never appear here at all,
 // and a fresh/offline install showed a fully empty table (#505).
 func TestCLI_PricingList_MergesTierPricing(t *testing.T) {
 	populated(t)
@@ -1140,7 +1140,7 @@ func TestCLI_Review_AgainstARealEdit(t *testing.T) {
 
 	repo := t.TempDir()
 	// A .git marker that is not a repository, so the .hydra-bak backup is the
-	// baseline — the path a non-git user is on.
+	// baseline, the path a non-git user is on.
 	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -1192,7 +1192,7 @@ func TestCLI_Review_AgainstARealEdit(t *testing.T) {
 	}
 }
 
-// Reject restores the file from the backup — the other half of the review pair.
+// Reject restores the file from the backup, the other half of the review pair.
 func TestCLI_ReviewReject_RestoresTheFile(t *testing.T) {
 	populated(t)
 

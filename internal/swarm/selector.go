@@ -63,7 +63,7 @@ func (s *NumericTierSelector) Select(all []provider.Head, opts Options) ([]provi
 		return applyFiltersAndCap(candidates, opts), nil
 	}
 
-	// Nothing at or below the requested tier — degrade to the cheapest
+	// Nothing at or below the requested tier, degrade to the cheapest
 	// executable heads available, never the most expensive (matches
 	// dispatch.selectHeads' own degrade path).
 	for _, h := range all {
@@ -102,7 +102,7 @@ func (s *TierSelector) Select(all []provider.Head, opts Options) ([]provider.Hea
 	}
 
 	if len(candidates) == 0 {
-		// Tier has no live heads — fall back to capability score ranking.
+		// Tier has no live heads, fall back to capability score ranking.
 		return (&CapScoreSelector{}).Select(all, opts)
 	}
 
@@ -181,7 +181,7 @@ func applyFiltersAndCap(heads []provider.Head, opts Options) []provider.Head {
 	maxHeads := opts.MaxHeads
 	if maxHeads <= 0 {
 		// An explicit HeadIDs list is the caller's stated intent, so the
-		// *default* cap must not silently trim it — pinning 7 heads and
+		// *default* cap must not silently trim it, pinning 7 heads and
 		// receiving 5 is exactly the source-diversity problem --swarm-heads
 		// exists to solve. An explicitly set MaxHeads still applies.
 		if len(opts.HeadIDs) > 0 {

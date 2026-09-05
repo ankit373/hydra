@@ -150,7 +150,7 @@ func Merge(a, b []Row) ([]Row, error) {
 	return out, nil
 }
 
-// Load reads rollups. A missing file is not an error — nothing has rolled up yet.
+// Load reads rollups. A missing file is not an error, nothing has rolled up yet.
 func Load(path string) ([]Row, error) {
 	f, err := os.Open(path)
 	if err != nil {

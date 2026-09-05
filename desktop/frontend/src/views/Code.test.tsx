@@ -208,7 +208,7 @@ describe('accepting and undoing a change', () => {
 
   // A confirm armed on one file must not still be armed after switching.
   it('drops a pending confirm when the pane moves to another file', async () => {
-    // A nested path, so its basename in the list is not also its full path —
+    // A nested path, so its basename in the list is not also its full path,
     // a flat "b.go" renders twice and matches two elements.
     render(<Code runID="r" edits={[edit(), edit({ file: 'internal/dispatch/dispatch.go' })]} />)
 

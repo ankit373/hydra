@@ -89,7 +89,7 @@ func typeName(v interface{}) string {
 
 // The PATH-discovered Ollama head is the case that made probe and dispatch
 // disagree (#248): probe listed it, dispatch filtered it out, and the error
-// told the user to go look at probe. The reason must be actionable — "no
+// told the user to go look at probe. The reason must be actionable, "no
 // executor" would leave them no better off than before.
 func TestUnroutable_LocalBinaryWithoutAServerSaysWhatToDo(t *testing.T) {
 	// Exactly how internal/provider/cli registers it: {"ollama", "local", true}.
@@ -103,12 +103,12 @@ func TestUnroutable_LocalBinaryWithoutAServerSaysWhatToDo(t *testing.T) {
 		t.Errorf("reason %q does not mention the server the user needs to start", why)
 	}
 	if Supports(head) {
-		t.Error("Supports disagrees with Unroutable — the two must never diverge")
+		t.Error("Supports disagrees with Unroutable, the two must never diverge")
 	}
 }
 
 // An embedding-only model (marked by the port provider, #532) is discovered
-// but never routable — and the reason wins over every source-based branch, so
+// but never routable, and the reason wins over every source-based branch, so
 // no discovery path can accidentally re-admit one.
 func TestUnroutable_EmbeddingOnlyIsNeverRouted(t *testing.T) {
 	head := provider.Head{
@@ -131,8 +131,8 @@ func TestUnroutable_EmbeddingOnlyIsNeverRouted(t *testing.T) {
 }
 
 // Supports is defined as Unroutable == "", so this holds by construction today.
-// It is pinned because the previous shape — two functions each walking the same
-// branches — is exactly how a listing surface and a routing surface drift apart.
+// It is pinned because the previous shape, two functions each walking the same
+// branches, is exactly how a listing surface and a routing surface drift apart.
 func TestSupports_AlwaysAgreesWithUnroutable(t *testing.T) {
 	heads := []provider.Head{
 		{ID: "opus-thinking", Provider: "agy", Source: "registry"},
@@ -152,7 +152,7 @@ func TestSupports_AlwaysAgreesWithUnroutable(t *testing.T) {
 // heads. #248 was the listing surface and the routing surface disagreeing about
 // what could be dispatched to; the fix made Supports derive from Unroutable so
 // they structurally cannot. That guarantee is only worth what it is checked
-// over — a handful of examples can miss exactly the combination that breaks it.
+// over, a handful of examples can miss exactly the combination that breaks it.
 //
 // Two properties, for every combination:
 //   - Supports(h) ⟺ Unroutable(h) == ""
@@ -178,7 +178,7 @@ func TestSupportsAndUnroutable_AgreeOverEveryHeadShape(t *testing.T) {
 							t.Errorf("%+v: Supports=%v but Unroutable=%q", h, Supports(h), why)
 						}
 						if why != "" && len(strings.TrimSpace(why)) < 10 {
-							t.Errorf("%+v: Unroutable reason %q is too terse to act on — "+
+							t.Errorf("%+v: Unroutable reason %q is too terse to act on, "+
 								"probe prints it verbatim as the reason the head is skipped", h, why)
 						}
 						checked++

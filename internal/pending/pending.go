@@ -23,8 +23,8 @@ import (
 	"github.com/ankit373/hydra/internal/config"
 )
 
-// MaxPending bounds the queue. Abandoned questions are never auto-discarded —
-// dropping one would silently lose work someone is waiting on — so the bound is
+// MaxPending bounds the queue. Abandoned questions are never auto-discarded,
+// dropping one would silently lose work someone is waiting on, so the bound is
 // enforced by refusing to park anything new, loudly, rather than by pruning.
 const MaxPending = 100
 

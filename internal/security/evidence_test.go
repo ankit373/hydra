@@ -24,7 +24,7 @@ func TestAssessEvidence_EmptyOnAFreshMachine(t *testing.T) {
 }
 
 // A source used in a run but never calibrated is an absence of data, not a
-// measured weakness — conflating the two would accuse a new head of being
+// measured weakness, conflating the two would accuse a new head of being
 // useless purely for being new.
 func TestAssessEvidence_UncalibratedIsNotWeak(t *testing.T) {
 	testutil.NewSandbox(t)
@@ -40,7 +40,7 @@ func TestAssessEvidence_UncalibratedIsNotWeak(t *testing.T) {
 	}
 	q := AssessEvidence(runs)
 	if len(q.WeakSources) != 0 {
-		t.Errorf("WeakSources = %+v, want none — the source was never calibrated", q.WeakSources)
+		t.Errorf("WeakSources = %+v, want none, the source was never calibrated", q.WeakSources)
 	}
 	if len(q.UncalibratedSources) != 1 || q.UncalibratedSources[0] != "brand-new-head" {
 		t.Errorf("UncalibratedSources = %+v, want the one unmeasured source", q.UncalibratedSources)

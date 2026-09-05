@@ -2,7 +2,7 @@
 
 package tui
 
-// styles.go — the cockpit's palette and lipgloss styles, mapped from the
+// styles.go, the cockpit's palette and lipgloss styles, mapped from the
 // desktop design tokens (desktop/frontend/src/tokens.css). One place; no view
 // declares its own colours. ck-prefixed to avoid clashing with splash/init.
 

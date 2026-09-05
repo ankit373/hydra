@@ -17,7 +17,7 @@ func TestExposures_SplitsLocalFromRemoteByHead(t *testing.T) {
 	events := []ledger.Event{
 		{Tool: "ollama/qwen", Classification: "pii", PIITypes: []string{"email"}},
 		{Tool: "gpt-4o", Classification: "pii", PIITypes: []string{"aws access key id"}},
-		{Tool: "gpt-4o"}, // unclassified — not an exposure at all
+		{Tool: "gpt-4o"}, // unclassified, not an exposure at all
 	}
 
 	exps := Exposures(events, heads)
@@ -71,7 +71,7 @@ func TestExposures_ConfirmedRemoteExcludesUnknownHeads(t *testing.T) {
 	}
 }
 
-// The detector names must survive from the ledger into the report — that is
+// The detector names must survive from the ledger into the report, that is
 // the whole reason PIITypes exists.
 func TestExposures_CarriesPIITypes(t *testing.T) {
 	events := []ledger.Event{{

@@ -34,7 +34,7 @@ type SourcePower struct {
 	Source string  `json:"source"`
 	Domain string  `json:"domain"`
 	D      float64 `json:"d"`
-	// Observations excludes the Laplace prior, so 0 means never calibrated —
+	// Observations excludes the Laplace prior, so 0 means never calibrated,
 	// which is not the same finding as measured-and-useless.
 	Observations float64 `json:"observations"`
 }
@@ -49,12 +49,12 @@ type EvidenceQuality struct {
 	WeakSources []SourcePower `json:"weakSources,omitempty"`
 	// UncalibratedSources were used in a run but have no recorded outcomes,
 	// so their contribution rests entirely on the prior. Absence of data, not
-	// evidence of weakness — kept separate so the two are never conflated.
+	// evidence of weakness, kept separate so the two are never conflated.
 	UncalibratedSources []string `json:"uncalibratedSources,omitempty"`
 }
 
 // AssessEvidence reports what the confidence in runs rests on. runs is what
-// Build already loaded (via trust.LoadRuns) — passed in rather than reloaded
+// Build already loaded (via trust.LoadRuns), passed in rather than reloaded
 // here, since owasp.go's LLM09 check needs the identical data. Every input is
 // optional: a machine that has never run an ensemble gets an empty result,
 // not an invented one.
@@ -62,7 +62,7 @@ func AssessEvidence(runs []trust.RunLog) EvidenceQuality {
 	var q EvidenceQuality
 	q.Runs = len(runs)
 
-	// Which sources actually carried a vote — a weak source nobody uses is
+	// Which sources actually carried a vote, a weak source nobody uses is
 	// not a finding.
 	used := map[string]bool{}
 	for _, r := range runs {
@@ -126,7 +126,7 @@ func evidenceCheck(q EvidenceQuality) Check {
 	if len(problems) == 0 {
 		detail := fmt.Sprintf("%d run(s); no correlated families and no measured-undiagnostic sources", q.Runs)
 		if n := len(q.UncalibratedSources); n > 0 {
-			detail += fmt.Sprintf(" — %d source(s) are uncalibrated, so their weight rests on the prior", n)
+			detail += fmt.Sprintf(", %d source(s) are uncalibrated, so their weight rests on the prior", n)
 		}
 		return Check{Name: name, Status: "no correlation detected", Detail: detail}
 	}
@@ -137,11 +137,11 @@ func evidenceCheck(q EvidenceQuality) Check {
 func evidenceDetail(q EvidenceQuality) string {
 	var parts []string
 	for _, f := range q.Families {
-		parts = append(parts, fmt.Sprintf("%s heads agree %.0f%% beyond chance — they vote as one",
+		parts = append(parts, fmt.Sprintf("%s heads agree %.0f%% beyond chance, they vote as one",
 			f.Family, f.Coupling*100))
 	}
 	for _, s := range q.WeakSources {
-		parts = append(parts, fmt.Sprintf("%s has D=%.3f nats over %.0f outcomes — its agreement carries ~no information",
+		parts = append(parts, fmt.Sprintf("%s has D=%.3f nats over %.0f outcomes, its agreement carries ~no information",
 			s.Source, s.D, s.Observations))
 	}
 	return strings.Join(parts, "; ")

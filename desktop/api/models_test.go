@@ -70,7 +70,7 @@ func TestGetModels_SharedPoolHasMultipleMembers(t *testing.T) {
 		}
 		shared++
 		if len(p.Models) < 2 {
-			t.Errorf("pool %q is marked shared but has %d member(s) — nothing to contend with",
+			t.Errorf("pool %q is marked shared but has %d member(s), nothing to contend with",
 				p.Name, len(p.Models))
 		}
 	}
@@ -79,7 +79,7 @@ func TestGetModels_SharedPoolHasMultipleMembers(t *testing.T) {
 	}
 }
 
-// A machine that has never dispatched still has a registry worth showing — a
+// A machine that has never dispatched still has a registry worth showing, a
 // missing cost log must not blank the model list.
 func TestGetModels_NoCostLogStillReturnsRegistry(t *testing.T) {
 	sandbox(t)
@@ -136,8 +136,43 @@ func TestGetModels_AggregatesObservedSpendPerPool(t *testing.T) {
 		t.Errorf("agy_claude ObservedCostUSD = %v, want ~0.30", claude.ObservedCostUSD)
 	}
 	if flash != nil && flash.ObservedCalls != 1 {
-		t.Errorf("agy_flash ObservedCalls = %d, want 1 — spend leaked across pools",
+		t.Errorf("agy_flash ObservedCalls = %d, want 1, spend leaked across pools",
 			flash.ObservedCalls)
+	}
+}
+
+// The card beside the chat read "0 calls" while the list under it said 26, for
+// the same model. The rows were written with pool="" because only the agy
+// provider attached token_pool metadata, so local_ollama never matched any
+// spend (#681). 90% of a real machine's rows were affected.
+func TestGetModels_LocalPoolSpendIsCounted(t *testing.T) {
+	home := sandbox(t)
+
+	writeCostRows(t, home, []map[string]any{
+		{"ts": "2026-09-05T10:00:00Z", "pool": "local_ollama", "tier": 10,
+			"prompt_tokens": 40, "response_tokens": 20, "est_cost_usd": 0},
+		{"ts": "2026-09-05T10:01:00Z", "pool": "local_ollama", "tier": 10,
+			"prompt_tokens": 60, "response_tokens": 30, "est_cost_usd": 0},
+		{"ts": "2026-09-05T10:02:00Z", "pool": "agy_claude", "tier": 2,
+			"prompt_tokens": 10, "response_tokens": 5, "est_cost_usd": 0.10},
+	})
+
+	var local *Pool
+	reg := New().GetModels()
+	for i := range reg.Pools {
+		if reg.Pools[i].Name == "local_ollama" {
+			local = &reg.Pools[i]
+		}
+	}
+	if local == nil {
+		t.Fatal("local_ollama pool missing; the registry declares it for the Ollama models")
+	}
+	if local.ObservedCalls != 2 {
+		t.Errorf("local_ollama ObservedCalls = %d, want 2. A free local call is still a call, "+
+			"and 0 next to a list saying 2 makes the number worthless", local.ObservedCalls)
+	}
+	if got := local.ObservedTokens; got != 150 {
+		t.Errorf("local_ollama ObservedTokens = %d, want 150", got)
 	}
 }
 
@@ -180,7 +215,7 @@ models:
 	}
 	m := r.Pools[0].Models[0]
 	if m.ID != "just-one" {
-		t.Errorf("model id = %q, want just-one — the embedded copy won", m.ID)
+		t.Errorf("model id = %q, want just-one, the embedded copy won", m.ID)
 	}
 	if m.ContextWindow != 1234 || m.ComplexityMax != 3 {
 		t.Errorf("override fields lost: ctx=%d band=%d-%d", m.ContextWindow, m.ComplexityMin, m.ComplexityMax)

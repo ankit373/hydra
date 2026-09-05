@@ -68,7 +68,7 @@ func TestOllamaExecute_HappyPathParsesOutputAndUsage(t *testing.T) {
 	if resp.Output != "local answer" {
 		t.Errorf("Output = %q", resp.Output)
 	}
-	// Ollama reports real counts, so they must not be labelled as estimated —
+	// Ollama reports real counts, so they must not be labelled as estimated,
 	// local heads are free, but the budget governor still books their usage.
 	if resp.InputTokens != 21 || resp.OutputTokens != 9 {
 		t.Errorf("tokens = %d/%d, want 21/9", resp.InputTokens, resp.OutputTokens)
@@ -196,7 +196,7 @@ func TestOllamaIsHealthy(t *testing.T) {
 		t.Error("a 500 was reported as healthy")
 	}
 
-	// Nothing listening, and a host that is not a URL at all — both must be
+	// Nothing listening, and a host that is not a URL at all, both must be
 	// "not healthy" rather than a panic.
 	if (&OllamaExecutor{}).isHealthy("http://127.0.0.1:1") {
 		t.Error("a dead port was reported as healthy")
@@ -206,7 +206,7 @@ func TestOllamaIsHealthy(t *testing.T) {
 	}
 }
 
-// ensureRunning must not be reached when the server is already up — the
+// ensureRunning must not be reached when the server is already up, the
 // auto-start path spawns a subprocess and waits three seconds.
 func TestOllamaEnsureRunning_NoOpWhenAlreadyHealthy(t *testing.T) {
 	testutil.NewSandbox(t)
@@ -219,7 +219,7 @@ func TestOllamaEnsureRunning_NoOpWhenAlreadyHealthy(t *testing.T) {
 		t.Fatalf("a healthy server was reported as needing a start: %v", err)
 	}
 	if elapsed := time.Since(start); elapsed > time.Second {
-		t.Errorf("took %v against a healthy server — it tried to start one", elapsed)
+		t.Errorf("took %v against a healthy server, it tried to start one", elapsed)
 	}
 }
 
@@ -229,7 +229,7 @@ func TestOllamaHost_MatchesDiscovery(t *testing.T) {
 	testutil.NewSandbox(t)
 
 	if got, want := ollamaHost(), provider.OllamaHost(); got != want {
-		t.Errorf("ollamaHost() = %q but discovery uses %q — a dispatch would go to a "+
+		t.Errorf("ollamaHost() = %q but discovery uses %q, a dispatch would go to a "+
 			"different server than the one probe reported", got, want)
 	}
 	t.Setenv("OLLAMA_HOST", "http://192.0.2.10:11434")
@@ -281,26 +281,26 @@ func TestCLIBuildArgs_SubstitutesThePromptPlaceholder(t *testing.T) {
 }
 
 // Bare `codex "<prompt>"` launches codex's interactive TUI, which fails
-// instantly outside a real terminal — every dispatch to codex failed this
+// instantly outside a real terminal, every dispatch to codex failed this
 // way and silently fell back to a lower-scoring head (#491). The exec
 // subcommand is the non-interactive entry point.
 func TestCLIBuildArgs_OpenAIUsesTheExecSubcommand(t *testing.T) {
 	got := cliTemplates["openai"].buildArgs("the prompt")
 	want := []string{"exec", "the prompt"}
 	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
-		t.Errorf("openai template args = %q, want %q — bare codex launches its interactive TUI", got, want)
+		t.Errorf("openai template args = %q, want %q, bare codex launches its interactive TUI", got, want)
 	}
 }
 
-// Bare `agy "<prompt>"` launches agy's interactive TUI too, but — unlike
-// codex — still exits 0, with the TUI error text on stdout. CLIExecutor only
+// Bare `agy "<prompt>"` launches agy's interactive TUI too, but, unlike
+// codex, still exits 0, with the TUI error text on stdout. CLIExecutor only
 // checks the exit code, so this silently reports a false success carrying an
 // error message as if it were the model's real answer (#492).
 func TestCLIBuildArgs_AntigravityUsesPrintFlag(t *testing.T) {
 	got := cliTemplates["antigravity"].buildArgs("the prompt")
 	want := []string{"--print", "the prompt"}
 	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
-		t.Errorf("antigravity template args = %q, want %q — bare agy launches its interactive TUI", got, want)
+		t.Errorf("antigravity template args = %q, want %q, bare agy launches its interactive TUI", got, want)
 	}
 }
 
@@ -355,13 +355,13 @@ func TestCLIExecute_StdinTemplatesSendThePromptOnStdin(t *testing.T) {
 	}
 }
 
-// A tool that exits non-zero must be an error carrying its stderr — that text
+// A tool that exits non-zero must be an error carrying its stderr, that text
 // is the only diagnostic the user gets, and dropping it turns a login prompt
 // into a blank failure.
 func TestCLIExecute_NonZeroExitCarriesStderr(t *testing.T) {
 	s := testutil.NewSandbox(t)
 
-	body := "#!/bin/sh\necho 'not logged in — run: claude login' >&2\nexit 1\n"
+	body := "#!/bin/sh\necho 'not logged in, run: claude login' >&2\nexit 1\n"
 	if runtime.GOOS == "windows" {
 		body = "@echo off\r\necho not logged in 1>&2\r\nexit /b 1\r\n"
 	}
@@ -375,7 +375,7 @@ func TestCLIExecute_NonZeroExitCarriesStderr(t *testing.T) {
 		t.Fatal("a non-zero exit was reported as success")
 	}
 	if !strings.Contains(err.Error(), "not logged in") {
-		t.Errorf("error = %v, want the tool's stderr — it is the only diagnostic "+
+		t.Errorf("error = %v, want the tool's stderr, it is the only diagnostic "+
 			"the user gets", err)
 	}
 }
@@ -521,7 +521,7 @@ func TestWriteTokenSidecar_RefusesToWriteOutsideTempDir(t *testing.T) {
 
 			if _, err := os.Stat(clean); err == nil {
 				_ = os.Remove(clean)
-				t.Errorf("a sidecar was written to %q, outside the temp directory — "+
+				t.Errorf("a sidecar was written to %q, outside the temp directory, "+
 					"the executor is steerable into writing arbitrary files", clean)
 			}
 		})
@@ -539,7 +539,7 @@ func TestWriteTokenSidecar_RefusesToWriteOutsideTempDir(t *testing.T) {
 // The auto-start attempt is guarded by a package-level sync.Once, so it happens
 // at most once per process and every later caller falls through to the
 // three-second wait loop instead. Resetting it here is what makes this test
-// independent of which other test ran first — without that it passes alone and
+// independent of which other test ran first, without that it passes alone and
 // fails under -count=2.
 func TestOllamaEnsureRunning_ReportsWhyItCouldNotStart(t *testing.T) {
 	testutil.NewSandbox(t) // empty PATH: there is no ollama to start
@@ -556,7 +556,7 @@ func TestOllamaEnsureRunning_ReportsWhyItCouldNotStart(t *testing.T) {
 		t.Errorf("error = %v, want it to say the server could not be started", err)
 	}
 	// It must not sit through the three-second readiness wait when the start
-	// itself failed — there is nothing to wait for.
+	// itself failed, there is nothing to wait for.
 	if elapsed := time.Since(start); elapsed > 2*time.Second {
 		t.Errorf("took %v to report a failed start", elapsed)
 	}

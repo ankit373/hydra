@@ -2,7 +2,7 @@
 
 package tui
 
-// chrome.go — the shell every view sits in: the header (brand · tabs ·
+// chrome.go, the shell every view sits in: the header (brand · tabs ·
 // session/context), and the one-line status bar (view keys left, facts right).
 
 import (
@@ -67,7 +67,7 @@ func (m Cockpit) contextGauge() string {
 		ckDimS.Render(fmt.Sprintf(" %d%%", m.claudePct))
 }
 
-// ckBandStyle colours a claude_pct by its budget band — the band itself comes
+// ckBandStyle colours a claude_pct by its budget band, the band itself comes
 // from internal/budget, never a re-implemented threshold table.
 func ckBandStyle(pct int) lipgloss.Style {
 	switch budget.ModeFor(pct).String() {
@@ -82,7 +82,7 @@ func ckBandStyle(pct int) lipgloss.Style {
 
 // statusBar is one line: the active view's keys (from ckKeymap) plus
 // "? shortcuts" on the left, view-specific facts (or a transient flash) right.
-// At narrow widths trailing keys are dropped — "? shortcuts" survives, and the
+// At narrow widths trailing keys are dropped, "? shortcuts" survives, and the
 // glossary still documents everything that was dropped.
 func (m Cockpit) statusBar() string {
 	right := m.statusFact()

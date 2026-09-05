@@ -14,7 +14,7 @@ import (
 )
 
 // The spine: every analysis in this package converts into a Risk, so findings
-// are one kind of object — identified, rated, aged against an SLA, quantified,
+// are one kind of object, identified, rated, aged against an SLA, quantified,
 // crosswalked, evidenced. Nothing new is detected here.
 
 // RiskClass is where a risk came from, which also drives its framework
@@ -44,7 +44,7 @@ const (
 //
 // These are the widely-published vulnerability-management targets (critical
 // within a week, high within a month, medium within a quarter) rather than
-// numbers chosen here. They are the clock only — this register deliberately
+// numbers chosen here. They are the clock only, this register deliberately
 // assigns no owner, so a breach says "this is late", never "you are late".
 var slaDays = map[Severity]int{
 	SeverityCritical: 7,
@@ -84,7 +84,7 @@ type Risk struct {
 
 	// Cost of ONE defect of this class, from internal/trust's defect model so
 	// dashboard and router agree. Not "exposure": per-occurrence, not
-	// annualised — an annual figure needs a frequency nothing here measures.
+	// annualised, an annual figure needs a frequency nothing here measures.
 	DefectCostUSD float64        `json:"defectCostUsd"`
 	Frameworks    []FrameworkRef `json:"frameworks,omitempty"`
 	Evidence      []string       `json:"evidence,omitempty"`
@@ -94,7 +94,7 @@ type Risk struct {
 type RiskRegister struct {
 	Risks []Risk `json:"risks"`
 	// SumDefectCostUSD adds the per-defect costs of open risks. It is a
-	// magnitude, not a forecast — see Risk.DefectCostUSD.
+	// magnitude, not a forecast, see Risk.DefectCostUSD.
 	SumDefectCostUSD float64          `json:"sumDefectCostUsd"`
 	Breached         int              `json:"breached"`
 	BySeverity       map[Severity]int `json:"bySeverity"`
@@ -155,7 +155,7 @@ func BuildRegister(r *Report, now time.Time) RiskRegister {
 		if b.Changed {
 			out = append(out, newRisk(ClassSupplyChain, SeverityHigh,
 				fmt.Sprintf("%s binary changed since it was last seen", b.HeadID),
-				b.Path+" — an upgrade and a swap look identical here", "", now,
+				b.Path+", an upgrade and a swap look identical here", "", now,
 				trust.Task{Irreversible: true, Production: true}, []string{b.Path}))
 		}
 	}
@@ -196,7 +196,7 @@ func BuildRegister(r *Report, now time.Time) RiskRegister {
 			reg.Breached++
 		}
 	}
-	// Worst first, then most overdue — the order an operator works down.
+	// Worst first, then most overdue, the order an operator works down.
 	sort.SliceStable(reg.Risks, func(i, j int) bool {
 		si, sj := severityRank(reg.Risks[i].Severity), severityRank(reg.Risks[j].Severity)
 		if si != sj {

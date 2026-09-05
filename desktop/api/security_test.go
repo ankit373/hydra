@@ -8,7 +8,7 @@ import (
 	"github.com/ankit373/hydra/internal/ledger"
 )
 
-// A fresh machine has no ledger — the view must render "no data yet", not an
+// A fresh machine has no ledger, the view must render "no data yet", not an
 // error dialog on first launch.
 func TestGetSecurity_EmptyStateIsHonest(t *testing.T) {
 	sandbox(t)
@@ -20,7 +20,7 @@ func TestGetSecurity_EmptyStateIsHonest(t *testing.T) {
 	if r.HasData {
 		t.Error("HasData = true with no ledger on disk")
 	}
-	// Checks must still say something concrete even with no data — an empty
+	// Checks must still say something concrete even with no data, an empty
 	// Status would read as "not yet computed" rather than "computed, clean".
 	for _, c := range r.Checks {
 		if c.Name == "" || c.Status == "" {
@@ -29,7 +29,7 @@ func TestGetSecurity_EmptyStateIsHonest(t *testing.T) {
 	}
 }
 
-// GetSecurity must report exactly what ledger.Summarize/ByHeadRisk compute —
+// GetSecurity must report exactly what ledger.Summarize/ByHeadRisk compute,
 // reimplementing the math here would let the desktop view and `hyctl
 // security` disagree about the same ledger file.
 func TestGetSecurity_MatchesLedgerSummarize(t *testing.T) {
@@ -56,11 +56,11 @@ func TestGetSecurity_MatchesLedgerSummarize(t *testing.T) {
 		t.Errorf("ByHead = %+v, want one entry for h1 with 1 denied", r.ByHead)
 	}
 	if len(r.Coverage.Categories) == 0 {
-		t.Error("Coverage.Categories is empty — the OWASP LLM Top-10 list must always be populated")
+		t.Error("Coverage.Categories is empty, the OWASP LLM Top-10 list must always be populated")
 	}
 }
 
-// A tampered ledger must hard-override the report's integrity flag — the one
+// A tampered ledger must hard-override the report's integrity flag, the one
 // case where the coverage percentage cannot be trusted regardless of what it
 // computes to.
 func TestGetSecurity_TamperedChainIsNotIntact(t *testing.T) {
@@ -80,7 +80,7 @@ func TestGetSecurity_TamperedChainIsNotIntact(t *testing.T) {
 }
 
 // GetSecurity reads fresh on every call and holds no state, matching every
-// other API method — safe for the frontend to poll from several places.
+// other API method, safe for the frontend to poll from several places.
 func TestGetSecurity_ConcurrentCallsAreSafe(t *testing.T) {
 	sandbox(t)
 	if err := ledger.Record(ledger.DefaultPath(), ledger.Event{Agent: "a", Tool: "h1", Decision: ledger.Allow}); err != nil {

@@ -134,7 +134,7 @@ func TestScanClaudeCode_UserAndProjectScope(t *testing.T) {
 
 	// Built structurally, not by string-interpolating proj into a JSON
 	// literal: proj is a Windows path on Windows CI, and an unescaped
-	// backslash inside a hand-written JSON string corrupts the document —
+	// backslash inside a hand-written JSON string corrupts the document,
 	// this is exactly the bug that broke this test on windows-latest.
 	cfg := claudeCodeConfig{
 		MCPServers: map[string]clientServerConfig{

@@ -25,7 +25,7 @@ import (
 //
 // A sealed segment is one zstd frame per run, concatenated, plus a sidecar
 // index. Frames concatenate legally in zstd, so one run can be read back by
-// seeking to its offset and decoding a single frame — the alternative, one
+// seeking to its offset and decoding a single frame, the alternative, one
 // frame for the whole month, would mean decompressing a month to read a minute.
 
 // SegDir is where sealed segments live.
@@ -220,7 +220,7 @@ func countLines(raw []byte) int {
 	return n
 }
 
-// onDiskSize reports blocks actually charged, not the logical length — the
+// onDiskSize reports blocks actually charged, not the logical length, the
 // whole point of sealing is the gap between them.
 func onDiskSize(path string) int64 {
 	info, err := os.Stat(path)

@@ -16,8 +16,8 @@ import (
 // A named parent is emitted rather than reusing the task id: tree.Reconstruct
 // links a child to whatever Parent names, so pointing at an id no event ever
 // declares would materialise a phantom node labelled with a raw timestamp. A
-// swarm and an ensemble are also different things to a reader — one is racing
-// candidates, the other is accumulating evidence — so they get different roots.
+// swarm and an ensemble are also different things to a reader, one is racing
+// candidates, the other is accumulating evidence, so they get different roots.
 const (
 	swarmAgent = "swarm"
 	sprtAgent  = "ensemble"
@@ -26,12 +26,12 @@ const (
 // logRunEvents appends one runlog event per attempt so a swarm reads as N heads
 // working one task rather than a single opaque node.
 //
-// cost.jsonl already records the spend; this records the *shape* — which head,
-// which tier, which won, how long — because that is what a supervision tree and
+// cost.jsonl already records the spend; this records the *shape*, which head,
+// which tier, which won, how long, because that is what a supervision tree and
 // a Fleet view are reconstructed from. Before #204 nothing in this package
 // emitted, so a five-head swarm collapsed to one tree node.
 //
-// SPRT does not use this — see logSamples, which emits from the LLR ledger so
+// SPRT does not use this, see logSamples, which emits from the LLR ledger so
 // each event carries the running confidence.
 //
 // Every append is best-effort. Losing an observability event must never fail the
@@ -58,7 +58,7 @@ func logRunEvents(attempts []Attempt, mode SwarmMode, opts Options) {
 		_ = rl.Append(runlog.Event{
 			Kind:   runlog.KindAttempt,
 			TaskID: taskID,
-			// Keyed by head id, which is also how dispatch keys its own events —
+			// Keyed by head id, which is also how dispatch keys its own events,
 			// so a head's selection, execution, and attempt collapse into one
 			// node rather than three.
 			Agent:      a.Head.ID,
@@ -79,7 +79,7 @@ func logRunEvents(attempts []Attempt, mode SwarmMode, opts Options) {
 // logSamples appends one runlog event per SPRT ledger entry, carrying the
 // running confidence after that source was weighed.
 //
-// attempts is consulted only to recover the head's display name and tier — the
+// attempts is consulted only to recover the head's display name and tier, the
 // ledger keys on source id alone.
 func logSamples(ledger []trust.Evidence, attempts []Attempt, opts Options) {
 	runID := runid.ResolveRun(opts.RunID)

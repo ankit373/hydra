@@ -38,7 +38,7 @@ func TestGetSession_EmptyRunIDIsHandled(t *testing.T) {
 }
 
 // The timeline must show every event, including the run-level ones the tree
-// deliberately omits — a run's own start and end belong on a timeline.
+// deliberately omits, a run's own start and end belong on a timeline.
 func TestGetSession_TimelineIncludesRunLevelEvents(t *testing.T) {
 	sandbox(t)
 
@@ -57,7 +57,7 @@ func TestGetSession_TimelineIncludesRunLevelEvents(t *testing.T) {
 		t.Fatal("Found = false for a run that exists")
 	}
 	if len(s.Timeline) != 4 {
-		t.Fatalf("%d timeline entries, want 4 — run-level events belong here even though the tree omits them", len(s.Timeline))
+		t.Fatalf("%d timeline entries, want 4, run-level events belong here even though the tree omits them", len(s.Timeline))
 	}
 	if s.Timeline[0].Kind != string(runlog.KindRunStarted) {
 		t.Errorf("first entry is %q, want run_started", s.Timeline[0].Kind)
@@ -65,7 +65,7 @@ func TestGetSession_TimelineIncludesRunLevelEvents(t *testing.T) {
 	if s.Timeline[3].Kind != string(runlog.KindRunFinished) {
 		t.Errorf("last entry is %q, want run_finished", s.Timeline[3].Kind)
 	}
-	// The tree still has only the head — run-level events create no node.
+	// The tree still has only the head, run-level events create no node.
 	if len(s.Agents) != 1 || s.Agents[0].ID != "agy" {
 		t.Errorf("agents = %+v, want just the head", s.Agents)
 	}
@@ -146,9 +146,9 @@ func TestGetSession_FanOutIsNonLinear(t *testing.T) {
 	}
 }
 
-// A real hyctl dispatch always crosses runs for its A2A handoff — the target
+// A real hyctl dispatch always crosses runs for its A2A handoff, the target
 // picks up last_handoff.json in a later, separate invocation with its own
-// run_id — so writeHandoff's ref (e.g. "hydra-tier-4") never names a node in
+// run_id, so writeHandoff's ref (e.g. "hydra-tier-4") never names a node in
 // this run's own tree. Every successful dispatch writes one of these
 // unconditionally, so treating it as same-run graph structure made ordinary,
 // single-head runs non-linear 100% of the time (#485): the Graph tab always
@@ -170,13 +170,13 @@ func TestGetSession_DanglingHandoffIsNotNonLinear(t *testing.T) {
 		t.Error("NonLinear = true for a handoff whose target is not a node in this run")
 	}
 	if len(s.Edges) != 0 {
-		t.Errorf("%d edges, want 0 — the target does not exist in this session", len(s.Edges))
+		t.Errorf("%d edges, want 0, the target does not exist in this session", len(s.Edges))
 	}
 }
 
-// A handoff whose target IS a node in the same run — the one shape the
+// A handoff whose target IS a node in the same run, the one shape the
 // current architecture never actually produces, but the graph must still
-// render correctly if it ever does — is real structure a timeline cannot
+// render correctly if it ever does, is real structure a timeline cannot
 // draw, and must still make the run non-linear.
 func TestGetSession_ResolvableHandoffMakesItNonLinear(t *testing.T) {
 	sandbox(t)
@@ -228,7 +228,7 @@ func TestGetSession_HandoffIsNotAnOwnershipEdge(t *testing.T) {
 	}
 }
 
-// The SPRT detail is the verifiable part — what the source did to the running
+// The SPRT detail is the verifiable part, what the source did to the running
 // log-odds. It must reach the view, because a confidence number with no
 // evidence behind it is the configuration that produces misplaced trust.
 func TestGetSession_SPRTSamplesCarryEvidence(t *testing.T) {
@@ -260,7 +260,7 @@ func TestGetSession_SPRTSamplesCarryEvidence(t *testing.T) {
 	}
 	for i, want := range []string{"agreed · LLR +1.200 → Λ 1.200", "disagreed · LLR -0.400 → Λ 1.700"} {
 		if samples[i].Detail != want {
-			t.Errorf("sample %d detail = %q, want %q — the evidence must reach the view", i, samples[i].Detail, want)
+			t.Errorf("sample %d detail = %q, want %q, the evidence must reach the view", i, samples[i].Detail, want)
 		}
 	}
 }

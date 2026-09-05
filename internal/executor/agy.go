@@ -28,7 +28,7 @@ type AuthRequiredError struct {
 func (e *AuthRequiredError) Error() string {
 	msg := fmt.Sprintf("auth required for agy model %q (pool %q)", e.ModelFlag, e.Pool)
 	if e.AuthURL != "" {
-		msg += " — authenticate at: " + e.AuthURL
+		msg += ", authenticate at: " + e.AuthURL
 	}
 	return msg
 }
@@ -42,8 +42,8 @@ var authURLRe = regexp.MustCompile(`https?://\S+`)
 // cleanup of a stale swap sentinel a pre-#522 Hydra binary may have left
 // behind after being killed mid swap. Model selection itself goes through
 // agy's own --model flag now (verified against the real CLI, see #522), so
-// concurrent calls no longer share any mutable file and cmd.Run() — the
-// actual tens-of-seconds subprocess work — runs outside this lock entirely.
+// concurrent calls no longer share any mutable file and cmd.Run(), the
+// actual tens-of-seconds subprocess work, runs outside this lock entirely.
 var agyMu sync.Mutex
 
 // AgyExecutor invokes `agy --print` with model selection via the --model flag.
@@ -65,14 +65,14 @@ func (e *AgyExecutor) Execute(ctx context.Context, req Request) (*Response, erro
 		if d, err := time.ParseDuration(t); err == nil {
 			timeout = d
 		} else if d, err := time.ParseDuration(t + "s"); err == nil {
-			// Bare integer seconds (e.g. "300") — treat as seconds.
+			// Bare integer seconds (e.g. "300"), treat as seconds.
 			timeout = d
 		}
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	// stderr is only used for auth detection — cap it at 64 KB so a runaway
+	// stderr is only used for auth detection, cap it at 64 KB so a runaway
 	// process can't exhaust memory through error output.
 	stderr := util.NewAccumulator(64 << 10)
 	stdout := util.NewAccumulator(0)
@@ -89,7 +89,7 @@ func (e *AgyExecutor) Execute(ctx context.Context, req Request) (*Response, erro
 	outStr := stdout.String()
 
 	// Auth detection: check stderr + first 3 lines of stdout only.
-	// Never scan full output — model responses may contain auth strings.
+	// Never scan full output, model responses may contain auth strings.
 	firstLines := strings.Join(strings.SplitN(outStr, "\n", 4)[:min(strings.Count(outStr, "\n")+1, 3)], "\n")
 	authSignal := stderrStr + "\n" + firstLines
 
@@ -107,7 +107,7 @@ func (e *AgyExecutor) Execute(ctx context.Context, req Request) (*Response, erro
 	}
 
 	if runErr != nil {
-		return nil, fmt.Errorf("agy exec %s: %w — %s", req.Head.ID, runErr, strings.TrimSpace(stderrStr))
+		return nil, fmt.Errorf("agy exec %s: %w, %s", req.Head.ID, runErr, strings.TrimSpace(stderrStr))
 	}
 
 	output := strings.TrimSpace(outStr)
@@ -123,7 +123,7 @@ func (e *AgyExecutor) Execute(ctx context.Context, req Request) (*Response, erro
 		InputTokens:  promptTokens,
 		OutputTokens: responseTokens,
 		Truncated:    stdout.Truncated(),
-		// agy does not report token usage — these are char/4 estimates.
+		// agy does not report token usage, these are char/4 estimates.
 		TokensEstimated: true,
 	}, nil
 }
@@ -136,7 +136,7 @@ func agySitesPath() string {
 
 // agyOrigSuffix is the sentinel a pre-#522 Hydra could leave behind if
 // SIGKILLed mid settings.json swap. Model selection no longer swaps
-// settings.json (see Execute), so nothing writes this sentinel anymore —
+// settings.json (see Execute), so nothing writes this sentinel anymore,
 // recoverAgySwap only cleans up a leftover from an older binary.
 const agyOrigSuffix = ".hydra-orig"
 

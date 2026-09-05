@@ -76,7 +76,7 @@ function RunCard({
 }) {
   // Past the threshold a node-link graph is a hairball, not a picture (mirrors
   // Airflow's separate Grid view for large DAGs), so it collapses to a state
-  // heatmap until asked to expand. A live run starts expanded — it is the one
+  // heatmap until asked to expand. A live run starts expanded, it is the one
   // you opened the app to watch.
   const large = run.allCount > groupThreshold
   const [expanded, setExpanded] = useState(!large)
@@ -141,7 +141,7 @@ function RunShape({
   onOpenFile: (file: string) => void
 }) {
   if (agents.length === 0) return null
-  // A single node is trivially linear — the same reasoning Session.tsx uses
+  // A single node is trivially linear, the same reasoning Session.tsx uses
   // to decide nonLinear (isNonLinear is false whenever there's nothing to
   // branch from). Drawing a graph of one box is worse than a line of text.
   if (agents.length === 1) {
@@ -191,7 +191,7 @@ function AgentRow({ agent }: { agent: Agent }) {
 }
 
 /**
- * At/above GroupThreshold a node-link graph is a hairball, not a picture —
+ * At/above GroupThreshold a node-link graph is a hairball, not a picture,
  * Airflow ships a separate Grid view for exactly this reason instead of
  * scaling its Graph view. One chip per agent, colored by state, grouped by
  * depth: "mostly green with a cluster of red" has to read in under a second.
@@ -245,7 +245,7 @@ function chipTitle(a: Agent): string {
  * by who has to act: you, then the machine, then nobody.
  *
  * There is deliberately no "has a deliverable" group yet. Nothing in a run
- * records an artifact — a PR url, a file, a report — so a group for it would
+ * records an artifact, a PR url, a file, a report, so a group for it would
  * be permanently empty or, worse, guessed at.
  */
 type RunGroup = {

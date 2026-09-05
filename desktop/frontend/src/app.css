@@ -1,5 +1,5 @@
 /* Layout and components. All colour, type, and radius values come from
-   tokens.css — brand/tokens.css is the single source of truth and is copied in
+   tokens.css, brand/tokens.css is the single source of truth and is copied in
    verbatim, never edited here. */
 
 * { box-sizing: border-box; }
@@ -33,7 +33,7 @@ body {
 
 .rail__mark { width: 24px; height: 24px; flex: 0 0 auto; margin-bottom: 14px; }
 
-/* Rotation only — no filter/blur, so it costs nothing on a GPU-less machine.
+/* Rotation only, no filter/blur, so it costs nothing on a GPU-less machine.
    The mark's own SVG has no glow filter baked in (unlike brand/svg/mark.svg)
    for exactly that reason: fine once as a static icon, wasted looping. */
 .hy-spinner { animation: hy-spin 2.2s linear infinite; transform-origin: 50% 50%; }
@@ -99,7 +99,7 @@ body {
 /* ── Headings ──────────────────────────────────────────────────────────── */
 
 .view__head { margin-bottom: 22px; }
-/* Only the views with a back button need a row — plain title+subtitle
+/* Only the views with a back button need a row, plain title+subtitle
    (Fleet, Dashboard) stack correctly as block siblings with no flex at all. */
 .view__headrow { display: flex; align-items: baseline; gap: 12px; }
 .view__title { margin: 0; font-size: 24px; letter-spacing: -0.03em; }
@@ -227,7 +227,7 @@ body {
 .sec-export:hover { color: var(--hy-ink); border-color: var(--hy-aqua); }
 .sec-export:focus-visible { outline: 2px solid var(--hy-aqua); outline-offset: 1px; }
 
-/* Generic delta colouring — used wherever a change is simply good or bad,
+/* Generic delta colouring, used wherever a change is simply good or bad,
    not tied to any one panel. */
 .delta--good { color: var(--hy-cheap); }
 .delta--bad  { color: var(--hy-expensive); }
@@ -248,7 +248,7 @@ body {
 .sec-verdict--ok        { border-left-color: var(--hy-cheap); }
 
 /* The verdict is the largest thing on the screen. It was 11px while the page
-   title — which carries no information — was the biggest text in the view. */
+   title, which carries no information, was the biggest text in the view. */
 .sec-verdict__label {
   font-family: var(--hy-font-mono);
   font-size: 34px;
@@ -331,7 +331,7 @@ body {
 .sec-history__line { stroke: var(--hy-aqua); stroke-width: 1.5; }
 .sec-history__dot  { fill: var(--hy-aqua); }
 
-/* Part-to-whole donut + legend — the "N by status" pattern security
+/* Part-to-whole donut + legend, the "N by status" pattern security
    dashboards (Wiz, Snyk, GitHub) use for a handful of categories summing to
    a total. See SecurityCharts.tsx's StatusDonut doc comment. */
 .sec-donut { display: flex; align-items: center; gap: 14px; margin-top: 8px; }
@@ -352,7 +352,7 @@ body {
 .sec-donut__swatch { width: 8px; height: 8px; border-radius: 2px; flex: 0 0 auto; }
 
 /* Small multiples: one compact tile per category, replacing an earlier radar
-   chart — see SecurityCharts.tsx's CategoryGrid doc comment for why. */
+   chart, see SecurityCharts.tsx's CategoryGrid doc comment for why. */
 .sec-grid {
   margin-top: 4px;
   width: 100%;
@@ -532,7 +532,7 @@ body {
 .spend-bar:focus-visible { outline: none; }
 
 /* Bars grow in from a zero baseline the first time real data lands
-   (Dashboard.tsx's `useReveal`) — transform, not height, so it's a single
+   (Dashboard.tsx's `useReveal`), transform, not height, so it's a single
    composited property and never triggers layout. transform-box: fill-box
    makes "bottom" mean the rect's own bottom edge, not the SVG viewport's. */
 .spend-bar__rect,
@@ -554,7 +554,7 @@ body {
 .spend-bar__rect--mid       { fill: var(--hy-mid); }
 .spend-bar__rect--expensive { fill: var(--hy-expensive); }
 
-/* A larger, lower-opacity rect behind the crisp bar — a layered solid fill,
+/* A larger, lower-opacity rect behind the crisp bar, a layered solid fill,
    never `filter: blur`/`backdrop-filter`, so the glow rasterizes like any
    other shape instead of costing a compositor blur pass. */
 .spend-bar__halo { opacity: .22; }
@@ -624,7 +624,7 @@ body {
 
 .rank__value { font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 
-/* A "by model" row that opens the drill-down drawer (#408) — a <button>
+/* A "by model" row that opens the drill-down drawer (#408), a <button>
    wearing .rank__row's grid layout, so it needs its own reset for the
    browser's default button chrome plus a hover/focus affordance. */
 .rank__row--detail {
@@ -667,7 +667,7 @@ body {
 /* ── Dashboard: calibration leaderboard (#409) ─────────────────────────── */
 /* Same row shape as .rank (name / track / value), plus a domain sub-label and
    an oracle-vs-model color split. Bars use the spend-bar halo treatment
-   (#414) rotated 90° — a fainter halo layered behind a crisp fill, both
+   (#414) rotated 90°, a fainter halo layered behind a crisp fill, both
    growing via `transform: scaleX` from a zero baseline the first time real
    data lands, never `filter: blur`. */
 
@@ -687,7 +687,7 @@ body {
 }
 .cal__domain { margin-left: 6px; font-size: 10px; color: var(--hy-faint); }
 
-/* Not `overflow: hidden` — the halo bleeds vertically past the track, the same
+/* Not `overflow: hidden`, the halo bleeds vertically past the track, the same
    way SpendTrend's SVG halo bleeds HALO_PAD past its crisp bar. Horizontally
    it cannot: calBarWidths lays the pair out inside the track less the bleed. */
 .cal__track {
@@ -769,7 +769,7 @@ body {
 /* ── Dashboard: HUD chrome ─────────────────────────────────────────────── */
 /* Corner brackets + scanline + vignette, the same frame language as
    brand/living/hydra-hud.src.html. Fixed to the viewport but mounted only
-   while the Dashboard component is (#408) — a view-scoped instance of the
+   while the Dashboard component is (#408), a view-scoped instance of the
    app-wide chrome rather than a shared-shell change. Pure CSS: a scanline is
    a repeating gradient and the vignette a radial one, never
    backdrop-filter/blur, matching this app's no-GPU-blur discipline. */
@@ -799,7 +799,7 @@ body {
 
 /* ── Dashboard: skeleton loader ────────────────────────────────────────── */
 /* Shown while GetDashboard()'s first call is in flight (dashboard === null
-   in App.tsx) — driven by real React state, not a timer. Shimmer via
+   in App.tsx), driven by real React state, not a timer. Shimmer via
    background-position, never filter/blur. */
 
 .skeleton-block {
@@ -934,7 +934,7 @@ body {
   font-size: 12px;
 }
 
-/* ── Setup banner (#383 — hyctl missing) ──────────────────────────────── */
+/* ── Setup banner (#383, hyctl missing) ──────────────────────────────── */
 
 .setup {
   background: var(--hy-panel);
@@ -1187,11 +1187,11 @@ body {
 .agent__detail { color: var(--hy-dim); font-size: 12px; }
 
 /* Fleet's inline run graph (RunGraph) reuses .graph/.edge/.gnode from the
-   Session graph below — this modifier only trims the chrome that doesn't fit
+   Session graph below, this modifier only trims the chrome that doesn't fit
    inside a run card: no legend, tighter margin/padding. */
 .graph--compact { margin-top: 10px; padding: 8px; }
 
-/* Fleet's state heatmap for a run at/above GroupThreshold — one chip per
+/* Fleet's state heatmap for a run at/above GroupThreshold, one chip per
    agent, grouped by depth, colored the same as .state-dot/.gnode so "shape of
    a run" always means the same colours everywhere in the app. */
 .agrid { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
@@ -1325,14 +1325,14 @@ body {
 .gnode--ok       { stroke: var(--hy-cheap); }
 .gnode--failed   { stroke: var(--hy-expensive); }
 .gnode--running  { stroke: var(--hy-aqua); }
-/* Not an agent run — an edit-target node, say — so it gets a distinct dashed
+/* Not an agent run, an edit-target node, say, so it gets a distinct dashed
    neutral border rather than the "still to run" implication of pending. */
 .gnode--artifact { stroke: var(--hy-faint); stroke-dasharray: 3 3; }
 
 .gnode__label { fill: var(--hy-ink); font-family: var(--hy-font-mono); font-size: 11px; }
 .gnode__sub   { fill: var(--hy-dim); font-family: var(--hy-font-mono); font-size: 10px; }
 
-/* Only artifact (edit-target) nodes open something on click — a plain agent
+/* Only artifact (edit-target) nodes open something on click, a plain agent
    node's label/sub already show everything known about it (#518). */
 .gnode-wrap--clickable { cursor: pointer; }
 .gnode-wrap--clickable:hover .gnode,
@@ -1529,7 +1529,7 @@ body {
 /* Was a fixed-position dock. It is the default surface now (#520), so it fills
    its grid cell instead of floating over another view. */
 
-/* flex:1 + min-height:0, not height:100% — as a flex child in a padded
+/* flex:1 + min-height:0, not height:100%, as a flex child in a padded
    column, 100% overflows and pushes the composer below the fold. */
 .chatv { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
 
@@ -1560,6 +1560,23 @@ body {
 .turn__out { margin: 0; font-size: 14px; line-height: 1.6; white-space: pre-wrap; }
 .turn__wait { margin: 0; color: var(--hy-dim); font-size: 12px; }
 .turn__err { margin: 0; color: var(--hy-expensive); font-size: 12px; font-family: var(--hy-font-mono); }
+/* A fallback is not an error: the answer arrived. It is amber because the
+   model you picked is not the one that replied. */
+.turn__fellback {
+  align-self: flex-start;
+  margin: 2px 0 0;
+  padding: 6px 10px;
+  border-left: 2px solid var(--hy-mid);
+  background: color-mix(in srgb, var(--hy-mid) 8%, transparent);
+  border-radius: 0 3px 3px 0;
+}
+.turn__fellbackRow {
+  margin: 0;
+  color: var(--hy-dim);
+  font-size: 12px;
+  line-height: 1.55;
+  font-family: var(--hy-font-mono);
+}
 .turn__meta {
   align-self: flex-start;
   background: none;
@@ -1755,7 +1772,7 @@ body {
 
 /* ── Reduced motion ────────────────────────────────────────────────────── */
 /* The Dashboard's reveal state (useReveal in reveal.ts) still flips
-   instantly under reduced motion — these rules just stop it from being
+   instantly under reduced motion, these rules just stop it from being
    animated on the way there. */
 @media (prefers-reduced-motion: reduce) {
   .spend-bar__rect,
@@ -1771,7 +1788,7 @@ body {
 }
 
 /* ── Chat split: thread + companion pane ───────────────────────────────── */
-/* The pane is glanceable, never readable — that is what makes a permanently
+/* The pane is glanceable, never readable, that is what makes a permanently
    visible companion affordable, where the old dock had to collapse (#520). */
 
 .chatv-split {
@@ -1810,7 +1827,7 @@ body {
 .ck__empty { margin: 0; font-size: 11.5px; color: var(--hy-dim); line-height: 1.5; }
 .ck__empty code { font-family: var(--hy-font-mono); font-size: 11px; color: var(--hy-cyan); }
 
-/* Active head — the one place the brand gradient appears in the app body. */
+/* Active head, the one place the brand gradient appears in the app body. */
 .ck__card { background: var(--hy-bg-3); border: 1px solid var(--hy-line); border-radius: var(--hy-radius-sm); overflow: hidden; }
 .ck__cardGrad { height: 2px; background: var(--hy-brand); }
 .ck__cardIn { padding: 10px 12px 11px; }
@@ -1996,7 +2013,7 @@ body {
 
 /* ── Tier movement track ───────────────────────────────────────────────── */
 /* Renders only when the router actually changed tier, and never for swarm or
-   SPRT runs — see tierSteps for why a step line would misstate those. */
+   SPRT runs, see tierSteps for why a step line would misstate those. */
 
 .tt {
   margin: 16px 0 0;
@@ -2141,7 +2158,7 @@ body {
   font-size: 13.5px; font-weight: 600; letter-spacing: -.01em;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-/* No prompt was recorded, so the id IS the title — set in mono, because that
+/* No prompt was recorded, so the id IS the title, set in mono, because that
    is what it is. */
 .run__goal--id { font-family: var(--hy-font-mono); font-size: 12px; font-weight: 500; color: var(--hy-dim); }
 .run__id { font-family: var(--hy-font-mono); font-size: 10px; color: var(--hy-faint); flex: 0 0 auto; }

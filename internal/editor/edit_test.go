@@ -19,7 +19,7 @@ import (
 	"github.com/ankit373/hydra/internal/trust"
 
 	// Providers register themselves in init(), and this package does not import
-	// them — without these blanks provider.All() is empty in the test binary and
+	// them, without these blanks provider.All() is empty in the test binary and
 	// every dispatch finds no heads. cmd/hydra imports the same set.
 	_ "github.com/ankit373/hydra/internal/provider/cli"
 )
@@ -29,7 +29,7 @@ import (
 // the difference between an edit and a lost file.
 
 // editSandbox gives a hermetic environment with a config, a workspace rooted at
-// a temp repo, and a fake head on PATH that replies with the given body — so a
+// a temp repo, and a fake head on PATH that replies with the given body, so a
 // real end-to-end edit runs with no network and no API key.
 func editSandbox(t *testing.T, reply string) string {
 	t.Helper()
@@ -48,7 +48,7 @@ func editSandbox(t *testing.T, reply string) string {
 	repo := t.TempDir()
 	// A .git directory that is not a repository: workspace resolution roots
 	// here, but git commands fail, so the .hydra-bak backup is what protects
-	// the file — the path a non-git user is on.
+	// the file, the path a non-git user is on.
 	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -139,7 +139,7 @@ func TestEdit_WritesTheContentAndRecordsTheEdit(t *testing.T) {
 	}
 }
 
-// A ledger rule keyed on a file glob must block an edit to a matching path —
+// A ledger rule keyed on a file glob must block an edit to a matching path,
 // the concrete "excessive agency" containment: a head may be trusted in
 // general but still denied write access to a specific subtree.
 func TestEdit_LedgerResourceRuleBlocksAMatchingFile(t *testing.T) {
@@ -161,7 +161,7 @@ func TestEdit_LedgerResourceRuleBlocksAMatchingFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	if res.Status != "fail" {
-		t.Errorf("status = %q, want fail — the resource rule should have blocked this edit", res.Status)
+		t.Errorf("status = %q, want fail, the resource rule should have blocked this edit", res.Status)
 	}
 
 	allowed := filepath.Join(repo, "main.go")
@@ -172,7 +172,7 @@ func TestEdit_LedgerResourceRuleBlocksAMatchingFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	if res.Status != "ok" {
-		t.Errorf("status = %q, want ok — a non-matching path must not be blocked: %q", res.Status, res.Error)
+		t.Errorf("status = %q, want ok, a non-matching path must not be blocked: %q", res.Status, res.Error)
 	}
 }
 
@@ -235,13 +235,13 @@ func TestEdit_EmptyReplacementLeavesTheFileUntouched(t *testing.T) {
 	if raw, _ := os.ReadFile(file); string(raw) != original {
 		t.Errorf("the file was modified despite the refusal: %q", raw)
 	}
-	// The backup this edit created must not be left behind — a stale one is a
+	// The backup this edit created must not be left behind, a stale one is a
 	// wrong baseline for the next edit and for `hyctl review`.
 	if _, err := os.Stat(file + ".hydra-bak"); err == nil {
 		t.Error("a backup survived a refused edit")
 	}
 	// Scope resolution ran and succeeded well before the empty-replacement
-	// check — failResult used to zero Workspace/GitRoot regardless, making a
+	// check, failResult used to zero Workspace/GitRoot regardless, making a
 	// downstream failure indistinguishable from "scope was never resolved"
 	// (#464).
 	if res.Workspace == "" {
@@ -281,7 +281,7 @@ func TestEdit_RefusesBeforeDispatching(t *testing.T) {
 }
 
 // Root scopes an edit to a Hydra-managed worktree that lives outside every
-// registered workspace (#598) — accepted under the root, still refused for
+// registered workspace (#598), accepted under the root, still refused for
 // denied globs and for paths outside it.
 func TestEdit_RootScopesAHydraWorktree(t *testing.T) {
 	editSandbox(t, marked("package wt"))
@@ -390,7 +390,7 @@ func TestEdit_PassingValidationKeepsTheEdit(t *testing.T) {
 	}
 }
 
-// A validator's exit code is real ground truth — it must reach calibration
+// A validator's exit code is real ground truth, it must reach calibration
 // automatically, both when it passes and when it fails, without a human
 // ever running `hyctl trust record`.
 func TestEdit_ValidationOutcomeReachesCalibration(t *testing.T) {
@@ -433,7 +433,7 @@ func TestEdit_ValidationOutcomeReachesCalibration(t *testing.T) {
 }
 
 // The backup is a verbatim copy of the user's source sitting beside it until
-// the edit is approved. It must not be world-readable — the same defect #273
+// the edit is approved. It must not be world-readable, the same defect #273
 // fixed for the run log's edit snapshots.
 //
 // It is only created for a non-git workspace: with a git root, git itself holds
@@ -497,7 +497,7 @@ func TestAtomicWrite_PreservesModeAndLeavesNoTempFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	if info.Mode().Perm() != 0o755 {
-		t.Errorf("mode = %v after the edit, want 0755 — the script is no longer "+
+		t.Errorf("mode = %v after the edit, want 0755, the script is no longer "+
 			"executable", info.Mode().Perm())
 	}
 
@@ -592,7 +592,7 @@ func TestRollback_RestoresFromEachSource(t *testing.T) {
 func TestTSCTemplate_OnlyWhenTSCIsInstalled(t *testing.T) {
 	root := t.TempDir()
 	if got := tscTemplate(root); got != "" {
-		t.Errorf("tscTemplate = %q with no node_modules, want empty — naming a "+
+		t.Errorf("tscTemplate = %q with no node_modules, want empty, naming a "+
 			"binary that is not there fails every TypeScript edit at validation "+
 			"and rolls back a correct change", got)
 	}
@@ -629,7 +629,7 @@ func TestDiffStats_CountsFromTheBackupWhenGitIsUnavailable(t *testing.T) {
 
 	added, removed := diffStats(file, "one\n", "", backup, true)
 	if added != 2 || removed != 0 {
-		t.Errorf("diffStats = (%d, %d), want (2, 0) — counted from the edit script, "+
+		t.Errorf("diffStats = (%d, %d), want (2, 0), counted from the edit script, "+
 			"not by re-parsing diff(1) (#260)", added, removed)
 	}
 }
@@ -702,7 +702,7 @@ func TestAtomicWrite_OverwritesAndPreservesContent(t *testing.T) {
 	}
 
 	// Content with no trailing newline, embedded NULs and CRLF must round-trip
-	// byte for byte — atomicWrite is not a text transform.
+	// byte for byte, atomicWrite is not a text transform.
 	tricky := "no newline at end\r\nwith crlf\x00and a nul"
 	if err := atomicWrite(path, tricky); err != nil {
 		t.Fatal(err)
@@ -762,7 +762,7 @@ func TestStripOuterFence_InnerFencesSurvive(t *testing.T) {
 
 // A rename that cannot complete must leave no temp file. Windows refuses a
 // rename onto a file another process has open, so this is a real collision
-// path, not a hypothetical one — and every collision leaving a .hydra-tmp.*
+// path, not a hypothetical one, and every collision leaving a .hydra-tmp.*
 // behind litters the user's source tree.
 func TestAtomicWrite_FailedRenameLeavesNoTempFile(t *testing.T) {
 	dir := t.TempDir()
@@ -845,7 +845,7 @@ func TestRollback_UsesGitInARepository(t *testing.T) {
 	}
 }
 
-// A model that ignored the instruction entirely — no markers, no content —
+// A model that ignored the instruction entirely, no markers, no content,
 // against a file that does not exist yet is a different failure from an empty
 // replacement: there is nothing to preserve, and the file must not be created.
 func TestEdit_MarkerParseFailedOnANewFile(t *testing.T) {
@@ -862,7 +862,7 @@ func TestEdit_MarkerParseFailedOnANewFile(t *testing.T) {
 		t.Fatalf("status = %q, want fail", res.Status)
 	}
 	if res.Error != "marker_parse_failed" {
-		t.Errorf("Error = %q, want marker_parse_failed — an empty_replacement "+
+		t.Errorf("Error = %q, want marker_parse_failed, an empty_replacement "+
 			"would imply there was content to lose", res.Error)
 	}
 	if _, statErr := os.Stat(file); statErr == nil {
@@ -892,7 +892,7 @@ func TestEdit_TerminatorLeakageIsRefused(t *testing.T) {
 }
 
 // A write that cannot land must be reported as write_failed and must not
-// consume the backup — the file is unchanged, so its baseline still applies.
+// consume the backup, the file is unchanged, so its baseline still applies.
 func TestEdit_UnwritableTargetIsReportedNotSilent(t *testing.T) {
 	repo := editSandbox(t, marked("new content"))
 

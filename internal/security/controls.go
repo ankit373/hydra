@@ -14,7 +14,7 @@ import (
 
 // Does a configured control actually run? A control that is declared but
 // cannot fire reads as protection while doing nothing (see #424, #425). Answered
-// by reading call sites, not config — hence Control.Verified.
+// by reading call sites, not config, hence Control.Verified.
 
 // Control is one security control and whether it can actually fire.
 type Control struct {
@@ -23,7 +23,7 @@ type Control struct {
 	Declared bool `json:"declared"`
 	// Wired: it can actually take effect at runtime.
 	Wired bool `json:"wired"`
-	// Limited marks a control that fires but is weaker than it appears —
+	// Limited marks a control that fires but is weaker than it appears,
 	// distinct from inert, and it must not be reported as simply healthy.
 	Limited bool   `json:"limited,omitempty"`
 	Detail  string `json:"detail"`
@@ -77,7 +77,7 @@ func Controls(events []ledger.Event, audit PolicyAudit, chain ledger.ChainResult
 // amount of introspection tells a running binary whether its caller used a
 // return value. It was established by reading the source, is reported with
 // Verified:false so nobody mistakes it for an observation, and MUST be
-// updated by hand if the wiring lands — the same deliberate-drift discipline
+// updated by hand if the wiring lands, the same deliberate-drift discipline
 // desktop/api/dashboard_test.go already uses for its duplicated tier key.
 const filePolicyEnforcementSite = "internal/parallel/parallel.go:242"
 
@@ -95,7 +95,7 @@ func filePolicyControl() Control {
 		return c
 	}
 	c.Detail = fmt.Sprintf("%d rule(s) declared (cost ceilings, diff-size caps, atomic writes, "+
-		"worktree isolation) — none are applied: the only caller evaluates them and discards the "+
+		"worktree isolation), none are applied: the only caller evaluates them and discards the "+
 		"result at %s, so no cap takes effect at runtime", n, filePolicyEnforcementSite)
 	return c
 }
@@ -114,16 +114,16 @@ func a2aConflictControl() Control {
 	h, err := a2a.Load(path)
 	if err != nil || h == nil {
 		// Nothing observed either way. Reported as limited rather than active
-		// — claiming a control is working on the strength of never having
+		//, claiming a control is working on the strength of never having
 		// seen it run is the kind of false assurance this section exists to
-		// remove — but not as inert, which would assert a defect just as
+		// remove, but not as inert, which would assert a defect just as
 		// baselessly.
 		c.Wired, c.Limited = true, true
 		c.Detail = "no handoff has been written yet, so whether conflict detection can fire is undetermined"
 		return c
 	}
 	if len(h.Files) == 0 {
-		c.Detail = "the last handoff carries no file list, and ConflictsWith needs one — " +
+		c.Detail = "the last handoff carries no file list, and ConflictsWith needs one, " +
 			"concurrent edits to the same file cannot be detected"
 		return c
 	}
@@ -155,7 +155,7 @@ func boundApprovalControl(events []ledger.Event) Control {
 		return c
 	}
 	c.Limited = true
-	c.Detail = fmt.Sprintf("%d bound approval(s), oldest %s — an approval is never consumed and "+
+	c.Detail = fmt.Sprintf("%d bound approval(s), oldest %s, an approval is never consumed and "+
 		"never expires, so any one of them can authorise unlimited later executions", bound, oldest)
 	return c
 }
@@ -169,7 +169,7 @@ func ledgerRuleControl(a PolicyAudit) Control {
 	unreachable := a.ShadowedCount()
 	if unreachable > 0 {
 		c.Limited = true
-		c.Detail = fmt.Sprintf("%d of %d rule(s) are unreachable — an earlier rule always matches first, "+
+		c.Detail = fmt.Sprintf("%d of %d rule(s) are unreachable, an earlier rule always matches first, "+
 			"so they can never fire", unreachable, len(a.Rules))
 		return c
 	}
@@ -178,7 +178,7 @@ func ledgerRuleControl(a PolicyAudit) Control {
 }
 
 // chainControl reports whether tamper-evidence *works*, not whether tampering
-// happened — the tampering itself is the chain check's and IntegrityIntact's
+// happened, the tampering itself is the chain check's and IntegrityIntact's
 // job. A chain that detected a break is a control doing exactly what it is
 // for, so it stays wired; the one genuinely degraded state is a missing
 // anchor, where deletion from the end can no longer be ruled out.
@@ -186,7 +186,7 @@ func chainControl(chain ledger.ChainResult) Control {
 	c := Control{Name: "Audit-log tamper evidence", Declared: true, Wired: true, Verified: true}
 	switch {
 	case chain.Chained == 0:
-		c.Detail = "no chained events yet — nothing to verify"
+		c.Detail = "no chained events yet, nothing to verify"
 	case chain.Truncated:
 		c.Detail = "working: it detected that records were deleted from the end of the ledger"
 	case !chain.Intact:

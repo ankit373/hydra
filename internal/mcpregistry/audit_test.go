@@ -14,7 +14,7 @@ import (
 
 // withStubbedScoringDeps points ComputeScore's external calls (OSV.dev,
 // GitHub) at local httptest servers returning empty/neutral responses, so
-// audit tests that resolve a server stay fast, offline, and deterministic —
+// audit tests that resolve a server stay fast, offline, and deterministic,
 // scoring's own behavior is covered separately in score_test.go.
 func withStubbedScoringDeps(t *testing.T) {
 	t.Helper()
@@ -129,7 +129,7 @@ func TestAudit_PersistsAliasesSoClassificationForToolWorksAfterward(t *testing.T
 	}
 
 	// Phase 2's automaton starts a newly-seen clean server at PROVISIONAL,
-	// not TRUSTED, so this shouldn't be classified yet — but it also
+	// not TRUSTED, so this shouldn't be classified yet, but it also
 	// shouldn't be "never seen" any more, and that alias must now resolve.
 	aliases, err := LoadAliases()
 	if err != nil {

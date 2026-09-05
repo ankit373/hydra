@@ -28,7 +28,7 @@ type EditedFile struct {
 	// Radius and Dependents are only meaningful when Known.
 	Radius     float64 `json:"radius,omitempty"`
 	Dependents int     `json:"dependents,omitempty"`
-	// Known is false when graph.json does not index this file — reported as
+	// Known is false when graph.json does not index this file, reported as
 	// unknown rather than as a leaf, because the two are not the same claim.
 	Known bool `json:"known"`
 }
@@ -128,7 +128,7 @@ func blastCheck(r BlastReport) Check {
 	const name = "Edit blast radius"
 	if !r.GraphPresent {
 		return Check{Name: name, Status: "no code graph",
-			Detail: "graph.json is absent, so the reach of an agent's edits cannot be scored — " +
+			Detail: "graph.json is absent, so the reach of an agent's edits cannot be scored, " +
 				"generate one with `hyctl graph` to enable this"}
 	}
 	if len(r.Files) == 0 {
@@ -140,7 +140,7 @@ func blastCheck(r BlastReport) Check {
 		return Check{Name: name, Status: fmt.Sprintf("%d file(s), none with dependents", len(r.Files)),
 			Detail: fmt.Sprintf("%d edited file(s) are not indexed by the graph, so their reach is unknown", r.Unknown)}
 	}
-	detail := fmt.Sprintf("widest reach: %s — %d dependent(s), radius %.2f×", top.File, top.Dependents, top.Radius)
+	detail := fmt.Sprintf("widest reach: %s, %d dependent(s), radius %.2f×", top.File, top.Dependents, top.Radius)
 	if r.Percolates {
 		detail += fmt.Sprintf("; the graph percolates (kappa=%.1f), so an edit to a hub can cascade", r.Kappa)
 	}

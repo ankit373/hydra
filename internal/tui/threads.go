@@ -2,7 +2,7 @@
 
 package tui
 
-// threads.go — parallel chat threads (#598): per-thread task state, the chip
+// threads.go, parallel chat threads (#598): per-thread task state, the chip
 // strip, switching/attention keys, and split bookkeeping. Worktree isolation
 // lives in thread_worktree.go, queue-on-overlap in thread_queue.go.
 
@@ -15,14 +15,14 @@ import (
 	"github.com/ankit373/hydra/internal/a2a"
 )
 
-// ckMaxThreads bounds the strip and keeps every thread reachable by alt+1–9.
+// ckMaxThreads bounds the strip and keeps every thread reachable by alt+1-9.
 const ckMaxThreads = 9
 
 // ckThread is one chat thread: its own scrollback, input draft, task pipeline,
 // code panel, and (for edit work) worktree + file holds. Threads are held by
 // pointer so a tea.Cmd result can land on the right one whatever is current.
 type ckThread struct {
-	id   int    // stable 1-based id — the chip number and the alt+N target
+	id   int    // stable 1-based id, the chip number and the alt+N target
 	name string // short chip label, from the first prompt
 
 	input  string
@@ -33,7 +33,7 @@ type ckThread struct {
 	planWait *ckWait
 	confirm  *ckWait
 	lastDone *ckTask
-	attn     bool // finished needing eyes (a failure) — cleared on visit
+	attn     bool // finished needing eyes (a failure), cleared on visit
 
 	bg         bool        // re-parented to the agents view
 	queued     *ckQueued   // waiting on an overlap blocker; nil otherwise
@@ -42,9 +42,9 @@ type ckThread struct {
 	clock      a2a.Clock   // causal backstop across threads
 	inEdit     bool        // an in-place (no-isolation) edit task is running
 	discardArm bool        // first x pressed; the next x discards the worktree
-	lastRunID  string      // latest task's run id — the agents-view join key
+	lastRunID  string      // latest task's run id, the agents-view join key
 
-	// code panel — per thread, each shows its own last edit
+	// code panel, per thread, each shows its own last edit
 	codeLang  string
 	codeLines []string
 	codeShown int
@@ -59,7 +59,7 @@ func newThread(id int) *ckThread {
 func ckThreadAgent(id int) string { return fmt.Sprintf("thread-%d", id) }
 
 // status is the chip state: queued < running < needs < done < idle, evaluated
-// in gate order — a queued thread is queued even though nothing executes yet.
+// in gate order, a queued thread is queued even though nothing executes yet.
 func (t *ckThread) status() string {
 	switch {
 	case t.queued != nil:
@@ -93,7 +93,7 @@ func ckThreadGlyph(status string) string {
 
 // ── registry ──────────────────────────────────────────────────────────────────
 
-// withThreads guarantees thread 1 exists — a bare Cockpit{} must render and
+// withThreads guarantees thread 1 exists, a bare Cockpit{} must render and
 // route keys without panicking, exactly like the pre-thread model did.
 func (m Cockpit) withThreads() Cockpit {
 	if len(m.threads) == 0 {
@@ -116,7 +116,7 @@ func (m Cockpit) threadByID(id int) *ckThread {
 	return nil
 }
 
-// visibleThreads are the strip's chips — backgrounded threads live in the
+// visibleThreads are the strip's chips, backgrounded threads live in the
 // agents view instead.
 func (m Cockpit) visibleThreads() []*ckThread {
 	var out []*ckThread
@@ -145,15 +145,15 @@ func (m Cockpit) threadCounts() (running, needs, queued int) {
 
 // ── switching ─────────────────────────────────────────────────────────────────
 
-// addThread opens a fresh thread and makes it current. Capped so alt+1–9 can
+// addThread opens a fresh thread and makes it current. Capped so alt+1-9 can
 // always address every thread; the cap refuses visibly, never silently.
 func (m Cockpit) addThread() Cockpit {
 	if len(m.threads) >= ckMaxThreads {
-		m.flash = fmt.Sprintf("thread limit %d — apply or reuse an existing one", ckMaxThreads)
+		m.flash = fmt.Sprintf("thread limit %d, apply or reuse an existing one", ckMaxThreads)
 		return m
 	}
 	t := newThread(m.nextID)
-	t.log = []string{ckDimS.Render(fmt.Sprintf("thread %d — type a task and press enter.", t.id))}
+	t.log = []string{ckDimS.Render(fmt.Sprintf("thread %d, type a task and press enter.", t.id))}
 	m.nextID++
 	m.threads = append(m.threads, t)
 	return m.focusThread(t.id)
@@ -183,7 +183,7 @@ func (m Cockpit) focusThread(id int) Cockpit {
 	}
 	// jump also closes the transient overlays, wherever the key was pressed.
 	m = m.jump(ckViewChat)
-	// A split showing the same thread twice says nothing — drop the pin.
+	// A split showing the same thread twice says nothing, drop the pin.
 	if m.split && m.splitID == t.id {
 		m.split = false
 	}
@@ -205,7 +205,7 @@ func (m Cockpit) cycleThread(dir int) Cockpit {
 	}
 	vis := m.visibleThreads()
 	if len(vis) < 2 {
-		m.flash = "one thread — ctrl+t opens another"
+		m.flash = "one thread, ctrl+t opens another"
 		return m
 	}
 	curID := m.th().id
@@ -220,7 +220,7 @@ func (m Cockpit) cycleThread(dir int) Cockpit {
 	return m.focusThread(next.id)
 }
 
-// nextAttention jumps to the next thread needing input (gates, failures) —
+// nextAttention jumps to the next thread needing input (gates, failures),
 // backgrounded threads included, since their pings point here.
 func (m Cockpit) nextAttention() Cockpit {
 	n := len(m.threads)
@@ -252,7 +252,7 @@ func (m Cockpit) toggleSplit() Cockpit {
 	}
 	pin := m.pickSplitPin()
 	if pin == 0 {
-		m.flash = "no second thread to pin — ctrl+t opens one"
+		m.flash = "no second thread to pin, ctrl+t opens one"
 		return m
 	}
 	m.split, m.splitID = true, pin
@@ -275,11 +275,11 @@ func (m Cockpit) pickSplitPin() int {
 }
 
 // dropSplitIfNarrow disables an active split when the terminal shrinks below
-// the split minimum — one honest pane instead of two garbled ones.
+// the split minimum, one honest pane instead of two garbled ones.
 func (m Cockpit) dropSplitIfNarrow() Cockpit {
 	if m.split && m.w < ckSplitMinCols {
 		m.split = false
-		m.flash = fmt.Sprintf("split closed — needs ≥%d cols", ckSplitMinCols)
+		m.flash = fmt.Sprintf("split closed, needs ≥%d cols", ckSplitMinCols)
 	}
 	return m
 }

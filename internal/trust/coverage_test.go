@@ -26,7 +26,7 @@ func TestDefaultPaths_LiveUnderTheUsersHydraDir(t *testing.T) {
 			t.Errorf("path for %s = %q, want %q", name, got, want)
 		}
 	}
-	// The two must not collide — one is the training record, the other the run
+	// The two must not collide, one is the training record, the other the run
 	// ledger, and merging them would corrupt both.
 	if DefaultPath() == DefaultLogPath() {
 		t.Error("calibration and run-log paths are the same file")
@@ -58,7 +58,7 @@ func TestDecision_StringCoversBothOutcomes(t *testing.T) {
 		t.Errorf("DecisionAccept.String() = %q", got)
 	}
 	// Anything else is the budget-exhausted outcome, which must be labelled
-	// distinctly — "we ran out of samples" is not "we are confident".
+	// distinctly, "we ran out of samples" is not "we are confident".
 	other := Decision(99)
 	if got := other.String(); got != "stopped_on_budget" {
 		t.Errorf("Decision(99).String() = %q, want stopped_on_budget", got)
@@ -106,11 +106,11 @@ func TestNew_MissingCalibrationFileIsAFreshStore(t *testing.T) {
 	}
 }
 
-// Malformed lines must be skipped, not abort the load — the file is appended to
+// Malformed lines must be skipped, not abort the load, the file is appended to
 // by concurrent runs and a crash can truncate the last record.
 func TestNew_SkipsMalformedRecords(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "cal.jsonl")
-	// outcome is an int on the wire, not a label — writing "correct" there makes
+	// outcome is an int on the wire, not a label, writing "correct" there makes
 	// the whole line fail to unmarshal and be skipped as malformed, which is how
 	// the first version of this fixture silently tested nothing.
 	good := `{"ts":"2026-08-01T00:00:00Z","source":"model:a","domain":"go","said_correct":true,"outcome":1}`
@@ -158,7 +158,7 @@ func TestRecord_PersistsAcrossReload(t *testing.T) {
 	after := reloaded.LLR("model:x", "go", true)
 
 	if math.Abs(before-after) > 1e-9 {
-		t.Errorf("LLR was %v in memory and %v after reload — records are not "+
+		t.Errorf("LLR was %v in memory and %v after reload, records are not "+
 			"surviving the round trip", before, after)
 	}
 }
@@ -175,7 +175,7 @@ func TestRecord_UnwritablePathIsAnError(t *testing.T) {
 		return
 	}
 	if err := c.Update("model:x", "go", true, OutcomeCorrect); err == nil {
-		t.Error("recording under a blocked path reported success — calibration " +
+		t.Error("recording under a blocked path reported success, calibration " +
 			"would silently never accumulate")
 	}
 }
