@@ -31,7 +31,12 @@ export function SetupBanner({
       const r = await InstallHyctl()
       setResult(r)
       if (r.ok) {
-        onChanged({ found: true, version: r.version, supported: status.supported })
+        onChanged({
+          found: true,
+          version: r.version,
+          versionError: r.versionError,
+          supported: status.supported,
+        })
       }
     } finally {
       setBusy(false)
@@ -70,6 +75,12 @@ export function SetupBanner({
 
       {result && !result.ok && (
         <p className="setup__error">{result.error || 'Install failed for an unknown reason.'}</p>
+      )}
+
+      {/* The install worked; only the version read did not. Saying which beats
+          a button that reads "Installed" with a blank where a version goes. */}
+      {result?.ok && result.versionError && (
+        <p className="setup__body">Installed, but its version could not be read: {result.versionError}</p>
       )}
 
       {result?.log && (

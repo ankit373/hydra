@@ -306,6 +306,8 @@ export interface HyctlStatus {
   found: boolean
   path?: string
   version?: string
+  /** Why version is empty despite hyctl being found — a timeout reads differently from no output. */
+  versionError?: string
   /** False on platforms InstallHyctl cannot drive (Windows) — see its Go doc. */
   supported: boolean
 }
@@ -313,6 +315,8 @@ export interface HyctlStatus {
 export interface InstallResult {
   ok: boolean
   version?: string
+  /** Set when the post-install probe could not read a version; the install still succeeded. */
+  versionError?: string
   /** The installer's combined stdout/stderr, shown on both success and failure. */
   log: string
   error?: string

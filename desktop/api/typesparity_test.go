@@ -95,6 +95,8 @@ func TestTypesTS_MirrorsEveryFieldOnTheWire(t *testing.T) {
 		{"ChatReply", ChatReply{}},
 		{"PendingQuestion", PendingQuestion{}},
 		{"QuestionQueue", QuestionQueue{}},
+		{"HyctlStatus", HyctlStatus{}},
+		{"InstallResult", InstallResult{}},
 	} {
 		t.Run(c.iface, func(t *testing.T) {
 			ts := tsInterface(t, src, c.iface)
@@ -140,6 +142,8 @@ func TestTypesTS_DeclaresNoFieldTheBackendNeverSends(t *testing.T) {
 		{"ChatReply", ChatReply{}},
 		{"PendingQuestion", PendingQuestion{}},
 		{"QuestionQueue", QuestionQueue{}},
+		{"HyctlStatus", HyctlStatus{}},
+		{"InstallResult", InstallResult{}},
 	} {
 		t.Run(c.iface, func(t *testing.T) {
 			g := jsonFields(c.goVal)
