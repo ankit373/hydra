@@ -355,6 +355,7 @@ func TestTrainDictRefusesADegenerateCorpus(t *testing.T) {
 // several times larger *on disk* than a packed one at the same logical size,
 // because every small blob is charged a whole filesystem block.
 func TestPackedStorageIsSmallerOnDiskThanLoose(t *testing.T) {
+	requireBlockAccounting(t)
 	s := openStore(t)
 	loose := t.TempDir()
 
@@ -390,6 +391,42 @@ func TestPackedStorageIsSmallerOnDiskThanLoose(t *testing.T) {
 	}
 	t.Logf("packed %d B vs loose %d B on disk (%.1fx) for %d blobs", packed, looseBytes,
 		float64(looseBytes)/float64(packed), n)
+}
+
+// The structural claim behind the disk saving, checkable on every platform:
+// however many blobs go in, the store is a fixed number of files. That is what
+// makes the per-file block charge a constant rather than something that scales
+// with the corpus.
+//
+// Note this is a claim about *allocated* space, not logical bytes: at 200 small
+// blobs the pack is larger than the loose bytes added up, because each frame
+// carries zstd framing. The win is that 200 block charges become two.
+func TestPackedStorageIsAFixedNumberOfFiles(t *testing.T) {
+	dir := t.TempDir()
+	s, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 200; i++ {
+		if _, err := s.Put(fmt.Sprintf("blob number %d", i), 1); err != nil {
+			t.Fatal(err)
+		}
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) > 3 { // pack, index, and at most a dictionary
+		names := make([]string, 0, len(entries))
+		for _, e := range entries {
+			names = append(names, e.Name())
+		}
+		t.Errorf("200 blobs produced %d files (%v); the store must not scale its file count with the corpus",
+			len(entries), names)
+	}
+	if s.Len() != 200 {
+		t.Errorf("store holds %d blobs, want 200", s.Len())
+	}
 }
 
 // Put holds a lock across a read-modify-append of the pack. If it did not, two
@@ -450,6 +487,26 @@ func TestStatSummarisesTheStore(t *testing.T) {
 // ── helpers ─────────────────────────────────────────────────────────────────
 
 func nan() float64 { var z float64; return z / z }
+
+// requireBlockAccounting skips when util.DiskBytes cannot see past logical
+// length. Windows does not expose allocation size through fs.FileInfo, so the
+// block overhead this test measures is invisible there — the saving is still
+// real on NTFS, it just cannot be observed from Go, and asserting it anyway
+// would be testing the platform rather than the store.
+func requireBlockAccounting(t *testing.T) {
+	t.Helper()
+	probe := filepath.Join(t.TempDir(), "one-byte")
+	if err := os.WriteFile(probe, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(probe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if util.DiskBytes(info) <= info.Size() {
+		t.Skip("this filesystem does not report allocated blocks, so on-disk cost cannot be measured here")
+	}
+}
 
 // seedCorpus writes samples that share a preamble but differ in body, which is
 // what a real payload corpus looks like: one system prompt, many tasks. A
