@@ -17,6 +17,9 @@ func TestDefaultPaths_AreDistinctAndUnderHydraDir(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
+	// A developer or CI runner with a stray $HYDRA_HOME already exported must
+	// not leak into this "no override" case (#442 was found exactly this way).
+	t.Setenv("HYDRA_HOME", "")
 
 	log, policy := DefaultPath(), DefaultPolicyPath()
 	if !strings.HasPrefix(log, filepath.Join(home, ".hydra")) {
@@ -28,6 +31,23 @@ func TestDefaultPaths_AreDistinctAndUnderHydraDir(t *testing.T) {
 	if log == policy {
 		t.Error("the ledger and its policy are the same file; appending events " +
 			"would destroy the rules")
+	}
+}
+
+// $HYDRA_HOME must win over $HOME for the ledger — the whole point of #442 is
+// that this subsystem is exactly what silently ignored it before.
+func TestDefaultPaths_PreferHydraHomeOverHome(t *testing.T) {
+	home := t.TempDir()
+	hydraHome := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("HYDRA_HOME", hydraHome)
+
+	if got, want := DefaultPath(), filepath.Join(hydraHome, "mcp_ledger.jsonl"); got != want {
+		t.Errorf("DefaultPath() = %q, want %q ($HYDRA_HOME, not $HOME)", got, want)
+	}
+	if got, want := DefaultPolicyPath(), filepath.Join(hydraHome, "mcp_policy.json"); got != want {
+		t.Errorf("DefaultPolicyPath() = %q, want %q ($HYDRA_HOME, not $HOME)", got, want)
 	}
 }
 
@@ -44,6 +64,42 @@ func TestLoadPolicy_MissingFileIsDefaultAllow(t *testing.T) {
 	}
 	if len(p.Rules) != 0 {
 		t.Errorf("a missing policy produced %d rules", len(p.Rules))
+	}
+}
+
+// LoadPolicy caches its result per path (a dispatch fallback loop or swarm
+// fan-out calls it once per candidate head for the same content), but a real
+// edit to the file must never be masked by a stale cache entry — the whole
+// reason it keys on mtime+size instead of remembering the first read forever.
+func TestLoadPolicy_CacheInvalidatesOnRealEdit(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "policy.json")
+
+	if err := os.WriteFile(path, []byte(`{"default":"allow","rules":[]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	p1, err := LoadPolicy(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p1.Default != Allow {
+		t.Fatalf("first load Default = %q, want Allow", p1.Default)
+	}
+
+	// Deliberately a different size, so this can never collide with the first
+	// read's cache key regardless of filesystem mtime resolution.
+	body := `{"default":"deny","rules":[{"tool":"fs","resource":"/repo/*","action":"write","decision":"allow"}]}`
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	p2, err := LoadPolicy(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p2.Default != Deny {
+		t.Errorf("after editing the file, Default = %q, want Deny — the cache served a stale read", p2.Default)
+	}
+	if len(p2.Rules) != 1 {
+		t.Errorf("after editing the file, got %d rule(s), want 1 — the cache served a stale read", len(p2.Rules))
 	}
 }
 

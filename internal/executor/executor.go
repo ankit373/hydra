@@ -56,6 +56,10 @@ type Executor interface {
 // different questions, and only one function should answer the second.
 func Unroutable(h provider.Head) string {
 	switch {
+	case h.Meta["embedding_only"] == "true":
+		// Discovered and shown, never dispatched: it has no completion API,
+		// so every dispatch to it would fail (#532).
+		return "embeddings only — never routed"
 	case h.Source == "registry":
 		return "" // agy tiers — AgyExecutor handles them
 	case h.Source == "port" || h.Source == "env" || h.Endpoint != "":

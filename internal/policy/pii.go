@@ -64,15 +64,34 @@ var detectors = []detector{
 }
 
 // ContainsPII reports whether the prompt likely contains sensitive data.
+// Honors req.PII when already computed, rather than re-running the scan.
 func ContainsPII(req Request) bool {
+	if req.PII != nil {
+		return *req.PII
+	}
+	return len(DetectPII(req)) > 0
+}
+
+// DetectPII returns the names of every detector that matched, deduped and in
+// declaration order.
+//
+// The detectors have always known *what* they matched — "aws access key id" is
+// a categorically different finding from "email" — but the only accessor was
+// ContainsPII's bool, so the distinction was discarded at the first call site
+// and everything downstream could say no more than "PII". Callers that record
+// or report a detection want the names; ContainsPII is now defined in terms of
+// this rather than duplicating the loop, so the two can never disagree.
+func DetectPII(req Request) []string {
+	var out []string
 	for _, d := range detectors {
 		for _, loc := range d.re.FindAllStringSubmatchIndex(req.Prompt, -1) {
 			if d.valid == nil || d.valid(req.Prompt, loc) {
-				return true
+				out = append(out, d.name)
+				break // one entry per detector, however many times it hit
 			}
 		}
 	}
-	return false
+	return out
 }
 
 // validLuhn checks the card checksum. Without it, any 16-digit identifier —

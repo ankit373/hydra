@@ -1,6 +1,28 @@
 import { useEffect, useRef, useState } from 'react'
-import type { Breakdown, CalibrationRow, Dashboard as DashboardData, TrustPanel } from '../types'
-import { clockTime, costBand, govBand, ms, pct, sourceKind, sourceLabel, tokens, usd, usdExact } from '../format'
+import type {
+  Breakdown,
+  CalibrationRow,
+  Dashboard as DashboardData,
+  RecentCall,
+  TrustPanel,
+} from '../types'
+import {
+  calibrationLabel,
+  calibrationStrength,
+  calibrationWidthPct,
+  clockTime,
+  contextHeadroom,
+  contextModeText,
+  costBand,
+  govBand,
+  ms,
+  pct,
+  sourceKind,
+  sourceLabel,
+  tokens,
+  usd,
+  usdExact,
+} from '../format'
 import { ArcGauge, Sparkline, SpendTrend, TrustArc } from './DashboardCharts'
 import { useCountUp, useReveal } from '../reveal'
 
@@ -10,12 +32,28 @@ import { useCountUp, useReveal } from '../reveal'
  * than a fake timeout. Once data lands the HUD chrome (corner brackets,
  * scanline, vignette) stays mounted for the lifetime of the view; only the
  * body swaps from skeleton to `DashboardContent`.
+ *
+ * The drawer used to coordinate with a floating ChatDock (#460): both were
+ * `position: fixed` overlays that could sandwich each other. Chat is a view of
+ * its own now (#520), so there is no second overlay to collide with and the
+ * mutual-exclusion dance is gone.
  */
-export function Dashboard({ data }: { data: DashboardData | null }) {
+export function Dashboard({
+  data,
+  onOpenRun,
+}: {
+  data: DashboardData | null
+  /** Opens one recent request's run. Absent means the rows stay inert. */
+  onOpenRun?: (runID: string) => void
+}) {
   return (
     <>
       <HudChrome />
-      {data ? <DashboardContent data={data} /> : <DashboardSkeleton />}
+      {data ? (
+        <DashboardContent data={data} onOpenRun={onOpenRun} />
+      ) : (
+        <DashboardSkeleton />
+      )}
     </>
   )
 }
@@ -38,8 +76,8 @@ function HudChrome() {
 function DashboardHeader() {
   return (
     <header className="view__head">
-      <h1 className="view__title view__title--brand">Dashboard</h1>
-      <p className="view__sub">Spend, governor pressure, and the trust ensemble's record.</p>
+      <h1 className="view__title view__title--brand">Usage</h1>
+      <p className="view__sub">What you spent, how much context budget is left, and which models earned their answers.</p>
     </header>
   )
 }
@@ -73,7 +111,13 @@ function SkeletonCard() {
   )
 }
 
-function DashboardContent({ data }: { data: DashboardData }) {
+function DashboardContent({
+  data,
+  onOpenRun,
+}: {
+  data: DashboardData
+  onOpenRun?: (runID: string) => void
+}) {
   const [drawerRow, setDrawerRow] = useState<Breakdown | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
 
@@ -102,7 +146,7 @@ function DashboardContent({ data }: { data: DashboardData }) {
         <TrustCard data={data} />
       </div>
 
-      {data.hasData ? <Breakdowns data={data} onSelectModel={openDrawer} /> : <EmptyState />}
+      {data.hasData ? <Breakdowns data={data} onSelectModel={openDrawer} onOpenRun={onOpenRun} /> : <EmptyState />}
 
       <CalibrationLeaderboard rows={data.calibration} />
 
@@ -121,7 +165,7 @@ function SpendCard({ data }: { data: DashboardData }) {
       <div className="card">
         <div className="card__label">Spend today</div>
         <div className="card__value card__value--unknown">no data yet</div>
-        <div className="card__note">Nothing has dispatched on this machine.</div>
+        <div className="card__note">No requests on this machine yet.</div>
       </div>
     )
   }
@@ -149,29 +193,52 @@ function GovernorCard({ data }: { data: DashboardData }) {
   if (!governor.known) {
     return (
       <div className="card">
-        <div className="card__label">Orchestrator context</div>
+        <div className="card__label">Context budget</div>
         <div className="card__value card__value--unknown">unknown</div>
         {/* Not 0%. Nothing has reported usage, and 0% would read as headroom. */}
-        <div className="card__note">No orchestrator has reported its usage.</div>
+        <div className="card__note">Nothing has reported how much context it is using.</div>
       </div>
     )
   }
   const band = govBand(governor.pct)
+  const headroom = contextHeadroom(governor)
   return (
     <div className={`card gov--${band}`}>
-      <div className="card__label">Orchestrator context</div>
+      <div className="card__label">Context budget</div>
       <div className="arc-wrap">
         <ArcGauge
           fraction={Math.min(governor.pct, 100) / 100}
           color={`var(--hy-gov-${band})`}
           centerValue={`${Math.round(displayPct)}%`}
-          centerLabel={governor.mode}
+          centerLabel={governor.effectiveMode || governor.mode}
           revealed={revealed}
         />
       </div>
-      <div className="card__note">mode: {governor.mode}</div>
+      {/* "mode: warning" names a band from a table the reader has never seen.
+          Say what it means, and add the headroom the rate model has computed
+          since #557 and nothing surfaced. */}
+      <div className="card__note">
+        {contextModeText(governor.effectiveMode || governor.mode)}
+        {headroom !== null && (
+          <>
+            {' \u00B7 about '}
+            {headroom} update{headroom === 1 ? '' : 's'} of room
+          </>
+        )}
+      </div>
     </div>
   )
+}
+
+/**
+ * What the consensus machinery actually bought, in a sentence. The ring beside
+ * it shows the same comparison; this says which direction is good.
+ */
+function consensusNote(t: TrustPanel): string {
+  const runs = `${t.runs} check${t.runs === 1 ? '' : 's'}`
+  if (t.meanSamples <= 0 || t.fixedSwarmN <= 0) return runs
+  const asked = t.meanSamples.toFixed(1)
+  return `${runs} \u00B7 asked ${asked} models on average instead of a fixed ${t.fixedSwarmN}`
 }
 
 function TrustCard({ data }: { data: DashboardData }) {
@@ -181,21 +248,20 @@ function TrustCard({ data }: { data: DashboardData }) {
   if (trust.runs === 0) {
     return (
       <div className="card">
-        <div className="card__label">Trust ensemble</div>
-        <div className="card__value card__value--unknown">no runs</div>
+        <div className="card__label">Consensus checks</div>
+        <div className="card__value card__value--unknown">none yet</div>
         <div className="card__note">
-          Try <code>hyctl dispatch --confidence 0.95</code>
+          Asking several models the same question, and stopping once they agree. Try{' '}
+          <code>hyctl dispatch --confidence 0.95</code>
         </div>
       </div>
     )
   }
   return (
     <div className="card">
-      <div className="card__label">Trust ensemble</div>
+      <div className="card__label">Consensus checks</div>
       <TrustCompare trust={trust} revealed={revealed} />
-      <div className="card__note">
-        {trust.runs} run{trust.runs === 1 ? '' : 's'}
-      </div>
+      <div className="card__note">{consensusNote(trust)}</div>
     </div>
   )
 }
@@ -231,9 +297,11 @@ function TrustCompare({ trust, revealed }: { trust: TrustPanel; revealed: boolea
 function Breakdowns({
   data,
   onSelectModel,
+  onOpenRun,
 }: {
   data: DashboardData
   onSelectModel: (row: Breakdown) => void
+  onOpenRun?: (runID: string) => void
 }) {
   return (
     <>
@@ -247,7 +315,7 @@ function Breakdowns({
         <RankedBars title="By model · click a row for detail" rows={data.byModel} onSelect={onSelectModel} />
         <RankedBars title="By tier" rows={data.byTier} />
       </div>
-      <RecentTable data={data} />
+      <RecentTable rows={data.recent} onOpenRun={onOpenRun} />
     </>
   )
 }
@@ -316,19 +384,21 @@ function RankedBars({
  * Which sources actually earn their stated confidence — one row per
  * (source, domain), sorted by D descending (the order internal/trust's
  * Calibrator.Report already returns, same as `hyctl trust calibration`).
- * Bars use the SpendTrend halo treatment (#414) turned sideways: a fainter
- * halo layered behind a crisp fill, both growing in via `transform: scaleX`
- * once `useReveal` fires, never `filter: blur`. Independent of `hasData` —
+ * Bars are on an absolute nat scale, never share-of-max (#593): "who to
+ * trust" has to draw a weak field as weak, and the strongest of three coin
+ * flips is still a coin flip. They use the SpendTrend halo treatment (#414)
+ * turned sideways: a fainter halo behind a crisp fill, both growing in via
+ * `transform: scaleX` once `useReveal` fires. Independent of `hasData` —
  * calibration history comes from `hyctl trust record`, not the cost log, so
  * it can be populated (or empty) regardless of whether anything dispatched.
  */
-function CalibrationLeaderboard({ rows }: { rows: CalibrationRow[] }) {
+export function CalibrationLeaderboard({ rows }: { rows: CalibrationRow[] }) {
   const revealed = useReveal(rows.length > 0)
 
   if (rows.length === 0) {
     return (
       <section>
-        <h2 className="section__title">Calibration leaderboard</h2>
+        <h2 className="section__title">Which models earned their answers</h2>
         <div className="empty" style={{ marginTop: 0 }}>
           <p className="empty__title">No calibration recorded yet</p>
           <p>
@@ -339,14 +409,13 @@ function CalibrationLeaderboard({ rows }: { rows: CalibrationRow[] }) {
     )
   }
 
-  const maxD = Math.max(...rows.map((r) => r.d))
   return (
     <section>
-      <h2 className="section__title">Calibration leaderboard · who to trust</h2>
+      <h2 className="section__title">Which models earned their answers</h2>
       <div className="table__wrap">
         <div className="rank">
           {rows.map((r) => (
-            <CalibrationBar key={`${r.source} ${r.domain}`} row={r} maxD={maxD} revealed={revealed} />
+            <CalibrationBar key={`${r.source}\u0000${r.domain}`} row={r} revealed={revealed} />
           ))}
         </div>
         <div className="cal-legend">
@@ -358,6 +427,7 @@ function CalibrationLeaderboard({ rows }: { rows: CalibrationRow[] }) {
             <span className="cal-legend__dot cal-legend__dot--model" />
             model's own answer
           </span>
+          <span className="cal-legend__scale">full bar = one verdict enough for 95% on its own</span>
         </div>
       </div>
     </section>
@@ -368,11 +438,22 @@ function CalibrationLeaderboard({ rows }: { rows: CalibrationRow[] }) {
 // matches SpendTrend's HALO_PAD.
 const CAL_HALO_PAD = 3
 
-function CalibrationBar({ row, maxD, revealed }: { row: CalibrationRow; maxD: number; revealed: boolean }) {
+/** Both bars sit inside the track minus the halo's bleed, so a full-width
+ * bar's halo lands on the track edge. The old `calc(100% + 6px)` could not be
+ * contained at any pad; this cannot exceed the track at any width. */
+export function calBarWidths(widthPct: number): { fill: string; halo: string } {
+  const bleed = CAL_HALO_PAD * 2
+  const s = Math.min(1, Math.max(0, widthPct / 100))
+  return {
+    fill: `calc(${s} * (100% - ${bleed}px))`,
+    halo: s > 0 ? `calc(${s} * (100% - ${bleed}px) + ${bleed}px)` : '0px',
+  }
+}
+
+function CalibrationBar({ row, revealed }: { row: CalibrationRow; revealed: boolean }) {
   const kind = sourceKind(row.source)
-  // A source with real observations but zero diagnostic power (a coin flip)
-  // still gets a sliver — the row itself is informative even at D=0.
-  const widthPct = maxD > 0 ? (row.d / maxD) * 100 : row.n > 0 ? 4 : 0
+  const strength = calibrationStrength(row.d, row.n)
+  const { fill, halo } = calBarWidths(calibrationWidthPct(row.d, row.n))
   const grown = revealed ? ' grown' : ''
   return (
     <div className="cal__row">
@@ -382,17 +463,21 @@ function CalibrationBar({ row, maxD, revealed }: { row: CalibrationRow; maxD: nu
       </span>
       <span className="cal__track">
         <span
-          className={`cal__halo cal__halo--${kind}${grown}`}
+          className={`cal__halo cal__halo--${kind} cal__halo--${strength}${grown}`}
           style={{
-            width: `calc(${widthPct}% + ${CAL_HALO_PAD * 2}px)`,
+            width: halo,
             height: `calc(100% + ${CAL_HALO_PAD * 2}px)`,
-            left: -CAL_HALO_PAD,
+            left: 0,
             top: -CAL_HALO_PAD,
           }}
         />
-        <span className={`cal__fill cal__fill--${kind}${grown}`} style={{ width: `${widthPct}%` }} />
+        <span
+          className={`cal__fill cal__fill--${kind} cal__fill--${strength}${grown}`}
+          style={{ width: fill, left: CAL_HALO_PAD }}
+        />
       </span>
       <span className="cal__value" title={`Se ${row.se.toFixed(2)} · Sp ${row.sp.toFixed(2)} · n=${row.n}`}>
+        <span className={`cal__strength cal__strength--${strength}`}>{calibrationLabel(strength)}</span>
         {row.d.toFixed(2)}
       </span>
     </div>
@@ -471,13 +556,30 @@ function ModelDetailDrawer({
   )
 }
 
-function RecentTable({ data }: { data: DashboardData }) {
-  const rows = data.recent
+/**
+ * The last few requests, each one a way into the run that produced it.
+ *
+ * These rows used to be inert with a bare run id in the last column, which is
+ * why the panel read as decoration: nothing here could be acted on, and the
+ * one identifier shown led nowhere.
+ */
+export function RecentTable({
+  rows,
+  onOpenRun,
+}: {
+  rows: RecentCall[] | null
+  onOpenRun?: (runID: string) => void
+}) {
   if (!rows || rows.length === 0) return null
   const max = Math.max(...rows.map((r) => r.costUsd))
   return (
     <section>
-      <h2 className="section__title">Recent</h2>
+      <div className="section__head">
+        <h2 className="section__title">Recent requests</h2>
+        {onOpenRun && (
+          <span className="section__hint">Open one to see what it was asked and what it did.</span>
+        )}
+      </div>
       <div className="table__wrap">
         <table className="table">
           <thead>
@@ -487,20 +589,42 @@ function RecentTable({ data }: { data: DashboardData }) {
               <th className="num">Tier</th>
               <th className="num">Wall</th>
               <th className="num">Cost</th>
-              <th>Run</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
-            {rows.map((r, i) => (
-              <tr key={`${r.ts}-${i}`}>
-                <td className="mono">{clockTime(r.ts)}</td>
-                <td>{r.model}</td>
-                <td className="num">{r.tier === 0 ? '—' : r.tier}</td>
-                <td className="num">{ms(r.wallMs)}</td>
-                <td className={`num cost--${costBand(r.costUsd, max)}`}>{usdExact(r.costUsd)}</td>
-                <td className="mono">{r.runId || '—'}</td>
-              </tr>
-            ))}
+            {rows.map((r, i) => {
+              const openable = !!(onOpenRun && r.runId)
+              return (
+                <tr
+                  key={`${r.ts}-${i}`}
+                  className={openable ? 'row--open' : undefined}
+                  tabIndex={openable ? 0 : undefined}
+                  role={openable ? 'button' : undefined}
+                  aria-label={openable ? `Open ${r.runId}` : undefined}
+                  onClick={openable ? () => onOpenRun!(r.runId) : undefined}
+                  onKeyDown={
+                    openable
+                      ? (e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault()
+                            onOpenRun!(r.runId)
+                          }
+                        }
+                      : undefined
+                  }
+                >
+                  <td className="mono">{clockTime(r.ts)}</td>
+                  <td>{r.model}</td>
+                  <td className="num">{r.tier === 0 ? '—' : r.tier}</td>
+                  <td className="num">{ms(r.wallMs)}</td>
+                  <td className={`num cost--${costBand(r.costUsd, max)}`}>{usdExact(r.costUsd)}</td>
+                  {/* A request with no run id has no run to open — say so rather
+                      than rendering a control that does nothing. */}
+                  <td className="mono">{openable ? 'open →' : '—'}</td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       </div>
@@ -511,7 +635,7 @@ function RecentTable({ data }: { data: DashboardData }) {
 function EmptyState() {
   return (
     <div className="empty" style={{ marginTop: 26 }}>
-      <p className="empty__title">Nothing has dispatched yet</p>
+      <p className="empty__title">No requests yet</p>
       <p>
         Run <code>hyctl dispatch --enum SIMPLE "…"</code> and this fills in.
       </p>

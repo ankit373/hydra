@@ -45,6 +45,13 @@ type Row struct {
 	SwarmMode      string  `json:"swarm_mode"`
 	SwarmWinner    bool    `json:"swarm_winner"`
 	Config         string  `json:"config,omitempty"` // deployment-identity breadcrumb (config.Breadcrumb)
+
+	// ActProb is the probability the router chose this head; KeepProb the
+	// probability this row was retained by sampling. Never omitempty: an
+	// absent propensity is unusable and a zero one divides by zero, so both
+	// must be distinguishable from "not recorded". See internal/ope.
+	ActProb  float64 `json:"act_prob"`
+	KeepProb float64 `json:"keep_prob"`
 }
 
 // Totals is an aggregate summary.
@@ -121,13 +128,30 @@ func LoadAll() ([]Row, error) {
 	return loadRows(costLogPath())
 }
 
+// DefaultLogPath is where cost.jsonl lives. Exported so callers that aggregate
+// it (internal/rollup) name the same file this package reads.
+func DefaultLogPath() string { return costLogPath() }
+
+// LoadRows reads rows from an explicit path. Exported so callers that
+// aggregate the log (internal/rollup) can be tested against a fixture instead
+// of the real ~/.hydra.
+func LoadRows(path string) ([]Row, error) { return loadRows(path) }
+
 // Summary returns today + all-time totals and last 5 recent rows.
 func Summary() (*SummaryResult, error) {
 	all, err := LoadAll()
 	if err != nil {
 		return nil, err
 	}
+	return SummaryFromRows(all), nil
+}
 
+// SummaryFromRows computes the same result as Summary but from rows the
+// caller already loaded — callers that also need the raw rows (e.g. the
+// TUI's latency/savings panels, which call LoadAll for their own purposes)
+// should load once and derive both from that one slice instead of paying for
+// a second full read+parse of cost.jsonl.
+func SummaryFromRows(all []Row) *SummaryResult {
 	todayStr := time.Now().UTC().Format("2006-01-02")
 	var todayRows []Row
 	for _, r := range all {
@@ -136,7 +160,9 @@ func Summary() (*SummaryResult, error) {
 		}
 	}
 
-	recent := all
+	// A copy, not a subslice of all: reversing in place must never mutate the
+	// caller's own rows out from under it when all is shared/reused.
+	recent := append([]Row(nil), all...)
 	if len(recent) > 5 {
 		recent = recent[len(recent)-5:]
 	}
@@ -152,7 +178,7 @@ func Summary() (*SummaryResult, error) {
 		Recent:          recent,
 		ActualTokens:    actualTok,
 		EstimatedTokens: estTok,
-	}, nil
+	}
 }
 
 // Today returns today's per-tier breakdown.
@@ -241,9 +267,13 @@ func ByRun(runID string) (*ByRunResult, error) {
 }
 
 // Tail returns the last N rows, newest first, via a backward tail-seek rather
-// than loading the whole log.
+// than loading the whole log. n == 0 returns no rows, matching `tail -n 0`.
+// n < 0 returns everything — see #464 for tightening that UX separately.
 func Tail(n int) ([]Row, error) {
-	if n <= 0 {
+	if n == 0 {
+		return nil, nil
+	}
+	if n < 0 {
 		return LoadAll()
 	}
 	lines, err := tailLines(costLogPath(), n)
@@ -589,13 +619,18 @@ func tailLines(path string, n int) ([]string, error) {
 
 func aggregate(rows []Row) Totals {
 	var t Totals
+	var totalWallMS int64
 	t.Calls = len(rows)
 	for _, r := range rows {
 		t.PromptTokens += r.PromptTokens
 		t.ResponseTokens += r.ResponseTokens
 		t.EstCostUSD += r.EstCostUSD
-		t.WallSeconds += r.WallMS / 1000
+		totalWallMS += r.WallMS
 	}
+	// Sum milliseconds first, then divide once: dividing per-row before summing
+	// truncates every sub-second call to 0, so a batch of fast calls reports
+	// "0s" total wall time regardless of real cumulative time.
+	t.WallSeconds = totalWallMS / 1000
 	// Round to 6 decimal places.
 	t.EstCostUSD = math.Round(t.EstCostUSD*1_000_000) / 1_000_000
 	return t
@@ -623,8 +658,14 @@ func groupBy(rows []Row, key func(Row) string) []GroupRow {
 		g.EstCostUSD = math.Round(g.EstCostUSD*1_000_000) / 1_000_000
 		result = append(result, *g)
 	}
+	// Ties (often several $0 rows) need a deterministic tiebreaker — result is
+	// built from a map, whose iteration order is randomized, so without one
+	// equal-cost rows visibly swapped position on every poll (#506).
 	sort.Slice(result, func(i, j int) bool {
-		return result[i].EstCostUSD > result[j].EstCostUSD
+		if result[i].EstCostUSD != result[j].EstCostUSD {
+			return result[i].EstCostUSD > result[j].EstCostUSD
+		}
+		return result[i].Key < result[j].Key
 	})
 	return result
 }

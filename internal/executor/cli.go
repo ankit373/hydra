@@ -3,12 +3,13 @@
 package executor
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"os/exec"
 	"strings"
 	"time"
+
+	"github.com/ankit373/hydra/internal/util"
 )
 
 // CLIExecutor runs a prompt via a subprocess CLI tool.
@@ -30,19 +31,32 @@ func (e *CLIExecutor) Execute(ctx context.Context, req Request) (*Response, erro
 		cmd.Stdin = strings.NewReader(req.Prompt)
 	}
 
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+	stdout := util.NewAccumulator(0)
+	stderr := util.NewAccumulator(64 << 10)
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
 
 	start := time.Now()
 	if err := cmd.Run(); err != nil {
 		return nil, fmt.Errorf("cli exec %s: %w — stderr: %s", req.Head.ID, err, stderr.String())
 	}
 
+	output := strings.TrimSpace(stdout.String())
+
+	promptTokens := len(req.Prompt) / 4
+	responseTokens := len(output) / 4
+	writeTokenSidecar(req.Head.ID, "cli", "estimate", promptTokens, responseTokens)
+
 	return &Response{
-		Output:   strings.TrimSpace(stdout.String()),
-		Duration: time.Since(start),
-		Model:    req.Head.ID,
+		Output:       output,
+		Duration:     time.Since(start),
+		Model:        req.Head.ID,
+		InputTokens:  promptTokens,
+		OutputTokens: responseTokens,
+		Truncated:    stdout.Truncated(),
+		// CLI tools (claude, codex, cursor, ...) report no token usage — these
+		// are char/4 estimates, same heuristic as the agy executor.
+		TokensEstimated: true,
 	}, nil
 }
 
@@ -68,9 +82,9 @@ func (t cliTemplate) buildArgs(prompt string) []string {
 // To add a new CLI tool, add an entry here and in capabilities/data.json.
 var cliTemplates = map[string]cliTemplate{
 	"anthropic":   {args: []string{"--print", ""}}, // claude --print "<prompt>"
-	"openai":      {args: []string{""}},            // codex "<prompt>"
+	"openai":      {args: []string{"exec", ""}},    // codex exec "<prompt>" — bare codex launches its interactive TUI (#491)
 	"google":      {args: []string{""}},            // gemini "<prompt>"
-	"antigravity": {args: []string{""}},            // agy "<prompt>"
+	"antigravity": {args: []string{"--print", ""}}, // agy --print "<prompt>" — bare agy launches its interactive TUI and, unlike codex, still exits 0 (#492)
 	"cursor":      {args: []string{"--stdio"}, stdinPrompt: true},
 	"amazon":      {args: []string{""}},                       // kiro "<prompt>"
 	"codeium":     {args: []string{""}},                       // windsurf "<prompt>"

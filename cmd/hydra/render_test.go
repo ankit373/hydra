@@ -70,6 +70,39 @@ func TestPrintSwarmResult_ShowsEveryAttemptAndMarksTheWinner(t *testing.T) {
 	}
 }
 
+// A judge fallback must say why the LLM judge was skipped — CompositeJudge
+// already carries the reason on JudgeMeta.FallbackReason, but the printer
+// discarded it, leaving a runtime judge failure indistinguishable from a
+// healthy run (#501).
+func TestPrintSwarmResult_ShowsWhyTheJudgeFellBack(t *testing.T) {
+	testutil.NewSandbox(t)
+
+	winner := swarm.Attempt{
+		Head: provider.Head{ID: "strong", Name: "strong"}, Status: swarm.StatusOK,
+		Output: "the winning answer", Rank: 1,
+	}
+	res := &swarm.SwarmResult{
+		Mode:     swarm.ModeBest,
+		Prompt:   "the question",
+		Attempts: []swarm.Attempt{winner},
+		Winner:   &winner,
+		Verdict: &swarm.JudgeVerdict{
+			WinnerIndex: 0,
+			Reason:      "ranked by capability score",
+			Meta:        swarm.JudgeMeta{UsedFallback: true, FallbackReason: "judge dispatch: connection refused"},
+		},
+	}
+
+	out := captureStdout(t, func() { printSwarmResult(res) })
+	if !strings.Contains(out, "cap-score fallback") {
+		t.Errorf("the fallback is not labelled:\n%s", out)
+	}
+	if !strings.Contains(out, "connection refused") {
+		t.Errorf("the fallback reason is not shown, so a real judge failure looks identical "+
+			"to a healthy run:\n%s", out)
+	}
+}
+
 // The SPRT report is the evidence ledger behind a confidence number. Every
 // source that was sampled must appear, or the number is unauditable.
 func TestPrintSPRTResult_ShowsTheWholeLedger(t *testing.T) {

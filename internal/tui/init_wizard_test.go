@@ -70,6 +70,8 @@ func TestInitWizard_FullWalkWritesALoadableConfig(t *testing.T) {
 	m, _ = send(m, "enter")
 	// Privacy: cursor 0 is local-only.
 	m, _ = send(m, "enter")
+	// Payload capture: cursor 0 is "no".
+	m, _ = send(m, "enter")
 	// Skills: confirm and save.
 	m, cmd := send(m, "enter")
 
@@ -107,6 +109,28 @@ func TestInitWizard_FullWalkWritesALoadableConfig(t *testing.T) {
 	}
 }
 
+// The done screen must not have a stray whitespace-only line between "ready"
+// and "Cortex :" — lipgloss pads every line of a multi-line Render to its
+// widest line, so a blank line written *inside* the styled block became a row
+// of spaces glued onto the next line instead of a real newline (#465).
+func TestInitWizard_DoneScreenHasNoStrayWhitespaceLine(t *testing.T) {
+	testutil.NewSandbox(t)
+
+	m := tea.Model(NewInitModel(wizardHeads()))
+	m, _ = send(m, "enter", "enter", "enter", "enter", "enter")
+
+	im := m.(InitModel)
+	if im.err != nil {
+		t.Fatalf("the wizard reported an error: %v", im.err)
+	}
+	for _, line := range strings.Split(im.View(), "\n") {
+		if strings.TrimSpace(line) == "" && strings.Trim(line, " ") != line {
+			t.Errorf("done screen has a whitespace-only (not empty) line: %q\nfull view:\n%s",
+				line, im.View())
+		}
+	}
+}
+
 // Declining local-only must leave no PII policy, rather than writing one that
 // says something else.
 func TestInitWizard_DecliningLocalOnlyWritesNoPIIPolicy(t *testing.T) {
@@ -116,6 +140,7 @@ func TestInitWizard_DecliningLocalOnlyWritesNoPIIPolicy(t *testing.T) {
 	m, _ = send(m, "enter")         // cortex: claude
 	m, _ = send(m, "enter")         // tiers
 	m, _ = send(m, "down", "enter") // privacy: cursor 1 = no
+	m, _ = send(m, "enter")         // capture: cursor 0 = no
 	_, _ = send(m, "enter")         // skills → save; the config is the assertion
 
 	cfg, err := config.Load()
@@ -381,15 +406,19 @@ func TestExportToRoutingYAML_NoFileOnDiskIsNotAnError(t *testing.T) {
 // A save that cannot write must surface on the done screen rather than showing
 // a success the user will act on.
 func TestInitWizard_SaveFailureIsSurfaced(t *testing.T) {
-	s := testutil.NewSandbox(t)
+	testutil.NewSandbox(t)
 
-	// ~/.hydra is a regular file, so the config directory cannot be created.
-	if err := os.WriteFile(filepath.Join(s.Home, ".hydra"), []byte("not a dir"), 0o600); err != nil {
+	// Dir() is a regular file, so the config directory cannot be created. The
+	// sandbox pre-creates it as an empty directory, so remove that first.
+	if err := os.RemoveAll(config.Dir()); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(config.Dir(), []byte("not a dir"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
 	m := tea.Model(NewInitModel(wizardHeads()))
-	m, _ = send(m, "enter", "enter", "enter", "enter")
+	m, _ = send(m, "enter", "enter", "enter", "enter", "enter")
 
 	im := m.(InitModel)
 	if im.err == nil {
@@ -397,5 +426,59 @@ func TestInitWizard_SaveFailureIsSurfaced(t *testing.T) {
 	}
 	if !strings.Contains(im.View(), "Setup failed") {
 		t.Errorf("the done screen does not show the failure:\n%s", im.View())
+	}
+}
+
+// Payload capture stores verbatim source and prompts, so a user who presses
+// enter through the wizard must not end up with it on. The default is the whole
+// safety property here, not a preference.
+func TestInitWizard_PayloadCaptureIsOffUnlessChosen(t *testing.T) {
+	testutil.NewSandbox(t)
+
+	m := tea.Model(NewInitModel(wizardHeads()))
+	_, _ = send(m, "enter", "enter", "enter", "enter", "enter") // straight through
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("the wizard wrote no loadable config: %v", err)
+	}
+	if cfg.CapturePayloads {
+		t.Error("pressing enter through the wizard enabled payload capture; " +
+			"storing the user's source must be a choice, never a default")
+	}
+}
+
+func TestInitWizard_PayloadCaptureIsOnWhenChosen(t *testing.T) {
+	testutil.NewSandbox(t)
+
+	m := tea.Model(NewInitModel(wizardHeads()))
+	m, _ = send(m, "enter")         // cortex
+	m, _ = send(m, "enter")         // tiers
+	m, _ = send(m, "enter")         // privacy
+	m, _ = send(m, "down", "enter") // capture: cursor 1 = yes
+	_, _ = send(m, "enter")         // skills → save
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("the wizard wrote no loadable config: %v", err)
+	}
+	if !cfg.CapturePayloads {
+		t.Error("the user selected capture and it was not saved")
+	}
+}
+
+// The step has to say what it is asking for. "Store payloads?" means nothing to
+// someone who has not read the design doc.
+func TestInitWizard_CaptureStepExplainsWhatIsStored(t *testing.T) {
+	testutil.NewSandbox(t)
+
+	m := tea.Model(NewInitModel(wizardHeads()))
+	m, _ = send(m, "enter", "enter", "enter") // land on the capture step
+
+	view := m.(InitModel).View()
+	for _, want := range []string{"prompts and responses", "sampled", "redacted"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("the capture step never mentions %q:\n%s", want, view)
+		}
 	}
 }

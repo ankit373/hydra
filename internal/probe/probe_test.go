@@ -5,7 +5,9 @@ package probe
 import (
 	"context"
 	"errors"
+	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -242,5 +244,56 @@ func TestRunWith_EachProviderIsAskedOnce(t *testing.T) {
 
 	if p.calls != 1 {
 		t.Errorf("provider called %d times, want 1", p.calls)
+	}
+}
+
+// A provider failure (e.g. cli/env/port's capabilities.Load choking on a
+// corrupted ~/.hydra/models.json overlay) must stay non-fatal — the documented
+// contract every other test in this file exercises — but silently dropping it
+// with no trace at all contradicts hyctl probe's own "✗ marks unroutable heads
+// with the reason" promise (#248): this provider's heads never even reached
+// that accounting. Warnings is the visible signal (#505).
+func TestRunWith_AFailingProviderIsRecordedAsAWarning(t *testing.T) {
+	good := &fakeProvider{id: "good", heads: []provider.Head{head("g", 70, false)}}
+	bad := &fakeProvider{id: "cli", err: errors.New("corrupted models.json overlay")}
+
+	res := RunWith(context.Background(), []provider.Provider{bad, good})
+
+	if len(res.Heads) != 1 || res.Heads[0].ID != "g" {
+		t.Fatalf("got %+v, want the one head from the working provider", res.Heads)
+	}
+	if len(res.Warnings) != 1 {
+		t.Fatalf("got %d warnings, want 1: %+v", len(res.Warnings), res.Warnings)
+	}
+	if !strings.Contains(res.Warnings[0], "cli") || !strings.Contains(res.Warnings[0], "corrupted models.json overlay") {
+		t.Errorf("warning = %q, want it to name the provider and the error", res.Warnings[0])
+	}
+}
+
+// A provider that returns no error must not manufacture a warning — Warnings
+// is specifically about failures, not an audit log of every provider run.
+func TestRunWith_NoWarningsWhenEveryProviderSucceeds(t *testing.T) {
+	res := RunWith(context.Background(), []provider.Provider{
+		&fakeProvider{id: "a", heads: []provider.Head{head("a1", 50, false)}},
+		&fakeProvider{id: "b"},
+	})
+	if len(res.Warnings) != 0 {
+		t.Errorf("got warnings %+v with no failing provider", res.Warnings)
+	}
+}
+
+// Warnings must be in a stable order despite concurrent providers, or a probe
+// run against the same broken machine twice would print differently each time.
+func TestRunWith_WarningsAreDeterministicallyOrdered(t *testing.T) {
+	res := RunWith(context.Background(), []provider.Provider{
+		&fakeProvider{id: "zzz", err: errors.New("boom")},
+		&fakeProvider{id: "aaa", err: errors.New("boom")},
+		&fakeProvider{id: "mmm", err: errors.New("boom")},
+	})
+	if len(res.Warnings) != 3 {
+		t.Fatalf("got %d warnings, want 3: %+v", len(res.Warnings), res.Warnings)
+	}
+	if !sort.StringsAreSorted(res.Warnings) {
+		t.Errorf("warnings not sorted: %+v", res.Warnings)
 	}
 }

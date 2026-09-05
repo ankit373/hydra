@@ -109,6 +109,47 @@ func TestCLI_MCPLogAndReport_SurfaceFlaggedEvents(t *testing.T) {
 	}
 }
 
+// Agent/Tool are attacker/agent-controlled: any local MCP tool or misbehaving
+// agent can set them via `hyctl mcp record` or a real dispatch. `mcp log`
+// already sanitized them at render (util.SafeTerminal), but `mcp report`
+// printed them raw — and a control-heavy value forges a fake verdict line on
+// the terminal. Sanitizing once at Record ingest fixes both by construction,
+// so nobody has to remember to do it at every render site (#500).
+func TestCLI_MCPRecord_SanitizesEscapesForBothLogAndReport(t *testing.T) {
+	testutil.NewSandbox(t)
+
+	evilTool := "evil\x1b[2K\rFAKE OK no findings"
+	if _, cobraOut, err := run(t, "mcp", "record",
+		"--agent", "auditor", "--tool", evilTool,
+		"--resource", "/x", "--decision", "allow"); err != nil {
+		t.Fatalf("`hyctl mcp record` failed: %v (%s)", err, cobraOut)
+	}
+
+	logOut, logCobraOut, err := run(t, "mcp", "log")
+	if err != nil {
+		t.Fatalf("`hyctl mcp log` failed: %v", err)
+	}
+	logCombined := logOut + logCobraOut
+	if strings.Contains(logCombined, "\x1b[2K") || strings.Contains(logCombined, "\rFAKE OK") {
+		t.Errorf("`mcp log` printed a raw escape/CR sequence:\n%q", logCombined)
+	}
+	if !strings.Contains(logCombined, "FAKE OK") {
+		t.Errorf("`mcp log` lost the tool name's ordinary text entirely:\n%q", logCombined)
+	}
+
+	repOut, repCobraOut, err := run(t, "mcp", "report")
+	if err != nil {
+		t.Fatalf("`hyctl mcp report` failed: %v", err)
+	}
+	repCombined := repOut + repCobraOut
+	if strings.Contains(repCombined, "\x1b[2K") || strings.Contains(repCombined, "\rFAKE OK") {
+		t.Errorf("`mcp report` printed a raw escape/CR sequence — the exact defect #500 reports:\n%q", repCombined)
+	}
+	if !strings.Contains(repCombined, "FAKE OK") {
+		t.Errorf("`mcp report` lost the tool name's ordinary text entirely:\n%q", repCombined)
+	}
+}
+
 // `hyctl mcp verify-chain` is the tamper-evidence check over the ledger —
 // it must report intact after ordinary recording and confirm gate-ability
 // (a non-zero exit) when it isn't, matching the other ledger verify commands.
@@ -167,7 +208,10 @@ func TestCLI_Security_HandlesEmptyAndSeededLedger(t *testing.T) {
 			Covered        int     `json:"covered"`
 			PercentCovered float64 `json:"percentCovered"`
 		} `json:"coverage"`
-		Recommendations []string `json:"recommendations"`
+		Actions []struct {
+			ID       string `json:"id"`
+			Priority string `json:"priority"`
+		} `json:"actions"`
 	}
 	if err := json.Unmarshal([]byte(out+cobraOut), &rep); err != nil {
 		t.Fatalf("security --json did not parse: %v\n%s", err, out+cobraOut)
@@ -184,22 +228,40 @@ func TestCLI_Security_HandlesEmptyAndSeededLedger(t *testing.T) {
 	if rep.Coverage.Applicable != 8 {
 		t.Errorf("Coverage.Applicable = %d, want 8", rep.Coverage.Applicable)
 	}
-	if len(rep.Recommendations) == 0 {
-		t.Error("Recommendations is empty despite real coverage gaps existing")
+	if len(rep.Actions) == 0 {
+		t.Error("Actions is empty despite real coverage gaps existing")
 	}
 
-	// Text output must show the headline coverage score and the recommendations
-	// section — the KPI/feedback-loop surface, not just the raw tables.
+	// Text output must show the headline coverage score and the action queue
+	// — the KPI/feedback-loop surface, not just the raw tables.
 	textOut, textCobraOut, err := run(t, "security")
 	if err != nil {
 		t.Fatalf("`hyctl security` failed: %v", err)
 	}
 	combined := textOut + textCobraOut
-	if !strings.Contains(combined, "OWASP LLM Top-10 coverage") {
-		t.Errorf("text output missing the coverage headline:\n%s", combined)
+	// The default surface is the answer, not the dashboard: a verdict, the
+	// activity, and whether the record can be trusted.
+	for _, want := range []string{"VERDICT", "activity", "evidence"} {
+		if !strings.Contains(combined, want) {
+			t.Errorf("default `security` output missing %q:\n%s", want, combined)
+		}
 	}
-	if !strings.Contains(combined, "recommendations") {
-		t.Errorf("text output missing the recommendations section:\n%s", combined)
+
+	// Coverage and the action queue moved behind --why when the surface was
+	// re-aimed at "what did the agent do"; they must still be reachable.
+	whyOut, whyCobraOut, err := run(t, "security", "--why")
+	if err != nil {
+		t.Fatalf("`hyctl security --why` failed: %v", err)
+	}
+	why := whyOut + whyCobraOut
+	if !strings.Contains(why, "OWASP LLM Top-10 coverage") {
+		t.Errorf("--why output missing the coverage headline:\n%s", why)
+	}
+	if !strings.Contains(why, "action queue") {
+		t.Errorf("--why output missing the action queue section:\n%s", why)
+	}
+	if len(why) <= len(combined) {
+		t.Error("--why should be a superset of the default surface")
 	}
 }
 
@@ -263,6 +325,64 @@ func TestCLI_TrustRecordThenCalibration_RoundTrips(t *testing.T) {
 	}
 }
 
+// calibration is append-only, so a blank --domain writes a permanent, unfixable
+// row. It must be refused up front, exactly like --source and --outcome.
+func TestCLI_TrustRecord_RequiresDomain(t *testing.T) {
+	populated(t)
+
+	_, cobraOut, err := run(t, "trust", "record",
+		"--source", "model:test-head", "--said-correct", "--outcome", "correct")
+	if err == nil {
+		t.Fatal("`hyctl trust record` without --domain was accepted")
+	}
+	if !strings.Contains(err.Error()+cobraOut, "--domain") {
+		t.Errorf("error = %v, want it to name --domain", err)
+	}
+}
+
+// Two domains sharing a ten-character prefix (e.g. "trust-bench" and
+// "trust-bench-v2") must not render as the identical truncated label — that
+// makes rows with different n/D visually indistinguishable.
+func TestCLI_TrustCalibration_DistinguishesDomainsWithSharedPrefix(t *testing.T) {
+	populated(t)
+
+	if _, cobraOut, err := run(t, "trust", "record",
+		"--source", "model:x", "--domain", "trust-bench",
+		"--said-correct", "--outcome", "correct"); err != nil {
+		t.Fatalf("`hyctl trust record` (trust-bench) failed: %v (%s)", err, cobraOut)
+	}
+	if _, cobraOut, err := run(t, "trust", "record",
+		"--source", "model:x", "--domain", "trust-bench-v2",
+		"--said-correct", "--outcome", "incorrect"); err != nil {
+		t.Fatalf("`hyctl trust record` (trust-bench-v2) failed: %v (%s)", err, cobraOut)
+	}
+
+	out, cobraOut, err := run(t, "trust", "calibration")
+	if err != nil {
+		t.Fatalf("`hyctl trust calibration` failed: %v", err)
+	}
+	table := out + cobraOut
+
+	var domains []string
+	for _, line := range strings.Split(table, "\n") {
+		if !strings.Contains(line, "model:x") {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			t.Fatalf("row for model:x has no domain column: %q", line)
+		}
+		domains = append(domains, fields[1])
+	}
+	if len(domains) != 2 {
+		t.Fatalf("want 2 rows for model:x, got %d (%v):\n%s", len(domains), domains, table)
+	}
+	if domains[0] == domains[1] {
+		t.Errorf("both domains rendered as the same label %q — the rows are "+
+			"visually indistinguishable:\n%s", domains[0], table)
+	}
+}
+
 // The defect model sets how much confidence a task needs. PII and production
 // must both raise the bar — that is the whole point of the flags.
 func TestCLI_TrustDefect_RaisesTheBarForRiskyWork(t *testing.T) {
@@ -281,6 +401,50 @@ func TestCLI_TrustDefect_RaisesTheBarForRiskyWork(t *testing.T) {
 	}
 	if plain == risky {
 		t.Errorf("--pii --production did not change the required confidence:\n%s", plain)
+	}
+}
+
+// A non-finite --blast must never reach the model: text mode used to print a
+// nonsensical "$NaN" recommendation (exit 0), and --json crashed outright with
+// a leaked Go internal error ("json: unsupported value: NaN", exit 1) instead
+// of a clean CLI error (#501).
+func TestCLI_TrustDefect_RejectsNonFiniteBlast(t *testing.T) {
+	populated(t)
+
+	for _, blast := range []string{"NaN", "+Inf", "-Inf"} {
+		t.Run("text/"+blast, func(t *testing.T) {
+			_, _, err := run(t, "trust", "defect", "--blast", blast)
+			if err == nil {
+				t.Errorf("`trust defect --blast %s` was accepted", blast)
+			}
+		})
+		t.Run("json/"+blast, func(t *testing.T) {
+			_, _, err := run(t, "trust", "defect", "--blast", blast, "--json")
+			if err == nil {
+				t.Errorf("`trust defect --blast %s --json` was accepted", blast)
+			}
+		})
+	}
+}
+
+// The JSON blast_radius must match the value CostUSD/RequiredConfidence
+// actually used, not the raw --blast input: BlastRadius<=0 is internally
+// clamped to 1.0, and the CLI used to display the unclamped input instead.
+func TestCLI_TrustDefect_JSONBlastRadiusMatchesTheUsedValue(t *testing.T) {
+	populated(t)
+
+	for _, blast := range []string{"0", "-5"} {
+		out, cobraOut, err := run(t, "trust", "defect", "--blast", blast, "--json")
+		if err != nil {
+			t.Fatalf("`trust defect --blast %s --json` failed: %v (%s)", blast, err, cobraOut)
+		}
+		var got map[string]any
+		if jerr := json.Unmarshal([]byte(out), &got); jerr != nil {
+			t.Fatalf("output is not JSON: %v\n%s", jerr, out)
+		}
+		if br, _ := got["blast_radius"].(float64); br != 1 {
+			t.Errorf("--blast %s: blast_radius = %v, want 1 (the clamped value CostUSD used)", blast, got["blast_radius"])
+		}
 	}
 }
 
@@ -565,6 +729,115 @@ func TestCLI_Models_AddListRemoveRoundTrips(t *testing.T) {
 	}
 }
 
+// `models add` on an id that already exists in the embedded built-in catalog
+// silently shadowed it with the same "added X" phrasing whether X was
+// brand-new or a full override of a curated, heavily-routed identity like
+// "claude" (#505). This must read differently from a routine add.
+func TestCLI_ModelsAdd_WarnsWhenShadowingABuiltin(t *testing.T) {
+	populated(t)
+
+	out, cobraOut, err := run(t, "models", "add", "claude",
+		"--name", "Claude (tuned)", "--provider", "anthropic", "--cap-score", "50")
+	if err != nil {
+		t.Fatalf("`hyctl models add claude` failed: %v (%s)", err, cobraOut)
+	}
+	combined := out + cobraOut
+	if !strings.Contains(combined, "overriding built-in") {
+		t.Errorf("overriding a built-in id printed the generic message, not a distinct "+
+			"warning:\n%s", combined)
+	}
+
+	// A brand-new id must still get the ordinary phrasing.
+	out, cobraOut, err = run(t, "models", "add", "kimi-k4", "--cap-score", "70")
+	if err != nil {
+		t.Fatalf("`hyctl models add kimi-k4` failed: %v (%s)", err, cobraOut)
+	}
+	combined = out + cobraOut
+	if strings.Contains(combined, "overriding built-in") {
+		t.Errorf("a brand-new model was reported as overriding a built-in:\n%s", combined)
+	}
+	if !strings.Contains(combined, "added") {
+		t.Errorf("a brand-new model add did not say it was added:\n%s", combined)
+	}
+}
+
+// `models sync` re-run used to look up "already known" against the embedded
+// catalog only, never the overlay — so a model the user had already synced
+// and hand-tuned via `models add` looked unrecognized and was silently
+// overwritten back to a fresh heuristic capScore on every re-run, all while
+// the printed message claimed it was "already known, skipped" (#505).
+func TestCLI_ModelsSync_DoesNotRevertUserTunedCapScore(t *testing.T) {
+	populated(t)
+	seedPricingCache(t, map[string]struct{ In, Out float64 }{
+		"testvendor/test-model-xyz": {1.0, 2.0},
+	})
+
+	// First sync imports it at the heuristic score.
+	if _, cobraOut, err := run(t, "models", "sync"); err != nil {
+		t.Fatalf("first `hyctl models sync` failed: %v (%s)", err, cobraOut)
+	}
+
+	// The user tunes it by hand afterwards.
+	if _, cobraOut, err := run(t, "models", "add", "testvendor/test-model-xyz",
+		"--provider", "testvendor", "--cap-score", "99"); err != nil {
+		t.Fatalf("`hyctl models add` failed: %v (%s)", err, cobraOut)
+	}
+
+	// Re-running sync must not revert the hand-tuned score, and must say so.
+	out, cobraOut, err := run(t, "models", "sync")
+	if err != nil {
+		t.Fatalf("second `hyctl models sync` failed: %v (%s)", err, cobraOut)
+	}
+	combined := out + cobraOut
+	if !strings.Contains(combined, "1 already known, skipped") {
+		t.Errorf("sync did not report the user-tuned model as already known:\n%s", combined)
+	}
+
+	listOut, listCobra, err := run(t, "models", "list", "--json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var entries []struct {
+		ID       string `json:"id"`
+		CapScore int    `json:"capScore"`
+	}
+	if err := json.Unmarshal([]byte(listOut), &entries); err != nil {
+		t.Fatalf("models list --json did not parse: %v (%s)", err, listOut+listCobra)
+	}
+	found := false
+	for _, e := range entries {
+		if e.ID == "testvendor/test-model-xyz" {
+			found = true
+			if e.CapScore != 99 {
+				t.Errorf("capScore = %d after re-sync, want 99 (the user's tuning) — "+
+					"sync silently reverted it", e.CapScore)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("synced model missing from `models list` entirely")
+	}
+}
+
+// seedPricingCache writes a fresh pricing_cache.json so `pricing.Load()` sees
+// live OpenRouter-shaped data without reaching the network.
+func seedPricingCache(t *testing.T, models map[string]struct{ In, Out float64 }) {
+	t.Helper()
+	m := make(map[string]map[string]float64, len(models))
+	for id, p := range models {
+		m[id] = map[string]float64{"input_per_mtok": p.In, "output_per_mtok": p.Out}
+	}
+	raw, err := json.Marshal(map[string]any{
+		"fetched_at": time.Now().UTC().Format(time.RFC3339),
+		"source":     "test",
+		"models":     m,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	seed(t, "pricing_cache.json", string(raw))
+}
+
 // ── oracle ────────────────────────────────────────────────────────────────────
 
 // An oracle is a high-D evidence source — its verdict can outweigh several
@@ -589,6 +862,25 @@ func TestCLI_OracleVerify_PassAndFailDifferByExitCode(t *testing.T) {
 	}
 	if passOut == failOut {
 		t.Errorf("a passing and a failing oracle print the same thing:\n%s", passOut)
+	}
+}
+
+// A verifier argument containing a space (a shell -c script) must reach the
+// verifier exactly as typed, not get corrupted by joining argv into a string
+// and re-splitting it on whitespace (#444). Before the fix, `sh -c "exit 1"`
+// silently became `sh -c exit 1`, which bash runs as `sh -c 'exit'` — a false
+// PASS for a command that actually exits 1.
+func TestCLI_OracleVerify_ArgumentWithSpaceIsNotCorrupted(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Log("windows: no /bin/sh-style true/false to drive exit codes here")
+		return
+	}
+	s := populated(t)
+
+	code, out := runBinary(t, s, "oracle", "verify", "--", "sh", "-c", "exit 1")
+	if code == 0 {
+		t.Errorf("`sh -c \"exit 1\"` exited 0 — the quoted argument's space was "+
+			"re-tokenized into two argv elements:\n%s", out)
 	}
 }
 
@@ -770,6 +1062,73 @@ func TestCLI_PricingList_WorksOffline(t *testing.T) {
 	none, noneCobra, err := run(t, "pricing", "list", "definitely-not-a-model-xyz")
 	if err == nil && strings.TrimSpace(none+noneCobra) == "" {
 		t.Error("a filter matching nothing printed nothing at all")
+	}
+}
+
+// `pricing list --json` used to emit `null` (a nil slice) instead of `[]` when
+// a filter matched nothing — valid JSON, but a script/agent iterating the
+// result as an array breaks on it (#505). docs/pricing.md exists precisely
+// because this output is meant to be machine-consumed.
+func TestCLI_PricingListJSON_EmitsEmptyArrayNotNullWhenNothingMatches(t *testing.T) {
+	populated(t)
+
+	out, cobraOut, err := run(t, "pricing", "list", "--json", "definitely-not-a-model-xyz")
+	if err != nil {
+		t.Fatalf("`hyctl pricing list --json <no-match>` failed: %v (%s)", err, cobraOut)
+	}
+	trimmed := strings.TrimSpace(out)
+	if trimmed == "null" {
+		t.Fatalf("emitted the literal null; a script iterating this as an array panics:\n%s", out)
+	}
+	var v []any
+	if err := json.Unmarshal([]byte(trimmed), &v); err != nil {
+		t.Fatalf("not a JSON array: %v\n%s", err, trimmed)
+	}
+	if v == nil {
+		t.Error("json.Unmarshal produced a nil slice — the wire form was null, not []")
+	}
+	if len(v) != 0 {
+		t.Errorf("got %d rows for a filter that should match nothing: %v", len(v), v)
+	}
+}
+
+// `pricing list` used to only walk the OpenRouter-fetched map, so CLI-agent
+// heads (claude-core, opus-thinking, …) — priced from registry/pricing.yaml,
+// keyed by tier rather than a model name — could never appear here at all,
+// and a fresh/offline install showed a fully empty table (#505).
+func TestCLI_PricingList_MergesTierPricing(t *testing.T) {
+	populated(t)
+
+	out, cobraOut, err := run(t, "pricing", "list", "claude-core")
+	if err != nil {
+		t.Fatalf("`hyctl pricing list claude-core` failed: %v (%s)", err, cobraOut)
+	}
+	if !strings.Contains(out+cobraOut, "claude-core") {
+		t.Fatalf("tier-based pricing for claude-core never showed up:\n%s", out+cobraOut)
+	}
+
+	jsonOut, jsonCobra, err := run(t, "pricing", "list", "--json")
+	if err != nil {
+		t.Fatalf("`hyctl pricing list --json` failed: %v (%s)", err, jsonCobra)
+	}
+	var rows []struct {
+		Model  string `json:"model"`
+		Source string `json:"source"`
+	}
+	if err := json.Unmarshal([]byte(jsonOut), &rows); err != nil {
+		t.Fatalf("not valid JSON: %v\n%s", err, jsonOut)
+	}
+	var sawTier bool
+	for _, r := range rows {
+		if r.Model == "claude-core" {
+			sawTier = true
+			if r.Source != "tier" {
+				t.Errorf("claude-core source = %q, want %q", r.Source, "tier")
+			}
+		}
+	}
+	if !sawTier {
+		t.Fatalf("claude-core is absent from `pricing list --json`:\n%s", jsonOut)
 	}
 }
 

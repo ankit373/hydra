@@ -38,6 +38,7 @@ const (
 	stepCortex  step = iota // user picks the Cortex
 	stepTiers               // user confirms auto-assigned tiers
 	stepPrivacy             // does the user need local-only routing for PII?
+	stepCapture             // store prompt/response text, or only the statistics?
 	stepSkills              // which skills to enable
 	stepDone                // confirmation screen
 )
@@ -51,12 +52,20 @@ type InitModel struct {
 	cursor    int
 	cortex    *provider.Head
 	localOnly bool
+	capture   bool
 	skills    []string
 	err       error
+
+	// specs is detected once here, not per render — viewTiers used to call
+	// sysinfo.Detect() (subprocess spawns: sysctl/vm_stat/nvidia-smi) fresh on
+	// every re-render of the Tiers step, re-probing hardware on every
+	// arrow-key press. install.go's NewInstallModel already gets this right;
+	// this mirrors it.
+	specs *sysinfo.Specs
 }
 
 func NewInitModel(result *probe.Result) InitModel {
-	return InitModel{result: result}
+	return InitModel{result: result, specs: sysinfo.Detect()}
 }
 
 func (m InitModel) Init() tea.Cmd { return nil }
@@ -100,6 +109,14 @@ func (m InitModel) confirm() (tea.Model, tea.Cmd) {
 
 	case stepPrivacy:
 		m.localOnly = m.cursor == 0
+		m.step = stepCapture
+		m.cursor = 0
+
+	case stepCapture:
+		// "No" is first, so the cursor's resting position is the safe answer:
+		// capture is opt-in, and a user who presses enter through the wizard
+		// must not end up storing their source.
+		m.capture = m.cursor == 1
 		m.step = stepSkills
 		m.skills = defaultSkills(m.cortex)
 		m.cursor = 0
@@ -119,7 +136,7 @@ func (m InitModel) maxCursor() int {
 	switch m.step {
 	case stepCortex:
 		return len(m.result.Heads) - 1
-	case stepPrivacy:
+	case stepPrivacy, stepCapture:
 		return 1
 	}
 	return 0
@@ -138,13 +155,18 @@ func (m InitModel) View() string {
 		m.viewTiers(&b)
 	case stepPrivacy:
 		m.viewPrivacy(&b)
+	case stepCapture:
+		m.viewCapture(&b)
 	case stepSkills:
 		m.viewSkills(&b)
 	case stepDone:
 		m.viewDone(&b)
 	}
 
-	b.WriteString(sHint.Render("\n  ↑↓ navigate   enter select   q quit\n"))
+	// Same lipgloss gotcha as viewDone (#465): a blank line written inside
+	// Render gets padded to the block's widest line instead of staying a real
+	// newline, so both surrounding newlines stay outside the styled text.
+	b.WriteString("\n" + sHint.Render("  ↑↓ navigate   enter select   q quit") + "\n")
 	return b.String()
 }
 
@@ -180,11 +202,10 @@ func (m InitModel) viewTiers(b *strings.Builder) {
 		}
 	}
 	if hasLocal {
-		specs := sysinfo.Detect()
-		best := specs.BestOllamaModel()
+		best := m.specs.BestOllamaModel()
 		b.WriteString(sDim.Render(fmt.Sprintf(
 			"\n  Hardware: %s\n  Best local model for your machine: %s\n",
-			specs.Summary(), best.DisplayName,
+			m.specs.Summary(), best.DisplayName,
 		)))
 	}
 
@@ -206,6 +227,24 @@ func (m InitModel) viewPrivacy(b *strings.Builder) {
 	}
 }
 
+func (m InitModel) viewCapture(b *strings.Builder) {
+	b.WriteString(sPrompt.Render("  Store the text of prompts and responses?\n\n"))
+	opts := []string{
+		"No  — keep only the statistics (recommended)",
+		"Yes — store the text too, sampled and redacted",
+	}
+	for i, opt := range opts {
+		if i == m.cursor {
+			b.WriteString(sSelected.Render("  › "+opt) + "\n")
+		} else {
+			b.WriteString(sDim.Render("    "+opt) + "\n")
+		}
+	}
+	b.WriteString(sHint.Render("\n  Prompts and responses are verbatim source. Hydra can route and\n" +
+		"  report without them; stored text is sampled, and anything matching\n" +
+		"  a secret detector is replaced before it is written.\n"))
+}
+
 func (m InitModel) viewSkills(b *strings.Builder) {
 	b.WriteString(sPrompt.Render("  Skills enabled for your setup:\n\n"))
 	for _, s := range m.skills {
@@ -219,7 +258,11 @@ func (m InitModel) viewDone(b *strings.Builder) {
 		b.WriteString(sError.Render(fmt.Sprintf("  ✗ Setup failed: %v\n", m.err)))
 		return
 	}
-	b.WriteString(sSelected.Render("  ✓ Hydra is ready\n\n"))
+	// The blank line must stay outside Render: lipgloss pads every line of a
+	// multi-line render to its widest line, turning a trailing blank segment
+	// into a row of spaces glued directly onto the next line with no real
+	// newline between them (#465).
+	b.WriteString(sSelected.Render("  ✓ Hydra is ready") + "\n\n")
 	b.WriteString(fmt.Sprintf("  Cortex : %s\n", m.cortex.Name))
 	b.WriteString(fmt.Sprintf("  Config : %s\n", config.Path()))
 }
@@ -238,6 +281,7 @@ func (m InitModel) save() error {
 			"pii": {Action: "local-only"},
 		}
 	}
+	cfg.CapturePayloads = m.capture
 	if err := config.Save(cfg); err != nil {
 		return err
 	}

@@ -1,11 +1,14 @@
 import { useMemo } from 'react'
-import type { Session } from '../types'
+import type { Agent, Session } from '../types'
 import { layoutDag } from '../dagreLayout'
 
 // Sugiyama/dagre layout mechanics live in dagreLayout.ts, shared with Fleet's
 // inline run graph — see that file for why dagre over a force-directed layout.
 const NODE_W = 168
 const NODE_H = 46
+// Wider than RunGraph's LABEL_MAX (12): this node has more room, but a full
+// file path (an edit-target node's label) still needs truncating to fit it.
+const LABEL_MAX = 24
 
 interface Placed {
   id: string
@@ -14,9 +17,18 @@ interface Placed {
   label: string
   sub: string
   state: string
+  /** The file this node represents, when state is 'artifact' — clicking it
+   *  opens that file rather than nothing (#518). */
+  file?: string
 }
 
-export function SessionGraph({ session }: { session: Session }) {
+export function SessionGraph({
+  session,
+  onOpenFile,
+}: {
+  session: Session
+  onOpenFile?: (file: string) => void
+}) {
   const { nodes, lines, width, height } = useMemo(() => layout(session), [session])
 
   if (nodes.length === 0) return null
@@ -32,28 +44,66 @@ export function SessionGraph({ session }: { session: Session }) {
             fill="none"
           />
         ))}
-        {nodes.map((n) => (
-          <g key={n.id} transform={`translate(${n.x - NODE_W / 2},${n.y - NODE_H / 2})`}>
-            <rect
-              width={NODE_W}
-              height={NODE_H}
-              rx={10}
-              className={`gnode gnode--${n.state || 'pending'}`}
-            />
-            <text x={11} y={19} className="gnode__label">
-              {n.label}
-            </text>
-            <text x={11} y={34} className="gnode__sub">
-              {n.sub}
-            </text>
-          </g>
-        ))}
+        {nodes.map((n) => {
+          const clickable = n.file !== undefined && onOpenFile !== undefined
+          return (
+            <g
+              key={n.id}
+              transform={`translate(${n.x - NODE_W / 2},${n.y - NODE_H / 2})`}
+              className={clickable ? 'gnode-wrap--clickable' : undefined}
+              role={clickable ? 'button' : undefined}
+              tabIndex={clickable ? 0 : undefined}
+              aria-label={clickable ? `Open ${n.file}` : undefined}
+              onClick={clickable ? () => onOpenFile!(n.file!) : undefined}
+              onKeyDown={
+                clickable
+                  ? (e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        onOpenFile!(n.file!)
+                      }
+                    }
+                  : undefined
+              }
+            >
+              <rect
+                width={NODE_W}
+                height={NODE_H}
+                rx={10}
+                className={`gnode gnode--${n.state}`}
+              />
+              <text x={11} y={19} className="gnode__label">
+                {n.label}
+              </text>
+              <text x={11} y={34} className="gnode__sub">
+                {n.sub}
+              </text>
+            </g>
+          )
+        })}
       </svg>
       <p className="graph__legend">
         solid = ownership · dashed = A2A handoff
       </p>
     </div>
   )
+}
+
+function shortLabel(s: string): string {
+  if (s.length <= LABEL_MAX) return s
+  // File paths: the filename at the end is the meaningful part, so truncate
+  // from the start — clipping the end instead hides it (#461).
+  if (s.includes('/')) return `…${s.slice(-(LABEL_MAX - 1))}`
+  return `${s.slice(0, LABEL_MAX - 1)}…`
+}
+
+// A node with none of these signals never went through a run lifecycle — an
+// edit-target node, say — so it isn't "pending" (still to run); it's an
+// artifact the run touched. Reusing 'pending' reads as stuck forever (#462).
+function stateClass(a: Agent): string {
+  if (a.state && a.state !== 'pending') return a.state
+  if (a.tier > 0 || a.durationMs > 0) return 'pending'
+  return 'artifact'
 }
 
 function layout(session: Session) {
@@ -68,16 +118,20 @@ function layout(session: Session) {
   for (const p of placed) {
     const a = byID.get(p.id)
     if (!a) continue
+    const state = stateClass(a)
     nodes.push({
       id: p.id,
       x: p.x,
       y: p.y,
-      label: a.model || a.head || a.id,
+      label: shortLabel(a.model || a.head || a.id),
       // Verifiable facts first — tier, state, duration — rather than narration.
       sub: [a.tier > 0 ? `T${a.tier}` : null, a.state, a.durationMs > 0 ? `${a.durationMs}ms` : null]
         .filter(Boolean)
         .join(' · '),
-      state: a.state,
+      state,
+      // An artifact node's own id IS the file path (see shortLabel's
+      // truncate-from-the-start case, which exists specifically for this).
+      file: state === 'artifact' ? a.id : undefined,
     })
   }
 

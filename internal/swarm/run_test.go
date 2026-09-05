@@ -4,11 +4,13 @@ package swarm
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/ankit373/hydra/internal/a2a"
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/cost"
 	"github.com/ankit373/hydra/internal/dispatch"
@@ -93,6 +95,48 @@ func TestRun_ModeAllRunsEveryHeadAndRanksThem(t *testing.T) {
 	}
 	if res.Mode != ModeAll || res.Prompt != "the question" {
 		t.Errorf("result did not carry the request back: %+v", res)
+	}
+}
+
+// writeHandoffFile writes a minimal valid A2A handoff to a fresh temp file
+// and returns its path, for tests exercising Options.A2AFile.
+func writeHandoffFile(t *testing.T) string {
+	t.Helper()
+	h := a2a.Handoff{From: "agent-1", Task: "earlier task", PriorOutput: "prior output"}
+	raw, err := json.Marshal(h)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "handoff.json")
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+// #530: a valid --a2a file must actually reach the heads Run fires, not just
+// pass validation — swarm.Options carrying an A2AFile field is only half the
+// fix if the injected content never makes it into the executed prompt.
+func TestRun_A2AFileInjectsHandoffIntoPrompt(t *testing.T) {
+	withTempConfig(t)
+	capturing := &capturingExecutor{}
+	withStubExecutor(t, capturing)
+
+	s := New(nil, []provider.Head{registryHead("h1", "H1", 90)}, fakePricing{per: 0.01})
+	if _, err := s.Run(context.Background(), "new instruction", Options{
+		Mode: ModeAll, A2AFile: writeHandoffFile(t),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	seen := capturing.seen()
+	if len(seen) != 1 {
+		t.Fatalf("executor ran %d times, want 1", len(seen))
+	}
+	for _, want := range []string{"agent-1", "prior output", "new instruction"} {
+		if !strings.Contains(seen[0], want) {
+			t.Errorf("executed prompt is missing %q:\n%s", want, seen[0])
+		}
 	}
 }
 
@@ -424,6 +468,38 @@ func TestRunSPRT_EmptyDomainDefaults(t *testing.T) {
 	}
 	if res.Domain == "" {
 		t.Error("Domain is empty; calibration would be recorded against no domain at all")
+	}
+}
+
+// #530: RunSPRT must honor --a2a exactly like Run does — the handoff's
+// context has to reach every sampled head's prompt, not just pass Options
+// validation.
+func TestRunSPRT_A2AFileInjectsHandoffIntoPrompt(t *testing.T) {
+	withTempConfig(t)
+	capturing := &capturingExecutor{}
+	withStubExecutor(t, capturing)
+
+	s := New(nil, []provider.Head{registryHead("h1", "H1", 90)}, fakePricing{per: 0.01})
+	res, err := s.RunSPRT(context.Background(), "new instruction", Options{
+		Confidence: 0.6, A2AFile: writeHandoffFile(t),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	seen := capturing.seen()
+	if len(seen) == 0 {
+		t.Fatal("no prompts were executed")
+	}
+	for _, p := range seen {
+		for _, want := range []string{"agent-1", "prior output", "new instruction"} {
+			if !strings.Contains(p, want) {
+				t.Errorf("executed prompt is missing %q:\n%s", want, p)
+			}
+		}
+	}
+	if !strings.Contains(res.Prompt, "prior output") {
+		t.Errorf("SPRTResult.Prompt = %q, want it to reflect the injected handoff", res.Prompt)
 	}
 }
 

@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ankit373/hydra/internal/pending"
 	"github.com/ankit373/hydra/internal/runlog"
 )
 
@@ -378,5 +379,178 @@ func TestGetFleet_ConcurrentCallsAreSafe(t *testing.T) {
 		if err := <-done; err != nil {
 			t.Errorf("concurrent GetFleet: %v", err)
 		}
+	}
+}
+
+// A list of runs identified only by timestamp id is a list of timestamps. The
+// prompt is recorded on the run-started event, but tree.Reconstruct drops
+// run-level events, so it never reached the view until this read (#603).
+func TestGetFleet_CarriesWhatTheRunWasAskedToDo(t *testing.T) {
+	sandbox(t)
+	const id = "20260903T120000Z-goaltest"
+	writeRun(t, id,
+		runlog.Event{Kind: runlog.KindRunStarted, TaskID: "t1", Detail: "add pagination to /users"},
+		runlog.Event{Kind: runlog.KindHeadSelected, TaskID: "t1", Head: "h", Tier: 6},
+		runlog.Event{Kind: runlog.KindRunFinished, TaskID: "t1"},
+	)
+
+	f, err := New().GetFleet()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := findRun(t, f, id).Goal; got != "add pagination to /users" {
+		t.Errorf("Goal = %q, want the run-started detail", got)
+	}
+}
+
+// An external orchestrator can supply a run id and never a prompt. That is an
+// absent goal, not an error, and must not be fabricated from another event.
+func TestGetFleet_NoPromptLeavesTheGoalEmpty(t *testing.T) {
+	sandbox(t)
+	const id = "20260903T120001Z-nogoal"
+	writeRun(t, id,
+		runlog.Event{Kind: runlog.KindRunStarted, TaskID: "t1"},
+		runlog.Event{Kind: runlog.KindHeadSelected, TaskID: "t1", Head: "h", Tier: 6,
+			Detail: "candidate 1 of 2"},
+	)
+
+	f, err := New().GetFleet()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := findRun(t, f, id).Goal; got != "" {
+		t.Errorf("Goal = %q, want empty — a head_selected detail is not the goal", got)
+	}
+}
+
+// One run, one goal: the first statement of it is what was actually requested.
+func TestGetFleet_FirstGoalWinsOverALaterRunStarted(t *testing.T) {
+	sandbox(t)
+	const id = "20260903T120002Z-twogoals"
+	writeRun(t, id,
+		runlog.Event{Kind: runlog.KindRunStarted, TaskID: "t1", Detail: "the real request"},
+		runlog.Event{Kind: runlog.KindHeadSelected, TaskID: "t1", Head: "h", Tier: 6},
+		// A second writer sharing the run appends its own run_started (runlog's
+		// own docs note several writers share one run).
+		runlog.Event{Kind: runlog.KindRunStarted, TaskID: "t2", Detail: "a second writer's idea"},
+	)
+
+	f, err := New().GetFleet()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := findRun(t, f, id).Goal; got != "the real request" {
+		t.Errorf("Goal = %q, want the first run_started detail", got)
+	}
+}
+
+func findRun(t *testing.T, f *Fleet, id string) Run {
+	t.Helper()
+	for _, r := range f.Runs {
+		if r.ID == id {
+			return r
+		}
+	}
+	t.Fatalf("run %q not in fleet of %d", id, len(f.Runs))
+	return Run{}
+}
+
+// A run parked on a question is the one entry in Activity that cannot progress
+// without a person, so it must be visible and it must sort first (#583).
+func TestGetFleet_ParkedRunIsVisibleAndFirst(t *testing.T) {
+	sandbox(t)
+
+	// An ordinary finished run, newer than the parked one.
+	writeRun(t, "20260904T120000Z-done",
+		runlog.Event{Kind: runlog.KindRunStarted, TaskID: "t", Detail: "ship the thing"},
+		runlog.Event{Kind: runlog.KindHeadSelected, TaskID: "t", Head: "h1", Model: "H1", Tier: 3},
+		runlog.Event{Kind: runlog.KindRunFinished, TaskID: "t"},
+	)
+	// The parked run: a question was asked and nothing ran.
+	writeRun(t, "20260904T100000Z-park",
+		runlog.Event{Kind: runlog.KindRunStarted, TaskID: "p", Detail: "rotate the signing key"},
+		runlog.Event{Kind: runlog.KindQuestionAsked, TaskID: "p", Head: "gated", Detail: "Allow gated?"},
+	)
+	if err := pending.Save(pending.Question{
+		TaskID: "p", RunID: "20260904T100000Z-park",
+		Question: "Allow gated?", Prompt: "rotate the signing key", Head: "gated",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	f, err := New().GetFleet()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f.WaitingCount != 1 {
+		t.Errorf("WaitingCount = %d, want 1", f.WaitingCount)
+	}
+	if len(f.Runs) != 2 {
+		t.Fatalf("want both runs, got %d: %+v", len(f.Runs), f.Runs)
+	}
+	// Older, but it outranks a finished run because only a person can clear it.
+	if !f.Runs[0].Waiting || f.Runs[0].ID != "20260904T100000Z-park" {
+		t.Errorf("the parked run should sort first, got %+v", f.Runs[0])
+	}
+	if f.Runs[1].Waiting {
+		t.Error("the finished run is marked waiting")
+	}
+}
+
+// The empty-run filter drops a finished run with no agents and no error, which
+// is exactly the shape of a parked run: nothing executed, so no agents, and no
+// error because nothing failed. Without the exemption the one run that needs a
+// person is the one that disappears.
+func TestGetFleet_ParkedRunSurvivesTheEmptyRunFilter(t *testing.T) {
+	sandbox(t)
+
+	writeRun(t, "20260904T100000Z-park",
+		runlog.Event{Kind: runlog.KindRunStarted, TaskID: "p", Detail: "rotate the signing key"},
+	)
+	if err := pending.Save(pending.Question{
+		TaskID: "p", RunID: "20260904T100000Z-park",
+		Question: "Allow gated?", Prompt: "rotate", Head: "gated",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	f, err := New().GetFleet()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(f.Runs) != 1 {
+		t.Fatalf("the parked run was filtered out of Activity: %+v", f.Runs)
+	}
+	if !f.Runs[0].Waiting {
+		t.Error("the surviving run is not marked waiting")
+	}
+	if !f.HasRuns {
+		t.Error("HasRuns is false with a parked run present")
+	}
+}
+
+// A question that was asked and since answered must not leave the run pinned
+// to the top forever. The run log records the asking but never the answering,
+// so only the consumed file distinguishes the two.
+func TestGetFleet_AnsweredRunIsNoLongerWaiting(t *testing.T) {
+	sandbox(t)
+
+	writeRun(t, "20260904T100000Z-was",
+		runlog.Event{Kind: runlog.KindRunStarted, TaskID: "p", Detail: "rotate the signing key"},
+		runlog.Event{Kind: runlog.KindQuestionAsked, TaskID: "p", Head: "gated", Detail: "Allow gated?"},
+		runlog.Event{Kind: runlog.KindHeadSelected, TaskID: "p", Head: "gated", Model: "Gated", Tier: 3},
+		runlog.Event{Kind: runlog.KindRunFinished, TaskID: "p"},
+	)
+	// No pending file: the question was answered and the file consumed.
+
+	f, err := New().GetFleet()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f.WaitingCount != 0 {
+		t.Errorf("WaitingCount = %d, want 0 — the question was answered", f.WaitingCount)
+	}
+	if len(f.Runs) == 1 && f.Runs[0].Waiting {
+		t.Error("a run whose question was answered still reads as waiting")
 	}
 }

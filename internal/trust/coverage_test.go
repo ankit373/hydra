@@ -14,10 +14,12 @@ func TestDefaultPaths_LiveUnderTheUsersHydraDir(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
+	t.Setenv("HYDRA_HOME", "")
 
 	for name, got := range map[string]string{
 		"calibration.jsonl": DefaultPath(),
 		"trust.jsonl":       DefaultLogPath(),
+		"coagreement.jsonl": DefaultCoAgreementPath(),
 	} {
 		want := filepath.Join(home, ".hydra", name)
 		if got != want {
@@ -28,6 +30,26 @@ func TestDefaultPaths_LiveUnderTheUsersHydraDir(t *testing.T) {
 	// ledger, and merging them would corrupt both.
 	if DefaultPath() == DefaultLogPath() {
 		t.Error("calibration and run-log paths are the same file")
+	}
+}
+
+// $HYDRA_HOME must win over $HOME (#442).
+func TestDefaultPaths_PreferHydraHomeOverHome(t *testing.T) {
+	home := t.TempDir()
+	hydraHome := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("HYDRA_HOME", hydraHome)
+
+	for name, got := range map[string]string{
+		"calibration.jsonl": DefaultPath(),
+		"trust.jsonl":       DefaultLogPath(),
+		"coagreement.jsonl": DefaultCoAgreementPath(),
+	} {
+		want := filepath.Join(hydraHome, name)
+		if got != want {
+			t.Errorf("path for %s = %q, want %q ($HYDRA_HOME, not $HOME)", name, got, want)
+		}
 	}
 }
 

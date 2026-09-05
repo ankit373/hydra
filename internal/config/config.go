@@ -29,10 +29,34 @@ type Config struct {
 	Tiers    []Tier            `toml:"tiers"`  // ordered by capability (high → low)
 	Skills   []string          `toml:"skills"` // enabled skill IDs
 	Policies map[string]Policy `toml:"policies,omitempty"`
+
+	// ExploreRate is the probability a dispatch tries a head other than the
+	// top-ranked one, so the logs carry the counterfactual evidence off-policy
+	// evaluation needs. 0 (the default) is pure argmax and changes nothing.
+	ExploreRate float64 `toml:"explore_rate,omitempty"`
+
+	// CapturePayloads opts into storing prompt and response text. Off by
+	// default and deliberately not inferable from anything else: payloads are
+	// verbatim source and prompts, the only trace class with real privacy risk,
+	// so capture is a decision someone makes rather than a default they inherit.
+	CapturePayloads bool `toml:"capture_payloads,omitempty"`
+
+	// PayloadKeepRate is the probability a payload is admitted when capture is
+	// on. Sampling is what keeps the store bounded; the rate is recorded on
+	// every stored blob so the set can still be weighted back to the population.
+	// 0 means the built-in default rather than "keep nothing".
+	PayloadKeepRate float64 `toml:"payload_keep_rate,omitempty"`
 }
 
-// Dir returns the Hydra config directory (~/.hydra).
+// Dir returns the Hydra state directory: $HYDRA_HOME if set, else ~/.hydra.
+// Every subsystem that persists Hydra state (cost, trust, ledger, security,
+// run logs, config.toml) must resolve its path through this function rather
+// than calling os.UserHomeDir() directly, or $HYDRA_HOME silently stops being
+// an isolation boundary for it (#442).
 func Dir() string {
+	if h := os.Getenv("HYDRA_HOME"); h != "" {
+		return filepath.Clean(h)
+	}
 	home, _ := os.UserHomeDir()
 	return filepath.Join(home, ".hydra")
 }

@@ -4,18 +4,18 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Hydra Desktop — watch every agent, every dollar, live</title>
-  <meta name="description" content="The Hydra desktop app: four views over your local control plane — Dashboard, Fleet, Session, Code. See what each agent is doing and what it costs, as it happens. macOS, Linux and Windows.">
+  <meta name="description" content="The Hydra desktop app: ask for work in a chat, and every reply says which model answered, at which tier, and what it cost. Plus Models, Activity, Usage and Audit views. macOS, Linux and Windows.">
   <meta name="keywords" content="AI agent dashboard, LLM cost dashboard, desktop app, multi-model orchestration UI, agent monitoring, Hydra desktop">
 
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://hydra.uvansa.com/app.html">
   <meta property="og:title" content="Hydra Desktop — watch every agent, every dollar, live">
-  <meta property="og:description" content="Four views over your local control plane: Dashboard, Fleet, Session, Code. Free, open source, runs entirely on your machine.">
+  <meta property="og:description" content="Chat-first, over your local control plane: every reply names the model, the tier and the cost. Free, open source, runs entirely on your machine.">
   <meta property="og:image" content="https://hydra.uvansa.com/logo.png">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:site" content="@ankit373">
   <meta name="twitter:title" content="Hydra Desktop — watch every agent, every dollar, live">
-  <meta name="twitter:description" content="Four views over your local control plane. See what each agent is doing and what it costs, as it happens.">
+  <meta name="twitter:description" content="Five views over your local control plane. See what each agent is doing and what it costs, as it happens.">
   <meta name="twitter:image" content="https://hydra.uvansa.com/logo.png">
 
   <link rel="canonical" href="https://hydra.uvansa.com/app.html">
@@ -118,27 +118,31 @@ a:hover{text-decoration:underline;}
 .nav-item i{width:5px;height:5px;border-radius:50%;background:currentColor;opacity:.5;font-style:normal;}
 .pane{padding:18px 20px;position:relative;}
 
-/* Each pane fades in on its own slice of one 24s loop. Four views, 6s each. */
-.view{position:absolute;inset:18px 20px;opacity:0;animation:cycle 24s infinite;}
+/* Each pane fades in on its own slice of one 30s loop. Five views, 6s each —
+   a slot is 20% of the loop, which is why the percentages below are not the
+   25%-slot ones this had when there were four. */
+.view{position:absolute;inset:18px 20px;opacity:0;animation:cycle 30s infinite;}
 .view:nth-child(1){animation-delay:0s;}
 .view:nth-child(2){animation-delay:6s;}
 .view:nth-child(3){animation-delay:12s;}
 .view:nth-child(4){animation-delay:18s;}
+.view:nth-child(5){animation-delay:24s;}
 @keyframes cycle{
-  0%,1%   {opacity:0;transform:translateY(6px);}
-  3%,23%  {opacity:1;transform:none;}
-  25%,100%{opacity:0;transform:translateY(-4px);}
+  0%,1%    {opacity:0;transform:translateY(6px);}
+  2.5%,18% {opacity:1;transform:none;}
+  20%,100% {opacity:0;transform:translateY(-4px);}
 }
-/* The sidebar highlight tracks the same 24s clock. */
-.nav-item{animation:navlit 24s infinite;}
+/* The sidebar highlight tracks the same 30s clock. */
+.nav-item{animation:navlit 30s infinite;}
 .nav-item:nth-of-type(1){animation-delay:0s;}
 .nav-item:nth-of-type(2){animation-delay:6s;}
 .nav-item:nth-of-type(3){animation-delay:12s;}
 .nav-item:nth-of-type(4){animation-delay:18s;}
+.nav-item:nth-of-type(5){animation-delay:24s;}
 @keyframes navlit{
-  0%,1%   {background:transparent;color:var(--dim);}
-  3%,23%  {background:rgba(0,230,195,.10);color:var(--aqua);}
-  25%,100%{background:transparent;color:var(--dim);}
+  0%,1%    {background:transparent;color:var(--dim);}
+  2.5%,18% {background:rgba(0,230,195,.10);color:var(--aqua);}
+  20%,100% {background:transparent;color:var(--dim);}
 }
 /* Once nav.js confirms click handling is wired, it swaps the autoplay loop
    above for direct control: exactly one view/nav-item active, no timer. */
@@ -153,6 +157,27 @@ a:hover{text-decoration:underline;}
   .view:nth-child(1){opacity:1;}
   .nav-item:nth-of-type(1){background:rgba(0,230,195,.10);color:var(--aqua);}
 }
+
+/* Chat view: thread on the left, the glanceable companion pane on the right —
+   the same split the app ships. */
+.chat-split{display:grid;grid-template-columns:1fr 150px;gap:14px;align-items:start;}
+.said{margin-left:auto;max-width:78%;background:var(--panel);border:1px solid var(--line);
+  border-radius:10px 10px 3px 10px;padding:7px 11px;font-size:12px;margin-bottom:9px;width:fit-content;}
+.prov{font-family:var(--mono);font-size:9.5px;color:var(--faint);display:flex;align-items:center;
+  gap:6px;margin-bottom:12px;}
+.composer{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:9px;
+  background:var(--panel);padding:8px 10px;font-size:11.5px;}
+.chip{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line);border-radius:999px;
+  padding:2px 8px;font-size:10px;color:var(--ink);white-space:nowrap;}
+.chip i{width:5px;height:5px;border-radius:50%;background:var(--aqua);font-style:normal;}
+.ckpane{border-left:1px solid var(--line);padding-left:12px;}
+.cklbl{font-family:var(--mono);font-size:8.5px;letter-spacing:.09em;color:var(--faint);margin-bottom:4px;}
+.ckrow{display:flex;justify-content:space-between;align-items:baseline;font-size:10.5px;}
+/* Session's tab strip. */
+.tabs{display:flex;gap:4px;margin-bottom:10px;}
+.tab{font-family:var(--mono);font-size:10px;padding:3px 9px;border-radius:5px;
+  border:1px solid var(--line);color:var(--dim);}
+.tab.on{color:var(--aqua);border-color:var(--aqua);background:rgba(0,230,195,.08);}
 
 .vhead{font-family:var(--display);font-size:15px;margin-bottom:2px;}
 .vsub{font-family:var(--mono);font-size:10.5px;color:var(--faint);margin-bottom:14px;}
@@ -269,7 +294,7 @@ footer a{color:var(--dim);}
     </p>
     <div class="cta">
       <a class="btn primary" href="#download">Download for your platform</a>
-      <a class="btn" href="#views">See the four views</a>
+      <a class="btn" href="#views">See the views</a>
     </div>
   </div>
 
@@ -286,16 +311,93 @@ footer a{color:var(--dim);}
       <div class="win-body">
         <div class="side">
           <div class="lbl">Views</div>
-          <button type="button" class="nav-item"><i></i>Dashboard</button>
-          <button type="button" class="nav-item"><i></i>Fleet</button>
-          <button type="button" class="nav-item"><i></i>Session</button>
-          <button type="button" class="nav-item"><i></i>Code</button>
+          <button type="button" class="nav-item"><i></i>Chat</button>
+          <button type="button" class="nav-item"><i></i>Models</button>
+          <button type="button" class="nav-item"><i></i>Activity</button>
+          <button type="button" class="nav-item"><i></i>Usage</button>
+          <button type="button" class="nav-item"><i></i>Audit</button>
         </div>
 
         <div class="pane">
-          <!-- 1 · Dashboard -->
+          <!-- 1 · Chat · the default surface -->
           <div class="view">
-            <div class="vhead">Dashboard</div>
+            <div class="vhead">Chat</div>
+            <div class="vsub">ask for work — the reply says who answered, and what it cost</div>
+            <div class="chat-split">
+              <div>
+                <div class="said">add pagination to /users</div>
+                <div class="row" style="border:0;padding:2px 0 8px">
+                  <span style="flex:1;color:var(--dim)">Read <span class="mono">internal/api/users.go</span>,
+                    added page/size parsing and an <span class="mono">X-Total-Count</span> header.</span>
+                </div>
+                <div class="prov">
+                  <span class="pill ok">T6</span> gemini-flash
+                  <span style="color:var(--line)">·</span> 2.9s
+                  <span style="color:var(--line)">·</span> $0.004
+                  <span style="color:var(--line)">·</span> <span style="color:var(--aqua)">session →</span>
+                </div>
+                <div class="composer">
+                  <span style="flex:1;color:var(--faint)">Ask anything about this repo…</span>
+                  <span class="chip"><i></i>Auto-route</span>
+                </div>
+              </div>
+              <div class="ckpane">
+                <div class="cklbl">ACTIVE</div>
+                <div style="font-size:11.5px;margin-bottom:2px">gemini-flash <span style="color:var(--faint)">T6</span></div>
+                <div style="font-family:var(--mono);font-size:9.5px;color:var(--faint)">flash pool · 37 calls</div>
+                <div class="cklbl" style="margin-top:12px">MEASURED AT THIS</div>
+                <div class="ckrow"><span>gemini-flash</span><span style="color:var(--cheap)">1.18</span></div>
+                <div style="font-family:var(--mono);font-size:9px;color:var(--faint)">go · 41 obs</div>
+                <div class="ckrow" style="margin-top:7px"><span>qwen2.5</span><span style="color:var(--mid)">0.31</span></div>
+                <div style="font-family:var(--mono);font-size:9px;color:var(--mid)">yaml · 5 obs · thin</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 2 · Models -->
+          <div class="view">
+            <div class="vhead">Models</div>
+            <div class="vsub">what this machine can route to, and whether anything can drive it now</div>
+            <table class="mini">
+              <tr><th>Model</th><th>Tier</th><th>Reachable now</th><th style="text-align:right">Measured</th></tr>
+              <tr><td>claude-opus</td><td>1</td><td style="color:var(--cheap)">yes</td><td class="n">1.42 · 62 outcomes</td></tr>
+              <tr><td>claude-sonnet</td><td>3</td><td style="color:var(--cheap)">yes</td><td class="n">0.91 · 38 outcomes</td></tr>
+              <tr><td>gemini-flash</td><td>6</td><td style="color:var(--dim)">no API key for google</td><td class="n" style="color:var(--faint)">not measured</td></tr>
+              <tr><td>qwen2.5-coder:7b</td><td>10</td><td style="color:var(--dim)">start ollama serve</td><td class="n">0.34 · 77 outcomes</td></tr>
+            </table>
+            <div style="margin-top:12px;font-size:11px;color:var(--dim)">
+              The dot means reachable, not enabled in a config file. A score never
+              appears without the number of outcomes behind it.
+            </div>
+          </div>
+
+          <!-- 3 · Activity -->
+          <div class="view">
+            <div class="vhead">Activity</div>
+            <div class="vsub">grouped by who has to act, not by time alone</div>
+            <div style="font-family:var(--mono);font-size:10px;color:#E0A93A;margin:2px 0 6px">
+              WAITING ON YOU · 1</div>
+            <div class="row"><span style="width:6px"></span><span style="flex:1">rotate the signing key</span>
+              <span class="pill">answer</span><span style="color:var(--dim)">tier 1</span></div>
+            <div style="font-family:var(--mono);font-size:10px;color:var(--aqua);margin:10px 0 6px">
+              RUNNING NOW · 1</div>
+            <div class="row"><span class="blink"></span><span style="flex:1">add pagination to /users</span>
+              <span class="pill live">live</span><span style="color:var(--dim)">tier 6</span></div>
+            <div style="font-family:var(--mono);font-size:10px;color:#FF5A6E;margin:10px 0 6px">
+              SOMETHING FAILED · 1</div>
+            <div class="row"><span style="width:6px"></span><span style="flex:1">refactor the ledger globs</span>
+              <span class="pill fail">failed</span><span style="color:var(--dim)">tier 3</span></div>
+            <div style="font-family:var(--mono);font-size:10px;color:var(--faint);margin:10px 0 6px">
+              DONE · 2</div>
+            <div class="row"><span style="width:6px"></span><span style="flex:1">write DTO tests</span>
+              <span class="pill ok">done</span><span style="color:var(--cheap)">local</span></div>
+            <div class="row"><span style="width:6px"></span><span style="flex:1">add a User DTO</span>
+              <span class="pill ok">done</span><span style="color:var(--dim)">tier 8</span></div>
+          </div>
+
+          <!-- 4 · Usage -->
+          <div class="view">
+            <div class="vhead">Usage</div>
             <div class="vsub">spend, grouped by model · tier · day</div>
             <div class="cards">
               <div class="card"><div class="k">Calls today</div><div class="v">128</div></div>
@@ -310,75 +412,34 @@ footer a{color:var(--dim);}
             </table>
           </div>
 
-          <!-- 2 · Fleet -->
+          <!-- 5 · Audit -->
           <div class="view">
-            <div class="vhead">Fleet</div>
-            <div class="vsub">every run on this machine, newest first</div>
-            <div class="row"><span class="blink"></span><span style="flex:1">add pagination to /users</span>
-              <span class="pill live">live</span><span style="color:var(--dim)">tier 6</span></div>
-            <div class="row"><span style="width:6px"></span><span style="flex:1">rotate the signing key</span>
-              <span class="pill ok">done</span><span style="color:var(--dim)">tier 1</span></div>
-            <div class="row"><span style="width:6px"></span><span style="flex:1">write DTO tests</span>
-              <span class="pill ok">done</span><span style="color:var(--cheap)">local</span></div>
-            <div class="row"><span style="width:6px"></span><span style="flex:1">refactor the ledger globs</span>
-              <span class="pill fail">failed</span><span style="color:var(--dim)">tier 3</span></div>
-            <div style="margin-top:14px">
-              <div style="font-family:var(--mono);font-size:10px;color:var(--faint);margin-bottom:5px">
-                CONTEXT USED · 52%</div>
-              <div class="bar"><i style="width:52%;background:var(--cheap)"></i></div>
+            <div class="vhead">Audit</div>
+            <div class="vsub">what agents touched, and whether policy allowed it</div>
+            <div class="cards">
+              <div class="card"><div class="k">Allowed</div><div class="v">1,204</div></div>
+              <div class="card"><div class="k">Denied</div><div class="v" style="color:var(--exp)">7</div></div>
+              <div class="card"><div class="k">Flagged</div><div class="v" style="color:var(--mid)">2</div></div>
             </div>
-          </div>
-
-          <!-- 3 · Session -->
-          <div class="view">
-            <div class="vhead">Session <span class="pill live" style="margin-left:6px">live</span></div>
-            <div class="vsub">run-4b1 · what this agent is doing, in order</div>
-            <div class="row"><span style="color:var(--faint);width:52px">00:00.0</span>
-              <span style="flex:1">head selected — <span style="color:var(--aqua)">gemini-flash</span> (tier 6)</span></div>
-            <div class="row"><span style="color:var(--faint);width:52px">00:01.2</span>
-              <span style="flex:1">candidate 1 failed — falling through</span><span class="pill fail">retry</span></div>
-            <div class="row"><span style="color:var(--faint);width:52px">00:02.9</span>
-              <span style="flex:1">dispatch finished — 1.4k tok</span><span class="pill ok">ok</span></div>
-            <div class="row"><span style="color:var(--faint);width:52px">00:03.1</span>
-              <span style="flex:1">handed off to hydra-tier-6</span></div>
-            <div class="row"><span style="color:var(--faint);width:52px">00:03.4</span>
-              <span style="flex:1">edited <span class="mono">internal/api/users.go</span></span>
-              <span style="color:var(--cheap)">+18</span><span style="color:var(--exp)">−4</span></div>
+            <div class="row"><span style="flex:1">Ledger chain intact</span><span class="pill ok">verified</span></div>
+            <div class="row"><span style="flex:1">OWASP LLM Top-10 coverage</span><span style="color:var(--dim)">8 / 10 rules</span></div>
+            <div class="row"><span style="flex:1">Prompt-injection markers seen</span><span style="color:var(--mid)">2 blocked</span></div>
             <div style="margin-top:12px;font-family:var(--mono);font-size:10px;color:var(--faint)">
-              TIMELINE · a layered graph appears here when a run fans out</div>
-          </div>
-
-          <!-- 4 · Code -->
-          <div class="view">
-            <div class="vhead">Code</div>
-            <div class="vsub">what this run actually changed on disk</div>
-            <div style="font-family:var(--mono);font-size:11px;color:var(--dim);margin-bottom:10px">
-              internal/api/users.go <span style="color:var(--cheap)">+18</span>
-              <span style="color:var(--exp)">−4</span></div>
-            <div class="diff">
-              <div class="ctx">  func ListUsers(w http.ResponseWriter, r *http.Request) {</div>
-              <div class="del">-   users := store.All()</div>
-              <div class="add">+   page, size := paging.FromQuery(r.URL.Query())</div>
-              <div class="add">+   users, total := store.Page(page, size)</div>
-              <div class="ctx">  </div>
-              <div class="add">+   w.Header().Set("X-Total-Count", strconv.Itoa(total))</div>
-              <div class="ctx">    json.NewEncoder(w).Encode(users)</div>
-              <div class="ctx">  }</div>
-            </div>
+              EVERY DECISION IS APPEND-ONLY AND HASH-CHAINED · NOTHING LEAVES THE MACHINE</div>
           </div>
         </div>
       </div>
     </div>
     <p class="caption">
-      A live rendering of the app's four views, built from its own design tokens.
+      A live rendering of the app's views, built from its own design tokens.
       Not a screenshot — the numbers are sample data.
     </p>
   </div>
 </section>
 
-<!-- ══ THE FOUR VIEWS ══════════════════════════════════════════════════ -->
+<!-- ══ THE FIVE VIEWS ══════════════════════════════════════════════════ -->
 <section class="blk wrap" id="views">
-  <div class="klabel"><span>What's in it</span><b>four views, one question each</b></div>
+  <div class="klabel"><span>What's in it</span><b>five views, one question each</b></div>
   <h2>Each screen answers something you'd otherwise <span class="grad">grep the logs for</span>.</h2>
   <p>
     The app is a reader, not a second brain. Everything it shows comes from the
@@ -390,39 +451,67 @@ footer a{color:var(--dim);}
 
   <div class="grid4">
     <div class="feat">
-      <div class="tag">Dashboard</div>
+      <div class="tag">Chat</div>
+      <h3>Ask, and see what answered</h3>
+      <p>The window opens here. Ask for work and the reply names the model, the tier
+        and the cost, with the run narrating itself as it goes rather than after.
+        The model picker groups by shared quota, so it shows when choosing one model
+        spends the budget another will need.</p>
+    </div>
+    <div class="feat">
+      <div class="tag">Models</div>
+      <h3>What you can actually route to</h3>
+      <p>Every head this machine found, grouped by the token pool it spends, each
+        marked with whether anything can drive it <i>right now</i> and, when it
+        cannot, why — no API key, or a local server that is not running. Beside
+        it, the accuracy each model has actually earned, never shown without the
+        number of outcomes behind it.</p>
+    </div>
+    <div class="feat">
+      <div class="tag">Usage</div>
       <h3>Where the money went</h3>
       <p>Spend grouped by model, by tier and by day, with call counts beside each —
         alongside the governor's context pressure and your trust record, so cost
         and confidence sit on one screen.</p>
     </div>
     <div class="feat">
-      <div class="tag">Fleet</div>
-      <h3>What's running right now</h3>
-      <p>Runs in flight and the agents inside them, newest first, with the live
-        ones marked. Answers "is something still going, and should I be worried
-        about it".</p>
+      <div class="tag">Activity</div>
+      <h3>What needs you</h3>
+      <p>Every request, grouped by who has to act rather than by time alone:
+        waiting on you, running now, something failed, done. A flat newest-first
+        list gave a parked request, a live one and a month-old success the same
+        weight, so nothing read as needing attention.</p>
     </div>
     <div class="feat">
       <div class="tag">Session</div>
       <h3>Why it did that</h3>
+      <p class="app-note">Opened from a request in Activity, not from the rail.</p>
       <p>One run's timeline in order: which head was selected, which candidates
         failed and why it fell through, how long each step took, where it handed
         off — and a layered graph when the run fanned out, so a swarm reads as a
-        shape rather than a list.</p>
+        shape rather than a list. Its <b>Code</b> tab carries the diffs for the same
+        run — marking what changed <i>within</i> a modified line, not just which
+        lines moved — and lets you accept or undo the change on disk. Clicking a
+        file in the graph opens it there.</p>
     </div>
     <div class="feat">
-      <div class="tag">Code</div>
-      <h3>What changed on disk</h3>
-      <p>The files a run touched and the diff for each. If a run says it edited
-        something, this is where you check what it actually wrote.</p>
+      <div class="tag">Audit</div>
+      <h3>What it was allowed to touch</h3>
+      <p>Every tool call an agent made, whether the guardrails allowed it, and
+        what got blocked or flagged — over an append-only, hash-chained audit
+        log, mapped against the OWASP LLM Top 10. Its <b>MCP servers</b> tab
+        carries a trust verdict for each server installed on this machine, and
+        says plainly when nothing has been compared against the official
+        registry yet.</p>
     </div>
   </div>
 
   <div class="note">
-    <b>Plus a chat dock.</b> Collapsed by default, on every screen. Type a task,
-    let Hydra auto-route it, and watch the run appear in Fleet — without leaving
-    the view you were reading.
+    <b>Beside the chat, a pane you glance at.</b> The model working now and the
+    quota it draws from, this run's confidence, the files it changed, and how
+    accurate each model has actually measured at this kind of work — with the
+    sample size beside every score, because a number from five observations is not
+    a measurement.
   </div>
 </section>
 
@@ -476,13 +565,13 @@ footer a{color:var(--dim);}
 
   <div class="term" style="margin-top:22px;">
     <div class="copyline" data-copy="curl -fsSL https://raw.githubusercontent.com/ankit373/hydra/main/install-app.sh | sh"><span><span class="p">$</span> curl -fsSL https://raw.githubusercontent.com/ankit373/hydra/main/install-app.sh | sh</span><span class="cp">copy</span></div>
-    <div class="o">&nbsp;&nbsp;Release&nbsp;: <span class="g">v1.1.0</span></div>
+    <div class="o">&nbsp;&nbsp;Release&nbsp;: <span class="g">v1.4.0</span></div>
     <div class="o">&nbsp;&nbsp;Target&nbsp;&nbsp;: darwin_universal</div>
     <div class="o">&nbsp;&nbsp;Checksum: <span class="g">verified</span></div>
     <div class="o">&nbsp;&nbsp;Installed: /Applications/Hydra.app</div>
   </div>
   <p style="font-size:13.5px;color:var(--faint);margin-top:12px;">
-    Pin a version with <span class="mono">HYDRA_VERSION=v1.1.0</span>, or change where it
+    Pin a version with <span class="mono">HYDRA_VERSION=v1.4.0</span>, or change where it
     lands with <span class="mono">HYDRA_APP_DIR=~/Applications</span>.
     <a href="https://github.com/ankit373/hydra/blob/main/install-app.sh">Read the script</a>
     before you pipe it to a shell — it is under 200 lines and you should.
@@ -493,34 +582,42 @@ footer a{color:var(--dim);}
     <div class="row">
       <div class="os">macOS</div>
       <div class="meta">universal · Apple Silicon + Intel</div>
-      <div class="sz">8.3 MB</div>
-      <a class="get" href="https://github.com/ankit373/hydra/releases/download/v1.1.0/hydra-desktop_v1.1.0_darwin_universal.zip">.zip</a>
-      <a class="sum" href="https://github.com/ankit373/hydra/releases/download/v1.1.0/hydra-desktop_v1.1.0_darwin_universal.zip.sha256">sha256</a>
+      <div class="sz">8.8 MB</div>
+      <a class="get" href="https://github.com/ankit373/hydra/releases/download/v1.4.0/hydra-desktop_v1.4.0_darwin_universal.zip">.zip</a>
+      <a class="sum" href="https://github.com/ankit373/hydra/releases/download/v1.4.0/hydra-desktop_v1.4.0_darwin_universal.zip.sha256">sha256</a>
     </div>
     <div class="row">
-      <div class="os">Linux</div>
+      <div class="os">Linux x86-64</div>
       <div class="meta">x86-64</div>
-      <div class="sz">4.3 MB</div>
-      <a class="get" href="https://github.com/ankit373/hydra/releases/download/v1.1.0/hydra-desktop_v1.1.0_linux_amd64.tar.gz">.tar.gz</a>
-      <a class="sum" href="https://github.com/ankit373/hydra/releases/download/v1.1.0/hydra-desktop_v1.1.0_linux_amd64.tar.gz.sha256">sha256</a>
+      <div class="sz">4.4 MB</div>
+      <a class="get" href="https://github.com/ankit373/hydra/releases/download/v1.4.0/hydra-desktop_v1.4.0_linux_amd64.tar.gz">.tar.gz</a>
+      <a class="sum" href="https://github.com/ankit373/hydra/releases/download/v1.4.0/hydra-desktop_v1.4.0_linux_amd64.tar.gz.sha256">sha256</a>
     </div>
     <div class="row">
-      <div class="os">Windows</div>
-      <div class="meta">x86-64 · unzip and run Hydra.exe</div>
-      <div class="sz">4.8 MB</div>
-      <a class="get" href="https://github.com/ankit373/hydra/releases/download/v1.1.0/hydra-desktop_v1.1.0_windows_amd64.zip">.zip</a>
-      <a class="sum" href="https://github.com/ankit373/hydra/releases/download/v1.1.0/hydra-desktop_v1.1.0_windows_amd64.zip.sha256">sha256</a>
-    </div>
-    <div class="row off">
       <div class="os">Linux ARM64</div>
-      <div class="meta">Windows ARM64 too — both build now (<a href="https://github.com/ankit373/hydra/issues/263">#263</a>), first release carrying them is the one after v1.2.0</div>
-      <div class="sz">—</div>
-      <div class="sum"></div>
-      <div class="sum"></div>
+      <div class="meta">aarch64</div>
+      <div class="sz">4.0 MB</div>
+      <a class="get" href="https://github.com/ankit373/hydra/releases/download/v1.4.0/hydra-desktop_v1.4.0_linux_arm64.tar.gz">.tar.gz</a>
+      <a class="sum" href="https://github.com/ankit373/hydra/releases/download/v1.4.0/hydra-desktop_v1.4.0_linux_arm64.tar.gz.sha256">sha256</a>
+    </div>
+    <div class="row">
+      <div class="os">Windows x86-64</div>
+      <div class="meta">x86-64 · unzip and run Hydra.exe</div>
+      <div class="sz">4.9 MB</div>
+      <a class="get" href="https://github.com/ankit373/hydra/releases/download/v1.4.0/hydra-desktop_v1.4.0_windows_amd64.zip">.zip</a>
+      <a class="sum" href="https://github.com/ankit373/hydra/releases/download/v1.4.0/hydra-desktop_v1.4.0_windows_amd64.zip.sha256">sha256</a>
+    </div>
+    <div class="row">
+      <div class="os">Windows ARM64</div>
+      <div class="meta">aarch64 · unzip and run Hydra.exe</div>
+      <div class="sz">4.4 MB</div>
+      <a class="get" href="https://github.com/ankit373/hydra/releases/download/v1.4.0/hydra-desktop_v1.4.0_windows_arm64.zip">.zip</a>
+      <a class="sum" href="https://github.com/ankit373/hydra/releases/download/v1.4.0/hydra-desktop_v1.4.0_windows_arm64.zip.sha256">sha256</a>
     </div>
   </div>
+  </div>
   <p style="font-size:13px;color:var(--faint);margin-top:12px;font-family:var(--mono);">
-    links pinned to v1.1.0 · <a href="https://github.com/ankit373/hydra/releases">all releases</a> ·
+    links pinned to v1.4.0 · <a href="https://github.com/ankit373/hydra/releases">all releases</a> ·
     the command above always takes the newest
   </p>
 

@@ -13,10 +13,25 @@ func TestDefaultOverlayPath_IsUnderTheUsersHydraDir(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
+	t.Setenv("HYDRA_HOME", "")
 
 	want := filepath.Join(home, ".hydra", "models.json")
 	if got := DefaultOverlayPath(); got != want {
 		t.Errorf("DefaultOverlayPath() = %q, want %q", got, want)
+	}
+}
+
+// $HYDRA_HOME must win over $HOME (#442).
+func TestDefaultOverlayPath_PrefersHydraHomeOverHome(t *testing.T) {
+	home := t.TempDir()
+	hydraHome := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("HYDRA_HOME", hydraHome)
+
+	want := filepath.Join(hydraHome, "models.json")
+	if got := DefaultOverlayPath(); got != want {
+		t.Errorf("DefaultOverlayPath() = %q, want %q ($HYDRA_HOME, not $HOME)", got, want)
 	}
 }
 
@@ -215,6 +230,53 @@ func TestLoad_MalformedOverlayIsAnError(t *testing.T) {
 	if _, err := Load(path); err == nil {
 		t.Error("a malformed overlay loaded silently; the user would never learn " +
 			"their added models are being ignored")
+	}
+}
+
+// Load caches its result per overlay path, keyed on mtime+size — but an error
+// must never be cached past a fix. mtime alone would usually change on a
+// rewrite anyway, which would mask this bug by accident (a fresh mtime is a
+// fresh cache key regardless of whether errors are cached) — os.Chtimes
+// forces the second write to share the first write's exact mtime, and the
+// replacement is deliberately the same byte length too ("{broken" and
+// "[]     " are both 7 bytes — trailing whitespace after a JSON value is
+// valid), so the fingerprint is provably identical across both calls and the
+// only thing that can make the second Load succeed is NOT caching the error.
+func TestLoad_ErrorIsNotCachedPastAFix(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "models.json")
+
+	if err := os.WriteFile(path, []byte("{broken"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(path); err == nil {
+		t.Fatal("malformed overlay loaded without error — the fixture is wrong")
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstModTime := info.ModTime()
+
+	fixed := []byte("[]     ") // valid empty JSON array + trailing whitespace, same 7 bytes
+	if len(fixed) != len("{broken") {
+		t.Fatalf("test fixture bug: replacement is %d bytes, want %d", len(fixed), len("{broken"))
+	}
+	if err := os.WriteFile(path, fixed, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(path, firstModTime, firstModTime); err != nil {
+		t.Fatal(err)
+	}
+	if info, err := os.Stat(path); err != nil || info.ModTime() != firstModTime {
+		t.Fatalf("test fixture bug: mtime did not stick (got %v, want %v)", info.ModTime(), firstModTime)
+	}
+
+	db, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load still errors after the overlay was fixed (same mtime+size as the broken write): %v — a stale cached error is masking the fix", err)
+	}
+	if db == nil {
+		t.Fatal("Load returned a nil DB after the overlay was fixed — a stale cached error entry is masking the fix")
 	}
 }
 

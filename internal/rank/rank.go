@@ -4,8 +4,8 @@
 package rank
 
 import (
-	"fmt"
 	"sort"
+	"strconv"
 
 	"github.com/ankit373/hydra/internal/provider"
 )
@@ -80,8 +80,7 @@ func dedupeKey(h provider.Head) string {
 func UITier(h provider.Head) int {
 	if h.Source == "registry" {
 		if t := h.Meta["tier"]; t != "" {
-			var n int
-			if _, err := fmt.Sscanf(t, "%d", &n); err == nil {
+			if n, err := strconv.Atoi(t); err == nil {
 				return n
 			}
 		}

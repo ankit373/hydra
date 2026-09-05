@@ -45,8 +45,15 @@ floor internal/executor             86
 floor internal/glob                 96
 floor internal/graph                88
 floor internal/ledger               86
+# internal/mcpregistry talks to two external APIs (OSV.dev, GitHub) and reads
+# five clients' config files, so its remaining uncovered lines are the
+# cross-device-rename and UserHomeDir-failure branches that no portable test
+# can reach — the same category as internal/config's Windows skips.
+floor internal/mcpregistry          88
+floor internal/ope                  92
 floor internal/optimal              96
 floor internal/oracle               85
+floor internal/otlp                 85
 floor internal/parallel             87
 floor internal/policy               88
 floor internal/pricing              86

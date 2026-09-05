@@ -3,6 +3,7 @@
 package api
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -15,12 +16,16 @@ import (
 )
 
 // sandbox points config.Dir() and trust.DefaultLogPath() at a temp HOME, so a
-// test never reads (or writes) the developer's real ~/.hydra.
+// test never reads (or writes) the developer's real ~/.hydra. Clearing
+// HYDRA_HOME too matters since config.Dir() prefers it over HOME (#442) — a
+// developer or CI runner with one already exported would otherwise leak
+// straight through every "HOME-only" sandbox in this file.
 func sandbox(t *testing.T) string {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home) // windows
+	t.Setenv("HYDRA_HOME", "")
 	if err := os.MkdirAll(filepath.Join(home, ".hydra", "logs"), 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -432,6 +437,90 @@ func mustUpdate(t *testing.T, c *trust.Calibrator, source, domain string, saidCo
 	}
 }
 
+// writeManyCostRows fills cost.jsonl with n synthetic rows — large enough
+// that cost.jsonl's read+parse cost dominates a GetDashboard call, so any
+// difference between reading it once and reading it twice shows up in wall
+// time (#524).
+func writeManyCostRows(t *testing.T, home string, n int) {
+	t.Helper()
+	path := filepath.Join(home, ".hydra", "logs", "cost.jsonl")
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	w := bufio.NewWriter(f)
+	defer w.Flush()
+
+	today := time.Now().UTC().Format("2006-01-02")
+	for i := 0; i < n; i++ {
+		row := map[string]any{
+			"ts": today + "T10:00:00Z", "tier": (i % 8) + 1, "model": fmt.Sprintf("model-%d", i%5),
+			"prompt_tokens": 100 + i%50, "response_tokens": 50 + i%20, "est_cost_usd": 0.001,
+			"wall_ms": 200, "tokens_source": "actual", "run_id": fmt.Sprintf("run-%d", i), "task_id": fmt.Sprintf("task-%d", i),
+		}
+		raw, err := json.Marshal(row)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := w.Write(raw); err != nil {
+			t.Fatal(err)
+		}
+		if err := w.WriteByte('\n'); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// GetDashboard used to call cost.LoadAll() directly and then cost.Summary()
+// — which itself calls LoadAll() again — parsing cost.jsonl twice per call.
+// On a large log this test's cost.jsonl deliberately reproduces the shape of
+// the bug: enough rows that the JSONL parse dominates wall time, so a
+// regression back to a second full read shows up as roughly double the time
+// a single cost.LoadAll of the same file takes. The correctness half of this
+// (that Spend actually matches cost.SummaryFromRows) is already covered by
+// TestGetDashboard_MatchesCLI; this test is about the read count.
+func TestGetDashboard_ReadsCostLogOnce(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping large-file timing test in -short mode")
+	}
+	home := sandbox(t)
+	const n = 40000
+	writeManyCostRows(t, home, n)
+
+	start := time.Now()
+	rows, err := cost.LoadAll()
+	if err != nil {
+		t.Fatalf("cost.LoadAll: %v", err)
+	}
+	if len(rows) != n {
+		t.Fatalf("wrote %d rows, LoadAll read %d", n, len(rows))
+	}
+	oneRead := time.Since(start)
+
+	start = time.Now()
+	d, err := New().GetDashboard()
+	if err != nil {
+		t.Fatalf("GetDashboard: %v", err)
+	}
+	dashboardTime := time.Since(start)
+
+	if !d.HasData || d.Spend.TotalCalls != n {
+		t.Fatalf("GetDashboard did not see all %d rows: HasData=%v TotalCalls=%d", n, d.HasData, d.Spend.TotalCalls)
+	}
+
+	// A single-read GetDashboard costs one LoadAll plus a handful of cheap
+	// O(n) in-memory passes (ByModel/ByTier/ByDay/SummaryFromRows) — well
+	// under 2x one read. A regression to calling cost.Summary() (its own
+	// second LoadAll) on top of the first would cost close to 2x oneRead
+	// before those passes even run. 1.6x gives headroom for scheduling noise
+	// while still catching a real regression.
+	if budget := oneRead * 16 / 10; dashboardTime > budget {
+		t.Errorf("GetDashboard took %v for %d rows — more than 1.6x a single cost.LoadAll (%v); "+
+			"looks like it is reading cost.jsonl twice again", dashboardTime, n, oneRead)
+	}
+}
+
 // GetDashboard reads fresh on every call and holds no state, which is what
 // makes it safe for the frontend to poll from several places at once.
 func TestGetDashboard_ConcurrentCallsAreSafe(t *testing.T) {
@@ -450,5 +539,69 @@ func TestGetDashboard_ConcurrentCallsAreSafe(t *testing.T) {
 		if err := <-done; err != nil {
 			t.Errorf("concurrent GetDashboard: %v", err)
 		}
+	}
+}
+
+// A single-point (or absent) history gives RiskFromHistory no rate signal, so
+// burn and risk come back zero. Observations must ship alongside them, or a UI
+// cannot tell "measured no risk" from "never measured" (#555).
+func TestGovernor_NoRateSignalIsDistinguishableFromNoRisk(t *testing.T) {
+	home := sandbox(t)
+	state := filepath.Join(home, ".hydra", "logs", "state.json")
+	if err := os.WriteFile(state, []byte(`{"claude_pct": 40, "claude_pct_history": [40]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	d, err := New().GetDashboard()
+	if err != nil {
+		t.Fatal(err)
+	}
+	g := d.Governor
+	if g.BurnRatePct != 0 || g.Risk != 0 {
+		t.Errorf("burn=%v risk=%v; one observation cannot yield a rate", g.BurnRatePct, g.Risk)
+	}
+	if g.Observations != 1 {
+		t.Errorf("Observations = %d, want 1 — without it a zero risk reads as measured", g.Observations)
+	}
+	if g.HorizonObs <= 0 {
+		t.Errorf("HorizonObs = %d; the UI cannot state the horizon it is reporting", g.HorizonObs)
+	}
+	// With no rate signal the governor must fall back to the level band exactly.
+	if g.EffectiveMode != g.Mode {
+		t.Errorf("EffectiveMode = %q, Mode = %q; they must agree with no rate signal",
+			g.EffectiveMode, g.Mode)
+	}
+}
+
+// A climbing trajectory must produce a positive burn rate, and a fast climb must
+// be able to raise the effective mode above the static band — that escalation is
+// the entire point of the rate model.
+func TestGovernor_FastBurnRaisesEffectiveModeAboveTheBand(t *testing.T) {
+	home := sandbox(t)
+	state := filepath.Join(home, ".hydra", "logs", "state.json")
+	// Steady +8pp per observation, ending at 64: ModeFor(64) is "compact", but
+	// at this rate the 80% barrier is about two observations away.
+	body := `{"claude_pct": 64, "claude_pct_history": [24,32,40,48,56,64]}`
+	if err := os.WriteFile(state, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	d, err := New().GetDashboard()
+	if err != nil {
+		t.Fatal(err)
+	}
+	g := d.Governor
+	if g.BurnRatePct <= 0 {
+		t.Errorf("BurnRatePct = %v on a monotonically climbing series", g.BurnRatePct)
+	}
+	if g.Risk <= 0 {
+		t.Errorf("Risk = %v; a fast climb toward 80%% must carry non-zero risk", g.Risk)
+	}
+	if g.Mode != "compact" {
+		t.Fatalf("Mode = %q, want compact — fixture no longer pins the band it means to", g.Mode)
+	}
+	if g.EffectiveMode == g.Mode {
+		t.Errorf("EffectiveMode = %q, same as the static band; the rate floor never applied",
+			g.EffectiveMode)
 	}
 }

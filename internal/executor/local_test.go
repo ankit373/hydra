@@ -280,6 +280,30 @@ func TestCLIBuildArgs_SubstitutesThePromptPlaceholder(t *testing.T) {
 	}
 }
 
+// Bare `codex "<prompt>"` launches codex's interactive TUI, which fails
+// instantly outside a real terminal — every dispatch to codex failed this
+// way and silently fell back to a lower-scoring head (#491). The exec
+// subcommand is the non-interactive entry point.
+func TestCLIBuildArgs_OpenAIUsesTheExecSubcommand(t *testing.T) {
+	got := cliTemplates["openai"].buildArgs("the prompt")
+	want := []string{"exec", "the prompt"}
+	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Errorf("openai template args = %q, want %q — bare codex launches its interactive TUI", got, want)
+	}
+}
+
+// Bare `agy "<prompt>"` launches agy's interactive TUI too, but — unlike
+// codex — still exits 0, with the TUI error text on stdout. CLIExecutor only
+// checks the exit code, so this silently reports a false success carrying an
+// error message as if it were the model's real answer (#492).
+func TestCLIBuildArgs_AntigravityUsesPrintFlag(t *testing.T) {
+	got := cliTemplates["antigravity"].buildArgs("the prompt")
+	want := []string{"--print", "the prompt"}
+	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Errorf("antigravity template args = %q, want %q — bare agy launches its interactive TUI", got, want)
+	}
+}
+
 func TestCLIExecute_RunsTheBinaryAndReturnsItsOutput(t *testing.T) {
 	s := testutil.NewSandbox(t)
 

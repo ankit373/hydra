@@ -205,10 +205,32 @@ func (r *Registry) Check(path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	return ws.check(path)
+}
 
+// CheckRooted validates path against a synthesized workspace rooted at root —
+// the default workspace's glob rules, just not at the CWD repo. It exists for
+// Hydra-managed git worktrees, which live outside every registered root.
+func CheckRooted(root, path string) (string, error) {
+	if !filepath.IsAbs(root) || !filepath.IsAbs(path) {
+		return "", fmt.Errorf("root and path must be absolute: %s, %s", root, path)
+	}
+	ws := Workspace{
+		Name: "hydra-worktree", Root: filepath.Clean(root), Git: "auto",
+		AllowedGlobs: []string{"**"}, DeniedGlobs: defaultDeniedGlobs,
+	}
+	if !contains(ws.Root, path) {
+		return "", fmt.Errorf("worktree root %s does not contain %s", ws.Root, path)
+	}
+	return ws.check(path)
+}
+
+// check applies the workspace's glob rules to a path already known to be
+// contained under its root.
+func (ws Workspace) check(path string) (string, error) {
 	// filepath.Rel cleans both sides, so rel is already free of "." and ".."
-	// segments — and find has established containment, so it cannot start with
-	// "..". ToSlash because the glob patterns are written with forward slashes
+	// segments — and containment is established, so it cannot start with "..".
+	// ToSlash because the glob patterns are written with forward slashes
 	// and matchGlob splits on "/"; without it no pattern matches on Windows.
 	rel, err := filepath.Rel(ws.Root, path)
 	if err != nil {

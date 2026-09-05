@@ -121,14 +121,92 @@ func TestResolveTierHint(t *testing.T) {
 	d := routingDispatcher()
 	tests := []struct{ in, want string }{
 		{"", ""},
-		{"8", "8"},         // numeric passes through
-		{"expert", "1"},    // named → strongest member's capability tier
-		{"local", "10"},    //
-		{"bogus", "bogus"}, // unknown returned as-is so the caller can report it
+		{"8", "8"},      // numeric passes through
+		{"expert", "1"}, // named → strongest member's capability tier
+		{"local", "10"},
 	}
 	for _, tt := range tests {
-		if got := d.resolveTierHint(tt.in); got != tt.want {
+		got, err := d.resolveTierHint(tt.in)
+		if err != nil {
+			t.Errorf("resolveTierHint(%q) unexpected error: %v", tt.in, err)
+		}
+		if got != tt.want {
 			t.Errorf("resolveTierHint(%q) = %q, want %q", tt.in, got, tt.want)
+		}
+	}
+}
+
+// A name absent from cfg.Tiers entirely is a config problem, not a
+// routability one — it must produce a distinct error naming the bad tier and
+// what IS configured, rather than resolving to a value selectHeads then fails
+// on with the generic "no routable heads" message (#451).
+func TestResolveTierHint_UnknownNameIsADistinctError(t *testing.T) {
+	d := routingDispatcher()
+	for _, hint := range []string{"bogus", "expret", "Expert"} {
+		got, err := d.resolveTierHint(hint)
+		if err == nil {
+			t.Fatalf("resolveTierHint(%q) = %q, nil — want an error naming the unknown tier", hint, got)
+		}
+		if !strings.Contains(err.Error(), hint) {
+			t.Errorf("resolveTierHint(%q) error = %q, want it to name the bad tier", hint, err)
+		}
+		for _, configured := range []string{"expert", "local"} {
+			if !strings.Contains(err.Error(), configured) {
+				t.Errorf("resolveTierHint(%q) error = %q, want it to list configured tier %q", hint, err, configured)
+			}
+		}
+	}
+}
+
+// A numeric tier outside 1-10 can never be routable (rank.UITier never
+// produces such a value) — it must be rejected with the requested value and
+// the valid range, not silently treated as "no tier" or clamped invisibly (#454).
+func TestResolveTierHint_NumericOutOfRangeIsRejected(t *testing.T) {
+	d := routingDispatcher()
+	for _, hint := range []string{"0", "-1", "11", "15", "20"} {
+		got, err := d.resolveTierHint(hint)
+		if err == nil {
+			t.Fatalf("resolveTierHint(%q) = %q, nil — want an out-of-range error", hint, got)
+		}
+		if !strings.Contains(err.Error(), hint) {
+			t.Errorf("resolveTierHint(%q) error = %q, want it to name the requested value", hint, err)
+		}
+	}
+}
+
+// In-range numeric hints (the boundaries included) must still pass through
+// untouched — only genuinely out-of-range values are rejected.
+func TestResolveTierHint_NumericBoundariesAccepted(t *testing.T) {
+	d := routingDispatcher()
+	for _, hint := range []string{"1", "10"} {
+		got, err := d.resolveTierHint(hint)
+		if err != nil {
+			t.Errorf("resolveTierHint(%q) unexpected error: %v", hint, err)
+		}
+		if got != hint {
+			t.Errorf("resolveTierHint(%q) = %q, want %q", hint, got, hint)
+		}
+	}
+}
+
+// ValidateTierHint is what --swarm/--confidence must call too, or an invalid
+// --tier only errors for plain dispatch (#501). It must accept exactly what
+// resolveTierHint can turn into something routable, and reject everything
+// else with a clear reason.
+func TestValidateTierHint(t *testing.T) {
+	cfg := routingDispatcher().cfg // has tiers "expert" and "local"
+
+	valid := []string{"", "1", "8", "10", "expert", "local"}
+	for _, hint := range valid {
+		if err := ValidateTierHint(cfg, hint); err != nil {
+			t.Errorf("ValidateTierHint(%q) = %v, want nil", hint, err)
+		}
+	}
+
+	invalid := []string{"0", "11", "99", "-1", "bogus", "nonsense"}
+	for _, hint := range invalid {
+		if err := ValidateTierHint(cfg, hint); err == nil {
+			t.Errorf("ValidateTierHint(%q) = nil, want an error", hint)
 		}
 	}
 }

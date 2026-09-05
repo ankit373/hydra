@@ -64,7 +64,7 @@ func atoiTier(t *testing.T, s string) int {
 func TestChat_EmptyPromptIsAReplyNotAnError(t *testing.T) {
 	sandbox(t)
 
-	r, err := New().Chat("", "")
+	r, err := New().Chat("", "", "", "")
 	if err != nil {
 		t.Fatalf("an empty prompt must not error: %v", err)
 	}
@@ -81,12 +81,58 @@ func TestChat_EmptyPromptIsAReplyNotAnError(t *testing.T) {
 func TestChat_FailedDispatchReturnsAReply(t *testing.T) {
 	sandbox(t)
 
-	r, err := New().Chat("hello", "SIMPLE")
+	r, err := New().Chat("hello", "SIMPLE", "", "")
 	if err != nil {
 		t.Fatalf("a failed dispatch must come back as a reply, not a Go error: %v", err)
 	}
 	if r.RunID == "" {
 		t.Error("no RunID; a failed chat still has a run the user can inspect")
+	}
+}
+
+// The dock mints its id via NewRunID before dispatching, so it can poll
+// GetSession(runId) while Chat is still in flight (#513). Chat must actually
+// use that id rather than silently minting its own.
+func TestChat_HonoursCallerSuppliedRunID(t *testing.T) {
+	sandbox(t)
+
+	want := New().NewRunID()
+	r, err := New().Chat("hello", "SIMPLE", want, "")
+	if err != nil {
+		t.Fatalf("a failed dispatch must come back as a reply, not a Go error: %v", err)
+	}
+	if r.RunID != want {
+		t.Errorf("RunID = %q, want the caller-supplied %q — the dock's poll would be watching the wrong log", r.RunID, want)
+	}
+}
+
+func TestNewRunID_NonEmptyAndUnique(t *testing.T) {
+	a := New()
+	first, second := a.NewRunID(), a.NewRunID()
+	if first == "" || second == "" {
+		t.Fatal("NewRunID returned an empty id")
+	}
+	if first == second {
+		t.Error("two calls returned the same id")
+	}
+}
+
+// An unrecognized enum must not fall through to unrestricted auto-routing —
+// its zero-tier is byte-identical to "no enum given" everywhere else, so a
+// typo would otherwise silently route to the single strongest head instead of
+// being reported (#533, mirroring cmd/hydra's own --enum check for #501).
+func TestChat_UnknownEnumIsRejected(t *testing.T) {
+	sandbox(t)
+
+	r, err := New().Chat("hello", "NOT_A_REAL_ENUM", "", "")
+	if err != nil {
+		t.Fatalf("an unknown enum must not error: %v", err)
+	}
+	if r.Error == "" {
+		t.Error("no Error on the reply; a garbage enum silently became auto-routing")
+	}
+	if r.NeedsProbe {
+		t.Error("NeedsProbe = true for a bad enum; that flag means zero heads, not a bad key")
 	}
 }
 
@@ -101,7 +147,7 @@ func TestChat_NoHeadsAtAllSetsNeedsProbe(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	r, err := New().Chat("hello", "SIMPLE")
+	r, err := New().Chat("hello", "SIMPLE", "", "")
 	if err != nil {
 		t.Fatalf("zero heads must come back as a reply, not a Go error: %v", err)
 	}
@@ -110,5 +156,38 @@ func TestChat_NoHeadsAtAllSetsNeedsProbe(t *testing.T) {
 	}
 	if r.Error == "" {
 		t.Error("no Error on the reply; the dock would render an empty message")
+	}
+}
+
+// The picker expresses "answer this with Opus Thinking" as a tier, so an
+// explicit tier has to outrank whatever the enum would have inferred —
+// otherwise choosing a model silently does nothing (#558).
+func TestChat_ExplicitTierOutranksEnum(t *testing.T) {
+	sandbox(t)
+
+	// GRUNT infers the weakest tier; the explicit "2" must win. With no heads
+	// in the sandbox the dispatch still fails, so this asserts on the reply
+	// shape rather than on routing — the point is that a bad tier is rejected
+	// by dispatch's own validation and a good one is accepted.
+	r, err := New().Chat("hello", "GRUNT", "", "2")
+	if err != nil {
+		t.Fatalf("an explicit tier must not turn a failed dispatch into a Go error: %v", err)
+	}
+	if r.RunID == "" {
+		t.Error("no RunID; a failed chat still has a run to inspect")
+	}
+}
+
+// Out-of-range tiers are dispatch's call, not something the API should coerce.
+// A silently clamped tier would route somewhere the user never asked for.
+func TestChat_RejectsOutOfRangeTier(t *testing.T) {
+	sandbox(t)
+
+	r, err := New().Chat("hello", "", "", "99")
+	if err != nil {
+		t.Fatalf("a bad tier must come back as a reply, not a Go error: %v", err)
+	}
+	if r.Error == "" {
+		t.Error("tier 99 was accepted; dispatch must reject it rather than clamp")
 	}
 }

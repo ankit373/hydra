@@ -4,14 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Hydra — The Trust Control Plane for AI Development</title>
-  <meta name="description" content="Route to a target confidence of correctness, not just the cheapest model. Hydra samples adaptively (SPRT), cutting AI API costs 70-85% along the way.">
+  <meta name="description" content="Route to a target confidence of correctness, not just the cheapest model. Hydra samples models adaptively (SPRT), cuts AI API costs 70-85% along the way, and keeps sensitive data local.">
   <meta name="keywords" content="trust control plane, AI confidence routing, multi-model AI orchestration, LLM router, Claude Code, Ollama, local LLM, AI model routing, LLM cost optimization, AI coding assistant, llm orchestration CLI, model routing open source">
 
   <!-- Open Graph / Social sharing -->
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://hydra.uvansa.com/">
   <meta property="og:title" content="Hydra — The Trust Control Plane for AI Development">
-  <meta property="og:description" content="Hydra routes tasks across every model on your machine to a target confidence of correctness, cutting AI costs 70-85%. Open source, MIT license.">
+  <meta property="og:description" content="Hydra routes tasks across every model on your machine to a target confidence of correctness — sampling adaptively (SPRT) and stopping once the evidence is strong enough. Cuts AI costs 70-85% along the way. Open source, MIT license.">
   <meta property="og:image" content="https://hydra.uvansa.com/logo.png">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:site" content="@ankit373">
@@ -44,9 +44,9 @@
     "description": "Hydra is the Trust Control Plane for AI development: it routes tasks across every model on your machine to a target confidence of correctness — sampling models adaptively (SPRT) and stopping once the evidence is strong enough — while cutting AI API costs 70-85% along the way.",
     "url": "https://hydra.uvansa.com/",
     "downloadUrl": "https://github.com/ankit373/hydra",
-    "softwareVersion": "1.0.0",
+    "softwareVersion": "1.4.0",
     "datePublished": "2026-01-01",
-    "dateModified": "2026-08-09",
+    "dateModified": "2026-09-04",
     "license": "https://github.com/ankit373/hydra/blob/main/LICENSE",
     "author": {
       "@type": "Person",
@@ -71,12 +71,19 @@
       "Automatic fallback chains terminating at always-on local Qwen",
       "Local Ollama + cloud model hybrid — provider-neutral discovery",
       "Interactive TUI cockpit (hyctl tui) — chat, route work, and watch spend live",
-      "Desktop app (Wails v2) for macOS, Windows and Linux — Dashboard, Fleet, Session and Code views over a chat dock",
+      "Desktop app (Wails v2) for macOS, Windows and Linux — chat-first, with a pool-aware model picker and a routing pane, plus Models, Activity, Usage and Audit views",
       "Per-run event log — reconstruct any run's supervision tree, timeline and file edits",
       "Swarm dispatch — race, best, and all modes across multiple models simultaneously",
       "Token budget enforcement — per-model context window tracking with pressure modes",
       "Dynamic live pricing — OpenRouter API pricing with 24h cache and tier fallback",
       "hyctl stats — real-time session cost rollup by model, tier, and day",
+      "hyctl stats --latency — p50/p90/p99 per model from mergeable sketches, not a rescan of the cost log",
+      "Oracle-verified eval corpus (hyctl eval) — labelled examples kept verbatim and exempt from retention",
+      "hyctl trace seal — folds old run logs into compressed monthly segments, losslessly and invisibly to readers",
+      "Opt-in payload store (hyctl trace payloads) — prompt and response text, off by default, sampled, and redacted before it is written",
+      "Off-policy evaluation (hyctl trace evaluate) — what a routing policy you never ran would have cost, with a confidence interval, refusing where the log cannot answer",
+      "OpenTelemetry export (hyctl trace export --otlp) — dispatches as OTLP spans for Langfuse, Grafana or Jaeger; nothing leaves the machine by default",
+      "hyctl ask — tasks parked waiting on a human, when a ledger rule answers ask rather than allow or deny",
       "A2A agent-to-agent handoff protocol with vector clocks for causal ordering",
       "Homebrew installable on macOS and Linux"
     ]
@@ -429,7 +436,14 @@ h2.big{font-size:clamp(28px,4.4vw,46px);letter-spacing:-1px;font-weight:800;line
 .tile .mech code{font-family:var(--mono);font-size:12px;color:var(--ink);background:rgba(0,0,0,.4);padding:1px 6px;border-radius:4px;}
 
 /* ── section 6 · comparison ────────────────────────────────────────────── */
-.cmp-scroll{margin-top:34px;overflow-x:auto;border:1px solid var(--line);border-radius:14px;-webkit-overflow-scrolling:touch;}
+.cmp-scroll-wrap{position:relative;margin-top:34px;}
+.cmp-scroll{overflow-x:auto;border:1px solid var(--line);border-radius:14px;-webkit-overflow-scrolling:touch;}
+.cmp-swipe-hint{display:none;font-family:var(--mono);font-size:11px;letter-spacing:.5px;color:var(--faint);margin:0 0 8px;}
+@media (max-width:700px){
+  .cmp-swipe-hint{display:block;}
+  .cmp-scroll-wrap::after{content:"";position:absolute;top:1px;right:1px;bottom:1px;width:28px;pointer-events:none;
+    background:linear-gradient(to right,transparent,var(--bg));border-radius:0 13px 13px 0;}
+}
 table.cmp{border-collapse:collapse;width:100%;min-width:680px;font-size:14px;}
 table.cmp th,table.cmp td{padding:16px 18px;text-align:left;border-bottom:1px solid var(--line);}
 table.cmp thead th{font-family:var(--mono);font-size:12px;letter-spacing:.5px;color:var(--dim);font-weight:600;
@@ -462,6 +476,7 @@ table.cmp tbody tr:last-child td,table.cmp tbody tr:last-child th{border-bottom:
   padding:12px 14px;color:#c7d0e8;overflow-x:auto;}
 .term .p{color:var(--aqua);}.term .c{color:var(--faint);}.term .o{color:var(--dim);}
 .term .g{color:var(--cheap);}
+.term .e{color:var(--exp);font-weight:700;}
 .copyline{display:flex;align-items:center;gap:10px;justify-content:space-between;cursor:pointer;}
 .copyline .cp{font-size:10.5px;color:var(--faint);transition:.15s;flex-shrink:0;}
 .copyline:hover .cp{color:var(--aqua);}
@@ -534,6 +549,7 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
     <a href="/docs.html">Docs</a>
     <a href="/first-principles.html">First principles</a>
     <a href="/app.html">Desktop app</a>
+    <a href="#security">Security</a>
     <a href="#compare">Compare</a>
     <a href="/pricing.html">Pricing</a>
     <a href="https://github.com/ankit373/hydra">GitHub</a>
@@ -703,6 +719,33 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
   </div>
 </section>
 
+<!-- ══ 4b · SECURITY ═══════════════════════════════════════════════════════ -->
+<section class="blk wrap reveal" id="security">
+  <div class="klabel"><span>Accountability</span><b>counts hide the sequence</b></div>
+  <h2 class="big">You gave an agent your repo. <span class="grad">What did it do?</span></h2>
+  <p class="lede">Every access an agent makes is recorded in a local, hash-chained ledger. <b>hyctl security</b> reads that log and answers the one question you actually have — not a wall of metrics.</p>
+
+  <div class="term" style="margin-top:22px;max-width:760px">
+    <div class="copyline" data-copy="hyctl security"><span><span class="p">$</span> hyctl security</span><span class="cp">copy</span></div>
+    <div class="o"><span class="e">VERDICT  ACT NOW</span></div>
+    <div class="o"><span class="c">  critical incident — gpt-4o: the same resource was denied</span></div>
+    <div class="o"><span class="c">  repeatedly, then it escalated to an exec/network action,</span></div>
+    <div class="o"><span class="c">  then it targeted the audit trail itself.</span></div>
+    <div class="o"><span class="c">  recon → escalation → audit-tampering · 4 event(s)</span></div>
+    <div class="o">&nbsp;</div>
+    <div class="o">activity  <span class="e">4 blocked</span> · 0 flagged</div>
+    <div class="o">evidence  4 event(s), 4 hash-chained, <span class="g">intact</span></div>
+  </div>
+
+  <p class="lede" style="margin-top:26px">“4 denied, 2 flagged” and “injection → recon → escalation → an attempt on the audit trail” are the same rows read twice. Only the second one is an incident. Severity is <b>OWASP Risk Rating</b> (likelihood × impact) — never a blended score.</p>
+
+  <p class="cmp-note"><b>hyctl security --why</b> opens the whole programme underneath: a risk register on an SLA clock, crosswalked to OWASP LLM / NIST AI RMF / ISO 42001 / MITRE ATLAS / SOC 2 · OWASP LLM Top-10 coverage · a policy audit that finds rules which can <em>never</em> fire · PII exposure resolved against real heads, so a local model is not reported as a leak · control effectiveness, where a control that is configured but never applied reads as <b>inert</b> rather than as protection · head-binary integrity · edit blast radius.</p>
+
+  <p class="cmp-note"><b>Honest about its own limits.</b> Framework mappings are marked <em>curated</em> assertions, not measurements. Defect cost is per-occurrence, not annualised. A file the dependency graph does not index is <em>unknown</em>, never “low-risk”. The attestation is unsigned, because Hydra has no key management and a signature without one is theatre.</p>
+
+  <p class="lede" style="margin-top:26px">The ledger records what an agent did. <b>hyctl mcp registry</b> scores whether the MCP server it was talking to was ever safe to trust in the first place — every existing MCP directory answers “does this exist”, none answer “is it safe to run with my credentials right now”, and star counts are actively misleading (the most-starred servers score worst on quality in independent research). <code>audit</code> resolves what's installed against the official registry and scores it; every trust state drops back to <em>provisional</em> on a version bump, the direct fix for a server that ships clean for months then turns malicious in one release.</p>
+</section>
+
 <!-- ══ 5 · CRAZY NUMBERS ════════════════════════════════════════════════════ -->
 <section class="blk wrap reveal" id="numbers">
   <div class="klabel"><span>By the numbers</span><b>every number has a mechanism</b></div>
@@ -754,6 +797,8 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
   <h2 class="big">Others route your traffic. <span class="grad">Hydra routes on your metal.</span></h2>
   <p class="lede">Cost routing and fallback are table stakes — most tools have them. The differentiators are the rows nobody else can check: local-first, confidence/trust routing, and an on-device accountability ledger.</p>
 
+  <div class="cmp-scroll-wrap">
+  <p class="cmp-swipe-hint">swipe to compare →</p>
   <div class="cmp-scroll">
     <table class="cmp">
       <colgroup><col><col class="hyctl"><col><col><col></colgroup>
@@ -773,11 +818,13 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
         <tr><th scope="row">Spend logging &amp; cost reporting</th><td class="hydcol"><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
         <tr><th scope="row">Confidence / trust routing (calibrated + optimal-stopping)</th><td class="hydcol"><span class="yes">✓</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td></tr>
         <tr><th scope="row">On-device accountability ledger (PII / local-only policy)</th><td class="hydcol"><span class="yes">✓</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td></tr>
+        <tr><th scope="row">MCP server trust scoring (not just an index)</th><td class="hydcol"><span class="yes">✓</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td></tr>
         <tr><th scope="row">Runs fully offline (0 network to route)</th><td class="hydcol"><span class="yes">✓</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td></tr>
       </tbody>
     </table>
   </div>
-  <p class="cmp-note"><b>Every row checked above ships today</b> — <code>hyctl dispatch --confidence</code>, <code>hyctl graph blast</code>, <code>hyctl mcp</code>. The agent-tree cockpit (<code>hyctl tui</code>) now renders real runs from the per-run event log, and the desktop app ships as a download for macOS, Windows and Linux with every release — not yet code-signed, so macOS needs right-click → Open on first launch.</p>
+  </div>
+  <p class="cmp-note"><b>Every row checked above ships today</b> — <code>hyctl dispatch --confidence</code>, <code>hyctl graph blast</code>, <code>hyctl mcp</code>, <code>hyctl mcp registry</code>. The cockpit (<code>hyctl tui</code>) runs the work you type and renders real runs from the per-run event log, and the desktop app ships as a download for macOS, Windows and Linux on both x86-64 and ARM64 with every release — not yet code-signed, so macOS needs right-click → Open on first launch.</p>
 </section>
 
 <!-- ══ 6b · DESKTOP APP NUDGE ═══════════════════════════════════════════════ -->
@@ -785,18 +832,20 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
   <div class="klabel"><span>Hydra Desktop</span><b>ships with every release</b></div>
   <h2 class="big">Prefer to <span class="grad">watch</span> it rather than grep it?</h2>
   <p style="max-width:720px;color:var(--dim)">
-    Everything above is the CLI. The same control plane has a desktop app —
-    four views over the logs <code>hyctl</code> already writes: where the money
-    went, what is running now, why a run picked the head it did, and which files
-    it changed. No account, no server, nothing leaves the machine.
+    Everything above is the CLI. The same control plane has a desktop app that
+    opens on a chat: ask for work, and every reply says which model answered, at
+    which tier, and what it cost — beside a pane showing what the router knows.
+    Models, Activity, Usage and Audit sit behind it, over the logs
+    <code>hyctl</code> already writes. No account, no server, nothing leaves the
+    machine.
   </p>
 
   <div class="app-tease">
     <div class="app-tease-views">
-      <span><b>Dashboard</b>where the money went</span>
-      <span><b>Fleet</b>what is running now</span>
-      <span><b>Session</b>why it did that</span>
-      <span><b>Code</b>what changed on disk</span>
+      <span><b>Models</b>what you can actually route to</span>
+      <span><b>Activity</b>what needs you</span>
+      <span><b>Usage</b>where the money went</span>
+      <span><b>Audit</b>what the agents did</span>
     </div>
     <a class="app-tease-cta" href="/app.html">
       See the app <span aria-hidden="true">→</span>
@@ -809,8 +858,8 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
   <p class="cmp-note" style="margin-top:16px">
     macOS · Linux · Windows, attached to every GitHub release with a SHA-256
     checksum. Not yet code-signed, so macOS needs right-click → Open the first
-    time — the install script clears that for you. Linux and Windows ARM64
-    builds ship starting with this release (<a href="https://github.com/ankit373/hydra/issues/263">#263</a>).
+    time — the install script clears that for you. ARM64 builds ship for both
+    Windows and Linux (<a href="https://github.com/ankit373/hydra/issues/263">#263</a>).
     <a href="/app.html#download">Direct downloads</a>.
   </p>
 </section>
@@ -880,6 +929,7 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
         <h4>Product</h4>
         <a href="#universe">The universe</a>
         <a href="#math">The math</a>
+        <a href="#security">Security</a>
         <a href="#compare">Comparison</a>
       </div>
       <div class="col">
@@ -893,8 +943,6 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
         <h4>Resources</h4>
         <a href="/docs.html">Docs</a>
         <a href="https://github.com/ankit373/hydra">GitHub ★</a>
-        <a href="/llms.txt">llms.txt</a>
-        <a href="/pricing.md">pricing.md</a>
       </div>
     </div>
     <div class="foot-bottom">
