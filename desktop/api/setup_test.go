@@ -9,7 +9,9 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
+	"time"
 )
 
 // withPath puts dir as the only entry on $PATH, so exec.LookPath finds
@@ -105,6 +107,90 @@ func TestCheckHyctl_FallsBackToCommonInstallDirs(t *testing.T) {
 	}
 	if st.Version != "hydra v1.2.3" {
 		t.Errorf("Version = %q, want hydra v1.2.3", st.Version)
+	}
+}
+
+// withVersionProbeTimeout shrinks the probe deadline so a timeout test costs
+// milliseconds instead of the real ten seconds.
+func withVersionProbeTimeout(t *testing.T, d time.Duration) {
+	t.Helper()
+	orig := versionProbeTimeout
+	versionProbeTimeout = d
+	t.Cleanup(func() { versionProbeTimeout = orig })
+}
+
+// slowHyctl writes an executable that sleeps before printing, to outlast the
+// probe deadline. Windows has no /bin/sh, and a .bat cannot sleep portably,
+// so the timeout path is exercised on the platforms InstallHyctl supports.
+func slowHyctl(t *testing.T, dir string) {
+	t.Helper()
+	path := filepath.Join(dir, "hyctl")
+	script := "#!/bin/sh\nsleep 5\necho 'hydra v9.9.9'\n"
+	if err := os.WriteFile(path, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A probe that never finished and one that ran and printed nothing both left
+// Version empty, so a loaded machine looked identical to a broken hyctl and
+// the frontend could say nothing useful about either (#667).
+func TestCheckHyctl_TimeoutIsDistinctFromNoOutput(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the fake needs /bin/sh to sleep")
+	}
+
+	t.Run("timeout says so", func(t *testing.T) {
+		withVersionProbeTimeout(t, 50*time.Millisecond)
+		dir := t.TempDir()
+		slowHyctl(t, dir)
+		withPath(t, dir+string(os.PathListSeparator)+"/usr/bin"+string(os.PathListSeparator)+"/bin")
+		withHyctlSearchDirs(t)
+
+		st := New().CheckHyctl()
+		if !st.Found {
+			t.Fatal("Found = false; the probe's deadline must not make hyctl look absent")
+		}
+		if st.Version != "" {
+			t.Errorf("Version = %q, want empty on a timeout", st.Version)
+		}
+		if !strings.Contains(st.VersionError, "did not respond") {
+			t.Errorf("VersionError = %q, want it to name the timeout", st.VersionError)
+		}
+	})
+
+	t.Run("silent binary says something else", func(t *testing.T) {
+		dir := t.TempDir()
+		fakeHyctl(t, dir, "")
+		withPath(t, dir)
+		withHyctlSearchDirs(t)
+
+		st := New().CheckHyctl()
+		if !st.Found {
+			t.Fatal("Found = false; a silent hyctl is still present")
+		}
+		if st.VersionError == "" {
+			t.Fatal("VersionError is empty; the caller cannot tell why Version is blank")
+		}
+		if strings.Contains(st.VersionError, "did not respond") {
+			t.Errorf("VersionError = %q, but nothing timed out here", st.VersionError)
+		}
+	})
+}
+
+// A version that reads fine must leave VersionError empty, or the frontend
+// would render a fault on every healthy machine.
+func TestCheckHyctl_NoVersionErrorOnSuccess(t *testing.T) {
+	dir := t.TempDir()
+	fakeHyctl(t, dir, "hydra v1.2.3")
+	withPath(t, dir)
+	withHyctlSearchDirs(t)
+
+	st := New().CheckHyctl()
+	if st.Version != "hydra v1.2.3" {
+		t.Fatalf("Version = %q, want hydra v1.2.3", st.Version)
+	}
+	if st.VersionError != "" {
+		t.Errorf("VersionError = %q, want empty when the version read fine", st.VersionError)
 	}
 }
 
