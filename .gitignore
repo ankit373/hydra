@@ -23,6 +23,12 @@ auth_required.json
 # ── Tool caches ────────────────────────────────────────────────────────────
 .antigravitycli/
 
+# ── Local build output ─────────────────────────────────────────────────────
+# Anchored: an unanchored `hydra` would also ignore cmd/hydra/. A 17 MB build
+# of this reached develop once already (#662).
+/hyctl
+/hydra
+
 # ── Node / Bun ─────────────────────────────────────────────────────────────
 node_modules/
 desktop/frontend/node_modules/
