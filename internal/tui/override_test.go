@@ -73,7 +73,7 @@ func TestOverride_ForceTierDigits(t *testing.T) {
 	}
 }
 
-// Consensus is a two-step pick from the design's 90–99.9% targets, by digit or
+// Consensus is a two-step pick from the design's 90-99.9% targets, by digit or
 // j/k+enter.
 func TestOverride_ConsensusTargets(t *testing.T) {
 	m := openOverride(t)
@@ -90,7 +90,7 @@ func TestOverride_ConsensusTargets(t *testing.T) {
 		t.Errorf("strategy = %q", got)
 	}
 
-	// j/k + enter picks too — 99.9% renders without a fabricated ".0".
+	// j/k + enter picks too, 99.9% renders without a fabricated ".0".
 	m = press(m, tea.KeyCtrlO)
 	m = typed(m, "jjjj")
 	m, _ = enter(m)

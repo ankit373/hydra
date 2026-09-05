@@ -20,7 +20,7 @@ import (
 
 // Run fans one prompt out to N heads and charges the user for all of them. Its
 // contract is that every head's answer is accounted for, exactly one winner is
-// reported, and the spend is logged — none of which was covered.
+// reported, and the spend is logged, none of which was covered.
 
 // swarmHead builds a head backed by a fake CLI binary that prints reply.
 func swarmHead(t *testing.T, s *testutil.Sandbox, id string, capScore int, reply string) provider.Head {
@@ -115,7 +115,7 @@ func writeHandoffFile(t *testing.T) string {
 }
 
 // #530: a valid --a2a file must actually reach the heads Run fires, not just
-// pass validation — swarm.Options carrying an A2AFile field is only half the
+// pass validation, swarm.Options carrying an A2AFile field is only half the
 // fix if the injected content never makes it into the executed prompt.
 func TestRun_A2AFileInjectsHandoffIntoPrompt(t *testing.T) {
 	withTempConfig(t)
@@ -206,7 +206,7 @@ func TestRun_OneFailingHeadDoesNotFailTheSwarm(t *testing.T) {
 		t.Fatalf("one failing head failed the whole swarm: %v", err)
 	}
 	if len(res.Attempts) != 2 {
-		t.Fatalf("got %d attempts, want both recorded — a failed head is part of "+
+		t.Fatalf("got %d attempts, want both recorded, a failed head is part of "+
 			"what the run did", len(res.Attempts))
 	}
 	if res.Winner == nil || res.Winner.Head.ID != "working" {
@@ -263,7 +263,7 @@ func TestRun_LogsEveryAttemptToTheCostLog(t *testing.T) {
 	var winners int
 	for _, r := range rows {
 		if r.SwarmMode != string(ModeAll) {
-			t.Errorf("row mode = %q, want %q — `hyctl stats` groups on this",
+			t.Errorf("row mode = %q, want %q, `hyctl stats` groups on this",
 				r.SwarmMode, ModeAll)
 		}
 		if r.SwarmWinner {
@@ -326,7 +326,7 @@ func TestRun_CostGuardRefusesBeforeFiring(t *testing.T) {
 	}
 }
 
-// Plan is what --dry-run reports. It must name the same heads Run would fire —
+// Plan is what --dry-run reports. It must name the same heads Run would fire,
 // a plan that describes a different run than the one it precedes is worse than
 // no plan (#167).
 func TestPlan_MatchesWhatRunWouldFire(t *testing.T) {
@@ -441,7 +441,7 @@ func TestRunSPRT_AgreeingHeadsReachTheTargetAndRecordTheirAttempts(t *testing.T)
 		t.Errorf("Target = %v, want the requested 0.75", res.Target)
 	}
 	if res.Domain != "go" {
-		t.Errorf("Domain = %q, want the requested one — calibration is per-domain", res.Domain)
+		t.Errorf("Domain = %q, want the requested one, calibration is per-domain", res.Domain)
 	}
 	if res.Prompt != "q" {
 		t.Errorf("Prompt = %q", res.Prompt)
@@ -471,7 +471,7 @@ func TestRunSPRT_EmptyDomainDefaults(t *testing.T) {
 	}
 }
 
-// #530: RunSPRT must honor --a2a exactly like Run does — the handoff's
+// #530: RunSPRT must honor --a2a exactly like Run does, the handoff's
 // context has to reach every sampled head's prompt, not just pass Options
 // validation.
 func TestRunSPRT_A2AFileInjectsHandoffIntoPrompt(t *testing.T) {

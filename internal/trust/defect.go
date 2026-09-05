@@ -28,7 +28,7 @@ func DefaultWeights() DefectWeights {
 // willing to tolerate per task. RequiredConfidence sets the error probability α
 // so that α × (defect cost) ≈ this constant: a mistake that costs 10× more must
 // be 10× less likely. The baseline task (defect cost = Base) yields α = 0.10, i.e.
-// a 90% target — matching the SPRT default.
+// a 90% target, matching the SPRT default.
 const defaultToleratedLeakUSD = 0.10
 
 // maxConfidence caps how sure Hydra will insist on being, so an enormous
@@ -78,8 +78,8 @@ func (d *DefectModel) RequiredConfidence(t Task) float64 {
 
 // NormalizeBlastRadius applies the same clamp CostUSD uses internally: a
 // non-positive radius is treated as 1.0 (local). Exported so a caller that
-// displays BlastRadius alongside a derived cost/confidence — `hyctl trust
-// defect` — shows the value the calculation actually used, not the raw input.
+// displays BlastRadius alongside a derived cost/confidence, `hyctl trust
+// defect`, shows the value the calculation actually used, not the raw input.
 func NormalizeBlastRadius(blast float64) float64 {
 	if blast <= 0 {
 		return 1.0

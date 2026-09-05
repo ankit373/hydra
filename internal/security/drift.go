@@ -11,7 +11,7 @@ import (
 
 // Were these decisions all made under the same rules? Each event's
 // config.Breadcrumb is covered by its own hash, so a breadcrumb that changes
-// mid-log is a config swapped underneath prior approvals — a local rug pull.
+// mid-log is a config swapped underneath prior approvals, a local rug pull.
 
 // ConfigEpoch is a span of the ledger recorded under one configuration.
 type ConfigEpoch struct {
@@ -28,7 +28,7 @@ type ConfigDrift struct {
 	// Changed is true when more than one distinct configuration produced the
 	// events in this log.
 	Changed bool `json:"changed"`
-	// Unstamped counts events with no breadcrumb — recorded before the
+	// Unstamped counts events with no breadcrumb, recorded before the
 	// fingerprint shipped, or by a build that could not read its registry.
 	// Reported rather than folded into an epoch, because "unknown config" is
 	// not a configuration.
@@ -70,7 +70,7 @@ func DetectConfigDrift(events []ledger.Event) ConfigDrift {
 }
 
 // shortBreadcrumb trims a SHA256 to a readable prefix. The full value is never
-// needed for display — only for equality, which has already happened.
+// needed for display, only for equality, which has already happened.
 func shortBreadcrumb(s string) string {
 	if len(s) <= 12 {
 		return s
@@ -94,7 +94,7 @@ func driftCheck(d ConfigDrift) Check {
 		return Check{Name: name, Status: "unchanged", Detail: detail}
 	default:
 		return Check{Name: name, Status: fmt.Sprintf("%d configurations", len(d.Epochs)),
-			Detail: fmt.Sprintf("the routing/pricing config changed mid-history — decisions before %s "+
+			Detail: fmt.Sprintf("the routing/pricing config changed mid-history, decisions before %s "+
 				"were made under different rules than those after it",
 				d.Epochs[len(d.Epochs)-1].FirstTS)}
 	}

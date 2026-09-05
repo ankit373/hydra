@@ -8,7 +8,7 @@ import (
 )
 
 // internal/update was at 0%. semverGT decides whether a user is told a new
-// release exists — so a wrong answer is silent: nobody sees a notification that
+// release exists, so a wrong answer is silent: nobody sees a notification that
 // was never printed.
 
 func TestSemverGT_ReleaseBeatsItsOwnPrerelease(t *testing.T) {
@@ -125,7 +125,7 @@ func TestParseVer(t *testing.T) {
 	}
 }
 
-// Nothing unparsable may be reported as newer — that would show an update
+// Nothing unparsable may be reported as newer, that would show an update
 // notice pointing at a version that does not exist.
 func TestSemverGT_GarbageIsNeverNewer(t *testing.T) {
 	for _, junk := range []string{"", "garbage", "vv1", "...", "-rc.1", "v"} {
@@ -169,7 +169,7 @@ func FuzzSemverGT_IsAStrictOrdering(f *testing.F) {
 		}
 		// Irreflexive: nothing is greater than itself.
 		if semverGT(a, a) {
-			t.Fatalf("semverGT(%q, %q) = true — not irreflexive", a, a)
+			t.Fatalf("semverGT(%q, %q) = true, not irreflexive", a, a)
 		}
 		// Asymmetric: both directions cannot hold.
 		if semverGT(a, b) && semverGT(b, a) {

@@ -13,7 +13,7 @@ import (
 )
 
 // Confidence states how much evidence backs a score. "Insufficient" is a
-// distinct third state from low/moderate/high — a server with no evidence
+// distinct third state from low/moderate/high, a server with no evidence
 // yet must never render the same as one found to be safe or unsafe (§10.2
 // of the design doc: this is a design requirement, not a rounding choice).
 type Confidence string
@@ -26,7 +26,7 @@ const (
 )
 
 // Signal is one piece of evidence behind a score. Always shown alongside the
-// number it feeds — a bare score with no signals is exactly what every
+// number it feeds, a bare score with no signals is exactly what every
 // existing MCP directory already gets wrong (star/download counts with no
 // explanation). Impact ranges -100..100; Available false means the signal
 // couldn't be evaluated (network failure, unsupported ecosystem, non-GitHub
@@ -39,7 +39,7 @@ type Signal struct {
 }
 
 // CategoryScore is one of the CSA MCP Selection Scorecard's four categories
-// (modelcontextprotocol-security.io/audit/scorecard.html) — Hydra automates
+// (modelcontextprotocol-security.io/audit/scorecard.html), Hydra automates
 // signal collection into a taxonomy the MCP Security Working Group already
 // endorsed, rather than inventing a competing one.
 type CategoryScore struct {
@@ -130,7 +130,7 @@ func ComputeScore(ctx context.Context, srv ServerRecord, corpus []ServerRecord) 
 }
 
 // aggregate turns a category's signals into a 0-100 value plus a confidence
-// derived from how many of the signals were actually available — the
+// derived from how many of the signals were actually available, the
 // "how many of the signals were computable" measure the design doc uses in
 // place of a borrowed calibration engine with no training data (§12/§13).
 func aggregate(signals []Signal) CategoryScore {
@@ -169,7 +169,7 @@ func aggregate(signals []Signal) CategoryScore {
 // produced evidence, not their summed weight. Weight-summing let a single
 // always-on baseline signal manufacture "moderate" confidence for a server
 // nothing had been checked about, which made the insufficient-evidence state
-// unreachable in practice — the one thing the design doc calls a hard
+// unreachable in practice, the one thing the design doc calls a hard
 // requirement.
 func overallConfidence(substantiveCategories int) Confidence {
 	switch {
@@ -190,7 +190,7 @@ func overallConfidence(substantiveCategories int) Confidence {
 // The live registry uses five types (npm, pypi, oci, nuget, mcpb); an
 // unmapped one reports unavailable rather than a fabricated clean result.
 // OSV has no ecosystem for oci (a container digest) or mcpb (an MCP bundle),
-// so those stay unmapped deliberately. Casing is exact — OSV rejects
+// so those stay unmapped deliberately. Casing is exact, OSV rejects
 // "pypi" with HTTP 400.
 var osvEcosystem = map[string]string{
 	"npm":   "npm",
@@ -210,7 +210,7 @@ type osvResponse struct {
 }
 
 // knownBadSignal cross-references a package against OSV.dev's advisory
-// database — the highest-value signal per the design doc's evidence: OX
+// database, the highest-value signal per the design doc's evidence: OX
 // Security found 9 of 11 registries accept a known-malicious clone with zero
 // review. This is the check that would have caught it.
 func knownBadSignal(ctx context.Context, pkg Package) Signal {
@@ -257,7 +257,7 @@ func knownBadSignal(ctx context.Context, pkg Package) Signal {
 }
 
 // typosquatSignal flags a package identifier that's suspiciously close (edit
-// distance <=2) to a different, already-registered identifier — the exact
+// distance <=2) to a different, already-registered identifier, the exact
 // pattern OX Security proved works against real registries. There's no
 // popularity signal in the official registry's schema to compare against
 // (deliberately: §7 found popularity is actively misleading), so this
@@ -266,7 +266,7 @@ func knownBadSignal(ctx context.Context, pkg Package) Signal {
 func typosquatSignal(srv ServerRecord, corpus []ServerRecord) Signal {
 	// Nothing to compare is not the same as compared-and-clean. With no
 	// identifier of our own, or no synced corpus to compare against, this
-	// check did not run — reporting "no close match found" would claim a
+	// check did not run, reporting "no close match found" would claim a
 	// clean result for a comparison that never happened, and it was enough
 	// on its own to keep a wholly-unknown server out of the
 	// insufficient-evidence state.
@@ -294,7 +294,7 @@ func typosquatSignal(srv ServerRecord, corpus []ServerRecord) Signal {
 				if d > 0 && d <= 2 && d < len(pkg.Identifier)/3+1 {
 					return Signal{
 						Name:      "near-duplicate identifier",
-						Detail:    fmt.Sprintf("%q is %d edit(s) from %q, published under a different namespace (%s) — verify this isn't a typosquat", pkg.Identifier, d, otherPkg.Identifier, publisherNamespace(other.Name)),
+						Detail:    fmt.Sprintf("%q is %d edit(s) from %q, published under a different namespace (%s), verify this isn't a typosquat", pkg.Identifier, d, otherPkg.Identifier, publisherNamespace(other.Name)),
 						Impact:    -40,
 						Available: true,
 					}
@@ -324,7 +324,7 @@ func anyIdentifierIn(corpus []ServerRecord) bool {
 }
 
 // publisherNamespace is the reverse-DNS namespace a registry name is
-// published under — "ai.dinglebear" for "ai.dinglebear/unraid-mcp". Two
+// published under, "ai.dinglebear" for "ai.dinglebear/unraid-mcp". Two
 // entries sharing a namespace are the same publisher.
 func publisherNamespace(name string) string {
 	if i := strings.Index(name, "/"); i >= 0 {
@@ -407,7 +407,7 @@ type githubRepo struct {
 // maintenanceRecencyThreshold: no push in this long is treated as elevated
 // abandonment risk. Not a precise hazard-rate model (that needs contributor
 // counts and release cadence GitHub's single repo GET doesn't cheaply
-// provide — see design doc §12 for the Cox proportional-hazards research
+// provide, see design doc §12 for the Cox proportional-hazards research
 // this is informed by), but the same directional signal: staleness is real
 // and current popularity signals miss it.
 const maintenanceRecencyThreshold = 180 * 24 * time.Hour
@@ -495,7 +495,7 @@ func parseGitHubURL(url string) (owner, repo string, ok bool) {
 // this is weighted lower than an independently-checkable signal like a
 // known-vulnerability match, never presented as a verified guarantee.
 //
-// Only applies to remote servers — a stdio server runs locally under the
+// Only applies to remote servers, a stdio server runs locally under the
 // user's own OS permissions, so "remote auth posture" isn't a meaningful
 // question for it, and this correctly reports Available=false rather than
 // inventing a score for a question that doesn't apply.
@@ -518,7 +518,7 @@ func declaredAuthSignal(srv ServerRecord) Signal {
 	}
 	return Signal{
 		Name:      "declared remote auth (not independently verified)",
-		Detail:    "remote endpoint declares no auth header — matches the pattern security research found in the large majority of exposed production MCP servers",
+		Detail:    "remote endpoint declares no auth header, matches the pattern security research found in the large majority of exposed production MCP servers",
 		Impact:    -30,
 		Available: true,
 	}
@@ -529,7 +529,7 @@ func declaredAuthSignal(srv ServerRecord) Signal {
 // registryPresenceSignal is context, not evidence. It is true of every
 // server this function is ever called for (scoring only runs on entries
 // already resolved against the official registry), so it discriminates
-// nothing — a constant cannot separate a good server from a bad one.
+// nothing, a constant cannot separate a good server from a bad one.
 // Available is false so it renders in the signal list for the reader without
 // contributing confidence or moving the score; counting it was what made
 // "insufficient evidence" unreachable for real servers.
@@ -547,7 +547,7 @@ func FormatConfidence(c Confidence) string {
 }
 
 // FormatScore renders an overall score as a rounded percentage string, or
-// "insufficient evidence" — never a bare number for a score with no signal.
+// "insufficient evidence", never a bare number for a score with no signal.
 func FormatScore(s Score) string {
 	if s.Confidence == ConfidenceInsufficient {
 		return "insufficient evidence"

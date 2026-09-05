@@ -37,7 +37,7 @@ func TestResolvePackage(t *testing.T) {
 
 func TestClaudeDesktopConfigPathFor_AllThreePlatforms(t *testing.T) {
 	// filepath.Join uses the test-running host's own separator regardless of
-	// the goos argument (it isn't itself GOOS-aware) — so "want" is computed
+	// the goos argument (it isn't itself GOOS-aware), so "want" is computed
 	// with the same filepath.Join calls the function under test makes,
 	// rather than a hardcoded separator that would only be right on one host.
 	home, appData := "/Users/x", "/Users/x/AppData/Roaming"
@@ -106,7 +106,7 @@ func TestClientServerConfig_HasNoEnvField(t *testing.T) {
 	if err := json.Unmarshal(raw, &cfg); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	// The struct simply has nowhere to put "env" — this assertion documents
+	// The struct simply has nowhere to put "env", this assertion documents
 	// that guarantee rather than testing incidental behavior.
 	if cfg.Command != "npx" {
 		t.Fatalf("sanity check failed: Command = %q", cfg.Command)

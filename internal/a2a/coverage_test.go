@@ -11,7 +11,7 @@ import (
 )
 
 // Ordering.String labels causal relationships in handoff output. "concurrent"
-// is the one that matters — it is what tells a reader two agents may have
+// is the one that matters, it is what tells a reader two agents may have
 // raced, so an unlabelled value hides the exact case worth noticing.
 func TestOrdering_StringCoversEveryValue(t *testing.T) {
 	want := map[Ordering]string{
@@ -37,7 +37,7 @@ func TestOrdering_StringCoversEveryValue(t *testing.T) {
 	}
 }
 
-// A missing handoff is "no handoff yet", not an error — the first dispatch of a
+// A missing handoff is "no handoff yet", not an error, the first dispatch of a
 // session has none, and treating that as a failure would break every cold start.
 func TestLoad_MissingFileIsNilNilNotAnError(t *testing.T) {
 	h, err := Load(filepath.Join(t.TempDir(), "never-written.json"))
@@ -100,7 +100,7 @@ func TestLoad_MalformedJSONIsAnError(t *testing.T) {
 }
 
 // A handoff carries the prior agent's context and file list. An unwritable
-// destination must surface, not be swallowed — the next agent would otherwise
+// destination must surface, not be swallowed, the next agent would otherwise
 // run with no context and no indication why.
 func TestSave_UnwritableDestinationIsAnError(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "nope", "deeper")
@@ -182,7 +182,7 @@ func TestConflictsWith_RequiresBothConcurrencyAndFileOverlap(t *testing.T) {
 	}
 }
 
-// A nil counterpart must not panic — Load returns nil for a first run, and
+// A nil counterpart must not panic, Load returns nil for a first run, and
 // callers pass that straight through.
 func TestConflictsWith_NilIsNotAConflict(t *testing.T) {
 	h := &Handoff{From: "a", Files: []string{"/x.go"}, Clock: Clock{"a": 1}}

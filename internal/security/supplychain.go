@@ -41,7 +41,7 @@ type HeadBinary struct {
 	Path   string `json:"path"`
 	SHA256 string `json:"sha256"`
 	Size   int64  `json:"size"`
-	// New is a binary with no prior fingerprint — a baseline, not a finding.
+	// New is a binary with no prior fingerprint, a baseline, not a finding.
 	New bool `json:"new,omitempty"`
 	// Changed means the content hash differs from the stored one.
 	Changed bool `json:"changed,omitempty"`
@@ -61,7 +61,7 @@ type SupplyChain struct {
 
 // FingerprintHeads hashes each CLI head's binary, compares it against the
 // stored fingerprint, and persists the new state. Heads with no executable
-// (API-key and port-sourced providers) are skipped — there is no local
+// (API-key and port-sourced providers) are skipped, there is no local
 // artifact to fingerprint.
 func FingerprintHeads(heads []provider.Head) SupplyChain {
 	store := loadBinaryStore(binaryStorePath())
@@ -104,7 +104,7 @@ func FingerprintHeads(heads []provider.Head) SupplyChain {
 			hb.Changed, hb.Previous, hb.FirstSeen = true, prev.SHA256, prev.FirstSeen
 			sc.Changed++
 		default:
-			// Size or mtime moved but the content did not — a touch or a
+			// Size or mtime moved but the content did not, a touch or a
 			// reinstall of the same build. Not a finding.
 			hb.FirstSeen = prev.FirstSeen
 		}
@@ -169,7 +169,7 @@ func supplyChainCheck(sc SupplyChain) Check {
 	}
 	if sc.Changed > 0 {
 		return Check{Name: name, Status: fmt.Sprintf("%d binary(ies) CHANGED", sc.Changed),
-			Detail: changedBinarySummary(sc) + " — an agent binary was replaced since it was last seen; " +
+			Detail: changedBinarySummary(sc) + ", an agent binary was replaced since it was last seen; " +
 				"an upgrade looks identical to a swap here, so confirm it was one"}
 	}
 	if sc.New == len(sc.Binaries) {
@@ -177,7 +177,7 @@ func supplyChainCheck(sc SupplyChain) Check {
 			Detail: "first run: fingerprints recorded, so a later change to any of these binaries will be reported"}
 	}
 	return Check{Name: name, Status: fmt.Sprintf("%d unchanged", len(sc.Binaries)-sc.New),
-		Detail: "no head binary has changed since its fingerprint was recorded; two limits on that claim — " +
+		Detail: "no head binary has changed since its fingerprint was recorded; two limits on that claim, " +
 			"a replacement preserving both size and mtime would not be re-hashed, and the stored baseline " +
 			"is a plain file, so anything able to write ~/.hydra can forge this result"}
 }

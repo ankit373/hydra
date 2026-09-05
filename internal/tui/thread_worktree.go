@@ -2,7 +2,7 @@
 
 package tui
 
-// thread_worktree.go — edit-thread isolation (#598): each edit-capable thread
+// thread_worktree.go, edit-thread isolation (#598): each edit-capable thread
 // gets its own git worktree of the user's repo, and the a / x x keys merge it
 // back with conflicts surfaced (git apply --3way) or discard it.
 
@@ -26,11 +26,11 @@ import (
 
 // ckWorktree is one thread's isolated checkout.
 type ckWorktree struct {
-	tag    string // "t3-9f2c1a" — dir basename, branch suffix, and the UI label
+	tag    string // "t3-9f2c1a", dir basename, branch suffix, and the UI label
 	dir    string // <hydra home>/worktrees/<tag>
 	branch string // hydra/task-<tag>
 	repo   string // the user's repo root it was cut from
-	base   string // commit the worktree was created at — the diff's left side
+	base   string // commit the worktree was created at, the diff's left side
 }
 
 // ckWorktreeBase is where thread worktrees live: $HYDRA_HOME/worktrees, i.e.
@@ -38,7 +38,7 @@ type ckWorktree struct {
 func ckWorktreeBase() string { return filepath.Join(config.Dir(), "worktrees") }
 
 // ckGitTimeout bounds every worktree git command so a wedged lock cannot hang
-// the UI (apply/discard run synchronously — they are index-local and fast).
+// the UI (apply/discard run synchronously, they are index-local and fast).
 const ckGitTimeout = 30 * time.Second
 
 // ckGit runs one git command and returns its combined output, bounded. The
@@ -100,12 +100,12 @@ type ckApplyOut struct {
 	files      []string // repo-relative paths the diff touches
 	detail     string   // first git line explaining a refusal or failure
 	branchKept bool     // the branch survives (conflict/refusal recovery)
-	err        error    // git itself failed — not a merge outcome
+	err        error    // git itself failed, not a merge outcome
 }
 
 // ckApplyWorktree commits the worktree and 3-way-applies its diff onto the
 // user's tree. Atomic on refusal (dirty overlap: nothing lands), standard
-// conflict markers on committed divergence — never a silent overwrite.
+// conflict markers on committed divergence, never a silent overwrite.
 func ckApplyWorktree(wt *ckWorktree) ckApplyOut {
 	if out, err := ckGit(wt.dir, "", "add", "-A"); err != nil {
 		return ckApplyOut{err: fmt.Errorf("git add: %s", ckFirstLine(out))}
@@ -163,8 +163,8 @@ func ckApplyWorktree(wt *ckWorktree) ckApplyOut {
 }
 
 // ckUnsavedOverlap lists which of files the tree has unsaved (worktree-vs-index)
-// changes to. A merely staged change is safe to merge over — its content is in
-// the object store — but an unsaved edit exists nowhere else.
+// changes to. A merely staged change is safe to merge over, its content is in
+// the object store, but an unsaved edit exists nowhere else.
 func ckUnsavedOverlap(repo string, files []string) []string {
 	out, err := ckGit(repo, "", append([]string{"status", "--porcelain", "-z", "--"}, files...)...)
 	if err != nil {
@@ -219,7 +219,7 @@ func ckCleanupWorktree(wt *ckWorktree, keepBranch bool) error {
 	return nil
 }
 
-// ckDiscardWorktree drops the worktree and its branch — the thread's un-applied
+// ckDiscardWorktree drops the worktree and its branch, the thread's un-applied
 // edits are gone, which is exactly what discard means.
 func ckDiscardWorktree(wt *ckWorktree) error { return ckCleanupWorktree(wt, false) }
 
@@ -257,7 +257,7 @@ func ckSplitLines(s string) []string {
 func (m Cockpit) discardKey(th *ckThread) (Cockpit, tea.Cmd, bool) {
 	if !th.discardArm {
 		th.discardArm = true
-		m.flash = fmt.Sprintf("x again discards worktree %s — its edits are lost", th.wt.tag)
+		m.flash = fmt.Sprintf("x again discards worktree %s, its edits are lost", th.wt.tag)
 		return m, nil, true
 	}
 	th.discardArm = false
@@ -268,7 +268,7 @@ func (m Cockpit) discardKey(th *ckThread) (Cockpit, tea.Cmd, bool) {
 	}
 	th.wt = nil
 	th.files = nil
-	th.log = append(th.log, ckDimS.Render(fmt.Sprintf("  ⎇ worktree %s discarded — your tree was never touched", tag)))
+	th.log = append(th.log, ckDimS.Render(fmt.Sprintf("  ⎇ worktree %s discarded, your tree was never touched", tag)))
 	nm, cmd := m.releaseThreads(th)
 	return nm, cmd, true
 }
@@ -288,23 +288,23 @@ func (m Cockpit) applyThread(th *ckThread) (Cockpit, tea.Cmd, bool) {
 		// Either this code refused up front (unsaved overlap) or git's atomic
 		// apply declined; both mean nothing in the user's tree changed.
 		th.log = append(th.log,
-			ckExpS.Render("  ✗ apply blocked ")+ckDimS.Render("— nothing in your tree was changed"),
+			ckExpS.Render("  ✗ apply blocked ")+ckDimS.Render("· nothing in your tree was changed"),
 			ckDimS.Render("    "+truncate(ckSafe(out.detail), 80)),
 			ckFaintS.Render("    save or stash the overlapping change, then press a again · x x discards"))
 		return m, nil, true
 	case out.empty:
-		th.log = append(th.log, ckDimS.Render("  ⎇ nothing to apply — worktree removed"))
+		th.log = append(th.log, ckDimS.Render("  ⎇ nothing to apply, worktree removed"))
 	case out.conflict:
 		th.log = append(th.log,
-			ckMidS.Render("  ⚠ applied with conflicts ")+ckDimS.Render("— markers left in "+truncate(strings.Join(out.files, ", "), 60)),
+			ckMidS.Render("  ⚠ applied with conflicts ")+ckDimS.Render("· markers left in "+truncate(strings.Join(out.files, ", "), 60)),
 			ckDimS.Render("    resolve the <<<<<<< markers, then `git add` · `git diff` shows the conflict"),
-			ckDimS.Render("    branch "+wt.branch+" kept — `git branch -D` it once resolved"))
+			ckDimS.Render("    branch "+wt.branch+" kept, `git branch -D` it once resolved"))
 	default:
 		th.log = append(th.log, ckCheapS.Render("  ✓ applied ")+
 			ckDimS.Render(fmt.Sprintf("%d file%s staged onto %s · worktree and branch removed",
 				len(out.files), plural(len(out.files)), truncate(wt.repo, 40))))
 	}
-	if out.err != nil { // cleanup hiccup after a landed apply — disclose it
+	if out.err != nil { // cleanup hiccup after a landed apply, disclose it
 		th.log = append(th.log, ckMidS.Render("  ⚠ cleanup: ")+ckDimS.Render(ckSafe(out.err.Error())))
 	}
 	th.wt = nil
@@ -325,7 +325,7 @@ type ckWtReadyMsg struct {
 	err  error
 }
 
-// ckWtCreate cuts the worktree off the UI loop — `git worktree add` checks out
+// ckWtCreate cuts the worktree off the UI loop, `git worktree add` checks out
 // the whole tree, which is slow on big repos.
 func ckWtCreate(ex *ckExecState, t ckTask, repo string) tea.Cmd {
 	return func() tea.Msg {

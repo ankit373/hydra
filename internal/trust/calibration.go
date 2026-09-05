@@ -48,7 +48,7 @@ func (c *confusion) observations() float64 {
 	return (c.TP + c.FP + c.TN + c.FN) - 4*laplacePrior
 }
 
-// Stat is one row of a calibration report — the human/JSON-facing view.
+// Stat is one row of a calibration report, the human/JSON-facing view.
 type Stat struct {
 	Source string  `json:"source"`
 	Domain string  `json:"domain"`
@@ -123,7 +123,7 @@ func (c *Calibrator) load() error {
 	}
 
 	// Bounded by the snapshot's own threshold except on the very first load of
-	// a pre-existing history — no worse than the old full-file replay.
+	// a pre-existing history, no worse than the old full-file replay.
 	delta, err := io.ReadAll(f)
 	if err != nil {
 		return err
@@ -228,7 +228,7 @@ func (c *Calibrator) LLR(source, domain string, saidCorrect bool) float64 {
 
 // D is the diagnostic power of a source (nats): the expected LLR of its verdict
 // given a truly-correct item, i.e. KL(Bern(se) ‖ Bern(1−sp)). It is ≥0 always,
-// and 0 exactly when se+sp=1 (the source carries no information — Law 2). Use it
+// and 0 exactly when se+sp=1 (the source carries no information, Law 2). Use it
 // to order which source to sample next (most evidence first).
 func (c *Calibrator) D(source, domain string) float64 {
 	se, sp := c.rates(source, domain)

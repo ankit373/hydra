@@ -122,7 +122,7 @@ func Diff(file string) (string, error) {
 	}
 
 	if gitUsable(resolved.GitRoot) {
-		// git diff on a pathspec it doesn't track exits 0 with empty output —
+		// git diff on a pathspec it doesn't track exits 0 with empty output,
 		// identical to a real "no changes" result. Distinguish them before
 		// asking git, the same guard the backup branch below applies (#260).
 		tracked := exec.Command("git", "-C", resolved.GitRoot, "ls-files", "--error-unmatch", file).Run() == nil
@@ -143,7 +143,7 @@ func Diff(file string) (string, error) {
 	if fileExists(backup) {
 		// Both reads must succeed. This used to shell out to diff(1) and
 		// discard the error, so a missing binary or an unreadable file
-		// produced ("", nil) — a blank diff a reviewer would read as "no
+		// produced ("", nil), a blank diff a reviewer would read as "no
 		// changes" and approve (#260).
 		before, err := os.ReadFile(backup)
 		if err != nil {
@@ -218,8 +218,8 @@ func Reject(file string) (*RejectResult, error) {
 			result = &RejectResult{Status: "rejected", File: file, Method: "git_checkout"}
 		} else {
 			// Only a clean exit status of 1 means "this path is not tracked". Any
-			// other failure — git missing, .git present but not a repository, a
-			// permissions error — means we do not know, and deleting a file we
+			// other failure, git missing, .git present but not a repository, a
+			// permissions error, means we do not know, and deleting a file we
 			// cannot prove is disposable is unrecoverable data loss. Before this,
 			// every one of those took the branch below and removed the file.
 			var exitErr *exec.ExitError
@@ -299,7 +299,7 @@ CONCERNS <bullet list of issues>`, file, diffText)
 // workspace.GitRoot only stats for a ".git" entry, so it happily reports a root
 // for a stray marker, a broken checkout, or a machine with no git installed.
 // Every caller here then ran a git command and read its failure as a fact about
-// the file rather than about git — which, in Reject, meant deleting it.
+// the file rather than about git, which, in Reject, meant deleting it.
 func gitUsable(root string) bool {
 	if root == "" {
 		return false
@@ -399,7 +399,7 @@ func filesFromLogs() []string {
 }
 
 // headIDForLastEdit returns the head that produced file's last edit, or ""
-// if last_edit.json's own file doesn't match — its single slot can only
+// if last_edit.json's own file doesn't match, its single slot can only
 // answer for whichever file was edited most recently.
 func headIDForLastEdit(file string) string {
 	raw, err := os.ReadFile(filepath.Join(config.Dir(), "logs", "last_edit.json"))

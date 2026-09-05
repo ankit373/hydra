@@ -14,7 +14,7 @@ import (
 	"github.com/ankit373/hydra/internal/config"
 )
 
-// scoreEntry is one line of ~/.hydra/security_score.jsonl — one hyctl
+// scoreEntry is one line of ~/.hydra/security_score.jsonl, one hyctl
 // security run's coverage snapshot.
 type scoreEntry struct {
 	TS             string   `json:"ts"`
@@ -25,7 +25,7 @@ type scoreEntry struct {
 }
 
 // Trend compares the current run's coverage against the very first recorded
-// run — "since you started tracking" rather than an arbitrary lookback
+// run, "since you started tracking" rather than an arbitrary lookback
 // window, so it needs no calendar-boundary logic and is never misleading
 // about how far apart the two points actually are.
 type Trend struct {
@@ -57,7 +57,7 @@ func DefaultScoreHistoryPath() string {
 }
 
 // loadScoreHistory reads all entries; a missing file yields none.
-// Unparseable lines are skipped — a corrupt trend log must never fail
+// Unparseable lines are skipped, a corrupt trend log must never fail
 // `hyctl security` itself.
 func loadScoreHistory(path string) []scoreEntry {
 	f, err := os.Open(path)
@@ -82,7 +82,7 @@ func loadScoreHistory(path string) []scoreEntry {
 	return out
 }
 
-// appendScoreHistory records this run's coverage, best-effort — a failure to
+// appendScoreHistory records this run's coverage, best-effort, a failure to
 // persist the trend must never fail the report it would have fed.
 func appendScoreHistory(path string, cov Coverage) {
 	gaps := make([]string, 0)
@@ -114,7 +114,7 @@ func appendScoreHistory(path string, cov Coverage) {
 }
 
 // buildTrend compares cov against the earliest entry read *before* this run
-// was recorded — prior must be captured before appendScoreHistory runs, or
+// was recorded, prior must be captured before appendScoreHistory runs, or
 // the "first" run would compare against itself.
 func buildTrend(prior []scoreEntry, cov Coverage) Trend {
 	if len(prior) == 0 {

@@ -113,10 +113,10 @@ func TestAppend_ConcurrentWritersDoNotTear(t *testing.T) {
 		t.Fatal(err)
 	}
 	if skipped != 0 {
-		t.Errorf("%d lines were unparseable — concurrent appends tore", skipped)
+		t.Errorf("%d lines were unparseable, concurrent appends tore", skipped)
 	}
 	if len(events) != want {
-		t.Fatalf("loaded %d events, want %d — lines were lost or merged", len(events), want)
+		t.Fatalf("loaded %d events, want %d, lines were lost or merged", len(events), want)
 	}
 	// Every sequence number must appear exactly once.
 	seen := map[uint64]bool{}
@@ -159,7 +159,7 @@ func TestLoadCounted_ReportsTruncatedTail(t *testing.T) {
 		t.Errorf("parsed %d events, want the 3 intact ones", len(events))
 	}
 	if skipped != 1 {
-		t.Errorf("skipped = %d, want 1 — a discarded record must be reported", skipped)
+		t.Errorf("skipped = %d, want 1, a discarded record must be reported", skipped)
 	}
 }
 
@@ -233,7 +233,7 @@ func TestRuns_NoDirectoryIsEmpty(t *testing.T) {
 	}
 }
 
-// Schema version must be on the wire, not just the struct — the desktop app
+// Schema version must be on the wire, not just the struct, the desktop app
 // will read these bytes without importing this package.
 func TestAppend_SchemaVersionIsSerialized(t *testing.T) {
 	tempHome(t)

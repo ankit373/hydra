@@ -4,7 +4,7 @@ logs/
 *.log
 *.jsonl
 # …except the checked-in format fixtures. They are files as an earlier Hydra
-# wrote them, and the whole point is that they stay byte-identical — the
+# wrote them, and the whole point is that they stay byte-identical, the
 # backward-compatibility contract in internal/formats has nothing to compare
 # against without them. The blanket *.jsonl rule above is for logs, and it
 # silently swallowed them: the tests passed locally against files git had
@@ -64,11 +64,11 @@ Thumbs.db
 package-lock.json
 yarn.lock
 pnpm-lock.yaml
-# The desktop frontend is npm, not bun, and its lockfile must be committed —
+# The desktop frontend is npm, not bun, and its lockfile must be committed,
 # without it `npm ci` cannot run and nobody builds the same bundle twice.
 !desktop/frontend/package-lock.json
 
-# Private planning docs — local-only scoping / planning / spec / review / design.
+# Private planning docs, local-only scoping / planning / spec / review / design.
 # NEVER commit these. Glob patterns catch future ones; explicit names below are legacy.
 *_SCOPE.md
 *_SCOPING.md

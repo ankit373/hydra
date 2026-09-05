@@ -22,7 +22,7 @@ import (
 // write loses the user's whole setup, and Save is the only thing standing
 // between them and that.
 
-// Dir prefers $HYDRA_HOME over $HOME/.hydra (#442) — the sandbox sets both to
+// Dir prefers $HYDRA_HOME over $HOME/.hydra (#442), the sandbox sets both to
 // distinct directories, so this only passes if HYDRA_HOME actually wins.
 func TestDirAndPath_PrefersHydraHomeOverUsersHome(t *testing.T) {
 	s := testutil.NewSandbox(t)
@@ -96,7 +96,7 @@ func TestSaveLoad_RoundTripsEveryField(t *testing.T) {
 		t.Fatalf("Policies = %v, want two entries", got.Policies)
 	}
 	if got.Policies["pii"].Action != "local-only" {
-		t.Errorf("pii policy = %q, want local-only — PII routing is enforced from this",
+		t.Errorf("pii policy = %q, want local-only, PII routing is enforced from this",
 			got.Policies["pii"].Action)
 	}
 }
@@ -122,7 +122,7 @@ func TestLoad_MissingFileIsAnError(t *testing.T) {
 	testutil.NewSandbox(t)
 
 	if _, err := Load(); err == nil {
-		t.Error("Load succeeded with no config file — callers use this to decide " +
+		t.Error("Load succeeded with no config file, callers use this to decide " +
 			"whether to run the init wizard")
 	}
 }
@@ -192,7 +192,7 @@ func TestSave_ConfigIsNotWorldReadable(t *testing.T) {
 	if info.Mode().Perm()&0o077 != 0 {
 		t.Errorf("config.toml mode %v is group/other readable", info.Mode().Perm())
 	}
-	// The directory too — a readable dir leaks what exists even if files do not.
+	// The directory too, a readable dir leaks what exists even if files do not.
 	dinfo, err := os.Stat(Dir())
 	if err != nil {
 		t.Fatal(err)
@@ -240,7 +240,7 @@ func TestSave_ConcurrentWritesLeaveAValidConfig(t *testing.T) {
 	}
 }
 
-// ScriptHome honours HYDRA_HOME above everything else — it is how an operator
+// ScriptHome honours HYDRA_HOME above everything else, it is how an operator
 // points Hydra at a retuned registry without a rebuild.
 func TestScriptHome_PrefersHydraHome(t *testing.T) {
 	s := testutil.NewSandbox(t)

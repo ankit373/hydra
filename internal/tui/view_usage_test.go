@@ -137,7 +137,7 @@ func TestCkSavings(t *testing.T) {
 	if saved, base := ckSavings(rows, nil); saved != 0 || base != 0 {
 		t.Errorf("nil pricer: %v/%v", saved, base)
 	}
-	// Spending more than tier-1 yields a negative saving — reported raw; the
+	// Spending more than tier-1 yields a negative saving, reported raw; the
 	// tile decides how to word it.
 	expensive := []cost.Row{{Tier: 1, PromptTokens: 100, ResponseTokens: 50, EstCostUSD: 999}}
 	if saved, _ := ckSavings(expensive, stubPricer{}); saved >= 0 {
@@ -188,7 +188,7 @@ func TestUsageBreakdown_LocalFreeAndGroupings(t *testing.T) {
 		localModels:  map[string]bool{"qwen": true},
 	}
 	out = stripANSI(free.usageBreakdown())
-	if !strings.Contains(out, "bars by calls — everything was free") {
+	if !strings.Contains(out, "bars by calls, everything was free") {
 		t.Errorf("the by-calls fallback is not disclosed:\n%s", out)
 	}
 	if !strings.Contains(out, "▮") {
@@ -212,7 +212,7 @@ func TestUsageContextBudget(t *testing.T) {
 	for _, want := range []string{
 		"CONTEXT BUDGET", "52% · compact",
 		"burn", "risk of hitting 80%",
-		"bands 0–49 normal · 50 compact · 65 caution",
+		"bands 0-49 normal · 50 compact · 65 caution",
 		"70 downgrade · 75 critical · 80 stop",
 	} {
 		if !strings.Contains(out, want) {
@@ -266,7 +266,7 @@ func TestUsageView_ScrollsToEverything(t *testing.T) {
 	}
 }
 
-// The tier label in byTierToday is "T<tier>" — strconv, not a homegrown itoa.
+// The tier label in byTierToday is "T<tier>", strconv, not a homegrown itoa.
 func TestFold_TierLabels(t *testing.T) {
 	m := usageMetrics(t)
 	found := false

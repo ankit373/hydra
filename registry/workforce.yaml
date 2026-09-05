@@ -1,27 +1,27 @@
-# Hydra Workforce Registry — the "org chart"
+# Hydra Workforce Registry, the "org chart"
 # ─────────────────────────────────────────────────────────────────────────────
 # Maps each skill to a department, role, tier preference, and constraints.
 # Read by company.sh when emitting playbook manifests, and by the brain
 # (Claude Code) when picking which skill to invoke for a task.
 #
 # Each entry:
-#   department         — which org function this skill serves
-#   role               — what title the skill plays
-#   invokes_as         — Claude Code Skill tool invocation (slash command)
-#   modes              — optional list of mode flags the skill accepts
-#   inputs             — what artifacts the skill expects (informational)
-#   outputs            — what artifacts the skill produces (informational)
-#   tier_preference    — enum key from routing.yaml when the skill itself
-#                        delegates internally (informational hint only —
+#   department        , which org function this skill serves
+#   role              , what title the skill plays
+#   invokes_as        , Claude Code Skill tool invocation (slash command)
+#   modes             , optional list of mode flags the skill accepts
+#   inputs            , what artifacts the skill expects (informational)
+#   outputs           , what artifacts the skill produces (informational)
+#   tier_preference   , enum key from routing.yaml when the skill itself
+#                        delegates internally (informational hint only,
 #                        most skills run as Claude directly)
-#   parallel_safe      — true if multiple instances or co-running with siblings
+#   parallel_safe     , true if multiple instances or co-running with siblings
 #                        is safe (no shared-state mutation)
-#   mutates_filesystem — writes files outside its own artifacts dir
-#   mutates_git        — runs git operations (commit, push, merge)
-#   budget_minutes     — soft budget; brain warns if exceeded
+#   mutates_filesystem, writes files outside its own artifacts dir
+#   mutates_git       , runs git operations (commit, push, merge)
+#   budget_minutes    , soft budget; brain warns if exceeded
 #
 # To add a skill: append a block. To change routing: edit tier_preference.
-# This file is reference data — no behavior changes from edits until a
+# This file is reference data, no behavior changes from edits until a
 # playbook references the skill.
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -289,7 +289,7 @@ skills:
     department: orchestration
     role: Claude Code (you)
     invokes_as: null
-    notes: "Stage is performed directly by the brain — synthesis, merge, decomposition."
+    notes: "Stage is performed directly by the brain, synthesis, merge, decomposition."
     parallel_safe: false
 
   __tier_dispatch:

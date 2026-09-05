@@ -14,7 +14,7 @@ import (
 )
 
 // Five independent implementations reconstruct the release archive filename by
-// hand — four installers plus goreleaser's own template — and nothing checked
+// hand, four installers plus goreleaser's own template, and nothing checked
 // that they agree.
 //
 // That is exactly how #262 shipped: npm and pip both mapped arm64 → windows/arm64
@@ -59,7 +59,7 @@ func builtTargets(t *testing.T) map[target]bool {
 		t.Fatalf("parsing .goreleaser.yaml: %v", err)
 	}
 	if len(doc.Builds) == 0 {
-		t.Fatal("no builds in .goreleaser.yaml — this guard has stopped guarding")
+		t.Fatal("no builds in .goreleaser.yaml, this guard has stopped guarding")
 	}
 
 	out := map[target]bool{}
@@ -86,7 +86,7 @@ func literalMapValues(t *testing.T, src, anchor string) []string {
 	t.Helper()
 	i := strings.Index(src, anchor)
 	if i < 0 {
-		t.Fatalf("anchor %q not found — the installer was restructured and this guard "+
+		t.Fatalf("anchor %q not found, the installer was restructured and this guard "+
 			"is no longer reading what it thinks it is", anchor)
 	}
 	rest := src[i:]
@@ -156,7 +156,7 @@ func TestInstallers_OnlyRequestTargetsThatAreBuilt(t *testing.T) {
 			for _, goarch := range dedupe(inst.arches) {
 				tgt := target{goos, goarch}
 				if !built[tgt] {
-					t.Errorf("%s can resolve to %s, but .goreleaser.yaml does not build it — "+
+					t.Errorf("%s can resolve to %s, but .goreleaser.yaml does not build it, "+
 						"that install 404s. This is #262.", inst.name, tgt)
 				}
 			}
@@ -187,7 +187,7 @@ func psArchValues(t *testing.T, src string) []string {
 	re := regexp.MustCompile(`\$Arch\s*=\s*'([a-z0-9_]+)'`)
 	m := re.FindAllStringSubmatch(src, -1)
 	if len(m) == 0 {
-		t.Fatal("no $Arch assignments found in install.ps1 — restructured, and this " +
+		t.Fatal("no $Arch assignments found in install.ps1, restructured, and this " +
 			"guard is no longer reading what it thinks it is")
 	}
 	var out []string
@@ -198,7 +198,7 @@ func psArchValues(t *testing.T, src string) []string {
 }
 
 // install.ps1 is the Windows counterpart to install.sh. It must verify
-// checksums and fail closed on a checksums.txt that omits the archive — the
+// checksums and fail closed on a checksums.txt that omits the archive, the
 // #241 hole, and the one behaviour every other installer already shares.
 func TestInstallPs1_VerifiesChecksumsAndFailsClosed(t *testing.T) {
 	src := repoFile(t, "install.ps1")
@@ -207,7 +207,7 @@ func TestInstallPs1_VerifiesChecksumsAndFailsClosed(t *testing.T) {
 		t.Error("install.ps1 does not compute a SHA256 of what it downloaded")
 	}
 	if !strings.Contains(src, "is not listed in checksums.txt") {
-		t.Error("install.ps1 does not fail closed when checksums.txt omits the archive — " +
+		t.Error("install.ps1 does not fail closed when checksums.txt omits the archive, " +
 			"that is #241, and every other installer already refuses this case")
 	}
 	if !strings.Contains(src, "checksum mismatch") {
@@ -218,7 +218,7 @@ func TestInstallPs1_VerifiesChecksumsAndFailsClosed(t *testing.T) {
 	//
 	// Matched on the environment variable rather than the prose "Program
 	// Files", which appears in the script's own comment explaining why it is
-	// not used — the first version of this check failed on that comment, which
+	// not used, the first version of this check failed on that comment, which
 	// is a fair reminder that a substring is not a usage.
 	if regexp.MustCompile(`\$env:ProgramFiles|\$env:ProgramW6432`).MatchString(src) {
 		t.Error("install.ps1 installs under Program Files, which needs elevation")
@@ -278,7 +278,7 @@ func TestInstallers_UseTheRightArchiveExtension(t *testing.T) {
 	// pip states it inline; npm derives it. Both must agree with the above.
 	pip := repoFile(t, "pip", "hyctl", "__init__.py")
 	if !strings.Contains(pip, `ext = "zip" if osname == "windows" else "tar.gz"`) {
-		t.Error("pip's extension logic no longer reads `zip` on windows else `tar.gz` — " +
+		t.Error("pip's extension logic no longer reads `zip` on windows else `tar.gz`, " +
 			"if it changed deliberately, update this contract with it")
 	}
 }
@@ -290,7 +290,7 @@ func TestInstallSh_DoesNotClaimWindows(t *testing.T) {
 	src := repoFile(t, "install.sh")
 	for _, o := range shellCaseValues(t, src, `OS="`) {
 		if o == "windows" {
-			t.Error("install.sh maps an OS to windows but always downloads .tar.gz — " +
+			t.Error("install.sh maps an OS to windows but always downloads .tar.gz, " +
 				"it would hand a zip to tar. Windows needs install.ps1 (#264).")
 		}
 	}
@@ -300,7 +300,7 @@ func TestInstallSh_DoesNotClaimWindows(t *testing.T) {
 }
 
 // The README's platform table is a promise. It must not list a target that is
-// not built — the badge claimed "macOS | Linux" while Windows binaries shipped,
+// not built, the badge claimed "macOS | Linux" while Windows binaries shipped,
 // and the table was added in #262 precisely so the claim is checkable.
 func TestReadme_PlatformTableMatchesTheBuildMatrix(t *testing.T) {
 	built := builtTargets(t)
@@ -308,7 +308,7 @@ func TestReadme_PlatformTableMatchesTheBuildMatrix(t *testing.T) {
 
 	i := strings.Index(readme, "#### Platform support")
 	if i < 0 {
-		t.Fatal("README has no '#### Platform support' section — it was removed or renamed, " +
+		t.Fatal("README has no '#### Platform support' section, it was removed or renamed, " +
 			"so nothing now states which platforms ship")
 	}
 	section := readme[i:]
@@ -355,21 +355,21 @@ func dedupe(in []string) []string {
 // ── The gaps the epic #254 revert audit found ────────────────────────────────
 //
 // #254's definition of done includes: "reverting any one of the eight v1.1.0
-// fixes turns the suite red — the honest test of whether this suite is worth
+// fixes turns the suite red, the honest test of whether this suite is worth
 // anything." Running that audit for real, three of the eight came back green.
 // All three lived outside Go, which is why 90% statement coverage said nothing
 // about them. These are the contracts that close that.
 
 // #241 made npm and pip fail closed when checksums.txt downloads but does not
 // list the archive. install.sh had always done this and install.ps1 was covered
-// by a test — so the property was asserted for exactly one of the four
+// by a test, so the property was asserted for exactly one of the four
 // installers, and reverting #241 left the suite green.
 //
 // The fatal call must be on the same line as the message. A test that only
 // looked for the words would pass on a file that had moved them into a comment
 // explaining why verification was skipped, which is the exact regression.
 func TestInstallers_AllFailClosedOnAnUnlistedArchive(t *testing.T) {
-	// Wording differs per installer on purpose — each speaks its own idiom, and
+	// Wording differs per installer on purpose, each speaks its own idiom, and
 	// pinning one sentence across four languages would be a worse contract than
 	// pinning the behaviour. What is common is: a fatal call, in the branch
 	// where checksums.txt was fetched but has no entry for this archive.
@@ -385,7 +385,7 @@ func TestInstallers_AllFailClosedOnAnUnlistedArchive(t *testing.T) {
 		t.Run(c.file, func(t *testing.T) {
 			src := repoFile(t, strings.Split(c.file, string(filepath.Separator))...)
 			if !strings.Contains(src, "checksums.txt") {
-				t.Fatalf("%s never reads checksums.txt — it installs unverified", c.file)
+				t.Fatalf("%s never reads checksums.txt, it installs unverified", c.file)
 			}
 			if !c.fatal.MatchString(src) {
 				t.Errorf("%s does not abort when checksums.txt omits the archive.\n"+
@@ -408,13 +408,13 @@ func TestDesktopBundle_VersionIsStampedFromTheRelease(t *testing.T) {
 	plist := repoFile(t, "desktop", "build", "darwin", "Info.plist")
 	for _, key := range []string{"CFBundleVersion", "CFBundleShortVersionString"} {
 		if !strings.Contains(plist, key) {
-			t.Errorf("Info.plist has no %s — Finder cannot tell one build from another", key)
+			t.Errorf("Info.plist has no %s, Finder cannot tell one build from another", key)
 			continue
 		}
 		// Templated, not literal. A hardcoded version is the bug wearing a
 		// different number: it goes stale on the very next release.
 		if !regexp.MustCompile(key + `</key>\s*<string>\{\{`).MatchString(plist) {
-			t.Errorf("Info.plist's %s is not templated from wails.json — "+
+			t.Errorf("Info.plist's %s is not templated from wails.json, "+
 				"it will report the same version for every release (#233)", key)
 		}
 	}
@@ -426,13 +426,13 @@ func TestDesktopBundle_VersionIsStampedFromTheRelease(t *testing.T) {
 	}
 	// The other half of #233: goreleaser's checksums.txt is produced by a job
 	// that never sees the desktop artifacts, so they shipped with no integrity
-	// evidence at all — which matters more while the app is unsigned, not less.
+	// evidence at all, which matters more while the app is unsigned, not less.
 	if !strings.Contains(wf, ".sha256") {
 		t.Error("desktop-build.yml publishes no checksum beside the artifacts (#233)")
 	}
 }
 
-// #243 deleted a Homebrew formula that no longer matched how the tap works —
+// #243 deleted a Homebrew formula that no longer matched how the tap works,
 // it named a binary that had been renamed, so anyone who found it got a broken
 // install. Restoring the file is a silent regression: nothing imports it, so
 // nothing fails.

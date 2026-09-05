@@ -2,9 +2,9 @@
 
 package tui
 
-// cockpit_metrics.go — the real numbers behind the views, computed once at
+// cockpit_metrics.go, the real numbers behind the views, computed once at
 // startup so the render path stays pure and does no I/O. The rule (#189):
-// never invent a figure — but a figure that exists must be shown, not dropped.
+// never invent a figure, but a figure that exists must be shown, not dropped.
 
 import (
 	"path/filepath"
@@ -77,7 +77,7 @@ type ckPricer interface {
 	EstimateCost(tier, inputTokens, outputTokens int) float64
 }
 
-// ckLoadMetrics reads the real logs once — one cost.jsonl pass feeds spend,
+// ckLoadMetrics reads the real logs once, one cost.jsonl pass feeds spend,
 // per-model stats, usage groupings, and the run join.
 func ckLoadMetrics(pr *pricing.DB) ckMetrics {
 	m := ckMetrics{
@@ -173,7 +173,7 @@ func (m *ckMetrics) fold(rows []cost.Row, pr ckPricer, now time.Time) {
 }
 
 // ckLocalExecutor reports whether a cost row's executor field names a local
-// provider — dispatch stamps Head.Provider there ("local" for port heads,
+// provider, dispatch stamps Head.Provider there ("local" for port heads,
 // "ollama" in older rows).
 func ckLocalExecutor(e string) bool { return e == "local" || e == "ollama" }
 
@@ -181,7 +181,7 @@ func ckLocalExecutor(e string) bool { return e == "local" || e == "ollama" }
 func ckGraphPath() string { return filepath.Join(config.ScriptHome(), "graph.json") }
 
 // ckSavings compares what was actually spent against what the same tokens
-// would have cost routed entirely to tier 1 — the "one frontier model for
+// would have cost routed entirely to tier 1, the "one frontier model for
 // everything" baseline Hydra exists to beat. Both sides come from real rows
 // priced through the same pricing DB, so the comparison is like-for-like.
 // saved may be ≤ 0; the renderer decides how to say that honestly.
@@ -199,7 +199,7 @@ func ckSavings(rows []cost.Row, pr ckPricer) (saved, baseline float64) {
 
 // ckBlastFor computes the real change impact of a file: the dependent count and
 // percolation factor from the code graph. Returns ok=false when there is no
-// graph or the file is not in it — the caller then says nothing (#193).
+// graph or the file is not in it, the caller then says nothing (#193).
 func (m ckMetrics) ckBlastFor(file string) (radius float64, dependents int, kappa float64, ok bool) {
 	if m.graph == nil || file == "" {
 		return 0, 0, 0, false
@@ -216,7 +216,7 @@ func (m ckMetrics) ckBlastFor(file string) (radius float64, dependents int, kapp
 
 // ckStatFor finds a model's cost aggregates. cost.jsonl records the model as
 // the executor reported it ("Qwen2.5-Coder:7b (Ollama)") while the scan names
-// it differently, so an exact match silently misses — matching is therefore
+// it differently, so an exact match silently misses, matching is therefore
 // tolerant: exact, then either string containing the other, case-insensitively.
 func (m ckMetrics) ckStatFor(name, id string) ckModelStat {
 	if v, ok := m.stats[name]; ok {

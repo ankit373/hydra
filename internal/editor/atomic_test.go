@@ -11,7 +11,7 @@ import (
 )
 
 // These cover the code that mutates the user's files. A bug here does not
-// produce a wrong answer — it destroys work, or quietly changes a file's
+// produce a wrong answer, it destroys work, or quietly changes a file's
 // permissions on the way past.
 
 func writeFileMode(t *testing.T, path, content string, mode os.FileMode) {
@@ -55,7 +55,7 @@ func TestAtomicWrite_PreservesTheExistingFileMode(t *testing.T) {
 			t.Fatal(err)
 		}
 		if got := modeOf(t, path); got != mode {
-			t.Errorf("mode %v became %v after an edit — an executable script would "+
+			t.Errorf("mode %v became %v after an edit, an executable script would "+
 				"stop being executable", mode, got)
 		}
 		body, err := os.ReadFile(path)
@@ -126,7 +126,7 @@ func TestAtomicWrite_UnwritableDirectoryIsAnError(t *testing.T) {
 }
 
 // The backup holds a verbatim copy of the user's source until the edit is
-// approved. It was created 0644 — the same defect #273 fixed for runlog's edit
+// approved. It was created 0644, the same defect #273 fixed for runlog's edit
 // snapshots, still present here.
 func TestBackup_IsNotWorldReadable(t *testing.T) {
 	if runtime.GOOS == "windows" {
@@ -164,7 +164,7 @@ func TestRollback_RemovesAFileThatDidNotExistBefore(t *testing.T) {
 	}
 }
 
-// A backup, when present, is the source of truth — it is the exact bytes from
+// A backup, when present, is the source of truth, it is the exact bytes from
 // before the edit.
 func TestRollback_RestoresFromTheBackupAndConsumesIt(t *testing.T) {
 	dir := t.TempDir()
@@ -233,7 +233,7 @@ func TestExtractContent_MarkerHandling(t *testing.T) {
 }
 
 // The validator template is split around {file} so a path containing spaces is
-// passed as one argument — splitting on whitespace would fragment it and the
+// passed as one argument, splitting on whitespace would fragment it and the
 // validator would check the wrong (or no) file.
 func TestRunValidatorCmd_PathWithSpacesStaysOneArgument(t *testing.T) {
 	if runtime.GOOS == "windows" {
@@ -249,7 +249,7 @@ func TestRunValidatorCmd_PathWithSpacesStaysOneArgument(t *testing.T) {
 	// `test -f {file}` exits 0 only if the path arrived intact.
 	out, code := runValidatorCmd("test -f {file}", spaced)
 	if code != 0 {
-		t.Errorf("validator exit %d (%s) — the path was fragmented into separate args", code, out)
+		t.Errorf("validator exit %d (%s), the path was fragmented into separate args", code, out)
 	}
 	out, code = runValidatorCmd("test -f {file}", filepath.Join(dir, "does not exist.txt"))
 	if code == 0 {

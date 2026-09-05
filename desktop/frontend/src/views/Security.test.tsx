@@ -12,7 +12,7 @@ describe('the verdict and the measurement', () => {
     expect(screen.getByText(/chain broken/)).toBeInTheDocument()
   })
 
-  // LedgerCard lives under a detail tab, so this is only reachable there —
+  // LedgerCard lives under a detail tab, so this is only reachable there,
   // which is part of why the state had never been exercised.
   it('says so when the audit log is empty rather than rendering zeroes as fact', () => {
     render(<Security data={securityReport({ hasData: false })} />)

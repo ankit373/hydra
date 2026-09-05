@@ -85,7 +85,7 @@ func TestControls_A2AIsWiredOnceTheHandoffListsFiles(t *testing.T) {
 	}
 }
 
-// An approval that never expires and is never consumed still works — it is
+// An approval that never expires and is never consumed still works, it is
 // weaker than it looks, which is a third state, not a binary.
 func TestControls_BoundApprovalsAreLimitedNotInert(t *testing.T) {
 	testutil.NewSandbox(t)
@@ -108,7 +108,7 @@ func TestControls_BoundApprovalsAreLimitedNotInert(t *testing.T) {
 	}
 }
 
-// A chain that caught tampering is a control doing its job — reporting it as
+// A chain that caught tampering is a control doing its job, reporting it as
 // inert would blame the smoke detector for the fire.
 func TestControls_ChainStaysWiredWhenItDetectsTampering(t *testing.T) {
 	testutil.NewSandbox(t)
@@ -140,7 +140,7 @@ func TestControls_UnreachableLedgerRulesAreLimited(t *testing.T) {
 	}
 }
 
-// An inert control must reach the work queue — this is protection the
+// An inert control must reach the work queue, this is protection the
 // operator believes they already have, so it outranks a known gap.
 func TestBuildActions_InertControlRaisesAPriorityNowAction(t *testing.T) {
 	controls := []Control{{Name: "File-policy caps", Declared: true, Wired: false, Detail: "d"}}

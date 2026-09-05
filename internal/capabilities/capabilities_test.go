@@ -100,8 +100,8 @@ func TestEntries_MarksSourceAndSorts(t *testing.T) {
 	}
 }
 
-// Entry is what a caller needs before overwriting an id — e.g. `models add`
-// warning it is about to shadow a curated built-in — since Score/Name/Source
+// Entry is what a caller needs before overwriting an id, e.g. `models add`
+// warning it is about to shadow a curated built-in, since Score/Name/Source
 // each expose only one field of the record it would need to report on.
 func TestEntry_ReturnsTheFullRecordBuiltinAndUser(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "models.json")
@@ -128,7 +128,7 @@ func TestEntry_ReturnsTheFullRecordBuiltinAndUser(t *testing.T) {
 }
 
 // Source is the "managed vs. discovered" signal a security dashboard reports
-// on — a user-added model must be distinguishable from an embedded one.
+// on, a user-added model must be distinguishable from an embedded one.
 func TestSource_DistinguishesUserFromBuiltin(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "models.json")
 	if _, err := AddModel(path, Entry{ID: "kimi-k2", Name: "Kimi K2", CapScore: 82}); err != nil {

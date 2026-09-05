@@ -5,7 +5,7 @@ import type { UpdateStatus } from '../types'
 /**
  * GetUpdateStatus is itself cached for 24h on the Go side (internal/update's
  * on-disk cache), so re-checking hourly costs nothing extra over the network
- * — it just catches a release cut sometime after the app was opened, without
+ *, it just catches a release cut sometime after the app was opened, without
  * needing a restart to notice.
  */
 const RECHECK_MS = 60 * 60 * 1000
@@ -14,12 +14,12 @@ type Phase = 'idle' | 'upgrading' | 'done' | 'failed'
 
 /**
  * Lives in the rail footer next to the version string. Renders nothing when
- * already current — the common case — so there is zero visual noise until an
+ * already current, the common case, so there is zero visual noise until an
  * update actually exists.
  *
  * "Upgrade now" runs install-app.sh as a subprocess (same script the docs
  * point a user at for a fresh install) rather than replacing this running
- * process's own binary — the app is unsigned, so a real in-place self-update
+ * process's own binary, the app is unsigned, so a real in-place self-update
  * is out of scope; see desktop/api/update.go's TriggerUpgrade for the full
  * reasoning. The result is a new .app bundle on disk that takes effect the
  * next time the app is opened, which is why success says "quit and reopen"

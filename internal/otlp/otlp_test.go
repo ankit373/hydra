@@ -85,7 +85,7 @@ func TestBuild_SpansFromOneRunShareATraceID(t *testing.T) {
 }
 
 // OTLP/JSON encodes 64-bit values as strings. A JSON number loses precision
-// above 2^53, and unix nanos passed that in 1970 — so a numeric timestamp is
+// above 2^53, and unix nanos passed that in 1970, so a numeric timestamp is
 // silently wrong, not rejected.
 func TestMarshal_EncodesSixtyFourBitValuesAsStrings(t *testing.T) {
 	p, err := Build([]cost.Row{sampleRow()}, "hydra", "1.4.0")
@@ -105,7 +105,7 @@ func TestMarshal_EncodesSixtyFourBitValuesAsStrings(t *testing.T) {
 	for _, k := range []string{"startTimeUnixNano", "endTimeUnixNano"} {
 		v, ok := span[k].(string)
 		if !ok {
-			t.Errorf("%s is %T, want a string — a JSON number loses nanosecond precision", k, span[k])
+			t.Errorf("%s is %T, want a string, a JSON number loses nanosecond precision", k, span[k])
 			continue
 		}
 		if _, err := strconv.ParseInt(v, 10, 64); err != nil {
@@ -201,7 +201,7 @@ func TestBuild_SchemaURLIsPinned(t *testing.T) {
 }
 
 // Swarm and breadcrumb fields are optional on a row, so they must appear only
-// when set — an empty swarm.mode attribute would read as a swarm that ran.
+// when set, an empty swarm.mode attribute would read as a swarm that ran.
 func TestBuild_OptionalFieldsAppearOnlyWhenPresent(t *testing.T) {
 	plain, err := Build([]cost.Row{sampleRow()}, "hydra", "1.4.0")
 	if err != nil {

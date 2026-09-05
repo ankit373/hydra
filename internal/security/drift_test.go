@@ -24,7 +24,7 @@ func TestDetectConfigDrift_OneConfigurationIsNoDrift(t *testing.T) {
 }
 
 // A breadcrumb that changes partway through means the routing/pricing rules
-// were swapped mid-history — decisions before and after are not comparable.
+// were swapped mid-history, decisions before and after are not comparable.
 func TestDetectConfigDrift_DetectsAMidHistorySwap(t *testing.T) {
 	events := []ledger.Event{
 		{TS: "2026-08-01T00:00:00Z", Config: "old0000000000000"},
@@ -45,7 +45,7 @@ func TestDetectConfigDrift_DetectsAMidHistorySwap(t *testing.T) {
 }
 
 // An unstamped event is "unknown configuration", which is not a configuration
-// — folding it into an epoch would invent a span that never existed.
+// , folding it into an epoch would invent a span that never existed.
 func TestDetectConfigDrift_UnstampedEventsAreCountedSeparately(t *testing.T) {
 	events := []ledger.Event{
 		{TS: "2026-08-01T00:00:00Z"}, // pre-fingerprint

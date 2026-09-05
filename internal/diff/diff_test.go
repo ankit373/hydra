@@ -32,7 +32,7 @@ func TestUnified_ChangeProducesADiff(t *testing.T) {
 
 	got := Unified("main.go", "main.go", old, new)
 	if got == "" {
-		t.Fatal("a real change produced no diff — this is the #260 failure mode")
+		t.Fatal("a real change produced no diff, this is the #260 failure mode")
 	}
 	for _, want := range []string{"--- main.go", "+++ main.go", "@@", "+import"} {
 		if !strings.Contains(got, want) {
@@ -89,7 +89,7 @@ func TestStats_AgreesWithUnified(t *testing.T) {
 		t.Errorf("Stats = +%d/-%d but the diff body has +%d/-%d", added, removed, uAdded, uRemoved)
 	}
 	if added == 0 && removed == 0 {
-		t.Error("a changed file reported 0/0 — the exact symptom #260 produced on Windows")
+		t.Error("a changed file reported 0/0, the exact symptom #260 produced on Windows")
 	}
 }
 
@@ -97,7 +97,7 @@ func TestStats_AgreesWithUnified(t *testing.T) {
 // our replacement is faithful rather than merely self-consistent.
 func TestUnified_MatchesSystemDiffWhereAvailable(t *testing.T) {
 	if _, err := exec.LookPath("diff"); err != nil {
-		t.Skipf("no diff(1) on this platform (%v) — the very reason this package exists", err)
+		t.Skipf("no diff(1) on this platform (%v), the very reason this package exists", err)
 	}
 
 	cases := []struct{ old, new string }{
@@ -131,7 +131,7 @@ func TestUnified_MatchesSystemDiffWhereAvailable(t *testing.T) {
 }
 
 // A file too large for the LCS table must still produce a correct diff, just a
-// non-minimal one — never a silently empty result.
+// non-minimal one, never a silently empty result.
 func TestUnified_OversizedInputStillDiffs(t *testing.T) {
 	var a, b strings.Builder
 	for i := 0; i < 2600; i++ { // 2600² > maxCells
@@ -177,7 +177,7 @@ func applyUnified(old []string, u string) ([]string, error) {
 	// once, before the first hunk. They are NOT recognised by prefix: a content
 	// line beginning "++" renders as "+++" and is indistinguishable from the
 	// header. Real diff(1) emits exactly that, and the first version of this
-	// helper dropped such lines as headers and silently lost content — found by
+	// helper dropped such lines as headers and silently lost content, found by
 	// FuzzUnified_RoundTrips with old="0", new="++".
 	for i, l := range strings.Split(strings.TrimRight(u, "\n"), "\n") {
 		if i < 2 {

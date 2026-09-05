@@ -1,4 +1,4 @@
-# /rubber-duck — Cross-Model Reviewer Skill
+# /rubber-duck, Cross-Model Reviewer Skill
 
 Reviews output from one model family using a DIFFERENT model family.
 This catches blind spots that same-family models share.
@@ -6,7 +6,7 @@ This catches blind spots that same-family models share.
 ## When to Use
 - After tiers 2-3 (agy Claude) produce output → review with tier 4 (GPT-OSS)
 - After tier 1 (Claude Code) produces output → review with tier 4 (GPT-OSS)
-- After tiers 7-10 produce output → review with tier 8 (Flash Med) — quick sanity only
+- After tiers 7-10 produce output → review with tier 8 (Flash Med), quick sanity only
 - SKIP if claude_pct ≥ 75 (preserve tokens)
 
 ## Review Prompt Template
@@ -29,9 +29,9 @@ TASK THAT PRODUCED IT:
 <original task>
 
 RESPOND WITH:
-- APPROVED: <one line summary> — if no significant issues
-- ISSUES: <bullet list> — if problems found (include severity: low/medium/high)
-- SUGGEST: <alternative approach> — if a fundamentally better approach exists
+- APPROVED: <one line summary>, if no significant issues
+- ISSUES: <bullet list>, if problems found (include severity: low/medium/high)
+- SUGGEST: <alternative approach>, if a fundamentally better approach exists
 ```
 
 ## Dispatch

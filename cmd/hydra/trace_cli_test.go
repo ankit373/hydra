@@ -75,7 +75,7 @@ func TestCLI_TraceSealDryRunJSONNamesTheRuns(t *testing.T) {
 	}
 }
 
-// The reason this command exists is disk, so it has to report the saving —
+// The reason this command exists is disk, so it has to report the saving,
 // and the run must still read back afterwards, or it is retention, not
 // relocation.
 func TestCLI_TraceSealReportsTheSavingAndKeepsRunsReadable(t *testing.T) {
@@ -103,7 +103,7 @@ func TestCLI_TraceSealReportsTheSavingAndKeepsRunsReadable(t *testing.T) {
 			t.Fatalf("sealed run %d no longer loads: %v", i, err)
 		}
 		if len(events) != 3 {
-			t.Errorf("sealed run %d has %d events, want 3 — sealing lost data", i, len(events))
+			t.Errorf("sealed run %d has %d events, want 3, sealing lost data", i, len(events))
 		}
 	}
 }
@@ -177,7 +177,7 @@ func TestHumanBytes(t *testing.T) {
 }
 
 // A machine that has never run `hyctl init` has no config. The answer is still
-// knowable — no config means capture was never opted into — so reporting a
+// knowable, no config means capture was never opted into, so reporting a
 // missing file would be an error about plumbing in place of the answer asked for.
 func TestCLI_TracePayloadsWithNoConfigSaysCaptureIsOff(t *testing.T) {
 	testutil.NewSandbox(t) // deliberately no config written

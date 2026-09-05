@@ -1,20 +1,20 @@
-# Hydra — Orchestrator Instructions
+# Hydra, Orchestrator Instructions
 # Provider-neutral, local-first control plane. The orchestrator delegates; cheaper/local heads do the work.
 
 ## What Hydra Is
 A **local-first, multi-vendor Trust Control Plane** shipped as a Go CLI (`hyctl`). It discovers
 every model on your machine (CLI agents, API keys, local servers), scores each, and routes tasks by
-complexity/cost with automatic fallback — enforcing policy (PII/local-only) and logging spend. It
+complexity/cost with automatic fallback, enforcing policy (PII/local-only) and logging spend. It
 also routes to a target *confidence of correctness*: calibration (`internal/trust`) + an
 optimal-stopping SPRT ensemble (`hyctl dispatch --confidence`), graph-aware routing
 (`internal/graph`), causal A2A handoffs (`internal/a2a`), a context-entropy governor
 (`internal/entropy`), a local MCP accountability ledger (`internal/ledger`), and a pluggable
-verification-oracle interface (`internal/oracle`) — all shipped, not roadmap. See the package map
+verification-oracle interface (`internal/oracle`), all shipped, not roadmap. See the package map
 below, and the private planning docs (`ROADMAP_TRUST_CONTROL_PLANE.md`, `HYDRA_MANIFESTO.md`,
 `SPEC_TRUST_V1.md`) for the theory/math behind it.
 
 Whatever model you drive Hydra with acts as the **orchestrator**; Antigravity (agy), API providers,
-and Ollama are interchangeable **heads**. No single vendor is privileged — the whole point is
+and Ollama are interchangeable **heads**. No single vendor is privileged, the whole point is
 routing *across* providers (and *away* from expensive ones), so keep it provider-neutral.
 Never do work yourself that belongs to a lower tier. Never escalate work to yourself that a cheaper head can handle.
 
@@ -24,7 +24,7 @@ Never do work yourself that belongs to a lower tier. Never escalate work to your
 
 **The `hyctl` Go CLI is the entire interface** (`cmd/hydra` + `internal/`). The legacy
 `dispatch/*.sh` shell layer and the `internal/company` playbook engine have been **removed**
-(#86, #88) — there is no shell fallback and no `hyctl run`. Everything is native Go.
+(#86, #88), there is no shell fallback and no `hyctl run`. Everything is native Go.
 ```
 cmd/hydra/              ← CLI entry point (Cobra): dispatch, probe, status, cost, stats,
                           pricing, edit, review, parallel, trust, init.
@@ -33,7 +33,7 @@ internal/executor/      ← Native executors: agy, Ollama, HTTP (API providers),
 internal/provider/      ← Discovery: cli / env (API keys) / port / agy.
 internal/swarm/         ← Fan-out (race/best/all + judge) + SPRT adapter (swarm→trust).
 internal/trust/         ← Trust Control Plane: calibration (LLR/D) + defect-cost + SPRT ensemble.
-internal/graph/         ← Code dependency graph (graph.json) → blast radius + coupling k + percolation κ (Molloy–Reed).
+internal/graph/         ← Code dependency graph (graph.json) → blast radius + coupling k + percolation κ (Molloy-Reed).
 internal/a2a/           ← Causal agent handoffs: vector clocks + concurrent-edit conflict detection.
 internal/optimal/       ← Optimal parallel-agent count n*=√((1-s)/k) (Amdahl+coordination, Law 4).
 internal/entropy/       ← Context signal density (gzip proxy) → useful_tokens=L·ρ; compaction governor (Law 5).
@@ -61,13 +61,13 @@ internal/util/          ← Shared utilities (Accumulator, etc).
 
 registry/               ← Routing data, compiled into the binary via `go:embed` (registry.go)
                           and overridable on disk at `$HYDRA_HOME/registry/<file>`. Nothing ships
-                          these files as separate artifacts — brew/npm/pip/curl install the binary
+                          these files as separate artifacts, brew/npm/pip/curl install the binary
                           alone, so before #238 every install ran with no registry at all.
   routing.yaml          ← Enum → tier reference table, and what `hyctl init` writes. NOTE: the
-                          runtime mapping is `dispatch.EnumToTier`, a hardcoded Go switch — editing
+                          runtime mapping is `dispatch.EnumToTier`, a hardcoded Go switch, editing
                           this file alone does NOT change how a dispatch routes.
   models.yaml           ← Model definitions, token pools, context windows (flags are
-                          install-specific defaults — verify against your providers). Read by
+                          install-specific defaults, verify against your providers). Read by
                           the agy provider and the budget governor.
   domains.yaml          ← Domain → enum key routing (references routing.yaml).
   pricing.yaml          ← Tier pricing. Prices the CLI-agent heads that never appear in
@@ -80,32 +80,32 @@ logs/                   ← Dispatch log + state.json (claude_pct, claude_pct_hi
 
 ## Orchestration Protocol
 
-### Step 1 — Classify
+### Step 1, Classify
 Read `registry/domains.yaml` to identify the domain and task type.
 Look up the enum key (e.g. `SIMPLE`, `COMPLEX`).
 `registry/routing.yaml` documents which tier that enum resolves to; the mapping the router
 actually applies is `dispatch.EnumToTier`.
 
-### Step 2 — Check State
+### Step 2, Check State
 ```bash
 hyctl status      # check claude_pct, budget, and available heads
 ```
 If claude_pct ≥ 75: freeze escalations, do not route new work to tier 1 (yourself).
-If claude_pct ≥ 95: emergency mode — warn user, only route, don't execute.
+If claude_pct ≥ 95: emergency mode, warn user, only route, don't execute.
 
-### Step 3 — Dispatch
+### Step 3, Dispatch
 ```bash
 hyctl dispatch --enum SIMPLE "<task>" [--system <text>] [--a2a logs/last_handoff.json]
 ```
 Dispatch handles fallbacks automatically. You do not need to retry. Use `--dry-run` to preview
 the routing chain, `--local` to force local-only, `--tier N` to pin a tier.
 
-### Step 4 — Review
+### Step 4, Review
 Read the output. Ask: does this compile? match conventions? solve the task?
 If no → escalate one tier: `hyctl dispatch --tier <lower-number> …` (lower tier number = stronger).
 If yes → apply to disk, continue.
 
-### Step 5 — Rubber Duck
+### Step 5, Rubber Duck
 For any output from tiers 2-3 (agy Claude family), run rubber duck review:
 ```bash
 hyctl dispatch --tier 4 "Review this for tradeoffs and blind spots:\n<output>"
@@ -140,11 +140,11 @@ Claude Code IS the orchestrator. If it runs out, everything stops.
 
 | claude_pct | Mode      | Action |
 |-----------|-----------|--------|
-| 0–49%     | normal    | Full orchestration |
-| 50–64%    | compact   | Run `/compact` — recommended now |
-| 65–69%    | caution   | Run `/compact` URGENTLY. Stop self-reviewing agy output. |
-| 70–74%    | warning   | Downgrade all tasks 1 tier. Freeze escalations. `/compact` now. |
-| 75–79%    | critical  | Hard switch. Routing only. Only CORE if truly necessary. |
+| 0-49%     | normal    | Full orchestration |
+| 50-64%    | compact   | Run `/compact`, recommended now |
+| 65-69%    | caution   | Run `/compact` URGENTLY. Stop self-reviewing agy output. |
+| 70-74%    | warning   | Downgrade all tasks 1 tier. Freeze escalations. `/compact` now. |
+| 75-79%    | critical  | Hard switch. Routing only. Only CORE if truly necessary. |
 | 80%+      | emergency | 🚨 STOP all generation. Route to Qwen. Warn user to start new session. |
 
 **When to run `/compact`**: Proactively at 50%. Urgently at 65%. It's too late after 75%.
@@ -154,19 +154,19 @@ Update `logs/state.json` when you know your token usage percent:
 jq '.claude_pct = 52' logs/state.json > logs/state.json.tmp && mv logs/state.json.tmp logs/state.json
 ```
 
-**Same 70%/75%/80% rule applies to ALL delegated models** — `hyctl dispatch` enforces this via the budget governor + fallback chains.
-**Local heads are tier 10, the terminal fallback** — they cost nothing, so `rank.UITier` puts any
+**Same 70%/75%/80% rule applies to ALL delegated models**, `hyctl dispatch` enforces this via the budget governor + fallback chains.
+**Local heads are tier 10, the terminal fallback**, they cost nothing, so `rank.UITier` puts any
 `LocalOnly` head at the cheapest tier regardless of its score, and API limits never apply to them.
 
 This holds only while a local head is actually **routable**. Ollama is discovered twice: as a binary
-on `$PATH` (not routable on its own — nothing can drive it) and, once its server answers on `:11434`,
+on `$PATH` (not routable on its own, nothing can drive it) and, once its server answers on `:11434`,
 as one routable head per model via the port provider. With the server down there is no tier-10 head,
 and dispatch degrades to the cheapest routable head and says so. `hyctl probe` marks unroutable
 heads with `✗` and the reason (#248).
 
 ---
 
-## Code Quality Standard — Non-Negotiable
+## Code Quality Standard, Non-Negotiable
 
 **Everything written here must be industry-best. No exceptions. No "good enough".**
 
@@ -177,7 +177,7 @@ When reviewing or producing code:
 - **Dead code is a lie.** A branch that can never execute is a statement about the code that is false. Delete it.
 - **User-visible output must be correct.** `used/1000` truncating to zero is broken, not "close enough."
 - **Exported symbols must be used.** An exported function with no callers is noise that misleads the next engineer.
-- **If the race detector, linter, or vet flag it — fix it before asking for review.** Not after.
+- **If the race detector, linter, or vet flag it, fix it before asking for review.** Not after.
 
 The bar is: would a senior engineer at a top systems shop approve this without comment? If not, keep working.
 
@@ -190,12 +190,12 @@ The bar is: would a senior engineer at a top systems shop approve this without c
 - If output is 200 lines and could be 50, ask the delegated head to rewrite.
 - Never add error handling for impossible scenarios.
 
-## Comments — 2-3 lines, hard cap
+## Comments, 2-3 lines, hard cap
 **No comment is longer than 2-3 lines. No exceptions, including file headers.**
 Say why, not what; the code already says what. If the rationale genuinely needs a
 page, it belongs in a planning doc or the PR body, not the source. A 20-line essay
 at the top of a file is the tell that the design was argued in comments instead of
-being made obvious in code — delete it and make the names carry it.
+being made obvious in code, delete it and make the names carry it.
 
 ---
 
@@ -252,7 +252,7 @@ hyctl graph parallel internal/a.go internal/b.go
 hyctl trust calibration ; hyctl trust record --source model:x --domain go --said-correct --outcome correct
 hyctl trust defect --pii --production ; hyctl trust stats ; hyctl trust explain <task_hash>
 
-# Add a model at runtime (no rebuild) — merges into ~/.hydra/models.json overlay
+# Add a model at runtime (no rebuild), merges into ~/.hydra/models.json overlay
 hyctl models add kimi-k3 --name "Kimi K3" --provider moonshot --cap-score 85
 hyctl models list ; hyctl models remove kimi-k3 ; hyctl models sync   # import OpenRouter catalog
 
@@ -270,7 +270,7 @@ hyctl ask list ; hyctl ask answer <task-id> "go ahead" ; hyctl ask decline <task
 # Latency percentiles from mergeable sketches, not a full rescan of cost.jsonl
 hyctl stats --latency ; hyctl stats --latency --json
 
-# Oracle-verified examples — the labelled corpus, never pruned
+# Oracle-verified examples, the labelled corpus, never pruned
 hyctl oracle verify --candidate out.go --domain go -- go test ./...
 hyctl eval stats ; hyctl eval list --failed
 
@@ -293,7 +293,7 @@ hyctl status ; hyctl probe ; hyctl cost ; hyctl stats
 
 ---
 
-# Development Workflow — Issue-First, Always
+# Development Workflow, Issue-First, Always
 
 > **Golden rule**: No code without a GitHub issue. No branch without an issue number.
 > Claude Code must follow this workflow for every task, no exceptions.
@@ -302,7 +302,7 @@ hyctl status ; hyctl probe ; hyctl cost ; hyctl stats
 
 ## Branching Strategy
 
-Modelled after GitHub CLI + Helm — simple enough for a small team, rigorous enough that nothing untested hits main.
+Modelled after GitHub CLI + Helm, simple enough for a small team, rigorous enough that nothing untested hits main.
 
 ```
 main                ← production only. NEVER pushed directly. Tags live here.
@@ -322,7 +322,7 @@ hotfix/#{n}-slug    ← branches from main tag. Merged → main, cherry-picked �
 
 | Branch | Who pushes | Version bump? | CI publishes |
 |---|---|---|---|
-| `main` | release-please PR only | **YES** — semver tag | stable release + Homebrew |
+| `main` | release-please PR only | **YES**, semver tag | stable release + Homebrew |
 | `release/v*` | cut from develop | no | RC pre-release (`v1.2.0-rc.1`) |
 | `develop` | feature PR merges | no | edge pre-release (overwritten) |
 | `feature/*` `fix/*` `chore/*` | you | no | nothing |
@@ -334,14 +334,14 @@ hotfix/#{n}-slug    ← branches from main tag. Merged → main, cherry-picked �
 
 Every issue must be:
 1. **On the GitHub project board** (Project #2 "Hydra Roadmap")
-2. **Linked to its branch** — GitHub auto-links when branch name contains the issue number (`feature/54-hydra-stats` links to #54)
-3. **Linked to its PR** — PR body must contain `Closes #<issue>` so the PR shows on the issue
+2. **Linked to its branch**, GitHub auto-links when branch name contains the issue number (`feature/54-hydra-stats` links to #54)
+3. **Linked to its PR**, PR body must contain `Closes #<issue>` so the PR shows on the issue
 4. **Moving through board states** at every transition (Todo → In Progress → In Review → Done)
-5. **Closed once the release carrying it reaches `main`** — automated by `close-shipped-issues.yml`, see below
+5. **Closed once the release carrying it reaches `main`**, automated by `close-shipped-issues.yml`, see below
 
 ### Link a branch to an issue (GitHub auto-detection)
 GitHub automatically links a branch to an issue when the branch name contains the issue number.
-**Always name branches `feature/#{n}-slug`, `fix/#{n}-slug` etc.** — this is what creates the link.
+**Always name branches `feature/#{n}-slug`, `fix/#{n}-slug` etc.**, this is what creates the link.
 
 To verify the link is showing on the issue:
 ```bash
@@ -352,11 +352,11 @@ gh issue view 54 --json linkedBranches
 Always include `Closes #<n>` in the PR body.
 
 GitHub only honours the closing keyword when the PR merges into the **default branch**, which here
-is `main`. Every feature/fix PR targets `develop` by design, so the keyword links but never fires —
+is `main`. Every feature/fix PR targets `develop` by design, so the keyword links but never fires,
 and it fails silently: the PR merges green and the issue stays open. 17 issues accumulated this way
 before anyone noticed (#217), and 96 more before the sweep below existed.
 
-**Write the keyword anyway — it is now the thing that closes the issue.** At release time
+**Write the keyword anyway, it is now the thing that closes the issue.** At release time
 `close-shipped-issues.yml` reads `Closes #n` back out of the body of every PR in the release and
 closes each one with `Shipped in vX.Y.Z.` GitHub's own link API (`closingIssuesReferences`) is
 **empty** for develop-targeted PRs, so the PR body is the only record of the link that survives:
@@ -371,12 +371,12 @@ gh workflow run close-shipped-issues.yml -f tag=v1.3.1                   # close
 
 Re-running is safe: it only ever closes issues that are open, and never reopens anything.
 
-(Board columns are untouched — they need a `read:project` scope `GITHUB_TOKEN` does not have, so
+(Board columns are untouched, they need a `read:project` scope `GITHUB_TOKEN` does not have, so
 `Deploy` → `Done` stays a manual move.)
 
 ---
 
-## Step 1 — Create a GitHub Issue FIRST
+## Step 1, Create a GitHub Issue FIRST
 
 Before touching any code, create an issue and add it to the board:
 
@@ -407,9 +407,9 @@ gh project item-edit --project-id PVT_kwHOAL1qLc4BZbZZ --id "$ITEM_ID" \
 
 ---
 
-## Step 2 — Create a Branch (from develop)
+## Step 2, Create a Branch (from develop)
 
-Branch naming is strict — always include the issue number:
+Branch naming is strict, always include the issue number:
 
 | Type | Pattern | Example |
 |---|---|---|
@@ -419,11 +419,11 @@ Branch naming is strict — always include the issue number:
 | Chore / deps | `chore/#{issue}-short-desc` | `chore/46-bump-bubbletea` |
 
 ```bash
-# Features/fixes — always branch from develop
+# Features/fixes, always branch from develop
 git checkout develop && git pull origin develop
 git checkout -b feature/43-hydra-stats
 
-# Hotfixes — branch from the last production tag
+# Hotfixes, branch from the last production tag
 git checkout main && git pull origin main
 git checkout -b hotfix/45-nil-panic
 
@@ -434,7 +434,7 @@ gh project item-edit --project-id PVT_kwHOAL1qLc4BZbZZ --id "$ITEM_ID" \
 
 ---
 
-## Step 3 — Conventional Commits (required)
+## Step 3, Conventional Commits (required)
 
 Every commit must follow the conventional commit spec.
 **This drives automatic changelog generation and version bumps.**
@@ -447,7 +447,7 @@ Every commit must follow the conventional commit spec.
 | `perf:` | patch bump | `perf: cache probe results for 60s` |
 | `refactor:` | no bump | `refactor: extract dispatch logic` |
 | `chore(deps):` | no bump | `chore(deps): bump bubbletea v0.28` |
-| `docs:`, `test:`, `ci:`, `style:` | no bump, hidden in changelog | — |
+| `docs:`, `test:`, `ci:`, `style:` | no bump, hidden in changelog |, |
 
 ```bash
 git commit -m "feat(dispatch): add --dry-run flag to preview routing decisions"
@@ -457,11 +457,11 @@ git commit -m "chore(deps): bump golang.org/x/sys to v0.25.0"
 
 ---
 
-## Step 4 — Open a Pull Request → Link to Issue
+## Step 4, Open a Pull Request → Link to Issue
 
 ```bash
 gh pr create \
-  --title "feat(stats): hyctl stats — cost breakdown by model/tier/day" \
+  --title "feat(stats): hyctl stats, cost breakdown by model/tier/day" \
   --body "$(cat <<'EOF'
 ## Summary
 - Adds `hyctl stats` subcommand
@@ -469,8 +469,8 @@ gh pr create \
 - Outputs table with totals
 
 ## Changes
-- `internal/stats/stats.go` — new package
-- `cmd/hydra/main.go` — wire cmdStats()
+- `internal/stats/stats.go`, new package
+- `cmd/hydra/main.go`, wire cmdStats()
 
 Closes #43
 EOF
@@ -487,27 +487,27 @@ gh project item-edit --project-id PVT_kwHOAL1qLc4BZbZZ --id "$ITEM_ID" \
 - Title must be a valid conventional commit (e.g. `feat(scope): description`)
 - Body must contain `Closes #<issue>`. The keyword does not fire on a develop-targeted PR, but
   `close-shipped-issues.yml` reads it at release time and closes the issue then. No keyword, no close.
-- All features/fixes target `develop`. Hotfixes target `main` — and there the keyword *does* fire.
+- All features/fixes target `develop`. Hotfixes target `main`, and there the keyword *does* fire.
 - Never open a PR directly to `main` from a feature branch.
 
 ---
 
-## Step 5 — Review & Merge
+## Step 5, Review & Merge
 
 - PRs to `develop` require 0 approvals (self-merge allowed) but must pass CI
 - PRs to `main` (release branch merges, hotfixes) require 1 approval
-- Merge strategy: **Squash and merge** everywhere — clean linear history
+- Merge strategy: **Squash and merge** everywhere, clean linear history
 - Never force-push to `develop`, `release/*`, or `main`
 
 ```bash
-# After merge — move issue to Done
+# After merge, move issue to Done
 gh project item-edit --project-id PVT_kwHOAL1qLc4BZbZZ --id "$ITEM_ID" \
   --field-id PVTSSF_lAHOAL1qLc4BZbZZzhUaGlE --single-select-option-id 98236657
 ```
 
 ---
 
-## Step 6 — Release Cycle
+## Step 6, Release Cycle
 
 ### Normal release flow (feature release)
 
@@ -517,13 +517,13 @@ Features merge to develop (conventional commits)
 Cut release branch: git checkout -b release/v1.2.0 develop
         ↓  (push → rc.yml fires → publishes v1.2.0-rc.1 pre-release)
 UAT testing on release/v1.2.0
-Bug fixes land via PR into release/v1.2.0 (direct pushes are rejected — the
+Bug fixes land via PR into release/v1.2.0 (direct pushes are rejected, the
 release-branch-protection ruleset requires a PR and linear history, so a merge
 commit cannot land there either; squash or rebase only)
         ↓  (each merge → rc.yml publishes v1.2.0-rc.2, rc.3 …)
 Sign-off ✓
         ↓
-PR: release/v1.2.0 → main  (squash merge — MUST carry a Release-As footer, see below)
+PR: release/v1.2.0 → main  (squash merge, MUST carry a Release-As footer, see below)
         ↓
 release-please opens Release PR on main (bumps version, updates CHANGELOG)
         ↓
@@ -536,7 +536,7 @@ close-shipped-issues.yml closes every issue in the release ("Shipped in v1.2.0."
 Cherry-pick any release-branch fixes back to develop
 ```
 
-### ⚠️ The squash-merge trap — `Release-As:` is mandatory
+### ⚠️ The squash-merge trap, `Release-As:` is mandatory
 
 **A squash merge of `release/v*` → `main` destroys the commit history release-please
 needs, and the release silently does not happen.**
@@ -546,11 +546,11 @@ This is not hypothetical: it is exactly what happened to v1.1.0. PR #219 merged 
 
 ```
 ✔ Considering: 3 commits
-✔ No user facing commits found since e5e766e — skipping
+✔ No user facing commits found since e5e766e, skipping
 ```
 
 The reason: squashing collapses every `feat:`/`fix:` commit on the release branch into a
-**single** commit whose type is taken from the PR title — here `chore(release): v1.1.0`.
+**single** commit whose type is taken from the PR title, here `chore(release): v1.1.0`.
 `chore` does not bump. release-please saw no user-facing commit and correctly did nothing.
 Nothing failed, nothing was red, and no `v1.1.0` tag was ever created.
 
@@ -561,13 +561,13 @@ the version regardless of commit types:
 Release-As: 1.2.0
 ```
 
-Put it on its own line at the end of the PR **body** — a squash composes the commit message
+Put it on its own line at the end of the PR **body**, a squash composes the commit message
 from title + body, so a footer in a local commit message is discarded. Give the PR a
 `fix(release):` or `feat(release):` title as well, so a user-facing commit exists and
-release-please cannot take the "nothing to do" path at all. Belt and braces — this step is
+release-please cannot take the "nothing to do" path at all. Belt and braces, this step is
 invisible when it works and completely silent when it is missed.
 
-**Verify after merging**, every time — a green `Release Please` run does not mean a release:
+**Verify after merging**, every time, a green `Release Please` run does not mean a release:
 
 ```bash
 gh run list --branch main --workflow "Release Please" --limit 1   # must be success
@@ -576,7 +576,7 @@ git ls-remote --tags origin | grep "v1.2.0$"                      # after mergin
 ```
 
 If no Release PR appears, the footer was missing. Fix it by pushing another PR to `main`
-carrying the footer; do **not** create the tag by hand — a manual tag leaves
+carrying the footer; do **not** create the tag by hand, a manual tag leaves
 `.release-please-manifest.json` behind at the old version, and the next release is then
 computed off the wrong base (#215).
 
@@ -594,14 +594,14 @@ shipped, and reads the trailing `(#n)` off every commit subject there.
 Quick Start below prescribes `(#${ISSUE})` in the commit subject, and both conventions are in
 the history. So each number is resolved to whichever it is: a PR means read `Closes #m` out of
 its body, an issue means the commit names the issue it shipped. Only issues still open are
-touched. Handling just one convention silently loses most of the release — that is what the
+touched. Handling just one convention silently loses most of the release, that is what the
 first cut of this workflow did. Verify:
 
 ```bash
 gh run list --workflow "Close shipped issues" --limit 1
 ```
 
-If it did not fire, re-run it by hand — see **Link a PR to an issue** above.
+If it did not fire, re-run it by hand, see **Link a PR to an issue** above.
 
 ### Cutting a release branch
 
@@ -641,17 +641,17 @@ git push origin develop
 | **edge** | `develop` | `edge` (overwritten) | GitHub pre-release |
 
 ### Version bump rules (CRITICAL)
-- **Only `main` ever gets a semver tag** — release-please enforces this
-- `release/*` and `develop` get pre-release tags only (RC / edge) — no semver bump
-- Never manually bump version numbers — release-please reads conventional commits
+- **Only `main` ever gets a semver tag**, release-please enforces this
+- `release/*` and `develop` get pre-release tags only (RC / edge), no semver bump
+- Never manually bump version numbers, release-please reads conventional commits
 - `BREAKING CHANGE:` in commit body → major bump; `feat:` → minor; `fix:`/`perf:` → patch
 
 ---
 
-## Step 7 — GitHub Project Board (MANDATORY — every state change)
+## Step 7, GitHub Project Board (MANDATORY, every state change)
 
-Board: **Project #2 "Hydra Roadmap"** — `PVT_kwHOAL1qLc4BZbZZ`
-Field: **Status** — `PVTSSF_lAHOAL1qLc4BZbZZzhUaGlE`
+Board: **Project #2 "Hydra Roadmap"**, `PVT_kwHOAL1qLc4BZbZZ`
+Field: **Status**, `PVTSSF_lAHOAL1qLc4BZbZZzhUaGlE`
 
 | Column | Option ID | When to move |
 |---|---|---|
@@ -718,7 +718,7 @@ gh project item-add 2 --owner ankit373 --url "$ISSUE_URL"
 
 ---
 
-## Quick Start — Full Flow in One Go
+## Quick Start, Full Flow in One Go
 
 ```bash
 # 1. Create issue + add to board + move to Todo
@@ -749,7 +749,7 @@ gh pr create --title "feat(stats): add hyctl stats subcommand" \
 gh project item-edit --project-id PVT_kwHOAL1qLc4BZbZZ --id "$ITEM_ID" \
   --field-id PVTSSF_lAHOAL1qLc4BZbZZzhUaGlE --single-select-option-id 1490e846
 
-# 5. After merge to develop — move to Deploy (merged, not yet released)
+# 5. After merge to develop, move to Deploy (merged, not yet released)
 gh project item-edit --project-id PVT_kwHOAL1qLc4BZbZZ --id "$ITEM_ID" \
   --field-id PVTSSF_lAHOAL1qLc4BZbZZzhUaGlE --single-select-option-id bcafa7ca
 
@@ -766,13 +766,13 @@ gh project item-edit --project-id PVT_kwHOAL1qLc4BZbZZ --id "$ITEM_ID" \
 ```
 v{MAJOR}.{MINOR}.{PATCH}
 
-MAJOR — breaking CLI interface change (rare, needs migration guide in PR)
-MINOR — new subcommand, new feature, new model support
-PATCH — bug fix, security patch, dependency update
+MAJOR, breaking CLI interface change (rare, needs migration guide in PR)
+MINOR, new subcommand, new feature, new model support
+PATCH, bug fix, security patch, dependency update
 ```
 
 Current version is tracked in `.release-please-manifest.json`.
-**Never edit version numbers manually** — release-please handles all bumps.
+**Never edit version numbers manually**, release-please handles all bumps.
 
 ---
 
@@ -782,7 +782,7 @@ Current version is tracked in `.release-please-manifest.json`.
 .goreleaser.yaml              ← build matrix, archives, homebrew tap config
 release-please-config.json    ← release-please behaviour
 .release-please-manifest.json ← last released version. release-please reads THIS, not tags,
-                                to compute the next bump — if it drifts from the newest tag,
+                                to compute the next bump, if it drifts from the newest tag,
                                 the next release is computed off the wrong base (#215).
 CHANGELOG.md                  ← release-please prepends each release; the pre-1.0 tail is a
                                 hand-written historical record. Do not edit the generated part.
@@ -798,15 +798,35 @@ internal/update/update.go     ← startup update checker (24h cache)
                                        from "Closes #n" in each PR body (#217). Its resolver
                                        is close_shipped_issues.py beside it.
 .github/workflows/sync-develop.yml   ← fires on main push → back-merge PR (main → develop).
-                                       FAILS loudly on conflict; a red run here means develop
+                                       FAILS loudly on conflict, and also when the PR it opened
+                                       cannot merge (#670). Either way a red run means develop
                                        is behind main and a release cut will not merge cleanly.
 ```
 
+**The back-merge PR cannot merge itself, and needs one of your commits.** Two independent
+reasons, both invisible on the PR: it is opened by `github-actions[bot]`, whose events start no
+workflow runs, so its required checks are *expected* and never arrive; and it carries
+release-please's **unsigned** commit, which `develop` rejects, `required_signatures` with
+`enforce_admins: true`, so `--admin` does not help and the refusal reads "the base branch policy
+prohibits the merge" while every check is green.
+
+Until a `BACK_MERGE_TOKEN` secret exists (a PAT whose account also signs), land it by hand:
+
+```bash
+git fetch origin chore/back-merge-main
+git checkout -B backmerge origin/chore/back-merge-main
+git commit -S --allow-empty -m "chore: sign and trigger the back-merge"
+git push origin HEAD:chore/back-merge-main
+```
+
+Skipping it leaves develop without the version bump, and the next release computes off a stale
+manifest, the #215 failure mode.
+
 ---
 
-## Docs Site — Keep These Files in Sync (MANDATORY)
+## Docs Site, Keep These Files in Sync (MANDATORY)
 
-The GitHub Pages site at `hydra.uvansa.com` serves static files from `docs/`. Several of these are **manually maintained** — they do not update themselves. Whenever a relevant change lands, update all affected files in the same commit or PR.
+The GitHub Pages site at `hydra.uvansa.com` serves static files from `docs/`. Several of these are **manually maintained**, they do not update themselves. Whenever a relevant change lands, update all affected files in the same commit or PR.
 
 ```
 docs/index.html    ← landing page (features, stats, CLI tab, cost table)
@@ -829,18 +849,30 @@ docs/robots.txt    ← AI crawler rules (only change if bot policy changes)
 | AI crawler policy change | `robots.txt` |
 
 ### Rules
-- `llms.txt` must always reflect what `hyctl --help` and `hyctl stats` actually do — no aspirational features
-- `pricing.md` costs must match `hyctl pricing list` live output — never hardcode stale rates without noting the date
+- `llms.txt` must always reflect what `hyctl --help` and `hyctl stats` actually do, no aspirational features
+- `pricing.md` costs must match `hyctl pricing list` live output, never hardcode stale rates without noting the date
 - `sitemap.xml` `lastmod` must be updated whenever `index.html` changes
-- `app.html`'s direct download links are **version-pinned by necessity** — desktop asset names embed
+- `app.html`'s direct download links are **version-pinned by necessity**, desktop asset names embed
   their version, so GitHub's `/releases/latest/download/` shortcut cannot address them. They go stale
   every release and must be bumped by hand; the `install-app.sh` command beside them resolves the
-  newest tag at runtime and never goes stale, which is why it is the primary path on the page
+  newest tag at runtime and never goes stale, which is why it is the primary path on the page.
+  **`cmd/hydra/docs_version_test.go` now fails the build when they drift**, so a missed bump is red
+  rather than a 404 someone finds later. It checks three things: every version reference in
+  `app.html`, `index.html` and `README.md` names one version; that version matches
+  `.release-please-manifest.json`; and each asset URL's tag matches the version inside its filename.
+  Bump them all together:
+
+  ```bash
+  OLD=1.4.0 NEW=1.4.1
+  sed -i '' "s/v${OLD}/v${NEW}/g; s/\"softwareVersion\": \"${OLD}\"/\"softwareVersion\": \"${NEW}\"/" \
+    docs/app.html docs/index.html README.md
+  go test ./cmd/hydra -run TestDocs_Version   # must pass before the release PR
+  ```
 - Do not add features to `llms.txt` that haven't shipped to `main` yet
 
 ---
 
-## Go Control Plane — Package Map
+## Go Control Plane, Package Map
 
 All Go source lives under `cmd/` and `internal/`. Key packages:
 
@@ -849,40 +881,40 @@ All Go source lives under `cmd/` and `internal/`. Key packages:
 | `internal/dispatch` | Core router: policy → head selection → executor → fallback |
 | `internal/executor` | Per-provider execution: agy, ollama, HTTP (OpenAI-compat), CLI |
 | `internal/provider` | Head discovery plugins (agy registry, env, port, CLI) |
-| `internal/probe` | Machine scan — finds all live heads at startup |
+| `internal/probe` | Machine scan, finds all live heads at startup |
 | `internal/swarm` | Fan-out dispatch: race / best (LLM judge) / all (CapScore rank) |
-| `internal/otlp` | Renders the dispatch log as OpenTelemetry spans, OTLP/HTTP with a JSON body — the transport collectors people actually run accept (Langfuse ingests at `/api/public/otel/v1/traces` and offers no gRPC at all). A bridge, not a migration: `gen_ai.*` is populated only where it genuinely corresponds, and tier/enum/cost/propensity — which OTel has no place for and which are the reason the log is worth exporting — are carried under `hydra.*` rather than dropped. 64-bit values are encoded as strings per OTLP/JSON, because a JSON number loses precision above 2^53 and unix nanos passed that in 1970, so a numeric timestamp is silently wrong rather than rejected. An all-zero trace or span id is invalid and collectors drop the span, so a row with no run id gets a random one — an unlinked span is data, a dropped one is not. Nothing leaves the machine unless `--otlp` names an endpoint. |
+| `internal/otlp` | Renders the dispatch log as OpenTelemetry spans, OTLP/HTTP with a JSON body, the transport collectors people actually run accept (Langfuse ingests at `/api/public/otel/v1/traces` and offers no gRPC at all). A bridge, not a migration: `gen_ai.*` is populated only where it genuinely corresponds, and tier/enum/cost/propensity, which OTel has no place for and which are the reason the log is worth exporting, are carried under `hydra.*` rather than dropped. 64-bit values are encoded as strings per OTLP/JSON, because a JSON number loses precision above 2^53 and unix nanos passed that in 1970, so a numeric timestamp is silently wrong rather than rejected. An all-zero trace or span id is invalid and collectors drop the span, so a row with no run id gets a random one, an unlinked span is data, a dropped one is not. Nothing leaves the machine unless `--otlp` names an endpoint. |
 | `internal/pricing` | Live cost DB: OpenRouter fetch + 24h cache + tier YAML fallback |
 | `internal/util` | Shared utilities: `Accumulator` (bounded io.Writer, 33 MB cap) |
 | `internal/cost` | Reads `cost.jsonl`, produces spend summaries |
 | `internal/policy` | Allow/deny rules (PII local-only, etc.) |
 | `internal/rank` | CapScore ranking helpers |
-| `registry` | The routing YAML **and** the `go:embed` that compiles it into the binary. `registry.Read(home, name)` prefers `$HYDRA_HOME/registry/<name>` so operators can retune without a rebuild, and falls back to the embedded copy — which is what every brew/npm/pip/curl install uses, since none of them ship the files (#238). |
-| `internal/config` | Hydra config load/save (`~/.config/hydra/`); `Breadcrumb()` — SHA256 deployment-identity fingerprint over `registry/{routing,models,domains}.yaml`, auto-stamped into ledger/trust/cost log entries so they can be tied back to the exact routing rules in effect. |
+| `registry` | The routing YAML **and** the `go:embed` that compiles it into the binary. `registry.Read(home, name)` prefers `$HYDRA_HOME/registry/<name>` so operators can retune without a rebuild, and falls back to the embedded copy, which is what every brew/npm/pip/curl install uses, since none of them ship the files (#238). |
+| `internal/config` | Hydra config load/save (`~/.config/hydra/`); `Breadcrumb()`, SHA256 deployment-identity fingerprint over `registry/{routing,models,domains}.yaml`, auto-stamped into ledger/trust/cost log entries so they can be tied back to the exact routing rules in effect. |
 | `internal/capabilities` | Model capability scores: embedded `data.json` ⊕ runtime user overlay (`~/.hydra/models.json`) merged at discovery, so new models are added without a rebuild. Drives `hyctl models list\|add\|remove\|sync`. |
 | `internal/budget` | Token-budget governor: static pressure bands (`ModeFor`) + a rate-aware first-passage-time model on the orchestrator's `claude_pct` session history (`RiskFromHistory`/`EffectiveMode`) that escalates before a threshold is crossed. Feeds `claudeMode` downgrades and `hyctl status`. |
 | `internal/trust` | Trust Control Plane confidence layer: per-source calibration (Beta-Bernoulli → LLR/D), defect-cost model + `RequiredConfidence`, and the SPRT optimal-stopping ensemble (`trust.Run`). Drives `hyctl dispatch --confidence` and `hyctl trust calibration\|record\|defect\|stats\|explain`. |
-| `internal/graph` | Code dependency graph (`graph.json`, Graphify or any tree-sitter indexer) → transitive-dependent blast radius + coupling `k` + Molloy–Reed percolation κ=⟨k²⟩/⟨k⟩ (κ≥2 ⟹ cascade-capable core; `PercolationFactor` lifts hub-core files). Drives `hyctl graph blast\|parallel` and `hyctl dispatch --file`. |
+| `internal/graph` | Code dependency graph (`graph.json`, Graphify or any tree-sitter indexer) → transitive-dependent blast radius + coupling `k` + Molloy-Reed percolation κ=⟨k²⟩/⟨k⟩ (κ≥2 ⟹ cascade-capable core; `PercolationFactor` lifts hub-core files). Drives `hyctl graph blast\|parallel` and `hyctl dispatch --file`. |
 | `internal/a2a` | Agent-to-agent handoffs with vector clocks: causal ordering (before/after/concurrent) + `ConflictsWith` (concurrent + overlapping files). Backs `last_handoff.json` and `--a2a`. |
 | `internal/optimal` | Optimal parallel-agent count `n*=√((1−s)/k)` and speedup (Amdahl + coordination, Manifesto Law 4). Drives `hyctl graph parallel`. |
 | `internal/entropy` | Context signal density ρ (gzip-ratio proxy) → `useful_tokens = L·ρ` + a compaction governor (Manifesto Law 5). Drives `hyctl context entropy`. |
 | `internal/ledger` | Local MCP accountability ledger: append-only access events + glob allow/deny `Policy.Decide` gate (records every decision), classification-aware (`Rule.Classification`, auto-derived from content via `policy.ContainsPII` or set explicitly) + `HashParams`/`VerifyParams` SHA256 parameter-hash binding for tamper-evidence between a decision and its execution. `Check` fails **closed** (unhashable params → `Deny`, recorded); `LoadPolicy` rejects unparseable decisions/actions/globs rather than silently voiding a rule, actions/classifications are case-normalized, and only **Allow** events count as approvals for `verify`. Drives `hyctl mcp check\|record\|verify\|log\|report`. |
-| `internal/mcpregistry` | Local-first MCP server trust registry — identity-only sync/scan/audit of what's installed (never reads secret/env values from client configs, by construction), a CSA MCP Selection Scorecard-shaped score (known-CVE cross-reference via OSV.dev, edit-distance typosquat detection, GitHub maintenance recency, declared-not-verified auth posture — each category renders "insufficient evidence" rather than a fabricated number), and a trust lifecycle automaton (new/provisional/trusted/flagged/quarantined/delisted) where every version bump — a content-hash diff of the manifest — drops a server back to provisional. Only a *confirmed* finding quarantines (`quarantineThreshold`, -80): the near-duplicate heuristic scores -40 and deliberately sits above it, because it false-positived on 0.7% of the live registry and quarantine has no automatic exit — `Clear` is the manual recovery path. An unevaluated category contributes `neutralBaseline` rather than dropping out of the weighted average, so missing evidence can never raise a score, and a server with no substantive category reads "insufficient evidence" instead of a number. `ClassificationForTool` feeds `mcp-unverified`/`mcp-flagged`/`mcp-quarantined` into `internal/ledger`'s classification, the same mechanism `policy.ContainsPII` uses for content. `BehaviorClassification` adds `mcp-behavior-change` from local ledger history alone — a server whose recorded `Action`s have only ever been one kind performing another for the first time — no cross-user aggregation or registry-declared capability data needed (neither exists yet). `Backtest` validates the pipeline against real documented incidents (`postmark-mcp`'s rug-pull, CVE-2025-6514) before any public directory export is trusted. Drives `hyctl mcp registry sync\|scan\|audit\|export\|backtest\|list\|clear`. |
-| `internal/pending` | Tasks parked on a ledger `ask` verdict, under `logs/pending/<task-id>.json`. An `ask` stops dispatch **before any executor runs** and does not fall through to the next fallback candidate — skipping the head that needs permission and running a cheaper one would mean the question is never asked, and for a resource-scoped rule would reach the gated resource anyway. `Save` is temp-then-rename; `Load` fails loudly on a corrupt or incomplete file rather than resuming on a zero value; the bound refuses new work instead of pruning, since discarding a question drops work someone is waiting on. `dispatch.Resume` consumes the file before dispatching, which is what makes answering idempotent, and re-approves **only the stored head** (`Options.AnsweredHead`). `dispatch.Decline` is a package function, not a Dispatcher method, so a machine with no working config can still refuse a task it parked. Drives `hyctl ask list\|answer\|decline`. |
-| `internal/oracle` | Verification oracles: `Oracle`/`CommandOracle` run tests/compile/lint (exit 0 = pass) and map the verdict to a calibrated LLR (`oracle.LLR`) — a high-`D` evidence source. Drives `hyctl oracle verify`. |
-| `internal/sketch` | Mergeable relative-error quantile sketch. Logarithmic buckets give a *relative* bound (not rank), which is what makes it usable on skewed latency where a rank-error sketch is arbitrarily wrong in the tail. Measured: p99 within 0.45% in ~4 KB vs 1.6 MB of raw values. Merging two sketches is as accurate as one sketch of the union, so machines can combine stats without shipping traces. Past the bucket cap the guarantee is directional — the tail keeps its bound, the small end inflates. |
+| `internal/mcpregistry` | Local-first MCP server trust registry, identity-only sync/scan/audit of what's installed (never reads secret/env values from client configs, by construction), a CSA MCP Selection Scorecard-shaped score (known-CVE cross-reference via OSV.dev, edit-distance typosquat detection, GitHub maintenance recency, declared-not-verified auth posture, each category renders "insufficient evidence" rather than a fabricated number), and a trust lifecycle automaton (new/provisional/trusted/flagged/quarantined/delisted) where every version bump, a content-hash diff of the manifest, drops a server back to provisional. Only a *confirmed* finding quarantines (`quarantineThreshold`, -80): the near-duplicate heuristic scores -40 and deliberately sits above it, because it false-positived on 0.7% of the live registry and quarantine has no automatic exit, `Clear` is the manual recovery path. An unevaluated category contributes `neutralBaseline` rather than dropping out of the weighted average, so missing evidence can never raise a score, and a server with no substantive category reads "insufficient evidence" instead of a number. `ClassificationForTool` feeds `mcp-unverified`/`mcp-flagged`/`mcp-quarantined` into `internal/ledger`'s classification, the same mechanism `policy.ContainsPII` uses for content. `BehaviorClassification` adds `mcp-behavior-change` from local ledger history alone, a server whose recorded `Action`s have only ever been one kind performing another for the first time, no cross-user aggregation or registry-declared capability data needed (neither exists yet). `Backtest` validates the pipeline against real documented incidents (`postmark-mcp`'s rug-pull, CVE-2025-6514) before any public directory export is trusted. Drives `hyctl mcp registry sync\|scan\|audit\|export\|backtest\|list\|clear`. |
+| `internal/pending` | Tasks parked on a ledger `ask` verdict, under `logs/pending/<task-id>.json`. An `ask` stops dispatch **before any executor runs** and does not fall through to the next fallback candidate, skipping the head that needs permission and running a cheaper one would mean the question is never asked, and for a resource-scoped rule would reach the gated resource anyway. `Save` is temp-then-rename; `Load` fails loudly on a corrupt or incomplete file rather than resuming on a zero value; the bound refuses new work instead of pruning, since discarding a question drops work someone is waiting on. `dispatch.Resume` consumes the file before dispatching, which is what makes answering idempotent, and re-approves **only the stored head** (`Options.AnsweredHead`). `dispatch.Decline` is a package function, not a Dispatcher method, so a machine with no working config can still refuse a task it parked. Drives `hyctl ask list\|answer\|decline`. |
+| `internal/oracle` | Verification oracles: `Oracle`/`CommandOracle` run tests/compile/lint (exit 0 = pass) and map the verdict to a calibrated LLR (`oracle.LLR`), a high-`D` evidence source. Drives `hyctl oracle verify`. |
+| `internal/sketch` | Mergeable relative-error quantile sketch. Logarithmic buckets give a *relative* bound (not rank), which is what makes it usable on skewed latency where a rank-error sketch is arbitrarily wrong in the tail. Measured: p99 within 0.45% in ~4 KB vs 1.6 MB of raw values. Merging two sketches is as accurate as one sketch of the union, so machines can combine stats without shipping traces. Past the bucket cap the guarantee is directional, the tail keeps its bound, the small end inflates. |
 | `internal/rollup` | Per-day aggregates keyed by `(date, model, executor, enum, tier)`: calls, tokens, spend, a latency sketch, and propensity sums. What `hyctl stats --latency` reads instead of rescanning `cost.jsonl`, and what must be written *before* any retention deletes raw rows. |
 | `internal/evalset` | Oracle-verified examples: task, candidate, and ground truth from `internal/oracle`. The only trace-adjacent data kept verbatim and forever, because it is the only corpus the router can be improved against. Lives at `~/.hydra/evalset/`, deliberately outside `logs/` so nothing that prunes logs can reach it. Deduplicated on `(task_hash, candidate_hash)`; PII is marked rather than dropped, since dropping it would bias the corpus. Drives `hyctl eval list\|stats`. |
-| `internal/payload` | Opt-in store for prompt and response text — the only trace class with real privacy risk, so off by default and gated behind an explicit `hyctl init` question. Content-addressed but **packed, not loose**: one file per blob is charged a whole filesystem block, measured 22.2x more on disk for 200 small blobs (allocated space, on a filesystem that reports blocks; Windows does not expose allocation size through `fs.FileInfo`, so the saving is real there but unmeasurable from Go). Compressed with a dictionary trained from the user's own corpus, since the gain comes from the structure *these* prompts share. `DictPath` is store-relative on purpose — a frame written with a dictionary cannot be decoded without that exact dictionary, so a store that trains into one path and reads from another loses its contents irrecoverably. `policy.Redact` runs **before hashing**, so the content address names what was stored rather than leaving a fingerprint of the secret in the index. Every blob records `KeepProb`; a probability outside (0,1] is refused rather than defaulted, because a stored payload with an unknown admission probability silently biases anything computed from the set. `TrainDict` recovers from `zstd.BuildDict`, which panics with an integer divide by zero on a corpus that compresses to no literals — not a hypothetical input here but the expected one, since a young store is one system prompt repeated. |
-| `internal/runlog` (sealing) | `Seal` folds runs older than an age into one zstd frame per run inside `logs/seg/YYYY-MM.zst`, with a sidecar `.idx`. One frame per run rather than one per month, so reading one run seeks and decodes one frame instead of a month. `Load`/`Runs` read sealed segments transparently — `internal/tree`, the cockpit and the desktop app need no change. Lossless relocation, not retention: nothing is discarded. Measured 16.5x on disk in test, 8.53x amplification confirmed on a real machine (58 files, 27,835 bytes logical, 237,568 on disk). |
-| `internal/ope` | Off-policy estimation. `SelfNormalized` recovers a population rate from a non-uniformly sampled log by weighting each row by the inverse of its inclusion probability. `Evaluate` answers the counterfactual — what a routing policy you did not run would have cost — as self-normalized IPS with a **percentile bootstrap interval**, never a bare point estimate. It refuses rather than answering when the logged policy had no chance of doing what the candidate would do: that question is *unidentifiable*, not merely uncertain, and a wide interval still gets read as a number. `ErrNoPropensity` is kept distinct from `ErrInsufficientSupport` because the remedies differ — raising `explore_rate` creates overlap for future rows but cannot fix rows already written. Effective sample size (Kish's (Σw)²/Σw²) is the honest count: a thousand rows dominated by one weight are worth about one observation, and the estimate is refused below `MinESS`. Weights are clipped by default and `Method` says so, since clipping is a bias-variance trade the reader has to be told about. Bootstrap seeded so the same log gives the same interval twice. Exists because averaging a sampled log inverted the true ranking of two heads in simulation, which would then change routing (#605). |
+| `internal/payload` | Opt-in store for prompt and response text, the only trace class with real privacy risk, so off by default and gated behind an explicit `hyctl init` question. Content-addressed but **packed, not loose**: one file per blob is charged a whole filesystem block, measured 22.2x more on disk for 200 small blobs (allocated space, on a filesystem that reports blocks; Windows does not expose allocation size through `fs.FileInfo`, so the saving is real there but unmeasurable from Go). Compressed with a dictionary trained from the user's own corpus, since the gain comes from the structure *these* prompts share. `DictPath` is store-relative on purpose, a frame written with a dictionary cannot be decoded without that exact dictionary, so a store that trains into one path and reads from another loses its contents irrecoverably. `policy.Redact` runs **before hashing**, so the content address names what was stored rather than leaving a fingerprint of the secret in the index. Every blob records `KeepProb`; a probability outside (0,1] is refused rather than defaulted, because a stored payload with an unknown admission probability silently biases anything computed from the set. `TrainDict` recovers from `zstd.BuildDict`, which panics with an integer divide by zero on a corpus that compresses to no literals, not a hypothetical input here but the expected one, since a young store is one system prompt repeated. |
+| `internal/runlog` (sealing) | `Seal` folds runs older than an age into one zstd frame per run inside `logs/seg/YYYY-MM.zst`, with a sidecar `.idx`. One frame per run rather than one per month, so reading one run seeks and decodes one frame instead of a month. `Load`/`Runs` read sealed segments transparently, `internal/tree`, the cockpit and the desktop app need no change. Lossless relocation, not retention: nothing is discarded. Measured 16.5x on disk in test, 8.53x amplification confirmed on a real machine (58 files, 27,835 bytes logical, 237,568 on disk). |
+| `internal/ope` | Off-policy estimation. `SelfNormalized` recovers a population rate from a non-uniformly sampled log by weighting each row by the inverse of its inclusion probability. `Evaluate` answers the counterfactual, what a routing policy you did not run would have cost, as self-normalized IPS with a **percentile bootstrap interval**, never a bare point estimate. It refuses rather than answering when the logged policy had no chance of doing what the candidate would do: that question is *unidentifiable*, not merely uncertain, and a wide interval still gets read as a number. `ErrNoPropensity` is kept distinct from `ErrInsufficientSupport` because the remedies differ, raising `explore_rate` creates overlap for future rows but cannot fix rows already written. Effective sample size (Kish's (Σw)²/Σw²) is the honest count: a thousand rows dominated by one weight are worth about one observation, and the estimate is refused below `MinESS`. Weights are clipped by default and `Method` says so, since clipping is a bias-variance trade the reader has to be told about. Bootstrap seeded so the same log gives the same interval twice. Exists because averaging a sampled log inverted the true ranking of two heads in simulation, which would then change routing (#605). |
 | `internal/tui` | Bubble Tea TUI: init wizard, install flow |
 | `internal/review` | Code review subcommand |
 | `internal/editor` | Editor integration |
 
 ### Key invariants
-- `internal/util.Accumulator` **must** be used for all subprocess stdout/stderr capture — never `bytes.Buffer` for unbounded output.
-- `internal/pricing.DB` is the single source of truth for all cost estimation — never hardcode $/token values.
+- `internal/util.Accumulator` **must** be used for all subprocess stdout/stderr capture, never `bytes.Buffer` for unbounded output.
+- `internal/pricing.DB` is the single source of truth for all cost estimation, never hardcode $/token values.
 - `internal/swarm` uses `sync.WaitGroup` (not errgroup) for race mode to guarantee goroutine drain and prevent zombie agy subprocesses.
 - All executors must set `Response.Truncated = true` when output was capped.
 
@@ -891,7 +923,7 @@ All Go source lives under `cmd/` and `internal/`. Key packages:
 pricing.Load()
   → readCache()           # ~/.config/hydra/pricing_cache.json (24h TTL)
   → fetchFromOpenRouter() # background refresh if stale
-  → loadFallbackTiers()   # registry/pricing.yaml — embedded in the binary, on-disk copy wins
+  → loadFallbackTiers()   # registry/pricing.yaml, embedded in the binary, on-disk copy wins
 ```
 The tier table is not just an offline fallback: it is what prices the CLI-agent heads (claude, agy,
 codex, cursor…) that never appear in OpenRouter's catalog.

@@ -2,7 +2,7 @@
 
 package tui
 
-// chat_exec.go — the chat's execution pipeline (plan → edit → verify), run as
+// chat_exec.go, the chat's execution pipeline (plan → edit → verify), run as
 // tea.Cmds through internal/dispatch, internal/editor and internal/oracle.
 // The stage funcs are seams: tests fake the providers, never the pipeline.
 
@@ -35,7 +35,7 @@ import (
 // after two model-written fixes needs a human, not a third attempt.
 const ckMaxFixes = 2
 
-// ckTaskTimeout bounds one pipeline phase — same reasoning as the desktop's
+// ckTaskTimeout bounds one pipeline phase, same reasoning as the desktop's
 // ChatTimeout, wider because a phase can hold several dispatches plus a test run.
 const ckTaskTimeout = 10 * time.Minute
 
@@ -54,15 +54,15 @@ type ckVerifyRound struct {
 
 // ckTask is one chat task: the routing decision plus everything the pipeline
 // accumulates while running it. It moves by value between the UI and the
-// worker — exactly one owner at a time, so no locking.
+// worker, exactly one owner at a time, so no locking.
 type ckTask struct {
 	prompt      string
 	mode        ckModeDef
-	file        string // absolute path being edited — inside the worktree when isolated
+	file        string // absolute path being edited, inside the worktree when isolated
 	rel         string // repo-relative display path; "" when outside the repo
 	root        string // editor scope-root override: the thread's worktree dir
 	dir         string // verify working directory; "" = the process CWD
-	threadID    int    // the owning thread — tea.Cmd results route back by this
+	threadID    int    // the owning thread, tea.Cmd results route back by this
 	runID       string
 	taskID      string
 	answerTier  string
@@ -168,6 +168,10 @@ type ckStageOut struct {
 	head       string
 	tier       int
 	confidence float64 // consensus runs only
+
+	// attempts is every head that was tried and did not answer. Carried so the
+	// task can say it fell back rather than reporting only who replied (#676).
+	attempts []dispatch.Attempt
 }
 
 // The three provider seams. Tests substitute these; the pipeline around them
@@ -180,7 +184,7 @@ var (
 
 // ckRealDispatchStage routes one prompt through the real router, honoring the
 // task's strategy for this stage: plain dispatch, best-of-3 swarm, or the SPRT
-// consensus ensemble — the same code paths cmd/hydra's dispatch uses.
+// consensus ensemble, the same code paths cmd/hydra's dispatch uses.
 func ckRealDispatchStage(ctx context.Context, t *ckTask, prompt, tierHint string, strat byte) (ckStageOut, error) {
 	d, err := dispatch.New(ctx)
 	if err != nil {
@@ -232,13 +236,13 @@ func ckRealDispatchStage(ctx context.Context, t *ckTask, prompt, tierHint string
 		if err != nil {
 			return ckStageOut{}, err
 		}
-		return ckStageOut{output: res.Output, head: res.Head.Name, tier: rank.UITier(res.Head)}, nil
+		return ckStageOut{output: res.Output, head: res.Head.Name, tier: rank.UITier(res.Head), attempts: res.Attempts}, nil
 	}
 }
 
 // ckRealEditStage runs the editor path: scoped, validated, rollback-safe, with
 // the runlog KindEdit snapshot the d/x keys read back. Root carries a worktree
-// thread's scope override — its files live outside every registered workspace.
+// thread's scope override, its files live outside every registered workspace.
 func ckRealEditStage(ctx context.Context, t *ckTask, prompt string) (*editor.Result, error) {
 	return editor.Edit(ctx, editor.Request{
 		File: t.file, Enum: t.editEnum, Prompt: prompt, Validate: true,
@@ -247,7 +251,7 @@ func ckRealEditStage(ctx context.Context, t *ckTask, prompt string) (*editor.Res
 }
 
 // ckRealVerifyStage runs the workspace's verify command through the oracle.
-// argv carries no placeholders — the file argument was substituted with the
+// argv carries no placeholders, the file argument was substituted with the
 // real on-disk path, which is what is being verified. dir is the worktree for
 // isolated threads, so the verifier checks the thread's copy, not the user's.
 func ckRealVerifyStage(ctx context.Context, argv []string, dir string) (oracle.Verdict, error) {
@@ -259,7 +263,7 @@ func ckRealVerifyStage(ctx context.Context, argv []string, dir string) (oracle.V
 
 // ckVerifyArgs picks the verify command: `go test ./...` when the CWD repo is
 // Go, else the workspace.yaml validator for the edited file's extension.
-// Empty argv means no verifier is configured — the proof strip says so.
+// Empty argv means no verifier is configured, the proof strip says so.
 func ckVerifyArgs(file string) (argv []string, label string) {
 	if ckGoModDir() != "" {
 		return []string{"go", "test", "./..."}, "go test ./..."
@@ -276,7 +280,7 @@ func ckVerifyArgs(file string) (argv []string, label string) {
 		return nil, ""
 	}
 	// {file} substitutes the real path as one argv element (paths with spaces
-	// survive) — the verifier must check the file on disk, not a temp copy.
+	// survive), the verifier must check the file on disk, not a temp copy.
 	if idx := strings.Index(tmpl, "{file}"); idx >= 0 {
 		argv = append(strings.Fields(tmpl[:idx]), file)
 		argv = append(argv, strings.Fields(tmpl[idx+len("{file}"):])...)
@@ -370,10 +374,32 @@ func ckRunStages(ctx context.Context, ex *ckExecState, t *ckTask, phase int) byt
 	}
 	t.answer, t.conf = out.output, out.confidence
 	t.headName, t.tier = out.head, out.tier
+	if n := ckFellBackNote(out); n != "" {
+		t.note = n
+	}
 	if t.mode.name == "edit" && t.file == "" {
-		t.note = "no file named — answered instead"
+		t.note = "no file named, answered instead"
 	}
 	return 0
+}
+
+// ckFellBackNote says which head was tried and could not answer. Silence here
+// is what #676 reported: a reply from a weak head reads the same whether the
+// router chose it or fell back to it.
+func ckFellBackNote(out ckStageOut) string {
+	if len(out.attempts) == 0 {
+		return ""
+	}
+	a := out.attempts[0]
+	name := a.Model
+	if name == "" {
+		name = a.Head
+	}
+	more := ""
+	if len(out.attempts) > 1 {
+		more = fmt.Sprintf(" (+%d more)", len(out.attempts)-1)
+	}
+	return fmt.Sprintf("%s could not answer%s: %s", name, more, truncate(a.Reason, 60))
 }
 
 // ckEditAndVerify is the edit → verify → fix loop. In careful mode each fix
@@ -412,13 +438,13 @@ func ckEditAndVerify(ctx context.Context, ex *ckExecState, t *ckTask) byte {
 			return 0
 		}
 	} else { // resumed at a confirmed fix
-		if !editOnce(fmt.Sprintf("fixing (%d/%d) — %s", t.fixRound, ckMaxFixes, base), ckFixPrompt(t)) {
+		if !editOnce(fmt.Sprintf("fixing (%d/%d), %s", t.fixRound, ckMaxFixes, base), ckFixPrompt(t)) {
 			return 0
 		}
 	}
 
 	for {
-		ex.setStage("verifying — " + t.verifyLabel)
+		ex.setStage("verifying, " + t.verifyLabel)
 		v, verr := ckVerifyStage(ctx, t.verifyArgv, t.dir)
 		if verr != nil {
 			t.verifyErr = verr.Error()
@@ -437,7 +463,7 @@ func ckEditAndVerify(ctx context.Context, ex *ckExecState, t *ckTask) byte {
 		if t.mode.confirm {
 			return 'f' // careful: this write needs a y first
 		}
-		if !editOnce(fmt.Sprintf("fixing (%d/%d) — %s", t.fixRound, ckMaxFixes, base), ckFixPrompt(t)) {
+		if !editOnce(fmt.Sprintf("fixing (%d/%d), %s", t.fixRound, ckMaxFixes, base), ckFixPrompt(t)) {
 			return 0
 		}
 	}
@@ -451,7 +477,7 @@ func ckOverCap(t *ckTask) error {
 		return nil
 	}
 	if spent := ckRunSpend(t.runID); spent >= t.mode.capUSD {
-		return fmt.Errorf("cost cap $%.2f reached ($%.4f spent) — stopped before the next stage", t.mode.capUSD, spent)
+		return fmt.Errorf("cost cap $%.2f reached ($%.4f spent), stopped before the next stage", t.mode.capUSD, spent)
 	}
 	return nil
 }
@@ -491,7 +517,7 @@ func ckFinalize(t *ckTask, ctx context.Context) {
 // ── prompts ───────────────────────────────────────────────────────────────────
 
 func ckPlanPrompt(t *ckTask) string {
-	p := "Plan this task as a short numbered list of concrete steps (at most 8). Steps only — no code, no preamble.\n\nTask: " + t.prompt
+	p := "Plan this task as a short numbered list of concrete steps (at most 8). Steps only, no code, no preamble.\n\nTask: " + t.prompt
 	if t.file != "" {
 		p += "\nTarget file: " + t.file
 	}

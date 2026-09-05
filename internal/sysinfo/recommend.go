@@ -40,7 +40,7 @@ var ollamaModels = []ModelRecommendation{
 //
 // When the hardware could not be read, every model is returned with Fits=false
 // and a reason saying so. Ranking against the zero value would silently compare
-// each model to a 0GB budget and report "insufficient memory" — a hardware
+// each model to a 0GB budget and report "insufficient memory", a hardware
 // verdict drawn from the absence of a hardware reading (#258).
 func (s *Specs) OllamaRecommendations() []ModelRecommendation {
 	effective := s.EffectiveVRAMGB()
@@ -79,7 +79,7 @@ func (s *Specs) memoryCost(m ModelRecommendation, effectiveGB float64) string {
 }
 
 // BestOllamaModel returns the single highest-capability model that fits.
-// Returns Fits=false if nothing fits — callers should check AnyLocalModelFits first.
+// Returns Fits=false if nothing fits, callers should check AnyLocalModelFits first.
 func (s *Specs) BestOllamaModel() ModelRecommendation {
 	for _, m := range s.OllamaRecommendations() {
 		if m.Fits {
@@ -131,12 +131,12 @@ func (s *Specs) reason(m ModelRecommendation, effectiveGB float64) string {
 func (s *Specs) PressureWarning() string {
 	switch s.MemPressure {
 	case PressureUnknown:
-		return "Memory could not be detected on this platform — local model sizing is unavailable. " +
+		return "Memory could not be detected on this platform, local model sizing is unavailable. " +
 			"API-backed heads are unaffected."
 	case PressureModerate:
-		return fmt.Sprintf("Memory moderate (%.1fGB free) — close other apps for better performance.", s.FreeRAMGB)
+		return fmt.Sprintf("Memory moderate (%.1fGB free), close other apps for better performance.", s.FreeRAMGB)
 	case PressureHigh:
-		return fmt.Sprintf("Memory tight (%.1fGB free of %.0fGB) — smaller models recommended to avoid swapping.", s.FreeRAMGB, s.TotalRAMGB)
+		return fmt.Sprintf("Memory tight (%.1fGB free of %.0fGB), smaller models recommended to avoid swapping.", s.FreeRAMGB, s.TotalRAMGB)
 	}
 	return ""
 }

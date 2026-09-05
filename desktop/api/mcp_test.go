@@ -22,7 +22,7 @@ func TestGetMCPServers_EmptyMachineSaysItScanned(t *testing.T) {
 		t.Errorf("Scanned = false with no error: %+v", got)
 	}
 	if got.Servers == nil {
-		t.Error("Servers is nil — the bridge must send [] for an empty list")
+		t.Error("Servers is nil, the bridge must send [] for an empty list")
 	}
 	if len(got.Servers) != 0 {
 		t.Errorf("expected no servers in a sandbox, got %+v", got.Servers)
@@ -41,12 +41,12 @@ func TestGetMCPServers_NeverSyncedIsReported(t *testing.T) {
 }
 
 // Scan reads client configs, so this proves the shape it produces reaches the
-// panel — and that the identity fields survive the mapping.
+// panel, and that the identity fields survive the mapping.
 func TestGetMCPServers_ReportsAnInstalledServer(t *testing.T) {
 	s := testutil.NewSandbox(t)
 
 	// The Claude Code config shape: mcpServers keyed by name. The env value
-	// here is a canary — Scan is identity-only by construction, so it must not
+	// here is a canary, Scan is identity-only by construction, so it must not
 	// appear anywhere in the panel.
 	cfg := map[string]any{
 		"mcpServers": map[string]any{

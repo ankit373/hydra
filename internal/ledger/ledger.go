@@ -3,7 +3,7 @@
 // Package ledger is Hydra's local MCP accountability ledger: an append-only
 // record of what every agent was allowed to touch and did. A policy gate decides
 // allow/deny for each tool/resource access and writes the decision to the ledger,
-// so there is always a local, queryable trail — the accountability half of
+// so there is always a local, queryable trail, the accountability half of
 // multi-model safety.
 package ledger
 
@@ -45,7 +45,7 @@ const (
 	Deny  Decision = "deny"
 
 	// Ask means the access needs a human's confirmation before it happens: not
-	// permitted, not refused, pending. It is never a fallback — only an explicit
+	// permitted, not refused, pending. It is never a fallback, only an explicit
 	// rule match produces it, because a failure path that returned Ask would
 	// turn a policy bug into a prompt instead of a block (#580).
 	//
@@ -56,7 +56,7 @@ const (
 
 // ParseAction normalizes and validates an action string. Matching is exact, so
 // an unrecognized or differently-cased value would silently miss every
-// action-scoped rule and fall through to the default — hence a hard error
+// action-scoped rule and fall through to the default, hence a hard error
 // rather than a best-effort coercion.
 func ParseAction(s string) (Action, error) {
 	switch a := Action(strings.ToLower(strings.TrimSpace(s))); a {
@@ -100,7 +100,7 @@ type Event struct {
 	Reason   string   `json:"reason,omitempty"`
 
 	// ParametersHash binds this decision to the exact parameters it was made
-	// for (HashParams) — tamper-evidence between an access decision and the
+	// for (HashParams), tamper-evidence between an access decision and the
 	// parameters actually used at execution time.
 	ParametersHash string `json:"parameters_hash,omitempty"`
 	// Classification is the data-sensitivity tag this access was evaluated
@@ -109,19 +109,19 @@ type Event struct {
 	// PIITypes names the specific detectors that matched (e.g. "aws access
 	// key id", "email"), when Classification is "pii". Kept separate from
 	// Classification rather than encoded into it because Classification is a
-	// policy *matching* key (see Rule.matches) — folding the type in would
+	// policy *matching* key (see Rule.matches), folding the type in would
 	// silently stop every existing {"classification":"pii"} rule matching.
 	PIITypes []string `json:"pii_types,omitempty"`
 
 	// Flagged is true when Content matched a heuristic prompt-injection
-	// marker (policy.ContainsInjectionMarkers). A non-blocking audit signal —
+	// marker (policy.ContainsInjectionMarkers). A non-blocking audit signal,
 	// it does not itself cause Deny. See FlagReason for which phrase matched.
 	Flagged bool `json:"flagged,omitempty"`
 	// FlagReason is the specific heuristic that matched, when Flagged is true.
 	FlagReason string `json:"flag_reason,omitempty"`
 
 	// PrevHash is the previous event's Hash, and Hash is sha256 of this event
-	// (PrevHash set, Hash cleared) — a local hash chain, so an edited or
+	// (PrevHash set, Hash cleared), a local hash chain, so an edited or
 	// deleted line breaks the link and VerifyChain can detect it. Both empty
 	// means this event predates the feature ("unchained"), not tampered.
 	PrevHash string `json:"prev_hash,omitempty"`
@@ -138,7 +138,7 @@ type Event struct {
 // time. Go's json.Marshal sorts map[string]any keys, so this is canonical
 // regardless of map iteration order.
 //
-// Scope: the hash covers the parameters ONLY — not the tool, resource, or
+// Scope: the hash covers the parameters ONLY, not the tool, resource, or
 // action. Two approvals with identical parameters for different resources
 // therefore share a hash, so a verifier must match the tool/resource itself
 // (see LatestBound) rather than treating a hash match as proof of which
@@ -147,7 +147,7 @@ type Event struct {
 // Decode JSON parameters with DecodeParams, not a plain json.Unmarshal: that
 // keeps numbers as json.Number so their exact literal is hashed. Decoding into
 // a bare any turns every number into a float64, which silently collapses
-// integers above 2^53 — 1000000000000000001 and ...002 would share a hash.
+// integers above 2^53, 1000000000000000001 and ...002 would share a hash.
 func HashParams(params map[string]any) (string, error) {
 	raw, err := json.Marshal(params)
 	if err != nil {
@@ -171,7 +171,7 @@ func DecodeParams(raw string) (map[string]any, error) {
 	return params, nil
 }
 
-// VerifyParams reports whether params match a previously recorded hash — the
+// VerifyParams reports whether params match a previously recorded hash, the
 // check to run at execution time to detect tampering between an approval and
 // its use (e.g. once decision and execution can happen on different
 // machines/agents).
@@ -184,7 +184,7 @@ func VerifyParams(params map[string]any, hash string) (bool, error) {
 }
 
 // LatestBound returns the most recent *allowed* event for a tool/resource that
-// carries a parameters hash — the approval that execution-time params should be
+// carries a parameters hash, the approval that execution-time params should be
 // verified against. An empty tool or resource matches any.
 //
 // Only Allow events qualify: a denied attempt is recorded with the parameters
@@ -210,11 +210,11 @@ func DefaultPath() string {
 
 // Record appends one event, stamping TS and Config (best-effort) if blank.
 // The chainhash read-modify-write is guarded by an OS-level advisory lock
-// (chainLock) — an in-process mutex alone can't stop two `hyctl` processes
+// (chainLock), an in-process mutex alone can't stop two `hyctl` processes
 // from forking the hash chain.
 func Record(path string, e Event) error {
 	// Agent/Tool/Resource are supplied by whatever's on the other end of an MCP
-	// call — a local tool or a misbehaving agent — and every consumer (log,
+	// call, a local tool or a misbehaving agent, and every consumer (log,
 	// report, the TUI Security view) prints them. Sanitising once here, at the
 	// only place an event enters the ledger, makes every consumer safe by
 	// construction instead of each renderer needing its own escape-stripping (#500).
@@ -265,7 +265,7 @@ func Record(path string, e Event) error {
 }
 
 // hashEvent computes e's chain hash: sha256 of e's canonical JSON with Hash
-// cleared (PrevHash, being an ordinary field, is covered by the same hash —
+// cleared (PrevHash, being an ordinary field, is covered by the same hash,
 // no separate prefix needed). Event holds only strings and typed strings, so
 // json.Marshal cannot fail here.
 func hashEvent(e Event) string {
@@ -293,18 +293,18 @@ func writeChainHash(path, hash string) error {
 type ChainResult struct {
 	// Chained is the number of events that carry a hash (post-migration).
 	Chained int `json:"chained"`
-	// Unchained is the number of events with no hash — they predate this
+	// Unchained is the number of events with no hash, they predate this
 	// feature, not tampered.
 	Unchained int  `json:"unchained"`
 	Intact    bool `json:"intact"`
 	// BrokenAt is the index into the events slice VerifyChain read, of the
-	// first event whose hash doesn't match — 0 when Intact.
+	// first event whose hash doesn't match, 0 when Intact.
 	BrokenAt int `json:"broken_at,omitempty"`
 
 	// Truncated is true when the sidecar anchor names a hash that appears
 	// nowhere in the log: the event it recorded has been removed. Deleting
 	// the *tail* of the log leaves every surviving PrevHash link valid, so
-	// the walk alone cannot see it — the anchor is the only witness.
+	// the walk alone cannot see it, the anchor is the only witness.
 	Truncated bool `json:"truncated,omitempty"`
 	// AnchorStale is true when the anchor matches an event that is not the
 	// last one. Nothing was removed; a best-effort writeChainHash simply did
@@ -318,7 +318,7 @@ type ChainResult struct {
 // VerifyChain walks path's events in order, recomputing each chained event's
 // hash and confirming it links to the one before it. An event with no Hash is
 // treated as pre-migration and excluded from verification, not flagged
-// broken — the chain only covers events recorded since this feature shipped.
+// broken, the chain only covers events recorded since this feature shipped.
 func VerifyChain(path string) (ChainResult, error) {
 	events, _, err := LoadCounted(path)
 	if err != nil {
@@ -358,7 +358,7 @@ func VerifyChainEvents(events []Event, path string) ChainResult {
 
 	// The walk above can only detect edits and deletions from the middle,
 	// both of which break a PrevHash link. Deleting the tail leaves the
-	// survivors perfectly self-consistent, so it needs an external witness —
+	// survivors perfectly self-consistent, so it needs an external witness,
 	// the sidecar anchor Record maintains on every append.
 	anchor := readChainHash(chainHashPath(path))
 	switch {
@@ -372,7 +372,7 @@ func VerifyChainEvents(events []Event, path string) ChainResult {
 		// Healthy: the anchor names the last event still present.
 	case seen[anchor]:
 		// The anchored event is still in the log but is not the last one, so
-		// nothing was removed — a writeChainHash simply failed (it is
+		// nothing was removed, a writeChainHash simply failed (it is
 		// best-effort by design). Report it; do not cry tampering.
 		res.AnchorStale = true
 	default:
@@ -385,7 +385,7 @@ func VerifyChainEvents(events []Event, path string) ChainResult {
 }
 
 // Load reads all events; a missing ledger yields no events. Unparseable lines
-// are skipped — use LoadCounted when the caller needs to report them.
+// are skipped, use LoadCounted when the caller needs to report them.
 func Load(path string) ([]Event, error) {
 	events, _, err := LoadCounted(path)
 	return events, err
@@ -394,7 +394,7 @@ func Load(path string) ([]Event, error) {
 // LoadCounted is Load plus the number of unparseable lines skipped. An
 // append-only accountability ledger that silently discards records is a
 // contradiction, and a truncated tail (a crash mid-write) would otherwise
-// make verification fall back to an older approval with no indication — so
+// make verification fall back to an older approval with no indication, so
 // callers should surface a non-zero count.
 func LoadCounted(path string) ([]Event, int, error) {
 	f, err := os.Open(path)
@@ -441,7 +441,7 @@ type Rule struct {
 	Decision       Decision `json:"decision"`
 
 	// Framework optionally tags which recognized security framework category
-	// this rule covers (e.g. "owasp:llm06", "atlas:ai-ml-attack-staging") —
+	// this rule covers (e.g. "owasp:llm06", "atlas:ai-ml-attack-staging"),
 	// freeform, normalized like Classification. Purely a label for
 	// FrameworksCovered's coverage report: it plays no part in Decide's
 	// matching, since an access attempt carries no "framework" of its own.
@@ -487,7 +487,7 @@ func fieldMatch(pattern, v string) bool {
 // globMatch: empty or "*" matches anything; otherwise filepath.Match glob. A
 // malformed pattern falls back to exact comparison rather than erroring.
 // globMatch delegates to the shared dialect. It used filepath.Match, which has
-// no "**" and whose separator is "\" on Windows — so "/repo/*" matched one
+// no "**" and whose separator is "\" on Windows, so "/repo/*" matched one
 // level on Unix and arbitrarily deep on Windows, and a "**/secrets/**" rule
 // copied from workspace.yaml matched nothing at all (#310).
 func globMatch(pattern, v string) bool { return glob.Match(pattern, v) }
@@ -521,7 +521,7 @@ var (
 // LoadPolicy reads a policy file. A missing file yields a default-allow policy
 // (Hydra records everything but blocks nothing until rules are defined).
 //
-// The parsed result is cached per path, keyed on the file's mtime+size — a
+// The parsed result is cached per path, keyed on the file's mtime+size, a
 // dispatch fallback loop or a swarm fan-out checks the same content against
 // several candidate heads in quick succession, and without this every one of
 // them re-reads and re-parses the identical policy file from disk. An
@@ -533,7 +533,7 @@ func LoadPolicy(path string) (Policy, error) {
 		if os.IsNotExist(statErr) {
 			return Policy{Default: Allow}, nil
 		}
-		// Stat failed for a reason other than "missing" (permissions, etc.) —
+		// Stat failed for a reason other than "missing" (permissions, etc.),
 		// fall through to the real read, which will surface the same error.
 	} else {
 		policyCacheMu.Lock()
@@ -576,7 +576,7 @@ func loadPolicyUncached(path string) (Policy, error) {
 
 // validate normalizes and checks every rule. A policy is rejected rather than
 // partially honored: a rule whose decision or action does not parse can never
-// match (or can never deny), so loading it would silently weaken the gate —
+// match (or can never deny), so loading it would silently weaken the gate,
 // a default-deny posture written as "DENY" would void entirely.
 func (p *Policy) validate() error {
 	d, err := ParseDecision(string(p.Default))
@@ -600,7 +600,7 @@ func (p *Policy) validate() error {
 			r.Action = a
 		}
 		// A malformed glob can never match, so globMatch falls back to exact
-		// comparison — meaning a typo'd deny rule silently permits everything
+		// comparison, meaning a typo'd deny rule silently permits everything
 		// it was written to block. Reject it at load instead.
 		if _, err := filepath.Match(r.Resource, ""); err != nil {
 			return fmt.Errorf("rule %d: invalid resource pattern %q: %w", i, r.Resource, err)
@@ -612,9 +612,9 @@ func (p *Policy) validate() error {
 }
 
 // FrameworksCovered returns the distinct, non-empty Framework tags present
-// across p's rules, sorted — hyctl security's coverage list: which
+// across p's rules, sorted, hyctl security's coverage list: which
 // recognized categories (e.g. "owasp:llm06", "atlas:ai-ml-attack-staging")
-// have at least one rule, versus which don't. Never a manufactured score —
+// have at least one rule, versus which don't. Never a manufactured score,
 // only what a user has actually tagged and configured.
 func (p Policy) FrameworksCovered() []string {
 	seen := map[string]bool{}
@@ -648,7 +648,7 @@ type CheckRequest struct {
 	// Classification is the data-sensitivity tag (e.g. "pii"). If Classified is
 	// false and Content is non-empty, it is derived via policy.DetectPII(Content).
 	Classification string
-	// PIITypes accompanies a caller-supplied Classification (Classified=true) —
+	// PIITypes accompanies a caller-supplied Classification (Classified=true),
 	// the specific detectors that matched, preserved for the recorded Event
 	// instead of being silently dropped because detection was skipped.
 	PIITypes []string
@@ -664,21 +664,21 @@ type CheckRequest struct {
 }
 
 // detectPII and injectionMarker indirect policy's detectors through package
-// variables — mirrors swarm's executorFor — so a test can count calls without
+// variables, mirrors swarm's executorFor, so a test can count calls without
 // a live regex scan on every one of them.
 var (
 	detectPII       = policy.DetectPII
 	injectionMarker = policy.InjectionMarker
 )
 
-// Check evaluates the policy AND records the resulting event to the ledger —
+// Check evaluates the policy AND records the resulting event to the ledger,
 // the accountability gate. It returns the decision.
 //
 // Check fails closed: if the request's parameters cannot be hashed, it returns
 // Deny (and records that denial) rather than a zero Decision.
 //
 // Callers must gate on `decision != Allow`, not `== Deny`. Deny is no longer
-// the only verdict that withholds permission — Ask does too — so testing for
+// the only verdict that withholds permission, Ask does too, so testing for
 // Deny alone would let a pending question through as if it were approval.
 func Check(path string, p Policy, req CheckRequest) (Decision, error) {
 	classification := NormalizeClassification(req.Classification)
@@ -702,7 +702,7 @@ func Check(path string, p Policy, req CheckRequest) (Decision, error) {
 		h, err := HashParams(req.Params)
 		if err != nil {
 			// Unhashable params cannot be bound to a decision, so the access is
-			// denied — and the denial is itself recorded for accountability.
+			// denied, and the denial is itself recorded for accountability.
 			_ = Record(path, Event{
 				Agent: req.Agent, Tool: req.Tool, Resource: req.Resource,
 				Action: req.Action, Decision: Deny, Classification: classification,
@@ -726,13 +726,13 @@ func Check(path string, p Policy, req CheckRequest) (Decision, error) {
 
 // CheckAndRecordDispatch is the automatic-dispatch-path counterpart to the
 // manual `hyctl mcp check`: it loads the default policy, evaluates one head
-// call as a tool/resource access (Action=Exec), and records the decision —
+// call as a tool/resource access (Action=Exec), and records the decision,
 // so a real dispatch produces a ledger event without anyone invoking
 // `hyctl mcp` by hand. Default (no rules configured) policy is Allow, so this
 // only changes behavior for an install that has deliberately configured a
 // deny rule.
 //
-// class is content's already-computed classification (policy.Classify) — pass
+// class is content's already-computed classification (policy.Classify), pass
 // the same one for every candidate head tried against this content so Check
 // never re-runs DetectPII/InjectionMarker per candidate. Pass nil to let Check
 // derive it itself.
@@ -801,7 +801,7 @@ func Filter(events []Event, agent string, deniedOnly bool) []Event {
 	return out
 }
 
-// HeadRisk is one head's denied/flagged activity — the "top-N riskiest
+// HeadRisk is one head's denied/flagged activity, the "top-N riskiest
 // entity" panel a security dashboard reports on.
 type HeadRisk struct {
 	Head    string `json:"head"`
@@ -811,7 +811,7 @@ type HeadRisk struct {
 
 // ByHeadRisk groups denied and flagged counts by Tool (head), sorted by
 // denied+flagged descending then Head ascending. Heads with neither are
-// omitted — this is a risk list, not a full inventory.
+// omitted, this is a risk list, not a full inventory.
 func ByHeadRisk(events []Event) []HeadRisk {
 	type acc struct{ denied, flagged int }
 	byHead := map[string]*acc{}
@@ -845,7 +845,7 @@ func ByHeadRisk(events []Event) []HeadRisk {
 	return out
 }
 
-// DayRisk is one day's denied/flagged activity — the trend a WAF-style
+// DayRisk is one day's denied/flagged activity, the trend a WAF-style
 // "blocked over time" panel is built from.
 type DayRisk struct {
 	Date    string `json:"date"`
@@ -855,7 +855,7 @@ type DayRisk struct {
 
 // ByDayRisk buckets denied/flagged counts by day (TS's first 10 characters,
 // mirroring cost.ByDay's own day-key convention), sorted ascending. Days with
-// neither are omitted — same skip rule as ByHeadRisk.
+// neither are omitted, same skip rule as ByHeadRisk.
 func ByDayRisk(events []Event) []DayRisk {
 	type acc struct{ denied, flagged int }
 	byDay := map[string]*acc{}

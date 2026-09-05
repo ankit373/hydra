@@ -10,7 +10,7 @@ import (
 )
 
 // The header: brand, the six tab labels with the active one chipped, and the
-// session/context readout — one line at any width, degrading to the active
+// session/context readout, one line at any width, degrading to the active
 // chip alone when the tab strip cannot fit.
 func TestHeader_TabsSessionAndContext(t *testing.T) {
 	m := testCockpit()
@@ -29,7 +29,7 @@ func TestHeader_TabsSessionAndContext(t *testing.T) {
 	}
 
 	// Narrow: the strip goes, but the position and the key that moves between
-	// views stay — otherwise nothing at 80 columns says they exist (#630).
+	// views stay, otherwise nothing at 80 columns says they exist (#630).
 	m.w = 80
 	got = stripANSI(m.header())
 	if strings.Contains(got, "activity") {
@@ -165,7 +165,7 @@ func TestStatusBar_FactsAndFlash(t *testing.T) {
 }
 
 // The wordmark and every status bar stay single-line and inside the frame at
-// every view (the per-view keys come from the table — tested in keys_test).
+// every view (the per-view keys come from the table, tested in keys_test).
 func TestStatusBar_SingleLineEverywhere(t *testing.T) {
 	m := testCockpit()
 	for v := 0; v < ckViewCount(); v++ {

@@ -30,7 +30,7 @@ func TestExtractContent(t *testing.T) {
 	}
 }
 
-// The file's own on-disk content rides into this prompt unsanitized — it must
+// The file's own on-disk content rides into this prompt unsanitized, it must
 // be explicitly framed as data, not an instruction, so a file containing text
 // that reads like a command can't hijack the edit (the indirect-injection
 // shape: untrusted content steering a downstream model).

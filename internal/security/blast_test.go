@@ -8,7 +8,7 @@ import (
 )
 
 // With no graph nothing can be scored, and the check must say so rather than
-// listing files at the neutral 1.0 floor — which would read as "all safe".
+// listing files at the neutral 1.0 floor, which would read as "all safe".
 func TestBlastCheck_NoGraphSaysSoRatherThanScoringZero(t *testing.T) {
 	c := blastCheck(BlastReport{})
 	if c.Status != "no code graph" {
@@ -19,7 +19,7 @@ func TestBlastCheck_NoGraphSaysSoRatherThanScoringZero(t *testing.T) {
 	}
 }
 
-// A file the graph does not index is unknown, never low-risk — the whole
+// A file the graph does not index is unknown, never low-risk, the whole
 // reason internal/graph grew Knows().
 func TestBlastCheck_UnindexedFilesAreUnknownNotSafe(t *testing.T) {
 	r := BlastReport{
@@ -54,7 +54,7 @@ func TestRiskiestEdit_PrefersScoredFilesWithDependents(t *testing.T) {
 
 // The action must actually reach the queue. An earlier round shipped a
 // buildActions parameter whose block was never added, and because unused Go
-// parameters are legal nothing failed — so assert the wiring, not just the
+// parameters are legal nothing failed, so assert the wiring, not just the
 // helper.
 func TestBuildActions_PercolatingGraphRaisesABlastAction(t *testing.T) {
 	blast := BlastReport{

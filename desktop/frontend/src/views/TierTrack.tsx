@@ -53,7 +53,7 @@ export function TierTrack({ entries }: { entries: TimelineEntry[] }) {
         <span className="tt__sum">{summary(steps)}</span>
       </div>
       {/* The line stretches with the column, so the SVG is non-uniformly
-          scaled. Circles cannot live in there — X scales ~10x and Y 1x, which
+          scaled. Circles cannot live in there, X scales ~10x and Y 1x, which
           renders every dot as a wide smear. They go on top as HTML, positioned
           in percent, so they stay round at any width. */}
       <div className="tt__plot" role="img" aria-label={ariaLabel(steps)}>

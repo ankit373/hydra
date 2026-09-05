@@ -2,10 +2,10 @@
 
 package tui
 
-// view_audit.go — view 5: calibration scorecard, audit-log integrity,
+// view_audit.go, view 5: calibration scorecard, audit-log integrity,
 // guardrails, and the needs-a-human queue. Like #524's security view it is
-// NOT built at startup — reading the audit log and scoring history is a cost
-// the other five views must not pay — and it refreshes on every entry.
+// NOT built at startup, reading the audit log and scoring history is a cost
+// the other five views must not pay, and it refreshes on every entry.
 
 import (
 	"fmt"
@@ -59,7 +59,7 @@ func (m Cockpit) loadAudit() Cockpit {
 	return m
 }
 
-// ckAuditFrom assembles the view's data from already-loaded inputs — pure, so
+// ckAuditFrom assembles the view's data from already-loaded inputs, pure, so
 // the aggregation is testable without a machine's real logs.
 func ckAuditFrom(report *security.Report, events []ledger.Event, scorecard []trust.Stat,
 	families map[string]trust.FamilyCouplingResult, states map[string]mcpregistry.ServerState,
@@ -119,13 +119,13 @@ func ckAuditFrom(report *security.Report, events []ledger.Event, scorecard []tru
 	}
 	if len(failed) >= 2 {
 		a.items = append(a.items, ckAuditItem{
-			text:  fmt.Sprintf("%d runs failed today — enter opens the latest failed trace", len(failed)),
+			text:  fmt.Sprintf("%d runs failed today, enter opens the latest failed trace", len(failed)),
 			runID: failed[0].id,
 		})
 	}
 	for _, name := range a.provisional {
 		a.items = append(a.items, ckAuditItem{
-			text: "MCP server " + name + " is provisional — version changed, awaiting re-trust",
+			text: "MCP server " + name + " is provisional, version changed, awaiting re-trust",
 		})
 	}
 	return a
@@ -200,7 +200,7 @@ func (m Cockpit) auditFact() string {
 func (m Cockpit) viewAudit(w, h int) string {
 	if m.audit == nil {
 		return lipgloss.NewStyle().Width(w).Height(h).Render(
-			ckFaintS.Render(" audit not built yet — press v to verify now"))
+			ckFaintS.Render(" audit not built yet, press v to verify now"))
 	}
 	out, _ := ckScrollLines(strings.Split(m.auditBody(w), "\n"), m.auditOff, h)
 	return strings.Join(out, "\n")
@@ -231,7 +231,7 @@ func (m Cockpit) auditBody(w int) string {
 	return lipgloss.JoinVertical(lipgloss.Left, top, ckBoxS.Render(m.auditQueue()))
 }
 
-// auditLines is the body's height at the current width — what a scroll offset
+// auditLines is the body's height at the current width, what a scroll offset
 // is clamped against.
 func (m Cockpit) auditLines() int {
 	if m.audit == nil {
@@ -248,7 +248,7 @@ const (
 )
 
 // auditScorecard is the per-source calibration table. No history is persisted
-// for these figures yet, so no trend arrows are drawn — a fabricated trend is
+// for these figures yet, so no trend arrows are drawn, a fabricated trend is
 // worse than none.
 func (m Cockpit) auditScorecard() string {
 	a := m.audit
@@ -286,7 +286,7 @@ func (m Cockpit) auditScorecard() string {
 }
 
 // auditFamilyFact renders the measured same-family agreement discount, or says
-// none was measured. The discount is 1−J — a family whose members nearly
+// none was measured. The discount is 1−J, a family whose members nearly
 // always agree contributes almost nothing on a repeat vote.
 func (m Cockpit) auditFamilyFact() string {
 	names := make([]string, 0, len(m.audit.families))
@@ -307,7 +307,7 @@ func (m Cockpit) auditFamilyFact() string {
 	f := m.audit.families[names[0]]
 	s := fmt.Sprintf("%s ×%.2f (J=%.2f)", names[0], 1-f.J, f.J)
 	if f.Warn {
-		return ckMidS.Render(s + " — echo, not evidence")
+		return ckMidS.Render(s + ", echo, not evidence")
 	}
 	return ckCyanS.Render(s)
 }
@@ -334,7 +334,7 @@ func (m Cockpit) auditLogTile() string {
 	var b strings.Builder
 	b.WriteString(ckLabelS.Render("AUDIT LOG") + "\n\n")
 	if a.report == nil {
-		b.WriteString(ckFaintS.Render(" unavailable — the audit log could not be read"))
+		b.WriteString(ckFaintS.Render(" unavailable, the audit log could not be read"))
 		return b.String()
 	}
 	ev := a.report.Attestation.Evidence
@@ -367,7 +367,7 @@ func (m Cockpit) auditGuardrails() string {
 	var b strings.Builder
 	b.WriteString(ckLabelS.Render("GUARDRAILS") + "\n\n")
 	if a.report == nil {
-		b.WriteString(ckFaintS.Render(" unavailable — the audit log could not be read") + "\n")
+		b.WriteString(ckFaintS.Render(" unavailable, the audit log could not be read") + "\n")
 	} else {
 		r := a.report
 		fired := len(r.Exposures)
@@ -395,7 +395,7 @@ func (m Cockpit) auditGuardrails() string {
 	t, p, q := a.mcpCounts[mcpregistry.StateTrusted], a.mcpCounts[mcpregistry.StateProvisional], a.mcpCounts[mcpregistry.StateQuarantined]
 	if len(a.mcpCounts) == 0 {
 		b.WriteString(" " + ckDimS.Render(ckCell("mcp servers", 19)) +
-			ckFaintS.Render("none tracked — `hyctl mcp registry scan`"))
+			ckFaintS.Render("none tracked, `hyctl mcp registry scan`"))
 		return b.String()
 	}
 	ps := ckDimS
@@ -438,7 +438,7 @@ func (m Cockpit) auditQueue() string {
 	b.WriteString(ckLabelS.Render("NEEDS A HUMAN") + "\n\n")
 	if len(items) == 0 {
 		b.WriteString(ckCheapS.Render(" nothing needs review") +
-			ckDimS.Render(" — no repeated failures, no provisional MCP servers"))
+			ckDimS.Render(", no repeated failures, no provisional MCP servers"))
 		return b.String()
 	}
 	sel := m.auditSel

@@ -29,12 +29,12 @@ import { UpdateNotice } from "./views/UpdateNotice";
 import { SetupBanner } from "./views/SetupBanner";
 import { HydraMark, HydraSpinner } from "./brand";
 
-/** Dashboard is retrospective — a slow refresh is enough and costs nothing. */
+/** Dashboard is retrospective, a slow refresh is enough and costs nothing. */
 const DASHBOARD_MS = 5000;
 
 /**
  * Fleet and an open Session poll faster because they answer "what is happening
- * now", and runlog.StaleAfter is 10s — a slower tick than half that would let a
+ * now", and runlog.StaleAfter is 10s, a slower tick than half that would let a
  * run look live for seconds after it died.
  */
 const LIVE_MS = 2000;
@@ -89,7 +89,7 @@ export default function App() {
   const load = useCallback(async (which: ViewID, id: string) => {
     try {
       if (which === "activity") setFleet(await GetFleet());
-      // Code is a tab inside Session now (#519), not its own view — fetch
+      // Code is a tab inside Session now (#519), not its own view, fetch
       // both together so switching tabs never has to wait on a second load.
       else if (which === "session") {
         const [s, e] = await Promise.all([GetSession(id), GetEdits(id)]);
@@ -138,7 +138,7 @@ export default function App() {
   }, []);
 
   // One-shot, not polled: this is a first-run check (#383), not a live value.
-  // A machine with hyctl already on PATH — the common case — never shows
+  // A machine with hyctl already on PATH, the common case, never shows
   // anything, since the banner below renders only when Found is false.
   useEffect(() => {
     CheckHyctl()
@@ -151,7 +151,7 @@ export default function App() {
   // Set alongside runID when a caller wants Session to open straight on the
   // Code tab at a specific file (an artifact-node click, #518) rather than
   // its own default. Session is keyed by runId below, so a fresh mount reads
-  // this once as initial state — plain opens must clear it, or a later
+  // this once as initial state, plain opens must clear it, or a later
   // no-file open of a different run would wrongly inherit it.
   const [pendingFile, setPendingFile] = useState<string | undefined>();
 
@@ -233,7 +233,7 @@ export default function App() {
           <SetupBanner status={hyctlStatus} onChanged={setHyctlStatus} />
         )}
 
-        {/* An error replaces the body but never the shell — a broken read
+        {/* An error replaces the body but never the shell, a broken read
             should not look like a crashed app. */}
         {error && <div className="error">{error}</div>}
         {!error && view === "chat" && (

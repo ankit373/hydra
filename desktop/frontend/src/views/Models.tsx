@@ -132,7 +132,7 @@ function PoolGroup({
 
 /**
  * One model's record. Capability is what the registry claims; the scorecard
- * below it is what was measured — and it never shows a score without the
+ * below it is what was measured, and it never shows a score without the
  * sample count that decides whether the score means anything (#593).
  */
 function Scorecard({ model, cal, heads }: { model: Model; cal: CalibrationRow[]; heads: Head[] | null }) {
@@ -157,7 +157,7 @@ function Scorecard({ model, cal, heads }: { model: Model; cal: CalibrationRow[];
       <div className="scard__lbl">Measured record</div>
       {rows.length === 0 ? (
         <p className="scard__none">
-          Nothing measured yet. This is absence of evidence, not a low score — record outcomes
+          Nothing measured yet. This is absence of evidence, not a low score, record outcomes
           and it fills in.
         </p>
       ) : (
@@ -189,7 +189,7 @@ function Line({ k, v }: { k: string; v: string }) {
 
 function complexity(m: Model): string {
   if (m.complexityMax <= 0) return '—'
-  return `${m.complexityMin}–${m.complexityMax}`
+  return `${m.complexityMin}-${m.complexityMax}`
 }
 
 /**
@@ -240,13 +240,13 @@ export function poolLabel(name: string): string {
  * Whether this model is reachable right now, as opposed to declared.
  *
  * The dot used to come from models.yaml's `enabled` flag, which CLAUDE.md
- * calls an install-specific default — so a head with no API key, or an Ollama
+ * calls an install-specific default, so a head with no API key, or an Ollama
  * model whose server is down, rendered as on. The view's own subtitle says
  * "what this machine can route to", which the registry alone cannot support.
  *
  * The agy provider emits one head per *enabled* tier keyed by the same id, so
  * a registry model with no matching head is either switched off or was not
- * discovered — and those need different fixes, so they are not merged.
+ * discovered, and those need different fixes, so they are not merged.
  */
 function headFor(m: Model, heads: Head[] | null): Head | undefined {
   return heads?.find((h) => h.id === m.id)
@@ -263,6 +263,6 @@ export function reachText(m: Model, heads: Head[] | null): string {
   if (!heads) return 'checking…'
   const h = headFor(m, heads)
   if (h) return h.routable ? 'yes' : h.reason || 'no'
-  if (!m.enabled) return 'no — switched off in models.yaml'
-  return 'no — the last scan did not find it'
+  if (!m.enabled) return 'no, switched off in models.yaml'
+  return 'no, the last scan did not find it'
 }

@@ -64,11 +64,11 @@ async function main() {
   try {
     archiveBuf = await get(`${base}/${archive}`);
   } catch (e) {
-    fail(`download failed — ${e.message}`);
+    fail(`download failed, ${e.message}`);
   }
 
   // Verify against checksums.txt. Only an unreachable checksums.txt is a
-  // warning — a network blip should not brick `npm install`. A checksums.txt
+  // warning, a network blip should not brick `npm install`. A checksums.txt
   // that downloads but does not list this archive is a broken release and
   // fails closed: the realistic cause is drift, since `archive` is built here
   // from goreleaser's name_template, so a template change would otherwise stop
@@ -77,12 +77,12 @@ async function main() {
   try {
     sums = (await get(`${base}/checksums.txt`)).toString('utf8');
   } catch {
-    console.warn('hyctl: checksums.txt unavailable — skipping verification');
+    console.warn('hyctl: checksums.txt unavailable, skipping verification');
   }
   if (sums !== undefined) {
     const line = sums.split('\n').find((l) => l.trim().endsWith(archive));
     if (!line) {
-      fail(`${archive} is not listed in checksums.txt — refusing to install unverified`);
+      fail(`${archive} is not listed in checksums.txt, refusing to install unverified`);
     }
     const expected = line.trim().split(/\s+/)[0];
     const actual = crypto.createHash('sha256').update(archiveBuf).digest('hex');
@@ -99,7 +99,7 @@ async function main() {
   try {
     execFileSync('tar', ['-xf', archivePath, '-C', tmp, binName], { stdio: 'ignore' });
   } catch (e) {
-    fail(`extraction failed — ${e.message}`);
+    fail(`extraction failed, ${e.message}`);
   }
 
   const dest = path.join(binDir, binName);

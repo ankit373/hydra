@@ -15,14 +15,14 @@ package api
 
 // maxWordCells bounds the token-level table the way maxLCSCells bounds the
 // line-level one. A pair of very long lines falls back to no marking rather
-// than to a slow one — an unmarked line still renders correctly.
+// than to a slow one, an unmarked line still renders correctly.
 const maxWordCells = 1 << 16 // 256x256 tokens
 
 // markPairs annotates 1:1 replacements in place.
 //
 // Only a single removed line followed by a single added line is paired. A
-// multi-line block has no defensible pairing — guessing which removed line
-// became which added one invents a relationship the diff never established —
+// multi-line block has no defensible pairing, guessing which removed line
+// became which added one invents a relationship the diff never established,
 // so those lines are left unmarked, which is how they render today.
 func markPairs(lines []DiffLine) {
 	for i := 0; i+1 < len(lines); i++ {

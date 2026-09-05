@@ -3,20 +3,20 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Hydra — The Trust Control Plane for AI Development</title>
+  <title>Hydra, The Trust Control Plane for AI Development</title>
   <meta name="description" content="Route to a target confidence of correctness, not just the cheapest model. Hydra samples models adaptively (SPRT), cuts AI API costs 70-85% along the way, and keeps sensitive data local.">
   <meta name="keywords" content="trust control plane, AI confidence routing, multi-model AI orchestration, LLM router, Claude Code, Ollama, local LLM, AI model routing, LLM cost optimization, AI coding assistant, llm orchestration CLI, model routing open source">
 
   <!-- Open Graph / Social sharing -->
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://hydra.uvansa.com/">
-  <meta property="og:title" content="Hydra — The Trust Control Plane for AI Development">
-  <meta property="og:description" content="Hydra routes tasks across every model on your machine to a target confidence of correctness — sampling adaptively (SPRT) and stopping once the evidence is strong enough. Cuts AI costs 70-85% along the way. Open source, MIT license.">
+  <meta property="og:title" content="Hydra, The Trust Control Plane for AI Development">
+  <meta property="og:description" content="Hydra routes tasks across every model on your machine to a target confidence of correctness, sampling adaptively (SPRT) and stopping once the evidence is strong enough. Cuts AI costs 70-85% along the way. Open source, MIT license.">
   <meta property="og:image" content="https://hydra.uvansa.com/logo.png">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:site" content="@ankit373">
-  <meta name="twitter:title" content="Hydra — The Trust Control Plane for AI Development">
-  <meta name="twitter:description" content="Route to a confidence of correctness, not just the cheapest model. One command, every AI model, provable trust — open source LLM orchestration CLI in Go.">
+  <meta name="twitter:title" content="Hydra, The Trust Control Plane for AI Development">
+  <meta name="twitter:description" content="Route to a confidence of correctness, not just the cheapest model. One command, every AI model, provable trust, open source LLM orchestration CLI in Go.">
   <meta name="twitter:image" content="https://hydra.uvansa.com/logo.png">
 
   <!-- Canonical URL -->
@@ -25,11 +25,11 @@
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="logo.png">
 
-  <!-- AI context file — machine-readable summary for LLMs and AI agents -->
+  <!-- AI context file, machine-readable summary for LLMs and AI agents -->
   <link rel="ai-context" href="https://hydra.uvansa.com/llms.txt" type="text/plain">
   <!-- Machine-readable pricing for AI agents evaluating dev tools -->
   <link rel="ai-pricing" href="https://hydra.uvansa.com/pricing.md" type="text/markdown">
-  <!-- funding.json (fundingjson.org) — machine-readable funding manifest -->
+  <!-- funding.json (fundingjson.org), machine-readable funding manifest -->
   <link rel="funding" href="https://hydra.uvansa.com/funding.json" type="application/json">
 
   <!-- Structured Data: SoftwareApplication -->
@@ -41,10 +41,10 @@
     "alternateName": "Hydra Trust Control Plane",
     "applicationCategory": "DeveloperApplication",
     "operatingSystem": "macOS, Linux",
-    "description": "Hydra is the Trust Control Plane for AI development: it routes tasks across every model on your machine to a target confidence of correctness — sampling models adaptively (SPRT) and stopping once the evidence is strong enough — while cutting AI API costs 70-85% along the way.",
+    "description": "Hydra is the Trust Control Plane for AI development: it routes tasks across every model on your machine to a target confidence of correctness, sampling models adaptively (SPRT) and stopping once the evidence is strong enough, while cutting AI API costs 70-85% along the way.",
     "url": "https://hydra.uvansa.com/",
     "downloadUrl": "https://github.com/ankit373/hydra",
-    "softwareVersion": "1.4.0",
+    "softwareVersion": "1.4.1",
     "datePublished": "2026-01-01",
     "dateModified": "2026-09-04",
     "license": "https://github.com/ankit373/hydra/blob/main/LICENSE",
@@ -63,27 +63,27 @@
     "image": "https://hydra.uvansa.com/logo.png",
     "sameAs": "https://github.com/ankit373/hydra",
     "featureList": [
-      "Confidence routing — hyctl dispatch --confidence samples models adaptively (SPRT) and stops once a target confidence of correctness is reached",
-      "Per-source calibration (hyctl trust calibration) — measures each model's diagnostic power from real outcomes",
-      "Blast-radius aware routing — a code dependency graph raises the confidence bar for widely-depended-on files",
-      "Local MCP accountability ledger — records and gates what each agent's tools touch",
+      "Confidence routing, hyctl dispatch --confidence samples models adaptively (SPRT) and stops once a target confidence of correctness is reached",
+      "Per-source calibration (hyctl trust calibration), measures each model's diagnostic power from real outcomes",
+      "Blast-radius aware routing, a code dependency graph raises the confidence bar for widely-depended-on files",
+      "Local MCP accountability ledger, records and gates what each agent's tools touch",
       "10-tier model routing by task complexity",
       "Automatic fallback chains terminating at always-on local Qwen",
-      "Local Ollama + cloud model hybrid — provider-neutral discovery",
-      "Interactive TUI cockpit (hyctl tui) — chat, route work, and watch spend live",
-      "Desktop app (Wails v2) for macOS, Windows and Linux — chat-first, with a pool-aware model picker and a routing pane, plus Models, Activity, Usage and Audit views",
-      "Per-run event log — reconstruct any run's supervision tree, timeline and file edits",
-      "Swarm dispatch — race, best, and all modes across multiple models simultaneously",
-      "Token budget enforcement — per-model context window tracking with pressure modes",
-      "Dynamic live pricing — OpenRouter API pricing with 24h cache and tier fallback",
-      "hyctl stats — real-time session cost rollup by model, tier, and day",
-      "hyctl stats --latency — p50/p90/p99 per model from mergeable sketches, not a rescan of the cost log",
-      "Oracle-verified eval corpus (hyctl eval) — labelled examples kept verbatim and exempt from retention",
-      "hyctl trace seal — folds old run logs into compressed monthly segments, losslessly and invisibly to readers",
-      "Opt-in payload store (hyctl trace payloads) — prompt and response text, off by default, sampled, and redacted before it is written",
-      "Off-policy evaluation (hyctl trace evaluate) — what a routing policy you never ran would have cost, with a confidence interval, refusing where the log cannot answer",
-      "OpenTelemetry export (hyctl trace export --otlp) — dispatches as OTLP spans for Langfuse, Grafana or Jaeger; nothing leaves the machine by default",
-      "hyctl ask — tasks parked waiting on a human, when a ledger rule answers ask rather than allow or deny",
+      "Local Ollama + cloud model hybrid, provider-neutral discovery",
+      "Interactive TUI cockpit (hyctl tui), chat, route work, and watch spend live",
+      "Desktop app (Wails v2) for macOS, Windows and Linux, chat-first, with a pool-aware model picker and a routing pane, plus Models, Activity, Usage and Audit views",
+      "Per-run event log, reconstruct any run's supervision tree, timeline and file edits",
+      "Swarm dispatch, race, best, and all modes across multiple models simultaneously",
+      "Token budget enforcement, per-model context window tracking with pressure modes",
+      "Dynamic live pricing, OpenRouter API pricing with 24h cache and tier fallback",
+      "hyctl stats, real-time session cost rollup by model, tier, and day",
+      "hyctl stats --latency, p50/p90/p99 per model from mergeable sketches, not a rescan of the cost log",
+      "Oracle-verified eval corpus (hyctl eval), labelled examples kept verbatim and exempt from retention",
+      "hyctl trace seal, folds old run logs into compressed monthly segments, losslessly and invisibly to readers",
+      "Opt-in payload store (hyctl trace payloads), prompt and response text, off by default, sampled, and redacted before it is written",
+      "Off-policy evaluation (hyctl trace evaluate), what a routing policy you never ran would have cost, with a confidence interval, refusing where the log cannot answer",
+      "OpenTelemetry export (hyctl trace export --otlp), dispatches as OTLP spans for Langfuse, Grafana or Jaeger; nothing leaves the machine by default",
+      "hyctl ask, tasks parked waiting on a human, when a ledger rule answers ask rather than allow or deny",
       "A2A agent-to-agent handoff protocol with vector clocks for causal ordering",
       "Homebrew installable on macOS and Linux"
     ]
@@ -98,7 +98,7 @@
     "name": "Hydra",
     "alternateName": "Hydra Trust Control Plane",
     "url": "https://hydra.uvansa.com/",
-    "description": "The Trust Control Plane for AI development — open source, written in Go"
+    "description": "The Trust Control Plane for AI development, open source, written in Go"
   }
   </script>
 
@@ -113,7 +113,7 @@
         "name": "What is Hydra?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "Hydra is the Trust Control Plane for AI development — an open source CLI written in Go that routes developer tasks across every AI model on your machine to a target confidence of correctness, not just the cheapest one. It samples models adaptively (SPRT) and stops as soon as the evidence is strong enough, which also cuts AI API costs 70-85% along the way."
+          "text": "Hydra is the Trust Control Plane for AI development, an open source CLI written in Go that routes developer tasks across every AI model on your machine to a target confidence of correctness, not just the cheapest one. It samples models adaptively (SPRT) and stops as soon as the evidence is strong enough, which also cuts AI API costs 70-85% along the way."
         }
       },
       {
@@ -121,7 +121,7 @@
         "name": "What is a Trust Control Plane?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "A Trust Control Plane routes work to a target confidence of correctness rather than just the cheapest or fastest model. Hydra measures each model's calibration from real outcomes (hyctl trust calibration), runs a sequential probability ratio test (SPRT) that samples models adaptively and stops once confidence crosses your target, and automatically raises the bar for code with a wider blast radius — spending more only where accuracy demands it."
+          "text": "A Trust Control Plane routes work to a target confidence of correctness rather than just the cheapest or fastest model. Hydra measures each model's calibration from real outcomes (hyctl trust calibration), runs a sequential probability ratio test (SPRT) that samples models adaptively and stops once confidence crosses your target, and automatically raises the bar for code with a wider blast radius, spending more only where accuracy demands it."
         }
       },
       {
@@ -145,7 +145,7 @@
         "name": "What models does Hydra support?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "Hydra supports any model accessible via Antigravity (agy) or Ollama. Out of the box: Claude Opus and Sonnet (tiers 1-3), Gemini 2.5 Pro and Flash (tiers 4-8), and Qwen3 via Ollama (tiers 9-10 local). New models are added at runtime with 'hyctl models add' or by editing registry/models.yaml — no code changes required."
+          "text": "Hydra supports any model accessible via Antigravity (agy) or Ollama. Out of the box: Claude Opus and Sonnet (tiers 1-3), Gemini 2.5 Pro and Flash (tiers 4-8), and Qwen3 via Ollama (tiers 9-10 local). New models are added at runtime with 'hyctl models add' or by editing registry/models.yaml, no code changes required."
         }
       },
       {
@@ -161,7 +161,7 @@
         "name": "Does Hydra work without internet?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "Yes. Hydra maintains a 100% local fallback chain. When cloud APIs are unavailable or token budgets are exhausted, Hydra automatically routes to Qwen via Ollama running locally. The routing and cost tracking engine runs entirely offline — only the model API calls require network access."
+          "text": "Yes. Hydra maintains a 100% local fallback chain. When cloud APIs are unavailable or token budgets are exhausted, Hydra automatically routes to Qwen via Ollama running locally. The routing and cost tracking engine runs entirely offline, only the model API calls require network access."
         }
       }
     ]
@@ -175,7 +175,7 @@
     "@type": "SoftwareSourceCode",
     "name": "Hydra",
     "alternateName": "Hydra Trust Control Plane",
-    "description": "Hydra is the Trust Control Plane for AI development — an open source CLI written in Go that routes tasks across every model on your machine to a target confidence of correctness.",
+    "description": "Hydra is the Trust Control Plane for AI development, an open source CLI written in Go that routes tasks across every model on your machine to a target confidence of correctness.",
     "codeRepository": "https://github.com/ankit373/hydra",
     "programmingLanguage": "Go",
     "license": "https://opensource.org/licenses/MIT",
@@ -191,7 +191,7 @@
 
 <style>
 /* ============================================================================
-   HYDRA — flagship landing page. "Ten generations from now."
+   HYDRA, flagship landing page. "Ten generations from now."
    Local-first, multi-vendor AI control plane. Provider-neutral.
    Locked design system:
      Committed DARK world. Brand gradient cyan→violet→magenta (identity).
@@ -235,7 +235,7 @@ a{color:inherit;text-decoration:none;}
 .cheap{color:var(--cheap);}.mid{color:var(--mid);}.exp{color:var(--exp);}
 .cy{color:var(--cyan);}.vi{color:var(--violet);}.mg{color:var(--magenta);}
 
-/* Buttons/links are actions, not content — a stray click-drag shouldn't
+/* Buttons/links are actions, not content, a stray click-drag shouldn't
    highlight their label. Scoped to controls only: headings, body copy, and
    the subline stay normally selectable everywhere else on the page. */
 .topbar .ghost,.topbar nav a,.btn-ghost,.skip-intro,.install{
@@ -259,7 +259,7 @@ a{color:inherit;text-decoration:none;}
 .topbar .ghost:hover{border-color:var(--aqua);color:var(--aqua);}
 @media(max-width:720px){.topbar nav{display:none;}}
 
-/* ── hero — hydra-hud: dive into the cortex ──────────────────────────────── */
+/* ── hero, hydra-hud: dive into the cortex ──────────────────────────────── */
 .hero-pin{position:relative;}
 .hero-sticky{position:sticky;top:0;height:100svh;min-height:600px;overflow:hidden;background:var(--bg);
   display:flex;flex-direction:column;justify-content:flex-end;cursor:grab;}
@@ -301,9 +301,9 @@ a{color:inherit;text-decoration:none;}
   color:transparent;margin-bottom:7px;}
 .deep .db{font-size:11px;color:var(--dim);letter-spacing:.5px;line-height:1.6;transition:opacity .15s ease-out;font-family:var(--mono);}
 /* top must clear .topbar (position:sticky, top:0, height:52px, z-index:60).
-   At top:20px this pill sat entirely inside the bar's 0–52px band, and since
+   At top:20px this pill sat entirely inside the bar's 0-52px band, and since
    .hero-pin creates no stacking context above z-index 60, the bar painted over
-   it — background and backdrop-filter and all — so every click landed on the
+   it, background and backdrop-filter and all, so every click landed on the
    topbar and "skip intro" did nothing. Kept below the bar rather than raised
    above it: floating a hero control over the nav is the wrong fix. */
 .skip-intro{position:absolute;top:68px;left:50%;transform:translateX(-50%);z-index:3;pointer-events:auto;
@@ -312,7 +312,7 @@ a{color:inherit;text-decoration:none;}
 .skip-intro:hover{color:var(--aqua);border-color:var(--aqua);}
 .hero-buffer{height:14vh;}
 @media(max-width:720px){#hudLog,#hudTele,.hud-meta{display:none;}
-  /* The topbar keeps its 52px height on mobile — only its nav is hidden — so
+  /* The topbar keeps its 52px height on mobile, only its nav is hidden, so
      this still has to clear it. */
   .skip-intro{top:64px;}}
 .hero-inner{position:relative;z-index:3;padding:0 24px 9vh;max-width:var(--maxw);margin:0 auto;width:100%;
@@ -558,7 +558,7 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
   <a class="ghost" href="https://github.com/ankit373/hydra">★ GitHub</a>
 </div>
 
-<!-- ══ 1 · HERO — hydra-hud: dive into the cortex ══════════════════════════ -->
+<!-- ══ 1 · HERO, hydra-hud: dive into the cortex ══════════════════════════ -->
 <div class="hero-pin" id="heroPin">
   <header class="hero-sticky" id="heroSticky">
     <canvas id="stage" aria-label="Live control-plane visualization: many heads converging into the cortex, then diving in to demonstrate routing, trust, swarm, the budget governor and local-first policy"></canvas>
@@ -582,9 +582,9 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
     <a class="skip-intro" href="#universe">skip intro ↓</a>
     <div class="hero-inner" id="heroCopy">
       <div class="eyebrow">local-first <span>·</span> provider-neutral <span>·</span> trust control plane</div>
-      <h1 class="wordmark">HYDRA<span style="position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;"> — the local-first Trust Control Plane: multi-model AI orchestration CLI</span></h1>
+      <h1 class="wordmark">HYDRA<span style="position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;">, the local-first Trust Control Plane: multi-model AI orchestration CLI</span></h1>
       <div class="tagline">One Cortex · Many Heads</div>
-      <p class="subline">The local-first <b>Trust Control Plane</b> for AI. Hydra discovers every model on your machine — CLI agents, API keys, local servers — and routes each task to the cheapest head that clears your <b>target confidence</b>.</p>
+      <p class="subline">The local-first <b>Trust Control Plane</b> for AI. Hydra discovers every model on your machine, CLI agents, API keys, local servers, and routes each task to the cheapest head that clears your <b>target confidence</b>.</p>
       <div class="ctas">
         <button class="install" data-copy="brew install ankit373/hydra/hyctl" aria-label="Copy install command">
           <span class="dollar">$</span><span class="cmd">brew install <b>ankit373/hydra/hyctl</b></span><span class="cp">copy</span>
@@ -602,7 +602,7 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
 <section class="blk wrap reveal" id="universe">
   <div class="klabel"><span>Where we fit in the universe</span><b>the uncontested quadrant</b></div>
   <h2 class="big">Every other tool is a <span class="grad">hosted proxy</span>.<br>We built the local-first one.</h2>
-  <p class="lede">Cloud gateways route your traffic through <b>their</b> servers. Eval tools score answers <b>after</b> the fact. Local runtimes each manage only <b>their own</b> models. Plot the field on two axes — hosted↔local and cost-routing↔trust — and one quadrant sits empty. That is where Hydra lives. <b>Hover any star.</b></p>
+  <p class="lede">Cloud gateways route your traffic through <b>their</b> servers. Eval tools score answers <b>after</b> the fact. Local runtimes each manage only <b>their own</b> models. Plot the field on two axes, hosted↔local and cost-routing↔trust, and one quadrant sits empty. That is where Hydra lives. <b>Hover any star.</b></p>
 
   <div class="galaxy-frame">
     <canvas id="galaxy" aria-label="Constellation of AI infrastructure tools plotted on two axes; Hydra alone occupies the local-first, trust quadrant"></canvas>
@@ -633,7 +633,7 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
     <div class="chart" id="chartPareto">
       <div class="ct">a · cost vs quality</div>
       <h3>The Pareto frontier</h3>
-      <p class="cd">Single models are dots. For any one of them, Hydra's routed curve reaches equal or better quality at lower cost — it picks the best head <em>per task</em>.</p>
+      <p class="cd">Single models are dots. For any one of them, Hydra's routed curve reaches equal or better quality at lower cost, it picks the best head <em>per task</em>.</p>
       <svg viewBox="0 0 340 260" role="img" aria-label="Cost versus quality scatter. Hydra's routed frontier dominates single-model points.">
         <!-- axes -->
         <line class="axisln" x1="40" y1="220" x2="326" y2="220"/>
@@ -666,14 +666,14 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
           <text class="dotlbl pop" x="120" y="42" fill="#00E6C3" style="transition-delay:.8s">Hydra routes here</text>
         </g>
       </svg>
-      <div class="foot">Same quality, <b>lower cost</b> — the RouteLLM result, applied per dispatch.</div>
+      <div class="foot">Same quality, <b>lower cost</b>: the RouteLLM result, applied per dispatch.</div>
     </div>
 
     <!-- (b) SPRT confidence convergence -->
     <div class="chart" id="chartSprt">
       <div class="ct">b · optimal stopping</div>
       <h3>Confidence, then stop</h3>
-      <p class="cd">Hydra polls heads until the sequential test (SPRT) crosses your target confidence — then it stops early and banks the unspent heads.</p>
+      <p class="cd">Hydra polls heads until the sequential test (SPRT) crosses your target confidence, then it stops early and banks the unspent heads.</p>
       <svg viewBox="0 0 340 260" role="img" aria-label="Confidence rising with each head queried, crossing the 0.95 target and stopping early.">
         <line class="axisln" x1="40" y1="220" x2="326" y2="220"/>
         <line class="axisln" x1="40" y1="20" x2="40" y2="220"/>
@@ -698,24 +698,24 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
         <text class="dotlbl pop" x="256" y="52" fill="#00E6C3" style="transition-delay:1.8s">accept ✔</text>
         <text class="dotlbl pop" x="256" y="66" fill="#5a5f85" style="transition-delay:1.9s">stopped early</text>
       </svg>
-      <div class="foot"><b>Fewer heads, cleared bar</b> — the calibrated number the field lacks.</div>
+      <div class="foot"><b>Fewer heads, cleared bar</b>: the calibrated number the field lacks.</div>
     </div>
 
     <!-- (c) percolation-κ blast radius -->
     <div class="chart" id="chartPercol">
       <div class="ct">c · percolation-κ</div>
-      <h3>Blast radius (Molloy–Reed)</h3>
-      <p class="cd">κ = ⟨k²⟩/⟨k⟩. A hub file with many transitive dependents is cascade-capable — so it demands more confidence. <b>Hover a node.</b></p>
+      <h3>Blast radius (Molloy-Reed)</h3>
+      <p class="cd">κ = ⟨k²⟩/⟨k⟩. A hub file with many transitive dependents is cascade-capable, so it demands more confidence. <b>Hover a node.</b></p>
       <svg viewBox="0 0 340 260" id="percolSvg" role="img" aria-label="Dependency graph. Hovering a high-kappa hub lights its dependents.">
         <g id="pgEdges"></g>
         <g id="pgNodes"></g>
-        <text class="pg-readout" id="pgReadout" x="170" y="248" text-anchor="middle">hover a node — κ &amp; blast radius</text>
+        <text class="pg-readout" id="pgReadout" x="170" y="248" text-anchor="middle">hover a node, κ &amp; blast radius</text>
       </svg>
       <div class="foot"><b>High-κ ⇒ higher bar.</b> The confidence target rises with the graph.</div>
     </div>
   </div>
   <div style="text-align:center;margin-top:38px;">
-    <a class="btn-ghost" href="/first-principles.html">Derive it yourself — six interactive proofs on the First Principles page →</a>
+    <a class="btn-ghost" href="/first-principles.html">Derive it yourself, six interactive proofs on the First Principles page →</a>
   </div>
 </section>
 
@@ -723,12 +723,12 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
 <section class="blk wrap reveal" id="security">
   <div class="klabel"><span>Accountability</span><b>counts hide the sequence</b></div>
   <h2 class="big">You gave an agent your repo. <span class="grad">What did it do?</span></h2>
-  <p class="lede">Every access an agent makes is recorded in a local, hash-chained ledger. <b>hyctl security</b> reads that log and answers the one question you actually have — not a wall of metrics.</p>
+  <p class="lede">Every access an agent makes is recorded in a local, hash-chained ledger. <b>hyctl security</b> reads that log and answers the one question you actually have, not a wall of metrics.</p>
 
   <div class="term" style="margin-top:22px;max-width:760px">
     <div class="copyline" data-copy="hyctl security"><span><span class="p">$</span> hyctl security</span><span class="cp">copy</span></div>
     <div class="o"><span class="e">VERDICT  ACT NOW</span></div>
-    <div class="o"><span class="c">  critical incident — gpt-4o: the same resource was denied</span></div>
+    <div class="o"><span class="c">  critical incident, gpt-4o: the same resource was denied</span></div>
     <div class="o"><span class="c">  repeatedly, then it escalated to an exec/network action,</span></div>
     <div class="o"><span class="c">  then it targeted the audit trail itself.</span></div>
     <div class="o"><span class="c">  recon → escalation → audit-tampering · 4 event(s)</span></div>
@@ -737,13 +737,13 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
     <div class="o">evidence  4 event(s), 4 hash-chained, <span class="g">intact</span></div>
   </div>
 
-  <p class="lede" style="margin-top:26px">“4 denied, 2 flagged” and “injection → recon → escalation → an attempt on the audit trail” are the same rows read twice. Only the second one is an incident. Severity is <b>OWASP Risk Rating</b> (likelihood × impact) — never a blended score.</p>
+  <p class="lede" style="margin-top:26px">“4 denied, 2 flagged” and “injection → recon → escalation → an attempt on the audit trail” are the same rows read twice. Only the second one is an incident. Severity is <b>OWASP Risk Rating</b> (likelihood × impact), never a blended score.</p>
 
   <p class="cmp-note"><b>hyctl security --why</b> opens the whole programme underneath: a risk register on an SLA clock, crosswalked to OWASP LLM / NIST AI RMF / ISO 42001 / MITRE ATLAS / SOC 2 · OWASP LLM Top-10 coverage · a policy audit that finds rules which can <em>never</em> fire · PII exposure resolved against real heads, so a local model is not reported as a leak · control effectiveness, where a control that is configured but never applied reads as <b>inert</b> rather than as protection · head-binary integrity · edit blast radius.</p>
 
   <p class="cmp-note"><b>Honest about its own limits.</b> Framework mappings are marked <em>curated</em> assertions, not measurements. Defect cost is per-occurrence, not annualised. A file the dependency graph does not index is <em>unknown</em>, never “low-risk”. The attestation is unsigned, because Hydra has no key management and a signature without one is theatre.</p>
 
-  <p class="lede" style="margin-top:26px">The ledger records what an agent did. <b>hyctl mcp registry</b> scores whether the MCP server it was talking to was ever safe to trust in the first place — every existing MCP directory answers “does this exist”, none answer “is it safe to run with my credentials right now”, and star counts are actively misleading (the most-starred servers score worst on quality in independent research). <code>audit</code> resolves what's installed against the official registry and scores it; every trust state drops back to <em>provisional</em> on a version bump, the direct fix for a server that ships clean for months then turns malicious in one release.</p>
+  <p class="lede" style="margin-top:26px">The ledger records what an agent did. <b>hyctl mcp registry</b> scores whether the MCP server it was talking to was ever safe to trust in the first place, every existing MCP directory answers “does this exist”, none answer “is it safe to run with my credentials right now”, and star counts are actively misleading (the most-starred servers score worst on quality in independent research). <code>audit</code> resolves what's installed against the official registry and scores it; every trust state drops back to <em>provisional</em> on a version bump, the direct fix for a server that ships clean for months then turns malicious in one release.</p>
 </section>
 
 <!-- ══ 5 · CRAZY NUMBERS ════════════════════════════════════════════════════ -->
@@ -795,7 +795,7 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
 <section class="blk wrap reveal" id="compare">
   <div class="klabel"><span>Hydra vs the gateways</span><b>only one is local-first + trust + ledger</b></div>
   <h2 class="big">Others route your traffic. <span class="grad">Hydra routes on your metal.</span></h2>
-  <p class="lede">Cost routing and fallback are table stakes — most tools have them. The differentiators are the rows nobody else can check: local-first, confidence/trust routing, and an on-device accountability ledger.</p>
+  <p class="lede">Cost routing and fallback are table stakes, most tools have them. The differentiators are the rows nobody else can check: local-first, confidence/trust routing, and an on-device accountability ledger.</p>
 
   <div class="cmp-scroll-wrap">
   <p class="cmp-swipe-hint">swipe to compare →</p>
@@ -813,7 +813,7 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
       </thead>
       <tbody>
         <tr><th scope="row">Local-first discovery &amp; routing</th><td class="hydcol"><span class="yes">✓</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td></tr>
-        <tr><th scope="row">Provider-neutral — routes <em>away</em> from expensive heads</th><td class="hydcol"><span class="yes">✓</span></td><td><span class="part">partial</span></td><td><span class="part">partial</span></td><td><span class="part">partial</span></td></tr>
+        <tr><th scope="row">Provider-neutral, routes <em>away</em> from expensive heads</th><td class="hydcol"><span class="yes">✓</span></td><td><span class="part">partial</span></td><td><span class="part">partial</span></td><td><span class="part">partial</span></td></tr>
         <tr><th scope="row">Automatic fallback chains</th><td class="hydcol"><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
         <tr><th scope="row">Spend logging &amp; cost reporting</th><td class="hydcol"><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
         <tr><th scope="row">Confidence / trust routing (calibrated + optimal-stopping)</th><td class="hydcol"><span class="yes">✓</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td></tr>
@@ -824,7 +824,7 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
     </table>
   </div>
   </div>
-  <p class="cmp-note"><b>Every row checked above ships today</b> — <code>hyctl dispatch --confidence</code>, <code>hyctl graph blast</code>, <code>hyctl mcp</code>, <code>hyctl mcp registry</code>. The cockpit (<code>hyctl tui</code>) runs the work you type and renders real runs from the per-run event log, and the desktop app ships as a download for macOS, Windows and Linux on both x86-64 and ARM64 with every release — not yet code-signed, so macOS needs right-click → Open on first launch.</p>
+  <p class="cmp-note"><b>Every row checked above ships today</b>: <code>hyctl dispatch --confidence</code>, <code>hyctl graph blast</code>, <code>hyctl mcp</code>, <code>hyctl mcp registry</code>. The cockpit (<code>hyctl tui</code>) runs the work you type and renders real runs from the per-run event log, and the desktop app ships as a download for macOS, Windows and Linux on both x86-64 and ARM64 with every release, not yet code-signed, so macOS needs right-click → Open on first launch.</p>
 </section>
 
 <!-- ══ 6b · DESKTOP APP NUDGE ═══════════════════════════════════════════════ -->
@@ -834,7 +834,7 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
   <p style="max-width:720px;color:var(--dim)">
     Everything above is the CLI. The same control plane has a desktop app that
     opens on a chat: ask for work, and every reply says which model answered, at
-    which tier, and what it cost — beside a pane showing what the router knows.
+    which tier, and what it cost, beside a pane showing what the router knows.
     Models, Activity, Usage and Audit sit behind it, over the logs
     <code>hyctl</code> already writes. No account, no server, nothing leaves the
     machine.
@@ -858,7 +858,7 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
   <p class="cmp-note" style="margin-top:16px">
     macOS · Linux · Windows, attached to every GitHub release with a SHA-256
     checksum. Not yet code-signed, so macOS needs right-click → Open the first
-    time — the install script clears that for you. ARM64 builds ship for both
+    time, the install script clears that for you. ARM64 builds ship for both
     Windows and Linux (<a href="https://github.com/ankit373/hydra/issues/263">#263</a>).
     <a href="/app.html#download">Direct downloads</a>.
   </p>
@@ -871,7 +871,7 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
 
   <div class="steps">
     <div class="step">
-      <div class="n">01 — INSTALL</div>
+      <div class="n">01, INSTALL</div>
       <h3>Get the binary</h3>
       <p>One Go binary. No daemon, no account, no cloud.</p>
       <div class="term">
@@ -883,7 +883,7 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
       </div>
     </div>
     <div class="step">
-      <div class="n">02 — DISCOVER</div>
+      <div class="n">02, DISCOVER</div>
       <h3>Scan your machine</h3>
       <p>Finds every head: CLI agents, API keys, local servers.</p>
       <div class="term">
@@ -893,7 +893,7 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
       </div>
     </div>
     <div class="step">
-      <div class="n">03 — DISPATCH</div>
+      <div class="n">03, DISPATCH</div>
       <h3>Route a task</h3>
       <p>Classify → tier → cheapest head that clears confidence.</p>
       <div class="term">
@@ -908,7 +908,7 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
 <!-- ══ FINAL CTA ════════════════════════════════════════════════════════════ -->
 <section class="cta reveal">
   <h2>Stop paying frontier prices<br>for <span class="grad">boilerplate</span>.</h2>
-  <p>One cortex, many heads. Route each task to the cheapest head that clears your bar — on your own hardware, with your spend and policy staying home.</p>
+  <p>One cortex, many heads. Route each task to the cheapest head that clears your bar, on your own hardware, with your spend and policy staying home.</p>
   <div class="ctas">
     <button class="install" data-copy="brew install ankit373/hydra/hyctl" aria-label="Copy install command">
         <span class="dollar">$</span><span class="cmd">brew install <b>ankit373/hydra/hyctl</b></span><span class="cp">copy</span>
@@ -923,7 +923,7 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
     <div class="foot-grid">
       <div class="brand">
         <div class="mark">HYDRA</div>
-        <p>The local-first Trust Control Plane. Discovers every model on your machine and routes by cost, policy and confidence — no vendor privileged.</p>
+        <p>The local-first Trust Control Plane. Discovers every model on your machine and routes by cost, policy and confidence, no vendor privileged.</p>
       </div>
       <div class="col">
         <h4>Product</h4>
@@ -970,7 +970,7 @@ var NS='http://www.w3.org/2000/svg';
 function svg(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attrs)e.setAttribute(k,attrs[k]);return e;}
 
 /* ══════════════════════════════════════════════════════════════════════════
-   1 · HERO — hydra-hud: heads converge into the cortex, then the scroll
+   1 · HERO, hydra-hud: heads converge into the cortex, then the scroll
        dives inside for a live 5-stop tour (routing / trust / swarm /
        governor / local-first), each stop driven by real simulated telemetry.
    ══════════════════════════════════════════════════════════════════════════*/
@@ -1098,11 +1098,11 @@ function svg(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attr
   var deepEl=$('#hudDeep'), deepTitleEl=$('#hudDeepTitle'), deepBodyEl=$('#hudDeepBody');
   var DIVE_VH=1.0, PER_VH=0.65;
   var FEATURES=[
-    {title:'COST-DESCENDING ROUTING', body:'every task drops through the tier ladder — the cheapest head that clears the bar wins the work.', accent:'linear-gradient(90deg,'+C.exp+','+C.mid+','+C.cheap+')'},
+    {title:'COST-DESCENDING ROUTING', body:'every task drops through the tier ladder, the cheapest head that clears the bar wins the work.', accent:'linear-gradient(90deg,'+C.exp+','+C.mid+','+C.cheap+')'},
     {title:'TRUST CONTROL PLANE',     body:'an SPRT ensemble votes to a target confidence, not just to the cheapest answer.', accent:'linear-gradient(90deg,'+C.aqua+','+C.cyan+')'},
     {title:'SWARM · RACE / BEST-OF-N', body:'fan a task out to several heads at once, judge the field, keep the winner.', accent:'linear-gradient(90deg,'+C.violet+','+C.magenta+')'},
     {title:'BUDGET GOVERNOR',         body:'a rate-aware governor watches claude_pct and downgrades tiers before you hit the wall.', accent:C.cheap},
-    {title:'LOCAL-FIRST POLICY',      body:'PII and local-only tasks never leave the machine — enforced, not promised.', accent:'linear-gradient(90deg,'+C.cheap+','+C.aqua+')'}
+    {title:'LOCAL-FIRST POLICY',      body:'PII and local-only tasks never leave the machine, enforced, not promised.', accent:'linear-gradient(90deg,'+C.cheap+','+C.aqua+')'}
   ];
   heroPin.style.height=((DIVE_VH+FEATURES.length*PER_VH)*100)+'vh';
   var zoomT=0, featureT=0, activeFeature=-1, switching=false, featureSwitchStart=-1e9, released=false;
@@ -1387,7 +1387,7 @@ function svg(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attr
   }
   function hexA(h,a){var rgb=hx(h);return'rgba('+rgb[0]+','+rgb[1]+','+rgb[2]+','+a+')';}
 
-  // the rAF loop pauses once the sticky hero has released and scrolled off — no point
+  // the rAF loop pauses once the sticky hero has released and scrolled off, no point
   // burning a frame budget animating a canvas that's no longer on screen
   var looping=false;
   function loop(ts){looping=true;draw(ts);if(!released){requestAnimationFrame(loop);}else{looping=false;}}
@@ -1400,7 +1400,7 @@ function svg(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attr
 })();
 
 /* ══════════════════════════════════════════════════════════════════════════
-   2 · UNIVERSE — constellation galaxy. Two axes: hosted↔local × cost↔trust.
+   2 · UNIVERSE, constellation galaxy. Two axes: hosted↔local × cost↔trust.
        Hydra alone in the local-first + trust quadrant, lit aqua with a halo.
    ══════════════════════════════════════════════════════════════════════════*/
 (function galaxy(){
@@ -1416,40 +1416,40 @@ function svg(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attr
   };
   /* x: -1 hosted … +1 local-first ; y: -1 cost/latency … +1 trust/confidence */
   var STARS=[
-    // cloud gateways — hosted + cost/latency (bottom-left)
+    // cloud gateways, hosted + cost/latency (bottom-left)
     {n:'OpenRouter',c:'gateway',x:-0.68,y:-0.52,r:3.4,t:'Hosted model marketplace · ~25ms proxy hop'},
     {n:'LiteLLM',c:'gateway',x:-0.50,y:-0.74,r:3.1,t:'Proxy/SDK to 100+ provider APIs'},
-    {n:'Portkey',c:'gateway',x:-0.86,y:-0.34,r:3.1,t:'Hosted AI gateway — owns "control panel"'},
+    {n:'Portkey',c:'gateway',x:-0.86,y:-0.34,r:3.1,t:'Hosted AI gateway, owns "control panel"'},
     {n:'Cloudflare AI Gateway',c:'gateway',x:-0.58,y:-0.30,r:2.9,t:'Edge proxy + analytics · "app control plane"'},
     {n:'Vercel AI Gateway',c:'gateway',x:-0.40,y:-0.54,r:2.7,t:'Hosted routing for the AI SDK'},
     {n:'Requesty',c:'gateway',x:-0.74,y:-0.68,r:2.5,t:'Hosted routing + spend caps'},
-    {n:'Unify',c:'gateway',x:-0.55,y:-0.16,r:2.3,t:'Route-to-best LLM — pivoted away'},
-    // eval / observability — hosted + trust-ish (top-left)
+    {n:'Unify',c:'gateway',x:-0.55,y:-0.16,r:2.3,t:'Route-to-best LLM, pivoted away'},
+    // eval / observability, hosted + trust-ish (top-left)
     {n:'Helicone',c:'eval',x:-0.66,y:0.50,r:2.9,t:'Hosted LLM observability & logging'},
     {n:'LangSmith',c:'eval',x:-0.48,y:0.70,r:3.0,t:'Traces + evals, retrospective (hosted)'},
     {n:'Langfuse',c:'eval',x:-0.82,y:0.36,r:2.7,t:'LLM tracing + eval dashboards'},
     {n:'Braintrust',c:'eval',x:-0.44,y:0.48,r:2.7,t:'Eval + LLM-judge scoring (after the fact)'},
-    // local runtimes — local + cost/latency (bottom-right)
-    {n:'Ollama',c:'local',x:0.62,y:-0.52,r:3.2,t:'Local model runner — its own models only'},
+    // local runtimes, local + cost/latency (bottom-right)
+    {n:'Ollama',c:'local',x:0.62,y:-0.52,r:3.2,t:'Local model runner, its own models only'},
     {n:'LM Studio',c:'local',x:0.78,y:-0.38,r:2.9,t:'Local desktop model host'},
     {n:'llama.cpp',c:'local',x:0.50,y:-0.74,r:2.7,t:'On-device inference engine'},
     {n:'vLLM',c:'local',x:0.40,y:-0.40,r:2.6,t:'Self-hosted high-throughput serving'},
-    // frontier heads — destinations, dim, bottom band
-    {n:'OpenAI',c:'frontier',x:-0.30,y:-0.95,r:2.2,t:'Frontier head — a destination, not a router'},
-    {n:'Anthropic',c:'frontier',x:-0.10,y:-0.98,r:2.2,t:'Frontier head — a destination, not a router'},
-    {n:'Google Gemini',c:'frontier',x:0.12,y:-0.96,r:2.2,t:'Frontier head — a destination, not a router'},
-    {n:'Mistral',c:'frontier',x:0.30,y:-0.93,r:2.0,t:'Frontier head — a destination, not a router'},
-    {n:'Meta Llama',c:'frontier',x:0.02,y:-0.86,r:2.0,t:'Open-weights head — a destination'},
-    // Hydra — local + trust (top-right, alone)
+    // frontier heads, destinations, dim, bottom band
+    {n:'OpenAI',c:'frontier',x:-0.30,y:-0.95,r:2.2,t:'Frontier head, a destination, not a router'},
+    {n:'Anthropic',c:'frontier',x:-0.10,y:-0.98,r:2.2,t:'Frontier head, a destination, not a router'},
+    {n:'Google Gemini',c:'frontier',x:0.12,y:-0.96,r:2.2,t:'Frontier head, a destination, not a router'},
+    {n:'Mistral',c:'frontier',x:0.30,y:-0.93,r:2.0,t:'Frontier head, a destination, not a router'},
+    {n:'Meta Llama',c:'frontier',x:0.02,y:-0.86,r:2.0,t:'Open-weights head, a destination'},
+    // Hydra, local + trust (top-right, alone)
     {n:'Hydra',c:'hyctl',x:0.60,y:0.58,r:6.2,t:'Local-first · provider-neutral · routes to a target confidence, on your machine',hyctl:true}
   ];
   STARS.forEach(function(s,i){s.ph=Math.random()*6.283;s.sp=0.4+Math.random()*0.6;
     s.tw=0.7+Math.random()*0.7;                  // per-star twinkle frequency (organic, non-mechanical)
-    s.bx=s.x;s.by=s.y;                            // locked base position — the quadrant anchor
+    s.bx=s.x;s.by=s.y;                            // locked base position, the quadrant anchor
     s.px=0;s.py=0;s.lx=0;s.ly=0;s.idx=i;});       // cached screen pos + eased gravitational lean
-  /* constellation links: connect each star to its 1–2 nearest SAME-category
+  /* constellation links: connect each star to its 1-2 nearest SAME-category
      neighbours (sparse graph, computed once from locked base positions). Hydra
-     is alone in its quadrant, so it links to nothing — it stays the focal point. */
+     is alone in its quadrant, so it links to nothing, it stays the focal point. */
   var LINKCATS=['gateway','eval','local','frontier'];
   var links=[],heat={};
   LINKCATS.forEach(function(cat){
@@ -1477,7 +1477,7 @@ function svg(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attr
   onVisible(cv.parentNode,function(vis){running=vis;});
   /* clamp a drifting coordinate so it can never cross out of its home quadrant.
      Corner clusters (|base|>0.06) are pinned to their side; central frontier
-     destinations (near an axis) may wander a hair — that carries no quadrant meaning. */
+     destinations (near an axis) may wander a hair, that carries no quadrant meaning. */
   function keepSide(v,base){
     if(base>0.06)return v<0.04?0.04:v;
     if(base<-0.06)return v>-0.04?-0.04:v;
@@ -1493,7 +1493,7 @@ function svg(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attr
       var sx=mapX(nx),sy=mapY(ny),tx=0,ty=0;
       if(!reduce && mouse.on){                          // gravitational lean toward the cursor
         var vx=mouse.x-sx,vy=mouse.y-sy,d=Math.hypot(vx,vy)||1;
-        var pull=Math.exp(-d/170)*(s.hydra?5:14);       // px — Hydra barely leans (stays focal)
+        var pull=Math.exp(-d/170)*(s.hydra?5:14);       // px, Hydra barely leans (stays focal)
         tx=vx/d*pull;ty=vy/d*pull;
       }
       s.lx+=(tx-s.lx)*0.08;s.ly+=(ty-s.ly)*0.08;         // ease in, and ease back when cursor leaves
@@ -1512,7 +1512,7 @@ function svg(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attr
     var qg=ctx.createRadialGradient(mapX(0.6),mapY(0.6),0,mapX(0.6),mapY(0.6),Math.max(W,H)*0.42);
     qg.addColorStop(0,'rgba(0,230,195,.10)');qg.addColorStop(1,'rgba(0,230,195,0)');
     ctx.fillStyle=qg;ctx.fillRect(hx,padY-14,W-padX-hx+14,hy-padY+14);
-    // per-cluster proximity heat (0..1, eased) — drives constellation + glow brightening
+    // per-cluster proximity heat (0..1, eased), drives constellation + glow brightening
     for(var ci=0;ci<LINKCATS.length;ci++){
       var cat=LINKCATS[ci],mind=1e9;
       for(var si=0;si<STARS.length;si++){if(STARS[si].c!==cat)continue;
@@ -1528,7 +1528,7 @@ function svg(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attr
       g.addColorStop(0,'rgba('+col[0]+','+col[1]+','+col[2]+','+gi+')');g.addColorStop(1,'rgba('+col[0]+','+col[1]+','+col[2]+',0)');
       ctx.fillStyle=g;ctx.beginPath();ctx.arc(cx,cy,150,0,6.283);ctx.fill();
     });
-    // constellation lines between same-category stars — brighten when the cluster is near the cursor
+    // constellation lines between same-category stars, brighten when the cluster is near the cursor
     ctx.lineCap='round';
     for(var li=0;li<links.length;li++){
       var L=links[li],col=CATS[L.cat].col,h=heat[L.cat];
@@ -1548,7 +1548,7 @@ function svg(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attr
       var isH=(hovered===s), scale=isH?1.5:1;
       var rad=s.r*scale;
       if(s.hydra){
-        // pulsing halo — the clear focal point
+        // pulsing halo, the clear focal point
         var hr=(reduce?34:34+Math.sin(t*1.4)*6);
         var hg=ctx.createRadialGradient(s.px,s.py,0,s.px,s.py,hr);
         hg.addColorStop(0,'rgba(0,230,195,.35)');hg.addColorStop(0.5,'rgba(0,230,195,.12)');hg.addColorStop(1,'rgba(0,230,195,0)');
@@ -1563,7 +1563,7 @@ function svg(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attr
       g2.addColorStop(1,'rgba('+col[0]+','+col[1]+','+col[2]+',0)');
       ctx.fillStyle=g2;ctx.beginPath();ctx.arc(s.px,s.py,rad*5,0,6.283);ctx.fill();
       ctx.fillStyle='rgba(255,255,255,'+(s.c==='frontier'?0.6:0.95)+')';ctx.beginPath();ctx.arc(s.px,s.py,Math.max(1,rad*0.62),0,6.283);ctx.fill();
-      // permanent hyctl label — drawn last, tracks its (barely-moving) star so it stays readable
+      // permanent hyctl label, drawn last, tracks its (barely-moving) star so it stays readable
       if(s.hydra){
         ctx.font='700 14px ui-monospace,Menlo,monospace';ctx.fillStyle='rgba(0,230,195,.95)';ctx.textAlign='left';
         ctx.fillText('HYDRA',s.px+22,s.py+5);
@@ -1583,7 +1583,7 @@ function svg(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attr
 })();
 
 /* ══════════════════════════════════════════════════════════════════════════
-   3 · MATH — reveal charts on scroll (Pareto + SPRT via CSS); percolation graph
+   3 · MATH, reveal charts on scroll (Pareto + SPRT via CSS); percolation graph
    ══════════════════════════════════════════════════════════════════════════*/
 (function charts(){
   // set dash lengths so stroke-dashoffset animation works
@@ -1674,7 +1674,7 @@ function svg(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attr
   function clearHi(){
     $all('.pg-node',gN).forEach(function(g){g.classList.remove('hot');});
     $all('.pg-edge',gE).forEach(function(l){l.classList.remove('hot');});
-    ro.textContent='hover a node — κ & blast radius';ro.removeAttribute('fill');
+    ro.textContent='hover a node, κ & blast radius';ro.removeAttribute('fill');
   }
   // idle demo: briefly pulse the token hub once visible (reduced-motion skips)
   if(!reduce){

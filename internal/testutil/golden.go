@@ -15,7 +15,7 @@ import (
 //
 // Registered here rather than per-package so one flag drives every golden in
 // the repo. Re-blessing is legitimate when the change to the output was
-// intended; it is the bug when it was not. CONTRIBUTING.md draws that line —
+// intended; it is the bug when it was not. CONTRIBUTING.md draws that line,
 // this flag is the reason it has to.
 var updateGolden = flag.Bool("update", false, "rewrite golden files to match current output")
 
@@ -43,7 +43,7 @@ var normalisers = []struct {
 	//
 	// Added after the cost summary's golden broke overnight. It pins a date
 	// derived from time.Now(), so the fixture was only ever correct on the day
-	// it was blessed — a test that fails tomorrow, for everyone, with no change
+	// it was blessed, a test that fails tomorrow, for everyone, with no change
 	// to the code. Normalising it is the fix; re-blessing daily is not.
 	{regexp.MustCompile(`\b\d{4}-\d{2}-\d{2}\b`), "<date>"},
 	// Dollar amounts.
@@ -120,7 +120,7 @@ func Golden(t *testing.T, name, got string, tempPaths ...string) {
 		t.Fatal(err)
 	}
 	// Normalise the expected side too. It is text on disk, and git's autocrlf
-	// rewrites checked-in files to CRLF on Windows checkouts — so comparing a
+	// rewrites checked-in files to CRLF on Windows checkouts, so comparing a
 	// normalised `got` against a raw `want` made every golden fail there, on
 	// output that was byte-identical apart from line endings.
 	want := Normalise(string(wantRaw))

@@ -80,7 +80,7 @@ func TestParseProfile_IgnoresMalformedLinesRatherThanCounting(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got["internal/a"] != 0 {
-		t.Errorf("internal/a = %.1f%%, want 0 — the malformed line must not count "+
+		t.Errorf("internal/a = %.1f%%, want 0, the malformed line must not count "+
 			"as covered", got["internal/a"])
 	}
 
@@ -252,7 +252,7 @@ func TestCheck_SkipBudgetAndReasons(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Three real skips, within budget — but one has no reason.
+	// Three real skips, within budget, but one has no reason.
 	if len(problems) != 1 {
 		t.Fatalf("got %v, want only the reasonless skip reported", problems)
 	}
@@ -331,10 +331,10 @@ func TestCheckedInConfig_IsValid(t *testing.T) {
 	}
 	for pkg, floor := range cfg.Floors {
 		if floor < 0 || floor > 100 {
-			t.Errorf("%s has a floor of %v, outside 0–100", pkg, floor)
+			t.Errorf("%s has a floor of %v, outside 0-100", pkg, floor)
 		}
 	}
-	// A package cannot both have a floor and be allow-listed as untested — one
+	// A package cannot both have a floor and be allow-listed as untested, one
 	// of the two is wrong, and the gate would enforce the weaker.
 	for pkg := range cfg.NoTests {
 		if _, hasFloor := cfg.Floors[pkg]; hasFloor {

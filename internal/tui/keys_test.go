@@ -113,7 +113,7 @@ func TestDigits_JumpOutsideChatTypeInsideChat(t *testing.T) {
 	}
 }
 
-// Text editing must only affect the chat view — typing on other views is
+// Text editing must only affect the chat view, typing on other views is
 // shortcuts, never invisible input edits (#506).
 func TestInput_IsScopedToTheChatView(t *testing.T) {
 	m := testCockpit()

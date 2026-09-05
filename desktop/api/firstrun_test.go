@@ -11,7 +11,7 @@ import (
 // withEmptyHome points the process at a home directory containing no ~/.hydra,
 // which is the state of a machine that has just downloaded the app and never
 // run hyctl. config.Dir() checks $HYDRA_HOME before $HOME (#442), so a
-// developer or CI runner with one already exported must not leak through —
+// developer or CI runner with one already exported must not leak through,
 // clearing it is as much a part of isolating this as setting HOME/USERPROFILE.
 func withEmptyHome(t *testing.T) string {
 	t.Helper()
@@ -26,7 +26,7 @@ func withEmptyHome(t *testing.T) string {
 // user journey when the app started being distributed as a download (#227):
 // before that, the only people launching it had already been running the CLI.
 //
-// The bar is that no entry point errors — an error blanks the view body, so a
+// The bar is that no entry point errors, an error blanks the view body, so a
 // first-time user would open the app to a wall of red rather than an empty
 // state telling them what to run.
 func TestFirstRun_EveryEntryPointIsSafeWithNoHydraHome(t *testing.T) {
@@ -95,7 +95,7 @@ func TestFirstRun_EveryEntryPointIsSafeWithNoHydraHome(t *testing.T) {
 		}
 	})
 
-	// Version is decoration, but it must not be blank — the footer renders it
+	// Version is decoration, but it must not be blank, the footer renders it
 	// directly and an empty string looks like a broken build.
 	t.Run("version", func(t *testing.T) {
 		v := a.GetVersion()
@@ -105,7 +105,7 @@ func TestFirstRun_EveryEntryPointIsSafeWithNoHydraHome(t *testing.T) {
 	})
 
 	// CheckHyctl reads $PATH, not ~/.hydra, so an empty home is unrelated to
-	// it — but it is the very first call the app makes on a fresh machine
+	// it, but it is the very first call the app makes on a fresh machine
 	// (#383), so it belongs in this contract too: it must return a value, not
 	// panic, regardless of what is or is not installed.
 	t.Run("hyctl status", func(t *testing.T) {
@@ -114,7 +114,7 @@ func TestFirstRun_EveryEntryPointIsSafeWithNoHydraHome(t *testing.T) {
 }
 
 // The whole first-run payload must be marshallable and free of nulls where the
-// frontend expects a list — Wails serialises these across the bridge, so a nil
+// frontend expects a list, Wails serialises these across the bridge, so a nil
 // here is a runtime TypeError in the view, not a Go error anyone would see.
 func TestFirstRun_PayloadHasNoNullsWhereTheViewExpectsAList(t *testing.T) {
 	withEmptyHome(t)

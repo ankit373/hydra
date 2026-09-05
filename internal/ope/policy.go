@@ -10,8 +10,8 @@ import (
 
 // A counterfactual policy says what it would have done in a logged context.
 //
-// Deterministic policies are the useful ones here — "always one tier cheaper",
-// "always local" — so Would returns a probability that is 1 or 0 rather than a
+// Deterministic policies are the useful ones here, "always one tier cheaper",
+// "always local", so Would returns a probability that is 1 or 0 rather than a
 // distribution. The signature keeps room for a stochastic policy without
 // changing the estimator, which already takes TargetProb as a probability.
 
@@ -51,7 +51,7 @@ func (p TierShift) Name() string {
 }
 
 // Would treats a logged row as on-policy when its tier is what the shifted
-// policy would have chosen for *some* logged context — that is, when this row's
+// policy would have chosen for *some* logged context, that is, when this row's
 // tier equals another observed tier plus the shift.
 func (p TierShift) Would(d Decision) float64 {
 	if p.Tiers[d.Tier-p.Shift] {
@@ -123,7 +123,7 @@ func ParsePolicy(spec string, tiers map[int]bool) (Policy, error) {
 		}
 		return PinnedModel{Model: name}, nil
 	}
-	return nil, fmt.Errorf("ope: unknown policy %q — try %s", spec, strings.Join(PolicyNames(), ", "))
+	return nil, fmt.Errorf("ope: unknown policy %q, try %s", spec, strings.Join(PolicyNames(), ", "))
 }
 
 // PolicyNames lists what ParsePolicy accepts, for help text and errors.

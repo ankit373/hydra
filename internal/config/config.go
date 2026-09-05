@@ -69,8 +69,8 @@ func Dir() string {
 //  3. ~/.hydra
 //
 // Step 3 used to be documented as "standalone install copies the registry here".
-// Nothing has ever done that — not install.sh, not the tap formula, not the npm
-// or pip installers — which is why every installed binary ran with no registry
+// Nothing has ever done that, not install.sh, not the tap formula, not the npm
+// or pip installers, which is why every installed binary ran with no registry
 // at all until #238. It is the embedded copy that makes the files always
 // available now; this path only decides where an operator's *override* is read
 // from, so a miss here is normal rather than a failure.

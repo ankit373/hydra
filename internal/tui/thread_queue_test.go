@@ -5,7 +5,7 @@ package tui
 // Queue-on-overlap (#598): same-file edits never run concurrently; the second
 // queues visibly and auto-starts on apply/discard. Vector clocks are the
 // apply-time backstop. The race test at the bottom runs real workers
-// concurrently — the detector must see the actual parallel paths.
+// concurrently, the detector must see the actual parallel paths.
 
 import (
 	"context"
@@ -93,11 +93,11 @@ func TestQueue_SameFileQueuesThenAutoStartsOnApply(t *testing.T) {
 		t.Fatalf("the released thread did not run: %+v", th2.lastDone)
 	}
 	logs := stripANSI(strings.Join(th2.log, "\n"))
-	if !strings.Contains(logs, "unblocked — starting") {
+	if !strings.Contains(logs, "unblocked, starting") {
 		t.Errorf("the release is not visible: %q", logs)
 	}
 	// Thread 2 ran AFTER thread 1 applied: its clock must dominate thread 1's,
-	// not read as concurrent — that is the causal-ordering merge.
+	// not read as concurrent, that is the causal-ordering merge.
 	if got := th2.clock.Compare(m.threadByID(1).clock); got != a2a.After {
 		t.Errorf("released thread's clock ordering = %v, want After", got)
 	}
@@ -157,7 +157,7 @@ func TestQueue_ChainRequeuesBehindTheNewBlocker(t *testing.T) {
 	}
 	q3 := m.threadByID(3).queued
 	if q3 == nil {
-		t.Fatal("thread 3 started alongside thread 2 — same file")
+		t.Fatal("thread 3 started alongside thread 2, same file")
 	}
 	if q3.blockerID != 2 {
 		t.Errorf("thread 3 queues behind %d, want 2", q3.blockerID)
@@ -280,7 +280,7 @@ func TestConcurrentWarnings_VectorClockBackstop(t *testing.T) {
 	if warns := m.concurrentWarnings(t1); len(warns) != 0 {
 		t.Errorf("ordered clocks still warn: %v", warns)
 	}
-	// Disjoint files: concurrent but no overlap — no warning.
+	// Disjoint files: concurrent but no overlap, no warning.
 	t2.clock = a2a.Clock{}.Tick(ckThreadAgent(2))
 	t2.files = []string{"pkg/other.go"}
 	if warns := m.concurrentWarnings(t1); len(warns) != 0 {
@@ -339,8 +339,8 @@ func runRounds(t *testing.T, m Cockpit, cmds []tea.Cmd) Cockpit {
 }
 
 // Three edit threads on three different files run their pipelines
-// CONCURRENTLY — separate worktrees, real runlog heartbeats, stubbed editors
-// with real sleeps — and every result must land on its own thread.
+// CONCURRENTLY: separate worktrees, real runlog heartbeats, stubbed editors
+// with real sleeps, and every result must land on its own thread.
 func TestThreads_ConcurrentWorkersSettleOnTheirOwnThreads(t *testing.T) {
 	repo := threadRepo(t)
 	stubExec(t)
@@ -361,7 +361,7 @@ func TestThreads_ConcurrentWorkersSettleOnTheirOwnThreads(t *testing.T) {
 		cmds = append(cmds, cmd)
 	}
 	if _, _, queued := m.threadCounts(); queued != 0 {
-		t.Fatal("disjoint files queued — they must run concurrently")
+		t.Fatal("disjoint files queued, they must run concurrently")
 	}
 
 	m = runRounds(t, m, cmds)
@@ -387,7 +387,7 @@ func TestThreads_ConcurrentWorkersSettleOnTheirOwnThreads(t *testing.T) {
 		}
 	}
 
-	// All three apply cleanly — disjoint files cannot conflict.
+	// All three apply cleanly, disjoint files cannot conflict.
 	for id := 1; id <= 3; id++ {
 		m = altDigit(m, rune('0'+id))
 		var acmd tea.Cmd

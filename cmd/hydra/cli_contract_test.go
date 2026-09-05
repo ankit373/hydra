@@ -195,7 +195,7 @@ func TestCLI_ReadCommandsSurviveAFreshInstall(t *testing.T) {
 }
 
 // --json is the scripting surface. Whatever it prints must parse, on a fresh
-// install as much as a populated one — a jq pipeline that breaks when there is
+// install as much as a populated one, a jq pipeline that breaks when there is
 // no data yet is a broken contract.
 func TestCLI_JSONOutputParses(t *testing.T) {
 	for _, args := range [][]string{
@@ -243,7 +243,7 @@ func TestCLI_DryRunExecutesNothing(t *testing.T) {
 	// A dry run chooses a head but never calls one, so it has no place in a
 	// log of runs either. Before #379 it wrote run_started/run_finished
 	// unconditionally, leaving a permanent, contentless card in the desktop
-	// app's Fleet view for every preview — 0ms, $0.00, no agents, nothing to
+	// app's Fleet view for every preview, 0ms, $0.00, no agents, nothing to
 	// say why, indistinguishable from a broken reconstruction.
 	ids, err := runlog.Runs()
 	if err != nil {
@@ -258,7 +258,7 @@ func TestCLI_DryRunExecutesNothing(t *testing.T) {
 // anything, and say which it was.
 //
 // Only the ones that return an error are driven in-process: `hyctl edit` calls
-// os.Exit(2) on a failed edit — deliberately, so callers can gate on it — which
+// os.Exit(2) on a failed edit, deliberately, so callers can gate on it, which
 // would take the test binary down with it. Exit codes are asserted against a
 // real subprocess below.
 func TestCLI_FileCommandsRefuseUnsafePaths(t *testing.T) {
@@ -327,7 +327,7 @@ func TestTokenLabel_DoesNotTruncateToZero(t *testing.T) {
 			t.Errorf("tokenLabel(%d, %d) = %q, want %q", in[0], in[1], got, want)
 		}
 	}
-	// A sub-1000 count must never render as "0k" — that reads as no usage at all.
+	// A sub-1000 count must never render as "0k", that reads as no usage at all.
 	if got := tokenLabel(999, 1000); strings.HasPrefix(got, "0k") {
 		t.Errorf("tokenLabel(999, …) = %q, which reads as zero usage", got)
 	}
@@ -363,7 +363,7 @@ func TestTruncLabel_CountsRunes(t *testing.T) {
 	if n := len([]rune(truncLabel(long, 20))); n != 20 {
 		t.Errorf("truncLabel produced %d runes, want 20", n)
 	}
-	// Multi-byte input must be cut on a rune boundary, not a byte one — a split
+	// Multi-byte input must be cut on a rune boundary, not a byte one, a split
 	// rune renders as a replacement character in the table.
 	cjk := strings.Repeat("日", 40)
 	got := truncLabel(cjk, 10)

@@ -16,7 +16,7 @@ import (
 )
 
 // Load is what every command calls at startup. Its job is to never block and
-// never return nil, whatever the network and the cache are doing — a nil DB
+// never return nil, whatever the network and the cache are doing, a nil DB
 // panics the caller, and a blocking one hangs the CLI on a dead network.
 
 // stubOpenRouter points the fetcher at a local server returning the given
@@ -88,7 +88,7 @@ func TestLoad_NoCacheStillPricesEveryTier(t *testing.T) {
 	if got := db.EstimateCost(1, 1_000_000, 0); got <= 0 {
 		t.Errorf("EstimateCost(tier 1) = %v with no cache, want the fallback rate", got)
 	}
-	// Models are absent on this first call — the fetch is in the background —
+	// Models are absent on this first call, the fetch is in the background,
 	// and arrive on the next one.
 	if len(db.Models()) != 0 {
 		t.Errorf("Models() = %v with no cache, want none until the fetch lands", db.Models())
@@ -141,7 +141,7 @@ func TestLoad_StaleCacheIsUsedImmediatelyThenRefreshedInBackground(t *testing.T)
 	})
 
 	db := Load()
-	// The stale data is returned immediately — Load must not block on the network.
+	// The stale data is returned immediately, Load must not block on the network.
 	if _, ok := db.ModelPrice("stale/model"); !ok {
 		t.Error("stale cache was discarded instead of used while the refresh runs")
 	}
@@ -174,7 +174,7 @@ func TestLoad_CorruptCacheIsReplacedNotFatal(t *testing.T) {
 	drainBackgroundFetch(t, "good/model")
 }
 
-// Refresh is `hyctl pricing refresh` — synchronous, and its count is printed to
+// Refresh is `hyctl pricing refresh`, synchronous, and its count is printed to
 // the user, so it must be the number actually written.
 func TestRefresh_ReportsWhatItWroteAndSurfacesFailures(t *testing.T) {
 	testutil.NewSandbox(t)
@@ -205,7 +205,7 @@ func TestRefresh_ReportsWhatItWroteAndSurfacesFailures(t *testing.T) {
 		t.Errorf("cache Source = %q, want openrouter", c.Source)
 	}
 	if time.Since(c.FetchedAt) > time.Minute {
-		t.Errorf("FetchedAt = %v, not stamped at fetch time — the cache would read "+
+		t.Errorf("FetchedAt = %v, not stamped at fetch time, the cache would read "+
 			"as stale immediately", c.FetchedAt)
 	}
 }
@@ -234,7 +234,7 @@ func TestRefresh_ServerErrorIsReportedNotSwallowed(t *testing.T) {
 	}
 }
 
-// A fetch that succeeds but cannot be persisted must still return the data —
+// A fetch that succeeds but cannot be persisted must still return the data,
 // pricing is more useful than caching it.
 func TestFetchAndSave_UnwritableCacheStillReturnsThePrices(t *testing.T) {
 	testutil.NewSandbox(t)
@@ -262,7 +262,7 @@ func TestFetchAndSave_UnwritableCacheStillReturnsThePrices(t *testing.T) {
 }
 
 // ModelPrice and TierPrice are the lookup surface `hyctl pricing list` renders.
-// A miss must be reported as a miss, not as a zero price — zero is a real rate
+// A miss must be reported as a miss, not as a zero price, zero is a real rate
 // for local models.
 func TestModelPriceAndTierPrice_ReportMissesAsMisses(t *testing.T) {
 	db := &DB{
@@ -301,7 +301,7 @@ func TestWriteCache_LeavesNoTempFile(t *testing.T) {
 		t.Error("the .tmp file survived a successful write")
 	}
 
-	// Overwriting an existing cache must work too — this is the every-refresh path.
+	// Overwriting an existing cache must work too, this is the every-refresh path.
 	c.Source = "second"
 	if err := writeCache(c); err != nil {
 		t.Fatal(err)
@@ -326,7 +326,7 @@ func TestReadCache_MissingFileIsNotExistNotCorruption(t *testing.T) {
 		t.Fatal("readCache succeeded with no cache file")
 	}
 	if !os.IsNotExist(err) {
-		t.Errorf("err = %v, want an os.ErrNotExist — Load distinguishes "+
+		t.Errorf("err = %v, want an os.ErrNotExist, Load distinguishes "+
 			"\"never fetched\" from \"corrupt\"", err)
 	}
 }
@@ -350,7 +350,7 @@ func TestLoadFallbackTiers_OnDiskOverrideWinsAndCorruptIsAnError(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got := tiers[4].InputPerMillion; got != 42 {
-		t.Errorf("tier 4 input = %v, want the on-disk override's 42 — an operator's "+
+		t.Errorf("tier 4 input = %v, want the on-disk override's 42, an operator's "+
 			"retuned pricing.yaml was ignored", got)
 	}
 
@@ -358,7 +358,7 @@ func TestLoadFallbackTiers_OnDiskOverrideWinsAndCorruptIsAnError(t *testing.T) {
 		t.Fatal(err)
 	}
 	if tiers, err := loadFallbackTiers(); err == nil {
-		t.Errorf("loadFallbackTiers() = %v with unparsable YAML, want an error — "+
+		t.Errorf("loadFallbackTiers() = %v with unparsable YAML, want an error, "+
 			"an empty table silently prices everything at $0.00", tiers)
 	}
 }

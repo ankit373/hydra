@@ -11,7 +11,7 @@ import (
 
 // The bug: runInstallCmd ran `sh -lc`, and stock Windows has no sh, so the
 // entire guided-install path died with an opaque exec error. Whatever shell is
-// chosen for this OS must actually exist on it — a test that only checked the
+// chosen for this OS must actually exist on it, a test that only checked the
 // argv shape would have passed on the broken version too.
 func TestShellFor_ShellExistsOnThisOS(t *testing.T) {
 	argv := shellFor("echo hi")
@@ -19,7 +19,7 @@ func TestShellFor_ShellExistsOnThisOS(t *testing.T) {
 		t.Fatalf("shellFor returned %v, want a shell plus at least one flag", argv)
 	}
 	if _, err := exec.LookPath(argv[0]); err != nil {
-		t.Errorf("shellFor picked %q on %s, but it is not on PATH: %v — this is exactly the "+
+		t.Errorf("shellFor picked %q on %s, but it is not on PATH: %v, this is exactly the "+
 			"`sh -lc` failure (#259), just with a different shell", argv[0], runtime.GOOS, err)
 	}
 	if argv[len(argv)-1] != "echo hi" {
@@ -41,7 +41,7 @@ func TestShellFor_ActuallyRunsACommand(t *testing.T) {
 	}
 }
 
-// The install command and the shell that runs it must agree, for every OS —
+// The install command and the shell that runs it must agree, for every OS,
 // checked from every OS, which is the point of taking goos as a parameter.
 // The original bug only manifested on Windows, so a test that could exercise
 // only the running OS would have passed everywhere except the one machine
@@ -54,7 +54,7 @@ func TestInstallCmdAndShellAgree_ForEveryOS(t *testing.T) {
 		bannedInfx string // a fragment that must NOT appear in the command
 	}{
 		// ollama.com/download/windows documents `irm … | iex` and ships no
-		// winget package, so the command is PowerShell by necessity — and it
+		// winget package, so the command is PowerShell by necessity, and it
 		// must therefore be run by PowerShell, not cmd.exe or sh.
 		{"windows", "powershell", "iex", "| sh"},
 		{"darwin", "sh", "brew", "iex"},
@@ -70,19 +70,19 @@ func TestInstallCmdAndShellAgree_ForEveryOS(t *testing.T) {
 				t.Errorf("%s install command = %q, want it to contain %q", tc.goos, cmd, tc.wantInCmd)
 			}
 			if strings.Contains(cmd, tc.bannedInfx) {
-				t.Errorf("%s install command = %q contains %q — wrong platform's syntax",
+				t.Errorf("%s install command = %q contains %q, wrong platform's syntax",
 					tc.goos, cmd, tc.bannedInfx)
 			}
 			shell := shellForOS(tc.goos, cmd)[0]
 			if !strings.Contains(strings.ToLower(shell), tc.wantShell) {
-				t.Errorf("%s: command %q would be handed to %q, want a %s shell — "+
+				t.Errorf("%s: command %q would be handed to %q, want a %s shell, "+
 					"this is the #259 mismatch", tc.goos, cmd, shell, tc.wantShell)
 			}
 		})
 	}
 }
 
-// The command must always be the final argument, whatever shell was chosen —
+// The command must always be the final argument, whatever shell was chosen,
 // otherwise it is passed as a flag and silently not executed.
 func TestShellForOS_CommandIsTheLastArgument(t *testing.T) {
 	for _, goos := range []string{"windows", "darwin", "linux", "freebsd"} {

@@ -13,7 +13,7 @@ import (
 
 // ckGroupHeads must nest models under their server, make the binary-on-PATH
 // pseudo-head the group header (never a sibling row), and mark embedding-only
-// models as never routed — the fixes for the server-down/model-up
+// models as never routed, the fixes for the server-down/model-up
 // contradiction (#248) and #532.
 func TestCkGroupHeads_ServerNesting(t *testing.T) {
 	groups := ckGroupHeads(testProbedHeads())
@@ -57,7 +57,7 @@ func TestCkGroupHeads_ServerNesting(t *testing.T) {
 }
 
 // With the server down (binary on PATH, no port heads) the group renders down
-// with its models unavailable — never a down server above up models.
+// with its models unavailable, never a down server above up models.
 func TestCkGroupHeads_ServerDown(t *testing.T) {
 	groups := ckGroupHeads([]provider.Head{
 		{ID: "claude", Name: "Claude Code", Provider: "anthropic", Source: "cli", AuthReady: true},
@@ -97,7 +97,7 @@ func TestViewModels_TreeRendering(t *testing.T) {
 	out := stripANSI(m.viewModels(120, 30))
 	for _, want := range []string{
 		"MODELS · by provider/server",
-		"embeddings only — never routed",
+		"embeddings only, never routed",
 		"● up · ○ down (children unavailable) · ◌ not routable",
 		"anthropic",
 		"Ollama",
@@ -108,7 +108,7 @@ func TestViewModels_TreeRendering(t *testing.T) {
 	}
 }
 
-// Three same-prefix models must never truncate to identical rows — the
+// Three same-prefix models must never truncate to identical rows, the
 // distinguishing tail survives (the issue's own Gemini example).
 func TestViewModels_SmartTruncationInTree(t *testing.T) {
 	heads := []provider.Head{
@@ -254,9 +254,9 @@ func TestModels_ScorecardFromCalibration(t *testing.T) {
 	}
 	// ckScorecardFor consults the calibrator, so exercise the matcher directly.
 	if !ckSourceMatches("ollama/qwen2.5-coder:7b", "qwen2.5-coder:7b (Ollama)") {
-		// The tolerant match: the row id is contained in neither string — the
+		// The tolerant match: the row id is contained in neither string, the
 		// name contains the model but the source is the id.
-		t.Log("direct name/source mismatch — matched via id instead")
+		t.Log("direct name/source mismatch, matched via id instead")
 	}
 	if !ckSourceMatches(stats[0].Source, "ollama/qwen2.5-coder:7b") {
 		t.Error("an exact id match failed")

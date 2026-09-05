@@ -16,7 +16,7 @@ import (
 // publishing a public negative signal about a real project needs a
 // publisher-facing correction path before it ships, not as a later
 // afterthought. There's no backend to run a live dispute flow against, so
-// the honest, buildable version is a pre-filled issue against this repo —
+// the honest, buildable version is a pre-filled issue against this repo,
 // matches how the rest of this repo's process already works (issue-first).
 func disputeIssueURL(serverName string) string {
 	v := url.Values{}
@@ -26,7 +26,7 @@ func disputeIssueURL(serverName string) string {
 }
 
 // DirectoryEntry is one server's public-facing record for the Phase 3
-// static export — every field a reader needs to see the score with its
+// static export, every field a reader needs to see the score with its
 // reasoning, never a bare number with nothing behind it.
 type DirectoryEntry struct {
 	Name           string         `json:"name"`
@@ -39,7 +39,7 @@ type DirectoryEntry struct {
 
 // Directory gathers every server this machine has ever audited (via
 // `hyctl mcp registry audit`) into the display shape both the static export
-// and `hyctl mcp registry list` use — one source of truth for "what has
+// and `hyctl mcp registry list` use, one source of truth for "what has
 // this machine scored," sorted by name. Deliberately bounded to what's
 // actually been scored, not an attempt to cover the full synced registry:
 // the design doc's own non-goals rule out a fifth undifferentiated
@@ -83,7 +83,7 @@ func Directory() ([]DirectoryEntry, error) {
 // frontend against it) and index.html (a plain, dependency-free page).
 // Returns the number of entries written.
 //
-// This produces static files only — it does not publish, host, or deploy
+// This produces static files only, it does not publish, host, or deploy
 // anything anywhere. Where these files end up (if anywhere) is a decision
 // for whoever runs this, not something this function makes on its own.
 func ExportDirectory(outDir string) (int, error) {
@@ -109,8 +109,8 @@ func ExportDirectory(outDir string) (int, error) {
 		return 0, err
 	}
 	defer f.Close()
-	// html/template, not string concatenation: every field rendered below —
-	// server name, signal detail — originates from the official registry,
+	// html/template, not string concatenation: every field rendered below,
+	// server name, signal detail, originates from the official registry,
 	// which by its own moderation policy applies "minimal-to-no" review
 	// (§2 of the design doc). A malicious entry's name or a signal's Detail
 	// string is untrusted input as far as this generator is concerned, and
@@ -142,8 +142,8 @@ th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #ddd; verti
 </head>
 <body>
 <h1>Hydra MCP Trust Directory</h1>
-<p>Locally exported — servers this machine has audited via <code>hyctl mcp registry audit</code>, not the full official registry.</p>
-<p class="disclaimer"><b>This is a probabilistic signal from automated checks, not a guarantee of safety and not a claim about a publisher's intent.</b> Every signal behind a score is shown below it — nothing here is a bare number with no reasoning. Believe a score is wrong, stale, or unfair? Use the "dispute" link on that row.</p>
+<p>Locally exported, servers this machine has audited via <code>hyctl mcp registry audit</code>, not the full official registry.</p>
+<p class="disclaimer"><b>This is a probabilistic signal from automated checks, not a guarantee of safety and not a claim about a publisher's intent.</b> Every signal behind a score is shown below it, nothing here is a bare number with no reasoning. Believe a score is wrong, stale, or unfair? Use the "dispute" link on that row.</p>
 <table>
 <thead><tr><th>Server</th><th>State</th><th>Score</th><th>Signals</th><th>Last checked</th></tr></thead>
 <tbody>

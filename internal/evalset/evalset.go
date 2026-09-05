@@ -5,7 +5,7 @@
 // A dispatch an oracle checked is a *labelled* example: a task, a candidate,
 // and ground truth about whether it worked. That is the rarest and most
 // valuable thing Hydra produces, and it is the only class of trace data worth
-// keeping verbatim and forever — everything else is better as a statistic.
+// keeping verbatim and forever, everything else is better as a statistic.
 //
 // It lives outside the trace store on purpose. Traces expire; this must not,
 // or the router loses the only corpus it could ever be improved against.
@@ -55,8 +55,8 @@ type Example struct {
 	Config string `json:"config,omitempty"`
 
 	// PII marks a candidate that tripped policy detection. The example is still
-	// kept — it is ground truth, and dropping it would bias the corpus toward
-	// whatever contains no PII — but any export path must refuse it.
+	// kept, it is ground truth, and dropping it would bias the corpus toward
+	// whatever contains no PII, but any export path must refuse it.
 	PII bool `json:"pii,omitempty"`
 }
 
@@ -74,7 +74,7 @@ func Hash(s string) string {
 
 // Add appends an example unless an identical (task, candidate) pair is already
 // present, and reports whether it wrote. Re-running the same verification is
-// normal and must not inflate the corpus — a duplicated example would weight
+// normal and must not inflate the corpus, a duplicated example would weight
 // that case twice in anything computed from the set.
 func Add(path string, e Example) (bool, error) {
 	if strings.TrimSpace(e.Candidate) == "" {
@@ -117,7 +117,7 @@ func Add(path string, e Example) (bool, error) {
 	return err == nil, err
 }
 
-// Load reads every example. A missing file is not an error — nothing has been
+// Load reads every example. A missing file is not an error, nothing has been
 // verified yet.
 func Load(path string) ([]Example, error) {
 	f, err := os.Open(path)

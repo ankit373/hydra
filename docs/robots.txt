@@ -1,7 +1,7 @@
 User-agent: *
 Allow: /
 
-# AI search bots — explicitly allowed so these platforms can cite Hydra
+# AI search bots: explicitly allowed so these platforms can cite Hydra
 User-agent: GPTBot
 Allow: /
 
@@ -23,7 +23,7 @@ Allow: /
 User-agent: Bingbot
 Allow: /
 
-# CCBot (Common Crawl bulk training scraper) — blocked
+# CCBot (Common Crawl bulk training scraper): blocked
 User-agent: CCBot
 Disallow: /
 

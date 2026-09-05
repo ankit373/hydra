@@ -97,7 +97,7 @@ type HistoricalStats struct {
 	Samples   int
 	Days      int
 	AvgFreeGB float64
-	P75FreeGB float64 // 75th percentile — "typically this much is free"
+	P75FreeGB float64 // 75th percentile, "typically this much is free"
 	MinFreeGB float64
 	MaxFreeGB float64
 	Reliable  bool // true when we have enough samples to trust the average

@@ -3,8 +3,8 @@
 // Wails writes frontend/wailsjs/go/api/API.js at build time. That directory is a
 // build artefact and is gitignored, so importing it directly would break both
 // `npm run typecheck` on a clean checkout and any future browser-based test
-// harness. Reading the methods off `window.go` at call time — the same object
-// the generated module wraps — keeps the source tree self-contained.
+// harness. Reading the methods off `window.go` at call time, the same object
+// the generated module wraps, keeps the source tree self-contained.
 
 import type {
   ChatReply,
@@ -34,7 +34,7 @@ interface WailsGo {
       GetFleet(): Promise<Fleet>
       GetSession(runID: string): Promise<Session>
       GetEdits(runID: string): Promise<Edit[]>
-      Chat(prompt: string, enumKey: string, runID: string, tier: string): Promise<ChatReply>
+      Chat(prompt: string, enumKey: string, runID: string, tier: string, head: string): Promise<ChatReply>
       ApproveEdit(file: string): Promise<ReviewOutcome>
       RejectEdit(file: string): Promise<ReviewOutcome>
       GetMCPServers(): Promise<MCPPanel>
@@ -66,7 +66,7 @@ declare global {
 function backend() {
   const go = window.go
   if (!go?.api?.API) {
-    throw new Error('Wails backend not available — run `wails dev` rather than `vite` alone')
+    throw new Error('Wails backend not available, run `wails dev` rather than `vite` alone')
   }
   return go.api.API
 }
@@ -82,7 +82,8 @@ export const Chat = (
   enumKey: string,
   runID: string,
   tier: string,
-): Promise<ChatReply> => backend().Chat(prompt, enumKey, runID, tier)
+  head: string,
+): Promise<ChatReply> => backend().Chat(prompt, enumKey, runID, tier, head)
 
 export const ApproveEdit = (file: string): Promise<ReviewOutcome> => backend().ApproveEdit(file)
 

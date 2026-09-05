@@ -66,7 +66,7 @@ func (a *API) AnswerQuestion(taskID, answer string) (*ChatReply, error) {
 
 	// Everything that can be decided without a router is decided first. Built
 	// the other way round, a double-clicked question on a machine with no
-	// config reported "no hydra config" — a setup error for something that is
+	// config reported "no hydra config", a setup error for something that is
 	// not a setup problem.
 	q, lErr := pending.Load(taskID)
 	switch {
@@ -115,8 +115,8 @@ func (a *API) AnswerQuestion(taskID, answer string) (*ChatReply, error) {
 
 // DeclineQuestion refuses a parked task. Nothing runs.
 //
-// Free text cannot carry a refusal reliably — "no, don't" folded into a prompt
-// still dispatches and leaves it to the head to notice — so declining is its
+// Free text cannot carry a refusal reliably, "no, don't" folded into a prompt
+// still dispatches and leaves it to the head to notice, so declining is its
 // own path, and dispatch.Decline needs no config to take it.
 func (a *API) DeclineQuestion(taskID, reason string) error {
 	return dispatch.Decline(taskID, reason)

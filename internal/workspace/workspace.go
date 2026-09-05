@@ -27,7 +27,7 @@ type Workspace struct {
 	DeniedGlobs  []string
 }
 
-// Resolved is the output of Resolve — full context for a validated path.
+// Resolved is the output of Resolve, full context for a validated path.
 type Resolved struct {
 	Workspace string
 	Root      string
@@ -50,7 +50,7 @@ type workspaceEntry struct {
 
 // SkippedWorkspace is an entry Load could not use. It is kept so callers can
 // distinguish "no workspaces are configured" from "your configuration was read
-// and then ignored" — the second is a problem the user needs told about.
+// and then ignored", the second is a problem the user needs told about.
 type SkippedWorkspace struct {
 	Name   string
 	Root   string
@@ -72,7 +72,7 @@ func (r *Registry) Skipped() []SkippedWorkspace {
 	return r.skipped
 }
 
-// Load reads registry/workspace.yaml — an on-disk copy under hydraHome if one
+// Load reads registry/workspace.yaml, an on-disk copy under hydraHome if one
 // exists, otherwise the copy embedded in the binary (#238).
 func Load(hydraHome string) (*Registry, error) {
 	raw, err := registry.Read(hydraHome, "workspace.yaml")
@@ -93,7 +93,7 @@ func Load(hydraHome string) (*Registry, error) {
 			//
 			// A root that is not absolute *for this platform* must not make the
 			// entire scope layer unusable. The embedded registry ships POSIX
-			// roots, and filepath.IsAbs("/Users/x") is false on Windows — so
+			// roots, and filepath.IsAbs("/Users/x") is false on Windows, so
 			// erroring here made workspace.Load fail outright there, and every
 			// hyctl edit/parallel/review died before it looked at a path (#297).
 			//
@@ -127,7 +127,7 @@ func Load(hydraHome string) (*Registry, error) {
 		}
 	}
 
-	// Nothing was configured at all — fall back to the repository the user is
+	// Nothing was configured at all, fall back to the repository the user is
 	// standing in, so a fresh install works without hand-writing a registry
 	// (#297).
 	//
@@ -173,7 +173,7 @@ var defaultDeniedGlobs = []string{
 // "/" or the user's home, and defaulting write scope to either is not a
 // tradeoff to make on a user's behalf. A git repository is a bounded,
 // intentional project, and it is the same boundary every other developer tool
-// assumes. Outside a repository there is no default at all — Hydra says it has
+// assumes. Outside a repository there is no default at all, Hydra says it has
 // no workspace and the user configures one, which is the honest outcome.
 func defaultWorkspace() (Workspace, bool) {
 	cwd, err := os.Getwd()
@@ -208,7 +208,7 @@ func (r *Registry) Check(path string) (string, error) {
 	return ws.check(path)
 }
 
-// CheckRooted validates path against a synthesized workspace rooted at root —
+// CheckRooted validates path against a synthesized workspace rooted at root,
 // the default workspace's glob rules, just not at the CWD repo. It exists for
 // Hydra-managed git worktrees, which live outside every registered root.
 func CheckRooted(root, path string) (string, error) {
@@ -229,7 +229,7 @@ func CheckRooted(root, path string) (string, error) {
 // contained under its root.
 func (ws Workspace) check(path string) (string, error) {
 	// filepath.Rel cleans both sides, so rel is already free of "." and ".."
-	// segments — and containment is established, so it cannot start with "..".
+	// segments, and containment is established, so it cannot start with "..".
 	// ToSlash because the glob patterns are written with forward slashes
 	// and matchGlob splits on "/"; without it no pattern matches on Windows.
 	rel, err := filepath.Rel(ws.Root, path)
@@ -290,7 +290,7 @@ func (r *Registry) ValidatorFor(ext string) string {
 }
 
 // HasAnyValidator reports whether at least one extension has a real
-// (non-null) validator command — "output validation runs for at least one
+// (non-null) validator command, "output validation runs for at least one
 // file type" as distinct from every entry having been explicitly nulled out
 // (as ts/tsx are by default, relying on a different built-in path instead).
 func (r *Registry) HasAnyValidator() bool {
@@ -306,7 +306,7 @@ func (r *Registry) HasAnyValidator() bool {
 // Returns empty string if not inside a git repo.
 // Termination is by fixed point, not by comparing against "/". filepath.Dir
 // returns its argument unchanged once it reaches the filesystem root, and on
-// Windows that root is "C:\", never "/" — so the old `for dir != "/"` condition
+// Windows that root is "C:\", never "/", so the old `for dir != "/"` condition
 // never became false there and the walk spun forever.
 func GitRoot(path string) string {
 	dir := path
@@ -355,7 +355,7 @@ func (r *Registry) find(path string) (Workspace, error) {
 //
 // This used to be `strings.HasPrefix(path, root+"/")`, which was wrong three
 // ways. It let "/ws/../etc/passwd" through, because the literal prefix matches
-// even though the path resolves outside the root — a workspace with a "**"
+// even though the path resolves outside the root, a workspace with a "**"
 // allowed_glob would then have permitted writing anywhere on the filesystem.
 // It hardcoded "/" as the separator, so on Windows no path ever matched any
 // workspace and every edit was rejected. And a sibling directory named

@@ -2,7 +2,7 @@
 
 package tui
 
-// view_chat.go — view 0: the chat console (keys, the bordered input bar with
+// view_chat.go, view 0: the chat console (keys, the bordered input bar with
 // its mode chip), its sidebar, and the code panel. Kept thin: execution lives
 // in chat_exec.go/chat_task.go, the strip and split panes in threads.go, modes
 // in modes.go, the override in override.go.
@@ -89,12 +89,12 @@ func (m Cockpit) confirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	w := *t.confirm
 	switch msg.Runes[0] {
 	case 'y', 'Y':
-		t.log = append(t.log, ckDimS.Render("  confirmed — writing"))
+		t.log = append(t.log, ckDimS.Render("  confirmed, writing"))
 		return m.resumeTask(t, w)
 	case 'n', 'N':
-		note := "stopped before writing — nothing changed"
+		note := "stopped before writing, nothing changed"
 		if w.phase == ckPhaseFix {
-			note = "fix declined — the file keeps its last write"
+			note = "fix declined, the file keeps its last write"
 		}
 		return m.stopWait(t, w, note)
 	}
@@ -107,13 +107,13 @@ func (m Cockpit) planKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	t := m.th()
 	switch msg.Type {
 	case tea.KeyEnter:
-		t.log = append(t.log, ckDimS.Render("  plan approved — running"))
+		t.log = append(t.log, ckDimS.Render("  plan approved, running"))
 		return m.resumeTask(t, *t.planWait)
 	case tea.KeyRunes:
 		if len(msg.Runes) == 1 {
 			switch msg.Runes[0] {
 			case 'y', 'Y', 'a', 'A':
-				t.log = append(t.log, ckDimS.Render("  plan approved — running"))
+				t.log = append(t.log, ckDimS.Render("  plan approved, running"))
 				return m.resumeTask(t, *t.planWait)
 			}
 		}
@@ -126,7 +126,7 @@ func (m Cockpit) submit() (tea.Model, tea.Cmd) {
 	t := strings.TrimSpace(th.input)
 	th.input = ""
 	th.scroll = 0 // sending your own message returns the view to live
-	// Commands are matched case-insensitively (#465) — free-text task input
+	// Commands are matched case-insensitively (#465), free-text task input
 	// below is not, since a real task's casing is meaningful.
 	lt := strings.ToLower(t)
 	switch {
@@ -157,7 +157,7 @@ func (m Cockpit) submit() (tea.Model, tea.Cmd) {
 	}
 	if th.exec != nil || th.queued != nil {
 		th.input = t // nothing typed is lost
-		m.flash = fmt.Sprintf("thread %d is busy — ctrl+t opens a new thread · esc cancels", th.id)
+		m.flash = fmt.Sprintf("thread %d is busy, ctrl+t opens a new thread · esc cancels", th.id)
 		return m, nil
 	}
 	return m.startTask(t)
@@ -182,7 +182,7 @@ func (m Cockpit) pickHead(wantTier int, localOnly bool) int {
 				return i
 			}
 		}
-		// Nothing is routable — a machine with only the ollama binary and no
+		// Nothing is routable, a machine with only the ollama binary and no
 		// server behind it must not get a route naming an unusable model (#248).
 		return -1
 	}
@@ -215,7 +215,7 @@ func (m Cockpit) chatCode(bodyH int) string {
 	default:
 		chatW, split := ckChatSplit(mainW)
 		if !split {
-			// too tight for the code panel — the whole main pane is chat.
+			// too tight for the code panel, the whole main pane is chat.
 			main = m.chatMain(m.th(), mainW, bodyH)
 		} else {
 			main = lipgloss.JoinHorizontal(lipgloss.Top,
@@ -270,7 +270,7 @@ func (m Cockpit) chatLogGeom() (w, logH int) {
 }
 
 // chatScrollBy moves the active thread's scrollback: 0 in scroll means live
-// tail, L+1 means anchored at rendered line L — so an anchored reader is never
+// tail, L+1 means anchored at rendered line L, so an anchored reader is never
 // yanked when new output appends below.
 func (m Cockpit) chatScrollBy(delta int) Cockpit {
 	t := m.th()
@@ -281,7 +281,7 @@ func (m Cockpit) chatScrollBy(delta int) Cockpit {
 	}
 	top := len(ckLogLines(t.log, w, entryCap)) - logH
 	if top <= 0 {
-		t.scroll = 0 // everything fits — only live makes sense
+		t.scroll = 0 // everything fits, only live makes sense
 		return m
 	}
 	cur := top
@@ -290,7 +290,7 @@ func (m Cockpit) chatScrollBy(delta int) Cockpit {
 	}
 	cur += delta
 	if cur >= top {
-		t.scroll = 0 // reached the tail — back to live
+		t.scroll = 0 // reached the tail, back to live
 		return m
 	}
 	if cur < 0 {
@@ -314,8 +314,8 @@ func (m Cockpit) sidebar(h int) string {
 	}
 	foot := []string{"", ckLabelS.Render("MODE"), " " + ckCyanS.Render(m.mode)}
 
-	// lipgloss.Height only pads shorter content — it never truncates taller
-	// content — so an uncapped list would dictate the whole view's height once
+	// lipgloss.Height only pads shorter content, it never truncates taller
+	// content, so an uncapped list would dictate the whole view's height once
 	// JoinHorizontal pads every other column to match it (#446). Cap it and
 	// say how many were left out.
 	avail := h - len(head) - len(foot)
@@ -324,7 +324,7 @@ func (m Cockpit) sidebar(h int) string {
 	var compact string
 	switch {
 	case avail <= 0:
-		// No room for even one row — the count must not silently contradict
+		// No room for even one row, the count must not silently contradict
 		// the rest of the UI (#506).
 		if len(m.heads) > 0 {
 			compact = fmt.Sprintf(" %d model%s (not enough room to list)", len(m.heads), plural(len(m.heads)))
@@ -368,7 +368,7 @@ func (m Cockpit) sidebar(h int) string {
 
 // chatMain renders one thread's log above the input bar.
 func (m Cockpit) chatMain(t *ckThread, w, h int) string {
-	// The pane is the log box plus the input bar, totalling exactly h lines —
+	// The pane is the log box plus the input bar, totalling exactly h lines,
 	// anything more and Bubble Tea crops the overflow off the TOP, deleting
 	// the header on every launch (#445).
 	input := m.inputBar(w)
@@ -387,14 +387,14 @@ func (m Cockpit) chatMain(t *ckThread, w, h int) string {
 	return lipgloss.JoinVertical(lipgloss.Left, rows...)
 }
 
-// ckInputWrapCap bounds how many wrapped lines of a long input stay visible —
+// ckInputWrapCap bounds how many wrapped lines of a long input stay visible,
 // the newest ones, where the cursor is. The rest is typed, just not shown.
 const ckInputWrapCap = 3
 
-// inputBar renders the bordered input with the mode chip and — once threads
-// exist to tell apart — its target thread: idle placeholder, wrapped typing,
+// inputBar renders the bordered input with the mode chip and, once threads
+// exist to tell apart, its target thread: idle placeholder, wrapped typing,
 // the running spinner, or the pending question. Heights too small for a border
-// degrade to one bare line — the input never disappears.
+// degrade to one bare line, the input never disappears.
 func (m Cockpit) inputBar(w int) string {
 	t := m.th()
 	chip := ckChipS.Render(ckModeByName(m.mode).chip + " ▾")
@@ -412,11 +412,11 @@ func (m Cockpit) inputBar(w int) string {
 	case t.confirm != nil:
 		body = ckMidS.Render(t.confirm.question)
 	case t.planWait != nil:
-		body = ckCyanS.Render("plan ready — enter/y runs it · esc discards")
+		body = ckCyanS.Render("plan ready, enter/y runs it · esc discards")
 	case t.queued != nil:
 		body = ckDimS.Render("◱ " + t.queued.reason + " · esc discards")
 	case t.input == "":
-		body = ckFaintS.Render("what do you need done? — enter runs it")
+		body = ckFaintS.Render("what do you need done?, enter runs it")
 	default:
 		body = ckInkS.Render(t.input) + ckAquaS.Render("▏")
 	}
@@ -449,7 +449,7 @@ func ckChatSplit(mainW int) (chatW int, split bool) {
 	return chatW, mainW-chatW >= 22
 }
 
-// ckTailTruncate keeps the END of a styled line within n cells — the input's
+// ckTailTruncate keeps the END of a styled line within n cells, the input's
 // newest characters, unlike truncate which keeps the start.
 func ckTailTruncate(s string, n int) string {
 	if lipgloss.Width(s) <= n {
@@ -479,8 +479,8 @@ func (m Cockpit) codePanel(t *ckThread, w, h int) string {
 	rows := []string{ckLabelS.Render(title) + ckDimS.Render(" · "+lang)}
 
 	if len(t.codeLines) == 0 {
-		rows = append(rows, "", ckFaintS.Render("no edits yet —"),
-			ckFaintS.Render("a task that changes a"), ckFaintS.Render("file streams it here."))
+		rows = append(rows, "", ckFaintS.Render("no edits yet."),
+			ckFaintS.Render("A task that changes a"), ckFaintS.Render("file streams it here."))
 	} else {
 		shown := min(t.codeShown, len(t.codeLines))
 		// Width() budgets padding too, so a line may only use inner-1 cells;
@@ -533,7 +533,7 @@ func ckCodeLine(line string, isDiff bool) string {
 
 // ── task classification ───────────────────────────────────────────────────────
 
-// classifyTask maps a prompt to a routing enum and its tier — the cockpit's
+// classifyTask maps a prompt to a routing enum and its tier, the cockpit's
 // route preview; the dispatch layer re-derives its own decision at run time.
 func classifyTask(task string) (string, int) {
 	t := strings.ToLower(task)

@@ -37,7 +37,7 @@ func TestDefaultOverlayPath_PrefersHydraHomeOverHome(t *testing.T) {
 
 // ScoreOllama maps a local model name to a capability score. Local model names
 // carry a tag ("qwen3:8b"), and an unknown model must still get a usable score
-// rather than 0 — a 0 would sort it below everything and never be routed to.
+// rather than 0, a 0 would sort it below everything and never be routed to.
 func TestScoreOllama_AlwaysReturnsAUsableScore(t *testing.T) {
 	db, err := Load("")
 	if err != nil {
@@ -53,7 +53,7 @@ func TestScoreOllama_AlwaysReturnsAUsableScore(t *testing.T) {
 				"the model could never be routed to", name, got)
 		}
 		if got > 100 {
-			t.Errorf("ScoreOllama(%q) = %d, above the 0–100 scale", name, got)
+			t.Errorf("ScoreOllama(%q) = %d, above the 0-100 scale", name, got)
 		}
 	}
 }
@@ -78,7 +78,7 @@ func TestName_FallsBackToTheID(t *testing.T) {
 }
 
 // The overlay is how `hyctl models add` works without a rebuild. A missing file
-// is an empty overlay, not an error — that is the state before the first add.
+// is an empty overlay, not an error, that is the state before the first add.
 func TestLoadOverlay_MissingFileIsEmpty(t *testing.T) {
 	entries, err := LoadOverlay(filepath.Join(t.TempDir(), "absent.json"))
 	if err != nil {
@@ -95,7 +95,7 @@ func TestLoadOverlay_MalformedJSONIsAnError(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := LoadOverlay(path); err == nil {
-		t.Error("a malformed overlay loaded without error — the user's added models " +
+		t.Error("a malformed overlay loaded without error, the user's added models " +
 			"would silently vanish")
 	}
 }
@@ -209,14 +209,14 @@ func TestLoad_OverlayWinsOverEmbedded(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got := db.Score("claude"); got != 42 {
-		t.Errorf("Score(claude) = %d, want the overlay's 42 — an operator's retune "+
+		t.Errorf("Score(claude) = %d, want the overlay's 42, an operator's retune "+
 			"must beat the compiled-in default", got)
 	}
 	if got := db.Name("claude"); got != "My Claude" {
 		t.Errorf("Name(claude) = %q, want the overlay's label", got)
 	}
 	if got := db.Score("brand-new"); got != 77 {
-		t.Errorf("Score(brand-new) = %d, want 77 — a model added at runtime must be "+
+		t.Errorf("Score(brand-new) = %d, want 77, a model added at runtime must be "+
 			"usable without a rebuild", got)
 	}
 }
@@ -233,13 +233,13 @@ func TestLoad_MalformedOverlayIsAnError(t *testing.T) {
 	}
 }
 
-// Load caches its result per overlay path, keyed on mtime+size — but an error
+// Load caches its result per overlay path, keyed on mtime+size, but an error
 // must never be cached past a fix. mtime alone would usually change on a
 // rewrite anyway, which would mask this bug by accident (a fresh mtime is a
-// fresh cache key regardless of whether errors are cached) — os.Chtimes
+// fresh cache key regardless of whether errors are cached), os.Chtimes
 // forces the second write to share the first write's exact mtime, and the
 // replacement is deliberately the same byte length too ("{broken" and
-// "[]     " are both 7 bytes — trailing whitespace after a JSON value is
+// "[]     " are both 7 bytes, trailing whitespace after a JSON value is
 // valid), so the fingerprint is provably identical across both calls and the
 // only thing that can make the second Load succeed is NOT caching the error.
 func TestLoad_ErrorIsNotCachedPastAFix(t *testing.T) {
@@ -249,7 +249,7 @@ func TestLoad_ErrorIsNotCachedPastAFix(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := Load(path); err == nil {
-		t.Fatal("malformed overlay loaded without error — the fixture is wrong")
+		t.Fatal("malformed overlay loaded without error, the fixture is wrong")
 	}
 	info, err := os.Stat(path)
 	if err != nil {
@@ -273,10 +273,10 @@ func TestLoad_ErrorIsNotCachedPastAFix(t *testing.T) {
 
 	db, err := Load(path)
 	if err != nil {
-		t.Fatalf("Load still errors after the overlay was fixed (same mtime+size as the broken write): %v — a stale cached error is masking the fix", err)
+		t.Fatalf("Load still errors after the overlay was fixed (same mtime+size as the broken write): %v, a stale cached error is masking the fix", err)
 	}
 	if db == nil {
-		t.Fatal("Load returned a nil DB after the overlay was fixed — a stale cached error entry is masking the fix")
+		t.Fatal("Load returned a nil DB after the overlay was fixed, a stale cached error entry is masking the fix")
 	}
 }
 

@@ -29,7 +29,7 @@ const (
 // Posture is the answer plus its reasoning.
 type Posture struct {
 	Verdict Verdict `json:"verdict"`
-	// Trigger is the single most severe condition that fired — the reason.
+	// Trigger is the single most severe condition that fired, the reason.
 	Trigger string `json:"trigger"`
 	// Because lists every condition that fired, most severe first.
 	Because []string `json:"because,omitempty"`
@@ -51,7 +51,7 @@ func AssessPosture(r *Report, chain ledger.ChainResult) Posture {
 	// ── conditions that demand action today ──────────────────────────────
 	switch {
 	case chain.Truncated:
-		critical = append(critical, "the audit ledger was truncated — records were deleted from the end")
+		critical = append(critical, "the audit ledger was truncated, records were deleted from the end")
 	case !chain.Intact && chain.Chained > 0:
 		critical = append(critical, fmt.Sprintf("the audit ledger was modified after recording (index %d)", chain.BrokenAt))
 	}
@@ -60,7 +60,7 @@ func AssessPosture(r *Report, chain ledger.ChainResult) Posture {
 	}
 	for _, in := range r.Incidents {
 		if in.Severity == SeverityCritical {
-			critical = append(critical, "critical incident — "+in.Narrative)
+			critical = append(critical, "critical incident, "+in.Narrative)
 		}
 	}
 	if n := r.Register.Breached; n > 0 {
@@ -70,7 +70,7 @@ func AssessPosture(r *Report, chain ledger.ChainResult) Posture {
 	// ── conditions worth attention, not alarm ────────────────────────────
 	for _, in := range r.Incidents {
 		if in.Severity == SeverityHigh {
-			warning = append(warning, "high-severity incident — "+in.Narrative)
+			warning = append(warning, "high-severity incident, "+in.Narrative)
 		}
 	}
 	if n := InertControls(r.Controls); n > 0 {

@@ -51,7 +51,7 @@ const DefaultClip = 20
 // CounterfactualSample is one logged decision plus what the evaluated policy
 // would have done in the same context.
 type CounterfactualSample struct {
-	// Value is the observed outcome — cost in dollars, or 1/0 for success.
+	// Value is the observed outcome, cost in dollars, or 1/0 for success.
 	Value float64
 
 	// LoggedProb is π_behaviour(a|x): the probability the router actually
@@ -60,7 +60,7 @@ type CounterfactualSample struct {
 
 	// TargetProb is π_target(a|x): the probability the evaluated policy would
 	// have taken that same action. 0 means it would have done something else,
-	// so the row carries no information about the target policy — but it still
+	// so the row carries no information about the target policy, but it still
 	// counts toward the support diagnostics, which is the point.
 	TargetProb float64
 }
@@ -165,7 +165,7 @@ func Evaluate(samples []CounterfactualSample, opts Options) (Estimate, error) {
 	}
 	est.ESS = effectiveSampleSize(weights)
 	if est.ESS < minESS {
-		return est, fmt.Errorf("%w: effective sample size %.1f is below %.0f — %d rows overlap but the weights concentrate on too few",
+		return est, fmt.Errorf("%w: effective sample size %.1f is below %.0f, %d rows overlap but the weights concentrate on too few",
 			ErrInsufficientSupport, est.ESS, minESS, est.Supporting)
 	}
 

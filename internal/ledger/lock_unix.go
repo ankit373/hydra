@@ -11,7 +11,7 @@ import (
 )
 
 // lockExclusive blocks until it holds an exclusive flock on f, retrying on
-// EINTR — a flock interrupted by a signal must be retried, not treated as
+// EINTR: a flock interrupted by a signal must be retried, not treated as
 // lock failure.
 func lockExclusive(f *os.File) error {
 	fd := int(f.Fd())

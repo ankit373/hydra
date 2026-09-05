@@ -6,10 +6,10 @@
 # orchestrator.
 #
 # Each workspace declares:
-#   root          — absolute path the workspace covers
-#   allowed_globs — paths inside root that may be edited (relative to root)
-#   denied_globs  — paths inside root that must NEVER be edited (wins over allowed)
-#   git           — auto | true | false
+#   root         , absolute path the workspace covers
+#   allowed_globs, paths inside root that may be edited (relative to root)
+#   denied_globs , paths inside root that must NEVER be edited (wins over allowed)
+#   git          , auto | true | false
 #                   auto: scope.sh walks up from target file to find .git
 #                   true: workspace root itself is a git repo
 #                   false: no git, edit.sh falls back to .hydra-bak file backup
@@ -31,14 +31,14 @@ version: "1.0"
 # person's directory layout (#297).
 #
 # With no entries here, Hydra falls back to **the git repository you are
-# standing in** — allowed_globs "**", minus a denied set covering .git, .env,
+# standing in**, allowed_globs "**", minus a denied set covering .git, .env,
 # credentials, keys, node_modules and vendor. The fallback is deliberately the
 # git root and not the working directory: a bare cwd could be "/" or your home
 # directory, and defaulting write scope to either is not a decision to make on
 # a user's behalf. Outside a git repository there is no default, and Hydra will
 # say it has no workspace rather than guess.
 #
-# Define workspaces below to override that entirely — the fallback applies only
+# Define workspaces below to override that entirely, the fallback applies only
 # when this map yields no usable entry, so a configured registry is never
 # widened. Roots must be absolute for the platform Hydra is running on; an entry
 # that is not is skipped (and reported), never fatal.
@@ -52,7 +52,7 @@ version: "1.0"
 workspaces: {}
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Validators — per-extension safety check run after every edit.
+# Validators, per-extension safety check run after every edit.
 # If the validator exits non-zero, edit.sh auto-rolls back and escalates.
 # Set to null to skip validation for that extension.
 # Override with HYDRA_VALIDATE=off to disable globally.

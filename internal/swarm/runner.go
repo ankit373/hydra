@@ -27,7 +27,7 @@ var executorFor = executor.For
 
 // effectiveTimeout returns the per-head deadline to apply: the caller's explicit
 // Options.PerHeadTimeout when positive, otherwise defaultPerHeadTimeout. Swarm
-// never runs a head unbounded — a zero value means "use the default", not "no
+// never runs a head unbounded, a zero value means "use the default", not "no
 // limit".
 func effectiveTimeout(opts Options) time.Duration {
 	if opts.PerHeadTimeout > 0 {
@@ -37,7 +37,7 @@ func effectiveTimeout(opts Options) time.Duration {
 }
 
 // executeHead runs one head and returns a completed Attempt.
-// Never returns an error — all failures are captured in Attempt.Status/Err.
+// Never returns an error, all failures are captured in Attempt.Status/Err.
 func executeHead(ctx context.Context, h provider.Head, prompt string, opts Options) Attempt {
 	a := Attempt{
 		Head:      h,
@@ -45,7 +45,7 @@ func executeHead(ctx context.Context, h provider.Head, prompt string, opts Optio
 		StartedAt: time.Now(),
 	}
 
-	// Proceeds only on an explicit Allow — see the same gate in dispatch.go for
+	// Proceeds only on an explicit Allow, see the same gate in dispatch.go for
 	// why `== Deny` is not sufficient now that Ask also withholds permission.
 	//
 	// Fails closed the same way on error: a policy-check failure must deny, not
@@ -60,8 +60,8 @@ func executeHead(ctx context.Context, h provider.Head, prompt string, opts Optio
 		case err != nil:
 			a.Err = fmt.Errorf("ledger policy check failed: %w: head %s", err, h.ID)
 		// Reporting an Ask as "denied" describes the wrong policy. The head is
-		// skipped either way — a fan-out cannot hold a subprocess open waiting
-		// on a human — but the operator who wrote "ask" should be told the
+		// skipped either way, a fan-out cannot hold a subprocess open waiting
+		// on a human, but the operator who wrote "ask" should be told the
 		// question went unasked, not that their rule refused the head.
 		case decision == ledger.Ask:
 			a.Err = fmt.Errorf("waiting on a human decision, so skipped in fan-out: head %s", h.ID)
@@ -102,7 +102,7 @@ func executeHead(ctx context.Context, h provider.Head, prompt string, opts Optio
 
 // runRace fires all heads concurrently and returns as soon as the first
 // StatusOK attempt arrives. All other goroutines are canceled and drained
-// before returning — no goroutine leaks, no zombie subprocesses.
+// before returning, no goroutine leaks, no zombie subprocesses.
 func runRace(ctx context.Context, heads []provider.Head, prompt string, opts Options) []Attempt {
 	raceCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -147,7 +147,7 @@ func runRace(ctx context.Context, heads []provider.Head, prompt string, opts Opt
 
 // runAll fires all heads concurrently and waits for every one to finish.
 // Used by both ModeAll (rank by CapScore) and ModeBest (feed to judge).
-// Uses sync.WaitGroup (not errgroup) — guarantees goroutine drain regardless
+// Uses sync.WaitGroup (not errgroup), guarantees goroutine drain regardless
 // of errors, preventing zombie agy subprocesses.
 func runAll(ctx context.Context, heads []provider.Head, prompt string, opts Options) []Attempt {
 	attempts := make([]Attempt, len(heads))

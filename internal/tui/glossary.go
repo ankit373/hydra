@@ -2,7 +2,7 @@
 
 package tui
 
-// glossary.go — the `?` shortcut overlay. Rendered FROM ckKeymap (keys.go),
+// glossary.go, the `?` shortcut overlay. Rendered FROM ckKeymap (keys.go),
 // grouped EVERYWHERE / CHAT / LISTS, so it can only ever document keys that
 // are actually declared.
 
@@ -14,7 +14,7 @@ import (
 
 var ckGlossaryGroups = []string{"EVERYWHERE", "THREADS", "CHAT", "LISTS"}
 
-// ckGlossaryLines builds the glossary rows from ckKeymap — the single source
+// ckGlossaryLines builds the glossary rows from ckKeymap, the single source
 // of every binding, so the overlay cannot document a key that does not exist.
 func ckGlossaryLines() []string {
 	lines := []string{ckLabelS.Render("SHORTCUTS")}
@@ -25,7 +25,7 @@ func ckGlossaryLines() []string {
 				continue
 			}
 			// Long key lists (the /mode and :view commands) overflow the
-			// column rather than truncate — a glossary must never cut a key.
+			// column rather than truncate, a glossary must never cut a key.
 			k := ckCell(b.keys, 18)
 			if lipgloss.Width(b.keys) > 18 {
 				k = b.keys + "  "

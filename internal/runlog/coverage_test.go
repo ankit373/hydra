@@ -37,7 +37,7 @@ func TestAppend_UnwritablePathIsAnError(t *testing.T) {
 	}
 }
 
-// A run with no log is "nothing happened yet", not a failure — the tree view
+// A run with no log is "nothing happened yet", not a failure, the tree view
 // asks for runs that may never have emitted.
 func TestLoad_MissingRunIsEmptyNotAnError(t *testing.T) {
 	tempHome(t)
@@ -84,7 +84,7 @@ func TestLoad_SkipsMalformedLinesAndKeepsTheRest(t *testing.T) {
 	}
 }
 
-// Sequence numbers are the total order — wall-clock ties and out-of-order
+// Sequence numbers are the total order, wall-clock ties and out-of-order
 // timestamps are expected from concurrent goroutines, so position is what
 // orders a run.
 func TestAppend_AssignsMonotonicSequenceNumbers(t *testing.T) {
@@ -166,7 +166,7 @@ func TestLiveRuns_IgnoresUnrelatedEntries(t *testing.T) {
 }
 
 // touch must create the marker when it does not exist and refresh it when it
-// does — both halves, since the create path only runs once per run.
+// does, both halves, since the create path only runs once per run.
 func TestHeartbeatTouch_CreatesThenRefreshes(t *testing.T) {
 	tempHome(t)
 	h := &Heartbeat{path: HeartbeatPath("touch-test"), interval: time.Millisecond}

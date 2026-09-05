@@ -39,7 +39,7 @@ func TestBehaviorClassification_FlagsANovelAction(t *testing.T) {
 	}
 	class, ok := BehaviorClassification(history, "mcp__fetch__send", ledger.Network)
 	if !ok || class != ClassMCPBehaviorChange {
-		t.Fatalf("got (%q, %v), want (%q, true) — Network has never appeared before for this server", class, ok, ClassMCPBehaviorChange)
+		t.Fatalf("got (%q, %v), want (%q, true), Network has never appeared before for this server", class, ok, ClassMCPBehaviorChange)
 	}
 }
 
@@ -53,7 +53,7 @@ func TestBehaviorClassification_DoesNotFlagARepeatedAction(t *testing.T) {
 }
 
 func TestBehaviorClassification_DoesNotFlagAServersFirstEverCall(t *testing.T) {
-	// No history at all for "brand-new" — everything would technically be
+	// No history at all for "brand-new", everything would technically be
 	// "novel" for a server with zero prior calls, which is meaningless noise,
 	// not a signal. Must not flag.
 	if _, ok := BehaviorClassification(nil, "mcp__brand-new__anything", ledger.Network); ok {
@@ -71,7 +71,7 @@ func TestBehaviorClassification_IgnoresNonMCPTools(t *testing.T) {
 func TestBehaviorClassification_ThePostmarkMCPShape(t *testing.T) {
 	// The concrete scenario this feature exists for: a server that has only
 	// ever performed Read actions (fetching/composing email content)
-	// suddenly performs a Network action (the BCC exfiltration) — this is
+	// suddenly performs a Network action (the BCC exfiltration), this is
 	// exactly postmark-mcp's real 15-clean-versions-then-malicious shape,
 	// catchable from local ledger history alone.
 	history := make([]ledger.Event, 15)

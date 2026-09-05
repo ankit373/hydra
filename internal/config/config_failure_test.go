@@ -32,7 +32,7 @@ func TestSave_UnwritableConfigDirIsAnErrorNotSilentDataLoss(t *testing.T) {
 	}
 
 	if err := Save(&Config{Cortex: "x"}); err == nil {
-		t.Error("Save reported success with an unusable config directory — the " +
+		t.Error("Save reported success with an unusable config directory, the " +
 			"wizard would tell the user their setup was saved")
 	}
 	if Exists() {
@@ -79,7 +79,7 @@ func TestSave_ReadOnlyConfigDirIsAnError(t *testing.T) {
 	testutil.NewSandbox(t)
 
 	// The sandbox pre-creates Dir(), so MkdirAll here would be a permission-set
-	// no-op on an already-existing directory — Chmod is what actually locks it.
+	// no-op on an already-existing directory, Chmod is what actually locks it.
 	if err := os.MkdirAll(Dir(), 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -119,7 +119,7 @@ func TestScriptHome_WalksUpToARepoCheckout(t *testing.T) {
 	got := ScriptHome()
 	if got != planted {
 		t.Errorf("ScriptHome() = %q, want the checkout %q found by walking up from "+
-			"the binary — a dev build would read the embedded registry instead of "+
+			"the binary, a dev build would read the embedded registry instead of "+
 			"the working tree's", got, planted)
 	}
 }
@@ -129,8 +129,8 @@ func TestScriptHome_FallsBackToTheConfigDir(t *testing.T) {
 	t.Setenv("HYDRA_HOME", "")
 
 	// No $HYDRA_HOME and no registry above the binary: this is every installed
-	// binary. A miss here is normal — the embedded copy is what actually gets
-	// read (#238) — but the path returned must still be somewhere an operator
+	// binary. A miss here is normal, the embedded copy is what actually gets
+	// read (#238), but the path returned must still be somewhere an operator
 	// can drop an override.
 	if got, want := ScriptHome(), Dir(); got != want {
 		t.Errorf("ScriptHome() = %q, want %q", got, want)
@@ -173,7 +173,7 @@ func plantRegistryBesideBinary(t *testing.T) string {
 }
 
 // Breadcrumb ties a log entry to the routing rules in effect when it was
-// written. An error from it must propagate — a caller that logs an empty
+// written. An error from it must propagate, a caller that logs an empty
 // fingerprint has recorded that the deployment is unidentifiable, which is
 // indistinguishable from a deployment with no registry.
 func TestBreadcrumb_MissingRegistryFileIsAnError(t *testing.T) {

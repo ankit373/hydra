@@ -93,7 +93,7 @@ func TestExploredCountsOnlyRealPropensities(t *testing.T) {
 func TestUnparseableTimestampIsSkipped(t *testing.T) {
 	got := Build([]cost.Row{row("not-a-date", "m1", 2, 100, 0.5, 1, 1)})
 	if len(got) != 0 {
-		t.Errorf("got %d rows, want 0 — a row with no day cannot be attributed", len(got))
+		t.Errorf("got %d rows, want 0, a row with no day cannot be attributed", len(got))
 	}
 }
 

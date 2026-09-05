@@ -28,7 +28,7 @@ func TestSafeTerminal_NeutralisesVerdictSpoofing(t *testing.T) {
 	if !strings.HasPrefix(got, "gpt") {
 		t.Fatalf("legitimate prefix was mangled: %q", got)
 	}
-	// The forged text stays visible — it just cannot move the cursor. Seeing
+	// The forged text stays visible, it just cannot move the cursor. Seeing
 	// mangled garbage is the point: the input was garbage.
 	if !strings.Contains(got, "VERDICT") {
 		t.Fatalf("payload text should remain visible, got %q", got)
@@ -36,7 +36,7 @@ func TestSafeTerminal_NeutralisesVerdictSpoofing(t *testing.T) {
 }
 
 func TestSafeTerminal_LeavesOrdinaryStringsAlone(t *testing.T) {
-	for _, s := range []string{"", "internal/ledger/ledger.go", "ollama/qwen2.5", "café — naïve"} {
+	for _, s := range []string{"", "internal/ledger/ledger.go", "ollama/qwen2.5", "café, naïve"} {
 		if got := SafeTerminal(s); got != s {
 			t.Errorf("SafeTerminal(%q) = %q, want unchanged", s, got)
 		}
@@ -45,7 +45,7 @@ func TestSafeTerminal_LeavesOrdinaryStringsAlone(t *testing.T) {
 
 func TestSafeTerminal_ReplacesNewlinesAndC1(t *testing.T) {
 	// A newline forges an entire extra row, and 0x9b is a single-byte CSI on
-	// terminals that decode C1 — both must go.
+	// terminals that decode C1, both must go.
 	for _, s := range []string{"a\nb", "a\tb", "a\x9bb", "a\x7fb"} {
 		got := SafeTerminal(s)
 		if got != "a�b" {

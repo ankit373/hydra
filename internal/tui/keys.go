@@ -2,7 +2,7 @@
 
 package tui
 
-// keys.go — every binding, declared once in ckKeymap and routed here. The
+// keys.go, every binding, declared once in ckKeymap and routed here. The
 // glossary and the status bars render FROM the table, so keys and their docs
 // cannot drift; only the behavior lives in the switches below.
 
@@ -22,7 +22,7 @@ type ckBinding struct {
 
 var ckKeymap = []ckBinding{
 	{"tab", "next view", "EVERYWHERE", nil},
-	{"1–6", "jump to a view (in chat, digits type into the input)", "EVERYWHERE", nil},
+	{"1-6", "jump to a view (in chat, digits type into the input)", "EVERYWHERE", nil},
 	{"?", "this glossary (in chat: when the input is empty)", "EVERYWHERE", nil},
 	{"esc", "close overlay · back · clear chat input", "EVERYWHERE", nil},
 	{"pgup/pgdn · wheel", "scroll · lists: page the selection", "EVERYWHERE", nil},
@@ -32,10 +32,10 @@ var ckKeymap = []ckBinding{
 
 	{"ctrl+t", "new thread", "THREADS", nil},
 	{"ctrl+t", "thread", "", []int{ckViewChat}},
-	{"alt+1–9", "jump to that thread (foregrounds a backgrounded one)", "THREADS", nil},
+	{"alt+1-9", "jump to that thread (foregrounds a backgrounded one)", "THREADS", nil},
 	{"ctrl+←/→", "cycle threads · in a split: move focus between the sides", "THREADS", nil},
 	{"ctrl+\\", "split: pin a second thread beside this one (≥100 cols) · again closes", "THREADS", nil},
-	{"ctrl+b", "background the thread — it keeps running in agents, pings chat when done", "THREADS", nil},
+	{"ctrl+b", "background the thread, it keeps running in agents, pings chat when done", "THREADS", nil},
 	{"ctrl+g", "jump to the next thread needing you (confirms, plan gates, failures)", "THREADS", nil},
 	{"a · x", "after an isolated edit: apply the worktree to your tree · x x discards it", "THREADS", nil},
 
@@ -44,7 +44,7 @@ var ckKeymap = []ckBinding{
 	{"shift+tab", "cycle the basic modes: ask · edit · plan · auto", "CHAT", nil},
 	{"shift+tab", "mode", "", []int{ckViewChat}},
 	{"m", "mode picker, advanced modes included (empty input)", "CHAT", nil},
-	{"ctrl+o", "routing override for the next task — where it runs", "CHAT", nil},
+	{"ctrl+o", "routing override for the next task, where it runs", "CHAT", nil},
 	{"ctrl+o", "route", "", []int{ckViewChat}},
 	{"esc", "cancel the running task · discard a plan · clear the input", "CHAT", nil},
 	{"y/n", "approve / refuse a pending plan or file write", "CHAT", nil},
@@ -89,7 +89,7 @@ func ckBarBindings(v int) []ckBinding {
 	return out
 }
 
-// key routes one keypress. Chat keeps every binding it always had — new shell
+// key routes one keypress. Chat keeps every binding it always had, new shell
 // keys apply only where they collide with nothing (#465's discipline); all
 // thread keys are modifier-based so typing is never broken.
 func (m Cockpit) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -118,7 +118,7 @@ func (m Cockpit) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case tea.KeyCtrlG:
 		return m.nextAttention(), nil
 	}
-	// alt+1–9 jumps to that thread from anywhere.
+	// alt+1-9 jumps to that thread from anywhere.
 	if msg.Alt && msg.Type == tea.KeyRunes && len(msg.Runes) == 1 &&
 		msg.Runes[0] >= '1' && msg.Runes[0] <= '9' {
 		return m.focusThread(int(msg.Runes[0] - '0')), nil
@@ -150,7 +150,7 @@ func (m Cockpit) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m.viewKey(msg)
 }
 
-// ckScrollAll is a jump "as far as it goes" — every offset is clamped against
+// ckScrollAll is a jump "as far as it goes", every offset is clamped against
 // its real content length, so home/end reuse the ordinary scroll path.
 const ckScrollAll = 1 << 20
 
@@ -164,8 +164,8 @@ func (m Cockpit) pageSize() int {
 }
 
 // scrollBy routes a scroll gesture (page keys, wheel) to whatever the active
-// context scrolls: the glossary, the chat log, a table offset, or — in list
-// views — the selection itself, whose window follows it.
+// context scrolls: the glossary, the chat log, a table offset, or, in list
+// views, the selection itself, whose window follows it.
 func (m Cockpit) scrollBy(delta int) Cockpit {
 	switch {
 	case m.glossary:
@@ -196,7 +196,7 @@ func ckClampOff(off, n int) int {
 
 // jump switches to view v, closing transient overlays (glossary, picker,
 // override) and running the on-entry hook. A pending plan/confirm survives on
-// its thread — a question must not be lost by looking at activity.
+// its thread, a question must not be lost by looking at activity.
 func (m Cockpit) jump(v int) Cockpit {
 	if !ckValidView(v) {
 		return m
@@ -214,7 +214,7 @@ func (m Cockpit) jump(v int) Cockpit {
 }
 
 // escape closes the topmost thing first: overlay, then modal stage, then a
-// pending question, then typed input, then the running task itself — always on
+// pending question, then typed input, then the running task itself, always on
 // the ACTIVE thread; other threads keep running untouched.
 func (m Cockpit) escape() (Cockpit, tea.Cmd) {
 	t := m.th()
@@ -232,13 +232,13 @@ func (m Cockpit) escape() (Cockpit, tea.Cmd) {
 		}
 	case m.view == ckViewChat && t.confirm != nil:
 		w := *t.confirm
-		note := "stopped before writing — nothing changed"
+		note := "stopped before writing, nothing changed"
 		if w.phase == ckPhaseFix {
-			note = "fix declined — the file keeps its last write"
+			note = "fix declined, the file keeps its last write"
 		}
 		return m.stopWait(t, w, note)
 	case m.view == ckViewChat && t.planWait != nil:
-		return m.stopWait(t, *t.planWait, "plan discarded — nothing ran")
+		return m.stopWait(t, *t.planWait, "plan discarded, nothing ran")
 	case m.view == ckViewChat && t.input != "":
 		t.input = ""
 	case m.view == ckViewChat && t.queued != nil:
@@ -318,9 +318,9 @@ func (m Cockpit) viewRune(r rune) (tea.Model, tea.Cmd) {
 		case 'o':
 			return m.openEditedFile()
 		case 'c':
-			// Run files record events, never model output — there is nothing
+			// Run files record events, never model output, there is nothing
 			// to copy until execution lands (#597). Say so instead of a no-op.
-			m.flash = "no answer stored — run files keep events, not outputs"
+			m.flash = "no answer stored, run files keep events, not outputs"
 		case 'l':
 			return m.jump(ckViewAudit), nil
 		}
@@ -378,7 +378,7 @@ func (m Cockpit) move(delta int) Cockpit {
 		// Nothing to select on a dashboard, so j/k scroll it (#630).
 		m.usageOff = ckClampOff(m.usageOff+delta, m.usageLines())
 	case ckViewAudit:
-		// With a queue to pick through, j/k pick; with none — the usual case —
+		// With a queue to pick through, j/k pick; with none, the usual case,
 		// they scroll the view, which is what the "↓ N more" cue invites (#630).
 		if len(m.auditItems()) > 1 {
 			m.auditSel = clamp(m.auditSel+delta, len(m.auditItems()))

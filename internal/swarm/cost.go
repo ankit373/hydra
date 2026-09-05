@@ -14,6 +14,7 @@ import (
 	"github.com/ankit373/hydra/internal/provider"
 	"github.com/ankit373/hydra/internal/rank"
 	"github.com/ankit373/hydra/internal/runid"
+	"github.com/ankit373/hydra/registry"
 )
 
 // PricingReader abstracts the per-tier cost lookup so swarm doesn't need to
@@ -68,12 +69,12 @@ func enrichCosts(attempts []Attempt, pr PricingReader) {
 }
 
 // logAttempts writes one cost.jsonl entry per attempt that actually executed
-// (StatusOK or StatusFailed — not Pending/Canceled).
+// (StatusOK or StatusFailed, not Pending/Canceled).
 //
 // It takes the attempts and mode directly rather than a *SwarmResult so the SPRT
 // path can share it: RunSPRT produces attempts without ever building a
 // SwarmResult, and without this its ensemble spend never reached cost.jsonl at
-// all — only the aggregate trust.jsonl row (#175).
+// all, only the aggregate trust.jsonl row (#175).
 //
 // Every attempt shares the run's identity: heads racing or voting on one prompt
 // are all working the same logical task, so they carry the same TaskID. That is
@@ -98,14 +99,14 @@ func logAttempts(attempts []Attempt, mode SwarmMode, opts Options, promptPreview
 		if a.Status == StatusPending || a.Status == StatusCanceled {
 			continue
 		}
-		// Shared with the dispatch log path — see cost.SourceLabels.
+		// Shared with the dispatch log path, see cost.SourceLabels.
 		tokensSource, costSrc, legacySource := cost.SourceLabels(a.TokensEstimated)
 		entry := map[string]any{
 			"ts":              a.FinishedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
 			"tier":            rank.UITier(a.Head),
 			"model":           a.Head.Name,
 			"executor":        a.Head.Provider,
-			"pool":            a.Head.Meta["token_pool"],
+			"pool":            headPool(a.Head),
 			"prompt_tokens":   a.InputTokens,
 			"response_tokens": a.OutputTokens,
 			"est_cost_usd":    a.EstCostUSD,
@@ -133,4 +134,13 @@ func logAttempts(attempts []Attempt, mode SwarmMode, opts Options, promptPreview
 
 func round6(f float64) float64 {
 	return math.Round(f*1_000_000) / 1_000_000
+}
+
+// headPool mirrors dispatch's: provider metadata when present, else the
+// registry, since only the agy provider ever attached it (#681).
+func headPool(h provider.Head) string {
+	if p := h.Meta["token_pool"]; p != "" {
+		return p
+	}
+	return registry.TokenPoolFor(config.ScriptHome(), h.ID)
 }
