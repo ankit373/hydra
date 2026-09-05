@@ -43,12 +43,14 @@ internal/mcpregistry/   ← MCP server trust registry: sync official registry, s
                           score (CSA-shaped categories), version-bump trust automaton, backtest against
                           known incidents. `hyctl mcp registry`.
 internal/oracle/        ← Verification oracles (tests/compile/lint) as calibrated evidence sources. `hyctl oracle`.
-internal/ope/           ← Off-policy estimation: inverse-probability weighting over sampled logs.
+internal/ope/           ← Off-policy estimation: IPW over sampled logs, plus counterfactual policy
+                          evaluation with bootstrap intervals. `hyctl trace evaluate`.
 internal/sketch/        ← Mergeable relative-error quantile sketch (DDSketch-style). Bounded memory.
 internal/rollup/        ← Per-day aggregates of cost.jsonl (calls, tokens, spend, latency sketch).
 internal/evalset/       ← Oracle-verified labelled examples. Outside logs/, exempt from retention. `hyctl eval`.
 internal/runlog/        ← Per-run event log. Old runs seal into ~/.hydra/logs/seg/YYYY-MM.zst
                           (+ .idx), lossless and invisible to readers. `hyctl trace seal`.
+internal/otlp/          ← Dispatch log → OpenTelemetry spans (OTLP/HTTP JSON). `hyctl trace export`.
 internal/pricing/       ← Live pricing DB (OpenRouter fetch + 24h cache + tier fallback).
 internal/policy/        ← PII detection + local-only enforcement.
 internal/{cost,budget}/ ← Spend reporting (est/actual labeling) + token-budget governor (static bands + rate-aware first-passage on claude_pct).
@@ -272,6 +274,12 @@ hyctl eval stats ; hyctl eval list --failed
 
 # Fold old run logs into compressed monthly segments (lossless; readers unaffected)
 hyctl trace seal --dry-run ; hyctl trace seal --older-than 168h
+
+# What a policy you did not run would have cost, from the log alone
+hyctl trace evaluate --policy cheaper ; hyctl trace evaluate --policy tier:8 --json
+
+# Dispatches as OpenTelemetry spans. Nothing is sent without --otlp.
+hyctl trace export --limit 100 ; hyctl trace export --otlp http://localhost:4318/v1/traces
 
 # System state / discovered heads / spend
 # `hyctl status` shows the rate-aware claude_pct governor (first-passage risk toward 80%).
@@ -838,6 +846,7 @@ All Go source lives under `cmd/` and `internal/`. Key packages:
 | `internal/provider` | Head discovery plugins (agy registry, env, port, CLI) |
 | `internal/probe` | Machine scan — finds all live heads at startup |
 | `internal/swarm` | Fan-out dispatch: race / best (LLM judge) / all (CapScore rank) |
+| `internal/otlp` | Renders the dispatch log as OpenTelemetry spans, OTLP/HTTP with a JSON body — the transport collectors people actually run accept (Langfuse ingests at `/api/public/otel/v1/traces` and offers no gRPC at all). A bridge, not a migration: `gen_ai.*` is populated only where it genuinely corresponds, and tier/enum/cost/propensity — which OTel has no place for and which are the reason the log is worth exporting — are carried under `hydra.*` rather than dropped. 64-bit values are encoded as strings per OTLP/JSON, because a JSON number loses precision above 2^53 and unix nanos passed that in 1970, so a numeric timestamp is silently wrong rather than rejected. An all-zero trace or span id is invalid and collectors drop the span, so a row with no run id gets a random one — an unlinked span is data, a dropped one is not. Nothing leaves the machine unless `--otlp` names an endpoint. |
 | `internal/pricing` | Live cost DB: OpenRouter fetch + 24h cache + tier YAML fallback |
 | `internal/util` | Shared utilities: `Accumulator` (bounded io.Writer, 33 MB cap) |
 | `internal/cost` | Reads `cost.jsonl`, produces spend summaries |
@@ -860,7 +869,7 @@ All Go source lives under `cmd/` and `internal/`. Key packages:
 | `internal/rollup` | Per-day aggregates keyed by `(date, model, executor, enum, tier)`: calls, tokens, spend, a latency sketch, and propensity sums. What `hyctl stats --latency` reads instead of rescanning `cost.jsonl`, and what must be written *before* any retention deletes raw rows. |
 | `internal/evalset` | Oracle-verified examples: task, candidate, and ground truth from `internal/oracle`. The only trace-adjacent data kept verbatim and forever, because it is the only corpus the router can be improved against. Lives at `~/.hydra/evalset/`, deliberately outside `logs/` so nothing that prunes logs can reach it. Deduplicated on `(task_hash, candidate_hash)`; PII is marked rather than dropped, since dropping it would bias the corpus. Drives `hyctl eval list\|stats`. |
 | `internal/runlog` (sealing) | `Seal` folds runs older than an age into one zstd frame per run inside `logs/seg/YYYY-MM.zst`, with a sidecar `.idx`. One frame per run rather than one per month, so reading one run seeks and decodes one frame instead of a month. `Load`/`Runs` read sealed segments transparently — `internal/tree`, the cockpit and the desktop app need no change. Lossless relocation, not retention: nothing is discarded. Measured 16.5x on disk in test, 8.53x amplification confirmed on a real machine (58 files, 27,835 bytes logical, 237,568 on disk). |
-| `internal/ope` | Off-policy estimation. `SelfNormalized` recovers a population rate from a non-uniformly sampled log by weighting each row by the inverse of its inclusion probability. A non-positive probability is skipped and counted, never treated as certain. Exists because averaging a sampled log inverted the true ranking of two heads in simulation, which would then change routing (#605). |
+| `internal/ope` | Off-policy estimation. `SelfNormalized` recovers a population rate from a non-uniformly sampled log by weighting each row by the inverse of its inclusion probability. `Evaluate` answers the counterfactual — what a routing policy you did not run would have cost — as self-normalized IPS with a **percentile bootstrap interval**, never a bare point estimate. It refuses rather than answering when the logged policy had no chance of doing what the candidate would do: that question is *unidentifiable*, not merely uncertain, and a wide interval still gets read as a number. `ErrNoPropensity` is kept distinct from `ErrInsufficientSupport` because the remedies differ — raising `explore_rate` creates overlap for future rows but cannot fix rows already written. Effective sample size (Kish's (Σw)²/Σw²) is the honest count: a thousand rows dominated by one weight are worth about one observation, and the estimate is refused below `MinESS`. Weights are clipped by default and `Method` says so, since clipping is a bias-variance trade the reader has to be told about. Bootstrap seeded so the same log gives the same interval twice. Exists because averaging a sampled log inverted the true ranking of two heads in simulation, which would then change routing (#605). |
 | `internal/tui` | Bubble Tea TUI: init wizard, install flow |
 | `internal/review` | Code review subcommand |
 | `internal/editor` | Editor integration |
