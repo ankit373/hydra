@@ -90,6 +90,8 @@ HYDRA_MANIFESTO.md
 SPEC_TRUST_V1.md
 BUILD_STATE.md
 HYDRA_INFERENCE_SCOPING.md
+# The globs above are suffix-based, so kebab-case names slip through them.
+research/
 
 # Python
 __pycache__/
