@@ -53,9 +53,10 @@ export function ChatView({
   focusSignal: number
 }) {
   const [prompt, setPrompt] = useState('')
-  // Empty means auto-route. A tier, not an enum: the picker offers models,
-  // and every registry model declares a tier (#558).
-  const [tier, setTier] = useState('')
+  // Empty means auto-route. The model's own id, not its tier: a tier cannot
+  // say which of two T1 heads was picked, and the router was free to answer
+  // from a different one (#676).
+  const [head, setHead] = useState('')
   const [turns, setTurns] = useState<Turn[]>([])
   const [busy, setBusy] = useState(false)
   // The one turn currently in flight, if any, Chat's own busy flag already
@@ -176,7 +177,7 @@ export function ChatView({
     setTurns((t) => [...t, { prompt: p, runId }])
     watchRun(runId)
     try {
-      const reply = await Chat(p, '', runId, tier)
+      const reply = await Chat(p, '', runId, '', head)
       setTurns((t) => t.map((turn, i) => (i === t.length - 1 ? { ...turn, reply } : turn)))
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e)
@@ -208,7 +209,7 @@ export function ChatView({
     setTurns((t) => t.map((turn, idx) => (idx === i ? { ...turn, runId } : turn)))
     watchRun(runId)
     try {
-      const reply = await Chat(p, '', runId, tier)
+      const reply = await Chat(p, '', runId, '', head)
       setTurns((t) => t.map((turn, idx) => (idx === i ? { ...turn, reply } : turn)))
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e)
@@ -352,6 +353,7 @@ export function ChatView({
                 )}
                 {/* Which head, which tier, what it cost, this is a router, so
                     that is the part worth showing, not just the answer. */}
+                <FellBack reply={t.reply} />
                 <SessionLink reply={t.reply} onOpenRun={onOpenRun} />
               </>
             )}
@@ -379,7 +381,7 @@ export function ChatView({
           {/* The model control is part of the send row, not a setting buried in
               a header: choosing depth is part of asking (#520). */}
           <div className="chatv__bar">
-            <ModelPicker tier={tier} onPick={setTier} disabled={busy} />
+            <ModelPicker head={head} onPick={setHead} disabled={busy} />
             <span className="chatv__hint">enter to send</span>
             <button
               className="chatv__send"
@@ -398,6 +400,28 @@ export function ChatView({
         lastReply={lastSettled(turns)}
         runId={turns[turns.length - 1]?.runId}
       />
+    </div>
+  )
+}
+
+/**
+ * Names the models that were asked and could not answer. Without it a reply
+ * from a weak local model looks identical whether the router chose it or fell
+ * back to it after the picked model failed, which is what #676 reported: a
+ * T1 pick answered by a T10 head with nothing said.
+ */
+function FellBack({ reply }: { reply: ChatReply }) {
+  const tried = reply.attempts ?? []
+  if (tried.length === 0) return null
+  return (
+    <div className="turn__fellback">
+      {tried.map((a) => (
+        <p key={a.head} className="turn__fellbackRow">
+          <b>{a.model || a.head}</b>
+          {a.tier > 0 && ` (T${a.tier})`} could not answer: {a.reason}
+        </p>
+      ))}
+      <p className="turn__fellbackRow">Answered by {reply.model || reply.head} instead.</p>
     </div>
   )
 }

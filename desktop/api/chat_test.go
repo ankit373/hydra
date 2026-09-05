@@ -64,7 +64,7 @@ func atoiTier(t *testing.T, s string) int {
 func TestChat_EmptyPromptIsAReplyNotAnError(t *testing.T) {
 	sandbox(t)
 
-	r, err := New().Chat("", "", "", "")
+	r, err := New().Chat("", "", "", "", "")
 	if err != nil {
 		t.Fatalf("an empty prompt must not error: %v", err)
 	}
@@ -81,7 +81,7 @@ func TestChat_EmptyPromptIsAReplyNotAnError(t *testing.T) {
 func TestChat_FailedDispatchReturnsAReply(t *testing.T) {
 	sandbox(t)
 
-	r, err := New().Chat("hello", "SIMPLE", "", "")
+	r, err := New().Chat("hello", "SIMPLE", "", "", "")
 	if err != nil {
 		t.Fatalf("a failed dispatch must come back as a reply, not a Go error: %v", err)
 	}
@@ -97,7 +97,7 @@ func TestChat_HonoursCallerSuppliedRunID(t *testing.T) {
 	sandbox(t)
 
 	want := New().NewRunID()
-	r, err := New().Chat("hello", "SIMPLE", want, "")
+	r, err := New().Chat("hello", "SIMPLE", want, "", "")
 	if err != nil {
 		t.Fatalf("a failed dispatch must come back as a reply, not a Go error: %v", err)
 	}
@@ -124,7 +124,7 @@ func TestNewRunID_NonEmptyAndUnique(t *testing.T) {
 func TestChat_UnknownEnumIsRejected(t *testing.T) {
 	sandbox(t)
 
-	r, err := New().Chat("hello", "NOT_A_REAL_ENUM", "", "")
+	r, err := New().Chat("hello", "NOT_A_REAL_ENUM", "", "", "")
 	if err != nil {
 		t.Fatalf("an unknown enum must not error: %v", err)
 	}
@@ -147,7 +147,7 @@ func TestChat_NoHeadsAtAllSetsNeedsProbe(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	r, err := New().Chat("hello", "SIMPLE", "", "")
+	r, err := New().Chat("hello", "SIMPLE", "", "", "")
 	if err != nil {
 		t.Fatalf("zero heads must come back as a reply, not a Go error: %v", err)
 	}
@@ -169,7 +169,7 @@ func TestChat_ExplicitTierOutranksEnum(t *testing.T) {
 	// in the sandbox the dispatch still fails, so this asserts on the reply
 	// shape rather than on routing, the point is that a bad tier is rejected
 	// by dispatch's own validation and a good one is accepted.
-	r, err := New().Chat("hello", "GRUNT", "", "2")
+	r, err := New().Chat("hello", "GRUNT", "", "2", "")
 	if err != nil {
 		t.Fatalf("an explicit tier must not turn a failed dispatch into a Go error: %v", err)
 	}
@@ -183,7 +183,7 @@ func TestChat_ExplicitTierOutranksEnum(t *testing.T) {
 func TestChat_RejectsOutOfRangeTier(t *testing.T) {
 	sandbox(t)
 
-	r, err := New().Chat("hello", "", "", "99")
+	r, err := New().Chat("hello", "", "", "99", "")
 	if err != nil {
 		t.Fatalf("a bad tier must come back as a reply, not a Go error: %v", err)
 	}

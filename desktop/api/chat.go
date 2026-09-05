@@ -31,6 +31,11 @@ type ChatReply struct {
 	Model string `json:"model"`
 	Tier  int    `json:"tier"`
 
+	// Attempts is every model that was tried and did not answer, with the
+	// reason. A reply that names only the winner cannot distinguish "routed
+	// here" from "fell back here after your choice failed" (#676).
+	Attempts []ChatAttempt `json:"attempts,omitempty"`
+
 	CostUSD    float64 `json:"costUsd"`
 	DurationMS int64   `json:"durationMs"`
 
@@ -55,6 +60,14 @@ type ChatReply struct {
 	// the dock offers to retry (which re-probes) instead of surfacing a CLI
 	// instruction a GUI user has no terminal for (#434, #452).
 	NeedsProbe bool `json:"needsProbe,omitempty"`
+}
+
+// ChatAttempt is one model that was tried and did not answer.
+type ChatAttempt struct {
+	Head   string `json:"head"`
+	Model  string `json:"model"`
+	Tier   int    `json:"tier"`
+	Reason string `json:"reason"`
 }
 
 // NewRunID mints a run id for the caller to hold before a dispatch starts.
@@ -84,7 +97,7 @@ func (a *API) NewRunID() string { return runid.New() }
 // Errors come back inside the reply rather than as a Go error: a failed
 // dispatch is a normal outcome the view renders as a message, not an exception
 // that should blank the window.
-func (a *API) Chat(prompt, enum, runID, tier string) (*ChatReply, error) {
+func (a *API) Chat(prompt, enum, runID, tier, head string) (*ChatReply, error) {
 	if prompt == "" {
 		return &ChatReply{Error: "empty prompt"}, nil
 	}
@@ -136,9 +149,12 @@ func (a *API) Chat(prompt, enum, runID, tier string) (*ChatReply, error) {
 
 	res, err := d.Dispatch(ctx, prompt, dispatch.Options{
 		TierHint: tierHint,
-		Enum:     enum,
-		RunID:    runID,
-		TaskID:   taskID,
+		// A picked model is pinned, not merely preferred: dispatch refuses
+		// rather than answering from something the user did not choose.
+		Head:   head,
+		Enum:   enum,
+		RunID:  runID,
+		TaskID: taskID,
 	})
 	if err != nil {
 		if errors.Is(err, dispatch.ErrNoHeads) {
@@ -169,6 +185,11 @@ func fill(r *ChatReply, res *dispatch.Result) {
 	r.Head = res.Head.ID
 	r.Model = res.Head.Name
 	r.Tier = rank.UITier(res.Head)
+	for _, at := range res.Attempts {
+		r.Attempts = append(r.Attempts, ChatAttempt{
+			Head: at.Head, Model: at.Model, Tier: at.Tier, Reason: at.Reason,
+		})
+	}
 	if res.Response != nil {
 		r.DurationMS = res.Response.Duration.Milliseconds()
 	}

@@ -724,11 +724,21 @@ export interface LedgerEvent {
   flag_reason?: string
 }
 
+/** One model that was tried and did not answer. */
+export interface ChatAttempt {
+  head: string
+  model: string
+  tier: number
+  reason: string
+}
+
 export interface ChatReply {
   output: string
   head: string
   model: string
   tier: number
+  /** Models tried that did not answer, with the reason. Empty on a clean run. */
+  attempts?: ChatAttempt[]
   costUsd: number
   durationMs: number
   /** Links the reply into Session, "why did it say that" is one click. */

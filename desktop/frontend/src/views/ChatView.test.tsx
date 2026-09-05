@@ -343,4 +343,38 @@ describe('a task parked waiting on a human (#583)', () => {
 
     await waitFor(() => expect(mockAnswer).toHaveBeenCalledWith('task-1', 'go'))
   })
+  it('names the model that could not answer, and the one that did', async () => {
+    // #676: a T1 pick answered by a T10 local head, with nothing said. The
+    // reply used to carry only the winner, so this read as ordinary routing.
+    mockChat.mockResolvedValue({
+      output: 'sure',
+      head: 'ollama/qwen', model: 'Qwen2.5-Coder:7b (Ollama)', tier: 10,
+      costUsd: 0, durationMs: 1700, runId: 'run-1',
+      attempts: [{ head: 'claude', model: 'Claude Code', tier: 1, reason: 'exit status 1' }],
+    })
+    renderDock(vi.fn())
+
+    const textarea = screen.getByPlaceholderText(/ask anything/i)
+    fireEvent.change(textarea, { target: { value: 'is claude code working' } })
+    fireEvent.keyDown(textarea, { key: 'Enter' })
+
+    expect(await screen.findByText(/could not answer/i)).toHaveTextContent('Claude Code')
+    expect(screen.getByText(/could not answer/i)).toHaveTextContent('exit status 1')
+    expect(screen.getByText(/Answered by/i)).toHaveTextContent('Qwen2.5-Coder:7b (Ollama)')
+  })
+
+  it('says nothing about fallbacks when the first model answered', async () => {
+    mockChat.mockResolvedValue({
+      output: 'sure', head: 'claude', model: 'Claude Code', tier: 1,
+      costUsd: 0, durationMs: 900, runId: 'run-1',
+    })
+    renderDock(vi.fn())
+
+    const textarea = screen.getByPlaceholderText(/ask anything/i)
+    fireEvent.change(textarea, { target: { value: 'hello' } })
+    fireEvent.keyDown(textarea, { key: 'Enter' })
+
+    await screen.findByRole('button', { name: /session →/ })
+    expect(screen.queryByText(/could not answer/i)).not.toBeInTheDocument()
+  })
 })

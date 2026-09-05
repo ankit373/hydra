@@ -1560,6 +1560,23 @@ body {
 .turn__out { margin: 0; font-size: 14px; line-height: 1.6; white-space: pre-wrap; }
 .turn__wait { margin: 0; color: var(--hy-dim); font-size: 12px; }
 .turn__err { margin: 0; color: var(--hy-expensive); font-size: 12px; font-family: var(--hy-font-mono); }
+/* A fallback is not an error: the answer arrived. It is amber because the
+   model you picked is not the one that replied. */
+.turn__fellback {
+  align-self: flex-start;
+  margin: 2px 0 0;
+  padding: 6px 10px;
+  border-left: 2px solid var(--hy-mid);
+  background: color-mix(in srgb, var(--hy-mid) 8%, transparent);
+  border-radius: 0 3px 3px 0;
+}
+.turn__fellbackRow {
+  margin: 0;
+  color: var(--hy-dim);
+  font-size: 12px;
+  line-height: 1.55;
+  font-family: var(--hy-font-mono);
+}
 .turn__meta {
   align-self: flex-start;
   background: none;

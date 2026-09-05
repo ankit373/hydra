@@ -76,6 +76,13 @@ type Options struct {
 	// silently re-routes to a head the human was never shown.
 	AnsweredHead string
 
+	// Head pins one head by ID. A person choosing a model is asking for that
+	// model, so it is never substituted: if it cannot run, Dispatch says why
+	// instead of quietly answering from a different one. Before this the
+	// desktop picker could only ask for a tier, so choosing a T1 head let the
+	// chain walk down to the T10 local model with nothing said (#676).
+	Head string
+
 	// Classification is prompt's already-computed PII/injection verdict
 	// (policy.Classify), cmdDispatch computes this once for its own
 	// defect-cost/local-only decisions and passes it here so Dispatch and
@@ -90,7 +97,22 @@ type Result struct {
 	Head      provider.Head
 	Fallbacks []provider.Head // remaining candidates after the selected head
 	Retries   int
+
+	// Attempts is every candidate that was tried and did not answer, in the
+	// order tried. Retries counts them; this says which and why. Without it a
+	// caller can only report who answered, so a fallback to a weaker head
+	// looks identical to routing there in the first place (#676).
+	Attempts []Attempt
+
 	*executor.Response
+}
+
+// Attempt is one candidate that did not answer, and the reason.
+type Attempt struct {
+	Head   string
+	Model  string
+	Tier   int
+	Reason string
 }
 
 // ParkedError reports a task stopped before the executor ran because the
@@ -354,6 +376,17 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 
 	localOnly := action.LocalOnly || opts.LocalOnly
 	candidates := d.selectHeads(tier, localOnly)
+	if opts.Head != "" {
+		// A pinned head is the whole candidate list, so there is nothing to
+		// fall back to and no way to answer from a model the user did not ask
+		// for. Pinned but unroutable is an error with a reason, not a
+		// substitution.
+		pinned, err := d.pinHead(opts.Head, localOnly)
+		if err != nil {
+			return nil, err
+		}
+		candidates = []provider.Head{pinned}
+	}
 	if len(candidates) == 0 {
 		// Report the effective localOnly (policy may have forced it), not just
 		// the caller's flag, or a PII-forced local-only run points the user at
@@ -387,6 +420,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 	taskID := runid.ResolveTask(opts.TaskID)
 
 	var lastErr error
+	var attempts []Attempt
 	for i, h := range candidates {
 		// Computed once per candidate instead of once per use below (event
 		// logging, cost estimation): rank.UITier re-derives the same int for
@@ -411,6 +445,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		decision, lerr := ledger.CheckAndRecordDispatch("hydra-dispatch", h.ID, opts.Resource, prompt, class)
 		refuse := func(detail string) {
 			lastErr = fmt.Errorf("%s: head %s", detail, h.ID)
+			attempts = append(attempts, Attempt{Head: h.ID, Model: h.Name, Tier: tier, Reason: detail})
 			_ = rl.Append(runlog.Event{
 				Kind: runlog.KindError, TaskID: taskID,
 				Head: h.ID, Model: h.Name, Tier: tier,
@@ -467,6 +502,8 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 					Head: h.ID, Model: h.Name, Tier: tier,
 					Status: "denied", Detail: "exceeds cost ceiling",
 				})
+				attempts = append(attempts, Attempt{Head: h.ID, Model: h.Name, Tier: tier,
+					Reason: fmt.Sprintf("estimated $%.4f exceeds the $%.4f ceiling", estCost, opts.MaxCostUSD)})
 				// Shares the ledger's accountability trail with policy denials
 				// (Reason distinguishes them) so `hyctl security` has one place
 				// to find every kind of refused access, cost or policy.
@@ -495,9 +532,11 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 				Status: "failed", DurationMS: time.Since(started).Milliseconds(),
 				Detail: truncate(err.Error(), 200),
 			})
+			attempts = append(attempts, Attempt{Head: h.ID, Model: h.Name, Tier: tier,
+				Reason: truncate(err.Error(), 200)})
 			continue
 		}
-		r := &Result{Output: resp.Output, Head: h, Retries: i, Response: resp}
+		r := &Result{Output: resp.Output, Head: h, Retries: i, Attempts: attempts, Response: resp}
 		_ = rl.Append(runlog.Event{
 			Kind: runlog.KindDispatchFinished, TaskID: taskID,
 			Head: h.ID, Model: resp.Model, Tier: tier, Status: "ok",
@@ -767,6 +806,31 @@ func (d *Dispatcher) blockedHeads(localOnly bool) string {
 		return ""
 	}
 	return "Discovered, but not routable:\n" + b.String()
+}
+
+// pinHead resolves Options.Head to one discovered head, or explains why it
+// cannot be used. Every failure names the head the caller asked for, because
+// the caller is a person who picked it from a list and is owed an answer
+// about that model rather than a different one (#676).
+func (d *Dispatcher) pinHead(id string, localOnly bool) (provider.Head, error) {
+	for _, h := range d.heads {
+		if h.ID != id {
+			continue
+		}
+		if localOnly && !h.LocalOnly {
+			return provider.Head{}, fmt.Errorf(
+				"%w: %s is not a local head, and this run is local-only "+
+					"(policy or --local); choose a local model or lift the restriction",
+				ErrNoHeads, h.Name)
+		}
+		if why := executor.Unroutable(h); why != "" {
+			return provider.Head{}, fmt.Errorf("%w: %s cannot be run: %s", ErrNoHeads, h.Name, why)
+		}
+		return h, nil
+	}
+	return provider.Head{}, fmt.Errorf(
+		"%w: no discovered head with id %q; run `hyctl probe` to see what this machine has",
+		ErrNoHeads, id)
 }
 
 // selectHeads returns heads to try, in order of preference.

@@ -34,7 +34,7 @@ interface WailsGo {
       GetFleet(): Promise<Fleet>
       GetSession(runID: string): Promise<Session>
       GetEdits(runID: string): Promise<Edit[]>
-      Chat(prompt: string, enumKey: string, runID: string, tier: string): Promise<ChatReply>
+      Chat(prompt: string, enumKey: string, runID: string, tier: string, head: string): Promise<ChatReply>
       ApproveEdit(file: string): Promise<ReviewOutcome>
       RejectEdit(file: string): Promise<ReviewOutcome>
       GetMCPServers(): Promise<MCPPanel>
@@ -82,7 +82,8 @@ export const Chat = (
   enumKey: string,
   runID: string,
   tier: string,
-): Promise<ChatReply> => backend().Chat(prompt, enumKey, runID, tier)
+  head: string,
+): Promise<ChatReply> => backend().Chat(prompt, enumKey, runID, tier, head)
 
 export const ApproveEdit = (file: string): Promise<ReviewOutcome> => backend().ApproveEdit(file)
 
