@@ -262,10 +262,3 @@ func TestCLI_TraceExportWithAnEmptyLog(t *testing.T) {
 		t.Fatal("export produced a payload for an empty log")
 	}
 }
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
