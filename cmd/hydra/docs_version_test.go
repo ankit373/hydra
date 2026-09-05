@@ -5,6 +5,8 @@ package main
 import (
 	"encoding/json"
 	"regexp"
+	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -66,7 +68,12 @@ func TestDocs_VersionReferencesAgree(t *testing.T) {
 
 // The docs must not fall behind what was actually released, or every download
 // link points at the previous release's asset names.
-func TestDocs_VersionMatchesTheRelease(t *testing.T) {
+//
+// Ahead is allowed and is the normal pre-release state: the docs are bumped in
+// the PR that prepares a release, and release-please only writes the manifest
+// when that release actually lands. Requiring equality would make preparing a
+// release fail this test, which is the opposite of the point.
+func TestDocs_VersionIsNotBehindTheRelease(t *testing.T) {
 	want := releasedVersion(t)
 	src := repoFile(t, "docs", "app.html")
 
@@ -79,13 +86,31 @@ func TestDocs_VersionMatchesTheRelease(t *testing.T) {
 		t.Fatal("app.html has no release download links; this test has stopped testing anything")
 	}
 	for v := range found {
-		if v != want {
-			t.Errorf("app.html links to v%s but the manifest last released %s.\n"+
+		if cmpSemver(v, want) < 0 {
+			t.Errorf("app.html links to v%s but %s was released since.\n"+
 				"Desktop asset names embed their version, so /releases/latest/download/ "+
 				"cannot address them and these go stale every release. Bump them, or the "+
 				"downloads 404.", v, want)
 		}
 	}
+}
+
+// cmpSemver compares two dotted numeric versions. Reports -1, 0 or 1.
+// Deliberately not a dependency: these are always plain X.Y.Z here, and the
+// regexes above have already refused anything else.
+func cmpSemver(a, b string) int {
+	as, bs := strings.Split(a, "."), strings.Split(b, ".")
+	for i := 0; i < 3; i++ {
+		x, _ := strconv.Atoi(as[i])
+		y, _ := strconv.Atoi(bs[i])
+		if x != y {
+			if x < y {
+				return -1
+			}
+			return 1
+		}
+	}
+	return 0
 }
 
 // An asset URL names the version twice, in the tag and in the filename. They
