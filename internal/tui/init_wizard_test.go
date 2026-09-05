@@ -436,7 +436,7 @@ func TestInitWizard_PayloadCaptureIsOffUnlessChosen(t *testing.T) {
 	testutil.NewSandbox(t)
 
 	m := tea.Model(NewInitModel(wizardHeads()))
-	m, _ = send(m, "enter", "enter", "enter", "enter", "enter") // straight through
+	_, _ = send(m, "enter", "enter", "enter", "enter", "enter") // straight through
 
 	cfg, err := config.Load()
 	if err != nil {
