@@ -10,19 +10,19 @@ import type { Model, ModelRegistry } from '../types'
  * choosing one spends what the other will need. That consequence is the thing
  * worth knowing at the moment of choosing, and no other surface says it.
  *
- * A choice is expressed as a tier, since every registry model declares one.
- * It is a starting point, not a guarantee, the governor can still downgrade
- * and fallback can still move off it, so the label says "start with", not
- * "use".
+ * A choice is expressed as the model's own id, not its tier. A tier is not a
+ * model: two heads share T1, so a tier could not say which was picked, and the
+ * router was free to answer from a different one entirely (#676). A pinned id
+ * is honoured or refused with a reason, never substituted.
  */
 export function ModelPicker({
-  tier,
+  head,
   onPick,
   disabled,
 }: {
   /** Empty means auto-route. */
-  tier: string
-  onPick: (tier: string) => void
+  head: string
+  onPick: (head: string) => void
   disabled?: boolean
 }) {
   const [reg, setReg] = useState<ModelRegistry | null>(null)
@@ -54,7 +54,7 @@ export function ModelPicker({
   }, [open])
 
   const all = reg?.pools.flatMap((p) => p.models) ?? []
-  const picked = all.find((m) => String(m.tier) === tier)
+  const picked = all.find((m) => m.id === head)
 
   return (
     <div className="picker" ref={wrapRef}>
@@ -67,7 +67,7 @@ export function ModelPicker({
           <div className="picker__body">
             <button
               className="picker__auto"
-              aria-checked={tier === ''}
+              aria-checked={head === ''}
               role="radio"
               onClick={() => {
                 onPick('')
@@ -80,7 +80,7 @@ export function ModelPicker({
                   Hydra reads the task's complexity and picks the cheapest model that clears it
                 </span>
               </span>
-              {tier === '' && <span className="picker__tick">✓</span>}
+              {head === '' && <span className="picker__tick">✓</span>}
             </button>
 
             {reg.pools.map((p) => (
@@ -99,10 +99,10 @@ export function ModelPicker({
                     key={m.id}
                     className="picker__m"
                     role="radio"
-                    aria-checked={String(m.tier) === tier}
+                    aria-checked={m.id === head}
                     disabled={!m.enabled}
                     onClick={() => {
-                      onPick(String(m.tier))
+                      onPick(m.id)
                       setOpen(false)
                     }}
                   >
@@ -111,7 +111,7 @@ export function ModelPicker({
                       <span className="picker__mTier">T{m.tier}</span>
                       {!m.enabled && <span className="picker__off">off</span>}
                     </span>
-                    {String(m.tier) === tier && <span className="picker__tick">✓</span>}
+                    {m.id === head && <span className="picker__tick">✓</span>}
                     <span className="picker__mSpec">{spec(m, p.shared, p.models.length)}</span>
                   </button>
                 ))}

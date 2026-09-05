@@ -16,6 +16,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/ankit373/hydra/internal/config"
+	"github.com/ankit373/hydra/internal/dispatch"
 	"github.com/ankit373/hydra/internal/editor"
 	"github.com/ankit373/hydra/internal/oracle"
 	"github.com/ankit373/hydra/internal/runlog"
@@ -1333,5 +1334,35 @@ func TestChatScrollGeom_MirrorsInputBarHeight(t *testing.T) {
 	m.th().log = []string{"one"}
 	if m = m.chatScrollBy(-3); m.th().scroll != 0 {
 		t.Error("a fitting log entered scrollback")
+	}
+}
+
+// #676: a reply from a weak head reads the same whether the router chose it or
+// fell back to it after the picked one failed. The note is what distinguishes
+// them, so silence here is the defect.
+func TestCkFellBackNote(t *testing.T) {
+	if got := ckFellBackNote(ckStageOut{}); got != "" {
+		t.Errorf("clean run produced a note %q; every ordinary reply would carry it", got)
+	}
+
+	one := ckStageOut{attempts: []dispatch.Attempt{
+		{Head: "claude", Model: "Claude Code", Tier: 1, Reason: "exit status 1"},
+	}}
+	got := ckFellBackNote(one)
+	for _, want := range []string{"Claude Code", "could not answer", "exit status 1"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("note = %q, want it to contain %q", got, want)
+		}
+	}
+	if strings.Contains(got, "more") {
+		t.Errorf("note = %q, must not claim more attempts than there were", got)
+	}
+
+	two := ckStageOut{attempts: []dispatch.Attempt{
+		{Head: "a", Model: "A", Tier: 1, Reason: "boom"},
+		{Head: "b", Model: "B", Tier: 2, Reason: "boom"},
+	}}
+	if got := ckFellBackNote(two); !strings.Contains(got, "+1 more") {
+		t.Errorf("note = %q, want it to count the other attempts", got)
 	}
 }

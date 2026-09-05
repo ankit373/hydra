@@ -168,6 +168,10 @@ type ckStageOut struct {
 	head       string
 	tier       int
 	confidence float64 // consensus runs only
+
+	// attempts is every head that was tried and did not answer. Carried so the
+	// task can say it fell back rather than reporting only who replied (#676).
+	attempts []dispatch.Attempt
 }
 
 // The three provider seams. Tests substitute these; the pipeline around them
@@ -232,7 +236,7 @@ func ckRealDispatchStage(ctx context.Context, t *ckTask, prompt, tierHint string
 		if err != nil {
 			return ckStageOut{}, err
 		}
-		return ckStageOut{output: res.Output, head: res.Head.Name, tier: rank.UITier(res.Head)}, nil
+		return ckStageOut{output: res.Output, head: res.Head.Name, tier: rank.UITier(res.Head), attempts: res.Attempts}, nil
 	}
 }
 
@@ -370,10 +374,32 @@ func ckRunStages(ctx context.Context, ex *ckExecState, t *ckTask, phase int) byt
 	}
 	t.answer, t.conf = out.output, out.confidence
 	t.headName, t.tier = out.head, out.tier
+	if n := ckFellBackNote(out); n != "" {
+		t.note = n
+	}
 	if t.mode.name == "edit" && t.file == "" {
 		t.note = "no file named, answered instead"
 	}
 	return 0
+}
+
+// ckFellBackNote says which head was tried and could not answer. Silence here
+// is what #676 reported: a reply from a weak head reads the same whether the
+// router chose it or fell back to it.
+func ckFellBackNote(out ckStageOut) string {
+	if len(out.attempts) == 0 {
+		return ""
+	}
+	a := out.attempts[0]
+	name := a.Model
+	if name == "" {
+		name = a.Head
+	}
+	more := ""
+	if len(out.attempts) > 1 {
+		more = fmt.Sprintf(" (+%d more)", len(out.attempts)-1)
+	}
+	return fmt.Sprintf("%s could not answer%s: %s", name, more, truncate(a.Reason, 60))
 }
 
 // ckEditAndVerify is the edit → verify → fix loop. In careful mode each fix
