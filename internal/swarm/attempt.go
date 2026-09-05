@@ -39,7 +39,7 @@ type Attempt struct {
 	TokensEstimated bool // true when tokens were estimated (agy char/4), not provider-reported
 	Duration        time.Duration
 	EstCostUSD      float64
-	Err             error // original typed error — never stringified before display
+	Err             error // original typed error, never stringified before display
 	StartedAt       time.Time
 	FinishedAt      time.Time
 	Rank            int // 1 = winner; 0 = unranked

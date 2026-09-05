@@ -124,7 +124,7 @@ func TestSPRT_SamplesHighestDFirst(t *testing.T) {
 }
 
 // Law 2 guard: an uninformative (coin-flip) source moves confidence essentially
-// nowhere — a fleet of them never reaches a decision and stays at σ(0)=0.5.
+// nowhere, a fleet of them never reaches a decision and stays at σ(0)=0.5.
 func TestSPRT_MiscalibratedSourceContributesNothing(t *testing.T) {
 	c, _ := New("")
 	calibrateSymmetric(c, "coin", "d", 0.5, 1000)
@@ -154,7 +154,7 @@ func TestSPRT_BehavioralEquivalenceLiftsAgreement(t *testing.T) {
 	c, _ := New("")
 	calibrateSymmetric(c, "sim", "d", 0.9, 1000)
 
-	// Correct answers, worded differently — a textual check calls these "disagree".
+	// Correct answers, worded differently, a textual check calls these "disagree".
 	seq := func() []string {
 		return []string{"return a + b", "func sum(a,b int) int { return b+a }", "the sum: a plus b"}
 	}
@@ -184,7 +184,7 @@ func TestSPRT_BehavioralEquivalenceLiftsAgreement(t *testing.T) {
 	}
 }
 
-// A nil comparator (WithEquivalence(nil)) is ignored — the default is kept.
+// A nil comparator (WithEquivalence(nil)) is ignored, the default is kept.
 func TestSPRT_WithEquivalenceNilKeepsDefault(t *testing.T) {
 	c, _ := New("")
 	calibrateSymmetric(c, "sim", "d", 0.9, 1000)
@@ -208,7 +208,7 @@ func TestTextEquivalence(t *testing.T) {
 	}
 }
 
-// probExec answers `truth` with probability p, else `wrong` — a stochastic model.
+// probExec answers `truth` with probability p, else `wrong`, a stochastic model.
 type probExec struct {
 	truth, wrong string
 	p            float64
@@ -256,7 +256,7 @@ func TestSPRT_Law3_SamplesAndAccuracy(t *testing.T) {
 		blendedMean, 100*(1-blendedMean/fixedSwarm), blendedAcc)
 
 	// NOTE: these land above the Manifesto's *continuous* E[N] ([MODEL]: easy
-	// 1.33, blended 2.48) because evidence arrives in quantized ~2.19-nat steps —
+	// 1.33, blended 2.48) because evidence arrives in quantized ~2.19-nat steps,
 	// a single vote is below the accept threshold A=ln(19)=2.94, so an easy task
 	// needs ≥2 corroborating votes. That is faithful discrete SPRT, not a defect.
 
@@ -268,7 +268,7 @@ func TestSPRT_Law3_SamplesAndAccuracy(t *testing.T) {
 	if blendedMean >= fixedSwarm {
 		t.Errorf("blended mean samples = %.3f, want < %.0f (adaptive beats fixed)", blendedMean, fixedSwarm)
 	}
-	// SPRT spends more on harder tasks — that is the point, and fixed-N can't.
+	// SPRT spends more on harder tasks, that is the point, and fixed-N can't.
 	if hardMean <= easyMean {
 		t.Errorf("hard mean (%.3f) should exceed easy mean (%.3f)", hardMean, easyMean)
 	}

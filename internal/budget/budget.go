@@ -11,11 +11,11 @@ import (
 type Mode int
 
 const (
-	ModeNormal    Mode = iota // 0–49%
-	ModeCompact               // 50–64%
-	ModeCaution               // 65–69%
-	ModeWarning               // 70–74%
-	ModeCritical              // 75–79%
+	ModeNormal    Mode = iota // 0-49%
+	ModeCompact               // 50-64%
+	ModeCaution               // 65-69%
+	ModeWarning               // 70-74%
+	ModeCritical              // 75-79%
 	ModeEmergency             // 80%+
 )
 
@@ -66,7 +66,7 @@ func ModeFor(pct int) Mode {
 }
 
 // Tracker holds the latest snapshot for a single model. Safe for concurrent use.
-// modelID is set once at construction and never mutated — no lock needed for reads.
+// modelID is set once at construction and never mutated, no lock needed for reads.
 type Tracker struct {
 	modelID string
 	mu      sync.RWMutex

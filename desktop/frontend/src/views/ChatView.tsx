@@ -7,11 +7,11 @@ import { ModelPicker } from './ModelPicker'
 import { Cockpit } from './Cockpit'
 import { GovernorNotice } from './GovernorNotice'
 
-// Matches App.tsx's LIVE_MS — same reasoning: this is "what is happening now",
+// Matches App.tsx's LIVE_MS, same reasoning: this is "what is happening now",
 // not a retrospective read.
 const POLL_MS = 2000
 
-// Turn history survives a reload via sessionStorage — cleared when the window
+// Turn history survives a reload via sessionStorage, cleared when the window
 // closes, which is the lifetime a still-open chat already implies. Own key so
 // a future view's persistence cannot collide with it.
 const TURNS_KEY = 'hydra.chat.turns'
@@ -23,13 +23,13 @@ interface Turn {
   // Set instead of trusting `reply` at face value when this turn's outcome
   // was reconstructed from the run log after a reload rather than returned by
   // Chat() itself. runlog never inlines model output (its own doc says so),
-  // so a recovered turn can carry routing/cost but never the answer text —
+  // so a recovered turn can carry routing/cost but never the answer text,
   // this is what says so, rather than rendering a blank reply as if real.
   recoveredNote?: string
 }
 
 /**
- * The chat view — Hydra's default surface (#520).
+ * The chat view, Hydra's default surface (#520).
  *
  * Was a collapsible dock, whose whole rationale was avoiding split attention
  * between a chat and the view it commented on. As the primary surface there is
@@ -58,7 +58,7 @@ export function ChatView({
   const [tier, setTier] = useState('')
   const [turns, setTurns] = useState<Turn[]>([])
   const [busy, setBusy] = useState(false)
-  // The one turn currently in flight, if any — Chat's own busy flag already
+  // The one turn currently in flight, if any, Chat's own busy flag already
   // guarantees at most one, so this doesn't need to be keyed by turn index.
   const [liveSession, setLiveSession] = useState<SessionData | null>(null)
   const [governor, setGovernor] = useState<GovernorPanel | undefined>()
@@ -79,7 +79,7 @@ export function ChatView({
 
   // Runlog is written incrementally from the moment Chat begins (chat.go
   // appends KindRunStarted before dispatching), so GetSession has something to
-  // show well before the blocking Chat call returns — this is what makes a
+  // show well before the blocking Chat call returns, this is what makes a
   // chat turn narrate the way Session's own Timeline already does, instead of
   // sitting behind a spinner until the whole thing finishes (#513).
   function watchRun(runId: string) {
@@ -89,10 +89,10 @@ export function ChatView({
     pollRef.current = setInterval(poll, POLL_MS)
   }
 
-  // Reattaches to a run this page did not start watching — either a reload
+  // Reattaches to a run this page did not start watching, either a reload
   // caught it mid-dispatch, or the log needs one read to learn it already
   // finished. chat.go's dispatch runs on its own context, unaffected by the
-  // frontend reloading (#533), so the run itself is never actually lost —
+  // frontend reloading (#533), so the run itself is never actually lost,
   // only this page's earlier view of it was. Keeps polling like a fresh
   // dispatch until the run stops being live, then settles the turn from
   // whatever the log recorded, since the real Chat() promise that would have
@@ -110,8 +110,8 @@ export function ChatView({
           setLiveSession(null)
           setBusy(false)
           const note = s.found
-            ? 'Finished while this view was closed — the run record was kept, not the answer text.'
-            : "Couldn't confirm this task's status — check Fleet."
+            ? 'Finished while this view was closed, the run record was kept, not the answer text.'
+            : "Couldn't confirm this task's status, check Fleet."
           setTurns((t) =>
             t.map((turn, i) =>
               i === idx ? { ...turn, reply: recoveredReply(runId, s), recoveredNote: note } : turn,
@@ -170,7 +170,7 @@ export function ChatView({
     setPrompt('')
     setBusy(true)
     // Minted before dispatching (not read off the reply) so watchRun can
-    // start polling immediately — Chat won't resolve until the whole
+    // start polling immediately, Chat won't resolve until the whole
     // dispatch finishes, but the run's log exists from the moment it starts.
     const runId = await NewRunID()
     setTurns((t) => [...t, { prompt: p, runId }])
@@ -194,11 +194,11 @@ export function ChatView({
     }
   }
 
-  // No heads discoverable at all — dispatch.New already probes fresh on every
+  // No heads discoverable at all, dispatch.New already probes fresh on every
   // call, so retrying the same prompt IS the "look again" action, not a
   // separate one. Targets a turn by index and reuses its own stored prompt
   // rather than the (already-cleared) input state. A fresh run id, same as
-  // any other dispatch attempt — the failed attempt's log stays exactly what
+  // any other dispatch attempt, the failed attempt's log stays exactly what
   // it was, a probe that found nothing.
   async function retry(i: number) {
     if (busy) return
@@ -247,7 +247,7 @@ export function ChatView({
   }
 
   // Refusing is a separate path that never reaches an executor, so it is not
-  // an answer of "no" — nothing runs at all.
+  // an answer of "no", nothing runs at all.
   async function decline(i: number) {
     const taskId = turns[i].reply?.taskId
     if (!taskId || busy) return
@@ -292,14 +292,14 @@ export function ChatView({
           <div key={i} className="turn">
             {/* A tier change belongs in the transcript, not a toast: a toast
                 vanishes and then a different model answered for no visible
-                reason. Only says what moved — the router does not record *why*,
+                reason. Only says what moved, the router does not record *why*,
                 and inventing a reason would be worse than omitting one. */}
             {tierShift(turns, i) && (
               <div className="shift">
                 <span className="shift__ico" aria-hidden="true">&#8663;</span>
                 <span className="shift__txt">
                   Moved to <b>{turns[i - 1].reply!.tier > t.reply!.tier ? 'a stronger' : 'a cheaper'}</b>{' '}
-                  model — T{turns[i - 1].reply!.tier} &rarr; T{t.reply!.tier}
+                  model, T{turns[i - 1].reply!.tier} &rarr; T{t.reply!.tier}
                 </span>
               </div>
             )}
@@ -308,7 +308,7 @@ export function ChatView({
               <>
                 <p className="turn__wait">{liveSession?.found ? 'working…' : 'routing…'}</p>
                 {/* Same event stream Session's Timeline renders after the fact
-                    (runlog.Append writes each event as it happens) — shown
+                    (runlog.Append writes each event as it happens), shown
                     live here instead of making "what is it doing" a click
                     through to Session once the whole turn is already done. */}
                 {i === turns.length - 1 && liveSession?.found && (
@@ -328,7 +328,7 @@ export function ChatView({
             {t.reply?.error && !t.reply.needsProbe && (
               <>
                 <p className="turn__err">{t.reply.error}</p>
-                {/* The run's full record outlives the error — a generic
+                {/* The run's full record outlives the error, a generic
                     dispatch failure must not be a dead end (#533). */}
                 {t.reply.runId && <SessionLink reply={t.reply} onOpenRun={onOpenRun} />}
               </>
@@ -350,7 +350,7 @@ export function ChatView({
                 ) : (
                   <p className="turn__out">{t.reply.output}</p>
                 )}
-                {/* Which head, which tier, what it cost — this is a router, so
+                {/* Which head, which tier, what it cost, this is a router, so
                     that is the part worth showing, not just the answer. */}
                 <SessionLink reply={t.reply} onOpenRun={onOpenRun} />
               </>
@@ -415,7 +415,7 @@ function SessionLink({ reply, onOpenRun }: { reply: ChatReply; onOpenRun: (runID
   )
 }
 
-// Built from whatever GetSession recovered rather than Chat()'s own return —
+// Built from whatever GetSession recovered rather than Chat()'s own return,
 // the log has routing and cost (TimelineEntry/Agent carry both), never the
 // answer text, so output is deliberately left blank instead of guessed at.
 function recoveredReply(runId: string, s: SessionData): ChatReply {
@@ -456,7 +456,7 @@ function tierShift(turns: Turn[], i: number): boolean {
  *
  * Not a modal: a modal that vanishes leaves the task silently parked, and the
  * question is part of the conversation's record. The task stays parked until
- * it is answered or declined — there is deliberately no default action and
+ * it is answered or declined, there is deliberately no default action and
  * nothing that resolves on dismiss or timeout.
  */
 function Waiting({

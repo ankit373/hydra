@@ -54,7 +54,7 @@ function coverageSegments(categories: Category[]): DonutSegment[] {
 }
 
 // Allowed/Denied are mutually exclusive (Decision is one or the other) and
-// sum to Total — a real part-to-whole pie. Flagged is a different,
+// sum to Total, a real part-to-whole pie. Flagged is a different,
 // independent dimension (a flagged event can be either allowed or denied),
 // so it can't be a third slice without double-counting; it's called out
 // separately instead of drawn into the same pie.
@@ -96,7 +96,7 @@ export function Security({ data }: { data: SecurityReport }) {
 
       {!data.integrityIntact && (
         <div className="error">
-          INTEGRITY COMPROMISED — the audit log's hash chain has been tampered with. Nothing else
+          INTEGRITY COMPROMISED, the audit log's hash chain has been tampered with. Nothing else
           in this report can be trusted until this is resolved.
         </div>
       )}
@@ -181,7 +181,7 @@ function sevClass(s: Severity) {
   return 'sec-sev--low'
 }
 
-// An incident is a story, so it renders as one — the narrative first, the
+// An incident is a story, so it renders as one, the narrative first, the
 // stage chips and the evidence count under it.
 function IncidentList({ incidents, heading }: { incidents: Incident[]; heading: string }) {
   if (incidents.length === 0) return null
@@ -219,7 +219,7 @@ function RegisterTable({ register }: { register: RiskRegister }) {
     <section>
       <h2 className="section__title">Risk register</h2>
       <p className="card__note">
-        Σ modelled defect cost ${register.sumDefectCostUsd.toFixed(0)} — per-occurrence, not
+        Σ modelled defect cost ${register.sumDefectCostUsd.toFixed(0)}, per-occurrence, not
         annualised{register.breached > 0 ? ` · ${register.breached} past remediation SLA` : ''}.
         Framework mappings are curated assertions, not measurements.
       </p>
@@ -295,7 +295,7 @@ function Hero({ data }: { data: SecurityReport }) {
               <RiskTrend history={data.riskHistory} />
             </div>
           ) : (
-            <p className="card__note">No history yet — a trend appears after the second day.</p>
+            <p className="card__note">No history yet, a trend appears after the second day.</p>
           )}
         </div>
       </div>
@@ -352,7 +352,7 @@ function ActionCards({ actions }: { actions: Action[] }) {
   if (actions.length === 0) {
     return (
       <p className="card__note">
-        Nothing to act on — every applicable category is covered and no head is flagged.
+        Nothing to act on, every applicable category is covered and no head is flagged.
       </p>
     )
   }
@@ -509,7 +509,7 @@ function PrivilegeView({ rows }: { rows: AgentPrivilege[] }) {
 // says what is live and what leaves the machine.
 function BOMView({ entries }: { entries: BOMEntry[] }) {
   if (entries.length === 0) {
-    return <p className="card__note">No heads discovered — run <code>hyctl probe</code>.</p>
+    return <p className="card__note">No heads discovered, run <code>hyctl probe</code>.</p>
   }
   const remote = entries.filter((b) => !b.local).length
   const runtime = entries.filter((b) => b.origin === 'user').length
@@ -591,12 +591,12 @@ function AttestationView({ a }: { a: Attestation }) {
           </div>
           <p className="card__note">
             {a.evidence.truncated
-              ? 'truncated — records were deleted from the end'
+              ? 'truncated, records were deleted from the end'
               : a.evidence.anchorMissing
-                ? 'unanchored — truncation would not be detected'
+                ? 'unanchored, truncation would not be detected'
                 : a.evidence.chainIntact
                   ? 'chain intact'
-                  : 'chain broken — the log was modified after recording'}
+                  : 'chain broken, the log was modified after recording'}
           </p>
         </div>
       </div>
@@ -665,14 +665,14 @@ function ControlsView({ controls }: { controls: Control[] }) {
 }
 
 // A confidence figure assembled from correlated or coin-flip sources reads
-// as a result while being none — the opposite of a missing control, which at
+// as a result while being none, the opposite of a missing control, which at
 // least looks missing.
 // A head binary changing under you is the rug-pull pattern itself. First
-// sight is a baseline, not a finding — flagging every head on a first run
+// sight is a baseline, not a finding, flagging every head on a first run
 // would teach the reader to ignore the column.
 // Consequences, not access decisions: an edit to a hub forty files depend on
 // is a different risk from an edit to a leaf. A file the graph does not index
-// is shown as unknown and sorted last — never as low-risk, which is the whole
+// is shown as unknown and sorted last, never as low-risk, which is the whole
 // reason internal/graph exposes Knows().
 function BlastView({ blast }: { blast: BlastReport }) {
   if (!blast?.graphPresent) {
@@ -750,7 +750,7 @@ function SupplyChainView({ supply }: { supply: SupplyChain }) {
       {supply.changed > 0 && (
         <div className="error">
           {supply.changed} head binary(ies) changed since last seen. An upgrade and a swap look
-          identical here — confirm which it was.
+          identical here, confirm which it was.
         </div>
       )}
       <div className="table__wrap">
@@ -820,7 +820,7 @@ function ConfidenceEvidenceView({ evidence }: { evidence: EvidenceQuality }) {
         <div className="sec-action sec-action--soon" key={w.source}>
           <div className="sec-action__title">{w.source} carries no diagnostic weight</div>
           <div className="sec-action__detail">
-            D={w.d.toFixed(3)} nats over {w.observations.toFixed(0)} recorded outcomes — its agreement
+            D={w.d.toFixed(3)} nats over {w.observations.toFixed(0)} recorded outcomes, its agreement
             barely moves the posterior
           </div>
         </div>
@@ -852,7 +852,7 @@ function DriftView({ drift }: { drift: ConfigDrift }) {
     <section>
       <h2 className="section__title">Configuration history</h2>
       <div className="error">
-        The routing/pricing configuration changed mid-history — decisions recorded before{' '}
+        The routing/pricing configuration changed mid-history, decisions recorded before{' '}
         {epochs[epochs.length - 1].firstTs} were made under different rules than those after it.
       </div>
       <div className="table__wrap">
@@ -887,7 +887,7 @@ function PolicyAuditView({ audit }: { audit: PolicyAudit }) {
       <>
         <FailOpenBanner audit={audit} />
         <p className="card__note">
-          No rules are defined — every access falls through to the {audit?.default ?? 'allow'} default,
+          No rules are defined, every access falls through to the {audit?.default ?? 'allow'} default,
           so nothing is scoped.
         </p>
       </>
@@ -950,7 +950,7 @@ function FailOpenBanner({ audit }: { audit: PolicyAudit }) {
   if (!audit?.failOpen) return null
   return (
     <div className="error">
-      FAIL-OPEN — the default decision is allow, so anything no rule names is permitted. Set
+      FAIL-OPEN, the default decision is allow, so anything no rule names is permitted. Set
       "default": "deny" in <code>~/.hydra/mcp_policy.json</code> to invert that.
     </div>
   )
@@ -1049,12 +1049,12 @@ function CountBars({ title, rows }: { title: string; rows?: SecurityCount[] }) {
   )
 }
 
-// The raw rows behind every finding — Agent/Resource/Action/FlagReason have
+// The raw rows behind every finding, Agent/Resource/Action/FlagReason have
 // been recorded on every event since the ledger shipped and rendered nowhere
 // until now.
 function EvidenceView({ events, truncated }: { events: LedgerEvent[]; truncated: boolean }) {
   if (events.length === 0) {
-    return <p className="card__note">The audit log is empty — nothing has been recorded on this machine.</p>
+    return <p className="card__note">The audit log is empty, nothing has been recorded on this machine.</p>
   }
   const rows = [...events].reverse() // newest first
   return (
@@ -1062,7 +1062,7 @@ function EvidenceView({ events, truncated }: { events: LedgerEvent[]; truncated:
       <h2 className="section__title">Recorded evidence</h2>
       {truncated && (
         <p className="card__note">
-          Showing the most recent {events.length} events. The full audit log is longer — read it with{' '}
+          Showing the most recent {events.length} events. The full audit log is longer, read it with{' '}
           <code>hyctl mcp log</code>.
         </p>
       )}
@@ -1153,7 +1153,7 @@ function Categories({ categories }: { categories: Category[] }) {
   )
 }
 
-// Ranked bars, not a table — the same .rank/.rank__* pattern (and the
+// Ranked bars, not a table, the same .rank/.rank__* pattern (and the
 // generic free/cheap/mid/expensive ramp) Dashboard's RankedBars already
 // established for exactly this shape: a handful of named rows ranked by one
 // number, which a bar makes comparable at a glance in a way a table doesn't.

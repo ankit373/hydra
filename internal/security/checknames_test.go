@@ -12,9 +12,9 @@ import (
 )
 
 // The desktop looks checks up by name, with an exact string compare
-// (findCheckStatus). Two of those names did not exist — the backend emits
+// (findCheckStatus). Two of those names did not exist, the backend emits
 // "Sensitive data exposure" and "Policy posture", the view asked for
-// "PII/sensitive-data detections" and "Policy adherence" — so both hero cards
+// "PII/sensitive-data detections" and "Policy adherence", so both hero cards
 // silently never rendered. Nothing was checking the two sides agreed.
 //
 // dto_test.go guards the shape of the wire and typesparity_test.go guards the
@@ -59,16 +59,16 @@ func TestCheckNamesAreReal(t *testing.T) {
 
 	names := producedNames()
 	if len(names) == 0 {
-		t.Fatal("no check names collected — the guard would silently pass")
+		t.Fatal("no check names collected, the guard would silently pass")
 	}
 
 	found := lookupRE.FindAllStringSubmatch(string(raw), -1)
 	if len(found) == 0 {
-		t.Fatal("no findCheckStatus lookups found — the regex has drifted from the view")
+		t.Fatal("no findCheckStatus lookups found, the regex has drifted from the view")
 	}
 	for _, m := range found {
 		if !names[m[1]] {
-			t.Errorf("the Audit view looks up a check named %q, which no builder emits — "+
+			t.Errorf("the Audit view looks up a check named %q, which no builder emits, "+
 				"findCheckStatus compares exactly, so that card can never render", m[1])
 		}
 	}
@@ -78,7 +78,7 @@ func TestCheckNamesAreReal(t *testing.T) {
 // empty name would also make the guard above vacuous.
 func TestEveryCheckIsNamed(t *testing.T) {
 	if got := len(producedNames()); got != 13 {
-		t.Errorf("collected %d distinct check names, want 13 — a builder was added, "+
+		t.Errorf("collected %d distinct check names, want 13, a builder was added, "+
 			"removed, or returned an unnamed Check", got)
 	}
 }

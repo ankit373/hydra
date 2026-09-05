@@ -2,7 +2,7 @@
 
 package tui
 
-// scroll_test.go — the invariant that #630 was six instances of: a frame that
+// scroll_test.go, the invariant that #630 was six instances of: a frame that
 // says there is more below must move when a key that claims to move is pressed.
 // Rendering tests alone never caught it; nobody pressed a key.
 
@@ -51,7 +51,7 @@ func overflowing() Cockpit {
 	return m
 }
 
-// ckCueRe matches the overflow cue itself — the glossary documents "↑/↓" as
+// ckCueRe matches the overflow cue itself, the glossary documents "↑/↓" as
 // keys, and that arrow is text, not a promise of more content.
 var ckCueRe = regexp.MustCompile(`[↑↓] \d+ more`)
 
@@ -74,7 +74,7 @@ func frameOf(m Cockpit, w, h int) string {
 	return stripANSI(m.View())
 }
 
-// A cue that no key answers is content the user cannot reach — the audit view
+// A cue that no key answers is content the user cannot reach, the audit view
 // hid 16 lines that way, and the glossary ignored the arrows (#630).
 func TestScrollCue_EveryAdvertisedKeyMoves(t *testing.T) {
 	testutil.NewSandbox(t)
@@ -111,7 +111,7 @@ func TestScrollCue_OverlaysMoveToo(t *testing.T) {
 	m.glossary = true
 	before := frameOf(m, 80, 24)
 	if !hasCue(before, "↓") {
-		t.Fatal("the glossary no longer overflows an 80x24 terminal — pick a smaller size")
+		t.Fatal("the glossary no longer overflows an 80x24 terminal, pick a smaller size")
 	}
 	for _, k := range scrollKeys {
 		m.w, m.h, m.ready = 80, 24, true

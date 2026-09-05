@@ -16,7 +16,7 @@ type Edit struct {
 	Detail string `json:"detail,omitempty"`
 
 	// Ref resolves to the stored before/after snapshot. Empty when the content
-	// was refused for size or could not be written — the change still happened,
+	// was refused for size or could not be written, the change still happened,
 	// so the row still appears, but no diff can be shown for it.
 	Ref string `json:"ref,omitempty"`
 
@@ -46,7 +46,7 @@ type DiffLine struct {
 	NewLine int    `json:"newLine"` // 0 when the line is a removal
 
 	// Spans are the byte ranges on this line that actually changed, set only
-	// for a 1:1 replacement. Empty means "no intra-line detail" — either the
+	// for a 1:1 replacement. Empty means "no intra-line detail", either the
 	// line was added or removed outright, or it belongs to a multi-line block
 	// where pairing removed lines to added ones would invent a relationship
 	// the diff never established.
@@ -117,7 +117,7 @@ func (a *API) GetDiff(runID, ref, file string) (*Diff, error) {
 }
 
 // splitLines splits content into lines without inventing a trailing empty one
-// for the final newline — a file ending in "\n" has as many lines as newlines,
+// for the final newline, a file ending in "\n" has as many lines as newlines,
 // and a phantom last line renders as a spurious change.
 func splitLines(s string) []string {
 	if s == "" {
@@ -129,7 +129,7 @@ func splitLines(s string) []string {
 
 // maxLCSCells bounds the dynamic program below. The LCS table is O(n·m), and
 // MaxSnapshotBytes permits ~65k lines, so an unbounded table would be 4.2
-// billion cells — tens of gigabytes and effectively a hang. Trimming the common
+// billion cells, tens of gigabytes and effectively a hang. Trimming the common
 // prefix and suffix first collapses almost every real edit well under this;
 // what survives is a file rewritten wholesale, which is rendered as one
 // replacement rather than a line-by-line alignment nobody would read anyway.

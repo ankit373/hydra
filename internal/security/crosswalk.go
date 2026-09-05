@@ -12,42 +12,42 @@ import "sort"
 var crosswalkTable = map[RiskClass][]FrameworkRef{
 	ClassExposure: {
 		{Framework: "OWASP LLM", Control: "LLM02 Sensitive Information Disclosure"},
-		{Framework: "NIST AI RMF", Control: "MAP 5 — impacts characterised"},
+		{Framework: "NIST AI RMF", Control: "MAP 5, impacts characterised"},
 		{Framework: "ISO/IEC 42001", Control: "A.7 Data for AI systems"},
 		{Framework: "SOC 2", Control: "CC6.1 Logical access"},
 		{Framework: "MITRE ATLAS", Control: "Exfiltration via AI service"},
 	},
 	ClassIncident: {
 		{Framework: "OWASP LLM", Control: "LLM01 Prompt Injection"},
-		{Framework: "NIST AI RMF", Control: "MANAGE 4 — incidents handled"},
+		{Framework: "NIST AI RMF", Control: "MANAGE 4, incidents handled"},
 		{Framework: "ISO/IEC 42001", Control: "A.10 Incident management"},
 		{Framework: "SOC 2", Control: "CC7.3 Security incident evaluation"},
 		{Framework: "MITRE ATLAS", Control: "Prompt injection / privilege escalation"},
 	},
 	ClassControl: {
-		{Framework: "NIST AI RMF", Control: "GOVERN 1 — policies enacted"},
+		{Framework: "NIST AI RMF", Control: "GOVERN 1, policies enacted"},
 		{Framework: "ISO/IEC 42001", Control: "A.6 AI system lifecycle"},
 		{Framework: "SOC 2", Control: "CC5.2 Control activities deployed"},
 	},
 	ClassPolicy: {
 		{Framework: "OWASP LLM", Control: "LLM06 Excessive Agency"},
-		{Framework: "NIST AI RMF", Control: "GOVERN 1 — policies enacted"},
+		{Framework: "NIST AI RMF", Control: "GOVERN 1, policies enacted"},
 		{Framework: "ISO/IEC 42001", Control: "A.9 Use of AI systems"},
 		{Framework: "SOC 2", Control: "CC6.3 Least privilege"},
 	},
 	ClassSupplyChain: {
 		{Framework: "OWASP LLM", Control: "LLM03 Supply Chain"},
-		{Framework: "NIST AI RMF", Control: "MAP 4 — third-party risk"},
+		{Framework: "NIST AI RMF", Control: "MAP 4, third-party risk"},
 		{Framework: "ISO/IEC 42001", Control: "A.10 Third-party suppliers"},
 		{Framework: "SOC 2", Control: "CC9.2 Vendor management"},
 		{Framework: "MITRE ATLAS", Control: "ML supply chain compromise"},
 	},
 	ClassCoverage: {
-		{Framework: "NIST AI RMF", Control: "MEASURE 2 — risks assessed"},
+		{Framework: "NIST AI RMF", Control: "MEASURE 2, risks assessed"},
 		{Framework: "ISO/IEC 42001", Control: "A.5 Risk assessment"},
 	},
 	ClassEvidence: {
-		{Framework: "NIST AI RMF", Control: "MEASURE 1 — metrics documented"},
+		{Framework: "NIST AI RMF", Control: "MEASURE 1, metrics documented"},
 		{Framework: "ISO/IEC 42001", Control: "A.8 Information for interested parties"},
 		{Framework: "SOC 2", Control: "CC4.1 Monitoring"},
 	},
@@ -85,7 +85,7 @@ func Frameworks() []string {
 	return out
 }
 
-// FrameworkExposure counts open risks touching each framework — the
+// FrameworkExposure counts open risks touching each framework, the
 // "how do we look against X" answer, per framework, from one pass.
 func FrameworkExposure(reg RiskRegister) map[string]int {
 	out := map[string]int{}

@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-// GenerateGo builds a Doc from `go list -json ./...` rooted at dir — a Go
+// GenerateGo builds a Doc from `go list -json ./...` rooted at dir, a Go
 // package-import graph (dependency edges at package granularity), not a
 // general tree-sitter indexer. exclude skips any package whose short
 // (module-relative) import path has one of these prefixes.

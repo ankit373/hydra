@@ -13,7 +13,7 @@ import {
 } from '../bindings'
 import type { ChatReply, Session as SessionData } from '../types'
 
-// ChatView talks to the Go backend only through these bindings — mocking the
+// ChatView talks to the Go backend only through these bindings, mocking the
 // module lets every test drive a specific backend outcome (a run still live,
 // one that finished while the view was away, a plain dispatch failure) without
 // a real Wails runtime.

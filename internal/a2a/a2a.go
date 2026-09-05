@@ -2,7 +2,7 @@
 
 // Package a2a models agent-to-agent handoffs with causal ordering. Each handoff
 // carries a vector clock so Hydra can tell whether two handoffs are sequential
-// (one happened-before the other) or concurrent — and, when concurrent, whether
+// (one happened-before the other) or concurrent, and, when concurrent, whether
 // they touch overlapping files and therefore conflict.
 package a2a
 
@@ -26,7 +26,7 @@ func (c Clock) Tick(agent string) Clock {
 	return out
 }
 
-// Merge returns the component-wise maximum of two clocks — the causal history
+// Merge returns the component-wise maximum of two clocks, the causal history
 // known to an agent that has observed both.
 func (c Clock) Merge(o Clock) Clock {
 	out := c.clone()
@@ -53,7 +53,7 @@ const (
 	Equal      Ordering = iota // identical histories
 	Before                     // c happened-before o
 	After                      // o happened-before c
-	Concurrent                 // neither — independent, possibly conflicting
+	Concurrent                 // neither, independent, possibly conflicting
 )
 
 func (o Ordering) String() string {
@@ -190,7 +190,7 @@ func (h *Handoff) PromptBlock(task string) string {
 }
 
 // ConflictsWith reports whether two handoffs are concurrent (neither
-// happened-before the other) AND touch at least one common file — the signature
+// happened-before the other) AND touch at least one common file, the signature
 // of an unsynchronized edit collision.
 func (h *Handoff) ConflictsWith(o *Handoff) bool {
 	if h == nil || o == nil {

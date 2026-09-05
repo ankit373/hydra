@@ -15,11 +15,11 @@ concurrency:
 
 jobs:
   # Hydra ships for darwin, linux and windows on both amd64 and arm64, but every
-  # job in this file used to run on ubuntu-latest — so `go test` only ever ran on
+  # job in this file used to run on ubuntu-latest, so `go test` only ever ran on
   # Linux. That is how a Windows user came to see "0GB RAM · memory fully
   # occupied" and "memory pressure: low" at the same time (#258), and how the
-  # non-git diff path came to return ("", nil) — silently indistinguishable from
-  # "no changes" — on any machine without diff(1) (#260). Neither is exotic; both
+  # non-git diff path came to return ("", nil), silently indistinguishable from
+  # "no changes", on any machine without diff(1) (#260). Neither is exotic; both
   # are simply untested surfaces. The matrix is the fix (#255).
   go:
     name: Go build & test
@@ -45,7 +45,7 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      # gofmt/vet/staticcheck analyse source, not behaviour — their verdict does
+      # gofmt/vet/staticcheck analyse source, not behaviour, their verdict does
       # not vary by runner OS, so they run once on Linux rather than three times.
       # Formatting is checked before anything expensive: cheapest failure to
       # produce, cheapest to fix.
@@ -83,12 +83,12 @@ jobs:
 
       # -count=1 defeats the test cache. setup-go restores the build cache across
       # runs, so without it a green result can be a replay of a previous run's
-      # verdict rather than a fresh one — which is precisely the failure mode this
+      # verdict rather than a fresh one, which is precisely the failure mode this
       # matrix exists to rule out.
       #
       # The race detector supports windows/amd64, but needs cgo and a C compiler.
       # If the Windows image ever stops shipping one, drop -race for that leg
-      # rather than dropping the leg — an unraced Windows run still catches every
+      # rather than dropping the leg, an unraced Windows run still catches every
       # platform bug listed above.
       - name: Test
         run: go test ./... -race -count=1
@@ -96,7 +96,7 @@ jobs:
       # Coverage floors, the zero-test-package allow-list and the skip budget.
       #
       # Linux only: all three are properties of the source, not of the runner,
-      # and the numbers would differ per OS anyway — a test that legitimately
+      # and the numbers would differ per OS anyway, a test that legitimately
       # skips on Windows moves that package's coverage there. Enforcing one set
       # of floors on the platform they were measured on is the only version of
       # this that means anything.
@@ -111,7 +111,7 @@ jobs:
           go run ./ci/covergate -profile cover.out -config ci/coverage-floors.txt
 
   # The desktop app ships for all three OSes, so its Go backend is tested on all
-  # three too — same reasoning as the root job above (#257).
+  # three too, same reasoning as the root job above (#257).
   desktop:
     name: Desktop backend
     runs-on: ${{ matrix.os }}
@@ -140,8 +140,8 @@ jobs:
       # Scoped to ./api/... deliberately: desktop/main.go imports Wails, which
       # needs libwebkit2gtk to compile on Linux. A build tag used to exclude it,
       # but `wails build` generates bindings by compiling that package untagged,
-      # so the tag broke the documented build command (#213). desktop/api — the
-      # part with the tests — imports no UI framework at all, and main.go is
+      # so the tag broke the documented build command (#213). desktop/api, the
+      # part with the tests, imports no UI framework at all, and main.go is
       # exercised by `wails build` on a machine that has a webview.
       - name: Gofmt
         if: runner.os == 'Linux'
@@ -190,14 +190,14 @@ jobs:
       #
       # Both installers are piped straight into `sh` by users following the
       # README, so a syntax error here reaches them mid-install. Naming them
-      # explicitly rather than globbing keeps that intent visible — and is why
+      # explicitly rather than globbing keeps that intent visible, and is why
       # a new installer must be added to this list, not just written.
       - name: Lint shell scripts
         run: |
           shellcheck --severity=error install.sh install-app.sh
 
   # install.ps1's counterpart to the shellcheck job above. It runs on Windows
-  # because that is where PowerShell's own parser lives — and because nobody
+  # because that is where PowerShell's own parser lives, and because nobody
   # developing this repo on macOS or Linux can otherwise tell whether the
   # installer even parses, let alone works (#264).
   powershell:
@@ -223,7 +223,7 @@ jobs:
 
       # Best-effort, unlike the parse step above. PSScriptAnalyzer has to be
       # fetched from the PowerShell Gallery, and a gallery outage is not a
-      # defect in install.ps1 — blocking every unrelated PR on it is the wrong
+      # defect in install.ps1, blocking every unrelated PR on it is the wrong
       # trade. The parse check needs no network and is the real gate.
       - name: PSScriptAnalyzer
         shell: pwsh
@@ -238,7 +238,7 @@ jobs:
             Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -ErrorAction SilentlyContinue
             Install-Module -Name PSScriptAnalyzer -Force -Scope CurrentUser -ErrorAction Stop
           } catch {
-            Write-Host "::warning::PSScriptAnalyzer unavailable ($($_.Exception.Message)) — skipping. The parse check above still ran."
+            Write-Host "::warning::PSScriptAnalyzer unavailable ($($_.Exception.Message)), skipping. The parse check above still ran."
             exit 0
           }
 
@@ -258,7 +258,7 @@ jobs:
       - uses: actions/checkout@v7
 
       # This job used to typecheck ui/, the Ink TUI removed in #197. It now
-      # covers the desktop frontend, which had no CI coverage at all — its
+      # covers the desktop frontend, which had no CI coverage at all, its
       # types.ts mirrors the Go DTOs by hand, so a compile error there is
       # exactly the kind of drift CI should catch.
       - name: Set up Node
@@ -280,13 +280,13 @@ jobs:
         working-directory: desktop/frontend
         run: npm test
 
-      # The production bundle must build, not merely typecheck — `wails build`
+      # The production bundle must build, not merely typecheck, `wails build`
       # runs this exact command before it compiles any Go.
       - name: Build
         working-directory: desktop/frontend
         run: npm run build
 
-  # Every target Hydra ships (and windows/arm64, which it should — see #262)
+  # Every target Hydra ships (and windows/arm64, which it should, see #262)
   # compiles and vets clean today. Nothing guarded that, so a Unix-only syscall
   # or a platform-specific import could land with CI fully green, because CI only
   # ever built for the runner's own OS.
@@ -364,7 +364,7 @@ jobs:
 
   # The only place desktop/main.go is compiled. The `desktop` job above is
   # scoped to ./api/... because main.go imports Wails, so without this the Wails
-  # wiring — bindings, embedded frontend, app setup — is verified by nobody and
+  # wiring, bindings, embedded frontend, app setup, is verified by nobody and
   # breaks are found only when someone runs `wails build` by hand (#227).
   #
   # Linux only: it catches Go-level breakage for a fraction of the cost of a

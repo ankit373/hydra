@@ -34,14 +34,14 @@ func TestCrosswalk_DoesNotMutateTheTable(t *testing.T) {
 	_ = crosswalk(ClassExposure)
 	for _, f := range crosswalkTable[ClassExposure] {
 		if f.Curated {
-			t.Fatal("crosswalk() wrote Curated back into crosswalkTable — the table is shared state")
+			t.Fatal("crosswalk() wrote Curated back into crosswalkTable, the table is shared state")
 		}
 	}
 }
 
 func TestCrosswalk_UnknownClassMapsToNothing(t *testing.T) {
 	if refs := crosswalk(RiskClass("not-a-class")); refs != nil {
-		t.Errorf("got %d refs for an unknown class, want nil — a missing mapping must not be invented", len(refs))
+		t.Errorf("got %d refs for an unknown class, want nil, a missing mapping must not be invented", len(refs))
 	}
 }
 
@@ -79,7 +79,7 @@ func TestFrameworkExposure_CountsOpenRisksOnly(t *testing.T) {
 
 	got := FrameworkExposure(reg)
 	if got["OWASP LLM"] != 1 {
-		t.Errorf("OWASP LLM = %d, want 1 — a mitigated risk is not open exposure", got["OWASP LLM"])
+		t.Errorf("OWASP LLM = %d, want 1, a mitigated risk is not open exposure", got["OWASP LLM"])
 	}
 	for f, n := range got {
 		if n != 1 {

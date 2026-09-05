@@ -31,7 +31,7 @@ type SPRTResult struct {
 // RunSPRT routes a prompt through the SPRT optimal-stopping ensemble: it samples
 // the selected heads adaptively, in most-diagnostic-per-dollar order, stopping as
 // soon as the calibrated confidence reaches opts.Confidence. It is the production
-// caller of trust.Run — the swarm executor is adapted to trust.Executor here.
+// caller of trust.Run, the swarm executor is adapted to trust.Executor here.
 func (s *Swarm) RunSPRT(ctx context.Context, prompt string, opts Options) (*SPRTResult, error) {
 	if math.IsNaN(opts.Confidence) || opts.Confidence <= 0 || opts.Confidence >= 1 {
 		return nil, fmt.Errorf("swarm sprt: confidence must be in (0,1), got %v", opts.Confidence)
@@ -56,7 +56,7 @@ func (s *Swarm) RunSPRT(ctx context.Context, prompt string, opts Options) (*SPRT
 		return nil, fmt.Errorf("swarm sprt: no heads available")
 	}
 
-	// Classify once, before any head is sampled — every executeHead call the
+	// Classify once, before any head is sampled, every executeHead call the
 	// adapter makes below reuses this instead of each re-scanning prompt (#522).
 	if opts.Classification == nil {
 		c := policy.Classify(prompt)
@@ -89,7 +89,7 @@ func (s *Swarm) RunSPRT(ctx context.Context, prompt string, opts Options) (*SPRT
 	adapter := &sprtExecutor{swarm: s, prompt: prompt, opts: opts, byID: byID}
 
 	// Behavior-based agreement: two independently-correct answers that differ only
-	// in wording must count as agreement, not disagreement — the effect that capped
+	// in wording must count as agreement, not disagreement, the effect that capped
 	// real SPRT confidence at 32.9% (see the findings doc §3). nil when no
 	// dispatcher is available, in which case trust.Run keeps its textual default.
 	var equiv trust.AnswerEquivalence
@@ -115,7 +115,7 @@ func (s *Swarm) RunSPRT(ctx context.Context, prompt string, opts Options) (*SPRT
 
 	// Log the sampled heads to cost.jsonl, exactly as Run does for race/best/all.
 	// Without this the ensemble's per-head spend is invisible to `hyctl cost` and
-	// `hyctl stats` — only the aggregate trust.jsonl row survives (#175).
+	// `hyctl stats`, only the aggregate trust.jsonl row survives (#175).
 	logAttempts(adapter.attempts, ModeSPRT, opts, truncate(prompt, 80))
 
 	// Samples come from the LLR ledger, not from the attempt list: the ledger is
@@ -171,7 +171,7 @@ func (s *Swarm) judgeEquivalence(ctx context.Context, prompt string, opts Option
 	}
 	return func(candidate, answer string) bool {
 		if trust.TextEquivalence(candidate, answer) {
-			return true // identical mod formatting — no need to spend a judge call
+			return true // identical mod formatting, no need to spend a judge call
 		}
 		jctx, cancel := context.WithTimeout(ctx, timeout)
 		defer cancel()
@@ -189,7 +189,7 @@ func (s *Swarm) judgeEquivalence(ctx context.Context, prompt string, opts Option
 // buildEquivalencePrompt asks whether two answers are equivalent solutions.
 func buildEquivalencePrompt(prompt, a, b string) string {
 	var sb strings.Builder
-	sb.WriteString("Two answers were given to the same task. Decide whether they are EQUIVALENT — ")
+	sb.WriteString("Two answers were given to the same task. Decide whether they are EQUIVALENT, ")
 	sb.WriteString("both correct/valid solutions that satisfy the task, even if they differ in ")
 	sb.WriteString("wording, identifiers, formatting, or style.\n\nTask:\n---\n")
 	sb.WriteString(prompt)
@@ -202,7 +202,7 @@ func buildEquivalencePrompt(prompt, a, b string) string {
 }
 
 // parseYesNo extracts a yes/no decision from a judge reply. Ambiguous or empty
-// replies are treated as NO — the conservative direction for a trust check, so a
+// replies are treated as NO, the conservative direction for a trust check, so a
 // confused judge never inflates agreement.
 func parseYesNo(s string) bool {
 	for _, f := range strings.Fields(strings.ToLower(s)) {

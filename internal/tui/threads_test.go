@@ -38,7 +38,7 @@ func TestThreads_CtrlTCreatesAndAltDigitJumps(t *testing.T) {
 	}
 	m = altDigit(m, '2')
 	if m.th().id != 2 || m.th().input != "draft for thread 2" {
-		t.Errorf("alt+2: id=%d input=%q — the draft must survive the switch", m.th().id, m.th().input)
+		t.Errorf("alt+2: id=%d input=%q, the draft must survive the switch", m.th().id, m.th().input)
 	}
 	// alt+9 with no thread 9: refused visibly, not a panic or a silent no-op.
 	m = altDigit(m, '9')
@@ -63,7 +63,7 @@ func TestThreads_CapRefusesTheTenth(t *testing.T) {
 func TestThreads_CtrlArrowsCycleVisible(t *testing.T) {
 	m := testCockpit()
 	m = press(m, tea.KeyCtrlT)
-	m = press(m, tea.KeyCtrlT) // threads 1,2,3 — current 3
+	m = press(m, tea.KeyCtrlT) // threads 1,2,3, current 3
 	m = press(m, tea.KeyCtrlRight)
 	if m.th().id != 1 {
 		t.Fatalf("ctrl+→ from 3 landed on %d, want 1 (wraps)", m.th().id)
@@ -322,7 +322,7 @@ func TestThreads_ScrollbackPreservedAcrossSwitches(t *testing.T) {
 
 // ── message routing ──────────────────────────────────────────────────────────
 
-// Concurrent tea.Cmd results must land on the thread that owns them — by id,
+// Concurrent tea.Cmd results must land on the thread that owns them, by id,
 // never on whichever thread is current.
 func TestExecDone_RoutesByThreadIDNotCurrent(t *testing.T) {
 	testutil.NewSandbox(t)
@@ -438,7 +438,7 @@ func TestBackground_ReparentsToAgentsAndPingsOnCompletion(t *testing.T) {
 
 func TestThreadLayouts_NothingOverflowsAtAnySize(t *testing.T) {
 	testutil.NewSandbox(t)
-	long := strings.Repeat("wide thread content — no pane may leak past its column budget. ", 46) // ~3000 chars
+	long := strings.Repeat("wide thread content, no pane may leak past its column budget. ", 46) // ~3000 chars
 
 	states := map[string]func(Cockpit) Cockpit{
 		"four_threads_long_names": func(m Cockpit) Cockpit {
@@ -453,7 +453,7 @@ func TestThreadLayouts_NothingOverflowsAtAnySize(t *testing.T) {
 		"split_both_streaming": func(m Cockpit) Cockpit {
 			m = press(m, tea.KeyCtrlT)
 			m.split, m.splitID = true, 1
-			m.threads[0].exec = &ckExecState{stage: "verifying — go test ./...", started: time.Now()}
+			m.threads[0].exec = &ckExecState{stage: "verifying, go test ./...", started: time.Now()}
 			m.threads[0].log = append(m.threads[0].log, strings.Split(long, ". ")...)
 			m.threads[1].exec = &ckExecState{stage: "editing users.go", started: time.Now()}
 			m.threads[1].log = append(m.threads[1].log, strings.Split(long, ". ")...)
@@ -507,7 +507,7 @@ func TestThreadLayouts_NothingOverflowsAtAnySize(t *testing.T) {
 
 // A streamed REAL file (tab-indented, lines that fill the budget) must occupy
 // exactly one panel row each. Found live: the panel's text budget ignored its
-// own padding, so every full line wrapped in two and half the panel was lost —
+// own padding, so every full line wrapped in two and half the panel was lost,
 // disclosed by ckFrame as "… N more lines", but still half a pane of content.
 func TestCodePanel_RealFileLinesDoNotWrap(t *testing.T) {
 	var lines []string
@@ -528,11 +528,11 @@ func TestCodePanel_RealFileLinesDoNotWrap(t *testing.T) {
 		for _, pw := range []int{22, 29, 40} {
 			panel := m.codePanel(th, pw, bodyH)
 			if got := lipgloss.Height(panel); got > bodyH {
-				t.Errorf("%dx%d panel w=%d: height %d > %d — a line wrapped",
+				t.Errorf("%dx%d panel w=%d: height %d > %d, a line wrapped",
 					sz.w, sz.h, pw, got, bodyH)
 			}
 		}
-		if out := m.View(); strings.Contains(stripANSI(out), "more lines — enlarge") {
+		if out := m.View(); strings.Contains(stripANSI(out), "more lines, enlarge") {
 			t.Errorf("%dx%d: the frame had to clamp a streamed file", sz.w, sz.h)
 		}
 	}
@@ -541,7 +541,7 @@ func TestCodePanel_RealFileLinesDoNotWrap(t *testing.T) {
 // The glossary documents the THREADS group and every new key.
 func TestGlossary_DocumentsThreadKeys(t *testing.T) {
 	lines := stripANSI(strings.Join(ckGlossaryLines(), "\n"))
-	for _, want := range []string{"THREADS", "ctrl+t", "alt+1–9", "ctrl+←/→", "ctrl+\\", "ctrl+b", "ctrl+g"} {
+	for _, want := range []string{"THREADS", "ctrl+t", "alt+1-9", "ctrl+←/→", "ctrl+\\", "ctrl+b", "ctrl+g"} {
 		if !strings.Contains(lines, want) {
 			t.Errorf("glossary lacks %q", want)
 		}

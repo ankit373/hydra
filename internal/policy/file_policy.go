@@ -14,7 +14,7 @@ import (
 	"github.com/ankit373/hydra/registry"
 )
 
-// Spec is the input to the file policy evaluator — describes the task.
+// Spec is the input to the file policy evaluator, describes the task.
 // All fields are optional; missing fields don't satisfy any condition.
 type Spec struct {
 	File          string `json:"file"`
@@ -74,7 +74,7 @@ type FilePolicyEngine struct {
 	pf policyFile
 }
 
-// LoadFilePolicy reads registry/policy.yaml — an on-disk copy under hydraHome
+// LoadFilePolicy reads registry/policy.yaml, an on-disk copy under hydraHome
 // if one exists, otherwise the copy embedded in the binary (#238).
 func LoadFilePolicy(hydraHome string) (*FilePolicyEngine, error) {
 	raw, err := registry.Read(hydraHome, "policy.yaml")
@@ -90,7 +90,7 @@ func LoadFilePolicy(hydraHome string) (*FilePolicyEngine, error) {
 
 // RuleCount is how many rules policy.yaml declares. It exists so a security
 // audit can report the size of a ruleset without reaching into the parsed
-// file — the count is the difference between "no policy configured" and
+// file, the count is the difference between "no policy configured" and
 // "policy configured but not applied", which are opposite findings.
 func (e *FilePolicyEngine) RuleCount() int { return len(e.pf.Rules) }
 

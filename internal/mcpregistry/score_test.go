@@ -96,7 +96,7 @@ func TestOSVEcosystem_CoversWhatTheRegistryActuallyPublishes(t *testing.T) {
 		}
 	}
 	if _, ok := osvEcosystem["docker"]; ok {
-		t.Error(`"docker" is not a registryType the registry emits — the real value is "oci"`)
+		t.Error(`"docker" is not a registryType the registry emits, the real value is "oci"`)
 	}
 	for _, unsupported := range []string{"oci", "mcpb"} {
 		if _, ok := osvEcosystem[unsupported]; ok {
@@ -151,7 +151,7 @@ func TestNearestIdentifier_SkipsEmptyIdentifiersInCorpus(t *testing.T) {
 	}
 	nearest, dist := NearestIdentifier("real-candidat", corpus)
 	if nearest != "real-candidate" || dist != 1 {
-		t.Errorf("got (%q, %d), want (\"real-candidate\", 1) — the empty identifier must never be returned as the nearest match", nearest, dist)
+		t.Errorf("got (%q, %d), want (\"real-candidate\", 1), the empty identifier must never be returned as the nearest match", nearest, dist)
 	}
 }
 
@@ -223,7 +223,7 @@ func TestKnownBadSignal_ParsesVulnResponse(t *testing.T) {
 
 // A real OSV.dev response's database_specific field is an OBJECT
 // (malicious-packages-origins, severity, cwe_ids, ...), not the array an
-// earlier version of osvVuln mistakenly declared it as — which made
+// earlier version of osvVuln mistakenly declared it as, which made
 // json.Decode fail on every real advisory carrying that field, silently
 // turning the single highest-value signal in this whole scoring engine into
 // a permanent no-op. This test uses the real shape (verbatim from a live
@@ -330,7 +330,7 @@ func TestMaintenanceSignal_RateLimitedIsUnavailableWithDetail(t *testing.T) {
 }
 
 // An unevaluated category contributes the neutral baseline, so a repo
-// confirmed to be actively maintained must score strictly above it —
+// confirmed to be actively maintained must score strictly above it,
 // otherwise "checked and healthy" ties with "never checked".
 func TestMaintenanceSignal_RecentPushIsPositive(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -347,7 +347,7 @@ func TestMaintenanceSignal_RecentPushIsPositive(t *testing.T) {
 	}
 }
 
-// "Nothing to compare against" is not "compared and clean" — claiming the
+// "Nothing to compare against" is not "compared and clean", claiming the
 // latter was enough on its own to keep a wholly-unknown server out of the
 // insufficient-evidence state.
 func TestTyposquatSignal_UnavailableWhenThereIsNothingToCompare(t *testing.T) {
@@ -365,14 +365,14 @@ func TestTyposquatSignal_UnavailableWhenThereIsNothingToCompare(t *testing.T) {
 
 // The whole point of the third state: a server nothing could be checked
 // about must say so, not render a number. This was unreachable in production
-// before — every scored server got at least one always-on signal.
+// before, every scored server got at least one always-on signal.
 func TestComputeScore_TrulyUnknownServerSaysInsufficientEvidence(t *testing.T) {
 	score := ComputeScore(context.Background(), ServerRecord{Name: "io.example/unknown"}, nil)
 	if score.Confidence != ConfidenceInsufficient {
 		t.Errorf("Confidence = %q, want insufficient_evidence", score.Confidence)
 	}
 	if got := FormatScore(score); got != "insufficient evidence" {
-		t.Errorf("FormatScore = %q, want %q — a number here would be a claim we cannot support", got, "insufficient evidence")
+		t.Errorf("FormatScore = %q, want %q, a number here would be a claim we cannot support", got, "insufficient evidence")
 	}
 }
 
@@ -450,7 +450,7 @@ func TestAggregate_ClampsToZeroAndHundred(t *testing.T) {
 func TestComputeScore_InsufficientEvidenceOverallWhenNothingResolves(t *testing.T) {
 	// A server with an unsupported-ecosystem package, a non-GitHub repo, and
 	// no remotes has every signal come back unavailable except the baseline
-	// registry-presence signal (Community & Governance) — overall confidence
+	// registry-presence signal (Community & Governance), overall confidence
 	// should reflect that most categories are insufficient, not average them
 	// in as if they were neutral zeros.
 	srv := ServerRecord{
@@ -462,7 +462,7 @@ func TestComputeScore_InsufficientEvidenceOverallWhenNothingResolves(t *testing.
 	if score.SecurityImplementation.Confidence != ConfidenceInsufficient {
 		// typosquatSignal is always available (pure algorithm), so Security
 		// Implementation has partial evidence even though knownBadSignal
-		// isn't — that's correct, not a bug: assert on the categories that
+		// isn't, that's correct, not a bug: assert on the categories that
 		// truly have nothing.
 		t.Logf("security implementation: %+v (expected partial evidence from typosquatSignal)", score.SecurityImplementation)
 	}
@@ -476,7 +476,7 @@ func TestComputeScore_InsufficientEvidenceOverallWhenNothingResolves(t *testing.
 	// every scored server, so counting it manufactured confidence about a
 	// server nothing had actually been checked about.
 	if score.CommunityGovernance.Confidence != ConfidenceInsufficient {
-		t.Errorf("CommunityGovernance.Confidence = %q, want insufficient_evidence — a constant every server gets is not evidence", score.CommunityGovernance.Confidence)
+		t.Errorf("CommunityGovernance.Confidence = %q, want insufficient_evidence, a constant every server gets is not evidence", score.CommunityGovernance.Confidence)
 	}
 	if len(score.CommunityGovernance.Signals) == 0 {
 		t.Error("the presence signal should still be listed for the reader, just not counted")
@@ -518,7 +518,7 @@ func TestComputeScore_MissingEvidenceNeverBeatsGoodEvidence(t *testing.T) {
 	unchecked := ComputeScore(context.Background(), srv, nil)
 
 	if unchecked.Overall > checked.Overall {
-		t.Errorf("rate-limited score %.1f beats verified-healthy score %.1f — failing to check must not raise the score",
+		t.Errorf("rate-limited score %.1f beats verified-healthy score %.1f, failing to check must not raise the score",
 			unchecked.Overall, checked.Overall)
 	}
 	if unchecked.Confidence == checked.Confidence {

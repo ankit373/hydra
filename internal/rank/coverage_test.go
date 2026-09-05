@@ -8,7 +8,7 @@ import (
 	"github.com/ankit373/hydra/internal/provider"
 )
 
-// UITier maps a head to the 1–10 ladder used for cost estimation, logging and
+// UITier maps a head to the 1-10 ladder used for cost estimation, logging and
 // `--tier` pinning. Every threshold is a routing decision, so the whole ladder
 // is walked rather than sampled.
 func TestUITier_EveryThresholdBoundary(t *testing.T) {
@@ -40,18 +40,18 @@ func TestUITier_EveryThresholdBoundary(t *testing.T) {
 func TestUITier_IsMonotonicInCapScore(t *testing.T) {
 	// Walking the score down, the tier number must never go down with it:
 	// a weaker head can only be the same tier or a cheaper (higher-numbered)
-	// one. Lower tier number means stronger, so the two run opposite ways —
+	// one. Lower tier number means stronger, so the two run opposite ways,
 	// which I had backwards on the first attempt.
 	prev := 0
 	for score := 100; score >= 0; score-- {
 		h := provider.Head{ID: "h", Provider: "openai", Source: "env", CapScore: score}
 		got := UITier(h)
 		if got < prev {
-			t.Errorf("score %d gave tier %d after tier %d at a higher score — a weaker "+
+			t.Errorf("score %d gave tier %d after tier %d at a higher score, a weaker "+
 				"head was assigned a stronger tier", score, got, prev)
 		}
 		if got < 1 || got > 10 {
-			t.Errorf("score %d gave tier %d, outside the 1–10 ladder", score, got)
+			t.Errorf("score %d gave tier %d, outside the 1-10 ladder", score, got)
 		}
 		prev = got
 	}
@@ -61,20 +61,20 @@ func TestUITier_IsMonotonicInCapScore(t *testing.T) {
 }
 
 // #248: a local head is tier 10 whatever it scores. Ollama scores exactly 60,
-// which the ladder alone puts at tier 9 — one short of the bottom — so GRUNT
+// which the ladder alone puts at tier 9, one short of the bottom, so GRUNT
 // degraded past it to a paid cloud head.
 func TestUITier_LocalHeadsAreAlwaysTierTen(t *testing.T) {
 	for _, score := range []int{0, 60, 61, 90, 100} {
 		h := provider.Head{ID: "ollama/x", Provider: "local", Source: "port",
 			CapScore: score, LocalOnly: true}
 		if got := UITier(h); got != 10 {
-			t.Errorf("a local head scoring %d got tier %d, want 10 — it costs nothing "+
+			t.Errorf("a local head scoring %d got tier %d, want 10, it costs nothing "+
 				"to run, so it belongs at the cheapest tier (#248)", score, got)
 		}
 	}
 }
 
-// A registry head's explicit tier wins over the CapScore ladder — that is how
+// A registry head's explicit tier wins over the CapScore ladder, that is how
 // models.yaml pins an agy tier regardless of its score.
 func TestUITier_RegistryMetaTierWins(t *testing.T) {
 	h := provider.Head{
@@ -91,7 +91,7 @@ func TestUITier_RegistryMetaTierWins(t *testing.T) {
 	bad := h
 	bad.Meta = map[string]string{"tier": "not-a-number"}
 	if got := UITier(bad); got < 1 || got > 10 {
-		t.Errorf("a malformed meta tier gave %d, outside the 1–10 ladder", got)
+		t.Errorf("a malformed meta tier gave %d, outside the 1-10 ladder", got)
 	}
 
 	// Meta tier is honoured only for registry heads.

@@ -29,12 +29,12 @@ const DefaultAlpha = 0.01
 // observations, so a cap is only reached by data spanning an implausible range:
 // at DefaultAlpha, DefaultMaxBuckets represents a ratio of about 6e17 between
 // the largest and smallest value. Past the cap the guarantee becomes
-// directional — see collapse.
+// directional, see collapse.
 
 // DefaultMaxBuckets caps memory. A sketch must not be able to grow without
 // bound because one caller logged a pathological value; past the cap the
 // lowest buckets collapse, which degrades accuracy for the smallest values
-// and leaves the tail — the part anyone asks about — intact.
+// and leaves the tail, the part anyone asks about, intact.
 const DefaultMaxBuckets = 2048
 
 // ErrAlphaMismatch reports a merge between sketches with different error
@@ -183,7 +183,7 @@ func (s *Sketch) Quantile(q float64) float64 {
 }
 
 // Merge folds other into s. Two sketches of the same alpha merge into one as
-// accurate as a single sketch of the union — the property that makes fleet-wide
+// accurate as a single sketch of the union, the property that makes fleet-wide
 // statistics possible without moving any raw data.
 func (s *Sketch) Merge(other *Sketch) error {
 	if other == nil {

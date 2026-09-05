@@ -74,7 +74,7 @@ func TestRedact_LabelsWhatItReplaced(t *testing.T) {
 	}
 }
 
-// Detectors overlap by design — an "Authorization: Bearer eyJ..." header is
+// Detectors overlap by design, an "Authorization: Bearer eyJ..." header is
 // also a jwt. Emitting both placeholders would interleave them and corrupt the
 // text, so the wider span has to win.
 func TestRedact_OverlappingDetectorsProduceOneCleanPlaceholder(t *testing.T) {

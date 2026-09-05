@@ -21,7 +21,7 @@ func fakeHead(t *testing.T, id, content string) provider.Head {
 	return provider.Head{ID: id, Executable: path}
 }
 
-// First sight of a binary is a baseline, not a finding — flagging every head
+// First sight of a binary is a baseline, not a finding, flagging every head
 // as "changed" on first run would train the reader to ignore the signal.
 func TestFingerprintHeads_FirstRunBaselinesRatherThanAlarms(t *testing.T) {
 	testutil.NewSandbox(t)
@@ -42,7 +42,7 @@ func TestFingerprintHeads_DetectsAReplacedBinary(t *testing.T) {
 	if sc := FingerprintHeads([]provider.Head{h}); sc.New != 1 {
 		t.Fatalf("baseline run = %+v", sc)
 	}
-	// Same path, different content — and a different size so the cheap
+	// Same path, different content, and a different size so the cheap
 	// fingerprint moves, which is what triggers the re-hash.
 	if err := os.WriteFile(h.Executable, []byte("v2-different-length"), 0o700); err != nil {
 		t.Fatal(err)
@@ -84,7 +84,7 @@ func TestFingerprintHeads_SkipsHeadsWithNoExecutable(t *testing.T) {
 }
 
 // LLM03 was a hardcoded permanent Gap; it is now earned by actually tracking
-// binaries — and must fall back to Gap when nothing is tracked.
+// binaries, and must fall back to Gap when nothing is tracked.
 func TestLLM03SupplyChain_EarnedNotHardcoded(t *testing.T) {
 	if got := llm03SupplyChain(SupplyChain{}).Status; got != Gap {
 		t.Errorf("no binaries tracked: Status = %q, want Gap", got)

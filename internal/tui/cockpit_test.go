@@ -143,7 +143,7 @@ func TestValidSnapshotView(t *testing.T) {
 //
 // For every view (plus the glossary) at every mandated size: the output is at
 // most h lines, no line exceeds w cells, and the status bar is the final line
-// — even with pathological content (a 3000-char task, embedded newlines).
+//, even with pathological content (a 3000-char task, embedded newlines).
 
 func TestEveryView_LayoutInvariantsAtEverySize(t *testing.T) {
 	testutil.NewSandbox(t)
@@ -189,7 +189,7 @@ func TestEveryView_LayoutInvariantsAtEverySize(t *testing.T) {
 		}
 	}
 
-	// Every overlay obeys the same frame — a short one (the override modal) is
+	// Every overlay obeys the same frame, a short one (the override modal) is
 	// where the status bar used to float mid-screen.
 	overlays := map[string]func(Cockpit) Cockpit{
 		"glossary": func(c Cockpit) Cockpit { c.glossary = true; return c },
@@ -267,7 +267,7 @@ func TestCockpitSnapshot_RendersAllViewsAndGlossary(t *testing.T) {
 }
 
 // `--view N` renders exactly the requested frame, never panicking on an
-// out-of-range value — the CLI validates, but the function must be total.
+// out-of-range value, the CLI validates, but the function must be total.
 func TestCockpitSnapshotView_AllViewsAndOutOfRange(t *testing.T) {
 	testutil.NewSandbox(t)
 	for view, name := range ckViewNames {
@@ -341,7 +341,7 @@ func TestCkHeadsFrom_MirrorsRoutingAndDoesNotFabricatePrices(t *testing.T) {
 }
 
 // The code-stream tick carries its thread and generation so a superseded
-// stream — or another thread's — cannot double-speed the current one.
+// stream, or another thread's, cannot double-speed the current one.
 func TestCodeTick_GenerationGuard(t *testing.T) {
 	cmd := ckCodeTick(1, 7)
 	if cmd == nil {

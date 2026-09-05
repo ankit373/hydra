@@ -1,4 +1,4 @@
-# Hydra Routing Map — THE ENUM FILE
+# Hydra Routing Map, THE ENUM FILE
 # ─────────────────────────────────────────────────────────────────────────────
 # This is your single enum. Change a value here → every domain updates.
 # Domains and skills reference keys (e.g. SIMPLE), never tier numbers directly.
@@ -13,32 +13,32 @@ version: "1.0"
 
 routing_map:
 
-  # Pure mechanical work — local, free, slow, no accuracy needed
+  # Pure mechanical work, local, free, slow, no accuracy needed
   GRUNT:      10   # → Qwen2.5-Coder:7b (Ollama, local)
 
-  # Trivial agy work — enums, constants, simple types
+  # Trivial agy work, enums, constants, simple types
   TRIVIAL:    9    # → Gemini 3.5 Flash (Low)
 
-  # Simple structured code — DTOs, schemas, interfaces
+  # Simple structured code, DTOs, schemas, interfaces
   SIMPLE:     8    # → Gemini 3.5 Flash (Medium)
 
-  # Standard patterns — controllers, handlers, basic CRUD
+  # Standard patterns, controllers, handlers, basic CRUD
   STANDARD:   7    # → Gemini 3.5 Flash (High)
 
-  # Moderate logic — services, repos, validators
+  # Moderate logic, services, repos, validators
   MODERATE:   6    # → Gemini 3.1 Pro (Low)
 
-  # Complex implementations — middleware, auth, ML pipelines
+  # Complex implementations, middleware, auth, ML pipelines
   COMPLEX:    5    # → Gemini 3.1 Pro (High)
 
-  # Hard cross-cutting — tradeoff review, non-trivial algorithms (also rubber duck for Claude)
+  # Hard cross-cutting, tradeoff review, non-trivial algorithms (also rubber duck for Claude)
   HARD:       4    # → GPT-OSS 120B (Medium)
 
-  # Very hard — multi-step reasoning, complex refactors
+  # Very hard, multi-step reasoning, complex refactors
   VERY_HARD:  3    # → Claude Sonnet 4.6 (Thinking)
 
-  # Expert level — architecture decisions, distributed systems
+  # Expert level, architecture decisions, distributed systems
   EXPERT:     2    # → Claude Opus 4.6 (Thinking)
 
-  # Core — handled directly by Claude Code orchestrator, never dispatched
+  # Core, handled directly by Claude Code orchestrator, never dispatched
   CORE:       1    # → Claude Code

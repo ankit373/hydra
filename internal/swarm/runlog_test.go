@@ -122,7 +122,7 @@ func TestLogRunEvents_MarksWinner(t *testing.T) {
 	}
 }
 
-// The emitted events must actually reconstruct — a fan-out has to render as a
+// The emitted events must actually reconstruct, a fan-out has to render as a
 // fan-out. This is what makes the parent a named node rather than the task id:
 // linking to an id no event declares would materialise a phantom node.
 func TestLogRunEvents_ReconstructsAsAFanOut(t *testing.T) {
@@ -145,7 +145,7 @@ func TestLogRunEvents_ReconstructsAsAFanOut(t *testing.T) {
 		t.Fatalf("%d rows, want 4 (one swarm root + three heads): %+v", len(rows), rows)
 	}
 	if rows[0].Node.ID != swarmAgent {
-		t.Errorf("root is %q, want %q — a phantom root means Parent named an undeclared node",
+		t.Errorf("root is %q, want %q, a phantom root means Parent named an undeclared node",
 			rows[0].Node.ID, swarmAgent)
 	}
 	for _, r := range rows[1:] {
@@ -196,7 +196,7 @@ func TestLogSamples_CarriesRunningConfidence(t *testing.T) {
 }
 
 // A run must not be attributed to the wrong ensemble root. swarm and SPRT are
-// different things to a reader — racing candidates vs accumulating evidence.
+// different things to a reader, racing candidates vs accumulating evidence.
 func TestLogSamples_UsesItsOwnRoot(t *testing.T) {
 	rlSandbox(t)
 

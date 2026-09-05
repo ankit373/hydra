@@ -24,7 +24,7 @@ func registryHead(id string, capScore int, local bool) provider.Head {
 
 // routingDispatcher mirrors a real install: heads pre-sorted by CapScore
 // (as probe.Run does via rank.ByCapScore) and tiers named the way
-// internal/tui/init.go actually writes them — NOT numerically.
+// internal/tui/init.go actually writes them, NOT numerically.
 func routingDispatcher() *Dispatcher {
 	heads := []provider.Head{
 		registryHead("strongest", 100, false), // UITier 1  (orchestrator class)
@@ -54,14 +54,14 @@ func TestSelectHeads_NumericTierDoesNotReturnStrongest(t *testing.T) {
 		t.Fatal("tier 10 selected no heads")
 	}
 	if got[0].ID == "strongest" {
-		t.Fatalf("tier 10 (cheapest) selected the STRONGEST head %q — cost routing inverted", got[0].ID)
+		t.Fatalf("tier 10 (cheapest) selected the STRONGEST head %q, cost routing inverted", got[0].ID)
 	}
 	if got[0].ID != "weak" {
 		t.Errorf("tier 10 primary = %q, want \"weak\"", got[0].ID)
 	}
 	for _, h := range got {
 		if rank.UITier(h) < 10 {
-			t.Errorf("tier 10 selected %q at capability tier %d — stronger than requested", h.ID, rank.UITier(h))
+			t.Errorf("tier 10 selected %q at capability tier %d, stronger than requested", h.ID, rank.UITier(h))
 		}
 	}
 }
@@ -91,7 +91,7 @@ func TestSelectHeads_UnknownTierSelectsNothing(t *testing.T) {
 	d := routingDispatcher()
 	for _, hint := range []string{"expret", "nonsense", "Expert"} {
 		if got := d.selectHeads(hint, false); len(got) != 0 {
-			t.Errorf("unknown tier %q selected %v — must not silently widen", hint, ids(got))
+			t.Errorf("unknown tier %q selected %v, must not silently widen", hint, ids(got))
 		}
 	}
 }
@@ -137,7 +137,7 @@ func TestResolveTierHint(t *testing.T) {
 }
 
 // A name absent from cfg.Tiers entirely is a config problem, not a
-// routability one — it must produce a distinct error naming the bad tier and
+// routability one, it must produce a distinct error naming the bad tier and
 // what IS configured, rather than resolving to a value selectHeads then fails
 // on with the generic "no routable heads" message (#451).
 func TestResolveTierHint_UnknownNameIsADistinctError(t *testing.T) {
@@ -145,7 +145,7 @@ func TestResolveTierHint_UnknownNameIsADistinctError(t *testing.T) {
 	for _, hint := range []string{"bogus", "expret", "Expert"} {
 		got, err := d.resolveTierHint(hint)
 		if err == nil {
-			t.Fatalf("resolveTierHint(%q) = %q, nil — want an error naming the unknown tier", hint, got)
+			t.Fatalf("resolveTierHint(%q) = %q, nil, want an error naming the unknown tier", hint, got)
 		}
 		if !strings.Contains(err.Error(), hint) {
 			t.Errorf("resolveTierHint(%q) error = %q, want it to name the bad tier", hint, err)
@@ -159,14 +159,14 @@ func TestResolveTierHint_UnknownNameIsADistinctError(t *testing.T) {
 }
 
 // A numeric tier outside 1-10 can never be routable (rank.UITier never
-// produces such a value) — it must be rejected with the requested value and
+// produces such a value), it must be rejected with the requested value and
 // the valid range, not silently treated as "no tier" or clamped invisibly (#454).
 func TestResolveTierHint_NumericOutOfRangeIsRejected(t *testing.T) {
 	d := routingDispatcher()
 	for _, hint := range []string{"0", "-1", "11", "15", "20"} {
 		got, err := d.resolveTierHint(hint)
 		if err == nil {
-			t.Fatalf("resolveTierHint(%q) = %q, nil — want an out-of-range error", hint, got)
+			t.Fatalf("resolveTierHint(%q) = %q, nil, want an out-of-range error", hint, got)
 		}
 		if !strings.Contains(err.Error(), hint) {
 			t.Errorf("resolveTierHint(%q) error = %q, want it to name the requested value", hint, err)
@@ -175,7 +175,7 @@ func TestResolveTierHint_NumericOutOfRangeIsRejected(t *testing.T) {
 }
 
 // In-range numeric hints (the boundaries included) must still pass through
-// untouched — only genuinely out-of-range values are rejected.
+// untouched, only genuinely out-of-range values are rejected.
 func TestResolveTierHint_NumericBoundariesAccepted(t *testing.T) {
 	d := routingDispatcher()
 	for _, hint := range []string{"1", "10"} {
@@ -221,7 +221,7 @@ func TestEnumToTier_RoutesAwayFromStrongest(t *testing.T) {
 		t.Fatal("GRUNT selected no heads")
 	}
 	if cheap[0].ID == "strongest" {
-		t.Errorf("enum GRUNT routed to the strongest head — the router is inverted")
+		t.Errorf("enum GRUNT routed to the strongest head, the router is inverted")
 	}
 	if cheap[0].ID != "weak" {
 		t.Errorf("enum GRUNT primary = %q, want \"weak\"", cheap[0].ID)
@@ -248,7 +248,7 @@ func ids(heads []provider.Head) []string {
 	return out
 }
 
-// When nothing is cheap enough, degrade to the CHEAPEST available head — never
+// When nothing is cheap enough, degrade to the CHEAPEST available head, never
 // silently escalate to the most expensive one, which is the #165 failure mode.
 func TestSelectHeads_NoCheapHeadFallsBackToCheapest(t *testing.T) {
 	d := routingDispatcher()
@@ -262,7 +262,7 @@ func TestSelectHeads_NoCheapHeadFallsBackToCheapest(t *testing.T) {
 		t.Fatal("fallback selected nothing")
 	}
 	if got[0].ID == "strongest" {
-		t.Errorf("fell back to the STRONGEST head %q — must degrade to the cheapest", got[0].ID)
+		t.Errorf("fell back to the STRONGEST head %q, must degrade to the cheapest", got[0].ID)
 	}
 	if got[0].ID != "expert" {
 		t.Errorf("fallback primary = %q, want cheapest (\"expert\")", got[0].ID)
@@ -270,7 +270,7 @@ func TestSelectHeads_NoCheapHeadFallsBackToCheapest(t *testing.T) {
 }
 
 // The existing tier-10 test uses a local head at score 40, which the score
-// ladder already put at tier 10 — so it passed while the real machine failed.
+// ladder already put at tier 10, so it passed while the real machine failed.
 // Ollama scores exactly 60, which landed at tier 9, and GRUNT degraded past it
 // to a paid cloud head (#248). Same shape, real number.
 func TestSelectHeads_Tier10PrefersALocalHeadOverAPaidOne(t *testing.T) {
@@ -282,10 +282,10 @@ func TestSelectHeads_Tier10PrefersALocalHeadOverAPaidOne(t *testing.T) {
 
 	got := d.selectHeads("10", false)
 	if len(got) == 0 {
-		t.Fatal("tier 10 selected no heads — GRUNT would degrade to a paid head")
+		t.Fatal("tier 10 selected no heads, GRUNT would degrade to a paid head")
 	}
 	if got[0].ID != "ollama" {
-		t.Errorf("tier 10 primary = %q, want \"ollama\" — a free local head must win the cheapest tier", got[0].ID)
+		t.Errorf("tier 10 primary = %q, want \"ollama\", a free local head must win the cheapest tier", got[0].ID)
 	}
 	// Asserting the ID alone is not enough, and I had this wrong first: with
 	// only two heads the *degraded* fallback also returns ollama, because it
@@ -293,7 +293,7 @@ func TestSelectHeads_Tier10PrefersALocalHeadOverAPaidOne(t *testing.T) {
 	// the fix removed. What actually distinguishes a real tier-10 match from a
 	// degraded pick is the head's own tier.
 	if tier := rank.UITier(got[0]); tier < 10 {
-		t.Errorf("tier 10 was served by a head at tier %d — selected via the degradation path, "+
+		t.Errorf("tier 10 was served by a head at tier %d, selected via the degradation path, "+
 			"not because a local head belongs at the cheapest tier", tier)
 	}
 }
@@ -319,7 +319,7 @@ func TestDispatch_NoRoutableHeadsNamesTheBlockedHeadAndWhy(t *testing.T) {
 	}
 }
 
-// A cloud head must not be listed as the blocker for a local-only run — the
+// A cloud head must not be listed as the blocker for a local-only run, the
 // user could not have used it either way, so naming it sends them the wrong way.
 func TestDispatch_BlockedHeadsRespectsLocalOnly(t *testing.T) {
 	d := routingDispatcher()

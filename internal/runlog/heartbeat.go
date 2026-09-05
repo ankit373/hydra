@@ -11,7 +11,7 @@ import (
 )
 
 // Heartbeat defaults. StaleAfter is a multiple of Interval so a reader tolerates
-// a missed tick or two — a briefly busy process must not flicker to "dead".
+// a missed tick or two, a briefly busy process must not flicker to "dead".
 const (
 	HeartbeatInterval = 2 * time.Second
 	StaleAfter        = 10 * time.Second
@@ -25,7 +25,7 @@ func HeartbeatPath(runID string) string {
 // Heartbeat keeps a run's liveness marker fresh.
 //
 // Liveness is inferred from the marker's *freshness*, never from its existence.
-// The obvious design — create on start, delete on exit — is wrong: a crashed or
+// The obvious design, create on start, delete on exit, is wrong: a crashed or
 // killed process never runs its cleanup, leaving a permanent "still running"
 // ghost a reader can never clear. Touching a marker periodically makes the
 // failure self-healing: a dead process simply stops touching it and the marker
@@ -93,7 +93,7 @@ func (h *Heartbeat) touch() {
 	if err := os.Chtimes(h.path, now, now); err == nil {
 		return
 	}
-	// Not there yet — create it.
+	// Not there yet, create it.
 	f, err := os.OpenFile(h.path, os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		return

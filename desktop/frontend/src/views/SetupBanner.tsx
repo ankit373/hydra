@@ -5,11 +5,11 @@ import type { HyctlStatus, InstallResult } from '../types'
 /**
  * The one-time first-run prompt for #383: the desktop app can be downloaded
  * on its own (install-app.sh), which leaves a real gap when hyctl was never
- * separately installed — every other view already renders safely with zero
+ * separately installed, every other view already renders safely with zero
  * ~/.hydra data, but there is nothing to route to at all.
  *
  * Invisible on every machine that already has hyctl working, which is the
- * common case — App only renders this when CheckHyctl says Found is false.
+ * common case, App only renders this when CheckHyctl says Found is false.
  */
 export function SetupBanner({
   status,

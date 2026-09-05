@@ -13,7 +13,7 @@ import (
 
 // reviewRepo is the desktop-side equivalent of internal/review's repoSandbox:
 // a workspace with a .git directory that is not a repository, so git commands
-// fail and the backup path is the one exercised. The chdir matters —
+// fail and the backup path is the one exercised. The chdir matters,
 // workspace resolution roots itself at GitRoot(os.Getwd()), and the OS's
 // spelling of a temp dir differs from the one handed to us (macOS /var
 // symlinks, Windows casing).

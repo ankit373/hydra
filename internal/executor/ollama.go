@@ -89,7 +89,7 @@ func (e *OllamaExecutor) Execute(ctx context.Context, req Request) (*Response, e
 
 	// Safety net: cap response body so a runaway/adversarial server can't OOM us.
 	// If the body exceeds the limit the JSON decoder returns an error, which is
-	// the right outcome — Ollama should never emit a 33 MB JSON response.
+	// the right outcome, Ollama should never emit a 33 MB JSON response.
 	limited := io.LimitReader(resp.Body, int64(util.DefaultMaxBytes)+1)
 
 	var out ollamaGenerateResponse
@@ -144,7 +144,7 @@ func (e *OllamaExecutor) ensureRunning(host string) error {
 			return nil
 		}
 	}
-	return fmt.Errorf("ollama started but did not respond within 3s — is it installed?")
+	return fmt.Errorf("ollama started but did not respond within 3s, is it installed?")
 }
 
 // isHealthy returns true if Ollama's root endpoint responds with 200.

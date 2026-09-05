@@ -400,8 +400,8 @@ go build -o hyctl ./cmd/hydra</pre>
 CONTEXT BUDGET       <span class="tf">│</span> 🐉 Hydra initialised · 15 models      <span class="tf">│</span> CODE · go
 <span class="tf">░░░░░░░░░░░░░░░</span>      <span class="tf">│</span> scanned · routing engine ready.       <span class="tf">│</span>   1 // paginated users endpoint
 claude 0%            <span class="tf">│</span> Type a task and press <span class="ta">enter</span>. <span class="ta">shift+tab</span><span class="tf">│</span>   2 func (s *Server) ListUsers(w ht…
-                     <span class="tf">│</span> mode · <span class="ta">ctrl+o</span> route · ? shortcuts · :q<span class="tf">│</span>   3     page := parsePage(r.URL.Que…
-MODELS               <span class="tf">│</span> quits.                                <span class="tf">│</span>   4     users, err := s.repo.Users(…
+                     <span class="tf">│</span> mode · <span class="ta">ctrl+t</span> thread · ? shortcuts ·  <span class="tf">│</span>   3     page := parsePage(r.URL.Que…
+MODELS               <span class="tf">│</span> :q quits.                             <span class="tf">│</span>   4     users, err := s.repo.Users(…
  <span class="tg">✓</span> Claude Code       <span class="tf">│</span> ❯ add pagination to the users endpoint<span class="tf">│</span>   5     if err != nil {
  <span class="tg">✓</span> Claude Opus 4.…   <span class="tf">│</span>   auto-routed · standard work → <span class="tv">T7</span>    <span class="tf">│</span>   6         http.Error(w, err.Error…
  <span class="tg">✓</span> OpenAI Codex      <span class="tf">│</span> qwen2.5-coder · single                <span class="tf">│</span>   7         return
@@ -409,10 +409,10 @@ MODELS               <span class="tf">│</span> quits.                         
  <span class="tg">✓</span> Gemini 2.0 Fla…   <span class="tf">│</span> PII                                   <span class="tf">│</span>   9     json.NewEncoder(w).Encode(u…
  <span class="tg">✓</span> Antigravity       <span class="tf">│</span>   plan <span class="tg">✓</span> 3 steps · edit <span class="tg">✓</span> users.go    <span class="tf">│</span>  10 }
  <span class="tg">✓</span> …1 Pro (High)     <span class="tf">│</span> +24/−6 · tests <span class="tg">✓</span> go test ./...        <span class="tf">│</span>
- <span class="tg">✓</span> …1 Pro (Low)      <span class="tf">│</span>   d diff · x undo · o open — on an    <span class="tf">│</span>
+ <span class="tg">✓</span> …1 Pro (Low)      <span class="tf">│</span>   d diff · x undo · o open, on an     <span class="tf">│</span>
  <span class="tg">✓</span> …5 Flash (High)   <span class="tf">│</span> empty input                           <span class="tf">│</span>
  <span class="tg">✓</span> …5 Flash (Medi…   <span class="tf">│</span>   <span class="tg">✓</span> done 3.2s · <span class="tg">$0.0041</span> est · trace   <span class="tf">│</span>
- <span class="tg">✓</span> …5 Flash (Low)    <span class="tf">│</span> demo0000 — <span class="ta">enter</span> opens the trace      <span class="tf">│</span>
+ <span class="tg">✓</span> …5 Flash (Low)    <span class="tf">│</span> demo0000, <span class="ta">enter</span> opens the trace       <span class="tf">│</span>
  <span class="tg">✓</span> Qwen2.5-Coder:…   <span class="tf">│</span>                                       <span class="tf">│</span>
  <span class="tg">✓</span> qwen3:0.6b (Ol…   <span class="tf">│</span>                                       <span class="tf">│</span>
  <span class="tr">✗</span> Ollama            <span class="tf">│</span>                                       <span class="tf">│</span>
@@ -421,10 +421,10 @@ MODELS               <span class="tf">│</span> quits.                         
 MODE                 <span class="tf">│</span>                                       <span class="tf">│</span>
  auto                <span class="tf">│</span>                                       <span class="tf">│</span>
                      <span class="tf">│</span> <span class="tf">╭────────────────────────────────────╮│</span>
-                     <span class="tf">│</span> <span class="tf">│</span>  Auto <span class="tf">▾</span>  what do you need done? —  <span class="tf">││</span>
+                     <span class="tf">│</span> <span class="tf">│</span>  Auto <span class="tf">▾</span>  what do you need done?,   <span class="tf">││</span>
                      <span class="tf">│</span> <span class="tf">│</span> <span class="ta">enter</span> runs it                      <span class="tf">││</span>
                      <span class="tf">│</span> <span class="tf">╰────────────────────────────────────╯│</span>
- <span class="ta">enter</span> send  <span class="ta">shift+tab</span> mode  <span class="ta">ctrl+o</span> route  ? shortcuts                       mode auto · route auto</pre>
+ <span class="ta">ctrl+t</span> thread  <span class="ta">enter</span> send  <span class="ta">shift+tab</span> mode  <span class="ta">ctrl+o</span> route  ? shortcuts        mode auto · route auto</pre>
         </div>
       </div>
 
@@ -433,30 +433,30 @@ MODE                 <span class="tf">│</span>                                
           <div class="bar"><i class="d1"></i><i class="d2"></i><i class="d3"></i><span class="ttl">HYDRA ▸ models</span></div>
 <pre> <span class="tv">HYDRA</span>  chat  agents  models  activity  usage  audit          session <span class="tg">$0.0000</span> · context <span class="tf">▱▱▱▱▱▱▱▱</span> 0%
 <span class="tf">────────────────────────────────────────────────────────────────────────────────────────────────────</span>
-<span class="tf">╭──────────────────────────────────────────────────────────────────╮</span> <span class="tf">╭─────────────────────────────╮</span>
-<span class="tf">│</span> MODELS · by provider/server                                      <span class="tf">│</span> <span class="tf">│</span> SERVER                      <span class="tf">│</span>
-<span class="tf">│</span>                                                                  <span class="tf">│</span> <span class="tf">│</span>                             <span class="tf">│</span>
-<span class="tf">│</span> <span class="tf">▸</span> <span class="tf">▾</span> <span class="ta">●</span> anthropic                  1 model                         <span class="tf">│</span> <span class="tf">│</span>  anthropic                  <span class="tf">│</span>
-<span class="tf">│</span>      <span class="ta">●</span> Claude Code             <span class="tv">T1</span>                                <span class="tf">│</span> <span class="tf">│</span>                             <span class="tf">│</span>
-<span class="tf">│</span>   <span class="tf">▾</span> <span class="ta">●</span> antigravity                9 models                        <span class="tf">│</span> <span class="tf">│</span>  models      1 (1 routable) <span class="tf">│</span>
-<span class="tf">│</span>      <span class="ta">●</span> Claude Opus 4.6 (Thin…  <span class="tv">T2</span>                                <span class="tf">│</span> <span class="tf">│</span>  state       up             <span class="tf">│</span>
-<span class="tf">│</span>      <span class="ta">●</span> Claude Sonnet 4.6 (Th…  <span class="tv">T3</span>                                <span class="tf">│</span> <span class="tf">╰─────────────────────────────╯</span>
-<span class="tf">│</span>      <span class="ta">●</span> Gemini 2.0 Flash Thin…  <span class="tv">T4</span>                                <span class="tf">│</span>
-<span class="tf">│</span>      <span class="ta">●</span> Antigravity             <span class="tv">T4</span>                                <span class="tf">│</span>
-<span class="tf">│</span>      <span class="ta">●</span> Gemini 3.1 Pro (High)   <span class="tv">T5</span>                                <span class="tf">│</span>
-<span class="tf">│</span>      <span class="ta">●</span> Gemini 3.1 Pro (Low)    <span class="tv">T6</span>                                <span class="tf">│</span>
-<span class="tf">│</span>      <span class="ta">●</span> …3.5 Flash (High)       <span class="tv">T7</span>                                <span class="tf">│</span>
-<span class="tf">│</span>      <span class="ta">●</span> …3.5 Flash (Medium)     <span class="tv">T8</span>                                <span class="tf">│</span>
-<span class="tf">│</span>      <span class="ta">●</span> …3.5 Flash (Low)        <span class="tv">T9</span>                                <span class="tf">│</span>
-<span class="tf">│</span>   <span class="tf">▾</span> <span class="ta">●</span> openai                     1 model                         <span class="tf">│</span>
-<span class="tf">│</span>      <span class="ta">●</span> OpenAI Codex            <span class="tv">T3</span>                                <span class="tf">│</span>
-<span class="tf">│</span>   <span class="tf">▾</span> <span class="ta">●</span> Ollama                     3 models                        <span class="tf">│</span>
-<span class="tf">│</span>      <span class="ta">●</span> Qwen2.5-Coder:7b       <span class="tv">T10</span>                                <span class="tf">│</span>
-<span class="tf">│</span>      <span class="ta">●</span> qwen3:0.6b             <span class="tv">T10</span>                                <span class="tf">│</span>
-<span class="tf">│</span>      <span class="tf">◌</span> nomic-embed-text:late… <span class="tv">T10</span> embeddings only — never routed <span class="tf">│</span>
-<span class="tf">│</span>                                                                  <span class="tf">│</span>
-<span class="tf">│</span> <span class="ta">●</span> up · ○ down (children unavailable) · <span class="tf">◌</span> not routable            <span class="tf">│</span>
-<span class="tf">╰──────────────────────────────────────────────────────────────────╯</span>
+<span class="tf">╭─────────────────────────────────────────────────────────────────╮</span> <span class="tf">╭─────────────────────────────╮</span>
+<span class="tf">│</span> MODELS · by provider/server                                     <span class="tf">│</span> <span class="tf">│</span> SERVER                      <span class="tf">│</span>
+<span class="tf">│</span>                                                                 <span class="tf">│</span> <span class="tf">│</span>                             <span class="tf">│</span>
+<span class="tf">│</span> <span class="tf">▸</span> <span class="tf">▾</span> <span class="ta">●</span> anthropic                  1 model                        <span class="tf">│</span> <span class="tf">│</span>  anthropic                  <span class="tf">│</span>
+<span class="tf">│</span>      <span class="ta">●</span> Claude Code             <span class="tv">T1</span>                               <span class="tf">│</span> <span class="tf">│</span>                             <span class="tf">│</span>
+<span class="tf">│</span>   <span class="tf">▾</span> <span class="ta">●</span> antigravity                9 models                       <span class="tf">│</span> <span class="tf">│</span>  models      1 (1 routable) <span class="tf">│</span>
+<span class="tf">│</span>      <span class="ta">●</span> Claude Opus 4.6 (Thin…  <span class="tv">T2</span>                               <span class="tf">│</span> <span class="tf">│</span>  state       up             <span class="tf">│</span>
+<span class="tf">│</span>      <span class="ta">●</span> Claude Sonnet 4.6 (Th…  <span class="tv">T3</span>                               <span class="tf">│</span> <span class="tf">╰─────────────────────────────╯</span>
+<span class="tf">│</span>      <span class="ta">●</span> Gemini 2.0 Flash Thin…  <span class="tv">T4</span>                               <span class="tf">│</span>
+<span class="tf">│</span>      <span class="ta">●</span> Antigravity             <span class="tv">T4</span>                               <span class="tf">│</span>
+<span class="tf">│</span>      <span class="ta">●</span> Gemini 3.1 Pro (High)   <span class="tv">T5</span>                               <span class="tf">│</span>
+<span class="tf">│</span>      <span class="ta">●</span> Gemini 3.1 Pro (Low)    <span class="tv">T6</span>                               <span class="tf">│</span>
+<span class="tf">│</span>      <span class="ta">●</span> …3.5 Flash (High)       <span class="tv">T7</span>                               <span class="tf">│</span>
+<span class="tf">│</span>      <span class="ta">●</span> …3.5 Flash (Medium)     <span class="tv">T8</span>                               <span class="tf">│</span>
+<span class="tf">│</span>      <span class="ta">●</span> …3.5 Flash (Low)        <span class="tv">T9</span>                               <span class="tf">│</span>
+<span class="tf">│</span>   <span class="tf">▾</span> <span class="ta">●</span> openai                     1 model                        <span class="tf">│</span>
+<span class="tf">│</span>      <span class="ta">●</span> OpenAI Codex            <span class="tv">T3</span>                               <span class="tf">│</span>
+<span class="tf">│</span>   <span class="tf">▾</span> <span class="ta">●</span> Ollama                     3 models                       <span class="tf">│</span>
+<span class="tf">│</span>      <span class="ta">●</span> Qwen2.5-Coder:7b       <span class="tv">T10</span>                               <span class="tf">│</span>
+<span class="tf">│</span>      <span class="ta">●</span> qwen3:0.6b             <span class="tv">T10</span>                               <span class="tf">│</span>
+<span class="tf">│</span>      <span class="tf">◌</span> nomic-embed-text:late… <span class="tv">T10</span> embeddings only, never routed <span class="tf">│</span>
+<span class="tf">│</span>                                                                 <span class="tf">│</span>
+<span class="tf">│</span> <span class="ta">●</span> up · ○ down (children unavailable) · <span class="tf">◌</span> not routable           <span class="tf">│</span>
+<span class="tf">╰─────────────────────────────────────────────────────────────────╯</span>
 
 
 
@@ -469,34 +469,34 @@ MODE                 <span class="tf">│</span>                                
           <div class="bar"><i class="d1"></i><i class="d2"></i><i class="d3"></i><span class="ttl">HYDRA ▸ audit</span></div>
 <pre> <span class="tv">HYDRA</span>  chat  agents  models  activity  usage  audit          session <span class="tg">$0.0000</span> · context <span class="tf">▱▱▱▱▱▱▱▱</span> 0%
 <span class="tf">────────────────────────────────────────────────────────────────────────────────────────────────────</span>
-<span class="tf">╭──────────────────────────────────────────────────────────────────╮</span>
-<span class="tf">│</span> MODEL SCORECARD · calibration                                    <span class="tf">│</span>
-<span class="tf">│</span>                                                                  <span class="tf">│</span>
-<span class="tf">│</span>  source               domain      n  sens  spec  D nats          <span class="tf">│</span>
-<span class="tf">│</span>  claude               trust-b…   10  0.83  0.50    0.24          <span class="tf">│</span>
-<span class="tf">│</span>  qwen                 trust-b…    9  0.88  0.20    0.02          <span class="tf">│</span>
-<span class="tf">│</span>  claude               trust-b…    5  0.86  0.50    0.28          <span class="tf">│</span>
-<span class="tf">│</span>  ollama/Qwen2.5-Code… trust-b…    5  0.86  0.50    0.28          <span class="tf">│</span>
-<span class="tf">│</span>  qwen                 trust-b…    5  0.86  0.50    0.28          <span class="tf">│</span>
-<span class="tf">│</span>  test-src             test-do…    1  0.67  0.50    0.06          <span class="tf">│</span>
-<span class="tf">│</span>  verifier:go          gotest      1  0.67  0.50    0.06          <span class="tf">│</span>
-<span class="tf">│</span>                                                                  <span class="tf">│</span>
-<span class="tf">│</span>  consensus checks       0.50 mean confidence over 16             <span class="tf">│</span>
-<span class="tf">│</span>  cleared without review 0%                                       <span class="tf">│</span>
-<span class="tf">│</span>  same-family agreement  acme ×0.14 (J=0.86) — echo, not evidence <span class="tf">│</span>
-<span class="tf">╰──────────────────────────────────────────────────────────────────╯</span>
+<span class="tf">╭─────────────────────────────────────────────────────────────────╮</span>
+<span class="tf">│</span> MODEL SCORECARD · calibration                                   <span class="tf">│</span>
+<span class="tf">│</span>                                                                 <span class="tf">│</span>
+<span class="tf">│</span>  source               domain      n  sens  spec  D nats         <span class="tf">│</span>
+<span class="tf">│</span>  claude               trust-b…   10  0.83  0.50    0.24         <span class="tf">│</span>
+<span class="tf">│</span>  qwen                 trust-b…    9  0.88  0.20    0.02         <span class="tf">│</span>
+<span class="tf">│</span>  claude               trust-b…    5  0.86  0.50    0.28         <span class="tf">│</span>
+<span class="tf">│</span>  ollama/Qwen2.5-Code… trust-b…    5  0.86  0.50    0.28         <span class="tf">│</span>
+<span class="tf">│</span>  qwen                 trust-b…    5  0.86  0.50    0.28         <span class="tf">│</span>
+<span class="tf">│</span>  test-src             test-do…    1  0.67  0.50    0.06         <span class="tf">│</span>
+<span class="tf">│</span>  verifier:go          gotest      1  0.67  0.50    0.06         <span class="tf">│</span>
+<span class="tf">│</span>                                                                 <span class="tf">│</span>
+<span class="tf">│</span>  consensus checks       0.50 mean confidence over 16            <span class="tf">│</span>
+<span class="tf">│</span>  cleared without review 0%                                      <span class="tf">│</span>
+<span class="tf">│</span>  same-family agreement  acme ×0.14 (J=0.86), echo, not evidence <span class="tf">│</span>
+<span class="tf">╰─────────────────────────────────────────────────────────────────╯</span>
 <span class="tf">╭────────────────────────────────────────────╮</span>
 <span class="tf">│</span> AUDIT LOG                                  <span class="tf">│</span>
 <span class="tf">│</span>                                            <span class="tf">│</span>
-<span class="tf">│</span>  chain    <span class="tr">BROKEN</span> · 522 events, 486 chained <span class="tf">│</span>
-<span class="tf">│</span>  today    72 allowed · 0 denied            <span class="tf">│</span>
-<span class="tf">│</span>  all-time <span class="tf">████████████████████</span> 522         <span class="tf">│</span>
+<span class="tf">│</span>  chain    <span class="tr">BROKEN</span> · 635 events, 599 chained <span class="tf">│</span>
+<span class="tf">│</span>  today    89 allowed · 0 denied            <span class="tf">│</span>
+<span class="tf">│</span>  all-time <span class="tf">████████████████████</span> 635         <span class="tf">│</span>
 <span class="tf">╰────────────────────────────────────────────╯</span>
-<span class="tf">╭──────────────────────────────────────────────────────────────╮</span>
-<span class="tf">│</span> GUARDRAILS                                                   <span class="tf">│</span>
-<span class="tf">│</span>                                                              <span class="tf">│</span>
+<span class="tf">╭─────────────────────────────────────────────────────────────╮</span>
+<span class="tf">│</span> GUARDRAILS                                                  <span class="tf">│</span>
+<span class="tf">│</span>                                                             <span class="tf">│</span>
 <span class="tf">↓ 9 more</span>
- <span class="ta">j/k</span> move  <span class="ta">enter</span> resolve  v verify  i ignore  ? shortcuts           chain <span class="tr">BROKEN</span> · checked 07:33:20</pre>
+ <span class="ta">j/k</span> move  <span class="ta">enter</span> resolve  v verify  i ignore  ? shortcuts           chain <span class="tr">BROKEN</span> · checked 14:20:08</pre>
         </div>
       </div>
       </div>
@@ -576,7 +576,7 @@ hydra-desktop_&lt;version&gt;_darwin_universal.zip   <span class="c"># macOS, In
 hydra-desktop_&lt;version&gt;_windows_amd64.zip      <span class="c"># Windows</span>
 hydra-desktop_&lt;version&gt;_linux_amd64.tar.gz     <span class="c"># Linux</span>
 
-<span class="c"># Every artifact ships a .sha256 beside it — verify before you run:</span>
+<span class="c"># Every artifact ships a .sha256 beside it. Verify before you run:</span>
 shasum -a 256 -c hydra-desktop_&lt;version&gt;_darwin_universal.zip.sha256   <span class="c"># macOS</span>
 sha256sum   -c hydra-desktop_&lt;version&gt;_linux_amd64.tar.gz.sha256       <span class="c"># Linux</span>
 

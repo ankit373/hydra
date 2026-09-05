@@ -3,7 +3,7 @@ import type { Agent, Session } from '../types'
 import { layoutDag } from '../dagreLayout'
 
 // Sugiyama/dagre layout mechanics live in dagreLayout.ts, shared with Fleet's
-// inline run graph — see that file for why dagre over a force-directed layout.
+// inline run graph, see that file for why dagre over a force-directed layout.
 const NODE_W = 168
 const NODE_H = 46
 // Wider than RunGraph's LABEL_MAX (12): this node has more room, but a full
@@ -17,7 +17,7 @@ interface Placed {
   label: string
   sub: string
   state: string
-  /** The file this node represents, when state is 'artifact' — clicking it
+  /** The file this node represents, when state is 'artifact', clicking it
    *  opens that file rather than nothing (#518). */
   file?: string
 }
@@ -92,13 +92,13 @@ export function SessionGraph({
 function shortLabel(s: string): string {
   if (s.length <= LABEL_MAX) return s
   // File paths: the filename at the end is the meaningful part, so truncate
-  // from the start — clipping the end instead hides it (#461).
+  // from the start, clipping the end instead hides it (#461).
   if (s.includes('/')) return `…${s.slice(-(LABEL_MAX - 1))}`
   return `${s.slice(0, LABEL_MAX - 1)}…`
 }
 
-// A node with none of these signals never went through a run lifecycle — an
-// edit-target node, say — so it isn't "pending" (still to run); it's an
+// A node with none of these signals never went through a run lifecycle, an
+// edit-target node, say, so it isn't "pending" (still to run); it's an
 // artifact the run touched. Reusing 'pending' reads as stuck forever (#462).
 function stateClass(a: Agent): string {
   if (a.state && a.state !== 'pending') return a.state
@@ -124,7 +124,7 @@ function layout(session: Session) {
       x: p.x,
       y: p.y,
       label: shortLabel(a.model || a.head || a.id),
-      // Verifiable facts first — tier, state, duration — rather than narration.
+      // Verifiable facts first, tier, state, duration, rather than narration.
       sub: [a.tier > 0 ? `T${a.tier}` : null, a.state, a.durationMs > 0 ? `${a.durationMs}ms` : null]
         .filter(Boolean)
         .join(' · '),

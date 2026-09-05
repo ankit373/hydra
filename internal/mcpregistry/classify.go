@@ -64,7 +64,7 @@ func SaveAliases(m map[string]aliasEntry) error {
 	return nil
 }
 
-// ParseMCPToolName extracts the server alias from an MCP-style tool name —
+// ParseMCPToolName extracts the server alias from an MCP-style tool name,
 // the "mcp__<alias>__<tool>" convention Claude Code and other MCP clients
 // expose tools under. Returns ok=false for anything that doesn't match,
 // including a bare "mcp__" with no alias.
@@ -81,7 +81,7 @@ func ParseMCPToolName(tool string) (alias string, ok bool) {
 	return parts[0], true
 }
 
-// Ledger classification tags for MCP-derived risk — distinct from
+// Ledger classification tags for MCP-derived risk, distinct from
 // policy's "pii" tag, and distinct from each other so a policy author can
 // gate differently on "not even in the registry" vs. "in the registry but
 // currently flagged/quarantined".
@@ -94,10 +94,10 @@ const (
 // ClassificationForTool is Phase 4's wiring point (design doc §6/§13): a low
 // trust score or an unresolved server becomes an auto-derived ledger
 // classification, the same mechanism policy.ContainsPII already uses for
-// content sensitivity — applied to MCP server risk instead. Returns
+// content sensitivity, applied to MCP server risk instead. Returns
 // ok=false when tool isn't an MCP tool name, when the alias has never been
 // seen by an audit run, or when the server is trusted/provisional/new (no
-// flag warranted) — callers should fall through to their own classification
+// flag warranted), callers should fall through to their own classification
 // logic in all of those cases, not treat false as an error.
 func ClassificationForTool(tool string) (classification string, ok bool) {
 	alias, isMCP := ParseMCPToolName(tool)

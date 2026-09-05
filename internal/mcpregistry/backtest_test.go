@@ -10,12 +10,12 @@ import (
 	"testing"
 )
 
-// The test suite stubs OSV.dev rather than depending on the network — the
+// The test suite stubs OSV.dev rather than depending on the network, the
 // real API was hand-verified live while building this (postmark-mcp:
-// MAL-2025-47604, mcp-remote: CVE-2025-6514) — see KnownIncidents' doc
+// MAL-2025-47604, mcp-remote: CVE-2025-6514), see KnownIncidents' doc
 // comment. This test proves the plumbing (Backtest calls knownBadSignal
 // correctly and reports Caught accurately), not that OSV.dev's data hasn't
-// changed since — that's what re-running the real command before a launch
+// changed since, that's what re-running the real command before a launch
 // decision is for.
 func TestBacktest_ReportsCaughtWhenOSVHasAnAdvisory(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -73,14 +73,14 @@ func TestBacktestTyposquat_DetectsKnownPatternPairs(t *testing.T) {
 			t.Errorf("%s vs %s (%d edits): expected the typosquat detector to flag this pair", r.Pair.Registered, r.Pair.Typosquat, r.Distance)
 		}
 		if r.Distance > 3 {
-			t.Errorf("%s vs %s: distance %d is suspiciously large for a claimed typosquat pair — check the fixture", r.Pair.Registered, r.Pair.Typosquat, r.Distance)
+			t.Errorf("%s vs %s: distance %d is suspiciously large for a claimed typosquat pair, check the fixture", r.Pair.Registered, r.Pair.Typosquat, r.Distance)
 		}
 	}
 }
 
 func TestKnownIncidents_TableIsWellFormed(t *testing.T) {
 	if len(KnownIncidents) == 0 {
-		t.Fatal("KnownIncidents must not be empty — an empty backtest silently reports nothing")
+		t.Fatal("KnownIncidents must not be empty, an empty backtest silently reports nothing")
 	}
 	for _, inc := range KnownIncidents {
 		if inc.Name == "" || inc.Identifier == "" || inc.RegistryType == "" || inc.Description == "" {

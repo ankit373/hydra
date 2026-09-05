@@ -13,7 +13,7 @@ import (
 )
 
 // cliHead plants a fake CLI binary that always prints stdout, regardless of
-// the args the executor's template builds — same technique as fakeAgy.
+// the args the executor's template builds, same technique as fakeAgy.
 func cliHead(t *testing.T, s *testutil.Sandbox, id, provName, stdout string) provider.Head {
 	t.Helper()
 	body := "#!/bin/sh\nprintf '%s' " + shellQuote(stdout) + "\n"

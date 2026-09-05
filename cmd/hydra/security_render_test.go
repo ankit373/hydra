@@ -23,8 +23,8 @@ func hostileReport() *security.Report {
 		HasData: true,
 		Posture: security.Posture{
 			Verdict: security.VerdictActNow,
-			Trigger: "critical incident — " + evilPayload,
-			Because: []string{"critical incident — " + evilPayload},
+			Trigger: "critical incident, " + evilPayload,
+			Because: []string{"critical incident, " + evilPayload},
 		},
 		Incidents: []security.Incident{{
 			ID: "x", Actor: evilPayload, Severity: security.SeverityCritical,
@@ -67,7 +67,7 @@ func TestSecurityPrinters_NeverEmitControlCharacters(t *testing.T) {
 	// Deliberately the whole report renderer, not a hand-picked list of
 	// printers. An earlier version of this test called seven printers by name
 	// and passed while the per-head table and the action queue were both still
-	// emitting raw escapes — the list drifted from the renderer immediately.
+	// emitting raw escapes, the list drifted from the renderer immediately.
 	// --why on, so every printer runs: a sink that only appears in the full
 	// report is exactly the one a default-surface test would miss.
 	out := captureStdout(t, func() { printSecurityReport(r, true) })
@@ -83,7 +83,7 @@ func TestSecurityPrinters_NeverEmitControlCharacters(t *testing.T) {
 		{0x1b, "ESC"}, {0x0d, "CR"}, {0x7f, "DEL"}, {0x9b, "C1 CSI"}, {0x09, "TAB"}, {0x08, "BACKSPACE"},
 	} {
 		if strings.IndexByte(stripped, bad.b) >= 0 {
-			t.Errorf("%s survived into rendered output — a print site is missing util.SafeTerminal", bad.name)
+			t.Errorf("%s survived into rendered output, a print site is missing util.SafeTerminal", bad.name)
 		}
 	}
 
@@ -95,7 +95,7 @@ func TestSecurityPrinters_NeverEmitControlCharacters(t *testing.T) {
 }
 
 // Strips only well-formed SGR (ESC [ digits m). Scanning to the next 'm'
-// instead lets an injected "ESC[2K" swallow the escapes this test looks for —
+// instead lets an injected "ESC[2K" swallow the escapes this test looks for,
 // the greedy version reported one failure where there were five.
 func stripStyles(s string) string {
 	var b strings.Builder
@@ -150,7 +150,7 @@ func TestSecurityReport_DefaultIsTheAnswerNotTheDashboard(t *testing.T) {
 func TestSecurityReport_DoesNotPrintTheCitedIncidentTwice(t *testing.T) {
 	r := hostileReport()
 	narrative := r.Incidents[0].Narrative
-	r.Posture.Trigger = "critical incident — " + narrative
+	r.Posture.Trigger = "critical incident, " + narrative
 	rendered := util.SafeTerminal(narrative)
 
 	out := stripStyles(captureStdout(t, func() { printSecurityReport(r, false) }))

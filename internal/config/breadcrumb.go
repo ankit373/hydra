@@ -23,7 +23,7 @@ var (
 	breadcrumbCacheMu     sync.Mutex
 	breadcrumbCacheKey    string
 	breadcrumbCacheResult string
-	breadcrumbCached      bool // only ever set true alongside a successful result — see Breadcrumb
+	breadcrumbCached      bool // only ever set true alongside a successful result, see Breadcrumb
 )
 
 // breadcrumbFingerprint is a cheap (stat-only) signal for whether Breadcrumb
@@ -39,7 +39,7 @@ func breadcrumbFingerprint() string {
 	var b strings.Builder
 	// home must be part of the key: two different registry roots whose files
 	// happen to coincide on mtime+size (plausible on filesystems with coarser
-	// mtime resolution — NFS, some CI runners, tmpfs) would otherwise produce
+	// mtime resolution, NFS, some CI runners, tmpfs) would otherwise produce
 	// the identical fingerprint string and silently serve one home's cached
 	// hash to the other.
 	b.WriteString(home + "\x00")
@@ -57,8 +57,8 @@ func breadcrumbFingerprint() string {
 // Breadcrumb is a SHA256 hex fingerprint of the registry files that define
 // this Hydra deployment's routing behavior. It lets ledger/trust/cost log
 // entries be tied back to the exact routing rules in effect when they were
-// written, and lets logs from different machines — or from before/after a
-// registry edit — be told apart.
+// written, and lets logs from different machines, or from before/after a
+// registry edit, be told apart.
 //
 // Cached, keyed on breadcrumbFingerprint (mtime+size for an on-disk override,
 // a fixed marker for the embedded fallback) rather than memoized forever: a
@@ -68,7 +68,7 @@ func breadcrumbFingerprint() string {
 // still invalidate on the very next call, which the fingerprint guarantees.
 // Reads each file through registry.Read, so an installed binary fingerprints
 // its embedded rules and an operator with on-disk overrides fingerprints those
-// instead — which is the distinction the breadcrumb exists to record. Before
+// instead, which is the distinction the breadcrumb exists to record. Before
 // #238 this read disk only and returned an error on every installed binary, so
 // the fingerprint was silently absent from exactly the logs it was added for.
 func Breadcrumb() (string, error) {
@@ -107,7 +107,7 @@ func computeBreadcrumb() (string, error) {
 		}
 		// Length-prefix each file with its name. Plain concatenation is
 		// ambiguous: moving a line from the end of routing.yaml to the start of
-		// models.yaml would leave the byte stream — and so the fingerprint —
+		// models.yaml would leave the byte stream, and so the fingerprint,
 		// unchanged, while being a materially different deployment.
 		fmt.Fprintf(h, "%s\x00%d\x00", name, len(raw))
 		h.Write(raw)

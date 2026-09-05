@@ -12,10 +12,10 @@ import (
 
 // Hydra has two descriptions of the same fact.
 //
-// registry/routing.yaml calls itself "THE ENUM FILE — this is your single enum,
+// registry/routing.yaml calls itself "THE ENUM FILE, this is your single enum,
 // change a value here → every domain updates". EnumToTier is a hardcoded Go
 // switch. Only the switch runs. Editing the YAML alone changes nothing about
-// how a dispatch routes, and nothing anywhere compared the two — which is bug
+// how a dispatch routes, and nothing anywhere compared the two, which is bug
 // #165, and why CLAUDE.md carries a standing warning about it.
 //
 // The right fix would be one source of truth. Until then this is the next best
@@ -35,7 +35,7 @@ func TestEnumToTier_MatchesRoutingYAML(t *testing.T) {
 		t.Fatalf("parsing routing.yaml: %v", err)
 	}
 	if len(doc.RoutingMap) == 0 {
-		t.Fatal("routing_map is empty — this guard has stopped guarding " +
+		t.Fatal("routing_map is empty, this guard has stopped guarding " +
 			"(key renamed or file restructured?)")
 	}
 
@@ -43,7 +43,7 @@ func TestEnumToTier_MatchesRoutingYAML(t *testing.T) {
 	for enum, wantTier := range doc.RoutingMap {
 		got := EnumToTier(enum)
 		if got == "" {
-			t.Errorf("routing.yaml documents %s → tier %d, but EnumToTier(%q) returns \"\" — "+
+			t.Errorf("routing.yaml documents %s → tier %d, but EnumToTier(%q) returns \"\", "+
 				"a dispatch with --enum %s would not route at all", enum, wantTier, enum, enum)
 			continue
 		}
@@ -64,7 +64,7 @@ func TestEnumToTier_MatchesRoutingYAML(t *testing.T) {
 	}
 }
 
-// A tier number outside 1–10 is not routable: rank.UITier only ever produces
+// A tier number outside 1-10 is not routable: rank.UITier only ever produces
 // that range, so nothing would ever match.
 func TestEnumToTier_ProducesRoutableTiers(t *testing.T) {
 	for _, enum := range knownEnums() {
@@ -75,7 +75,7 @@ func TestEnumToTier_ProducesRoutableTiers(t *testing.T) {
 			continue
 		}
 		if n < 1 || n > 10 {
-			t.Errorf("EnumToTier(%q) = %d, outside the routable range 1–10", enum, n)
+			t.Errorf("EnumToTier(%q) = %d, outside the routable range 1-10", enum, n)
 		}
 	}
 }
@@ -85,13 +85,13 @@ func TestEnumToTier_ProducesRoutableTiers(t *testing.T) {
 func TestEnumToTier_UnknownEnumDoesNotRoute(t *testing.T) {
 	for _, bad := range []string{"", "simple", "Simple", "SIMPLE ", "NOPE", "11", "0", "TRIVIALX"} {
 		if got := EnumToTier(bad); got != "" {
-			t.Errorf("EnumToTier(%q) = %q, want \"\" — an unrecognised enum must not route", bad, got)
+			t.Errorf("EnumToTier(%q) = %q, want \"\", an unrecognised enum must not route", bad, got)
 		}
 	}
 }
 
 // EnumToTier's "" result is ambiguous between "no enum given" and
-// "unrecognized key" — IsKnownEnum is how a caller (cmd/hydra's --enum flag)
+// "unrecognized key", IsKnownEnum is how a caller (cmd/hydra's --enum flag)
 // tells the two apart instead of silently routing a typo unrestricted (#501).
 func TestIsKnownEnum(t *testing.T) {
 	for _, enum := range knownEnums() {
@@ -121,7 +121,7 @@ func TestEnumToTier_HarderWorkGetsAStrongerTier(t *testing.T) {
 			t.Fatalf("EnumToTier(%q) = %q: %v", enum, EnumToTier(enum), err)
 		}
 		if n <= prev {
-			t.Errorf("%s resolves to tier %d, not weaker than the previous enum's tier %d — "+
+			t.Errorf("%s resolves to tier %d, not weaker than the previous enum's tier %d, "+
 				"the enum ladder is out of order", enum, n, prev)
 		}
 		prev = n

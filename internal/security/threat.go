@@ -17,7 +17,7 @@ type Count struct {
 
 // Threats is the forensic breakdown behind "N blocked, M flagged".
 //
-// The counts alone answer nothing actionable — a security view has to say
+// The counts alone answer nothing actionable, a security view has to say
 // *what* was attempted, *where*, and *how dangerous the operation was*. All
 // three come from fields the ledger has always recorded (FlagReason, Resource,
 // Action) and that nothing rendered until now.
@@ -25,7 +25,7 @@ type Threats struct {
 	// ByMarker groups flagged events by the injection phrase that actually
 	// matched, e.g. "ignore previous instructions".
 	ByMarker []Count `json:"byMarker,omitempty"`
-	// ProbedResources are resources denied at least probeThreshold times —
+	// ProbedResources are resources denied at least probeThreshold times,
 	// repeated denials against one target, which is the one behavioural
 	// signal present in the data.
 	ProbedResources []Count `json:"probedResources,omitempty"`

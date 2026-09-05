@@ -25,8 +25,8 @@ type modelsFile struct {
 	Models []modelEntry `yaml:"models"`
 }
 
-// LoadWindows reads registry/models.yaml — an on-disk copy under home if one
-// exists, otherwise the copy embedded in the binary — and returns a map of
+// LoadWindows reads registry/models.yaml, an on-disk copy under home if one
+// exists, otherwise the copy embedded in the binary, and returns a map of
 // model-id → context window size. Missing entries get provider-based fallbacks
 // (ollama → 32 768, everything else → 200 000).
 //

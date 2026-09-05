@@ -51,7 +51,7 @@ func TestParsePolicy_MalformedTierAndModel(t *testing.T) {
 }
 
 // A shift off the end of the ladder has no target, so no row supports it. The
-// alternative — mapping onto a tier that does not exist — would silently
+// alternative, mapping onto a tier that does not exist, would silently
 // evaluate a policy nobody could run.
 func TestTierShift_ShiftOffTheLadderSupportsNothing(t *testing.T) {
 	p := TierShift{Shift: 1, Tiers: TiersIn([]int{3, 4})}

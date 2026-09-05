@@ -25,7 +25,7 @@ const (
 	ModeBest SwarmMode = "best" // fire all; LLM judge (with CapScore fallback) picks winner
 	ModeAll  SwarmMode = "all"  // fire all; return ranked by CapScore, no judge
 	// ModeSPRT labels cost rows from RunSPRT's adaptive optimal-stopping ensemble.
-	// It is a cost-log label, not a value Options.Mode ever takes — RunSPRT is
+	// It is a cost-log label, not a value Options.Mode ever takes, RunSPRT is
 	// entered via Options.Confidence, not via Mode.
 	ModeSPRT SwarmMode = "sprt"
 )
@@ -34,7 +34,7 @@ const (
 type Options struct {
 	Mode SwarmMode
 
-	// Head selection — at most one of TierHint / HeadIDs should be set.
+	// Head selection, at most one of TierHint / HeadIDs should be set.
 	// When both are empty, CapScoreSelector picks the top-N available heads.
 	TierHint    string
 	HeadIDs     []string // explicit head IDs; bypasses tier
@@ -52,7 +52,7 @@ type Options struct {
 
 	// A2AFile is a path to an A2A handoff JSON file (--a2a): its structured
 	// context is prepended to the prompt before any head fires. Mirrors the
-	// fail-loudly contract dispatch.Options.A2AFile gives plain dispatch — a
+	// fail-loudly contract dispatch.Options.A2AFile gives plain dispatch, a
 	// missing or malformed file fails Plan/Run/RunSPRT instead of silently
 	// dropping the handoff, which is what happened before this field existed
 	// at all (#530).
@@ -68,13 +68,13 @@ type Options struct {
 
 	// RunID/TaskID group this swarm's attempt rows with the invocation and the
 	// logical task they belong to. Every head racing or voting on one prompt is
-	// working the same task, so they share a TaskID — that is what lets a reader
+	// working the same task, so they share a TaskID, that is what lets a reader
 	// tell "5 heads on one task" from "5 separate tasks" (#181).
 	RunID  string
 	TaskID string
 
 	// Classification is prompt's already-computed PII/injection verdict
-	// (policy.Classify) — cmdDispatch computes this once and passes it here so
+	// (policy.Classify), cmdDispatch computes this once and passes it here so
 	// Run/RunSPRT resolve it once, before firing any head, instead of every
 	// concurrent executeHead call re-scanning the same prompt. Nil means "not
 	// computed yet"; Run/RunSPRT derive and fill it in before dispatching.
@@ -114,7 +114,7 @@ type Swarm struct {
 
 // New constructs a Swarm.
 // heads is the already-probed set of live heads (from probe.Run or Dispatcher.Heads).
-// pricing may be nil — cost estimation and pre-flight guard will be skipped.
+// pricing may be nil, cost estimation and pre-flight guard will be skipped.
 func New(d *dispatch.Dispatcher, heads []provider.Head, pricing PricingReader) *Swarm {
 	return &Swarm{d: d, heads: heads, pricing: pricing}
 }
@@ -135,7 +135,7 @@ func validateMode(m SwarmMode) error {
 // heads would be engaged, and what one round of fan-out is estimated to cost.
 //
 // It exists so --dry-run can mean the same thing in every mode. It used to mean
-// nothing in swarm and SPRT modes — the flag was read only by the single-dispatch
+// nothing in swarm and SPRT modes, the flag was read only by the single-dispatch
 // path, which both ensemble branches returned before reaching, so a dry run
 // fired a paid ensemble (#167).
 //
@@ -186,7 +186,7 @@ func (s *Swarm) Run(ctx context.Context, prompt string, opts Options) (*SwarmRes
 		return nil, fmt.Errorf("swarm: config load: %w", err)
 	}
 	// An invalid --tier/--swarm-judge-tier must fail here, before any heads
-	// are fired or judged — never silently widen to CapScoreSelector's top-N
+	// are fired or judged, never silently widen to CapScoreSelector's top-N
 	// fan-out (#501).
 	if err := validateSwarmTiers(cfg, opts); err != nil {
 		return nil, err
@@ -206,7 +206,7 @@ func (s *Swarm) Run(ctx context.Context, prompt string, opts Options) (*SwarmRes
 		return nil, fmt.Errorf("swarm: no heads available for the requested configuration")
 	}
 
-	// Classify once, before any head fires — every concurrent executeHead call
+	// Classify once, before any head fires, every concurrent executeHead call
 	// below reuses this instead of each re-scanning the same prompt (#522).
 	if opts.Classification == nil {
 		c := policy.Classify(prompt)
@@ -256,7 +256,7 @@ func (s *Swarm) Run(ctx context.Context, prompt string, opts Options) (*SwarmRes
 			winner.Rank = 1
 			result.Winner = winner
 		} else {
-			// Judge completely failed — fall back to CapScore winner.
+			// Judge completely failed, fall back to CapScore winner.
 			result.Winner = capScoreWinner(attempts)
 		}
 	case ModeAll:
@@ -301,7 +301,7 @@ func validateSwarmTiers(cfg *config.Config, opts Options) error {
 // injectA2A prepends opts.A2AFile's handoff context to prompt when set, using
 // the identical fail-loudly contract dispatch.Dispatch applies to --a2a. Plan,
 // Run and RunSPRT all call this so a bad handoff file is rejected the same way
-// regardless of mode — before this, swarm.Options had no A2AFile field at all,
+// regardless of mode, before this, swarm.Options had no A2AFile field at all,
 // so --a2a was silently dropped the moment --swarm or --confidence was
 // combined with it (#530).
 func injectA2A(prompt string, opts Options) (string, error) {
@@ -332,7 +332,7 @@ func buildJudge(d *dispatch.Dispatcher, opts Options, cfg *config.Config) Judge 
 	return newCompositeJudge(newCalibratedJudge(cal, domain, nil), fallback)
 }
 
-// loadCalibrationFor degrades to (nil, domain) on a load error — callers
+// loadCalibrationFor degrades to (nil, domain) on a load error, callers
 // treat nil as "no calibration data" and fall back rather than fail.
 func loadCalibrationFor(opts Options) (*trust.Calibrator, string) {
 	domain := opts.Domain

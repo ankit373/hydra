@@ -4,7 +4,7 @@
 #
 # dispatch/decide.sh evaluates rules in order, starting from `defaults` and
 # merging each matching rule's `apply` block on top. Later rules override
-# earlier ones — order matters.
+# earlier ones, order matters.
 #
 # Match operators (suffix on the field name in `when`):
 #   *_eq        exact equal       file_extension_eq: ts
@@ -23,32 +23,32 @@
 #   ── Edit format ──────────────────────────────────────────────
 #   edit_mode               rewrite | sr_blocks | udiff | agentic
 #   ── Isolation ────────────────────────────────────────────────
-#   atomic                  bool — group rollback on any failure
-#   use_worktree            bool — run in isolated git worktree
+#   atomic                  bool, group rollback on any failure
+#   use_worktree            bool, run in isolated git worktree
 #   ── Commits ──────────────────────────────────────────────────
-#   auto_commit             bool — drop a git commit per approved edit
+#   auto_commit             bool, drop a git commit per approved edit
 #   ── Observability ────────────────────────────────────────────
-#   track_tokens            bool — log token cost to logs/cost.jsonl
+#   track_tokens            bool, log token cost to logs/cost.jsonl
 #   ── Validation ───────────────────────────────────────────────
-#   validators              list — [syntax, tsc, lint, test, test_impact]
-#   validate_strict         bool — fail on any validator output (vs warn)
-#   test_loop               bool — re-dispatch with errors until tests pass
-#   lint_loop               bool — re-dispatch with errors until linter clean
+#   validators              list, [syntax, tsc, lint, test, test_impact]
+#   validate_strict         bool, fail on any validator output (vs warn)
+#   test_loop               bool, re-dispatch with errors until tests pass
+#   lint_loop               bool, re-dispatch with errors until linter clean
 #   ── Routing/retries ──────────────────────────────────────────
-#   max_retries             int  — retry count before escalating tier
-#   escalate_on_fail        bool — bump enum tier on failure (vs hard fail)
-#   rubber_duck             bool — post-edit review by a different tier
-#   confidence_threshold    float (0–1) — escalate if model confidence below
+#   max_retries             int , retry count before escalating tier
+#   escalate_on_fail        bool, bump enum tier on failure (vs hard fail)
+#   rubber_duck             bool, post-edit review by a different tier
+#   confidence_threshold    float (0-1), escalate if model confidence below
 #   ── Safety caps ──────────────────────────────────────────────
-#   diff_size_cap_pct       int  — reject edits changing > N% of file
-#   max_cost_usd            float — abort task if accumulated spend > N
-#   max_wall_seconds        int  — abort task if wall time > N
+#   diff_size_cap_pct       int , reject edits changing > N% of file
+#   max_cost_usd            float, abort task if accumulated spend > N
+#   max_wall_seconds        int , abort task if wall time > N
 #   ── Context ──────────────────────────────────────────────────
-#   use_repo_map            bool — inject compressed repo summary in prompt
-#   dedup_file_reads        bool — replace duplicate file reads with marker
-#   prompt_cache            bool — enable Anthropic prompt caching (SDK tiers)
+#   use_repo_map            bool, inject compressed repo summary in prompt
+#   dedup_file_reads        bool, replace duplicate file reads with marker
+#   prompt_cache            bool, enable Anthropic prompt caching (SDK tiers)
 #   ── Mode hints ───────────────────────────────────────────────
-#   defensive               bool — read more context before editing (risky tasks)
+#   defensive               bool, read more context before editing (risky tasks)
 # ─────────────────────────────────────────────────────────────────────────────
 
 version: "1.0"

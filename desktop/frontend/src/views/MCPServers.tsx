@@ -46,12 +46,12 @@ export function MCPServers() {
       </div>
 
       {/* Without a sync every server reads unresolved, and that says nothing
-          about the servers — only that nothing has been compared yet. Saying
+          about the servers, only that nothing has been compared yet. Saying
           so is the difference between a finding and an absence of one. */}
       <p className="card__note">
         {panel.synced
           ? `Compared against the official registry, last pulled ${panel.synced.slice(0, 10)}.`
-          : 'The official registry has never been pulled on this machine, so every server below is unresolved for that reason alone — not because anything is wrong with it.'}
+          : 'The official registry has never been pulled on this machine, so every server below is unresolved for that reason alone, not because anything is wrong with it.'}
       </p>
       {syncNote && <p className="card__note">{syncNote}</p>}
 

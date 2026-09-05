@@ -12,7 +12,7 @@ import (
 // chosen.
 //
 // Argmax routing gives every head but the winner a selection probability of
-// zero, so a log of it can never answer "what would another head have done" —
+// zero, so a log of it can never answer "what would another head have done",
 // that evidence is absent rather than sparse, and no amount of stored data
 // recovers it. A small exploration rate is what makes the question answerable.
 //

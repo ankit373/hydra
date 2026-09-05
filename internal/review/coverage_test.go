@@ -95,7 +95,7 @@ func TestSummary_FallsBackToTheLastSingleEditOnlyWhenNeeded(t *testing.T) {
 }
 
 // A corrupt or absent log must produce an empty review, not an error and not a
-// panic — the logs are written by another process and can be truncated.
+// panic, the logs are written by another process and can be truncated.
 func TestSummary_CorruptOrAbsentLogsReviewNothing(t *testing.T) {
 	repoSandbox(t, false)
 
@@ -166,7 +166,7 @@ func TestNumstat_GitStatuses(t *testing.T) {
 }
 
 // Without a usable git root the backup is the baseline. An unreadable backup
-// must be reported as no_baseline rather than as an unchanged file — the whole
+// must be reported as no_baseline rather than as an unchanged file, the whole
 // point of #260 is that a silent 0/0 reads as "nothing to review".
 func TestNumstat_BackupPathAndUnreadableBaseline(t *testing.T) {
 	repo := repoSandbox(t, false)
@@ -194,7 +194,7 @@ func TestNumstat_BackupPathAndUnreadableBaseline(t *testing.T) {
 }
 
 // gitUsable is the guard that stops a git failure being read as a fact about
-// the file — in Reject that meant deleting it.
+// the file, in Reject that meant deleting it.
 //
 // One sandbox per test: NewSandbox empties $PATH, so a second one in the same
 // test can no longer resolve git and AllowHostBinary skips.
@@ -238,7 +238,7 @@ func TestDiff_UsesGitInARepository(t *testing.T) {
 		t.Errorf("git diff did not show the added line:\n%s", got)
 	}
 
-	// An unchanged file has an empty diff — which is correct here, unlike the
+	// An unchanged file has an empty diff, which is correct here, unlike the
 	// backup path where empty meant the diff had failed.
 	write(t, file, "one\n")
 	if got, err := Diff(file); err != nil || strings.TrimSpace(got) != "" {

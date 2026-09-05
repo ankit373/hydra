@@ -16,7 +16,7 @@ import (
 )
 
 // LLM01/LLM02 are always Enforced (automatic, no config), LLM07 is always Gap
-// (no mechanism exists), LLM04/LLM08 are always N/A — these don't depend on
+// (no mechanism exists), LLM04/LLM08 are always N/A, these don't depend on
 // install state, unlike LLM03/05/06/09/10. LLM03 is Gap only while nothing is
 // being fingerprinted, which is what an empty SupplyChain means here.
 func TestComputeCoverage_StaticCategoriesAreFixed(t *testing.T) {
@@ -104,7 +104,7 @@ func TestLLM10UnboundedConsumption_ConfiguredOnlyWithACostCeilingDenial(t *testi
 }
 
 // A custom workspace.yaml with every validator explicitly nulled must report
-// Gap — the only way LLM05 should ever be Gap, since the embedded default
+// Gap: the only way LLM05 should ever be Gap, since the embedded default
 // ships real validators.
 func TestLLM05OutputHandling_GapWhenNoValidatorsConfigured(t *testing.T) {
 	s := testutil.NewSandbox(t)
@@ -129,7 +129,7 @@ func TestLLM05OutputHandling_EnforcedByDefault(t *testing.T) {
 	}
 }
 
-// A gap with no matching history entry is brand-new — this run is the first
+// A gap with no matching history entry is brand-new, this run is the first
 // evidence of it, so age must be zero rather than undefined/negative.
 func TestAnnotateGapAge_BrandNewGapHasZeroAge(t *testing.T) {
 	cats := []Category{{ID: "LLM03", Status: Gap}}
@@ -140,7 +140,7 @@ func TestAnnotateGapAge_BrandNewGapHasZeroAge(t *testing.T) {
 }
 
 // The *earliest* history entry naming this category wins, not the most
-// recent — age is "how long has this been broken," not "when did we last
+// recent, age is "how long has this been broken," not "when did we last
 // check."
 func TestAnnotateGapAge_UsesEarliestHistoryOccurrence(t *testing.T) {
 	now := time.Date(2026, 8, 10, 0, 0, 0, 0, time.UTC)
@@ -192,8 +192,8 @@ func annotateGapAgeOld(cats []Category, history []scoreEntry, now time.Time) []C
 }
 
 // Exercises earliest-wins, multiple gaps per entry, a category with no
-// history at all, a non-gap category, and — the case most likely to break a
-// naive index rewrite — a malformed timestamp on the *first* entry naming a
+// history at all, a non-gap category, and, the case most likely to break a
+// naive index rewrite, a malformed timestamp on the *first* entry naming a
 // category, where the old scan silently skipped it and kept looking for the
 // next-oldest entry naming the same ID.
 func TestAnnotateGapAge_MatchesOldImplementation(t *testing.T) {
@@ -206,7 +206,7 @@ func TestAnnotateGapAge_MatchesOldImplementation(t *testing.T) {
 		{TS: now.Add(-5 * 24 * time.Hour).Format(time.RFC3339), Gaps: []string{"LLM07", "LLM09"}},
 	}
 	cats := []Category{
-		{ID: "LLM01", Status: Enforced}, // never a gap — must stay unannotated
+		{ID: "LLM01", Status: Enforced}, // never a gap, must stay unannotated
 		{ID: "LLM03", Status: Gap},      // first (bad-ts) sighting must be skipped, second used
 		{ID: "LLM06", Status: Gap},      // same, different entries
 		{ID: "LLM07", Status: Gap},      // earliest of two valid sightings must win
@@ -246,7 +246,7 @@ func TestAnnotateGapAge_MatchesOldImplementation(t *testing.T) {
 // security_score.jsonl actually accumulates, engineered for the old scan's
 // worst case: the categories being looked up only start appearing as gaps in
 // the very last entry, so a per-category rescan that walks oldest-first
-// cannot short-circuit early for any of them — it must cross nearly the
+// cannot short-circuit early for any of them, it must cross nearly the
 // whole file before it finds (or fails to find) a match. That is the
 // realistic shape too: a gap that has existed since day one already matches
 // at history[0] and old's "break on first match" makes it cheap; a nested
@@ -266,7 +266,7 @@ func buildGapHistory(n int) []scoreEntry {
 }
 
 // A relative wall-clock comparison against annotateGapAgeOld is inherently
-// flaky on shared CI runners (#526 — both sides are sub-2ms at n=50000, so
+// flaky on shared CI runners (#526, both sides are sub-2ms at n=50000, so
 // runner jitter alone can erase the gap). This instead pins an absolute
 // ceiling generous enough to only fire if the one-pass rewrite regresses back
 // toward quadratic behavior, never on ordinary scheduling noise.
@@ -290,7 +290,7 @@ func TestAnnotateGapAge_CompletesQuicklyAtScale(t *testing.T) {
 }
 
 // BenchmarkAnnotateGapAge and BenchmarkAnnotateGapAgeOld are the real
-// before/after comparison at #524's "50x" synthetic data volume — run with
+// before/after comparison at #524's "50x" synthetic data volume, run with
 // `go test ./internal/security/ -bench AnnotateGapAge -run ^$`.
 func BenchmarkAnnotateGapAge(b *testing.B) {
 	history := buildGapHistory(50000)

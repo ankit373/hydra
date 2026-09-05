@@ -26,7 +26,7 @@ func TestClusterByAgreement_NilEquivDefaultsToText(t *testing.T) {
 }
 
 // A run with fewer than two familied sources carries no correlation signal
-// and must not be recorded — an empty Family means "independent, nothing to
+// and must not be recorded, an empty Family means "independent, nothing to
 // discount," so there is nothing to measure.
 func TestRecordCoAgreement_SkipsUnfamiliedSourcesAndTinyRuns(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "coagreement.jsonl")
@@ -47,9 +47,9 @@ func TestRecordCoAgreement_SkipsUnfamiliedSourcesAndTinyRuns(t *testing.T) {
 	}
 }
 
-// loadCoAgreement caches its result per path — an SPRT run or swarm judge may
+// loadCoAgreement caches its result per path, an SPRT run or swarm judge may
 // call FamilyDiscount/FamilyCoupling several times against the same file
-// while it's stable — but a real append (the next run's RecordCoAgreement)
+// while it's stable, but a real append (the next run's RecordCoAgreement)
 // must never be masked by a stale cache entry.
 func TestLoadCoAgreement_CacheInvalidatesOnRealAppend(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "coagreement.jsonl")
@@ -61,7 +61,7 @@ func TestLoadCoAgreement_CacheInvalidatesOnRealAppend(t *testing.T) {
 
 	RecordCoAgreement(path, "python", []string{"c", "d", "e"}, []string{"famB", "famB", "famB"}, []string{"x", "x", "y"}, TextEquivalence)
 	if got := loadCoAgreement(path); len(got) != 2 {
-		t.Errorf("got %d record(s) after second append, want 2 — the cache served a stale read", len(got))
+		t.Errorf("got %d record(s) after second append, want 2, the cache served a stale read", len(got))
 	}
 }
 
@@ -80,7 +80,7 @@ func TestFamilyCoupling_BelowThresholdIsNotOK(t *testing.T) {
 
 // Two same-family sources that always echo each other, alongside a
 // different-family source that never agrees with either, is the textbook
-// "these two are one vote" case — J must measure close to 1.
+// "these two are one vote" case, J must measure close to 1.
 func TestFamilyCoupling_HighExcessAgreementMeasuresNearOne(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "coagreement.jsonl")
 	for i := 0; i < minCoAgreementSamples; i++ {
@@ -106,7 +106,7 @@ func TestFamilyCoupling_HighExcessAgreementMeasuresNearOne(t *testing.T) {
 }
 
 // Same-family and cross-family pairs agreeing at the same rate is the
-// textbook "not actually correlated" case — J must measure close to 0, and
+// textbook "not actually correlated" case, J must measure close to 0, and
 // the discount must be close to 1 (no discount).
 func TestFamilyCoupling_NoExcessAgreementMeasuresNearZero(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "coagreement.jsonl")
@@ -145,7 +145,7 @@ func TestFamilyCoupling_NoExcessAgreementMeasuresNearZero(t *testing.T) {
 // AllFamilyCoupling derives every family's J by complementation (diff bucket
 // = all pairs minus this family's own same-family pairs) instead of rescanning
 // the log once per family. It must agree exactly with calling FamilyCoupling
-// per family — three families (not two) is the minimum shape that actually
+// per family, three families (not two) is the minimum shape that actually
 // exercises the "every other family counts toward MY cross-family baseline"
 // case the complementation trick depends on.
 func TestAllFamilyCoupling_MatchesPerFamilyFamilyCoupling(t *testing.T) {
@@ -178,7 +178,7 @@ func TestAllFamilyCoupling_MatchesPerFamilyFamilyCoupling(t *testing.T) {
 			continue
 		}
 		if wantOK && math.Abs(got.J-wantJ) > 1e-9 {
-			t.Errorf("%s: AllFamilyCoupling.J=%.6f, FamilyCoupling J=%.6f — batched computation diverged from the per-family one", fam, got.J, wantJ)
+			t.Errorf("%s: AllFamilyCoupling.J=%.6f, FamilyCoupling J=%.6f, batched computation diverged from the per-family one", fam, got.J, wantJ)
 		}
 		wantWarn := wantOK && wantJ >= criticalCoupling
 		if got.Warn != wantWarn {

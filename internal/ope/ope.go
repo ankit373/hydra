@@ -5,7 +5,7 @@
 // Averaging a sampled log answers a question nobody asked: the mean over what
 // was kept, not the mean over what happened. Keeping every failure and a
 // fraction of successes understates success rates badly enough to invert the
-// ranking of two heads, which then changes routing — a closed loop with no
+// ranking of two heads, which then changes routing, a closed loop with no
 // error signal in it. Weighting each row by the inverse of the probability it
 // was kept removes the bias.
 package ope

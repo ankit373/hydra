@@ -1,7 +1,7 @@
 # Hydra Domain Registry
 # ─────────────────────────────────────────────────────────────────────────────
 # Maps roles/domains to routing enum keys (from routing.yaml).
-# NEVER reference tier numbers here — always use enum keys.
+# NEVER reference tier numbers here, always use enum keys.
 #
 # To add a role     → add a domain block (copy _template pattern)
 # To adjust routing → change the enum key (e.g. SIMPLE → STANDARD)

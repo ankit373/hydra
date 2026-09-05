@@ -101,7 +101,7 @@ func TestParseJudgeResponse_RejectsMalformedVerdicts(t *testing.T) {
 		name: "winner out of range", raw: `{"winner":7,"scores":[90,80],"reason":"x"}`,
 		totalAttempts: 2, successIdx: []int{0, 1},
 	}, {
-		// It picked an attempt that failed — there is no output to return.
+		// It picked an attempt that failed, there is no output to return.
 		name: "winner is a failed attempt", raw: `{"winner":1,"scores":[90],"reason":"x"}`,
 		totalAttempts: 2, successIdx: []int{0},
 	}, {
@@ -131,7 +131,7 @@ func TestParseJudgeResponse_MapsScoresBackOntoFailedAttempts(t *testing.T) {
 		t.Fatalf("Scores = %v, want one per attempt", v.Scores)
 	}
 	if v.Scores[0] != 60 || v.Scores[1] != 0 || v.Scores[2] != 95 {
-		t.Errorf("Scores = %v, want [60 0 95] — the failed attempt must score 0 "+
+		t.Errorf("Scores = %v, want [60 0 95], the failed attempt must score 0 "+
 			"rather than shifting the others", v.Scores)
 	}
 }
@@ -157,7 +157,7 @@ func TestBuildJudgePrompt_CarriesEveryCandidate(t *testing.T) {
 		}
 	}
 	// The failed attempt has no output to score and must not appear as a
-	// candidate — the judge would otherwise be asked to rank an empty answer.
+	// candidate, the judge would otherwise be asked to rank an empty answer.
 	if strings.Contains(got, "Response 1 ") {
 		t.Errorf("the failed attempt was offered as a candidate:\n%s", got)
 	}
@@ -196,7 +196,7 @@ func TestLLMJudge_NoSuccessfulAttemptsIsAnError(t *testing.T) {
 
 func TestNewLLMJudge_DefaultsTheTimeout(t *testing.T) {
 	if got := newLLMJudge(nil, "1", 0); got.timeout != defaultJudgeTimeout {
-		t.Errorf("timeout = %v with none set, want the default %v — zero would "+
+		t.Errorf("timeout = %v with none set, want the default %v, zero would "+
 			"cancel the judge immediately", got.timeout, defaultJudgeTimeout)
 	}
 	if got := newLLMJudge(nil, "1", 5*time.Second); got.timeout != 5*time.Second {
@@ -296,7 +296,7 @@ func TestFirstSuccessful(t *testing.T) {
 }
 
 // truncate bounds the prompt preview written to cost.jsonl. It counts runes,
-// not bytes — cutting a multi-byte character in half produces invalid UTF-8 in
+// not bytes, cutting a multi-byte character in half produces invalid UTF-8 in
 // a JSON log.
 func TestTruncate_CountsRunesNotBytes(t *testing.T) {
 	if got := truncate("short", 80); got != "short" {
@@ -343,7 +343,7 @@ func TestClassifyError_EveryStatus(t *testing.T) {
 		})
 	}
 
-	// Wrapping must not hide the type — errors.As unwraps, and that is what
+	// Wrapping must not hide the type, errors.As unwraps, and that is what
 	// keeps "run: claude login" reaching the user through a fallback chain.
 	wrapped := fmt.Errorf("dispatch failed: %w", &executor.AuthRequiredError{ModelFlag: "m"})
 	if got := classifyError(wrapped); got != StatusAuthRequired {
@@ -358,7 +358,7 @@ func TestClassifyError_EveryStatus(t *testing.T) {
 // ── selectors ─────────────────────────────────────────────────────────────────
 
 // TierSelector resolves a named config tier. When that tier has no live heads it
-// falls back to capability ranking rather than returning nothing — a swarm that
+// falls back to capability ranking rather than returning nothing, a swarm that
 // silently engages zero heads is indistinguishable from one that ran.
 func TestTierSelector_FallsBackWhenTheTierIsEmpty(t *testing.T) {
 	heads := []provider.Head{
@@ -414,7 +414,7 @@ func TestTierSelector_FallsBackWhenTheTierIsEmpty(t *testing.T) {
 }
 
 // IDSelector resolves explicit head ids. A typo'd id must be reported, not
-// silently dropped — the user asked for a specific head.
+// silently dropped, the user asked for a specific head.
 func TestIDSelector_ReportsAnUnknownID(t *testing.T) {
 	heads := []provider.Head{registryHeadFor("known", 90)}
 	sel := &IDSelector{}

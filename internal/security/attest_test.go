@@ -19,7 +19,7 @@ func TestAttestation_DigestDetectsAlteration(t *testing.T) {
 	}
 	a.Verdict = VerdictActNow // someone edits the claim
 	if VerifyAttestation(a) {
-		t.Error("an altered attestation still verified — the digest covers nothing")
+		t.Error("an altered attestation still verified, the digest covers nothing")
 	}
 }
 

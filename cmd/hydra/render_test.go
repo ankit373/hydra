@@ -49,7 +49,7 @@ func TestPrintSwarmResult_ShowsEveryAttemptAndMarksTheWinner(t *testing.T) {
 
 	for _, want := range []string{"strong", "weak", "broken", "slow"} {
 		if !strings.Contains(out, want) {
-			t.Errorf("the report omits head %q — the user paid for it:\n%s", want, out)
+			t.Errorf("the report omits head %q, the user paid for it:\n%s", want, out)
 		}
 	}
 	if !strings.Contains(out, "the winning answer") {
@@ -70,7 +70,7 @@ func TestPrintSwarmResult_ShowsEveryAttemptAndMarksTheWinner(t *testing.T) {
 	}
 }
 
-// A judge fallback must say why the LLM judge was skipped — CompositeJudge
+// A judge fallback must say why the LLM judge was skipped, CompositeJudge
 // already carries the reason on JudgeMeta.FallbackReason, but the printer
 // discarded it, leaving a runtime judge failure indistinguishable from a
 // healthy run (#501).
@@ -308,7 +308,7 @@ func TestCLI_CostAndStatsAgainstRealRows(t *testing.T) {
 	}
 }
 
-// relativeTime is the trend line's human-facing duration — a bad format
+// relativeTime is the trend line's human-facing duration, a bad format
 // string here would silently misreport how stale the comparison point is.
 func TestRelativeTime(t *testing.T) {
 	cases := []struct {

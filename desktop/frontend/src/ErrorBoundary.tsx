@@ -24,7 +24,7 @@ export class ErrorBoundary extends Component<
       <div className="error">
         {this.props.label} failed to render: {error.message}
         <div className="card__note">
-          The rest of Hydra still works. This is a bug — please report it with the console output.
+          The rest of Hydra still works. This is a bug, please report it with the console output.
         </div>
       </div>
     )

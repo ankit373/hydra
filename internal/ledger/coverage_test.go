@@ -34,7 +34,7 @@ func TestDefaultPaths_AreDistinctAndUnderHydraDir(t *testing.T) {
 	}
 }
 
-// $HYDRA_HOME must win over $HOME for the ledger — the whole point of #442 is
+// $HYDRA_HOME must win over $HOME for the ledger, the whole point of #442 is
 // that this subsystem is exactly what silently ignored it before.
 func TestDefaultPaths_PreferHydraHomeOverHome(t *testing.T) {
 	home := t.TempDir()
@@ -69,7 +69,7 @@ func TestLoadPolicy_MissingFileIsDefaultAllow(t *testing.T) {
 
 // LoadPolicy caches its result per path (a dispatch fallback loop or swarm
 // fan-out calls it once per candidate head for the same content), but a real
-// edit to the file must never be masked by a stale cache entry — the whole
+// edit to the file must never be masked by a stale cache entry, the whole
 // reason it keys on mtime+size instead of remembering the first read forever.
 func TestLoadPolicy_CacheInvalidatesOnRealEdit(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "policy.json")
@@ -96,10 +96,10 @@ func TestLoadPolicy_CacheInvalidatesOnRealEdit(t *testing.T) {
 		t.Fatal(err)
 	}
 	if p2.Default != Deny {
-		t.Errorf("after editing the file, Default = %q, want Deny — the cache served a stale read", p2.Default)
+		t.Errorf("after editing the file, Default = %q, want Deny, the cache served a stale read", p2.Default)
 	}
 	if len(p2.Rules) != 1 {
-		t.Errorf("after editing the file, got %d rule(s), want 1 — the cache served a stale read", len(p2.Rules))
+		t.Errorf("after editing the file, got %d rule(s), want 1, the cache served a stale read", len(p2.Rules))
 	}
 }
 
@@ -109,14 +109,14 @@ func TestLoadPolicy_MalformedJSONIsAnError(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := LoadPolicy(path); err == nil {
-		t.Error("a malformed policy loaded without error — the gate would run " +
+		t.Error("a malformed policy loaded without error, the gate would run " +
 			"with no rules and nobody would know")
 	}
 }
 
 // A policy is rejected whole rather than partially honoured. A rule whose
 // decision does not parse can never deny, so loading it would silently weaken
-// the gate — a default-deny posture written as "DENY" would void entirely.
+// the gate, a default-deny posture written as "DENY" would void entirely.
 func TestLoadPolicy_RejectsUnparseableRulesRatherThanWeakeningTheGate(t *testing.T) {
 	cases := []struct{ name, body string }{
 		{"bad default", `{"default":"maybe","rules":[]}`},
@@ -179,14 +179,14 @@ func TestHashDecodeVerifyParams_RoundTripAndTamperDetection(t *testing.T) {
 		t.Error("the same params did not verify against their own hash")
 	}
 
-	// Any change must fail verification — that is the whole point of binding.
+	// Any change must fail verification, that is the whole point of binding.
 	tampered := map[string]any{"path": "/etc/passwd", "mode": "write", "n": 3}
 	ok, err = VerifyParams(tampered, hash)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if ok {
-		t.Error("altered params verified against the original hash — the binding " +
+		t.Error("altered params verified against the original hash, the binding " +
 			"between what was approved and what ran is not tamper-evident")
 	}
 
@@ -253,7 +253,7 @@ func TestRecord_StampsATimestampWhenAbsent(t *testing.T) {
 }
 
 // globMatch backs resource rules. A pattern that cannot compile must not match
-// everything — that would turn a deny rule into a universal block or an allow
+// everything, that would turn a deny rule into a universal block or an allow
 // rule into a universal pass.
 func TestGlobMatch_Behaviour(t *testing.T) {
 	cases := []struct {
@@ -264,7 +264,7 @@ func TestGlobMatch_Behaviour(t *testing.T) {
 		{"/repo/*", "/repo/sub/a.go", false},
 		// Both of these are now the same dialect internal/workspace uses, on
 		// every platform. Before #310 this package used filepath.Match: no "**"
-		// at all, and a "\\" separator on Windows — so "/repo/*" matched one
+		// at all, and a "\\" separator on Windows, so "/repo/*" matched one
 		// level on Unix and arbitrarily deep on Windows, which the three-OS
 		// matrix caught.
 		{"/repo/**", "/repo/sub/a.go", true},
@@ -281,7 +281,7 @@ func TestGlobMatch_Behaviour(t *testing.T) {
 	}
 }
 
-// Load on a missing ledger is an empty history, not an error — nothing has been
+// Load on a missing ledger is an empty history, not an error, nothing has been
 // recorded yet on a fresh install.
 func TestLoad_MissingLedgerIsEmpty(t *testing.T) {
 	events, err := Load(filepath.Join(t.TempDir(), "absent.jsonl"))

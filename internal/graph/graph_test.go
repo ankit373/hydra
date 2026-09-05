@@ -66,7 +66,7 @@ func TestBlastRadius_BasenameMatch(t *testing.T) {
 }
 
 // A garbage path whose final segment happens to collide with a real
-// package's basename must not silently resolve to that package's data — the
+// package's basename must not silently resolve to that package's data, the
 // exact bug behind `hyctl graph blast zzz/made/up/dispatch` returning numbers
 // identical to internal/dispatch (#503).
 func TestSeedsForFile_BasenameFallbackRejectsAncestryMismatch(t *testing.T) {
@@ -84,7 +84,7 @@ func TestSeedsForFile_BasenameFallbackRejectsAncestryMismatch(t *testing.T) {
 }
 
 // The ancestry check only applies when both sides actually have a parent
-// segment to compare — a legitimate absolute-path lookup that preserves the
+// segment to compare, a legitimate absolute-path lookup that preserves the
 // real parent must still match, and one that swaps in an unrelated parent
 // must not.
 func TestSeedsForFile_BasenameFallbackAncestry(t *testing.T) {
@@ -98,8 +98,8 @@ func TestSeedsForFile_BasenameFallbackAncestry(t *testing.T) {
 	}
 }
 
-// graph generate (GenerateGo) indexes at Go package granularity — one node
-// per package, keyed by its module-relative import path — not per file. A
+// graph generate (GenerateGo) indexes at Go package granularity, one node
+// per package, keyed by its module-relative import path, not per file. A
 // caller passing a specific file inside an indexed package must still resolve
 // to that package's real measurement, not silently default to 1.0 (#448).
 func TestBlastRadius_PackageGranularity(t *testing.T) {
@@ -124,7 +124,7 @@ func TestBlastRadius_PackageGranularity(t *testing.T) {
 		t.Errorf("blast(internal/dispatch/dispatch.go) = %v, want %v (the package's measured radius)", got, want)
 	}
 	if !g.Knows("internal/dispatch/dispatch.go") {
-		t.Error("Knows(internal/dispatch/dispatch.go) = false, want true — package is in the graph")
+		t.Error("Knows(internal/dispatch/dispatch.go) = false, want true, package is in the graph")
 	}
 	if got, want := len(g.NodesInFile("internal/dispatch/dispatch.go")), 1; got != want {
 		t.Errorf("NodesInFile(internal/dispatch/dispatch.go) returned %d node(s), want %d", got, want)
@@ -136,9 +136,9 @@ func TestBlastRadius_PackageGranularity(t *testing.T) {
 	}
 
 	// A file in a package that genuinely is NOT in the graph must still report
-	// as unrecognized — the fallback must not over-match.
+	// as unrecognized, the fallback must not over-match.
 	if g.Knows("internal/ledger/ledger.go") {
-		t.Error("Knows(internal/ledger/ledger.go) = true, want false — package is not in the graph")
+		t.Error("Knows(internal/ledger/ledger.go) = true, want false, package is not in the graph")
 	}
 	if got := g.BlastRadiusForFile("internal/ledger/ledger.go"); got != 1.0 {
 		t.Errorf("blast(internal/ledger/ledger.go) = %v, want the 1.0 default", got)
@@ -177,7 +177,7 @@ func checkImpactMatchesSeparateCalls(t *testing.T, g *Graph, file string) {
 }
 
 // Impact resolves seedsForFile once and derives Radius/Dependents/Percolation
-// from that single pass — it must agree exactly with calling the four
+// from that single pass, it must agree exactly with calling the four
 // separate functions, for a known hub, a known leaf, and an unknown file, all
 // on a subcritical graph where Percolation is trivially 1.0 everywhere.
 func TestImpact_MatchesSeparateCalls(t *testing.T) {
@@ -196,7 +196,7 @@ func TestImpact_MatchesSeparateCalls(t *testing.T) {
 // percolationFactor's excess/superMargin/lift arithmetic never runs
 // (PercolationFactor short-circuits to 1.0 before touching it). This
 // exercises Impact on supercriticalGraph's hub file (x.go), where Percolation
-// is genuinely > 1.0 — the only way to catch a copy/paste error in that
+// is genuinely > 1.0, the only way to catch a copy/paste error in that
 // arithmetic during Impact's extraction.
 func TestImpact_MatchesSeparateCalls_NonTrivialPercolation(t *testing.T) {
 	g := supercriticalGraph()
@@ -312,9 +312,9 @@ func TestKappa_TopologyOrdering(t *testing.T) {
 
 // supercriticalGraph returns a graph with κ≥2: X is a fan-in hub with 6 direct
 // dependents (degree 6, count 6), Y heads a 6-long dependent chain (degree 1
-// at Y, count 6) — equal transitive-dependent counts but very different total
+// at Y, count 6), equal transitive-dependent counts but very different total
 // degree. Since #503, PercolationFactor keys off dependent count, not degree,
-// so X and Y get the SAME lift here despite the degree difference — see
+// so X and Y get the SAME lift here despite the degree difference, see
 // TestPercolation_EqualCountEqualFactorRegardlessOfDegree below.
 func supercriticalGraph() *Graph {
 	nodes := []Node{{ID: "X", File: "x.go"}, {ID: "Y", File: "y.go"}}
@@ -338,7 +338,7 @@ func supercriticalGraph() *Graph {
 // own outbound imports. Pre-#503 the lift was keyed on total (in+out) degree,
 // so X (a fan-in hub with no imports of its own) scored higher than Y (same
 // dependent count, reached via a chain) purely because X's raw degree was
-// higher — the same mechanism that let cmd/hydra out-score other leaves.
+// higher, the same mechanism that let cmd/hydra out-score other leaves.
 func TestPercolation_EqualCountEqualFactorRegardlessOfDegree(t *testing.T) {
 	g := supercriticalGraph()
 
@@ -353,7 +353,7 @@ func TestPercolation_EqualCountEqualFactorRegardlessOfDegree(t *testing.T) {
 	}
 	bx, by := g.BlastRadiusForFile("x.go"), g.BlastRadiusForFile("y.go")
 	if bx != by {
-		t.Errorf("equal-count files priced differently: x=%.4f y=%.4f — blast radius must depend "+
+		t.Errorf("equal-count files priced differently: x=%.4f y=%.4f, blast radius must depend "+
 			"on dependent count, not on a file's own unrelated degree", bx, by)
 	}
 	if fx, fy := g.PercolationFactor("x.go"), g.PercolationFactor("y.go"); fx != fy {
@@ -375,13 +375,13 @@ func TestPercolation_ZeroDependentLeafNeverLifted(t *testing.T) {
 		edges = append(edges, Edge{From: id, To: "hub"})
 	}
 	// main: 0 dependents (nothing imports a main package), but imports 5
-	// packages of its own — inflating its own total degree, not its reach.
+	// packages of its own, inflating its own total degree, not its reach.
 	for i := 0; i < 5; i++ {
 		id := fmt.Sprintf("imp%d", i)
 		nodes = append(nodes, Node{ID: id, File: id + ".go"})
 		edges = append(edges, Edge{From: "main", To: id})
 	}
-	// leaf: 0 dependents, 0 imports — the uncontroversial neutral case.
+	// leaf: 0 dependents, 0 imports, the uncontroversial neutral case.
 	g := fromDoc(Doc{Nodes: nodes, Edges: edges})
 
 	if !g.Percolates() {
@@ -394,7 +394,7 @@ func TestPercolation_ZeroDependentLeafNeverLifted(t *testing.T) {
 		t.Errorf("main (0 dependents, heavy imports) PercolationFactor = %.4f, want the neutral 1.0 floor", f)
 	}
 	if got, want := g.BlastRadiusForFile("main.go"), g.BlastRadiusForFile("leaf.go"); got != want {
-		t.Errorf("blast radius main=%.4f leaf=%.4f — a 0-dependent main package must not "+
+		t.Errorf("blast radius main=%.4f leaf=%.4f, a 0-dependent main package must not "+
 			"out-score a 0-dependent leaf", got, want)
 	}
 }
@@ -446,7 +446,7 @@ func TestPercolation_MonotonicInDependentCount(t *testing.T) {
 				t.Fatalf("test precondition broken: %s count %d must exceed %s count %d", s.id, count, prevID, prevCount)
 			}
 			if radius < prevRadius {
-				t.Errorf("%s: dependent count %d > %s's %d, but blast radius %.4f < %.4f — "+
+				t.Errorf("%s: dependent count %d > %s's %d, but blast radius %.4f < %.4f, "+
 					"not monotonic in dependent count", s.id, count, prevID, prevCount, radius, prevRadius)
 			}
 		}
@@ -514,7 +514,7 @@ func TestLoad_RoundTrip(t *testing.T) {
 // A blast radius of 1.0 means either "nothing depends on this" or "I have no
 // idea", and those are opposite conclusions. Before #251 they rendered
 // identically: internal/a2a reported 6 dependents and 97.4% required confidence
-// with a graph, and "subcritical — edits stay local" at 90.0% without one.
+// with a graph, and "subcritical, edits stay local" at 90.0% without one.
 // Empty and Knows are what let a UI tell a default from a measurement.
 func TestEmptyAndKnows_DistinguishNoDataFromNoDependents(t *testing.T) {
 	missing, err := Load(filepath.Join(t.TempDir(), "absent.json"))
@@ -527,7 +527,7 @@ func TestEmptyAndKnows_DistinguishNoDataFromNoDependents(t *testing.T) {
 	if missing.Knows("internal/a2a") {
 		t.Error("an empty graph claims to know a file")
 	}
-	// The degraded radius itself is unchanged — that contract is deliberate.
+	// The degraded radius itself is unchanged, that contract is deliberate.
 	if got := missing.BlastRadiusForFile("internal/a2a"); got != 1.0 {
 		t.Errorf("BlastRadiusForFile on an empty graph = %v, want 1.0", got)
 	}
@@ -542,7 +542,7 @@ func TestEmptyAndKnows_DistinguishNoDataFromNoDependents(t *testing.T) {
 	if !populated.Knows("a.go") {
 		t.Error("Knows(a.go) = false for an indexed file")
 	}
-	// An unindexed file in a real graph is still a default, not a measurement —
+	// An unindexed file in a real graph is still a default, not a measurement,
 	// the case a typo or a stale index produces.
 	if populated.Knows("typo.go") {
 		t.Error("Knows(typo.go) = true for a file that is not in the graph")

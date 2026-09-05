@@ -251,7 +251,7 @@ func TestEffectiveMode(t *testing.T) {
 func TestLoadWindows_UsesEmbeddedRegistryWhenNoneIsOnDisk(t *testing.T) {
 	windows := LoadWindows("/no/such/path")
 	if len(windows) == 0 {
-		t.Fatal("no windows loaded — the embedded registry should always be readable")
+		t.Fatal("no windows loaded, the embedded registry should always be readable")
 	}
 	for id, w := range windows {
 		if w <= 0 {

@@ -579,7 +579,7 @@ func openAICompatConfigFor(h provider.Head) (openAICompatConfig, error) {
 	baseURLs := map[string]string{
 		"openai": "https://api.openai.com",
 		// OpenRouter speaks the OpenAI chat-completions wire format, so it needs
-		// no executor of its own — only a base URL. Hydra already reads its
+		// no executor of its own, only a base URL. Hydra already reads its
 		// catalogue for pricing; this lets it dispatch there too.
 		"openrouter": "https://openrouter.ai/api",
 		"xai":        "https://api.x.ai",
@@ -678,7 +678,7 @@ func joinCohereBlocks(blocks []struct {
 
 func httpStatusError(headID string, resp *http.Response) error {
 	b, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-	return fmt.Errorf("http exec %s: status %d — %s", headID, resp.StatusCode, string(b))
+	return fmt.Errorf("http exec %s: status %d, %s", headID, resp.StatusCode, string(b))
 }
 
 func defaultModelFor(providerID string) string {
@@ -864,8 +864,8 @@ func stringifyAny(v any) string {
 		return x
 	case []any:
 		// Joined with nothing between them. Replicate's predictions API streams a
-		// text answer as an array of *token fragments* — ["Hel", "lo", ", wor",
-		// "ld"] — and its own clients concatenate them. Joining with "\n" put a
+		// text answer as an array of *token fragments*, ["Hel", "lo", ", wor",
+		// "ld"], and its own clients concatenate them. Joining with "\n" put a
 		// line break between every token, so every Replicate answer arrived as
 		// one fragment per line. Its own tests asserted that, which is how the
 		// shape survived: they pinned the implementation rather than the format.

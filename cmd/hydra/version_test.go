@@ -9,7 +9,7 @@ import (
 
 // `hyctl --version` answered "unknown flag: --version" while a `version`
 // subcommand existed. It is the near-universal convention, so it is what people
-// type first — and an error there reads like a broken install.
+// type first, and an error there reads like a broken install.
 //
 // Executing the real root command rather than inspecting fields: the point is
 // what a user typing the flag actually gets.

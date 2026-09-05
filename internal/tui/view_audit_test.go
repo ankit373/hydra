@@ -27,7 +27,7 @@ func testAudit(report *security.Report, runs []ckRun) *ckAudit {
 		{TS: "2026-09-04T10:01:00Z", Decision: ledger.Allow},
 		{TS: "2026-09-04T10:02:00Z", Decision: ledger.Deny, Reason: "pii must stay local"},
 		{TS: "2026-09-04T10:03:00Z", Decision: ledger.Allow, Flagged: true, FlagReason: "ignore previous instructions"},
-		{TS: "2026-09-01T10:00:00Z", Decision: ledger.Deny, Reason: "old — not today"},
+		{TS: "2026-09-01T10:00:00Z", Decision: ledger.Deny, Reason: "old, not today"},
 	}
 	scorecard := []trust.Stat{
 		{Source: "model:qwen", Domain: "go", N: 12, Se: 0.91, Sp: 0.84, D: 1.32},
@@ -102,7 +102,7 @@ func TestCkAuditFrom_Aggregation(t *testing.T) {
 		t.Errorf("provisional item = %+v", a.items[1])
 	}
 
-	// One failed run is not a pattern — no item.
+	// One failed run is not a pattern, no item.
 	one := testAudit(testSecurityReport(), []ckRun{testRun("r", "failed", "once")})
 	for _, it := range one.items {
 		if strings.Contains(it.text, "failed today") {
@@ -120,7 +120,7 @@ func TestCkAuditFrom_ScorecardOrder(t *testing.T) {
 }
 
 // The rendered audit view: scorecard columns, footer facts, chain state,
-// today's approvals/denials with the reason, guardrails, and the queue —
+// today's approvals/denials with the reason, guardrails, and the queue,
 // and no trend arrows, since no history exists to compute one from.
 func TestViewAudit_RendersRealDataOnly(t *testing.T) {
 	m := testCockpit()
@@ -164,7 +164,7 @@ func TestViewAudit_DegradedStates(t *testing.T) {
 	m := testCockpit()
 	m.audit = testAudit(nil, nil)
 	out := stripANSI(m.viewAudit(120, 30))
-	if !strings.Contains(out, "unavailable — the audit log could not be read") {
+	if !strings.Contains(out, "unavailable, the audit log could not be read") {
 		t.Errorf("nil report not disclosed:\n%s", out)
 	}
 	if !strings.Contains(out, "MODEL SCORECARD") || !strings.Contains(out, "model:claude") {
@@ -271,7 +271,7 @@ func TestAudit_LazyBuildAndRefresh(t *testing.T) {
 	testutil.NewSandbox(t)
 	m := testCockpit()
 	if m.audit != nil {
-		t.Fatal("the audit was built at startup — it must stay lazy (#524)")
+		t.Fatal("the audit was built at startup, it must stay lazy (#524)")
 	}
 	m = m.jump(ckViewAudit)
 	if m.audit == nil {
@@ -373,7 +373,7 @@ func TestAuditView_JKScrollsWhenTheQueueIsEmpty(t *testing.T) {
 		t.Error("j left the audit view unchanged")
 	}
 
-	// With a queue, j/k keep picking items — that is what enter/i act on.
+	// With a queue, j/k keep picking items, that is what enter/i act on.
 	withQueue := m
 	withQueue.audit.items = []ckAuditItem{{text: "one"}, {text: "two"}}
 	if got := withQueue.move(1); got.auditSel != 1 || got.auditOff != 0 {

@@ -144,14 +144,14 @@ func TestValidPublicIP_RangeClassification(t *testing.T) {
 
 // A known, deliberate false positive: a version directory inside a path reads as
 // a public address. Suppressing dotted quads after "/" would also suppress real
-// addresses in URLs like http://8.8.8.8/foo, and that trade runs the wrong way —
+// addresses in URLs like http://8.8.8.8/foo, and that trade runs the wrong way,
 // a false positive costs only local routing, a false negative leaks a secret.
 //
 // Pinned so the behaviour is a decision on record rather than an accident, and
 // so anyone tightening it sees what they would break.
 func TestContainsPII_KnownFalsePositive_VersionInPath(t *testing.T) {
 	if !ContainsPII(Request{Prompt: "see /opt/app/1.2.3.4/bin"}) {
-		t.Skip("version-in-path no longer reads as an IP — if that was deliberate, " +
+		t.Skip("version-in-path no longer reads as an IP, if that was deliberate, " +
 			"check http://8.8.8.8/foo is still detected and delete this test")
 	}
 	if !ContainsPII(Request{Prompt: "fetch http://8.8.8.8/foo"}) {

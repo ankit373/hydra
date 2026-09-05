@@ -187,7 +187,7 @@ func TestLogDispatchWritesPropensity(t *testing.T) {
 		}
 		got, ok := rows[0]["act_prob"]
 		if !ok {
-			t.Fatalf("%s: act_prob missing — an absent propensity is unusable", name)
+			t.Fatalf("%s: act_prob missing, an absent propensity is unusable", name)
 		}
 		if f, _ := got.(float64); f != actProb {
 			t.Errorf("%s: act_prob %v, want %v", name, got, actProb)
@@ -203,7 +203,7 @@ func TestLogDispatchWritesPropensity(t *testing.T) {
 }
 
 // explore_rate = nan is valid TOML. NaN passes an `eps <= 0 || eps > 1` range
-// check, and a NaN act_prob fails json.Marshal — which silently drops the very
+// check, and a NaN act_prob fails json.Marshal, which silently drops the very
 // row it was supposed to describe. It must fail closed to pure argmax instead.
 func TestPickNaNRateFailsClosed(t *testing.T) {
 	nan := math.NaN()

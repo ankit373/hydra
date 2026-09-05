@@ -4,7 +4,7 @@ package tui
 
 // Worktree isolation lifecycle (#598) against real git: create, apply (clean /
 // conflict / refusal / empty), discard, stale recovery. No git behavior is
-// mocked — the merge semantics ARE the feature.
+// mocked, the merge semantics ARE the feature.
 
 import (
 	"context"
@@ -19,7 +19,7 @@ import (
 )
 
 // threadRepo installs a sandbox with the host's git allowed, builds a
-// committed repo with pkg/{main,other,third}.go, and chdirs into it —
+// committed repo with pkg/{main,other,third}.go, and chdirs into it,
 // mirroring where a user launches `hyctl tui`.
 func threadRepo(t *testing.T) string {
 	t.Helper()
@@ -106,7 +106,7 @@ func TestWorktree_CreateApplyCleanLifecycle(t *testing.T) {
 
 // The induced-conflict case: the user commits their own change to a file the
 // thread also edited. Apply must land standard conflict markers, keep the
-// branch, and say all of it — never a silent overwrite.
+// branch, and say all of it, never a silent overwrite.
 func TestWorktree_ApplyConflictSurfacesMarkers(t *testing.T) {
 	repo := threadRepo(t)
 
@@ -139,7 +139,7 @@ func TestWorktree_ApplyConflictSurfacesMarkers(t *testing.T) {
 		t.Errorf("no unmerged index entry: %q", st)
 	}
 	if bout, _ := ckGit(repo, "", "branch", "--list", wt.branch); strings.TrimSpace(bout) == "" {
-		t.Error("the branch was deleted on a conflicted apply — the thread's exact edit is gone")
+		t.Error("the branch was deleted on a conflicted apply, the thread's exact edit is gone")
 	}
 	if _, err := os.Stat(wt.dir); !os.IsNotExist(err) {
 		t.Error("the worktree dir survived the apply")
@@ -147,8 +147,8 @@ func TestWorktree_ApplyConflictSurfacesMarkers(t *testing.T) {
 }
 
 // Uncommitted user changes to an overlapping file. Which way git goes here is
-// platform- and version-dependent — a Linux/macOS git refuses the patch
-// atomically, the Windows runner's git 3-way-merges it into conflict markers —
+// platform- and version-dependent, a Linux/macOS git refuses the patch
+// atomically, the Windows runner's git 3-way-merges it into conflict markers,
 // so this pins the invariant that holds either way: the user's uncommitted
 // work is never silently replaced, and the thread's edits stay recoverable.
 func TestWorktree_ApplyNeverDiscardsDirtyUserWork(t *testing.T) {
@@ -180,14 +180,14 @@ func TestWorktree_ApplyNeverDiscardsDirtyUserWork(t *testing.T) {
 	switch {
 	case out.refused:
 		if got != userEdit {
-			t.Errorf("the refusal was not atomic — the user's file changed: %q", got)
+			t.Errorf("the refusal was not atomic, the user's file changed: %q", got)
 		}
 		other, _ := os.ReadFile(filepath.Join(repo, "pkg", "other.go"))
 		if strings.Contains(string(other), "thread") {
-			t.Error("the refusal was not atomic — the clean half of the patch landed anyway")
+			t.Error("the refusal was not atomic, the clean half of the patch landed anyway")
 		}
 		if _, err := os.Stat(wt.dir); err != nil {
-			t.Error("a refused apply lost the worktree — nothing is retryable")
+			t.Error("a refused apply lost the worktree, nothing is retryable")
 		}
 		// Retry once the user commits: it must now land or conflict, not refuse.
 		if cout, cerr := ckGit(repo, "", "commit", "-aqm", "user keeps their edit"); cerr != nil {
@@ -209,7 +209,7 @@ func TestWorktree_ApplyNeverDiscardsDirtyUserWork(t *testing.T) {
 			t.Error("a conflicted apply deleted the branch holding the thread's edit")
 		}
 	default:
-		t.Fatalf("a dirty overlap applied silently — the user's edit was overwritten: %+v\n%q", out, got)
+		t.Fatalf("a dirty overlap applied silently, the user's edit was overwritten: %+v\n%q", out, got)
 	}
 	if !out.branchKept {
 		t.Error("the thread's work was not kept recoverable")
@@ -292,7 +292,7 @@ func TestWorktree_ApplyConflictSurvivesATranslatedLocale(t *testing.T) {
 }
 
 // A tree already holding someone else's unmerged entries must not make a
-// blocked apply read as "applied with conflicts" — only paths this apply left
+// blocked apply read as "applied with conflicts", only paths this apply left
 // unmerged count as evidence about this apply.
 func TestWorktree_PreExistingConflictIsNotClaimedAsOurs(t *testing.T) {
 	repo := threadRepo(t)
@@ -382,7 +382,7 @@ func TestWorktree_DiscardRemovesDirAndBranch(t *testing.T) {
 }
 
 // Stale worktrees from a crashed session are listed and reported, never
-// auto-deleted — they may hold un-applied work.
+// auto-deleted, they may hold un-applied work.
 func TestStaleWorktrees_ListedNeverDeleted(t *testing.T) {
 	testutil.NewSandbox(t)
 	stale := filepath.Join(ckWorktreeBase(), "t9-dead99")
@@ -398,7 +398,7 @@ func TestStaleWorktrees_ListedNeverDeleted(t *testing.T) {
 	}
 }
 
-// A failed worktree creation fails the task honestly and releases the hold —
+// A failed worktree creation fails the task honestly and releases the hold,
 // it must never fall back to editing the user's tree.
 func TestWorktreeReady_ErrorFailsTaskAndReleasesQueue(t *testing.T) {
 	testutil.NewSandbox(t)
@@ -426,7 +426,7 @@ func TestWorktreeReady_ErrorFailsTaskAndReleasesQueue(t *testing.T) {
 	}
 }
 
-// A superseded or cancelled creation discards the worktree it cut — nothing
+// A superseded or cancelled creation discards the worktree it cut, nothing
 // may litter ~/.hydra/worktrees.
 func TestWorktreeReady_SupersededCreationIsDiscarded(t *testing.T) {
 	repo := threadRepo(t)
@@ -525,7 +525,7 @@ func TestThreadEdit_DoubleXDiscards(t *testing.T) {
 
 	m, _ = keyRune(m, 'x')
 	if m.th().wt == nil {
-		t.Fatal("a single x already discarded — it must only arm")
+		t.Fatal("a single x already discarded, it must only arm")
 	}
 	if !strings.Contains(m.flash, "x again discards") {
 		t.Errorf("the arm is silent: %q", m.flash)

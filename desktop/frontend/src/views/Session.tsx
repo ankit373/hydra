@@ -16,7 +16,7 @@ export function Session({
   edits: Edit[]
   onBack: () => void
   /** Set when Session is opened by clicking an artifact node elsewhere (e.g.
-   *  Fleet's inline graph, #518) — App keys Session by runId, so this only
+   *  Fleet's inline graph, #518), App keys Session by runId, so this only
    *  needs to seed initial state, not stay in sync afterward. */
   initialTab?: 'code'
   initialFile?: string
@@ -24,7 +24,7 @@ export function Session({
   // Timeline is the default: most runs are linear, and a list is the right
   // shape for a linear thing.
   const [tab, setTab] = useState<'timeline' | 'code' | 'graph'>(initialTab ?? 'timeline')
-  // Consumed by Code, which re-selects whenever this changes — set once here,
+  // Consumed by Code, which re-selects whenever this changes, set once here,
   // then updated by clicking further artifact nodes within the same session.
   const [codeFile, setCodeFile] = useState<string | undefined>(initialFile)
 
@@ -130,7 +130,7 @@ export function Timeline({ entries }: { entries: TimelineEntry[] }) {
             {e.tier > 0 && <span className="agent__tier">T{e.tier}</span>}
           </span>
           {/* Evidence leads. For an SPRT sample this is
-              "agreed · LLR +1.200 → Λ 1.200" — what actually happened to the
+              "agreed · LLR +1.200 → Λ 1.200", what actually happened to the
               log-odds, ahead of any narration. */}
           {e.detail && <span className="tl__detail">{e.detail}</span>}
           {/* Joined, not concatenated with trailing separators: an entry with a

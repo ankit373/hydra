@@ -40,7 +40,7 @@ func TestDirectory_MatchesWhatExportWrites(t *testing.T) {
 		t.Fatal(err)
 	}
 	if n != len(viaDirectory) {
-		t.Errorf("ExportDirectory wrote %d entries, Directory() returned %d — they should agree", n, len(viaDirectory))
+		t.Errorf("ExportDirectory wrote %d entries, Directory() returned %d, they should agree", n, len(viaDirectory))
 	}
 
 	raw, err := os.ReadFile(filepath.Join(out, "index.json"))
@@ -52,7 +52,7 @@ func TestDirectory_MatchesWhatExportWrites(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(exported) != 1 || exported[0].Name != viaDirectory[0].Name || exported[0].Score.Overall != viaDirectory[0].Score.Overall {
-		t.Errorf("exported = %+v, Directory() = %+v — should be the same data", exported, viaDirectory)
+		t.Errorf("exported = %+v, Directory() = %+v, should be the same data", exported, viaDirectory)
 	}
 }
 
@@ -68,7 +68,7 @@ func TestExportDirectory_PropagatesDirectoryError(t *testing.T) {
 
 // A file sitting where the output directory needs to go is a portable way
 // to make MkdirAll fail on every OS, without relying on permission bits
-// (which Windows doesn't enforce the same way — see internal/config's
+// (which Windows doesn't enforce the same way, see internal/config's
 // equivalent test for the same reasoning).
 func TestExportDirectory_MkdirAllFailureIsAnError(t *testing.T) {
 	withTempHydraHome(t)
@@ -159,7 +159,7 @@ func TestExportDirectory_WritesOneEntryPerAuditedServer(t *testing.T) {
 }
 
 // The registry's own moderation policy is "minimal-to-no" review (design
-// doc §2) — a malicious entry's name is untrusted input as far as this
+// doc §2), a malicious entry's name is untrusted input as far as this
 // generator is concerned. html/template must escape it, not string-concat
 // it into the page.
 func TestExportDirectory_EscapesUntrustedServerNames(t *testing.T) {
@@ -273,7 +273,7 @@ func TestExportDirectory_EachEntryHasADisputeLink(t *testing.T) {
 	}
 }
 
-// A malicious server name flows into the dispute URL's query string too —
+// A malicious server name flows into the dispute URL's query string too,
 // html/template's URL-context escaping must hold there as well, not just in
 // the visible table cell.
 func TestExportDirectory_DisputeURLEscapesUntrustedServerName(t *testing.T) {

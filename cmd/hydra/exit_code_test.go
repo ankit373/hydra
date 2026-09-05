@@ -15,8 +15,8 @@ import (
 
 // Exit codes are a contract: `hyctl edit` returns 2 on a failed edit and the
 // MCP gate returns 3 on a denial, specifically so a shell script can branch on
-// them. They cannot be asserted in-process — os.Exit takes the test binary with
-// it — so these drive a real binary.
+// them. They cannot be asserted in-process, os.Exit takes the test binary with
+// it, so these drive a real binary.
 
 var hyctlBin string
 
@@ -56,8 +56,8 @@ func exitCode(t *testing.T, args ...string) (code int, output string) {
 //
 // Any command that calls os.Exit has to be driven this way: in-process, the
 // exit takes the test binary down with it. `hyctl edit` returns 2, and the MCP
-// gate and the oracle return 3 — deliberately, so a shell script can branch on
-// the verdict — which means the exit code *is* the contract for those.
+// gate and the oracle return 3, deliberately, so a shell script can branch on
+// the verdict, which means the exit code *is* the contract for those.
 func runBinary(t *testing.T, s *testutil.Sandbox, args ...string) (code int, output string) {
 	t.Helper()
 	if hyctlBin == "" {
@@ -152,7 +152,7 @@ func TestExitCodes_JSONGoesToStdoutAlone(t *testing.T) {
 		t.Fatal("nothing on stdout")
 	}
 	if trimmed[0] != '{' && trimmed[0] != '[' {
-		t.Errorf("stdout does not start with JSON — something else was printed to "+
+		t.Errorf("stdout does not start with JSON, something else was printed to "+
 			"it:\n%s", trimmed)
 	}
 }

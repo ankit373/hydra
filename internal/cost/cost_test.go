@@ -49,7 +49,7 @@ func TestByModel_Groups(t *testing.T) {
 	if len(groups) != 2 {
 		t.Fatalf("expected 2 model groups, got %d", len(groups))
 	}
-	// Sorted by cost descending — claude first.
+	// Sorted by cost descending, claude first.
 	if groups[0].Key != "claude" {
 		t.Fatalf("expected claude first (highest cost), got %s", groups[0].Key)
 	}
@@ -165,7 +165,7 @@ func TestTokensEstimated_Precedence(t *testing.T) {
 	}
 }
 
-// Equal-cost groups (commonly several $0 rows) must sort in a fixed order —
+// Equal-cost groups (commonly several $0 rows) must sort in a fixed order,
 // otherwise the dashboard's "by model"/"by tier" rows reorder on every ~5s
 // poll with no underlying data change, since groups is built from a map whose
 // iteration order is randomized (#506).

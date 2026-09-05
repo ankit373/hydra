@@ -21,7 +21,7 @@ func TestChatEnums_EveryKeyResolvesToATier(t *testing.T) {
 	}
 }
 
-// "auto" is the absence of an enum, not a member of the list — an empty string
+// "auto" is the absence of an enum, not a member of the list, an empty string
 // in a picker renders as a blank row.
 func TestChatEnums_ContainsNoEmptyEntry(t *testing.T) {
 	for _, enum := range New().ChatEnums() {
@@ -40,7 +40,7 @@ func TestChatEnums_OrderedWeakestFirst(t *testing.T) {
 		tier := dispatch.EnumToTier(enum)
 		n := atoiTier(t, tier)
 		if i > 0 && n > prev {
-			t.Errorf("%q is tier %d after tier %d — the list must run weakest (highest tier) first",
+			t.Errorf("%q is tier %d after tier %d, the list must run weakest (highest tier) first",
 				enum, n, prev)
 		}
 		prev = n
@@ -76,7 +76,7 @@ func TestChat_EmptyPromptIsAReplyNotAnError(t *testing.T) {
 	}
 }
 
-// A dispatch that cannot run is a normal outcome — no heads configured is the
+// A dispatch that cannot run is a normal outcome, no heads configured is the
 // common first-launch case. It must not blank the window.
 func TestChat_FailedDispatchReturnsAReply(t *testing.T) {
 	sandbox(t)
@@ -102,7 +102,7 @@ func TestChat_HonoursCallerSuppliedRunID(t *testing.T) {
 		t.Fatalf("a failed dispatch must come back as a reply, not a Go error: %v", err)
 	}
 	if r.RunID != want {
-		t.Errorf("RunID = %q, want the caller-supplied %q — the dock's poll would be watching the wrong log", r.RunID, want)
+		t.Errorf("RunID = %q, want the caller-supplied %q, the dock's poll would be watching the wrong log", r.RunID, want)
 	}
 }
 
@@ -117,7 +117,7 @@ func TestNewRunID_NonEmptyAndUnique(t *testing.T) {
 	}
 }
 
-// An unrecognized enum must not fall through to unrestricted auto-routing —
+// An unrecognized enum must not fall through to unrestricted auto-routing,
 // its zero-tier is byte-identical to "no enum given" everywhere else, so a
 // typo would otherwise silently route to the single strongest head instead of
 // being reported (#533, mirroring cmd/hydra's own --enum check for #501).
@@ -137,7 +137,7 @@ func TestChat_UnknownEnumIsRejected(t *testing.T) {
 }
 
 // A machine with zero discoverable heads at all is distinct from an ordinary
-// dispatch failure — dispatch.New already probes fresh on every call, so
+// dispatch failure, dispatch.New already probes fresh on every call, so
 // there is no separate "go discover models" step to point the GUI at. The
 // dock offers a retry instead of a raw CLI instruction it has no terminal
 // for (#434).
@@ -152,7 +152,7 @@ func TestChat_NoHeadsAtAllSetsNeedsProbe(t *testing.T) {
 		t.Fatalf("zero heads must come back as a reply, not a Go error: %v", err)
 	}
 	if !r.NeedsProbe {
-		t.Error("NeedsProbe = false, want true — nothing was discoverable at all")
+		t.Error("NeedsProbe = false, want true, nothing was discoverable at all")
 	}
 	if r.Error == "" {
 		t.Error("no Error on the reply; the dock would render an empty message")
@@ -160,14 +160,14 @@ func TestChat_NoHeadsAtAllSetsNeedsProbe(t *testing.T) {
 }
 
 // The picker expresses "answer this with Opus Thinking" as a tier, so an
-// explicit tier has to outrank whatever the enum would have inferred —
+// explicit tier has to outrank whatever the enum would have inferred,
 // otherwise choosing a model silently does nothing (#558).
 func TestChat_ExplicitTierOutranksEnum(t *testing.T) {
 	sandbox(t)
 
 	// GRUNT infers the weakest tier; the explicit "2" must win. With no heads
 	// in the sandbox the dispatch still fails, so this asserts on the reply
-	// shape rather than on routing — the point is that a bad tier is rejected
+	// shape rather than on routing, the point is that a bad tier is rejected
 	// by dispatch's own validation and a good one is accepted.
 	r, err := New().Chat("hello", "GRUNT", "", "2")
 	if err != nil {

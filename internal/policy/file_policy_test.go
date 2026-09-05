@@ -91,13 +91,13 @@ func TestMatchCondition_MultipleConditions(t *testing.T) {
 		"file_count_gt": 3,
 		"has_git_eq":    "true",
 	}
-	// file_count is 0, not > 3 — should not match
+	// file_count is 0, not > 3, should not match
 	if matchWhen(when, spec) {
-		t.Error("file_count 0 > 3 should not match — all conditions must hold")
+		t.Error("file_count 0 > 3 should not match, all conditions must hold")
 	}
 
 	spec2 := Spec{FileCount: 5, HasGit: true}
 	if !matchWhen(when, spec2) {
-		t.Error("file_count 5 > 3 and has_git true — should match")
+		t.Error("file_count 5 > 3 and has_git true, should match")
 	}
 }

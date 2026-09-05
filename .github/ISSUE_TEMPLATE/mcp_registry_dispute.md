@@ -9,7 +9,7 @@ assignees: ''
 ## What this is for
 
 `hyctl mcp registry` computes a probabilistic trust signal from automated checks (known-vulnerability
-cross-reference, maintenance recency, near-duplicate/typosquat detection, declared auth posture) — it
+cross-reference, maintenance recency, near-duplicate/typosquat detection, declared auth posture), it
 is **not a guarantee of safety** and it is **not a claim about a publisher's intent**. Every signal
 behind a score is shown alongside it precisely so a wrong or unfair call can be identified and
 corrected. This template is that correction path.
@@ -28,7 +28,7 @@ corrected. This template is that correction path.
 
 ## Why
 
-<!-- The evidence for your side — e.g. the CVE was fixed in a later version now published, the
+<!-- The evidence for your side, e.g. the CVE was fixed in a later version now published, the
      "near-duplicate" match is a legitimate fork with its own distinct maintainers, the repository
      moved and the new URL is actively maintained, etc. -->
 

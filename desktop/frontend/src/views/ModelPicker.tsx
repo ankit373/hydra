@@ -11,7 +11,7 @@ import type { Model, ModelRegistry } from '../types'
  * worth knowing at the moment of choosing, and no other surface says it.
  *
  * A choice is expressed as a tier, since every registry model declares one.
- * It is a starting point, not a guarantee — the governor can still downgrade
+ * It is a starting point, not a guarantee, the governor can still downgrade
  * and fallback can still move off it, so the label says "start with", not
  * "use".
  */
@@ -35,7 +35,7 @@ export function ModelPicker({
     })
   }, [])
 
-  // Dismiss on outside click and on Escape — a popover that can only be closed
+  // Dismiss on outside click and on Escape, a popover that can only be closed
   // by re-clicking its own trigger traps the keyboard.
   useEffect(() => {
     if (!open) return
@@ -89,7 +89,7 @@ export function ModelPicker({
                   <span className="picker__poolName">{poolLabel(p.name)}</span>
                   {p.shared && <span className="picker__shared">shared</span>}
                   {p.observedCalls > 0 && (
-                    <span className="picker__poolSpend" title="What Hydra logged against this pool — not a provider quota reading">
+                    <span className="picker__poolSpend" title="What Hydra logged against this pool, not a provider quota reading">
                       {p.observedCalls} calls · ${p.observedCostUsd.toFixed(2)}
                     </span>
                   )}
@@ -138,12 +138,12 @@ export function ModelPicker({
 
 /**
  * The one line under each model. Complexity leads because it is the honest
- * answer to "how hard can this one think" — Hydra has no thinking-depth dial,
+ * answer to "how hard can this one think", Hydra has no thinking-depth dial,
  * so depth is which model you pick.
  */
 function spec(m: Model, shared: boolean, siblings: number): string {
   const parts: string[] = []
-  if (m.complexityMax > 0) parts.push(`complexity ${m.complexityMin}–${m.complexityMax}`)
+  if (m.complexityMax > 0) parts.push(`complexity ${m.complexityMin}-${m.complexityMax}`)
   if (m.speed) parts.push(m.speed.replace(/_/g, ' '))
   if (m.contextWindow > 0) parts.push(`${ctx(m.contextWindow)} ctx`)
   // Only worth saying when there is actually another member to starve.

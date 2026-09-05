@@ -1,14 +1,14 @@
 /* ────────────────────────────────────────────────────────────────────────
-   HYDRA — design tokens (single source of truth)
+   HYDRA, design tokens (single source of truth)
    Shared by: docs site · desktop app · TUI palette module.
    Change a brand value HERE, nowhere else. Kills the duplicated hardcoded
    colors called out in REDESIGN_SCOPE.md Phase 0.
    ──────────────────────────────────────────────────────────────────────── */
 :root {
   /* ── Surfaces ── */
-  --hy-bg:        #06070F;              /* base — near-black, faint blue-violet bias */
+  --hy-bg:        #06070F;              /* base, near-black, faint blue-violet bias */
   --hy-bg-2:      #0A0C18;              /* raised surface */
-  --hy-bg-3:      #0E1122;              /* raised twice — input wells, selected rows */
+  --hy-bg-3:      #0E1122;              /* raised twice, input wells, selected rows */
   --hy-panel:     rgba(18, 20, 38, .62);/* cards / TUI panels (over bg) */
   --hy-line:      rgba(150, 140, 255, .16); /* borders, hairlines, grid */
   --hy-line-2:    rgba(150, 140, 255, .28); /* the same hairline, one step up: focusable edges */
@@ -18,7 +18,7 @@
   --hy-dim:       #9AA0C4;              /* secondary text / labels */
   --hy-faint:     #525A80;              /* de-emphasized meta (chart ranges, HUD chrome) */
 
-  /* ── Brand gradient (the logo) — cyan → violet → magenta ── */
+  /* ── Brand gradient (the logo), cyan → violet → magenta ── */
   --hy-cyan:      #2AF0E0;              /* gradient start · center head */
   --hy-violet:    #8B5CF6;              /* gradient mid   · body */
   --hy-magenta:   #E852C8;              /* gradient end   · side heads */
@@ -29,14 +29,14 @@
   /* ── Interaction accent (NOT the brand gradient) ── */
   --hy-aqua:      #00E6C3;              /* CTAs, focus rings, live values, links, the cortex node */
 
-  /* ── Cost / tier data ramp (semantic — separate from brand + accent) ── */
+  /* ── Cost / tier data ramp (semantic, separate from brand + accent) ── */
   --hy-cheap:     #3FD98A;             /* cheap / local */
   --hy-mid:       #E0A93A;             /* mid tier */
   --hy-expensive: #FF5A6E;             /* expensive / frontier */
 
   /* ── Governor bands (map to CLAUDE.md claude_pct) ── */
-  --hy-gov-normal:   #3FD98A;          /* 0–49  normal / compact */
-  --hy-gov-warning:  #E0A93A;          /* 50–74 warning */
+  --hy-gov-normal:   #3FD98A;          /* 0-49  normal / compact */
+  --hy-gov-warning:  #E0A93A;          /* 50-74 warning */
   --hy-gov-critical: #FF5A6E;          /* 75+   critical / emergency */
 
   /* ── Type ── */

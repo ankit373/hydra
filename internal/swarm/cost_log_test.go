@@ -70,7 +70,7 @@ func costAttempt(id string, status HeadStatus, rank int) Attempt {
 
 // An SPRT run's sampled heads must reach cost.jsonl. Before #175, RunSPRT never
 // called logAttempts, so the whole --confidence path was invisible to
-// `hyctl cost` / `hyctl stats` — only the aggregate trust.jsonl row survived.
+// `hyctl cost` / `hyctl stats`, only the aggregate trust.jsonl row survived.
 func TestLogAttempts_SPRTModeIsRecorded(t *testing.T) {
 	attempts := []Attempt{
 		costAttempt("a", StatusOK, 1),
@@ -89,7 +89,7 @@ func TestLogAttempts_SPRTModeIsRecorded(t *testing.T) {
 			t.Errorf("swarm_mode = %v, want %q so SPRT spend is distinguishable from race/best/all",
 				r["swarm_mode"], ModeSPRT)
 		}
-		// Provenance labels must match the dispatch path — see cost.SourceLabels.
+		// Provenance labels must match the dispatch path, see cost.SourceLabels.
 		if r["cost_source"] != "estimated" {
 			t.Errorf("cost_source = %v, want \"estimated\"", r["cost_source"])
 		}
@@ -134,7 +134,7 @@ func TestLogAttempts_SkipsUnexecutedAttempts(t *testing.T) {
 	}
 }
 
-// The mode label must be whatever the caller passed — the signature change from
+// The mode label must be whatever the caller passed, the signature change from
 // *SwarmResult to (attempts, mode) is what lets SPRT share this writer at all.
 func TestLogAttempts_ModeLabelIsCallerSupplied(t *testing.T) {
 	for _, mode := range []SwarmMode{ModeRace, ModeBest, ModeAll, ModeSPRT} {

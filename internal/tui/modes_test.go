@@ -64,7 +64,7 @@ func TestModes_PickerOpensSelectsAndCloses(t *testing.T) {
 		t.Fatal("m typed mid-sentence opened the picker")
 	}
 	if m.th().input != "make a helper for m" {
-		t.Errorf("input = %q — typing a word starting with m must pass through the picker intact", m.th().input)
+		t.Errorf("input = %q, typing a word starting with m must pass through the picker intact", m.th().input)
 	}
 	if m.mode != "unattended" {
 		t.Errorf("typing through the picker changed the mode to %q", m.mode)
@@ -72,7 +72,7 @@ func TestModes_PickerOpensSelectsAndCloses(t *testing.T) {
 }
 
 // Real terminals coalesce fast keystrokes into one multi-rune message; the
-// handlers see them replayed one key at a time — found live when "jj" arrived
+// handlers see them replayed one key at a time, found live when "jj" arrived
 // as a single message and every modal dropped it (#597).
 func TestKeys_CoalescedRunesReplayIndividually(t *testing.T) {
 	m := testCockpit()
@@ -92,7 +92,7 @@ func TestKeys_CoalescedRunesReplayIndividually(t *testing.T) {
 	if got := next.(Cockpit).th().input; got != "fix the bug" {
 		t.Errorf("coalesced typing lost characters: %q", got)
 	}
-	// A bracketed paste is literal input, never a run of shortcuts — even when
+	// A bracketed paste is literal input, never a run of shortcuts, even when
 	// it starts with a command letter on an empty input.
 	next, _ = testCockpit().Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("make it so"), Paste: true})
 	pasted := next.(Cockpit)
@@ -102,7 +102,7 @@ func TestKeys_CoalescedRunesReplayIndividually(t *testing.T) {
 }
 
 // The picker is forgiving, not modal: a non-navigation rune closes it and
-// types on — the opening m included — so "make…" is never eaten. Backspace
+// types on, the opening m included, so "make…" is never eaten. Backspace
 // un-types the m; space keeps it.
 func TestModes_PickerForgivesTyping(t *testing.T) {
 	m := typed(testCockpit(), "m")
@@ -132,7 +132,7 @@ func TestModes_PickerRendersEveryMode(t *testing.T) {
 	if !strings.Contains(lines, "ADVANCED") {
 		t.Error("the advanced group is not labelled")
 	}
-	// $0.50 cap is unattended's safety story — it must be visible up front.
+	// $0.50 cap is unattended's safety story, it must be visible up front.
 	if !strings.Contains(lines, "$0.50") {
 		t.Error("unattended's cost cap is not disclosed in the picker")
 	}

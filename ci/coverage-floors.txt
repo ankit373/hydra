@@ -1,7 +1,7 @@
 # Per-package coverage floors, enforced by `go run ./ci/covergate`.
 #
 # Floors are a ratchet: they may be raised freely, but lowering one requires an
-# explicit commit a reviewer can see. That is the whole point — nothing here
+# explicit commit a reviewer can see. That is the whole point, nothing here
 # stops coverage sliding back down except the fact that doing so must be
 # written down.
 #
@@ -16,7 +16,7 @@
 # variation a coverage run has. internal/sysinfo is the widest gap: it reads
 # memory through darwinRAM/darwinMemoryState on macOS and /proc on Linux, so it
 # measures 94.5% there and 83.9% here. Running this on a Mac therefore prints a
-# "consider ratcheting" line for sysinfo every time — that advisory is comparing
+# "consider ratcheting" line for sysinfo every time, that advisory is comparing
 # a macOS measurement against a Linux floor, and acting on it would break CI. Raise a floor in the same PR that raises the coverage; the
 # gate prints every package's measured value, so the number to use is in the
 # log of the run you are looking at.
@@ -48,7 +48,7 @@ floor internal/ledger               86
 # internal/mcpregistry talks to two external APIs (OSV.dev, GitHub) and reads
 # five clients' config files, so its remaining uncovered lines are the
 # cross-device-rename and UserHomeDir-failure branches that no portable test
-# can reach — the same category as internal/config's Windows skips.
+# can reach, the same category as internal/config's Windows skips.
 floor internal/mcpregistry          88
 floor internal/ope                  92
 floor internal/optimal              96
@@ -80,7 +80,7 @@ floor registry                      86
 
 # Packages allowed to have no test files at all.
 #
-# The list started at eleven — the entire platform and discovery layer. It is
+# The list started at eleven, the entire platform and discovery layer. It is
 # down to two, and both are permanent:
 #
 #   internal/build   is four ldflags-injected string vars and nothing else.
@@ -94,7 +94,7 @@ floor registry                      86
 # cmd/specstest was here too, on the grounds that it is "just a debug main".
 # That was the wrong call: it is the diagnostic a user is pointed at when local
 # model sizing does not match what they expect, so a version of it that panics
-# or prints nothing is worse than none — it is consulted precisely when
+# or prints nothing is worse than none, it is consulted precisely when
 # something is already wrong. It now has a smoke test and a floor.
 #
 # Adding anything here needs a reason on the line. A package with no tests is
@@ -106,7 +106,7 @@ no-tests internal/build   ldflags-injected version vars only
 # Skips are how a cross-platform suite hides the problem it exists to catch: a
 # three-OS matrix where every awkward test skips on two of them is decorative.
 # Each skip must carry a reason, and the total cannot grow without this number
-# being edited — which a reviewer sees.
+# being edited, which a reviewer sees.
 # Raised 32 -> 34 for the oracle's {file}-staging test (/bin/test is POSIX,
 # and the contract it guards is covered platform-independently), then 34 -> 40
 # for the batch that took total coverage past 90%: the agy read-only-directory
@@ -114,6 +114,6 @@ no-tests internal/build   ldflags-injected version vars only
 # ignores it), the POSIX /usr/bin/true|false oracle verdicts, and the
 # workspace-validator templates, which are POSIX command lines.
 #
-# Each raise is the deliberate act the gate exists to force — the increase is
+# Each raise is the deliberate act the gate exists to force, the increase is
 # always in the diff, next to its reason.
 skip-budget 40

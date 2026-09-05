@@ -82,7 +82,7 @@ func TestAdvance_TrustedDropsToProvisionalOnVersionBump(t *testing.T) {
 	prev := ServerState{State: StateTrusted, ManifestHash: ManifestHash(old), StateChangedAt: time.Now().Add(-30 * 24 * time.Hour)}
 	next := Advance(&prev, bumped, cleanScore(), time.Now())
 	if next.State != StateProvisional {
-		t.Fatalf("State = %q, want provisional — this is the single edge that would have caught postmark-mcp", next.State)
+		t.Fatalf("State = %q, want provisional, this is the single edge that would have caught postmark-mcp", next.State)
 	}
 	if next.ManifestHash != ManifestHash(bumped) {
 		t.Error("ManifestHash should update to the new version's hash")
@@ -103,7 +103,7 @@ func TestAdvance_TrustedFlaggedByPostHocCVE(t *testing.T) {
 	prev := ServerState{State: StateTrusted, ManifestHash: ManifestHash(srv), StateChangedAt: time.Now().Add(-30 * 24 * time.Hour)}
 	next := Advance(&prev, srv, badScore(), time.Now())
 	if next.State != StateFlagged {
-		t.Errorf("State = %q, want flagged — same version, but a CVE was filed after the fact", next.State)
+		t.Errorf("State = %q, want flagged, same version, but a CVE was filed after the fact", next.State)
 	}
 }
 
@@ -130,7 +130,7 @@ func TestAdvance_QuarantinedNeverAutoPromotes(t *testing.T) {
 	prev := ServerState{State: StateQuarantined, ManifestHash: ManifestHash(srv), StateChangedAt: time.Now().Add(-365 * 24 * time.Hour)}
 	next := Advance(&prev, srv, cleanScore(), time.Now())
 	if next.State != StateQuarantined {
-		t.Errorf("State = %q, want to stay quarantined — no automatic path out, that's a manual-clear decision", next.State)
+		t.Errorf("State = %q, want to stay quarantined, no automatic path out, that's a manual-clear decision", next.State)
 	}
 }
 
@@ -167,7 +167,7 @@ func TestAdvance_TyposquatFlagDoesNotQuarantine(t *testing.T) {
 func TestAdvance_ConfirmedKnownBadStillQuarantines(t *testing.T) {
 	next := Advance(nil, srvV("x", "1.0.0"), badScore(), time.Now())
 	if next.State != StateQuarantined {
-		t.Errorf("State = %q, want quarantined — a confirmed advisory match is a confirmation", next.State)
+		t.Errorf("State = %q, want quarantined, a confirmed advisory match is a confirmation", next.State)
 	}
 }
 
@@ -176,7 +176,7 @@ func TestAdvance_RecordsTheScoreThatProducedTheState(t *testing.T) {
 	score.Overall = 87
 	first := Advance(nil, srvV("x", "1.0.0"), score, time.Now())
 	if first.LastScore.Overall != 87 {
-		t.Errorf("first sight: LastScore.Overall = %v, want 87 — the type must own this, not the caller", first.LastScore.Overall)
+		t.Errorf("first sight: LastScore.Overall = %v, want 87, the type must own this, not the caller", first.LastScore.Overall)
 	}
 	next := cleanScore()
 	next.Overall = 42
@@ -213,7 +213,7 @@ func TestClear_MovesQuarantinedBackToProvisionalAndResetsCooldown(t *testing.T) 
 	// The cooldown clock must restart, or a cleared server is instantly
 	// promoted to trusted on the next audit by its year-old timestamp.
 	if !got.StateChangedAt.Equal(now) {
-		t.Errorf("StateChangedAt = %v, want the clear time %v — a cleared server must re-earn trust", got.StateChangedAt, now)
+		t.Errorf("StateChangedAt = %v, want the clear time %v, a cleared server must re-earn trust", got.StateChangedAt, now)
 	}
 }
 

@@ -26,7 +26,7 @@ const TrustFixedSwarmBaseline = 5
 // where a test can catch it.
 type Dashboard struct {
 	// HasData is false when cost.jsonl does not exist or holds no rows. The
-	// view must render "no data yet" rather than a wall of zeros — zeros look
+	// view must render "no data yet" rather than a wall of zeros, zeros look
 	// like a measurement, and an unrun tool reporting $0.00 spend is a lie.
 	HasData bool `json:"hasData"`
 
@@ -41,10 +41,10 @@ type Dashboard struct {
 	Recent []RecentCall `json:"recent"`
 
 	// Calibration is per-(source,domain) calibration quality from
-	// internal/trust — which models/oracles actually earn their stated
+	// internal/trust, which models/oracles actually earn their stated
 	// confidence. Independent of cost.jsonl (a machine can have calibration
 	// history from `hyctl trust record` without ever having dispatched), so
-	// unlike ByModel/ByTier/ByDay it is always a list, never nil — an empty
+	// unlike ByModel/ByTier/ByDay it is always a list, never nil, an empty
 	// leaderboard is a real, renderable state, not "never ran".
 	Calibration []CalibrationRow `json:"calibration"`
 }
@@ -77,7 +77,7 @@ type GovernorPanel struct {
 
 	// BurnRatePct is the mean change in percentage points per observation, and
 	// Risk the probability of reaching the 80% emergency line within
-	// HorizonObs observations. Both are zero when Observations < 2 — that is
+	// HorizonObs observations. Both are zero when Observations < 2, that is
 	// "no rate signal", not "no risk", which is why Observations ships too: a
 	// bare 0 would read as a measurement.
 	BurnRatePct float64 `json:"burnRatePct"`
@@ -112,13 +112,13 @@ type Breakdown struct {
 	WallMS         int64   `json:"wallMs"`
 }
 
-// CalibrationRow is one (source, domain) row of the calibration leaderboard —
+// CalibrationRow is one (source, domain) row of the calibration leaderboard,
 // a direct mapping of trust.Stat, the same shape `hyctl trust calibration`
 // prints.
 type CalibrationRow struct {
 	Source string  `json:"source"`
 	Domain string  `json:"domain"`
-	D      float64 `json:"d"`  // diagnostic power (nats) — sort key, most first
+	D      float64 `json:"d"`  // diagnostic power (nats), sort key, most first
 	Se     float64 `json:"se"` // sensitivity
 	Sp     float64 `json:"sp"` // specificity
 	N      int     `json:"n"`  // real observations (excludes the Laplace prior)
@@ -137,7 +137,7 @@ type RecentCall struct {
 
 // GetDashboard assembles the Dashboard view.
 //
-// Every figure routes through the same cost/trust logic the CLI uses —
+// Every figure routes through the same cost/trust logic the CLI uses,
 // cost.SummaryFromRows for the headline, cost.ByModel/ByDay/GroupBy for the
 // breakdowns, trust.Aggregate for the ensemble record. Reimplementing any of
 // them here would let `hyctl cost` and this view disagree about one file.
@@ -145,7 +145,7 @@ func (a *API) GetDashboard() (*Dashboard, error) {
 	// A machine that has never dispatched has no cost.jsonl, and cost.LoadAll
 	// reports that as an error because the CLI wants to say "has anything
 	// dispatched yet?". For a GUI that is the ordinary first-launch state, not a
-	// failure — the window must open on an empty dashboard, not an error dialog.
+	// failure, the window must open on an empty dashboard, not an error dialog.
 	rows, err := cost.LoadAll()
 	if err != nil && !errors.Is(err, cost.ErrNoLog) {
 		return nil, err
@@ -163,7 +163,7 @@ func (a *API) GetDashboard() (*Dashboard, error) {
 		return d, nil
 	}
 
-	// rows is already loaded above — cost.Summary would reload cost.jsonl a
+	// rows is already loaded above, cost.Summary would reload cost.jsonl a
 	// second time for the same data, doubling this call's I/O (#524).
 	sum := cost.SummaryFromRows(rows)
 	d.Spend = spendPanel(sum)
@@ -253,7 +253,7 @@ func trustPanel() TrustPanel {
 // same most-diagnostic-first order (Calibrator.Report). A brand-new machine
 // has no ~/.hydra/calibration.jsonl, which trust.New treats as an empty store
 // rather than an error, so this always returns a non-nil, possibly-empty
-// slice — never an error, never nil.
+// slice, never an error, never nil.
 func calibrationPanel() []CalibrationRow {
 	cal, err := trust.New(trust.DefaultPath())
 	if err != nil {

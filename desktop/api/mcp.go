@@ -31,7 +31,7 @@ type MCPServer struct {
 	Remote  bool   `json:"remote"`
 
 	// Status is "verified" or "unresolved". Unresolved means the registry has
-	// nothing under this identity — which with no sync is every server.
+	// nothing under this identity, which with no sync is every server.
 	Status string `json:"status"`
 	State  string `json:"state,omitempty"`
 
@@ -43,7 +43,7 @@ type MCPServer struct {
 	Confidence string  `json:"confidence,omitempty"`
 
 	// NearestMatch is the closest known identifier for an unresolved server,
-	// with its edit distance — the typosquat signal. Empty when not computed.
+	// with its edit distance, the typosquat signal. Empty when not computed.
 	NearestMatch string `json:"nearestMatch,omitempty"`
 	NearestDist  int    `json:"nearestDist,omitempty"`
 }
@@ -113,7 +113,7 @@ func (a *API) GetMCPServers() MCPPanel {
 // User-triggered rather than automatic: it is a paginated network fetch that
 // writes a cache, the same shape as `hyctl pricing refresh`. Offering it here
 // is what keeps the view from telling a GUI user to go run a CLI command
-// (#452) — without a sync, every server reads unresolved forever.
+// (#452), without a sync, every server reads unresolved forever.
 func (a *API) SyncMCPRegistry() MCPSyncResult {
 	ctx, cancel := context.WithTimeout(context.Background(), SyncTimeout)
 	defer cancel()

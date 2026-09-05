@@ -149,7 +149,7 @@ func TestSealSkipsAnAlreadyIndexedRun(t *testing.T) {
 	}
 	idx, _ := LoadIndex("2026-01")
 	if len(idx) != 1 {
-		t.Errorf("index has %d entries, want 1 — a duplicate was appended", len(idx))
+		t.Errorf("index has %d entries, want 1, a duplicate was appended", len(idx))
 	}
 	if _, err := os.Stat(Path(id)); !os.IsNotExist(err) {
 		t.Error("the leftover loose file was not cleaned up")
@@ -267,7 +267,7 @@ func TestSegmentFilesLandInSegDir(t *testing.T) {
 }
 
 // The dry-run listing and the seal itself must never disagree about what is old
-// enough to archive — they are one function precisely so they cannot.
+// enough to archive, they are one function precisely so they cannot.
 func TestSealCandidatesAreExactlyWhatSealActsOn(t *testing.T) {
 	tempHome(t)
 	old := []string{runID("202601", 1), runID("202602", 2), runID("202603", 3)}
@@ -298,7 +298,7 @@ func TestSealCandidatesAreExactlyWhatSealActsOn(t *testing.T) {
 		t.Errorf("Seal folded %d runs but SealCandidates listed %d", res.Runs, len(got))
 	}
 	if res.Months != 3 {
-		t.Errorf("Months = %d, want 3 — one segment per calendar month", res.Months)
+		t.Errorf("Months = %d, want 3, one segment per calendar month", res.Months)
 	}
 	if _, err := os.Stat(Path(fresh)); err != nil {
 		t.Errorf("the fresh run was sealed: %v", err)
@@ -412,7 +412,7 @@ func TestLoadIndexMissingMonthIsNotAnError(t *testing.T) {
 	}
 }
 
-// A corrupt segment must surface as an error, never as a run with no events —
+// A corrupt segment must surface as an error, never as a run with no events,
 // silently rendering a sealed run as empty is the failure mode that matters.
 func TestLoadReportsACorruptSegmentRatherThanEmptyingIt(t *testing.T) {
 	tempHome(t)

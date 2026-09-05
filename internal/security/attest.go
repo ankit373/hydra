@@ -16,7 +16,7 @@ import (
 )
 
 // What was true, under which rules (config.Breadcrumb), over which evidence
-// (the chained ledger) — with a digest so two copies can be compared without
+// (the chained ledger), with a digest so two copies can be compared without
 // trusting either holder. Deliberately unsigned: Hydra has no key management.
 
 // Attestation is a point-in-time, checkable statement of posture.
@@ -112,7 +112,7 @@ func digestAttestation(a Attestation) string {
 }
 
 // VerifyAttestation recomputes the digest and reports whether the document is
-// internally consistent — the check a recipient runs.
+// internally consistent, the check a recipient runs.
 func VerifyAttestation(a Attestation) bool {
 	return a.Digest != "" && digestAttestation(a) == a.Digest
 }
@@ -122,7 +122,7 @@ func VerifyAttestation(a Attestation) bool {
 // document; it invalidates the claims, and the two must be distinguishable.
 //
 // Events with no chain coverage count as unverifiable. "No break was found"
-// over a log that carries no hashes is not integrity — it is the absence of a
+// over a log that carries no hashes is not integrity, it is the absence of a
 // test, and reporting it as clean would be the exact overclaiming this
 // package refuses everywhere else.
 func (a Attestation) Trustworthy() bool {

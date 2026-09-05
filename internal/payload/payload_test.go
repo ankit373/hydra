@@ -135,7 +135,7 @@ func TestPutRedactsSecretsBeforeWriting(t *testing.T) {
 		t.Errorf("the redaction is unlabelled, so the finding is lost:\n%s", got)
 	}
 
-	// The bytes on disk are the real test — Get could be redacting on read.
+	// The bytes on disk are the real test, Get could be redacting on read.
 	raw, err := os.ReadFile(packPath(s.dir))
 	if err != nil {
 		t.Fatal(err)
@@ -154,7 +154,7 @@ func TestPutRedactsSecretsBeforeWriting(t *testing.T) {
 }
 
 // Redaction happens before hashing. Hashing the raw text would leave a
-// fingerprint of the secret in the index — an offline guess-and-compare oracle
+// fingerprint of the secret in the index, an offline guess-and-compare oracle
 // for exactly the value being kept off disk.
 func TestHashAddressesTheRedactedContent(t *testing.T) {
 	s := openStore(t)
@@ -321,13 +321,13 @@ func TestTrainDictRefusesTooSmallACorpus(t *testing.T) {
 }
 
 // zstd.BuildDict panics with an integer divide by zero on a corpus that
-// compresses to no literals. That input is not exotic here — it is what a young
+// compresses to no literals. That input is not exotic here, it is what a young
 // store looks like when one system prompt repeats. Training is a background
 // convenience and must never take down the process doing the routing.
 func TestTrainDictRefusesADegenerateCorpus(t *testing.T) {
 	s := openStore(t)
 	for i := 0; i < DictSampleTarget; i++ {
-		// One system prompt, one varying task number — the realistic shape of a
+		// One system prompt, one varying task number, the realistic shape of a
 		// young Hydra corpus, and the input that actually reproduces the panic.
 		if _, err := s.Put(fmt.Sprintf(
 			"You are a routing head. Task %d: implement the handler and return only code.", i), 1); err != nil {
@@ -365,7 +365,7 @@ func TestPackedStorageIsSmallerOnDiskThanLoose(t *testing.T) {
 		if _, err := s.Put(content, 1); err != nil {
 			t.Fatal(err)
 		}
-		// The same content, one file per blob — the obvious design.
+		// The same content, one file per blob, the obvious design.
 		name := filepath.Join(loose, Hash(content))
 		if err := os.WriteFile(name, []byte(content), 0o600); err != nil {
 			t.Fatal(err)
@@ -387,7 +387,7 @@ func TestPackedStorageIsSmallerOnDiskThanLoose(t *testing.T) {
 	}
 
 	if packed >= looseBytes {
-		t.Errorf("packed %d bytes on disk vs loose %d — packing bought nothing", packed, looseBytes)
+		t.Errorf("packed %d bytes on disk vs loose %d, packing bought nothing", packed, looseBytes)
 	}
 	t.Logf("packed %d B vs loose %d B on disk (%.1fx) for %d blobs", packed, looseBytes,
 		float64(looseBytes)/float64(packed), n)
@@ -459,7 +459,7 @@ func TestConcurrentPutsAreSafeAndAllReadBack(t *testing.T) {
 			t.Fatalf("blob %d does not read back: %v", i, err)
 		}
 		if want := fmt.Sprintf("concurrent blob number %d", i); got != want {
-			t.Fatalf("blob %d decoded as %q, want %q — offsets were interleaved", i, got, want)
+			t.Fatalf("blob %d decoded as %q, want %q, offsets were interleaved", i, got, want)
 		}
 	}
 }
@@ -490,7 +490,7 @@ func nan() float64 { var z float64; return z / z }
 
 // requireBlockAccounting skips when util.DiskBytes cannot see past logical
 // length. Windows does not expose allocation size through fs.FileInfo, so the
-// block overhead this test measures is invisible there — the saving is still
+// block overhead this test measures is invisible there, the saving is still
 // real on NTFS, it just cannot be observed from Go, and asserting it anyway
 // would be testing the platform rather than the store.
 func requireBlockAccounting(t *testing.T) {

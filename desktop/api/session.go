@@ -28,7 +28,7 @@ type Session struct {
 	Agents   []Agent         `json:"agents"`
 	Edges    []Edge          `json:"edges"`
 
-	// NonLinear reports whether this run has structure a list cannot show —
+	// NonLinear reports whether this run has structure a list cannot show,
 	// a fan-out or an A2A cross-edge. The Graph tab is offered only then;
 	// drawing a graph of a straight line is worse than drawing a list.
 	NonLinear bool `json:"nonLinear"`
@@ -54,7 +54,7 @@ type TimelineEntry struct {
 	Confidence float64 `json:"confidence"`
 
 	// Detail is the run log's short human string. For an SPRT sample #205
-	// writes the verifiable part here — "agreed · LLR +1.203 → Λ 1.203" — which
+	// writes the verifiable part here, "agreed · LLR +1.203 → Λ 1.203", which
 	// is deliberately what the row leads with rather than narrated intent.
 	Detail string `json:"detail,omitempty"`
 }
@@ -101,7 +101,7 @@ func (a *API) GetSession(runID string) (*Session, error) {
 	t, tl := tree.Reconstruct(events)
 	s.Skipped = t.Skipped
 
-	// Entries in file order. runlog's own doc says Seq "is not the sort key" —
+	// Entries in file order. runlog's own doc says Seq "is not the sort key",
 	// several writers share one run and each counts from 1, so re-sorting by it
 	// puts a run's end before a handoff that happened first (#205).
 	for _, e := range tl.Entries {
@@ -126,8 +126,8 @@ func (a *API) GetSession(runID string) (*Session, error) {
 			Detail:     n.Detail,
 		})
 		for _, h := range n.Handoffs {
-			// An A2A handoff always crosses runs — the target picks it up in a
-			// later, separate `hyctl dispatch` invocation with its own run_id —
+			// An A2A handoff always crosses runs, the target picks it up in a
+			// later, separate `hyctl dispatch` invocation with its own run_id,
 			// so it can never resolve to a node in *this* run's tree. Every
 			// successful dispatch writes one of these unconditionally (as
 			// bookkeeping for a possible future --a2a chain), so treating it as
@@ -165,7 +165,7 @@ func isNonLinear(t *tree.Tree, edges int) bool {
 	return false
 }
 
-// formatTS renders a timestamp for display, or empty when there is none —
+// formatTS renders a timestamp for display, or empty when there is none,
 // never a zero-time string, which reads as a real measurement from year 1.
 func formatTS(ts time.Time) string {
 	if ts.IsZero() {

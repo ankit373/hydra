@@ -102,7 +102,7 @@ func TestTypesTS_MirrorsEveryFieldOnTheWire(t *testing.T) {
 			ts := tsInterface(t, src, c.iface)
 			for name := range jsonFields(c.goVal) {
 				if !ts[name] {
-					t.Errorf("%s.%s ships on the wire but types.ts does not declare it — "+
+					t.Errorf("%s.%s ships on the wire but types.ts does not declare it, "+
 						"the desktop cannot render a field it has never heard of",
 						c.iface, name)
 				}
@@ -149,7 +149,7 @@ func TestTypesTS_DeclaresNoFieldTheBackendNeverSends(t *testing.T) {
 			g := jsonFields(c.goVal)
 			for name := range tsInterface(t, src, c.iface) {
 				if !g[name] {
-					t.Errorf("types.ts declares %s.%s but the backend never sends it — "+
+					t.Errorf("types.ts declares %s.%s but the backend never sends it, "+
 						"it is permanently undefined", c.iface, name)
 				}
 			}
@@ -161,7 +161,7 @@ func TestTypesTS_DeclaresNoFieldTheBackendNeverSends(t *testing.T) {
 // string enum carries, and a value is just as load-bearing: the Audit view
 // looked two checks up by names internal/security never emitted, and both
 // cards silently never rendered (#634). Those were free strings rather than a
-// declared union, but a union can drift the same way — a TypeScript union is
+// declared union, but a union can drift the same way, a TypeScript union is
 // only a compile-time promise about the frontend, never a claim about Go.
 //
 // So: every union in types.ts that mirrors a Go string type must hold exactly
@@ -219,13 +219,13 @@ func TestTypesTS_UnionValuesMatchGo(t *testing.T) {
 			ts := tsUnionValues(t, src, c.union)
 			for _, v := range c.goVals {
 				if !ts[v] {
-					t.Errorf("Go emits %s %q but types.ts does not list it — "+
+					t.Errorf("Go emits %s %q but types.ts does not list it, "+
 						"a value the view can receive and never match", c.union, v)
 				}
 				delete(ts, v)
 			}
 			for extra := range ts {
-				t.Errorf("types.ts lists %s %q, which Go never emits — "+
+				t.Errorf("types.ts lists %s %q, which Go never emits, "+
 					"any branch on it is unreachable", c.union, extra)
 			}
 		})

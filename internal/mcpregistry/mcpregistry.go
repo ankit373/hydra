@@ -3,7 +3,7 @@
 // Package mcpregistry is the Phase 1 CLI wedge of Hydra's MCP registry:
 // identity-only sync of the official MCP registry, a scan of what's actually
 // installed across this machine's MCP clients, and an audit that resolves one
-// against the other. No trust scoring yet — that's Phase 2.
+// against the other. No trust scoring yet, that's Phase 2.
 package mcpregistry
 
 import (
@@ -14,8 +14,8 @@ import (
 )
 
 // EnvVar is one environment variable a package declares it needs, as
-// published in the registry's server.json. Identity/shape only — a
-// variable's name and whether it's secret-shaped, never a value — this is
+// published in the registry's server.json. Identity/shape only, a
+// variable's name and whether it's secret-shaped, never a value, this is
 // registry metadata about what the package asks for, not a real config
 // file, so it carries none of the privacy risk scan.go's clientServerConfig
 // deliberately avoids.
@@ -38,7 +38,7 @@ type Repository struct {
 }
 
 // RemoteHeader is one HTTP header a remote (URL-based) server declares it
-// needs — the registry's mechanism for a server to say "call me with this
+// needs, the registry's mechanism for a server to say "call me with this
 // auth header". IsSecret is what marks it as a credential rather than an
 // arbitrary header.
 type RemoteHeader struct {
@@ -56,7 +56,7 @@ type Remote struct {
 // ServerRecord is one server as published by the official MCP registry.
 // Presence in the registry under a reverse-DNS name (e.g. "io.github.x/y")
 // already implies namespace ownership was verified at publish time (GitHub
-// OIDC or DNS challenge) — there is no separate "verified" flag to check.
+// OIDC or DNS challenge), there is no separate "verified" flag to check.
 type ServerRecord struct {
 	Name       string     `json:"name"`
 	Version    string     `json:"version"`
@@ -68,7 +68,7 @@ type ServerRecord struct {
 // InstalledServer is one MCP server found configured on this machine.
 // Identity only, by construction: the parser this feeds from never declares
 // a field for env vars or other config values, so a secret cannot end up
-// here even by accident — see clientServerConfig in scan.go.
+// here even by accident, see clientServerConfig in scan.go.
 type InstalledServer struct {
 	Client  string `json:"client"`            // "claude-code", "claude-desktop", "cursor", "windsurf"
 	Scope   string `json:"scope"`             // "user" or "project"

@@ -2,7 +2,7 @@
 
 package tui
 
-// view_models.go — view 2: every scanned model, nested under its
+// view_models.go, view 2: every scanned model, nested under its
 // provider/server, with a detail panel for the selected one. Replaces the old
 // dashboard's flat fleet table, where the Ollama binary and its models were
 // siblings that could contradict each other (server down · model up).
@@ -32,7 +32,7 @@ type ckModelRow struct {
 	capScore int
 	up       bool
 	reason   string // unroutable reason, "" when up
-	embed    bool   // embeddings only — never routed
+	embed    bool   // embeddings only, never routed
 	local    bool
 }
 
@@ -44,7 +44,7 @@ type ckModelGroup struct {
 }
 
 // ckServerFor names the group a head belongs to and whether the head is a
-// binary-on-PATH pseudo-head — the group's header, never a sibling row.
+// binary-on-PATH pseudo-head, the group's header, never a sibling row.
 func ckServerFor(h provider.Head) (group string, isBinary bool) {
 	switch {
 	case h.ID == "ollama":
@@ -211,7 +211,7 @@ func (m Cockpit) applyRescan(msg ckRescanMsg) Cockpit {
 
 // ── render ────────────────────────────────────────────────────────────────────
 
-// ckModelNameW is the tree's name column budget — fixed so a long name in one
+// ckModelNameW is the tree's name column budget, fixed so a long name in one
 // row never shifts its siblings' columns.
 const ckModelNameW = 22
 
@@ -227,7 +227,7 @@ func (m Cockpit) modelTree(h int) string {
 
 	flat := m.flatRows()
 	if len(flat) == 0 {
-		b.WriteString(ckFaintS.Render(" nothing scanned — run `hyctl probe` to see why") + "\n")
+		b.WriteString(ckFaintS.Render(" nothing scanned, run `hyctl probe` to see why") + "\n")
 	}
 	sel := m.modelSel
 	if sel < 0 || sel >= len(flat) {
@@ -272,7 +272,7 @@ func (m Cockpit) modelTree(h int) string {
 		glyph, style, meta := ckCheapS.Render("●"), ckVioletS, ""
 		switch {
 		case row.embed:
-			glyph, style, meta = ckFaintS.Render("◌"), ckFaintS, "embeddings only — never routed"
+			glyph, style, meta = ckFaintS.Render("◌"), ckFaintS, "embeddings only, never routed"
 		case !row.up:
 			glyph, style, meta = ckFaintS.Render("◌"), ckFaintS, "not routable"
 		}
@@ -355,7 +355,7 @@ func (m Cockpit) modelDetail(w int) string {
 	}
 	switch {
 	case mr.embed:
-		lines = append(lines, "", " "+ckFaintS.Render("embeddings only — never routed"))
+		lines = append(lines, "", " "+ckFaintS.Render("embeddings only, never routed"))
 	case !mr.up:
 		lines = append(lines, "", " "+ckExpS.Render("not routable"), " "+ckFaintS.Render(truncate(mr.reason, 38)))
 	}

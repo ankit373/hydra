@@ -232,13 +232,13 @@ When you have Ollama, Hydra picks the best model for your actual available memor
 
 ```
   Detected: Apple Silicon · 16GB total · memory fully occupied (1.2GB free)
-  ⚠  Memory tight — close other apps to run local models
+  ⚠  Memory tight, close other apps to run local models
 
   Recommended alternatives (free tiers available):
 
-  ✓ Claude Code   Free tier via claude.ai — npm install -g @anthropic-ai/claude-code
-  ✓ OpenAI Codex  Free tier — npm install -g @openai/codex
-  ✓ Cursor        Free tier IDE — cursor.com
+  ✓ Claude Code   Free tier via claude.ai, npm install -g @anthropic-ai/claude-code
+  ✓ OpenAI Codex  Free tier, npm install -g @openai/codex
+  ✓ Cursor        Free tier IDE, cursor.com
 ```
 
 ```
@@ -274,7 +274,7 @@ Every dispatch is logged to `~/.hydra/cost.jsonl` with model, tier, token counts
 ```
 $ hyctl cost
 
-  Cost — last 30 days
+  Cost, last 30 days
 
   Model                 Dispatches   Tokens       Est. Cost
   claude                12           48,200        $0.72
@@ -335,7 +335,7 @@ have:
 
 ```
   VERDICT  ACT NOW
-    critical incident — gpt-4o: the same resource was denied repeatedly, then it
+    critical incident, gpt-4o: the same resource was denied repeatedly, then it
     escalated to an exec/network action, then it targeted the audit trail itself.
     recon → escalation → audit-tampering · 4 event(s) · likelihood 8 × impact 8
 

@@ -6,13 +6,13 @@
 # Prices reflect public list rates as of 2026-05. Antigravity costs are
 # zero-out-of-pocket on the user's plan but we track *estimated retail* so
 # the cost dashboard surfaces what an equivalent direct-API run would have
-# cost — useful for future tier-shift decisions.
+# cost, useful for future tier-shift decisions.
 #
 # `estimate_factor` for executors without real token counts:
 #   token_count ≈ char_count / estimate_factor
 # Defaults to 4 (Anthropic + most providers).
 #
-# Update prices by editing this file — no code change required.
+# Update prices by editing this file, no code change required.
 # ─────────────────────────────────────────────────────────────────────────────
 
 version: "1.0"
@@ -27,13 +27,13 @@ tiers:
     id: claude-core
     input_per_million: 15.00     # Opus equivalent retail
     output_per_million: 75.00
-    notes: "Orchestrator — direct Anthropic billing"
+    notes: "Orchestrator, direct Anthropic billing"
 
   2:  # Opus Thinking via agy
     id: opus-thinking
     input_per_million: 15.00
     output_per_million: 75.00
-    notes: "Antigravity proxies Anthropic — track retail equivalent"
+    notes: "Antigravity proxies Anthropic, track retail equivalent"
 
   3:  # Sonnet Thinking via agy
     id: sonnet-thinking
@@ -74,7 +74,7 @@ tiers:
     id: qwen-grunt
     input_per_million: 0.00      # local, no $ cost
     output_per_million: 0.00
-    notes: "Local Ollama — compute cost only"
+    notes: "Local Ollama, compute cost only"
 
 # ── Pool budgets (informational; for cost.sh totals) ─────────────────────────
 pool_budgets:

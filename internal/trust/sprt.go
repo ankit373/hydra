@@ -44,7 +44,7 @@ type Decision int
 const (
 	// DecisionAccept: Λ crossed the accept threshold A at the target confidence.
 	DecisionAccept Decision = iota
-	// DecisionStoppedOnBudget: ran out of budget/heads before reaching A — the
+	// DecisionStoppedOnBudget: ran out of budget/heads before reaching A, the
 	// residual uncertainty is where a human oracle (review) should be spent.
 	DecisionStoppedOnBudget
 )
@@ -56,7 +56,7 @@ func (d Decision) String() string {
 	return "stopped_on_budget"
 }
 
-// Evidence is one entry in the LLR ledger — a single source's calibrated
+// Evidence is one entry in the LLR ledger, a single source's calibrated
 // contribution to the running log-odds that the candidate is correct.
 type Evidence struct {
 	Source      string  `json:"source"`
@@ -66,7 +66,7 @@ type Evidence struct {
 	LambdaAfter float64 `json:"lambda_after"`
 	CostUSD     float64 `json:"cost_usd"`
 
-	// ConfidenceAfter is σ(LambdaAfter) — the running P(correct) once this
+	// ConfidenceAfter is σ(LambdaAfter), the running P(correct) once this
 	// source had been weighed. Stored rather than left for readers to derive:
 	// the ledger is a public JSON type written to trust.jsonl and read by the
 	// run log, and a second copy of the sigmoid in each reader is a third place
@@ -112,7 +112,7 @@ func Run(ctx context.Context, task Task, sources []Source, exec Executor, cal *C
 	// (decorate-sort-undecorate), not inside the comparator: evidencePerCost
 	// takes the calibrator's lock and does two log() calls, so recomputing it
 	// per comparison turns an O(n) computation into O(n log n) lock
-	// acquisitions — real cost when Run is called thousands of times in a
+	// acquisitions, real cost when Run is called thousands of times in a
 	// benchmark against a calibration that never changes mid-run.
 	type scoredSource struct {
 		src   Source
@@ -143,7 +143,7 @@ func Run(ctx context.Context, task Task, sources []Source, exec Executor, cal *C
 		}
 		ans, err := exec.Execute(ctx, src, task)
 		if err != nil {
-			continue // a dead head is not evidence — skip it
+			continue // a dead head is not evidence, skip it
 		}
 		if ans.CostUSD > 0 {
 			cost = ans.CostUSD
@@ -187,7 +187,7 @@ func Run(ctx context.Context, task Task, sources []Source, exec Executor, cal *C
 			res.Ledger[len(res.Ledger)-1].ConfidenceAfter = sigmoid(lambda)
 			// The reseeded Λ must be tested against A immediately: if the
 			// pivoting source's own evidence alone already clears the accept
-			// threshold, Decision has to reflect that in this same iteration —
+			// threshold, Decision has to reflect that in this same iteration,
 			// otherwise a run that pivoted on its last sampled source ends with
 			// Decision still StoppedOnBudget even though Confidence cleared the
 			// target, corrupting hyctl trust explain and AutoClearedPct.
@@ -219,13 +219,13 @@ func evidencePerCost(cal *Calibrator, src Source, domain string) float64 {
 // AnswerEquivalence decides whether a source's answer counts as agreeing with the
 // current candidate for the purpose of accumulating correctness evidence.
 //
-// The v1 default (TextEquivalence) compares normalized text — which miscounts two
+// The v1 default (TextEquivalence) compares normalized text, which miscounts two
 // independently-correct answers that differ only in wording (variable names,
 // println vs. fmt.Println) as *disagreement*, pushing Λ the wrong way. In the real
 // benchmark this capped achieved confidence at 32.9% even though both sources were
 // oracle-verified correct (see TRUST_CONTROL_PLANE_BENCHMARK_FINDINGS.md §3).
-// Callers that can compare *behavior* — an oracle verdict in a benchmark, an LLM
-// judge in production — inject a semantic comparator via WithEquivalence.
+// Callers that can compare *behavior*, an oracle verdict in a benchmark, an LLM
+// judge in production, inject a semantic comparator via WithEquivalence.
 type AnswerEquivalence func(candidate, answer string) bool
 
 // RunOption configures an SPRT run without changing Run's core signature.
@@ -247,7 +247,7 @@ func WithEquivalence(fn AnswerEquivalence) RunOption {
 
 // TextEquivalence is the v1 default agreement check: case-insensitive with
 // collapsed whitespace. It removes trivial-formatting false disagreements but is
-// NOT semantic — two behaviorally-equivalent answers with different identifiers
+// NOT semantic, two behaviorally-equivalent answers with different identifiers
 // still register as disagreement. Supply WithEquivalence for behavior-based
 // comparison.
 func TextEquivalence(candidate, answer string) bool {

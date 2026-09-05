@@ -34,7 +34,7 @@ func globSeeds(f *testing.F) {
 	}
 }
 
-// It must never panic, and — the real risk — it must always terminate.
+// It must never panic, and, the real risk, it must always terminate.
 // matchSegments recurses over every split point for each "**", so a pattern
 // with several of them against a long path is a candidate for exponential
 // blow-up. A hang here is a denial of service on the scope check, which is the
@@ -63,7 +63,7 @@ func FuzzMatchGlob_TerminatesAndNeverPanics(f *testing.F) {
 		select {
 		case <-done:
 		case <-time.After(5 * time.Second):
-			t.Fatalf("matchGlob(%q, %q) did not terminate in 5s — the scope check "+
+			t.Fatalf("matchGlob(%q, %q) did not terminate in 5s, the scope check "+
 				"can be hung by a pattern", rel, pattern)
 		}
 	})
@@ -86,7 +86,7 @@ func TestMatchGlob_PathologicalPatternStillTerminates(t *testing.T) {
 		}
 	case <-time.After(10 * time.Second):
 		t.Fatalf("matchGlob did not terminate for %d path segments against %d '**' "+
-			"segments — matching is exponential and a workspace.yaml pattern can "+
+			"segments, matching is exponential and a workspace.yaml pattern can "+
 			"hang every scope check", strings.Count(rel, "/")+1, strings.Count(pattern, "**"))
 	}
 }

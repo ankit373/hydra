@@ -132,7 +132,7 @@ func TestDB_Models_Sorted(t *testing.T) {
 // ── DB.TierEntries ────────────────────────────────────────────────────────────
 
 // TierEntries is what lets `pricing list` show CLI-agent heads (claude-core,
-// opus-thinking, …) at all — they're keyed by tier number, not a model name,
+// opus-thinking, …) at all, they're keyed by tier number, not a model name,
 // so without this they can never appear in Models() (#505).
 func TestDB_TierEntries_SortedByTierNumber(t *testing.T) {
 	db := &DB{
@@ -156,7 +156,7 @@ func TestDB_TierEntries_SortedByTierNumber(t *testing.T) {
 }
 
 // A tier with no id in pricing.yaml has nothing meaningful to show as a
-// "model" name in `pricing list` — it must be skipped, not surfaced as an
+// "model" name in `pricing list`, it must be skipped, not surfaced as an
 // empty-string row.
 func TestDB_TierEntries_SkipsTiersWithNoID(t *testing.T) {
 	db := &DB{
@@ -279,8 +279,8 @@ func TestFetchFromOpenRouter_Non200(t *testing.T) {
 // ── Cache ─────────────────────────────────────────────────────────────────────
 
 func TestCacheRoundtrip(t *testing.T) {
-	// HYDRA_CONFIG_DIR was read by nothing — config.Dir() resolves from the
-	// home directory — so this test wrote its fixture straight into the
+	// HYDRA_CONFIG_DIR was read by nothing, config.Dir() resolves from the
+	// home directory, so this test wrote its fixture straight into the
 	// developer's real ~/.hydra/pricing_cache.json and left it there. A plain
 	// `go test ./...` therefore replaced the machine's live pricing data with
 	// an empty models map, after which every model priced off the tier
@@ -308,8 +308,8 @@ func TestCacheRoundtrip(t *testing.T) {
 }
 
 func TestReadCache_EmptySentinel(t *testing.T) {
-	// HYDRA_CONFIG_DIR was read by nothing — config.Dir() resolves from the
-	// home directory — so this test wrote its fixture straight into the
+	// HYDRA_CONFIG_DIR was read by nothing, config.Dir() resolves from the
+	// home directory, so this test wrote its fixture straight into the
 	// developer's real ~/.hydra/pricing_cache.json and left it there. A plain
 	// `go test ./...` therefore replaced the machine's live pricing data with
 	// an empty models map, after which every model priced off the tier
@@ -359,7 +359,7 @@ func TestParsePerToken(t *testing.T) {
 		wantErr bool
 	}{
 		{"0.000015", 0.000015, false},
-		{"0", 0, false}, // free model — included, not skipped
+		{"0", 0, false}, // free model, included, not skipped
 		{"", 0, true},
 		{"-1", 0, true},
 		{"abc", 0, true},
@@ -377,7 +377,7 @@ func TestParsePerToken(t *testing.T) {
 }
 
 // Hydra is a cost router, so a tier that prices at $0.00 is not a missing
-// feature — it is a wrong number presented as a real one. registry/pricing.yaml
+// feature, it is a wrong number presented as a real one. registry/pricing.yaml
 // used to be read from disk only, and no install path ships it, so every
 // installed binary logged a WARNING and then estimated every CLI-agent head at
 // zero (#238). Those heads never appear in OpenRouter's catalog, so the tier
@@ -393,9 +393,9 @@ func TestLoadFallbackTiers_NonZeroOnAMachineWithNoRegistryOnDisk(t *testing.T) {
 		t.Fatalf("tier pricing unreadable with no on-disk registry: %v", err)
 	}
 	if len(tiers) == 0 {
-		t.Fatal("no tiers loaded — every cost estimate would be $0.00")
+		t.Fatal("no tiers loaded, every cost estimate would be $0.00")
 	}
-	// Tier 10 is the local Ollama head and is genuinely free — asserting
+	// Tier 10 is the local Ollama head and is genuinely free, asserting
 	// non-zero across the board would encode a wrong expectation, not a
 	// stronger guarantee. Every paid tier must be priced.
 	const localTier = 10
@@ -411,6 +411,6 @@ func TestLoadFallbackTiers_NonZeroOnAMachineWithNoRegistryOnDisk(t *testing.T) {
 		paid++
 	}
 	if paid == 0 {
-		t.Fatal("no paid tier carries a price — every API head would estimate at $0.00")
+		t.Fatal("no paid tier carries a price, every API head would estimate at $0.00")
 	}
 }

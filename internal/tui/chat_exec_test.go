@@ -58,7 +58,7 @@ func stubAnswer(out string, cost float64) func(context.Context, *ckTask, string,
 }
 
 // stubEdit writes after to the task's file and snapshots before/after via the
-// real runlog.LogEdit — the same record the real editor path leaves.
+// real runlog.LogEdit, the same record the real editor path leaves.
 func stubEdit(before, after string) func(context.Context, *ckTask, string) (*editor.Result, error) {
 	return func(_ context.Context, tk *ckTask, _ string) (*editor.Result, error) {
 		if err := os.WriteFile(tk.file, []byte(after), 0o644); err != nil {
@@ -70,7 +70,7 @@ func stubEdit(before, after string) func(context.Context, *ckTask, string) (*edi
 }
 
 // runCmds executes a command tree synchronously, feeding every message back
-// into Update. Clock ticks are dropped — re-feeding them would loop forever.
+// into Update. Clock ticks are dropped, re-feeding them would loop forever.
 func runCmds(t *testing.T, m Cockpit, cmd tea.Cmd) Cockpit {
 	t.Helper()
 	queue := []tea.Cmd{cmd}
@@ -130,7 +130,7 @@ func namedFile(t *testing.T, content string) (rel, abs string) {
 // ── ask ───────────────────────────────────────────────────────────────────────
 
 // A typed task actually executes: route line first, then the answer block, the
-// footer with cost and trace, session cost accrual — and an empty enter
+// footer with cost and trace, session cost accrual, and an empty enter
 // afterwards opens the trace in activity.
 func TestExec_AskAnswersAccruesCostAndLinksTrace(t *testing.T) {
 	testutil.NewSandbox(t)
@@ -177,7 +177,7 @@ func TestExec_AskAnswersAccruesCostAndLinksTrace(t *testing.T) {
 	}
 }
 
-// A dispatch failure renders the error and its trace link — never a dead end.
+// A dispatch failure renders the error and its trace link, never a dead end.
 func TestExec_FailureRendersErrorAndTrace(t *testing.T) {
 	testutil.NewSandbox(t)
 	stubExec(t)
@@ -197,7 +197,7 @@ func TestExec_FailureRendersErrorAndTrace(t *testing.T) {
 }
 
 // esc cancels the running task through context cancellation, rendered as
-// cancelled — not as a generic failure.
+// cancelled, not as a generic failure.
 func TestExec_EscCancelsRunningTask(t *testing.T) {
 	testutil.NewSandbox(t)
 	stubExec(t)
@@ -210,7 +210,7 @@ func TestExec_EscCancelsRunningTask(t *testing.T) {
 	if m.th().exec == nil {
 		t.Fatal("no task started")
 	}
-	m = press(m, tea.KeyEsc) // cancel — exec stays until the worker reports back
+	m = press(m, tea.KeyEsc) // cancel, exec stays until the worker reports back
 	if m.th().exec == nil {
 		t.Fatal("esc cleared exec before the worker returned")
 	}
@@ -257,7 +257,7 @@ func TestExec_SubmitWhileRunningRefusesAndKeepsInput(t *testing.T) {
 }
 
 // The PII badge shows when the config forces local, and the dispatch options
-// carry LocalOnly — the enforcement is dispatch's, the disclosure is the TUI's.
+// carry LocalOnly, the enforcement is dispatch's, the disclosure is the TUI's.
 func TestExec_PIIForcesLocalBadgeAndOption(t *testing.T) {
 	testutil.NewSandbox(t)
 	stubExec(t)
@@ -308,7 +308,7 @@ func TestExec_EditModeEditsAndDXOWorkOffSnapshots(t *testing.T) {
 		t.Fatalf("edit mode ran %d edits, want 1 (no plan step)", edits)
 	}
 	joined := stripANSI(strings.Join(m.th().log, "\n"))
-	for _, want := range []string{"edit ✓ main.go +1/−1", "tests — skipped (edit mode)", "d diff · x undo · o open"} {
+	for _, want := range []string{"edit ✓ main.go +1/−1", "tests, skipped (edit mode)", "d diff · x undo · o open"} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("proof strip missing %q:\n%s", want, joined)
 		}
@@ -316,7 +316,7 @@ func TestExec_EditModeEditsAndDXOWorkOffSnapshots(t *testing.T) {
 	if raw, _ := os.ReadFile(abs); string(raw) != after {
 		t.Fatalf("the file was not written: %q", raw)
 	}
-	// The code panel streams the real new content — the fake snippets are gone.
+	// The code panel streams the real new content, the fake snippets are gone.
 	if !strings.Contains(strings.Join(m.th().codeLines, "\n"), "var new = 2") {
 		t.Errorf("the code panel does not hold the edited content: %v", m.th().codeLines)
 	}
@@ -360,7 +360,7 @@ func TestExec_EditModeEditsAndDXOWorkOffSnapshots(t *testing.T) {
 	}
 }
 
-// With no completed edit, d/x/o type like any other letter — the hijack exists
+// With no completed edit, d/x/o type like any other letter, the hijack exists
 // only while there is something to act on.
 func TestExec_DXOTypeWhenNothingToActOn(t *testing.T) {
 	m := testCockpit()
@@ -385,7 +385,7 @@ func TestExec_EditModeWithoutFileAnswersWithNote(t *testing.T) {
 	m, cmd := enter(typed(m, "rename the variable"))
 	m = runCmds(t, m, cmd)
 	joined := stripANSI(strings.Join(m.th().log, "\n"))
-	if !strings.Contains(joined, "no file named — answered instead") {
+	if !strings.Contains(joined, "no file named, answered instead") {
 		t.Errorf("the no-file note is missing:\n%s", joined)
 	}
 	if !strings.Contains(joined, "here is how") {
@@ -417,7 +417,7 @@ func TestExec_PlanApproveRunsTheRest(t *testing.T) {
 		t.Fatal("exec still set while waiting on approval")
 	}
 	joined := stripANSI(strings.Join(m.th().log, "\n"))
-	if !strings.Contains(joined, "PLAN — 2 steps") || !strings.Contains(joined, "1. read the file") {
+	if !strings.Contains(joined, "PLAN, 2 steps") || !strings.Contains(joined, "1. read the file") {
 		t.Errorf("the plan is not rendered:\n%s", joined)
 	}
 
@@ -476,7 +476,7 @@ func TestExec_PlanDiscardRunsNothing(t *testing.T) {
 		t.Fatal("esc did not discard the plan")
 	}
 	joined := stripANSI(strings.Join(m.th().log, "\n"))
-	if !strings.Contains(joined, "plan discarded — nothing ran") || !strings.Contains(joined, "◼ stopped") {
+	if !strings.Contains(joined, "plan discarded, nothing ran") || !strings.Contains(joined, "◼ stopped") {
 		t.Errorf("the discard is not disclosed:\n%s", joined)
 	}
 	if raw, _ := os.ReadFile(abs); string(raw) != "package main\n" {
@@ -727,7 +727,7 @@ func TestExec_OverrideWiresIntoTheNextDispatchOnly(t *testing.T) {
 		t.Error("local only did not reach the dispatch options")
 	}
 	if m.override.kind != 0 {
-		t.Error("the override survived the task — it is next-task-only")
+		t.Error("the override survived the task, it is next-task-only")
 	}
 
 	// force tier 3
@@ -775,7 +775,7 @@ func TestExec_OverrideWiresIntoTheNextDispatchOnly(t *testing.T) {
 	}
 }
 
-// A fan-out override on a file edit stays single — visibly.
+// A fan-out override on a file edit stays single, visibly.
 func TestExec_OverrideFanoutFallsBackToSingleForEdits(t *testing.T) {
 	testutil.NewSandbox(t)
 	stubExec(t)
@@ -1008,7 +1008,7 @@ func TestCkTestsCellAndProofStrip_EveryState(t *testing.T) {
 		{"skipped mode", func(t *ckTask) { t.mode = ckModeByName("edit") }, "skipped (edit mode)"},
 		{"unconfigured", func(t *ckTask) { t.verifySkipped = true }, "no verifier configured"},
 		{"verifier failed", func(t *ckTask) { t.verifyErr = "exec: not found" }, "verifier failed"},
-		{"not run", func(*ckTask) {}, "tests — not run"},
+		{"not run", func(*ckTask) {}, "tests, not run"},
 		{"passed", func(t *ckTask) { t.rounds = []ckVerifyRound{{passed: true}} }, "tests ✓ go test ./..."},
 		{"passed after fixes", func(t *ckTask) {
 			t.rounds = []ckVerifyRound{{}, {}, {passed: true}}
@@ -1037,7 +1037,7 @@ func TestChatStates_LayoutInvariantsAtEverySize(t *testing.T) {
 	long := strings.Repeat("x", 3000)
 	longAnswer := ckTask{
 		runID: "20260904T111111Z-aaaa1111", mode: ckModeByName("auto"),
-		answer: strings.Repeat("answer line — reasonably long so it wraps at narrow widths\n", 60) + long,
+		answer: strings.Repeat("answer line, reasonably long so it wraps at narrow widths\n", 60) + long,
 		edited: true, file: "internal/api/users.go", added: 12, removed: 4, planSteps: 3,
 		rounds: []ckVerifyRound{{passed: true}}, verifyLabel: "go test ./...",
 		costUSD: 0.0123, elapsed: 3 * time.Second,
@@ -1045,7 +1045,7 @@ func TestChatStates_LayoutInvariantsAtEverySize(t *testing.T) {
 
 	states := map[string]func(Cockpit) Cockpit{
 		"running": func(m Cockpit) Cockpit {
-			m.th().exec = &ckExecState{stage: "verifying — go test ./... with a very long stage line " + long[:200], started: time.Now()}
+			m.th().exec = &ckExecState{stage: "verifying, go test ./... with a very long stage line " + long[:200], started: time.Now()}
 			return m
 		},
 		"plan_pending": func(m Cockpit) Cockpit {
@@ -1129,7 +1129,7 @@ func TestChatScrollback_SurvivesLongAnswers(t *testing.T) {
 	}
 }
 
-// ── the real stages (error paths — no provider is ever driven in a unit test) ──
+// ── the real stages (error paths, no provider is ever driven in a unit test) ──
 
 // The real dispatch stage reaches the real router for every strategy; with a
 // config but no heads each strategy fails at its own entry point rather than
@@ -1190,7 +1190,7 @@ func TestCkRealVerifyStage_ExitCodesBecomeVerdicts(t *testing.T) {
 
 // ── pipeline error branches ───────────────────────────────────────────────────
 
-// A verifier that cannot run is disclosed as such — distinct from tests failing.
+// A verifier that cannot run is disclosed as such, distinct from tests failing.
 func TestExec_VerifierErrorIsHonest(t *testing.T) {
 	testutil.NewSandbox(t)
 	stubExec(t)
@@ -1276,7 +1276,7 @@ func TestCkPlanLines_CapsLongPlans(t *testing.T) {
 	}
 	tk := ckTask{plan: strings.Join(steps, "\n"), planSteps: 20, headName: "h"}
 	lines := stripANSI(strings.Join(ckPlanLines(tk), "\n"))
-	if !strings.Contains(lines, "PLAN — 20 steps") || !strings.Contains(lines, "… 8 more lines") {
+	if !strings.Contains(lines, "PLAN, 20 steps") || !strings.Contains(lines, "… 8 more lines") {
 		t.Errorf("the cap is not disclosed:\n%s", lines)
 	}
 }

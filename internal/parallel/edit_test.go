@@ -20,14 +20,14 @@ import (
 	"github.com/ankit373/hydra/internal/testutil"
 
 	// Providers register themselves in init(), and this package does not import
-	// them — so without these blanks provider.All() is empty in the test binary
+	// them, so without these blanks provider.All() is empty in the test binary
 	// and every dispatch finds no heads at all. cmd/hydra imports the same set.
 	_ "github.com/ankit373/hydra/internal/provider/cli"
 )
 
 // The edit path is the only thing in Hydra that writes to the user's source
-// files from a model's output. Every guard on it — scope, marker parsing,
-// atomic write, validation, rollback — is the difference between an edit and a
+// files from a model's output. Every guard on it, scope, marker parsing,
+// atomic write, validation, rollback, is the difference between an edit and a
 // corrupted file, and none of them was covered.
 
 // editSandbox gives a hermetic environment with a config, a workspace rooted at
@@ -43,7 +43,7 @@ func editSandbox(t *testing.T, reply string) (repo string) {
 
 	// The head is discovered from $PATH by the cli provider. `cody` is used
 	// rather than `claude` because its capability score puts it at UITier 6, so
-	// enum MODERATE routes to it — a tier-1 head is *stronger* than any enum an
+	// enum MODERATE routes to it, a tier-1 head is *stronger* than any enum an
 	// edit task is allowed to ask for, and selection would find nothing.
 	s.FakeBinary(t, "cody", testutil.EchoScript(reply))
 
@@ -133,7 +133,7 @@ func TestEdit_WritesTheModelsContentAndReportsTheDiff(t *testing.T) {
 }
 
 // A ledger rule keyed on a file glob must block runEditTask against a
-// matching path — mirrors editor.Edit's own resource-scoping test, since
+// matching path, mirrors editor.Edit's own resource-scoping test, since
 // parallel.runEditTask duplicates that flow.
 func TestEdit_LedgerResourceRuleBlocksAMatchingFile(t *testing.T) {
 	repo := editSandbox(t, marked("package main\n\nfunc main() {}"))
@@ -149,7 +149,7 @@ func TestEdit_LedgerResourceRuleBlocksAMatchingFile(t *testing.T) {
 
 	got := runEdit(t, Task{Label: "edit", Enum: "MODERATE", File: blocked, Prompt: "add a helper", Validate: boolPtr(false)})
 	if got.Status != "fail" {
-		t.Errorf("status = %q, want fail — the resource rule should have blocked this edit", got.Status)
+		t.Errorf("status = %q, want fail, the resource rule should have blocked this edit", got.Status)
 	}
 
 	allowed := filepath.Join(repo, "main.go")
@@ -158,7 +158,7 @@ func TestEdit_LedgerResourceRuleBlocksAMatchingFile(t *testing.T) {
 	}
 	got = runEdit(t, Task{Label: "edit", Enum: "MODERATE", File: allowed, Prompt: "add an empty main", Validate: boolPtr(false)})
 	if got.Status != "ok" {
-		t.Errorf("status = %q, want ok — a non-matching path must not be blocked: %q", got.Status, got.Error)
+		t.Errorf("status = %q, want ok, a non-matching path must not be blocked: %q", got.Status, got.Error)
 	}
 }
 
@@ -178,7 +178,7 @@ func writeLedgerPolicy(t *testing.T, p ledger.Policy) {
 }
 
 // A batch's edit task must leave the same KindEdit run-log trail a standalone
-// `hyctl edit` leaves for the same change (#531) — the agent-tree view,
+// `hyctl edit` leaves for the same change (#531), the agent-tree view,
 // blast.go's recent-edit signal, and the desktop live-code panel all key off
 // it, and runEditTask used to write the file but never emit the event.
 func TestEdit_EmitsAKindEditRunLogEvent(t *testing.T) {
@@ -218,7 +218,7 @@ func TestEdit_EmitsAKindEditRunLogEvent(t *testing.T) {
 		t.Fatalf("no KindEdit event in the run log: %+v", events)
 	}
 	if edit.File != file {
-		t.Errorf("edit.File = %q, want the file path %q — the same field hyctl edit keys the "+
+		t.Errorf("edit.File = %q, want the file path %q, the same field hyctl edit keys the "+
 			"agent-tree node on", edit.File, file)
 	}
 	if edit.Ref == "" {
@@ -226,7 +226,7 @@ func TestEdit_EmitsAKindEditRunLogEvent(t *testing.T) {
 	}
 	wantDetail := fmt.Sprintf("+%d/-%d", got.LinesAdded, got.LinesRemoved)
 	if edit.Detail != wantDetail {
-		t.Errorf("edit.Detail = %q, want %q — the same +N/-M format hyctl edit produces", edit.Detail, wantDetail)
+		t.Errorf("edit.Detail = %q, want %q, the same +N/-M format hyctl edit produces", edit.Detail, wantDetail)
 	}
 
 	before, after, err := runlog.LoadEdit("run-parallel-edit", edit.Ref)
@@ -277,7 +277,7 @@ func TestEdit_EmptyReplacementIsRefusedAndTheFileIsUntouched(t *testing.T) {
 	})
 
 	if got.Status != "fail" {
-		t.Fatalf("status = %q, want fail — an empty replacement was accepted", got.Status)
+		t.Fatalf("status = %q, want fail, an empty replacement was accepted", got.Status)
 	}
 	if got.Error != "empty_replacement" {
 		t.Errorf("Error = %q, want empty_replacement", got.Error)
@@ -422,7 +422,7 @@ func TestEdit_FailedValidationRollsTheFileBack(t *testing.T) {
 // anything. A cap this low must now reject and roll back a real edit.
 func TestEdit_DiffSizeCapExceededRollsTheFileBack(t *testing.T) {
 	repo := editSandbox(t, marked("package main\n\nfunc main() {\n\tprintln(\"hello\")\n}\n"))
-	writePolicyYAML(t, 1) // 1% cap — any real growth trips it
+	writePolicyYAML(t, 1) // 1% cap, any real growth trips it
 
 	file := filepath.Join(repo, "a.go")
 	original := "package main\n"
@@ -453,7 +453,7 @@ func TestEdit_DiffSizeCapExceededRollsTheFileBack(t *testing.T) {
 	}
 }
 
-// A generous cap must not reject an edit that easily fits within it — the cap
+// A generous cap must not reject an edit that easily fits within it, the cap
 // is a ceiling, not a trigger on every change. Uses a file large enough that a
 // one-line addition stays well under the default 90% cap; a tiny file would
 // trip even a legitimate small edit (which is exactly why policy.yaml itself
@@ -562,7 +562,7 @@ func TestTextTask_ReturnsTheAnswerAndReadsItsContextFile(t *testing.T) {
 		t.Errorf("Output = %q", got.Output)
 	}
 
-	// A context file that does not exist must not fail the task — the prompt
+	// A context file that does not exist must not fail the task, the prompt
 	// simply goes without it.
 	results, err = Run(context.Background(), []Task{{
 		Label: "ask", Enum: "MODERATE", Prompt: "question",
@@ -580,7 +580,7 @@ func TestTextTask_ReturnsTheAnswerAndReadsItsContextFile(t *testing.T) {
 }
 
 // A task whose dispatch fails must be reported as a failed task, not as a
-// failed batch — the other tasks in the fan-out still ran.
+// failed batch, the other tasks in the fan-out still ran.
 func TestRun_OneFailingTaskDoesNotFailTheBatch(t *testing.T) {
 	repo := editSandbox(t, marked("fine"))
 
@@ -635,7 +635,7 @@ func TestRunValidate_DoesNotFragmentPathsWithSpaces(t *testing.T) {
 		t.Fatal(err)
 	}
 	if rc := runValidate("/bin/test -f {file}", spaced); rc != 0 {
-		t.Errorf("exit %d — the path was fragmented at its spaces", rc)
+		t.Errorf("exit %d, the path was fragmented at its spaces", rc)
 	}
 
 	if rc := runValidate("/usr/bin/false", "ignored"); rc == 0 {
@@ -673,7 +673,7 @@ func TestReadFileAndFileExists(t *testing.T) {
 	if !fileExists(path) {
 		t.Error("fileExists = false for a file that exists")
 	}
-	// An empty file exists — distinguishing it from a missing one is what
+	// An empty file exists, distinguishing it from a missing one is what
 	// decides "create" versus "modify" in the edit prompt.
 	empty := filepath.Join(dir, "empty.txt")
 	if err := os.WriteFile(empty, nil, 0o600); err != nil {
@@ -708,7 +708,7 @@ func TestDiffStats_CountsFromTheBackupWhenGitIsUnavailable(t *testing.T) {
 
 	added, removed := diffStats(file, "one\n", "", backup, true)
 	if added != 2 || removed != 0 {
-		t.Errorf("diffStats = (%d, %d), want (2, 0) — counted from the backup, not "+
+		t.Errorf("diffStats = (%d, %d), want (2, 0), counted from the backup, not "+
 			"by re-parsing diff(1) (#260)", added, removed)
 	}
 
@@ -886,7 +886,7 @@ func TestStripOuterFence(t *testing.T) {
 	}
 }
 
-// tscTemplate is only offered when the workspace actually has tsc installed —
+// tscTemplate is only offered when the workspace actually has tsc installed,
 // naming a binary that is not there would fail every TypeScript edit at the
 // validation step and roll back a correct change.
 func TestTSCTemplate_OnlyWhenTSCIsInstalled(t *testing.T) {
@@ -920,7 +920,7 @@ func TestTSCTemplate_OnlyWhenTSCIsInstalled(t *testing.T) {
 		t.Errorf("tscTemplate = %q, want it to use the project's tsconfig.json", got)
 	}
 	if strings.Contains(got, "{file}") {
-		t.Errorf("tscTemplate = %q — a project-wide check takes no file argument", got)
+		t.Errorf("tscTemplate = %q, a project-wide check takes no file argument", got)
 	}
 }
 
@@ -1002,7 +1002,7 @@ func TestRollbackAndDiffStats_UseGitInARepository(t *testing.T) {
 	}
 
 	// And its line count comes from the file itself, since git has no baseline
-	// for it — reporting 0/0 would read as "nothing changed".
+	// for it, reporting 0/0 would read as "nothing changed".
 	fresh := filepath.Join(repo, "fresh.go")
 	if err := os.WriteFile(fresh, []byte("a\nb\nc\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -1013,7 +1013,7 @@ func TestRollbackAndDiffStats_UseGitInARepository(t *testing.T) {
 }
 
 // persistResults writes the batch for `hyctl review` to read. A batch whose
-// results cannot be persisted must say so — the edits are already on disk, and
+// results cannot be persisted must say so, the edits are already on disk, and
 // the user needs to know they cannot see what changed.
 func TestPersistResults_RoundTripsThroughDisk(t *testing.T) {
 	testutil.NewSandbox(t)

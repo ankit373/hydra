@@ -38,7 +38,7 @@ func TestBuild_NoDataOnAnEmptyMachine(t *testing.T) {
 // A scan failure partway through trust.jsonl (bufio.Scanner's ErrTooLong on
 // an oversized line) hands trust.LoadRuns back a partially-populated, non-nil
 // runs slice alongside a non-nil error. Build must treat that as no runs at
-// all — never silently report LLM09 as Configured off truncated/corrupt data.
+// all, never silently report LLM09 as Configured off truncated/corrupt data.
 func TestBuild_CorruptedTrustLogReportsGapNotConfigured(t *testing.T) {
 	testutil.NewSandbox(t)
 
@@ -85,7 +85,7 @@ func TestBuild_CorruptedTrustLogReportsGapNotConfigured(t *testing.T) {
 	for _, c := range r.Coverage.Categories {
 		if c.ID == "LLM09" {
 			if c.Status != Gap {
-				t.Errorf("LLM09 status = %q after a corrupted trust.jsonl, want Gap — Build is trusting partial/truncated data", c.Status)
+				t.Errorf("LLM09 status = %q after a corrupted trust.jsonl, want Gap, Build is trusting partial/truncated data", c.Status)
 			}
 			return
 		}
@@ -93,7 +93,7 @@ func TestBuild_CorruptedTrustLogReportsGapNotConfigured(t *testing.T) {
 	t.Fatal("LLM09 category not found in Coverage.Categories")
 }
 
-// Panel numbers must come straight from ledger.Summarize/ByHeadRisk — no
+// Panel numbers must come straight from ledger.Summarize/ByHeadRisk, no
 // reimplemented math to drift from the ledger package's own truth.
 func TestBuild_PanelNumbersMatchLedgerSummarize(t *testing.T) {
 	testutil.NewSandbox(t)
@@ -155,7 +155,7 @@ func TestBuild_ChainCheckReflectsRealVerifyChain(t *testing.T) {
 		t.Errorf("chain check Status = %q, want BROKEN after tampering", chain.Status)
 	}
 	if r.IntegrityIntact {
-		t.Error("Report.IntegrityIntact = true after tampering, want false — the hard override must fire")
+		t.Error("Report.IntegrityIntact = true after tampering, want false, the hard override must fire")
 	}
 }
 
@@ -214,7 +214,7 @@ func actionsText(actions []Action) string {
 	return strings.Join(parts, "\n")
 }
 
-// A risky head is live, ongoing exposure — it must always rank PriorityNow,
+// A risky head is live, ongoing exposure, it must always rank PriorityNow,
 // never downgraded by age the way a gap would be.
 func TestBuildActions_RiskyHeadIsAlwaysPriorityNow(t *testing.T) {
 	byHead := []ledger.HeadRisk{{Head: "sketchy", Denied: 2, Flagged: 1}}
@@ -281,14 +281,14 @@ func TestBuild_PersistsScoreHistoryAcrossCalls(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !second.Trend.Available {
-		t.Fatal("second Build() call reported no trend — the first call's history was not persisted")
+		t.Fatal("second Build() call reported no trend, the first call's history was not persisted")
 	}
 	if second.Trend.FirstPct != first.Coverage.PercentCovered {
 		t.Errorf("Trend.FirstPct = %v, want %v (the first call's own coverage)", second.Trend.FirstPct, first.Coverage.PercentCovered)
 	}
 }
 
-// History is the raw series a chart draws from — it must always end with the
+// History is the raw series a chart draws from, it must always end with the
 // run that just computed it, and grow by exactly one point per Build call.
 func TestBuild_HistoryEndsWithTheCurrentRun(t *testing.T) {
 	testutil.NewSandbox(t)
@@ -406,7 +406,7 @@ func TestExposureCheck_SplitsLocalFromRemote(t *testing.T) {
 	if s := exposureCheck(withUnknown).Status; s != "3 detected, 1 to a remote head, 1 unidentified" {
 		t.Errorf("Status = %q, want the unidentified head counted separately", s)
 	}
-	// The detail has to name the destination and the secret type — that is
+	// The detail has to name the destination and the secret type, that is
 	// the difference between a finding and a counter.
 	for _, want := range []string{"gpt-4o", "aws access key id"} {
 		if !strings.Contains(got.Detail, want) {

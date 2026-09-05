@@ -7,7 +7,7 @@ import (
 )
 
 // OllamaHost is the single answer both discovery and execution use. They used
-// to disagree — the executor honoured $OLLAMA_HOST while the port provider
+// to disagree, the executor honoured $OLLAMA_HOST while the port provider
 // hardcoded localhost, so a user running Ollama anywhere else had a working
 // server discovery could not see, no tier-10 head, and a silent degrade to a
 // paid one (#282).
@@ -98,7 +98,7 @@ func TestIsLoopback(t *testing.T) {
 	}
 	for _, h := range remote {
 		if isLoopback(h) {
-			t.Errorf("isLoopback(%q) = true — cleartext prompts would be sent there", h)
+			t.Errorf("isLoopback(%q) = true, cleartext prompts would be sent there", h)
 		}
 	}
 }
