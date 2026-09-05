@@ -16,8 +16,6 @@ import (
 // CLAUDE.md already documents that these need bumping by hand. That is what
 // keeps failing. This turns "remember to update them" into a red build.
 
-var semverRE = regexp.MustCompile(`\b(\d+\.\d+\.\d+)\b`)
-
 // releasedVersion is what release-please last shipped, and the version the
 // asset names on the releases page actually carry.
 func releasedVersion(t *testing.T) string {
