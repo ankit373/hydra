@@ -30,7 +30,7 @@ builds:
       - arm64
     # No `ignore` here on purpose. windows/arm64 was excluded, but both the npm
     # and pip installers map process.arch/platform.machine() "arm64" straight to
-    # windows/arm64 and request an archive that was therefore never uploaded —
+    # windows/arm64 and request an archive that was therefore never uploaded,
     # so Windows-on-ARM installs 404'd (#262). The target builds and vets clean,
     # and ci.yml's cross-compile job now guards that for all six targets.
 
@@ -60,7 +60,7 @@ archives:
 checksum:
   name_template: "checksums.txt"
 
-# Phase 3: cosign signing — uncomment when COSIGN_KEY is configured
+# Phase 3: cosign signing, uncomment when COSIGN_KEY is configured
 # signs:
 #   - artifacts: checksum
 #     cmd: cosign
@@ -84,7 +84,7 @@ sboms:
 # maintained by scripts/update-tap-formula.sh, which regenerates it from the
 # release archive + checksums after each release. GoReleaser's native `brews:`
 # automation is intentionally disabled until a cross-repo push token
-# (HOMEBREW_TAP_GITHUB_TOKEN) is added as a repo secret — the default
+# (HOMEBREW_TAP_GITHUB_TOKEN) is added as a repo secret, the default
 # GITHUB_TOKEN cannot push to the separate tap repository. To re-enable
 # automation, add that secret and restore a `brews:` block here.
 
@@ -94,7 +94,7 @@ changelog:
   # release-please owns the release notes (see release.mode above), so
   # GoReleaser does not generate a changelog. NOTE: `use: git-cliff` was
   # invalid config (valid: git|github|github-native|gitlab) and failed schema
-  # validation — disabling is correct now that notes come from release-please.
+  # validation, disabling is correct now that notes come from release-please.
   disable: true
 
 # ── GitHub Release ────────────────────────────────────────────────────────────
@@ -103,7 +103,7 @@ release:
   # release-please already creates the GitHub Release (with sectioned notes:
   # ✨ Features / 🐛 Fixes / ⚡ Performance) when its Release PR merges.
   # keep-existing ⇒ GoReleaser ONLY appends binaries / checksums / SBOM and
-  # never overwrites those notes — so every release has notes, guaranteed.
+  # never overwrites those notes, so every release has notes, guaranteed.
   # (If the release doesn't exist yet, GoReleaser creates it using header/footer.)
   mode: keep-existing
   github:

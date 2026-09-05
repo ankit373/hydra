@@ -120,7 +120,7 @@ func TestSnapshot_OffsetPastFileSizeIsRejected(t *testing.T) {
 }
 
 // A schema-valid, in-bounds offset that lands mid-line (not on a JSONL line
-// boundary) must be rejected, not seeked-to — otherwise the split first line
+// boundary) must be rejected, not seeked-to, otherwise the split first line
 // silently drops a real record instead of triggering a full replay.
 func TestSnapshot_MisalignedOffsetFallsBackToFullReplay(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "calibration.jsonl")
@@ -137,7 +137,7 @@ func TestSnapshot_MisalignedOffsetFallsBackToFullReplay(t *testing.T) {
 		t.Fatal(err)
 	}
 	// A few bytes short of EOF lands inside the last line's JSON, not on a
-	// newline — schema-valid and in-bounds, but not a real line boundary.
+	// newline, schema-valid and in-bounds, but not a real line boundary.
 	if err := saveSnapshot(snapshotPath(path), map[calibKey]*confusion{}, info.Size()-5); err != nil {
 		t.Fatal(err)
 	}
@@ -165,7 +165,7 @@ func TestSnapshot_NotWrittenBelowThreshold(t *testing.T) {
 	}
 	feed(t, c1, "model:good", "go", 2, 1, 0, 0)
 
-	if _, err := New(path); err != nil { // replays 3 records — well under snapshotThreshold
+	if _, err := New(path); err != nil { // replays 3 records, well under snapshotThreshold
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(snapshotPath(path)); !os.IsNotExist(err) {

@@ -20,7 +20,7 @@ var sourceWeight = map[string]int{"cli": 3, "env": 2, "port": 1}
 // because they serve a different purpose.
 //
 // Special case: the generic "ollama" CLI head (the runtime binary) is suppressed
-// when any port-discovered Ollama model exists — the named models are strictly
+// when any port-discovered Ollama model exists, the named models are strictly
 // more useful than the bare runtime as a dispatchable head.
 func ByCapScore(heads []provider.Head) []provider.Head {
 	// Check if Ollama port models are present before deduping.
@@ -87,7 +87,7 @@ func UITier(h provider.Head) int {
 	}
 	// A local head costs nothing to run, so for cost routing it belongs at the
 	// cheapest tier regardless of how capable it is. Without this, Ollama's
-	// score of exactly 60 landed it at tier 9 — one short of the bottom — and
+	// score of exactly 60 landed it at tier 9, one short of the bottom, and
 	// `--enum GRUNT` degraded past it to a *paid* cloud head, which is the
 	// inverse of the point (#248). It also makes CLAUDE.md's promise that
 	// tier 10 is the always-available terminal fallback actually true.

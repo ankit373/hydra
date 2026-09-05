@@ -1,7 +1,7 @@
 name: Publish (all channels)
 
 # Single source of truth for shipping a release everywhere: binaries + checksums
-# (GitHub release), Homebrew tap, npm, and pip. curl (install.sh) needs nothing —
+# (GitHub release), Homebrew tap, npm, and pip. curl (install.sh) needs nothing,
 # it always resolves the latest release at runtime.
 #
 # Called automatically by release-please.yml when a release is created, and
@@ -40,7 +40,7 @@ jobs:
           fetch-depth: 0
       # Idempotent: if this tag's release already has archives (e.g. a re-run or
       # workflow_dispatch re-publish), skip GoReleaser so it doesn't fail trying
-      # to re-upload existing assets — downstream channels still run.
+      # to re-upload existing assets, downstream channels still run.
       - name: Check for existing artifacts
         id: check
         env:
@@ -84,7 +84,7 @@ jobs:
         run: ./scripts/update-tap-formula.sh "${{ inputs.tag }}"
       - name: Skipped (no token)
         if: ${{ env.TAP_TOKEN == '' }}
-        run: echo "::warning::HOMEBREW_TAP_GITHUB_TOKEN not set — skipping Homebrew tap update."
+        run: echo "::warning::HOMEBREW_TAP_GITHUB_TOKEN not set, skipping Homebrew tap update."
 
   npm:
     name: npm
@@ -111,7 +111,7 @@ jobs:
           npm publish --access public
       - name: Skipped (no token)
         if: ${{ env.NPM_TOKEN == '' }}
-        run: echo "::warning::NPM_TOKEN not set — skipping npm publish."
+        run: echo "::warning::NPM_TOKEN not set, skipping npm publish."
 
   pip:
     name: pip / PyPI
@@ -141,7 +141,7 @@ jobs:
           python -m twine upload dist/*
       - name: Skipped (no token)
         if: ${{ env.PYPI_API_TOKEN == '' }}
-        run: echo "::warning::PYPI_API_TOKEN not set — skipping PyPI publish."
+        run: echo "::warning::PYPI_API_TOKEN not set, skipping PyPI publish."
 
   desktop:
     name: Desktop app

@@ -3,13 +3,13 @@
 // Command hydradesk is Hydra's desktop app.
 //
 // It lives in this module rather than its own repo because it binds directly to
-// internal/cost, internal/trust, and internal/budget — Go's internal rule means
+// internal/cost, internal/trust, and internal/budget, Go's internal rule means
 // only code inside this module tree can import them, so a separate repo would
 // force those packages public first.
 //
 // This file is the only one that knows Wails exists. Everything it binds lives
 // in desktop/api, which imports no UI framework and is unit-tested without a
-// webview — so CI checks the backend with `./api/...` and never needs
+// webview, so CI checks the backend with `./api/...` and never needs
 // libwebkit2gtk on a Linux runner.
 //
 // It carries no build tag. One did exclude it, but `wails build` generates
@@ -30,7 +30,7 @@ import (
 
 	// Self-registering discovery plugins. Without these, provider.All() is
 	// empty and every chat dispatch reports zero heads, no matter what is
-	// actually installed on the machine (#495) — cmd/hydra/main.go imports
+	// actually installed on the machine (#495), cmd/hydra/main.go imports
 	// the same four for the same reason.
 	_ "github.com/ankit373/hydra/internal/provider/agy"
 	_ "github.com/ankit373/hydra/internal/provider/cli"

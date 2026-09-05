@@ -62,8 +62,8 @@ func jsonFields(t *testing.T, v any) map[string]reflect.Kind {
 //
 // A subset check, not an exact match: adding a field is a compatible change and
 // must not need this test edited, while removing or retyping one breaks every
-// reader — `hyctl stats`, the desktop app, and whatever a user has piped into
-// jq — and must go red here first.
+// reader, `hyctl stats`, the desktop app, and whatever a user has piped into
+// jq, and must go red here first.
 func requireFields(t *testing.T, name string, v any, want map[string]reflect.Kind) {
 	t.Helper()
 
@@ -71,7 +71,7 @@ func requireFields(t *testing.T, name string, v any, want map[string]reflect.Kin
 	for field, kind := range want {
 		gotKind, present := got[field]
 		if !present {
-			t.Errorf("%s: field %q is gone. Every reader of this file breaks — "+
+			t.Errorf("%s: field %q is gone. Every reader of this file breaks, "+
 				"`hyctl stats`, the desktop app, and any jq pipeline a user wrote. "+
 				"If the rename is intended, migrate the readers in the same change.",
 				name, field)
@@ -94,7 +94,7 @@ func requireFields(t *testing.T, name string, v any, want map[string]reflect.Kin
 	if len(added) > 0 {
 		sort.Strings(added)
 		t.Logf("%s: new field(s) since this contract was written: %s "+
-			"(compatible — add them here when convenient)", name, strings.Join(added, ", "))
+			"(compatible, add them here when convenient)", name, strings.Join(added, ", "))
 	}
 }
 
@@ -250,7 +250,7 @@ func TestCostLog_OlderFixturesStillParse(t *testing.T) {
 	}
 
 	// The oldest row predates run_id/task_id/swarm fields entirely. It must
-	// load with those zeroed rather than failing the whole file — one
+	// load with those zeroed rather than failing the whole file, one
 	// unparsable line would hide every row after it.
 	oldest := rows[0]
 	if oldest.Model != "claude-sonnet-4" || oldest.Tier != 2 {
@@ -263,7 +263,7 @@ func TestCostLog_OlderFixturesStillParse(t *testing.T) {
 		t.Errorf("run_id = %q on a row written before that field existed", oldest.RunID)
 	}
 
-	// A row from after the token-source split must keep its label — that label
+	// A row from after the token-source split must keep its label, that label
 	// is the whole reason an estimate is not reported as measured spend.
 	var sawEstimated bool
 	for _, r := range rows {
@@ -468,7 +468,7 @@ func TestRegistry_EmbeddedCopyIsReadableAndValid(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			raw, err := registry.Read(s.HydraHome, name)
 			if err != nil {
-				t.Fatalf("%s is not readable from the embedded registry — this is "+
+				t.Fatalf("%s is not readable from the embedded registry, this is "+
 					"every brew/npm/pip/curl install (#238): %v", name, err)
 			}
 			if len(raw) == 0 {
@@ -485,7 +485,7 @@ func TestRegistry_EmbeddedCopyIsReadableAndValid(t *testing.T) {
 	}
 }
 
-// An operator's on-disk copy must win over the embedded one — that is the whole
+// An operator's on-disk copy must win over the embedded one, that is the whole
 // point of $HYDRA_HOME/registry, and a silent fallback to embedded would mean
 // their retuned routing was ignored.
 func TestRegistry_OnDiskOverrideWinsOverEmbedded(t *testing.T) {
@@ -565,7 +565,7 @@ func TestRegistry_PricingCoversEveryTier(t *testing.T) {
 }
 
 // workspace.yaml ships embedded to every install, so it must not carry anyone's
-// absolute paths. It did — two roots from the maintainer's own machine, which
+// absolute paths. It did, two roots from the maintainer's own machine, which
 // meant a fresh install had no workspace that could ever match (#297).
 func TestRegistry_WorkspaceShipsNoAbsolutePaths(t *testing.T) {
 	s := testutil.NewSandbox(t)

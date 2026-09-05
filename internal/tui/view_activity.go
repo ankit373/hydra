@@ -2,9 +2,9 @@
 
 package tui
 
-// view_activity.go — view 3: today's runs on the left, the selected run as a
+// view_activity.go, view 3: today's runs on the left, the selected run as a
 // trace timeline on the right. Everything shown is a recorded event or the
-// cost.jsonl join for that run — never an example (#191).
+// cost.jsonl join for that run, never an example (#191).
 
 import (
 	"fmt"
@@ -18,7 +18,7 @@ import (
 	"github.com/ankit373/hydra/internal/runlog"
 )
 
-// focusRun jumps to the activity view with one run's trace drilled in — how
+// focusRun jumps to the activity view with one run's trace drilled in, how
 // the agents view and the audit queue hand a run over without touching this
 // view's internals themselves.
 func (m Cockpit) focusRun(id string) Cockpit {
@@ -54,7 +54,7 @@ var ckPlainWording = strings.NewReplacer(
 	"ledger", "audit log",
 )
 
-// ckTrace turns a run's event stream into the trace timeline. Pure — the
+// ckTrace turns a run's event stream into the trace timeline. Pure, the
 // inputs are the recorded events, the cost.jsonl join, and the resolved run
 // cost (so the done row agrees with the list rows).
 func ckTrace(run ckRun, rc ckRunCost, hasRC bool, costUSD float64) []ckTraceRow {
@@ -89,7 +89,7 @@ func ckTrace(run ckRun, rc ckRunCost, hasRC bool, costUSD float64) []ckTraceRow 
 			if dec, reason := ckPolicyOutcome(run.events[i+1:], e.Head); dec != "" {
 				sub := "recorded in the audit log (l)"
 				if dec == "denied" {
-					add("policy", "denied — "+ckPlainWording.Replace(reason), sub, ckExpS)
+					add("policy", "denied, "+ckPlainWording.Replace(reason), sub, ckExpS)
 				} else {
 					add("policy", "allowed", sub, ckCheapS)
 				}
@@ -107,7 +107,7 @@ func ckTrace(run ckRun, rc ckRunCost, hasRC bool, costUSD float64) []ckTraceRow 
 			if e.Status == "denied" && selected[e.Head] {
 				continue
 			}
-			add("error", e.Model+" — "+ckPlainWording.Replace(e.Detail), "", ckExpS)
+			add("error", e.Model+", "+ckPlainWording.Replace(e.Detail), "", ckExpS)
 		case runlog.KindEdit:
 			add("edit", e.File+"  "+e.Detail, "", ckMidS)
 		case runlog.KindAttempt:
@@ -132,7 +132,7 @@ func ckTrace(run ckRun, rc ckRunCost, hasRC bool, costUSD float64) []ckTraceRow 
 	}
 
 	if selCount == 1 && run.fails == 0 && run.status == "ok" {
-		add("fallbacks", "none — first candidate answered", "", ckFaintS)
+		add("fallbacks", "none, first candidate answered", "", ckFaintS)
 	}
 	switch run.status {
 	case "running":
@@ -180,7 +180,7 @@ func ckPolicyOutcome(rest []runlog.Event, head string) (decision, reason string)
 
 // ── render ────────────────────────────────────────────────────────────────────
 
-// ckActTaskW is the run list's task column budget — fixed so durations align.
+// ckActTaskW is the run list's task column budget, fixed so durations align.
 const ckActTaskW = 24
 
 func (m Cockpit) viewActivity(w, h int) string {
@@ -192,9 +192,9 @@ func (m Cockpit) viewActivity(w, h int) string {
 
 	var list strings.Builder
 	ok, failed, running := ckRunCounts(runs)
-	title := fmt.Sprintf("RUNS · today — %d", len(runs))
+	title := fmt.Sprintf("RUNS · today, %d", len(runs))
 	if m.actFailOnly {
-		title = fmt.Sprintf("RUNS · failures — %d", len(runs))
+		title = fmt.Sprintf("RUNS · failures, %d", len(runs))
 	}
 	list.WriteString(ckLabelS.Render(title) + "\n")
 	list.WriteString(ckDimS.Render(fmt.Sprintf("%d ok · %d failed · %d running", ok, failed, running)) + "\n\n")
@@ -205,7 +205,7 @@ func (m Cockpit) viewActivity(w, h int) string {
 			reason = "no failed runs today"
 		}
 		list.WriteString(ckFaintS.Render(" "+reason) + "\n\n" +
-			ckDimS.Render(" Requests appear here as they run —") + "\n" +
+			ckDimS.Render(" Requests appear here as they run,") + "\n" +
 			ckDimS.Render(" start one from chat, or:") + "\n" +
 			ckDimS.Render("   hyctl dispatch \"add a retry to the refresher\""))
 	}

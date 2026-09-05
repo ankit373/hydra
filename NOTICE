@@ -68,7 +68,7 @@ Dual: MIT OR Apache License 2.0 (upstream's choice)
 --------------------------------------------------------------------------
 
 None of the above requires source disclosure, network-use disclosure, or
-relicensing of Hydra's own code — all are permissive licenses compatible
+relicensing of Hydra's own code, all are permissive licenses compatible
 with MIT redistribution. This file exists for attribution completeness in
 compiled release binaries (Homebrew, GitHub Releases); it imposes no
 additional obligations beyond what each dependency's own license already

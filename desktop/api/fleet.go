@@ -72,7 +72,7 @@ type Run struct {
 	// as a complete one.
 	Skipped int `json:"skipped"`
 
-	// Goal is what was asked, in the requester's words — the run-started
+	// Goal is what was asked, in the requester's words, the run-started
 	// event's own detail. It is the only human-readable identifier a run has;
 	// without it a list of runs is a list of timestamps. Empty when the run
 	// recorded no prompt (an external orchestrator can supply the id and
@@ -81,7 +81,7 @@ type Run struct {
 	Goal string `json:"goal,omitempty"`
 
 	// Error is set when this run's log could not be read. The run still appears
-	// as a row — a bad file must not blank the whole view.
+	// as a row, a bad file must not blank the whole view.
 	Error string `json:"error,omitempty"`
 }
 
@@ -97,7 +97,7 @@ type Agent struct {
 
 	// Tier and Confidence are deliberately not omitempty: the view compares
 	// them numerically, and an omitted key arrives as undefined rather than 0.
-	// A tier of 0 also means something — "unknown", the same bucket
+	// A tier of 0 also means something, "unknown", the same bucket
 	// `hyctl stats --tier` uses.
 	Tier       int     `json:"tier"`
 	CostUSD    float64 `json:"costUsd"`
@@ -109,8 +109,8 @@ type Agent struct {
 
 // GetFleet lists every run, live ones first.
 //
-// Reconstruction goes through tree.Reconstruct — the same call the terminal
-// cockpit makes — so the two surfaces cannot disagree about the same run.
+// Reconstruction goes through tree.Reconstruct, the same call the terminal
+// cockpit makes, so the two surfaces cannot disagree about the same run.
 func (a *API) GetFleet() (*Fleet, error) {
 	ids, err := runlog.Runs()
 	if err != nil {
@@ -158,15 +158,15 @@ func (a *API) GetFleet() (*Fleet, error) {
 		if r.Waiting {
 			f.WaitingCount++
 		}
-		// A finished run with zero agents and no error carries no information —
+		// A finished run with zero agents and no error carries no information,
 		// dispatch never reached a head, most commonly a --dry-run preview
 		// (before #390 fixed dry-run writing these in the first place; this
 		// machine's own history still has 16 of them from before that fix).
 		// Sorted live-first-then-most-recent, a pile of these outranks real
 		// history and makes Fleet look empty even when hasRuns is technically
-		// true. A live run is never filtered — it may not have picked a head
+		// true. A live run is never filtered, it may not have picked a head
 		// yet, and it is the one the user opened the app to watch.
-		// A parked run has exactly this shape — nothing executed, so no agents,
+		// A parked run has exactly this shape, nothing executed, so no agents,
 		// and no error because nothing failed. Without the exemption the one
 		// run that actually needs a person would be the one filtered out.
 		if !r.Live && !r.Waiting && r.AllCount == 0 && r.Error == "" {
@@ -177,7 +177,7 @@ func (a *API) GetFleet() (*Fleet, error) {
 	f.HasRuns = len(f.Runs) > 0
 
 	// Live first, then most recent. Run ids are timestamp-prefixed, so a
-	// reverse lexical compare is a reverse chronological one — no parsing, and
+	// reverse lexical compare is a reverse chronological one, no parsing, and
 	// it stays correct for ids minted by an external orchestrator that followed
 	// the same format.
 	// Waiting first, then live, then most recent. A parked run outranks a
@@ -209,8 +209,8 @@ func buildRun(id string, live bool, now time.Time) Run {
 		return r
 	}
 
-	// tree.Reconstruct drops run-level events by design — they describe the
-	// invocation, not a node in it — so the prompt has to be read here, before
+	// tree.Reconstruct drops run-level events by design, they describe the
+	// invocation, not a node in it, so the prompt has to be read here, before
 	// the events are handed over, or it is lost to the view entirely.
 	r.Goal = runGoal(events)
 
@@ -229,7 +229,7 @@ func buildRun(id string, live bool, now time.Time) Run {
 			Detail:     n.Detail,
 		})
 		r.CostUSD += n.CostUSD
-		// The run's confidence is whichever agent carries one — only an SPRT
+		// The run's confidence is whichever agent carries one, only an SPRT
 		// ensemble does, and its root records the final value.
 		if n.Confidence > r.Confidence {
 			r.Confidence = n.Confidence

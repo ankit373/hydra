@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 // Package cli discovers AI heads available as CLI tools on PATH.
-// To add a new CLI tool: add one entry to the knownCLIs table — no other changes needed.
+// To add a new CLI tool: add one entry to the knownCLIs table, no other changes needed.
 package cli
 
 import (
@@ -45,7 +45,7 @@ func (p *Provider) Discover(_ context.Context) ([]provider.Head, error) {
 	return heads, nil
 }
 
-// knownCLIs — add new CLI tools here. Name and score come from data.json.
+// knownCLIs, add new CLI tools here. Name and score come from data.json.
 var knownCLIs = []struct {
 	binary     string
 	providerID string

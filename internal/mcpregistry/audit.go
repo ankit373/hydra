@@ -10,14 +10,14 @@ import (
 )
 
 // Status is the Phase 1 (identity-only) resolution of one installed server
-// against the synced registry. There is no trust score yet — that's Phase 2.
+// against the synced registry. There is no trust score yet, that's Phase 2.
 type Status string
 
 const (
 	// StatusVerified means the server's resolved package matches a
 	// namespace-verified entry in the official registry.
 	StatusVerified Status = "verified"
-	// StatusUnresolved means no match was found — a remote (URL-based)
+	// StatusUnresolved means no match was found, a remote (URL-based)
 	// server, a launcher this package couldn't resolve to a package
 	// identifier, or a package genuinely absent from the registry (private,
 	// custom, or simply not the one it claims to be). Not necessarily
@@ -46,7 +46,7 @@ type AuditReport struct {
 
 // Audit scans this machine's MCP clients and resolves each installed server
 // against the last-synced registry dataset. Works with no prior sync (every
-// entry reports unresolved and RegistrySync is zero) — sync is what upgrades
+// entry reports unresolved and RegistrySync is zero), sync is what upgrades
 // the report from "here's what's installed" to "here's what's verified".
 // Resolved entries additionally get a Phase 2 trust score and lifecycle
 // state, persisted across runs so a later version bump can be detected.
@@ -121,7 +121,7 @@ func Audit(ctx context.Context, cwd string) (*AuditReport, error) {
 }
 
 // buildPackageIndex maps a package identifier to the registry server that
-// publishes it. Last-write-wins on a rare identifier collision — acceptable
+// publishes it. Last-write-wins on a rare identifier collision, acceptable
 // for Phase 1's identity resolution, which isn't a security decision on its
 // own (see StatusUnresolved's doc comment).
 func buildPackageIndex(servers []ServerRecord) map[string]ServerRecord {

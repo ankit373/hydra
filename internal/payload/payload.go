@@ -3,7 +3,7 @@
 // Package payload is the opt-in store for prompt and response text.
 //
 // Payloads are ~79% of trace bytes, carry the least decision value per byte,
-// and are the only trace class with real privacy risk — they are verbatim
+// and are the only trace class with real privacy risk, they are verbatim
 // source code and prompts. So this is off by default, gated on PII, and treated
 // as a cache rather than a record.
 //
@@ -11,7 +11,7 @@
 // larger on disk than a packed one, because every small blob is charged a whole
 // filesystem block; so blobs are addressed by hash but stored in packs. And
 // compressing small blobs individually is weak (~2.2x) until a trained
-// dictionary is supplied, which takes it to ~6.3x — the structure Hydra's
+// dictionary is supplied, which takes it to ~6.3x, the structure Hydra's
 // prompts share is exactly what a dictionary captures.
 package payload
 
@@ -83,14 +83,14 @@ type Entry struct {
 
 	// PII records that the content matched a detector and was redacted before
 	// it was written. PIITypes names what matched, which is the part worth
-	// keeping — the kind of secret is a finding, the secret itself is a
+	// keeping, the kind of secret is a finding, the secret itself is a
 	// liability.
 	PII      bool     `json:"pii,omitempty"`
 	PIITypes []string `json:"pii_types,omitempty"`
 
 	// KeepProb is the probability this payload was admitted. Payloads are
 	// sampled, and a sampled record without its inclusion probability cannot be
-	// weighted back to the population — the same defect that inverted head
+	// weighted back to the population, the same defect that inverted head
 	// rankings in #605. Always written, never omitempty: an absent probability
 	// is unusable and a zero one divides by zero.
 	KeepProb float64 `json:"keep_prob"`
@@ -322,7 +322,7 @@ func (s *Store) Stat() Stats {
 //
 // Trained from the user's corpus rather than shipped: the gain comes from the
 // structure *these* prompts share, and a generic dictionary captures none of
-// it. Existing blobs keep their frames — each records whether it used a
+// it. Existing blobs keep their frames, each records whether it used a
 // dictionary, so old and new coexist without a migration.
 func (s *Store) TrainDict(maxDictBytes int) error {
 	s.mu.Lock()
@@ -379,7 +379,7 @@ var ErrDegenerateCorpus = errors.New("payload: corpus is too uniform to train a 
 // buildDict wraps zstd.BuildDict, which panics with an integer divide by zero
 // on a corpus that compresses to no literals at all.
 //
-// That is not a hypothetical input here — it is the expected one. Hydra's
+// That is not a hypothetical input here, it is the expected one. Hydra's
 // payloads are dominated by one system prompt repeated across thousands of
 // dispatches, so a young store's samples are near-identical and every byte
 // after the first is a back-reference. Training is a background convenience;

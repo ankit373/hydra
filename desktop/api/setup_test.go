@@ -15,7 +15,7 @@ import (
 )
 
 // withPath puts dir as the only entry on $PATH, so exec.LookPath finds
-// nothing outside it — mirrors internal/testutil.Sandbox's reasoning that one
+// nothing outside it, mirrors internal/testutil.Sandbox's reasoning that one
 // empty directory makes "not found" mean exactly that, rather than leaking
 // whatever the developer's own machine happens to have installed (which, for
 // hyctl, on this repo's own contributors' machines, is likely to be true).
@@ -25,7 +25,7 @@ func withPath(t *testing.T, dir string) {
 }
 
 // withHyctlSearchDirs points CheckHyctl's fallback at dirs instead of the
-// real /usr/local_bin and ~/.local/bin — a test must never touch either.
+// real /usr/local_bin and ~/.local/bin, a test must never touch either.
 func withHyctlSearchDirs(t *testing.T, dirs ...string) {
 	t.Helper()
 	orig := hyctlSearchDirs
@@ -36,7 +36,7 @@ func withHyctlSearchDirs(t *testing.T, dirs ...string) {
 // fakeHyctl writes an executable named hyctl into dir that prints versionLine
 // when run with any arguments (including --version). On Windows,
 // exec.LookPath only considers files carrying a PATHEXT extension, so the
-// file is hyctl.bat there — same reasoning as
+// file is hyctl.bat there, same reasoning as
 // internal/testutil.Sandbox.FakeBinary.
 func fakeHyctl(t *testing.T, dir, versionLine string) string {
 	t.Helper()
@@ -56,7 +56,7 @@ func fakeHyctl(t *testing.T, dir, versionLine string) string {
 
 // A machine with no hyctl anywhere PATH or the common install directories
 // point at must say so plainly, so the frontend banner has something to key
-// off — the whole point of #383.
+// off, the whole point of #383.
 func TestCheckHyctl_NotFoundAnywhere(t *testing.T) {
 	withPath(t, t.TempDir())
 	withHyctlSearchDirs(t) // no dirs at all
@@ -92,7 +92,7 @@ func TestCheckHyctl_FoundOnPath(t *testing.T) {
 
 // A GUI app launched from Finder/Dock/a desktop file inherits a minimal PATH
 // that usually omits install.sh's destinations. hyctl must still be found
-// there directly — otherwise the banner would reappear immediately after a
+// there directly, otherwise the banner would reappear immediately after a
 // successful install, in the very same process that just ran it.
 func TestCheckHyctl_FallsBackToCommonInstallDirs(t *testing.T) {
 	withPath(t, t.TempDir()) // hyctl absent from PATH
@@ -205,8 +205,8 @@ func TestInstallSupported(t *testing.T) {
 	}
 }
 
-// On a platform InstallHyctl cannot drive, it must say so — and point at the
-// documented alternative — rather than attempting a network call it cannot
+// On a platform InstallHyctl cannot drive, it must say so, and point at the
+// documented alternative, rather than attempting a network call it cannot
 // finish correctly.
 func TestInstallHyctl_UnsupportedOSReturnsGuidance(t *testing.T) {
 	if installSupported(runtime.GOOS) {
@@ -223,7 +223,7 @@ func TestInstallHyctl_UnsupportedOSReturnsGuidance(t *testing.T) {
 }
 
 // The full round trip: fetch the (fake) installer over HTTP, run it, and
-// re-check via CheckHyctl — exactly what the frontend's install button
+// re-check via CheckHyctl, exactly what the frontend's install button
 // triggers. The fake script stands in for install.sh so the test never
 // reaches GitHub or writes outside its own temp directory.
 func TestInstallHyctl_RunsTheFetchedScript(t *testing.T) {
@@ -255,7 +255,7 @@ echo "installed to %s"
 	// binDir first so the post-install CheckHyctl finds the script's fake
 	// hyctl ahead of anything real; /usr/bin and /bin stay on PATH because
 	// the fake script itself shells out to cat/chmod, real external commands
-	// that need resolving — unlike the other tests here, which only use sh
+	// that need resolving, unlike the other tests here, which only use sh
 	// builtins (echo, exit) and can tolerate an empty PATH.
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+"/usr/bin"+string(os.PathListSeparator)+"/bin")
 	withHyctlSearchDirs(t)

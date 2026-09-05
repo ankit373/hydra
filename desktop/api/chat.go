@@ -14,7 +14,7 @@ import (
 )
 
 // ChatTimeout bounds one dispatch from the dock. A GUI cannot leave a request
-// outstanding forever — the window has no way to say "still working" that a
+// outstanding forever, the window has no way to say "still working" that a
 // user will keep believing.
 const ChatTimeout = 5 * time.Minute
 
@@ -22,7 +22,7 @@ const ChatTimeout = 5 * time.Minute
 //
 // The routing is not decoration. Which head answered, at which tier, for how
 // much is the difference between an answer you can weigh and one you can only
-// believe — and this is a router, so it is the part the user is actually
+// believe, and this is a router, so it is the part the user is actually
 // buying.
 type ChatReply struct {
 	Output string `json:"output"`
@@ -47,7 +47,7 @@ type ChatReply struct {
 	Question string `json:"question,omitempty"`
 	TaskID   string `json:"taskId,omitempty"`
 
-	// NeedsProbe is true when there is nothing to route this chat to — zero
+	// NeedsProbe is true when there is nothing to route this chat to, zero
 	// heads discovered at all, or heads discovered but none dispatchable for
 	// this request (dispatch.ErrNoHeads, e.g. the dock's "auto-route" default
 	// left every candidate filtered out). dispatch.New probes fresh on every
@@ -60,7 +60,7 @@ type ChatReply struct {
 // NewRunID mints a run id for the caller to hold before a dispatch starts.
 //
 // The frontend uses this to poll GetSession(runId) for an in-flight chat turn
-// instead of waiting for Chat to return — the run's log exists and is being
+// instead of waiting for Chat to return, the run's log exists and is being
 // appended to from the moment Chat begins, not just once it finishes. A thin
 // wrapper rather than the frontend minting its own: the timestamp-prefix +
 // hex format is a contract Fleet's sort depends on (see fleet.go), so there is
@@ -76,7 +76,7 @@ func (a *API) NewRunID() string { return runid.New() }
 // tier pins the starting tier ("1".."10"), which is how the model picker
 // expresses "answer this with Opus Thinking": every registry model declares a
 // tier, so choosing a model chooses its tier. It is a *starting point*, not a
-// guarantee — the governor can still downgrade it and fallback can still move
+// guarantee, the governor can still downgrade it and fallback can still move
 // off it, exactly as for any other dispatch. It outranks enum, since an
 // explicit choice should beat an inferred one. Invalid values are rejected by
 // dispatch's own resolveTierHint rather than silently coerced.
@@ -120,11 +120,11 @@ func (a *API) Chat(prompt, enum, runID, tier string) (*ChatReply, error) {
 
 	// An explicit tier outranks an inferred one: picking a model is a stronger
 	// statement than the complexity band a routing key implies. Left unvalidated
-	// here on purpose — dispatch's resolveTierHint already rejects anything
+	// here on purpose, dispatch's resolveTierHint already rejects anything
 	// outside 1-10, and duplicating that bound is how the two drift apart.
 	tierHint := tier
 	if tierHint == "" && enum != "" {
-		// A garbage enum must not fall through to unrestricted auto-routing —
+		// A garbage enum must not fall through to unrestricted auto-routing,
 		// EnumToTier's "" is ambiguous with "no enum given" (#501's fix,
 		// applied here too since the dock is a second caller of the same map).
 		if !dispatch.IsKnownEnum(enum) {
@@ -142,7 +142,7 @@ func (a *API) Chat(prompt, enum, runID, tier string) (*ChatReply, error) {
 	})
 	if err != nil {
 		if errors.Is(err, dispatch.ErrNoHeads) {
-			// Same dead end as zero heads at all — same friendly retry reply
+			// Same dead end as zero heads at all, same friendly retry reply
 			// instead of dispatch's raw, CLI-flavored error text (#452).
 			r.Error = "No model is available to answer this yet."
 			r.NeedsProbe = true

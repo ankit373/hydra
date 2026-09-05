@@ -15,7 +15,7 @@ import (
 	"github.com/ankit373/hydra/internal/config"
 )
 
-// RunLog is one persisted SPRT run — the data the "By The Numbers" page
+// RunLog is one persisted SPRT run, the data the "By The Numbers" page
 // graduates from [MODEL] to [MEASURED], and what `hyctl trust stats/explain` read.
 type RunLog struct {
 	TS         string     `json:"ts"`

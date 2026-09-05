@@ -28,7 +28,7 @@ BATCH = 50
 def graphql(query):
     """A number that exists as neither issue nor PR errors for that alias alone; gh
     exits 1 but still prints the rest, which is what we want. A batch where every
-    alias came back null is not that — it means the query shape is wrong, so fail."""
+    alias came back null is not that, it means the query shape is wrong, so fail."""
     out = subprocess.run(
         ["gh", "api", "graphql", "-f", "query=" + query],
         capture_output=True, text=True,
@@ -58,7 +58,7 @@ def main():
     # A trailing (#n) is not always a PR. GitHub's squash default appends the PR
     # number, but this repo's own commit convention appends the ISSUE number
     # (CLAUDE.md: `git commit -m "feat(stats): ... (#${ISSUE})"`), and both are in
-    # the history — so resolve what the number actually is and handle each.
+    # the history, so resolve what the number actually is and handle each.
     query = ("issueOrPullRequest(number:%d){ __typename "
              "... on Issue { number } "
              "... on PullRequest { number body merged } }")
@@ -79,10 +79,10 @@ def main():
     targets = [n for n in batched(sorted(via), query)
                if n.get("__typename") == "Issue" and n["state"] == "OPEN"]
 
-    summary = ["### Close shipped issues — `%s`" % TAG, ""]
+    summary = ["### Close shipped issues, `%s`" % TAG, ""]
     if not targets:
         print("Nothing to close: every referenced issue is already closed.")
-        summary.append("Nothing to close — every issue in this release is already closed.")
+        summary.append("Nothing to close, every issue in this release is already closed.")
     else:
         summary.append("| Issue | Shipped by | Title |")
         summary.append("|---|---|---|")
@@ -92,7 +92,7 @@ def main():
         num = issue["number"]
         source = ", ".join(sorted(via[num]))
         if DRY_RUN:
-            print("DRY RUN would close #%d (via %s) — %s" % (num, source, issue["title"]))
+            print("DRY RUN would close #%d (via %s), %s" % (num, source, issue["title"]))
         else:
             done = subprocess.run(
                 ["gh", "issue", "close", str(num), "--repo", REPO,
@@ -107,7 +107,7 @@ def main():
         summary.append("| #%d | %s | %s |" % (num, source, issue["title"]))
 
     summary.append("")
-    summary.append("%d issue(s)%s." % (len(targets), " — dry run, nothing closed" if DRY_RUN else " closed"))
+    summary.append("%d issue(s)%s." % (len(targets), ", dry run, nothing closed" if DRY_RUN else " closed"))
     path = os.environ.get("GITHUB_STEP_SUMMARY")
     if path:
         with open(path, "a") as fh:

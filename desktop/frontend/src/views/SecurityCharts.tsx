@@ -4,7 +4,7 @@ import type { Category, CoverageStatus, DayRisk, HistoryPoint } from '../types'
  * The Security hero's three bespoke SVG charts, following DashboardCharts'
  * house style: a useMemo-free layout pass (these are cheap enough to compute
  * inline) followed by plain SVG primitives, styled through app.css/tokens.css
- * — no charting library.
+ *, no charting library.
  */
 
 const RING_R = 54
@@ -12,7 +12,7 @@ const RING_STROKE = 10
 const RING_SIZE = (RING_R + RING_STROKE) * 2
 const RING_C = 2 * Math.PI * RING_R
 
-/** The coverage percentage as a progress ring — the hero's single glanceable
+/** The coverage percentage as a progress ring, the hero's single glanceable
  * number, big enough to read in five seconds. */
 export function CoverageRing({ percent, band }: { percent: number; band: 'good' | 'warn' | 'bad' }) {
   const clamped = Math.max(0, Math.min(100, percent))
@@ -49,7 +49,7 @@ export function CoverageRing({ percent, band }: { percent: number; band: 'good' 
 const HIST_W = 260
 const HIST_H = 64
 
-/** The real coverage series, oldest to newest — fixed 0-100 scale (not
+/** The real coverage series, oldest to newest, fixed 0-100 scale (not
  * data-relative like the spend chart) so "75%" always reads the same height,
  * run to run. */
 export function CoverageHistory({ history }: { history: HistoryPoint[] }) {
@@ -94,7 +94,7 @@ const DONUT_SIZE = (DONUT_R + DONUT_STROKE) * 2
 const DONUT_C = 2 * Math.PI * DONUT_R
 
 /**
- * A part-to-whole donut with a legend — the "issues by severity/status"
+ * A part-to-whole donut with a legend, the "issues by severity/status"
  * pattern Wiz, Snyk, and GitHub's security-overview dashboards all use for
  * exactly this shape of data (a handful of categories summing to a total).
  * Kept to 3 segments everywhere it's used, well under the 4-6 where donuts
@@ -170,7 +170,7 @@ function statusFill(status: CoverageStatus): number {
  * A small-multiples grid replacing an earlier radar/spider chart: radar
  * charts are a well-documented legibility trap (axis order changes the shape
  * you see, precise values are hard to read, more than 2-3 series turns
- * illegible) — a grid of small, independently-labelled tiles is the standard
+ * illegible), a grid of small, independently-labelled tiles is the standard
  * alternative, and each tile is self-explanatory without a legend: the ID,
  * a fill bar (a third/two-thirds/full by status), and the status word.
  */
@@ -197,7 +197,7 @@ const RISK_H = 64
 
 /**
  * Denied (blocked) and flagged (suspected injection marker) accesses per day
- * — the "blocked over time" trend WAF dashboards report as their headline
+ *, the "blocked over time" trend WAF dashboards report as their headline
  * security KPI. Scaled to its own data (unlike CoverageHistory's fixed
  * 0-100), since these are small, unbounded counts, not a percentage.
  */

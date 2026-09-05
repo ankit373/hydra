@@ -19,7 +19,7 @@ const (
 	PressureLow      Pressure = iota // plenty of headroom
 	PressureModerate                 // usable but getting tight
 	PressureHigh                     // constrained; only small models safe
-	// PressureUnknown means detection failed — no reading was taken.
+	// PressureUnknown means detection failed, no reading was taken.
 	//
 	// Appended rather than inserted so the three values above keep their
 	// numbering. It exists because the alternative is worse than useless:
@@ -48,7 +48,7 @@ func (s *Specs) HardwareKnown() bool { return s != nil && s.TotalRAMGB > 0 }
 type Specs struct {
 	TotalRAMGB     float64
 	FreeRAMGB      float64 // recoverable memory right now (free + reclaimable)
-	WiredRAMGB     float64 // locked by OS/kernel — cannot be reclaimed
+	WiredRAMGB     float64 // locked by OS/kernel, cannot be reclaimed
 	GPUVRAMGB      float64 // 0 if no discrete GPU detected
 	IsAppleSilicon bool
 	GPUName        string
@@ -59,14 +59,14 @@ type Specs struct {
 }
 
 // osMinBufferGB is the minimum we always keep free for OS stability.
-// Sized generously — better to under-recommend than cause swapping.
+// Sized generously, better to under-recommend than cause swapping.
 const osMinBufferGB = 1.5
 
 // EffectiveVRAMGB returns how much memory is realistically available for a model.
 //
 // Priority order:
 //  1. Discrete GPU VRAM (separate from system RAM, very reliable)
-//  2. 7-day historical P75 free memory (most accurate — reflects real usage patterns)
+//  2. 7-day historical P75 free memory (most accurate, reflects real usage patterns)
 //  3. Current free memory snapshot (accurate but a single moment in time)
 //  4. Conservative fraction of total RAM (last resort when nothing else is known)
 func (s *Specs) EffectiveVRAMGB() float64 {
@@ -99,7 +99,7 @@ func (s *Specs) bestFreeEstimate() float64 {
 	if s.FreeRAMGB > 0 {
 		return s.FreeRAMGB
 	}
-	// Nothing known — be conservative.
+	// Nothing known, be conservative.
 	return s.TotalRAMGB * 0.55
 }
 
@@ -126,12 +126,12 @@ func (s *Specs) MemoryNote() string {
 }
 
 // Text shown wherever hardware could not be read. It says "unknown", not a
-// number, because the number would be 0 and every reader — human or code —
+// number, because the number would be 0 and every reader, human or code,
 // would take that as a measurement of an empty machine rather than an absence
 // of one (#258).
 const (
 	unknownHardwareSummary = "hardware unknown · could not read this machine's memory"
-	unknownHardwareNote    = "memory could not be detected on this platform — local model sizing is unavailable"
+	unknownHardwareNote    = "memory could not be detected on this platform, local model sizing is unavailable"
 )
 
 // Summary returns a one-line hardware description for display.
@@ -157,7 +157,7 @@ func (s *Specs) Summary() string {
 }
 
 // Detect reads hardware specs and current memory state from the OS.
-// Never returns an error — conservative estimates are returned on failure.
+// Never returns an error, conservative estimates are returned on failure.
 func Detect() *Specs {
 	s := &Specs{
 		Arch: runtime.GOARCH,
@@ -188,8 +188,8 @@ func Detect() *Specs {
 }
 
 func (s *Specs) computePressure() Pressure {
-	// No reading was taken. Reporting PressureLow here — as this did until
-	// #258 — is an affirmative "plenty of headroom" claim derived from nothing,
+	// No reading was taken. Reporting PressureLow here, as this did until
+	// #258, is an affirmative "plenty of headroom" claim derived from nothing,
 	// and it is the most permissive verdict the type can express.
 	if s.TotalRAMGB == 0 {
 		return PressureUnknown
@@ -289,7 +289,7 @@ func darwinGPUVRAM() (float64, string) {
 //
 // Split from the exec for the same reason parseMeminfo is: the parser is the
 // part that can be wrong, and running system_profiler for real is neither
-// deterministic nor available off macOS — so as one function it was untestable
+// deterministic nor available off macOS, so as one function it was untestable
 // everywhere, which is how a misparse ships.
 func parseSPDisplays(out []byte) (float64, string) {
 	lines := strings.Split(string(out), "\n")
@@ -327,7 +327,7 @@ var meminfoPath = "/proc/meminfo"
 
 // parseMeminfo returns the named /proc/meminfo fields converted from kB to GB.
 // Fields that are absent or unparsable are simply missing from the result, so a
-// caller can tell "not present" from "zero" — a distinction the old
+// caller can tell "not present" from "zero", a distinction the old
 // `grep | Fields` pipeline collapsed.
 //
 // Kept as a pure function over a string so it is testable against a fixture on
@@ -335,7 +335,7 @@ var meminfoPath = "/proc/meminfo"
 func parseMeminfo(content string) map[string]float64 {
 	out := make(map[string]float64, 2)
 	for _, line := range strings.Split(content, "\n") {
-		// Format is "MemTotal:       16007748 kB" — name, value, unit.
+		// Format is "MemTotal:       16007748 kB", name, value, unit.
 		name, rest, found := strings.Cut(line, ":")
 		if !found {
 			continue
@@ -370,14 +370,14 @@ func readMeminfo() map[string]float64 {
 
 // linuxRAM returns total RAM in GB, or 0 if it could not be read.
 //
-// It used to return a hardcoded 8 on failure — a number no one measured,
+// It used to return a hardcoded 8 on failure, a number no one measured,
 // presented as a reading, which then flowed into model-fit recommendations. 0
 // routes through HardwareKnown to PressureUnknown instead, so an unreadable
 // machine is reported as unreadable (#261, same class as #258).
 func linuxRAM() float64 { return readMeminfo()["MemTotal"] }
 
-// linuxFreeRAM returns MemAvailable — the kernel's own estimate of how much can
-// be reclaimed without swapping — in GB, or 0 if it could not be read.
+// linuxFreeRAM returns MemAvailable, the kernel's own estimate of how much can
+// be reclaimed without swapping, in GB, or 0 if it could not be read.
 func linuxFreeRAM() float64 { return readMeminfo()["MemAvailable"] }
 
 func nvidiaVRAM() (float64, string) {

@@ -55,14 +55,14 @@ func TestDiff_ModifyAddRemove(t *testing.T) {
 			removed: 1,
 		},
 		{
-			name:   "file creation — everything is new",
+			name:   "file creation, everything is new",
 			before: "",
 			after:  "one\ntwo\n",
 			want:   "+one\n+two\n",
 			added:  2,
 		},
 		{
-			name:    "file emptied — everything goes",
+			name:    "file emptied, everything goes",
 			before:  "one\ntwo\n",
 			after:   "",
 			want:    "-one\n-two\n",
@@ -160,7 +160,7 @@ func TestDiff_LineNumbersTrackBothSides(t *testing.T) {
 	}
 }
 
-// A pruned snapshot is not a crash and not a blank pane — the view says why.
+// A pruned snapshot is not a crash and not a blank pane, the view says why.
 func TestGetDiff_MissingSnapshotExplainsItself(t *testing.T) {
 	sandbox(t)
 
@@ -218,7 +218,7 @@ func TestGetEdits_ListsAppliedEditsInOrder(t *testing.T) {
 	}
 }
 
-// A run that changed nothing returns an empty list, never null — the view
+// A run that changed nothing returns an empty list, never null, the view
 // iterates it.
 func TestGetEdits_NoEditsIsEmptyNotNull(t *testing.T) {
 	sandbox(t)
@@ -252,7 +252,7 @@ func TestParseCounts_UnparseableDetailYieldsZero(t *testing.T) {
 func TestDiff_HandlesContentAtTheSizeCap(t *testing.T) {
 	sandbox(t)
 
-	// One line short of the cap, so the "after" side — which gains a line —
+	// One line short of the cap, so the "after" side, which gains a line,
 	// still fits. Sizing "before" exactly at the cap would push "after" over it
 	// and test the refusal path instead of the diff.
 	line := strings.Repeat("x", 63) + "\n"
@@ -291,7 +291,7 @@ func TestDiff_SurvivesNonUTF8Content(t *testing.T) {
 }
 
 // The quadratic core must never see a whole large file. Before the
-// prefix/suffix trim, a 4 MiB snapshot meant a ~65k x 65k LCS table — 4.2
+// prefix/suffix trim, a 4 MiB snapshot meant a ~65k x 65k LCS table, 4.2
 // billion cells, tens of gigabytes, an effective hang. This is the shape of a
 // real edit: a big file with one line changed near the end.
 func TestDiff_LargeFileWithASmallEditIsFast(t *testing.T) {
@@ -322,7 +322,7 @@ func TestDiff_LargeFileWithASmallEditIsFast(t *testing.T) {
 	// Generous: the point is to catch a return to quadratic-on-the-whole-file,
 	// which does not finish at all, not to police milliseconds.
 	if elapsed > 5*time.Second {
-		t.Errorf("took %v for a one-line change in a 60k-line file — the prefix/suffix trim is gone", elapsed)
+		t.Errorf("took %v for a one-line change in a 60k-line file, the prefix/suffix trim is gone", elapsed)
 	}
 }
 
@@ -356,7 +356,7 @@ func TestDiff_WhollyDifferentLargeFilesDegradeGracefully(t *testing.T) {
 }
 
 // Trimming a shared tail must not emit a line twice when head and tail regions
-// would otherwise overlap — the classic off-by-one in this optimisation.
+// would otherwise overlap, the classic off-by-one in this optimisation.
 func TestDiff_HeadAndTailTrimsDoNotOverlap(t *testing.T) {
 	sandbox(t)
 

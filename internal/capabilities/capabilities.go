@@ -51,7 +51,7 @@ var (
 	loadCacheMu  sync.Mutex
 	loadCacheKey string
 	loadCacheDB  *DB
-	loadCached   bool // only ever set true alongside a successful result — see Load
+	loadCached   bool // only ever set true alongside a successful result, see Load
 )
 
 // loadCacheFingerprint is overlayPath plus its file state: mtime+size when it
@@ -170,7 +170,7 @@ func (db *DB) Name(id string) string {
 	return id
 }
 
-// Entry returns the full capability record for id — built-in or user overlay —
+// Entry returns the full capability record for id, built-in or user overlay,
 // and whether it was found. Score/Name/Source each expose one field of this;
 // callers that need to know what an id already resolves to before changing it
 // (e.g. `models add` warning it is about to shadow a curated built-in) want
@@ -180,11 +180,11 @@ func (db *DB) Entry(id string) (Entry, bool) {
 	return e, ok
 }
 
-// Source returns id's capability entry's provenance — "builtin" for the
+// Source returns id's capability entry's provenance, "builtin" for the
 // embedded, curated catalog, "user" for one added via the runtime overlay
 // (`hyctl models add`), or "" if id matched neither and fell to DefaultScore.
 // This is the "managed vs. discovered" distinction AI-BOM tooling is built
-// around — a user-added model isn't malicious, it just wasn't vetted by
+// around, a user-added model isn't malicious, it just wasn't vetted by
 // whoever curated the embedded catalog, and that's worth being able to see.
 func (db *DB) Source(id string) string {
 	if m, ok := db.index[id]; ok {
@@ -194,7 +194,7 @@ func (db *DB) Source(id string) string {
 }
 
 // SourceOllama returns "builtin" when modelName matched a curated family
-// pattern, or "" when it fell to DefaultScore (an unrecognized local model) —
+// pattern, or "" when it fell to DefaultScore (an unrecognized local model),
 // the ScoreOllama analog of Source, since family-pattern matching has no
 // per-model Entry to look up.
 func (db *DB) SourceOllama(modelName string) string {
@@ -288,7 +288,7 @@ func RemoveModel(path, id string) (removed bool, err error) {
 }
 
 // HeuristicCapScore estimates a provisional capScore from a model id/name, used
-// by `hyctl models sync` when importing from OpenRouter. Deliberately rough —
+// by `hyctl models sync` when importing from OpenRouter. Deliberately rough,
 // users can override with `hyctl models add`.
 func HeuristicCapScore(id string) int {
 	s := strings.ToLower(id)

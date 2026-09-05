@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
-# Hydra (hyctl) — standalone binary installer
+# Hydra (hyctl), standalone binary installer
 #
 #   curl -fsSL https://raw.githubusercontent.com/ankit373/hydra/main/install.sh | sh
 #
@@ -60,7 +60,7 @@ else
   TAG="$($DL "https://api.github.com/repos/${REPO}/releases/latest" \
     | grep -m1 '"tag_name"' \
     | sed -E 's/.*"tag_name" *: *"([^"]+)".*/\1/')"
-  [ "${TAG:-}" != "" ] || die "could not determine latest release — set HYDRA_VERSION=vX.Y.Z"
+  [ "${TAG:-}" != "" ] || die "could not determine latest release, set HYDRA_VERSION=vX.Y.Z"
 fi
 
 # Archive version = tag without a leading 'v' (matches goreleaser name_template).
@@ -88,16 +88,16 @@ if $DLO "$TMP/checksums.txt" "$SUMS_URL" 2>/dev/null; then
     SHA="$(shasum -a 256 "$TMP/$ARCHIVE" | awk '{print $1}')"
   else
     SHA=""
-    warn "no sha256 tool found — skipping checksum verification"
+    warn "no sha256 tool found, skipping checksum verification"
   fi
   if [ "${SHA:-}" != "" ]; then
     EXPECTED="$(grep " ${ARCHIVE}\$" "$TMP/checksums.txt" | awk '{print $1}')"
     [ "${EXPECTED:-}" != "" ] || die "checksum for ${ARCHIVE} not found in checksums.txt"
-    [ "$SHA" = "$EXPECTED" ] || die "checksum mismatch — refusing to install (expected ${EXPECTED}, got ${SHA})"
+    [ "$SHA" = "$EXPECTED" ] || die "checksum mismatch, refusing to install (expected ${EXPECTED}, got ${SHA})"
     info "Checksum: verified"
   fi
 else
-  warn "checksums.txt not published for ${TAG} — skipping verification"
+  warn "checksums.txt not published for ${TAG}, skipping verification"
 fi
 
 # ── Extract ────────────────────────────────────────────────────────────────────
@@ -125,4 +125,4 @@ case ":$PATH:" in
 esac
 
 echo ""
-echo "Done — ${BINARY} ${TAG} installed. Run:  ${BINARY} init"
+echo "Done, ${BINARY} ${TAG} installed. Run:  ${BINARY} init"

@@ -14,7 +14,7 @@ import (
 
 // stubGitHubRelease points update.ReleaseURL at a local server for the life of
 // the test, so GetUpdateStatus is exercised without ever reaching the real
-// GitHub API — same reasoning as internal/update's own fetch_test.go.
+// GitHub API, same reasoning as internal/update's own fetch_test.go.
 func stubGitHubRelease(t *testing.T, tag string) {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -34,7 +34,7 @@ func withVersion(t *testing.T, v string) {
 	t.Cleanup(func() { build.Version = orig })
 }
 
-// GetUpdateStatus must report the running build even when no update exists —
+// GetUpdateStatus must report the running build even when no update exists,
 // the version badge in the footer needs it either way.
 func TestGetUpdateStatus_ReportsCurrentVersionWhenUpToDate(t *testing.T) {
 	sandbox(t)
@@ -72,7 +72,7 @@ func TestGetUpdateStatus_AvailableWhenNewer(t *testing.T) {
 }
 
 // GetUpdateStatus goes through update.CheckIgnoringTTY, so it must honour the
-// same HYDRA_NO_UPDATE_CHECK escape hatch hyctl's own banner does — a user who
+// same HYDRA_NO_UPDATE_CHECK escape hatch hyctl's own banner does, a user who
 // disabled the check should not see it resurface in the desktop app.
 func TestGetUpdateStatus_RespectsNoUpdateCheckEnvVar(t *testing.T) {
 	sandbox(t)

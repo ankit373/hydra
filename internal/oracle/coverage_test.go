@@ -23,7 +23,7 @@ func TestFirstLine(t *testing.T) {
 		{"one", "one"},
 		{"first\nsecond", "first"},
 		// TrimSpace runs on the whole string first, so leading blank lines are
-		// skipped to reach real content — good — but trailing spaces on the
+		// skipped to reach real content, good, but trailing spaces on the
 		// first line survive. Both are the actual contract; I expected the
 		// opposite of each.
 		{"  padded  \nrest", "padded  "},
@@ -52,7 +52,7 @@ func TestDefaultWriteTemp_MaterializesAndCleansUp(t *testing.T) {
 
 	cleanup()
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
-		t.Error("cleanup left the temp file behind — an oracle runs per candidate, " +
+		t.Error("cleanup left the temp file behind, an oracle runs per candidate, " +
 			"so these accumulate")
 	}
 }
@@ -104,10 +104,10 @@ func TestVerify_ExitStatusDecidesTheVerdict(t *testing.T) {
 
 // Args holds real argv (e.g. straight from cobra). An element containing a
 // space, like a shell -c script, must reach exec.Command as one atomic
-// argument — not get re-split by whitespace the way joining argv into
+// argument, not get re-split by whitespace the way joining argv into
 // Template and re-tokenizing it would (#444). Before the fix, "sh -c \"exit
 // 1\"" (3 argv elements) silently became "sh -c exit 1" (4 elements), which
-// bash parses as `sh -c 'exit'` — a false PASS for a command that fails.
+// bash parses as `sh -c 'exit'`, a false PASS for a command that fails.
 func TestVerify_ArgsElementWithSpaceIsNotReTokenized(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Log("windows: no /bin/sh-style true/false to drive exit codes here")
@@ -119,13 +119,13 @@ func TestVerify_ArgsElementWithSpaceIsNotReTokenized(t *testing.T) {
 		t.Fatal(err)
 	}
 	if v.Passed {
-		t.Error("Passed = true for a command that exits 1 — the -c script's " +
+		t.Error("Passed = true for a command that exits 1, the -c script's " +
 			"space was re-tokenized, splitting \"exit 1\" into two argv elements")
 	}
 }
 
 // buildArgsFromArgv must substitute {answer}/{file} into Args elements in
-// place, exactly like buildArgs does for Template — Args is an additional
+// place, exactly like buildArgs does for Template, Args is an additional
 // input shape, not a reason to drop placeholder support.
 func TestBuildArgsFromArgv_SubstitutesAnswerAndFile(t *testing.T) {
 	const spaced = "/tmp/expected output.txt"
@@ -154,7 +154,7 @@ func TestBuildArgsFromArgv_SubstitutesAnswerAndFile(t *testing.T) {
 
 // A candidate file written the ordinary way (echo, any text editor) ends in
 // a trailing newline by convention. That newline is not part of the answer,
-// so a verifier doing plain string equality on {answer} must not see it —
+// so a verifier doing plain string equality on {answer} must not see it,
 // while {file} still gets the exact original bytes, since a verifier that
 // reads the file itself (compiler, linter) needs the real content (#487).
 func TestBuildArgsFromArgv_AnswerDropsTrailingNewlineButFileKeepsIt(t *testing.T) {
@@ -183,7 +183,7 @@ func TestBuildArgsFromArgv_AnswerDropsTrailingNewlineButFileKeepsIt(t *testing.T
 }
 
 // {file} materialization failing through the Args path must abort the same
-// way it does through Template — an oracle that ran against a stale or
+// way it does through Template, an oracle that ran against a stale or
 // missing file would misreport the candidate as wrong.
 func TestBuildArgsFromArgv_WriteTempFailureIsAnError(t *testing.T) {
 	o := &CommandOracle{
@@ -213,7 +213,7 @@ func TestBuildArgsFromArgv_NoPlaceholdersNoCleanup(t *testing.T) {
 	}
 }
 
-// A missing binary must not be read as "the candidate is wrong" — that is the
+// A missing binary must not be read as "the candidate is wrong", that is the
 // oracle being unavailable, and treating it as evidence would let a broken
 // toolchain veto correct answers.
 func TestVerify_MissingBinaryIsAnError(t *testing.T) {
@@ -233,7 +233,7 @@ func TestVerify_EmptyTemplateIsAnError(t *testing.T) {
 }
 
 // buildArgs substitutes both placeholders and keeps a materialized path as one
-// argument — splitting on whitespace would point the oracle at the wrong file,
+// argument, splitting on whitespace would point the oracle at the wrong file,
 // or at several files that do not exist.
 func TestBuildArgs_SubstitutionAndSpacing(t *testing.T) {
 	const spaced = "/tmp/a file.txt"
@@ -288,7 +288,7 @@ func TestBuildArgs_SubstitutionAndSpacing(t *testing.T) {
 }
 
 // The Template path must trim {answer}'s trailing newline exactly like Args
-// does — the two substitution paths must not diverge on this (#487).
+// does, the two substitution paths must not diverge on this (#487).
 func TestBuildArgs_AnswerDropsTrailingNewlineButFileKeepsIt(t *testing.T) {
 	var gotFileContent string
 	o := &CommandOracle{
@@ -315,7 +315,7 @@ func TestBuildArgs_AnswerDropsTrailingNewlineButFileKeepsIt(t *testing.T) {
 }
 
 // A candidate answer containing whitespace or flag-like tokens must land as
-// ONE atomic argv element, never re-split — otherwise it can inject extra
+// ONE atomic argv element, never re-split, otherwise it can inject extra
 // argv entries into whatever binary the template names (CWE-88 argument
 // injection). This is the regression test for the bug: {answer} used to be
 // substituted via raw string-replace before Fields-splitting, so whitespace
@@ -333,7 +333,7 @@ func TestBuildArgs_AnswerWithWhitespaceIsOneAtomicArg(t *testing.T) {
 	}
 	want := []string{"grep", malicious, "file.txt"}
 	if len(parts) != len(want) {
-		t.Fatalf("buildArgs = %q, want %q — the candidate was fragmented into %d argv tokens instead of 1",
+		t.Fatalf("buildArgs = %q, want %q, the candidate was fragmented into %d argv tokens instead of 1",
 			parts, want, len(parts)-2)
 	}
 	for i := range want {
@@ -371,7 +371,7 @@ func TestBuildArgs_AnswerAndFileBothAtomicRegardlessOfOrder(t *testing.T) {
 }
 
 // A cancelled context must stop the oracle rather than let it run to its own
-// timeout — the SPRT loop relies on this to bound a run.
+// timeout, the SPRT loop relies on this to bound a run.
 func TestVerify_HonoursContextCancellation(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Log("windows: no sleep binary to hold the command open")
@@ -406,7 +406,7 @@ func TestVerify_FailureCarriesTheCommandsOutput(t *testing.T) {
 
 // defaultWriteTemp's error paths: a full disk or an unwritable temp dir must
 // surface, because Verify turns a materialization failure into an error rather
-// than a verdict — and that only works if the failure is reported.
+// than a verdict, and that only works if the failure is reported.
 func TestDefaultWriteTemp_UnwritableTempDirIsAnError(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Log("windows: TMPDIR is not honoured the same way")
@@ -425,7 +425,7 @@ func TestDefaultWriteTemp_UnwritableTempDirIsAnError(t *testing.T) {
 	}
 }
 
-// Large candidates must round-trip intact — a truncated write would have the
+// Large candidates must round-trip intact, a truncated write would have the
 // oracle verify something the model did not produce.
 func TestDefaultWriteTemp_LargeCandidateRoundTrips(t *testing.T) {
 	content := strings.Repeat("some candidate line\n", 20000)
@@ -441,7 +441,7 @@ func TestDefaultWriteTemp_LargeCandidateRoundTrips(t *testing.T) {
 		t.Fatal(err)
 	}
 	if string(got) != content {
-		t.Errorf("wrote %d bytes, read back %d — the oracle would verify "+
+		t.Errorf("wrote %d bytes, read back %d, the oracle would verify "+
 			"something other than the candidate", len(content), len(got))
 	}
 }
@@ -467,7 +467,7 @@ func TestDefaultWriteTemp_EmptyCandidateStillMaterializes(t *testing.T) {
 // A verifier that writes far more than outputCap to stdout, on one line with
 // no newline, must not have that output captured or displayed unbounded: the
 // Accumulator caps memory at outputCap, and firstLine caps the displayed
-// Detail independently at detailMaxLen — a truncation marker inside the
+// Detail independently at detailMaxLen, a truncation marker inside the
 // captured buffer supplies the newline firstLine slices on (#504).
 func TestVerify_LargeOutputIsBoundedAndTruncated(t *testing.T) {
 	if runtime.GOOS == "windows" {
@@ -487,7 +487,7 @@ func TestVerify_LargeOutputIsBoundedAndTruncated(t *testing.T) {
 		t.Fatal("a command exiting 1 reported a pass")
 	}
 	if got, max := len(v.Detail), detailMaxLen+len("...(truncated)"); got > max {
-		t.Errorf("Detail is %d bytes, want <= %d — a ~150000-byte verifier line reached the caller unbounded", got, max)
+		t.Errorf("Detail is %d bytes, want <= %d, a ~150000-byte verifier line reached the caller unbounded", got, max)
 	}
 	if !strings.HasSuffix(v.Detail, "...(truncated)") {
 		t.Errorf("Detail = %q, want it to end with the truncation marker", v.Detail)
@@ -495,7 +495,7 @@ func TestVerify_LargeOutputIsBoundedAndTruncated(t *testing.T) {
 }
 
 // A candidate too large to pass via {answer} must fail with a clear,
-// actionable error before exec is ever attempted — not the raw OS
+// actionable error before exec is ever attempted, not the raw OS
 // "fork/exec: argument list too long" (#504).
 func TestVerify_OversizedAnswerCandidateReturnsCleanError(t *testing.T) {
 	o := &CommandOracle{Template: "echo {answer}", Source: "v"}
@@ -517,7 +517,7 @@ func TestVerify_OversizedAnswerCandidateReturnsCleanError(t *testing.T) {
 }
 
 // The same guard must apply through the Args path (buildArgsFromArgv), not
-// just Template — both substitution shapes reach the same exec.Command call.
+// just Template, both substitution shapes reach the same exec.Command call.
 func TestVerify_OversizedAnswerViaArgsReturnsCleanError(t *testing.T) {
 	o := &CommandOracle{Args: []string{"echo", "{answer}"}, Source: "v"}
 	huge := strings.Repeat("b", maxArgvBytes+1)

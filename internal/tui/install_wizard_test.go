@@ -33,7 +33,7 @@ func TestBuildInstallOptions_EveryOptionIsActionable(t *testing.T) {
 		}
 	}
 
-	// The Ollama entry must name the model that actually fits this machine —
+	// The Ollama entry must name the model that actually fits this machine,
 	// recommending one that does not fit is how a user ends up swapping.
 	var ollama *installOption
 	for i := range opts {
@@ -327,7 +327,7 @@ func TestSplashAndDashboard_Render(t *testing.T) {
 		}
 	}
 
-	// Zero values and an empty cortex name must still render — a fresh install
+	// Zero values and an empty cortex name must still render, a fresh install
 	// has both.
 	if got := Dashboard("", Stats{}); strings.TrimSpace(got) == "" {
 		t.Error("Dashboard rendered nothing for a fresh install")

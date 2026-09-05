@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 
-// Package oracle turns deterministic verifiers — test runners, compilers,
-// linters — into first-class evidence sources for the Trust Control Plane. A
+// Package oracle turns deterministic verifiers, test runners, compilers,
+// linters, into first-class evidence sources for the Trust Control Plane. A
 // passing suite is far stronger evidence of correctness than any single model's
 // opinion, so a calibrated oracle contributes a large log-likelihood ratio to
 // the SPRT ensemble (SPEC §4: "verifiers as sources too").
@@ -26,7 +26,7 @@ const (
 	outputCap = 64 << 10
 
 	// detailMaxLen bounds what firstLine ever returns, independent of the
-	// Accumulator's cap — a single newline-free line can otherwise still be
+	// Accumulator's cap, a single newline-free line can otherwise still be
 	// outputCap bytes and flood the terminal.
 	detailMaxLen = 4 << 10
 
@@ -71,19 +71,19 @@ type Oracle interface {
 // CommandOracle runs an external command as the verifier. Exit code 0 is a pass;
 // any non-zero exit is a fail. The candidate answer is written to a temp file
 // verbatim for {file}; {answer} gets the same content with a trailing
-// newline trimmed — a file-write artifact (echo, any editor), not part of
+// newline trimmed, a file-write artifact (echo, any editor), not part of
 // the answer a verifier is comparing against.
 type CommandOracle struct {
 	// Args is the command argv, verbatim, e.g. []string{"sh", "-c", "exit 1"}.
 	// Each element is substituted in place for {file}/{answer} and passed to
-	// exec.Command as-is — never re-tokenized — so an element containing
+	// exec.Command as-is, never re-tokenized, so an element containing
 	// whitespace survives intact. Preferred whenever real argv is available
 	// (e.g. parsed CLI args); takes precedence over Template.
 	Args []string
 	// Template is the command as one string, e.g. "go test ./..." or
 	// "tsc --noEmit {file}", split on whitespace. Only used when Args is
 	// empty. Joining real argv into a Template and letting it re-split is
-	// what corrupted any argument containing a space (#444) — a caller
+	// what corrupted any argument containing a space (#444), a caller
 	// holding argv must use Args instead.
 	Template string
 	// Source is the calibration key for this oracle, e.g. "verifier:go-test".
@@ -111,7 +111,7 @@ func (o *CommandOracle) Verify(ctx context.Context, candidate string, _ trust.Ta
 		// an oracle is a high-D evidence source, so LLR lets its verdict
 		// outweigh several models' votes. A template that was blank, or lost in
 		// config, therefore produced *confident false evidence* that the
-		// candidate was correct — and did it silently, since nothing else in
+		// candidate was correct, and did it silently, since nothing else in
 		// the chain can tell an unconfigured oracle from a satisfied one.
 		return Verdict{}, fmt.Errorf("oracle %s: empty command template", o.Source)
 	}
@@ -121,7 +121,7 @@ func (o *CommandOracle) Verify(ctx context.Context, candidate string, _ trust.Ta
 	cmd := exec.CommandContext(ctx, parts[0], parts[1:]...)
 	cmd.Dir = o.Dir
 	// Both streams share one bounded Accumulator, matching CombinedOutput's
-	// interleaving — but capped, unlike the bytes.Buffer it replaces.
+	// interleaving, but capped, unlike the bytes.Buffer it replaces.
 	out := util.NewAccumulator(outputCap)
 	cmd.Stdout = out
 	cmd.Stderr = out
@@ -144,7 +144,7 @@ func checkArgvSize(parts []string, candidate string) error {
 		total += len(p)
 	}
 	if total > maxArgvBytes {
-		return fmt.Errorf("candidate too large to pass via {answer} (%d bytes) — use {file} instead", len(candidate))
+		return fmt.Errorf("candidate too large to pass via {answer} (%d bytes), use {file} instead", len(candidate))
 	}
 	return nil
 }
@@ -152,7 +152,7 @@ func checkArgvSize(parts []string, candidate string) error {
 // buildArgs builds the argv to execute. When Args holds real argv it is used
 // verbatim (see buildArgsFromArgv, #444); otherwise it splits Template into
 // argv, substituting {answer} inline and materializing {file} to a temp path.
-// Both substitute as exactly one atomic argv element — never re-split by
+// Both substitute as exactly one atomic argv element, never re-split by
 // whitespace inside the substituted value, so a candidate answer containing
 // whitespace or flag-like tokens cannot inject extra argv entries into
 // whatever binary is named (CWE-88 argument injection).
@@ -178,7 +178,7 @@ func (o *CommandOracle) buildArgs(candidate string) (parts []string, cleanup fun
 }
 
 // answerFor is what fills an {answer} slot: the candidate with a trailing
-// newline trimmed. {file} materialization uses the raw candidate untouched —
+// newline trimmed. {file} materialization uses the raw candidate untouched,
 // a verifier reading the file itself (compiler, linter) must see the exact
 // bytes the candidate was.
 func answerFor(candidate string) string {
@@ -245,7 +245,7 @@ func splitTemplate(tmpl, answer, file string) []string {
 // LLR maps a verdict to the calibrated log-likelihood-ratio contribution of this
 // oracle, exactly as any evidence source: a pass is "says correct", a fail is
 // "says incorrect". A verifier calibrated to high sensitivity/specificity yields
-// a large-magnitude contribution — dominating a single model's vote.
+// a large-magnitude contribution, dominating a single model's vote.
 func LLR(cal *trust.Calibrator, source, domain string, v Verdict) float64 {
 	return cal.LLR(source, domain, v.Passed)
 }

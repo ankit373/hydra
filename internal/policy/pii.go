@@ -21,7 +21,7 @@ import (
 //
 // Go's regexp is RE2, which has no lookahead or lookbehind, so conditions like
 // "an IPv4 address unless it is a version string" cannot be written as a
-// pattern at all — they need code that sees the match in context (#169).
+// pattern at all, they need code that sees the match in context (#169).
 type detector struct {
 	name string
 	re   *regexp.Regexp
@@ -49,12 +49,12 @@ var detectors = []detector{
 	// A separator is required. Nine bare digits are indistinguishable from an
 	// order number, invoice id or primary key, and treating every such run as an
 	// SSN forced local-only routing on ordinary queries like "look up order
-	// 123456789". This does trade away detection of a bare, unformatted SSN —
+	// 123456789". This does trade away detection of a bare, unformatted SSN,
 	// a real loss, accepted because the formatted spelling is overwhelmingly
 	// more common in text and the unformatted one is unknowable in isolation.
 	{name: "ssn", re: regexp.MustCompile(`\b\d{3}[-.\s]\d{2}[-.\s]\d{4}\b`)},
 
-	// 13–19 digits, optionally grouped, that pass Luhn. Luhn rejects ~90% of
+	// 13-19 digits, optionally grouped, that pass Luhn. Luhn rejects ~90% of
 	// random digit runs, which is what keeps long ids from reading as cards.
 	{name: "credit card", re: regexp.MustCompile(`\b\d{4}[- ]?\d{4}[- ]?\d{4}[- ]?\d{1,7}\b`), valid: validLuhn},
 
@@ -75,8 +75,8 @@ func ContainsPII(req Request) bool {
 // DetectPII returns the names of every detector that matched, deduped and in
 // declaration order.
 //
-// The detectors have always known *what* they matched — "aws access key id" is
-// a categorically different finding from "email" — but the only accessor was
+// The detectors have always known *what* they matched, "aws access key id" is
+// a categorically different finding from "email", but the only accessor was
 // ContainsPII's bool, so the distinction was discarded at the first call site
 // and everything downstream could say no more than "PII". Callers that record
 // or report a detection want the names; ContainsPII is now defined in terms of
@@ -94,8 +94,8 @@ func DetectPII(req Request) []string {
 	return out
 }
 
-// validLuhn checks the card checksum. Without it, any 16-digit identifier —
-// order numbers, trace ids — forced local-only routing.
+// validLuhn checks the card checksum. Without it, any 16-digit identifier,
+// order numbers, trace ids, forced local-only routing.
 func validLuhn(prompt string, loc []int) bool {
 	digits := make([]int, 0, 19)
 	for _, r := range prompt[loc[0]:loc[1]] {
@@ -141,7 +141,7 @@ func validCredentialValue(prompt string, loc []int) bool {
 	if _, err := strconv.Atoi(v); err == nil {
 		return false
 	}
-	// A placeholder is the opposite of a secret — it exists to be substituted.
+	// A placeholder is the opposite of a secret, it exists to be substituted.
 	switch strings.ToLower(v) {
 	case "none", "null", "nil", "empty", "false", "true", "changeme", "redacted", "<redacted>", "xxxxxx", "******":
 		return false
@@ -161,7 +161,7 @@ var versionContext = map[string]bool{
 //
 // It rejects three classes that were all forcing local-only routing needlessly:
 // octets above 255 and version-like context ("version 1.2.3.4"), addresses that
-// are part of a longer dotted run ("1.2.3.4.5"), and non-public ranges —
+// are part of a longer dotted run ("1.2.3.4.5"), and non-public ranges,
 // loopback, private, link-local, multicast and reserved. None of those identify
 // a person, and 127.0.0.1 in particular appears constantly in dev prompts.
 func validPublicIP(prompt string, loc []int) bool {

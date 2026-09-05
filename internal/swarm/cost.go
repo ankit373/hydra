@@ -68,12 +68,12 @@ func enrichCosts(attempts []Attempt, pr PricingReader) {
 }
 
 // logAttempts writes one cost.jsonl entry per attempt that actually executed
-// (StatusOK or StatusFailed — not Pending/Canceled).
+// (StatusOK or StatusFailed, not Pending/Canceled).
 //
 // It takes the attempts and mode directly rather than a *SwarmResult so the SPRT
 // path can share it: RunSPRT produces attempts without ever building a
 // SwarmResult, and without this its ensemble spend never reached cost.jsonl at
-// all — only the aggregate trust.jsonl row (#175).
+// all, only the aggregate trust.jsonl row (#175).
 //
 // Every attempt shares the run's identity: heads racing or voting on one prompt
 // are all working the same logical task, so they carry the same TaskID. That is
@@ -98,7 +98,7 @@ func logAttempts(attempts []Attempt, mode SwarmMode, opts Options, promptPreview
 		if a.Status == StatusPending || a.Status == StatusCanceled {
 			continue
 		}
-		// Shared with the dispatch log path — see cost.SourceLabels.
+		// Shared with the dispatch log path, see cost.SourceLabels.
 		tokensSource, costSrc, legacySource := cost.SourceLabels(a.TokensEstimated)
 		entry := map[string]any{
 			"ts":              a.FinishedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),

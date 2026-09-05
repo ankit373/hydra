@@ -54,7 +54,7 @@ func TestAddIsIdempotentOnIdenticalTaskAndCandidate(t *testing.T) {
 	}
 }
 
-// A different candidate for the same task is a genuinely new example — that is
+// A different candidate for the same task is a genuinely new example, that is
 // the interesting case, two heads answering the same question differently.
 func TestDifferentCandidateForSameTaskIsKept(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "examples.jsonl")
@@ -96,7 +96,7 @@ func TestPIIIsMarkedNotDropped(t *testing.T) {
 	}
 	got, _ := Load(p)
 	if len(got) != 1 {
-		t.Fatalf("got %d, want 1 — a PII example must be kept", len(got))
+		t.Fatalf("got %d, want 1, a PII example must be kept", len(got))
 	}
 	if !got[0].PII {
 		t.Error("PII not marked; an export path has nothing to refuse on")
@@ -159,6 +159,6 @@ func TestDefaultPathIsNotUnderLogs(t *testing.T) {
 		t.Errorf("path %q is not under evalset/", p)
 	}
 	if got := filepath.Dir(p); filepath.Base(got) == "logs" || filepath.Base(filepath.Dir(got)) == "logs" {
-		t.Errorf("eval set is under logs/ (%q) — a retention pass would delete it", p)
+		t.Errorf("eval set is under logs/ (%q), a retention pass would delete it", p)
 	}
 }

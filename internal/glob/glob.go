@@ -7,7 +7,7 @@
 // meaning by operating system.
 //
 //   - internal/workspace matched "**" across path segments.
-//   - internal/ledger used filepath.Match, which has no "**" at all — so a
+//   - internal/ledger used filepath.Match, which has no "**" at all, so a
 //     "**/secrets/**" rule copied from workspace.yaml into mcp_policy.json
 //     matched nothing below the first level: a deny that did not deny (#310).
 //   - Worse, filepath.Match is separator-aware, and the separator is "\" on
@@ -30,7 +30,7 @@ import (
 // Semantics:
 //   - "**" matches zero or more whole segments
 //   - "*" and "?" match within a single segment and never cross "/"
-//   - an empty pattern, or "*" alone at the top level, matches anything —
+//   - an empty pattern, or "*" alone at the top level, matches anything,
 //     the "no constraint" case both callers rely on
 func Match(pattern, p string) bool {
 	if pattern == "" || pattern == "*" || pattern == "**" {
@@ -47,7 +47,7 @@ var (
 
 // splitPattern caches a pattern's "/"-split segments. Patterns come from a
 // small, fixed, operator-controlled set (policy/workspace config rules) that
-// Match is called against repeatedly — once per rule, per resource checked —
+// Match is called against repeatedly, once per rule, per resource checked,
 // while the path side genuinely differs on every call, so only the pattern
 // side is worth memoizing. The returned slice is never mutated by callers.
 func splitPattern(pattern string) []string {
@@ -71,7 +71,7 @@ func splitPattern(pattern string) []string {
 // Without it each "**" branches over every remaining split point and matching
 // is exponential in the number of "**" segments: "**/**/**/…/nomatch" against a
 // long path never returns. That is a denial of service on whatever the pattern
-// gates — found by fuzzing the workspace matcher (#303).
+// gates, found by fuzzing the workspace matcher (#303).
 func matchSegments(pathSegs, pat []string) bool {
 	type state struct{ i, j int }
 	memo := make(map[state]bool)

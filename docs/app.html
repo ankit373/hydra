@@ -3,18 +3,18 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Hydra Desktop — watch every agent, every dollar, live</title>
+  <title>Hydra Desktop, watch every agent, every dollar, live</title>
   <meta name="description" content="The Hydra desktop app: ask for work in a chat, and every reply says which model answered, at which tier, and what it cost. Plus Models, Activity, Usage and Audit views. macOS, Linux and Windows.">
   <meta name="keywords" content="AI agent dashboard, LLM cost dashboard, desktop app, multi-model orchestration UI, agent monitoring, Hydra desktop">
 
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://hydra.uvansa.com/app.html">
-  <meta property="og:title" content="Hydra Desktop — watch every agent, every dollar, live">
+  <meta property="og:title" content="Hydra Desktop, watch every agent, every dollar, live">
   <meta property="og:description" content="Chat-first, over your local control plane: every reply names the model, the tier and the cost. Free, open source, runs entirely on your machine.">
   <meta property="og:image" content="https://hydra.uvansa.com/logo.png">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:site" content="@ankit373">
-  <meta name="twitter:title" content="Hydra Desktop — watch every agent, every dollar, live">
+  <meta name="twitter:title" content="Hydra Desktop, watch every agent, every dollar, live">
   <meta name="twitter:description" content="Five views over your local control plane. See what each agent is doing and what it costs, as it happens.">
   <meta name="twitter:image" content="https://hydra.uvansa.com/logo.png">
 
@@ -118,7 +118,7 @@ a:hover{text-decoration:underline;}
 .nav-item i{width:5px;height:5px;border-radius:50%;background:currentColor;opacity:.5;font-style:normal;}
 .pane{padding:18px 20px;position:relative;}
 
-/* Each pane fades in on its own slice of one 30s loop. Five views, 6s each —
+/* Each pane fades in on its own slice of one 30s loop. Five views, 6s each,
    a slot is 20% of the loop, which is why the percentages below are not the
    25%-slot ones this had when there were four. */
 .view{position:absolute;inset:18px 20px;opacity:0;animation:cycle 30s infinite;}
@@ -158,7 +158,7 @@ a:hover{text-decoration:underline;}
   .nav-item:nth-of-type(1){background:rgba(0,230,195,.10);color:var(--aqua);}
 }
 
-/* Chat view: thread on the left, the glanceable companion pane on the right —
+/* Chat view: thread on the left, the glanceable companion pane on the right,
    the same split the app ships. */
 .chat-split{display:grid;grid-template-columns:1fr 150px;gap:14px;align-items:start;}
 .said{margin-left:auto;max-width:78%;background:var(--panel);border:1px solid var(--line);
@@ -287,7 +287,7 @@ footer a{color:var(--dim);}
     <div class="klabel"><span>Hydra Desktop</span><b>ships with every release</b></div>
     <h1>Your agents are already running.<br><span class="grad">Now you can watch them.</span></h1>
     <p class="lede">
-      The CLI routes the work. The desktop app shows you what it did — which head
+      The CLI routes the work. The desktop app shows you what it did, which head
       answered, how long it took, what it cost, how confident it was, and which
       files changed. It reads the same local logs <span class="mono">hyctl</span>
       writes, so there is nothing to connect and nothing to sign in to.
@@ -299,14 +299,14 @@ footer a{color:var(--dim);}
   </div>
 
   <!-- The preview below is a live HTML rendering, built from the app's own
-       design tokens — not a screenshot and not a recording. It shows the real
+       design tokens, not a screenshot and not a recording. It shows the real
        view names and the real shape of each screen; the numbers in it are
        illustrative sample data. -->
   <div class="stage">
     <div class="win">
       <div class="win-bar">
         <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
-        <span class="win-title">Hydra — localhost · no account, no telemetry</span>
+        <span class="win-title">Hydra, localhost · no account, no telemetry</span>
       </div>
       <div class="win-body">
         <div class="side">
@@ -322,7 +322,7 @@ footer a{color:var(--dim);}
           <!-- 1 · Chat · the default surface -->
           <div class="view">
             <div class="vhead">Chat</div>
-            <div class="vsub">ask for work — the reply says who answered, and what it cost</div>
+            <div class="vsub">ask for work, the reply says who answered, and what it cost</div>
             <div class="chat-split">
               <div>
                 <div class="said">add pagination to /users</div>
@@ -432,7 +432,7 @@ footer a{color:var(--dim);}
     </div>
     <p class="caption">
       A live rendering of the app's views, built from its own design tokens.
-      Not a screenshot — the numbers are sample data.
+      Not a screenshot, the numbers are sample data.
     </p>
   </div>
 </section>
@@ -444,7 +444,7 @@ footer a{color:var(--dim);}
   <p>
     The app is a reader, not a second brain. Everything it shows comes from the
     JSONL files <span class="mono">hyctl</span> already writes to
-    <span class="mono">~/.hydra</span> — so the numbers on screen are the same
+    <span class="mono">~/.hydra</span>, so the numbers on screen are the same
     ones <span class="mono">hyctl cost</span> and <span class="mono">hyctl stats</span>
     print, by construction.
   </p>
@@ -463,14 +463,14 @@ footer a{color:var(--dim);}
       <h3>What you can actually route to</h3>
       <p>Every head this machine found, grouped by the token pool it spends, each
         marked with whether anything can drive it <i>right now</i> and, when it
-        cannot, why — no API key, or a local server that is not running. Beside
+        cannot, why, no API key, or a local server that is not running. Beside
         it, the accuracy each model has actually earned, never shown without the
         number of outcomes behind it.</p>
     </div>
     <div class="feat">
       <div class="tag">Usage</div>
       <h3>Where the money went</h3>
-      <p>Spend grouped by model, by tier and by day, with call counts beside each —
+      <p>Spend grouped by model, by tier and by day, with call counts beside each,
         alongside the governor's context pressure and your trust record, so cost
         and confidence sit on one screen.</p>
     </div>
@@ -488,17 +488,17 @@ footer a{color:var(--dim);}
       <p class="app-note">Opened from a request in Activity, not from the rail.</p>
       <p>One run's timeline in order: which head was selected, which candidates
         failed and why it fell through, how long each step took, where it handed
-        off — and a layered graph when the run fanned out, so a swarm reads as a
+        off, and a layered graph when the run fanned out, so a swarm reads as a
         shape rather than a list. Its <b>Code</b> tab carries the diffs for the same
-        run — marking what changed <i>within</i> a modified line, not just which
-        lines moved — and lets you accept or undo the change on disk. Clicking a
+        run, marking what changed <i>within</i> a modified line, not just which
+        lines moved, and lets you accept or undo the change on disk. Clicking a
         file in the graph opens it there.</p>
     </div>
     <div class="feat">
       <div class="tag">Audit</div>
       <h3>What it was allowed to touch</h3>
       <p>Every tool call an agent made, whether the guardrails allowed it, and
-        what got blocked or flagged — over an append-only, hash-chained audit
+        what got blocked or flagged, over an append-only, hash-chained audit
         log, mapped against the OWASP LLM Top 10. Its <b>MCP servers</b> tab
         carries a trust verdict for each server installed on this machine, and
         says plainly when nothing has been compared against the official
@@ -509,7 +509,7 @@ footer a{color:var(--dim);}
   <div class="note">
     <b>Beside the chat, a pane you glance at.</b> The model working now and the
     quota it draws from, this run's confidence, the files it changed, and how
-    accurate each model has actually measured at this kind of work — with the
+    accurate each model has actually measured at this kind of work, with the
     sample size beside every score, because a number from five observations is not
     a measurement.
   </div>
@@ -522,7 +522,7 @@ footer a{color:var(--dim);}
   <p>
     There is no Hydra backend to sign in to, because there is no Hydra backend.
     The app opens the same files on your disk that the CLI writes, and that is the
-    whole data path. Close it and the CLI keeps working exactly as before — it is
+    whole data path. Close it and the CLI keeps working exactly as before, it is
     a window onto the control plane, not a dependency of it.
   </p>
   <div class="grid4">
@@ -535,7 +535,7 @@ footer a{color:var(--dim);}
     <div class="feat">
       <div class="tag">Provider-neutral</div>
       <h3>Whatever you have installed</h3>
-      <p>Claude, Gemini, Codex, an API key, a local Ollama model — the app shows
+      <p>Claude, Gemini, Codex, an API key, a local Ollama model, the app shows
         whichever heads your machine actually has, and marks the ones it cannot drive.</p>
     </div>
     <div class="feat">
@@ -574,7 +574,7 @@ footer a{color:var(--dim);}
     Pin a version with <span class="mono">HYDRA_VERSION=v1.4.0</span>, or change where it
     lands with <span class="mono">HYDRA_APP_DIR=~/Applications</span>.
     <a href="https://github.com/ankit373/hydra/blob/main/install-app.sh">Read the script</a>
-    before you pipe it to a shell — it is under 200 lines and you should.
+    before you pipe it to a shell, it is under 200 lines and you should.
   </p>
 
   <h3 style="font-family:var(--display);font-size:19px;margin-top:40px;">Or take the binary directly</h3>
@@ -632,7 +632,7 @@ footer a{color:var(--dim);}
 
   <div class="note">
     <b>Install the CLI too.</b> The app reads the logs <span class="mono">hyctl</span>
-    writes — without it there is nothing to show and the app will look empty rather
+    writes, without it there is nothing to show and the app will look empty rather
     than unconfigured. <span class="mono">brew install ankit373/hydra/hyctl</span>, or
     <a href="/#start">the other install paths</a>.
   </div>
@@ -673,7 +673,7 @@ footer a{color:var(--dim);}
   });
 })();
 
-// The app preview sidebar: click a view name, see that view — matched by
+// The app preview sidebar: click a view name, see that view, matched by
 // position, since the nav-items and .view panes share the same markup order.
 (function(){
   var winBody=document.querySelector('.stage .win-body');

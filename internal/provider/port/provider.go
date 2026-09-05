@@ -43,7 +43,7 @@ func (p *Provider) Discover(ctx context.Context) ([]provider.Head, error) {
 		return nil, err
 	}
 
-	// Base URLs are resolved here, once, and handed to the services — so a
+	// Base URLs are resolved here, once, and handed to the services, so a
 	// service can be constructed against a test server, and so the address the
 	// liveness dial uses is provably the same one the probe and the head's
 	// Endpoint use.
@@ -155,7 +155,7 @@ func (s *ollamaService) probe(ctx context.Context, caps *capabilities.DB) ([]pro
 
 // completionCapable reports whether an Ollama model can serve a text-completion
 // request. An empty list means an older server or a model type that never
-// populates the field — treated as capable, since we have no positive signal
+// populates the field, treated as capable, since we have no positive signal
 // either way. A non-empty list lacking "completion" (e.g. embedding-only) is
 // the one case we can rule out (#532).
 func completionCapable(caps []string) bool {
@@ -174,7 +174,7 @@ func completionCapable(caps []string) bool {
 
 // defaultLMStudioHost is LM Studio's default server address. Unlike Ollama it
 // publishes no environment variable for relocating it, so there is nothing to
-// honour — but the base is still a field so the two services behave the same
+// honour, but the base is still a field so the two services behave the same
 // way and both are testable against a stub server.
 const defaultLMStudioHost = "http://localhost:1234"
 

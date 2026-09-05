@@ -9,10 +9,10 @@ import (
 )
 
 const (
-	// DefaultMaxBytes is 33 MB — matches Claude Code's EndTruncatingAccumulator default.
+	// DefaultMaxBytes is 33 MB, matches Claude Code's EndTruncatingAccumulator default.
 	DefaultMaxBytes = 1 << 25
 
-	truncationMarker = "\n\n[… output truncated — limit exceeded …]"
+	truncationMarker = "\n\n[… output truncated, limit exceeded …]"
 )
 
 // Accumulator is a bounded, goroutine-safe io.Writer that caps captured output
@@ -84,7 +84,7 @@ func (a *Accumulator) String() string {
 
 // Len returns the number of bytes currently stored. When truncation has
 // occurred this includes the length of the truncation marker itself, so
-// Len() may exceed maxBytes. Do not use Len() as a budget guard — use
+// Len() may exceed maxBytes. Do not use Len() as a budget guard, use
 // TotalBytes() to know how many bytes were actually written by the source.
 func (a *Accumulator) Len() int {
 	a.mu.Lock()

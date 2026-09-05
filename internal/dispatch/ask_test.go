@@ -83,7 +83,7 @@ func TestDispatch_AskAppendsQuestionAskedEvent(t *testing.T) {
 			return
 		}
 	}
-	t.Error("no question_asked event — a parked task left no trail")
+	t.Error("no question_asked event, a parked task left no trail")
 }
 
 // The behaviour #582 changes, and the reason it is worth changing.
@@ -242,7 +242,7 @@ func TestResume_CorruptPendingFileFailsLoudly(t *testing.T) {
 	}
 }
 
-// A refusal cannot be free text folded into the prompt — that still dispatches
+// A refusal cannot be free text folded into the prompt, that still dispatches
 // and leaves it to the head to notice. Decline never reaches an executor.
 func TestDecline_ConsumesAndRecordsADenial(t *testing.T) {
 	s := testutil.NewSandbox(t)

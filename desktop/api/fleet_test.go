@@ -60,7 +60,7 @@ func TestGetFleet_EmptyStateIsHonest(t *testing.T) {
 		t.Errorf("expected no runs, got %d (%d live)", len(f.Runs), f.LiveCount)
 	}
 	if f.GroupThreshold != GroupThreshold {
-		t.Errorf("GroupThreshold = %d, want %d — the view must not hardcode its own", f.GroupThreshold, GroupThreshold)
+		t.Errorf("GroupThreshold = %d, want %d, the view must not hardcode its own", f.GroupThreshold, GroupThreshold)
 	}
 }
 
@@ -160,7 +160,7 @@ func TestGetFleet_StaleHeartbeatIsNotLive(t *testing.T) {
 		t.Fatal(err)
 	}
 	if f.LiveCount != 0 {
-		t.Errorf("LiveCount = %d, want 0 — a stale marker is a dead process", f.LiveCount)
+		t.Errorf("LiveCount = %d, want 0, a stale marker is a dead process", f.LiveCount)
 	}
 	if r := runByID(f, "20260802T100000Z-stale"); r == nil || r.Live {
 		t.Error("run with a stale heartbeat is still marked live")
@@ -216,7 +216,7 @@ func TestGetFleet_FinishedRunElapsedStopsAtLastEvent(t *testing.T) {
 		t.Fatal("run missing")
 	}
 	if r.ElapsedMS < 4_000 || r.ElapsedMS > 6_000 {
-		t.Errorf("ElapsedMS = %d, want ~5000 — a finished run must not keep accruing", r.ElapsedMS)
+		t.Errorf("ElapsedMS = %d, want ~5000, a finished run must not keep accruing", r.ElapsedMS)
 	}
 }
 
@@ -239,7 +239,7 @@ func TestGetFleet_LiveRunElapsedRunsToNow(t *testing.T) {
 		t.Fatal("live run missing or not live")
 	}
 	if r.ElapsedMS < 29_000 {
-		t.Errorf("ElapsedMS = %d, want ~30000 — a live run is measured to now", r.ElapsedMS)
+		t.Errorf("ElapsedMS = %d, want ~30000, a live run is measured to now", r.ElapsedMS)
 	}
 }
 
@@ -251,7 +251,7 @@ func TestGetFleet_MalformedLinesAreSurfacedNotHidden(t *testing.T) {
 	writeRun(t, "20260802T100000Z-partial",
 		runlog.Event{Kind: runlog.KindHeadSelected, Head: "h"},
 	)
-	// An event attributable to no node — nodeID returns "".
+	// An event attributable to no node, nodeID returns "".
 	writeRun(t, "20260802T100000Z-partial",
 		runlog.Event{Kind: runlog.KindEdit},
 	)
@@ -276,11 +276,11 @@ func TestGetFleet_MalformedLinesAreSurfacedNotHidden(t *testing.T) {
 }
 
 // A finished, non-live run with zero agents and no error carries no
-// information — before #390, --dry-run wrote exactly this shape to the
+// information, before #390, --dry-run wrote exactly this shape to the
 // runlog. Once real machines accumulate enough of these (sorted
 // live-first-then-newest, so they outrank real history), Fleet looks empty
 // even though HasRuns is technically true. #390 stopped writing new ones;
-// this is the other half — don't surface the ones already on disk either.
+// this is the other half, don't surface the ones already on disk either.
 func TestGetFleet_ZeroAgentGhostRunsAreFilteredOut(t *testing.T) {
 	sandbox(t)
 
@@ -309,7 +309,7 @@ func TestGetFleet_ZeroAgentGhostRunsAreFilteredOut(t *testing.T) {
 }
 
 // A machine whose only history is dry-run ghosts must still get the honest
-// "no runs yet" empty state, not a blank list with no explanation — the
+// "no runs yet" empty state, not a blank list with no explanation, the
 // exact failure this filter would otherwise reintroduce.
 func TestGetFleet_AllGhostRunsStillShowHonestEmptyState(t *testing.T) {
 	sandbox(t)
@@ -328,16 +328,16 @@ func TestGetFleet_AllGhostRunsStillShowHonestEmptyState(t *testing.T) {
 		t.Fatal(err)
 	}
 	if f.HasRuns {
-		t.Error("HasRuns = true with every run filtered out — the view would render a blank list with no explanation")
+		t.Error("HasRuns = true with every run filtered out, the view would render a blank list with no explanation")
 	}
 	if len(f.Runs) != 0 {
 		t.Errorf("len(Runs) = %d, want 0", len(f.Runs))
 	}
 }
 
-// A live run must never be filtered even with zero agents so far — it may
+// A live run must never be filtered even with zero agents so far, it may
 // not have picked a head yet, and it is the one the user opened the app to
-// watch. A run with a read error must never be filtered either — the error
+// watch. A run with a read error must never be filtered either, the error
 // itself is the information (see TestGetFleet_MalformedLinesAreSurfacedNotHidden
 // for the read-error case; this covers the live case).
 func TestGetFleet_LiveZeroAgentRunIsNeverFiltered(t *testing.T) {
@@ -419,7 +419,7 @@ func TestGetFleet_NoPromptLeavesTheGoalEmpty(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got := findRun(t, f, id).Goal; got != "" {
-		t.Errorf("Goal = %q, want empty — a head_selected detail is not the goal", got)
+		t.Errorf("Goal = %q, want empty, a head_selected detail is not the goal", got)
 	}
 }
 
@@ -548,7 +548,7 @@ func TestGetFleet_AnsweredRunIsNoLongerWaiting(t *testing.T) {
 		t.Fatal(err)
 	}
 	if f.WaitingCount != 0 {
-		t.Errorf("WaitingCount = %d, want 0 — the question was answered", f.WaitingCount)
+		t.Errorf("WaitingCount = %d, want 0, the question was answered", f.WaitingCount)
 	}
 	if len(f.Runs) == 1 && f.Runs[0].Waiting {
 		t.Error("a run whose question was answered still reads as waiting")

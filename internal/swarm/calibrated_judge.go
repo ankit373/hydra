@@ -11,7 +11,7 @@ import (
 )
 
 // CalibratedJudge is a Dawid-Skene naive-Bayes combiner over the K distinct
-// answers in a swarm round — the batch dual of trust.Run's sequential SPRT,
+// answers in a swarm round, the batch dual of trust.Run's sequential SPRT,
 // scoring every candidate hypothesis at once instead of picking via a single
 // LLM judge call or a static CapScore rank. Errors when every hypothesis'
 // Λ is 0 (no calibration data anywhere), so CompositeJudge falls through to
@@ -56,8 +56,8 @@ func (j *CalibratedJudge) Judge(_ context.Context, _ string, attempts []Attempt)
 	groups := clusterByAgreement(attempts, successful, j.equiv)
 	recordSwarmCoAgreement(j.domain, successful, attempts, j.equiv)
 
-	// Each successful attempt's LLR only ever takes one of two values — agree
-	// or disagree with whichever hypothesis is being scored — so both are
+	// Each successful attempt's LLR only ever takes one of two values, agree
+	// or disagree with whichever hypothesis is being scored, so both are
 	// precomputed once per attempt here instead of lambdaFor calling the
 	// calibrator (an RWMutex-guarded map lookup) once per (hypothesis, attempt)
 	// pair: O(N) lookups total instead of O(N×K) for K hypotheses.
@@ -132,7 +132,7 @@ func (j *CalibratedJudge) lambdaFor(hypothesis agreementGroup, successful []int,
 
 // representative breaks the tie among a hypothesis's equally-valid members by
 // individual evidence, then CapScore. llrTrue is Judge's precomputed
-// LLR(id, domain, true) per attempt — always the "true" branch here since
+// LLR(id, domain, true) per attempt, always the "true" branch here since
 // representative asks who best supports having actually said the right thing.
 func representative(g agreementGroup, attempts []Attempt, llrTrue map[int]float64) int {
 	best := g.members[0]

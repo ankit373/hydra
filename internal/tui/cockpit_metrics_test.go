@@ -109,7 +109,7 @@ func TestCkStatFor_ToleratesTheNamingMismatch(t *testing.T) {
 	}
 }
 
-// With no graph loaded there is no change impact to report — and reporting
+// With no graph loaded there is no change impact to report, and reporting
 // one anyway is exactly the bug #193 removed.
 func TestBlastFor_NoGraphSaysNothing(t *testing.T) {
 	var m ckMetrics
@@ -121,7 +121,7 @@ func TestBlastFor_NoGraphSaysNothing(t *testing.T) {
 	}
 }
 
-// A graph that does contain the file yields real numbers — dependents and κ
+// A graph that does contain the file yields real numbers, dependents and κ
 // walked from the graph, never a literal.
 func TestBlastFor_RealGraphYieldsRealNumbers(t *testing.T) {
 	dir := t.TempDir()

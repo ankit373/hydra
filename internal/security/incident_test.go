@@ -12,7 +12,7 @@ import (
 // The worked example the whole design rests on: one actor, one afternoon,
 // five events that every previous version of this dashboard reported as
 // unrelated rows. It must correlate into exactly one incident carrying every
-// stage, including the one that matters most — a flagged request that was
+// stage, including the one that matters most, a flagged request that was
 // ALLOWED rather than blocked.
 func TestCorrelateIncidents_TheWorkedExample(t *testing.T) {
 	events := []ledger.Event{
@@ -28,7 +28,7 @@ func TestCorrelateIncidents_TheWorkedExample(t *testing.T) {
 
 	got := CorrelateIncidents(events, BlastReport{})
 	if len(got) != 1 {
-		t.Fatalf("got %d incidents, want exactly 1 — the sequence was split", len(got))
+		t.Fatalf("got %d incidents, want exactly 1, the sequence was split", len(got))
 	}
 	in := got[0]
 	if len(in.Events) != 5 {
@@ -51,7 +51,7 @@ func TestCorrelateIncidents_TheWorkedExample(t *testing.T) {
 }
 
 // scoreImpact adds +1 per event that touches a file the graph knows to be
-// widely depended on — every qualifying event in an incident should raise the
+// widely depended on, every qualifying event in an incident should raise the
 // score, not just the first one found. No prior test exercised this with a
 // non-empty BlastReport; a regression here (e.g. reintroducing a break that
 // only lets the first qualifying event count) would have shipped silently.
@@ -76,7 +76,7 @@ func TestCorrelateIncidents_EachWidelyDependedFileTouchRaisesImpact(t *testing.T
 		t.Fatalf("got %d and %d incidents, want exactly 1 each", len(one), len(two))
 	}
 	if two[0].Impact <= one[0].Impact {
-		t.Errorf("two qualifying-file touches scored Impact=%d, one touch scored Impact=%d — "+
+		t.Errorf("two qualifying-file touches scored Impact=%d, one touch scored Impact=%d, "+
 			"each qualifying event should raise the score, not just the first", two[0].Impact, one[0].Impact)
 	}
 }
@@ -94,7 +94,7 @@ func TestCorrelateIncidents_SucceededOutranksBlocked(t *testing.T) {
 	}, BlastReport{})
 
 	if landed[0].Likelihood <= blocked[0].Likelihood {
-		t.Errorf("a flagged request that SUCCEEDED scored %d, blocked scored %d — succeeding must weigh more",
+		t.Errorf("a flagged request that SUCCEEDED scored %d, blocked scored %d, succeeding must weigh more",
 			landed[0].Likelihood, blocked[0].Likelihood)
 	}
 }

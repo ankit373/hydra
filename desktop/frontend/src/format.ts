@@ -32,7 +32,7 @@ export function pct(v: number, digits = 0): string {
 
 /**
  * Governor band. Mirrors CLAUDE.md's claude_pct table, collapsed to the three
- * colours brand/tokens.css defines: 0–49 normal, 50–74 warning, 75+ critical.
+ * colours brand/tokens.css defines: 0-49 normal, 50-74 warning, 75+ critical.
  */
 export function govBand(p: number): 'normal' | 'warning' | 'critical' {
   if (p >= 75) return 'critical'
@@ -51,7 +51,7 @@ export function coverageBand(pct: number): 'good' | 'warn' | 'bad' {
 }
 
 /**
- * The security category table as CSV, one row per applicable finding — the
+ * The security category table as CSV, one row per applicable finding, the
  * same shape `hyctl security --csv` emits, so the two exports never disagree
  * about what a "finding" looks like.
  */
@@ -79,7 +79,7 @@ export function costBand(v: number, max: number): 'free' | 'cheap' | 'mid' | 'ex
   return 'cheap'
 }
 
-/** internal/trust's D is expected |LLR| in nats — 0 is a coin flip. ln(.95/.05)
+/** internal/trust's D is expected |LLR| in nats, 0 is a coin flip. ln(.95/.05)
  * is what one verdict must carry to move a 50/50 prior to the 95% the SPRT
  * ensemble targets, so it is the honest full scale for a bar. */
 const CAL_FULL_SCALE_NATS = Math.log(0.95 / 0.05)
@@ -99,7 +99,7 @@ export function calibrationWidthPct(d: number, n: number): number {
 export type CalStrength = 'thin' | 'weak' | 'moderate' | 'strong'
 
 /** The bands Cockpit's per-model rows already read D by, in one place. n is
- * trust.Stat.N, which excludes the Laplace prior — under ten observations the
+ * trust.Stat.N, which excludes the Laplace prior, under ten observations the
  * number is a guess whatever it says, so that outranks the value. */
 export function calibrationStrength(d: number, n: number): CalStrength {
   if (n < 10) return 'thin'
@@ -116,7 +116,7 @@ export function calibrationLabel(s: CalStrength): string {
 }
 
 /** internal/trust calibration keys are "verifier:go-test" / "model:claude-sonnet"
- * — the prefix is the routing/storage key, not something worth showing next to
+ *, the prefix is the routing/storage key, not something worth showing next to
  * every row of a leaderboard. Falls back to the raw string for anything else. */
 export function sourceLabel(source: string): string {
   const i = source.indexOf(':')
@@ -124,7 +124,7 @@ export function sourceLabel(source: string): string {
 }
 
 /** Oracles (verifier:*, e.g. test/lint results) are a structurally different
- * kind of evidence than a model's own self-report (model:*) — the calibration
+ * kind of evidence than a model's own self-report (model:*), the calibration
  * leaderboard color-codes by this distinction. Unrecognized prefixes read as
  * 'model', the more common case. */
 export function sourceKind(source: string): 'oracle' | 'model' {
@@ -143,7 +143,7 @@ export function clockTime(ts: string): string {
  * or null when there is no rate signal to project from.
  *
  * budget.RiskFromHistory returns zero below two observations, so a zero burn
- * rate means "never measured", not "not burning" — presenting that as headroom
+ * rate means "never measured", not "not burning", presenting that as headroom
  * would be a lie. Counts claude_pct *updates*, which are not chat turns and not
  * wall-clock time.
  */

@@ -54,13 +54,13 @@ func TestExecute_HappyPathParsesOutputAndUsage(t *testing.T) {
 	if resp.Output != "hello from the stub" {
 		t.Errorf("Output = %q", resp.Output)
 	}
-	// Token counts must come from the provider, not be estimated — cost
+	// Token counts must come from the provider, not be estimated, cost
 	// reporting labels these as actual spend.
 	if resp.InputTokens != 11 || resp.OutputTokens != 7 {
 		t.Errorf("tokens = %d/%d, want 11/7", resp.InputTokens, resp.OutputTokens)
 	}
 	if resp.TokensEstimated {
-		t.Error("TokensEstimated = true, but the provider reported real usage — " +
+		t.Error("TokensEstimated = true, but the provider reported real usage, " +
 			"estimated tokens must never be presented as measured spend")
 	}
 	if resp.Model != "gpt-test" {
@@ -141,7 +141,7 @@ func TestExecute_FaultsAreErrorsNotEmptySuccesses(t *testing.T) {
 				Prompt: "x", Head: stubHead(srv.URL),
 			})
 			if err == nil {
-				t.Fatalf("got a Response (%+v) instead of an error — a caller would bill this "+
+				t.Fatalf("got a Response (%+v) instead of an error, a caller would bill this "+
 					"as a successful completion", resp)
 			}
 			if resp != nil {
@@ -160,7 +160,7 @@ func TestExecute_FaultsAreErrorsNotEmptySuccesses(t *testing.T) {
 }
 
 // A cancelled context must abort promptly rather than block until the client
-// timeout — dispatch relies on this to enforce its own deadlines.
+// timeout, dispatch relies on this to enforce its own deadlines.
 func TestExecute_HonoursContextCancellation(t *testing.T) {
 	testutil.NewSandbox(t)
 
@@ -255,7 +255,7 @@ func TestDefaultMaxTokens(t *testing.T) {
 
 func TestFirstNonEmpty(t *testing.T) {
 	if got := firstNonEmpty("", "  ", "x", "y"); got != "x" {
-		t.Errorf("got %q, want x — whitespace-only is not a value", got)
+		t.Errorf("got %q, want x, whitespace-only is not a value", got)
 	}
 	if got := firstNonEmpty("", ""); got != "" {
 		t.Errorf("got %q, want empty", got)
@@ -310,7 +310,7 @@ func TestStringifyAny(t *testing.T) {
 	}
 }
 
-// The error must carry the status and a bounded slice of the body — enough to
+// The error must carry the status and a bounded slice of the body, enough to
 // diagnose, not so much that a huge error page floods the log.
 func TestHTTPStatusError_IsInformativeAndBounded(t *testing.T) {
 	huge := strings.Repeat("E", 100_000)
@@ -334,7 +334,7 @@ func TestHTTPStatusError_IsInformativeAndBounded(t *testing.T) {
 		t.Errorf("error %q lacks the status or the head ID", msg[:min(200, len(msg))])
 	}
 	if len(msg) > 8192 {
-		t.Errorf("error is %d bytes — an upstream error page should be truncated, not logged whole", len(msg))
+		t.Errorf("error is %d bytes, an upstream error page should be truncated, not logged whole", len(msg))
 	}
 }
 

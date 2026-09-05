@@ -27,7 +27,7 @@ func caps(t *testing.T) *capabilities.DB {
 
 // The bug: the executor honoured $OLLAMA_HOST while this package hardcoded
 // localhost:11434, so a user running Ollama anywhere else had a working server
-// discovery could not see — no tier-10 head, and a silent degrade to a paid
+// discovery could not see, no tier-10 head, and a silent degrade to a paid
 // one (#282). A stub server on an arbitrary port is exactly that situation.
 func TestOllama_DiscoversModelsOnANonDefaultAddress(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -53,7 +53,7 @@ func TestOllama_DiscoversModelsOnANonDefaultAddress(t *testing.T) {
 			t.Errorf("ID = %q, want an ollama/ prefix", h.ID)
 		}
 		if !h.LocalOnly {
-			t.Errorf("%s: LocalOnly = false — it would lose tier 10 and could be routed to as paid", h.ID)
+			t.Errorf("%s: LocalOnly = false, it would lose tier 10 and could be routed to as paid", h.ID)
 		}
 		if h.Source != "port" {
 			t.Errorf("%s: Source = %q, want %q", h.ID, h.Source, "port")
@@ -62,7 +62,7 @@ func TestOllama_DiscoversModelsOnANonDefaultAddress(t *testing.T) {
 		// later, so a head found at one address and stamped with another fails
 		// at the point of use.
 		if h.Endpoint != srv.URL {
-			t.Errorf("%s: Endpoint = %q, want %q — the address it was actually discovered at",
+			t.Errorf("%s: Endpoint = %q, want %q, the address it was actually discovered at",
 				h.ID, h.Endpoint, srv.URL)
 		}
 	}
@@ -97,7 +97,7 @@ func TestLMStudio_DiscoversModelsOnANonDefaultAddress(t *testing.T) {
 // Embedding-only models report capabilities but never "completion", so they
 // failed every dispatch (#532). They are now discovered but MARKED, so
 // executor.Unroutable keeps them out of routing while surfaces can still show
-// them; only the positively-non-completion case is marked — no capabilities
+// them; only the positively-non-completion case is marked, no capabilities
 // field at all (older servers) stays routable.
 func TestOllama_MarksEmbeddingOnlyModels(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -136,7 +136,7 @@ func TestOllama_MarksEmbeddingOnlyModels(t *testing.T) {
 		marked := h.Meta["embedding_only"] == "true"
 		if h.ID == "ollama/nomic-embed-text:latest" {
 			if !marked {
-				t.Error("the embedding-only model is not marked — dispatch would try it and fail (#532)")
+				t.Error("the embedding-only model is not marked, dispatch would try it and fail (#532)")
 			}
 			if executor.Supports(h) {
 				t.Error("an embedding-only model must never be a dispatch candidate (#532)")
@@ -180,7 +180,7 @@ func TestProbe_GarbageBodyYieldsNoHeads(t *testing.T) {
 }
 
 // An empty model list means the server is up with nothing loaded. That is zero
-// heads and no error — distinct from a failed probe.
+// heads and no error, distinct from a failed probe.
 func TestOllama_NoModelsIsNotAnError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`{"models":[]}`))
@@ -218,7 +218,7 @@ func TestHostPort_TracksTheBaseURL(t *testing.T) {
 	}
 }
 
-// The service's dial address must be derived from the base it will probe —
+// The service's dial address must be derived from the base it will probe,
 // checked directly, because these being independently computed is what allowed
 // them to disagree in the first place.
 func TestOllamaService_AddrMatchesItsBase(t *testing.T) {
@@ -238,7 +238,7 @@ func TestOllamaService_AddrMatchesItsBase(t *testing.T) {
 }
 
 // Discovery and execution must resolve $OLLAMA_HOST to the same address. They
-// did not — that is #282 — and one shared resolver is what stops them drifting
+// did not, that is #282, and one shared resolver is what stops them drifting
 // again. Asserted through the sandbox so no developer's own OLLAMA_HOST leaks in.
 func TestDiscovery_ResolvesTheSameHostTheExecutorWill(t *testing.T) {
 	cases := []struct{ env, want string }{
@@ -276,7 +276,7 @@ func TestDiscovery_ResolvesTheSameHostTheExecutorWill(t *testing.T) {
 }
 
 // Discover walks every service. With nothing listening it must find nothing and
-// not hang — a probe that blocks is worse than one that finds nothing, because
+// not hang, a probe that blocks is worse than one that finds nothing, because
 // `hyctl probe` is often the first command a user runs.
 func TestDiscover_NothingListeningFindsNothingQuickly(t *testing.T) {
 	s := testutil.NewSandbox(t)
@@ -318,7 +318,7 @@ func TestIsOpen_DetectsListeningAndNot(t *testing.T) {
 	}
 }
 
-// Discover finds a real service when one is listening — the positive case that
+// Discover finds a real service when one is listening, the positive case that
 // proves the negative ones above are not passing for the wrong reason.
 func TestDiscover_FindsAListeningOllama(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -347,12 +347,12 @@ func TestDiscover_FindsAListeningOllama(t *testing.T) {
 		t.Errorf("Endpoint = %q, want the address it was found at", heads[0].Endpoint)
 	}
 	if got := heads[0].Meta["model_source"]; got != "builtin" {
-		t.Errorf("Meta[model_source] = %q, want builtin — qwen matches a curated family pattern", got)
+		t.Errorf("Meta[model_source] = %q, want builtin, qwen matches a curated family pattern", got)
 	}
 }
 
 // Each service's dial address is derived from the base it will probe, for both
-// services — checked directly, since computing them independently is what let
+// services, checked directly, since computing them independently is what let
 // them disagree before.
 func TestServiceAddrs_DeriveFromTheirBases(t *testing.T) {
 	if got, want := (&ollamaService{base: "http://127.0.0.1:11500"}).addr(), "127.0.0.1:11500"; got != want {
@@ -372,7 +372,7 @@ func TestServiceAddrs_DeriveFromTheirBases(t *testing.T) {
 
 // Each probe reads a different vendor's response shape. A non-200, an
 // unparsable body or an empty catalogue must each yield no heads rather than a
-// head Hydra cannot drive — discovery reporting something that is not there is
+// head Hydra cannot drive, discovery reporting something that is not there is
 // the #248 defect class.
 func TestProbes_RejectBadResponses(t *testing.T) {
 	caps, err := capabilities.Load("")
@@ -428,7 +428,7 @@ func TestProbes_RejectBadResponses(t *testing.T) {
 }
 
 // LM Studio speaks the OpenAI catalogue shape, Ollama its own. Each head must
-// carry the address it was actually found at — the executor dials it later, so
+// carry the address it was actually found at, the executor dials it later, so
 // a head discovered at one address and stamped with another fails at the point
 // of use (#282).
 func TestProbes_StampTheAddressTheyWereFoundAt(t *testing.T) {

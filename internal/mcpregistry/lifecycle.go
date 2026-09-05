@@ -17,7 +17,7 @@ import (
 
 // LifecycleState is a server's position in the trust automaton (design doc
 // §9): every version bump costs a server its accumulated trust until it
-// re-earns a cooldown period — the direct, mechanical fix for the
+// re-earns a cooldown period, the direct, mechanical fix for the
 // postmark-mcp rug-pull pattern (15 clean versions, then a malicious one).
 type LifecycleState string
 
@@ -33,12 +33,12 @@ const (
 // provisionalCooldown is how long a server must hold a stable manifest hash
 // before graduating provisional -> trusted. A starting default, not a value
 // derived from a specific cited study (unlike the Cox hazard ratios in
-// score.go) — reasonable, not claimed as more rigorous than it is.
+// score.go), reasonable, not claimed as more rigorous than it is.
 const provisionalCooldown = 14 * 24 * time.Hour
 
 // ServerState is what's persisted per server between audit runs, keyed by
 // the server's registry Name. LastScore is the most recent ComputeScore
-// result — persisted so a later export or report doesn't have to re-run
+// result, persisted so a later export or report doesn't have to re-run
 // the network-calling signals just to redisplay a score already computed.
 type ServerState struct {
 	State          LifecycleState `json:"state"`
@@ -49,8 +49,8 @@ type ServerState struct {
 }
 
 // ManifestHash fingerprints the parts of a server record that matter for
-// re-verification: identity, version, and what it ships. Any change here —
-// not a statistically-detected anomaly — is what triggers re-review; the
+// re-verification: identity, version, and what it ships. Any change here,
+// not a statistically-detected anomaly, is what triggers re-review; the
 // design doc's research (§12) found the published defense for rug-pulls is
 // hash-pinning plus forced re-approval, not a learned changepoint detector.
 func ManifestHash(srv ServerRecord) string {
@@ -70,7 +70,7 @@ func ManifestHash(srv ServerRecord) string {
 // quarantineThreshold is deliberately below the near-duplicate signal's
 // -40: only a *confirmed* finding (a known-bad advisory match, -100) puts a
 // server in quarantine, because quarantine has no automatic way out. A
-// name-similarity heuristic is not a confirmation — measured against the
+// name-similarity heuristic is not a confirmation, measured against the
 // live registry it flagged 0.7% of servers and every single one of those was
 // a false positive, so wiring it to an unrecoverable state would have
 // stranded roughly 550 legitimately-published servers. It still subtracts
@@ -78,7 +78,7 @@ func ManifestHash(srv ServerRecord) string {
 const quarantineThreshold = -80.0
 
 // severeSecuritySignal reports whether score's Security Implementation
-// category carries a confirmed finding severe enough to force quarantine —
+// category carries a confirmed finding severe enough to force quarantine,
 // the automaton's trigger for NEW/PROVISIONAL -> QUARANTINED.
 func severeSecuritySignal(s Score) bool {
 	for _, sig := range s.SecurityImplementation.Signals {
@@ -129,7 +129,7 @@ func Advance(prev *ServerState, srv ServerRecord, score Score, now time.Time) Se
 			next.State = StateProvisional
 		}
 	case StateQuarantined, StateDelisted, StateNew:
-		// No automatic promotion out of quarantine/delisted — that's a
+		// No automatic promotion out of quarantine/delisted, that's a
 		// manual-clear path (design doc §9's "false positive, manually
 		// cleared" edge), not something an audit run decides on its own.
 		// StateNew never persists (Advance always assigns Provisional or
@@ -146,7 +146,7 @@ func Advance(prev *ServerState, srv ServerRecord, score Score, now time.Time) Se
 // a manual clear applies to.
 var ErrNotQuarantined = errors.New("server is not quarantined or delisted")
 
-// Clear is the manual path out of quarantine — the "false positive, manually
+// Clear is the manual path out of quarantine, the "false positive, manually
 // cleared" edge the automaton documents. Advance deliberately never takes
 // this edge on its own; without a way to invoke it, a wrongly-quarantined
 // server was unrecoverable short of hand-editing the state file. Returns the
@@ -159,7 +159,7 @@ func Clear(name string, now time.Time) (LifecycleState, error) {
 	}
 	st, ok := states[name]
 	if !ok {
-		return "", fmt.Errorf("no recorded state for %q — run `hyctl mcp registry audit` first", name)
+		return "", fmt.Errorf("no recorded state for %q, run `hyctl mcp registry audit` first", name)
 	}
 	if st.State != StateQuarantined && st.State != StateDelisted {
 		return st.State, ErrNotQuarantined
@@ -178,7 +178,7 @@ func statePath() string {
 }
 
 // LoadStates reads the persisted lifecycle-state map. A missing file yields
-// an empty map, not an error — the very first audit run has no history yet.
+// an empty map, not an error, the very first audit run has no history yet.
 func LoadStates() (map[string]ServerState, error) {
 	raw, err := os.ReadFile(statePath())
 	if err != nil {

@@ -4,7 +4,7 @@ name: Release Please
 #   1. Opens a "Release PR" with bumped version + updated CHANGELOG.md
 #   2. When the Release PR is merged, creates the tag + GitHub release
 #   3. This workflow then fans the release out to every channel (binaries,
-#      Homebrew, npm, pip) via publish.yml — so a feature release auto-updates
+#      Homebrew, npm, pip) via publish.yml, so a feature release auto-updates
 #      everywhere with no manual steps. curl (install.sh) always resolves the
 #      latest release at runtime, so it needs nothing.
 
@@ -47,7 +47,7 @@ jobs:
     secrets: inherit
 
   # The tag release-please creates is made with GITHUB_TOKEN, and events raised by
-  # that token start no workflow — so this has to hang off the job graph, like publish.
+  # that token start no workflow, so this has to hang off the job graph, like publish.
   close-issues:
     name: Close shipped issues
     needs: release-please

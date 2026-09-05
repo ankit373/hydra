@@ -10,7 +10,7 @@
 // than forced into a shape that loses it.
 //
 // OTLP/HTTP with a JSON body, because that is what the collectors people
-// actually run accept — Langfuse ingests at /api/public/otel/v1/traces and
+// actually run accept, Langfuse ingests at /api/public/otel/v1/traces and
 // offers no gRPC endpoint at all.
 package otlp
 
@@ -54,7 +54,7 @@ type Scope struct {
 }
 
 // Span is one dispatch. Times are strings because OTLP/JSON encodes 64-bit
-// values as strings — a JSON number loses precision above 2^53, and unix nanos
+// values as strings, a JSON number loses precision above 2^53, and unix nanos
 // passed that in 1970.
 type Span struct {
 	TraceID           string     `json:"traceId"`
@@ -188,7 +188,7 @@ func spanFor(r cost.Row) (Span, error) {
 //
 // A trace or span id of all zeroes is invalid per the spec and collectors drop
 // the span, so a row with no run or task id gets a random one rather than a
-// zero one — an unlinked span is still data; a dropped span is not.
+// zero one, an unlinked span is still data; a dropped span is not.
 func idHex(n int, seed string) (string, error) {
 	buf := make([]byte, n)
 	if seed == "" {

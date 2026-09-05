@@ -12,7 +12,7 @@ function row(d: number, n = 40, source = 'model:claude-sonnet'): CalibrationRow 
 }
 
 /** Resolves a bar's calc() against a concrete track width, the way the browser
- * does — the "cannot overflow" claim is arithmetic, not CSS to be trusted. */
+ * does, the "cannot overflow" claim is arithmetic, not CSS to be trusted. */
 function resolve(expr: string, trackPx: number): number {
   if (expr === '0px') return 0
   const m = /^calc\((?:(\d+)px \+ )?([\d.]+) \* \(100% - (\d+)px\)(?: \+ (\d+)px)?\)$/.exec(expr)

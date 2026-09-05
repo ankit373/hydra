@@ -14,13 +14,13 @@ const DefaultOllamaHost = "http://localhost:11434"
 
 // OllamaHost resolves where Ollama is listening, honouring $OLLAMA_HOST.
 //
-// This lives in provider — not executor, and not port — because both of them
+// This lives in provider, not executor, and not port, because both of them
 // need it and neither should depend on the other. Discovery and execution
 // having separate answers is exactly the bug: the executor honoured
 // $OLLAMA_HOST while the port provider hardcoded localhost:11434, so a user
 // running Ollama anywhere else had a working server that discovery could not
 // see, no tier-10 head, and a silent degrade to a paid one (#282). Same shape
-// as #248 — two surfaces disagreeing about what exists.
+// as #248, two surfaces disagreeing about what exists.
 //
 // Plain http:// is restricted to loopback on purpose: a prompt is the user's
 // source code, and sending it in cleartext to a remote host because an

@@ -12,7 +12,7 @@ import "github.com/ankit373/hydra/internal/review"
 type ReviewOutcome struct {
 	File   string `json:"file"`
 	Status string `json:"status,omitempty"`
-	// Method is how the rollback was done — git_checkout, rm_untracked or
+	// Method is how the rollback was done, git_checkout, rm_untracked or
 	// backup_restore. Shown because the three are not equally recoverable.
 	Method string `json:"method,omitempty"`
 	Error  string `json:"error,omitempty"`
@@ -22,7 +22,7 @@ type ReviewOutcome struct {
 // that made undoing it possible.
 //
 // The path is passed through exactly as the run log recorded it, and is never
-// resolved against a guessed workspace root — that could accept a file outside
+// resolved against a guessed workspace root, that could accept a file outside
 // the intended scope. It does not need to be: both edit paths (editor.Edit,
 // parallel) refuse a relative path outright, so a stored path is absolute by
 // construction, and review.Approve refuses anything else. Re-checking it here

@@ -8,7 +8,7 @@ title = "Hydra"
 useDefault = true
 
 [allowlist]
-description = "Public identifiers and synthetic test fixtures — not secrets"
+description = "Public identifiers and synthetic test fixtures, not secrets"
 
 # Conditions are OR-ed: a finding is allowed if its content matches a regex
 # below OR its file matches a path below.
@@ -20,7 +20,7 @@ regexes = [
 
   # AWS SigV4 known-answer vectors: the *derived signing keys* for AWS's own
   # published example secret, used by internal/executor/sigv4_test.go. They are
-  # 64 hex chars of high entropy, so gitleaks reads them as generic-api-key —
+  # 64 hex chars of high entropy, so gitleaks reads them as generic-api-key,
   # correct by pattern, wrong by fact. A signing key is the output of a KDF over
   # a documented sample secret; it authenticates nothing, and the first value is
   # printed verbatim in AWS's "deriving the signing key" documentation.
@@ -31,7 +31,7 @@ regexes = [
   # still: defeating the scanner by obfuscation rather than declaring the
   # exception.
   #
-  # Allowlisted as exact values rather than by path — tighter than the
+  # Allowlisted as exact values rather than by path, tighter than the
   # pii_test.go entry below, since this cannot hide anything but these two
   # specific strings, in any file.
   '''f4780e2d9f65fa895f9c67b32ce1baf0b0d8a43505a000a1a9e090d414db404d''',
@@ -40,8 +40,8 @@ regexes = [
 
 paths = [
   # The corpus for Hydra's own PII detector (#169). Its fixtures are secrets by
-  # construction — a test that a private key is detected has to contain
-  # something shaped like a private key — so gitleaks flags all of them.
+  # construction, a test that a private key is detected has to contain
+  # something shaped like a private key, so gitleaks flags all of them.
   #
   # Every value there is synthetic or a vendor's published example
   # (e.g. AKIAIOSFODNN7EXAMPLE is AWS's documented sample key). Scoped to this

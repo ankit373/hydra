@@ -9,16 +9,16 @@ import (
 )
 
 // ClassMCPBehaviorChange flags an MCP tool call whose Action type has never
-// appeared before in this server's own ledger history — the local,
+// appeared before in this server's own ledger history, the local,
 // backend-free slice of the design doc's Phase 6 ("ledger-as-flywheel")
 // idea. The original design needed two things that don't exist: a
 // cross-user aggregation backend, and per-tool declared-capability data the
 // official registry doesn't publish. A server's own action history, already
-// recorded by internal/ledger for every call, is itself a real baseline —
+// recorded by internal/ledger for every call, is itself a real baseline,
 // no external data or cross-machine aggregation required. A server that has
 // only ever shown ledger.Read suddenly showing ledger.Network is exactly
 // postmark-mcp's real attack shape (an email tool that starts silently
-// BCC'ing — a network-shaped action) — catchable from local history alone,
+// BCC'ing, a network-shaped action), catchable from local history alone,
 // before any CVE exists for it.
 const ClassMCPBehaviorChange = "mcp-behavior-change"
 
@@ -27,7 +27,7 @@ const ClassMCPBehaviorChange = "mcp-behavior-change"
 type ObservedActions map[ledger.Action]bool
 
 // BehaviorProfiles builds a per-server-alias action history from a slice of
-// ledger events — purely local, no external data.
+// ledger events, purely local, no external data.
 func BehaviorProfiles(events []ledger.Event) map[string]ObservedActions {
 	profiles := make(map[string]ObservedActions)
 	for _, e := range events {
@@ -48,7 +48,7 @@ func BehaviorProfiles(events []ledger.Event) map[string]ObservedActions {
 // would be the first of its kind ever recorded for tool's MCP server alias,
 // given priorEvents (everything logged strictly before this call). Returns
 // ("", false) for a non-MCP tool name, or when the server has no prior
-// history at all — a server's very first-ever call has nothing to compare
+// history at all, a server's very first-ever call has nothing to compare
 // against, and flagging it as "novel" would be noise, not a signal.
 func BehaviorClassification(priorEvents []ledger.Event, tool string, action ledger.Action) (string, bool) {
 	alias, ok := ParseMCPToolName(tool)

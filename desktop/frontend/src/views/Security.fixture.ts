@@ -12,7 +12,7 @@ import type {
  * This is the deliverable as much as the tests are. The Audit view is the
  * largest in the app and had no tests at all, purely because its only prop is
  * a report with fifteen required nested fields and no fixture for one existed
- * anywhere — not in the frontend, not on the Go side. Every conditional path
+ * anywhere, not in the frontend, not on the Go side. Every conditional path
  * in the view was therefore unreachable from a test, which is how two hero
  * cards came to look checks up by names the backend never emits.
  *

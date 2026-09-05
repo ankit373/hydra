@@ -16,7 +16,7 @@ import (
 // PII is exactly what gets replaced. A second detection pass over the result is
 // the test that keeps that honest.
 //
-// The label is kept because the *kind* of secret is the part worth retaining —
+// The label is kept because the *kind* of secret is the part worth retaining,
 // "this response contained an AWS key" is a finding; the key itself is a
 // liability.
 func Redact(prompt string) (string, []string) {
@@ -43,7 +43,7 @@ func Redact(prompt string) (string, []string) {
 		return prompt, nil
 	}
 
-	// Detectors overlap by design — an "authorization: Bearer eyJ..." hit is
+	// Detectors overlap by design, an "authorization: Bearer eyJ..." hit is
 	// also a jwt hit. Emitting both placeholders would corrupt the text, so
 	// overlapping spans merge into the earliest-starting, widest one.
 	sort.Slice(spans, func(i, j int) bool {

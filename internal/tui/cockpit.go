@@ -2,7 +2,7 @@
 
 package tui
 
-// cockpit.go — the interactive terminal cockpit (`hyctl tui`): the model, the
+// cockpit.go, the interactive terminal cockpit (`hyctl tui`): the model, the
 // six-view table, and the frame loop. Chrome lives in chrome.go, bindings in
 // keys.go, layout helpers in layout.go, and each view in view_<name>.go.
 
@@ -26,7 +26,7 @@ import (
 	"github.com/ankit373/hydra/internal/workspace"
 )
 
-// Cockpit views. The name table is the single source of truth — deriving the
+// Cockpit views. The name table is the single source of truth, deriving the
 // count and the bounds check from it keeps the Tab cycle, the header tabs, and
 // the --view validation from drifting apart when a view is added.
 const (
@@ -107,14 +107,14 @@ type Cockpit struct {
 	glossary bool
 	flash    string // transient status-bar note, replaced by the next action
 
-	// chat (view 0) — executes for real (#597) across parallel threads (#598).
+	// chat (view 0), executes for real (#597) across parallel threads (#598).
 	// Per-task state (input, log, pipeline, code panel) lives on each thread;
 	// the mode, override, and overlays are session-level.
 	threads    []*ckThread
-	cur        int // index into threads — the thread owning the input
+	cur        int // index into threads, the thread owning the input
 	nextID     int
-	queueSeq   int    // ordering for queued tasks — see overlapBlocker
-	prevCur    int    // previously active thread id — the split's default pin
+	queueSeq   int    // ordering for queued tasks, see overlapBlocker
+	prevCur    int    // previously active thread id, the split's default pin
 	split      bool   // ctrl+\ split: pinned thread beside the active one
 	splitID    int    // the pinned (watch-only) side's thread id
 	repoRoot   string // CWD repo root; "" = no repo, edit isolation degrades
@@ -133,7 +133,7 @@ type Cockpit struct {
 	pctKnown   bool // false when state.json has no claude_pct to read
 	pctHist    []int
 	spend      float64 // today's real estimated spend, from cost.jsonl
-	sessionUSD float64 // est cost accrued by THIS process — zero until chat executes
+	sessionUSD float64 // est cost accrued by THIS process, zero until chat executes
 	metrics    ckMetrics
 	heads      []ckHead
 	// probedHeads is kept from the startup scan so the models view and the
@@ -160,7 +160,7 @@ type Cockpit struct {
 	usageGroup byte // 'm' model · 't' tier · 'd' day
 	usageOff   int  // usage view scroll (the whole view is one document)
 
-	// audit (view 5) — built lazily on entry (#524) and refreshed on each
+	// audit (view 5), built lazily on entry (#524) and refreshed on each
 	// entry; nil until then or when the build failed.
 	audit        *ckAudit
 	auditSel     int
@@ -228,7 +228,7 @@ func NewCockpit() Cockpit {
 			ckMidS.Render(fmt.Sprintf("⚠ %d stale worktree%s from a previous session under %s:",
 				len(stale), plural(len(stale)), ckWorktreeBase())),
 			ckDimS.Render("  "+truncate(strings.Join(stale, " · "), 90)),
-			ckDimS.Render("  recover with `git diff` there, or remove with `git worktree remove <dir>` — nothing is auto-deleted."))
+			ckDimS.Render("  recover with `git diff` there, or remove with `git worktree remove <dir>`, nothing is auto-deleted."))
 	}
 	return m
 }
@@ -382,7 +382,7 @@ func CockpitSnapshotView(view int) string {
 
 // ckSnapshotModel builds the one demo Cockpit state every snapshot view
 // renders from (NewCockpit alone scans the machine; the audit stays lazy,
-// #524). The transcript uses the real renderers — a snapshot never dispatches.
+// #524). The transcript uses the real renderers, a snapshot never dispatches.
 func ckSnapshotModel() Cockpit {
 	m := NewCockpit()
 	m.w, m.h, m.ready = 100, 30, true
@@ -421,7 +421,7 @@ func ckSnapshotModel() Cockpit {
 }
 
 // CockpitSnapshot renders all six views stacked plus the shortcut glossary,
-// each labelled — the representative frame shown by `hyctl tui --snapshot`.
+// each labelled, the representative frame shown by `hyctl tui --snapshot`.
 func CockpitSnapshot() string {
 	label := func(s string) string { return ckLabelS.Render("── " + s + " " + strings.Repeat("─", 40)) }
 	base := ckSnapshotModel()

@@ -99,7 +99,7 @@ describe('checking the registry', () => {
     render(<MCPServers />)
     await screen.findByRole('button', { name: /check the registry/i })
     // Counted relative to the mount, since StrictMode invokes the mount
-    // effect twice — an absolute count asserts the harness, not the code.
+    // effect twice, an absolute count asserts the harness, not the code.
     const before = mockGet.mock.calls.length
     fireEvent.click(screen.getByRole('button', { name: /check the registry/i }))
 

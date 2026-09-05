@@ -11,7 +11,7 @@ import (
 
 // specstest is the diagnostic a user is pointed at when Hydra's local-model
 // sizing does not match what they expect. It had no test because it is "just a
-// debug main" — but a diagnostic that panics or prints nothing is worse than no
+// debug main", but a diagnostic that panics or prints nothing is worse than no
 // diagnostic, since it is consulted precisely when something is already wrong.
 //
 // This is a smoke test on purpose: it asserts the tool runs on whatever machine
@@ -35,7 +35,7 @@ func TestMain_ReportsEveryFieldItClaimsTo(t *testing.T) {
 		}
 	}
 
-	// Every recommendation must carry a fit marker and a reason — a bare model
+	// Every recommendation must carry a fit marker and a reason, a bare model
 	// name tells the reader nothing about why it was or was not chosen.
 	lines := strings.Split(out, "\n")
 	var recs int

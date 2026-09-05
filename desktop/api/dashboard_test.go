@@ -17,7 +17,7 @@ import (
 
 // sandbox points config.Dir() and trust.DefaultLogPath() at a temp HOME, so a
 // test never reads (or writes) the developer's real ~/.hydra. Clearing
-// HYDRA_HOME too matters since config.Dir() prefers it over HOME (#442) — a
+// HYDRA_HOME too matters since config.Dir() prefers it over HOME (#442), a
 // developer or CI runner with one already exported would otherwise leak
 // straight through every "HOME-only" sandbox in this file.
 func sandbox(t *testing.T) string {
@@ -69,7 +69,7 @@ func fixture(t *testing.T, home string) {
 		{"ts": today + "T12:00:00Z", "tier": 1, "model": "claude-opus", "prompt_tokens": 300,
 			"response_tokens": 150, "est_cost_usd": 0.015, "wall_ms": 900, "tokens_source": "estimated",
 			"run_id": "run-b", "task_id": "task-c"},
-		// tier 0 — the "unknown" bucket both surfaces must label identically.
+		// tier 0, the "unknown" bucket both surfaces must label identically.
 		{"ts": yesterday + "T09:00:00Z", "tier": 0, "model": "mystery", "prompt_tokens": 100,
 			"response_tokens": 50, "est_cost_usd": 0.001, "wall_ms": 100, "tokens_source": "estimated",
 			"run_id": "run-c", "task_id": "task-d"},
@@ -177,7 +177,7 @@ func TestGetDashboard_TierZeroIsUnknown(t *testing.T) {
 }
 
 // A machine that has never dispatched must say so. Rendering $0.00 spend and
-// empty tables looks like a measurement — it is the absence of one.
+// empty tables looks like a measurement, it is the absence of one.
 func TestGetDashboard_EmptyStateIsHonest(t *testing.T) {
 	sandbox(t) // no cost.jsonl written
 
@@ -197,7 +197,7 @@ func TestGetDashboard_EmptyStateIsHonest(t *testing.T) {
 }
 
 // state.json absent means nobody has reported the orchestrator's usage. That is
-// unknown, not 0% — 0% would read as "plenty of headroom".
+// unknown, not 0%, 0% would read as "plenty of headroom".
 func TestGovernor_UnknownWithoutStateFile(t *testing.T) {
 	sandbox(t)
 
@@ -282,7 +282,7 @@ func TestGovernor_MissingKeyIsUnknown(t *testing.T) {
 }
 
 // The trust panel must agree with `hyctl trust stats`, including the fixed-5
-// baseline it compares against — a different baseline reports different savings
+// baseline it compares against, a different baseline reports different savings
 // for identical runs.
 func TestTrustPanel_MatchesCLIAggregate(t *testing.T) {
 	home := sandbox(t)
@@ -316,7 +316,7 @@ func TestTrustPanel_MatchesCLIAggregate(t *testing.T) {
 		t.Errorf("mean samples = %v, CLI says %v", d.Trust.MeanSamples, want.MeanSamples)
 	}
 	if d.Trust.SamplesSavedPct != want.SamplesSavedPct {
-		t.Errorf("samples saved = %v%%, CLI says %v%% — the fixed-N baselines have diverged",
+		t.Errorf("samples saved = %v%%, CLI says %v%%, the fixed-N baselines have diverged",
 			d.Trust.SamplesSavedPct, want.SamplesSavedPct)
 	}
 	if d.Trust.AutoClearedPct != want.AutoClearedPct {
@@ -354,7 +354,7 @@ func TestSpend_TokenProvenanceShare(t *testing.T) {
 }
 
 // A fresh machine has no ~/.hydra/calibration.jsonl. That is a real empty
-// leaderboard, not an error — trust.New treats a missing file as an empty
+// leaderboard, not an error, trust.New treats a missing file as an empty
 // store, and the frontend needs a non-nil slice to render "no data yet"
 // rather than a null it can't .map over.
 func TestCalibrationPanel_EmptyOnFreshMachine(t *testing.T) {
@@ -372,8 +372,8 @@ func TestCalibrationPanel_EmptyOnFreshMachine(t *testing.T) {
 	}
 }
 
-// Real calibration history — written the same way `hyctl trust record` does,
-// through trust.Calibrator.Update — must come back out through the Dashboard
+// Real calibration history, written the same way `hyctl trust record` does,
+// through trust.Calibrator.Update, must come back out through the Dashboard
 // exactly as trust.Calibrator.Report (the same call `hyctl trust calibration`
 // makes) sees it: most-diagnostic-source first, with Se/Sp/N intact.
 func TestCalibrationPanel_MatchesCalibratorReport(t *testing.T) {
@@ -384,7 +384,7 @@ func TestCalibrationPanel_MatchesCalibratorReport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// verifier:go-test: near-perfect — should out-rank the model by D.
+	// verifier:go-test: near-perfect, should out-rank the model by D.
 	for i := 0; i < 40; i++ {
 		mustUpdate(t, cal, "verifier:go-test", "go", true, trust.OutcomeCorrect)
 	}
@@ -427,7 +427,7 @@ func TestCalibrationPanel_MatchesCalibratorReport(t *testing.T) {
 	}
 }
 
-// mustUpdate mirrors internal/trust's own test helper of the same name —
+// mustUpdate mirrors internal/trust's own test helper of the same name,
 // duplicated here rather than exported from trust for one call site, since
 // trust.Calibrator.Update already returns a plain error.
 func mustUpdate(t *testing.T, c *trust.Calibrator, source, domain string, saidCorrect bool, outcome trust.Outcome) {
@@ -437,7 +437,7 @@ func mustUpdate(t *testing.T, c *trust.Calibrator, source, domain string, saidCo
 	}
 }
 
-// writeManyCostRows fills cost.jsonl with n synthetic rows — large enough
+// writeManyCostRows fills cost.jsonl with n synthetic rows, large enough
 // that cost.jsonl's read+parse cost dominates a GetDashboard call, so any
 // difference between reading it once and reading it twice shows up in wall
 // time (#524).
@@ -473,7 +473,7 @@ func writeManyCostRows(t *testing.T, home string, n int) {
 }
 
 // GetDashboard used to call cost.LoadAll() directly and then cost.Summary()
-// — which itself calls LoadAll() again — parsing cost.jsonl twice per call.
+// , which itself calls LoadAll() again, parsing cost.jsonl twice per call.
 // On a large log this test's cost.jsonl deliberately reproduces the shape of
 // the bug: enough rows that the JSONL parse dominates wall time, so a
 // regression back to a second full read shows up as roughly double the time
@@ -510,13 +510,13 @@ func TestGetDashboard_ReadsCostLogOnce(t *testing.T) {
 	}
 
 	// A single-read GetDashboard costs one LoadAll plus a handful of cheap
-	// O(n) in-memory passes (ByModel/ByTier/ByDay/SummaryFromRows) — well
+	// O(n) in-memory passes (ByModel/ByTier/ByDay/SummaryFromRows), well
 	// under 2x one read. A regression to calling cost.Summary() (its own
 	// second LoadAll) on top of the first would cost close to 2x oneRead
 	// before those passes even run. 1.6x gives headroom for scheduling noise
 	// while still catching a real regression.
 	if budget := oneRead * 16 / 10; dashboardTime > budget {
-		t.Errorf("GetDashboard took %v for %d rows — more than 1.6x a single cost.LoadAll (%v); "+
+		t.Errorf("GetDashboard took %v for %d rows, more than 1.6x a single cost.LoadAll (%v); "+
 			"looks like it is reading cost.jsonl twice again", dashboardTime, n, oneRead)
 	}
 }
@@ -561,7 +561,7 @@ func TestGovernor_NoRateSignalIsDistinguishableFromNoRisk(t *testing.T) {
 		t.Errorf("burn=%v risk=%v; one observation cannot yield a rate", g.BurnRatePct, g.Risk)
 	}
 	if g.Observations != 1 {
-		t.Errorf("Observations = %d, want 1 — without it a zero risk reads as measured", g.Observations)
+		t.Errorf("Observations = %d, want 1, without it a zero risk reads as measured", g.Observations)
 	}
 	if g.HorizonObs <= 0 {
 		t.Errorf("HorizonObs = %d; the UI cannot state the horizon it is reporting", g.HorizonObs)
@@ -574,7 +574,7 @@ func TestGovernor_NoRateSignalIsDistinguishableFromNoRisk(t *testing.T) {
 }
 
 // A climbing trajectory must produce a positive burn rate, and a fast climb must
-// be able to raise the effective mode above the static band — that escalation is
+// be able to raise the effective mode above the static band, that escalation is
 // the entire point of the rate model.
 func TestGovernor_FastBurnRaisesEffectiveModeAboveTheBand(t *testing.T) {
 	home := sandbox(t)
@@ -598,7 +598,7 @@ func TestGovernor_FastBurnRaisesEffectiveModeAboveTheBand(t *testing.T) {
 		t.Errorf("Risk = %v; a fast climb toward 80%% must carry non-zero risk", g.Risk)
 	}
 	if g.Mode != "compact" {
-		t.Fatalf("Mode = %q, want compact — fixture no longer pins the band it means to", g.Mode)
+		t.Fatalf("Mode = %q, want compact, fixture no longer pins the band it means to", g.Mode)
 	}
 	if g.EffectiveMode == g.Mode {
 		t.Errorf("EffectiveMode = %q, same as the static band; the rate floor never applied",

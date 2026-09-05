@@ -19,7 +19,7 @@ import (
 )
 
 // The agy executor used to mutate a file the user owns: swap the model into
-// agy's own settings.json, run, swap it back — serialized end to end because
+// agy's own settings.json, run, swap it back, serialized end to end because
 // two concurrent swaps corrupt the shared file. It now passes the model via
 // agy's own --model flag (confirmed against the real CLI, #522), so Execute
 // never touches settings.json for model selection and concurrent calls run
@@ -58,7 +58,7 @@ func fakeAgy(t *testing.T, s *testutil.Sandbox, stdout, stderr string, exitCode 
 
 // fakeAgyCapturingArgs plants an `agy` that appends its argv (one per line) to
 // argsFile before printing stdout, so a test can assert exactly what Execute
-// invoked it with — e.g. that --model carries the right flag.
+// invoked it with, e.g. that --model carries the right flag.
 func fakeAgyCapturingArgs(t *testing.T, s *testutil.Sandbox, argsFile, stdout string, exitCode int) {
 	t.Helper()
 	if runtime.GOOS == "windows" {
@@ -120,8 +120,8 @@ func agyHead(modelFlag string) provider.Head {
 }
 
 // Model selection goes through agy's own --model flag (confirmed against the
-// real CLI, #522) rather than a settings.json swap, so a live user config —
-// including a model they picked themselves — must survive a dispatch call
+// real CLI, #522) rather than a settings.json swap, so a live user config,
+// including a model they picked themselves, must survive a dispatch call
 // completely untouched.
 func TestAgyExecute_PassesModelViaFlagAndNeverTouchesSettings(t *testing.T) {
 	s := testutil.NewSandbox(t)
@@ -163,7 +163,7 @@ func TestAgyExecute_PassesModelViaFlagAndNeverTouchesSettings(t *testing.T) {
 		t.Errorf("agy invoked with args %v, want --model claude-sonnet-4.5 among them", args)
 	}
 
-	// settings.json must be byte-identical — no swap, no restore, nothing.
+	// settings.json must be byte-identical, no swap, no restore, nothing.
 	after, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
@@ -244,7 +244,7 @@ func TestAgyExecute_RealAuthFailureIsTypedAndRecorded(t *testing.T) {
 	}
 	authErr, ok := err.(*AuthRequiredError)
 	if !ok {
-		t.Fatalf("error is %T, want *AuthRequiredError — dispatch keys its fallback "+
+		t.Fatalf("error is %T, want *AuthRequiredError, dispatch keys its fallback "+
 			"on the type, not on the message", err)
 	}
 	if authErr.Pool != "gemini" || authErr.ModelFlag != "claude-sonnet-4.5" {
@@ -293,7 +293,7 @@ func TestAgyExecute_OrdinaryFailureIsNotAnAuthError(t *testing.T) {
 	}
 }
 
-// A head with no model_flag cannot be routed to agy at all — swapping in an
+// A head with no model_flag cannot be routed to agy at all, swapping in an
 // empty model would run whatever agy happened to be set to.
 func TestAgyExecute_MissingModelFlagIsRefused(t *testing.T) {
 	testutil.NewSandbox(t)
@@ -310,7 +310,7 @@ func TestAgyExecute_MissingModelFlagIsRefused(t *testing.T) {
 	}
 }
 
-// With no settings.json at all, agy still runs — it just cannot be pinned to a
+// With no settings.json at all, agy still runs, it just cannot be pinned to a
 // model. A user who has never opened agy must not get a hard failure.
 func TestAgyExecute_NoSettingsFileStillRuns(t *testing.T) {
 	s := testutil.NewSandbox(t)
@@ -430,7 +430,7 @@ func TestAgyExecute_ConcurrentCallsRunInParallel(t *testing.T) {
 	}
 
 	// A real sleep(0.5) syscall can't finish early, so full serialization has a
-	// hard floor of n*500ms=1.5s regardless of machine speed — genuine
+	// hard floor of n*500ms=1.5s regardless of machine speed, genuine
 	// parallelism stays close to one call's duration instead. 1.2s sits well
 	// below that floor. Up to 3 attempts absorb a one-off host scheduling
 	// stall (which looks identical to a serializing lock in a single sample);
@@ -451,7 +451,7 @@ func TestAgyExecute_ConcurrentCallsRunInParallel(t *testing.T) {
 		}
 	}
 	t.Errorf("best of 3 attempts: wall=%v for %d concurrent 500ms calls, want at least "+
-		"one attempt well under the n*500ms=1.5s serialized floor — the lock is "+
+		"one attempt well under the n*500ms=1.5s serialized floor, the lock is "+
 		"serializing cmd.Run() again", best, n)
 }
 
@@ -479,7 +479,7 @@ func TestAgyExecute_HonoursTheTimeout(t *testing.T) {
 				t.Fatal("a timed-out run reported success")
 			}
 			if elapsed > 10*time.Second {
-				t.Errorf("took %v with AGY_TIMEOUT=%s — the timeout was not applied "+
+				t.Errorf("took %v with AGY_TIMEOUT=%s, the timeout was not applied "+
 					"(a bare integer means seconds)", elapsed, timeout)
 			}
 		})

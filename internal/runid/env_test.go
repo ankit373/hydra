@@ -17,7 +17,7 @@ func TestResolve_GeneratedValueMustNotBePassedAsExplicit(t *testing.T) {
 	// What cmd/hydra used to do.
 	minted := New()
 	if got := ResolveRun(minted); got != minted {
-		t.Fatalf("ResolveRun(minted) = %q, want the explicit value — precedence changed", got)
+		t.Fatalf("ResolveRun(minted) = %q, want the explicit value, precedence changed", got)
 	}
 	if minted == "orchestrator-run" {
 		t.Fatal("New() collided with the env value; test is meaningless")
@@ -25,7 +25,7 @@ func TestResolve_GeneratedValueMustNotBePassedAsExplicit(t *testing.T) {
 
 	// What it must do instead.
 	if got := ResolveRun(""); got != "orchestrator-run" {
-		t.Errorf("ResolveRun(\"\") = %q, want the env value %q — HYDRA_RUN_ID is being ignored",
+		t.Errorf("ResolveRun(\"\") = %q, want the env value %q, HYDRA_RUN_ID is being ignored",
 			got, "orchestrator-run")
 	}
 }

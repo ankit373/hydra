@@ -17,7 +17,7 @@ import (
 	"github.com/ankit373/hydra/internal/testutil"
 )
 
-// countingExecutor always succeeds and counts how many times it actually ran —
+// countingExecutor always succeeds and counts how many times it actually ran,
 // so a test can prove a denied head's executor was never invoked, not merely
 // that its output was discarded.
 type countingExecutor struct{ calls *int }
@@ -42,7 +42,7 @@ func writeLedgerPolicy(t *testing.T, p ledger.Policy) {
 	}
 }
 
-// A ledger deny rule must stop executeHead before it ever calls the executor —
+// A ledger deny rule must stop executeHead before it ever calls the executor,
 // gating, not just logging after the fact.
 func TestExecuteHead_LedgerDenyBlocksExecution(t *testing.T) {
 	testutil.NewSandbox(t)
@@ -83,7 +83,7 @@ func TestEffectiveTimeout(t *testing.T) {
 	}
 	// Regression guard: swarm must never run a head unbounded.
 	if effectiveTimeout(Options{}) <= 0 {
-		t.Fatal("default per-head timeout must be positive — heads must never run unbounded")
+		t.Fatal("default per-head timeout must be positive, heads must never run unbounded")
 	}
 }
 
@@ -125,7 +125,7 @@ func (c *capturingExecutor) seen() []string {
 	return append([]string(nil), c.prompts...)
 }
 
-// A hung head must degrade to a clean StatusTimeout — not block wg.Wait forever.
+// A hung head must degrade to a clean StatusTimeout, not block wg.Wait forever.
 func TestRunAll_BoundsHangingHead(t *testing.T) {
 	withStubExecutor(t, hangingExecutor{})
 	heads := []provider.Head{registryHead("a", "A", 90), registryHead("b", "B", 80)}
@@ -146,7 +146,7 @@ func TestRunAll_BoundsHangingHead(t *testing.T) {
 			}
 		}
 	case <-time.After(5 * time.Second):
-		t.Fatal("runAll did not return within 5s — hung head was not bounded by the per-head timeout")
+		t.Fatal("runAll did not return within 5s, hung head was not bounded by the per-head timeout")
 	}
 }
 
@@ -162,8 +162,8 @@ func TestRunRace_BoundsHangingHeads(t *testing.T) {
 
 	select {
 	case <-done:
-		// Returned instead of hanging — that is the property under test.
+		// Returned instead of hanging, that is the property under test.
 	case <-time.After(5 * time.Second):
-		t.Fatal("runRace did not return within 5s — hung heads were not bounded")
+		t.Fatal("runRace did not return within 5s, hung heads were not bounded")
 	}
 }

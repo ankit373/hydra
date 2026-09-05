@@ -29,7 +29,7 @@ func TestGetPendingQuestions_EmptyIsAList(t *testing.T) {
 
 	got := New().GetPendingQuestions()
 	if got.Questions == nil {
-		t.Error("Questions is nil — the bridge must send [] for an empty queue")
+		t.Error("Questions is nil, the bridge must send [] for an empty queue")
 	}
 	if len(got.Questions) != 0 || got.Error != "" {
 		t.Errorf("expected a clean empty queue, got %+v", got)
@@ -77,7 +77,7 @@ func TestGetPendingQuestions_ReportsCorruptWithoutHidingTheRest(t *testing.T) {
 }
 
 // Answering twice must not run the work twice, and the second answer must not
-// read as a crash — it is an ordinary double click or a second window.
+// read as a crash, it is an ordinary double click or a second window.
 func TestAnswerQuestion_AlreadyAnsweredIsNotAlarming(t *testing.T) {
 	sandbox(t)
 
@@ -119,7 +119,7 @@ func TestAnswerQuestion_ReplyKeepsTheRunLink(t *testing.T) {
 		t.Fatal(err)
 	}
 	if r.RunID != "run-t1" {
-		t.Errorf("RunID = %q, want run-t1 — the answered task must stay linked to its run", r.RunID)
+		t.Errorf("RunID = %q, want run-t1, the answered task must stay linked to its run", r.RunID)
 	}
 	if r.TaskID != "t1" {
 		t.Errorf("TaskID = %q, want t1", r.TaskID)

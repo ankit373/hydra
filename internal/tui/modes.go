@@ -2,7 +2,7 @@
 
 package tui
 
-// modes.go — the chat modes (what a task DOES: ask/edit/plan/auto + advanced)
+// modes.go, the chat modes (what a task DOES: ask/edit/plan/auto + advanced)
 // and the `m` picker overlay. Where a task RUNS is the ctrl+o override
 // (override.go); the two are deliberately separate axes.
 
@@ -32,18 +32,18 @@ type ckModeDef struct {
 	capUSD    float64 // hard per-task cost cap; 0 = none
 }
 
-// ckPlanTierDefault is where plan drafts route: cheap, per the design — a plan
+// ckPlanTierDefault is where plan drafts route: cheap, per the design, a plan
 // is a numbered list, not the implementation.
 const ckPlanTierDefault = "8"
 
 var ckModes = []ckModeDef{
 	{name: "ask", chip: "Ask", basic: true,
-		desc: "answer only — never writes files"},
+		desc: "answer only, never writes files"},
 	{name: "edit", chip: "Edit", basic: true,
-		desc: "direct change when the prompt names an existing file — no plan step"},
+		desc: "direct change when the prompt names an existing file, no plan step"},
 	// plan carries verify: an approved plan proceeds as auto (edit → verify).
 	{name: "plan", chip: "Plan", basic: true, plan: true, verify: true,
-		desc: "draft numbered steps and wait — enter/y runs them, esc discards"},
+		desc: "draft numbered steps and wait, enter/y runs them, esc discards"},
 	{name: "auto", chip: "Auto", basic: true, plan: true, verify: true,
 		desc: "plan → edit → verify with the workspace tests, fixing failures (max 2 tries)"},
 	{name: "architect", chip: "Architect", plan: true, verify: true, planTier: "2", cheapImpl: true,
@@ -51,7 +51,7 @@ var ckModes = []ckModeDef{
 	{name: "careful", chip: "Careful", plan: true, verify: true, confirm: true,
 		desc: "auto, but every file write needs a y/n confirm first"},
 	{name: "unattended", chip: "Unattended", plan: true, verify: true, capUSD: ckUnattendedCapUSD,
-		desc: "auto with no confirms — hard $0.50 cost cap per task, stops visibly at it"},
+		desc: "auto with no confirms, hard $0.50 cost cap per task, stops visibly at it"},
 }
 
 // ckModeDef looks a mode up by name; an unknown name reads as auto so a stale
@@ -130,7 +130,7 @@ func (m Cockpit) modePickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 		}
-		// Anything else — a typed letter or a paste — falls through to input.
+		// Anything else, a typed letter or a paste, falls through to input.
 		m.modePick = false
 		m.th().input = "m" + string(msg.Runes)
 	}
@@ -163,7 +163,7 @@ func (m Cockpit) openModePicker() Cockpit {
 // ckModePickerLines renders the picker rows; sel marks the highlighted mode.
 func ckModePickerLines(sel int) []string {
 	lines := []string{
-		ckLabelS.Render("MODE — what the task does"),
+		ckLabelS.Render("MODE, what the task does"),
 		ckFaintS.Render("shift+tab cycles the basics · where it runs is ctrl+o"),
 	}
 	lastBasic := true

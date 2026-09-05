@@ -1,18 +1,18 @@
-# Pricing — Hydra
+# Pricing: Hydra
 
 ## Free (Open Source)
 
-- **Price**: $0 — free forever
+- **Price**: $0, free forever
 - **License**: MIT
 - **Source**: https://github.com/ankit373/hydra
 - **Install**: `brew install ankit373/hydra/hyctl` (also npm/npx/pip/curl)
-- **Limits**: None — route as many tasks as you want
+- **Limits**: None, route as many tasks as you want
 - **Support**: GitHub Issues and Discussions
 
 ## What You Need
 
 - Go 1.22+ (only if building from source; Homebrew binary includes everything)
-- Ollama (optional — for local model support at tiers 9-10)
+- Ollama (optional, for local model support at tiers 9-10)
 - Your own API keys for cloud models (Anthropic, Google, or OpenRouter)
 
 ## Model Costs (You Pay the Providers Directly)

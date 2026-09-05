@@ -24,7 +24,7 @@ type JudgeVerdict struct {
 	Meta        JudgeMeta
 }
 
-// JudgeMeta records how the verdict was reached — LLM or fallback.
+// JudgeMeta records how the verdict was reached, LLM or fallback.
 type JudgeMeta struct {
 	Head           provider.Head
 	InputTokens    int
@@ -62,7 +62,7 @@ func (j *LLMJudge) Judge(ctx context.Context, prompt string, attempts []Attempt)
 		return nil, fmt.Errorf("judge: no successful attempts to evaluate")
 	}
 	if len(successful) == 1 {
-		// Trivial case — no need to call the LLM.
+		// Trivial case, no need to call the LLM.
 		idx := successful[0]
 		scores := make([]int, len(attempts))
 		scores[idx] = attempts[idx].Head.CapScore
@@ -91,7 +91,7 @@ func (j *LLMJudge) Judge(ctx context.Context, prompt string, attempts []Attempt)
 
 	verdict, err := parseJudgeResponse(result.Output, len(attempts), successful)
 	if err != nil {
-		return nil, fmt.Errorf("judge parse: %w — raw: %.200s", err, result.Output)
+		return nil, fmt.Errorf("judge parse: %w, raw: %.200s", err, result.Output)
 	}
 
 	verdict.Meta = JudgeMeta{
@@ -183,7 +183,7 @@ func parseJudgeResponse(raw string, totalAttempts int, successIdx []int) (*Judge
 
 // ── CapScoreJudge ─────────────────────────────────────────────────────────────
 
-// CapScoreJudge is the deterministic fallback — no LLM call required.
+// CapScoreJudge is the deterministic fallback, no LLM call required.
 // The winner is the successful attempt with the highest CapScore.
 // Score = CapScore (0-100).
 type CapScoreJudge struct{}

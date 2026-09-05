@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 // Package dispatch routes a prompt through policy evaluation, head selection,
-// and execution — with automatic fallback on failure.
+// and execution, with automatic fallback on failure.
 package dispatch
 
 import (
@@ -50,7 +50,7 @@ type Options struct {
 	A2AFile   string // path to A2A handoff JSON; prepends structured context to prompt
 	Enum      string // enum key (e.g. "SIMPLE") for cost logging
 
-	// Resource is the file (or other resource) this dispatch acts on, if any —
+	// Resource is the file (or other resource) this dispatch acts on, if any,
 	// e.g. the path editor.Edit is about to write. Passed to the ledger so a
 	// policy rule can express least-privilege file scoping ("deny writes under
 	// internal/auth/**"), not just per-head rules. Empty means no resource
@@ -58,26 +58,26 @@ type Options struct {
 	Resource string
 
 	// MaxCostUSD refuses a candidate whose estimated cost exceeds it before
-	// executing — the same preflight guard swarm.Options.MaxEstCostUSD already
+	// executing, the same preflight guard swarm.Options.MaxEstCostUSD already
 	// gives fan-out mode, extended to ordinary dispatch. 0 = no limit.
 	MaxCostUSD float64
 
 	// RunID groups every log row produced by one user-facing invocation;
 	// TaskID groups the rows for one logical task inside it. Empty means
-	// "derive one" (see runid.ResolveRun/ResolveTask) — pass them explicitly
+	// "derive one" (see runid.ResolveRun/ResolveTask), pass them explicitly
 	// when several dispatches belong to the same run, as a parallel batch or a
 	// swarm does, otherwise each call is its own run.
 	RunID  string
 	TaskID string
 
 	// AnsweredHead is the head a human has already approved for this task, set
-	// only by Resume. An Ask verdict counts as approval for that head alone —
+	// only by Resume. An Ask verdict counts as approval for that head alone,
 	// approving one head must never authorize a different one, or a resume
 	// silently re-routes to a head the human was never shown.
 	AnsweredHead string
 
 	// Classification is prompt's already-computed PII/injection verdict
-	// (policy.Classify) — cmdDispatch computes this once for its own
+	// (policy.Classify), cmdDispatch computes this once for its own
 	// defect-cost/local-only decisions and passes it here so Dispatch and
 	// every fallback candidate's ledger check reuse it instead of re-scanning
 	// prompt once per candidate. Nil means "not computed yet; derive it here."
@@ -155,7 +155,7 @@ func (d *Dispatcher) Resume(ctx context.Context, taskID, answer string) (*Result
 		System: q.System, Enum: q.Enum, Resource: q.Resource,
 		RunID: q.RunID, TaskID: q.TaskID,
 		AnsweredHead: q.Head,
-		// A2A context is already inside q.Prompt — Dispatch injected it before
+		// A2A context is already inside q.Prompt, Dispatch injected it before
 		// the gate parked the task, so naming the file again would double it.
 	})
 }
@@ -209,8 +209,8 @@ type Dispatcher struct {
 func (d *Dispatcher) Heads() []provider.Head { return d.heads }
 
 // PIILocalOnly reports whether the configured pii policy forces local-only
-// routing. Exported so callers that bypass Dispatch — the SPRT/swarm branches
-// in cmd/hydra's cmdDispatch — can still enforce it instead of acting only on
+// routing. Exported so callers that bypass Dispatch, the SPRT/swarm branches
+// in cmd/hydra's cmdDispatch, can still enforce it instead of acting only on
 // --local, which was config-blind on that path (#500).
 func (d *Dispatcher) PIILocalOnly() bool { return piiLocalOnly(d.cfg) }
 
@@ -221,7 +221,7 @@ func (d *Dispatcher) EstimateCost(tier, inputTokens, outputTokens int) float64 {
 
 // probeCacheTTL bounds how long a machine probe is reused across calls to New
 // within one process. New is called once per CLI invocation, but also once per
-// task inside a parallel batch and once per view inside a TUI snapshot — with
+// task inside a parallel batch and once per view inside a TUI snapshot, with
 // no cache each of those redoes the same ~13 exec.LookPath calls and two
 // network liveness checks. A short TTL collapses those into one real probe
 // without leaving a long-running TUI session blind to a server that started
@@ -237,7 +237,7 @@ var (
 
 // probeEnvFingerprint is HOME+PATH, the two environment variables that change
 // what a probe discovers (CLI binaries on PATH; agy/models overlay under
-// HOME). Any change invalidates the cache immediately regardless of TTL —
+// HOME). Any change invalidates the cache immediately regardless of TTL,
 // without this, a cached result from one HOME (e.g. a test's temp dir with
 // its own stub binaries) would be silently reused after HOME changes.
 func probeEnvFingerprint() string {
@@ -259,7 +259,7 @@ func cachedProbe(ctx context.Context) *probe.Result {
 	return probeCacheResult
 }
 
-// PIILocalOnly reports whether cfg's pii policy forces local-only routing —
+// PIILocalOnly reports whether cfg's pii policy forces local-only routing,
 // the config-level check for callers with no Dispatcher yet (the TUI's route
 // badge), so the rule is never restated (#597).
 func PIILocalOnly(cfg *config.Config) bool { return piiLocalOnly(cfg) }
@@ -274,7 +274,7 @@ func piiLocalOnly(cfg *config.Config) bool {
 func New(ctx context.Context) (*Dispatcher, error) {
 	cfg, err := config.Load()
 	if err != nil {
-		return nil, fmt.Errorf("no hydra config — run: hyctl init")
+		return nil, fmt.Errorf("no hydra config, run: hyctl init")
 	}
 
 	result := cachedProbe(ctx)
@@ -300,29 +300,29 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 	// Resolve the hint to a capability number BEFORE the governor runs. A named
 	// config tier ("expert") is otherwise opaque to claudeMode's Atoi, which
 	// left the whole token-preservation table inert for every non-numeric hint
-	// (#165). A hint that is invalid on its face — an unconfigured name or an
-	// out-of-range number — is rejected here, before routability ever enters
+	// (#165). A hint that is invalid on its face, an unconfigured name or an
+	// out-of-range number, is rejected here, before routability ever enters
 	// the picture, so the error blames the actual cause (#451, #454).
 	hint, err := d.resolveTierHint(opts.TierHint)
 	if err != nil {
 		return nil, err
 	}
 
-	// Apply claude% preservation — may downgrade tier or abort.
+	// Apply claude% preservation, may downgrade tier or abort.
 	tier, mode, pct := d.claudeMode(hint)
 	switch mode {
 	case "emergency":
-		log.Printf("🚨 EMERGENCY: Claude at %d%% — routing to local tier only. Start a new session.", pct)
+		log.Printf("🚨 EMERGENCY: Claude at %d%%, routing to local tier only. Start a new session.", pct)
 		tier = "10"
 		opts.LocalOnly = true
 	case "critical":
-		log.Printf("🔴 CRITICAL: Claude at %d%% — downgrading tier by 2. Run /compact NOW.", pct)
+		log.Printf("🔴 CRITICAL: Claude at %d%%, downgrading tier by 2. Run /compact NOW.", pct)
 	case "warning":
-		log.Printf("🟠 WARNING: Claude at %d%% — downgrading tier by 1. Run /compact now.", pct)
+		log.Printf("🟠 WARNING: Claude at %d%%, downgrading tier by 1. Run /compact now.", pct)
 	case "caution":
-		log.Printf("🟡 CAUTION: Claude at %d%% — Run /compact immediately.", pct)
+		log.Printf("🟡 CAUTION: Claude at %d%%, Run /compact immediately.", pct)
 	case "compact":
-		log.Printf("ℹ️  Claude at %d%% — Consider running /compact.", pct)
+		log.Printf("ℹ️  Claude at %d%%, Consider running /compact.", pct)
 	}
 
 	// Inject A2A handoff context into prompt if provided. --a2a names a file the
@@ -337,7 +337,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 	}
 
 	// Classify once and reuse for both the policy engine below and every
-	// fallback candidate's ledger check — DetectPII/InjectionMarker are pure
+	// fallback candidate's ledger check, DetectPII/InjectionMarker are pure
 	// functions of prompt, so re-running them per candidate repeats the same
 	// answer at the same cost (#522).
 	class := opts.Classification
@@ -380,8 +380,8 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		return &Result{Head: candidates[0], Fallbacks: candidates[1:]}, nil
 	}
 
-	// The run log records the shape of the run — which head was picked, when,
-	// and how it ended — none of which the cost/dispatch outcome rows capture.
+	// The run log records the shape of the run, which head was picked, when,
+	// and how it ended, none of which the cost/dispatch outcome rows capture.
 	// Observability must never fail the work, so every append error is ignored.
 	rl := runlog.New(runid.ResolveRun(opts.RunID))
 	taskID := runid.ResolveTask(opts.TaskID)
@@ -399,7 +399,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		})
 		// Proceeds only on an explicit Allow. Testing `== Deny` instead would
 		// let any other verdict through, which stopped being safe the moment
-		// Deny was not the only one that withholds permission — a pending
+		// Deny was not the only one that withholds permission, a pending
 		// ledger.Ask would have read as approval (#580).
 		//
 		// Fails closed the same way on error: a policy-check failure (unreadable
@@ -431,7 +431,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 
 		// An Ask is not a denial, and must not fall through to the next
 		// candidate the way one does. Continuing would skip the head that
-		// needs permission and run a cheaper one instead — routing around the
+		// needs permission and run a cheaper one instead, routing around the
 		// question rather than asking it.
 		case decision == ledger.Ask && !approved:
 			q := pending.Question{
@@ -527,7 +527,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 // mode string, and raw percentage. The mode is rate-aware: a fast burn (high
 // first-passage risk toward the 80% line) escalates the mode above its static
 // level band, so the tier downgrades earlier. With no history the effective mode
-// equals ModeFor(pct) — identical to the prior behavior.
+// equals ModeFor(pct), identical to the prior behavior.
 func (d *Dispatcher) claudeMode(tierHint string) (tier string, mode string, pct int) {
 	pct = readClaudePct()
 	_, risk := budget.RiskFromHistory(readClaudePctHistory())
@@ -547,7 +547,7 @@ func (d *Dispatcher) claudeMode(tierHint string) (tier string, mode string, pct 
 	case "warning":
 		t++
 	}
-	// Only escalation overflow reaches this — resolveTierHint already rejects
+	// Only escalation overflow reaches this, resolveTierHint already rejects
 	// any raw hint outside 1-10, so this clamps e.g. 9+2=11, never user input
 	// silently getting relabelled as "10" (#454).
 	if t > maxTier {
@@ -628,7 +628,7 @@ func (d *Dispatcher) writeHandoff(r *Result, prompt string) (string, error) {
 	// every LocalOnly head shares tier 10, so two different local models
 	// would otherwise tick the same "hydra-tier-10" key and become
 	// indistinguishable under Clock.Compare (#503). "From" keeps the
-	// tier-bucket string — it is display text, not a clock key.
+	// tier-bucket string, it is display text, not a clock key.
 	agentKey := r.Head.ID
 
 	h := a2a.Handoff{
@@ -652,7 +652,7 @@ const (
 // ValidateTierHint rejects a --tier value that cannot resolve to anything: a
 // numeric value outside [minTier,maxTier], or a name that matches no
 // configured tier. A name that matches a configured tier but currently has no
-// live heads is NOT an error here — that is a runtime availability gap
+// live heads is NOT an error here, that is a runtime availability gap
 // selectHeads reports on its own, distinct from a malformed hint.
 //
 // Plain dispatch, --swarm and --confidence (SPRT) all call this before
@@ -679,22 +679,22 @@ func ValidateTierHint(cfg *config.Config, hint string) error {
 
 // resolveTierHint normalizes a tier hint to a capability number ("1".."10"),
 // and reports the two ways a hint can be invalid on its face:
-//   - numeric but outside [minTier,maxTier] — e.g. "0" and "15" both silently
+//   - numeric but outside [minTier,maxTier], e.g. "0" and "15" both silently
 //     behaved as "no tier" or got clamped to 10 with no indication anything
 //     was wrong (#454).
-//   - named but absent from cfg.Tiers entirely — a config/typo problem, not a
+//   - named but absent from cfg.Tiers entirely, a config/typo problem, not a
 //     routability one, so the caller must not blame the head pool for it (#451).
 //
 // A name that IS configured but currently has no live heads is deliberately
 // NOT an error here: it resolves unchanged, and selectHeads/blockedHeads
-// report the routability gap instead — the tier itself was valid.
+// report the routability gap instead, the tier itself was valid.
 func (d *Dispatcher) resolveTierHint(hint string) (string, error) {
 	if hint == "" {
 		return "", nil
 	}
 	if n, err := strconv.Atoi(hint); err == nil {
 		if n < minTier || n > maxTier {
-			return "", fmt.Errorf("tier %d is out of range — valid tiers are %d-%d", n, minTier, maxTier)
+			return "", fmt.Errorf("tier %d is out of range, valid tiers are %d-%d", n, minTier, maxTier)
 		}
 		return hint, nil
 	}
@@ -720,14 +720,14 @@ func (d *Dispatcher) resolveTierHint(hint string) (string, error) {
 		}
 		return hint, nil // named tier has no live heads; let the caller report it
 	}
-	return "", fmt.Errorf("unknown tier %q — configured tiers: %s", hint, d.tierNameList())
+	return "", fmt.Errorf("unknown tier %q, configured tiers: %s", hint, d.tierNameList())
 }
 
 // tierNameList formats cfg.Tiers' names for the "unknown tier" error, so the
 // user sees what they could have typed instead of just what they got wrong.
 func (d *Dispatcher) tierNameList() string {
 	if len(d.cfg.Tiers) == 0 {
-		return "(none configured — run `hyctl init`)"
+		return "(none configured, run `hyctl init`)"
 	}
 	names := make([]string, len(d.cfg.Tiers))
 	for i, t := range d.cfg.Tiers {
@@ -737,8 +737,8 @@ func (d *Dispatcher) tierNameList() string {
 }
 
 // tierClause phrases the tier for a no-heads error. An empty tier (no hint
-// given at all — e.g. the desktop dock's "auto-route" default) would
-// otherwise print as tier "" — a confusing artifact, not a routing outcome.
+// given at all, e.g. the desktop dock's "auto-route" default) would
+// otherwise print as tier "", a confusing artifact, not a routing outcome.
 func tierClause(tier string) string {
 	if tier == "" {
 		return "no tier hint given"
@@ -748,7 +748,7 @@ func tierClause(tier string) string {
 
 // blockedHeads describes discovered heads that were excluded because no
 // executor can drive them, formatted for an error message. Returns "" when
-// nothing was excluded for that reason — in which case the real problem is the
+// nothing was excluded for that reason, in which case the real problem is the
 // tier or the config, and the caller says so instead.
 //
 // Respects localOnly so a PII-forced local run does not list cloud heads the
@@ -781,7 +781,7 @@ func (d *Dispatcher) blockedHeads(localOnly bool) string {
 // Numeric hints must NOT be resolved through config tier names: config tiers
 // are named (expert/complex/…) while enums resolve to "1".."10", so an exact
 // name match can never succeed and the old fall-through silently returned the
-// single most expensive head — the exact inverse of cost routing (#165).
+// single most expensive head, the exact inverse of cost routing (#165).
 //
 // A hint that matches nothing returns no candidates; the caller reports that
 // rather than silently widening to every head.
@@ -796,7 +796,7 @@ func (d *Dispatcher) selectHeads(tierHint string, localOnly bool) []provider.Hea
 		return true
 	}
 
-	// No tier specified — use every live head, best score first.
+	// No tier specified, use every live head, best score first.
 	if tierHint == "" {
 		var all []provider.Head
 		for _, h := range d.heads {
@@ -821,7 +821,7 @@ func (d *Dispatcher) selectHeads(tierHint string, localOnly bool) []provider.Hea
 		if len(candidates) > 0 {
 			return candidates
 		}
-		// Nothing is that cheap. Degrade to the cheapest heads available —
+		// Nothing is that cheap. Degrade to the cheapest heads available,
 		// ascending capability, so the fallback is the least expensive option
 		// rather than the most. Silently escalating to the strongest head is
 		// what made tier routing worthless in the first place (#165).
@@ -832,7 +832,7 @@ func (d *Dispatcher) selectHeads(tierHint string, localOnly bool) []provider.Hea
 		}
 		if len(candidates) > 0 {
 			slices.Reverse(candidates) // pre-sorted strongest-first → cheapest-first
-			log.Printf("⚠️  no head at tier %d or cheaper — falling back to the cheapest available (%s)",
+			log.Printf("⚠️  no head at tier %d or cheaper, falling back to the cheapest available (%s)",
 				want, candidates[0].ID)
 		}
 		return candidates
@@ -871,7 +871,7 @@ func (d *Dispatcher) recordBudget(r *Result) {
 }
 
 // syncStateJSON updates ~/.hydra/logs/state.json after a successful dispatch so
-// the governor readouts reflect it — `hyctl status`, the cockpit's dashboard,
+// the governor readouts reflect it, `hyctl status`, the cockpit's dashboard,
 // and the desktop app all read that file.
 func (d *Dispatcher) syncStateJSON(r *Result) {
 	stateMu.Lock()
@@ -899,7 +899,7 @@ func (d *Dispatcher) syncStateJSON(r *Result) {
 	}
 
 	// Persist per-model budget snapshots so the TUI and status command can read
-	// them. Merge into whatever is already on disk instead of replacing it — each
+	// them. Merge into whatever is already on disk instead of replacing it, each
 	// `hyctl` invocation is a fresh process, so d.budget only knows about models
 	// dispatched to in this run, and overwriting would erase every other model's
 	// entry (#502).
@@ -1037,7 +1037,7 @@ func truncate(s string, n int) string {
 	return s[:n] + "…"
 }
 
-// enumTiers maps each routing enum key to its tier number — the single
+// enumTiers maps each routing enum key to its tier number, the single
 // source of truth EnumToTier and IsKnownEnum both read, so editor, parallel,
 // and cmd/hydra's --enum validation can never drift apart.
 var enumTiers = map[string]string{
@@ -1054,7 +1054,7 @@ var enumTiers = map[string]string{
 }
 
 // EnumToTier maps a routing enum key (e.g. "SIMPLE") to a tier number string.
-// An unrecognized key returns "" — the same value as an empty enum, which is
+// An unrecognized key returns "", the same value as an empty enum, which is
 // why a caller that must reject a typo instead of silently routing
 // unrestricted checks IsKnownEnum first (#501).
 func EnumToTier(enum string) string {
@@ -1063,7 +1063,7 @@ func EnumToTier(enum string) string {
 
 // IsKnownEnum reports whether enum is a recognized routing enum key.
 // EnumToTier's "" result is ambiguous between "no enum given" and
-// "unrecognized key" — this is how a caller tells the two apart.
+// "unrecognized key", this is how a caller tells the two apart.
 func IsKnownEnum(enum string) bool {
 	_, ok := enumTiers[enum]
 	return ok

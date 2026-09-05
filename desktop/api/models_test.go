@@ -70,7 +70,7 @@ func TestGetModels_SharedPoolHasMultipleMembers(t *testing.T) {
 		}
 		shared++
 		if len(p.Models) < 2 {
-			t.Errorf("pool %q is marked shared but has %d member(s) — nothing to contend with",
+			t.Errorf("pool %q is marked shared but has %d member(s), nothing to contend with",
 				p.Name, len(p.Models))
 		}
 	}
@@ -79,7 +79,7 @@ func TestGetModels_SharedPoolHasMultipleMembers(t *testing.T) {
 	}
 }
 
-// A machine that has never dispatched still has a registry worth showing — a
+// A machine that has never dispatched still has a registry worth showing, a
 // missing cost log must not blank the model list.
 func TestGetModels_NoCostLogStillReturnsRegistry(t *testing.T) {
 	sandbox(t)
@@ -136,7 +136,7 @@ func TestGetModels_AggregatesObservedSpendPerPool(t *testing.T) {
 		t.Errorf("agy_claude ObservedCostUSD = %v, want ~0.30", claude.ObservedCostUSD)
 	}
 	if flash != nil && flash.ObservedCalls != 1 {
-		t.Errorf("agy_flash ObservedCalls = %d, want 1 — spend leaked across pools",
+		t.Errorf("agy_flash ObservedCalls = %d, want 1, spend leaked across pools",
 			flash.ObservedCalls)
 	}
 }
@@ -180,7 +180,7 @@ models:
 	}
 	m := r.Pools[0].Models[0]
 	if m.ID != "just-one" {
-		t.Errorf("model id = %q, want just-one — the embedded copy won", m.ID)
+		t.Errorf("model id = %q, want just-one, the embedded copy won", m.ID)
 	}
 	if m.ContextWindow != 1234 || m.ComplexityMax != 3 {
 		t.Errorf("override fields lost: ctx=%d band=%d-%d", m.ContextWindow, m.ComplexityMin, m.ComplexityMax)

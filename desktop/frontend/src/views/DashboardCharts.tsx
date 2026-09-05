@@ -23,13 +23,13 @@ interface Bar {
 
 /**
  * The dashboard's hero chart: one bar per day, height proportional to spend.
- * Same pattern as SessionGraph — a useMemo layout pass produces positions,
+ * Same pattern as SessionGraph, a useMemo layout pass produces positions,
  * then plain SVG primitives render them, styled via tokens.css. Bars pick up
  * the existing cost ramp (free/cheap/mid/expensive) so an expensive day reads
  * as red without a legend.
  *
  * Each bar is drawn as a halo (larger, low-opacity, same band color) behind a
- * crisp full-opacity rect — a layered solid fill, never `filter: blur` or
+ * crisp full-opacity rect, a layered solid fill, never `filter: blur` or
  * `backdrop-filter`, so the glow rasterizes like any other shape instead of
  * costing a compositor blur pass. Bars grow in from a zero baseline
  * (`transform: scaleY`) the first time real data lands, staggered per bar;
@@ -115,7 +115,7 @@ function layout(days: Breakdown[]): { bars: Bar[]; width: number } {
     key: d.key,
     x: i * (BAR_W + GAP),
     // A zero-cost day (all local/free heads) still gets a visible nub rather
-    // than vanishing — the day itself is real, even if it cost nothing.
+    // than vanishing, the day itself is real, even if it cost nothing.
     barH: max > 0 ? Math.max(2, d.costUsd * scale) : 2,
     costUsd: d.costUsd,
     calls: d.calls,
@@ -130,7 +130,7 @@ const SPARK_H = 26
 /**
  * Inline trend inside the spend stat card: the tail of byDay, so "is this
  * normal" is visible without scrolling down to the hero chart. Follows the
- * sparkline figure spec — the line stays in the de-emphasis hue, only the
+ * sparkline figure spec, the line stays in the de-emphasis hue, only the
  * current (latest) point picks up the accent.
  */
 export function Sparkline({ days }: { days: Breakdown[] }) {
@@ -166,7 +166,7 @@ export function Sparkline({ days }: { days: Breakdown[] }) {
 // ── arc gauges ───────────────────────────────────────────────────────────
 // Replace the flat progress bars on GovernorCard/TrustCard with SVG rings:
 // an outer track, and a fill ring whose stroke-dasharray/dashoffset encode
-// the fraction — animated purely in CSS (tokens.css's `.arc-fill` transition)
+// the fraction, animated purely in CSS (tokens.css's `.arc-fill` transition)
 // so the sweep-in is a single reflow-free property change, not a JS loop.
 
 const ARC_SIZE = 112
@@ -182,7 +182,7 @@ function arcDash(r: number, frac: number): { circumference: number; offset: numb
   return { circumference, offset: circumference * (1 - clamped) }
 }
 
-/** Single-ring gauge — Governor's context-window pressure. */
+/** Single-ring gauge, Governor's context-window pressure. */
 export function ArcGauge({
   fraction,
   color,
@@ -190,7 +190,7 @@ export function ArcGauge({
   centerLabel,
   revealed,
 }: {
-  /** 0–1, already clamped by the caller. */
+  /** 0-1, already clamped by the caller. */
   fraction: number
   color: string
   centerValue: string
@@ -229,7 +229,7 @@ export function ArcGauge({
   )
 }
 
-/** Dual-ring gauge — SPRT mean samples (outer, aqua) vs. a fixed swarm (inner, dim), both scaled to the larger of the two so the comparison reads directly off the rings. */
+/** Dual-ring gauge, SPRT mean samples (outer, aqua) vs. a fixed swarm (inner, dim), both scaled to the larger of the two so the comparison reads directly off the rings. */
 export function TrustArc({
   meanSamples,
   fixedSwarmN,

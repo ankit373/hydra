@@ -12,7 +12,7 @@
              identity macOS keys preferences, TCC permissions and update
              comparisons off. Changing it after users have installed resets all
              of that, and notarization requires it to sit under a domain the
-             signing team owns — hydra.uvansa.com reversed. -->
+             signing team owns, hydra.uvansa.com reversed. -->
         <key>CFBundleIdentifier</key>
         <string>com.uvansa.hydra</string>
         <key>CFBundleVersion</key>

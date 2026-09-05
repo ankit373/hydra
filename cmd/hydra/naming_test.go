@@ -16,9 +16,9 @@ import (
 
 // The binary is hyctl. Cobra prints `Use` correctly on its own, but every
 // hand-written error string, help Long and Example is just text nobody
-// recompiles against — so the #150 rename left 37 of them across 12 files still
+// recompiles against, so the #150 rename left 37 of them across 12 files still
 // telling users to run `hydra <something>`. `hyctl status` on a fresh machine
-// answered "no config found — run: hydra init", which is a command that does
+// answered "no config found, run: hydra init", which is a command that does
 // not exist. That is the first thing a new user sees.
 //
 // Command names come from the real tree rather than a hardcoded list, so adding
@@ -34,7 +34,7 @@ func TestUserFacingText_NeverNamesABinaryThatDoesNotExist(t *testing.T) {
 	}
 	collect(rootCmd())
 	if len(names) == 0 {
-		t.Fatal("no subcommands found — the guard would silently pass")
+		t.Fatal("no subcommands found, the guard would silently pass")
 	}
 
 	stale := regexp.MustCompile(`\bhydra (` + strings.Join(names, "|") + `)\b`)
@@ -57,7 +57,7 @@ func TestUserFacingText_NeverNamesABinaryThatDoesNotExist(t *testing.T) {
 			}
 			for i, line := range strings.Split(string(src), "\n") {
 				if m := stale.FindString(line); m != "" {
-					t.Errorf("%s:%d says %q — the binary is hyctl, so that command does not exist:\n    %s",
+					t.Errorf("%s:%d says %q, the binary is hyctl, so that command does not exist:\n    %s",
 						path, i+1, m, strings.TrimSpace(line))
 				}
 			}

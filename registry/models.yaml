@@ -9,7 +9,7 @@
 # To disable        → set enabled: false (route.sh auto-escalates)
 # ─────────────────────────────────────────────────────────────────────────────
 #
-# ⚠️  model_flag VALUES ARE INSTALL-SPECIFIC DEFAULTS — VERIFY, DON'T TRUST.
+# ⚠️  model_flag VALUES ARE INSTALL-SPECIFIC DEFAULTS, VERIFY, DON'T TRUST.
 # The `model_flag` and version-bearing `name` fields below (e.g. agy Claude/Gemini
 # tiers) are provider-INTERNAL identifiers that only resolve on YOUR specific
 # Antigravity / Ollama / API installation. They are starting defaults, NOT a
@@ -23,7 +23,7 @@
 version: "1.0"
 
 # ─────────────────────────────────────────────────────────────────────────────
-# TOKEN POOLS — shared quotas across models from the same provider/plan
+# TOKEN POOLS, shared quotas across models from the same provider/plan
 # Key insight: models in the same pool compete for the same monthly budget.
 # Use lower tiers in a pool when running low to preserve quota for harder tasks.
 # ─────────────────────────────────────────────────────────────────────────────
@@ -32,7 +32,7 @@ token_pools:
 
   claude_direct:
     members: [claude-core]
-    quota: "Anthropic API billing — per token"
+    quota: "Anthropic API billing, per token"
     shared: false
     note: "Direct Claude Code usage. Billed separately from agy."
 
@@ -61,17 +61,17 @@ token_pools:
     note: >
       Flash has significantly higher token quota than Pro or Claude.
       Freely usable for standard and simple tasks.
-      Lower accuracy ceiling — do not use for complex logic.
+      Lower accuracy ceiling, do not use for complex logic.
 
   agy_flash_thinking:
     members: [flash-thinking]
     quota: "Antigravity Gemini Flash Thinking allocation"
     shared: false
-    note: "Use as rubber duck reviewer for Claude output. Thinking-mode Gemini — different family from Claude avoids shared blind spots."
+    note: "Use as rubber duck reviewer for Claude output. Thinking-mode Gemini, different family from Claude avoids shared blind spots."
 
   local_ollama:
     members: [qwen-grunt]
-    quota: "Unlimited — runs locally"
+    quota: "Unlimited, runs locally"
     shared: false
     note: >
       Free but constrained by local compute (Apple Silicon).
@@ -119,7 +119,7 @@ models:
     tokens_per_call: very_high
     speed: slow              # thinking mode takes time
     accuracy: very_high
-    frequency: use_sparingly # shares pool with Sonnet — preserve for expert tasks
+    frequency: use_sparingly # shares pool with Sonnet, preserve for expert tasks
     strengths:
       - hard multi-step reasoning
       - complex algorithm design
@@ -141,7 +141,7 @@ models:
     tokens_per_call: high
     speed: medium_slow
     accuracy: high
-    frequency: moderate      # same pool as Opus — use when Opus not needed
+    frequency: moderate      # same pool as Opus, use when Opus not needed
     strengths:
       - complex service logic
       - multi-file refactoring
@@ -207,7 +207,7 @@ models:
     tokens_per_call: medium
     speed: medium_fast
     accuracy: medium_high
-    frequency: moderate      # shares pool with Pro High — prefer this first in Pro tier
+    frequency: moderate      # shares pool with Pro High, prefer this first in Pro tier
     strengths:
       - service layer implementations
       - repository patterns
@@ -215,7 +215,7 @@ models:
       - CI/CD pipeline configs
     complexity_min: 4
     complexity_max: 5
-    notes: "Default Pro choice. Uses fewer tokens than Pro High. Same pool — prefer this."
+    notes: "Default Pro choice. Uses fewer tokens than Pro High. Same pool, prefer this."
 
   - tier: 7
     id: flash-high
@@ -229,7 +229,7 @@ models:
     tokens_per_call: low_medium
     speed: fast
     accuracy: medium
-    frequency: high          # Flash pool is large — use freely
+    frequency: high          # Flash pool is large, use freely
     strengths:
       - controllers and route handlers
       - validators and guards
@@ -251,7 +251,7 @@ models:
     tokens_per_call: low
     speed: fast
     accuracy: medium_low
-    frequency: very_high     # cheapest agy model — use for high-volume simple tasks
+    frequency: very_high     # cheapest agy model, use for high-volume simple tasks
     strengths:
       - DTOs and request/response schemas
       - interfaces and type definitions
@@ -305,6 +305,6 @@ models:
     complexity_min: 0
     complexity_max: 1
     notes: >
-      Free but slow. Runs on local GPU/CPU — avoid long prompts (>500 tokens input).
+      Free but slow. Runs on local GPU/CPU, avoid long prompts (>500 tokens input).
       Expect 10-40 tok/s. Best for short, mechanical, verifiable output.
       Not suitable when network latency < local inference time.

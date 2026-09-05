@@ -18,7 +18,7 @@ const SLOW_MS = 5000
  *
  * Deliberately glanceable, never readable: chips, meters and one gauge. That is
  * the answer to the split-attention objection the old chat dock's
- * collapse-on-idle behaviour was built around — a permanently visible panel is
+ * collapse-on-idle behaviour was built around, a permanently visible panel is
  * only affordable if nothing in it asks to be read.
  */
 export function Cockpit({
@@ -172,7 +172,7 @@ export function Cockpit({
 
 /**
  * Per-model rows fusing what a model did with how good it is measured to be at
- * that — usage alone is a tally, not a judgement.
+ * that, usage alone is a tally, not a judgement.
  *
  * The sample size ships next to every score because trust.Stat.N excludes the
  * prior: a D on a handful of observations is close to a coin flip, and showing

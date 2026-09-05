@@ -36,7 +36,7 @@ func snapshotPath(jsonlPath string) string {
 	return jsonlPath + ".snapshot"
 }
 
-// loadSnapshot never errors — missing/corrupt/out-of-bounds/misaligned offset
+// loadSnapshot never errors, missing/corrupt/out-of-bounds/misaligned offset
 // just means "no usable checkpoint," so load() falls back to a full replay.
 func loadSnapshot(path string, jsonl *os.File, jsonlSize int64) (store map[calibKey]*confusion, offset int64, ok bool) {
 	data, err := os.ReadFile(path)

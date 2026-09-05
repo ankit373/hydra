@@ -3,7 +3,7 @@
 // Package runlog is Hydra's append-only record of what happened during a run.
 //
 // The other logs answer "what did this cost" and "what was the verdict".
-// This one answers "what happened, in what order, and under whom" — the
+// This one answers "what happened, in what order, and under whom", the
 // lifecycle events a timeline or supervision-tree view is reconstructed from.
 // Nothing else in Hydra carries that: a2a's handoff file keeps only the latest
 // hop, the MCP ledger is never called from the dispatch pipeline, and
@@ -31,7 +31,7 @@
 // Append does one os.OpenFile(O_APPEND) + one Fprintln, the same pattern every
 // other jsonl writer in this codebase uses without a mutex. POSIX makes an
 // O_APPEND write atomic, within and across processes, so concurrent writers
-// cannot tear each other's lines. Keep entries small — the guarantee is about
+// cannot tear each other's lines. Keep entries small, the guarantee is about
 // a single write() call, so bulk payloads (diffs, full model output) must be
 // referenced via Ref, never inlined.
 package runlog
@@ -53,7 +53,7 @@ import (
 )
 
 // SchemaVersion is stamped on every event. It exists so the terminal cockpit
-// and the desktop app — two independent readers of this format — can branch on
+// and the desktop app, two independent readers of this format, can branch on
 // a version rather than guess, and so a format change is a one-line reader
 // change instead of a coordinated migration.
 const SchemaVersion = 1
@@ -68,8 +68,8 @@ const (
 	KindTaskStarted  Kind = "task_started"
 	KindTaskFinished Kind = "task_finished"
 
-	// KindHeadSelected records the routing decision itself — which head won and
-	// why — which no existing log captures.
+	// KindHeadSelected records the routing decision itself, which head won and
+	// why, which no existing log captures.
 	KindHeadSelected Kind = "head_selected"
 
 	KindDispatchStarted  Kind = "dispatch_started"
@@ -98,7 +98,7 @@ const (
 	KindError Kind = "error"
 )
 
-// Event is one record. Fields are omitempty so a line stays small — the atomic
+// Event is one record. Fields are omitempty so a line stays small, the atomic
 // append guarantee is per write() call, not per arbitrary size.
 type Event struct {
 	V   int    `json:"v"`
@@ -110,7 +110,7 @@ type Event struct {
 	Kind   Kind   `json:"kind"`
 
 	// Agent is this node's id in the supervision tree; Parent is its ownership
-	// edge. Together they reconstruct the tree — separate from any A2A
+	// edge. Together they reconstruct the tree, separate from any A2A
 	// collaboration edge, which is a KindHandoff event.
 	Agent  string `json:"agent,omitempty"`
 	Parent string `json:"parent,omitempty"`
@@ -129,7 +129,7 @@ type Event struct {
 	Ref    string `json:"ref,omitempty"`
 	Detail string `json:"detail,omitempty"`
 
-	// File is the path a KindEdit event changed. Its own field, not Agent —
+	// File is the path a KindEdit event changed. Its own field, not Agent,
 	// an edit has no identity of its own, only a task it happened within
 	// (#434); conflating the two used to mint a phantom tree node per file.
 	File string `json:"file,omitempty"`
@@ -149,7 +149,7 @@ type Logger struct {
 	seq   atomic.Uint64
 }
 
-// New returns a Logger for runID. It does not create the file — that happens on
+// New returns a Logger for runID. It does not create the file, that happens on
 // the first Append, so a run that never logs leaves nothing behind.
 func New(runID string) *Logger {
 	return &Logger{runID: runID, path: Path(runID)}
@@ -191,7 +191,7 @@ func (l *Logger) Append(e Event) error {
 
 // Load reads a run's events in append order, from the live file if it is still
 // loose and from its sealed segment otherwise. A missing run yields no events
-// and no error — a run that logged nothing is not a failure.
+// and no error, a run that logged nothing is not a failure.
 //
 // Sealing is invisible here on purpose: internal/tree, the cockpit and the
 // desktop app all call this, and none of them should learn about segments.
@@ -205,7 +205,7 @@ func Load(runID string) ([]Event, error) {
 	}
 	sealed, ok, err := loadSealed(runID)
 	if err != nil {
-		// A damaged segment must not read back as a run that did nothing —
+		// A damaged segment must not read back as a run that did nothing,
 		// that is the "incomplete rendered as complete" failure LoadCounted
 		// exists to avoid, and sealing must not reintroduce it.
 		return nil, err
@@ -218,7 +218,7 @@ func Load(runID string) ([]Event, error) {
 
 // LoadCounted is Load for an explicit path, plus the number of unparseable
 // lines skipped. An append-only record that silently drops entries is worse
-// than useless for reconstruction — a crash mid-write leaves a truncated tail,
+// than useless for reconstruction, a crash mid-write leaves a truncated tail,
 // and a reader that hides it will render an incomplete run as a complete one.
 func LoadCounted(path string) ([]Event, int, error) {
 	f, err := os.Open(path)

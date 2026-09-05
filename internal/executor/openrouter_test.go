@@ -47,7 +47,7 @@ func TestOpenRouter_SupportsGatesOnKey(t *testing.T) {
 }
 
 // An env head has no Executable, so routing it to CLIExecutor guarantees a
-// failed exec — the #75 regression, re-asserted for the new provider.
+// failed exec, the #75 regression, re-asserted for the new provider.
 func TestOpenRouter_RoutesToHTTPExecutor(t *testing.T) {
 	if _, ok := For(openRouterHead()).(*HTTPExecutor); !ok {
 		t.Fatalf("For(env/openrouter) = %T, want *HTTPExecutor", For(openRouterHead()))
@@ -79,11 +79,11 @@ func TestOpenRouter_ModelIsOverridable(t *testing.T) {
 	clearProviderKeys(t)
 
 	if got := defaultModelFor("openrouter"); got == "" {
-		t.Fatal("defaultModelFor(openrouter) is empty — SupportsHTTP would reject the head")
+		t.Fatal("defaultModelFor(openrouter) is empty, SupportsHTTP would reject the head")
 	}
 	// OpenRouter model IDs are vendor-prefixed; a bare name is a wrong default.
 	if got := defaultModelFor("openrouter"); !strings.Contains(got, "/") {
-		t.Errorf("default model %q is not vendor-prefixed — OpenRouter IDs look like \"anthropic/claude-…\"", got)
+		t.Errorf("default model %q is not vendor-prefixed, OpenRouter IDs look like \"anthropic/claude-…\"", got)
 	}
 
 	t.Setenv("OPENROUTER_MODEL", "meta-llama/llama-4-scout")
@@ -98,7 +98,7 @@ func TestOpenRouter_ModelIsOverridable(t *testing.T) {
 	}
 }
 
-// Adding a provider means touching five separate tables — env.knownKeys,
+// Adding a provider means touching five separate tables, env.knownKeys,
 // openAICompatConfigFor, defaultModelFor, apiKeyFor, and capabilities. #200
 // existed because OpenRouter was in none of them while pricing depended on it.
 // This asserts the tables agree, so the next provider added to one but not the
@@ -124,7 +124,7 @@ func TestEveryOpenAICompatProviderIsFullyWired(t *testing.T) {
 	for _, p := range compat {
 		t.Run(p.id, func(t *testing.T) {
 			if got := defaultModelFor(p.id); got == "" {
-				t.Errorf("defaultModelFor(%q) is empty — SupportsHTTP will always reject this provider", p.id)
+				t.Errorf("defaultModelFor(%q) is empty, SupportsHTTP will always reject this provider", p.id)
 			}
 
 			h := provider.Head{ID: "env/" + p.id, Source: "env", Provider: p.id}

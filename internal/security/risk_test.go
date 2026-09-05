@@ -37,7 +37,7 @@ func TestBuildRegister_IDsAreStableAcrossRuns(t *testing.T) {
 		t.Fatal("expected at least one risk from a critical incident")
 	}
 	if first.Risks[0].ID != second.Risks[0].ID {
-		t.Errorf("risk ID changed between runs: %q then %q — an ID that moves cannot be tracked",
+		t.Errorf("risk ID changed between runs: %q then %q, an ID that moves cannot be tracked",
 			first.Risks[0].ID, second.Risks[0].ID)
 	}
 	if !strings.HasPrefix(first.Risks[0].ID, "R-") {
@@ -126,7 +126,7 @@ func TestBuildRegister_EveryRiskCarriesACuratedCrosswalk(t *testing.T) {
 	for _, k := range BuildRegister(r, now).Risks {
 		for _, f := range k.Frameworks {
 			if !f.Curated {
-				t.Errorf("risk %q maps to %s/%s without Curated set — a crosswalk is an assertion, "+
+				t.Errorf("risk %q maps to %s/%s without Curated set, a crosswalk is an assertion, "+
 					"and rendering it like measured data is the overclaim this package refuses",
 					k.ID, f.Framework, f.Control)
 			}

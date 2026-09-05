@@ -127,7 +127,7 @@ func TestJSONRoundTripPreservesQuantiles(t *testing.T) {
 // buckets together, so the guarantee is directional: the tail keeps its
 // relative-error bound, the small end degrades. Asserting a tight bound on
 // *every* quantile here would be asserting something the algorithm does not
-// promise — at alpha 0.01 a 256-bucket cap represents a 167x range while this
+// promise, at alpha 0.01 a 256-bucket cap represents a 167x range while this
 // population spans ~1300x, so the bottom must give.
 func TestCollapsePreservesTheTail(t *testing.T) {
 	s := New(0.01)
@@ -148,7 +148,7 @@ func TestCollapsePreservesTheTail(t *testing.T) {
 	// The low end is allowed to be wrong, but only upward: collapsing merges a
 	// bucket into its neighbour above, so a collapsed value is never understated.
 	if got, want := s.Quantile(0.001), exact(vals, 0.001); got < want*(1-s.Alpha) {
-		t.Errorf("p0.1 understated: got %.0f, true %.0f — collapse must only inflate", got, want)
+		t.Errorf("p0.1 understated: got %.0f, true %.0f, collapse must only inflate", got, want)
 	}
 }
 
@@ -160,7 +160,7 @@ func TestDefaultCapNeverCollapsesRealisticData(t *testing.T) {
 		s.Add(v)
 	}
 	if len(s.Buckets) >= s.MaxBuckets {
-		t.Fatalf("realistic data hit the bucket cap (%d) — the default is too tight", len(s.Buckets))
+		t.Fatalf("realistic data hit the bucket cap (%d), the default is too tight", len(s.Buckets))
 	}
 	t.Logf("%d buckets for 200k samples, cap %d", len(s.Buckets), s.MaxBuckets)
 }

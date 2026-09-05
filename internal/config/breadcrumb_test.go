@@ -60,7 +60,7 @@ func TestBreadcrumb_ChangesWhenAnyRegistryFileChanges(t *testing.T) {
 
 // Plain concatenation would be ambiguous: moving content across a file boundary
 // leaves the byte stream unchanged, so two materially different deployments
-// would share a fingerprint — exactly what the breadcrumb exists to prevent.
+// would share a fingerprint, exactly what the breadcrumb exists to prevent.
 func TestBreadcrumb_DistinguishesContentMovedAcrossFileBoundary(t *testing.T) {
 	dirA := t.TempDir()
 	testutil.WriteRegistry(t, dirA, "tier: 1\n", "model: x\n", "d: y\n", "p: z\n")
@@ -102,8 +102,8 @@ func TestBreadcrumb_CoversPricing(t *testing.T) {
 	}
 }
 
-// A fingerprint keyed only on (filename, mtime, size) — without the registry
-// root itself — would let two different HYDRA_HOME directories whose files
+// A fingerprint keyed only on (filename, mtime, size), without the registry
+// root itself, would let two different HYDRA_HOME directories whose files
 // happen to share mtime+size (plausible on filesystems with coarser mtime
 // resolution: NFS, some CI runners, tmpfs) collide on the identical cache
 // key, silently serving one home's hash to the other. Forcing matching sizes
@@ -136,13 +136,13 @@ func TestBreadcrumb_DifferentHomesDoNotCollideEvenWithMatchingFileStats(t *testi
 	}
 
 	if a == b {
-		t.Error("two different HYDRA_HOME directories with matching file stats produced the same fingerprint — the cache is not actually keyed on home")
+		t.Error("two different HYDRA_HOME directories with matching file stats produced the same fingerprint, the cache is not actually keyed on home")
 	}
 }
 
 // BreadcrumbFiles and the embedded set are maintained in different packages, so
 // adding a file to one without the other would make Breadcrumb error on every
-// installed binary again — silently, since callers stamp a blank fingerprint
+// installed binary again, silently, since callers stamp a blank fingerprint
 // rather than failing.
 func TestBreadcrumbFiles_AreAllEmbeddedInTheBinary(t *testing.T) {
 	for _, name := range config.BreadcrumbFiles {
@@ -152,7 +152,7 @@ func TestBreadcrumbFiles_AreAllEmbeddedInTheBinary(t *testing.T) {
 	}
 }
 
-// This used to assert an error for a missing registry — which was every
+// This used to assert an error for a missing registry, which was every
 // installed binary, so the fingerprint was absent from exactly the ledger,
 // trust and cost logs it exists to stamp (#238). The registry is embedded now,
 // so a machine with nothing on disk must still produce a stable fingerprint:

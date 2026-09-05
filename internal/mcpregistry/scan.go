@@ -14,7 +14,7 @@ import (
 // map. There is deliberately no field for "env" or any other config value:
 // these files commonly hold API keys and tokens in plaintext, and scan must
 // never read, log, or transmit them. Adding an Env field here is a privacy
-// regression — identity fields only (command/args/url), never values that
+// regression, identity fields only (command/args/url), never values that
 // could carry a secret.
 type clientServerConfig struct {
 	Type    string   `json:"type,omitempty"`
@@ -26,7 +26,7 @@ type clientServerConfig struct {
 // Scan enumerates MCP servers configured across this machine's known
 // clients (Claude Code, Claude Desktop, Cursor, Windsurf, VS Code).
 // cwd scopes project-level lookups; pass "" to skip project-scoped sources.
-// A missing config file for a client is not an error — most machines won't
+// A missing config file for a client is not an error, most machines won't
 // have every client installed.
 func Scan(cwd string) []InstalledServer {
 	var out []InstalledServer
@@ -87,7 +87,7 @@ func claudeDesktopConfigPath() string {
 }
 
 // claudeDesktopConfigPathFor is the pure, OS-parameterized core of
-// claudeDesktopConfigPath — split out so all three platform branches are
+// claudeDesktopConfigPath, split out so all three platform branches are
 // unit-testable on every CI runner, not just whichever OS happens to be
 // running the test (goos/appData wouldn't otherwise vary within one job).
 func claudeDesktopConfigPathFor(goos, home, appData string) string {
@@ -139,7 +139,7 @@ func scanMCPServersFile(path, client, scope string) []InstalledServer {
 	return toInstalledServers(cfg.MCPServers, client, scope)
 }
 
-// scanVSCodeFile reads VS Code's {"servers": {name: config}} shape — the one
+// scanVSCodeFile reads VS Code's {"servers": {name: config}} shape, the one
 // client here that uses "servers" instead of "mcpServers".
 func scanVSCodeFile(path string) []InstalledServer {
 	raw, err := os.ReadFile(path)
@@ -174,14 +174,14 @@ func toInstalledServers(servers map[string]clientServerConfig, client, scope str
 }
 
 // dockerSubcommands are bare tokens that appear in a docker invocation but
-// are never the image — excluded so a config with only flags and no real
+// are never the image, excluded so a config with only flags and no real
 // image argument doesn't misresolve one of these as if it were the image.
 var dockerSubcommands = map[string]bool{"run": true, "exec": true, "start": true}
 
 // resolvePackage makes a best-effort guess at the package identifier a
 // stdio launcher command runs, so it can be matched against the registry's
 // packages[].identifier. Deliberately conservative: an unresolved package
-// (empty string) is safe — it just shows up as "unresolved" in the audit,
+// (empty string) is safe, it just shows up as "unresolved" in the audit,
 // not as a false claim about what the server is.
 func resolvePackage(command string, args []string) string {
 	switch filepath.Base(command) {
@@ -195,7 +195,7 @@ func resolvePackage(command string, args []string) string {
 		// Best-effort: the image is usually the last bare token that isn't
 		// a flag, doesn't look like an env-style KEY=VALUE pair passed to a
 		// preceding -e/--env flag, and isn't the docker subcommand itself
-		// ("run"/"exec"/"start" are bare tokens too — a config with only
+		// ("run"/"exec"/"start" are bare tokens too, a config with only
 		// flags and no real image argument would otherwise misresolve one
 		// of these as if it were the image).
 		for i := len(args) - 1; i >= 0; i-- {

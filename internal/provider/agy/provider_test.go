@@ -54,7 +54,7 @@ func TestDiscover_UsesTheEmbeddedRegistryWhenNothingIsOnDisk(t *testing.T) {
 
 	heads := discover(t)
 	if len(heads) == 0 {
-		t.Fatal("no agy heads from the embedded registry — this is what every " +
+		t.Fatal("no agy heads from the embedded registry, this is what every " +
 			"installed binary sees (#238)")
 	}
 	for _, h := range heads {
@@ -149,7 +149,7 @@ func TestTierScore_IsMonotonicAcrossTheLadder(t *testing.T) {
 	for tier := 2; tier <= 9; tier++ {
 		got := tierScore(tier)
 		if got >= prev {
-			t.Errorf("tier %d scored %d, not below tier %d's %d — the ladder inverts",
+			t.Errorf("tier %d scored %d, not below tier %d's %d, the ladder inverts",
 				tier, got, tier-1, prev)
 		}
 		prev = got

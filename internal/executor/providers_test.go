@@ -21,7 +21,7 @@ import (
 
 // Each provider adapter builds a request in that vendor's wire format and picks
 // the answer back out of that vendor's response shape. Both halves are pure
-// convention — a wrong header name is a 401 the user reads as "my key is bad",
+// convention, a wrong header name is a 401 the user reads as "my key is bad",
 // and a wrong response field is an empty string that Hydra reports as a
 // successful, empty answer. Nothing but a test catches the second one.
 //
@@ -110,7 +110,7 @@ func TestExecuteAnthropic_WireFormatAndParsing(t *testing.T) {
 			got.body["system"])
 	}
 	if got.body["max_tokens"] != float64(256) {
-		t.Errorf("max_tokens = %v, want 256 — Anthropic requires it", got.body["max_tokens"])
+		t.Errorf("max_tokens = %v, want 256, Anthropic requires it", got.body["max_tokens"])
 	}
 	if got.body["model"] != "claude-test-1" {
 		t.Errorf("model = %v, want the env override", got.body["model"])
@@ -190,7 +190,7 @@ func TestExecuteGemini_WireFormatAndParsing(t *testing.T) {
 }
 
 // Gemini returns 200 with no candidates when the prompt is filtered. That is
-// not a successful empty answer — reporting it as one would log a paid call
+// not a successful empty answer, reporting it as one would log a paid call
 // that produced nothing and hand the caller "".
 func TestExecuteGemini_NoCandidatesIsAnError(t *testing.T) {
 	s := testutil.NewSandbox(t)
@@ -253,14 +253,14 @@ func TestExecuteAzure_BuildsTheDeploymentURL(t *testing.T) {
 	}
 
 	if strings.Contains(got.path, "//") {
-		t.Errorf("path = %q — the endpoint's trailing slash was not trimmed", got.path)
+		t.Errorf("path = %q, the endpoint's trailing slash was not trimmed", got.path)
 	}
 	if !strings.Contains(got.rawPath, "my%20deployment") {
 		t.Errorf("wire path = %q, want the deployment name escaped; a space would "+
 			"otherwise break the route", got.rawPath)
 	}
 	if !strings.Contains(got.query, "api-version=") {
-		t.Errorf("query = %q, want an api-version — Azure rejects the call without one", got.query)
+		t.Errorf("query = %q, want an api-version, Azure rejects the call without one", got.query)
 	}
 	if k := got.headers.Get("api-key"); k != "az-test" {
 		t.Errorf("api-key = %q; Azure does not use Authorization", k)
@@ -335,7 +335,7 @@ func TestExecuteReplicate_PollsUntilTheAnswerExists(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls++
 		if r.Method == http.MethodPost {
-			// The poll URL must be on Replicate's own host — the executor
+			// The poll URL must be on Replicate's own host, the executor
 			// refuses anything else, which is what stops a hostile response
 			// redirecting the authenticated poll somewhere arbitrary.
 			_, _ = w.Write([]byte(`{"status":"processing","urls":{"get":"https://api.replicate.com/v1/predictions/abc"}}`))
@@ -470,7 +470,7 @@ func TestSupportsHTTP_RequiresEveryProvidersOwnSettings(t *testing.T) {
 		})
 	}
 
-	// Azure needs three settings, so any one missing must disqualify it — this
+	// Azure needs three settings, so any one missing must disqualify it, this
 	// is where a partial config silently produces a broken URL.
 	for _, missing := range []string{"AZURE_OPENAI_API_KEY", "AZURE_OPENAI_ENDPOINT", "AZURE_OPENAI_DEPLOYMENT"} {
 		t.Run("azure without "+missing, func(t *testing.T) {
@@ -538,7 +538,7 @@ func TestDefaultModelFor_EnvOverridesAndReplicateHasNoDefault(t *testing.T) {
 		t.Error("anthropic has no default model")
 	}
 	if got := defaultModelFor("replicate"); got != "" {
-		t.Errorf("defaultModelFor(replicate) = %q; there is no sensible default — "+
+		t.Errorf("defaultModelFor(replicate) = %q; there is no sensible default, "+
 			"the model is what the user is paying to run", got)
 	}
 	if got := defaultModelFor("not-a-provider"); got != "" {
@@ -577,7 +577,7 @@ func TestStringifyAny_HandlesEveryReplicateOutputShape(t *testing.T) {
 		})
 	}
 	// An object falls back to JSON rather than Go's %v, which would emit
-	// map[k:v] — not something a user or a downstream parser can use.
+	// map[k:v], not something a user or a downstream parser can use.
 	if got := stringifyAny(map[string]any{"k": "v"}); !strings.Contains(got, `"k"`) {
 		t.Errorf("stringifyAny(map) = %q, want JSON", got)
 	}
@@ -639,7 +639,7 @@ func TestModelPinVars_CoversDefaultModelFor(t *testing.T) {
 				t.Setenv(env, "")
 				if changed && !scrubbed[env] {
 					t.Errorf("%s changes defaultModelFor(%s) but testutil.ModelPinVars "+
-						"does not clear it — a developer with it exported gets different "+
+						"does not clear it, a developer with it exported gets different "+
 						"test results", env, p)
 				}
 			}
@@ -659,7 +659,7 @@ func TestModelPinVars_CoversDefaultModelFor(t *testing.T) {
 }
 
 // Every adapter decodes its vendor's response shape. A 200 with a body that
-// does not parse must be an error, not an empty successful answer — each
+// does not parse must be an error, not an empty successful answer, each
 // adapter has its own decode call, so each needs its own case.
 func TestEveryProvider_UnparsableBodyIsAnError(t *testing.T) {
 	providers := []string{"anthropic", "google", "cohere", "azure", "bedrock", "replicate", "openai"}
@@ -708,7 +708,7 @@ func TestRecoverAgySwap_IsBestEffortOnBadInput(t *testing.T) {
 	}
 
 	// A sentinel with no settings file beside it: recovery writes the sentinel
-	// back, which is the whole point — the settings file was lost mid-swap.
+	// back, which is the whole point, the settings file was lost mid-swap.
 	lost := filepath.Join(dir, "lost.json")
 	if err := os.WriteFile(lost+agyOrigSuffix, []byte(`{"model":"restored"}`), 0o600); err != nil {
 		t.Fatal(err)

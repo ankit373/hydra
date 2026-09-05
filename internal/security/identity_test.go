@@ -100,7 +100,7 @@ func TestBuildBOM_MarksUsageOriginAndLocality(t *testing.T) {
 		t.Error("api/gpt appears as a Tool in the ledger, so Used must be true")
 	}
 	if byID["api/gpt"].Origin != "user" {
-		t.Errorf("Origin = %q, want %q — a runtime-added model is not from the curated catalog",
+		t.Errorf("Origin = %q, want %q, a runtime-added model is not from the curated catalog",
 			byID["api/gpt"].Origin, "user")
 	}
 	if byID["api/gpt"].Fingerprint != "deadbeef" {

@@ -46,7 +46,7 @@ func TestEvaluate_RecoversAKnownCounterfactualMean(t *testing.T) {
 			est.Level*100, est.Lo, est.Hi, dearCost)
 	}
 	if est.Supporting >= est.N {
-		t.Errorf("Supporting=%d of N=%d — the rows the target would not take were counted as support",
+		t.Errorf("Supporting=%d of N=%d, the rows the target would not take were counted as support",
 			est.Supporting, est.N)
 	}
 }
@@ -167,7 +167,7 @@ func TestEvaluate_ClipsWeightsAndSaysSo(t *testing.T) {
 	}
 
 	// Unclipped, that one row is the entire estimate: ESS collapses to ~1 and
-	// the answer is refused. That refusal is the estimator working — clipping
+	// the answer is refused. That refusal is the estimator working, clipping
 	// is what turns 301 rows into an answerable question.
 	_, err = Evaluate(samples, Options{Seed: 4, ClipAt: -1})
 	if !errors.Is(err, ErrInsufficientSupport) {
@@ -175,7 +175,7 @@ func TestEvaluate_ClipsWeightsAndSaysSo(t *testing.T) {
 	}
 
 	// Forced through anyway, the outlier drags the mean far above the 1.0 that
-	// 300 of the 301 rows observed — the bias clipping trades variance for.
+	// 300 of the 301 rows observed, the bias clipping trades variance for.
 	forced, err := Evaluate(samples, Options{Seed: 4, ClipAt: -1, MinESS: 1})
 	if err != nil {
 		t.Fatal(err)
@@ -191,7 +191,7 @@ func TestEvaluate_ClipsWeightsAndSaysSo(t *testing.T) {
 		clipped.Mean, clipped.ESS, forced.Mean, forced.ESS)
 }
 
-// A corrupt row must be skipped and counted, never treated as certain — the
+// A corrupt row must be skipped and counted, never treated as certain, the
 // same rule SelfNormalized follows.
 func TestEvaluate_SkipsUnusableRows(t *testing.T) {
 	good := CounterfactualSample{Value: 1, LoggedProb: 0.5, TargetProb: 1}

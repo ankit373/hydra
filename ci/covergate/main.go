@@ -125,7 +125,7 @@ func loadConfig(path string) (*Config, error) {
 	return cfg, nil
 }
 
-// check returns every problem found, plus how many skips the suite used — so a
+// check returns every problem found, plus how many skips the suite used, so a
 // green run still reports the headroom rather than only the verdict.
 func check(cfg *Config, profile, root string) (problems []string, skips int, err error) {
 	coverage, err := parseProfile(profile)
@@ -139,21 +139,21 @@ func check(cfg *Config, profile, root string) (problems []string, skips int, err
 		got, measured := coverage[pkg]
 		if !measured {
 			problems = append(problems, fmt.Sprintf(
-				"%s has a floor of %.0f%% but no coverage was measured — was it deleted, "+
+				"%s has a floor of %.0f%% but no coverage was measured, was it deleted, "+
 					"or did its tests stop running?", pkg, floor))
 			continue
 		}
 		if got < floor {
 			problems = append(problems, fmt.Sprintf(
 				"%s is at %.1f%%, below its floor of %.0f%%. Raise the coverage, or lower "+
-					"the floor in ci/coverage-floors.txt — which is a change a reviewer sees.",
+					"the floor in ci/coverage-floors.txt, which is a change a reviewer sees.",
 				pkg, got, floor))
 		}
 	}
 
 	// Every measurement, printed whether or not the run passes. Ratcheting a
 	// floor means knowing the current number, and the run you are looking at is
-	// where it should be — not a local run on a different OS, where the same
+	// where it should be, not a local run on a different OS, where the same
 	// package can measure ten points apart.
 	fmt.Println("covergate: measured coverage")
 	for _, pkg := range sortedKeys(coverage) {
@@ -189,7 +189,7 @@ func check(cfg *Config, profile, root string) (problems []string, skips int, err
 			if _, exists := os.Stat(filepath.Join(root, pkg)); exists == nil {
 				problems = append(problems, fmt.Sprintf(
 					"%s is allow-listed as having no tests, but it has some. Remove the "+
-						"no-tests line — a stale entry exempts it again if they are deleted.", pkg))
+						"no-tests line, a stale entry exempts it again if they are deleted.", pkg))
 			}
 		}
 	}
@@ -202,7 +202,7 @@ func check(cfg *Config, profile, root string) (problems []string, skips int, err
 	if skips > cfg.SkipBudget {
 		problems = append(problems, fmt.Sprintf(
 			"the suite has %d t.Skip calls, over the budget of %d. A three-OS matrix "+
-				"where every awkward test skips on two of them is decorative — either "+
+				"where every awkward test skips on two of them is decorative, either "+
 				"make the test run, or raise the budget deliberately.", skips, cfg.SkipBudget))
 	}
 	for _, loc := range unexplained {
@@ -221,7 +221,7 @@ func check(cfg *Config, profile, root string) (problems []string, skips int, err
 //	github.com/ankit373/hydra/internal/x/file.go:10.2,12.16 2 1
 //
 // where the trailing numbers are the statement count in that block and how many
-// times it ran. Package coverage is covered statements over total statements —
+// times it ran. Package coverage is covered statements over total statements,
 // the same arithmetic `go tool cover -func` reports.
 func parseProfile(path string) (map[string]float64, error) {
 	f, err := os.Open(path)
@@ -392,7 +392,7 @@ func countSkips(root string) (total int, unexplained []string, err error) {
 // enclosingFunc reports which kind of top-level test function a line opens.
 //
 // The distinction matters: `t.Skip()` inside an f.Fuzz body rejects a generated
-// input and moves on — it is the fuzzer's own control flow, happens thousands
+// input and moves on, it is the fuzzer's own control flow, happens thousands
 // of times per run, and a reason string there would be noise. A skip inside a
 // Test function is the thing this budget exists to bound: a platform or
 // environment exemption that quietly stops covering something.

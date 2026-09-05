@@ -2,7 +2,7 @@
 
 package tui
 
-// layout.go — the shared alignment/wrapping/clipping helpers every view uses.
+// layout.go, the shared alignment/wrapping/clipping helpers every view uses.
 // All measurement is in display cells (lipgloss.Width / ansi.Truncate), never
 // len(): byte or rune counts misalign columns the moment a name is not ASCII.
 
@@ -38,20 +38,20 @@ func truncate(s string, n int) string {
 }
 
 // ckCell is a fixed table cell: s truncated and padded to exactly w display
-// cells, left-aligned. Styled input is fine — measurement strips ANSI.
+// cells, left-aligned. Styled input is fine, measurement strips ANSI.
 func ckCell(s string, w int) string {
 	s = truncate(s, w)
 	return s + strings.Repeat(" ", w-lipgloss.Width(s))
 }
 
-// ckRCell right-aligns within w cells — for numeric columns.
+// ckRCell right-aligns within w cells, for numeric columns.
 func ckRCell(s string, w int) string {
 	s = truncate(s, w)
 	return strings.Repeat(" ", w-lipgloss.Width(s)) + s
 }
 
 // ckFrame clamps a rendered body to at most h lines of at most w cells each.
-// Overflow is disclosed, never silently dropped — and never allowed to push
+// Overflow is disclosed, never silently dropped, and never allowed to push
 // the chrome off-frame, which is what an uncropped pane does (#445, #446).
 func ckFrame(body string, w, h int) string {
 	if w < 1 {
@@ -64,7 +64,7 @@ func ckFrame(body string, w, h int) string {
 	if len(lines) > h {
 		n := len(lines) - (h - 1)
 		lines = lines[:h-1]
-		lines = append(lines, ckFaintS.Render(truncate(fmt.Sprintf("… %d more line%s — enlarge the terminal", n, plural(n)), w)))
+		lines = append(lines, ckFaintS.Render(truncate(fmt.Sprintf("… %d more line%s, enlarge the terminal", n, plural(n)), w)))
 	}
 	for i, l := range lines {
 		if lipgloss.Width(l) > w {
@@ -80,7 +80,7 @@ func ckFrame(body string, w, h int) string {
 }
 
 // ckSplit joins two panes side by side when the width allows; otherwise it
-// shows one whole pane instead of two broken ones — the secondary when the
+// shows one whole pane instead of two broken ones, the secondary when the
 // user has focused into it, else the primary.
 func ckSplit(w int, primary, secondary string, focusSecondary bool) string {
 	if lipgloss.Width(primary)+1+lipgloss.Width(secondary) <= w {
@@ -94,7 +94,7 @@ func ckSplit(w int, primary, secondary string, focusSecondary bool) string {
 
 // ckDistinctTruncate truncates each sibling name to width display cells. A
 // family of siblings whose shared prefix would eat most of the budget gets
-// that prefix dropped so the distinguishing tail survives — "…Flash (Med)",
+// that prefix dropped so the distinguishing tail survives, "…Flash (Med)",
 // never three near-identical "Gemini 3.5 Fla…" rows.
 func ckDistinctTruncate(names []string, width int) []string {
 	out := make([]string, len(names))
@@ -143,7 +143,7 @@ func ckDistinctTruncate(names []string, width int) []string {
 
 // ckFamilyCut is how many leading runes to drop from every member of a family
 // so its longest member fits. It prefers a word boundary inside the shared
-// prefix — "…3.5 Flash (Medium)" identifies the family, "…Medium)" does not —
+// prefix, "…3.5 Flash (Medium)" identifies the family, "…Medium)" does not,
 // and returns 0 when the family already fits or nothing can be cut.
 func ckFamilyCut(set []string, prefix, width int) int {
 	longest, shortest := 0, 1<<30
@@ -169,7 +169,7 @@ func ckFamilyCut(set []string, prefix, width int) int {
 		}
 	}
 	if best == 0 {
-		best = prefix // no word boundary deep enough — fall back to the prefix
+		best = prefix // no word boundary deep enough, fall back to the prefix
 	}
 	if best >= shortest {
 		return 0
@@ -309,8 +309,8 @@ func ckScrollLines(lines []string, off, avail int) ([]string, int) {
 // the input line off-frame (#506).
 const ckLogEntryCap = 6
 
-// ckLogLines renders every log entry as clipped display lines — each entry
-// capped at entryCap rendered lines (#506) — flattened for the scroll window.
+// ckLogLines renders every log entry as clipped display lines, each entry
+// capped at entryCap rendered lines (#506), flattened for the scroll window.
 func ckLogLines(log []string, w, entryCap int) []string {
 	if entryCap < 1 {
 		entryCap = 1
@@ -324,7 +324,7 @@ func ckLogLines(log []string, w, entryCap int) []string {
 
 // ckVisibleLog is the chat scrollback window: scroll < 0 follows the live
 // tail; otherwise the window is anchored at that line, so appends never yank
-// a reader who scrolled up — the arrivals just grow the "below" cue.
+// a reader who scrolled up, the arrivals just grow the "below" cue.
 func ckVisibleLog(log []string, w, logH, scroll int) string {
 	entryCap := ckLogEntryCap
 	if logH < entryCap {

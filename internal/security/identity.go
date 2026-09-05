@@ -27,7 +27,7 @@ type AgentPrivilege struct {
 	// Heads are the models it drove.
 	Heads []string `json:"heads,omitempty"`
 	// Unscoped is true when no policy rule names this agent, so it is
-	// governed only by the default — the practical definition of
+	// governed only by the default, the practical definition of
 	// over-permissioned here, since Hydra's default is allow.
 	Unscoped bool `json:"unscoped"`
 	// WritesOrExecs counts the operations that can change state, which is
@@ -140,7 +140,7 @@ type BOMEntry struct {
 	Local bool `json:"local"`
 	// Fingerprint is the binary hash where one exists.
 	Fingerprint string `json:"fingerprint,omitempty"`
-	// Used is true when the ledger shows this head actually handling work —
+	// Used is true when the ledger shows this head actually handling work,
 	// an inventory of what is installed is less useful than one that says
 	// what is live.
 	Used bool `json:"used"`
@@ -177,7 +177,7 @@ func bomCheck(bom []BOMEntry) Check {
 	const name = "Model inventory (AI-BOM)"
 	if len(bom) == 0 {
 		return Check{Name: name, Status: "no heads discovered",
-			Detail: "nothing was found to inventory — run `hyctl probe`"}
+			Detail: "nothing was found to inventory, run `hyctl probe`"}
 	}
 	var remote, unvetted, used int
 	for _, b := range bom {

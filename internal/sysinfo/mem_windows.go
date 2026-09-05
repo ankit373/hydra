@@ -20,7 +20,7 @@ var (
 )
 
 // memoryStatusEx mirrors MEMORYSTATUSEX. Field order and widths are fixed by
-// the Win32 ABI — the call writes into this layout, so it must not be reordered.
+// the Win32 ABI, the call writes into this layout, so it must not be reordered.
 type memoryStatusEx struct {
 	Length               uint32
 	MemoryLoad           uint32
@@ -38,7 +38,7 @@ type memoryStatusEx struct {
 // AvailPhys is what Windows itself shows as "Available" in Task Manager: free
 // plus standby (cached-but-reclaimable) pages. That is the same notion as the
 // free+inactive figure darwinMemoryState derives from vm_stat, and as the
-// MemAvailable field linuxFreeRAM reads — so all three platforms feed
+// MemAvailable field linuxFreeRAM reads, so all three platforms feed
 // EffectiveVRAMGB comparable numbers rather than three different definitions of
 // "free".
 //

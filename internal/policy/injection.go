@@ -6,7 +6,7 @@ import "strings"
 
 // injectionMarkers are classic phrases used to try to override a model's
 // instructions with content it was only supposed to treat as data. This is a
-// heuristic keyword scan — not a classifier, not exhaustive, trivially evaded
+// heuristic keyword scan, not a classifier, not exhaustive, trivially evaded
 // by anyone who tries. It exists to leave an audit trail, not to prevent an
 // attack: no pattern-based defense closes this hole architecturally.
 var injectionMarkers = []string{

@@ -23,7 +23,7 @@ import (
 const sessionGap = time.Hour
 
 // Stage is one observed step in an incident, each derived from a field the
-// ledger already records — not an invented taxonomy.
+// ledger already records, not an invented taxonomy.
 type Stage string
 
 const (
@@ -145,7 +145,7 @@ func CorrelateIncidents(events []ledger.Event, blast BlastReport) []Incident {
 
 	// Built once and shared by every incident's scoreImpact call below, instead
 	// of each one linearly scanning all of blast.Files per event to find a
-	// match — O(events_in_incident × len(blast.Files)) repeated once per
+	// match, O(events_in_incident × len(blast.Files)) repeated once per
 	// incident, when blast.Files is already fully built and doesn't change
 	// within one CorrelateIncidents call.
 	widelyDepended := widelyDependedFiles(blast)
@@ -192,7 +192,7 @@ func withinSession(a, b string) bool {
 
 // widelyDependedFiles indexes blast.Files by path, keeping only the files
 // scoreImpact actually cares about (known to the graph and depended on by at
-// least one other file) — an O(1) lookup by e.Resource replaces a linear scan
+// least one other file), an O(1) lookup by e.Resource replaces a linear scan
 // of the whole slice per event.
 func widelyDependedFiles(blast BlastReport) map[string]bool {
 	out := make(map[string]bool, len(blast.Files))
@@ -225,7 +225,7 @@ func buildIncident(actor string, evs []ledger.Event, widelyDepended map[string]b
 		if e.Flagged {
 			seen[StageInjection] = true
 			// A flagged attempt that was *allowed* is the one that actually
-			// got through — the single most important distinction here.
+			// got through, the single most important distinction here.
 			if e.Decision == ledger.Allow {
 				seen[StageSucceeded] = true
 			}

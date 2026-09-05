@@ -56,7 +56,7 @@ type InitModel struct {
 	skills    []string
 	err       error
 
-	// specs is detected once here, not per render — viewTiers used to call
+	// specs is detected once here, not per render, viewTiers used to call
 	// sysinfo.Detect() (subprocess spawns: sysctl/vm_stat/nvidia-smi) fresh on
 	// every re-render of the Tiers step, re-probing hardware on every
 	// arrow-key press. install.go's NewInstallModel already gets this right;
@@ -146,7 +146,7 @@ func (m InitModel) maxCursor() int {
 
 func (m InitModel) View() string {
 	var b strings.Builder
-	b.WriteString(sTitle.Render("  Hydra — First Run Setup") + "\n\n")
+	b.WriteString(sTitle.Render("  Hydra, First Run Setup") + "\n\n")
 
 	switch m.step {
 	case stepCortex:
@@ -215,8 +215,8 @@ func (m InitModel) viewTiers(b *strings.Builder) {
 func (m InitModel) viewPrivacy(b *strings.Builder) {
 	b.WriteString(sPrompt.Render("  Should prompts that look like PII stay on local Heads only?\n\n"))
 	opts := []string{
-		"Yes — keep likely PII on local Heads only",
-		"No  — use any Head",
+		"Yes, keep likely PII on local Heads only",
+		"No , use any Head",
 	}
 	for i, opt := range opts {
 		if i == m.cursor {
@@ -230,8 +230,8 @@ func (m InitModel) viewPrivacy(b *strings.Builder) {
 func (m InitModel) viewCapture(b *strings.Builder) {
 	b.WriteString(sPrompt.Render("  Store the text of prompts and responses?\n\n"))
 	opts := []string{
-		"No  — keep only the statistics (recommended)",
-		"Yes — store the text too, sampled and redacted",
+		"No , keep only the statistics (recommended)",
+		"Yes, store the text too, sampled and redacted",
 	}
 	for i, opt := range opts {
 		if i == m.cursor {
@@ -296,7 +296,7 @@ func exportToRoutingYAML(tiers []config.Tier, cortex *provider.Head) error {
 
 	existing, err := os.ReadFile(routingPath)
 	if err != nil {
-		return nil // routing.yaml not present in this install layout — skip silently
+		return nil // routing.yaml not present in this install layout, skip silently
 	}
 
 	// Strip any previously written discovered block.
