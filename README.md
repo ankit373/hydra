@@ -747,7 +747,8 @@ hydra/
 │   ├── trust/                   # Trust Control Plane: calibration · defect-cost · SPRT ensemble
 │   ├── pricing/                 # Live cost DB (OpenRouter fetch + 24h cache + YAML fallback)
 │   ├── cost/                    # cost.jsonl reader + spend summaries + source labeling
-│   ├── ope/                     # Off-policy estimation: inverse-probability weighting over sampled logs
+│   ├── ope/                     # Off-policy estimation + counterfactual policy evaluation with intervals
+│   ├── otlp/                    # Dispatch log → OpenTelemetry spans (OTLP/HTTP, nothing sent by default)
 │   ├── sketch/                  # Mergeable relative-error quantile sketch (bounded memory)
 │   ├── rollup/                  # Per-day aggregates: calls, tokens, spend, latency sketch
 │   ├── evalset/                 # Oracle-verified labelled examples — kept verbatim, never pruned
