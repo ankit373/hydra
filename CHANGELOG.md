@@ -6,6 +6,13 @@ Format: [Semantic Versioning](https://semver.org). Entries from v1.0.1 onward ar
 
 ---
 
+## [1.4.0](https://github.com/ankit373/hydra/compare/v1.3.1...v1.4.0) (2026-09-05)
+
+
+### Features
+
+* **release:** v1.4.0 — MCP server trust registry, security dashboard, chat-first desktop app ([#659](https://github.com/ankit373/hydra/issues/659)) ([59c49b2](https://github.com/ankit373/hydra/commit/59c49b2cff60b6aa347fc4977517eb34b17f4bba))
+
 ## [1.3.1](https://github.com/ankit373/hydra/compare/v1.2.0...v1.3.1) (2026-08-20)
 
 
