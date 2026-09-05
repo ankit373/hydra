@@ -855,7 +855,19 @@ docs/robots.txt    ← AI crawler rules (only change if bot policy changes)
 - `app.html`'s direct download links are **version-pinned by necessity**, desktop asset names embed
   their version, so GitHub's `/releases/latest/download/` shortcut cannot address them. They go stale
   every release and must be bumped by hand; the `install-app.sh` command beside them resolves the
-  newest tag at runtime and never goes stale, which is why it is the primary path on the page
+  newest tag at runtime and never goes stale, which is why it is the primary path on the page.
+  **`cmd/hydra/docs_version_test.go` now fails the build when they drift**, so a missed bump is red
+  rather than a 404 someone finds later. It checks three things: every version reference in
+  `app.html`, `index.html` and `README.md` names one version; that version matches
+  `.release-please-manifest.json`; and each asset URL's tag matches the version inside its filename.
+  Bump them all together:
+
+  ```bash
+  OLD=1.4.0 NEW=1.4.1
+  sed -i '' "s/v${OLD}/v${NEW}/g; s/\"softwareVersion\": \"${OLD}\"/\"softwareVersion\": \"${NEW}\"/" \
+    docs/app.html docs/index.html README.md
+  go test ./cmd/hydra -run TestDocs_Version   # must pass before the release PR
+  ```
 - Do not add features to `llms.txt` that haven't shipped to `main` yet
 
 ---
