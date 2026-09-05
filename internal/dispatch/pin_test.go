@@ -151,3 +151,31 @@ func TestDispatch_PinnedHeadUnknownNamesIt(t *testing.T) {
 		t.Errorf("err = %q, want it to name the head that was asked for", err)
 	}
 }
+
+// The cost row's pool came only from head metadata, and exactly one provider
+// (agy) ever set it. Every other provider's rows landed with pool="" and their
+// pool card read 0 calls forever, on 90% of a real machine's rows (#681).
+func TestHeadPool_ResolvesFromTheRegistryWhenMetadataIsAbsent(t *testing.T) {
+	// The shape the port provider actually discovers: no metadata at all.
+	h := provider.Head{ID: "ollama/Qwen2.5-Coder:7b", Name: "Qwen2.5-Coder:7b (Ollama)"}
+	if got := headPool(h); got != "local_ollama" {
+		t.Errorf("headPool(%s) = %q, want local_ollama from the registry", h.ID, got)
+	}
+}
+
+// Metadata still wins where a provider does attach it, so agy keeps working
+// exactly as before.
+func TestHeadPool_ProviderMetadataWins(t *testing.T) {
+	h := provider.Head{ID: "ollama/Qwen2.5-Coder:7b", Meta: map[string]string{"token_pool": "explicit"}}
+	if got := headPool(h); got != "explicit" {
+		t.Errorf("headPool = %q, want the provider's own metadata to win", got)
+	}
+}
+
+// An unrecognised head records no pool rather than guessing one: a wrong pool
+// files spend against someone else's quota, which is worse than none.
+func TestHeadPool_UnknownHeadRecordsNoPool(t *testing.T) {
+	if got := headPool(provider.Head{ID: "nothing/we-know"}); got != "" {
+		t.Errorf("headPool = %q, want empty for an unknown head", got)
+	}
+}

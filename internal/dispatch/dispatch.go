@@ -32,6 +32,7 @@ import (
 	"github.com/ankit373/hydra/internal/rank"
 	"github.com/ankit373/hydra/internal/runid"
 	"github.com/ankit373/hydra/internal/runlog"
+	"github.com/ankit373/hydra/registry"
 )
 
 // ErrNoHeads marks a dispatch with no head to run, discovered or routable.
@@ -1050,7 +1051,7 @@ func (d *Dispatcher) logDispatch(r *Result, prompt string, opts Options, actProb
 			"enum":            opts.Enum,
 			"model":           r.Response.Model,
 			"executor":        r.Head.Provider,
-			"pool":            r.Head.Meta["token_pool"],
+			"pool":            headPool(r.Head),
 			"prompt_tokens":   r.Response.InputTokens,
 			"response_tokens": r.Response.OutputTokens,
 			"est_cost_usd":    estCost,
@@ -1131,4 +1132,15 @@ func EnumToTier(enum string) string {
 func IsKnownEnum(enum string) bool {
 	_, ok := enumTiers[enum]
 	return ok
+}
+
+// headPool is the token pool a cost row should be filed under. Provider
+// metadata wins when present; otherwise the registry is asked, because only
+// the agy provider ever set that metadata and every other provider's rows were
+// landing with no pool at all (#681).
+func headPool(h provider.Head) string {
+	if p := h.Meta["token_pool"]; p != "" {
+		return p
+	}
+	return registry.TokenPoolFor(config.ScriptHome(), h.ID)
 }

@@ -147,8 +147,9 @@ func (a *API) GetModels() ModelRegistry {
 		key := m.TokenPool
 		if key == "" {
 			// A model with no declared pool draws from nothing shared. Group
-			// them together rather than dropping them.
-			key = "unpooled"
+			// them together rather than dropping them, under the same key
+			// internal/cost files their rows by, or the spend reads as zero.
+			key = cost.UnknownPoolKey
 		}
 
 		idx, ok := seen[key]

@@ -207,6 +207,11 @@ func All() ([]GroupRow, error) {
 }
 
 // ByPool returns per-pool totals.
+// UnknownPoolKey is how ByPool groups a row whose model declared no token pool.
+// Exported because the desktop looked those rows up under its own literal and
+// found nothing; one constant is what stops the two drifting again (#681).
+const UnknownPoolKey = "unknown"
+
 func ByPool() ([]GroupRow, error) {
 	all, err := LoadAll()
 	if err != nil {
@@ -214,7 +219,7 @@ func ByPool() ([]GroupRow, error) {
 	}
 	return groupBy(all, func(r Row) string {
 		if r.Pool == "" {
-			return "unknown"
+			return UnknownPoolKey
 		}
 		return r.Pool
 	}), nil

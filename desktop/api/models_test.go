@@ -141,6 +141,41 @@ func TestGetModels_AggregatesObservedSpendPerPool(t *testing.T) {
 	}
 }
 
+// The card beside the chat read "0 calls" while the list under it said 26, for
+// the same model. The rows were written with pool="" because only the agy
+// provider attached token_pool metadata, so local_ollama never matched any
+// spend (#681). 90% of a real machine's rows were affected.
+func TestGetModels_LocalPoolSpendIsCounted(t *testing.T) {
+	home := sandbox(t)
+
+	writeCostRows(t, home, []map[string]any{
+		{"ts": "2026-09-05T10:00:00Z", "pool": "local_ollama", "tier": 10,
+			"prompt_tokens": 40, "response_tokens": 20, "est_cost_usd": 0},
+		{"ts": "2026-09-05T10:01:00Z", "pool": "local_ollama", "tier": 10,
+			"prompt_tokens": 60, "response_tokens": 30, "est_cost_usd": 0},
+		{"ts": "2026-09-05T10:02:00Z", "pool": "agy_claude", "tier": 2,
+			"prompt_tokens": 10, "response_tokens": 5, "est_cost_usd": 0.10},
+	})
+
+	var local *Pool
+	reg := New().GetModels()
+	for i := range reg.Pools {
+		if reg.Pools[i].Name == "local_ollama" {
+			local = &reg.Pools[i]
+		}
+	}
+	if local == nil {
+		t.Fatal("local_ollama pool missing; the registry declares it for the Ollama models")
+	}
+	if local.ObservedCalls != 2 {
+		t.Errorf("local_ollama ObservedCalls = %d, want 2. A free local call is still a call, "+
+			"and 0 next to a list saying 2 makes the number worthless", local.ObservedCalls)
+	}
+	if got := local.ObservedTokens; got != 150 {
+		t.Errorf("local_ollama ObservedTokens = %d, want 150", got)
+	}
+}
+
 // An operator's on-disk registry must win over the embedded copy, or retuning
 // routing without a rebuild (the whole point of registry.Read) silently fails.
 func TestGetModels_OnDiskRegistryOverridesEmbedded(t *testing.T) {
