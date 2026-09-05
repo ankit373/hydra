@@ -22,7 +22,7 @@ toolchain go1.26.5
 
 require (
 	github.com/ankit373/hydra v0.0.0
-	github.com/wailsapp/wails/v2 v2.13.0
+	github.com/wailsapp/wails/v2 v2.15.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
