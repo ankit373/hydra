@@ -119,8 +119,8 @@ func (e *AgyExecutor) Execute(ctx context.Context, req Request) (*Response, erro
 
 	output := strings.TrimSpace(outStr)
 
-	promptTokens := len(req.Prompt) / 4
-	responseTokens := len(output) / 4
+	promptTokens := EstimateTokens(req.Prompt)
+	responseTokens := EstimateTokens(output)
 	writeTokenSidecar(modelFlag, "agy", "estimate", promptTokens, responseTokens)
 
 	return &Response{

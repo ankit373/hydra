@@ -105,6 +105,7 @@ func logAttempts(attempts []Attempt, mode SwarmMode, opts Options, promptPreview
 			"ts":              a.FinishedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
 			"tier":            rank.UITier(a.Head),
 			"model":           a.Head.Name,
+			"head":            a.Head.ID,
 			"executor":        a.Head.Provider,
 			"pool":            headPool(a.Head),
 			"prompt_tokens":   a.InputTokens,

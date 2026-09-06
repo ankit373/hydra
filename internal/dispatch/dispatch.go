@@ -1071,6 +1071,7 @@ func (d *Dispatcher) logDispatch(r *Result, prompt string, opts Options, actProb
 			"tier":            tier,
 			"enum":            opts.Enum,
 			"model":           r.Response.Model,
+			"head":            r.Head.ID,
 			"executor":        r.Head.Provider,
 			"pool":            headPool(r.Head),
 			"prompt_tokens":   r.Response.InputTokens,

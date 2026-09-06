@@ -40,6 +40,22 @@ type Response struct {
 	TokensEstimated bool
 }
 
+// EstimateTokens approximates a token count from text length, for the CLI
+// heads that report no usage of their own.
+//
+// Never returns 0 for text that exists. len(s)/4 truncated a reply of "OK" to
+// zero tokens, so a call that answered was reported as producing nothing and
+// its cost rounded to $0.000 (#696).
+func EstimateTokens(s string) int {
+	if s == "" {
+		return 0
+	}
+	if n := len(s) / 4; n > 0 {
+		return n
+	}
+	return 1
+}
+
 // Executor runs a prompt and returns a response.
 type Executor interface {
 	Execute(ctx context.Context, req Request) (*Response, error)
