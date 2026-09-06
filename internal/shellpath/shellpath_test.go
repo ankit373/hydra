@@ -4,6 +4,7 @@ package shellpath
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -85,7 +86,7 @@ func TestLooksBare(t *testing.T) {
 		// the recovery never ran.
 		{"Linux .desktop", sep("/usr/local/sbin", "/usr/local/bin", "/usr/sbin", "/usr/bin", "/sbin", "/bin", "/usr/games", "/usr/local/games"), true},
 		{"systemd user service", sep("/usr/local/bin", "/usr/bin", "/bin"), true},
-		{"a shell profile has run", sep(home+"/.local/bin", "/usr/bin", "/bin"), false},
+		{"a shell profile has run", sep(filepath.Join(home, ".local", "bin"), "/usr/bin", "/bin"), false},
 		{"empty", "", true},
 	}
 	for _, c := range cases {
@@ -104,7 +105,7 @@ func TestAdopt_LeavesARealPathUntouched(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
-	real := sep(home+"/.local/bin", "/usr/bin", "/bin")
+	real := sep(filepath.Join(home, ".local", "bin"), "/usr/bin", "/bin")
 	t.Setenv("PATH", real)
 	Adopt()
 	if got := os.Getenv("PATH"); got != real {

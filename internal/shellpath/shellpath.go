@@ -6,6 +6,7 @@ import (
 	"context"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -55,9 +56,13 @@ func looksBare(path string) bool {
 	if err != nil || home == "" {
 		return false // cannot tell, so leave PATH alone
 	}
-	prefix := home + string(os.PathSeparator)
+	// Cleaned on both sides: Windows accepts either separator in a path, so a
+	// raw prefix test misses "C:\Users\me/.local/bin". Adopt returns early on
+	// Windows, but a predicate that is only accidentally right is worse than
+	// one that is right.
+	prefix := filepath.Clean(home) + string(os.PathSeparator)
 	for _, dir := range strings.Split(path, string(os.PathListSeparator)) {
-		if dir != "" && strings.HasPrefix(dir, prefix) {
+		if dir != "" && strings.HasPrefix(filepath.Clean(dir), prefix) {
 			return false
 		}
 	}
