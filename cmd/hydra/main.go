@@ -787,6 +787,9 @@ func cmdDispatch() *cobra.Command {
 					Classification: &promptClass,
 				})
 				if err != nil {
+					if errors.Is(err, trust.ErrNoEvidence) {
+						return noEvidenceError(domain)
+					}
 					return err
 				}
 				printSPRTResult(res)
@@ -2959,6 +2962,35 @@ func cmdGraph() *cobra.Command {
 
 // printSPRTResult renders an SPRT confidence run: the LLR ledger, the decision,
 // and the winning answer.
+// noEvidenceError turns the SPRT refusal into something the reader can act on.
+// The bare error names the domain; what they need is which domains do carry
+// evidence and how to give this one some.
+func noEvidenceError(domain string) error {
+	var b strings.Builder
+	fmt.Fprintf(&b, "nothing here can judge %q yet, so --confidence would sample every head, "+
+		"move the estimate nowhere and hand back 50%%.\n", domain)
+	b.WriteString("A source only carries evidence once its verdicts have been scored against outcomes.\n\n")
+
+	if cal, err := trust.New(trust.DefaultPath()); err == nil {
+		seen := map[string]bool{}
+		var domains []string
+		for _, st := range cal.Report() {
+			if st.D > 0 && !seen[st.Domain] {
+				seen[st.Domain] = true
+				domains = append(domains, st.Domain)
+			}
+		}
+		if len(domains) > 0 {
+			sort.Strings(domains)
+			fmt.Fprintf(&b, "  Domains with evidence: %s\n", strings.Join(domains, ", "))
+		}
+	}
+	b.WriteString("  Record an outcome:     hyctl trust record --source model:<id> --domain " + domain + " --said-correct --outcome correct\n")
+	b.WriteString("  Or verify with a test: hyctl oracle verify --candidate <file> --domain " + domain + " -- go test ./...\n")
+	b.WriteString("\nWithout --confidence the same prompt routes normally and costs one head.")
+	return errors.New(b.String())
+}
+
 func printSPRTResult(r *swarm.SPRTResult) {
 	sep := dimStyle.Render("  " + strings.Repeat("─", 60))
 	t := r.Trust
