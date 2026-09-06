@@ -504,3 +504,19 @@ func TestAgyExecute_UnparsableTimeoutFallsBackToTheDefault(t *testing.T) {
 		t.Fatalf("a garbage AGY_TIMEOUT cancelled the run: %v", err)
 	}
 }
+
+// The message a person actually acts on. agy authenticates interactively and a
+// --print run cannot complete the handshake, so a bare URL sends the reader to
+// Google, hands them an OAuth code, and leaves nowhere to paste it. That
+// happened (#702).
+func TestAuthRequiredError_NamesTheCommandThatFixesIt(t *testing.T) {
+	e := &AuthRequiredError{ModelFlag: "gemini-3.8-flash-medium", Pool: "agy_flash",
+		AuthURL: "https://accounts.google.com/o/oauth2/auth?x=1"}
+	msg := e.Error()
+	if !strings.Contains(msg, "run `agy`") {
+		t.Errorf("Error() = %q, want it to name the command that completes sign-in", msg)
+	}
+	if !strings.Contains(msg, "gemini-3.8-flash-medium") {
+		t.Errorf("Error() = %q, want it to name the model", msg)
+	}
+}
