@@ -134,7 +134,7 @@ models:
     name: "Claude Sonnet 4.6 (Thinking)"
     provider: antigravity
     executor: agy
-    model_flag: "claude-sonnet-4-6-thinking"
+    model_flag: "claude-sonnet-4-6"
     token_pool: agy_claude
     enabled: true
     context_window: 200000
@@ -158,7 +158,11 @@ models:
     executor: agy
     model_flag: "gemini-2.0-flash-thinking-exp"
     token_pool: agy_flash_thinking
-    enabled: true
+    # agy no longer offers a thinking-flash model, and nothing it does offer is
+    # a like-for-like replacement. Off rather than repointed: choosing a
+    # stand-in is a routing decision, not a data fix. `agy models` lists what
+    # this install actually has.
+    enabled: false
     context_window: 1000000
     tokens_per_call: medium
     speed: fast
@@ -178,7 +182,7 @@ models:
     name: "Gemini 3.1 Pro (High)"
     provider: antigravity
     executor: agy
-    model_flag: "gemini-3.1-pro"
+    model_flag: "gemini-3.1-pro-high"
     token_pool: agy_gemini_pro
     enabled: true
     context_window: 1000000
@@ -219,10 +223,10 @@ models:
 
   - tier: 7
     id: flash-high
-    name: "Gemini 3.5 Flash (High)"
+    name: "Gemini 3.8 Flash (High)"
     provider: antigravity
     executor: agy
-    model_flag: "gemini-3.5-flash-high"
+    model_flag: "gemini-3.8-flash-high"
     token_pool: agy_flash
     enabled: true
     context_window: 1000000
@@ -241,10 +245,10 @@ models:
 
   - tier: 8
     id: flash-med
-    name: "Gemini 3.5 Flash (Medium)"
+    name: "Gemini 3.8 Flash (Medium)"
     provider: antigravity
     executor: agy
-    model_flag: "gemini-3.5-flash"
+    model_flag: "gemini-3.8-flash-medium"
     token_pool: agy_flash
     enabled: true
     context_window: 1000000
@@ -263,10 +267,10 @@ models:
 
   - tier: 9
     id: flash-low
-    name: "Gemini 3.5 Flash (Low)"
+    name: "Gemini 3.8 Flash (Low)"
     provider: antigravity
     executor: agy
-    model_flag: "gemini-3.5-flash-low"
+    model_flag: "gemini-3.8-flash-low"
     token_pool: agy_flash
     enabled: true
     context_window: 1000000

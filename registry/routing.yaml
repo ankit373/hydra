@@ -17,13 +17,13 @@ routing_map:
   GRUNT:      10   # → Qwen2.5-Coder:7b (Ollama, local)
 
   # Trivial agy work, enums, constants, simple types
-  TRIVIAL:    9    # → Gemini 3.5 Flash (Low)
+  TRIVIAL:    9    # → Gemini 3.8 Flash (Low)
 
   # Simple structured code, DTOs, schemas, interfaces
-  SIMPLE:     8    # → Gemini 3.5 Flash (Medium)
+  SIMPLE:     8    # → Gemini 3.8 Flash (Medium)
 
   # Standard patterns, controllers, handlers, basic CRUD
-  STANDARD:   7    # → Gemini 3.5 Flash (High)
+  STANDARD:   7    # → Gemini 3.8 Flash (High)
 
   # Moderate logic, services, repos, validators
   MODERATE:   6    # → Gemini 3.1 Pro (Low)

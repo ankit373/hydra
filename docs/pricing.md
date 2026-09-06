@@ -24,7 +24,7 @@ Hydra itself is free. The underlying models charge per token:
 | Claude Opus 4.7 | 1 | ~$15/M tokens | ~$75/M tokens | Anthropic |
 | Claude Sonnet 4.6 | 2-3 | ~$3/M tokens | ~$15/M tokens | Anthropic |
 | Gemini 2.5 Pro | 4-5 | ~$1.25/M tokens | ~$10/M tokens | Google |
-| Gemini 2.0 Flash | 6-8 | ~$0.075/M tokens | ~$0.30/M tokens | Google |
+| Gemini 3.8 Flash | 7-9 | $0.075-0.30/M tokens | $0.63-2.50/M tokens | Google, via Antigravity |
 | Qwen3 (local) | 9-10 | $0 | $0 | Ollama, runs locally |
 
 Run `hyctl pricing list` for live rates fetched from OpenRouter.
