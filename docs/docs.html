@@ -55,9 +55,18 @@
 }
 *{box-sizing:border-box;}
 html{scroll-behavior:smooth;
-  /* Nothing on the site is selectable. Install commands are click-to-copy
-     (.copyline), which is the affordance that replaces dragging. */
+  /* Prose and chrome are not selectable; code and commands are, see below. */
   user-select:none;-webkit-user-select:none;}
+
+/* Code and command examples stay selectable. docs.html carries 53 of them and
+   no copy button, so blocking selection there leaves no way to take a command
+   off the page. user-select inherits, so descendants follow. */
+pre,code{user-select:text;-webkit-user-select:text;}
+
+/* Except where a click already copies: dragging across one of those is the
+   accident the site-wide rule exists to prevent. Attribute specificity beats
+   the element selectors above. */
+[data-copy]{user-select:none;-webkit-user-select:none;}
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto;}}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.62;
   -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;}
