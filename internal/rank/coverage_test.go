@@ -78,7 +78,7 @@ func TestUITier_LocalHeadsAreAlwaysTierTen(t *testing.T) {
 // models.yaml pins an agy tier regardless of its score.
 func TestUITier_RegistryMetaTierWins(t *testing.T) {
 	h := provider.Head{
-		ID: "opus", Provider: "antigravity", Source: "registry",
+		ID: "opus", Provider: "antigravity", Source: "registry", Executable: "/usr/bin/agy",
 		CapScore: 10, // would be tier 10 by score alone
 		Meta:     map[string]string{"tier": "2"},
 	}
@@ -134,7 +134,7 @@ func TestByCapScore_SuppressesTheGenericOllamaCLIWhenPortModelsExist(t *testing.
 func TestByCapScore_TiesBreakBySourceDeterministically(t *testing.T) {
 	heads := []provider.Head{
 		{ID: "a", Provider: "openai", Source: "env", CapScore: 80},
-		{ID: "b", Provider: "openai", Source: "registry", CapScore: 80},
+		{ID: "b", Provider: "openai", Source: "registry", Executable: "/usr/bin/agy", CapScore: 80},
 	}
 	first := ByCapScore(heads)
 	for i := 0; i < 20; i++ {
