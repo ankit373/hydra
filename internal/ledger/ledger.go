@@ -133,6 +133,52 @@ type Event struct {
 	Config string `json:"config,omitempty"`
 }
 
+// maxFieldLen bounds an identity field. The value that prompted this was a
+// captured progress line, not a name, and no real agent or tool needs more.
+const maxFieldLen = 256
+
+// SafeText strips control characters from a value that will be recorded or
+// displayed as an identity.
+//
+// A real ledger on a real machine held a tool name of
+// "gpt\x1b[2K\r  VERDICT  OK  no findings", captured terminal output complete
+// with an erase-line escape. Printed into a report that is read in a terminal,
+// ESC[2K\r erases the line and returns the carriage, so the value can hide the
+// findings around it. An accountability record that can rewrite its own
+// presentation is not one (#688 QA).
+func SafeText(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		switch {
+		case r == '\t':
+			b.WriteByte(' ')
+		case r < 0x20 || r == 0x7f: // C0 and DEL
+			b.WriteByte(' ')
+		case r >= 0x80 && r <= 0x9f: // C1, where ESC-less escapes live
+			b.WriteByte(' ')
+		default:
+			b.WriteRune(r)
+		}
+	}
+	out := strings.TrimSpace(b.String())
+	if len(out) > maxFieldLen {
+		out = out[:maxFieldLen] + "…"
+	}
+	return out
+}
+
+// sanitize cleans every field an event carries that is rendered as text.
+// Applied in Record, before the hash is computed, so the stored value and the
+// hashed value are the same thing.
+func (e Event) sanitize() Event {
+	e.Agent = SafeText(e.Agent)
+	e.Tool = SafeText(e.Tool)
+	e.Resource = SafeText(e.Resource)
+	e.Reason = SafeText(e.Reason)
+	e.FlagReason = SafeText(e.FlagReason)
+	return e
+}
+
 // HashParams returns a SHA256 hex hash of params, for tamper-evident binding
 // between an access decision and the parameters actually used at execution
 // time. Go's json.Marshal sorts map[string]any keys, so this is canonical
@@ -240,6 +286,7 @@ func Record(path string, e Event) error {
 	}
 	defer lock.unlock()
 
+	e = e.sanitize()
 	if e.PrevHash == "" {
 		e.PrevHash = readChainHash(chainHashPath(path))
 	}
@@ -313,6 +360,18 @@ type ChainResult struct {
 	// AnchorMissing is true when there is no sidecar to verify against, so
 	// truncation cannot be ruled out either way. Never reported as intact.
 	AnchorMissing bool `json:"anchor_missing,omitempty"`
+
+	// Restarts counts chained events that carry no PrevHash, each of which
+	// begins a fresh segment. Record leaves PrevHash empty whenever the
+	// sidecar anchor is unreadable, so this is an ordinary consequence of a
+	// best-effort write, not evidence of tampering (#688 QA).
+	Restarts int `json:"restarts,omitempty"`
+
+	// Forks counts events whose PrevHash names an earlier event that is still
+	// in the log, rather than the immediately preceding one. Two concurrent
+	// Record calls that read the anchor before either wrote it both link to
+	// the same predecessor; nothing was removed or altered.
+	Forks int `json:"forks,omitempty"`
 }
 
 // VerifyChain walks path's events in order, recomputing each chained event's
@@ -345,7 +404,24 @@ func VerifyChainEvents(events []Event, path string) ChainResult {
 		res.Chained++
 		seen[e.Hash] = true
 		broken := hashEvent(e) != e.Hash
-		if chainStarted && e.PrevHash != prevHash {
+		switch {
+		case !chainStarted:
+			// Nothing to link to yet.
+		case e.PrevHash == "":
+			// A fresh segment, not a break. Record writes PrevHash from the
+			// sidecar anchor and leaves it empty when that read fails, so an
+			// unlinked event is the documented outcome of a best-effort write.
+			// Safe to allow: PrevHash is covered by the event's own Hash, so
+			// stripping one to hide a deletion fails the hash check above.
+			res.Restarts++
+		case e.PrevHash != prevHash && seen[e.PrevHash]:
+			// A fork: this event links to an earlier event that is still
+			// present, which is what two concurrent appends produce. A
+			// deletion cannot look like this, because the record it removed
+			// is by definition no longer in the log, and an attacker cannot
+			// re-point the link without breaking this event's own hash.
+			res.Forks++
+		case e.PrevHash != prevHash:
 			broken = true
 		}
 		if broken && res.Intact {
@@ -833,7 +909,10 @@ func ByHeadRisk(events []Event) []HeadRisk {
 	}
 	out := make([]HeadRisk, 0, len(byHead))
 	for head, a := range byHead {
-		out = append(out, HeadRisk{Head: head, Denied: a.denied, Flagged: a.flagged})
+		// Events recorded before Record sanitized are still in the log and
+		// cannot be rewritten without invalidating their hashes, so the value
+		// is cleaned on the way out too.
+		out = append(out, HeadRisk{Head: SafeText(head), Denied: a.denied, Flagged: a.flagged})
 	}
 	sort.Slice(out, func(i, j int) bool {
 		ri, rj := out[i].Denied+out[i].Flagged, out[j].Denied+out[j].Flagged

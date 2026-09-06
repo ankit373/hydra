@@ -1075,3 +1075,209 @@ func TestCheck_UnhashableParamsStillDeniesNeverAsks(t *testing.T) {
 		t.Errorf("Check = %q on unhashable params, want %q, a failure path must not ask", got, Deny)
 	}
 }
+
+// Record leaves PrevHash empty whenever the sidecar anchor cannot be read,
+// which is a documented best-effort outcome, and the verifier called the next
+// event a break. On a real machine that surfaced as "BROKEN: tampering
+// detected at event index 29" on a ledger nobody had touched. A security check
+// that cries wolf on ordinary history is one people learn to ignore.
+func TestVerifyChain_AMissingPrevHashIsARestartNotTampering(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mcp_ledger.jsonl")
+	for i := 0; i < 3; i++ {
+		if err := Record(path, Event{Agent: "a", Tool: "t", Decision: Allow}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Exactly what a lost anchor produces: an event with its own valid hash
+	// and no link back.
+	os.Remove(chainHashPath(path))
+	if err := Record(path, Event{Agent: "a", Tool: "t", Decision: Allow}); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := VerifyChain(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Intact {
+		t.Errorf("ChainResult = %+v, want intact: an unlinked event is a restart, not tampering", res)
+	}
+	if res.Restarts != 1 {
+		t.Errorf("Restarts = %d, want 1", res.Restarts)
+	}
+}
+
+// The reason the restart above is safe to allow: PrevHash is covered by the
+// event's own Hash, so an attacker who deletes a record and strips the next
+// event's link to hide the gap invalidates that event's hash and is caught
+// anyway. If this ever fails, the restart allowance has become a way to
+// launder a deletion.
+func TestVerifyChain_StrippingPrevHashToHideADeletionIsStillCaught(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mcp_ledger.jsonl")
+	for i := 0; i < 4; i++ {
+		if err := Record(path, Event{Agent: "a", Tool: "t", Decision: Allow}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimRight(string(raw), "\n"), "\n")
+
+	// Delete a middle event, then strip the following event's PrevHash so the
+	// walk has nothing to compare.
+	var e Event
+	if err := json.Unmarshal([]byte(lines[2]), &e); err != nil {
+		t.Fatal(err)
+	}
+	e.PrevHash = ""
+	relinked, err := json.Marshal(e)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines = append(lines[:1], append([]string{string(relinked)}, lines[3:]...)...)
+	if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := VerifyChain(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Intact {
+		t.Fatal("a deletion hidden by stripping PrevHash reported as intact")
+	}
+}
+
+// A real ledger held a tool name of "gpt\x1b[2K\r  VERDICT  OK  no findings":
+// captured terminal output, escape codes and all, stored as an identity and
+// rendered verbatim in the security report. ESC[2K\r erases the line and
+// returns the carriage, so the value can hide the findings printed around it.
+func TestSafeText_StripsTerminalControlCharacters(t *testing.T) {
+	got := SafeText("gpt\x1b[2K\r  VERDICT  OK  no findings")
+	if strings.ContainsRune(got, 0x1b) || strings.ContainsRune(got, '\r') {
+		t.Errorf("SafeText = %q, still carries control characters", got)
+	}
+	if !strings.HasPrefix(got, "gpt") {
+		t.Errorf("SafeText = %q, want the readable text kept", got)
+	}
+}
+
+func TestSafeText_BoundsRunawayValues(t *testing.T) {
+	if got := SafeText(strings.Repeat("x", maxFieldLen*2)); len(got) > maxFieldLen+4 {
+		t.Errorf("SafeText returned %d bytes, want it bounded near %d", len(got), maxFieldLen)
+	}
+}
+
+func TestRecord_StoresIdentitiesWithoutControlCharacters(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mcp_ledger.jsonl")
+	if err := Record(path, Event{Agent: "claude", Tool: "gpt\x1b[2K\rVERDICT OK", Decision: Deny}); err != nil {
+		t.Fatal(err)
+	}
+	events, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.ContainsRune(events[0].Tool, 0x1b) {
+		t.Errorf("Tool = %q, an escape sequence was stored verbatim", events[0].Tool)
+	}
+	// Sanitizing must happen before the hash, or every sanitized event reads
+	// as tampered.
+	res, err := VerifyChain(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Intact {
+		t.Errorf("ChainResult = %+v, want intact: sanitizing must precede hashing", res)
+	}
+}
+
+// The events already on disk cannot be rewritten, so the risk table cleans
+// them as it renders.
+func TestByHeadRisk_CleansIdentitiesFromExistingHistory(t *testing.T) {
+	got := ByHeadRisk([]Event{{Tool: "gpt\x1b[2K\rVERDICT OK", Decision: Deny}})
+	if len(got) != 1 {
+		t.Fatalf("ByHeadRisk returned %d rows, want 1", len(got))
+	}
+	if strings.ContainsRune(got[0].Head, 0x1b) {
+		t.Errorf("Head = %q, rendered an escape sequence from stored history", got[0].Head)
+	}
+}
+
+// Two concurrent appends that both read the anchor before either wrote it
+// link to the same predecessor. Nothing was removed or altered, and a real
+// ledger carries exactly this shape twice, from hydra-swarm inside one second,
+// written before Record took a lock. It reported as "the log was modified
+// after recording".
+func TestVerifyChain_AConcurrentForkIsNotTampering(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mcp_ledger.jsonl")
+	for i := 0; i < 3; i++ {
+		if err := Record(path, Event{Agent: "a", Tool: "t", Decision: Allow}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// A fourth event linking to the second, as a lost race would produce.
+	events, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	forked := Event{Agent: "a", Tool: "concurrent", Decision: Allow, PrevHash: events[1].Hash}
+	forked.Hash = hashEvent(forked)
+	appendEvent(t, path, forked)
+
+	res, err := VerifyChain(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Intact {
+		t.Errorf("ChainResult = %+v, want intact: a fork is a lost race, not an edit", res)
+	}
+	if res.Forks != 1 {
+		t.Errorf("Forks = %d, want 1", res.Forks)
+	}
+}
+
+// The fork allowance turns on the referenced event still being present. A
+// deletion removes it, so the link points at nothing and must still break.
+func TestVerifyChain_DeletingAMiddleRecordIsStillCaught(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mcp_ledger.jsonl")
+	for i := 0; i < 4; i++ {
+		if err := Record(path, Event{Agent: "a", Tool: "t", Decision: Allow}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimRight(string(raw), "\n"), "\n")
+	lines = append(lines[:1], lines[2:]...) // drop one from the middle, touch nothing else
+	if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := VerifyChain(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Intact {
+		t.Fatal("deleting a record from the middle reported as intact")
+	}
+}
+
+func appendEvent(t *testing.T, path string, e Event) {
+	t.Helper()
+	raw, err := json.Marshal(e)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	if _, err := f.Write(append(raw, '\n')); err != nil {
+		t.Fatal(err)
+	}
+}
