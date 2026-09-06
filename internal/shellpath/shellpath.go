@@ -41,18 +41,23 @@ func Adopt() {
 	}
 }
 
-// systemDirs are what a launcher hands a process when nothing has set PATH.
-// Anything outside this set means a shell profile has already been read.
-var systemDirs = map[string]bool{
-	"/usr/bin": true, "/bin": true, "/usr/sbin": true, "/sbin": true,
-	"/usr/local/bin": true, "/usr/local/sbin": true,
-}
-
-// looksBare reports whether PATH holds nothing but system directories, which is
-// the signature of a launcher start rather than a shell.
+// looksBare reports whether PATH looks like a launcher handed it over rather
+// than a shell, by asking whether anything on it lives under the user's home.
+//
+// A launcher-provided PATH never contains one; a shell profile worth having
+// almost always adds at least one (nvm, .local/bin, go/bin, cargo, rbenv).
+// This replaced an allowlist of system directories, which could only ever be
+// incomplete: it did not know about /usr/games and /usr/local/games, which are
+// on every Debian-family default PATH, so a .desktop launch on Linux was
+// treated as already configured and the recovery never ran.
 func looksBare(path string) bool {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return false // cannot tell, so leave PATH alone
+	}
+	prefix := home + string(os.PathSeparator)
 	for _, dir := range strings.Split(path, string(os.PathListSeparator)) {
-		if dir != "" && !systemDirs[dir] {
+		if dir != "" && strings.HasPrefix(dir, prefix) {
 			return false
 		}
 	}
