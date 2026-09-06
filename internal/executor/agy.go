@@ -26,9 +26,14 @@ type AuthRequiredError struct {
 }
 
 func (e *AuthRequiredError) Error() string {
-	msg := fmt.Sprintf("auth required for agy model %q (pool %q)", e.ModelFlag, e.Pool)
+	// Names the command, not just the URL. agy authenticates interactively and
+	// a --print run cannot complete the handshake, so following the link alone
+	// ends with an OAuth code and nowhere to paste it, which is exactly what
+	// happened to the first person who hit this (#702).
+	msg := fmt.Sprintf("agy is not signed in for model %q (pool %q); run `agy` in a terminal once to sign in",
+		e.ModelFlag, e.Pool)
 	if e.AuthURL != "" {
-		msg += ", authenticate at: " + e.AuthURL
+		msg += ", or open " + e.AuthURL
 	}
 	return msg
 }
