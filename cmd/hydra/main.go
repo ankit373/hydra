@@ -55,6 +55,7 @@ import (
 	"github.com/ankit373/hydra/internal/runid"
 	"github.com/ankit373/hydra/internal/runlog"
 	"github.com/ankit373/hydra/internal/security"
+	"github.com/ankit373/hydra/internal/shellpath"
 	"github.com/ankit373/hydra/internal/swarm"
 	"github.com/ankit373/hydra/internal/trust"
 	"github.com/ankit373/hydra/internal/tui"
@@ -68,6 +69,11 @@ import (
 )
 
 func main() {
+	// Before any command discovers heads. A hyctl or `hyctl tui` started by
+	// something other than a shell, a launcher or an IDE, gets a PATH with no
+	// CLI head in it at all (#689). No-op when a shell already set one.
+	shellpath.Adopt()
+
 	// Fire update check in the background, never blocks startup.
 	updateCh := update.CheckAsync()
 
