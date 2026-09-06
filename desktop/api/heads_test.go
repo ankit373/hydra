@@ -60,7 +60,7 @@ func TestGetHeads_RoutableCountMatchesTheRows(t *testing.T) {
 // whatever the host machine happens to have.
 func TestHeadsFrom_MarksRoutabilityAndSaysWhyNot(t *testing.T) {
 	// Source "registry" is the agy path: AgyExecutor drives it, so routable.
-	routable := provider.Head{ID: "opus", Name: "Opus", Provider: "agy", Source: "registry", CapScore: 98}
+	routable := provider.Head{ID: "opus", Name: "Opus", Provider: "agy", Source: "registry", Executable: "/usr/bin/agy", CapScore: 98}
 	// An embedding-only head is discovered and shown but never dispatched.
 	embedding := provider.Head{
 		ID: "embed", Name: "Embedder", Provider: "openai", Source: "env",
@@ -106,7 +106,7 @@ func TestHeadsFrom_MarksRoutabilityAndSaysWhyNot(t *testing.T) {
 // carry one, the view renders the reason instead of the tier.
 func TestHeadsFrom_ReasonAndRoutableAreNeverBothSet(t *testing.T) {
 	got := headsFrom([]provider.Head{
-		{ID: "a", Source: "registry"},
+		{ID: "a", Source: "registry", Executable: "/usr/bin/agy"},
 		{ID: "b", Source: "cli", Provider: "nobody-at-all"},
 	})
 	for _, h := range got.Heads {

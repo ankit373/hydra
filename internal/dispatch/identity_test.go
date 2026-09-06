@@ -44,7 +44,7 @@ func readLog(t *testing.T, home, name string) []map[string]any {
 func logResult() *Result {
 	return &Result{
 		Output: "ok",
-		Head:   provider.Head{ID: "h1", Name: "H1", Provider: "agy", Source: "registry", CapScore: 90},
+		Head:   provider.Head{ID: "h1", Name: "H1", Provider: "agy", Source: "registry", Executable: "/usr/bin/agy", CapScore: 90},
 		Response: &executor.Response{
 			Output:       "ok",
 			Model:        "m",

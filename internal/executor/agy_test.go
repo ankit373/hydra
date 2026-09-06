@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -113,8 +114,11 @@ func readAgySettings(t *testing.T, path string) map[string]any {
 }
 
 func agyHead(modelFlag string) provider.Head {
+	// Mirrors discovery: the resolved path is what makes a registry head
+	// routable, and inside a sandbox that is the planted fake.
+	bin, _ := exec.LookPath("agy")
 	return provider.Head{
-		ID: "agy-tier-3", Name: "agy-tier-3", Provider: "antigravity", Source: "registry",
+		ID: "agy-tier-3", Name: "agy-tier-3", Provider: "antigravity", Source: "registry", Executable: bin,
 		Meta: map[string]string{"model_flag": modelFlag, "token_pool": "gemini"},
 	}
 }
@@ -300,7 +304,7 @@ func TestAgyExecute_MissingModelFlagIsRefused(t *testing.T) {
 
 	_, err := (&AgyExecutor{}).Execute(context.Background(), Request{
 		Prompt: "hi",
-		Head:   provider.Head{ID: "agy-tier-1", Provider: "antigravity", Source: "registry"},
+		Head:   provider.Head{ID: "agy-tier-1", Provider: "antigravity", Source: "registry", Executable: "/usr/bin/agy"},
 	})
 	if err == nil {
 		t.Fatal("a head with no model_flag was executed")
