@@ -261,6 +261,20 @@ func chainCheck(res ledger.ChainResult) Check {
 		return Check{Name: name, Status: "no anchor",
 			Detail: fmt.Sprintf("%d chained event(s) verify, but with no chain anchor deletion from the end cannot be ruled out", res.Chained)}
 	}
+	if res.Restarts > 0 || res.Forks > 0 {
+		// Said plainly rather than as a warning: every event still verifies,
+		// and a reader who sees anything alarming here learns to ignore the
+		// check that matters.
+		var notes []string
+		if res.Restarts > 0 {
+			notes = append(notes, fmt.Sprintf("%d restart(s) where the chain anchor could not be read", res.Restarts))
+		}
+		if res.Forks > 0 {
+			notes = append(notes, fmt.Sprintf("%d fork(s) from concurrent recording", res.Forks))
+		}
+		return Check{Name: name, Status: "intact",
+			Detail: fmt.Sprintf("%d chained event(s), %d unchained, %s", res.Chained, res.Unchained, strings.Join(notes, " and "))}
+	}
 	return Check{Name: name, Status: "intact",
 		Detail: fmt.Sprintf("%d chained event(s), %d unchained", res.Chained, res.Unchained)}
 }
