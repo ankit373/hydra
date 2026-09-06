@@ -206,7 +206,7 @@ func widelyDependedFiles(blast BlastReport) map[string]bool {
 
 func buildIncident(actor string, evs []ledger.Event, widelyDepended map[string]bool) Incident {
 	in := Incident{
-		Actor:  actor,
+		Actor:  ledger.SafeText(actor),
 		Start:  evs[0].TS,
 		End:    evs[len(evs)-1].TS,
 		Events: evs,

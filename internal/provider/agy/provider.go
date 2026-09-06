@@ -11,6 +11,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os/exec"
 
 	"gopkg.in/yaml.v3"
 
@@ -61,17 +62,24 @@ func (p *Provider) Discover(_ context.Context) ([]provider.Head, error) {
 		return nil, nil
 	}
 
+	// Resolved once, not per head: every model here is executed through the
+	// same binary. Left empty when it is missing, so the heads are still listed
+	// and every one of them reads as unroutable with a reason, rather than
+	// looking healthy and failing eight times per dispatch (#688).
+	agyPath, _ := exec.LookPath("agy")
+
 	var heads []provider.Head
 	for _, m := range reg.Models {
 		if m.Executor != "agy" || !m.Enabled || m.ModelFlag == "" || m.ModelFlag == "null" {
 			continue
 		}
 		heads = append(heads, provider.Head{
-			ID:       m.ID,
-			Name:     m.Name,
-			Provider: "antigravity",
-			Source:   "registry",
-			CapScore: tierScore(m.Tier),
+			ID:         m.ID,
+			Name:       m.Name,
+			Provider:   "antigravity",
+			Source:     "registry",
+			Executable: agyPath,
+			CapScore:   tierScore(m.Tier),
 			Meta: map[string]string{
 				"model_flag": m.ModelFlag,
 				"token_pool": m.TokenPool,

@@ -17,7 +17,7 @@ import (
 // tests exercise real selection rather than being filtered out wholesale.
 func registryHead(id string, capScore int, local bool) provider.Head {
 	return provider.Head{
-		ID: id, Name: id, Provider: "agy", Source: "registry",
+		ID: id, Name: id, Provider: "agy", Source: "registry", Executable: "/usr/bin/agy",
 		CapScore: capScore, LocalOnly: local, AuthReady: true,
 	}
 }

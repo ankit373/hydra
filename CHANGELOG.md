@@ -6,13 +6,6 @@ Format: [Semantic Versioning](https://semver.org). Entries from v1.0.1 onward ar
 
 ---
 
-## [1.4.1](https://github.com/ankit373/hydra/compare/v1.4.0...v1.4.1) (2026-09-05)
-
-
-### Bug Fixes
-
-* **release:** v1.4.1 ([#684](https://github.com/ankit373/hydra/issues/684)) ([52b5c93](https://github.com/ankit373/hydra/commit/52b5c93150772575583968a67558ac45f1d780d7))
-
 ## [1.4.0](https://github.com/ankit373/hydra/compare/v1.3.1...v1.4.0) (2026-09-05)
 
 

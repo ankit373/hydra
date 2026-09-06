@@ -23,6 +23,7 @@ import (
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/cost"
 	"github.com/ankit373/hydra/internal/executor"
+	"github.com/ankit373/hydra/internal/health"
 	"github.com/ankit373/hydra/internal/ledger"
 	"github.com/ankit373/hydra/internal/pending"
 	"github.com/ankit373/hydra/internal/policy"
@@ -226,6 +227,7 @@ type Dispatcher struct {
 	policy  *policy.Engine
 	pricing *pricing.DB
 	budget  *budget.Registry
+	health  *health.Store
 }
 
 // Heads returns the probed head list for external callers (e.g. swarm).
@@ -311,6 +313,7 @@ func New(ctx context.Context) (*Dispatcher, error) {
 		policy:  policy.New(policy.DefaultRules(localOnly)),
 		pricing: pricing.Load(),
 		budget:  budgetReg,
+		health:  health.Open(health.DefaultPath()),
 	}, nil
 }
 
@@ -319,6 +322,9 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 	if err := ValidateTierHint(d.cfg, opts.TierHint); err != nil {
 		return nil, err
 	}
+	// Written once per dispatch rather than per outcome. Breaker state is a
+	// cache of what was observed, so a lost update costs one retry, never work.
+	defer func() { _ = d.health.Flush() }()
 
 	// Resolve the hint to a capability number BEFORE the governor runs. A named
 	// config tier ("expert") is otherwise opaque to claudeMode's Atoi, which
@@ -525,6 +531,10 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		})
 		if err != nil {
 			lastErr = err
+			// Parks the head so the rest of this run, and the next one, skip
+			// it. A missing binary or an unknown model opens the breaker at
+			// once; anything that might not recur gets a second chance first.
+			d.health.Fail(h.ID, truncate(err.Error(), 120), health.Classify(err), time.Now())
 			// A failed candidate is part of the run's shape: it is why the
 			// fallback chain advanced, and nothing else records it.
 			_ = rl.Append(runlog.Event{
@@ -537,6 +547,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 				Reason: truncate(err.Error(), 200)})
 			continue
 		}
+		d.health.Pass(h.ID)
 		r := &Result{Output: resp.Output, Head: h, Retries: i, Attempts: attempts, Response: resp}
 		_ = rl.Append(runlog.Event{
 			Kind: runlog.KindDispatchFinished, TaskID: taskID,
@@ -801,6 +812,10 @@ func (d *Dispatcher) blockedHeads(localOnly bool) string {
 		}
 		if why := executor.Unroutable(h); why != "" {
 			fmt.Fprintf(&b, "  %s (%s): %s\n", h.Name, h.Provider, why)
+			continue
+		}
+		if why, parked := d.health.Blocked(h.ID, time.Now()); parked {
+			fmt.Fprintf(&b, "  %s (%s): %s\n", h.Name, h.Provider, why)
 		}
 	}
 	if b.Len() == 0 {
@@ -851,8 +866,14 @@ func (d *Dispatcher) pinHead(id string, localOnly bool) (provider.Head, error) {
 // A hint that matches nothing returns no candidates; the caller reports that
 // rather than silently widening to every head.
 func (d *Dispatcher) selectHeads(tierHint string, localOnly bool) []provider.Head {
+	now := time.Now()
 	filter := func(h provider.Head) bool {
 		if !executor.Supports(h) {
+			return false
+		}
+		// Dropped from the candidate list rather than tried and skipped: a
+		// head the breaker has parked must not be routed to at all (#688).
+		if _, parked := d.health.Blocked(h.ID, now); parked {
 			return false
 		}
 		if localOnly && !h.LocalOnly {
@@ -1050,6 +1071,7 @@ func (d *Dispatcher) logDispatch(r *Result, prompt string, opts Options, actProb
 			"tier":            tier,
 			"enum":            opts.Enum,
 			"model":           r.Response.Model,
+			"head":            r.Head.ID,
 			"executor":        r.Head.Provider,
 			"pool":            headPool(r.Head),
 			"prompt_tokens":   r.Response.InputTokens,

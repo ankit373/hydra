@@ -399,6 +399,21 @@ Most routers optimize *cost*. Hydra is growing a second axis: **verified correct
 hyctl dispatch --confidence 0.95 "is this migration safe to run in prod?"
 ```
 
+**Calibration is a prerequisite, not a nice-to-have.** An uncalibrated source
+has sensitivity = specificity = 0.5, so its verdict contributes `ln(0.5/0.5) = 0`
+however emphatically it agrees. With no calibrated source for the domain the
+estimate cannot move at all, so Hydra refuses the run rather than sampling every
+head to arrive back at 50%, and tells you which domains do carry evidence:
+
+```
+$ hyctl dispatch --confidence 0.9 --domain go "is this safe?"
+Error: nothing here can judge "go" yet, so --confidence would sample every head,
+move the estimate nowhere and hand back 50%.
+
+  Domains with evidence: gotest, trust-bench
+  Record an outcome:     hyctl trust record --source model:<id> --domain go --said-correct --outcome correct
+```
+
 It leans on **per-source calibration** you build from real outcomes, each model/verifier earns a measured sensitivity, specificity, and *diagnostic power* `D`. A coin-flip source (`D≈0`) contributes nothing; a proven one lets a single vote go a long way.
 
 ```bash
@@ -417,7 +432,7 @@ hyctl dispatch --confidence 0.90 --file internal/auth/token.go "rotate the signi
 #   graph: blast radius 3.00 → demands confidence ≥ 96.7%  (raises the 0.90 floor)
 ```
 
-In synthetic benchmarks this cuts model calls **~49% on easy tasks** and **~24% on a blended workload** at ≥98% accuracy, while deliberately sampling *more* than a fixed swarm on genuinely hard tasks, which a fixed-N ensemble cannot do. Calibration is cold-start conservative: with no history, sources are treated as uninformative and Hydra falls back to sampling broadly.
+In synthetic benchmarks this cuts model calls **~49% on easy tasks** and **~24% on a blended workload** at ≥98% accuracy, while deliberately sampling *more* than a fixed swarm on genuinely hard tasks, which a fixed-N ensemble cannot do.
 
 > The SPRT ensemble, calibration engine, defect-cost model, graph-aware (blast-radius) routing, the local MCP accountability ledger, verification oracles, security posture assessment (`hyctl security`), and the native desktop app have all shipped. A browser-based Web UI and a central MCP server registry are on the [roadmap](#roadmap).
 

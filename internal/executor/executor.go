@@ -40,6 +40,22 @@ type Response struct {
 	TokensEstimated bool
 }
 
+// EstimateTokens approximates a token count from text length, for the CLI
+// heads that report no usage of their own.
+//
+// Never returns 0 for text that exists. len(s)/4 truncated a reply of "OK" to
+// zero tokens, so a call that answered was reported as producing nothing and
+// its cost rounded to $0.000 (#696).
+func EstimateTokens(s string) int {
+	if s == "" {
+		return 0
+	}
+	if n := len(s) / 4; n > 0 {
+		return n
+	}
+	return 1
+}
+
 // Executor runs a prompt and returns a response.
 type Executor interface {
 	Execute(ctx context.Context, req Request) (*Response, error)
@@ -61,7 +77,13 @@ func Unroutable(h provider.Head) string {
 		// so every dispatch to it would fail (#532).
 		return "embeddings only, never routed"
 	case h.Source == "registry":
-		return "" // agy tiers, AgyExecutor handles them
+		// Every registry head is driven by AgyExecutor, which execs `agy`.
+		// Calling them routable without it turned one missing binary into a
+		// chain of eight identical failures per dispatch (#688).
+		if h.Executable == "" {
+			return "the agy CLI is not on PATH, so nothing can drive this head"
+		}
+		return ""
 	case h.Source == "port" || h.Source == "env" || h.Endpoint != "":
 		if SupportsHTTP(h) {
 			return ""
