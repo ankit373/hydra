@@ -213,3 +213,24 @@ func TestUnroutable_RegistryHeadWithAResolvedAgy(t *testing.T) {
 		t.Errorf("Unroutable = %q, want routable", why)
 	}
 }
+
+// A reply of "OK" is two characters, and len/4 made it zero tokens, so a call
+// that answered was reported as producing nothing and its cost rounded to
+// $0.000 in `hyctl stats` (#696).
+func TestEstimateTokens_NeverZeroForTextThatExists(t *testing.T) {
+	cases := []struct {
+		in   string
+		want int
+	}{
+		{"", 0},
+		{"OK", 1},
+		{"a", 1},
+		{"abcd", 1},
+		{"abcdefgh", 2},
+	}
+	for _, c := range cases {
+		if got := EstimateTokens(c.in); got != c.want {
+			t.Errorf("EstimateTokens(%q) = %d, want %d", c.in, got, c.want)
+		}
+	}
+}

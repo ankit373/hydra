@@ -43,8 +43,8 @@ func (e *CLIExecutor) Execute(ctx context.Context, req Request) (*Response, erro
 
 	output := strings.TrimSpace(stdout.String())
 
-	promptTokens := len(req.Prompt) / 4
-	responseTokens := len(output) / 4
+	promptTokens := EstimateTokens(req.Prompt)
+	responseTokens := EstimateTokens(output)
 	writeTokenSidecar(req.Head.ID, "cli", "estimate", promptTokens, responseTokens)
 
 	return &Response{
