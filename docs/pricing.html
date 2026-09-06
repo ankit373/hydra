@@ -55,7 +55,10 @@
   --maxw:1120px;
 }
 *{box-sizing:border-box;}
-html{scroll-behavior:smooth;}
+html{scroll-behavior:smooth;
+  /* Nothing on the site is selectable. Install commands are click-to-copy
+     (.copyline), which is the affordance that replaces dragging. */
+  user-select:none;-webkit-user-select:none;}
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto;}}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.6;
   overflow-x:hidden;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;}
