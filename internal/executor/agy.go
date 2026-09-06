@@ -76,7 +76,14 @@ func (e *AgyExecutor) Execute(ctx context.Context, req Request) (*Response, erro
 	// process can't exhaust memory through error output.
 	stderr := util.NewAccumulator(64 << 10)
 	stdout := util.NewAccumulator(0)
-	cmd := exec.CommandContext(ctx, "agy", "--print", req.Prompt,
+	// The path discovery already resolved. Re-resolving it here is what let
+	// execution and Unroutable disagree, so a head that arrived without one is
+	// refused rather than quietly looked up again (#688).
+	bin := req.Head.Executable
+	if bin == "" {
+		return nil, fmt.Errorf("agy executor: head %q carries no resolved agy path", req.Head.ID)
+	}
+	cmd := exec.CommandContext(ctx, bin, "--print", req.Prompt,
 		"--model", modelFlag, "--print-timeout", fmt.Sprintf("%ds", int(timeout.Seconds())))
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr

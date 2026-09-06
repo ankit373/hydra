@@ -34,8 +34,8 @@ import (
 	"github.com/ankit373/hydra/internal/editor"
 	"github.com/ankit373/hydra/internal/entropy"
 	"github.com/ankit373/hydra/internal/evalset"
-	"github.com/ankit373/hydra/internal/executor"
 	"github.com/ankit373/hydra/internal/graph"
+	"github.com/ankit373/hydra/internal/health"
 	"github.com/ankit373/hydra/internal/ledger"
 	"github.com/ankit373/hydra/internal/mcpregistry"
 	"github.com/ankit373/hydra/internal/ope"
@@ -332,9 +332,10 @@ func cmdProbe() *cobra.Command {
 				cortexName = result.Cortex.Name
 			}
 			if jsonOut {
+				hs, now := health.Open(health.DefaultPath()), time.Now()
 				heads := make([]probeHeadJSON, len(result.Heads))
 				for i, h := range result.Heads {
-					why := executor.Unroutable(h)
+					why := health.Reason(hs, h, now)
 					heads[i] = probeHeadJSON{
 						ID: h.ID, Name: h.Name, Provider: h.Provider, Source: h.Source,
 						CapScore: h.CapScore, LocalOnly: h.LocalOnly,
@@ -370,12 +371,13 @@ func cmdProbe() *cobra.Command {
 			// the Ollama binary that `dispatch --local` then refused (#248), so
 			// unroutable heads are marked and carry their reason.
 			var unroutable int
+			hs, now := health.Open(health.DefaultPath()), time.Now()
 			for _, h := range result.Heads {
 				marker := "  "
 				if result.Cortex != nil && h.ID == result.Cortex.ID {
 					marker = cortexStyle.Render("→ ")
 				}
-				why := executor.Unroutable(h)
+				why := health.Reason(hs, h, now)
 				if why != "" {
 					marker = warnStyle.Render("✗ ")
 					unroutable++

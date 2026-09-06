@@ -61,7 +61,13 @@ func Unroutable(h provider.Head) string {
 		// so every dispatch to it would fail (#532).
 		return "embeddings only, never routed"
 	case h.Source == "registry":
-		return "" // agy tiers, AgyExecutor handles them
+		// Every registry head is driven by AgyExecutor, which execs `agy`.
+		// Calling them routable without it turned one missing binary into a
+		// chain of eight identical failures per dispatch (#688).
+		if h.Executable == "" {
+			return "the agy CLI is not on PATH, so nothing can drive this head"
+		}
+		return ""
 	case h.Source == "port" || h.Source == "env" || h.Endpoint != "":
 		if SupportsHTTP(h) {
 			return ""

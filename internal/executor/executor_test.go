@@ -15,7 +15,7 @@ func TestFor_SelectsExecutorBySource(t *testing.T) {
 		head provider.Head
 		want interface{}
 	}{
-		{"registry → agy", provider.Head{Source: "registry", Provider: "anthropic"}, &AgyExecutor{}},
+		{"registry → agy", provider.Head{Source: "registry", Executable: "/usr/bin/agy", Provider: "anthropic"}, &AgyExecutor{}},
 		{"ollama source → ollama", provider.Head{Source: "ollama", ID: "ollama/qwen2.5"}, &OllamaExecutor{}},
 		{"ollama provider → ollama", provider.Head{Provider: "ollama", ID: "qwen2.5"}, &OllamaExecutor{}},
 		{"env → http", provider.Head{Source: "env", Provider: "anthropic", ID: "env/anthropic"}, &HTTPExecutor{}},
@@ -61,7 +61,7 @@ func TestSupports_EnvHeadsGateOnKey(t *testing.T) {
 }
 
 func TestSupports_NonEnvUnchanged(t *testing.T) {
-	if !Supports(provider.Head{Source: "registry", Provider: "anthropic"}) {
+	if !Supports(provider.Head{Source: "registry", Executable: "/usr/bin/agy", Provider: "anthropic"}) {
 		t.Fatal("registry head should be supported")
 	}
 	if !Supports(provider.Head{Source: "cli", Provider: "anthropic", Executable: "/usr/bin/claude"}) {
@@ -135,7 +135,7 @@ func TestUnroutable_EmbeddingOnlyIsNeverRouted(t *testing.T) {
 // branches, is exactly how a listing surface and a routing surface drift apart.
 func TestSupports_AlwaysAgreesWithUnroutable(t *testing.T) {
 	heads := []provider.Head{
-		{ID: "opus-thinking", Provider: "agy", Source: "registry"},
+		{ID: "opus-thinking", Provider: "agy", Source: "registry", Executable: "/usr/bin/agy"},
 		{ID: "ollama", Provider: "local", Source: "cli", LocalOnly: true},
 		{ID: "claude", Provider: "anthropic", Source: "cli"},
 		{ID: "mystery", Provider: "nobody", Source: "cli"},
@@ -191,4 +191,25 @@ func TestSupportsAndUnroutable_AgreeOverEveryHeadShape(t *testing.T) {
 		t.Fatal("no combinations checked")
 	}
 	t.Logf("agreement held over %d head shapes", checked)
+}
+
+// The reported failure (#688): with agy missing, eight registry heads were
+// still advertised as healthy and each was dispatched to in turn, failing
+// identically. Discovery resolves the binary; without one there is nothing to
+// drive the head and it must say so.
+func TestUnroutable_RegistryHeadWithoutAResolvedAgy(t *testing.T) {
+	why := Unroutable(provider.Head{ID: "opus-thinking", Provider: "antigravity", Source: "registry"})
+	if why == "" {
+		t.Fatal("a registry head with no agy binary was reported routable")
+	}
+	if !strings.Contains(why, "agy") {
+		t.Errorf("reason = %q, want it to name the missing CLI", why)
+	}
+}
+
+func TestUnroutable_RegistryHeadWithAResolvedAgy(t *testing.T) {
+	h := provider.Head{ID: "opus-thinking", Provider: "antigravity", Source: "registry", Executable: "/usr/bin/agy"}
+	if why := Unroutable(h); why != "" {
+		t.Errorf("Unroutable = %q, want routable", why)
+	}
 }
