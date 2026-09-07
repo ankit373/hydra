@@ -405,16 +405,21 @@ hyctl dispatch --confidence 0.95 "is this migration safe to run in prod?"
 has sensitivity = specificity = 0.5, so its verdict contributes `ln(0.5/0.5) = 0`
 however emphatically it agrees. With no calibrated source for the domain the
 estimate cannot move at all, so Hydra refuses the run rather than sampling every
-head to arrive back at 50%, and tells you which domains do carry evidence:
+head to arrive back at 50%, and tells you what does carry evidence:
 
 ```
 $ hyctl dispatch --confidence 0.9 --domain go "is this safe?"
-Error: nothing here can judge "go" yet, so --confidence would sample every head,
-move the estimate nowhere and hand back 50%.
+Error: no head this run would sample has been scored in domain "go", so
+--confidence would sample every head, move the estimate nowhere and hand back 50%.
 
-  Domains with evidence: gotest, trust-bench
+  Scored in "go":  verifier:go
+  ...but none of them is among the heads this run selects.
+  Other domains with evidence: gotest, trust-bench
   Record an outcome:     hyctl trust record --source model:<id> --domain go --said-correct --outcome correct
 ```
+
+The distinction matters: a domain nothing has ever scored and a domain scored
+only by a source this run would not sample need different fixes.
 
 It leans on **per-source calibration** you build from real outcomes, each model/verifier earns a measured sensitivity, specificity, and *diagnostic power* `D`. A coin-flip source (`D≈0`) contributes nothing; a proven one lets a single vote go a long way.
 
@@ -425,6 +430,12 @@ hyctl trust defect --pii --production   # modeled $ cost of shipping a wrong ans
 hyctl trust stats                # samples saved vs fixed-N, achieved vs target confidence
 hyctl trust explain <task_hash>  # the full LLR ledger for a past run: why it stopped
 ```
+
+Every confidence run ends by printing its own `task_hash` and the `trust explain`
+command for it, so the ledger above is one copy-paste away rather than something
+to go looking for. `trust stats` says outright when achieved confidence has never
+left the 50% prior, which means the runs paid for heads without learning
+anything, rather than leaving that to be inferred from a savings figure.
 
 **Blast-radius aware.** Point Hydra at a dependency graph (`graph.json` from [Graphify](https://github.com/safishamsi/graphify) or any tree-sitter indexer) and the confidence bar scales with how much code an edit could break, a fix to a hub everything imports demands far more certainty than a leaf helper:
 

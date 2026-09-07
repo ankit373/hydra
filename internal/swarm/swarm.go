@@ -335,10 +335,7 @@ func buildJudge(d *dispatch.Dispatcher, opts Options, cfg *config.Config) Judge 
 // loadCalibrationFor degrades to (nil, domain) on a load error, callers
 // treat nil as "no calibration data" and fall back rather than fail.
 func loadCalibrationFor(opts Options) (*trust.Calibrator, string) {
-	domain := opts.Domain
-	if domain == "" {
-		domain = "default"
-	}
+	domain := trust.Domain(opts.Domain)
 	cal, err := trust.New(trust.DefaultPath())
 	if err != nil {
 		return nil, domain
