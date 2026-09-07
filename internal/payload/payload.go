@@ -60,6 +60,21 @@ var ErrNotFound = errors.New("payload: no content for this hash")
 // computed from the set.
 var ErrBadKeepProb = errors.New("payload: keep probability must be in (0,1]")
 
+// Pack sizing. Eviction drops whole packs, so a pack is also the granularity at
+// which old payloads are forgotten: packsPerBudget keeps that granularity a
+// fraction of the budget however the budget is set, and the two bounds keep the
+// file count sane at either extreme.
+const (
+	MaxPackBytes   = 32 << 20
+	minPackBytes   = 4 << 10
+	packsPerBudget = 8
+)
+
+// DefaultBudgetBytes bounds the whole store. At the ratios chunking achieves
+// this holds several gigabytes of prompt text, which is why capture no longer
+// needs a coin flip to stay bounded.
+const DefaultBudgetBytes int64 = 256 << 20
+
 // Dir is where packs, the index and the dictionary live.
 func Dir() string { return filepath.Join(config.Dir(), "payloads") }
 
@@ -70,16 +85,29 @@ func Dir() string { return filepath.Join(config.Dir(), "payloads") }
 // path and reads from another loses its contents irrecoverably.
 func DictPath(dir string) string { return filepath.Join(dir, "trace.dict") }
 
-func packPath(dir string) string  { return filepath.Join(dir, "blobs.pack") }
+func packPath(dir string, n int) string {
+	return filepath.Join(dir, fmt.Sprintf("blobs-%06d.pack", n))
+}
 func indexPath(dir string) string { return filepath.Join(dir, "blobs.idx") }
 
 // Entry locates one blob inside a pack.
 type Entry struct {
 	Hash string `json:"hash"`
+	Pack int    `json:"pack"`
 	Off  int64  `json:"off"`
 	Len  int64  `json:"len"`
 	Raw  int64  `json:"raw"` // uncompressed size, for reporting only
 	Dict bool   `json:"dict"`
+
+	// Manifest marks a blob that names other blobs rather than holding text.
+	// Load follows it; Get returns it verbatim.
+	Manifest bool `json:"manifest,omitempty"`
+
+	// Logical is the payload length a manifest represents, before dedup. Raw
+	// counts unique chunks only, so without this the store's saving is
+	// invisible: five dispatches sharing one system prompt reported the text
+	// they collapsed to, never the text they stood for.
+	Logical int64 `json:"logical,omitempty"`
 
 	// PII records that the content matched a detector and was redacted before
 	// it was written. PIITypes names what matched, which is the part worth
@@ -102,6 +130,41 @@ type Store struct {
 	dir   string
 	dict  []byte
 	index map[string]Entry
+
+	// budget bounds total pack bytes; pack is the one currently being appended
+	// to. Both are set by Open.
+	budget int64
+	pack   int
+}
+
+// DefaultKeepRate keeps every payload. The store is bounded by bytes and
+// forgets oldest-first, so a coin flip is no longer what keeps it small, and a
+// trace you can open only one time in ten is not worth capturing at all.
+const DefaultKeepRate = 1.0
+
+// KeepRate resolves the configured admission probability, treating an unset or
+// nonsensical value as the default rather than as "keep nothing".
+func KeepRate(cfg *config.Config) float64 {
+	if cfg != nil && cfg.PayloadKeepRate > 0 && cfg.PayloadKeepRate <= 1 {
+		return cfg.PayloadKeepRate
+	}
+	return DefaultKeepRate
+}
+
+// Budget resolves the store's byte budget from config.
+func Budget(cfg *config.Config) int64 {
+	if cfg != nil && cfg.PayloadBudgetMB > 0 {
+		return int64(cfg.PayloadBudgetMB) << 20
+	}
+	return DefaultBudgetBytes
+}
+
+// SetBudget bounds the store in bytes. Zero or less disables eviction, which
+// is only sensible for a test that wants the store to grow freely.
+func (s *Store) SetBudget(b int64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.budget = b
 }
 
 // Open prepares a store, loading any existing index and dictionary.
@@ -109,10 +172,15 @@ func Open(dir string) (*Store, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, err
 	}
-	s := &Store{dir: dir, index: map[string]Entry{}}
+	s := &Store{dir: dir, index: map[string]Entry{}, budget: DefaultBudgetBytes}
 	if err := s.loadIndex(); err != nil {
 		return nil, err
 	}
+	p, err := newestPack(dir)
+	if err != nil {
+		return nil, err
+	}
+	s.pack = p
 	if raw, err := os.ReadFile(DictPath(dir)); err == nil {
 		s.dict = raw
 	}
@@ -155,6 +223,10 @@ func Hash(content string) string {
 // point of addressing by content when one system prompt repeats across
 // thousands of dispatches.
 func (s *Store) Put(content string, keepProb float64) (string, error) {
+	return s.put(content, keepProb, false, 0)
+}
+
+func (s *Store) put(content string, keepProb float64, isManifest bool, logical int64) (string, error) {
 	if len(content) > MaxBlobBytes {
 		return "", ErrTooLarge
 	}
@@ -193,7 +265,30 @@ func (s *Store) Put(content string, keepProb float64) (string, error) {
 	}
 	frame := []byte(buf.String())
 
-	pack, err := os.OpenFile(packPath(s.dir), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	// s.mu covers goroutines; this covers processes. Under O_APPEND the kernel
+	// writes at the end as it is at write time, not where Seek reported, so two
+	// `hyctl` processes appending at once would record offsets into each
+	// other's frames and the index would decode garbage. One lock for the whole
+	// store, not one per pack: a lock chosen from a stale pack number is no
+	// lock at all once another process has rotated.
+	lock, err := util.Lock(util.LockPath(indexPath(s.dir)))
+	if err != nil {
+		return "", err
+	}
+	defer lock.Unlock()
+
+	// Under the lock: another process may have rotated or grown the pack, and
+	// a stale view of either produces a bad offset.
+	if err := s.reopenIndexLocked(); err != nil {
+		return "", err
+	}
+	if _, ok := s.index[h]; ok {
+		return h, nil
+	}
+	if err := s.rotateIfFull(int64(len(frame))); err != nil {
+		return "", err
+	}
+	pack, err := os.OpenFile(packPath(s.dir, s.pack), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		return "", err
 	}
@@ -205,8 +300,9 @@ func (s *Store) Put(content string, keepProb float64) (string, error) {
 	if _, err := pack.Write(frame); err != nil {
 		return "", err
 	}
-	e := Entry{Hash: h, Off: off, Len: int64(len(frame)), Raw: int64(len(content)),
-		Dict: usedDict, PII: len(piiTypes) > 0, PIITypes: piiTypes, KeepProb: keepProb}
+	e := Entry{Hash: h, Pack: s.pack, Off: off, Len: int64(len(frame)), Raw: int64(len(content)),
+		Dict: usedDict, PII: len(piiTypes) > 0, PIITypes: piiTypes, KeepProb: keepProb,
+		Manifest: isManifest, Logical: logical}
 
 	idx, err := os.OpenFile(indexPath(s.dir), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
@@ -226,6 +322,12 @@ func (s *Store) Put(content string, keepProb float64) (string, error) {
 		return "", err
 	}
 	s.index[h] = e
+	// Evict after the write, not before: a store at its limit must still be
+	// able to accept the payload that pushes it over, or the newest run is the
+	// one that goes unrecorded.
+	if err := s.evictLocked(); err != nil {
+		return "", err
+	}
 	return h, nil
 }
 
@@ -238,8 +340,13 @@ func (s *Store) Get(h string) (string, error) {
 	if !ok {
 		return "", ErrNotFound
 	}
-	f, err := os.Open(packPath(s.dir))
+	f, err := os.Open(packPath(s.dir, e.Pack))
 	if err != nil {
+		if os.IsNotExist(err) {
+			// The pack was evicted. The index is rewritten on eviction, so this
+			// is an interrupted one, and a missing blob is the same answer.
+			return "", ErrNotFound
+		}
 		return "", err
 	}
 	defer f.Close()
@@ -283,12 +390,19 @@ func (s *Store) Len() int {
 
 // Stats reports stored size against the raw bytes those blobs represent.
 type Stats struct {
-	Blobs     int   `json:"blobs"`
-	RawBytes  int64 `json:"raw_bytes"`
-	PackBytes int64 `json:"pack_bytes"`
-	WithDict  int   `json:"with_dict"`
-	WithPII   int   `json:"with_pii"`
-	DiskBytes int64 `json:"disk_bytes"`
+	Blobs     int `json:"blobs"`
+	Packs     int `json:"packs"`
+	Manifests int `json:"manifests"`
+
+	// LogicalBytes is the payload text the store stands for; RawBytes is what
+	// survived deduplication. The gap between them is the saving, so reporting
+	// only the second hides the thing chunking exists to do.
+	LogicalBytes int64 `json:"logical_bytes"`
+	RawBytes     int64 `json:"raw_bytes"`
+	PackBytes    int64 `json:"pack_bytes"`
+	WithDict     int   `json:"with_dict"`
+	WithPII      int   `json:"with_pii"`
+	DiskBytes    int64 `json:"disk_bytes"`
 }
 
 // Stat summarises the store.
@@ -306,11 +420,19 @@ func (s *Store) Stat() Stats {
 		if e.PII {
 			st.WithPII++
 		}
+		if e.Manifest {
+			st.Manifests++
+			st.LogicalBytes += e.Logical
+		}
 	}
 	// Blocks charged, not logical length: the packed-vs-loose difference this
 	// design exists for is entirely in that gap.
-	if info, err := os.Stat(packPath(s.dir)); err == nil {
-		st.DiskBytes = util.DiskBytes(info)
+	nums, _ := packNumbers(s.dir)
+	st.Packs = len(nums)
+	for _, n := range nums {
+		if info, err := os.Stat(packPath(s.dir, n)); err == nil {
+			st.DiskBytes += util.DiskBytes(info)
+		}
 	}
 	if info, err := os.Stat(indexPath(s.dir)); err == nil {
 		st.DiskBytes += util.DiskBytes(info)

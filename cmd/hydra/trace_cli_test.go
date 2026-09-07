@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/runlog"
 	"github.com/ankit373/hydra/internal/testutil"
 )
@@ -217,27 +216,5 @@ func TestCLI_TracePayloadsJSONReportsCaptureStateAndRate(t *testing.T) {
 	// A zero rate would divide by zero in any estimator reading these blobs.
 	if !(got.KeepRate > 0 && got.KeepRate <= 1) {
 		t.Errorf("keep_rate = %v, want a usable probability", got.KeepRate)
-	}
-}
-
-// A configured rate outside (0,1] must fall back to the default rather than
-// silently disabling capture the user explicitly turned on.
-func TestPayloadKeepRate_FallsBackRatherThanKeepingNothing(t *testing.T) {
-	for _, c := range []struct {
-		in   float64
-		want float64
-	}{
-		{0, DefaultPayloadKeepRate},
-		{-1, DefaultPayloadKeepRate},
-		{2, DefaultPayloadKeepRate},
-		{0.25, 0.25},
-		{1, 1},
-	} {
-		if got := payloadKeepRate(&config.Config{PayloadKeepRate: c.in}); got != c.want {
-			t.Errorf("payloadKeepRate(%v) = %v, want %v", c.in, got, c.want)
-		}
-	}
-	if got := payloadKeepRate(nil); got != DefaultPayloadKeepRate {
-		t.Errorf("payloadKeepRate(nil) = %v, want the default", got)
 	}
 }

@@ -42,10 +42,15 @@ type Config struct {
 	CapturePayloads bool `toml:"capture_payloads,omitempty"`
 
 	// PayloadKeepRate is the probability a payload is admitted when capture is
-	// on. Sampling is what keeps the store bounded; the rate is recorded on
-	// every stored blob so the set can still be weighted back to the population.
-	// 0 means the built-in default rather than "keep nothing".
+	// on. A byte budget is what bounds the store now, so the default keeps
+	// everything; the rate is still recorded on every blob so a deliberately
+	// sampled store stays correctable to the population. 0 means the default.
 	PayloadKeepRate float64 `toml:"payload_keep_rate,omitempty"`
+
+	// PayloadBudgetMB bounds the payload store on disk. Past it the oldest
+	// packs are dropped, so the store forgets rather than refuses. 0 means the
+	// built-in default.
+	PayloadBudgetMB int `toml:"payload_budget_mb,omitempty"`
 }
 
 // Dir returns the Hydra state directory: $HYDRA_HOME if set, else ~/.hydra.

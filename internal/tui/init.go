@@ -231,7 +231,7 @@ func (m InitModel) viewCapture(b *strings.Builder) {
 	b.WriteString(sPrompt.Render("  Store the text of prompts and responses?\n\n"))
 	opts := []string{
 		"No , keep only the statistics (recommended)",
-		"Yes, store the text too, sampled and redacted",
+		"Yes, store the text too, redacted and size-capped",
 	}
 	for i, opt := range opts {
 		if i == m.cursor {
@@ -241,8 +241,9 @@ func (m InitModel) viewCapture(b *strings.Builder) {
 		}
 	}
 	b.WriteString(sHint.Render("\n  Prompts and responses are verbatim source. Hydra can route and\n" +
-		"  report without them; stored text is sampled, and anything matching\n" +
-		"  a secret detector is replaced before it is written.\n"))
+		"  report without them. Stored text is deduplicated and capped at a\n" +
+		"  disk budget, oldest first, and anything matching a secret detector\n" +
+		"  is replaced before it is written.\n"))
 }
 
 func (m InitModel) viewSkills(b *strings.Builder) {
