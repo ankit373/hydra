@@ -21,6 +21,12 @@ const (
 	Enforced CoverageStatus = "enforced"
 	// Configured: the mechanism exists and is actually set up/used on this install.
 	Configured CoverageStatus = "configured"
+	// Partial: a mechanism exists but is detective or advisory, never
+	// preventive. It does not count as covered. A control whose own
+	// implementation documents it as evadable is evidence for an audit
+	// trail, not a defense, and reporting it as Enforced misleads the
+	// operator at exactly the moment they decide whether to trust the run.
+	Partial CoverageStatus = "partial"
 	// Gap: nothing addresses this category today.
 	Gap CoverageStatus = "gap"
 	// NotApplicable: this category does not apply to an orchestrator that
@@ -52,6 +58,7 @@ type Coverage struct {
 	Categories     []Category `json:"categories"`
 	Applicable     int        `json:"applicable"` // categories excluding N/A
 	Covered        int        `json:"covered"`    // Enforced + Configured
+	Partial        int        `json:"partial"`    // detective only, deliberately not covered
 	PercentCovered float64    `json:"percentCovered"`
 }
 
@@ -63,10 +70,13 @@ type Coverage struct {
 // for both consumers).
 func computeCoverage(pol ledger.Policy, sc SupplyChain, runs []trust.RunLog, costCeilingDenials int) Coverage {
 	cats := []Category{
-		{ID: "LLM01", Name: "Prompt Injection", Status: Enforced,
-			Detail: "untrusted content is framed as data (a2a/editor/parallel) and scanned for injection markers automatically"},
-		{ID: "LLM02", Name: "Sensitive Information Disclosure", Status: Enforced,
-			Detail: "PII detection forces local-only routing automatically"},
+		{ID: "LLM01", Name: "Prompt Injection", Status: Partial,
+			Detail: "untrusted content is fenced as data (a2a/parallel) with a content-derived nonce, but the " +
+				"injection-marker scan is an 11-phrase keyword heuristic that leaves an audit trail rather than " +
+				"preventing an attack, and head output is not scanned at all"},
+		{ID: "LLM02", Name: "Sensitive Information Disclosure", Status: Partial,
+			Detail: "PII detection forces local-only routing, but it is a denylist over the prompt string only: " +
+				"file content, --system and a2a fields are never scanned"},
 		llm03SupplyChain(sc),
 		{ID: "LLM04", Name: "Data and Model Poisoning", Status: NotApplicable,
 			Detail: "Hydra routes prompts to models, it does not train or fine-tune any"},
@@ -80,21 +90,24 @@ func computeCoverage(pol ledger.Policy, sc SupplyChain, runs []trust.RunLog, cos
 		llm10UnboundedConsumption(costCeilingDenials),
 	}
 
-	var applicable, covered int
+	var applicable, covered, partial int
 	for _, c := range cats {
 		if c.Status == NotApplicable {
 			continue
 		}
 		applicable++
-		if c.Status == Enforced || c.Status == Configured {
+		switch c.Status {
+		case Enforced, Configured:
 			covered++
+		case Partial:
+			partial++
 		}
 	}
 	pct := 0.0
 	if applicable > 0 {
 		pct = 100 * float64(covered) / float64(applicable)
 	}
-	return Coverage{Categories: cats, Applicable: applicable, Covered: covered, PercentCovered: pct}
+	return Coverage{Categories: cats, Applicable: applicable, Covered: covered, Partial: partial, PercentCovered: pct}
 }
 
 // Detection, not provenance, and the baseline is a plain file, so this is

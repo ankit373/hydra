@@ -1108,7 +1108,7 @@ function svg(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attr
     {title:'TRUST CONTROL PLANE',     body:'an SPRT ensemble votes to a target confidence, not just to the cheapest answer.', accent:'linear-gradient(90deg,'+C.aqua+','+C.cyan+')'},
     {title:'SWARM · RACE / BEST-OF-N', body:'fan a task out to several heads at once, judge the field, keep the winner.', accent:'linear-gradient(90deg,'+C.violet+','+C.magenta+')'},
     {title:'BUDGET GOVERNOR',         body:'a rate-aware governor watches claude_pct and downgrades tiers before you hit the wall.', accent:C.cheap},
-    {title:'LOCAL-FIRST POLICY',      body:'PII and local-only tasks never leave the machine, enforced, not promised.', accent:'linear-gradient(90deg,'+C.cheap+','+C.aqua+')'}
+    {title:'LOCAL-FIRST POLICY',      body:'a prompt matching a PII detector routes to a local head, and whatever is not yet enforced is reported as exactly that.', accent:'linear-gradient(90deg,'+C.cheap+','+C.aqua+')'}
   ];
   heroPin.style.height=((DIVE_VH+FEATURES.length*PER_VH)*100)+'vh';
   var zoomT=0, featureT=0, activeFeature=-1, switching=false, featureSwitchStart=-1e9, released=false;

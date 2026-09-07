@@ -252,11 +252,13 @@ When you have Ollama, Hydra picks the best model for your actual available memor
   ✓ Qwen2.5-Coder 7B     7B   uses ~5GB  · 11.2GB left free
 ```
 
-### 🔒 PII-Aware Routing (Enforced, Not Conventional)
+### 🔒 PII-Aware Routing
 
-Enable local-only policy in `hyctl init` and any prompt containing sensitive data is blocked from leaving your machine, at the dispatch layer, before any network call is made.
+Enable local-only policy in `hyctl init` and a prompt matching a PII detector is routed to a local head rather than a network one, at the dispatch layer, before any API call is made.
 
 Detected patterns: Social Security Numbers, credit card numbers, email addresses, API keys and tokens, IP addresses, private key material.
+
+**What this is not.** Detection is a denylist over the prompt string. It does not see file content a head will read, `--system` content, or a2a handoff fields, and it cannot recognize a secret format nobody wrote a pattern for. `hyctl security` reports LLM02 as `partial (detective only)` for exactly that reason, and withholds its coverage score entirely while the access policy still defaults to allow. The egress gate that closes these is tracked in [#721](https://github.com/ankit373/hydra/issues/721).
 
 ```bash
 $ hyctl dispatch "process payment for card 4111-1111-1111-1111"

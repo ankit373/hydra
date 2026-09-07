@@ -15,16 +15,23 @@ import (
 	"github.com/ankit373/hydra/internal/trust"
 )
 
-// LLM01/LLM02 are always Enforced (automatic, no config), LLM07 is always Gap
-// (no mechanism exists), LLM04/LLM08 are always N/A, these don't depend on
-// install state, unlike LLM03/05/06/09/10. LLM03 is Gap only while nothing is
-// being fingerprinted, which is what an empty SupplyChain means here.
+// LLM01/LLM02 are Partial, LLM07 is always Gap (no mechanism exists),
+// LLM04/LLM08 are always N/A, these don't depend on install state, unlike
+// LLM03/05/06/09/10. LLM03 is Gap only while nothing is being fingerprinted,
+// which is what an empty SupplyChain means here.
+//
+// LLM01 and LLM02 are pinned Partial deliberately. Both were Enforced while
+// the mechanisms behind them documented themselves otherwise: internal/policy
+// /injection.go calls its scan "trivially evaded by anyone who tries... not to
+// prevent an attack", and PII detection is a denylist that never sees file
+// content, --system or a2a fields. Promoting either back to Enforced needs a
+// preventive mechanism first, not a better detector (#722).
 func TestComputeCoverage_StaticCategoriesAreFixed(t *testing.T) {
 	testutil.NewSandbox(t)
 
 	cov := computeCoverage(ledger.Policy{}, SupplyChain{}, nil, 0)
 	want := map[string]CoverageStatus{
-		"LLM01": Enforced, "LLM02": Enforced,
+		"LLM01": Partial, "LLM02": Partial,
 		"LLM03": Gap, "LLM07": Gap,
 		"LLM04": NotApplicable, "LLM08": NotApplicable,
 	}

@@ -286,6 +286,17 @@ func runInit() error {
 	if err := requireTerminal("hyctl init"); err != nil {
 		return err
 	}
+	// Provision the access policy before anything else. Until #722 nothing
+	// ever wrote this file, so LoadPolicy returned a default-allow policy on
+	// every install and the gate in the dispatch path recorded without ever
+	// blocking. Failing to write it is not fatal: init's job is to get the
+	// user running, and hyctl security reports the fail-open state loudly.
+	if created, err := ledger.EnsurePolicy(ledger.DefaultPolicyPath()); err != nil {
+		fmt.Println(warnStyle.Render("  could not write the access policy: " + err.Error()))
+	} else if created {
+		fmt.Println(dimStyle.Render("  Wrote access policy to " + ledger.DefaultPolicyPath()))
+	}
+
 	fmt.Println(dimStyle.Render("  Scanning your machine for AI models..."))
 	result := probe.Run(context.Background())
 
@@ -2533,6 +2544,19 @@ func printCoverageHeadline(r *security.Report) {
 		fmt.Println()
 		return
 	}
+	// A fail-open policy withholds the score for the same reason tampering
+	// does: with every access defaulting to allow, the gate in the dispatch
+	// path records and blocks nothing, so a coverage number describes
+	// mechanisms that are not actually in force.
+	if pa := r.PolicyAudit; pa.FailOpen {
+		fmt.Printf("  %s  %s\n", cortexStyle.Render("OWASP LLM Top-10 coverage"),
+			warnStyle.Render("NO DEFAULT-DENY POLICY, anything no rule names is allowed, score withheld"))
+		fmt.Println(dimStyle.Render(fmt.Sprintf(
+			"    %d rule(s) in force, default %q; %d of %d recorded accesses matched no rule",
+			len(pa.Rules), pa.Default, pa.DefaultHits, pa.Evaluated)))
+		fmt.Println()
+		return
+	}
 	cov := r.Coverage
 	pct := fmt.Sprintf("%.0f%%", cov.PercentCovered)
 	fmt.Printf("  %s  %s  (%d/%d applicable categories)\n",
@@ -2557,6 +2581,8 @@ func printCoverageHeadline(r *security.Report) {
 		switch c.Status {
 		case security.Enforced:
 			label = okStyle.Render(label)
+		case security.Partial:
+			label = dimStyle.Render(label + " (detective only)")
 		case security.Gap:
 			label = warnStyle.Render(label)
 			if c.GapAgeDays > 0 {
