@@ -63,9 +63,10 @@ registry/               ← Routing data, compiled into the binary via `go:embed
                           and overridable on disk at `$HYDRA_HOME/registry/<file>`. Nothing ships
                           these files as separate artifacts, brew/npm/pip/curl install the binary
                           alone, so before #238 every install ran with no registry at all.
-  routing.yaml          ← Enum → tier reference table, and what `hyctl init` writes. NOTE: the
-                          runtime mapping is `dispatch.EnumToTier`, a hardcoded Go switch, editing
-                          this file alone does NOT change how a dispatch routes.
+  routing.yaml          ← Enum → tier map. The router reads it (`registry.EnumTiers`), so editing
+                          it, or a copy at `$HYDRA_HOME/registry/routing.yaml`, does change how a
+                          dispatch routes. An override must list every enum; a partial one is
+                          refused rather than silently falling back (#720).
   models.yaml           ← Model definitions, token pools, context windows (flags are
                           install-specific defaults, verify against your providers). Read by
                           the agy provider and the budget governor.
@@ -83,8 +84,9 @@ logs/                   ← Dispatch log + state.json (claude_pct, claude_pct_hi
 ### Step 1, Classify
 Read `registry/domains.yaml` to identify the domain and task type.
 Look up the enum key (e.g. `SIMPLE`, `COMPLEX`).
-`registry/routing.yaml` documents which tier that enum resolves to; the mapping the router
-actually applies is `dispatch.EnumToTier`.
+`registry/routing.yaml` defines which tier that enum resolves to, and is what `dispatch.EnumToTier`
+reads, so the two cannot disagree. `domains.yaml` is still a reference table for this step only:
+nothing at runtime reads it.
 
 ### Step 2, Check State
 ```bash
