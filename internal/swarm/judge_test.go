@@ -435,7 +435,7 @@ func TestIDSelector_ReportsAnUnknownID(t *testing.T) {
 
 func registryHeadFor(id string, capScore int) provider.Head {
 	return provider.Head{
-		ID: id, Name: id, Provider: "agy", Source: "registry",
+		ID: id, Name: id, Provider: "agy", Source: "registry", Executable: "/usr/bin/agy",
 		CapScore: capScore, AuthReady: true,
 	}
 }

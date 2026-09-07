@@ -18,7 +18,7 @@ import (
 // registryHead returns a head that executor.Supports() accepts (Source=="registry"),
 // so selector tests exercise real executability filtering without network.
 func registryHead(id, name string, cap int) provider.Head {
-	return provider.Head{ID: id, Name: name, Provider: "agy", Source: "registry", CapScore: cap}
+	return provider.Head{ID: id, Name: name, Provider: "agy", Source: "registry", Executable: "/usr/bin/agy", CapScore: cap}
 }
 
 // ── Attempt / SwarmResult ──────────────────────────────────────────────────────

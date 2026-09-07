@@ -17,7 +17,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/ankit373/hydra/internal/executor"
+	"github.com/ankit373/hydra/internal/health"
 	"github.com/ankit373/hydra/internal/pricing"
 	"github.com/ankit373/hydra/internal/probe"
 	"github.com/ankit373/hydra/internal/provider"
@@ -72,16 +72,17 @@ func ckGroupHeads(heads []provider.Head) []ckModelGroup {
 		groups = append(groups, ckModelGroup{name: name})
 		return len(groups) - 1
 	}
+	hs, now := health.Open(health.DefaultPath()), time.Now()
 	for _, h := range heads {
 		name, isBinary := ckServerFor(h)
 		i := at(name)
 		if isBinary {
 			// The binary alone is not routable; keep its reason as the group's
 			// server-down note, used only if no routable child shows up.
-			groups[i].note = executor.Unroutable(h)
+			groups[i].note = health.Reason(hs, h, now)
 			continue
 		}
-		reason := executor.Unroutable(h)
+		reason := health.Reason(hs, h, now)
 		groups[i].rows = append(groups[i].rows, ckModelRow{
 			id:       h.ID,
 			name:     ckStripGroupSuffix(h.Name, name),

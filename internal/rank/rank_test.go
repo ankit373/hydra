@@ -77,7 +77,7 @@ func TestUITier_LocalHeadsAreAlwaysTheCheapestTier(t *testing.T) {
 // intent, and inferring over it would silently ignore their edit.
 func TestUITier_ExplicitRegistryTierBeatsTheLocalRule(t *testing.T) {
 	h := provider.Head{
-		ID: "qwen-grunt", Source: "registry", LocalOnly: true, CapScore: 60,
+		ID: "qwen-grunt", Source: "registry", Executable: "/usr/bin/agy", LocalOnly: true, CapScore: 60,
 		Meta: map[string]string{"tier": "7"},
 	}
 	if got := UITier(h); got != 7 {

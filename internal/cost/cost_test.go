@@ -216,3 +216,35 @@ func TestGroupBy_Exported(t *testing.T) {
 		t.Fatalf("expected tier-1 first (highest cost), got %s", groups[0].Key)
 	}
 }
+
+// The two writers disagreed about what "model" meant: dispatch logged the
+// head id, swarm logged the display name. One head landed in two rows and
+// every per-head total was understated (#696).
+func TestByModel_OneHeadIsOneRowAcrossBothWriters(t *testing.T) {
+	rows := []Row{
+		{Head: "claude", Model: "claude", EstCostUSD: 0.01},
+		{Head: "claude", Model: "Claude Code", EstCostUSD: 0.02},
+	}
+	got := ByModel(rows)
+	if len(got) != 1 {
+		t.Fatalf("ByModel returned %d groups, want 1: %+v", len(got), got)
+	}
+	if got[0].Key != "claude" {
+		t.Errorf("Key = %q, want the stable head id", got[0].Key)
+	}
+	if got[0].Calls != 2 {
+		t.Errorf("Calls = %d, want 2", got[0].Calls)
+	}
+}
+
+// Rows written before the head field existed must still group somewhere
+// sensible rather than collapsing into one "unknown" bucket.
+func TestByModel_FallsBackToModelForOlderRows(t *testing.T) {
+	got := ByModel([]Row{
+		{Model: "Claude Code", EstCostUSD: 0.01},
+		{Model: "Qwen2.5-Coder:7b", EstCostUSD: 0.02},
+	})
+	if len(got) != 2 {
+		t.Fatalf("ByModel returned %d groups, want 2", len(got))
+	}
+}

@@ -4,9 +4,11 @@ package trust
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"math/rand"
+	"strings"
 	"testing"
 )
 
@@ -133,8 +135,11 @@ func TestSPRT_MiscalibratedSourceContributesNothing(t *testing.T) {
 	for i := range seq {
 		seq[i] = "A"
 	}
+	// Forced past the no-evidence refusal on purpose: the point here is what a
+	// measured coin contributes once it is running, and a caller routing real
+	// work is now refused before it can spend anything on one.
 	res, err := Run(context.Background(), Task{Domain: "d"}, nSources("coin", 20, 1),
-		&scriptExec{seq: seq}, c, Target{Confidence: 0.95})
+		&scriptExec{seq: seq}, c, Target{Confidence: 0.95}, AllowNoEvidence())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -276,5 +281,52 @@ func TestSPRT_Law3_SamplesAndAccuracy(t *testing.T) {
 	if easyAcc < 0.95 || hardAcc < 0.95 || blendedAcc < 0.95 {
 		t.Errorf("accuracy below target: easy=%.4f hard=%.4f blended=%.4f, want ≥0.95",
 			easyAcc, hardAcc, blendedAcc)
+	}
+}
+
+// Observed live: --confidence on an uncalibrated domain sampled five heads,
+// every one agreed, every LLR was +0.000, and the run reported "stopped on
+// budget, confidence 50.0%" having spent $0.0095. The posterior cannot move
+// when no source carries evidence, so the only possible outcome is the prior,
+// reached by the most expensive path available.
+func TestSPRT_RefusesWhenNoSourceCarriesEvidence(t *testing.T) {
+	c, _ := New("")
+	seq := make([]string, 5)
+	for i := range seq {
+		seq[i] = "A"
+	}
+	_, err := Run(context.Background(), Task{Domain: "go"}, nSources("unknown", 5, 1),
+		&scriptExec{seq: seq}, c, Target{Confidence: 0.95})
+	if !errors.Is(err, ErrNoEvidence) {
+		t.Fatalf("err = %v, want ErrNoEvidence", err)
+	}
+	if !strings.Contains(err.Error(), "go") {
+		t.Errorf("err = %v, want it to name the domain", err)
+	}
+}
+
+// One calibrated source is enough to make the run worth paying for.
+func TestSPRT_RunsWhenOneSourceCarriesEvidence(t *testing.T) {
+	c, _ := New("")
+	calibrateSymmetric(c, "good", "go", 0.9, 100)
+	seq := make([]string, 6)
+	for i := range seq {
+		seq[i] = "A"
+	}
+	sources := append(nSources("coin", 3, 1), nSources("good", 3, 1)...)
+	if _, err := Run(context.Background(), Task{Domain: "go"}, sources,
+		&scriptExec{seq: seq}, c, Target{Confidence: 0.95}); err != nil {
+		t.Fatalf("Run refused a domain that has evidence: %v", err)
+	}
+}
+
+// The benchmark harness runs precisely to produce calibration that does not
+// exist yet, so it must be able to opt out.
+func TestSPRT_AllowNoEvidenceOptsOutOfTheRefusal(t *testing.T) {
+	c, _ := New("")
+	seq := []string{"A", "A"}
+	if _, err := Run(context.Background(), Task{Domain: "go"}, nSources("unknown", 2, 1),
+		&scriptExec{seq: seq}, c, Target{Confidence: 0.95}, AllowNoEvidence()); err != nil {
+		t.Fatalf("AllowNoEvidence did not lift the refusal: %v", err)
 	}
 }

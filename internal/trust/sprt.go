@@ -4,6 +4,7 @@ package trust
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"sort"
@@ -103,6 +104,17 @@ func Run(ctx context.Context, task Task, sources []Source, exec Executor, cal *C
 	alpha := 1 - t.Confidence
 	if alpha <= 0 || alpha >= 1 {
 		return nil, fmt.Errorf("sprt: confidence must be in (0,1), got %v", t.Confidence)
+	}
+	// An uncalibrated source has se=sp=0.5, so its verdict contributes exactly
+	// ln(0.5/0.5)=0 nats however emphatically it agrees. With no calibrated
+	// source for this domain the posterior cannot move at all, so the run
+	// samples every head, reaches neither threshold, exhausts its budget and
+	// reports the prior back as its answer. Observed live: five heads agreed
+	// unanimously, every LLR +0.000, "stopped_on_budget", confidence 50.0%,
+	// $0.0095 spent to learn nothing (#698). Refusing costs the user nothing
+	// they would have got.
+	if !cfg.allowUncalibrated && !anyEvidence(cal, sources, task.Domain) {
+		return nil, fmt.Errorf("%w in domain %q", ErrNoEvidence, task.Domain)
 	}
 	// Symmetric Wald thresholds (α = β for v1).
 	A := math.Log((1 - alpha) / alpha)
@@ -232,7 +244,39 @@ type AnswerEquivalence func(candidate, answer string) bool
 type RunOption func(*runConfig)
 
 type runConfig struct {
-	equiv AnswerEquivalence
+	equiv             AnswerEquivalence
+	allowUncalibrated bool
+}
+
+// AllowNoEvidence runs the ensemble even when no source can move the
+// posterior. For the benchmark harness, which runs precisely to produce the
+// calibration that does not exist yet, and for tests asserting that an
+// uninformative source contributes nothing. A caller routing real work wants
+// the refusal.
+func AllowNoEvidence() RunOption {
+	return func(c *runConfig) { c.allowUncalibrated = true }
+}
+
+// ErrNoEvidence is returned when no source carries diagnostic power for the
+// task's domain, either because none is calibrated there or because every one
+// of them is measured as uninformative. Either way no verdict can move the
+// posterior, so the run could only burn its budget and hand back the prior.
+var ErrNoEvidence = errors.New("no source carries evidence")
+
+// minD is the diagnostic power below which a source is treated as carrying no
+// evidence. Calibration is stored as float rates, so an exactly-uninformative
+// source lands near zero rather than on it.
+const minD = 1e-9
+
+// anyEvidence reports whether at least one source can contribute to the
+// posterior in this domain.
+func anyEvidence(cal *Calibrator, sources []Source, domain string) bool {
+	for _, s := range sources {
+		if cal.D(s.ID, domain) > minD {
+			return true
+		}
+	}
+	return false
 }
 
 // WithEquivalence overrides how answer agreement is decided (default:

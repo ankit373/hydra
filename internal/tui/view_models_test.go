@@ -112,9 +112,9 @@ func TestViewModels_TreeRendering(t *testing.T) {
 // distinguishing tail survives (the issue's own Gemini example).
 func TestViewModels_SmartTruncationInTree(t *testing.T) {
 	heads := []provider.Head{
-		{ID: "g1", Name: "Gemini 3.5 Flash (High) with an extremely long suffix", Provider: "antigravity", Source: "registry", AuthReady: true},
-		{ID: "g2", Name: "Gemini 3.5 Flash (Medium) with an extremely long suffix", Provider: "antigravity", Source: "registry", AuthReady: true},
-		{ID: "g3", Name: "Gemini 3.5 Flash (Low) with an extremely long suffix", Provider: "antigravity", Source: "registry", AuthReady: true},
+		{ID: "g1", Name: "Gemini 3.5 Flash (High) with an extremely long suffix", Provider: "antigravity", Source: "registry", Executable: "/usr/bin/agy", AuthReady: true},
+		{ID: "g2", Name: "Gemini 3.5 Flash (Medium) with an extremely long suffix", Provider: "antigravity", Source: "registry", Executable: "/usr/bin/agy", AuthReady: true},
+		{ID: "g3", Name: "Gemini 3.5 Flash (Low) with an extremely long suffix", Provider: "antigravity", Source: "registry", Executable: "/usr/bin/agy", AuthReady: true},
 	}
 	m := testCockpit()
 	m.groups = ckGroupHeads(heads)

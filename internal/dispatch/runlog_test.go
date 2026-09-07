@@ -17,7 +17,7 @@ import (
 // tests exercise real selection rather than being filtered out.
 func rlHead(id string, capScore int) provider.Head {
 	return provider.Head{
-		ID: id, Name: id, Provider: "agy", Source: "registry",
+		ID: id, Name: id, Provider: "agy", Source: "registry", Executable: "/usr/bin/agy",
 		CapScore: capScore, AuthReady: true,
 	}
 }

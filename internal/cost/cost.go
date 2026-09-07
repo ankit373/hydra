@@ -31,6 +31,7 @@ type Row struct {
 	Tier           int     `json:"tier"`
 	Enum           string  `json:"enum"`
 	Model          string  `json:"model"`
+	Head           string  `json:"head,omitempty"`
 	Executor       string  `json:"executor"`
 	Pool           string  `json:"pool"`
 	PromptTokens   int     `json:"prompt_tokens"`
@@ -343,13 +344,23 @@ func FilterDays(rows []Row, n int) []Row {
 	return out
 }
 
-// ByModel returns per-model totals sorted by cost descending.
+// ByModel returns per-head totals sorted by cost descending.
+//
+// Keyed on Head, not Model: Model is whatever the provider called itself, and
+// the two writers disagreed about it, so one head landed in two or three rows
+// ("Claude Code" beside "claude", "Qwen2.5-Coder:7b (Ollama)" beside
+// "Qwen2.5-Coder:7b") and every per-head total was understated. Rows written
+// before Head existed still group by Model.
 func ByModel(rows []Row) []GroupRow {
 	return groupBy(rows, func(r Row) string {
-		if r.Model == "" {
+		switch {
+		case r.Head != "":
+			return r.Head
+		case r.Model != "":
+			return r.Model
+		default:
 			return "unknown"
 		}
-		return r.Model
 	})
 }
 

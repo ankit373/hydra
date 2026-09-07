@@ -16,6 +16,7 @@ import (
 	"github.com/ankit373/hydra/internal/dispatch"
 	"github.com/ankit373/hydra/internal/provider"
 	"github.com/ankit373/hydra/internal/testutil"
+	"github.com/ankit373/hydra/internal/trust"
 )
 
 // Run fans one prompt out to N heads and charges the user for all of them. Its
@@ -423,6 +424,7 @@ func TestRunSPRT_AgreeingHeadsReachTheTargetAndRecordTheirAttempts(t *testing.T)
 		swarmHead(t, s, "b", 85, "the same answer"),
 		swarmHead(t, s, "c", 80, "the same answer"),
 	)
+	seedCalibration(t, "go", "a", "b", "c")
 
 	res, err := sw.RunSPRT(context.Background(), "q", Options{Confidence: 0.75, Domain: "go"})
 	if err != nil {
@@ -458,9 +460,41 @@ func TestRunSPRT_AgreeingHeadsReachTheTargetAndRecordTheirAttempts(t *testing.T)
 
 // A domain is required for calibration lookup; an empty one must default rather
 // than being written to the ledger as the empty-string domain.
+// seedCalibration gives the named sources measurable diagnostic power in a
+// domain, so RunSPRT is not refused for having no evidence to work with. A
+// sandbox starts with an empty calibration store, and a real install that has
+// never recorded an outcome is in the same position, which is the case #698
+// made refuse rather than spend.
+func seedCalibration(t *testing.T, domain string, sources ...string) {
+	t.Helper()
+	// DefaultPath resolves against HOME at call time, so calling this before
+	// the sandbox is in place writes to the developer's real calibration
+	// store. That happened while writing these tests, and 64 rows of fixture
+	// had to be removed by hand.
+	path := trust.DefaultPath()
+	if !strings.HasPrefix(path, os.TempDir()) && !strings.Contains(path, t.TempDir()[:8]) {
+		t.Fatalf("seedCalibration would write to %s, outside a sandbox; call it after the sandbox is set up", path)
+	}
+	cal, err := trust.New(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, src := range sources {
+		for i := 0; i < 8; i++ {
+			if err := cal.Update(src, domain, true, trust.OutcomeCorrect); err != nil {
+				t.Fatal(err)
+			}
+			if err := cal.Update(src, domain, false, trust.OutcomeIncorrect); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+}
+
 func TestRunSPRT_EmptyDomainDefaults(t *testing.T) {
 	s := swarmSandbox(t)
 	sw := newSwarm(t, swarmHead(t, s, "a", 90, "answer"))
+	seedCalibration(t, "default", "a")
 
 	res, err := sw.RunSPRT(context.Background(), "q", Options{Confidence: 0.6})
 	if err != nil {
@@ -478,6 +512,7 @@ func TestRunSPRT_A2AFileInjectsHandoffIntoPrompt(t *testing.T) {
 	withTempConfig(t)
 	capturing := &capturingExecutor{}
 	withStubExecutor(t, capturing)
+	seedCalibration(t, "default", "h1")
 
 	s := New(nil, []provider.Head{registryHead("h1", "H1", 90)}, fakePricing{per: 0.01})
 	res, err := s.RunSPRT(context.Background(), "new instruction", Options{

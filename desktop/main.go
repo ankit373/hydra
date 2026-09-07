@@ -27,6 +27,7 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/options/mac"
 
 	"github.com/ankit373/hydra/desktop/api"
+	"github.com/ankit373/hydra/internal/shellpath"
 
 	// Self-registering discovery plugins. Without these, provider.All() is
 	// empty and every chat dispatch reports zero heads, no matter what is
@@ -42,6 +43,10 @@ import (
 var assets embed.FS
 
 func main() {
+	// Before anything discovers heads. launchd starts this process with a PATH
+	// that contains no CLI head at all (#689).
+	shellpath.Adopt()
+
 	a := api.New()
 
 	err := wails.Run(&options.App{

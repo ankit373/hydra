@@ -3,10 +3,11 @@
 package api
 
 import (
-	"github.com/ankit373/hydra/internal/executor"
+	"github.com/ankit373/hydra/internal/health"
 	"github.com/ankit373/hydra/internal/probe"
 	"github.com/ankit373/hydra/internal/provider"
 	"github.com/ankit373/hydra/internal/rank"
+	"time"
 )
 
 // Head is one discovered head and whether anything can actually drive it.
@@ -60,8 +61,9 @@ func (a *API) GetHeads() HeadPanel {
 // nothing while passing.
 func headsFrom(discovered []provider.Head) HeadPanel {
 	out := HeadPanel{Heads: make([]Head, 0, len(discovered))}
+	hs, now := health.Open(health.DefaultPath()), time.Now()
 	for _, h := range discovered {
-		reason := executor.Unroutable(h)
+		reason := health.Reason(hs, h, now)
 		e := Head{
 			ID: h.ID, Name: h.Name, Provider: h.Provider, Source: h.Source,
 			Tier: rank.UITier(h), CapScore: h.CapScore,

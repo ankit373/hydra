@@ -57,7 +57,7 @@ func (f *fakeProvider) Discover(ctx context.Context) ([]provider.Head, error) {
 // The first version of these tests used Provider:"test" throughout and saw
 // three heads become two, which is the dedup contract working, not a bug.
 func head(id string, score int, local bool) provider.Head {
-	return provider.Head{ID: id, Name: id, Provider: id, Source: "registry",
+	return provider.Head{ID: id, Name: id, Provider: id, Source: "registry", Executable: "/usr/bin/agy",
 		CapScore: score, LocalOnly: local, AuthReady: true}
 }
 

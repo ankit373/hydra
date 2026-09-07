@@ -34,8 +34,8 @@ import (
 	"github.com/ankit373/hydra/internal/editor"
 	"github.com/ankit373/hydra/internal/entropy"
 	"github.com/ankit373/hydra/internal/evalset"
-	"github.com/ankit373/hydra/internal/executor"
 	"github.com/ankit373/hydra/internal/graph"
+	"github.com/ankit373/hydra/internal/health"
 	"github.com/ankit373/hydra/internal/ledger"
 	"github.com/ankit373/hydra/internal/mcpregistry"
 	"github.com/ankit373/hydra/internal/ope"
@@ -55,6 +55,7 @@ import (
 	"github.com/ankit373/hydra/internal/runid"
 	"github.com/ankit373/hydra/internal/runlog"
 	"github.com/ankit373/hydra/internal/security"
+	"github.com/ankit373/hydra/internal/shellpath"
 	"github.com/ankit373/hydra/internal/swarm"
 	"github.com/ankit373/hydra/internal/trust"
 	"github.com/ankit373/hydra/internal/tui"
@@ -68,6 +69,11 @@ import (
 )
 
 func main() {
+	// Before any command discovers heads. A hyctl or `hyctl tui` started by
+	// something other than a shell, a launcher or an IDE, gets a PATH with no
+	// CLI head in it at all (#689). No-op when a shell already set one.
+	shellpath.Adopt()
+
 	// Fire update check in the background, never blocks startup.
 	updateCh := update.CheckAsync()
 
@@ -332,9 +338,10 @@ func cmdProbe() *cobra.Command {
 				cortexName = result.Cortex.Name
 			}
 			if jsonOut {
+				hs, now := health.Open(health.DefaultPath()), time.Now()
 				heads := make([]probeHeadJSON, len(result.Heads))
 				for i, h := range result.Heads {
-					why := executor.Unroutable(h)
+					why := health.Reason(hs, h, now)
 					heads[i] = probeHeadJSON{
 						ID: h.ID, Name: h.Name, Provider: h.Provider, Source: h.Source,
 						CapScore: h.CapScore, LocalOnly: h.LocalOnly,
@@ -370,12 +377,13 @@ func cmdProbe() *cobra.Command {
 			// the Ollama binary that `dispatch --local` then refused (#248), so
 			// unroutable heads are marked and carry their reason.
 			var unroutable int
+			hs, now := health.Open(health.DefaultPath()), time.Now()
 			for _, h := range result.Heads {
 				marker := "  "
 				if result.Cortex != nil && h.ID == result.Cortex.ID {
 					marker = cortexStyle.Render("→ ")
 				}
-				why := executor.Unroutable(h)
+				why := health.Reason(hs, h, now)
 				if why != "" {
 					marker = warnStyle.Render("✗ ")
 					unroutable++
@@ -779,6 +787,9 @@ func cmdDispatch() *cobra.Command {
 					Classification: &promptClass,
 				})
 				if err != nil {
+					if errors.Is(err, trust.ErrNoEvidence) {
+						return noEvidenceError(domain)
+					}
 					return err
 				}
 				printSPRTResult(res)
@@ -2951,6 +2962,35 @@ func cmdGraph() *cobra.Command {
 
 // printSPRTResult renders an SPRT confidence run: the LLR ledger, the decision,
 // and the winning answer.
+// noEvidenceError turns the SPRT refusal into something the reader can act on.
+// The bare error names the domain; what they need is which domains do carry
+// evidence and how to give this one some.
+func noEvidenceError(domain string) error {
+	var b strings.Builder
+	fmt.Fprintf(&b, "nothing here can judge %q yet, so --confidence would sample every head, "+
+		"move the estimate nowhere and hand back 50%%.\n", domain)
+	b.WriteString("A source only carries evidence once its verdicts have been scored against outcomes.\n\n")
+
+	if cal, err := trust.New(trust.DefaultPath()); err == nil {
+		seen := map[string]bool{}
+		var domains []string
+		for _, st := range cal.Report() {
+			if st.D > 0 && !seen[st.Domain] {
+				seen[st.Domain] = true
+				domains = append(domains, st.Domain)
+			}
+		}
+		if len(domains) > 0 {
+			sort.Strings(domains)
+			fmt.Fprintf(&b, "  Domains with evidence: %s\n", strings.Join(domains, ", "))
+		}
+	}
+	b.WriteString("  Record an outcome:     hyctl trust record --source model:<id> --domain " + domain + " --said-correct --outcome correct\n")
+	b.WriteString("  Or verify with a test: hyctl oracle verify --candidate <file> --domain " + domain + " -- go test ./...\n")
+	b.WriteString("\nWithout --confidence the same prompt routes normally and costs one head.")
+	return errors.New(b.String())
+}
+
 func printSPRTResult(r *swarm.SPRTResult) {
 	sep := dimStyle.Render("  " + strings.Repeat("─", 60))
 	t := r.Trust

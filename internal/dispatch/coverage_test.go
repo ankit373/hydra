@@ -799,7 +799,7 @@ func TestAsIntAndAsIntSlice(t *testing.T) {
 func TestHeadsAndEstimateCost_AreExposedToCallers(t *testing.T) {
 	testutil.NewSandbox(t)
 
-	dd := liveDispatcher(provider.Head{ID: "a", Name: "a", Provider: "agy", Source: "registry", CapScore: 80})
+	dd := liveDispatcher(provider.Head{ID: "a", Name: "a", Provider: "agy", Source: "registry", Executable: "/usr/bin/agy", CapScore: 80})
 	dd.pricing = pricing.Load()
 	if heads := dd.Heads(); len(heads) != 1 || heads[0].ID != "a" {
 		t.Errorf("Heads() = %+v, want the one head it was built with", heads)
