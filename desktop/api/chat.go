@@ -207,12 +207,11 @@ func preview(s string) string {
 
 // ChatEnums lists the routing keys the dock offers, weakest head first.
 //
-// Taken from dispatch.EnumToTier's own table rather than restated, so the
-// picker cannot offer a key the router does not understand. The dock's "auto"
-// choice is the absence of an enum, not a member of this list.
+// Read from the router's own table, so the picker cannot offer a key the router
+// does not understand. It used to claim exactly that while being a hardcoded
+// restatement, a fourth copy of the enum list that drifts the moment
+// routing.yaml changes (#720). The dock's "auto" choice is the absence of an
+// enum, not a member of this list.
 func (a *API) ChatEnums() []string {
-	return []string{
-		"GRUNT", "TRIVIAL", "SIMPLE", "STANDARD", "MODERATE",
-		"COMPLEX", "HARD", "VERY_HARD", "EXPERT", "CORE",
-	}
+	return dispatch.EnumKeys()
 }

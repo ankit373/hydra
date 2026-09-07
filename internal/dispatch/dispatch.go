@@ -301,6 +301,11 @@ func New(ctx context.Context) (*Dispatcher, error) {
 	if err != nil {
 		return nil, fmt.Errorf("no hydra config, run: hyctl init")
 	}
+	// Before any probing or routing: an unusable routing.yaml stops the
+	// dispatch rather than being papered over with the shipped rule (#720).
+	if err := RoutingError(); err != nil {
+		return nil, err
+	}
 
 	result := cachedProbe(ctx)
 	localOnly := piiLocalOnly(cfg)
@@ -1124,20 +1129,20 @@ func truncate(s string, n int) string {
 	return s[:n] + "…"
 }
 
-// enumTiers maps each routing enum key to its tier number, the single
-// source of truth EnumToTier and IsKnownEnum both read, so editor, parallel,
-// and cmd/hydra's --enum validation can never drift apart.
-var enumTiers = map[string]string{
-	"GRUNT":     "10",
-	"TRIVIAL":   "9",
-	"SIMPLE":    "8",
-	"STANDARD":  "7",
-	"MODERATE":  "6",
-	"COMPLEX":   "5",
-	"HARD":      "4",
-	"VERY_HARD": "3",
-	"EXPERT":    "2",
-	"CORE":      "1",
+// enumTiers reads the map from registry/routing.yaml, the file whose own header
+// has always claimed to define it. It used to be a Go literal here, so the
+// on-disk override every other registry file honours did nothing for the one
+// file named after routing (#720).
+func enumTiers() (map[string]int, error) {
+	return registry.EnumTiers(config.ScriptHome())
+}
+
+// RoutingError reports an unusable routing.yaml. New returns it, so no surface
+// routes on a map it could not load, and a bad override is refused rather than
+// quietly reverting to the shipped rule.
+func RoutingError() error {
+	_, err := enumTiers()
+	return err
 }
 
 // EnumToTier maps a routing enum key (e.g. "SIMPLE") to a tier number string.
@@ -1145,15 +1150,36 @@ var enumTiers = map[string]string{
 // why a caller that must reject a typo instead of silently routing
 // unrestricted checks IsKnownEnum first (#501).
 func EnumToTier(enum string) string {
-	return enumTiers[enum]
+	tiers, err := enumTiers()
+	if err != nil {
+		return ""
+	}
+	if n, ok := tiers[enum]; ok {
+		return strconv.Itoa(n)
+	}
+	return ""
 }
 
 // IsKnownEnum reports whether enum is a recognized routing enum key.
 // EnumToTier's "" result is ambiguous between "no enum given" and
 // "unrecognized key", this is how a caller tells the two apart.
 func IsKnownEnum(enum string) bool {
-	_, ok := enumTiers[enum]
+	tiers, err := enumTiers()
+	if err != nil {
+		return false
+	}
+	_, ok := tiers[enum]
 	return ok
+}
+
+// EnumKeys lists the routing keys weakest head first, for a picker that must
+// not offer a key the router does not understand.
+func EnumKeys() []string {
+	keys, err := registry.EnumKeys(config.ScriptHome())
+	if err != nil {
+		return nil
+	}
+	return keys
 }
 
 // headPool is the token pool a cost row should be filed under. Provider

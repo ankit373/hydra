@@ -643,6 +643,13 @@ func cmdDispatch() *cobra.Command {
 		Short: "Route a prompt to the best available Head",
 		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Checked before the enum name: IsKnownEnum reports false when the
+			// routing table could not be loaded at all, so a broken routing.yaml
+			// otherwise came back as "unknown --enum SIMPLE", blaming a valid key
+			// for a file problem (#720).
+			if err := dispatch.RoutingError(); err != nil {
+				return err
+			}
 			// An unrecognized --enum must fail here, before anything routes: its
 			// zero value is byte-identical to "no enum given" everywhere else in
 			// this function, so a typo silently routed to the single strongest
