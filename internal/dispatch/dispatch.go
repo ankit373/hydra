@@ -22,6 +22,7 @@ import (
 	"github.com/ankit373/hydra/internal/budget"
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/cost"
+	"github.com/ankit373/hydra/internal/egress"
 	"github.com/ankit373/hydra/internal/executor"
 	"github.com/ankit373/hydra/internal/health"
 	"github.com/ankit373/hydra/internal/ledger"
@@ -58,6 +59,12 @@ type Options struct {
 	// internal/auth/**"), not just per-head rules. Empty means no resource
 	// concept applies (e.g. a plain text dispatch with no target file).
 	Resource string
+
+	// Provenance carries parts of the payload whose origin only the caller
+	// knows, e.g. the file whose content hyctl edit embedded in the prompt.
+	// Dispatch classifies these alongside the ones it derives itself; leaving
+	// content out of it is what the egress gate's fail-closed rules catch.
+	Provenance []egress.Part
 
 	// MaxCostUSD refuses a candidate whose estimated cost exceeds it before
 	// executing, the same preflight guard swarm.Options.MaxEstCostUSD already
@@ -387,7 +394,44 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 	}
 
 	localOnly := action.LocalOnly || opts.LocalOnly
+
+	// Classify where every span of the outgoing payload came from, before head
+	// selection, so a secret payload prefers a local head rather than being
+	// refused at the gate further down. Failing to classify routes nothing:
+	// an unavailable gate is not a reason to send the payload anyway.
+	parts, err := d.provenance(prompt, opts)
+	if err != nil {
+		return nil, fmt.Errorf("egress classification unavailable, refusing to route: %w", err)
+	}
+	strict := d.cfg.StrictEgress()
+	secretOrigins := egress.Origins(parts)
+	rerouted := false
+	if len(secretOrigins) > 0 && !localOnly {
+		localOnly, rerouted = true, true
+	}
+
 	candidates := d.selectHeads(tier, localOnly)
+
+	// The reroute failed: the content is secret and nothing local can run it.
+	// Strict refuses; otherwise the payload leaves, and the user is told in
+	// those words rather than left to infer it from the head name.
+	if len(candidates) == 0 && rerouted {
+		if strict {
+			return nil, fmt.Errorf(
+				"%w: content classified secret (%s) and no local head is routable. "+
+					"Start one (`ollama serve`), or set egress.strict = false in config.toml to allow it out",
+				ErrNoHeads, strings.Join(secretOrigins, ", "))
+		}
+		log.Printf("⚠️  egress.strict is off: secret content (%s) is going to a head that leaves this machine",
+			strings.Join(secretOrigins, ", "))
+		localOnly, rerouted = action.LocalOnly || opts.LocalOnly, false
+		candidates = d.selectHeads(tier, localOnly)
+	}
+	if rerouted && len(candidates) > 0 {
+		log.Printf("🔒 secret content (%s), routing to a local head only",
+			strings.Join(secretOrigins, ", "))
+	}
+
 	if opts.Head != "" {
 		// A pinned head is the whole candidate list, so there is nothing to
 		// fall back to and no way to answer from a model the user did not ask
@@ -473,6 +517,24 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 				Status: "denied", Detail: detail,
 			})
 		}
+		// The egress gate, deliberately independent of the ledger's decision:
+		// the ledger answers who may act, this answers where content may go.
+		// The reroute above should already have made this unreachable for a
+		// secret payload, so reaching it means something bypassed routing (a
+		// pinned head, an unclassified part) and it refuses.
+		sink := egress.Sink{Kind: egress.SinkRemote, Head: h.ID}
+		if h.LocalOnly {
+			sink.Kind = egress.SinkLocal
+		}
+		if v := egress.Guard(parts, sink, strict); v.Decision != egress.Allow {
+			refuse("egress denied: " + v.Reason)
+			_ = ledger.Record(ledger.DefaultPath(), ledger.Event{
+				Agent: "hydra-dispatch", Tool: h.ID, Resource: opts.Resource,
+				Action: ledger.Exec, Decision: ledger.Deny, Reason: v.Reason,
+			})
+			continue
+		}
+
 		// Approval is per head. An Ask answered for one head must not authorize
 		// a different one, or a resume silently re-routes to a head the human
 		// was never shown.
@@ -887,6 +949,43 @@ func (d *Dispatcher) pinHead(id string, localOnly bool) (provider.Head, error) {
 // name match can never succeed and the old fall-through silently returned the
 // single most expensive head, the exact inverse of cost routing (#165).
 //
+// provenance describes where every span of the outgoing payload came from.
+//
+// Provenance is what the gate decides on, so anything reaching an executor has
+// to appear here. A caller that knows more than dispatch can (hyctl edit knows
+// the file whose content it embedded) passes its own parts in opts.Provenance
+// and they are classified the same way.
+func (d *Dispatcher) provenance(prompt string, opts Options) ([]egress.Part, error) {
+	rules, err := egress.LoadRules(config.ScriptHome())
+	if err != nil {
+		return nil, err
+	}
+	var parts []egress.Part
+	add := func(content string, src egress.Source, origin string) {
+		if strings.TrimSpace(content) == "" && origin == "" {
+			return
+		}
+		parts = append(parts, rules.ClassifyPart(egress.Part{
+			Content: content, Source: src, Origin: origin,
+		}))
+	}
+
+	// The prompt and --system are SourceUser, so ClassifyPart leaves them to
+	// the configurable pii policy rather than re-deciding them here. They are
+	// still declared, because a payload with no provenance is refused.
+	add(prompt, egress.SourceUser, "")
+	add(opts.System, egress.SourceUser, "--system")
+	// The named resource is the file whose content the caller embedded in the
+	// prompt: hyctl edit's target, a parallel task's context file.
+	add("", egress.SourceFile, opts.Resource)
+	add("", egress.SourceFile, opts.A2AFile)
+
+	for _, p := range opts.Provenance {
+		parts = append(parts, rules.ClassifyPart(p))
+	}
+	return parts, nil
+}
+
 // A hint that matches nothing returns no candidates; the caller reports that
 // rather than silently widening to every head.
 func (d *Dispatcher) selectHeads(tierHint string, localOnly bool) []provider.Head {

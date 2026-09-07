@@ -23,12 +23,21 @@ type Policy struct {
 	Action string `toml:"action"` // "local-only", "budget-cap", etc.
 }
 
+// Egress governs what may leave the machine once content classifies secret.
+type Egress struct {
+	// Strict refuses a secret payload when no local head is routable, rather
+	// than sending it to one that reaches the network. Absent means on: a
+	// config file written before the gate existed must not read as an opt-out.
+	Strict *bool `toml:"strict,omitempty"`
+}
+
 // Config is the root Hydra configuration.
 type Config struct {
 	Cortex   string            `toml:"cortex"` // Head ID acting as the brain
 	Tiers    []Tier            `toml:"tiers"`  // ordered by capability (high → low)
 	Skills   []string          `toml:"skills"` // enabled skill IDs
 	Policies map[string]Policy `toml:"policies,omitempty"`
+	Egress   Egress            `toml:"egress,omitempty"`
 
 	// ExploreRate is the probability a dispatch tries a head other than the
 	// top-ranked one, so the logs carry the counterfactual evidence off-policy
@@ -46,6 +55,16 @@ type Config struct {
 	// every stored blob so the set can still be weighted back to the population.
 	// 0 means the built-in default rather than "keep nothing".
 	PayloadKeepRate float64 `toml:"payload_keep_rate,omitempty"`
+}
+
+// StrictEgress reports whether a secret payload is refused when no local head
+// is routable. A nil Config, or one with no [egress] section, is strict: the
+// safe reading of "not configured" is the one that does not leak.
+func (c *Config) StrictEgress() bool {
+	if c == nil || c.Egress.Strict == nil {
+		return true
+	}
+	return *c.Egress.Strict
 }
 
 // Dir returns the Hydra state directory: $HYDRA_HOME if set, else ~/.hydra.
