@@ -40,11 +40,17 @@ func logRunEvents(attempts []Attempt, mode SwarmMode, opts Options) {
 	runID := runid.ResolveRun(opts.RunID)
 	taskID := runid.ResolveTask(opts.TaskID)
 
+	// The fan-out is itself a span, and every attempt nests under it, so a
+	// swarm reads as one parent with N children rather than N siblings.
+	rootSpan := runlog.SpanIDFor(taskID + "/" + swarmAgent)
+
 	rl := runlog.New(runID)
 	_ = rl.Append(runlog.Event{
 		Kind: runlog.KindTaskStarted, TaskID: taskID,
+		SpanID: rootSpan, ParentSpanID: runlog.SpanIDFor(taskID),
 		Agent:  swarmAgent,
 		Detail: fmt.Sprintf("swarm · %s · %d heads", mode, len(attempts)),
+		Meta:   map[string]any{"mode": string(mode), "heads": len(attempts)},
 	})
 
 	for _, a := range attempts {
@@ -55,25 +61,37 @@ func logRunEvents(attempts []Attempt, mode SwarmMode, opts Options) {
 		if a.Status == StatusOK && a.Rank == 1 {
 			detail = string(mode) + " · winner"
 		}
-		_ = rl.Append(runlog.Event{
+		e := runlog.Event{
 			Kind:   runlog.KindAttempt,
 			TaskID: taskID,
 			// Keyed by head id, which is also how dispatch keys its own events,
 			// so a head's selection, execution, and attempt collapse into one
 			// node rather than three.
-			Agent:      a.Head.ID,
-			Parent:     swarmAgent,
-			Head:       a.Head.ID,
-			Model:      a.Head.Name,
-			Tier:       rank.UITier(a.Head),
-			Status:     string(a.Status),
-			CostUSD:    a.EstCostUSD,
-			DurationMS: a.Duration.Milliseconds(),
-			Detail:     detail,
-		})
+			Agent:        a.Head.ID,
+			Parent:       swarmAgent,
+			SpanID:       runlog.SpanIDFor(taskID + "/" + swarmAgent + "/" + a.Head.ID),
+			ParentSpanID: rootSpan,
+			Head:         a.Head.ID,
+			Model:        a.Head.Name,
+			Tier:         rank.UITier(a.Head),
+			Status:       string(a.Status),
+			CostUSD:      a.EstCostUSD,
+			DurationMS:   a.Duration.Milliseconds(),
+			InputTokens:  a.InputTokens,
+			OutputTokens: a.OutputTokens,
+			Detail:       detail,
+			Meta:         attemptMeta(a),
+		}
+		if a.Status != StatusOK {
+			e.Level = runlog.LevelError
+		}
+		_ = rl.Append(e)
 	}
 
-	_ = rl.Append(runlog.Event{Kind: runlog.KindTaskFinished, TaskID: taskID, Agent: swarmAgent})
+	_ = rl.Append(runlog.Event{
+		Kind: runlog.KindTaskFinished, TaskID: taskID,
+		SpanID: rootSpan, ParentSpanID: runlog.SpanIDFor(taskID), Agent: swarmAgent,
+	})
 }
 
 // logSamples appends one runlog event per SPRT ledger entry, carrying the
@@ -90,37 +108,47 @@ func logSamples(ledger []trust.Evidence, attempts []Attempt, opts Options) {
 		byID[a.Head.ID] = a
 	}
 
+	rootSpan := runlog.SpanIDFor(taskID + "/" + sprtAgent)
+
 	rl := runlog.New(runID)
 	_ = rl.Append(runlog.Event{
 		Kind: runlog.KindTaskStarted, TaskID: taskID,
+		SpanID: rootSpan, ParentSpanID: runlog.SpanIDFor(taskID),
 		Agent:  sprtAgent,
 		Detail: fmt.Sprintf("SPRT ensemble · %d samples", len(ledger)),
+		Meta:   map[string]any{"samples": len(ledger)},
 	})
 
 	var final float64
 	for _, ev := range ledger {
 		final = ev.ConfidenceAfter
 		e := runlog.Event{
-			Kind:       runlog.KindSample,
-			TaskID:     taskID,
-			Agent:      ev.Source,
-			Parent:     sprtAgent,
-			Head:       ev.Source,
-			CostUSD:    ev.CostUSD,
-			Confidence: ev.ConfidenceAfter,
-			Detail:     sampleDetail(ev),
+			Kind:         runlog.KindSample,
+			TaskID:       taskID,
+			Agent:        ev.Source,
+			Parent:       sprtAgent,
+			SpanID:       runlog.SpanIDFor(taskID + "/" + sprtAgent + "/" + ev.Source),
+			ParentSpanID: rootSpan,
+			Head:         ev.Source,
+			CostUSD:      ev.CostUSD,
+			Confidence:   ev.ConfidenceAfter,
+			Detail:       sampleDetail(ev),
+			Meta:         map[string]any{"llr": ev.LLR, "lambda": ev.LambdaAfter, "agreed": ev.Agreed},
 		}
 		if a, ok := byID[ev.Source]; ok {
 			e.Model = a.Head.Name
 			e.Tier = rank.UITier(a.Head)
 			e.Status = string(a.Status)
 			e.DurationMS = a.Duration.Milliseconds()
+			e.InputTokens = a.InputTokens
+			e.OutputTokens = a.OutputTokens
 		}
 		_ = rl.Append(e)
 	}
 
 	_ = rl.Append(runlog.Event{
 		Kind: runlog.KindTaskFinished, TaskID: taskID,
+		SpanID: rootSpan, ParentSpanID: runlog.SpanIDFor(taskID),
 		Agent: sprtAgent, Confidence: final,
 	})
 }
@@ -133,4 +161,23 @@ func sampleDetail(ev trust.Evidence) string {
 		verdict = "agreed"
 	}
 	return fmt.Sprintf("%s · LLR %+.3f → Λ %.3f", verdict, ev.LLR, ev.LambdaAfter)
+}
+
+// attemptMeta carries the per-attempt facts with no field of their own, the
+// same shape dispatch uses so one reader renders both.
+func attemptMeta(a Attempt) map[string]any {
+	m := map[string]any{}
+	if a.TokensEstimated {
+		m["tokens_estimated"] = true
+	}
+	if a.Truncated {
+		m["truncated"] = true
+	}
+	if a.Rank > 0 {
+		m["rank"] = a.Rank
+	}
+	if len(m) == 0 {
+		return nil
+	}
+	return m
 }

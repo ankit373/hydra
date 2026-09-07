@@ -115,6 +115,17 @@ type Entry struct {
 	DurationMS int64
 	Confidence float64
 	Detail     string
+
+	// Span identity, tokens and level are carried through rather than used to
+	// key nodes: this is a supervision tree, where a head's selection and its
+	// execution deliberately collapse into one node. A waterfall keyed on
+	// SpanID is a different reconstruction over the same events.
+	SpanID       string
+	ParentSpanID string
+	Level        runlog.Level
+	InputTokens  int
+	OutputTokens int
+	TTFTMs       int64
 }
 
 // Timeline is the run's events in order, for a chronological view.

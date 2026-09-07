@@ -136,9 +136,15 @@ func spanFor(r cost.Row) (Span, error) {
 	if err != nil {
 		return Span{}, err
 	}
-	spanID, err := idHex(8, r.TaskID)
-	if err != nil {
-		return Span{}, err
+	// The run log's span id is already 8 bytes of hex, an OTLP span id exactly,
+	// so a row that carries one exports under the same identity the trace uses
+	// instead of a second one derived from the task.
+	spanID := r.SpanID
+	if !validSpanID(spanID) {
+		spanID, err = idHex(8, r.TaskID)
+		if err != nil {
+			return Span{}, err
+		}
 	}
 
 	attrs := []KeyValue{
@@ -182,6 +188,25 @@ func spanFor(r cost.Row) (Span, error) {
 		Attributes:        attrs,
 		Status:            Status{Code: 1},
 	}, nil
+}
+
+// validSpanID reports whether s is a well-formed, non-zero OTLP span id. An
+// all-zero id is invalid per the spec and collectors drop the span, so a
+// malformed one falls back rather than exporting something that vanishes.
+func validSpanID(s string) bool {
+	if len(s) != 16 {
+		return false
+	}
+	raw, err := hex.DecodeString(s)
+	if err != nil {
+		return false
+	}
+	for _, b := range raw {
+		if b != 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // idHex renders a stable id of exactly n bytes as hex.

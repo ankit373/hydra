@@ -775,7 +775,8 @@ hydra/
 │   ├── util/                    # Shared utilities (bounded Accumulator, 33 MB cap)
 │   ├── sysinfo/                 # Hardware detection + 7-day memory history
 │   ├── payload/                 # Opt-in prompt/response store: packed, dictionary-compressed, redacted
-│   ├── runlog/                  # Per-run event log (~/.hydra/logs/runs/) + liveness heartbeat + edit snapshots
+│   ├── runlog/                  # Per-run span log (~/.hydra/logs/runs/): identity, parent, level,
+│   │                            #   tokens, TTFT, metadata + liveness heartbeat + edit snapshots
 │   │                            # Old runs seal into compressed monthly segments (logs/seg/)
 │   ├── tree/                    # Reconstructs a run: supervision tree + timeline, framework-free
 │   ├── runid/                   # Run/task identity: correlates every log a run produces

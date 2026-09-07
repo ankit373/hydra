@@ -108,6 +108,10 @@ func (e *OllamaExecutor) Execute(ctx context.Context, req Request) (*Response, e
 		Model:        firstNonEmpty(out.Model, modelFlag),
 		InputTokens:  out.PromptEvalCount,
 		OutputTokens: out.EvalCount,
+		// Prompt-eval is the work before the first output token, so it is
+		// exactly TTFT. Ollama has always reported it and Hydra parsed it into
+		// a field nothing read.
+		TTFT: time.Duration(out.PromptEvalDuration),
 	}, nil
 }
 

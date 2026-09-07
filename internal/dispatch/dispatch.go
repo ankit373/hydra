@@ -425,6 +425,9 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 	// Observability must never fail the work, so every append error is ignored.
 	rl := runlog.New(runid.ResolveRun(opts.RunID))
 	taskID := runid.ResolveTask(opts.TaskID)
+	// Every candidate attempt hangs off the task's span, derived rather than
+	// minted so swarm and parallel agree on the same parent without passing it.
+	taskSpan := runlog.SpanIDFor(taskID)
 
 	var lastErr error
 	var attempts []Attempt
@@ -433,10 +436,15 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		// logging, cost estimation): rank.UITier re-derives the same int for
 		// the identical head every time it's called.
 		tier := rank.UITier(h)
+		// One span per attempt. Two attempts on one head are then distinct,
+		// which the old head-derived identity could not express.
+		span := runlog.NewSpanID()
 		_ = rl.Append(runlog.Event{
 			Kind: runlog.KindHeadSelected, TaskID: taskID,
+			SpanID: span, ParentSpanID: taskSpan,
 			Head: h.ID, Model: h.Name, Tier: tier,
 			Detail: fmt.Sprintf("candidate %d of %d", i+1, len(candidates)),
+			Meta:   map[string]any{"attempt": i + 1, "candidates": len(candidates)},
 		})
 		// Proceeds only on an explicit Allow. Testing `== Deny` instead would
 		// let any other verdict through, which stopped being safe the moment
@@ -455,6 +463,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 			attempts = append(attempts, Attempt{Head: h.ID, Model: h.Name, Tier: tier, Reason: detail})
 			_ = rl.Append(runlog.Event{
 				Kind: runlog.KindError, TaskID: taskID,
+				SpanID: span, ParentSpanID: taskSpan, Level: runlog.LevelError,
 				Head: h.ID, Model: h.Name, Tier: tier,
 				Status: "denied", Detail: detail,
 			})
@@ -490,6 +499,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 			}
 			_ = rl.Append(runlog.Event{
 				Kind: runlog.KindQuestionAsked, TaskID: taskID,
+				SpanID: span, ParentSpanID: taskSpan, Level: runlog.LevelWarn,
 				Head: h.ID, Model: h.Name, Tier: tier,
 				Status: "waiting", Detail: q.Question,
 			})
@@ -506,8 +516,10 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 				lastErr = fmt.Errorf("estimated cost $%.4f for head %s exceeds limit $%.4f", estCost, h.ID, opts.MaxCostUSD)
 				_ = rl.Append(runlog.Event{
 					Kind: runlog.KindError, TaskID: taskID,
+					SpanID: span, ParentSpanID: taskSpan, Level: runlog.LevelError,
 					Head: h.ID, Model: h.Name, Tier: tier,
 					Status: "denied", Detail: "exceeds cost ceiling",
+					Meta: map[string]any{"est_cost_usd": estCost, "limit_usd": opts.MaxCostUSD},
 				})
 				attempts = append(attempts, Attempt{Head: h.ID, Model: h.Name, Tier: tier,
 					Reason: fmt.Sprintf("estimated $%.4f exceeds the $%.4f ceiling", estCost, opts.MaxCostUSD)})
@@ -539,6 +551,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 			// fallback chain advanced, and nothing else records it.
 			_ = rl.Append(runlog.Event{
 				Kind: runlog.KindError, TaskID: taskID,
+				SpanID: span, ParentSpanID: taskSpan, Level: runlog.LevelError,
 				Head: h.ID, Model: h.Name, Tier: tier,
 				Status: "failed", DurationMS: time.Since(started).Milliseconds(),
 				Detail: truncate(err.Error(), 200),
@@ -551,17 +564,23 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		r := &Result{Output: resp.Output, Head: h, Retries: i, Attempts: attempts, Response: resp}
 		_ = rl.Append(runlog.Event{
 			Kind: runlog.KindDispatchFinished, TaskID: taskID,
+			SpanID: span, ParentSpanID: taskSpan,
 			Head: h.ID, Model: resp.Model, Tier: tier, Status: "ok",
-			CostUSD:    d.estimateCost(tier, resp.InputTokens, resp.OutputTokens),
-			DurationMS: resp.Duration.Milliseconds(),
+			CostUSD:      d.estimateCost(tier, resp.InputTokens, resp.OutputTokens),
+			DurationMS:   resp.Duration.Milliseconds(),
+			InputTokens:  resp.InputTokens,
+			OutputTokens: resp.OutputTokens,
+			TTFTMs:       resp.TTFT.Milliseconds(),
+			Meta:         dispatchMeta(opts, resp),
 		})
-		_ = d.logDispatch(r, prompt, opts, actProb)
+		_ = d.logDispatch(r, prompt, opts, actProb, span)
 		if from, err := d.writeHandoff(r, prompt); err == nil {
 			// last_handoff.json keeps only the newest. Appending the handoff
 			// here is what makes a *chain* of them reconstructable, which is
 			// the stated purpose of KindHandoff and did not happen before #204.
 			_ = rl.Append(runlog.Event{
 				Kind: runlog.KindHandoff, TaskID: taskID,
+				SpanID: span, ParentSpanID: taskSpan,
 				Agent: h.ID, Head: h.ID, Model: h.Name,
 				Ref: from, Detail: "context handed to " + from,
 			})
@@ -1021,7 +1040,7 @@ func (d *Dispatcher) syncStateJSON(r *Result) {
 }
 
 // logDispatch writes to dispatch.jsonl and cost.jsonl.
-func (d *Dispatcher) logDispatch(r *Result, prompt string, opts Options, actProb float64) error {
+func (d *Dispatcher) logDispatch(r *Result, prompt string, opts Options, actProb float64, span string) error {
 	tier := rank.UITier(r.Head)
 	wallMs := r.Response.Duration.Milliseconds()
 	estCost := d.estimateCost(tier, r.Response.InputTokens, r.Response.OutputTokens)
@@ -1052,6 +1071,7 @@ func (d *Dispatcher) logDispatch(r *Result, prompt string, opts Options, actProb
 		// "unrecorded" (#605).
 		"act_prob":  actProb,
 		"keep_prob": 1.0,
+		"span_id":   span,
 	}
 	if err := appendJSONL(filepath.Join(logDir, "dispatch.jsonl"), dispatchEntry); err != nil {
 		return err
@@ -1085,6 +1105,7 @@ func (d *Dispatcher) logDispatch(r *Result, prompt string, opts Options, actProb
 			"run_id":          runID,
 			"act_prob":        actProb,
 			"keep_prob":       1.0,
+			"span_id":         span,
 		}
 		if breadcrumb != "" { // match the omitempty on cost.Row.Config
 			costEntry["config"] = breadcrumb
@@ -1115,6 +1136,32 @@ func (d *Dispatcher) estimateCost(tier, inputTokens, outputTokens int) float64 {
 		return 0
 	}
 	return d.pricing.EstimateCost(tier, inputTokens, outputTokens)
+}
+
+// dispatchMeta is the model-parameter side of a span: what was requested and
+// how trustworthy the numbers coming back are. Only non-default values are
+// carried, an event line stays small by not restating the defaults.
+func dispatchMeta(opts Options, resp *executor.Response) map[string]any {
+	m := map[string]any{}
+	if opts.MaxTokens > 0 {
+		m["max_tokens"] = opts.MaxTokens
+	}
+	if opts.System != "" {
+		m["system"] = true
+	}
+	if opts.Enum != "" {
+		m["enum"] = opts.Enum
+	}
+	if resp.TokensEstimated {
+		m["tokens_estimated"] = true
+	}
+	if resp.Truncated {
+		m["truncated"] = true
+	}
+	if len(m) == 0 {
+		return nil
+	}
+	return m
 }
 
 func truncate(s string, n int) string {
