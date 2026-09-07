@@ -4,6 +4,7 @@ package shellpath
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -70,15 +71,22 @@ func TestAdopt_RecoversTheShellsPathFromABareOne(t *testing.T) {
 // shell costs about a second, and a process started from a terminal already
 // knows the answer.
 func TestLooksBare(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
 	cases := []struct {
 		name string
 		path string
 		want bool
 	}{
-		{"launchd's default", sep("/usr/bin", "/bin", "/usr/sbin", "/sbin"), true},
-		{"system dirs only", sep("/usr/bin", "/bin", "/usr/local/bin"), true},
-		{"a shell profile has run", sep("/Users/x/.local/bin", "/usr/bin", "/bin"), false},
-		{"homebrew present", sep("/opt/homebrew/bin", "/usr/bin"), false},
+		{"macOS launchd", sep("/usr/bin", "/bin", "/usr/sbin", "/sbin"), true},
+		// Every Debian-family default. The allowlist this replaced did not
+		// know /usr/games, so a .desktop launch looked already-configured and
+		// the recovery never ran.
+		{"Linux .desktop", sep("/usr/local/sbin", "/usr/local/bin", "/usr/sbin", "/usr/bin", "/sbin", "/bin", "/usr/games", "/usr/local/games"), true},
+		{"systemd user service", sep("/usr/local/bin", "/usr/bin", "/bin"), true},
+		{"a shell profile has run", sep(filepath.Join(home, ".local", "bin"), "/usr/bin", "/bin"), false},
 		{"empty", "", true},
 	}
 	for _, c := range cases {
@@ -92,7 +100,12 @@ func TestLooksBare(t *testing.T) {
 
 // A terminal-started process must not pay for a subprocess it does not need.
 func TestAdopt_LeavesARealPathUntouched(t *testing.T) {
-	real := sep("/Users/x/.local/bin", "/usr/bin", "/bin")
+	// The entry has to be under this test's HOME, because that is exactly what
+	// looksBare looks for.
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	real := sep(filepath.Join(home, ".local", "bin"), "/usr/bin", "/bin")
 	t.Setenv("PATH", real)
 	Adopt()
 	if got := os.Getenv("PATH"); got != real {
