@@ -536,7 +536,7 @@ The wizard scans your machine, ranks every model it finds, walks you through pic
 # Discovery & state
 hyctl init                              # first-run wizard
 hyctl probe                             # scan and display all available models
-hyctl status                            # live system state (heads, budget bars, burn-rate risk)
+hyctl status                            # live state: heads that can run, budget bars, burn-rate risk
 hyctl tui                               # interactive cockpit, six views (see below), `?` for shortcuts
 hyctl version                           # version, commit, build info
 hyctl upgrade                           # self-update via install.sh (curl installs only; brew installs: `brew upgrade hyctl`)
