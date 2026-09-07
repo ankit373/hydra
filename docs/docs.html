@@ -669,8 +669,8 @@ hyctl probe                        <span class="c"># it shows up as a scored hea
 
     <section class="doc" id="status">
       <h2><span class="cmd">hyctl status</span> <span class="tagline">live state</span></h2>
-      <p class="sum">Heads, budget bars, and the <b>rate-aware</b> governor.</p>
-      <div class="sub"><div class="lbl">How it works</div><p>Models context usage as a drifting process and estimates the <b>first-passage probability</b> of crossing the ceiling before the task ends, escalating <i>before</i> a threshold is hit.</p></div>
+      <p class="sum">The heads that <b>can actually run</b>, budget bars, and the <b>rate-aware</b> governor.</p>
+      <div class="sub"><div class="lbl">How it works</div><p>Head list comes from live discovery, grouped by the tier each head would route at, so it cannot drift from the router; anything discovery found but nothing can drive is counted, not listed. The governor models context usage as a drifting process and estimates the <b>first-passage probability</b> of crossing the ceiling before the task ends, escalating <i>before</i> a threshold is hit.</p></div>
       <div class="sub"><div class="lbl">Usage</div><pre>hyctl status</pre></div>
       <a class="more" href="#governor">How the governor decides →</a>
     </section>

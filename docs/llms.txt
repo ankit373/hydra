@@ -24,7 +24,7 @@
 
 - `hyctl dispatch`: route a task to the cheapest head that clears the bar (`--enum`/`--tier`, `--swarm`, `--confidence`, `--file`, `--local`, `--dry-run`, `--a2a`)
 - `hyctl probe`: scan the machine for every available head (CLI agents, API keys, local servers)
-- `hyctl status`: session state, the rate-aware `claude_pct` budget governor and discovered heads
+- `hyctl status`: session state, the rate-aware `claude_pct` budget governor, and the heads that can actually run right now, grouped by the tier they would route at
 - `hyctl tui`: interactive cockpit whose chat executes (Auto/Plan/Edit/Ask, plus Architect/Careful/Unattended), plus five more views over the same data: Agents, Models, Activity, Usage, Audit
 - `hyctl cost`: spend report (estimated vs actual) from the dispatch cost log
 - `hyctl stats`: session cost rollup by model, tier, and day. `--latency` reports p50/p90/p99 per model from mergeable relative-error sketches held in per-day rollups, so a percentile is answered without rescanning the whole cost log and two machines' stats can be combined without shipping their traces

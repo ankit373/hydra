@@ -414,7 +414,7 @@ func cmdStatus() *cobra.Command {
 	return &cobra.Command{
 		Use:   "status",
 		Short: "Show current Cortex, Head configuration, and budget utilisation",
-		RunE: func(_ *cobra.Command, _ []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			cfg, err := config.Load()
 			if err != nil {
 				return fmt.Errorf("no config found, run: hyctl init")
@@ -437,23 +437,35 @@ func cmdStatus() *cobra.Command {
 					)
 				}
 			}
+			// Discovery, not cfg.Tiers: that is a snapshot `hyctl init` wrote
+			// once, and it advertised three heads that could not serve (#714).
+			// Measured at 10-40ms, so there is nothing to save by trusting it.
+			result := probe.Run(cmd.Context())
+			hs, now := health.Open(health.DefaultPath()), time.Now()
+			reason := func(h provider.Head) string { return health.Reason(hs, h, now) }
+
 			fmt.Println()
-			fmt.Println(dimStyle.Render("  " + strings.Repeat("─", 48)))
-			fmt.Printf("  %-14s  %s\n", "Tier", "Heads")
-			fmt.Println(dimStyle.Render("  " + strings.Repeat("─", 48)))
-			for _, t := range cfg.Tiers {
-				fmt.Printf("  %-14s  %s\n", t.Name, strings.Join(t.Heads, ", "))
+			for _, w := range result.Warnings {
+				fmt.Printf("  %s %s\n", warnStyle.Render("⚠"), dimStyle.Render(w))
 			}
+			fmt.Print(headTiers(result.Heads, reason))
+			fmt.Println()
+			fmt.Print(tierAliases(cfg.Tiers, result.Heads, reason))
 			fmt.Println()
 
 			// Budget section, read from state.json (written by dispatcher).
-			printBudgetStatus()
+			names := make(map[string]string, len(result.Heads))
+			for _, h := range result.Heads {
+				names[h.ID] = h.Name
+			}
+			printBudgetStatus(names)
 			return nil
 		},
 	}
 }
 
-func printBudgetStatus() {
+// names maps a head ID to its display name; a nil map leaves every row on its ID.
+func printBudgetStatus(names map[string]string) {
 	statePath := filepath.Join(config.Dir(), "logs", "state.json")
 	raw, err := os.ReadFile(statePath)
 	if err != nil {
@@ -494,14 +506,37 @@ func printBudgetStatus() {
 	fmt.Println(dimStyle.Render("  " + strings.Repeat("─", 48)))
 	fmt.Printf("  %-20s  %6s  %8s  %s\n", "Model", "  Used", " Window", "Mode")
 	fmt.Println(dimStyle.Render("  " + strings.Repeat("─", 48)))
-	for modelID, snap := range state.Budget {
+	// Sorted on the label, because ranging the map reordered the table on every
+	// invocation, and ordering by an ID the table does not show reads as random.
+	type row struct {
+		label string
+		id    string
+	}
+	rows := make([]row, 0, len(state.Budget))
+	for id := range state.Budget {
+		// Discovery's display name where it has one, so this table names a head
+		// the way `probe` and the tier table above do (#714).
+		label := id
+		if n := names[id]; n != "" {
+			label = n
+		}
+		rows = append(rows, row{label: label, id: id})
+	}
+	sort.Slice(rows, func(i, j int) bool {
+		if rows[i].label != rows[j].label {
+			return rows[i].label < rows[j].label
+		}
+		return rows[i].id < rows[j].id
+	})
+	for _, r := range rows {
+		snap := state.Budget[r.id]
 		pct := int(toFloat(snap["pct"]))
 		used := int(toFloat(snap["used"]))
 		window := int(toFloat(snap["window"]))
 		mode, _ := snap["mode"].(string)
 		bar := budgetBar(pct)
 		fmt.Printf("  %-20s  %s %3d%%  %-8s  %s\n",
-			truncLabel(modelID, 20),
+			truncLabel(r.label, 20),
 			bar, pct,
 			tokenLabel(used, window),
 			budgetModeStyle(mode).Render(mode),
