@@ -6,6 +6,14 @@ Format: [Semantic Versioning](https://semver.org). Entries from v1.0.1 onward ar
 
 ---
 
+## [1.4.2](https://github.com/ankit373/hydra/compare/v1.4.1...v1.4.2) (2026-09-07)
+
+
+### Bug Fixes
+
+* **release:** v1.4.2 - head health, PATH recovery, and the audit surface ([#706](https://github.com/ankit373/hydra/issues/706)) ([f827c45](https://github.com/ankit373/hydra/commit/f827c454e6a6bdfa5667eb65db173b1348009d8c))
+* **shellpath:** recover PATH on a Linux desktop launch ([#711](https://github.com/ankit373/hydra/issues/711)) ([94619ca](https://github.com/ankit373/hydra/commit/94619cad92c8646a6576e5b6dc421151ef4fe675))
+
 ## [1.4.0](https://github.com/ankit373/hydra/compare/v1.3.1...v1.4.0) (2026-09-05)
 
 
