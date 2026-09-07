@@ -35,7 +35,7 @@ You have Claude Code for complex problems, Codex for code generation, Ollama run
 
 **Hydra is the control plane that sits in front of all of it.**
 
-It discovers every AI model on your machine, assigns each a capability score, and routes tasks not just to the cheapest one but to a *target confidence of correctness*, enforcing PII policy so sensitive data never leaves your machine, and logging every dispatch with token counts and cost, without any manual configuration.
+It discovers every AI model on your machine, assigns each a capability score, and routes tasks not just to the cheapest one but to a *target confidence of correctness*, enforcing an egress gate so a file like `.env` or `~/.aws/credentials` is refused to any model that leaves your machine, and logging every dispatch with token counts and cost, without any manual configuration.
 
 **Confidence routing** samples models adaptively (SPRT) and stops the moment you're sure enough, using per-model calibration built from real outcomes (see **Confidence Routing** under [Features](#features)). Because cheap or local models handle the tasks that don't need a frontier model, this typically cuts LLM spend 70-85% along the way.
 
@@ -78,7 +78,7 @@ Hydra discovers and routes to all of these automatically, with no plugins and no
 ```mermaid
 flowchart TD
     A["<b>hyctl dispatch</b><br/>--local · --swarm · --confidence 0.95"] --> B
-    B["<b>Policy Engine</b><br/>PII detection · cost ceiling · local-only<br/><i>blocks before any network call</i>"] --> C
+    B["<b>Policy Engine + Egress Gate</b><br/>path-classified secrets · PII · cost ceiling<br/><i>reroutes local, or refuses, before any network call</i>"] --> C
     C["<b>Router</b><br/>CapScore → tier → fallback chain<br/><i>~1.1 µs/dispatch</i>"]
 
     C -->|single| E["best available head<br/>+ fallback chain"]
@@ -258,7 +258,7 @@ Enable local-only policy in `hyctl init` and a prompt matching a PII detector is
 
 Detected patterns: Social Security Numbers, credit card numbers, email addresses, API keys and tokens, IP addresses, private key material.
 
-**What this is not.** Detection is a denylist over the prompt string. It does not see file content a head will read, `--system` content, or a2a handoff fields, and it cannot recognize a secret format nobody wrote a pattern for. `hyctl security` reports LLM02 as `partial (detective only)` for exactly that reason, and withholds its coverage score entirely while the access policy still defaults to allow. The egress gate that closes these is tracked in [#721](https://github.com/ankit373/hydra/issues/721).
+**What this is not.** Detection is a denylist over the prompt string, so it can only stop what somebody wrote a pattern for. That is why the egress gate below classifies by path instead, and why `hyctl security` withholds its coverage score entirely while the access policy still defaults to allow.
 
 ```bash
 $ hyctl dispatch "process payment for card 4111-1111-1111-1111"
@@ -268,6 +268,36 @@ $ hyctl dispatch "process payment for card 4111-1111-1111-1111"
 
   Dispatching → ollama/qwen3:8b  [local, no API call made]
 ```
+
+### 🚪 Egress Gate
+
+A detector can only stop what somebody wrote a pattern for. The egress gate classifies a file by **where it is**, not what is inside it, which closes a whole category whether or not its contents look like anything:
+
+```bash
+$ hyctl edit deploy/.env "rotate the database password"
+
+  🔒 secret content (deploy/.env), routing to a local head only
+  Dispatching → ollama/qwen3:8b  [local, nothing left this machine]
+```
+
+With no local head running, the default refuses rather than falling back to one that reaches the network:
+
+```
+no dispatchable heads: content classified secret (deploy/.env) and no local head
+is routable. Start one (`ollama serve`), or set egress.strict = false in
+config.toml to allow it out
+```
+
+The rules live in `registry/sensitivity.yaml`, embedded in the binary and overridable at `$HYDRA_HOME/registry/sensitivity.yaml` without a rebuild. They cover env files, private keys, cloud and cluster credentials, tfstate, SSH and package-manager config, and `~/.hydra` itself, with an `allow` list so a committed `.env.example` is not treated as a secret. Turn the floor off with:
+
+```toml
+[egress]
+  strict = false   # default true; a config with no [egress] section is strict
+```
+
+**What it guarantees.** No file matching a rule reaches a head that leaves the machine, errors deny rather than allow, and a payload that declares no provenance is refused, so a new code path that forgets the gate breaks loudly instead of leaking quietly. Every decision is recorded in the ledger with the rule that produced it.
+
+**Where the boundary is.** CLI-agent heads are agents in their own right with their own filesystem access. Hydra guarantees what *it* sends; it cannot control what `agy` or `codex` independently decides to read once handed a task. The guarantee is total only when the work runs on a local head, which is exactly what the gate reroutes to.
 
 ### 💰 Full Cost Visibility
 

@@ -7,31 +7,33 @@ import (
 	"path/filepath"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/ledger"
 	"github.com/ankit373/hydra/internal/testutil"
 	"github.com/ankit373/hydra/internal/trust"
 )
 
-// LLM01/LLM02 are Partial, LLM07 is always Gap (no mechanism exists),
-// LLM04/LLM08 are always N/A, these don't depend on install state, unlike
-// LLM03/05/06/09/10. LLM03 is Gap only while nothing is being fingerprinted,
-// which is what an empty SupplyChain means here.
+// LLM01 is Partial, LLM07 is always Gap (no mechanism exists), LLM04/LLM08
+// are always N/A, these don't depend on install state, unlike LLM02/03/05/06
+// /09/10. LLM03 is Gap only while nothing is being fingerprinted, which is
+// what an empty SupplyChain means here.
 //
-// LLM01 and LLM02 are pinned Partial deliberately. Both were Enforced while
-// the mechanisms behind them documented themselves otherwise: internal/policy
-// /injection.go calls its scan "trivially evaded by anyone who tries... not to
-// prevent an attack", and PII detection is a denylist that never sees file
-// content, --system or a2a fields. Promoting either back to Enforced needs a
-// preventive mechanism first, not a better detector (#722).
+// LLM01 is pinned Partial deliberately. It was Enforced while the mechanism
+// behind it documented itself otherwise: internal/policy/injection.go calls
+// its scan "trivially evaded by anyone who tries... not to prevent an attack".
+// Promoting it back needs a preventive mechanism, not a better detector
+// (#722). LLM02 earned Enforced when the egress gate shipped (#723) and is
+// asserted separately, since it now reads real runtime state.
 func TestComputeCoverage_StaticCategoriesAreFixed(t *testing.T) {
 	testutil.NewSandbox(t)
 
 	cov := computeCoverage(ledger.Policy{}, SupplyChain{}, nil, 0)
 	want := map[string]CoverageStatus{
-		"LLM01": Partial, "LLM02": Partial,
+		"LLM01": Partial,
 		"LLM03": Gap, "LLM07": Gap,
 		"LLM04": NotApplicable, "LLM08": NotApplicable,
 	}
@@ -43,6 +45,33 @@ func TestComputeCoverage_StaticCategoriesAreFixed(t *testing.T) {
 		if got[id] != status {
 			t.Errorf("%s = %q, want %q", id, got[id], status)
 		}
+	}
+}
+
+// LLM02 reports what the egress gate is actually doing, never a fixed claim.
+// Enforced needs both halves: path rules loaded, and the strict floor on. With
+// strict off a secret payload still leaves when nothing local is routable, so
+// that is Configured rather than Enforced, and the detail has to say which.
+func TestLLM02_ReadsTheEgressGatesRealState(t *testing.T) {
+	testutil.NewSandbox(t)
+
+	if got := llm02SensitiveInfo(); got.Status != Enforced {
+		t.Fatalf("LLM02 = %q with the gate shipped and strict defaulting on, want %q (%s)",
+			got.Status, Enforced, got.Detail)
+	}
+
+	cfg := &config.Config{}
+	off := false
+	cfg.Egress.Strict = &off
+	if err := config.Save(cfg); err != nil {
+		t.Skipf("cannot write a config in this sandbox: %v", err)
+	}
+	got := llm02SensitiveInfo()
+	if got.Status != Configured {
+		t.Errorf("LLM02 = %q with egress.strict off, want %q", got.Status, Configured)
+	}
+	if !strings.Contains(got.Detail, "egress.strict") {
+		t.Errorf("the detail does not name what is turned off: %q", got.Detail)
 	}
 }
 

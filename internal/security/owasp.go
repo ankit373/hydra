@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ankit373/hydra/internal/config"
+	"github.com/ankit373/hydra/internal/egress"
 	"github.com/ankit373/hydra/internal/ledger"
 	"github.com/ankit373/hydra/internal/trust"
 	"github.com/ankit373/hydra/internal/workspace"
@@ -74,9 +75,7 @@ func computeCoverage(pol ledger.Policy, sc SupplyChain, runs []trust.RunLog, cos
 			Detail: "untrusted content is fenced as data (a2a/parallel) with a content-derived nonce, but the " +
 				"injection-marker scan is an 11-phrase keyword heuristic that leaves an audit trail rather than " +
 				"preventing an attack, and head output is not scanned at all"},
-		{ID: "LLM02", Name: "Sensitive Information Disclosure", Status: Partial,
-			Detail: "PII detection forces local-only routing, but it is a denylist over the prompt string only: " +
-				"file content, --system and a2a fields are never scanned"},
+		llm02SensitiveInfo(),
 		llm03SupplyChain(sc),
 		{ID: "LLM04", Name: "Data and Model Poisoning", Status: NotApplicable,
 			Detail: "Hydra routes prompts to models, it does not train or fine-tune any"},
@@ -108,6 +107,35 @@ func computeCoverage(pol ledger.Policy, sc SupplyChain, runs []trust.RunLog, cos
 		pct = 100 * float64(covered) / float64(applicable)
 	}
 	return Coverage{Categories: cats, Applicable: applicable, Covered: covered, Partial: partial, PercentCovered: pct}
+}
+
+// llm02SensitiveInfo reads the egress gate's real state rather than asserting
+// one. Content detection alone is a denylist that can only stop what someone
+// wrote a pattern for, which is why this reports Enforced only once the path
+// rules are loaded and the strict floor is on: together those are what make
+// "a local config cannot reach a head that leaves the machine" a property of
+// the code rather than a hope about the detectors.
+func llm02SensitiveInfo() Category {
+	c := Category{ID: "LLM02", Name: "Sensitive Information Disclosure"}
+
+	rules, err := egress.LoadRules(config.ScriptHome())
+	if err != nil {
+		c.Status = Partial
+		c.Detail = "the egress gate has no sensitivity rules loaded (" + err.Error() +
+			"), so only prompt-string PII detection stands between a local config and a head that leaves the machine"
+		return c
+	}
+	cfg, _ := config.Load() // a config that will not load is the default one, which is strict
+	if !cfg.StrictEgress() {
+		c.Status = Configured
+		c.Detail = fmt.Sprintf("%d path rules classify files by location, but egress.strict is off, so a secret "+
+			"payload with no routable local head still leaves the machine", len(rules.Secret))
+		return c
+	}
+	c.Status = Enforced
+	c.Detail = fmt.Sprintf("%d path rules classify files by location regardless of content, and a secret payload "+
+		"with no routable local head is refused rather than sent", len(rules.Secret))
+	return c
 }
 
 // Detection, not provenance, and the baseline is a plain file, so this is
