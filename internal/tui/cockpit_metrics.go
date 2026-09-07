@@ -111,11 +111,14 @@ func (m *ckMetrics) fold(rows []cost.Row, pr ckPricer, now time.Time) {
 	nonLocal := map[string]bool{}
 
 	for _, r := range rows {
-		if r.Model != "" {
-			st := m.stats[r.Model]
+		// Keyed the way cost.ByModel keys its groups, so the per-model stats and
+		// the "local · free" marker still find their row after one head's three
+		// logged spellings collapse into one group (#729).
+		if key := cost.CanonicalKey(r); r.Model != "" {
+			st := m.stats[key]
 			if st == nil {
 				st = &ckModelStat{}
-				m.stats[r.Model] = st
+				m.stats[key] = st
 			}
 			if r.WallMS > 0 {
 				st.wall = append(st.wall, r.WallMS)
@@ -129,9 +132,9 @@ func (m *ckMetrics) fold(rows []cost.Row, pr ckPricer, now time.Time) {
 				st.costToday += r.EstCostUSD
 			}
 			if ckLocalExecutor(r.Executor) {
-				m.localModels[r.Model] = true
+				m.localModels[key] = true
 			} else {
-				nonLocal[r.Model] = true
+				nonLocal[key] = true
 			}
 		}
 		if r.RunID != "" {
@@ -214,16 +217,25 @@ func (m ckMetrics) ckBlastFor(file string) (radius float64, dependents int, kapp
 	return radius, dependents, kappa, true
 }
 
-// ckStatFor finds a model's cost aggregates. cost.jsonl records the model as
-// the executor reported it ("Qwen2.5-Coder:7b (Ollama)") while the scan names
-// it differently, so an exact match silently misses, matching is therefore
-// tolerant: exact, then either string containing the other, case-insensitively.
+// ckStatFor finds a model's cost aggregates.
+//
+// The fold keys on cost.CanonicalKey, so either the display name or the head id
+// resolves to the same row. The tolerant containment pass stays for names from
+// a superseded era that nothing declares any more, which resolve to nothing
+// (#729).
 func (m ckMetrics) ckStatFor(name, id string) ckModelStat {
-	if v, ok := m.stats[name]; ok {
-		return *v
-	}
-	if v, ok := m.stats[id]; ok {
-		return *v
+	for _, key := range []string{id, name} {
+		if key == "" {
+			continue
+		}
+		if v, ok := m.stats[key]; ok {
+			return *v
+		}
+		if c := cost.ResolveHeadName(key); c != "" {
+			if v, ok := m.stats[c]; ok {
+				return *v
+			}
+		}
 	}
 	for _, key := range []string{name, id} {
 		if key == "" {

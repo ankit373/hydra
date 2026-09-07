@@ -329,12 +329,17 @@ func JSON(since string) ([]Row, error) {
 	return out, nil
 }
 
-// FilterDays returns rows from the last n calendar days (UTC). n=0 returns all.
+// FilterDays returns rows from the last n calendar days (UTC), today included.
+// n=0 returns all.
+//
+// n-1 because the window counts today: subtracting n returned n+1 days, so
+// `--days 1` meant today and yesterday, and `hyctl stats` reported 34 calls for
+// "today" where `hyctl cost` reported 6 for the same log (#729).
 func FilterDays(rows []Row, n int) []Row {
 	if n <= 0 {
 		return rows
 	}
-	cutoff := time.Now().UTC().AddDate(0, 0, -n).Format("2006-01-02")
+	cutoff := time.Now().UTC().AddDate(0, 0, -(n - 1)).Format("2006-01-02")
 	var out []Row
 	for _, r := range rows {
 		if len(r.TS) >= 10 && r.TS[:10] >= cutoff {
@@ -346,22 +351,26 @@ func FilterDays(rows []Row, n int) []Row {
 
 // ByModel returns per-head totals sorted by cost descending.
 //
-// Keyed on Head, not Model: Model is whatever the provider called itself, and
-// the two writers disagreed about it, so one head landed in two or three rows
-// ("Claude Code" beside "claude", "Qwen2.5-Coder:7b (Ollama)" beside
-// "Qwen2.5-Coder:7b") and every per-head total was understated. Rows written
-// before Head existed still group by Model.
+// Keyed on the canonical head (see CanonicalKey): Model is whatever that era's
+// writer called the head, and it changed three times, so one head landed in two
+// or three rows ("Claude Code" beside "claude") and no per-head total was its
+// spend. Names nothing on this machine declares are left as their own group
+// rather than guessed into one.
 func ByModel(rows []Row) []GroupRow {
-	return groupBy(rows, func(r Row) string {
-		switch {
-		case r.Head != "":
-			return r.Head
-		case r.Model != "":
-			return r.Model
-		default:
-			return "unknown"
+	return groupBy(rows, CanonicalKey)
+}
+
+// Unattributed counts groups whose key names no head this machine declares,
+// which is what a row from a superseded naming era looks like. Rendered as a
+// footnote so a stale name reads as stale rather than as a separate head.
+func Unattributed(groups []GroupRow) (n int, calls int) {
+	for _, g := range groups {
+		if !Attributable(g.Key) {
+			n++
+			calls += g.Calls
 		}
-	})
+	}
+	return n, calls
 }
 
 // ByDay returns per-day totals sorted by date ascending.
@@ -489,6 +498,13 @@ func RenderStatsTable(period string, rows []GroupRow) {
 		commaInt(totOut),
 		fmt.Sprintf("$%.3f", totCost),
 	)
+	// A row from a superseded naming era names a head nothing here declares.
+	// Said plainly, because silently merging it would misattribute spend and
+	// silently dropping it would understate the total.
+	if n, calls := Unattributed(rows); n > 0 {
+		fmt.Printf("\n  %d of these name a head this machine no longer declares (%d calls);\n"+
+			"  they are shown under the name they were logged with.\n", n, calls)
+	}
 	fmt.Println()
 }
 
