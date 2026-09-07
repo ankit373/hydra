@@ -32,6 +32,11 @@ type Response struct {
 	Model        string
 	Truncated    bool // true when output exceeded the accumulator cap
 
+	// TTFT is time to first token. Only providers that report it set it, which
+	// today is Ollama alone (prompt-eval duration); zero means unknown, never
+	// instant, so a consumer must not average it in as a measured zero.
+	TTFT time.Duration
+
 	// TokensEstimated is true when InputTokens/OutputTokens were derived by
 	// Hydra (e.g. agy's char/4 heuristic) rather than reported by the provider.
 	// HTTP and Ollama executors parse real usage and leave this false; the agy

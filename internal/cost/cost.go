@@ -43,9 +43,15 @@ type Row struct {
 	CostSource     string  `json:"cost_source"`   // always "estimated", cost is derived, never billed
 	TaskID         string  `json:"task_id"`
 	RunID          string  `json:"run_id"`
-	SwarmMode      string  `json:"swarm_mode"`
-	SwarmWinner    bool    `json:"swarm_winner"`
-	Config         string  `json:"config,omitempty"` // deployment-identity breadcrumb (config.Breadcrumb)
+
+	// SpanID is the run-log span this spend belongs to. Without it a cost row
+	// joins the trace only by task id, which cannot say which of several
+	// attempts on one task actually spent the money.
+	SpanID string `json:"span_id,omitempty"`
+
+	SwarmMode   string `json:"swarm_mode"`
+	SwarmWinner bool   `json:"swarm_winner"`
+	Config      string `json:"config,omitempty"` // deployment-identity breadcrumb (config.Breadcrumb)
 
 	// ActProb is the probability the router chose this head; KeepProb the
 	// probability this row was retained by sampling. Never omitempty: an

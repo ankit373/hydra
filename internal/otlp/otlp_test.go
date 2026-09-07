@@ -248,3 +248,41 @@ func keysOf(p Payload) map[string]bool {
 	}
 	return out
 }
+
+// A row that carries a recorded span id must export under it, or the OTel trace
+// and Hydra's own run log name the same work with two different identities.
+func TestSpanFor_UsesTheRecordedSpanID(t *testing.T) {
+	const recorded = "a1b2c3d4e5f60718"
+	span, err := spanFor(cost.Row{
+		TS: "2026-09-07T19:08:23Z", RunID: "r1", TaskID: "t1",
+		SpanID: recorded, Model: "m", WallMS: 100,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if span.SpanID != recorded {
+		t.Fatalf("spanId = %q, want the recorded %q", span.SpanID, recorded)
+	}
+}
+
+// A malformed or all-zero id must fall back rather than export a span the
+// collector silently drops.
+func TestSpanFor_FallsBackOnAnUnusableSpanID(t *testing.T) {
+	for _, bad := range []string{"", "short", "zzzzzzzzzzzzzzzz", "0000000000000000"} {
+		t.Run(bad, func(t *testing.T) {
+			span, err := spanFor(cost.Row{
+				TS: "2026-09-07T19:08:23Z", RunID: "r1", TaskID: "t1",
+				SpanID: bad, Model: "m", WallMS: 100,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if span.SpanID == bad {
+				t.Fatalf("exported the unusable id %q instead of falling back", bad)
+			}
+			if len(span.SpanID) != 16 {
+				t.Fatalf("fallback span id %q is not 8 bytes of hex", span.SpanID)
+			}
+		})
+	}
+}

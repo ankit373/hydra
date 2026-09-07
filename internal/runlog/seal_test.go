@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 )
@@ -55,7 +56,9 @@ func TestSealIsReaderTransparent(t *testing.T) {
 		t.Fatalf("after sealing: %d events, want %d", len(after), len(before))
 	}
 	for i := range before {
-		if before[i] != after[i] {
+		// DeepEqual, not !=: Event carries an open Meta map and is no longer
+		// a comparable type.
+		if !reflect.DeepEqual(before[i], after[i]) {
 			t.Fatalf("event %d changed across sealing:\n before %+v\n after  %+v", i, before[i], after[i])
 		}
 	}

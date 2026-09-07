@@ -26,6 +26,13 @@
 // processes appending to one run (an external orchestrator sharing a run ID)
 // will legitimately produce interleaved sequences.
 //
+// # Spans
+//
+// v2 events carry an explicit SpanID and ParentSpanID. Nesting used to be
+// re-derived from whichever of Agent/Head/TaskID was set, which cannot tell
+// two attempts on one head apart and left an exporter no identity to carry.
+// Ids are 8 bytes of hex, an OTLP span id exactly. v1 events still read.
+//
 // # Concurrency
 //
 // Append does one os.OpenFile(O_APPEND) + one Fprintln, the same pattern every
@@ -39,6 +46,10 @@ package runlog
 import (
 	"bufio"
 	"bytes"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -56,7 +67,7 @@ import (
 // and the desktop app, two independent readers of this format, can branch on
 // a version rather than guess, and so a format change is a one-line reader
 // change instead of a coordinated migration.
-const SchemaVersion = 1
+const SchemaVersion = 2
 
 // Kind is what happened. The set is deliberately small: these are the events a
 // timeline and a supervision tree are built from, not a general trace facility.
@@ -98,6 +109,23 @@ const (
 	KindError Kind = "error"
 )
 
+// Level is an event's severity, so a reader can drop noise without knowing
+// every Kind. Empty means Info; Severity resolves it, which keeps the common
+// case off the wire entirely.
+type Level string
+
+const (
+	LevelDebug Level = "debug"
+	LevelInfo  Level = "info"
+	LevelWarn  Level = "warn"
+	LevelError Level = "error"
+)
+
+// MaxEventBytes bounds one serialized event. The append is atomic per write()
+// call, so "keep entries small" is now enforced rather than documented: past
+// the cap Meta is shed, never the event, and the line says so.
+const MaxEventBytes = 16 << 10
+
 // Event is one record. Fields are omitempty so a line stays small, the atomic
 // append guarantee is per write() call, not per arbitrary size.
 type Event struct {
@@ -108,6 +136,16 @@ type Event struct {
 	RunID  string `json:"run_id"`
 	TaskID string `json:"task_id,omitempty"`
 	Kind   Kind   `json:"kind"`
+
+	// SpanID identifies this unit of work; ParentSpanID is its enclosing one,
+	// elided when it is the task's own derived span and restored by ParentSpan.
+	// Restating a hash of a field already on the line cost 10 B/event sealed.
+	SpanID       string `json:"sid,omitempty"`
+	ParentSpanID string `json:"psid,omitempty"`
+
+	// Level is severity. Empty reads as Info via Severity, so the common case
+	// costs nothing on the wire.
+	Level Level `json:"lvl,omitempty"`
 
 	// Agent is this node's id in the supervision tree; Parent is its ownership
 	// edge. Together they reconstruct the tree, separate from any A2A
@@ -124,6 +162,24 @@ type Event struct {
 	DurationMS int64   `json:"duration_ms,omitempty"`
 	Confidence float64 `json:"confidence,omitempty"`
 
+	// Tokens on the span itself. cost.jsonl has them too, but a task-id join
+	// cannot say which of several attempts spent them.
+	InputTokens  int `json:"in_tok,omitempty"`
+	OutputTokens int `json:"out_tok,omitempty"`
+
+	// TTFTMs is time to first token. Only some executors can report it
+	// (Ollama's prompt-eval duration); zero means unknown, not instant.
+	TTFTMs int64 `json:"ttft_ms,omitempty"`
+
+	// InputRef and OutputRef are content hashes into internal/payload. The
+	// text itself is never inlined: the append is atomic per write() call.
+	InputRef  string `json:"in,omitempty"`
+	OutputRef string `json:"out,omitempty"`
+
+	// Meta is open-ended, for model parameters and anything else with no field
+	// of its own. Bounded by MaxEventBytes, not by schema.
+	Meta map[string]any `json:"meta,omitempty"`
+
 	// Ref points at bulk content held elsewhere (a path, a hash). Detail is a
 	// short human string. Neither may carry a diff or a full model response.
 	Ref    string `json:"ref,omitempty"`
@@ -133,6 +189,54 @@ type Event struct {
 	// an edit has no identity of its own, only a task it happened within
 	// (#434); conflating the two used to mint a phantom tree node per file.
 	File string `json:"file,omitempty"`
+}
+
+// NewSpanID mints a span id: 8 random bytes as hex, so exporting a trace
+// carries this identity instead of inventing one.
+func NewSpanID() string {
+	var b [8]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		// Only reached if the OS entropy source fails. A time-derived id is
+		// still unique enough to link a start to its finish, which is all a
+		// span id has to do here.
+		binary.BigEndian.PutUint64(b[:], uint64(time.Now().UnixNano()))
+	}
+	return hex.EncodeToString(b[:])
+}
+
+// SpanIDFor derives a stable span id from a seed. A task's span has to be
+// nameable by any process appending to the run, and by one that starts mid-run,
+// so it is derived rather than minted and remembered.
+func SpanIDFor(seed string) string {
+	sum := sha256.Sum256([]byte(seed))
+	return hex.EncodeToString(sum[:8])
+}
+
+// ParentSpan resolves an event's parent, falling back to the task's derived
+// span, which is what Append elides. A span with neither is a root.
+func (e Event) ParentSpan() string {
+	if e.ParentSpanID != "" {
+		return e.ParentSpanID
+	}
+	if e.TaskID == "" || e.SpanID == "" {
+		return ""
+	}
+	if derived := SpanIDFor(e.TaskID); derived != e.SpanID {
+		return derived
+	}
+	return ""
+}
+
+// Severity resolves an event's level, deriving one from Kind when unset so v1
+// events and unlabelled writers still sort into the right bucket.
+func (e Event) Severity() Level {
+	if e.Level != "" {
+		return e.Level
+	}
+	if e.Kind == KindError {
+		return LevelError
+	}
+	return LevelInfo
 }
 
 // Dir is where per-run files live.
@@ -180,9 +284,24 @@ func (l *Logger) Append(e Event) error {
 	}
 	defer f.Close()
 
+	// Elided rather than never set, so writers stay explicit about parentage
+	// and only the wire format is lean. ParentSpan puts it back.
+	if e.ParentSpanID != "" && e.TaskID != "" && e.ParentSpanID == SpanIDFor(e.TaskID) {
+		e.ParentSpanID = ""
+	}
+
 	raw, err := json.Marshal(e)
 	if err != nil {
 		return err
+	}
+	if len(raw) > MaxEventBytes {
+		// Meta is the only unbounded field, so shedding it is what brings a
+		// line back under the cap. Dropping the event instead would lose the
+		// fact that the work happened, which is the one thing this log is for.
+		e.Meta = map[string]any{"meta_dropped": "event exceeded MaxEventBytes"}
+		if raw, err = json.Marshal(e); err != nil {
+			return err
+		}
 	}
 	// One Fprintln = one write() = atomic under O_APPEND. Do not split this.
 	_, err = fmt.Fprintln(f, string(raw))
