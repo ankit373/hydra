@@ -25,9 +25,12 @@ func TestFold_PerModelStatsAndRunJoin(t *testing.T) {
 		{TS: "2020-01-01T00:00:00Z", Model: "qwen (Ollama)", Executor: "local", Tier: 10, WallMS: 100},
 	}, stubPricer{}, now)
 
-	st := m.stats["qwen (Ollama)"]
+	// Keyed canonically, not by the logged name: "qwen (Ollama)" is the port
+	// provider's display form of head ollama/qwen, and the fold now keys the way
+	// cost.ByModel groups so a head's spellings share one row (#729).
+	st := m.stats["ollama/qwen"]
 	if st == nil {
-		t.Fatal("no per-model stat folded")
+		t.Fatalf("no per-model stat folded under the canonical key; got %v", keysOf(m.stats))
 	}
 	if len(st.wall) != 3 {
 		t.Errorf("wall samples = %d, want all 3 (p50 uses history)", len(st.wall))
@@ -38,8 +41,18 @@ func TestFold_PerModelStatsAndRunJoin(t *testing.T) {
 	if st.lastRunID != "r1" {
 		t.Errorf("lastRunID = %q", st.lastRunID)
 	}
-	if !m.localModels["qwen (Ollama)"] {
+	if !m.localModels["ollama/qwen"] {
 		t.Error("a purely-local model is not marked local")
+	}
+	// The contract the view depends on: the row is reachable by the name the log
+	// recorded and by the head's own id, whichever the caller happens to hold.
+	for _, k := range []struct{ name, id string }{
+		{"qwen (Ollama)", ""},
+		{"", "ollama/qwen"},
+	} {
+		if got := m.ckStatFor(k.name, k.id); got.reqsToday != 2 {
+			t.Errorf("ckStatFor(%q,%q) found reqsToday=%d, want 2", k.name, k.id, got.reqsToday)
+		}
 	}
 
 	rc, ok := m.runCost["r1"]
@@ -52,6 +65,14 @@ func TestFold_PerModelStatsAndRunJoin(t *testing.T) {
 	if rc.prompt != 200 || rc.resp != 100 || rc.actual != 300 || rc.est != 0 {
 		t.Errorf("run tokens = %+v", rc)
 	}
+}
+
+func keysOf(m map[string]*ckModelStat) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
 }
 
 // A model that ever routed to a remote provider must not claim "local · free".
