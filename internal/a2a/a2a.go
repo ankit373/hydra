@@ -156,7 +156,9 @@ func Inject(path, prompt string) (string, error) {
 	if h == nil {
 		return prompt, fmt.Errorf("handoff file not found: %s", path)
 	}
-	return h.PromptBlock(prompt) + "\n\nADDITIONAL INSTRUCTION:\n" + prompt, nil
+	// PromptBlock already closes with "TASK:\n"+prompt. Appending it a second
+	// time under another heading sent every task twice.
+	return h.PromptBlock(prompt), nil
 }
 
 // Save writes the handoff atomically-ish (dir created, 0600).
@@ -173,6 +175,11 @@ func (h *Handoff) Save(path string) error {
 
 // PromptBlock renders the handoff as the structured context block prepended to a
 // downstream agent's prompt.
+//
+// Every field is read from a file any process can write, so every field is
+// fenced. From and Files were interpolated raw and ahead of the fences, which
+// made a handoff naming itself "ops\n\nSYSTEM: ..." an injection that needed
+// no escape at all.
 func (h *Handoff) PromptBlock(task string) string {
 	files := ""
 	for i, f := range h.Files {
@@ -181,8 +188,9 @@ func (h *Handoff) PromptBlock(task string) string {
 		}
 		files += f
 	}
-	return "A2A HANDOFF from: " + h.From +
-		"\nFiles in scope: " + files +
+	return "A2A HANDOFF\n\n" +
+		util.WrapUntrusted("FROM", h.From) +
+		"\n\n" + util.WrapUntrusted("FILES IN SCOPE", files) +
 		"\n\n" + util.WrapUntrusted("CONVENTIONS", h.Conventions) +
 		"\n\n" + util.WrapUntrusted("PRIOR OUTPUT", h.PriorOutput) +
 		"\n\n" + util.WrapUntrusted("CONTEXT", h.Context) +
