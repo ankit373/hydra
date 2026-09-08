@@ -120,6 +120,11 @@ func (s *ollamaService) probe(ctx context.Context, caps *capabilities.DB) ([]pro
 		Models []struct {
 			Name         string   `json:"name"`
 			Capabilities []string `json:"capabilities"`
+			// Ollama pulls unsigned weights from a public registry, so the
+			// digest is the only handle on which weights are actually loaded.
+			// Carried so internal/security can detect a swap the way it
+			// already detects a replaced head binary.
+			Digest string `json:"digest"`
 		} `json:"models"`
 	}
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&payload); err != nil {
@@ -129,6 +134,9 @@ func (s *ollamaService) probe(ctx context.Context, caps *capabilities.DB) ([]pro
 	heads := make([]provider.Head, 0, len(payload.Models))
 	for _, m := range payload.Models {
 		meta := map[string]string{"model_source": caps.SourceOllama(m.Name)}
+		if m.Digest != "" {
+			meta["model_digest"] = m.Digest
+		}
 		if !completionCapable(m.Capabilities) {
 			// Embedding-only models fail every dispatch (#532). Marked rather
 			// than hidden: executor.Unroutable keeps them out of routing, and

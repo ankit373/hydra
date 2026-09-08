@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/ankit373/hydra/internal/config"
+	"github.com/ankit373/hydra/internal/sandbox"
 	"github.com/ankit373/hydra/internal/util"
 )
 
@@ -88,8 +89,9 @@ func (e *AgyExecutor) Execute(ctx context.Context, req Request) (*Response, erro
 	if bin == "" {
 		return nil, fmt.Errorf("agy executor: head %q carries no resolved agy path", req.Head.ID)
 	}
-	cmd := exec.CommandContext(ctx, bin, "--print", req.Prompt,
-		"--model", modelFlag, "--print-timeout", fmt.Sprintf("%ds", int(timeout.Seconds())))
+	cmd := sandbox.Harden(exec.CommandContext(ctx, bin, "--print", req.Prompt,
+		"--model", modelFlag, "--print-timeout", fmt.Sprintf("%ds", int(timeout.Seconds()))))
+	cmd.Env = headEnv(req.Head)
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 

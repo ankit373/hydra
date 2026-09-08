@@ -144,12 +144,12 @@ func llm03SupplyChain(sc SupplyChain) Category {
 	c := Category{ID: "LLM03", Name: "Supply Chain"}
 	if len(sc.Binaries) == 0 {
 		c.Status = Gap
-		c.Detail = "no CLI head binary is being fingerprinted, so a replaced agent binary would go unnoticed"
+		c.Detail = "nothing is being fingerprinted, so a replaced agent binary or swapped model would go unnoticed"
 		return c
 	}
 	c.Status = Configured
-	c.Detail = fmt.Sprintf("%d head binary(ies) fingerprinted; a replacement is detected, though origin is not "+
-		"verified and the stored baseline is not itself tamper-evident", len(sc.Binaries))
+	c.Detail = fmt.Sprintf("%d artifact(s) fingerprinted, head binaries and local model weights; a replacement is "+
+		"detected, though origin is not verified and the stored baseline is not itself tamper-evident", len(sc.Binaries))
 	return c
 }
 

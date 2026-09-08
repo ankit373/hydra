@@ -712,7 +712,10 @@ func defaultModelFor(providerID string) string {
 	return spec.fallback
 }
 
-func apiKeyFor(providerID string) string {
+// apiKeyEnvs names where each provider's credential can live. It is also what
+// decides which credential a head subprocess is allowed to see: its own
+// provider's, and no other's.
+var apiKeyEnvs = func() map[string][]string {
 	envs := map[string][]string{
 		"anthropic":  {"ANTHROPIC_API_KEY"},
 		"openai":     {"OPENAI_API_KEY"},
@@ -731,7 +734,11 @@ func apiKeyFor(providerID string) string {
 		"cohere":    {"COHERE_API_KEY"},
 		"replicate": {"REPLICATE_API_TOKEN"},
 	}
-	return firstEnv(envs[providerID]...)
+	return envs
+}()
+
+func apiKeyFor(providerID string) string {
+	return firstEnv(apiKeyEnvs[providerID]...)
 }
 
 func azureEndpoint() string   { return firstEnv("AZURE_OPENAI_ENDPOINT") }
