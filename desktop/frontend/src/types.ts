@@ -591,13 +591,16 @@ export interface Posture {
   checked: string[]
 }
 
+/** How far a correlated attack sequence got. */
+export type Stage = 'injection' | 'recon' | 'escalation' | 'audit-tampering' | 'succeeded'
+
 export interface Incident {
   id: string
   actor: string
   agent?: string
   start: string
   end: string
-  stages: string[]
+  stages: Stage[]
   /** OWASP Risk Rating factors, kept separate so severity can be argued with. */
   likelihood: number
   impact: number
@@ -613,13 +616,24 @@ export interface FrameworkRef {
   curated: boolean
 }
 
+/** What kind of thing the risk is about, which is what groups the register. */
+export type RiskClass =
+  | 'exposure'
+  | 'incident'
+  | 'control'
+  | 'policy'
+  | 'supply-chain'
+  | 'coverage'
+  | 'evidence'
+export type RiskStatus = 'open' | 'accepted' | 'mitigated'
+
 export interface Risk {
   id: string
-  class: string
+  class: RiskClass
   title: string
   detail: string
   severity: Severity
-  status: string
+  status: RiskStatus
   firstSeen?: string
   ageDays: number
   dueInDays: number
@@ -729,19 +743,43 @@ export interface Threats {
   byAction?: SecurityCount[]
 }
 
+export type LedgerAction = 'read' | 'write' | 'exec' | 'network'
+export type Decision = 'allow' | 'deny' | 'ask'
+
+/** What a dispatch's payload was assembled from and where it went. */
+export interface EventProvenance {
+  /** Provenance kinds carried: user, file, head, mcp, web, env. */
+  sources?: string[]
+  /** The files and heads the payload was assembled from. */
+  origins?: string[]
+  /** public | internal | secret. */
+  sensitivity?: string
+  /** Where it went. 'local' never left the machine, 'remote' did. */
+  sink?: string
+}
+
 /** One raw ledger row, the evidence behind a finding. */
 export interface LedgerEvent {
   ts: string
   agent: string
   tool: string
   resource: string
-  action: string
-  decision: string
+  action: LedgerAction
+  decision: Decision
   reason?: string
+  /** Binds the decision to the exact parameters it was made for. */
+  parameters_hash?: string
   classification?: string
   pii_types?: string[]
   flagged?: boolean
   flag_reason?: string
+  /** The local hash chain. Both empty means unchained, not tampered. */
+  prev_hash?: string
+  hash?: string
+  /** The deployment-identity breadcrumb in effect when this was recorded. */
+  config?: string
+  /** Set on dispatch events only. */
+  provenance?: EventProvenance
 }
 
 /** One model that was tried and did not answer. */

@@ -153,22 +153,17 @@ export function StatusDonut({ segments }: { segments: DonutSegment[] }) {
   )
 }
 
-function statusFill(status: CoverageStatus): number {
-  switch (status) {
-    case 'enforced':
-      return 1
-    case 'configured':
-      return 2 / 3
-    // Detective, not preventive: real, and short of configured. Without this
-    // it fell to the default and drew identically to n/a, which reads as
-    // "does not apply" rather than "applies and is only half met".
-    case 'partial':
-      return 1 / 2
-    case 'gap':
-      return 1 / 3
-    default:
-      return 0
-  }
+// How full each status draws its bar. A Record rather than a switch, so a
+// status added to the union fails to compile until it is given a fill: the
+// switch this replaces had a `default`, and 'partial' fell into it and drew
+// identically to n/a, reading as "does not apply" rather than "applies and is
+// only half met" (#753).
+const STATUS_FILL: Record<CoverageStatus, number> = {
+  enforced: 1,
+  configured: 2 / 3,
+  partial: 1 / 2, // detective, not preventive: real, and short of configured
+  gap: 1 / 3,
+  'n/a': 0,
 }
 
 /**
@@ -188,7 +183,7 @@ export function CategoryGrid({ categories }: { categories: Category[] }) {
         <div key={c.id} className={`sec-tile sec-tile--${c.status}`} title={c.name}>
           <div className="sec-tile__id">{c.id}</div>
           <div className="sec-tile__bar">
-            <div className="sec-tile__fill" style={{ width: `${statusFill(c.status) * 100}%` }} />
+            <div className="sec-tile__fill" style={{ width: `${STATUS_FILL[c.status] * 100}%` }} />
           </div>
           <div className="sec-tile__status">{c.status}</div>
         </div>

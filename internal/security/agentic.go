@@ -49,23 +49,7 @@ func computeAgentic(pol ledger.Policy, sc SupplyChain, integrityIntact bool) Age
 		asi10RogueAgents(sc, integrityIntact),
 	}
 
-	var applicable, covered, partial int
-	for _, c := range cats {
-		if c.Status == NotApplicable {
-			continue
-		}
-		applicable++
-		switch c.Status {
-		case Enforced, Configured:
-			covered++
-		case Partial:
-			partial++
-		}
-	}
-	pct := 0.0
-	if applicable > 0 {
-		pct = 100 * float64(covered) / float64(applicable)
-	}
+	applicable, covered, partial, pct := tally(cats)
 	return AgenticCoverage{
 		Categories: cats, Applicable: applicable,
 		Covered: covered, Partial: partial, PercentCovered: pct,
