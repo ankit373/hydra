@@ -251,3 +251,86 @@ func TestBuild_HandlesNoEvents(t *testing.T) {
 		t.Error("an empty run has non-zero totals")
 	}
 }
+
+// A verdict arrives after the span closes, sometimes minutes later. Folding it
+// into the span would stretch its bar to when the test suite finished and
+// rename its kind, so the span's own shape must be untouched.
+func TestBuild_ScoresDoNotAlterTheSpanTheyJudge(t *testing.T) {
+	span := "aaaaaaaaaaaaaaaa"
+	tr := Build([]runlog.Event{
+		{RunID: "r1", TaskID: "t1", Kind: runlog.KindHeadSelected, TS: at(1), SpanID: span, Head: "h1"},
+		{RunID: "r1", TaskID: "t1", Kind: runlog.KindDispatchFinished, TS: at(5), SpanID: span,
+			Head: "h1", Status: "ok", DurationMS: 4000},
+		// Judged five minutes later.
+		{RunID: "r1", TaskID: "t1", Kind: runlog.KindScore, TS: at(305), SpanID: span,
+			Head: "h1", Score: &runlog.Score{Name: "tests", Value: 1, Source: "verifier:go"}},
+	})
+	spans := tr.Flatten()
+	if len(spans) != 1 {
+		t.Fatalf("got %d spans, want 1: a score is not a span", len(spans))
+	}
+	s := spans[0]
+	if got := s.Elapsed(); got != 4*time.Second {
+		t.Fatalf("elapsed = %v, want 4s: the score stretched the span", got)
+	}
+	if s.Kind != runlog.KindDispatchFinished {
+		t.Errorf("span kind = %q, want the dispatch's: the score renamed it", s.Kind)
+	}
+	if s.Status != "ok" {
+		t.Errorf("span status = %q, want ok", s.Status)
+	}
+	if len(s.Scores) != 1 || s.Scores[0].Name != "tests" {
+		t.Fatalf("the score did not attach: %+v", s.Scores)
+	}
+}
+
+// A score alone must not mint a span. An empty row with no head and no timing
+// tells a reader nothing and looks like work that happened.
+func TestBuild_AScoreAloneDoesNotCreateASpan(t *testing.T) {
+	tr := Build([]runlog.Event{
+		{RunID: "r1", TaskID: "t1", Kind: runlog.KindScore, TS: at(1), SpanID: "9999999999999999",
+			Score: &runlog.Score{Name: "tests", Value: 1}},
+	})
+	if len(tr.Flatten()) != 0 {
+		t.Fatalf("a lone score produced %d spans", len(tr.Flatten()))
+	}
+	if tr.OrphanScores != 1 {
+		t.Fatalf("OrphanScores = %d, want 1: the verdict was dropped silently", tr.OrphanScores)
+	}
+}
+
+// Any failing check fails the span. Aggregating the other way would let one
+// passing check hide a failing one, which is the whole point of scoring.
+func TestVerdict_AnyFailureFailsTheSpan(t *testing.T) {
+	cases := map[string]struct {
+		scores     []runlog.Score
+		wantPassed bool
+		wantKnown  bool
+	}{
+		"nothing judged it": {nil, false, false},
+		"all pass":          {[]runlog.Score{{Name: "a", Value: 1}, {Name: "b", Value: 0.5}}, true, true},
+		"one fails":         {[]runlog.Score{{Name: "a", Value: 1}, {Name: "b", Value: 0}}, false, true},
+		"all fail":          {[]runlog.Score{{Name: "a", Value: 0}}, false, true},
+		"negative fails":    {[]runlog.Score{{Name: "a", Value: -1}}, false, true},
+	}
+	for name, c := range cases {
+		s := &Span{Scores: c.scores}
+		passed, known := s.Verdict()
+		if passed != c.wantPassed || known != c.wantKnown {
+			t.Errorf("%s: Verdict() = (%v, %v), want (%v, %v)",
+				name, passed, known, c.wantPassed, c.wantKnown)
+		}
+	}
+}
+
+// "Nothing judged this" and "this was judged good" must never be the same
+// answer, or an unverified span reads as verified.
+func TestVerdict_UnknownIsNotAPass(t *testing.T) {
+	passed, known := (&Span{}).Verdict()
+	if known {
+		t.Fatal("an unjudged span reports a known verdict")
+	}
+	if passed {
+		t.Fatal("an unjudged span reports a pass")
+	}
+}

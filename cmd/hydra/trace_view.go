@@ -119,6 +119,10 @@ func renderWaterfall(tr *waterfall.Trace, showText bool) {
 		fmt.Printf("\n  %s\n", warnStyle.Render(fmt.Sprintf(
 			"%d event(s) named no span and are not shown", tr.Unspanned)))
 	}
+	if tr.OrphanScores > 0 {
+		fmt.Printf("\n  %s\n", warnStyle.Render(fmt.Sprintf(
+			"%d score(s) judge a span this run does not contain", tr.OrphanScores)))
+	}
 	fmt.Printf("\n  %s\n\n", dimStyle.Render("hyctl trace view "+tr.RunID+" --span <id>  for one span's prompt and response"))
 }
 
@@ -140,10 +144,11 @@ func renderSpanRow(s *waterfall.Span, tr *waterfall.Trace) {
 		label = label[:29] + "…"
 	}
 
-	fmt.Printf("  %-30s %s %s %s\n",
+	fmt.Printf("  %-30s %s %s%s %s\n",
 		label,
 		bar(s, tr),
 		statusMark(s),
+		verdictMark(s),
 		dimStyle.Render(spanFacts(s)))
 }
 
@@ -198,6 +203,21 @@ func statusMark(s *waterfall.Span) string {
 	return dimStyle.Render("·")
 }
 
+// verdictMark is whether the work was judged right, which is a separate column
+// from whether the call succeeded. A span nobody judged shows a space, not a
+// pass: "unverified" and "verified good" must never look the same.
+func verdictMark(s *waterfall.Span) string {
+	passed, known := s.Verdict()
+	switch {
+	case !known:
+		return " "
+	case passed:
+		return okStyle.Render("✔")
+	default:
+		return warnStyle.Render("✘")
+	}
+}
+
 // spanFacts is the one-line summary beside a bar: the numbers that distinguish
 // this span from its siblings, and nothing that repeats the run header.
 func spanFacts(s *waterfall.Span) string {
@@ -222,6 +242,12 @@ func spanFacts(s *waterfall.Span) string {
 	}
 	if s.InputRef != "" {
 		parts = append(parts, s.ID[:min(8, len(s.ID))])
+	}
+	// Scores go last and are named, because "was it right" is a different
+	// question from the status the head reported and must not be confused
+	// with it.
+	for _, sc := range s.Scores {
+		parts = append(parts, fmt.Sprintf("%s=%g", sc.Name, sc.Value))
 	}
 	if s.Detail != "" && len(parts) < 3 {
 		parts = append(parts, oneLine(s.Detail))
@@ -268,6 +294,24 @@ func renderSpanDetail(tr *waterfall.Trace, id string, jsonOut bool) error {
 			kv = append(kv, fmt.Sprintf("%s=%v", k, s.Meta[k]))
 		}
 		fmt.Printf("  %s\n", dimStyle.Render(strings.Join(kv, " · ")))
+	}
+	if len(s.Scores) > 0 {
+		fmt.Println()
+		fmt.Printf("  %s\n", dimStyle.Render("── judged ──"))
+		for _, sc := range s.Scores {
+			mark := okStyle.Render("✔")
+			if sc.Value <= 0 {
+				mark = warnStyle.Render("✘")
+			}
+			line := fmt.Sprintf("%s %s = %g", mark, sc.Name, sc.Value)
+			if sc.Source != "" {
+				line += dimStyle.Render(" · " + sc.Source)
+			}
+			fmt.Printf("    %s\n", line)
+			if sc.Comment != "" {
+				fmt.Printf("      %s\n", dimStyle.Render(oneLine(sc.Comment)))
+			}
+		}
 	}
 	fmt.Println()
 	renderSpanText(s, "  ")
@@ -386,4 +430,55 @@ func humanDuration(d time.Duration) string {
 	default:
 		return fmt.Sprintf("%dm%02ds", int(d.Minutes()), int(d.Seconds())%60)
 	}
+}
+
+func cmdTraceScore() *cobra.Command {
+	var spanID, name, comment, source string
+	var value float64
+
+	cmd := &cobra.Command{
+		Use:   "score [run-id]",
+		Short: "Record a verdict on a span: whether the work it did was right",
+		Long: `hyctl trace score attaches a verdict to a span already in the log.
+
+A trace says what a run cost and how long it took. This is what makes it say
+whether the answer was any good, so a later ` + "`hyctl trace view`" + ` can show which
+head's output actually held up.
+
+Values are read as pass above zero and fail at or below it, and any failing
+score fails the span. Nothing is overwritten: a verdict is appended, so the
+span keeps whatever the head itself reported.`,
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			runID, err := resolveRunID(args)
+			if err != nil {
+				return err
+			}
+			if spanID == "" {
+				return fmt.Errorf("--span is required; run `hyctl trace view %s` to list them", runID)
+			}
+			err = runlog.AppendScore(runID, spanID, runlog.Score{
+				Name: name, Value: value, Comment: comment, Source: source,
+			})
+			if errors.Is(err, runlog.ErrNoSuchSpan) {
+				return fmt.Errorf("%w; run `hyctl trace view %s` to list them", err, runID)
+			}
+			if err != nil {
+				return err
+			}
+			mark := okStyle.Render("✔")
+			if value <= 0 {
+				mark = warnStyle.Render("✘")
+			}
+			fmt.Printf("\n  %s %s = %g %s\n\n", mark, name, value,
+				dimStyle.Render("on span "+spanID+" of "+runID))
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&spanID, "span", "", "span to judge (id or unique prefix)")
+	cmd.Flags().StringVar(&name, "name", "", "what was checked, e.g. tests or lint")
+	cmd.Flags().Float64Var(&value, "value", 0, "the verdict; above zero passes")
+	cmd.Flags().StringVar(&comment, "comment", "", "why, in a sentence")
+	cmd.Flags().StringVar(&source, "source", "human", "who judged: an oracle id, human, a CI job")
+	return cmd
 }
