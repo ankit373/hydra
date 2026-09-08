@@ -201,7 +201,7 @@ your change looks identical to a real one.
 ### The coverage gate
 
 `ci/coverage-floors.txt` is a checked-in contract, enforced on every PR by
-`go run ./ci/covergate`. It fails on three things, all of which are otherwise
+`go run ./ci/covergate`. It fails on four things, all of which are otherwise
 invisible, they happen one PR at a time and never turn CI red on their own:
 
 **Per-package coverage floors.** Every package has a minimum. The gate names
@@ -217,19 +217,26 @@ The gate also prints `consider ratcheting` for any package sitting ten points
 or more above its floor: a floor that has drifted far below reality no longer
 protects anything.
 
+**A floor for every measured package.** Adding a package means adding its
+floor. Without this the gate printed `(no floor)` and passed, so a package
+joined the suite unratcheted and nothing ever said so, which is how seven of
+them accumulated (#805). Take the percent from the table the gate prints, and
+take it from a **Linux** run: the same package can measure ten points apart
+across platforms, and the gate runs on Linux.
+
 **Packages with no test files.** A new package with no tests fails the gate.
 The allow-list started at eleven, the whole platform and discovery layer, and
-is down to two, both permanent: `internal/build` is four ldflags-injected
-strings, and `cmd/specstest` is a debug main whose logic is covered in
-`internal/sysinfo`. Adding to the list requires a reason on the line, because a
-package with no tests is not a package with nothing to test.
+is down to one: `internal/build`, four ldflags-injected strings. Adding to the
+list requires a reason on the line, because a package with no tests is not a
+package with nothing to test.
 
 **A skip budget.** The total number of `t.Skip` calls across the suite is
 capped, and each needs a reason. Skips are how a cross-platform suite hides the
 problem it exists to catch: a three-OS matrix where every awkward test skips on
-two of them is decorative. Prefer rule 4 above, parametrise by platform, and
-if you genuinely need a skip, raise the budget in the same commit so the
-increase is visible.
+two of them is decorative. Prefer a build tag, `//go:build !windows`, so the
+test does not exist on a platform rather than existing there to skip, and if
+you genuinely need a skip, raise the budget in the same commit so the increase
+is visible.
 
 `t.Skip()` inside an `f.Fuzz` body is not counted: there it is the fuzzer's own
 control flow for rejecting a generated input, it happens thousands of times per

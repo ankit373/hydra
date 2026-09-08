@@ -183,6 +183,40 @@ func TestCheck_AFloorWithNoMeasurementFails(t *testing.T) {
 	}
 }
 
+// The mirror of the case above, and the one that actually happens: a package
+// with tests and no floor. Passing it is how seven arrived unratcheted (#805).
+func TestCheck_AMeasuredPackageWithNoFloorFails(t *testing.T) {
+	dir := t.TempDir()
+	profile := filepath.Join(dir, "cover.out")
+	writeFile(t, profile, "mode: set\ngithub.com/ankit373/hydra/internal/new/x.go:1.1,2.2 10 1\n")
+
+	cfg := &Config{Floors: map[string]float64{}, NoTests: map[string]string{}, SkipBudget: 100}
+	problems, _, err := check(cfg, profile, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(problems) != 1 {
+		t.Fatalf("got %d problems, want 1: %v", len(problems), problems)
+	}
+	// Naming the package and the file is what makes the failure actionable,
+	// since the fix is one line and the reader has to know which.
+	for _, want := range []string{"internal/new", "coverage-floors.txt"} {
+		if !strings.Contains(problems[0], want) {
+			t.Errorf("the message does not mention %q: %s", want, problems[0])
+		}
+	}
+
+	// Given a floor, the same profile passes.
+	cfg.Floors["internal/new"] = 90
+	problems, _, err = check(cfg, profile, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(problems) != 0 {
+		t.Fatalf("a floored package was still reported: %v", problems)
+	}
+}
+
 // A package with no test files must fail unless allow-listed, and a stale
 // allow-list entry must fail too.
 func TestCheck_ZeroTestPackages(t *testing.T) {
