@@ -1180,7 +1180,56 @@ improved against.`,
 	}
 	stats.Flags().BoolVar(&jsonOut, "json", false, "machine-readable output")
 
-	cmd.AddCommand(list, stats)
+	readiness := &cobra.Command{
+		Use:   "readiness",
+		Short: "Whether the corpus can yet support fitting a routing choice, by enum",
+		RunE: func(_ *cobra.Command, _ []string) error {
+			all, err := evalset.Load(evalset.DefaultPath())
+			if err != nil {
+				return err
+			}
+			rd := evalset.Readiness(all)
+			if jsonOut {
+				raw, _ := json.MarshalIndent(rd, "", "  ")
+				fmt.Println(string(raw))
+				return nil
+			}
+			if len(rd) == 0 {
+				fmt.Printf("No verified examples yet. Attribute one with %s\n",
+					dimStyle.Render("hyctl oracle verify --candidate <file> --enum SIMPLE -- <cmd>"))
+				return nil
+			}
+			fmt.Printf("%-14s %8s %10s %12s %7s  %s\n",
+				"ENUM", "TOTAL", "PASS RATE", "HEADS>="+strconv.Itoa(evalset.MinObservationsPerHead), "READY", "SHORTFALL")
+			for _, s := range rd {
+				ready, comparable, short := "no", strconv.Itoa(s.Comparable), ""
+				switch {
+				case s.Enum == "(none)":
+					comparable, short = "-", "no enum recorded, nothing can route on these"
+				case s.Ready:
+					ready = cortexStyle.Render("yes")
+				default:
+					short = fmt.Sprintf("need %d more head%s at %d examples",
+						evalset.MinComparableHeads-s.Comparable,
+						plural(evalset.MinComparableHeads-s.Comparable), evalset.MinObservationsPerHead)
+					// Otherwise "need 2 more heads" reads as a shortage of
+					// examples to someone who already has plenty of them.
+					if n := s.PerHead["(none)"]; n > 0 {
+						short += fmt.Sprintf(" (%d name no head)", n)
+					}
+				}
+				fmt.Printf("%-14s %8d %9.1f%% %12s %7s  %s\n",
+					s.Enum, s.Total, s.PassRate*100, comparable, ready, dimStyle.Render(short))
+			}
+			fmt.Printf("\n%s\n", dimStyle.Render(fmt.Sprintf(
+				"a fitted routing choice needs %d examples on each of %d heads: below that it loses to the strongest head",
+				evalset.MinObservationsPerHead, evalset.MinComparableHeads)))
+			return nil
+		},
+	}
+	readiness.Flags().BoolVar(&jsonOut, "json", false, "machine-readable output")
+
+	cmd.AddCommand(list, stats, readiness)
 	return cmd
 }
 
@@ -1581,7 +1630,8 @@ func cmdOracle() *cobra.Command {
 		Use:   "oracle",
 		Short: "Run deterministic verifiers (tests/compile/lint) as evidence sources",
 	}
-	var source, domain, candidateFile, record, scoreRun, scoreSpan string
+	var source, domain, candidateFile, record, scoreRun, scoreSpan, enumKey string
+	var tierNum int
 	verify := &cobra.Command{
 		Use:   "verify <command...>",
 		Short: "Run a verifier command; report pass/fail + its calibrated LLR",
@@ -1627,6 +1677,37 @@ func cmdOracle() *cobra.Command {
 			}
 			llr := oracle.LLR(cal, src, domain, v)
 
+			// Resolved once, for the example and the span score alike, since the
+			// span already recorded the routing decision. Refused rather than
+			// half-filled: this corpus is never pruned.
+			runID := scoreRun
+			var spanEv runlog.Event
+			if scoreSpan != "" {
+				if runID == "" {
+					runs, rErr := runlog.Runs()
+					if rErr != nil || len(runs) == 0 {
+						return fmt.Errorf("--span given but no run to attach it to; pass --run")
+					}
+					runID = runs[0]
+				}
+				events, lErr := runlog.Load(runID)
+				if lErr != nil {
+					return fmt.Errorf("run %s: %w", runID, lErr)
+				}
+				ev, ok := runlog.Span(events, scoreSpan)
+				if !ok {
+					return fmt.Errorf("span %q not found in run %s, or ambiguous", scoreSpan, runID)
+				}
+				spanEv = ev
+			}
+			enum, tier := enumKey, tierNum
+			if enum == "" {
+				enum, _ = spanEv.Meta["enum"].(string)
+			}
+			if tier == 0 {
+				tier = spanEv.Tier
+			}
+
 			// An oracle verdict on a real candidate is ground truth, and the
 			// rarest thing Hydra produces. It is kept outside the trace store
 			// so no retention pass can ever reach it (#625).
@@ -1635,6 +1716,7 @@ func cmdOracle() *cobra.Command {
 				added, aerr := evalset.Add(evalset.DefaultPath(), evalset.Example{
 					Domain: domain, Source: src, Candidate: candidate,
 					Passed: v.Passed, Detail: v.Detail, Config: breadcrumb,
+					Enum: enum, Tier: tier, Head: spanEv.Head,
 				})
 				switch {
 				case aerr != nil:
@@ -1650,14 +1732,6 @@ func cmdOracle() *cobra.Command {
 			// The oracle has always computed this; until #758 it had nowhere
 			// to put it, so a trace never said whether its answer held up.
 			if scoreSpan != "" {
-				runID := scoreRun
-				if runID == "" {
-					runs, rErr := runlog.Runs()
-					if rErr != nil || len(runs) == 0 {
-						return fmt.Errorf("--span given but no run to attach it to; pass --run")
-					}
-					runID = runs[0]
-				}
 				val := 0.0
 				if v.Passed {
 					val = 1
@@ -1694,6 +1768,8 @@ func cmdOracle() *cobra.Command {
 	verify.Flags().StringVar(&record, "record", "", "train calibration with the true outcome: correct|incorrect")
 	verify.Flags().StringVar(&scoreRun, "run", "", "run holding the span to score (default: newest)")
 	verify.Flags().StringVar(&scoreSpan, "span", "", "span this verdict judges, so `hyctl trace view` can show it")
+	verify.Flags().StringVar(&enumKey, "enum", "", "routing enum this verdict judges (default: read from --span)")
+	verify.Flags().IntVar(&tierNum, "tier", 0, "tier this verdict judges (default: read from --span)")
 	cmd.AddCommand(verify)
 	return cmd
 }
