@@ -206,6 +206,10 @@ func TestTypesTS_UnionValuesMatchGo(t *testing.T) {
 		{"CoverageStatus", []string{
 			string(security.Enforced),
 			string(security.Configured),
+			// Added in #722 and missed here, which is this test's own blind
+			// spot: both sides are hand-written, so a value absent from both
+			// drifts in step and stays green.
+			string(security.Partial),
 			string(security.Gap),
 			string(security.NotApplicable),
 		}},

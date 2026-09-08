@@ -425,6 +425,25 @@ assertions rather than measurements, defect cost is **per-occurrence and not
 annualised**, a file the dependency graph does not index is **unknown** and never
 "low-risk", and the attestation is **unsigned** because Hydra has no key management.
 
+**Two taxonomies, because they answer different questions.** The OWASP LLM Top 10 governs what a model *says*. The [OWASP Top 10 for Agentic Applications](https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/) (ASI01-ASI10) governs what a system *does*, and an orchestrator with fallback chains, swarm fan-out, tool access and cross-run memory is squarely the second. Both are scored, side by side:
+
+```
+  OWASP Agentic Top-10 coverage  50%  (5/10, 4 partial)
+  ────────────────────────────────────────────────
+    ASI01  Agent Goal Hijack                partial
+    ASI02  Tool Misuse and Exploitation     configured
+    ASI03  Identity and Privilege Abuse     enforced
+    ASI04  Agentic Supply Chain             configured
+    ASI05  Unexpected Code Execution        partial
+    ASI06  Memory and Context Poisoning     partial
+    ASI07  Insecure Inter-Agent Communicat… partial
+    ASI08  Cascading Failures               gap
+    ASI09  Human-Agent Trust Exploitation   configured
+    ASI10  Rogue Agents                     configured
+```
+
+Every status is read from live state, not asserted. `ASI02` tracks the policy default, so a fail-open policy reports `partial` and an absent one reports `gap`. `ASI08` reports `gap` without a `graph.json`, because blast radius you cannot compute is not blast radius you have bounded. `ASI10` drops to `gap` the moment the ledger chain breaks, since the record that would show an agent acting outside policy is precisely the thing that just became untrustworthy. And `partial` never counts toward the percentage.
+
 ### 🧩 MCP Server Trust Registry (`hyctl mcp registry`)
 
 The ledger above records what an agent *did*. This scores whether the MCP server it

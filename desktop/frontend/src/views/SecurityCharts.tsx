@@ -159,6 +159,11 @@ function statusFill(status: CoverageStatus): number {
       return 1
     case 'configured':
       return 2 / 3
+    // Detective, not preventive: real, and short of configured. Without this
+    // it fell to the default and drew identically to n/a, which reads as
+    // "does not apply" rather than "applies and is only half met".
+    case 'partial':
+      return 1 / 2
     case 'gap':
       return 1 / 3
     default:

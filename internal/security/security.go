@@ -49,6 +49,12 @@ type Report struct {
 
 	// Coverage is Hydra's posture against the OWASP LLM Top 10, the score.
 	Coverage Coverage `json:"coverage"`
+	// Agentic is the posture against the OWASP Top 10 for Agentic
+	// Applications (ASI01-ASI10). The LLM list governs what a model says,
+	// this governs what a system does, and Hydra is squarely the second.
+	// Scoring only the first left seven of the ten risks that actually
+	// describe an orchestrator unassessed.
+	Agentic AgenticCoverage `json:"agentic"`
 	// IntegrityIntact is false when VerifyChain found tampering, a hard
 	// override on Coverage's own percentage, since a tampered ledger means
 	// none of the other evidence in this report can be trusted (mirrors SSL
@@ -220,6 +226,7 @@ func Build(heads []provider.Head) (*Report, error) {
 	r.RiskHistory = ledger.ByDayRisk(events)
 
 	r.Coverage = computeCoverage(pol, r.SupplyChain, runs, costCeilingDenials)
+	r.Agentic = computeAgentic(pol, r.SupplyChain, r.IntegrityIntact)
 
 	historyPath := DefaultScoreHistoryPath()
 	prior := loadScoreHistory(historyPath)
