@@ -98,8 +98,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # GoReleaser resolves GORELEASER_CURRENT_TAG and reads that tag's
-      # contents, which --skip=validate does not skip. Annotated, not
-      # lightweight: %(contents) of a lightweight tag is empty too (#821).
+      # contents, which --skip=validate does not skip (#821). Annotated so the
+      # tag carries its own message; a lightweight one reads the commit's.
       #
       # A tag object carries a tagger, and the runner has no git identity: the
       # OS fallback derives an empty name there. -c rather than `git config`,
