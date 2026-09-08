@@ -97,6 +97,12 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # GoReleaser resolves GORELEASER_CURRENT_TAG and reads that tag's
+      # contents, which --skip=validate does not skip. Annotated, not
+      # lightweight: %(contents) of a lightweight tag is empty too (#821).
+      - name: Create the tag GoReleaser reads
+        run: git tag -a "${{ steps.ver.outputs.version }}" -m "edge ${{ steps.ver.outputs.sha }}"
+
       - name: Build edge binaries
         uses: goreleaser/goreleaser-action@v7
         with:
@@ -104,8 +110,9 @@ jobs:
           # Not --snapshot: it computes its own 0.0.0-SNAPSHOT version and
           # ignores the tag, so every edge build shipped archives that could
           # not say which commit they came from (#759, and #705 for RC).
-          # Skipping validate is what makes a build work with no tag on HEAD,
-          # which is always the case here, and it keeps the version.
+          # It was also swallowing the missing-tag error, which is why dropping
+          # it turned this red; the tag above is what actually addresses that,
+          # not --skip=validate, which only skips the git *state* checks (#821).
           args: release --clean --skip=publish,sign,sbom,validate
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
