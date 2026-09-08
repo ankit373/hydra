@@ -317,7 +317,10 @@ func New(ctx context.Context) (*Dispatcher, error) {
 	result := cachedProbe(ctx)
 	localOnly := piiLocalOnly(cfg)
 
-	budgetReg := budget.NewRegistry(budget.LoadWindows(config.ScriptHome()))
+	// Seeded from the discovered heads, not from models.yaml alone: Record is
+	// called with a head id, and those only partly overlap the registry's own
+	// ids, so a local head used to miss and be budgeted at 200000 (#764).
+	budgetReg := budget.NewRegistry(budget.WindowsForHeads(config.ScriptHome(), result.Heads))
 
 	return &Dispatcher{
 		cfg:     cfg,

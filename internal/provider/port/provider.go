@@ -13,6 +13,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -153,6 +154,10 @@ func (s *ollamaService) probe(ctx context.Context, caps *capabilities.DB) ([]pro
 				// the tradeoff the router exists to make (#762).
 				QuantizationLevel string `json:"quantization_level"`
 				ParameterSize     string `json:"parameter_size"`
+				// The architectural maximum, not what the server allocates:
+				// measured on 0.33.2, a 40960 model runs at the 4096 server
+				// default. A ceiling to cap a declared window by (#764).
+				ContextLength int `json:"context_length"`
 			} `json:"details"`
 		} `json:"models"`
 	}
@@ -173,6 +178,9 @@ func (s *ollamaService) probe(ctx context.Context, caps *capabilities.DB) ([]pro
 		}
 		if p := strings.TrimSpace(m.Details.ParameterSize); p != "" {
 			meta["model_params"] = p
+		}
+		if m.Details.ContextLength > 0 {
+			meta["model_ctx_max"] = strconv.Itoa(m.Details.ContextLength)
 		}
 		if !completionCapable(m.Capabilities) {
 			// Embedding-only models fail every dispatch (#532). Marked rather
