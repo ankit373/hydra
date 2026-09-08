@@ -48,21 +48,31 @@ jobs:
           # the archive filenames need this form and not the tag (#759).
           echo "semver=${RC_TAG#v}" >> "$GITHUB_OUTPUT"
 
+      # GoReleaser resolves GORELEASER_CURRENT_TAG and reads that tag's
+      # contents, which --skip=validate does not skip. Annotated, not
+      # lightweight: %(contents) of a lightweight tag is empty too (#821).
+      - name: Create the tag GoReleaser reads
+        run: git tag -a "${{ steps.ver.outputs.tag }}" -m "RC ${{ steps.ver.outputs.sha }}"
+
       - name: Build RC binaries
         uses: goreleaser/goreleaser-action@v7
         with:
           version: latest
           # --snapshot made GoReleaser compute its own 0.0.0-SNAPSHOT version
           # and ignore the tag, so every RC shipped CLI archives that could not
-          # say which release they stood for (#705). It was presumably there
-          # because a plain `release` refuses when HEAD carries no tag, which is
-          # always true here: the tag is created afterwards, by `gh release
-          # create`. Skipping validate is what actually addresses that, and it
-          # keeps GORELEASER_CURRENT_TAG as the version.
+          # say which release they stood for (#705). It was also swallowing the
+          # missing-tag error, which is why dropping it broke the build; the tag
+          # above is what addresses that, not --skip=validate, which only skips
+          # the git *state* checks (#821).
           args: release --clean --skip=publish,sign,sbom,validate
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GORELEASER_CURRENT_TAG: ${{ steps.ver.outputs.version }}
+
+      # gh release create refuses a tag that exists locally but not on the
+      # remote, so the build-only tag goes before it creates the real one.
+      - name: Drop the local build tag
+        run: git tag -d "${{ steps.ver.outputs.tag }}"
 
       - name: Publish RC release
         run: |
