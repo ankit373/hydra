@@ -30,7 +30,7 @@ cmd/hydra/              ← CLI entry point (Cobra): dispatch, probe, status, co
                           pricing, edit, review, parallel, trust, init.
 internal/dispatch/      ← Tier routing + fallback + policy + cost logging (the router).
 internal/executor/      ← Native executors: agy, Ollama, HTTP (API providers), CLI subprocess.
-internal/provider/      ← Discovery: cli / env (API keys) / port / agy.
+internal/provider/      ← Discovery: cli / env (API keys, plus the OpenRouter model allowlist) / port / agy.
 internal/swarm/         ← Fan-out (race/best/all + judge) + SPRT adapter (swarm→trust).
 internal/trust/         ← Trust Control Plane: calibration (LLR/D) + defect-cost + SPRT ensemble.
 internal/graph/         ← Code dependency graph (graph.json) → blast radius + coupling k + percolation κ (Molloy-Reed).
@@ -164,6 +164,10 @@ jq '.claude_pct = 52' logs/state.json > logs/state.json.tmp && mv logs/state.jso
 **Same 70%/75%/80% rule applies to ALL delegated models**, `hyctl dispatch` enforces this via the budget governor + fallback chains.
 **Local heads are tier 10, the terminal fallback**, they cost nothing, so `rank.UITier` puts any
 `LocalOnly` head at the cheapest tier regardless of its score, and API limits never apply to them.
+Tier 10 is the **free floor, and local-only in both directions**: a paid head scoring under 60 used
+to fall through to it as well, where `routing.yaml` sends `GRUNT` and `pricing.yaml` charges $0.00,
+so it was preferred over a free local head and costed as if it were one. Paid heads now floor at 9.
+Only reachable in practice once one provider could offer many models, a 1b model scores 55 (#752).
 
 This holds only while a local head is actually **routable**. Ollama is discovered twice: as a binary
 on `$PATH` (not routable on its own, nothing can drive it) and, once its server answers on `:11434`,
@@ -262,6 +266,12 @@ hyctl trust defect --pii --production ; hyctl trust stats ; hyctl trust explain 
 # Add a model at runtime (no rebuild), merges into ~/.hydra/models.json overlay
 hyctl models add kimi-k3 --name "Kimi K3" --provider moonshot --cap-score 85
 hyctl models list ; hyctl models remove kimi-k3 ; hyctl models sync   # import OpenRouter catalog
+
+# Route between individual OpenRouter models. A key alone is one head, one model;
+# naming models makes each its own head. Nothing changes until you name some.
+#   ~/.hydra/config.toml:  [openrouter]
+#                          models = ["anthropic/claude-sonnet-4.5", "google/gemini-2.5-pro"]
+hyctl probe            # lists one head per model, and "2 of 423 enabled"
 
 # Multi-step task, each step routed on its own (triage cheap, fix strong)
 hyctl workflow run --task "fix the flaky test" \
@@ -896,7 +906,7 @@ All Go source lives under `cmd/` and `internal/`. Key packages:
 |---|---|
 | `internal/dispatch` | Core router: policy → head selection → executor → fallback |
 | `internal/executor` | Per-provider execution: agy, ollama, HTTP (OpenAI-compat), CLI |
-| `internal/provider` | Head discovery plugins (agy registry, env, port, CLI) |
+| `internal/provider` | Head discovery plugins (agy registry, env, port, CLI). `port` dials and probes every local service **concurrently**, so the floor stops growing with the service list (#750). `env` normally emits one head per API key; OpenRouter is the exception, where `[openrouter] models` in `config.toml` admits individual catalogue models as heads the router can choose between, each carrying `Meta["model"]`, the id the executor sends. Admission is explicit because enumerating hundreds would bury `probe` and `status`; top-N and usage-based rules are just ways of computing the same list. A named model the catalogue does not hold carries `Meta["unroutable_reason"]` and reads as not routable, but an **unfetched** catalogue refuses nothing, since it is no evidence either way. The named heads *replace* `env/openrouter` rather than joining it, or one account would have two heads and neither row its real spend (#752). |
 | `internal/probe` | Machine scan, finds all live heads at startup |
 | `internal/swarm` | Fan-out dispatch: race / best (LLM judge) / all (CapScore rank) |
 | `internal/otlp` | Renders the dispatch log as OpenTelemetry spans, OTLP/HTTP with a JSON body, the transport collectors people actually run accept (Langfuse ingests at `/api/public/otel/v1/traces` and offers no gRPC at all). A bridge, not a migration: `gen_ai.*` is populated only where it genuinely corresponds, and tier/enum/cost/propensity, which OTel has no place for and which are the reason the log is worth exporting, are carried under `hydra.*` rather than dropped. 64-bit values are encoded as strings per OTLP/JSON, because a JSON number loses precision above 2^53 and unix nanos passed that in 1970, so a numeric timestamp is silently wrong rather than rejected. An all-zero trace or span id is invalid and collectors drop the span, so a row with no run id gets a random one, an unlinked span is data, a dropped one is not. Nothing leaves the machine unless `--otlp` names an endpoint. |
@@ -904,7 +914,7 @@ All Go source lives under `cmd/` and `internal/`. Key packages:
 | `internal/util` | Shared utilities: `Accumulator` (bounded io.Writer, 33 MB cap) |
 | `internal/cost` | Reads `cost.jsonl`, produces spend summaries |
 | `internal/policy` | Allow/deny rules (PII local-only, etc.) |
-| `internal/rank` | CapScore ranking helpers |
+| `internal/rank` | CapScore ranking helpers. `ByCapScore` dedupes non-local heads per **provider**, one entry per cloud vendor, except a head that names its own model (`Meta["model"]`), whose ID is its identity the way a local model's is: without that a three-model OpenRouter allowlist arrived as whichever scored highest and the rest were gone from probe, status and routing alike. `UITier` keeps tier 10 as the **free floor**, local-only, and floors paid heads at 9 (#752). |
 | `registry` | The routing YAML **and** the `go:embed` that compiles it into the binary. `registry.Read(home, name)` prefers `$HYDRA_HOME/registry/<name>` so operators can retune without a rebuild, and falls back to the embedded copy, which is what every brew/npm/pip/curl install uses, since none of them ship the files (#238). |
 | `internal/config` | Hydra config load/save (`~/.config/hydra/`); `Breadcrumb()`, SHA256 deployment-identity fingerprint over `registry/{routing,models,domains}.yaml`, auto-stamped into ledger/trust/cost log entries so they can be tied back to the exact routing rules in effect. |
 | `internal/capabilities` | Model capability scores: embedded `data.json` ⊕ runtime user overlay (`~/.hydra/models.json`) merged at discovery, so new models are added without a rebuild. Drives `hyctl models list\|add\|remove\|sync`. |

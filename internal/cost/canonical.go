@@ -33,12 +33,14 @@ var aliasOnce struct {
 	table aliasTable
 }
 
-// localPrefixes inverts the port provider's own display construction
+// perModelPrefixes inverts the display name a per-model provider builds
 // (ID "ollama/X" is shown as "X (Ollama)"), so it resolves a name that provider
-// built rather than guessing at one.
-var localPrefixes = map[string]string{
-	" (Ollama)":    "ollama/",
-	" (LM Studio)": "lmstudio/",
+// built rather than guessing at one. Not only local ones: an allowlisted
+// OpenRouter model is one head per model the same way (#752).
+var perModelPrefixes = map[string]string{
+	" (Ollama)":     "ollama/",
+	" (LM Studio)":  "lmstudio/",
+	" (OpenRouter)": "openrouter/",
 }
 
 type aliasModel struct {
@@ -89,7 +91,7 @@ func resolveName(name string, a aliasTable) string {
 	if id, ok := a.byName[name]; ok {
 		return id
 	}
-	for suffix, prefix := range localPrefixes {
+	for suffix, prefix := range perModelPrefixes {
 		if model, cut := strings.CutSuffix(name, suffix); cut && model != "" {
 			return prefix + model
 		}
@@ -104,7 +106,7 @@ func attributable(key string, a aliasTable) bool {
 	if a.ids[key] {
 		return true
 	}
-	for _, prefix := range localPrefixes {
+	for _, prefix := range perModelPrefixes {
 		if strings.HasPrefix(key, prefix) {
 			return true
 		}

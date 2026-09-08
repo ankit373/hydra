@@ -595,7 +595,7 @@ func openAICompatConfigFor(h provider.Head) (openAICompatConfig, error) {
 		return openAICompatConfig{}, errUnsupportedHTTPProvider
 	}
 
-	key, model := apiKeyFor(h.Provider), defaultModelFor(h.Provider)
+	key, model := apiKeyFor(h.Provider), modelFor(h)
 	if key == "" || model == "" {
 		return openAICompatConfig{}, errUnsupportedHTTPProvider
 	}
@@ -679,6 +679,16 @@ func joinCohereBlocks(blocks []struct {
 func httpStatusError(headID string, resp *http.Response) error {
 	b, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 	return fmt.Errorf("http exec %s: status %d, %s", headID, resp.StatusCode, string(b))
+}
+
+// modelFor prefers the model the discovering provider named, which is what
+// lets one provider emit several heads differing only by model (#752).
+// Otherwise the provider's single default, and its env override, as before.
+func modelFor(h provider.Head) string {
+	if m := h.Meta["model"]; m != "" {
+		return m
+	}
+	return defaultModelFor(h.Provider)
 }
 
 func defaultModelFor(providerID string) string {

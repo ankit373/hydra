@@ -643,6 +643,9 @@ cd desktop &amp;&amp; wails build                <span class="c"># → desktop/b
       </div>
       <div class="sub"><div class="lbl">Add one</div><pre>export ANTHROPIC_API_KEY=sk-…      <span class="c"># then:</span>
 hyctl probe                        <span class="c"># it shows up as a scored head</span></pre></div>
+      <div class="sub"><div class="lbl">Route <i>within</i> OpenRouter</div><p>A key alone gives one head routing to one model. Hydra already prices and scores OpenRouter's whole catalogue, so naming models turns each into its own head the router chooses between. Admission is explicit: enumerating hundreds would bury this list. Naming nothing changes nothing.</p><pre><span class="c"># ~/.hydra/config.toml</span>
+[openrouter]
+models = ["anthropic/claude-sonnet-4.5", "google/gemini-2.5-pro"]</pre><p><span class="fx">hyctl probe</span> then lists one head per model and says how much of the catalogue is enabled ("2 of 423"). A name the catalogue does not hold is shown as not routable with the reason, never dropped.</p></div>
     </section>
 
     <section class="doc" id="local">
