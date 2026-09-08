@@ -647,7 +647,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 			Meta:         dispatchMeta(opts, resp),
 		})
 		_ = d.logDispatch(r, prompt, opts, actProb, span)
-		if from, err := d.writeHandoff(r, prompt); err == nil {
+		if from, err := d.writeHandoff(r, prompt, opts); err == nil {
 			// last_handoff.json keeps only the newest. Appending the handoff
 			// here is what makes a *chain* of them reconstructable, which is
 			// the stated purpose of KindHandoff and did not happen before #204.
@@ -755,10 +755,27 @@ func asIntSlice(v any) []int {
 	return out
 }
 
+// handoffFiles is the file set a handoff records, so the next agent's
+// a2a.ConflictsWith has something to overlap. Empty before this: every
+// persisted handoff carried no files, and ConflictsWith could not return true
+// for any of them whatever the clocks said, which `hyctl security` reported as
+// an inert control (#425).
+//
+// The resource this dispatch acts on is the whole set today, and it is the
+// file a collision is actually about, the path `hyctl edit` is writing.
+// `dispatch --file` cannot reach here: naming a file selects the SPRT
+// ensemble, and that path writes no handoff at all (#766).
+func handoffFiles(opts Options) []string {
+	if f := strings.TrimSpace(opts.Resource); f != "" {
+		return []string{f}
+	}
+	return nil
+}
+
 // writeHandoff saves last_handoff.json after a successful dispatch, advancing
 // the vector clock so downstream agents inherit this dispatch's causal history.
 // It returns the handoff's From identity so the caller can record the edge.
-func (d *Dispatcher) writeHandoff(r *Result, prompt string) (string, error) {
+func (d *Dispatcher) writeHandoff(r *Result, prompt string, opts Options) (string, error) {
 	handoffPath := filepath.Join(config.Dir(), "logs", "last_handoff.json")
 
 	// Inherit the prior handoff's clock (if any) and tick for this agent.
@@ -778,6 +795,7 @@ func (d *Dispatcher) writeHandoff(r *Result, prompt string) (string, error) {
 		From:        from,
 		Model:       r.Head.Name,
 		Task:        prompt,
+		Files:       handoffFiles(opts),
 		PriorOutput: r.Response.Output,
 		Clock:       base.Tick(agentKey),
 	}
