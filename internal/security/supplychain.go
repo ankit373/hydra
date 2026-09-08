@@ -59,6 +59,41 @@ type SupplyChain struct {
 	Unfingerprintable int `json:"unfingerprintable,omitempty"`
 }
 
+// modelKey namespaces a model's stored digest so it cannot collide with a
+// filesystem path in the same store.
+func modelKey(headID string) string { return "model:" + headID }
+
+// fingerprintModel records a local model's weight digest and reports whether
+// it moved. Reported through HeadBinary because it is the same finding with a
+// different artifact: something that answers prompts was replaced without
+// anyone choosing that. Path carries the head's endpoint, since a model has no
+// path and leaving it blank reads as unknown rather than not-applicable.
+func fingerprintModel(h provider.Head, store map[string]binaryRecord, now string, sc *SupplyChain) (HeadBinary, bool) {
+	digest := h.Meta["model_digest"]
+	if digest == "" {
+		return HeadBinary{}, false
+	}
+	key := modelKey(h.ID)
+	prev, known := store[key]
+
+	hb := HeadBinary{HeadID: h.ID, Path: h.Endpoint, SHA256: digest}
+	switch {
+	case !known:
+		hb.New, hb.FirstSeen = true, now
+		sc.New++
+	case prev.SHA256 != digest:
+		hb.Changed, hb.Previous, hb.FirstSeen = true, prev.SHA256, prev.FirstSeen
+		sc.Changed++
+	default:
+		hb.FirstSeen = prev.FirstSeen
+	}
+	if hb.FirstSeen == "" {
+		hb.FirstSeen = now
+	}
+	store[key] = binaryRecord{SHA256: digest, FirstSeen: hb.FirstSeen}
+	return hb, true
+}
+
 // FingerprintHeads hashes each CLI head's binary, compares it against the
 // stored fingerprint, and persists the new state. Heads with no executable
 // (API-key and port-sourced providers) are skipped, there is no local
@@ -70,6 +105,13 @@ func FingerprintHeads(heads []provider.Head) SupplyChain {
 
 	for _, h := range heads {
 		if h.Executable == "" {
+			// A local model has no binary of its own, but Ollama pulls
+			// unsigned weights from a public registry, so a swapped model
+			// silently owns every dispatch that routes to it. The server's
+			// own digest is the handle, compared the same way a binary is.
+			if hb, ok := fingerprintModel(h, store, now, &sc); ok {
+				sc.Binaries = append(sc.Binaries, hb)
+			}
 			continue
 		}
 		info, err := os.Stat(h.Executable)

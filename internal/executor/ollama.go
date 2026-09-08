@@ -8,12 +8,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/url"
 	"os/exec"
 	"sync"
 	"time"
 
 	"github.com/ankit373/hydra/internal/provider"
+	"github.com/ankit373/hydra/internal/sandbox"
 	"github.com/ankit373/hydra/internal/util"
 )
 
@@ -118,15 +121,50 @@ func (e *OllamaExecutor) Execute(ctx context.Context, req Request) (*Response, e
 // ollamaServeOnce ensures at most one `ollama serve` process is started by Hydra.
 var ollamaServeOnce sync.Once
 
+// serveTarget returns the host:port Hydra should bind when it starts Ollama
+// itself, and false when host is not one it should start a server for.
+//
+// It parses the address rather than matching a prefix, the same reasoning as
+// provider.isLoopback: "127.0.0.1.evil.com" is a valid hostname someone else
+// controls, and a prefix check passes it.
+func serveTarget(host string) (string, bool) {
+	u, err := url.Parse(host)
+	if err != nil || u.Host == "" {
+		return "", false
+	}
+	if h := u.Hostname(); h != "localhost" {
+		if ip := net.ParseIP(h); ip == nil || !ip.IsLoopback() {
+			return "", false
+		}
+	}
+	return u.Host, true
+}
+
 // ensureRunning checks Ollama health and attempts auto-start if down.
 func (e *OllamaExecutor) ensureRunning(host string) error {
 	if e.isHealthy(host) {
 		return nil
 	}
 
+	// Only ever start a server Hydra will itself talk to. A non-loopback host
+	// is another machine: a local daemon would neither reach it nor be what
+	// the operator asked for.
+	bind, ok := serveTarget(host)
+	if !ok {
+		return fmt.Errorf("ollama at %s is not responding, and Hydra only auto-starts a server on loopback", host)
+	}
+
 	var startErr error
 	ollamaServeOnce.Do(func() {
-		cmd := exec.Command("ollama", "serve")
+		cmd := sandbox.Harden(exec.Command("ollama", "serve"))
+		// The child reads $OLLAMA_HOST itself. Inheriting the environment let
+		// OLLAMA_HOST=0.0.0.0 bind the model server to every interface while
+		// provider.OllamaHost had already refused that value for Hydra's own
+		// requests and fallen back to loopback: Hydra would start a
+		// network-exposed server believing it was talking to localhost.
+		cmd.Env = append(
+			sandbox.WithVars("OLLAMA_MODELS", "OLLAMA_KEEP_ALIVE", "OLLAMA_NUM_PARALLEL", "OLLAMA_FLASH_ATTENTION"),
+			"OLLAMA_HOST="+bind)
 		cmd.Stdout = nil
 		cmd.Stderr = nil
 		if err := cmd.Start(); err != nil {

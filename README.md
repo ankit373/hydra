@@ -299,6 +299,22 @@ The rules live in `registry/sensitivity.yaml`, embedded in the binary and overri
 
 **Where the boundary is.** CLI-agent heads are agents in their own right with their own filesystem access. Hydra guarantees what *it* sends; it cannot control what `agy` or `codex` independently decides to read once handed a task. The guarantee is total only when the work runs on a local head, which is exactly what the gate reroutes to.
 
+### 🧱 Least-Privilege Heads
+
+Every head Hydra spawns used to inherit your whole environment, so an `agy` subprocess held `AWS_SECRET_ACCESS_KEY`, every other provider's API key, and `SSH_AUTH_SOCK` for the duration of the call. Now a head gets the base set (PATH, HOME, locale, proxy), **its own provider's credential**, and its own tool configuration. Nothing else crosses.
+
+The allowlist cannot be complete, since every CLI agent reads its own settings and they change. If a head needs a variable Hydra does not know about:
+
+```bash
+export HYDRA_HEAD_ENV=SOME_AGENT_TOKEN,SOME_OTHER_VAR
+```
+
+Head subprocesses are also bounded so a grandchild holding the pipe open cannot hang a call on a process that already exited.
+
+Two related fixes ship with it. `ollama serve` is no longer started with an inherited environment: it previously read your `OLLAMA_HOST` itself, so `OLLAMA_HOST=0.0.0.0` made Hydra start a **model server bound to every interface** while it believed it was talking to loopback. Hydra now auto-starts a server only on loopback and binds it explicitly. And local model weights are fingerprinted by digest alongside head binaries, so a swapped model behind a familiar name is detected the same way a replaced agent binary is, which matters because Ollama pulls unsigned weights from a public registry.
+
+**Not included.** Repo-supplied validator and oracle commands still run unconfined. Go's `os/exec` has no per-child rlimit support, and faking one through `sh -c 'ulimit ...'` would re-tokenize argv, which `internal/oracle` deliberately avoids. Real containment there needs a platform sandbox (`sandbox-exec`, seccomp) and is tracked separately.
+
 ### 💰 Full Cost Visibility
 
 Every dispatch is logged to `~/.hydra/cost.jsonl` with model, tier, token counts, estimated cost, and fallback chain. Costs are **honestly labeled**: `tokens_source` marks whether a provider reported real usage or Hydra estimated it, and `cost_source` is always `estimated` (pricing × tokens, never a billed figure). Run `hyctl cost` or `hyctl stats` to see where your budget is going, or `hyctl stats --latency` for p50/p90/p99 per model, computed from mergeable sketches accurate to within 1%, so percentiles survive even after the raw rows are gone. Each row also carries `act_prob` (the probability the router picked that head) and `keep_prob` (the probability the row was kept), so a sampled log can still be read without bias. Averaging a non-uniformly sampled log understates rates badly enough to reverse which head looks better.
