@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -67,26 +68,29 @@ func TestCLI_EvalReadinessOnAnEmptyCorpusSaysHowToAttributeOne(t *testing.T) {
 	}
 }
 
+// seedAttributed writes n examples for one (enum, head) pair through the real
+// Add, so the test sees whatever normalization and dedup it applies.
+func seedAttributed(t *testing.T, enum, head string, n int) {
+	t.Helper()
+	for i := 0; i < n; i++ {
+		_, err := evalset.Add(evalset.DefaultPath(), evalset.Example{
+			Domain: "go", Source: "oracle:test", Enum: enum, Tier: 8, Head: head,
+			Candidate: fmt.Sprintf("package %s%s%d", enum, head, i), Passed: i%2 == 0,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 // The distinction the floor turns on: volume on one head is not comparability.
 // Reporting the lopsided enum as ready would recommend fitting on a sample
 // measured to lose to the strongest head outright.
 func TestCLI_EvalReadinessDistinguishesVolumeFromComparability(t *testing.T) {
 	cliSandbox(t)
-	seed := func(enum, head string, n int) {
-		t.Helper()
-		for i := 0; i < n; i++ {
-			_, err := evalset.Add(evalset.DefaultPath(), evalset.Example{
-				Domain: "go", Source: "oracle:test", Enum: enum, Tier: 8, Head: head,
-				Candidate: fmt.Sprintf("package %s%s%d", enum, head, i), Passed: i%2 == 0,
-			})
-			if err != nil {
-				t.Fatal(err)
-			}
-		}
-	}
-	seed("LOPSIDED", "head-a", evalset.MinObservationsPerHead*2)
-	seed("SPREAD", "head-a", evalset.MinObservationsPerHead)
-	seed("SPREAD", "head-b", evalset.MinObservationsPerHead)
+	seedAttributed(t, "LOPSIDED", "head-a", evalset.MinObservationsPerHead*2)
+	seedAttributed(t, "SPREAD", "head-a", evalset.MinObservationsPerHead)
+	seedAttributed(t, "SPREAD", "head-b", evalset.MinObservationsPerHead)
 
 	out, _, err := run(t, "eval", "readiness", "--json")
 	if err != nil {
@@ -105,6 +109,46 @@ func TestCLI_EvalReadinessDistinguishesVolumeFromComparability(t *testing.T) {
 	}
 	if s := byEnum["SPREAD"]; !s.Ready {
 		t.Errorf("the floor on two heads did not read as ready: %+v", s)
+	}
+}
+
+// The rendered table is what anyone actually reads before deciding whether to
+// fit the router, so each verdict it can print has to be right. In particular an
+// enum with examples but no attributed head must not read as merely short of
+// examples, which is the reading that would send someone to collect more of the
+// data that cannot help.
+func TestCLI_EvalReadinessRendersEachVerdict(t *testing.T) {
+	cliSandbox(t)
+	seedAttributed(t, "READY", "head-a", evalset.MinObservationsPerHead)
+	seedAttributed(t, "READY", "head-b", evalset.MinObservationsPerHead)
+	seedAttributed(t, "ONESHORT", "head-a", evalset.MinObservationsPerHead)
+	seedAttributed(t, "NOHEAD", "", evalset.MinObservationsPerHead+3)
+	seedAttributed(t, "", "head-a", 4)
+
+	out, _, err := run(t, "eval", "readiness")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"READY", "yes",
+		"need 1 more head at " + strconv.Itoa(evalset.MinObservationsPerHead) + " examples",
+		strconv.Itoa(evalset.MinObservationsPerHead+3) + " name no head",
+		"no enum recorded",
+		"loses to the strongest head",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("readiness output is missing %q:\n%s", want, out)
+		}
+	}
+	// Per line, since a shortfall on some other enum's row says nothing about
+	// this one: the whole-output form passes whenever any row is short.
+	for _, line := range strings.Split(out, "\n") {
+		if !strings.HasPrefix(strings.TrimSpace(line), "READY ") {
+			continue
+		}
+		if strings.Contains(line, "need") {
+			t.Errorf("the ready enum's own row reports a shortfall: %q", line)
+		}
 	}
 }
 
