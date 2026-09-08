@@ -13,19 +13,23 @@ package evalset
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/policy"
+	"github.com/ankit373/hydra/internal/util"
 )
 
 // SchemaVersion is stamped on every example so readers can branch, not guess.
@@ -89,6 +93,134 @@ func Hash(s string) string {
 	return hex.EncodeToString(sum[:16])
 }
 
+// The dedup sidecar holds only the two hashes Add compares, so a duplicate
+// check reads tens of bytes per example rather than unmarshalling every stored
+// candidate. Rescanning the corpus made filling it quadratic (#796).
+const (
+	idxMagic = "hydra-evalset-idx 1 "
+	// Fixed width, so committing a new corpus size is one WriteAt.
+	idxHdrLen = len(idxMagic) + 20 + 1
+	// maxLineBytes bounds one record. A candidate is a source file, and a
+	// bufio.Scanner refuses a longer line rather than truncating it.
+	maxLineBytes = 16 << 20
+)
+
+func indexPath(corpus string) string { return corpus + ".idx" }
+
+func idxHeader(corpusSize int64) []byte {
+	return []byte(fmt.Sprintf("%s%020d\n", idxMagic, corpusSize))
+}
+
+func fileSize(path string) int64 {
+	fi, err := os.Stat(path)
+	if err != nil {
+		return 0
+	}
+	return fi.Size()
+}
+
+// dedupKey identifies an example for dedup. Not fixed width: a caller may set
+// its own TaskHash, and a wrong-length key would silently corrupt the sidecar.
+func dedupKey(taskHash, candidateHash string) string {
+	return taskHash + ":" + candidateHash
+}
+
+// loadKeys returns the corpus's dedup keys, rebuilding the sidecar when it is
+// absent, malformed, or does not describe this corpus size. The corpus is
+// append-only, so size equality is exact currency and costs one stat.
+func loadKeys(corpus string, corpusSize int64) (map[string]struct{}, error) {
+	raw, err := os.ReadFile(indexPath(corpus))
+	if err == nil && len(raw) >= idxHdrLen && string(raw[:len(idxMagic)]) == idxMagic {
+		n, perr := strconv.ParseInt(strings.TrimSpace(string(raw[len(idxMagic):idxHdrLen])), 10, 64)
+		if perr == nil && n == corpusSize {
+			keys := make(map[string]struct{})
+			for _, line := range strings.Split(string(raw[idxHdrLen:]), "\n") {
+				if line != "" {
+					keys[line] = struct{}{}
+				}
+			}
+			return keys, nil
+		}
+	}
+	return rebuildIndex(corpus, corpusSize)
+}
+
+// rebuildIndex derives the sidecar from the corpus, decoding only the two hash
+// fields. Runs once per staleness: no sidecar yet, or a crash between the
+// corpus append and the header commit.
+func rebuildIndex(corpus string, corpusSize int64) (map[string]struct{}, error) {
+	keys := make(map[string]struct{})
+	var order []string
+
+	f, err := os.Open(corpus)
+	if err != nil && !os.IsNotExist(err) {
+		return nil, err
+	}
+	if err == nil {
+		defer f.Close()
+		sc := bufio.NewScanner(f)
+		sc.Buffer(make([]byte, 0, 64*1024), maxLineBytes)
+		for sc.Scan() {
+			line := strings.TrimSpace(sc.Text())
+			if line == "" {
+				continue
+			}
+			var rec struct {
+				TaskHash      string `json:"task_hash"`
+				CandidateHash string `json:"candidate_hash"`
+			}
+			if json.Unmarshal([]byte(line), &rec) != nil {
+				continue // a torn tail must not hide the corpus before it
+			}
+			k := dedupKey(rec.TaskHash, rec.CandidateHash)
+			if _, seen := keys[k]; !seen {
+				keys[k] = struct{}{}
+				order = append(order, k)
+			}
+		}
+		if err := sc.Err(); err != nil {
+			return nil, err
+		}
+	}
+	return keys, writeIndex(corpus, order, corpusSize)
+}
+
+func writeIndex(corpus string, keys []string, corpusSize int64) error {
+	var b bytes.Buffer
+	b.Write(idxHeader(corpusSize))
+	for _, k := range keys {
+		b.WriteString(k)
+		b.WriteByte('\n')
+	}
+	tmp := indexPath(corpus) + ".tmp"
+	if err := os.WriteFile(tmp, b.Bytes(), 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, indexPath(corpus))
+}
+
+// commitKey appends the key, then rewrites the header. Header last, because it
+// is the commit: a crash before it leaves the size stale and the next Add
+// rebuilds, where a crash after would claim a key the corpus does not hold.
+func commitKey(corpus, key string, corpusSize int64) error {
+	// No O_CREATE: loadKeys has already written a headered sidecar, so a
+	// missing one here is a real error rather than something to paper over
+	// by writing a key where the header belongs.
+	f, err := os.OpenFile(indexPath(corpus), os.O_RDWR, 0o600)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	if _, err := f.Seek(0, io.SeekEnd); err != nil {
+		return err
+	}
+	if _, err := f.WriteString(key + "\n"); err != nil {
+		return err
+	}
+	_, err = f.WriteAt(idxHeader(corpusSize), 0)
+	return err
+}
+
 // Add appends an example unless an identical (task, candidate) pair is already
 // present, and reports whether it wrote. Re-running the same verification is
 // normal and must not inflate the corpus, a duplicated example would weight
@@ -108,30 +240,46 @@ func Add(path string, e Example) (bool, error) {
 	if !e.PII {
 		e.PII = policy.Classify(e.Candidate).PII
 	}
-
-	existing, err := Load(path)
-	if err != nil {
-		return false, err
-	}
-	for _, x := range existing {
-		if x.TaskHash == e.TaskHash && x.CandidateHash == e.CandidateHash {
-			return false, nil
-		}
-	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return false, err
-	}
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
-	if err != nil {
-		return false, err
-	}
-	defer f.Close()
 	raw, err := json.Marshal(e)
 	if err != nil {
 		return false, err
 	}
-	_, err = fmt.Fprintln(f, string(raw))
-	return err == nil, err
+	line := append(raw, '\n')
+
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return false, err
+	}
+	// Corpus and sidecar must not diverge, and under O_APPEND two hyctl
+	// processes can interleave: the kernel writes at the end as it is at write
+	// time. The same hazard internal/payload takes a store-wide lock against.
+	lock, err := util.Lock(util.LockPath(path))
+	if err != nil {
+		return false, err
+	}
+	defer lock.Unlock()
+
+	size := fileSize(path)
+	keys, err := loadKeys(path, size)
+	if err != nil {
+		return false, err
+	}
+	key := dedupKey(e.TaskHash, e.CandidateHash)
+	if _, dup := keys[key]; dup {
+		return false, nil
+	}
+
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		return false, err
+	}
+	if _, err := f.Write(line); err != nil {
+		f.Close()
+		return false, err
+	}
+	if err := f.Close(); err != nil {
+		return false, err
+	}
+	return true, commitKey(path, key, size+int64(len(line)))
 }
 
 // Load reads every example. A missing file is not an error, nothing has been
@@ -147,7 +295,7 @@ func Load(path string) ([]Example, error) {
 	defer f.Close()
 	var out []Example
 	sc := bufio.NewScanner(f)
-	sc.Buffer(make([]byte, 0, 64*1024), 16*1024*1024)
+	sc.Buffer(make([]byte, 0, 64*1024), maxLineBytes)
 	for sc.Scan() {
 		line := strings.TrimSpace(sc.Text())
 		if line == "" {
