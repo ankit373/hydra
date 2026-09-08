@@ -2640,32 +2640,46 @@ func plural(n int) string {
 func cmdModels() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "models",
-		Short: "Manage the model registry, add new models (e.g. Kimi K2) without recompiling",
+		Short: "Model capability scores: list what is known, and record new ones without recompiling",
 	}
 	overlay := capabilities.DefaultOverlayPath()
 
 	var jsonOut bool
 	list := &cobra.Command{
 		Use:   "list",
-		Short: "List all models (built-in + your additions), by capability score",
-		RunE: func(_ *cobra.Command, _ []string) error {
+		Short: "List known models and whether this machine can actually run each",
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			db, err := capabilities.Load(overlay)
 			if err != nil {
 				return err
 			}
-			entries := db.Entries()
+			// Joined to discovery: this is a catalogue of scores, and rendering
+			// it without saying which entries are live listed API providers with
+			// no key set as if they were available (#742).
+			rows := liveModelRows(db.Entries(), probe.Run(cmd.Context()).Heads)
 			if jsonOut {
-				return json.NewEncoder(os.Stdout).Encode(entries)
+				return json.NewEncoder(os.Stdout).Encode(rows)
 			}
-			fmt.Printf("\n  %-26s %-14s %6s  %s\n", "ID", "PROVIDER", "SCORE", "SOURCE")
-			fmt.Println("  " + strings.Repeat("─", 58))
-			for _, e := range entries {
-				src := dimStyle.Render(e.Source)
-				if e.Source == "user" {
+			fmt.Printf("\n  %-26s %-14s %6s  %-8s %s\n", "ID", "PROVIDER", "SCORE", "SOURCE", "ROUTABLE")
+			fmt.Println("  " + strings.Repeat("─", 72))
+			var live int
+			for _, r := range rows {
+				src := dimStyle.Render(r.Source)
+				if r.Source == "user" {
 					src = cortexStyle.Render("user")
 				}
-				fmt.Printf("  %-26.26s %-14.14s %6d  %s\n", e.ID, e.Provider, e.CapScore, src)
+				routable := warnStyle.Render("✗")
+				if r.Live {
+					live++
+					routable = okStyle.Render("✓")
+				}
+				fmt.Printf("  %-26.26s %-14.14s %6d  %-8s %s\n",
+					r.ID, r.Provider, r.CapScore, src, routable)
 			}
+			fmt.Println("  " + strings.Repeat("─", 72))
+			fmt.Printf("  %s\n", dimStyle.Render(fmt.Sprintf(
+				"%d of %d can be routed to right now; the rest are capability scores for "+
+					"models nothing here discovers. `hyctl probe` says why.", live, len(rows))))
 			fmt.Println()
 			return nil
 		},
@@ -2676,7 +2690,7 @@ func cmdModels() *cobra.Command {
 	var addScore int
 	add := &cobra.Command{
 		Use:   "add <id>",
-		Short: "Add or update a model in your registry",
+		Short: "Record a capability score for a model (a provider must still discover it)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			if addScore < 0 || addScore > 100 {
@@ -2707,8 +2721,17 @@ func cmdModels() *cobra.Command {
 			case replaced:
 				fmt.Printf("  updated %s (%s, score %d) → %s\n", e.ID, e.Provider, e.CapScore, overlay)
 			default:
-				fmt.Printf("  added %s (%s, score %d) → %s\n", e.ID, e.Provider, e.CapScore, overlay)
+				// Provider is optional, and interpolating an empty one rendered
+				// "recorded kimi-k4 (, score 70)".
+				where := fmt.Sprintf("score %d", e.CapScore)
+				if e.Provider != "" {
+					where = fmt.Sprintf("%s, score %d", e.Provider, e.CapScore)
+				}
+				fmt.Printf("  recorded %s (%s) → %s\n", e.ID, where, overlay)
 			}
+			// "added" on its own read as "this model is now routable", which an
+			// overlay entry never makes it (#742).
+			fmt.Printf("  %s\n", dimStyle.Render(addedModelNote(e)))
 			return nil
 		},
 	}
