@@ -283,6 +283,14 @@ func (m Cockpit) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// tick from a superseded task schedules nothing.
 		for _, t := range m.threads {
 			if t.exec == msg.exec && t.exec != nil {
+				// The tick is also what coalesces the stream: deltas land every
+				// ~20ms and this repaints five times a second, so the render
+				// never runs per delta. Newly abandoned partials are copied to
+				// the thread here, which is what keeps them expandable after
+				// the task that produced them is gone.
+				if g := t.exec.stream.abandoned(); len(g) > len(t.gone) {
+					t.gone = ckMergeAbandoned(t.gone, g)
+				}
 				return m, ckSpinTick(t.exec)
 			}
 		}

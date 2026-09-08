@@ -31,7 +31,7 @@ func stubExec(t *testing.T) {
 	t.Helper()
 	d, e, v := ckDispatchStage, ckEditStage, ckVerifyStage
 	// The pipeline around the seams is real; the providers never are in a test.
-	ckDispatchStage = func(context.Context, *ckTask, string, string, byte) (ckStageOut, error) {
+	ckDispatchStage = func(context.Context, *ckTask, string, string, byte, dispatch.OnStream) (ckStageOut, error) {
 		t.Fatal("ckDispatchStage used without a stub")
 		return ckStageOut{}, nil
 	}
@@ -48,8 +48,8 @@ func stubExec(t *testing.T) {
 
 // stubAnswer is a dispatch stage returning out; cost > 0 also records the
 // spend the way real dispatch does, so the cost fold has something to fold.
-func stubAnswer(out string, cost float64) func(context.Context, *ckTask, string, string, byte) (ckStageOut, error) {
-	return func(_ context.Context, tk *ckTask, _ string, _ string, _ byte) (ckStageOut, error) {
+func stubAnswer(out string, cost float64) func(context.Context, *ckTask, string, string, byte, dispatch.OnStream) (ckStageOut, error) {
+	return func(_ context.Context, tk *ckTask, _ string, _ string, _ byte, _ dispatch.OnStream) (ckStageOut, error) {
 		if cost > 0 {
 			_ = runlog.New(tk.runID).Append(runlog.Event{
 				Kind: runlog.KindDispatchFinished, TaskID: tk.taskID, Status: "ok", CostUSD: cost})
@@ -182,7 +182,7 @@ func TestExec_AskAnswersAccruesCostAndLinksTrace(t *testing.T) {
 func TestExec_FailureRendersErrorAndTrace(t *testing.T) {
 	testutil.NewSandbox(t)
 	stubExec(t)
-	ckDispatchStage = func(context.Context, *ckTask, string, string, byte) (ckStageOut, error) {
+	ckDispatchStage = func(context.Context, *ckTask, string, string, byte, dispatch.OnStream) (ckStageOut, error) {
 		return ckStageOut{}, errors.New("no heads answered")
 	}
 	m := chatFixture("ask")
@@ -202,7 +202,7 @@ func TestExec_FailureRendersErrorAndTrace(t *testing.T) {
 func TestExec_EscCancelsRunningTask(t *testing.T) {
 	testutil.NewSandbox(t)
 	stubExec(t)
-	ckDispatchStage = func(ctx context.Context, _ *ckTask, _ string, _ string, _ byte) (ckStageOut, error) {
+	ckDispatchStage = func(ctx context.Context, _ *ckTask, _ string, _ string, _ byte, _ dispatch.OnStream) (ckStageOut, error) {
 		<-ctx.Done()
 		return ckStageOut{}, ctx.Err()
 	}
@@ -233,7 +233,7 @@ func TestExec_EscCancelsRunningTask(t *testing.T) {
 func TestExec_SubmitWhileRunningRefusesAndKeepsInput(t *testing.T) {
 	testutil.NewSandbox(t)
 	stubExec(t)
-	ckDispatchStage = func(ctx context.Context, _ *ckTask, _ string, _ string, _ byte) (ckStageOut, error) {
+	ckDispatchStage = func(ctx context.Context, _ *ckTask, _ string, _ string, _ byte, _ dispatch.OnStream) (ckStageOut, error) {
 		<-ctx.Done()
 		return ckStageOut{}, ctx.Err()
 	}
@@ -263,7 +263,7 @@ func TestExec_PIIForcesLocalBadgeAndOption(t *testing.T) {
 	testutil.NewSandbox(t)
 	stubExec(t)
 	var got *ckTask
-	ckDispatchStage = func(_ context.Context, tk *ckTask, _ string, _ string, _ byte) (ckStageOut, error) {
+	ckDispatchStage = func(_ context.Context, tk *ckTask, _ string, _ string, _ byte, _ dispatch.OnStream) (ckStageOut, error) {
 		got = tk
 		return ckStageOut{output: "ok", head: "local-stub", tier: 10}, nil
 	}
@@ -689,7 +689,7 @@ func TestExec_UnattendedStopsVisiblyAtTheCostCap(t *testing.T) {
 	}
 	// The stage-level guard also rides along on plain dispatches.
 	var seen *ckTask
-	ckDispatchStage = func(_ context.Context, tk *ckTask, _ string, _ string, _ byte) (ckStageOut, error) {
+	ckDispatchStage = func(_ context.Context, tk *ckTask, _ string, _ string, _ byte, _ dispatch.OnStream) (ckStageOut, error) {
 		seen = tk
 		return ckStageOut{output: "1. ok", head: "h", tier: 8}, nil
 	}
@@ -708,7 +708,7 @@ func TestExec_OverrideWiresIntoTheNextDispatchOnly(t *testing.T) {
 	stubExec(t)
 	var strat byte
 	var seen *ckTask
-	capture := func(_ context.Context, tk *ckTask, _ string, _ string, s byte) (ckStageOut, error) {
+	capture := func(_ context.Context, tk *ckTask, _ string, _ string, s byte, _ dispatch.OnStream) (ckStageOut, error) {
 		seen, strat = tk, s
 		return ckStageOut{output: "ok", head: "h", tier: 8, confidence: 0.97}, nil
 	}
@@ -782,7 +782,7 @@ func TestExec_OverrideFanoutFallsBackToSingleForEdits(t *testing.T) {
 	stubExec(t)
 	rel, _ := namedFile(t, "package main\n")
 	var strat byte = 0xFF
-	ckDispatchStage = func(_ context.Context, _ *ckTask, _ string, _ string, s byte) (ckStageOut, error) {
+	ckDispatchStage = func(_ context.Context, _ *ckTask, _ string, _ string, s byte, _ dispatch.OnStream) (ckStageOut, error) {
 		strat = s
 		return ckStageOut{output: "1. plan", head: "h", tier: 8}, nil
 	}
@@ -813,7 +813,7 @@ func TestExec_ArchitectSplitsPlanAndImplementTiers(t *testing.T) {
 	stubExec(t)
 	rel, _ := namedFile(t, "package main\n")
 	var planTier string
-	ckDispatchStage = func(_ context.Context, tk *ckTask, _ string, tier string, _ byte) (ckStageOut, error) {
+	ckDispatchStage = func(_ context.Context, tk *ckTask, _ string, tier string, _ byte, _ dispatch.OnStream) (ckStageOut, error) {
 		planTier = tier
 		return ckStageOut{output: "1. design\n2. build", head: "opus", tier: 2}, nil
 	}
@@ -1140,7 +1140,7 @@ func TestCkRealDispatchStage_StrategiesReachTheirEntryPoints(t *testing.T) {
 	tk := &ckTask{runID: "r", taskID: "t", confidence: 0.95}
 
 	// No config at all: dispatch.New itself refuses.
-	if _, err := ckRealDispatchStage(context.Background(), tk, "p", "8", 0); err == nil ||
+	if _, err := ckRealDispatchStage(context.Background(), tk, "p", "8", 0, nil); err == nil ||
 		!strings.Contains(err.Error(), "hyctl init") {
 		t.Fatalf("no-config dispatch did not fail loudly: %v", err)
 	}
@@ -1149,7 +1149,7 @@ func TestCkRealDispatchStage_StrategiesReachTheirEntryPoints(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, strat := range []byte{0, 'B', 'C'} {
-		_, err := ckRealDispatchStage(context.Background(), tk, "p", "", strat)
+		_, err := ckRealDispatchStage(context.Background(), tk, "p", "", strat, nil)
 		if err == nil {
 			t.Fatalf("strategy %q dispatched with zero heads", strat)
 		}

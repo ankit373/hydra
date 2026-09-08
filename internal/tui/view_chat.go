@@ -68,6 +68,14 @@ func (m Cockpit) chatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				return m, nil
 			case 'm':
 				return m.openModePicker(), nil
+			case 'e':
+				// The TUI has no click hit-testing, so expanding a collapsed
+				// partial is a key. Falls through to typing when there is
+				// nothing collapsed, so `e` is not stolen from the input.
+				if t.toggleNewestAbandoned() {
+					t.scroll = 0 // back to live, the expanded text is at the tail
+					return m, nil
+				}
 			case 'a', 'd', 'x', 'o':
 				if nm, cmd, ok := m.resultKey(msg.Runes[0]); ok {
 					return nm, cmd
@@ -382,7 +390,7 @@ func (m Cockpit) chatMain(t *ckThread, w, h int) string {
 		logH = 1
 	}
 	rows = append(rows, lipgloss.NewStyle().Width(w).Height(logH).
-		Render(ckVisibleLog(t.log, w, logH, t.scroll-1)))
+		Render(ckVisibleLog(t.displayLog(), w, logH, t.scroll-1)))
 	rows = append(rows, input)
 	return lipgloss.JoinVertical(lipgloss.Left, rows...)
 }
