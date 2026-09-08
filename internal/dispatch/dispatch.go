@@ -113,6 +113,14 @@ type Result struct {
 	// looks identical to routing there in the first place (#676).
 	Attempts []Attempt
 
+	// OutputProvenance is Output classified, with the head that produced it.
+	// Hydra already treats a head's answer as untrusted data when the *next
+	// model* will read it (a2a fences PriorOutput), and as trusted instruction
+	// when a human's agent will, which is backwards: the orchestrator is the
+	// one with write access. Callers get the provenance rather than a bare
+	// string so they can decide (#740).
+	OutputProvenance egress.Part
+
 	*executor.Response
 }
 
@@ -402,7 +410,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 	// selection, so a secret payload prefers a local head rather than being
 	// refused at the gate further down. Failing to classify routes nothing:
 	// an unavailable gate is not a reason to send the payload anyway.
-	parts, err := d.provenance(prompt, opts)
+	parts, rules, err := d.provenance(prompt, opts)
 	if err != nil {
 		return nil, fmt.Errorf("egress classification unavailable, refusing to route: %w", err)
 	}
@@ -636,6 +644,10 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		}
 		d.health.Pass(h.ID)
 		r := &Result{Output: resp.Output, Head: h, Retries: i, Attempts: attempts, Response: resp}
+		r.OutputProvenance = rules.ClassifyPart(egress.Part{
+			Content: resp.Output, Source: egress.SourceHead, Origin: h.ID,
+		})
+		recordOutputFinding(r.OutputProvenance, h)
 		inRef, outRef := d.capturePayloads(prompt, opts, resp)
 		_ = rl.Append(runlog.Event{
 			Kind: runlog.KindDispatchFinished, TaskID: taskID,
@@ -1000,10 +1012,34 @@ func provenanceRecord(parts []egress.Part, h provider.Head) *ledger.EventProvena
 // to appear here. A caller that knows more than dispatch can (hyctl edit knows
 // the file whose content it embedded) passes its own parts in opts.Provenance
 // and they are classified the same way.
-func (d *Dispatcher) provenance(prompt string, opts Options) ([]egress.Part, error) {
+// recordOutputFinding notes a head that just emitted something credential-
+// shaped. Not a gate: the answer is already the caller's, and refusing to
+// return it would lose work over a heuristic. It is an audit trail, so the
+// question "which model leaked a key into a diff" has an answer.
+//
+// Deliberately not classified "pii": Exposures reads that to mean "sensitive
+// data was *sent* to this head", and filing an inbound finding there would
+// print a remote head's own leak as if Hydra had leaked to it.
+func recordOutputFinding(p egress.Part, h provider.Head) {
+	if p.Sens < egress.Secret {
+		return
+	}
+	_ = ledger.Record(ledger.DefaultPath(), ledger.Event{
+		Agent: "hydra-dispatch", Tool: h.ID, Action: ledger.Read,
+		Resource: "response", Decision: ledger.Allow,
+		Classification: classHeadOutput, PIITypes: p.Reasons,
+		Reason: "the response carries credential-shaped content; it was returned unmodified",
+	})
+}
+
+// classHeadOutput marks a finding about what a head returned, as distinct from
+// what was sent to one.
+const classHeadOutput = "head-output-secret"
+
+func (d *Dispatcher) provenance(prompt string, opts Options) ([]egress.Part, *egress.Rules, error) {
 	rules, err := egress.LoadRules(config.ScriptHome())
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	var parts []egress.Part
 	add := func(content string, src egress.Source, origin string) {
@@ -1028,7 +1064,7 @@ func (d *Dispatcher) provenance(prompt string, opts Options) ([]egress.Part, err
 	for _, p := range opts.Provenance {
 		parts = append(parts, rules.ClassifyPart(p))
 	}
-	return parts, nil
+	return parts, rules, nil
 }
 
 // A hint that matches nothing returns no candidates; the caller reports that

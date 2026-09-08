@@ -72,9 +72,10 @@ type Coverage struct {
 func computeCoverage(pol ledger.Policy, sc SupplyChain, runs []trust.RunLog, costCeilingDenials int) Coverage {
 	cats := []Category{
 		{ID: "LLM01", Name: "Prompt Injection", Status: Partial,
-			Detail: "untrusted content is fenced as data (a2a/parallel) with a content-derived nonce, but the " +
-				"injection-marker scan is an 11-phrase keyword heuristic that leaves an audit trail rather than " +
-				"preventing an attack, and head output is not scanned at all"},
+			Detail: "every point where model output re-enters a prompt is fenced as data with a content-derived " +
+				"nonce (a2a, parallel, the swarm judge, workflow steps), and a head's answer comes back " +
+				"classified; but the injection-marker scan is an 11-phrase keyword heuristic that leaves an " +
+				"audit trail rather than preventing an attack, and a fence is an instruction a model may ignore"},
 		llm02SensitiveInfo(),
 		llm03SupplyChain(sc),
 		{ID: "LLM04", Name: "Data and Model Poisoning", Status: NotApplicable,
