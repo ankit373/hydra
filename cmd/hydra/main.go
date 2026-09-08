@@ -2373,17 +2373,6 @@ func securityCSV(w io.Writer, r *security.Report) error {
 	return cw.Error()
 }
 
-// printSubprocessBoundary states in words what no number above it can: a
-// CLI-agent head runs in a process Hydra does not control, so the coverage
-// figures describe what Hydra sends, not everything that leaves (#725).
-func printSubprocessBoundary() {
-	fmt.Println()
-	fmt.Println(dimStyle.Render("  what this does not cover"))
-	fmt.Println(dimStyle.Render("  a CLI-agent head (claude, agy, codex, cursor) is an agent in a process Hydra"))
-	fmt.Println(dimStyle.Render("  does not control. Above is what Hydra sends and records; what such a head"))
-	fmt.Println(dimStyle.Render("  reads and ships on its own is outside it. Only a local-only run stays here."))
-}
-
 // printSecurityReport answers one question by default, what did the agents
 // on this machine do, and can the record be trusted, and everything else
 // only under --why. Nine analyses printed unconditionally is an engineer's
@@ -2393,7 +2382,7 @@ func printSecurityReport(r *security.Report, why bool) {
 	printVerdict(r)
 	printIncidents(r)
 	printEvidenceState(r)
-	printSubprocessBoundary()
+	printBoundary(r)
 
 	if !why {
 		fmt.Println()
@@ -2521,6 +2510,38 @@ func printEvidenceState(r *security.Report) {
 		cortexStyle.Render("activity"), r.Ledger.Denied, r.Ledger.Flagged)
 	fmt.Printf("  %s  %d event(s), %d hash-chained, %s\n",
 		cortexStyle.Render("evidence"), ev.Events, ev.ChainedEvents, chain)
+}
+
+// printBoundary states what every number above it is a statement about. A
+// verdict of OK over a machine whose heads are mostly separate programs is
+// true and reads as more than it is, so the scope goes on the same screen
+// rather than three flags away (#725).
+func printBoundary(r *security.Report) {
+	b := r.Boundary
+	// Stated on every run, including this one: a reader who takes a figure
+	// away has already read it, so a caveat that only appears sometimes is a
+	// caveat they will meet after they needed it (#803).
+	if len(b.Governed) == 0 && len(b.Opaque) == 0 {
+		fmt.Printf("  %s     no heads discovered, so what Hydra does not control here is unknown\n",
+			cortexStyle.Render("scope"))
+		fmt.Println(dimStyle.Render(
+			"            a CLI-agent head runs in a process Hydra does not control; run `hyctl probe`"))
+		return
+	}
+	if b.Total() {
+		fmt.Printf("  %s     every head takes a request Hydra composes, so the gate sees all of it\n",
+			cortexStyle.Render("scope"))
+		fmt.Println(dimStyle.Render(
+			"            nothing here runs in a process Hydra does not control"))
+		return
+	}
+	fmt.Printf("  %s     %d of %d heads are separate programs (%s)\n",
+		cortexStyle.Render("scope"), len(b.Opaque), len(b.Opaque)+len(b.Governed),
+		security.HeadList(b.Opaque))
+	fmt.Println(dimStyle.Render(
+		"            Hydra governs what it sends them, not what they read or send on their own;"))
+	fmt.Println(dimStyle.Render(
+		"            only a local-only run keeps the whole task on this machine"))
 }
 
 // printIncidents shows correlated sequences rather than scattered rows.

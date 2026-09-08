@@ -62,8 +62,10 @@ func computeAgentic(pol ledger.Policy, sc SupplyChain, integrityIntact bool) Age
 func asi01GoalHijack() Category {
 	return Category{
 		ID: "ASI01", Name: "Agent Goal Hijack", Status: Partial,
-		Detail: "a2a and parallel context is fenced as data with a content-derived nonce, but head output " +
-			"returns to the orchestrator unfenced and the injection-marker scan is a keyword heuristic",
+		Detail: "every point where one model's output becomes another's prompt is fenced as data with a " +
+			"content-derived nonce (a2a, parallel, the swarm judge, workflow steps), but the answer an " +
+			"orchestrator reads carries only a convention and a credential warning, and the " +
+			"injection-marker scan is a keyword heuristic",
 	}
 }
 
