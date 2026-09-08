@@ -365,8 +365,13 @@ func cmdProbe() *cobra.Command {
 				if warnings == nil {
 					warnings = []string{}
 				}
+				// A JSON caller cannot derive the catalogue size from the heads,
+				// so it would have no way to tell an allowlist of 12 from all
+				// there is (#752).
+				enabled, catalogue := openRouterCounts()
 				return json.NewEncoder(os.Stdout).Encode(map[string]any{
 					"cortex": cortexName, "heads": heads, "warnings": warnings,
+					"openrouter": map[string]int{"enabled": enabled, "catalogue": catalogue},
 				})
 			}
 			fmt.Println(tui.Splash(cortexName))
@@ -412,6 +417,10 @@ func cmdProbe() *cobra.Command {
 				fmt.Printf("\n  %s\n", dimStyle.Render(fmt.Sprintf(
 					"✗ = discovered but not routable (%d of %d), dispatch will skip these.",
 					unroutable, len(result.Heads))))
+			}
+			if enabled, catalogue := openRouterCounts(); enabled > 0 {
+				fmt.Printf("\n  %s\n", dimStyle.Render(
+					openRouterNote(enabled, catalogue, config.Path())))
 			}
 			return nil
 		},

@@ -71,6 +71,14 @@ func dedupeKey(h provider.Head) string {
 	if h.LocalOnly || h.Provider == "antigravity" {
 		return h.ID // each local model or antigravity tier is unique
 	}
+	// A head that names its own model is one of several from the same
+	// provider, so its ID is its identity, the same reason a local model's
+	// is. Keying it on the provider collapsed a three-model OpenRouter
+	// allowlist to whichever scored highest, and the other two were silently
+	// gone from probe, status and routing (#752).
+	if h.Meta["model"] != "" {
+		return h.ID
+	}
 	return h.Provider // one entry per cloud provider
 }
 
@@ -111,9 +119,13 @@ func UITier(h provider.Head) int {
 		return 7
 	case h.CapScore >= 65:
 		return 8
-	case h.CapScore >= 60:
-		return 9
 	default:
-		return 10
+		// The bottom tier is the free floor, and only local heads belong on it.
+		// A weak *paid* head fell through to 10 as well, where routing.yaml
+		// sends `GRUNT` and pricing.yaml charges $0.00 ("local, no $ cost"), so
+		// it was both preferred over a free local head and costed as if it were
+		// one. Reachable in practice only once a single provider could offer
+		// many models (#752), a 1b model on OpenRouter scores 55.
+		return 9
 	}
 }

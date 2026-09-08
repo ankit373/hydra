@@ -77,6 +77,12 @@ type Executor interface {
 // different questions, and only one function should answer the second.
 func Unroutable(h provider.Head) string {
 	switch {
+	case h.Meta["unroutable_reason"] != "":
+		// The discovering provider knows something this package does not, e.g.
+		// that a configured OpenRouter model is not in the catalogue (#752).
+		// Its message rather than a guess, so the reason stays where the
+		// knowledge is.
+		return h.Meta["unroutable_reason"]
 	case h.Meta["embedding_only"] == "true":
 		// Discovered and shown, never dispatched: it has no completion API,
 		// so every dispatch to it would fail (#532).

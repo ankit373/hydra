@@ -66,12 +66,14 @@ func TestCanonicalKey_NoNameAtAllIsUnknown(t *testing.T) {
 }
 
 // The " (Ollama)" suffix is the port provider's own display construction over
-// ID "ollama/X", so inverting it resolves rather than guesses.
+// ID "ollama/X", so inverting it resolves rather than guesses. An allowlisted
+// OpenRouter model is one head per model the same way (#752).
 func TestResolveHeadName_InvertsThePortProviderDisplayName(t *testing.T) {
 	for name, want := range map[string]string{
-		"qwen3:0.6b (Ollama)":   "ollama/qwen3:0.6b",
-		"phi-4 (LM Studio)":     "lmstudio/phi-4",
-		"nothing-declares-this": "",
+		"qwen3:0.6b (Ollama)":                      "ollama/qwen3:0.6b",
+		"phi-4 (LM Studio)":                        "lmstudio/phi-4",
+		"anthropic/claude-sonnet-4.5 (OpenRouter)": "openrouter/anthropic/claude-sonnet-4.5",
+		"nothing-declares-this":                    "",
 	} {
 		if got := resolveName(name, table()); got != want {
 			t.Errorf("resolveName(%q) = %q, want %q", name, got, want)
@@ -88,10 +90,13 @@ func TestResolveHeadName_RefusesAnEmptyModelPart(t *testing.T) {
 
 func TestAttributable(t *testing.T) {
 	for key, want := range map[string]bool{
-		"claude":                  true,
-		"ollama/qwen3:0.6b":       true, // a local head, declared by prefix
-		"Gemini 3.5 Flash (High)": false,
-		UnknownPoolKey:            false,
+		"claude":            true,
+		"ollama/qwen3:0.6b": true, // a local head, declared by prefix
+		// A named OpenRouter model, so its spend attributes to it rather than
+		// falling into the unattributed footnote.
+		"openrouter/google/gemini-2.5-pro": true,
+		"Gemini 3.5 Flash (High)":          false,
+		UnknownPoolKey:                     false,
 	} {
 		if got := attributable(key, table()); got != want {
 			t.Errorf("attributable(%q) = %v, want %v", key, got, want)

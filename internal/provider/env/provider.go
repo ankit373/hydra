@@ -24,9 +24,21 @@ func (p *Provider) Discover(_ context.Context) ([]provider.Head, error) {
 		return nil, err
 	}
 
+	// Computed once, before the loop, so a machine with no allowlist never
+	// reads the pricing catalogue during discovery.
+	named := allowlistedOpenRouter(caps)
+
 	var heads []provider.Head
 	for _, k := range knownKeys {
 		if !k.detected() {
+			continue
+		}
+		// An allowlist replaces the single key-derived head rather than sitting
+		// beside it. Two heads on one account, one of them routing to whatever
+		// OPENROUTER_MODEL happens to say, splits the account's spend between
+		// them and makes neither row its real cost.
+		if k.providerID == "openrouter" && len(named) > 0 {
+			heads = append(heads, named...)
 			continue
 		}
 		id := "env/" + k.providerID

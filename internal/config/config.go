@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/BurntSushi/toml"
 )
@@ -29,6 +30,35 @@ type Egress struct {
 	// than sending it to one that reaches the network. Absent means on: a
 	// config file written before the gate existed must not read as an opt-out.
 	Strict *bool `toml:"strict,omitempty"`
+}
+
+// OpenRouter admits individual models from OpenRouter's catalogue as routable
+// heads. Hydra already prices and scores hundreds of them, but enumerating
+// them all would bury `hyctl probe` and `hyctl status`, so admission is the
+// user's explicit choice (#752).
+type OpenRouter struct {
+	// Models is the allowlist of catalogue ids, e.g. "anthropic/claude-sonnet-4-5".
+	// Empty means the single key-derived head every install has had, so naming
+	// nothing changes nothing.
+	Models []string `toml:"models,omitempty"`
+}
+
+// Normalized drops blanks and case-insensitive duplicates, keeping the user's
+// spelling: the string is what gets sent as the API's model id, and lowercasing
+// it would be inventing a normalization the API never promised.
+func (o OpenRouter) Normalized() []string {
+	seen := make(map[string]bool, len(o.Models))
+	out := make([]string, 0, len(o.Models))
+	for _, m := range o.Models {
+		m = strings.TrimSpace(m)
+		key := strings.ToLower(m)
+		if m == "" || seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, m)
+	}
+	return out
 }
 
 // Config is the root Hydra configuration.
@@ -60,6 +90,21 @@ type Config struct {
 	// packs are dropped, so the store forgets rather than refuses. 0 means the
 	// built-in default.
 	PayloadBudgetMB int `toml:"payload_budget_mb,omitempty"`
+
+	OpenRouter OpenRouter `toml:"openrouter,omitempty"`
+}
+
+// OpenRouterModels is the configured allowlist, or nothing.
+//
+// A missing or unparseable config yields an empty list rather than an error:
+// discovery runs on machines that have never written one, and failing to
+// discover anything at all over it would be far worse than routing as before.
+func OpenRouterModels() []string {
+	cfg, err := Load()
+	if err != nil {
+		return nil
+	}
+	return cfg.OpenRouter.Normalized()
 }
 
 // StrictEgress reports whether a secret payload is refused when no local head

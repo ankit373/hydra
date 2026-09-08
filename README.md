@@ -768,6 +768,23 @@ heads   = ["ollama/phi4-mini"]
 action  = "local-only"
 ```
 
+### Routing between individual OpenRouter models
+
+By default an `OPENROUTER_API_KEY` gives you one head, routing to one model
+(`OPENROUTER_MODEL`, or a built-in default). Hydra already prices and scores
+OpenRouter's whole catalogue, so naming models turns each into its own head
+that the router can choose between on cost and capability:
+
+```toml
+[openrouter]
+models = ["anthropic/claude-sonnet-4.5", "google/gemini-2.5-pro"]
+```
+
+`hyctl probe` then lists one head per model and says how much of the catalogue
+is enabled ("2 of 423"). A name the catalogue does not have is shown as not
+routable with the reason, rather than quietly dropped. Naming nothing changes
+nothing: the single key-derived head is exactly as before.
+
 ---
 
 ## Adding a Model
