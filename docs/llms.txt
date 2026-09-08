@@ -26,7 +26,7 @@
 ## CLI Commands
 
 - `hyctl dispatch`: route a task to the cheapest head that clears the bar (`--enum`/`--tier`, `--swarm`, `--confidence`, `--file`, `--local`, `--dry-run`, `--a2a`)
-- `hyctl probe`: scan the machine for every available head (CLI agents, API keys, local servers)
+- `hyctl probe`: scan the machine for every available head (CLI agents, API keys, local servers). For a local model it reports the quantization the server actually loaded (`Q4_K_M`, `Q8_0`, `F16`) and the parameter count, read from what the server reports rather than guessed: the same model id at two quants differs in accuracy, VRAM and tokens/sec, so routing them as one head hides the tradeoff. A server that reports no quantization gets no column and no invented value
 - `hyctl status`: session state, the rate-aware `claude_pct` budget governor, and the heads that can actually run right now, grouped by the tier they would route at
 - `hyctl tui`: interactive cockpit whose chat executes (Auto/Plan/Edit/Ask, plus Architect/Careful/Unattended), plus five more views over the same data: Agents, Models, Activity, Usage, Audit
 - `hyctl cost`: spend report (estimated vs actual) from the dispatch cost log
