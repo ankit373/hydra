@@ -505,9 +505,18 @@ only by a source this run would not sample need different fixes.
 
 It leans on **per-source calibration** you build from real outcomes, each model/verifier earns a measured sensitivity, specificity, and *diagnostic power* `D`. A coin-flip source (`D≈0`) contributes nothing; a proven one lets a single vote go a long way.
 
+Recording only your own answers is not enough to calibrate: a model that produced
+an answer always "said correct", which fills TP and FP and leaves TN on its bare
+prior, so specificity is never measured and `LLR = ln(se/(1-sp))` stays under
+`ln 2 = 0.693` nats, against the `2.944` a 95% target needs. The dissenters are
+what fix it. `hyctl trust outcome` replays a past ensemble run's ledger once its
+answer is known, so a head that disagreed with an answer that turned out wrong
+finally earns the true negative that specificity can only come from.
+
 ```bash
+hyctl trust outcome <task_hash> --outcome incorrect   # train every source that voted in a run
 hyctl trust record --source model:claude-sonnet --domain go --said-correct --outcome correct
-hyctl trust calibration          # per-source se / sp / D table
+hyctl trust calibration          # per-source se / sp / D table (neg=0 flags an unusable cell)
 hyctl trust defect --pii --production   # modeled $ cost of shipping a wrong answer
 hyctl trust stats                # samples saved vs fixed-N, achieved vs target confidence
 hyctl trust explain <task_hash>  # the full LLR ledger for a past run: why it stopped
@@ -663,7 +672,8 @@ hyctl pricing list                      # live $/1M-token rates (OpenRouter + fa
 
 # Trust Control Plane
 hyctl trust calibration                 # per-source sensitivity / specificity / D
-hyctl trust record ...                  # feed an outcome to train calibration
+hyctl trust record ...                  # feed one source's outcome to train calibration
+hyctl trust outcome <task_hash> ...     # train every voter in a past run from its verified answer
 hyctl trust defect ...                  # modeled cost of shipping a wrong answer
 hyctl trust stats                       # samples saved, achieved vs target confidence
 hyctl trust explain <task_hash>         # the LLR ledger for a past SPRT run
