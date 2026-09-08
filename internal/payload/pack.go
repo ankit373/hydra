@@ -178,3 +178,21 @@ func (s *Store) reopenIndexLocked() error {
 	s.pack = p
 	return nil
 }
+
+// appendIndexLine appends one entry and closes the file before returning.
+//
+// Closed rather than deferred: eviction renames a fresh index over this path,
+// and Windows refuses to rename over a file that is still open ("Access is
+// denied"). On Unix the deferred close was harmless, which is exactly why this
+// only showed up on the Windows leg of CI.
+func appendIndexLine(path, line string) error {
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintln(f, line); err != nil {
+		f.Close()
+		return err
+	}
+	return f.Close()
+}

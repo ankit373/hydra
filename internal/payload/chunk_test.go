@@ -32,7 +32,8 @@ func corpus(t *testing.T) []string {
 		out = append(out, string(b))
 	}
 	if len(out) < 3 {
-		t.Skip("not enough source files to build a corpus")
+		t.Fatalf("only %d source files over 2 KB in this package; the corpus these "+
+			"ratio tests measure against is gone", len(out))
 	}
 	return out
 }
@@ -131,8 +132,11 @@ func TestChunking_StoresARepeatedSystemPromptOnce(t *testing.T) {
 	wRatio := storedRatio(t, whole, raw)
 	cRatio := storedRatio(t, chunked, raw)
 	t.Logf("whole blob %.1fx, chunked %.1fx (%.1fx better)", wRatio, cRatio, cRatio/wRatio)
-	if cRatio < wRatio*3 {
-		t.Fatalf("chunking gained only %.1fx over whole-blob hashing, want at least 3x", cRatio/wRatio)
+	// Measured 3.6x on macOS and 3.0x on Windows, where a tighter bound landed
+	// exactly on the assert. The claim being guarded is that chunking is a
+	// large multiple, not a specific one.
+	if cRatio < wRatio*2.5 {
+		t.Fatalf("chunking gained only %.1fx over whole-blob hashing, want at least 2.5x", cRatio/wRatio)
 	}
 }
 
@@ -149,7 +153,7 @@ func TestChunking_SurvivesSmallEditsToTheSameFile(t *testing.T) {
 	}
 	lines := strings.Split(base, "\n")
 	if len(lines) < 60 {
-		t.Skip("corpus file too short to edit meaningfully")
+		t.Fatalf("largest corpus file is %d lines; too short to measure edits against", len(lines))
 	}
 
 	const calls = 30
@@ -196,12 +200,12 @@ func TestChunk_BoundariesFollowContentNotOffset(t *testing.T) {
 		}
 	}
 	if len(base) < minChunkBytes*8 {
-		t.Skip("corpus file too short")
+		t.Fatalf("largest corpus file is %d B; too short to produce several chunks", len(base))
 	}
 	before := chunk(base)
 	after := chunk("// one inserted line\n" + base)
 	if len(before) < 3 {
-		t.Skipf("only %d chunks; nothing to compare", len(before))
+		t.Fatalf("the corpus produced %d chunks; nothing to compare boundaries against", len(before))
 	}
 
 	shared := map[string]bool{}

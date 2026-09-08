@@ -304,11 +304,6 @@ func (s *Store) put(content string, keepProb float64, isManifest bool, logical i
 		Dict: usedDict, PII: len(piiTypes) > 0, PIITypes: piiTypes, KeepProb: keepProb,
 		Manifest: isManifest, Logical: logical}
 
-	idx, err := os.OpenFile(indexPath(s.dir), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
-	if err != nil {
-		return "", err
-	}
-	defer idx.Close()
 	line, err := json.Marshal(e)
 	if err != nil {
 		return "", err
@@ -318,7 +313,7 @@ func (s *Store) put(content string, keepProb float64, isManifest bool, logical i
 	if err := pack.Sync(); err != nil {
 		return "", err
 	}
-	if _, err := fmt.Fprintln(idx, string(line)); err != nil {
+	if err := appendIndexLine(indexPath(s.dir), string(line)); err != nil {
 		return "", err
 	}
 	s.index[h] = e
