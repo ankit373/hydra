@@ -76,6 +76,7 @@ floor internal/trust                88
 floor internal/tui                  86
 floor internal/update               89
 floor internal/util                 96
+floor internal/workflow             84
 floor internal/workspace            89
 floor registry                      86
 
