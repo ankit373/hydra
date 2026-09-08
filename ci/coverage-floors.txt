@@ -44,9 +44,9 @@ floor internal/cost                 91
 floor internal/diff                 92
 floor internal/dispatch             89
 floor internal/editor               86
-# internal/egress's enforcement path is the covered part: Guard 94.7%, the
-# classifiers 85-90%. What drags the package number down is the reporting
-# surface, one function of which has no callers at all (#806).
+# internal/egress reads 58% here but is covered to 80.2% measured through
+# internal/dispatch (-coverpkg): Summarize and Origins are 100% there. A
+# package's own profile cannot see its caller's tests, so 58 understates it.
 floor internal/egress               55
 floor internal/entropy              88
 # internal/evalset reads 90.3% on develop and 86.5% with #796's hash sidecar,
