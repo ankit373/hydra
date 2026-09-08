@@ -38,6 +38,8 @@ internal/a2a/           ← Causal agent handoffs: vector clocks + concurrent-ed
 internal/optimal/       ← Optimal parallel-agent count n*=√((1-s)/k) (Amdahl+coordination, Law 4).
 internal/entropy/       ← Context signal density (gzip proxy) → useful_tokens=L·ρ; compaction governor (Law 5).
 internal/ledger/        ← MCP accountability ledger: record + policy-gate what agents touch. `hyctl mcp`.
+internal/workflow/      ← Ordered multi-step tasks, each step routed on its own; state saved
+                          before every step so a killed run resumes. `hyctl workflow`.
 internal/pending/       ← Tasks parked on a ledger `ask` verdict (logs/pending/<task-id>.json). `hyctl ask`.
 internal/mcpregistry/   ← MCP server trust registry: sync official registry, scan installed servers,
                           score (CSA-shaped categories), version-bump trust automaton, backtest against
@@ -258,6 +260,12 @@ hyctl trust defect --pii --production ; hyctl trust stats ; hyctl trust explain 
 # Add a model at runtime (no rebuild), merges into ~/.hydra/models.json overlay
 hyctl models add kimi-k3 --name "Kimi K3" --provider moonshot --cap-score 85
 hyctl models list ; hyctl models remove kimi-k3 ; hyctl models sync   # import OpenRouter catalog
+
+# Multi-step task, each step routed on its own (triage cheap, fix strong)
+hyctl workflow run --task "fix the flaky test" \
+  --step "list the failing tests" --enum SIMPLE \
+  --step "write the fix" --enum EXPERT
+hyctl workflow list ; hyctl workflow show <id> ; hyctl workflow resume <id>
 
 # Tasks parked waiting on a human (ledger `ask` verdict)
 hyctl ask list ; hyctl ask answer <task-id> "go ahead" ; hyctl ask decline <task-id> "not prod"

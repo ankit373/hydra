@@ -644,6 +644,8 @@ hyctl security --attest                 # checkable attestation: posture + evide
 hyctl edit --file ... --prompt "..."    # scoped, validated, rollback-safe file edit
 hyctl review ...                        # code review / approve / reject / QA
 hyctl parallel ...                      # fan independent tasks across heads
+hyctl workflow run --step A --step B    # multi-step task, each step routed on its own
+hyctl workflow resume <id>              # continue a killed workflow from where it stopped
 ```
 
 ### The Cockpit (`hyctl tui`)
