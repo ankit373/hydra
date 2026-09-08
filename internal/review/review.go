@@ -431,6 +431,5 @@ func recordReviewOutcome(file string, correct bool) {
 	if correct {
 		outcome = trust.OutcomeCorrect
 	}
-	domain := strings.TrimPrefix(filepath.Ext(file), ".")
-	_ = cal.Update(headID, domain, true, outcome)
+	_ = cal.Update(headID, trust.DomainForFile(file), true, outcome)
 }

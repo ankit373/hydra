@@ -773,6 +773,16 @@ func cmdDispatch() *cobra.Command {
 				}()
 			}
 
+			// editor and review record outcomes under the target file's own
+			// domain, so a --file run has to look up that same cell rather than
+			// "default", which nothing fills (#785). An explicit --domain always
+			// wins; this only supplies the one the writers would have used.
+			if file != "" && !cmd.Flags().Changed("domain") {
+				if d := trust.DomainForFile(file); d != trust.DefaultDomain {
+					domain = d
+				}
+			}
+
 			d, err := dispatch.New(ctx)
 			if err != nil {
 				return err
@@ -4463,6 +4473,10 @@ func cmdTrustRecord() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if reason, bad := trust.UnreadableSourceKey(source); bad {
+				fmt.Printf("  %s\n", warnStyle.Render(fmt.Sprintf(
+					"source %q: %s. `hyctl probe` lists the IDs the router uses.", source, reason)))
+			}
 			if err := cal.Update(source, domain, saidCorrect, o); err != nil {
 				return err
 			}
@@ -4471,7 +4485,7 @@ func cmdTrustRecord() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&source, "source", "", "evidence source, e.g. model:claude-sonnet or verifier:tests")
+	cmd.Flags().StringVar(&source, "source", "", "evidence source: a head ID from `hyctl probe` (e.g. ollama/qwen3:4b), or verifier:<name>")
 	cmd.Flags().StringVar(&domain, "domain", "", "task domain")
 	cmd.Flags().BoolVar(&saidCorrect, "said-correct", false, "the source's raw verdict")
 	cmd.Flags().StringVar(&outcome, "outcome", "", "ground truth: correct|incorrect")
