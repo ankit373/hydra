@@ -322,3 +322,41 @@ func TestStream_PrefersTheStreamingPath(t *testing.T) {
 		t.Errorf("got %d deltas, want 3: Stream fell back to Execute", n)
 	}
 }
+
+// #810: zero was both the sentinel and a reachable measurement, so a first
+// token that arrived inside the clock's granularity read as "the provider does
+// not report TTFT" and the next fragment then recorded its own elapsed time as
+// the time to the first. Windows against a local server is where that showed.
+func TestDeltaSink_TheFirstTokenKeepsTheTitle(t *testing.T) {
+	s := newDeltaSink(func(string) {}, time.Now())
+
+	s.write("a")
+	if s.firstTokenAt() == 0 {
+		t.Fatal("TTFT is zero for a token that demonstrably arrived")
+	}
+
+	// Stand in for a sub-granularity measurement, which is the state the old
+	// sentinel could not tell from "never measured". A later fragment must not
+	// be able to claim the title from it.
+	s.mu.Lock()
+	s.ttft = 0
+	s.mu.Unlock()
+
+	time.Sleep(2 * time.Millisecond)
+	s.write("b")
+
+	if got := s.firstTokenAt(); got != 0 {
+		t.Errorf("a later fragment recorded %v as the time to the first token", got)
+	}
+}
+
+// The floor itself: a reading of zero is a reading, and must not render as the
+// absence of one.
+func TestMeasured_ZeroIsReportedAsTheFloorNotAsUnknown(t *testing.T) {
+	if got := measured(0); got != time.Nanosecond {
+		t.Errorf("measured(0) = %v, want the floor: zero reads as 'not reported'", got)
+	}
+	if got := measured(3 * time.Millisecond); got != 3*time.Millisecond {
+		t.Errorf("measured(3ms) = %v, a real reading must pass through untouched", got)
+	}
+}

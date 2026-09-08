@@ -61,6 +61,11 @@ type Coverage struct {
 	Covered        int        `json:"covered"`    // Enforced + Configured
 	Partial        int        `json:"partial"`    // detective only, deliberately not covered
 	PercentCovered float64    `json:"percentCovered"`
+
+	// Edition qualifies every ID above. Only LLM01 and LLM02 keep their
+	// number across editions, so a consumer pinning on "LLM06" needs to know
+	// which list it read to notice when the entry underneath it changes (#748).
+	Edition string `json:"edition"`
 }
 
 // computeCoverage classifies all 10 OWASP LLM Top-10 categories against
@@ -91,7 +96,8 @@ func computeCoverage(pol ledger.Policy, sc SupplyChain, runs []trust.RunLog, cos
 	}
 
 	applicable, covered, partial, pct := tally(cats)
-	return Coverage{Categories: cats, Applicable: applicable, Covered: covered, Partial: partial, PercentCovered: pct}
+	return Coverage{Categories: cats, Applicable: applicable, Covered: covered,
+		Partial: partial, PercentCovered: pct, Edition: LLMEdition}
 }
 
 // tally counts categories into the numbers both Top-10 scores report. One
@@ -234,9 +240,18 @@ func llm10UnboundedConsumption(costCeilingDenials int) Category {
 // small set of categories actually being annotated, not to every one of
 // potentially hundreds of thousands of history entries regardless of
 // whether anything ever looks them up.
+//
+// Entries from another LLM edition are skipped rather than matched. The IDs
+// are only stable for LLM01 and LLM02, so an unqualified match would report
+// one category's gap age under another category's name, wrong and invisible,
+// in the field a reader trusts to say how long something has been broken
+// (#748).
 func firstGapSeen(history []scoreEntry) map[string]int {
 	out := make(map[string]int, 8)
 	for i, h := range history {
+		if h.edition() != LLMEdition {
+			continue
+		}
 		for _, id := range h.Gaps {
 			if _, ok := out[id]; ok {
 				continue
@@ -255,6 +270,9 @@ func firstGapSeen(history []scoreEntry) map[string]int {
 // since a malformed timestamp is not the common case.
 func firstParseableGapSince(history []scoreEntry, id string) (string, time.Time, bool) {
 	for _, h := range history {
+		if h.edition() != LLMEdition {
+			continue // same cross-edition rule as firstGapSeen (#748)
+		}
 		if !slices.Contains(h.Gaps, id) {
 			continue
 		}

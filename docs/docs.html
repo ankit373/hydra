@@ -691,10 +691,15 @@ hyctl dispatch <span class="fl">--enum</span> SIMPLE <span class="s">"write a Us
 hyctl dispatch <span class="fl">--dry-run</span> <span class="s">"add pagination"</span>
 hyctl dispatch <span class="fl">--local</span> <span class="s">"write unit tests"</span></pre>
       </div>
+      <div class="sub"><div class="lbl">Streaming</div>
+        <p>On a terminal the answer is drawn <b>as it arrives</b>: a spinner covers the wait before the first token, then tokens append, then the token counts, elapsed time and measured <b>TTFT</b> print as a footer, since none of those numbers exist until the call returns. Measured on a local 7B: 435 deltas spread over 9.9s of a 10.0s call, where before there was nothing on screen for the whole ten seconds.</p>
+        <p>Piped output <b>never streams</b> and is byte-identical to before, so scripts are unaffected; <span class="fx">--no-stream</span> asks for the same buffered rendering on a terminal. When a head fails part-way through, its partial is <b>collapsed off the screen</b> and replaced by one line naming the head and the reason, because a partial left on screen reads as part of the answer. Nothing is erased once it has scrolled past the top of the window.</p>
+      </div>
       <div class="sub"><div class="lbl">Key flags</div>
         <div class="pill-row">
           <span class="mp"><b>--enum</b> / <b>--tier</b></span><span class="mp"><b>--dry-run</b></span><span class="mp"><b>--local</b></span>
           <span class="mp"><b>--file</b> raise bar by blast radius</span><span class="mp"><b>--a2a</b> handoff.json</span><span class="mp"><b>--system</b></span>
+          <span class="mp"><b>--no-stream</b></span>
         </div>
       </div>
     </section>

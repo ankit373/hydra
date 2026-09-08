@@ -934,6 +934,33 @@ body {
   font-size: 12px;
 }
 
+/* ── Scope note (#725): what the score above is a statement about ────── */
+
+.scope {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  background: var(--hy-panel);
+  border: 1px solid var(--hy-line);
+  border-left: 3px solid var(--hy-cheap);
+  border-radius: var(--hy-radius);
+  padding: 13px 17px;
+  margin-bottom: 22px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--hy-dim);
+}
+.scope--partial { border-left-color: var(--hy-aqua); }
+
+.scope__label {
+  flex: none;
+  font-family: var(--hy-font-mono);
+  font-size: 11px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--hy-ink);
+}
+
 /* ── Setup banner (#383, hyctl missing) ──────────────────────────────── */
 
 .setup {

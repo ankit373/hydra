@@ -704,6 +704,7 @@ func cmdDispatch() *cobra.Command {
 		a2aFile   string
 		enumKey   string
 		maxCost   float64
+		noStream  bool
 		// swarm flags
 		doSwarm       bool
 		swarmMode     string
@@ -979,6 +980,16 @@ func cmdDispatch() *cobra.Command {
 				Classification: &promptClass,
 			}
 
+			// Streamed on a terminal only. A pipe keeps the buffered rendering
+			// below byte for byte, so nothing that parses hyctl's output can be
+			// broken by an interactive nicety. --dry-run runs no head at all.
+			var sr *streamRenderer
+			if !dryRun && !noStream && isatty.IsTerminal(os.Stdout.Fd()) {
+				w, h := terminalSize()
+				sr = newStreamRenderer(os.Stdout, runID, w, h, d.CapturesPayloads())
+				opts.OnStream = sr.Handle
+			}
+
 			result, err := d.Dispatch(ctx, prompt, opts)
 			// A parked task is not a failure, but it is not success either:
 			// nothing ran. Print what is being asked and how to answer, then
@@ -1012,6 +1023,18 @@ func cmdDispatch() *cobra.Command {
 				return nil
 			}
 
+			// The answer is already on screen, delta by delta, so reprinting
+			// Output would show it twice. Only the numbers are still missing,
+			// since they do not exist until the call returns.
+			if sr != nil && sr.Streamed() {
+				sr.Finish(result.InputTokens, result.OutputTokens, result.Duration, result.TTFT)
+				printOutputWarning(result.OutputProvenance)
+				return nil
+			}
+			if sr != nil {
+				sr.Stop()
+			}
+
 			fmt.Println()
 			fmt.Printf("  %s %s  %s  %dms\n",
 				cortexStyle.Render("▶"),
@@ -1038,6 +1061,7 @@ func cmdDispatch() *cobra.Command {
 	cmd.Flags().StringVar(&a2aFile, "a2a", "", "path to A2A handoff JSON (prepends structured context to prompt)")
 	cmd.Flags().StringVar(&enumKey, "enum", "", "routing enum key, e.g. SIMPLE, selects the tier when --tier is unset")
 	cmd.Flags().Float64Var(&maxCost, "max-cost", 0, "refuse a candidate head if its estimated cost exceeds this USD (denial-of-wallet guard)")
+	cmd.Flags().BoolVar(&noStream, "no-stream", false, "print the answer in one block instead of as it arrives (piped output never streams)")
 	// swarm flags
 	cmd.Flags().BoolVar(&doSwarm, "swarm", false, "fan prompt out to multiple heads simultaneously")
 	cmd.Flags().StringVar(&swarmMode, "swarm-mode", "best", "response strategy: best|race|all")
@@ -1156,7 +1180,56 @@ improved against.`,
 	}
 	stats.Flags().BoolVar(&jsonOut, "json", false, "machine-readable output")
 
-	cmd.AddCommand(list, stats)
+	readiness := &cobra.Command{
+		Use:   "readiness",
+		Short: "Whether the corpus can yet support fitting a routing choice, by enum",
+		RunE: func(_ *cobra.Command, _ []string) error {
+			all, err := evalset.Load(evalset.DefaultPath())
+			if err != nil {
+				return err
+			}
+			rd := evalset.Readiness(all)
+			if jsonOut {
+				raw, _ := json.MarshalIndent(rd, "", "  ")
+				fmt.Println(string(raw))
+				return nil
+			}
+			if len(rd) == 0 {
+				fmt.Printf("No verified examples yet. Attribute one with %s\n",
+					dimStyle.Render("hyctl oracle verify --candidate <file> --enum SIMPLE -- <cmd>"))
+				return nil
+			}
+			fmt.Printf("%-14s %8s %10s %12s %7s  %s\n",
+				"ENUM", "TOTAL", "PASS RATE", "HEADS>="+strconv.Itoa(evalset.MinObservationsPerHead), "READY", "SHORTFALL")
+			for _, s := range rd {
+				ready, comparable, short := "no", strconv.Itoa(s.Comparable), ""
+				switch {
+				case s.Enum == "(none)":
+					comparable, short = "-", "no enum recorded, nothing can route on these"
+				case s.Ready:
+					ready = cortexStyle.Render("yes")
+				default:
+					short = fmt.Sprintf("need %d more head%s at %d examples",
+						evalset.MinComparableHeads-s.Comparable,
+						plural(evalset.MinComparableHeads-s.Comparable), evalset.MinObservationsPerHead)
+					// Otherwise "need 2 more heads" reads as a shortage of
+					// examples to someone who already has plenty of them.
+					if n := s.PerHead["(none)"]; n > 0 {
+						short += fmt.Sprintf(" (%d name no head)", n)
+					}
+				}
+				fmt.Printf("%-14s %8d %9.1f%% %12s %7s  %s\n",
+					s.Enum, s.Total, s.PassRate*100, comparable, ready, dimStyle.Render(short))
+			}
+			fmt.Printf("\n%s\n", dimStyle.Render(fmt.Sprintf(
+				"a fitted routing choice needs %d examples on each of %d heads: below that it loses to the strongest head",
+				evalset.MinObservationsPerHead, evalset.MinComparableHeads)))
+			return nil
+		},
+	}
+	readiness.Flags().BoolVar(&jsonOut, "json", false, "machine-readable output")
+
+	cmd.AddCommand(list, stats, readiness)
 	return cmd
 }
 
@@ -1557,7 +1630,8 @@ func cmdOracle() *cobra.Command {
 		Use:   "oracle",
 		Short: "Run deterministic verifiers (tests/compile/lint) as evidence sources",
 	}
-	var source, domain, candidateFile, record, scoreRun, scoreSpan string
+	var source, domain, candidateFile, record, scoreRun, scoreSpan, enumKey string
+	var tierNum int
 	verify := &cobra.Command{
 		Use:   "verify <command...>",
 		Short: "Run a verifier command; report pass/fail + its calibrated LLR",
@@ -1603,6 +1677,37 @@ func cmdOracle() *cobra.Command {
 			}
 			llr := oracle.LLR(cal, src, domain, v)
 
+			// Resolved once, for the example and the span score alike, since the
+			// span already recorded the routing decision. Refused rather than
+			// half-filled: this corpus is never pruned.
+			runID := scoreRun
+			var spanEv runlog.Event
+			if scoreSpan != "" {
+				if runID == "" {
+					runs, rErr := runlog.Runs()
+					if rErr != nil || len(runs) == 0 {
+						return fmt.Errorf("--span given but no run to attach it to; pass --run")
+					}
+					runID = runs[0]
+				}
+				events, lErr := runlog.Load(runID)
+				if lErr != nil {
+					return fmt.Errorf("run %s: %w", runID, lErr)
+				}
+				ev, ok := runlog.Span(events, scoreSpan)
+				if !ok {
+					return fmt.Errorf("span %q not found in run %s, or ambiguous", scoreSpan, runID)
+				}
+				spanEv = ev
+			}
+			enum, tier := enumKey, tierNum
+			if enum == "" {
+				enum, _ = spanEv.Meta["enum"].(string)
+			}
+			if tier == 0 {
+				tier = spanEv.Tier
+			}
+
 			// An oracle verdict on a real candidate is ground truth, and the
 			// rarest thing Hydra produces. It is kept outside the trace store
 			// so no retention pass can ever reach it (#625).
@@ -1611,6 +1716,7 @@ func cmdOracle() *cobra.Command {
 				added, aerr := evalset.Add(evalset.DefaultPath(), evalset.Example{
 					Domain: domain, Source: src, Candidate: candidate,
 					Passed: v.Passed, Detail: v.Detail, Config: breadcrumb,
+					Enum: enum, Tier: tier, Head: spanEv.Head,
 				})
 				switch {
 				case aerr != nil:
@@ -1626,14 +1732,6 @@ func cmdOracle() *cobra.Command {
 			// The oracle has always computed this; until #758 it had nowhere
 			// to put it, so a trace never said whether its answer held up.
 			if scoreSpan != "" {
-				runID := scoreRun
-				if runID == "" {
-					runs, rErr := runlog.Runs()
-					if rErr != nil || len(runs) == 0 {
-						return fmt.Errorf("--span given but no run to attach it to; pass --run")
-					}
-					runID = runs[0]
-				}
 				val := 0.0
 				if v.Passed {
 					val = 1
@@ -1670,6 +1768,8 @@ func cmdOracle() *cobra.Command {
 	verify.Flags().StringVar(&record, "record", "", "train calibration with the true outcome: correct|incorrect")
 	verify.Flags().StringVar(&scoreRun, "run", "", "run holding the span to score (default: newest)")
 	verify.Flags().StringVar(&scoreSpan, "span", "", "span this verdict judges, so `hyctl trace view` can show it")
+	verify.Flags().StringVar(&enumKey, "enum", "", "routing enum this verdict judges (default: read from --span)")
+	verify.Flags().IntVar(&tierNum, "tier", 0, "tier this verdict judges (default: read from --span)")
 	cmd.AddCommand(verify)
 	return cmd
 }
@@ -2247,7 +2347,7 @@ func cmdSecurity() *cobra.Command {
 	}
 	cmd.Flags().BoolVar(&whyOut, "why", false, "full detail: coverage, controls, policy, exposure, threats, and the risk register")
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "machine-readable JSON output")
-	cmd.Flags().BoolVar(&csvOut, "csv", false, "one row per OWASP LLM Top-10 category (id,name,status,gap_age_days,detail)")
+	cmd.Flags().BoolVar(&csvOut, "csv", false, "one row per OWASP LLM Top-10 category (id,edition,name,status,gap_age_days,detail)")
 	cmd.Flags().BoolVar(&execOut, "exec", false, "executive summary: the verdict, open risk by severity, and framework exposure")
 	cmd.Flags().BoolVar(&attestOut, "attest", false, "checkable attestation: posture, evidence state, rules in force, and a digest")
 	cmd.AddCommand(cmdSecurityTrifecta())
@@ -2327,9 +2427,12 @@ func printTrifecta(t security.Trifecta) {
 // securityCSV emits the coverage table as one row per finding, the same
 // shape GitHub's and AWS Security Hub's security-overview CSV exports use,
 // so it can be dropped straight into a tracker or spreadsheet.
+// An edition column rather than a bare id: only LLM01 and LLM02 keep their
+// number across editions, so a tracker keyed on "LLM06" alone silently follows
+// whatever entry takes that slot next (#748).
 func securityCSV(w io.Writer, r *security.Report) error {
 	cw := csv.NewWriter(w)
-	if err := cw.Write([]string{"id", "name", "status", "gap_age_days", "detail"}); err != nil {
+	if err := cw.Write([]string{"id", "edition", "name", "status", "gap_age_days", "detail"}); err != nil {
 		return err
 	}
 	for _, c := range r.Coverage.Categories {
@@ -2337,7 +2440,7 @@ func securityCSV(w io.Writer, r *security.Report) error {
 			continue
 		}
 		if err := cw.Write([]string{
-			c.ID, c.Name, string(c.Status), strconv.Itoa(c.GapAgeDays), c.Detail,
+			c.ID, r.Coverage.Edition, c.Name, string(c.Status), strconv.Itoa(c.GapAgeDays), c.Detail,
 		}); err != nil {
 			return err
 		}
@@ -2355,6 +2458,7 @@ func printSecurityReport(r *security.Report, why bool) {
 	printVerdict(r)
 	printIncidents(r)
 	printEvidenceState(r)
+	printBoundary(r)
 
 	if !why {
 		fmt.Println()
@@ -2482,6 +2586,38 @@ func printEvidenceState(r *security.Report) {
 		cortexStyle.Render("activity"), r.Ledger.Denied, r.Ledger.Flagged)
 	fmt.Printf("  %s  %d event(s), %d hash-chained, %s\n",
 		cortexStyle.Render("evidence"), ev.Events, ev.ChainedEvents, chain)
+}
+
+// printBoundary states what every number above it is a statement about. A
+// verdict of OK over a machine whose heads are mostly separate programs is
+// true and reads as more than it is, so the scope goes on the same screen
+// rather than three flags away (#725).
+func printBoundary(r *security.Report) {
+	b := r.Boundary
+	// Stated on every run, including this one: a reader who takes a figure
+	// away has already read it, so a caveat that only appears sometimes is a
+	// caveat they will meet after they needed it (#803).
+	if len(b.Governed) == 0 && len(b.Opaque) == 0 {
+		fmt.Printf("  %s     no heads discovered, so what Hydra does not control here is unknown\n",
+			cortexStyle.Render("scope"))
+		fmt.Println(dimStyle.Render(
+			"            a CLI-agent head runs in a process Hydra does not control; run `hyctl probe`"))
+		return
+	}
+	if b.Total() {
+		fmt.Printf("  %s     every head takes a request Hydra composes, so the gate sees all of it\n",
+			cortexStyle.Render("scope"))
+		fmt.Println(dimStyle.Render(
+			"            nothing here runs in a process Hydra does not control"))
+		return
+	}
+	fmt.Printf("  %s     %d of %d heads are separate programs (%s)\n",
+		cortexStyle.Render("scope"), len(b.Opaque), len(b.Opaque)+len(b.Governed),
+		security.HeadList(b.Opaque))
+	fmt.Println(dimStyle.Render(
+		"            Hydra governs what it sends them, not what they read or send on their own;"))
+	fmt.Println(dimStyle.Render(
+		"            only a local-only run keeps the whole task on this machine"))
 }
 
 // printIncidents shows correlated sequences rather than scattered rows.

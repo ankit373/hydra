@@ -316,20 +316,9 @@ func Summarize(parts []Part) Summary {
 	return s
 }
 
-// HasSecret reports whether any part classifies Secret, the question dispatch
-// asks before head selection so it can prefer a local head rather than
-// discovering the problem at the gate.
-func HasSecret(parts []Part) bool {
-	for _, p := range parts {
-		if p.Sens == Secret {
-			return true
-		}
-	}
-	return false
-}
-
 // Origins names the secret-classified parts, for the notice shown when a run
-// is rerouted to a local head.
+// is rerouted to a local head. Its emptiness is also the "is anything secret"
+// test dispatch reroutes on, so no separate predicate is needed.
 func Origins(parts []Part) []string {
 	var out []string
 	for _, p := range parts {

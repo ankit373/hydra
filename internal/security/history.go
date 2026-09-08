@@ -14,6 +14,13 @@ import (
 	"github.com/ankit373/hydra/internal/config"
 )
 
+// LLMEdition is the OWASP LLM Top-10 edition the category IDs in this build
+// mean. Only LLM01 and LLM02 are stable across editions, so a bare "LLM06"
+// names Excessive Agency in 2025 and something else in 2026. Bumping this is
+// what makes gap age restart instead of silently re-dating a different
+// category's history (#748).
+const LLMEdition = "2025"
+
 // scoreEntry is one line of ~/.hydra/security_score.jsonl, one hyctl
 // security run's coverage snapshot.
 type scoreEntry struct {
@@ -22,6 +29,19 @@ type scoreEntry struct {
 	Applicable     int      `json:"applicable"`
 	Covered        int      `json:"covered"`
 	Gaps           []string `json:"gaps"`
+
+	// Edition qualifies Gaps. Absent means 2025: every row written before
+	// this field existed was scored against that ordering.
+	Edition string `json:"edition,omitempty"`
+}
+
+// edition is Edition with the pre-field default applied, so a caller never
+// has to remember which absence means what.
+func (e scoreEntry) edition() string {
+	if e.Edition == "" {
+		return "2025"
+	}
+	return e.Edition
 }
 
 // Trend compares the current run's coverage against the very first recorded
@@ -97,6 +117,7 @@ func appendScoreHistory(path string, cov Coverage) {
 		Applicable:     cov.Applicable,
 		Covered:        cov.Covered,
 		Gaps:           gaps,
+		Edition:        LLMEdition,
 	}
 	raw, err := json.Marshal(entry)
 	if err != nil {
