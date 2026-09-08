@@ -1084,7 +1084,7 @@ func cmdTrace() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "trace",
-		Short: "Run-log storage: seal old runs into compressed segments",
+		Short: "Run traces: view a run's spans, seal old logs, evaluate and export",
 	}
 
 	seal := &cobra.Command{
@@ -1395,7 +1395,7 @@ replaced before it is written.`,
 	}
 	payloads.Flags().BoolVar(&jsonOut, "json", false, "machine-readable output")
 
-	cmd.AddCommand(seal, evaluate, export, payloads)
+	cmd.AddCommand(seal, evaluate, export, payloads, cmdTraceView())
 	return cmd
 }
 

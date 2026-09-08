@@ -4,6 +4,7 @@ package swarm
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/ankit373/hydra/internal/rank"
 	"github.com/ankit373/hydra/internal/runid"
@@ -44,11 +45,17 @@ func logRunEvents(attempts []Attempt, mode SwarmMode, opts Options) {
 	// swarm reads as one parent with N children rather than N siblings.
 	rootSpan := runlog.SpanIDFor(taskID + "/" + swarmAgent)
 
+	// These events are appended after the fan-out finishes, so a timestamp of
+	// "now" would put every span at the moment of logging. The attempts know
+	// when they actually ran.
+	first, last := attemptWindow(attempts)
+
 	rl := runlog.New(runID)
 	_ = rl.Append(runlog.Event{
 		Kind: runlog.KindTaskStarted, TaskID: taskID,
 		SpanID: rootSpan, ParentSpanID: runlog.SpanIDFor(taskID),
 		Agent:  swarmAgent,
+		TS:     stamp(first),
 		Detail: fmt.Sprintf("swarm · %s · %d heads", mode, len(attempts)),
 		Meta:   map[string]any{"mode": string(mode), "heads": len(attempts)},
 	})
@@ -75,6 +82,7 @@ func logRunEvents(attempts []Attempt, mode SwarmMode, opts Options) {
 			Model:        a.Head.Name,
 			Tier:         rank.UITier(a.Head),
 			Status:       string(a.Status),
+			TS:           stamp(a.FinishedAt),
 			CostUSD:      a.EstCostUSD,
 			DurationMS:   a.Duration.Milliseconds(),
 			InputTokens:  a.InputTokens,
@@ -91,6 +99,7 @@ func logRunEvents(attempts []Attempt, mode SwarmMode, opts Options) {
 	_ = rl.Append(runlog.Event{
 		Kind: runlog.KindTaskFinished, TaskID: taskID,
 		SpanID: rootSpan, ParentSpanID: runlog.SpanIDFor(taskID), Agent: swarmAgent,
+		TS: stamp(last),
 	})
 }
 
@@ -180,4 +189,28 @@ func attemptMeta(a Attempt) map[string]any {
 		return nil
 	}
 	return m
+}
+
+// attemptWindow is when the fan-out really started and ended, from the attempts
+// themselves. Zero times are ignored: an attempt that never ran says nothing
+// about when the ones that did began.
+func attemptWindow(attempts []Attempt) (first, last time.Time) {
+	for _, a := range attempts {
+		if !a.StartedAt.IsZero() && (first.IsZero() || a.StartedAt.Before(first)) {
+			first = a.StartedAt
+		}
+		if a.FinishedAt.After(last) {
+			last = a.FinishedAt
+		}
+	}
+	return first, last
+}
+
+// stamp renders a time for an event, leaving it empty when unknown so Append
+// falls back to now rather than to the zero year.
+func stamp(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.UTC().Format(time.RFC3339Nano)
 }
