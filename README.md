@@ -299,6 +299,23 @@ The rules live in `registry/sensitivity.yaml`, embedded in the binary and overri
 
 **Where the boundary is.** CLI-agent heads are agents in their own right with their own filesystem access. Hydra guarantees what *it* sends; it cannot control what `agy` or `codex` independently decides to read once handed a task. The guarantee is total only when the work runs on a local head, which is exactly what the gate reroutes to.
 
+**What it records.** Every dispatch writes its provenance to the ledger: what the payload was assembled from, how it classified, and whether the head it reached leaves the machine. That is what `hyctl security trifecta` reads:
+
+```
+  LETHAL TRIFECTA  2 dispatch(es) had all three legs and were not stopped
+  over 7 dispatch(es) with recorded provenance
+
+  private data         4 dispatch(es), read local files or environment
+      deploy/.env                                  2
+      internal/auth/token.go                       2
+  untrusted content    4 dispatch(es), ingested content Hydra did not author
+      head                                         4
+  external comms       6 dispatch(es), reached a head that leaves the machine
+      openai/gpt-5                                 5
+```
+
+Any one of the three is fine; all three at once is what turns a poisoned input into exfiltration with no software vulnerability involved. The headline is **exposure**, not presence: a trifecta the gate refused is reported as contained, because a dashboard that flags a working control teaches people to ignore it.
+
 ### 🧱 Least-Privilege Heads
 
 Every head Hydra spawns used to inherit your whole environment, so an `agy` subprocess held `AWS_SECRET_ACCESS_KEY`, every other provider's API key, and `SSH_AUTH_SOCK` for the duration of the call. Now a head gets the base set (PATH, HOME, locale, proxy), **its own provider's credential**, and its own tool configuration. Nothing else crosses.
@@ -654,6 +671,7 @@ hyctl mcp registry list                 # audited servers by trust score
 hyctl mcp registry clear <server>       # recover a server quarantined in error
 hyctl security                          # what the agents did, and can the record be trusted
 hyctl security --why                    # the full programme: register, coverage, policy, exposure
+hyctl security trifecta                 # private data + untrusted content + egress: which dispatches had all three
 hyctl security --attest                 # checkable attestation: posture + evidence + digest
 
 # Editing & batch

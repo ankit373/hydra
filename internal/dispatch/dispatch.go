@@ -506,7 +506,11 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		// CheckAndRecordDispatch's LoadPolicy is itself mtime-cached, so trying
 		// every candidate against the same prompt no longer re-reads and
 		// re-parses the identical policy file from disk once per candidate.
-		decision, lerr := ledger.CheckAndRecordDispatch("hydra-dispatch", h.ID, opts.Resource, prompt, class)
+		decision, lerr := ledger.CheckAndRecordDispatch(ledger.Dispatch{
+			Agent: "hydra-dispatch", HeadID: h.ID, Resource: opts.Resource,
+			Content: prompt, Class: class,
+			Provenance: provenanceRecord(parts, h),
+		})
 		refuse := func(detail string) {
 			lastErr = fmt.Errorf("%s: head %s", detail, h.ID)
 			attempts = append(attempts, Attempt{Head: h.ID, Model: h.Name, Tier: tier, Reason: detail})
@@ -951,6 +955,24 @@ func (d *Dispatcher) pinHead(id string, localOnly bool) (provider.Head, error) {
 // name match can never succeed and the old fall-through silently returned the
 // single most expensive head, the exact inverse of cost routing (#165).
 //
+// provenanceRecord is the audit shape of a payload about to reach h: what it
+// was assembled from, and whether that head leaves the machine.
+//
+// Recorded per candidate rather than per dispatch on purpose. The sink is the
+// half that changes between candidates, and a fallback from a local head to a
+// remote one is exactly the transition an auditor needs to see.
+func provenanceRecord(parts []egress.Part, h provider.Head) *ledger.EventProvenance {
+	s := egress.Summarize(parts)
+	sink := string(egress.SinkRemote)
+	if h.LocalOnly {
+		sink = string(egress.SinkLocal)
+	}
+	return &ledger.EventProvenance{
+		Sources: s.Sources, Origins: s.Origins,
+		Sensitivity: s.Sensitivity, Sink: sink,
+	}
+}
+
 // provenance describes where every span of the outgoing payload came from.
 //
 // Provenance is what the gate decides on, so anything reaching an executor has

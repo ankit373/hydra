@@ -131,6 +131,63 @@ type Event struct {
 	// effect when this event was recorded, ties the event to the exact
 	// routing rules that were live.
 	Config string `json:"config,omitempty"`
+
+	// Provenance is what a dispatch's payload was assembled from and where it
+	// went. Nil on every other kind of event.
+	Provenance *EventProvenance `json:"provenance,omitempty"`
+}
+
+// EventProvenance answers what a run touched and where it sent it.
+//
+// The ledger could not answer either. On the first machine it ran on it held
+// 828 events, every one of them action=exec, recording which head ran and
+// nothing about what went into the payload. That is precisely the question a
+// trifecta audit asks, so the report had no data to stand on (#741).
+type EventProvenance struct {
+	// Sources names the provenance kinds carried, deduped and ordered:
+	// user, file, head, mcp, web, env.
+	Sources []string `json:"sources,omitempty"`
+	// Origins names the files and heads the payload was assembled from, the
+	// "what private data did this touch" half of the audit.
+	Origins []string `json:"origins,omitempty"`
+	// Sensitivity is the payload's classification: public, internal, secret.
+	Sensitivity string `json:"sensitivity,omitempty"`
+	// Sink is where it went. "local" never left the machine, "remote" did.
+	Sink string `json:"sink,omitempty"`
+}
+
+// maxProvenanceItems bounds Sources and Origins. A payload assembled from
+// hundreds of files is ordinary for a parallel batch, and an unbounded list
+// would let one event dwarf the log it lives in. Truncation appends a count
+// rather than dropping quietly, since a silently short list reads as a
+// complete one.
+const maxProvenanceItems = 32
+
+func (p *EventProvenance) sanitize() *EventProvenance {
+	if p == nil {
+		return nil
+	}
+	out := *p
+	out.Sources = safeList(p.Sources)
+	out.Origins = safeList(p.Origins)
+	out.Sensitivity = SafeText(p.Sensitivity)
+	out.Sink = SafeText(p.Sink)
+	return &out
+}
+
+func safeList(in []string) []string {
+	if len(in) == 0 {
+		return nil
+	}
+	n := min(len(in), maxProvenanceItems)
+	out := make([]string, 0, n+1)
+	for _, s := range in[:n] {
+		out = append(out, SafeText(s))
+	}
+	if len(in) > n {
+		out = append(out, fmt.Sprintf("... +%d more", len(in)-n))
+	}
+	return out
 }
 
 // maxFieldLen bounds an identity field. The value that prompted this was a
@@ -176,6 +233,7 @@ func (e Event) sanitize() Event {
 	e.Resource = SafeText(e.Resource)
 	e.Reason = SafeText(e.Reason)
 	e.FlagReason = SafeText(e.FlagReason)
+	e.Provenance = e.Provenance.sanitize()
 	return e
 }
 
@@ -737,6 +795,10 @@ type CheckRequest struct {
 	// same content classifies it once instead of once per candidate.
 	Classified bool
 	Content    string
+
+	// Provenance is what the payload was assembled from and where it is going,
+	// recorded onto the Event so the ledger can answer a trifecta audit.
+	Provenance *EventProvenance
 }
 
 // detectPII and injectionMarker indirect policy's detectors through package
@@ -795,7 +857,7 @@ func Check(path string, p Policy, req CheckRequest) (Decision, error) {
 		Agent: req.Agent, Tool: req.Tool, Resource: req.Resource,
 		Action: req.Action, Decision: decision, Reason: reason,
 		ParametersHash: hash, Classification: classification, PIITypes: piiTypes,
-		Flagged: flagged, FlagReason: flagReason,
+		Flagged: flagged, FlagReason: flagReason, Provenance: req.Provenance,
 	})
 	return decision, err
 }
@@ -812,7 +874,20 @@ func Check(path string, p Policy, req CheckRequest) (Decision, error) {
 // the same one for every candidate head tried against this content so Check
 // never re-runs DetectPII/InjectionMarker per candidate. Pass nil to let Check
 // derive it itself.
-func CheckAndRecordDispatch(agent, headID, resource, content string, class *policy.Classification) (Decision, error) {
+// Dispatch is one dispatch's access check. A struct rather than positional
+// arguments because it grew past the point where a reader could tell which
+// string was which, and CheckRequest beside it already sets the house style.
+type Dispatch struct {
+	Agent    string
+	HeadID   string
+	Resource string
+	Content  string
+	Class    *policy.Classification
+	// Provenance is what the payload was assembled from and where it goes.
+	Provenance *EventProvenance
+}
+
+func CheckAndRecordDispatch(d Dispatch) (Decision, error) {
 	// LoadPolicy is itself mtime-cached, so a fallback loop or fan-out calling
 	// this once per candidate head for the same content no longer re-reads
 	// and re-parses the identical policy file from disk each time.
@@ -820,12 +895,15 @@ func CheckAndRecordDispatch(agent, headID, resource, content string, class *poli
 	if err != nil {
 		return "", err
 	}
-	req := CheckRequest{Agent: agent, Tool: headID, Resource: resource, Action: Exec, Content: content}
-	if class != nil {
+	req := CheckRequest{
+		Agent: d.Agent, Tool: d.HeadID, Resource: d.Resource,
+		Action: Exec, Content: d.Content, Provenance: d.Provenance,
+	}
+	if d.Class != nil {
 		req.Classified = true
-		req.PIITypes = class.PIITypes
-		req.FlagReason = class.FlagReason
-		if class.PII {
+		req.PIITypes = d.Class.PIITypes
+		req.FlagReason = d.Class.FlagReason
+		if d.Class.PII {
 			req.Classification = "pii"
 		}
 	}

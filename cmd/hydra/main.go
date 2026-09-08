@@ -2137,7 +2137,78 @@ func cmdSecurity() *cobra.Command {
 	cmd.Flags().BoolVar(&csvOut, "csv", false, "one row per OWASP LLM Top-10 category (id,name,status,gap_age_days,detail)")
 	cmd.Flags().BoolVar(&execOut, "exec", false, "executive summary: the verdict, open risk by severity, and framework exposure")
 	cmd.Flags().BoolVar(&attestOut, "attest", false, "checkable attestation: posture, evidence state, rules in force, and a digest")
+	cmd.AddCommand(cmdSecurityTrifecta())
 	return cmd
+}
+
+func cmdSecurityTrifecta() *cobra.Command {
+	var jsonOut bool
+	cmd := &cobra.Command{
+		Use:   "trifecta",
+		Short: "Private data, untrusted content, and egress: which dispatches had all three",
+		Long: "The lethal trifecta. Any one capability is fine; all three at once is what turns a " +
+			"poisoned input into exfiltration with no software vulnerability involved. Counted per " +
+			"dispatch, from the provenance the egress gate records.",
+		RunE: func(_ *cobra.Command, _ []string) error {
+			events, err := ledger.Load(ledger.DefaultPath())
+			if err != nil {
+				return err
+			}
+			t := security.AssessTrifecta(events)
+			if jsonOut {
+				return json.NewEncoder(os.Stdout).Encode(t)
+			}
+			printTrifecta(t)
+			return nil
+		},
+	}
+	cmd.Flags().BoolVar(&jsonOut, "json", false, "machine-readable JSON output")
+	return cmd
+}
+
+func printTrifecta(t security.Trifecta) {
+	fmt.Println()
+	if !t.HasData {
+		fmt.Println("  " + dimStyle.Render(
+			"No dispatch has recorded provenance yet. Run something through `hyctl dispatch` first;"))
+		fmt.Println("  " + dimStyle.Render(
+			"events written before the egress gate shipped carry none, and are not counted."))
+		fmt.Println()
+		return
+	}
+
+	// The headline is exposure, not presence. A trifecta the gate refused is
+	// the control working, and reporting it as a finding trains people to
+	// ignore the number.
+	switch {
+	case t.Exposed() > 0:
+		fmt.Printf("  %s  %s\n", cortexStyle.Render("LETHAL TRIFECTA"),
+			warnStyle.Render(fmt.Sprintf("%d dispatch(es) had all three legs and were not stopped", t.Exposed())))
+	case t.AllThree > 0:
+		fmt.Printf("  %s  %s\n", cortexStyle.Render("LETHAL TRIFECTA"),
+			okStyle.Render(fmt.Sprintf("%d dispatch(es) had all three legs, all refused", t.AllThree)))
+	default:
+		fmt.Printf("  %s  %s\n", cortexStyle.Render("LETHAL TRIFECTA"),
+			okStyle.Render("no dispatch carried all three legs"))
+	}
+	fmt.Println(dimStyle.Render(fmt.Sprintf("  over %d dispatch(es) with recorded provenance", t.Evaluated)))
+	fmt.Println()
+
+	leg := func(label, detail string, l security.TrifectaLeg) {
+		fmt.Printf("  %-20s %s\n", cortexStyle.Render(label),
+			dimStyle.Render(fmt.Sprintf("%d dispatch(es), %s", l.Dispatches, detail)))
+		for _, it := range l.Top {
+			fmt.Printf("      %-44s %s\n", truncateMiddle(it.Name, 44),
+				dimStyle.Render(fmt.Sprintf("%d", it.Count)))
+		}
+	}
+	leg("private data", "read local files or environment", t.PrivateData)
+	leg("untrusted content", "ingested content Hydra did not author", t.Untrusted)
+	leg("external comms", "reached a head that leaves the machine", t.External)
+
+	fmt.Println()
+	fmt.Println(dimStyle.Render("  " + t.Caveat))
+	fmt.Println()
 }
 
 // securityCSV emits the coverage table as one row per finding, the same
