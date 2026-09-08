@@ -8,6 +8,7 @@ import type {
   Check,
   ConfigDrift,
   Control,
+  CoverageStatus,
   EvidenceQuality,
   SupplyChain,
   BlastReport,
@@ -41,26 +42,27 @@ function findCheckStatus(checks: Check[], name: string): string | undefined {
   return checks.find((c) => c.name === name)?.status
 }
 
-// Every applicable category lands in exactly one slice. Partial has its own:
-// dropping it left the slices summing to less than the category count, so a
-// donut drawn as a part-to-whole was quietly missing part of the whole.
+// One slice per status, in draw order; null is excluded from the part-to-whole
+// exactly as it is from scoring. A Record rather than a hand-listed four, so a
+// status added to the union fails to compile until it is given a slice:
+// 'partial' was dropped here and the donut's slices quietly stopped summing to
+// the category count (#753).
+const COVERAGE_SLICES: Record<CoverageStatus, Omit<DonutSegment, 'value'> | null> = {
+  enforced: { label: 'Enforced', colorVar: 'var(--hy-cheap)' },
+  configured: { label: 'Configured', colorVar: 'var(--hy-aqua)' },
+  partial: { label: 'Partial', colorVar: 'var(--hy-mid)' },
+  gap: { label: 'Gap', colorVar: 'var(--hy-expensive)' },
+  'n/a': null,
+}
+
 function coverageSegments(categories: Category[]): DonutSegment[] {
-  const counts = { enforced: 0, configured: 0, partial: 0, gap: 0 }
-  for (const c of categories) {
-    if (
-      c.status === 'enforced' ||
-      c.status === 'configured' ||
-      c.status === 'partial' ||
-      c.status === 'gap'
-    )
-      counts[c.status]++
-  }
-  return [
-    { label: 'Enforced', value: counts.enforced, colorVar: 'var(--hy-cheap)' },
-    { label: 'Configured', value: counts.configured, colorVar: 'var(--hy-aqua)' },
-    { label: 'Partial', value: counts.partial, colorVar: 'var(--hy-mid)' },
-    { label: 'Gap', value: counts.gap, colorVar: 'var(--hy-expensive)' },
-  ]
+  const counts = new Map<CoverageStatus, number>()
+  for (const c of categories) counts.set(c.status, (counts.get(c.status) ?? 0) + 1)
+  const order = Object.keys(COVERAGE_SLICES) as CoverageStatus[]
+  return order.flatMap((s) => {
+    const slice = COVERAGE_SLICES[s]
+    return slice ? [{ ...slice, value: counts.get(s) ?? 0 }] : []
+  })
 }
 
 // Allowed/Denied are mutually exclusive (Decision is one or the other) and

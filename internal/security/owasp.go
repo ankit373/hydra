@@ -89,24 +89,34 @@ func computeCoverage(pol ledger.Policy, sc SupplyChain, runs []trust.RunLog, cos
 		llm10UnboundedConsumption(costCeilingDenials),
 	}
 
-	var applicable, covered, partial int
+	applicable, covered, partial, pct := tally(cats)
+	return Coverage{Categories: cats, Applicable: applicable, Covered: covered, Partial: partial, PercentCovered: pct}
+}
+
+// tally counts categories into the numbers both Top-10 scores report. One
+// copy: computeCoverage and computeAgentic ran this identical loop twice.
+//
+// Every declared CoverageStatus is named below, Gap included even though it
+// feeds no counter, so the switch reads as the exhaustive thing it has to be.
+// A status added to the enum and not here is scored as applicable and
+// reported nowhere, which is the shape of the bug in #753.
+func tally(cats []Category) (applicable, covered, partial int, pct float64) {
 	for _, c := range cats {
-		if c.Status == NotApplicable {
-			continue
-		}
-		applicable++
 		switch c.Status {
+		case NotApplicable:
+			continue // excluded from the denominator, not just from the numerator
 		case Enforced, Configured:
 			covered++
 		case Partial:
 			partial++
+		case Gap:
 		}
+		applicable++
 	}
-	pct := 0.0
 	if applicable > 0 {
 		pct = 100 * float64(covered) / float64(applicable)
 	}
-	return Coverage{Categories: cats, Applicable: applicable, Covered: covered, Partial: partial, PercentCovered: pct}
+	return applicable, covered, partial, pct
 }
 
 // llm02SensitiveInfo reads the egress gate's real state rather than asserting
