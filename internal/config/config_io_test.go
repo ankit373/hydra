@@ -69,9 +69,6 @@ func TestSaveLoad_RoundTripsEveryField(t *testing.T) {
 
 	want := &Config{
 		Cortex: "claude",
-		Tiers: []Tier{
-			{}, // zero value must survive too
-		},
 		Skills: []string{"review", "qa"},
 		Policies: map[string]Policy{
 			"pii":    {Action: "local-only"},

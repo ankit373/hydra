@@ -8,11 +8,11 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/ankit373/hydra/internal/config"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/ankit373/hydra/internal/dispatch"
 	"github.com/ankit373/hydra/internal/executor"
 	"github.com/ankit373/hydra/internal/provider"
 )
@@ -403,32 +403,57 @@ func TestClassifyError_EveryStatus(t *testing.T) {
 
 // ── selectors ─────────────────────────────────────────────────────────────────
 
-// TierSelector resolves a named config tier. When that tier has no live heads it
-// falls back to capability ranking rather than returning nothing, a swarm that
-// silently engages zero heads is indistinguishable from one that ran.
-func TestTierSelector_FallsBackWhenTheTierIsEmpty(t *testing.T) {
+// A named tier resolves through routing.yaml here exactly as it does in a
+// plain dispatch, and a tier nothing sits at still selects something: a swarm
+// that silently engages zero heads is indistinguishable from one that ran.
+//
+// It used to filter cfg.Tiers' head list instead, so `--tier simple` fanned
+// out over a different set than the same flag routed a single dispatch to
+// (#782).
+func TestTierSelector_ResolvesNamesLikeDispatch(t *testing.T) {
+	// One head at each tier the names below resolve to, or every hint degrades
+	// to the same set and the comparison holds for the wrong reason.
+	local := registryHeadFor("floor", 63)
+	local.LocalOnly = true
 	heads := []provider.Head{
-		registryHeadFor("strong", 95),
-		registryHeadFor("mid", 70),
+		registryHeadFor("expert-class", 92), // UITier 2
+		registryHeadFor("simple-class", 66), // UITier 8
+		local,                               // UITier 10
 	}
-	cfg := &config.Config{Tiers: []config.Tier{
-		{Name: "expert", Heads: []string{"strong"}},
-		{Name: "ghost", Heads: []string{"a-head-that-is-not-installed"}},
-	}}
-	sel := &TierSelector{cfg: cfg}
+	sel := &TierSelector{}
 
-	// A tier with a live head selects exactly it.
-	got, err := sel.Select(heads, Options{TierHint: "expert"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(got) != 1 || got[0].ID != "strong" {
-		t.Errorf("Select(expert) = %+v, want just the configured head", got)
+	// Anchored to the enum table, not to the resolver under test: comparing a
+	// name against its own resolution would agree even if both were wrong.
+	for name, enum := range map[string]string{
+		"expert": "EXPERT", "simple": "SIMPLE", "local": "GRUNT",
+	} {
+		got, err := sel.Select(heads, Options{TierHint: name})
+		if err != nil {
+			t.Fatalf("Select(%q): %v", name, err)
+		}
+		number := dispatch.EnumToTier(enum)
+		if number == "" {
+			t.Fatalf("enum %s resolves to no tier", enum)
+		}
+		byNumber, err := sel.Select(heads, Options{TierHint: number})
+		if err != nil {
+			t.Fatalf("Select(%s): %v", number, err)
+		}
+		if len(got) != len(byNumber) {
+			t.Errorf("--tier %s selected %d heads, --tier %s selected %d; one word, one instruction",
+				name, len(got), number, len(byNumber))
+			continue
+		}
+		for i := range got {
+			if got[i].ID != byNumber[i].ID {
+				t.Errorf("--tier %s selected %q at %d, --tier %s selected %q",
+					name, got[i].ID, i, number, byNumber[i].ID)
+			}
+		}
 	}
 
-	// A tier whose heads are all absent falls back to capability ranking rather
-	// than selecting nothing.
-	got, err = sel.Select(heads, Options{TierHint: "ghost"})
+	// A tier no head sits at degrades rather than selecting nothing.
+	got, err := sel.Select(heads, Options{TierHint: "1"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -437,18 +462,15 @@ func TestTierSelector_FallsBackWhenTheTierIsEmpty(t *testing.T) {
 			"report a run that engaged no head")
 	}
 
-	// A tier name that is not in the config at all does the same.
-	got, err = sel.Select(heads, Options{TierHint: "never-configured"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(got) == 0 {
-		t.Error("an unknown tier name selected nothing")
+	// A name that resolves to nothing errors rather than widening to every
+	// head, which is the failure #501 exists to prevent.
+	if _, err := sel.Select(heads, Options{TierHint: "never-configured"}); err == nil {
+		t.Error("an unknown tier name selected heads instead of erroring")
 	}
 
 	// MinCapScore still filters after the fallback, so a floor is not lost by
 	// taking the fallback path.
-	got, err = sel.Select(heads, Options{TierHint: "ghost", MinCapScore: 90})
+	got, err = sel.Select(heads, Options{TierHint: "1", MinCapScore: 90})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -437,24 +437,28 @@ func TestDispatch_AllHeadsFailingReportsWhy(t *testing.T) {
 	}
 }
 
-// The end-to-end repro for #451: a documented tier name ("expert") that does
-// not exist in cfg.Tiers must fail with an error naming the bad tier, not the
-// generic "no routable heads" message that blames the head pool for a config
-// problem. A live, perfectly routable head is present, so a regression back to
-// the old behavior would still dispatch successfully rather than error at all.
+// The end-to-end repro for #451: a tier name that does not resolve must fail
+// with an error naming the bad tier, not the generic "no routable heads"
+// message that blames the head pool for a typo. A live, perfectly routable
+// head is present, so a regression back to the old behavior would still
+// dispatch successfully rather than error at all.
+//
+// The original repro used "expert", which was absent from cfg.Tiers on the
+// reporter's machine. It resolves through routing.yaml now (#782), so the
+// unknown name has to be one that really is unknown.
 func TestDispatch_UnknownNamedTierIsDistinctFromNoRoutableHeads(t *testing.T) {
 	s := testutil.NewSandbox(t)
 	dd := liveDispatcher(echoHead(t, s, "cloud", 90))
 
-	_, err := dd.Dispatch(context.Background(), "go", Options{TierHint: "expert"})
+	_, err := dd.Dispatch(context.Background(), "go", Options{TierHint: "expret"})
 	if err == nil {
-		t.Fatal("dispatch succeeded with a tier name absent from config")
+		t.Fatal("dispatch succeeded with a tier name that resolves to nothing")
 	}
-	if !strings.Contains(err.Error(), "unknown tier") || !strings.Contains(err.Error(), "expert") {
-		t.Errorf("error = %v, want it to name \"expert\" as an unknown tier", err)
+	if !strings.Contains(err.Error(), "unknown tier") || !strings.Contains(err.Error(), "expret") {
+		t.Errorf("error = %v, want it to name \"expret\" as an unknown tier", err)
 	}
 	if strings.Contains(err.Error(), "no routable heads") || strings.Contains(err.Error(), "no available heads") {
-		t.Errorf("error = %v, blames routability for a config problem", err)
+		t.Errorf("error = %v, blames routability for a typo", err)
 	}
 }
 

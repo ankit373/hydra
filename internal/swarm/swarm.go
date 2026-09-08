@@ -150,18 +150,14 @@ func (s *Swarm) Plan(prompt string, opts Options) (heads []provider.Head, estUSD
 		return nil, 0, err
 	}
 
-	cfg, err := config.Load()
-	if err != nil {
-		return nil, 0, fmt.Errorf("swarm: config load: %w", err)
-	}
-	if err := validateSwarmTiers(cfg, opts); err != nil {
+	if err := validateSwarmTiers(opts); err != nil {
 		return nil, 0, err
 	}
 	prompt, err = injectA2A(prompt, opts)
 	if err != nil {
 		return nil, 0, err
 	}
-	selected, err := resolveSelector(opts, cfg).Select(s.heads, opts)
+	selected, err := resolveSelector(opts).Select(s.heads, opts)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -188,7 +184,7 @@ func (s *Swarm) Run(ctx context.Context, prompt string, opts Options) (*SwarmRes
 	// An invalid --tier/--swarm-judge-tier must fail here, before any heads
 	// are fired or judged, never silently widen to CapScoreSelector's top-N
 	// fan-out (#501).
-	if err := validateSwarmTiers(cfg, opts); err != nil {
+	if err := validateSwarmTiers(opts); err != nil {
 		return nil, err
 	}
 	prompt, err = injectA2A(prompt, opts)
@@ -197,7 +193,7 @@ func (s *Swarm) Run(ctx context.Context, prompt string, opts Options) (*SwarmRes
 	}
 
 	// 1. Head selection.
-	selector := resolveSelector(opts, cfg)
+	selector := resolveSelector(opts)
 	selected, err := selector.Select(s.heads, opts)
 	if err != nil {
 		return nil, err
@@ -288,11 +284,11 @@ func (s *Swarm) Run(ctx context.Context, prompt string, opts Options) (*SwarmRes
 // selection or judging happens, using the identical rule dispatch.Dispatch
 // applies. Run, RunSPRT and Plan all call this so --tier/--swarm-judge-tier
 // fail the same way regardless of mode (#501).
-func validateSwarmTiers(cfg *config.Config, opts Options) error {
-	if err := dispatch.ValidateTierHint(cfg, opts.TierHint); err != nil {
+func validateSwarmTiers(opts Options) error {
+	if err := dispatch.ValidateTierHint(opts.TierHint); err != nil {
 		return fmt.Errorf("swarm: %w", err)
 	}
-	if err := dispatch.ValidateTierHint(cfg, opts.JudgeTierHint); err != nil {
+	if err := dispatch.ValidateTierHint(opts.JudgeTierHint); err != nil {
 		return fmt.Errorf("swarm: judge tier: %w", err)
 	}
 	return nil

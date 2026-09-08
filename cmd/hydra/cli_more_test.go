@@ -305,10 +305,14 @@ func TestCLI_Dispatch_RefusesBadFlagsBeforeSpending(t *testing.T) {
 	}
 }
 
-// A named --tier absent from config (#451) and an out-of-range numeric --tier
-// (#454) are both config/input problems, not routability problems. Each must
+// A --tier name that resolves to nothing (#451) and an out-of-range numeric
+// --tier (#454) are both input problems, not routability problems. Each must
 // say so distinctly, naming what was actually wrong, rather than falling
 // through to the generic "no routable heads" message that blames the head pool.
+//
+// "expert" was the original repro, absent from cfg.Tiers on the reporter's
+// machine. It resolves through routing.yaml now (#782), so the unknown name
+// has to be one that really is unknown.
 func TestCLI_Dispatch_TierErrorsNameTheActualProblem(t *testing.T) {
 	populated(t)
 
@@ -317,7 +321,7 @@ func TestCLI_Dispatch_TierErrorsNameTheActualProblem(t *testing.T) {
 		tier   string
 		wantIn []string
 	}{
-		{"unknown named tier", "expert", []string{"expert"}},
+		{"unknown named tier", "expret", []string{"expret"}},
 		{"tier zero", "0", []string{"0"}},
 		{"negative tier", "-1", []string{"-1"}},
 		{"tier above max", "11", []string{"11"}},

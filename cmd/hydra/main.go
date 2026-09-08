@@ -534,8 +534,6 @@ func cmdStatus() *cobra.Command {
 			}
 			fmt.Print(headTiers(result.Heads, reason))
 			fmt.Println()
-			fmt.Print(tierAliases(cfg.Tiers, result.Heads, reason))
-			fmt.Println()
 
 			// Budget section, read from state.json (written by dispatcher).
 			names := make(map[string]string, len(result.Heads))
@@ -1020,7 +1018,10 @@ func cmdDispatch() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVarP(&tier, "tier", "t", "", "target tier (expert/complex/standard/simple/local)")
+	// Read off routing.yaml rather than restated, so the help cannot advertise
+	// a name that does not resolve. It listed "local" while `--tier local`
+	// errored, and both lists were maintained by hand (#782).
+	cmd.Flags().StringVarP(&tier, "tier", "t", "", "target tier: 1-10, or a name ("+strings.Join(dispatch.TierNames(), "/")+")")
 	cmd.Flags().BoolVarP(&localOnly, "local", "l", false, "force local heads only")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "show selected head without executing")
 	cmd.Flags().StringVarP(&system, "system", "s", "", "system prompt")

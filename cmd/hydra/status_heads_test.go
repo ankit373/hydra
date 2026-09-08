@@ -3,11 +3,10 @@
 package main
 
 import (
-	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 
-	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/provider"
 )
 
@@ -38,17 +37,26 @@ func refuses(h provider.Head) string {
 	return ""
 }
 
-// tierRow matches a rendered tier row. The %-6s tier column leaves at least two
-// spaces, which is what separates a row from the "2 of 5 … cannot run" summary.
-var tierRow = regexp.MustCompile(`(?m)^  (\d{1,2}) {2,}(.+)$`)
+// A rendered row is two spaces, a %-6s tier, a %-16s name list, then the heads,
+// so the head column starts at a fixed offset. Splitting on a run of spaces
+// instead would read the --tier names as head names.
+const headColumn = 2 + 6 + 16
 
 // listedHeads returns the head names headTiers presented as available. Exact
 // names, not a substring scan: "Ollama" is a substring of "qwen3:0.6b (Ollama)".
 func listedHeads(out string) map[string]bool {
 	names := map[string]bool{}
-	for _, m := range tierRow.FindAllStringSubmatch(out, -1) {
-		for _, n := range strings.Split(m[2], ", ") {
-			names[strings.TrimSpace(n)] = true
+	for _, line := range strings.Split(out, "\n") {
+		if len(line) <= headColumn || !strings.HasPrefix(line, "  ") {
+			continue
+		}
+		if _, err := strconv.Atoi(strings.TrimSpace(line[2:8])); err != nil {
+			continue // not a tier row
+		}
+		for _, n := range strings.Split(line[headColumn:], ", ") {
+			if n = strings.TrimSpace(n); n != "" {
+				names[n] = true
+			}
 		}
 	}
 	return names
@@ -89,9 +97,9 @@ func TestHeadTiers_CountsWhatItWouldNotList(t *testing.T) {
 func TestHeadTiers_GroupsByTheTierDispatchWouldUse(t *testing.T) {
 	out := stripANSICodes(headTiers(liveHeads(), refuses))
 	for _, want := range []string{
-		"1     Claude Code",
-		"5     Gemini 3.1 Pro (High)",
-		"10    qwen3:0.6b (Ollama)", // LocalOnly ⇒ tier 10 regardless of score
+		"1     core            Claude Code",
+		"5     complex         Gemini 3.1 Pro (High)",
+		"10    grunt, local    qwen3:0.6b (Ollama)", // LocalOnly ⇒ tier 10 regardless of score
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing row %q in:\n%s", want, out)
@@ -106,41 +114,58 @@ func TestHeadTiers_SaysSoWhenNothingCanRun(t *testing.T) {
 	}
 }
 
-// cfg.Tiers is written once by `hyctl init`. Entries that have gone stale must
-// read as stale, not as available.
-func TestTierAliases_MarksEntriesThatCannotRun(t *testing.T) {
-	tiers := []config.Tier{
-		{Name: "complex", Heads: []string{"flash-thinking", "pro-high"}},
-		{Name: "simple", Heads: []string{"ollama/qwen3:0.6b", "ollama", "ollama/nomic-embed-text:latest"}},
-	}
-	out := stripANSICodes(tierAliases(tiers, liveHeads(), refuses))
-
+// The --tier names sit on the row of the tier they resolve to, so the word a
+// user types and the head that answers it are read off one line. A separate
+// panel used to list them against cfg.Tiers' frozen head IDs, which is not
+// where any of them route (#782).
+func TestHeadTiers_NamesEachTierWithTheWordsThatReachIt(t *testing.T) {
+	out := stripANSICodes(headTiers(liveHeads(), refuses))
 	for _, want := range []string{
-		"flash-thinking: not discovered",
-		"ollama: binary only, start its local server",
-		"ollama/nomic-embed-text:latest: embeddings only, never routed",
+		"core",  // tier 1
+		"grunt", // tier 10
+		"local", // tier 10's legacy alias
 	} {
 		if !strings.Contains(out, want) {
-			t.Errorf("stale entry not marked: want %q in:\n%s", want, out)
+			t.Errorf("the table does not name --tier %s:\n%s", want, out)
 		}
 	}
-	if !strings.Contains(out, "complex") || !strings.Contains(out, "Gemini 3.1 Pro (High)") {
-		t.Errorf("the live half of a partly-stale tier must still be shown:\n%s", out)
+	// And a name never lands on a tier it does not resolve to.
+	for _, line := range strings.Split(out, "\n") {
+		if !strings.Contains(line, " core ") {
+			continue
+		}
+		if !strings.HasPrefix(strings.TrimSpace(line), "1 ") {
+			t.Errorf("--tier core is shown against the wrong tier: %q", line)
+		}
 	}
 }
 
-func TestTierAliases_SaysNoneCanRunRatherThanShowingBlank(t *testing.T) {
-	tiers := []config.Tier{{Name: "expert", Heads: []string{"gone", "ollama"}}}
-	out := stripANSICodes(tierAliases(tiers, liveHeads(), refuses))
-	if !strings.Contains(out, "none can run") {
-		t.Errorf("a tier with nothing live must say so, not print an empty cell:\n%s", out)
+// A name whose tier no live head sits at still routes, by degrading to the
+// cheapest head available, so it must be reported rather than omitted. The
+// fixture has nothing at tiers 2-4 or 6-9.
+func TestIdleTierNames_ReportsNamesWithNothingToServeThem(t *testing.T) {
+	out := stripANSICodes(headTiers(liveHeads(), refuses))
+	if !strings.Contains(out, "resolves but nothing can serve it") {
+		t.Errorf("names with no live head at their tier are not reported:\n%s", out)
+	}
+	if !strings.Contains(out, "expert (2)") {
+		t.Errorf("want expert reported as idle at tier 2:\n%s", out)
+	}
+	// A tier that does have a head must not be called idle.
+	idle := out[strings.Index(out, "resolves but nothing can serve it"):]
+	for _, served := range []string{"core (1)", "grunt/local (10)"} {
+		if strings.Contains(idle, served) {
+			t.Errorf("%s has a live head but is reported idle:\n%s", served, idle)
+		}
 	}
 }
 
-// An unconfigured machine has no aliases to show, and an empty bordered table
-// with no rows is worse than no table.
-func TestTierAliases_EmptyWhenNoTiersConfigured(t *testing.T) {
-	if out := tierAliases(nil, liveHeads(), refuses); out != "" {
-		t.Errorf("want no output for an empty tier list, got:\n%s", out)
+// When every name has a head at its tier there is nothing to warn about, and
+// an empty warning line reads as a warning.
+func TestIdleTierNames_EmptyWhenEveryTierIsServed(t *testing.T) {
+	names := map[int][]string{1: {"core"}, 10: {"grunt", "local"}}
+	byTier := map[int][]string{1: {"Claude Code"}, 10: {"qwen3:0.6b (Ollama)"}}
+	if got := idleTierNames(names, byTier); got != "" {
+		t.Errorf("idleTierNames = %q, want empty when every tier has a head", got)
 	}
 }

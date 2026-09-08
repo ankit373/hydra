@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/dispatch"
 	"github.com/ankit373/hydra/internal/policy"
 	"github.com/ankit373/hydra/internal/provider"
@@ -36,19 +35,15 @@ func (s *Swarm) RunSPRT(ctx context.Context, prompt string, opts Options) (*SPRT
 	if math.IsNaN(opts.Confidence) || opts.Confidence <= 0 || opts.Confidence >= 1 {
 		return nil, fmt.Errorf("swarm sprt: confidence must be in (0,1), got %v", opts.Confidence)
 	}
-	cfg, err := config.Load()
-	if err != nil {
-		return nil, fmt.Errorf("swarm sprt: config load: %w", err)
-	}
-	if err := validateSwarmTiers(cfg, opts); err != nil {
+	if err := validateSwarmTiers(opts); err != nil {
 		return nil, err
 	}
-	prompt, err = injectA2A(prompt, opts)
+	prompt, err := injectA2A(prompt, opts)
 	if err != nil {
 		return nil, err
 	}
 
-	selected, err := resolveSelector(opts, cfg).Select(s.heads, opts)
+	selected, err := resolveSelector(opts).Select(s.heads, opts)
 	if err != nil {
 		return nil, err
 	}
