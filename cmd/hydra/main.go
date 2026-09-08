@@ -14,10 +14,12 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 	"unicode/utf8"
 
@@ -70,6 +72,18 @@ import (
 )
 
 func main() {
+	// Cancelling this is what tears a run's heads down, now that each has a
+	// process group of its own and the terminal's Ctrl+C no longer reaches it
+	// (#738). First, because Adopt below can spend 3s in a login shell.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	go func() {
+		<-ctx.Done()
+		// Restore the default action, so a second Ctrl+C kills a teardown that
+		// has itself wedged rather than being swallowed like the first.
+		stop()
+	}()
+
 	// Before any command discovers heads. A hyctl or `hyctl tui` started by
 	// something other than a shell, a launcher or an IDE, gets a PATH with no
 	// CLI head in it at all (#689). No-op when a shell already set one.
@@ -78,7 +92,14 @@ func main() {
 	// Fire update check in the background, never blocks startup.
 	updateCh := update.CheckAsync()
 
-	if err := rootCmd().Execute(); err != nil {
+	if err := rootCmd().ExecuteContext(ctx); err != nil {
+		if ctx.Err() != nil {
+			// 130 is the shell's convention for "killed by SIGINT", and exit
+			// codes are a contract here (see exit_code_test.go).
+			fmt.Fprintln(os.Stderr, "  interrupted")
+			os.Exit(130)
+		}
+		fmt.Fprintln(os.Stderr, "Error:", err)
 		os.Exit(1)
 	}
 
@@ -110,9 +131,12 @@ func rootCmd() *cobra.Command {
 		// same way: one line naming the problem. Run --help for the flag list
 		// (#464).
 		SilenceUsage: true,
+		// main prints the error instead, in Cobra's own format, so that a
+		// cancelled run can read as "interrupted" rather than as a failure.
+		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if !config.Exists() {
-				return runInit()
+				return runInit(cmd.Context())
 			}
 			return cmd.Help()
 		},
@@ -260,7 +284,7 @@ func cmdInit() *cobra.Command {
 	return &cobra.Command{
 		Use:   "init",
 		Short: "First-run wizard: discover Heads and choose your Cortex",
-		RunE:  func(_ *cobra.Command, _ []string) error { return runInit() },
+		RunE:  func(cmd *cobra.Command, _ []string) error { return runInit(cmd.Context()) },
 	}
 }
 
@@ -284,7 +308,7 @@ func requireTerminal(cmd string) error {
 		"writing ~/.hydra/config.toml directly, or run this from a real shell", cmd)
 }
 
-func runInit() error {
+func runInit(ctx context.Context) error {
 	if err := requireTerminal("hyctl init"); err != nil {
 		return err
 	}
@@ -300,7 +324,7 @@ func runInit() error {
 	}
 
 	fmt.Println(dimStyle.Render("  Scanning your machine for AI models..."))
-	result := probe.Run(context.Background())
+	result := probe.Run(ctx)
 
 	if len(result.Heads) == 0 {
 		// Nothing found, guide the user through installing something.
@@ -349,11 +373,11 @@ func cmdProbe() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "probe",
 		Short: "Scan machine for available AI Heads",
-		RunE: func(_ *cobra.Command, _ []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			if !jsonOut {
 				fmt.Println(dimStyle.Render("  Scanning..."))
 			}
-			result := probe.Run(context.Background())
+			result := probe.Run(cmd.Context())
 			cortexName := "none"
 			if result.Cortex != nil {
 				cortexName = result.Cortex.Name
@@ -718,7 +742,7 @@ func cmdDispatch() *cobra.Command {
 			}
 
 			prompt := strings.Join(args, " ")
-			ctx := context.Background()
+			ctx := cmd.Context()
 
 			// One invocation is one run with one logical task, whichever path
 			// below handles it, so a swarm's attempts and the dispatch that
@@ -1525,7 +1549,7 @@ func cmdOracle() *cobra.Command {
 		Use:   "verify <command...>",
 		Short: "Run a verifier command; report pass/fail + its calibrated LLR",
 		Args:  cobra.MinimumNArgs(1),
-		RunE: func(_ *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			// Validated before running the verifier at all: a garbage --record
 			// used to be silently ignored, no error, no calibration write, no
 			// indication anything was wrong, discovered only after the command
@@ -1552,7 +1576,7 @@ func cmdOracle() *cobra.Command {
 				src = "verifier:" + args[0]
 			}
 			o := &oracle.CommandOracle{Args: args, Source: src}
-			v, err := o.Verify(context.Background(), candidate, trust.Task{Domain: domain})
+			v, err := o.Verify(cmd.Context(), candidate, trust.Task{Domain: domain})
 			if err != nil {
 				return err
 			}
@@ -2186,8 +2210,8 @@ func cmdSecurity() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "security",
 		Short: "What the agents on this machine did, and whether you need to act",
-		RunE: func(_ *cobra.Command, _ []string) error {
-			heads := probe.Run(context.Background()).Heads
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			heads := probe.Run(cmd.Context()).Heads
 			rep, err := security.Build(heads)
 			if err != nil {
 				return err
@@ -3534,8 +3558,8 @@ func cmdEdit() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "edit",
 		Short: "Atomic, validated, rollback-safe file edit via a Hydra Head",
-		RunE: func(_ *cobra.Command, _ []string) error {
-			ctx := context.Background()
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			ctx := cmd.Context()
 
 			// Resolve rather than mint, so HYDRA_RUN_ID groups an edit with the
 			// invocation that spawned it (#204, #211).
@@ -3649,8 +3673,8 @@ func cmdReview() *cobra.Command {
 		Use:   "qa <file>",
 		Short: "Send file diff to a Hydra Head for LLM code review",
 		Args:  cobra.ExactArgs(1),
-		RunE: func(_ *cobra.Command, args []string) error {
-			ctx := context.Background()
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
 			result, err := review.QA(ctx, args[0], qaTier)
 			if err != nil {
 				return err
@@ -3674,7 +3698,7 @@ func cmdParallel() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "parallel",
 		Short: "Fan N tasks out to N Hydra Heads simultaneously",
-		RunE: func(_ *cobra.Command, _ []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			raw, err := os.ReadFile(tasksFile)
 			if err != nil {
 				return fmt.Errorf("reading tasks file: %w", err)
@@ -3684,7 +3708,7 @@ func cmdParallel() *cobra.Command {
 				return fmt.Errorf("invalid JSON in %s: %w", tasksFile, err)
 			}
 
-			ctx := context.Background()
+			ctx := cmd.Context()
 			results, err := parallel.Run(ctx, tasks, parallel.Options{RunID: runid.New()})
 			if err != nil {
 				return err

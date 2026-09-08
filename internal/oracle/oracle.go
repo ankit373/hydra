@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/ankit373/hydra/internal/sandbox"
 	"github.com/ankit373/hydra/internal/trust"
 	"github.com/ankit373/hydra/internal/util"
 )
@@ -118,7 +119,9 @@ func (o *CommandOracle) Verify(ctx context.Context, candidate string, _ trust.Ta
 	if err := checkArgvSize(parts, candidate); err != nil {
 		return Verdict{}, err
 	}
-	cmd := exec.CommandContext(ctx, parts[0], parts[1:]...)
+	// A verifier is `go test ./...` or a linter: it spawns a tree, and without
+	// this a cancelled run leaves the compile jobs behind (#738).
+	cmd := sandbox.Harden(exec.CommandContext(ctx, parts[0], parts[1:]...))
 	cmd.Dir = o.Dir
 	// Both streams share one bounded Accumulator, matching CombinedOutput's
 	// interleaving, but capped, unlike the bytes.Buffer it replaces.
@@ -127,6 +130,13 @@ func (o *CommandOracle) Verify(ctx context.Context, candidate string, _ trust.Ta
 	cmd.Stderr = out
 	runErr := cmd.Run()
 	if runErr != nil {
+		// A killed verifier exits non-zero like a failing one. It did not
+		// fail, it never finished, and an oracle carries enough LLR that
+		// recording that as a fail is confident false evidence, the same trap
+		// the empty-template case above guards (#738).
+		if ctx.Err() != nil {
+			return Verdict{}, fmt.Errorf("oracle %s: %w", o.Source, ctx.Err())
+		}
 		if _, ok := runErr.(*exec.ExitError); ok {
 			return Verdict{Passed: false, Detail: firstLine(out.String())}, nil
 		}

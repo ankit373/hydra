@@ -4,10 +4,12 @@ package oracle
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
+	"time"
 
 	"github.com/ankit373/hydra/internal/trust"
 )
@@ -87,6 +89,29 @@ func TestCommandOracle_LauncherErrorIsError(t *testing.T) {
 	o := &CommandOracle{Template: "this-command-does-not-exist-hydra"}
 	if _, err := o.Verify(context.Background(), "x", trust.Task{}); err == nil {
 		t.Error("a missing verifier binary should return an error, not a fail verdict")
+	}
+}
+
+// A cancelled verifier exits non-zero exactly like a failing one, and this
+// used to report Passed:false. An oracle carries enough LLR to outweigh
+// several models, so Ctrl+C on a run would have written confident evidence
+// that the candidate was wrong (#738).
+func TestCommandOracle_CancelledIsNotAFailedVerdict(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	o := &CommandOracle{Args: []string{"sh", "-c", "sleep 30"}, Source: "verifier:slow"}
+
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		cancel()
+	}()
+
+	v, err := o.Verify(ctx, "x", trust.Task{})
+	if err == nil {
+		t.Fatalf("a cancelled verifier returned a verdict (%+v), want an error", v)
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("error %v does not unwrap to context.Canceled, so a caller cannot tell "+
+			"cancellation from a verifier that could not launch", err)
 	}
 }
 
