@@ -182,7 +182,7 @@ func Edit(ctx context.Context, req Request) (*Result, error) {
 
 		if vtmpl != "" {
 			vout, vrc := runValidatorCmd(vtmpl, req.File)
-			recordValidationOutcome(dispResult.Head.ID, fileExt(req.File), vrc == 0)
+			recordValidationOutcome(dispResult.Head.ID, trust.DomainForFile(req.File), vrc == 0)
 			if vrc != 0 {
 				validatorPassed = false
 				rollback(req.File, origContent, origExisted, resolved.GitRoot, backup)

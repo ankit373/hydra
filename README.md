@@ -497,7 +497,7 @@ Error: no head this run would sample has been scored in domain "go", so
   Scored in "go":  verifier:go
   ...but none of them is among the heads this run selects.
   Other domains with evidence: gotest, trust-bench
-  Record an outcome:     hyctl trust record --source model:<id> --domain go --said-correct --outcome correct
+  Record an outcome:     hyctl trust record --source <head-id> --domain go --said-correct --outcome correct
 ```
 
 The distinction matters: a domain nothing has ever scored and a domain scored
@@ -515,7 +515,7 @@ finally earns the true negative that specificity can only come from.
 
 ```bash
 hyctl trust outcome <task_hash> --outcome incorrect   # train every source that voted in a run
-hyctl trust record --source model:claude-sonnet --domain go --said-correct --outcome correct
+hyctl trust record --source ollama/qwen3:4b --domain go --said-correct --outcome correct
 hyctl trust calibration          # per-source se / sp / D table (neg=0 flags an unusable cell)
 hyctl trust defect --pii --production   # modeled $ cost of shipping a wrong answer
 hyctl trust stats                # samples saved vs fixed-N, achieved vs target confidence
