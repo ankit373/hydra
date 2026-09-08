@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 
 // Package port discovers AI heads running as local HTTP services.
-// To add a new local service: implement a portService and add it to services.
+// To add a new local service: implement a portService and add it to the list
+// Discover hands to discover, which dials and probes them all concurrently.
 package port
 
 import (
@@ -12,6 +13,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"sync"
 	"time"
 
 	"github.com/ankit373/hydra/internal/capabilities"
@@ -47,23 +49,42 @@ func (p *Provider) Discover(ctx context.Context) ([]provider.Head, error) {
 	// service can be constructed against a test server, and so the address the
 	// liveness dial uses is provably the same one the probe and the head's
 	// Endpoint use.
-	services := []portService{
+	return discover(ctx, caps, []portService{
 		&ollamaService{base: provider.OllamaHost()},
 		&lmStudioService{base: defaultLMStudioHost},
+	}), nil
+}
+
+// discover dials and probes every service concurrently. Serially, a dead
+// service cost the whole dial timeout before the next dial began, so the floor
+// grew with the service list on every probe, status and dispatch (#750).
+//
+// Results land in a per-service slot rather than a shared append, so head
+// order stays the service order however the dials interleave.
+func discover(ctx context.Context, caps *capabilities.DB, services []portService) []provider.Head {
+	found := make([][]provider.Head, len(services))
+	var wg sync.WaitGroup
+	for i, svc := range services {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if !isOpen(svc.addr()) {
+				return
+			}
+			heads, err := svc.probe(ctx, caps)
+			if err != nil {
+				return // service is up but probe failed; skip gracefully
+			}
+			found[i] = heads
+		}()
 	}
+	wg.Wait()
 
 	var heads []provider.Head
-	for _, svc := range services {
-		if !isOpen(svc.addr()) {
-			continue
-		}
-		found, err := svc.probe(ctx, caps)
-		if err != nil {
-			continue // service is up but probe failed; skip gracefully
-		}
-		heads = append(heads, found...)
+	for _, f := range found {
+		heads = append(heads, f...)
 	}
-	return heads, nil
+	return heads
 }
 
 // isOpen is a cheap liveness check before the real probe, so a machine with
