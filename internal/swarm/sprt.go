@@ -63,10 +63,7 @@ func (s *Swarm) RunSPRT(ctx context.Context, prompt string, opts Options) (*SPRT
 		opts.Classification = &c
 	}
 
-	domain := opts.Domain
-	if domain == "" {
-		domain = "default"
-	}
+	domain := trust.Domain(opts.Domain)
 
 	cal, err := trust.New(trust.DefaultPath())
 	if err != nil {

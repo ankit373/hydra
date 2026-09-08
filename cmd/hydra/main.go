@@ -962,7 +962,10 @@ func cmdDispatch() *cobra.Command {
 	cmd.Flags().StringVar(&swarmJudge, "swarm-judge-tier", "", "tier for judge head in best mode (default: tier 1 / cortex)")
 	// trust / SPRT flags
 	cmd.Flags().Float64Var(&confidence, "confidence", 0, "route via SPRT ensemble until this P(correct) is reached, e.g. 0.95")
-	cmd.Flags().StringVar(&domain, "domain", "", "calibration domain for --confidence (default: \"default\")")
+	// The real value, not a claim about it in the description: the flag defaulted
+	// to "" while --help promised "default", so the refusal quoted an empty
+	// domain and printed two commands ending in a bare `--domain ` (#732).
+	cmd.Flags().StringVar(&domain, "domain", trust.DefaultDomain, "calibration domain for --confidence")
 	cmd.Flags().StringVar(&file, "file", "", "target file, derives a confidence target from its blast radius, so this alone selects the SPRT ensemble")
 	cmd.Flags().StringVar(&graphPath, "graph", "graph.json", "path to the dependency graph used with --file")
 	cmd.Flags().BoolVar(&irreversible, "irreversible", false, "change cannot be cheaply undone, raises the required confidence")
@@ -3028,29 +3031,46 @@ func cmdGraph() *cobra.Command {
 	return cmd
 }
 
-// printSPRTResult renders an SPRT confidence run: the LLR ledger, the decision,
-// and the winning answer.
 // noEvidenceError turns the SPRT refusal into something the reader can act on.
-// The bare error names the domain; what they need is which domains do carry
-// evidence and how to give this one some.
+//
+// The refusal tests whether any head this run would sample carries evidence in
+// this domain. The message used to answer a different question, listing every
+// domain in which any source has evidence, so asking for `gotest` was refused
+// with "nothing here can judge gotest" directly above a list containing gotest
+// (#732). Sources scored in this domain are named first, because a domain that
+// has evidence but not from these heads is a different problem with a different
+// fix.
 func noEvidenceError(domain string) error {
 	var b strings.Builder
-	fmt.Fprintf(&b, "nothing here can judge %q yet, so --confidence would sample every head, "+
-		"move the estimate nowhere and hand back 50%%.\n", domain)
+	fmt.Fprintf(&b, "no head this run would sample has been scored in domain %q, so --confidence "+
+		"would sample every head, move the estimate nowhere and hand back 50%%.\n", domain)
 	b.WriteString("A source only carries evidence once its verdicts have been scored against outcomes.\n\n")
 
 	if cal, err := trust.New(trust.DefaultPath()); err == nil {
+		var here []string
 		seen := map[string]bool{}
-		var domains []string
+		var others []string
 		for _, st := range cal.Report() {
-			if st.D > 0 && !seen[st.Domain] {
+			if st.D <= 0 {
+				continue
+			}
+			if st.Domain == domain {
+				here = append(here, st.Source)
+				continue
+			}
+			if !seen[st.Domain] {
 				seen[st.Domain] = true
-				domains = append(domains, st.Domain)
+				others = append(others, st.Domain)
 			}
 		}
-		if len(domains) > 0 {
-			sort.Strings(domains)
-			fmt.Fprintf(&b, "  Domains with evidence: %s\n", strings.Join(domains, ", "))
+		if len(here) > 0 {
+			sort.Strings(here)
+			fmt.Fprintf(&b, "  Scored in %q:  %s\n", domain, strings.Join(here, ", "))
+			b.WriteString("  ...but none of them is among the heads this run selects.\n")
+		}
+		if len(others) > 0 {
+			sort.Strings(others)
+			fmt.Fprintf(&b, "  Other domains with evidence: %s\n", strings.Join(others, ", "))
 		}
 	}
 	b.WriteString("  Record an outcome:     hyctl trust record --source model:<id> --domain " + domain + " --said-correct --outcome correct\n")
@@ -3058,6 +3078,9 @@ func noEvidenceError(domain string) error {
 	b.WriteString("\nWithout --confidence the same prompt routes normally and costs one head.")
 	return errors.New(b.String())
 }
+
+// printSPRTResult renders an SPRT confidence run: the LLR ledger, the decision,
+// and the winning answer.
 
 func printSPRTResult(r *swarm.SPRTResult) {
 	sep := dimStyle.Render("  " + strings.Repeat("─", 60))
@@ -3077,11 +3100,22 @@ func printSPRTResult(r *swarm.SPRTResult) {
 	}
 	fmt.Println(sep)
 
-	fmt.Printf("\n  %s %s  ·  confidence %.1f%%  ·  %d samples  ·  $%.4f\n",
+	// The target and the stop reason, not just the number reached: without them
+	// a run that met its target and a run that gave up at the 50% prior render
+	// identically, and the second is the one worth knowing about (#732).
+	fmt.Printf("\n  %s %s  ·  target %.1f%% → achieved %.1f%%  ·  %d samples  ·  $%.4f\n",
 		dimStyle.Render("Decision →"),
 		cortexStyle.Render(t.Decision.String()),
-		t.Confidence*100, t.Samples, t.SpentUSD,
+		r.Target*100, t.Confidence*100, t.Samples, t.SpentUSD,
 	)
+	if warn := sprtWarning(r); warn != "" {
+		fmt.Printf("  %s\n", warnStyle.Render(warn))
+	}
+	// The key `hyctl trust explain` takes. It was written to trust.jsonl and
+	// printed nowhere, so the best diagnostic in the tool was reachable only by
+	// grepping a log file.
+	fmt.Printf("  %s\n", dimStyle.Render(
+		"why: hyctl trust explain "+trust.TaskHash(r.Prompt)))
 	fmt.Println()
 	if t.Candidate != "" {
 		fmt.Println(t.Candidate)
@@ -3089,11 +3123,42 @@ func printSPRTResult(r *swarm.SPRTResult) {
 	}
 }
 
+// stalledConfidence reports when the ensemble has not moved off the 50% prior,
+// which is a spend report rather than a confidence one. Both conditions are
+// required: a run can legitimately land near 50% after real evidence cancelled
+// out, and that is not the same as never having any.
+func stalledConfidence(meanFinal, autoClearedPct float64) string {
+	const prior, tol = 0.5, 0.02
+	if autoClearedPct > 0 || meanFinal < prior-tol || meanFinal > prior+tol {
+		return ""
+	}
+	return "achieved confidence has not left the 50% prior and no run has ever " +
+		"reached its target.\n  These runs paid for heads without learning anything. " +
+		"Calibrate a domain first:\n  hyctl trust calibration   ·   hyctl oracle verify --domain <d> -- <test command>"
+}
+
+// sprtWarning names the failure that looks like a result: every source
+// contributed zero evidence, so the posterior never left the prior and the
+// heads were paid for nothing.
+func sprtWarning(r *swarm.SPRTResult) string {
+	t := r.Trust
+	if t == nil || len(t.Ledger) == 0 {
+		return ""
+	}
+	for _, e := range t.Ledger {
+		if e.LLR != 0 {
+			return ""
+		}
+	}
+	return fmt.Sprintf(
+		"no source carried evidence in %q: %d heads were sampled and the estimate never left the prior.\n"+
+			"  Calibrate with `hyctl oracle verify --domain %s -- <test command>`.",
+		r.Domain, len(t.Ledger), r.Domain)
+}
+
 // logTrustRun appends the SPRT run to ~/.hydra/trust.jsonl (best-effort).
 func logTrustRun(r *swarm.SPRTResult, prompt, domain string) {
-	if domain == "" {
-		domain = "default"
-	}
+	domain = trust.Domain(domain)
 	models := make([]string, 0, len(r.Attempts))
 	seen := map[string]bool{}
 	for _, a := range r.Attempts {
@@ -4003,7 +4068,13 @@ func cmdTrustStats() *cobra.Command {
 			fmt.Printf("  auto-cleared        %.0f%%  (reached target without a human)\n", s.AutoClearedPct)
 			fmt.Printf("  confidence          target %.1f%% → achieved %.1f%%\n",
 				s.MeanTargetConf*100, s.MeanFinalConf*100)
-			fmt.Printf("  total spend         $%.4f\n\n", s.TotalCostUSD)
+			fmt.Printf("  total spend         $%.4f\n", s.TotalCostUSD)
+			// "samples saved 47%" reads as a win directly above a number saying
+			// nothing was learned. Said plainly rather than left to be inferred.
+			if warn := stalledConfidence(s.MeanFinalConf, s.AutoClearedPct); warn != "" {
+				fmt.Printf("\n  %s\n", warnStyle.Render(warn))
+			}
+			fmt.Println()
 			return nil
 		},
 	}
