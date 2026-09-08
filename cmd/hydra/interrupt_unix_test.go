@@ -31,9 +31,13 @@ func TestInterrupt_KillsTheSubprocessAndExits130(t *testing.T) {
 	// The verifier announces itself before blocking, so the signal below lands
 	// while it is genuinely running. Signalling on a timer instead raced
 	// hyctl's own startup and failed under load.
+	//
+	// Absolute paths and a shell builtin for the marker: the sandbox strips
+	// PATH to its own bin dir, which macOS's sh papered over and Ubuntu's dash
+	// did not.
 	started := filepath.Join(t.TempDir(), "verifier-started")
 	cmd := exec.Command(hyctlBin, "oracle", "verify", "--",
-		"/bin/sh", "-c", "touch "+started+"; sleep 60")
+		"/bin/sh", "-c", ": > "+started+"; /bin/sleep 60")
 	cmd.Env = append(os.Environ(),
 		"HOME="+s.Home,
 		"USERPROFILE="+s.Home,
