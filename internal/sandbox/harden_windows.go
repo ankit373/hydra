@@ -14,9 +14,13 @@ import (
 // hangs on a process that already exited.
 const waitDelay = 5 * time.Second
 
-// Harden bounds a subprocess without changing who can signal it. Killing a
-// tree on Windows means a job object, which needs the same signal wiring the
-// Unix build is waiting on. See harden_unix.go.
+// Harden bounds a subprocess without changing who can signal it.
+//
+// The Unix build isolates the head's process group so a cancelled run kills
+// its helpers too. Windows has no equivalent: it needs a job object, which is
+// a different mechanism and cannot be exercised from CI's build-only Windows
+// job, so a timed-out head still leaves helpers behind here (#738). Console
+// Ctrl+C reaches the child either way, since nothing asks for a new group.
 func Harden(cmd *exec.Cmd) *exec.Cmd {
 	cmd.WaitDelay = waitDelay
 	return cmd
