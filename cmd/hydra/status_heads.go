@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ankit373/hydra/internal/config"
+	"github.com/ankit373/hydra/internal/dispatch"
 	"github.com/ankit373/hydra/internal/provider"
 	"github.com/ankit373/hydra/internal/rank"
 )
@@ -19,9 +19,14 @@ import (
 type reasonFunc func(provider.Head) string
 
 // headTiers renders the heads that can run right now, grouped by the tier they
-// would actually route at. Anything reason refuses is counted, not listed:
-// status advertised three heads that could not serve because it echoed a config
-// snapshot instead of asking (#714).
+// would actually route at, and the --tier/--enum words that reach each one.
+// Anything reason refuses is counted, not listed: status advertised three heads
+// that could not serve because it echoed a config snapshot instead of asking
+// (#714).
+//
+// The names come from routing.yaml, the table the router resolves them
+// through. A separate panel used to list them against cfg.Tiers' frozen head
+// IDs, which is not where any of them route (#782).
 func headTiers(heads []provider.Head, reason reasonFunc) string {
 	byTier := map[int][]string{}
 	var blocked []string
@@ -33,11 +38,13 @@ func headTiers(heads []provider.Head, reason reasonFunc) string {
 		t := rank.UITier(h)
 		byTier[t] = append(byTier[t], h.Name)
 	}
+	names := dispatch.TierNamesByTier()
 
 	var b strings.Builder
-	b.WriteString(dimStyle.Render("  "+strings.Repeat("─", 48)) + "\n")
-	b.WriteString(fmt.Sprintf("  %-6s%s\n", "Tier", "Heads that can run now"))
-	b.WriteString(dimStyle.Render("  "+strings.Repeat("─", 48)) + "\n")
+	rule := dimStyle.Render("  "+strings.Repeat("─", 62)) + "\n"
+	b.WriteString(rule)
+	b.WriteString(fmt.Sprintf("  %-6s%-16s%s\n", "Tier", "--tier/--enum", "Heads that can run now"))
+	b.WriteString(rule)
 
 	if len(byTier) == 0 {
 		b.WriteString("  " + warnStyle.Render("no routable heads") + "\n")
@@ -48,7 +55,11 @@ func headTiers(heads []provider.Head, reason reasonFunc) string {
 	}
 	sort.Ints(tiers)
 	for _, t := range tiers {
-		b.WriteString(fmt.Sprintf("  %-6s%s\n", strconv.Itoa(t), strings.Join(byTier[t], ", ")))
+		b.WriteString(fmt.Sprintf("  %-6s%-16s%s\n",
+			strconv.Itoa(t), strings.Join(names[t], ", "), strings.Join(byTier[t], ", ")))
+	}
+	if idle := idleTierNames(names, byTier); idle != "" {
+		b.WriteString("\n  " + dimStyle.Render("resolves but nothing can serve it: "+idle) + "\n")
 	}
 
 	if len(blocked) > 0 {
@@ -59,48 +70,25 @@ func headTiers(heads []provider.Head, reason reasonFunc) string {
 	return b.String()
 }
 
-// tierAliases renders cfg.Tiers as what it actually is: the names `--tier <name>`
-// accepts. It is written once by `hyctl init` and never refreshed, so entries
-// are resolved against discovery and dead ones are marked rather than listed as
-// available (#714).
-func tierAliases(tiers []config.Tier, heads []provider.Head, reason reasonFunc) string {
+// idleTierNames lists the names that resolve to a tier no live head sits at.
+// They still route, by degrading to the cheapest head available, so leaving
+// them out of the table entirely would hide a word the user can legitimately
+// type; saying so is the honest middle (#782).
+func idleTierNames(names map[int][]string, byTier map[int][]string) string {
+	tiers := make([]int, 0, len(names))
+	for t := range names {
+		if len(byTier[t]) == 0 {
+			tiers = append(tiers, t)
+		}
+	}
 	if len(tiers) == 0 {
 		return ""
 	}
-	live := map[string]provider.Head{}
-	for _, h := range heads {
-		live[h.ID] = h
-	}
+	sort.Ints(tiers)
 
-	var b strings.Builder
-	b.WriteString(dimStyle.Render("  "+strings.Repeat("─", 48)) + "\n")
-	b.WriteString(fmt.Sprintf("  %-14s  %s\n", "--tier <name>", "Heads it can reach"))
-	b.WriteString(dimStyle.Render("  "+strings.Repeat("─", 48)) + "\n")
-
+	var out []string
 	for _, t := range tiers {
-		var ok, dead []string
-		for _, id := range t.Heads {
-			h, found := live[id]
-			switch {
-			case !found:
-				// Discovery never emitted it. Could be uninstalled, could be
-				// `enabled: false` in the registry; status cannot tell, so it
-				// says what it knows rather than guessing which.
-				dead = append(dead, id+": not discovered")
-			case reason(h) != "":
-				dead = append(dead, id+": "+reason(h))
-			default:
-				ok = append(ok, h.Name)
-			}
-		}
-		lineup := strings.Join(ok, ", ")
-		if lineup == "" {
-			lineup = warnStyle.Render("none can run")
-		}
-		b.WriteString(fmt.Sprintf("  %-14s  %s\n", t.Name, lineup))
-		for _, d := range dead {
-			b.WriteString(fmt.Sprintf("  %-14s  %s\n", "", dimStyle.Render("✗ "+d)))
-		}
+		out = append(out, fmt.Sprintf("%s (%d)", strings.Join(names[t], "/"), t))
 	}
-	return b.String()
+	return strings.Join(out, ", ")
 }

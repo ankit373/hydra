@@ -12,13 +12,6 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
-// Tier groups one or more Head IDs under a named capability level.
-type Tier struct {
-	Name   string   `toml:"name"`
-	Heads  []string `toml:"heads"`
-	Policy string   `toml:"policy,omitempty"`
-}
-
 // Policy is a named routing rule applied before dispatch.
 type Policy struct {
 	Action string `toml:"action"` // "local-only", "budget-cap", etc.
@@ -63,8 +56,11 @@ func (o OpenRouter) Normalized() []string {
 
 // Config is the root Hydra configuration.
 type Config struct {
+	// A `[[tiers]]` block written by an older `hyctl init` is ignored rather
+	// than rejected: toml leaves unknown keys undecoded. Tier names resolve
+	// through registry/routing.yaml now, so a per-install head list cannot
+	// disagree with the enum that shares its name (#782).
 	Cortex   string            `toml:"cortex"` // Head ID acting as the brain
-	Tiers    []Tier            `toml:"tiers"`  // ordered by capability (high → low)
 	Skills   []string          `toml:"skills"` // enabled skill IDs
 	Policies map[string]Policy `toml:"policies,omitempty"`
 	Egress   Egress            `toml:"egress,omitempty"`

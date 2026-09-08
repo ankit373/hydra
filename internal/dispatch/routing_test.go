@@ -22,9 +22,9 @@ func registryHead(id string, capScore int, local bool) provider.Head {
 	}
 }
 
-// routingDispatcher mirrors a real install: heads pre-sorted by CapScore
-// (as probe.Run does via rank.ByCapScore) and tiers named the way
-// internal/tui/init.go actually writes them, NOT numerically.
+// routingDispatcher mirrors a real install: heads pre-sorted by CapScore, as
+// probe.Run does via rank.ByCapScore. There is no tier config to mirror any
+// more, names resolve through registry/routing.yaml (#782).
 func routingDispatcher() *Dispatcher {
 	heads := []provider.Head{
 		registryHead("strongest", 100, false), // UITier 1  (orchestrator class)
@@ -32,12 +32,8 @@ func routingDispatcher() *Dispatcher {
 		registryHead("mid", 70, false),        // UITier 7  (enum STANDARD)
 		registryHead("weak", 40, true),        // UITier 10 (enum GRUNT, local)
 	}
-	cfg := &config.Config{Tiers: []config.Tier{
-		{Name: "expert", Heads: []string{"strongest"}},
-		{Name: "local", Heads: []string{"weak"}},
-	}}
 	return &Dispatcher{
-		cfg: cfg, heads: heads,
+		cfg: &config.Config{}, heads: heads,
 		policy: policy.New(policy.DefaultRules(false)),
 		budget: budget.NewRegistry(nil),
 	}
@@ -96,13 +92,27 @@ func TestSelectHeads_UnknownTierSelectsNothing(t *testing.T) {
 	}
 }
 
-func TestSelectHeads_NamedTierStillWorks(t *testing.T) {
+// selectHeads takes numbers only: Dispatch resolves a name through
+// routing.yaml before the governor runs, so a name arriving here means a
+// caller skipped that step. It must select nothing rather than fall back to a
+// second, name-shaped selection path, which is what disagreed with the enum
+// in the first place (#782).
+func TestSelectHeads_TakesNumbersOnly(t *testing.T) {
 	d := routingDispatcher()
-	if got := d.selectHeads("expert", false); len(got) != 1 || got[0].ID != "strongest" {
-		t.Errorf("named tier \"expert\" = %v, want [strongest]", ids(got))
+	for _, hint := range []string{"expert", "simple", "local"} {
+		if got := d.selectHeads(hint, false); len(got) != 0 {
+			t.Errorf("selectHeads(%q) = %v, want nothing: names resolve upstream", hint, ids(got))
+		}
 	}
-	if got := d.selectHeads("local", false); len(got) != 1 || got[0].ID != "weak" {
-		t.Errorf("named tier \"local\" = %v, want [weak]", ids(got))
+	// And the resolved form of those same names does select.
+	for _, name := range []string{"expert", "simple", "local"} {
+		hint, err := resolveTierHint(name)
+		if err != nil {
+			t.Fatalf("resolveTierHint(%q): %v", name, err)
+		}
+		if got := d.selectHeads(hint, false); len(got) == 0 {
+			t.Errorf("selectHeads(%q) for --tier %s selected nothing", hint, name)
+		}
 	}
 }
 
@@ -118,15 +128,15 @@ func TestSelectHeads_LocalOnlyFilters(t *testing.T) {
 // Named tiers must resolve to a capability number so claudeMode can downgrade
 // them; previously Atoi failed and the whole pressure table was inert.
 func TestResolveTierHint(t *testing.T) {
-	d := routingDispatcher()
 	tests := []struct{ in, want string }{
 		{"", ""},
-		{"8", "8"},      // numeric passes through
-		{"expert", "1"}, // named → strongest member's capability tier
+		{"8", "8"}, // numeric passes through
+		{"expert", "2"},
+		{"simple", "8"},
 		{"local", "10"},
 	}
 	for _, tt := range tests {
-		got, err := d.resolveTierHint(tt.in)
+		got, err := resolveTierHint(tt.in)
 		if err != nil {
 			t.Errorf("resolveTierHint(%q) unexpected error: %v", tt.in, err)
 		}
@@ -136,23 +146,76 @@ func TestResolveTierHint(t *testing.T) {
 	}
 }
 
-// A name absent from cfg.Tiers entirely is a config problem, not a
-// routability one, it must produce a distinct error naming the bad tier and
-// what IS configured, rather than resolving to a value selectHeads then fails
-// on with the generic "no routable heads" message (#451).
+// THE regression guard for #782. `--tier simple` and `--enum SIMPLE` are the
+// same word, so they must be the same instruction. They were not: the name
+// resolved through cfg.Tiers' CapScore bands and the enum through
+// routing.yaml, and on a real machine SIMPLE billed a paid remote head while
+// simple ran a free local one.
+func TestResolveTierHint_EveryNameAgreesWithItsEnum(t *testing.T) {
+	keys := EnumKeys()
+	if len(keys) == 0 {
+		t.Fatal("no enum keys, routing.yaml did not load")
+	}
+	for _, key := range keys {
+		name := strings.ToLower(key)
+		viaName, err := resolveTierHint(name)
+		if err != nil {
+			t.Errorf("resolveTierHint(%q): %v", name, err)
+			continue
+		}
+		if viaEnum := EnumToTier(key); viaName != viaEnum {
+			t.Errorf("--tier %s resolves to tier %s but --enum %s resolves to tier %s; "+
+				"one word must be one routing instruction", name, viaName, key, viaEnum)
+		}
+	}
+}
+
+// "local" is the one accepted name that is not an enum key. It named the free
+// floor before the enum vocabulary existed and the --tier help string still
+// advertises it, so it must resolve, and to whatever tier GRUNT is on rather
+// than a hardcoded 10, or a routing.yaml override moves the floor and leaves
+// this behind. It errored outright on a real machine before #782.
+func TestResolveTierHint_LocalAliasesTheFreeFloor(t *testing.T) {
+	got, err := resolveTierHint("local")
+	if err != nil {
+		t.Fatalf("resolveTierHint(\"local\") = %v, want the free floor", err)
+	}
+	if want := EnumToTier("GRUNT"); got != want {
+		t.Errorf("resolveTierHint(\"local\") = %q, want GRUNT's tier %q", got, want)
+	}
+}
+
+// A flag value is a name, not a config key: rejecting a capitalization was an
+// artifact of exact-matching a string out of config.toml.
+func TestResolveTierHint_NamesAreCaseInsensitive(t *testing.T) {
+	for _, hint := range []string{"EXPERT", "Expert", " expert "} {
+		got, err := resolveTierHint(hint)
+		if err != nil {
+			t.Errorf("resolveTierHint(%q) = %v, want it to resolve", hint, err)
+			continue
+		}
+		if want := EnumToTier("EXPERT"); got != want {
+			t.Errorf("resolveTierHint(%q) = %q, want %q", hint, got, want)
+		}
+	}
+}
+
+// An unknown name is a typo, not a routability problem, so it must produce a
+// distinct error naming the bad value and what could have been typed, rather
+// than resolving to something selectHeads then fails on with the generic
+// "no routable heads" message (#451).
 func TestResolveTierHint_UnknownNameIsADistinctError(t *testing.T) {
-	d := routingDispatcher()
-	for _, hint := range []string{"bogus", "expret", "Expert"} {
-		got, err := d.resolveTierHint(hint)
+	for _, hint := range []string{"bogus", "expret"} {
+		got, err := resolveTierHint(hint)
 		if err == nil {
 			t.Fatalf("resolveTierHint(%q) = %q, nil, want an error naming the unknown tier", hint, got)
 		}
 		if !strings.Contains(err.Error(), hint) {
 			t.Errorf("resolveTierHint(%q) error = %q, want it to name the bad tier", hint, err)
 		}
-		for _, configured := range []string{"expert", "local"} {
-			if !strings.Contains(err.Error(), configured) {
-				t.Errorf("resolveTierHint(%q) error = %q, want it to list configured tier %q", hint, err, configured)
+		for _, accepted := range []string{"expert", "simple", "local"} {
+			if !strings.Contains(err.Error(), accepted) {
+				t.Errorf("resolveTierHint(%q) error = %q, want it to list accepted name %q", hint, err, accepted)
 			}
 		}
 	}
@@ -162,9 +225,8 @@ func TestResolveTierHint_UnknownNameIsADistinctError(t *testing.T) {
 // produces such a value), it must be rejected with the requested value and
 // the valid range, not silently treated as "no tier" or clamped invisibly (#454).
 func TestResolveTierHint_NumericOutOfRangeIsRejected(t *testing.T) {
-	d := routingDispatcher()
 	for _, hint := range []string{"0", "-1", "11", "15", "20"} {
-		got, err := d.resolveTierHint(hint)
+		got, err := resolveTierHint(hint)
 		if err == nil {
 			t.Fatalf("resolveTierHint(%q) = %q, nil, want an out-of-range error", hint, got)
 		}
@@ -177,9 +239,8 @@ func TestResolveTierHint_NumericOutOfRangeIsRejected(t *testing.T) {
 // In-range numeric hints (the boundaries included) must still pass through
 // untouched, only genuinely out-of-range values are rejected.
 func TestResolveTierHint_NumericBoundariesAccepted(t *testing.T) {
-	d := routingDispatcher()
 	for _, hint := range []string{"1", "10"} {
-		got, err := d.resolveTierHint(hint)
+		got, err := resolveTierHint(hint)
 		if err != nil {
 			t.Errorf("resolveTierHint(%q) unexpected error: %v", hint, err)
 		}
@@ -194,19 +255,32 @@ func TestResolveTierHint_NumericBoundariesAccepted(t *testing.T) {
 // resolveTierHint can turn into something routable, and reject everything
 // else with a clear reason.
 func TestValidateTierHint(t *testing.T) {
-	cfg := routingDispatcher().cfg // has tiers "expert" and "local"
-
-	valid := []string{"", "1", "8", "10", "expert", "local"}
+	valid := []string{"", "1", "8", "10", "expert", "simple", "local", "grunt", "very_hard"}
 	for _, hint := range valid {
-		if err := ValidateTierHint(cfg, hint); err != nil {
+		if err := ValidateTierHint(hint); err != nil {
 			t.Errorf("ValidateTierHint(%q) = %v, want nil", hint, err)
 		}
 	}
 
 	invalid := []string{"0", "11", "99", "-1", "bogus", "nonsense"}
 	for _, hint := range invalid {
-		if err := ValidateTierHint(cfg, hint); err == nil {
+		if err := ValidateTierHint(hint); err == nil {
 			t.Errorf("ValidateTierHint(%q) = nil, want an error", hint)
+		}
+	}
+}
+
+// Validation and resolution must be the same rule. Two implementations drifted
+// apart once already: one accepted a name with no live heads and the other
+// turned it into a number, so a hint could pass the gate and then mean
+// something else at selection.
+func TestValidateTierHint_AgreesWithResolution(t *testing.T) {
+	hints := []string{"", "1", "10", "0", "11", "expert", "local", "EXPERT", "bogus"}
+	for _, hint := range hints {
+		_, resolveErr := resolveTierHint(hint)
+		validateErr := ValidateTierHint(hint)
+		if (resolveErr == nil) != (validateErr == nil) {
+			t.Errorf("hint %q: resolve err = %v but validate err = %v", hint, resolveErr, validateErr)
 		}
 	}
 }

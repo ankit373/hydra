@@ -99,3 +99,8 @@ __pycache__/
 
 # gstack skill artifacts (security reports, local state)
 .gstack/
+
+# Local coverage profiles. CI writes cover.out in the workflow and never commits it;
+# running the same gate by hand leaves one in the tree.
+cover.out
+*.coverprofile

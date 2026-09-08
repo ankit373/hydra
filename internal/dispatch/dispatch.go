@@ -342,7 +342,7 @@ func New(ctx context.Context) (*Dispatcher, error) {
 
 // Dispatch routes prompt through policy + tier selection + execution with fallback.
 func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) (*Result, error) {
-	if err := ValidateTierHint(d.cfg, opts.TierHint); err != nil {
+	if err := ValidateTierHint(opts.TierHint); err != nil {
 		return nil, err
 	}
 	// Written once per dispatch rather than per outcome. Breaker state is a
@@ -350,12 +350,12 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 	defer func() { _ = d.health.Flush() }()
 
 	// Resolve the hint to a capability number BEFORE the governor runs. A named
-	// config tier ("expert") is otherwise opaque to claudeMode's Atoi, which
-	// left the whole token-preservation table inert for every non-numeric hint
-	// (#165). A hint that is invalid on its face, an unconfigured name or an
-	// out-of-range number, is rejected here, before routability ever enters
-	// the picture, so the error blames the actual cause (#451, #454).
-	hint, err := d.resolveTierHint(opts.TierHint)
+	// tier ("expert") is otherwise opaque to claudeMode's Atoi, which left the
+	// whole token-preservation table inert for every non-numeric hint (#165).
+	// A hint that is invalid on its face, an unknown name or an out-of-range
+	// number, is rejected here, before routability ever enters the picture, so
+	// the error blames the actual cause (#451, #454).
+	hint, err := resolveTierHint(opts.TierHint)
 	if err != nil {
 		return nil, err
 	}
@@ -826,31 +826,17 @@ const (
 )
 
 // ValidateTierHint rejects a --tier value that cannot resolve to anything: a
-// numeric value outside [minTier,maxTier], or a name that matches no
-// configured tier. A name that matches a configured tier but currently has no
-// live heads is NOT an error here, that is a runtime availability gap
-// selectHeads reports on its own, distinct from a malformed hint.
+// numeric value outside [minTier,maxTier], or a name that is not a routing
+// enum key. It is resolveTierHint's error alone, so a hint the router will
+// later resolve can never be refused here, or vice versa.
 //
 // Plain dispatch, --swarm and --confidence (SPRT) all call this before
 // selecting heads, so an invalid --tier/--swarm-judge-tier value fails the
 // same way in every mode instead of silently widening to a broader, pricier
 // selection (#501).
-func ValidateTierHint(cfg *config.Config, hint string) error {
-	if hint == "" {
-		return nil
-	}
-	if n, err := strconv.Atoi(hint); err == nil {
-		if n < minTier || n > maxTier {
-			return fmt.Errorf("tier %d is out of range (valid: %d-%d)", n, minTier, maxTier)
-		}
-		return nil
-	}
-	for _, t := range cfg.Tiers {
-		if t.Name == hint {
-			return nil
-		}
-	}
-	return fmt.Errorf("unknown tier %q: not a number %d-%d and not a configured tier name", hint, minTier, maxTier)
+func ValidateTierHint(hint string) error {
+	_, err := resolveTierHint(hint)
+	return err
 }
 
 // resolveTierHint normalizes a tier hint to a capability number ("1".."10"),
@@ -858,56 +844,51 @@ func ValidateTierHint(cfg *config.Config, hint string) error {
 //   - numeric but outside [minTier,maxTier], e.g. "0" and "15" both silently
 //     behaved as "no tier" or got clamped to 10 with no indication anything
 //     was wrong (#454).
-//   - named but absent from cfg.Tiers entirely, a config/typo problem, not a
-//     routability one, so the caller must not blame the head pool for it (#451).
+//   - named but not a routing enum key, a typo rather than a routability
+//     problem, so the caller must not blame the head pool for it (#451).
 //
-// A name that IS configured but currently has no live heads is deliberately
-// NOT an error here: it resolves unchanged, and selectHeads/blockedHeads
-// report the routability gap instead, the tier itself was valid.
-func (d *Dispatcher) resolveTierHint(hint string) (string, error) {
+// A name resolves through routing.yaml, the table --enum reads, which is what
+// makes `--tier simple`, `--enum SIMPLE` and `--tier 8` one instruction. It
+// used to read cfg.Tiers, whose CapScore bands had no relation to the tier
+// numbers, so the same word routed to a paid head one way and a free one the
+// other (#782).
+func resolveTierHint(hint string) (string, error) {
+	n, err := ResolveTier(hint)
+	if err != nil || n == 0 {
+		return "", err
+	}
+	return strconv.Itoa(n), nil
+}
+
+// ResolveTier turns a --tier value, numeric or named, into a tier number, and
+// is the only place either shape is interpreted. An empty hint means "no tier
+// requested" and yields 0.
+//
+// Exported because swarm selects its own heads: when it resolved names its own
+// way, one --tier value picked a different head set in a swarm than in a plain
+// dispatch (#782).
+func ResolveTier(hint string) (int, error) {
 	if hint == "" {
-		return "", nil
+		return 0, nil
 	}
 	if n, err := strconv.Atoi(hint); err == nil {
 		if n < minTier || n > maxTier {
-			return "", fmt.Errorf("tier %d is out of range, valid tiers are %d-%d", n, minTier, maxTier)
+			return 0, fmt.Errorf("tier %d is out of range, valid tiers are %d-%d", n, minTier, maxTier)
 		}
-		return hint, nil
+		return n, nil
 	}
-	for _, t := range d.cfg.Tiers {
-		if t.Name != hint {
-			continue
-		}
-		ids := make(map[string]bool, len(t.Heads))
-		for _, id := range t.Heads {
-			ids[id] = true
-		}
-		strongest := 0
-		for _, h := range d.heads {
-			if !ids[h.ID] {
-				continue
-			}
-			if n := rank.UITier(h); strongest == 0 || n < strongest {
-				strongest = n
-			}
-		}
-		if strongest > 0 {
-			return strconv.Itoa(strongest), nil
-		}
-		return hint, nil // named tier has no live heads; let the caller report it
+	if n, ok := ResolveTierName(hint); ok {
+		return n, nil
 	}
-	return "", fmt.Errorf("unknown tier %q, configured tiers: %s", hint, d.tierNameList())
+	return 0, fmt.Errorf("unknown tier %q, accepted names are %s", hint, tierNameList())
 }
 
-// tierNameList formats cfg.Tiers' names for the "unknown tier" error, so the
+// tierNameList formats the accepted names for the "unknown tier" error, so the
 // user sees what they could have typed instead of just what they got wrong.
-func (d *Dispatcher) tierNameList() string {
-	if len(d.cfg.Tiers) == 0 {
-		return "(none configured, run `hyctl init`)"
-	}
-	names := make([]string, len(d.cfg.Tiers))
-	for i, t := range d.cfg.Tiers {
-		names[i] = t.Name
+func tierNameList() string {
+	names := TierNames()
+	if len(names) == 0 {
+		return "(routing.yaml is unreadable, so no name resolves)"
 	}
 	return strings.Join(names, ", ")
 }
@@ -1097,52 +1078,39 @@ func (d *Dispatcher) selectHeads(tierHint string, localOnly bool) []provider.Hea
 		return all
 	}
 
-	// Numeric hint → select by capability tier, independent of config naming.
-	if want, err := strconv.Atoi(tierHint); err == nil {
-		var candidates []provider.Head
-		for _, h := range d.heads {
-			// d.heads is pre-sorted by CapScore (probe.Run → rank.ByCapScore),
-			// so "at or below the requested strength" yields the strongest
-			// eligible head first and weaker ones as the fallback chain.
-			if filter(h) && rank.UITier(h) >= want {
-				candidates = append(candidates, h)
-			}
-		}
-		if len(candidates) > 0 {
-			return candidates
-		}
-		// Nothing is that cheap. Degrade to the cheapest heads available,
-		// ascending capability, so the fallback is the least expensive option
-		// rather than the most. Silently escalating to the strongest head is
-		// what made tier routing worthless in the first place (#165).
-		for _, h := range d.heads {
-			if filter(h) {
-				candidates = append(candidates, h)
-			}
-		}
-		if len(candidates) > 0 {
-			slices.Reverse(candidates) // pre-sorted strongest-first → cheapest-first
-			log.Printf("⚠️  no head at tier %d or cheaper, falling back to the cheapest available (%s)",
-				want, candidates[0].ID)
-		}
-		return candidates
-	}
-
-	// Named tier → heads assigned to it in config.
-	tierIDs := map[string]bool{}
-	for _, t := range d.cfg.Tiers {
-		if t.Name == tierHint {
-			for _, id := range t.Heads {
-				tierIDs[id] = true
-			}
-		}
+	// Every hint that reaches here is a number: resolveTierHint turns a name
+	// into one through routing.yaml before the governor runs, so there is no
+	// second, name-shaped selection path to disagree with this one (#782).
+	want, err := strconv.Atoi(tierHint)
+	if err != nil {
+		return nil
 	}
 
 	var candidates []provider.Head
 	for _, h := range d.heads {
-		if filter(h) && tierIDs[h.ID] {
+		// d.heads is pre-sorted by CapScore (probe.Run → rank.ByCapScore),
+		// so "at or below the requested strength" yields the strongest
+		// eligible head first and weaker ones as the fallback chain.
+		if filter(h) && rank.UITier(h) >= want {
 			candidates = append(candidates, h)
 		}
+	}
+	if len(candidates) > 0 {
+		return candidates
+	}
+	// Nothing is that cheap. Degrade to the cheapest heads available,
+	// ascending capability, so the fallback is the least expensive option
+	// rather than the most. Silently escalating to the strongest head is
+	// what made tier routing worthless in the first place (#165).
+	for _, h := range d.heads {
+		if filter(h) {
+			candidates = append(candidates, h)
+		}
+	}
+	if len(candidates) > 0 {
+		slices.Reverse(candidates) // pre-sorted strongest-first → cheapest-first
+		log.Printf("⚠️  no head at tier %d or cheaper, falling back to the cheapest available (%s)",
+			want, candidates[0].ID)
 	}
 	return candidates
 }

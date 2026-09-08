@@ -11,7 +11,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/provider"
 )
 
@@ -274,22 +273,24 @@ func TestCapScoreSelector_MaxHeadsCap(t *testing.T) {
 	}
 }
 
-// ── NumericTierSelector ──────────────────────────────────────────────────────
+// ── TierSelector ─────────────────────────────────────────────────────────────
 
 // A numeric --tier used to match no config tier name and always fall through
 // to CapScoreSelector's top-N fan-out, silently firing every head regardless
-// of the requested tier. NumericTierSelector is what resolveSelector now picks
-// for a numeric hint, mirroring dispatch.selectHeads' own semantics (#501).
-func TestResolveSelector_PicksNumericTierSelectorForANumericHint(t *testing.T) {
-	if _, ok := resolveSelector(Options{TierHint: "6"}, &config.Config{}).(*NumericTierSelector); !ok {
-		t.Error("a numeric TierHint did not resolve to NumericTierSelector")
+// of the requested tier (#501). Numeric and named hints now reach the same
+// selector, because a name is just another way to write a number (#782).
+func TestResolveSelector_SendsEveryTierHintToTheTierSelector(t *testing.T) {
+	for _, hint := range []string{"6", "expert", "simple", "local"} {
+		if _, ok := resolveSelector(Options{TierHint: hint}).(*TierSelector); !ok {
+			t.Errorf("TierHint %q did not resolve to TierSelector", hint)
+		}
 	}
-	if _, ok := resolveSelector(Options{TierHint: "expert"}, &config.Config{}).(*TierSelector); !ok {
-		t.Error("a named TierHint did not resolve to TierSelector")
+	if _, ok := resolveSelector(Options{}).(*CapScoreSelector); !ok {
+		t.Error("no TierHint did not resolve to CapScoreSelector")
 	}
 }
 
-func TestNumericTierSelector_MatchesDispatchSemantics(t *testing.T) {
+func TestTierSelector_MatchesDispatchSemantics(t *testing.T) {
 	all := []provider.Head{
 		registryHead("strongest", "Strongest", 100), // UITier 1
 		registryHead("mid", "Mid", 70),              // UITier 7
@@ -298,7 +299,7 @@ func TestNumericTierSelector_MatchesDispatchSemantics(t *testing.T) {
 
 	// Tier 7: excludes the tier-1 head, keeps mid + weaker as fallback,
 	// strongest-eligible first.
-	got, err := (&NumericTierSelector{}).Select(all, Options{TierHint: "7"})
+	got, err := (&TierSelector{}).Select(all, Options{TierHint: "7"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -312,7 +313,7 @@ func TestNumericTierSelector_MatchesDispatchSemantics(t *testing.T) {
 	}
 
 	// Tier 1: everything qualifies, strongest first.
-	got, err = (&NumericTierSelector{}).Select(all, Options{TierHint: "1"})
+	got, err = (&TierSelector{}).Select(all, Options{TierHint: "1"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -323,12 +324,12 @@ func TestNumericTierSelector_MatchesDispatchSemantics(t *testing.T) {
 
 // Nothing matches the requested tier, degrade to the cheapest heads
 // available, never silently escalate to the strongest (most expensive) one.
-func TestNumericTierSelector_DegradesToCheapestNeverStrongest(t *testing.T) {
+func TestTierSelector_DegradesToCheapestNeverStrongest(t *testing.T) {
 	all := []provider.Head{
 		registryHead("strongest", "Strongest", 100),
 		registryHead("expert", "Expert", 92),
 	}
-	got, err := (&NumericTierSelector{}).Select(all, Options{TierHint: "10"})
+	got, err := (&TierSelector{}).Select(all, Options{TierHint: "10"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -358,8 +359,6 @@ func ids(heads []provider.Head) []string {
 // value under --swarm/--confidence fell straight through to CapScoreSelector
 // instead of erroring (#501).
 func TestValidateSwarmTiers(t *testing.T) {
-	cfg := &config.Config{Tiers: []config.Tier{{Name: "expert", Heads: []string{"strong"}}}}
-
 	valid := []Options{
 		{},
 		{TierHint: "6"},
@@ -368,7 +367,7 @@ func TestValidateSwarmTiers(t *testing.T) {
 		{TierHint: "6", JudgeTierHint: "expert"},
 	}
 	for _, opts := range valid {
-		if err := validateSwarmTiers(cfg, opts); err != nil {
+		if err := validateSwarmTiers(opts); err != nil {
 			t.Errorf("validateSwarmTiers(%+v) = %v, want nil", opts, err)
 		}
 	}
@@ -380,7 +379,7 @@ func TestValidateSwarmTiers(t *testing.T) {
 		{JudgeTierHint: "not-a-real-tier"},
 	}
 	for _, opts := range invalid {
-		if err := validateSwarmTiers(cfg, opts); err == nil {
+		if err := validateSwarmTiers(opts); err == nil {
 			t.Errorf("validateSwarmTiers(%+v) = nil, want an error", opts)
 		}
 	}
@@ -438,11 +437,7 @@ func TestPlan_SelectsSameHeadsAsRunAndExecutesNothing(t *testing.T) {
 	}
 
 	// Same selector, same options, Plan must not diverge from the run path.
-	cfg, err := config.Load()
-	if err != nil {
-		t.Fatalf("config: %v", err)
-	}
-	want, err := resolveSelector(opts, cfg).Select(all, opts)
+	want, err := resolveSelector(opts).Select(all, opts)
 	if err != nil {
 		t.Fatalf("selector: %v", err)
 	}

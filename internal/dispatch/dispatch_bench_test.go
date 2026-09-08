@@ -25,17 +25,8 @@ func benchDispatcher() *Dispatcher {
 		{ID: "qwen-local", Name: "qwen3:8b", Provider: "local", CapScore: 10, LocalOnly: true, AuthReady: true},
 	}
 
-	cfg := &config.Config{
-		Tiers: []config.Tier{
-			{Name: "1", Heads: []string{"claude-core"}},
-			{Name: "7", Heads: []string{"gemini-pro"}},
-			{Name: "8", Heads: []string{"gemini-flash-high"}},
-			{Name: "10", Heads: []string{"qwen-local"}},
-		},
-	}
-
 	return &Dispatcher{
-		cfg:     cfg,
+		cfg:     &config.Config{},
 		heads:   heads,
 		policy:  policy.New(policy.DefaultRules(false)),
 		pricing: pricing.Load(),

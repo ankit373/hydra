@@ -751,22 +751,32 @@ Everything shown is measured from the machine's real logs, a figure that cannot 
 
 ```toml
 cortex = "claude"
-
-[[tiers]]
-name    = "expert"
-heads   = ["claude", "codex"]
-
-[[tiers]]
-name    = "simple"
-heads   = ["ollama/qwen3:8b"]
-
-[[tiers]]
-name    = "local"
-heads   = ["ollama/phi4-mini"]
+skills = ["code-gen", "review", "benchmark"]
 
 [policies.pii]
 action  = "local-only"
 ```
+
+### Tier names are enum names
+
+`--tier` takes a number 1-10 or a name, and a name is just the lowercase of a
+routing enum: `--tier simple`, `--enum SIMPLE` and `--tier 8` are one
+instruction. `--tier local` is the one alias, a legacy name for `grunt`, the
+free local floor. Retune any of them by editing `routing_map` in
+`registry/routing.yaml` (or a copy at `$HYDRA_HOME/registry/routing.yaml`) and
+both flags follow.
+
+```bash
+hyctl status            # every name, the tier it resolves to, and what serves it
+hyctl dispatch --dry-run --tier simple "add a DTO"
+```
+
+Older configs carry a `[[tiers]]` block that assigned heads to those names by
+CapScore band. It is ignored, not rejected: the bands were a second routing
+table and they disagreed with the enum about what every name meant, so
+`--tier simple` billed a paid remote head where `--enum SIMPLE` ran a free
+local one, or the reverse, depending on what `hyctl init` happened to discover.
+Re-run `hyctl init` to drop the block.
 
 ### Routing between individual OpenRouter models
 
