@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -69,6 +70,29 @@ func ckNewWorktreeTag(threadID int) string {
 	return fmt.Sprintf("t%d-%s", threadID, hex.EncodeToString(b[:]))
 }
 
+// ckGitFailure is the line of git's output that says why it failed: the last
+// non-empty one. ckFirstLine is wrong for these commands, `worktree add`
+// opens with "Preparing worktree (new branch 'x')" and puts the failure under
+// it, so every contended failure was reported as its own progress message and
+// the real reason never reached the log (#775).
+func ckGitFailure(out string) string {
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		if s := strings.TrimSpace(lines[i]); s != "" {
+			return s
+		}
+	}
+	return "no output"
+}
+
+// ckRepoLock serializes the git commands that take repository-level locks.
+// `worktree add` and `worktree remove` both write .git/worktrees and the
+// index, so threads cutting worktrees at the same moment contend and one
+// loses (#775). Work inside a worktree has its own index and stays parallel,
+// which is the concurrency that matters. One lock, not one per repo: the
+// cockpit drives a single repo at a time.
+var ckRepoLock sync.Mutex
+
 // ckCreateWorktree cuts a worktree of repo at HEAD on its own branch.
 func ckCreateWorktree(repo string, threadID int) (*ckWorktree, error) {
 	if err := os.MkdirAll(ckWorktreeBase(), 0o700); err != nil {
@@ -79,8 +103,11 @@ func ckCreateWorktree(repo string, threadID int) (*ckWorktree, error) {
 		tag: tag, dir: filepath.Join(ckWorktreeBase(), tag),
 		branch: "hydra/task-" + tag, repo: repo,
 	}
-	if out, err := ckGit(repo, "", "worktree", "add", wt.dir, "-b", wt.branch); err != nil {
-		return nil, fmt.Errorf("git worktree add: %s", ckFirstLine(out))
+	ckRepoLock.Lock()
+	out, err := ckGit(repo, "", "worktree", "add", wt.dir, "-b", wt.branch)
+	ckRepoLock.Unlock()
+	if err != nil {
+		return nil, fmt.Errorf("git worktree add: %s", ckGitFailure(out))
 	}
 	base, err := ckGit(wt.dir, "", "rev-parse", "HEAD")
 	if err != nil {
@@ -207,8 +234,11 @@ func ckNewPaths(before, after []string) []string {
 // ckCleanupWorktree removes the worktree checkout, and its branch too unless
 // keepBranch (a conflicted apply keeps it so nothing is lost while resolving).
 func ckCleanupWorktree(wt *ckWorktree, keepBranch bool) error {
-	if out, err := ckGit(wt.repo, "", "worktree", "remove", "--force", wt.dir); err != nil {
-		return fmt.Errorf("git worktree remove: %s", ckFirstLine(out))
+	ckRepoLock.Lock()
+	out, err := ckGit(wt.repo, "", "worktree", "remove", "--force", wt.dir)
+	ckRepoLock.Unlock()
+	if err != nil {
+		return fmt.Errorf("git worktree remove: %s", ckGitFailure(out))
 	}
 	if keepBranch {
 		return nil
