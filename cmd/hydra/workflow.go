@@ -191,7 +191,10 @@ func runWorkflow(ctx context.Context, w workflow.Workflow, system string) error 
 func printWorkflow(w workflow.Workflow) {
 	sep := dimStyle.Render("  " + strings.Repeat("─", 66))
 	fmt.Println(sep)
-	fmt.Printf("  %-3s %-28s %-10s %-18s %8s\n", "#", "STEP", "STATUS", "HEAD", "TIME")
+	// TIER has its own column: appended to HEAD it was the first thing the
+	// 18-char truncation cut, and which tier answered is the most informative
+	// part of the row.
+	fmt.Printf("  %-3s %-28s %-10s %-5s %-18s %8s\n", "#", "STEP", "STATUS", "TIER", "HEAD", "TIME")
 	fmt.Println(sep)
 	for _, s := range w.Steps {
 		head := s.Model
@@ -202,12 +205,12 @@ func printWorkflow(w workflow.Workflow) {
 		if s.DurationMS > 0 {
 			took = fmt.Sprintf("%.1fs", float64(s.DurationMS)/1000)
 		}
-		tier := ""
+		tier := dimStyle.Render("—")
 		if s.Tier > 0 {
-			tier = fmt.Sprintf(" T%d", s.Tier)
+			tier = fmt.Sprintf("T%d", s.Tier)
 		}
-		fmt.Printf("  %-3d %-28.28s %-10s %-18.18s %8s\n",
-			s.N, s.Title, statusLabel(s.Status), truncLabel(head+tier, 18), took)
+		fmt.Printf("  %-3d %-28.28s %-10s %-5s %-18.18s %8s\n",
+			s.N, s.Title, statusLabel(s.Status), tier, truncLabel(head, 18), took)
 		if s.Err != "" {
 			fmt.Printf("      %s\n", warnStyle.Render("↳ "+oneLine(s.Err)))
 		}
