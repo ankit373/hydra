@@ -12,19 +12,23 @@ import (
 
 const (
 	fallbackCloud = 200_000
-	// ollamaDefaultCtx is what an Ollama server allocates when nothing asks for
-	// more, measured as 4096 on 0.33.2. Hydra never asks: the executor sends
-	// only model, prompt and stream, and OLLAMA_CONTEXT_LENGTH lives in the
-	// server's environment rather than ours. The 32768 that used to sit here
-	// was unreachable, and real lookups fell through to fallbackCloud, so a
-	// 4096-token head was budgeted at 200000 and the governor could never fire
-	// for one (#764).
-	ollamaDefaultCtx = 4_096
+	// localDefaultCtx is what a local server allocates when nothing asks for
+	// more, measured as 4096 on Ollama 0.33.2 and assumed for any other local
+	// server (LM Studio reports no ceiling either) since a smaller assumption
+	// is the safe direction for a governor. Hydra never asks: the executor
+	// sends only model, prompt and stream, and OLLAMA_CONTEXT_LENGTH lives in
+	// the server's environment rather than ours. The 32768 that used to sit
+	// here was unreachable, and real lookups fell through to fallbackCloud, so
+	// a 4096-token head was budgeted at 200000 and the governor could never
+	// fire for one (#764).
+	localDefaultCtx = 4_096
 )
 
 type modelEntry struct {
 	ID            string `yaml:"id"`
+	Name          string `yaml:"name"`
 	Provider      string `yaml:"provider"`
+	ModelFlag     string `yaml:"model_flag"`
 	ContextWindow int    `yaml:"context_window"`
 }
 
@@ -32,39 +36,31 @@ type modelsFile struct {
 	Models []modelEntry `yaml:"models"`
 }
 
-// LoadWindows reads registry/models.yaml, an on-disk copy under home if one
-// exists, otherwise the copy embedded in the binary, and returns a map of
-// model-id → context window size. Missing entries get provider-based fallbacks
-// (ollama → ollamaDefaultCtx, everything else → fallbackCloud).
-//
-// home is the Hydra home directory, not the registry directory: Read appends
-// "registry" itself so every caller resolves the override the same way.
-func LoadWindows(home string) map[string]int {
-	out := map[string]int{}
-
+// parseModels reads models.yaml, preferring an on-disk copy under home over the
+// embedded one. An unreadable or malformed file yields no entries rather than
+// an error: a broken registry must not stop a dispatch.
+func parseModels(home string) []modelEntry {
 	raw, err := registry.Read(home, "models.yaml")
 	if err != nil {
-		return out
+		return nil
 	}
 	var mf modelsFile
 	if err := yaml.Unmarshal(raw, &mf); err != nil {
-		return out
+		return nil
 	}
-	for _, m := range mf.Models {
-		if m.ID == "" {
-			continue
-		}
-		w := m.ContextWindow
-		if w <= 0 {
-			if m.Provider == "ollama" {
-				w = ollamaDefaultCtx
-			} else {
-				w = fallbackCloud
-			}
-		}
-		out[m.ID] = w
+	return mf.Models
+}
+
+// windowOf is an entry's declared window, or its provider's default when it
+// declares none.
+func windowOf(m modelEntry) int {
+	if m.ContextWindow > 0 {
+		return m.ContextWindow
 	}
-	return out
+	if m.Provider == "ollama" {
+		return localDefaultCtx
+	}
+	return fallbackCloud
 }
 
 // windowFor returns the context window for a model ID, with fallback.
@@ -73,4 +69,34 @@ func windowFor(windows map[string]int, modelID string) int {
 		return w
 	}
 	return fallbackCloud
+}
+
+// loadDeclarations reads models.yaml into the three indexes a head can name an
+// entry by. First entry wins on a repeated key, so a duplicated name resolves
+// in file order rather than by map iteration.
+func loadDeclarations(home string) declarations {
+	d := declarations{
+		byID:   map[string]int{},
+		byFlag: map[string]int{},
+		byName: map[string]int{},
+	}
+	put := func(m map[string]int, key string, w int) {
+		if key == "" {
+			return
+		}
+		if _, seen := m[key]; !seen {
+			m[key] = w
+		}
+	}
+	for _, m := range parseModels(home) {
+		w := windowOf(m)
+		put(d.byID, m.ID, w)
+		put(d.byName, m.Name, w)
+		// How a port-discovered head is identified, and how internal/cost
+		// already resolves one: provider/model_flag.
+		if m.Provider != "" && m.ModelFlag != "" {
+			put(d.byFlag, m.Provider+"/"+m.ModelFlag, w)
+		}
+	}
+	return d
 }

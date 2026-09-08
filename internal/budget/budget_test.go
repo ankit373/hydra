@@ -248,8 +248,8 @@ func TestEffectiveMode(t *testing.T) {
 // binary, so context windows silently fell back to a flat 200k for everything
 // (#238). It is embedded now, so the honest contract is that a machine with no
 // on-disk registry still gets the real windows.
-func TestLoadWindows_UsesEmbeddedRegistryWhenNoneIsOnDisk(t *testing.T) {
-	windows := LoadWindows("/no/such/path")
+func TestDeclarations_UsesEmbeddedRegistryWhenNoneIsOnDisk(t *testing.T) {
+	windows := loadDeclarations("/no/such/path").byID
 	if len(windows) == 0 {
 		t.Fatal("no windows loaded, the embedded registry should always be readable")
 	}
@@ -263,7 +263,7 @@ func TestLoadWindows_UsesEmbeddedRegistryWhenNoneIsOnDisk(t *testing.T) {
 // The override is the reason the files stay editable YAML rather than becoming
 // Go constants; if it stops working, operators lose the ability to retune
 // routing without a rebuild and would have no way to tell.
-func TestLoadWindows_OnDiskRegistryOverridesTheEmbeddedCopy(t *testing.T) {
+func TestDeclarations_OnDiskRegistryOverridesTheEmbeddedCopy(t *testing.T) {
 	home := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(home, "registry"), 0o755); err != nil {
 		t.Fatal(err)
@@ -273,7 +273,7 @@ func TestLoadWindows_OnDiskRegistryOverridesTheEmbeddedCopy(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	windows := LoadWindows(home)
+	windows := loadDeclarations(home).byID
 	if got := windows["only-model"]; got != 4242 {
 		t.Errorf("on-disk models.yaml ignored: only-model window = %d, want 4242", got)
 	}

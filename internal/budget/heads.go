@@ -10,26 +10,33 @@ import (
 
 // WindowsForHeads returns the context window to budget each discovered head
 // against, keyed by head ID, which is what Registry.Record is called with.
+// Keying on registry/models.yaml ids alone did not work: those only partly
+// overlap head ids, so every local head missed, fell through to fallbackCloud,
+// and a 4096-token model was budgeted at 200000 with the 70/75/80% bands past
+// a ceiling it could never reach (#764).
 //
-// LoadWindows alone was not enough: it keys on registry/models.yaml ids, and
-// those only partly overlap head ids, so every local head missed and fell
-// through to fallbackCloud. A 4096-token model was budgeted at 200000, and the
-// 70/75/80% bands landed past a ceiling it could never reach (#764).
+// Where the truth lives differs by head, so the rule does too:
 //
-// The declared window and the reported ceiling are combined with min, because
-// a ceiling is a hard bound: a models.yaml entry claiming 32768 for a model
-// that can only do 2048 is wrong whoever wrote it.
+//   - A local head's window is decided by its server at runtime, and the
+//     registry cannot know it. Declarations are ignored rather than merely
+//     absent (#777): models.yaml already carries 32768 for a model measured at
+//     4096, and honouring that would undo #764 for it.
+//   - A cloud head reports nothing, so its declaration is the best evidence
+//     there is, resolved by declarations.windowFor.
+//
+// A reported ceiling caps either, because a ceiling is a hard bound.
 func WindowsForHeads(home string, heads []provider.Head) map[string]int {
-	declared := LoadWindows(home)
+	decls := loadDeclarations(home)
 
-	out := make(map[string]int, len(declared)+len(heads))
-	for id, w := range declared {
-		out[id] = w
-	}
+	// Only discovered heads go in. Record is called with a head id and nothing
+	// else, so seeding the registry-local ids too added keys nothing could look
+	// up, and one of them (qwen-grunt, 32768) is a local declaration that must
+	// never apply.
+	out := make(map[string]int, len(heads))
 	for _, h := range heads {
-		w, ok := declared[h.ID]
-		if !ok {
-			w = defaultWindowFor(h)
+		w := localDefaultCtx
+		if !h.LocalOnly {
+			w = decls.windowFor(h)
 		}
 		if ceil, ok := ContextCeiling(h); ok && ceil < w {
 			w = ceil
@@ -39,14 +46,33 @@ func WindowsForHeads(home string, heads []provider.Head) map[string]int {
 	return out
 }
 
-// defaultWindowFor is the window to assume for a head nothing declares. A
-// local head gets the local server's default rather than a cloud-sized one:
-// under-assuming makes the governor escalate early, over-assuming is what
-// silenced it, and for a budget governor the safe direction is the smaller
-// number.
-func defaultWindowFor(h provider.Head) int {
-	if h.LocalOnly {
-		return ollamaDefaultCtx
+// declarations indexes models.yaml the three ways a head can name an entry.
+// Kept separate so id beats model_flag beats name deterministically, rather
+// than collapsing into one map where load order decides.
+type declarations struct {
+	byID   map[string]int
+	byFlag map[string]int
+	byName map[string]int
+}
+
+// windowFor resolves a cloud head's declared window, falling back to
+// fallbackCloud when no entry names it.
+//
+// id, then provider/model_flag, then display name: the same three keys
+// internal/cost/canonical.go already bridges these two id namespaces with.
+// The head id is `claude` while the entry declaring 200000 is `claude-core`,
+// so keying on id alone missed and landed on fallbackCloud, which is also
+// 200000. Right answer, no mechanism: changing the declaration changed
+// nothing (#777).
+func (d declarations) windowFor(h provider.Head) int {
+	if w, ok := d.byID[h.ID]; ok {
+		return w
+	}
+	if w, ok := d.byFlag[h.ID]; ok {
+		return w
+	}
+	if w, ok := d.byName[h.Name]; ok {
+		return w
 	}
 	return fallbackCloud
 }
@@ -54,7 +80,7 @@ func defaultWindowFor(h provider.Head) int {
 // ContextCeiling is the architectural maximum a provider reported for a head,
 // and whether it reported one at all. Not the effective window: a model whose
 // ceiling is 40960 still runs at the server's 4096 default, so this caps a
-// declared window rather than replacing it.
+// window rather than replacing it.
 func ContextCeiling(h provider.Head) (int, bool) {
 	raw, ok := h.Meta["model_ctx_max"]
 	if !ok {

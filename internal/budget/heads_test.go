@@ -66,31 +66,146 @@ func TestWindowsForHeads_LocalHeadsResolveInsteadOfFallingThroughToCloud(t *test
 	}
 }
 
-// A ceiling is a hard bound, so it caps a declaration rather than losing to
-// one: a models.yaml entry claiming 32768 for a 2048-token model is wrong
-// whoever wrote it.
-func TestWindowsForHeads_CeilingCapsADeclaredWindow(t *testing.T) {
-	home := writeModels(t, `models:
-  - id: ollama/small
-    provider: ollama
-    context_window: 32768
-  - id: ollama/large
-    provider: ollama
-    context_window: 2048
-`)
+// A ceiling is a hard bound, so it caps the assumed window, and a ceiling
+// above the assumption does NOT raise it: 40960 architectural does not mean
+// the server will allocate 40960, which is the whole reason min is used.
+func TestWindowsForHeads_CeilingCapsTheAssumedWindow(t *testing.T) {
 	heads := []provider.Head{
-		ollamaHead("ollama/small", 2048),  // declared above its ceiling
-		ollamaHead("ollama/large", 40960), // declared below its ceiling
+		ollamaHead("ollama/small", 2048),  // ceiling under the local default
+		ollamaHead("ollama/large", 40960), // ceiling over it
 	}
-	w := WindowsForHeads(home, heads)
+	w := WindowsForHeads(t.TempDir(), heads)
 
 	if got := windowFor(w, "ollama/small"); got != 2048 {
-		t.Errorf("declared 32768 over a 2048 ceiling gave %d, want the ceiling", got)
+		t.Errorf("a 2048 ceiling gave %d, want the ceiling", got)
 	}
-	// The other direction must NOT be raised: a ceiling of 40960 does not mean
-	// the server will allocate it, which is the whole reason min is used.
-	if got := windowFor(w, "ollama/large"); got != 2048 {
-		t.Errorf("declared 2048 under a 40960 ceiling gave %d, want the declaration", got)
+	if got := windowFor(w, "ollama/large"); got != localDefaultCtx {
+		t.Errorf("a 40960 ceiling gave %d, want the local default %d", got, localDefaultCtx)
+	}
+}
+
+// The #764 regression guard, and the reason #777 exists. models.yaml already
+// carries 32768 for Qwen2.5-Coder:7b, which is measured at 4096. #764's fix
+// held only because no models.yaml *id* happened to equal a local head id:
+// rename that entry's id and the head silently went back to 8x over.
+//
+// A local head's window is decided by its server at runtime and the registry
+// cannot know it, so a declaration is ignored rather than merely absent.
+func TestWindowsForHeads_ALocalDeclarationCannotUndoTheMeasuredDefault(t *testing.T) {
+	home := writeModels(t, `models:
+  - id: ollama/Qwen2.5-Coder:7b
+    name: Qwen2.5-Coder 7b
+    provider: ollama
+    model_flag: Qwen2.5-Coder:7b
+    context_window: 32768
+`)
+	// Named by id, by provider/model_flag and by display name at once: no
+	// route into the declaration may reach a local head.
+	head := ollamaHead("ollama/Qwen2.5-Coder:7b", 32768)
+	head.Name = "Qwen2.5-Coder 7b"
+
+	got := windowFor(WindowsForHeads(home, []provider.Head{head}), head.ID)
+	if got == 32768 {
+		t.Fatal("a models.yaml declaration overrode the measured local default, undoing #764")
+	}
+	if got != localDefaultCtx {
+		t.Errorf("window %d, want the measured local default %d", got, localDefaultCtx)
+	}
+}
+
+// The other half of #777: `claude` is the head id, `claude-core` is the entry
+// declaring the window, so keying on id alone missed and fell through to
+// fallbackCloud, which is also 200000. The right answer with no mechanism
+// behind it. A declaration has to be followed, so changing it must change the
+// budget, which is why the fixture uses a number nothing else could produce.
+func TestWindowsForHeads_CloudHeadFollowsItsDeclarationByName(t *testing.T) {
+	home := writeModels(t, `models:
+  - id: claude-core
+    name: Claude Code
+    provider: claude
+    context_window: 123456
+`)
+	head := provider.Head{
+		ID: "claude", Name: "Claude Code", Provider: "anthropic",
+		Source: "cli", Meta: map[string]string{},
+	}
+	got := windowFor(WindowsForHeads(home, []provider.Head{head}), "claude")
+	if got == fallbackCloud {
+		t.Fatal("still landing on fallbackCloud, so the declaration is not being followed")
+	}
+	if got != 123456 {
+		t.Errorf("window %d, want the declared 123456", got)
+	}
+}
+
+// A port-discovered head is named provider/model_flag, the third key, and the
+// one internal/cost already resolves entries by. Tested on a cloud-ish head
+// because a local one ignores declarations entirely.
+func TestWindowsForHeads_CloudHeadFollowsItsDeclarationByProviderModelFlag(t *testing.T) {
+	home := writeModels(t, `models:
+  - id: registry-local-id
+    name: Some Display Name
+    provider: acme
+    model_flag: turbo-9
+    context_window: 54321
+`)
+	head := provider.Head{
+		ID: "acme/turbo-9", Name: "something else entirely",
+		Provider: "acme", Source: "env", Meta: map[string]string{},
+	}
+	got := windowFor(WindowsForHeads(home, []provider.Head{head}), "acme/turbo-9")
+	if got != 54321 {
+		t.Errorf("window %d, want the declared 54321 resolved by provider/model_flag", got)
+	}
+}
+
+// Resolution order has to be fixed, not decided by map iteration: id beats
+// provider/model_flag beats name.
+func TestWindowsForHeads_ResolutionOrderIsIdThenFlagThenName(t *testing.T) {
+	home := writeModels(t, `models:
+  - id: acme/turbo-9
+    name: unrelated
+    provider: none
+    context_window: 111
+  - id: by-flag
+    name: Turbo Nine
+    provider: acme
+    model_flag: turbo-9
+    context_window: 222
+  - id: by-name
+    name: acme/turbo-9
+    provider: other
+    context_window: 333
+`)
+	head := provider.Head{
+		ID: "acme/turbo-9", Name: "Turbo Nine",
+		Provider: "acme", Source: "env", Meta: map[string]string{},
+	}
+	// id (111) must win over provider/model_flag (222) and over the entry
+	// whose *name* is this head's id (333).
+	if got := windowFor(WindowsForHeads(home, []provider.Head{head}), head.ID); got != 111 {
+		t.Errorf("window %d, want 111: id must outrank flag and name", got)
+	}
+}
+
+// A repeated key resolves in file order, so the same registry always gives
+// the same answer.
+func TestLoadDeclarations_FirstEntryWinsOnARepeatedName(t *testing.T) {
+	home := writeModels(t, `models:
+  - id: first
+    name: Same Name
+    provider: acme
+    context_window: 1000
+  - id: second
+    name: Same Name
+    provider: acme
+    context_window: 2000
+`)
+	d := loadDeclarations(home)
+	for i := 0; i < 50; i++ {
+		if got := d.byName["Same Name"]; got != 1000 {
+			t.Fatalf("repeated name resolved to %d, want the first entry's 1000", got)
+		}
 	}
 }
 
@@ -99,8 +214,8 @@ func TestWindowsForHeads_CeilingCapsADeclaredWindow(t *testing.T) {
 func TestWindowsForHeads_UndeclaredLocalHeadGetsTheLocalDefault(t *testing.T) {
 	w := WindowsForHeads(t.TempDir(), []provider.Head{ollamaHead("ollama/mystery:1b", 0)})
 	got := windowFor(w, "ollama/mystery:1b")
-	if got != ollamaDefaultCtx {
-		t.Errorf("window %d, want the local default %d", got, ollamaDefaultCtx)
+	if got != localDefaultCtx {
+		t.Errorf("window %d, want the local default %d", got, localDefaultCtx)
 	}
 	if got == fallbackCloud {
 		t.Error("an undeclared local head is still budgeted as cloud-sized")
@@ -186,5 +301,24 @@ func TestContextCeiling_OnlyReportsWhatWasActuallyReported(t *testing.T) {
 	// A head with no Meta at all must not panic or invent a ceiling.
 	if _, ok := ContextCeiling(provider.Head{}); ok {
 		t.Error("a head with no Meta reported a ceiling")
+	}
+}
+
+// LM Studio heads are LocalOnly too and report no ceiling, so they take the
+// same local default. Covered explicitly because the constant is measured on
+// Ollama and only assumed here, and because a local head must never reach the
+// cloud fallback whichever server it came from.
+func TestWindowsForHeads_LMStudioHeadsAreLocalToo(t *testing.T) {
+	head := provider.Head{
+		ID: "lmstudio/some-model", Name: "some-model (LM Studio)",
+		Provider: "local", Source: "port", LocalOnly: true, AuthReady: true,
+		Meta: map[string]string{},
+	}
+	got := windowFor(WindowsForHeads(t.TempDir(), []provider.Head{head}), head.ID)
+	if got == fallbackCloud {
+		t.Fatal("an LM Studio head is budgeted as cloud-sized")
+	}
+	if got != localDefaultCtx {
+		t.Errorf("window %d, want the local default %d", got, localDefaultCtx)
 	}
 }
