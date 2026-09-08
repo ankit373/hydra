@@ -81,18 +81,19 @@ func computeCoverage(pol ledger.Policy, sc SupplyChain, runs []trust.RunLog, cos
 				"nonce (a2a, parallel, the swarm judge, workflow steps), and a head's answer comes back " +
 				"classified; but the injection-marker scan is an 11-phrase keyword heuristic that leaves an " +
 				"audit trail rather than preventing an attack, and a fence is an instruction a model may ignore"},
-		llm02SensitiveInfo(),
-		llm03SupplyChain(sc),
-		{ID: "LLM04", Name: "Data and Model Poisoning", Status: NotApplicable,
+		sensitiveInfoCategory(),
+		excessiveAgencyCategory(pol),
+		supplyChainCategory(sc),
+		{ID: "LLM05", Name: "Data and Model Poisoning", Status: NotApplicable,
 			Detail: "Hydra routes prompts to models, it does not train or fine-tune any"},
-		llm05OutputHandling(),
-		llm06ExcessiveAgency(pol),
-		{ID: "LLM07", Name: "System Prompt Leakage", Status: Gap,
-			Detail: "no protection exists for --system content today"},
-		{ID: "LLM08", Name: "Vector and Embedding Weaknesses", Status: NotApplicable,
+		unboundedConsumptionCategory(costCeilingDenials),
+		misinformationCategory(runs),
+		{ID: "LLM08", Name: "Hidden Context Exposure", Status: Gap,
+			Detail: "nothing protects the non-user-facing context Hydra assembles: --system text, the a2a " +
+				"handoff, and the file content an edit prompt embeds all reach the head unguarded"},
+		{ID: "LLM09", Name: "Vector and Embedding Weaknesses", Status: NotApplicable,
 			Detail: "Hydra has no RAG pipeline or vector store of its own"},
-		llm09Misinformation(runs),
-		llm10UnboundedConsumption(costCeilingDenials),
+		outputHandlingCategory(),
 	}
 
 	applicable, covered, partial, pct := tally(cats)
@@ -126,13 +127,13 @@ func tally(cats []Category) (applicable, covered, partial int, pct float64) {
 	return applicable, covered, partial, pct
 }
 
-// llm02SensitiveInfo reads the egress gate's real state rather than asserting
+// sensitiveInfoCategory reads the egress gate's real state rather than asserting
 // one. Content detection alone is a denylist that can only stop what someone
 // wrote a pattern for, which is why this reports Enforced only once the path
 // rules are loaded and the strict floor is on: together those are what make
 // "a local config cannot reach a head that leaves the machine" a property of
 // the code rather than a hope about the detectors.
-func llm02SensitiveInfo() Category {
+func sensitiveInfoCategory() Category {
 	c := Category{ID: "LLM02", Name: "Sensitive Information Disclosure"}
 
 	rules, err := egress.LoadRules(config.ScriptHome())
@@ -157,8 +158,8 @@ func llm02SensitiveInfo() Category {
 
 // Detection, not provenance, and the baseline is a plain file, so this is
 // Configured once binaries are tracked, never Enforced. See supplychain.go.
-func llm03SupplyChain(sc SupplyChain) Category {
-	c := Category{ID: "LLM03", Name: "Supply Chain"}
+func supplyChainCategory(sc SupplyChain) Category {
+	c := Category{ID: "LLM04", Name: "Supply Chain"}
 	if len(sc.Binaries) == 0 {
 		c.Status = Gap
 		c.Detail = "nothing is being fingerprinted, so a replaced agent binary or swapped model would go unnoticed"
@@ -170,12 +171,12 @@ func llm03SupplyChain(sc SupplyChain) Category {
 	return c
 }
 
-// llm05OutputHandling: Hydra ships default workspace validators (js, py,
+// outputHandlingCategory: Hydra ships default workspace validators (js, py,
 // yaml, sh, ...) that run after every edit and roll back on failure, so
 // this is Enforced whenever the loaded registry has any validator at all,
 // Gap only if a custom workspace.yaml stripped every one of them.
-func llm05OutputHandling() Category {
-	c := Category{ID: "LLM05", Name: "Improper Output Handling"}
+func outputHandlingCategory() Category {
+	c := Category{ID: "LLM10", Name: "Improper Output Handling"}
 	reg, err := workspace.Load(config.ScriptHome())
 	if err != nil || !reg.HasAnyValidator() {
 		c.Status = Gap
@@ -187,11 +188,11 @@ func llm05OutputHandling() Category {
 	return c
 }
 
-// llm06ExcessiveAgency: Configured when at least one ledger rule scopes
+// excessiveAgencyCategory: Configured when at least one ledger rule scopes
 // access by resource (real least-privilege), Gap otherwise, this is a
 // per-install choice, not something Hydra can ship a default for.
-func llm06ExcessiveAgency(pol ledger.Policy) Category {
-	c := Category{ID: "LLM06", Name: "Excessive Agency"}
+func excessiveAgencyCategory(pol ledger.Policy) Category {
+	c := Category{ID: "LLM03", Name: "Excessive Agency"}
 	for _, r := range pol.Rules {
 		if r.Resource != "" {
 			c.Status = Configured
@@ -204,10 +205,10 @@ func llm06ExcessiveAgency(pol ledger.Policy) Category {
 	return c
 }
 
-// llm09Misinformation: the SPRT confidence ensemble is Hydra's real mitigation
+// misinformationCategory: the SPRT confidence ensemble is Hydra's real mitigation
 // for hallucinated/wrong answers, Configured once it's actually been used.
-func llm09Misinformation(runs []trust.RunLog) Category {
-	c := Category{ID: "LLM09", Name: "Misinformation"}
+func misinformationCategory(runs []trust.RunLog) Category {
+	c := Category{ID: "LLM07", Name: "Misinformation"}
 	if len(runs) == 0 {
 		c.Status = Gap
 		c.Detail = "the SPRT confidence ensemble (hyctl dispatch --confidence) has never been used"
@@ -218,11 +219,11 @@ func llm09Misinformation(runs []trust.RunLog) Category {
 	return c
 }
 
-// llm10UnboundedConsumption: Configured once a --max-cost ceiling has
+// unboundedConsumptionCategory: Configured once a --max-cost ceiling has
 // actually refused a dispatch, the ledger is the only durable record that
 // the guard was ever exercised.
-func llm10UnboundedConsumption(costCeilingDenials int) Category {
-	c := Category{ID: "LLM10", Name: "Unbounded Consumption"}
+func unboundedConsumptionCategory(costCeilingDenials int) Category {
+	c := Category{ID: "LLM06", Name: "Unbounded Consumption"}
 	if costCeilingDenials > 0 {
 		c.Status = Configured
 		c.Detail = "a --max-cost ceiling has refused at least one dispatch"

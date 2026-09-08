@@ -184,18 +184,18 @@ func Build(heads []provider.Head) (*Report, error) {
 	chainRes := ledger.VerifyChainEvents(events, ledger.DefaultPath())
 	r.IntegrityIntact = chainRes.Intact
 
-	// Loaded once, shared by AssessEvidence and computeCoverage's LLM09 check
+	// Loaded once, shared by AssessEvidence and computeCoverage's misinformation check
 	// (both used to independently call trust.LoadRuns on the same file). A
 	// scan failure partway through (a corrupted trust.jsonl) can hand back a
 	// non-nil, partially-populated slice alongside the error, treated as no
-	// runs at all, matching the "any load error means Gap" invariant LLM09's
+	// runs at all, matching the "any load error means Gap" invariant that check's
 	// check relies on, rather than silently reporting Configured off of
 	// truncated/corrupt data.
 	runs, runsErr := trust.LoadRuns(trust.DefaultLogPath())
 	if runsErr != nil {
 		runs = nil
 	}
-	// Ditto: shared by the check below and LLM10's coverage category, instead
+	// Ditto: shared by the check below and the unbounded-consumption category, instead
 	// of each re-scanning events for the same cost-ceiling-denial predicate.
 	costCeilingDenials := countCostCeilingDenials(events)
 
@@ -458,14 +458,14 @@ func priorityRank(p ActionPriority) int {
 }
 
 // costCeilingReason reports whether e was a --max-cost refusal, the one
-// substring check shared by the cost-ceiling Check and the LLM10 detector,
+// substring check shared by the cost-ceiling Check and the unbounded-consumption detector,
 // so the two can never disagree about what counts.
 func costCeilingReason(e ledger.Event) bool {
 	return e.Decision == ledger.Deny && strings.Contains(e.Reason, "cost ceiling")
 }
 
 // countCostCeilingDenials is shared by costCeilingCheck and
-// llm10UnboundedConsumption, both used to independently scan the identical
+// unboundedConsumptionCategory, both used to independently scan the identical
 // events slice testing the same predicate; Build now scans once and passes
 // the count to both.
 func countCostCeilingDenials(events []ledger.Event) int {

@@ -432,10 +432,17 @@ what such a head independently reads and ships is outside it. Only a local-only 
 keeps the whole task on this machine. The default view says so in words, because no
 coverage percentage can.
 
+Scored against the **2026** edition (`OWASP-GenAI-LLM-Top-10-2026-v1.0`, published
+4 August 2026). Seven of the ten moved: Excessive Agency rose 06 to 03, Improper
+Output Handling fell 05 to 10, and System Prompt Leakage was replaced by the broader
+LLM08 Hidden Context Exposure.
+
 Category IDs are qualified by their OWASP **edition**, in `--json`, in `--csv` and on
 every persisted score entry. Only LLM01 and LLM02 keep their number between editions,
 so gap age is never computed across two of them: a reordering restarts that clock
-rather than reporting one category's history under another's name.
+rather than reporting one category's history under another's name. Upgrading to a
+build that changes edition therefore resets every gap age to zero once, by design;
+the alternative is dating one category's history under another's name.
 
 **Two taxonomies, because they answer different questions.** The OWASP LLM Top 10 governs what a model *says*. The [OWASP Top 10 for Agentic Applications](https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/) (ASI01-ASI10) governs what a system *does*, and an orchestrator with fallback chains, swarm fan-out, tool access and cross-run memory is squarely the second. Both are scored, side by side:
 
