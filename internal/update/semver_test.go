@@ -191,3 +191,43 @@ func FuzzSemverGT_IsTransitive(f *testing.F) {
 		}
 	})
 }
+
+// What an edge build sees. The edge channel names its version from the next
+// patch after the last release, not the last release itself, and that choice
+// is only visible here: SemVer puts any prerelease *before* its own version,
+// so 1.4.2-edge.<sha> sorts below the released 1.4.2 and `hyctl` would tell
+// an edge user to "upgrade" to code older than the one they are running.
+//
+// Before #759 an edge binary reported 0.0.0-SNAPSHOT-none, which was wrong in
+// the same direction and for a duller reason. These cases are why edge.yml
+// increments (#705, #759).
+func TestSemverGT_EdgeBuildIsNotToldToDowngrade(t *testing.T) {
+	const released = "v1.4.2"
+
+	// The bug, kept as a case so the ordering that causes it stays documented.
+	for _, behind := range []string{"0.0.0-SNAPSHOT-none", "1.4.2-edge.g0f001bb"} {
+		if !semverGT(released, behind) {
+			t.Errorf("semverGT(%q, %q) = false; the case this guards against no longer holds "+
+				"and the comment above is stale", released, behind)
+		}
+	}
+
+	// The scheme edge actually uses: ahead of the release it is built past.
+	const edge = "1.4.3-edge.g0f001bb"
+	if semverGT(released, edge) {
+		t.Errorf("an edge build reporting %q is told to upgrade to %q, which is older code",
+			edge, released)
+	}
+	// And once the release that carries its code lands, it must be told.
+	for _, next := range []string{"v1.4.3", "v1.5.0", "v2.0.0"} {
+		if !semverGT(next, edge) {
+			t.Errorf("an edge build reporting %q is not told about %q, so it never updates",
+				edge, next)
+		}
+	}
+	// Two edge builds order by commit only, which is not meaningful, but the
+	// newer must never read as older than the release either.
+	if semverGT("1.4.3-edge.gaaaaaaa", "v1.4.3") {
+		t.Error("an edge prerelease outranks its own release")
+	}
+}

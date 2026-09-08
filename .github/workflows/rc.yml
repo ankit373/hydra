@@ -44,12 +44,22 @@ jobs:
           echo "version=${RC_TAG}" >> "$GITHUB_OUTPUT"
           echo "tag=${RC_TAG}" >> "$GITHUB_OUTPUT"
           echo "sha=${SHA}" >> "$GITHUB_OUTPUT"
+          # GoReleaser's {{ .Version }} is the semver without the leading v, so
+          # the archive filenames need this form and not the tag (#759).
+          echo "semver=${RC_TAG#v}" >> "$GITHUB_OUTPUT"
 
       - name: Build RC binaries
         uses: goreleaser/goreleaser-action@v7
         with:
           version: latest
-          args: release --snapshot --clean --skip=publish,sign,sbom
+          # --snapshot made GoReleaser compute its own 0.0.0-SNAPSHOT version
+          # and ignore the tag, so every RC shipped CLI archives that could not
+          # say which release they stood for (#705). It was presumably there
+          # because a plain `release` refuses when HEAD carries no tag, which is
+          # always true here: the tag is created afterwards, by `gh release
+          # create`. Skipping validate is what actually addresses that, and it
+          # keeps GORELEASER_CURRENT_TAG as the version.
+          args: release --clean --skip=publish,sign,sbom,validate
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GORELEASER_CURRENT_TAG: ${{ steps.ver.outputs.version }}
@@ -70,7 +80,7 @@ jobs:
           **Install RC build**
           \`\`\`bash
           # macOS (Apple Silicon)
-          curl -L https://github.com/ankit373/hydra/releases/download/${{ steps.ver.outputs.tag }}/hydra_${{ steps.ver.outputs.version }}_darwin_arm64.tar.gz | tar xz
+          curl -L https://github.com/ankit373/hydra/releases/download/${{ steps.ver.outputs.tag }}/hydra_${{ steps.ver.outputs.semver }}_darwin_arm64.tar.gz | tar xz
           sudo mv hyctl /usr/local/bin/
           \`\`\`
           EOF

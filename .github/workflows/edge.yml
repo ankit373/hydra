@@ -42,10 +42,48 @@ jobs:
         id: ver
         run: |
           SHA=$(git rev-parse --short HEAD)
-          # Use latest tag as base, append edge suffix
-          BASE=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
-          echo "version=${BASE}-edge.${SHA}" >> "$GITHUB_OUTPUT"
+
+          # `git describe` cannot name a release from here. Release tags live on
+          # main, and develop's history does not contain them because every
+          # release lands as a squash merge, so describe either finds an RC tag
+          # on a release branch or nothing at all. It found neither: the most
+          # recent tag it could reach was `edge`, the one this workflow pushed
+          # last time, so BASE became "edge", the version became
+          # "edge-edge.<sha>", and GoReleaser discarded that as invalid semver
+          # and fell back to 0.0.0. That is why GORELEASER_CURRENT_TAG looked
+          # like it did nothing (#759).
+          #
+          # The release-please manifest is the version release-please itself
+          # reads instead of tags (#215), and it is in this checkout, so it is
+          # the base. No fallback: an unversioned edge build is the bug.
+          RELEASED=$(python3 -c 'import json; print(json.load(open(".release-please-manifest.json"))["."])')
+          if [ -z "$RELEASED" ]; then
+            echo "::error::no version in .release-please-manifest.json, refusing to build an unversioned edge"
+            exit 1
+          fi
+
+          # The next patch, not the last release: an edge build is *after* the
+          # release, and SemVer puts any prerelease before its own version. With
+          # BASE=1.4.2 an edge build reports 1.4.2-edge.<sha>, which sorts below
+          # the released 1.4.2, so `hyctl` tells edge users to "upgrade" to code
+          # older than the one they are running. Checked against semverGT: the
+          # prompt is wrong for 1.4.2-edge and right for 1.4.3-edge, before and
+          # after the next release both. Same reason GoReleaser's own snapshot
+          # template uses incpatch. The arithmetic fails loudly on a
+          # non-numeric patch, which is what a malformed manifest deserves.
+          MAJOR="${RELEASED%%.*}"; REST="${RELEASED#*.}"
+          MINOR="${REST%%.*}"; PATCH="${REST#*.}"
+          BASE="${MAJOR}.${MINOR}.$((PATCH + 1))"
+
+          # g<sha>, git describe's own convention: an all-digit short sha
+          # beginning with 0 is an invalid semver prerelease identifier, and
+          # would silently reproduce the 0.0.0 fallback about 1 build in 400.
+          VERSION="v${BASE}-edge.g${SHA}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "sha=${SHA}" >> "$GITHUB_OUTPUT"
+          # GoReleaser's {{ .Version }} drops the leading v, so the archive
+          # filenames need this form rather than the tag (#759).
+          echo "semver=${VERSION#v}" >> "$GITHUB_OUTPUT"
 
       # Delete existing edge release + tag so we can overwrite it.
       # Must delete local tag too, fetch-depth:0 pulls it into the checkout,
@@ -59,11 +97,16 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build snapshot binaries
+      - name: Build edge binaries
         uses: goreleaser/goreleaser-action@v7
         with:
           version: latest
-          args: release --snapshot --clean --skip=publish,sign,sbom
+          # Not --snapshot: it computes its own 0.0.0-SNAPSHOT version and
+          # ignores the tag, so every edge build shipped archives that could
+          # not say which commit they came from (#759, and #705 for RC).
+          # Skipping validate is what makes a build work with no tag on HEAD,
+          # which is always the case here, and it keeps the version.
+          args: release --clean --skip=publish,sign,sbom,validate
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GORELEASER_CURRENT_TAG: ${{ steps.ver.outputs.version }}
@@ -84,7 +127,7 @@ jobs:
           **Install edge build**
           \`\`\`bash
           # macOS (Apple Silicon)
-          curl -L https://github.com/ankit373/hydra/releases/download/edge/hydra_${{ steps.ver.outputs.version }}_darwin_arm64.tar.gz | tar xz
+          curl -L https://github.com/ankit373/hydra/releases/download/edge/hydra_${{ steps.ver.outputs.semver }}_darwin_arm64.tar.gz | tar xz
           sudo mv hyctl /usr/local/bin/
           \`\`\`
           EOF
