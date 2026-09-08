@@ -35,6 +35,7 @@ import (
 	"github.com/ankit373/hydra/internal/cost"
 	"github.com/ankit373/hydra/internal/dispatch"
 	"github.com/ankit373/hydra/internal/editor"
+	"github.com/ankit373/hydra/internal/egress"
 	"github.com/ankit373/hydra/internal/entropy"
 	"github.com/ankit373/hydra/internal/evalset"
 	"github.com/ankit373/hydra/internal/graph"
@@ -1014,6 +1015,7 @@ func cmdDispatch() *cobra.Command {
 			fmt.Println()
 			fmt.Println(result.Output)
 			fmt.Println()
+			printOutputWarning(result.OutputProvenance)
 			return nil
 		},
 	}
@@ -2644,6 +2646,18 @@ func printPolicyAudit(r *security.Report) {
 			rule.Index, util.SafeTerminal(rule.Summary), rule.Decision, rule.Hits, note)
 	}
 	fmt.Println(dimStyle.Render(fmt.Sprintf("    %d access(es) fell through to the %s default", a.DefaultHits, a.Default)))
+}
+
+// printOutputWarning flags a response that carries credential-shaped content.
+// It prints after the output rather than before, so the warning is the last
+// thing on screen when the orchestration protocol's next step is to apply that
+// output to disk.
+func printOutputWarning(p egress.Part) {
+	if p.Sens < egress.Secret {
+		return
+	}
+	fmt.Printf("  %s the response carries %s. Review before applying it.\n\n",
+		warnStyle.Render("⚠"), util.SafeTerminal(strings.Join(p.Reasons, ", ")))
 }
 
 // printExposures answers the question a PII count never could: did any of it

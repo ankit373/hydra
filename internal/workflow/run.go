@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/ankit373/hydra/internal/util"
 )
 
 // StepResult is what running one step produced. Deliberately not
@@ -109,6 +111,10 @@ func Run(ctx context.Context, w Workflow, r Router, save Saver) (Workflow, error
 
 // stepPrompt is step i's prompt with the previous step's output as context.
 // Without this a workflow is a list of unrelated prompts rather than a chain.
+//
+// The previous output is fenced, because a workflow exists to route a cheap
+// head's step into a stronger one's, and unfenced it is a model writing the
+// next model's instructions. a2a already fences exactly this (#740).
 func (w Workflow) stepPrompt(i int) string {
 	if i == 0 {
 		return w.Steps[i].Prompt
@@ -119,7 +125,9 @@ func (w Workflow) stepPrompt(i int) string {
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "This is step %d of %d in the task: %s\n\n", i+1, len(w.Steps), w.Task)
-	fmt.Fprintf(&b, "Step %d (%s) produced:\n%s\n\n", prev.N, prev.Title, prev.Output)
+	label := fmt.Sprintf("STEP %d OUTPUT (%s)", prev.N, util.SafeTerminal(prev.Title))
+	b.WriteString(util.WrapUntrusted(label, prev.Output))
+	b.WriteString("\n\n")
 	b.WriteString(w.Steps[i].Prompt)
 	return b.String()
 }
