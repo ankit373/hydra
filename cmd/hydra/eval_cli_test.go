@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -111,6 +112,12 @@ func TestCLI_EvalReadinessDistinguishesVolumeFromComparability(t *testing.T) {
 // An oracle verdict that does not say which routing decision it judges cannot
 // improve routing, which is the only reason the corpus is kept forever.
 func TestCLI_OracleVerifyRecordsTheRoutingDecision(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		// cliSandbox scrubs PATH, so the verifier needs an absolute path and
+		// there is no portable exit-0 one. Leaves the flag wiring itself
+		// unexercised here; what it writes is covered by evalset's round-trip.
+		t.Skip("no portable absolute-path exit-0 verifier under a scrubbed PATH")
+	}
 	cliSandbox(t)
 	f := filepath.Join(t.TempDir(), "candidate.go")
 	if err := os.WriteFile(f, []byte("package a\n"), 0o600); err != nil {
