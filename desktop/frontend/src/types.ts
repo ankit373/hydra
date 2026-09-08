@@ -347,6 +347,10 @@ export interface Coverage {
   /** Detective only, deliberately not counted toward percentCovered. */
   partial: number
   percentCovered: number
+  /** The OWASP edition every id above belongs to. Only LLM01 and LLM02 keep
+   *  their number between editions, so an id alone does not identify a
+   *  category across two of them. */
+  edition: string
 }
 
 /** Posture against the OWASP Top 10 for Agentic Applications (ASI01-ASI10).
