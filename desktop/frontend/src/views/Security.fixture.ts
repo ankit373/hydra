@@ -38,6 +38,9 @@ export function securityReport(over: Partial<SecurityReport> = {}): SecurityRepo
     posture: posture(),
     register: { risks: [], sumDefectCostUsd: 0, breached: 0, bySeverity: {} },
     attestation: attestation(),
+    // A quiet machine here means one Hydra fully governs, so a test that cares
+    // about the boundary has to say so rather than inherit a caveat.
+    boundary: { governed: ['ollama/qwen2.5'], opaque: [], opaqueLocalOnly: [] },
     ...over,
   }
 }

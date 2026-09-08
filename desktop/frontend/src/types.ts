@@ -465,6 +465,25 @@ export interface SecurityReport {
   privilege?: AgentPrivilege[]
   /** AI bill of materials: the model estate, with provenance. */
   bom?: BOMEntry[]
+  /** What the egress gate can and cannot reach, so every number above it is
+   *  read with its scope attached. */
+  boundary: SecurityBoundary
+}
+
+/**
+ * The limit of what the egress gate enforces. It sees the request Hydra
+ * composes; it cannot see inside a CLI-agent head, which is a separate program
+ * that reads files and reaches the network on its own account.
+ */
+export interface SecurityBoundary {
+  /** Heads Hydra builds the request for, so the gate sees every byte. */
+  governed: string[]
+  /** Separate programs handed a prompt. Hydra guarantees what it passes them
+   *  and nothing about what they do next. */
+  opaque: string[]
+  /** The opaque heads declared local-only: a claim about that program rather
+   *  than something Hydra verifies, so it narrows the hole without closing it. */
+  opaqueLocalOnly: string[]
 }
 
 /** What was true, under which rules, over which evidence. */
