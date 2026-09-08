@@ -106,6 +106,9 @@ const (
 	// content, which is never inlined.
 	KindEdit Kind = "edit"
 
+	// KindScore is a verdict on a span, appended after it closes. See score.go.
+	KindScore Kind = "score"
+
 	KindError Kind = "error"
 )
 
@@ -179,6 +182,10 @@ type Event struct {
 	// Meta is open-ended, for model parameters and anything else with no field
 	// of its own. Bounded by MaxEventBytes, not by schema.
 	Meta map[string]any `json:"meta,omitempty"`
+
+	// Score is set only on a KindScore event, so it costs nothing on the
+	// events that carry the work itself.
+	Score *Score `json:"score,omitempty"`
 
 	// Ref points at bulk content held elsewhere (a path, a hash). Detail is a
 	// short human string. Neither may carry a diff or a full model response.

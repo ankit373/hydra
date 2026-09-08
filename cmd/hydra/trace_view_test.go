@@ -284,3 +284,205 @@ func stripANSI(s string) string {
 	}
 	return b.String()
 }
+
+// A verdict has to survive being written by one invocation and read by
+// another, because a test suite finishes long after the dispatch it judges.
+func TestCLI_TraceScoreThenViewShowsTheVerdict(t *testing.T) {
+	cliSandbox(t)
+	_, okSpan := seedRun(t, "20260908T060000Z-1111111111111111")
+
+	scoreCmd := cmdTraceScore()
+	scoreCmd.SetArgs([]string{"20260908T060000Z-1111111111111111",
+		"--span", okSpan[:8], "--name", "tests", "--value", "1",
+		"--comment", "suite passed", "--source", "verifier:go"})
+	if out := captureStdout(t, func() {
+		if err := scoreCmd.Execute(); err != nil {
+			t.Fatal(err)
+		}
+	}); !strings.Contains(out, "tests = 1") {
+		t.Errorf("scoring did not confirm what it recorded:\n%s", out)
+	}
+
+	out := captureStdout(t, func() {
+		cmd := cmdTraceView()
+		cmd.SetArgs([]string{"20260908T060000Z-1111111111111111"})
+		if err := cmd.Execute(); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if !strings.Contains(out, "tests=1") {
+		t.Errorf("the waterfall does not show the verdict:\n%s", out)
+	}
+
+	detail := captureStdout(t, func() {
+		cmd := cmdTraceView()
+		cmd.SetArgs([]string{"20260908T060000Z-1111111111111111", "--span", okSpan[:8]})
+		if err := cmd.Execute(); err != nil {
+			t.Fatal(err)
+		}
+	})
+	for _, want := range []string{"judged", "tests = 1", "verifier:go", "suite passed"} {
+		if !strings.Contains(detail, want) {
+			t.Errorf("the drill-down never shows %q:\n%s", want, detail)
+		}
+	}
+}
+
+// A span nobody judged must not render as one that passed.
+func TestVerdictMark_DistinguishesUnjudgedFromPassed(t *testing.T) {
+	unjudged := verdictMark(&waterfall.Span{})
+	passed := verdictMark(&waterfall.Span{Scores: []runlog.Score{{Name: "a", Value: 1}}})
+	failed := verdictMark(&waterfall.Span{Scores: []runlog.Score{{Name: "a", Value: 0}}})
+
+	if strings.TrimSpace(stripANSI(unjudged)) != "" {
+		t.Errorf("an unjudged span renders %q, want blank", stripANSI(unjudged))
+	}
+	if stripANSI(passed) == stripANSI(unjudged) {
+		t.Error("a passed span looks the same as an unjudged one")
+	}
+	if stripANSI(failed) == stripANSI(passed) {
+		t.Error("a failed span looks the same as a passed one")
+	}
+	// Every state must occupy one cell, or scored and unscored rows misalign.
+	for name, mark := range map[string]string{"unjudged": unjudged, "passed": passed, "failed": failed} {
+		if n := len([]rune(stripANSI(mark))); n != 1 {
+			t.Errorf("%s mark is %d cells, want 1", name, n)
+		}
+	}
+}
+
+// A score naming no span in this run is refused, and the error says how to find
+// the right one.
+func TestCLI_TraceScoreRefusesAnUnknownSpan(t *testing.T) {
+	cliSandbox(t)
+	seedRun(t, "20260908T060000Z-2222222222222222")
+
+	cmd := cmdTraceScore()
+	cmd.SetArgs([]string{"20260908T060000Z-2222222222222222",
+		"--span", "deadbeefdeadbeef", "--name", "tests", "--value", "1"})
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("a score on a nonexistent span was accepted")
+	}
+	if !strings.Contains(err.Error(), "hyctl trace view") {
+		t.Errorf("the error does not say how to list spans: %v", err)
+	}
+}
+
+func TestCLI_TraceScoreRequiresASpan(t *testing.T) {
+	cliSandbox(t)
+	seedRun(t, "20260908T060000Z-3333333333333333")
+
+	cmd := cmdTraceScore()
+	cmd.SetArgs([]string{"20260908T060000Z-3333333333333333", "--name", "tests", "--value", "1"})
+	if err := cmd.Execute(); err == nil {
+		t.Fatal("a score with no --span was accepted")
+	}
+}
+
+// Scoring must be additive. A run with no scores has to render exactly as it
+// did before this existed.
+func TestCLI_TraceViewUnchangedForRunsWithNoScores(t *testing.T) {
+	cliSandbox(t)
+	seedRun(t, "20260908T060000Z-4444444444444444")
+
+	out := captureStdout(t, func() {
+		cmd := cmdTraceView()
+		cmd.SetArgs([]string{"20260908T060000Z-4444444444444444"})
+		if err := cmd.Execute(); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if strings.Contains(out, "judged") || strings.Contains(out, "✔") || strings.Contains(out, "✘") {
+		t.Errorf("an unscored run shows verdict output:\n%s", out)
+	}
+	// And it still shows the run itself.
+	if !strings.Contains(out, "Local Model") {
+		t.Errorf("the waterfall stopped rendering:\n%s", out)
+	}
+}
+
+// The JSON drill-down is what an external tool reads, so it has to carry the
+// text and say why when it cannot, exactly as the human view does.
+func TestCLI_TraceViewSpanJSONCarriesTextOrTheReason(t *testing.T) {
+	cliSandbox(t)
+	if err := config.Save(&config.Config{Cortex: "none", CapturePayloads: true}); err != nil {
+		t.Fatal(err)
+	}
+	store, err := payload.Open(payload.Dir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	inRef, err := store.PutSegments([]payload.Segment{{Label: "prompt", Content: "ASKED-MARKER"}}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	span := runlog.NewSpanID()
+	// An output ref that was never stored, so both branches are exercised in
+	// one run: text present on one side, a reason on the other.
+	if err := runlog.New("20260908T060000Z-5555555555555555").Append(runlog.Event{
+		Kind: runlog.KindDispatchFinished, TaskID: "t1", SpanID: span,
+		Head: "h1", Model: "M", Tier: 8, Status: "ok", InputRef: inRef,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	out := captureStdout(t, func() {
+		cmd := cmdTraceView()
+		cmd.SetArgs([]string{"20260908T060000Z-5555555555555555", "--span", span, "--json"})
+		if err := cmd.Execute(); err != nil {
+			t.Fatal(err)
+		}
+	})
+	var got struct {
+		Input             string `json:"input"`
+		Output            string `json:"output"`
+		OutputUnavailable string `json:"output_unavailable"`
+		Span              struct {
+			ID string `json:"id"`
+		} `json:"span"`
+	}
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("--span --json is not valid JSON: %v\n%s", err, out)
+	}
+	if got.Span.ID != span {
+		t.Errorf("the JSON names span %q, want %q", got.Span.ID, span)
+	}
+	if got.Input != "ASKED-MARKER" {
+		t.Errorf("input = %q, want the stored prompt", got.Input)
+	}
+	// A missing side must carry its reason rather than an empty string that
+	// reads as "the model answered nothing".
+	if got.Output != "" || got.OutputUnavailable == "" {
+		t.Errorf("a never-stored output gave output=%q reason=%q", got.Output, got.OutputUnavailable)
+	}
+}
+
+// A parked task is neither a success nor a failure, and the waterfall has to
+// render that third state rather than colouring it as one of the other two.
+func TestCLI_TraceViewRendersAParkedSpan(t *testing.T) {
+	cliSandbox(t)
+	span := runlog.NewSpanID()
+	if err := runlog.New("20260908T060000Z-6666666666666666").Append(runlog.Event{
+		Kind: runlog.KindQuestionAsked, TaskID: "t1", SpanID: span,
+		Level: runlog.LevelWarn, Head: "h1", Model: "Gated Model", Tier: 4,
+		Status: "waiting", Detail: "may this reach production?",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	out := captureStdout(t, func() {
+		cmd := cmdTraceView()
+		cmd.SetArgs([]string{"20260908T060000Z-6666666666666666"})
+		if err := cmd.Execute(); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if !strings.Contains(out, "Gated Model") {
+		t.Errorf("a parked span is not rendered:\n%s", out)
+	}
+	if !strings.Contains(stripANSI(out), "?") {
+		t.Errorf("a parked span does not read as waiting:\n%s", stripANSI(out))
+	}
+}

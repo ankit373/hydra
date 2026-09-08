@@ -1395,7 +1395,7 @@ replaced before it is written.`,
 	}
 	payloads.Flags().BoolVar(&jsonOut, "json", false, "machine-readable output")
 
-	cmd.AddCommand(seal, evaluate, export, payloads, cmdTraceView())
+	cmd.AddCommand(seal, evaluate, export, payloads, cmdTraceView(), cmdTraceScore())
 	return cmd
 }
 
@@ -1473,7 +1473,7 @@ func cmdOracle() *cobra.Command {
 		Use:   "oracle",
 		Short: "Run deterministic verifiers (tests/compile/lint) as evidence sources",
 	}
-	var source, domain, candidateFile, record string
+	var source, domain, candidateFile, record, scoreRun, scoreSpan string
 	verify := &cobra.Command{
 		Use:   "verify <command...>",
 		Short: "Run a verifier command; report pass/fail + its calibrated LLR",
@@ -1538,6 +1538,33 @@ func cmdOracle() *cobra.Command {
 				}
 			}
 
+			// Attribute the verdict to the span that produced the candidate.
+			// The oracle has always computed this; until #758 it had nowhere
+			// to put it, so a trace never said whether its answer held up.
+			if scoreSpan != "" {
+				runID := scoreRun
+				if runID == "" {
+					runs, rErr := runlog.Runs()
+					if rErr != nil || len(runs) == 0 {
+						return fmt.Errorf("--span given but no run to attach it to; pass --run")
+					}
+					runID = runs[0]
+				}
+				val := 0.0
+				if v.Passed {
+					val = 1
+				}
+				if sErr := runlog.AppendScore(runID, scoreSpan, runlog.Score{
+					Name: "oracle", Value: val, Comment: v.Detail, Source: src,
+				}); sErr != nil {
+					// Reported, never fatal: the verification itself is the
+					// work, and losing its attribution must not fail it.
+					fmt.Printf("  %s\n", dimStyle.Render("span score: "+sErr.Error()))
+				} else {
+					fmt.Printf("  %s\n", dimStyle.Render("scored span "+scoreSpan))
+				}
+			}
+
 			status := cortexStyle.Render("PASS")
 			if !v.Passed {
 				status = "FAIL"
@@ -1557,6 +1584,8 @@ func cmdOracle() *cobra.Command {
 	verify.Flags().StringVar(&domain, "domain", "", "task domain")
 	verify.Flags().StringVar(&candidateFile, "candidate", "", "file holding the answer to verify (for {file}/{answer})")
 	verify.Flags().StringVar(&record, "record", "", "train calibration with the true outcome: correct|incorrect")
+	verify.Flags().StringVar(&scoreRun, "run", "", "run holding the span to score (default: newest)")
+	verify.Flags().StringVar(&scoreSpan, "span", "", "span this verdict judges, so `hyctl trace view` can show it")
 	cmd.AddCommand(verify)
 	return cmd
 }

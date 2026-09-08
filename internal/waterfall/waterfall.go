@@ -50,6 +50,11 @@ type Span struct {
 	OutputRef string         `json:"output_ref,omitempty"`
 	Meta      map[string]any `json:"meta,omitempty"`
 
+	// Scores are verdicts on this span, appended after it closed. They never
+	// touch the fields above: a judgement must not be able to rewrite what the
+	// head actually reported.
+	Scores []runlog.Score `json:"scores,omitempty"`
+
 	Depth    int     `json:"depth"`
 	Children []*Span `json:"children,omitempty"`
 }
@@ -77,6 +82,9 @@ type Trace struct {
 	// Surfaced rather than dropped: a partial trace rendered as a whole one is
 	// the failure this package exists to avoid.
 	Unspanned int `json:"unspanned,omitempty"`
+
+	// OrphanScores counts verdicts naming a span this run does not contain.
+	OrphanScores int `json:"orphan_scores,omitempty"`
 }
 
 // Build folds a run's events into a nested trace.
@@ -93,6 +101,7 @@ func Build(events []runlog.Event) *Trace {
 
 	byID := map[string]*Span{}
 	seen := map[string]int{}
+	scores := map[string][]runlog.Score{}
 	var order []string
 	for _, e := range events {
 		if isRunLevel(e.Kind) {
@@ -106,6 +115,16 @@ func Build(events []runlog.Event) *Trace {
 			t.Unspanned++
 			continue
 		}
+		// A score is a verdict on a span, not part of one. Folding it in would
+		// stretch the span's bar to whenever the test suite finished and
+		// rename its kind, and a score alone must not mint a span with no work
+		// in it, so they are collected and attached afterwards.
+		if e.Kind == runlog.KindScore {
+			if e.Score != nil {
+				scores[id] = append(scores[id], *e.Score)
+			}
+			continue
+		}
 		s, ok := byID[id]
 		if !ok {
 			s = &Span{ID: id, ParentID: e.ParentSpan()}
@@ -114,6 +133,19 @@ func Build(events []runlog.Event) *Trace {
 		}
 		seen[id]++
 		fold(s, e)
+	}
+
+	for id, sc := range scores {
+		s, ok := byID[id]
+		if !ok {
+			// The span it judges is not in this run. Counted rather than
+			// dropped: a verdict nobody can see is exactly what AppendScore
+			// refuses to write, so one turning up here means the log is
+			// partial and a reader should be told.
+			t.OrphanScores += len(sc)
+			continue
+		}
+		s.Scores = append(s.Scores, sc...)
 	}
 
 	for _, id := range order {
@@ -344,4 +376,20 @@ func (t *Trace) Totals() (costUSD float64, inTok, outTok int) {
 		outTok += s.OutputTokens
 	}
 	return costUSD, inTok, outTok
+}
+
+// Verdict summarises a span's scores. Any non-positive score fails the span:
+// aggregating the other way would let one passing check hide a failing one.
+// known is false when nothing has judged this span, which is not the same as
+// a pass and must not render as one.
+func (s *Span) Verdict() (passed, known bool) {
+	if len(s.Scores) == 0 {
+		return false, false
+	}
+	for _, sc := range s.Scores {
+		if sc.Value <= 0 {
+			return false, true
+		}
+	}
+	return true, true
 }
