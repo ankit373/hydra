@@ -98,6 +98,11 @@ type Options struct {
 	// every fallback candidate's ledger check reuse it instead of re-scanning
 	// prompt once per candidate. Nil means "not computed yet; derive it here."
 	Classification *policy.Classification
+
+	// OnStream receives output as it arrives, and the attempt boundaries that
+	// say which head produced it. Nil means no incremental delivery, which
+	// takes the plain Execute path and behaves exactly as before.
+	OnStream OnStream
 }
 
 // Result is the outcome of a successful dispatch.
@@ -253,6 +258,14 @@ func (d *Dispatcher) Heads() []provider.Head { return d.heads }
 // in cmd/hydra's cmdDispatch, can still enforce it instead of acting only on
 // --local, which was config-blind on that path (#500).
 func (d *Dispatcher) PIILocalOnly() bool { return piiLocalOnly(d.cfg) }
+
+// CapturesPayloads reports whether prompt and response text is being stored.
+// A surface that collapses an abandoned partial away needs it: without capture
+// the span still opens but holds no text, so offering to go and read it would
+// send someone to an empty page.
+func (d *Dispatcher) CapturesPayloads() bool {
+	return d.cfg != nil && d.cfg.CapturePayloads
+}
 
 // EstimateCost exposes per-tier cost estimation for external callers.
 func (d *Dispatcher) EstimateCost(tier, inputTokens, outputTokens int) float64 {
@@ -617,14 +630,34 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		}
 		started := time.Now()
 		exec := executor.For(h)
-		resp, err := exec.Execute(ctx, executor.Request{
+		emit := func(kind StreamKind, text, reason string) {
+			if opts.OnStream == nil {
+				return
+			}
+			opts.OnStream(StreamEvent{
+				Kind: kind, Head: h, Tier: tier,
+				Text: text, Reason: reason, SpanID: span,
+			})
+		}
+		// Announced before the executor runs, not after: prefill on a local 7B
+		// took 4.2s in measurement, and that whole wait is before any token
+		// exists for a surface to render.
+		emit(StreamAttemptStarted, "", "")
+		var onDelta executor.OnDelta
+		if opts.OnStream != nil {
+			onDelta = func(d string) { emit(StreamDelta, d, "") }
+		}
+		resp, err := executor.Stream(ctx, exec, executor.Request{
 			Prompt:    prompt,
 			Head:      h,
 			MaxTokens: opts.MaxTokens,
 			System:    opts.System,
-		})
+		}, onDelta)
 		if err != nil {
 			lastErr = err
+			// Before the chain advances, so a surface can retract this head's
+			// partial output before the next head's tokens interleave with it.
+			emit(StreamAttemptFailed, "", err.Error())
 			// Parks the head so the rest of this run, and the next one, skip
 			// it. A missing binary or an unknown model opens the breaker at
 			// once; anything that might not recur gets a second chance first.

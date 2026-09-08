@@ -704,6 +704,7 @@ func cmdDispatch() *cobra.Command {
 		a2aFile   string
 		enumKey   string
 		maxCost   float64
+		noStream  bool
 		// swarm flags
 		doSwarm       bool
 		swarmMode     string
@@ -979,6 +980,16 @@ func cmdDispatch() *cobra.Command {
 				Classification: &promptClass,
 			}
 
+			// Streamed on a terminal only. A pipe keeps the buffered rendering
+			// below byte for byte, so nothing that parses hyctl's output can be
+			// broken by an interactive nicety. --dry-run runs no head at all.
+			var sr *streamRenderer
+			if !dryRun && !noStream && isatty.IsTerminal(os.Stdout.Fd()) {
+				w, h := terminalSize()
+				sr = newStreamRenderer(os.Stdout, runID, w, h, d.CapturesPayloads())
+				opts.OnStream = sr.Handle
+			}
+
 			result, err := d.Dispatch(ctx, prompt, opts)
 			// A parked task is not a failure, but it is not success either:
 			// nothing ran. Print what is being asked and how to answer, then
@@ -1012,6 +1023,18 @@ func cmdDispatch() *cobra.Command {
 				return nil
 			}
 
+			// The answer is already on screen, delta by delta, so reprinting
+			// Output would show it twice. Only the numbers are still missing,
+			// since they do not exist until the call returns.
+			if sr != nil && sr.Streamed() {
+				sr.Finish(result.InputTokens, result.OutputTokens, result.Duration, result.TTFT)
+				printOutputWarning(result.OutputProvenance)
+				return nil
+			}
+			if sr != nil {
+				sr.Stop()
+			}
+
 			fmt.Println()
 			fmt.Printf("  %s %s  %s  %dms\n",
 				cortexStyle.Render("▶"),
@@ -1038,6 +1061,7 @@ func cmdDispatch() *cobra.Command {
 	cmd.Flags().StringVar(&a2aFile, "a2a", "", "path to A2A handoff JSON (prepends structured context to prompt)")
 	cmd.Flags().StringVar(&enumKey, "enum", "", "routing enum key, e.g. SIMPLE, selects the tier when --tier is unset")
 	cmd.Flags().Float64Var(&maxCost, "max-cost", 0, "refuse a candidate head if its estimated cost exceeds this USD (denial-of-wallet guard)")
+	cmd.Flags().BoolVar(&noStream, "no-stream", false, "print the answer in one block instead of as it arrives (piped output never streams)")
 	// swarm flags
 	cmd.Flags().BoolVar(&doSwarm, "swarm", false, "fan prompt out to multiple heads simultaneously")
 	cmd.Flags().StringVar(&swarmMode, "swarm-mode", "best", "response strategy: best|race|all")
