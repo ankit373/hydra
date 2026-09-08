@@ -52,7 +52,10 @@ func executeHead(ctx context.Context, h provider.Head, prompt string, opts Optio
 	// silently let the head run because the decision couldn't be computed.
 	// opts.Classification is resolved once by Run/RunSPRT before any head fires,
 	// so concurrent calls here reuse it instead of each re-scanning prompt (#522).
-	if decision, err := ledger.CheckAndRecordDispatch("hydra-swarm", h.ID, "", prompt, opts.Classification); err != nil || decision != ledger.Allow {
+	check := ledger.Dispatch{
+		Agent: "hydra-swarm", HeadID: h.ID, Content: prompt, Class: opts.Classification,
+	}
+	if decision, err := ledger.CheckAndRecordDispatch(check); err != nil || decision != ledger.Allow {
 		a.FinishedAt = time.Now()
 		a.Duration = a.FinishedAt.Sub(a.StartedAt)
 		a.Status = StatusFailed

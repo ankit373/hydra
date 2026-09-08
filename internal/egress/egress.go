@@ -10,6 +10,7 @@ package egress
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 
@@ -277,6 +278,42 @@ func Guard(parts []Part, sink Sink, strict bool) Verdict {
 				sinkName(sink), strings.Join(reasons, ", ")),
 		}
 	}
+}
+
+// Summary is what a payload was assembled from, in the shape an audit record
+// wants. Returned as plain strings rather than a ledger type so this package
+// stays a leaf that both the ledger and dispatch can depend on.
+type Summary struct {
+	Sources     []string
+	Origins     []string
+	Sensitivity string
+}
+
+// Summarize reduces a payload's parts to what a run touched. Sources and
+// Origins are deduped and ordered, so the same payload always summarizes
+// identically and two records can be compared.
+func Summarize(parts []Part) Summary {
+	s := Summary{Sensitivity: Public.String()}
+	seenSrc, seenOrg := map[Source]bool{}, map[string]bool{}
+	worst := Public
+
+	for _, p := range parts {
+		if p.Source != "" && !seenSrc[p.Source] {
+			seenSrc[p.Source] = true
+			s.Sources = append(s.Sources, string(p.Source))
+		}
+		if p.Origin != "" && !seenOrg[p.Origin] {
+			seenOrg[p.Origin] = true
+			s.Origins = append(s.Origins, p.Origin)
+		}
+		if p.Sens > worst {
+			worst = p.Sens
+		}
+	}
+	sort.Strings(s.Sources)
+	sort.Strings(s.Origins)
+	s.Sensitivity = worst.String()
+	return s
 }
 
 // HasSecret reports whether any part classifies Secret, the question dispatch
