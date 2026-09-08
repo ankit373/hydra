@@ -45,8 +45,7 @@ func ByCapScore(heads []provider.Head) []provider.Head {
 			best[key] = h
 			continue
 		}
-		if h.CapScore > existing.CapScore ||
-			(h.CapScore == existing.CapScore && sourceWeight[h.Source] > sourceWeight[existing.Source]) {
+		if rankLess(h, existing) {
 			best[key] = h
 		}
 	}
@@ -56,15 +55,31 @@ func ByCapScore(heads []provider.Head) []provider.Head {
 		ranked = append(ranked, h)
 	}
 
-	sort.Slice(ranked, func(i, j int) bool {
-		a, b := ranked[i], ranked[j]
-		if a.CapScore != b.CapScore {
-			return a.CapScore > b.CapScore
-		}
-		return sourceWeight[a.Source] > sourceWeight[b.Source]
-	})
+	sort.Slice(ranked, func(i, j int) bool { return rankLess(ranked[i], ranked[j]) })
 
 	return ranked
+}
+
+// rankLess reports whether a should rank ahead of b, as a total order: score,
+// then source, then bits per weight, then id.
+//
+// Total on purpose. Score and source alone left two quants of one model
+// incomparable, and `best` above is a map, whose iteration order Go
+// randomizes, so the unstable sort had a different input every call and picked
+// between them by coin flip: 23 of 40 real `probe` runs ranked the Q4 first,
+// 17 the Q8 (#765). The dedupe tie uses the same predicate so the two passes
+// cannot disagree about which of two heads is better.
+func rankLess(a, b provider.Head) bool {
+	if a.CapScore != b.CapScore {
+		return a.CapScore > b.CapScore
+	}
+	if sourceWeight[a.Source] != sourceWeight[b.Source] {
+		return sourceWeight[a.Source] > sourceWeight[b.Source]
+	}
+	if qa, qb := quantRank(a), quantRank(b); qa != qb {
+		return qa > qb
+	}
+	return a.ID < b.ID
 }
 
 func dedupeKey(h provider.Head) string {
