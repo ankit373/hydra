@@ -23,9 +23,7 @@ import (
 // `oracle verify` is the shortest path that really runs one, so this covers
 // the whole chain: signal → context → exec.CommandContext → Harden's group kill.
 func TestInterrupt_KillsTheSubprocessAndExits130(t *testing.T) {
-	if hyctlBin == "" {
-		t.Skip("hyctl could not be built in this environment")
-	}
+	requireHyctl(t)
 	s := testutil.NewSandbox(t)
 
 	// The verifier announces itself before blocking, so the signal below lands
