@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ankit373/hydra/internal/pricing"
 	"github.com/ankit373/hydra/internal/provider"
 )
 
@@ -149,5 +150,35 @@ func TestEveryOpenAICompatProviderIsFullyWired(t *testing.T) {
 				t.Errorf("%q Authorization = %q, want %q", p.id, cfg.Headers["Authorization"], "Bearer test-key")
 			}
 		})
+	}
+}
+
+// The default was `anthropic/claude-sonnet-4-5`, which OpenRouter has never
+// held: it spells that model with a dot. The test above passed it happily,
+// because non-empty and vendor-prefixed is exactly what a plausible wrong id
+// looks like, so the head read as routable and failed at the point of use
+// (#755).
+//
+// This asserts against the catalogue OpenRouter itself publishes, read from
+// the pricing cache this machine already keeps. With no cache it asserts
+// nothing: a network call in the test suite would be flaky and would reach
+// out on every run, which is worse than a guard that fires wherever pricing
+// has been fetched, including every developer machine.
+func TestOpenRouter_DefaultModelExistsInTheCatalogue(t *testing.T) {
+	catalogue := pricing.Load().Models()
+	if len(catalogue) == 0 {
+		t.Log("no pricing cache on this machine, so the catalogue cannot be checked here")
+		return
+	}
+
+	known := make(map[string]bool, len(catalogue))
+	for _, id := range catalogue {
+		known[strings.ToLower(id)] = true
+	}
+	got := strings.ToLower(defaultModelFor("openrouter"))
+	if !known[got] {
+		t.Errorf("defaultModelFor(openrouter) = %q, which is not one of the %d models "+
+			"OpenRouter publishes; a dispatch to env/openrouter with no OPENROUTER_MODEL "+
+			"set would send an id that does not exist", got, len(catalogue))
 	}
 }

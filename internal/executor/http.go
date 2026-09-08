@@ -687,9 +687,12 @@ func defaultModelFor(providerID string) string {
 		envs     []string
 	}
 	specs := map[string]modelSpec{
-		"anthropic":  {fallback: "claude-sonnet-4-20250514", envs: []string{"ANTHROPIC_MODEL", "HYDRA_MODEL_ANTHROPIC"}},
-		"openai":     {fallback: "gpt-4o", envs: []string{"OPENAI_MODEL", "HYDRA_MODEL_OPENAI"}},
-		"openrouter": {fallback: "anthropic/claude-sonnet-4-5", envs: []string{"OPENROUTER_MODEL", "HYDRA_MODEL_OPENROUTER"}},
+		"anthropic": {fallback: "claude-sonnet-4-20250514", envs: []string{"ANTHROPIC_MODEL", "HYDRA_MODEL_ANTHROPIC"}},
+		"openai":    {fallback: "gpt-4o", envs: []string{"OPENAI_MODEL", "HYDRA_MODEL_OPENAI"}},
+		// OpenRouter spells Claude point releases with a dot; the dashed form
+		// above is Anthropic's own convention, and crossing the two left this
+		// pointing at an id the catalogue has never held (#755).
+		"openrouter": {fallback: "anthropic/claude-sonnet-4.5", envs: []string{"OPENROUTER_MODEL", "HYDRA_MODEL_OPENROUTER"}},
 		"google":     {fallback: "gemini-2.5-flash", envs: []string{"GEMINI_MODEL", "GOOGLE_MODEL", "HYDRA_MODEL_GOOGLE"}},
 		"xai":        {fallback: "grok-3-latest", envs: []string{"XAI_MODEL", "HYDRA_MODEL_XAI"}},
 		"groq":       {fallback: "llama-3.3-70b-versatile", envs: []string{"GROQ_MODEL", "HYDRA_MODEL_GROQ"}},
