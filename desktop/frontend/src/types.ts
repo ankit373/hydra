@@ -322,7 +322,10 @@ export interface InstallResult {
   error?: string
 }
 
-export type CoverageStatus = 'enforced' | 'configured' | 'gap' | 'n/a'
+/** 'partial' is a mechanism that is detective rather than preventive. It never
+ *  counts as covered: a control whose own implementation documents it as
+ *  evadable is evidence for an audit trail, not a defence. */
+export type CoverageStatus = 'enforced' | 'configured' | 'partial' | 'gap' | 'n/a'
 
 export interface Category {
   id: string
@@ -341,6 +344,20 @@ export interface Coverage {
   applicable: number
   /** Enforced + Configured. */
   covered: number
+  /** Detective only, deliberately not counted toward percentCovered. */
+  partial: number
+  percentCovered: number
+}
+
+/** Posture against the OWASP Top 10 for Agentic Applications (ASI01-ASI10).
+ *  The LLM list governs what a model says, this governs what a system does,
+ *  and an orchestrator is squarely the second. Same shape as Coverage, kept a
+ *  separate type so the two tables can never be rendered as one score. */
+export interface AgenticCoverage {
+  categories: Category[]
+  applicable: number
+  covered: number
+  partial: number
   percentCovered: number
 }
 
@@ -397,6 +414,9 @@ export interface SecurityReport {
   byHead: HeadRisk[]
   checks: Check[]
   coverage: Coverage
+  /** Posture against the agentic taxonomy, scored beside the LLM one rather
+   *  than instead of it: they answer different questions. */
+  agentic: AgenticCoverage
   /** Hard override: false means the ledger chain was tampered with, the
    *  coverage percentage above cannot be trusted regardless of its value. */
   integrityIntact: boolean
