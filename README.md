@@ -855,6 +855,7 @@ hydra/
 │   ├── sysinfo/                 # Hardware detection + 7-day memory history
 │   ├── payload/                 # Opt-in prompt/response store: chunked, packed, redacted,
 │   │                            #   bounded by a byte budget that evicts oldest packs
+│   ├── waterfall/               # A run as nested spans on a timeline (hyctl trace view)
 │   ├── runlog/                  # Per-run span log (~/.hydra/logs/runs/): identity, parent, level,
 │   │                            #   tokens, TTFT, metadata + liveness heartbeat + edit snapshots
 │   │                            # Old runs seal into compressed monthly segments (logs/seg/)
