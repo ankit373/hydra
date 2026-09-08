@@ -2257,6 +2257,7 @@ func printSecurityReport(r *security.Report, why bool) {
 	fmt.Println(dimStyle.Render("  " + strings.Repeat("=", 48)))
 	fmt.Println(dimStyle.Render("  detail"))
 	printCoverageHeadline(r)
+	printAgenticCoverage(r)
 
 	if !r.HasData {
 		fmt.Println(dimStyle.Render("  no ledger events yet, nothing has dispatched through hyctl on this machine"))
@@ -2611,6 +2612,38 @@ func actionPriorityTag(p security.ActionPriority) string {
 	default:
 		return dimStyle.Render("[WATCH]")
 	}
+}
+
+// printAgenticCoverage is the second table: the OWASP Top 10 for Agentic
+// Applications. Rendered beside the LLM list rather than instead of it,
+// because they answer different questions: what a model says, and what a
+// system does. Hydra is squarely the second.
+func printAgenticCoverage(r *security.Report) {
+	a := r.Agentic
+	if len(a.Categories) == 0 {
+		return
+	}
+	summary := fmt.Sprintf("%.0f%%", a.PercentCovered)
+	fmt.Printf("  %s  %s  (%d/%d, %d partial)\n",
+		cortexStyle.Render("OWASP Agentic Top-10 coverage"), okStyle.Render(summary),
+		a.Covered, a.Applicable, a.Partial)
+	fmt.Println(dimStyle.Render("  " + strings.Repeat("─", 48)))
+	for _, c := range a.Categories {
+		if c.Status == security.NotApplicable {
+			continue
+		}
+		label := string(c.Status)
+		switch c.Status {
+		case security.Enforced, security.Configured:
+			label = okStyle.Render(label)
+		case security.Partial:
+			label = dimStyle.Render(label)
+		case security.Gap:
+			label = warnStyle.Render(label)
+		}
+		fmt.Printf("    %-6s %-32s %s\n", c.ID, truncLabel(c.Name, 32), label)
+	}
+	fmt.Println()
 }
 
 // printCoverageHeadline is the KPI tile: coverage against the OWASP LLM Top
