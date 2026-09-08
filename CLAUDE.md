@@ -878,7 +878,8 @@ internal/build/build.go       ← version vars set by ldflags at build time
 internal/update/update.go     ← startup update checker (24h cache)
 .github/workflows/release.yml ← fires on tag push → goreleaser
 .github/workflows/edge.yml    ← fires on develop push → edge build
-.github/workflows/rc.yml      ← fires on release/v* push → RC pre-release
+.github/workflows/rc.yml      ← fires on release/v* push → RC pre-release. Both build from a
+                                branch, so they must tag HEAD themselves, see below.
 .github/workflows/publish.yml ← fans a release out to brew/npm/pip
 .github/workflows/release-please.yml ← fires on main push → release PR, then fans out to
                                        publish.yml and close-shipped-issues.yml
@@ -890,6 +891,15 @@ internal/update/update.go     ← startup update checker (24h cache)
                                        cannot merge (#670). Either way a red run means develop
                                        is behind main and a release cut will not merge cleanly.
 ```
+
+**A prerelease channel has to create the tag it names.** edge.yml and rc.yml build from a branch,
+so they invent a version and hand it to GoReleaser as `GORELEASER_CURRENT_TAG`. GoReleaser reads
+that tag's contents, and `--skip=validate` does not bypass that read, so naming a tag that does not
+exist fails the build in 0s on `couldn't get tag contents`. Both now tag HEAD before the build,
+local to the runner and never pushed, annotated with an explicit tagger because a runner has no git
+identity of its own. Every edge build failed this way from #761 until #822 and nobody saw it, since
+edge and RC gate no PR and nothing else reports them; `cmd/hydra/prerelease_naming_test.go` is what
+fails at PR time now instead (#793, #821).
 
 **The back-merge PR cannot merge itself, and needs one of your commits.** Two independent
 reasons, both invisible on the PR: it is opened by `github-actions[bot]`, whose events start no

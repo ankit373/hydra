@@ -17,8 +17,9 @@ import (
 // Two invariants, checked against the workflow files, because that is where
 // they are actually decided.
 
-// prereleaseWorkflows are the channels built from a branch, with no tag on
-// HEAD. The stable release is tagged, so it never had this problem.
+// prereleaseWorkflows are the channels built from a branch, so nothing tags
+// HEAD for them and they have to do it themselves. The stable release runs on
+// a tag release-please already made.
 var prereleaseWorkflows = []string{"rc.yml", "edge.yml"}
 
 func workflowFile(t *testing.T, name string) string {
@@ -51,8 +52,8 @@ func TestPrereleaseWorkflows_DoNotBuildInSnapshotMode(t *testing.T) {
 					"0.0.0-SNAPSHOT and `hyctl version` cannot report the release: %s", name, args)
 			}
 			if !strings.Contains(args, "validate") {
-				t.Errorf("%s does not skip validate, and HEAD carries no tag here, so "+
-					"GoReleaser will refuse the build: %s", name, args)
+				t.Errorf("%s does not skip validate, so GoReleaser applies the git *state* "+
+					"checks to a tag the workflow made a moment ago: %s", name, args)
 			}
 		})
 	}
@@ -129,6 +130,80 @@ func TestPrereleaseWorkflows_InstallSnippetNamesAnAssetThatExists(t *testing.T) 
 			if !strings.Contains(body, `echo "semver=`) {
 				t.Errorf("%s uses outputs.semver but never writes it, so the filename "+
 					"interpolates to hydra__darwin_arm64.tar.gz", name)
+			}
+		})
+	}
+}
+
+// outputRef matches a ${{ steps.<id>.outputs.<name> }} reference, and
+// currentTagEnv the one a workflow hands GoReleaser as its tag.
+var (
+	outputRef     = regexp.MustCompile(`steps\.\w+\.outputs\.(\w+)`)
+	currentTagEnv = regexp.MustCompile(`GORELEASER_CURRENT_TAG:\s*\$\{\{\s*steps\.\w+\.outputs\.(\w+)\s*\}\}`)
+	outputAssign  = regexp.MustCompile(`echo "(\w+)=([^"]*)" >> "\$GITHUB_OUTPUT"`)
+)
+
+// A prerelease workflow invents its version, so the tag it names exists only
+// if the workflow makes one. --skip=validate does not bypass GoReleaser's read
+// of the tag's contents, so from #761 every edge build failed in 0s on
+// "couldn't get tag contents" while the tests above stayed green, because they
+// only ever checked that a tag was named (#793, #821).
+func TestPrereleaseWorkflows_CreateTheTagTheyName(t *testing.T) {
+	for _, name := range prereleaseWorkflows {
+		t.Run(name, func(t *testing.T) {
+			body := workflowFile(t, name)
+			m := currentTagEnv.FindStringSubmatch(body)
+			if m == nil {
+				t.Fatalf("%s hands GoReleaser no GORELEASER_CURRENT_TAG output; this "+
+					"test no longer checks what it thinks", name)
+			}
+			want := m[1]
+
+			// rc.yml tags outputs.tag but hands GoReleaser outputs.version, which
+			// works only because one shell expression writes both. Comparing the
+			// values rather than the names accepts that and still catches the two
+			// drifting apart.
+			value := map[string]string{}
+			for _, a := range outputAssign.FindAllStringSubmatch(body, -1) {
+				value[a[1]] = a[2]
+			}
+			isTag := func(s string) bool {
+				for _, r := range outputRef.FindAllStringSubmatch(s, -1) {
+					if r[1] == want || (value[want] != "" && value[r[1]] == value[want]) {
+						return true
+					}
+				}
+				return false
+			}
+
+			build := strings.Index(body, goreleaserArgs(t, body, name))
+			create, push, off := -1, -1, 0
+			for _, line := range strings.Split(body, "\n") {
+				// The one-line `run:` form, normalised to the block form.
+				s := strings.TrimPrefix(strings.TrimSpace(line), "run: ")
+				switch {
+				case !isTag(s):
+				case strings.Contains(s, "git push"):
+					push = off
+				case strings.Contains(s, "tag ") && !strings.Contains(s, " -d "):
+					if create < 0 {
+						create = off
+					}
+				}
+				off += len(line) + 1
+			}
+
+			switch {
+			case create < 0:
+				t.Errorf("%s hands GoReleaser outputs.%s but never creates that tag, so "+
+					"the build fails reading the tag's contents", name, want)
+			case create > build:
+				t.Errorf("%s creates outputs.%s only after the build that reads it, and "+
+					"steps run in file order", name, want)
+			}
+			if push >= 0 {
+				t.Errorf("%s pushes outputs.%s, putting a prerelease tag in the branch's "+
+					"own history, where git describe reaches it again (#759)", name, want)
 			}
 		})
 	}
