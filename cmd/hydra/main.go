@@ -19,6 +19,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -333,6 +334,10 @@ type probeHeadJSON struct {
 	// same distinction the human table marks with ✗ (#248).
 	Routable         bool   `json:"routable"`
 	UnroutableReason string `json:"unroutable_reason,omitempty"`
+	// What the provider reports about the weights actually loaded, omitted
+	// when it reports nothing. Ollama is the only source of these today.
+	Quant  string `json:"quant,omitempty"`
+	Params string `json:"params,omitempty"`
 }
 
 func cmdProbe() *cobra.Command {
@@ -359,6 +364,7 @@ func cmdProbe() *cobra.Command {
 						CapScore: h.CapScore, LocalOnly: h.LocalOnly,
 						IsCortex: result.Cortex != nil && h.ID == result.Cortex.ID,
 						Routable: why == "", UnroutableReason: why,
+						Quant: h.Meta["model_quant"], Params: h.Meta["model_params"],
 					}
 				}
 				warnings := result.Warnings
@@ -387,8 +393,34 @@ func cmdProbe() *cobra.Command {
 				fmt.Println("  No models found.")
 				return nil
 			}
-			fmt.Printf("  %-30s  %-5s  %-5s  %s\n", "Head", "Score", "Src", "Provider")
-			fmt.Println("  " + strings.Repeat("─", 56))
+			// Only Ollama reports a quant today, so the column is dead space
+			// on a machine with no local models (#762).
+			var anyQuant bool
+			// A name past the column pushed every later column right. The fixed
+			// width had always done that; adding one made it plain, so size the
+			// column to the names, capped to stay inside a normal terminal.
+			const minHead, maxHead = 30, 44
+			headWidth := minHead
+			for _, h := range result.Heads {
+				anyQuant = anyQuant || h.Meta["model_quant"] != ""
+				if n := utf8.RuneCountInString(h.Name); n > headWidth {
+					headWidth = min(n, maxHead)
+				}
+			}
+			header := fmt.Sprintf("  %-*s  %-5s  %-5s  %s", headWidth, "Head", "Score", "Src", "Provider")
+			rowOf := func(h provider.Head) string {
+				return fmt.Sprintf("%-*s  %-5d  %-5s  %s", headWidth, h.Name, h.CapScore, h.Source, h.Provider)
+			}
+			if anyQuant {
+				header = fmt.Sprintf("  %-*s  %-8s  %-5s  %-5s  %s", headWidth, "Head", "Quant", "Score", "Src", "Provider")
+				rowOf = func(h provider.Head) string {
+					return fmt.Sprintf("%-*s  %-8s  %-5d  %-5s  %s",
+						headWidth, h.Name, h.Meta["model_quant"], h.CapScore, h.Source, h.Provider)
+				}
+			}
+			fmt.Println(header)
+			// Derived, not a second constant to keep in sync with the widths.
+			fmt.Println("  " + strings.Repeat("─", len(strings.TrimSpace(header))))
 			// Discovery finding a head is not the same as Hydra being able to
 			// drive it. Listing both identically is what let `probe` advertise
 			// the Ollama binary that `dispatch --local` then refused (#248), so
@@ -405,7 +437,7 @@ func cmdProbe() *cobra.Command {
 					marker = warnStyle.Render("✗ ")
 					unroutable++
 				}
-				row := fmt.Sprintf("%-30s  %-5d  %-5s  %s", h.Name, h.CapScore, h.Source, h.Provider)
+				row := rowOf(h)
 				if why == "" {
 					fmt.Printf("%s%s\n", marker, row)
 					continue

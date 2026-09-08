@@ -13,6 +13,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -145,7 +146,14 @@ func (s *ollamaService) probe(ctx context.Context, caps *capabilities.DB) ([]pro
 			// digest is the only handle on which weights are actually loaded.
 			// Carried so internal/security can detect a swap the way it
 			// already detects a replaced head binary.
-			Digest string `json:"digest"`
+			Digest  string `json:"digest"`
+			Details struct {
+				// The same model id at Q4_K_M and at Q8_0 differs in accuracy,
+				// VRAM and tokens/sec. Routing them as one head hides exactly
+				// the tradeoff the router exists to make (#762).
+				QuantizationLevel string `json:"quantization_level"`
+				ParameterSize     string `json:"parameter_size"`
+			} `json:"details"`
 		} `json:"models"`
 	}
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&payload); err != nil {
@@ -157,6 +165,14 @@ func (s *ollamaService) probe(ctx context.Context, caps *capabilities.DB) ([]pro
 		meta := map[string]string{"model_source": caps.SourceOllama(m.Name)}
 		if m.Digest != "" {
 			meta["model_digest"] = m.Digest
+		}
+		// Absent on older servers, which send no details at all. Left unset
+		// rather than defaulted: a fabricated quant would be read as measured.
+		if q := strings.TrimSpace(m.Details.QuantizationLevel); q != "" {
+			meta["model_quant"] = q
+		}
+		if p := strings.TrimSpace(m.Details.ParameterSize); p != "" {
+			meta["model_params"] = p
 		}
 		if !completionCapable(m.Capabilities) {
 			// Embedding-only models fail every dispatch (#532). Marked rather
