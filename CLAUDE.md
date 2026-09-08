@@ -348,6 +348,7 @@ hyctl status ; hyctl probe ; hyctl cost ; hyctl stats
 # Development Workflow, Issue-First, Always
 
 > **Golden rule**: No code without a GitHub issue. No branch without an issue number.
+> **No merge without green CI**, every check `SUCCESS`, see Step 5.
 > Claude Code must follow this workflow for every task, no exceptions.
 
 ---
@@ -545,6 +546,36 @@ gh project item-edit --project-id PVT_kwHOAL1qLc4BZbZZ --id "$ITEM_ID" \
 ---
 
 ## Step 5, Review & Merge
+
+### 🚨 Never merge unless CI is green. No exceptions.
+
+**Every check `SUCCESS`, verified immediately before the merge.** This is a hard rule, not a
+preference, and it is the first thing to check on every PR.
+
+"Not green" is mostly not "red", which is what makes this easy to get wrong:
+
+| State | Green? |
+|---|---|
+| every check `SUCCESS` | ✅ the only case you may merge |
+| `PENDING` / `QUEUED` / `IN_PROGRESS` | ❌ an unfinished check is not a passing one |
+| a green *subset* | ❌ 8 of 13 pass in under a minute while the three Go legs and the coverage gate still run, and the coverage gate is the one that catches things |
+| `mergeStateStatus: BLOCKED` | ❌ the API saying not yet |
+| any `FAILURE` | ❌ |
+
+```bash
+gh pr checks <n> --json state -q '[.[].state] | unique | join(",")'   # must print exactly SUCCESS
+gh pr view <n> --json mergeable,mergeStateStatus                       # MERGEABLE + CLEAN
+gh pr merge <n> --squash
+```
+
+**Never `--admin`**, and never `--auto` as a way of not looking. A red run that is not your
+change's fault, a stale base is the usual cause, is fixed by rebasing on `develop` and re-running,
+never by merging around it: #790's red coverage gate was an old base, and a rebase cleared it.
+A stuck or flaky check is something to report and ask about, not to decide does not count.
+
+Do not poll with `gh pr checks --watch`; a short background poll loop costs far less.
+
+### The rest
 
 - PRs to `develop` require 0 approvals (self-merge allowed) but must pass CI
 - PRs to `main` (release branch merges, hotfixes) require 1 approval
