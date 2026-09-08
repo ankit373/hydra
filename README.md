@@ -37,7 +37,7 @@ You have Claude Code for complex problems, Codex for code generation, Ollama run
 
 It discovers every AI model on your machine, assigns each a capability score, and routes tasks not just to the cheapest one but to a *target confidence of correctness*, enforcing an egress gate so a file like `.env` or `~/.aws/credentials` is refused to any model that leaves your machine, and logging every dispatch with token counts and cost, without any manual configuration.
 
-**Confidence routing** samples models adaptively (SPRT) and stops the moment you're sure enough, using per-model calibration built from real outcomes (see **Confidence Routing** under [Features](#features)). Because cheap or local models handle the tasks that don't need a frontier model, this typically cuts LLM spend 70-85% along the way.
+**Confidence routing** samples models adaptively (multi-hypothesis SPRT) and stops the moment you're sure enough, using per-model calibration built from real outcomes (see **Confidence Routing** under [Features](#features)). Because cheap or local models handle the tasks that don't need a frontier model, this typically cuts LLM spend 70-85% along the way.
 
 ```bash
 brew install ankit373/hydra/hyctl && hyctl init

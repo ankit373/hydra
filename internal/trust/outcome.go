@@ -29,9 +29,9 @@ func ApplyRunOutcome(cal *Calibrator, domain string, ledger []Evidence, actual O
 	if len(ledger) == 0 {
 		return 0, nil
 	}
-	// The candidate can change mid-run when Λ crosses the reject threshold, and
-	// a pivot rewrites only the pivoting entry, so the last entry always holds
-	// whichever answer the run ended on.
+	// The leading answer can change as votes arrive, and each entry records the
+	// leader at its own moment, so the last entry always holds whichever answer
+	// the run ended on.
 	final := ledger[len(ledger)-1].Candidate
 
 	recorded := 0

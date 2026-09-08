@@ -107,10 +107,10 @@ func TestApplyRunOutcome_IdentifiesBothRates(t *testing.T) {
 	}
 }
 
-// A pivot rewrites the candidate mid-run, so an entry's Agreed bit is relative
-// to whatever was current then. Re-expressing it against the verified answer is
+// The leader can change mid-run, so an entry's Agreed bit is relative to
+// whatever was leading then. Re-expressing it against the verified answer is
 // what keeps a superseded vote from being counted backwards.
-func TestApplyRunOutcome_RelativizesVotesAcrossAPivot(t *testing.T) {
+func TestApplyRunOutcome_RelativizesVotesAcrossALeaderChange(t *testing.T) {
 	c, _ := New("")
 	led := []Evidence{
 		{Source: "early", Agreed: true, Candidate: "A"},  // backed A, which lost
