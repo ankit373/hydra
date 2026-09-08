@@ -82,15 +82,17 @@ func TestBuild_CorruptedTrustLogReportsGapNotConfigured(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// By name, not by id: the number is the thing that moves between editions,
+	// and this test is about Misinformation whatever slot it occupies (#748).
 	for _, c := range r.Coverage.Categories {
-		if c.ID == "LLM09" {
+		if c.Name == "Misinformation" {
 			if c.Status != Gap {
-				t.Errorf("LLM09 status = %q after a corrupted trust.jsonl, want Gap, Build is trusting partial/truncated data", c.Status)
+				t.Errorf("Misinformation (%s) status = %q after a corrupted trust.jsonl, want Gap, Build is trusting partial/truncated data", c.ID, c.Status)
 			}
 			return
 		}
 	}
-	t.Fatal("LLM09 category not found in Coverage.Categories")
+	t.Fatal("the Misinformation category is not in Coverage.Categories")
 }
 
 // Panel numbers must come straight from ledger.Summarize/ByHeadRisk, no

@@ -19,7 +19,7 @@ import (
 // names Excessive Agency in 2025 and something else in 2026. Bumping this is
 // what makes gap age restart instead of silently re-dating a different
 // category's history (#748).
-const LLMEdition = "2025"
+const LLMEdition = "2026"
 
 // scoreEntry is one line of ~/.hydra/security_score.jsonl, one hyctl
 // security run's coverage snapshot.

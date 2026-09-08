@@ -86,10 +86,10 @@ func TestFingerprintHeads_SkipsHeadsWithNoExecutable(t *testing.T) {
 // LLM03 was a hardcoded permanent Gap; it is now earned by actually tracking
 // binaries, and must fall back to Gap when nothing is tracked.
 func TestLLM03SupplyChain_EarnedNotHardcoded(t *testing.T) {
-	if got := llm03SupplyChain(SupplyChain{}).Status; got != Gap {
+	if got := supplyChainCategory(SupplyChain{}).Status; got != Gap {
 		t.Errorf("no binaries tracked: Status = %q, want Gap", got)
 	}
-	tracked := llm03SupplyChain(SupplyChain{Binaries: []HeadBinary{{HeadID: "claude"}}})
+	tracked := supplyChainCategory(SupplyChain{Binaries: []HeadBinary{{HeadID: "claude"}}})
 	if tracked.Status != Configured {
 		t.Errorf("binaries tracked: Status = %q, want Configured", tracked.Status)
 	}
