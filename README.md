@@ -601,8 +601,8 @@ hyctl version                           # version, commit, build info
 hyctl upgrade                           # self-update via install.sh (curl installs only; brew installs: `brew upgrade hyctl`)
 
 # Model registry (add a new model at runtime: no rebuild)
-hyctl models list                       # built-in + your models, by capability score
-hyctl models add kimi-k3 --provider moonshot --cap-score 85   # upsert into your overlay
+hyctl models list                       # known models, marked with what can actually route now
+hyctl models add kimi-k3 --provider moonshot --cap-score 85   # record a score (not a head)
 hyctl models remove kimi-k3             # remove one of your additions
 hyctl models sync                       # import the OpenRouter catalog (provisional scores)
 

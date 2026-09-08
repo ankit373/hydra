@@ -756,8 +756,12 @@ func TestCLI_ModelsAdd_WarnsWhenShadowingABuiltin(t *testing.T) {
 	if strings.Contains(combined, "overriding built-in") {
 		t.Errorf("a brand-new model was reported as overriding a built-in:\n%s", combined)
 	}
-	if !strings.Contains(combined, "added") {
-		t.Errorf("a brand-new model add did not say it was added:\n%s", combined)
+	// The verb changed from "added" to "recorded" in #742, because an overlay
+	// entry never makes a model routable and "added" was read as though it did.
+	// #505's guarantee is that this case reads differently from an override,
+	// which it still does.
+	if !strings.Contains(combined, "recorded kimi-k4") {
+		t.Errorf("a brand-new model add did not report what it recorded:\n%s", combined)
 	}
 }
 
