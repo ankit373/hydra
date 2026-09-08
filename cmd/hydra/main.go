@@ -3420,6 +3420,7 @@ func logTrustRun(r *swarm.SPRTResult, prompt, domain string) {
 		CostSource: costSource,
 		Decision:   r.Trust.Decision.String(),
 		Ledger:     r.Trust.Ledger,
+		Hypotheses: r.Trust.Hypotheses,
 	})
 }
 
@@ -4350,6 +4351,17 @@ func cmdTrustExplain() *cobra.Command {
 						verdict = "disagree"
 					}
 					fmt.Printf("  %-28.28s  %-9s  %+8.3f  %+10.3f\n", e.Source, verdict, e.LLR, e.LambdaAfter)
+				}
+				// Every answer stays under test for the whole run, so the losing
+				// ones carry real evidence and are worth seeing (#778). Runs
+				// logged before that are ledger-only and print nothing here.
+				if len(r.Hypotheses) > 0 {
+					fmt.Printf("\n  %-40s  %6s  %10s  %s\n", "HYPOTHESIS", "VOTES", "Λ", "CONFIDENCE")
+					fmt.Println("  " + strings.Repeat("─", 74))
+					for _, h := range r.Hypotheses {
+						fmt.Printf("  %-40.40s  %6d  %+10.3f  %9.1f%%\n",
+							truncLabel(strings.Join(strings.Fields(h.Answer), " "), 40), h.Votes, h.Lambda, h.Confidence*100)
+					}
 				}
 				fmt.Println()
 				return nil

@@ -43,7 +43,8 @@ type Executor interface {
 type Decision int
 
 const (
-	// DecisionAccept: Λ crossed the accept threshold A at the target confidence.
+	// DecisionAccept: some answer's Λ crossed the accept threshold A at the
+	// target confidence.
 	DecisionAccept Decision = iota
 	// DecisionStoppedOnBudget: ran out of budget/heads before reaching A, the
 	// residual uncertainty is where a human oracle (review) should be spent.
@@ -75,24 +76,51 @@ type Evidence struct {
 	ConfidenceAfter float64 `json:"confidence_after"`
 }
 
-// Result is the outcome of Run.
-type Result struct {
-	Candidate  string     `json:"candidate"`
-	Confidence float64    `json:"confidence"` // σ(Λ)
-	Decision   Decision   `json:"decision"`
-	Lambda     float64    `json:"lambda"`
-	SpentUSD   float64    `json:"spent_usd"`
-	Samples    int        `json:"samples"`
-	Ledger     []Evidence `json:"ledger"`
+// Hypothesis is one candidate answer under test, with the evidence for it.
+// Every distinct answer is tracked for the whole run, so nothing has to be
+// discarded when the leader changes.
+type Hypothesis struct {
+	Answer     string  `json:"answer"`
+	Lambda     float64 `json:"lambda"`     // log-odds this answer is the correct one
+	Confidence float64 `json:"confidence"` // σ(Lambda)
+	Votes      int     `json:"votes"`      // sources whose answer matched it
 }
 
-// Run executes the sequential probability ratio test: it samples sources in
-// decreasing evidence-per-dollar order, accumulating the calibrated
-// log-likelihood ratio Λ that the current candidate answer is correct, and
-// stops as soon as Λ crosses the Wald accept threshold A (target confidence) or
-// runs out of budget. A source that disagrees with the candidate pushes Λ down;
-// if Λ crosses the reject threshold B the run pivots to that source's answer
-// (destructive interference collapses to the better branch).
+// Result is the outcome of Run. Confidence and Lambda describe the leading
+// hypothesis; Hypotheses carries every one that was under test.
+type Result struct {
+	Candidate  string       `json:"candidate"`
+	Confidence float64      `json:"confidence"` // σ(Λ) of the leader
+	Decision   Decision     `json:"decision"`
+	Lambda     float64      `json:"lambda"`
+	SpentUSD   float64      `json:"spent_usd"`
+	Samples    int          `json:"samples"`
+	Ledger     []Evidence   `json:"ledger"`
+	Hypotheses []Hypothesis `json:"hypotheses,omitempty"`
+}
+
+// Run executes a multi-hypothesis sequential probability ratio test: it samples
+// sources in decreasing evidence-per-dollar order and accumulates, for every
+// distinct answer seen, the calibrated log-odds Λ_c that *that* answer is the
+// correct one. It stops as soon as some answer's Λ_c crosses the Wald accept
+// threshold A, or when budget or heads run out.
+//
+// Each source is evidence about every hypothesis, not only whichever answer
+// happened to be current: a source whose answer matches c contributes
+// LLR(agree) to c and LLR(disagree) to all the others. Nothing is discarded
+// when the leader changes, and the hypothesis under test never moves, so
+// Wald's error bound applies to a fixed comparison the way it is derived
+// (#778). The previous binary form re-seeded Λ on a pivot, which both threw
+// away the evidence gathered so far and continued against thresholds derived
+// for the hypothesis it had just abandoned.
+//
+// Λ_c is the log-odds of "c is correct" against "c is incorrect", so σ(Λ_c) is
+// that answer's probability of correctness and needs no normalizing across
+// hypotheses. It also means two answers' confidences can sum past 1: they are
+// each measured against their own negation rather than against each other,
+// which is as far as a sensitivity/specificity parameterization reaches. A
+// generator likelihood that makes them mutually exclusive needs the answer
+// model in #771's follow-up, not a normalization here.
 func Run(ctx context.Context, task Task, sources []Source, exec Executor, cal *Calibrator, t Target, opts ...RunOption) (*Result, error) {
 	if len(sources) == 0 {
 		return nil, fmt.Errorf("sprt: no sources provided")
@@ -107,44 +135,20 @@ func Run(ctx context.Context, task Task, sources []Source, exec Executor, cal *C
 	}
 	// An uncalibrated source has se=sp=0.5, so its verdict contributes exactly
 	// ln(0.5/0.5)=0 nats however emphatically it agrees. With no calibrated
-	// source for this domain the posterior cannot move at all, so the run
-	// samples every head, reaches neither threshold, exhausts its budget and
-	// reports the prior back as its answer. Observed live: five heads agreed
-	// unanimously, every LLR +0.000, "stopped_on_budget", confidence 50.0%,
-	// $0.0095 spent to learn nothing (#698). Refusing costs the user nothing
-	// they would have got.
+	// source for this domain no hypothesis can move, so the run samples every
+	// head, reaches no threshold, exhausts its budget and reports the prior
+	// back as its answer. Observed live: five heads agreed unanimously, every
+	// LLR +0.000, "stopped_on_budget", confidence 50.0%, $0.0095 spent to learn
+	// nothing (#698). Refusing costs the user nothing they would have got.
 	if !cfg.allowUncalibrated && !anyEvidence(cal, sources, task.Domain) {
 		return nil, fmt.Errorf("%w in domain %q", ErrNoEvidence, task.Domain)
 	}
-	// Symmetric Wald thresholds (α = β for v1).
 	A := math.Log((1 - alpha) / alpha)
-	B := -A
 
-	// Sample most-evidence-per-dollar first. Score is computed once per source
-	// (decorate-sort-undecorate), not inside the comparator: evidencePerCost
-	// takes the calibrator's lock and does two log() calls, so recomputing it
-	// per comparison turns an O(n) computation into O(n log n) lock
-	// acquisitions, real cost when Run is called thousands of times in a
-	// benchmark against a calibration that never changes mid-run.
-	type scoredSource struct {
-		src   Source
-		score float64
-	}
-	decorated := make([]scoredSource, len(sources))
-	for i, src := range sources {
-		decorated[i] = scoredSource{src: src, score: evidencePerCost(cal, src, task.Domain)}
-	}
-	sort.SliceStable(decorated, func(i, j int) bool {
-		return decorated[i].score > decorated[j].score
-	})
-	order := make([]Source, len(decorated))
-	for i, d := range decorated {
-		order[i] = d.src
-	}
+	order := sampleOrder(sources, cal, task.Domain)
 
 	res := &Result{Decision: DecisionStoppedOnBudget}
-	var lambda float64
-	candidate := ""
+	var votes []vote
 	familySeen := map[string]bool{}
 	var seenIDs, seenFamilies, seenTexts []string
 
@@ -166,56 +170,113 @@ func Run(ctx context.Context, task Task, sources []Source, exec Executor, cal *C
 		seenFamilies = append(seenFamilies, src.Family)
 		seenTexts = append(seenTexts, ans.Text)
 
-		if candidate == "" {
-			candidate = ans.Text // first answer seeds the candidate
-		}
-		agreed := cfg.equiv(candidate, ans.Text)
-
-		llr := cal.LLR(src.ID, task.Domain, agreed)
+		// A repeat vote from a family that has already spoken is discounted by
+		// its measured excess agreement, not counted as fresh confirmation.
+		weight := 1.0
 		if src.Family != "" && familySeen[src.Family] {
-			llr *= FamilyDiscount(DefaultCoAgreementPath(), src.Family)
+			weight = FamilyDiscount(DefaultCoAgreementPath(), src.Family)
 		}
 		familySeen[src.Family] = true
 
-		lambda += llr
+		votes = append(votes, vote{src: src, text: ans.Text, weight: weight})
+		hyps := scoreHypotheses(votes, cal, task.Domain, cfg.equiv)
+		lead := hyps[0]
+
+		agreed := cfg.equiv(lead.Answer, ans.Text)
 		res.Ledger = append(res.Ledger, Evidence{
-			Source: src.ID, Agreed: agreed, LLR: llr,
-			Candidate: candidate, LambdaAfter: lambda, CostUSD: cost,
-			ConfidenceAfter: sigmoid(lambda),
+			Source:          src.ID,
+			Agreed:          agreed,
+			LLR:             weight * cal.LLR(src.ID, task.Domain, agreed),
+			Candidate:       lead.Answer,
+			LambdaAfter:     lead.Lambda,
+			CostUSD:         cost,
+			ConfidenceAfter: lead.Confidence,
 		})
 
-		if lambda >= A {
+		res.Hypotheses = hyps
+		res.Candidate = lead.Answer
+		res.Lambda = lead.Lambda
+		res.Confidence = lead.Confidence
+
+		if lead.Lambda >= A {
 			res.Decision = DecisionAccept
 			break
-		}
-		if lambda <= B {
-			// The weight of evidence says the candidate is wrong. Collapse to the
-			// disagreeing answer and re-seed Λ with this source asserting it.
-			candidate = ans.Text
-			lambda = cal.LLR(src.ID, task.Domain, true)
-			// The pivoting source's own vote now supports the new candidate.
-			res.Ledger[len(res.Ledger)-1].Candidate = candidate
-			res.Ledger[len(res.Ledger)-1].LambdaAfter = lambda
-			res.Ledger[len(res.Ledger)-1].ConfidenceAfter = sigmoid(lambda)
-			// The reseeded Λ must be tested against A immediately: if the
-			// pivoting source's own evidence alone already clears the accept
-			// threshold, Decision has to reflect that in this same iteration,
-			// otherwise a run that pivoted on its last sampled source ends with
-			// Decision still StoppedOnBudget even though Confidence cleared the
-			// target, corrupting hyctl trust explain and AutoClearedPct.
-			if lambda >= A {
-				res.Decision = DecisionAccept
-				break
-			}
 		}
 	}
 
 	RecordCoAgreement(DefaultCoAgreementPath(), task.Domain, seenIDs, seenFamilies, seenTexts, cfg.equiv)
-
-	res.Candidate = candidate
-	res.Lambda = lambda
-	res.Confidence = sigmoid(lambda)
 	return res, nil
+}
+
+// vote is one source's answer, with the correlation weight its contribution
+// carries. Kept for the whole run because every hypothesis is scored against
+// every vote, including votes cast before that hypothesis existed.
+type vote struct {
+	src    Source
+	text   string
+	weight float64
+}
+
+// scoreHypotheses scores every distinct answer against all votes so far,
+// strongest first. Λ_c sums LLR(agree) over the votes matching c and
+// LLR(disagree) over the rest, which is the log-odds that c is the correct
+// answer. Recomputing from all votes each sample is O(votes × answers) on a
+// handful of heads, and is what lets a hypothesis benefit from evidence
+// gathered before anyone proposed it.
+func scoreHypotheses(votes []vote, cal *Calibrator, domain string, equiv AnswerEquivalence) []Hypothesis {
+	var hyps []Hypothesis
+	for _, v := range votes {
+		seen := false
+		for _, h := range hyps {
+			if equiv(h.Answer, v.text) {
+				seen = true
+				break
+			}
+		}
+		if !seen {
+			hyps = append(hyps, Hypothesis{Answer: v.text})
+		}
+	}
+	for i := range hyps {
+		var lambda float64
+		votesFor := 0
+		for _, v := range votes {
+			match := equiv(hyps[i].Answer, v.text)
+			if match {
+				votesFor++
+			}
+			lambda += v.weight * cal.LLR(v.src.ID, domain, match)
+		}
+		hyps[i].Lambda = lambda
+		hyps[i].Confidence = sigmoid(lambda)
+		hyps[i].Votes = votesFor
+	}
+	// Ties break on the earlier-proposed answer, so a run is reproducible.
+	sort.SliceStable(hyps, func(i, j int) bool { return hyps[i].Lambda > hyps[j].Lambda })
+	return hyps
+}
+
+// sampleOrder ranks sources most-evidence-per-dollar first. The score is
+// computed once per source (decorate-sort-undecorate), not inside the
+// comparator: evidencePerCost takes the calibrator's lock and does two log()
+// calls, so recomputing it per comparison turns an O(n) computation into
+// O(n log n) lock acquisitions, real cost when Run is called thousands of
+// times in a benchmark against a calibration that never changes mid-run.
+func sampleOrder(sources []Source, cal *Calibrator, domain string) []Source {
+	type scored struct {
+		src   Source
+		score float64
+	}
+	decorated := make([]scored, len(sources))
+	for i, src := range sources {
+		decorated[i] = scored{src: src, score: evidencePerCost(cal, src, domain)}
+	}
+	sort.SliceStable(decorated, func(i, j int) bool { return decorated[i].score > decorated[j].score })
+	order := make([]Source, len(decorated))
+	for i, d := range decorated {
+		order[i] = d.src
+	}
+	return order
 }
 
 // evidencePerCost ranks sources by diagnostic power per dollar. Zero-cost
