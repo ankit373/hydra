@@ -100,3 +100,19 @@ func Scores(events []Event, spanID string) []Score {
 	}
 	return out
 }
+
+// Verdict summarises a span's scores. Any non-positive score fails the span:
+// aggregating the other way would let one passing check hide a failing one.
+// known is false when nothing has judged the span, which is not a pass and must
+// never render as one.
+func Verdict(scores []Score) (passed, known bool) {
+	if len(scores) == 0 {
+		return false, false
+	}
+	for _, sc := range scores {
+		if sc.Value <= 0 {
+			return false, true
+		}
+	}
+	return true, true
+}

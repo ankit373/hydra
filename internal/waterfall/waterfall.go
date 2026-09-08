@@ -378,18 +378,6 @@ func (t *Trace) Totals() (costUSD float64, inTok, outTok int) {
 	return costUSD, inTok, outTok
 }
 
-// Verdict summarises a span's scores. Any non-positive score fails the span:
-// aggregating the other way would let one passing check hide a failing one.
-// known is false when nothing has judged this span, which is not the same as
-// a pass and must not render as one.
-func (s *Span) Verdict() (passed, known bool) {
-	if len(s.Scores) == 0 {
-		return false, false
-	}
-	for _, sc := range s.Scores {
-		if sc.Value <= 0 {
-			return false, true
-		}
-	}
-	return true, true
-}
+// Verdict summarises a span's scores. The rule lives in runlog beside Scores,
+// so a reader and a writer cannot drift on what counts as a pass.
+func (s *Span) Verdict() (passed, known bool) { return runlog.Verdict(s.Scores) }

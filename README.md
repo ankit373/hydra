@@ -532,6 +532,7 @@ hyctl trust calibration          # per-source se / sp / D table (neg=0 flags an 
 hyctl trust defect --pii --production   # modeled $ cost of shipping a wrong answer
 hyctl trust stats                # samples saved vs fixed-N, achieved vs target confidence
 hyctl trust explain <task_hash>  # the full LLR ledger for a past run: why it stopped
+hyctl trust reliability          # is the stated confidence honest? Brier / ECE / diagram
 ```
 
 Every confidence run ends by printing its own `task_hash` and the `trust explain`
@@ -689,6 +690,7 @@ hyctl trust outcome <task_hash> ...     # train every voter in a past run from i
 hyctl trust defect ...                  # modeled cost of shipping a wrong answer
 hyctl trust stats                       # samples saved, achieved vs target confidence
 hyctl trust explain <task_hash>         # the LLR ledger for a past SPRT run
+hyctl trust reliability                 # when it says 90%, is it right 90% of the time
 hyctl trust benchmark                   # measured SPRT numbers (samples saved, accuracy)
 hyctl graph blast <file>                # a file's blast radius + the confidence it demands
 hyctl graph parallel <files...>         # optimal number of parallel agents (Law 4)
