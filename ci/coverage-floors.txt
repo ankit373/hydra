@@ -5,6 +5,10 @@
 # stops coverage sliding back down except the fact that doing so must be
 # written down.
 #
+# Every package the suite measures needs a line here. A missing one used to
+# read `(no floor)` and pass, so seven packages sat unratcheted; the gate now
+# refuses one (#805).
+#
 # Values are the numbers measured **on Linux**, because that is where the gate
 # runs. They are not the numbers you will see on a Mac: internal/sysinfo reads
 # memory through darwinRAM/darwinMemoryState there and through /proc on Linux,
@@ -40,10 +44,19 @@ floor internal/cost                 91
 floor internal/diff                 92
 floor internal/dispatch             89
 floor internal/editor               86
+# internal/egress reads 58% here but is covered to 80.2% measured through
+# internal/dispatch (-coverpkg): Summarize and Origins are 100% there. A
+# package's own profile cannot see its caller's tests, so 58 understates it.
+floor internal/egress               55
 floor internal/entropy              88
+# internal/evalset reads 90.3% on develop and 86.5% with #796's hash sidecar,
+# whose rebuild and lock paths are driven but not exhaustively. Floored under
+# both, so whichever lands first the gate says the same thing.
+floor internal/evalset              84
 floor internal/executor             86
 floor internal/glob                 96
 floor internal/graph                88
+floor internal/health               82
 floor internal/ledger               86
 # internal/mcpregistry talks to two external APIs (OSV.dev, GitHub) and reads
 # five clients' config files, so its remaining uncovered lines are the
@@ -56,6 +69,7 @@ floor internal/oracle               85
 floor internal/otlp                 85
 floor internal/parallel             87
 floor internal/payload              80
+floor internal/pending              80
 floor internal/policy               88
 floor internal/pricing              86
 floor internal/probe                91
@@ -66,10 +80,13 @@ floor internal/provider/env         91
 floor internal/provider/port        89
 floor internal/rank                 91
 floor internal/review               88
+floor internal/rollup               80
 floor internal/runid                96
 floor internal/runlog               85
 floor internal/sandbox              86
 floor internal/security             85
+floor internal/shellpath            84
+floor internal/sketch               91
 floor internal/swarm                89
 floor internal/sysinfo              82
 floor internal/testutil             81

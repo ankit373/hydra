@@ -1,16 +1,19 @@
 // SPDX-License-Identifier: MIT
 
-// Command covergate enforces three things CI cannot otherwise see:
+// Command covergate enforces four things CI cannot otherwise see:
 //
 //  1. per-package coverage against a checked-in floor,
-//  2. that no package has zero test files unless it is allow-listed with a
+//  2. that every measured package has one, so a package cannot join the suite
+//     unratcheted,
+//  3. that no package has zero test files unless it is allow-listed with a
 //     reason,
-//  3. that the number of t.Skip calls has not grown past a checked-in budget.
+//  4. that the number of t.Skip calls has not grown past a checked-in budget.
 //
-// All three exist because the failure they catch is invisible: coverage slides
-// down one PR at a time, a new package ships with no tests at all, and a
-// cross-platform suite fills with `t.Skip("not on windows")` until the
-// three-OS matrix is decorative. None of those turn CI red on their own.
+// All four exist because the failure they catch is invisible: coverage slides
+// down one PR at a time, a new package arrives with tests but no floor, a
+// package ships with no tests at all, and a cross-platform suite fills with
+// `t.Skip("not on windows")` until the three-OS matrix is decorative. None of
+// those turn CI red on their own.
 //
 // Usage:
 //
@@ -151,6 +154,19 @@ func check(cfg *Config, profile, root string) (problems []string, skips int, err
 		}
 	}
 
+	// 2. Every measured package has a floor. The gate documented itself as
+	// enforcing floors while passing any package that had none, which is how
+	// seven of them accumulated unratcheted (#805).
+	for _, pkg := range sortedKeys(coverage) {
+		if _, hasFloor := cfg.Floors[pkg]; !hasFloor {
+			problems = append(problems, fmt.Sprintf(
+				"%s has tests but no floor in ci/coverage-floors.txt, so its coverage can "+
+					"slide without failing anything. Add a `floor %s <percent>` line, taking "+
+					"the percent from the table above, which is measured on the OS that ran "+
+					"the gate.", pkg, pkg))
+		}
+	}
+
 	// Every measurement, printed whether or not the run passes. Ratcheting a
 	// floor means knowing the current number, and the run you are looking at is
 	// where it should be, not a local run on a different OS, where the same
@@ -170,7 +186,7 @@ func check(cfg *Config, profile, root string) (problems []string, skips int, err
 	}
 	fmt.Println()
 
-	// 2. Packages with no test files.
+	// 3. Packages with no test files.
 	untested, err := packagesWithoutTests(root)
 	if err != nil {
 		return nil, 0, err
@@ -194,7 +210,7 @@ func check(cfg *Config, profile, root string) (problems []string, skips int, err
 		}
 	}
 
-	// 3. Skip budget.
+	// 4. Skip budget.
 	skips, unexplained, err := countSkips(root)
 	if err != nil {
 		return nil, 0, err
