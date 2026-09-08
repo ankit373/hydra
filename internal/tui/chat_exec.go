@@ -112,6 +112,10 @@ type ckExecState struct {
 	ctx     context.Context
 	cancel  context.CancelFunc
 	started time.Time
+
+	// stream is the output produced so far. A value, not a pointer, so a bare
+	// &ckExecState{} is still usable.
+	stream ckStream
 }
 
 func (e *ckExecState) setStage(s string) {
@@ -185,7 +189,7 @@ var (
 // ckRealDispatchStage routes one prompt through the real router, honoring the
 // task's strategy for this stage: plain dispatch, best-of-3 swarm, or the SPRT
 // consensus ensemble, the same code paths cmd/hydra's dispatch uses.
-func ckRealDispatchStage(ctx context.Context, t *ckTask, prompt, tierHint string, strat byte) (ckStageOut, error) {
+func ckRealDispatchStage(ctx context.Context, t *ckTask, prompt, tierHint string, strat byte, onStream dispatch.OnStream) (ckStageOut, error) {
 	d, err := dispatch.New(ctx)
 	if err != nil {
 		return ckStageOut{}, err
@@ -232,6 +236,10 @@ func ckRealDispatchStage(ctx context.Context, t *ckTask, prompt, tierHint string
 			TierHint: tierHint, LocalOnly: localOnly,
 			MaxCostUSD: t.mode.capUSD, RunID: t.runID, TaskID: t.taskID,
 			Classification: &class,
+			// Only the plain path streams. A swarm has several heads answering
+			// at once and 'C' picks by judge after N replies, so there is no
+			// single stream to show; those get a progress panel (#798).
+			OnStream: onStream,
 		})
 		if err != nil {
 			return ckStageOut{}, err
@@ -344,7 +352,7 @@ func ckRunStages(ctx context.Context, ex *ckExecState, t *ckTask, phase int) byt
 	if phase == ckPhaseFull || phase == ckPhaseHead {
 		if t.mode.plan {
 			ex.setStage("planning")
-			out, err := ckDispatchStage(ctx, t, ckPlanPrompt(t), t.planTier, 0)
+			out, err := ckDispatchStage(ctx, t, ckPlanPrompt(t), t.planTier, 0, ex.stream.handler())
 			if err != nil {
 				t.errText = "plan: " + err.Error()
 				return 0
@@ -367,7 +375,7 @@ func ckRunStages(ctx context.Context, ex *ckExecState, t *ckTask, phase int) byt
 		return ckEditAndVerify(ctx, ex, t)
 	}
 	ex.setStage("answering")
-	out, err := ckDispatchStage(ctx, t, ckAnswerPrompt(t), t.answerTier, t.strategy)
+	out, err := ckDispatchStage(ctx, t, ckAnswerPrompt(t), t.answerTier, t.strategy, ex.stream.handler())
 	if err != nil {
 		t.errText = err.Error()
 		return 0

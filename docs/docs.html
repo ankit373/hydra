@@ -515,9 +515,14 @@ MODE                 <span class="tf">│</span>                                
       <div class="sub"><div class="lbl">How it works</div>
         <p><b>Chat</b> executes: the route line names the tier, model and strategy the router picked and why, then the proof strip reports what the run planned, edited and verified. <span class="fx">shift+tab</span> cycles the modes, Auto (plan → edit → run your tests → fix → repeat), Plan, Edit, Ask, and <span class="fx">ctrl+o</span> overrides where the next task runs without changing what it does. <b>Models</b> is the discovered estate by provider, each head at its routing tier, with a server's children greyed when the server itself is down. <b>Audit</b> carries the calibration scorecard, the hash-chained log's integrity, the guardrails actually in force, and anything waiting on a human. <b>Agents</b>, <b>Activity</b> and <b>Usage</b> cover work in flight, per-run traces, and where the money went. <span class="fx">?</span> lists every key, rendered from the keymap itself so it cannot drift.</p>
       </div>
+      <div class="sub"><div class="lbl">Streaming</div>
+        <p>An answer appears <b>as it arrives</b> rather than all at once when the task finishes, so a slow head and a stuck one no longer look the same. The frame repaints five times a second, which is also what coalesces the stream: deltas land every ~20ms and the render never runs per delta.</p>
+        <p>When a head gives up part-way through, its partial output <b>collapses to one dim line</b> naming the head and the reason, so it cannot be mistaken for the answer, and <span class="fx">e</span> expands it again. The text is kept, not re-fetched. Only plain routing streams: a swarm has several heads answering at once and consensus picks by judge after N replies, so neither has a single stream to show.</p>
+      </div>
       <div class="sub"><div class="lbl">Keys &amp; usage</div>
         <pre>hyctl tui
-<span class="c"># tab cycles views · shift+tab modes · ctrl+o routing · ? all keys · :q quit</span>
+<span class="c"># tab cycles views · shift+tab modes · ctrl+o routing · e expands a</span>
+<span class="c"># collapsed partial · ? all keys · :q quit</span>
 hyctl tui <span class="fl">--snapshot</span> <span class="fl">--view</span> 0..5   <span class="c"># render one static frame</span></pre>
       </div>
     </section>
