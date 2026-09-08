@@ -56,11 +56,24 @@ jobs:
           # The release-please manifest is the version release-please itself
           # reads instead of tags (#215), and it is in this checkout, so it is
           # the base. No fallback: an unversioned edge build is the bug.
-          BASE=$(python3 -c 'import json; print(json.load(open(".release-please-manifest.json"))["."])')
-          if [ -z "$BASE" ]; then
+          RELEASED=$(python3 -c 'import json; print(json.load(open(".release-please-manifest.json"))["."])')
+          if [ -z "$RELEASED" ]; then
             echo "::error::no version in .release-please-manifest.json, refusing to build an unversioned edge"
             exit 1
           fi
+
+          # The next patch, not the last release: an edge build is *after* the
+          # release, and SemVer puts any prerelease before its own version. With
+          # BASE=1.4.2 an edge build reports 1.4.2-edge.<sha>, which sorts below
+          # the released 1.4.2, so `hyctl` tells edge users to "upgrade" to code
+          # older than the one they are running. Checked against semverGT: the
+          # prompt is wrong for 1.4.2-edge and right for 1.4.3-edge, before and
+          # after the next release both. Same reason GoReleaser's own snapshot
+          # template uses incpatch. The arithmetic fails loudly on a
+          # non-numeric patch, which is what a malformed manifest deserves.
+          MAJOR="${RELEASED%%.*}"; REST="${RELEASED#*.}"
+          MINOR="${REST%%.*}"; PATCH="${REST#*.}"
+          BASE="${MAJOR}.${MINOR}.$((PATCH + 1))"
 
           # g<sha>, git describe's own convention: an all-digit short sha
           # beginning with 0 is an invalid semver prerelease identifier, and
