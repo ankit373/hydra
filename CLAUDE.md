@@ -79,7 +79,13 @@ registry/               ← Routing data, compiled into the binary via `go:embed
   domains.yaml          ← Domain → enum key routing (references routing.yaml).
   pricing.yaml          ← Tier pricing. Prices the CLI-agent heads that never appear in
                           OpenRouter's catalog, so it is load-bearing, not just an offline fallback.
-  policy.yaml           ← File-policy rules.  workspace.yaml ← workspace roots + validators.
+  policy.yaml           ← File-policy rules. Three of its fields take effect, and only in
+                          `hyctl parallel`: diff_size_cap_pct rolls an over-large edit back,
+                          max_cost_usd refuses a head before it runs, max_wall_seconds
+                          deadlines the dispatch (#424). The rest are declared and read by
+                          nothing, and `hyctl edit` does not consult the file at all (#769).
+                          `hyctl security` reports which, derived rather than hardcoded.
+  workspace.yaml        ← workspace roots + validators.
 logs/                   ← Dispatch log + state.json (claude_pct, claude_pct_history).
 ```
 

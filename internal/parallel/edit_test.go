@@ -12,10 +12,12 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/dispatch"
 	"github.com/ankit373/hydra/internal/ledger"
+	"github.com/ankit373/hydra/internal/policy"
 	"github.com/ankit373/hydra/internal/runlog"
 	"github.com/ankit373/hydra/internal/testutil"
 
@@ -1041,5 +1043,152 @@ func TestPersistResults_RoundTripsThroughDisk(t *testing.T) {
 	// successes, since a failed edit may still have touched the file.
 	if got[0]["status"] != "ok" || got[1]["status"] != "fail" {
 		t.Errorf("statuses did not round-trip: %v", got)
+	}
+}
+
+// writePolicyApply writes a policy.yaml whose single always-matching rule
+// applies whatever fields the caller names, so a test can trip one cap without
+// tripping the others.
+func writePolicyApply(t *testing.T, apply string) {
+	t.Helper()
+	dir := filepath.Join(os.Getenv("HYDRA_HOME"), "registry")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	body := "version: \"1.0\"\nrules:\n  - name: test_caps\n    when:\n      always: true\n    apply:\n" + apply
+	if err := os.WriteFile(filepath.Join(dir, "policy.yaml"), []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// max_cost_usd was declared in policy.yaml and read by nothing, so an operator
+// reading a $2 ceiling had none. The enforcement already existed in dispatch's
+// preflight; the policy's number simply never reached it (#424).
+func TestEdit_CostCeilingRefusesTheHeadBeforeItRuns(t *testing.T) {
+	repo := editSandbox(t, marked("package main\n"))
+	// A ceiling no head can be under, so the refusal is the policy's and not
+	// a pricing accident.
+	writePolicyApply(t, "      max_cost_usd: 0.0000000001\n")
+
+	file := filepath.Join(repo, "a.go")
+	if err := os.WriteFile(file, []byte("package main\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	original, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got := runEdit(t, Task{
+		Label: "cost", Enum: "MODERATE", File: file,
+		Prompt: "grow this file", Validate: boolPtr(false),
+	})
+
+	if got.Status != "fail" {
+		t.Fatalf("result = %+v, want a failure: the policy's ceiling was not applied", got)
+	}
+	if !strings.Contains(got.Error, "route_failed") || !strings.Contains(got.Error, "exceeds limit") {
+		t.Errorf("Error = %q, want the cost ceiling's own refusal", got.Error)
+	}
+	raw, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(raw) != string(original) {
+		t.Errorf("the file was written despite the ceiling refusing the head:\n%q", raw)
+	}
+}
+
+// max_wall_seconds likewise. Both caps are declared here, so this asserts the
+// pair does not let an edit through; which one refuses is a race and is
+// deliberately not asserted. The deadline's own wiring is tested by
+// TestPolicyDeadline_AppliesMaxWallSeconds, because a test that sets both caps
+// passes even with the deadline deleted, which is how the first version of
+// this let a surviving mutant through.
+func TestEdit_WallClockLimitDeadlinesTheDispatch(t *testing.T) {
+	repo := editSandbox(t, marked("package main\n"))
+	writePolicyApply(t, "      max_wall_seconds: 1\n      max_cost_usd: 0.0000000001\n")
+
+	file := filepath.Join(repo, "a.go")
+	if err := os.WriteFile(file, []byte("package main\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got := runEdit(t, Task{
+		Label: "wall", Enum: "MODERATE", File: file,
+		Prompt: "grow this file", Validate: boolPtr(false),
+	})
+
+	// Either cap may win the race; what must not happen is the edit landing
+	// with both declared. The message has to name which one refused, or the
+	// operator cannot tell a policy refusal from a broken head.
+	if got.Status != "fail" {
+		t.Fatalf("result = %+v, want a failure with both caps set to the unmeetable", got)
+	}
+	if !strings.Contains(got.Error, "max_wall_seconds_exceeded") && !strings.Contains(got.Error, "exceeds limit") {
+		t.Errorf("Error = %q, want it to name the cap that refused", got.Error)
+	}
+}
+
+// And with no caps declared, an edit must still work: a policy.yaml that says
+// nothing must not become a policy that refuses everything.
+//
+// The file is deliberately large and the change small. A one-line file grown
+// to three lines is a 150% diff and trips the *default* 90% cap, which is
+// correct behaviour and not what this test is about.
+func TestEdit_NoCapsDeclaredStillEdits(t *testing.T) {
+	body := "package main\n\nfunc main() {\n"
+	for i := 0; i < 20; i++ {
+		body += "\tprintln(\"line\")\n"
+	}
+	body += "}\n"
+	repo := editSandbox(t, marked(body+"\n// one added line\n"))
+	writePolicyApply(t, "      atomic: true\n")
+
+	file := filepath.Join(repo, "a.go")
+	if err := os.WriteFile(file, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got := runEdit(t, Task{
+		Label: "nocaps", Enum: "MODERATE", File: file,
+		Prompt: "grow this file", Validate: boolPtr(false),
+	})
+
+	if got.Status != "ok" {
+		t.Fatalf("result = %+v, want ok: no cap was declared, so nothing should refuse", got)
+	}
+}
+
+// The deadline's wiring, deterministically. An end-to-end timeout needs a head
+// slow enough to miss it, which means `sleep`, which is Unix-only and racy;
+// this asserts the policy's number reaches a real deadline, which is the part
+// that was missing entirely.
+func TestPolicyDeadline_AppliesMaxWallSeconds(t *testing.T) {
+	t.Run("a declared limit becomes a deadline", func(t *testing.T) {
+		ctx, cancel := policyDeadline(context.Background(), policy.FilePolicy{MaxWallSeconds: 30})
+		defer cancel()
+		dl, ok := ctx.Deadline()
+		if !ok {
+			t.Fatal("no deadline was set, so max_wall_seconds bounds nothing")
+		}
+		if d := time.Until(dl); d > 30*time.Second || d < 29*time.Second {
+			t.Errorf("deadline is %v out, want about 30s", d)
+		}
+	})
+
+	// An absent cap must not become a zero one: a context that has already
+	// expired would refuse every edit on a policy that declared no limit.
+	for _, v := range []int{0, -1} {
+		t.Run(fmt.Sprintf("no limit at %d", v), func(t *testing.T) {
+			ctx, cancel := policyDeadline(context.Background(), policy.FilePolicy{MaxWallSeconds: v})
+			defer cancel()
+			if _, ok := ctx.Deadline(); ok {
+				t.Error("a deadline was set with no limit declared")
+			}
+			if err := ctx.Err(); err != nil {
+				t.Errorf("ctx is already done: %v", err)
+			}
+		})
 	}
 }

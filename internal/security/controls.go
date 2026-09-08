@@ -5,6 +5,8 @@ package security
 import (
 	"fmt"
 	"path/filepath"
+	"reflect"
+	"strings"
 
 	"github.com/ankit373/hydra/internal/a2a"
 	"github.com/ankit373/hydra/internal/config"
@@ -70,16 +72,36 @@ func Controls(events []ledger.Event, audit PolicyAudit, chain ledger.ChainResult
 	}
 }
 
-// filePolicyEnforcementSite names the one call site that evaluates
-// registry/policy.yaml, and the fact that it throws the result away.
+// filePolicyEnforcementSite names where registry/policy.yaml's caps are
+// applied, and enforcedCaps names which of them take effect.
 //
-// This is the only claim in this file that cannot be checked at runtime: no
+// These are the only claims in this file that cannot be checked at runtime: no
 // amount of introspection tells a running binary whether its caller used a
-// return value. It was established by reading the source, is reported with
-// Verified:false so nobody mistakes it for an observation, and MUST be
-// updated by hand if the wiring lands, the same deliberate-drift discipline
+// return value. They are established by reading the source, reported with
+// Verified:false so nobody mistakes them for observations, and MUST be updated
+// by hand as the wiring changes, the same deliberate-drift discipline
 // desktop/api/dashboard_test.go already uses for its duplicated tier key.
-const filePolicyEnforcementSite = "internal/parallel/parallel.go:242"
+//
+// That hand-sync is exactly what drifted: #501 made the caps apply and this
+// text kept saying "none are applied … discards the result", so the one
+// surface whose purpose is an honest posture was understating it (#424).
+const filePolicyEnforcementSite = "internal/parallel/parallel.go"
+
+// enforcedCaps are the FilePolicy fields something actually reads, by their
+// policy.yaml names, so the line names what an operator can rely on rather
+// than listing the seventeen they cannot.
+//
+// Hand-maintained, and the reason this const block carries Verified:false. The
+// count it is measured against is *derived* from the struct, so adding a field
+// to FilePolicy cannot quietly inflate what this claims, and a test asserts
+// every name here is a real yaml tag.
+var enforcedCaps = []string{"diff_size_cap_pct", "max_cost_usd", "max_wall_seconds"}
+
+// policyFieldCount is how many knobs registry/policy.yaml can set, read off
+// the struct rather than written down: my first version of this line said
+// eight fields were unenforced when the real number was seventeen, which is
+// the same kind of stale hand-written claim this control exists to report.
+func policyFieldCount() int { return reflect.TypeOf(policy.FilePolicy{}).NumField() }
 
 func filePolicyControl() Control {
 	c := Control{Name: "File-policy caps", Verified: false}
@@ -94,9 +116,17 @@ func filePolicyControl() Control {
 		c.Detail = "registry/policy.yaml declares no rules"
 		return c
 	}
-	c.Detail = fmt.Sprintf("%d rule(s) declared (cost ceilings, diff-size caps, atomic writes, "+
-		"worktree isolation), none are applied: the only caller evaluates them and discards the "+
-		"result at %s, so no cap takes effect at runtime", n, filePolicyEnforcementSite)
+	// Wired, and deliberately Limited: the caps an operator is most likely to
+	// be relying on are applied, and several fields still are not. Reporting
+	// this as fully active would overstate it in the other direction.
+	c.Wired, c.Limited = true, true
+	c.Detail = fmt.Sprintf("%d rule(s) declared, and %d of %d policy fields take effect (%s) at %s: "+
+		"an over-large diff is rolled back, a head over the cost ceiling is refused before it runs, "+
+		"and the wall-clock limit deadlines the dispatch. The other %d are declared and read by "+
+		"nothing. `hyctl edit` does not consult this policy at all, so even these apply to "+
+		"`hyctl parallel` only",
+		n, len(enforcedCaps), policyFieldCount(), strings.Join(enforcedCaps, ", "),
+		filePolicyEnforcementSite, policyFieldCount()-len(enforcedCaps))
 	return c
 }
 

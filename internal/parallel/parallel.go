@@ -7,6 +7,7 @@ package parallel
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -222,6 +223,16 @@ func runTextTask(ctx context.Context, d *dispatch.Dispatcher, dispatchErr error,
 	})
 }
 
+// policyDeadline bounds a dispatch by policy.yaml's max_wall_seconds. Returns
+// ctx unchanged, with a no-op cancel, when no limit is declared, so an absent
+// cap is not a zero one.
+func policyDeadline(ctx context.Context, fp policy.FilePolicy) (context.Context, context.CancelFunc) {
+	if fp.MaxWallSeconds <= 0 {
+		return ctx, func() {}
+	}
+	return context.WithTimeout(ctx, time.Duration(fp.MaxWallSeconds)*time.Second)
+}
+
 // runEditTask performs an atomic file edit and returns the raw JSON result.
 // Self-contained port of edit.sh, its tests target this package's own
 // extractContent/diffStats/rollback, but shares the KindEdit emission with
@@ -294,14 +305,27 @@ func runEditTask(ctx context.Context, d *dispatch.Dispatcher, dispatchErr error,
 		cleanupBackup()
 		return failEdit(task, "dispatcher init: "+dispatchErr.Error())
 	}
+	// max_wall_seconds and max_cost_usd were declared in policy.yaml and
+	// enforced nowhere, so an operator reading a $2 ceiling had none (#424).
+	// Both enforcement mechanisms already existed and were simply not handed
+	// the policy's numbers: dispatch refuses a candidate over MaxCostUSD
+	// before executing it, and a deadline is what bounds a slow head.
+	ctx, cancel := policyDeadline(ctx, fp)
+	defer cancel()
 	dispResult, err := d.Dispatch(ctx, editPrompt, dispatch.Options{
-		TierHint: enumToTier(task.Enum),
-		RunID:    runID,
-		TaskID:   taskID,
-		Resource: file,
+		TierHint:   enumToTier(task.Enum),
+		RunID:      runID,
+		TaskID:     taskID,
+		Resource:   file,
+		MaxCostUSD: fp.MaxCostUSD,
 	})
 	if err != nil {
 		cleanupBackup()
+		// A deadline is the policy refusing, not the head failing, and the two
+		// want different answers from whoever reads the result.
+		if errors.Is(err, context.DeadlineExceeded) {
+			return failEdit(task, fmt.Sprintf("max_wall_seconds_exceeded: policy allows %ds", fp.MaxWallSeconds))
+		}
 		return failEdit(task, "route_failed: "+err.Error())
 	}
 
