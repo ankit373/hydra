@@ -85,6 +85,11 @@ func findSpan(events []Event, spanID string) (Event, bool) {
 	return hit, found
 }
 
+// Span returns the event that declares a span, resolving a unique id prefix
+// exactly as AppendScore does. Exported so a caller can read what a span
+// recorded without reimplementing that resolution.
+func Span(events []Event, spanID string) (Event, bool) { return findSpan(events, spanID) }
+
 // Scores returns the verdicts recorded against a span, in append order.
 func Scores(events []Event, spanID string) []Score {
 	var out []Score

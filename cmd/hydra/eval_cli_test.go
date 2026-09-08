@@ -4,6 +4,9 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -46,6 +49,86 @@ func TestCLI_EvalOnAnEmptyCorpusSaysHowToRecordOne(t *testing.T) {
 	}
 	if !strings.Contains(out, "No verified examples") {
 		t.Errorf("empty stats output = %q", out)
+	}
+}
+
+// The readiness view exists to answer "can I fit routing from this yet". On an
+// empty corpus that answer needs the command that starts filling it, including
+// the attribution flag, or the corpus grows unusable for the one thing it is for.
+func TestCLI_EvalReadinessOnAnEmptyCorpusSaysHowToAttributeOne(t *testing.T) {
+	cliSandbox(t)
+
+	out, _, err := run(t, "eval", "readiness")
+	if err != nil {
+		t.Fatalf("eval readiness on an empty corpus errored: %v", err)
+	}
+	if !strings.Contains(out, "--enum") {
+		t.Errorf("empty readiness does not name the attribution flag:\n%s", out)
+	}
+}
+
+// The distinction the floor turns on: volume on one head is not comparability.
+// Reporting the lopsided enum as ready would recommend fitting on a sample
+// measured to lose to the strongest head outright.
+func TestCLI_EvalReadinessDistinguishesVolumeFromComparability(t *testing.T) {
+	cliSandbox(t)
+	seed := func(enum, head string, n int) {
+		t.Helper()
+		for i := 0; i < n; i++ {
+			_, err := evalset.Add(evalset.DefaultPath(), evalset.Example{
+				Domain: "go", Source: "oracle:test", Enum: enum, Tier: 8, Head: head,
+				Candidate: fmt.Sprintf("package %s%s%d", enum, head, i), Passed: i%2 == 0,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	seed("LOPSIDED", "head-a", evalset.MinObservationsPerHead*2)
+	seed("SPREAD", "head-a", evalset.MinObservationsPerHead)
+	seed("SPREAD", "head-b", evalset.MinObservationsPerHead)
+
+	out, _, err := run(t, "eval", "readiness", "--json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []evalset.EnumStat
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("readiness --json is not valid JSON: %v\n%s", err, out)
+	}
+	byEnum := map[string]evalset.EnumStat{}
+	for _, s := range got {
+		byEnum[s.Enum] = s
+	}
+	if s := byEnum["LOPSIDED"]; s.Ready {
+		t.Errorf("2x the floor on one head read as ready: %+v", s)
+	}
+	if s := byEnum["SPREAD"]; !s.Ready {
+		t.Errorf("the floor on two heads did not read as ready: %+v", s)
+	}
+}
+
+// An oracle verdict that does not say which routing decision it judges cannot
+// improve routing, which is the only reason the corpus is kept forever.
+func TestCLI_OracleVerifyRecordsTheRoutingDecision(t *testing.T) {
+	cliSandbox(t)
+	f := filepath.Join(t.TempDir(), "candidate.go")
+	if err := os.WriteFile(f, []byte("package a\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, _, err := run(t, "oracle", "verify", "--candidate", f,
+		"--domain", "go", "--enum", "SIMPLE", "--tier", "8",
+		"--", "/bin/sh", "-c", "exit 0"); err != nil {
+		t.Fatalf("verify: %v", err)
+	}
+
+	got, err := evalset.Load(evalset.DefaultPath())
+	if err != nil || len(got) != 1 {
+		t.Fatalf("got %d examples, err=%v", len(got), err)
+	}
+	if got[0].Enum != "SIMPLE" || got[0].Tier != 8 {
+		t.Errorf("routing decision not recorded: enum=%q tier=%d", got[0].Enum, got[0].Tier)
 	}
 }
 
