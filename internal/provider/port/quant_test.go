@@ -87,8 +87,44 @@ func TestOllama_NoDetailsInventsNoQuant(t *testing.T) {
 		if p, ok := h.Meta["model_params"]; ok {
 			t.Errorf("%s: invented params %q from a server that reported none", h.ID, p)
 		}
+		if _, ok := h.Meta["model_ctx_max"]; ok {
+			t.Errorf("%s: invented a context ceiling from a server that reported none", h.ID)
+		}
 		if !executor.Supports(h) {
 			t.Errorf("%s became unroutable: %s", h.ID, executor.Unroutable(h))
+		}
+	}
+}
+
+// The ceiling the budget governor caps a declared window by. Values are the
+// ones a live Ollama 0.33.2 reports; the same models run at the server's 4096
+// default, which is why this is a ceiling and not the window itself (#764).
+func TestOllama_CarriesTheArchitecturalContextCeiling(t *testing.T) {
+	srv := tagsServer(t, `{"models":[
+		{"name":"qwen3:0.6b","details":{"quantization_level":"Q4_K_M",
+		 "parameter_size":"751.63M","context_length":40960}},
+		{"name":"nomic-embed-text:latest","details":{"quantization_level":"F16",
+		 "parameter_size":"137M","context_length":2048}},
+		{"name":"noctx:1b","details":{"quantization_level":"Q4_K_M"}}
+	]}`)
+
+	heads, err := (&ollamaService{base: srv.URL}).probe(context.Background(), caps(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]string{}
+	for _, h := range heads {
+		got[h.ID] = h.Meta["model_ctx_max"]
+	}
+	for id, want := range map[string]string{
+		"ollama/qwen3:0.6b":              "40960",
+		"ollama/nomic-embed-text:latest": "2048",
+		// Reported nothing, so nothing is recorded: a guessed ceiling would
+		// cap a window against a number no server ever gave.
+		"ollama/noctx:1b": "",
+	} {
+		if got[id] != want {
+			t.Errorf("%s: ctx ceiling %q, want %q", id, got[id], want)
 		}
 	}
 }

@@ -666,7 +666,7 @@ models = ["anthropic/claude-sonnet-4.5", "google/gemini-2.5-pro"]</pre><p><span 
 
     <section class="doc" id="probe">
       <h2><span class="cmd">hyctl probe</span> <span class="tagline">discover every head</span></h2>
-      <p class="sum">Runs the three discovery channels concurrently and lists every head with its CapScore and status. For a local model it also shows the <b>quantization actually loaded</b>, because the same model id at Q4_K_M and at Q8_0 is not the same head: it differs in accuracy, VRAM and tokens/sec.</p>
+      <p class="sum">Runs the three discovery channels concurrently and lists every head with its CapScore and status. For a local model it also shows the <b>quantization actually loaded</b>, because the same model id at Q4_K_M and at Q8_0 is not the same head: it differs in accuracy, VRAM and tokens/sec. <code>--json</code> also carries the model's architectural context ceiling, which is what caps the window the budget governor holds a local head to.</p>
       <div class="sub"><div class="lbl">Usage</div><pre>hyctl probe</pre></div>
     </section>
 

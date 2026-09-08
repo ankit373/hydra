@@ -11,8 +11,15 @@ import (
 )
 
 const (
-	fallbackCloud  = 200_000
-	fallbackOllama = 32_768
+	fallbackCloud = 200_000
+	// ollamaDefaultCtx is what an Ollama server allocates when nothing asks for
+	// more, measured as 4096 on 0.33.2. Hydra never asks: the executor sends
+	// only model, prompt and stream, and OLLAMA_CONTEXT_LENGTH lives in the
+	// server's environment rather than ours. The 32768 that used to sit here
+	// was unreachable, and real lookups fell through to fallbackCloud, so a
+	// 4096-token head was budgeted at 200000 and the governor could never fire
+	// for one (#764).
+	ollamaDefaultCtx = 4_096
 )
 
 type modelEntry struct {
@@ -28,7 +35,7 @@ type modelsFile struct {
 // LoadWindows reads registry/models.yaml, an on-disk copy under home if one
 // exists, otherwise the copy embedded in the binary, and returns a map of
 // model-id → context window size. Missing entries get provider-based fallbacks
-// (ollama → 32 768, everything else → 200 000).
+// (ollama → ollamaDefaultCtx, everything else → fallbackCloud).
 //
 // home is the Hydra home directory, not the registry directory: Read appends
 // "registry" itself so every caller resolves the override the same way.
@@ -50,7 +57,7 @@ func LoadWindows(home string) map[string]int {
 		w := m.ContextWindow
 		if w <= 0 {
 			if m.Provider == "ollama" {
-				w = fallbackOllama
+				w = ollamaDefaultCtx
 			} else {
 				w = fallbackCloud
 			}

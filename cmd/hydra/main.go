@@ -338,6 +338,10 @@ type probeHeadJSON struct {
 	// when it reports nothing. Ollama is the only source of these today.
 	Quant  string `json:"quant,omitempty"`
 	Params string `json:"params,omitempty"`
+	// CtxMax is the architectural ceiling, not the window the head runs at:
+	// a 40960 model still runs at its server's default. It is what caps a
+	// declared window in internal/budget (#764).
+	CtxMax int `json:"ctx_max,omitempty"`
 }
 
 func cmdProbe() *cobra.Command {
@@ -359,12 +363,14 @@ func cmdProbe() *cobra.Command {
 				heads := make([]probeHeadJSON, len(result.Heads))
 				for i, h := range result.Heads {
 					why := health.Reason(hs, h, now)
+					ctxMax, _ := budget.ContextCeiling(h)
 					heads[i] = probeHeadJSON{
 						ID: h.ID, Name: h.Name, Provider: h.Provider, Source: h.Source,
 						CapScore: h.CapScore, LocalOnly: h.LocalOnly,
 						IsCortex: result.Cortex != nil && h.ID == result.Cortex.ID,
 						Routable: why == "", UnroutableReason: why,
 						Quant: h.Meta["model_quant"], Params: h.Meta["model_params"],
+						CtxMax: ctxMax,
 					}
 				}
 				warnings := result.Warnings
