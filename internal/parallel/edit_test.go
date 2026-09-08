@@ -636,22 +636,22 @@ func TestRunValidate_DoesNotFragmentPathsWithSpaces(t *testing.T) {
 	if err := os.WriteFile(spaced, []byte("x"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if rc := runValidate("/bin/test -f {file}", spaced); rc != 0 {
-		t.Errorf("exit %d, the path was fragmented at its spaces", rc)
+	if rc, err := runValidate(context.Background(), "/bin/test -f {file}", spaced); rc != 0 || err != nil {
+		t.Errorf("exit %d (err %v), the path was fragmented at its spaces", rc, err)
 	}
 
-	if rc := runValidate("/usr/bin/false", "ignored"); rc == 0 {
-		t.Error("a failing validator reported success")
+	if rc, err := runValidate(context.Background(), "/usr/bin/false", "ignored"); rc == 0 || err != nil {
+		t.Errorf("a failing validator reported rc %d, err %v, want non-zero and no error", rc, err)
 	}
 	// A template naming a binary that does not exist is a failure, not a pass:
 	// treating "could not run the check" as "the check passed" is how an
 	// unvalidated edit ships.
-	if rc := runValidate("definitely-not-installed-anywhere", "x"); rc == 0 {
-		t.Error("a missing validator binary was treated as a pass")
+	if rc, err := runValidate(context.Background(), "definitely-not-installed-anywhere", "x"); rc == 0 || err != nil {
+		t.Errorf("a missing validator binary gave rc %d, err %v, want non-zero and no error", rc, err)
 	}
 	// An empty template means no validator is configured, which is a pass.
-	if rc := runValidate("", "x"); rc != 0 {
-		t.Errorf("an empty template returned %d, want 0 (no validator configured)", rc)
+	if rc, err := runValidate(context.Background(), "", "x"); rc != 0 || err != nil {
+		t.Errorf("an empty template returned %d, %v, want 0 and no error (no validator configured)", rc, err)
 	}
 }
 
