@@ -629,9 +629,11 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		}
 		d.health.Pass(h.ID)
 		r := &Result{Output: resp.Output, Head: h, Retries: i, Attempts: attempts, Response: resp}
+		inRef, outRef := d.capturePayloads(prompt, opts, resp)
 		_ = rl.Append(runlog.Event{
 			Kind: runlog.KindDispatchFinished, TaskID: taskID,
 			SpanID: span, ParentSpanID: taskSpan,
+			InputRef: inRef, OutputRef: outRef,
 			Head: h.ID, Model: resp.Model, Tier: tier, Status: "ok",
 			CostUSD:      d.estimateCost(tier, resp.InputTokens, resp.OutputTokens),
 			DurationMS:   resp.Duration.Milliseconds(),

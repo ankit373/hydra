@@ -817,7 +817,8 @@ hydra/
 │   ├── review/                  # Code review / approve / reject / QA
 │   ├── util/                    # Shared utilities (bounded Accumulator, 33 MB cap)
 │   ├── sysinfo/                 # Hardware detection + 7-day memory history
-│   ├── payload/                 # Opt-in prompt/response store: packed, dictionary-compressed, redacted
+│   ├── payload/                 # Opt-in prompt/response store: chunked, packed, redacted,
+│   │                            #   bounded by a byte budget that evicts oldest packs
 │   ├── runlog/                  # Per-run span log (~/.hydra/logs/runs/): identity, parent, level,
 │   │                            #   tokens, TTFT, metadata + liveness heartbeat + edit snapshots
 │   │                            # Old runs seal into compressed monthly segments (logs/seg/)

@@ -2,7 +2,7 @@
 
 //go:build !windows
 
-package ledger
+package util
 
 import (
 	"os"

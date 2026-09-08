@@ -280,11 +280,11 @@ func Record(path string, e Event) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
-	lock, err := lockChain(lockPath(path))
+	lock, err := util.Lock(util.LockPath(path))
 	if err != nil {
 		return err
 	}
-	defer lock.unlock()
+	defer lock.Unlock()
 
 	e = e.sanitize()
 	if e.PrevHash == "" {

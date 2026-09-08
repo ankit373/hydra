@@ -55,6 +55,7 @@ floor internal/optimal              96
 floor internal/oracle               85
 floor internal/otlp                 85
 floor internal/parallel             87
+floor internal/payload              80
 floor internal/policy               88
 floor internal/pricing              86
 floor internal/probe                91

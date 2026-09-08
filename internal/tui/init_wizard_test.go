@@ -476,9 +476,14 @@ func TestInitWizard_CaptureStepExplainsWhatIsStored(t *testing.T) {
 	m, _ = send(m, "enter", "enter", "enter") // land on the capture step
 
 	view := m.(InitModel).View()
-	for _, want := range []string{"prompts and responses", "sampled", "redacted"} {
+	for _, want := range []string{"prompts and responses", "budget", "redacted", "secret detector"} {
 		if !strings.Contains(view, want) {
 			t.Errorf("the capture step never mentions %q:\n%s", want, view)
 		}
+	}
+	// The store stopped sampling in #728. A wizard describing the old
+	// behaviour is worse than one describing none.
+	if strings.Contains(view, "sampled") {
+		t.Errorf("the capture step still claims payloads are sampled:\n%s", view)
 	}
 }

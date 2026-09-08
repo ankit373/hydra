@@ -1352,7 +1352,8 @@ replaced before it is written.`,
 			if jsonOut {
 				raw, _ := json.MarshalIndent(map[string]any{
 					"capture_enabled": cfg.CapturePayloads,
-					"keep_rate":       payloadKeepRate(cfg),
+					"keep_rate":       payload.KeepRate(cfg),
+					"budget_bytes":    payload.Budget(cfg),
 					"stats":           st,
 				}, "", "  ")
 				fmt.Println(string(raw))
@@ -1370,9 +1371,22 @@ replaced before it is written.`,
 				fmt.Println("No payloads stored.")
 				return nil
 			}
-			fmt.Printf("  %d blob%s, admitted at %.0f%%\n", st.Blobs, plural(st.Blobs), payloadKeepRate(cfg)*100)
-			fmt.Printf("  %s of text in %s on disk (%.1fx)\n",
-				humanBytes(st.RawBytes), humanBytes(st.DiskBytes), ratioOf(st.RawBytes, st.DiskBytes))
+			fmt.Printf("  %d payload%s over %d chunk%s in %d pack%s\n",
+				st.Manifests, plural(st.Manifests),
+				st.Blobs-st.Manifests, plural(st.Blobs-st.Manifests),
+				st.Packs, plural(st.Packs))
+			// Compression and disk are separate numbers on purpose. A small
+			// store is dominated by the filesystem block it is charged, so one
+			// combined ratio reads as compression having made things bigger.
+			fmt.Printf("  %s of prompt text held in %s (%.1fx) · %s on disk\n",
+				humanBytes(st.LogicalBytes), humanBytes(st.PackBytes),
+				ratioOf(st.LogicalBytes, st.PackBytes), humanBytes(st.DiskBytes))
+			fmt.Printf("  %s\n", dimStyle.Render(fmt.Sprintf(
+				"%s unique after chunking, so %s of it repeated across runs",
+				humanBytes(st.RawBytes), humanBytes(st.LogicalBytes-st.RawBytes))))
+			fmt.Printf("  %s\n", dimStyle.Render(fmt.Sprintf(
+				"budget %s, oldest packs dropped past it · admitted at %.0f%%",
+				humanBytes(payload.Budget(cfg)), payload.KeepRate(cfg)*100)))
 			fmt.Printf("  %s\n", dimStyle.Render(fmt.Sprintf(
 				"%d dictionary-compressed · %d contained redacted secrets", st.WithDict, st.WithPII)))
 			return nil
@@ -1430,21 +1444,6 @@ func rowsWithinDays(rows []cost.Row, days int) []cost.Row {
 		}
 	}
 	return out
-}
-
-// DefaultPayloadKeepRate is how often a payload is admitted when capture is on
-// but no rate was configured. Sampling is what bounds the store; the rate is
-// recorded on every blob so the set stays correctable to the population.
-const DefaultPayloadKeepRate = 0.1
-
-// payloadKeepRate resolves the configured rate, treating an unset or nonsensical
-// value as the default rather than as "keep nothing", a zero rate would
-// silently disable capture the user had explicitly turned on.
-func payloadKeepRate(cfg *config.Config) float64 {
-	if cfg != nil && cfg.PayloadKeepRate > 0 && cfg.PayloadKeepRate <= 1 {
-		return cfg.PayloadKeepRate
-	}
-	return DefaultPayloadKeepRate
 }
 
 // ratioOf guards the division so an empty seal cannot print Inf or NaN.
