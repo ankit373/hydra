@@ -76,6 +76,11 @@ type deltaSink struct {
 	onDelta OnDelta
 	started time.Time
 	ttft    time.Duration
+	// Separate from ttft because zero is a reachable measurement, not just an
+	// unset one: against a local server the first token can arrive inside the
+	// clock's granularity. Overloading zero as the sentinel let the *second*
+	// fragment record its own elapsed time as the time to the first (#810).
+	ttftSet bool
 }
 
 // newDeltaSink starts measuring from started, which must be when the request
@@ -101,8 +106,9 @@ func (s *deltaSink) write(delta string) {
 		return
 	}
 	s.mu.Lock()
-	if s.ttft == 0 && strings.TrimSpace(delta) != "" {
-		s.ttft = time.Since(s.started)
+	if !s.ttftSet && strings.TrimSpace(delta) != "" {
+		s.ttftSet = true
+		s.ttft = measured(time.Since(s.started))
 	}
 	truncated := s.acc.Truncated()
 	if !truncated {
@@ -142,6 +148,17 @@ func (s *deltaSink) truncated() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.acc.Truncated()
+}
+
+// measured reports an elapsed time a reader can tell apart from no reading at
+// all. Response.TTFT documents zero as "the provider does not report it", and
+// a first token can arrive inside the clock's granularity against a local
+// server, so the floor is the honest answer there (#810).
+func measured(d time.Duration) time.Duration {
+	if d == 0 {
+		return time.Nanosecond
+	}
+	return d
 }
 
 // firstTokenAt is the measured time to the first non-empty delta, or 0 when
