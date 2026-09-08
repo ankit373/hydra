@@ -177,3 +177,41 @@ func TestAppendScore_IsNotItselfScorable(t *testing.T) {
 		t.Fatalf("the span resolved to a %q event", target.Kind)
 	}
 }
+
+// Verdict is the one place that decides what a span's scores add up to, so it
+// is tested here rather than only through the renderers that call it.
+func TestVerdict(t *testing.T) {
+	cases := []struct {
+		name          string
+		scores        []Score
+		passed, known bool
+	}{
+		{"nothing judged it", nil, false, false},
+		{"empty slice is also unjudged", []Score{}, false, false},
+		{"one pass", []Score{{Name: "tests", Value: 1}}, true, true},
+		{"one fail", []Score{{Name: "tests", Value: 0}}, false, true},
+		{"zero is a fail, not a pass", []Score{{Name: "lint", Value: 0}}, false, true},
+		{"negative is a fail", []Score{{Name: "lint", Value: -3}}, false, true},
+		{"all pass", []Score{{Name: "tests", Value: 1}, {Name: "lint", Value: 0.5}}, true, true},
+		// The asymmetry is the point: one failing check must not be hidden by
+		// any number of passing ones.
+		{"a single fail sinks the span", []Score{{Name: "tests", Value: 1}, {Name: "lint", Value: 0}}, false, true},
+		{"order does not matter", []Score{{Name: "lint", Value: 0}, {Name: "tests", Value: 1}}, false, true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			passed, known := Verdict(c.scores)
+			if passed != c.passed || known != c.known {
+				t.Errorf("Verdict(%v) = (%v, %v), want (%v, %v)", c.scores, passed, known, c.passed, c.known)
+			}
+		})
+	}
+}
+
+// An unjudged span is not a passing span. Conflating them would render work
+// nobody checked as verified.
+func TestVerdict_UnknownIsNotAPass(t *testing.T) {
+	if passed, known := Verdict(nil); passed || known {
+		t.Errorf("Verdict(nil) = (%v, %v), want (false, false)", passed, known)
+	}
+}
