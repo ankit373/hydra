@@ -152,6 +152,100 @@ func TestStats(t *testing.T) {
 }
 
 // The eval set must live outside anything a retention pass walks.
+// The routing decision must survive the write, or the corpus cannot be grouped
+// by the thing routing.yaml is keyed on, which is the only reason to keep it.
+func TestEnumAndTierRoundTrip(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "examples.jsonl")
+	e := ex("go", "func main() {}", true)
+	e.Enum, e.Tier, e.Head = "SIMPLE", 8, "ollama/qwen3"
+	if _, err := Add(p, e); err != nil {
+		t.Fatalf("add: %v", err)
+	}
+	got, err := Load(p)
+	if err != nil || len(got) != 1 {
+		t.Fatalf("got %d, err=%v", len(got), err)
+	}
+	if got[0].Enum != "SIMPLE" || got[0].Tier != 8 || got[0].Head != "ollama/qwen3" {
+		t.Errorf("routing decision lost: enum=%q tier=%d head=%q",
+			got[0].Enum, got[0].Tier, got[0].Head)
+	}
+}
+
+func withHead(enum, head string, n int) []Example {
+	out := make([]Example, 0, n)
+	for i := 0; i < n; i++ {
+		out = append(out, Example{Enum: enum, Head: head, Passed: i%2 == 0})
+	}
+	return out
+}
+
+func statFor(t *testing.T, rd []EnumStat, enum string) EnumStat {
+	t.Helper()
+	for _, s := range rd {
+		if s.Enum == enum {
+			return s
+		}
+	}
+	t.Fatalf("no stat for enum %q in %+v", enum, rd)
+	return EnumStat{}
+}
+
+// Volume on one head is not evidence about a different head, and choosing
+// between heads is the whole point. Four times the floor on a single head must
+// still read as not ready.
+func TestReadinessNeedsSeveralHeadsNotJustVolume(t *testing.T) {
+	lopsided := withHead("SIMPLE", "head-a", MinObservationsPerHead*4)
+	if s := statFor(t, Readiness(lopsided), "SIMPLE"); s.Ready || s.Comparable != 1 {
+		t.Errorf("one head at 4x the floor read as ready: %+v", s)
+	}
+
+	spread := append(withHead("SIMPLE", "head-a", MinObservationsPerHead),
+		withHead("SIMPLE", "head-b", MinObservationsPerHead)...)
+	s := statFor(t, Readiness(spread), "SIMPLE")
+	if !s.Ready || s.Comparable != MinComparableHeads {
+		t.Errorf("two heads at the floor did not read as ready: %+v", s)
+	}
+	if s.Total != MinObservationsPerHead*2 {
+		t.Errorf("total = %d, want %d", s.Total, MinObservationsPerHead*2)
+	}
+}
+
+// One short of the floor is short of the floor: rounding it up would recommend
+// fitting on the sample size measured to lose to the strongest head.
+func TestReadinessIsStrictAtTheFloor(t *testing.T) {
+	just := append(withHead("SIMPLE", "head-a", MinObservationsPerHead),
+		withHead("SIMPLE", "head-b", MinObservationsPerHead-1)...)
+	if s := statFor(t, Readiness(just), "SIMPLE"); s.Ready {
+		t.Errorf("one example short read as ready: %+v", s)
+	}
+}
+
+// A verdict with no head is still ground truth, but it names nothing routable,
+// so it can never make an enum fittable however many there are.
+func TestReadinessIgnoresUnattributedHead(t *testing.T) {
+	s := statFor(t, Readiness(withHead("SIMPLE", "", MinObservationsPerHead*3)), "SIMPLE")
+	if s.Ready || s.Comparable != 0 {
+		t.Errorf("unattributed heads counted toward comparability: %+v", s)
+	}
+	if s.Total != MinObservationsPerHead*3 {
+		t.Errorf("unattributed examples were dropped: %+v", s)
+	}
+}
+
+// Examples predating attribution land in "(none)". They are the gap this
+// measures, so they must be visible and never ready.
+func TestReadinessNeverReadyWithoutEnum(t *testing.T) {
+	plenty := append(withHead("", "head-a", MinObservationsPerHead*2),
+		withHead("", "head-b", MinObservationsPerHead*2)...)
+	s := statFor(t, Readiness(plenty), "(none)")
+	if s.Ready {
+		t.Errorf("examples with no enum read as ready: %+v", s)
+	}
+	if s.Total != MinObservationsPerHead*4 {
+		t.Errorf("total = %d, want %d", s.Total, MinObservationsPerHead*4)
+	}
+}
+
 func TestDefaultPathIsNotUnderLogs(t *testing.T) {
 	t.Setenv("HYDRA_HOME", t.TempDir())
 	p := DefaultPath()

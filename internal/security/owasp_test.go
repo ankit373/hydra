@@ -190,6 +190,75 @@ func TestAnnotateGapAge_UsesEarliestHistoryOccurrence(t *testing.T) {
 	}
 }
 
+// The hazard #748 was split out for. Category IDs are only stable for LLM01
+// and LLM02, so a stored "LLM06" from the 2025 ordering names Excessive Agency
+// while a 2026 "LLM06" names something else. Matching across editions would
+// report one category's history as another's age, wrong and invisible, in the
+// field a reader trusts to say how long something has been broken.
+func TestAnnotateGapAge_NeverMatchesAcrossEditions(t *testing.T) {
+	now := time.Date(2026, 9, 8, 0, 0, 0, 0, time.UTC)
+	history := []scoreEntry{
+		// A different edition's LLM06 is a different category. Two years of it
+		// must not become this category's age.
+		{TS: now.Add(-700 * 24 * time.Hour).Format(time.RFC3339),
+			Gaps: []string{"LLM06"}, Edition: "1999"},
+		{TS: now.Add(-30 * 24 * time.Hour).Format(time.RFC3339),
+			Gaps: []string{"LLM06"}, Edition: LLMEdition},
+	}
+	got := annotateGapAge([]Category{{ID: "LLM06", Status: Gap}}, history, now)
+	if got[0].GapAgeDays != 30 {
+		t.Errorf("GapAgeDays = %d, want 30: the other edition's LLM06 is a "+
+			"different category and must not date this one", got[0].GapAgeDays)
+	}
+}
+
+// Every row written before the edition field existed was scored against the
+// 2025 ordering, so absence has to mean 2025 and not "unknown". Reading it as
+// unknown would make each of those rows foreign and silently reset every
+// existing gap's age to zero, which is the same class of lie in the other
+// direction.
+func TestScoreEntry_UnstampedIsThePreFieldEdition(t *testing.T) {
+	if got := (scoreEntry{}).edition(); got != "2025" {
+		t.Errorf("edition() = %q for an unstamped row, want 2025: that is what "+
+			"every row written before the field existed was scored against", got)
+	}
+	if got := (scoreEntry{Edition: "2026"}).edition(); got != "2026" {
+		t.Errorf("edition() = %q, want the stamped value", got)
+	}
+}
+
+// A row of the current edition dates a gap normally. Paired with the
+// cross-edition test above: together they show the filter admits what it
+// should and refuses what it should, rather than refusing everything.
+func TestAnnotateGapAge_CurrentEditionHistoryStillCounts(t *testing.T) {
+	now := time.Date(2026, 9, 8, 0, 0, 0, 0, time.UTC)
+	history := []scoreEntry{{
+		TS:      now.Add(-45 * 24 * time.Hour).Format(time.RFC3339),
+		Gaps:    []string{"LLM03"},
+		Edition: LLMEdition,
+	}}
+	got := annotateGapAge([]Category{{ID: "LLM03", Status: Gap}}, history, now)
+	if got[0].GapAgeDays != 45 {
+		t.Errorf("GapAgeDays = %d, want 45", got[0].GapAgeDays)
+	}
+}
+
+// The corrupt-timestamp fallback is a second reader of the same history and
+// must apply the same rule, or a bad TS on the current edition's row silently
+// reopens the cross-edition match the indexed path refuses.
+func TestFirstParseableGapSince_AlsoRefusesOtherEditions(t *testing.T) {
+	now := time.Date(2026, 9, 8, 0, 0, 0, 0, time.UTC)
+	history := []scoreEntry{
+		{TS: "not-a-timestamp", Gaps: []string{"LLM06"}, Edition: LLMEdition},
+		{TS: now.Add(-500 * 24 * time.Hour).Format(time.RFC3339),
+			Gaps: []string{"LLM06"}, Edition: "1999"},
+	}
+	if ts, _, ok := firstParseableGapSince(history, "LLM06"); ok {
+		t.Errorf("fell back to a foreign edition's entry (%s); the only "+
+			"current-edition row has a corrupt timestamp, so there is no age", ts)
+	}
+}
+
 // A category that is not currently a Gap must never get an age, even if an
 // older history entry happens to name it (it was a gap once and got fixed).
 func TestAnnotateGapAge_SkipsNonGapCategories(t *testing.T) {

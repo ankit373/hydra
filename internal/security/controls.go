@@ -122,7 +122,8 @@ func filePolicyControl() Control {
 	c.Wired, c.Limited = true, true
 	c.Detail = fmt.Sprintf("%d rule(s) declared, and %d of %d policy fields take effect (%s) at %s: "+
 		"an over-large diff is rolled back, a head over the cost ceiling is refused before it runs, "+
-		"and the wall-clock limit deadlines the dispatch. The other %d are declared and read by "+
+		"and the wall-clock limit deadlines the dispatch and the validator after it. The other %d "+
+		"are declared and read by "+
 		"nothing. `hyctl edit` does not consult this policy at all, so even these apply to "+
 		"`hyctl parallel` only",
 		n, len(enforcedCaps), policyFieldCount(), strings.Join(enforcedCaps, ", "),

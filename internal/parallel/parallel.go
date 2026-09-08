@@ -25,6 +25,7 @@ import (
 	"github.com/ankit373/hydra/internal/policy"
 	"github.com/ankit373/hydra/internal/runid"
 	"github.com/ankit373/hydra/internal/runlog"
+	"github.com/ankit373/hydra/internal/sandbox"
 	"github.com/ankit373/hydra/internal/util"
 	"github.com/ankit373/hydra/internal/workspace"
 )
@@ -397,7 +398,23 @@ func runEditTask(ctx context.Context, d *dispatch.Dispatcher, dispatchErr error,
 			vtmpl = tscTemplate(resolved.GitRoot)
 		}
 		if vtmpl != "" {
-			if rc := runValidate(vtmpl, file); rc != 0 {
+			rc, verr := runValidate(ctx, vtmpl, file)
+			if verr != nil {
+				// The deadline is the policy stopping the validator, not the
+				// validator rejecting the edit, the same distinction the
+				// dispatch above draws (#424).
+				rollback(file, origContent, origExisted, resolved.GitRoot, backup)
+				reason := "validator_cancelled: " + verr.Error()
+				if errors.Is(verr, context.DeadlineExceeded) {
+					reason = fmt.Sprintf("max_wall_seconds_exceeded: policy allows %ds", fp.MaxWallSeconds)
+				}
+				return mustMarshal(EditResult{
+					Label: task.Label, Enum: task.Enum, Mode: "edit",
+					Status: "fail", File: file, Workspace: wsName, GitRoot: resolved.GitRoot,
+					RolledBack: true, Error: reason,
+				})
+			}
+			if rc != 0 {
 				rollback(file, origContent, origExisted, resolved.GitRoot, backup)
 				return mustMarshal(EditResult{
 					Label: task.Label, Enum: task.Enum, Mode: "edit",
@@ -586,7 +603,10 @@ func rollback(file, origContent string, origExisted bool, gitRoot, backup string
 
 // runValidate splits the validator template around {file} to prevent
 // paths-with-spaces from being fragmented by strings.Fields.
-func runValidate(vtmpl, file string) int {
+// A non-nil error means the run was cancelled or ran past max_wall_seconds,
+// which is not an exit code: a killed validator exits non-zero exactly like a
+// failing one.
+func runValidate(ctx context.Context, vtmpl, file string) (int, error) {
 	var parts []string
 	if idx := strings.Index(vtmpl, "{file}"); idx >= 0 {
 		parts = append(strings.Fields(vtmpl[:idx]), file)
@@ -595,16 +615,19 @@ func runValidate(vtmpl, file string) int {
 		parts = strings.Fields(vtmpl)
 	}
 	if len(parts) == 0 {
-		return 0
+		return 0, nil
 	}
-	c := exec.Command(parts[0], parts[1:]...)
+	c := sandbox.Harden(exec.CommandContext(ctx, parts[0], parts[1:]...))
 	if err := c.Run(); err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			return exitErr.ExitCode()
+		if ctx.Err() != nil {
+			return 0, ctx.Err()
 		}
-		return 1
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			return exitErr.ExitCode(), nil
+		}
+		return 1, nil
 	}
-	return 0
+	return 0, nil
 }
 
 func tscTemplate(gitRoot string) string {

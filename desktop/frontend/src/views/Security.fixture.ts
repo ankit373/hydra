@@ -26,7 +26,7 @@ export function securityReport(over: Partial<SecurityReport> = {}): SecurityRepo
     ledger: { total: 42, allowed: 40, denied: 2, flagged: 0 },
     byHead: [],
     checks: [],
-    coverage: { categories: [], applicable: 10, covered: 8, partial: 0, percentCovered: 80 },
+    coverage: { categories: [], applicable: 10, covered: 8, partial: 0, percentCovered: 80, edition: '2025' },
     agentic: { categories: [], applicable: 10, covered: 5, partial: 4, percentCovered: 50 },
     trend: { available: true, deltaPct: 4, firstPct: 76, firstTs: '2026-08-01T00:00:00Z' },
     policyAudit: { rules: [], default: 'deny', failOpen: false, defaultHits: 0, evaluated: 42 },
@@ -38,6 +38,9 @@ export function securityReport(over: Partial<SecurityReport> = {}): SecurityRepo
     posture: posture(),
     register: { risks: [], sumDefectCostUsd: 0, breached: 0, bySeverity: {} },
     attestation: attestation(),
+    // A quiet machine here means one Hydra fully governs, so a test that cares
+    // about the boundary has to say so rather than inherit a caveat.
+    boundary: { governed: ['ollama/qwen2.5'], opaque: [], opaqueLocalOnly: [] },
     ...over,
   }
 }

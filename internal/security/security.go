@@ -93,6 +93,10 @@ type Report struct {
 	Privilege []AgentPrivilege `json:"privilege,omitempty"`
 	// BOM is the model estate: provenance, locality, and what is actually used.
 	BOM []BOMEntry `json:"bom,omitempty"`
+	// Boundary is what the egress gate can and cannot reach, so every other
+	// number here is read with its scope attached rather than as a guarantee
+	// over a CLI-agent head Hydra cannot see inside.
+	Boundary Boundary `json:"boundary"`
 	// Register is the governed view: every finding above as one kind of
 	// object, rated, aged against an SLA, priced and mapped to frameworks.
 	Register RiskRegister `json:"register"`
@@ -206,9 +210,11 @@ func Build(heads []provider.Head) (*Report, error) {
 	r.Incidents = CorrelateIncidents(events, r.Blast)
 	r.Privilege = ReviewPrivilege(events, pol)
 	r.BOM = BuildBOM(heads, events, r.SupplyChain)
+	r.Boundary = AssessBoundary(heads)
 	r.Events, r.Truncated = evidenceTail(events)
 
 	r.Checks = []Check{
+		boundaryCheck(r.Boundary),
 		chainCheck(chainRes),
 		costCeilingCheck(costCeilingDenials),
 		provenanceCheck(heads),

@@ -53,10 +53,11 @@ const modulePath = "github.com/ankit373/hydra"
 // entry fails loudly with "declares no interface", so it can never make a
 // check silently pass.
 var tsNames = map[string]string{
-	modulePath + "/internal/security.Report": "SecurityReport",
-	modulePath + "/internal/security.Count":  "SecurityCount",
-	modulePath + "/internal/ledger.Event":    "LedgerEvent",
-	modulePath + "/internal/ledger.Action":   "LedgerAction",
+	modulePath + "/internal/security.Report":   "SecurityReport",
+	modulePath + "/internal/security.Count":    "SecurityCount",
+	modulePath + "/internal/security.Boundary": "SecurityBoundary",
+	modulePath + "/internal/ledger.Event":      "LedgerEvent",
+	modulePath + "/internal/ledger.Action":     "LedgerAction",
 }
 
 func tsName(rt reflect.Type) string {

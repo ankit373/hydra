@@ -16,6 +16,7 @@ import (
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/diff"
 	"github.com/ankit373/hydra/internal/dispatch"
+	"github.com/ankit373/hydra/internal/sandbox"
 	"github.com/ankit373/hydra/internal/trust"
 	"github.com/ankit373/hydra/internal/util"
 	"github.com/ankit373/hydra/internal/workspace"
@@ -181,7 +182,13 @@ func Edit(ctx context.Context, req Request) (*Result, error) {
 		}
 
 		if vtmpl != "" {
-			vout, vrc := runValidatorCmd(vtmpl, req.File)
+			vout, vrc, verr := runValidatorCmd(ctx, vtmpl, req.File)
+			if verr != nil {
+				// Interrupted, so nothing was learned about this head. Recording
+				// it would teach the calibrator that a Ctrl+C is broken code.
+				rollback(req.File, origContent, origExisted, resolved.GitRoot, backup)
+				return nil, fmt.Errorf("validating %s: %w", req.File, verr)
+			}
 			recordValidationOutcome(dispResult.Head.ID, trust.DomainForFile(req.File), vrc == 0)
 			if vrc != 0 {
 				validatorPassed = false
@@ -464,7 +471,9 @@ func rollback(file, origContent string, origExisted bool, gitRoot, backup string
 
 // runValidatorCmd executes a validator template safely.
 // Splits around {file} so paths containing spaces are never fragmented by Fields.
-func runValidatorCmd(vtmpl, file string) (output string, exitCode int) {
+// A non-nil error means the run was cancelled, which is not an exit code: a
+// killed validator exits non-zero exactly like a failing one.
+func runValidatorCmd(ctx context.Context, vtmpl, file string) (output string, exitCode int, err error) {
 	var parts []string
 	if idx := strings.Index(vtmpl, "{file}"); idx >= 0 {
 		parts = append(strings.Fields(vtmpl[:idx]), file)
@@ -473,17 +482,20 @@ func runValidatorCmd(vtmpl, file string) (output string, exitCode int) {
 		parts = strings.Fields(vtmpl)
 	}
 	if len(parts) == 0 {
-		return "", 0
+		return "", 0, nil
 	}
-	c := exec.Command(parts[0], parts[1:]...)
-	out, err := c.CombinedOutput()
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			return string(out), exitErr.ExitCode()
+	c := sandbox.Harden(exec.CommandContext(ctx, parts[0], parts[1:]...))
+	out, runErr := c.CombinedOutput()
+	if runErr != nil {
+		if ctx.Err() != nil {
+			return string(out), 0, ctx.Err()
 		}
-		return string(out), 1
+		if exitErr, ok := runErr.(*exec.ExitError); ok {
+			return string(out), exitErr.ExitCode(), nil
+		}
+		return string(out), 1, nil
 	}
-	return string(out), 0
+	return string(out), 0, nil
 }
 
 func tscTemplate(gitRoot string) string {

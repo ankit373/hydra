@@ -35,6 +35,16 @@ import (
 // SchemaVersion is stamped on every example so readers can branch, not guess.
 const SchemaVersion = 1
 
+// MinObservationsPerHead is how many examples one (enum, head) pair needs before
+// that head's rate is worth ranking on. Measured: under ~10 a fitted table loses
+// to the strongest head outright, and 25 is the first gain interval excluding zero.
+const MinObservationsPerHead = 25
+
+// MinComparableHeads is how many heads must clear that floor before an enum's
+// routing choice can be fitted. Ranking needs something to rank: 25 examples all
+// from one head say nothing about whether a different head would have done better.
+const MinComparableHeads = 2
+
 // ErrNoCandidate reports an example with nothing to learn from. A verdict with
 // no candidate is a statistic, and belongs in calibration rather than here.
 var ErrNoCandidate = errors.New("evalset: example has no candidate")
@@ -44,10 +54,17 @@ type Example struct {
 	V  int    `json:"v"`
 	TS string `json:"ts"`
 
-	TaskHash      string `json:"task_hash"`
-	Domain        string `json:"domain"`
-	Source        string `json:"source"` // the oracle that produced the verdict
-	Head          string `json:"head,omitempty"`
+	TaskHash string `json:"task_hash"`
+	Domain   string `json:"domain"`
+	Source   string `json:"source"` // the oracle that produced the verdict
+	Head     string `json:"head,omitempty"`
+
+	// Enum and Tier are the routing decision this example judges. Recorded
+	// rather than re-derived: routing.yaml is editable, so the map in force
+	// when the head ran is not recoverable afterwards.
+	Enum string `json:"enum,omitempty"`
+	Tier int    `json:"tier,omitempty"`
+
 	CandidateHash string `json:"candidate_hash"`
 	Candidate     string `json:"candidate"`
 	Passed        bool   `json:"passed"`
@@ -301,6 +318,70 @@ type DomainStat struct {
 	Failed   int     `json:"failed"`
 	PassRate float64 `json:"pass_rate"`
 	WithPII  int     `json:"with_pii"`
+}
+
+// EnumStat is one enum's progress toward a sample its routing choice could be
+// fitted from.
+type EnumStat struct {
+	Enum     string  `json:"enum"`
+	Total    int     `json:"total"`
+	Passed   int     `json:"passed"`
+	PassRate float64 `json:"pass_rate"`
+
+	// PerHead counts examples per head, and Comparable is how many of those
+	// heads clear MinObservationsPerHead.
+	PerHead    map[string]int `json:"per_head"`
+	Comparable int            `json:"comparable_heads"`
+	Ready      bool           `json:"ready"`
+}
+
+// Readiness reports per enum whether its examples could yet support fitting a
+// routing choice, most examples first. Those with no recorded enum count under
+// "(none)": still ground truth, but nothing can route on them.
+func Readiness(examples []Example) []EnumStat {
+	acc := map[string]*EnumStat{}
+	for _, e := range examples {
+		k := e.Enum
+		if k == "" {
+			k = "(none)"
+		}
+		s := acc[k]
+		if s == nil {
+			s = &EnumStat{Enum: k, PerHead: map[string]int{}}
+			acc[k] = s
+		}
+		s.Total++
+		if e.Passed {
+			s.Passed++
+		}
+		h := e.Head
+		if h == "" {
+			h = "(none)"
+		}
+		s.PerHead[h]++
+	}
+	out := make([]EnumStat, 0, len(acc))
+	for _, s := range acc {
+		if s.Total > 0 {
+			s.PassRate = float64(s.Passed) / float64(s.Total)
+		}
+		for h, n := range s.PerHead {
+			// An unattributed head is not a head one could route to, so it
+			// never counts toward comparability however many examples it has.
+			if h != "(none)" && n >= MinObservationsPerHead {
+				s.Comparable++
+			}
+		}
+		s.Ready = s.Enum != "(none)" && s.Comparable >= MinComparableHeads
+		out = append(out, *s)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Total != out[j].Total {
+			return out[i].Total > out[j].Total
+		}
+		return out[i].Enum < out[j].Enum
+	})
+	return out
 }
 
 // Stats summarises the corpus by domain, largest first.

@@ -36,7 +36,7 @@ describe('coverage by category', () => {
     render(
       <Security
         data={securityReport({
-          coverage: { categories, applicable: 4, covered: 2, partial: 1, percentCovered: 50 },
+          coverage: { categories, applicable: 4, covered: 2, partial: 1, percentCovered: 50, edition: '2025' },
         })}
       />,
     )
@@ -173,5 +173,39 @@ describe('CSV export', () => {
     } finally {
       URL.createObjectURL = url
     }
+  })
+})
+
+// A verdict of OK over a machine whose heads are mostly separate programs is
+// true and reads as more than it is. The scope belongs on the same screen as
+// the number it qualifies, not three tabs away (#725).
+describe('the enforcement boundary', () => {
+  it('names the heads the gate cannot see inside', () => {
+    render(
+      <Security
+        data={securityReport({
+          boundary: { governed: ['openrouter'], opaque: ['claude', 'codex'], opaqueLocalOnly: [] },
+        })}
+      />,
+    )
+    expect(screen.getByText(/2 of 3 heads are separate programs/)).toBeInTheDocument()
+    expect(screen.getByText(/claude, codex/)).toBeInTheDocument()
+    expect(screen.getByText(/not what they read or send on their own account/)).toBeInTheDocument()
+  })
+
+  it('says a local-only subprocess is a claim, not a control', () => {
+    render(
+      <Security
+        data={securityReport({
+          boundary: { governed: [], opaque: ['ollama'], opaqueLocalOnly: ['ollama'] },
+        })}
+      />,
+    )
+    expect(screen.getByText(/rather than something Hydra verifies/)).toBeInTheDocument()
+  })
+
+  it('states the guarantee plainly when nothing is opaque', () => {
+    render(<Security data={securityReport()} />)
+    expect(screen.getByText(/gate sees everything that leaves/)).toBeInTheDocument()
   })
 })
