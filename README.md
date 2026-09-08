@@ -425,6 +425,18 @@ assertions rather than measurements, defect cost is **per-occurrence and not
 annualised**, a file the dependency graph does not index is **unknown** and never
 "low-risk", and the attestation is **unsigned** because Hydra has no key management.
 
+**The boundary the numbers cannot state.** A CLI-agent head (claude, agy, codex,
+cursor) is itself an agent, with its own filesystem and network access, in a process
+Hydra does not control. Everything scored above is what Hydra *sends and records*;
+what such a head independently reads and ships is outside it. Only a local-only run
+keeps the whole task on this machine. The default view says so in words, because no
+coverage percentage can.
+
+Category IDs are qualified by their OWASP **edition**, in `--json`, in `--csv` and on
+every persisted score entry. Only LLM01 and LLM02 keep their number between editions,
+so gap age is never computed across two of them: a reordering restarts that clock
+rather than reporting one category's history under another's name.
+
 **Two taxonomies, because they answer different questions.** The OWASP LLM Top 10 governs what a model *says*. The [OWASP Top 10 for Agentic Applications](https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/) (ASI01-ASI10) governs what a system *does*, and an orchestrator with fallback chains, swarm fan-out, tool access and cross-run memory is squarely the second. Both are scored, side by side:
 
 ```
