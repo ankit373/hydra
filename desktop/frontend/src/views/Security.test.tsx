@@ -36,7 +36,7 @@ describe('coverage by category', () => {
     render(
       <Security
         data={securityReport({
-          coverage: { categories, applicable: 4, covered: 2, partial: 1, percentCovered: 50 },
+          coverage: { categories, applicable: 4, covered: 2, partial: 1, percentCovered: 50, edition: '2025' },
         })}
       />,
     )

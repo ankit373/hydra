@@ -2247,7 +2247,7 @@ func cmdSecurity() *cobra.Command {
 	}
 	cmd.Flags().BoolVar(&whyOut, "why", false, "full detail: coverage, controls, policy, exposure, threats, and the risk register")
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "machine-readable JSON output")
-	cmd.Flags().BoolVar(&csvOut, "csv", false, "one row per OWASP LLM Top-10 category (id,name,status,gap_age_days,detail)")
+	cmd.Flags().BoolVar(&csvOut, "csv", false, "one row per OWASP LLM Top-10 category (id,edition,name,status,gap_age_days,detail)")
 	cmd.Flags().BoolVar(&execOut, "exec", false, "executive summary: the verdict, open risk by severity, and framework exposure")
 	cmd.Flags().BoolVar(&attestOut, "attest", false, "checkable attestation: posture, evidence state, rules in force, and a digest")
 	cmd.AddCommand(cmdSecurityTrifecta())
@@ -2327,9 +2327,12 @@ func printTrifecta(t security.Trifecta) {
 // securityCSV emits the coverage table as one row per finding, the same
 // shape GitHub's and AWS Security Hub's security-overview CSV exports use,
 // so it can be dropped straight into a tracker or spreadsheet.
+// An edition column rather than a bare id: only LLM01 and LLM02 keep their
+// number across editions, so a tracker keyed on "LLM06" alone silently follows
+// whatever entry takes that slot next (#748).
 func securityCSV(w io.Writer, r *security.Report) error {
 	cw := csv.NewWriter(w)
-	if err := cw.Write([]string{"id", "name", "status", "gap_age_days", "detail"}); err != nil {
+	if err := cw.Write([]string{"id", "edition", "name", "status", "gap_age_days", "detail"}); err != nil {
 		return err
 	}
 	for _, c := range r.Coverage.Categories {
@@ -2337,13 +2340,24 @@ func securityCSV(w io.Writer, r *security.Report) error {
 			continue
 		}
 		if err := cw.Write([]string{
-			c.ID, c.Name, string(c.Status), strconv.Itoa(c.GapAgeDays), c.Detail,
+			c.ID, r.Coverage.Edition, c.Name, string(c.Status), strconv.Itoa(c.GapAgeDays), c.Detail,
 		}); err != nil {
 			return err
 		}
 	}
 	cw.Flush()
 	return cw.Error()
+}
+
+// printSubprocessBoundary states in words what no number above it can: a
+// CLI-agent head runs in a process Hydra does not control, so the coverage
+// figures describe what Hydra sends, not everything that leaves (#725).
+func printSubprocessBoundary() {
+	fmt.Println()
+	fmt.Println(dimStyle.Render("  what this does not cover"))
+	fmt.Println(dimStyle.Render("  a CLI-agent head (claude, agy, codex, cursor) is an agent in a process Hydra"))
+	fmt.Println(dimStyle.Render("  does not control. Above is what Hydra sends and records; what such a head"))
+	fmt.Println(dimStyle.Render("  reads and ships on its own is outside it. Only a local-only run stays here."))
 }
 
 // printSecurityReport answers one question by default, what did the agents
@@ -2355,6 +2369,7 @@ func printSecurityReport(r *security.Report, why bool) {
 	printVerdict(r)
 	printIncidents(r)
 	printEvidenceState(r)
+	printSubprocessBoundary()
 
 	if !why {
 		fmt.Println()

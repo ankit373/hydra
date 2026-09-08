@@ -145,6 +145,26 @@ func TestSecurityReport_DefaultIsTheAnswerNotTheDashboard(t *testing.T) {
 	}
 }
 
+// The coverage percentage describes what Hydra sends. A CLI-agent head reads
+// and ships on its own, in a process Hydra does not control, and no number on
+// this surface can say so, which is why #725 asks for it in words. It has to
+// be on the default view: a caveat behind --why does not qualify the figure
+// the reader already took away.
+func TestSecurityReport_StatesTheSubprocessBoundaryByDefault(t *testing.T) {
+	lean := stripStyles(captureStdout(t, func() { printSecurityReport(hostileReport(), false) }))
+
+	for _, want := range []string{
+		"does not cover",   // it is labelled as a limit, not buried in prose
+		"does not control", // the reason: it is another process
+		"local-only",       // and the one configuration where the limit closes
+	} {
+		if !strings.Contains(lean, want) {
+			t.Errorf("the default security view does not state the subprocess boundary (%q missing):\n%s",
+				want, lean)
+		}
+	}
+}
+
 // The verdict already quotes one incident. Printing it again underneath puts
 // the same sentence on screen twice in the most valuable pixels there are.
 func TestSecurityReport_DoesNotPrintTheCitedIncidentTwice(t *testing.T) {
