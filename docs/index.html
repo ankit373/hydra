@@ -64,7 +64,8 @@
     "sameAs": "https://github.com/ankit373/hydra",
     "featureList": [
       "Confidence routing, hyctl dispatch --confidence samples models adaptively (SPRT) and stops once a target confidence of correctness is reached",
-      "Per-source calibration (hyctl trust calibration), measures each model's diagnostic power from real outcomes",
+      "Per-source calibration (hyctl trust calibration), measures each model's diagnostic power from real outcomes, and flags a source whose specificity has never been measured instead of reporting a number for it",
+      "hyctl trust outcome, trains every model that voted in a past run once its answer is known, including the dissenters, because a model that disagreed with an answer that turned out wrong is the only evidence that measures specificity",
       "Blast-radius aware routing, a code dependency graph raises the confidence bar for widely-depended-on files",
       "Local MCP accountability ledger, records and gates what each agent's tools touch",
       "10-tier model routing by task complexity",

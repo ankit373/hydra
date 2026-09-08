@@ -4235,7 +4235,7 @@ func cmdTrust() *cobra.Command {
 		Use:   "trust",
 		Short: "Confidence layer: source calibration and defect-cost (Trust Control Plane)",
 	}
-	cmd.AddCommand(cmdTrustCalibration(), cmdTrustRecord(), cmdTrustDefect(),
+	cmd.AddCommand(cmdTrustCalibration(), cmdTrustRecord(), cmdTrustOutcome(), cmdTrustDefect(),
 		cmdTrustStats(), cmdTrustExplain(), cmdTrustBenchmark())
 	return cmd
 }
@@ -4387,11 +4387,27 @@ func cmdTrustCalibration() *cobra.Command {
 				fmt.Println("\n  No calibration recorded yet. Feed outcomes with `hyctl trust record`.")
 				return nil
 			}
-			fmt.Printf("\n  %-28s %-16s %6s %7s %7s %8s\n", "Source", "Domain", "n", "se", "sp", "D(nats)")
-			fmt.Println("  " + strings.Repeat("─", 80))
+			fmt.Printf("\n  %-28s %-16s %6s %6s %7s %7s %8s\n", "Source", "Domain", "n", "neg", "se", "sp", "D(nats)")
+			fmt.Println("  " + strings.Repeat("─", 87))
+			pinned := 0
 			for _, s := range stats {
-				fmt.Printf("  %-28.28s %-16s %6.0f %7.3f %7.3f %8.3f\n",
-					s.Source, truncLabel(s.Domain, 16), s.N, s.Se, s.Sp, s.D)
+				if s.Neg == 0 {
+					pinned++
+				}
+				fmt.Printf("  %-28.28s %-16s %6.0f %6.0f %7.3f %7.3f %8.3f\n",
+					s.Source, truncLabel(s.Domain, 16), s.N, s.Neg, s.Se, s.Sp, s.D)
+			}
+			// With no negative verdicts TN keeps its bare prior, so sp can never
+			// rise above 0.5 and LLR(agree) = ln(se/(1-sp)) stays under ln2.
+			// More positives never lift it, so such a cell has to be told apart
+			// from one that is merely thin.
+			if pinned > 0 {
+				fmt.Printf("\n  %s\n", warnStyle.Render(fmt.Sprintf(
+					"%d of %d cells have no negative verdicts (neg=0): with no measured specificity, sp "+
+						"cannot exceed 0.5 and LLR stays under %.3f nats there however many positives "+
+						"arrive. Negatives come from ensemble runs whose answer was verified; attach one "+
+						"with `hyctl trust outcome`.",
+					pinned, len(stats), math.Ln2)))
 			}
 			// A family whose members have converged on effectively one vote is a
 			// coordination risk the se/sp table above cannot show, two "sources"
@@ -4447,6 +4463,75 @@ func cmdTrustRecord() *cobra.Command {
 	cmd.Flags().BoolVar(&saidCorrect, "said-correct", false, "the source's raw verdict")
 	cmd.Flags().StringVar(&outcome, "outcome", "", "ground truth: correct|incorrect")
 	return cmd
+}
+
+func cmdTrustOutcome() *cobra.Command {
+	var outcome string
+	cmd := &cobra.Command{
+		Use:   "outcome <task_hash>",
+		Short: "Attach ground truth to a past SPRT run, training every source that voted in it",
+		Long: "Replays a logged run's LLR ledger into calibration now that the answer is known.\n" +
+			"Unlike `hyctl trust record`, which can only ever say a source was right or wrong about\n" +
+			"its own answer, this records the dissenters too, and a source that disagreed with a\n" +
+			"candidate later verified incorrect is the only observation that can move specificity.",
+		Args: cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			o := trust.ParseOutcome(outcome)
+			if o == trust.OutcomeUnknown {
+				return fmt.Errorf("--outcome must be correct|incorrect (got %q)", outcome)
+			}
+			runs, err := trust.LoadRuns(trust.DefaultLogPath())
+			if err != nil {
+				return err
+			}
+			for i := len(runs) - 1; i >= 0; i-- { // newest match first
+				r := runs[i]
+				if r.TaskHash != args[0] {
+					continue
+				}
+				if len(r.Ledger) == 0 {
+					return fmt.Errorf("run %s has no ledger, nothing to train from", r.TaskHash)
+				}
+				cal, err := trust.New(trust.DefaultPath())
+				if err != nil {
+					return err
+				}
+				n, err := trust.ApplyRunOutcome(cal, r.Domain, r.Ledger, o)
+				if err != nil {
+					return err
+				}
+				fmt.Printf("\n  run %s  ·  domain %s  ·  outcome %s\n", r.TaskHash, r.Domain, outcome)
+				fmt.Printf("  recorded %d of %d ledger entries\n\n", n, len(r.Ledger))
+				fmt.Printf("  %-28s %-9s %7s %7s %8s\n", "SOURCE", "VERDICT", "se", "sp", "D(nats)")
+				fmt.Println("  " + strings.Repeat("─", 64))
+				for _, e := range r.Ledger {
+					verdict := "agree"
+					if !e.Agreed {
+						verdict = "disagree"
+					}
+					st := calibFor(cal, e.Source, r.Domain)
+					fmt.Printf("  %-28.28s %-9s %7.3f %7.3f %8.3f\n", e.Source, verdict, st.Se, st.Sp, st.D)
+				}
+				fmt.Println()
+				return nil
+			}
+			return fmt.Errorf("no run found with task_hash %q", args[0])
+		},
+	}
+	cmd.Flags().StringVar(&outcome, "outcome", "", "ground truth for the run's answer: correct|incorrect")
+	_ = cmd.MarkFlagRequired("outcome")
+	return cmd
+}
+
+// calibFor picks one cell out of a Report, so the outcome command can show what
+// each voter's rates became without a second Calibrator accessor.
+func calibFor(cal *trust.Calibrator, source, domain string) trust.Stat {
+	for _, s := range cal.Report() {
+		if s.Source == source && s.Domain == domain {
+			return s
+		}
+	}
+	return trust.Stat{Source: source, Domain: domain}
 }
 
 func cmdTrustDefect() *cobra.Command {

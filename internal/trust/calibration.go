@@ -48,14 +48,22 @@ func (c *confusion) observations() float64 {
 	return (c.TP + c.FP + c.TN + c.FN) - 4*laplacePrior
 }
 
+// negatives counts real "said incorrect" verdicts. At zero, sp is still its
+// prior and LLR cannot exceed ln2 however many positives arrive (#771), so it
+// is the number that says whether a cell is usable rather than merely populated.
+func (c *confusion) negatives() float64 {
+	return (c.TN + c.FN) - 2*laplacePrior
+}
+
 // Stat is one row of a calibration report, the human/JSON-facing view.
 type Stat struct {
 	Source string  `json:"source"`
 	Domain string  `json:"domain"`
-	N      float64 `json:"n"`  // real observations (excludes prior)
-	Se     float64 `json:"se"` // sensitivity
-	Sp     float64 `json:"sp"` // specificity
-	D      float64 `json:"d"`  // diagnostic power (nats), expected |LLR|
+	N      float64 `json:"n"`   // real observations (excludes prior)
+	Neg    float64 `json:"neg"` // of those, "said incorrect" verdicts; 0 pins sp
+	Se     float64 `json:"se"`  // sensitivity
+	Sp     float64 `json:"sp"`  // specificity
+	D      float64 `json:"d"`   // diagnostic power (nats), expected |LLR|
 }
 
 // Calibrator maintains an online confusion posterior per (source, domain) and
@@ -270,6 +278,7 @@ func (c *Calibrator) Report() []Stat {
 			Source: k.source,
 			Domain: k.domain,
 			N:      conf.observations(),
+			Neg:    conf.negatives(),
 			Se:     se,
 			Sp:     sp,
 			D:      se*math.Log(se/(1-sp)) + (1-se)*math.Log((1-se)/sp),
