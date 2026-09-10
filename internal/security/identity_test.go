@@ -75,7 +75,7 @@ func TestPrivilegeCheck_SaysNothingRatherThanNothingFound(t *testing.T) {
 // must stay distinguishable, and a local head must never read as remote.
 func TestBuildBOM_MarksUsageOriginAndLocality(t *testing.T) {
 	heads := []provider.Head{
-		{ID: "ollama/qwen", Name: "Qwen", Provider: "ollama", Source: "port", LocalOnly: true},
+		{ID: "ollama/qwen", Name: "Qwen", Provider: "local", Source: "port", LocalOnly: true},
 		{ID: "api/gpt", Name: "GPT", Provider: "openai", Source: "env",
 			Meta: map[string]string{"model_source": "user"}},
 	}

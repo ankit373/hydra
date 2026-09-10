@@ -19,26 +19,16 @@ var sourceWeight = map[string]int{"cli": 3, "env": 2, "port": 1}
 // Local heads (LocalOnly=true) are never deduplicated against remote heads
 // because they serve a different purpose.
 //
-// Special case: the generic "ollama" CLI head (the runtime binary) is suppressed
-// when any port-discovered Ollama model exists, the named models are strictly
-// more useful than the bare runtime as a dispatchable head.
+// Nothing is suppressed. A special case here dropped the bare "ollama" runtime
+// binary whenever a port-discovered model existed, keyed on `Provider ==
+// "ollama"`, which the port provider has never stamped, so it never fired
+// (#820). Restoring it would be wrong anyway: executor.Unroutable already
+// answers that head with "start its local server", which is the one actionable
+// line a user with no server running needs to see (#248).
 func ByCapScore(heads []provider.Head) []provider.Head {
-	// Check if Ollama port models are present before deduping.
-	hasOllamaPortModels := false
-	for _, h := range heads {
-		if h.Provider == "ollama" && h.Source == "port" {
-			hasOllamaPortModels = true
-			break
-		}
-	}
-
 	best := map[string]provider.Head{}
 
 	for _, h := range heads {
-		// Suppress the generic ollama CLI binary when named port models exist.
-		if hasOllamaPortModels && h.ID == "ollama" && h.Source == "cli" {
-			continue
-		}
 		key := dedupeKey(h)
 		existing, ok := best[key]
 		if !ok {

@@ -63,7 +63,7 @@ func TestUITier_IsMonotonicInCapScore(t *testing.T) {
 	if prev != 9 {
 		t.Errorf("the weakest paid score lands at tier %d, want 9", prev)
 	}
-	local := provider.Head{ID: "ollama/x", Provider: "ollama", Source: "port", CapScore: 0, LocalOnly: true}
+	local := provider.Head{ID: "ollama/x", Provider: "local", Source: "port", CapScore: 0, LocalOnly: true}
 	if got := UITier(local); got != 10 {
 		t.Errorf("tier 10 is unreachable: a local head landed at %d", got)
 	}
@@ -109,32 +109,6 @@ func TestUITier_RegistryMetaTierWins(t *testing.T) {
 	if got := UITier(notRegistry); got == 2 {
 		t.Error("a non-registry head honoured its meta tier; only registry entries " +
 			"carry an authoritative tier")
-	}
-}
-
-// The ollama CLI binary is suppressed when named port models exist, so a probe
-// shows "qwen3:8b" rather than a generic, unroutable "ollama" entry alongside it.
-func TestByCapScore_SuppressesTheGenericOllamaCLIWhenPortModelsExist(t *testing.T) {
-	heads := []provider.Head{
-		{ID: "ollama", Provider: "ollama", Source: "cli", CapScore: 60, LocalOnly: true},
-		{ID: "ollama/qwen3:8b", Provider: "ollama", Source: "port", CapScore: 60, LocalOnly: true},
-	}
-	got := ByCapScore(heads)
-
-	for _, h := range got {
-		if h.ID == "ollama" && h.Source == "cli" {
-			t.Error("the generic ollama CLI head survived alongside named port models")
-		}
-	}
-	if len(got) != 1 || got[0].ID != "ollama/qwen3:8b" {
-		t.Errorf("got %+v, want just the named port model", got)
-	}
-
-	// With no port models, the CLI head is the only way to reach ollama and
-	// must be kept.
-	onlyCLI := ByCapScore([]provider.Head{heads[0]})
-	if len(onlyCLI) != 1 {
-		t.Errorf("the ollama CLI head was dropped with no port models to replace it: %+v", onlyCLI)
 	}
 }
 

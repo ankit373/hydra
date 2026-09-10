@@ -25,7 +25,7 @@ func wizardHeads() *probe.Result {
 		{ID: "claude", Name: "Claude Code", Provider: "anthropic", CapScore: 95},
 		{ID: "gemini", Name: "Gemini CLI", Provider: "google", CapScore: 82},
 		{ID: "cody", Name: "Cody", Provider: "sourcegraph", CapScore: 75},
-		{ID: "qwen", Name: "Qwen 7B", Provider: "ollama", CapScore: 60, LocalOnly: true},
+		{ID: "qwen", Name: "Qwen 7B", Provider: "local", CapScore: 60, LocalOnly: true},
 	}}
 }
 

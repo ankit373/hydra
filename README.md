@@ -328,7 +328,7 @@ export HYDRA_HEAD_ENV=SOME_AGENT_TOKEN,SOME_OTHER_VAR
 
 Head subprocesses are also bounded so a grandchild holding the pipe open cannot hang a call on a process that already exited.
 
-Two related fixes ship with it. `ollama serve` is no longer started with an inherited environment: it previously read your `OLLAMA_HOST` itself, so `OLLAMA_HOST=0.0.0.0` made Hydra start a **model server bound to every interface** while it believed it was talking to loopback. Hydra now auto-starts a server only on loopback and binds it explicitly. And local model weights are fingerprinted by digest alongside head binaries, so a swapped model behind a familiar name is detected the same way a replaced agent binary is, which matters because Ollama pulls unsigned weights from a public registry.
+One related fix ships with it: local model weights are fingerprinted by digest alongside head binaries, so a swapped model behind a familiar name is detected the same way a replaced agent binary is, which matters because Ollama pulls unsigned weights from a public registry.
 
 **Not included.** Repo-supplied validator and oracle commands still run unconfined. Go's `os/exec` has no per-child rlimit support, and faking one through `sh -c 'ulimit ...'` would re-tokenize argv, which `internal/oracle` deliberately avoids. Real containment there needs a platform sandbox (`sandbox-exec`, seccomp) and is tracked separately.
 
