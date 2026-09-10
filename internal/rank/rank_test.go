@@ -8,49 +8,43 @@ import (
 	"github.com/ankit373/hydra/internal/provider"
 )
 
-func TestOllamaCLISuppressedWhenPortModelsExist(t *testing.T) {
+// Heads stamped exactly as the providers stamp them: internal/provider/cli
+// registers {"ollama", "local", true} and internal/provider/port mints
+// "ollama/<model>" with Provider "local", Source "port". The suppression this
+// replaces tested Provider == "ollama", a value neither produces, so it never
+// ran and its comment described behaviour the code could not perform (#820).
+//
+// Keeping the bare head is also the better answer: it is the only row that can
+// carry "start its local server", which is what a user with no server running
+// needs to read.
+func TestByCapScore_KeepsTheBareOllamaHeadBesideNamedModels(t *testing.T) {
 	heads := []provider.Head{
 		{ID: "claude", Provider: "anthropic", Source: "cli", CapScore: 95},
-		{ID: "ollama", Provider: "ollama", Source: "cli", CapScore: 60, LocalOnly: true},
-		{ID: "ollama/qwen3:8b", Provider: "ollama", Source: "port", CapScore: 66, LocalOnly: true},
-		{ID: "ollama/phi4-mini", Provider: "ollama", Source: "port", CapScore: 64, LocalOnly: true},
+		{ID: "ollama", Provider: "local", Source: "cli", CapScore: 60, LocalOnly: true},
+		{ID: "ollama/qwen3:8b", Provider: "local", Source: "port", CapScore: 66, LocalOnly: true},
+		{ID: "ollama/phi4-mini", Provider: "local", Source: "port", CapScore: 64, LocalOnly: true},
 	}
 
 	ranked := ByCapScore(heads)
 
+	if len(ranked) != len(heads) {
+		t.Fatalf("ranked %d of %d heads; nothing here shares a dedupe key", len(ranked), len(heads))
+	}
+	var bare, port int
 	for _, h := range ranked {
-		if h.ID == "ollama" && h.Source == "cli" {
-			t.Errorf("generic ollama CLI head should be suppressed when port models exist, but it appeared in results")
+		switch {
+		case h.ID == "ollama" && h.Source == "cli":
+			bare++
+		case h.Source == "port":
+			port++
 		}
 	}
-
-	portCount := 0
-	for _, h := range ranked {
-		if h.Source == "port" {
-			portCount++
-		}
+	if bare != 1 {
+		t.Error("the bare ollama head was dropped, and with it the only row that " +
+			"can tell the user to start the server")
 	}
-	if portCount != 2 {
-		t.Errorf("expected 2 port heads, got %d", portCount)
-	}
-}
-
-func TestOllamaCLIKeptWhenNoPortModels(t *testing.T) {
-	heads := []provider.Head{
-		{ID: "claude", Provider: "anthropic", Source: "cli", CapScore: 95},
-		{ID: "ollama", Provider: "ollama", Source: "cli", CapScore: 60, LocalOnly: true},
-	}
-
-	ranked := ByCapScore(heads)
-
-	found := false
-	for _, h := range ranked {
-		if h.ID == "ollama" && h.Source == "cli" {
-			found = true
-		}
-	}
-	if !found {
-		t.Errorf("ollama CLI head should be kept when no port models exist")
+	if port != 2 {
+		t.Errorf("kept %d of 2 named port models", port)
 	}
 }
 
@@ -151,7 +145,7 @@ func TestUITier_OnlyLocalHeadsReachTheFreeFloor(t *testing.T) {
 	// A local head still does, whatever it scores: that is what makes tier 10
 	// the always-available terminal fallback.
 	for _, score := range []int{0, 55, 60, 66, 99} {
-		local := provider.Head{ID: "ollama/x", Provider: "ollama", Source: "port",
+		local := provider.Head{ID: "ollama/x", Provider: "local", Source: "port",
 			CapScore: score, LocalOnly: true}
 		if got := UITier(local); got != 10 {
 			t.Errorf("a local head scoring %d landed at tier %d, want 10", score, got)

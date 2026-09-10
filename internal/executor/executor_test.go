@@ -16,8 +16,6 @@ func TestFor_SelectsExecutorBySource(t *testing.T) {
 		want interface{}
 	}{
 		{"registry → agy", provider.Head{Source: "registry", Executable: "/usr/bin/agy", Provider: "anthropic"}, &AgyExecutor{}},
-		{"ollama source → ollama", provider.Head{Source: "ollama", ID: "ollama/qwen2.5"}, &OllamaExecutor{}},
-		{"ollama provider → ollama", provider.Head{Provider: "ollama", ID: "qwen2.5"}, &OllamaExecutor{}},
 		{"env → http", provider.Head{Source: "env", Provider: "anthropic", ID: "env/anthropic"}, &HTTPExecutor{}},
 		{"env openai → http", provider.Head{Source: "env", Provider: "openai", ID: "env/openai"}, &HTTPExecutor{}},
 		{"port → http", provider.Head{Source: "port", Endpoint: "http://localhost:1234"}, &HTTPExecutor{}},
@@ -76,8 +74,6 @@ func typeName(v interface{}) string {
 	switch v.(type) {
 	case *AgyExecutor:
 		return "agy"
-	case *OllamaExecutor:
-		return "ollama"
 	case *HTTPExecutor:
 		return "http"
 	case *CLIExecutor:

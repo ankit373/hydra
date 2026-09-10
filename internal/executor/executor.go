@@ -32,14 +32,15 @@ type Response struct {
 	Model        string
 	Truncated    bool // true when output exceeded the accumulator cap
 
-	// TTFT is time to first token. Only providers that report it set it, which
-	// today is Ollama alone (prompt-eval duration); zero means unknown, never
-	// instant, so a consumer must not average it in as a measured zero.
+	// TTFT is time to first token, measured by the streaming paths from the
+	// first delta that carries something. Zero means unknown, never instant,
+	// so a consumer must not average it in as a measured zero: a plain
+	// Execute observes no first token and reports none.
 	TTFT time.Duration
 
 	// TokensEstimated is true when InputTokens/OutputTokens were derived by
 	// Hydra (e.g. agy's char/4 heuristic) rather than reported by the provider.
-	// HTTP and Ollama executors parse real usage and leave this false; the agy
+	// The HTTP executor parses real usage and leaves this false; the agy
 	// executor sets it true. Consumers must not present estimated tokens as
 	// measured spend.
 	TokensEstimated bool
@@ -122,19 +123,21 @@ func Supports(h provider.Head) bool { return Unroutable(h) == "" }
 
 // For selects the correct Executor for a given Head.
 //   - registry source (agy tiers): AgyExecutor → native (execs the `agy` binary)
-//   - ollama source: OllamaExecutor → native /api/generate
 //   - env source / port source / explicit endpoint: HTTPExecutor → per-provider REST
 //   - everything else: CLIExecutor → subprocess
 //
 // env-key heads (Source=="env") carry no Executable, they are API providers
 // (anthropic, openai, groq, …). HTTPExecutor.Execute dispatches on Head.Provider
 // and already has an adapter for each, so env heads route to HTTP, not CLI.
+//
+// Local model servers reach HTTPExecutor via their Endpoint, Ollama included:
+// it serves an OpenAI-compatible API and the port provider stamps the address
+// it was found at. A branch here for Ollama's native /api/generate matched
+// `Source`/`Provider` values no provider has ever produced, so the dialect
+// beside it could not be selected (#819).
 func For(h provider.Head) Executor {
 	if h.Source == "registry" {
 		return &AgyExecutor{}
-	}
-	if h.Source == "ollama" || h.Provider == "ollama" {
-		return &OllamaExecutor{}
 	}
 	if h.Source == "port" || h.Source == "env" || h.Endpoint != "" {
 		return &HTTPExecutor{}
