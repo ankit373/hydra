@@ -24,6 +24,22 @@ const (
 	sprtAgent  = "ensemble"
 )
 
+// fanOutAgent is the root a mode's attempts hang under.
+func fanOutAgent(mode SwarmMode) string {
+	if mode == ModeSPRT {
+		return sprtAgent
+	}
+	return swarmAgent
+}
+
+// attemptSpan is one head's span in a fan-out. The cost row and the run-log
+// event call this rather than each spelling the expression out, because a cost
+// row carries span_id so spend joins the span that spent it, and two heads on
+// one task cannot be told apart by task id (#794).
+func attemptSpan(taskID, agent, headID string) string {
+	return runlog.SpanIDFor(taskID + "/" + agent + "/" + headID)
+}
+
 // logRunEvents appends one runlog event per attempt so a swarm reads as N heads
 // working one task rather than a single opaque node.
 //
@@ -76,7 +92,7 @@ func logRunEvents(attempts []Attempt, mode SwarmMode, opts Options) {
 			// node rather than three.
 			Agent:        a.Head.ID,
 			Parent:       swarmAgent,
-			SpanID:       runlog.SpanIDFor(taskID + "/" + swarmAgent + "/" + a.Head.ID),
+			SpanID:       attemptSpan(taskID, swarmAgent, a.Head.ID),
 			ParentSpanID: rootSpan,
 			Head:         a.Head.ID,
 			Model:        a.Head.Name,
@@ -136,7 +152,7 @@ func logSamples(ledger []trust.Evidence, attempts []Attempt, opts Options) {
 			TaskID:       taskID,
 			Agent:        ev.Source,
 			Parent:       sprtAgent,
-			SpanID:       runlog.SpanIDFor(taskID + "/" + sprtAgent + "/" + ev.Source),
+			SpanID:       attemptSpan(taskID, sprtAgent, ev.Source),
 			ParentSpanID: rootSpan,
 			Head:         ev.Source,
 			CostUSD:      ev.CostUSD,

@@ -119,6 +119,7 @@ func logAttempts(attempts []Attempt, mode SwarmMode, opts Options, promptPreview
 			"swarm_winner":    a.Status == StatusOK && a.Rank == 1,
 			"task_id":         taskID,
 			"run_id":          runID,
+			"span_id":         attemptSpan(taskID, fanOutAgent(mode), a.Head.ID),
 			"prompt_preview":  promptPreview,
 			// 1 for both: a swarm runs the heads it fans out to rather than
 			// drawing one, so every attempt logged here was certain to appear.
