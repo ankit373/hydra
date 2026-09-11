@@ -21,7 +21,8 @@ type HeadSelector interface {
 }
 
 // resolveSelector picks the right HeadSelector from Options.
-// Priority: explicit HeadIDs > TierHint (numeric or named) > top-N by CapScore.
+// Priority: explicit HeadIDs > a tier, from TierHint (numeric or named) or from
+// the Enum that chose it > top-N by CapScore.
 //
 // Numeric and named hints go to the same selector because dispatch.ResolveTier
 // interprets both. Splitting them sent a name to a selector that filtered
@@ -31,7 +32,7 @@ func resolveSelector(opts Options) HeadSelector {
 	if len(opts.HeadIDs) > 0 {
 		return &IDSelector{}
 	}
-	if opts.TierHint != "" {
+	if opts.tier() != "" {
 		return &TierSelector{}
 	}
 	return &CapScoreSelector{}
@@ -48,7 +49,7 @@ func resolveSelector(opts Options) HeadSelector {
 type TierSelector struct{}
 
 func (s *TierSelector) Select(all []provider.Head, opts Options) ([]provider.Head, error) {
-	want, err := dispatch.ResolveTier(opts.TierHint)
+	want, err := dispatch.ResolveTier(opts.tier())
 	if err != nil {
 		return nil, fmt.Errorf("swarm: %w", err)
 	}

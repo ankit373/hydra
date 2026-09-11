@@ -115,6 +115,7 @@ func logAttempts(attempts []Attempt, mode SwarmMode, opts Options, promptPreview
 			"tokens_source":   tokensSource,
 			"cost_source":     costSrc,
 			"source":          legacySource,
+			"enum":            opts.Enum,
 			"swarm_mode":      string(mode),
 			"swarm_winner":    a.Status == StatusOK && a.Rank == 1,
 			"task_id":         taskID,

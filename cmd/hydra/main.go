@@ -880,6 +880,7 @@ func cmdDispatch() *cobra.Command {
 				planOpts := swarm.Options{
 					Mode:          mode,
 					TierHint:      tier,
+					Enum:          enumKey,
 					HeadIDs:       headIDs,
 					MaxHeads:      swarmMaxHeads,
 					MaxEstCostUSD: swarmMaxCost,
@@ -902,6 +903,7 @@ func cmdDispatch() *cobra.Command {
 				sw := swarm.New(d, d.Heads(), d)
 				res, err := sw.RunSPRT(ctx, prompt, swarm.Options{
 					TierHint:      tier,
+					Enum:          enumKey,
 					HeadIDs:       headIDs,
 					MaxHeads:      swarmMaxHeads,
 					MaxEstCostUSD: swarmMaxCost,
@@ -944,6 +946,7 @@ func cmdDispatch() *cobra.Command {
 				result, err := sw.Run(ctx, prompt, swarm.Options{
 					Mode:           mode,
 					TierHint:       tier,
+					Enum:           enumKey,
 					HeadIDs:        headIDs,
 					MaxHeads:       swarmMaxHeads,
 					MaxEstCostUSD:  swarmMaxCost,

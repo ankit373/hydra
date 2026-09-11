@@ -35,10 +35,14 @@ type Options struct {
 	Mode SwarmMode
 
 	// Head selection, at most one of TierHint / HeadIDs should be set.
-	// When both are empty, CapScoreSelector picks the top-N available heads.
+	// With none of these and no Enum, CapScoreSelector picks the top-N heads.
 	TierHint    string
 	HeadIDs     []string // explicit head IDs; bypasses tier
 	MinCapScore int      // exclude heads below this score (0 = no filter)
+
+	// Enum is the routing enum key (--enum) that chose the tier. It selects
+	// heads when TierHint is empty, see Options.tier.
+	Enum string
 
 	// Execution constraints.
 	MaxHeads       int           // hard cap on fan-out (0 → defaultMaxHeads = 5)
@@ -280,12 +284,22 @@ func (s *Swarm) Run(ctx context.Context, prompt string, opts Options) (*SwarmRes
 
 // ── private helpers ───────────────────────────────────────────────────────────
 
+// tier is what head selection routes on: --tier when given, else the tier
+// --enum resolves to, as a single dispatch resolves the two. Every reader goes
+// through here, or the enum on the cost row is one that did not route (#832).
+func (o Options) tier() string {
+	if o.TierHint != "" {
+		return o.TierHint
+	}
+	return dispatch.EnumToTier(o.Enum)
+}
+
 // validateSwarmTiers rejects an invalid TierHint or JudgeTierHint before any
 // selection or judging happens, using the identical rule dispatch.Dispatch
 // applies. Run, RunSPRT and Plan all call this so --tier/--swarm-judge-tier
 // fail the same way regardless of mode (#501).
 func validateSwarmTiers(opts Options) error {
-	if err := dispatch.ValidateTierHint(opts.TierHint); err != nil {
+	if err := dispatch.ValidateTierHint(opts.tier()); err != nil {
 		return fmt.Errorf("swarm: %w", err)
 	}
 	if err := dispatch.ValidateTierHint(opts.JudgeTierHint); err != nil {
