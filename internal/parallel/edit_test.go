@@ -12,12 +12,10 @@ import (
 	"runtime"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/dispatch"
 	"github.com/ankit373/hydra/internal/ledger"
-	"github.com/ankit373/hydra/internal/policy"
 	"github.com/ankit373/hydra/internal/runlog"
 	"github.com/ankit373/hydra/internal/testutil"
 
@@ -1157,38 +1155,5 @@ func TestEdit_NoCapsDeclaredStillEdits(t *testing.T) {
 
 	if got.Status != "ok" {
 		t.Fatalf("result = %+v, want ok: no cap was declared, so nothing should refuse", got)
-	}
-}
-
-// The deadline's wiring, deterministically. An end-to-end timeout needs a head
-// slow enough to miss it, which means `sleep`, which is Unix-only and racy;
-// this asserts the policy's number reaches a real deadline, which is the part
-// that was missing entirely.
-func TestPolicyDeadline_AppliesMaxWallSeconds(t *testing.T) {
-	t.Run("a declared limit becomes a deadline", func(t *testing.T) {
-		ctx, cancel := policyDeadline(context.Background(), policy.FilePolicy{MaxWallSeconds: 30})
-		defer cancel()
-		dl, ok := ctx.Deadline()
-		if !ok {
-			t.Fatal("no deadline was set, so max_wall_seconds bounds nothing")
-		}
-		if d := time.Until(dl); d > 30*time.Second || d < 29*time.Second {
-			t.Errorf("deadline is %v out, want about 30s", d)
-		}
-	})
-
-	// An absent cap must not become a zero one: a context that has already
-	// expired would refuse every edit on a policy that declared no limit.
-	for _, v := range []int{0, -1} {
-		t.Run(fmt.Sprintf("no limit at %d", v), func(t *testing.T) {
-			ctx, cancel := policyDeadline(context.Background(), policy.FilePolicy{MaxWallSeconds: v})
-			defer cancel()
-			if _, ok := ctx.Deadline(); ok {
-				t.Error("a deadline was set with no limit declared")
-			}
-			if err := ctx.Err(); err != nil {
-				t.Errorf("ctx is already done: %v", err)
-			}
-		})
 	}
 }

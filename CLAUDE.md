@@ -84,12 +84,13 @@ registry/               ← Routing data, compiled into the binary via `go:embed
   domains.yaml          ← Domain → enum key routing (references routing.yaml).
   pricing.yaml          ← Tier pricing. Prices the CLI-agent heads that never appear in
                           OpenRouter's catalog, so it is load-bearing, not just an offline fallback.
-  policy.yaml           ← File-policy rules. Three of its fields take effect, and only in
-                          `hyctl parallel`: diff_size_cap_pct rolls an over-large edit back,
-                          max_cost_usd refuses a head before it runs, max_wall_seconds
-                          deadlines the dispatch (#424). The rest are declared and read by
-                          nothing, and `hyctl edit` does not consult the file at all (#769).
-                          `hyctl security` reports which, derived rather than hardcoded.
+  policy.yaml           ← File-policy rules. Three of its fields take effect, in both
+                          `hyctl edit` and `hyctl parallel`: diff_size_cap_pct rolls an
+                          over-large edit back, max_cost_usd refuses a head before it runs,
+                          max_wall_seconds deadlines the dispatch (#424, #769). All three are
+                          enforced from `internal/policy`'s caps.go, so a refusal reads the
+                          same whichever command hit it. The rest are declared and read by
+                          nothing. `hyctl security` reports which, derived rather than hardcoded.
   workspace.yaml        ← workspace roots + validators.
 logs/                   ← Dispatch log + state.json (claude_pct, claude_pct_history).
 ```
@@ -985,7 +986,7 @@ All Go source lives under `cmd/` and `internal/`. Key packages:
 | `internal/pricing` | Live cost DB: OpenRouter fetch + 24h cache + tier YAML fallback |
 | `internal/util` | Shared utilities: `Accumulator` (bounded io.Writer, 33 MB cap) |
 | `internal/cost` | Reads `cost.jsonl`, produces spend summaries |
-| `internal/policy` | Allow/deny rules (PII local-only, etc.) |
+| `internal/policy` | Allow/deny rules (PII local-only, etc.), plus the three `policy.yaml` caps that take effect. `ForFile`/`Deadline`/`Bounded`/`DiffExceeded` are the one place they are enforced from: `hyctl edit` read the policy file nowhere at all, so every cap applied to `hyctl parallel` and nothing else (#769). `Bounded` reads the deadline off the **context**, not the dispatch error, because killing a CLI head's subprocess surfaces as "signal: killed" with no deadline for `errors.Is` to find, so an error-only check saw the timeout on HTTP heads and never on CLI ones. |
 | `internal/rank` | CapScore ranking helpers. `ByCapScore` dedupes non-local heads per **provider**, one entry per cloud vendor, except a head that names its own model (`Meta["model"]`), whose ID is its identity the way a local model's is: without that a three-model OpenRouter allowlist arrived as whichever scored highest and the rest were gone from probe, status and routing alike. `UITier` keeps tier 10 as the **free floor**, local-only, and floors paid heads at 9 (#752). |
 | `registry` | The routing YAML **and** the `go:embed` that compiles it into the binary. `registry.Read(home, name)` prefers `$HYDRA_HOME/registry/<name>` so operators can retune without a rebuild, and falls back to the embedded copy, which is what every brew/npm/pip/curl install uses, since none of them ship the files (#238). |
 | `internal/config` | Hydra config load/save (`~/.config/hydra/`); `Breadcrumb()`, SHA256 deployment-identity fingerprint over `registry/{routing,models,domains}.yaml`, auto-stamped into ledger/trust/cost log entries so they can be tied back to the exact routing rules in effect. It holds **no tier table**: a `[[tiers]]` block from an older `hyctl init` is left undecoded rather than rejected. Those CapScore bands (85/75/65/55/0) were a second routing table with no relation to the tier numbers, so `--tier simple` and `--enum SIMPLE` picked different heads, and which of the two cost money depended on what discovery happened to find (#782). |

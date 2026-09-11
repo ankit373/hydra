@@ -11,11 +11,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/diff"
 	"github.com/ankit373/hydra/internal/dispatch"
+	"github.com/ankit373/hydra/internal/policy"
 	"github.com/ankit373/hydra/internal/sandbox"
 	"github.com/ankit373/hydra/internal/trust"
 	"github.com/ankit373/hydra/internal/util"
@@ -115,6 +117,29 @@ func Edit(ctx context.Context, req Request) (*Result, error) {
 		}
 	}
 
+	// ── Policy ────────────────────────────────────────────────────────────────
+	// Decided after the snapshot, so the line-count rules see the file's real
+	// shape rather than the zero value. Every cap below is enforced through
+	// internal/policy alongside `hyctl parallel`, so a refusal reads the same
+	// whichever command hit it (#769).
+	//
+	// Three of policy.yaml's fields take effect; the rest are declared and read
+	// by nothing, which `hyctl security` reports rather than this pretending
+	// otherwise. Of those three, atomic write, the extension validator and
+	// rollback-on-failure are editor-owned and unconditional: they are what
+	// `hyctl edit` *is*, so `atomic: false` does not turn off atomicity here
+	// and `--no-validate` remains the only way to skip validation.
+	enumTier, _ := strconv.Atoi(enumToTier(req.Enum))
+	fp := policy.ForFile(config.ScriptHome(), policy.Spec{
+		File:          req.File,
+		FileLines:     strings.Count(origContent, "\n") + 1,
+		FileCount:     1,
+		FileExtension: fileExt(req.File),
+		HasGit:        resolved.GitRoot != "",
+		EnumTier:      enumTier,
+		Workspace:     wsName,
+	})
+
 	// ── Build prompt ──────────────────────────────────────────────────────────
 	var ctxNote string
 	if origExisted {
@@ -135,16 +160,21 @@ func Edit(ctx context.Context, req Request) (*Result, error) {
 		cleanupBackup()
 		return failResult(req, wsName, resolved.GitRoot, "dispatcher init failed: "+err.Error()), nil
 	}
-	tierHint := enumToTier(req.Enum)
+	ctx, cancel := fp.Deadline(ctx)
+	defer cancel()
 	dispResult, err := d.Dispatch(ctx, editPrompt, dispatch.Options{
-		TierHint:  tierHint,
-		LocalOnly: req.LocalOnly,
-		RunID:     req.RunID,
-		TaskID:    req.TaskID,
-		Resource:  req.File,
+		TierHint:   enumToTier(req.Enum),
+		LocalOnly:  req.LocalOnly,
+		RunID:      req.RunID,
+		TaskID:     req.TaskID,
+		Resource:   req.File,
+		MaxCostUSD: fp.MaxCostUSD,
 	})
 	if err != nil {
 		cleanupBackup()
+		if fp.Bounded(ctx) {
+			return failResult(req, wsName, resolved.GitRoot, fp.WallExceeded()), nil
+		}
 		return failResult(req, wsName, resolved.GitRoot, "route_failed: "+err.Error()), nil
 	}
 
@@ -210,6 +240,21 @@ func Edit(ctx context.Context, req Request) (*Result, error) {
 
 	// ── Diff stats ────────────────────────────────────────────────────────────
 	added, removed := diffStats(req.File, origContent, resolved.GitRoot, backup, origExisted)
+
+	// ── Diff-size cap ─────────────────────────────────────────────────────────
+	// After the write, because the size of the change is only knowable once it
+	// exists, and before the run log, so a rolled-back edit is never recorded
+	// as an applied one.
+	if origExisted {
+		if why, over := fp.DiffExceeded(added, removed, strings.Count(origContent, "\n")+1); over {
+			rollback(req.File, origContent, origExisted, resolved.GitRoot, backup)
+			return &Result{
+				Status: "fail", File: req.File, Workspace: wsName,
+				GitRoot: resolved.GitRoot, Enum: req.Enum, Head: dispResult.Head.ID,
+				ValidatorPassed: validatorPassed, RolledBack: true, Error: why,
+			}, nil
+		}
+	}
 
 	// ── Run log ───────────────────────────────────────────────────────────────
 	// Emitted here, after validation, so a rolled-back edit is never recorded as

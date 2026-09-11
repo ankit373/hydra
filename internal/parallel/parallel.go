@@ -224,16 +224,6 @@ func runTextTask(ctx context.Context, d *dispatch.Dispatcher, dispatchErr error,
 	})
 }
 
-// policyDeadline bounds a dispatch by policy.yaml's max_wall_seconds. Returns
-// ctx unchanged, with a no-op cancel, when no limit is declared, so an absent
-// cap is not a zero one.
-func policyDeadline(ctx context.Context, fp policy.FilePolicy) (context.Context, context.CancelFunc) {
-	if fp.MaxWallSeconds <= 0 {
-		return ctx, func() {}
-	}
-	return context.WithTimeout(ctx, time.Duration(fp.MaxWallSeconds)*time.Second)
-}
-
 // runEditTask performs an atomic file edit and returns the raw JSON result.
 // Self-contained port of edit.sh, its tests target this package's own
 // extractContent/diffStats/rollback, but shares the KindEdit emission with
@@ -278,19 +268,16 @@ func runEditTask(ctx context.Context, d *dispatch.Dispatcher, dispatchErr error,
 	// a Decide result that is only ever discarded is not a policy, and the
 	// Security view's own "file-policy caps declared but never run" finding
 	// traced to this exact line (#501).
-	fp := policy.FilePolicy{DiffSizeCapPct: 90} // matches defaultFilePolicy's cap if policy.yaml can't load
-	if eng, pErr := policy.LoadFilePolicy(config.ScriptHome()); pErr == nil {
-		enumTier, _ := strconv.Atoi(enumToTier(task.Enum))
-		fp = eng.Decide(policy.Spec{
-			File:          file,
-			FileLines:     strings.Count(origContent, "\n") + 1,
-			FileCount:     1,
-			FileExtension: fileExt(file),
-			HasGit:        resolved.GitRoot != "",
-			EnumTier:      enumTier,
-			Workspace:     wsName,
-		})
-	}
+	enumTier, _ := strconv.Atoi(enumToTier(task.Enum))
+	fp := policy.ForFile(config.ScriptHome(), policy.Spec{
+		File:          file,
+		FileLines:     strings.Count(origContent, "\n") + 1,
+		FileCount:     1,
+		FileExtension: fileExt(file),
+		HasGit:        resolved.GitRoot != "",
+		EnumTier:      enumTier,
+		Workspace:     wsName,
+	})
 
 	// Build prompt
 	ctxNote := "The file currently exists. Modify it per the instruction below."
@@ -311,7 +298,7 @@ func runEditTask(ctx context.Context, d *dispatch.Dispatcher, dispatchErr error,
 	// Both enforcement mechanisms already existed and were simply not handed
 	// the policy's numbers: dispatch refuses a candidate over MaxCostUSD
 	// before executing it, and a deadline is what bounds a slow head.
-	ctx, cancel := policyDeadline(ctx, fp)
+	ctx, cancel := fp.Deadline(ctx)
 	defer cancel()
 	dispResult, err := d.Dispatch(ctx, editPrompt, dispatch.Options{
 		TierHint:   enumToTier(task.Enum),
@@ -324,8 +311,8 @@ func runEditTask(ctx context.Context, d *dispatch.Dispatcher, dispatchErr error,
 		cleanupBackup()
 		// A deadline is the policy refusing, not the head failing, and the two
 		// want different answers from whoever reads the result.
-		if errors.Is(err, context.DeadlineExceeded) {
-			return failEdit(task, fmt.Sprintf("max_wall_seconds_exceeded: policy allows %ds", fp.MaxWallSeconds))
+		if fp.Bounded(ctx) {
+			return failEdit(task, fp.WallExceeded())
 		}
 		return failEdit(task, "route_failed: "+err.Error())
 	}
@@ -372,17 +359,14 @@ func runEditTask(ctx context.Context, d *dispatch.Dispatcher, dispatchErr error,
 	// doc comment calls it "reject edits changing > N% of file", and nothing
 	// rejected anything before this. A brand-new file has no "percent of
 	// itself changed" to measure, so the cap only applies to modifications.
-	if origExisted && fp.DiffSizeCapPct > 0 {
-		if total := strings.Count(origContent, "\n") + 1; total > 0 {
-			if pct := float64(added+removed) / float64(total) * 100; pct > float64(fp.DiffSizeCapPct) {
-				rollback(file, origContent, origExisted, resolved.GitRoot, backup)
-				return mustMarshal(EditResult{
-					Label: task.Label, Enum: task.Enum, Mode: "edit",
-					Status: "fail", File: file, Workspace: wsName, GitRoot: resolved.GitRoot,
-					RolledBack: true,
-					Error:      fmt.Sprintf("diff_size_cap_exceeded: changed %.0f%% of file (cap %d%%)", pct, fp.DiffSizeCapPct),
-				})
-			}
+	if origExisted {
+		if why, over := fp.DiffExceeded(added, removed, strings.Count(origContent, "\n")+1); over {
+			rollback(file, origContent, origExisted, resolved.GitRoot, backup)
+			return mustMarshal(EditResult{
+				Label: task.Label, Enum: task.Enum, Mode: "edit",
+				Status: "fail", File: file, Workspace: wsName, GitRoot: resolved.GitRoot,
+				RolledBack: true, Error: why,
+			})
 		}
 	}
 
