@@ -39,7 +39,7 @@ type Row struct {
 	EstCostUSD     float64 `json:"est_cost_usd"`
 	WallMS         int64   `json:"wall_ms"`
 	Source         string  `json:"source"`        // legacy, mirrors tokens_source
-	TokensSource   string  `json:"tokens_source"` // "actual" (provider) or "estimated" (agy char/4)
+	TokensSource   string  `json:"tokens_source"` // "actual" (provider) or "estimated" (char/4)
 	CostSource     string  `json:"cost_source"`   // always "estimated", cost is derived, never billed
 	TaskID         string  `json:"task_id"`
 	RunID          string  `json:"run_id"`
@@ -92,8 +92,9 @@ type SummaryResult struct {
 
 // SourceLabels returns the cost.jsonl provenance labels for a token count that
 // was either reported by the provider (estimated=false) or estimated by Hydra
-// (estimated=true, e.g. agy's char/4). It is the single source of truth for
-// these labels so the dispatch and swarm log paths cannot drift.
+// (estimated=true: the CLI heads that report no usage, and any HTTP provider
+// that answered without one, #802). It is the single source of truth for these
+// labels so the dispatch and swarm log paths cannot drift.
 //   - tokensSource: "actual" | "estimated"
 //   - costSource:   always "estimated" (est_cost_usd is pricing × tokens, never billed)
 //   - legacySource: "real" | "estimate", mirrors tokensSource for older readers
@@ -447,7 +448,7 @@ func RenderSummary(r *SummaryResult) {
 	renderTotals(r.AllTime, "    ")
 	if tot := r.ActualTokens + r.EstimatedTokens; tot > 0 {
 		estPct := float64(r.EstimatedTokens) * 100 / float64(tot)
-		fmt.Printf("    token source   %.0f%% actual · %.0f%% estimated (agy char/4)\n",
+		fmt.Printf("    token source   %.0f%% actual · %.0f%% estimated (Hydra's char/4)\n",
 			100-estPct, estPct)
 	}
 	fmt.Println("    (cost is estimated: pricing × tokens, not billed)")

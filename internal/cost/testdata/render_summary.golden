@@ -13,7 +13,7 @@
     tokens in/out  900000 / 250000
     est cost       <usd>
     wall time      <dur>
-    token source   87% actual · 13% estimated (agy char/4)
+    token source   87% actual · 13% estimated (Hydra's char/4)
     (cost is estimated: pricing × tokens, not billed)
 
   Recent (last 5):
