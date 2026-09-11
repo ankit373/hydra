@@ -1153,7 +1153,7 @@ func (d *Dispatcher) recordBudget(r *Result) {
 	if d.budget == nil || r.Response.InputTokens == 0 {
 		return
 	}
-	// Estimated tokens (agy char/4) must not be booked as measured usage.
+	// Tokens Hydra estimated must not be booked as measured usage.
 	source := "real"
 	if r.Response.TokensEstimated {
 		source = "estimate"
@@ -1267,7 +1267,7 @@ func (d *Dispatcher) logDispatch(r *Result, prompt string, opts Options, actProb
 	if r.Response.InputTokens > 0 || r.Response.OutputTokens > 0 {
 		// Provenance labels come from cost.SourceLabels so dispatch and swarm
 		// stay in lock-step: tokens_source reflects whether the provider
-		// reported usage or Hydra estimated it (agy char/4); cost_source is
+		// reported usage or Hydra estimated it (char/4); cost_source is
 		// always "estimated" (est_cost_usd is pricing × tokens, never billed);
 		// the legacy `source` field mirrors tokens_source for older readers.
 		tokensSource, costSource, legacySource := cost.SourceLabels(r.Response.TokensEstimated)

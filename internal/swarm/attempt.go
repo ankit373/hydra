@@ -36,7 +36,7 @@ type Attempt struct {
 	Truncated       bool // true when output was capped by the accumulator
 	InputTokens     int
 	OutputTokens    int
-	TokensEstimated bool // true when tokens were estimated (agy char/4), not provider-reported
+	TokensEstimated bool // true when Hydra estimated the tokens, not provider-reported
 	Duration        time.Duration
 	EstCostUSD      float64
 	Err             error // original typed error, never stringified before display

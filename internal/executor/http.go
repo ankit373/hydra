@@ -152,13 +152,9 @@ func (e *HTTPExecutor) executeOpenAICompatible(ctx context.Context, req Request,
 		return nil, fmt.Errorf("http exec %s: empty response", req.Head.ID)
 	}
 
-	return &Response{
-		Output:       cr.Choices[0].Message.Content,
-		InputTokens:  cr.Usage.PromptTokens,
-		OutputTokens: cr.Usage.CompletionTokens,
-		Duration:     time.Since(start),
-		Model:        firstNonEmpty(cr.Model, cfg.Model),
-	}, nil
+	return httpResponse(req, cr.Choices[0].Message.Content,
+		firstNonEmpty(cr.Model, cfg.Model),
+		cr.Usage.PromptTokens, cr.Usage.CompletionTokens, start), nil
 }
 
 func (e *HTTPExecutor) executeAnthropic(ctx context.Context, req Request) (*Response, error) {
@@ -212,13 +208,9 @@ func (e *HTTPExecutor) executeAnthropic(ctx context.Context, req Request) (*Resp
 		return nil, fmt.Errorf("http exec %s: decode: %w", req.Head.ID, err)
 	}
 
-	return &Response{
-		Output:       joinAnthropicBlocks(out.Content),
-		InputTokens:  out.Usage.InputTokens,
-		OutputTokens: out.Usage.OutputTokens,
-		Duration:     time.Since(start),
-		Model:        firstNonEmpty(out.Model, model),
-	}, nil
+	return httpResponse(req, joinAnthropicBlocks(out.Content),
+		firstNonEmpty(out.Model, model),
+		out.Usage.InputTokens, out.Usage.OutputTokens, start), nil
 }
 
 func (e *HTTPExecutor) executeGemini(ctx context.Context, req Request) (*Response, error) {
@@ -286,13 +278,9 @@ func (e *HTTPExecutor) executeGemini(ctx context.Context, req Request) (*Respons
 		return nil, fmt.Errorf("http exec %s: empty response", req.Head.ID)
 	}
 
-	return &Response{
-		Output:       joinGeminiParts(out.Candidates[0].Content.Parts),
-		InputTokens:  out.UsageMetadata.PromptTokenCount,
-		OutputTokens: out.UsageMetadata.CandidatesTokenCount,
-		Duration:     time.Since(start),
-		Model:        firstNonEmpty(out.ModelVersion, model),
-	}, nil
+	return httpResponse(req, joinGeminiParts(out.Candidates[0].Content.Parts),
+		firstNonEmpty(out.ModelVersion, model),
+		out.UsageMetadata.PromptTokenCount, out.UsageMetadata.CandidatesTokenCount, start), nil
 }
 
 func (e *HTTPExecutor) executeCohere(ctx context.Context, req Request) (*Response, error) {
@@ -346,13 +334,8 @@ func (e *HTTPExecutor) executeCohere(ctx context.Context, req Request) (*Respons
 		return nil, fmt.Errorf("http exec %s: decode: %w", req.Head.ID, err)
 	}
 
-	return &Response{
-		Output:       joinCohereBlocks(out.Message.Content),
-		InputTokens:  out.Usage.Tokens.InputTokens,
-		OutputTokens: out.Usage.Tokens.OutputTokens,
-		Duration:     time.Since(start),
-		Model:        model,
-	}, nil
+	return httpResponse(req, joinCohereBlocks(out.Message.Content), model,
+		out.Usage.Tokens.InputTokens, out.Usage.Tokens.OutputTokens, start), nil
 }
 
 func (e *HTTPExecutor) executeAzureOpenAI(ctx context.Context, req Request) (*Response, error) {
@@ -393,13 +376,9 @@ func (e *HTTPExecutor) executeAzureOpenAI(ctx context.Context, req Request) (*Re
 		return nil, fmt.Errorf("http exec %s: empty response", req.Head.ID)
 	}
 
-	return &Response{
-		Output:       out.Choices[0].Message.Content,
-		InputTokens:  out.Usage.PromptTokens,
-		OutputTokens: out.Usage.CompletionTokens,
-		Duration:     time.Since(start),
-		Model:        firstNonEmpty(out.Model, azureDeployment()),
-	}, nil
+	return httpResponse(req, out.Choices[0].Message.Content,
+		firstNonEmpty(out.Model, azureDeployment()),
+		out.Usage.PromptTokens, out.Usage.CompletionTokens, start), nil
 }
 
 func (e *HTTPExecutor) executeBedrock(ctx context.Context, req Request) (*Response, error) {
@@ -446,13 +425,9 @@ func (e *HTTPExecutor) executeBedrock(ctx context.Context, req Request) (*Respon
 		return nil, fmt.Errorf("http exec %s: empty response", req.Head.ID)
 	}
 
-	return &Response{
-		Output:       out.Choices[0].Message.Content,
-		InputTokens:  out.Usage.PromptTokens,
-		OutputTokens: out.Usage.CompletionTokens,
-		Duration:     time.Since(start),
-		Model:        firstNonEmpty(out.Model, cfg.Model),
-	}, nil
+	return httpResponse(req, out.Choices[0].Message.Content,
+		firstNonEmpty(out.Model, cfg.Model),
+		out.Usage.PromptTokens, out.Usage.CompletionTokens, start), nil
 }
 
 func (e *HTTPExecutor) executeReplicate(ctx context.Context, req Request) (*Response, error) {
@@ -518,11 +493,9 @@ func (e *HTTPExecutor) executeReplicate(ctx context.Context, req Request) (*Resp
 		return nil, fmt.Errorf("http exec %s: prediction ended with status %q", req.Head.ID, pred.Status)
 	}
 
-	return &Response{
-		Output:   stringifyAny(pred.Output),
-		Duration: time.Since(start),
-		Model:    model,
-	}, nil
+	// Replicate's prediction API reports no token usage at all, so this
+	// path logged every call as 0/0 and $0.00 measured.
+	return httpResponse(req, stringifyAny(pred.Output), model, 0, 0, start), nil
 }
 
 type replicatePrediction struct {
@@ -774,6 +747,33 @@ func firstEnv(keys ...string) string {
 		}
 	}
 	return ""
+}
+
+// httpResponse assembles a dialect's reply and estimates whichever token count
+// the provider did not report, because cost is derived from the counts, so a
+// call that answered was logged as 0/0 and $0.00 *measured* (#802).
+//
+// Per side, not both-or-neither: a real count is never discarded, and a
+// provider reporting only its prompt tokens still gets an honest output figure.
+// TokensEstimated is how the cost report says the number is Hydra's, not the
+// provider's, so every path must come through here rather than build a Response
+// itself, which TestHTTPResponse_EveryDialectGoesThroughTheHelper enforces.
+func httpResponse(req Request, output, model string, in, out int, started time.Time) *Response {
+	estimated := false
+	if in == 0 && req.Prompt != "" {
+		in, estimated = EstimateTokens(req.Prompt), true
+	}
+	if out == 0 && output != "" {
+		out, estimated = EstimateTokens(output), true
+	}
+	return &Response{
+		Output:          output,
+		InputTokens:     in,
+		OutputTokens:    out,
+		Duration:        time.Since(started),
+		Model:           model,
+		TokensEstimated: estimated,
+	}
 }
 
 func firstNonEmpty(values ...string) string {

@@ -119,7 +119,6 @@ func (e *HTTPExecutor) streamOpenAILike(ctx context.Context, req Request, onDelt
 	sink := newDeltaSink(onDelta, start)
 	var gotModel string
 	var inTok, outTok int
-	var sawUsage bool
 
 	sc := bufio.NewScanner(io.LimitReader(resp.Body, int64(util.DefaultMaxBytes)+1))
 	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
@@ -146,7 +145,7 @@ func (e *HTTPExecutor) streamOpenAILike(ctx context.Context, req Request, onDelt
 			gotModel = chunk.Model
 		}
 		if chunk.Usage != nil {
-			inTok, outTok, sawUsage = chunk.Usage.PromptTokens, chunk.Usage.CompletionTokens, true
+			inTok, outTok = chunk.Usage.PromptTokens, chunk.Usage.CompletionTokens
 		}
 		for _, c := range chunk.Choices {
 			sink.write(c.Delta.Content)
@@ -165,24 +164,12 @@ func (e *HTTPExecutor) streamOpenAILike(ctx context.Context, req Request, onDelt
 	}
 
 	// A server that ignored stream_options, or a stream cut short, leaves no
-	// counts. Estimated and labelled beats reporting a call that answered as
-	// having cost nothing.
-	estimated := false
-	if !sawUsage || (inTok == 0 && outTok == 0) {
-		inTok, outTok = EstimateTokens(req.Prompt), EstimateTokens(out)
-		estimated = true
-	}
-
-	return &Response{
-		Output:          out,
-		InputTokens:     inTok,
-		OutputTokens:    outTok,
-		Duration:        time.Since(start),
-		Model:           firstNonEmpty(gotModel, model),
-		Truncated:       sink.truncated(),
-		TTFT:            sink.firstTokenAt(),
-		TokensEstimated: estimated,
-	}, nil
+	// counts. httpResponse estimates them, the same way the buffered dialects
+	// do, so the two cannot disagree about what a call with no usage cost.
+	answer := httpResponse(req, out, firstNonEmpty(gotModel, model), inTok, outTok, start)
+	answer.Truncated = sink.truncated()
+	answer.TTFT = sink.firstTokenAt()
+	return answer, nil
 }
 
 // azureStreamTarget mirrors executeAzureOpenAI's endpoint construction. Azure
