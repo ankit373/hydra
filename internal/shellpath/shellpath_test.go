@@ -3,8 +3,10 @@
 package shellpath
 
 import (
+	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -48,10 +50,17 @@ func TestMergePath_NoLoginPathChangesNothing(t *testing.T) {
 // Exercised through a deliberately bare PATH, which is the only state Adopt
 // acts on: with this machine's real PATH the guard returns first and the test
 // would assert nothing while passing.
+//
+// Through adopt with no deadline, not Adopt with its 3s one. The budget is
+// right for startup and wrong for an assertion: a fork can outlast it on a
+// machine running the whole suite, and the timeout then looks like the missing
+// merge this is here to catch (#816).
 func TestAdopt_RecoversTheShellsPathFromABareOne(t *testing.T) {
+	fakeShell(t, sep("/opt/homebrew/bin", "/opt/only-the-shell-knows"))
+
 	bare := sep("/usr/bin", "/bin", "/usr/sbin", "/sbin")
 	t.Setenv("PATH", bare)
-	Adopt()
+	adopt(context.Background())
 
 	got := os.Getenv("PATH")
 	if got == "" {
@@ -62,7 +71,17 @@ func TestAdopt_RecoversTheShellsPathFromABareOne(t *testing.T) {
 			t.Errorf("Adopt dropped %q from PATH", dir)
 		}
 	}
-	if os.Getenv("SHELL") != "" && got == bare {
+
+	// On Windows PATH comes from the registry and Adopt returns before asking
+	// any shell. Asserted rather than skipped, so the platform difference is
+	// part of the contract instead of a hole in it.
+	if runtime.GOOS == "windows" {
+		if got != bare {
+			t.Errorf("PATH = %q, want it untouched: Adopt does not run on Windows", got)
+		}
+		return
+	}
+	if !strings.Contains(got, "/opt/only-the-shell-knows") {
 		t.Errorf("PATH = %q, want the shell's own entries merged in", got)
 	}
 }
