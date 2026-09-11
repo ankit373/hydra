@@ -33,8 +33,9 @@ func findControl(t *testing.T, cs []Control, name string) Control {
 // two releases understating it. The expectation is changed on purpose, and the
 // caps it reports on are now enforced (#424).
 //
-// `limited`, not `active`: three of the twenty policy fields take effect, and
-// `hyctl edit` still does not consult the policy at all.
+// `limited`, not `active`: three of the twenty policy fields take effect. Both
+// edit commands enforce those three now (#769), so what remains limited is the
+// seventeen fields nothing reads, not which command they reach.
 func TestControls_FilePolicyIsEnforcedButPartial(t *testing.T) {
 	testutil.NewSandbox(t)
 
@@ -53,7 +54,13 @@ func TestControls_FilePolicyIsEnforcedButPartial(t *testing.T) {
 		t.Errorf("Detail = %q, want it to name the enforcing call site", c.Detail)
 	}
 	if !strings.Contains(c.Detail, "hyctl edit") {
-		t.Errorf("Detail = %q, want it to say the caps do not reach hyctl edit", c.Detail)
+		t.Errorf("Detail = %q, want it to name both commands the caps reach", c.Detail)
+	}
+	// The claim that made this control honest when the caps were unreachable
+	// is now itself the false one, and the control reports the source.
+	if strings.Contains(c.Detail, "does not consult") {
+		t.Errorf("Detail still says hyctl edit ignores the policy, which it no "+
+			"longer does: %s", c.Detail)
 	}
 	for _, cap := range enforcedCaps {
 		if !strings.Contains(c.Detail, cap) {
