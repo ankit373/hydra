@@ -811,8 +811,9 @@ func asIntSlice(v any) []int {
 //
 // The resource this dispatch acts on is the whole set today, and it is the
 // file a collision is actually about, the path `hyctl edit` is writing.
-// `dispatch --file` cannot reach here: naming a file selects the SPRT
-// ensemble, and that path writes no handoff at all (#766).
+// `dispatch --file` reaches this through SaveHandoff instead: naming a file
+// selects the SPRT ensemble, which does not come through Dispatch at all and
+// so wrote no handoff until #766.
 func handoffFiles(opts Options) []string {
 	if f := strings.TrimSpace(opts.Resource); f != "" {
 		return []string{f}
@@ -824,30 +825,74 @@ func handoffFiles(opts Options) []string {
 // the vector clock so downstream agents inherit this dispatch's causal history.
 // It returns the handoff's From identity so the caller can record the edge.
 func (d *Dispatcher) writeHandoff(r *Result, prompt string, opts Options) (string, error) {
-	handoffPath := filepath.Join(config.Dir(), "logs", "last_handoff.json")
-
-	// Inherit the prior handoff's clock (if any) and tick for this agent.
-	var base a2a.Clock
-	if prior, err := a2a.Load(handoffPath); err == nil && prior != nil {
-		base = prior.Clock
-	}
-	from := fmt.Sprintf("hydra-tier-%d", rank.UITier(r.Head))
 	// The clock is keyed on the head's own identity, not its tier bucket:
 	// every LocalOnly head shares tier 10, so two different local models
 	// would otherwise tick the same "hydra-tier-10" key and become
 	// indistinguishable under Clock.Compare (#503). "From" keeps the
 	// tier-bucket string, it is display text, not a clock key.
-	agentKey := r.Head.ID
+	return SaveHandoff(HandoffRecord{
+		From:   fmt.Sprintf("hydra-tier-%d", rank.UITier(r.Head)),
+		Model:  r.Head.Name,
+		Task:   prompt,
+		Files:  handoffFiles(opts),
+		Output: r.Response.Output,
+		Agents: []string{r.Head.ID},
+	})
+}
+
+// HandoffRecord is what a completed piece of work hands the next agent.
+type HandoffRecord struct {
+	From   string   // display identity, e.g. "hydra-tier-10"
+	Model  string   // display name of what answered
+	Task   string   // the prompt
+	Files  []string // what the work was about, for a2a.ConflictsWith
+	Output string   // what came back
+	Agents []string // clock keys: every head that actually ran
+}
+
+// SaveHandoff writes last_handoff.json, inheriting the prior clock and ticking
+// once per agent. It returns the From identity so a caller can record the edge.
+//
+// One tick per head, not one for the run, because the clock's actor is a head:
+// a fan-out that consulted three heads is three events, and saying so is what
+// keeps a later dispatch to one of them correctly ordered after the ensemble.
+//
+// The alternatives are worse rather than merely different. A single synthetic
+// ensemble key makes two independent fan-outs tick the same counter, so their
+// clocks come out *identical* and Compare reports Equal, which is the one
+// answer that cannot be right for two runs that never saw each other. Keying
+// on the accepted head is undefined for SPRT, whose Candidate is an answer and
+// not a source, and where several heads may support it, so the key would come
+// down to a tie-break, the coin-flip class of #765. Ticking every head grows
+// the *counters*, not the key set, which stays bounded by the machine's head
+// inventory exactly as the single-dispatch path already is (#766).
+//
+// The hole this leaves is the one the single-dispatch path already has: two
+// concurrent runs over the identical head set read as Equal rather than
+// Concurrent. SPRT stops early, so two runs rarely sample the same set, but
+// when they do a conflict is missed.
+func SaveHandoff(rec HandoffRecord) (string, error) {
+	path := filepath.Join(config.Dir(), "logs", "last_handoff.json")
+
+	var clock a2a.Clock
+	if prior, err := a2a.Load(path); err == nil && prior != nil {
+		clock = prior.Clock
+	}
+	for _, agent := range rec.Agents {
+		if agent != "" {
+			clock = clock.Tick(agent)
+		}
+	}
 
 	h := a2a.Handoff{
-		From:        from,
-		Model:       r.Head.Name,
-		Task:        prompt,
-		Files:       handoffFiles(opts),
-		PriorOutput: r.Response.Output,
-		Clock:       base.Tick(agentKey),
+		From:        rec.From,
+		Model:       rec.Model,
+		Task:        rec.Task,
+		Files:       rec.Files,
+		PriorOutput: rec.Output,
+		Clock:       clock,
 	}
-	return from, h.Save(handoffPath)
+	return rec.From, h.Save(path)
 }
 
 // minTier and maxTier bound the numeric --tier flag: rank.UITier never
