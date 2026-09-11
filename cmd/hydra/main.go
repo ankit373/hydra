@@ -929,6 +929,8 @@ func cmdDispatch() *cobra.Command {
 				}
 				printSPRTResult(res)
 				logTrustRun(res, prompt, domain)
+				writeFanoutHandoff("hydra-ensemble", "SPRT ensemble", prompt,
+					res.Trust.Candidate, file, res.Attempts)
 				return nil
 			}
 
@@ -957,6 +959,12 @@ func cmdDispatch() *cobra.Command {
 					return err
 				}
 				printSwarmResult(result)
+				var winner string
+				if result.Winner != nil {
+					winner = result.Winner.Output
+				}
+				writeFanoutHandoff("hydra-swarm", "swarm · "+string(mode), prompt,
+					winner, file, result.Attempts)
 				return nil
 			}
 
@@ -3542,6 +3550,38 @@ func sprtWarning(r *swarm.SPRTResult) string {
 		"no source carried evidence in %q: %d heads were sampled and the estimate never left the prior.\n"+
 			"  Calibrate with `hyctl oracle verify --domain %s -- <test command>`.",
 		r.Domain, len(t.Ledger), r.Domain)
+}
+
+// writeFanoutHandoff records a swarm or SPRT run in last_handoff.json.
+//
+// Neither path reaches Dispatcher.Dispatch's success branch, the only caller of
+// the handoff writer, so a --confidence, --swarm or --file run left the causal
+// chain with a hole exactly where the highest-stakes work happened: the next
+// agent's --a2a read a handoff from before the run, and ConflictsWith had
+// nothing to overlap for the flag most likely to name a contended file (#766).
+//
+// Every head that produced an answer ticks the clock, which is why attempts are
+// passed rather than a winner. Best-effort, like the single-dispatch writer:
+// losing the handoff must not fail work that already succeeded.
+func writeFanoutHandoff(from, model, prompt, output, file string, attempts []swarm.Attempt) {
+	agents := make([]string, 0, len(attempts))
+	for _, a := range attempts {
+		if a.Status == swarm.StatusOK {
+			agents = append(agents, a.Head.ID)
+		}
+	}
+	if len(agents) == 0 {
+		return // nothing answered, so no agent did anything to record
+	}
+
+	var files []string
+	if f := strings.TrimSpace(file); f != "" {
+		files = []string{f}
+	}
+	_, _ = dispatch.SaveHandoff(dispatch.HandoffRecord{
+		From: from, Model: model, Task: prompt,
+		Files: files, Output: output, Agents: agents,
+	})
 }
 
 // logTrustRun appends the SPRT run to ~/.hydra/trust.jsonl (best-effort).
