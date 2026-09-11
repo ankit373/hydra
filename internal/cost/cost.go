@@ -455,8 +455,8 @@ func RenderSummary(r *SummaryResult) {
 	fmt.Println()
 	fmt.Println("  Recent (last 5):")
 	for _, row := range r.Recent {
-		fmt.Printf("  %s  %s/%d  %s, %d+%d tok, $%.6f, %dms\n",
-			row.TS, row.Enum, row.Tier, row.Model,
+		fmt.Printf("  %s  %s  %s, %d+%d tok, $%.6f, %dms\n",
+			row.TS, routeKey(row.Enum, row.Tier), row.Model,
 			row.PromptTokens, row.ResponseTokens, row.EstCostUSD, row.WallMS)
 	}
 	fmt.Println()
@@ -565,14 +565,21 @@ func truncLabel(s string, max int) string {
 // RenderTail prints human-readable tail rows.
 func RenderTail(rows []Row) {
 	for _, r := range rows {
-		enum := r.Enum
-		if enum == "" {
-			enum = "?"
-		}
-		fmt.Printf("  %s  %s/%d  %s, %d+%d tok, $%.6f, %dms\n",
-			r.TS, enum, r.Tier, r.Model,
+		fmt.Printf("  %s  %s  %s, %d+%d tok, $%.6f, %dms\n",
+			r.TS, routeKey(r.Enum, r.Tier), r.Model,
 			r.PromptTokens, r.ResponseTokens, r.EstCostUSD, r.WallMS)
 	}
+}
+
+// routeKey says how a dispatch was routed: the enum that chose the tier, or
+// the tier itself when one was pinned. An absent enum is not unknown, a
+// --tier run has no routing key, and "%s/%d" over it printed a bare "/10" on
+// every row of a machine that routes that way (#794).
+func routeKey(enum string, tier int) string {
+	if enum == "" {
+		return fmt.Sprintf("tier %d", tier)
+	}
+	return fmt.Sprintf("%s/%d", enum, tier)
 }
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
