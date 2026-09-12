@@ -26,11 +26,6 @@ var costWriterExemptions = map[string]string{
 	"swarm_mode":   "swarm only: there is no mode on a single dispatch",
 	"swarm_winner": "swarm only: nothing to win",
 
-	// --enum reaches dispatch.Options and stops there; swarm.Options has no
-	// Enum field, so a swarm is never routed by an enum even when one was
-	// passed. Writing it here would record a routing key that did not route.
-	"enum": "dispatch only: an enum does not reach the swarm path at all",
-
 	// The dispatch log carries the preview on its own entry rather than on the
 	// cost row; swarm has one writer for both.
 	"prompt_preview": "swarm only: swarm has no separate dispatch-log entry",

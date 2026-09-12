@@ -797,9 +797,15 @@ free local floor. Retune any of them by editing `routing_map` in
 `registry/routing.yaml` (or a copy at `$HYDRA_HOME/registry/routing.yaml`) and
 both flags follow.
 
+That holds on a fan-out too. `--enum` reached the swarm and stopped there, so
+`--enum SIMPLE --swarm` fanned out over the top heads by capability, which on a
+machine with a frontier head is the most expensive five available and the exact
+opposite of what SIMPLE asks for.
+
 ```bash
 hyctl status            # every name, the tier it resolves to, and what serves it
 hyctl dispatch --dry-run --tier simple "add a DTO"
+hyctl dispatch --dry-run --swarm --enum SIMPLE "add a DTO"   # the same heads
 ```
 
 Older configs carry a `[[tiers]]` block that assigned heads to those names by
