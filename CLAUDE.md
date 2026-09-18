@@ -68,6 +68,8 @@ internal/runlog/        ← Per-run event log, v2 spans: identity + parent, leve
                           (+ .idx), lossless and invisible to readers. `hyctl trace seal`.
 internal/otlp/          ← Run log → nested OpenTelemetry spans (OTLP/HTTP JSON). `hyctl trace export`.
 internal/pricing/       ← Live pricing DB (OpenRouter fetch + 24h cache + tier fallback).
+internal/signals/       ← Routing signals + a small closed expression language + priority-ordered
+                          rules (registry/signals.yaml). Evaluated once per dispatch.
 internal/policy/        ← PII detection + local-only enforcement.
 internal/{cost,budget}/ ← Spend reporting (est/actual labeling) + token-budget governor (static bands + rate-aware first-passage on claude_pct).
 internal/capabilities/  ← Model capability scores: embedded data.json ⊕ runtime user overlay (~/.hydra/models.json). `hyctl models`.
@@ -90,6 +92,15 @@ registry/               ← Routing data, compiled into the binary via `go:embed
   domains.yaml          ← Domain → enum key routing (references routing.yaml).
   pricing.yaml          ← Tier pricing. Prices the CLI-agent heads that never appear in
                           OpenRouter's catalog, so it is load-bearing, not just an offline fallback.
+  signals.yaml          ← Routing signals and rules. Named, typed facts about a dispatch
+                          (PII detectors, injection marker, blast radius, keyword sets,
+                          whether trust has evidence) combined by priority-ordered rules
+                          into an action: pin a tier/enum, force local-only, raise the
+                          confidence bar, or refuse. Ships EMPTY, so routing is unchanged
+                          until someone writes a rule, and `cmd/hydra` has a test asserting
+                          the reporting layer prints nothing when none fired. A rule naming
+                          a signal that does not exist fails at load rather than silently
+                          never matching (#903).
   policy.yaml           ← File-policy rules. Three of its fields take effect, in both
                           `hyctl edit` and `hyctl parallel`: diff_size_cap_pct rolls an
                           over-large edit back, max_cost_usd refuses a head before it runs,

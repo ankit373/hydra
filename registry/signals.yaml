@@ -1,0 +1,64 @@
+# Routing signals and rules.
+#
+# Signals are named, typed facts about one dispatch. Rules combine them into an
+# action, highest priority first, first match wins. The point is that a new
+# routing input is a signal and a rule rather than another branch in
+# selectHeads, which is how two routing tables came to disagree (#782).
+#
+# This file ships EMPTY on purpose. With no rules, routing is exactly what it
+# was before signals existed, and `cmd/hydra` has a test that asserts that
+# rather than a comment claiming it. Copy this to
+# $HYDRA_HOME/registry/signals.yaml to change it; an on-disk copy replaces this
+# one wholesale rather than merging with it.
+#
+# `hyctl dispatch --dry-run` prints which rule fired and the signals it read.
+# `hyctl security` lists rules that can never fire.
+
+version: 1
+
+# Keyword sets. Each becomes the signal keyword.<name>.matched, true when the
+# prompt contains any of its phrases (case-insensitive substring).
+#
+# keywords:
+#   - name: production
+#     any: ["prod", "production", "the live site"]
+#   - name: migration
+#     any: ["migration", "migrate the schema", "alter table"]
+keywords: []
+
+# Available signals, all readable in a rule's `when`:
+#
+#   pii.any                     bool    any detector fired
+#   pii.<detector>.matched      bool    one detector, e.g. pii.aws_access_key_id.matched
+#                                       (`hyctl security` lists the detector names)
+#   injection.matched           bool    a prompt-injection marker was found
+#   graph.blast_radius          number  transitive dependents of --file; 0 when unknown
+#   trust.calibrated            bool    internal/trust has evidence for this domain
+#   keyword.<name>.matched      bool    one of the sets declared above
+#
+# Operators: && || ! ( ) == != < <= > >=
+# A rule naming a signal that does not exist fails at load rather than
+# silently never matching.
+#
+# Actions:
+#   {type: fallthrough}                       route exactly as today
+#   {type: route, tier: …, enum: …, local_only: true}
+#   {type: require_confidence, value: 0.95}
+#   {type: block, reason: "…"}
+#
+# rules:
+#   - name: secrets never leave the machine
+#     priority: 200
+#     when: pii.aws_access_key_id.matched || pii.pem_private_key.matched
+#     action: {type: route, local_only: true}
+#
+#   - name: wide blast radius needs a confidence bar
+#     priority: 100
+#     when: graph.blast_radius > 20
+#     action: {type: require_confidence, value: 0.95}
+#
+#   - name: production migrations are not automated
+#     priority: 150
+#     when: keyword.production.matched && keyword.migration.matched
+#     action: {type: block, reason: "a production migration needs a human"}
+rules: []

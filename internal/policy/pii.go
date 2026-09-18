@@ -81,6 +81,18 @@ func ContainsPII(req Request) bool {
 // and everything downstream could say no more than "PII". Callers that record
 // or report a detection want the names; ContainsPII is now defined in terms of
 // this rather than duplicating the loop, so the two can never disagree.
+// DetectorNames lists every detector, in declaration order.
+//
+// Exported so a caller can enumerate the signals a rule may name before any
+// prompt exists. DetectPII answers what fired; this answers what could.
+func DetectorNames() []string {
+	out := make([]string, 0, len(detectors))
+	for _, d := range detectors {
+		out = append(out, d.name)
+	}
+	return out
+}
+
 func DetectPII(req Request) []string {
 	var out []string
 	for _, d := range detectors {

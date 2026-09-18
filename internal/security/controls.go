@@ -65,6 +65,7 @@ func InertControls(cs []Control) int {
 func Controls(events []ledger.Event, audit PolicyAudit, chain ledger.ChainResult) []Control {
 	return []Control{
 		filePolicyControl(),
+		signalRulesControl(),
 		a2aConflictControl(),
 		boundApprovalControl(events),
 		ledgerRuleControl(audit),

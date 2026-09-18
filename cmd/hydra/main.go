@@ -60,6 +60,7 @@ import (
 	"github.com/ankit373/hydra/internal/runlog"
 	"github.com/ankit373/hydra/internal/security"
 	"github.com/ankit373/hydra/internal/shellpath"
+	"github.com/ankit373/hydra/internal/signals"
 	"github.com/ankit373/hydra/internal/swarm"
 	"github.com/ankit373/hydra/internal/trust"
 	"github.com/ankit373/hydra/internal/tui"
@@ -936,13 +937,50 @@ func cmdDispatch() *cobra.Command {
 			if d.PIILocalOnly() && touchesPII {
 				localOnly = true
 			}
+			// The code graph is loaded once and read twice: the rules want the
+			// dependent count, a measurement, and the defect model wants its
+			// own derived radius. Two loads of the same file would be a second
+			// read of something this one already produced.
+			var g *graph.Graph
+			var blastRadius *int
+			if file != "" {
+				var err error
+				if g, err = graph.Load(graphPath); err != nil {
+					return err
+				}
+				// Absent rather than zero when the graph does not know the
+				// file: zero dependents is a real reading and a rule comparing
+				// against it must not match on ignorance.
+				if g.Knows(file) {
+					n := g.DependentCountForFile(file)
+					blastRadius = &n
+				}
+			}
+
+			// Evaluated once for this dispatch, whichever of the plain, swarm
+			// and SPRT paths runs, and handed to Dispatch so no candidate
+			// re-derives it.
+			ruleDecision := d.Decide(prompt, domain, blastRadius)
+			if ruleDecision.Action.Type == signals.ActionBlock {
+				return &dispatch.ErrBlocked{Rule: ruleDecision.Rule, Reason: ruleDecision.Action.Reason}
+			}
+			// require_confidence is applied here because this is where the
+			// stopping rule is read; dispatch applies route and block.
+			if ruleDecision.Action.Type == signals.ActionRequireConfidence &&
+				ruleDecision.Action.Value > effectiveConf {
+				effectiveConf = ruleDecision.Action.Value
+			}
+			if ruleDecision.Action.Type == signals.ActionRoute && ruleDecision.Action.LocalOnly {
+				localOnly = true
+			}
+			// Before the dry-run branches below, all of which return: a rule
+			// that changed this dispatch has to be visible on every path, not
+			// only the plain one.
+			printRuleDecision(os.Stdout, ruleDecision, dryRun)
+
 			if file != "" || irreversible || production || touchesPII {
 				radius := 1.0
 				if file != "" {
-					g, err := graph.Load(graphPath)
-					if err != nil {
-						return err
-					}
 					radius = g.BlastRadiusForFile(file)
 					// --file exists to RAISE the bar for risky files. With no graph
 					// it silently never raises, while printing a line that reads
@@ -1131,7 +1169,8 @@ func cmdDispatch() *cobra.Command {
 				// The same key --confidence reads. A plain dispatch now routes
 				// on it too, so the domain a session fills is the domain its
 				// next dispatch is ranked for (#885).
-				Domain: domain,
+				Domain:   domain,
+				Decision: &ruleDecision,
 			}
 
 			// Streamed on a terminal only. A pipe keeps the buffered rendering
