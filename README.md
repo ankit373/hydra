@@ -260,6 +260,32 @@ Scanning happens across three channels simultaneously:
 | **Port scan** | Ollama (11434), LM Studio (1234); queries each server and lists every installed model individually |
 | **Env vars** | 14 API providers: Anthropic, OpenAI, Google, xAI, Groq, Together, Fireworks, Mistral, DeepSeek, Bedrock, Azure, Perplexity, Cohere, Replicate |
 
+### 📥 Get a Model Without Leaving hyctl
+
+```
+$ hyctl models pull hf.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF
+  pulling 74a4da8c9fdb  491.4 MB / 491.4 MB (100%)
+  ✓ pulled hf.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF
+    routable as ollama/hf.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF:latest
+```
+
+The ref is whatever your local server resolves: an Ollama library name
+(`qwen3:8b`) or a **HuggingFace GGUF repo**. The head id is read back from the
+server rather than guessed, because Ollama renames a HuggingFace ref.
+
+A model bigger than your machine can run is refused from the size the server
+reports on the first chunk, seconds in rather than an hour later:
+
+```
+$ hyctl models pull hf.co/unsloth/Llama-3.3-70B-Instruct-GGUF
+Error: model is larger than this machine can run: 42.5 GB to download against 3.0 GB usable.
+  Pick a smaller quantization (Q4_K_M rather than Q8_0 or F16), or pass --force if this
+  machine has more headroom than it reports
+```
+
+This is the only command that downloads weights, and nothing does it as a side
+effect of anything else.
+
 ### 🧠 Hardware-Aware Local Model Selection
 
 When you have Ollama, Hydra picks the best model for your actual available memory, not your total RAM. It reads 7 days of memory usage history and uses the 75th-percentile free memory reading so the recommendation reflects how your machine actually runs under typical load, not a lucky snapshot.
@@ -1007,6 +1033,7 @@ hydra/
 │   ├── rollup/                  # Per-day aggregates: calls, tokens, spend, latency sketch
 │   ├── evalset/                 # Oracle-verified labelled examples: verbatim, never pruned, never uploaded
 │   ├── budget/                  # Token-budget governor: 6 static pressure modes + rate-aware first-passage risk on claude_pct
+│   ├── modelpull/               # Fetch a model into the local Ollama server (library or HuggingFace GGUF ref)
 │   ├── rank/                    # Deduplication + ranking: CapScore updated by verified outcomes
 │   ├── editor/                  # Scoped, validated, rollback-safe file edits
 │   ├── parallel/                # Independent multi-task fan-out

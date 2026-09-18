@@ -28,7 +28,10 @@ type installOption struct {
 // to recommend the right Ollama model.
 func buildInstallOptions(specs *sysinfo.Specs) []installOption {
 	best := specs.BestOllamaModel()
-	ollamaPost := fmt.Sprintf("Then run: ollama pull %s", best.Model)
+	// hyctl's own command, not another tool's: the wizard has an opinion about
+	// which model suits this machine, and handing that opinion to a different
+	// binary to act on is where the install flow used to end (#896).
+	ollamaPost := fmt.Sprintf("Then run: hyctl models pull %s", best.Model)
 	ollamaDesc := "Local, free, no API key."
 	if specs.AnyLocalModelFits() {
 		ollamaDesc = fmt.Sprintf("Local, free, no API key. Best for your machine: %s", best.DisplayName)
@@ -209,7 +212,7 @@ func (m InstallModel) confirm() (tea.Model, tea.Cmd) {
 		m.chosenModel = m.models[m.cursor]
 		// Update the post-install command to use chosen model
 		updated := *m.selected
-		updated.postInstall = "Then run: ollama pull " + m.chosenModel.Model
+		updated.postInstall = "Then run: hyctl models pull " + m.chosenModel.Model
 		m.selected = &updated
 		m.step = installStepConfirm
 		m.cursor = 0
