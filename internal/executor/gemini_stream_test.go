@@ -188,3 +188,74 @@ func TestGemini_BothPathsResolveTheSameHost(t *testing.T) {
 		t.Errorf("buffered target = %q, want the same host and model, without the stream method", stub.targets[1])
 	}
 }
+
+// A mid-stream error arrives on a 200 with no candidates and no promptFeedback,
+// so every field was skipped and the chunk read as one carrying nothing. With
+// text already delivered the partial came back as a complete answer, with
+// estimated counts, and nothing downstream could tell it was cut short: a
+// --confidence run would vote on it (#869).
+//
+// Ordered text-then-error deliberately. With the error first the output is
+// empty and sseStream already fails, so that case hides the bug.
+func TestGeminiStream_MidStreamErrorFailsRatherThanReturningThePartial(t *testing.T) {
+	newGeminiStub(t, []string{
+		geminiText("the first half of an answer", 17, 6),
+		`{"error":{"code":429,"status":"RESOURCE_EXHAUSTED","message":"Quota exceeded"}}`,
+	})
+
+	resp, err := (&HTTPExecutor{}).ExecuteStream(context.Background(),
+		Request{Prompt: "ask", Head: geminiHead()}, func(string) {})
+	if err == nil {
+		t.Fatalf("a mid-stream error returned the partial as the answer: %q", resp.Output)
+	}
+	if !strings.Contains(err.Error(), "RESOURCE_EXHAUSTED") {
+		t.Errorf("error = %v, want Gemini's own status so the reason is actionable", err)
+	}
+}
+
+// The other two SSE dialects already refuse a mid-stream failure. This pins all
+// three to the same behaviour so Gemini cannot drift back into being the
+// outlier.
+func TestSSEDialects_AllRefuseAMidStreamError(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		want string
+		run  func(t *testing.T) (*Response, error)
+	}{
+		{
+			name: "gemini",
+			want: "RESOURCE_EXHAUSTED",
+			run: func(t *testing.T) (*Response, error) {
+				newGeminiStub(t, []string{
+					geminiText("partial", 5, 2),
+					`{"error":{"code":429,"status":"RESOURCE_EXHAUSTED","message":"Quota exceeded"}}`,
+				})
+				return (&HTTPExecutor{}).ExecuteStream(context.Background(),
+					Request{Prompt: "p", Head: geminiHead()}, func(string) {})
+			},
+		},
+		{
+			name: "anthropic",
+			want: "overloaded_error",
+			run: func(t *testing.T) (*Response, error) {
+				newAnthropicStub(t, []string{
+					sse("message_start", anthropicStart),
+					anthropicText("partial"),
+					sse("error", `{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}`),
+				})
+				return (&HTTPExecutor{}).ExecuteStream(context.Background(),
+					Request{Prompt: "p", Head: anthropicHead()}, func(string) {})
+			},
+		},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			resp, err := c.run(t)
+			if err == nil {
+				t.Fatalf("%s returned a partial as the answer: %q", c.name, resp.Output)
+			}
+			if !strings.Contains(err.Error(), c.want) {
+				t.Errorf("%s error = %v, want %q in it", c.name, err, c.want)
+			}
+		})
+	}
+}
