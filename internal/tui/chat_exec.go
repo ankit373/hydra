@@ -287,7 +287,7 @@ func ckWorker(ex *ckExecState, t ckTask, phase int) tea.Cmd {
 		defer hb.Stop()
 		rl := runlog.New(t.runID)
 		if phase == ckPhaseFull || phase == ckPhaseHead {
-			_ = rl.Append(runlog.Event{Kind: runlog.KindRunStarted, TaskID: t.taskID, Detail: truncate(t.prompt, 80)})
+			runlog.DeclareRun(t.runID, t.taskID, t.prompt)
 		}
 		gate := ckRunStages(ex.ctx, ex, &t, phase)
 		if gate != 0 && t.errText == "" {

@@ -853,11 +853,8 @@ func cmdDispatch() *cobra.Command {
 				hb := runlog.StartHeartbeat(ctx, runID, runlog.HeartbeatInterval)
 				defer hb.Stop()
 
-				rl := runlog.New(runID)
-				_ = rl.Append(runlog.Event{Kind: runlog.KindRunStarted, TaskID: taskID, Detail: promptPreview(prompt)})
-				defer func() {
-					_ = rl.Append(runlog.Event{Kind: runlog.KindRunFinished, TaskID: taskID})
-				}()
+				runlog.DeclareRun(runID, taskID, prompt)
+				defer runlog.FinishRun(runID, taskID)
 			}
 
 			// editor and review record outcomes under the target file's own
@@ -3976,6 +3973,11 @@ func cmdEdit() *cobra.Command {
 			runID, taskID := runid.ResolveRun(""), runid.ResolveTask("")
 			hb := runlog.StartHeartbeat(ctx, runID, runlog.HeartbeatInterval)
 			defer hb.Stop()
+			// The file is what an edit run is about, by base name: a full path
+			// spends the whole subject budget and the prompt never appears.
+			// The path itself is on every edit event this run writes.
+			runlog.DeclareRun(runID, taskID, "edit "+filepath.Base(file)+": "+prompt)
+			defer runlog.FinishRun(runID, taskID)
 
 			result, err := editor.Edit(ctx, editor.Request{
 				File:     file,
@@ -4119,7 +4121,14 @@ func cmdParallel() *cobra.Command {
 			}
 
 			ctx := cmd.Context()
-			results, err := parallel.Run(ctx, tasks, parallel.Options{RunID: runid.New()})
+			// A fan-out is one run of N tasks, so the run says how many and
+			// from where rather than borrowing the first task's routing key.
+			runID, taskID := runid.New(), runid.New()
+			runlog.DeclareRun(runID, taskID, fmt.Sprintf("parallel: %d task%s from %s",
+				len(tasks), plural(len(tasks)), filepath.Base(tasksFile)))
+			defer runlog.FinishRun(runID, taskID)
+
+			results, err := parallel.Run(ctx, tasks, parallel.Options{RunID: runID})
 			if err != nil {
 				return err
 			}
@@ -5028,19 +5037,6 @@ var (
 	warnStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
 	okStyle     = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("42"))
 )
-
-// promptPreview shortens a prompt for a log Detail field. Run events carry a
-// short human label, never the full text, the atomic-append guarantee that
-// makes the run log safe under concurrency is per write() call, so entries must
-// stay small.
-func promptPreview(s string) string {
-	const max = 80
-	s = strings.TrimSpace(strings.ReplaceAll(s, "\n", " "))
-	if len(s) <= max {
-		return s
-	}
-	return s[:max] + "…"
-}
 
 // ── ask ───────────────────────────────────────────────────────────────────────
 

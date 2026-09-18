@@ -16,6 +16,7 @@ import (
 	"github.com/ankit373/hydra/internal/dispatch"
 	"github.com/ankit373/hydra/internal/rank"
 	"github.com/ankit373/hydra/internal/runid"
+	"github.com/ankit373/hydra/internal/runlog"
 	"github.com/ankit373/hydra/internal/workflow"
 )
 
@@ -158,6 +159,13 @@ func runWorkflow(ctx context.Context, w workflow.Workflow, system string) error 
 	}
 	fmt.Printf("\n  %s %s\n", cortexStyle.Render("▶ WORKFLOW"), w.ID)
 	fmt.Printf("  %s\n\n", dimStyle.Render(w.Task))
+
+	// The workflow's task is what this run is about. Without it the cockpit
+	// fell back to the first step's routing enum and listed the run as
+	// "GRUNT" (#910).
+	taskID := runid.New()
+	runlog.DeclareRun(w.RunID, taskID, w.Task)
+	defer runlog.FinishRun(w.RunID, taskID)
 
 	r := dispatchRouter{d: d, runID: w.RunID, system: system}
 	// Progress is printed from the saver rather than a separate hook: Run
