@@ -192,6 +192,7 @@ func ckRealDispatchStage(ctx context.Context, t *ckTask, prompt, tierHint string
 	if err != nil {
 		return ckStageOut{}, err
 	}
+	defer d.Close()
 	class := policy.Classify(prompt)
 	localOnly := t.localOnly || (d.PIILocalOnly() && class.PII)
 	switch strat {

@@ -39,6 +39,7 @@ const (
 	stepTiers               // user confirms auto-assigned tiers
 	stepPrivacy             // does the user need local-only routing for PII?
 	stepCapture             // store prompt/response text, or only the statistics?
+	stepEmbed               // store a vector per dispatch?
 	stepSkills              // which skills to enable
 	stepDone                // confirmation screen
 )
@@ -53,6 +54,7 @@ type InitModel struct {
 	cortex    *provider.Head
 	localOnly bool
 	capture   bool
+	embed     bool
 	skills    []string
 	err       error
 
@@ -117,6 +119,14 @@ func (m InitModel) confirm() (tea.Model, tea.Cmd) {
 		// capture is opt-in, and a user who presses enter through the wizard
 		// must not end up storing their source.
 		m.capture = m.cursor == 1
+		m.step = stepEmbed
+		m.cursor = 0
+
+	case stepEmbed:
+		// "No" first, for the same reason capture defaults to no: an embedding
+		// is not plaintext, but inversion attacks recover approximate text from
+		// one, so it is not a thing to inherit by pressing enter.
+		m.embed = m.cursor == 1
 		m.step = stepSkills
 		m.skills = defaultSkills(m.cortex)
 		m.cursor = 0
@@ -136,7 +146,7 @@ func (m InitModel) maxCursor() int {
 	switch m.step {
 	case stepCortex:
 		return len(m.result.Heads) - 1
-	case stepPrivacy, stepCapture:
+	case stepPrivacy, stepCapture, stepEmbed:
 		return 1
 	}
 	return 0
@@ -157,6 +167,8 @@ func (m InitModel) View() string {
 		m.viewPrivacy(&b)
 	case stepCapture:
 		m.viewCapture(&b)
+	case stepEmbed:
+		m.viewEmbed(&b)
 	case stepSkills:
 		m.viewSkills(&b)
 	case stepDone:
@@ -260,6 +272,25 @@ func (m InitModel) viewCapture(b *strings.Builder) {
 		"  is replaced before it is written.\n"))
 }
 
+func (m InitModel) viewEmbed(b *strings.Builder) {
+	b.WriteString(sPrompt.Render("  Store a vector for each dispatch?\n\n"))
+	opts := []string{
+		"No , do not embed prompts (recommended)",
+		"Yes, embed with a local model already on this machine",
+	}
+	for i, opt := range opts {
+		if i == m.cursor {
+			b.WriteString(sSelected.Render("  › "+opt) + "\n")
+		} else {
+			b.WriteString(sDim.Render("    "+opt) + "\n")
+		}
+	}
+	b.WriteString(sHint.Render("\n  A vector is what lets Hydra recognise a task it has seen before.\n" +
+		"  Nothing leaves the machine: the model runs under Ollama, text is\n" +
+		"  redacted before it is embedded, and the store is capped at a disk\n" +
+		"  budget, oldest first. With no embedding model this stays off.\n"))
+}
+
 func (m InitModel) viewSkills(b *strings.Builder) {
 	b.WriteString(sPrompt.Render("  Skills enabled for your setup:\n\n"))
 	for _, s := range m.skills {
@@ -295,6 +326,7 @@ func (m InitModel) save() error {
 		}
 	}
 	cfg.CapturePayloads = m.capture
+	cfg.CaptureEmbeddings = m.embed
 	return config.Save(cfg)
 }
 

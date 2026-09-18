@@ -120,6 +120,9 @@ func Run(ctx context.Context, tasks []Task, opts Options) ([]Result, error) {
 	// each task's own JSON result carries the same "dispatcher init" error every
 	// task used to hit independently.
 	d, dispatchErr := dispatch.New(ctx)
+	if dispatchErr == nil {
+		defer d.Close()
+	}
 
 	results := make([]Result, len(tasks))
 	var mu sync.Mutex

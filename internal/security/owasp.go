@@ -9,6 +9,7 @@ import (
 
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/egress"
+	"github.com/ankit373/hydra/internal/embed"
 	"github.com/ankit373/hydra/internal/ledger"
 	"github.com/ankit373/hydra/internal/trust"
 	"github.com/ankit373/hydra/internal/workspace"
@@ -93,8 +94,7 @@ func computeCoverage(pol ledger.Policy, sc SupplyChain, runs []trust.RunLog, cos
 				"response repeating either back is recorded as a finding naming the head; but the echo check " +
 				"is verbatim over a 96-character window, so a paraphrased or summarised disclosure is not " +
 				"caught, and it reports rather than refuses, since the answer is already the caller's"},
-		{ID: "LLM09", Name: "Vector and Embedding Weaknesses", Status: NotApplicable,
-			Detail: "Hydra has no RAG pipeline or vector store of its own"},
+		vectorCategory(),
 		outputHandlingCategory(),
 	}
 
@@ -333,4 +333,23 @@ func annotateGapAge(cats []Category, history []scoreEntry, now time.Time) []Cate
 		out[i].GapAgeDays = int(now.Sub(ts).Hours() / 24)
 	}
 	return out
+}
+
+// vectorCategory reports LLM09 from the store on disk rather than from a
+// constant. It read "Hydra has no RAG pipeline or vector store of its own"
+// unconditionally, which stopped being true the moment one shipped (#904).
+func vectorCategory() Category {
+	st, ok := embed.StoredStats(embed.Dir())
+	if !ok || st.Count == 0 {
+		return Category{ID: "LLM09", Name: "Vector and Embedding Weaknesses", Status: NotApplicable,
+			Detail: "no vectors are stored: embedding capture is opt-in and nothing has been written"}
+	}
+	return Category{ID: "LLM09", Name: "Vector and Embedding Weaknesses", Status: Partial,
+		Detail: fmt.Sprintf("%d vectors from %s are stored; text is redacted before it is embedded, "+
+			"the model and dimension are part of the store's key so two vector spaces cannot be "+
+			"compared, and the store is byte-bounded and evicts oldest-first. Not covered: an "+
+			"embedding is invertible to approximate text, and nothing retrieves from the store yet, "+
+			"so there is no retrieval-side poisoning control to assess",
+			st.Count, st.Model),
+	}
 }

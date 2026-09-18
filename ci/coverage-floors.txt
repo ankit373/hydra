@@ -48,6 +48,7 @@ floor internal/cost                 91
 floor internal/diff                 92
 floor internal/dispatch             89
 floor internal/editor               86
+floor internal/embed                80
 # internal/egress reads 58% here but is covered to 80.2% measured through
 # internal/dispatch (-coverpkg): Summarize and Origins are 100% there. A
 # package's own profile cannot see its caller's tests, so 58 understates it.

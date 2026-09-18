@@ -160,6 +160,7 @@ func Edit(ctx context.Context, req Request) (*Result, error) {
 		cleanupBackup()
 		return failResult(req, wsName, resolved.GitRoot, "dispatcher init failed: "+err.Error()), nil
 	}
+	defer d.Close()
 	ctx, cancel := fp.Deadline(ctx)
 	defer cancel()
 	dispResult, err := d.Dispatch(ctx, editPrompt, dispatch.Options{

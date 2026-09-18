@@ -87,6 +87,23 @@ type Config struct {
 	// built-in default.
 	PayloadBudgetMB int `toml:"payload_budget_mb,omitempty"`
 
+	// CaptureEmbeddings opts into storing a vector per dispatch. Off by
+	// default and argued separately from CapturePayloads: an embedding is not
+	// plaintext, but inversion attacks recover approximate text from one, so it
+	// is a decision someone makes rather than a default they inherit.
+	CaptureEmbeddings bool `toml:"capture_embeddings,omitempty"`
+
+	// EmbedModel names the embedding model to use. Normally discovery finds it,
+	// but an older Ollama reports no capabilities at all, so its embedding
+	// models are indistinguishable from chat ones and naming one is the only
+	// honest way through.
+	EmbedModel string `toml:"embed_model,omitempty"`
+
+	// EmbedBudgetMB bounds the vector store on disk. Past it the oldest vectors
+	// are dropped, so the store forgets rather than refuses. 0 means the
+	// built-in default.
+	EmbedBudgetMB int `toml:"embed_budget_mb,omitempty"`
+
 	OpenRouter OpenRouter `toml:"openrouter,omitempty"`
 }
 

@@ -277,6 +277,7 @@ CONCERNS <bullet list of issues>`, file, diffText)
 	if err != nil {
 		return nil, fmt.Errorf("dispatcher init: %w", err)
 	}
+	defer d.Close()
 	result, err := d.Dispatch(ctx, qaPrompt, dispatch.Options{
 		TierHint: strconv.Itoa(tier),
 	})

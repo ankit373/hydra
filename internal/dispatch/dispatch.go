@@ -23,6 +23,7 @@ import (
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/cost"
 	"github.com/ankit373/hydra/internal/egress"
+	"github.com/ankit373/hydra/internal/embed"
 	"github.com/ankit373/hydra/internal/executor"
 	"github.com/ankit373/hydra/internal/health"
 	"github.com/ankit373/hydra/internal/ledger"
@@ -270,6 +271,11 @@ type Dispatcher struct {
 	// domain. Nil when the store will not load, which leaves the pooled probe
 	// order: a ranking basis that degrades has to degrade to the previous one.
 	cal *trust.Calibrator
+
+	// embed vectorises prompts off the dispatch path. Built at most once, by
+	// recorder(), and drained by Close.
+	embedOnce sync.Once
+	embed     *embed.Recorder
 }
 
 // Heads returns the probed head list for external callers (e.g. swarm).
@@ -742,6 +748,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		recordOutputFinding(r.OutputProvenance, h)
 		recordContextEcho(resp.Output, hiddenContextFor(opts, handoffText), h)
 		inRef, outRef := d.capturePayloads(prompt, opts, resp)
+		d.captureEmbedding(span, prompt)
 		_ = rl.Append(runlog.Event{
 			Kind: runlog.KindDispatchFinished, TaskID: taskID,
 			SpanID: span, ParentSpanID: taskSpan,
