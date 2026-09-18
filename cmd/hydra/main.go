@@ -695,6 +695,19 @@ func truncLabel(s string, n int) string {
 
 // ── dispatch ──────────────────────────────────────────────────────────────────
 
+// resolveCostCeiling picks the denial-of-wallet ceiling and names its source.
+//
+// policy.yaml's max_cost_usd reached hyctl edit and hyctl parallel and never
+// the command that spends the money, so the guard had never once fired (#838).
+// An explicit --max-cost still wins, including --max-cost 0, which is how a
+// policy ceiling is lifted for one run: hence flagSet rather than a zero check.
+func resolveCostCeiling(hydraHome string, flagSet bool, flagVal float64, spec policy.Spec) (float64, string) {
+	if flagSet {
+		return flagVal, "--max-cost"
+	}
+	return policy.ForFile(hydraHome, spec).MaxCostUSD, "policy.yaml max_cost_usd"
+}
+
 func cmdDispatch() *cobra.Command {
 	var (
 		tier      string
@@ -978,6 +991,22 @@ func cmdDispatch() *cobra.Command {
 			if tierHint == "" && enumKey != "" {
 				tierHint = dispatch.EnumToTier(enumKey)
 			}
+			// policy.yaml's max_cost_usd reached hyctl edit and hyctl parallel
+			// and never the command that spends the money. An explicit
+			// --max-cost still wins, including --max-cost 0 to lift a ceiling
+			// the policy set, which is why this asks Changed rather than
+			// reading the zero (#838).
+			// A named tier resolves to its number, so an enum_tier rule matches
+			// the same whichever spelling routed the dispatch.
+			enumTier, _ := dispatch.ResolveTier(tierHint)
+			ceiling, ceilingFrom := resolveCostCeiling(
+				config.ScriptHome(), cmd.Flags().Changed("max-cost"), maxCost,
+				policy.Spec{
+					File:         file,
+					Prompt:       prompt,
+					PromptLength: len(prompt),
+					EnumTier:     enumTier,
+				})
 			opts := dispatch.Options{
 				TierHint:       tierHint,
 				LocalOnly:      localOnly,
@@ -987,7 +1016,8 @@ func cmdDispatch() *cobra.Command {
 				Enum:           enumKey,
 				RunID:          runID,
 				TaskID:         taskID,
-				MaxCostUSD:     maxCost,
+				MaxCostUSD:     ceiling,
+				MaxCostSource:  ceilingFrom,
 				Classification: &promptClass,
 			}
 

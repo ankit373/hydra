@@ -304,8 +304,9 @@ func runEditTask(ctx context.Context, d *dispatch.Dispatcher, dispatchErr error,
 		TierHint:   enumToTier(task.Enum),
 		RunID:      runID,
 		TaskID:     taskID,
-		Resource:   file,
-		MaxCostUSD: fp.MaxCostUSD,
+		Resource:      file,
+		MaxCostUSD:    fp.MaxCostUSD,
+		MaxCostSource: "policy.yaml max_cost_usd",
 	})
 	if err != nil {
 		cleanupBackup()

@@ -167,8 +167,9 @@ func Edit(ctx context.Context, req Request) (*Result, error) {
 		LocalOnly:  req.LocalOnly,
 		RunID:      req.RunID,
 		TaskID:     req.TaskID,
-		Resource:   req.File,
-		MaxCostUSD: fp.MaxCostUSD,
+		Resource:      req.File,
+		MaxCostUSD:    fp.MaxCostUSD,
+		MaxCostSource: "policy.yaml max_cost_usd",
 	})
 	if err != nil {
 		cleanupBackup()

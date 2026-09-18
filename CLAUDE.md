@@ -89,7 +89,11 @@ registry/               ← Routing data, compiled into the binary via `go:embed
                           over-large edit back, max_cost_usd refuses a head before it runs,
                           max_wall_seconds deadlines the dispatch (#424, #769). All three are
                           enforced from `internal/policy`'s caps.go, so a refusal reads the
-                          same whichever command hit it. The rest are declared and read by
+                          same whichever command hit it. max_cost_usd also reaches `hyctl
+                          dispatch`, the command that actually spends the money, where it had
+                          no ceiling at all and the denial-of-wallet guard had never once
+                          fired; `--max-cost` overrides it, and `--max-cost 0` lifts it for one
+                          run (#838). The rest are declared and read by
                           nothing. `hyctl security` reports which, derived rather than hardcoded.
   workspace.yaml        ← workspace roots + validators.
 logs/                   ← Dispatch log + state.json (claude_pct, claude_pct_history).

@@ -149,6 +149,11 @@ func TestEdit_CostCeilingRefusesBeforeTheFileIsTouched(t *testing.T) {
 		t.Fatalf("error = %q, want the cost ceiling; something else refused this "+
 			"edit and the ceiling may still be unwired", res.Error)
 	}
+	// The ceiling came out of policy.yaml, so the refusal must say so rather
+	// than name --max-cost, a flag hyctl edit does not even have (#838).
+	if !strings.Contains(res.Error, "policy.yaml max_cost_usd") {
+		t.Errorf("error = %q, want it to name policy.yaml as the source", res.Error)
+	}
 	// Nothing was written, so there was nothing to restore. A rolled-back
 	// refusal is a different mechanism reaching the same file content.
 	if res.RolledBack {
