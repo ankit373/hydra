@@ -159,29 +159,16 @@ func (e *HTTPExecutor) executeOpenAICompatible(ctx context.Context, req Request,
 
 func (e *HTTPExecutor) executeAnthropic(ctx context.Context, req Request) (*Response, error) {
 	model := defaultModelFor("anthropic")
-	body := map[string]interface{}{
-		"model":      model,
-		"max_tokens": defaultMaxTokens(req.MaxTokens, 1024),
-		"messages": []map[string]string{
-			{"role": "user", "content": req.Prompt},
-		},
-	}
-	if req.System != "" {
-		body["system"] = req.System
-	}
-
-	raw, err := json.Marshal(body)
+	raw, err := json.Marshal(anthropicBody(req, model, false))
 	if err != nil {
 		return nil, err
 	}
 
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.anthropic.com/v1/messages", bytes.NewReader(raw))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, anthropicMessagesURL(), bytes.NewReader(raw))
 	if err != nil {
 		return nil, err
 	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("x-api-key", apiKeyFor("anthropic"))
-	httpReq.Header.Set("anthropic-version", "2023-06-01")
+	setAnthropicHeaders(httpReq)
 
 	start := time.Now()
 	resp, err := e.httpClient().Do(httpReq)
@@ -211,6 +198,39 @@ func (e *HTTPExecutor) executeAnthropic(ctx context.Context, req Request) (*Resp
 	return httpResponse(req, joinAnthropicBlocks(out.Content),
 		firstNonEmpty(out.Model, model),
 		out.Usage.InputTokens, out.Usage.OutputTokens, start), nil
+}
+
+// anthropicMessagesURL honours ANTHROPIC_BASE_URL, the variable the official
+// SDKs read, so a gateway already configured for them serves this head too.
+func anthropicMessagesURL() string {
+	base := firstNonEmpty(firstEnv("ANTHROPIC_BASE_URL"), "https://api.anthropic.com")
+	return strings.TrimRight(base, "/") + "/v1/messages"
+}
+
+// anthropicBody and setAnthropicHeaders are shared with the streaming path, so
+// the two cannot drift into asking for different things or pinning different
+// API versions. Streaming is the one field that differs.
+func anthropicBody(req Request, model string, stream bool) map[string]interface{} {
+	body := map[string]interface{}{
+		"model":      model,
+		"max_tokens": defaultMaxTokens(req.MaxTokens, 1024),
+		"messages": []map[string]string{
+			{"role": "user", "content": req.Prompt},
+		},
+	}
+	if req.System != "" {
+		body["system"] = req.System
+	}
+	if stream {
+		body["stream"] = true
+	}
+	return body
+}
+
+func setAnthropicHeaders(r *http.Request) {
+	r.Header.Set("Content-Type", "application/json")
+	r.Header.Set("x-api-key", apiKeyFor("anthropic"))
+	r.Header.Set("anthropic-version", "2023-06-01")
 }
 
 func (e *HTTPExecutor) executeGemini(ctx context.Context, req Request) (*Response, error) {
