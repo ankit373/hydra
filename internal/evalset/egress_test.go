@@ -36,13 +36,20 @@ func egressVia(imports []string) string {
 func TestNoHydraPackageReachableFromTheCorpusCanEgress(t *testing.T) {
 	graph := importGraph(t)
 
-	// A walk returning nothing would pass by asserting nothing, which is how
-	// the shellpath guard went vacuous (#816). Both are reachable by
-	// construction: Add marshals JSON and locks through internal/util.
-	for _, anchor := range []string{"encoding/json", modulePath + "internal/util"} {
-		if !slices.ContainsFunc(graph, func(p pkg) bool { return p.path == anchor }) {
-			t.Fatalf("walk returned %d packages and no %s, so it proves nothing", len(graph), anchor)
+	// A walk returning nothing, or only the root, would pass by asserting
+	// nothing, which is how the shellpath guard went vacuous (#816). Naming a
+	// particular dependency would break on a refactor that is allowed to.
+	if !slices.ContainsFunc(graph, func(p pkg) bool { return p.path == "encoding/json" }) {
+		t.Fatalf("walk returned %d packages and no encoding/json, so it proves nothing", len(graph))
+	}
+	ours := 0
+	for _, p := range graph {
+		if strings.HasPrefix(p.path, modulePath) {
+			ours++
 		}
+	}
+	if ours < 2 {
+		t.Fatalf("walk found %d Hydra packages, so it never left the corpus itself", ours)
 	}
 
 	// Ours, not the whole graph: x/sys/windows imports net for its syscall
