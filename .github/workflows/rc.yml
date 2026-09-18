@@ -64,7 +64,9 @@ jobs:
       - name: Build RC binaries
         uses: goreleaser/goreleaser-action@v7
         with:
-          version: latest
+          # Exact, not latest or ~> v2: 2.17.1 and 2.18.1 disagree on whether a
+          # missing tag is fatal, which killed 24 edge builds unnoticed (#821).
+          version: "2.18.2"
           # --snapshot made GoReleaser compute its own 0.0.0-SNAPSHOT version
           # and ignore the tag, so every RC shipped CLI archives that could not
           # say which release they stood for (#705). It was also swallowing the

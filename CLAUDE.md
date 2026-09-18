@@ -893,6 +893,13 @@ internal/update/update.go     ← startup update checker (24h cache)
 .github/workflows/rc.yml      ← fires on release/v* push → RC pre-release. Both build from a
                                 branch, so they must tag HEAD themselves, see below.
 .github/workflows/publish.yml ← fans a release out to brew/npm/pip
+                                All three pin GoReleaser to an exact version, guarded by
+                                cmd/hydra/prerelease_naming_test.go. `latest` means upstream
+                                picks what builds the release: 2.17.1 and 2.18.1 disagree on
+                                whether a missing tag is fatal, which is #821's 24 dead edge
+                                builds, and that was a minor bump inside v2, so `~> v2` is no
+                                protection either. Bumping the pin is deliberate; Dependabot
+                                does not track an action input (#881).
 .github/workflows/release-please.yml ← fires on main push → release PR, then fans out to
                                        publish.yml and close-shipped-issues.yml
 .github/workflows/close-shipped-issues.yml ← closes the issues a release shipped, read back
