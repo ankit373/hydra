@@ -737,8 +737,10 @@ hyctl workflow resume <id>              # continue a killed workflow from where 
 
 The corpus behind `hyctl eval` is the one thing Hydra keeps verbatim and forever, because it is the
 only data a router can be improved against. It is your own code and prompts, so it stays in
-`~/.hydra/evalset/`, nothing that prunes logs can reach it, and there is no code path that can send
-it anywhere, which a test enforces rather than a comment promising it.
+`~/.hydra/evalset/`, nothing that prunes logs can reach it, and there is no upload path. A test
+enforces that, rather than a comment promising it: no Hydra package that can reach the corpus
+imports anything able to open a socket or exec, and the third-party packages it rests on are
+pinned by name, so a new dependency is a decision rather than a side effect.
 
 ### The Cockpit (`hyctl tui`)
 
