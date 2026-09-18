@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -328,5 +329,32 @@ func TestSPRT_AllowNoEvidenceOptsOutOfTheRefusal(t *testing.T) {
 	if _, err := Run(context.Background(), Task{Domain: "go"}, nSources("unknown", 2, 1),
 		&scriptExec{seq: seq}, c, Target{Confidence: 0.95}, AllowNoEvidence()); err != nil {
 		t.Fatalf("AllowNoEvidence did not lift the refusal: %v", err)
+	}
+}
+
+// The refusal has to carry the heads it refused, or the CLI telling the reader
+// which key to record against has nothing concrete to name and falls back to a
+// placeholder. That placeholder is what #785 left as a "model:" prefix the
+// router never reads (#835).
+func TestSPRT_RefusalNamesTheSourcesItWouldHaveSampled(t *testing.T) {
+	c, _ := New("")
+	sources := []Source{{ID: "ollama/qwen3:4b"}, {ID: "agy/claude-sonnet"}}
+
+	_, err := Run(context.Background(), Task{Domain: "go"}, sources,
+		&scriptExec{seq: []string{"A", "A"}}, c, Target{Confidence: 0.95})
+
+	var noEv *NoEvidenceError
+	if !errors.As(err, &noEv) {
+		t.Fatalf("err = %v (%T), want a *NoEvidenceError a caller can read the sources off", err, err)
+	}
+	if !errors.Is(err, ErrNoEvidence) {
+		t.Errorf("err = %v no longer matches ErrNoEvidence, which every caller branches on", err)
+	}
+	if noEv.Domain != "go" {
+		t.Errorf("Domain = %q, want %q", noEv.Domain, "go")
+	}
+	want := []string{"agy/claude-sonnet", "ollama/qwen3:4b"} // sorted, for a stable message
+	if !slices.Equal(noEv.Sources, want) {
+		t.Errorf("Sources = %v, want %v", noEv.Sources, want)
 	}
 }
