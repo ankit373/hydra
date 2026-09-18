@@ -75,6 +75,28 @@ func TestMatchCondition_ZeroIsRealForPromptLengthAndContextPct(t *testing.T) {
 	}
 }
 
+// A misspelled field name is the same defect wearing a different hat:
+// specField answers "" for it, which compares as 0. The existing coverage case
+// only tried `no_such_field_gt: 1`, which was false for the same accidental
+// reason the real bug hid behind, that 0 > 1 happens not to hold.
+func TestMatchCondition_MisspelledFieldMatchesNothing(t *testing.T) {
+	spec := Spec{File: "main.go", FileLines: 20, FileCount: 1, EnumTier: 3}
+	for _, key := range []string{"enum_teir_lte", "no_such_field_lt", "no_such_field_lte"} {
+		if matchCondition(key, 100, spec) {
+			t.Errorf("%s matched; a typo must refuse rather than match everything", key)
+		}
+	}
+}
+
+// A non-numeric field compared numerically is the third face of it: workspace
+// is a string, so toFloat reads it as 0 and every _lt rule holds.
+func TestMatchCondition_StringFieldComparedNumericallyMatchesNothing(t *testing.T) {
+	spec := Spec{Workspace: "hydra-self"}
+	if matchCondition("workspace_lt", 5, spec) {
+		t.Error("workspace_lt 5 matched a string field read as 0")
+	}
+}
+
 // The end-to-end shape, through the engine rather than one condition: the rule
 // that bit hyctl edit in the wild.
 func TestEngine_UntieredEditDoesNotGetTheStrongTierEditMode(t *testing.T) {
