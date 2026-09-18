@@ -37,6 +37,10 @@
 floor cmd/specstest                 90
 floor cmd/hydra                     77
 floor internal/a2a                  93
+# internal/awsconf reads 88.3%. The uncovered lines are os.UserHomeDir failing
+# and the two default paths, which the tests override to stay off the
+# developer's real ~/.aws.
+floor internal/awsconf              85
 floor internal/budget               92
 floor internal/capabilities         90
 floor internal/config               84

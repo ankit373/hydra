@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ankit373/hydra/internal/awsconf"
 	"github.com/ankit373/hydra/internal/provider"
 	"github.com/ankit373/hydra/internal/util"
 )
@@ -102,7 +103,8 @@ func SupportsHTTP(h provider.Head) bool {
 	case "azure":
 		return apiKeyFor("azure") != "" && azureEndpoint() != "" && azureDeployment() != ""
 	case "bedrock":
-		return awsAccessKeyID() != "" && awsSecretAccessKey() != "" && bedrockRegion() != "" && defaultModelFor("bedrock") != ""
+		creds := awsconf.Resolve()
+		return creds.Usable() && creds.Region != "" && defaultModelFor("bedrock") != ""
 	case "replicate":
 		return apiKeyFor("replicate") != "" && defaultModelFor("replicate") != ""
 	default:
@@ -836,11 +838,10 @@ func azureAPIVersion() string {
 	return firstNonEmpty(firstEnv("AZURE_OPENAI_API_VERSION"), "2024-10-21")
 }
 
-func bedrockRegion() string { return firstEnv("AWS_REGION", "AWS_DEFAULT_REGION") }
-
-func awsAccessKeyID() string     { return firstEnv("AWS_ACCESS_KEY_ID") }
-func awsSecretAccessKey() string { return firstEnv("AWS_SECRET_ACCESS_KEY") }
-func awsSessionToken() string    { return firstEnv("AWS_SESSION_TOKEN") }
+// The environment is checked first and the shared files after, so a machine
+// configured the way the AWS CLI expects is not reported as having no Bedrock
+// at all (#867).
+func bedrockRegion() string { return awsconf.Resolve().Region }
 
 func firstEnv(keys ...string) string {
 	for _, key := range keys {
@@ -888,18 +889,21 @@ func firstNonEmpty(values ...string) string {
 }
 
 func signAWSRequest(req *http.Request, payload []byte, region, service string) error {
-	accessKey := awsAccessKeyID()
-	secretKey := awsSecretAccessKey()
-	if accessKey == "" || secretKey == "" {
+	// Resolved once: the id, the secret and the token have to come from the
+	// same profile, and three independent lookups could pair an id from the
+	// environment with a secret from a file and sign nothing.
+	creds := awsconf.Resolve()
+	if !creds.Usable() {
 		return errors.New("missing AWS credentials")
 	}
+	accessKey, secretKey := creds.AccessKeyID, creds.SecretAccessKey
 
 	now := time.Now().UTC()
 	amzDate := now.Format("20060102T150405Z")
 	dateStamp := now.Format("20060102")
 	req.Header.Set("X-Amz-Date", amzDate)
-	if token := awsSessionToken(); token != "" {
-		req.Header.Set("X-Amz-Security-Token", token)
+	if creds.SessionToken != "" {
+		req.Header.Set("X-Amz-Security-Token", creds.SessionToken)
 	}
 
 	payloadHash := sha256Hex(payload)
