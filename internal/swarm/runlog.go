@@ -133,7 +133,7 @@ func logSamples(ledger []trust.Evidence, attempts []Attempt, opts Options) {
 		byID[a.Head.ID] = a
 	}
 
-	rootSpan := runlog.SpanIDFor(taskID + "/" + sprtAgent)
+	rootSpan := SPRTSpanID(taskID)
 
 	rl := runlog.New(runID)
 	_ = rl.Append(runlog.Event{
@@ -229,4 +229,12 @@ func stamp(t time.Time) string {
 		return ""
 	}
 	return t.UTC().Format(time.RFC3339Nano)
+}
+
+// SPRTSpanID is the span an SPRT ensemble runs under, derived from the task id.
+// Exported because a caller attaching a verdict afterwards has to address the
+// same span this package wrote, and a second copy of the derivation would land
+// the score on a span no reader ever looks at.
+func SPRTSpanID(taskID string) string {
+	return runlog.SpanIDFor(taskID + "/" + sprtAgent)
 }
