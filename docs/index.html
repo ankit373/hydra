@@ -832,6 +832,7 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
         <tr><th scope="row">Spend logging &amp; cost reporting</th><td class="hydcol"><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
         <tr><th scope="row">Confidence / trust routing (calibrated + optimal-stopping)</th><td class="hydcol"><span class="yes">✓</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td></tr>
         <tr><th scope="row">Head ranking learns from verified outcomes <em>on your machine</em></th><td class="hydcol"><span class="yes">✓</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td></tr>
+        <tr><th scope="row">Routes per <em>domain</em>: best at Go, not best on average</th><td class="hydcol"><span class="yes">✓</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td></tr>
         <tr><th scope="row">On-device accountability ledger (PII / local-only policy)</th><td class="hydcol"><span class="yes">✓</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td></tr>
         <tr><th scope="row">MCP server trust scoring (not just an index)</th><td class="hydcol"><span class="yes">✓</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td></tr>
         <tr><th scope="row">Runs fully offline (0 network to route)</th><td class="hydcol"><span class="yes">✓</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td></tr>
@@ -910,7 +911,7 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
     <div class="step">
       <div class="n">03, DISPATCH</div>
       <h3>Route a task</h3>
-      <p>Classify → tier → cheapest head that clears confidence.</p>
+      <p>Classify → tier → cheapest head that clears confidence, ranked on what each one got right at this kind of work.</p>
       <div class="term">
         <div class="copyline" data-copy='hyctl dispatch --enum SIMPLE "write a User DTO"'><span><span class="p">$</span> hyctl dispatch --enum SIMPLE …</span><span class="cp">copy</span></div>
         <div class="o"><span class="c">→ T8 gemini-flash · $0.0001</span></div>

@@ -376,6 +376,20 @@ type probeHeadJSON struct {
 	CtxMax int `json:"ctx_max,omitempty"`
 }
 
+// routingEvidence says why a head ranks where it does, for --dry-run. Empty
+// when nothing measured it, so the declared score beside it stands alone
+// rather than being restated as an adjustment that did not happen.
+func routingEvidence(r *dispatch.Result, h provider.Head) string {
+	sc, ok := r.Scores[h.ID]
+	if !ok || sc.N == 0 {
+		return ""
+	}
+	// The in-domain count is what separates "measured here" from "measured
+	// somewhere else and borrowed", which is the whole reason to print it.
+	return dimStyle.Render(fmt.Sprintf("  → %d on %d judged, %d in %s",
+		sc.Effective, sc.N, sc.InDomain, r.Domain))
+}
+
 // probeColumn is one column of the probe table. A zero width is the last
 // column, which is not padded, so no trailing run of spaces reaches a terminal.
 type probeColumn struct {
@@ -1086,6 +1100,10 @@ func cmdDispatch() *cobra.Command {
 				MaxCostUSD:     ceiling,
 				MaxCostSource:  ceilingFrom,
 				Classification: &promptClass,
+				// The same key --confidence reads. A plain dispatch now routes
+				// on it too, so the domain a session fills is the domain its
+				// next dispatch is ranked for (#885).
+				Domain: domain,
 			}
 
 			// Streamed on a terminal only. A pipe keeps the buffered rendering
@@ -1118,13 +1136,14 @@ func cmdDispatch() *cobra.Command {
 			}
 
 			if dryRun {
-				fmt.Printf("  %s  %s  (score %d, %s)\n",
+				why := func(h provider.Head) string { return routingEvidence(result, h) }
+				fmt.Printf("  %s  %s  (score %d, %s)%s\n",
 					cortexStyle.Render("Primary  →"),
-					result.Head.Name, result.Head.CapScore, result.Head.Source)
+					result.Head.Name, result.Head.CapScore, result.Head.Source, why(result.Head))
 				if len(result.Fallbacks) > 0 {
 					fmt.Println(dimStyle.Render("  Fallback chain:"))
 					for i, f := range result.Fallbacks {
-						line := fmt.Sprintf("    %d. %-28s score %d  %s", i+1, f.Name, f.CapScore, f.Source)
+						line := fmt.Sprintf("    %d. %-28s score %d  %s%s", i+1, f.Name, f.CapScore, f.Source, why(f))
 						fmt.Println(dimStyle.Render(line))
 					}
 				}
@@ -1182,7 +1201,7 @@ func cmdDispatch() *cobra.Command {
 	// The real value, not a claim about it in the description: the flag defaulted
 	// to "" while --help promised "default", so the refusal quoted an empty
 	// domain and printed two commands ending in a bare `--domain ` (#732).
-	cmd.Flags().StringVar(&domain, "domain", trust.DefaultDomain, "calibration domain for --confidence")
+	cmd.Flags().StringVar(&domain, "domain", trust.DefaultDomain, "calibration domain: ranks heads on what they got right at this kind of work, and keys --confidence")
 	cmd.Flags().StringVar(&file, "file", "", "target file, derives a confidence target from its blast radius, so this alone selects the SPRT ensemble")
 	cmd.Flags().BoolVar(&verifyRun, "verify", false, "after a --confidence run, run the workspace verifier and record its verdict: what trains calibration and fills hyctl trust reliability")
 	cmd.Flags().StringVar(&graphPath, "graph", "graph.json", "path to the dependency graph used with --file")

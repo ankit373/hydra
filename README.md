@@ -234,6 +234,24 @@ Below twenty judged answers nothing moves at all, so a fresh install ranks exact
 always did. There is no per-quantization penalty table: a 2-bit model is outranked once it
 has been measured, never because a hardcoded number said it should be.
 
+A dispatch that knows its domain goes further and ranks on what each head got right at
+**that kind of work**, so a model strong at Go and weak at SQL stops being routed both as
+though it were one model:
+
+```
+$ hyctl dispatch --dry-run --enum EXPERT --domain ts "add pagination"
+  Primary  →  Claude Sonnet 4.6 (Thinking)  (score 88, registry)  → 93 on 40 judged, 40 in ts
+
+$ hyctl dispatch --dry-run --enum EXPERT --domain rust "add pagination"
+  Primary  →  OpenAI Codex  (score 88, cli)  → 92 on 40 judged, 0 in rust
+```
+
+`--file foo.go` derives the same domain, so no flag is needed. Evidence from a head's other
+domains still counts, since one thin in a domain should borrow from its own record rather
+than be judged on three runs, but only up to a bound: without one, a head measured
+everywhere *except* here outranked a head measured here, and naming a domain changed
+nothing. The `0 in rust` above is that borrowing being honest about itself.
+
 Scanning happens across three channels simultaneously:
 
 | Channel | What it finds |

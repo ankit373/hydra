@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ankit373/hydra/internal/dispatch"
 	"github.com/ankit373/hydra/internal/provider"
 	"github.com/ankit373/hydra/internal/rank"
 )
@@ -112,5 +113,55 @@ func TestProbeRow_LastColumnIsNotPadded(t *testing.T) {
 	row := probeRow(cols, func(c probeColumn) string { return c.cell(h) })
 	if row != strings.TrimRight(row, " ") {
 		t.Errorf("row %q ends in padding", row)
+	}
+}
+
+// --dry-run has to say what the order was built on. A head nothing measured
+// gets no annotation rather than a row of zeroes, which would read as an
+// adjustment that did not happen.
+func TestRoutingEvidence(t *testing.T) {
+	h := probeHead("ollama/a:7b", "", 70)
+	cases := []struct {
+		name  string
+		res   *dispatch.Result
+		wants []string
+		empty bool
+	}{
+		{
+			name: "measured in this domain",
+			res: &dispatch.Result{Domain: "go", Scores: map[string]rank.Score{
+				h.ID: {Declared: 70, Effective: 88, N: 50, InDomain: 40},
+			}},
+			wants: []string{"88", "50", "40", "go"},
+		},
+		{
+			name: "borrowed from other domains",
+			res: &dispatch.Result{Domain: "rust", Scores: map[string]rank.Score{
+				h.ID: {Declared: 70, Effective: 80, N: 50, InDomain: 0},
+			}},
+			wants: []string{"80", "50", "0", "rust"},
+		},
+		{
+			name:  "nothing measured",
+			res:   &dispatch.Result{Domain: "go", Scores: map[string]rank.Score{h.ID: {Declared: 70, Effective: 70}}},
+			empty: true,
+		},
+		{name: "no domain narrowed the ranking", res: &dispatch.Result{}, empty: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := routingEvidence(tc.res, h)
+			if tc.empty {
+				if got != "" {
+					t.Fatalf("got %q, want nothing", got)
+				}
+				return
+			}
+			for _, w := range tc.wants {
+				if !strings.Contains(got, w) {
+					t.Errorf("got %q, want it to carry %q", got, w)
+				}
+			}
+		})
 	}
 }
