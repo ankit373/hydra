@@ -235,37 +235,16 @@ func setAnthropicHeaders(r *http.Request) {
 
 func (e *HTTPExecutor) executeGemini(ctx context.Context, req Request) (*Response, error) {
 	model := defaultModelFor("google")
-	body := map[string]interface{}{
-		"contents": []map[string]interface{}{
-			{
-				"role": "user",
-				"parts": []map[string]string{
-					{"text": req.Prompt},
-				},
-			},
-		},
-	}
-	if req.System != "" {
-		body["system_instruction"] = map[string]interface{}{
-			"parts": []map[string]string{{"text": req.System}},
-		}
-	}
-	if req.MaxTokens > 0 {
-		body["generationConfig"] = map[string]int{"maxOutputTokens": req.MaxTokens}
-	}
-
-	raw, err := json.Marshal(body)
+	raw, err := json.Marshal(geminiBody(req))
 	if err != nil {
 		return nil, err
 	}
 
-	u := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent", url.PathEscape(model))
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, u, bytes.NewReader(raw))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, geminiURL(model, false), bytes.NewReader(raw))
 	if err != nil {
 		return nil, err
 	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("x-goog-api-key", apiKeyFor("google"))
+	setGeminiHeaders(httpReq)
 
 	start := time.Now()
 	resp, err := e.httpClient().Do(httpReq)
@@ -301,6 +280,55 @@ func (e *HTTPExecutor) executeGemini(ctx context.Context, req Request) (*Respons
 	return httpResponse(req, joinGeminiParts(out.Candidates[0].Content.Parts),
 		firstNonEmpty(out.ModelVersion, model),
 		out.UsageMetadata.PromptTokenCount, out.UsageMetadata.CandidatesTokenCount, start), nil
+}
+
+// geminiURL builds the generate endpoint, streaming or not. `?alt=sse` is not
+// cosmetic: without it :streamGenerateContent answers with a streamed JSON
+// array rather than events, which an SSE reader gets nothing at all from.
+//
+// The host honours GOOGLE_GEMINI_BASE_URL, and GEMINI_BASE_URL as the spelling
+// several tools use, so a gateway serves the streamed and buffered paths alike.
+func geminiURL(model string, stream bool) string {
+	base := firstNonEmpty(firstEnv("GOOGLE_GEMINI_BASE_URL", "GEMINI_BASE_URL"),
+		"https://generativelanguage.googleapis.com")
+	method := "generateContent"
+	if stream {
+		method = "streamGenerateContent"
+	}
+	u := fmt.Sprintf("%s/v1beta/models/%s:%s", strings.TrimRight(base, "/"), url.PathEscape(model), method)
+	if stream {
+		u += "?alt=sse"
+	}
+	return u
+}
+
+// geminiBody and setGeminiHeaders are shared with the streaming path, so the
+// two cannot drift into asking for different things.
+func geminiBody(req Request) map[string]interface{} {
+	body := map[string]interface{}{
+		"contents": []map[string]interface{}{
+			{
+				"role": "user",
+				"parts": []map[string]string{
+					{"text": req.Prompt},
+				},
+			},
+		},
+	}
+	if req.System != "" {
+		body["system_instruction"] = map[string]interface{}{
+			"parts": []map[string]string{{"text": req.System}},
+		}
+	}
+	if req.MaxTokens > 0 {
+		body["generationConfig"] = map[string]int{"maxOutputTokens": req.MaxTokens}
+	}
+	return body
+}
+
+func setGeminiHeaders(r *http.Request) {
+	r.Header.Set("Content-Type", "application/json")
+	r.Header.Set("x-goog-api-key", apiKeyFor("google"))
 }
 
 func (e *HTTPExecutor) executeCohere(ctx context.Context, req Request) (*Response, error) {
