@@ -233,8 +233,24 @@ func setAnthropicHeaders(r *http.Request) {
 	r.Header.Set("anthropic-version", "2023-06-01")
 }
 
-func (e *HTTPExecutor) executeGemini(ctx context.Context, req Request) (*Response, error) {
-	model := defaultModelFor("google")
+// geminiURL builds the generateContent endpoint for one method. The base is
+// overridable so a gateway, or a test's stub, is addressed without a second
+// dialect; streaming asks for SSE framing rather than Gemini's default JSON
+// array, which arrives whole and would defeat the point.
+func geminiURL(model, method string, sse bool) string {
+	base := firstNonEmpty(firstEnv("GEMINI_BASE_URL", "GOOGLE_BASE_URL"),
+		"https://generativelanguage.googleapis.com")
+	u := fmt.Sprintf("%s/v1beta/models/%s:%s",
+		strings.TrimRight(base, "/"), url.PathEscape(model), method)
+	if sse {
+		u += "?alt=sse"
+	}
+	return u
+}
+
+// geminiBody and setGeminiHeaders are shared with the streaming path, so the
+// two cannot drift into asking for different things.
+func geminiBody(req Request) map[string]interface{} {
 	body := map[string]interface{}{
 		"contents": []map[string]interface{}{
 			{
@@ -253,19 +269,27 @@ func (e *HTTPExecutor) executeGemini(ctx context.Context, req Request) (*Respons
 	if req.MaxTokens > 0 {
 		body["generationConfig"] = map[string]int{"maxOutputTokens": req.MaxTokens}
 	}
+	return body
+}
 
-	raw, err := json.Marshal(body)
+func setGeminiHeaders(r *http.Request) {
+	r.Header.Set("Content-Type", "application/json")
+	r.Header.Set("x-goog-api-key", apiKeyFor("google"))
+}
+
+func (e *HTTPExecutor) executeGemini(ctx context.Context, req Request) (*Response, error) {
+	model := defaultModelFor("google")
+	raw, err := json.Marshal(geminiBody(req))
 	if err != nil {
 		return nil, err
 	}
 
-	u := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent", url.PathEscape(model))
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, u, bytes.NewReader(raw))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		geminiURL(model, "generateContent", false), bytes.NewReader(raw))
 	if err != nil {
 		return nil, err
 	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("x-goog-api-key", apiKeyFor("google"))
+	setGeminiHeaders(httpReq)
 
 	start := time.Now()
 	resp, err := e.httpClient().Do(httpReq)

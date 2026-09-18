@@ -48,7 +48,9 @@ func (e *HTTPExecutor) ExecuteStream(ctx context.Context, req Request, onDelta O
 		return e.streamOpenAILike(ctx, req, onDelta, azureStreamTarget)
 	case "anthropic":
 		return e.streamAnthropic(ctx, req, onDelta)
-	case "google", "cohere", "bedrock", "replicate":
+	case "google":
+		return e.streamGemini(ctx, req, onDelta)
+	case "cohere", "bedrock", "replicate":
 		// Dialects this does not stream yet. Falling back rather than failing:
 		// the caller asked for output, not specifically for a stream, and
 		// executor.Stream already delivers a non-streamed answer as one delta.
