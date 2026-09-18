@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -38,10 +39,9 @@ type openAIChatChunk struct {
 }
 
 // ExecuteStream streams the OpenAI-compatible and Azure paths, which share a
-// wire shape, plus Anthropic, Gemini and Cohere, which do not (#845, #851,
-// #860). Bedrock frames its events as an AWS binary event stream rather than
-// SSE and Replicate polls rather than streams, so they keep taking Execute
-// until each is done deliberately rather than in a batch (#787).
+// wire shape, plus Anthropic, Gemini, Cohere and Bedrock, which do not (#845,
+// #851, #860, #876). Replicate is the one left on Execute: its prediction API
+// polls rather than streams, so there is nothing to read incrementally.
 func (e *HTTPExecutor) ExecuteStream(ctx context.Context, req Request, onDelta OnDelta) (*Response, error) {
 	switch req.Head.Provider {
 	case "azure":
@@ -52,7 +52,9 @@ func (e *HTTPExecutor) ExecuteStream(ctx context.Context, req Request, onDelta O
 		return e.streamGemini(ctx, req, onDelta)
 	case "cohere":
 		return e.streamCohere(ctx, req, onDelta)
-	case "bedrock", "replicate":
+	case "bedrock":
+		return e.streamBedrock(ctx, req, onDelta)
+	case "replicate":
 		// Dialects this does not stream yet. Falling back rather than failing:
 		// the caller asked for output, not specifically for a stream, and
 		// executor.Stream already delivers a non-streamed answer as one delta.
@@ -135,15 +137,25 @@ func (e *HTTPExecutor) streamOpenAILike(ctx context.Context, req Request, onDelt
 	return answer, nil
 }
 
-// sseStream is the transport half every SSE dialect shares: issue the request
-// without a whole-request timeout, fail on a status, fold the events through
-// onData, and keep what a cancelled stream had already delivered.
+// sseStream is streamRequest for the dialects framed as server-sent events.
+func (e *HTTPExecutor) sseStream(ctx context.Context, headID string, httpReq *http.Request, onDelta OnDelta,
+	onData func(payload string, sink *deltaSink) error) (*deltaSink, time.Time, error) {
+
+	return e.streamRequest(ctx, headID, httpReq, onDelta, func(body io.Reader, sink *deltaSink) error {
+		return scanSSE(body, func(payload string) error { return onData(payload, sink) })
+	})
+}
+
+// streamRequest is the transport half every streaming dialect shares: issue the
+// request without a whole-request timeout, fail on a status, fold the body
+// through read, and keep what a cancelled stream had already delivered.
 //
 // It returns the sink rather than a Response because each dialect carries its
 // model and its token counts in events of its own shape, which is the whole of
-// what differs between them.
-func (e *HTTPExecutor) sseStream(ctx context.Context, headID string, httpReq *http.Request, onDelta OnDelta,
-	onData func(payload string, sink *deltaSink) error) (*deltaSink, time.Time, error) {
+// what differs between them. Framing differs too: Bedrock answers with a binary
+// event stream rather than SSE (#876).
+func (e *HTTPExecutor) streamRequest(ctx context.Context, headID string, httpReq *http.Request, onDelta OnDelta,
+	read func(body io.Reader, sink *deltaSink) error) (*deltaSink, time.Time, error) {
 
 	// A whole-request timeout would cut a long answer off mid-sentence rather
 	// than bound a stall, so a stream is bounded by the caller's context.
@@ -162,7 +174,7 @@ func (e *HTTPExecutor) sseStream(ctx context.Context, headID string, httpReq *ht
 	}
 
 	sink := newDeltaSink(onDelta, start)
-	err = scanSSE(resp.Body, func(payload string) error { return onData(payload, sink) })
+	err = read(resp.Body, sink)
 	// A cancelled stream keeps whatever arrived: the caller stopped it, and the
 	// partial is what a surface has already rendered.
 	if err != nil && ctx.Err() == nil {
