@@ -301,9 +301,9 @@ func runEditTask(ctx context.Context, d *dispatch.Dispatcher, dispatchErr error,
 	ctx, cancel := fp.Deadline(ctx)
 	defer cancel()
 	dispResult, err := d.Dispatch(ctx, editPrompt, dispatch.Options{
-		TierHint:   enumToTier(task.Enum),
-		RunID:      runID,
-		TaskID:     taskID,
+		TierHint:      enumToTier(task.Enum),
+		RunID:         runID,
+		TaskID:        taskID,
 		Resource:      file,
 		MaxCostUSD:    fp.MaxCostUSD,
 		MaxCostSource: "policy.yaml max_cost_usd",
