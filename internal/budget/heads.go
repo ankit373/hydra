@@ -38,6 +38,14 @@ func WindowsForHeads(home string, heads []provider.Head) map[string]int {
 		if !h.LocalOnly {
 			w = decls.windowFor(h)
 		}
+		// A server that reports the window it actually allocated replaces the
+		// guess outright rather than capping it: localDefaultCtx exists because
+		// a local server's window is unknowable, and llama.cpp answers it. A
+		// ceiling could only ever lower the number, so a server started with
+		// -c 32768 would still have been budgeted at 4096 (#913).
+		if eff, ok := EffectiveContext(h); ok {
+			w = eff
+		}
 		if ceil, ok := ContextCeiling(h); ok && ceil < w {
 			w = ceil
 		}
@@ -77,12 +85,26 @@ func (d declarations) windowFor(h provider.Head) int {
 	return fallbackCloud
 }
 
+// EffectiveContext is the window a server reported actually allocating, and
+// whether it reported one. Distinct from ContextCeiling on purpose: a ceiling
+// says "never more than", while this says "this is the number", which is the
+// difference between capping a guess and replacing it.
+func EffectiveContext(h provider.Head) (int, bool) {
+	return positiveMeta(h, "model_ctx")
+}
+
 // ContextCeiling is the architectural maximum a provider reported for a head,
 // and whether it reported one at all. Not the effective window: a model whose
 // ceiling is 40960 still runs at the server's 4096 default, so this caps a
 // window rather than replacing it.
 func ContextCeiling(h provider.Head) (int, bool) {
-	raw, ok := h.Meta["model_ctx_max"]
+	return positiveMeta(h, "model_ctx_max")
+}
+
+// positiveMeta reads a positive integer from Meta, so an absent, unparseable or
+// zero value reads as "not reported" rather than as a window of nothing.
+func positiveMeta(h provider.Head, key string) (int, bool) {
+	raw, ok := h.Meta[key]
 	if !ok {
 		return 0, false
 	}

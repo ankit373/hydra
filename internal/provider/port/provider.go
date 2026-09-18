@@ -55,6 +55,7 @@ func (p *Provider) Discover(ctx context.Context) ([]provider.Head, error) {
 		&ollamaService{base: provider.OllamaHost()},
 		&lmStudioService{base: defaultLMStudioHost},
 		newLiteLLMService(),
+		newLlamaCppService(),
 	}), nil
 }
 

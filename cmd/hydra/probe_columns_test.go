@@ -5,6 +5,7 @@ package main
 import (
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/ankit373/hydra/internal/dispatch"
 	"github.com/ankit373/hydra/internal/provider"
@@ -89,20 +90,38 @@ func TestProbeRow_HeaderAndRowsShareTheSameWidths(t *testing.T) {
 	heads := []provider.Head{
 		probeHead("ollama/short:1b", "Q4_K_M", 40),
 		probeHead("ollama/a-considerably-longer-model-name:70b", "Q8_0", 80),
+		// Past the column's cap, which the two above are not: a llama.cpp head
+		// is named after the file it serves and an Ollama model pulled from
+		// HuggingFace carries its whole repo path, so the case this test exists
+		// for was one the fixture could not reach (#913).
+		probeHead("llamacpp/"+strings.Repeat("very-long-model-name-", 4), "", 55),
 	}
 	scores := map[string]rank.Score{
 		heads[0].ID: {Declared: 40, Effective: 52, N: 25},
 		heads[1].ID: {Declared: 80, Effective: 80},
+		heads[2].ID: {Declared: 55, Effective: 55},
 	}
 	cols := probeColumns(heads, scores)
 
-	want := strings.Index(probeRow(cols, func(c probeColumn) string { return c.head }), "Src")
+	// Counted in runes, not bytes: a cut cell ends in a one-rune ellipsis that
+	// is three bytes, so a byte offset reads a correctly aligned row as two
+	// columns adrift.
+	want := columnAt(probeRow(cols, func(c probeColumn) string { return c.head }), "Src")
 	for _, h := range heads {
 		row := probeRow(cols, func(c probeColumn) string { return c.cell(h) })
-		if got := strings.Index(row, h.Source); got != want {
+		if got := columnAt(row, h.Source); got != want {
 			t.Errorf("%s: Src column starts at %d, header puts it at %d", h.ID, got, want)
 		}
 	}
+}
+
+// columnAt is where sub begins, measured the way a terminal lays a line out.
+func columnAt(row, sub string) int {
+	i := strings.Index(row, sub)
+	if i < 0 {
+		return -1
+	}
+	return utf8.RuneCountInString(row[:i])
 }
 
 // The last column is unpadded, or every line ships a run of trailing spaces.
@@ -163,5 +182,30 @@ func TestRoutingEvidence(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// Widths are minimums, not the whole answer: "registry" is eight characters in
+// a column declared five. Cutting it to "regi…" to keep the columns aligned
+// would trade one wrong output for another, so a column fits its own values.
+func TestProbeColumns_AColumnFitsItsOwnValues(t *testing.T) {
+	h := provider.Head{ID: "agy/opus", Name: "Claude Opus", Provider: "antigravity", Source: "registry"}
+	cols := probeColumns([]provider.Head{h}, map[string]rank.Score{})
+
+	for _, c := range cols {
+		if c.width == 0 {
+			continue // the last column runs to the end of the line
+		}
+		if got := utf8.RuneCountInString(c.cell(h)); got > c.width {
+			t.Errorf("column %q is %d wide but has to show %d characters (%q)",
+				c.head, c.width, got, c.cell(h))
+		}
+		if got := utf8.RuneCountInString(c.head); got > c.width {
+			t.Errorf("column %q is %d wide but its own header is %d characters", c.head, c.width, got)
+		}
+	}
+
+	if row := probeRow(cols, func(c probeColumn) string { return c.cell(h) }); !strings.Contains(row, "registry") {
+		t.Errorf("row cut a value that fits its column:\n%s", row)
 	}
 }
