@@ -27,7 +27,7 @@ func sampleRow() cost.Row {
 // drops it silently. Getting these right is the difference between an export
 // that works and one that reports success into a void.
 func TestBuild_ProducesValidSpanIdentity(t *testing.T) {
-	p, err := Build([]cost.Row{sampleRow()}, "hydra", "1.4.0")
+	p, err := Build(nil, []cost.Row{sampleRow()}, "hydra", "1.4.0")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +57,7 @@ func TestBuild_ProducesValidSpanIdentity(t *testing.T) {
 func TestBuild_RowWithNoIdsStillGetsUsableIdentity(t *testing.T) {
 	r := sampleRow()
 	r.RunID, r.TaskID = "", ""
-	p, err := Build([]cost.Row{r}, "hydra", "1.4.0")
+	p, err := Build(nil, []cost.Row{r}, "hydra", "1.4.0")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -71,7 +71,7 @@ func TestBuild_RowWithNoIdsStillGetsUsableIdentity(t *testing.T) {
 func TestBuild_SpansFromOneRunShareATraceID(t *testing.T) {
 	a, b := sampleRow(), sampleRow()
 	b.TaskID = "task-def"
-	p, err := Build([]cost.Row{a, b}, "hydra", "1.4.0")
+	p, err := Build(nil, []cost.Row{a, b}, "hydra", "1.4.0")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -88,7 +88,7 @@ func TestBuild_SpansFromOneRunShareATraceID(t *testing.T) {
 // above 2^53, and unix nanos passed that in 1970, so a numeric timestamp is
 // silently wrong, not rejected.
 func TestMarshal_EncodesSixtyFourBitValuesAsStrings(t *testing.T) {
-	p, err := Build([]cost.Row{sampleRow()}, "hydra", "1.4.0")
+	p, err := Build(nil, []cost.Row{sampleRow()}, "hydra", "1.4.0")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -125,7 +125,7 @@ func TestMarshal_EncodesSixtyFourBitValuesAsStrings(t *testing.T) {
 }
 
 func TestBuild_SpanCoversTheDispatchDuration(t *testing.T) {
-	p, err := Build([]cost.Row{sampleRow()}, "hydra", "1.4.0")
+	p, err := Build(nil, []cost.Row{sampleRow()}, "hydra", "1.4.0")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,7 +144,7 @@ func TestBuild_SpanCoversTheDispatchDuration(t *testing.T) {
 // The fields worth exporting are the ones OTel has no place for. Dropping them
 // would leave a trace that says less than the log it came from.
 func TestBuild_CarriesHydrasOwnFieldsAlongsideGenAI(t *testing.T) {
-	p, err := Build([]cost.Row{sampleRow()}, "hydra", "1.4.0")
+	p, err := Build(nil, []cost.Row{sampleRow()}, "hydra", "1.4.0")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -167,13 +167,13 @@ func TestBuild_CarriesHydrasOwnFieldsAlongsideGenAI(t *testing.T) {
 func TestBuild_RefusesAnUnparseableTimestamp(t *testing.T) {
 	r := sampleRow()
 	r.TS = "not a timestamp"
-	if _, err := Build([]cost.Row{r}, "hydra", "1.4.0"); err == nil {
+	if _, err := Build(nil, []cost.Row{r}, "hydra", "1.4.0"); err == nil {
 		t.Error("Build accepted a row with an unparseable timestamp")
 	}
 }
 
 func TestBuild_EmptyLogProducesAWellFormedEmptyPayload(t *testing.T) {
-	p, err := Build(nil, "hydra", "1.4.0")
+	p, err := Build(nil, nil, "hydra", "1.4.0")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -191,7 +191,7 @@ func TestBuild_EmptyLogProducesAWellFormedEmptyPayload(t *testing.T) {
 }
 
 func TestBuild_SchemaURLIsPinned(t *testing.T) {
-	p, err := Build([]cost.Row{sampleRow()}, "hydra", "1.4.0")
+	p, err := Build(nil, []cost.Row{sampleRow()}, "hydra", "1.4.0")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -203,7 +203,7 @@ func TestBuild_SchemaURLIsPinned(t *testing.T) {
 // Swarm and breadcrumb fields are optional on a row, so they must appear only
 // when set, an empty swarm.mode attribute would read as a swarm that ran.
 func TestBuild_OptionalFieldsAppearOnlyWhenPresent(t *testing.T) {
-	plain, err := Build([]cost.Row{sampleRow()}, "hydra", "1.4.0")
+	plain, err := Build(nil, []cost.Row{sampleRow()}, "hydra", "1.4.0")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -216,7 +216,7 @@ func TestBuild_OptionalFieldsAppearOnlyWhenPresent(t *testing.T) {
 
 	r := sampleRow()
 	r.SwarmMode, r.SwarmWinner, r.Config = "best", true, "abc123"
-	rich, err := Build([]cost.Row{r}, "hydra", "1.4.0")
+	rich, err := Build(nil, []cost.Row{r}, "hydra", "1.4.0")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -232,7 +232,7 @@ func TestBuild_OptionalFieldsAppearOnlyWhenPresent(t *testing.T) {
 func TestBuild_NamesASpanWithNoModel(t *testing.T) {
 	r := sampleRow()
 	r.Model = ""
-	p, err := Build([]cost.Row{r}, "hydra", "1.4.0")
+	p, err := Build(nil, []cost.Row{r}, "hydra", "1.4.0")
 	if err != nil {
 		t.Fatal(err)
 	}
