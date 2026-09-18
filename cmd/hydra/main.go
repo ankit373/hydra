@@ -65,6 +65,7 @@ import (
 	"github.com/ankit373/hydra/internal/tui"
 	"github.com/ankit373/hydra/internal/update"
 	"github.com/ankit373/hydra/internal/util"
+	"github.com/ankit373/hydra/internal/waterfall"
 
 	_ "github.com/ankit373/hydra/internal/provider/agy"
 	_ "github.com/ankit373/hydra/internal/provider/cli"
@@ -1481,7 +1482,11 @@ explore_rate in config.toml above 0 is what creates that overlap.`,
 	export := &cobra.Command{
 		Use:   "export",
 		Short: "Render the dispatch log as OpenTelemetry spans",
-		Long: `hyctl trace export renders dispatches as OTLP spans.
+		Long: `hyctl trace export renders runs as OTLP spans.
+
+Spans come from the run log, so a collector shows the same nesting
+hyctl trace view does: a task, the attempts under it, and the fallback chain
+between them. Spend from the cost log is joined onto the span that spent it.
 
 Nothing leaves the machine unless --otlp names an endpoint. With no endpoint
 the payload is written to stdout or --out, so you can read exactly what would
@@ -1505,7 +1510,7 @@ place for, are carried under hydra.* rather than dropped.`,
 			if len(rows) == 0 {
 				return fmt.Errorf("no dispatches in the cost log, nothing to export")
 			}
-			payload, err := otlp.Build(rows, "hydra", build.Version)
+			payload, err := otlp.Build(tracesForRows(rows), rows, "hydra", build.Version)
 			if err != nil {
 				return err
 			}
@@ -1605,6 +1610,28 @@ replaced before it is written.`,
 
 	cmd.AddCommand(seal, evaluate, export, payloads, cmdTraceView(), cmdTraceScore())
 	return cmd
+}
+
+// tracesForRows loads the run log for every run the rows name, in first-seen
+// order so one export is byte-identical twice.
+//
+// A run whose log is gone is skipped, not an error: its rows still export as
+// roots, which is what every row written before span ids existed does.
+func tracesForRows(rows []cost.Row) []*waterfall.Trace {
+	var traces []*waterfall.Trace
+	seen := map[string]bool{}
+	for _, r := range rows {
+		if r.RunID == "" || seen[r.RunID] {
+			continue
+		}
+		seen[r.RunID] = true
+		events, err := runlog.Load(r.RunID)
+		if err != nil || len(events) == 0 {
+			continue
+		}
+		traces = append(traces, waterfall.Build(events))
+	}
+	return traces
 }
 
 // postOTLP sends the payload to an OTLP/HTTP endpoint.

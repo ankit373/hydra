@@ -19,10 +19,13 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strconv"
 	"time"
 
 	"github.com/ankit373/hydra/internal/cost"
+	"github.com/ankit373/hydra/internal/runlog"
+	"github.com/ankit373/hydra/internal/waterfall"
 )
 
 // SchemaURL pins the semantic-convention version these attribute names follow.
@@ -57,8 +60,11 @@ type Scope struct {
 // values as strings, a JSON number loses precision above 2^53, and unix nanos
 // passed that in 1970.
 type Span struct {
-	TraceID           string     `json:"traceId"`
-	SpanID            string     `json:"spanId"`
+	TraceID string `json:"traceId"`
+	SpanID  string `json:"spanId"`
+	// ParentSpanID is omitted on a root. An empty string is a valid encoding
+	// of "no parent"; an invalid one makes a collector drop the nesting.
+	ParentSpanID      string     `json:"parentSpanId,omitempty"`
 	Name              string     `json:"name"`
 	Kind              int        `json:"kind"`
 	StartTimeUnixNano string     `json:"startTimeUnixNano"`
@@ -97,19 +103,66 @@ func flt(k string, v float64) KeyValue {
 	return KeyValue{Key: k, Value: Value{DoubleValue: &v}}
 }
 
-// Build renders dispatch rows as a single OTLP payload.
+// Build renders runs and dispatch rows as a single OTLP payload.
+//
+// Spans come from the run log, so a fallback chain reaches a collector as the
+// tree `hyctl trace view` shows rather than as a flat list. Cost rows attach
+// spend to the span that spent it, which is what cost.Row.SpanID is for.
 //
 // serviceName names the resource; version is stamped so a collector can tell
 // which Hydra produced a span.
-func Build(rows []cost.Row, serviceName, version string) (Payload, error) {
-	spans := make([]Span, 0, len(rows))
+func Build(traces []*waterfall.Trace, rows []cost.Row, serviceName, version string) (Payload, error) {
+	spend := map[string]cost.Row{}
 	for _, r := range rows {
+		if validSpanID(r.SpanID) {
+			spend[r.SpanID] = r
+		}
+	}
+
+	var spans []Span
+	claimed := map[string]bool{}
+	for _, t := range traces {
+		traceID, err := idHex(16, t.RunID)
+		if err != nil {
+			return Payload{}, err
+		}
+		// Two passes: a parent has to be resolved against the ids this payload
+		// actually carries. waterfall promotes a span whose parent no event
+		// declared to a root but keeps ParentID set, so emitting it unchecked
+		// points a collector at a span that is not in the export.
+		flat := flatten(t.Roots)
+		emitted := make(map[string]string, len(flat))
+		for _, s := range flat {
+			id, err := otlpSpanID(s)
+			if err != nil {
+				return Payload{}, err
+			}
+			emitted[s.ID] = id
+		}
+		for _, s := range flat {
+			span, err := spanForWaterfall(s, traceID, emitted, spend[s.ID])
+			if err != nil {
+				return Payload{}, err
+			}
+			claimed[s.ID] = true
+			spans = append(spans, span)
+		}
+	}
+
+	// A row naming no span the run log holds still exports, as a root. These
+	// are rows written before span ids existed; dropping them would lose spend
+	// a collector used to see, which is a worse trade than a flat span.
+	for _, r := range rows {
+		if r.SpanID != "" && claimed[r.SpanID] {
+			continue
+		}
 		span, err := spanFor(r)
 		if err != nil {
 			return Payload{}, err
 		}
 		spans = append(spans, span)
 	}
+
 	return Payload{ResourceSpans: []ResourceSpans{{
 		Resource: Resource{Attributes: []KeyValue{
 			str("service.name", serviceName),
@@ -121,6 +174,177 @@ func Build(rows []cost.Row, serviceName, version string) (Payload, error) {
 		}},
 		SchemaURL: SchemaURL,
 	}}}, nil
+}
+
+// flatten walks the span tree depth-first. Order is the tree's, so a parent is
+// always emitted before its children.
+func flatten(roots []*waterfall.Span) []*waterfall.Span {
+	var out []*waterfall.Span
+	var walk func([]*waterfall.Span)
+	walk = func(ss []*waterfall.Span) {
+		for _, s := range ss {
+			out = append(out, s)
+			walk(s.Children)
+		}
+	}
+	walk(roots)
+	return out
+}
+
+// otlpSpanID is the id this span exports under. A run-log span id is already an
+// OTLP one; anything else is derived, since an unusable id is a dropped span.
+func otlpSpanID(s *waterfall.Span) (string, error) {
+	if validSpanID(s.ID) {
+		return s.ID, nil
+	}
+	return idHex(8, s.ID+s.TaskID)
+}
+
+// emitted maps each waterfall span id to the id it exports under, so a parent
+// resolves only if it is in this payload. spendRow is the cost row that named
+// this span, zero if none did.
+func spanForWaterfall(s *waterfall.Span, traceID string, emitted map[string]string, spendRow cost.Row) (Span, error) {
+	spanID, err := otlpSpanID(s)
+	if err != nil {
+		return Span{}, err
+	}
+	// A parent the export does not carry is no parent. Pointing a collector at
+	// a span that is not in the payload is worse than the root it would
+	// otherwise be: the trace renders as broken rather than as flat.
+	parent := emitted[s.ParentID]
+	if !validSpanID(parent) {
+		parent = ""
+	}
+
+	attrs := []KeyValue{
+		str("gen_ai.operation.name", "chat"),
+		str("hydra.span.kind", string(s.Kind)),
+		str("hydra.level", string(s.Level)),
+	}
+	if s.Model != "" {
+		attrs = append(attrs, str("gen_ai.request.model", s.Model))
+	}
+	if s.Head != "" {
+		attrs = append(attrs, str("gen_ai.system", s.Head), str("hydra.head", s.Head))
+	}
+	if s.InputTokens > 0 {
+		attrs = append(attrs, num("gen_ai.usage.input_tokens", int64(s.InputTokens)))
+	}
+	if s.OutputTokens > 0 {
+		attrs = append(attrs, num("gen_ai.usage.output_tokens", int64(s.OutputTokens)))
+	}
+	// Zero means the provider never reported it, not instant, so it is absent
+	// rather than exported as a measured zero.
+	if s.TTFTMs > 0 {
+		attrs = append(attrs, num("hydra.ttft_ms", s.TTFTMs))
+	}
+	if s.Tier > 0 {
+		attrs = append(attrs, num("hydra.tier", int64(s.Tier)))
+	}
+	if s.Status != "" {
+		attrs = append(attrs, str("hydra.status", s.Status))
+	}
+	if s.Confidence > 0 {
+		attrs = append(attrs, flt("hydra.confidence", s.Confidence))
+	}
+	if s.CostUSD > 0 {
+		attrs = append(attrs, flt("hydra.cost.est_usd", s.CostUSD))
+	}
+	if s.InputRef != "" {
+		attrs = append(attrs, str("hydra.payload.input_ref", s.InputRef))
+	}
+	if s.OutputRef != "" {
+		attrs = append(attrs, str("hydra.payload.output_ref", s.OutputRef))
+	}
+	attrs = append(attrs, metaAttrs(s.Meta)...)
+	attrs = append(attrs, spendAttrs(spendRow)...)
+
+	name := string(s.Kind)
+	if s.Model != "" {
+		name += " " + s.Model
+	}
+	// A verdict is what the run concluded, and outranks the span's own level:
+	// a dispatch that returned cleanly and then failed its tests is an error.
+	code := 1
+	if s.Level == runlog.LevelError {
+		code = 2
+	}
+	if passed, known := s.Verdict(); known && !passed {
+		code = 2
+	}
+	return Span{
+		TraceID:           traceID,
+		SpanID:            spanID,
+		ParentSpanID:      parent,
+		Name:              name,
+		Kind:              3, // SPAN_KIND_CLIENT
+		StartTimeUnixNano: strconv.FormatInt(s.Start.UnixNano(), 10),
+		EndTimeUnixNano:   strconv.FormatInt(s.End.UnixNano(), 10),
+		Attributes:        attrs,
+		Status:            Status{Code: code},
+	}, nil
+}
+
+// metaAttrs renders the open Meta map under hydra.meta.*. Keys are sorted so
+// one run exports byte-identically twice, which is what makes a diff of two
+// exports mean something.
+func metaAttrs(meta map[string]any) []KeyValue {
+	if len(meta) == 0 {
+		return nil
+	}
+	keys := make([]string, 0, len(meta))
+	for k := range meta {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	out := make([]KeyValue, 0, len(keys))
+	for _, k := range keys {
+		switch v := meta[k].(type) {
+		case string:
+			out = append(out, str("hydra.meta."+k, v))
+		case bool:
+			b := v
+			out = append(out, KeyValue{Key: "hydra.meta." + k, Value: Value{BoolValue: &b}})
+		case float64: // every JSON number decodes as float64
+			out = append(out, flt("hydra.meta."+k, v))
+		case int:
+			out = append(out, num("hydra.meta."+k, int64(v)))
+		case int64:
+			out = append(out, num("hydra.meta."+k, v))
+		default:
+			out = append(out, str("hydra.meta."+k, fmt.Sprint(v)))
+		}
+	}
+	return out
+}
+
+// spendAttrs carries what only the cost log knows. A zero row contributes
+// nothing rather than a row of zeroes that reads as a free dispatch.
+func spendAttrs(r cost.Row) []KeyValue {
+	if r.SpanID == "" {
+		return nil
+	}
+	attrs := []KeyValue{
+		flt("hydra.cost.est_usd", r.EstCostUSD),
+		str("hydra.cost.tokens_source", r.TokensSource),
+		flt("hydra.routing.act_prob", r.ActProb),
+		flt("hydra.routing.keep_prob", r.KeepProb),
+	}
+	if r.Enum != "" {
+		attrs = append(attrs, str("hydra.enum", r.Enum))
+	}
+	if r.Pool != "" {
+		attrs = append(attrs, str("hydra.pool", r.Pool))
+	}
+	if r.SwarmMode != "" {
+		winner := r.SwarmWinner
+		attrs = append(attrs, str("hydra.swarm.mode", r.SwarmMode),
+			KeyValue{Key: "hydra.swarm.winner", Value: Value{BoolValue: &winner}})
+	}
+	if r.Config != "" {
+		attrs = append(attrs, str("hydra.config.breadcrumb", r.Config))
+	}
+	return attrs
 }
 
 func spanFor(r cost.Row) (Span, error) {
