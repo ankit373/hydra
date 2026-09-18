@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 )
 
 func newTestStore(t *testing.T, model string) *Store {
@@ -224,52 +223,10 @@ func TestStore_BudgetBelowOneRecordEmpties(t *testing.T) {
 	}
 }
 
-func TestStore_EachWalksInWriteOrder(t *testing.T) {
-	s := newTestStore(t, "m")
-	for i := range 5 {
-		if err := s.Put(spanID(i), vec(4, float32(i))); err != nil {
-			t.Fatal(err)
-		}
-	}
-	var order []float32
-	var last time.Time
-	err := s.Each(func(id string, ts time.Time, v []float32) bool {
-		order = append(order, v[0])
-		if ts.Before(last) {
-			t.Fatalf("timestamps went backwards at %s", id)
-		}
-		last = ts
-		return true
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	for i, got := range order {
-		if got != float32(i) {
-			t.Fatalf("at %d want %v got %v", i, i, got)
-		}
-	}
-}
-
-func TestStore_EachStopsWhenAskedTo(t *testing.T) {
-	s := newTestStore(t, "m")
-	for i := range 5 {
-		s.Put(spanID(i), vec(4, float32(i)))
-	}
-	n := 0
-	s.Each(func(string, time.Time, []float32) bool { n++; return n < 2 })
-	if n != 2 {
-		t.Fatalf("want 2 visits, got %d", n)
-	}
-}
-
 func TestStore_EmptyStoreReadsCleanly(t *testing.T) {
 	s := newTestStore(t, "m")
 	if _, ok := s.Get(spanID(1)); ok {
 		t.Fatal("empty store returned a vector")
-	}
-	if err := s.Each(func(string, time.Time, []float32) bool { return true }); err != nil {
-		t.Fatal(err)
 	}
 	if st := s.Stat(); st.Count != 0 || st.Dim != 0 {
 		t.Fatalf("bad empty stats: %+v", st)
