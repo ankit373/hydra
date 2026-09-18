@@ -198,6 +198,54 @@ func TestResolve_ADeferralDeclaredInConfigCounts(t *testing.T) {
 	}
 }
 
+// The environment sits ahead of the profile in the AWS chain, so an exported
+// key pair is what every other AWS tool would use and the file is never
+// consulted. A file's deferral must not reach it.
+//
+// My first fix cleared these too, and called it deliberate in a comment. It is
+// not: someone holding working credentials was told they had none, because a
+// profile they were not using declared role_arn. Caught in review on #891.
+func TestResolve_AFileDeferralDoesNotClearEnvironmentKeys(t *testing.T) {
+	awsHome(t, "", "[default]\nregion = us-east-1\nrole_arn = arn:aws:iam::1:role/R\n")
+	t.Setenv("AWS_ACCESS_KEY_ID", "AKIAENV")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "secretenv")
+
+	c := Resolve()
+	if !c.Usable() {
+		t.Fatalf("Resolve() = %+v is not Usable, but the environment carries a working "+
+			"pair and the profile it defers is one no other AWS tool would consult", c)
+	}
+	if c.AccessKeyID != "AKIAENV" {
+		t.Errorf("AccessKeyID = %q, want the environment's", c.AccessKeyID)
+	}
+	if c.Deferred != "" {
+		t.Errorf("Deferred = %q, but the keys did not come from the profile", c.Deferred)
+	}
+	// The region still resolves from that same file, which is the point of
+	// reading configuration out of a profile whose credentials are not used.
+	if c.Region != "us-east-1" {
+		t.Errorf("Region = %q, want us-east-1", c.Region)
+	}
+}
+
+// The mirror case, so the fix above cannot be "never defer at all": a half-set
+// environment is not a credential, so the file's keys are taken and the file's
+// deferral applies to them.
+func TestResolve_AHalfSetEnvironmentStillTakesTheFilesDeferral(t *testing.T) {
+	awsHome(t, "[default]\naws_access_key_id = AKIAFILE\naws_secret_access_key = s\n"+
+		"role_arn = arn:aws:iam::1:role/R\n", "[default]\nregion = us-east-1\n")
+	t.Setenv("AWS_ACCESS_KEY_ID", "AKIAENV") // id only, no secret
+
+	c := Resolve()
+	if c.Usable() {
+		t.Errorf("Resolve() = %+v is Usable: an id with no secret is not a credential, "+
+			"so the file's keys apply and so does its role_arn", c)
+	}
+	if c.Deferred != "role_arn" {
+		t.Errorf("Deferred = %q, want role_arn", c.Deferred)
+	}
+}
+
 // A region is configuration, not a credential. A deferring profile is
 // unroutable for want of an identity, and reporting a second missing thing
 // would send someone to fix the wrong one.
