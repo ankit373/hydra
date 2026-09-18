@@ -70,6 +70,9 @@ type Options struct {
 	// executing, the same preflight guard swarm.Options.MaxEstCostUSD already
 	// gives fan-out mode, extended to ordinary dispatch. 0 = no limit.
 	MaxCostUSD float64
+	// MaxCostSource names where that ceiling came from, so a refusal says
+	// which of the flag and the policy file to change. Empty reads as the flag.
+	MaxCostSource string
 
 	// RunID groups every log row produced by one user-facing invocation;
 	// TaskID groups the rows for one logical task inside it. Empty means
@@ -608,7 +611,15 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 			estInputTokens := len(prompt) / 4
 			estCost := d.estimateCost(tier, estInputTokens, estInputTokens/2)
 			if estCost > opts.MaxCostUSD {
-				lastErr = fmt.Errorf("estimated cost $%.4f for head %s exceeds limit $%.4f", estCost, h.ID, opts.MaxCostUSD)
+				// Named only when the caller said where the ceiling came from.
+				// Defaulting to a source would mean printing "--max-cost" at an
+				// edit whose ceiling came out of policy.yaml.
+				where := ""
+				if opts.MaxCostSource != "" {
+					where = " set by " + opts.MaxCostSource
+				}
+				lastErr = fmt.Errorf("estimated cost $%.4f for head %s exceeds limit $%.4f%s",
+					estCost, h.ID, opts.MaxCostUSD, where)
 				_ = rl.Append(runlog.Event{
 					Kind: runlog.KindError, TaskID: taskID,
 					SpanID: span, ParentSpanID: taskSpan, Level: runlog.LevelError,

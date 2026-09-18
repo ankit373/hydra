@@ -163,12 +163,13 @@ func Edit(ctx context.Context, req Request) (*Result, error) {
 	ctx, cancel := fp.Deadline(ctx)
 	defer cancel()
 	dispResult, err := d.Dispatch(ctx, editPrompt, dispatch.Options{
-		TierHint:   enumToTier(req.Enum),
-		LocalOnly:  req.LocalOnly,
-		RunID:      req.RunID,
-		TaskID:     req.TaskID,
-		Resource:   req.File,
-		MaxCostUSD: fp.MaxCostUSD,
+		TierHint:      enumToTier(req.Enum),
+		LocalOnly:     req.LocalOnly,
+		RunID:         req.RunID,
+		TaskID:        req.TaskID,
+		Resource:      req.File,
+		MaxCostUSD:    fp.MaxCostUSD,
+		MaxCostSource: "policy.yaml max_cost_usd",
 	})
 	if err != nil {
 		cleanupBackup()
