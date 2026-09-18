@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func newTestStore(t *testing.T, model string) *Store {
@@ -260,5 +261,86 @@ func TestStore_MeasuredBytesPerVector(t *testing.T) {
 		dim, st.Count, st.Bytes, fi.Size(), per, DefaultBudgetBytes/per)
 	if per != spanIDLen+tsLen+dim*4 {
 		t.Fatalf("record width drifted from the layout: %d", per)
+	}
+}
+
+func TestStore_EachWalksInWriteOrder(t *testing.T) {
+	s := newTestStore(t, "m")
+	for i := range 5 {
+		if err := s.Put(spanID(i), vec(4, float32(i))); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var order []float32
+	var last time.Time
+	err := s.Each(func(id string, ts time.Time, v []float32) bool {
+		order = append(order, v[0])
+		if ts.Before(last) {
+			t.Fatalf("timestamps went backwards at %s", id)
+		}
+		last = ts
+		return true
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, got := range order {
+		if got != float32(i) {
+			t.Fatalf("at %d want %v got %v", i, i, got)
+		}
+	}
+}
+
+func TestStore_EachStopsWhenAskedTo(t *testing.T) {
+	s := newTestStore(t, "m")
+	for i := range 5 {
+		if err := s.Put(spanID(i), vec(4, float32(i))); err != nil {
+			t.Fatal(err)
+		}
+	}
+	n := 0
+	if err := s.Each(func(string, time.Time, []float32) bool { n++; return n < 2 }); err != nil {
+		t.Fatal(err)
+	}
+	if n != 2 {
+		t.Fatalf("want 2 visits, got %d", n)
+	}
+}
+
+func TestStore_EachOnAnEmptyStore(t *testing.T) {
+	s := newTestStore(t, "m")
+	calls := 0
+	if err := s.Each(func(string, time.Time, []float32) bool { calls++; return true }); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 0 {
+		t.Fatalf("want no visits, got %d", calls)
+	}
+}
+
+// Eviction rewrites the file underneath a walk. On Unix the open handle pins
+// the old inode, so the walk stays consistent rather than reading a half-new
+// file, which is the property Each's doc comment claims.
+func TestStore_EachSurvivesAConcurrentEviction(t *testing.T) {
+	s := newTestStore(t, "m")
+	for i := range 20 {
+		if err := s.Put(spanID(i), vec(8, float32(i))); err != nil {
+			t.Fatal(err)
+		}
+	}
+	seen := 0
+	err := s.Each(func(id string, _ time.Time, v []float32) bool {
+		if seen == 0 {
+			s.SetBudget(s.recordSize() * 2)
+			_ = s.Put(spanID(999), vec(8, 999))
+		}
+		seen++
+		return true
+	})
+	if err != nil {
+		t.Fatalf("the walk failed under eviction: %v", err)
+	}
+	if seen == 0 {
+		t.Fatal("the walk visited nothing")
 	}
 }

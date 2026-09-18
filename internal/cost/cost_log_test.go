@@ -295,7 +295,7 @@ func TestRenderSwarmStats_Golden(t *testing.T) {
 		Runs: 12, WinnerRate: 0.75, AvgWallMS: 3400, TotalCost: 0.4567,
 		ByMode: map[string]int{"best": 7, "race": 4, "all": 1},
 	}
-	out := capture(t, func() { RenderSwarmStats("today", sum) })
+	out := capture(t, func() { RenderSwarmStats(sum) })
 	testutil.Golden(t, "render_swarm_stats", out, s.Home, s.HydraHome)
 }
 

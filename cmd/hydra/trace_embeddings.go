@@ -13,6 +13,7 @@ import (
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/embed"
 	"github.com/ankit373/hydra/internal/probe"
+	"github.com/ankit373/hydra/internal/retrieve"
 )
 
 // cmdTraceEmbeddings reports the opt-in vector store.
@@ -62,6 +63,7 @@ key: changing it invalidates the store rather than mixing two vector spaces.`,
 					"model":           emb.Model(),
 					"budget_bytes":    embed.Budget(cfg),
 					"stats":           st,
+					"lexical":         lexStat(cfg),
 				}, "", "  ")
 				fmt.Println(string(raw))
 				return nil
@@ -72,8 +74,12 @@ key: changing it invalidates the store rather than mixing two vector spaces.`,
 				fmt.Println("Turn it on with capture_embeddings = true in config.toml.")
 				return nil
 			}
+			lex := lexStat(cfg)
+			fmt.Printf("  lexical index: %d prompt%s, %d term%s in %s\n",
+				lex.Docs, plural(lex.Docs), lex.Terms, plural(lex.Terms), humanBytes(lex.Bytes))
+
 			if !emb.Available() {
-				fmt.Println("Embedding capture is on, but no embedding model was found.")
+				fmt.Println("  no embedding model found, so search is lexical only.")
 				fmt.Printf("  %s\n", dimStyle.Render(
 					"pull one, e.g. `ollama pull nomic-embed-text`, or name it with embed_model in config.toml"))
 				return nil
@@ -118,4 +124,15 @@ func since(t time.Time) string {
 		return "0s"
 	}
 	return d.String()
+}
+
+// lexStat reads the lexical index's size without creating it, so reporting
+// cannot make its own answer true.
+func lexStat(cfg *config.Config) retrieve.Stats {
+	ix, err := retrieve.OpenIndex(retrieve.Dir())
+	if err != nil {
+		return retrieve.Stats{}
+	}
+	ix.SetBudget(retrieve.Budget(cfg))
+	return ix.Stat()
 }
