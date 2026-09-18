@@ -280,22 +280,39 @@ func TestBedrock_BufferedPathStillSignsAndDoesNotStream(t *testing.T) {
 // Replicate is deliberately excluded from #792: its prediction API is a
 // polling interface, so there is no stream to read. It must keep falling back
 // to Execute rather than being quietly routed at a stream reader.
+//
+// Routed through redirect() like the other Replicate tests, so it reaches a
+// stub rather than api.replicate.com: a test that leaves the machine is slow,
+// depends on someone else's uptime, and fails differently on each CI runner.
 func TestReplicate_StaysOnTheBufferedPath(t *testing.T) {
+	var sawStreamRequest bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.Header.Get("Accept"), "event-stream") {
+			sawStreamRequest = true
+		}
+		if r.Method == http.MethodPost {
+			_, _ = w.Write([]byte(`{"status":"succeeded","output":["polled ","answer"]}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"status":"succeeded","output":["polled ","answer"]}`))
+	}))
+	t.Cleanup(srv.Close)
+	t.Setenv("REPLICATE_API_TOKEN", "r8-test")
+	t.Setenv("REPLICATE_MODEL", "meta/llama-test")
+
 	head := provider.Head{
 		ID: "replicate", Name: "Replicate", Provider: "replicate",
 		Source: "env", AuthReady: true, Meta: map[string]string{},
 	}
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if a := r.Header.Get("Accept"); strings.Contains(a, "event-stream") {
-			t.Errorf("Replicate was asked for a stream (Accept: %s); its API polls", a)
-		}
-		http.Error(w, "not reached", http.StatusInternalServerError)
-	}))
-	t.Cleanup(srv.Close)
-	t.Setenv("REPLICATE_API_TOKEN", "test")
-
-	// The call fails (no real Replicate), which is fine: what matters is that
-	// ExecuteStream did not route it at an SSE reader.
-	_, _ = (&HTTPExecutor{}).ExecuteStream(context.Background(),
+	resp, err := redirect(srv).ExecuteStream(context.Background(),
 		Request{Prompt: "p", Head: head}, func(string) {})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sawStreamRequest {
+		t.Error("Replicate was asked for an event stream; its prediction API polls")
+	}
+	if resp.Output != "polled answer" {
+		t.Errorf("Output = %q, want the polled prediction reassembled", resp.Output)
+	}
 }
