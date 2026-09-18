@@ -46,6 +46,9 @@ const (
 	Running Status = "running"
 	Done    Status = "done"
 	Failed  Status = "failed"
+	// Interrupted is a reader's verdict and is never stored: the run was
+	// recorded as running and the process that recorded it is gone (#898).
+	Interrupted Status = "interrupted"
 )
 
 // Step is one unit of a workflow: a prompt, its own routing hint, and what
@@ -79,6 +82,29 @@ type Workflow struct {
 	Status  Status `json:"status"`
 	RunID   string `json:"run_id,omitempty"`
 	Steps   []Step `json:"steps"`
+}
+
+// Observed is the status to show a reader. The stored one, except that a run
+// recorded as running whose heartbeat has stopped is interrupted: nothing is
+// running, and `hyctl workflow resume` is what picks it up.
+//
+// Read-only by design. A reader that repaired the stored status would race the
+// writer it is trying to describe.
+func (w Workflow) Observed() Status {
+	if w.Status == Running && !alive(w.ID) {
+		return Interrupted
+	}
+	return w.Status
+}
+
+// ObservedStep is the same verdict for the step that was in flight: it is not
+// running either, and labelling it so is what sends someone looking for a
+// process that exited.
+func ObservedStep(step, run Status) Status {
+	if step == Running && run == Interrupted {
+		return Interrupted
+	}
+	return step
 }
 
 // CostUSD totals what the workflow has spent so far.
