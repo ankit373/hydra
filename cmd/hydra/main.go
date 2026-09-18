@@ -2543,7 +2543,9 @@ func cmdSecurity() *cobra.Command {
 		Short: "What the agents on this machine did, and whether you need to act",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			heads := probe.Run(cmd.Context()).Heads
-			rep, err := security.Build(heads)
+			// Scanned here rather than inside Build: it is network work, and
+			// this is the command whose job is to go and look (#923).
+			rep, err := security.BuildWith(heads, probe.ScanLocalServers(cmd.Context(), heads))
 			if err != nil {
 				return err
 			}
