@@ -22,7 +22,7 @@ type Target struct {
 // provider.Head so the trust package stays a low-level dependency; callers
 // (swarm/dispatch) adapt their heads to this in Phase 2b.
 type Source struct {
-	ID         string // calibration key, e.g. "model:claude-sonnet"
+	ID         string // calibration key: the head's own ID, e.g. "ollama/qwen3:4b"
 	Family     string // base-model family, for the correlation discount ("" = independent)
 	EstCostUSD float64
 }
@@ -141,7 +141,7 @@ func Run(ctx context.Context, task Task, sources []Source, exec Executor, cal *C
 	// LLR +0.000, "stopped_on_budget", confidence 50.0%, $0.0095 spent to learn
 	// nothing (#698). Refusing costs the user nothing they would have got.
 	if !cfg.allowUncalibrated && !anyEvidence(cal, sources, task.Domain) {
-		return nil, fmt.Errorf("%w in domain %q", ErrNoEvidence, task.Domain)
+		return nil, &NoEvidenceError{Domain: task.Domain, Sources: sourceIDs(sources)}
 	}
 	A := math.Log((1 - alpha) / alpha)
 
@@ -323,6 +323,29 @@ func AllowNoEvidence() RunOption {
 // of them is measured as uninformative. Either way no verdict can move the
 // posterior, so the run could only burn its budget and hand back the prior.
 var ErrNoEvidence = errors.New("no source carries evidence")
+
+// NoEvidenceError carries the sources the refused run would have sampled, so a
+// caller telling the user which key to record against can name one the router
+// actually looks up rather than a placeholder shape it never reads (#835).
+type NoEvidenceError struct {
+	Domain  string
+	Sources []string // head IDs, as `hyctl probe` prints them
+}
+
+func (e *NoEvidenceError) Error() string {
+	return fmt.Sprintf("%s in domain %q", ErrNoEvidence, e.Domain)
+}
+
+func (e *NoEvidenceError) Unwrap() error { return ErrNoEvidence }
+
+func sourceIDs(sources []Source) []string {
+	ids := make([]string, 0, len(sources))
+	for _, s := range sources {
+		ids = append(ids, s.ID)
+	}
+	sort.Strings(ids)
+	return ids
+}
 
 // minD is the diagnostic power below which a source is treated as carrying no
 // evidence. Calibration is stored as float rates, so an exactly-uninformative

@@ -749,7 +749,7 @@ hyctl dispatch <span class="fl">--local</span> <span class="s">"write unit tests
       <div class="sub"><div class="lbl">How it works</div><p>A Beta-Bernoulli posterior over sensitivity/specificity → a per-vote LLR and a <b>diagnostic power D</b> (KL divergence, nats). A coin-flip source has D≈0 and is ignored. The defect-cost model prices a wrong answer and sets the required confidence.</p></div>
       <div class="sub"><div class="lbl">Subcommands</div>
         <pre>hyctl trust calibration      <span class="c"># per-source se / sp / D</span>
-hyctl trust record <span class="fl">--source</span> model:claude <span class="fl">--domain</span> go <span class="fl">--said-correct</span> <span class="fl">--outcome</span> correct
+hyctl trust record <span class="fl">--source</span> ollama/qwen3:4b <span class="fl">--domain</span> go <span class="fl">--said-correct</span> <span class="fl">--outcome</span> correct  <span class="c"># a head ID from `hyctl probe`</span>
 hyctl trust defect <span class="fl">--pii</span> <span class="fl">--production</span>
 hyctl trust stats   <span class="c"># samples saved vs fixed-N</span>
 hyctl trust explain &lt;hash&gt;   <span class="c"># the LLR ledger for a run</span>

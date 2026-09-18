@@ -925,7 +925,12 @@ func cmdDispatch() *cobra.Command {
 				})
 				if err != nil {
 					if errors.Is(err, trust.ErrNoEvidence) {
-						return noEvidenceError(domain)
+						var noEv *trust.NoEvidenceError
+						var heads []string
+						if errors.As(err, &noEv) {
+							heads = noEv.Sources
+						}
+						return noEvidenceError(domain, heads)
 					}
 					return err
 				}
@@ -3430,6 +3435,21 @@ func cmdGraph() *cobra.Command {
 	return cmd
 }
 
+// recordableSource picks the head the suggested `trust record` should name: one
+// the run just refused, since a concrete id beats a placeholder and the refusal
+// already holds the list. Falls back to describing the shape, never a prefix.
+func recordableSource(heads []string) string {
+	for _, h := range heads {
+		if h == "" {
+			continue
+		}
+		if _, bad := trust.UnreadableSourceKey(h); !bad {
+			return h
+		}
+	}
+	return "<head-id, as `hyctl probe` prints it>"
+}
+
 // noEvidenceError turns the SPRT refusal into something the reader can act on.
 //
 // The refusal tests whether any head this run would sample carries evidence in
@@ -3439,7 +3459,7 @@ func cmdGraph() *cobra.Command {
 // (#732). Sources scored in this domain are named first, because a domain that
 // has evidence but not from these heads is a different problem with a different
 // fix.
-func noEvidenceError(domain string) error {
+func noEvidenceError(domain string, heads []string) error {
 	var b strings.Builder
 	fmt.Fprintf(&b, "no head this run would sample has been scored in domain %q, so --confidence "+
 		"would sample every head, move the estimate nowhere and hand back 50%%.\n", domain)
@@ -3472,7 +3492,11 @@ func noEvidenceError(domain string) error {
 			fmt.Fprintf(&b, "  Other domains with evidence: %s\n", strings.Join(others, ", "))
 		}
 	}
-	b.WriteString("  Record an outcome:     hyctl trust record --source model:<id> --domain " + domain + " --said-correct --outcome correct\n")
+	// This printed "model:<id>", the first prefix UnreadableSourceKey exists to
+	// flag, so following the only instruction on screen filled a cell nothing
+	// reads and earned the same refusal again (#835).
+	b.WriteString("  Record an outcome:     hyctl trust record --source " + recordableSource(heads) +
+		" --domain " + domain + " --said-correct --outcome correct\n")
 	b.WriteString("  Or verify with a test: hyctl oracle verify --candidate <file> --domain " + domain + " -- go test ./...\n")
 	b.WriteString("\nWithout --confidence the same prompt routes normally and costs one head.")
 	return errors.New(b.String())
