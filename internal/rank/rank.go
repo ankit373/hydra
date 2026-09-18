@@ -26,6 +26,13 @@ var sourceWeight = map[string]int{"cli": 3, "env": 2, "port": 1}
 // answers that head with "start its local server", which is the one actionable
 // line a user with no server running needs to see (#248).
 func ByCapScore(heads []provider.Head) []provider.Head {
+	ranked, _ := ByMeasured(heads, nil)
+	return ranked
+}
+
+// rankBy deduplicates and sorts against a precomputed score per head, so the
+// two passes and the order a caller is told about all read the same number.
+func rankBy(heads []provider.Head, scores map[string]Score) []provider.Head {
 	best := map[string]provider.Head{}
 
 	for _, h := range heads {
@@ -35,7 +42,7 @@ func ByCapScore(heads []provider.Head) []provider.Head {
 			best[key] = h
 			continue
 		}
-		if rankLess(h, existing) {
+		if rankLess(h, existing, scores) {
 			best[key] = h
 		}
 	}
@@ -45,13 +52,19 @@ func ByCapScore(heads []provider.Head) []provider.Head {
 		ranked = append(ranked, h)
 	}
 
-	sort.Slice(ranked, func(i, j int) bool { return rankLess(ranked[i], ranked[j]) })
+	sort.Slice(ranked, func(i, j int) bool { return rankLess(ranked[i], ranked[j], scores) })
 
 	return ranked
 }
 
-// rankLess reports whether a should rank ahead of b, as a total order: score,
-// then source, then bits per weight, then id.
+// rankLess reports whether a should rank ahead of b, as a total order: the
+// score it was ranked on, then source, then bits per weight, then id.
+//
+// The first key is the *effective* score, which is the declared one until this
+// machine has verified enough of a head's answers to move it (measured.go).
+// UITier still bands on the declared score: a measurement says which head to
+// prefer, not what a tier costs, and rank and tier are already separate axes,
+// a local head is tier 10 whatever it scores.
 //
 // Total on purpose. Score and source alone left two quants of one model
 // incomparable, and `best` above is a map, whose iteration order Go
@@ -59,9 +72,9 @@ func ByCapScore(heads []provider.Head) []provider.Head {
 // between them by coin flip: 23 of 40 real `probe` runs ranked the Q4 first,
 // 17 the Q8 (#765). The dedupe tie uses the same predicate so the two passes
 // cannot disagree about which of two heads is better.
-func rankLess(a, b provider.Head) bool {
-	if a.CapScore != b.CapScore {
-		return a.CapScore > b.CapScore
+func rankLess(a, b provider.Head, scores map[string]Score) bool {
+	if sa, sb := scores[a.ID].Effective, scores[b.ID].Effective; sa != sb {
+		return sa > sb
 	}
 	if sourceWeight[a.Source] != sourceWeight[b.Source] {
 		return sourceWeight[a.Source] > sourceWeight[b.Source]

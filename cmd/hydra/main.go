@@ -354,6 +354,12 @@ type probeHeadJSON struct {
 	CapScore  int    `json:"cap_score"`
 	LocalOnly bool   `json:"local_only"`
 	IsCortex  bool   `json:"is_cortex"`
+	// CapScoreEffective is what the head was ranked on: cap_score updated by
+	// this machine's own verified history, and equal to it until there is
+	// enough of that history to move it. Commitments is how many judged
+	// answers stood behind the update, absent when none did (#815).
+	CapScoreEffective int `json:"cap_score_effective"`
+	Commitments       int `json:"commitments,omitempty"`
 	// Routable is false when discovery found the head but no executor can
 	// drive it (e.g. the Ollama binary with its server not running), the
 	// same distinction the human table marks with ✗ (#248).
@@ -367,6 +373,75 @@ type probeHeadJSON struct {
 	// a 40960 model still runs at its server's default. It is what caps a
 	// declared window in internal/budget (#764).
 	CtxMax int `json:"ctx_max,omitempty"`
+}
+
+// probeColumn is one column of the probe table. A zero width is the last
+// column, which is not padded, so no trailing run of spaces reaches a terminal.
+type probeColumn struct {
+	head  string
+	width int
+	cell  func(provider.Head) string
+}
+
+// probeColumns decides which columns this head set needs. A column appears
+// only when something fills it: Quant is dead space on a machine with no local
+// models (#762), and Declared is dead space until a measurement has actually
+// moved a head off its catalogue score (#815).
+func probeColumns(heads []provider.Head, scores map[string]rank.Score) []probeColumn {
+	// A name past the column pushed every later column right. The fixed width
+	// had always done that; adding one made it plain, so size the column to
+	// the names, capped to stay inside a normal terminal.
+	const minHead, maxHead = 30, 44
+	headWidth := minHead
+	var anyQuant, anyAdjusted bool
+	for _, h := range heads {
+		anyQuant = anyQuant || h.Meta["model_quant"] != ""
+		anyAdjusted = anyAdjusted || scores[h.ID].Adjusted()
+		if n := utf8.RuneCountInString(h.Name); n > headWidth {
+			headWidth = min(n, maxHead)
+		}
+	}
+
+	cols := []probeColumn{{"Head", headWidth, func(h provider.Head) string { return h.Name }}}
+	if anyQuant {
+		cols = append(cols, probeColumn{"Quant", 8, func(h provider.Head) string { return h.Meta["model_quant"] }})
+	}
+	// Score is what the head was ranked on, so it is the effective one. With
+	// no measurement anywhere that is the declared score and the two columns
+	// would be identical, which is why the second only appears beside an
+	// adjustment.
+	cols = append(cols, probeColumn{"Score", 5, func(h provider.Head) string {
+		return strconv.Itoa(scores[h.ID].Effective)
+	}})
+	if anyAdjusted {
+		cols = append(cols, probeColumn{"Declared", 12, func(h provider.Head) string {
+			sc := scores[h.ID]
+			if !sc.Adjusted() {
+				return ""
+			}
+			return fmt.Sprintf("%d (n=%d)", sc.Declared, sc.N)
+		}})
+	}
+	return append(cols,
+		probeColumn{"Src", 5, func(h provider.Head) string { return h.Source }},
+		probeColumn{"Provider", 0, func(h provider.Head) string { return h.Provider }})
+}
+
+// probeRow renders one row, taking each cell from val so the header and the
+// body cannot drift apart into two format strings that need keeping in sync.
+func probeRow(cols []probeColumn, val func(probeColumn) string) string {
+	var b strings.Builder
+	for i, c := range cols {
+		if i > 0 {
+			b.WriteString("  ")
+		}
+		if c.width == 0 {
+			b.WriteString(val(c))
+			continue
+		}
+		fmt.Fprintf(&b, "%-*s", c.width, val(c))
+	}
+	return b.String()
 }
 
 func cmdProbe() *cobra.Command {
@@ -395,7 +470,9 @@ func cmdProbe() *cobra.Command {
 						IsCortex: result.Cortex != nil && h.ID == result.Cortex.ID,
 						Routable: why == "", UnroutableReason: why,
 						Quant: h.Meta["model_quant"], Params: h.Meta["model_params"],
-						CtxMax: ctxMax,
+						CtxMax:            ctxMax,
+						CapScoreEffective: result.Scores[h.ID].Effective,
+						Commitments:       result.Scores[h.ID].N,
 					}
 				}
 				warnings := result.Warnings
@@ -424,30 +501,10 @@ func cmdProbe() *cobra.Command {
 				fmt.Println("  No models found.")
 				return nil
 			}
-			// Only Ollama reports a quant today, so the column is dead space
-			// on a machine with no local models (#762).
-			var anyQuant bool
-			// A name past the column pushed every later column right. The fixed
-			// width had always done that; adding one made it plain, so size the
-			// column to the names, capped to stay inside a normal terminal.
-			const minHead, maxHead = 30, 44
-			headWidth := minHead
-			for _, h := range result.Heads {
-				anyQuant = anyQuant || h.Meta["model_quant"] != ""
-				if n := utf8.RuneCountInString(h.Name); n > headWidth {
-					headWidth = min(n, maxHead)
-				}
-			}
-			header := fmt.Sprintf("  %-*s  %-5s  %-5s  %s", headWidth, "Head", "Score", "Src", "Provider")
+			cols := probeColumns(result.Heads, result.Scores)
+			header := "  " + probeRow(cols, func(c probeColumn) string { return c.head })
 			rowOf := func(h provider.Head) string {
-				return fmt.Sprintf("%-*s  %-5d  %-5s  %s", headWidth, h.Name, h.CapScore, h.Source, h.Provider)
-			}
-			if anyQuant {
-				header = fmt.Sprintf("  %-*s  %-8s  %-5s  %-5s  %s", headWidth, "Head", "Quant", "Score", "Src", "Provider")
-				rowOf = func(h provider.Head) string {
-					return fmt.Sprintf("%-*s  %-8s  %-5d  %-5s  %s",
-						headWidth, h.Name, h.Meta["model_quant"], h.CapScore, h.Source, h.Provider)
-				}
+				return probeRow(cols, func(c probeColumn) string { return c.cell(h) })
 			}
 			fmt.Println(header)
 			// Derived, not a second constant to keep in sync with the widths.

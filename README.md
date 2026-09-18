@@ -218,6 +218,22 @@ $ hyctl probe
     anthropic           Anthropic (API)     score:95  env    ✓ key found
 ```
 
+The score each head is listed under is the one it was **ranked** on: the catalogue's
+number updated by what that head has actually got right on this machine, drawn from the
+same calibration record `hyctl trust calibration` reports. A model that keeps being wrong
+sinks below one the catalogue rates higher, and where that happened the table says what it
+was adjusted from and on how many judged answers:
+
+```
+  Head                        Quant     Score  Declared      Src    Provider
+  ──────────────────────────────────────────────────────────────────────────
+  Qwen2.5-Coder:7b (Ollama)   Q4_K_M    38     66 (n=30)     port   local
+```
+
+Below twenty judged answers nothing moves at all, so a fresh install ranks exactly as it
+always did. There is no per-quantization penalty table: a 2-bit model is outranked once it
+has been measured, never because a hardcoded number said it should be.
+
 Scanning happens across three channels simultaneously:
 
 | Channel | What it finds |
@@ -941,7 +957,7 @@ hydra/
 │   ├── rollup/                  # Per-day aggregates: calls, tokens, spend, latency sketch
 │   ├── evalset/                 # Oracle-verified labelled examples: verbatim, never pruned, never uploaded
 │   ├── budget/                  # Token-budget governor: 6 static pressure modes + rate-aware first-passage risk on claude_pct
-│   ├── rank/                    # Deduplication + CapScore ranking
+│   ├── rank/                    # Deduplication + ranking: CapScore updated by verified outcomes
 │   ├── editor/                  # Scoped, validated, rollback-safe file edits
 │   ├── parallel/                # Independent multi-task fan-out
 │   ├── review/                  # Code review / approve / reject / QA
