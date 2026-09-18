@@ -123,8 +123,10 @@ func ckTrace(run ckRun, rc ckRunCost, hasRC bool, costUSD float64) []ckTraceRow 
 			}
 			add("consensus", txt, "", ckVioletS)
 		case runlog.KindTaskStarted:
+			// The routing key this task was dispatched under, named as one:
+			// rendered as "plan" it read as a step called GRUNT (#910).
 			if e.Detail != "" && e.Detail != run.task {
-				add("plan", ckPlainWording.Replace(e.Detail), "", ckDimS)
+				add("routing key", ckPlainWording.Replace(e.Detail), "", ckDimS)
 			}
 		case runlog.KindHandoff:
 			add("handoff", ckPlainWording.Replace(e.Detail), "", ckMagentaS)
