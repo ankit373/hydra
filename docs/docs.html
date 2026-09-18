@@ -614,7 +614,7 @@ cd desktop &amp;&amp; wails build                <span class="c"># → desktop/b
       <div class="chan-flow">
         <div class="chan"><span class="cnt">13+</span><h4>PATH scan</h4><div class="how">executables on $PATH</div><p>Finds installed coding agents &amp; CLIs, Claude Code, Codex, Cursor, Gemini CLI, Copilot and more.</p></div>
         <div class="chan"><span class="cnt">14</span><h4>Env vars</h4><div class="how">provider API keys</div><p>Detects keys for the major API providers and registers each as a routable head.</p></div>
-        <div class="chan"><span class="cnt">2</span><h4>Port scan</h4><div class="how">localhost servers</div><p>Queries Ollama (11434) and LM Studio (1234) and enumerates every installed local model.</p></div>
+        <div class="chan"><span class="cnt">2</span><h4>Port scan</h4><div class="how">localhost servers</div><p>Queries Ollama (11434), LM Studio (1234) and a LiteLLM proxy (4000), and enumerates every model each one serves.</p></div>
       </div>
     </section>
 
@@ -659,6 +659,7 @@ models = ["anthropic/claude-sonnet-4.5", "google/gemini-2.5-pro"]</pre><p><span 
       <div class="intg-grid">
         <div class="intg"><div class="nm"><span class="glyph" style="background:#111">Ol</span>Ollama</div><div class="meta">port 11434 · <span class="tier">simple-local · T8-T10</span></div><div class="desc">Every installed model enumerated individually (Qwen, Llama, Phi…).</div></div>
         <div class="intg"><div class="nm"><span class="glyph" style="background:#8b5cf6">LM</span>LM Studio</div><div class="meta">port 1234 · <span class="tier">simple-local</span></div><div class="desc">Local server; models discovered and routed.</div></div>
+        <div class="intg"><div class="nm"><span class="glyph" style="background:#0ea5e9">Li</span>LiteLLM</div><div class="meta">port 4000 · <span class="tier">per-model tier</span></div><div class="desc">One head per model the proxy fronts. Local only where the upstream itself is local, so a proxy forwarding to OpenAI is never priced or governed as local.</div></div>
       </div>
     </section>
 

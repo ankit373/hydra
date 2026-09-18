@@ -640,10 +640,20 @@ func (e *HTTPExecutor) getReplicatePrediction(ctx context.Context, headID, getUR
 
 func openAICompatConfigFor(h provider.Head) (openAICompatConfig, error) {
 	if h.Endpoint != "" {
-		return openAICompatConfig{
+		cfg := openAICompatConfig{
 			BaseURL: strings.TrimRight(h.Endpoint, "/"),
-			Model:   trimLocalModelID(h.ID),
-		}, nil
+			// A head that names its own model is honoured here too, not only on
+			// the keyed-provider path below: a LiteLLM proxy routes on the alias
+			// it publishes, which is not derivable from the head id.
+			Model: firstNonEmpty(h.Meta["model"], trimLocalModelID(h.ID)),
+		}
+		// A proxy with a master key rejects an unauthenticated request, so a
+		// head discovered through one carries its credential the same way a
+		// keyed provider does.
+		if key := apiKeyFor(h.Provider); key != "" {
+			cfg.Headers = map[string]string{"Authorization": "Bearer " + key}
+		}
+		return cfg, nil
 	}
 
 	// baseURL only. The auth header is built below from the raw key, never
@@ -823,6 +833,9 @@ var apiKeyEnvs = func() map[string][]string {
 		},
 		"cohere":    {"COHERE_API_KEY"},
 		"replicate": {"REPLICATE_API_TOKEN"},
+		// The variable LiteLLM's own client reads, so a machine already set up
+		// to talk to a proxy needs nothing new.
+		"litellm": {"LITELLM_PROXY_API_KEY"},
 	}
 	return envs
 }()
