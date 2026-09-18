@@ -344,3 +344,39 @@ func min(a, b int) int {
 	}
 	return b
 }
+
+// A credential and a region come from different places, so "no API key" is the
+// wrong answer when the key is there and the region is not (#867).
+func TestUnroutable_BedrockNamesTheMissingHalf(t *testing.T) {
+	head := provider.Head{ID: "env/bedrock", Provider: "bedrock", Source: "env"}
+
+	t.Run("no credentials at all", func(t *testing.T) {
+		testutil.NewSandbox(t)
+		if got := Unroutable(head); !strings.Contains(got, "AWS credentials") {
+			t.Errorf("Unroutable = %q, want it to name the missing credential", got)
+		}
+	})
+
+	t.Run("credentials but no region", func(t *testing.T) {
+		s := testutil.NewSandbox(t)
+		s.SetKey(t, "AWS_ACCESS_KEY_ID", "AKID")
+		s.SetKey(t, "AWS_SECRET_ACCESS_KEY", "secret")
+		got := Unroutable(head)
+		if !strings.Contains(got, "region") {
+			t.Errorf("Unroutable = %q, want it to name the missing region", got)
+		}
+		if strings.Contains(got, "API key") {
+			t.Errorf("Unroutable = %q, but the credential is configured", got)
+		}
+	})
+
+	t.Run("both, so it is routable", func(t *testing.T) {
+		s := testutil.NewSandbox(t)
+		s.SetKey(t, "AWS_ACCESS_KEY_ID", "AKID")
+		s.SetKey(t, "AWS_SECRET_ACCESS_KEY", "secret")
+		t.Setenv("AWS_REGION", "eu-west-1")
+		if got := Unroutable(head); got != "" {
+			t.Errorf("Unroutable = %q, want routable", got)
+		}
+	})
+}

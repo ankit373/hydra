@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ankit373/hydra/internal/awsauth"
 	"github.com/ankit373/hydra/internal/provider"
 	"github.com/ankit373/hydra/internal/testutil"
 )
@@ -547,7 +548,7 @@ func TestAzureAPIVersion_DefaultsButIsOverridable(t *testing.T) {
 // order the AWS SDKs themselves resolve them.
 func TestAWSEnvLookups(t *testing.T) {
 	testutil.NewSandbox(t)
-	if bedrockRegion() != "" || awsAccessKeyID() != "" || awsSecretAccessKey() != "" || awsSessionToken() != "" {
+	if id, secret, tok := awsauth.Credentials(); bedrockRegion() != "" || id != "" || secret != "" || tok != "" {
 		t.Fatal("the sandbox did not clear the AWS environment")
 	}
 
@@ -560,9 +561,11 @@ func TestAWSEnvLookups(t *testing.T) {
 		t.Errorf("bedrockRegion() = %q, want AWS_REGION to win", got)
 	}
 
+	t.Setenv("AWS_ACCESS_KEY_ID", "AKID")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "secret")
 	t.Setenv("AWS_SESSION_TOKEN", "tok")
-	if got := awsSessionToken(); got != "tok" {
-		t.Errorf("awsSessionToken() = %q", got)
+	if id, secret, tok := awsauth.Credentials(); id != "AKID" || secret != "secret" || tok != "tok" {
+		t.Errorf("awsauth.Credentials() = %q/%q/%q, want all three from the environment", id, secret, tok)
 	}
 }
 

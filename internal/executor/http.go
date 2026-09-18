@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ankit373/hydra/internal/awsauth"
 	"github.com/ankit373/hydra/internal/provider"
 	"github.com/ankit373/hydra/internal/util"
 )
@@ -102,7 +103,7 @@ func SupportsHTTP(h provider.Head) bool {
 	case "azure":
 		return apiKeyFor("azure") != "" && azureEndpoint() != "" && azureDeployment() != ""
 	case "bedrock":
-		return awsAccessKeyID() != "" && awsSecretAccessKey() != "" && bedrockRegion() != "" && defaultModelFor("bedrock") != ""
+		return awsauth.Configured() && bedrockRegion() != "" && defaultModelFor("bedrock") != ""
 	case "replicate":
 		return apiKeyFor("replicate") != "" && defaultModelFor("replicate") != ""
 	default:
@@ -836,11 +837,7 @@ func azureAPIVersion() string {
 	return firstNonEmpty(firstEnv("AZURE_OPENAI_API_VERSION"), "2024-10-21")
 }
 
-func bedrockRegion() string { return firstEnv("AWS_REGION", "AWS_DEFAULT_REGION") }
-
-func awsAccessKeyID() string     { return firstEnv("AWS_ACCESS_KEY_ID") }
-func awsSecretAccessKey() string { return firstEnv("AWS_SECRET_ACCESS_KEY") }
-func awsSessionToken() string    { return firstEnv("AWS_SESSION_TOKEN") }
+func bedrockRegion() string { return awsauth.Region() }
 
 func firstEnv(keys ...string) string {
 	for _, key := range keys {
@@ -888,8 +885,7 @@ func firstNonEmpty(values ...string) string {
 }
 
 func signAWSRequest(req *http.Request, payload []byte, region, service string) error {
-	accessKey := awsAccessKeyID()
-	secretKey := awsSecretAccessKey()
+	accessKey, secretKey, sessionToken := awsauth.Credentials()
 	if accessKey == "" || secretKey == "" {
 		return errors.New("missing AWS credentials")
 	}
@@ -898,8 +894,8 @@ func signAWSRequest(req *http.Request, payload []byte, region, service string) e
 	amzDate := now.Format("20060102T150405Z")
 	dateStamp := now.Format("20060102")
 	req.Header.Set("X-Amz-Date", amzDate)
-	if token := awsSessionToken(); token != "" {
-		req.Header.Set("X-Amz-Security-Token", token)
+	if sessionToken != "" {
+		req.Header.Set("X-Amz-Security-Token", sessionToken)
 	}
 
 	payloadHash := sha256Hex(payload)

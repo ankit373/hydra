@@ -37,6 +37,7 @@
 floor cmd/specstest                 90
 floor cmd/hydra                     77
 floor internal/a2a                  93
+floor internal/awsauth              90
 floor internal/budget               92
 floor internal/capabilities         90
 floor internal/config               84

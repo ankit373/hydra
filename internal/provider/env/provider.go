@@ -8,6 +8,7 @@ import (
 	"context"
 	"os"
 
+	"github.com/ankit373/hydra/internal/awsauth"
 	"github.com/ankit373/hydra/internal/capabilities"
 	"github.com/ankit373/hydra/internal/provider"
 )
@@ -59,9 +60,13 @@ type keySpec struct {
 	envVars    []string // all must be non-empty (AND) unless anyOf is true
 	anyOf      bool     // at least one env var must be set
 	providerID string
+	detect     func() bool // asked instead of the env vars, where a provider has its own rule
 }
 
 func (k keySpec) detected() bool {
+	if k.detect != nil {
+		return k.detect()
+	}
 	if k.anyOf {
 		for _, v := range k.envVars {
 			if os.Getenv(v) != "" {
@@ -90,7 +95,10 @@ var knownKeys = []keySpec{
 	{envVars: []string{"FIREWORKS_API_KEY"}, providerID: "fireworks"},
 	{envVars: []string{"MISTRAL_API_KEY"}, providerID: "mistral"},
 	{envVars: []string{"DEEPSEEK_API_KEY"}, providerID: "deepseek"},
-	{envVars: []string{"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"}, providerID: "bedrock"},
+	// Bedrock is the one credential that does not have to be in the
+	// environment: AWS's own tools read ~/.aws, and requiring the variables
+	// meant a normally configured machine showed no head at all (#867).
+	{envVars: []string{"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"}, providerID: "bedrock", detect: awsauth.Configured},
 	{envVars: []string{"AZURE_OPENAI_API_KEY", "AZURE_OPENAI_ENDPOINT"}, providerID: "azure"},
 	{envVars: []string{"PERPLEXITY_API_KEY"}, providerID: "perplexity"},
 	{envVars: []string{"COHERE_API_KEY"}, providerID: "cohere"},
