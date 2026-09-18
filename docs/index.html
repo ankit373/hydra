@@ -831,6 +831,7 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
         <tr><th scope="row">Automatic fallback chains</th><td class="hydcol"><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
         <tr><th scope="row">Spend logging &amp; cost reporting</th><td class="hydcol"><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
         <tr><th scope="row">Confidence / trust routing (calibrated + optimal-stopping)</th><td class="hydcol"><span class="yes">✓</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td></tr>
+        <tr><th scope="row">Head ranking learns from verified outcomes <em>on your machine</em></th><td class="hydcol"><span class="yes">✓</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td></tr>
         <tr><th scope="row">On-device accountability ledger (PII / local-only policy)</th><td class="hydcol"><span class="yes">✓</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td></tr>
         <tr><th scope="row">MCP server trust scoring (not just an index)</th><td class="hydcol"><span class="yes">✓</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td></tr>
         <tr><th scope="row">Runs fully offline (0 network to route)</th><td class="hydcol"><span class="yes">✓</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td><td><span class="no">—</span></td></tr>
@@ -899,7 +900,7 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
     <div class="step">
       <div class="n">02, DISCOVER</div>
       <h3>Scan your machine</h3>
-      <p>Finds every head: CLI agents, API keys, local servers.</p>
+      <p>Finds every head: CLI agents, API keys, local servers. Ranked on what each one has actually got right here, not just a catalogue score.</p>
       <div class="term">
         <div class="copyline" data-copy="hyctl probe"><span><span class="p">$</span> hyctl probe</span><span class="cp">copy</span></div>
         <div class="o"><span class="g">✓</span> 12 heads · agy · gemini · openrouter</div>
