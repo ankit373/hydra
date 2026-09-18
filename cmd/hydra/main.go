@@ -3950,8 +3950,8 @@ func printSwarmResult(r *swarm.SwarmResult) {
 		)
 	}
 
-	fmt.Printf("\n  %s  total $%.4f  ·  wall %dms  ·  %d/%d succeeded\n\n",
-		sep,
+	fmt.Println(sep)
+	fmt.Printf("  total $%.4f  ·  wall %dms  ·  %d/%d succeeded\n\n",
 		r.TotalCostUSD,
 		r.WallDuration.Milliseconds(),
 		r.SucceededCount(),

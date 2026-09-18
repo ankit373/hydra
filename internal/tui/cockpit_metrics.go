@@ -102,9 +102,14 @@ func ckLoadMetrics(pr *pricing.DB) ckMetrics {
 	return m
 }
 
-// fold aggregates the cost rows relative to now (UTC, matching cost.Summary's
-// day boundary).
+// fold aggregates the cost rows relative to now, on the reader's day, which is
+// the boundary cost.Summary uses too.
 func (m *ckMetrics) fold(rows []cost.Row, pr ckPricer, now time.Time) {
+	// Both are local dates, and the rows they are compared against are stamped
+	// in UTC, so the comparison goes through cost.DayOf rather than matching
+	// text: a local date against a UTC prefix dropped every row between local
+	// midnight and UTC midnight, which is when this machine reported no spend
+	// today minutes after spending (#916).
 	day := now.Format("2006-01-02")
 	month := now.Format("2006-01")
 	var today []cost.Row
@@ -127,7 +132,7 @@ func (m *ckMetrics) fold(rows []cost.Row, pr ckPricer, now time.Time) {
 				st.lastRunID = r.RunID
 			}
 			st.lastTS = r.TS
-			if strings.HasPrefix(r.TS, day) {
+			if cost.DayOf(r.TS) == day {
 				st.reqsToday++
 				st.costToday += r.EstCostUSD
 			}
@@ -153,11 +158,11 @@ func (m *ckMetrics) fold(rows []cost.Row, pr ckPricer, now time.Time) {
 			rc.costUSD += r.EstCostUSD
 			m.runCost[r.RunID] = rc
 		}
-		if strings.HasPrefix(r.TS, month) {
+		if strings.HasPrefix(cost.DayOf(r.TS), month) {
 			m.monthUSD += r.EstCostUSD
 			m.monthReqs++
 		}
-		if strings.HasPrefix(r.TS, day) {
+		if cost.DayOf(r.TS) == day {
 			today = append(today, r)
 		}
 	}

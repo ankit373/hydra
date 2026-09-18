@@ -160,10 +160,10 @@ func Summary() (*SummaryResult, error) {
 // should load once and derive both from that one slice instead of paying for
 // a second full read+parse of cost.jsonl.
 func SummaryFromRows(all []Row) *SummaryResult {
-	todayStr := time.Now().UTC().Format("2006-01-02")
+	today := Day(0)
 	var todayRows []Row
 	for _, r := range all {
-		if strings.HasPrefix(r.TS, todayStr) {
+		if DayOf(r.TS) == today {
 			todayRows = append(todayRows, r)
 		}
 	}
@@ -195,10 +195,10 @@ func Today() ([]GroupRow, error) {
 	if err != nil {
 		return nil, err
 	}
-	todayStr := time.Now().UTC().Format("2006-01-02")
+	day := Day(0)
 	var today []Row
 	for _, r := range all {
-		if strings.HasPrefix(r.TS, todayStr) {
+		if DayOf(r.TS) == day {
 			today = append(today, r)
 		}
 	}
@@ -346,10 +346,9 @@ func FilterDays(rows []Row, n int) []Row {
 	if n <= 0 {
 		return rows
 	}
-	cutoff := time.Now().UTC().AddDate(0, 0, -(n - 1)).Format("2006-01-02")
 	var out []Row
 	for _, r := range rows {
-		if len(r.TS) >= 10 && r.TS[:10] >= cutoff {
+		if InLastDays(r.TS, n) {
 			out = append(out, r)
 		}
 	}
@@ -382,12 +381,7 @@ func Unattributed(groups []GroupRow) (n int, calls int) {
 
 // ByDay returns per-day totals sorted by date ascending.
 func ByDay(rows []Row) []GroupRow {
-	groups := groupBy(rows, func(r Row) string {
-		if len(r.TS) >= 10 {
-			return r.TS[:10]
-		}
-		return "unknown"
-	})
+	groups := groupBy(rows, func(r Row) string { return DayOf(r.TS) })
 	sort.Slice(groups, func(i, j int) bool { return groups[i].Key < groups[j].Key })
 	return groups
 }
@@ -436,7 +430,7 @@ func SwarmStats(rows []Row) SwarmSummary {
 
 // RenderSummary prints a human-readable summary.
 func RenderSummary(r *SummaryResult) {
-	today := time.Now().UTC().Format("2006-01-02")
+	today := Day(0)
 	fmt.Println()
 	fmt.Println("  Hydra cost summary")
 	fmt.Println("  ═════════════════════════════════════════════════════════════")
@@ -509,10 +503,19 @@ func RenderStatsTable(period string, rows []GroupRow) {
 	// Said plainly, because silently merging it would misattribute spend and
 	// silently dropping it would understate the total.
 	if n, calls := Unattributed(rows); n > 0 {
-		fmt.Printf("\n  %d of these name a head this machine no longer declares (%d calls);\n"+
-			"  they are shown under the name they were logged with.\n", n, calls)
+		fmt.Printf("\n  %d of these name a head this machine no longer declares (%d call%s);\n"+
+			"  they are shown under the name they were logged with.\n", n, calls, plural(calls))
 	}
 	fmt.Println()
+}
+
+// plural is the suffix for n of something, so a single row does not report
+// itself as "1 calls".
+func plural(n int) string {
+	if n == 1 {
+		return ""
+	}
+	return "s"
 }
 
 // RenderSwarmStats prints the swarm-specific summary.
