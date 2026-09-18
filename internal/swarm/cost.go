@@ -56,16 +56,18 @@ func preflightCost(heads []provider.Head, prompt string, pr PricingReader, maxUS
 	return total, nil
 }
 
-// enrichCosts fills EstCostUSD on each attempt using real token counts.
-func enrichCosts(attempts []Attempt, pr PricingReader) {
-	if pr == nil {
-		return
+// attemptCost prices one finished attempt from its real token counts. The
+// single definition of what a swarm attempt cost: RunSPRT priced its own with
+// the same formula written out a second time, and every path now reports spend
+// as it accrues rather than only once the fan-out is over.
+//
+// Only a head that answered is charged for, and an unpriced swarm (pr nil) is
+// free by construction rather than unknown.
+func attemptCost(a Attempt, pr PricingReader) float64 {
+	if pr == nil || a.Status != StatusOK {
+		return 0
 	}
-	for i := range attempts {
-		if attempts[i].Status == StatusOK {
-			attempts[i].EstCostUSD = round6(pr.EstimateCost(rank.UITier(attempts[i].Head), attempts[i].InputTokens, attempts[i].OutputTokens))
-		}
-	}
+	return round6(pr.EstimateCost(rank.UITier(a.Head), a.InputTokens, a.OutputTokens))
 }
 
 // logAttempts writes one cost.jsonl entry per attempt that actually executed

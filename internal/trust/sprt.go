@@ -198,6 +198,10 @@ func Run(ctx context.Context, task Task, sources []Source, exec Executor, cal *C
 		res.Lambda = lead.Lambda
 		res.Confidence = lead.Confidence
 
+		if cfg.observe != nil {
+			cfg.observe(res.Ledger[len(res.Ledger)-1], A)
+		}
+
 		if lead.Lambda >= A {
 			res.Decision = DecisionAccept
 			break
@@ -307,6 +311,7 @@ type RunOption func(*runConfig)
 type runConfig struct {
 	equiv             AnswerEquivalence
 	allowUncalibrated bool
+	observe           Observer
 }
 
 // AllowNoEvidence runs the ensemble even when no source can move the
@@ -369,6 +374,23 @@ func WithEquivalence(fn AnswerEquivalence) RunOption {
 	return func(c *runConfig) {
 		if fn != nil {
 			c.equiv = fn
+		}
+	}
+}
+
+// Observer watches the run as it happens: called once per sampled source, with
+// the ledger entry just recorded and the Wald accept threshold Λ has to cross.
+// The threshold is passed rather than left to be recomputed, or a surface
+// showing progress toward it derives it from α a second time.
+type Observer func(e Evidence, accept float64)
+
+// WithObserver reports each piece of evidence as it is weighed, so a caller can
+// show why the run has not stopped yet. Called from Run's own goroutine,
+// between samples, so it must not block for long. A nil observer is ignored.
+func WithObserver(fn Observer) RunOption {
+	return func(c *runConfig) {
+		if fn != nil {
+			c.observe = fn
 		}
 	}
 }

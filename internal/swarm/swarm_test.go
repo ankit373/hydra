@@ -157,17 +157,18 @@ func TestPreflightCost(t *testing.T) {
 	}
 }
 
-func TestEnrichCosts(t *testing.T) {
-	attempts := []Attempt{
-		{Head: registryHead("a", "A", 90), Status: StatusOK, InputTokens: 100, OutputTokens: 50},
-		{Head: registryHead("b", "B", 80), Status: StatusFailed},
+func TestAttemptCost(t *testing.T) {
+	ok := Attempt{Head: registryHead("a", "A", 90), Status: StatusOK, InputTokens: 100, OutputTokens: 50}
+	failed := Attempt{Head: registryHead("b", "B", 80), Status: StatusFailed}
+
+	if got := attemptCost(ok, fakePricing{per: 0.02}); got != 0.02 {
+		t.Errorf("OK attempt cost = %v, want 0.02", got)
 	}
-	enrichCosts(attempts, fakePricing{per: 0.02})
-	if attempts[0].EstCostUSD != 0.02 {
-		t.Errorf("OK attempt cost = %v, want 0.02", attempts[0].EstCostUSD)
+	if got := attemptCost(failed, fakePricing{per: 0.02}); got != 0 {
+		t.Errorf("failed attempt cost = %v, want 0", got)
 	}
-	if attempts[1].EstCostUSD != 0 {
-		t.Errorf("failed attempt cost = %v, want 0 (untouched)", attempts[1].EstCostUSD)
+	if got := attemptCost(ok, nil); got != 0 {
+		t.Errorf("unpriced swarm cost = %v, want 0", got)
 	}
 }
 
