@@ -17,6 +17,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ankit373/hydra/internal/config"
@@ -127,15 +128,37 @@ func Path(id string) (string, error) {
 	return filepath.Join(Dir(), id+".json"), nil
 }
 
+// nowFunc is a var so a test can pin the clock. The guard below exists for
+// clocks too coarse to tick between two calls, which a real one will not do
+// on demand.
+var nowFunc = time.Now
+
+var created struct {
+	sync.Mutex
+	last time.Time
+}
+
+// List orders on Created, so two workflows must never share one. Formatting to
+// nanoseconds does not achieve that: Windows' clock can hand consecutive calls
+// the same instant, and the comparison then falls back to ids, which is not an
+// order in time at all. Step past the last stamp issued instead (#856).
+func createdStamp() string {
+	created.Lock()
+	defer created.Unlock()
+	now := nowFunc().UTC()
+	if !now.After(created.last) {
+		now = created.last.Add(time.Nanosecond)
+	}
+	created.last = now
+	return now.Format(time.RFC3339Nano)
+}
+
 // New builds an unsaved workflow from step prompts.
 func New(id, task string, steps []Step) (Workflow, error) {
 	if len(steps) == 0 {
 		return Workflow{}, ErrNoSteps
 	}
-	// Nano, not second, precision: List orders on Created, and two workflows
-	// started in the same second would otherwise fall back to an id comparison,
-	// so "newest first" stopped being true exactly when a fleet was busy.
-	now := time.Now().UTC().Format(time.RFC3339Nano)
+	now := createdStamp()
 	w := Workflow{ID: id, Task: task, Created: now, Updated: now, Status: Pending}
 	for i, s := range steps {
 		s.N = i + 1
@@ -250,8 +273,13 @@ func List() ([]Workflow, error) {
 		out = append(out, w)
 	}
 	sort.Slice(out, func(i, j int) bool {
-		if out[i].Created != out[j].Created {
-			return out[i].Created > out[j].Created
+		// Parsed, not compared as strings: RFC3339Nano trims trailing zeros, so
+		// a whole-second stamp ends in "Z" where a sub-second one has "." at the
+		// same offset, and 'Z' > '.' sorts the older of the two as newer (#856).
+		ti, erri := time.Parse(time.RFC3339Nano, out[i].Created)
+		tj, errj := time.Parse(time.RFC3339Nano, out[j].Created)
+		if erri == nil && errj == nil && !ti.Equal(tj) {
+			return ti.After(tj)
 		}
 		return out[i].ID > out[j].ID
 	})

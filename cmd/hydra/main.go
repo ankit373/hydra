@@ -695,6 +695,19 @@ func truncLabel(s string, n int) string {
 
 // ── dispatch ──────────────────────────────────────────────────────────────────
 
+// resolveCostCeiling picks the denial-of-wallet ceiling and names its source.
+//
+// policy.yaml's max_cost_usd reached hyctl edit and hyctl parallel and never
+// the command that spends the money, so the guard had never once fired (#838).
+// An explicit --max-cost still wins, including --max-cost 0, which is how a
+// policy ceiling is lifted for one run: hence flagSet rather than a zero check.
+func resolveCostCeiling(hydraHome string, flagSet bool, flagVal float64, spec policy.Spec) (float64, string) {
+	if flagSet {
+		return flagVal, "--max-cost"
+	}
+	return policy.ForFile(hydraHome, spec).MaxCostUSD, "policy.yaml max_cost_usd"
+}
+
 func cmdDispatch() *cobra.Command {
 	var (
 		tier      string
@@ -719,6 +732,7 @@ func cmdDispatch() *cobra.Command {
 		graphPath    string
 		irreversible bool
 		production   bool
+		verifyRun    bool
 	)
 
 	cmd := &cobra.Command{
@@ -925,7 +939,12 @@ func cmdDispatch() *cobra.Command {
 				})
 				if err != nil {
 					if errors.Is(err, trust.ErrNoEvidence) {
-						return noEvidenceError(domain)
+						var noEv *trust.NoEvidenceError
+						var heads []string
+						if errors.As(err, &noEv) {
+							heads = noEv.Sources
+						}
+						return noEvidenceError(domain, heads)
 					}
 					return err
 				}
@@ -933,6 +952,9 @@ func cmdDispatch() *cobra.Command {
 				logTrustRun(res, prompt, domain)
 				writeFanoutHandoff("hydra-ensemble", "SPRT ensemble", prompt,
 					res.Trust.Candidate, file, res.Attempts)
+				if verifyRun {
+					verifyAndScoreRun(ctx, res, runID, taskID, file, domain)
+				}
 				return nil
 			}
 
@@ -978,6 +1000,22 @@ func cmdDispatch() *cobra.Command {
 			if tierHint == "" && enumKey != "" {
 				tierHint = dispatch.EnumToTier(enumKey)
 			}
+			// policy.yaml's max_cost_usd reached hyctl edit and hyctl parallel
+			// and never the command that spends the money. An explicit
+			// --max-cost still wins, including --max-cost 0 to lift a ceiling
+			// the policy set, which is why this asks Changed rather than
+			// reading the zero (#838).
+			// A named tier resolves to its number, so an enum_tier rule matches
+			// the same whichever spelling routed the dispatch.
+			enumTier, _ := dispatch.ResolveTier(tierHint)
+			ceiling, ceilingFrom := resolveCostCeiling(
+				config.ScriptHome(), cmd.Flags().Changed("max-cost"), maxCost,
+				policy.Spec{
+					File:         file,
+					Prompt:       prompt,
+					PromptLength: len(prompt),
+					EnumTier:     enumTier,
+				})
 			opts := dispatch.Options{
 				TierHint:       tierHint,
 				LocalOnly:      localOnly,
@@ -987,7 +1025,8 @@ func cmdDispatch() *cobra.Command {
 				Enum:           enumKey,
 				RunID:          runID,
 				TaskID:         taskID,
-				MaxCostUSD:     maxCost,
+				MaxCostUSD:     ceiling,
+				MaxCostSource:  ceilingFrom,
 				Classification: &promptClass,
 			}
 
@@ -1087,6 +1126,7 @@ func cmdDispatch() *cobra.Command {
 	// domain and printed two commands ending in a bare `--domain ` (#732).
 	cmd.Flags().StringVar(&domain, "domain", trust.DefaultDomain, "calibration domain for --confidence")
 	cmd.Flags().StringVar(&file, "file", "", "target file, derives a confidence target from its blast radius, so this alone selects the SPRT ensemble")
+	cmd.Flags().BoolVar(&verifyRun, "verify", false, "after a --confidence run, run the workspace verifier and record its verdict: what trains calibration and fills hyctl trust reliability")
 	cmd.Flags().StringVar(&graphPath, "graph", "graph.json", "path to the dependency graph used with --file")
 	cmd.Flags().BoolVar(&irreversible, "irreversible", false, "change cannot be cheaply undone, raises the required confidence")
 	cmd.Flags().BoolVar(&production, "production", false, "target is production, raises the required confidence")
@@ -3430,6 +3470,21 @@ func cmdGraph() *cobra.Command {
 	return cmd
 }
 
+// recordableSource picks the head the suggested `trust record` should name: one
+// the run just refused, since a concrete id beats a placeholder and the refusal
+// already holds the list. Falls back to describing the shape, never a prefix.
+func recordableSource(heads []string) string {
+	for _, h := range heads {
+		if h == "" {
+			continue
+		}
+		if _, bad := trust.UnreadableSourceKey(h); !bad {
+			return h
+		}
+	}
+	return "<head-id, as `hyctl probe` prints it>"
+}
+
 // noEvidenceError turns the SPRT refusal into something the reader can act on.
 //
 // The refusal tests whether any head this run would sample carries evidence in
@@ -3439,7 +3494,7 @@ func cmdGraph() *cobra.Command {
 // (#732). Sources scored in this domain are named first, because a domain that
 // has evidence but not from these heads is a different problem with a different
 // fix.
-func noEvidenceError(domain string) error {
+func noEvidenceError(domain string, heads []string) error {
 	var b strings.Builder
 	fmt.Fprintf(&b, "no head this run would sample has been scored in domain %q, so --confidence "+
 		"would sample every head, move the estimate nowhere and hand back 50%%.\n", domain)
@@ -3472,7 +3527,11 @@ func noEvidenceError(domain string) error {
 			fmt.Fprintf(&b, "  Other domains with evidence: %s\n", strings.Join(others, ", "))
 		}
 	}
-	b.WriteString("  Record an outcome:     hyctl trust record --source model:<id> --domain " + domain + " --said-correct --outcome correct\n")
+	// This printed "model:<id>", the first prefix UnreadableSourceKey exists to
+	// flag, so following the only instruction on screen filled a cell nothing
+	// reads and earned the same refusal again (#835).
+	b.WriteString("  Record an outcome:     hyctl trust record --source " + recordableSource(heads) +
+		" --domain " + domain + " --said-correct --outcome correct\n")
 	b.WriteString("  Or verify with a test: hyctl oracle verify --candidate <file> --domain " + domain + " -- go test ./...\n")
 	b.WriteString("\nWithout --confidence the same prompt routes normally and costs one head.")
 	return errors.New(b.String())

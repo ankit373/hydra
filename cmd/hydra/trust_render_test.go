@@ -75,7 +75,7 @@ func TestStalledConfidence(t *testing.T) {
 // The one message whose whole job is to be actionable printed two commands
 // ending in a bare `--domain ` with no value.
 func TestNoEvidenceError_PrintsCommandsThatCanBeRun(t *testing.T) {
-	msg := noEvidenceError(trust.DefaultDomain).Error()
+	msg := noEvidenceError(trust.DefaultDomain, nil).Error()
 
 	if strings.Contains(msg, `--domain "`) || strings.Contains(msg, "--domain \n") {
 		t.Errorf("a suggested command names an empty domain:\n%s", msg)
@@ -100,7 +100,7 @@ func TestNoEvidenceError_PrintsCommandsThatCanBeRun(t *testing.T) {
 // evidence at all. Asking for a domain that has evidence from another source
 // was refused directly above a list containing that same domain.
 func TestNoEvidenceError_DoesNotContradictItself(t *testing.T) {
-	msg := noEvidenceError("gotest").Error()
+	msg := noEvidenceError("gotest", nil).Error()
 	if i := strings.Index(msg, "Other domains with evidence:"); i >= 0 {
 		others := msg[i:]
 		if idx := strings.Index(others, "\n"); idx >= 0 {

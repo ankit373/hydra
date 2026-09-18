@@ -159,29 +159,16 @@ func (e *HTTPExecutor) executeOpenAICompatible(ctx context.Context, req Request,
 
 func (e *HTTPExecutor) executeAnthropic(ctx context.Context, req Request) (*Response, error) {
 	model := defaultModelFor("anthropic")
-	body := map[string]interface{}{
-		"model":      model,
-		"max_tokens": defaultMaxTokens(req.MaxTokens, 1024),
-		"messages": []map[string]string{
-			{"role": "user", "content": req.Prompt},
-		},
-	}
-	if req.System != "" {
-		body["system"] = req.System
-	}
-
-	raw, err := json.Marshal(body)
+	raw, err := json.Marshal(anthropicBody(req, model, false))
 	if err != nil {
 		return nil, err
 	}
 
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.anthropic.com/v1/messages", bytes.NewReader(raw))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, anthropicMessagesURL(), bytes.NewReader(raw))
 	if err != nil {
 		return nil, err
 	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("x-api-key", apiKeyFor("anthropic"))
-	httpReq.Header.Set("anthropic-version", "2023-06-01")
+	setAnthropicHeaders(httpReq)
 
 	start := time.Now()
 	resp, err := e.httpClient().Do(httpReq)
@@ -213,39 +200,51 @@ func (e *HTTPExecutor) executeAnthropic(ctx context.Context, req Request) (*Resp
 		out.Usage.InputTokens, out.Usage.OutputTokens, start), nil
 }
 
-func (e *HTTPExecutor) executeGemini(ctx context.Context, req Request) (*Response, error) {
-	model := defaultModelFor("google")
+// anthropicMessagesURL honours ANTHROPIC_BASE_URL, the variable the official
+// SDKs read, so a gateway already configured for them serves this head too.
+func anthropicMessagesURL() string {
+	base := firstNonEmpty(firstEnv("ANTHROPIC_BASE_URL"), "https://api.anthropic.com")
+	return strings.TrimRight(base, "/") + "/v1/messages"
+}
+
+// anthropicBody and setAnthropicHeaders are shared with the streaming path, so
+// the two cannot drift into asking for different things or pinning different
+// API versions. Streaming is the one field that differs.
+func anthropicBody(req Request, model string, stream bool) map[string]interface{} {
 	body := map[string]interface{}{
-		"contents": []map[string]interface{}{
-			{
-				"role": "user",
-				"parts": []map[string]string{
-					{"text": req.Prompt},
-				},
-			},
+		"model":      model,
+		"max_tokens": defaultMaxTokens(req.MaxTokens, 1024),
+		"messages": []map[string]string{
+			{"role": "user", "content": req.Prompt},
 		},
 	}
 	if req.System != "" {
-		body["system_instruction"] = map[string]interface{}{
-			"parts": []map[string]string{{"text": req.System}},
-		}
+		body["system"] = req.System
 	}
-	if req.MaxTokens > 0 {
-		body["generationConfig"] = map[string]int{"maxOutputTokens": req.MaxTokens}
+	if stream {
+		body["stream"] = true
 	}
+	return body
+}
 
-	raw, err := json.Marshal(body)
+func setAnthropicHeaders(r *http.Request) {
+	r.Header.Set("Content-Type", "application/json")
+	r.Header.Set("x-api-key", apiKeyFor("anthropic"))
+	r.Header.Set("anthropic-version", "2023-06-01")
+}
+
+func (e *HTTPExecutor) executeGemini(ctx context.Context, req Request) (*Response, error) {
+	model := defaultModelFor("google")
+	raw, err := json.Marshal(geminiBody(req))
 	if err != nil {
 		return nil, err
 	}
 
-	u := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent", url.PathEscape(model))
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, u, bytes.NewReader(raw))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, geminiURL(model, false), bytes.NewReader(raw))
 	if err != nil {
 		return nil, err
 	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("x-goog-api-key", apiKeyFor("google"))
+	setGeminiHeaders(httpReq)
 
 	start := time.Now()
 	resp, err := e.httpClient().Do(httpReq)
@@ -281,6 +280,55 @@ func (e *HTTPExecutor) executeGemini(ctx context.Context, req Request) (*Respons
 	return httpResponse(req, joinGeminiParts(out.Candidates[0].Content.Parts),
 		firstNonEmpty(out.ModelVersion, model),
 		out.UsageMetadata.PromptTokenCount, out.UsageMetadata.CandidatesTokenCount, start), nil
+}
+
+// geminiURL builds the generate endpoint, streaming or not. `?alt=sse` is not
+// cosmetic: without it :streamGenerateContent answers with a streamed JSON
+// array rather than events, which an SSE reader gets nothing at all from.
+//
+// The host honours GOOGLE_GEMINI_BASE_URL, and GEMINI_BASE_URL as the spelling
+// several tools use, so a gateway serves the streamed and buffered paths alike.
+func geminiURL(model string, stream bool) string {
+	base := firstNonEmpty(firstEnv("GOOGLE_GEMINI_BASE_URL", "GEMINI_BASE_URL"),
+		"https://generativelanguage.googleapis.com")
+	method := "generateContent"
+	if stream {
+		method = "streamGenerateContent"
+	}
+	u := fmt.Sprintf("%s/v1beta/models/%s:%s", strings.TrimRight(base, "/"), url.PathEscape(model), method)
+	if stream {
+		u += "?alt=sse"
+	}
+	return u
+}
+
+// geminiBody and setGeminiHeaders are shared with the streaming path, so the
+// two cannot drift into asking for different things.
+func geminiBody(req Request) map[string]interface{} {
+	body := map[string]interface{}{
+		"contents": []map[string]interface{}{
+			{
+				"role": "user",
+				"parts": []map[string]string{
+					{"text": req.Prompt},
+				},
+			},
+		},
+	}
+	if req.System != "" {
+		body["system_instruction"] = map[string]interface{}{
+			"parts": []map[string]string{{"text": req.System}},
+		}
+	}
+	if req.MaxTokens > 0 {
+		body["generationConfig"] = map[string]int{"maxOutputTokens": req.MaxTokens}
+	}
+	return body
+}
+
+func setGeminiHeaders(r *http.Request) {
+	r.Header.Set("Content-Type", "application/json")
+	r.Header.Set("x-goog-api-key", apiKeyFor("google"))
 }
 
 func (e *HTTPExecutor) executeCohere(ctx context.Context, req Request) (*Response, error) {

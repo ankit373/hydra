@@ -698,6 +698,7 @@ hyctl trust defect ...                  # modeled cost of shipping a wrong answe
 hyctl trust stats                       # samples saved, achieved vs target confidence
 hyctl trust explain <task_hash>         # the LLR ledger for a past SPRT run
 hyctl trust reliability                 # when it says 90%, is it right 90% of the time
+hyctl dispatch --confidence 0.9 --verify "..."   # verify the answer and record it, closing the loop
 hyctl trust benchmark                   # measured SPRT numbers (samples saved, accuracy)
 hyctl graph blast <file>                # a file's blast radius + the confidence it demands
 hyctl graph parallel <files...>         # optimal number of parallel agents (Law 4)
