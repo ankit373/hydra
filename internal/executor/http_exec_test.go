@@ -6,6 +6,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -343,4 +344,48 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// A credential and a region come from different places and either can be absent
+// on its own, so "no API key" sends someone to look in the wrong one (#890).
+func TestUnroutable_BedrockNamesTheMissingHalf(t *testing.T) {
+	head := provider.Head{ID: "env/bedrock", Provider: "bedrock", Source: "env"}
+	// The sandbox clears the environment; the file variables are pointed at an
+	// empty temp dir so a developer's real ~/.aws cannot answer for it.
+	isolate := func(t *testing.T) {
+		t.Helper()
+		s := testutil.NewSandbox(t)
+		t.Setenv("AWS_SHARED_CREDENTIALS_FILE", filepath.Join(s.Home, "no-credentials"))
+		t.Setenv("AWS_CONFIG_FILE", filepath.Join(s.Home, "no-config"))
+	}
+
+	t.Run("no credentials at all", func(t *testing.T) {
+		isolate(t)
+		if got := Unroutable(head); !strings.Contains(got, "AWS credentials") {
+			t.Errorf("Unroutable = %q, want it to name the missing credential", got)
+		}
+	})
+
+	t.Run("credentials but no region", func(t *testing.T) {
+		isolate(t)
+		t.Setenv("AWS_ACCESS_KEY_ID", "AKID")
+		t.Setenv("AWS_SECRET_ACCESS_KEY", "secret")
+		got := Unroutable(head)
+		if !strings.Contains(got, "region") {
+			t.Errorf("Unroutable = %q, want it to name the missing region", got)
+		}
+		if strings.Contains(got, "credentials") {
+			t.Errorf("Unroutable = %q, but the credential is configured", got)
+		}
+	})
+
+	t.Run("both, so it is routable", func(t *testing.T) {
+		isolate(t)
+		t.Setenv("AWS_ACCESS_KEY_ID", "AKID")
+		t.Setenv("AWS_SECRET_ACCESS_KEY", "secret")
+		t.Setenv("AWS_REGION", "eu-west-1")
+		if got := Unroutable(head); got != "" {
+			t.Errorf("Unroutable = %q, want routable", got)
+		}
+	})
 }

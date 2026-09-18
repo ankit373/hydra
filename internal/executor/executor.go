@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ankit373/hydra/internal/awsconf"
 	"github.com/ankit373/hydra/internal/provider"
 )
 
@@ -100,6 +101,9 @@ func Unroutable(h provider.Head) string {
 		if SupportsHTTP(h) {
 			return ""
 		}
+		if h.Provider == "bedrock" {
+			return bedrockMissing()
+		}
 		return "no API key or default model configured for " + h.Provider
 	}
 	if _, ok := cliTemplates[h.Provider]; ok {
@@ -177,4 +181,18 @@ func writeTokenSidecar(model, executorName, source string, prompt, response int)
 		ResponseTokens: response,
 	})
 	_ = os.WriteFile(clean, data, 0o600)
+}
+
+// bedrockMissing names the half that is missing. A credential and a region come
+// from different places, either can be absent on its own, and "no API key" sends
+// someone to look in the wrong one when the key is there (#890).
+func bedrockMissing() string {
+	creds := awsconf.Resolve()
+	switch {
+	case !creds.Usable():
+		return "no usable AWS credentials: set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY, or name a profile with static keys via AWS_PROFILE"
+	case creds.Region == "":
+		return "no AWS region: set AWS_REGION, or `region` on the profile"
+	}
+	return "no model configured for bedrock"
 }

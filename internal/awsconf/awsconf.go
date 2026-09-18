@@ -52,12 +52,21 @@ func Resolve() Creds {
 	// Keys come from credentials, region from config. A key set is taken whole
 	// rather than field by field, or an id from one source could be paired with
 	// a secret from another and sign nothing.
+	fromFile := false
 	if !c.Usable() {
 		if f := section(credentialsPath(), profile); f != nil {
 			c.AccessKeyID = f["aws_access_key_id"]
 			c.SecretAccessKey = f["aws_secret_access_key"]
 			c.SessionToken = f["aws_session_token"]
+			fromFile = c.Usable()
 		}
+	}
+	// Keys read beside a credential the profile says must be *fetched* are not
+	// that profile's identity: the pair beside a role_arn is what obtains the
+	// role, so signing with it acts as the base principal instead. Hydra
+	// performs no token exchange, and no credential beats the wrong one (#890).
+	if fromFile && profileFetchesCredentials(profile) {
+		c.AccessKeyID, c.SecretAccessKey, c.SessionToken = "", "", ""
 	}
 	if c.Region == "" {
 		// ~/.aws/config prefixes every non-default profile with "profile ",
@@ -71,6 +80,25 @@ func Resolve() Creds {
 		}
 	}
 	return c
+}
+
+// profileFetchesCredentials reports whether the profile names a credential to
+// obtain rather than read. Either file can declare it: the role or SSO session
+// usually sits in config while the stale keys sit in credentials.
+func profileFetchesCredentials(profile string) bool {
+	paths := []struct{ path, name string }{{credentialsPath(), profile}}
+	for _, name := range configSectionNames(profile) {
+		paths = append(paths, struct{ path, name string }{configPath(), name})
+	}
+	for _, p := range paths {
+		f := section(p.path, p.name)
+		for _, key := range []string{"role_arn", "credential_process", "sso_session", "sso_start_url"} {
+			if f[key] != "" {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func configSectionNames(profile string) []string {

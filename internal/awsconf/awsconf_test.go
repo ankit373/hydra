@@ -193,3 +193,70 @@ func TestSection_AbsentIsNilAndEmptyIsNot(t *testing.T) {
 		t.Errorf("section did not stop at the preceding header: %v", got)
 	}
 }
+
+// A credential the profile says must be fetched is not one that can be read:
+// the static pair beside a role_arn is what obtains the role, so signing with
+// it acts as the base principal instead of the role (#890).
+func TestResolve_AFetchedCredentialIsNotTheStaticKeysBesideIt(t *testing.T) {
+	cases := map[string]struct{ credentials, config string }{
+		"assumed role in credentials": {
+			credentials: "[default]\nrole_arn = arn:aws:iam::123456789012:role/Deploy\n" +
+				"aws_access_key_id = AKIDBASE\naws_secret_access_key = basesecret\n",
+			config: "[default]\nregion = eu-west-1\n",
+		},
+		"assumed role in config, stale keys in credentials": {
+			credentials: "[default]\naws_access_key_id = AKIDBASE\naws_secret_access_key = basesecret\n",
+			config:      "[default]\nregion = eu-west-1\nrole_arn = arn:aws:iam::123456789012:role/Deploy\nsource_profile = base\n",
+		},
+		"sso session with stale keys": {
+			credentials: "[default]\naws_access_key_id = AKIDSTALE\naws_secret_access_key = stalesecret\n",
+			config:      "[default]\nregion = eu-west-1\nsso_session = corp\nsso_account_id = 123456789012\n",
+		},
+		"credential process": {
+			credentials: "[default]\naws_access_key_id = AKIDSTALE\naws_secret_access_key = stalesecret\n",
+			config:      "[default]\nregion = eu-west-1\ncredential_process = /usr/local/bin/fetch-creds\n",
+		},
+	}
+	for name, files := range cases {
+		t.Run(name, func(t *testing.T) {
+			awsHome(t, files.credentials, files.config)
+
+			got := Resolve()
+			if got.Usable() {
+				t.Errorf("Usable() = true with %q/%q: that pair obtains the identity, it is not the identity",
+					got.AccessKeyID, got.SecretAccessKey)
+			}
+			// A region is configuration rather than a credential, and is still
+			// readable from such a profile.
+			if got.Region != "eu-west-1" {
+				t.Errorf("Region = %q, want the profile's region", got.Region)
+			}
+		})
+	}
+}
+
+// The environment is not a profile: keys given there are the identity, whatever
+// a profile in the files happens to declare.
+func TestResolve_EnvironmentKeysSurviveAProfileThatFetches(t *testing.T) {
+	awsHome(t, "[default]\naws_access_key_id = AKIDSTALE\naws_secret_access_key = stalesecret\n",
+		"[default]\nregion = eu-west-1\nrole_arn = arn:aws:iam::123456789012:role/Deploy\n")
+	t.Setenv("AWS_ACCESS_KEY_ID", "AKIDFROMENV")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "envsecret")
+
+	got := Resolve()
+	if !got.Usable() || got.AccessKeyID != "AKIDFROMENV" {
+		t.Errorf("Resolve() = %q/%q, want the environment's own credential", got.AccessKeyID, got.SecretAccessKey)
+	}
+}
+
+// A plain static profile still resolves, or the guard would have taken the
+// credential chain with it.
+func TestResolve_AStaticProfileIsStillUsable(t *testing.T) {
+	awsHome(t, "[default]\naws_access_key_id = AKIDSTATIC\naws_secret_access_key = staticsecret\n",
+		"[default]\nregion = us-east-1\n")
+
+	got := Resolve()
+	if !got.Usable() || got.AccessKeyID != "AKIDSTATIC" || got.Region != "us-east-1" {
+		t.Errorf("Resolve() = %+v, want the static profile", got)
+	}
+}
