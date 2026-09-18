@@ -172,3 +172,93 @@ func TestSnapshot_NotWrittenBelowThreshold(t *testing.T) {
 		t.Errorf("expected no snapshot file below the threshold, stat err = %v", err)
 	}
 }
+
+// A checkpoint written before the key was normalized holds its rows under "".
+// loadSnapshot rebuilds the store without going through apply, so restoring one
+// verbatim puts the old history in a cell no reader asks for while every later
+// observation lands in "default", and saveSnapshot then re-persists the dead
+// cell forever.
+func TestSnapshot_APreNormalizationCheckpointFoldsIntoTheCellReadersAsk(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "calibration.jsonl")
+
+	c1, err := New(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	feed(t, c1, "verifier:go test", "", 50, 0, 20, 0)
+
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// What load() would have checkpointed before the fix: "" keys, offset at
+	// the end of the file so nothing is left to replay on top of it.
+	if err := saveSnapshot(snapshotPath(path), map[calibKey]*confusion{
+		{"verifier:go test", ""}: {TP: 51, FP: 1, TN: 21, FN: 1},
+	}, info.Size()); err != nil {
+		t.Fatal(err)
+	}
+
+	c2, err := New(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := c2.Report()
+	if len(rows) != 1 {
+		t.Fatalf("got %d cells after restore, want 1: %+v", len(rows), rows)
+	}
+	if rows[0].Domain != DefaultDomain {
+		t.Errorf("restored cell domain = %q, want %q", rows[0].Domain, DefaultDomain)
+	}
+	if rows[0].N != 70 {
+		t.Errorf("restored observations = %v, want 70", rows[0].N)
+	}
+	if d := c2.D("verifier:go test", DefaultDomain); d == 0 {
+		t.Error("D = 0 after restoring 70 observations: the checkpoint landed where nothing reads")
+	}
+
+	// The next observations must join that history rather than open a second cell.
+	feed(t, c2, "verifier:go test", "", 10, 0, 0, 0)
+	if rows = c2.Report(); len(rows) != 1 || rows[0].N != 80 {
+		t.Errorf("after ten more: %d cells, first N=%v; want 1 cell of 80", len(rows), rows[0].N)
+	}
+}
+
+// Folding two entries must add what they observed, not what they store: every
+// entry carries the Laplace prior, so summing the raw counts inflates the cell
+// by a whole prior's worth and reports observations that never happened.
+func TestSnapshot_FoldingTwoEntriesDoesNotCountThePriorTwice(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "calibration.jsonl")
+
+	c1, err := New(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	feed(t, c1, "claude", DefaultDomain, 1, 0, 0, 0) // one line, so the offset has somewhere to land
+
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Both spellings of the same cell, as a store straddling the fix holds them.
+	if err := saveSnapshot(snapshotPath(path), map[calibKey]*confusion{
+		{"claude", ""}:            {TP: 41, FP: 1, TN: 31, FN: 1},
+		{"claude", DefaultDomain}: {TP: 21, FP: 1, TN: 11, FN: 1},
+	}, info.Size()); err != nil {
+		t.Fatal(err)
+	}
+
+	c2, err := New(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := c2.Report()
+	if len(rows) != 1 {
+		t.Fatalf("got %d cells, want the two spellings folded into 1: %+v", len(rows), rows)
+	}
+	// 40+30 real from one entry, 20+10 from the other. 104 means the prior was
+	// added twice; 30 or 70 means one entry overwrote the other.
+	if rows[0].N != 100 {
+		t.Errorf("observations = %v, want 100", rows[0].N)
+	}
+}

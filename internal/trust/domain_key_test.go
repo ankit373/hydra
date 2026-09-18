@@ -78,3 +78,50 @@ func TestUnreadableSourceKey(t *testing.T) {
 		}
 	}
 }
+
+// #894 normalized the write path and left the read path taking the caller's
+// string, so `hyctl oracle verify` with no --domain filed under "default" and
+// then looked the row up under "", finding the uninformative prior however much
+// history it had written. Both directions have to reach the same cell.
+func TestCalibration_AnUnspecifiedDomainReadsBackEitherWayItIsAsked(t *testing.T) {
+	c, err := New(filepath.Join(t.TempDir(), "calibration.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	feed(t, c, "verifier:go test", "", 50, 0, 20, 0) // written the way oracle verify writes
+
+	blank, dflt := c.D("verifier:go test", ""), c.D("verifier:go test", DefaultDomain)
+	if blank != dflt {
+		t.Errorf("D read as %q = %.4f but as %q = %.4f; one history, two cells", "", blank, DefaultDomain, dflt)
+	}
+	// Equal at zero would satisfy the check above while reading nothing at all,
+	// which is the same bug in its other direction.
+	if blank == 0 {
+		t.Errorf("D = 0 on 70 observations: the reader found the prior, not the history")
+	}
+	if l := c.LLR("verifier:go test", "", true); l == 0 {
+		t.Errorf("LLR read with no domain = 0 on 70 observations")
+	}
+}
+
+// The reverse pairing: written with the spelling dispatch uses, read with the
+// spelling oracle verify uses.
+func TestCalibration_DefaultAndBlankAreOneCellWhicheverWrote(t *testing.T) {
+	c, err := New(filepath.Join(t.TempDir(), "calibration.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	feed(t, c, "claude", DefaultDomain, 30, 0, 10, 0)
+	feed(t, c, "claude", "", 20, 0, 10, 0)
+
+	rows := c.Report()
+	if len(rows) != 1 {
+		t.Fatalf("got %d cells, want 1: %+v", len(rows), rows)
+	}
+	if rows[0].N != 70 {
+		t.Errorf("observations = %v, want 70 (30+10 and 20+10 in one cell)", rows[0].N)
+	}
+	if rows[0].Domain != DefaultDomain {
+		t.Errorf("cell domain = %q, want %q: a report must name a key a reader can ask for", rows[0].Domain, DefaultDomain)
+	}
+}

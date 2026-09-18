@@ -60,7 +60,19 @@ func loadSnapshot(path string, jsonl *os.File, jsonlSize int64) (store map[calib
 	}
 	store = make(map[calibKey]*confusion, len(snap.Entries))
 	for _, e := range snap.Entries {
-		store[calibKey{e.Source, e.Domain}] = &confusion{TP: e.TP, FP: e.FP, TN: e.TN, FN: e.FN}
+		// A checkpoint written before #888 holds "" rows that the delta on top
+		// of it now writes as "default", so restoring verbatim splits one
+		// history in two. Real counts are added: each entry carries the prior.
+		key := keyFor(e.Source, e.Domain)
+		conf := store[key]
+		if conf == nil {
+			conf = newConfusion()
+			store[key] = conf
+		}
+		conf.TP += e.TP - laplacePrior
+		conf.FP += e.FP - laplacePrior
+		conf.TN += e.TN - laplacePrior
+		conf.FN += e.FN - laplacePrior
 	}
 	return store, snap.Offset, true
 }

@@ -24,6 +24,13 @@ const laplacePrior = 1.0
 // calibKey namespaces a confusion posterior by source and domain.
 type calibKey struct{ source, domain string }
 
+// keyFor is the one derivation of a store key, for reads, writes and snapshot
+// restores alike. Normalizing the write path alone left `hyctl oracle verify`
+// filing under "default" and reading back under "" (#888).
+func keyFor(source, domain string) calibKey {
+	return calibKey{source, Domain(domain)}
+}
+
 // confusion holds Beta-Bernoulli pseudo-counts for one (source, domain).
 //
 //	              actually correct   actually incorrect
@@ -162,12 +169,10 @@ func (c *Calibrator) apply(source, domain string, saidCorrect bool, actual Outco
 	if actual == OutcomeUnknown {
 		return
 	}
-	// Normalized here, the one path both Update and load funnel through, so
-	// the key cannot depend on which caller wrote it. `hyctl oracle verify`
-	// defaults --domain to "" while `hyctl dispatch` defaults it to "default",
-	// so the same unspecified domain produced two cells and only one of them
-	// was ever read (#888), which is #785 in the writer that pass missed.
-	key := calibKey{source, Domain(domain)}
+	// The key is derived rather than taken, so it cannot depend on which
+	// caller wrote it: `oracle verify` defaults --domain to "" where
+	// `dispatch` defaults it to "default", which is #785 in a writer (#888).
+	key := keyFor(source, domain)
 	conf := c.store[key]
 	if conf == nil {
 		conf = newConfusion()
@@ -251,7 +256,7 @@ func (c *Calibrator) D(source, domain string) float64 {
 // rates returns clamped se/sp so LLR/D never hit ±Inf from a degenerate cell.
 func (c *Calibrator) rates(source, domain string) (se, sp float64) {
 	c.mu.RLock()
-	conf := c.store[calibKey{source, domain}]
+	conf := c.store[keyFor(source, domain)]
 	c.mu.RUnlock()
 	if conf == nil {
 		return 0.5, 0.5 // unknown source: uninformative
