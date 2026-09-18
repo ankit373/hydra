@@ -45,7 +45,7 @@ func routingDispatcher() *Dispatcher {
 func TestSelectHeads_NumericTierDoesNotReturnStrongest(t *testing.T) {
 	d := routingDispatcher()
 
-	got := d.selectHeads("10", false)
+	got := d.selectHeads("10", false, "")
 	if len(got) == 0 {
 		t.Fatal("tier 10 selected no heads")
 	}
@@ -66,11 +66,11 @@ func TestSelectHeads_NumericTierOrdering(t *testing.T) {
 	d := routingDispatcher()
 
 	// Strongest tier: everything is eligible, best first.
-	if got := d.selectHeads("1", false); len(got) == 0 || got[0].ID != "strongest" {
+	if got := d.selectHeads("1", false, ""); len(got) == 0 || got[0].ID != "strongest" {
 		t.Errorf("tier 1 primary = %v, want \"strongest\"", ids(got))
 	}
 	// Mid tier: excludes the strongest, keeps mid + weaker as fallback.
-	got := d.selectHeads("7", false)
+	got := d.selectHeads("7", false, "")
 	if len(got) == 0 || got[0].ID != "mid" {
 		t.Fatalf("tier 7 primary = %v, want \"mid\"", ids(got))
 	}
@@ -86,7 +86,7 @@ func TestSelectHeads_NumericTierOrdering(t *testing.T) {
 func TestSelectHeads_UnknownTierSelectsNothing(t *testing.T) {
 	d := routingDispatcher()
 	for _, hint := range []string{"expret", "nonsense", "Expert"} {
-		if got := d.selectHeads(hint, false); len(got) != 0 {
+		if got := d.selectHeads(hint, false, ""); len(got) != 0 {
 			t.Errorf("unknown tier %q selected %v, must not silently widen", hint, ids(got))
 		}
 	}
@@ -100,7 +100,7 @@ func TestSelectHeads_UnknownTierSelectsNothing(t *testing.T) {
 func TestSelectHeads_TakesNumbersOnly(t *testing.T) {
 	d := routingDispatcher()
 	for _, hint := range []string{"expert", "simple", "local"} {
-		if got := d.selectHeads(hint, false); len(got) != 0 {
+		if got := d.selectHeads(hint, false, ""); len(got) != 0 {
 			t.Errorf("selectHeads(%q) = %v, want nothing: names resolve upstream", hint, ids(got))
 		}
 	}
@@ -110,7 +110,7 @@ func TestSelectHeads_TakesNumbersOnly(t *testing.T) {
 		if err != nil {
 			t.Fatalf("resolveTierHint(%q): %v", name, err)
 		}
-		if got := d.selectHeads(hint, false); len(got) == 0 {
+		if got := d.selectHeads(hint, false, ""); len(got) == 0 {
 			t.Errorf("selectHeads(%q) for --tier %s selected nothing", hint, name)
 		}
 	}
@@ -118,7 +118,7 @@ func TestSelectHeads_TakesNumbersOnly(t *testing.T) {
 
 func TestSelectHeads_LocalOnlyFilters(t *testing.T) {
 	d := routingDispatcher()
-	for _, h := range d.selectHeads("1", true) {
+	for _, h := range d.selectHeads("1", true, "") {
 		if !h.LocalOnly {
 			t.Errorf("localOnly selection included remote head %q", h.ID)
 		}
@@ -290,7 +290,7 @@ func TestValidateTierHint_AgreesWithResolution(t *testing.T) {
 func TestEnumToTier_RoutesAwayFromStrongest(t *testing.T) {
 	d := routingDispatcher()
 
-	cheap := d.selectHeads(EnumToTier("GRUNT"), false)
+	cheap := d.selectHeads(EnumToTier("GRUNT"), false, "")
 	if len(cheap) == 0 {
 		t.Fatal("GRUNT selected no heads")
 	}
@@ -303,7 +303,7 @@ func TestEnumToTier_RoutesAwayFromStrongest(t *testing.T) {
 
 	// EXPERT resolves to tier 2, so the tier-1 orchestrator-class head is
 	// deliberately excluded: an enum must not escalate past what it asked for.
-	expensive := d.selectHeads(EnumToTier("EXPERT"), false)
+	expensive := d.selectHeads(EnumToTier("EXPERT"), false, "")
 	if len(expensive) == 0 || expensive[0].ID != "expert" {
 		t.Errorf("enum EXPERT primary = %v, want \"expert\"", ids(expensive))
 	}
@@ -331,7 +331,7 @@ func TestSelectHeads_NoCheapHeadFallsBackToCheapest(t *testing.T) {
 		registryHead("expert", 92, false),     // UITier 2
 	}
 
-	got := d.selectHeads("10", false) // nothing at tier 10
+	got := d.selectHeads("10", false, "") // nothing at tier 10
 	if len(got) == 0 {
 		t.Fatal("fallback selected nothing")
 	}
@@ -354,7 +354,7 @@ func TestSelectHeads_Tier10PrefersALocalHeadOverAPaidOne(t *testing.T) {
 		registryHead("ollama", 60, true),      // exactly Ollama's score
 	}
 
-	got := d.selectHeads("10", false)
+	got := d.selectHeads("10", false, "")
 	if len(got) == 0 {
 		t.Fatal("tier 10 selected no heads, GRUNT would degrade to a paid head")
 	}

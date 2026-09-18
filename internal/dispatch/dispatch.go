@@ -34,6 +34,7 @@ import (
 	"github.com/ankit373/hydra/internal/rank"
 	"github.com/ankit373/hydra/internal/runid"
 	"github.com/ankit373/hydra/internal/runlog"
+	"github.com/ankit373/hydra/internal/trust"
 	"github.com/ankit373/hydra/registry"
 )
 
@@ -59,6 +60,12 @@ type Options struct {
 	// internal/auth/**"), not just per-head rules. Empty means no resource
 	// concept applies (e.g. a plain text dispatch with no target file).
 	Resource string
+
+	// Domain is the calibration domain this dispatch routes for, the same key
+	// internal/trust records outcomes under. It reorders the candidate heads
+	// onto the one measured best at this kind of work. Empty, and with no
+	// Resource to derive one from, leaves the pooled probe ranking standing.
+	Domain string
 
 	// Provenance carries parts of the payload whose origin only the caller
 	// knows, e.g. the file whose content hyctl edit embedded in the prompt.
@@ -128,6 +135,14 @@ type Result struct {
 	// one with write access. Callers get the provenance rather than a bare
 	// string so they can decide (#740).
 	OutputProvenance egress.Part
+
+	// Domain is the calibration domain the candidates were ranked for, and
+	// Scores why each ranks where it does. Both empty when nothing narrowed
+	// the ranking, which is when the pooled probe order stands unchanged.
+	// Populated on the --dry-run preview, whose whole job is to explain a
+	// choice before it costs anything.
+	Domain string
+	Scores map[string]rank.Score
 
 	*executor.Response
 }
@@ -251,6 +266,10 @@ type Dispatcher struct {
 	pricing *pricing.DB
 	budget  *budget.Registry
 	health  *health.Store
+	// cal reorders candidates onto the head measured best at the task's
+	// domain. Nil when the store will not load, which leaves the pooled probe
+	// order: a ranking basis that degrades has to degrade to the previous one.
+	cal *trust.Calibrator
 }
 
 // Heads returns the probed head list for external callers (e.g. swarm).
@@ -346,6 +365,15 @@ func New(ctx context.Context) (*Dispatcher, error) {
 	// ids, so a local head used to miss and be budgeted at 200000 (#764).
 	budgetReg := budget.NewRegistry(budget.WindowsForHeads(config.ScriptHome(), result.Heads))
 
+	// A store that will not load must not stop a dispatch, but it must not do
+	// it quietly either: routing would fall back to the pooled order with
+	// nothing saying the domain evidence was skipped.
+	cal, err := trust.New(trust.DefaultPath())
+	if err != nil {
+		log.Printf("⚠️  calibration unreadable (%v), routing on the pooled ranking", err)
+		cal = nil
+	}
+
 	return &Dispatcher{
 		cfg:     cfg,
 		heads:   result.Heads,
@@ -353,6 +381,7 @@ func New(ctx context.Context) (*Dispatcher, error) {
 		pricing: pricing.Load(),
 		budget:  budgetReg,
 		health:  health.Open(health.DefaultPath()),
+		cal:     cal,
 	}, nil
 }
 
@@ -443,7 +472,8 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		localOnly, rerouted = true, true
 	}
 
-	candidates := d.selectHeads(tier, localOnly)
+	domain := routingDomain(opts)
+	candidates := d.selectHeads(tier, localOnly, domain)
 
 	// The reroute failed: the content is secret and nothing local can run it.
 	// Strict refuses; otherwise the payload leaves, and the user is told in
@@ -458,7 +488,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		log.Printf("⚠️  egress.strict is off: secret content (%s) is going to a head that leaves this machine",
 			strings.Join(secretOrigins, ", "))
 		localOnly, rerouted = action.LocalOnly || opts.LocalOnly, false
-		candidates = d.selectHeads(tier, localOnly)
+		candidates = d.selectHeads(tier, localOnly, domain)
 	}
 	if rerouted && len(candidates) > 0 {
 		log.Printf("🔒 secret content (%s), routing to a local head only",
@@ -499,7 +529,12 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 	candidates, actProb := d.pick(candidates, opts)
 
 	if opts.DryRun {
-		return &Result{Head: candidates[0], Fallbacks: candidates[1:]}, nil
+		// Why this order, not just what it is: a reordering the user cannot
+		// see the evidence for is indistinguishable from an arbitrary one.
+		return &Result{
+			Head: candidates[0], Fallbacks: candidates[1:],
+			Domain: domain, Scores: d.explain(candidates, domain),
+		}, nil
 	}
 
 	// The run log records the shape of the run, which head was picked, when,
@@ -1165,7 +1200,7 @@ func (d *Dispatcher) provenance(prompt string, opts Options) ([]egress.Part, *eg
 
 // A hint that matches nothing returns no candidates; the caller reports that
 // rather than silently widening to every head.
-func (d *Dispatcher) selectHeads(tierHint string, localOnly bool) []provider.Head {
+func (d *Dispatcher) selectHeads(tierHint string, localOnly bool, domain string) []provider.Head {
 	now := time.Now()
 	filter := func(h provider.Head) bool {
 		if !executor.Supports(h) {
@@ -1190,7 +1225,7 @@ func (d *Dispatcher) selectHeads(tierHint string, localOnly bool) []provider.Hea
 				all = append(all, h)
 			}
 		}
-		return all
+		return d.rerankFor(all, domain)
 	}
 
 	// Every hint that reaches here is a number: resolveTierHint turns a name
@@ -1211,7 +1246,7 @@ func (d *Dispatcher) selectHeads(tierHint string, localOnly bool) []provider.Hea
 		}
 	}
 	if len(candidates) > 0 {
-		return candidates
+		return d.rerankFor(candidates, domain)
 	}
 	// Nothing is that cheap. Degrade to the cheapest heads available,
 	// ascending capability, so the fallback is the least expensive option
@@ -1228,6 +1263,60 @@ func (d *Dispatcher) selectHeads(tierHint string, localOnly bool) []provider.Hea
 			want, candidates[0].ID)
 	}
 	return candidates
+}
+
+// rerankFor reorders candidates onto the head measured best at this domain.
+//
+// Deliberately not applied to the degrade path below, which reverses into
+// cheapest-first because nothing was cheap enough: that order answers "what
+// can I afford", and re-sorting it on quality would quietly turn a cost
+// fallback into an escalation, the defect #165 was about.
+//
+// An empty domain, no calibrator or a single candidate leaves the list exactly
+// as the pooled probe ranking had it.
+func (d *Dispatcher) rerankFor(candidates []provider.Head, domain string) []provider.Head {
+	if domain == "" || d.cal == nil || len(candidates) < 2 {
+		return candidates
+	}
+	ranked, _ := rank.SortMeasured(candidates, d.domainMeasurement(domain))
+	return ranked
+}
+
+// explain reports why each candidate ranks where it does, from the same lookup
+// the ordering used. Nil when nothing measured them, so a caller renders the
+// declared score rather than a table of zeroes.
+func (d *Dispatcher) explain(candidates []provider.Head, domain string) map[string]rank.Score {
+	if domain == "" || d.cal == nil {
+		return nil
+	}
+	return rank.Scores(candidates, d.domainMeasurement(domain))
+}
+
+// domainMeasurement reads both levels the estimator needs: what this head has
+// done everywhere, and what it has done in this domain.
+func (d *Dispatcher) domainMeasurement(domain string) rank.Lookup {
+	return func(headID string) rank.Measurement {
+		correct, total := d.cal.Commitments(headID)
+		inCorrect, inTotal := d.cal.CommitmentsIn(headID, domain)
+		return rank.Measurement{
+			Correct: correct, Total: total,
+			InDomainCorrect: inCorrect, InDomainTotal: inTotal,
+		}
+	}
+}
+
+// routingDomain is the calibration domain a dispatch routes for: what the
+// caller named, else the one derived from the file it acts on, the same
+// derivation hyctl edit and hyctl review record their outcomes under (#785).
+// Empty means nothing narrows the ranking and the pooled order stands.
+func routingDomain(opts Options) string {
+	if d := strings.TrimSpace(opts.Domain); d != "" {
+		return d
+	}
+	if f := strings.TrimSpace(opts.Resource); f != "" {
+		return trust.DomainForFile(f)
+	}
+	return ""
 }
 
 // recordBudget updates the budget registry with this call's token usage.

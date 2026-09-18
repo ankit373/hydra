@@ -30,3 +30,23 @@ func (c *Calibrator) Commitments(source string) (correct, total int) {
 	}
 	return int(math.Round(tp)), int(math.Round(tp + fp))
 }
+
+// CommitmentsIn is Commitments narrowed to one domain: what this source's
+// answers did when the task was of that kind.
+//
+// A direct cell read rather than a filtered walk, and the domain is normalized
+// through Domain so the key read is the key every writer records under. That
+// agreement is the whole of #785: a reader spelling the domain differently
+// finds an empty cell and reports a head as never measured when it has a full
+// history.
+func (c *Calibrator) CommitmentsIn(source, domain string) (correct, total int) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	conf := c.store[calibKey{source, Domain(domain)}]
+	if conf == nil {
+		return 0, 0
+	}
+	tp, fp := conf.TP-laplacePrior, conf.FP-laplacePrior
+	return int(math.Round(tp)), int(math.Round(tp + fp))
+}

@@ -40,7 +40,7 @@ func BenchmarkSelectHeads_NoTier(b *testing.B) {
 	d := benchDispatcher()
 	b.ResetTimer()
 	for range b.N {
-		_ = d.selectHeads("", false)
+		_ = d.selectHeads("", false, "")
 	}
 }
 
@@ -49,7 +49,7 @@ func BenchmarkSelectHeads_Tier(b *testing.B) {
 	d := benchDispatcher()
 	b.ResetTimer()
 	for range b.N {
-		_ = d.selectHeads("7", false)
+		_ = d.selectHeads("7", false, "")
 	}
 }
 
@@ -75,7 +75,7 @@ func BenchmarkRoutingPath(b *testing.B) {
 		req := policy.Request{Prompt: prompt, TierHint: tier}
 		action := d.policy.Evaluate(req)
 		if !action.Deny {
-			_ = d.selectHeads(tier, false)
+			_ = d.selectHeads(tier, false, "")
 		}
 	}
 }

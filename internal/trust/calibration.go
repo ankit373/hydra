@@ -162,7 +162,12 @@ func (c *Calibrator) apply(source, domain string, saidCorrect bool, actual Outco
 	if actual == OutcomeUnknown {
 		return
 	}
-	key := calibKey{source, domain}
+	// Normalized here, the one path both Update and load funnel through, so
+	// the key cannot depend on which caller wrote it. `hyctl oracle verify`
+	// defaults --domain to "" while `hyctl dispatch` defaults it to "default",
+	// so the same unspecified domain produced two cells and only one of them
+	// was ever read (#888), which is #785 in the writer that pass missed.
+	key := calibKey{source, Domain(domain)}
 	conf := c.store[key]
 	if conf == nil {
 		conf = newConfusion()
