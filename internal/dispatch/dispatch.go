@@ -396,11 +396,17 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 	// Inject A2A handoff context into prompt if provided. --a2a names a file the
 	// user explicitly asked for, so a read/parse failure must fail the dispatch
 	// rather than silently running without the handoff context (#450).
+	// handoffText is what Inject prepended, kept so recordContextEcho can tell
+	// whether a head repeated it back. Taken as the difference rather than by
+	// re-reading the file, which would parse it a second time to reconstruct
+	// something this call already produced (#872).
+	var handoffText string
 	if opts.A2AFile != "" {
 		injected, err := a2a.Inject(opts.A2AFile, prompt)
 		if err != nil {
 			return nil, fmt.Errorf("--a2a %s: %w", opts.A2AFile, err)
 		}
+		handoffText = strings.TrimSuffix(injected, prompt)
 		prompt = injected
 	}
 
@@ -692,6 +698,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 			Content: resp.Output, Source: egress.SourceHead, Origin: h.ID,
 		})
 		recordOutputFinding(r.OutputProvenance, h)
+		recordContextEcho(resp.Output, hiddenContextFor(opts, handoffText), h)
 		inRef, outRef := d.capturePayloads(prompt, opts, resp)
 		_ = rl.Append(runlog.Event{
 			Kind: runlog.KindDispatchFinished, TaskID: taskID,

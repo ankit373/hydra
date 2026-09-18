@@ -127,6 +127,19 @@ func filePolicyControl() Control {
 		"either way (#769). The other %d are declared and read by nothing",
 		n, len(enforcedCaps), policyFieldCount(), strings.Join(enforcedCaps, ", "),
 		filePolicyEnforcementSite, policyFieldCount()-len(enforcedCaps))
+	// A condition naming a field the evaluator does not know can never be
+	// satisfied, so the rule around it is not merely unexercised, it is dead.
+	// Said separately from the field count above because the remedy differs: a
+	// field nothing reads is Hydra's gap, a condition nothing can match is a
+	// typo in the operator's own file (#854).
+	if dead := eng.DeadConditions(); len(dead) > 0 {
+		names := make([]string, 0, len(dead))
+		for _, d := range dead {
+			names = append(names, d.String())
+		}
+		c.Detail += fmt.Sprintf(". %d condition(s) can never match, so their rule never fires: %s",
+			len(dead), strings.Join(names, "; "))
+	}
 	return c
 }
 
