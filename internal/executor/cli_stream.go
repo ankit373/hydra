@@ -58,7 +58,7 @@ func (e *CLIExecutor) ExecuteStream(ctx context.Context, req Request, onDelta On
 
 	return &Response{
 		Output:       output,
-		Duration:     time.Since(start),
+		Duration:     measured(time.Since(start)),
 		Model:        req.Head.ID,
 		InputTokens:  promptTokens,
 		OutputTokens: responseTokens,

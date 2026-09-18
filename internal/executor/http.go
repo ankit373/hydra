@@ -872,7 +872,7 @@ func httpResponse(req Request, output, model string, in, out int, started time.T
 		Output:          output,
 		InputTokens:     in,
 		OutputTokens:    out,
-		Duration:        time.Since(started),
+		Duration:        measured(time.Since(started)),
 		Model:           model,
 		TokensEstimated: estimated,
 	}
