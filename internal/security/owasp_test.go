@@ -102,6 +102,25 @@ func TestExcessiveAgency_ConfiguredOnlyWithAResourceScopedRule(t *testing.T) {
 	if got := excessiveAgencyCategory(scoped).Status; got != Configured {
 		t.Errorf("a resource-scoped rule exists: Status = %q, want Configured", got)
 	}
+
+	// An agent-scoped rule counts too. The least-privilege check beside this one
+	// reports unscoped *agents*, so an operator who scopes one and sees LLM03
+	// still read Gap concludes the work did nothing (#854).
+	byAgent := ledger.Policy{Rules: []ledger.Rule{{Agent: "hydra-swarm", Decision: ledger.Deny}}}
+	if got := excessiveAgencyCategory(byAgent).Status; got != Configured {
+		t.Errorf("an agent-scoped rule exists: Status = %q, want Configured", got)
+	}
+}
+
+// A gap that does not say what would close it is a score, not a finding. The
+// detail has to name the file and a rule shape an operator can paste (#854).
+func TestExcessiveAgency_GapNamesTheRemedy(t *testing.T) {
+	c := excessiveAgencyCategory(ledger.Policy{Rules: []ledger.Rule{{Tool: "a", Decision: ledger.Allow}}})
+	for _, want := range []string{ledger.DefaultPolicyPath(), "hydra-swarm", "\"decision\":\"deny\""} {
+		if !strings.Contains(c.Detail, want) {
+			t.Errorf("LLM03 gap detail does not contain %q: %s", want, c.Detail)
+		}
+	}
 }
 
 func TestLLM09Misinformation_ConfiguredOnlyWithARecordedRun(t *testing.T) {

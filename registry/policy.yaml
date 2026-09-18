@@ -146,6 +146,9 @@ rules:
       validate_strict: true
 
   # ── Context-pressure adjustments ───────────────────────────────────────────
+  # Both of these are inert today: nothing populates context_pct, so neither has
+  # ever fired. Kept rather than deleted because the number exists (the claude_pct
+  # governor measures it) and the rules are what it would drive (#854).
 
   - name: high_context_skip_rubber_duck
     when:

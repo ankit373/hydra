@@ -332,6 +332,38 @@ One related fix ships with it: local model weights are fingerprinted by digest a
 
 **Not included.** Repo-supplied validator and oracle commands still run unconfined. Go's `os/exec` has no per-child rlimit support, and faking one through `sh -c 'ulimit ...'` would re-tokenize argv, which `internal/oracle` deliberately avoids. Real containment there needs a platform sandbox (`sandbox-exec`, seccomp) and is tracked separately.
 
+**Scoping the agents themselves.** That covers what a head *holds*. What an agent may *reach* is the access policy at `~/.hydra/mcp_policy.json`, and Hydra ships no scoping rules there on purpose: which agent may write where is a decision about your repository, and a blanket deny gets uninstalled rather than tuned. `hyctl security` tells you who is running unscoped:
+
+```
+  Least privilege   3 agent(s) unscoped
+    no policy rule names these agents, so they run under the default while
+    changing state: hydra-swarm (720 state-changing), hydra-dispatch (127)
+```
+
+A rule narrows by agent, resource, action, or any combination. First match wins, so put the specific rules above the general ones:
+
+```json
+{
+  "default": "allow",
+  "rules": [
+    {"agent": "hydra-swarm", "resource": "registry/**", "action": "write",
+     "decision": "deny", "framework": "owasp:llm03"},
+    {"agent": "hydra-swarm", "resource": "**/*_test.go", "action": "write",
+     "decision": "ask"},
+    {"classification": "mcp-quarantined", "decision": "deny"}
+  ]
+}
+```
+
+`deny` refuses and records it. `ask` parks the task under `hyctl ask` instead, which is the right verdict when you want a human in the loop rather than a refusal; it stops dispatch before any executor runs and never falls through to a cheaper head. Check a rule fires before trusting it, then read back what the policy is actually doing:
+
+```bash
+hyctl mcp check fs --agent hydra-swarm --resource registry/routing.yaml --action write
+hyctl security --why     # per-rule hit counts, rules that never matched, rules unreachable
+```
+
+A rule that has never matched is reported as such, and one an earlier rule always shadows is reported as unreachable, so a policy that reads strict and does nothing shows up as exactly that.
+
 ### 💰 Full Cost Visibility
 
 Every dispatch is logged to `~/.hydra/cost.jsonl` with model, tier, token counts, estimated cost, and fallback chain. Costs are **honestly labeled**: `tokens_source` marks whether a provider reported real usage or Hydra estimated it, and `cost_source` is always `estimated` (pricing × tokens, never a billed figure). Run `hyctl cost` or `hyctl stats` to see where your budget is going, or `hyctl stats --latency` for p50/p90/p99 per model, computed from mergeable sketches accurate to within 1%, so percentiles survive even after the raw rows are gone. Each row also carries `act_prob` (the probability the router picked that head) and `keep_prob` (the probability the row was kept), so a sampled log can still be read without bias. Averaging a non-uniformly sampled log understates rates badly enough to reverse which head looks better.

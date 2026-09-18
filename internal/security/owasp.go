@@ -188,20 +188,29 @@ func outputHandlingCategory() Category {
 	return c
 }
 
-// excessiveAgencyCategory: Configured when at least one ledger rule scopes
-// access by resource (real least-privilege), Gap otherwise, this is a
-// per-install choice, not something Hydra can ship a default for.
+// excessiveAgencyCategory: Configured when at least one ledger rule narrows
+// what an agent may reach, by resource or by agent. Gap otherwise, this is a
+// per-install choice, not something Hydra can ship a default for: a blanket
+// deny gets uninstalled rather than tuned, and the shipped secret-path rules
+// that were proposed instead are already covered at the egress boundary (#837).
+//
+// Agent counts alongside Resource because the least-privilege check beside this
+// one reports unscoped *agents*, and the two disagreeing about what least
+// privilege means is how an operator does the work and sees nothing move.
 func excessiveAgencyCategory(pol ledger.Policy) Category {
 	c := Category{ID: "LLM03", Name: "Excessive Agency"}
 	for _, r := range pol.Rules {
-		if r.Resource != "" {
+		if r.Resource != "" || r.Agent != "" {
 			c.Status = Configured
-			c.Detail = "at least one ledger rule scopes access by resource (least-privilege)"
+			c.Detail = "at least one ledger rule narrows what an agent may reach (least-privilege)"
 			return c
 		}
 	}
 	c.Status = Gap
-	c.Detail = "no ledger rule scopes access by resource, any allowed head can touch any file"
+	c.Detail = "no ledger rule scopes access by resource or agent, so any allowed head can " +
+		"touch any file; scope the agents that change state in " + ledger.DefaultPolicyPath() +
+		", e.g. {\"agent\":\"hydra-swarm\",\"resource\":\"registry/**\",\"action\":\"write\"," +
+		"\"decision\":\"deny\"}"
 	return c
 }
 
