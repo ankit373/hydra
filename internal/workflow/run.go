@@ -43,6 +43,12 @@ type Saver func(Workflow) error
 // The returned Workflow is the final state, saved. An error means a step failed
 // or could not be persisted; the workflow is still resumable in both cases.
 func Run(ctx context.Context, w Workflow, r Router, save Saver) (Workflow, error) {
+	// The heartbeat is what tells a later reader this run is alive: without
+	// it a killed run reads as running forever and nothing says it needs
+	// resuming (#898).
+	stopBeat := heartbeat(w.ID)
+	defer stopBeat()
+
 	if len(w.Steps) == 0 {
 		return w, ErrNoSteps
 	}

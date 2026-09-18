@@ -40,7 +40,10 @@ internal/optimal/       ← Optimal parallel-agent count n*=√((1-s)/k) (Amdahl
 internal/entropy/       ← Context signal density (gzip proxy) → useful_tokens=L·ρ; compaction governor (Law 5).
 internal/ledger/        ← MCP accountability ledger: record + policy-gate what agents touch. `hyctl mcp`.
 internal/workflow/      ← Ordered multi-step tasks, each step routed on its own; state saved
-                          before every step so a killed run resumes. `hyctl workflow`.
+                          before every step so a killed run resumes, plus a heartbeat file beside
+                          the record: a status is only what the last writer knew, so a killed run
+                          read as `running` for ever until `Observed()` resolved it against a live
+                          beat (#898). `hyctl workflow`.
 internal/pending/       ← Tasks parked on a ledger `ask` verdict (logs/pending/<task-id>.json). `hyctl ask`.
 internal/mcpregistry/   ← MCP server trust registry: sync official registry, scan installed servers,
                           score (CSA-shaped categories), version-bump trust automaton, backtest against

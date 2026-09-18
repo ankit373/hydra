@@ -189,6 +189,9 @@ func runWorkflow(ctx context.Context, w workflow.Workflow, system string) error 
 }
 
 func printWorkflow(w workflow.Workflow) {
+	// Resolved once: a run recorded as running whose process is gone is
+	// interrupted, and its in-flight step is not running either (#898).
+	observed := w.Observed()
 	sep := dimStyle.Render("  " + strings.Repeat("─", 66))
 	fmt.Println(sep)
 	// TIER has its own column: appended to HEAD it was the first thing the
@@ -210,7 +213,7 @@ func printWorkflow(w workflow.Workflow) {
 			tier = fmt.Sprintf("T%d", s.Tier)
 		}
 		fmt.Printf("  %-3d %-28.28s %-10s %-5s %-18.18s %8s\n",
-			s.N, s.Title, statusLabel(s.Status), tier, truncLabel(head, 18), took)
+			s.N, s.Title, statusLabel(workflow.ObservedStep(s.Status, observed)), tier, truncLabel(head, 18), took)
 		if s.Err != "" {
 			fmt.Printf("      %s\n", warnStyle.Render("↳ "+oneLine(s.Err)))
 		}
@@ -218,7 +221,11 @@ func printWorkflow(w workflow.Workflow) {
 	fmt.Println(sep)
 	done, total := w.Progress()
 	fmt.Printf("  %s %s  ·  %d/%d steps  ·  $%.4f\n\n",
-		dimStyle.Render("Workflow →"), cortexStyle.Render(string(w.Status)), done, total, w.CostUSD())
+		dimStyle.Render("Workflow →"), cortexStyle.Render(string(observed)), done, total, w.CostUSD())
+	if observed == workflow.Interrupted {
+		fmt.Printf("  %s\n\n", warnStyle.Render(
+			"the process running this is gone; continue it with `hyctl workflow resume "+w.ID+"`"))
+	}
 
 	if last := lastOutput(w); last != "" {
 		fmt.Println(last)
@@ -245,6 +252,8 @@ func statusLabel(s workflow.Status) string {
 		return warnStyle.Render("failed")
 	case workflow.Running:
 		return cortexStyle.Render("running")
+	case workflow.Interrupted:
+		return warnStyle.Render("interrupted")
 	default:
 		return dimStyle.Render("pending")
 	}
@@ -282,7 +291,7 @@ func cmdWorkflowList() *cobra.Command {
 			for _, w := range list {
 				done, total := w.Progress()
 				fmt.Printf("  %-22.22s %-10s %-8s %9s  %-.30s\n",
-					w.ID, statusLabel(w.Status),
+					w.ID, statusLabel(w.Observed()),
 					fmt.Sprintf("%d/%d", done, total),
 					fmt.Sprintf("$%.4f", w.CostUSD()),
 					oneLine(w.Task))
