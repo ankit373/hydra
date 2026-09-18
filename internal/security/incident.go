@@ -374,7 +374,13 @@ func narrate(in Incident) string {
 	if len(beats) == 0 {
 		beats = append(beats, fmt.Sprintf("%d access(es) were blocked", len(in.Events)))
 	}
-	return fmt.Sprintf("%s: %s.", in.Actor, strings.Join(beats, ", then "))
+	// The actor is quoted, not spliced. It is a recorded value and a hostile one
+	// is shaped to read like this report: a real ledger here held the tool name
+	// "gpt\x1b[2K\r  VERDICT  OK  no findings", and with the escape stripped the
+	// remaining text still narrated itself as Hydra's own verdict. Blocking
+	// cursor movement stops a value overwriting the report; quoting stops it
+	// impersonating one (#921).
+	return fmt.Sprintf("%q: %s.", in.Actor, strings.Join(beats, ", then "))
 }
 
 func clamp09(v int) int {
