@@ -163,7 +163,12 @@ type Action struct {
 // heads is the currently-discovered head list (e.g. probe.Run's result),
 // passed in rather than probed here, so this package stays free of any
 // network/subprocess dependency and is testable on plain data.
-func Build(heads []provider.Head) (*Report, error) {
+func Build(heads []provider.Head) (*Report, error) { return BuildWith(heads, nil) }
+
+// BuildWith is Build with the result of a local-server scan, which is network
+// work and so belongs to the caller, the same reasoning that keeps heads out of
+// here. A nil scan renders as "not scanned", never as a pass (#923).
+func BuildWith(heads []provider.Head, servers []LocalServer) (*Report, error) {
 	events, err := ledger.Load(ledger.DefaultPath())
 	if err != nil {
 		return nil, err
@@ -228,6 +233,7 @@ func Build(heads []provider.Head) (*Report, error) {
 		incidentCheck(r.Incidents),
 		privilegeCheck(r.Privilege),
 		bomCheck(r.BOM),
+		localServerCheck(localHeads(heads), servers),
 	}
 	r.RiskHistory = ledger.ByDayRisk(events)
 
