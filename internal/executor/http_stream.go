@@ -38,10 +38,10 @@ type openAIChatChunk struct {
 }
 
 // ExecuteStream streams the OpenAI-compatible and Azure paths, which share a
-// wire shape, plus Anthropic and Gemini, which do not (#845, #851). Cohere and
-// Bedrock each carry usage in an event of their own shape and Replicate polls
-// rather than streams, so they keep taking Execute until each is done
-// deliberately rather than in a batch (#787).
+// wire shape, plus Anthropic, Gemini and Cohere, which do not (#845, #851,
+// #860). Bedrock frames its events as an AWS binary event stream rather than
+// SSE and Replicate polls rather than streams, so they keep taking Execute
+// until each is done deliberately rather than in a batch (#787).
 func (e *HTTPExecutor) ExecuteStream(ctx context.Context, req Request, onDelta OnDelta) (*Response, error) {
 	switch req.Head.Provider {
 	case "azure":
@@ -50,7 +50,9 @@ func (e *HTTPExecutor) ExecuteStream(ctx context.Context, req Request, onDelta O
 		return e.streamAnthropic(ctx, req, onDelta)
 	case "google":
 		return e.streamGemini(ctx, req, onDelta)
-	case "cohere", "bedrock", "replicate":
+	case "cohere":
+		return e.streamCohere(ctx, req, onDelta)
+	case "bedrock", "replicate":
 		// Dialects this does not stream yet. Falling back rather than failing:
 		// the caller asked for output, not specifically for a stream, and
 		// executor.Stream already delivers a non-streamed answer as one delta.

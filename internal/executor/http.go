@@ -333,25 +333,16 @@ func setGeminiHeaders(r *http.Request) {
 
 func (e *HTTPExecutor) executeCohere(ctx context.Context, req Request) (*Response, error) {
 	model := defaultModelFor("cohere")
-	body := map[string]interface{}{
-		"model":    model,
-		"messages": buildMessages(req),
-	}
-	if req.MaxTokens > 0 {
-		body["max_tokens"] = req.MaxTokens
-	}
-
-	raw, err := json.Marshal(body)
+	raw, err := json.Marshal(cohereBody(req, model, false))
 	if err != nil {
 		return nil, err
 	}
 
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.cohere.ai/v2/chat", bytes.NewReader(raw))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, cohereChatURL(), bytes.NewReader(raw))
 	if err != nil {
 		return nil, err
 	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", "Bearer "+apiKeyFor("cohere"))
+	setCohereHeaders(httpReq)
 
 	start := time.Now()
 	resp, err := e.httpClient().Do(httpReq)
@@ -384,6 +375,34 @@ func (e *HTTPExecutor) executeCohere(ctx context.Context, req Request) (*Respons
 
 	return httpResponse(req, joinCohereBlocks(out.Message.Content), model,
 		out.Usage.Tokens.InputTokens, out.Usage.Tokens.OutputTokens, start), nil
+}
+
+// cohereChatURL honours CO_API_URL, which is what Cohere's own SDK reads, so a
+// gateway already configured for it serves this head too.
+func cohereChatURL() string {
+	base := firstNonEmpty(firstEnv("CO_API_URL", "COHERE_BASE_URL"), "https://api.cohere.ai")
+	return strings.TrimRight(base, "/") + "/v2/chat"
+}
+
+// cohereBody and setCohereHeaders are shared with the streaming path, so the
+// two cannot drift into asking for different things.
+func cohereBody(req Request, model string, stream bool) map[string]interface{} {
+	body := map[string]interface{}{
+		"model":    model,
+		"messages": buildMessages(req),
+	}
+	if req.MaxTokens > 0 {
+		body["max_tokens"] = req.MaxTokens
+	}
+	if stream {
+		body["stream"] = true
+	}
+	return body
+}
+
+func setCohereHeaders(r *http.Request) {
+	r.Header.Set("Content-Type", "application/json")
+	r.Header.Set("Authorization", "Bearer "+apiKeyFor("cohere"))
 }
 
 func (e *HTTPExecutor) executeAzureOpenAI(ctx context.Context, req Request) (*Response, error) {
