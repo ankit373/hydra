@@ -81,23 +81,25 @@ func Resolve() Creds {
 
 	// A key set is taken whole rather than field by field, or an id from one
 	// source could be paired with a secret from another and sign nothing.
-	if !c.Usable() && creds != nil {
+	fromEnv := c.Usable()
+	if !fromEnv && creds != nil {
 		c.AccessKeyID = creds["aws_access_key_id"]
 		c.SecretAccessKey = creds["aws_secret_access_key"]
 		c.SessionToken = creds["aws_session_token"]
 	}
-	// Applies to environment keys too: a profile that defers is a statement
-	// about which identity this run is meant to act as, and AWS_PROFILE naming
-	// such a profile is not satisfied by whatever keys happen to be exported.
+	// The deferral governs the *profile's* keys, never the environment's. The
+	// environment sits ahead of the profile in the AWS chain, so an exported
+	// pair is what every other AWS tool would use and the file is not consulted
+	// at all; clearing it here reported "no credentials" to someone holding
+	// working ones, which is how this got fixed twice (#891).
 	//
-	// The keys are cleared rather than merely flagged, so a caller that reads
-	// AccessKeyID without consulting Usable cannot sign as the base principal
-	// by accident. Leaving a usable-looking key on a struct that means "not
-	// usable" is the footgun this whole fix is about.
-	if deferred != "" {
+	// Where the keys did come from the file, they are cleared rather than
+	// merely flagged, so a caller that reads AccessKeyID without consulting
+	// Usable cannot sign as the base principal by accident.
+	if deferred != "" && !fromEnv {
 		c.AccessKeyID, c.SecretAccessKey, c.SessionToken = "", "", ""
+		c.Deferred = deferred
 	}
-	c.Deferred = deferred
 
 	if c.Region == "" {
 		// A region is configuration, not a credential, so it is read from a
