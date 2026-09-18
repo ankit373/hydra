@@ -151,9 +151,9 @@ func (s *deltaSink) truncated() bool {
 }
 
 // measured reports an elapsed time a reader can tell apart from no reading at
-// all. Response.TTFT documents zero as "the provider does not report it", and
-// a first token can arrive inside the clock's granularity against a local
-// server, so the floor is the honest answer there (#810).
+// all: zero means "not measured" on both TTFT and Duration, and either can
+// finish inside the clock's granularity against a local head, which a Windows
+// tick does routinely (#810, #875).
 func measured(d time.Duration) time.Duration {
 	if d == 0 {
 		return time.Nanosecond
