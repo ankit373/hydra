@@ -987,6 +987,8 @@ func cmdDispatch() *cobra.Command {
 
 			if effectiveConf > 0 {
 				sw := swarm.New(d, d.Heads(), d)
+				panel := newEnsemblePanelIf(!noStream,
+					fmt.Sprintf("ensemble · target %.1f%% confidence", effectiveConf*100))
 				res, err := sw.RunSPRT(ctx, prompt, swarm.Options{
 					TierHint:      tier,
 					Enum:          enumKey,
@@ -1008,7 +1010,9 @@ func cmdDispatch() *cobra.Command {
 					RunID:          runID,
 					TaskID:         taskID,
 					Classification: &promptClass,
+					OnProgress:     panel.handler(),
 				})
+				panel.Stop()
 				if err != nil {
 					if errors.Is(err, trust.ErrNoEvidence) {
 						var noEv *trust.NoEvidenceError
@@ -1037,6 +1041,7 @@ func cmdDispatch() *cobra.Command {
 					mode = swarm.ModeBest
 				}
 				sw := swarm.New(d, d.Heads(), d)
+				panel := newEnsemblePanelIf(!noStream, "swarm · "+string(mode))
 				result, err := sw.Run(ctx, prompt, swarm.Options{
 					Mode:           mode,
 					TierHint:       tier,
@@ -1051,7 +1056,9 @@ func cmdDispatch() *cobra.Command {
 					RunID:          runID,
 					TaskID:         taskID,
 					Classification: &promptClass,
+					OnProgress:     panel.handler(),
 				})
+				panel.Stop()
 				if err != nil {
 					return err
 				}
@@ -1188,7 +1195,7 @@ func cmdDispatch() *cobra.Command {
 	cmd.Flags().StringVar(&a2aFile, "a2a", "", "path to A2A handoff JSON (prepends structured context to prompt)")
 	cmd.Flags().StringVar(&enumKey, "enum", "", "routing enum key, e.g. SIMPLE, selects the tier when --tier is unset")
 	cmd.Flags().Float64Var(&maxCost, "max-cost", 0, "refuse a candidate head if its estimated cost exceeds this USD (denial-of-wallet guard)")
-	cmd.Flags().BoolVar(&noStream, "no-stream", false, "print the answer in one block instead of as it arrives (piped output never streams)")
+	cmd.Flags().BoolVar(&noStream, "no-stream", false, "print the answer in one block instead of as it arrives, and draw no fan-out panel (piped output never streams)")
 	// swarm flags
 	cmd.Flags().BoolVar(&doSwarm, "swarm", false, "fan prompt out to multiple heads simultaneously")
 	cmd.Flags().StringVar(&swarmMode, "swarm-mode", "best", "response strategy: best|race|all")

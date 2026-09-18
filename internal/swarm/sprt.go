@@ -43,6 +43,7 @@ func (s *Swarm) RunSPRT(ctx context.Context, prompt string, opts Options) (*SPRT
 		return nil, err
 	}
 
+	opts.progress = &progressSink{fn: opts.OnProgress}
 	selected, err := resolveSelector(opts).Select(s.heads, opts)
 	if err != nil {
 		return nil, err
@@ -50,6 +51,7 @@ func (s *Swarm) RunSPRT(ctx context.Context, prompt string, opts Options) (*SPRT
 	if len(selected) == 0 {
 		return nil, fmt.Errorf("swarm sprt: no heads available")
 	}
+	opts.progress.emit(Progress{Kind: ProgressSelected, Heads: selected})
 
 	// Classify once, before any head is sampled, every executeHead call the
 	// adapter makes below reuses this instead of each re-scanning prompt (#522).
@@ -89,10 +91,17 @@ func (s *Swarm) RunSPRT(ctx context.Context, prompt string, opts Options) (*SPRT
 		equiv = s.judgeEquivalence(ctx, prompt, opts)
 	}
 
+	// The running Λ and the threshold it is walking toward exist only inside
+	// trust.Run: a head finishing is not the same event as its answer being
+	// weighed, and only the second says why the ensemble has not stopped.
+	observe := func(e trust.Evidence, accept float64) {
+		opts.progress.emit(Progress{Kind: ProgressEvidence, Evidence: e, Threshold: accept})
+	}
+
 	res, err := trust.Run(ctx, trust.Task{Domain: domain}, sources, adapter, cal, trust.Target{
 		Confidence: opts.Confidence,
 		MaxCostUSD: opts.MaxEstCostUSD,
-	}, trust.WithEquivalence(equiv))
+	}, trust.WithEquivalence(equiv), trust.WithObserver(observe))
 	if err != nil {
 		return nil, err
 	}
@@ -134,12 +143,9 @@ func (e *sprtExecutor) Execute(ctx context.Context, src trust.Source, _ trust.Ta
 	if !ok {
 		return trust.Answer{}, fmt.Errorf("sprt: unknown source %q", src.ID)
 	}
-	a := executeHead(ctx, h, e.prompt, e.opts)
-
-	// Price the attempt so cost logging and the budget guard see real numbers.
-	if e.swarm.pricing != nil && a.Status == StatusOK {
-		a.EstCostUSD = round6(e.swarm.pricing.EstimateCost(rank.UITier(h), a.InputTokens, a.OutputTokens))
-	}
+	// executeHead prices the attempt, so cost logging and the budget guard see
+	// the same number the panel already showed.
+	a := executeHead(ctx, h, e.prompt, e.opts, e.swarm.pricing)
 	a.FinishedAt = time.Now()
 	e.attempts = append(e.attempts, a)
 

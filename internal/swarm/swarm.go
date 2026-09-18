@@ -77,6 +77,16 @@ type Options struct {
 	RunID  string
 	TaskID string
 
+	// OnProgress reports the run as it happens: the heads selected, each one
+	// starting and finishing, and on the SPRT path how far the evidence has
+	// moved Λ. Nil leaves the run byte-identical, nothing else reads it.
+	OnProgress func(Progress)
+
+	// progress is OnProgress wrapped so concurrent heads cannot interleave in
+	// it. Run/RunSPRT fill it in, like Classification below; Options is copied
+	// by value, so it has to be a pointer to survive the copy.
+	progress *progressSink
+
 	// Classification is prompt's already-computed PII/injection verdict
 	// (policy.Classify), cmdDispatch computes this once and passes it here so
 	// Run/RunSPRT resolve it once, before firing any head, instead of every
@@ -197,6 +207,7 @@ func (s *Swarm) Run(ctx context.Context, prompt string, opts Options) (*SwarmRes
 	}
 
 	// 1. Head selection.
+	opts.progress = &progressSink{fn: opts.OnProgress}
 	selector := resolveSelector(opts)
 	selected, err := selector.Select(s.heads, opts)
 	if err != nil {
@@ -205,6 +216,7 @@ func (s *Swarm) Run(ctx context.Context, prompt string, opts Options) (*SwarmRes
 	if len(selected) == 0 {
 		return nil, fmt.Errorf("swarm: no heads available for the requested configuration")
 	}
+	opts.progress.emit(Progress{Kind: ProgressSelected, Heads: selected})
 
 	// Classify once, before any head fires, every concurrent executeHead call
 	// below reuses this instead of each re-scanning the same prompt (#522).
@@ -225,17 +237,14 @@ func (s *Swarm) Run(ctx context.Context, prompt string, opts Options) (*SwarmRes
 
 	switch opts.Mode {
 	case ModeRace:
-		attempts = runRace(ctx, selected, prompt, opts)
+		attempts = runRace(ctx, selected, prompt, opts, s.pricing)
 	case ModeBest, ModeAll:
-		attempts = runAll(ctx, selected, prompt, opts)
+		attempts = runAll(ctx, selected, prompt, opts, s.pricing)
 	}
 
 	wallDuration := time.Since(startedAt)
 
-	// 4. Enrich cost on each attempt.
-	enrichCosts(attempts, s.pricing)
-
-	// 5. Determine winner + verdict.
+	// 4. Determine winner + verdict.
 	result := &SwarmResult{
 		Mode:         opts.Mode,
 		Prompt:       prompt,
@@ -270,12 +279,12 @@ func (s *Swarm) Run(ctx context.Context, prompt string, opts Options) (*SwarmRes
 		}
 	}
 
-	// 6. Sum total cost.
+	// 5. Sum total cost.
 	for _, a := range attempts {
 		result.TotalCostUSD += a.EstCostUSD
 	}
 
-	// 7. Log to cost.jsonl.
+	// 6. Log to cost.jsonl.
 	logAttempts(result.Attempts, result.Mode, opts, truncate(prompt, 80))
 	logRunEvents(result.Attempts, result.Mode, opts)
 

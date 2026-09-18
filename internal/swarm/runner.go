@@ -38,8 +38,18 @@ func effectiveTimeout(opts Options) time.Duration {
 
 // executeHead runs one head and returns a completed Attempt.
 // Never returns an error, all failures are captured in Attempt.Status/Err.
-func executeHead(ctx context.Context, h provider.Head, prompt string, opts Options) Attempt {
-	a := Attempt{
+//
+// The finish is reported from a defer, so a head that never reached its
+// executor, a ledger denial, reports as finished too; a surface that showed it
+// starting must never be left rendering it as still running.
+func executeHead(ctx context.Context, h provider.Head, prompt string, opts Options, pr PricingReader) (a Attempt) {
+	opts.progress.emit(Progress{Kind: ProgressStarted, Head: h})
+	defer func() {
+		a.EstCostUSD = attemptCost(a, pr)
+		opts.progress.emit(Progress{Kind: ProgressFinished, Head: h, Attempt: a})
+	}()
+
+	a = Attempt{
 		Head:      h,
 		Status:    StatusRunning,
 		StartedAt: time.Now(),
@@ -106,7 +116,7 @@ func executeHead(ctx context.Context, h provider.Head, prompt string, opts Optio
 // runRace fires all heads concurrently and returns as soon as the first
 // StatusOK attempt arrives. All other goroutines are canceled and drained
 // before returning, no goroutine leaks, no zombie subprocesses.
-func runRace(ctx context.Context, heads []provider.Head, prompt string, opts Options) []Attempt {
+func runRace(ctx context.Context, heads []provider.Head, prompt string, opts Options, pr PricingReader) []Attempt {
 	raceCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -120,7 +130,7 @@ func runRace(ctx context.Context, heads []provider.Head, prompt string, opts Opt
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			a := executeHead(raceCtx, h, prompt, opts)
+			a := executeHead(raceCtx, h, prompt, opts, pr)
 
 			mu.Lock()
 			defer mu.Unlock()
@@ -152,7 +162,7 @@ func runRace(ctx context.Context, heads []provider.Head, prompt string, opts Opt
 // Used by both ModeAll (rank by CapScore) and ModeBest (feed to judge).
 // Uses sync.WaitGroup (not errgroup), guarantees goroutine drain regardless
 // of errors, preventing zombie agy subprocesses.
-func runAll(ctx context.Context, heads []provider.Head, prompt string, opts Options) []Attempt {
+func runAll(ctx context.Context, heads []provider.Head, prompt string, opts Options, pr PricingReader) []Attempt {
 	attempts := make([]Attempt, len(heads))
 	var mu sync.Mutex
 	var wg sync.WaitGroup
@@ -162,7 +172,7 @@ func runAll(ctx context.Context, heads []provider.Head, prompt string, opts Opti
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			a := executeHead(ctx, h, prompt, opts)
+			a := executeHead(ctx, h, prompt, opts, pr)
 			mu.Lock()
 			attempts[i] = a
 			mu.Unlock()
