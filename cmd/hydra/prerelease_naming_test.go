@@ -222,3 +222,38 @@ func TestStableRelease_StillValidatesGitState(t *testing.T) {
 		}
 	}
 }
+
+// releaseWorkflows are every workflow that builds a published artifact. The
+// stable path is in here too: pinning only the prerelease channels would leave
+// what users actually install running whatever shipped that morning.
+var releaseWorkflows = []string{"rc.yml", "edge.yml", "publish.yml"}
+
+// A `latest` here means upstream chooses what builds the release. 2.17.1 and
+// 2.18.1 disagreed on whether a missing tag is fatal, and 24 edge builds died
+// unnoticed (#821, #881). A minor bump inside v2, so `~> v2` is not enough.
+func TestReleaseWorkflowsPinGoReleaserExactly(t *testing.T) {
+	pinned := regexp.MustCompile(`^version:\s*"?\d+\.\d+\.\d+"?$`)
+
+	for _, name := range releaseWorkflows {
+		body := workflowFile(t, name)
+		var found []string
+		for _, line := range strings.Split(body, "\n") {
+			s := strings.TrimSpace(line)
+			// Only the goreleaser-action input. Other version: keys in these
+			// files are job outputs and setup-node/python, which are not it.
+			if strings.HasPrefix(s, "version:") && !strings.Contains(s, "${{") &&
+				!strings.Contains(s, "node-") && !strings.Contains(s, "python-") {
+				found = append(found, s)
+			}
+		}
+		if len(found) != 1 {
+			t.Fatalf("%s: found %d goreleaser version lines %q, so this test no longer "+
+				"checks what it thinks", name, len(found), found)
+		}
+		if !pinned.MatchString(found[0]) {
+			t.Errorf("%s pins GoReleaser as %q. Name an exact version: with `latest`, upstream "+
+				"decides what builds the release, and it does not announce a behaviour change "+
+				"on the way in.", name, found[0])
+		}
+	}
+}
