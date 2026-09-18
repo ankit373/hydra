@@ -4455,7 +4455,7 @@ Examples:
   hyctl stats --swarm          # swarm-only stats + winner rate
   hyctl stats --session <id>   # single session/task breakdown
   hyctl stats --json           # machine-readable output`,
-		RunE: func(_ *cobra.Command, _ []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			// Percentiles come from rollups, not raw rows: a mean latency
 			// answers nothing, and keeping every wall_ms to compute p99 is
 			// what internal/sketch exists to avoid (#624).
@@ -4497,16 +4497,23 @@ Examples:
 				return nil
 			}
 
-			rows := cost.FilterDays(all, days)
-
-			period := "all time"
-			if days > 0 {
-				period = fmt.Sprintf("last %d days", days)
-			} else if days == 0 && !byModel && !byTier && !byDay && !swarmOnly {
-				// Default: today
-				rows = cost.FilterDays(all, 1)
-				period = "today"
+			// The period comes from --days and from nothing else. It used to be
+			// a condition over the grouping flags, so `hyctl stats --model`,
+			// naming the grouping that is already the default, reported all
+			// time where the bare command reported today: 161 calls against 5,
+			// with only the "Period:" line to say why (#918).
+			//
+			// An explicit --days 0 means all time, which is what
+			// cost.FilterDays does and what the same flag means on `trace
+			// evaluate` and `trace export`.
+			window, period := 1, "today"
+			switch {
+			case days > 0:
+				window, period = days, fmt.Sprintf("last %d days", days)
+			case cmd.Flags().Changed("days"):
+				window, period = 0, "all time"
 			}
+			rows := cost.FilterDays(all, window)
 
 			if swarmOnly {
 				s := cost.SwarmStats(rows)
@@ -4514,7 +4521,7 @@ Examples:
 					printJSON(s)
 					return nil
 				}
-				cost.RenderSwarmStats(s)
+				cost.RenderSwarmStats(period, s)
 				return nil
 			}
 
@@ -4554,13 +4561,13 @@ Examples:
 			// Append swarm summary if any swarm rows exist.
 			s := cost.SwarmStats(rows)
 			if s.Runs > 0 {
-				cost.RenderSwarmStats(s)
+				cost.RenderSwarmStats(period, s)
 			}
 			return nil
 		},
 	}
 
-	cmd.Flags().IntVar(&days, "days", 0, "show last N days (0 = today by default)")
+	cmd.Flags().IntVar(&days, "days", 0, "show last N days (0 = all time; omit for today)")
 	cmd.Flags().BoolVar(&byModel, "model", false, "group by model (default grouping)")
 	cmd.Flags().BoolVar(&byTier, "tier", false, "group by tier")
 	cmd.Flags().BoolVar(&byDay, "day", false, "group by calendar day")
