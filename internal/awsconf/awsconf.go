@@ -22,13 +22,26 @@ type Creds struct {
 	SecretAccessKey string
 	SessionToken    string
 	Region          string
+
+	// Deferred names a directive the profile carries that requires a token
+	// exchange Hydra does not perform (role_arn, sso_session,
+	// credential_process). Empty when the keys stand on their own.
+	Deferred string
 }
 
-// Usable reports whether these can actually sign a request. A profile carrying
-// only role_arn/source_profile resolves to no keys and must not read as one:
-// assuming a role needs a token exchange, not a file read.
+// deferredKeys are the directives that mean "these keys are not the identity".
+// Where a profile declares one, any static keys beside it are the credential
+// used to *obtain* the identity, so signing with them acts as the base
+// principal instead of the role, which is a wrong answer rather than a
+// degraded one (#890).
+var deferredKeys = []string{"role_arn", "sso_session", "credential_process", "sso_start_url"}
+
+// Usable reports whether these can actually sign a request *as the identity the
+// profile stands for*. A profile that defers is not usable at any strength of
+// static key: Hydra performs no token exchange, so the honest answer is no
+// credential rather than the wrong one.
 func (c Creds) Usable() bool {
-	return c.AccessKeyID != "" && c.SecretAccessKey != ""
+	return c.Deferred == "" && c.AccessKeyID != "" && c.SecretAccessKey != ""
 }
 
 // Resolve reads the environment, then the profile named by AWS_PROFILE (or
@@ -49,28 +62,70 @@ func Resolve() Creds {
 	if profile == "" {
 		profile = "default"
 	}
-	// Keys come from credentials, region from config. A key set is taken whole
-	// rather than field by field, or an id from one source could be paired with
-	// a secret from another and sign nothing.
-	if !c.Usable() {
-		if f := section(credentialsPath(), profile); f != nil {
-			c.AccessKeyID = f["aws_access_key_id"]
-			c.SecretAccessKey = f["aws_secret_access_key"]
-			c.SessionToken = f["aws_session_token"]
+	creds := section(credentialsPath(), profile)
+	// ~/.aws/config prefixes every non-default profile with "profile ", where
+	// ~/.aws/credentials does not. Both spellings are tried because a file
+	// written by hand often omits it.
+	var conf map[string]string
+	for _, name := range configSectionNames(profile) {
+		if f := section(configPath(), name); f != nil {
+			conf = f
+			break
 		}
 	}
+
+	// Read from both files, because role_arn and sso_session conventionally
+	// live in config while the static keys live in credentials. Checking only
+	// the credentials file would miss the ordinary assume-role setup entirely.
+	deferred := firstNonEmptyOf(deferredBy(creds), deferredBy(conf))
+
+	// A key set is taken whole rather than field by field, or an id from one
+	// source could be paired with a secret from another and sign nothing.
+	if !c.Usable() && creds != nil {
+		c.AccessKeyID = creds["aws_access_key_id"]
+		c.SecretAccessKey = creds["aws_secret_access_key"]
+		c.SessionToken = creds["aws_session_token"]
+	}
+	// Applies to environment keys too: a profile that defers is a statement
+	// about which identity this run is meant to act as, and AWS_PROFILE naming
+	// such a profile is not satisfied by whatever keys happen to be exported.
+	//
+	// The keys are cleared rather than merely flagged, so a caller that reads
+	// AccessKeyID without consulting Usable cannot sign as the base principal
+	// by accident. Leaving a usable-looking key on a struct that means "not
+	// usable" is the footgun this whole fix is about.
+	if deferred != "" {
+		c.AccessKeyID, c.SecretAccessKey, c.SessionToken = "", "", ""
+	}
+	c.Deferred = deferred
+
 	if c.Region == "" {
-		// ~/.aws/config prefixes every non-default profile with "profile ",
-		// where ~/.aws/credentials does not. Both spellings are tried because
-		// a file written by hand often omits it.
-		for _, name := range configSectionNames(profile) {
-			if f := section(configPath(), name); f != nil && f["region"] != "" {
-				c.Region = f["region"]
-				break
-			}
-		}
+		// A region is configuration, not a credential, so it is read from a
+		// deferring profile as well: the head is unroutable for want of an
+		// identity, and reporting a second missing thing would be noise.
+		c.Region = conf["region"]
 	}
 	return c
+}
+
+// deferredBy names the first directive in f that means "these keys are not the
+// identity", or "" when there is none.
+func deferredBy(f map[string]string) string {
+	for _, k := range deferredKeys {
+		if strings.TrimSpace(f[k]) != "" {
+			return k
+		}
+	}
+	return ""
+}
+
+func firstNonEmptyOf(vals ...string) string {
+	for _, v := range vals {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 func configSectionNames(profile string) []string {
