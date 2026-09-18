@@ -843,6 +843,28 @@ func azureAPIVersion() string {
 // at all (#867).
 func bedrockRegion() string { return awsconf.Resolve().Region }
 
+// bedrockUnroutableReason names which half is missing, in the order someone
+// would fix them. Three conditions gate this head and the generic message
+// named only the first, so a present key read as an absent one (#890).
+func bedrockUnroutableReason() string {
+	creds := awsconf.Resolve()
+	switch {
+	case creds.Deferred != "":
+		return "the AWS profile declares " + creds.Deferred +
+			", which needs a token exchange Hydra does not perform; export static credentials instead"
+	case !creds.Usable():
+		return "no AWS credentials in the environment or ~/.aws/credentials"
+	case creds.Region == "":
+		return "no AWS region set: export AWS_REGION or set one in ~/.aws/config"
+	case defaultModelFor("bedrock") == "":
+		return "no Bedrock model configured: set BEDROCK_MODEL"
+	}
+	// Only reached if this and SupportsHTTP disagree. Returning "" would mean
+	// routable, so the head would be dispatched to on the strength of a bug
+	// here; a vague refusal is the safe direction.
+	return "the Bedrock head is not configured"
+}
+
 func firstEnv(keys ...string) string {
 	for _, key := range keys {
 		if v := strings.TrimSpace(os.Getenv(key)); v != "" {
