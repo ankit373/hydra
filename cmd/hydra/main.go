@@ -65,6 +65,7 @@ import (
 	"github.com/ankit373/hydra/internal/tui"
 	"github.com/ankit373/hydra/internal/update"
 	"github.com/ankit373/hydra/internal/util"
+	"github.com/ankit373/hydra/internal/waterfall"
 
 	_ "github.com/ankit373/hydra/internal/provider/agy"
 	_ "github.com/ankit373/hydra/internal/provider/cli"
@@ -1537,12 +1538,23 @@ explore_rate in config.toml above 0 is what creates that overlap.`,
 	)
 	export := &cobra.Command{
 		Use:   "export",
-		Short: "Render the dispatch log as OpenTelemetry spans",
-		Long: `hyctl trace export renders dispatches as OTLP spans.
+		Short: "Render the run log as OpenTelemetry spans",
+		Long: `hyctl trace export renders runs as OTLP spans.
+
+Spans come from the run log, so a collector shows the same nesting
+hyctl trace view does: a task, the attempts under it, and the fallback chain
+between them. Spend from the cost log is joined onto the span that spent it.
 
 Nothing leaves the machine unless --otlp names an endpoint. With no endpoint
 the payload is written to stdout or --out, so you can read exactly what would
 be sent before sending it.
+
+Authentication is HYDRA_OTLP_HEADERS, "k=v,k=v", the same shape
+OTEL_EXPORTER_OTLP_HEADERS uses. A local collector on :4318 usually needs
+none; every hosted one does. For Langfuse:
+
+  HYDRA_OTLP_HEADERS="Authorization=Basic $(printf '%s:%s' "$PUBLIC_KEY" "$SECRET_KEY" | base64)" \
+    hyctl trace export --otlp https://cloud.langfuse.com/api/public/otel/v1/traces
 
 The export is a bridge, not a migration: Hydra's own schema stays
 authoritative. gen_ai.* attributes are populated where they genuinely
@@ -1562,7 +1574,7 @@ place for, are carried under hydra.* rather than dropped.`,
 			if len(rows) == 0 {
 				return fmt.Errorf("no dispatches in the cost log, nothing to export")
 			}
-			payload, err := otlp.Build(rows, "hydra", build.Version)
+			payload, err := otlp.Build(tracesForRows(rows), rows, "hydra", build.Version)
 			if err != nil {
 				return err
 			}
@@ -1587,7 +1599,8 @@ place for, are carried under hydra.* rather than dropped.`,
 		},
 	}
 	export.Flags().StringVar(&endpoint, "otlp", "",
-		"OTLP/HTTP traces endpoint (e.g. http://localhost:4318/v1/traces). Without it nothing is sent")
+		"OTLP/HTTP traces endpoint (e.g. http://localhost:4318/v1/traces). Without it nothing is sent. "+
+			"Set "+otlpHeadersEnv+`="k=v,k=v" to authenticate, which a hosted collector needs`)
 	export.Flags().StringVar(&outFile, "out", "", "write the payload to a file instead of stdout")
 	export.Flags().IntVar(&expDays, "days", 0, "only dispatches from the last N days (0 = all)")
 	export.Flags().IntVar(&limit, "limit", 0, "export at most N of the newest dispatches (0 = all)")
@@ -1664,6 +1677,59 @@ replaced before it is written.`,
 	return cmd
 }
 
+// tracesForRows loads the run log for every run the rows name, in first-seen
+// order so one export is byte-identical twice.
+//
+// A run whose log is gone is skipped, not an error: its rows still export as
+// roots, which is what every row written before span ids existed does.
+func tracesForRows(rows []cost.Row) []*waterfall.Trace {
+	var traces []*waterfall.Trace
+	seen := map[string]bool{}
+	for _, r := range rows {
+		if r.RunID == "" || seen[r.RunID] {
+			continue
+		}
+		seen[r.RunID] = true
+		events, err := runlog.Load(r.RunID)
+		if err != nil || len(events) == 0 {
+			continue
+		}
+		traces = append(traces, waterfall.Build(events))
+	}
+	return traces
+}
+
+// otlpHeadersEnv carries auth for the export, "k=v,k=v", the same shape
+// OTEL_EXPORTER_OTLP_HEADERS uses, so a collector's existing config transfers.
+const otlpHeadersEnv = "HYDRA_OTLP_HEADERS"
+
+// otlpHeaders parses that variable.
+//
+// A malformed pair is an error rather than a skip. The value is hand-typed and
+// undocumented until now, so a typo is the expected failure, and dropping it
+// silently sends an unauthenticated request whose 401 reads as the collector's
+// fault rather than the caller's.
+func otlpHeaders(spec string) (map[string]string, error) {
+	if strings.TrimSpace(spec) == "" {
+		return nil, nil
+	}
+	out := map[string]string{}
+	for _, pair := range strings.Split(spec, ",") {
+		pair = strings.TrimSpace(pair)
+		if pair == "" {
+			continue // a trailing or doubled comma says nothing either way
+		}
+		k, v, ok := strings.Cut(pair, "=")
+		k = strings.TrimSpace(k)
+		if !ok || k == "" {
+			return nil, fmt.Errorf("%s: %q is not k=v; the whole variable is "+
+				"\"k=v,k=v\", the same shape OTEL_EXPORTER_OTLP_HEADERS uses", otlpHeadersEnv, pair)
+		}
+		out[k] = strings.TrimSpace(v)
+	}
+	return out, nil
+}
+
 // postOTLP sends the payload to an OTLP/HTTP endpoint.
 //
 // Sending is the one thing here that leaves the machine, so it is explicit
@@ -1674,15 +1740,12 @@ func postOTLP(endpoint string, body []byte, spans int) error {
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	if key := os.Getenv("HYDRA_OTLP_HEADERS"); key != "" {
-		// "k=v,k=v", the same shape OTEL_EXPORTER_OTLP_HEADERS uses, so an
-		// existing collector's auth config transfers unchanged.
-		for _, pair := range strings.Split(key, ",") {
-			k, v, ok := strings.Cut(strings.TrimSpace(pair), "=")
-			if ok {
-				req.Header.Set(k, v)
-			}
-		}
+	headers, err := otlpHeaders(os.Getenv(otlpHeadersEnv))
+	if err != nil {
+		return err
+	}
+	for k, v := range headers {
+		req.Header.Set(k, v)
 	}
 	resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
 	if err != nil {

@@ -3,6 +3,7 @@
 package security
 
 import (
+	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -65,6 +66,34 @@ func TestControls_FilePolicyIsEnforcedButPartial(t *testing.T) {
 	for _, cap := range enforcedCaps {
 		if !strings.Contains(c.Detail, cap) {
 			t.Errorf("Detail does not name the enforced cap %q: %s", cap, c.Detail)
+		}
+	}
+	// The shipped policy has no dead condition, so the line must be absent
+	// rather than present-and-zero, which would read as a finding.
+	if strings.Contains(c.Detail, "can never match") {
+		t.Errorf("Detail reports a dead condition against the shipped policy: %s", c.Detail)
+	}
+}
+
+// A rule whose condition names no real field never fires, and before #848 it
+// matched everything instead. Either way the operator sees nothing, so the
+// control has to name it (#854).
+func TestControls_FilePolicyNamesAConditionThatCanNeverMatch(t *testing.T) {
+	s := testutil.NewSandbox(t)
+	dir := filepath.Join(s.HydraHome, "registry")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	body := "version: \"1.0\"\nrules:\n  - name: typo_rule\n    when:\n      enum_teir_lte: 3\n" +
+		"    apply:\n      edit_mode: sr_blocks\n"
+	if err := os.WriteFile(filepath.Join(dir, "policy.yaml"), []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	c := findControl(t, Controls(nil, PolicyAudit{}, ledger.ChainResult{}), "File-policy caps")
+	for _, want := range []string{"can never match", "typo_rule", "enum_teir"} {
+		if !strings.Contains(c.Detail, want) {
+			t.Errorf("Detail does not contain %q, so the typo stays invisible: %s", want, c.Detail)
 		}
 	}
 	// This is the one source-derived claim in the set and must say so.

@@ -28,6 +28,14 @@ type geminiChunk struct {
 	PromptFeedback *struct {
 		BlockReason string `json:"blockReason"`
 	} `json:"promptFeedback"`
+	// Arrives on a 200 partway through, like Anthropic's error event and
+	// Cohere's. A chunk of this shape carries no candidates and no feedback, so
+	// every other field is skipped and the reader used to treat it as a chunk
+	// carrying nothing, returning the text so far as a complete answer (#869).
+	Error *struct {
+		Status  string `json:"status"`
+		Message string `json:"message"`
+	} `json:"error"`
 	ModelVersion string `json:"modelVersion"`
 }
 
@@ -57,6 +65,9 @@ func (e *HTTPExecutor) streamGemini(ctx context.Context, req Request, onDelta On
 		// without this a blocked prompt reads as a head that said nothing.
 		if fb := chunk.PromptFeedback; fb != nil && fb.BlockReason != "" {
 			return fmt.Errorf("gemini: prompt blocked: %s", fb.BlockReason)
+		}
+		if e := chunk.Error; e != nil {
+			return fmt.Errorf("gemini: %s: %s", e.Status, e.Message)
 		}
 		gotModel = firstNonEmpty(chunk.ModelVersion, gotModel)
 		if u := chunk.UsageMetadata; u != nil {

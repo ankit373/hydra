@@ -51,7 +51,7 @@ func (e *CLIExecutor) Execute(ctx context.Context, req Request) (*Response, erro
 
 	return &Response{
 		Output:       output,
-		Duration:     time.Since(start),
+		Duration:     measured(time.Since(start)),
 		Model:        req.Head.ID,
 		InputTokens:  promptTokens,
 		OutputTokens: responseTokens,

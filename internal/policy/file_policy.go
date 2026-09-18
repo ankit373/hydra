@@ -138,10 +138,16 @@ func matchWhen(when map[string]interface{}, spec Spec) bool {
 	return true
 }
 
+// condSuffixes are the operator suffixes a `when` key may carry, longest-first
+// so `_lte` is not read as `_lt` with a stray e. Shared with DeadConditions,
+// which must split a key exactly the way this does or it reports the wrong
+// rules dead.
+var condSuffixes = []string{"_contains", "_present", "_lte", "_gte", "_lt", "_gt", "_ne", "_eq", "_in"}
+
 // matchCondition evaluates a single (key, value) condition against spec.
 func matchCondition(key string, val interface{}, spec Spec) bool {
 	var op, field string
-	for _, suffix := range []string{"_contains", "_present", "_lte", "_gte", "_lt", "_gt", "_ne", "_eq", "_in"} {
+	for _, suffix := range condSuffixes {
 		if strings.HasSuffix(key, suffix) {
 			op = strings.TrimPrefix(suffix, "_")
 			field = strings.TrimSuffix(key, suffix)
@@ -161,7 +167,15 @@ func matchCondition(key string, val interface{}, spec Spec) bool {
 	case "ne":
 		return fmt.Sprintf("%v", specVal) != fmt.Sprintf("%v", val)
 	case "gt", "lt", "gte", "lte":
-		sn := toFloat(specVal)
+		// Unknown satisfies no comparison. A field the spec never carried
+		// compares as 0 and matches every _lt and _lte rule written for the low
+		// end of the range, and so does a misspelled or non-numeric field name,
+		// which specField answers with "" (#848).
+		n, numeric := specVal.(int)
+		if !numeric || numericUnset(field, n) {
+			return false
+		}
+		sn := float64(n)
 		vn := toFloat(val)
 		switch op {
 		case "gt":
@@ -200,6 +214,21 @@ func matchCondition(key string, val interface{}, spec Spec) bool {
 		present := sv != "" && sv != "false" && sv != "0"
 		wantPresent := fmt.Sprintf("%v", val) == "true"
 		return present == wantPresent
+	}
+	return false
+}
+
+// numericUnset reports whether a numeric field was never supplied, so no
+// comparison against it can hold.
+//
+// A real tier is 1-10, a real file has at least one line, and a real file set
+// has at least one file, so a non-positive value in these three is absence
+// rather than a measurement. prompt_length and context_pct are deliberately
+// absent: 0 is a genuine value for both (an empty prompt, no context pressure).
+func numericUnset(field string, v int) bool {
+	switch field {
+	case "enum_tier", "file_lines", "file_count":
+		return v <= 0
 	}
 	return false
 }

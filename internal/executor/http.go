@@ -449,23 +449,13 @@ func (e *HTTPExecutor) executeAzureOpenAI(ctx context.Context, req Request) (*Re
 }
 
 func (e *HTTPExecutor) executeBedrock(ctx context.Context, req Request) (*Response, error) {
-	cfg := openAICompatConfig{
-		BaseURL: fmt.Sprintf("https://bedrock-runtime.%s.amazonaws.com", bedrockRegion()),
-		Model:   defaultModelFor("bedrock"),
-	}
-	msgs := buildMessages(req)
-	body := openAIChatRequest{
-		Model:     cfg.Model,
-		Messages:  msgs,
-		MaxTokens: req.MaxTokens,
-		Stream:    false,
-	}
-	raw, err := json.Marshal(body)
+	model := defaultModelFor("bedrock")
+	raw, err := json.Marshal(bedrockBody(req))
 	if err != nil {
 		return nil, err
 	}
 
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, cfg.BaseURL+"/v1/chat/completions", bytes.NewReader(raw))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, bedrockURL(model, false), bytes.NewReader(raw))
 	if err != nil {
 		return nil, err
 	}
@@ -484,17 +474,60 @@ func (e *HTTPExecutor) executeBedrock(ctx context.Context, req Request) (*Respon
 		return nil, httpStatusError(req.Head.ID, resp)
 	}
 
-	var out openAIChatResponse
+	var out struct {
+		Output struct {
+			Message struct {
+				Content []textBlock `json:"content"`
+			} `json:"message"`
+		} `json:"output"`
+		Usage struct {
+			InputTokens  int `json:"inputTokens"`
+			OutputTokens int `json:"outputTokens"`
+		} `json:"usage"`
+	}
 	if err := json.NewDecoder(io.LimitReader(resp.Body, int64(util.DefaultMaxBytes)+1)).Decode(&out); err != nil {
 		return nil, fmt.Errorf("http exec %s: decode: %w", req.Head.ID, err)
 	}
-	if len(out.Choices) == 0 {
+
+	answer := joinTextBlocks(out.Output.Message.Content)
+	if answer == "" {
 		return nil, fmt.Errorf("http exec %s: empty response", req.Head.ID)
 	}
+	return httpResponse(req, answer, model, out.Usage.InputTokens, out.Usage.OutputTokens, start), nil
+}
 
-	return httpResponse(req, out.Choices[0].Message.Content,
-		firstNonEmpty(out.Model, cfg.Model),
-		out.Usage.PromptTokens, out.Usage.CompletionTokens, start), nil
+// bedrockURL addresses the Converse API, which is model-agnostic: one request
+// shape for every Bedrock model. The OpenAI-compatible endpoint this used to
+// post to lives under /openai/v1, not /v1, and serves only the few models whose
+// card lists Chat Completions, so the head could never answer (#866).
+//
+// AWS_ENDPOINT_URL_BEDROCK_RUNTIME, the variable the AWS SDKs read, overrides
+// the regional host.
+func bedrockURL(model string, stream bool) string {
+	base := firstNonEmpty(firstEnv("AWS_ENDPOINT_URL_BEDROCK_RUNTIME", "AWS_ENDPOINT_URL"),
+		fmt.Sprintf("https://bedrock-runtime.%s.amazonaws.com", bedrockRegion()))
+	method := "converse"
+	if stream {
+		method = "converse-stream"
+	}
+	return fmt.Sprintf("%s/model/%s/%s", strings.TrimRight(base, "/"), url.PathEscape(model), method)
+}
+
+// bedrockBody is the Converse request. Shared with the streaming path so the
+// two cannot drift into asking for different things.
+func bedrockBody(req Request) map[string]interface{} {
+	body := map[string]interface{}{
+		"messages": []map[string]interface{}{
+			{"role": "user", "content": []map[string]string{{"text": req.Prompt}}},
+		},
+	}
+	if req.System != "" {
+		body["system"] = []map[string]string{{"text": req.System}}
+	}
+	if req.MaxTokens > 0 {
+		body["inferenceConfig"] = map[string]int{"maxTokens": req.MaxTokens}
+	}
+	return body
 }
 
 func (e *HTTPExecutor) executeReplicate(ctx context.Context, req Request) (*Response, error) {
@@ -682,7 +715,9 @@ func joinTextBlocks(blocks []textBlock) string {
 	return strings.Join(parts, "\n")
 }
 
-type textBlock struct{ Text string }
+type textBlock struct {
+	Text string `json:"text"`
+}
 
 func joinGeminiParts(parts []struct {
 	Text string `json:"text"`
@@ -837,7 +872,7 @@ func httpResponse(req Request, output, model string, in, out int, started time.T
 		Output:          output,
 		InputTokens:     in,
 		OutputTokens:    out,
-		Duration:        time.Since(started),
+		Duration:        measured(time.Since(started)),
 		Model:           model,
 		TokensEstimated: estimated,
 	}

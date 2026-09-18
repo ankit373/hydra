@@ -132,7 +132,7 @@ func (e *AgyExecutor) Execute(ctx context.Context, req Request) (*Response, erro
 
 	return &Response{
 		Output:       output,
-		Duration:     duration,
+		Duration:     measured(duration),
 		Model:        req.Head.ID,
 		InputTokens:  promptTokens,
 		OutputTokens: responseTokens,
