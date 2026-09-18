@@ -652,8 +652,9 @@ var (
 	policyCache   = map[string]policyCacheEntry{}
 )
 
-// LoadPolicy reads a policy file. A missing file yields a default-allow policy
-// (Hydra records everything but blocks nothing until rules are defined).
+// LoadPolicy reads a policy file. A missing file yields DefaultPolicy, the same
+// rules EnsurePolicy would have written there, so the gate does not depend on
+// a file existing to refuse what Hydra can already prove (#836).
 //
 // The parsed result is cached per path, keyed on the file's mtime+size, a
 // dispatch fallback loop or a swarm fan-out checks the same content against
@@ -665,7 +666,7 @@ func LoadPolicy(path string) (Policy, error) {
 	info, statErr := os.Stat(path)
 	if statErr != nil {
 		if os.IsNotExist(statErr) {
-			return Policy{Default: Allow}, nil
+			return DefaultPolicy(), nil
 		}
 		// Stat failed for a reason other than "missing" (permissions, etc.),
 		// fall through to the real read, which will surface the same error.
@@ -691,7 +692,7 @@ func loadPolicyUncached(path string) (Policy, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return Policy{Default: Allow}, nil
+			return DefaultPolicy(), nil
 		}
 		return Policy{}, err
 	}
