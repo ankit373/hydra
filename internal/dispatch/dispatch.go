@@ -23,7 +23,6 @@ import (
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/cost"
 	"github.com/ankit373/hydra/internal/egress"
-	"github.com/ankit373/hydra/internal/embed"
 	"github.com/ankit373/hydra/internal/executor"
 	"github.com/ankit373/hydra/internal/health"
 	"github.com/ankit373/hydra/internal/ledger"
@@ -33,6 +32,7 @@ import (
 	"github.com/ankit373/hydra/internal/probe"
 	"github.com/ankit373/hydra/internal/provider"
 	"github.com/ankit373/hydra/internal/rank"
+	"github.com/ankit373/hydra/internal/retrieve"
 	"github.com/ankit373/hydra/internal/runid"
 	"github.com/ankit373/hydra/internal/runlog"
 	"github.com/ankit373/hydra/internal/trust"
@@ -272,10 +272,10 @@ type Dispatcher struct {
 	// order: a ranking basis that degrades has to degrade to the previous one.
 	cal *trust.Calibrator
 
-	// embed vectorises prompts off the dispatch path. Built at most once, by
-	// recorder(), and drained by Close.
-	embedOnce sync.Once
-	embed     *embed.Recorder
+	// recall indexes and vectorises prompts off the dispatch path. Built at
+	// most once, by recorder(), and drained by Close.
+	recallOnce sync.Once
+	recall     *retrieve.Recorder
 }
 
 // Heads returns the probed head list for external callers (e.g. swarm).
@@ -748,7 +748,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		recordOutputFinding(r.OutputProvenance, h)
 		recordContextEcho(resp.Output, hiddenContextFor(opts, handoffText), h)
 		inRef, outRef := d.capturePayloads(prompt, opts, resp)
-		d.captureEmbedding(span, prompt)
+		d.captureRecall(span, prompt)
 		_ = rl.Append(runlog.Event{
 			Kind: runlog.KindDispatchFinished, TaskID: taskID,
 			SpanID: span, ParentSpanID: taskSpan,

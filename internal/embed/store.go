@@ -370,6 +370,45 @@ func (s *Store) Get(spanID string) ([]float32, bool) {
 	return decodeVec(buf, s.dim), true
 }
 
+// Each calls fn for every stored vector, oldest first. Returning false stops it.
+//
+// The slice handed to fn is reused, so a caller keeping one must copy it. The
+// file handle is opened once and held for the walk, which on Unix pins a
+// consistent snapshot even if eviction rewrites the file underneath.
+func (s *Store) Each(fn func(spanID string, ts time.Time, vec []float32) bool) error {
+	s.mu.Lock()
+	dim, size, dir := s.dim, s.size, s.dir
+	s.mu.Unlock()
+	if dim == 0 || size == 0 {
+		return nil
+	}
+
+	f, err := os.Open(dataPath(dir))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	rs := int64(spanIDLen + tsLen + dim*4)
+	rec := make([]byte, rs)
+	vec := make([]float32, dim)
+	for off := int64(0); off+rs <= size; off += rs {
+		if _, err := f.ReadAt(rec, off); err != nil {
+			return err
+		}
+		ts := time.Unix(0, int64(binary.LittleEndian.Uint64(rec[spanIDLen:])))
+		for i := range dim {
+			vec[i] = math.Float32frombits(binary.LittleEndian.Uint32(rec[spanIDLen+tsLen+i*4:]))
+		}
+		if !fn(string(rec[:spanIDLen]), ts, vec) {
+			return nil
+		}
+	}
+	return nil
+}
+
 func decodeVec(buf []byte, dim int) []float32 {
 	v := make([]float32, dim)
 	for i := 0; i < dim; i++ {

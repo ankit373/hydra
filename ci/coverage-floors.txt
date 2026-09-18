@@ -87,6 +87,7 @@ floor internal/provider/port        89
 floor internal/rank                 91
 floor internal/reliability          97
 floor internal/review               88
+floor internal/retrieve             85
 floor internal/rollup               80
 floor internal/runid                96
 floor internal/runlog               85

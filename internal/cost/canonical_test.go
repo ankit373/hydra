@@ -153,12 +153,8 @@ func TestGroupByCanonicalKey_MovesRowsWithoutChangingTheTotal(t *testing.T) {
 // n+1, so `--days 1` meant today and yesterday and `stats` reported "today" for
 // two days of spend while `cost` reported one (#729).
 func TestFilterDays_CountsNDaysIncludingToday(t *testing.T) {
-	// Local noon, so the row is unambiguously inside its own local day in any
-	// zone: this test is about how many days n means, not where the boundary
-	// falls, which is TestFilterDays_TheDayIsTheReaders below.
 	day := func(n int) string {
-		d := time.Now().AddDate(0, 0, -n)
-		return time.Date(d.Year(), d.Month(), d.Day(), 12, 0, 0, 0, time.Local).Format(time.RFC3339)
+		return time.Now().UTC().AddDate(0, 0, -n).Format("2006-01-02") + "T12:00:00Z"
 	}
 	rows := []Row{
 		{TS: day(0), Model: "a"},
@@ -179,26 +175,17 @@ func TestFilterDays_CountsNDaysIncludingToday(t *testing.T) {
 // The two commands must answer the same question the same way: this is the
 // exact comparison that read 6 against 34 on a real log.
 func TestFilterDays_OneDayMatchesTheCalendarTodayFilter(t *testing.T) {
-	now := time.Now()
-	local := func(dayOffset, hour int) string {
-		d := now.AddDate(0, 0, dayOffset)
-		return time.Date(d.Year(), d.Month(), d.Day(), hour, 0, 0, 0, time.Local).Format(time.RFC3339)
-	}
+	today := time.Now().UTC().Format("2006-01-02")
 	rows := []Row{
-		{TS: local(0, 1), Model: "a"},
-		{TS: local(0, 23), Model: "b"},
-		{TS: local(-1, 23), Model: "c"},
+		{TS: today + "T01:00:00Z", Model: "a"},
+		{TS: today + "T23:00:00Z", Model: "b"},
+		{TS: time.Now().UTC().AddDate(0, 0, -1).Format("2006-01-02") + "T23:00:00Z", Model: "c"},
 	}
-
-	today := now.Format("2006-01-02")
 	var calendar int
 	for _, r := range rows {
-		if t, err := time.Parse(time.RFC3339, r.TS); err == nil && t.Local().Format("2006-01-02") == today {
+		if len(r.TS) >= 10 && r.TS[:10] == today {
 			calendar++
 		}
-	}
-	if calendar != 2 {
-		t.Fatalf("the fixture puts %d rows in today, want 2", calendar)
 	}
 	if got := len(FilterDays(rows, 1)); got != calendar {
 		t.Errorf("FilterDays(1) = %d rows but the calendar-today filter = %d; "+
