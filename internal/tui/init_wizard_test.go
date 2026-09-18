@@ -71,6 +71,8 @@ func TestInitWizard_FullWalkWritesALoadableConfig(t *testing.T) {
 	m, _ = send(m, "enter")
 	// Payload capture: cursor 0 is "no".
 	m, _ = send(m, "enter")
+	// Embedding capture: cursor 0 is "no".
+	m, _ = send(m, "enter")
 	// Skills: confirm and save.
 	m, cmd := send(m, "enter")
 
@@ -111,7 +113,7 @@ func TestInitWizard_DoneScreenHasNoStrayWhitespaceLine(t *testing.T) {
 	testutil.NewSandbox(t)
 
 	m := tea.Model(NewInitModel(wizardHeads()))
-	m, _ = send(m, "enter", "enter", "enter", "enter", "enter")
+	m, _ = send(m, "enter", "enter", "enter", "enter", "enter", "enter")
 
 	im := m.(InitModel)
 	if im.err != nil {
@@ -135,6 +137,7 @@ func TestInitWizard_DecliningLocalOnlyWritesNoPIIPolicy(t *testing.T) {
 	m, _ = send(m, "enter")         // tiers
 	m, _ = send(m, "down", "enter") // privacy: cursor 1 = no
 	m, _ = send(m, "enter")         // capture: cursor 0 = no
+	m, _ = send(m, "enter")         // embed: cursor 0 = no
 	_, _ = send(m, "enter")         // skills → save; the config is the assertion
 
 	cfg, err := config.Load()
@@ -218,7 +221,7 @@ func TestInitWizard_EveryStepRenders(t *testing.T) {
 
 	m := tea.Model(NewInitModel(wizardHeads()))
 	seen := map[step]string{}
-	for i := 0; i < 5; i++ {
+	for i := 0; i < 6; i++ {
 		im := m.(InitModel)
 		view := im.View()
 		if strings.TrimSpace(view) == "" {
@@ -230,8 +233,8 @@ func TestInitWizard_EveryStepRenders(t *testing.T) {
 		seen[im.step] = view
 		m, _ = send(m, "enter")
 	}
-	if len(seen) != 5 {
-		t.Errorf("reached %d distinct steps, want all 5", len(seen))
+	if len(seen) != 6 {
+		t.Errorf("reached %d distinct steps, want all 6", len(seen))
 	}
 	// The head list must actually name the discovered heads, or the user is
 	// choosing blind.
@@ -327,7 +330,7 @@ func TestInitWizard_SaveFailureIsSurfaced(t *testing.T) {
 	}
 
 	m := tea.Model(NewInitModel(wizardHeads()))
-	m, _ = send(m, "enter", "enter", "enter", "enter", "enter")
+	m, _ = send(m, "enter", "enter", "enter", "enter", "enter", "enter")
 
 	im := m.(InitModel)
 	if im.err == nil {
@@ -345,7 +348,7 @@ func TestInitWizard_PayloadCaptureIsOffUnlessChosen(t *testing.T) {
 	testutil.NewSandbox(t)
 
 	m := tea.Model(NewInitModel(wizardHeads()))
-	_, _ = send(m, "enter", "enter", "enter", "enter", "enter") // straight through
+	_, _ = send(m, "enter", "enter", "enter", "enter", "enter", "enter") // straight through
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -365,6 +368,7 @@ func TestInitWizard_PayloadCaptureIsOnWhenChosen(t *testing.T) {
 	m, _ = send(m, "enter")         // tiers
 	m, _ = send(m, "enter")         // privacy
 	m, _ = send(m, "down", "enter") // capture: cursor 1 = yes
+	m, _ = send(m, "enter")         // embed: cursor 0 = no
 	_, _ = send(m, "enter")         // skills → save
 
 	cfg, err := config.Load()
@@ -394,5 +398,60 @@ func TestInitWizard_CaptureStepExplainsWhatIsStored(t *testing.T) {
 	// behaviour is worse than one describing none.
 	if strings.Contains(view, "sampled") {
 		t.Errorf("the capture step still claims payloads are sampled:\n%s", view)
+	}
+}
+
+func TestInitWizard_EmbeddingCaptureIsOffUnlessChosen(t *testing.T) {
+	testutil.NewSandbox(t)
+
+	m := tea.Model(NewInitModel(wizardHeads()))
+	_, _ = send(m, "enter", "enter", "enter", "enter", "enter", "enter") // straight through
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("the wizard wrote no loadable config: %v", err)
+	}
+	if cfg.CaptureEmbeddings {
+		t.Error("pressing enter through the wizard opted into embedding capture")
+	}
+}
+
+func TestInitWizard_EmbeddingCaptureIsOnWhenChosen(t *testing.T) {
+	testutil.NewSandbox(t)
+
+	m := tea.Model(NewInitModel(wizardHeads()))
+	m, _ = send(m, "enter")         // cortex
+	m, _ = send(m, "enter")         // tiers
+	m, _ = send(m, "enter")         // privacy
+	m, _ = send(m, "enter")         // capture: cursor 0 = no
+	m, _ = send(m, "down", "enter") // embed: cursor 1 = yes
+	_, _ = send(m, "enter")         // skills → save
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("the wizard wrote no loadable config: %v", err)
+	}
+	if !cfg.CaptureEmbeddings {
+		t.Error("the user selected embedding capture and it was not saved")
+	}
+	// The two decisions are independent; choosing one must not set the other.
+	if cfg.CapturePayloads {
+		t.Error("choosing embedding capture also turned on payload capture")
+	}
+}
+
+// The step has to say where the text goes, or the user is consenting to
+// something they were not told about.
+func TestInitWizard_EmbedStepSaysNothingLeavesTheMachine(t *testing.T) {
+	testutil.NewSandbox(t)
+
+	m := tea.Model(NewInitModel(wizardHeads()))
+	m, _ = send(m, "enter", "enter", "enter", "enter")
+	view := m.(InitModel).View()
+
+	for _, want := range []string{"vector", "Nothing leaves the machine", "redacted", "Ollama"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("the embedding step does not mention %q:\n%s", want, view)
+		}
 	}
 }

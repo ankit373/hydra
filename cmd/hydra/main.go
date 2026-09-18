@@ -874,6 +874,7 @@ func cmdDispatch() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			defer d.Close()
 
 			var headIDs []string
 			if swarmHeads != "" {
@@ -1699,7 +1700,7 @@ replaced before it is written.`,
 	}
 	payloads.Flags().BoolVar(&jsonOut, "json", false, "machine-readable output")
 
-	cmd.AddCommand(seal, evaluate, export, payloads, cmdTraceView(), cmdTraceScore())
+	cmd.AddCommand(seal, evaluate, export, payloads, cmdTraceEmbeddings(), cmdTraceView(), cmdTraceScore())
 	return cmd
 }
 
@@ -5103,6 +5104,7 @@ func cmdAsk() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			defer d.Close()
 			res, err := d.Resume(cmd.Context(), args[0], args[1])
 			if err != nil {
 				return err

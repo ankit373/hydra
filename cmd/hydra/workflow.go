@@ -156,6 +156,7 @@ func runWorkflow(ctx context.Context, w workflow.Workflow, system string) error 
 	if err != nil {
 		return err
 	}
+	defer d.Close()
 	fmt.Printf("\n  %s %s\n", cortexStyle.Render("▶ WORKFLOW"), w.ID)
 	fmt.Printf("  %s\n\n", dimStyle.Render(w.Task))
 
