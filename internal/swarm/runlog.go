@@ -67,6 +67,7 @@ func logRunEvents(attempts []Attempt, mode SwarmMode, opts Options) {
 	first, last := attemptWindow(attempts)
 
 	rl := runlog.New(runID)
+	declareTaskSpan(rl, taskID, string(mode), first)
 	_ = rl.Append(runlog.Event{
 		Kind: runlog.KindTaskStarted, TaskID: taskID,
 		SpanID: rootSpan, ParentSpanID: runlog.SpanIDFor(taskID),
@@ -136,6 +137,7 @@ func logSamples(ledger []trust.Evidence, attempts []Attempt, opts Options) {
 	rootSpan := SPRTSpanID(taskID)
 
 	rl := runlog.New(runID)
+	declareTaskSpan(rl, taskID, "confidence", time.Time{})
 	_ = rl.Append(runlog.Event{
 		Kind: runlog.KindTaskStarted, TaskID: taskID,
 		SpanID: rootSpan, ParentSpanID: runlog.SpanIDFor(taskID),
@@ -224,6 +226,21 @@ func attemptWindow(attempts []Attempt) (first, last time.Time) {
 
 // stamp renders a time for an event, leaving it empty when unknown so Append
 // falls back to now rather than to the zero year.
+// declareTaskSpan writes the task's own span, which both writers here name as
+// their parent. A parent nothing declares is dangling: waterfall promotes the
+// child to a root, so a fan-out read as an unrelated dispatch rather than as
+// work under its task (#864).
+func declareTaskSpan(rl *runlog.Logger, taskID, detail string, at time.Time) {
+	e := runlog.Event{
+		Kind: runlog.KindTaskStarted, TaskID: taskID,
+		SpanID: runlog.SpanIDFor(taskID), Detail: detail,
+	}
+	if !at.IsZero() {
+		e.TS = stamp(at)
+	}
+	_ = rl.Append(e)
+}
+
 func stamp(t time.Time) string {
 	if t.IsZero() {
 		return ""

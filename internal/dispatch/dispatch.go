@@ -510,6 +510,13 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 	// Every candidate attempt hangs off the task's span, derived rather than
 	// minted so swarm and parallel agree on the same parent without passing it.
 	taskSpan := runlog.SpanIDFor(taskID)
+	// And declared, or it is a parent nothing writes: waterfall promotes a span
+	// whose parent no event declared to a root, so every attempt read as an
+	// unrelated dispatch and no run had a tree at all (#864).
+	_ = rl.Append(runlog.Event{
+		Kind: runlog.KindTaskStarted, TaskID: taskID, SpanID: taskSpan,
+		Detail: opts.Enum,
+	})
 
 	var lastErr error
 	var attempts []Attempt
@@ -726,9 +733,21 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		}
 		d.recordBudget(r)
 		d.syncStateJSON(r)
+		_ = rl.Append(runlog.Event{
+			Kind: runlog.KindTaskFinished, TaskID: taskID, SpanID: taskSpan,
+			Head: h.ID, Model: resp.Model, Tier: tier, Status: "ok",
+		})
 		return r, nil
 	}
 
+	// Closed on the way out too, or the span stays open and its bar ends at
+	// whichever attempt happened to log last. A parked task is deliberately not
+	// closed here: it is waiting on a human, not finished.
+	_ = rl.Append(runlog.Event{
+		Kind: runlog.KindTaskFinished, TaskID: taskID, SpanID: taskSpan,
+		Level: runlog.LevelError, Status: "failed",
+		Detail: fmt.Sprintf("all %d heads failed", len(candidates)),
+	})
 	return nil, fmt.Errorf("all heads failed (tried %d): %w", len(candidates), lastErr)
 }
 
