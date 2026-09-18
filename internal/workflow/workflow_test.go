@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ankit373/hydra/internal/testutil"
 )
@@ -201,5 +202,74 @@ func TestSave_RefusesAWorkflowWithNoSteps(t *testing.T) {
 func TestNew_RefusesNoSteps(t *testing.T) {
 	if _, err := New("wf1", "t", nil); !errors.Is(err, ErrNoSteps) {
 		t.Errorf("err = %v, want ErrNoSteps", err)
+	}
+}
+
+// pinClock freezes time and resets the monotonic stamp, so a case cannot leak
+// a future Created into the next one.
+func pinClock(t *testing.T, at time.Time) {
+	t.Helper()
+	prev := nowFunc
+	nowFunc = func() time.Time { return at }
+	created.Lock()
+	created.last = time.Time{}
+	created.Unlock()
+	t.Cleanup(func() {
+		nowFunc = prev
+		created.Lock()
+		created.last = time.Time{}
+		created.Unlock()
+	})
+}
+
+// A clock too coarse to tick between two calls is what Windows has, and what
+// made List fall back to comparing ids (#856). A real clock cannot be asked
+// to repeat, so the case is made by pinning it.
+func TestCreatedStamp_DistinctOnAClockThatDoesNotTick(t *testing.T) {
+	pinClock(t, time.Date(2026, 9, 18, 12, 0, 0, 0, time.UTC))
+
+	var stamps []string
+	for i := 0; i < 5; i++ {
+		stamps = append(stamps, createdStamp())
+	}
+	for i := 1; i < len(stamps); i++ {
+		if stamps[i] == stamps[i-1] {
+			t.Fatalf("stamp %d repeated %s, so List orders those two on their ids", i, stamps[i])
+		}
+		prev, err := time.Parse(time.RFC3339Nano, stamps[i-1])
+		if err != nil {
+			t.Fatalf("stamp %q does not parse: %v", stamps[i-1], err)
+		}
+		cur, err := time.Parse(time.RFC3339Nano, stamps[i])
+		if err != nil {
+			t.Fatalf("stamp %q does not parse: %v", stamps[i], err)
+		}
+		if !cur.After(prev) {
+			t.Errorf("stamp %d (%s) is not after %s", i, stamps[i], stamps[i-1])
+		}
+	}
+}
+
+// The first step past a whole second is where comparing the formatted strings
+// gets it backwards: RFC3339Nano trims trailing zeros, so the older stamp ends
+// in "Z" and the newer in ".", and 'Z' > '.' (#856).
+func TestList_OrdersAWholeSecondBelowTheNanosecondAfterIt(t *testing.T) {
+	testutil.NewSandbox(t)
+	pinClock(t, time.Date(2026, 9, 18, 12, 0, 0, 0, time.UTC))
+
+	older := saved(t, "zzz", []Step{{Prompt: "a"}})
+	newer := saved(t, "aaa", []Step{{Prompt: "b"}})
+	if !strings.HasSuffix(older.Created, ":00Z") || !strings.Contains(newer.Created, ".") {
+		t.Fatalf("case not set up: %q then %q", older.Created, newer.Created)
+	}
+
+	list, err := List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Ids chosen so the id fallback disagrees: it sorts descending, so it puts
+	// the older "zzz" first. Only a real time comparison passes this.
+	if list[0].ID != "aaa" {
+		t.Errorf("got %s first, want the newer aaa: %v", list[0].ID, []string{list[0].ID, list[1].ID})
 	}
 }
