@@ -3382,7 +3382,7 @@ func cmdModels() *cobra.Command {
 	sync.Flags().StringVar(&syncFilter, "filter", "", "only import models whose id contains this substring")
 	sync.Flags().BoolVar(&syncDry, "dry-run", false, "show what would be imported without writing")
 
-	cmd.AddCommand(list, add, remove, sync)
+	cmd.AddCommand(list, add, remove, sync, cmdModelsPull())
 	return cmd
 }
 

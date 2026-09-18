@@ -67,6 +67,7 @@ floor internal/ledger               86
 # cross-device-rename and UserHomeDir-failure branches that no portable test
 # can reach, the same category as internal/config's Windows skips.
 floor internal/mcpregistry          88
+floor internal/modelpull            92
 floor internal/ope                  92
 floor internal/optimal              96
 floor internal/oracle               85
