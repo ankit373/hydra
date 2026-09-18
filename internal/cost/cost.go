@@ -518,9 +518,12 @@ func plural(n int) string {
 	return "s"
 }
 
-// RenderSwarmStats prints the swarm-specific summary.
-func RenderSwarmStats(s SwarmSummary) {
-	fmt.Printf("\nSwarm runs: %d  Winner rate: %.0f%%  Avg wall time: %.1fs  Total: $%.4f\n",
+// RenderSwarmStats prints the swarm-specific summary for a period, which it
+// names: these numbers used to cover all time whatever `--days` said, and a
+// total with no period beside it cannot be read at all (#918).
+func RenderSwarmStats(period string, s SwarmSummary) {
+	fmt.Printf("\nSwarm runs (%s): %d  Winner rate: %.0f%%  Avg wall time: %.1fs  Total: $%.4f\n",
+		period,
 		s.Runs, s.WinnerRate*100, float64(s.AvgWallMS)/1000, s.TotalCost)
 	if len(s.ByMode) > 0 {
 		// Sorted, because Go randomises map iteration: `hyctl stats` printed the
