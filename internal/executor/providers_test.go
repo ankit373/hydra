@@ -286,24 +286,34 @@ func TestExecuteAzure_EmptyChoicesIsAnError(t *testing.T) {
 
 // Bedrock is the only provider that signs rather than sending a bearer token.
 // An unsigned request is a 403 the user cannot diagnose from Hydra's output.
-func TestExecuteBedrock_SignsTheRequest(t *testing.T) {
+func TestExecuteBedrock_AddressesConverseAndSignsIt(t *testing.T) {
 	s := testutil.NewSandbox(t)
 	s.SetKey(t, "AWS_ACCESS_KEY_ID", "AKIDEXAMPLE")
 	s.SetKey(t, "AWS_SECRET_ACCESS_KEY", "secret")
 	t.Setenv("AWS_REGION", "eu-west-1")
+	t.Setenv("BEDROCK_MODEL_ID", "anthropic.claude-3-5-sonnet-20241022-v2:0")
 
-	srv, got := serve(t, 200, okChatBody)
+	srv, got := serve(t, 200, `{"output":{"message":{"role":"assistant","content":[
+		{"text":"first block"},{"text":"second block"}]}},
+		"stopReason":"end_turn","usage":{"inputTokens":41,"outputTokens":17,"totalTokens":58}}`)
 
 	resp, err := redirect(srv).Execute(context.Background(), Request{
-		Prompt: "hello", Head: head("bedrock"),
+		Prompt: "hello", System: "be terse", MaxTokens: 256, Head: head("bedrock"),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 
+	// The OpenAI-compatible endpoint lives under /openai/v1 and serves only the
+	// few models whose card lists it. Converse serves every model (#866).
+	wantPath := "/model/anthropic.claude-3-5-sonnet-20241022-v2:0/converse"
+	if got.path != wantPath {
+		t.Errorf("path = %q, want %q", got.path, wantPath)
+	}
 	if !strings.Contains(got.host, "eu-west-1") {
 		t.Errorf("host = %q, want the configured region", got.host)
 	}
+
 	auth := got.headers.Get("Authorization")
 	if !strings.HasPrefix(auth, "AWS4-HMAC-SHA256 ") {
 		t.Fatalf("Authorization = %q, want a SigV4 signature", auth)
@@ -318,8 +328,36 @@ func TestExecuteBedrock_SignsTheRequest(t *testing.T) {
 	if got.headers.Get("X-Amz-Content-Sha256") == "" {
 		t.Error("no X-Amz-Content-Sha256; the service cannot verify the payload")
 	}
-	if resp.Output != "hello from the stub" {
-		t.Errorf("Output = %q", resp.Output)
+
+	// Converse takes content blocks, a system list and inferenceConfig, not an
+	// OpenAI messages array.
+	msgs, _ := got.body["messages"].([]interface{})
+	if len(msgs) != 1 {
+		t.Fatalf("messages = %v, want one user turn", got.body["messages"])
+	}
+	first, _ := msgs[0].(map[string]interface{})
+	blocks, _ := first["content"].([]interface{})
+	if len(blocks) != 1 {
+		t.Fatalf("content = %v, want one text block", first["content"])
+	}
+	if block, _ := blocks[0].(map[string]interface{}); block["text"] != "hello" {
+		t.Errorf("content block = %v, want the prompt under text", blocks[0])
+	}
+	if got.body["system"] == nil {
+		t.Error("system missing, so the system prompt was dropped")
+	}
+	if cfg, _ := got.body["inferenceConfig"].(map[string]interface{}); cfg == nil || cfg["maxTokens"] != float64(256) {
+		t.Errorf("inferenceConfig = %v, want maxTokens 256", got.body["inferenceConfig"])
+	}
+
+	if resp.Output != "first block\nsecond block" {
+		t.Errorf("Output = %q, want both content blocks joined", resp.Output)
+	}
+	if resp.InputTokens != 41 || resp.OutputTokens != 17 {
+		t.Errorf("counts = %d/%d, want 41/17 from usage", resp.InputTokens, resp.OutputTokens)
+	}
+	if resp.TokensEstimated {
+		t.Error("TokensEstimated = true, but Converse reported both counts")
 	}
 }
 
