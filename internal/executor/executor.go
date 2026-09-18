@@ -100,6 +100,13 @@ func Unroutable(h provider.Head) string {
 		if SupportsHTTP(h) {
 			return ""
 		}
+		// SupportsHTTP folds several conditions into one bool, so the generic
+		// sentence names only the first of them. For Bedrock that sent someone
+		// hunting for a key that was sitting right there, when what was missing
+		// was the region: a wrong reason is worse than a vague one (#890).
+		if h.Provider == "bedrock" {
+			return bedrockUnroutableReason()
+		}
 		return "no API key or default model configured for " + h.Provider
 	}
 	if _, ok := cliTemplates[h.Provider]; ok {

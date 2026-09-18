@@ -55,6 +55,15 @@ aws_session_token = tokwork
 [rolesonly]
 role_arn = arn:aws:iam::111122223333:role/Reader
 source_profile = default
+
+[roleplus]
+aws_access_key_id = AKIABASE
+aws_secret_access_key = secretbase
+role_arn = arn:aws:iam::111122223333:role/Writer
+
+[ssoconf]
+aws_access_key_id = AKIASTALE
+aws_secret_access_key = secretstale
 `
 
 const sharedConfig = `[default]
@@ -62,6 +71,13 @@ region = us-east-1
 
 [profile work]
 region = eu-west-1
+
+[profile roleplus]
+region = us-west-1
+
+[profile ssoconf]
+region = eu-north-1
+sso_session = corp
 
 [unprefixed]
 region = ap-south-1
@@ -110,12 +126,105 @@ func TestResolve_AcceptsAnUnprefixedConfigSection(t *testing.T) {
 // Assuming a role needs a token exchange, not a file read. A profile carrying
 // only a role reference must not read as a usable credential, or discovery
 // advertises a head that cannot sign anything.
+//
+// This one passed for the wrong reason before #890: there were no keys, so
+// Usable() was false whether or not role_arn was noticed at all. The case below
+// is the one that actually exercises the check.
 func TestResolve_ARoleOnlyProfileIsNotACredential(t *testing.T) {
 	awsHome(t, sharedCreds, sharedConfig)
 	t.Setenv("AWS_PROFILE", "rolesonly")
 
-	if c := Resolve(); c.Usable() {
+	c := Resolve()
+	if c.Usable() {
 		t.Errorf("Resolve() = %+v is Usable, but the profile only names a role", c)
+	}
+	if c.Deferred != "role_arn" {
+		t.Errorf("Deferred = %q, want role_arn: without it this passes merely because "+
+			"the profile has no keys", c.Deferred)
+	}
+}
+
+// Usable is tested directly, not only through Resolve. Resolve also *clears*
+// the keys on a deferring profile, so a Usable that ignored Deferred still
+// answered false through that path and the mutation went uncaught: two
+// mechanisms reaching the same outcome is how a guard goes vacuous. Both are
+// wanted (clearing stops a caller reading the keys at all; the check states the
+// invariant), so both are pinned at their own level.
+func TestCreds_UsableIsFalseWhateverKeysSitBesideADeferral(t *testing.T) {
+	c := Creds{AccessKeyID: "AKIA", SecretAccessKey: "s", Deferred: "role_arn"}
+	if c.Usable() {
+		t.Error("Usable() = true with Deferred set: these keys obtain the identity, " +
+			"they are not it, so signing with them acts as the base principal")
+	}
+	c.Deferred = ""
+	if !c.Usable() {
+		t.Error("Usable() = false for a plain key pair; the check is too strict")
+	}
+}
+
+// The real bug. Static keys sitting beside role_arn are the credential used to
+// *obtain* the identity, not the identity itself, so signing with them acts as
+// the base principal rather than the role. Hydra performs no token exchange, so
+// the honest answer is no credential, never the wrong one (#890).
+func TestResolve_StaticKeysBesideARoleAreNotTheIdentity(t *testing.T) {
+	awsHome(t, sharedCreds, sharedConfig)
+	t.Setenv("AWS_PROFILE", "roleplus")
+
+	c := Resolve()
+	if c.Usable() {
+		t.Errorf("Resolve() = %+v is Usable: Hydra would sign as the base principal "+
+			"instead of the role the profile names", c)
+	}
+	if c.Deferred != "role_arn" {
+		t.Errorf("Deferred = %q, want role_arn", c.Deferred)
+	}
+}
+
+// role_arn and sso_session conventionally live in ~/.aws/config while the keys
+// live in ~/.aws/credentials, so checking only the credentials file would miss
+// the ordinary assume-role setup entirely.
+func TestResolve_ADeferralDeclaredInConfigCounts(t *testing.T) {
+	awsHome(t, sharedCreds, sharedConfig)
+	t.Setenv("AWS_PROFILE", "ssoconf")
+
+	c := Resolve()
+	if c.Usable() {
+		t.Errorf("Resolve() = %+v is Usable though [profile ssoconf] in ~/.aws/config "+
+			"declares sso_session", c)
+	}
+	if c.AccessKeyID != "" {
+		t.Errorf("AccessKeyID = %q, want it cleared: a key left on a struct that means "+
+			"\"not usable\" is exactly the footgun this fixes", c.AccessKeyID)
+	}
+}
+
+// A region is configuration, not a credential. A deferring profile is
+// unroutable for want of an identity, and reporting a second missing thing
+// would send someone to fix the wrong one.
+func TestResolve_ADeferringProfileStillYieldsItsRegion(t *testing.T) {
+	awsHome(t, sharedCreds, sharedConfig)
+	t.Setenv("AWS_PROFILE", "roleplus")
+
+	if got := Resolve().Region; got != "us-west-1" {
+		t.Errorf("Region = %q, want us-west-1: the region is still readable", got)
+	}
+}
+
+// Every directive that means "fetch this identity" is covered, not just the one
+// that prompted the fix.
+func TestResolve_EveryDeferralDirectiveIsRecognised(t *testing.T) {
+	for _, key := range deferredKeys {
+		t.Run(key, func(t *testing.T) {
+			awsHome(t, "[default]\naws_access_key_id = AKIA\naws_secret_access_key = s\n"+
+				key+" = something\n", "")
+			c := Resolve()
+			if c.Usable() {
+				t.Errorf("%s did not defer: Resolve() = %+v", key, c)
+			}
+			if c.Deferred != key {
+				t.Errorf("Deferred = %q, want %q", c.Deferred, key)
+			}
+		})
 	}
 }
 
