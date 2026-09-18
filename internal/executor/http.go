@@ -836,6 +836,8 @@ var apiKeyEnvs = func() map[string][]string {
 		// The variable LiteLLM's own client reads, so a machine already set up
 		// to talk to a proxy needs nothing new.
 		"litellm": {"LITELLM_PROXY_API_KEY"},
+		// llama-server's own --api-key variable, for a server started with one.
+		"llamacpp": {"LLAMA_API_KEY"},
 	}
 	return envs
 }()

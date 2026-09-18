@@ -437,9 +437,28 @@ func probeColumns(heads []provider.Head, scores map[string]rank.Score) []probeCo
 			return fmt.Sprintf("%d (n=%d)", sc.Declared, sc.N)
 		}})
 	}
-	return append(cols,
+	cols = append(cols,
 		probeColumn{"Src", 5, func(h provider.Head) string { return h.Source }},
 		probeColumn{"Provider", 0, func(h provider.Head) string { return h.Provider }})
+	return fitColumns(cols, heads, maxHead)
+}
+
+// fitColumns widens each column to the widest thing it has to show, its header
+// included, and caps it. The declared widths are minimums: "registry" is eight
+// characters in a column declared five, so cells are cut to a width that has
+// to fit them rather than to a number written down once.
+func fitColumns(cols []probeColumn, heads []provider.Head, cap_ int) []probeColumn {
+	for i, c := range cols {
+		if c.width == 0 {
+			continue // the last column runs to the end of the line
+		}
+		w := max(c.width, utf8.RuneCountInString(c.head))
+		for _, h := range heads {
+			w = max(w, utf8.RuneCountInString(c.cell(h)))
+		}
+		cols[i].width = min(w, cap_)
+	}
+	return cols
 }
 
 // probeRow renders one row, taking each cell from val so the header and the
@@ -454,7 +473,11 @@ func probeRow(cols []probeColumn, val func(probeColumn) string) string {
 			b.WriteString(val(c))
 			continue
 		}
-		fmt.Fprintf(&b, "%-*s", c.width, val(c))
+		// Cut as well as pad. The Head column is already sized to the names and
+		// capped, but %-*s only ever pads, so the cap never bit: a llama.cpp
+		// head is named after the file it serves, and one long GGUF name pushed
+		// every later column right (#913).
+		fmt.Fprintf(&b, "%-*s", c.width, truncLabel(val(c), c.width))
 	}
 	return b.String()
 }

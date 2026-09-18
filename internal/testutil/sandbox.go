@@ -99,7 +99,22 @@ var tuningVars = []string{
 	"HYDRA_TOKEN_SIDECAR",
 	"HYDRA_WORKSPACE",
 	"AGY_TIMEOUT",
+	// Every variable naming where a locally discovered service listens. Each
+	// is pointed at a dead address below rather than cleared, see the note
+	// there: clearing falls back to the built-in default, which is exactly
+	// where a developer's real server is.
 	"OLLAMA_HOST",
+	"LITELLM_PROXY_URL",
+	"LLAMA_ARG_HOST",
+	"LLAMA_ARG_PORT",
+}
+
+// deadAddressVars are the subset whose value is an address to dial.
+var deadAddressVars = map[string]string{
+	"OLLAMA_HOST":       "127.0.0.1:1",
+	"LITELLM_PROXY_URL": "http://127.0.0.1:1",
+	"LLAMA_ARG_HOST":    "127.0.0.1",
+	"LLAMA_ARG_PORT":    "1",
 }
 
 // Blocking outbound HTTP has to happen at package load, not per test.
@@ -197,16 +212,18 @@ func NewSandbox(t *testing.T) *Sandbox {
 		switch v {
 		case "HYDRA_HOME":
 			continue // set above
-		case "OLLAMA_HOST":
-			// Clearing to "" falls back to the built-in localhost:11434
-			// default, indistinguishable from "no override" but not from
-			// "no Ollama". A machine that actually runs Ollama there (this
-			// is not hypothetical: it broke TestCLI_Dispatch_
-			// LocalOnlyRefusesWhenNothingIsLocal on a real laptop, #539) gets
-			// a genuine local head CI never sees. Point at a dead address,
-			// same convention as the package init()'s proxy blackhole below,
-			// so port discovery fails deterministically everywhere.
-			t.Setenv(v, "127.0.0.1:1")
+		}
+		// Clearing to "" falls back to the built-in default, which is
+		// indistinguishable from "no override" but not from "no server". A
+		// machine that actually runs one there gets a genuine local head CI
+		// never sees: not hypothetical, it broke TestCLI_Dispatch_
+		// LocalOnlyRefusesWhenNothingIsLocal on a real laptop with Ollama
+		// (#539) and again with a llama.cpp server on 8080 (#913). Point at a
+		// dead address, the same convention as the package init()'s proxy
+		// blackhole below, so port discovery fails deterministically
+		// everywhere.
+		if dead, ok := deadAddressVars[v]; ok {
+			t.Setenv(v, dead)
 			continue
 		}
 		t.Setenv(v, "")
