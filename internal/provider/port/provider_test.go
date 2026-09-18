@@ -280,8 +280,12 @@ func TestDiscovery_ResolvesTheSameHostTheExecutorWill(t *testing.T) {
 // `hyctl probe` is often the first command a user runs.
 func TestDiscover_NothingListeningFindsNothingQuickly(t *testing.T) {
 	s := testutil.NewSandbox(t)
-	// Point Ollama at a port nothing is on, so the liveness dial fails fast.
+	// Point the services that can be relocated at a port nothing is on, so the
+	// liveness dial fails fast and a machine that really runs one of them does
+	// not fail a test about finding nothing. LM Studio publishes no such
+	// variable, so it is the one this cannot redirect.
 	s.SetKey(t, "OLLAMA_HOST", "http://127.0.0.1:1")
+	s.SetKey(t, "LITELLM_PROXY_URL", "http://127.0.0.1:1")
 
 	start := time.Now()
 	heads, err := (&Provider{}).Discover(context.Background())
@@ -293,7 +297,7 @@ func TestDiscover_NothingListeningFindsNothingQuickly(t *testing.T) {
 	if len(heads) != 0 {
 		t.Errorf("found %d heads with nothing listening: %+v", len(heads), heads)
 	}
-	// Two services, each with a 400ms dial timeout, plus slack.
+	// Every service dials concurrently with a 400ms timeout, plus slack.
 	if elapsed > 5*time.Second {
 		t.Errorf("Discover took %v with nothing listening", elapsed)
 	}
@@ -337,16 +341,23 @@ func TestDiscover_FindsAListeningOllama(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(heads) != 1 {
-		t.Fatalf("got %d heads, want the one served model: %+v", len(heads), heads)
+	// The stubbed head, not the whole list: Discover dials this machine's real
+	// ports as well, so asserting a count here fails on a developer running LM
+	// Studio or a LiteLLM proxy, for reasons that have nothing to do with
+	// Ollama. The fan-out tests assert the exact set, against stub services.
+	var found *provider.Head
+	for i := range heads {
+		if heads[i].ID == "ollama/qwen3:8b" {
+			found = &heads[i]
+		}
 	}
-	if heads[0].ID != "ollama/qwen3:8b" {
-		t.Errorf("ID = %q", heads[0].ID)
+	if found == nil {
+		t.Fatalf("the served model was not discovered, got %+v", heads)
 	}
-	if heads[0].Endpoint != srv.URL {
-		t.Errorf("Endpoint = %q, want the address it was found at", heads[0].Endpoint)
+	if found.Endpoint != srv.URL {
+		t.Errorf("Endpoint = %q, want the address it was found at", found.Endpoint)
 	}
-	if got := heads[0].Meta["model_source"]; got != "builtin" {
+	if got := found.Meta["model_source"]; got != "builtin" {
 		t.Errorf("Meta[model_source] = %q, want builtin, qwen matches a curated family pattern", got)
 	}
 }

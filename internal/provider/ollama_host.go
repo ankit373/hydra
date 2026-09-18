@@ -12,6 +12,30 @@ import (
 // DefaultOllamaHost is where Ollama listens unless told otherwise.
 const DefaultOllamaHost = "http://localhost:11434"
 
+// HostFromEnv resolves a service's base URL from env, falling back when the
+// variable is absent or unusable. Shared so every service Hydra discovers by
+// address applies the same cleartext rule, rather than each re-deciding it.
+func HostFromEnv(env, fallback string) string {
+	h := os.Getenv(env)
+	if h == "" {
+		return fallback
+	}
+	// Ollama itself accepts a bare "host:port"; url.Parse would read that as a
+	// scheme, so normalise before parsing.
+	if !strings.Contains(h, "://") {
+		h = "http://" + h
+	}
+	u, err := url.Parse(h)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		return fallback
+	}
+	if u.Scheme == "http" && !isLoopback(u.Hostname()) {
+		return fallback
+	}
+	// Trailing slashes would produce "…//api/tags" once a path is appended.
+	return strings.TrimRight(u.Scheme+"://"+u.Host, "/")
+}
+
 // OllamaHost resolves where Ollama is listening, honouring $OLLAMA_HOST.
 //
 // This lives in provider, not executor, and not port, because both of them
@@ -28,26 +52,7 @@ const DefaultOllamaHost = "http://localhost:11434"
 // a remote host is allowed. An unparsable or rejected value falls back to the
 // default rather than erroring, so a stray export cannot make Ollama
 // undiscoverable.
-func OllamaHost() string {
-	h := os.Getenv("OLLAMA_HOST")
-	if h == "" {
-		return DefaultOllamaHost
-	}
-	// Ollama itself accepts a bare "host:port"; url.Parse would read that as a
-	// scheme, so normalise before parsing.
-	if !strings.Contains(h, "://") {
-		h = "http://" + h
-	}
-	u, err := url.Parse(h)
-	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
-		return DefaultOllamaHost
-	}
-	if u.Scheme == "http" && !isLoopback(u.Hostname()) {
-		return DefaultOllamaHost
-	}
-	// Trailing slashes would produce "…//api/tags" once a path is appended.
-	return strings.TrimRight(u.Scheme+"://"+u.Host, "/")
-}
+func OllamaHost() string { return HostFromEnv("OLLAMA_HOST", DefaultOllamaHost) }
 
 // isLoopback decides whether cleartext is acceptable for this host.
 //
