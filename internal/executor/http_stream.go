@@ -39,23 +39,29 @@ type openAIChatChunk struct {
 
 // ExecuteStream streams the OpenAI-compatible and Azure paths, which share a
 // wire shape, plus Anthropic, Gemini and Cohere, which do not (#845, #851,
-// #860). Bedrock frames its events as an AWS binary event stream rather than
-// SSE and Replicate polls rather than streams, so they keep taking Execute
-// until each is done deliberately rather than in a batch (#787).
+// #860), and Bedrock, whose OpenAI-compatible endpoint shares it but whose
+// SigV4 credentials cover the body (#865). Replicate alone still takes
+// Execute: its prediction API polls, so there is nothing to stream (#787).
 func (e *HTTPExecutor) ExecuteStream(ctx context.Context, req Request, onDelta OnDelta) (*Response, error) {
 	switch req.Head.Provider {
 	case "azure":
-		return e.streamOpenAILike(ctx, req, onDelta, azureStreamTarget)
+		return e.streamOpenAILike(ctx, req, onDelta, azureStreamTarget, nil)
 	case "anthropic":
 		return e.streamAnthropic(ctx, req, onDelta)
 	case "google":
 		return e.streamGemini(ctx, req, onDelta)
 	case "cohere":
 		return e.streamCohere(ctx, req, onDelta)
-	case "bedrock", "replicate":
-		// Dialects this does not stream yet. Falling back rather than failing:
-		// the caller asked for output, not specifically for a stream, and
-		// executor.Stream already delivers a non-streamed answer as one delta.
+	case "bedrock":
+		// Bedrock's OpenAI-compatible API, the one executeBedrock already calls,
+		// streams as ordinary SSE. invoke-with-response-stream's binary framing
+		// is a different endpoint Hydra does not use (#865).
+		return e.streamOpenAILike(ctx, req, onDelta, bedrockStreamTarget, signBedrock)
+	case "replicate":
+		// Replicate's prediction API is a polling interface, so there is no
+		// stream to read. Falling back rather than failing: the caller asked
+		// for output, not specifically for a stream, and executor.Stream
+		// delivers a non-streamed answer as one delta.
 		return e.Execute(ctx, req)
 	default:
 		cfg, err := openAICompatConfigFor(req.Head)
@@ -64,14 +70,20 @@ func (e *HTTPExecutor) ExecuteStream(ctx context.Context, req Request, onDelta O
 		}
 		return e.streamOpenAILike(ctx, req, onDelta, func(Request) (string, string, map[string]string, error) {
 			return strings.TrimRight(cfg.BaseURL, "/") + "/v1/chat/completions", cfg.Model, cfg.Headers, nil
-		})
+		}, nil)
 	}
 }
 
 // streamTarget resolves the endpoint, model and headers for one dialect.
 type streamTarget func(req Request) (endpoint, model string, headers map[string]string, err error)
 
-func (e *HTTPExecutor) streamOpenAILike(ctx context.Context, req Request, onDelta OnDelta, target streamTarget) (*Response, error) {
+// signRequest runs once the body is marshalled and every header is set, for a
+// dialect whose credentials cover the payload rather than sitting in a header.
+// SigV4 signs a hash of the exact bytes, so it cannot be expressed as the
+// static map a streamTarget returns (#865). nil for every other dialect.
+type signRequest func(r *http.Request, body []byte) error
+
+func (e *HTTPExecutor) streamOpenAILike(ctx context.Context, req Request, onDelta OnDelta, target streamTarget, sign signRequest) (*Response, error) {
 	endpoint, model, headers, err := target(req)
 	if err != nil {
 		return nil, err
@@ -101,6 +113,12 @@ func (e *HTTPExecutor) streamOpenAILike(ctx context.Context, req Request, onDelt
 	httpReq.Header.Set("Accept", "text/event-stream")
 	for k, v := range headers {
 		httpReq.Header.Set(k, v)
+	}
+	// After the headers, because the signature covers some of them.
+	if sign != nil {
+		if err := sign(httpReq, raw); err != nil {
+			return nil, fmt.Errorf("http exec %s: %w", req.Head.ID, err)
+		}
 	}
 
 	var gotModel string
@@ -181,6 +199,12 @@ func (e *HTTPExecutor) sseStream(ctx context.Context, headID string, httpReq *ht
 // azureStreamTarget mirrors executeAzureOpenAI's endpoint construction. Azure
 // puts the deployment in the path and the model nowhere, so the request body
 // carries no model at all.
+// bedrockStreamTarget carries no headers: SigV4 supplies them all, and it
+// cannot run until the body exists, so signBedrock does it as the hook.
+func bedrockStreamTarget(Request) (string, string, map[string]string, error) {
+	return bedrockChatURL(), defaultModelFor("bedrock"), nil, nil
+}
+
 func azureStreamTarget(Request) (string, string, map[string]string, error) {
 	base := strings.TrimRight(azureEndpoint(), "/")
 	u := fmt.Sprintf("%s/openai/deployments/%s/chat/completions?api-version=%s",

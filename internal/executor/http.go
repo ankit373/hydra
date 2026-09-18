@@ -448,29 +448,42 @@ func (e *HTTPExecutor) executeAzureOpenAI(ctx context.Context, req Request) (*Re
 		out.Usage.PromptTokens, out.Usage.CompletionTokens, start), nil
 }
 
-func (e *HTTPExecutor) executeBedrock(ctx context.Context, req Request) (*Response, error) {
-	cfg := openAICompatConfig{
-		BaseURL: fmt.Sprintf("https://bedrock-runtime.%s.amazonaws.com", bedrockRegion()),
-		Model:   defaultModelFor("bedrock"),
+// bedrockChatURL is Bedrock's OpenAI-compatible Chat Completions endpoint, not
+// invoke-with-response-stream. The base is overridable so a VPC endpoint, or a
+// test's stub, is addressed without a second dialect.
+func bedrockChatURL() string {
+	base := firstEnv("BEDROCK_BASE_URL", "AWS_BEDROCK_BASE_URL")
+	if base == "" {
+		base = fmt.Sprintf("https://bedrock-runtime.%s.amazonaws.com", bedrockRegion())
 	}
-	msgs := buildMessages(req)
-	body := openAIChatRequest{
-		Model:     cfg.Model,
-		Messages:  msgs,
+	return strings.TrimRight(base, "/") + "/v1/chat/completions"
+}
+
+// signBedrock signs a already-built request over the exact bytes it will send.
+// SigV4 hashes the payload, so it cannot be a static header map, which is why
+// the streaming split takes it as a hook rather than as headers (#865).
+func signBedrock(r *http.Request, body []byte) error {
+	return signAWSRequest(r, body, bedrockRegion(), "bedrock")
+}
+
+func (e *HTTPExecutor) executeBedrock(ctx context.Context, req Request) (*Response, error) {
+	model := defaultModelFor("bedrock")
+	raw, err := json.Marshal(openAIChatRequest{
+		Model:     model,
+		Messages:  buildMessages(req),
 		MaxTokens: req.MaxTokens,
 		Stream:    false,
-	}
-	raw, err := json.Marshal(body)
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, cfg.BaseURL+"/v1/chat/completions", bytes.NewReader(raw))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, bedrockChatURL(), bytes.NewReader(raw))
 	if err != nil {
 		return nil, err
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
-	if err := signAWSRequest(httpReq, raw, bedrockRegion(), "bedrock"); err != nil {
+	if err := signBedrock(httpReq, raw); err != nil {
 		return nil, fmt.Errorf("http exec %s: %w", req.Head.ID, err)
 	}
 
@@ -493,7 +506,7 @@ func (e *HTTPExecutor) executeBedrock(ctx context.Context, req Request) (*Respon
 	}
 
 	return httpResponse(req, out.Choices[0].Message.Content,
-		firstNonEmpty(out.Model, cfg.Model),
+		firstNonEmpty(out.Model, model),
 		out.Usage.PromptTokens, out.Usage.CompletionTokens, start), nil
 }
 
