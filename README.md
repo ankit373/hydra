@@ -705,6 +705,9 @@ hyctl context entropy <file|->          # signal density + useful tokens + compa
 
 # Verification & accountability
 hyctl oracle verify go test ./... --source verifier:go-test  # verifier as evidence + its LLR
+hyctl eval stats                        # the verified corpus: size and pass rate by domain
+hyctl eval readiness                    # per enum, whether the corpus can yet fit a routing choice
+hyctl eval list --failed                # the examples the oracle rejected
 hyctl mcp check <tool> --agent A --resource R --action write  # gate + record an access
 hyctl mcp check <tool> --content "$DATA" --action network      # PII auto-classified; policy can deny egress
 hyctl mcp check <tool> --params '{"amount":500}'               # bind a hash of the params to the decision
@@ -731,6 +734,11 @@ hyctl parallel ...                      # fan independent tasks across heads
 hyctl workflow run --step A --step B    # multi-step task, each step routed on its own
 hyctl workflow resume <id>              # continue a killed workflow from where it stopped
 ```
+
+The corpus behind `hyctl eval` is the one thing Hydra keeps verbatim and forever, because it is the
+only data a router can be improved against. It is your own code and prompts, so it stays in
+`~/.hydra/evalset/`, nothing that prunes logs can reach it, and there is no code path that can send
+it anywhere, which a test enforces rather than a comment promising it.
 
 ### The Cockpit (`hyctl tui`)
 
@@ -928,7 +936,7 @@ hydra/
 │   ├── otlp/                    # Dispatch log → OpenTelemetry spans (OTLP/HTTP, nothing sent by default)
 │   ├── sketch/                  # Mergeable relative-error quantile sketch (bounded memory)
 │   ├── rollup/                  # Per-day aggregates: calls, tokens, spend, latency sketch
-│   ├── evalset/                 # Oracle-verified labelled examples: kept verbatim, never pruned
+│   ├── evalset/                 # Oracle-verified labelled examples: verbatim, never pruned, never uploaded
 │   ├── budget/                  # Token-budget governor: 6 static pressure modes + rate-aware first-passage risk on claude_pct
 │   ├── rank/                    # Deduplication + CapScore ranking
 │   ├── editor/                  # Scoped, validated, rollback-safe file edits
