@@ -88,9 +88,11 @@ func computeCoverage(pol ledger.Policy, sc SupplyChain, runs []trust.RunLog, cos
 			Detail: "Hydra routes prompts to models, it does not train or fine-tune any"},
 		unboundedConsumptionCategory(costCeilingDenials),
 		misinformationCategory(runs),
-		{ID: "LLM08", Name: "Hidden Context Exposure", Status: Gap,
-			Detail: "nothing protects the non-user-facing context Hydra assembles: --system text, the a2a " +
-				"handoff, and the file content an edit prompt embeds all reach the head unguarded"},
+		{ID: "LLM08", Name: "Hidden Context Exposure", Status: Partial,
+			Detail: "--system text and the a2a handoff are declared to the egress gate on the way in, and a " +
+				"response repeating either back is recorded as a finding naming the head; but the echo check " +
+				"is verbatim over a 96-character window, so a paraphrased or summarised disclosure is not " +
+				"caught, and it reports rather than refuses, since the answer is already the caller's"},
 		{ID: "LLM09", Name: "Vector and Embedding Weaknesses", Status: NotApplicable,
 			Detail: "Hydra has no RAG pipeline or vector store of its own"},
 		outputHandlingCategory(),

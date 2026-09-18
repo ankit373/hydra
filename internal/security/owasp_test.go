@@ -33,8 +33,11 @@ func TestComputeCoverage_StaticCategoriesAreFixed(t *testing.T) {
 
 	cov := computeCoverage(ledger.Policy{}, SupplyChain{}, nil, 0)
 	want := map[string]CoverageStatus{
-		"LLM01": Partial,
-		"LLM04": Gap, "LLM08": Gap,
+		// LLM08 left gap when the 2026 ordering landed and became partial once
+		// a head repeating the hidden context back was recorded (#872). Partial
+		// is where it stays: the check is verbatim and detective.
+		"LLM01": Partial, "LLM08": Partial,
+		"LLM04": Gap,
 		"LLM05": NotApplicable, "LLM09": NotApplicable,
 	}
 	got := map[string]CoverageStatus{}
