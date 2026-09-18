@@ -5,6 +5,7 @@ package executor
 import (
 	"context"
 	"encoding/json"
+	"github.com/ankit373/hydra/internal/awsconf"
 	"github.com/ankit373/hydra/internal/config"
 	"net/http"
 	"net/http/httptest"
@@ -544,10 +545,11 @@ func TestAzureAPIVersion_DefaultsButIsOverridable(t *testing.T) {
 }
 
 // Region and credential lookups accept the standard AWS variable names, in the
-// order the AWS SDKs themselves resolve them.
+// order the AWS SDKs themselves resolve them. The shared-file half of that
+// resolution is internal/awsconf's own tests; this is the executor's view.
 func TestAWSEnvLookups(t *testing.T) {
 	testutil.NewSandbox(t)
-	if bedrockRegion() != "" || awsAccessKeyID() != "" || awsSecretAccessKey() != "" || awsSessionToken() != "" {
+	if c := awsconf.Resolve(); bedrockRegion() != "" || c.Usable() || c.SessionToken != "" {
 		t.Fatal("the sandbox did not clear the AWS environment")
 	}
 
@@ -561,8 +563,8 @@ func TestAWSEnvLookups(t *testing.T) {
 	}
 
 	t.Setenv("AWS_SESSION_TOKEN", "tok")
-	if got := awsSessionToken(); got != "tok" {
-		t.Errorf("awsSessionToken() = %q", got)
+	if got := awsconf.Resolve().SessionToken; got != "tok" {
+		t.Errorf("SessionToken = %q", got)
 	}
 }
 
