@@ -56,10 +56,36 @@ var agyMu sync.Mutex
 // Ports all logic from dispatch/agy.sh natively in Go.
 type AgyExecutor struct{}
 
-func (e *AgyExecutor) Execute(ctx context.Context, req Request) (*Response, error) {
+// agyAuthLines is how much of stdout the auth detector may see. Never the whole
+// output: a model's answer can legitimately contain "please sign in", and
+// scanning all of it would turn an ordinary reply into an auth failure.
+const agyAuthLines = 3
+
+func agyAuthPrefix(out string) string {
+	parts := strings.SplitN(out, "\n", agyAuthLines+1)
+	return strings.Join(parts[:min(strings.Count(out, "\n")+1, agyAuthLines)], "\n")
+}
+
+// agyAuthError reports the auth failure both paths return, or nil. One copy, so
+// a streamed run and a buffered one cannot disagree about what counts as needing
+// a sign-in.
+func agyAuthError(stderrStr, outPrefix, pool, modelFlag string) error {
+	signal := stderrStr + "\n" + outPrefix
+	if !authSignalRe.MatchString(signal) {
+		return nil
+	}
+	authURL := authURLRe.FindString(signal)
+	writeAuthRequired(pool, modelFlag, authURL)
+	return &AuthRequiredError{ModelFlag: modelFlag, Pool: pool, AuthURL: authURL}
+}
+
+// agyCommand builds the subprocess both Execute and ExecuteStream run, so the
+// two cannot drift on the flags, the timeout or the environment. The caller
+// attaches stdout, since that is the only thing they differ on.
+func agyCommand(ctx context.Context, req Request) (*exec.Cmd, context.CancelFunc, string, error) {
 	modelFlag := req.Head.Meta["model_flag"]
 	if modelFlag == "" {
-		return nil, fmt.Errorf("agy executor: head %q has no model_flag in Meta", req.Head.ID)
+		return nil, nil, "", fmt.Errorf("agy executor: head %q has no model_flag in Meta", req.Head.ID)
 	}
 
 	agyMu.Lock()
@@ -76,22 +102,32 @@ func (e *AgyExecutor) Execute(ctx context.Context, req Request) (*Response, erro
 		}
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
+
+	// The path discovery already resolved. Re-resolving it here is what let
+	// execution and Unroutable disagree, so a head that arrived without one is
+	// refused rather than quietly looked up again (#688).
+	bin := req.Head.Executable
+	if bin == "" {
+		cancel()
+		return nil, nil, "", fmt.Errorf("agy executor: head %q carries no resolved agy path", req.Head.ID)
+	}
+	cmd := sandbox.Harden(exec.CommandContext(ctx, bin, "--print", req.Prompt,
+		"--model", modelFlag, "--print-timeout", fmt.Sprintf("%ds", int(timeout.Seconds()))))
+	cmd.Env = headEnv(req.Head)
+	return cmd, cancel, modelFlag, nil
+}
+
+func (e *AgyExecutor) Execute(ctx context.Context, req Request) (*Response, error) {
+	cmd, cancel, modelFlag, err := agyCommand(ctx, req)
+	if err != nil {
+		return nil, err
+	}
 	defer cancel()
 
 	// stderr is only used for auth detection, cap it at 64 KB so a runaway
 	// process can't exhaust memory through error output.
 	stderr := util.NewAccumulator(64 << 10)
 	stdout := util.NewAccumulator(0)
-	// The path discovery already resolved. Re-resolving it here is what let
-	// execution and Unroutable disagree, so a head that arrived without one is
-	// refused rather than quietly looked up again (#688).
-	bin := req.Head.Executable
-	if bin == "" {
-		return nil, fmt.Errorf("agy executor: head %q carries no resolved agy path", req.Head.ID)
-	}
-	cmd := sandbox.Harden(exec.CommandContext(ctx, bin, "--print", req.Prompt,
-		"--model", modelFlag, "--print-timeout", fmt.Sprintf("%ds", int(timeout.Seconds()))))
-	cmd.Env = headEnv(req.Head)
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 
@@ -102,22 +138,8 @@ func (e *AgyExecutor) Execute(ctx context.Context, req Request) (*Response, erro
 	stderrStr := stderr.String()
 	outStr := stdout.String()
 
-	// Auth detection: check stderr + first 3 lines of stdout only.
-	// Never scan full output, model responses may contain auth strings.
-	firstLines := strings.Join(strings.SplitN(outStr, "\n", 4)[:min(strings.Count(outStr, "\n")+1, 3)], "\n")
-	authSignal := stderrStr + "\n" + firstLines
-
-	if authSignalRe.MatchString(authSignal) {
-		authURL := ""
-		if m := authURLRe.FindString(authSignal); m != "" {
-			authURL = m
-		}
-		writeAuthRequired(req.Head.Meta["token_pool"], modelFlag, authURL)
-		return nil, &AuthRequiredError{
-			ModelFlag: modelFlag,
-			Pool:      req.Head.Meta["token_pool"],
-			AuthURL:   authURL,
-		}
+	if err := agyAuthError(stderrStr, agyAuthPrefix(outStr), req.Head.Meta["token_pool"], modelFlag); err != nil {
+		return nil, err
 	}
 
 	if runErr != nil {
