@@ -161,6 +161,12 @@ func matchCondition(key string, val interface{}, spec Spec) bool {
 	case "ne":
 		return fmt.Sprintf("%v", specVal) != fmt.Sprintf("%v", val)
 	case "gt", "lt", "gte", "lte":
+		// Unknown does not satisfy a comparison. Without this a spec that never
+		// carried the field compares as 0 and matches every _lt and _lte rule
+		// written for the low end of the range (#848).
+		if numericUnset(field, spec) {
+			return false
+		}
 		sn := toFloat(specVal)
 		vn := toFloat(val)
 		switch op {
@@ -200,6 +206,25 @@ func matchCondition(key string, val interface{}, spec Spec) bool {
 		present := sv != "" && sv != "false" && sv != "0"
 		wantPresent := fmt.Sprintf("%v", val) == "true"
 		return present == wantPresent
+	}
+	return false
+}
+
+// numericUnset reports whether a numeric field was never supplied, so no
+// comparison against it can hold.
+//
+// A real tier is 1-10, a real file has at least one line, and a real file set
+// has at least one file, so a non-positive value in these three is absence
+// rather than a measurement. prompt_length and context_pct are deliberately
+// absent: 0 is a genuine value for both (an empty prompt, no context pressure).
+func numericUnset(field string, spec Spec) bool {
+	switch field {
+	case "enum_tier":
+		return spec.EnumTier <= 0
+	case "file_lines":
+		return spec.FileLines <= 0
+	case "file_count":
+		return spec.FileCount <= 0
 	}
 	return false
 }
