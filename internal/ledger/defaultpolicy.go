@@ -19,13 +19,16 @@ const (
 	classBehaviorChange = "mcp-behavior-change"
 )
 
-// DefaultPolicy is what a fresh install starts with.
+// DefaultPolicy is what every install runs under until a file overrides it.
+// LoadPolicy returns it for a missing file, so these rules do not depend on
+// anything having written one (#836).
 //
 // It is deliberately default-allow. The classifications that would justify a
 // default-deny (file provenance, egress sensitivity) do not exist yet, and a
 // deny that stops every dispatch gets uninstalled rather than tuned. What it
-// does do is refuse what Hydra can already prove, and exist on disk so the
-// vocabulary is visible and editable instead of implied by a missing file.
+// does do is refuse what Hydra can already prove. EnsurePolicy materialises it
+// on disk so the vocabulary is visible and editable, which is a convenience
+// rather than the thing that makes the rules apply.
 //
 // FailOpen stays true under this policy and hyctl security withholds the
 // coverage score because of it. That is the intended reading: nothing is
