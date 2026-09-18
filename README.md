@@ -1009,7 +1009,9 @@ hydra/
 
 A native window over the same engine, opening on **Chat**: ask for work, and each reply says which
 model answered, at which tier, and what it cost, with the run's timeline narrated live rather than
-after the fact. The composer's model picker groups models by **token pool**, so it shows when a
+after the fact. The reply grows as the model writes it, and when the router falls back, the
+abandoned partial fades to a one-line summary naming the head and why it stopped, expandable to
+read what it had written. The composer's model picker groups models by **token pool**, so it shows when a
 choice spends a quota another model shares (Opus and Sonnet draw from the same one). A companion
 pane beside the thread carries the active head, this run's confidence, per-model measured accuracy
 from the calibration record, and the files the run changed.

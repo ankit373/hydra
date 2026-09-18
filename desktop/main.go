@@ -18,6 +18,7 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"log"
 
@@ -25,6 +26,7 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
 	"github.com/wailsapp/wails/v2/pkg/options/mac"
+	"github.com/wailsapp/wails/v2/pkg/runtime"
 
 	"github.com/ankit373/hydra/desktop/api"
 	"github.com/ankit373/hydra/internal/shellpath"
@@ -65,8 +67,15 @@ func main() {
 		Mac: &mac.Options{
 			TitleBar: mac.TitleBarHiddenInset(),
 		},
-		OnStartup: a.Startup,
-		Bind:      []any{a},
+		OnStartup: func(ctx context.Context) {
+			a.Startup(ctx)
+			// Wails stays in this file. The API takes a plain function, so the
+			// backend is still unit-tested with no webview in the loop.
+			a.SetEmit(func(name string, payload any) {
+				runtime.EventsEmit(ctx, name, payload)
+			})
+		},
+		Bind: []any{a},
 	})
 	if err != nil {
 		log.Fatalf("hydradesk: %v", err)

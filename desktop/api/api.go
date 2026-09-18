@@ -26,7 +26,14 @@ import (
 // concurrently from the frontend.
 type API struct {
 	ctx context.Context
+	// emit is set once at startup, before the frontend can call anything, so
+	// it needs no lock despite every other method being call-concurrent.
+	emit Emit
 }
+
+// SetEmit supplies the function that pushes events to the frontend. Taking a
+// plain func is what keeps Wails out of this package.
+func (a *API) SetEmit(e Emit) { a.emit = e }
 
 // New returns an API ready to bind.
 func New() *API { return &API{} }

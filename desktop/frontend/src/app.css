@@ -1586,6 +1586,41 @@ body {
 }
 .turn__out { margin: 0; font-size: 14px; line-height: 1.6; white-space: pre-wrap; }
 .turn__wait { margin: 0; color: var(--hy-dim); font-size: 12px; }
+
+/* A dispatch as it arrives (#799). The caret says more is coming, which is
+   what separates a slow answer from a finished short one. */
+.turn__out--live { position: relative; }
+.turn__caret {
+  display: inline-block; width: 7px; height: 1em; margin-left: 2px;
+  vertical-align: text-bottom; background: var(--hy-aqua);
+  animation: hy-caret 1s steps(2, start) infinite;
+}
+@keyframes hy-caret { to { visibility: hidden; } }
+
+/* An attempt the chain moved on from. Faded and collapsed rather than
+   deleted: it is evidence, and it must not read as the answer. */
+.abandoned {
+  margin: 0; padding: 6px 8px; border-left: 2px solid var(--hy-gov-warning);
+  color: var(--hy-dim); font-size: 12px; opacity: 0.55;
+  animation: hy-fade-back 320ms ease-out;
+}
+.abandoned:hover, .abandoned[open] { opacity: 0.9; }
+.abandoned > summary { cursor: pointer; }
+.abandoned__ico { color: var(--hy-gov-warning); }
+.abandoned__partial {
+  margin: 6px 0 0; white-space: pre-wrap; font-size: 12px; opacity: 0.8;
+}
+.abandoned__trace {
+  display: block; margin-top: 6px; font-size: 11px; color: var(--hy-dim);
+}
+@keyframes hy-fade-back { from { opacity: 1; } to { opacity: 0.55; } }
+
+/* Motion is decoration here; the collapse and the caret both still read
+   without it. */
+@media (prefers-reduced-motion: reduce) {
+  .turn__caret { animation: none; }
+  .abandoned { animation: none; }
+}
 .turn__err { margin: 0; color: var(--hy-expensive); font-size: 12px; font-family: var(--hy-font-mono); }
 /* A fallback is not an error: the answer arrived. It is amber because the
    model you picked is not the one that replied. */

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { ChatView } from './ChatView'
 import {
   AnswerQuestion,
@@ -10,8 +10,10 @@ import {
   GetModels,
   GetSession,
   NewRunID,
+  onChatStream,
 } from '../bindings'
 import type { ChatReply, Session as SessionData } from '../types'
+import type { ChatStreamEvent } from '../chatStream'
 
 // ChatView talks to the Go backend only through these bindings, mocking the
 // module lets every test drive a specific backend outcome (a run still live,
@@ -26,6 +28,7 @@ vi.mock('../bindings', () => ({
   GetModels: vi.fn(),
   GetSession: vi.fn(),
   NewRunID: vi.fn(),
+  onChatStream: vi.fn(),
 }))
 
 const mockChat = vi.mocked(Chat)
@@ -36,6 +39,11 @@ const mockGetDashboard = vi.mocked(GetDashboard)
 const mockGetEdits = vi.mocked(GetEdits)
 const mockGetSession = vi.mocked(GetSession)
 const mockNewRunID = vi.mocked(NewRunID)
+const mockOnChatStream = vi.mocked(onChatStream)
+
+// The view subscribes once on mount, so a test drives the stream by keeping the
+// callback it registered and calling it, which is what Wails does.
+let pushEvent: (ev: ChatStreamEvent) => void = () => {}
 
 const TURNS_KEY = 'hydra.chat.turns'
 const noop = () => {}
@@ -60,6 +68,12 @@ function renderDock(onOpenRun: (runID: string) => void = noop) {
 
 beforeEach(() => {
   sessionStorage.clear()
+  mockOnChatStream.mockImplementation((cb) => {
+    pushEvent = cb
+    return () => {
+      pushEvent = () => {}
+    }
+  })
   mockGetModels.mockResolvedValue({ found: true, pools: [] })
   mockGetEdits.mockResolvedValue([])
   // The companion pane reads the dashboard for the governor and calibration;
@@ -376,5 +390,161 @@ describe('a task parked waiting on a human (#583)', () => {
 
     await screen.findByRole('button', { name: /session →/ })
     expect(screen.queryByText(/could not answer/i)).not.toBeInTheDocument()
+  })
+})
+
+// The dispatch as it happens, rather than a window that shows nothing until the
+// whole answer exists (#799). Driven through the callback the view registered,
+// which is what Wails calls.
+describe('a streaming dispatch', () => {
+  const streamEvent = (over: Partial<ChatStreamEvent>): ChatStreamEvent => ({
+    runID: 'run-1',
+    kind: 'delta',
+    head: 'ollama/qwen3',
+    tier: 10,
+    offset: 0,
+    recoverable: false,
+    ...over,
+  })
+
+  // Held open so the turn stays in flight while events arrive, which is the
+  // whole window this feature exists for.
+  function sendAndHold() {
+    let finish: (r: ChatReply) => void = () => {}
+    mockNewRunID.mockResolvedValue('run-1')
+    mockChat.mockReturnValue(
+      new Promise<ChatReply>((res) => {
+        finish = res
+      }),
+    )
+    renderDock()
+    const textarea = screen.getByPlaceholderText(/ask anything/i)
+    fireEvent.change(textarea, { target: { value: 'write me a haiku' } })
+    fireEvent.keyDown(textarea, { key: 'Enter' })
+    return { finish }
+  }
+
+  it('grows the message on screen as deltas arrive', async () => {
+    sendAndHold()
+    await waitFor(() => expect(mockChat).toHaveBeenCalled())
+
+    act(() => {
+      pushEvent(streamEvent({ kind: 'started' }))
+      pushEvent(streamEvent({ text: 'an old ', offset: 0 }))
+    })
+    expect(await screen.findByText(/an old/)).toBeInTheDocument()
+
+    act(() => {
+      pushEvent(streamEvent({ text: 'silent pond', offset: 7 }))
+    })
+    expect(await screen.findByText('an old silent pond')).toBeInTheDocument()
+    // The placeholder is gone once there is an answer to look at; both at once
+    // reads as a stall.
+    expect(screen.queryByText(/routing…|working…/)).not.toBeInTheDocument()
+  })
+
+  it('replaces the streamed text with the finished reply, not duplicating it', async () => {
+    const { finish } = sendAndHold()
+    await waitFor(() => expect(mockChat).toHaveBeenCalled())
+    act(() => {
+      pushEvent(streamEvent({ kind: 'started' }))
+      pushEvent(streamEvent({ text: 'an old silent pond', offset: 0 }))
+    })
+    await screen.findByText('an old silent pond')
+
+    act(() => {
+      finish({
+        output: 'an old silent pond',
+        head: 'ollama/qwen3',
+        model: 'qwen3',
+        tier: 10,
+        costUsd: 0,
+        durationMs: 120,
+        runId: 'run-1',
+      })
+    })
+
+    // Exactly one copy: the live block is dropped when the turn completes, and
+    // the finished turn renders from reply.output.
+    await waitFor(() => {
+      expect(screen.getAllByText('an old silent pond')).toHaveLength(1)
+    })
+  })
+
+  it('collapses an abandoned attempt to one line, expandable to its partial', async () => {
+    sendAndHold()
+    await waitFor(() => expect(mockChat).toHaveBeenCalled())
+
+    act(() => {
+      // recoverable is a run-wide setting (payload capture), so the backend
+      // puts it on every event, not only the one that reads it.
+      pushEvent(
+        streamEvent({ kind: 'started', head: 'openrouter/gpt', tier: 4, recoverable: true }),
+      )
+      pushEvent(
+        streamEvent({
+          text: 'half an answ',
+          offset: 0,
+          head: 'openrouter/gpt',
+          recoverable: true,
+        }),
+      )
+      pushEvent(
+        streamEvent({
+          kind: 'failed',
+          head: 'openrouter/gpt',
+          reason: '429 rate limited',
+          spanID: 'span-a',
+          offset: 12,
+          recoverable: true,
+        }),
+      )
+      pushEvent(streamEvent({ kind: 'started', head: 'claude', tier: 1 }))
+      pushEvent(streamEvent({ text: 'the real answer', offset: 0, head: 'claude' }))
+    })
+
+    expect(await screen.findByText(/abandoned/)).toBeInTheDocument()
+    expect(screen.getByText(/429 rate limited/)).toBeInTheDocument()
+    // Present but collapsed, not deleted: it is evidence, and the point is that
+    // it does not stand in the transcript as if it were the answer.
+    expect(screen.getByText('half an answ')).not.toBeVisible()
+    expect(screen.getByText('the real answer')).toBeVisible()
+
+    fireEvent.click(screen.getByText(/abandoned/))
+    expect(screen.getByText('half an answ')).toBeVisible()
+    // Payload capture was on, so the span really can be read back.
+    expect(screen.getByText(/hyctl trace view run-1 --span span-a/)).toBeInTheDocument()
+  })
+
+  // A missed event means what is on screen is not the whole answer. Saying so
+  // beats rendering a spliced one that looks complete.
+  it('says so when an event went missing rather than splicing over it', async () => {
+    sendAndHold()
+    await waitFor(() => expect(mockChat).toHaveBeenCalled())
+
+    act(() => {
+      pushEvent(streamEvent({ kind: 'started' }))
+      pushEvent(streamEvent({ text: 'an old ', offset: 0 }))
+      pushEvent(streamEvent({ text: 'pond', offset: 999 }))
+    })
+
+    expect(await screen.findByText(/did not reach the window/i)).toBeInTheDocument()
+    expect(screen.queryByText('an old pond')).not.toBeInTheDocument()
+  })
+
+  // Events from a dispatch that has already finished must not attach themselves
+  // to whatever is on screen now.
+  it('ignores an event from another run', async () => {
+    sendAndHold()
+    await waitFor(() => expect(mockChat).toHaveBeenCalled())
+
+    act(() => {
+      pushEvent(streamEvent({ kind: 'started' }))
+      pushEvent(streamEvent({ text: 'mine', offset: 0 }))
+      pushEvent(streamEvent({ runID: 'run-2', text: ' theirs', offset: 4 }))
+    })
+
+    expect(await screen.findByText('mine')).toBeInTheDocument()
+    expect(screen.queryByText('mine theirs')).not.toBeInTheDocument()
   })
 })

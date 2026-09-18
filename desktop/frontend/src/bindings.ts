@@ -26,6 +26,7 @@ import type {
   UpgradeResult,
   Version,
 } from './types'
+import { CHAT_STREAM_EVENT, type ChatStreamEvent } from './chatStream'
 
 interface WailsGo {
   api: {
@@ -60,7 +61,24 @@ interface WailsGo {
 declare global {
   interface Window {
     go?: WailsGo
+    runtime?: {
+      EventsOn(name: string, cb: (...data: unknown[]) => void): () => void
+    }
   }
+}
+
+/**
+ * Subscribe to a dispatch's stream events, returning the unsubscribe.
+ *
+ * Read off `window.runtime` at call time for the same reason the methods are:
+ * the generated module is a gitignored build artefact. A missing runtime is not
+ * an error here, unlike a missing backend, `vite` alone renders a chat that
+ * cannot stream, which is the pre-#799 behaviour and not a broken window.
+ */
+export function onChatStream(cb: (ev: ChatStreamEvent) => void): () => void {
+  const rt = window.runtime
+  if (!rt?.EventsOn) return () => {}
+  return rt.EventsOn(CHAT_STREAM_EVENT, (...data: unknown[]) => cb(data[0] as ChatStreamEvent))
 }
 
 function backend() {
