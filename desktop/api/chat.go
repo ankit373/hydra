@@ -147,7 +147,13 @@ func (a *API) Chat(prompt, enum, runID, tier, head string) (*ChatReply, error) {
 		tierHint = dispatch.EnumToTier(enum)
 	}
 
+	// Deltas go to the frontend as they arrive. The reply still carries the
+	// whole output: the view renders the growing text while the call is in
+	// flight and the finished turn from Output, so nothing is rendered twice.
+	cs := &chatStream{emit: a.emit, runID: runID, recoverable: d.CapturesPayloads()}
+
 	res, err := d.Dispatch(ctx, prompt, dispatch.Options{
+		OnStream: cs.on,
 		TierHint: tierHint,
 		// A picked model is pinned, not merely preferred: dispatch refuses
 		// rather than answering from something the user did not choose.
