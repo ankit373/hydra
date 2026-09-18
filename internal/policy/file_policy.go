@@ -138,10 +138,16 @@ func matchWhen(when map[string]interface{}, spec Spec) bool {
 	return true
 }
 
+// condSuffixes are the operator suffixes a `when` key may carry, longest-first
+// so `_lte` is not read as `_lt` with a stray e. Shared with DeadConditions,
+// which must split a key exactly the way this does or it reports the wrong
+// rules dead.
+var condSuffixes = []string{"_contains", "_present", "_lte", "_gte", "_lt", "_gt", "_ne", "_eq", "_in"}
+
 // matchCondition evaluates a single (key, value) condition against spec.
 func matchCondition(key string, val interface{}, spec Spec) bool {
 	var op, field string
-	for _, suffix := range []string{"_contains", "_present", "_lte", "_gte", "_lt", "_gt", "_ne", "_eq", "_in"} {
+	for _, suffix := range condSuffixes {
 		if strings.HasSuffix(key, suffix) {
 			op = strings.TrimPrefix(suffix, "_")
 			field = strings.TrimSuffix(key, suffix)
