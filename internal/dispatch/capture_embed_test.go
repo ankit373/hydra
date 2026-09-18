@@ -43,8 +43,8 @@ func TestCaptureEmbedding_OptedInWithNoModelIsSilent(t *testing.T) {
 	}
 }
 
-// Close is wired at seven construction sites, one of which does not check the
-// constructor's error, so it has to survive a nil receiver.
+// Close is wired at seven construction sites and drains a background worker, so
+// a nil receiver has to be a no-op rather than a panic in a deferred call.
 func TestClose_SurvivesANilDispatcher(t *testing.T) {
 	var d *Dispatcher
 	d.Close()
