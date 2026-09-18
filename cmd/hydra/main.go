@@ -719,6 +719,7 @@ func cmdDispatch() *cobra.Command {
 		graphPath    string
 		irreversible bool
 		production   bool
+		verifyRun    bool
 	)
 
 	cmd := &cobra.Command{
@@ -933,6 +934,9 @@ func cmdDispatch() *cobra.Command {
 				logTrustRun(res, prompt, domain)
 				writeFanoutHandoff("hydra-ensemble", "SPRT ensemble", prompt,
 					res.Trust.Candidate, file, res.Attempts)
+				if verifyRun {
+					verifyAndScoreRun(ctx, res, runID, taskID, file, domain)
+				}
 				return nil
 			}
 
@@ -1087,6 +1091,7 @@ func cmdDispatch() *cobra.Command {
 	// domain and printed two commands ending in a bare `--domain ` (#732).
 	cmd.Flags().StringVar(&domain, "domain", trust.DefaultDomain, "calibration domain for --confidence")
 	cmd.Flags().StringVar(&file, "file", "", "target file, derives a confidence target from its blast radius, so this alone selects the SPRT ensemble")
+	cmd.Flags().BoolVar(&verifyRun, "verify", false, "after a --confidence run, run the workspace verifier and record its verdict: what trains calibration and fills hyctl trust reliability")
 	cmd.Flags().StringVar(&graphPath, "graph", "graph.json", "path to the dependency graph used with --file")
 	cmd.Flags().BoolVar(&irreversible, "irreversible", false, "change cannot be cheaply undone, raises the required confidence")
 	cmd.Flags().BoolVar(&production, "production", false, "target is production, raises the required confidence")

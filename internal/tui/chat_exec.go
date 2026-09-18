@@ -10,7 +10,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -19,7 +18,6 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/dispatch"
 	"github.com/ankit373/hydra/internal/editor"
 	"github.com/ankit373/hydra/internal/oracle"
@@ -28,7 +26,7 @@ import (
 	"github.com/ankit373/hydra/internal/runlog"
 	"github.com/ankit373/hydra/internal/swarm"
 	"github.com/ankit373/hydra/internal/trust"
-	"github.com/ankit373/hydra/internal/workspace"
+	"github.com/ankit373/hydra/internal/verify"
 )
 
 // ckMaxFixes caps Auto's fix-and-reverify loop: a change that is still failing
@@ -269,59 +267,14 @@ func ckRealVerifyStage(ctx context.Context, argv []string, dir string) (oracle.V
 
 // ── verify command resolution ─────────────────────────────────────────────────
 
-// ckVerifyArgs picks the verify command: `go test ./...` when the CWD repo is
-// Go, else the workspace.yaml validator for the edited file's extension.
-// Empty argv means no verifier is configured, the proof strip says so.
-func ckVerifyArgs(file string) (argv []string, label string) {
-	if ckGoModDir() != "" {
-		return []string{"go", "test", "./..."}, "go test ./..."
-	}
-	if file == "" {
-		return nil, ""
-	}
-	reg, err := workspace.Load(config.ScriptHome())
-	if err != nil {
-		return nil, ""
-	}
-	tmpl := reg.ValidatorFor(strings.TrimPrefix(filepath.Ext(file), "."))
-	if tmpl == "" {
-		return nil, ""
-	}
-	// {file} substitutes the real path as one argv element (paths with spaces
-	// survive), the verifier must check the file on disk, not a temp copy.
-	if idx := strings.Index(tmpl, "{file}"); idx >= 0 {
-		argv = append(strings.Fields(tmpl[:idx]), file)
-		argv = append(argv, strings.Fields(tmpl[idx+len("{file}"):])...)
-	} else {
-		argv = strings.Fields(tmpl)
-	}
-	if len(argv) == 0 {
-		return nil, ""
-	}
-	return argv, strings.ReplaceAll(tmpl, "{file}", filepath.Base(file))
-}
+// ckVerifyArgs picks the verify command. The resolution lives in
+// internal/verify so the CLI's `dispatch --verify` and this cannot disagree
+// about what counts as a check.
+func ckVerifyArgs(file string) (argv []string, label string) { return verify.Command(file) }
 
 // ckGoModDir walks up from the CWD to the nearest go.mod, stopping at the
 // first .git boundary so a Go directory above an unrelated repo doesn't claim it.
-func ckGoModDir() string {
-	dir, err := os.Getwd()
-	if err != nil {
-		return ""
-	}
-	for {
-		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
-			return dir
-		}
-		if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
-			return ""
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			return ""
-		}
-		dir = parent
-	}
-}
+func ckGoModDir() string { return verify.GoModDir() }
 
 // ── the worker ────────────────────────────────────────────────────────────────
 
