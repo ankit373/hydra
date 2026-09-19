@@ -49,6 +49,12 @@ type Row struct {
 	// attempts on one task actually spent the money.
 	SpanID string `json:"span_id,omitempty"`
 
+	// Domain is the calibration domain the router ranked heads for. Written
+	// because routing reads it (#885) and nothing recorded it, which leaves
+	// any off-policy question about domain-aware routing unanswerable rather
+	// than merely uncertain. Absent on every row written before this.
+	Domain string `json:"domain,omitempty"`
+
 	SwarmMode   string `json:"swarm_mode"`
 	SwarmWinner bool   `json:"swarm_winner"`
 	Config      string `json:"config,omitempty"` // deployment-identity breadcrumb (config.Breadcrumb)

@@ -382,13 +382,67 @@ type probeHeadJSON struct {
 // rather than being restated as an adjustment that did not happen.
 func routingEvidence(r *dispatch.Result, h provider.Head) string {
 	sc, ok := r.Scores[h.ID]
-	if !ok || sc.N == 0 {
+	if !ok {
+		return ""
+	}
+	if sc.N == 0 {
+		// Nothing was measured, so there is nothing to say about this head in
+		// particular. When that is true of every head the requirement line
+		// says so once, rather than once per row.
 		return ""
 	}
 	// The in-domain count is what separates "measured here" from "measured
 	// somewhere else and borrowed", which is the whole reason to print it.
-	return dimStyle.Render(fmt.Sprintf("  → %d on %d judged, %d in %s",
-		sc.Effective, sc.N, sc.InDomain, r.Domain))
+	line := fmt.Sprintf("  → %d on %d judged, %d in %s", sc.Effective, sc.N, sc.InDomain, r.Domain)
+	if r.Requirement > 0 {
+		line += fmt.Sprintf(", $%.5f, %s", sc.CostUSD, clearance(sc))
+	}
+	return dimStyle.Render(line)
+}
+
+// clearance separates the two reasons a head is not chosen: it was judged and
+// fell short, or it was never judged enough here to be asked. Reporting both
+// as a failure would blame a head for evidence nobody collected.
+func clearance(sc rank.Score) string {
+	switch {
+	case sc.Clears:
+		return "clears"
+	case sc.InDomain >= rank.MinCommitments:
+		return "under the bar"
+	}
+	return "too little in-domain evidence"
+}
+
+// routingRequirement is the bar the cost constraint applied, and is printed
+// only when the constraint is what ordered the candidates. A pinned tier is
+// still a pinned tier, and prints exactly what it always did.
+//
+// It also reports whether anything cleared, which is the difference between
+// "the cheapest competent head took this" and "the ranking stands because
+// nothing here has been measured". Read off the verdicts the ordering
+// recorded, not recomputed, so the line cannot contradict the chain below it.
+func routingRequirement(r *dispatch.Result) string {
+	if r.Requirement <= 0 {
+		return ""
+	}
+	measured := false
+	for _, sc := range r.Scores {
+		measured = measured || sc.N > 0
+		if sc.Clears {
+			return dimStyle.Render(fmt.Sprintf(
+				"  needs %.1f%% correct in %s; the cheapest head measured that competent runs it ($ per 1.5k tokens)",
+				r.Requirement*100, r.Domain))
+		}
+	}
+	if !measured {
+		// Nothing has been judged in this domain at all, so the constraint had
+		// nothing to decide with and there is no choice to explain. Reporting
+		// a bar as unmet would name a comparison that never happened.
+		return ""
+	}
+	return dimStyle.Render(fmt.Sprintf(
+		"  needs %.1f%% correct in %s; nothing here is measured that well, so the ranking stands",
+		r.Requirement*100, r.Domain))
 }
 
 // probeColumn is one column of the probe table. A zero width is the last
@@ -1204,6 +1258,9 @@ func cmdDispatch() *cobra.Command {
 
 			if dryRun {
 				why := func(h provider.Head) string { return routingEvidence(result, h) }
+				if req := routingRequirement(result); req != "" {
+					fmt.Println(req)
+				}
 				fmt.Printf("  %s  %s  (score %d, %s)%s\n",
 					cortexStyle.Render("Primary  →"),
 					result.Head.Name, result.Head.CapScore, result.Head.Source, why(result.Head))
@@ -1509,7 +1566,7 @@ It only works where the router had some chance of doing what the candidate
 policy would do. Where it had none the question is not hard but unanswerable,
 and this refuses rather than returning a confident wrong number. Setting
 explore_rate in config.toml above 0 is what creates that overlap.`,
-		RunE: func(_ *cobra.Command, _ []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			rows, err := cost.LoadRows(cost.DefaultLogPath())
 			if err != nil {
 				return err
@@ -1526,7 +1583,17 @@ explore_rate in config.toml above 0 is what creates that overlap.`,
 				tiers = append(tiers, r.Tier)
 			}
 			tierSet := ope.TiersIn(tiers)
-			policy, err := ope.ParsePolicy(policySpec, tierSet)
+			// Only the constraint policy needs the live machine, so a broken
+			// or absent config still evaluates every policy that does not.
+			env := ope.Env{Tiers: tierSet}
+			if d, derr := dispatch.New(cmd.Context()); derr == nil {
+				defer d.Close()
+				env.Chosen = func(domain string) (string, bool) {
+					h, ok := d.Constrained(domain)
+					return h.ID, ok
+				}
+			}
+			policy, err := ope.ParsePolicy(policySpec, env)
 			if err != nil {
 				return err
 			}
@@ -1539,10 +1606,23 @@ explore_rate in config.toml above 0 is what creates that overlap.`,
 					TargetProb: policy.Would(ope.Decision{
 						Enum: r.Enum, Tier: r.Tier, Model: r.Model,
 						Executor: r.Executor, Pool: r.Pool,
+						Head: r.Head, Domain: r.Domain,
 					}),
 				})
 			}
 			est, evalErr := ope.Evaluate(samples, ope.Options{Level: level, ClipAt: clipAt})
+
+			// The constraint policy reads a field older rows do not carry.
+			// Reported separately because "the policy would have routed
+			// elsewhere" and "these rows cannot say" look identical in the
+			// total and have different remedies.
+			_, constrained := policy.(ope.Constraint)
+			withDomain := 0
+			for _, r := range rows {
+				if r.Domain != "" {
+					withDomain++
+				}
+			}
 
 			// The logged policy's own average, for comparison. Self-normalised
 			// over the same rows so the two numbers are computed the same way.
@@ -1565,6 +1645,9 @@ explore_rate in config.toml above 0 is what creates that overlap.`,
 				if loggedErr == nil {
 					out["logged_policy_mean"] = logged
 				}
+				if constrained {
+					out["rows_with_domain"] = withDomain
+				}
 				raw, _ := json.MarshalIndent(out, "", "  ")
 				fmt.Println(string(raw))
 				return nil
@@ -1572,6 +1655,9 @@ explore_rate in config.toml above 0 is what creates that overlap.`,
 
 			fmt.Printf("  Policy   %s\n", policy.Name())
 			fmt.Printf("  Log      %d dispatches across tiers %v\n", len(rows), ope.SortedTiers(tierSet))
+			if constrained {
+				fmt.Printf("  Domain   %d of %d rows record one; the rest cannot be evaluated\n", withDomain, len(rows))
+			}
 			if loggedErr == nil {
 				fmt.Printf("  Actual   $%.5f per dispatch under the policy that ran\n", logged)
 			}
@@ -1585,6 +1671,13 @@ explore_rate in config.toml above 0 is what creates that overlap.`,
 					fmt.Printf("  %s\n", dimStyle.Render(
 						"These dispatches were logged before Hydra recorded routing propensity. "+
 							"Rows written from now on carry it; nothing recovers it for old ones."))
+				} else if constrained && withDomain == 0 {
+					// A third remedy, and the one that applies to every log
+					// written before the domain was recorded. Sending someone
+					// after explore_rate here would not help at all.
+					fmt.Printf("  %s\n", dimStyle.Render(
+						"None of these rows records the domain the router ranked on, so what this policy "+
+							"would have chosen for them is unknown. Rows written from now on carry it."))
 				} else {
 					fmt.Printf("  %s\n", dimStyle.Render(
 						"The router is argmax by default, so heads it did not pick have probability 0 "+

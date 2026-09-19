@@ -88,6 +88,7 @@
       "Corpus readiness (hyctl eval readiness), whether enough verified examples exist per routing enum to fit a routing choice rather than guess at one",
       "hyctl trace seal, folds old run logs into compressed monthly segments, losslessly and invisibly to readers",
       "Routing rules in config (registry/signals.yaml), priority-ordered rules over PII, injection, blast-radius and keyword signals that pin a tier, force local-only, raise the confidence bar or refuse; ships empty so routing is unchanged until you write one",
+      "Cheapest measured-competent routing, an unpinned dispatch runs the cheapest head this machine has measured competent at the task's domain rather than the strongest one it owns; needs twenty judged answers in that domain, so an unmeasured machine routes exactly as before, and a named tier or enum is still obeyed as the instruction it is",
       "Hybrid recall over past dispatches (hyctl trace search), BM25 fused with vector cosine by rank, so it still works on a machine with no embedding model installed",
       "Opt-in embedding store (hyctl trace embeddings), one vector per dispatch from a local Ollama model, redacted before it is embedded and keyed on the model so two vector spaces are never compared; off by default",
       "Opt-in payload store (hyctl trace payloads), prompt and response text, off by default, chunked so a repeated system prompt is stored once, and redacted before it is written",
