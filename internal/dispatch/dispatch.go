@@ -151,6 +151,11 @@ type Result struct {
 	Domain string
 	Scores map[string]rank.Score
 
+	// Requirement is the confidence of correctness this task needed, and is
+	// set only when the cost constraint was the thing that ordered the
+	// candidates. Zero means it did not run, never that nothing was demanded.
+	Requirement float64
+
 	*executor.Response
 }
 
@@ -271,8 +276,12 @@ type Dispatcher struct {
 	heads   []provider.Head
 	policy  *policy.Engine
 	pricing *pricing.DB
-	budget  *budget.Registry
-	health  *health.Store
+	// price is what a nominal call to each head costs, derived from pricing
+	// once rather than per candidate. Nil when nothing can price a head, which
+	// leaves the cost constraint out of the ordering entirely.
+	price  rank.Price
+	budget *budget.Registry
+	health *health.Store
 	// cal reorders candidates onto the head measured best at the task's
 	// domain. Nil when the store will not load, which leaves the pooled probe
 	// order: a ranking basis that degrades has to degrade to the previous one.
@@ -395,11 +404,13 @@ func New(ctx context.Context) (*Dispatcher, error) {
 		cal = nil
 	}
 
+	prices := pricing.Load()
 	return &Dispatcher{
 		cfg:     cfg,
 		heads:   result.Heads,
 		policy:  policy.New(policy.DefaultRules(localOnly)),
-		pricing: pricing.Load(),
+		pricing: prices,
+		price:   headPrice(prices),
 		budget:  budgetReg,
 		health:  health.Open(health.DefaultPath()),
 		cal:     cal,
@@ -557,6 +568,18 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 			ErrNoHeads, tierClause(tier), localOnly)
 	}
 
+	// With no tier pinned, prefer the cheapest head this machine has measured
+	// competent at this domain over the strongest one it has. A pinned tier is
+	// an instruction and is left exactly as it was resolved: one word must not
+	// route two ways (#782).
+	var requirement float64
+	var scores map[string]rank.Score
+	if tier == "" && opts.Head == "" {
+		candidates, scores, requirement = d.constrain(candidates, domain, requirementFor(class))
+	} else if opts.DryRun {
+		scores = d.explain(candidates, domain)
+	}
+
 	// Reorders candidates so the head to try first is at index 0 and reports
 	// the probability it was chosen. At the default ExploreRate of 0 this is
 	// the identity and actProb is 1.
@@ -567,7 +590,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		// see the evidence for is indistinguishable from an arbitrary one.
 		return &Result{
 			Head: candidates[0], Fallbacks: candidates[1:],
-			Domain: domain, Scores: d.explain(candidates, domain),
+			Domain: domain, Scores: scores, Requirement: requirement,
 		}, nil
 	}
 
@@ -1317,6 +1340,83 @@ func (d *Dispatcher) rerankFor(candidates []provider.Head, domain string) []prov
 	return ranked
 }
 
+// constrain orders the candidates onto the cheapest head measured competent in
+// this domain, and returns both the evidence it ordered on and the requirement
+// it actually applied, so the dry run explains the order it got rather than
+// recomputing one or naming a bar that decided nothing.
+//
+// Degrades to the measured ranking, which is to say to today's behaviour, on
+// every input it is missing: no domain to measure against, no calibration
+// store, no pricing to compare costs with, or no head with enough in-domain
+// evidence to be judged at all. The last is the common case on a fresh
+// machine, and is why this changes nothing until something has been measured.
+func (d *Dispatcher) constrain(candidates []provider.Head, domain string, requirement float64) ([]provider.Head, map[string]rank.Score, float64) {
+	scores := d.explain(candidates, domain)
+	if scores == nil || d.price == nil || requirement <= 0 {
+		return candidates, scores, 0
+	}
+	ordered, annotated := rank.Cheapest(candidates, scores, d.price, requirement)
+	return ordered, annotated, requirement
+}
+
+// Constrained reports the head an unpinned dispatch for this domain would run,
+// and whether there was any candidate at all. Not a second reading of the
+// routing decision: the same candidate list through the same ordering, so a
+// counterfactual cannot describe a policy the router does not implement.
+//
+// At the baseline requirement, because the caller asking this is reading a log
+// row and a log row does not record whether that prompt carried personal data.
+func (d *Dispatcher) Constrained(domain string) (provider.Head, bool) {
+	candidates := d.selectHeads("", false, domain)
+	if len(candidates) == 0 {
+		return provider.Head{}, false
+	}
+	ordered, _, _ := d.constrain(candidates, domain, requirementFor(nil))
+	return ordered[0], true
+}
+
+// nominalTokens prices one comparable call per head. The real prompt is the
+// same for every candidate, so its length cancels out of the ordering and only
+// each head's rate survives; a constant keeps the comparison from moving with
+// the prompt.
+const nominalTokens = 1000
+
+// headPrice is what a nominal call to each head costs, and whether that is
+// known at all. Nothing is assumed free: pricing.EstimateCost answers 0 both
+// for a local head and for a broken pricing file, and reading the second as
+// the first would make an unpriceable head the cheapest thing on the machine.
+func headPrice(db *pricing.DB) rank.Price {
+	if db == nil {
+		return nil
+	}
+	return func(h provider.Head) (float64, bool) {
+		tier := rank.UITier(h)
+		model := h.Meta["model"]
+		_, modelKnown := db.ModelPrice(model)
+		_, tierKnown := db.TierPrice(tier)
+		if !modelKnown && !tierKnown {
+			return 0, false
+		}
+		return db.CostForModel(model, tier, nominalTokens, nominalTokens/2), true
+	}
+}
+
+// requirementFor is how sure this dispatch has to be, from the same defect
+// model `hyctl dispatch --confidence` and `hyctl trust defect` read.
+//
+// Personal data is the only risk factor weighed here, and not for want of the
+// others: a blast radius or a production flag raises the target above zero in
+// cmdDispatch, which is what sends the task to the SPRT ensemble instead, so
+// no dispatch carrying one ever reaches this path. Taking a Task here would be
+// a parameter nothing could set.
+func requirementFor(class *policy.Classification) float64 {
+	var t trust.Task
+	if class != nil {
+		t.TouchesPII = class.PII
+	}
+	return trust.NewDefectModel().RequiredConfidence(t)
+}
+
 // explain reports why each candidate ranks where it does, from the same lookup
 // the ordering used. Nil when nothing measured them, so a caller renders the
 // declared score rather than a table of zeroes.
@@ -1501,6 +1601,11 @@ func (d *Dispatcher) logDispatch(r *Result, prompt string, opts Options, actProb
 		}
 		if breadcrumb != "" { // match the omitempty on cost.Row.Config
 			costEntry["config"] = breadcrumb
+		}
+		// The key the candidates were ranked on, from the one derivation that
+		// produced it, so a row cannot name a domain the routing did not use.
+		if dom := routingDomain(opts); dom != "" {
+			costEntry["domain"] = dom
 		}
 		_ = appendJSONL(filepath.Join(logDir, "cost.jsonl"), costEntry)
 	}

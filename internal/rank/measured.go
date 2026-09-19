@@ -55,6 +55,13 @@ type Score struct {
 	// measured, and reporting no evidence for it would be a lie.
 	N        int `json:"n"`
 	InDomain int `json:"in_domain,omitempty"`
+
+	// CostUSD and Clears are set by Cheapest alone: what one nominal call to
+	// this head costs, and whether its measured in-domain competence reached
+	// the requirement. Both stay zero everywhere else, where no requirement
+	// was asked and a false Clears would read as a head that failed one.
+	CostUSD float64 `json:"cost_usd,omitempty"`
+	Clears  bool    `json:"clears,omitempty"`
 }
 
 // Adjusted reports whether measurement moved this head at all.
