@@ -23,6 +23,12 @@ type LocalServer struct {
 	// Tried counts the non-loopback addresses the scan could reach for. At zero
 	// an empty OffHost says nothing at all, which the detail has to admit.
 	Tried int `json:"tried"`
+
+	// AdvisoryState says whether advisories were looked up at all; its zero
+	// value means nobody asked. Advisories being empty is meaningless without
+	// it, which is the difference between clean and unchecked.
+	AdvisoryState AdvisoryState `json:"advisoryState,omitempty"`
+	Advisories    []Advisory    `json:"advisories,omitempty"`
 }
 
 // localServerCheck reports whether the model servers Hydra routes to are

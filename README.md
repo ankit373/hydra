@@ -517,6 +517,35 @@ assertions rather than measurements, defect cost is **per-occurrence and not
 annualised**, a file the dependency graph does not index is **unknown** and never
 "low-risk", and the attestation is **unsigned** because Hydra has no key management.
 
+**The servers it routes to are checked, not taken on trust.** Hydra discovers local model
+servers, ranks them and sends real work to them, so their configuration is part of its own
+posture. Two checks say so rather than assuming it:
+
+```
+Local server exposure      1 exposed
+  ollama 0.9.9 (http://localhost:11435) answers on 192.168.1.15. That address is not
+  loopback, so the server is serving more than this machine, and neither Ollama nor
+  vLLM requires authentication by default
+
+Local server advisories    9 unfixed upstream
+  no upgrade answers these, so the mitigation is not reaching them: CVE-2024-12055,
+  CVE-2024-8063, CVE-2025-0312, and 6 more
+```
+
+Ollama ships with no authentication and prints no warning when bound to `0.0.0.0`, and a
+model server reachable from the network is the one thing that falsifies local-first outright.
+The probe compares the same identity endpoint discovery already uses, between loopback and
+this machine's own addresses, so nothing goes on the wire and an unrelated listener on the
+same port is not mistaken for the model server.
+
+`--advisories` asks OSV about the versions found, and is off by default because it is the only
+part of the report that leaves the machine. Advisories **with** a fix are separated from
+advisories **without** one: upgrading answers the first and cannot answer the second, and a
+fully current Ollama carries nine of the second kind, so a single count would read the same on
+a patched server as on an abandoned one. Both checks state what a negative result does not
+prove: a host firewall that drops the probe is indistinguishable from a server that is not
+listening, and a lookup that failed is unchecked rather than clean.
+
 **The boundary the numbers cannot state.** A CLI-agent head (claude, agy, codex,
 cursor) is itself an agent, with its own filesystem and network access, in a process
 Hydra does not control. Everything scored above is what Hydra *sends and records*;
@@ -818,6 +847,7 @@ hyctl mcp registry clear <server>       # recover a server quarantined in error
 hyctl security                          # what the agents did, and can the record be trusted
 hyctl security --why                    # the full programme: register, coverage, policy, exposure
 hyctl security trifecta                 # private data + untrusted content + egress: which dispatches had all three
+hyctl security --advisories             # ask OSV about the local model server versions found
 hyctl security --attest                 # checkable attestation: posture + evidence + digest
 
 # Editing & batch

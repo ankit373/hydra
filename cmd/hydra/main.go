@@ -2576,7 +2576,7 @@ func cmdMCPRegistry() *cobra.Command {
 // per-head risk, and a short list of honest checks, never a manufactured
 // score, only what's actually configured and observed.
 func cmdSecurity() *cobra.Command {
-	var jsonOut, csvOut, execOut, attestOut, whyOut bool
+	var jsonOut, csvOut, execOut, attestOut, whyOut, advisories bool
 	cmd := &cobra.Command{
 		Use:   "security",
 		Short: "What the agents on this machine did, and whether you need to act",
@@ -2584,7 +2584,13 @@ func cmdSecurity() *cobra.Command {
 			heads := probe.Run(cmd.Context()).Heads
 			// Scanned here rather than inside Build: it is network work, and
 			// this is the command whose job is to go and look (#923).
-			rep, err := security.BuildWith(heads, probe.ScanLocalServers(cmd.Context(), heads))
+			servers := probe.ScanLocalServers(cmd.Context(), heads)
+			// Opt-in, because this is the only part of the report that leaves
+			// the machine, and it names the versions running here (#925).
+			if advisories {
+				servers = probe.LookupAdvisories(cmd.Context(), servers)
+			}
+			rep, err := security.BuildWith(heads, servers)
 			if err != nil {
 				return err
 			}
@@ -2605,6 +2611,7 @@ func cmdSecurity() *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&whyOut, "why", false, "full detail: coverage, controls, policy, exposure, threats, and the risk register")
+	cmd.Flags().BoolVar(&advisories, "advisories", false, "ask OSV about the local model server versions found (the only check that leaves this machine)")
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "machine-readable JSON output")
 	cmd.Flags().BoolVar(&csvOut, "csv", false, "one row per OWASP LLM Top-10 category (id,edition,name,status,gap_age_days,detail)")
 	cmd.Flags().BoolVar(&execOut, "exec", false, "executive summary: the verdict, open risk by severity, and framework exposure")
