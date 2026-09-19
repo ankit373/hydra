@@ -317,27 +317,6 @@ func TestStoredStats_DistinguishesAbsentFromEmpty(t *testing.T) {
 	}
 }
 
-// Encoding is little-endian float32 both ways, so a store written on one run
-// is readable on the next.
-func TestVecRoundTrip(t *testing.T) {
-	in := []float32{0, 1, -1, 0.5, 3.25}
-	out := decodeVec(encodeVec(in))
-	if len(out) != len(in) {
-		t.Fatalf("got %d floats, want %d", len(out), len(in))
-	}
-	for i := range in {
-		if in[i] != out[i] {
-			t.Errorf("element %d: %v != %v", i, out[i], in[i])
-		}
-	}
-	if encodeVec(nil) != "" || decodeVec("") != nil {
-		t.Error("an absent vector did not round-trip as absent")
-	}
-	if decodeVec("not base64 at all!") != nil {
-		t.Error("garbage decoded to a vector")
-	}
-}
-
 // A near hit and a refusal have to move different tallies, or the report
 // cannot say whether the content gate did anything.
 func TestRecord_SeparatesNearHitsFromRefusals(t *testing.T) {

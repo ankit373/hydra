@@ -1500,12 +1500,55 @@ improved against.`,
 			fmt.Printf("\n%s\n", dimStyle.Render(fmt.Sprintf(
 				"a fitted routing choice needs %d examples on each of %d heads: below that it loses to the strongest head",
 				evalset.MinObservationsPerHead, evalset.MinComparableHeads)))
+			fmt.Printf("%s\n", dimStyle.Render(
+				"hyctl eval training asks the other question, whether a prompt classifier could be fitted"))
 			return nil
 		},
 	}
 	readiness.Flags().BoolVar(&jsonOut, "json", false, "machine-readable output")
 
-	cmd.AddCommand(list, stats, readiness)
+	training := &cobra.Command{
+		Use:   "training",
+		Short: "Whether the corpus holds vectors a prompt classifier could be fitted on",
+		RunE: func(_ *cobra.Command, _ []string) error {
+			all, err := evalset.Load(evalset.DefaultPath())
+			if err != nil {
+				return err
+			}
+			tr := evalset.Trainable(all)
+			if jsonOut {
+				raw, _ := json.MarshalIndent(tr, "", "  ")
+				fmt.Println(string(raw))
+				return nil
+			}
+			if len(tr) == 0 {
+				fmt.Printf("No example carries an embedding. %s\n", dimStyle.Render(
+					"one is recorded per validated edit, when an embedding model is on the machine"))
+				fmt.Printf("%s\n", dimStyle.Render("hyctl probe lists what was discovered"))
+				return nil
+			}
+			fmt.Printf("%-34s %6s %8s %7s  %s\n", "EMBEDDING MODEL", "DIM", "VECTORS", "ENUMS", "")
+			for _, s := range tr {
+				note := ""
+				switch {
+				case s.MixedDims:
+					note = "two vector lengths under one model name, these are not comparable"
+				case !s.Separable:
+					note = "one enum only, nothing to choose between"
+				}
+				fmt.Printf("%-34s %6d %8d %7d  %s\n",
+					s.Model, s.Dim, s.Total, len(s.PerEnum), dimStyle.Render(note))
+			}
+			if len(tr) > 1 {
+				fmt.Printf("\n%s\n", dimStyle.Render(
+					"two models are two corpora: a vector from one is not comparable to a vector from the other"))
+			}
+			return nil
+		},
+	}
+	training.Flags().BoolVar(&jsonOut, "json", false, "machine-readable output")
+
+	cmd.AddCommand(list, stats, readiness, training)
 	return cmd
 }
 

@@ -419,8 +419,11 @@ func runEditTask(ctx context.Context, d *dispatch.Dispatcher, dispatchErr error,
 			// is recorded first, because the rollback below discards the content
 			// the verdict is about.
 			if rc != 0 {
-				editor.RecordVerifiedEdit(task.Prompt, file, task.Enum, dispResult.Head.ID,
-					newContent, false, "validation_failed")
+				editor.RecordVerifiedEdit(ctx, d.Embedder(), editor.VerifiedEdit{
+					Prompt: task.Prompt, File: file, Enum: task.Enum,
+					Head: dispResult.Head.ID, Candidate: newContent,
+					Passed: false, Detail: "validation_failed",
+				})
 				rollback(file, origContent, origExisted, resolved.GitRoot, backup)
 				return mustMarshal(EditResult{
 					Label: task.Label, Enum: task.Enum, Mode: "edit",
@@ -428,8 +431,10 @@ func runEditTask(ctx context.Context, d *dispatch.Dispatcher, dispatchErr error,
 					ValidatorPassed: validatorPassed, RolledBack: true, Error: "validation_failed",
 				})
 			}
-			editor.RecordVerifiedEdit(task.Prompt, file, task.Enum, dispResult.Head.ID,
-				newContent, true, "")
+			editor.RecordVerifiedEdit(ctx, d.Embedder(), editor.VerifiedEdit{
+				Prompt: task.Prompt, File: file, Enum: task.Enum,
+				Head: dispResult.Head.ID, Candidate: newContent, Passed: true,
+			})
 		}
 	}
 

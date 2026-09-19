@@ -323,10 +323,25 @@ type Dispatcher struct {
 	cacheOnce sync.Once
 	answers   *cache.Store
 	answerEmb embed.Embedder
+
+	// corpusEmb embeds a task for the verified-example corpus. Its own rather
+	// than answerEmb, which exists only while the answer cache is open:
+	// recording what a verdict judged is a different decision from caching an
+	// answer, and someone who turned on neither should still get the first.
+	corpusOnce sync.Once
+	corpusEmb  embed.Embedder
 }
 
 // Heads returns the probed head list for external callers (e.g. swarm).
 func (d *Dispatcher) Heads() []provider.Head { return d.heads }
+
+// Embedder resolves the machine's embedding model once, for a caller that
+// needs a vector rather than an answer. Never nil; with no model on the machine
+// it reports itself unavailable, so callers keep one code path.
+func (d *Dispatcher) Embedder() embed.Embedder {
+	d.corpusOnce.Do(func() { d.corpusEmb = embed.Resolve(d.heads, d.cfg.EmbedModel) })
+	return d.corpusEmb
+}
 
 // PIILocalOnly reports whether the configured pii policy forces local-only
 // routing. Exported so callers that bypass Dispatch, the SPRT/swarm branches

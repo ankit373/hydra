@@ -14,6 +14,7 @@ import (
 	"github.com/ankit373/hydra/internal/evalset"
 	"github.com/ankit373/hydra/internal/rollup"
 	"github.com/ankit373/hydra/internal/sketch"
+	"github.com/ankit373/hydra/internal/util"
 )
 
 // seedExamples writes a small corpus through the real Add, so the test sees
@@ -410,5 +411,73 @@ func TestTruncateMiddle(t *testing.T) {
 	long := truncateMiddle("anthropic/claude-sonnet-5-20260101", 20)
 	if len([]rune(long)) != 20 {
 		t.Errorf("truncated to %d runes, want exactly 20", len([]rune(long)))
+	}
+}
+
+func seedVectored(t *testing.T, enum, model string, dim, n int) {
+	t.Helper()
+	vec := make([]float32, dim)
+	for i := range vec {
+		vec[i] = float32(i)
+	}
+	for i := 0; i < n; i++ {
+		_, err := evalset.Add(evalset.DefaultPath(), evalset.Example{
+			Domain: "go", Source: "editor:validator", Enum: enum, Head: "head-a",
+			Candidate:  fmt.Sprintf("package %s%s%d", enum, model, i),
+			Passed:     true,
+			Embedding:  util.EncodeVec(vec),
+			EmbedModel: model,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// A corpus with no embeddings is the normal state of a fresh machine, and it
+// has to say what would produce one rather than print an empty table.
+func TestCLI_EvalTrainingOnAnEmptyCorpusSaysWhatFillsIt(t *testing.T) {
+	cliSandbox(t)
+	out, _, err := run(t, "eval", "training")
+	if err != nil {
+		t.Fatalf("eval training on an empty corpus errored: %v", err)
+	}
+	if !strings.Contains(out, "embedding model") {
+		t.Errorf("the empty view does not say what produces a vector:\n%s", out)
+	}
+}
+
+// Vectors from two models are two corpora. The view must show them apart, or a
+// reader adds them up and fits on a comparison that is not defined.
+func TestCLI_EvalTrainingKeepsTwoModelsApart(t *testing.T) {
+	cliSandbox(t)
+	seedVectored(t, "SIMPLE", "model-a", 4, 3)
+	seedVectored(t, "COMPLEX", "model-a", 4, 2)
+	seedVectored(t, "SIMPLE", "model-b", 8, 1)
+
+	out, _, err := run(t, "eval", "training", "--json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []evalset.TrainStat
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("eval training --json is not valid JSON: %v\n%s", err, out)
+	}
+	if len(got) != 2 {
+		t.Fatalf("got %d models, want 2: %+v", len(got), got)
+	}
+	if got[0].Model != "model-a" || got[0].Total != 5 || !got[0].Separable {
+		t.Errorf("model-a: %+v", got[0])
+	}
+	if got[1].Separable {
+		t.Errorf("a single-enum model read as separable: %+v", got[1])
+	}
+
+	text, _, err := run(t, "eval", "training")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(text, "model-a") || !strings.Contains(text, "model-b") {
+		t.Errorf("the table does not name both models:\n%s", text)
 	}
 }
