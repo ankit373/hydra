@@ -160,12 +160,17 @@ func (s *litellmService) unreadableHead(err error) provider.Head {
 func (s *litellmService) head(m litellmModel, caps *capabilities.DB) provider.Head {
 	upstream := m.ModelInfo.Provider
 	local := litellmLocalUpstreams[upstream]
+	id := "litellm/" + m.ModelName
 
 	meta := map[string]string{
 		// The alias the proxy routes on, which is what a request must name.
 		// Also what keeps these heads distinct through rank's per-provider
 		// dedup, the same mechanism the OpenRouter allowlist uses (#752).
 		"model": m.ModelName,
+		// Where the score came from. The other three local paths report this
+		// and this one did not, so every proxied model counted as unclassified
+		// in the AI-BOM whatever the catalog or the overlay said about it.
+		"model_source": caps.SourceLocal(id, upstreamModelID(m)),
 	}
 	if upstream != "" {
 		meta["litellm_upstream"] = upstream
@@ -188,7 +193,7 @@ func (s *litellmService) head(m litellmModel, caps *capabilities.DB) provider.He
 	}
 
 	return provider.Head{
-		ID:       "litellm/" + m.ModelName,
+		ID:       id,
 		Name:     m.ModelName + " (LiteLLM)",
 		Provider: "litellm",
 		Source:   "port",
@@ -196,7 +201,7 @@ func (s *litellmService) head(m litellmModel, caps *capabilities.DB) provider.He
 		// Scored on the model the proxy actually calls, not on the alias: an
 		// alias is whatever the operator typed, so scoring it would give every
 		// model behind a proxy the same default.
-		CapScore:  caps.ScoreOllama(upstreamModelID(m)),
+		CapScore:  caps.ScoreLocal(id, upstreamModelID(m)),
 		LocalOnly: local,
 		AuthReady: true,
 		Meta:      meta,
