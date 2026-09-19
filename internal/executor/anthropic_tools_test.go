@@ -373,14 +373,14 @@ func TestAnthropic_StreamedAndBufferedAgreeOnTheSameCall(t *testing.T) {
 // dialect: the list is the claim, and a dialect that maps tools without being
 // added here is a capability nothing can reach.
 func TestCanUseTools_NamesEveryDialectThatMapsThem(t *testing.T) {
-	for _, p := range []string{"anthropic", "google", "bedrock"} {
+	for _, p := range []string{"anthropic", "google", "bedrock", "cohere"} {
 		if !CanUseTools(head(p)) {
 			t.Errorf("%s maps tools but heads of that provider are still skipped", p)
 		}
 	}
-	for _, p := range []string{"cohere", "replicate"} {
-		if CanUseTools(head(p)) {
-			t.Errorf("%s reports it can carry tools, but nothing maps them yet", p)
-		}
+	// Replicate polls rather than chats and has no tool surface at all, so it
+	// is the one head a tool-carrying dispatch still has to skip.
+	if CanUseTools(head("replicate")) {
+		t.Error("replicate reports it can carry tools, but its API has none")
 	}
 }
