@@ -559,3 +559,48 @@ func TestPrintVet_NoEnsembleOffersNoCommand(t *testing.T) {
 		t.Errorf("a single-dispatch run offered to train from a run it never recorded:\n%s", buf.String())
 	}
 }
+
+// With calibration present the ensemble runs, and the run it records has to be
+// reachable afterwards: without the task hash on the result, the ledger of who
+// voted is written and nothing can ever attach a verdict to it.
+func TestReviewEnsemble_RecordsAReachableRun(t *testing.T) {
+	dispatchable(t, `[{"line":1,"severity":"blocking","title":"a defect"}]`)
+
+	cal, err := trust.New(trust.DefaultPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Enough for the head to carry evidence at all; the run need not clear its
+	// bar, only be recorded.
+	for i := 0; i < 3; i++ {
+		if err := cal.Update("cody", "go", true, trust.OutcomeCorrect); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := cal.Update("cody", "go", false, trust.OutcomeIncorrect); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx := context.Background()
+	d, err := dispatch.New(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+
+	const prompt = "review this diff"
+	r := vetRouter{d: d, sw: swarm.New(d, d.Heads(), d), floor: 0.6, graphPath: "graph.json"}
+	ans, err := r.reviewEnsemble(ctx, prompt, "go", "a.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ans.TaskHash == "" {
+		t.Fatal("the ensemble recorded a ledger no verdict can ever reach")
+	}
+	if ans.TaskHash != trust.TaskHash(prompt) {
+		t.Errorf("task hash %q does not identify this run's prompt", ans.TaskHash)
+	}
+	if !ans.Bar.Set() {
+		t.Error("no bar was demanded of the file")
+	}
+}
