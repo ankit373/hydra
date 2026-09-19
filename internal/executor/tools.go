@@ -96,10 +96,26 @@ func (t *toolCallStream) add(frag ToolCall) {
 	if frag.Type != "" {
 		c.Type = frag.Type
 	}
-	if frag.Function.Name != "" {
-		c.Function.Name = frag.Function.Name
-	}
+	c.Function.Name = foldName(c.Function.Name, frag.Function.Name)
 	c.Function.Arguments += frag.Function.Arguments
+}
+
+// foldName continues a name across fragments, the way the arguments beside it
+// are continued, but keeps a repeat rather than doubling it.
+//
+// Assigning instead would only ever protect a server that restates the whole
+// name on every fragment, and such a server restates the arguments too, which
+// concatenate into something no client can parse. So it was not buying that
+// case and was losing the split one outright: "get_wea" then "ther" arrived as
+// "ther", and an agent asked for a tool its client does not have.
+//
+// A server that sends the name once, which is what OpenAI does, carries no name
+// on its later fragments and is untouched either way.
+func foldName(have, frag string) string {
+	if frag == "" || frag == have {
+		return have
+	}
+	return have + frag
 }
 
 // find returns the call frag continues, searching backwards so the newest call

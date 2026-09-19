@@ -241,3 +241,50 @@ func TestHTTPStream_AgreesWithTheBufferedPathOnTheSameCall(t *testing.T) {
 			buffered.FinishReason, streamed.FinishReason)
 	}
 }
+
+// A name split the way the arguments beside it are split has to fold, or the
+// agent asks for a tool whose name is only its own last fragment.
+func TestHTTPStream_ReassemblesANameSplitAcrossChunks(t *testing.T) {
+	srv := newToolSSEServer(t, []string{
+		toolChunk(`{"tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"get_wea","arguments":"{\"ci"}}]}`),
+		toolChunk(`{"tool_calls":[{"index":0,"function":{"name":"ther","arguments":"ty\":\"Paris\"}"}}]}`),
+	})
+	resp := streamOnce(t, srv, Request{Prompt: "p", Tools: []ToolDef{weatherTool}})
+
+	if len(resp.ToolCalls) != 1 {
+		t.Fatalf("got %d calls, want 1: %+v", len(resp.ToolCalls), resp.ToolCalls)
+	}
+	if got := resp.ToolCalls[0].Function.Name; got != "get_weather" {
+		t.Errorf("name folded to %q, want get_weather", got)
+	}
+}
+
+// A server that restates the whole name on every fragment must not have it
+// doubled. Its arguments are what say the two fragments are one call.
+func TestHTTPStream_ARestatedNameIsNotDoubled(t *testing.T) {
+	srv := newToolSSEServer(t, []string{
+		toolChunk(`{"tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"get_weather","arguments":"{\"city\":"}}]}`),
+		toolChunk(`{"tool_calls":[{"index":0,"function":{"name":"get_weather","arguments":"\"Paris\"}"}}]}`),
+	})
+	resp := streamOnce(t, srv, Request{Prompt: "p", Tools: []ToolDef{weatherTool}})
+
+	if len(resp.ToolCalls) != 1 {
+		t.Fatalf("got %d calls, want 1: %+v", len(resp.ToolCalls), resp.ToolCalls)
+	}
+	if got := resp.ToolCalls[0].Function.Name; got != "get_weather" {
+		t.Errorf("name folded to %q, want get_weather", got)
+	}
+}
+
+// The shape OpenAI itself sends: the name once, complete, then arguments only.
+func TestHTTPStream_ANameSentOnceIsKept(t *testing.T) {
+	srv := newToolSSEServer(t, []string{
+		toolChunk(`{"tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"get_weather","arguments":""}}]}`),
+		toolChunk(`{"tool_calls":[{"index":0,"function":{"arguments":"{\"city\":\"Paris\"}"}}]}`),
+	})
+	resp := streamOnce(t, srv, Request{Prompt: "p", Tools: []ToolDef{weatherTool}})
+
+	if len(resp.ToolCalls) != 1 || resp.ToolCalls[0].Function.Name != "get_weather" {
+		t.Errorf("the ordinary shape did not survive: %+v", resp.ToolCalls)
+	}
+}
