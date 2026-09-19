@@ -5,7 +5,10 @@ package main
 import (
 	"context"
 	"fmt"
+	"strings"
 
+	"github.com/ankit373/hydra/internal/config"
+	"github.com/ankit373/hydra/internal/evalset"
 	"github.com/ankit373/hydra/internal/oracle"
 	"github.com/ankit373/hydra/internal/runlog"
 	"github.com/ankit373/hydra/internal/swarm"
@@ -56,6 +59,11 @@ func verifyAndScoreRun(ctx context.Context, res *swarm.SPRTResult, runID, taskID
 		fmt.Printf("  %s\n", dimStyle.Render("span score: "+err.Error()))
 	}
 
+	// An oracle verdict on a real candidate is a labelled example, and the
+	// rarest thing Hydra produces. Filed before calibration, which returns early
+	// on its own errors and would otherwise drop the corpus entry with it (#969).
+	fileExample(res, v, src, domain)
+
 	cal, err := trust.New(trust.DefaultPath())
 	if err != nil {
 		fmt.Printf("  %s\n", dimStyle.Render("calibration: "+err.Error()))
@@ -68,4 +76,47 @@ func verifyAndScoreRun(ctx context.Context, res *swarm.SPRTResult, runID, taskID
 	}
 	fmt.Printf("  %s\n", dimStyle.Render(fmt.Sprintf(
 		"trained %d source(s) in %q · hyctl trust calibration", n, trust.Domain(domain))))
+}
+
+// fileExample records the verified answer in the eval set, the only corpus the
+// router can be improved against. Until #969 this path computed ground truth and
+// discarded it, so the store had one writer: `hyctl oracle verify --candidate`.
+func fileExample(res *swarm.SPRTResult, v oracle.Verdict, src, domain string) {
+	cand := res.Trust.Candidate
+	if strings.TrimSpace(cand) == "" {
+		return
+	}
+	breadcrumb, _ := config.Breadcrumb()
+	added, err := evalset.Add(evalset.DefaultPath(), evalset.Example{
+		Domain: domain, Source: src, Candidate: cand,
+		Passed: v.Passed, Detail: v.Detail, Config: breadcrumb,
+		Enum: res.Enum, Tier: res.Tier, Head: soleAuthor(res.Attempts, cand),
+	})
+	switch {
+	case err != nil:
+		// Never fail a verification because its example could not be filed;
+		// report it, so the loss is visible rather than silent.
+		fmt.Printf("  %s\n", dimStyle.Render("eval set: "+err.Error()))
+	case added:
+		fmt.Printf("  %s\n", dimStyle.Render("recorded to the eval set"))
+	}
+}
+
+// soleAuthor names the head whose output *is* the verified answer, and only when
+// one head produced it. Agreement is the point of an ensemble, so two heads
+// returning byte-identical text leaves the example genuinely unattributed rather
+// than credited to whichever was sampled first. Answers judged equivalent but
+// textually different are not this case: the text that was verified had one author.
+func soleAuthor(attempts []swarm.Attempt, candidate string) string {
+	id := ""
+	for _, a := range attempts {
+		if a.Output != candidate {
+			continue
+		}
+		if id != "" {
+			return ""
+		}
+		id = a.Head.ID
+	}
+	return id
 }

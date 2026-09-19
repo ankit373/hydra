@@ -25,6 +25,12 @@ type SPRTResult struct {
 	Domain   string
 	Prompt   string
 	Target   float64 // requested target confidence
+
+	// Enum and Tier are the routing decision this run was made under, carried
+	// so a verdict on the answer can be filed against it. routing.yaml is
+	// editable, so the map in force when the heads ran is not recoverable later.
+	Enum string
+	Tier int
 }
 
 // RunSPRT routes a prompt through the SPRT optimal-stopping ensemble: it samples
@@ -125,7 +131,13 @@ func (s *Swarm) RunSPRT(ctx context.Context, prompt string, opts Options) (*SPRT
 	// would record that N heads ran but not what their evidence did (#204).
 	logSamples(res.Ledger, adapter.attempts, opts)
 
-	return &SPRTResult{Trust: res, Attempts: adapter.attempts, Domain: domain, Prompt: prompt, Target: opts.Confidence}, nil
+	// validateSwarmTiers already rejected an unresolvable hint above, so this
+	// cannot fail; an empty hint resolves to 0, which is "unrouted", not tier 0.
+	tier, _ := dispatch.ResolveTier(opts.tier())
+	return &SPRTResult{
+		Trust: res, Attempts: adapter.attempts, Domain: domain, Prompt: prompt,
+		Target: opts.Confidence, Enum: opts.Enum, Tier: tier,
+	}, nil
 }
 
 // sprtExecutor adapts the swarm's per-head execution to the trust.Executor
