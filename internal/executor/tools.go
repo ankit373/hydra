@@ -54,8 +54,8 @@ type ToolCallFunction struct {
 // CanUseTools reports whether a head can be sent function definitions and
 // answer with structured calls.
 //
-// The OpenAI-compatible path, Anthropic and Gemini carry them. Cohere and
-// Bedrock each shape tools differently, and Replicate polls rather than chats.
+// The OpenAI-compatible path, Anthropic, Gemini and Bedrock carry them. Cohere
+// shapes tools differently, and Replicate polls rather than chats.
 // The predicate exists so a dispatch can skip a head that cannot, because a
 // silently dropped tool array is not a degraded answer: the caller's agent loop
 // never terminates, and every round looks like the model simply declining.
@@ -64,9 +64,9 @@ func CanUseTools(h provider.Head) bool {
 		return false
 	}
 	switch h.Provider {
-	case "anthropic", "google":
+	case "anthropic", "google", "bedrock":
 		return true
-	case "cohere", "bedrock", "replicate":
+	case "cohere", "replicate":
 		return false
 	}
 	_, err := openAICompatConfigFor(h)
