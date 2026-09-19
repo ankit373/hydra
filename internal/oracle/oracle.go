@@ -260,6 +260,48 @@ func LLR(cal *trust.Calibrator, source, domain string, v Verdict) float64 {
 	return cal.LLR(source, domain, v.Passed)
 }
 
+// Measured reports whether this source has the recorded history to state an
+// evidence strength at all, and says what is missing when it does not.
+//
+// LLR always returns a number, because the Beta priors always yield one. That
+// number is a statement about a source nobody has observed, and it reads
+// exactly like a measured one. Two cases have to be told apart from a real
+// measurement:
+//
+//   - no observations at all, where the answer is the prior
+//   - observations but no negative, where specificity cannot exceed 0.5 and
+//     the LLR stays under ln 2 however many positives arrive. That is #771's
+//     defect, and it looks like evidence accumulating when it is not.
+//
+// A caller that reports strength should print what this returns instead of a
+// number when it is false, the way internal/mcpregistry renders a category it
+// could not evaluate.
+func Measured(cal *trust.Calibrator, source, domain string) (bool, string) {
+	if cal == nil {
+		return false, "no calibration store"
+	}
+	// Through trust.Domain, because the store writes under it. Comparing the
+	// caller's raw value against a normalized one is the half-normalized key
+	// again: an unspecified domain is filed as "default" and looked up as "",
+	// so a source with a full history reads as never observed (#888).
+	want := trust.Domain(domain)
+	for _, st := range cal.Report() {
+		if st.Source != source || st.Domain != want {
+			continue
+		}
+		if st.N == 0 {
+			break
+		}
+		if st.Neg == 0 {
+			return false, fmt.Sprintf(
+				"%.0f observations but no negative: specificity cannot exceed 0.5 and the evidence "+
+					"stays under ln 2 however many more arrive", st.N)
+		}
+		return true, ""
+	}
+	return false, "nothing recorded for this source yet"
+}
+
 func firstLine(s string) string {
 	s = strings.TrimSpace(s)
 	if i := strings.IndexByte(s, '\n'); i >= 0 {

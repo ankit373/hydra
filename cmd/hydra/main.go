@@ -2133,7 +2133,7 @@ func cmdOracle() *cobra.Command {
 	verify.Flags().StringVar(&scoreSpan, "span", "", "span this verdict judges, so `hyctl trace view` can show it")
 	verify.Flags().StringVar(&enumKey, "enum", "", "routing enum this verdict judges (default: read from --span)")
 	verify.Flags().IntVar(&tierNum, "tier", 0, "tier this verdict judges (default: read from --span)")
-	cmd.AddCommand(verify)
+	cmd.AddCommand(verify, cmdOracleGround())
 	return cmd
 }
 
