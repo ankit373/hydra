@@ -44,6 +44,7 @@ floor internal/awsconf              85
 floor internal/budget               92
 floor internal/capabilities         90
 floor internal/config               84
+floor internal/cache                85
 floor internal/cost                 91
 floor internal/diff                 92
 floor internal/dispatch             89

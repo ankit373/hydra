@@ -40,6 +40,7 @@ const (
 	stepPrivacy             // does the user need local-only routing for PII?
 	stepCapture             // store prompt/response text, or only the statistics?
 	stepEmbed               // store a vector per dispatch?
+	stepCache               // answer a repeated dispatch from the previous one?
 	stepSkills              // which skills to enable
 	stepDone                // confirmation screen
 )
@@ -55,6 +56,7 @@ type InitModel struct {
 	localOnly bool
 	capture   bool
 	embed     bool
+	cache     bool
 	skills    []string
 	err       error
 
@@ -127,6 +129,13 @@ func (m InitModel) confirm() (tea.Model, tea.Cmd) {
 		// is not plaintext, but inversion attacks recover approximate text from
 		// one, so it is not a thing to inherit by pressing enter.
 		m.embed = m.cursor == 1
+		m.step = stepCache
+		m.cursor = 0
+
+	case stepCache:
+		// "No" first, and for a stronger reason than the two before it: those
+		// store what happened, this one changes what comes back.
+		m.cache = m.cursor == 1
 		m.step = stepSkills
 		m.skills = defaultSkills(m.cortex)
 		m.cursor = 0
@@ -146,7 +155,7 @@ func (m InitModel) maxCursor() int {
 	switch m.step {
 	case stepCortex:
 		return len(m.result.Heads) - 1
-	case stepPrivacy, stepCapture, stepEmbed:
+	case stepPrivacy, stepCapture, stepEmbed, stepCache:
 		return 1
 	}
 	return 0
@@ -169,6 +178,8 @@ func (m InitModel) View() string {
 		m.viewCapture(&b)
 	case stepEmbed:
 		m.viewEmbed(&b)
+	case stepCache:
+		m.viewCache(&b)
 	case stepSkills:
 		m.viewSkills(&b)
 	case stepDone:
@@ -291,6 +302,25 @@ func (m InitModel) viewEmbed(b *strings.Builder) {
 		"  budget, oldest first. With no embedding model this stays off.\n"))
 }
 
+func (m InitModel) viewCache(b *strings.Builder) {
+	b.WriteString(sPrompt.Render("  Answer a repeated question from the last answer?\n\n"))
+	opts := []string{
+		"No , always ask a head (recommended)",
+		"Yes, reuse the answer when the question is the same",
+	}
+	for i, opt := range opts {
+		if i == m.cursor {
+			b.WriteString(sSelected.Render("  › "+opt) + "\n")
+		} else {
+			b.WriteString(sDim.Render("    "+opt) + "\n")
+		}
+	}
+	b.WriteString(sHint.Render("\n  This is the only setting here that changes what you get back.\n" +
+		"  The same question word for word is always safe; anything else has\n" +
+		"  to be about exactly the same things, and a prompt carrying personal\n" +
+		"  data is never answered from the cache at all.\n"))
+}
+
 func (m InitModel) viewSkills(b *strings.Builder) {
 	b.WriteString(sPrompt.Render("  Skills enabled for your setup:\n\n"))
 	for _, s := range m.skills {
@@ -327,6 +357,7 @@ func (m InitModel) save() error {
 	}
 	cfg.CapturePayloads = m.capture
 	cfg.CaptureEmbeddings = m.embed
+	cfg.CacheAnswers = m.cache
 	return config.Save(cfg)
 }
 

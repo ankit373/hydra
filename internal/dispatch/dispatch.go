@@ -20,9 +20,11 @@ import (
 
 	"github.com/ankit373/hydra/internal/a2a"
 	"github.com/ankit373/hydra/internal/budget"
+	"github.com/ankit373/hydra/internal/cache"
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/cost"
 	"github.com/ankit373/hydra/internal/egress"
+	"github.com/ankit373/hydra/internal/embed"
 	"github.com/ankit373/hydra/internal/executor"
 	"github.com/ankit373/hydra/internal/health"
 	"github.com/ankit373/hydra/internal/ledger"
@@ -103,6 +105,12 @@ type Options struct {
 	// that have no --confidence to apply and no blast radius to supply.
 	Decision *signals.Decision
 
+	// NoCache refuses to answer this dispatch from an earlier one, and refuses
+	// to store its answer for a later one. For a caller whose prompt only
+	// looks repeatable: a swarm judge weighing two candidate answers is asking
+	// about those answers, not about the question they answer.
+	NoCache bool
+
 	// AnsweredHead is the head a human has already approved for this task, set
 	// only by Resume. An Ask verdict counts as approval for that head alone,
 	// approving one head must never authorize a different one, or a resume
@@ -162,6 +170,12 @@ type Result struct {
 	// set only when the cost constraint was the thing that ordered the
 	// candidates. Zero means it did not run, never that nothing was demanded.
 	Requirement float64
+
+	// Cache is the stored answer this result was served from, nil when a head
+	// actually ran. Callers label it rather than passing it off as fresh work:
+	// an answer nobody just produced is a different thing from one somebody
+	// did, however identical the text.
+	Cache *cache.Hit
 
 	*executor.Response
 }
@@ -302,6 +316,13 @@ type Dispatcher struct {
 	// most once, by recorder(), and drained by Close.
 	recallOnce sync.Once
 	recall     *retrieve.Recorder
+
+	// answers serves a dispatch from an earlier one when the cache is on, with
+	// answerEmb embedding prompts for the near-match path. Both nil when it is
+	// off, which is the default and the whole off switch.
+	cacheOnce sync.Once
+	answers   *cache.Store
+	answerEmb embed.Embedder
 }
 
 // Heads returns the probed head list for external callers (e.g. swarm).
@@ -507,6 +528,18 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		return nil, fmt.Errorf("dispatch denied by policy: %s", action.Reason)
 	}
 
+	// After the policy, before any head: a denied prompt stays denied, and a
+	// served one costs nothing at all. The outcome is carried to the dry run
+	// as well, so a preview that would be answered from the cache says so
+	// instead of naming a head that would never run (#167).
+	cached, consulted := d.fromCache(ctx, prompt, opts, class)
+	if consulted && !opts.DryRun {
+		d.recordLookup(cached)
+	}
+	if cached.Found && !opts.DryRun {
+		return d.serveCached(opts, cached), nil
+	}
+
 	localOnly := action.LocalOnly || opts.LocalOnly
 
 	// Classify where every span of the outgoing payload came from, before head
@@ -595,10 +628,16 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 	if opts.DryRun {
 		// Why this order, not just what it is: a reordering the user cannot
 		// see the evidence for is indistinguishable from an arbitrary one.
-		return &Result{
+		r := &Result{
 			Head: candidates[0], Fallbacks: candidates[1:],
 			Domain: domain, Scores: scores, Requirement: requirement,
-		}, nil
+		}
+		if cached.Found {
+			// Named, not served: a dry run runs nothing, including the cache,
+			// so nothing is counted and no answer is handed back.
+			r.Cache = &cached.Hit
+		}
+		return r, nil
 	}
 
 	// The run log records the shape of the run, which head was picked, when,
@@ -818,6 +857,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		recordContextEcho(resp.Output, hiddenContextFor(opts, handoffText), h)
 		inRef, outRef := d.capturePayloads(prompt, opts, resp)
 		d.captureRecall(span, prompt)
+		d.remember(ctx, prompt, opts, class, r, d.estimateCost(tier, resp.InputTokens, resp.OutputTokens))
 		_ = rl.Append(runlog.Event{
 			Kind: runlog.KindDispatchFinished, TaskID: taskID,
 			SpanID: span, ParentSpanID: taskSpan,

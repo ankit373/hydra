@@ -109,6 +109,12 @@ const (
 	// KindScore is a verdict on a span, appended after it closes. See score.go.
 	KindScore Kind = "score"
 
+	// KindCacheHit is an answer served from a previous dispatch. Its own kind
+	// rather than a dispatch with zero cost: no head ran, nothing was
+	// committed, and a reader that counted it as a dispatch would be measuring
+	// the cache as though it were a model.
+	KindCacheHit Kind = "cache_hit"
+
 	KindError Kind = "error"
 )
 
