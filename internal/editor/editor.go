@@ -222,12 +222,12 @@ func Edit(ctx context.Context, req Request) (*Result, error) {
 				rollback(req.File, origContent, origExisted, resolved.GitRoot, backup)
 				return nil, fmt.Errorf("validating %s: %w", req.File, verr)
 			}
-			recordValidationOutcome(dispResult.Head.ID, trust.DomainForFile(req.File), vrc == 0)
 			// The validator ran against the file this edit had already written,
 			// so unlike a dispatch's verdict this one judges the candidate and
 			// is ground truth (#986). Filed here, before the rollback below
 			// discards the content it is about.
-			recordVerifiedExample(req, dispResult.Head.ID, newContent, vrc == 0, firstLine(vout))
+			RecordVerifiedEdit(req.Prompt, req.File, req.Enum, dispResult.Head.ID,
+				newContent, vrc == 0, firstLine(vout))
 			if vrc != 0 {
 				validatorPassed = false
 				rollback(req.File, origContent, origExisted, resolved.GitRoot, backup)
@@ -306,26 +306,34 @@ func recordValidationOutcome(headID, domain string, passed bool) {
 	_ = cal.Update(headID, domain, true, outcome)
 }
 
-// recordVerifiedExample files the edit in the eval set, the corpus the router is
-// fitted against. Only ever called where the validator actually ran: an
-// unconfigured validator leaves validatorPassed true having checked nothing, and
-// filing that as a pass is the mislabelling #982 removed from the dispatch path.
-func recordVerifiedExample(req Request, headID, candidate string, passed bool, detail string) {
+// RecordVerifiedEdit is the one place both edit paths record what a validated
+// edit taught: the calibration outcome and the eval-set example. `hyctl parallel`
+// keeps its own edit mechanics by design, but sharing this is what stops the two
+// drifting, which they already had: parallel never trained the calibrator at
+// all (#999).
+//
+// Only ever call it where the validator actually ran. An extension with no
+// validator configured leaves an edit passing with nothing having checked it,
+// and recording that is the mislabelling #982 removed from the dispatch path.
+func RecordVerifiedEdit(prompt, file, enum, headID, candidate string, passed bool, detail string) {
+	recordValidationOutcome(headID, trust.DomainForFile(file), passed)
 	if strings.TrimSpace(candidate) == "" {
 		return
 	}
 	breadcrumb, _ := config.Breadcrumb()
-	if _, err := evalset.Add(evalset.DefaultPath(), evalset.Example{
-		TaskHash:  evalset.TaskHashFor(req.Prompt),
-		Domain:    trust.DomainForFile(req.File),
+	// Never fail an edit because its example could not be filed. The edit is the
+	// work; the corpus entry is a record of it.
+	_, _ = evalset.Add(evalset.DefaultPath(), evalset.Example{
+		TaskHash:  evalset.TaskHashFor(prompt),
+		Domain:    trust.DomainForFile(file),
 		Source:    "editor:validator",
-		Candidate: candidate, Passed: passed, Detail: detail,
-		Enum: req.Enum, Head: headID, Config: breadcrumb,
-	}); err != nil {
-		// Never fail an edit because its example could not be filed. The edit is
-		// the work; the corpus entry is a record of it.
-		_ = err
-	}
+		Candidate: candidate,
+		Passed:    passed,
+		Detail:    detail,
+		Enum:      enum,
+		Head:      headID,
+		Config:    breadcrumb,
+	})
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
