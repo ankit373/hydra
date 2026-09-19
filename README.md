@@ -472,6 +472,29 @@ hyctl dispatch --dry-run "write a SQL migration"
 hyctl dispatch --local "write unit tests for this function"
 ```
 
+### 📺 Output as It Arrives
+
+A dispatch renders while the model writes it, on every surface: the CLI, the `hyctl tui` cockpit,
+the desktop app, and a swarm fan-out. Seven executor paths stream natively, the OpenAI-compatible
+wire shape (and Azure, which shares it), Anthropic, Gemini, Cohere, Bedrock over its binary event
+stream, Ollama, and the agy CLI. Replicate is the one that does not: its prediction API polls, so
+there is nothing to read incrementally.
+
+A head that cannot stream is not a second code path. `executor.Stream` delivers its whole output as
+one delta, so a surface is written once and the two kinds cannot drift apart in how they render.
+
+When the router falls back mid-answer, the abandoned partial does not stay on screen pretending to
+be the answer. It collapses to one line naming the head, roughly how much it wrote and why it
+stopped, and expands if you want to read it:
+
+```
+⤺ abandoned  openrouter/gpt after ~212 chars: 429 rate limited
+    hyctl trace view run-7f2a --span 9c1d4e02
+```
+
+That command is only offered when payload capture is on. Without it the span exists but stores no
+text, and pointing you at an empty page would be worse than saying nothing.
+
 ### 🐝 Swarm Dispatch
 
 Fan a single prompt out to multiple heads at once, then keep the best answer:
@@ -1077,6 +1100,8 @@ hydra/
 │   ├── ope/                     # Off-policy estimation + counterfactual policy evaluation with intervals
 │   ├── otlp/                    # Dispatch log → OpenTelemetry spans (OTLP/HTTP, nothing sent by default)
 │   ├── sketch/                  # Mergeable relative-error quantile sketch (bounded memory)
+│   ├── embed/                   # Vectors from an embedding model already on the machine
+│   ├── retrieve/                # Hybrid recall: BM25 ⊕ vectors, fused on rank, not on score
 │   ├── rollup/                  # Per-day aggregates: calls, tokens, spend, latency sketch
 │   ├── evalset/                 # Oracle-verified labelled examples: verbatim, never pruned, never uploaded
 │   ├── budget/                  # Token-budget governor: 6 static pressure modes + rate-aware first-passage risk on claude_pct
