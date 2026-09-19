@@ -96,6 +96,7 @@ floor internal/sandbox              86
 floor internal/security             85
 floor internal/shellpath            84
 floor internal/signals              90
+floor internal/serve                 88
 floor internal/sketch               91
 floor internal/swarm                89
 floor internal/sysinfo              82

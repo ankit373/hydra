@@ -75,6 +75,8 @@
       "Local Ollama + cloud model hybrid, provider-neutral discovery",
       "hyctl vet, reviews a diff and says what is wrong with it: open-code-review resolves which files are worth reviewing and by what rules with no model and no spend, and Hydra routes each file to a Head of its own, so cost, policy, fallback and per-domain calibration all apply",
       "hyctl vet refuses to guess: an unreadable reply is reported as unreadable rather than as a clean file, a finding naming a file the Head was never shown is discarded, and it exits 3 on a blocking finding so a script can gate on it",
+      "hyctl serve, an OpenAI-compatible endpoint in front of the router, so any tool that speaks OpenAI routes through Hydra: the model field is the routing instruction (hydra, hydra/hard, hydra/t4, or a head id), and tool calling is passed through so agent loops work",
+      "hyctl serve binds loopback and refuses an off-loopback bind with no token, rather than warning, because the endpoint spends money and reads your code",
       "Interactive TUI cockpit (hyctl tui), chat, route work, and watch spend live",
       "Desktop app (Wails v2) for macOS, Windows and Linux, chat-first, with a pool-aware model picker and a routing pane, plus Models, Activity, Usage and Audit views",
       "Per-run span log, identity, parent, level, tokens and time-to-first-token, at 35 bytes a span on disk",
