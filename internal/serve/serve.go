@@ -128,6 +128,7 @@ type chatRequest struct {
 	MaxTokens           int                `json:"max_tokens"`
 	MaxCompletionTokens int                `json:"max_completion_tokens"`
 	Stream              bool               `json:"stream"`
+	StreamOptions       *streamOptions     `json:"stream_options"`
 	Tools               []executor.ToolDef `json:"tools"`
 	ToolChoice          json.RawMessage    `json:"tool_choice"`
 }
@@ -152,28 +153,35 @@ func chat(w http.ResponseWriter, req *http.Request, r Router) {
 		writeError(w, http.StatusBadRequest, "messages is empty, so there is nothing to answer")
 		return
 	}
-	if in.Stream {
-		// Answering a stream request with a whole body is worse than refusing:
-		// the client is parsing SSE and sees a malformed stream instead of a
-		// message it can act on.
-		writeError(w, http.StatusBadRequest,
-			"this endpoint does not stream yet; retry with \"stream\": false")
-		return
-	}
-
 	route, err := parseRoute(in.Model)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	ans, err := r.Chat(req.Context(), Request{
+	call := Request{
 		Messages:   in.Messages,
 		Tools:      in.Tools,
 		ToolChoice: in.ToolChoice,
 		MaxTokens:  firstPositive(in.MaxCompletionTokens, in.MaxTokens),
 		Route:      route,
-	})
+	}
+
+	if in.Stream {
+		sr, ok := r.(StreamingRouter)
+		if !ok {
+			// Answering a stream request with a whole body is worse than
+			// refusing: the client is parsing SSE and would see a malformed
+			// stream instead of a message it can act on.
+			writeError(w, http.StatusBadRequest,
+				"this router cannot stream; retry with \"stream\": false")
+			return
+		}
+		streamChat(w, req, sr, in, call)
+		return
+	}
+
+	ans, err := r.Chat(req.Context(), call)
 	if err != nil {
 		status := http.StatusBadGateway
 		if errors.Is(err, ErrBadRequest) {

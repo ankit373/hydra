@@ -196,3 +196,110 @@ func TestCmdServe_GarbageEnumIsRefusedBeforeBinding(t *testing.T) {
 		t.Errorf("the refusal does not name the enum: %v", err)
 	}
 }
+
+// Only a delta reaches the client. An attempt starting or failing is the chain
+// doing its job, and forwarding either would open the stream on a head that has
+// produced nothing, which is what makes an ordinary fallback invisible.
+func TestStreamBridge_ForwardsOnlyDeltas(t *testing.T) {
+	var got []serve.Delta
+	stopped := false
+	bridge := streamBridge(
+		func(d serve.Delta) error { got = append(got, d); return nil },
+		func() { stopped = true },
+	)
+
+	head := provider.Head{ID: "ollama/qwen3:4b", Name: "Qwen3 4B"}
+	bridge(dispatch.StreamEvent{Kind: dispatch.StreamAttemptStarted, Head: head})
+	bridge(dispatch.StreamEvent{Kind: dispatch.StreamDelta, Head: head, Text: "hello"})
+	bridge(dispatch.StreamEvent{Kind: dispatch.StreamAttemptFailed, Head: head, Reason: "boom"})
+
+	if len(got) != 1 || got[0].Text != "hello" {
+		t.Fatalf("forwarded %+v, want the one delta", got)
+	}
+	// The client's model field is a routing instruction, so the chunks have to
+	// name the head that answered rather than echo the key back.
+	if got[0].Head != "ollama/qwen3:4b" || got[0].Model != "Qwen3 4B" {
+		t.Errorf("the head did not travel with the text: %+v", got[0])
+	}
+	if stopped {
+		t.Error("a failed attempt cancelled the run, so the fallback chain cannot do its job")
+	}
+}
+
+// Refusing a delta means bytes are already on the wire and this run's answer
+// can no longer be used. Carrying on spends money on it anyway.
+func TestStreamBridge_ARefusedDeltaStopsTheRun(t *testing.T) {
+	stopped := false
+	bridge := streamBridge(
+		func(serve.Delta) error { return errors.New("committed to another head") },
+		func() { stopped = true },
+	)
+	bridge(dispatch.StreamEvent{Kind: dispatch.StreamDelta, Text: "x"})
+
+	if !stopped {
+		t.Error("the run was left to finish an answer nobody will receive")
+	}
+}
+
+// The streamed path must deliver the same answer the whole-body one does, or
+// one request reports two different things depending on how it was asked.
+func TestServeRouter_ChatStreamDeliversTheAnswerAsDeltas(t *testing.T) {
+	dispatchable(t, "the head's answer")
+
+	ctx := context.Background()
+	d, err := dispatch.New(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+
+	var streamed strings.Builder
+	r := serveRouter{d: d, runID: "run-3", defaultEnum: "MODERATE"}
+	ans, err := r.ChatStream(ctx,
+		serve.Request{Messages: []executor.Message{{Role: "user", Content: "hi"}}},
+		func(delta serve.Delta) error {
+			if delta.Head == "" {
+				t.Error("a delta with no head cannot name what is answering")
+			}
+			streamed.WriteString(delta.Text)
+			return nil
+		})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// executor.Stream delivers a head that cannot stream as one whole delta,
+	// which is what lets this path be written once.
+	if !strings.Contains(streamed.String(), "the head's answer") {
+		t.Errorf("the answer never reached the client as deltas: %q", streamed.String())
+	}
+	if !strings.Contains(ans.Output, "the head's answer") || ans.Head == "" {
+		t.Errorf("the returned answer lost the output or the head: %+v", ans)
+	}
+}
+
+// A routing key the router cannot resolve has to fail before anything is
+// streamed, or the client is sent a 200 carrying an error it does not look for.
+func TestServeRouter_ChatStreamRefusesBeforeAnyDelta(t *testing.T) {
+	dispatchable(t, "unused")
+
+	ctx := context.Background()
+	d, err := dispatch.New(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+
+	sent := 0
+	_, err = serveRouter{d: d, runID: "run-4", defaultEnum: "MODERATE"}.
+		ChatStream(ctx, serve.Request{
+			Messages: []executor.Message{{Role: "user", Content: "hi"}},
+			Route:    serve.Route{Enum: "NOT_A_KEY"},
+		}, func(serve.Delta) error { sent++; return nil })
+
+	if !errors.Is(err, serve.ErrBadRequest) {
+		t.Errorf("the client would be told 502 for its own mistake: %v", err)
+	}
+	if sent != 0 {
+		t.Errorf("%d deltas were sent before the refusal, so the status line was already gone", sent)
+	}
+}

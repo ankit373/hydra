@@ -193,15 +193,16 @@ func TestChat_FinishReasonIsDerivedWhenTheHeadOmitsIt(t *testing.T) {
 	}
 }
 
-// Answering a stream request with a whole body is worse than refusing: the
-// client is parsing SSE and sees a malformed stream rather than a message.
+// A router that cannot stream refuses. Answering with a whole body would be
+// worse: the client is parsing SSE and would see a malformed stream rather than
+// a message it can act on.
 func TestChat_StreamIsRefusedNotQuietlyAnswered(t *testing.T) {
 	s := &stubRouter{answer: Answer{Output: "hi"}}
 	w := post(t, s, "", "", `{"model":"hydra","stream":true,"messages":[{"role":"user","content":"hi"}]}`)
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status %d, want 400: %s", w.Code, w.Body)
 	}
-	if !strings.Contains(w.Body.String(), "does not stream yet") {
+	if !strings.Contains(w.Body.String(), "cannot stream") {
 		t.Errorf("the refusal does not say why: %s", w.Body)
 	}
 	if s.got.Messages != nil {

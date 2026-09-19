@@ -30,12 +30,67 @@ type serveRouter struct {
 }
 
 func (r serveRouter) Chat(ctx context.Context, req serve.Request) (serve.Answer, error) {
-	tier, enum, head, err := routeToDispatch(req.Route, r.defaultEnum)
+	opts, err := r.options(req)
+	if err != nil {
+		return serve.Answer{}, err
+	}
+	res, err := r.d.Dispatch(ctx, flattenConversation(req.Messages), opts)
+	if err != nil {
+		return serve.Answer{}, err
+	}
+	return toAnswer(res), nil
+}
+
+// ChatStream answers incrementally.
+//
+// Cancelling on a refused delta is the whole of it: serve refuses one when the
+// chain has fallen back after this stream already committed bytes to the wire,
+// and carrying on would spend money on an answer this request can no longer
+// use. A head that fails before producing anything never reaches here, so the
+// ordinary fallback is untouched.
+func (r serveRouter) ChatStream(ctx context.Context, req serve.Request, onDelta serve.OnDelta) (serve.Answer, error) {
+	opts, err := r.options(req)
 	if err != nil {
 		return serve.Answer{}, err
 	}
 
-	res, err := r.d.Dispatch(ctx, flattenConversation(req.Messages), dispatch.Options{
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	opts.OnStream = streamBridge(onDelta, cancel)
+
+	res, err := r.d.Dispatch(ctx, flattenConversation(req.Messages), opts)
+	if err != nil {
+		return serve.Answer{}, err
+	}
+	return toAnswer(res), nil
+}
+
+// streamBridge turns the router's stream events into serve's deltas, and a
+// refusal into a cancelled run. It is the whole of the policy; everything else
+// in ChatStream is an ordinary dispatch.
+//
+// Only a delta is forwarded. An attempt starting or failing is the chain doing
+// its job, and a client that has been sent nothing yet must not learn of it:
+// that is what makes an ordinary fallback invisible.
+func streamBridge(onDelta serve.OnDelta, stop context.CancelFunc) dispatch.OnStream {
+	return func(ev dispatch.StreamEvent) {
+		if ev.Kind != dispatch.StreamDelta {
+			return
+		}
+		if onDelta(serve.Delta{Text: ev.Text, Head: ev.Head.ID, Model: ev.Head.Name}) != nil {
+			stop()
+		}
+	}
+}
+
+// options is the one reading of a request as a routing instruction, so the
+// streamed and whole-body paths cannot route the same request two ways.
+func (r serveRouter) options(req serve.Request) (dispatch.Options, error) {
+	tier, enum, head, err := routeToDispatch(req.Route, r.defaultEnum)
+	if err != nil {
+		return dispatch.Options{}, err
+	}
+	return dispatch.Options{
 		TierHint:   tier,
 		Enum:       enum,
 		Head:       head,
@@ -46,18 +101,17 @@ func (r serveRouter) Chat(ctx context.Context, req serve.Request) (serve.Answer,
 		ToolChoice: req.ToolChoice,
 		RunID:      r.runID,
 		TaskID:     runid.New(),
-	})
-	if err != nil {
-		return serve.Answer{}, err
-	}
+	}, nil
+}
 
+func toAnswer(res *dispatch.Result) serve.Answer {
 	ans := serve.Answer{Output: res.Output, Head: res.Head.ID, Model: res.Head.Name}
 	if res.Response != nil {
 		ans.ToolCalls = res.Response.ToolCalls
 		ans.FinishReason = res.Response.FinishReason
 		ans.InputTokens, ans.OutputTokens = res.Response.InputTokens, res.Response.OutputTokens
 	}
-	return ans, nil
+	return ans
 }
 
 // Models advertises the routing keys alongside the discovered heads, so any
@@ -141,6 +195,9 @@ func cmdServe() *cobra.Command {
 			"logging all apply the way they do to `hyctl dispatch`.\n\n" +
 			"The model field is the routing instruction. `hydra` takes the default enum,\n" +
 			"`hydra/hard` or `hydra/t4` pin an enum or a tier, and a head id pins that head.\n\n" +
+			"It streams when the client asks. A Head that cannot stream still answers, in\n" +
+			"one chunk, and a fallback before the first byte is invisible; after it the\n" +
+			"stream ends rather than appending a second Head's answer to the first.\n\n" +
 			"Binds 127.0.0.1. Any other address needs --token, because this endpoint spends\n" +
 			"money and reads your code, and `hyctl security` reports exactly this risk about\n" +
 			"other people's model servers.",
