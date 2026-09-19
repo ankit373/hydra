@@ -3876,6 +3876,35 @@ func noEvidenceError(domain string, heads []string) error {
 	return errors.New(b.String())
 }
 
+// ledgerNote explains a Λ column that does not add up. Λ AFTER is the leading
+// answer's total recomputed over every vote, not a running sum of the LLR
+// beside it: a repeat vote from a family already heard is discounted, and the
+// leader can change mid-run, after which the earlier rows were weighed against
+// a different answer. Printed only when the two actually differ, so an ordinary
+// run says nothing (#997).
+func ledgerNote(ledger []trust.Evidence) string {
+	if len(ledger) == 0 {
+		return ""
+	}
+	var sum float64
+	changed := false
+	for i, e := range ledger {
+		sum += e.LLR
+		if i > 0 && e.Candidate != ledger[i-1].Candidate {
+			changed = true
+		}
+	}
+	if math.Abs(sum-ledger[len(ledger)-1].LambdaAfter) < 1e-6 {
+		return ""
+	}
+	if changed {
+		return "Λ is the leading answer's total over every vote, not the column summed: " +
+			"the leader changed mid-run, so the rows before it were weighed against a different answer."
+	}
+	return "Λ is the leading answer's total over every vote, not the column summed: " +
+		"a repeat vote from a family already heard counts for less than a fresh one."
+}
+
 // printSPRTResult renders an SPRT confidence run: the LLR ledger, the decision,
 // and the winning answer.
 
@@ -3896,6 +3925,9 @@ func printSPRTResult(r *swarm.SPRTResult) {
 		fmt.Printf("  %-28.28s  %-9s  %+8.3f  %+10.3f\n", e.Source, verdict, e.LLR, e.LambdaAfter)
 	}
 	fmt.Println(sep)
+	if note := ledgerNote(t.Ledger); note != "" {
+		fmt.Printf("  %s\n", dimStyle.Render(note))
+	}
 
 	// The target and the stop reason, not just the number reached: without them
 	// a run that met its target and a run that gave up at the 50% prior render
@@ -4951,6 +4983,9 @@ func cmdTrustExplain() *cobra.Command {
 						verdict = "disagree"
 					}
 					fmt.Printf("  %-28.28s  %-9s  %+8.3f  %+10.3f\n", e.Source, verdict, e.LLR, e.LambdaAfter)
+				}
+				if note := ledgerNote(r.Ledger); note != "" {
+					fmt.Printf("  %s\n", dimStyle.Render(note))
 				}
 				// Every answer stays under test for the whole run, so the losing
 				// ones carry real evidence and are worth seeing (#778). Runs
