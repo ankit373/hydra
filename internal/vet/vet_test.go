@@ -526,3 +526,104 @@ func emptyConfig(t *testing.T) string {
 	}
 	return path
 }
+
+// ── the confidence bar ─────────────────────────────────────────────────────────
+
+// A failure that would repeat for every file stops the run, rather than being
+// paid once per file and reported as though each file had its own problem.
+func TestRun_AFailureThatWouldRepeatStopsTheRun(t *testing.T) {
+	dir := gitRepo(t)
+	var files []File
+	groups := []string{}
+	for _, name := range []string{"a.go", "b.go", "c.go", "d.go"} {
+		write(t, dir, name, "package p\n\nfunc F() {}\n")
+		files = append(files, File{Path: name})
+		groups = append(groups, name)
+	}
+	spec := &Spec{
+		Mode: "workspace", Repository: dir,
+		Reviewable: files,
+		Groups:     []Group{{Files: groups, Rule: "r"}},
+	}
+
+	var mu sync.Mutex
+	calls := 0
+	r := &stubRouter{reply: func(string) (Answer, error) {
+		mu.Lock()
+		calls++
+		mu.Unlock()
+		return Answer{}, fmt.Errorf("%w: nothing is calibrated", ErrCannotSample)
+	}}
+
+	res, err := Run(context.Background(), r, spec, RunOptions{Concurrency: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if calls == len(files) {
+		t.Errorf("every file was dispatched (%d): the same refusal was paid %d times", calls, calls)
+	}
+	if res.CannotSample() == "" {
+		t.Fatal("the run-stopping reason was not reported, so nothing says why it stopped")
+	}
+	if !strings.Contains(res.CannotSample(), "nothing is calibrated") {
+		t.Errorf("the reason was lost: %q", res.CannotSample())
+	}
+}
+
+// An ordinary per-file failure must NOT stop the run: the other files are
+// still reviewable and stopping would hide real findings.
+func TestRun_AnOrdinaryFailureDoesNotStopTheRun(t *testing.T) {
+	dir := gitRepo(t)
+	for _, name := range []string{"a.go", "b.go"} {
+		write(t, dir, name, "package p\n")
+	}
+	spec := &Spec{
+		Mode: "workspace", Repository: dir,
+		Reviewable: []File{{Path: "a.go"}, {Path: "b.go"}},
+		Groups:     []Group{{Files: []string{"a.go", "b.go"}, Rule: "r"}},
+	}
+	r := &stubRouter{reply: func(path string) (Answer, error) {
+		if path == "a.go" {
+			return Answer{}, errors.New("this head fell over")
+		}
+		return Answer{Output: `[{"line":1,"severity":"blocking","title":"real"}]`, Head: "h"}, nil
+	}}
+
+	res, _ := Run(context.Background(), r, spec, RunOptions{Concurrency: 1})
+	if res.CannotSample() != "" {
+		t.Error("one head failing was treated as fatal to the whole run")
+	}
+	if res.BlockingCount() != 1 {
+		t.Errorf("the other file's findings were lost: %d blocking", res.BlockingCount())
+	}
+}
+
+// A file that never reached its bar keeps its findings and loses its claim to
+// confidence. Reporting the two the same way is the defect this prevents.
+func TestFileOutcome_ShortOfBarIsDistinctFromHavingNoBar(t *testing.T) {
+	short := FileOutcome{Bar: Bar{Target: 0.9}, Confidence: 0.6}
+	if !short.ShortOfBar() || short.Cleared() {
+		t.Error("a file under its bar did not read as short of it")
+	}
+	met := FileOutcome{Bar: Bar{Target: 0.9}, Confidence: 0.95}
+	if met.ShortOfBar() || !met.Cleared() {
+		t.Error("a file over its bar did not read as clearing it")
+	}
+	// The single-dispatch path has no bar at all, and must not be counted as
+	// having failed one.
+	none := FileOutcome{Confidence: 0}
+	if none.ShortOfBar() || none.Cleared() {
+		t.Error("a file held to no bar was judged against one")
+	}
+}
+
+func TestResult_ShortOfBarCountsOnlyTheFilesHeldToOne(t *testing.T) {
+	r := &Result{Files: []FileOutcome{
+		{Bar: Bar{Target: 0.9}, Confidence: 0.5},
+		{Bar: Bar{Target: 0.9}, Confidence: 0.99},
+		{Confidence: 0},
+	}}
+	if got := r.ShortOfBar(); got != 1 {
+		t.Errorf("ShortOfBar = %d, want 1", got)
+	}
+}

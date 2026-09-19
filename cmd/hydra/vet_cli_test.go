@@ -11,6 +11,7 @@ import (
 
 	"github.com/ankit373/hydra/internal/dispatch"
 	"github.com/ankit373/hydra/internal/testutil"
+	"github.com/ankit373/hydra/internal/trust"
 	"github.com/ankit373/hydra/internal/vet"
 )
 
@@ -306,5 +307,119 @@ func TestVetRouter_CarriesTheHeadTierAndCostBack(t *testing.T) {
 	}
 	if ans.Tier <= 0 {
 		t.Errorf("tier = %d, so the report cannot say what answered", ans.Tier)
+	}
+}
+
+// ── the per-file confidence bar ───────────────────────────────────────────────
+
+// A radius Hydra did not read off a graph is a default. Reporting it as a
+// measurement makes a run with no graph read like blast-radius-aware routing
+// when nothing measured anything (#251).
+func TestBarFor_AnUnmeasuredRadiusSaysSo(t *testing.T) {
+	r := vetRouter{floor: 0.5} // no graph loaded at all
+	bar := r.barFor("go", "internal/auth/token.go")
+	if bar.Measured {
+		t.Error("a radius with no graph behind it claimed to be measured")
+	}
+	if bar.Radius != 1.0 {
+		t.Errorf("radius = %v, want the 1.0 default", bar.Radius)
+	}
+	if bar.Target < 0.5 {
+		t.Errorf("target %v fell below the caller's floor", bar.Target)
+	}
+}
+
+// The floor is a floor: the blast radius raises the bar above it and never
+// lowers it, or a risky file would be held to a laxer standard than asked for.
+func TestBarFor_TheBlastRadiusOnlyRaisesTheFloor(t *testing.T) {
+	low := vetRouter{floor: 0.01}.barFor("go", "a.go")
+	if low.Target <= 0.01 {
+		t.Errorf("target %v: the defect model never raised the bar", low.Target)
+	}
+	high := vetRouter{floor: 0.99}.barFor("go", "a.go")
+	if high.Target < 0.99 {
+		t.Errorf("target %v dropped below the caller's floor of 0.99", high.Target)
+	}
+}
+
+// The refusal has to name a head the router would actually sample, or the
+// command it prints records under a key nothing reads and earns the same
+// refusal again (#835).
+func TestNoEvidenceAdvice_NamesAHeadTheRouterWouldSample(t *testing.T) {
+	got := noEvidenceAdvice(&trust.NoEvidenceError{
+		Domain:  "go",
+		Sources: []string{"ollama/qwen3:8b", "agy"},
+	})
+	for _, want := range []string{"ollama/qwen3:8b", "--domain go", "hyctl trust record", "drop --confidence"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the advice is missing %q:\n%s", want, got)
+		}
+	}
+}
+
+// With no head to name it must still be actionable rather than printing a
+// command with an empty source.
+func TestNoEvidenceAdvice_SurvivesWithNoSources(t *testing.T) {
+	got := noEvidenceAdvice(&trust.NoEvidenceError{Domain: "rust"})
+	if strings.Contains(got, "--source --domain") || strings.Contains(got, "--source  ") {
+		t.Errorf("the command has an empty source:\n%s", got)
+	}
+	if !strings.Contains(got, "rust") {
+		t.Errorf("the advice does not name the domain:\n%s", got)
+	}
+}
+
+func TestBarLine_SaysWhetherTheRadiusWasMeasured(t *testing.T) {
+	unmeasured := barLine(vet.FileOutcome{Bar: vet.Bar{Target: 0.9, Radius: 1.0}, Confidence: 0.95, Samples: 2})
+	if !strings.Contains(unmeasured, "default, not measured") {
+		t.Errorf("an unmeasured radius did not say so: %s", unmeasured)
+	}
+	measured := barLine(vet.FileOutcome{
+		Bar: vet.Bar{Target: 0.9, Radius: 12, Measured: true}, Confidence: 0.95, Samples: 3,
+	})
+	if strings.Contains(measured, "default") {
+		t.Errorf("a measured radius was called a default: %s", measured)
+	}
+	if !strings.Contains(measured, "reached") || !strings.Contains(measured, "3 head") {
+		t.Errorf("the line does not report the outcome: %s", measured)
+	}
+}
+
+// A file that fell short must be visible as such in the report, not rendered
+// identically to one that cleared.
+func TestPrintVet_ShortOfBarIsVisible(t *testing.T) {
+	var buf bytes.Buffer
+	printVet(&buf, &vet.Result{
+		Spec: &vet.Spec{Mode: "workspace"},
+		Files: []vet.FileOutcome{{
+			File: "a.go", Head: "h", Bar: vet.Bar{Target: 0.9, Radius: 1}, Confidence: 0.6, Samples: 4,
+		}},
+	})
+	out := buf.String()
+	if !strings.Contains(out, "short of") {
+		t.Errorf("a file under its bar did not say so:\n%s", out)
+	}
+	if !strings.Contains(out, "their findings stand, the confidence does not") {
+		t.Errorf("the summary does not separate the findings from the confidence:\n%s", out)
+	}
+}
+
+// The run-stopping reason is printed once, in the summary, not blamed on each
+// file in turn.
+func TestPrintVet_ARunStoppingReasonIsSaidOnce(t *testing.T) {
+	var buf bytes.Buffer
+	printVet(&buf, &vet.Result{
+		Spec: &vet.Spec{Mode: "workspace"},
+		Files: []vet.FileOutcome{
+			{File: "a.go", Err: "cannot review any file: nothing is calibrated", Fatal: true},
+			{File: "b.go", Err: "cannot review any file: nothing is calibrated", Fatal: true},
+		},
+	})
+	out := buf.String()
+	if n := strings.Count(out, "nothing is calibrated"); n != 1 {
+		t.Errorf("the reason appears %d times, want 1:\n%s", n, out)
+	}
+	if !strings.Contains(out, "the run stopped") {
+		t.Errorf("the summary does not say the run stopped:\n%s", out)
 	}
 }
