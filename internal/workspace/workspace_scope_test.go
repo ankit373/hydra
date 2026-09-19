@@ -671,3 +671,30 @@ func TestCheckRooted_ContainsAndStillDenies(t *testing.T) {
 		t.Error("a relative root was accepted")
 	}
 }
+
+// TestValidatorFor above builds its own map, so it proves the lookup and says
+// nothing about what ships. Nothing else asserted the embedded registry either,
+// and `go` had no entry in it at all: `hyctl edit` on a Go file ran no
+// validator, reported validator_passed anyway, and filed no corpus example,
+// in the language Hydra itself is written in (#998).
+func TestLoad_TheShippedRegistryValidatesTheLanguagesItClaimsTo(t *testing.T) {
+	testutil.NewSandbox(t)
+
+	// An empty HYDRA_HOME has no registry/ override, so Load falls back to the
+	// copy compiled into the binary, which is what every install actually runs.
+	r, err := Load(t.TempDir())
+	if err != nil {
+		t.Fatalf("the embedded workspace.yaml did not load: %v", err)
+	}
+
+	for _, ext := range []string{"go", "js", "py", "sh", "json"} {
+		if got := r.ValidatorFor(ext); got == "" {
+			t.Errorf("ValidatorFor(%q) is empty: the shipped registry validates nothing for it", ext)
+		}
+	}
+	// ts and tsx are explicitly null, the editor has its own tsc path for them,
+	// so an empty answer there is the configured one rather than a gap.
+	if got := r.ValidatorFor("ts"); got != "" {
+		t.Errorf("ValidatorFor(ts) = %q, want empty: it is declared null on purpose", got)
+	}
+}

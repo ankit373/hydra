@@ -7,6 +7,7 @@ package editor
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -56,15 +57,18 @@ type Request struct {
 
 // Result is the JSON output emitted by Edit.
 type Result struct {
-	Status          string `json:"status"`
-	File            string `json:"file"`
-	Workspace       string `json:"workspace"`
-	GitRoot         string `json:"git_root"`
-	Enum            string `json:"enum"`
-	Head            string `json:"head,omitempty"` // head ID that produced the edit
-	LinesAdded      int    `json:"lines_added"`
-	LinesRemoved    int    `json:"lines_removed"`
-	ValidatorPassed bool   `json:"validator_passed"`
+	Status       string `json:"status"`
+	File         string `json:"file"`
+	Workspace    string `json:"workspace"`
+	GitRoot      string `json:"git_root"`
+	Enum         string `json:"enum"`
+	Head         string `json:"head,omitempty"` // head ID that produced the edit
+	LinesAdded   int    `json:"lines_added"`
+	LinesRemoved int    `json:"lines_removed"`
+	// ValidatorPassed is nil when no validator ran, which is not the same claim
+	// as a pass: the extension may simply have none configured. A plain bool
+	// reported those two identically, and the second is most of them (#998).
+	ValidatorPassed *bool  `json:"validator_passed"`
 	RolledBack      bool   `json:"rolled_back"`
 	Error           string `json:"error,omitempty"`
 }
@@ -204,7 +208,9 @@ func Edit(ctx context.Context, req Request) (*Result, error) {
 	}
 
 	// ── Validate ──────────────────────────────────────────────────────────────
-	validatorPassed := true
+	// Nil until a validator actually runs, so "not checked" can never be
+	// reported as "passed".
+	var validatorPassed *bool
 	if req.Validate {
 		ext := fileExt(req.File)
 		vtmpl := reg.ValidatorFor(ext)
@@ -216,12 +222,23 @@ func Edit(ctx context.Context, req Request) (*Result, error) {
 
 		if vtmpl != "" {
 			vout, vrc, verr := runValidatorCmd(ctx, vtmpl, req.File)
+			if errors.Is(verr, ErrValidatorUnavailable) {
+				// Not the head's fault and not a verdict, so nothing is
+				// recorded: validatorPassed stays nil and says so.
+				rollback(req.File, origContent, origExisted, resolved.GitRoot, backup)
+				return &Result{
+					Status: "fail", File: req.File, Workspace: wsName,
+					GitRoot: resolved.GitRoot, Enum: req.Enum, Head: dispResult.Head.ID,
+					RolledBack: true, Error: verr.Error(),
+				}, nil
+			}
 			if verr != nil {
 				// Interrupted, so nothing was learned about this head. Recording
 				// it would teach the calibrator that a Ctrl+C is broken code.
 				rollback(req.File, origContent, origExisted, resolved.GitRoot, backup)
 				return nil, fmt.Errorf("validating %s: %w", req.File, verr)
 			}
+			validatorPassed = boolp(vrc == 0)
 			// The validator ran against the file this edit had already written,
 			// so unlike a dispatch's verdict this one judges the candidate and
 			// is ground truth (#986). Filed here, before the rollback below
@@ -229,7 +246,6 @@ func Edit(ctx context.Context, req Request) (*Result, error) {
 			RecordVerifiedEdit(req.Prompt, req.File, req.Enum, dispResult.Head.ID,
 				newContent, vrc == 0, firstLine(vout))
 			if vrc != 0 {
-				validatorPassed = false
 				rollback(req.File, origContent, origExisted, resolved.GitRoot, backup)
 				return &Result{
 					Status:          "fail",
@@ -238,7 +254,7 @@ func Edit(ctx context.Context, req Request) (*Result, error) {
 					GitRoot:         resolved.GitRoot,
 					Enum:            req.Enum,
 					Head:            dispResult.Head.ID,
-					ValidatorPassed: false,
+					ValidatorPassed: validatorPassed,
 					RolledBack:      true,
 					Error:           "validation_failed: " + firstLine(vout),
 				}, nil
@@ -386,6 +402,12 @@ snippet) between these exact markers and nothing else:
 // handful of failures that happen before Edit resolves scope at all. Zeroing
 // them unconditionally used to hide that resolution had succeeded and the
 // real failure was downstream, e.g. response-parsing (#464).
+// ErrValidatorUnavailable marks a validator that could not start, as opposed
+// to one that rejected the file. The first says nothing about the head.
+var ErrValidatorUnavailable = errors.New("validator_unavailable")
+
+func boolp(b bool) *bool { return &b }
+
 func failResult(req Request, wsName, gitRoot, errMsg string) *Result {
 	return &Result{
 		Status:    "fail",
@@ -581,7 +603,11 @@ func runValidatorCmd(ctx context.Context, vtmpl, file string) (output string, ex
 		if exitErr, ok := runErr.(*exec.ExitError); ok {
 			return string(out), exitErr.ExitCode(), nil
 		}
-		return string(out), 1, nil
+		// The command never started, so nothing judged the answer. Reporting
+		// that as a failing exit code blamed the head for a missing binary and
+		// recorded it as ground truth, which is #982's mislabelling arriving
+		// through a third door (#998).
+		return string(out), 0, fmt.Errorf("%w: %w", ErrValidatorUnavailable, runErr)
 	}
 	return string(out), 0, nil
 }

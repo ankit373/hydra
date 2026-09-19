@@ -59,16 +59,18 @@ type TextResult struct {
 
 // EditResult is the result of an edit task (matches editor.Result + label/enum/mode).
 type EditResult struct {
-	Label           string `json:"label"`
-	Enum            string `json:"enum"`
-	Mode            string `json:"mode"`
-	Status          string `json:"status"`
-	File            string `json:"file"`
-	Workspace       string `json:"workspace"`
-	GitRoot         string `json:"git_root"`
-	LinesAdded      int    `json:"lines_added"`
-	LinesRemoved    int    `json:"lines_removed"`
-	ValidatorPassed bool   `json:"validator_passed"`
+	Label        string `json:"label"`
+	Enum         string `json:"enum"`
+	Mode         string `json:"mode"`
+	Status       string `json:"status"`
+	File         string `json:"file"`
+	Workspace    string `json:"workspace"`
+	GitRoot      string `json:"git_root"`
+	LinesAdded   int    `json:"lines_added"`
+	LinesRemoved int    `json:"lines_removed"`
+	// Nil when no validator ran, which is not a pass: the same distinction
+	// internal/editor's Result draws, and for the same reason (#998).
+	ValidatorPassed *bool  `json:"validator_passed"`
 	RolledBack      bool   `json:"rolled_back"`
 	Error           string `json:"error,omitempty"`
 }
@@ -380,6 +382,7 @@ func runEditTask(ctx context.Context, d *dispatch.Dispatcher, dispatchErr error,
 	if task.Validate != nil {
 		validate = *task.Validate
 	}
+	var validatorPassed *bool
 	if validate {
 		ext := fileExt(file)
 		vtmpl := reg.ValidatorFor(ext)
@@ -391,9 +394,14 @@ func runEditTask(ctx context.Context, d *dispatch.Dispatcher, dispatchErr error,
 			if verr != nil {
 				// The deadline is the policy stopping the validator, not the
 				// validator rejecting the edit, the same distinction the
-				// dispatch above draws (#424).
+				// dispatch above draws (#424). A validator that could not start
+				// is the third case, and none of them is a verdict, so
+				// validatorPassed stays nil and nothing is recorded.
 				rollback(file, origContent, origExisted, resolved.GitRoot, backup)
 				reason := "validator_cancelled: " + verr.Error()
+				if errors.Is(verr, editor.ErrValidatorUnavailable) {
+					reason = verr.Error()
+				}
 				if errors.Is(verr, context.DeadlineExceeded) {
 					reason = fmt.Sprintf("max_wall_seconds_exceeded: policy allows %ds", fp.MaxWallSeconds)
 				}
@@ -403,6 +411,7 @@ func runEditTask(ctx context.Context, d *dispatch.Dispatcher, dispatchErr error,
 					RolledBack: true, Error: reason,
 				})
 			}
+			validatorPassed = boolp(rc == 0)
 			// The validator ran against the file this task had already written, so
 			// the verdict judges the content the head produced, exactly as it does
 			// for `hyctl edit`. Recorded through the shared writer rather than a
@@ -416,7 +425,7 @@ func runEditTask(ctx context.Context, d *dispatch.Dispatcher, dispatchErr error,
 				return mustMarshal(EditResult{
 					Label: task.Label, Enum: task.Enum, Mode: "edit",
 					Status: "fail", File: file, Workspace: wsName, GitRoot: resolved.GitRoot,
-					RolledBack: true, Error: "validation_failed",
+					ValidatorPassed: validatorPassed, RolledBack: true, Error: "validation_failed",
 				})
 			}
 			editor.RecordVerifiedEdit(task.Prompt, file, task.Enum, dispResult.Head.ID,
@@ -431,7 +440,7 @@ func runEditTask(ctx context.Context, d *dispatch.Dispatcher, dispatchErr error,
 	return mustMarshal(EditResult{
 		Label: task.Label, Enum: task.Enum, Mode: "edit",
 		Status: "ok", File: file, Workspace: wsName, GitRoot: resolved.GitRoot,
-		LinesAdded: added, LinesRemoved: removed, ValidatorPassed: true,
+		LinesAdded: added, LinesRemoved: removed, ValidatorPassed: validatorPassed,
 	})
 }
 
@@ -624,7 +633,10 @@ func runValidate(ctx context.Context, vtmpl, file string) (int, error) {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			return exitErr.ExitCode(), nil
 		}
-		return 1, nil
+		// The command never started, so nothing judged the answer, and a
+		// failing exit code here would blame the head for a missing binary and
+		// record that as ground truth (#998).
+		return 0, fmt.Errorf("%w: %w", editor.ErrValidatorUnavailable, err)
 	}
 	return 0, nil
 }
@@ -683,3 +695,5 @@ func diffStats(file, origContent, gitRoot, backup string, origExisted bool) (add
 }
 
 func enumToTier(enum string) string { return dispatch.EnumToTier(enum) }
+
+func boolp(b bool) *bool { return &b }

@@ -59,6 +59,9 @@ workspaces: {}
 # ─────────────────────────────────────────────────────────────────────────────
 
 validators:
+  # gofmt -l exits non-zero only on a parse error, so this is the same
+  # syntax-only check node --check and py_compile perform, not a format gate.
+  go:   "gofmt -l {file}"
   js:   "node --check {file}"
   mjs:  "node --check {file}"
   cjs:  "node --check {file}"
