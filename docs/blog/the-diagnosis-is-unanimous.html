@@ -198,6 +198,10 @@ blockquote.inline cite{display:block;margin-top:6px;font-family:var(--mono);font
 .spec-node .dot{width:12px;height:12px;border-radius:50%;border:2px solid var(--bg);margin:0 auto;box-shadow:0 0 0 1px var(--line-2);}
 .spec-node .lbl{position:absolute;top:-32px;left:50%;transform:translateX(-50%);font-family:var(--mono);font-size:10.5px;color:var(--ink);white-space:nowrap;font-weight:600;}
 .spec-node .sub2{position:absolute;top:18px;left:50%;transform:translateX(-50%);font-family:var(--mono);font-size:9.5px;color:var(--faint);white-space:nowrap;}
+/* Five nowrap labels are wider than a phone, so scroll them together the way
+   index.html scrolls its comparison table; desktop is wider than the floor (#942). */
+.spec-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+.spec-scroll>.spectrum-track,.spec-scroll>.spectrum-labels{min-width:520px;}
 .spectrum-labels{display:flex;justify-content:space-between;font-family:var(--mono);font-size:10px;color:var(--faint);text-transform:uppercase;letter-spacing:.05em;padding:0 6px;}
 
 /* callout */
@@ -312,6 +316,7 @@ footer{border-top:1px solid var(--line);margin-top:20px;padding:44px 0 56px;}
     <h2>Patch the current thing, or <span class="grad">replace</span> it</h2>
     <p>Once you separate the diagnosis from the treatment, the field splits into three camps, and none of them are bluffing. Real money, real published research, real companies built around each bet.</p>
 
+    <div class="spec-scroll">
     <div class="spectrum-track">
       <div class="spec-node" style="left:8%"><span class="lbl">Altman · Amodei</span><span class="dot" style="background:#7C6CF0"></span><span class="sub2">scale + reasoning scaffolds</span></div>
       <div class="spec-node" style="left:32%"><span class="lbl">Hassabis</span><span class="dot" style="background:#7C6CF0"></span><span class="sub2">Gemini scales, Genie adds a leg</span></div>
@@ -320,6 +325,7 @@ footer{border-top:1px solid var(--line);margin-top:20px;padding:44px 0 56px;}
       <div class="spec-node" style="left:94%"><span class="lbl">LeCun</span><span class="dot" style="background:#E0407A"></span><span class="sub2">JEPA, non-generative</span></div>
     </div>
     <div class="spectrum-labels"><span>extend the current architecture</span><span>replace it outright</span></div>
+    </div>
     <p class="cap" style="margin-top:22px;">This is our read of where each person has put their own research program. Treat the spacing as illustrative, not a measured scale.</p>
 
     <h3>The "replace" camp isn't rhetoric. It's funded, and it has proofs.</h3>

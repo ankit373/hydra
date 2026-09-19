@@ -1015,6 +1015,9 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
 
 <style>
 .faq{display:grid;gap:22px;margin-top:28px;max-width:820px;}
+/* anywhere, not break-word: only anywhere lowers min-content, and a grid track is
+   sized from it, so one 64-char URL widened the whole page at phone widths (#939). */
+.faq-item{overflow-wrap:anywhere;}
 .faq-item h3{margin:0 0 8px;font-size:17px;font-weight:700;letter-spacing:-.2px;}
 .faq-item p{margin:0;color:var(--dim);font-size:15px;line-height:1.7;}
 @media(min-width:900px){.faq{grid-template-columns:1fr 1fr;gap:26px 40px;max-width:none;}}
