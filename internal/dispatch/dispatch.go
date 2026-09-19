@@ -69,6 +69,13 @@ type Options struct {
 	// Resource to derive one from, leaves the pooled probe ranking standing.
 	Domain string
 
+	// Messages is a whole conversation, when the caller has one, and Tools the
+	// functions a head may call. Both exist for `hyctl serve`: an agent loop
+	// sends its tool results back as further turns, which Prompt cannot carry.
+	Messages   []executor.Message
+	Tools      []executor.ToolDef
+	ToolChoice json.RawMessage
+
 	// Provenance carries parts of the payload whose origin only the caller
 	// knows, e.g. the file whose content hyctl edit embedded in the prompt.
 	// Dispatch classifies these alongside the ones it derives itself; leaving
@@ -653,6 +660,14 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 				Status: "denied", Detail: detail,
 			})
 		}
+		// A head that cannot carry tool definitions is skipped rather than sent
+		// the request without them: a stripped tool array is not a degraded
+		// answer, it is an agent loop that never terminates, with every round
+		// looking like the model simply declining to act.
+		if len(opts.Tools) > 0 && !executor.CanUseTools(h) {
+			refuse("cannot carry tool definitions")
+			continue
+		}
 		// The egress gate, deliberately independent of the ledger's decision:
 		// the ledger answers who may act, this answers where content may go.
 		// The reroute above should already have made this unreachable for a
@@ -764,10 +779,13 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 			onDelta = func(d string) { emit(StreamDelta, d, "") }
 		}
 		resp, err := executor.Stream(ctx, exec, executor.Request{
-			Prompt:    prompt,
-			Head:      h,
-			MaxTokens: opts.MaxTokens,
-			System:    opts.System,
+			Prompt:     prompt,
+			Head:       h,
+			MaxTokens:  opts.MaxTokens,
+			System:     opts.System,
+			Messages:   opts.Messages,
+			Tools:      opts.Tools,
+			ToolChoice: opts.ToolChoice,
 		}, onDelta)
 		if err != nil {
 			lastErr = err

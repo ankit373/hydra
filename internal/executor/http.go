@@ -35,24 +35,23 @@ func (e *HTTPExecutor) httpClient() *http.Client {
 	return http.DefaultClient
 }
 
-type message struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
-}
-
 type openAIChatRequest struct {
-	Model     string    `json:"model,omitempty"`
-	Messages  []message `json:"messages"`
-	MaxTokens int       `json:"max_tokens,omitempty"`
-	Stream    bool      `json:"stream"`
+	Model      string          `json:"model,omitempty"`
+	Messages   []Message       `json:"messages"`
+	MaxTokens  int             `json:"max_tokens,omitempty"`
+	Stream     bool            `json:"stream"`
+	Tools      []ToolDef       `json:"tools,omitempty"`
+	ToolChoice json.RawMessage `json:"tool_choice,omitempty"`
 }
 
 type openAIChatResponse struct {
 	Model   string `json:"model"`
 	Choices []struct {
 		Message struct {
-			Content string `json:"content"`
+			Content   string     `json:"content"`
+			ToolCalls []ToolCall `json:"tool_calls"`
 		} `json:"message"`
+		FinishReason string `json:"finish_reason"`
 	} `json:"choices"`
 	Usage struct {
 		PromptTokens     int `json:"prompt_tokens"`
@@ -116,10 +115,12 @@ func SupportsHTTP(h provider.Head) bool {
 func (e *HTTPExecutor) executeOpenAICompatible(ctx context.Context, req Request, cfg openAICompatConfig) (*Response, error) {
 	msgs := buildMessages(req)
 	body := openAIChatRequest{
-		Model:     cfg.Model,
-		Messages:  msgs,
-		MaxTokens: req.MaxTokens,
-		Stream:    false,
+		Model:      cfg.Model,
+		Messages:   msgs,
+		MaxTokens:  req.MaxTokens,
+		Stream:     false,
+		Tools:      req.Tools,
+		ToolChoice: req.ToolChoice,
 	}
 	raw, err := json.Marshal(body)
 	if err != nil {
@@ -154,9 +155,14 @@ func (e *HTTPExecutor) executeOpenAICompatible(ctx context.Context, req Request,
 		return nil, fmt.Errorf("http exec %s: empty response", req.Head.ID)
 	}
 
-	return httpResponse(req, cr.Choices[0].Message.Content,
+	answer := httpResponse(req, cr.Choices[0].Message.Content,
 		firstNonEmpty(cr.Model, cfg.Model),
-		cr.Usage.PromptTokens, cr.Usage.CompletionTokens, start), nil
+		cr.Usage.PromptTokens, cr.Usage.CompletionTokens, start)
+	// An answer that only asks for tools carries no text at all, so these are
+	// what say it replied rather than said nothing.
+	answer.ToolCalls = cr.Choices[0].Message.ToolCalls
+	answer.FinishReason = cr.Choices[0].FinishReason
+	return answer, nil
 }
 
 func (e *HTTPExecutor) executeAnthropic(ctx context.Context, req Request) (*Response, error) {
@@ -692,12 +698,17 @@ func openAICompatConfigFor(h provider.Head) (openAICompatConfig, error) {
 	}, nil
 }
 
-func buildMessages(req Request) []message {
-	msgs := make([]message, 0, 2)
-	if req.System != "" {
-		msgs = append(msgs, message{Role: "system", Content: req.System})
+// buildMessages prefers a caller's whole conversation over the single turn
+// Prompt describes, since only the former can carry a tool result.
+func buildMessages(req Request) []Message {
+	if len(req.Messages) > 0 {
+		return req.Messages
 	}
-	msgs = append(msgs, message{Role: "user", Content: req.Prompt})
+	msgs := make([]Message, 0, 2)
+	if req.System != "" {
+		msgs = append(msgs, Message{Role: "system", Content: req.System})
+	}
+	msgs = append(msgs, Message{Role: "user", Content: req.Prompt})
 	return msgs
 }
 

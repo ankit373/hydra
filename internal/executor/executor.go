@@ -21,6 +21,17 @@ type Request struct {
 	Head      provider.Head
 	MaxTokens int    // 0 = provider default
 	System    string // optional system prompt
+
+	// Messages is a whole conversation, when the caller has one. It replaces
+	// Prompt and System for the executors that can carry it; Prompt is still
+	// set alongside, because token estimation and the logs describe a call by
+	// what was asked, not by how many turns preceded it.
+	Messages []Message
+
+	// Tools the head may call, and the caller's choice policy, passed through
+	// untouched. Only heads CanUseTools reports true for receive them.
+	Tools      []ToolDef
+	ToolChoice json.RawMessage
 }
 
 // Response is the result of a successful execution.
@@ -37,6 +48,13 @@ type Response struct {
 	// so a consumer must not average it in as a measured zero: a plain
 	// Execute observes no first token and reports none.
 	TTFT time.Duration
+
+	// ToolCalls is the head asking to run one or more tools, and FinishReason
+	// is why it stopped ("stop", "tool_calls", "length"). A tool-calling answer
+	// usually has no Output at all, so an empty answer with calls present is a
+	// complete reply rather than a failed one.
+	ToolCalls    []ToolCall
+	FinishReason string
 
 	// TokensEstimated is true when InputTokens/OutputTokens were derived by
 	// Hydra (e.g. agy's char/4 heuristic) rather than reported by the provider.
