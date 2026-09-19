@@ -390,7 +390,11 @@ func setGeminiHeaders(r *http.Request) {
 
 func (e *HTTPExecutor) executeCohere(ctx context.Context, req Request) (*Response, error) {
 	model := defaultModelFor("cohere")
-	raw, err := json.Marshal(cohereBody(req, model, false))
+	body, err := cohereBody(req, model, false)
+	if err != nil {
+		return nil, err
+	}
+	raw, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
@@ -418,8 +422,13 @@ func (e *HTTPExecutor) executeCohere(ctx context.Context, req Request) (*Respons
 				Type string `json:"type"`
 				Text string `json:"text"`
 			} `json:"content"`
+			// The model's stated plan for what it will call. Not the answer,
+			// so it is read and deliberately not rendered as one.
+			ToolPlan  string     `json:"tool_plan"`
+			ToolCalls []ToolCall `json:"tool_calls"`
 		} `json:"message"`
-		Usage struct {
+		FinishReason string `json:"finish_reason"`
+		Usage        struct {
 			Tokens struct {
 				InputTokens  int `json:"input_tokens"`
 				OutputTokens int `json:"output_tokens"`
@@ -429,9 +438,16 @@ func (e *HTTPExecutor) executeCohere(ctx context.Context, req Request) (*Respons
 	if err := json.NewDecoder(io.LimitReader(resp.Body, int64(util.DefaultMaxBytes)+1)).Decode(&out); err != nil {
 		return nil, fmt.Errorf("http exec %s: decode: %w", req.Head.ID, err)
 	}
+	finish, err := cohereFinish(out.FinishReason)
+	if err != nil {
+		return nil, fmt.Errorf("http exec %s: %w", req.Head.ID, err)
+	}
 
-	return httpResponse(req, joinCohereBlocks(out.Message.Content), model,
-		out.Usage.Tokens.InputTokens, out.Usage.Tokens.OutputTokens, start), nil
+	answer := httpResponse(req, joinCohereBlocks(out.Message.Content), model,
+		out.Usage.Tokens.InputTokens, out.Usage.Tokens.OutputTokens, start)
+	answer.ToolCalls = numbered(out.Message.ToolCalls)
+	answer.FinishReason = finish
+	return answer, nil
 }
 
 // cohereChatURL honours CO_API_URL, which is what Cohere's own SDK reads, so a
@@ -443,7 +459,7 @@ func cohereChatURL() string {
 
 // cohereBody and setCohereHeaders are shared with the streaming path, so the
 // two cannot drift into asking for different things.
-func cohereBody(req Request, model string, stream bool) map[string]interface{} {
+func cohereBody(req Request, model string, stream bool) (map[string]interface{}, error) {
 	body := map[string]interface{}{
 		"model":    model,
 		"messages": buildMessages(req),
@@ -454,7 +470,19 @@ func cohereBody(req Request, model string, stream bool) map[string]interface{} {
 	if stream {
 		body["stream"] = true
 	}
-	return body
+	if len(req.Tools) > 0 {
+		choice, err := cohereToolChoice(req.ToolChoice)
+		if err != nil {
+			return nil, err
+		}
+		// A v2 tool definition is shaped exactly like OpenAI's, so this is the
+		// one dialect that needs no translation of the tools themselves.
+		body["tools"] = req.Tools
+		if choice != "" {
+			body["tool_choice"] = choice
+		}
+	}
+	return body, nil
 }
 
 func setCohereHeaders(r *http.Request) {

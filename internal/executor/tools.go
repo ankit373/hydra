@@ -55,8 +55,8 @@ type ToolCallFunction struct {
 // CanUseTools reports whether a head can be sent function definitions and
 // answer with structured calls.
 //
-// The OpenAI-compatible path, Anthropic, Gemini and Bedrock carry them. Cohere
-// shapes tools differently, and Replicate polls rather than chats.
+// Every chat dialect carries them now. Replicate is the exception: its
+// prediction API polls rather than chats, and has no tool surface at all.
 // The predicate exists so a dispatch can skip a head that cannot, because a
 // silently dropped tool array is not a degraded answer: the caller's agent loop
 // never terminates, and every round looks like the model simply declining.
@@ -65,9 +65,9 @@ func CanUseTools(h provider.Head) bool {
 		return false
 	}
 	switch h.Provider {
-	case "anthropic", "google", "bedrock":
+	case "anthropic", "google", "bedrock", "cohere":
 		return true
-	case "cohere", "replicate":
+	case "replicate":
 		return false
 	}
 	_, err := openAICompatConfigFor(h)
@@ -200,6 +200,16 @@ func (t *toolCallStream) find(frag ToolCall) int {
 		return i
 	}
 	return -1
+}
+
+// numbered gives calls their position, the way an assembled stream's are
+// numbered, so a dialect that reports its calls whole agrees with one that
+// reports them in fragments.
+func numbered(calls []ToolCall) []ToolCall {
+	for i := range calls {
+		calls[i].Index = i
+	}
+	return calls
 }
 
 // done returns the calls in the order their first fragment arrived. A slice
