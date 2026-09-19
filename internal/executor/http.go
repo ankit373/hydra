@@ -167,7 +167,11 @@ func (e *HTTPExecutor) executeOpenAICompatible(ctx context.Context, req Request,
 
 func (e *HTTPExecutor) executeAnthropic(ctx context.Context, req Request) (*Response, error) {
 	model := defaultModelFor("anthropic")
-	raw, err := json.Marshal(anthropicBody(req, model, false))
+	body, err := anthropicBody(req, model, false)
+	if err != nil {
+		return nil, err
+	}
+	raw, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
@@ -191,10 +195,14 @@ func (e *HTTPExecutor) executeAnthropic(ctx context.Context, req Request) (*Resp
 	var out struct {
 		Model   string `json:"model"`
 		Content []struct {
-			Type string `json:"type"`
-			Text string `json:"text"`
+			Type  string          `json:"type"`
+			Text  string          `json:"text"`
+			ID    string          `json:"id"`
+			Name  string          `json:"name"`
+			Input json.RawMessage `json:"input"`
 		} `json:"content"`
-		Usage struct {
+		StopReason string `json:"stop_reason"`
+		Usage      struct {
 			InputTokens  int `json:"input_tokens"`
 			OutputTokens int `json:"output_tokens"`
 		} `json:"usage"`
@@ -203,9 +211,25 @@ func (e *HTTPExecutor) executeAnthropic(ctx context.Context, req Request) (*Resp
 		return nil, fmt.Errorf("http exec %s: decode: %w", req.Head.ID, err)
 	}
 
-	return httpResponse(req, joinAnthropicBlocks(out.Content),
+	var text []textBlock
+	var calls []ToolCall
+	for _, b := range out.Content {
+		if b.Type == "tool_use" {
+			calls = append(calls, ToolCall{
+				ID: b.ID, Type: "function", Index: len(calls),
+				Function: ToolCallFunction{Name: b.Name, Arguments: toolArguments(b.Input)},
+			})
+			continue
+		}
+		text = append(text, textBlock{Text: b.Text})
+	}
+
+	answer := httpResponse(req, joinTextBlocks(text),
 		firstNonEmpty(out.Model, model),
-		out.Usage.InputTokens, out.Usage.OutputTokens, start), nil
+		out.Usage.InputTokens, out.Usage.OutputTokens, start)
+	answer.ToolCalls = calls
+	answer.FinishReason = anthropicFinish(out.StopReason)
+	return answer, nil
 }
 
 // anthropicMessagesURL honours ANTHROPIC_BASE_URL, the variable the official
@@ -218,21 +242,35 @@ func anthropicMessagesURL() string {
 // anthropicBody and setAnthropicHeaders are shared with the streaming path, so
 // the two cannot drift into asking for different things or pinning different
 // API versions. Streaming is the one field that differs.
-func anthropicBody(req Request, model string, stream bool) map[string]interface{} {
+func anthropicBody(req Request, model string, stream bool) (map[string]interface{}, error) {
+	system, msgs, err := anthropicConversation(buildMessages(req))
+	if err != nil {
+		return nil, err
+	}
 	body := map[string]interface{}{
 		"model":      model,
 		"max_tokens": defaultMaxTokens(req.MaxTokens, 1024),
-		"messages": []map[string]string{
-			{"role": "user", "content": req.Prompt},
-		},
+		"messages":   msgs,
 	}
-	if req.System != "" {
-		body["system"] = req.System
+	if system != "" {
+		body["system"] = system
+	}
+	if len(req.Tools) > 0 {
+		choice, send, err := anthropicToolChoice(req.ToolChoice)
+		if err != nil {
+			return nil, err
+		}
+		if send {
+			body["tools"] = anthropicTools(req.Tools)
+			if choice != nil {
+				body["tool_choice"] = choice
+			}
+		}
 	}
 	if stream {
 		body["stream"] = true
 	}
-	return body
+	return body, nil
 }
 
 func setAnthropicHeaders(r *http.Request) {
@@ -748,17 +786,6 @@ func joinGeminiParts(parts []struct {
 	texts := make([]textBlock, 0, len(parts))
 	for _, p := range parts {
 		texts = append(texts, textBlock{Text: p.Text})
-	}
-	return joinTextBlocks(texts)
-}
-
-func joinAnthropicBlocks(blocks []struct {
-	Type string `json:"type"`
-	Text string `json:"text"`
-}) string {
-	texts := make([]textBlock, 0, len(blocks))
-	for _, b := range blocks {
-		texts = append(texts, textBlock{Text: b.Text})
 	}
 	return joinTextBlocks(texts)
 }
