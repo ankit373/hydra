@@ -113,6 +113,11 @@ Typical savings: 75-85% vs routing everything through Claude. Run `hyctl pricing
 - The routing math teaser (Pareto, SPRT, percolation-κ charts): https://hydra.uvansa.com/#math
 - Where Hydra fits (local-first + trust quadrant): https://hydra.uvansa.com/#universe
 - Cost comparison vs gateways: https://hydra.uvansa.com/#compare
+- Engineering blog, field notes with the measurements shown: https://hydra.uvansa.com/blog/
+- "Twenty-four green builds that shipped nothing", why a release channel can die while every pull request stays green, and what an artifact check catches that a build log never will: https://hydra.uvansa.com/blog/twenty-four-green-builds.html
+- "A test that passes under the bug it exists to catch", five tests that were green while asserting nothing, and the habit that finds them: https://hydra.uvansa.com/blog/a-test-that-cannot-fail.html
+- "The diagnosis is unanimous, the cure isn't", a sourced read of where AI research is heading, checked against Hydra's roadmap: https://hydra.uvansa.com/blog/the-diagnosis-is-unanimous.html
+- Frequently asked questions, answered on the landing page: https://hydra.uvansa.com/#faq
 - Changelog: https://github.com/ankit373/hydra/blob/main/CHANGELOG.md
 - Funding, machine-readable funding manifest (fundingjson.org): https://hydra.uvansa.com/funding.json
 

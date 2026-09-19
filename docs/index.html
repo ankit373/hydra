@@ -113,69 +113,93 @@
 
   <!-- Structured Data: FAQ -->
   <script type="application/ld+json">
-  {
-    "@context": "https://schema.org",
-    "@type": "FAQPage",
-    "mainEntity": [
-      {
-        "@type": "Question",
-        "name": "What is Hydra?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "Hydra is the Trust Control Plane for AI development, an open source CLI written in Go that routes developer tasks across every AI model on your machine to a target confidence of correctness, not just the cheapest one. It samples models adaptively (SPRT) and stops as soon as the evidence is strong enough, which also cuts AI API costs 70-85% along the way."
-        }
-      },
-      {
-        "@type": "Question",
-        "name": "What is a Trust Control Plane?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "A Trust Control Plane routes work to a target confidence of correctness rather than just the cheapest or fastest model. Hydra measures each model's calibration from real outcomes (hyctl trust calibration), runs a sequential probability ratio test (SPRT) that samples models adaptively and stops once confidence crosses your target, and automatically raises the bar for code with a wider blast radius, spending more only where accuracy demands it."
-        }
-      },
-      {
-        "@type": "Question",
-        "name": "How does Hydra reduce AI costs?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "Hydra classifies each task by complexity and routes it to the cheapest model capable of handling it. Boilerplate code, mock data, and simple helpers go to local Qwen via Ollama (free). Standard CRUD and API work goes to Gemini Flash (~100x cheaper than Claude). Only architecture decisions and complex reasoning tasks reach Claude. This tiered routing typically reduces total LLM spend by 70-85% compared to routing everything through a frontier model."
-        }
-      },
-      {
-        "@type": "Question",
-        "name": "How do I install Hydra?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "Install the Hydra CLI (hyctl) via Homebrew: 'brew install ankit373/hydra/hyctl'. Also available via npm ('npm install -g hyctl'), npx ('npx hyctl'), pip ('pip install hyctl'), a standalone installer ('curl -fsSL https://raw.githubusercontent.com/ankit373/hydra/main/install.sh | sh'), or prebuilt binaries from GitHub releases. Optionally install Ollama for local model support."
-        }
-      },
-      {
-        "@type": "Question",
-        "name": "What models does Hydra support?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "Hydra supports any model accessible via Antigravity (agy) or Ollama. Out of the box: Claude Opus and Sonnet (tiers 1-3), Gemini 2.5 Pro and Flash (tiers 4-8), and Qwen3 via Ollama (tiers 9-10 local). New models are added at runtime with 'hyctl models add' or by editing registry/models.yaml, no code changes required."
-        }
-      },
-      {
-        "@type": "Question",
-        "name": "What is swarm dispatch?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "Swarm dispatch fans a single prompt out to multiple model heads simultaneously. Race mode returns the first successful response. Best mode uses an LLM judge to pick the highest quality answer. All mode aggregates every response for comparison. Run it with: hyctl dispatch --swarm --swarm-mode race 'your prompt'."
-        }
-      },
-      {
-        "@type": "Question",
-        "name": "Does Hydra work without internet?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "Yes. Hydra maintains a 100% local fallback chain. When cloud APIs are unavailable or token budgets are exhausted, Hydra automatically routes to Qwen via Ollama running locally. The routing and cost tracking engine runs entirely offline, only the model API calls require network access."
-        }
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "What is Hydra?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Hydra is the Trust Control Plane for AI development, an open source CLI written in Go that routes developer tasks across every AI model on your machine to a target confidence of correctness, not just the cheapest one. It samples models adaptively (SPRT) and stops as soon as the evidence is strong enough, which also cuts AI API costs 70-85% along the way."
       }
-    ]
-  }
-  </script>
+    },
+    {
+      "@type": "Question",
+      "name": "What is a Trust Control Plane?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "A Trust Control Plane routes work to a target confidence of correctness rather than just the cheapest or fastest model. Hydra measures each model's calibration from real outcomes (hyctl trust calibration), runs a sequential probability ratio test (SPRT) that samples models adaptively and stops once confidence crosses your target, and automatically raises the bar for code with a wider blast radius, spending more only where accuracy demands it."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "How does Hydra reduce AI costs?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Hydra classifies each task by complexity and routes it to the cheapest model capable of handling it. Boilerplate code, mock data, and simple helpers go to local Qwen via Ollama (free). Standard CRUD and API work goes to Gemini Flash (~100x cheaper than Claude). Only architecture decisions and complex reasoning tasks reach Claude. This tiered routing typically reduces total LLM spend by 70-85% compared to routing everything through a frontier model."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "How do I install Hydra?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Install the Hydra CLI (hyctl) via Homebrew: 'brew install ankit373/hydra/hyctl'. Also available via npm ('npm install -g hyctl'), npx ('npx hyctl'), pip ('pip install hyctl'), a standalone installer ('curl -fsSL https://raw.githubusercontent.com/ankit373/hydra/main/install.sh | sh'), or prebuilt binaries from GitHub releases. Optionally install Ollama for local model support."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "What models does Hydra support?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Hydra supports any model accessible via Antigravity (agy) or Ollama. Out of the box: Claude Opus and Sonnet (tiers 1-3), Gemini 2.5 Pro and Flash (tiers 4-8), and Qwen3 via Ollama (tiers 9-10 local). New models are added at runtime with 'hyctl models add' or by editing registry/models.yaml, no code changes required."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "What is swarm dispatch?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Swarm dispatch fans a single prompt out to multiple model heads simultaneously. Race mode returns the first successful response. Best mode uses an LLM judge to pick the highest quality answer. All mode aggregates every response for comparison. Run it with: hyctl dispatch --swarm --swarm-mode race 'your prompt'."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Does Hydra work without internet?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes. Hydra maintains a 100% local fallback chain. When cloud APIs are unavailable or token budgets are exhausted, Hydra automatically routes to Qwen via Ollama running locally. The routing and cost tracking engine runs entirely offline, only the model API calls require network access."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Does Hydra stream model output as it arrives?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes, on every surface. A dispatch renders while the model is still writing it in the terminal, the hyctl tui cockpit, the desktop app and across a swarm fan-out. Seven executor paths stream natively: the OpenAI-compatible wire shape and Azure, Anthropic, Gemini, Cohere, Bedrock over its binary event stream, Ollama, and the agy CLI. A head that cannot stream is not a separate code path, its whole output is delivered as one delta so every surface is written once. When the router falls back mid-answer the abandoned partial collapses to one line naming the head, how much it wrote and why it stopped, rather than staying on screen as if it were the answer."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "What data leaves my machine when I use Hydra?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Only the prompt you dispatch, and only to the head that answers it. There is no account, no server and no telemetry. Spend logs, run logs, the calibration record and the oracle-verified corpus all stay in ~/.hydra on your own disk. An egress gate refuses a file classified as secret, such as .env or ~/.aws/credentials, to any head that leaves the machine, and a local-only policy pins sensitive work to models running on your hardware. Traces are exported to an OpenTelemetry collector only when you pass --otlp with an endpoint."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Can Hydra route between local models like Ollama and llama.cpp?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes. Hydra discovers a running Ollama server as one routable head per model, and a llama.cpp server as one head per loaded model, identified from llama.cpp's own build_info rather than assumed from its port, so an unrelated service on 8080 yields no heads. A LiteLLM proxy is discovered as one head per model it fronts, and whether each counts as local is decided from the upstream the proxy reports rather than from its address, because a proxy on localhost forwarding to OpenAI is the normal deployment. hyctl models pull fetches a model into the local Ollama server, including a HuggingFace GGUF repo, without leaving hyctl."
+      }
+    }
+  ]
+}
+</script>
 
   <!-- Structured Data: SoftwareSourceCode (entity recognition) -->
   <script type="application/ld+json">
@@ -563,9 +587,11 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
     <a href="#universe">Universe</a>
     <a href="/docs.html">Docs</a>
     <a href="/first-principles.html">First principles</a>
+    <a href="/blog/">Blog</a>
     <a href="/app.html">Desktop app</a>
     <a href="#security">Security</a>
     <a href="#compare">Compare</a>
+    <a href="#faq">FAQ</a>
     <a href="/pricing.html">Pricing</a>
     <a href="https://github.com/ankit373/hydra">GitHub</a>
     <a href="#start">Get started</a>
@@ -846,6 +872,39 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
   <p class="cmp-note"><b>Every row checked above ships today</b>: <code>hyctl dispatch --confidence</code>, <code>hyctl graph blast</code>, <code>hyctl mcp</code>, <code>hyctl mcp registry</code>. The cockpit (<code>hyctl tui</code>) runs the work you type and renders real runs from the per-run event log, and the desktop app ships as a download for macOS, Windows and Linux on both x86-64 and ARM64 with every release, not yet code-signed, so macOS needs right-click → Open on first launch.</p>
 </section>
 
+<!-- ══ 6a2 · STREAMING ══════════════════════════════════════════════════════ -->
+<section class="blk wrap reveal" id="streaming">
+  <div class="klabel"><span>Streaming</span><b>every dialect, every surface</b></div>
+  <h2 class="big">A slow answer and a broken one <span class="grad">look identical</span>.</h2>
+  <p style="max-width:720px;color:var(--dim)">
+    Until they start arriving. Hydra renders a dispatch while the model is still
+    writing it, in the terminal, in the <code>hyctl tui</code> cockpit, in the
+    desktop app, and across a swarm fan-out. Seven executor paths stream
+    natively: the OpenAI-compatible wire shape and Azure, Anthropic, Gemini,
+    Cohere, Bedrock over its binary event stream, Ollama, and the agy CLI.
+  </p>
+  <p style="max-width:720px;color:var(--dim)">
+    A head that <em>cannot</em> stream is not a second code path. Its whole
+    output is delivered as one delta, so every surface is written once and the
+    two kinds cannot drift apart in how they render.
+  </p>
+
+  <div class="term" style="margin-top:20px;max-width:720px">
+    <div class="copyline" data-copy="hyctl dispatch --enum STANDARD &quot;add pagination to the users endpoint&quot;"><span><span class="p">$</span> hyctl dispatch --enum STANDARD "add pagination…"</span><span class="cp">copy</span></div>
+    <div class="o"><span class="c">ollama/qwen3:8b</span> · T8 · writing…</div>
+    <div class="o" style="opacity:.62">⤺ abandoned <span class="c">openrouter/gpt</span> after ~212 chars: 429 rate limited</div>
+    <div class="o" style="opacity:.62">&nbsp;&nbsp;&nbsp;hyctl trace view run-7f2a --span 9c1d4e02</div>
+  </div>
+  <p class="cmp-note" style="margin-top:16px">
+    When the router falls back mid-answer, the abandoned partial does not sit
+    there pretending to be the answer. It collapses to one line naming the head,
+    roughly how much it wrote and why it stopped, and expands if you want to
+    read it. The trace command appears only when payload capture is on, because
+    without it the span stores no text and pointing you at an empty page would
+    be worse than saying nothing.
+  </p>
+</section>
+
 <!-- ══ 6b · DESKTOP APP NUDGE ═══════════════════════════════════════════════ -->
 <section class="blk wrap reveal" id="app">
   <div class="klabel"><span>Hydra Desktop</span><b>ships with every release</b></div>
@@ -924,6 +983,60 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
   </div>
 </section>
 
+<style>
+.faq{display:grid;gap:22px;margin-top:28px;max-width:820px;}
+.faq-item h3{margin:0 0 8px;font-size:17px;font-weight:700;letter-spacing:-.2px;}
+.faq-item p{margin:0;color:var(--dim);font-size:15px;line-height:1.7;}
+@media(min-width:900px){.faq{grid-template-columns:1fr 1fr;gap:26px 40px;max-width:none;}}
+</style>
+<!-- ══ FAQ ══════════════════════════════════════════════════════════════════ -->
+<section class="blk wrap reveal" id="faq">
+  <div class="klabel"><span>FAQ</span><b>the questions people actually ask</b></div>
+  <h2 class="big">Straight <span class="grad">answers</span>.</h2>
+  <div class="faq">
+    <div class="faq-item">
+      <h3>What is Hydra?</h3>
+      <p>Hydra is the Trust Control Plane for AI development, an open source CLI written in Go that routes developer tasks across every AI model on your machine to a target confidence of correctness, not just the cheapest one. It samples models adaptively (SPRT) and stops as soon as the evidence is strong enough, which also cuts AI API costs 70-85% along the way.</p>
+    </div>
+    <div class="faq-item">
+      <h3>What is a Trust Control Plane?</h3>
+      <p>A Trust Control Plane routes work to a target confidence of correctness rather than just the cheapest or fastest model. Hydra measures each model&#x27;s calibration from real outcomes (hyctl trust calibration), runs a sequential probability ratio test (SPRT) that samples models adaptively and stops once confidence crosses your target, and automatically raises the bar for code with a wider blast radius, spending more only where accuracy demands it.</p>
+    </div>
+    <div class="faq-item">
+      <h3>How does Hydra reduce AI costs?</h3>
+      <p>Hydra classifies each task by complexity and routes it to the cheapest model capable of handling it. Boilerplate code, mock data, and simple helpers go to local Qwen via Ollama (free). Standard CRUD and API work goes to Gemini Flash (~100x cheaper than Claude). Only architecture decisions and complex reasoning tasks reach Claude. This tiered routing typically reduces total LLM spend by 70-85% compared to routing everything through a frontier model.</p>
+    </div>
+    <div class="faq-item">
+      <h3>How do I install Hydra?</h3>
+      <p>Install the Hydra CLI (hyctl) via Homebrew: &#x27;brew install ankit373/hydra/hyctl&#x27;. Also available via npm (&#x27;npm install -g hyctl&#x27;), npx (&#x27;npx hyctl&#x27;), pip (&#x27;pip install hyctl&#x27;), a standalone installer (&#x27;curl -fsSL https://raw.githubusercontent.com/ankit373/hydra/main/install.sh | sh&#x27;), or prebuilt binaries from GitHub releases. Optionally install Ollama for local model support.</p>
+    </div>
+    <div class="faq-item">
+      <h3>What models does Hydra support?</h3>
+      <p>Hydra supports any model accessible via Antigravity (agy) or Ollama. Out of the box: Claude Opus and Sonnet (tiers 1-3), Gemini 2.5 Pro and Flash (tiers 4-8), and Qwen3 via Ollama (tiers 9-10 local). New models are added at runtime with &#x27;hyctl models add&#x27; or by editing registry/models.yaml, no code changes required.</p>
+    </div>
+    <div class="faq-item">
+      <h3>What is swarm dispatch?</h3>
+      <p>Swarm dispatch fans a single prompt out to multiple model heads simultaneously. Race mode returns the first successful response. Best mode uses an LLM judge to pick the highest quality answer. All mode aggregates every response for comparison. Run it with: hyctl dispatch --swarm --swarm-mode race &#x27;your prompt&#x27;.</p>
+    </div>
+    <div class="faq-item">
+      <h3>Does Hydra work without internet?</h3>
+      <p>Yes. Hydra maintains a 100% local fallback chain. When cloud APIs are unavailable or token budgets are exhausted, Hydra automatically routes to Qwen via Ollama running locally. The routing and cost tracking engine runs entirely offline, only the model API calls require network access.</p>
+    </div>
+    <div class="faq-item">
+      <h3>Does Hydra stream model output as it arrives?</h3>
+      <p>Yes, on every surface. A dispatch renders while the model is still writing it in the terminal, the hyctl tui cockpit, the desktop app and across a swarm fan-out. Seven executor paths stream natively: the OpenAI-compatible wire shape and Azure, Anthropic, Gemini, Cohere, Bedrock over its binary event stream, Ollama, and the agy CLI. A head that cannot stream is not a separate code path, its whole output is delivered as one delta so every surface is written once. When the router falls back mid-answer the abandoned partial collapses to one line naming the head, how much it wrote and why it stopped, rather than staying on screen as if it were the answer.</p>
+    </div>
+    <div class="faq-item">
+      <h3>What data leaves my machine when I use Hydra?</h3>
+      <p>Only the prompt you dispatch, and only to the head that answers it. There is no account, no server and no telemetry. Spend logs, run logs, the calibration record and the oracle-verified corpus all stay in ~/.hydra on your own disk. An egress gate refuses a file classified as secret, such as .env or ~/.aws/credentials, to any head that leaves the machine, and a local-only policy pins sensitive work to models running on your hardware. Traces are exported to an OpenTelemetry collector only when you pass --otlp with an endpoint.</p>
+    </div>
+    <div class="faq-item">
+      <h3>Can Hydra route between local models like Ollama and llama.cpp?</h3>
+      <p>Yes. Hydra discovers a running Ollama server as one routable head per model, and a llama.cpp server as one head per loaded model, identified from llama.cpp&#x27;s own build_info rather than assumed from its port, so an unrelated service on 8080 yields no heads. A LiteLLM proxy is discovered as one head per model it fronts, and whether each counts as local is decided from the upstream the proxy reports rather than from its address, because a proxy on localhost forwarding to OpenAI is the normal deployment. hyctl models pull fetches a model into the local Ollama server, including a HuggingFace GGUF repo, without leaving hyctl.</p>
+    </div>
+  </div>
+</section>
+
 <!-- ══ FINAL CTA ════════════════════════════════════════════════════════════ -->
 <section class="cta reveal">
   <h2>Stop paying frontier prices<br>for <span class="grad">boilerplate</span>.</h2>
@@ -950,6 +1063,7 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
         <a href="#math">The math</a>
         <a href="#security">Security</a>
         <a href="#compare">Comparison</a>
+        <a href="/blog/">Blog</a>
       </div>
       <div class="col">
         <h4>CLI</h4>
