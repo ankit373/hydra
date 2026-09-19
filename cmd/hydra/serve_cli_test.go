@@ -4,13 +4,16 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"strings"
 	"testing"
 
+	"github.com/ankit373/hydra/internal/dispatch"
 	"github.com/ankit373/hydra/internal/executor"
 	"github.com/ankit373/hydra/internal/provider"
 	"github.com/ankit373/hydra/internal/serve"
+	"github.com/ankit373/hydra/internal/testutil"
 )
 
 // The client's model field is the routing instruction, so what it resolves to
@@ -102,5 +105,94 @@ func TestPrintServeBanner_SaysWhenATokenIsRequired(t *testing.T) {
 	printServeBanner(&buf, "0.0.0.0:8787", "HARD", true, false, nil)
 	if !strings.Contains(buf.String(), "bearer token required") {
 		t.Errorf("an exposed endpoint did not say it is authenticated:\n%s", buf.String())
+	}
+}
+
+// The adapter is the only place internal/serve and the router meet, so what it
+// drops is invisible everywhere else: an answer with no head cannot be
+// attributed, and tokens it forgets never reach the client's usage block.
+func TestServeRouter_CarriesTheAnswerHeadAndTokensBack(t *testing.T) {
+	dispatchable(t, "the head's answer")
+
+	ctx := context.Background()
+	d, err := dispatch.New(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+
+	ans, err := serveRouter{d: d, runID: "run-1", defaultEnum: "MODERATE"}.
+		Chat(ctx, serve.Request{Messages: []executor.Message{{Role: "user", Content: "hi"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(ans.Output, "the head's answer") {
+		t.Errorf("the answer did not survive the adapter: %q", ans.Output)
+	}
+	if ans.Head == "" {
+		t.Error("no head recorded, so the reply cannot say what answered")
+	}
+	if ans.InputTokens == 0 && ans.OutputTokens == 0 {
+		t.Error("no tokens carried back, so the client's usage block reads as a free call")
+	}
+}
+
+// A request the router cannot serve has to surface as an error, not as an empty
+// answer the client would render as the model saying nothing.
+func TestServeRouter_ARoutingFailureIsAnError(t *testing.T) {
+	dispatchable(t, "unused")
+
+	ctx := context.Background()
+	d, err := dispatch.New(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+
+	_, err = serveRouter{d: d, runID: "run-2", defaultEnum: "MODERATE"}.
+		Chat(ctx, serve.Request{
+			Messages: []executor.Message{{Role: "user", Content: "hi"}},
+			Route:    serve.Route{Enum: "NOT_A_KEY"},
+		})
+	if err == nil {
+		t.Fatal("an unknown routing key produced an answer")
+	}
+	if !errors.Is(err, serve.ErrBadRequest) {
+		t.Errorf("the client would be told 502 for its own mistake: %v", err)
+	}
+}
+
+// /v1/models is what a client's model picker reads, so it has to carry the
+// routing keys as well as the heads, or the picker shows no way to route.
+func TestServeRouter_ModelsAdvertisesRoutingKeysAndHeads(t *testing.T) {
+	dispatchable(t, "unused")
+
+	ctx := context.Background()
+	d, err := dispatch.New(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+
+	ids := map[string]bool{}
+	for _, m := range (serveRouter{d: d}).Models() {
+		ids[m.ID] = true
+	}
+	for _, want := range []string{"hydra", "hydra/hard", "cody"} {
+		if !ids[want] {
+			t.Errorf("the listing is missing %q: %v", want, ids)
+		}
+	}
+}
+
+// A garbage default enum must be refused before the listener is ever bound.
+func TestCmdServe_GarbageEnumIsRefusedBeforeBinding(t *testing.T) {
+	testutil.NewSandbox(t)
+	_, _, err := run(t, "serve", "--enum", "NOT_AN_ENUM")
+	if err == nil {
+		t.Fatal("a garbage enum was accepted")
+	}
+	if !strings.Contains(err.Error(), "NOT_AN_ENUM") {
+		t.Errorf("the refusal does not name the enum: %v", err)
 	}
 }
