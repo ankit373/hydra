@@ -871,6 +871,11 @@ hyctl eval stats                        # the verified corpus: size and pass rat
 hyctl eval readiness                    # per enum, whether the corpus can yet fit a routing choice
 hyctl eval list --failed                # the examples the oracle rejected
 hyctl eval training                     # vectors per embedding model, whether a classifier could be fitted
+
+# The standalone verifier: fill the corpus with no router and no Hydra config.
+# Built from this repo (go build ./cmd/hyverify), it reads no ~/.hydra at all.
+hyverify --candidate internal/auth/token.go --task "rotate signing key" --enum MODERATE
+hyverify --candidate out.go --task "..." -- go test ./...   # name the judge yourself
 hyctl mcp check <tool> --agent A --resource R --action write  # gate + record an access
 hyctl mcp check <tool> --content "$DATA" --action network      # PII auto-classified; policy can deny egress
 hyctl mcp check <tool> --params '{"amount":500}'               # bind a hash of the params to the decision
