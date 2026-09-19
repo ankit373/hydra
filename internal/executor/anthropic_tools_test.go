@@ -373,12 +373,12 @@ func TestAnthropic_StreamedAndBufferedAgreeOnTheSameCall(t *testing.T) {
 // dialect: the list is the claim, and a dialect that maps tools without being
 // added here is a capability nothing can reach.
 func TestCanUseTools_NamesEveryDialectThatMapsThem(t *testing.T) {
-	for _, p := range []string{"anthropic", "google"} {
+	for _, p := range []string{"anthropic", "google", "bedrock"} {
 		if !CanUseTools(head(p)) {
 			t.Errorf("%s maps tools but heads of that provider are still skipped", p)
 		}
 	}
-	for _, p := range []string{"cohere", "bedrock", "replicate"} {
+	for _, p := range []string{"cohere", "replicate"} {
 		if CanUseTools(head(p)) {
 			t.Errorf("%s reports it can carry tools, but nothing maps them yet", p)
 		}

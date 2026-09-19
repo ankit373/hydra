@@ -507,7 +507,11 @@ func (e *HTTPExecutor) executeAzureOpenAI(ctx context.Context, req Request) (*Re
 
 func (e *HTTPExecutor) executeBedrock(ctx context.Context, req Request) (*Response, error) {
 	model := defaultModelFor("bedrock")
-	raw, err := json.Marshal(bedrockBody(req))
+	body, err := bedrockBody(req)
+	if err != nil {
+		return nil, err
+	}
+	raw, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
@@ -534,10 +538,11 @@ func (e *HTTPExecutor) executeBedrock(ctx context.Context, req Request) (*Respon
 	var out struct {
 		Output struct {
 			Message struct {
-				Content []textBlock `json:"content"`
+				Content []bedrockBlock `json:"content"`
 			} `json:"message"`
 		} `json:"output"`
-		Usage struct {
+		StopReason string `json:"stopReason"`
+		Usage      struct {
 			InputTokens  int `json:"inputTokens"`
 			OutputTokens int `json:"outputTokens"`
 		} `json:"usage"`
@@ -546,11 +551,17 @@ func (e *HTTPExecutor) executeBedrock(ctx context.Context, req Request) (*Respon
 		return nil, fmt.Errorf("http exec %s: decode: %w", req.Head.ID, err)
 	}
 
-	answer := joinTextBlocks(out.Output.Message.Content)
-	if answer == "" {
+	text, calls := bedrockBlocks(out.Output.Message.Content)
+	// Emptiness means no text AND no calls: an answer that only asks for a tool
+	// carries no text at all, and this check predates tool support.
+	if text == "" && len(calls) == 0 {
 		return nil, fmt.Errorf("http exec %s: empty response", req.Head.ID)
 	}
-	return httpResponse(req, answer, model, out.Usage.InputTokens, out.Usage.OutputTokens, start), nil
+
+	answer := httpResponse(req, text, model, out.Usage.InputTokens, out.Usage.OutputTokens, start)
+	answer.ToolCalls = calls
+	answer.FinishReason = bedrockFinish(out.StopReason)
+	return answer, nil
 }
 
 // bedrockURL addresses the Converse API, which is model-agnostic: one request
@@ -572,19 +583,36 @@ func bedrockURL(model string, stream bool) string {
 
 // bedrockBody is the Converse request. Shared with the streaming path so the
 // two cannot drift into asking for different things.
-func bedrockBody(req Request) map[string]interface{} {
-	body := map[string]interface{}{
-		"messages": []map[string]interface{}{
-			{"role": "user", "content": []map[string]string{{"text": req.Prompt}}},
-		},
+func bedrockBody(req Request) (map[string]interface{}, error) {
+	system, msgs, err := bedrockConversation(buildMessages(req))
+	if err != nil {
+		return nil, err
 	}
-	if req.System != "" {
-		body["system"] = []map[string]string{{"text": req.System}}
+	body := map[string]interface{}{"messages": msgs}
+	if len(system) > 0 {
+		blocks := make([]map[string]string, 0, len(system))
+		for _, s := range system {
+			blocks = append(blocks, map[string]string{"text": s})
+		}
+		body["system"] = blocks
 	}
 	if req.MaxTokens > 0 {
 		body["inferenceConfig"] = map[string]int{"maxTokens": req.MaxTokens}
 	}
-	return body
+	if len(req.Tools) > 0 {
+		choice, send, err := bedrockToolChoice(req.ToolChoice)
+		if err != nil {
+			return nil, err
+		}
+		if send {
+			cfg := map[string]any{"tools": bedrockTools(req.Tools)}
+			if choice != nil {
+				cfg["toolChoice"] = choice
+			}
+			body["toolConfig"] = cfg
+		}
+	}
+	return body, nil
 }
 
 func (e *HTTPExecutor) executeReplicate(ctx context.Context, req Request) (*Response, error) {

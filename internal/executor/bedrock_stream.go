@@ -13,7 +13,11 @@ import (
 
 func (e *HTTPExecutor) streamBedrock(ctx context.Context, req Request, onDelta OnDelta) (*Response, error) {
 	model := defaultModelFor("bedrock")
-	raw, err := json.Marshal(bedrockBody(req))
+	body, err := bedrockBody(req)
+	if err != nil {
+		return nil, err
+	}
+	raw, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
@@ -31,6 +35,8 @@ func (e *HTTPExecutor) streamBedrock(ctx context.Context, req Request, onDelta O
 	}
 
 	var inTok, outTok int
+	var finish string
+	var tools toolCallStream
 
 	sink, start, err := e.streamRequest(ctx, req.Head.ID, httpReq, onDelta, func(body io.Reader, sink *deltaSink) error {
 		return scanEventStream(body, func(f eventFrame) error {
@@ -40,18 +46,60 @@ func (e *HTTPExecutor) streamBedrock(ctx context.Context, req Request, onDelta O
 				return fmt.Errorf("bedrock: %s: %s", f.Headers[":exception-type"], bedrockErrorMessage(f.Payload))
 			}
 			switch f.Headers[":event-type"] {
+			case "contentBlockStart":
+				// A tool call announces its identity here; its input follows as
+				// partial JSON on the deltas for the same block index.
+				var ev struct {
+					Start struct {
+						ToolUse *struct {
+							ToolUseID string `json:"toolUseId"`
+							Name      string `json:"name"`
+						} `json:"toolUse"`
+					} `json:"start"`
+					Index int `json:"contentBlockIndex"`
+				}
+				if err := json.Unmarshal(f.Payload, &ev); err != nil {
+					return fmt.Errorf("decode contentBlockStart: %w", err)
+				}
+				if ev.Start.ToolUse == nil {
+					return nil
+				}
+				tools.add(ToolCall{
+					Index: ev.Index, ID: ev.Start.ToolUse.ToolUseID, Type: "function",
+					Function: ToolCallFunction{Name: ev.Start.ToolUse.Name},
+				})
+				sink.noteStructured()
 			case "contentBlockDelta":
 				var ev struct {
 					Delta struct {
-						Text string `json:"text"`
+						Text    string `json:"text"`
+						ToolUse *struct {
+							Input string `json:"input"`
+						} `json:"toolUse"`
 					} `json:"delta"`
+					Index int `json:"contentBlockIndex"`
 				}
 				if err := json.Unmarshal(f.Payload, &ev); err != nil {
 					return fmt.Errorf("decode contentBlockDelta: %w", err)
 				}
-				// delta.toolUse and delta.reasoningContent ride the same event
-				// and are not answer text, so only text is read.
+				// delta.reasoningContent rides the same event and is not the
+				// answer, so it is still skipped.
+				if tu := ev.Delta.ToolUse; tu != nil {
+					tools.add(ToolCall{
+						Index:    ev.Index,
+						Function: ToolCallFunction{Arguments: tu.Input},
+					})
+					return nil
+				}
 				sink.write(ev.Delta.Text)
+			case "messageStop":
+				var ev struct {
+					StopReason string `json:"stopReason"`
+				}
+				if err := json.Unmarshal(f.Payload, &ev); err != nil {
+					return fmt.Errorf("decode messageStop: %w", err)
+				}
+				finish = bedrockFinish(ev.StopReason)
 			case "metadata":
 				var ev struct {
 					Usage struct {
@@ -74,6 +122,8 @@ func (e *HTTPExecutor) streamBedrock(ctx context.Context, req Request, onDelta O
 	answer := httpResponse(req, sink.output(), model, inTok, outTok, start)
 	answer.Truncated = sink.truncated()
 	answer.TTFT = sink.firstTokenAt()
+	answer.ToolCalls = tools.done()
+	answer.FinishReason = finish
 	return answer, nil
 }
 
