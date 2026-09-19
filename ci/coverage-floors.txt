@@ -36,6 +36,7 @@
 #     built binary, and a subprocess contributes nothing to this profile.
 floor cmd/specstest                 90
 floor cmd/hydra                     77
+floor cmd/hyverify                  85
 floor internal/a2a                  93
 # internal/awsconf reads 88.3%. The uncovered lines are os.UserHomeDir failing
 # and the two default paths, which the tests override to stay off the
