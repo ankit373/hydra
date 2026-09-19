@@ -15,9 +15,11 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/ankit373/hydra/internal/cache"
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/diff"
 	"github.com/ankit373/hydra/internal/dispatch"
+	"github.com/ankit373/hydra/internal/embed"
 	"github.com/ankit373/hydra/internal/evalset"
 	"github.com/ankit373/hydra/internal/policy"
 	"github.com/ankit373/hydra/internal/sandbox"
@@ -243,8 +245,11 @@ func Edit(ctx context.Context, req Request) (*Result, error) {
 			// so unlike a dispatch's verdict this one judges the candidate and
 			// is ground truth (#986). Filed here, before the rollback below
 			// discards the content it is about.
-			RecordVerifiedEdit(req.Prompt, req.File, req.Enum, dispResult.Head.ID,
-				newContent, vrc == 0, firstLine(vout))
+			RecordVerifiedEdit(ctx, d.Embedder(), VerifiedEdit{
+				Prompt: req.Prompt, File: req.File, Enum: req.Enum,
+				Head: dispResult.Head.ID, Candidate: newContent,
+				Passed: vrc == 0, Detail: firstLine(vout),
+			})
 			if vrc != 0 {
 				rollback(req.File, origContent, origExisted, resolved.GitRoot, backup)
 				return &Result{
@@ -322,6 +327,19 @@ func recordValidationOutcome(headID, domain string, passed bool) {
 	_ = cal.Update(headID, domain, true, outcome)
 }
 
+// VerifiedEdit is what a validated edit taught. A struct rather than the seven
+// positional arguments this was, five of them strings: swapping Enum and Head
+// compiles, and the vector would have made it nine.
+type VerifiedEdit struct {
+	Prompt    string // the instruction, not the prompt the head saw
+	File      string
+	Enum      string
+	Head      string
+	Candidate string
+	Passed    bool
+	Detail    string
+}
+
 // RecordVerifiedEdit is the one place both edit paths record what a validated
 // edit taught: the calibration outcome and the eval-set example. `hyctl parallel`
 // keeps its own edit mechanics by design, but sharing this is what stops the two
@@ -331,25 +349,50 @@ func recordValidationOutcome(headID, domain string, passed bool) {
 // Only ever call it where the validator actually ran. An extension with no
 // validator configured leaves an edit passing with nothing having checked it,
 // and recording that is the mislabelling #982 removed from the dispatch path.
-func RecordVerifiedEdit(prompt, file, enum, headID, candidate string, passed bool, detail string) {
-	recordValidationOutcome(headID, trust.DomainForFile(file), passed)
-	if strings.TrimSpace(candidate) == "" {
+func RecordVerifiedEdit(ctx context.Context, emb embed.Embedder, v VerifiedEdit) {
+	recordValidationOutcome(v.Head, trust.DomainForFile(v.File), v.Passed)
+	if strings.TrimSpace(v.Candidate) == "" {
 		return
 	}
 	breadcrumb, _ := config.Breadcrumb()
+	vec, model := embedTask(ctx, emb, v.Prompt)
 	// Never fail an edit because its example could not be filed. The edit is the
 	// work; the corpus entry is a record of it.
 	_, _ = evalset.Add(evalset.DefaultPath(), evalset.Example{
-		TaskHash:  evalset.TaskHashFor(prompt),
-		Domain:    trust.DomainForFile(file),
-		Source:    "editor:validator",
-		Candidate: candidate,
-		Passed:    passed,
-		Detail:    detail,
-		Enum:      enum,
-		Head:      headID,
-		Config:    breadcrumb,
+		TaskHash:   evalset.TaskHashFor(v.Prompt),
+		Domain:     trust.DomainForFile(v.File),
+		Source:     "editor:validator",
+		Candidate:  v.Candidate,
+		Passed:     v.Passed,
+		Detail:     v.Detail,
+		Enum:       v.Enum,
+		Head:       v.Head,
+		Config:     breadcrumb,
+		Embedding:  util.EncodeVec(vec),
+		EmbedModel: model,
 	})
+}
+
+// embedTask vectorises the instruction, never the prompt the head saw: that one
+// is mostly file content, and a classifier reading this corpus is handed the
+// task. cache.Normalize because a vector is only comparable to one made the
+// same way, and that is already the single derivation of how a prompt is
+// embedded.
+//
+// Bounded by embed.Timeout, which is generous because the first call loads a
+// cold model. Worth paying once here rather than shortening it: a deadline a
+// cold load cannot meet records no vector on the first edit of every session,
+// which looks like the feature not working. No vector is a normal outcome, not
+// a failure, so nothing about the edit changes either way.
+func embedTask(ctx context.Context, emb embed.Embedder, task string) ([]float32, string) {
+	if emb == nil || !emb.Available() || strings.TrimSpace(task) == "" {
+		return nil, ""
+	}
+	vec, err := emb.Embed(ctx, cache.Normalize(task))
+	if err != nil || len(vec) == 0 {
+		return nil, ""
+	}
+	return vec, emb.Model()
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────

@@ -91,6 +91,7 @@
       "hyctl stats --latency, p50/p90/p99 per model from mergeable sketches, not a rescan of the cost log",
       "Oracle-verified eval corpus (hyctl eval), labelled examples kept verbatim and exempt from retention, each tagged with the routing decision it judges",
       "Corpus readiness (hyctl eval readiness), whether enough verified examples exist per routing enum to fit a routing choice rather than guess at one",
+      "Corpus trainability (hyctl eval training), whether the verified examples carry the prompt vectors a classifier could be fitted on, reported per embedding model and never summed across them, because two models put one sentence in different spaces",
       "hyctl trace seal, folds old run logs into compressed monthly segments, losslessly and invisibly to readers",
       "Routing rules in config (registry/signals.yaml), priority-ordered rules over PII, injection, blast-radius and keyword signals that pin a tier, force local-only, raise the confidence bar or refuse; ships empty so routing is unchanged until you write one",
       "Cheapest measured-competent routing, an unpinned dispatch runs the cheapest head this machine has measured competent at the task's domain rather than the strongest one it owns; needs twenty judged answers in that domain, so an unmeasured machine routes exactly as before, and a named tier or enum is still obeyed as the instruction it is",

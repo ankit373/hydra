@@ -13,12 +13,9 @@ package cache
 
 import (
 	"bytes"
-	"encoding/base64"
-	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
 	"os"
 	"path/filepath"
 	"sync"
@@ -185,7 +182,7 @@ func (s *Store) addLoaded(e Entry) {
 		s.removeAt(i)
 	}
 	s.entries = append(s.entries, e)
-	s.vecs = append(s.vecs, decodeVec(e.Vec))
+	s.vecs = append(s.vecs, util.DecodeVec(e.Vec))
 	s.terms = append(s.terms, content(e.Prompt))
 	s.byKey[e.Key] = len(s.entries) - 1
 	s.bytes += entryBytes(e)
@@ -235,7 +232,7 @@ func (s *Store) Put(e Entry) error {
 
 // PutVec is Put with the prompt's embedding attached.
 func (s *Store) PutVec(e Entry, vec []float32) error {
-	e.Vec = encodeVec(vec)
+	e.Vec = util.EncodeVec(vec)
 	return s.Put(e)
 }
 
@@ -453,30 +450,4 @@ func writeCounters(dir string, c counters) error {
 // text plus the encoded vector, which is everything that scales with it.
 func entryBytes(e Entry) int64 {
 	return int64(len(e.Prompt) + len(e.Response) + len(e.Vec) + len(e.Head) + len(e.Model) + 64)
-}
-
-func encodeVec(vec []float32) string {
-	if len(vec) == 0 {
-		return ""
-	}
-	buf := make([]byte, 4*len(vec))
-	for i, f := range vec {
-		binary.LittleEndian.PutUint32(buf[4*i:], math.Float32bits(f))
-	}
-	return base64.StdEncoding.EncodeToString(buf)
-}
-
-func decodeVec(s string) []float32 {
-	if s == "" {
-		return nil
-	}
-	buf, err := base64.StdEncoding.DecodeString(s)
-	if err != nil || len(buf)%4 != 0 {
-		return nil
-	}
-	out := make([]float32, len(buf)/4)
-	for i := range out {
-		out[i] = math.Float32frombits(binary.LittleEndian.Uint32(buf[4*i:]))
-	}
-	return out
 }

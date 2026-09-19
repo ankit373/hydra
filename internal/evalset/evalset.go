@@ -75,6 +75,13 @@ type Example struct {
 	// corpus spanning a config change is summarising two different systems.
 	Config string `json:"config,omitempty"`
 
+	// Embedding is the task's vector and EmbedModel is what produced it. Two
+	// models put one sentence in different spaces and a []float32 names
+	// neither, so a vector kept without its model is a cosine against an
+	// incompatible basis that still returns a number.
+	Embedding  string `json:"embedding,omitempty"`
+	EmbedModel string `json:"embed_model,omitempty"`
+
 	// PII marks a candidate that tripped policy detection. The example is still
 	// kept, it is ground truth, and dropping it would bias the corpus toward
 	// whatever contains no PII, but any export path must refuse it.
@@ -263,6 +270,11 @@ func Add(path string, e Example) (bool, error) {
 	if !e.PII {
 		e.PII = policy.Classify(e.Candidate).PII
 	}
+	// Half a pair is unusable either way, and keeping it would make every
+	// reader re-check what the writer already knows.
+	if e.Embedding == "" || e.EmbedModel == "" {
+		e.Embedding, e.EmbedModel = "", ""
+	}
 	raw, err := json.Marshal(e)
 	if err != nil {
 		return false, err
@@ -442,6 +454,74 @@ func Stats(examples []Example) []DomainStat {
 			return out[i].Total > out[j].Total
 		}
 		return out[i].Domain < out[j].Domain
+	})
+	return out
+}
+
+// TrainStat is one embedding model's share of the corpus. Never aggregated
+// across models: two models put one sentence in different spaces, so a total
+// summed over both describes a corpus that does not exist.
+type TrainStat struct {
+	Model   string         `json:"model"`
+	Dim     int            `json:"dim"`
+	Total   int            `json:"total"`
+	PerEnum map[string]int `json:"per_enum"`
+
+	// MixedDims is a second vector length under one model name. Cosine between
+	// two lengths is not a worse number, it is undefined, so the count is
+	// reported carrying this rather than quietly filtered.
+	MixedDims bool `json:"mixed_dims,omitempty"`
+
+	// Separable says the vectors span more than one enum. One enum is not a
+	// choice, so a classifier fitted on it can only answer what it was given. A
+	// floor above two is a number to measure on a held-out split, not assert.
+	Separable bool `json:"separable"`
+}
+
+// Trainable reports what a prompt classifier could be fitted on. Readiness asks
+// the different question of whether a routing table can be fitted from
+// outcomes; this asks whether the corpus holds any vectors at all.
+func Trainable(examples []Example) []TrainStat {
+	acc := map[string]*TrainStat{}
+	for _, e := range examples {
+		if e.EmbedModel == "" {
+			continue
+		}
+		v := util.DecodeVec(e.Embedding)
+		if len(v) == 0 {
+			continue
+		}
+		s := acc[e.EmbedModel]
+		if s == nil {
+			s = &TrainStat{Model: e.EmbedModel, Dim: len(v), PerEnum: map[string]int{}}
+			acc[e.EmbedModel] = s
+		}
+		if len(v) != s.Dim {
+			s.MixedDims = true
+		}
+		s.Total++
+		k := e.Enum
+		if k == "" {
+			k = "(none)"
+		}
+		s.PerEnum[k]++
+	}
+	out := make([]TrainStat, 0, len(acc))
+	for _, s := range acc {
+		named := 0
+		for k := range s.PerEnum {
+			if k != "(none)" {
+				named++
+			}
+		}
+		s.Separable = named >= 2
+		out = append(out, *s)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Total != out[j].Total {
+			return out[i].Total > out[j].Total
+		}
+		return out[i].Model < out[j].Model
 	})
 	return out
 }

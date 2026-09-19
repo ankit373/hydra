@@ -870,6 +870,7 @@ hyctl oracle verify go test ./... --source verifier:go-test  # verifier as evide
 hyctl eval stats                        # the verified corpus: size and pass rate by domain
 hyctl eval readiness                    # per enum, whether the corpus can yet fit a routing choice
 hyctl eval list --failed                # the examples the oracle rejected
+hyctl eval training                     # vectors per embedding model, whether a classifier could be fitted
 hyctl mcp check <tool> --agent A --resource R --action write  # gate + record an access
 hyctl mcp check <tool> --content "$DATA" --action network      # PII auto-classified; policy can deny egress
 hyctl mcp check <tool> --params '{"amount":500}'               # bind a hash of the params to the decision
