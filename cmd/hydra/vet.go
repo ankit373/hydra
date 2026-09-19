@@ -16,8 +16,11 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ankit373/hydra/internal/dispatch"
+	"github.com/ankit373/hydra/internal/graph"
 	"github.com/ankit373/hydra/internal/rank"
 	"github.com/ankit373/hydra/internal/runid"
+	"github.com/ankit373/hydra/internal/swarm"
+	"github.com/ankit373/hydra/internal/trust"
 	"github.com/ankit373/hydra/internal/vet"
 )
 
@@ -34,9 +37,82 @@ type vetRouter struct {
 	enum  string
 	tier  string
 	local bool
+
+	// Set together by --confidence. floor is the caller's minimum and the
+	// file's blast radius raises the bar above it; nil sw means the
+	// single-dispatch path, which is what --confidence 0 keeps.
+	sw        *swarm.Swarm
+	floor     float64
+	graph     *graph.Graph
+	graphPath string
+	maxCost   float64
+}
+
+// barFor is the confidence this file has to clear: the caller's floor, raised
+// by what the file's blast radius demands.
+//
+// A radius Hydra did not read off a graph is a default, and saying otherwise
+// would make a line that reads like blast-radius routing into a claim the run
+// cannot support (#251).
+func (r vetRouter) barFor(domain, file string) vet.Bar {
+	bar := vet.Bar{Target: r.floor, Radius: 1.0}
+	if r.graph != nil && !r.graph.Empty() && r.graph.Knows(file) {
+		bar.Radius, bar.Measured = r.graph.BlastRadiusForFile(file), true
+	}
+	demanded := trust.NewDefectModel().RequiredConfidence(trust.Task{
+		Domain:      domain,
+		BlastRadius: bar.Radius,
+	})
+	if demanded > bar.Target {
+		bar.Target = demanded
+	}
+	return bar
+}
+
+// reviewEnsemble samples heads until the file's bar is cleared, or until the
+// budget or the head list runs out.
+func (r vetRouter) reviewEnsemble(ctx context.Context, prompt, domain, file string) (vet.Answer, error) {
+	bar := r.barFor(domain, file)
+	res, err := r.sw.RunSPRT(ctx, prompt, swarm.Options{
+		Mode:          swarm.ModeBest,
+		TierHint:      r.tier,
+		Enum:          r.enum,
+		LocalOnly:     r.local,
+		MaxEstCostUSD: r.maxCost,
+		Confidence:    bar.Target,
+		Domain:        domain,
+	})
+	if err != nil {
+		// An uncalibrated domain refuses identically for every file, so it is
+		// marked as fatal and reported once rather than blamed on each file.
+		var ne *trust.NoEvidenceError
+		if errors.As(err, &ne) {
+			return vet.Answer{}, fmt.Errorf("%w: %s", vet.ErrCannotSample, noEvidenceAdvice(ne))
+		}
+		return vet.Answer{}, err
+	}
+
+	a := vet.Answer{Bar: bar}
+	if res.Trust != nil {
+		a.Output = res.Trust.Candidate
+		a.Confidence, a.Samples, a.CostUSD = res.Trust.Confidence, res.Trust.Samples, res.Trust.SpentUSD
+	}
+	// The winner names the head whose answer was accepted; Samples says how
+	// many were consulted to get there.
+	for _, at := range res.Attempts {
+		if at.Rank == 1 {
+			a.Head, a.Model, a.Tier = at.Head.ID, at.Head.Name, rank.UITier(at.Head)
+			a.InputTokens, a.OutputTokens = at.InputTokens, at.OutputTokens
+			break
+		}
+	}
+	return a, nil
 }
 
 func (r vetRouter) Review(ctx context.Context, prompt, domain, resource string) (vet.Answer, error) {
+	if r.sw != nil {
+		return r.reviewEnsemble(ctx, prompt, domain, resource)
+	}
 	res, err := r.d.Dispatch(ctx, prompt, dispatch.Options{
 		TierHint:  r.tier,
 		Enum:      r.enum,
@@ -69,6 +145,9 @@ func cmdVet() *cobra.Command {
 		from, to, commit   string
 		repo, exclude      string
 		enum, tier         string
+		graphPath          string
+		confidence         float64
+		maxCost            float64
 		jsonOut, localOnly bool
 		dryRun             bool
 		concurrency        int
@@ -119,9 +198,23 @@ func cmdVet() *cobra.Command {
 			}
 			defer d.Close()
 
-			res, err := vet.Run(ctx, vetRouter{
+			router := vetRouter{
 				d: d, runID: runid.New(), enum: logEnum, tier: hint, local: localOnly,
-			}, spec, vet.RunOptions{Concurrency: concurrency})
+			}
+			if confidence > 0 {
+				if confidence >= 1 {
+					return fmt.Errorf("--confidence must be below 1, got %v", confidence)
+				}
+				g, gerr := graph.Load(graphPath)
+				if gerr != nil {
+					return fmt.Errorf("graph %s: %w", graphPath, gerr)
+				}
+				router.sw = swarm.New(d, d.Heads(), d)
+				router.floor, router.graph, router.graphPath, router.maxCost = confidence, g, graphPath, maxCost
+				printVetBar(os.Stdout, g, graphPath, confidence)
+			}
+
+			res, err := vet.Run(ctx, router, spec, vet.RunOptions{Concurrency: concurrency})
 			if err != nil {
 				return err
 			}
@@ -148,6 +241,10 @@ func cmdVet() *cobra.Command {
 	f.BoolVar(&localOnly, "local", false, "local Heads only, no API calls")
 	f.BoolVar(&jsonOut, "json", false, "emit JSON")
 	f.BoolVar(&dryRun, "dry-run", false, "show what would be reviewed, without dispatching")
+	f.Float64Var(&confidence, "confidence", 0,
+		"sample several Heads per file until this confidence is reached; the file's blast radius raises it (0 = one Head per file)")
+	f.StringVar(&graphPath, "graph", "graph.json", "dependency graph that sets each file's blast radius")
+	f.Float64Var(&maxCost, "max-cost", 0, "ceiling in USD for the whole run (0 = no limit)")
 	f.IntVar(&concurrency, "concurrency", 4, "files reviewed at once")
 	return cmd
 }
@@ -181,6 +278,30 @@ func renderVet(w io.Writer, res *vet.Result, jsonOut bool) (int, error) {
 		return 3, nil // non-zero so callers can gate on it
 	}
 	return 0, nil
+}
+
+// noEvidenceAdvice turns the ensemble's refusal into something actionable. It
+// names a head the router would actually have sampled, because a command that
+// records under a key nothing reads earns the same refusal again (#835).
+func noEvidenceAdvice(ne *trust.NoEvidenceError) string {
+	head := "<head-id>"
+	if len(ne.Sources) > 0 {
+		head = ne.Sources[0]
+	}
+	return fmt.Sprintf("no Head has measured accuracy in domain %q yet, so an ensemble has nothing to weigh. "+
+		"Record an outcome for one (`hyctl trust record --source %s --domain %s --said-correct --outcome correct`), "+
+		"or drop --confidence to review with a single Head", ne.Domain, head, ne.Domain)
+}
+
+// printVetBar says once, before any spending, whether the blast radii about to
+// set each file's bar are measurements or defaults (#251).
+func printVetBar(w io.Writer, g *graph.Graph, path string, floor float64) {
+	fmt.Fprintf(w, "\n  %s sampling until %.0f%% confidence, raised per file by its blast radius\n",
+		dimStyle.Render("confidence:"), floor*100)
+	if g == nil || g.Empty() {
+		fmt.Fprintf(w, "  %s\n", warnStyle.Render(
+			"graph: no graph at "+path+", every radius is a default rather than a measurement"))
+	}
 }
 
 func printNoRuleSource(w io.Writer) {
@@ -264,7 +385,15 @@ func printVet(w io.Writer, r *vet.Result) {
 		}
 		fmt.Fprintf(w, "  %-46.46s %s %s\n", out.File, dimStyle.Render(truncLabel(head, 20)), dimStyle.Render(tier))
 
+		if out.Bar.Set() {
+			fmt.Fprintf(w, "        %s\n", barLine(out))
+		}
+
 		switch {
+		case out.Fatal:
+			// The summary carries the reason once; repeating it per file reads
+			// as each file having its own problem.
+			fmt.Fprintf(w, "        %s\n", dimStyle.Render("not reviewed: the run stopped, see below"))
 		case out.Err != "":
 			fmt.Fprintf(w, "        %s\n", dimStyle.Render("not reviewed: "+out.Err))
 		case out.Unparsed:
@@ -293,6 +422,14 @@ func printVet(w io.Writer, r *vet.Result) {
 		fmt.Fprintln(w)
 	}
 
+	if why := r.CannotSample(); why != "" {
+		fmt.Fprintf(w, "  %s\n", blockingStyle.Render("the run stopped: "+why))
+		fmt.Fprintln(w)
+	}
+	if short := r.ShortOfBar(); short > 0 {
+		fmt.Fprintf(w, "  %s\n", nonBlockingStyle.Render(fmt.Sprintf(
+			"%d file(s) never reached the confidence their blast radius asked for; their findings stand, the confidence does not", short)))
+	}
 	blocking := r.BlockingCount()
 	fmt.Fprintf(w, "  %d blocking %s %d non-blocking %s %d/%d file(s) reviewed %s $%.4f\n",
 		blocking, dimStyle.Render("·"), len(r.Findings)-blocking, dimStyle.Render("·"),
@@ -301,6 +438,26 @@ func printVet(w io.Writer, r *vet.Result) {
 		fmt.Fprintln(w, dimStyle.Render("  "+excludedSummary(r.Spec.Excluded)))
 	}
 	fmt.Fprintln(w)
+}
+
+// barLine reports what this file had to clear and whether it did. A radius
+// Hydra did not read off a graph is named as a default, so a run with no graph
+// never reads as blast-radius-aware routing (#251).
+func barLine(out vet.FileOutcome) string {
+	radius := fmt.Sprintf("blast %.2f", out.Bar.Radius)
+	if !out.Bar.Measured {
+		radius += " (default, not measured)"
+	}
+	verdict := "reached"
+	if out.ShortOfBar() {
+		verdict = "short of"
+	}
+	line := fmt.Sprintf("%s · %s %.0f%% of the %.0f%% asked · %d head(s)",
+		radius, verdict, out.Confidence*100, out.Bar.Target*100, out.Samples)
+	if out.ShortOfBar() {
+		return nonBlockingStyle.Render(line)
+	}
+	return dimStyle.Render(line)
 }
 
 func severityLabel(s string) string {

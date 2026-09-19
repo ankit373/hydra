@@ -6,11 +6,17 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/ankit373/hydra/internal/dispatch"
+	"github.com/ankit373/hydra/internal/graph"
+	"github.com/ankit373/hydra/internal/swarm"
 	"github.com/ankit373/hydra/internal/testutil"
+	"github.com/ankit373/hydra/internal/trust"
 	"github.com/ankit373/hydra/internal/vet"
 )
 
@@ -306,5 +312,216 @@ func TestVetRouter_CarriesTheHeadTierAndCostBack(t *testing.T) {
 	}
 	if ans.Tier <= 0 {
 		t.Errorf("tier = %d, so the report cannot say what answered", ans.Tier)
+	}
+}
+
+// ── the per-file confidence bar ───────────────────────────────────────────────
+
+// A radius Hydra did not read off a graph is a default. Reporting it as a
+// measurement makes a run with no graph read like blast-radius-aware routing
+// when nothing measured anything (#251).
+func TestBarFor_AnUnmeasuredRadiusSaysSo(t *testing.T) {
+	r := vetRouter{floor: 0.5} // no graph loaded at all
+	bar := r.barFor("go", "internal/auth/token.go")
+	if bar.Measured {
+		t.Error("a radius with no graph behind it claimed to be measured")
+	}
+	if bar.Radius != 1.0 {
+		t.Errorf("radius = %v, want the 1.0 default", bar.Radius)
+	}
+	if bar.Target < 0.5 {
+		t.Errorf("target %v fell below the caller's floor", bar.Target)
+	}
+}
+
+// The floor is a floor: the blast radius raises the bar above it and never
+// lowers it, or a risky file would be held to a laxer standard than asked for.
+func TestBarFor_TheBlastRadiusOnlyRaisesTheFloor(t *testing.T) {
+	low := vetRouter{floor: 0.01}.barFor("go", "a.go")
+	if low.Target <= 0.01 {
+		t.Errorf("target %v: the defect model never raised the bar", low.Target)
+	}
+	high := vetRouter{floor: 0.99}.barFor("go", "a.go")
+	if high.Target < 0.99 {
+		t.Errorf("target %v dropped below the caller's floor of 0.99", high.Target)
+	}
+}
+
+// The refusal has to name a head the router would actually sample, or the
+// command it prints records under a key nothing reads and earns the same
+// refusal again (#835).
+func TestNoEvidenceAdvice_NamesAHeadTheRouterWouldSample(t *testing.T) {
+	got := noEvidenceAdvice(&trust.NoEvidenceError{
+		Domain:  "go",
+		Sources: []string{"ollama/qwen3:8b", "agy"},
+	})
+	for _, want := range []string{"ollama/qwen3:8b", "--domain go", "hyctl trust record", "drop --confidence"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the advice is missing %q:\n%s", want, got)
+		}
+	}
+}
+
+// With no head to name it must still be actionable rather than printing a
+// command with an empty source.
+func TestNoEvidenceAdvice_SurvivesWithNoSources(t *testing.T) {
+	got := noEvidenceAdvice(&trust.NoEvidenceError{Domain: "rust"})
+	if strings.Contains(got, "--source --domain") || strings.Contains(got, "--source  ") {
+		t.Errorf("the command has an empty source:\n%s", got)
+	}
+	if !strings.Contains(got, "rust") {
+		t.Errorf("the advice does not name the domain:\n%s", got)
+	}
+}
+
+func TestBarLine_SaysWhetherTheRadiusWasMeasured(t *testing.T) {
+	unmeasured := barLine(vet.FileOutcome{Bar: vet.Bar{Target: 0.9, Radius: 1.0}, Confidence: 0.95, Samples: 2})
+	if !strings.Contains(unmeasured, "default, not measured") {
+		t.Errorf("an unmeasured radius did not say so: %s", unmeasured)
+	}
+	measured := barLine(vet.FileOutcome{
+		Bar: vet.Bar{Target: 0.9, Radius: 12, Measured: true}, Confidence: 0.95, Samples: 3,
+	})
+	if strings.Contains(measured, "default") {
+		t.Errorf("a measured radius was called a default: %s", measured)
+	}
+	if !strings.Contains(measured, "reached") || !strings.Contains(measured, "3 head") {
+		t.Errorf("the line does not report the outcome: %s", measured)
+	}
+}
+
+// A file that fell short must be visible as such in the report, not rendered
+// identically to one that cleared.
+func TestPrintVet_ShortOfBarIsVisible(t *testing.T) {
+	var buf bytes.Buffer
+	printVet(&buf, &vet.Result{
+		Spec: &vet.Spec{Mode: "workspace"},
+		Files: []vet.FileOutcome{{
+			File: "a.go", Head: "h", Bar: vet.Bar{Target: 0.9, Radius: 1}, Confidence: 0.6, Samples: 4,
+		}},
+	})
+	out := buf.String()
+	if !strings.Contains(out, "short of") {
+		t.Errorf("a file under its bar did not say so:\n%s", out)
+	}
+	if !strings.Contains(out, "their findings stand, the confidence does not") {
+		t.Errorf("the summary does not separate the findings from the confidence:\n%s", out)
+	}
+}
+
+// The run-stopping reason is printed once, in the summary, not blamed on each
+// file in turn.
+func TestPrintVet_ARunStoppingReasonIsSaidOnce(t *testing.T) {
+	var buf bytes.Buffer
+	printVet(&buf, &vet.Result{
+		Spec: &vet.Spec{Mode: "workspace"},
+		Files: []vet.FileOutcome{
+			{File: "a.go", Err: "cannot review any file: nothing is calibrated", Fatal: true},
+			{File: "b.go", Err: "cannot review any file: nothing is calibrated", Fatal: true},
+		},
+	})
+	out := buf.String()
+	if n := strings.Count(out, "nothing is calibrated"); n != 1 {
+		t.Errorf("the reason appears %d times, want 1:\n%s", n, out)
+	}
+	if !strings.Contains(out, "the run stopped") {
+		t.Errorf("the summary does not say the run stopped:\n%s", out)
+	}
+}
+
+// A real graph makes the radius a measurement, and a hub file is held to a
+// higher bar than a leaf: that difference is the whole point of the flag.
+func TestBarFor_AMeasuredRadiusRaisesTheBarForAHubFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "graph.json")
+	// hub.go is depended on by three files; leaf.go by none.
+	doc := `{"nodes":[
+	  {"id":"hub","file":"hub.go"},{"id":"leaf","file":"leaf.go"},
+	  {"id":"a","file":"a.go"},{"id":"b","file":"b.go"},{"id":"c","file":"c.go"}],
+	 "edges":[{"from":"a","to":"hub"},{"from":"b","to":"hub"},{"from":"c","to":"hub"},
+	  {"from":"b","to":"a"}]}`
+	if err := os.WriteFile(path, []byte(doc), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	g, err := graph.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := vetRouter{floor: 0.5, graph: g, graphPath: path}
+
+	hub := r.barFor("go", "hub.go")
+	if !hub.Measured {
+		t.Fatal("a radius read off a real graph did not report as measured")
+	}
+	leaf := r.barFor("go", "leaf.go")
+	if !(hub.Radius > leaf.Radius) {
+		t.Fatalf("hub radius %v is not above leaf radius %v, so the graph changed nothing",
+			hub.Radius, leaf.Radius)
+	}
+	if !(hub.Target >= leaf.Target) {
+		t.Errorf("the hub file was held to a lower bar (%v) than the leaf (%v)", hub.Target, leaf.Target)
+	}
+
+	// A file the graph has never heard of is a default again, not a reading.
+	unknown := r.barFor("go", "nowhere.go")
+	if unknown.Measured {
+		t.Error("a file absent from the graph reported a measured radius")
+	}
+}
+
+// The warning has to come out once, before anything is spent, or a run with no
+// graph reads exactly like blast-radius-aware routing (#251).
+func TestPrintVetBar_SaysWhenEveryRadiusIsADefault(t *testing.T) {
+	var buf bytes.Buffer
+	printVetBar(&buf, nil, "graph.json", 0.7)
+	out := buf.String()
+	if !strings.Contains(out, "default rather than a measurement") {
+		t.Errorf("a missing graph was not called out:\n%s", out)
+	}
+	if !strings.Contains(out, "70%") {
+		t.Errorf("the floor was not stated:\n%s", out)
+	}
+
+	// With a real graph there is nothing to warn about.
+	dir := t.TempDir()
+	path := filepath.Join(dir, "graph.json")
+	if err := os.WriteFile(path, []byte(`{"nodes":[{"id":"a","file":"a.go"}],"edges":[]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	g, err := graph.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	buf.Reset()
+	printVetBar(&buf, g, path, 0.7)
+	if strings.Contains(buf.String(), "default rather than a measurement") {
+		t.Errorf("a real graph still warned about defaults:\n%s", buf.String())
+	}
+}
+
+// A fresh machine has no calibration, so the ensemble refuses. That refusal has
+// to arrive as ErrCannotSample or Run pays it once per file and the report
+// blames each file for a problem none of them has.
+func TestReviewEnsemble_AnUncalibratedDomainStopsTheRun(t *testing.T) {
+	dispatchable(t, "unused")
+
+	ctx := context.Background()
+	d, err := dispatch.New(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+
+	r := vetRouter{d: d, sw: swarm.New(d, d.Heads(), d), floor: 0.7, graphPath: "graph.json"}
+	_, err = r.reviewEnsemble(ctx, "review this", "go", "a.go")
+	if err == nil {
+		t.Fatal("an uncalibrated domain produced an answer")
+	}
+	if !errors.Is(err, vet.ErrCannotSample) {
+		t.Fatalf("the refusal was not marked as stopping the run, so every file pays it: %v", err)
+	}
+	// It must stay actionable through the wrap, not become a bare sentinel.
+	if !strings.Contains(err.Error(), "hyctl trust record") {
+		t.Errorf("the advice was lost in the wrap: %v", err)
 	}
 }

@@ -5,10 +5,12 @@ package vet
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/ankit373/hydra/internal/trust"
 )
@@ -26,7 +28,19 @@ const (
 	backgroundCap = 1 << 10
 )
 
-// Answer is one head's reply to one file's review.
+// Bar is the confidence one file had to clear, and where its blast radius came
+// from. Measured is false when the radius is a default rather than a reading
+// off the graph, which must never render as blast-radius-aware routing (#251).
+type Bar struct {
+	Target   float64 `json:"target"`
+	Radius   float64 `json:"radius"`
+	Measured bool    `json:"radius_measured"`
+}
+
+// Set reports whether a bar was actually demanded of this file.
+func (b Bar) Set() bool { return b.Target > 0 }
+
+// Answer is what answered one file's review: one head, or an ensemble of them.
 type Answer struct {
 	Output       string
 	Head         string
@@ -35,6 +49,12 @@ type Answer struct {
 	CostUSD      float64
 	InputTokens  int
 	OutputTokens int
+
+	// Bar, Confidence and Samples describe an ensemble review, and are zero on
+	// the single-dispatch path where nothing measured a confidence at all.
+	Bar        Bar
+	Confidence float64
+	Samples    int
 }
 
 // Router routes one file's review. This package deliberately does not import
@@ -69,6 +89,35 @@ type FileOutcome struct {
 	Unparsed  bool   `json:"unparsed,omitempty"`
 	Raw       string `json:"raw,omitempty"`
 	Err       string `json:"error,omitempty"`
+
+	// Bar, Confidence and Samples are carried so a report can say what this
+	// file had to clear and whether it did. Zero on the single-dispatch path.
+	Bar        Bar     `json:"bar,omitempty"`
+	Confidence float64 `json:"confidence,omitempty"`
+	Samples    int     `json:"samples,omitempty"`
+
+	// Fatal marks a failure that would repeat for every other file too, so a
+	// report says it once instead of blaming each file in turn.
+	Fatal bool `json:"-"`
+}
+
+// Cleared reports whether this file's findings met the bar it was held to.
+//
+// A file that never cleared is the reason the field exists: its findings are
+// still real, but presenting them beside a cleared file's without saying so
+// would report a confidence the run did not reach.
+func (f FileOutcome) Cleared() bool {
+	return f.Bar.Set() && f.Confidence >= f.Bar.Target
+}
+
+// ShortOfBar is the opposite, and excludes files that were never held to a bar.
+//
+// Defined against Cleared rather than by repeating the comparison: written as
+// its own `Confidence < Target` the Bar.Set() check is unreachable, since no
+// confidence is below a target of zero, and an unreachable guard is a claim
+// about the code that is false.
+func (f FileOutcome) ShortOfBar() bool {
+	return f.Bar.Set() && !f.Cleared()
 }
 
 // Result is one vet run.
@@ -90,6 +139,29 @@ func (r *Result) BlockingCount() int {
 	return n
 }
 
+// CannotSample reports the failure that stopped the whole run, if one did, so a
+// caller can print it once with what to do about it.
+func (r *Result) CannotSample() string {
+	for _, f := range r.Files {
+		if f.Fatal {
+			return f.Err
+		}
+	}
+	return ""
+}
+
+// ShortOfBar counts files whose findings did not reach the confidence their
+// blast radius demanded.
+func (r *Result) ShortOfBar() int {
+	n := 0
+	for _, f := range r.Files {
+		if f.ShortOfBar() {
+			n++
+		}
+	}
+	return n
+}
+
 // Reviewed counts the files a head actually answered for.
 func (r *Result) Reviewed() int {
 	n := 0
@@ -100,6 +172,11 @@ func (r *Result) Reviewed() int {
 	}
 	return n
 }
+
+// ErrCannotSample marks a router failure that will repeat identically for every
+// file, so Run stops rather than paying the same refusal once per file and
+// reporting it as though each file had its own problem.
+var ErrCannotSample = errors.New("cannot review any file")
 
 // RunOptions bounds a run. Zero means the default.
 type RunOptions struct {
@@ -126,9 +203,10 @@ func Run(ctx context.Context, r Router, spec *Spec, opts RunOptions) (*Result, e
 	}
 
 	var (
-		mu  sync.Mutex
-		wg  sync.WaitGroup
-		sem = make(chan struct{}, opts.Concurrency)
+		mu    sync.Mutex
+		wg    sync.WaitGroup
+		fatal atomic.Bool
+		sem   = make(chan struct{}, opts.Concurrency)
 	)
 	for _, f := range spec.Reviewable {
 		wg.Add(1)
@@ -143,7 +221,13 @@ func Run(ctx context.Context, r Router, spec *Spec, opts RunOptions) (*Result, e
 				mu.Unlock()
 				return
 			}
+			if fatal.Load() {
+				return
+			}
 			out, found := reviewFile(ctx, r, spec, path, opts)
+			if out.Fatal {
+				fatal.Store(true)
+			}
 			mu.Lock()
 			res.Files = append(res.Files, out)
 			res.Findings = append(res.Findings, found...)
@@ -200,9 +284,11 @@ func reviewFile(ctx context.Context, r Router, spec *Spec, path string, opts Run
 	ans, err := r.Review(ctx, buildPrompt(spec, group, path, diff, out.Truncated), trust.DomainForFile(path), path)
 	if err != nil {
 		out.Err = err.Error()
+		out.Fatal = errors.Is(err, ErrCannotSample)
 		return out, nil
 	}
 	out.Head, out.Tier, out.CostUSD = ans.Head, ans.Tier, ans.CostUSD
+	out.Bar, out.Confidence, out.Samples = ans.Bar, ans.Confidence, ans.Samples
 
 	found, discarded, parsed := parseFindings(ans.Output, path, ans.Head)
 	if !parsed {
