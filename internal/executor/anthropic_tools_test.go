@@ -374,7 +374,9 @@ func TestCanUseTools_NowIncludesAnthropic(t *testing.T) {
 	if !CanUseTools(anthropicHead()) {
 		t.Error("Anthropic heads are still skipped for a request that carries tools")
 	}
-	for _, p := range []string{"google", "cohere", "bedrock", "replicate"} {
+	// google moved to the other side of this list in #963. The list is what
+	// keeps a dialect from reporting tool support before anything maps it.
+	for _, p := range []string{"cohere", "bedrock", "replicate"} {
 		if CanUseTools(head(p)) {
 			t.Errorf("%s reports it can carry tools, but nothing maps them yet", p)
 		}

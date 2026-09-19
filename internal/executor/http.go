@@ -281,7 +281,11 @@ func setAnthropicHeaders(r *http.Request) {
 
 func (e *HTTPExecutor) executeGemini(ctx context.Context, req Request) (*Response, error) {
 	model := defaultModelFor("google")
-	raw, err := json.Marshal(geminiBody(req))
+	body, err := geminiBody(req)
+	if err != nil {
+		return nil, err
+	}
+	raw, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
@@ -305,10 +309,9 @@ func (e *HTTPExecutor) executeGemini(ctx context.Context, req Request) (*Respons
 	var out struct {
 		Candidates []struct {
 			Content struct {
-				Parts []struct {
-					Text string `json:"text"`
-				} `json:"parts"`
+				Parts []geminiPart `json:"parts"`
 			} `json:"content"`
+			FinishReason string `json:"finishReason"`
 		} `json:"candidates"`
 		UsageMetadata struct {
 			PromptTokenCount     int `json:"promptTokenCount"`
@@ -323,9 +326,29 @@ func (e *HTTPExecutor) executeGemini(ctx context.Context, req Request) (*Respons
 		return nil, fmt.Errorf("http exec %s: empty response", req.Head.ID)
 	}
 
-	return httpResponse(req, joinGeminiParts(out.Candidates[0].Content.Parts),
-		firstNonEmpty(out.ModelVersion, model),
-		out.UsageMetadata.PromptTokenCount, out.UsageMetadata.CandidatesTokenCount, start), nil
+	parts := out.Candidates[0].Content.Parts
+	answer := httpResponse(req, geminiAnswerText(parts), firstNonEmpty(out.ModelVersion, model),
+		out.UsageMetadata.PromptTokenCount, out.UsageMetadata.CandidatesTokenCount, start)
+	answer.ToolCalls = geminiToolCalls(parts)
+	answer.FinishReason = geminiFinishReason(out.Candidates[0].FinishReason, answer.ToolCalls)
+	return answer, nil
+}
+
+// geminiFinishReason maps Gemini's own word onto the one an OpenAI client
+// branches on. A candidate carrying calls stopped for them whatever it said,
+// which is how Gemini reports it: the reason is STOP either way.
+func geminiFinishReason(reason string, calls []ToolCall) string {
+	if len(calls) > 0 {
+		return "tool_calls"
+	}
+	switch strings.ToUpper(reason) {
+	case "MAX_TOKENS":
+		return "length"
+	case "", "STOP":
+		return "stop"
+	default:
+		return "stop"
+	}
 }
 
 // geminiURL builds the generate endpoint, streaming or not. `?alt=sse` is not
@@ -350,26 +373,30 @@ func geminiURL(model string, stream bool) string {
 
 // geminiBody and setGeminiHeaders are shared with the streaming path, so the
 // two cannot drift into asking for different things.
-func geminiBody(req Request) map[string]interface{} {
-	body := map[string]interface{}{
-		"contents": []map[string]interface{}{
-			{
-				"role": "user",
-				"parts": []map[string]string{
-					{"text": req.Prompt},
-				},
-			},
-		},
+func geminiBody(req Request) (map[string]interface{}, error) {
+	system, contents, err := geminiConversation(req.Messages)
+	if err != nil {
+		return nil, err
 	}
-	if req.System != "" {
+	if len(contents) == 0 {
+		contents = []geminiContent{{Role: "user", Parts: []geminiPart{{Text: req.Prompt}}}}
+	}
+
+	body := map[string]interface{}{"contents": contents}
+	// req.System wins: a caller that set it is stating the instruction for this
+	// dispatch, where a system turn in the history is the conversation's own.
+	if s := firstNonEmpty(req.System, system); s != "" {
 		body["system_instruction"] = map[string]interface{}{
-			"parts": []map[string]string{{"text": req.System}},
+			"parts": []map[string]string{{"text": s}},
 		}
+	}
+	if tools := geminiToolDeclarations(req.Tools); tools != nil {
+		body["tools"] = tools
 	}
 	if req.MaxTokens > 0 {
 		body["generationConfig"] = map[string]int{"maxOutputTokens": req.MaxTokens}
 	}
-	return body
+	return body, nil
 }
 
 func setGeminiHeaders(r *http.Request) {
@@ -778,16 +805,6 @@ func joinTextBlocks(blocks []textBlock) string {
 
 type textBlock struct {
 	Text string `json:"text"`
-}
-
-func joinGeminiParts(parts []struct {
-	Text string `json:"text"`
-}) string {
-	texts := make([]textBlock, 0, len(parts))
-	for _, p := range parts {
-		texts = append(texts, textBlock{Text: p.Text})
-	}
-	return joinTextBlocks(texts)
 }
 
 func joinCohereBlocks(blocks []struct {

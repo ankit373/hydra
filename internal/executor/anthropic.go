@@ -83,7 +83,7 @@ func assistantBlocks(m Message) ([]anthropicBlock, error) {
 		blocks = append(blocks, anthropicBlock{Type: "text", Text: m.Content})
 	}
 	for _, c := range m.ToolCalls {
-		input, err := toolInput(c)
+		input, err := toolArgsObject("anthropic", c)
 		if err != nil {
 			return nil, err
 		}
@@ -92,25 +92,6 @@ func assistantBlocks(m Message) ([]anthropicBlock, error) {
 		})
 	}
 	return blocks, nil
-}
-
-// toolInput turns OpenAI's arguments, a JSON string, into Anthropic's input, an
-// object.
-//
-// Arguments that do not parse are refused rather than replaced with an empty
-// object: sending `{}` would be a call the model reads as "no arguments", which
-// is a wrong answer, where the refusal names the call that cannot be expressed.
-func toolInput(c ToolCall) (json.RawMessage, error) {
-	args := strings.TrimSpace(c.Function.Arguments)
-	if args == "" {
-		return json.RawMessage(`{}`), nil
-	}
-	var probe map[string]any
-	if err := json.Unmarshal([]byte(args), &probe); err != nil {
-		return nil, fmt.Errorf("anthropic: tool call %s (%s) has arguments that are not a JSON object: %w",
-			c.ID, c.Function.Name, err)
-	}
-	return json.RawMessage(args), nil
 }
 
 // appendAnthropic adds blocks to the last message when it has the same role,
