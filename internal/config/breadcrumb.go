@@ -16,8 +16,11 @@ import (
 
 // BreadcrumbFiles are the registry files that define this deployment's
 // routing behavior; their combined bytes are the deployment's identity.
-// pricing.yaml is included because it drives cost-based routing decisions.
-var BreadcrumbFiles = []string{"routing.yaml", "models.yaml", "domains.yaml", "pricing.yaml"}
+// pricing.yaml is included because it drives cost-based routing decisions, and
+// signals.yaml because a rule can pin a tier, force local-only or refuse a
+// dispatch outright: a log row that cannot be tied back to the rules in force
+// when it was written is answering about a different system (#903).
+var BreadcrumbFiles = []string{"routing.yaml", "models.yaml", "domains.yaml", "pricing.yaml", "signals.yaml"}
 
 var (
 	breadcrumbCacheMu     sync.Mutex

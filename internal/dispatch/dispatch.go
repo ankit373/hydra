@@ -35,6 +35,7 @@ import (
 	"github.com/ankit373/hydra/internal/retrieve"
 	"github.com/ankit373/hydra/internal/runid"
 	"github.com/ankit373/hydra/internal/runlog"
+	"github.com/ankit373/hydra/internal/signals"
 	"github.com/ankit373/hydra/internal/trust"
 	"github.com/ankit373/hydra/registry"
 )
@@ -89,6 +90,11 @@ type Options struct {
 	// swarm does, otherwise each call is its own run.
 	RunID  string
 	TaskID string
+
+	// Decision is the routing rules' verdict, computed once by the caller.
+	// Nil means this dispatch computes it itself, which is right for callers
+	// that have no --confidence to apply and no blast radius to supply.
+	Decision *signals.Decision
 
 	// AnsweredHead is the head a human has already approved for this task, set
 	// only by Resume. An Ask verdict counts as approval for that head alone,
@@ -272,6 +278,10 @@ type Dispatcher struct {
 	// order: a ranking basis that degrades has to degrade to the previous one.
 	cal *trust.Calibrator
 
+	// rules turns signals into a routing action. Nil is a valid engine that
+	// always falls through, which is what a machine with no rules file gets.
+	rules *signals.Engine
+
 	// recall indexes and vectorises prompts off the dispatch path. Built at
 	// most once, by recorder(), and drained by Close.
 	recallOnce sync.Once
@@ -363,6 +373,11 @@ func New(ctx context.Context) (*Dispatcher, error) {
 		return nil, err
 	}
 
+	rules, err := loadRules(config.ScriptHome())
+	if err != nil {
+		return nil, err
+	}
+
 	result := cachedProbe(ctx)
 	localOnly := piiLocalOnly(cfg)
 
@@ -388,11 +403,24 @@ func New(ctx context.Context) (*Dispatcher, error) {
 		budget:  budgetReg,
 		health:  health.Open(health.DefaultPath()),
 		cal:     cal,
+		rules:   rules,
 	}, nil
 }
 
 // Dispatch routes prompt through policy + tier selection + execution with fallback.
 func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) (*Result, error) {
+	// Rules first: a block refuses before anything is validated, probed or
+	// spent, and a route has to land before the tier hint is resolved below.
+	// Evaluated once, here or by the caller, never per fallback candidate.
+	dec := opts.Decision
+	if dec == nil {
+		computed := d.Decide(prompt, opts.Domain, nil)
+		dec = &computed
+	}
+	if err := applyDecision(*dec, &opts); err != nil {
+		return nil, err
+	}
+
 	if err := ValidateTierHint(opts.TierHint); err != nil {
 		return nil, err
 	}
