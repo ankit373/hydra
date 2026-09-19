@@ -762,6 +762,32 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
 
   <p class="cmp-note"><b>Honest about its own limits.</b> Framework mappings are marked <em>curated</em> assertions, not measurements. Defect cost is per-occurrence, not annualised. A file the dependency graph does not index is <em>unknown</em>, never “low-risk”. The attestation is unsigned, because Hydra has no key management and a signature without one is theatre.</p>
 
+  <p class="lede" style="margin-top:34px">That covers the agents. The other half is the machine they run on: Hydra discovers local model servers, ranks them and sends real work to them, so <b>their</b> configuration is part of its posture too. It checks them rather than assuming.</p>
+
+  <div class="term" style="margin-top:22px;max-width:760px">
+    <div class="copyline" data-copy="hyctl security --why --advisories"><span><span class="p">$</span> hyctl security --why --advisories</span><span class="cp">copy</span></div>
+    <div class="o">Local server exposure      <span class="e">1 exposed</span></div>
+    <div class="o"><span class="c">  ollama 0.9.9 (http://localhost:11435) answers on 192.168.1.15. That</span></div>
+    <div class="o"><span class="c">  address is not loopback, so the server is serving more than this</span></div>
+    <div class="o"><span class="c">  machine, and neither Ollama nor vLLM requires auth by default</span></div>
+    <div class="o">&nbsp;</div>
+    <div class="o">Local server advisories    <span class="e">9 unfixed upstream</span></div>
+    <div class="o"><span class="c">  no upgrade answers these, so the mitigation is not reaching them:</span></div>
+    <div class="o"><span class="c">  CVE-2024-12055, CVE-2024-8063, CVE-2025-0312, and 6 more</span></div>
+    <div class="o">&nbsp;</div>
+    <div class="o">State directory reach      3 readable by others</div>
+    <div class="o"><span class="c">  ~/.hydra is 0755 &middot; the files are 0600, so this leaks the listing</span></div>
+    <div class="o"><span class="c">  rather than the contents</span></div>
+  </div>
+
+  <p class="lede" style="margin-top:26px">Ollama ships with <b>no authentication</b> and prints no warning when bound to <code>0.0.0.0</code>. A model server answering the network is the one thing that falsifies local-first outright, and nothing was looking. The probe compares the same identity endpoint discovery already uses, between loopback and this machine's own addresses, so nothing goes on the wire and an unrelated listener on the same port is not mistaken for the model server.</p>
+
+  <p class="cmp-note"><b>A fix you don't have is not the same as no fix at all.</b> Advisories are split on it, because a fully current Ollama still carries nine with no fix upstream: one combined count would read identically on a patched server and an abandoned one, and a number that fires when you have already done everything available to you is a number people learn to ignore. Fixable ones name the version to upgrade to. Unfixed ones say plainly that no upgrade answers them and point at the mitigation that exists, which is not reaching the server.</p>
+
+  <p class="cmp-note"><b>The negative result is the weaker one, and says so.</b> A host firewall that drops the probe looks exactly like a server that is not listening, so <em>loopback only</em> is reported as weaker evidence than <em>exposed</em>. A machine with no non-loopback address ruled nothing out. A lookup that failed is unchecked, never clean. The advisory query is the only part of the whole report that leaves your machine, so it is off unless you ask for it.</p>
+
+  <p class="cmp-note"><b>Including its own state directory.</b> The report had always said the head-binary baseline is forgeable by anything able to write <code>~/.hydra</code>, and nothing read a permission bit. Writable is the finding, since that is where the integrity baseline and the ledger's chain anchor live as plain files; readable is reported separately, since it exposes the listing and not the contents. It repairs nothing: the report is a read.</p>
+
   <p class="lede" style="margin-top:26px">The ledger records what an agent did. <b>hyctl mcp registry</b> scores whether the MCP server it was talking to was ever safe to trust in the first place, every existing MCP directory answers “does this exist”, none answer “is it safe to run with my credentials right now”, and star counts are actively misleading (the most-starred servers score worst on quality in independent research). <code>audit</code> resolves what's installed against the official registry and scores it; every trust state drops back to <em>provisional</em> on a version bump, the direct fix for a server that ships clean for months then turns malicious in one release.</p>
 </section>
 
