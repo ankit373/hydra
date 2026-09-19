@@ -7,6 +7,7 @@ Thank you for taking the time to contribute! This document explains how to get s
 ## Table of Contents
 
 - [Code of Conduct](#code-of-conduct)
+- [Signing the CLA](#signing-the-cla)
 - [Ways to Contribute](#ways-to-contribute)
 - [Development Setup](#development-setup)
 - [Making Changes](#making-changes)
@@ -21,6 +22,28 @@ Thank you for taking the time to contribute! This document explains how to get s
 ## Code of Conduct
 
 By participating you agree to our [Code of Conduct](CODE_OF_CONDUCT.md). We maintain a welcoming, inclusive environment, please read it.
+
+---
+
+## Signing the CLA
+
+Hydra accepts contributions under a [Contributor License Agreement](CLA.md). Two steps, once, and
+then never again:
+
+1. Add yourself to [`CONTRIBUTORS.md`](CONTRIBUTORS.md) in the same pull request as your first
+   contribution
+2. Tick the CLA box in the pull request description
+
+A workflow checks both. Bot pull requests (Dependabot, release-please) are exempt.
+
+**Most projects like this use a DCO instead**, including vLLM and Linux. A DCO certifies you have
+the right to submit; a CLA also grants a copyright and patent licence, which is what keeps a future
+licensing decision open rather than foreclosed. [CLA.md](CLA.md) explains the trade in full and
+says plainly that it has not been through legal review. If a legal instrument feels
+disproportionate for a typo fix, it probably is: say so on the pull request.
+
+One thing the CLA does **not** touch: the oracle-verified corpus at `~/.hydra/evalset/` is yours,
+stays on your machine, and has no upload path. Contributing code does not contribute your corpus.
 
 ---
 
@@ -54,6 +77,16 @@ Optional (for full dispatch testing):
 |------|---------|
 | `agy` (Antigravity CLI) | Tier 2-9 model execution |
 | `ollama` | Tier 10 local inference |
+
+### Hooks, so CI does not have to tell you
+
+```bash
+pip install pre-commit && pre-commit install
+```
+
+Runs `gofmt`, `go vet`, `go build` and the test suite before each commit, the same tools CI runs.
+The race detector, the desktop module and the frontend are left to CI on purpose so the hook stays
+fast enough that you keep it.
 
 ### Local setup
 
