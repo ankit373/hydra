@@ -5,9 +5,11 @@ package vet
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -388,5 +390,131 @@ func write(t *testing.T, dir, name, body string) {
 	t.Helper()
 	if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// ── the contract with the rule source ─────────────────────────────────────────
+
+// fakeOCR builds a stand-in rule source and puts it alone on PATH. Built rather
+// than scripted: a shell script is not executable on the Windows CI leg.
+func fakeOCR(t *testing.T, preview, rule string, exitCode int) {
+	t.Helper()
+	dir := t.TempDir()
+
+	prog := `package main
+
+import (
+	"fmt"
+	"os"
+	"strings"
+)
+
+func main() {
+	if CODE != 0 {
+		fmt.Fprintln(os.Stderr, "rule source said no")
+		os.Exit(CODE)
+	}
+	if len(os.Args) > 2 && strings.HasPrefix(os.Args[2], "rule") {
+		fmt.Print(RULE)
+		return
+	}
+	fmt.Print(PREVIEW)
+}
+`
+	prog = strings.ReplaceAll(prog, "CODE", fmt.Sprint(exitCode))
+	prog = strings.ReplaceAll(prog, "PREVIEW", "`"+preview+"`")
+	prog = strings.ReplaceAll(prog, "RULE", "`"+rule+"`")
+
+	write(t, dir, "main.go", prog)
+	write(t, dir, "go.mod", "module fakeocr\n\ngo 1.21\n")
+
+	bin := filepath.Join(dir, "ocr")
+	if runtime.GOOS == "windows" {
+		bin += ".exe"
+	}
+	build := exec.Command("go", "build", "-o", bin, ".")
+	build.Dir = dir
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("building the stand-in rule source: %v\n%s", err, out)
+	}
+	t.Setenv("PATH", dir)
+}
+
+func TestResolve_CarriesFilesRefsAndRulesThrough(t *testing.T) {
+	fakeOCR(t,
+		`{"schema_version":"1","mode":"range","repository":"/r","from":"develop","to":"HEAD",
+		  "merge_base":"abc123","reviewable_files":[{"path":"a.go","status":"modified","insertions":4,"deletions":1}],
+		  "excluded_files":[{"path":"README.md","status":"modified","exclude_reason":"unsupported_ext"}]}`,
+		`{"schema_version":"1","groups":[{"group_id":1,"source":"system","pattern":"**/*.go",
+		  "files":["a.go"],"rule":"the go rules"}]}`, 0)
+
+	spec, err := Resolve(context.Background(), Options{From: "develop", To: "HEAD"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if spec.Mode != "range" || spec.MergeBase != "abc123" {
+		t.Errorf("refs lost: mode=%q merge_base=%q", spec.Mode, spec.MergeBase)
+	}
+	if len(spec.Reviewable) != 1 || spec.Reviewable[0].Insertions != 4 {
+		t.Errorf("reviewable files lost: %+v", spec.Reviewable)
+	}
+	// The exclusions are what make a short review visibly a filtered one.
+	if len(spec.Excluded) != 1 || spec.Excluded[0].Reason != "unsupported_ext" {
+		t.Errorf("exclusions lost: %+v", spec.Excluded)
+	}
+	g, ok := spec.RuleFor("a.go")
+	if !ok || g.Rule != "the go rules" {
+		t.Errorf("the rule pack never made it onto the spec: %+v %v", g, ok)
+	}
+}
+
+// A reviewable set of nothing must not go on to ask for rules it cannot use.
+func TestResolve_NoFilesAsksForNoRules(t *testing.T) {
+	fakeOCR(t, `{"schema_version":"1","mode":"workspace","reviewable_files":[]}`,
+		`{"schema_version":"1","groups":[{"files":["ghost.go"],"rule":"never"}]}`, 0)
+
+	spec, err := Resolve(context.Background(), Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(spec.Groups) != 0 {
+		t.Fatalf("asked for rules with nothing to review: %+v", spec.Groups)
+	}
+}
+
+// A failing rule source must surface its own complaint, or the reason is lost.
+func TestResolve_ToolFailureCarriesItsReason(t *testing.T) {
+	fakeOCR(t, "", "", 2)
+	_, err := Resolve(context.Background(), Options{})
+	if err == nil {
+		t.Fatal("a failing rule source reported success")
+	}
+	if !strings.Contains(err.Error(), "rule source said no") {
+		t.Fatalf("the tool's own reason was dropped: %v", err)
+	}
+}
+
+func TestRun_CancelledContextIsReportedNotSilentlyClean(t *testing.T) {
+	dir := gitRepo(t)
+	write(t, dir, "a.go", "package p\n")
+	spec := &Spec{
+		Mode: "workspace", Repository: dir,
+		Reviewable: []File{{Path: "a.go"}},
+		Groups:     []Group{{Files: []string{"a.go"}, Rule: "r"}},
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	res, err := Run(ctx, &stubRouter{reply: func(string) (Answer, error) {
+		return Answer{Output: "[]", Head: "h"}, nil
+	}}, spec, RunOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Files) != 1 || res.Files[0].Err == "" {
+		t.Fatalf("a cancelled run reported no trouble: %+v", res.Files)
+	}
+	if res.Reviewed() != 0 {
+		t.Errorf("a cancelled file counted as reviewed")
 	}
 }

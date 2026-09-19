@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"sort"
 	"strings"
@@ -102,14 +103,14 @@ func cmdVet() *cobra.Command {
 			})
 			if err != nil {
 				if errors.Is(err, vet.ErrNoRuleSource) {
-					printNoRuleSource()
+					printNoRuleSource(os.Stdout)
 					os.Exit(2) // the reviewer is missing, which is setup, not a finding
 				}
 				return err
 			}
 
 			if dryRun || len(spec.Reviewable) == 0 {
-				return printVetPlan(spec, jsonOut)
+				return printVetPlan(os.Stdout, spec, jsonOut)
 			}
 
 			d, err := dispatch.New(ctx)
@@ -125,17 +126,12 @@ func cmdVet() *cobra.Command {
 				return err
 			}
 
-			if jsonOut {
-				if err := json.NewEncoder(os.Stdout).Encode(res); err != nil {
-					return err
-				}
-			} else {
-				printVet(res)
+			code, err := renderVet(os.Stdout, res, jsonOut)
+			if err != nil {
+				return err
 			}
-			// After both renderings, never inside one: --json is the mode a
-			// gate is likeliest to use, and it was the mode that exited 0.
-			if res.BlockingCount() > 0 {
-				os.Exit(3) // non-zero so callers can gate on it
+			if code != 0 {
+				os.Exit(code)
 			}
 			return nil
 		},
@@ -170,16 +166,33 @@ func resolveVetRouting(enum, tier string) (hint, logEnum string, err error) {
 	return dispatch.EnumToTier(enum), enum, nil
 }
 
-func printNoRuleSource() {
-	fmt.Println()
-	fmt.Println("  hyctl vet needs open-code-review to decide which files are worth reviewing")
-	fmt.Println("  and by what rules, and it is not on PATH.")
-	fmt.Println()
-	fmt.Println("      npm install -g @alibaba-group/open-code-review")
-	fmt.Println()
-	fmt.Println(dimStyle.Render("  Only its delegate mode is used, which resolves files and rules with no"))
-	fmt.Println(dimStyle.Render("  model, no API key and no spend. The reviewing is Hydra's own Heads."))
-	fmt.Println()
+// renderVet writes the result and answers with the process exit code, so the
+// exit code cannot depend on which rendering ran. --json returning before the
+// check is what let a gate pass on a blocking finding.
+func renderVet(w io.Writer, res *vet.Result, jsonOut bool) (int, error) {
+	if jsonOut {
+		if err := json.NewEncoder(w).Encode(res); err != nil {
+			return 1, err
+		}
+	} else {
+		printVet(w, res)
+	}
+	if res.BlockingCount() > 0 {
+		return 3, nil // non-zero so callers can gate on it
+	}
+	return 0, nil
+}
+
+func printNoRuleSource(w io.Writer) {
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "  hyctl vet needs open-code-review to decide which files are worth reviewing")
+	fmt.Fprintln(w, "  and by what rules, and it is not on PATH.")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "      npm install -g @alibaba-group/open-code-review")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, dimStyle.Render("  Only its delegate mode is used, which resolves files and rules with no"))
+	fmt.Fprintln(w, dimStyle.Render("  model, no API key and no spend. The reviewing is Hydra's own Heads."))
+	fmt.Fprintln(w)
 }
 
 // scopeLine names the diff under review, so a report is never ambiguous about
@@ -198,19 +211,19 @@ func scopeLine(s *vet.Spec) string {
 	}
 }
 
-func printVetPlan(s *vet.Spec, jsonOut bool) error {
+func printVetPlan(w io.Writer, s *vet.Spec, jsonOut bool) error {
 	if jsonOut {
-		return json.NewEncoder(os.Stdout).Encode(s)
+		return json.NewEncoder(w).Encode(s)
 	}
-	fmt.Println()
-	fmt.Printf("  vet %s %s %s\n", dimStyle.Render("·"), scopeLine(s), dimStyle.Render("· nothing dispatched"))
-	fmt.Println()
+	fmt.Fprintln(w)
+	fmt.Fprintf(w, "  vet %s %s %s\n", dimStyle.Render("·"), scopeLine(s), dimStyle.Render("· nothing dispatched"))
+	fmt.Fprintln(w)
 	if len(s.Reviewable) == 0 {
-		fmt.Println("  no reviewable files in this diff")
+		fmt.Fprintln(w, "  no reviewable files in this diff")
 		if n := len(s.Excluded); n > 0 {
-			fmt.Println(dimStyle.Render("  " + excludedSummary(s.Excluded)))
+			fmt.Fprintln(w, dimStyle.Render("  "+excludedSummary(s.Excluded)))
 		}
-		fmt.Println()
+		fmt.Fprintln(w)
 		return nil
 	}
 	for _, f := range s.Reviewable {
@@ -218,22 +231,22 @@ func printVetPlan(s *vet.Spec, jsonOut bool) error {
 		if g, ok := s.RuleFor(f.Path); ok {
 			rule = dimStyle.Render(g.Pattern)
 		}
-		fmt.Printf("  %-52.52s %9s  %s\n", f.Path, fmt.Sprintf("+%d/-%d", f.Insertions, f.Deletions), rule)
+		fmt.Fprintf(w, "  %-52.52s %9s  %s\n", f.Path, fmt.Sprintf("+%d/-%d", f.Insertions, f.Deletions), rule)
 	}
-	fmt.Println()
-	fmt.Printf("  %d file(s) would be reviewed", len(s.Reviewable))
+	fmt.Fprintln(w)
+	fmt.Fprintf(w, "  %d file(s) would be reviewed", len(s.Reviewable))
 	if n := len(s.Excluded); n > 0 {
-		fmt.Printf("%s", dimStyle.Render("  ·  "+excludedSummary(s.Excluded)))
+		fmt.Fprintf(w, "%s", dimStyle.Render("  ·  "+excludedSummary(s.Excluded)))
 	}
-	fmt.Println()
-	fmt.Println()
+	fmt.Fprintln(w)
+	fmt.Fprintln(w)
 	return nil
 }
 
-func printVet(r *vet.Result) {
-	fmt.Println()
-	fmt.Printf("  vet %s %s %s %d file(s)\n", dimStyle.Render("·"), scopeLine(r.Spec), dimStyle.Render("·"), len(r.Files))
-	fmt.Println()
+func printVet(w io.Writer, r *vet.Result) {
+	fmt.Fprintln(w)
+	fmt.Fprintf(w, "  vet %s %s %s %d file(s)\n", dimStyle.Render("·"), scopeLine(r.Spec), dimStyle.Render("·"), len(r.Files))
+	fmt.Fprintln(w)
 
 	byFile := map[string][]vet.Finding{}
 	for _, f := range r.Findings {
@@ -249,16 +262,16 @@ func printVet(r *vet.Result) {
 		if out.Tier > 0 {
 			tier = fmt.Sprintf("T%d", out.Tier)
 		}
-		fmt.Printf("  %-46.46s %s %s\n", out.File, dimStyle.Render(truncLabel(head, 20)), dimStyle.Render(tier))
+		fmt.Fprintf(w, "  %-46.46s %s %s\n", out.File, dimStyle.Render(truncLabel(head, 20)), dimStyle.Render(tier))
 
 		switch {
 		case out.Err != "":
-			fmt.Printf("        %s\n", dimStyle.Render("not reviewed: "+out.Err))
+			fmt.Fprintf(w, "        %s\n", dimStyle.Render("not reviewed: "+out.Err))
 		case out.Unparsed:
 			// Never rendered as clean: an unreadable reply is not a pass.
-			fmt.Printf("        %s\n", nonBlockingStyle.Render("the reply was not readable as findings; --json keeps it verbatim"))
+			fmt.Fprintf(w, "        %s\n", nonBlockingStyle.Render("the reply was not readable as findings; --json keeps it verbatim"))
 		case len(byFile[out.File]) == 0:
-			fmt.Printf("        %s\n", dimStyle.Render("no defects reported"))
+			fmt.Fprintf(w, "        %s\n", dimStyle.Render("no defects reported"))
 		}
 
 		for _, f := range byFile[out.File] {
@@ -266,28 +279,28 @@ func printVet(r *vet.Result) {
 			if f.Line > 0 {
 				line = fmt.Sprintf("%4d", f.Line)
 			}
-			fmt.Printf("    %s  %s  %s\n", line, severityLabel(f.Severity), f.Title)
-			for _, w := range wrap(f.Detail, 66) {
-				fmt.Printf("          %s\n", dimStyle.Render(w))
+			fmt.Fprintf(w, "    %s  %s  %s\n", line, severityLabel(f.Severity), f.Title)
+			for _, line := range wrap(f.Detail, 66) {
+				fmt.Fprintf(w, "          %s\n", dimStyle.Render(line))
 			}
 		}
 		if out.Truncated {
-			fmt.Printf("        %s\n", dimStyle.Render("diff was too large to send whole; the tail was not reviewed"))
+			fmt.Fprintf(w, "        %s\n", dimStyle.Render("diff was too large to send whole; the tail was not reviewed"))
 		}
 		if out.Discarded > 0 {
-			fmt.Printf("        %s\n", dimStyle.Render(fmt.Sprintf("%d reply/replies discarded: named another file, or carried no claim", out.Discarded)))
+			fmt.Fprintf(w, "        %s\n", dimStyle.Render(fmt.Sprintf("%d reply/replies discarded: named another file, or carried no claim", out.Discarded)))
 		}
-		fmt.Println()
+		fmt.Fprintln(w)
 	}
 
 	blocking := r.BlockingCount()
-	fmt.Printf("  %d blocking %s %d non-blocking %s %d/%d file(s) reviewed %s $%.4f\n",
+	fmt.Fprintf(w, "  %d blocking %s %d non-blocking %s %d/%d file(s) reviewed %s $%.4f\n",
 		blocking, dimStyle.Render("·"), len(r.Findings)-blocking, dimStyle.Render("·"),
 		r.Reviewed(), len(r.Files), dimStyle.Render("·"), r.CostUSD)
 	if r.Spec != nil && len(r.Spec.Excluded) > 0 {
-		fmt.Println(dimStyle.Render("  " + excludedSummary(r.Spec.Excluded)))
+		fmt.Fprintln(w, dimStyle.Render("  "+excludedSummary(r.Spec.Excluded)))
 	}
-	fmt.Println()
+	fmt.Fprintln(w)
 }
 
 func severityLabel(s string) string {
