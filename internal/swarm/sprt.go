@@ -185,14 +185,9 @@ func (s *Swarm) judgeEquivalence(ctx context.Context, prompt string, opts Option
 		}
 		jctx, cancel := context.WithTimeout(ctx, timeout)
 		defer cancel()
-		out, err := s.d.Dispatch(jctx, buildEquivalencePrompt(prompt, candidate, answer), dispatch.Options{
-			TierHint: opts.JudgeTierHint,
-			System:   "You compare two answers for equivalence. Reply with exactly one word: YES or NO.",
-			// Same reason as the judge above: this asks about two answers, not
-			// about the question. A stored verdict would decide the stopping
-			// rule on a comparison nobody made.
-			NoCache: true,
-		})
+		out, err := s.ask()(jctx, buildEquivalencePrompt(prompt, candidate, answer),
+			judgeOptions(opts, opts.JudgeTierHint,
+				"You compare two answers for equivalence. Reply with exactly one word: YES or NO."))
 		if err != nil {
 			return trust.TextEquivalence(candidate, answer) // degrade, never block
 		}

@@ -124,6 +124,17 @@ type Swarm struct {
 	d       *dispatch.Dispatcher
 	heads   []provider.Head
 	pricing PricingReader
+	// askJudge overrides how the equivalence judge dispatches, set only by
+	// tests so the options it sends are observable. See dispatchFunc.
+	askJudge dispatchFunc
+}
+
+// ask is the equivalence judge's dispatch, the real one unless a test replaced it.
+func (s *Swarm) ask() dispatchFunc {
+	if s.askJudge != nil {
+		return s.askJudge
+	}
+	return dispatchWith(s.d)
 }
 
 // New constructs a Swarm.
@@ -340,7 +351,7 @@ func buildJudge(d *dispatch.Dispatcher, opts Options, cfg *config.Config) Judge 
 		// Default to the configured Cortex head's tier (tier 1).
 		tierHint = "1"
 	}
-	llm := newLLMJudge(d, tierHint, opts.JudgeTimeout)
+	llm := newLLMJudge(d, tierHint, opts)
 	cap_ := &CapScoreJudge{}
 	fallback := newCompositeJudge(llm, cap_)
 

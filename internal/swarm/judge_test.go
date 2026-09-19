@@ -215,7 +215,7 @@ func TestBuildJudgePrompt_CarriesEveryCandidate(t *testing.T) {
 // One successful attempt needs no LLM call: there is nothing to compare.
 // Spending a tier-1 dispatch to pick the only candidate is pure waste.
 func TestLLMJudge_SingleSuccessSkipsTheDispatch(t *testing.T) {
-	j := newLLMJudge(nil, "1", 0) // a nil dispatcher would panic if used
+	j := newLLMJudge(nil, "1", Options{}) // a nil dispatcher would panic if used
 
 	attempts := []Attempt{failedAttempt("a"), okAttempt("b", 88, "the only answer")}
 	v, err := j.Judge(context.Background(), "q", attempts)
@@ -234,18 +234,18 @@ func TestLLMJudge_SingleSuccessSkipsTheDispatch(t *testing.T) {
 }
 
 func TestLLMJudge_NoSuccessfulAttemptsIsAnError(t *testing.T) {
-	j := newLLMJudge(nil, "1", 0)
+	j := newLLMJudge(nil, "1", Options{})
 	if v, err := j.Judge(context.Background(), "q", []Attempt{failedAttempt("a")}); err == nil {
 		t.Errorf("Judge returned %+v with nothing to judge", v)
 	}
 }
 
 func TestNewLLMJudge_DefaultsTheTimeout(t *testing.T) {
-	if got := newLLMJudge(nil, "1", 0); got.timeout != defaultJudgeTimeout {
+	if got := newLLMJudge(nil, "1", Options{}); got.timeout != defaultJudgeTimeout {
 		t.Errorf("timeout = %v with none set, want the default %v, zero would "+
 			"cancel the judge immediately", got.timeout, defaultJudgeTimeout)
 	}
-	if got := newLLMJudge(nil, "1", 5*time.Second); got.timeout != 5*time.Second {
+	if got := newLLMJudge(nil, "1", Options{JudgeTimeout: 5 * time.Second}); got.timeout != 5*time.Second {
 		t.Errorf("timeout = %v, want the caller's 5s", got.timeout)
 	}
 }
