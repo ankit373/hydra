@@ -904,6 +904,21 @@ func cmdDispatch() *cobra.Command {
 			if enumKey != "" && !dispatch.IsKnownEnum(enumKey) {
 				return fmt.Errorf("unknown --enum %q: not a recognized routing enum key", enumKey)
 			}
+			// A dispatch writes nothing to disk, so the workspace verifier it
+			// used to run judged the working tree and never saw the answer: the
+			// candidate reached it through neither argv nor the filesystem.
+			// Training calibration and scoring the span on that verdict was
+			// confident false evidence about the heads that answered (#982).
+			// Refused here, before anything routes, so nobody pays for a run
+			// whose verdict would mean nothing.
+			if verifyRun {
+				return fmt.Errorf("--verify cannot judge a dispatch: the answer is never written to " +
+					"disk, so the verifier checks the repository as it already was.\n" +
+					"  To verify an answer, apply it: `hyctl edit --file <path> \"<instruction>\"` " +
+					"validates the file it just wrote.\n" +
+					"  To verify one you have applied yourself: " +
+					"`hyctl oracle verify --candidate <file> -- <command>`")
+			}
 
 			prompt := strings.Join(args, " ")
 			ctx := cmd.Context()
@@ -1141,9 +1156,6 @@ func cmdDispatch() *cobra.Command {
 				logTrustRun(res, prompt, domain)
 				writeFanoutHandoff("hydra-ensemble", "SPRT ensemble", prompt,
 					res.Trust.Candidate, file, res.Attempts)
-				if verifyRun {
-					verifyAndScoreRun(ctx, res, runID, taskID, file, domain)
-				}
 				return nil
 			}
 
@@ -1339,7 +1351,7 @@ func cmdDispatch() *cobra.Command {
 	// domain and printed two commands ending in a bare `--domain ` (#732).
 	cmd.Flags().StringVar(&domain, "domain", trust.DefaultDomain, "calibration domain: ranks heads on what they got right at this kind of work, and keys --confidence")
 	cmd.Flags().StringVar(&file, "file", "", "target file, derives a confidence target from its blast radius, so this alone selects the SPRT ensemble")
-	cmd.Flags().BoolVar(&verifyRun, "verify", false, "after a --confidence run, run the workspace verifier and record its verdict: what trains calibration and fills hyctl trust reliability. It judges the working tree, not the answer, so it files no eval-set example")
+	cmd.Flags().BoolVar(&verifyRun, "verify", false, "refused: a dispatch writes nothing to disk, so a verifier cannot judge its answer. Use `hyctl edit`, which validates the file it wrote, or `hyctl oracle verify --candidate`")
 	cmd.Flags().StringVar(&graphPath, "graph", "graph.json", "path to the dependency graph used with --file")
 	cmd.Flags().BoolVar(&irreversible, "irreversible", false, "change cannot be cheaply undone, raises the required confidence")
 	cmd.Flags().BoolVar(&production, "production", false, "target is production, raises the required confidence")
