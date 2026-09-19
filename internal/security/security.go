@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/ledger"
 	"github.com/ankit373/hydra/internal/provider"
 	"github.com/ankit373/hydra/internal/trust"
@@ -235,6 +236,7 @@ func BuildWith(heads []provider.Head, servers []LocalServer) (*Report, error) {
 		bomCheck(r.BOM),
 		localServerCheck(localHeads(heads), servers),
 		advisoryCheck(servers),
+		stateDirCheck(config.Dir()),
 	}
 	r.RiskHistory = ledger.ByDayRisk(events)
 
