@@ -603,4 +603,27 @@ func TestReviewEnsemble_RecordsAReachableRun(t *testing.T) {
 	if !ans.Bar.Set() {
 		t.Error("no bar was demanded of the file")
 	}
+
+	// The ledger is the whole point: without it the hash names a run that was
+	// never written, and `hyctl trust outcome` finds nothing to replay.
+	runs, err := trust.LoadRuns(trust.DefaultLogPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var found *trust.RunLog
+	for i := range runs {
+		if runs[i].TaskHash == ans.TaskHash {
+			found = &runs[i]
+			break
+		}
+	}
+	if found == nil {
+		t.Fatalf("no run recorded for %s: the review taught nothing about any Head", ans.TaskHash)
+	}
+	if len(found.Ledger) == 0 {
+		t.Error("the run was recorded with no ledger, so no voter can be trained from it")
+	}
+	if found.Domain != "go" {
+		t.Errorf("run domain %q: a verdict would train the wrong cell", found.Domain)
+	}
 }
