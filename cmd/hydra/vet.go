@@ -111,6 +111,14 @@ func (r vetRouter) reviewEnsemble(ctx context.Context, prompt, domain, file stri
 			break
 		}
 	}
+	// Every head that answered, not only the winner. The ensemble already
+	// produced these and reading one of them was throwing the agreement
+	// between them away (#981).
+	for _, at := range res.Attempts {
+		if at.Succeeded() {
+			a.Votes = append(a.Votes, vet.Vote{Head: at.Head.ID, Output: at.Output})
+		}
+	}
 	return a, nil
 }
 
@@ -413,7 +421,7 @@ func printVet(w io.Writer, r *vet.Result) {
 			if f.Line > 0 {
 				line = fmt.Sprintf("%4d", f.Line)
 			}
-			fmt.Fprintf(w, "    %s  %s  %s\n", line, severityLabel(f.Severity), f.Title)
+			fmt.Fprintf(w, "    %s  %s  %s%s\n", line, severityLabel(f.Severity), f.Title, agreementLabel(f))
 			for _, line := range wrap(f.Detail, 66) {
 				fmt.Fprintf(w, "          %s\n", dimStyle.Render(line))
 			}
@@ -440,6 +448,15 @@ func printVet(w io.Writer, r *vet.Result) {
 			"  trains all of them, dissenters included, which is what moves specificity."))
 		fmt.Fprintln(w)
 	}
+	if lone := loneFindings(r); lone > 0 {
+		// Stated because the count is a lower bound: the same defect reported a
+		// line away, or worded differently, is counted as a separate claim.
+		fmt.Fprintf(w, "  %s\n", dimStyle.Render(fmt.Sprintf(
+			"%d finding(s) only one Head reported. Agreement is matched on line and severity,", lone)))
+		fmt.Fprintf(w, "  %s\n", dimStyle.Render(
+			"  so the same defect worded differently or a line away counts as its own claim."))
+		fmt.Fprintln(w)
+	}
 	if short := r.ShortOfBar(); short > 0 {
 		fmt.Fprintf(w, "  %s\n", nonBlockingStyle.Render(fmt.Sprintf(
 			"%d file(s) never reached the confidence their blast radius asked for; their findings stand, the confidence does not", short)))
@@ -457,6 +474,33 @@ func printVet(w io.Writer, r *vet.Result) {
 // barLine reports what this file had to clear and whether it did. A radius
 // Hydra did not read off a graph is named as a default, so a run with no graph
 // never reads as blast-radius-aware routing (#251).
+// agreementLabel renders how many of the sampled Heads made this claim. Silent
+// when one Head was asked, since "1 of 1" dresses a single opinion as a
+// consensus.
+func agreementLabel(f vet.Finding) string {
+	if !f.Agreement() {
+		return ""
+	}
+	// Dimmed only when one Head of several made the claim. Agreement is
+	// credibility, not severity, and colouring it like a severity would say
+	// the two are the same thing.
+	label := fmt.Sprintf("  %d/%d", f.Agreed, f.Voters)
+	if f.Lone() {
+		return dimStyle.Render(label)
+	}
+	return label
+}
+
+func loneFindings(r *vet.Result) int {
+	n := 0
+	for _, f := range r.Findings {
+		if f.Lone() {
+			n++
+		}
+	}
+	return n
+}
+
 func barLine(out vet.FileOutcome) string {
 	radius := fmt.Sprintf("blast %.2f", out.Bar.Radius)
 	if !out.Bar.Measured {

@@ -60,6 +60,20 @@ type Answer struct {
 	// attached to it later. Empty when no ensemble ran, and therefore when
 	// there is no ledger of votes to train from.
 	TaskHash string
+
+	// Votes is every sampled Head's answer, the accepted one included. The
+	// ensemble already produced them and only the winner's was read, so the
+	// agreement between Heads was being measured and thrown away.
+	//
+	// Empty on the single-dispatch path, where one answer is the whole of what
+	// was asked and "1 of 1" would dress a single opinion as a consensus.
+	Votes []Vote
+}
+
+// Vote is one sampled Head's answer to a file's review.
+type Vote struct {
+	Head   string
+	Output string
 }
 
 // Router routes one file's review. This package deliberately does not import
@@ -76,7 +90,27 @@ type Finding struct {
 	Title    string `json:"title"`
 	Detail   string `json:"detail,omitempty"`
 	Head     string `json:"head"`
+
+	// Agreed is how many of the Voters reported this same claim, and is the
+	// per-finding evidence the file's single confidence cannot give: a claim
+	// three of four Heads made and one only one of them made are very
+	// different, and the file's number says the same thing about both.
+	//
+	// Both zero when one Head was asked, so nothing renders "1 of 1".
+	Agreed int `json:"agreed,omitempty"`
+	Voters int `json:"voters,omitempty"`
 }
+
+// Agreement reports whether more than one Head was asked, which is the only
+// case where the count says anything.
+func (f Finding) Agreement() bool { return f.Voters > 1 }
+
+// Unanimous reports that every Head asked made this claim.
+func (f Finding) Unanimous() bool { return f.Agreement() && f.Agreed == f.Voters }
+
+// Lone reports a claim only one Head made while others were asked. It is the
+// case the file-level confidence most overstates.
+func (f Finding) Lone() bool { return f.Agreement() && f.Agreed == 1 }
 
 // FileOutcome is what happened to one file, whether or not it found anything.
 // Every field here exists so a quiet result can be told from an empty one.
@@ -320,9 +354,56 @@ func reviewFile(ctx context.Context, r Router, spec *Spec, path string, opts Run
 		out.Unparsed, out.Raw = true, ans.Output
 		return out, nil
 	}
+	countAgreement(found, ans.Votes, path)
 	out.Findings, out.Discarded = len(found), discarded
 	return out, found
 }
+
+// countAgreement records, per finding, how many of the sampled Heads made the
+// same claim.
+//
+// Two findings are the same claim when they name the same file, the same line
+// and the same severity. Nothing fuzzy: a line window needs a threshold and
+// there is no honest number for one, the same reason internal/cache refused an
+// overlap ratio. The consequence is stated rather than hidden, here and in the
+// report: a Head reporting the same defect a line away, or wording it
+// differently, counts as a separate claim, so **Agreed is a lower bound**.
+//
+// A vote that cannot be parsed contributes nothing to any count but is still a
+// voter, since a Head that answered unreadably did not agree with anything.
+func countAgreement(found []Finding, votes []Vote, path string) {
+	if len(votes) < 2 {
+		return
+	}
+	seen := make([]map[claimKey]bool, 0, len(votes))
+	for _, v := range votes {
+		claims := map[claimKey]bool{}
+		if parsed, _, ok := parseFindings(v.Output, path, v.Head); ok {
+			for _, f := range parsed {
+				claims[keyOf(f)] = true
+			}
+		}
+		seen = append(seen, claims)
+	}
+	for i := range found {
+		k := keyOf(found[i])
+		n := 0
+		for _, claims := range seen {
+			if claims[k] {
+				n++
+			}
+		}
+		found[i].Agreed, found[i].Voters = n, len(votes)
+	}
+}
+
+// claimKey is what makes two findings the same claim.
+type claimKey struct {
+	line     int
+	severity string
+}
+
+func keyOf(f Finding) claimKey { return claimKey{line: f.Line, severity: f.Severity} }
 
 const outputContract = `Reply with a JSON array and nothing else: no prose, no code fence.
 Each element is:
