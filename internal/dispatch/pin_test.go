@@ -5,6 +5,7 @@ package dispatch
 import (
 	"context"
 	"errors"
+	"github.com/ankit373/hydra/internal/executor"
 	"runtime"
 	"strings"
 	"testing"
@@ -177,5 +178,49 @@ func TestHeadPool_ProviderMetadataWins(t *testing.T) {
 func TestHeadPool_UnknownHeadRecordsNoPool(t *testing.T) {
 	if got := headPool(provider.Head{ID: "nothing/we-know"}); got != "" {
 		t.Errorf("headPool = %q, want empty for an unknown head", got)
+	}
+}
+
+// A head whose dialect cannot carry tool definitions is skipped rather than
+// sent the request without them.
+//
+// Not a degraded answer: the caller's agent loop never terminates, and every
+// round reads as the model simply declining to act. Measured against a stub
+// that answered plain text, open-code-review failed all 3 files after 101
+// attempts, which is what this refusal exists to prevent (#940).
+func TestDispatch_HeadThatCannotCarryToolsIsSkipped(t *testing.T) {
+	s := testutil.NewSandbox(t)
+
+	// A CLI head: it answers fine, but has nowhere to put a tool definition.
+	res, err := liveDispatcher(echoHead(t, s, "cli-head", 80)).
+		Dispatch(context.Background(), "review this", Options{
+			RunID: "run-tools", TaskID: "task-tools",
+			Tools: []executor.ToolDef{{
+				Type:     "function",
+				Function: executor.ToolFunction{Name: "file_read"},
+			}},
+		})
+	if err == nil {
+		t.Fatalf("a head that cannot carry tools answered anyway: %+v", res)
+	}
+	if !strings.Contains(err.Error(), "cannot carry tool definitions") {
+		t.Errorf("the refusal does not name the reason: %v", err)
+	}
+}
+
+// The same head answers normally when no tools are asked for, so the skip is
+// about the tools rather than about the head.
+func TestDispatch_TheSameHeadAnswersWithNoToolsAsked(t *testing.T) {
+	s := testutil.NewSandbox(t)
+
+	res, err := liveDispatcher(echoHead(t, s, "cli-head", 80)).
+		Dispatch(context.Background(), "review this", Options{
+			RunID: "run-notools", TaskID: "task-notools",
+		})
+	if err != nil {
+		t.Fatalf("the head refused without tools too, so the skip proves nothing: %v", err)
+	}
+	if res.Head.ID != "cli-head" {
+		t.Errorf("answered by %q", res.Head.ID)
 	}
 }
