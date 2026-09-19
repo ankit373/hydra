@@ -24,10 +24,11 @@ func TestBuildEditPrompt_FencesTheFileContent(t *testing.T) {
 	if spans[0].Content != sampleFile {
 		t.Errorf("the fenced span is not the file content: %q", spans[0].Content)
 	}
-	// The path is the label, so a reader of the prompt can tell which file the
-	// block is.
-	if !strings.Contains(p, "internal/a.go") {
-		t.Errorf("the fence does not name the file: %q", p)
+	// The path is the label, asserted on the fence line itself: the prompt
+	// also carries "File path: ...", so matching the whole prompt for the path
+	// passes whatever the fence is labelled.
+	if !strings.Contains(p, "BEGIN internal/a.go ") {
+		t.Errorf("the fence is not labelled with the file's path: %q", p)
 	}
 }
 
