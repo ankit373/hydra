@@ -343,13 +343,7 @@ func TestResolve_MissingToolIsItsOwnError(t *testing.T) {
 // A later schema may move fields, and a silent mis-parse reads as "no
 // findings", which is the one wrong answer a reviewer must never give.
 func TestResolve_RefusesASchemaItCannotRead(t *testing.T) {
-	dir := t.TempDir()
-	fake := filepath.Join(dir, "ocr")
-	script := "#!/bin/sh\necho '{\"schema_version\":\"9\",\"mode\":\"workspace\"}'\n"
-	if err := os.WriteFile(fake, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", dir)
+	fakeOCR(t, `{"schema_version":"9","mode":"workspace"}`, "", 0)
 
 	_, err := Resolve(context.Background(), Options{})
 	if err == nil || !strings.Contains(err.Error(), "schema 9") {
@@ -378,7 +372,10 @@ func gitRepo(t *testing.T) string {
 func git(t *testing.T, dir string, args ...string) string {
 	t.Helper()
 	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
-	cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null")
+	// A real empty file, not /dev/null: on Windows that is not a path git can
+	// open, and every git call in this suite would fail on the config read.
+	cmd.Env = append(os.Environ(),
+		"GIT_CONFIG_GLOBAL="+emptyConfig(t), "GIT_CONFIG_SYSTEM="+emptyConfig(t))
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("git %v: %v: %s", args, err, out)
@@ -517,4 +514,15 @@ func TestRun_CancelledContextIsReportedNotSilentlyClean(t *testing.T) {
 	if res.Reviewed() != 0 {
 		t.Errorf("a cancelled file counted as reviewed")
 	}
+}
+
+// emptyConfig is a config file git can open and learn nothing from, on every
+// platform.
+func emptyConfig(t *testing.T) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "gitconfig")
+	if err := os.WriteFile(path, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
 }
