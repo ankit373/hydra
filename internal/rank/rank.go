@@ -14,10 +14,10 @@ import (
 // have equal capability scores. CLI is preferred (no network, self-auth).
 var sourceWeight = map[string]int{"cli": 3, "env": 2, "port": 1}
 
-// ByCapScore deduplicates heads by provider (keeping the best-scoring entry
-// per provider, preferring CLI source on ties) then sorts descending by score.
-// Local heads (LocalOnly=true) are never deduplicated against remote heads
-// because they serve a different purpose.
+// ByCapScore deduplicates heads by provider and executor, keeping the
+// best-scoring entry of each, then sorts descending by score. Local heads
+// (LocalOnly=true) are never deduplicated against remote heads because they
+// serve a different purpose; see dedupeKey for why the executor is part of it.
 //
 // Nothing is suppressed. A special case here dropped the bare "ollama" runtime
 // binary whenever a port-discovered model existed, keyed on `Provider ==
