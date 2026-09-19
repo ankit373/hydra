@@ -10,7 +10,8 @@ package main
 import (
 	"context"
 	"os"
-	"strconv"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/ankit373/hydra/internal/evalset"
@@ -19,8 +20,6 @@ import (
 	"github.com/ankit373/hydra/internal/trust"
 )
 
-// sprtRunWith is a finished ensemble whose attempts are under the test's control,
-// which is what head attribution reads.
 func sprtRunWith(enum string, tier int, attempts []swarm.Attempt) *swarm.SPRTResult {
 	return &swarm.SPRTResult{
 		Domain: "go", Prompt: "p", Target: 0.95, Enum: enum, Tier: tier,
@@ -49,168 +48,59 @@ func corpus(t *testing.T) []evalset.Example {
 	return all
 }
 
-// The corpus is the only thing the router can be improved against, and this is
-// the command that produces ground truth. Before #969 it computed the verdict
-// and filed nothing, so the store had exactly one writer and stayed empty.
-func TestVerifyAndScoreRun_FilesTheVerifiedExample(t *testing.T) {
+// This is the mechanism, and it is the reason nothing may be filed from here.
+// A dispatch applies nothing to disk, and the repo's own suite carries no
+// placeholder, so the candidate is never handed to the verifier: the verdict is
+// true of the working tree and says nothing about the answer (#982).
+//
+// If this ever fails, the candidate has started reaching the verifier and the
+// filing decision below is worth revisiting. It is not a failure to paper over.
+func TestVerifyAndScoreRun_TheCandidateNeverReachesTheVerifier(t *testing.T) {
 	cliSandbox(t)
-	goRepo(t, "exit 0") // the suite passes, so the answer held up
+	argsFile := filepath.Join(t.TempDir(), "argv.txt")
+	goRepo(t, "printf '%s\\n' \"$@\" > "+argsFile+"; exit 0")
 
-	const runID, taskID = "rc1", "tc1"
-	logSPRTSpan(t, runID, taskID, 0.82)
-	res := sprtRunWith("SIMPLE", 8, []swarm.Attempt{
-		attempt("ollama/qwen3:4b", "A"),
-		attempt("claude", "B"),
-	})
-	verifyAndScoreRun(context.Background(), res, runID, taskID, "x.go", "go")
+	logSPRTSpan(t, "rv", "tv", 0.9)
+	res := sprtRunWith("SIMPLE", 8, []swarm.Attempt{attempt("claude", "A")})
+	res.Trust.Candidate = "UNIQUE_CANDIDATE_TEXT_12345"
+	verifyAndScoreRun(context.Background(), res, "rv", "tv", "x.go", "go")
 
-	all := corpus(t)
-	if len(all) != 1 {
-		t.Fatalf("corpus holds %d examples, want 1; --verify produced ground truth and dropped it", len(all))
+	raw, err := os.ReadFile(argsFile)
+	if err != nil {
+		t.Fatalf("the verifier never ran, so this proves nothing: %v", err)
 	}
-	e := all[0]
-	if !e.Passed {
-		t.Errorf("Passed = false, want true: the verifier exited 0")
-	}
-	if e.Candidate != "A" {
-		t.Errorf("Candidate = %q, want the answer that was verified", e.Candidate)
-	}
-	// Enum and head are what Readiness gates on. An example missing either is
-	// kept but can never make an enum fittable, so storing it is half the job.
-	if e.Enum != "SIMPLE" || e.Tier != 8 {
-		t.Errorf("routing decision = (%q, %d), want (SIMPLE, 8)", e.Enum, e.Tier)
-	}
-	if e.Head != "ollama/qwen3:4b" {
-		t.Errorf("Head = %q, want the head whose output was verified", e.Head)
-	}
-	if e.Domain != "go" {
-		t.Errorf("Domain = %q, want go", e.Domain)
+	if strings.Contains(string(raw), "UNIQUE_CANDIDATE_TEXT_12345") {
+		t.Fatalf("the candidate now reaches the verifier (argv %q); the verdict may judge the "+
+			"answer after all, so revisit whether an example should be filed", strings.TrimSpace(string(raw)))
 	}
 }
 
-// A wrong answer with ground truth attached is as valuable as a right one: a
-// corpus of only passes cannot tell any head from any other.
-func TestVerifyAndScoreRun_FilesAFailedAnswerToo(t *testing.T) {
+// Given the above, filing would write a verdict about the repo as if it were
+// ground truth about the answer. An empty corpus is recoverable; a corpus of
+// confident mislabels is not, and it is what the router would be fitted on.
+func TestVerifyAndScoreRun_FilesNoExample(t *testing.T) {
+	cliSandbox(t)
+	goRepo(t, "exit 0") // the suite passes, which says nothing about the answer
+
+	logSPRTSpan(t, "rw", "tw", 0.9)
+	res := sprtRunWith("SIMPLE", 8, []swarm.Attempt{attempt("claude", "A")})
+	verifyAndScoreRun(context.Background(), res, "rw", "tw", "x.go", "go")
+
+	if n := len(corpus(t)); n != 0 {
+		t.Fatalf("corpus holds %d examples, want 0: this verdict did not judge the candidate", n)
+	}
+}
+
+// A failing suite is the same argument. The answer may have been perfect.
+func TestVerifyAndScoreRun_FilesNothingOnFailureEither(t *testing.T) {
 	cliSandbox(t)
 	goRepo(t, "exit 1")
 
-	const runID, taskID = "rc2", "tc2"
-	logSPRTSpan(t, runID, taskID, 0.82)
+	logSPRTSpan(t, "rx", "tx", 0.9)
 	res := sprtRunWith("EXPERT", 2, []swarm.Attempt{attempt("claude", "A")})
-	verifyAndScoreRun(context.Background(), res, runID, taskID, "x.go", "go")
-
-	all := corpus(t)
-	if len(all) != 1 {
-		t.Fatalf("corpus holds %d examples, want 1", len(all))
-	}
-	if all[0].Passed {
-		t.Errorf("Passed = true, want false: the verifier exited 1")
-	}
-}
-
-// Two heads returning byte-identical text means neither is *the* author. Naming
-// one would attribute a pass to a head on the strength of another's work, which
-// is exactly the evidence Readiness must not accept.
-func TestVerifyAndScoreRun_AgreedAnswerIsUnattributed(t *testing.T) {
-	cliSandbox(t)
-	goRepo(t, "exit 0")
-
-	const runID, taskID = "rc3", "tc3"
-	logSPRTSpan(t, runID, taskID, 0.9)
-	res := sprtRunWith("SIMPLE", 8, []swarm.Attempt{
-		attempt("ollama/qwen3:4b", "A"),
-		attempt("claude", "A"),
-	})
-	verifyAndScoreRun(context.Background(), res, runID, taskID, "x.go", "go")
-
-	all := corpus(t)
-	if len(all) != 1 {
-		t.Fatalf("corpus holds %d examples, want 1", len(all))
-	}
-	if all[0].Head != "" {
-		t.Errorf("Head = %q, want empty: two heads produced that exact answer", all[0].Head)
-	}
-}
-
-// Calibration runs after this and returns early on its own errors. Filing the
-// example afterwards would let an unwritable calibrator silently cost ground truth.
-func TestVerifyAndScoreRun_FilesTheExampleEvenWhenCalibrationCannotLoad(t *testing.T) {
-	cliSandbox(t)
-	goRepo(t, "exit 0")
-
-	// A directory where the calibration file belongs: opening it as a file fails.
-	if err := os.MkdirAll(trust.DefaultPath(), 0o700); err != nil {
-		t.Fatal(err)
-	}
-
-	const runID, taskID = "rc4", "tc4"
-	logSPRTSpan(t, runID, taskID, 0.9)
-	res := sprtRunWith("SIMPLE", 8, []swarm.Attempt{attempt("claude", "A")})
-	verifyAndScoreRun(context.Background(), res, runID, taskID, "x.go", "go")
-
-	if n := len(corpus(t)); n != 1 {
-		t.Fatalf("corpus holds %d examples, want 1: a broken calibrator must not cost the example", n)
-	}
-}
-
-// No verifier is no verdict, so there is nothing to file. Recording an unchecked
-// answer would put a guess in the one store that is supposed to be ground truth.
-func TestVerifyAndScoreRun_UnverifiableFilesNothing(t *testing.T) {
-	cliSandbox(t)
-	dir := t.TempDir()
-	old, _ := os.Getwd()
-	if err := os.Chdir(dir); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Chdir(old) })
-
-	const runID, taskID = "rc5", "tc5"
-	logSPRTSpan(t, runID, taskID, 0.9)
-	res := sprtRunWith("SIMPLE", 8, []swarm.Attempt{attempt("claude", "A")})
-	verifyAndScoreRun(context.Background(), res, runID, taskID, "x.rs", "rust")
+	verifyAndScoreRun(context.Background(), res, "rx", "tx", "x.go", "go")
 
 	if n := len(corpus(t)); n != 0 {
-		t.Fatalf("corpus holds %d examples, want 0: nothing verified that answer", n)
-	}
-}
-
-// The prompt is the task. Two different questions that happen to get the same
-// answer must stay two examples, which is only true if --verify actually passes
-// the prompt through to the task hash (#973).
-func TestVerifyAndScoreRun_DifferentPromptsWithOneAnswerStayTwoExamples(t *testing.T) {
-	cliSandbox(t)
-	goRepo(t, "exit 0")
-
-	for i, prompt := range []string{"make Close idempotent", "make Flush idempotent"} {
-		runID := "rp" + strconv.Itoa(i)
-		taskID := "tp" + strconv.Itoa(i)
-		logSPRTSpan(t, runID, taskID, 0.9)
-		res := sprtRunWith("SIMPLE", 8, []swarm.Attempt{attempt("claude", "A")})
-		res.Prompt = prompt
-		verifyAndScoreRun(context.Background(), res, runID, taskID, "x.go", "go")
-	}
-
-	if n := len(corpus(t)); n != 2 {
-		t.Fatalf("corpus holds %d examples, want 2: two tasks were collapsed into one", n)
-	}
-}
-
-// And the same task verified twice is still one example, or every re-run grows
-// the corpus by a copy.
-func TestVerifyAndScoreRun_TheSameTaskTwiceIsOneExample(t *testing.T) {
-	cliSandbox(t)
-	goRepo(t, "exit 0")
-
-	for i := 0; i < 2; i++ {
-		runID := "rq" + strconv.Itoa(i)
-		taskID := "tq" + strconv.Itoa(i)
-		logSPRTSpan(t, runID, taskID, 0.9)
-		res := sprtRunWith("SIMPLE", 8, []swarm.Attempt{attempt("claude", "A")})
-		res.Prompt = "make Close idempotent"
-		verifyAndScoreRun(context.Background(), res, runID, taskID, "x.go", "go")
-	}
-
-	if n := len(corpus(t)); n != 1 {
-		t.Fatalf("corpus holds %d examples, want 1", n)
+		t.Fatalf("corpus holds %d examples, want 0", n)
 	}
 }
