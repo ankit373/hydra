@@ -20,8 +20,10 @@ func writeRecordBehindAddsBack(t *testing.T, path string, e Example) {
 	e.V = SchemaVersion
 	e.TS = "2026-09-08T00:00:00Z"
 	e.CandidateHash = Hash(e.Candidate)
+	// The one derivation, not a second copy: this helper having its own was how
+	// it silently stopped matching Add the moment the key changed (#973).
 	if e.TaskHash == "" {
-		e.TaskHash = Hash(e.Domain + "\x00" + e.Source)
+		e.TaskHash = taskHashFallback(e.Domain, e.Source)
 	}
 	raw, err := json.Marshal(e)
 	if err != nil {
