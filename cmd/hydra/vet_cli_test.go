@@ -6,10 +6,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/ankit373/hydra/internal/dispatch"
+	"github.com/ankit373/hydra/internal/graph"
 	"github.com/ankit373/hydra/internal/testutil"
 	"github.com/ankit373/hydra/internal/trust"
 	"github.com/ankit373/hydra/internal/vet"
@@ -421,5 +424,75 @@ func TestPrintVet_ARunStoppingReasonIsSaidOnce(t *testing.T) {
 	}
 	if !strings.Contains(out, "the run stopped") {
 		t.Errorf("the summary does not say the run stopped:\n%s", out)
+	}
+}
+
+// A real graph makes the radius a measurement, and a hub file is held to a
+// higher bar than a leaf: that difference is the whole point of the flag.
+func TestBarFor_AMeasuredRadiusRaisesTheBarForAHubFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "graph.json")
+	// hub.go is depended on by three files; leaf.go by none.
+	doc := `{"nodes":[
+	  {"id":"hub","file":"hub.go"},{"id":"leaf","file":"leaf.go"},
+	  {"id":"a","file":"a.go"},{"id":"b","file":"b.go"},{"id":"c","file":"c.go"}],
+	 "edges":[{"from":"a","to":"hub"},{"from":"b","to":"hub"},{"from":"c","to":"hub"},
+	  {"from":"b","to":"a"}]}`
+	if err := os.WriteFile(path, []byte(doc), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	g, err := graph.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := vetRouter{floor: 0.5, graph: g, graphPath: path}
+
+	hub := r.barFor("go", "hub.go")
+	if !hub.Measured {
+		t.Fatal("a radius read off a real graph did not report as measured")
+	}
+	leaf := r.barFor("go", "leaf.go")
+	if !(hub.Radius > leaf.Radius) {
+		t.Fatalf("hub radius %v is not above leaf radius %v, so the graph changed nothing",
+			hub.Radius, leaf.Radius)
+	}
+	if !(hub.Target >= leaf.Target) {
+		t.Errorf("the hub file was held to a lower bar (%v) than the leaf (%v)", hub.Target, leaf.Target)
+	}
+
+	// A file the graph has never heard of is a default again, not a reading.
+	unknown := r.barFor("go", "nowhere.go")
+	if unknown.Measured {
+		t.Error("a file absent from the graph reported a measured radius")
+	}
+}
+
+// The warning has to come out once, before anything is spent, or a run with no
+// graph reads exactly like blast-radius-aware routing (#251).
+func TestPrintVetBar_SaysWhenEveryRadiusIsADefault(t *testing.T) {
+	var buf bytes.Buffer
+	printVetBar(&buf, nil, "graph.json", 0.7)
+	out := buf.String()
+	if !strings.Contains(out, "default rather than a measurement") {
+		t.Errorf("a missing graph was not called out:\n%s", out)
+	}
+	if !strings.Contains(out, "70%") {
+		t.Errorf("the floor was not stated:\n%s", out)
+	}
+
+	// With a real graph there is nothing to warn about.
+	dir := t.TempDir()
+	path := filepath.Join(dir, "graph.json")
+	if err := os.WriteFile(path, []byte(`{"nodes":[{"id":"a","file":"a.go"}],"edges":[]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	g, err := graph.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	buf.Reset()
+	printVetBar(&buf, g, path, 0.7)
+	if strings.Contains(buf.String(), "default rather than a measurement") {
+		t.Errorf("a real graph still warned about defaults:\n%s", buf.String())
 	}
 }
