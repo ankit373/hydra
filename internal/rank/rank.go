@@ -97,7 +97,10 @@ func dedupeKey(h provider.Head) string {
 	if h.Meta["model"] != "" {
 		return h.ID
 	}
-	return h.Provider // one entry per cloud provider
+	// One entry per cloud provider *per executor*. A CLI agent and an API key
+	// are not interchangeable: only the second can be sent tool definitions, so
+	// collapsing them on score alone drops a capability the survivor lacks.
+	return h.Provider + "/" + h.Source
 }
 
 // UITier converts a Head's CapScore to the 1-10 tier integer used in cost
