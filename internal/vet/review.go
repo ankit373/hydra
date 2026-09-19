@@ -5,10 +5,12 @@ package vet
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/ankit373/hydra/internal/trust"
 )
@@ -93,6 +95,10 @@ type FileOutcome struct {
 	Bar        Bar     `json:"bar,omitempty"`
 	Confidence float64 `json:"confidence,omitempty"`
 	Samples    int     `json:"samples,omitempty"`
+
+	// Fatal marks a failure that would repeat for every other file too, so a
+	// report says it once instead of blaming each file in turn.
+	Fatal bool `json:"-"`
 }
 
 // Cleared reports whether this file's findings met the bar it was held to.
@@ -128,6 +134,17 @@ func (r *Result) BlockingCount() int {
 	return n
 }
 
+// CannotSample reports the failure that stopped the whole run, if one did, so a
+// caller can print it once with what to do about it.
+func (r *Result) CannotSample() string {
+	for _, f := range r.Files {
+		if f.Fatal {
+			return f.Err
+		}
+	}
+	return ""
+}
+
 // ShortOfBar counts files whose findings did not reach the confidence their
 // blast radius demanded.
 func (r *Result) ShortOfBar() int {
@@ -150,6 +167,11 @@ func (r *Result) Reviewed() int {
 	}
 	return n
 }
+
+// ErrCannotSample marks a router failure that will repeat identically for every
+// file, so Run stops rather than paying the same refusal once per file and
+// reporting it as though each file had its own problem.
+var ErrCannotSample = errors.New("cannot review any file")
 
 // RunOptions bounds a run. Zero means the default.
 type RunOptions struct {
@@ -176,9 +198,10 @@ func Run(ctx context.Context, r Router, spec *Spec, opts RunOptions) (*Result, e
 	}
 
 	var (
-		mu  sync.Mutex
-		wg  sync.WaitGroup
-		sem = make(chan struct{}, opts.Concurrency)
+		mu    sync.Mutex
+		wg    sync.WaitGroup
+		fatal atomic.Bool
+		sem   = make(chan struct{}, opts.Concurrency)
 	)
 	for _, f := range spec.Reviewable {
 		wg.Add(1)
@@ -193,7 +216,13 @@ func Run(ctx context.Context, r Router, spec *Spec, opts RunOptions) (*Result, e
 				mu.Unlock()
 				return
 			}
+			if fatal.Load() {
+				return
+			}
 			out, found := reviewFile(ctx, r, spec, path, opts)
+			if out.Fatal {
+				fatal.Store(true)
+			}
 			mu.Lock()
 			res.Files = append(res.Files, out)
 			res.Findings = append(res.Findings, found...)
@@ -250,6 +279,7 @@ func reviewFile(ctx context.Context, r Router, spec *Spec, path string, opts Run
 	ans, err := r.Review(ctx, buildPrompt(spec, group, path, diff, out.Truncated), trust.DomainForFile(path), path)
 	if err != nil {
 		out.Err = err.Error()
+		out.Fatal = errors.Is(err, ErrCannotSample)
 		return out, nil
 	}
 	out.Head, out.Tier, out.CostUSD = ans.Head, ans.Tier, ans.CostUSD

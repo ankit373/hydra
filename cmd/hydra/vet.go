@@ -83,6 +83,12 @@ func (r vetRouter) reviewEnsemble(ctx context.Context, prompt, domain, file stri
 		Domain:        domain,
 	})
 	if err != nil {
+		// An uncalibrated domain refuses identically for every file, so it is
+		// marked as fatal and reported once rather than blamed on each file.
+		var ne *trust.NoEvidenceError
+		if errors.As(err, &ne) {
+			return vet.Answer{}, fmt.Errorf("%w: %s", vet.ErrCannotSample, noEvidenceAdvice(ne))
+		}
 		return vet.Answer{}, err
 	}
 
@@ -274,6 +280,19 @@ func renderVet(w io.Writer, res *vet.Result, jsonOut bool) (int, error) {
 	return 0, nil
 }
 
+// noEvidenceAdvice turns the ensemble's refusal into something actionable. It
+// names a head the router would actually have sampled, because a command that
+// records under a key nothing reads earns the same refusal again (#835).
+func noEvidenceAdvice(ne *trust.NoEvidenceError) string {
+	head := "<head-id>"
+	if len(ne.Sources) > 0 {
+		head = ne.Sources[0]
+	}
+	return fmt.Sprintf("no Head has measured accuracy in domain %q yet, so an ensemble has nothing to weigh. "+
+		"Record an outcome for one (`hyctl trust record --source %s --domain %s --said-correct --outcome correct`), "+
+		"or drop --confidence to review with a single Head", ne.Domain, head, ne.Domain)
+}
+
 // printVetBar says once, before any spending, whether the blast radii about to
 // set each file's bar are measurements or defaults (#251).
 func printVetBar(w io.Writer, g *graph.Graph, path string, floor float64) {
@@ -371,6 +390,10 @@ func printVet(w io.Writer, r *vet.Result) {
 		}
 
 		switch {
+		case out.Fatal:
+			// The summary carries the reason once; repeating it per file reads
+			// as each file having its own problem.
+			fmt.Fprintf(w, "        %s\n", dimStyle.Render("not reviewed: the run stopped, see below"))
 		case out.Err != "":
 			fmt.Fprintf(w, "        %s\n", dimStyle.Render("not reviewed: "+out.Err))
 		case out.Unparsed:
@@ -399,6 +422,10 @@ func printVet(w io.Writer, r *vet.Result) {
 		fmt.Fprintln(w)
 	}
 
+	if why := r.CannotSample(); why != "" {
+		fmt.Fprintf(w, "  %s\n", blockingStyle.Render("the run stopped: "+why))
+		fmt.Fprintln(w)
+	}
 	if short := r.ShortOfBar(); short > 0 {
 		fmt.Fprintf(w, "  %s\n", nonBlockingStyle.Render(fmt.Sprintf(
 			"%d file(s) never reached the confidence their blast radius asked for; their findings stand, the confidence does not", short)))
