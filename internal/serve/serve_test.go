@@ -193,22 +193,6 @@ func TestChat_FinishReasonIsDerivedWhenTheHeadOmitsIt(t *testing.T) {
 	}
 }
 
-// Answering a stream request with a whole body is worse than refusing: the
-// client is parsing SSE and sees a malformed stream rather than a message.
-func TestChat_StreamIsRefusedNotQuietlyAnswered(t *testing.T) {
-	s := &stubRouter{answer: Answer{Output: "hi"}}
-	w := post(t, s, "", "", `{"model":"hydra","stream":true,"messages":[{"role":"user","content":"hi"}]}`)
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("status %d, want 400: %s", w.Code, w.Body)
-	}
-	if !strings.Contains(w.Body.String(), "does not stream yet") {
-		t.Errorf("the refusal does not say why: %s", w.Body)
-	}
-	if s.got.Messages != nil {
-		t.Error("the request was dispatched anyway, so it was paid for and discarded")
-	}
-}
-
 // The newer spelling is what open-code-review sends; reading only the old one
 // silently ignores the caller's ceiling.
 func TestChat_HonoursBothMaxTokenSpellings(t *testing.T) {

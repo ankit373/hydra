@@ -44,6 +44,7 @@ func (r serveRouter) Chat(ctx context.Context, req serve.Request) (serve.Answer,
 		Messages:   req.Messages,
 		Tools:      req.Tools,
 		ToolChoice: req.ToolChoice,
+		OnStream:   streamEvents(req.OnEvent),
 		RunID:      r.runID,
 		TaskID:     runid.New(),
 	})
@@ -58,6 +59,33 @@ func (r serveRouter) Chat(ctx context.Context, req serve.Request) (serve.Answer,
 		ans.InputTokens, ans.OutputTokens = res.Response.InputTokens, res.Response.OutputTokens
 	}
 	return ans, nil
+}
+
+// streamEvents adapts the router's events to the endpoint's, and is nil when
+// the client did not ask for a stream, which is what keeps that request on the
+// buffered executor path.
+//
+// StreamAttemptStarted is dropped: the protocol has no frame for "a head was
+// picked and is thinking", and inventing one would put a chunk on the wire that
+// no client knows how to render.
+func streamEvents(on func(serve.Event)) dispatch.OnStream {
+	if on == nil {
+		return nil
+	}
+	return func(e dispatch.StreamEvent) {
+		switch e.Kind {
+		case dispatch.StreamDelta:
+			on(serve.Event{
+				Kind: serve.EventDelta, Text: e.Text,
+				Head: e.Head.ID, Model: e.Head.Name, SpanID: e.SpanID,
+			})
+		case dispatch.StreamAttemptFailed:
+			on(serve.Event{
+				Kind: serve.EventAttemptFailed, Reason: e.Reason,
+				Head: e.Head.ID, Model: e.Head.Name, SpanID: e.SpanID,
+			})
+		}
+	}
 }
 
 // Models advertises the routing keys alongside the discovered heads, so any
@@ -141,6 +169,9 @@ func cmdServe() *cobra.Command {
 			"logging all apply the way they do to `hyctl dispatch`.\n\n" +
 			"The model field is the routing instruction. `hydra` takes the default enum,\n" +
 			"`hydra/hard` or `hydra/t4` pin an enum or a tier, and a head id pins that head.\n\n" +
+			"`stream: true` is answered as server-sent events. A fallback before any output is\n" +
+			"invisible; one after it ends the stream, because SSE cannot take back a partial and\n" +
+			"appending the next head's answer to it would compose a reply no head ever gave.\n\n" +
 			"Binds 127.0.0.1. Any other address needs --token, because this endpoint spends\n" +
 			"money and reads your code, and `hyctl security` reports exactly this risk about\n" +
 			"other people's model servers.",
