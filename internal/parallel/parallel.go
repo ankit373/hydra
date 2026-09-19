@@ -22,6 +22,7 @@ import (
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/diff"
 	"github.com/ankit373/hydra/internal/dispatch"
+	"github.com/ankit373/hydra/internal/editor"
 	"github.com/ankit373/hydra/internal/policy"
 	"github.com/ankit373/hydra/internal/runid"
 	"github.com/ankit373/hydra/internal/runlog"
@@ -402,7 +403,15 @@ func runEditTask(ctx context.Context, d *dispatch.Dispatcher, dispatchErr error,
 					RolledBack: true, Error: reason,
 				})
 			}
+			// The validator ran against the file this task had already written, so
+			// the verdict judges the content the head produced, exactly as it does
+			// for `hyctl edit`. Recorded through the shared writer rather than a
+			// second copy, which is how the two drifted before (#999). A rejection
+			// is recorded first, because the rollback below discards the content
+			// the verdict is about.
 			if rc != 0 {
+				editor.RecordVerifiedEdit(task.Prompt, file, task.Enum, dispResult.Head.ID,
+					newContent, false, "validation_failed")
 				rollback(file, origContent, origExisted, resolved.GitRoot, backup)
 				return mustMarshal(EditResult{
 					Label: task.Label, Enum: task.Enum, Mode: "edit",
@@ -410,6 +419,8 @@ func runEditTask(ctx context.Context, d *dispatch.Dispatcher, dispatchErr error,
 					RolledBack: true, Error: "validation_failed",
 				})
 			}
+			editor.RecordVerifiedEdit(task.Prompt, file, task.Enum, dispResult.Head.ID,
+				newContent, true, "")
 		}
 	}
 
