@@ -281,7 +281,11 @@ func setAnthropicHeaders(r *http.Request) {
 
 func (e *HTTPExecutor) executeGemini(ctx context.Context, req Request) (*Response, error) {
 	model := defaultModelFor("google")
-	raw, err := json.Marshal(geminiBody(req))
+	body, err := geminiBody(req)
+	if err != nil {
+		return nil, err
+	}
+	raw, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
@@ -305,10 +309,9 @@ func (e *HTTPExecutor) executeGemini(ctx context.Context, req Request) (*Respons
 	var out struct {
 		Candidates []struct {
 			Content struct {
-				Parts []struct {
-					Text string `json:"text"`
-				} `json:"parts"`
+				Parts []geminiPart `json:"parts"`
 			} `json:"content"`
+			FinishReason string `json:"finishReason"`
 		} `json:"candidates"`
 		UsageMetadata struct {
 			PromptTokenCount     int `json:"promptTokenCount"`
@@ -323,9 +326,12 @@ func (e *HTTPExecutor) executeGemini(ctx context.Context, req Request) (*Respons
 		return nil, fmt.Errorf("http exec %s: empty response", req.Head.ID)
 	}
 
-	return httpResponse(req, joinGeminiParts(out.Candidates[0].Content.Parts),
-		firstNonEmpty(out.ModelVersion, model),
-		out.UsageMetadata.PromptTokenCount, out.UsageMetadata.CandidatesTokenCount, start), nil
+	text, calls := geminiParts(out.Candidates[0].Content.Parts)
+	answer := httpResponse(req, text, firstNonEmpty(out.ModelVersion, model),
+		out.UsageMetadata.PromptTokenCount, out.UsageMetadata.CandidatesTokenCount, start)
+	answer.ToolCalls = calls
+	answer.FinishReason = geminiFinish(out.Candidates[0].FinishReason, len(calls))
+	return answer, nil
 }
 
 // geminiURL builds the generate endpoint, streaming or not. `?alt=sse` is not
@@ -350,26 +356,31 @@ func geminiURL(model string, stream bool) string {
 
 // geminiBody and setGeminiHeaders are shared with the streaming path, so the
 // two cannot drift into asking for different things.
-func geminiBody(req Request) map[string]interface{} {
-	body := map[string]interface{}{
-		"contents": []map[string]interface{}{
-			{
-				"role": "user",
-				"parts": []map[string]string{
-					{"text": req.Prompt},
-				},
-			},
-		},
+func geminiBody(req Request) (map[string]interface{}, error) {
+	system, contents, err := geminiConversation(buildMessages(req))
+	if err != nil {
+		return nil, err
 	}
-	if req.System != "" {
+	body := map[string]interface{}{"contents": contents}
+	if system != "" {
 		body["system_instruction"] = map[string]interface{}{
-			"parts": []map[string]string{{"text": req.System}},
+			"parts": []map[string]string{{"text": system}},
 		}
 	}
 	if req.MaxTokens > 0 {
 		body["generationConfig"] = map[string]int{"maxOutputTokens": req.MaxTokens}
 	}
-	return body
+	if len(req.Tools) > 0 {
+		cfg, err := geminiToolConfig(req.ToolChoice)
+		if err != nil {
+			return nil, err
+		}
+		body["tools"] = geminiTools(req.Tools)
+		if cfg != nil {
+			body["toolConfig"] = cfg
+		}
+	}
+	return body, nil
 }
 
 func setGeminiHeaders(r *http.Request) {
@@ -778,16 +789,6 @@ func joinTextBlocks(blocks []textBlock) string {
 
 type textBlock struct {
 	Text string `json:"text"`
-}
-
-func joinGeminiParts(parts []struct {
-	Text string `json:"text"`
-}) string {
-	texts := make([]textBlock, 0, len(parts))
-	for _, p := range parts {
-		texts = append(texts, textBlock{Text: p.Text})
-	}
-	return joinTextBlocks(texts)
 }
 
 func joinCohereBlocks(blocks []struct {

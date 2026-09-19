@@ -369,12 +369,16 @@ func TestAnthropic_StreamedAndBufferedAgreeOnTheSameCall(t *testing.T) {
 }
 
 // dispatch skips a head this is false for when the request carries tools, so
-// this predicate is what routed every agent loop away from the Claude heads.
-func TestCanUseTools_NowIncludesAnthropic(t *testing.T) {
-	if !CanUseTools(anthropicHead()) {
-		t.Error("Anthropic heads are still skipped for a request that carries tools")
+// this predicate is what routes an agent loop. One test rather than one per
+// dialect: the list is the claim, and a dialect that maps tools without being
+// added here is a capability nothing can reach.
+func TestCanUseTools_NamesEveryDialectThatMapsThem(t *testing.T) {
+	for _, p := range []string{"anthropic", "google"} {
+		if !CanUseTools(head(p)) {
+			t.Errorf("%s maps tools but heads of that provider are still skipped", p)
+		}
 	}
-	for _, p := range []string{"google", "cohere", "bedrock", "replicate"} {
+	for _, p := range []string{"cohere", "bedrock", "replicate"} {
 		if CanUseTools(head(p)) {
 			t.Errorf("%s reports it can carry tools, but nothing maps them yet", p)
 		}
