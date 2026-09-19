@@ -4,6 +4,8 @@ package executor
 
 import (
 	"encoding/json"
+	"fmt"
+	"strings"
 
 	"github.com/ankit373/hydra/internal/provider"
 )
@@ -52,7 +54,7 @@ type ToolCallFunction struct {
 // CanUseTools reports whether a head can be sent function definitions and
 // answer with structured calls.
 //
-// The OpenAI-compatible path and Anthropic carry them. Gemini, Cohere and
+// The OpenAI-compatible path, Anthropic and Gemini carry them. Cohere and
 // Bedrock each shape tools differently, and Replicate polls rather than chats.
 // The predicate exists so a dispatch can skip a head that cannot, because a
 // silently dropped tool array is not a degraded answer: the caller's agent loop
@@ -62,13 +64,35 @@ func CanUseTools(h provider.Head) bool {
 		return false
 	}
 	switch h.Provider {
-	case "anthropic":
+	case "anthropic", "google":
 		return true
-	case "google", "cohere", "bedrock", "replicate":
+	case "cohere", "bedrock", "replicate":
 		return false
 	}
 	_, err := openAICompatConfigFor(h)
 	return err == nil
+}
+
+// toolCallInput turns OpenAI's arguments, a JSON string, into Anthropic's input, an
+// object.
+//
+// Anthropic calls it input and Gemini calls it args; both want an object where
+// OpenAI sends a string, so one derivation serves both.
+//
+// Arguments that do not parse are refused rather than replaced with an empty
+// object: sending `{}` would be a call the model reads as "no arguments", which
+// is a wrong answer, where the refusal names the call that cannot be expressed.
+func toolCallInput(c ToolCall) (json.RawMessage, error) {
+	args := strings.TrimSpace(c.Function.Arguments)
+	if args == "" {
+		return json.RawMessage(`{}`), nil
+	}
+	var probe map[string]any
+	if err := json.Unmarshal([]byte(args), &probe); err != nil {
+		return nil, fmt.Errorf("tool call %s (%s) has arguments that are not a JSON object: %w",
+			c.ID, c.Function.Name, err)
+	}
+	return json.RawMessage(args), nil
 }
 
 // toolArguments renders a dialect's argument object as the JSON string

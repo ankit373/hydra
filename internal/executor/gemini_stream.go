@@ -16,10 +16,9 @@ import (
 type geminiChunk struct {
 	Candidates []struct {
 		Content struct {
-			Parts []struct {
-				Text string `json:"text"`
-			} `json:"parts"`
+			Parts []geminiPart `json:"parts"`
 		} `json:"content"`
+		FinishReason string `json:"finishReason"`
 	} `json:"candidates"`
 	UsageMetadata *struct {
 		PromptTokenCount     int `json:"promptTokenCount"`
@@ -41,7 +40,11 @@ type geminiChunk struct {
 
 func (e *HTTPExecutor) streamGemini(ctx context.Context, req Request, onDelta OnDelta) (*Response, error) {
 	model := defaultModelFor("google")
-	raw, err := json.Marshal(geminiBody(req))
+	body, err := geminiBody(req)
+	if err != nil {
+		return nil, err
+	}
+	raw, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
@@ -55,6 +58,8 @@ func (e *HTTPExecutor) streamGemini(ctx context.Context, req Request, onDelta On
 
 	gotModel := model
 	var inTok, outTok int
+	var finish string
+	var tools toolCallStream
 
 	sink, start, err := e.sseStream(ctx, req.Head.ID, httpReq, onDelta, func(payload string, sink *deltaSink) error {
 		var chunk geminiChunk
@@ -84,8 +89,23 @@ func (e *HTTPExecutor) streamGemini(ctx context.Context, req Request, onDelta On
 		if len(chunk.Candidates) == 0 {
 			return nil
 		}
+		if r := chunk.Candidates[0].FinishReason; r != "" {
+			finish = r
+		}
 		for _, p := range chunk.Candidates[0].Content.Parts {
-			sink.write(p.Text)
+			if p.FunctionCall == nil {
+				sink.write(p.Text)
+				continue
+			}
+			// Whole, not fragmented: Gemini sends a call in one part. The
+			// index is the call's position, since the dialect sends none and
+			// two calls at index 0 would fold into one.
+			name := p.FunctionCall.Name
+			tools.add(ToolCall{
+				Index: len(tools.calls), ID: geminiCallID(name, len(tools.calls)), Type: "function",
+				Function: ToolCallFunction{Name: name, Arguments: toolArguments(p.FunctionCall.Args)},
+			})
+			sink.noteStructured()
 		}
 		return nil
 	})
@@ -96,5 +116,7 @@ func (e *HTTPExecutor) streamGemini(ctx context.Context, req Request, onDelta On
 	answer := httpResponse(req, sink.output(), gotModel, inTok, outTok, start)
 	answer.Truncated = sink.truncated()
 	answer.TTFT = sink.firstTokenAt()
+	answer.ToolCalls = tools.done()
+	answer.FinishReason = geminiFinish(finish, len(answer.ToolCalls))
 	return answer, nil
 }
