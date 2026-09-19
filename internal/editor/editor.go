@@ -17,6 +17,7 @@ import (
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/diff"
 	"github.com/ankit373/hydra/internal/dispatch"
+	"github.com/ankit373/hydra/internal/evalset"
 	"github.com/ankit373/hydra/internal/policy"
 	"github.com/ankit373/hydra/internal/sandbox"
 	"github.com/ankit373/hydra/internal/trust"
@@ -222,6 +223,11 @@ func Edit(ctx context.Context, req Request) (*Result, error) {
 				return nil, fmt.Errorf("validating %s: %w", req.File, verr)
 			}
 			recordValidationOutcome(dispResult.Head.ID, trust.DomainForFile(req.File), vrc == 0)
+			// The validator ran against the file this edit had already written,
+			// so unlike a dispatch's verdict this one judges the candidate and
+			// is ground truth (#986). Filed here, before the rollback below
+			// discards the content it is about.
+			recordVerifiedExample(req, dispResult.Head.ID, newContent, vrc == 0, firstLine(vout))
 			if vrc != 0 {
 				validatorPassed = false
 				rollback(req.File, origContent, origExisted, resolved.GitRoot, backup)
@@ -298,6 +304,28 @@ func recordValidationOutcome(headID, domain string, passed bool) {
 		outcome = trust.OutcomeCorrect
 	}
 	_ = cal.Update(headID, domain, true, outcome)
+}
+
+// recordVerifiedExample files the edit in the eval set, the corpus the router is
+// fitted against. Only ever called where the validator actually ran: an
+// unconfigured validator leaves validatorPassed true having checked nothing, and
+// filing that as a pass is the mislabelling #982 removed from the dispatch path.
+func recordVerifiedExample(req Request, headID, candidate string, passed bool, detail string) {
+	if strings.TrimSpace(candidate) == "" {
+		return
+	}
+	breadcrumb, _ := config.Breadcrumb()
+	if _, err := evalset.Add(evalset.DefaultPath(), evalset.Example{
+		TaskHash:  evalset.TaskHashFor(req.Prompt),
+		Domain:    trust.DomainForFile(req.File),
+		Source:    "editor:validator",
+		Candidate: candidate, Passed: passed, Detail: detail,
+		Enum: req.Enum, Head: headID, Config: breadcrumb,
+	}); err != nil {
+		// Never fail an edit because its example could not be filed. The edit is
+		// the work; the corpus entry is a record of it.
+		_ = err
+	}
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
