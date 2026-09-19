@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/ankit373/hydra/internal/dispatch"
 	"github.com/ankit373/hydra/internal/graph"
+	"github.com/ankit373/hydra/internal/swarm"
 	"github.com/ankit373/hydra/internal/testutil"
 	"github.com/ankit373/hydra/internal/trust"
 	"github.com/ankit373/hydra/internal/vet"
@@ -494,5 +496,32 @@ func TestPrintVetBar_SaysWhenEveryRadiusIsADefault(t *testing.T) {
 	printVetBar(&buf, g, path, 0.7)
 	if strings.Contains(buf.String(), "default rather than a measurement") {
 		t.Errorf("a real graph still warned about defaults:\n%s", buf.String())
+	}
+}
+
+// A fresh machine has no calibration, so the ensemble refuses. That refusal has
+// to arrive as ErrCannotSample or Run pays it once per file and the report
+// blames each file for a problem none of them has.
+func TestReviewEnsemble_AnUncalibratedDomainStopsTheRun(t *testing.T) {
+	dispatchable(t, "unused")
+
+	ctx := context.Background()
+	d, err := dispatch.New(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+
+	r := vetRouter{d: d, sw: swarm.New(d, d.Heads(), d), floor: 0.7, graphPath: "graph.json"}
+	_, err = r.reviewEnsemble(ctx, "review this", "go", "a.go")
+	if err == nil {
+		t.Fatal("an uncalibrated domain produced an answer")
+	}
+	if !errors.Is(err, vet.ErrCannotSample) {
+		t.Fatalf("the refusal was not marked as stopping the run, so every file pays it: %v", err)
+	}
+	// It must stay actionable through the wrap, not become a bare sentinel.
+	if !strings.Contains(err.Error(), "hyctl trust record") {
+		t.Errorf("the advice was lost in the wrap: %v", err)
 	}
 }
