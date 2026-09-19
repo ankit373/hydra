@@ -95,8 +95,8 @@ func TestByCapScore_KeepsEveryHeadThatNamesItsOwnModel(t *testing.T) {
 		named("anthropic/claude-opus-4.1", 92),
 		named("google/gemini-2.5-flash", 78),
 		named("meta-llama/llama-3.2-1b", 55),
-		// The single key-derived head names no model, so one per provider is
-		// still right for it and for every other API provider.
+		// Key-derived heads name no model, so one per provider per executor is
+		// still right for them and for every other API provider.
 		{ID: "env/anthropic", Provider: "anthropic", Source: "env", CapScore: 95},
 		{ID: "claude", Provider: "anthropic", Source: "cli", CapScore: 95},
 	}
@@ -116,15 +116,11 @@ func TestByCapScore_KeepsEveryHeadThatNamesItsOwnModel(t *testing.T) {
 			t.Errorf("%s was deduped away: %+v", want, ranked)
 		}
 	}
-	// And the two anthropic heads naming no model still collapse to one.
-	anthropic := 0
-	for _, h := range ranked {
-		if h.Provider == "anthropic" {
-			anthropic++
-		}
-	}
-	if anthropic != 1 {
-		t.Errorf("got %d anthropic heads, want 1: per-provider dedupe was lost for heads that name no model", anthropic)
+	// The two anthropic heads name no model, so neither is kept by the rule
+	// above. They survive because they run on different executors (#990), which
+	// TestByCapScore_KeepsTheAPIHeadBesideTheCLIHead is what actually proves.
+	if !got["env/anthropic"] || !got["claude"] {
+		t.Errorf("an anthropic head was deduped away: %+v", ranked)
 	}
 }
 
@@ -158,5 +154,67 @@ func TestUITier_OnlyLocalHeadsReachTheFreeFloor(t *testing.T) {
 		if got := UITier(h); got != want {
 			t.Errorf("UITier(score %d) = %d, want %d", score, got, want)
 		}
+	}
+}
+
+// Keying a cloud head on its provider alone collapsed the Claude Code CLI head
+// and the Anthropic API head into one, and kept the higher score. Only the
+// second can be sent tool definitions (executor.CanUseTools requires an
+// HTTPExecutor), so installing Claude Code removed every Anthropic head that
+// could run an agent loop, measured as "5 of 16 Heads can carry tools" against
+// "6 of 13" with the binary off PATH (#990).
+func TestByCapScore_KeepsTheAPIHeadBesideTheCLIHead(t *testing.T) {
+	heads := []provider.Head{
+		{ID: "claude", Provider: "anthropic", Source: "cli", CapScore: 95},
+		{ID: "env/anthropic", Provider: "anthropic", Source: "env", CapScore: 90},
+	}
+
+	ranked := ByCapScore(heads)
+
+	if len(ranked) != 2 {
+		t.Fatalf("ranked %d heads, want both: the CLI head and the API head are not interchangeable", len(ranked))
+	}
+	// The CLI head still ranks first, so ordinary routing and probe's Cortex
+	// are unchanged; only the head that was disappearing is back.
+	if ranked[0].ID != "claude" {
+		t.Errorf("ranked[0] = %s, want claude: the stronger head must still lead", ranked[0].ID)
+	}
+	if ranked[1].ID != "env/anthropic" {
+		t.Errorf("ranked[1] = %s, want env/anthropic", ranked[1].ID)
+	}
+}
+
+// The other direction of the same key: two heads a provider offers through one
+// executor are still one entry, or the key has become the ID and every dedupe
+// this package does is gone.
+func TestByCapScore_StillCollapsesOneProvidersHeadsOnOneExecutor(t *testing.T) {
+	heads := []provider.Head{
+		{ID: "env/openai", Provider: "openai", Source: "env", CapScore: 88},
+		{ID: "env/openai-alt", Provider: "openai", Source: "env", CapScore: 80},
+	}
+
+	ranked := ByCapScore(heads)
+
+	if len(ranked) != 1 {
+		t.Fatalf("ranked %d heads, want 1: one entry per provider per executor", len(ranked))
+	}
+	if ranked[0].ID != "env/openai" {
+		t.Errorf("kept %s, want the higher-scoring env/openai", ranked[0].ID)
+	}
+}
+
+// And the provider half carries its own weight: two vendors reached through the
+// same executor are two heads, not one. Without this the key could be the
+// source alone and every API provider on the machine would collapse into one.
+func TestByCapScore_KeepsTwoProvidersReachedTheSameWay(t *testing.T) {
+	heads := []provider.Head{
+		{ID: "env/anthropic", Provider: "anthropic", Source: "env", CapScore: 90},
+		{ID: "env/cohere", Provider: "cohere", Source: "env", CapScore: 80},
+	}
+
+	ranked := ByCapScore(heads)
+
+	if len(ranked) != 2 {
+		t.Fatalf("ranked %d heads, want both: two vendors are not one head", len(ranked))
 	}
 }
