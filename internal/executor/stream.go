@@ -81,6 +81,10 @@ type deltaSink struct {
 	// clock's granularity. Overloading zero as the sentinel let the *second*
 	// fragment record its own elapsed time as the time to the first (#810).
 	ttftSet bool
+	// structured records that something arrived which is not text. An answer
+	// that only asks for tools carries no content at all, and an emptiness
+	// check on text alone reads that complete reply as a stream that failed.
+	structured bool
 }
 
 // newDeltaSink starts measuring from started, which must be when the request
@@ -106,9 +110,8 @@ func (s *deltaSink) write(delta string) {
 		return
 	}
 	s.mu.Lock()
-	if !s.ttftSet && strings.TrimSpace(delta) != "" {
-		s.ttftSet = true
-		s.ttft = measured(time.Since(s.started))
+	if strings.TrimSpace(delta) != "" {
+		s.markFirst()
 	}
 	truncated := s.acc.Truncated()
 	if !truncated {
@@ -122,6 +125,33 @@ func (s *deltaSink) write(delta string) {
 		return
 	}
 	cb(delta)
+}
+
+// markFirst records the time to the first thing the head produced. Called with
+// the lock held.
+func (s *deltaSink) markFirst() {
+	if s.ttftSet {
+		return
+	}
+	s.ttftSet = true
+	s.ttft = measured(time.Since(s.started))
+}
+
+// noteStructured records a tool call, which is output even though it is not
+// text: it starts the TTFT clock the way a token does, and it is what keeps an
+// answer made only of tool calls from reading as an empty one.
+func (s *deltaSink) noteStructured() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.structured = true
+	s.markFirst()
+}
+
+// empty reports that nothing arrived at all, text or otherwise.
+func (s *deltaSink) empty() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.acc.String() == "" && !s.structured
 }
 
 // Write adapts the sink to io.Writer, for an executor whose output arrives as

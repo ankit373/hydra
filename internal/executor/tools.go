@@ -68,3 +68,58 @@ func CanUseTools(h provider.Head) bool {
 	_, err := openAICompatConfigFor(h)
 	return err == nil
 }
+
+// toolCallStream reassembles tool calls that arrive in fragments, which is how
+// every streaming dialect sends them: the name comes once, the arguments are a
+// JSON string split over as many chunks as the model took to write it.
+type toolCallStream struct {
+	calls []ToolCall
+}
+
+// add folds one fragment in, keyed by the index the wire uses to interleave
+// parallel calls.
+//
+// A fragment naming a different id at the same index starts a new call instead
+// of appending: a server that sends each call whole has no reason to send an
+// index at all, so every one of its calls arrives as index 0 and they would
+// otherwise concatenate into one call with unparseable arguments.
+func (t *toolCallStream) add(frag ToolCall) {
+	at := t.find(frag)
+	if at < 0 {
+		t.calls = append(t.calls, frag)
+		return
+	}
+	c := &t.calls[at]
+	if frag.ID != "" {
+		c.ID = frag.ID
+	}
+	if frag.Type != "" {
+		c.Type = frag.Type
+	}
+	if frag.Function.Name != "" {
+		c.Function.Name = frag.Function.Name
+	}
+	c.Function.Arguments += frag.Function.Arguments
+}
+
+// find returns the call frag continues, searching backwards so the newest call
+// at an index wins once that index has been reused.
+func (t *toolCallStream) find(frag ToolCall) int {
+	for i := len(t.calls) - 1; i >= 0; i-- {
+		if t.calls[i].Index != frag.Index {
+			continue
+		}
+		if frag.ID != "" && t.calls[i].ID != "" && frag.ID != t.calls[i].ID {
+			return -1
+		}
+		return i
+	}
+	return -1
+}
+
+// done returns the calls in the order their first fragment arrived. A slice
+// rather than a map keyed by index, so two calls cannot order themselves
+// differently on two runs of the same stream.
+func (t *toolCallStream) done() []ToolCall {
+	return t.calls
+}

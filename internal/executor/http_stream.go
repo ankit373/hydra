@@ -28,7 +28,8 @@ type openAIChatChunk struct {
 	Model   string `json:"model"`
 	Choices []struct {
 		Delta struct {
-			Content string `json:"content"`
+			Content   string     `json:"content"`
+			ToolCalls []ToolCall `json:"tool_calls"`
 		} `json:"delta"`
 		FinishReason *string `json:"finish_reason"`
 	} `json:"choices"`
@@ -88,6 +89,11 @@ func (e *HTTPExecutor) streamOpenAILike(ctx context.Context, req Request, onDelt
 			Messages:  buildMessages(req),
 			MaxTokens: req.MaxTokens,
 			Stream:    true,
+			// A streamed request used to carry neither, so a head was asked
+			// its question with the tools removed and could only answer in
+			// prose, which an agent loop reads as the model declining for ever.
+			Tools:      req.Tools,
+			ToolChoice: req.ToolChoice,
 		},
 		StreamOptions: &streamOptions{IncludeUsage: true},
 	})
@@ -105,8 +111,9 @@ func (e *HTTPExecutor) streamOpenAILike(ctx context.Context, req Request, onDelt
 		httpReq.Header.Set(k, v)
 	}
 
-	var gotModel string
+	var gotModel, finish string
 	var inTok, outTok int
+	var tools toolCallStream
 
 	sink, start, err := e.sseStream(ctx, req.Head.ID, httpReq, onDelta, func(payload string, sink *deltaSink) error {
 		var chunk openAIChatChunk
@@ -121,6 +128,13 @@ func (e *HTTPExecutor) streamOpenAILike(ctx context.Context, req Request, onDelt
 		}
 		for _, c := range chunk.Choices {
 			sink.write(c.Delta.Content)
+			for _, frag := range c.Delta.ToolCalls {
+				tools.add(frag)
+				sink.noteStructured()
+			}
+			if c.FinishReason != nil && *c.FinishReason != "" {
+				finish = *c.FinishReason
+			}
 		}
 		return nil
 	})
@@ -134,6 +148,8 @@ func (e *HTTPExecutor) streamOpenAILike(ctx context.Context, req Request, onDelt
 	answer := httpResponse(req, sink.output(), firstNonEmpty(gotModel, model), inTok, outTok, start)
 	answer.Truncated = sink.truncated()
 	answer.TTFT = sink.firstTokenAt()
+	answer.ToolCalls = tools.done()
+	answer.FinishReason = finish
 	return answer, nil
 }
 
@@ -181,7 +197,7 @@ func (e *HTTPExecutor) streamRequest(ctx context.Context, headID string, httpReq
 		return nil, start, fmt.Errorf("http exec %s: %w", headID, err)
 	}
 
-	if sink.output() == "" {
+	if sink.empty() {
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return nil, start, fmt.Errorf("http exec %s: %w", headID, ctxErr)
 		}
