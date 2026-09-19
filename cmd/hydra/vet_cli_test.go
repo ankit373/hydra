@@ -525,3 +525,37 @@ func TestReviewEnsemble_AnUncalibratedDomainStopsTheRun(t *testing.T) {
 		t.Errorf("the advice was lost in the wrap: %v", err)
 	}
 }
+
+// The evidence is worthless if nobody is told where the verdict goes, and the
+// command must name the run that was actually recorded.
+func TestPrintVet_PointsAtWhereGroundTruthGoes(t *testing.T) {
+	var buf bytes.Buffer
+	printVet(&buf, &vet.Result{
+		Spec: &vet.Spec{Mode: "workspace"},
+		Files: []vet.FileOutcome{{
+			File: "a.go", Head: "h", TaskHash: "858cd1d7",
+			Bar: vet.Bar{Target: 0.9, Radius: 1}, Confidence: 0.95, Samples: 4,
+		}},
+	})
+	out := buf.String()
+	if !strings.Contains(out, "hyctl trust outcome 858cd1d7") {
+		t.Errorf("the report does not name the recorded run:\n%s", out)
+	}
+	// Dissenters are the whole reason this beats `hyctl trust record`.
+	if !strings.Contains(out, "dissenters") {
+		t.Errorf("the report does not say why replaying the run is worth anything:\n%s", out)
+	}
+}
+
+// A run with no ensemble recorded nothing, so offering a command that would
+// find no run is worse than saying nothing at all.
+func TestPrintVet_NoEnsembleOffersNoCommand(t *testing.T) {
+	var buf bytes.Buffer
+	printVet(&buf, &vet.Result{
+		Spec:  &vet.Spec{Mode: "workspace"},
+		Files: []vet.FileOutcome{{File: "a.go", Head: "h"}},
+	})
+	if strings.Contains(buf.String(), "trust outcome") {
+		t.Errorf("a single-dispatch run offered to train from a run it never recorded:\n%s", buf.String())
+	}
+}
