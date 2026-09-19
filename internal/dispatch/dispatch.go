@@ -512,6 +512,13 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		prompt = injected
 	}
 
+	// Before selection, the cache and any spend: a conversation no head can be
+	// asked is the caller's own payload, and walking the chain only pays every
+	// head to say the same thing while the breaker parks healthy ones.
+	if err := executor.CheckAskable(opts.Messages); err != nil {
+		return nil, err
+	}
+
 	// Classify once and reuse for both the policy engine below and every
 	// fallback candidate's ledger check, DetectPII/InjectionMarker are pure
 	// functions of prompt, so re-running them per candidate repeats the same
@@ -831,6 +838,20 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 			// Before the chain advances, so a surface can retract this head's
 			// partial output before the next head's tokens interleave with it.
 			emit(StreamAttemptFailed, "", err.Error())
+			// A request no head can be asked is not this head failing, so the
+			// chain stops here. Advancing it spends on every remaining head to
+			// be told the same thing, and the breaker below would park healthy
+			// heads over the caller's own payload.
+			if errors.Is(err, executor.ErrUnaskable) {
+				_ = rl.Append(runlog.Event{
+					Kind: runlog.KindError, TaskID: taskID,
+					SpanID: span, ParentSpanID: taskSpan, Level: runlog.LevelError,
+					Head: h.ID, Model: h.Name, Tier: tier,
+					Status: "refused", DurationMS: time.Since(started).Milliseconds(),
+					Detail: truncate(err.Error(), 200),
+				})
+				return nil, err
+			}
 			// Parks the head so the rest of this run, and the next one, skip
 			// it. A missing binary or an unknown model opens the breaker at
 			// once; anything that might not recur gets a second chance first.

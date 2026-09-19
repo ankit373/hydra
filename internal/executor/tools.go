@@ -4,6 +4,7 @@ package executor
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -73,6 +74,38 @@ func CanUseTools(h provider.Head) bool {
 	return err == nil
 }
 
+// ErrUnaskable marks a request no head can be asked, as opposed to a head that
+// failed. The fallback chain exists for the second, so advancing it on the
+// first only spends money to be told the same thing again, and marking the head
+// failed parks a healthy one over the caller's mistake.
+//
+// Deliberately narrow. It belongs only on a refusal that holds for **every**
+// dialect, which is why unparseable tool arguments carry it: the mappers refuse
+// them, and on the OpenAI-compatible path the server answers 400 (measured
+// against Ollama). A dialect-specific refusal must not carry it, because
+// another head can express what this one cannot: Gemini rejecting a tool result
+// whose id names no call is exactly that, since every other dialect carries ids.
+var ErrUnaskable = errors.New("no head can be asked this request")
+
+// CheckAskable reports whether a conversation can be expressed to any head at
+// all, so a request that cannot is refused before one runs rather than after
+// every one of them has been paid to say so.
+//
+// Checked here rather than per dialect because the OpenAI-compatible path does
+// not convert the arguments at all: it forwards the string and the server
+// answers 400, so the mappers' own refusals never see the commonest case. A
+// property of the request belongs on the request.
+func CheckAskable(msgs []Message) error {
+	for _, m := range msgs {
+		for _, c := range m.ToolCalls {
+			if _, err := toolCallInput(c); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 // toolCallInput turns OpenAI's arguments, a JSON string, into Anthropic's input, an
 // object.
 //
@@ -89,8 +122,8 @@ func toolCallInput(c ToolCall) (json.RawMessage, error) {
 	}
 	var probe map[string]any
 	if err := json.Unmarshal([]byte(args), &probe); err != nil {
-		return nil, fmt.Errorf("tool call %s (%s) has arguments that are not a JSON object: %w",
-			c.ID, c.Function.Name, err)
+		return nil, fmt.Errorf("%w: tool call %s (%s) has arguments that are not a JSON object: %w",
+			ErrUnaskable, c.ID, c.Function.Name, err)
 	}
 	return json.RawMessage(args), nil
 }

@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -49,7 +50,7 @@ func (r serveRouter) Chat(ctx context.Context, req serve.Request) (serve.Answer,
 		TaskID:     runid.New(),
 	})
 	if err != nil {
-		return serve.Answer{}, err
+		return serve.Answer{}, callerError(err)
 	}
 
 	ans := serve.Answer{Output: res.Output, Head: res.Head.ID, Model: res.Head.Name}
@@ -86,6 +87,16 @@ func streamEvents(on func(serve.Event)) dispatch.OnStream {
 			})
 		}
 	}
+}
+
+// callerError re-labels a refusal the caller's own payload caused, so a client
+// is told 400 about its request rather than 502 about a head that never
+// answered and was not the reason.
+func callerError(err error) error {
+	if errors.Is(err, executor.ErrUnaskable) {
+		return fmt.Errorf("%w: %w", serve.ErrBadRequest, err)
+	}
+	return err
 }
 
 // Models advertises the routing keys alongside the discovered heads, so any
