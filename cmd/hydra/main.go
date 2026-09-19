@@ -1258,6 +1258,10 @@ func cmdDispatch() *cobra.Command {
 
 			if dryRun {
 				why := func(h provider.Head) string { return routingEvidence(result, h) }
+				if result.Cache != nil {
+					fmt.Printf("  %s %s\n", cortexStyle.Render("⚡ would come from cache:"),
+						dimStyle.Render(cacheLabel(result.Cache)))
+				}
 				if req := routingRequirement(result); req != "" {
 					fmt.Println(req)
 				}
@@ -1284,6 +1288,14 @@ func cmdDispatch() *cobra.Command {
 			}
 			if sr != nil {
 				sr.Stop()
+			}
+
+			// A cached answer has no tokens and no duration to report, and
+			// printing the usual line would claim a head just ran.
+			if result.Cache != nil {
+				printCacheHit(result)
+				printOutputWarning(result.OutputProvenance)
+				return nil
 			}
 
 			fmt.Println()
@@ -1852,7 +1864,8 @@ replaced before it is written.`,
 	}
 	payloads.Flags().BoolVar(&jsonOut, "json", false, "machine-readable output")
 
-	cmd.AddCommand(seal, evaluate, export, payloads, cmdTraceEmbeddings(), cmdTraceSearch(), cmdTraceView(), cmdTraceScore())
+	cmd.AddCommand(seal, evaluate, export, payloads, cmdTraceEmbeddings(), cmdTraceSearch(), cmdTraceView(),
+		cmdTraceScore(), cmdTraceCache())
 	return cmd
 }
 

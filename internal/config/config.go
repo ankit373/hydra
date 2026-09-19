@@ -104,6 +104,24 @@ type Config struct {
 	// built-in default.
 	EmbedBudgetMB int `toml:"embed_budget_mb,omitempty"`
 
+	// CacheAnswers opts into answering a dispatch from a previous one. Off by
+	// default, and the most consequential of these switches: the others store
+	// what happened, this one changes what comes back. A near match returns a
+	// confident answer to a question nobody asked, so it is a decision someone
+	// makes rather than a default they inherit.
+	CacheAnswers bool `toml:"cache_answers,omitempty"`
+
+	// CacheThreshold is the cosine a near match must reach, and
+	// CacheThresholds raises or lowers it for one routing enum. Anything
+	// outside (0,1] is ignored rather than clamped: a threshold of 0 would
+	// serve every prompt from the nearest stored one.
+	CacheThreshold  float64            `toml:"cache_threshold,omitempty"`
+	CacheThresholds map[string]float64 `toml:"cache_thresholds,omitempty"`
+
+	// CacheBudgetMB bounds the answer store on disk. Past it the oldest
+	// answers are dropped, so the cache forgets rather than refuses.
+	CacheBudgetMB int `toml:"cache_budget_mb,omitempty"`
+
 	OpenRouter OpenRouter `toml:"openrouter,omitempty"`
 }
 

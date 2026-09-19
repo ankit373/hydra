@@ -84,6 +84,9 @@ func (j *LLMJudge) Judge(ctx context.Context, prompt string, attempts []Attempt)
 	result, err := j.d.Dispatch(jCtx, judgePrompt, dispatch.Options{
 		TierHint: j.tier,
 		System:   "You are a code and reasoning quality evaluator. Respond only with valid JSON.",
+		// The prompt embeds the candidate answers, so a stored verdict would
+		// be about answers this run never produced.
+		NoCache: true,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("judge dispatch: %w", err)

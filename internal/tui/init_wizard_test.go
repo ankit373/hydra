@@ -73,6 +73,8 @@ func TestInitWizard_FullWalkWritesALoadableConfig(t *testing.T) {
 	m, _ = send(m, "enter")
 	// Embedding capture: cursor 0 is "no".
 	m, _ = send(m, "enter")
+	// Answer cache: cursor 0 is "no".
+	m, _ = send(m, "enter")
 	// Skills: confirm and save.
 	m, cmd := send(m, "enter")
 
@@ -113,7 +115,7 @@ func TestInitWizard_DoneScreenHasNoStrayWhitespaceLine(t *testing.T) {
 	testutil.NewSandbox(t)
 
 	m := tea.Model(NewInitModel(wizardHeads()))
-	m, _ = send(m, "enter", "enter", "enter", "enter", "enter", "enter")
+	m, _ = send(m, "enter", "enter", "enter", "enter", "enter", "enter", "enter")
 
 	im := m.(InitModel)
 	if im.err != nil {
@@ -138,6 +140,7 @@ func TestInitWizard_DecliningLocalOnlyWritesNoPIIPolicy(t *testing.T) {
 	m, _ = send(m, "down", "enter") // privacy: cursor 1 = no
 	m, _ = send(m, "enter")         // capture: cursor 0 = no
 	m, _ = send(m, "enter")         // embed: cursor 0 = no
+	m, _ = send(m, "enter")         // cache: cursor 0 = no
 	_, _ = send(m, "enter")         // skills → save; the config is the assertion
 
 	cfg, err := config.Load()
@@ -330,7 +333,7 @@ func TestInitWizard_SaveFailureIsSurfaced(t *testing.T) {
 	}
 
 	m := tea.Model(NewInitModel(wizardHeads()))
-	m, _ = send(m, "enter", "enter", "enter", "enter", "enter", "enter")
+	m, _ = send(m, "enter", "enter", "enter", "enter", "enter", "enter", "enter")
 
 	im := m.(InitModel)
 	if im.err == nil {
@@ -348,7 +351,7 @@ func TestInitWizard_PayloadCaptureIsOffUnlessChosen(t *testing.T) {
 	testutil.NewSandbox(t)
 
 	m := tea.Model(NewInitModel(wizardHeads()))
-	_, _ = send(m, "enter", "enter", "enter", "enter", "enter", "enter") // straight through
+	_, _ = send(m, "enter", "enter", "enter", "enter", "enter", "enter", "enter") // straight through
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -369,6 +372,7 @@ func TestInitWizard_PayloadCaptureIsOnWhenChosen(t *testing.T) {
 	m, _ = send(m, "enter")         // privacy
 	m, _ = send(m, "down", "enter") // capture: cursor 1 = yes
 	m, _ = send(m, "enter")         // embed: cursor 0 = no
+	m, _ = send(m, "enter")         // cache: cursor 0 = no
 	_, _ = send(m, "enter")         // skills → save
 
 	cfg, err := config.Load()
@@ -405,7 +409,7 @@ func TestInitWizard_EmbeddingCaptureIsOffUnlessChosen(t *testing.T) {
 	testutil.NewSandbox(t)
 
 	m := tea.Model(NewInitModel(wizardHeads()))
-	_, _ = send(m, "enter", "enter", "enter", "enter", "enter", "enter") // straight through
+	_, _ = send(m, "enter", "enter", "enter", "enter", "enter", "enter", "enter") // straight through
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -425,6 +429,7 @@ func TestInitWizard_EmbeddingCaptureIsOnWhenChosen(t *testing.T) {
 	m, _ = send(m, "enter")         // privacy
 	m, _ = send(m, "enter")         // capture: cursor 0 = no
 	m, _ = send(m, "down", "enter") // embed: cursor 1 = yes
+	m, _ = send(m, "enter")         // cache: cursor 0 = no
 	_, _ = send(m, "enter")         // skills → save
 
 	cfg, err := config.Load()
@@ -453,5 +458,61 @@ func TestInitWizard_EmbedStepSaysNothingLeavesTheMachine(t *testing.T) {
 		if !strings.Contains(view, want) {
 			t.Errorf("the embedding step does not mention %q:\n%s", want, view)
 		}
+	}
+}
+
+// The cache is the one wizard answer that changes what comes back, so the step
+// has to say so before someone presses enter through it.
+func TestInitWizard_CacheStepSaysItChangesTheAnswer(t *testing.T) {
+	testutil.NewSandbox(t)
+
+	m := tea.Model(NewInitModel(wizardHeads()))
+	m, _ = send(m, "enter", "enter", "enter", "enter", "enter")
+	view := m.(InitModel).View()
+
+	for _, want := range []string{"changes what you get back", "word for word", "personal"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("the cache step does not mention %q:\n%s", want, view)
+		}
+	}
+}
+
+// Off unless chosen, like the two capture steps, and for a stronger reason.
+func TestInitWizard_CacheIsOffUnlessChosen(t *testing.T) {
+	testutil.NewSandbox(t)
+
+	m := tea.Model(NewInitModel(wizardHeads()))
+	_, _ = send(m, "enter", "enter", "enter", "enter", "enter", "enter", "enter")
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("the wizard wrote no loadable config: %v", err)
+	}
+	if cfg.CacheAnswers {
+		t.Error("pressing enter through the wizard turned the answer cache on")
+	}
+}
+
+func TestInitWizard_CacheIsOnWhenChosen(t *testing.T) {
+	testutil.NewSandbox(t)
+
+	m := tea.Model(NewInitModel(wizardHeads()))
+	m, _ = send(m, "enter")         // cortex
+	m, _ = send(m, "enter")         // tiers
+	m, _ = send(m, "enter")         // privacy
+	m, _ = send(m, "enter")         // capture: cursor 0 = no
+	m, _ = send(m, "enter")         // embed: cursor 0 = no
+	m, _ = send(m, "down", "enter") // cache: cursor 1 = yes
+	_, _ = send(m, "enter")         // skills → save
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("the wizard wrote no loadable config: %v", err)
+	}
+	if !cfg.CacheAnswers {
+		t.Error("the user selected the answer cache and it was not saved")
+	}
+	if cfg.CapturePayloads || cfg.CaptureEmbeddings {
+		t.Error("choosing the cache turned on a capture the user declined")
 	}
 }
