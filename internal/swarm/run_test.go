@@ -549,3 +549,50 @@ func TestRunSPRT_AllHeadsFailingDoesNotProduceAConfidentAnswer(t *testing.T) {
 		t.Errorf("reported %.2f confidence with every head failed", res.Trust.Confidence)
 	}
 }
+
+// The verdict on an answer is filed against the routing decision that produced
+// it, and routing.yaml is editable, so the map in force when the heads ran is
+// not recoverable afterwards. The result has to carry it (#969).
+func TestRunSPRT_CarriesTheRoutingDecisionItRanUnder(t *testing.T) {
+	s := swarmSandbox(t)
+	sw := newSwarm(t,
+		swarmHead(t, s, "a", 90, "same"),
+		swarmHead(t, s, "b", 85, "same"),
+	)
+	seedCalibration(t, "go", "a", "b")
+
+	// --enum resolves to a tier number; an example carrying the key but not the
+	// tier it meant cannot be read back once routing.yaml changes.
+	res, err := sw.RunSPRT(context.Background(), "q", Options{
+		Confidence: 0.75, Domain: "go", Enum: "SIMPLE",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Enum != "SIMPLE" {
+		t.Errorf("Enum = %q, want SIMPLE", res.Enum)
+	}
+	if res.Tier != 8 {
+		t.Errorf("Tier = %d, want 8, the tier SIMPLE resolves to", res.Tier)
+	}
+
+	// An explicit --tier is the same instruction by a different name.
+	res, err = sw.RunSPRT(context.Background(), "q", Options{
+		Confidence: 0.75, Domain: "go", TierHint: "2",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Tier != 2 {
+		t.Errorf("Tier = %d, want the pinned 2", res.Tier)
+	}
+
+	// Neither given is unrouted, which must read as unknown rather than tier 0.
+	res, err = sw.RunSPRT(context.Background(), "q", Options{Confidence: 0.75, Domain: "go"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Tier != 0 || res.Enum != "" {
+		t.Errorf("unrouted run = (%q, %d), want empty and 0", res.Enum, res.Tier)
+	}
+}

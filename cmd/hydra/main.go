@@ -1339,7 +1339,7 @@ func cmdDispatch() *cobra.Command {
 	// domain and printed two commands ending in a bare `--domain ` (#732).
 	cmd.Flags().StringVar(&domain, "domain", trust.DefaultDomain, "calibration domain: ranks heads on what they got right at this kind of work, and keys --confidence")
 	cmd.Flags().StringVar(&file, "file", "", "target file, derives a confidence target from its blast radius, so this alone selects the SPRT ensemble")
-	cmd.Flags().BoolVar(&verifyRun, "verify", false, "after a --confidence run, run the workspace verifier and record its verdict: what trains calibration and fills hyctl trust reliability")
+	cmd.Flags().BoolVar(&verifyRun, "verify", false, "after a --confidence run, run the workspace verifier and record its verdict: what trains calibration, fills hyctl trust reliability, and files the answer in the eval set")
 	cmd.Flags().StringVar(&graphPath, "graph", "graph.json", "path to the dependency graph used with --file")
 	cmd.Flags().BoolVar(&irreversible, "irreversible", false, "change cannot be cheaply undone, raises the required confidence")
 	cmd.Flags().BoolVar(&production, "production", false, "target is production, raises the required confidence")
