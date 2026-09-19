@@ -129,6 +129,9 @@ func Run(ctx context.Context, task Task, sources []Source, exec Executor, cal *C
 	for _, o := range opts {
 		o(&cfg)
 	}
+	// One verdict per pair for the whole run. Everything below asks the same
+	// question more than once, and a judge-backed comparator is an LLM call.
+	cfg.equiv = memoizeEquivalence(cfg.equiv)
 	alpha := 1 - t.Confidence
 	if alpha <= 0 || alpha >= 1 {
 		return nil, fmt.Errorf("sprt: confidence must be in (0,1), got %v", t.Confidence)
@@ -392,6 +395,47 @@ func WithObserver(fn Observer) RunOption {
 		if fn != nil {
 			c.observe = fn
 		}
+	}
+}
+
+// memoizeEquivalence answers each pair once per run.
+//
+// scoreHypotheses re-asks per hypothesis per vote on every sample, and the
+// ledger asks a third time for the entry it writes, so a comparator that is not
+// a pure function answers the same question several ways in one run. A
+// judge-backed one is exactly that: an LLM. Measured before this, a three-head
+// review counted a head's vote toward the accepted answer and recorded the same
+// head as having dissented from it, which `hyctl trust outcome` then trained on;
+// ten judge calls for three samples, and four votes attributed across two
+// hypotheses from three of them (#997).
+//
+// Reflexive and symmetric, because equivalence is both by definition. Today's
+// callers all ask in (hypothesis, vote) order, so the symmetry saves no calls
+// yet; it is here so a caller asking the other way round cannot be told
+// something different, which is the failure this function exists to stop.
+//
+// Run's sample loop is sequential, and so is RecordCoAgreement after it, so the
+// map needs no lock.
+func memoizeEquivalence(eq AnswerEquivalence) AnswerEquivalence {
+	type pair struct{ a, b string }
+	seen := make(map[pair]bool)
+	return func(candidate, answer string) bool {
+		if candidate == answer {
+			// Reflexive, so never worth asking. scoreHypotheses compares every
+			// hypothesis against every vote, which includes the vote that
+			// proposed it.
+			return true
+		}
+		k := pair{candidate, answer}
+		if candidate > answer {
+			k = pair{answer, candidate}
+		}
+		if v, ok := seen[k]; ok {
+			return v
+		}
+		v := eq(candidate, answer)
+		seen[k] = v
+		return v
 	}
 }
 
