@@ -41,7 +41,11 @@ type vetRouter struct {
 	// Set together by --confidence. floor is the caller's minimum and the
 	// file's blast radius raises the bar above it; nil sw means the
 	// single-dispatch path, which is what --confidence 0 keeps.
-	sw        *swarm.Swarm
+	//
+	// An interface rather than *swarm.Swarm so the ensemble seam can be driven
+	// in a test without a model: what this adapter does with the attempts is
+	// the whole of #981, and it was only reachable through a live fan-out.
+	sw        sprtRunner
 	floor     float64
 	graph     *graph.Graph
 	graphPath string
@@ -54,6 +58,11 @@ type vetRouter struct {
 // A radius Hydra did not read off a graph is a default, and saying otherwise
 // would make a line that reads like blast-radius routing into a claim the run
 // cannot support (#251).
+// sprtRunner is the ensemble this router consults. *swarm.Swarm satisfies it.
+type sprtRunner interface {
+	RunSPRT(ctx context.Context, prompt string, opts swarm.Options) (*swarm.SPRTResult, error)
+}
+
 func (r vetRouter) barFor(domain, file string) vet.Bar {
 	bar := vet.Bar{Target: r.floor, Radius: 1.0}
 	if r.graph != nil && !r.graph.Empty() && r.graph.Knows(file) {
@@ -111,15 +120,25 @@ func (r vetRouter) reviewEnsemble(ctx context.Context, prompt, domain, file stri
 			break
 		}
 	}
-	// Every head that answered, not only the winner. The ensemble already
-	// produced these and reading one of them was throwing the agreement
-	// between them away (#981).
-	for _, at := range res.Attempts {
+	a.Votes = votesFrom(res.Attempts)
+	return a, nil
+}
+
+// votesFrom carries every head that answered, not only the winner. The
+// ensemble already produced these and reading one of them was throwing the
+// agreement between them away (#981).
+//
+// A head that failed is not a voter: it was asked and could not answer, which
+// is different from answering and not agreeing, and counting it would deflate
+// every finding on the file.
+func votesFrom(attempts []swarm.Attempt) []vet.Vote {
+	var votes []vet.Vote
+	for _, at := range attempts {
 		if at.Succeeded() {
-			a.Votes = append(a.Votes, vet.Vote{Head: at.Head.ID, Output: at.Output})
+			votes = append(votes, vet.Vote{Head: at.Head.ID, Output: at.Output})
 		}
 	}
-	return a, nil
+	return votes
 }
 
 func (r vetRouter) Review(ctx context.Context, prompt, domain, resource string) (vet.Answer, error) {
