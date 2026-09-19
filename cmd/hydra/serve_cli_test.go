@@ -196,3 +196,31 @@ func TestCmdServe_GarbageEnumIsRefusedBeforeBinding(t *testing.T) {
 		t.Errorf("the refusal does not name the enum: %v", err)
 	}
 }
+
+// The endpoint cannot import dispatch, so this adapter is the only place the
+// two event vocabularies meet, and a kind mapped wrong here is a fallback the
+// stream never learns about.
+func TestStreamEvents_MapsEachKind(t *testing.T) {
+	if streamEvents(nil) != nil {
+		t.Fatal("a client that did not ask for a stream must leave OnStream nil, " +
+			"or every dispatch takes the streaming executor path")
+	}
+
+	var got []serve.Event
+	on := streamEvents(func(e serve.Event) { got = append(got, e) })
+	head := provider.Head{ID: "h1", Name: "model-1"}
+
+	on(dispatch.StreamEvent{Kind: dispatch.StreamAttemptStarted, Head: head})
+	on(dispatch.StreamEvent{Kind: dispatch.StreamDelta, Text: "hi", Head: head, SpanID: "s1"})
+	on(dispatch.StreamEvent{Kind: dispatch.StreamAttemptFailed, Reason: "EOF", Head: head, SpanID: "s1"})
+
+	if len(got) != 2 {
+		t.Fatalf("got %d events, want the delta and the failure: %+v", len(got), got)
+	}
+	if got[0].Kind != serve.EventDelta || got[0].Text != "hi" || got[0].Model != "model-1" {
+		t.Errorf("delta mapped as %+v", got[0])
+	}
+	if got[1].Kind != serve.EventAttemptFailed || got[1].Reason != "EOF" || got[1].SpanID != "s1" {
+		t.Errorf("failure mapped as %+v", got[1])
+	}
+}

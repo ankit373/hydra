@@ -46,6 +46,11 @@ type Request struct {
 	ToolChoice json.RawMessage
 	MaxTokens  int
 	Route      Route
+
+	// OnEvent is set only when the client asked for a stream. A router that
+	// ignores it still answers correctly: its whole output then arrives when
+	// Chat returns, and serve sends it as one delta.
+	OnEvent func(Event)
 }
 
 // Answer is what a head replied.
@@ -125,11 +130,14 @@ type chatRequest struct {
 	Messages []executor.Message `json:"messages"`
 	// Both spellings: the newer one is what open-code-review sends, and a
 	// server that reads only the old name silently ignores the caller's cap.
-	MaxTokens           int                `json:"max_tokens"`
-	MaxCompletionTokens int                `json:"max_completion_tokens"`
-	Stream              bool               `json:"stream"`
-	Tools               []executor.ToolDef `json:"tools"`
-	ToolChoice          json.RawMessage    `json:"tool_choice"`
+	MaxTokens           int  `json:"max_tokens"`
+	MaxCompletionTokens int  `json:"max_completion_tokens"`
+	Stream              bool `json:"stream"`
+	StreamOptions       *struct {
+		IncludeUsage bool `json:"include_usage"`
+	} `json:"stream_options"`
+	Tools      []executor.ToolDef `json:"tools"`
+	ToolChoice json.RawMessage    `json:"tool_choice"`
 }
 
 func chat(w http.ResponseWriter, req *http.Request, r Router) {
@@ -152,28 +160,18 @@ func chat(w http.ResponseWriter, req *http.Request, r Router) {
 		writeError(w, http.StatusBadRequest, "messages is empty, so there is nothing to answer")
 		return
 	}
-	if in.Stream {
-		// Answering a stream request with a whole body is worse than refusing:
-		// the client is parsing SSE and sees a malformed stream instead of a
-		// message it can act on.
-		writeError(w, http.StatusBadRequest,
-			"this endpoint does not stream yet; retry with \"stream\": false")
-		return
-	}
-
 	route, err := parseRoute(in.Model)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	ans, err := r.Chat(req.Context(), Request{
-		Messages:   in.Messages,
-		Tools:      in.Tools,
-		ToolChoice: in.ToolChoice,
-		MaxTokens:  firstPositive(in.MaxCompletionTokens, in.MaxTokens),
-		Route:      route,
-	})
+	if in.Stream {
+		streamChat(w, req, r, in, route)
+		return
+	}
+
+	ans, err := r.Chat(req.Context(), request(in, route, nil))
 	if err != nil {
 		status := http.StatusBadGateway
 		if errors.Is(err, ErrBadRequest) {
@@ -203,6 +201,47 @@ func chat(w http.ResponseWriter, req *http.Request, r Router) {
 			"total_tokens":      ans.InputTokens + ans.OutputTokens,
 		},
 	})
+}
+
+// streamChat answers as server-sent events.
+func streamChat(w http.ResponseWriter, req *http.Request, r Router, in chatRequest, route Route) {
+	ctx, cancel := context.WithCancel(req.Context())
+	defer cancel()
+
+	st := newStreamer(w, in.Model)
+	ans, err := r.Chat(ctx, request(in, route, func(e Event) { st.event(e, cancel) }))
+	st.done = true
+
+	switch {
+	case st.aborted:
+		// The stream already said why it ended, and the dispatch that carried
+		// on past it was cancelled: nobody is left to read that answer.
+	case err != nil && !st.started():
+		// Nothing has reached the client, so an error is still a real status
+		// code rather than a 200 carrying bad news.
+		status := http.StatusBadGateway
+		if errors.Is(err, ErrBadRequest) {
+			status = http.StatusBadRequest
+		}
+		writeError(w, status, err.Error())
+	case err != nil:
+		st.fail(err.Error())
+	default:
+		st.finish(ans, in.StreamOptions != nil && in.StreamOptions.IncludeUsage)
+	}
+}
+
+// request is the one derivation of what the router is asked, so the streamed
+// and buffered paths cannot come to disagree about it.
+func request(in chatRequest, route Route, on func(Event)) Request {
+	return Request{
+		Messages:   in.Messages,
+		Tools:      in.Tools,
+		ToolChoice: in.ToolChoice,
+		MaxTokens:  firstPositive(in.MaxCompletionTokens, in.MaxTokens),
+		Route:      route,
+		OnEvent:    on,
+	}
 }
 
 // parseRoute reads the model field as a routing instruction, which makes any
