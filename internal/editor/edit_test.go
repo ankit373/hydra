@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/ankit373/hydra/internal/config"
+	"github.com/ankit373/hydra/internal/evalset"
 	"github.com/ankit373/hydra/internal/ledger"
 	"github.com/ankit373/hydra/internal/runlog"
 	"github.com/ankit373/hydra/internal/testutil"
@@ -379,7 +380,7 @@ func TestEdit_PassingValidationKeepsTheEdit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Status != "ok" || !res.ValidatorPassed {
+	if res.Status != "ok" || res.ValidatorPassed == nil || !*res.ValidatorPassed {
 		t.Fatalf("result = %+v", res)
 	}
 	if raw, _ := os.ReadFile(file); !strings.Contains(string(raw), "validated") {
@@ -1013,4 +1014,81 @@ func TestDiffStats_UsesGitInARepository(t *testing.T) {
 	if added != 2 || removed != 0 {
 		t.Errorf("diffStats = (%d, %d), want (2, 0) from git's own numstat", added, removed)
 	}
+}
+
+// An extension the registry has no validator for must not report a pass: before
+// #998 validatorPassed was initialised true and never touched, so "nothing ran"
+// and "ran and passed" rendered identically.
+func TestEdit_AnExtensionWithNoValidatorReportsNoVerdict(t *testing.T) {
+	repo := editSandbox(t, marked("some notes"))
+	writeWorkspaceYAML(t, repo, "") // no validators block at all
+
+	file := filepath.Join(repo, "a.txt")
+	if err := os.WriteFile(file, []byte("notes\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := Edit(context.Background(), Request{
+		File: file, Enum: "MODERATE", Prompt: "x", Validate: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Status != "ok" {
+		t.Fatalf("result = %+v", res)
+	}
+	if res.ValidatorPassed != nil {
+		t.Errorf("ValidatorPassed = %v, want nil: no validator ran", *res.ValidatorPassed)
+	}
+}
+
+// A validator that cannot start is not the file's fault. CombinedOutput has
+// nothing in that case, so the reason lived only in the exec error and the user
+// was told "validation_failed: " with no cause. Reachable for Go for the first
+// time now that Go has a validator at all (#998).
+func TestEdit_AMissingValidatorBinaryNamesItself(t *testing.T) {
+	repo := editSandbox(t, marked("package main\n"))
+	// No fake gofmt on the sandbox PATH, so the shipped template cannot start.
+
+	file := filepath.Join(repo, "a.go")
+	if err := os.WriteFile(file, []byte("package main\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := Edit(context.Background(), Request{
+		File: file, Enum: "MODERATE", Prompt: "x", Validate: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Status != "fail" {
+		t.Fatalf("result = %+v, want a failure", res)
+	}
+	if !strings.Contains(res.Error, "gofmt") {
+		t.Errorf("Error = %q, want the missing binary named", res.Error)
+	}
+	// Not a verdict about the head, so no verdict is recorded. Filing one said
+	// this head produced code that fails to parse, on the evidence of a binary
+	// that is not installed.
+	if res.ValidatorPassed != nil {
+		t.Errorf("ValidatorPassed = %v, want nil: nothing judged the answer", *res.ValidatorPassed)
+	}
+	if n := countExamples(t); n != 0 {
+		t.Errorf("filed %d corpus examples, want none: the validator never ran", n)
+	}
+}
+
+// countExamples reads the sandbox's eval set, which is empty unless an edit
+// filed something.
+func countExamples(t *testing.T) int {
+	t.Helper()
+	raw, err := os.ReadFile(evalset.DefaultPath())
+	if err != nil {
+		return 0
+	}
+	body := strings.TrimSpace(string(raw))
+	if body == "" {
+		return 0
+	}
+	return len(strings.Split(body, "\n"))
 }

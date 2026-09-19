@@ -5,6 +5,7 @@ package parallel
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/dispatch"
+	"github.com/ankit373/hydra/internal/editor"
 	"github.com/ankit373/hydra/internal/ledger"
 	"github.com/ankit373/hydra/internal/runlog"
 	"github.com/ankit373/hydra/internal/testutil"
@@ -501,8 +503,8 @@ func TestEdit_PassingValidationKeepsTheEdit(t *testing.T) {
 	if got.Status != "ok" {
 		t.Fatalf("result = %+v", got)
 	}
-	if !got.ValidatorPassed {
-		t.Error("ValidatorPassed = false on a passing validator")
+	if got.ValidatorPassed == nil || !*got.ValidatorPassed {
+		t.Errorf("ValidatorPassed = %v, want a recorded pass", got.ValidatorPassed)
 	}
 	if raw, _ := os.ReadFile(file); !strings.Contains(string(raw), "validated content") {
 		t.Errorf("the edit was rolled back despite passing: %q", raw)
@@ -641,11 +643,14 @@ func TestRunValidate_DoesNotFragmentPathsWithSpaces(t *testing.T) {
 	if rc, err := runValidate(context.Background(), "/usr/bin/false", "ignored"); rc == 0 || err != nil {
 		t.Errorf("a failing validator reported rc %d, err %v, want non-zero and no error", rc, err)
 	}
-	// A template naming a binary that does not exist is a failure, not a pass:
-	// treating "could not run the check" as "the check passed" is how an
-	// unvalidated edit ships.
-	if rc, err := runValidate(context.Background(), "definitely-not-installed-anywhere", "x"); rc == 0 || err != nil {
-		t.Errorf("a missing validator binary gave rc %d, err %v, want non-zero and no error", rc, err)
+	// A template naming a binary that does not exist is still not a pass: the
+	// caller rolls back on the error, so an unvalidated edit does not ship. It
+	// is not a verdict either, which is the part that changed, because blaming
+	// the head for a missing binary put confident false evidence in the corpus
+	// and the calibration (#998).
+	rc, err := runValidate(context.Background(), "definitely-not-installed-anywhere", "x")
+	if !errors.Is(err, editor.ErrValidatorUnavailable) {
+		t.Errorf("a missing validator binary gave rc %d, err %v, want ErrValidatorUnavailable", rc, err)
 	}
 	// An empty template means no validator is configured, which is a pass.
 	if rc, err := runValidate(context.Background(), "", "x"); rc != 0 || err != nil {
@@ -1155,5 +1160,25 @@ func TestEdit_NoCapsDeclaredStillEdits(t *testing.T) {
 
 	if got.Status != "ok" {
 		t.Fatalf("result = %+v, want ok: no cap was declared, so nothing should refuse", got)
+	}
+}
+
+// The same claim hyctl edit was making: this path hardcoded ValidatorPassed on
+// success, so a file type with no validator was reported exactly like one that
+// had passed (#998).
+func TestParallelEdit_AnExtensionWithNoValidatorReportsNoVerdict(t *testing.T) {
+	repo := editSandbox(t, marked("notes"))
+
+	file := filepath.Join(repo, "a.txt")
+	if err := os.WriteFile(file, []byte("notes\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got := runEdit(t, Task{Label: "ok", Enum: "MODERATE", File: file, Prompt: "x"})
+	if got.Status != "ok" {
+		t.Fatalf("result = %+v", got)
+	}
+	if got.ValidatorPassed != nil {
+		t.Errorf("ValidatorPassed = %v, want nil: no validator ran", *got.ValidatorPassed)
 	}
 }
