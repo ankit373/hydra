@@ -45,16 +45,56 @@ type Judge interface {
 // LLMJudge dispatches a structured evaluation prompt to a configured head and
 // parses {"winner":0,"scores":[85,72],"reason":"..."} from the response.
 type LLMJudge struct {
-	d       *dispatch.Dispatcher
+	ask     dispatchFunc
 	tier    string
 	timeout time.Duration
+	// The run's own constraints, so a judge call cannot go somewhere the run
+	// it belongs to was forbidden to go. See judgeOptions.
+	run Options
 }
 
-func newLLMJudge(d *dispatch.Dispatcher, tierHint string, timeout time.Duration) *LLMJudge {
+// dispatchFunc is Dispatcher.Dispatch as a value, so a test can see the options
+// a judge really sends. Asserting on judgeOptions alone leaves the call site
+// free to rebuild them by hand, which is the defect rather than a variant of it.
+type dispatchFunc func(context.Context, string, dispatch.Options) (*dispatch.Result, error)
+
+// dispatchWith is d.Dispatch, or nil for a nil dispatcher, so a judge built
+// without one fails where it would have called rather than at construction.
+func dispatchWith(d *dispatch.Dispatcher) dispatchFunc {
+	if d == nil {
+		return nil
+	}
+	return d.Dispatch
+}
+
+func newLLMJudge(d *dispatch.Dispatcher, tierHint string, opts Options) *LLMJudge {
+	timeout := opts.JudgeTimeout
 	if timeout <= 0 {
 		timeout = defaultJudgeTimeout
 	}
-	return &LLMJudge{d: d, tier: tierHint, timeout: timeout}
+	return &LLMJudge{ask: dispatchWith(d), tier: tierHint, timeout: timeout, run: opts}
+}
+
+// judgeOptions is the one derivation of what a judge dispatch may do, shared
+// by the ModeBest judge and the SPRT equivalence judge so the two cannot drift.
+//
+// A judge prompt embeds the whole task prompt and the answers, so it is bound
+// by the run's own constraints: --local meant nothing about the sampled heads
+// alone, and the judge was reaching a paid head on a run that asked for none
+// (#996, the half #500 did not cover). The cost ceiling bounds one judge call;
+// it does not charge the judge against the run's budget, which the pre-flight
+// guard computes over the sampled heads before any judge exists.
+func judgeOptions(run Options, tierHint, system string) dispatch.Options {
+	return dispatch.Options{
+		TierHint: tierHint,
+		System:   system,
+		// The prompt embeds the candidate answers, so a stored verdict would
+		// be about answers this run never produced.
+		NoCache:       true,
+		LocalOnly:     run.LocalOnly,
+		MaxCostUSD:    run.MaxEstCostUSD,
+		MaxCostSource: "the run's cost ceiling",
+	}
 }
 
 func (j *LLMJudge) Judge(ctx context.Context, prompt string, attempts []Attempt) (*JudgeVerdict, error) {
@@ -81,13 +121,11 @@ func (j *LLMJudge) Judge(ctx context.Context, prompt string, attempts []Attempt)
 	defer cancel()
 
 	start := time.Now()
-	result, err := j.d.Dispatch(jCtx, judgePrompt, dispatch.Options{
-		TierHint: j.tier,
-		System:   "You are a code and reasoning quality evaluator. Respond only with valid JSON.",
-		// The prompt embeds the candidate answers, so a stored verdict would
-		// be about answers this run never produced.
-		NoCache: true,
-	})
+	if j.ask == nil {
+		return nil, fmt.Errorf("judge: no dispatcher")
+	}
+	result, err := j.ask(jCtx, judgePrompt, judgeOptions(j.run, j.tier,
+		"You are a code and reasoning quality evaluator. Respond only with valid JSON."))
 	if err != nil {
 		return nil, fmt.Errorf("judge dispatch: %w", err)
 	}
