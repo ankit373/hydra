@@ -110,9 +110,14 @@ func (f FileOutcome) Cleared() bool {
 	return f.Bar.Set() && f.Confidence >= f.Bar.Target
 }
 
-// ShortOfBar is the opposite, and excludes files that were never held to one.
+// ShortOfBar is the opposite, and excludes files that were never held to a bar.
+//
+// Defined against Cleared rather than by repeating the comparison: written as
+// its own `Confidence < Target` the Bar.Set() check is unreachable, since no
+// confidence is below a target of zero, and an unreachable guard is a claim
+// about the code that is false.
 func (f FileOutcome) ShortOfBar() bool {
-	return f.Bar.Set() && f.Confidence < f.Bar.Target
+	return f.Bar.Set() && !f.Cleared()
 }
 
 // Result is one vet run.

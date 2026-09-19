@@ -609,11 +609,15 @@ func TestFileOutcome_ShortOfBarIsDistinctFromHavingNoBar(t *testing.T) {
 	if met.ShortOfBar() || !met.Cleared() {
 		t.Error("a file over its bar did not read as clearing it")
 	}
-	// The single-dispatch path has no bar at all, and must not be counted as
-	// having failed one.
-	none := FileOutcome{Confidence: 0}
-	if none.ShortOfBar() || none.Cleared() {
-		t.Error("a file held to no bar was judged against one")
+	// The single-dispatch path has no bar at all and must not be judged against
+	// one. Without the Bar.Set() check this reads as short of a bar it was
+	// never held to, which is what would put it in the report's warning line.
+	none := FileOutcome{Confidence: 0.4}
+	if none.ShortOfBar() {
+		t.Error("a file held to no bar was reported as falling short of one")
+	}
+	if none.Cleared() {
+		t.Error("a file held to no bar was reported as clearing one")
 	}
 }
 
