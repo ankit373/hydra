@@ -546,6 +546,23 @@ a patched server as on an abandoned one. Both checks state what a negative resul
 prove: a host firewall that drops the probe is indistinguishable from a server that is not
 listening, and a lookup that failed is unchecked rather than clean.
 
+**Its own state directory is checked too.** The report has always said the head-binary
+baseline is forgeable by anything that can write `~/.hydra`, and nothing checked whether
+anything can:
+
+```
+State directory reach      3 readable by others
+  /Users/you/.hydra is 0755; /Users/you/.hydra/logs is 0755 ... The files themselves
+  are not readable, so this leaks the listing rather than the contents
+```
+
+Writable is the finding, because `head_binaries.json` is the record that says no head
+binary changed and `mcp_ledger.jsonl.chainhash` is the anchor that says nothing was
+removed from the ledger, and both are plain files. Readable is reported separately and
+more quietly, since it exposes the listing rather than the contents. `hyctl security`
+never changes a permission: it is a read, and a command that silently chmods your
+directory while you asked it a question is a surprise.
+
 **The boundary the numbers cannot state.** A CLI-agent head (claude, agy, codex,
 cursor) is itself an agent, with its own filesystem and network access, in a process
 Hydra does not control. Everything scored above is what Hydra *sends and records*;
