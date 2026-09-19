@@ -257,7 +257,7 @@ Scanning happens across three channels simultaneously:
 | Channel | What it finds |
 |---------|---------------|
 | **PATH scan** | 13+ CLI tools: Claude Code, Codex, Cursor, Kiro, Windsurf, Gemini, Copilot, Cody, Amp, Continue, Ollama binary |
-| **Port scan** | Ollama (11434), LM Studio (1234); queries each server and lists every installed model individually |
+| **Port scan** | Ollama (11434), LM Studio (1234), LiteLLM (4000), llama.cpp (8080); queries each server and lists every installed model individually. Relocate one with `OLLAMA_HOST`, `HYDRA_LMSTUDIO_HOST`, `LITELLM_PROXY_URL` or `LLAMA_ARG_HOST`/`LLAMA_ARG_PORT` |
 | **Env vars** | 14 API providers: Anthropic, OpenAI, Google, xAI, Groq, Together, Fireworks, Mistral, DeepSeek, Bedrock, Azure, Perplexity, Cohere, Replicate |
 
 ### 📥 Get a Model Without Leaving hyctl
