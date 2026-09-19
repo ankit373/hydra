@@ -73,8 +73,22 @@ func addedModelNote(e capabilities.Entry) string {
 		return "this records a capability score. " + e.ID +
 			" becomes routable once its provider's API key is set in the environment."
 	case e.Provider == "local" || e.Provider == "ollama" || e.Provider == "lmstudio":
-		return "this records a capability score. " + e.ID +
-			" becomes routable once a local server is serving it (`hyctl probe` shows what is)."
+		// A local head is named <server>/<model>, and only that spelling is
+		// scored. A bare model name reads as a working entry in `models list`
+		// and changes no head's score, which is #989.
+		if strings.Contains(e.ID, "/") {
+			return "this records a capability score for " + e.ID +
+				", applied once a local server is serving it (`hyctl probe` shows what is)."
+		}
+		// Naming the wrong server would be a new wrong instruction, so the
+		// example is only given when the entry says which one.
+		example := ""
+		if e.Provider == "ollama" || e.Provider == "lmstudio" {
+			example = ", e.g. " + e.Provider + "/" + e.ID
+		}
+		return "this records a capability score, but a local head is named <server>/<model>, so " +
+			"nothing is scored by the id " + e.ID + ". Add it under the id `hyctl probe` prints" +
+			example + "."
 	default:
 		return "this records a capability score, not a routable model. " + e.ID +
 			" is routed only if a provider discovers it: a CLI on PATH, an API key in the" +

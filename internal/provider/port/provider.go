@@ -169,7 +169,8 @@ func (s *ollamaService) probe(ctx context.Context, caps *capabilities.DB) ([]pro
 
 	heads := make([]provider.Head, 0, len(payload.Models))
 	for _, m := range payload.Models {
-		meta := map[string]string{"model_source": caps.SourceOllama(m.Name)}
+		id := "ollama/" + m.Name
+		meta := map[string]string{"model_source": caps.SourceLocal(id, m.Name)}
 		if m.Digest != "" {
 			meta["model_digest"] = m.Digest
 		}
@@ -191,7 +192,7 @@ func (s *ollamaService) probe(ctx context.Context, caps *capabilities.DB) ([]pro
 			meta["embedding_only"] = "true"
 		}
 		heads = append(heads, provider.Head{
-			ID:       "ollama/" + m.Name,
+			ID:       id,
 			Name:     m.Name + " (Ollama)",
 			Provider: "local",
 			Source:   "port",
@@ -199,7 +200,7 @@ func (s *ollamaService) probe(ctx context.Context, caps *capabilities.DB) ([]pro
 			// this later, so a head discovered at one address and stamped with
 			// another fails at the point of use.
 			Endpoint:  s.base,
-			CapScore:  caps.ScoreOllama(m.Name),
+			CapScore:  caps.ScoreLocal(id, m.Name),
 			LocalOnly: true,
 			AuthReady: true,
 			Meta:      meta,
@@ -262,16 +263,17 @@ func (s *lmStudioService) probe(ctx context.Context, caps *capabilities.DB) ([]p
 
 	heads := make([]provider.Head, 0, len(payload.Data))
 	for _, m := range payload.Data {
+		id := "lmstudio/" + m.ID
 		heads = append(heads, provider.Head{
-			ID:        "lmstudio/" + m.ID,
+			ID:        id,
 			Name:      m.ID + " (LM Studio)",
 			Provider:  "local",
 			Source:    "port",
 			Endpoint:  s.base,
-			CapScore:  caps.ScoreOllama(m.ID),
+			CapScore:  caps.ScoreLocal(id, m.ID),
 			LocalOnly: true,
 			AuthReady: true,
-			Meta:      map[string]string{"model_source": caps.SourceOllama(m.ID)},
+			Meta:      map[string]string{"model_source": caps.SourceLocal(id, m.ID)},
 		})
 	}
 	return heads, nil

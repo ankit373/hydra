@@ -77,9 +77,10 @@ func localHead(id, quant string, score int) provider.Head {
 	return h
 }
 
-// The bug: both quants of one model score the same (ScoreOllama matches on the
-// family pattern) and share a source, so score-then-source left them
-// incomparable, and an unstable sort picked between them (#765).
+// The bug: both quants of one model score the same (capabilities matches a
+// family pattern, which the quant is not part of) and share a source, so
+// score-then-source left them incomparable, and an unstable sort picked
+// between them (#765).
 func TestByCapScore_PrefersTheBetterQuantOfTheSameModel(t *testing.T) {
 	q4 := localHead("ollama/qwen2.5-coder:7b", "Q4_K_M", 66)
 	q8 := localHead("ollama/qwen2.5-coder:7b-q8_0", "Q8_0", 66)

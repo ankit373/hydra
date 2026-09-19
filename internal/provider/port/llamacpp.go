@@ -160,23 +160,24 @@ func (s *llamaCppService) get(ctx context.Context, path string) ([]byte, error) 
 
 func (s *llamaCppService) head(id string, props llamaCppProps, caps *capabilities.DB) provider.Head {
 	name := llamaCppModelName(id)
+	headID := "llamacpp/" + name
 	meta := map[string]string{
 		// The id the server answers to, which is the file path it loaded
 		// unless -a named an alias. Not derivable from the head id, since that
 		// carries the readable name.
 		"model":        id,
-		"model_source": caps.SourceOllama(name),
+		"model_source": caps.SourceLocal(headID, name),
 	}
 	if props.Generation.NCtx > 0 {
 		meta["model_ctx"] = strconv.Itoa(props.Generation.NCtx)
 	}
 	return provider.Head{
-		ID:        "llamacpp/" + name,
+		ID:        headID,
 		Name:      name + " (llama.cpp)",
 		Provider:  "llamacpp",
 		Source:    "port",
 		Endpoint:  s.base,
-		CapScore:  caps.ScoreOllama(name),
+		CapScore:  caps.ScoreLocal(headID, name),
 		LocalOnly: true,
 		AuthReady: true,
 		Meta:      meta,

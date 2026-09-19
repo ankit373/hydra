@@ -88,8 +88,8 @@ func TestAddedModelNote_NamesWhatWouldMakeItRoutable(t *testing.T) {
 		want string
 	}{
 		{"api key provider", capabilities.Entry{ID: "env/mistral", Provider: "mistral"}, "API key"},
-		{"local runtime", capabilities.Entry{ID: "my-llama", Provider: "ollama"}, "local server"},
-		{"lm studio", capabilities.Entry{ID: "phi", Provider: "lmstudio"}, "local server"},
+		{"local runtime", capabilities.Entry{ID: "ollama/my-llama", Provider: "ollama"}, "local server"},
+		{"lm studio", capabilities.Entry{ID: "lmstudio/phi", Provider: "lmstudio"}, "local server"},
 		{"anything else", capabilities.Entry{ID: "or-opus", Provider: "openrouter"}, "not a routable model"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -159,5 +159,33 @@ func TestModelsAdd_SaysItRecordedAScoreNotAHead(t *testing.T) {
 	}
 	if !strings.Contains(out, "not a routable model") {
 		t.Errorf("output does not say the model is not routable:\n%s", out)
+	}
+}
+
+// A bare model name is not a local head id, and the overlay scores nothing
+// under it. The note used to promise it "becomes routable once a local server
+// is serving it", which is the case where it still does nothing (#989).
+func TestAddedModelNote_ABareModelNameIsToldItScoresNothing(t *testing.T) {
+	for _, tc := range []struct{ provider, want string }{
+		{"ollama", "ollama/phi"},
+		{"lmstudio", "lmstudio/phi"},
+	} {
+		t.Run(tc.provider, func(t *testing.T) {
+			got := addedModelNote(capabilities.Entry{ID: "phi", Provider: tc.provider})
+			if !strings.Contains(got, "nothing is scored") {
+				t.Errorf("note does not say the id scores nothing: %s", got)
+			}
+			// The example must name this entry's own server. Sending an LM
+			// Studio user to an ollama/ id is a second wrong instruction.
+			if !strings.Contains(got, tc.want) {
+				t.Errorf("note does not offer %q as the id to use: %s", tc.want, got)
+			}
+		})
+	}
+	// Nothing says which server a bare "local" entry belongs to, so no example
+	// is invented for it.
+	got := addedModelNote(capabilities.Entry{ID: "phi", Provider: "local"})
+	if strings.Contains(got, "e.g.") {
+		t.Errorf("note invented a server for an entry that names none: %s", got)
 	}
 }
