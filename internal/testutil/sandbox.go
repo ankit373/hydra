@@ -107,6 +107,7 @@ var tuningVars = []string{
 	"LITELLM_PROXY_URL",
 	"LLAMA_ARG_HOST",
 	"LLAMA_ARG_PORT",
+	"HYDRA_LMSTUDIO_HOST",
 }
 
 // deadAddressVars are the subset whose value is an address to dial.
@@ -115,6 +116,10 @@ var deadAddressVars = map[string]string{
 	"LITELLM_PROXY_URL": "http://127.0.0.1:1",
 	"LLAMA_ARG_HOST":    "127.0.0.1",
 	"LLAMA_ARG_PORT":    "1",
+	// LM Studio publishes no variable of its own, so this is Hydra's, added
+	// because it was the one service a sandbox could not point away from the
+	// developer's machine (#988).
+	"HYDRA_LMSTUDIO_HOST": "http://127.0.0.1:1",
 }
 
 // Blocking outbound HTTP has to happen at package load, not per test.

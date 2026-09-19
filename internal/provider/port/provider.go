@@ -53,7 +53,7 @@ func (p *Provider) Discover(ctx context.Context) ([]provider.Head, error) {
 	// Endpoint use.
 	return discover(ctx, caps, []portService{
 		&ollamaService{base: provider.OllamaHost()},
-		&lmStudioService{base: defaultLMStudioHost},
+		newLMStudioService(),
 		newLiteLLMService(),
 		newLlamaCppService(),
 	}), nil
@@ -228,13 +228,20 @@ func completionCapable(caps []string) bool {
 
 // ── LM Studio ─────────────────────────────────────────────────────────────────
 
-// defaultLMStudioHost is LM Studio's default server address. Unlike Ollama it
-// publishes no environment variable for relocating it, so there is nothing to
-// honour, but the base is still a field so the two services behave the same
-// way and both are testable against a stub server.
+// defaultLMStudioHost is LM Studio's default server address. Its port is
+// configurable in the app and it publishes no variable of its own, so Hydra
+// names one: without it a relocated server is simply undiscoverable, the #282
+// shape, and no test could point discovery away from the real port either.
 const defaultLMStudioHost = "http://localhost:1234"
 
+// LMStudioHostEnv is Hydra's own variable, since LM Studio publishes none.
+const LMStudioHostEnv = "HYDRA_LMSTUDIO_HOST"
+
 type lmStudioService struct{ base string }
+
+func newLMStudioService() *lmStudioService {
+	return &lmStudioService{base: provider.HostFromEnv(LMStudioHostEnv, defaultLMStudioHost)}
+}
 
 func (s *lmStudioService) addr() string { return hostPort(s.base, 1234) }
 

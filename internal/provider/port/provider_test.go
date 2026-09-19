@@ -4,6 +4,7 @@ package port
 
 import (
 	"context"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -279,13 +280,11 @@ func TestDiscovery_ResolvesTheSameHostTheExecutorWill(t *testing.T) {
 // not hang, a probe that blocks is worse than one that finds nothing, because
 // `hyctl probe` is often the first command a user runs.
 func TestDiscover_NothingListeningFindsNothingQuickly(t *testing.T) {
-	s := testutil.NewSandbox(t)
-	// Point the services that can be relocated at a port nothing is on, so the
-	// liveness dial fails fast and a machine that really runs one of them does
-	// not fail a test about finding nothing. LM Studio publishes no such
-	// variable, so it is the one this cannot redirect.
-	s.SetKey(t, "OLLAMA_HOST", "http://127.0.0.1:1")
-	s.SetKey(t, "LITELLM_PROXY_URL", "http://127.0.0.1:1")
+	// The sandbox points every relocatable service at a port nothing is on, so
+	// the liveness dial fails fast and a machine that really runs one does not
+	// fail a test about finding nothing. LM Studio was the exception until it
+	// was given a variable to be relocated by (#988).
+	testutil.NewSandbox(t)
 
 	start := time.Now()
 	heads, err := (&Provider{}).Discover(context.Background())
@@ -492,4 +491,65 @@ func TestProbes_StampTheAddressTheyWereFoundAt(t *testing.T) {
 	if lmHeads[0].ID == heads[0].ID {
 		t.Error("an LM Studio head and an Ollama head share an id")
 	}
+}
+
+// The isolation, proven against the real port rather than asserted. Every other
+// test here says "nothing is listening", which is a claim about the machine, so
+// none of them could tell that discovery was reaching the developer's own
+// LM Studio: a stub left on 1234 by a concurrent session turned five tests red
+// across three packages (#988).
+//
+// The server is real and on the documented port. If something else already
+// holds it, that is the same condition under test and the assertion still
+// stands, so there is nothing to skip.
+func TestDiscover_IgnoresAServerOnLMStudiosRealPort(t *testing.T) {
+	testutil.NewSandbox(t)
+
+	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"data":[{"id":"a-model-nobody-asked-for","object":"model"}]}`))
+	}))
+	if ln, err := net.Listen("tcp", "127.0.0.1:1234"); err == nil {
+		srv.Listener.Close()
+		srv.Listener = ln
+		srv.Start()
+		defer srv.Close()
+	}
+
+	heads, err := (&Provider{}).Discover(context.Background())
+	if err != nil {
+		t.Fatalf("Discover errored: %v", err)
+	}
+	for _, h := range heads {
+		if strings.HasPrefix(h.ID, "lmstudio/") {
+			t.Errorf("discovery reached a server on the real port: %s at %s", h.ID, h.Endpoint)
+		}
+	}
+}
+
+// The other half of the same change: the variable exists so a real LM Studio on
+// a port other than 1234 is discoverable at all. Its port is configurable in
+// the app, and before this Hydra could only ever look at the default, the #282
+// shape one service later.
+func TestDiscover_HonoursTheLMStudioHostVariable(t *testing.T) {
+	testutil.NewSandbox(t)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"data":[{"id":"relocated-model","object":"model"}]}`))
+	}))
+	defer srv.Close()
+	t.Setenv(LMStudioHostEnv, srv.URL)
+
+	heads, err := (&Provider{}).Discover(context.Background())
+	if err != nil {
+		t.Fatalf("Discover errored: %v", err)
+	}
+	for _, h := range heads {
+		if h.ID == "lmstudio/relocated-model" {
+			if h.Endpoint != srv.URL {
+				t.Errorf("Endpoint = %q, want the relocated %q", h.Endpoint, srv.URL)
+			}
+			return
+		}
+	}
+	t.Errorf("a relocated LM Studio was not discovered: %+v", heads)
 }
