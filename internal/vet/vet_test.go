@@ -631,3 +631,29 @@ func TestResult_ShortOfBarCountsOnlyTheFilesHeldToOne(t *testing.T) {
 		t.Errorf("ShortOfBar = %d, want 1", got)
 	}
 }
+
+// Only an ensembled file has a ledger of votes to train from. Listing a
+// single-dispatch file would point the reader at a run that does not exist.
+func TestResult_TrainableIsOnlyTheEnsembledFiles(t *testing.T) {
+	r := &Result{Files: []FileOutcome{
+		{File: "a.go", TaskHash: "abc123", Bar: Bar{Target: 0.9}},
+		{File: "b.go"}, // single dispatch: nothing voted, nothing to replay
+		{File: "c.go", TaskHash: "def456", Bar: Bar{Target: 0.9}},
+	}}
+	got := r.Trainable()
+	if len(got) != 2 {
+		t.Fatalf("Trainable returned %d files, want 2", len(got))
+	}
+	for _, f := range got {
+		if f.TaskHash == "" {
+			t.Errorf("%s has no run to attach ground truth to", f.File)
+		}
+	}
+}
+
+func TestResult_TrainableIsEmptyWithNoEnsemble(t *testing.T) {
+	r := &Result{Files: []FileOutcome{{File: "a.go"}, {File: "b.go"}}}
+	if got := r.Trainable(); len(got) != 0 {
+		t.Fatalf("Trainable returned %d files for a run with no ensemble", len(got))
+	}
+}

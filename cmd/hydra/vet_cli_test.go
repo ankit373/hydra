@@ -525,3 +525,105 @@ func TestReviewEnsemble_AnUncalibratedDomainStopsTheRun(t *testing.T) {
 		t.Errorf("the advice was lost in the wrap: %v", err)
 	}
 }
+
+// The evidence is worthless if nobody is told where the verdict goes, and the
+// command must name the run that was actually recorded.
+func TestPrintVet_PointsAtWhereGroundTruthGoes(t *testing.T) {
+	var buf bytes.Buffer
+	printVet(&buf, &vet.Result{
+		Spec: &vet.Spec{Mode: "workspace"},
+		Files: []vet.FileOutcome{{
+			File: "a.go", Head: "h", TaskHash: "858cd1d7",
+			Bar: vet.Bar{Target: 0.9, Radius: 1}, Confidence: 0.95, Samples: 4,
+		}},
+	})
+	out := buf.String()
+	if !strings.Contains(out, "hyctl trust outcome 858cd1d7") {
+		t.Errorf("the report does not name the recorded run:\n%s", out)
+	}
+	// Dissenters are the whole reason this beats `hyctl trust record`.
+	if !strings.Contains(out, "dissenters") {
+		t.Errorf("the report does not say why replaying the run is worth anything:\n%s", out)
+	}
+}
+
+// A run with no ensemble recorded nothing, so offering a command that would
+// find no run is worse than saying nothing at all.
+func TestPrintVet_NoEnsembleOffersNoCommand(t *testing.T) {
+	var buf bytes.Buffer
+	printVet(&buf, &vet.Result{
+		Spec:  &vet.Spec{Mode: "workspace"},
+		Files: []vet.FileOutcome{{File: "a.go", Head: "h"}},
+	})
+	if strings.Contains(buf.String(), "trust outcome") {
+		t.Errorf("a single-dispatch run offered to train from a run it never recorded:\n%s", buf.String())
+	}
+}
+
+// With calibration present the ensemble runs, and the run it records has to be
+// reachable afterwards: without the task hash on the result, the ledger of who
+// voted is written and nothing can ever attach a verdict to it.
+func TestReviewEnsemble_RecordsAReachableRun(t *testing.T) {
+	dispatchable(t, `[{"line":1,"severity":"blocking","title":"a defect"}]`)
+
+	cal, err := trust.New(trust.DefaultPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Enough for the head to carry evidence at all; the run need not clear its
+	// bar, only be recorded.
+	for i := 0; i < 3; i++ {
+		if err := cal.Update("cody", "go", true, trust.OutcomeCorrect); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := cal.Update("cody", "go", false, trust.OutcomeIncorrect); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx := context.Background()
+	d, err := dispatch.New(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+
+	const prompt = "review this diff"
+	r := vetRouter{d: d, sw: swarm.New(d, d.Heads(), d), floor: 0.6, graphPath: "graph.json"}
+	ans, err := r.reviewEnsemble(ctx, prompt, "go", "a.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ans.TaskHash == "" {
+		t.Fatal("the ensemble recorded a ledger no verdict can ever reach")
+	}
+	if ans.TaskHash != trust.TaskHash(prompt) {
+		t.Errorf("task hash %q does not identify this run's prompt", ans.TaskHash)
+	}
+	if !ans.Bar.Set() {
+		t.Error("no bar was demanded of the file")
+	}
+
+	// The ledger is the whole point: without it the hash names a run that was
+	// never written, and `hyctl trust outcome` finds nothing to replay.
+	runs, err := trust.LoadRuns(trust.DefaultLogPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var found *trust.RunLog
+	for i := range runs {
+		if runs[i].TaskHash == ans.TaskHash {
+			found = &runs[i]
+			break
+		}
+	}
+	if found == nil {
+		t.Fatalf("no run recorded for %s: the review taught nothing about any Head", ans.TaskHash)
+	}
+	if len(found.Ledger) == 0 {
+		t.Error("the run was recorded with no ledger, so no voter can be trained from it")
+	}
+	if found.Domain != "go" {
+		t.Errorf("run domain %q: a verdict would train the wrong cell", found.Domain)
+	}
+}

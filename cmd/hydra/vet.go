@@ -92,7 +92,12 @@ func (r vetRouter) reviewEnsemble(ctx context.Context, prompt, domain, file stri
 		return vet.Answer{}, err
 	}
 
-	a := vet.Answer{Bar: bar}
+	// The ledger of who voted is what makes this run trainable later, and it is
+	// written here for the same reason the dispatch path writes it: without it
+	// a review that consulted four Heads teaches nothing about any of them.
+	logTrustRun(res, prompt, domain)
+
+	a := vet.Answer{Bar: bar, TaskHash: trust.TaskHash(prompt)}
 	if res.Trust != nil {
 		a.Output = res.Trust.Candidate
 		a.Confidence, a.Samples, a.CostUSD = res.Trust.Confidence, res.Trust.Samples, res.Trust.SpentUSD
@@ -424,6 +429,15 @@ func printVet(w io.Writer, r *vet.Result) {
 
 	if why := r.CannotSample(); why != "" {
 		fmt.Fprintf(w, "  %s\n", blockingStyle.Render("the run stopped: "+why))
+		fmt.Fprintln(w)
+	}
+	if trainable := r.Trainable(); len(trainable) > 0 {
+		fmt.Fprintf(w, "  %s\n", dimStyle.Render(fmt.Sprintf(
+			"%d file(s) recorded every Head that voted. Once you know whether a finding was real,", len(trainable))))
+		fmt.Fprintf(w, "  %s\n", dimStyle.Render(
+			"    hyctl trust outcome "+trainable[0].TaskHash+" --outcome correct|incorrect"))
+		fmt.Fprintf(w, "  %s\n", dimStyle.Render(
+			"  trains all of them, dissenters included, which is what moves specificity."))
 		fmt.Fprintln(w)
 	}
 	if short := r.ShortOfBar(); short > 0 {

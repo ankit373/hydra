@@ -55,6 +55,11 @@ type Answer struct {
 	Bar        Bar
 	Confidence float64
 	Samples    int
+
+	// TaskHash identifies the recorded ensemble run, so ground truth can be
+	// attached to it later. Empty when no ensemble ran, and therefore when
+	// there is no ledger of votes to train from.
+	TaskHash string
 }
 
 // Router routes one file's review. This package deliberately does not import
@@ -95,6 +100,7 @@ type FileOutcome struct {
 	Bar        Bar     `json:"bar,omitempty"`
 	Confidence float64 `json:"confidence,omitempty"`
 	Samples    int     `json:"samples,omitempty"`
+	TaskHash   string  `json:"task_hash,omitempty"`
 
 	// Fatal marks a failure that would repeat for every other file too, so a
 	// report says it once instead of blaming each file in turn.
@@ -148,6 +154,22 @@ func (r *Result) CannotSample() string {
 		}
 	}
 	return ""
+}
+
+// Trainable lists the files whose ensemble runs were recorded, so a caller can
+// tell the reader where ground truth would go.
+//
+// Deliberately not trained here: an ensemble asserting its own answer was right
+// is circular, and it is the shape that leaves specificity on its bare prior
+// (#771). The evidence is recorded and waits for a verdict from outside.
+func (r *Result) Trainable() []FileOutcome {
+	var out []FileOutcome
+	for _, f := range r.Files {
+		if f.TaskHash != "" {
+			out = append(out, f)
+		}
+	}
+	return out
 }
 
 // ShortOfBar counts files whose findings did not reach the confidence their
@@ -289,6 +311,7 @@ func reviewFile(ctx context.Context, r Router, spec *Spec, path string, opts Run
 	}
 	out.Head, out.Tier, out.CostUSD = ans.Head, ans.Tier, ans.CostUSD
 	out.Bar, out.Confidence, out.Samples = ans.Bar, ans.Confidence, ans.Samples
+	out.TaskHash = ans.TaskHash
 
 	found, discarded, parsed := parseFindings(ans.Output, path, ans.Head)
 	if !parsed {
