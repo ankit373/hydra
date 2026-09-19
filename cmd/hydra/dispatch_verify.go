@@ -88,7 +88,10 @@ func fileExample(res *swarm.SPRTResult, v oracle.Verdict, src, domain string) {
 	}
 	breadcrumb, _ := config.Breadcrumb()
 	added, err := evalset.Add(evalset.DefaultPath(), evalset.Example{
-		Domain: domain, Source: src, Candidate: cand,
+		// The prompt is the task, so two different questions answered identically
+		// stay two examples rather than deduping into one (#973).
+		TaskHash: evalset.TaskHashFor(res.Prompt),
+		Domain:   domain, Source: src, Candidate: cand,
 		Passed: v.Passed, Detail: v.Detail, Config: breadcrumb,
 		Enum: res.Enum, Tier: res.Tier, Head: soleAuthor(res.Attempts, cand),
 	})

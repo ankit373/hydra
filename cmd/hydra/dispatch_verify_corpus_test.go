@@ -10,6 +10,7 @@ package main
 import (
 	"context"
 	"os"
+	"strconv"
 	"testing"
 
 	"github.com/ankit373/hydra/internal/evalset"
@@ -170,5 +171,46 @@ func TestVerifyAndScoreRun_UnverifiableFilesNothing(t *testing.T) {
 
 	if n := len(corpus(t)); n != 0 {
 		t.Fatalf("corpus holds %d examples, want 0: nothing verified that answer", n)
+	}
+}
+
+// The prompt is the task. Two different questions that happen to get the same
+// answer must stay two examples, which is only true if --verify actually passes
+// the prompt through to the task hash (#973).
+func TestVerifyAndScoreRun_DifferentPromptsWithOneAnswerStayTwoExamples(t *testing.T) {
+	cliSandbox(t)
+	goRepo(t, "exit 0")
+
+	for i, prompt := range []string{"make Close idempotent", "make Flush idempotent"} {
+		runID := "rp" + strconv.Itoa(i)
+		taskID := "tp" + strconv.Itoa(i)
+		logSPRTSpan(t, runID, taskID, 0.9)
+		res := sprtRunWith("SIMPLE", 8, []swarm.Attempt{attempt("claude", "A")})
+		res.Prompt = prompt
+		verifyAndScoreRun(context.Background(), res, runID, taskID, "x.go", "go")
+	}
+
+	if n := len(corpus(t)); n != 2 {
+		t.Fatalf("corpus holds %d examples, want 2: two tasks were collapsed into one", n)
+	}
+}
+
+// And the same task verified twice is still one example, or every re-run grows
+// the corpus by a copy.
+func TestVerifyAndScoreRun_TheSameTaskTwiceIsOneExample(t *testing.T) {
+	cliSandbox(t)
+	goRepo(t, "exit 0")
+
+	for i := 0; i < 2; i++ {
+		runID := "rq" + strconv.Itoa(i)
+		taskID := "tq" + strconv.Itoa(i)
+		logSPRTSpan(t, runID, taskID, 0.9)
+		res := sprtRunWith("SIMPLE", 8, []swarm.Attempt{attempt("claude", "A")})
+		res.Prompt = "make Close idempotent"
+		verifyAndScoreRun(context.Background(), res, runID, taskID, "x.go", "go")
+	}
+
+	if n := len(corpus(t)); n != 1 {
+		t.Fatalf("corpus holds %d examples, want 1", n)
 	}
 }

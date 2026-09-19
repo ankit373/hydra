@@ -1995,6 +1995,7 @@ func cmdOracle() *cobra.Command {
 	}
 	var source, domain, candidateFile, record, scoreRun, scoreSpan, enumKey string
 	var tierNum int
+	var taskText string
 	verify := &cobra.Command{
 		Use:   "verify <command...>",
 		Short: "Run a verifier command; report pass/fail + its calibrated LLR",
@@ -2077,7 +2078,11 @@ func cmdOracle() *cobra.Command {
 			if candidate != "" {
 				breadcrumb, _ := config.Breadcrumb()
 				added, aerr := evalset.Add(evalset.DefaultPath(), evalset.Example{
-					Domain: domain, Source: src, Candidate: candidate,
+					// Hydra does not see the task on this path, so it is the
+					// caller's to name; unnamed stays unknown rather than being
+					// stood in for by the domain, which collided (#973).
+					TaskHash: evalset.TaskHashFor(taskText),
+					Domain:   domain, Source: src, Candidate: candidate,
 					Passed: v.Passed, Detail: v.Detail, Config: breadcrumb,
 					Enum: enum, Tier: tier, Head: spanEv.Head,
 				})
@@ -2127,6 +2132,7 @@ func cmdOracle() *cobra.Command {
 	}
 	verify.Flags().StringVar(&source, "source", "", "calibration source id (default: verifier:<cmd>)")
 	verify.Flags().StringVar(&domain, "domain", "", "task domain")
+	verify.Flags().StringVar(&taskText, "task", "", "the task this answer was for, so two tasks sharing an answer stay two examples")
 	verify.Flags().StringVar(&candidateFile, "candidate", "", "file holding the answer to verify (for {file}/{answer})")
 	verify.Flags().StringVar(&record, "record", "", "train calibration with the true outcome: correct|incorrect")
 	verify.Flags().StringVar(&scoreRun, "run", "", "run holding the span to score (default: newest)")

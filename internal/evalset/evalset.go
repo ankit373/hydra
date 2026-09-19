@@ -93,6 +93,29 @@ func Hash(s string) string {
 	return hex.EncodeToString(sum[:16])
 }
 
+// TaskHashFor identifies a task a writer actually knows, and is the one
+// derivation for all of them: normalising a key on one write path and not
+// another is worse than not normalising at all (#888).
+//
+// Empty in, empty out, so a caller can pass what it has and let Add fall back
+// rather than deciding the unknown case for itself.
+func TaskHashFor(task string) string {
+	task = strings.TrimSpace(task)
+	if task == "" {
+		return ""
+	}
+	return Hash(task)
+}
+
+// taskHashFallback identifies an example whose task nobody named. Domain and
+// source stay in the key, so a Go answer and a Rust answer that happen to share
+// text are still two examples, and a corpus written before #973 keys the same
+// way it always did. What it cannot do is tell two tasks in one domain apart,
+// which is exactly why a writer that knows the task passes TaskHashFor.
+func taskHashFallback(domain, source string) string {
+	return Hash(domain + "\x00" + source)
+}
+
 // The dedup sidecar holds only the two hashes Add compares, so a duplicate
 // check reads tens of bytes per example rather than unmarshalling every stored
 // candidate. Rescanning the corpus made filling it quadratic (#796).
@@ -235,7 +258,7 @@ func Add(path string, e Example) (bool, error) {
 	}
 	e.CandidateHash = Hash(e.Candidate)
 	if e.TaskHash == "" {
-		e.TaskHash = Hash(e.Domain + "\x00" + e.Source)
+		e.TaskHash = taskHashFallback(e.Domain, e.Source)
 	}
 	if !e.PII {
 		e.PII = policy.Classify(e.Candidate).PII

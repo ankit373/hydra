@@ -256,3 +256,86 @@ func TestDefaultPathIsNotUnderLogs(t *testing.T) {
 		t.Errorf("eval set is under logs/ (%q), a retention pass would delete it", p)
 	}
 }
+
+// The defect: every task in one domain hashed to one identity, so dedup fell
+// back to the candidate alone and two different questions answered identically
+// were filed as one example (#973).
+func TestAdd_TwoTasksSharingAnAnswerStayTwoExamples(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "examples.jsonl")
+
+	a := ex("go", "return nil", true)
+	a.TaskHash = TaskHashFor("make Close a no-op when already closed")
+	b := ex("go", "return nil", true)
+	b.TaskHash = TaskHashFor("make Flush a no-op when the buffer is empty")
+
+	if added, err := Add(p, a); err != nil || !added {
+		t.Fatalf("first: added=%v err=%v", added, err)
+	}
+	added, err := Add(p, b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !added {
+		t.Fatal("second task was deduped against the first; they share only the answer")
+	}
+	if got, _ := Load(p); len(got) != 2 {
+		t.Fatalf("corpus holds %d examples, want 2", len(got))
+	}
+}
+
+// Dedup still has to work, or the store grows a copy per run.
+func TestAdd_SameTaskAndAnswerIsStillOneExample(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "examples.jsonl")
+	e := ex("go", "return nil", true)
+	e.TaskHash = TaskHashFor("make Close a no-op when already closed")
+
+	if _, err := Add(p, e); err != nil {
+		t.Fatal(err)
+	}
+	added, err := Add(p, e)
+	if err != nil || added {
+		t.Fatalf("added=%v err=%v, want false: same task, same answer", added, err)
+	}
+}
+
+// An unnamed task falls back to domain and source, and the domain has to stay in
+// the key: dropping it would make one answer in two languages a single example.
+func TestAdd_UnnamedTasksInDifferentDomainsDoNotCollide(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "examples.jsonl")
+	if _, err := Add(p, ex("go", "return nil", true)); err != nil {
+		t.Fatal(err)
+	}
+	added, err := Add(p, ex("rust", "return nil", true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !added {
+		t.Fatal("a rust answer deduped against a go one; domain left the dedup key")
+	}
+}
+
+// A corpus written before #973 keys on the fallback. Upgrading must not re-add
+// every example anyone already had.
+func TestAdd_ACorpusWrittenBeforeTheChangeStillDedups(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "examples.jsonl")
+	legacy := ex("go", "func main() {}", true)
+	if _, err := Add(p, legacy); err != nil {
+		t.Fatal(err)
+	}
+	// Same example, same writer, after the change: still one record.
+	added, err := Add(p, ex("go", "func main() {}", true))
+	if err != nil || added {
+		t.Fatalf("added=%v err=%v, want false: upgrading must not duplicate the corpus", added, err)
+	}
+}
+
+// Empty in, empty out, so a caller passes what it has and Add decides the
+// unknown case in one place rather than every writer inventing its own.
+func TestTaskHashFor_EmptyTaskIsEmpty(t *testing.T) {
+	if got := TaskHashFor("   "); got != "" {
+		t.Errorf("TaskHashFor(blank) = %q, want empty", got)
+	}
+	if TaskHashFor("a") == TaskHashFor("b") {
+		t.Error("different tasks hashed the same")
+	}
+}
