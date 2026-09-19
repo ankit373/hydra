@@ -26,7 +26,19 @@ const (
 	backgroundCap = 1 << 10
 )
 
-// Answer is one head's reply to one file's review.
+// Bar is the confidence one file had to clear, and where its blast radius came
+// from. Measured is false when the radius is a default rather than a reading
+// off the graph, which must never render as blast-radius-aware routing (#251).
+type Bar struct {
+	Target   float64 `json:"target"`
+	Radius   float64 `json:"radius"`
+	Measured bool    `json:"radius_measured"`
+}
+
+// Set reports whether a bar was actually demanded of this file.
+func (b Bar) Set() bool { return b.Target > 0 }
+
+// Answer is what answered one file's review: one head, or an ensemble of them.
 type Answer struct {
 	Output       string
 	Head         string
@@ -35,6 +47,12 @@ type Answer struct {
 	CostUSD      float64
 	InputTokens  int
 	OutputTokens int
+
+	// Bar, Confidence and Samples describe an ensemble review, and are zero on
+	// the single-dispatch path where nothing measured a confidence at all.
+	Bar        Bar
+	Confidence float64
+	Samples    int
 }
 
 // Router routes one file's review. This package deliberately does not import
@@ -69,6 +87,26 @@ type FileOutcome struct {
 	Unparsed  bool   `json:"unparsed,omitempty"`
 	Raw       string `json:"raw,omitempty"`
 	Err       string `json:"error,omitempty"`
+
+	// Bar, Confidence and Samples are carried so a report can say what this
+	// file had to clear and whether it did. Zero on the single-dispatch path.
+	Bar        Bar     `json:"bar,omitempty"`
+	Confidence float64 `json:"confidence,omitempty"`
+	Samples    int     `json:"samples,omitempty"`
+}
+
+// Cleared reports whether this file's findings met the bar it was held to.
+//
+// A file that never cleared is the reason the field exists: its findings are
+// still real, but presenting them beside a cleared file's without saying so
+// would report a confidence the run did not reach.
+func (f FileOutcome) Cleared() bool {
+	return f.Bar.Set() && f.Confidence >= f.Bar.Target
+}
+
+// ShortOfBar is the opposite, and excludes files that were never held to one.
+func (f FileOutcome) ShortOfBar() bool {
+	return f.Bar.Set() && f.Confidence < f.Bar.Target
 }
 
 // Result is one vet run.
@@ -84,6 +122,18 @@ func (r *Result) BlockingCount() int {
 	n := 0
 	for _, f := range r.Findings {
 		if f.Severity == Blocking {
+			n++
+		}
+	}
+	return n
+}
+
+// ShortOfBar counts files whose findings did not reach the confidence their
+// blast radius demanded.
+func (r *Result) ShortOfBar() int {
+	n := 0
+	for _, f := range r.Files {
+		if f.ShortOfBar() {
 			n++
 		}
 	}
@@ -203,6 +253,7 @@ func reviewFile(ctx context.Context, r Router, spec *Spec, path string, opts Run
 		return out, nil
 	}
 	out.Head, out.Tier, out.CostUSD = ans.Head, ans.Tier, ans.CostUSD
+	out.Bar, out.Confidence, out.Samples = ans.Bar, ans.Confidence, ans.Samples
 
 	found, discarded, parsed := parseFindings(ans.Output, path, ans.Head)
 	if !parsed {
