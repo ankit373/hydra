@@ -234,6 +234,7 @@ func BuildWith(heads []provider.Head, servers []LocalServer) (*Report, error) {
 		privilegeCheck(r.Privilege),
 		bomCheck(r.BOM),
 		localServerCheck(localHeads(heads), servers),
+		advisoryCheck(servers),
 	}
 	r.RiskHistory = ledger.ByDayRisk(events)
 

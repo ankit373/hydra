@@ -72,6 +72,7 @@ floor internal/modelpull            92
 floor internal/ope                  92
 floor internal/optimal              96
 floor internal/oracle               85
+floor internal/osv                  86
 floor internal/otlp                 85
 floor internal/parallel             87
 floor internal/payload              80
