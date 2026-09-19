@@ -52,7 +52,7 @@ type ToolCallFunction struct {
 // CanUseTools reports whether a head can be sent function definitions and
 // answer with structured calls.
 //
-// Only the OpenAI-compatible path carries them. Anthropic, Gemini, Cohere and
+// The OpenAI-compatible path and Anthropic carry them. Gemini, Cohere and
 // Bedrock each shape tools differently, and Replicate polls rather than chats.
 // The predicate exists so a dispatch can skip a head that cannot, because a
 // silently dropped tool array is not a degraded answer: the caller's agent loop
@@ -62,11 +62,23 @@ func CanUseTools(h provider.Head) bool {
 		return false
 	}
 	switch h.Provider {
-	case "anthropic", "google", "cohere", "bedrock", "replicate":
+	case "anthropic":
+		return true
+	case "google", "cohere", "bedrock", "replicate":
 		return false
 	}
 	_, err := openAICompatConfigFor(h)
 	return err == nil
+}
+
+// toolArguments renders a dialect's argument object as the JSON string
+// ToolCall carries, so one shape reaches every caller whatever the head spoke.
+// An absent input is "{}" rather than empty: a client parses this.
+func toolArguments(input json.RawMessage) string {
+	if len(input) == 0 {
+		return "{}"
+	}
+	return string(input)
 }
 
 // toolCallStream reassembles tool calls that arrive in fragments, which is how
@@ -137,5 +149,12 @@ func (t *toolCallStream) find(frag ToolCall) int {
 // rather than a map keyed by index, so two calls cannot order themselves
 // differently on two runs of the same stream.
 func (t *toolCallStream) done() []ToolCall {
+	// Renumbered by position. The wire index says how fragments were
+	// interleaved and the dialects count different things (OpenAI counts
+	// calls, Anthropic counts content blocks, so its first call is often 1),
+	// which would make one answer read differently depending on who spoke it.
+	for i := range t.calls {
+		t.calls[i].Index = i
+	}
 	return t.calls
 }
