@@ -118,7 +118,7 @@ type Store struct {
 	maxN    int
 	entries []Entry
 	vecs    [][]float32
-	terms   []map[string]bool
+	terms   [][]string
 	byKey   map[string]int
 	bytes   int64
 	stats   counters

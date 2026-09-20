@@ -69,13 +69,13 @@ func TestSameQuestion_AcceptsFunctionWordDifferences(t *testing.T) {
 	}
 }
 
-// An empty content set matches nothing, or a prompt of pure function words
+// An empty content sequence matches nothing, or a prompt of pure function words
 // would be the same question as every other such prompt.
 func TestSameQuestion_EmptyMatchesNothing(t *testing.T) {
 	if sameQuestion(content("how do i"), content("what is it")) {
 		t.Error("two prompts with no content words were treated as the same question")
 	}
-	if sameQuestion(map[string]bool{}, map[string]bool{}) {
-		t.Error("two empty content sets matched")
+	if sameQuestion(nil, nil) {
+		t.Error("two empty content sequences matched")
 	}
 }

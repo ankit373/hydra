@@ -55,37 +55,50 @@ var stopwords = map[string]bool{
 	"you": true, "your": true,
 }
 
-// content is the set of tokens that carry the question, from the same
-// tokenizer the lexical index uses so the cache and recall cannot disagree
-// about what a word is.
-func content(normalized string) map[string]bool {
-	out := map[string]bool{}
+// content is the tokens that carry the question, in the order they were
+// written, from the same tokenizer the lexical index uses so the cache and
+// recall cannot disagree about what a word is.
+//
+// A sequence rather than a set. Order is what carries the direction of an
+// operation, and discarding it made "merge develop into main" and "merge main
+// into develop" the same question (#1010). Repeats are kept for the same
+// reason: "test the test" is not "test".
+func content(normalized string) []string {
+	var out []string
 	for _, tok := range retrieve.Tokenize(normalized) {
 		if !stopwords[tok] {
-			out[tok] = true
+			out = append(out, tok)
 		}
 	}
 	return out
 }
 
-// sameQuestion reports whether two prompts ask about exactly the same things.
+// sameQuestion reports whether two prompts ask exactly the same thing.
 //
 // This is the gate that exists because of a measurement, not a hunch. Embedded
 // with nomic-embed-text, `--max-cost` and `--max-heads` sit at 0.8557 cosine
 // and `internal/awsconf` and `internal/executor` at 0.8598, both *above* the
 // 0.85 a cosine-only cache would serve at (#911). The pairs differ by one
-// identifier, which is exactly what a content-token set catches and what
-// distance in embedding space does not.
+// identifier, which is exactly what content tokens catch and what distance in
+// embedding space does not.
 //
-// Set equality rather than an overlap ratio, because a ratio needs a threshold
-// and there is no honest number to put there: on a six-word question a single
+// Equality rather than an overlap ratio, because a ratio needs a threshold and
+// there is no honest number to put there: on a six-word question a single
 // changed noun still scores 0.71.
-func sameQuestion(a, b map[string]bool) bool {
+//
+// Compared in order. As a set this returned true for a question and its
+// reverse, and the dense half does not save it: six order-swapped pairs measure
+// 0.9736 to 0.9913 cosine, above the 0.95 threshold, so raising the threshold
+// makes it worse rather than better (#1010). Every perturbation the false-hit
+// harness counts as a true hit leaves the order alone, since case, punctuation
+// and whitespace are normalised before tokenizing and filler words are
+// stopwords.
+func sameQuestion(a, b []string) bool {
 	if len(a) != len(b) || len(a) == 0 {
 		return false
 	}
-	for tok := range a {
-		if !b[tok] {
+	for i := range a {
+		if a[i] != b[i] {
 			return false
 		}
 	}

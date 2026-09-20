@@ -44,7 +44,7 @@ func TestFalseHitRate(t *testing.T) {
 	}
 
 	vecs := make([][]float32, len(docs))
-	terms := make([]map[string]bool, len(docs))
+	terms := make([][]string, len(docs))
 	for i, d := range docs {
 		v, err := emb.Embed(context.Background(), d)
 		if err != nil {
