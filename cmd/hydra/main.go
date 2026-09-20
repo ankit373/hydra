@@ -31,6 +31,7 @@ import (
 	"github.com/ankit373/hydra/internal/budget"
 	"github.com/ankit373/hydra/internal/build"
 	"github.com/ankit373/hydra/internal/capabilities"
+	"github.com/ankit373/hydra/internal/classify"
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/cost"
 	"github.com/ankit373/hydra/internal/dispatch"
@@ -1548,7 +1549,37 @@ improved against.`,
 	}
 	training.Flags().BoolVar(&jsonOut, "json", false, "machine-readable output")
 
-	cmd.AddCommand(list, stats, readiness, training)
+	var holdOuts int
+	classifyCmd := &cobra.Command{
+		Use:   "classify",
+		Short: "Whether similarity to past work predicts whether an enum passes",
+		RunE: func(_ *cobra.Command, _ []string) error {
+			all, err := evalset.Load(evalset.DefaultPath())
+			if err != nil {
+				return err
+			}
+			corpus, err := classify.Load(all)
+			if err != nil {
+				return classifyRefusal(err)
+			}
+			res, err := classify.Evaluate(corpus, classify.DefaultK, holdOuts)
+			if err != nil {
+				return classifyRefusal(err)
+			}
+			if jsonOut {
+				raw, _ := json.MarshalIndent(res, "", "  ")
+				fmt.Println(string(raw))
+				return nil
+			}
+			printClassifyResult(res)
+			return nil
+		},
+	}
+	classifyCmd.Flags().BoolVar(&jsonOut, "json", false, "machine-readable output")
+	classifyCmd.Flags().IntVar(&holdOuts, "hold-out", classify.DefaultHoldOuts,
+		"how many examples to hold out; leave-one-out over the whole corpus is quadratic")
+
+	cmd.AddCommand(list, stats, readiness, training, classifyCmd)
 	return cmd
 }
 

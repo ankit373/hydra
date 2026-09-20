@@ -92,6 +92,7 @@
       "Oracle-verified eval corpus (hyctl eval), labelled examples kept verbatim and exempt from retention, each tagged with the routing decision it judges",
       "Corpus readiness (hyctl eval readiness), whether enough verified examples exist per routing enum to fit a routing choice rather than guess at one",
       "Corpus trainability (hyctl eval training), whether the verified examples carry the prompt vectors a classifier could be fitted on, reported per embedding model and never summed across them, because two models put one sentence in different spaces",
+      "Classifier evidence (hyctl eval classify), leave-one-out over the corpus asking whether similarity to past work predicts whether a routing key passes, with resolution scored against a permutation null so a finite corpus cannot report noise as a finding",
       "hyverify, a standalone verifier that records what a repository's own test suite says about a candidate file, with no router and no Hydra config, because a serving-side router never sees your test suite and cannot manufacture that ground truth",
       "hyctl trace seal, folds old run logs into compressed monthly segments, losslessly and invisibly to readers",
       "Routing rules in config (registry/signals.yaml), priority-ordered rules over PII, injection, blast-radius and keyword signals that pin a tier, force local-only, raise the confidence bar or refuse; ships empty so routing is unchanged until you write one",
