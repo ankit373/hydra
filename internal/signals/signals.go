@@ -34,6 +34,16 @@ type Input struct {
 	// Calibrated says whether internal/trust has evidence for this domain.
 	// Nil when the calibration store could not be read at all.
 	Calibrated *bool
+
+	// CorpusPassRate and CorpusSupport are what internal/classify found near
+	// this prompt. Both nil unless a rule asked: the lookup costs an embedding
+	// call, and #750 removed one of those from the dispatch path already.
+	//
+	// Nil rather than zero every way the corpus cannot speak. A zero rate is a
+	// real reading meaning work like this always failed, so a nil that became
+	// zero would fire exactly the rules written to catch failing work.
+	CorpusPassRate *float64
+	CorpusSupport  *int
 }
 
 // Keyword is a named set of phrases, declared in signals.yaml, that becomes
@@ -74,7 +84,14 @@ const (
 	SigInjection       = "injection.matched"
 	SigBlastRadius     = "graph.blast_radius"
 	SigTrustCalibrated = "trust.calibrated"
+	SigCorpusKnown     = "corpus.known"
+	SigCorpusPassRate  = "corpus.pass_rate"
+	SigCorpusSupport   = "corpus.support"
 )
+
+// CorpusSignals are the ones whose value costs an embedding call, so a
+// dispatch computes them only when a loaded rule names one.
+var CorpusSignals = []string{SigCorpusKnown, SigCorpusPassRate, SigCorpusSupport}
 
 // PIISignal is the signal name for one detector.
 func PIISignal(detector string) string { return "pii." + Normalize(detector) + ".matched" }
@@ -90,6 +107,9 @@ func SchemaFor(keywords []Keyword) Schema {
 		SigInjection:       KindBool,
 		SigBlastRadius:     KindNumber,
 		SigTrustCalibrated: KindBool,
+		SigCorpusKnown:     KindBool,
+		SigCorpusPassRate:  KindNumber,
+		SigCorpusSupport:   KindNumber,
 	}
 	for _, d := range policy.DetectorNames() {
 		sc[PIISignal(d)] = KindBool
@@ -127,6 +147,14 @@ func Collect(in Input, keywords []Keyword) Set {
 	}
 	if in.Calibrated != nil {
 		vals[SigTrustCalibrated] = *in.Calibrated
+	}
+	// All three absent together, so `hyctl dispatch --dry-run` reports nothing
+	// rather than a false nobody looked for. An absent bool already reads false,
+	// which is what `!corpus.known` needs.
+	if in.CorpusPassRate != nil && in.CorpusSupport != nil {
+		vals[SigCorpusKnown] = true
+		vals[SigCorpusPassRate] = *in.CorpusPassRate
+		vals[SigCorpusSupport] = float64(*in.CorpusSupport)
 	}
 
 	lower := strings.ToLower(in.Prompt)

@@ -82,20 +82,33 @@ func TestExpr_Precedence(t *testing.T) {
 	}
 }
 
-// A signal the set does not carry is its type's zero, so a provider that could
-// not run leaves a rule unmatched rather than failing the dispatch.
-func TestExpr_AbsentSignalIsTheTypeZero(t *testing.T) {
+// A signal nothing measured leaves a rule unmatched, rather than failing the
+// dispatch and rather than matching on a zero nobody observed.
+//
+// This test used to assert the type's zero, and its third case asserted that
+// `s.name == ""` *matched* an absent string, which is the opposite of the
+// "leaves a rule unmatched" it claimed in the same breath. Absence as zero is
+// the #848 defect: every `< bound` rule fires on evidence nobody has (#1021).
+func TestExpr_AbsentSignalMatchesNothing(t *testing.T) {
 	sc := testSchema()
 	empty := Set{}
 
-	if got, _ := evalBool(mustParse(t, "a.matched", sc), empty); got {
-		t.Error("an absent bool must read false")
+	for _, src := range []string{
+		"a.matched",
+		"n.count > 0",
+		"n.count < 5",  // the one that used to fire on every unmeasured dispatch
+		"n.count == 0", // and the one that looks like an absence check but is not
+		`s.name == ""`,
+	} {
+		if got, err := evalBool(mustParse(t, src, sc), empty); got || err != nil {
+			t.Errorf("%q matched with nothing measured (got %v, err %v)", src, got, err)
+		}
 	}
-	if got, _ := evalBool(mustParse(t, "n.count > 0", sc), empty); got {
-		t.Error("an absent number must read 0")
-	}
-	if got, _ := evalBool(mustParse(t, `s.name == ""`, sc), empty); !got {
-		t.Error("an absent string must read empty")
+
+	// Negation is how a rule asks "we did not see this", and it still works:
+	// an unmeasured bool is not true.
+	if got, err := evalBool(mustParse(t, "!a.matched", sc), empty); !got || err != nil {
+		t.Errorf("!absent must read true (got %v, err %v)", got, err)
 	}
 }
 
@@ -191,5 +204,27 @@ func TestKind_String(t *testing.T) {
 		if got := k.String(); got != want {
 			t.Errorf("got %q want %q", got, want)
 		}
+	}
+}
+
+// The rule shape #1021 was filed for: a low bound on an unmeasured number used
+// to match every time, which is how a routing rule fires on evidence nobody has.
+func TestExpr_LowBoundDoesNotFireOnAnUnmeasuredNumber(t *testing.T) {
+	sc := testSchema()
+	n := mustParse(t, "n.count < 5", sc)
+
+	if got, _ := evalBool(n, Set{}); got {
+		t.Error("an unmeasured number matched a rule written for small ones")
+	}
+	// The same rule still works on a real reading, in both directions.
+	if got, _ := evalBool(n, Set{"n.count": float64(2)}); !got {
+		t.Error("a measured 2 did not match < 5")
+	}
+	if got, _ := evalBool(n, Set{"n.count": float64(9)}); got {
+		t.Error("a measured 9 matched < 5")
+	}
+	// Zero is a reading, and must still be one.
+	if got, _ := evalBool(n, Set{"n.count": float64(0)}); !got {
+		t.Error("a measured 0 stopped matching < 5; absence was conflated with zero the other way")
 	}
 }
