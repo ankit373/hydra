@@ -845,6 +845,11 @@ hyctl dispatch --local "..."   # local models only, no API calls
 hyctl dispatch --swarm --swarm-mode best "..."   # fan out to many heads, judge best
 hyctl dispatch --confidence 0.95 "..."  # SPRT: sample until this P(correct) is reached
 
+# Serve the router to anything that speaks OpenAI
+hyctl serve                             # OpenAI-compatible endpoint, loopback only
+#   the `model` field is the routing instruction: `hydra`, `hydra/hard`, `hydra/t4`, or a head id.
+#   streams as server-sent events, and passes tool calls through on every dialect it speaks.
+
 # Tasks waiting on you
 # A ledger policy can answer `ask` instead of allow or deny. Dispatch then stops
 # before running anything and parks the task until you answer it.
@@ -912,6 +917,11 @@ hyctl review ...                        # code review / approve / reject / QA
 hyctl parallel ...                      # fan independent tasks across heads
 hyctl workflow run --step A --step B    # multi-step task, each step routed on its own
 hyctl workflow resume <id>              # continue a killed workflow from where it stopped
+
+# Reviewing a diff
+hyctl vet                               # review the working diff, each file routed to its own head
+hyctl vet --confidence 0.9              # sample each file with as many heads as its blast radius warrants
+hyctl vet --json                        # exits 3 on a blocking finding, so a script can gate on it
 ```
 
 The corpus behind `hyctl eval` is the one thing Hydra keeps verbatim and forever, because it is the
@@ -1191,7 +1201,7 @@ curl -fsSL https://raw.githubusercontent.com/ankit373/hydra/main/install-app.sh 
 It resolves the newest release (the asset names embed their version, so GitHub's `/latest/download/`
 shortcut cannot address them), verifies the download against the published `.sha256`, installs the
 `.app` to `/Applications`, or the binary to `~/.local/share/hydra` with a `~/.local/bin` symlink on
-Linux, and clears the macOS quarantine flag so the first launch works. `HYDRA_VERSION=v1.4.2` pins
+Linux, and clears the macOS quarantine flag so the first launch works. `HYDRA_VERSION=v1.5.0` pins
 a release; `HYDRA_APP_DIR` changes where it lands.
 
 **Or take the artifact directly**, from the
