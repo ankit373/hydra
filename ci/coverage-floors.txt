@@ -56,6 +56,7 @@ floor internal/embed                80
 # internal/dispatch (-coverpkg): Summarize and Origins are 100% there. A
 # package's own profile cannot see its caller's tests, so 58 understates it.
 floor internal/egress               55
+floor internal/entity               85
 floor internal/entropy              88
 # internal/evalset reads 90.3% on develop and 86.5% with #796's hash sidecar,
 # whose rebuild and lock paths are driven but not exhaustively. Floored under

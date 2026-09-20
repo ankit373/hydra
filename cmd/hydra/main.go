@@ -151,7 +151,7 @@ func rootCmd() *cobra.Command {
 		cmdEdit(), cmdReview(), cmdVet(), cmdParallel(), cmdCost(), cmdStats(),
 		cmdPricing(), cmdTrust(), cmdGraph(), cmdContext(), cmdMCP(), cmdOracle(), cmdEval(), cmdTrace(), cmdModels(),
 		cmdWorkflow(), cmdServe(),
-		cmdSecurity(), cmdAsk(), cmdVersion(), cmdUpgrade(),
+		cmdSecurity(), cmdPolicy(), cmdAsk(), cmdVersion(), cmdUpgrade(),
 	)
 	return root
 }

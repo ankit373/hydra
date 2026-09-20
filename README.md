@@ -324,6 +324,8 @@ Coverage is measured rather than claimed. Against the [presidio-research][pr] sy
 
 [pr]: https://github.com/microsoft/presidio-research
 
+`hyctl policy ner --head <id>` measures whether a head can read the half no pattern reaches. It asks 100 labelled texts and reports recall and false positives separately, because each alone is trivially passed: a head that answers NO to everything scores a flawless false-positive rate, and one that answers YES to everything scores perfect recall. Measured on this machine, a 7B local model scored 0.82 recall at 0.02 false positives while a 0.5B scored 0.72 at 0.75, which would force local-only routing on three quarters of ordinary work. An answer that is neither yes nor no is counted apart and never read as a no. **Nothing routes on this yet**, by design: it is the measurement that would earn it.
+
 ```bash
 $ hyctl dispatch "process payment for card 4111-1111-1111-1111"
 
