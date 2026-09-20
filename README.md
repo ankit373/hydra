@@ -316,9 +316,13 @@ When you have Ollama, Hydra picks the best model for your actual available memor
 
 Enable local-only policy in `hyctl init` and a prompt matching a PII detector is routed to a local head rather than a network one, at the dispatch layer, before any API call is made.
 
-Detected patterns: Social Security Numbers, credit card numbers, email addresses, API keys and tokens, IP addresses, private key material.
+Detected patterns: Social Security Numbers, credit card numbers, phone numbers, IBANs, email addresses, API keys and tokens, IP addresses, private key material.
 
 **What this is not.** Detection is a denylist over the prompt string, so it can only stop what somebody wrote a pattern for. That is why the egress gate below classifies by path instead, and why `hyctl security` withholds its coverage score entirely while the access policy still defaults to allow.
+
+Coverage is measured rather than claimed. Against the [presidio-research][pr] synthetic set, some detector fires on 18.7% of the 1,387 texts that carry PII: 100% of emails, SSNs and IBANs, 93% of cards and IP addresses, and 69% of phone numbers. The gap is names, street addresses and organisations, 1,509 spans with no pattern to write, which is what a trained NER model exists for. Phone numbers are recognised by a country code, a parenthesised area code, the 3-3-4 grouping or a trunk zero; a bare run of digits is refused for the same reason nine bare digits are not read as an SSN. Re-run the figures with `go test ./internal/policy -run TestPII_Recall -v`.
+
+[pr]: https://github.com/microsoft/presidio-research
 
 ```bash
 $ hyctl dispatch "process payment for card 4111-1111-1111-1111"

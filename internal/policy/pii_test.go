@@ -158,3 +158,76 @@ func TestContainsPII_KnownFalsePositive_VersionInPath(t *testing.T) {
 		t.Error("an address inside a URL must still be detected")
 	}
 }
+
+// The spellings that carry a marker ordinary digits do not. A bare run is
+// deliberately not one of them, for the reason nine bare digits are not an SSN.
+func TestDetectPII_PhoneNumber(t *testing.T) {
+	detected := []string{
+		"call me on +1-984-182-0190",
+		"Tel: +46 (0)8 928 571 38",
+		"reach him at 905-674-3793",
+		"office 541.714.1388",
+		"phone: 07700 063 966",
+		"mobile 0490 75 40 81",
+		"(08) 8747 6301 is the desk",
+		"Desk: +1-903-140-4508x769",
+		"phone:\n0393 1144137",
+	}
+	for _, in := range detected {
+		t.Run(in, func(t *testing.T) {
+			if !has(DetectPII(Request{Prompt: in}), "phone number") {
+				t.Errorf("missed a phone number: %q", in)
+			}
+		})
+	}
+
+	// Every one of these was a real hit against Loki and the Go module cache
+	// before its validator existed, so each pins one class rather than a guess.
+	clean := []string{
+		"the zero time is 0001-01-01 and nothing before it",
+		"bit pattern 0000 0RRR 0000 0000 0000 0000",
+		"podUID=\"69bc5e6c-0451-443e-af8a-c831871afbb8\"",
+		"MAC 0123.4567.89ab.cdef",
+		"seed=(seed*1664525+1013904223)>>>0",
+		"card 5500 0055 5555 5559 on file",
+		"Date: 2020-06-20 14:11:22",
+		"placeholder 111-111-1111",
+		"ports 8080 9090 and 3000",
+		"go 1.24.0 released",
+		"a date of 0234-05-06 in the record", // the ISO shape, digits above one
+		"short 012 34 here",                  // under E.164's 7
+		"long +12 345 678 901 234 567 here",  // over E.164's 15
+		"x = +0.234567890 exactly",           // no country code starts with zero
+	}
+	for _, in := range clean {
+		t.Run(in, func(t *testing.T) {
+			if has(DetectPII(Request{Prompt: in}), "phone number") {
+				t.Errorf("false positive: %q", in)
+			}
+		})
+	}
+}
+
+// mod-97 is to an IBAN what Luhn is to a card, and the country registry is what
+// stops a hex blob that passes mod-97 by chance from reading as an account.
+func TestDetectPII_IBAN(t *testing.T) {
+	for _, in := range []string{
+		"GB56HXDO88167774656119",
+		"transfer to gb42nawi04454264788619 today",
+		"DE89370400440532013000",
+	} {
+		if !has(DetectPII(Request{Prompt: in}), "iban") {
+			t.Errorf("missed an IBAN: %q", in)
+		}
+	}
+	for _, in := range []string{
+		"mustHexDecode(\"fb41d452eb80200000\")", // passes mod-97, no such country
+		"GB56HXDO8816777465611",                 // right country, wrong length
+		"GB57HXDO88167774656119",                // right shape, bad checksum
+		"ZZ00XXXXXXXXXXXXXXXXXX",                // not a country at all
+	} {
+		if has(DetectPII(Request{Prompt: in}), "iban") {
+			t.Errorf("false positive: %q", in)
+		}
+	}
+}
