@@ -7,6 +7,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"io"
@@ -15,6 +16,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/ankit373/hydra/internal/cache"
+	"github.com/ankit373/hydra/internal/embed"
 	"github.com/ankit373/hydra/internal/evalset"
 	"github.com/ankit373/hydra/internal/trust"
 	"github.com/ankit373/hydra/internal/util"
@@ -43,12 +46,13 @@ func run(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("hyverify", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	var (
-		candidate = fs.String("candidate", "", "file the verdict is about (required)")
-		task      = fs.String("task", "", "what was asked; without it two tasks in one domain share an identity")
-		domain    = fs.String("domain", "", "calibration domain (default: derived from the candidate)")
-		enum      = fs.String("enum", "", "routing enum this example judges, when a router chose one")
-		head      = fs.String("head", "", "model that produced the candidate")
-		out       = fs.String("out", DefaultOut, "corpus to append to")
+		candidate  = fs.String("candidate", "", "file the verdict is about (required)")
+		task       = fs.String("task", "", "what was asked; without it two tasks in one domain share an identity")
+		domain     = fs.String("domain", "", "calibration domain (default: derived from the candidate)")
+		enum       = fs.String("enum", "", "routing enum this example judges, when a router chose one")
+		head       = fs.String("head", "", "model that produced the candidate")
+		out        = fs.String("out", DefaultOut, "corpus to append to")
+		embedModel = fs.String("embed-model", "", "embedding model to vectorise the task with (off unless named)")
 	)
 	fs.Usage = func() {
 		fmt.Fprintf(stderr, "hyverify --candidate <file> [flags] [-- <command>...]\n\n"+
@@ -97,15 +101,18 @@ func run(args []string, stdout, stderr io.Writer) int {
 	if dom == "" {
 		dom = trust.DomainForFile(abs)
 	}
+	vec, model := embedTask(*embedModel, *task)
 	added, err := evalset.Add(*out, evalset.Example{
-		TaskHash:  evalset.TaskHashFor(*task),
-		Domain:    dom,
-		Source:    "hyverify",
-		Candidate: string(content),
-		Passed:    passed,
-		Detail:    detail,
-		Enum:      *enum,
-		Head:      *head,
+		TaskHash:   evalset.TaskHashFor(*task),
+		Domain:     dom,
+		Source:     "hyverify",
+		Candidate:  string(content),
+		Passed:     passed,
+		Detail:     detail,
+		Enum:       *enum,
+		Head:       *head,
+		Embedding:  util.EncodeVec(vec),
+		EmbedModel: model,
 	})
 	if err != nil {
 		fmt.Fprintf(stderr, "hyverify: recording the example: %v\n", err)
@@ -130,6 +137,33 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return exitPass
 	}
 	return exitFail
+}
+
+// embedTask vectorises the instruction so the example counts toward what a
+// classifier can be fitted on; without a vector internal/classify skips it
+// entirely, which is what made this tool fill a corpus it could not read
+// (#1026).
+//
+// Off unless a model is named: this tool's contract is that it needs no
+// services. embed.Resolve honours a named model against the default Ollama
+// host with no discovery, which is exactly the standalone case, and answers
+// Unavailable when none is named, so no guard here for the empty one: it could
+// not change the outcome, which is the same lie as a branch that cannot run.
+//
+// cache.Normalize because it is the one derivation the other writers use, and a
+// vector made differently is not comparable to theirs.
+func embedTask(model, task string) ([]float32, string) {
+	emb := embed.Resolve(nil, model)
+	if !emb.Available() {
+		return nil, ""
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), embed.Timeout)
+	defer cancel()
+	vec, err := emb.Embed(ctx, cache.Normalize(task))
+	if err != nil || len(vec) == 0 {
+		return nil, ""
+	}
+	return vec, emb.Model()
 }
 
 // resolve prefers the command the caller named and otherwise asks
