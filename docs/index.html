@@ -44,7 +44,7 @@
     "description": "Hydra is the Trust Control Plane for AI development: it routes tasks across every model on your machine to a target confidence of correctness, sampling models adaptively (SPRT) and stopping once the evidence is strong enough, while cutting AI API costs 70-85% along the way.",
     "url": "https://hydra.uvansa.com/",
     "downloadUrl": "https://github.com/ankit373/hydra",
-    "softwareVersion": "1.4.2",
+    "softwareVersion": "1.5.0",
     "datePublished": "2026-01-01",
     "dateModified": "2026-09-04",
     "license": "https://github.com/ankit373/hydra/blob/main/LICENSE",
@@ -104,6 +104,7 @@
       "Opt-in answer cache (hyctl trace cache), off by default, which refuses far more often than it answers: the same question word for word is served outright, anything else must clear both a cosine threshold and a gate requiring the two prompts to ask about exactly the same things, and a prompt carrying personal data is never served or stored at all",
       "Off-policy evaluation (hyctl trace evaluate), what a routing policy you never ran would have cost, with a confidence interval, refusing where the log cannot answer",
       "OpenTelemetry export (hyctl trace export --otlp), a run as nested OTLP spans for Langfuse, Grafana or Jaeger, keeping the fallback chain a collector would otherwise see flat, with HYDRA_OTLP_HEADERS for a hosted collector's auth; nothing leaves the machine by default",
+      "hyctl workflow, an ordered multi-step task with each step routed on its own, so triage runs cheap and the fix runs strong. State is written before every step, so a killed run resumes from where it stopped rather than restarting, and a heartbeat beside the record tells a dead run from a live one instead of reporting running for ever",
       "hyctl ask, tasks parked waiting on a human, when a ledger rule answers ask rather than allow or deny",
       "A2A agent-to-agent handoff protocol with vector clocks for causal ordering",
       "Homebrew installable on macOS and Linux"
