@@ -57,15 +57,19 @@ type TextResult struct {
 	Error  string `json:"error,omitempty"`
 }
 
-// EditResult is the result of an edit task (matches editor.Result + label/enum/mode).
+// EditResult is the result of an edit task: editor.Result plus label/enum/mode.
 type EditResult struct {
-	Label        string `json:"label"`
-	Enum         string `json:"enum"`
-	Mode         string `json:"mode"`
-	Status       string `json:"status"`
-	File         string `json:"file"`
-	Workspace    string `json:"workspace"`
-	GitRoot      string `json:"git_root"`
+	Label     string `json:"label"`
+	Enum      string `json:"enum"`
+	Mode      string `json:"mode"`
+	Status    string `json:"status"`
+	File      string `json:"file"`
+	Workspace string `json:"workspace"`
+	GitRoot   string `json:"git_root"`
+	// Head is which head wrote this file, the one field a fan-out needs most
+	// and the one this was missing: `hyctl review` could only ever find a head
+	// in last_edit.json, whose single slot a batch never writes (#1032).
+	Head         string `json:"head,omitempty"`
 	LinesAdded   int    `json:"lines_added"`
 	LinesRemoved int    `json:"lines_removed"`
 	// Nil when no validator ran, which is not a pass: the same distinction
@@ -375,7 +379,7 @@ func runEditTask(ctx context.Context, d *dispatch.Dispatcher, dispatchErr error,
 			return mustMarshal(EditResult{
 				Label: task.Label, Enum: task.Enum, Mode: "edit",
 				Status: "fail", File: file, Workspace: wsName, GitRoot: resolved.GitRoot,
-				RolledBack: true, Error: why,
+				Head: dispResult.Head.ID, RolledBack: true, Error: why,
 			})
 		}
 	}
@@ -411,7 +415,7 @@ func runEditTask(ctx context.Context, d *dispatch.Dispatcher, dispatchErr error,
 				return mustMarshal(EditResult{
 					Label: task.Label, Enum: task.Enum, Mode: "edit",
 					Status: "fail", File: file, Workspace: wsName, GitRoot: resolved.GitRoot,
-					RolledBack: true, Error: reason,
+					Head: dispResult.Head.ID, RolledBack: true, Error: reason,
 				})
 			}
 			validatorPassed = boolp(rc == 0)
@@ -431,7 +435,8 @@ func runEditTask(ctx context.Context, d *dispatch.Dispatcher, dispatchErr error,
 				return mustMarshal(EditResult{
 					Label: task.Label, Enum: task.Enum, Mode: "edit",
 					Status: "fail", File: file, Workspace: wsName, GitRoot: resolved.GitRoot,
-					ValidatorPassed: validatorPassed, RolledBack: true, Error: "validation_failed",
+					Head: dispResult.Head.ID, ValidatorPassed: validatorPassed,
+					RolledBack: true, Error: "validation_failed",
 				})
 			}
 			editor.RecordVerifiedEdit(ctx, d.Embedder(), editor.VerifiedEdit{
@@ -448,7 +453,8 @@ func runEditTask(ctx context.Context, d *dispatch.Dispatcher, dispatchErr error,
 	return mustMarshal(EditResult{
 		Label: task.Label, Enum: task.Enum, Mode: "edit",
 		Status: "ok", File: file, Workspace: wsName, GitRoot: resolved.GitRoot,
-		LinesAdded: added, LinesRemoved: removed, ValidatorPassed: validatorPassed,
+		Head: dispResult.Head.ID, LinesAdded: added, LinesRemoved: removed,
+		ValidatorPassed: validatorPassed,
 	})
 }
 

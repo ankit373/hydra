@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/diff"
@@ -27,9 +28,13 @@ type FileEntry struct {
 	File      string `json:"file"`
 	Workspace string `json:"workspace"`
 	GitRoot   string `json:"git_root"`
-	Added     int    `json:"lines_added"`
-	Removed   int    `json:"lines_removed"`
-	Status    string `json:"status"` // modified | new | unchanged | no_baseline | missing
+	// Head is who wrote it. Hydra recorded this all along and no review surface
+	// showed it, so the reviewer deciding whether to approve could not see
+	// which head produced the change (#1032).
+	Head    string `json:"head,omitempty"`
+	Added   int    `json:"lines_added"`
+	Removed int    `json:"lines_removed"`
+	Status  string `json:"status"` // modified | new | unchanged | no_baseline | missing
 }
 
 // SummaryResult is the JSON output of Summary.
@@ -94,6 +99,7 @@ func Summary(files []string) (*SummaryResult, error) {
 			File:      f,
 			Workspace: ws,
 			GitRoot:   resolved.GitRoot,
+			Head:      headIDForFile(f),
 			Added:     added,
 			Removed:   removed,
 			Status:    status,
@@ -399,11 +405,65 @@ func filesFromLogs() []string {
 	return files
 }
 
-// headIDForLastEdit returns the head that produced file's last edit, or ""
-// if last_edit.json's own file doesn't match, its single slot can only
-// answer for whichever file was edited most recently.
-func headIDForLastEdit(file string) string {
-	raw, err := os.ReadFile(filepath.Join(config.Dir(), "logs", "last_edit.json"))
+// headIDForFile returns the head that produced file's last edit, from both edit
+// logs. last_edit.json has a single slot and `hyctl parallel` never writes it,
+// so reading only that one credited no head to every file a batch touched, and
+// a human's approve or reject trained nothing (#1032).
+//
+// Newest log first: one file can appear in both, and the run that wrote it last
+// is the one whose head produced what is on disk. Each reader matches on the
+// path, so a file in neither yields "" rather than someone else's head.
+func headIDForFile(file string) string {
+	logDir := filepath.Join(config.Dir(), "logs")
+	batch := filepath.Join(logDir, "last_parallel.json")
+	single := filepath.Join(logDir, "last_edit.json")
+
+	readers := []func() string{
+		func() string { return headFromBatchLog(batch, file) },
+		func() string { return headFromEditLog(single, file) },
+	}
+	if modTime(single).After(modTime(batch)) {
+		readers[0], readers[1] = readers[1], readers[0]
+	}
+	for _, read := range readers {
+		if id := read(); id != "" {
+			return id
+		}
+	}
+	return ""
+}
+
+func modTime(path string) time.Time {
+	info, err := os.Stat(path)
+	if err != nil {
+		return time.Time{}
+	}
+	return info.ModTime()
+}
+
+func headFromBatchLog(path, file string) string {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	var rows []struct {
+		Mode string `json:"mode"`
+		File string `json:"file"`
+		Head string `json:"head"`
+	}
+	if json.Unmarshal(raw, &rows) != nil {
+		return ""
+	}
+	for _, r := range rows {
+		if r.Mode == "edit" && r.File == file {
+			return r.Head
+		}
+	}
+	return ""
+}
+
+func headFromEditLog(path, file string) string {
+	raw, err := os.ReadFile(path)
 	if err != nil {
 		return ""
 	}
@@ -420,7 +480,7 @@ func headIDForLastEdit(file string) string {
 // recordReviewOutcome is a best-effort calibration observation: a human's
 // approve/reject is stronger ground truth than editor's own syntax-check.
 func recordReviewOutcome(file string, correct bool) {
-	headID := headIDForLastEdit(file)
+	headID := headIDForFile(file)
 	if headID == "" {
 		return
 	}
