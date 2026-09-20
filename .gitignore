@@ -105,3 +105,7 @@ __pycache__/
 # running the same gate by hand leaves one in the tree.
 cover.out
 *.coverprofile
+
+# hyverify's default corpus. It carries the whole text of every file it
+# judged, so it is the repository's own source in a second place.
+.hydra-evalset/
