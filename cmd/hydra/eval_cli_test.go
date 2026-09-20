@@ -481,3 +481,25 @@ func TestCLI_EvalTrainingKeepsTwoModelsApart(t *testing.T) {
 		t.Errorf("the table does not name both models:\n%s", text)
 	}
 }
+
+// The refusals differ in remedy, so they must differ in wording: record
+// vectors, record more of them, or ask about something the corpus has seen.
+func TestCLI_EvalClassifyRefusalsNameTheRemedy(t *testing.T) {
+	cliSandbox(t)
+	_, errOut, err := run(t, "eval", "classify")
+	if err == nil {
+		t.Fatal("an empty corpus produced a score")
+	}
+	if !strings.Contains(err.Error()+errOut, "no example carries an embedding") {
+		t.Errorf("the refusal does not name the remedy: %v", err)
+	}
+
+	seedVectored(t, "SIMPLE", "model-a", 4, 3)
+	_, errOut, err = run(t, "eval", "classify")
+	if err == nil {
+		t.Fatal("three examples produced a score")
+	}
+	if !strings.Contains(err.Error()+errOut, "too few embedded examples") {
+		t.Errorf("a tiny corpus did not say so: %v", err)
+	}
+}

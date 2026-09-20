@@ -871,6 +871,7 @@ hyctl eval stats                        # the verified corpus: size and pass rat
 hyctl eval readiness                    # per enum, whether the corpus can yet fit a routing choice
 hyctl eval list --failed                # the examples the oracle rejected
 hyctl eval training                     # vectors per embedding model, whether a classifier could be fitted
+hyctl eval classify                     # does similarity to past work predict whether an enum passes
 
 # The standalone verifier: fill the corpus with no router and no Hydra config.
 # Built from this repo (go build ./cmd/hyverify), it reads no ~/.hydra at all.
