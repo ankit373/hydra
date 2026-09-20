@@ -253,6 +253,9 @@ func runEditTask(ctx context.Context, d *dispatch.Dispatcher, dispatchErr error,
 		return failEdit(task, "scope_rejected: "+err.Error())
 	}
 	resolved, _ := reg.Resolve(file)
+	// The same rule hyctl edit follows: os.Rename replaces a symlink rather
+	// than following it, so an edit must act on the file it names (#1023).
+	file = editor.ResolveLink(file)
 
 	// Snapshot: read before Decide, so the file-policy engine's line-count
 	// and diff-size rules see the file's real shape instead of always
