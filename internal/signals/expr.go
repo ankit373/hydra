@@ -328,6 +328,11 @@ func identifiers(n *node, into map[string]struct{}) {
 // A signal the set does not carry is its type's zero, not an error: a provider
 // that could not run (no code graph, no calibration store) must leave a rule
 // unmatched rather than fail the dispatch it was only advising.
+// absent is a signal nothing measured. Distinct from every value a signal can
+// take, because "no blast radius was read" is not the claim "the radius is 0"
+// and a rule must not match on the second when only the first is true (#1021).
+type absent struct{}
+
 func eval(n *node, vals Set) (any, error) {
 	switch n.op {
 	case "num":
@@ -340,13 +345,7 @@ func eval(n *node, vals Set) (any, error) {
 		if v, ok := vals[n.name]; ok {
 			return v, nil
 		}
-		switch n.kind {
-		case KindNumber:
-			return float64(0), nil
-		case KindString:
-			return "", nil
-		}
-		return false, nil
+		return absent{}, nil
 	case "!":
 		v, err := evalBool(n.left, vals)
 		return !v, err
@@ -380,6 +379,11 @@ func evalBool(n *node, vals Set) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+	// An unmeasured bool is not true, which is what a bare `sig` and `!sig`
+	// already meant, so no existing rule changes shape.
+	if _, missing := v.(absent); missing {
+		return false, nil
+	}
 	b, ok := v.(bool)
 	if !ok {
 		return false, fmt.Errorf("expected a bool, got %T", v)
@@ -388,6 +392,14 @@ func evalBool(n *node, vals Set) (bool, error) {
 }
 
 func compare(op string, l, r any) (any, error) {
+	// Nothing is true of a signal nobody measured, equality included: absence
+	// is not a value the rule's author can have meant.
+	if _, missing := l.(absent); missing {
+		return false, nil
+	}
+	if _, missing := r.(absent); missing {
+		return false, nil
+	}
 	switch op {
 	case "==":
 		return l == r, nil

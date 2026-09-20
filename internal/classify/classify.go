@@ -70,6 +70,12 @@ type Neighbourhood struct {
 	MeanSim  float64        `json:"mean_similarity"`
 	Baseline float64        `json:"baseline_similarity"`
 	PerEnum  []EnumEvidence `json:"per_enum"`
+
+	// Passed and PassRate are the whole neighbourhood, not one enum: how often
+	// work like this held up at all, which is the question a routing rule asks
+	// before it knows which enum it is choosing between.
+	Passed   int     `json:"passed"`
+	PassRate float64 `json:"pass_rate"`
 }
 
 // Corpus is the embedded slice of an eval set, in one embedding model's space.
@@ -216,8 +222,10 @@ func (c *Corpus) summarise(idx []int, mean float64, outcomes []bool) Neighbourho
 	}
 	for _, ev := range agg {
 		ev.PassRate = laplace(ev.Passed, ev.N)
+		n.Passed += ev.Passed
 		n.PerEnum = append(n.PerEnum, *ev)
 	}
+	n.PassRate = laplace(n.Passed, n.Size)
 	sort.Slice(n.PerEnum, func(a, b int) bool {
 		if n.PerEnum[a].N != n.PerEnum[b].N {
 			return n.PerEnum[a].N > n.PerEnum[b].N

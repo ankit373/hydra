@@ -32,9 +32,24 @@ keywords: []
 #   pii.<detector>.matched      bool    one detector, e.g. pii.aws_access_key_id.matched
 #                                       (`hyctl security` lists the detector names)
 #   injection.matched           bool    a prompt-injection marker was found
-#   graph.blast_radius          number  transitive dependents of --file; 0 when unknown
+#   graph.blast_radius          number  transitive dependents of --file
 #   trust.calibrated            bool    internal/trust has evidence for this domain
 #   keyword.<name>.matched      bool    one of the sets declared above
+#   corpus.known                bool    the verified corpus held work like this
+#   corpus.pass_rate            number  how often work like this passed
+#   corpus.support              number  how many verified examples said so
+#
+# A signal nothing measured is ABSENT, and a comparison against an absent
+# signal never matches, whatever the operator. `graph.blast_radius < 5` does
+# not fire on a dispatch with no --file, because nothing read a radius: that is
+# not the claim "the radius is 0" (#1021). A bare `sig` and `!sig` read an
+# absent bool as false, so "we did not see this" is still `!sig`.
+#
+# The corpus.* signals cost an embedding call and a pass over the eval set, so
+# they are derived ONLY when a rule below names one. A file with no such rule
+# routes exactly as it did before they existed. What fills that corpus is
+# `hyctl edit`, `hyctl parallel` and `hyverify`; `hyctl eval classify` reports
+# whether the estimate is worth routing on yet.
 #
 # Operators: && || ! ( ) == != < <= > >=
 # A rule naming a signal that does not exist fails at load rather than
@@ -56,6 +71,11 @@ keywords: []
 #     priority: 100
 #     when: graph.blast_radius > 20
 #     action: {type: require_confidence, value: 0.95}
+#
+#   - name: work like this has been failing
+#     priority: 120
+#     when: corpus.known && corpus.support >= 10 && corpus.pass_rate < 0.5
+#     action: {type: require_confidence, value: 0.9}
 #
 #   - name: production migrations are not automated
 #     priority: 150

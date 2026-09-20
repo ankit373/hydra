@@ -3,9 +3,13 @@
 package dispatch
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
+	"github.com/ankit373/hydra/internal/cache"
+	"github.com/ankit373/hydra/internal/classify"
+	"github.com/ankit373/hydra/internal/evalset"
 	"github.com/ankit373/hydra/internal/signals"
 	"github.com/ankit373/hydra/internal/trust"
 	"github.com/ankit373/hydra/registry"
@@ -55,16 +59,66 @@ func loadRules(home string) (*signals.Engine, error) {
 // blastRadius is the caller's, because the caller is the one that already
 // loaded the code graph for --file; nil leaves the signal absent rather than
 // zero, and zero dependents is a real reading.
-func (d *Dispatcher) Decide(prompt, domain string, blastRadius *int) signals.Decision {
+func (d *Dispatcher) Decide(ctx context.Context, prompt, domain string, blastRadius *int) signals.Decision {
 	in := signals.Input{Prompt: prompt, BlastRadius: blastRadius}
-	if d != nil && d.cal != nil {
-		cal := d.calibratedIn(domain)
-		in.Calibrated = &cal
-	}
 	if d == nil {
 		return (*signals.Engine)(nil).Evaluate(in)
 	}
+	if d.cal != nil {
+		cal := d.calibratedIn(domain)
+		in.Calibrated = &cal
+	}
+	// Only when a rule asks. The lookup costs an embedding call and a pass over
+	// the corpus, and #750 removed a per-dispatch HTTP call for good reason; an
+	// empty signals.yaml must still route byte-identically.
+	if d.rules.ReadsAny(signals.CorpusSignals...) {
+		in.CorpusPassRate, in.CorpusSupport = d.corpusEvidence(ctx, prompt)
+	}
 	return d.rules.Evaluate(in)
+}
+
+// corpusEvidence asks internal/classify what the verified examples say about
+// work like this. Both results nil every way it cannot answer, since a zero
+// pass rate means work like this always failed and must not be invented.
+func (d *Dispatcher) corpusEvidence(ctx context.Context, prompt string) (*float64, *int) {
+	c := d.corpus()
+	if c == nil {
+		return nil, nil
+	}
+	emb := d.Embedder()
+	if emb == nil || !emb.Available() {
+		return nil, nil
+	}
+	// cache.Normalize, the same derivation the corpus was written with, or the
+	// query vector is not comparable to the stored ones.
+	vec, err := emb.Embed(ctx, cache.Normalize(prompt))
+	if err != nil || len(vec) == 0 {
+		return nil, nil
+	}
+	n, err := c.Near(vec, classify.DefaultK, -1)
+	if err != nil {
+		return nil, nil
+	}
+	rate, support := n.PassRate, n.Size
+	return &rate, &support
+}
+
+// corpus loads the eval set once per Dispatcher. Once per dispatch would read
+// the whole file on every task, which is the cost this signal is opt-in to
+// avoid in the first place.
+func (d *Dispatcher) corpus() *classify.Corpus {
+	d.corpusLoad.Do(func() {
+		all, err := evalset.Load(evalset.DefaultPath())
+		if err != nil {
+			return
+		}
+		c, err := classify.Load(all)
+		if err != nil {
+			return
+		}
+		d.corpusData = c
+	})
+	return d.corpusData
 }
 
 // calibratedIn reports whether internal/trust holds any real observation for

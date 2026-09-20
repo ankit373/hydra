@@ -62,6 +62,9 @@ type Engine struct {
 	keywords []Keyword
 	rules    []Rule
 	schema   Schema
+	// named is every signal some rule reads, so a caller can skip deriving one
+	// nothing asks for. Filled at parse, because it cannot change afterwards.
+	named map[string]struct{}
 }
 
 // Decision is what evaluation concluded.
@@ -160,6 +163,13 @@ func Parse(raw []byte, extra ActionValidator) (*Engine, error) {
 		e.rules = append(e.rules, r)
 	}
 
+	e.named = map[string]struct{}{}
+	for _, r := range e.rules {
+		for _, n := range r.Referenced() {
+			e.named[n] = struct{}{}
+		}
+	}
+
 	// Total and deterministic: priority descending, then name. Never map order,
 	// and never a comparator that leaves a pair undecided (#765).
 	sort.Slice(e.rules, func(i, j int) bool {
@@ -232,6 +242,20 @@ func (e *Engine) Evaluate(in Input) Decision {
 }
 
 // Rules lists the loaded rules in evaluation order.
+// ReadsAny reports whether any rule names one of these signals. What makes an
+// expensive signal opt-in: nothing derives it until a rule asks.
+func (e *Engine) ReadsAny(names ...string) bool {
+	if e == nil {
+		return false
+	}
+	for _, n := range names {
+		if _, ok := e.named[n]; ok {
+			return true
+		}
+	}
+	return false
+}
+
 func (e *Engine) Rules() []Rule {
 	if e == nil {
 		return nil

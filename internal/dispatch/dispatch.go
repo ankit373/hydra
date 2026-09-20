@@ -21,6 +21,7 @@ import (
 	"github.com/ankit373/hydra/internal/a2a"
 	"github.com/ankit373/hydra/internal/budget"
 	"github.com/ankit373/hydra/internal/cache"
+	"github.com/ankit373/hydra/internal/classify"
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/cost"
 	"github.com/ankit373/hydra/internal/egress"
@@ -330,6 +331,11 @@ type Dispatcher struct {
 	// answer, and someone who turned on neither should still get the first.
 	corpusOnce sync.Once
 	corpusEmb  embed.Embedder
+
+	// corpusData is the embedded eval set, loaded at most once and only when a
+	// rule reads a corpus signal.
+	corpusLoad sync.Once
+	corpusData *classify.Corpus
 }
 
 // Heads returns the probed head list for external callers (e.g. swarm).
@@ -468,7 +474,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 	// Evaluated once, here or by the caller, never per fallback candidate.
 	dec := opts.Decision
 	if dec == nil {
-		computed := d.Decide(prompt, opts.Domain, nil)
+		computed := d.Decide(ctx, prompt, opts.Domain, nil)
 		dec = &computed
 	}
 	if err := applyDecision(*dec, &opts); err != nil {
