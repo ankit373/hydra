@@ -314,7 +314,7 @@ func (s *Store) Lookup(prompt string, vec []float32, threshold float64) Outcome 
 	// refuses every one on its own and cosine alone refuses all but one, so
 	// requiring a vector bought no refusal and cost 8% of restatements (#1015).
 	terms := content(norm)
-	best := s.sameQuestionLocked(terms)
+	best := s.sameQuestionLocked(terms, norm)
 	if best < 0 {
 		// Nothing asks the same thing, so say which kind of nothing it is. The
 		// same words in another order is the gate refusing, and answering that
@@ -340,6 +340,10 @@ func (s *Store) Lookup(prompt string, vec []float32, threshold float64) Outcome 
 }
 
 // sameQuestionLocked is the first stored entry asking the same thing, or -1.
+// The same thing means the same content tokens in the same order *and* the
+// same referents: without the second, "review my changes" and "review your
+// changes" were one question and the cache answered whichever came first
+// (#1035).
 //
 // Scanned rather than indexed, for the reason nearestLocked gives: the entry
 // count is bounded, and a map to keep in step with eviction is a second way to
@@ -388,9 +392,13 @@ func matchesCounts(want map[string]int, terms []string) bool {
 	return left == 0
 }
 
-func (s *Store) sameQuestionLocked(terms []string) int {
+func (s *Store) sameQuestionLocked(terms []string, norm string) int {
 	for i := range s.terms {
-		if sameQuestion(terms, s.terms[i]) {
+		// Referents are read off the stored prompt rather than kept in a
+		// slice beside terms, for the reason nearestLocked gives about maps:
+		// a second structure to hold in step with eviction is a second way to
+		// be wrong, and the scan is already linear (#1035).
+		if sameQuestion(terms, s.terms[i]) && sameReferents(norm, s.entries[i].Prompt) {
 			return i
 		}
 	}
