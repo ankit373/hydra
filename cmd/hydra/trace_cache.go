@@ -77,7 +77,10 @@ stopped. That number is the evidence the gate is worth having.`,
 				st.Hits, asked, 100*float64(st.Hits)/float64(asked), st.Exact, st.Near)
 			fmt.Printf("  %s\n", dimStyle.Render(fmt.Sprintf(
 				"$%.4f avoided, at what the same answers cost to produce", st.AvoidedUSD)))
-			fmt.Printf("  %d refused by the content gate · %d evicted\n", st.Refused, st.Evicted)
+			// "by a gate" rather than "by the content gate": a near match can
+			// now be declined by either half, and naming one of them would
+			// misattribute the other's refusals (#1015).
+			fmt.Printf("  %d refused by a gate · %d evicted\n", st.Refused, st.Evicted)
 			if st.Oldest != nil && st.Newest != nil {
 				fmt.Printf("  %s\n", dimStyle.Render(fmt.Sprintf(
 					"oldest %s ago · newest %s ago", since(*st.Oldest), since(*st.Newest))))

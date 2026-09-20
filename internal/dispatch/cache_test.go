@@ -311,9 +311,11 @@ func TestRemember_AStoreRefusalDoesNotFailTheDispatch(t *testing.T) {
 	}
 }
 
-// With no embedding model the cache is exact-match only rather than off, which
-// is what most machines running this will actually get.
-func TestFromCache_WithoutAnEmbedderIsExactOnly(t *testing.T) {
+// With no embedding model the cache still answers near matches, because the
+// gate that decides them is the content tokens and those need no model. This is
+// what most machines running this actually get, and before #1015 it was an
+// exact hash map for all of them.
+func TestFromCache_WithoutAnEmbedderStillServesARestatement(t *testing.T) {
 	s := testutil.NewSandbox(t)
 	d := cachingDispatcher(t, s)
 
@@ -336,8 +338,24 @@ func TestFromCache_WithoutAnEmbedderIsExactOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if near.Cache != nil {
-		t.Error("a near match was served with no vector to measure it with")
+	if near.Cache == nil {
+		t.Error("a restatement was refused with no embedder, leaving the cache an exact hash map")
+	}
+
+	// The guard that matters on such a machine: there is no second opinion to
+	// fall back on, so the token gate has to hold on its own.
+	for _, q := range []string{
+		"rotate the signing keys",
+		"rotate the signing certificate",
+		"the signing key rotate",
+	} {
+		other, err := d.Dispatch(context.Background(), q, Options{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if other.Cache != nil {
+			t.Errorf("served a cached answer for a different question: %q", q)
+		}
 	}
 }
 

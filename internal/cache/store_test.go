@@ -99,17 +99,38 @@ func TestLookup_ThresholdIsEnforced(t *testing.T) {
 	}
 }
 
-// A store with no vectors is exact-match only rather than unusable, which is
-// what a machine with no embedding model gets.
-func TestLookup_WithoutVectorsIsExactOnly(t *testing.T) {
+// A machine with no embedding model still gets near matches, because the gate
+// that decides them is the content tokens and those need no model. Before #1015
+// the candidate came from cosine alone, so this machine had an exact hash map.
+func TestLookup_WithoutVectorsStillServesARestatement(t *testing.T) {
 	s := open(t)
 	put(t, s, "rotate the signing key", "x")
 
 	if out := s.Lookup("rotate the signing key", nil, DefaultThreshold); !out.Found {
 		t.Error("the exact match stopped working without an embedder")
 	}
-	if out := s.Lookup("please rotate the signing key", nil, DefaultThreshold); out.Found {
-		t.Error("a near match was served with no vector to measure it with")
+	if out := s.Lookup("please rotate the signing key", nil, DefaultThreshold); !out.Found {
+		t.Error("a restatement was refused with no embedder, which leaves the cache an exact hash map")
+	}
+}
+
+// The guard that matters on that machine: no vector must not mean no gate. A
+// different question is still a different question with nothing to measure it
+// with, and here the cache has no second opinion to fall back on.
+func TestLookup_WithoutVectorsRefusesADifferentQuestion(t *testing.T) {
+	s := open(t)
+	put(t, s, "rotate the signing key", "x")
+
+	for _, q := range []string{
+		"rotate the signing keys",        // one token differs
+		"rotate the signing certificate", // one noun differs, the #911 shape
+		"the signing key rotate",         // same tokens, reordered, the #1010 shape
+		"rotate the key",                 // a subset
+		"rotate the signing key in prod", // a superset
+	} {
+		if out := s.Lookup(q, nil, DefaultThreshold); out.Found {
+			t.Errorf("served the stored answer for a different question: %q", q)
+		}
 	}
 }
 
