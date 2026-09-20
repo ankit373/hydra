@@ -105,6 +105,11 @@ func Edit(ctx context.Context, req Request) (*Result, error) {
 		return failResult(req, "", "", "scope_rejected: "+err.Error()), nil
 	}
 
+	// os.Rename replaces a symlink instead of following it, so editing one used
+	// to delete the link, write a copy of its target under its name and leave
+	// the file the caller named untouched, reported as a clean success (#1023).
+	req.File = ResolveLink(req.File)
+
 	// ── Snapshot ──────────────────────────────────────────────────────────────
 	origContent, origExisted := readFile(req.File)
 
@@ -460,6 +465,29 @@ func failResult(req Request, wsName, gitRoot, errMsg string) *Result {
 		Enum:      req.Enum,
 		Error:     errMsg,
 	}
+}
+
+// ResolveLink returns the file path names, following it when it is a symlink.
+//
+// Only the final component, because that is the only one os.Rename gets wrong:
+// a rename through a symlinked *directory* already lands in the real one. A
+// path that is not a link is returned untouched rather than canonicalised,
+// since every recorded path keys something (the run log's edit event, the
+// agent-tree node) and quietly respelling one, as Windows 8.3 expansion does,
+// orphans it.
+//
+// Shared with internal/parallel, which keeps its own edit mechanics, the same
+// reason RecordVerifiedEdit is (#1023).
+func ResolveLink(path string) string {
+	info, err := os.Lstat(path)
+	if err != nil || info.Mode()&os.ModeSymlink == 0 {
+		return path
+	}
+	target, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return path // a broken link names nothing to write to
+	}
+	return target
 }
 
 // atomicWrite replaces path's contents via a temp file and a rename, so a
