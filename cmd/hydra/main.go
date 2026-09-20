@@ -652,7 +652,7 @@ func cmdStatus() *cobra.Command {
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			cfg, err := config.Load()
 			if err != nil {
-				return fmt.Errorf("no config found, run: hyctl init")
+				return err
 			}
 
 			fmt.Println()

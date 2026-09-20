@@ -421,9 +421,12 @@ func piiLocalOnly(cfg *config.Config) bool {
 
 // New builds a Dispatcher from the saved config and a (possibly cached) machine probe.
 func New(ctx context.Context) (*Dispatcher, error) {
+	// config.Load already distinguishes an absent file from an unreadable one,
+	// and replacing its error lost that: a type error in config.toml reported as
+	// "no hydra config" and sent the reader to a wizard that overwrites it.
 	cfg, err := config.Load()
 	if err != nil {
-		return nil, fmt.Errorf("no hydra config, run: hyctl init")
+		return nil, err
 	}
 	// Before any probing or routing: an unusable routing.yaml stops the
 	// dispatch rather than being papered over with the shipped rule (#720).
