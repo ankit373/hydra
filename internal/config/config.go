@@ -4,7 +4,9 @@
 package config
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -200,11 +202,23 @@ func Exists() bool {
 	return err == nil
 }
 
+// ErrNotFound reports that no config file exists, which is the one failure
+// `hyctl init` answers. Anything else is a file that is there and does not
+// parse, where writing a fresh one destroys the evidence (#1030).
+var ErrNotFound = errors.New("no hydra config")
+
 // Load reads and parses the config file.
+//
+// The two failures have opposite remedies, so they are never collapsed into one
+// message: callers used to report an unparseable file as an absent one and send
+// the reader to a wizard that would overwrite it.
 func Load() (*Config, error) {
 	var cfg Config
 	if _, err := toml.DecodeFile(Path(), &cfg); err != nil {
-		return nil, err
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, fmt.Errorf("%w at %s, run: hyctl init", ErrNotFound, Path())
+		}
+		return nil, fmt.Errorf("config %s is not readable: %w", Path(), err)
 	}
 	return &cfg, nil
 }

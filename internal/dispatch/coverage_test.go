@@ -831,6 +831,37 @@ func TestNew_WithoutAConfigPointsAtInit(t *testing.T) {
 	}
 }
 
+// The other half of #1030: a config that is present and will not parse must not
+// be reported as absent, because `hyctl init` overwrites the file that holds
+// the answer. New used to replace config.Load's error with a fixed string, so
+// both failures read the same and only one of them was true.
+func TestNew_MalformedConfigIsNotReportedAsMissing(t *testing.T) {
+	testutil.NewSandbox(t)
+
+	if err := os.MkdirAll(config.Dir(), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	// Skills is []string, so a bare string is a type error the decoder names.
+	body := []byte("cortex = \"stub\"\nskills = \"stub\"\n")
+	if err := os.WriteFile(config.Path(), body, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	dd, err := New(context.Background())
+	if err == nil {
+		t.Fatalf("New() succeeded on an unparseable config: %+v", dd)
+	}
+	if errors.Is(err, config.ErrNotFound) {
+		t.Errorf("a config that is there was reported as absent: %v", err)
+	}
+	if strings.Contains(err.Error(), "hyctl init") {
+		t.Errorf("advice that overwrites the evidence: %v", err)
+	}
+	if !strings.Contains(err.Error(), "skills") {
+		t.Errorf("the refusal did not name the field at fault: %v", err)
+	}
+}
+
 func TestNew_LoadsTheConfigAndArmsThePIIPolicy(t *testing.T) {
 	testutil.NewSandbox(t)
 
