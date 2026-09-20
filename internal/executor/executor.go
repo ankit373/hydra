@@ -22,6 +22,11 @@ type Request struct {
 	MaxTokens int    // 0 = provider default
 	System    string // optional system prompt
 
+	// Temperature pins decoding. A pointer because 0 is the meaningful value,
+	// greedy and reproducible, so it cannot spell "provider default" the way
+	// MaxTokens does: a measurement that resamples is not one (#1041).
+	Temperature *float64
+
 	// Messages is a whole conversation, when the caller has one. It replaces
 	// Prompt and System for the executors that can carry it; Prompt is still
 	// set alongside, because token estimation and the logs describe a call by

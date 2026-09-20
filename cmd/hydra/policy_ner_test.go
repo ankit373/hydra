@@ -79,3 +79,21 @@ func TestPrintNER_SaysWhenTheAnswersAreNotEvidence(t *testing.T) {
 		})
 	}
 }
+
+// The measurement pins decoding, or it is not a measurement: the same head
+// scored 0.82 and 0.72 on consecutive runs before this (#1041).
+func TestNERRequest_PinsGreedyDecoding(t *testing.T) {
+	req := nerRequest(provider.Head{ID: "ollama/x"}, 256, entity.System, "some text")
+	if req.Temperature == nil {
+		t.Fatal("the request does not pin temperature, so every run resamples")
+	}
+	if *req.Temperature != 0 {
+		t.Errorf("temperature = %v, want 0 for reproducible decoding", *req.Temperature)
+	}
+	if req.System != entity.System {
+		t.Error("the request asked something other than entity.System")
+	}
+	if req.MaxTokens != 256 {
+		t.Errorf("max tokens = %d, want the budget it was given", req.MaxTokens)
+	}
+}

@@ -39,6 +39,7 @@ type openAIChatRequest struct {
 	Model      string          `json:"model,omitempty"`
 	Messages   []Message       `json:"messages"`
 	MaxTokens  int             `json:"max_tokens,omitempty"`
+	Temp       *float64        `json:"temperature,omitempty"`
 	Stream     bool            `json:"stream"`
 	Tools      []ToolDef       `json:"tools,omitempty"`
 	ToolChoice json.RawMessage `json:"tool_choice,omitempty"`
@@ -118,6 +119,7 @@ func (e *HTTPExecutor) executeOpenAICompatible(ctx context.Context, req Request,
 		Model:      cfg.Model,
 		Messages:   msgs,
 		MaxTokens:  req.MaxTokens,
+		Temp:       req.Temperature,
 		Stream:     false,
 		Tools:      req.Tools,
 		ToolChoice: req.ToolChoice,
@@ -252,6 +254,9 @@ func anthropicBody(req Request, model string, stream bool) (map[string]interface
 		"max_tokens": defaultMaxTokens(req.MaxTokens, 1024),
 		"messages":   msgs,
 	}
+	if req.Temperature != nil {
+		body["temperature"] = *req.Temperature
+	}
 	if system != "" {
 		body["system"] = system
 	}
@@ -367,8 +372,17 @@ func geminiBody(req Request) (map[string]interface{}, error) {
 			"parts": []map[string]string{{"text": system}},
 		}
 	}
-	if req.MaxTokens > 0 {
-		body["generationConfig"] = map[string]int{"maxOutputTokens": req.MaxTokens}
+	// Gemini carries both knobs inside generationConfig, so they are built
+	// together or the second one overwrites the first.
+	if req.MaxTokens > 0 || req.Temperature != nil {
+		gen := map[string]interface{}{}
+		if req.MaxTokens > 0 {
+			gen["maxOutputTokens"] = req.MaxTokens
+		}
+		if req.Temperature != nil {
+			gen["temperature"] = *req.Temperature
+		}
+		body["generationConfig"] = gen
 	}
 	if len(req.Tools) > 0 {
 		cfg, err := geminiToolConfig(req.ToolChoice)
@@ -467,6 +481,9 @@ func cohereBody(req Request, model string, stream bool) (map[string]interface{},
 	if req.MaxTokens > 0 {
 		body["max_tokens"] = req.MaxTokens
 	}
+	if req.Temperature != nil {
+		body["temperature"] = *req.Temperature
+	}
 	if stream {
 		body["stream"] = true
 	}
@@ -494,6 +511,7 @@ func (e *HTTPExecutor) executeAzureOpenAI(ctx context.Context, req Request) (*Re
 	body := openAIChatRequest{
 		Messages:  buildMessages(req),
 		MaxTokens: req.MaxTokens,
+		Temp:      req.Temperature,
 		Stream:    false,
 	}
 	raw, err := json.Marshal(body)
@@ -624,8 +642,16 @@ func bedrockBody(req Request) (map[string]interface{}, error) {
 		}
 		body["system"] = blocks
 	}
-	if req.MaxTokens > 0 {
-		body["inferenceConfig"] = map[string]int{"maxTokens": req.MaxTokens}
+	// Converse holds both knobs in inferenceConfig, so they are built together.
+	if req.MaxTokens > 0 || req.Temperature != nil {
+		inf := map[string]interface{}{}
+		if req.MaxTokens > 0 {
+			inf["maxTokens"] = req.MaxTokens
+		}
+		if req.Temperature != nil {
+			inf["temperature"] = *req.Temperature
+		}
+		body["inferenceConfig"] = inf
 	}
 	if len(req.Tools) > 0 {
 		choice, send, err := bedrockToolChoice(req.ToolChoice)

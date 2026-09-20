@@ -30,19 +30,20 @@ func cmdPolicyNER() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "ner",
 		Short: "Measure a head at detecting the PII no pattern can find",
-		Long: `hyctl policy ner asks a head about 100 labelled texts and reports what it got
+		Long: `hyctl policy ner asks a head about 470 labelled texts and reports what it got
 right, so its answers can be trusted or refused on evidence.
 
 The regex detectors cover formatted identifiers: cards, SSNs, emails, phone
 numbers, IBANs. Names, street addresses and organisations have no format, and on
 the presidio-research set they are 1,509 spans no pattern reaches. A head can
-read them, but only some heads can: measured here, one model scored 0.88 recall
-at no false positives while another scored the same recall and said yes to 85%
-of ordinary commit messages, which would force local-only routing on normal work.
+read them, but only some heads can: measured here, a 7B scored 0.87 recall at no
+false positives, while a 0.5B scored 0.86 recall and said yes to 94% of the
+negatives, clearing a recall bar by answering yes to nearly everything.
 
-Both halves are reported because each alone is trivially passed. A head that
-answers NO to everything has a flawless false-positive rate, and one that answers
-YES to everything has perfect recall.
+Both halves are reported because each alone is trivially passed, and both are
+judged on the 95% interval rather than the point estimate, so a head is eligible
+only when the sample is large enough to say so. Decoding is pinned greedy, or
+the same head measures differently on every run.
 
 An answer that is neither yes nor no is counted apart and never read as a no: a
 detector that reports clean because the head malfunctioned is worse than none.`,
@@ -65,8 +66,9 @@ detector that reports clean because the head malfunctioned is worse than none.`,
 			}
 			if jsonOut {
 				return json.NewEncoder(os.Stdout).Encode(map[string]any{
-					"head": head.ID, "recall": rep.Recall(),
+					"head": head.ID, "recall": rep.Recall(), "recall_low": rep.RecallLow(),
 					"false_positive_rate": rep.FalsePositiveRate(),
+					"false_positive_high": rep.FalsePositiveHigh(),
 					"positives":           rep.Positives, "recalled": rep.Recalled,
 					"negatives": rep.Negatives, "false_positives": rep.FalsePos,
 					"unreadable": rep.Unreadable, "failed": rep.Failed,
@@ -110,13 +112,22 @@ func pickHead(heads []provider.Head, want string) (provider.Head, error) {
 func headAsk(head provider.Head, maxTokens int) entity.Ask {
 	exec := executor.For(head)
 	return func(ctx context.Context, system, text string) (string, error) {
-		resp, err := exec.Execute(ctx, executor.Request{
-			Prompt: text, System: system, Head: head, MaxTokens: maxTokens,
-		})
+		resp, err := exec.Execute(ctx, nerRequest(head, maxTokens, system, text))
 		if err != nil {
 			return "", err
 		}
 		return resp.Output, nil
+	}
+}
+
+// nerRequest is built apart from the call so a test can read what is sent.
+// Greedy decoding is the whole of #1041: without it the same head measures
+// differently every run and the verdict is a coin flip rather than evidence.
+func nerRequest(head provider.Head, maxTokens int, system, text string) executor.Request {
+	greedy := 0.0
+	return executor.Request{
+		Prompt: text, System: system, Head: head,
+		MaxTokens: maxTokens, Temperature: &greedy,
 	}
 }
 
@@ -126,15 +137,15 @@ func printNER(id string, r entity.Report, took time.Duration) {
 		verdict = "eligible"
 	}
 	fmt.Printf("\n  %s\n\n", id)
-	fmt.Printf("    recall            %7s   %.2f   (bar %.2f)\n",
-		fmt.Sprintf("%d/%d", r.Recalled, r.Positives), r.Recall(), entity.MinRecall)
-	fmt.Printf("    false positives   %7s   %.2f   (bar %.2f)\n",
-		fmt.Sprintf("%d/%d", r.FalsePos, r.Negatives), r.FalsePositiveRate(), entity.MaxFalsePositive)
+	fmt.Printf("    recall            %8s   %.2f   95%% low  %.2f   (bar %.2f)\n",
+		fmt.Sprintf("%d/%d", r.Recalled, r.Positives), r.Recall(), r.RecallLow(), entity.MinRecall)
+	fmt.Printf("    false positives   %8s   %.2f   95%% high %.2f   (bar %.2f)\n",
+		fmt.Sprintf("%d/%d", r.FalsePos, r.Negatives), r.FalsePositiveRate(), r.FalsePositiveHigh(), entity.MaxFalsePositive)
 	if r.Unreadable > 0 {
-		fmt.Printf("    unreadable        %7d           answered neither yes nor no\n", r.Unreadable)
+		fmt.Printf("    unreadable        %8d   answered neither yes nor no\n", r.Unreadable)
 	}
 	if r.Failed > 0 {
-		fmt.Printf("    unreachable       %7d\n", r.Failed)
+		fmt.Printf("    unreachable       %8d\n", r.Failed)
 	}
 	fmt.Printf("\n    %s", verdict)
 	if !r.Eligible() {

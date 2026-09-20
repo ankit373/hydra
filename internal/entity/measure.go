@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 )
 
 //go:embed probeset.jsonl
@@ -65,24 +66,59 @@ func (r Report) FalsePositiveRate() float64 {
 }
 
 // MinRecall and MaxFalsePositive are where a head becomes worth asking, placed
-// between what three heads measured on this probe set rather than chosen:
-// Qwen2.5-Coder:7b 0.88 recall at 0.00, qwen3:0.6b 0.55 at 0.12, and
-// Qwen2.5-0.5B 0.88 at 0.85, which says yes to almost every negative. The
-// passing head still misses 12%, and that is the ceiling of the approach
-// rather than a rounding error (#1039).
+// between what heads measured on this probe set rather than chosen: a 7B scored
+// around 0.8 recall at near-zero false positives, while a 0.5B scored similar
+// recall and said yes to three quarters of the negatives.
+//
+// The bar is compared against the interval's lower bound, not the point
+// estimate. On 40 positives the 95% half-width was 0.124, wider than the gap
+// between two runs of the same head, so a point estimate near the bar decided
+// eligibility by noise (#1041).
 const (
 	MinRecall        = 0.80
 	MaxFalsePositive = 0.10
 )
+
+// RecallLow and FalsePositiveHigh are the 95% Wilson bounds, which is the
+// interval to use on a proportion near 0 or 1 where the normal approximation
+// puts its limits outside [0,1] and reports certainty it does not have.
+func (r Report) RecallLow() float64 {
+	lo, _ := wilson(r.Recalled, r.Positives)
+	return lo
+}
+
+func (r Report) FalsePositiveHigh() float64 {
+	_, hi := wilson(r.FalsePos, r.Negatives)
+	return hi
+}
+
+// wilson returns the 95% score interval for k successes in n trials.
+func wilson(k, n int) (lo, hi float64) {
+	if n == 0 {
+		return 0, 1
+	}
+	const z = 1.959964
+	fn := float64(n)
+	p := float64(k) / fn
+	d := 1 + z*z/fn
+	centre := (p + z*z/(2*fn)) / d
+	spread := z * math.Sqrt(p*(1-p)/fn+z*z/(4*fn*fn)) / d
+	return math.Max(0, centre-spread), math.Min(1, centre+spread)
+}
 
 // Eligible reports whether this head may be asked in earnest.
 //
 // Both halves are required, because each alone is trivially passed: a head that
 // answers NO to everything scores a flawless false-positive rate, and one that
 // answers YES to everything scores perfect recall.
+//
+// Judged on the interval rather than the point estimate, so a head is eligible
+// only when the probe set is large enough to say so. That is strictly harder to
+// pass and deliberately: the failure this prevents is a control that reports
+// competence it has not measured.
 func (r Report) Eligible() bool {
 	return r.Positives > 0 && r.Negatives > 0 &&
-		r.Recall() >= MinRecall && r.FalsePositiveRate() <= MaxFalsePositive
+		r.RecallLow() >= MinRecall && r.FalsePositiveHigh() <= MaxFalsePositive
 }
 
 // Measure runs every probe past one head.
