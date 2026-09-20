@@ -88,6 +88,7 @@ func (e *HTTPExecutor) streamOpenAILike(ctx context.Context, req Request, onDelt
 			Model:     model,
 			Messages:  buildMessages(req),
 			MaxTokens: req.MaxTokens,
+			Temp:      req.Temperature,
 			Stream:    true,
 			// A streamed request used to carry neither, so a head was asked
 			// its question with the tools removed and could only answer in

@@ -166,3 +166,59 @@ func TestMeasure_AHeadThatCannotBeReachedIsNotEligible(t *testing.T) {
 		t.Error("an unreachable head was rated eligible")
 	}
 }
+
+// Wilson, not the normal approximation: at 0 of 220 the normal interval is a
+// point at zero, which claims certainty from a finite sample, and at the other
+// end it puts a bound above 1.
+func TestWilson_StaysInsideZeroToOneAndWidensOnLittleData(t *testing.T) {
+	lo, hi := wilson(0, 220)
+	if lo != 0 {
+		t.Errorf("0 of 220 has a lower bound of %v, want 0", lo)
+	}
+	if hi <= 0 || hi > 0.05 {
+		t.Errorf("0 of 220 has an upper bound of %.4f, want a small positive number", hi)
+	}
+	if _, hi := wilson(0, 5); hi < 0.4 {
+		t.Errorf("0 of 5 claims an upper bound of %.2f, too confident for five samples", hi)
+	}
+	lo, hi = wilson(250, 250)
+	if hi < 0.999 || lo <= 0.95 {
+		t.Errorf("250 of 250 gave [%.3f, %.3f]", lo, hi)
+	}
+	// n=0 is no evidence, so the interval is the whole range rather than a
+	// division by zero or a confident zero.
+	if lo, hi := wilson(0, 0); lo != 0 || hi != 1 {
+		t.Errorf("no observations gave [%v, %v], want the whole range", lo, hi)
+	}
+}
+
+// The #1041 defect in one case: a head whose point estimate clears the bar but
+// whose interval does not has not been shown to clear it.
+func TestEligible_JudgesTheIntervalNotThePoint(t *testing.T) {
+	// 33 of 40 is 0.825, over the 0.80 bar, on a sample far too small to say so.
+	small := Report{Positives: 40, Recalled: 33, Negatives: 60}
+	if small.Recall() < MinRecall {
+		t.Fatalf("fixture is wrong: point estimate %.3f is already under the bar", small.Recall())
+	}
+	if small.Eligible() {
+		t.Errorf("a point estimate over the bar on 40 samples was rated eligible "+
+			"(low %.3f), which is how the verdict became a coin flip", small.RecallLow())
+	}
+
+	// The same rate measured on enough samples does clear it.
+	big := Report{Positives: 250, Recalled: 217, Negatives: 220}
+	if !big.Eligible() {
+		t.Errorf("a measured head was refused: recall %.3f low %.3f, fp high %.3f",
+			big.Recall(), big.RecallLow(), big.FalsePositiveHigh())
+	}
+}
+
+// And the false-positive half is judged from its upper bound for the same
+// reason: a clean run on a handful of negatives has not shown it is clean.
+func TestEligible_FalsePositivesJudgedFromTheUpperBound(t *testing.T) {
+	thin := Report{Positives: 250, Recalled: 250, Negatives: 8}
+	if thin.Eligible() {
+		t.Errorf("eight negatives were enough to certify a false-positive rate (high %.3f)",
+			thin.FalsePositiveHigh())
+	}
+}
