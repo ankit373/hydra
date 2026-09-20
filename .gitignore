@@ -13,6 +13,9 @@ logs/
 # Same reason: the PII recall corpus is a fixture the measurement is read from,
 # not a log. Without it every recall figure in the README is unverifiable.
 !internal/policy/testdata/*.jsonl
+# And the entity probe set, which is embedded into the binary rather than read
+# at test time: without it the package does not build at all.
+!internal/entity/*.jsonl
 state.json
 auth_required.json
 
