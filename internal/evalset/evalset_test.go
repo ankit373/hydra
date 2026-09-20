@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -337,5 +338,57 @@ func TestTaskHashFor_EmptyTaskIsEmpty(t *testing.T) {
 	}
 	if TaskHashFor("a") == TaskHashFor("b") {
 		t.Error("different tasks hashed the same")
+	}
+}
+
+// hyverify's default corpus is a directory inside the repository it verifies,
+// and an Example carries the whole text of the file it judged, so an unguarded
+// one is the user's own source staged by `git add -A` (#1011).
+func TestAdd_CorpusDirectoryIgnoresItself(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "corpus", "examples.jsonl")
+
+	if _, err := Add(path, Example{Domain: "go", Source: "hyverify", Candidate: "package v"}); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+
+	raw, err := os.ReadFile(filepath.Join(dir, "corpus", ".gitignore"))
+	if err != nil {
+		t.Fatalf("the corpus directory has no .gitignore: %v", err)
+	}
+	if strings.TrimSpace(string(raw)) != "*" {
+		t.Errorf(".gitignore = %q, want it to ignore everything including itself", raw)
+	}
+}
+
+// A corpus written before the guard existed gains one, and a guard the user has
+// already customised is left alone.
+func TestAdd_RestoresAMissingGuardAndKeepsAnExistingOne(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "corpus", "examples.jsonl")
+	add := func(candidate string) {
+		t.Helper()
+		if _, err := Add(path, Example{Domain: "go", Source: "hyverify", Candidate: candidate}); err != nil {
+			t.Fatalf("Add: %v", err)
+		}
+	}
+	guard := filepath.Join(dir, "corpus", ".gitignore")
+
+	add("package a")
+	if err := os.Remove(guard); err != nil {
+		t.Fatal(err)
+	}
+	add("package b")
+	if _, err := os.Stat(guard); err != nil {
+		t.Errorf("a corpus that lost its guard did not get one back: %v", err)
+	}
+
+	if err := os.WriteFile(guard, []byte("examples.jsonl\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	add("package c")
+	raw, _ := os.ReadFile(guard)
+	if strings.TrimSpace(string(raw)) != "examples.jsonl" {
+		t.Errorf(".gitignore = %q, want the user's own content untouched", raw)
 	}
 }

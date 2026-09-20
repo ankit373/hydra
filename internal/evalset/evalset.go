@@ -255,6 +255,29 @@ func commitKey(corpus, key string, corpusSize int64) error {
 // present, and reports whether it wrote. Re-running the same verification is
 // normal and must not inflate the corpus, a duplicated example would weight
 // that case twice in anything computed from the set.
+// ignoreCorpusDir keeps a corpus out of version control.
+//
+// hyverify's default puts one inside the repository it verifies, and an Example
+// carries the whole text of the file it judged, so `git add -A` would commit
+// the user's own source back to them, PII-marked records included. Self-ignoring
+// rather than an entry in the repository's .gitignore, so it needs nothing from
+// the repository and works for any --out path.
+//
+// Rewritten whenever absent rather than only at creation, which also guards a
+// corpus that predates this. Sharing one is meant to go through an explicit
+// opt-in and a separate redacted corpus, never this file, so restoring the
+// guard is the design rather than an override of it.
+//
+// Best effort: the example is the work, and failing to write a guard must not
+// lose a verdict.
+func ignoreCorpusDir(dir string) {
+	p := filepath.Join(dir, ".gitignore")
+	if _, err := os.Stat(p); err == nil {
+		return
+	}
+	_ = os.WriteFile(p, []byte("*\n"), 0o600)
+}
+
 func Add(path string, e Example) (bool, error) {
 	if strings.TrimSpace(e.Candidate) == "" {
 		return false, ErrNoCandidate
@@ -284,6 +307,7 @@ func Add(path string, e Example) (bool, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return false, err
 	}
+	ignoreCorpusDir(filepath.Dir(path))
 	// Corpus and sidecar must not diverge, and under O_APPEND two hyctl
 	// processes can interleave: the kernel writes at the end as it is at write
 	// time. The same hazard internal/payload takes a store-wide lock against.
