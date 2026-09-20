@@ -66,6 +66,7 @@ class Hyctl < Formula
 
   def install
     bin.install "hyctl"
+    bin.install "hyverify" if File.exist?("hyverify")
   end
 
   test do
