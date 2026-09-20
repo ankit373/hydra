@@ -887,7 +887,7 @@ hyctl eval classify                     # does similarity to past work predict w
 # registry/signals.yaml, derived only when a rule names one.
 
 # The standalone verifier: fill the corpus with no router and no Hydra config.
-# Built from this repo (go build ./cmd/hyverify), it reads no ~/.hydra at all.
+# Ships in the same archive as hyctl, and reads no ~/.hydra at all.
 hyverify --candidate internal/auth/token.go --task "rotate signing key" --enum MODERATE
 hyverify --candidate out.go --task "..." -- go test ./...   # name the judge yourself
 hyverify --candidate x.go --task "..." --embed-model nomic-embed-text  # so it trains a classifier
