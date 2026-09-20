@@ -15,6 +15,17 @@
   <link rel="canonical" href="https://hydra.uvansa.com/blog/">
   <link rel="icon" type="image/png" href="/logo.png">
   <link rel="ai-context" href="/llms.txt" type="text/plain">
+  <script type="application/ld+json">
+  {"@context":"https://schema.org","@type":"Blog","@id":"https://hydra.uvansa.com/blog/",
+   "name":"Hydra Field Notes","url":"https://hydra.uvansa.com/blog/",
+   "description":"Research notes and field reports from the team building Hydra.",
+   "publisher":{"@type":"Organization","name":"Hydra","url":"https://hydra.uvansa.com/"},
+   "blogPost":[
+     {"@type":"BlogPosting","headline":"A Test That Passes Under the Bug It Exists to Catch","url":"https://hydra.uvansa.com/blog/a-test-that-cannot-fail.html","datePublished":"2026-09-18"},
+     {"@type":"BlogPosting","headline":"Twenty-Four Green Builds That Shipped Nothing","url":"https://hydra.uvansa.com/blog/twenty-four-green-builds.html","datePublished":"2026-09-09"},
+     {"@type":"TechArticle","headline":"The Diagnosis Is Unanimous. The Cure Isn't.","url":"https://hydra.uvansa.com/blog/the-diagnosis-is-unanimous.html","datePublished":"2026-08-09"}
+   ]}
+  </script>
 
 <style>
 :root{
@@ -53,16 +64,17 @@ a{color:inherit;text-decoration:none;}
 .topbar .ghost{border:1px solid var(--line-2);border-radius:6px;padding:5px 12px;color:var(--ink);transition:.15s;}
 .topbar .ghost:hover{border-color:var(--aqua);color:var(--aqua);}
 
-.hero{padding:64px 0 20px;}
+.hero{padding-top:64px;padding-bottom:20px;}
 .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--aqua);margin-bottom:16px;}
 .hero h1{font-size:clamp(32px,5.6vw,52px);line-height:1.06;letter-spacing:-.5px;font-weight:750;}
 .hero p{font-size:17px;color:var(--dim);max-width:600px;margin:18px 0 0;}
 
-.postlist{padding:36px 0 80px;}
+.postlist{padding-top:36px;padding-bottom:80px;}
 .post{display:block;padding:28px 0;border-top:1px solid var(--line);transition:.15s;}
 .post:first-child{border-top:none;}
 .post:hover .title{color:var(--aqua);}
-.post .meta{font-family:var(--mono);font-size:11.5px;color:var(--faint);margin-bottom:10px;display:flex;gap:12px;}
+.post .meta{font-family:var(--mono);font-size:11.5px;color:var(--faint);margin-bottom:10px;display:flex;flex-wrap:wrap;gap:4px 12px;}
+.post .meta span{white-space:nowrap;}
 .post .title{font-size:clamp(20px,2.6vw,26px);font-weight:700;letter-spacing:-.2px;transition:color .15s;}
 .post .dek{color:var(--dim);font-size:15px;margin-top:10px;max-width:620px;}
 .post .read{margin-top:14px;font-family:var(--mono);font-size:12.5px;color:var(--aqua);display:flex;align-items:center;gap:6px;}
@@ -73,7 +85,7 @@ footer{border-top:1px solid var(--line);margin-top:20px;padding:44px 0 56px;}
   background:linear-gradient(90deg,var(--cyan),var(--violet) 55%,var(--magenta));
   -webkit-background-clip:text;background-clip:text;color:transparent;}
 .foot p{color:var(--faint);font-size:13px;margin:6px 0 0;}
-.foot nav{display:flex;gap:20px;font-family:var(--mono);font-size:12.5px;}
+.foot nav{display:flex;flex-wrap:wrap;gap:20px;font-family:var(--mono);font-size:12.5px;}
 .foot nav a{color:var(--dim);}.foot nav a:hover{color:var(--aqua);}
 </style>
 </head>
