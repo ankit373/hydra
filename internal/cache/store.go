@@ -89,10 +89,11 @@ type Stats struct {
 	Near    int64 `json:"near"`
 	Misses  int64 `json:"misses"`
 	// Refused counts prompts the cache declined rather than simply did not
-	// hold: one a similarity alone would have served and the content-token gate
-	// stopped, or one whose tokens matched and whose measured similarity did
-	// not. Both are a gate doing its job, which is why they are reported rather
-	// than folded into misses; a prompt nothing resembled is a miss.
+	// hold: the same content words in another order, one a similarity alone
+	// would have served, or one whose words matched and whose measured
+	// similarity did not. Each is a gate doing its job, which is why they are
+	// reported rather than folded into misses; a prompt nothing resembled is a
+	// miss.
 	Refused    int64      `json:"refused"`
 	Evicted    int64      `json:"evicted"`
 	AvoidedUSD float64    `json:"avoided_usd"`
@@ -282,9 +283,11 @@ func (s *Store) writeLocked() error {
 type Outcome struct {
 	Hit   Hit
 	Found bool
-	// Refused marks a prompt the similarity alone would have served and the
-	// content-token gate stopped. Counted separately because it is the only
-	// evidence about whether that gate earns its place.
+	// Refused marks a prompt a gate stopped rather than one the store did not
+	// hold: the same words in another order, or a similarity alone would have
+	// served. Counted separately because it is the only evidence about whether
+	// those gates earn their place, and the first needs no model so the number
+	// means the same thing without an embedder (#1025).
 	Refused bool
 }
 
@@ -313,9 +316,13 @@ func (s *Store) Lookup(prompt string, vec []float32, threshold float64) Outcome 
 	terms := content(norm)
 	best := s.sameQuestionLocked(terms)
 	if best < 0 {
-		// Nothing asks the same thing. Count it as a refusal only when the
-		// dense half would have served something, which is the number that
-		// says whether the token gate earns its place.
+		// Nothing asks the same thing, so say which kind of nothing it is. The
+		// same words in another order is the gate refusing, and answering that
+		// needs no model, which matters because the dense test below cannot
+		// run at all without a vector (#1025).
+		if s.sameWordsLocked(terms) {
+			return Outcome{Refused: true}
+		}
 		if i, _ := s.nearestLocked(vec, threshold); i >= 0 {
 			return Outcome{Refused: true}
 		}
@@ -342,6 +349,45 @@ func (s *Store) Lookup(prompt string, vec []float32, threshold float64) Outcome 
 // A prompt of pure function words needs no guard of its own here: sameQuestion
 // already refuses an empty sequence, and saying so twice would mean two places
 // could disagree about it.
+// sameWordsLocked reports whether any entry asks with exactly these content
+// words in some other order, which is the reversal gate refusing rather than
+// the store not holding the answer. Repeats count, as they do in sameQuestion.
+func (s *Store) sameWordsLocked(terms []string) bool {
+	if len(terms) == 0 {
+		return false
+	}
+	want := make(map[string]int, len(terms))
+	for _, t := range terms {
+		want[t]++
+	}
+	for i := range s.terms {
+		if matchesCounts(want, s.terms[i]) {
+			return true
+		}
+	}
+	return false
+}
+
+// matchesCounts reports whether terms holds exactly the multiset in want. A
+// length check beside this would guarantee the same thing a second way, and
+// then neither could be shown to be load-bearing, so the accounting is the
+// only mechanism: an extra word overruns its count, a missing one leaves want
+// unsatisfied.
+func matchesCounts(want map[string]int, terms []string) bool {
+	left := len(want)
+	seen := make(map[string]int, len(terms))
+	for _, t := range terms {
+		seen[t]++
+		if seen[t] > want[t] {
+			return false
+		}
+		if seen[t] == want[t] {
+			left--
+		}
+	}
+	return left == 0
+}
+
 func (s *Store) sameQuestionLocked(terms []string) int {
 	for i := range s.terms {
 		if sameQuestion(terms, s.terms[i]) {
