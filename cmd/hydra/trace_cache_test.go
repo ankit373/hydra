@@ -42,7 +42,7 @@ func TestTraceCache_ReportsRefusalsBesideHits(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"1 answer", "served", "refused by the content gate", "evicted"} {
+	for _, want := range []string{"1 answer", "served", "refused by a gate", "evicted"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("the report is missing %q:\n%s", want, out)
 		}

@@ -88,9 +88,11 @@ type Stats struct {
 	Exact   int64 `json:"exact"`
 	Near    int64 `json:"near"`
 	Misses  int64 `json:"misses"`
-	// Refused counts prompts a similarity alone would have served and the
-	// content-token gate stopped. It is the number that says whether the gate
-	// is doing anything, so it is reported rather than folded into misses.
+	// Refused counts prompts the cache declined rather than simply did not
+	// hold: one a similarity alone would have served and the content-token gate
+	// stopped, or one whose tokens matched and whose measured similarity did
+	// not. Both are a gate doing its job, which is why they are reported rather
+	// than folded into misses; a prompt nothing resembled is a miss.
 	Refused    int64      `json:"refused"`
 	Evicted    int64      `json:"evicted"`
 	AvoidedUSD float64    `json:"avoided_usd"`
@@ -301,14 +303,52 @@ func (s *Store) Lookup(prompt string, vec []float32, threshold float64) Outcome 
 	if i, ok := s.byKey[Key(norm)]; ok {
 		return Outcome{Hit: s.hitLocked(i, 1, true), Found: true}
 	}
-	best, sim := s.nearestLocked(vec, threshold)
+
+	// The candidate comes from the content tokens, which need no model, so the
+	// near-match path works on a machine with no embedder at all. Cosine is an
+	// upgrade on that candidate rather than a precondition for having one:
+	// measured over 79,800 pairs that must all be refused, the token gate
+	// refuses every one on its own and cosine alone refuses all but one, so
+	// requiring a vector bought no refusal and cost 8% of restatements (#1015).
+	terms := content(norm)
+	best := s.sameQuestionLocked(terms)
 	if best < 0 {
+		// Nothing asks the same thing. Count it as a refusal only when the
+		// dense half would have served something, which is the number that
+		// says whether the token gate earns its place.
+		if i, _ := s.nearestLocked(vec, threshold); i >= 0 {
+			return Outcome{Refused: true}
+		}
 		return Outcome{}
 	}
-	if !sameQuestion(content(norm), s.terms[best]) {
-		return Outcome{Refused: true}
+
+	sim := 0.0
+	if len(vec) > 0 && len(s.vecs[best]) > 0 {
+		sim = embed.Cosine(s.vecs[best], vec)
+		if sim < threshold {
+			return Outcome{Refused: true}
+		}
 	}
 	return Outcome{Hit: s.hitLocked(best, sim, false), Found: true}
+}
+
+// sameQuestionLocked is the first stored entry asking the same thing, or -1.
+//
+// Scanned rather than indexed, for the reason nearestLocked gives: the entry
+// count is bounded, and a map to keep in step with eviction is a second way to
+// be wrong. First match rather than best, because sameQuestion is exact, so
+// every match is equally good and the oldest is the stable choice.
+//
+// A prompt of pure function words needs no guard of its own here: sameQuestion
+// already refuses an empty sequence, and saying so twice would mean two places
+// could disagree about it.
+func (s *Store) sameQuestionLocked(terms []string) int {
+	for i := range s.terms {
+		if sameQuestion(terms, s.terms[i]) {
+			return i
+		}
+	}
+	return -1
 }
 
 // Record folds an outcome into the persisted tallies. Separate from Lookup so

@@ -3,6 +3,7 @@
 package cache
 
 import (
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -116,5 +117,155 @@ func TestLookup_AReversedQuestionIsRefusedEvenAtCosineOne(t *testing.T) {
 	// turned the cache into a hash map.
 	if out := s.Lookup("please can you merge develop into main for me", vec, DefaultThreshold); !out.Found {
 		t.Error("a filler-word restatement was refused")
+	}
+}
+
+// The refusal counter is what says whether the token gate earns its place, so
+// it has to keep counting the case it was introduced for: cosine would have
+// served this and the tokens said no. Making the tokens pick the candidate
+// could have quietly turned that into a plain miss (#1015).
+func TestLookup_StillCountsARefusalTheDenseHalfWouldHaveServed(t *testing.T) {
+	s, err := OpenDir(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	vec := []float32{1, 0, 0}
+	if err := s.PutVec(Entry{Prompt: Normalize("rotate the signing key"), Response: "x"}, vec); err != nil {
+		t.Fatal(err)
+	}
+
+	// Same vector, so cosine is 1.0 and would serve; different content word, so
+	// the token gate must not.
+	out := s.Lookup("rotate the signing certificate", vec, DefaultThreshold)
+	if out.Found {
+		t.Fatalf("served a different question at cosine 1.0: %q", out.Hit.Response)
+	}
+	if !out.Refused {
+		t.Error("counted as a plain miss, so the gate that earned its place is invisible in the stats")
+	}
+}
+
+// The other way a near match can now fail: the tokens agree and the dense half,
+// where there is one, does not. That is a refusal too, not a miss, or a machine
+// with an embedder would under-report what its cache declined.
+func TestLookup_ADenseDisagreementIsARefusalNotAMiss(t *testing.T) {
+	s, err := OpenDir(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.PutVec(Entry{Prompt: Normalize("rotate the signing key"), Response: "x"}, []float32{1, 0, 0}); err != nil {
+		t.Fatal(err)
+	}
+
+	out := s.Lookup("please rotate the signing key", []float32{0, 1, 0}, DefaultThreshold)
+	if out.Found {
+		t.Error("served a candidate the dense half rejected")
+	}
+	if !out.Refused {
+		t.Error("a dense disagreement was recorded as a miss")
+	}
+}
+
+// Nothing at all is still a miss, not a refusal: the cache declined nothing
+// because there was nothing to decline.
+func TestLookup_NoCandidateAtAllIsAMiss(t *testing.T) {
+	s, err := OpenDir(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.PutVec(Entry{Prompt: Normalize("rotate the signing key"), Response: "x"}, []float32{1, 0, 0}); err != nil {
+		t.Fatal(err)
+	}
+
+	out := s.Lookup("what is the capital of France", []float32{0, 1, 0}, DefaultThreshold)
+	if out.Found || out.Refused {
+		t.Errorf("Found=%v Refused=%v, want a plain miss", out.Found, out.Refused)
+	}
+}
+
+// A prompt carrying no content words at all must match nothing, or every such
+// prompt would be the same question as every other one and the first entry in
+// the store would answer all of them. sameQuestion is the single place that
+// decides this; asserting it here proves the decision survives the path a
+// caller actually takes.
+func TestLookup_APromptOfPureFunctionWordsMatchesNothing(t *testing.T) {
+	s, err := OpenDir(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.PutVec(Entry{Prompt: Normalize("rotate the signing key"), Response: "x"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	for _, q := range []string{"how do i", "what is it", "can you"} {
+		if out := s.Lookup(q, nil, DefaultThreshold); out.Found {
+			t.Errorf("%q was served %q", q, out.Hit.Response)
+		}
+	}
+}
+
+// What the floor is worth, measured rather than asserted: the same corpus and
+// the same perturbations the cachebench harness uses, driven through the real
+// Store.Lookup with no vectors at all. Needs no model, which is the point, so
+// unlike the cosine half of that harness this runs in CI.
+//
+// Before #1015 every one of these was a miss: with no embedder there was no
+// candidate, and the cache was an exact hash map.
+//
+// The contract asserted is exact rather than a rate: a restatement is served
+// if and only if it leaves the content sequence alone. That matters because
+// uppercasing does not always leave it alone. retrieve.Tokenize emits a
+// camelCase identifier both whole and split, so "LiteLLM" is
+// [litellm lite llm] and "LITELLM" is [litellm]; 31 of these 400 subjects
+// carry such an identifier. Refusing those is right, the words really did
+// change, and a flat "100% of restatements" would be measuring the wrong thing.
+func TestLookup_TheFloorServesRestatementsWithNoEmbedder(t *testing.T) {
+	raw, err := os.ReadFile("../retrieve/testdata/corpus.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var docs []string
+	for _, line := range strings.Split(strings.TrimSpace(string(raw)), "\n") {
+		if s := strings.TrimSpace(line); s != "" {
+			docs = append(docs, Normalize(s))
+		}
+	}
+
+	s, err := OpenDir(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.maxN = len(docs) + 1 // the corpus is the population here, not a working set
+	for i, d := range docs {
+		if err := s.Put(Entry{Prompt: d, Response: fmt.Sprintf("answer %d", i)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	for _, p := range []struct {
+		name string
+		fn   func(string) string
+	}{
+		{"case", strings.ToUpper},
+		{"trailing punctuation", func(s string) string { return s + "?" }},
+		{"whitespace", func(s string) string { return "  " + strings.ReplaceAll(s, " ", "   ") + "\n" }},
+		{"filler words", func(s string) string { return "please can you " + s + " for me" }},
+	} {
+		served, unchanged := 0, 0
+		for i, d := range docs {
+			q := p.fn(d)
+			keptWords := sameQuestion(content(Normalize(q)), content(d))
+			if keptWords {
+				unchanged++
+			}
+			out := s.Lookup(q, nil, DefaultThreshold)
+			hit := out.Found && out.Hit.Response == fmt.Sprintf("answer %d", i)
+			if hit {
+				served++
+			}
+			if hit != keptWords {
+				t.Errorf("%s: served=%v but the content sequence was kept=%v for %q", p.name, hit, keptWords, d)
+			}
+		}
+		t.Logf("%-22s %d/%d served, %d kept every content word in order", p.name, served, len(docs), unchanged)
 	}
 }
