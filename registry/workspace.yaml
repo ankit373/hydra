@@ -1,9 +1,14 @@
 # Hydra Workspace Registry
 # ─────────────────────────────────────────────────────────────────────────────
 # Defines where Hydra agents are allowed to read/edit files. Workspace scoping
-# is enforced by dispatch/scope.sh before every file edit. An attempted edit
+# is enforced by internal/workspace before every file edit. An attempted edit
 # outside any defined workspace is rejected, logged, and surfaced to the
 # orchestrator.
+#
+# Roots and target paths are both resolved through symlinks before they are
+# compared, so a root written as ~/code (a link to /Volumes/ext/code) still
+# matches a file named by its resolved path, and a symlink inside a workspace
+# cannot reach outside it or past denied_globs (#1019).
 #
 # Each workspace declares:
 #   root         , absolute path the workspace covers

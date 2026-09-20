@@ -203,7 +203,12 @@ func TestResolve_GitModes(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if got.GitRoot != tc.wantRoot {
+			// sameDir, not string equality: GitRoot is now the root as the
+			// filesystem sees it, and a macOS temp dir is a /var symlink.
+			if tc.wantRoot == "" && got.GitRoot != "" {
+				t.Errorf("git=%s → GitRoot %q, want none", tc.mode, got.GitRoot)
+			}
+			if tc.wantRoot != "" && !sameDir(t, got.GitRoot, tc.wantRoot) {
 				t.Errorf("git=%s → GitRoot %q, want %q", tc.mode, got.GitRoot, tc.wantRoot)
 			}
 			if got.Workspace != "ws" || got.Root != filepath.Clean(root) {
