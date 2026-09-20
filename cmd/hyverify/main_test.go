@@ -4,13 +4,19 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
+	"github.com/ankit373/hydra/internal/cache"
 	"github.com/ankit373/hydra/internal/evalset"
+	"github.com/ankit373/hydra/internal/util"
 )
 
 // The test binary doubles as the verifier, so a test needs no shell and no
@@ -296,5 +302,155 @@ func TestJudge_DistinguishesANonStartFromAFailure(t *testing.T) {
 	}
 	if !strings.Contains(detail, "verifier did not run") {
 		t.Errorf("detail %q does not distinguish a non-start from a rejection", detail)
+	}
+}
+
+// The whole point of #1026: without a vector internal/classify skips the
+// example, so this tool was filling a corpus it could not read.
+func TestRun_RecordsAVectorWhenAModelIsNamed(t *testing.T) {
+	h := newHarness(t, "package main // GOOD\n", "GOOD")
+	srv := fakeOllama(t, 8)
+	t.Setenv("OLLAMA_HOST", srv)
+
+	if code := h.run(t, "--task", "make it good", "--enum", "SIMPLE", "--embed-model", "fake-embed"); code != exitPass {
+		t.Fatalf("exit %d\nstderr: %s", code, h.stderr.String())
+	}
+	e := h.corpus(t)[0]
+	if e.EmbedModel != "fake-embed" {
+		t.Errorf("EmbedModel is %q, want the model that produced the vector", e.EmbedModel)
+	}
+	if n := len(util.DecodeVec(e.Embedding)); n != 8 {
+		t.Errorf("the stored vector decodes to %d floats, want 8", n)
+	}
+	// The instruction, not the candidate. A classifier reading this corpus is
+	// handed the task, and the candidate is the answer it is meant to predict.
+	if got := lastEmbedded(); !strings.Contains(got, "make it good") {
+		t.Errorf("embedded %q, want the task", got)
+	}
+	if strings.Contains(lastEmbedded(), "GOOD\n") {
+		t.Errorf("embedded the candidate rather than the task: %q", lastEmbedded())
+	}
+}
+
+// Off unless named. The tool's contract is that it needs no services, so the
+// default must not dial anything.
+func TestRun_NoModelNamedDialsNothing(t *testing.T) {
+	h := newHarness(t, "package main // GOOD\n", "GOOD")
+	srv := fakeOllama(t, 8)
+	t.Setenv("OLLAMA_HOST", srv)
+	if code := h.run(t, "--task", "make it good"); code != exitPass {
+		t.Fatalf("exit %d\nstderr: %s", code, h.stderr.String())
+	}
+	e := h.corpus(t)[0]
+	if e.Embedding != "" || e.EmbedModel != "" {
+		t.Errorf("recorded a vector with no model named: %q/%q", e.Embedding, e.EmbedModel)
+	}
+	// A reachable server that was never asked is the proof: the tool's contract
+	// is that it needs no services unless you name one.
+	if n := embedCalls(); n != 0 {
+		t.Errorf("dialled the embedding server %d times with no --embed-model", n)
+	}
+}
+
+// An unreachable model is not a failed verification. The verdict is the work.
+func TestRun_UnreachableModelStillRecordsTheVerdict(t *testing.T) {
+	h := newHarness(t, "package main // GOOD\n", "GOOD")
+	t.Setenv("OLLAMA_HOST", "http://127.0.0.1:1")
+	if code := h.run(t, "--task", "make it good", "--embed-model", "nope"); code != exitPass {
+		t.Fatalf("an unreachable embedder failed the verification: exit %d\n%s", code, h.stderr.String())
+	}
+	e := h.corpus(t)[0]
+	if !e.Passed || e.Candidate == "" {
+		t.Error("the verdict itself was lost")
+	}
+	if e.EmbedModel != "" {
+		t.Errorf("recorded a model that never answered: %q", e.EmbedModel)
+	}
+}
+
+// A vector here has to be comparable with one hyctl edit wrote, which means the
+// same normalisation. Two derivations would make one corpus into two.
+func TestEmbedTask_NormalisesLikeTheOtherWriters(t *testing.T) {
+	srv := fakeOllama(t, 4)
+	t.Setenv("OLLAMA_HOST", srv)
+	if _, model := embedTask("fake-embed", "  Rotate   the  key\n"); model != "fake-embed" {
+		t.Fatalf("model %q", model)
+	}
+	if got := lastEmbedded(); got != cache.Normalize("  Rotate   the  key\n") {
+		t.Errorf("embedded %q, want cache.Normalize's form %q", got, cache.Normalize("  Rotate   the  key\n"))
+	}
+}
+
+var embeddedMu sync.Mutex
+var embeddedLast string
+var embeddedCalls int
+
+func lastEmbedded() string {
+	embeddedMu.Lock()
+	defer embeddedMu.Unlock()
+	return embeddedLast
+}
+
+func embedCalls() int {
+	embeddedMu.Lock()
+	defer embeddedMu.Unlock()
+	return embeddedCalls
+}
+
+// fakeOllama answers /api/embed the way the real one does, and records what it
+// was asked to embed so a test can assert the input rather than only the shape.
+func fakeOllama(t *testing.T, dim int) string {
+	t.Helper()
+	embeddedMu.Lock()
+	embeddedLast, embeddedCalls = "", 0
+	embeddedMu.Unlock()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Input  string `json:"input"`
+			Prompt string `json:"prompt"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		text := body.Input
+		if text == "" {
+			text = body.Prompt
+		}
+		embeddedMu.Lock()
+		embeddedLast, embeddedCalls = text, embeddedCalls+1
+		embeddedMu.Unlock()
+
+		v := make([]float32, dim)
+		for i := range v {
+			v[i] = float32(i+1) / 10
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"embeddings": [][]float32{v}})
+	}))
+	t.Cleanup(srv.Close)
+	return srv.URL
+}
+
+// embedTask's own contract, tested directly because both its refusals are
+// neutralised further down and so are invisible in the corpus: an unnamed model
+// is already Unavailable to embed.Resolve, and a vector with no model is
+// cleared by evalset.Add's pairing invariant (#1004). Defence in depth is worth
+// having, and worth testing where it is actually observable.
+func TestEmbedTask_RefusesWithoutEmbedding(t *testing.T) {
+	srv := fakeOllama(t, 4)
+	t.Setenv("OLLAMA_HOST", srv)
+
+	if vec, model := embedTask("", "a real task"); vec != nil || model != "" {
+		t.Errorf("no model named produced %v/%q", vec, model)
+	}
+	if vec, model := embedTask("fake-embed", "   "); vec != nil || model != "" {
+		t.Errorf("an empty task produced %v/%q", vec, model)
+	}
+	if n := embedCalls(); n != 0 {
+		t.Errorf("dialled %d times for inputs it should have refused", n)
+	}
+
+	// And an unreachable server is no vector, not a vector of nothing.
+	t.Setenv("OLLAMA_HOST", "http://127.0.0.1:1")
+	if vec, model := embedTask("nope", "a real task"); vec != nil || model != "" {
+		t.Errorf("an unreachable server produced %v/%q", vec, model)
 	}
 }

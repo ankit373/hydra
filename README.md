@@ -877,6 +877,7 @@ hyctl eval classify                     # does similarity to past work predict w
 # Built from this repo (go build ./cmd/hyverify), it reads no ~/.hydra at all.
 hyverify --candidate internal/auth/token.go --task "rotate signing key" --enum MODERATE
 hyverify --candidate out.go --task "..." -- go test ./...   # name the judge yourself
+hyverify --candidate x.go --task "..." --embed-model nomic-embed-text  # so it trains a classifier
 hyctl mcp check <tool> --agent A --resource R --action write  # gate + record an access
 hyctl mcp check <tool> --content "$DATA" --action network      # PII auto-classified; policy can deny egress
 hyctl mcp check <tool> --params '{"amount":500}'               # bind a hash of the params to the decision

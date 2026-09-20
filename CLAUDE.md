@@ -32,6 +32,9 @@ cmd/hyverify/           ← A second binary, the standalone verifier: run the co
                           a repo against a candidate file and record the verdict as a labelled
                           example. No router, no head selection, no Hydra config, so a corpus
                           can be filled without adopting Hydra at all (#967 P2).
+                          `--embed-model` vectorises the task so the example counts toward
+                          what a classifier can be fitted on; off unless named, since the
+                          tool's contract is that it needs no services (#1026).
 internal/dispatch/      ← Tier routing + fallback + policy + cost logging (the router).
 internal/executor/      ← Native executors: agy, HTTP (API providers and local servers), CLI subprocess.
 internal/provider/      ← Discovery: cli / env (API keys, plus the OpenRouter model allowlist) / port / agy.
