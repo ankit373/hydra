@@ -105,6 +105,23 @@ func TestRunRlimitExec(t *testing.T) {
 	}
 }
 
+func TestRunRlimitExec_LookPathFails(t *testing.T) {
+	// A bare name with no "/" goes through exec.LookPath, which fails safely
+	// (no exec is ever attempted) for a binary that cannot exist.
+	if err := RunRlimitExec([]string{"hydra-test-no-such-binary-xyz"}); err == nil {
+		t.Error("expected an error for an unresolvable command, got nil")
+	}
+}
+
+func TestRunRlimitExec_ExecFails(t *testing.T) {
+	// An absolute path skips LookPath and goes straight to syscall.Exec,
+	// which fails safely (returns an error rather than replacing the
+	// process) for a path that exists but is not executable.
+	if err := RunRlimitExec([]string{"/dev/null"}); err == nil {
+		t.Error("expected an error execing a non-executable path, got nil")
+	}
+}
+
 func TestRunRlimitExec_NoTarget(t *testing.T) {
 	if err := RunRlimitExec(nil); err == nil {
 		t.Error("expected an error for an empty argv, got nil")
