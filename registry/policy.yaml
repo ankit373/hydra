@@ -51,6 +51,11 @@
 #   diff_size_cap_pct       int , reject edits changing > N% of file
 #   max_cost_usd            float, abort task if accumulated spend > N
 #   max_wall_seconds        int , abort task if wall time > N
+#   max_memory_mb           int , cap a dispatched subprocess's address space (0 = unlimited).
+#                           Linux only: macOS's kernel refuses RLIMIT_AS/RLIMIT_DATA outright
+#                           (verified, not merely unenforced), so this is a no-op on Darwin.
+#   max_cpu_seconds         int , cap a dispatched subprocess's CPU time (0 = unlimited).
+#                           Works on Linux and macOS; no rlimit equivalent on Windows (#738).
 #   ── Context ──────────────────────────────────────────────────
 #   use_repo_map            bool, inject compressed repo summary in prompt
 #   dedup_file_reads        bool, replace duplicate file reads with marker
@@ -86,6 +91,8 @@ defaults:
   diff_size_cap_pct: 90
   max_cost_usd: 0.0          # 0 = unlimited; set in rules per scenario
   max_wall_seconds: 600
+  max_memory_mb: 0           # 0 = unlimited; Linux only, see header note
+  max_cpu_seconds: 0         # 0 = unlimited; Linux + macOS, not Windows
   # Context
   use_repo_map: false
   dedup_file_reads: true     # cheap free win; always on by default

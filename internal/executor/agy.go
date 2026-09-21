@@ -114,6 +114,10 @@ func agyCommand(ctx context.Context, req Request) (*exec.Cmd, context.CancelFunc
 	cmd := sandbox.Harden(exec.CommandContext(ctx, bin, "--print", req.Prompt,
 		"--model", modelFlag, "--print-timeout", fmt.Sprintf("%ds", int(timeout.Seconds()))))
 	cmd.Env = headEnv(req.Head)
+	if err := sandbox.WithLimits(cmd, req.MaxMemoryMB, req.MaxCPUSeconds); err != nil {
+		cancel()
+		return nil, nil, "", err
+	}
 	return cmd, cancel, modelFlag, nil
 }
 

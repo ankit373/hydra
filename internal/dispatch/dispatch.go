@@ -93,6 +93,14 @@ type Options struct {
 	// which of the flag and the policy file to change. Empty reads as the flag.
 	MaxCostSource string
 
+	// MaxMemoryMB and MaxCPUSeconds cap a dispatched subprocess's address
+	// space and CPU time, from policy.yaml's max_memory_mb/max_cpu_seconds.
+	// 0 means no ceiling, same spelling MaxCostUSD already uses. Applied by
+	// sandbox.WithLimits inside the executor, not here: this only carries the
+	// numbers from policy to the process that will actually run.
+	MaxMemoryMB   int
+	MaxCPUSeconds int
+
 	// RunID groups every log row produced by one user-facing invocation;
 	// TaskID groups the rows for one logical task inside it. Empty means
 	// "derive one" (see runid.ResolveRun/ResolveTask), pass them explicitly
@@ -849,13 +857,15 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 			onDelta = func(d string) { emit(StreamDelta, d, "") }
 		}
 		resp, err := executor.Stream(ctx, exec, executor.Request{
-			Prompt:     prompt,
-			Head:       h,
-			MaxTokens:  opts.MaxTokens,
-			System:     opts.System,
-			Messages:   opts.Messages,
-			Tools:      opts.Tools,
-			ToolChoice: opts.ToolChoice,
+			Prompt:        prompt,
+			Head:          h,
+			MaxTokens:     opts.MaxTokens,
+			System:        opts.System,
+			Messages:      opts.Messages,
+			Tools:         opts.Tools,
+			ToolChoice:    opts.ToolChoice,
+			MaxMemoryMB:   opts.MaxMemoryMB,
+			MaxCPUSeconds: opts.MaxCPUSeconds,
 		}, onDelta)
 		if err != nil {
 			lastErr = err
