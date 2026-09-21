@@ -38,6 +38,9 @@ func (e *CLIExecutor) ExecuteStream(ctx context.Context, req Request, onDelta On
 	}
 	defer closeGate()
 	cmd.Env = env
+	if err := sandbox.WithLimits(cmd, req.MaxMemoryMB, req.MaxCPUSeconds); err != nil {
+		return nil, err
+	}
 	if tmpl.stdinPrompt {
 		cmd.Stdin = strings.NewReader(req.Prompt)
 	}

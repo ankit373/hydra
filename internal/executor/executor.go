@@ -37,6 +37,12 @@ type Request struct {
 	// untouched. Only heads CanUseTools reports true for receive them.
 	Tools      []ToolDef
 	ToolChoice json.RawMessage
+
+	// MaxMemoryMB and MaxCPUSeconds cap a subprocess head via
+	// sandbox.WithLimits; meaningless for an HTTP head, which spends no local
+	// process for this to bound. 0 means no ceiling.
+	MaxMemoryMB   int
+	MaxCPUSeconds int
 }
 
 // Response is the result of a successful execution.
