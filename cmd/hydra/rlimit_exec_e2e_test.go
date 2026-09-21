@@ -1,5 +1,11 @@
 // SPDX-License-Identifier: MIT
 
+//go:build !windows
+
+// Real end-to-end coverage of the compiled binary's rlimit-exec wiring.
+// Unix-only: it spawns /bin/sh, and sandbox.WithLimits is a documented
+// no-op on Windows in the first place (no rlimit equivalent), so there is
+// nothing this file would be proving there.
 package main
 
 import (
