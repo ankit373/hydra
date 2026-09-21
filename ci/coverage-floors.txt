@@ -63,6 +63,9 @@ floor internal/entropy              88
 # both, so whichever lands first the gate says the same thing.
 floor internal/evalset              84
 floor internal/executor             86
+# New package (#1052). Measured 83.2% on the actual failing CI run
+# (35625244671), with a small margin for ordinary variation.
+floor internal/gateway              82
 floor internal/glob                 96
 floor internal/graph                88
 floor internal/ground               95
