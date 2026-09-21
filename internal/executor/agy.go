@@ -113,8 +113,13 @@ func agyCommand(ctx context.Context, req Request) (*exec.Cmd, context.CancelFunc
 	}
 	cmd := sandbox.Harden(exec.CommandContext(ctx, bin, "--print", req.Prompt,
 		"--model", modelFlag, "--print-timeout", fmt.Sprintf("%ds", int(timeout.Seconds()))))
-	cmd.Env = headEnv(req.Head)
-	return cmd, cancel, modelFlag, nil
+	env, closeGate, err := gateIfLocalOnly(ctx, req.Head, headEnv(req.Head))
+	if err != nil {
+		cancel()
+		return nil, nil, "", err
+	}
+	cmd.Env = env
+	return cmd, func() { cancel(); closeGate() }, modelFlag, nil
 }
 
 func (e *AgyExecutor) Execute(ctx context.Context, req Request) (*Response, error) {

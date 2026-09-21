@@ -35,9 +35,10 @@ func TestAssessBoundary_ClassifiesOnWhoComposesTheRequest(t *testing.T) {
 	}
 }
 
-// The local-only subset narrows the hole and must not be reported as closing
-// it: LocalOnly is a claim about another program, and this package's whole
-// discipline is not to report a declaration as a verified control.
+// The local-only subset narrows the hole and must not be reported as fully
+// closing it: internal/gateway enforces it, but a head that ignores its
+// proxy environment and opens a raw socket is still outside what Hydra can
+// see, the same residual gap every other opaque head has.
 func TestBoundary_LocalOnlySubprocessesStillBreakTheGuarantee(t *testing.T) {
 	b := AssessBoundary([]provider.Head{
 		{ID: "ollama", Executable: "/usr/local/bin/ollama", LocalOnly: true},
@@ -50,12 +51,15 @@ func TestBoundary_LocalOnlySubprocessesStillBreakTheGuarantee(t *testing.T) {
 		t.Error("a local-only subprocess left the Opaque list, so the report would imply Hydra can see inside it")
 	}
 	if b.Total() {
-		t.Error("Total() is true with a subprocess head present: that reports a declaration as a guarantee")
+		t.Error("Total() is true with a subprocess head present: a residual raw-socket gap remains, so this cannot be reported as closed")
 	}
 
 	detail := boundaryCheck(b).Detail
-	if !strings.Contains(detail, "rather than something Hydra verifies") {
-		t.Errorf("the check does not say the local-only claim is unverified: %q", detail)
+	if !strings.Contains(detail, "network gate") {
+		t.Errorf("the check does not mention the enforcement gate: %q", detail)
+	}
+	if !strings.Contains(detail, "narrows the hole rather than closing it") {
+		t.Errorf("the check does not say the gap is narrowed rather than closed: %q", detail)
 	}
 }
 
