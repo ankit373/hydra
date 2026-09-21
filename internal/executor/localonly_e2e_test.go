@@ -1,5 +1,11 @@
 // SPDX-License-Identifier: MIT
 
+//go:build !windows
+
+// Real end-to-end coverage of the local-only gate, not just its pieces; both
+// tests spawn a genuine /bin/sh + curl subprocess, so they are Unix-only the
+// same way the mechanism they prove has always been Unix-only in practice
+// (every LocalOnly head discovered today is a Unix binary).
 package executor
 
 import (
