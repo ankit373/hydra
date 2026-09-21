@@ -193,7 +193,10 @@ func cmdVet() *cobra.Command {
 			"with no model and no spend. Hydra routes each file to a Head, so cost, policy,\n" +
 			"fallback and per-domain calibration all apply the way they do to any dispatch.\n\n" +
 			"With no flags it reads the workspace: staged, unstaged and untracked together.\n" +
-			"Exits 3 when a blocking finding is reported, so a script can gate on it.",
+			"Exits 3 when a blocking finding is reported, so a script can gate on it.\n\n" +
+			"Wants a chat Head. An agentic CLI answers a review prompt by narrating the\n" +
+			"step it would take next, which is not findings, so those files are reported\n" +
+			"unreviewed rather than clean. Use --local or --tier to pin one (#1049).",
 		Example: "  hyctl vet\n" +
 			"  hyctl vet --from develop --to HEAD\n" +
 			"  hyctl vet --commit 2504ec2\n" +

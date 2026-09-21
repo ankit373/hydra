@@ -922,6 +922,8 @@ hyctl workflow resume <id>              # continue a killed workflow from where 
 hyctl vet                               # review the working diff, each file routed to its own head
 hyctl vet --confidence 0.9              # sample each file with as many heads as its blast radius warrants
 hyctl vet --json                        # exits 3 on a blocking finding, so a script can gate on it
+# vet wants a chat head. An agentic CLI narrates the step it would take next rather
+# than returning findings, and those files read as unreviewed, not clean (#1049).
 ```
 
 The corpus behind `hyctl eval` is the one thing Hydra keeps verbatim and forever, because it is the
