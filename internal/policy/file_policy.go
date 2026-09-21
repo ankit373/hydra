@@ -50,6 +50,8 @@ type FilePolicy struct {
 	DiffSizeCapPct      int      `yaml:"diff_size_cap_pct"`
 	MaxCostUSD          float64  `yaml:"max_cost_usd"`
 	MaxWallSeconds      int      `yaml:"max_wall_seconds"`
+	MaxMemoryMB         int      `yaml:"max_memory_mb"`
+	MaxCPUSeconds       int      `yaml:"max_cpu_seconds"`
 	UseRepoMap          bool     `yaml:"use_repo_map"`
 	DedupFileReads      bool     `yaml:"dedup_file_reads"`
 	PromptCache         bool     `yaml:"prompt_cache"`

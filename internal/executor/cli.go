@@ -28,6 +28,9 @@ func (e *CLIExecutor) Execute(ctx context.Context, req Request) (*Response, erro
 	args := tmpl.buildArgs(req.Prompt)
 	cmd := sandbox.Harden(exec.CommandContext(ctx, req.Head.Executable, args...))
 	cmd.Env = headEnv(req.Head)
+	if err := sandbox.WithLimits(cmd, req.MaxMemoryMB, req.MaxCPUSeconds); err != nil {
+		return nil, err
+	}
 
 	if tmpl.stdinPrompt {
 		cmd.Stdin = strings.NewReader(req.Prompt)
