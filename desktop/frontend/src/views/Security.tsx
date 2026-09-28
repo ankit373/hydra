@@ -8,6 +8,7 @@ import type {
   Check,
   ConfigDrift,
   Control,
+  CoverageStatus,
   EvidenceQuality,
   SupplyChain,
   BlastReport,
@@ -21,6 +22,7 @@ import type {
   LedgerEvent,
   LedgerPanel,
   PolicyAudit,
+  SecurityBoundary,
   SecurityCount,
   SecurityReport,
   Threats,
@@ -41,16 +43,27 @@ function findCheckStatus(checks: Check[], name: string): string | undefined {
   return checks.find((c) => c.name === name)?.status
 }
 
+// One slice per status, in draw order; null is excluded from the part-to-whole
+// exactly as it is from scoring. A Record rather than a hand-listed four, so a
+// status added to the union fails to compile until it is given a slice:
+// 'partial' was dropped here and the donut's slices quietly stopped summing to
+// the category count (#753).
+const COVERAGE_SLICES: Record<CoverageStatus, Omit<DonutSegment, 'value'> | null> = {
+  enforced: { label: 'Enforced', colorVar: 'var(--hy-cheap)' },
+  configured: { label: 'Configured', colorVar: 'var(--hy-aqua)' },
+  partial: { label: 'Partial', colorVar: 'var(--hy-mid)' },
+  gap: { label: 'Gap', colorVar: 'var(--hy-expensive)' },
+  'n/a': null,
+}
+
 function coverageSegments(categories: Category[]): DonutSegment[] {
-  const counts = { enforced: 0, configured: 0, gap: 0 }
-  for (const c of categories) {
-    if (c.status === 'enforced' || c.status === 'configured' || c.status === 'gap') counts[c.status]++
-  }
-  return [
-    { label: 'Enforced', value: counts.enforced, colorVar: 'var(--hy-cheap)' },
-    { label: 'Configured', value: counts.configured, colorVar: 'var(--hy-aqua)' },
-    { label: 'Gap', value: counts.gap, colorVar: 'var(--hy-expensive)' },
-  ]
+  const counts = new Map<CoverageStatus, number>()
+  for (const c of categories) counts.set(c.status, (counts.get(c.status) ?? 0) + 1)
+  const order = Object.keys(COVERAGE_SLICES) as CoverageStatus[]
+  return order.flatMap((s) => {
+    const slice = COVERAGE_SLICES[s]
+    return slice ? [{ ...slice, value: counts.get(s) ?? 0 }] : []
+  })
 }
 
 // Allowed/Denied are mutually exclusive (Decision is one or the other) and
@@ -132,6 +145,56 @@ function downloadSecurityCSV(data: SecurityReport) {
   a.download = `hydra-security-${new Date().toISOString().slice(0, 10)}.csv`
   a.click()
   URL.revokeObjectURL(url)
+}
+
+/**
+ * What the coverage ring above is a statement about. The gate sees the request
+ * Hydra composes; a CLI-agent head is a separate program that reads files and
+ * reaches the network on its own account, and a reader who does not know that
+ * reads a good score as a guarantee over the whole machine (#725).
+ */
+function ScopeNote({ boundary }: { boundary?: SecurityBoundary }) {
+  const opaque = boundary?.opaque ?? []
+  const governed = boundary?.governed ?? []
+  if (opaque.length === 0 && governed.length === 0) return null
+
+  if (opaque.length === 0) {
+    return (
+      <div className="scope">
+        <span className="scope__label">Scope</span>
+        <span>
+          Every head takes a request Hydra composes, so the gate sees everything that leaves
+          this machine.
+        </span>
+      </div>
+    )
+  }
+
+  const local = boundary?.opaqueLocalOnly ?? []
+  return (
+    <div className="scope scope--partial">
+      <span className="scope__label">Scope</span>
+      <span>
+        {opaque.length} of {opaque.length + governed.length} heads are separate programs (
+        {headList(opaque)}). Hydra guarantees what it sends them, not what they read or send
+        on their own account.
+        {local.length > 0 && (
+          <>
+            {' '}
+            {local.join(', ')} {local.length === 1 ? 'is' : 'are'} declared local-only, which
+            is a claim about the program itself rather than something Hydra verifies.
+          </>
+        )}
+      </span>
+    </div>
+  )
+}
+
+// Mirrors security.HeadList: the same bound, so one surface does not wrap
+// where the other truncates.
+function headList(ids: string[]): string {
+  const max = 4
+  return ids.length <= max ? ids.join(', ') : `${ids.slice(0, max).join(', ')} and ${ids.length - max} more`
 }
 
 // ── hero: the catchy first view ────────────────────────────────────────────
@@ -299,6 +362,9 @@ function Hero({ data }: { data: SecurityReport }) {
           )}
         </div>
       </div>
+
+
+      <ScopeNote boundary={data.boundary} />
 
       <IncidentList incidents={others} heading={others.length === (data.incidents ?? []).length ? 'Incidents' : 'Other incidents'} />
 

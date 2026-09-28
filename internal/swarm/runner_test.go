@@ -50,7 +50,7 @@ func TestExecuteHead_LedgerDenyBlocksExecution(t *testing.T) {
 	calls := 0
 	withStubExecutor(t, countingExecutor{&calls})
 
-	a := executeHead(context.Background(), registryHead("denied", "Denied", 90), "p", Options{})
+	a := executeHead(context.Background(), registryHead("denied", "Denied", 90), "p", Options{}, nil)
 	if a.Status != StatusFailed {
 		t.Errorf("Status = %q, want %q for a denied head", a.Status, StatusFailed)
 	}
@@ -65,7 +65,7 @@ func TestExecuteHead_DefaultLedgerPolicyAllowsExecution(t *testing.T) {
 	calls := 0
 	withStubExecutor(t, countingExecutor{&calls})
 
-	a := executeHead(context.Background(), registryHead("h1", "H1", 90), "p", Options{})
+	a := executeHead(context.Background(), registryHead("h1", "H1", 90), "p", Options{}, nil)
 	if a.Status != StatusOK {
 		t.Errorf("Status = %q, want %q", a.Status, StatusOK)
 	}
@@ -132,7 +132,7 @@ func TestRunAll_BoundsHangingHead(t *testing.T) {
 
 	done := make(chan []Attempt, 1)
 	go func() {
-		done <- runAll(context.Background(), heads, "p", Options{PerHeadTimeout: 50 * time.Millisecond})
+		done <- runAll(context.Background(), heads, "p", Options{PerHeadTimeout: 50 * time.Millisecond}, nil)
 	}()
 
 	select {
@@ -157,7 +157,7 @@ func TestRunRace_BoundsHangingHeads(t *testing.T) {
 
 	done := make(chan []Attempt, 1)
 	go func() {
-		done <- runRace(context.Background(), heads, "p", Options{PerHeadTimeout: 50 * time.Millisecond})
+		done <- runRace(context.Background(), heads, "p", Options{PerHeadTimeout: 50 * time.Millisecond}, nil)
 	}()
 
 	select {

@@ -8,6 +8,7 @@ import (
 	"context"
 	"os"
 
+	"github.com/ankit373/hydra/internal/awsconf"
 	"github.com/ankit373/hydra/internal/capabilities"
 	"github.com/ankit373/hydra/internal/provider"
 )
@@ -24,9 +25,21 @@ func (p *Provider) Discover(_ context.Context) ([]provider.Head, error) {
 		return nil, err
 	}
 
+	// Computed once, before the loop, so a machine with no allowlist never
+	// reads the pricing catalogue during discovery.
+	named := allowlistedOpenRouter(caps)
+
 	var heads []provider.Head
 	for _, k := range knownKeys {
 		if !k.detected() {
+			continue
+		}
+		// An allowlist replaces the single key-derived head rather than sitting
+		// beside it. Two heads on one account, one of them routing to whatever
+		// OPENROUTER_MODEL happens to say, splits the account's spend between
+		// them and makes neither row its real cost.
+		if k.providerID == "openrouter" && len(named) > 0 {
+			heads = append(heads, named...)
 			continue
 		}
 		id := "env/" + k.providerID
@@ -47,9 +60,16 @@ type keySpec struct {
 	envVars    []string // all must be non-empty (AND) unless anyOf is true
 	anyOf      bool     // at least one env var must be set
 	providerID string
+	// detect overrides the env-var test for a provider whose credentials do not
+	// live in the environment at all. Only AWS so far, which keeps its in the
+	// shared config files the way every other AWS tool expects (#867).
+	detect func() bool
 }
 
 func (k keySpec) detected() bool {
+	if k.detect != nil {
+		return k.detect()
+	}
 	if k.anyOf {
 		for _, v := range k.envVars {
 			if os.Getenv(v) != "" {
@@ -78,7 +98,8 @@ var knownKeys = []keySpec{
 	{envVars: []string{"FIREWORKS_API_KEY"}, providerID: "fireworks"},
 	{envVars: []string{"MISTRAL_API_KEY"}, providerID: "mistral"},
 	{envVars: []string{"DEEPSEEK_API_KEY"}, providerID: "deepseek"},
-	{envVars: []string{"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"}, providerID: "bedrock"},
+	{envVars: []string{"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"}, providerID: "bedrock",
+		detect: func() bool { return awsconf.Resolve().Usable() }},
 	{envVars: []string{"AZURE_OPENAI_API_KEY", "AZURE_OPENAI_ENDPOINT"}, providerID: "azure"},
 	{envVars: []string{"PERPLEXITY_API_KEY"}, providerID: "perplexity"},
 	{envVars: []string{"COHERE_API_KEY"}, providerID: "cohere"},

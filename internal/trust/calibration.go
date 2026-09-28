@@ -24,6 +24,13 @@ const laplacePrior = 1.0
 // calibKey namespaces a confusion posterior by source and domain.
 type calibKey struct{ source, domain string }
 
+// keyFor is the one derivation of a store key, for reads, writes and snapshot
+// restores alike. Normalizing the write path alone left `hyctl oracle verify`
+// filing under "default" and reading back under "" (#888).
+func keyFor(source, domain string) calibKey {
+	return calibKey{source, Domain(domain)}
+}
+
 // confusion holds Beta-Bernoulli pseudo-counts for one (source, domain).
 //
 //	              actually correct   actually incorrect
@@ -48,14 +55,22 @@ func (c *confusion) observations() float64 {
 	return (c.TP + c.FP + c.TN + c.FN) - 4*laplacePrior
 }
 
+// negatives counts real "said incorrect" verdicts. At zero, sp is still its
+// prior and LLR cannot exceed ln2 however many positives arrive (#771), so it
+// is the number that says whether a cell is usable rather than merely populated.
+func (c *confusion) negatives() float64 {
+	return (c.TN + c.FN) - 2*laplacePrior
+}
+
 // Stat is one row of a calibration report, the human/JSON-facing view.
 type Stat struct {
 	Source string  `json:"source"`
 	Domain string  `json:"domain"`
-	N      float64 `json:"n"`  // real observations (excludes prior)
-	Se     float64 `json:"se"` // sensitivity
-	Sp     float64 `json:"sp"` // specificity
-	D      float64 `json:"d"`  // diagnostic power (nats), expected |LLR|
+	N      float64 `json:"n"`   // real observations (excludes prior)
+	Neg    float64 `json:"neg"` // of those, "said incorrect" verdicts; 0 pins sp
+	Se     float64 `json:"se"`  // sensitivity
+	Sp     float64 `json:"sp"`  // specificity
+	D      float64 `json:"d"`   // diagnostic power (nats), expected |LLR|
 }
 
 // Calibrator maintains an online confusion posterior per (source, domain) and
@@ -154,7 +169,10 @@ func (c *Calibrator) apply(source, domain string, saidCorrect bool, actual Outco
 	if actual == OutcomeUnknown {
 		return
 	}
-	key := calibKey{source, domain}
+	// The key is derived rather than taken, so it cannot depend on which
+	// caller wrote it: `oracle verify` defaults --domain to "" where
+	// `dispatch` defaults it to "default", which is #785 in a writer (#888).
+	key := keyFor(source, domain)
 	conf := c.store[key]
 	if conf == nil {
 		conf = newConfusion()
@@ -238,7 +256,7 @@ func (c *Calibrator) D(source, domain string) float64 {
 // rates returns clamped se/sp so LLR/D never hit ±Inf from a degenerate cell.
 func (c *Calibrator) rates(source, domain string) (se, sp float64) {
 	c.mu.RLock()
-	conf := c.store[calibKey{source, domain}]
+	conf := c.store[keyFor(source, domain)]
 	c.mu.RUnlock()
 	if conf == nil {
 		return 0.5, 0.5 // unknown source: uninformative
@@ -270,6 +288,7 @@ func (c *Calibrator) Report() []Stat {
 			Source: k.source,
 			Domain: k.domain,
 			N:      conf.observations(),
+			Neg:    conf.negatives(),
 			Se:     se,
 			Sp:     sp,
 			D:      se*math.Log(se/(1-sp)) + (1-se)*math.Log((1-se)/sp),

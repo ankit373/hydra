@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 
 // Package port discovers AI heads running as local HTTP services.
-// To add a new local service: implement a portService and add it to services.
+// To add a new local service: implement a portService and add it to the list
+// Discover hands to discover, which dials and probes them all concurrently.
 package port
 
 import (
@@ -12,6 +13,9 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/ankit373/hydra/internal/capabilities"
@@ -47,23 +51,44 @@ func (p *Provider) Discover(ctx context.Context) ([]provider.Head, error) {
 	// service can be constructed against a test server, and so the address the
 	// liveness dial uses is provably the same one the probe and the head's
 	// Endpoint use.
-	services := []portService{
+	return discover(ctx, caps, []portService{
 		&ollamaService{base: provider.OllamaHost()},
-		&lmStudioService{base: defaultLMStudioHost},
+		newLMStudioService(),
+		newLiteLLMService(),
+		newLlamaCppService(),
+	}), nil
+}
+
+// discover dials and probes every service concurrently. Serially, a dead
+// service cost the whole dial timeout before the next dial began, so the floor
+// grew with the service list on every probe, status and dispatch (#750).
+//
+// Results land in a per-service slot rather than a shared append, so head
+// order stays the service order however the dials interleave.
+func discover(ctx context.Context, caps *capabilities.DB, services []portService) []provider.Head {
+	found := make([][]provider.Head, len(services))
+	var wg sync.WaitGroup
+	for i, svc := range services {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if !isOpen(svc.addr()) {
+				return
+			}
+			heads, err := svc.probe(ctx, caps)
+			if err != nil {
+				return // service is up but probe failed; skip gracefully
+			}
+			found[i] = heads
+		}()
 	}
+	wg.Wait()
 
 	var heads []provider.Head
-	for _, svc := range services {
-		if !isOpen(svc.addr()) {
-			continue
-		}
-		found, err := svc.probe(ctx, caps)
-		if err != nil {
-			continue // service is up but probe failed; skip gracefully
-		}
-		heads = append(heads, found...)
+	for _, f := range found {
+		heads = append(heads, f...)
 	}
-	return heads, nil
+	return heads
 }
 
 // isOpen is a cheap liveness check before the real probe, so a machine with
@@ -120,6 +145,22 @@ func (s *ollamaService) probe(ctx context.Context, caps *capabilities.DB) ([]pro
 		Models []struct {
 			Name         string   `json:"name"`
 			Capabilities []string `json:"capabilities"`
+			// Ollama pulls unsigned weights from a public registry, so the
+			// digest is the only handle on which weights are actually loaded.
+			// Carried so internal/security can detect a swap the way it
+			// already detects a replaced head binary.
+			Digest  string `json:"digest"`
+			Details struct {
+				// The same model id at Q4_K_M and at Q8_0 differs in accuracy,
+				// VRAM and tokens/sec. Routing them as one head hides exactly
+				// the tradeoff the router exists to make (#762).
+				QuantizationLevel string `json:"quantization_level"`
+				ParameterSize     string `json:"parameter_size"`
+				// The architectural maximum, not what the server allocates:
+				// measured on 0.33.2, a 40960 model runs at the 4096 server
+				// default. A ceiling to cap a declared window by (#764).
+				ContextLength int `json:"context_length"`
+			} `json:"details"`
 		} `json:"models"`
 	}
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&payload); err != nil {
@@ -128,7 +169,22 @@ func (s *ollamaService) probe(ctx context.Context, caps *capabilities.DB) ([]pro
 
 	heads := make([]provider.Head, 0, len(payload.Models))
 	for _, m := range payload.Models {
-		meta := map[string]string{"model_source": caps.SourceOllama(m.Name)}
+		id := "ollama/" + m.Name
+		meta := map[string]string{"model_source": caps.SourceLocal(id, m.Name)}
+		if m.Digest != "" {
+			meta["model_digest"] = m.Digest
+		}
+		// Absent on older servers, which send no details at all. Left unset
+		// rather than defaulted: a fabricated quant would be read as measured.
+		if q := strings.TrimSpace(m.Details.QuantizationLevel); q != "" {
+			meta["model_quant"] = q
+		}
+		if p := strings.TrimSpace(m.Details.ParameterSize); p != "" {
+			meta["model_params"] = p
+		}
+		if m.Details.ContextLength > 0 {
+			meta["model_ctx_max"] = strconv.Itoa(m.Details.ContextLength)
+		}
 		if !completionCapable(m.Capabilities) {
 			// Embedding-only models fail every dispatch (#532). Marked rather
 			// than hidden: executor.Unroutable keeps them out of routing, and
@@ -136,7 +192,7 @@ func (s *ollamaService) probe(ctx context.Context, caps *capabilities.DB) ([]pro
 			meta["embedding_only"] = "true"
 		}
 		heads = append(heads, provider.Head{
-			ID:       "ollama/" + m.Name,
+			ID:       id,
 			Name:     m.Name + " (Ollama)",
 			Provider: "local",
 			Source:   "port",
@@ -144,7 +200,7 @@ func (s *ollamaService) probe(ctx context.Context, caps *capabilities.DB) ([]pro
 			// this later, so a head discovered at one address and stamped with
 			// another fails at the point of use.
 			Endpoint:  s.base,
-			CapScore:  caps.ScoreOllama(m.Name),
+			CapScore:  caps.ScoreLocal(id, m.Name),
 			LocalOnly: true,
 			AuthReady: true,
 			Meta:      meta,
@@ -172,13 +228,20 @@ func completionCapable(caps []string) bool {
 
 // ── LM Studio ─────────────────────────────────────────────────────────────────
 
-// defaultLMStudioHost is LM Studio's default server address. Unlike Ollama it
-// publishes no environment variable for relocating it, so there is nothing to
-// honour, but the base is still a field so the two services behave the same
-// way and both are testable against a stub server.
+// defaultLMStudioHost is LM Studio's default server address. Its port is
+// configurable in the app and it publishes no variable of its own, so Hydra
+// names one: without it a relocated server is simply undiscoverable, the #282
+// shape, and no test could point discovery away from the real port either.
 const defaultLMStudioHost = "http://localhost:1234"
 
+// LMStudioHostEnv is Hydra's own variable, since LM Studio publishes none.
+const LMStudioHostEnv = "HYDRA_LMSTUDIO_HOST"
+
 type lmStudioService struct{ base string }
+
+func newLMStudioService() *lmStudioService {
+	return &lmStudioService{base: provider.HostFromEnv(LMStudioHostEnv, defaultLMStudioHost)}
+}
 
 func (s *lmStudioService) addr() string { return hostPort(s.base, 1234) }
 
@@ -207,16 +270,17 @@ func (s *lmStudioService) probe(ctx context.Context, caps *capabilities.DB) ([]p
 
 	heads := make([]provider.Head, 0, len(payload.Data))
 	for _, m := range payload.Data {
+		id := "lmstudio/" + m.ID
 		heads = append(heads, provider.Head{
-			ID:        "lmstudio/" + m.ID,
+			ID:        id,
 			Name:      m.ID + " (LM Studio)",
 			Provider:  "local",
 			Source:    "port",
 			Endpoint:  s.base,
-			CapScore:  caps.ScoreOllama(m.ID),
+			CapScore:  caps.ScoreLocal(id, m.ID),
 			LocalOnly: true,
 			AuthReady: true,
-			Meta:      map[string]string{"model_source": caps.SourceOllama(m.ID)},
+			Meta:      map[string]string{"model_source": caps.SourceLocal(id, m.ID)},
 		})
 	}
 	return heads, nil

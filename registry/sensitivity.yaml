@@ -1,0 +1,90 @@
+# Which files must never reach a head that leaves the machine.
+#
+# Path rules, not content rules. Content detection can only stop what someone
+# wrote a pattern for; a path rule closes a whole category whether or not the
+# secret inside it looks like anything. Both run, and the stricter answer wins.
+#
+# Globs use Hydra's shared dialect (internal/glob): `**` crosses separators and
+# matches zero of them, so `**/.env` matches `.env`, `app/.env` and
+# `/Users/x/p/.env` alike. Matching is case-insensitive on the extension only
+# where the pattern says so, list both spellings when it matters.
+
+# secret: refused to any head that is not local. This is the list that makes
+# "no local configs leave the machine" a guarantee rather than a hope.
+secret:
+  # Environment and dotfile configuration
+  - "**/.env"
+  - "**/.env.*"
+  - "**/.envrc"
+  - "**/.netrc"
+  - "**/.npmrc"
+  - "**/.pypirc"
+  - "**/.dockercfg"
+  - "**/.docker/config.json"
+
+  # Private key material and certificates
+  - "**/*.pem"
+  - "**/*.key"
+  - "**/*.p12"
+  - "**/*.pfx"
+  - "**/*.jks"
+  - "**/*.keystore"
+  - "**/id_rsa"
+  - "**/id_dsa"
+  - "**/id_ecdsa"
+  - "**/id_ed25519"
+  - "**/.ssh/**"
+  - "**/*.ppk"
+
+  # Cloud and cluster credentials
+  - "**/.aws/credentials"
+  - "**/.aws/config"
+  - "**/.azure/**"
+  - "**/.config/gcloud/**"
+  - "**/gcloud/application_default_credentials.json"
+  - "**/kubeconfig"
+  - "**/.kube/config"
+  - "**/*service-account*.json"
+  - "**/terraform.tfstate"
+  - "**/terraform.tfstate.backup"
+  - "**/*.tfvars"
+
+  # Source control and package manager credentials
+  - "**/.git-credentials"
+  - "**/.gitconfig"
+  - "**/.hgrc"
+  - "**/.gem/credentials"
+  - "**/.cargo/credentials*"
+  - "**/.gradle/gradle.properties"
+
+  # Conventional secret locations
+  - "**/secrets/**"
+  - "**/secret/**"
+  - "**/credentials/**"
+  - "**/*.secret"
+  - "**/*secrets*.yaml"
+  - "**/*secrets*.yml"
+  - "**/*credentials*.json"
+
+  # Databases and keychains that routinely hold credentials
+  - "**/*.sqlite"
+  - "**/*.sqlite3"
+  - "**/*.kdbx"
+  - "**/*.keychain"
+  - "**/*.keychain-db"
+
+  # Hydra's own state, which carries prompts, spend and the audit trail
+  - "**/.hydra/**"
+
+# allow wins over secret. These match a pattern above but are the published
+# template rather than the filled-in file, and blocking them only teaches
+# people to turn the gate off.
+allow:
+  - "**/.env.example"
+  - "**/.env.sample"
+  - "**/.env.template"
+  - "**/.env.dist"
+  - "**/*.pem.example"
+  - "**/secrets/README*"
+  - "**/secrets/*.example"
+  - "**/secrets/*.template"

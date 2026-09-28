@@ -69,10 +69,16 @@ func TestInject(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"agent-1", "earlier output", "new instruction", "ADDITIONAL INSTRUCTION"} {
+	for _, want := range []string{"agent-1", "earlier output", "new instruction"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("injected prompt is missing %q:\n%s", want, got)
 		}
+	}
+
+	// PromptBlock already closes with the task. Inject used to append it a
+	// second time under "ADDITIONAL INSTRUCTION", sending every task twice.
+	if n := strings.Count(got, "new instruction"); n != 1 {
+		t.Errorf("task appears %d times, want 1:\n%s", n, got)
 	}
 
 	// --a2a always names a file the caller explicitly asked for, so a missing

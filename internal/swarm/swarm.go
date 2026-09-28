@@ -35,10 +35,14 @@ type Options struct {
 	Mode SwarmMode
 
 	// Head selection, at most one of TierHint / HeadIDs should be set.
-	// When both are empty, CapScoreSelector picks the top-N available heads.
+	// With none of these and no Enum, CapScoreSelector picks the top-N heads.
 	TierHint    string
 	HeadIDs     []string // explicit head IDs; bypasses tier
 	MinCapScore int      // exclude heads below this score (0 = no filter)
+
+	// Enum is the routing enum key (--enum) that chose the tier. It selects
+	// heads when TierHint is empty, see Options.tier.
+	Enum string
 
 	// Execution constraints.
 	MaxHeads       int           // hard cap on fan-out (0 → defaultMaxHeads = 5)
@@ -72,6 +76,16 @@ type Options struct {
 	// tell "5 heads on one task" from "5 separate tasks" (#181).
 	RunID  string
 	TaskID string
+
+	// OnProgress reports the run as it happens: the heads selected, each one
+	// starting and finishing, and on the SPRT path how far the evidence has
+	// moved Λ. Nil leaves the run byte-identical, nothing else reads it.
+	OnProgress func(Progress)
+
+	// progress is OnProgress wrapped so concurrent heads cannot interleave in
+	// it. Run/RunSPRT fill it in, like Classification below; Options is copied
+	// by value, so it has to be a pointer to survive the copy.
+	progress *progressSink
 
 	// Classification is prompt's already-computed PII/injection verdict
 	// (policy.Classify), cmdDispatch computes this once and passes it here so
@@ -110,6 +124,17 @@ type Swarm struct {
 	d       *dispatch.Dispatcher
 	heads   []provider.Head
 	pricing PricingReader
+	// askJudge overrides how the equivalence judge dispatches, set only by
+	// tests so the options it sends are observable. See dispatchFunc.
+	askJudge dispatchFunc
+}
+
+// ask is the equivalence judge's dispatch, the real one unless a test replaced it.
+func (s *Swarm) ask() dispatchFunc {
+	if s.askJudge != nil {
+		return s.askJudge
+	}
+	return dispatchWith(s.d)
 }
 
 // New constructs a Swarm.
@@ -150,18 +175,14 @@ func (s *Swarm) Plan(prompt string, opts Options) (heads []provider.Head, estUSD
 		return nil, 0, err
 	}
 
-	cfg, err := config.Load()
-	if err != nil {
-		return nil, 0, fmt.Errorf("swarm: config load: %w", err)
-	}
-	if err := validateSwarmTiers(cfg, opts); err != nil {
+	if err := validateSwarmTiers(opts); err != nil {
 		return nil, 0, err
 	}
 	prompt, err = injectA2A(prompt, opts)
 	if err != nil {
 		return nil, 0, err
 	}
-	selected, err := resolveSelector(opts, cfg).Select(s.heads, opts)
+	selected, err := resolveSelector(opts).Select(s.heads, opts)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -188,7 +209,7 @@ func (s *Swarm) Run(ctx context.Context, prompt string, opts Options) (*SwarmRes
 	// An invalid --tier/--swarm-judge-tier must fail here, before any heads
 	// are fired or judged, never silently widen to CapScoreSelector's top-N
 	// fan-out (#501).
-	if err := validateSwarmTiers(cfg, opts); err != nil {
+	if err := validateSwarmTiers(opts); err != nil {
 		return nil, err
 	}
 	prompt, err = injectA2A(prompt, opts)
@@ -197,7 +218,8 @@ func (s *Swarm) Run(ctx context.Context, prompt string, opts Options) (*SwarmRes
 	}
 
 	// 1. Head selection.
-	selector := resolveSelector(opts, cfg)
+	opts.progress = &progressSink{fn: opts.OnProgress}
+	selector := resolveSelector(opts)
 	selected, err := selector.Select(s.heads, opts)
 	if err != nil {
 		return nil, err
@@ -205,6 +227,7 @@ func (s *Swarm) Run(ctx context.Context, prompt string, opts Options) (*SwarmRes
 	if len(selected) == 0 {
 		return nil, fmt.Errorf("swarm: no heads available for the requested configuration")
 	}
+	opts.progress.emit(Progress{Kind: ProgressSelected, Heads: selected})
 
 	// Classify once, before any head fires, every concurrent executeHead call
 	// below reuses this instead of each re-scanning the same prompt (#522).
@@ -225,17 +248,14 @@ func (s *Swarm) Run(ctx context.Context, prompt string, opts Options) (*SwarmRes
 
 	switch opts.Mode {
 	case ModeRace:
-		attempts = runRace(ctx, selected, prompt, opts)
+		attempts = runRace(ctx, selected, prompt, opts, s.pricing)
 	case ModeBest, ModeAll:
-		attempts = runAll(ctx, selected, prompt, opts)
+		attempts = runAll(ctx, selected, prompt, opts, s.pricing)
 	}
 
 	wallDuration := time.Since(startedAt)
 
-	// 4. Enrich cost on each attempt.
-	enrichCosts(attempts, s.pricing)
-
-	// 5. Determine winner + verdict.
+	// 4. Determine winner + verdict.
 	result := &SwarmResult{
 		Mode:         opts.Mode,
 		Prompt:       prompt,
@@ -270,12 +290,12 @@ func (s *Swarm) Run(ctx context.Context, prompt string, opts Options) (*SwarmRes
 		}
 	}
 
-	// 6. Sum total cost.
+	// 5. Sum total cost.
 	for _, a := range attempts {
 		result.TotalCostUSD += a.EstCostUSD
 	}
 
-	// 7. Log to cost.jsonl.
+	// 6. Log to cost.jsonl.
 	logAttempts(result.Attempts, result.Mode, opts, truncate(prompt, 80))
 	logRunEvents(result.Attempts, result.Mode, opts)
 
@@ -284,15 +304,25 @@ func (s *Swarm) Run(ctx context.Context, prompt string, opts Options) (*SwarmRes
 
 // ── private helpers ───────────────────────────────────────────────────────────
 
+// tier is what head selection routes on: --tier when given, else the tier
+// --enum resolves to, as a single dispatch resolves the two. Every reader goes
+// through here, or the enum on the cost row is one that did not route (#832).
+func (o Options) tier() string {
+	if o.TierHint != "" {
+		return o.TierHint
+	}
+	return dispatch.EnumToTier(o.Enum)
+}
+
 // validateSwarmTiers rejects an invalid TierHint or JudgeTierHint before any
 // selection or judging happens, using the identical rule dispatch.Dispatch
 // applies. Run, RunSPRT and Plan all call this so --tier/--swarm-judge-tier
 // fail the same way regardless of mode (#501).
-func validateSwarmTiers(cfg *config.Config, opts Options) error {
-	if err := dispatch.ValidateTierHint(cfg, opts.TierHint); err != nil {
+func validateSwarmTiers(opts Options) error {
+	if err := dispatch.ValidateTierHint(opts.tier()); err != nil {
 		return fmt.Errorf("swarm: %w", err)
 	}
-	if err := dispatch.ValidateTierHint(cfg, opts.JudgeTierHint); err != nil {
+	if err := dispatch.ValidateTierHint(opts.JudgeTierHint); err != nil {
 		return fmt.Errorf("swarm: judge tier: %w", err)
 	}
 	return nil
@@ -321,7 +351,7 @@ func buildJudge(d *dispatch.Dispatcher, opts Options, cfg *config.Config) Judge 
 		// Default to the configured Cortex head's tier (tier 1).
 		tierHint = "1"
 	}
-	llm := newLLMJudge(d, tierHint, opts.JudgeTimeout)
+	llm := newLLMJudge(d, tierHint, opts)
 	cap_ := &CapScoreJudge{}
 	fallback := newCompositeJudge(llm, cap_)
 
@@ -335,10 +365,7 @@ func buildJudge(d *dispatch.Dispatcher, opts Options, cfg *config.Config) Judge 
 // loadCalibrationFor degrades to (nil, domain) on a load error, callers
 // treat nil as "no calibration data" and fall back rather than fail.
 func loadCalibrationFor(opts Options) (*trust.Calibrator, string) {
-	domain := opts.Domain
-	if domain == "" {
-		domain = "default"
-	}
+	domain := trust.Domain(opts.Domain)
 	cal, err := trust.New(trust.DefaultPath())
 	if err != nil {
 		return nil, domain

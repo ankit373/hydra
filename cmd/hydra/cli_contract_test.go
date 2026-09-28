@@ -420,7 +420,7 @@ func TestPrintBudgetStatus_SurvivesEveryStateShape(t *testing.T) {
 				}
 			}
 			// The assertion is that this returns at all.
-			_ = captureStdout(t, printBudgetStatus)
+			_ = captureStdout(t, func() { printBudgetStatus(nil) })
 		})
 	}
 }

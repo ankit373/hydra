@@ -115,7 +115,9 @@ func privilegeCheck(ps []AgentPrivilege) Check {
 	var unscoped []string
 	for _, p := range ps {
 		if p.Unscoped && p.WritesOrExecs > 0 {
-			unscoped = append(unscoped, fmt.Sprintf("%s (%d state-changing)", p.Agent, p.WritesOrExecs))
+			// Quoted for the same reason narrate quotes its actor: this is a
+			// recorded name, and a hostile one reads like the report (#921).
+			unscoped = append(unscoped, fmt.Sprintf("%q (%d state-changing)", p.Agent, p.WritesOrExecs))
 		}
 	}
 	if len(unscoped) == 0 {

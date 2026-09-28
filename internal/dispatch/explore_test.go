@@ -177,7 +177,7 @@ func TestLogDispatchWritesPropensity(t *testing.T) {
 
 	const actProb = 0.0125
 	d := newTestDispatcher()
-	if err := d.logDispatch(logResult(), "p", Options{}, actProb); err != nil {
+	if err := d.logDispatch(logResult(), "p", Options{}, actProb, "0102030405060708"); err != nil {
 		t.Fatal(err)
 	}
 	for _, name := range []string{"dispatch.jsonl", "cost.jsonl"} {

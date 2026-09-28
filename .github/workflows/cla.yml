@@ -1,0 +1,64 @@
+name: CLA
+
+# A published CLA that nothing checks is a document, not an agreement. This is
+# the check. It is deliberately self-contained: no third-party app, no bot
+# account, no storing anyone's signature anywhere but the repo itself.
+on:
+  pull_request_target:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  signed:
+    name: Contributor has signed
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # pull_request_target runs against the base, which is the point: a
+          # fork must not be able to edit the workflow that checks it, nor add
+          # itself to CONTRIBUTORS.md in a commit this job then trusts.
+          ref: ${{ github.base_ref }}
+
+      - name: Check the acknowledgement and the roster
+        env:
+          BODY: ${{ github.event.pull_request.body }}
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+        run: |
+          set -euo pipefail
+
+          # Dependabot and the release bot open PRs on the repo's own behalf.
+          # Quoted: unquoted, [bot] is a character class, not literal
+          # brackets, so this matched nothing and blocked every bot PR.
+          case "$AUTHOR" in
+            'dependabot[bot]'|'github-actions[bot]'|'release-please[bot]')
+              echo "::notice::$AUTHOR is a bot acting for this repo; CLA does not apply."
+              exit 0 ;;
+          esac
+
+          ticked=0
+          # Any ticked box whose text mentions the CLA. Matching the whole
+          # template line would fail the day someone rewords it.
+          if printf '%s' "$BODY" | grep -qiE '^\s*-\s*\[[xX]\].*\bCLA\b'; then
+            ticked=1
+          fi
+
+          listed=0
+          if grep -qiF "/$AUTHOR)" CONTRIBUTORS.md || grep -qiE "\b$AUTHOR\b" CONTRIBUTORS.md; then
+            listed=1
+          fi
+
+          if [ "$ticked" = 1 ] && [ "$listed" = 1 ]; then
+            echo "$AUTHOR has signed: acknowledgement ticked and listed in CONTRIBUTORS.md."
+            exit 0
+          fi
+
+          echo "::error::$AUTHOR has not completed the CLA."
+          [ "$ticked" = 1 ] || echo "::error::The CLA box in the pull request description is not ticked."
+          [ "$listed" = 1 ] || echo "::error::$AUTHOR is not listed in CONTRIBUTORS.md. Add yourself in this PR."
+          echo "Read it first: https://github.com/${{ github.repository }}/blob/main/CLA.md"
+          echo "It explains why this project asks for a CLA rather than the DCO most projects use."
+          exit 1

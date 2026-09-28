@@ -42,12 +42,20 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-// exitCode runs the built binary in a fresh sandboxed HOME.
-func exitCode(t *testing.T, args ...string) (code int, output string) {
+// requireHyctl skips when TestMain could not build the binary, which is an
+// environment problem rather than a failure. One call site, so the suite's
+// skip budget counts this concern once (see covergate).
+func requireHyctl(t *testing.T) {
 	t.Helper()
 	if hyctlBin == "" {
 		t.Skip("hyctl could not be built in this environment")
 	}
+}
+
+// exitCode runs the built binary in a fresh sandboxed HOME.
+func exitCode(t *testing.T, args ...string) (code int, output string) {
+	t.Helper()
+	requireHyctl(t)
 	return runBinary(t, testutil.NewSandbox(t), args...)
 }
 
@@ -60,9 +68,7 @@ func exitCode(t *testing.T, args ...string) (code int, output string) {
 // the verdict, which means the exit code *is* the contract for those.
 func runBinary(t *testing.T, s *testutil.Sandbox, args ...string) (code int, output string) {
 	t.Helper()
-	if hyctlBin == "" {
-		t.Skip("hyctl could not be built in this environment")
-	}
+	requireHyctl(t)
 
 	cmd := exec.Command(hyctlBin, args...)
 	cmd.Env = append(os.Environ(),
@@ -133,9 +139,7 @@ func TestExitCodes_MCPDenialIsNonZero(t *testing.T) {
 // stdout must stay parseable: a banner or a warning belongs on stderr, or it
 // lands in whatever is consuming the JSON.
 func TestExitCodes_JSONGoesToStdoutAlone(t *testing.T) {
-	if hyctlBin == "" {
-		t.Skip("hyctl could not be built in this environment")
-	}
+	requireHyctl(t)
 	s := testutil.NewSandbox(t)
 
 	cmd := exec.Command(hyctlBin, "models", "list", "--json")

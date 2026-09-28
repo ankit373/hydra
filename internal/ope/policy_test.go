@@ -17,7 +17,7 @@ func TestParsePolicy_KnownNames(t *testing.T) {
 		{"  CHEAPER  ", "1 tier(s) cheaper"},
 	}
 	for _, c := range cases {
-		p, err := ParsePolicy(c.spec, tiers)
+		p, err := ParsePolicy(c.spec, Env{Tiers: tiers})
 		if err != nil {
 			t.Errorf("ParsePolicy(%q): %v", c.spec, err)
 			continue
@@ -31,7 +31,7 @@ func TestParsePolicy_KnownNames(t *testing.T) {
 // An unknown name must list what is accepted. "unknown policy" alone leaves
 // someone guessing at a closed set.
 func TestParsePolicy_UnknownNameListsTheAlternatives(t *testing.T) {
-	_, err := ParsePolicy("wishful", TiersIn([]int{1}))
+	_, err := ParsePolicy("wishful", Env{Tiers: TiersIn([]int{1})})
 	if err == nil {
 		t.Fatal("ParsePolicy accepted an unknown policy")
 	}
@@ -44,7 +44,7 @@ func TestParsePolicy_UnknownNameListsTheAlternatives(t *testing.T) {
 
 func TestParsePolicy_MalformedTierAndModel(t *testing.T) {
 	for _, spec := range []string{"tier:", "tier:abc", "model:"} {
-		if _, err := ParsePolicy(spec, TiersIn([]int{1})); err == nil {
+		if _, err := ParsePolicy(spec, Env{Tiers: TiersIn([]int{1})}); err == nil {
 			t.Errorf("ParsePolicy(%q) returned no error", spec)
 		}
 	}
@@ -104,4 +104,75 @@ func TestSortedTiers(t *testing.T) {
 			t.Fatalf("got %v, want %v", got, want)
 		}
 	}
+}
+
+// The constraint policy needs the machine, not just the log. Refusing without
+// it beats scoring every row 0, which reads as "the policy would never do
+// this" rather than "nothing here could answer".
+func TestParsePolicy_ConstraintNeedsTheMachine(t *testing.T) {
+	if _, err := ParsePolicy("constraint", Env{Tiers: TiersIn([]int{1})}); err == nil {
+		t.Error("the constraint policy was accepted with no way to say what it would choose")
+	}
+	chosen := func(string) (string, bool) { return "local", true }
+	p, err := ParsePolicy("constraint", Env{Tiers: TiersIn([]int{1}), Chosen: chosen})
+	if err != nil {
+		t.Fatalf("ParsePolicy(constraint): %v", err)
+	}
+	if _, ok := p.(Constraint); !ok {
+		t.Errorf("ParsePolicy(constraint) returned %T", p)
+	}
+}
+
+// A row that predates domain logging cannot say what the constraint would have
+// done with it. Abstaining drops it from the estimate; scoring it 0 would
+// assert the policy routed elsewhere, which is a claim nobody can support.
+func TestConstraint_AbstainsOnRowsThatCannotAnswer(t *testing.T) {
+	asked := 0
+	p := Constraint{Chosen: func(string) (string, bool) { asked++; return "local", true }}
+
+	for _, d := range []Decision{
+		{Head: "local"}, // no domain
+		{Domain: "go"},  // no head
+		{},              // neither
+	} {
+		if got := p.Would(d); got != 0 {
+			t.Errorf("%+v scored %v, want 0", d, got)
+		}
+	}
+	if asked != 0 {
+		t.Errorf("asked the machine %d times about rows that carry no context", asked)
+	}
+}
+
+// The policy agrees with the row exactly when the head it would choose is the
+// head that ran, and head ids are compared without regard to case because the
+// log and the probe do not always agree on it.
+func TestConstraint_MatchesTheHeadItWouldChoose(t *testing.T) {
+	p := Constraint{Chosen: func(domain string) (string, bool) {
+		if domain != "go" {
+			return "", false
+		}
+		return "ollama/qwen3:4b", true
+	}}
+
+	if got := p.Would(Decision{Domain: "go", Head: "Ollama/Qwen3:4b"}); got != 1 {
+		t.Errorf("the head it would choose scored %v, want 1", got)
+	}
+	if got := p.Would(Decision{Domain: "go", Head: "anthropic/claude"}); got != 0 {
+		t.Errorf("a head it would not choose scored %v, want 0", got)
+	}
+	// A domain the machine cannot route for is not a disagreement.
+	if got := p.Would(Decision{Domain: "cobol", Head: "ollama/qwen3:4b"}); got != 0 {
+		t.Errorf("an unroutable domain scored %v, want 0", got)
+	}
+}
+
+// A policy that cannot be listed cannot be asked for.
+func TestPolicyNames_ListsTheConstraint(t *testing.T) {
+	for _, n := range PolicyNames() {
+		if n == "constraint" {
+			return
+		}
+	}
+	t.Errorf("PolicyNames() = %v, missing the constraint policy", PolicyNames())
 }

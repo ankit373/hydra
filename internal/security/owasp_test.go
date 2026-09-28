@@ -7,26 +7,38 @@ import (
 	"path/filepath"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/ledger"
 	"github.com/ankit373/hydra/internal/testutil"
 	"github.com/ankit373/hydra/internal/trust"
 )
 
-// LLM01/LLM02 are always Enforced (automatic, no config), LLM07 is always Gap
-// (no mechanism exists), LLM04/LLM08 are always N/A, these don't depend on
-// install state, unlike LLM03/05/06/09/10. LLM03 is Gap only while nothing is
-// being fingerprinted, which is what an empty SupplyChain means here.
+// LLM01 is Partial, LLM07 is always Gap (no mechanism exists), LLM04/LLM08
+// are always N/A, these don't depend on install state, unlike LLM02/03/05/06
+// /09/10. LLM03 is Gap only while nothing is being fingerprinted, which is
+// what an empty SupplyChain means here.
+//
+// LLM01 is pinned Partial deliberately. It was Enforced while the mechanism
+// behind it documented itself otherwise: internal/policy/injection.go calls
+// its scan "trivially evaded by anyone who tries... not to prevent an attack".
+// Promoting it back needs a preventive mechanism, not a better detector
+// (#722). LLM02 earned Enforced when the egress gate shipped (#723) and is
+// asserted separately, since it now reads real runtime state.
 func TestComputeCoverage_StaticCategoriesAreFixed(t *testing.T) {
 	testutil.NewSandbox(t)
 
 	cov := computeCoverage(ledger.Policy{}, SupplyChain{}, nil, 0)
 	want := map[string]CoverageStatus{
-		"LLM01": Enforced, "LLM02": Enforced,
-		"LLM03": Gap, "LLM07": Gap,
-		"LLM04": NotApplicable, "LLM08": NotApplicable,
+		// LLM08 left gap when the 2026 ordering landed and became partial once
+		// a head repeating the hidden context back was recorded (#872). Partial
+		// is where it stays: the check is verbatim and detective.
+		"LLM01": Partial, "LLM08": Partial,
+		"LLM04": Gap,
+		"LLM05": NotApplicable, "LLM09": NotApplicable,
 	}
 	got := map[string]CoverageStatus{}
 	for _, c := range cov.Categories {
@@ -39,15 +51,42 @@ func TestComputeCoverage_StaticCategoriesAreFixed(t *testing.T) {
 	}
 }
 
+// LLM02 reports what the egress gate is actually doing, never a fixed claim.
+// Enforced needs both halves: path rules loaded, and the strict floor on. With
+// strict off a secret payload still leaves when nothing local is routable, so
+// that is Configured rather than Enforced, and the detail has to say which.
+func TestLLM02_ReadsTheEgressGatesRealState(t *testing.T) {
+	testutil.NewSandbox(t)
+
+	if got := sensitiveInfoCategory(); got.Status != Enforced {
+		t.Fatalf("LLM02 = %q with the gate shipped and strict defaulting on, want %q (%s)",
+			got.Status, Enforced, got.Detail)
+	}
+
+	cfg := &config.Config{}
+	off := false
+	cfg.Egress.Strict = &off
+	if err := config.Save(cfg); err != nil {
+		t.Skipf("cannot write a config in this sandbox: %v", err)
+	}
+	got := sensitiveInfoCategory()
+	if got.Status != Configured {
+		t.Errorf("LLM02 = %q with egress.strict off, want %q", got.Status, Configured)
+	}
+	if !strings.Contains(got.Detail, "egress.strict") {
+		t.Errorf("the detail does not name what is turned off: %q", got.Detail)
+	}
+}
+
 func TestComputeCoverage_NAExcludedFromBothNumeratorAndDenominator(t *testing.T) {
 	testutil.NewSandbox(t)
 
 	cov := computeCoverage(ledger.Policy{}, SupplyChain{}, nil, 0)
 	if cov.Applicable != 8 {
-		t.Errorf("Applicable = %d, want 8 (10 categories minus LLM04 and LLM08)", cov.Applicable)
+		t.Errorf("Applicable = %d, want 8 (10 categories minus LLM05 and LLM09)", cov.Applicable)
 	}
 	for _, c := range cov.Categories {
-		if c.ID == "LLM04" || c.ID == "LLM08" {
+		if c.ID == "LLM05" || c.ID == "LLM09" {
 			continue
 		}
 		if c.Status == NotApplicable {
@@ -56,22 +95,41 @@ func TestComputeCoverage_NAExcludedFromBothNumeratorAndDenominator(t *testing.T)
 	}
 }
 
-func TestLLM06ExcessiveAgency_ConfiguredOnlyWithAResourceScopedRule(t *testing.T) {
+func TestExcessiveAgency_ConfiguredOnlyWithAResourceScopedRule(t *testing.T) {
 	none := ledger.Policy{Rules: []ledger.Rule{{Tool: "a", Decision: ledger.Allow}}}
-	if got := llm06ExcessiveAgency(none).Status; got != Gap {
+	if got := excessiveAgencyCategory(none).Status; got != Gap {
 		t.Errorf("no resource-scoped rule: Status = %q, want Gap", got)
 	}
 
 	scoped := ledger.Policy{Rules: []ledger.Rule{{Resource: "internal/auth/*", Decision: ledger.Deny}}}
-	if got := llm06ExcessiveAgency(scoped).Status; got != Configured {
+	if got := excessiveAgencyCategory(scoped).Status; got != Configured {
 		t.Errorf("a resource-scoped rule exists: Status = %q, want Configured", got)
+	}
+
+	// An agent-scoped rule counts too. The least-privilege check beside this one
+	// reports unscoped *agents*, so an operator who scopes one and sees LLM03
+	// still read Gap concludes the work did nothing (#854).
+	byAgent := ledger.Policy{Rules: []ledger.Rule{{Agent: "hydra-swarm", Decision: ledger.Deny}}}
+	if got := excessiveAgencyCategory(byAgent).Status; got != Configured {
+		t.Errorf("an agent-scoped rule exists: Status = %q, want Configured", got)
+	}
+}
+
+// A gap that does not say what would close it is a score, not a finding. The
+// detail has to name the file and a rule shape an operator can paste (#854).
+func TestExcessiveAgency_GapNamesTheRemedy(t *testing.T) {
+	c := excessiveAgencyCategory(ledger.Policy{Rules: []ledger.Rule{{Tool: "a", Decision: ledger.Allow}}})
+	for _, want := range []string{ledger.DefaultPolicyPath(), "hydra-swarm", "\"decision\":\"deny\""} {
+		if !strings.Contains(c.Detail, want) {
+			t.Errorf("LLM03 gap detail does not contain %q: %s", want, c.Detail)
+		}
 	}
 }
 
 func TestLLM09Misinformation_ConfiguredOnlyWithARecordedRun(t *testing.T) {
 	testutil.NewSandbox(t)
 
-	if got := llm09Misinformation(nil).Status; got != Gap {
+	if got := misinformationCategory(nil).Status; got != Gap {
 		t.Errorf("no trust.jsonl: Status = %q, want Gap", got)
 	}
 
@@ -86,19 +144,19 @@ func TestLLM09Misinformation_ConfiguredOnlyWithARecordedRun(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := llm09Misinformation(runs).Status; got != Configured {
+	if got := misinformationCategory(runs).Status; got != Configured {
 		t.Errorf("a recorded run exists: Status = %q, want Configured", got)
 	}
 }
 
 func TestLLM10UnboundedConsumption_ConfiguredOnlyWithACostCeilingDenial(t *testing.T) {
 	none := []ledger.Event{{Tool: "a", Decision: ledger.Deny, Reason: "denied by ledger policy"}}
-	if got := llm10UnboundedConsumption(countCostCeilingDenials(none)).Status; got != Gap {
+	if got := unboundedConsumptionCategory(countCostCeilingDenials(none)).Status; got != Gap {
 		t.Errorf("no cost-ceiling denial: Status = %q, want Gap", got)
 	}
 
 	withCeiling := []ledger.Event{{Tool: "a", Decision: ledger.Deny, Reason: "exceeds cost ceiling: estimated $1 > limit $0.5"}}
-	if got := llm10UnboundedConsumption(countCostCeilingDenials(withCeiling)).Status; got != Configured {
+	if got := unboundedConsumptionCategory(countCostCeilingDenials(withCeiling)).Status; got != Configured {
 		t.Errorf("a cost-ceiling denial exists: Status = %q, want Configured", got)
 	}
 }
@@ -117,14 +175,14 @@ func TestLLM05OutputHandling_GapWhenNoValidatorsConfigured(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if got := llm05OutputHandling().Status; got != Gap {
+	if got := outputHandlingCategory().Status; got != Gap {
 		t.Errorf("every validator nulled out: Status = %q, want Gap", got)
 	}
 }
 
 func TestLLM05OutputHandling_EnforcedByDefault(t *testing.T) {
 	testutil.NewSandbox(t)
-	if got := llm05OutputHandling().Status; got != Enforced {
+	if got := outputHandlingCategory().Status; got != Enforced {
 		t.Errorf("embedded default registry: Status = %q, want Enforced", got)
 	}
 }
@@ -145,12 +203,81 @@ func TestAnnotateGapAge_BrandNewGapHasZeroAge(t *testing.T) {
 func TestAnnotateGapAge_UsesEarliestHistoryOccurrence(t *testing.T) {
 	now := time.Date(2026, 8, 10, 0, 0, 0, 0, time.UTC)
 	history := []scoreEntry{
-		{TS: now.Add(-40 * 24 * time.Hour).Format(time.RFC3339), Gaps: []string{"LLM03"}},
-		{TS: now.Add(-20 * 24 * time.Hour).Format(time.RFC3339), Gaps: []string{"LLM03"}},
+		{TS: now.Add(-40 * 24 * time.Hour).Format(time.RFC3339), Gaps: []string{"LLM03"}, Edition: LLMEdition},
+		{TS: now.Add(-20 * 24 * time.Hour).Format(time.RFC3339), Gaps: []string{"LLM03"}, Edition: LLMEdition},
 	}
 	got := annotateGapAge([]Category{{ID: "LLM03", Status: Gap}}, history, now)
 	if got[0].GapAgeDays != 40 {
 		t.Errorf("GapAgeDays = %d, want 40 (the earliest occurrence, not the later one)", got[0].GapAgeDays)
+	}
+}
+
+// The hazard #748 was split out for. Category IDs are only stable for LLM01
+// and LLM02, so a stored "LLM06" from the 2025 ordering names Excessive Agency
+// while a 2026 "LLM06" names something else. Matching across editions would
+// report one category's history as another's age, wrong and invisible, in the
+// field a reader trusts to say how long something has been broken.
+func TestAnnotateGapAge_NeverMatchesAcrossEditions(t *testing.T) {
+	now := time.Date(2026, 9, 8, 0, 0, 0, 0, time.UTC)
+	history := []scoreEntry{
+		// A different edition's LLM06 is a different category. Two years of it
+		// must not become this category's age.
+		{TS: now.Add(-700 * 24 * time.Hour).Format(time.RFC3339),
+			Gaps: []string{"LLM06"}, Edition: "1999"},
+		{TS: now.Add(-30 * 24 * time.Hour).Format(time.RFC3339),
+			Gaps: []string{"LLM06"}, Edition: LLMEdition},
+	}
+	got := annotateGapAge([]Category{{ID: "LLM06", Status: Gap}}, history, now)
+	if got[0].GapAgeDays != 30 {
+		t.Errorf("GapAgeDays = %d, want 30: the other edition's LLM06 is a "+
+			"different category and must not date this one", got[0].GapAgeDays)
+	}
+}
+
+// Every row written before the edition field existed was scored against the
+// 2025 ordering, so absence has to mean 2025 and not "unknown". Reading it as
+// unknown would make each of those rows foreign and silently reset every
+// existing gap's age to zero, which is the same class of lie in the other
+// direction.
+func TestScoreEntry_UnstampedIsThePreFieldEdition(t *testing.T) {
+	if got := (scoreEntry{}).edition(); got != "2025" {
+		t.Errorf("edition() = %q for an unstamped row, want 2025: that is what "+
+			"every row written before the field existed was scored against", got)
+	}
+	if got := (scoreEntry{Edition: "2026"}).edition(); got != "2026" {
+		t.Errorf("edition() = %q, want the stamped value", got)
+	}
+}
+
+// A row of the current edition dates a gap normally. Paired with the
+// cross-edition test above: together they show the filter admits what it
+// should and refuses what it should, rather than refusing everything.
+func TestAnnotateGapAge_CurrentEditionHistoryStillCounts(t *testing.T) {
+	now := time.Date(2026, 9, 8, 0, 0, 0, 0, time.UTC)
+	history := []scoreEntry{{
+		TS:      now.Add(-45 * 24 * time.Hour).Format(time.RFC3339),
+		Gaps:    []string{"LLM03"},
+		Edition: LLMEdition,
+	}}
+	got := annotateGapAge([]Category{{ID: "LLM03", Status: Gap}}, history, now)
+	if got[0].GapAgeDays != 45 {
+		t.Errorf("GapAgeDays = %d, want 45", got[0].GapAgeDays)
+	}
+}
+
+// The corrupt-timestamp fallback is a second reader of the same history and
+// must apply the same rule, or a bad TS on the current edition's row silently
+// reopens the cross-edition match the indexed path refuses.
+func TestFirstParseableGapSince_AlsoRefusesOtherEditions(t *testing.T) {
+	now := time.Date(2026, 9, 8, 0, 0, 0, 0, time.UTC)
+	history := []scoreEntry{
+		{TS: "not-a-timestamp", Gaps: []string{"LLM06"}, Edition: LLMEdition},
+		{TS: now.Add(-500 * 24 * time.Hour).Format(time.RFC3339),
+			Gaps: []string{"LLM06"}, Edition: "1999"},
+	}
+	if ts, _, ok := firstParseableGapSince(history, "LLM06"); ok {
+		t.Errorf("fell back to a foreign edition's entry (%s); the only "+
+			"current-edition row has a corrupt timestamp, so there is no age", ts)
 	}
 }
 
@@ -198,12 +325,15 @@ func annotateGapAgeOld(cats []Category, history []scoreEntry, now time.Time) []C
 // next-oldest entry naming the same ID.
 func TestAnnotateGapAge_MatchesOldImplementation(t *testing.T) {
 	now := time.Date(2026, 8, 13, 12, 0, 0, 0, time.UTC)
+	// Stamped with the current edition throughout: this exercises earliest-wins
+	// and the malformed-timestamp skip, not the cross-edition refusal, which has
+	// its own test. annotateGapAgeOld ignores the field, so it is neutral there.
 	history := []scoreEntry{
-		{TS: now.Add(-90 * 24 * time.Hour).Format(time.RFC3339), Gaps: []string{"LLM07"}},
-		{TS: "not-a-timestamp", Gaps: []string{"LLM03", "LLM06"}},
-		{TS: now.Add(-60 * 24 * time.Hour).Format(time.RFC3339), Gaps: []string{"LLM03", "LLM10"}},
-		{TS: now.Add(-30 * 24 * time.Hour).Format(time.RFC3339), Gaps: []string{"LLM06", "LLM10"}},
-		{TS: now.Add(-5 * 24 * time.Hour).Format(time.RFC3339), Gaps: []string{"LLM07", "LLM09"}},
+		{TS: now.Add(-90 * 24 * time.Hour).Format(time.RFC3339), Gaps: []string{"LLM07"}, Edition: LLMEdition},
+		{TS: "not-a-timestamp", Gaps: []string{"LLM03", "LLM06"}, Edition: LLMEdition},
+		{TS: now.Add(-60 * 24 * time.Hour).Format(time.RFC3339), Gaps: []string{"LLM03", "LLM10"}, Edition: LLMEdition},
+		{TS: now.Add(-30 * 24 * time.Hour).Format(time.RFC3339), Gaps: []string{"LLM06", "LLM10"}, Edition: LLMEdition},
+		{TS: now.Add(-5 * 24 * time.Hour).Format(time.RFC3339), Gaps: []string{"LLM07", "LLM09"}, Edition: LLMEdition},
 	}
 	cats := []Category{
 		{ID: "LLM01", Status: Enforced}, // never a gap, must stay unannotated
@@ -315,5 +445,46 @@ func BenchmarkAnnotateGapAgeOld(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		annotateGapAgeOld(cats, history, now)
+	}
+}
+
+// The published 2026 ordering, transcribed from the contents page of
+// OWASP-GenAI-LLM-Top-10-2026-v1.0.pdf ("Version 2026", August 4th 2026).
+//
+// Hardcoded on purpose, and in slice order rather than as a set: the whole of
+// #748 is that a category can silently inherit a neighbour's number, and a
+// test that only checked membership would pass through exactly that. Seven of
+// the ten moved between 2025 and 2026; only LLM01 and LLM02 held.
+func TestComputeCoverage_MatchesThePublished2026Ordering(t *testing.T) {
+	testutil.NewSandbox(t)
+
+	want := []struct{ id, name string }{
+		{"LLM01", "Prompt Injection"},
+		{"LLM02", "Sensitive Information Disclosure"},
+		{"LLM03", "Excessive Agency"},
+		{"LLM04", "Supply Chain"},
+		{"LLM05", "Data and Model Poisoning"},
+		{"LLM06", "Unbounded Consumption"},
+		{"LLM07", "Misinformation"},
+		{"LLM08", "Hidden Context Exposure"},
+		{"LLM09", "Vector and Embedding Weaknesses"},
+		{"LLM10", "Improper Output Handling"},
+	}
+
+	cov := computeCoverage(ledger.Policy{}, SupplyChain{}, nil, 0)
+	if len(cov.Categories) != len(want) {
+		t.Fatalf("scored %d categories, want %d", len(cov.Categories), len(want))
+	}
+	for i, w := range want {
+		got := cov.Categories[i]
+		if got.ID != w.id || got.Name != w.name {
+			t.Errorf("position %d = %s %q, want %s %q", i+1, got.ID, got.Name, w.id, w.name)
+		}
+	}
+
+	// The stamp has to move with the numbers or gap age is computed across two
+	// different lists, which is the data hazard #803 landed the gate for.
+	if cov.Edition != "2026" {
+		t.Errorf("Edition = %q alongside the 2026 ordering, want 2026", cov.Edition)
 	}
 }

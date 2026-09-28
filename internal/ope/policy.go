@@ -23,6 +23,12 @@ type Decision struct {
 	Model    string
 	Executor string
 	Pool     string
+	// Head is the action itself, the head that ran, and Domain the calibration
+	// domain the router chose it for. A row written before either was logged
+	// carries neither, and a policy that needs them abstains rather than
+	// guessing what the context was.
+	Head   string
+	Domain string
 }
 
 // Policy scores how likely it is to have taken the logged action in a context.
@@ -97,11 +103,49 @@ func (LocalOnly) Would(d Decision) float64 {
 	return 0
 }
 
-// ParsePolicy resolves a policy name from the command line. tiers is the set of
-// tiers present in the log, needed by TierShift.
-func ParsePolicy(spec string, tiers map[int]bool) (Policy, error) {
+// Constraint is "route to the cheapest head measured competent at this row's
+// domain", the policy internal/dispatch applies when no tier is pinned.
+//
+// Chosen answers what that head is today, which is the honest limit of this
+// estimate and has to be read with it: the constraint's choice moves as
+// calibration accumulates, so this asks what the policy *now* would have done
+// with the contexts the log recorded, not what it would have done at the time.
+// A domain it cannot answer for abstains, which drops the row rather than
+// asserting the policy would have routed somewhere else.
+type Constraint struct {
+	Chosen func(domain string) (headID string, ok bool)
+}
+
+func (Constraint) Name() string { return "cheapest head measured competent in-domain" }
+
+func (p Constraint) Would(d Decision) float64 {
+	if p.Chosen == nil || d.Domain == "" || d.Head == "" {
+		return 0
+	}
+	id, ok := p.Chosen(d.Domain)
+	if !ok || !strings.EqualFold(id, d.Head) {
+		return 0
+	}
+	return 1
+}
+
+// Env is what a policy needs besides the log row: the tiers the log contains,
+// and the machine's own routing for the constraint policy.
+type Env struct {
+	Tiers  map[int]bool
+	Chosen func(domain string) (headID string, ok bool)
+}
+
+// ParsePolicy resolves a policy name from the command line.
+func ParsePolicy(spec string, env Env) (Policy, error) {
+	tiers := env.Tiers
 	spec = strings.TrimSpace(strings.ToLower(spec))
 	switch {
+	case spec == "constraint":
+		if env.Chosen == nil {
+			return nil, fmt.Errorf("ope: the constraint policy needs this machine's heads and calibration, which are not available here")
+		}
+		return Constraint{Chosen: env.Chosen}, nil
 	case spec == "" || spec == "cheaper":
 		return TierShift{Shift: 1, Tiers: tiers}, nil
 	case spec == "cheaper-by-2":
@@ -128,7 +172,7 @@ func ParsePolicy(spec string, tiers map[int]bool) (Policy, error) {
 
 // PolicyNames lists what ParsePolicy accepts, for help text and errors.
 func PolicyNames() []string {
-	return []string{"cheaper", "cheaper-by-2", "stronger", "local", "tier:<n>", "model:<name>"}
+	return []string{"cheaper", "cheaper-by-2", "stronger", "local", "constraint", "tier:<n>", "model:<name>"}
 }
 
 // TiersIn collects the tiers a log actually contains.

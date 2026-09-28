@@ -223,7 +223,7 @@ func TestWriteRegistry_WritesEveryBreadcrumbFile(t *testing.T) {
 	// With explicit contents, each file gets its own, which is what lets a
 	// breadcrumb test show that changing one file changes the fingerprint.
 	dir2 := t.TempDir()
-	WriteRegistry(t, dir2, "a", "b", "c", "d")
+	WriteRegistry(t, dir2, "a", "b", "c", "d", "e")
 	raw, err := os.ReadFile(filepath.Join(dir2, "registry", "routing.yaml"))
 	if err != nil {
 		t.Fatal(err)

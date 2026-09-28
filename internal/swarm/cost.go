@@ -56,16 +56,18 @@ func preflightCost(heads []provider.Head, prompt string, pr PricingReader, maxUS
 	return total, nil
 }
 
-// enrichCosts fills EstCostUSD on each attempt using real token counts.
-func enrichCosts(attempts []Attempt, pr PricingReader) {
-	if pr == nil {
-		return
+// attemptCost prices one finished attempt from its real token counts. The
+// single definition of what a swarm attempt cost: RunSPRT priced its own with
+// the same formula written out a second time, and every path now reports spend
+// as it accrues rather than only once the fan-out is over.
+//
+// Only a head that answered is charged for, and an unpriced swarm (pr nil) is
+// free by construction rather than unknown.
+func attemptCost(a Attempt, pr PricingReader) float64 {
+	if pr == nil || a.Status != StatusOK {
+		return 0
 	}
-	for i := range attempts {
-		if attempts[i].Status == StatusOK {
-			attempts[i].EstCostUSD = round6(pr.EstimateCost(rank.UITier(attempts[i].Head), attempts[i].InputTokens, attempts[i].OutputTokens))
-		}
-	}
+	return round6(pr.EstimateCost(rank.UITier(a.Head), a.InputTokens, a.OutputTokens))
 }
 
 // logAttempts writes one cost.jsonl entry per attempt that actually executed
@@ -115,10 +117,12 @@ func logAttempts(attempts []Attempt, mode SwarmMode, opts Options, promptPreview
 			"tokens_source":   tokensSource,
 			"cost_source":     costSrc,
 			"source":          legacySource,
+			"enum":            opts.Enum,
 			"swarm_mode":      string(mode),
 			"swarm_winner":    a.Status == StatusOK && a.Rank == 1,
 			"task_id":         taskID,
 			"run_id":          runID,
+			"span_id":         attemptSpan(taskID, fanOutAgent(mode), a.Head.ID),
 			"prompt_preview":  promptPreview,
 			// 1 for both: a swarm runs the heads it fans out to rather than
 			// drawing one, so every attempt logged here was certain to appear.

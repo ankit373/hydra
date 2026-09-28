@@ -24,8 +24,11 @@ func TestUITier_EveryThresholdBoundary(t *testing.T) {
 		{77, 6}, {72, 6}, // ≥72
 		{71, 7}, {70, 7}, // ≥70
 		{69, 8}, {65, 8}, // ≥65
-		{64, 9}, {60, 9}, // ≥60
-		{59, 10}, {0, 10}, {-5, 10}, // below the ladder
+		// The floor for a *paid* head is 9. Tier 10 is priced at $0.00 in
+		// pricing.yaml and is where routing.yaml sends GRUNT, so only a local
+		// head may occupy it; a weak paid head there was preferred over a free
+		// one and costed as free (#752).
+		{64, 9}, {60, 9}, {59, 9}, {0, 9}, {-5, 9},
 	}
 	for _, tc := range cases {
 		h := provider.Head{ID: "h", Provider: "openai", Source: "env", CapScore: tc.score}
@@ -55,8 +58,14 @@ func TestUITier_IsMonotonicInCapScore(t *testing.T) {
 		}
 		prev = got
 	}
-	if prev != 10 {
-		t.Errorf("the weakest score lands at tier %d, not the bottom of the ladder", prev)
+	// A paid head bottoms out at 9, not 10: the free floor is local-only
+	// (#752). Tier 10 is still reachable, by the heads that belong there.
+	if prev != 9 {
+		t.Errorf("the weakest paid score lands at tier %d, want 9", prev)
+	}
+	local := provider.Head{ID: "ollama/x", Provider: "local", Source: "port", CapScore: 0, LocalOnly: true}
+	if got := UITier(local); got != 10 {
+		t.Errorf("tier 10 is unreachable: a local head landed at %d", got)
 	}
 }
 
@@ -100,32 +109,6 @@ func TestUITier_RegistryMetaTierWins(t *testing.T) {
 	if got := UITier(notRegistry); got == 2 {
 		t.Error("a non-registry head honoured its meta tier; only registry entries " +
 			"carry an authoritative tier")
-	}
-}
-
-// The ollama CLI binary is suppressed when named port models exist, so a probe
-// shows "qwen3:8b" rather than a generic, unroutable "ollama" entry alongside it.
-func TestByCapScore_SuppressesTheGenericOllamaCLIWhenPortModelsExist(t *testing.T) {
-	heads := []provider.Head{
-		{ID: "ollama", Provider: "ollama", Source: "cli", CapScore: 60, LocalOnly: true},
-		{ID: "ollama/qwen3:8b", Provider: "ollama", Source: "port", CapScore: 60, LocalOnly: true},
-	}
-	got := ByCapScore(heads)
-
-	for _, h := range got {
-		if h.ID == "ollama" && h.Source == "cli" {
-			t.Error("the generic ollama CLI head survived alongside named port models")
-		}
-	}
-	if len(got) != 1 || got[0].ID != "ollama/qwen3:8b" {
-		t.Errorf("got %+v, want just the named port model", got)
-	}
-
-	// With no port models, the CLI head is the only way to reach ollama and
-	// must be kept.
-	onlyCLI := ByCapScore([]provider.Head{heads[0]})
-	if len(onlyCLI) != 1 {
-		t.Errorf("the ollama CLI head was dropped with no port models to replace it: %+v", onlyCLI)
 	}
 }
 

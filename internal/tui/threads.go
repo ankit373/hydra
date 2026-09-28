@@ -33,7 +33,13 @@ type ckThread struct {
 	planWait *ckWait
 	confirm  *ckWait
 	lastDone *ckTask
-	attn     bool // finished needing eyes (a failure), cleared on visit
+
+	// gone is every attempt that streamed and then failed, collapsed to a line
+	// each. Synced from the worker's stream while a task runs and kept after
+	// it finishes, so a partial stays expandable rather than vanishing with
+	// the task that produced it.
+	gone []ckAbandoned
+	attn bool // finished needing eyes (a failure), cleared on visit
 
 	bg         bool        // re-parented to the agents view
 	queued     *ckQueued   // waiting on an overlap blocker; nil otherwise

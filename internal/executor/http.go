@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ankit373/hydra/internal/awsconf"
 	"github.com/ankit373/hydra/internal/provider"
 	"github.com/ankit373/hydra/internal/util"
 )
@@ -34,24 +35,24 @@ func (e *HTTPExecutor) httpClient() *http.Client {
 	return http.DefaultClient
 }
 
-type message struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
-}
-
 type openAIChatRequest struct {
-	Model     string    `json:"model,omitempty"`
-	Messages  []message `json:"messages"`
-	MaxTokens int       `json:"max_tokens,omitempty"`
-	Stream    bool      `json:"stream"`
+	Model      string          `json:"model,omitempty"`
+	Messages   []Message       `json:"messages"`
+	MaxTokens  int             `json:"max_tokens,omitempty"`
+	Temp       *float64        `json:"temperature,omitempty"`
+	Stream     bool            `json:"stream"`
+	Tools      []ToolDef       `json:"tools,omitempty"`
+	ToolChoice json.RawMessage `json:"tool_choice,omitempty"`
 }
 
 type openAIChatResponse struct {
 	Model   string `json:"model"`
 	Choices []struct {
 		Message struct {
-			Content string `json:"content"`
+			Content   string     `json:"content"`
+			ToolCalls []ToolCall `json:"tool_calls"`
 		} `json:"message"`
+		FinishReason string `json:"finish_reason"`
 	} `json:"choices"`
 	Usage struct {
 		PromptTokens     int `json:"prompt_tokens"`
@@ -102,7 +103,8 @@ func SupportsHTTP(h provider.Head) bool {
 	case "azure":
 		return apiKeyFor("azure") != "" && azureEndpoint() != "" && azureDeployment() != ""
 	case "bedrock":
-		return awsAccessKeyID() != "" && awsSecretAccessKey() != "" && bedrockRegion() != "" && defaultModelFor("bedrock") != ""
+		creds := awsconf.Resolve()
+		return creds.Usable() && creds.Region != "" && defaultModelFor("bedrock") != ""
 	case "replicate":
 		return apiKeyFor("replicate") != "" && defaultModelFor("replicate") != ""
 	default:
@@ -114,10 +116,13 @@ func SupportsHTTP(h provider.Head) bool {
 func (e *HTTPExecutor) executeOpenAICompatible(ctx context.Context, req Request, cfg openAICompatConfig) (*Response, error) {
 	msgs := buildMessages(req)
 	body := openAIChatRequest{
-		Model:     cfg.Model,
-		Messages:  msgs,
-		MaxTokens: req.MaxTokens,
-		Stream:    false,
+		Model:      cfg.Model,
+		Messages:   msgs,
+		MaxTokens:  req.MaxTokens,
+		Temp:       req.Temperature,
+		Stream:     false,
+		Tools:      req.Tools,
+		ToolChoice: req.ToolChoice,
 	}
 	raw, err := json.Marshal(body)
 	if err != nil {
@@ -152,40 +157,32 @@ func (e *HTTPExecutor) executeOpenAICompatible(ctx context.Context, req Request,
 		return nil, fmt.Errorf("http exec %s: empty response", req.Head.ID)
 	}
 
-	return &Response{
-		Output:       cr.Choices[0].Message.Content,
-		InputTokens:  cr.Usage.PromptTokens,
-		OutputTokens: cr.Usage.CompletionTokens,
-		Duration:     time.Since(start),
-		Model:        firstNonEmpty(cr.Model, cfg.Model),
-	}, nil
+	answer := httpResponse(req, cr.Choices[0].Message.Content,
+		firstNonEmpty(cr.Model, cfg.Model),
+		cr.Usage.PromptTokens, cr.Usage.CompletionTokens, start)
+	// An answer that only asks for tools carries no text at all, so these are
+	// what say it replied rather than said nothing.
+	answer.ToolCalls = cr.Choices[0].Message.ToolCalls
+	answer.FinishReason = cr.Choices[0].FinishReason
+	return answer, nil
 }
 
 func (e *HTTPExecutor) executeAnthropic(ctx context.Context, req Request) (*Response, error) {
 	model := defaultModelFor("anthropic")
-	body := map[string]interface{}{
-		"model":      model,
-		"max_tokens": defaultMaxTokens(req.MaxTokens, 1024),
-		"messages": []map[string]string{
-			{"role": "user", "content": req.Prompt},
-		},
+	body, err := anthropicBody(req, model, false)
+	if err != nil {
+		return nil, err
 	}
-	if req.System != "" {
-		body["system"] = req.System
-	}
-
 	raw, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
 
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.anthropic.com/v1/messages", bytes.NewReader(raw))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, anthropicMessagesURL(), bytes.NewReader(raw))
 	if err != nil {
 		return nil, err
 	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("x-api-key", apiKeyFor("anthropic"))
-	httpReq.Header.Set("anthropic-version", "2023-06-01")
+	setAnthropicHeaders(httpReq)
 
 	start := time.Now()
 	resp, err := e.httpClient().Do(httpReq)
@@ -200,10 +197,14 @@ func (e *HTTPExecutor) executeAnthropic(ctx context.Context, req Request) (*Resp
 	var out struct {
 		Model   string `json:"model"`
 		Content []struct {
-			Type string `json:"type"`
-			Text string `json:"text"`
+			Type  string          `json:"type"`
+			Text  string          `json:"text"`
+			ID    string          `json:"id"`
+			Name  string          `json:"name"`
+			Input json.RawMessage `json:"input"`
 		} `json:"content"`
-		Usage struct {
+		StopReason string `json:"stop_reason"`
+		Usage      struct {
 			InputTokens  int `json:"input_tokens"`
 			OutputTokens int `json:"output_tokens"`
 		} `json:"usage"`
@@ -212,48 +213,93 @@ func (e *HTTPExecutor) executeAnthropic(ctx context.Context, req Request) (*Resp
 		return nil, fmt.Errorf("http exec %s: decode: %w", req.Head.ID, err)
 	}
 
-	return &Response{
-		Output:       joinAnthropicBlocks(out.Content),
-		InputTokens:  out.Usage.InputTokens,
-		OutputTokens: out.Usage.OutputTokens,
-		Duration:     time.Since(start),
-		Model:        firstNonEmpty(out.Model, model),
-	}, nil
+	var text []textBlock
+	var calls []ToolCall
+	for _, b := range out.Content {
+		if b.Type == "tool_use" {
+			calls = append(calls, ToolCall{
+				ID: b.ID, Type: "function", Index: len(calls),
+				Function: ToolCallFunction{Name: b.Name, Arguments: toolArguments(b.Input)},
+			})
+			continue
+		}
+		text = append(text, textBlock{Text: b.Text})
+	}
+
+	answer := httpResponse(req, joinTextBlocks(text),
+		firstNonEmpty(out.Model, model),
+		out.Usage.InputTokens, out.Usage.OutputTokens, start)
+	answer.ToolCalls = calls
+	answer.FinishReason = anthropicFinish(out.StopReason)
+	return answer, nil
+}
+
+// anthropicMessagesURL honours ANTHROPIC_BASE_URL, the variable the official
+// SDKs read, so a gateway already configured for them serves this head too.
+func anthropicMessagesURL() string {
+	base := firstNonEmpty(firstEnv("ANTHROPIC_BASE_URL"), "https://api.anthropic.com")
+	return strings.TrimRight(base, "/") + "/v1/messages"
+}
+
+// anthropicBody and setAnthropicHeaders are shared with the streaming path, so
+// the two cannot drift into asking for different things or pinning different
+// API versions. Streaming is the one field that differs.
+func anthropicBody(req Request, model string, stream bool) (map[string]interface{}, error) {
+	system, msgs, err := anthropicConversation(buildMessages(req))
+	if err != nil {
+		return nil, err
+	}
+	body := map[string]interface{}{
+		"model":      model,
+		"max_tokens": defaultMaxTokens(req.MaxTokens, 1024),
+		"messages":   msgs,
+	}
+	if req.Temperature != nil {
+		body["temperature"] = *req.Temperature
+	}
+	if system != "" {
+		body["system"] = system
+	}
+	if len(req.Tools) > 0 {
+		choice, send, err := anthropicToolChoice(req.ToolChoice)
+		if err != nil {
+			return nil, err
+		}
+		if send {
+			body["tools"] = anthropicTools(req.Tools)
+			if choice != nil {
+				body["tool_choice"] = choice
+			}
+		}
+	}
+	if stream {
+		body["stream"] = true
+	}
+	return body, nil
+}
+
+func setAnthropicHeaders(r *http.Request) {
+	r.Header.Set("Content-Type", "application/json")
+	r.Header.Set("x-api-key", apiKeyFor("anthropic"))
+	r.Header.Set("anthropic-version", "2023-06-01")
 }
 
 func (e *HTTPExecutor) executeGemini(ctx context.Context, req Request) (*Response, error) {
 	model := defaultModelFor("google")
-	body := map[string]interface{}{
-		"contents": []map[string]interface{}{
-			{
-				"role": "user",
-				"parts": []map[string]string{
-					{"text": req.Prompt},
-				},
-			},
-		},
+	body, err := geminiBody(req)
+	if err != nil {
+		return nil, err
 	}
-	if req.System != "" {
-		body["system_instruction"] = map[string]interface{}{
-			"parts": []map[string]string{{"text": req.System}},
-		}
-	}
-	if req.MaxTokens > 0 {
-		body["generationConfig"] = map[string]int{"maxOutputTokens": req.MaxTokens}
-	}
-
 	raw, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
 
-	u := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent", url.PathEscape(model))
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, u, bytes.NewReader(raw))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, geminiURL(model, false), bytes.NewReader(raw))
 	if err != nil {
 		return nil, err
 	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("x-goog-api-key", apiKeyFor("google"))
+	setGeminiHeaders(httpReq)
 
 	start := time.Now()
 	resp, err := e.httpClient().Do(httpReq)
@@ -268,10 +314,9 @@ func (e *HTTPExecutor) executeGemini(ctx context.Context, req Request) (*Respons
 	var out struct {
 		Candidates []struct {
 			Content struct {
-				Parts []struct {
-					Text string `json:"text"`
-				} `json:"parts"`
+				Parts []geminiPart `json:"parts"`
 			} `json:"content"`
+			FinishReason string `json:"finishReason"`
 		} `json:"candidates"`
 		UsageMetadata struct {
 			PromptTokenCount     int `json:"promptTokenCount"`
@@ -286,36 +331,93 @@ func (e *HTTPExecutor) executeGemini(ctx context.Context, req Request) (*Respons
 		return nil, fmt.Errorf("http exec %s: empty response", req.Head.ID)
 	}
 
-	return &Response{
-		Output:       joinGeminiParts(out.Candidates[0].Content.Parts),
-		InputTokens:  out.UsageMetadata.PromptTokenCount,
-		OutputTokens: out.UsageMetadata.CandidatesTokenCount,
-		Duration:     time.Since(start),
-		Model:        firstNonEmpty(out.ModelVersion, model),
-	}, nil
+	text, calls := geminiParts(out.Candidates[0].Content.Parts)
+	answer := httpResponse(req, text, firstNonEmpty(out.ModelVersion, model),
+		out.UsageMetadata.PromptTokenCount, out.UsageMetadata.CandidatesTokenCount, start)
+	answer.ToolCalls = calls
+	answer.FinishReason = geminiFinish(out.Candidates[0].FinishReason, len(calls))
+	return answer, nil
+}
+
+// geminiURL builds the generate endpoint, streaming or not. `?alt=sse` is not
+// cosmetic: without it :streamGenerateContent answers with a streamed JSON
+// array rather than events, which an SSE reader gets nothing at all from.
+//
+// The host honours GOOGLE_GEMINI_BASE_URL, and GEMINI_BASE_URL as the spelling
+// several tools use, so a gateway serves the streamed and buffered paths alike.
+func geminiURL(model string, stream bool) string {
+	base := firstNonEmpty(firstEnv("GOOGLE_GEMINI_BASE_URL", "GEMINI_BASE_URL"),
+		"https://generativelanguage.googleapis.com")
+	method := "generateContent"
+	if stream {
+		method = "streamGenerateContent"
+	}
+	u := fmt.Sprintf("%s/v1beta/models/%s:%s", strings.TrimRight(base, "/"), url.PathEscape(model), method)
+	if stream {
+		u += "?alt=sse"
+	}
+	return u
+}
+
+// geminiBody and setGeminiHeaders are shared with the streaming path, so the
+// two cannot drift into asking for different things.
+func geminiBody(req Request) (map[string]interface{}, error) {
+	system, contents, err := geminiConversation(buildMessages(req))
+	if err != nil {
+		return nil, err
+	}
+	body := map[string]interface{}{"contents": contents}
+	if system != "" {
+		body["system_instruction"] = map[string]interface{}{
+			"parts": []map[string]string{{"text": system}},
+		}
+	}
+	// Gemini carries both knobs inside generationConfig, so they are built
+	// together or the second one overwrites the first.
+	if req.MaxTokens > 0 || req.Temperature != nil {
+		gen := map[string]interface{}{}
+		if req.MaxTokens > 0 {
+			gen["maxOutputTokens"] = req.MaxTokens
+		}
+		if req.Temperature != nil {
+			gen["temperature"] = *req.Temperature
+		}
+		body["generationConfig"] = gen
+	}
+	if len(req.Tools) > 0 {
+		cfg, err := geminiToolConfig(req.ToolChoice)
+		if err != nil {
+			return nil, err
+		}
+		body["tools"] = geminiTools(req.Tools)
+		if cfg != nil {
+			body["toolConfig"] = cfg
+		}
+	}
+	return body, nil
+}
+
+func setGeminiHeaders(r *http.Request) {
+	r.Header.Set("Content-Type", "application/json")
+	r.Header.Set("x-goog-api-key", apiKeyFor("google"))
 }
 
 func (e *HTTPExecutor) executeCohere(ctx context.Context, req Request) (*Response, error) {
 	model := defaultModelFor("cohere")
-	body := map[string]interface{}{
-		"model":    model,
-		"messages": buildMessages(req),
+	body, err := cohereBody(req, model, false)
+	if err != nil {
+		return nil, err
 	}
-	if req.MaxTokens > 0 {
-		body["max_tokens"] = req.MaxTokens
-	}
-
 	raw, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
 
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.cohere.ai/v2/chat", bytes.NewReader(raw))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, cohereChatURL(), bytes.NewReader(raw))
 	if err != nil {
 		return nil, err
 	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", "Bearer "+apiKeyFor("cohere"))
+	setCohereHeaders(httpReq)
 
 	start := time.Now()
 	resp, err := e.httpClient().Do(httpReq)
@@ -334,8 +436,13 @@ func (e *HTTPExecutor) executeCohere(ctx context.Context, req Request) (*Respons
 				Type string `json:"type"`
 				Text string `json:"text"`
 			} `json:"content"`
+			// The model's stated plan for what it will call. Not the answer,
+			// so it is read and deliberately not rendered as one.
+			ToolPlan  string     `json:"tool_plan"`
+			ToolCalls []ToolCall `json:"tool_calls"`
 		} `json:"message"`
-		Usage struct {
+		FinishReason string `json:"finish_reason"`
+		Usage        struct {
 			Tokens struct {
 				InputTokens  int `json:"input_tokens"`
 				OutputTokens int `json:"output_tokens"`
@@ -345,20 +452,66 @@ func (e *HTTPExecutor) executeCohere(ctx context.Context, req Request) (*Respons
 	if err := json.NewDecoder(io.LimitReader(resp.Body, int64(util.DefaultMaxBytes)+1)).Decode(&out); err != nil {
 		return nil, fmt.Errorf("http exec %s: decode: %w", req.Head.ID, err)
 	}
+	finish, err := cohereFinish(out.FinishReason)
+	if err != nil {
+		return nil, fmt.Errorf("http exec %s: %w", req.Head.ID, err)
+	}
 
-	return &Response{
-		Output:       joinCohereBlocks(out.Message.Content),
-		InputTokens:  out.Usage.Tokens.InputTokens,
-		OutputTokens: out.Usage.Tokens.OutputTokens,
-		Duration:     time.Since(start),
-		Model:        model,
-	}, nil
+	answer := httpResponse(req, joinCohereBlocks(out.Message.Content), model,
+		out.Usage.Tokens.InputTokens, out.Usage.Tokens.OutputTokens, start)
+	answer.ToolCalls = numbered(out.Message.ToolCalls)
+	answer.FinishReason = finish
+	return answer, nil
+}
+
+// cohereChatURL honours CO_API_URL, which is what Cohere's own SDK reads, so a
+// gateway already configured for it serves this head too.
+func cohereChatURL() string {
+	base := firstNonEmpty(firstEnv("CO_API_URL", "COHERE_BASE_URL"), "https://api.cohere.ai")
+	return strings.TrimRight(base, "/") + "/v2/chat"
+}
+
+// cohereBody and setCohereHeaders are shared with the streaming path, so the
+// two cannot drift into asking for different things.
+func cohereBody(req Request, model string, stream bool) (map[string]interface{}, error) {
+	body := map[string]interface{}{
+		"model":    model,
+		"messages": buildMessages(req),
+	}
+	if req.MaxTokens > 0 {
+		body["max_tokens"] = req.MaxTokens
+	}
+	if req.Temperature != nil {
+		body["temperature"] = *req.Temperature
+	}
+	if stream {
+		body["stream"] = true
+	}
+	if len(req.Tools) > 0 {
+		choice, err := cohereToolChoice(req.ToolChoice)
+		if err != nil {
+			return nil, err
+		}
+		// A v2 tool definition is shaped exactly like OpenAI's, so this is the
+		// one dialect that needs no translation of the tools themselves.
+		body["tools"] = req.Tools
+		if choice != "" {
+			body["tool_choice"] = choice
+		}
+	}
+	return body, nil
+}
+
+func setCohereHeaders(r *http.Request) {
+	r.Header.Set("Content-Type", "application/json")
+	r.Header.Set("Authorization", "Bearer "+apiKeyFor("cohere"))
 }
 
 func (e *HTTPExecutor) executeAzureOpenAI(ctx context.Context, req Request) (*Response, error) {
 	body := openAIChatRequest{
 		Messages:  buildMessages(req),
 		MaxTokens: req.MaxTokens,
+		Temp:      req.Temperature,
 		Stream:    false,
 	}
 	raw, err := json.Marshal(body)
@@ -393,33 +546,23 @@ func (e *HTTPExecutor) executeAzureOpenAI(ctx context.Context, req Request) (*Re
 		return nil, fmt.Errorf("http exec %s: empty response", req.Head.ID)
 	}
 
-	return &Response{
-		Output:       out.Choices[0].Message.Content,
-		InputTokens:  out.Usage.PromptTokens,
-		OutputTokens: out.Usage.CompletionTokens,
-		Duration:     time.Since(start),
-		Model:        firstNonEmpty(out.Model, azureDeployment()),
-	}, nil
+	return httpResponse(req, out.Choices[0].Message.Content,
+		firstNonEmpty(out.Model, azureDeployment()),
+		out.Usage.PromptTokens, out.Usage.CompletionTokens, start), nil
 }
 
 func (e *HTTPExecutor) executeBedrock(ctx context.Context, req Request) (*Response, error) {
-	cfg := openAICompatConfig{
-		BaseURL: fmt.Sprintf("https://bedrock-runtime.%s.amazonaws.com", bedrockRegion()),
-		Model:   defaultModelFor("bedrock"),
-	}
-	msgs := buildMessages(req)
-	body := openAIChatRequest{
-		Model:     cfg.Model,
-		Messages:  msgs,
-		MaxTokens: req.MaxTokens,
-		Stream:    false,
+	model := defaultModelFor("bedrock")
+	body, err := bedrockBody(req)
+	if err != nil {
+		return nil, err
 	}
 	raw, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
 
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, cfg.BaseURL+"/v1/chat/completions", bytes.NewReader(raw))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, bedrockURL(model, false), bytes.NewReader(raw))
 	if err != nil {
 		return nil, err
 	}
@@ -438,21 +581,92 @@ func (e *HTTPExecutor) executeBedrock(ctx context.Context, req Request) (*Respon
 		return nil, httpStatusError(req.Head.ID, resp)
 	}
 
-	var out openAIChatResponse
+	var out struct {
+		Output struct {
+			Message struct {
+				Content []bedrockBlock `json:"content"`
+			} `json:"message"`
+		} `json:"output"`
+		StopReason string `json:"stopReason"`
+		Usage      struct {
+			InputTokens  int `json:"inputTokens"`
+			OutputTokens int `json:"outputTokens"`
+		} `json:"usage"`
+	}
 	if err := json.NewDecoder(io.LimitReader(resp.Body, int64(util.DefaultMaxBytes)+1)).Decode(&out); err != nil {
 		return nil, fmt.Errorf("http exec %s: decode: %w", req.Head.ID, err)
 	}
-	if len(out.Choices) == 0 {
+
+	text, calls := bedrockBlocks(out.Output.Message.Content)
+	// Emptiness means no text AND no calls: an answer that only asks for a tool
+	// carries no text at all, and this check predates tool support.
+	if text == "" && len(calls) == 0 {
 		return nil, fmt.Errorf("http exec %s: empty response", req.Head.ID)
 	}
 
-	return &Response{
-		Output:       out.Choices[0].Message.Content,
-		InputTokens:  out.Usage.PromptTokens,
-		OutputTokens: out.Usage.CompletionTokens,
-		Duration:     time.Since(start),
-		Model:        firstNonEmpty(out.Model, cfg.Model),
-	}, nil
+	answer := httpResponse(req, text, model, out.Usage.InputTokens, out.Usage.OutputTokens, start)
+	answer.ToolCalls = calls
+	answer.FinishReason = bedrockFinish(out.StopReason)
+	return answer, nil
+}
+
+// bedrockURL addresses the Converse API, which is model-agnostic: one request
+// shape for every Bedrock model. The OpenAI-compatible endpoint this used to
+// post to lives under /openai/v1, not /v1, and serves only the few models whose
+// card lists Chat Completions, so the head could never answer (#866).
+//
+// AWS_ENDPOINT_URL_BEDROCK_RUNTIME, the variable the AWS SDKs read, overrides
+// the regional host.
+func bedrockURL(model string, stream bool) string {
+	base := firstNonEmpty(firstEnv("AWS_ENDPOINT_URL_BEDROCK_RUNTIME", "AWS_ENDPOINT_URL"),
+		fmt.Sprintf("https://bedrock-runtime.%s.amazonaws.com", bedrockRegion()))
+	method := "converse"
+	if stream {
+		method = "converse-stream"
+	}
+	return fmt.Sprintf("%s/model/%s/%s", strings.TrimRight(base, "/"), url.PathEscape(model), method)
+}
+
+// bedrockBody is the Converse request. Shared with the streaming path so the
+// two cannot drift into asking for different things.
+func bedrockBody(req Request) (map[string]interface{}, error) {
+	system, msgs, err := bedrockConversation(buildMessages(req))
+	if err != nil {
+		return nil, err
+	}
+	body := map[string]interface{}{"messages": msgs}
+	if len(system) > 0 {
+		blocks := make([]map[string]string, 0, len(system))
+		for _, s := range system {
+			blocks = append(blocks, map[string]string{"text": s})
+		}
+		body["system"] = blocks
+	}
+	// Converse holds both knobs in inferenceConfig, so they are built together.
+	if req.MaxTokens > 0 || req.Temperature != nil {
+		inf := map[string]interface{}{}
+		if req.MaxTokens > 0 {
+			inf["maxTokens"] = req.MaxTokens
+		}
+		if req.Temperature != nil {
+			inf["temperature"] = *req.Temperature
+		}
+		body["inferenceConfig"] = inf
+	}
+	if len(req.Tools) > 0 {
+		choice, send, err := bedrockToolChoice(req.ToolChoice)
+		if err != nil {
+			return nil, err
+		}
+		if send {
+			cfg := map[string]any{"tools": bedrockTools(req.Tools)}
+			if choice != nil {
+				cfg["toolChoice"] = choice
+			}
+			body["toolConfig"] = cfg
+		}
+	}
+	return body, nil
 }
 
 func (e *HTTPExecutor) executeReplicate(ctx context.Context, req Request) (*Response, error) {
@@ -518,11 +732,9 @@ func (e *HTTPExecutor) executeReplicate(ctx context.Context, req Request) (*Resp
 		return nil, fmt.Errorf("http exec %s: prediction ended with status %q", req.Head.ID, pred.Status)
 	}
 
-	return &Response{
-		Output:   stringifyAny(pred.Output),
-		Duration: time.Since(start),
-		Model:    model,
-	}, nil
+	// Replicate's prediction API reports no token usage at all, so this
+	// path logged every call as 0/0 and $0.00 measured.
+	return httpResponse(req, stringifyAny(pred.Output), model, 0, 0, start), nil
 }
 
 type replicatePrediction struct {
@@ -565,10 +777,20 @@ func (e *HTTPExecutor) getReplicatePrediction(ctx context.Context, headID, getUR
 
 func openAICompatConfigFor(h provider.Head) (openAICompatConfig, error) {
 	if h.Endpoint != "" {
-		return openAICompatConfig{
+		cfg := openAICompatConfig{
 			BaseURL: strings.TrimRight(h.Endpoint, "/"),
-			Model:   trimLocalModelID(h.ID),
-		}, nil
+			// A head that names its own model is honoured here too, not only on
+			// the keyed-provider path below: a LiteLLM proxy routes on the alias
+			// it publishes, which is not derivable from the head id.
+			Model: firstNonEmpty(h.Meta["model"], trimLocalModelID(h.ID)),
+		}
+		// A proxy with a master key rejects an unauthenticated request, so a
+		// head discovered through one carries its credential the same way a
+		// keyed provider does.
+		if key := apiKeyFor(h.Provider); key != "" {
+			cfg.Headers = map[string]string{"Authorization": "Bearer " + key}
+		}
+		return cfg, nil
 	}
 
 	// baseURL only. The auth header is built below from the raw key, never
@@ -595,7 +817,7 @@ func openAICompatConfigFor(h provider.Head) (openAICompatConfig, error) {
 		return openAICompatConfig{}, errUnsupportedHTTPProvider
 	}
 
-	key, model := apiKeyFor(h.Provider), defaultModelFor(h.Provider)
+	key, model := apiKeyFor(h.Provider), modelFor(h)
 	if key == "" || model == "" {
 		return openAICompatConfig{}, errUnsupportedHTTPProvider
 	}
@@ -607,12 +829,17 @@ func openAICompatConfigFor(h provider.Head) (openAICompatConfig, error) {
 	}, nil
 }
 
-func buildMessages(req Request) []message {
-	msgs := make([]message, 0, 2)
-	if req.System != "" {
-		msgs = append(msgs, message{Role: "system", Content: req.System})
+// buildMessages prefers a caller's whole conversation over the single turn
+// Prompt describes, since only the former can carry a tool result.
+func buildMessages(req Request) []Message {
+	if len(req.Messages) > 0 {
+		return req.Messages
 	}
-	msgs = append(msgs, message{Role: "user", Content: req.Prompt})
+	msgs := make([]Message, 0, 2)
+	if req.System != "" {
+		msgs = append(msgs, Message{Role: "system", Content: req.System})
+	}
+	msgs = append(msgs, Message{Role: "user", Content: req.Prompt})
 	return msgs
 }
 
@@ -642,27 +869,8 @@ func joinTextBlocks(blocks []textBlock) string {
 	return strings.Join(parts, "\n")
 }
 
-type textBlock struct{ Text string }
-
-func joinGeminiParts(parts []struct {
+type textBlock struct {
 	Text string `json:"text"`
-}) string {
-	texts := make([]textBlock, 0, len(parts))
-	for _, p := range parts {
-		texts = append(texts, textBlock{Text: p.Text})
-	}
-	return joinTextBlocks(texts)
-}
-
-func joinAnthropicBlocks(blocks []struct {
-	Type string `json:"type"`
-	Text string `json:"text"`
-}) string {
-	texts := make([]textBlock, 0, len(blocks))
-	for _, b := range blocks {
-		texts = append(texts, textBlock{Text: b.Text})
-	}
-	return joinTextBlocks(texts)
 }
 
 func joinCohereBlocks(blocks []struct {
@@ -681,15 +889,28 @@ func httpStatusError(headID string, resp *http.Response) error {
 	return fmt.Errorf("http exec %s: status %d, %s", headID, resp.StatusCode, string(b))
 }
 
+// modelFor prefers the model the discovering provider named, which is what
+// lets one provider emit several heads differing only by model (#752).
+// Otherwise the provider's single default, and its env override, as before.
+func modelFor(h provider.Head) string {
+	if m := h.Meta["model"]; m != "" {
+		return m
+	}
+	return defaultModelFor(h.Provider)
+}
+
 func defaultModelFor(providerID string) string {
 	type modelSpec struct {
 		fallback string
 		envs     []string
 	}
 	specs := map[string]modelSpec{
-		"anthropic":  {fallback: "claude-sonnet-4-20250514", envs: []string{"ANTHROPIC_MODEL", "HYDRA_MODEL_ANTHROPIC"}},
-		"openai":     {fallback: "gpt-4o", envs: []string{"OPENAI_MODEL", "HYDRA_MODEL_OPENAI"}},
-		"openrouter": {fallback: "anthropic/claude-sonnet-4-5", envs: []string{"OPENROUTER_MODEL", "HYDRA_MODEL_OPENROUTER"}},
+		"anthropic": {fallback: "claude-sonnet-4-20250514", envs: []string{"ANTHROPIC_MODEL", "HYDRA_MODEL_ANTHROPIC"}},
+		"openai":    {fallback: "gpt-4o", envs: []string{"OPENAI_MODEL", "HYDRA_MODEL_OPENAI"}},
+		// OpenRouter spells Claude point releases with a dot; the dashed form
+		// above is Anthropic's own convention, and crossing the two left this
+		// pointing at an id the catalogue has never held (#755).
+		"openrouter": {fallback: "anthropic/claude-sonnet-4.5", envs: []string{"OPENROUTER_MODEL", "HYDRA_MODEL_OPENROUTER"}},
 		"google":     {fallback: "gemini-2.5-flash", envs: []string{"GEMINI_MODEL", "GOOGLE_MODEL", "HYDRA_MODEL_GOOGLE"}},
 		"xai":        {fallback: "grok-3-latest", envs: []string{"XAI_MODEL", "HYDRA_MODEL_XAI"}},
 		"groq":       {fallback: "llama-3.3-70b-versatile", envs: []string{"GROQ_MODEL", "HYDRA_MODEL_GROQ"}},
@@ -712,7 +933,10 @@ func defaultModelFor(providerID string) string {
 	return spec.fallback
 }
 
-func apiKeyFor(providerID string) string {
+// apiKeyEnvs names where each provider's credential can live. It is also what
+// decides which credential a head subprocess is allowed to see: its own
+// provider's, and no other's.
+var apiKeyEnvs = func() map[string][]string {
 	envs := map[string][]string{
 		"anthropic":  {"ANTHROPIC_API_KEY"},
 		"openai":     {"OPENAI_API_KEY"},
@@ -730,8 +954,17 @@ func apiKeyFor(providerID string) string {
 		},
 		"cohere":    {"COHERE_API_KEY"},
 		"replicate": {"REPLICATE_API_TOKEN"},
+		// The variable LiteLLM's own client reads, so a machine already set up
+		// to talk to a proxy needs nothing new.
+		"litellm": {"LITELLM_PROXY_API_KEY"},
+		// llama-server's own --api-key variable, for a server started with one.
+		"llamacpp": {"LLAMA_API_KEY"},
 	}
-	return firstEnv(envs[providerID]...)
+	return envs
+}()
+
+func apiKeyFor(providerID string) string {
+	return firstEnv(apiKeyEnvs[providerID]...)
 }
 
 func azureEndpoint() string   { return firstEnv("AZURE_OPENAI_ENDPOINT") }
@@ -741,11 +974,32 @@ func azureAPIVersion() string {
 	return firstNonEmpty(firstEnv("AZURE_OPENAI_API_VERSION"), "2024-10-21")
 }
 
-func bedrockRegion() string { return firstEnv("AWS_REGION", "AWS_DEFAULT_REGION") }
+// The environment is checked first and the shared files after, so a machine
+// configured the way the AWS CLI expects is not reported as having no Bedrock
+// at all (#867).
+func bedrockRegion() string { return awsconf.Resolve().Region }
 
-func awsAccessKeyID() string     { return firstEnv("AWS_ACCESS_KEY_ID") }
-func awsSecretAccessKey() string { return firstEnv("AWS_SECRET_ACCESS_KEY") }
-func awsSessionToken() string    { return firstEnv("AWS_SESSION_TOKEN") }
+// bedrockUnroutableReason names which half is missing, in the order someone
+// would fix them. Three conditions gate this head and the generic message
+// named only the first, so a present key read as an absent one (#890).
+func bedrockUnroutableReason() string {
+	creds := awsconf.Resolve()
+	switch {
+	case creds.Deferred != "":
+		return "the AWS profile declares " + creds.Deferred +
+			", which needs a token exchange Hydra does not perform; export static credentials instead"
+	case !creds.Usable():
+		return "no AWS credentials in the environment or ~/.aws/credentials"
+	case creds.Region == "":
+		return "no AWS region set: export AWS_REGION or set one in ~/.aws/config"
+	case defaultModelFor("bedrock") == "":
+		return "no Bedrock model configured: set BEDROCK_MODEL"
+	}
+	// Only reached if this and SupportsHTTP disagree. Returning "" would mean
+	// routable, so the head would be dispatched to on the strength of a bug
+	// here; a vague refusal is the safe direction.
+	return "the Bedrock head is not configured"
+}
 
 func firstEnv(keys ...string) string {
 	for _, key := range keys {
@@ -754,6 +1008,33 @@ func firstEnv(keys ...string) string {
 		}
 	}
 	return ""
+}
+
+// httpResponse assembles a dialect's reply and estimates whichever token count
+// the provider did not report, because cost is derived from the counts, so a
+// call that answered was logged as 0/0 and $0.00 *measured* (#802).
+//
+// Per side, not both-or-neither: a real count is never discarded, and a
+// provider reporting only its prompt tokens still gets an honest output figure.
+// TokensEstimated is how the cost report says the number is Hydra's, not the
+// provider's, so every path must come through here rather than build a Response
+// itself, which TestHTTPResponse_EveryDialectGoesThroughTheHelper enforces.
+func httpResponse(req Request, output, model string, in, out int, started time.Time) *Response {
+	estimated := false
+	if in == 0 && req.Prompt != "" {
+		in, estimated = EstimateTokens(req.Prompt), true
+	}
+	if out == 0 && output != "" {
+		out, estimated = EstimateTokens(output), true
+	}
+	return &Response{
+		Output:          output,
+		InputTokens:     in,
+		OutputTokens:    out,
+		Duration:        measured(time.Since(started)),
+		Model:           model,
+		TokensEstimated: estimated,
+	}
 }
 
 func firstNonEmpty(values ...string) string {
@@ -766,18 +1047,21 @@ func firstNonEmpty(values ...string) string {
 }
 
 func signAWSRequest(req *http.Request, payload []byte, region, service string) error {
-	accessKey := awsAccessKeyID()
-	secretKey := awsSecretAccessKey()
-	if accessKey == "" || secretKey == "" {
+	// Resolved once: the id, the secret and the token have to come from the
+	// same profile, and three independent lookups could pair an id from the
+	// environment with a secret from a file and sign nothing.
+	creds := awsconf.Resolve()
+	if !creds.Usable() {
 		return errors.New("missing AWS credentials")
 	}
+	accessKey, secretKey := creds.AccessKeyID, creds.SecretAccessKey
 
 	now := time.Now().UTC()
 	amzDate := now.Format("20060102T150405Z")
 	dateStamp := now.Format("20060102")
 	req.Header.Set("X-Amz-Date", amzDate)
-	if token := awsSessionToken(); token != "" {
-		req.Header.Set("X-Amz-Security-Token", token)
+	if creds.SessionToken != "" {
+		req.Header.Set("X-Amz-Security-Token", creds.SessionToken)
 	}
 
 	payloadHash := sha256Hex(payload)

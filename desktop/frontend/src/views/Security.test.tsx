@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import type { Category, CoverageStatus } from '../types'
 import { Security } from './Security'
 import { attestation, check, policyAudit, posture, securityReport } from './Security.fixture'
 
@@ -19,6 +20,31 @@ describe('the verdict and the measurement', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Detailed' }))
     fireEvent.click(screen.getByRole('button', { name: 'Evidence' }))
     expect(screen.getByText(/audit log is empty/i)).toBeInTheDocument()
+  })
+})
+
+// The Record in Security.tsx makes tsc demand a slice for every status. This
+// pins what that is for: the donut is a part-to-whole, so its slices have to
+// sum to the applicable categories. 'partial' was missing from the hand-listed
+// four and the whole quietly stopped being whole (#753).
+describe('coverage by category', () => {
+  it('draws every applicable category into exactly one slice', () => {
+    const categories: Category[] = (
+      ['enforced', 'configured', 'partial', 'gap', 'n/a'] as CoverageStatus[]
+    ).map((status, i) => ({ id: `C${i}`, name: status, status, detail: '' }))
+
+    render(
+      <Security
+        data={securityReport({
+          coverage: { categories, applicable: 4, covered: 2, partial: 1, percentCovered: 50, edition: '2025' },
+        })}
+      />,
+    )
+
+    // n/a is excluded from scoring, so it is excluded from the whole too.
+    expect(screen.getByRole('img', { name: /^Enforced: / })).toHaveAccessibleName(
+      'Enforced: 1, Configured: 1, Partial: 1, Gap: 1',
+    )
   })
 })
 
@@ -147,5 +173,39 @@ describe('CSV export', () => {
     } finally {
       URL.createObjectURL = url
     }
+  })
+})
+
+// A verdict of OK over a machine whose heads are mostly separate programs is
+// true and reads as more than it is. The scope belongs on the same screen as
+// the number it qualifies, not three tabs away (#725).
+describe('the enforcement boundary', () => {
+  it('names the heads the gate cannot see inside', () => {
+    render(
+      <Security
+        data={securityReport({
+          boundary: { governed: ['openrouter'], opaque: ['claude', 'codex'], opaqueLocalOnly: [] },
+        })}
+      />,
+    )
+    expect(screen.getByText(/2 of 3 heads are separate programs/)).toBeInTheDocument()
+    expect(screen.getByText(/claude, codex/)).toBeInTheDocument()
+    expect(screen.getByText(/not what they read or send on their own account/)).toBeInTheDocument()
+  })
+
+  it('says a local-only subprocess is a claim, not a control', () => {
+    render(
+      <Security
+        data={securityReport({
+          boundary: { governed: [], opaque: ['ollama'], opaqueLocalOnly: ['ollama'] },
+        })}
+      />,
+    )
+    expect(screen.getByText(/rather than something Hydra verifies/)).toBeInTheDocument()
+  })
+
+  it('states the guarantee plainly when nothing is opaque', () => {
+    render(<Security data={securityReport()} />)
+    expect(screen.getByText(/gate sees everything that leaves/)).toBeInTheDocument()
   })
 })

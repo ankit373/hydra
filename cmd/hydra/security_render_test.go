@@ -145,6 +145,48 @@ func TestSecurityReport_DefaultIsTheAnswerNotTheDashboard(t *testing.T) {
 	}
 }
 
+// The coverage percentage describes what Hydra sends. A CLI-agent head reads
+// and ships on its own, in a process Hydra does not control, and no number on
+// this surface can say so, which is why #725 asks for it in words. It has to
+// be on the default view: a caveat behind --why does not qualify the figure
+// the reader already took away.
+// The wording is derived from the estate now rather than fixed, so each shape
+// it can take is checked: a caveat that holds on one machine and goes quiet on
+// another is not a caveat.
+func TestSecurityReport_StatesTheSubprocessBoundaryByDefault(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		b    security.Boundary
+		want []string
+	}{
+		// Nothing probed is not evidence of a narrow boundary, and must not
+		// read as one by saying nothing at all.
+		{"no heads discovered", security.Boundary{},
+			[]string{"scope", "does not control"}},
+		// The one estate where the limit closes, said plainly rather than by
+		// omitting the caveat and letting silence imply it.
+		{"every head governed", security.Boundary{Governed: []string{"ollama/qwen2.5"}},
+			[]string{"scope", "does not control"}},
+		// The common case: named, not counted, and the one configuration that
+		// closes it spelled out.
+		{"a subprocess head present", security.Boundary{
+			Governed: []string{"openrouter"}, Opaque: []string{"claude"}},
+			[]string{"scope", "separate programs", "claude", "local-only"}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			r := hostileReport()
+			r.Boundary = tt.b
+			lean := stripStyles(captureStdout(t, func() { printSecurityReport(r, false) }))
+			for _, want := range tt.want {
+				if !strings.Contains(lean, want) {
+					t.Errorf("the default security view does not state the boundary (%q missing):\n%s",
+						want, lean)
+				}
+			}
+		})
+	}
+}
+
 // The verdict already quotes one incident. Printing it again underneath puts
 // the same sentence on screen twice in the most valuable pixels there are.
 func TestSecurityReport_DoesNotPrintTheCitedIncidentTwice(t *testing.T) {

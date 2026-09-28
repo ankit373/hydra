@@ -12,6 +12,7 @@ import (
 
 	"github.com/ankit373/hydra/internal/provider"
 	"github.com/ankit373/hydra/internal/rank"
+	"github.com/ankit373/hydra/internal/trust"
 )
 
 // Result is the output of a full machine scan.
@@ -19,19 +20,50 @@ type Result struct {
 	Heads    []provider.Head // all discovered heads, ranked best → worst
 	Cortex   *provider.Head  // highest-ranked head, recommended as Cortex
 	Warnings []string        // non-fatal provider failures, e.g. a corrupted models.json overlay
+	// Scores is why each head ranks where it does, keyed by head id: what the
+	// catalogue declared and what this machine's verified history made of it.
+	Scores map[string]rank.Score
 }
 
 // Run concurrently queries every registered provider and returns a ranked Result.
 // It never returns an error, individual provider failures are silently skipped
 // so a broken provider doesn't block the init wizard.
 func Run(ctx context.Context) *Result {
-	return RunWith(ctx, provider.All())
+	lookup, err := commitments()
+	r := runWith(ctx, provider.All(), lookup)
+	if err != nil {
+		// Same discipline as a failed provider: degrading to declared scores is
+		// fine, doing it silently is not, since the ranking a user sees would
+		// differ from the one their history earned with nothing saying why.
+		r.Warnings = append(r.Warnings, fmt.Sprintf("calibration: %v (ranking on declared scores)", err))
+		sort.Strings(r.Warnings)
+	}
+	return r
+}
+
+// commitments reads each head's verified history out of the calibration store.
+// A store that will not load yields no lookup rather than an empty one, so the
+// caller can say so instead of reporting every head as never measured.
+func commitments() (rank.Lookup, error) {
+	cal, err := trust.New(trust.DefaultPath())
+	if err != nil {
+		return nil, err
+	}
+	return func(headID string) rank.Measurement {
+		correct, total := cal.Commitments(headID)
+		return rank.Measurement{Correct: correct, Total: total}
+	}, nil
 }
 
 // RunWith is Run against an explicit provider set, so discovery can be tested
 // without registering fakes into the process-global registry, which every
-// other test in the binary would then see.
+// other test in the binary would then see. It ranks on declared scores: a test
+// must not read whatever calibration the machine running it happens to hold.
 func RunWith(ctx context.Context, providers []provider.Provider) *Result {
+	return runWith(ctx, providers, nil)
+}
+
+func runWith(ctx context.Context, providers []provider.Provider, lookup rank.Lookup) *Result {
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	var all []provider.Head
@@ -71,9 +103,9 @@ func RunWith(ctx context.Context, providers []provider.Provider) *Result {
 	// a repeated probe on the same broken machine reports the same order.
 	sort.Strings(warnings)
 
-	ranked := rank.ByCapScore(all)
+	ranked, scores := rank.ByMeasured(all, lookup)
 
-	r := &Result{Heads: ranked, Warnings: warnings}
+	r := &Result{Heads: ranked, Warnings: warnings, Scores: scores}
 	if len(ranked) > 0 {
 		r.Cortex = &ranked[0]
 	}

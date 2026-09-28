@@ -55,7 +55,7 @@ type EvidenceQuality struct {
 
 // AssessEvidence reports what the confidence in runs rests on. runs is what
 // Build already loaded (via trust.LoadRuns), passed in rather than reloaded
-// here, since owasp.go's LLM09 check needs the identical data. Every input is
+// here, since owasp.go's misinformation check needs the identical data. Every input is
 // optional: a machine that has never run an ensemble gets an empty result,
 // not an invented one.
 func AssessEvidence(runs []trust.RunLog) EvidenceQuality {

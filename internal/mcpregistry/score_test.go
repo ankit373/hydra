@@ -206,6 +206,17 @@ func TestKnownBadSignal_MalformedResponseIsUnavailable(t *testing.T) {
 	}
 }
 
+// osvResponse and osvVuln are the wire shape internal/osv parses, kept here as
+// a test fixture: these tests serve a response rather than depend on that
+// package's unexported types.
+type osvResponse struct {
+	Vulns []osvVuln `json:"vulns"`
+}
+
+type osvVuln struct {
+	ID string `json:"id"`
+}
+
 func TestKnownBadSignal_ParsesVulnResponse(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(osvResponse{Vulns: []osvVuln{{ID: "GHSA-test-1234"}}})

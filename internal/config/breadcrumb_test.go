@@ -17,7 +17,7 @@ import (
 
 func TestBreadcrumb_DeterministicForSameRegistry(t *testing.T) {
 	dir := t.TempDir()
-	testutil.WriteRegistry(t, dir, "routing: a", "models: b", "domains: c", "pricing: d")
+	testutil.WriteRegistry(t, dir, "routing: a", "models: b", "domains: c", "pricing: d", "signals: e")
 	t.Setenv("HYDRA_HOME", dir)
 
 	h1, err := config.Breadcrumb()
@@ -40,7 +40,7 @@ func TestBreadcrumb_DeterministicForSameRegistry(t *testing.T) {
 // long-running TUI must not keep serving a stale hash after a registry edit.
 func TestBreadcrumb_ChangesWhenAnyRegistryFileChanges(t *testing.T) {
 	dir := t.TempDir()
-	testutil.WriteRegistry(t, dir, "routing: a", "models: b", "domains: c", "pricing: d")
+	testutil.WriteRegistry(t, dir, "routing: a", "models: b", "domains: c", "pricing: d", "signals: e")
 	t.Setenv("HYDRA_HOME", dir)
 
 	before, err := config.Breadcrumb()
@@ -48,7 +48,7 @@ func TestBreadcrumb_ChangesWhenAnyRegistryFileChanges(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	testutil.WriteRegistry(t, dir, "routing: a-edited", "models: b", "domains: c", "pricing: d")
+	testutil.WriteRegistry(t, dir, "routing: a-edited", "models: b", "domains: c", "pricing: d", "signals: e")
 	after, err := config.Breadcrumb()
 	if err != nil {
 		t.Fatal(err)
@@ -63,7 +63,7 @@ func TestBreadcrumb_ChangesWhenAnyRegistryFileChanges(t *testing.T) {
 // would share a fingerprint, exactly what the breadcrumb exists to prevent.
 func TestBreadcrumb_DistinguishesContentMovedAcrossFileBoundary(t *testing.T) {
 	dirA := t.TempDir()
-	testutil.WriteRegistry(t, dirA, "tier: 1\n", "model: x\n", "d: y\n", "p: z\n")
+	testutil.WriteRegistry(t, dirA, "tier: 1\n", "model: x\n", "d: y\n", "p: z\n", "s: w\n")
 	t.Setenv("HYDRA_HOME", dirA)
 	a, err := config.Breadcrumb()
 	if err != nil {
@@ -71,7 +71,7 @@ func TestBreadcrumb_DistinguishesContentMovedAcrossFileBoundary(t *testing.T) {
 	}
 
 	dirB := t.TempDir()
-	testutil.WriteRegistry(t, dirB, "tier: 1\nmodel: x\n", "", "d: y\n", "p: z\n")
+	testutil.WriteRegistry(t, dirB, "tier: 1\nmodel: x\n", "", "d: y\n", "p: z\n", "s: w\n")
 	t.Setenv("HYDRA_HOME", dirB)
 	b, err := config.Breadcrumb()
 	if err != nil {
@@ -85,14 +85,14 @@ func TestBreadcrumb_DistinguishesContentMovedAcrossFileBoundary(t *testing.T) {
 // pricing.yaml drives cost-based routing, so an edit must change the identity.
 func TestBreadcrumb_CoversPricing(t *testing.T) {
 	dir := t.TempDir()
-	testutil.WriteRegistry(t, dir, "routing: a", "models: b", "domains: c", "tier1: 0.001")
+	testutil.WriteRegistry(t, dir, "routing: a", "models: b", "domains: c", "tier1: 0.001", "signals: e")
 	t.Setenv("HYDRA_HOME", dir)
 	before, err := config.Breadcrumb()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	testutil.WriteRegistry(t, dir, "routing: a", "models: b", "domains: c", "tier1: 999.0")
+	testutil.WriteRegistry(t, dir, "routing: a", "models: b", "domains: c", "tier1: 999.0", "signals: e")
 	after, err := config.Breadcrumb()
 	if err != nil {
 		t.Fatal(err)
@@ -111,8 +111,8 @@ func TestBreadcrumb_CoversPricing(t *testing.T) {
 // test passing only because real-world mtimes/sizes usually differ.
 func TestBreadcrumb_DifferentHomesDoNotCollideEvenWithMatchingFileStats(t *testing.T) {
 	dirA, dirB := t.TempDir(), t.TempDir()
-	testutil.WriteRegistry(t, dirA, "routing: AAA", "models: b", "domains: c", "pricing: d")
-	testutil.WriteRegistry(t, dirB, "routing: ZZZ", "models: b", "domains: c", "pricing: d")
+	testutil.WriteRegistry(t, dirA, "routing: AAA", "models: b", "domains: c", "pricing: d", "signals: e")
+	testutil.WriteRegistry(t, dirB, "routing: ZZZ", "models: b", "domains: c", "pricing: d", "signals: e")
 
 	fixed := time.Now()
 	for _, dir := range []string{dirA, dirB} {

@@ -663,12 +663,44 @@ func TestRenderers_HandleEmptyLongLabelsAndLargeNumbers(t *testing.T) {
 		t.Errorf("no total row:\n%s", out)
 	}
 
-	// A row with no enum must still print something, "?", rather than a gap
-	// that reads as a missing column.
+	// A --tier dispatch has no enum, so the field is not unknown and "?" was
+	// the wrong answer as surely as the bare "/3" the summary printed. Both
+	// render the same thing now, through routeKey.
 	tail := capture(t, func() {
 		RenderTail([]Row{{TS: "2026-08-01T00:00:00Z", Tier: 3, Model: "m", WallMS: 12}})
 	})
-	if !strings.Contains(tail, "?/3") {
-		t.Errorf("a row with no enum did not render a placeholder:\n%s", tail)
+	if !strings.Contains(tail, "tier 3") {
+		t.Errorf("a row with no enum does not say how it was routed:\n%s", tail)
+	}
+	if strings.Contains(tail, "/3") {
+		t.Errorf("a row with no enum still renders a routing key it does not have:\n%s", tail)
+	}
+}
+
+// One renderer forgot the placeholder the other had, which is how `hyctl cost`
+// came to print a bare "/10" on every row of a --tier-routed machine (#794).
+// Both call routeKey now, and this is what says so.
+func TestRouteKey_SaysHowARowWasRouted(t *testing.T) {
+	for _, c := range []struct {
+		enum string
+		tier int
+		want string
+	}{
+		{"STANDARD", 8, "STANDARD/8"},
+		{"", 10, "tier 10"},
+	} {
+		if got := routeKey(c.enum, c.tier); got != c.want {
+			t.Errorf("routeKey(%q, %d) = %q, want %q", c.enum, c.tier, got, c.want)
+		}
+	}
+
+	row := Row{TS: "2026-08-01T00:00:00Z", Tier: 10, Model: "m"}
+	summary := capture(t, func() {
+		RenderSummary(&SummaryResult{Recent: []Row{row}})
+	})
+	tail := capture(t, func() { RenderTail([]Row{row}) })
+	if !strings.Contains(summary, "tier 10") || !strings.Contains(tail, "tier 10") {
+		t.Errorf("the two renderers disagree about an enum-less row:\nsummary: %s\ntail: %s",
+			summary, tail)
 	}
 }

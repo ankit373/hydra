@@ -61,7 +61,9 @@ jobs:
         if: ${{ steps.check.outputs.has_assets == '0' }}
         uses: goreleaser/goreleaser-action@v7
         with:
-          version: latest
+          # Exact, not latest or ~> v2: 2.17.1 and 2.18.1 disagree on whether a
+          # missing tag is fatal, which killed 24 edge builds unnoticed (#821).
+          version: "2.18.2"
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

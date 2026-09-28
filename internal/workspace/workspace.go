@@ -25,6 +25,20 @@ type Workspace struct {
 	Git          string // "auto" | "true" | "false"
 	AllowedGlobs []string
 	DeniedGlobs  []string
+
+	// realRoot is Root with symlinks resolved, what containment is judged
+	// against. Root stays as written, since that is the spelling an operator
+	// recognises in a refusal.
+	realRoot string
+}
+
+// scopeRoot is the root as the filesystem sees it. Resolved on the fly for a
+// Workspace built by hand, so no construction path can skip it.
+func (ws Workspace) scopeRoot() string {
+	if ws.realRoot != "" {
+		return ws.realRoot
+	}
+	return resolveScopePath(ws.Root)
 }
 
 // Resolved is the output of Resolve, full context for a validated path.
@@ -111,6 +125,7 @@ func Load(hydraHome string) (*Registry, error) {
 		r.workspaces = append(r.workspaces, Workspace{
 			Name:         name,
 			Root:         root,
+			realRoot:     resolveScopePath(root),
 			Git:          e.Git,
 			AllowedGlobs: e.AllowedGlobs,
 			DeniedGlobs:  e.DeniedGlobs,
@@ -187,6 +202,7 @@ func defaultWorkspace() (Workspace, bool) {
 	return Workspace{
 		Name:         DefaultWorkspaceName,
 		Root:         filepath.Clean(root),
+		realRoot:     resolveScopePath(root),
 		Git:          "auto",
 		AllowedGlobs: []string{"**"},
 		DeniedGlobs:  defaultDeniedGlobs,
@@ -201,11 +217,13 @@ func (r *Registry) Check(path string) (string, error) {
 		return "", fmt.Errorf("path must be absolute: %s", path)
 	}
 
-	ws, err := r.find(path)
+	resolved := resolveScopePath(path)
+	ws, err := r.find(resolved)
 	if err != nil {
-		return "", err
+		return "", resolvedNote(path, resolved, err)
 	}
-	return ws.check(path)
+	name, err := ws.check(resolved)
+	return name, resolvedNote(path, resolved, err)
 }
 
 // CheckRooted validates path against a synthesized workspace rooted at root,
@@ -217,12 +235,15 @@ func CheckRooted(root, path string) (string, error) {
 	}
 	ws := Workspace{
 		Name: "hydra-worktree", Root: filepath.Clean(root), Git: "auto",
+		realRoot:     resolveScopePath(root),
 		AllowedGlobs: []string{"**"}, DeniedGlobs: defaultDeniedGlobs,
 	}
-	if !contains(ws.Root, path) {
-		return "", fmt.Errorf("worktree root %s does not contain %s", ws.Root, path)
+	resolved := resolveScopePath(path)
+	if !contains(ws.scopeRoot(), resolved) {
+		return "", resolvedNote(path, resolved, fmt.Errorf("worktree root %s does not contain %s", ws.Root, path))
 	}
-	return ws.check(path)
+	name, err := ws.check(resolved)
+	return name, resolvedNote(path, resolved, err)
 }
 
 // check applies the workspace's glob rules to a path already known to be
@@ -232,7 +253,7 @@ func (ws Workspace) check(path string) (string, error) {
 	// segments, and containment is established, so it cannot start with "..".
 	// ToSlash because the glob patterns are written with forward slashes
 	// and matchGlob splits on "/"; without it no pattern matches on Windows.
-	rel, err := filepath.Rel(ws.Root, path)
+	rel, err := filepath.Rel(ws.scopeRoot(), path)
 	if err != nil {
 		return "", fmt.Errorf("path %s is not relative to workspace %q root %s", path, ws.Name, ws.Root)
 	}
@@ -261,17 +282,20 @@ func (r *Registry) Resolve(path string) (Resolved, error) {
 		return Resolved{}, fmt.Errorf("path must be absolute: %s", path)
 	}
 
-	ws, err := r.find(path)
+	resolved := resolveScopePath(path)
+	ws, err := r.find(resolved)
 	if err != nil {
-		return Resolved{}, err
+		return Resolved{}, resolvedNote(path, resolved, err)
 	}
 
+	// Both arms report the root as the filesystem sees it, or one Resolved
+	// could carry two spellings of the same directory.
 	gitRoot := ""
 	switch ws.Git {
 	case "auto":
-		gitRoot = GitRoot(path)
+		gitRoot = GitRoot(resolved)
 	case "true":
-		gitRoot = ws.Root
+		gitRoot = ws.scopeRoot()
 	}
 
 	return Resolved{
@@ -334,7 +358,7 @@ func (r *Registry) find(path string) (Workspace, error) {
 	if override := os.Getenv("HYDRA_WORKSPACE"); override != "" {
 		for _, ws := range r.workspaces {
 			if ws.Name == override {
-				if !contains(ws.Root, path) {
+				if !contains(ws.scopeRoot(), path) {
 					return Workspace{}, fmt.Errorf("HYDRA_WORKSPACE=%s root (%s) does not contain %s", override, ws.Root, path)
 				}
 				return ws, nil
@@ -344,7 +368,7 @@ func (r *Registry) find(path string) (Workspace, error) {
 	}
 
 	for _, ws := range r.workspaces {
-		if contains(ws.Root, path) {
+		if contains(ws.scopeRoot(), path) {
 			return ws, nil
 		}
 	}
@@ -372,6 +396,39 @@ func contains(root, path string) bool {
 		return true // the root itself
 	}
 	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+// resolveScopePath resolves path through symlinks, so the scope rules judge
+// where a path points rather than how it is spelled. Without it a symlinked
+// directory inside a workspace writes outside it and a symlink to a .env walks
+// past the deny list, both reproduced against a real head (#1019).
+//
+// A file an edit is about to create does not exist yet, so the deepest existing
+// ancestor is resolved and the rest re-attached: that ancestor is what decides
+// where the write lands.
+func resolveScopePath(path string) string {
+	path = filepath.Clean(path)
+	rest := ""
+	for {
+		if target, err := filepath.EvalSymlinks(path); err == nil {
+			return filepath.Join(target, rest)
+		}
+		parent := filepath.Dir(path)
+		if parent == path {
+			return filepath.Join(path, rest) // nothing on this path exists
+		}
+		rest = filepath.Join(filepath.Base(path), rest)
+		path = parent
+	}
+}
+
+// resolvedNote names where a path actually pointed. A refusal quoting only the
+// spelling the caller used reads as wrong when a symlink is what moved it.
+func resolvedNote(path, resolved string, err error) error {
+	if err == nil || path == resolved {
+		return err
+	}
+	return fmt.Errorf("%w (%s resolves to %s)", err, path, resolved)
 }
 
 // matchGlob matches a relative path against a glob pattern, using the shared
