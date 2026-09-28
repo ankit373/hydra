@@ -416,7 +416,7 @@ section.blk{padding-top:96px;padding-bottom:96px;position:relative;}
   border-bottom:1px solid var(--line);padding-bottom:11px;margin-bottom:34px;}
 .klabel b{color:var(--aqua);font-weight:500;}
 h2.big{font-size:clamp(28px,4.4vw,46px);letter-spacing:-1px;font-weight:800;line-height:1.04;}
-.lede{color:var(--dim);font-size:clamp(15px,1.7vw,18px);max-width:66ch;margin-top:16px;}
+.lede{color:var(--dim);font-size:clamp(15px,1.7vw,18px);max-width:59ch;margin-top:16px;}
 .lede b{color:var(--ink);font-weight:600;}
 
 /* ── section 2 · universe / galaxy ─────────────────────────────────────── */
@@ -521,7 +521,10 @@ table.cmp td:first-child,table.cmp th[scope=row]{text-align:left;font-family:var
 .no{color:var(--faint);}
 .part{color:var(--mid);font-size:12px;}
 table.cmp tbody tr:last-child td,table.cmp tbody tr:last-child th{border-bottom:none;}
-.cmp-note{font-family:var(--mono);font-size:12px;color:var(--faint);margin-top:16px;}
+/* These carry prose, not code: nine of them, up to 527 characters. As 12px mono
+   with no cap they ran ~192 characters a line, and --faint is 3.26:1, under AA. */
+.cmp-note{font-size:13.5px;line-height:1.75;color:var(--dim);margin-top:16px;max-width:62ch;}
+.cmp-note code,.cmp-note .mono{font-family:var(--mono);font-size:.94em;}
 .cmp-note b{color:var(--aqua);}
 .cmp-note a{color:var(--dim);text-decoration:underline;text-underline-offset:2px;
   text-decoration-color:var(--line-2);}
@@ -925,14 +928,14 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
 <section class="blk wrap reveal" id="streaming">
   <div class="klabel"><span>Streaming</span><b>every dialect, every surface</b></div>
   <h2 class="big">A slow answer and a broken one <span class="grad">look identical</span>.</h2>
-  <p style="max-width:720px;color:var(--dim)">
+  <p style="max-width:59ch;color:var(--dim)">
     Until they start arriving. Hydra renders a dispatch while the model is still
     writing it, in the terminal, in the <code>hyctl tui</code> cockpit, in the
     desktop app, and across a swarm fan-out. Seven executor paths stream
     natively: the OpenAI-compatible wire shape and Azure, Anthropic, Gemini,
     Cohere, Bedrock over its binary event stream, Ollama, and the agy CLI.
   </p>
-  <p style="max-width:720px;color:var(--dim)">
+  <p style="max-width:59ch;color:var(--dim)">
     A head that <em>cannot</em> stream is not a second code path. Its whole
     output is delivered as one delta, so every surface is written once and the
     two kinds cannot drift apart in how they render.
@@ -958,7 +961,7 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
 <section class="blk wrap reveal" id="app">
   <div class="klabel"><span>Hydra Desktop</span><b>ships with every release</b></div>
   <h2 class="big">Prefer to <span class="grad">watch</span> it rather than grep it?</h2>
-  <p style="max-width:720px;color:var(--dim)">
+  <p style="max-width:59ch;color:var(--dim)">
     Everything above is the CLI. The same control plane has a desktop app that
     opens on a chat: ask for work, and every reply says which model answered, at
     which tier, and what it cost, beside a pane showing what the router knows.
