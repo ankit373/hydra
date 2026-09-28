@@ -64,6 +64,19 @@
 - `hyctl upgrade`: re-runs the same curl installer a fresh install uses: downloads the latest release, verifies its checksum, and renames the new binary over the old one, so the running process finishes on the old code and the next invocation picks up the new. Deliberately skipped for a Homebrew install, where overwriting brew's symlink would desync its bookkeeping, `brew upgrade hyctl` there instead
 - `hyctl version`: build and version info
 
+## How Hydra Differs From Other Routers
+
+Cost routing and automatic fallback are table stakes. The rows that separate Hydra from
+OpenRouter, LiteLLM, Portkey and vLLM Semantic Router are: local-first discovery (Hydra
+finds the models already on your machine rather than taking a declared endpoint list),
+confidence/trust routing (a calibrated optimal-stopping SPRT ensemble, not a single
+classification), head ranking that learns from outcomes verified **on your machine**, an
+on-device accountability ledger, and MCP server trust scoring. vLLM Semantic Router is the
+closest on routing itself: it is self-hosted, its classifier runs locally so a routing
+decision needs no network, and it routes per category rather than on one global "best"
+model. What it does not do is calibrate from your own verified outcomes, keep an
+append-only ledger of what was touched, or fetch the model.
+
 ## Who It's For
 
 Developers who use Claude Code, Cursor, Windsurf, or any AI coding assistant and want to reduce API costs without changing their workflow. Also useful for anyone building multi-model AI pipelines in Go.
