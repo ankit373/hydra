@@ -16,7 +16,7 @@ import {
   type Attempt,
   type LiveStream,
 } from '../chatStream'
-import type { ChatReply, GovernorPanel, Session as SessionData } from '../types'
+import type { ChatReply, GovernorPanel, Run, Session as SessionData } from '../types'
 import { ms, usdExact } from '../format'
 import { Timeline } from './Session'
 import { ModelPicker } from './ModelPicker'
@@ -31,6 +31,15 @@ const POLL_MS = 2000
 // closes, which is the lifetime a still-open chat already implies. Own key so
 // a future view's persistence cannot collide with it.
 const TURNS_KEY = 'hydra.chat.turns'
+
+/** Openers for an empty thread. Deliberately about this repo and this router,
+ *  since a generic prompt teaches nothing about what Hydra is for. */
+const STARTERS = [
+  'What changed on this branch?',
+  'Which head is cheapest for Go work here?',
+  'Is this migration safe for production?',
+  'Review the staged diff',
+]
 
 interface Turn {
   prompt: string
@@ -64,9 +73,12 @@ interface Turn {
 export function ChatView({
   onOpenRun,
   focusSignal,
+  runs,
 }: {
   onOpenRun: (runID: string) => void
   focusSignal: number
+  /** Recent runs for the sidebar. Null until the first fleet read answers. */
+  runs: Run[] | null
 }) {
   const [prompt, setPrompt] = useState('')
   // Empty means auto-route. The model's own id, not its tier: a tier cannot
@@ -309,10 +321,44 @@ export function ChatView({
     inputRef.current?.focus()
   }, [focusSignal])
 
+  // Clearing the transcript is not "delete the runs": every turn's run log
+  // outlives it and stays reachable from the sidebar and from Activity.
+  const newThread = () => {
+    setTurns([])
+    setPrompt('')
+    setLive(null)
+    setLiveSession(null)
+    try {
+      sessionStorage.removeItem(TURNS_KEY)
+    } catch {
+      /* Private mode, or storage disabled. The in-memory clear already happened. */
+    }
+    inputRef.current?.focus()
+  }
+
+  // The thread's subject is what opened it, not the latest turn: a crumb
+  // that renames itself on every message labels nothing.
+  const subject = turns.length > 0 ? turns[0].prompt : ''
+
   return (
-    <div className="chatv-split">
+    <div className="chatv-shell">
+      <ChatSidebar runs={runs} onOpen={onOpenRun} onNew={newThread} />
+
+      <section className={turns.length === 0 ? 'chatv chatv--empty' : 'chatv'}>
+      <header className="chatv__head">
+        <span className="chatv__crumb">
+          <span className="chatv__crumbRoot">Hydra</span>
+          <span className="chatv__crumbSep" aria-hidden="true">/</span>
+          <span className="chatv__crumbLeaf">{subject || 'New task'}</span>
+        </span>
+        <span className="chatv__headGrow" />
+        {turns.length > 0 && (
+          <button className="chatv__headBtn" onClick={newThread} disabled={busy}>
+            New task
+          </button>
+        )}
+      </header>
       <GovernorNotice governor={governor} busy={busy} />
-      <section className="chatv">
       <div className="chatv__log" ref={logRef}>
         {turns.length === 0 && (
           <div className="chatv__empty">
@@ -321,6 +367,22 @@ export function ChatView({
               Routed like any other task. Every reply says which model answered, at which
               tier, and what it cost.
             </p>
+            {/* Real prompts, not decoration: each one fills the composer so it
+                can be edited before it is sent, rather than dispatching blind. */}
+            <div className="chatv__starters">
+              {STARTERS.map((t) => (
+                <button
+                  key={t}
+                  className="chatv__starter"
+                  onClick={() => {
+                    setPrompt(t)
+                    inputRef.current?.focus()
+                  }}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
           </div>
         )}
         {turns.map((t, i) => (
@@ -459,6 +521,69 @@ export function ChatView({
         runId={turns[turns.length - 1]?.runId}
       />
     </div>
+  )
+}
+
+/**
+ * The run rail. Recents were reachable only from Activity, which meant the
+ * default view had no memory at all: the app opened on an empty box every
+ * time. Grouped Running / Recent because "still going" and "finished" are the
+ * two questions people actually open this to answer.
+ */
+function ChatSidebar({
+  runs,
+  onOpen,
+  onNew,
+}: {
+  runs: Run[] | null
+  onOpen: (id: string) => void
+  onNew: () => void
+}) {
+  const live = (runs ?? []).filter((r) => r.live)
+  const done = (runs ?? []).filter((r) => !r.live).slice(0, 12)
+  return (
+    <aside className="chatside" aria-label="Runs">
+      <button className="chatside__new" onClick={onNew}>
+        <span aria-hidden="true">+</span> New task
+      </button>
+
+      {live.length > 0 && (
+        <>
+          <div className="chatside__grp">Running</div>
+          {live.map((r) => (
+            <RunRow key={r.id} run={r} onOpen={onOpen} />
+          ))}
+        </>
+      )}
+
+      <div className="chatside__grp">Recent</div>
+      {runs === null && <p className="chatside__note">Reading run logs…</p>}
+      {runs !== null && done.length === 0 && (
+        <p className="chatside__note">Nothing yet. Ask something and it shows up here.</p>
+      )}
+      {done.map((r) => (
+        <RunRow key={r.id} run={r} onOpen={onOpen} />
+      ))}
+    </aside>
+  )
+}
+
+function RunRow({ run, onOpen }: { run: Run; onOpen: (id: string) => void }) {
+  return (
+    <button className="chatside__run" onClick={() => onOpen(run.id)} title={run.goal || run.id}>
+      <span
+        className={
+          run.waiting
+            ? 'chatside__dot chatside__dot--wait'
+            : run.live
+              ? 'chatside__dot chatside__dot--live'
+              : 'chatside__dot'
+        }
+        aria-hidden="true"
+      />
+      <span className="chatside__runName">{run.goal || run.id}</span>
+      {run.costUsd > 0 && <span className="chatside__runCost">{usdExact(run.costUsd)}</span>}
+    </button>
   )
 }
 

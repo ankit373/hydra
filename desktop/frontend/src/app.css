@@ -16,22 +16,251 @@ body {
 
 /* ── Shell ─────────────────────────────────────────────────────────────── */
 
-.shell { display: flex; height: 100%; }
-
-.rail {
-  width: 56px;
-  flex: 0 0 56px;
-  border-right: 1px solid var(--hy-line);
-  background: var(--hy-bg-2);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  /* Clears the inset macOS traffic lights. */
-  padding: 34px 0 12px;
-  --wails-draggable: drag;
+/* Header / body / footer. The app had none of the first or last: main.go runs
+   mac.TitleBarHiddenInset(), so nothing drew a top bar at all (#1060). */
+.shell {
+  display: grid;
+  grid-template-rows: var(--hy-head-h) 1fr var(--hy-foot-h);
+  height: 100%;
 }
 
-.rail__mark { width: 24px; height: 24px; flex: 0 0 auto; margin-bottom: 14px; }
+/* ── App header ────────────────────────────────────────────────────────── */
+
+.apphead {
+  --wails-draggable: drag;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  /* Left inset clears the macOS traffic lights, which float over the content. */
+  padding: 0 14px 0 var(--hy-traffic-w);
+  background: var(--hy-bg-2);
+  border-bottom: 1px solid var(--hy-line);
+  min-width: 0;
+}
+
+.apphead__brand { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+.apphead__mark { width: 22px; height: 22px; }
+.apphead__word {
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: .14em;
+  background: var(--hy-brand);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+
+.apphead__search {
+  --wails-draggable: no-drag;
+  appearance: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 1 300px;
+  min-width: 120px;
+  height: 30px;
+  padding: 0 8px 0 10px;
+  border: 1px solid var(--hy-line);
+  border-radius: var(--hy-radius-sm);
+  background: var(--hy-bg-3);
+  color: var(--hy-faint);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+  text-align: left;
+}
+.apphead__search:hover { border-color: var(--hy-line-2); color: var(--hy-dim); }
+.apphead__search:focus-visible { outline: 2px solid var(--hy-aqua); outline-offset: 1px; }
+.apphead__searchicon { font-size: 13px; }
+.apphead__searchtext { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.apphead__kbd {
+  font-family: var(--hy-font-mono);
+  font-size: 10px;
+  padding: 2px 5px;
+  border: 1px solid var(--hy-line);
+  border-radius: 4px;
+  color: var(--hy-faint);
+}
+
+.apphead__nav { display: flex; align-items: center; gap: 2px; margin-left: auto; }
+
+.apphead__tab {
+  --wails-draggable: no-drag;
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--hy-dim);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 7px 11px;
+  border-radius: var(--hy-radius-sm);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.apphead__tab:hover { background: var(--hy-panel); color: var(--hy-ink); }
+.apphead__tab[aria-current="page"] { background: var(--hy-bg-3); color: var(--hy-ink); box-shadow: inset 0 0 0 1px var(--hy-line-2); }
+.apphead__tab:focus-visible { outline: 2px solid var(--hy-aqua); outline-offset: 1px; }
+
+.apphead__badge {
+  font-family: var(--hy-font-mono);
+  font-size: 10px;
+  line-height: 1;
+  padding: 3px 5px;
+  border-radius: 999px;
+  background: var(--hy-mid);
+  color: #1A1206;
+  font-weight: 700;
+}
+/* Live work glows; work waiting on a human does not. The difference is the
+   whole point of having two counters. */
+.apphead__badge--live {
+  background: var(--hy-aqua);
+  color: #04221C;
+  box-shadow: 0 0 10px -1px var(--hy-aqua);
+}
+
+.apphead__status { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; }
+.apphead__stat {
+  --wails-draggable: no-drag;
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--hy-dim);
+  font-family: var(--hy-font-mono);
+  font-size: 11px;
+  padding: 6px 8px;
+  border-radius: var(--hy-radius-sm);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.apphead__stat:hover { background: var(--hy-panel); color: var(--hy-ink); }
+.apphead__stat:focus-visible { outline: 2px solid var(--hy-aqua); outline-offset: 1px; }
+
+.apphead__dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; }
+.apphead__dot--ok { background: var(--hy-aqua); box-shadow: 0 0 8px -1px var(--hy-aqua); }
+.apphead__dot--none { background: var(--hy-expensive); }
+.apphead__dot--unknown { background: var(--hy-faint); }
+
+/* ── App footer ────────────────────────────────────────────────────────── */
+
+.appfoot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
+  background: var(--hy-bg-2);
+  border-top: 1px solid var(--hy-line);
+  font-family: var(--hy-font-mono);
+  font-size: 11px;
+  color: var(--hy-dim);
+  min-width: 0;
+}
+.appfoot__item { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.appfoot__item strong { color: var(--hy-ink); font-weight: 600; }
+.appfoot__sub { color: var(--hy-faint); }
+.appfoot__sep { width: 1px; height: 12px; background: var(--hy-line); flex: 0 0 auto; }
+.appfoot__grow { flex: 1; }
+.appfoot__mode {
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  font-size: 9.5px;
+  padding: 3px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--hy-line-2);
+  color: var(--hy-dim);
+}
+.appfoot__mode--warning { color: var(--hy-gov-warning); border-color: var(--hy-gov-warning); }
+.appfoot__mode--caution { color: var(--hy-gov-warning); border-color: var(--hy-gov-warning); }
+.appfoot__mode--critical,
+.appfoot__mode--emergency { color: var(--hy-gov-critical); border-color: var(--hy-gov-critical); }
+
+/* ── Command palette ───────────────────────────────────────────────────── */
+
+.palette__scrim {
+  position: fixed;
+  inset: 0;
+  background: rgba(3, 4, 10, .66);
+  backdrop-filter: blur(3px);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 12vh;
+  z-index: 60;
+}
+.palette {
+  width: min(620px, 92vw);
+  max-height: 64vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--hy-bg-2);
+  border: 1px solid var(--hy-line-2);
+  border-radius: var(--hy-radius);
+  box-shadow: 0 24px 70px -12px rgba(0, 0, 0, .8);
+  overflow: hidden;
+}
+.palette__input {
+  appearance: none;
+  border: 0;
+  border-bottom: 1px solid var(--hy-line);
+  background: transparent;
+  color: var(--hy-ink);
+  font: inherit;
+  font-size: 15px;
+  padding: 15px 16px;
+  outline: none;
+}
+.palette__list { overflow-y: auto; padding: 6px; }
+.palette__group {
+  font-family: var(--hy-font-mono);
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: .11em;
+  color: var(--hy-faint);
+  padding: 10px 10px 5px;
+}
+.palette__row {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--hy-dim);
+  font: inherit;
+  font-size: 13px;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: var(--hy-radius-sm);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.palette__row[data-sel="true"] { background: var(--hy-bg-3); color: var(--hy-ink); box-shadow: inset 0 0 0 1px var(--hy-line-2); }
+.palette__label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.palette__hint { font-family: var(--hy-font-mono); font-size: 10.5px; color: var(--hy-faint); flex: 0 0 auto; }
+.palette__empty { color: var(--hy-dim); font-size: 13px; padding: 18px 10px; margin: 0; }
+.palette__foot {
+  border-top: 1px solid var(--hy-line);
+  padding: 8px 14px;
+  font-size: 10.5px;
+  color: var(--hy-faint);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.palette__foot kbd {
+  font-family: var(--hy-font-mono);
+  border: 1px solid var(--hy-line);
+  border-radius: 3px;
+  padding: 1px 4px;
+}
 
 /* Rotation only, no filter/blur, so it costs nothing on a GPU-less machine.
    The mark's own SVG has no glow filter baked in (unlike brand/svg/mark.svg)
@@ -55,46 +284,34 @@ body {
 }
 .loading__mark { width: 28px; height: 28px; }
 
-.rail__nav { display: flex; flex-direction: column; align-items: center; gap: 3px; }
-
-.rail__item {
-  --wails-draggable: no-drag;
-  appearance: none;
-  border: 0;
-  background: transparent;
-  color: var(--hy-dim);
-  font: inherit;
-  font-size: 15px;
-  cursor: pointer;
-  position: relative;
-  width: 36px;
-  height: 36px;
-  border-radius: var(--hy-radius-sm);
-  display: grid;
-  place-items: center;
-}
-.rail__item:hover:not(:disabled) { background: var(--hy-panel); color: var(--hy-ink); }
-.rail__item[aria-current="page"] { background: var(--hy-bg-3); color: var(--hy-aqua); box-shadow: inset 0 0 0 1px var(--hy-line-2); }
-.rail__item:disabled { opacity: .38; cursor: default; }
-.rail__item:focus-visible { outline: 2px solid var(--hy-aqua); outline-offset: 1px; }
-
-.rail__foot {
-  margin-top: auto;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  font-family: var(--hy-font-mono);
-  font-size: 9px;
-  color: var(--hy-dim);
-}
-/* Just the version on a 56px rail; the commit lives in the tooltip. */
-.rail__ver { writing-mode: horizontal-tb; font-size: 8.5px; opacity: .75; }
-
-.main { flex: 1; overflow-y: auto; padding: 34px 30px 40px; min-width: 0; }
+.main { overflow-y: auto; padding: 26px 30px 36px; min-width: 0; }
 /* Chat manages its own scrolling (log scrolls, composer pinned), so its wrapper
    must not add a second scroll container or pad the composer off the bottom. */
-.main--chat { overflow: hidden; display: flex; flex-direction: column; padding: 28px 30px 14px; }
+.main--chat { overflow: hidden; display: flex; flex-direction: column; padding: 0; }
+
+/* ── Page header ───────────────────────────────────────────────────────── */
+
+.pagehead { margin-bottom: 20px; }
+.pagehead__row { display: flex; align-items: flex-start; gap: 16px; }
+.pagehead__titles { flex: 1; min-width: 0; }
+.pagehead__title { margin: 0; font-size: 23px; letter-spacing: -0.03em; }
+.pagehead__sub { margin: 5px 0 0; color: var(--hy-dim); font-size: 13px; }
+/* Provenance sits apart from the subtitle: "what this is" and "what evidence
+   it rests on" are different claims. */
+.pagehead__prov {
+  margin: 9px 0 0;
+  font-family: var(--hy-font-mono);
+  font-size: 10.5px;
+  color: var(--hy-faint);
+}
+.pagehead__actions { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+.pagehead__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+  flex-wrap: wrap;
+}
 
 /* ── Headings ──────────────────────────────────────────────────────────── */
 
@@ -1560,7 +1777,7 @@ body {
    column, 100% overflows and pushes the composer below the fold. */
 .chatv { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
 
-.chatv__log { flex: 1 1 auto; overflow-y: auto; display: flex; flex-direction: column; gap: 20px; padding: 4px 0 14px; }
+.chatv__log { flex: 1 1 auto; overflow-y: auto; display: flex; flex-direction: column; gap: 20px; padding: 20px 22px 14px; }
 .chatv__log > * { max-width: 720px; width: 100%; margin: 0 auto; }
 
 .chatv__empty { text-align: center; padding: 48px 20px 0; }
@@ -1667,7 +1884,7 @@ body {
 
 /* ── Composer ──────────────────────────────────────────────────────────── */
 
-.chatv__composer { flex: 0 0 auto; padding: 12px 0 4px; }
+.chatv__composer { flex: 0 0 auto; padding: 12px 22px 16px; }
 .chatv__box {
   max-width: 720px;
   margin: 0 auto;
@@ -1853,23 +2070,134 @@ body {
 /* The pane is glanceable, never readable, that is what makes a permanently
    visible companion affordable, where the old dock had to collapse (#520). */
 
-.chatv-split {
+.chatv-shell {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 300px;
-  gap: 22px;
+  grid-template-columns: 218px minmax(0, 1fr) 292px;
   flex: 1 1 auto;
   min-height: 0;
+  height: 100%;
 }
-/* Below this the pane costs more width than it returns, so the thread takes it. */
-@media (max-width: 1000px) {
-  .chatv-split { grid-template-columns: minmax(0, 1fr); }
+/* Two folds, not one: the run rail goes before the cockpit, because at that
+   width the thread is still readable without either. */
+@media (max-width: 1180px) {
+  .chatv-shell { grid-template-columns: minmax(0, 1fr) 292px; }
+  .chatside { display: none; }
+}
+@media (max-width: 880px) {
+  .chatv-shell { grid-template-columns: minmax(0, 1fr); }
   .cockpit { display: none; }
 }
 
+/* ── Chat run rail ─────────────────────────────────────────────────────── */
+
+.chatside {
+  border-right: 1px solid var(--hy-line);
+  background: var(--hy-bg-2);
+  overflow-y: auto;
+  min-height: 0;
+  padding: 14px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.chatside__new {
+  appearance: none;
+  border: 1px solid var(--hy-line-2);
+  border-radius: var(--hy-radius-sm);
+  background: var(--hy-bg-3);
+  color: var(--hy-ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 9px 11px;
+  margin-bottom: 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.chatside__new:hover { border-color: var(--hy-aqua); color: var(--hy-aqua); }
+.chatside__new:focus-visible { outline: 2px solid var(--hy-aqua); outline-offset: 1px; }
+
+.chatside__grp {
+  font-family: var(--hy-font-mono);
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: .11em;
+  color: var(--hy-faint);
+  padding: 12px 8px 6px;
+}
+.chatside__note { margin: 0; padding: 2px 8px 8px; font-size: 12px; color: var(--hy-faint); line-height: 1.5; }
+
+.chatside__run {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--hy-dim);
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  padding: 7px 8px;
+  border-radius: var(--hy-radius-sm);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.chatside__run:hover { background: var(--hy-panel); color: var(--hy-ink); }
+.chatside__run:focus-visible { outline: 2px solid var(--hy-aqua); outline-offset: -2px; }
+.chatside__runName { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chatside__runCost { font-family: var(--hy-font-mono); font-size: 10px; color: var(--hy-faint); }
+.chatside__dot { width: 6px; height: 6px; border-radius: 50%; background: var(--hy-faint); flex: 0 0 auto; }
+.chatside__dot--live { background: var(--hy-aqua); box-shadow: 0 0 8px -1px var(--hy-aqua); }
+.chatside__dot--wait { background: var(--hy-mid); }
+
+/* ── Chat pane header ──────────────────────────────────────────────────── */
+
+.chatv__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 42px;
+  flex: 0 0 auto;
+  padding: 0 22px;
+  border-bottom: 1px solid var(--hy-line);
+  min-width: 0;
+}
+.chatv__crumb { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 13px; }
+.chatv__crumbRoot { color: var(--hy-faint); flex: 0 0 auto; }
+.chatv__crumbSep { color: var(--hy-faint); flex: 0 0 auto; }
+.chatv__crumbLeaf {
+  color: var(--hy-ink);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chatv__headGrow { flex: 1; }
+.chatv__headBtn {
+  appearance: none;
+  border: 1px solid var(--hy-line);
+  border-radius: var(--hy-radius-sm);
+  background: transparent;
+  color: var(--hy-dim);
+  font: inherit;
+  font-size: 12px;
+  padding: 5px 10px;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+.chatv__headBtn:hover:not(:disabled) { border-color: var(--hy-line-2); color: var(--hy-ink); }
+.chatv__headBtn:disabled { opacity: .45; cursor: default; }
+
 .cockpit {
   border-left: 1px solid var(--hy-line);
-  padding-left: 18px;
+  padding: 16px 16px 16px 18px;
   overflow-y: auto;
+  /* Without this a grid item is sized by its content, not its track, and the
+     pane's figures ran off the right edge of the window. */
+  min-width: 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
@@ -2238,3 +2566,187 @@ body {
 .row--open:hover { background: var(--hy-panel); }
 .row--open:hover td:last-child { color: var(--hy-aqua); }
 .row--open:focus-visible { outline: 2px solid var(--hy-aqua); outline-offset: -2px; }
+
+/* ── Toolbar controls ──────────────────────────────────────────────────── */
+
+.tb__search,
+.tb__select {
+  appearance: none;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--hy-line);
+  border-radius: var(--hy-radius-sm);
+  background: var(--hy-bg-3);
+  color: var(--hy-ink);
+  font: inherit;
+  font-size: 13px;
+}
+.tb__search { flex: 0 1 300px; min-width: 140px; }
+.tb__search::placeholder { color: var(--hy-faint); }
+.tb__search:focus-visible,
+.tb__select:focus-visible { outline: 2px solid var(--hy-aqua); outline-offset: 1px; border-color: transparent; }
+.tb__select { cursor: pointer; padding-right: 26px; }
+.tb__count { font-family: var(--hy-font-mono); font-size: 11px; color: var(--hy-faint); margin-left: auto; }
+
+/* ── Tab strip ─────────────────────────────────────────────────────────── */
+
+.tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border-bottom: 1px solid var(--hy-line);
+  margin-bottom: 18px;
+}
+.tabs__tab {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--hy-dim);
+  font: inherit;
+  font-size: 13px;
+  padding: 9px 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  /* On the container's own border, so the strip stays 1px whichever is lit. */
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+.tabs__tab:hover { color: var(--hy-ink); }
+.tabs__tab[aria-selected="true"] { color: var(--hy-ink); border-bottom-color: var(--hy-aqua); }
+.tabs__tab:focus-visible { outline: 2px solid var(--hy-aqua); outline-offset: -2px; }
+.tabs__n {
+  font-family: var(--hy-font-mono);
+  font-size: 10.5px;
+  color: var(--hy-faint);
+  background: var(--hy-bg-3);
+  padding: 2px 6px;
+  border-radius: 999px;
+}
+.tabs__tab[aria-selected="true"] .tabs__n { color: var(--hy-dim); }
+
+/* ── Catalog (filters · list · record) ─────────────────────────────────── */
+
+.catalog { display: grid; grid-template-columns: 178px minmax(0, 1fr) 300px; gap: 20px; align-items: start; }
+@media (max-width: 1180px) { .catalog { grid-template-columns: minmax(0, 1fr) 280px; } .filters { display: none; } }
+
+.filters { position: sticky; top: 0; }
+.filters__group { display: flex; flex-direction: column; gap: 2px; }
+.filters__title {
+  font-family: var(--hy-font-mono);
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: .11em;
+  color: var(--hy-faint);
+  padding: 0 0 8px;
+}
+.filters__check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--hy-dim);
+  padding: 5px 7px;
+  border-radius: var(--hy-radius-sm);
+  cursor: pointer;
+}
+.filters__check:hover { background: var(--hy-panel); color: var(--hy-ink); }
+.filters__check input { accent-color: var(--hy-aqua); margin: 0; }
+.filters__check span:nth-of-type(1) { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.filters__n { font-family: var(--hy-font-mono); font-size: 10px; color: var(--hy-faint); }
+.filters__clear {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--hy-aqua);
+  font: inherit;
+  font-size: 11.5px;
+  text-align: left;
+  padding: 7px;
+  cursor: pointer;
+}
+
+.catalog__list { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.catalog__empty { color: var(--hy-dim); font-size: 13px; padding: 26px 2px; margin: 0; }
+
+.mcard {
+  appearance: none;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  width: 100%;
+  text-align: left;
+  padding: 13px 15px;
+  border: 1px solid var(--hy-line);
+  border-radius: var(--hy-radius);
+  background: var(--hy-panel);
+  color: var(--hy-ink);
+  font: inherit;
+  cursor: pointer;
+}
+.mcard:hover { border-color: var(--hy-line-2); background: var(--hy-bg-3); }
+.mcard[aria-current="true"] { border-color: var(--hy-aqua); box-shadow: 0 0 0 1px var(--hy-aqua), 0 0 22px -12px var(--hy-aqua); }
+.mcard:focus-visible { outline: 2px solid var(--hy-aqua); outline-offset: 2px; }
+
+.mcard__top { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.mcard__spacer { flex: 1; }
+.mcard__dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; }
+.mcard__dot--on { background: var(--hy-aqua); box-shadow: 0 0 8px -1px var(--hy-aqua); }
+.mcard__dot--off { background: var(--hy-faint); }
+.mcard__dot--unknown { background: transparent; box-shadow: inset 0 0 0 1.5px var(--hy-faint); }
+.mcard__name { font-size: 14.5px; font-weight: 600; letter-spacing: -.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.mcard__tier { font-family: var(--hy-font-mono); font-size: 11px; color: var(--hy-dim); }
+.mcard__price { font-family: var(--hy-font-mono); font-size: 11px; font-weight: 700; }
+.mcard__price--free { color: var(--hy-cheap); }
+.mcard__price--low { color: var(--hy-cheap); }
+.mcard__price--mid { color: var(--hy-mid); }
+.mcard__price--high { color: var(--hy-expensive); }
+.mcard__id { font-family: var(--hy-font-mono); font-size: 11px; color: var(--hy-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mcard__meta { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 11.5px; color: var(--hy-dim); }
+.mcard__used { color: var(--hy-faint); }
+
+/* Not .chip: that is Fleet's 12px status square, and reusing the name left
+   these sized 12x12 with their labels spilling across the model name. */
+.tag {
+  white-space: nowrap;
+  line-height: 1.5;
+  font-family: var(--hy-font-mono);
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  padding: 2px 6px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  flex: 0 0 auto;
+}
+.tag--local { color: var(--hy-cheap); }
+.tag--shared { color: var(--hy-dim); }
+.tag--off { color: var(--hy-faint); }
+
+/* An empty thread centres greeting and composer as one block, rather than
+   pinning one to the top and the other to the bottom of an empty window. */
+.chatv--empty .chatv__log { flex: 0 0 auto; margin-top: auto; overflow: visible; }
+.chatv--empty .chatv__composer { margin-bottom: auto; }
+
+.chatv__starters {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin: 22px auto 0;
+  max-width: 620px;
+}
+.chatv__starter {
+  appearance: none;
+  border: 1px solid var(--hy-line);
+  border-radius: 999px;
+  background: var(--hy-bg-3);
+  color: var(--hy-dim);
+  font: inherit;
+  font-size: 12.5px;
+  padding: 7px 13px;
+  cursor: pointer;
+}
+.chatv__starter:hover { border-color: var(--hy-aqua); color: var(--hy-aqua); }
+.chatv__starter:focus-visible { outline: 2px solid var(--hy-aqua); outline-offset: 2px; }

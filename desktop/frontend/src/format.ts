@@ -26,6 +26,20 @@ export function ms(v: number): string {
   return `${v}ms`
 }
 
+/**
+ * A context window as its vendor quotes it. Vendors quote decimal (200000 is
+ * "200K") and local GGUF servers quote binary (32768 is "32K"), so rounding
+ * either way alone is wrong for half the estate: 32768/1000 rounds to the
+ * "33K" no one has ever written on a model card. Exact divisors win, and
+ * anything else is rounded decimally and says so by not being round.
+ */
+export function contextWindow(v: number): string {
+  if (v <= 0) return '—'
+  if (v % 1000 === 0) return `${v / 1000}K`
+  if (v % 1024 === 0) return `${v / 1024}K`
+  return `${Math.round(v / 1000)}K`
+}
+
 export function pct(v: number, digits = 0): string {
   return `${v.toFixed(digits)}%`
 }
