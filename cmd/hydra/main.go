@@ -160,10 +160,7 @@ func rootCmd() *cobra.Command {
 
 // versionText is shared by the `version` subcommand and the root `--version`
 // flag, so the two can never drift into reporting differently.
-func versionText() string {
-	return fmt.Sprintf("  hydra %s\n  commit:  %s\n  built:   %s\n  by:      %s\n",
-		build.Version, build.Commit, build.Date, build.BuiltBy)
-}
+func versionText() string { return build.Text("hydra") }
 
 func cmdVersion() *cobra.Command {
 	return &cobra.Command{

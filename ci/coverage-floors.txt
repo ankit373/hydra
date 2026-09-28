@@ -43,6 +43,7 @@ floor internal/a2a                  93
 # developer's real ~/.aws.
 floor internal/awsconf              85
 floor internal/budget               92
+floor internal/build                90
 floor internal/capabilities         90
 floor internal/config               84
 floor internal/cache                85
@@ -123,7 +124,9 @@ floor registry                      86
 # The list started at eleven, the entire platform and discovery layer. It is
 # down to two, and both are permanent:
 #
-#   internal/build   is four ldflags-injected string vars and nothing else.
+# The list is down to one. internal/build left it in #1058: it grew a renderer
+# shared by hyctl and hyverify, and a package that decides what a user reads
+# off a release archive is not a package with nothing to test.
 #
 # cmd/specstest's floor is 90 against a Linux reading of 94.1%, not the 100%
 # a Mac reports: main() prints the memory-pressure warning only when there is
@@ -139,7 +142,6 @@ floor registry                      86
 #
 # Adding anything here needs a reason on the line. A package with no tests is
 # not a package with nothing to test.
-no-tests internal/build   ldflags-injected version vars only
 
 # Maximum number of t.Skip/t.Skipf calls across the whole test suite.
 #
