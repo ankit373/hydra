@@ -28,8 +28,11 @@ type Boundary struct {
 	Opaque []string `json:"opaque"`
 
 	// OpaqueLocalOnly is the subset of Opaque the catalog declares never
-	// leaves the machine. That is a claim about another program rather than
-	// something Hydra observes, so it narrows the hole without closing it.
+	// leaves the machine. internal/gateway now runs a real network gate for
+	// these, denying anything but loopback/private destinations regardless of
+	// the declaration, but a head that ignores its HTTP_PROXY/HTTPS_PROXY
+	// environment and opens a raw socket is still outside what Hydra can see,
+	// so it narrows the hole without fully closing it.
 	OpaqueLocalOnly []string `json:"opaqueLocalOnly"`
 }
 
@@ -85,7 +88,7 @@ func boundaryCheck(b Boundary) Check {
 		if n == 1 {
 			verb = "is"
 		}
-		detail += fmt.Sprintf(". Of those, %s %s declared local-only, which is a claim about the program itself rather than something Hydra verifies",
+		detail += fmt.Sprintf(". Of those, %s %s declared local-only: Hydra runs a network gate denying them anything but loopback/private destinations, though a head that ignores that proxy environment and opens a raw socket is still unseen, so this narrows the hole rather than closing it",
 			strings.Join(b.OpaqueLocalOnly, ", "), verb)
 	}
 	return Check{Name: name,

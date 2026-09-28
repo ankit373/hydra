@@ -32,7 +32,12 @@ func (e *CLIExecutor) ExecuteStream(ctx context.Context, req Request, onDelta On
 
 	args := tmpl.buildArgs(req.Prompt)
 	cmd := sandbox.Harden(exec.CommandContext(ctx, req.Head.Executable, args...))
-	cmd.Env = headEnv(req.Head)
+	env, closeGate, err := gateIfLocalOnly(ctx, req.Head, headEnv(req.Head))
+	if err != nil {
+		return nil, err
+	}
+	defer closeGate()
+	cmd.Env = env
 	if tmpl.stdinPrompt {
 		cmd.Stdin = strings.NewReader(req.Prompt)
 	}
