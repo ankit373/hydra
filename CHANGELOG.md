@@ -6,6 +6,13 @@ Format: [Semantic Versioning](https://semver.org). Entries from v1.0.1 onward ar
 
 ---
 
+## [1.5.0](https://github.com/ankit373/hydra/compare/v1.4.2...v1.5.0) (2026-09-28)
+
+
+### Features
+
+* **release:** v1.5.0 — streaming and tool calls on every dialect, hyctl serve, measured routing, hyctl vet, and the public blog ([#1057](https://github.com/ankit373/hydra/issues/1057)) ([ed35dee](https://github.com/ankit373/hydra/commit/ed35deef2c0c8172c48db62989dacae69ed66885)), closes [#1042](https://github.com/ankit373/hydra/issues/1042) [#1045](https://github.com/ankit373/hydra/issues/1045) [#1047](https://github.com/ankit373/hydra/issues/1047)
+
 ## [1.4.2](https://github.com/ankit373/hydra/compare/v1.4.1...v1.4.2) (2026-09-07)
 
 
