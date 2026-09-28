@@ -109,9 +109,20 @@ jobs:
             git remote set-url origin \
               "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           fi
-          git push -f origin chore/back-merge-main
           echo "have_pat=$HAVE_PAT" >> "$GITHUB_OUTPUT"
-          echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+          # Publish through createCommitOnBranch, which GitHub signs. A PAT does
+          # not help here: a commit pushed over git from a runner is unsigned
+          # whoever pushes it, and develop requires signatures with no admin
+          # bypass, so stacking a signed commit on top still leaves the unsigned
+          # one in the PR and the merge is refused (#1079).
+          if python3 .github/workflows/back_merge_commit.py; then
+            :
+          else
+            echo "::warning title=Signed back-merge failed::Falling back to a plain push; the PR will need the manual path below."
+            git push -f origin chore/back-merge-main
+            echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          fi
 
           # Create the PR if one isn't already open for this branch; otherwise the
           # force-push above already updated the existing PR.
@@ -143,7 +154,7 @@ jobs:
           unsigned=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${HEAD_SHA}" \
             --jq 'if .commit.verification.verified then empty else .sha end' || echo "$HEAD_SHA")
           if [ -n "$unsigned" ]; then
-            echo "::error title=Back-merge commit is unsigned::${unsigned} is not signed, and develop has required_signatures with enforce_admins, there is no bypass."
+            echo "::error title=Back-merge commit is unsigned::${unsigned} is not signed. develop has required_signatures with enforce_admins, so there is no bypass and no amount of signed commits on top helps."
             blocked=1
           fi
 
@@ -162,15 +173,27 @@ jobs:
           cat <<'EOF'
           develop is now behind main and the PR above cannot merge itself.
 
-          To land it now:
+          To land it now, push one signed commit to the branch. That starts the
+          checks, which a GITHUB_TOKEN-opened PR can never start on its own:
+
             git fetch origin chore/back-merge-main
             git checkout -B backmerge origin/chore/back-merge-main
-            git commit -S --allow-empty -m "chore: sign and trigger the back-merge"
+            git commit -S --allow-empty -m "chore: trigger the back-merge checks"
             git push origin HEAD:chore/back-merge-main
 
-          To stop this recurring, add a BACK_MERGE_TOKEN secret (a PAT with repo
-          scope) and give its account a signing key, so the push is both signed
-          and able to start workflow runs.
+          If the branch still carries an unsigned commit, that alone will NOT
+          make it mergeable, because the unsigned one stays in the PR. Carry the
+          same content on a branch of your own instead:
+
+            git checkout -B chore/sync-manifest origin/develop
+            git checkout origin/main -- .release-please-manifest.json CHANGELOG.md
+            git commit -S -m "chore(release): carry the version bump back to develop"
+            gh pr create --base develop --fill
+
+          To stop this recurring, add a BACK_MERGE_TOKEN secret, a PAT with repo
+          scope. Its events can start workflow runs, which is the half no change
+          to this workflow can fix: GITHUB_TOKEN is barred from triggering them
+          so that workflows cannot recurse.
           EOF
           exit 1
 
