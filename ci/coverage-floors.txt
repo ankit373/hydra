@@ -43,6 +43,7 @@ floor internal/a2a                  93
 # developer's real ~/.aws.
 floor internal/awsconf              85
 floor internal/budget               92
+floor internal/build                90
 floor internal/capabilities         90
 floor internal/config               84
 floor internal/cache                85
@@ -120,26 +121,27 @@ floor registry                      86
 
 # Packages allowed to have no test files at all.
 #
-# The list started at eleven, the entire platform and discovery layer. It is
-# down to two, and both are permanent:
+# The list started at eleven, the entire platform and discovery layer. It is now
+# EMPTY, and the two that left it are why the rule below is worded as it is.
 #
-#   internal/build   is four ldflags-injected string vars and nothing else.
+# cmd/specstest was here on the grounds that it is "just a debug main". That was
+# the wrong call: it is the diagnostic a user is pointed at when local model
+# sizing does not match what they expect, so a version of it that panics or
+# prints nothing is worse than none, since it is consulted precisely when
+# something is already wrong. Its floor is 90 against a Linux reading of 94.1%,
+# not the 100% a Mac reports: main() prints the memory-pressure warning only
+# when there is one, and whether there is one depends on the machine. In a
+# 17-statement package one conditional branch is 5.9%, so the margin has to be
+# wider than the usual few points.
 #
-# cmd/specstest's floor is 90 against a Linux reading of 94.1%, not the 100%
-# a Mac reports: main() prints the memory-pressure warning only when there is
-# one, and whether there is one depends on the machine. In a 17-statement
-# package a single conditional branch is 5.9%, so the margin has to be wider
-# than the usual few points.
-#
-# cmd/specstest was here too, on the grounds that it is "just a debug main".
-# That was the wrong call: it is the diagnostic a user is pointed at when local
-# model sizing does not match what they expect, so a version of it that panics
-# or prints nothing is worse than none, it is consulted precisely when
-# something is already wrong. It now has a smoke test and a floor.
+# internal/build left in #1058. Its reason read "four ldflags-injected string
+# vars and nothing else", which stopped being true the moment it grew a renderer
+# shared by hyctl and hyverify. What a user reads off a release archive to file
+# a bug report is not nothing to test.
 #
 # Adding anything here needs a reason on the line. A package with no tests is
-# not a package with nothing to test.
-no-tests internal/build   ldflags-injected version vars only
+# not a package with nothing to test, and both entries that were here were
+# removed by someone noticing the reason had quietly become false.
 
 # Maximum number of t.Skip/t.Skipf calls across the whole test suite.
 #
