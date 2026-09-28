@@ -4,31 +4,68 @@
 package config
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/BurntSushi/toml"
 )
-
-// Tier groups one or more Head IDs under a named capability level.
-type Tier struct {
-	Name   string   `toml:"name"`
-	Heads  []string `toml:"heads"`
-	Policy string   `toml:"policy,omitempty"`
-}
 
 // Policy is a named routing rule applied before dispatch.
 type Policy struct {
 	Action string `toml:"action"` // "local-only", "budget-cap", etc.
 }
 
+// Egress governs what may leave the machine once content classifies secret.
+type Egress struct {
+	// Strict refuses a secret payload when no local head is routable, rather
+	// than sending it to one that reaches the network. Absent means on: a
+	// config file written before the gate existed must not read as an opt-out.
+	Strict *bool `toml:"strict,omitempty"`
+}
+
+// OpenRouter admits individual models from OpenRouter's catalogue as routable
+// heads. Hydra already prices and scores hundreds of them, but enumerating
+// them all would bury `hyctl probe` and `hyctl status`, so admission is the
+// user's explicit choice (#752).
+type OpenRouter struct {
+	// Models is the allowlist of catalogue ids, e.g. "anthropic/claude-sonnet-4-5".
+	// Empty means the single key-derived head every install has had, so naming
+	// nothing changes nothing.
+	Models []string `toml:"models,omitempty"`
+}
+
+// Normalized drops blanks and case-insensitive duplicates, keeping the user's
+// spelling: the string is what gets sent as the API's model id, and lowercasing
+// it would be inventing a normalization the API never promised.
+func (o OpenRouter) Normalized() []string {
+	seen := make(map[string]bool, len(o.Models))
+	out := make([]string, 0, len(o.Models))
+	for _, m := range o.Models {
+		m = strings.TrimSpace(m)
+		key := strings.ToLower(m)
+		if m == "" || seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, m)
+	}
+	return out
+}
+
 // Config is the root Hydra configuration.
 type Config struct {
+	// A `[[tiers]]` block written by an older `hyctl init` is ignored rather
+	// than rejected: toml leaves unknown keys undecoded. Tier names resolve
+	// through registry/routing.yaml now, so a per-install head list cannot
+	// disagree with the enum that shares its name (#782).
 	Cortex   string            `toml:"cortex"` // Head ID acting as the brain
-	Tiers    []Tier            `toml:"tiers"`  // ordered by capability (high → low)
 	Skills   []string          `toml:"skills"` // enabled skill IDs
 	Policies map[string]Policy `toml:"policies,omitempty"`
+	Egress   Egress            `toml:"egress,omitempty"`
 
 	// ExploreRate is the probability a dispatch tries a head other than the
 	// top-ranked one, so the logs carry the counterfactual evidence off-policy
@@ -42,10 +79,75 @@ type Config struct {
 	CapturePayloads bool `toml:"capture_payloads,omitempty"`
 
 	// PayloadKeepRate is the probability a payload is admitted when capture is
-	// on. Sampling is what keeps the store bounded; the rate is recorded on
-	// every stored blob so the set can still be weighted back to the population.
-	// 0 means the built-in default rather than "keep nothing".
+	// on. A byte budget is what bounds the store now, so the default keeps
+	// everything; the rate is still recorded on every blob so a deliberately
+	// sampled store stays correctable to the population. 0 means the default.
 	PayloadKeepRate float64 `toml:"payload_keep_rate,omitempty"`
+
+	// PayloadBudgetMB bounds the payload store on disk. Past it the oldest
+	// packs are dropped, so the store forgets rather than refuses. 0 means the
+	// built-in default.
+	PayloadBudgetMB int `toml:"payload_budget_mb,omitempty"`
+
+	// CaptureEmbeddings opts into storing a vector per dispatch. Off by
+	// default and argued separately from CapturePayloads: an embedding is not
+	// plaintext, but inversion attacks recover approximate text from one, so it
+	// is a decision someone makes rather than a default they inherit.
+	CaptureEmbeddings bool `toml:"capture_embeddings,omitempty"`
+
+	// EmbedModel names the embedding model to use. Normally discovery finds it,
+	// but an older Ollama reports no capabilities at all, so its embedding
+	// models are indistinguishable from chat ones and naming one is the only
+	// honest way through.
+	EmbedModel string `toml:"embed_model,omitempty"`
+
+	// EmbedBudgetMB bounds the vector store on disk. Past it the oldest vectors
+	// are dropped, so the store forgets rather than refuses. 0 means the
+	// built-in default.
+	EmbedBudgetMB int `toml:"embed_budget_mb,omitempty"`
+
+	// CacheAnswers opts into answering a dispatch from a previous one. Off by
+	// default, and the most consequential of these switches: the others store
+	// what happened, this one changes what comes back. A near match returns a
+	// confident answer to a question nobody asked, so it is a decision someone
+	// makes rather than a default they inherit.
+	CacheAnswers bool `toml:"cache_answers,omitempty"`
+
+	// CacheThreshold is the cosine a near match must reach, and
+	// CacheThresholds raises or lowers it for one routing enum. Anything
+	// outside (0,1] is ignored rather than clamped: a threshold of 0 would
+	// serve every prompt from the nearest stored one.
+	CacheThreshold  float64            `toml:"cache_threshold,omitempty"`
+	CacheThresholds map[string]float64 `toml:"cache_thresholds,omitempty"`
+
+	// CacheBudgetMB bounds the answer store on disk. Past it the oldest
+	// answers are dropped, so the cache forgets rather than refuses.
+	CacheBudgetMB int `toml:"cache_budget_mb,omitempty"`
+
+	OpenRouter OpenRouter `toml:"openrouter,omitempty"`
+}
+
+// OpenRouterModels is the configured allowlist, or nothing.
+//
+// A missing or unparseable config yields an empty list rather than an error:
+// discovery runs on machines that have never written one, and failing to
+// discover anything at all over it would be far worse than routing as before.
+func OpenRouterModels() []string {
+	cfg, err := Load()
+	if err != nil {
+		return nil
+	}
+	return cfg.OpenRouter.Normalized()
+}
+
+// StrictEgress reports whether a secret payload is refused when no local head
+// is routable. A nil Config, or one with no [egress] section, is strict: the
+// safe reading of "not configured" is the one that does not leak.
+func (c *Config) StrictEgress() bool {
+	if c == nil || c.Egress.Strict == nil {
+		return true
+	}
+	return *c.Egress.Strict
 }
 
 // Dir returns the Hydra state directory: $HYDRA_HOME if set, else ~/.hydra.
@@ -100,11 +202,23 @@ func Exists() bool {
 	return err == nil
 }
 
+// ErrNotFound reports that no config file exists, which is the one failure
+// `hyctl init` answers. Anything else is a file that is there and does not
+// parse, where writing a fresh one destroys the evidence (#1030).
+var ErrNotFound = errors.New("no hydra config")
+
 // Load reads and parses the config file.
+//
+// The two failures have opposite remedies, so they are never collapsed into one
+// message: callers used to report an unparseable file as an absent one and send
+// the reader to a wizard that would overwrite it.
 func Load() (*Config, error) {
 	var cfg Config
 	if _, err := toml.DecodeFile(Path(), &cfg); err != nil {
-		return nil, err
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, fmt.Errorf("%w at %s, run: hyctl init", ErrNotFound, Path())
+		}
+		return nil, fmt.Errorf("config %s is not readable: %w", Path(), err)
 	}
 	return &cfg, nil
 }

@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/dispatch"
 	"github.com/ankit373/hydra/internal/policy"
 	"github.com/ankit373/hydra/internal/provider"
@@ -26,6 +25,12 @@ type SPRTResult struct {
 	Domain   string
 	Prompt   string
 	Target   float64 // requested target confidence
+
+	// Enum and Tier are the routing decision this run was made under, carried
+	// so a verdict on the answer can be filed against it. routing.yaml is
+	// editable, so the map in force when the heads ran is not recoverable later.
+	Enum string
+	Tier int
 }
 
 // RunSPRT routes a prompt through the SPRT optimal-stopping ensemble: it samples
@@ -36,25 +41,23 @@ func (s *Swarm) RunSPRT(ctx context.Context, prompt string, opts Options) (*SPRT
 	if math.IsNaN(opts.Confidence) || opts.Confidence <= 0 || opts.Confidence >= 1 {
 		return nil, fmt.Errorf("swarm sprt: confidence must be in (0,1), got %v", opts.Confidence)
 	}
-	cfg, err := config.Load()
-	if err != nil {
-		return nil, fmt.Errorf("swarm sprt: config load: %w", err)
-	}
-	if err := validateSwarmTiers(cfg, opts); err != nil {
+	if err := validateSwarmTiers(opts); err != nil {
 		return nil, err
 	}
-	prompt, err = injectA2A(prompt, opts)
+	prompt, err := injectA2A(prompt, opts)
 	if err != nil {
 		return nil, err
 	}
 
-	selected, err := resolveSelector(opts, cfg).Select(s.heads, opts)
+	opts.progress = &progressSink{fn: opts.OnProgress}
+	selected, err := resolveSelector(opts).Select(s.heads, opts)
 	if err != nil {
 		return nil, err
 	}
 	if len(selected) == 0 {
 		return nil, fmt.Errorf("swarm sprt: no heads available")
 	}
+	opts.progress.emit(Progress{Kind: ProgressSelected, Heads: selected})
 
 	// Classify once, before any head is sampled, every executeHead call the
 	// adapter makes below reuses this instead of each re-scanning prompt (#522).
@@ -63,10 +66,7 @@ func (s *Swarm) RunSPRT(ctx context.Context, prompt string, opts Options) (*SPRT
 		opts.Classification = &c
 	}
 
-	domain := opts.Domain
-	if domain == "" {
-		domain = "default"
-	}
+	domain := trust.Domain(opts.Domain)
 
 	cal, err := trust.New(trust.DefaultPath())
 	if err != nil {
@@ -97,10 +97,17 @@ func (s *Swarm) RunSPRT(ctx context.Context, prompt string, opts Options) (*SPRT
 		equiv = s.judgeEquivalence(ctx, prompt, opts)
 	}
 
+	// The running Λ and the threshold it is walking toward exist only inside
+	// trust.Run: a head finishing is not the same event as its answer being
+	// weighed, and only the second says why the ensemble has not stopped.
+	observe := func(e trust.Evidence, accept float64) {
+		opts.progress.emit(Progress{Kind: ProgressEvidence, Evidence: e, Threshold: accept})
+	}
+
 	res, err := trust.Run(ctx, trust.Task{Domain: domain}, sources, adapter, cal, trust.Target{
 		Confidence: opts.Confidence,
 		MaxCostUSD: opts.MaxEstCostUSD,
-	}, trust.WithEquivalence(equiv))
+	}, trust.WithEquivalence(equiv), trust.WithObserver(observe))
 	if err != nil {
 		return nil, err
 	}
@@ -124,7 +131,13 @@ func (s *Swarm) RunSPRT(ctx context.Context, prompt string, opts Options) (*SPRT
 	// would record that N heads ran but not what their evidence did (#204).
 	logSamples(res.Ledger, adapter.attempts, opts)
 
-	return &SPRTResult{Trust: res, Attempts: adapter.attempts, Domain: domain, Prompt: prompt, Target: opts.Confidence}, nil
+	// validateSwarmTiers already rejected an unresolvable hint above, so this
+	// cannot fail; an empty hint resolves to 0, which is "unrouted", not tier 0.
+	tier, _ := dispatch.ResolveTier(opts.tier())
+	return &SPRTResult{
+		Trust: res, Attempts: adapter.attempts, Domain: domain, Prompt: prompt,
+		Target: opts.Confidence, Enum: opts.Enum, Tier: tier,
+	}, nil
 }
 
 // sprtExecutor adapts the swarm's per-head execution to the trust.Executor
@@ -142,12 +155,9 @@ func (e *sprtExecutor) Execute(ctx context.Context, src trust.Source, _ trust.Ta
 	if !ok {
 		return trust.Answer{}, fmt.Errorf("sprt: unknown source %q", src.ID)
 	}
-	a := executeHead(ctx, h, e.prompt, e.opts)
-
-	// Price the attempt so cost logging and the budget guard see real numbers.
-	if e.swarm.pricing != nil && a.Status == StatusOK {
-		a.EstCostUSD = round6(e.swarm.pricing.EstimateCost(rank.UITier(h), a.InputTokens, a.OutputTokens))
-	}
+	// executeHead prices the attempt, so cost logging and the budget guard see
+	// the same number the panel already showed.
+	a := executeHead(ctx, h, e.prompt, e.opts, e.swarm.pricing)
 	a.FinishedAt = time.Now()
 	e.attempts = append(e.attempts, a)
 
@@ -175,10 +185,9 @@ func (s *Swarm) judgeEquivalence(ctx context.Context, prompt string, opts Option
 		}
 		jctx, cancel := context.WithTimeout(ctx, timeout)
 		defer cancel()
-		out, err := s.d.Dispatch(jctx, buildEquivalencePrompt(prompt, candidate, answer), dispatch.Options{
-			TierHint: opts.JudgeTierHint,
-			System:   "You compare two answers for equivalence. Reply with exactly one word: YES or NO.",
-		})
+		out, err := s.ask()(jctx, buildEquivalencePrompt(prompt, candidate, answer),
+			judgeOptions(opts, opts.JudgeTierHint,
+				"You compare two answers for equivalence. Reply with exactly one word: YES or NO."))
 		if err != nil {
 			return trust.TextEquivalence(candidate, answer) // degrade, never block
 		}

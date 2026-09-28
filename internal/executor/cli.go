@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ankit373/hydra/internal/sandbox"
 	"github.com/ankit373/hydra/internal/util"
 )
 
@@ -25,7 +26,8 @@ func (e *CLIExecutor) Execute(ctx context.Context, req Request) (*Response, erro
 	}
 
 	args := tmpl.buildArgs(req.Prompt)
-	cmd := exec.CommandContext(ctx, req.Head.Executable, args...)
+	cmd := sandbox.Harden(exec.CommandContext(ctx, req.Head.Executable, args...))
+	cmd.Env = headEnv(req.Head)
 
 	if tmpl.stdinPrompt {
 		cmd.Stdin = strings.NewReader(req.Prompt)
@@ -49,7 +51,7 @@ func (e *CLIExecutor) Execute(ctx context.Context, req Request) (*Response, erro
 
 	return &Response{
 		Output:       output,
-		Duration:     time.Since(start),
+		Duration:     measured(time.Since(start)),
 		Model:        req.Head.ID,
 		InputTokens:  promptTokens,
 		OutputTokens: responseTokens,

@@ -5,17 +5,17 @@ package tui
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
+	"sort"
 	"strings"
-	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/ankit373/hydra/internal/config"
+	"github.com/ankit373/hydra/internal/dispatch"
 	"github.com/ankit373/hydra/internal/probe"
 	"github.com/ankit373/hydra/internal/provider"
+	"github.com/ankit373/hydra/internal/rank"
 	"github.com/ankit373/hydra/internal/sysinfo"
 )
 
@@ -39,6 +39,8 @@ const (
 	stepTiers               // user confirms auto-assigned tiers
 	stepPrivacy             // does the user need local-only routing for PII?
 	stepCapture             // store prompt/response text, or only the statistics?
+	stepEmbed               // store a vector per dispatch?
+	stepCache               // answer a repeated dispatch from the previous one?
 	stepSkills              // which skills to enable
 	stepDone                // confirmation screen
 )
@@ -53,6 +55,8 @@ type InitModel struct {
 	cortex    *provider.Head
 	localOnly bool
 	capture   bool
+	embed     bool
+	cache     bool
 	skills    []string
 	err       error
 
@@ -117,6 +121,21 @@ func (m InitModel) confirm() (tea.Model, tea.Cmd) {
 		// capture is opt-in, and a user who presses enter through the wizard
 		// must not end up storing their source.
 		m.capture = m.cursor == 1
+		m.step = stepEmbed
+		m.cursor = 0
+
+	case stepEmbed:
+		// "No" first, for the same reason capture defaults to no: an embedding
+		// is not plaintext, but inversion attacks recover approximate text from
+		// one, so it is not a thing to inherit by pressing enter.
+		m.embed = m.cursor == 1
+		m.step = stepCache
+		m.cursor = 0
+
+	case stepCache:
+		// "No" first, and for a stronger reason than the two before it: those
+		// store what happened, this one changes what comes back.
+		m.cache = m.cursor == 1
 		m.step = stepSkills
 		m.skills = defaultSkills(m.cortex)
 		m.cursor = 0
@@ -136,7 +155,7 @@ func (m InitModel) maxCursor() int {
 	switch m.step {
 	case stepCortex:
 		return len(m.result.Heads) - 1
-	case stepPrivacy, stepCapture:
+	case stepPrivacy, stepCapture, stepEmbed, stepCache:
 		return 1
 	}
 	return 0
@@ -157,6 +176,10 @@ func (m InitModel) View() string {
 		m.viewPrivacy(&b)
 	case stepCapture:
 		m.viewCapture(&b)
+	case stepEmbed:
+		m.viewEmbed(&b)
+	case stepCache:
+		m.viewCache(&b)
 	case stepSkills:
 		m.viewSkills(&b)
 	case stepDone:
@@ -187,10 +210,24 @@ func (m InitModel) viewCortex(b *strings.Builder) {
 }
 
 func (m InitModel) viewTiers(b *strings.Builder) {
-	b.WriteString(sPrompt.Render("  Auto-assigned Heads by default score bands:\n\n"))
-	tiers := buildTiers(m.result.Heads, m.cortex)
+	b.WriteString(sPrompt.Render("  Heads by the tier they will route at:\n\n"))
+	// The tier a head routes at, not a score band bucketed into config. The
+	// bands were a third routing table that disagreed with routing.yaml about
+	// what every one of these words meant (#782).
+	names := dispatch.TierNamesByTier()
+	byTier := map[int][]string{}
+	for _, h := range m.result.Heads {
+		t := rank.UITier(h)
+		byTier[t] = append(byTier[t], h.Name)
+	}
+	tiers := make([]int, 0, len(byTier))
+	for t := range byTier {
+		tiers = append(tiers, t)
+	}
+	sort.Ints(tiers)
 	for _, t := range tiers {
-		b.WriteString(fmt.Sprintf("  %-12s → %s\n", t.Name, strings.Join(t.Heads, ", ")))
+		b.WriteString(fmt.Sprintf("  %2d  %-12s → %s\n",
+			t, strings.Join(names[t], ", "), strings.Join(byTier[t], ", ")))
 	}
 
 	// Show hardware note if any local heads are present
@@ -231,7 +268,7 @@ func (m InitModel) viewCapture(b *strings.Builder) {
 	b.WriteString(sPrompt.Render("  Store the text of prompts and responses?\n\n"))
 	opts := []string{
 		"No , keep only the statistics (recommended)",
-		"Yes, store the text too, sampled and redacted",
+		"Yes, store the text too, redacted and size-capped",
 	}
 	for i, opt := range opts {
 		if i == m.cursor {
@@ -241,8 +278,47 @@ func (m InitModel) viewCapture(b *strings.Builder) {
 		}
 	}
 	b.WriteString(sHint.Render("\n  Prompts and responses are verbatim source. Hydra can route and\n" +
-		"  report without them; stored text is sampled, and anything matching\n" +
-		"  a secret detector is replaced before it is written.\n"))
+		"  report without them. Stored text is deduplicated and capped at a\n" +
+		"  disk budget, oldest first, and anything matching a secret detector\n" +
+		"  is replaced before it is written.\n"))
+}
+
+func (m InitModel) viewEmbed(b *strings.Builder) {
+	b.WriteString(sPrompt.Render("  Store a vector for each dispatch?\n\n"))
+	opts := []string{
+		"No , do not embed prompts (recommended)",
+		"Yes, embed with a local model already on this machine",
+	}
+	for i, opt := range opts {
+		if i == m.cursor {
+			b.WriteString(sSelected.Render("  › "+opt) + "\n")
+		} else {
+			b.WriteString(sDim.Render("    "+opt) + "\n")
+		}
+	}
+	b.WriteString(sHint.Render("\n  A vector is what lets Hydra recognise a task it has seen before.\n" +
+		"  Nothing leaves the machine: the model runs under Ollama, text is\n" +
+		"  redacted before it is embedded, and the store is capped at a disk\n" +
+		"  budget, oldest first. With no embedding model this stays off.\n"))
+}
+
+func (m InitModel) viewCache(b *strings.Builder) {
+	b.WriteString(sPrompt.Render("  Answer a repeated question from the last answer?\n\n"))
+	opts := []string{
+		"No , always ask a head (recommended)",
+		"Yes, reuse the answer when the question is the same",
+	}
+	for i, opt := range opts {
+		if i == m.cursor {
+			b.WriteString(sSelected.Render("  › "+opt) + "\n")
+		} else {
+			b.WriteString(sDim.Render("    "+opt) + "\n")
+		}
+	}
+	b.WriteString(sHint.Render("\n  This is the only setting here that changes what you get back.\n" +
+		"  The same question word for word is always safe; anything else has\n" +
+		"  to be about exactly the same things, and a prompt carrying personal\n" +
+		"  data is never answered from the cache at all.\n"))
 }
 
 func (m InitModel) viewSkills(b *strings.Builder) {
@@ -270,10 +346,8 @@ func (m InitModel) viewDone(b *strings.Builder) {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 func (m InitModel) save() error {
-	tiers := buildTiers(m.result.Heads, m.cortex)
 	cfg := &config.Config{
 		Cortex: m.cortex.ID,
-		Tiers:  tiers,
 		Skills: m.skills,
 	}
 	if m.localOnly {
@@ -282,80 +356,9 @@ func (m InitModel) save() error {
 		}
 	}
 	cfg.CapturePayloads = m.capture
-	if err := config.Save(cfg); err != nil {
-		return err
-	}
-	return exportToRoutingYAML(tiers, m.cortex)
-}
-
-// exportToRoutingYAML appends a discovered_heads block to registry/routing.yaml
-// so that route.sh and human operators can see what hyctl init found.
-// Any existing auto-discovered block is replaced.
-func exportToRoutingYAML(tiers []config.Tier, cortex *provider.Head) error {
-	routingPath := filepath.Join(config.ScriptHome(), "registry", "routing.yaml")
-
-	existing, err := os.ReadFile(routingPath)
-	if err != nil {
-		return nil // routing.yaml not present in this install layout, skip silently
-	}
-
-	// Strip any previously written discovered block.
-	const marker = "\n# ── Auto-discovered by hyctl init"
-	base := string(existing)
-	if idx := strings.Index(base, marker); idx != -1 {
-		base = base[:idx]
-	}
-
-	// Build the new discovered block.
-	var b strings.Builder
-	b.WriteString(marker)
-	b.WriteString(" ────────────────────────────────────────\n")
-	b.WriteString(fmt.Sprintf("# Generated: %s\n", time.Now().UTC().Format("2006-01-02T15:04:05Z")))
-	b.WriteString("# Re-run `hyctl init` to refresh.\n")
-	b.WriteString("discovered_heads:\n")
-	if cortex != nil {
-		b.WriteString(fmt.Sprintf("  cortex: %s\n", cortex.ID))
-	}
-	for _, t := range tiers {
-		b.WriteString(fmt.Sprintf("  %s: [%s]\n", t.Name, strings.Join(t.Heads, ", ")))
-	}
-
-	return os.WriteFile(routingPath, []byte(strings.TrimRight(base, "\n")+"\n"+b.String()), 0o644)
-}
-
-// buildTiers assigns Heads to named tiers by default score bands.
-func buildTiers(heads []provider.Head, cortex *provider.Head) []config.Tier {
-	bands := []struct {
-		name string
-		min  int
-	}{
-		{"expert", 85},
-		{"complex", 75},
-		{"standard", 65},
-		{"simple", 55},
-		{"local", 0},
-	}
-
-	buckets := map[string][]string{}
-	for _, h := range heads {
-		if cortex != nil && h.ID == cortex.ID {
-			continue
-		}
-		for _, b := range bands {
-			if h.CapScore >= b.min {
-				buckets[b.name] = append(buckets[b.name], h.ID)
-				break
-			}
-		}
-	}
-
-	var tiers []config.Tier
-	for _, b := range bands {
-		if ms := buckets[b.name]; len(ms) > 0 {
-			tiers = append(tiers, config.Tier{Name: b.name, Heads: ms})
-		}
-	}
-	return tiers
+	cfg.CaptureEmbeddings = m.embed
+	cfg.CacheAnswers = m.cache
+	return config.Save(cfg)
 }
 
 func defaultSkills(cortex *provider.Head) []string {

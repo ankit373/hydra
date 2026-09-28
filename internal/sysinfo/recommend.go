@@ -9,7 +9,7 @@ import (
 
 // ModelRecommendation is a ranked suggestion for a specific Ollama model.
 type ModelRecommendation struct {
-	Model        string // ollama pull <model>
+	Model        string // hyctl models pull <model>
 	DisplayName  string
 	SizeB        int     // parameter count in billions
 	RAMNeededGB  float64 // approximate RAM required (Q4_K_M quantisation)

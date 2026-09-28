@@ -7,6 +7,7 @@ package parallel
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -21,9 +22,11 @@ import (
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/diff"
 	"github.com/ankit373/hydra/internal/dispatch"
+	"github.com/ankit373/hydra/internal/editor"
 	"github.com/ankit373/hydra/internal/policy"
 	"github.com/ankit373/hydra/internal/runid"
 	"github.com/ankit373/hydra/internal/runlog"
+	"github.com/ankit373/hydra/internal/sandbox"
 	"github.com/ankit373/hydra/internal/util"
 	"github.com/ankit373/hydra/internal/workspace"
 )
@@ -54,18 +57,24 @@ type TextResult struct {
 	Error  string `json:"error,omitempty"`
 }
 
-// EditResult is the result of an edit task (matches editor.Result + label/enum/mode).
+// EditResult is the result of an edit task: editor.Result plus label/enum/mode.
 type EditResult struct {
-	Label           string `json:"label"`
-	Enum            string `json:"enum"`
-	Mode            string `json:"mode"`
-	Status          string `json:"status"`
-	File            string `json:"file"`
-	Workspace       string `json:"workspace"`
-	GitRoot         string `json:"git_root"`
-	LinesAdded      int    `json:"lines_added"`
-	LinesRemoved    int    `json:"lines_removed"`
-	ValidatorPassed bool   `json:"validator_passed"`
+	Label     string `json:"label"`
+	Enum      string `json:"enum"`
+	Mode      string `json:"mode"`
+	Status    string `json:"status"`
+	File      string `json:"file"`
+	Workspace string `json:"workspace"`
+	GitRoot   string `json:"git_root"`
+	// Head is which head wrote this file, the one field a fan-out needs most
+	// and the one this was missing: `hyctl review` could only ever find a head
+	// in last_edit.json, whose single slot a batch never writes (#1032).
+	Head         string `json:"head,omitempty"`
+	LinesAdded   int    `json:"lines_added"`
+	LinesRemoved int    `json:"lines_removed"`
+	// Nil when no validator ran, which is not a pass: the same distinction
+	// internal/editor's Result draws, and for the same reason (#998).
+	ValidatorPassed *bool  `json:"validator_passed"`
 	RolledBack      bool   `json:"rolled_back"`
 	Error           string `json:"error,omitempty"`
 }
@@ -118,6 +127,9 @@ func Run(ctx context.Context, tasks []Task, opts Options) ([]Result, error) {
 	// each task's own JSON result carries the same "dispatcher init" error every
 	// task used to hit independently.
 	d, dispatchErr := dispatch.New(ctx)
+	if dispatchErr == nil {
+		defer d.Close()
+	}
 
 	results := make([]Result, len(tasks))
 	var mu sync.Mutex
@@ -245,6 +257,9 @@ func runEditTask(ctx context.Context, d *dispatch.Dispatcher, dispatchErr error,
 		return failEdit(task, "scope_rejected: "+err.Error())
 	}
 	resolved, _ := reg.Resolve(file)
+	// The same rule hyctl edit follows: os.Rename replaces a symlink rather
+	// than following it, so an edit must act on the file it names (#1023).
+	file = editor.ResolveLink(file)
 
 	// Snapshot: read before Decide, so the file-policy engine's line-count
 	// and diff-size rules see the file's real shape instead of always
@@ -266,19 +281,16 @@ func runEditTask(ctx context.Context, d *dispatch.Dispatcher, dispatchErr error,
 	// a Decide result that is only ever discarded is not a policy, and the
 	// Security view's own "file-policy caps declared but never run" finding
 	// traced to this exact line (#501).
-	fp := policy.FilePolicy{DiffSizeCapPct: 90} // matches defaultFilePolicy's cap if policy.yaml can't load
-	if eng, pErr := policy.LoadFilePolicy(config.ScriptHome()); pErr == nil {
-		enumTier, _ := strconv.Atoi(enumToTier(task.Enum))
-		fp = eng.Decide(policy.Spec{
-			File:          file,
-			FileLines:     strings.Count(origContent, "\n") + 1,
-			FileCount:     1,
-			FileExtension: fileExt(file),
-			HasGit:        resolved.GitRoot != "",
-			EnumTier:      enumTier,
-			Workspace:     wsName,
-		})
-	}
+	enumTier, _ := strconv.Atoi(enumToTier(task.Enum))
+	fp := policy.ForFile(config.ScriptHome(), policy.Spec{
+		File:          file,
+		FileLines:     strings.Count(origContent, "\n") + 1,
+		FileCount:     1,
+		FileExtension: fileExt(file),
+		HasGit:        resolved.GitRoot != "",
+		EnumTier:      enumTier,
+		Workspace:     wsName,
+	})
 
 	// Build prompt
 	ctxNote := "The file currently exists. Modify it per the instruction below."
@@ -294,14 +306,28 @@ func runEditTask(ctx context.Context, d *dispatch.Dispatcher, dispatchErr error,
 		cleanupBackup()
 		return failEdit(task, "dispatcher init: "+dispatchErr.Error())
 	}
+	// max_wall_seconds and max_cost_usd were declared in policy.yaml and
+	// enforced nowhere, so an operator reading a $2 ceiling had none (#424).
+	// Both enforcement mechanisms already existed and were simply not handed
+	// the policy's numbers: dispatch refuses a candidate over MaxCostUSD
+	// before executing it, and a deadline is what bounds a slow head.
+	ctx, cancel := fp.Deadline(ctx)
+	defer cancel()
 	dispResult, err := d.Dispatch(ctx, editPrompt, dispatch.Options{
-		TierHint: enumToTier(task.Enum),
-		RunID:    runID,
-		TaskID:   taskID,
-		Resource: file,
+		TierHint:      enumToTier(task.Enum),
+		RunID:         runID,
+		TaskID:        taskID,
+		Resource:      file,
+		MaxCostUSD:    fp.MaxCostUSD,
+		MaxCostSource: "policy.yaml max_cost_usd",
 	})
 	if err != nil {
 		cleanupBackup()
+		// A deadline is the policy refusing, not the head failing, and the two
+		// want different answers from whoever reads the result.
+		if fp.Bounded(ctx) {
+			return failEdit(task, fp.WallExceeded())
+		}
 		return failEdit(task, "route_failed: "+err.Error())
 	}
 
@@ -347,17 +373,14 @@ func runEditTask(ctx context.Context, d *dispatch.Dispatcher, dispatchErr error,
 	// doc comment calls it "reject edits changing > N% of file", and nothing
 	// rejected anything before this. A brand-new file has no "percent of
 	// itself changed" to measure, so the cap only applies to modifications.
-	if origExisted && fp.DiffSizeCapPct > 0 {
-		if total := strings.Count(origContent, "\n") + 1; total > 0 {
-			if pct := float64(added+removed) / float64(total) * 100; pct > float64(fp.DiffSizeCapPct) {
-				rollback(file, origContent, origExisted, resolved.GitRoot, backup)
-				return mustMarshal(EditResult{
-					Label: task.Label, Enum: task.Enum, Mode: "edit",
-					Status: "fail", File: file, Workspace: wsName, GitRoot: resolved.GitRoot,
-					RolledBack: true,
-					Error:      fmt.Sprintf("diff_size_cap_exceeded: changed %.0f%% of file (cap %d%%)", pct, fp.DiffSizeCapPct),
-				})
-			}
+	if origExisted {
+		if why, over := fp.DiffExceeded(added, removed, strings.Count(origContent, "\n")+1); over {
+			rollback(file, origContent, origExisted, resolved.GitRoot, backup)
+			return mustMarshal(EditResult{
+				Label: task.Label, Enum: task.Enum, Mode: "edit",
+				Status: "fail", File: file, Workspace: wsName, GitRoot: resolved.GitRoot,
+				Head: dispResult.Head.ID, RolledBack: true, Error: why,
+			})
 		}
 	}
 
@@ -366,6 +389,7 @@ func runEditTask(ctx context.Context, d *dispatch.Dispatcher, dispatchErr error,
 	if task.Validate != nil {
 		validate = *task.Validate
 	}
+	var validatorPassed *bool
 	if validate {
 		ext := fileExt(file)
 		vtmpl := reg.ValidatorFor(ext)
@@ -373,14 +397,52 @@ func runEditTask(ctx context.Context, d *dispatch.Dispatcher, dispatchErr error,
 			vtmpl = tscTemplate(resolved.GitRoot)
 		}
 		if vtmpl != "" {
-			if rc := runValidate(vtmpl, file); rc != 0 {
+			rc, verr := runValidate(ctx, vtmpl, file)
+			if verr != nil {
+				// The deadline is the policy stopping the validator, not the
+				// validator rejecting the edit, the same distinction the
+				// dispatch above draws (#424). A validator that could not start
+				// is the third case, and none of them is a verdict, so
+				// validatorPassed stays nil and nothing is recorded.
+				rollback(file, origContent, origExisted, resolved.GitRoot, backup)
+				reason := "validator_cancelled: " + verr.Error()
+				if errors.Is(verr, editor.ErrValidatorUnavailable) {
+					reason = verr.Error()
+				}
+				if errors.Is(verr, context.DeadlineExceeded) {
+					reason = fmt.Sprintf("max_wall_seconds_exceeded: policy allows %ds", fp.MaxWallSeconds)
+				}
+				return mustMarshal(EditResult{
+					Label: task.Label, Enum: task.Enum, Mode: "edit",
+					Status: "fail", File: file, Workspace: wsName, GitRoot: resolved.GitRoot,
+					Head: dispResult.Head.ID, RolledBack: true, Error: reason,
+				})
+			}
+			validatorPassed = boolp(rc == 0)
+			// The validator ran against the file this task had already written, so
+			// the verdict judges the content the head produced, exactly as it does
+			// for `hyctl edit`. Recorded through the shared writer rather than a
+			// second copy, which is how the two drifted before (#999). A rejection
+			// is recorded first, because the rollback below discards the content
+			// the verdict is about.
+			if rc != 0 {
+				editor.RecordVerifiedEdit(ctx, d.Embedder(), editor.VerifiedEdit{
+					Prompt: task.Prompt, File: file, Enum: task.Enum,
+					Head: dispResult.Head.ID, Candidate: newContent,
+					Passed: false, Detail: "validation_failed",
+				})
 				rollback(file, origContent, origExisted, resolved.GitRoot, backup)
 				return mustMarshal(EditResult{
 					Label: task.Label, Enum: task.Enum, Mode: "edit",
 					Status: "fail", File: file, Workspace: wsName, GitRoot: resolved.GitRoot,
+					Head: dispResult.Head.ID, ValidatorPassed: validatorPassed,
 					RolledBack: true, Error: "validation_failed",
 				})
 			}
+			editor.RecordVerifiedEdit(ctx, d.Embedder(), editor.VerifiedEdit{
+				Prompt: task.Prompt, File: file, Enum: task.Enum,
+				Head: dispResult.Head.ID, Candidate: newContent, Passed: true,
+			})
 		}
 	}
 
@@ -391,7 +453,8 @@ func runEditTask(ctx context.Context, d *dispatch.Dispatcher, dispatchErr error,
 	return mustMarshal(EditResult{
 		Label: task.Label, Enum: task.Enum, Mode: "edit",
 		Status: "ok", File: file, Workspace: wsName, GitRoot: resolved.GitRoot,
-		LinesAdded: added, LinesRemoved: removed, ValidatorPassed: true,
+		Head: dispResult.Head.ID, LinesAdded: added, LinesRemoved: removed,
+		ValidatorPassed: validatorPassed,
 	})
 }
 
@@ -562,7 +625,10 @@ func rollback(file, origContent string, origExisted bool, gitRoot, backup string
 
 // runValidate splits the validator template around {file} to prevent
 // paths-with-spaces from being fragmented by strings.Fields.
-func runValidate(vtmpl, file string) int {
+// A non-nil error means the run was cancelled or ran past max_wall_seconds,
+// which is not an exit code: a killed validator exits non-zero exactly like a
+// failing one.
+func runValidate(ctx context.Context, vtmpl, file string) (int, error) {
 	var parts []string
 	if idx := strings.Index(vtmpl, "{file}"); idx >= 0 {
 		parts = append(strings.Fields(vtmpl[:idx]), file)
@@ -571,16 +637,22 @@ func runValidate(vtmpl, file string) int {
 		parts = strings.Fields(vtmpl)
 	}
 	if len(parts) == 0 {
-		return 0
+		return 0, nil
 	}
-	c := exec.Command(parts[0], parts[1:]...)
+	c := sandbox.Harden(exec.CommandContext(ctx, parts[0], parts[1:]...))
 	if err := c.Run(); err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			return exitErr.ExitCode()
+		if ctx.Err() != nil {
+			return 0, ctx.Err()
 		}
-		return 1
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			return exitErr.ExitCode(), nil
+		}
+		// The command never started, so nothing judged the answer, and a
+		// failing exit code here would blame the head for a missing binary and
+		// record that as ground truth (#998).
+		return 0, fmt.Errorf("%w: %w", editor.ErrValidatorUnavailable, err)
 	}
-	return 0
+	return 0, nil
 }
 
 func tscTemplate(gitRoot string) string {
@@ -637,3 +709,5 @@ func diffStats(file, origContent, gitRoot, backup string, origExisted bool) (add
 }
 
 func enumToTier(enum string) string { return dispatch.EnumToTier(enum) }
+
+func boolp(b bool) *bool { return &b }

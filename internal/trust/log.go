@@ -18,18 +18,19 @@ import (
 // RunLog is one persisted SPRT run, the data the "By The Numbers" page
 // graduates from [MODEL] to [MEASURED], and what `hyctl trust stats/explain` read.
 type RunLog struct {
-	TS         string     `json:"ts"`
-	TaskHash   string     `json:"task_hash"`
-	Domain     string     `json:"domain"`
-	TargetConf float64    `json:"target_conf"`
-	FinalConf  float64    `json:"final_conf"`
-	Samples    int        `json:"samples"`
-	Models     []string   `json:"models"`
-	CostUSD    float64    `json:"cost_usd"`
-	CostSource string     `json:"cost_source"` // from cost.SourceLabels
-	Decision   string     `json:"decision"`    // accept | stopped_on_budget
-	Ledger     []Evidence `json:"ledger,omitempty"`
-	Config     string     `json:"config,omitempty"` // deployment-identity breadcrumb (config.Breadcrumb)
+	TS         string       `json:"ts"`
+	TaskHash   string       `json:"task_hash"`
+	Domain     string       `json:"domain"`
+	TargetConf float64      `json:"target_conf"`
+	FinalConf  float64      `json:"final_conf"`
+	Samples    int          `json:"samples"`
+	Models     []string     `json:"models"`
+	CostUSD    float64      `json:"cost_usd"`
+	CostSource string       `json:"cost_source"` // from cost.SourceLabels
+	Decision   string       `json:"decision"`    // accept | stopped_on_budget
+	Ledger     []Evidence   `json:"ledger,omitempty"`
+	Hypotheses []Hypothesis `json:"hypotheses,omitempty"`
+	Config     string       `json:"config,omitempty"` // deployment-identity breadcrumb (config.Breadcrumb)
 }
 
 // DefaultLogPath is where SPRT runs are persisted (~/.hydra/trust.jsonl).

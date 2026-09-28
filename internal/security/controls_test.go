@@ -3,13 +3,16 @@
 package security
 
 import (
+	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/ankit373/hydra/internal/a2a"
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/ledger"
+	"github.com/ankit373/hydra/internal/policy"
 	"github.com/ankit373/hydra/internal/testutil"
 )
 
@@ -24,28 +27,104 @@ func findControl(t *testing.T, cs []Control, name string) Control {
 	return Control{}
 }
 
-// The file-policy caps are the reason this whole section exists: policy.yaml
-// declares cost ceilings and diff-size limits that no runtime path applies.
-func TestControls_FilePolicyIsDeclaredButInert(t *testing.T) {
+// The file-policy caps are the reason this whole section exists. This test
+// asserted `inert` deliberately, because nothing applied the policy at all.
+// That stopped being true when #501 wired the diff-size cap, and this text did
+// not move with it: the one surface whose purpose is an honest posture spent
+// two releases understating it. The expectation is changed on purpose, and the
+// caps it reports on are now enforced (#424).
+//
+// `limited`, not `active`: three of the twenty policy fields take effect. Both
+// edit commands enforce those three now (#769), so what remains limited is the
+// seventeen fields nothing reads, not which command they reach.
+func TestControls_FilePolicyIsEnforcedButPartial(t *testing.T) {
 	testutil.NewSandbox(t)
 
 	c := findControl(t, Controls(nil, PolicyAudit{}, ledger.ChainResult{}), "File-policy caps")
 	if !c.Declared {
 		t.Fatal("the embedded registry/policy.yaml declares rules; Declared = false")
 	}
-	if c.Wired {
-		t.Error("Wired = true, but no runtime path applies the file policy")
+	if !c.Wired {
+		t.Error("Wired = false, but the diff-size, cost and wall-clock caps are applied")
 	}
-	if c.Status() != "inert" {
-		t.Errorf("Status() = %q, want inert", c.Status())
+	if c.Status() != "limited" {
+		t.Errorf("Status() = %q, want limited: partly enforced is neither inert nor active", c.Status())
 	}
-	// The finding is only actionable if it names where the decision is lost.
+	// Only actionable if it names where the caps do and do not apply.
 	if !strings.Contains(c.Detail, filePolicyEnforcementSite) {
-		t.Errorf("Detail = %q, want it to name the discarding call site", c.Detail)
+		t.Errorf("Detail = %q, want it to name the enforcing call site", c.Detail)
+	}
+	if !strings.Contains(c.Detail, "hyctl edit") {
+		t.Errorf("Detail = %q, want it to name both commands the caps reach", c.Detail)
+	}
+	// The claim that made this control honest when the caps were unreachable
+	// is now itself the false one, and the control reports the source.
+	if strings.Contains(c.Detail, "does not consult") {
+		t.Errorf("Detail still says hyctl edit ignores the policy, which it no "+
+			"longer does: %s", c.Detail)
+	}
+	for _, cap := range enforcedCaps {
+		if !strings.Contains(c.Detail, cap) {
+			t.Errorf("Detail does not name the enforced cap %q: %s", cap, c.Detail)
+		}
+	}
+	// The shipped policy has no dead condition, so the line must be absent
+	// rather than present-and-zero, which would read as a finding.
+	if strings.Contains(c.Detail, "can never match") {
+		t.Errorf("Detail reports a dead condition against the shipped policy: %s", c.Detail)
+	}
+}
+
+// A rule whose condition names no real field never fires, and before #848 it
+// matched everything instead. Either way the operator sees nothing, so the
+// control has to name it (#854).
+func TestControls_FilePolicyNamesAConditionThatCanNeverMatch(t *testing.T) {
+	s := testutil.NewSandbox(t)
+	dir := filepath.Join(s.HydraHome, "registry")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	body := "version: \"1.0\"\nrules:\n  - name: typo_rule\n    when:\n      enum_teir_lte: 3\n" +
+		"    apply:\n      edit_mode: sr_blocks\n"
+	if err := os.WriteFile(filepath.Join(dir, "policy.yaml"), []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	c := findControl(t, Controls(nil, PolicyAudit{}, ledger.ChainResult{}), "File-policy caps")
+	for _, want := range []string{"can never match", "typo_rule", "enum_teir"} {
+		if !strings.Contains(c.Detail, want) {
+			t.Errorf("Detail does not contain %q, so the typo stays invisible: %s", want, c.Detail)
+		}
 	}
 	// This is the one source-derived claim in the set and must say so.
 	if c.Verified {
-		t.Error("Verified = true, but 'the caller discards the result' cannot be checked at runtime")
+		t.Error("Verified = true, but 'which caps a caller reads' cannot be checked at runtime")
+	}
+}
+
+// The hand-maintained half of this control is what drifted, so both halves are
+// guarded: every name in enforcedCaps must be a real policy.yaml key, and the
+// count it is compared against comes off the struct so a new FilePolicy field
+// cannot silently join the "enforced" side of the ratio.
+func TestEnforcedCaps_AreRealPolicyFields(t *testing.T) {
+	tags := map[string]bool{}
+	rt := reflect.TypeOf(policy.FilePolicy{})
+	for i := range rt.NumField() {
+		if tag := rt.Field(i).Tag.Get("yaml"); tag != "" {
+			tags[tag] = true
+		}
+	}
+	for _, cap := range enforcedCaps {
+		if !tags[cap] {
+			t.Errorf("enforcedCaps names %q, which is not a policy.FilePolicy yaml key", cap)
+		}
+	}
+	if policyFieldCount() != rt.NumField() {
+		t.Errorf("policyFieldCount() = %d, want %d", policyFieldCount(), rt.NumField())
+	}
+	if len(enforcedCaps) >= policyFieldCount() {
+		t.Errorf("enforcedCaps claims %d of %d fields; that would mean everything is enforced",
+			len(enforcedCaps), policyFieldCount())
 	}
 }
 

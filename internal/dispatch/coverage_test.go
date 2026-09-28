@@ -437,24 +437,28 @@ func TestDispatch_AllHeadsFailingReportsWhy(t *testing.T) {
 	}
 }
 
-// The end-to-end repro for #451: a documented tier name ("expert") that does
-// not exist in cfg.Tiers must fail with an error naming the bad tier, not the
-// generic "no routable heads" message that blames the head pool for a config
-// problem. A live, perfectly routable head is present, so a regression back to
-// the old behavior would still dispatch successfully rather than error at all.
+// The end-to-end repro for #451: a tier name that does not resolve must fail
+// with an error naming the bad tier, not the generic "no routable heads"
+// message that blames the head pool for a typo. A live, perfectly routable
+// head is present, so a regression back to the old behavior would still
+// dispatch successfully rather than error at all.
+//
+// The original repro used "expert", which was absent from cfg.Tiers on the
+// reporter's machine. It resolves through routing.yaml now (#782), so the
+// unknown name has to be one that really is unknown.
 func TestDispatch_UnknownNamedTierIsDistinctFromNoRoutableHeads(t *testing.T) {
 	s := testutil.NewSandbox(t)
 	dd := liveDispatcher(echoHead(t, s, "cloud", 90))
 
-	_, err := dd.Dispatch(context.Background(), "go", Options{TierHint: "expert"})
+	_, err := dd.Dispatch(context.Background(), "go", Options{TierHint: "expret"})
 	if err == nil {
-		t.Fatal("dispatch succeeded with a tier name absent from config")
+		t.Fatal("dispatch succeeded with a tier name that resolves to nothing")
 	}
-	if !strings.Contains(err.Error(), "unknown tier") || !strings.Contains(err.Error(), "expert") {
-		t.Errorf("error = %v, want it to name \"expert\" as an unknown tier", err)
+	if !strings.Contains(err.Error(), "unknown tier") || !strings.Contains(err.Error(), "expret") {
+		t.Errorf("error = %v, want it to name \"expret\" as an unknown tier", err)
 	}
 	if strings.Contains(err.Error(), "no routable heads") || strings.Contains(err.Error(), "no available heads") {
-		t.Errorf("error = %v, blames routability for a config problem", err)
+		t.Errorf("error = %v, blames routability for a typo", err)
 	}
 }
 
@@ -824,6 +828,37 @@ func TestNew_WithoutAConfigPointsAtInit(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "hyctl init") {
 		t.Errorf("error = %v, want it to name the fix", err)
+	}
+}
+
+// The other half of #1030: a config that is present and will not parse must not
+// be reported as absent, because `hyctl init` overwrites the file that holds
+// the answer. New used to replace config.Load's error with a fixed string, so
+// both failures read the same and only one of them was true.
+func TestNew_MalformedConfigIsNotReportedAsMissing(t *testing.T) {
+	testutil.NewSandbox(t)
+
+	if err := os.MkdirAll(config.Dir(), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	// Skills is []string, so a bare string is a type error the decoder names.
+	body := []byte("cortex = \"stub\"\nskills = \"stub\"\n")
+	if err := os.WriteFile(config.Path(), body, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	dd, err := New(context.Background())
+	if err == nil {
+		t.Fatalf("New() succeeded on an unparseable config: %+v", dd)
+	}
+	if errors.Is(err, config.ErrNotFound) {
+		t.Errorf("a config that is there was reported as absent: %v", err)
+	}
+	if strings.Contains(err.Error(), "hyctl init") {
+		t.Errorf("advice that overwrites the evidence: %v", err)
+	}
+	if !strings.Contains(err.Error(), "skills") {
+		t.Errorf("the refusal did not name the field at fault: %v", err)
 	}
 }
 

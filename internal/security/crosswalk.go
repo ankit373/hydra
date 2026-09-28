@@ -7,6 +7,9 @@ import "sort"
 // One finding, every standard it bears on. Every entry is Curated: an
 // assertion about what a standard means, never measured from data, and the two
 // must not render alike. Shallow control-family mappings only, never subclauses.
+//
+// The OWASP LLM ids follow LLMEdition and have to be renumbered with it: only
+// LLM01 and LLM02 survived 2025 to 2026 (#748).
 
 // crosswalkTable maps a risk class to the framework controls it bears on.
 var crosswalkTable = map[RiskClass][]FrameworkRef{
@@ -30,13 +33,13 @@ var crosswalkTable = map[RiskClass][]FrameworkRef{
 		{Framework: "SOC 2", Control: "CC5.2 Control activities deployed"},
 	},
 	ClassPolicy: {
-		{Framework: "OWASP LLM", Control: "LLM06 Excessive Agency"},
+		{Framework: "OWASP LLM", Control: "LLM03 Excessive Agency"},
 		{Framework: "NIST AI RMF", Control: "GOVERN 1, policies enacted"},
 		{Framework: "ISO/IEC 42001", Control: "A.9 Use of AI systems"},
 		{Framework: "SOC 2", Control: "CC6.3 Least privilege"},
 	},
 	ClassSupplyChain: {
-		{Framework: "OWASP LLM", Control: "LLM03 Supply Chain"},
+		{Framework: "OWASP LLM", Control: "LLM04 Supply Chain"},
 		{Framework: "NIST AI RMF", Control: "MAP 4, third-party risk"},
 		{Framework: "ISO/IEC 42001", Control: "A.10 Third-party suppliers"},
 		{Framework: "SOC 2", Control: "CC9.2 Vendor management"},

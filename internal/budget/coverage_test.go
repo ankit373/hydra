@@ -38,14 +38,14 @@ func TestMode_StringCoversEveryBand(t *testing.T) {
 	}
 }
 
-// LoadWindows resolves each model's context window; a missing or unusable
+// loadDeclarations resolves each model's context window; a missing or unusable
 // registry must yield an empty map, never a nil map a caller would panic on.
-func TestLoadWindows_DegradesToAnEmptyMap(t *testing.T) {
+func TestDeclarations_DegradesToAnEmptyMap(t *testing.T) {
 	dir := t.TempDir()
 
 	// No registry on disk at all → the embedded copy is used, which must parse.
-	if got := LoadWindows(dir); got == nil {
-		t.Fatal("LoadWindows returned a nil map")
+	if got := loadDeclarations(dir).byID; got == nil {
+		t.Fatal("loadDeclarations returned a nil map")
 	}
 
 	// A malformed on-disk registry must not panic or return nil.
@@ -56,7 +56,7 @@ func TestLoadWindows_DegradesToAnEmptyMap(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(reg, "models.yaml"), []byte("models: [oops"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	got := LoadWindows(dir)
+	got := loadDeclarations(dir).byID
 	if got == nil {
 		t.Fatal("malformed models.yaml returned a nil map")
 	}
@@ -65,8 +65,8 @@ func TestLoadWindows_DegradesToAnEmptyMap(t *testing.T) {
 	}
 }
 
-func TestLoadWindows_EmbeddedRegistryHasUsableWindows(t *testing.T) {
-	got := LoadWindows("")
+func TestDeclarations_EmbeddedRegistryHasUsableWindows(t *testing.T) {
+	got := loadDeclarations("").byID
 	if len(got) == 0 {
 		t.Fatal("no context windows from the embedded registry, the governor " +
 			"cannot compute a percentage without them")
@@ -79,9 +79,9 @@ func TestLoadWindows_EmbeddedRegistryHasUsableWindows(t *testing.T) {
 	}
 }
 
-// LoadWindows skips entries with no id, and supplies a fallback window for
+// loadDeclarations skips entries with no id, and supplies a fallback window for
 // ollama models that declare none.
-func TestLoadWindows_SkipsUnusableEntriesAndFallsBack(t *testing.T) {
+func TestDeclarations_SkipsUnusableEntriesAndFallsBack(t *testing.T) {
 	dir := t.TempDir()
 	reg := filepath.Join(dir, "registry")
 	if err := os.MkdirAll(reg, 0o700); err != nil {
@@ -97,7 +97,7 @@ models:
 		t.Fatal(err)
 	}
 
-	got := LoadWindows(dir)
+	got := loadDeclarations(dir).byID
 	if _, ok := got[""]; ok {
 		t.Error("an entry with no id produced a window keyed on the empty string")
 	}

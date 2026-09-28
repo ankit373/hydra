@@ -8,49 +8,43 @@ import (
 	"github.com/ankit373/hydra/internal/provider"
 )
 
-func TestOllamaCLISuppressedWhenPortModelsExist(t *testing.T) {
+// Heads stamped exactly as the providers stamp them: internal/provider/cli
+// registers {"ollama", "local", true} and internal/provider/port mints
+// "ollama/<model>" with Provider "local", Source "port". The suppression this
+// replaces tested Provider == "ollama", a value neither produces, so it never
+// ran and its comment described behaviour the code could not perform (#820).
+//
+// Keeping the bare head is also the better answer: it is the only row that can
+// carry "start its local server", which is what a user with no server running
+// needs to read.
+func TestByCapScore_KeepsTheBareOllamaHeadBesideNamedModels(t *testing.T) {
 	heads := []provider.Head{
 		{ID: "claude", Provider: "anthropic", Source: "cli", CapScore: 95},
-		{ID: "ollama", Provider: "ollama", Source: "cli", CapScore: 60, LocalOnly: true},
-		{ID: "ollama/qwen3:8b", Provider: "ollama", Source: "port", CapScore: 66, LocalOnly: true},
-		{ID: "ollama/phi4-mini", Provider: "ollama", Source: "port", CapScore: 64, LocalOnly: true},
+		{ID: "ollama", Provider: "local", Source: "cli", CapScore: 60, LocalOnly: true},
+		{ID: "ollama/qwen3:8b", Provider: "local", Source: "port", CapScore: 66, LocalOnly: true},
+		{ID: "ollama/phi4-mini", Provider: "local", Source: "port", CapScore: 64, LocalOnly: true},
 	}
 
 	ranked := ByCapScore(heads)
 
+	if len(ranked) != len(heads) {
+		t.Fatalf("ranked %d of %d heads; nothing here shares a dedupe key", len(ranked), len(heads))
+	}
+	var bare, port int
 	for _, h := range ranked {
-		if h.ID == "ollama" && h.Source == "cli" {
-			t.Errorf("generic ollama CLI head should be suppressed when port models exist, but it appeared in results")
+		switch {
+		case h.ID == "ollama" && h.Source == "cli":
+			bare++
+		case h.Source == "port":
+			port++
 		}
 	}
-
-	portCount := 0
-	for _, h := range ranked {
-		if h.Source == "port" {
-			portCount++
-		}
+	if bare != 1 {
+		t.Error("the bare ollama head was dropped, and with it the only row that " +
+			"can tell the user to start the server")
 	}
-	if portCount != 2 {
-		t.Errorf("expected 2 port heads, got %d", portCount)
-	}
-}
-
-func TestOllamaCLIKeptWhenNoPortModels(t *testing.T) {
-	heads := []provider.Head{
-		{ID: "claude", Provider: "anthropic", Source: "cli", CapScore: 95},
-		{ID: "ollama", Provider: "ollama", Source: "cli", CapScore: 60, LocalOnly: true},
-	}
-
-	ranked := ByCapScore(heads)
-
-	found := false
-	for _, h := range ranked {
-		if h.ID == "ollama" && h.Source == "cli" {
-			found = true
-		}
-	}
-	if !found {
-		t.Errorf("ollama CLI head should be kept when no port models exist")
+	if port != 2 {
+		t.Errorf("kept %d of 2 named port models", port)
 	}
 }
 
@@ -82,5 +76,145 @@ func TestUITier_ExplicitRegistryTierBeatsTheLocalRule(t *testing.T) {
 	}
 	if got := UITier(h); got != 7 {
 		t.Errorf("UITier = %d, want 7 from the registry meta", got)
+	}
+}
+
+// Deduping keyed every non-local head on its provider, "one entry per cloud
+// provider". That is right for a provider offering one head, and silently
+// wrong for one offering several: a three-model OpenRouter allowlist arrived
+// as whichever scored highest, and the other two were gone from probe, status
+// and routing alike (#752).
+func TestByCapScore_KeepsEveryHeadThatNamesItsOwnModel(t *testing.T) {
+	named := func(model string, score int) provider.Head {
+		return provider.Head{
+			ID: "openrouter/" + model, Provider: "openrouter", Source: "env",
+			CapScore: score, Meta: map[string]string{"model": model},
+		}
+	}
+	heads := []provider.Head{
+		named("anthropic/claude-opus-4.1", 92),
+		named("google/gemini-2.5-flash", 78),
+		named("meta-llama/llama-3.2-1b", 55),
+		// Key-derived heads name no model, so one per provider per executor is
+		// still right for them and for every other API provider.
+		{ID: "env/anthropic", Provider: "anthropic", Source: "env", CapScore: 95},
+		{ID: "claude", Provider: "anthropic", Source: "cli", CapScore: 95},
+	}
+
+	ranked := ByCapScore(heads)
+
+	got := map[string]bool{}
+	for _, h := range ranked {
+		got[h.ID] = true
+	}
+	for _, want := range []string{
+		"openrouter/anthropic/claude-opus-4.1",
+		"openrouter/google/gemini-2.5-flash",
+		"openrouter/meta-llama/llama-3.2-1b",
+	} {
+		if !got[want] {
+			t.Errorf("%s was deduped away: %+v", want, ranked)
+		}
+	}
+	// The two anthropic heads name no model, so neither is kept by the rule
+	// above. They survive because they run on different executors (#990), which
+	// TestByCapScore_KeepsTheAPIHeadBesideTheCLIHead is what actually proves.
+	if !got["env/anthropic"] || !got["claude"] {
+		t.Errorf("an anthropic head was deduped away: %+v", ranked)
+	}
+}
+
+// Tier 10 is the free floor: #248 put local heads there because they cost
+// nothing, routing.yaml sends GRUNT there, and pricing.yaml charges $0.00 for
+// it. A weak paid head fell through to it too, so it was preferred over a free
+// local head and costed as if it were one. Only reachable in practice once one
+// provider could offer many models (#752).
+func TestUITier_OnlyLocalHeadsReachTheFreeFloor(t *testing.T) {
+	paid := provider.Head{ID: "openrouter/meta-llama/llama-3.2-1b", Provider: "openrouter",
+		Source: "env", CapScore: 55, Meta: map[string]string{"model": "meta-llama/llama-3.2-1b"}}
+	if got := UITier(paid); got == 10 {
+		t.Error("a paid head reached tier 10, where GRUNT routes and pricing.yaml charges $0.00")
+	} else if got != 9 {
+		t.Errorf("UITier = %d, want 9, the cheapest tier a paid head may occupy", got)
+	}
+
+	// A local head still does, whatever it scores: that is what makes tier 10
+	// the always-available terminal fallback.
+	for _, score := range []int{0, 55, 60, 66, 99} {
+		local := provider.Head{ID: "ollama/x", Provider: "local", Source: "port",
+			CapScore: score, LocalOnly: true}
+		if got := UITier(local); got != 10 {
+			t.Errorf("a local head scoring %d landed at tier %d, want 10", score, got)
+		}
+	}
+
+	// The scale above the floor is untouched.
+	for score, want := range map[int]int{95: 1, 90: 2, 85: 3, 80: 4, 78: 5, 72: 6, 70: 7, 65: 8, 60: 9} {
+		h := provider.Head{ID: "env/x", Provider: "x", Source: "env", CapScore: score}
+		if got := UITier(h); got != want {
+			t.Errorf("UITier(score %d) = %d, want %d", score, got, want)
+		}
+	}
+}
+
+// Keying a cloud head on its provider alone collapsed the Claude Code CLI head
+// and the Anthropic API head into one, and kept the higher score. Only the
+// second can be sent tool definitions (executor.CanUseTools requires an
+// HTTPExecutor), so installing Claude Code removed every Anthropic head that
+// could run an agent loop, measured as "5 of 16 Heads can carry tools" against
+// "6 of 13" with the binary off PATH (#990).
+func TestByCapScore_KeepsTheAPIHeadBesideTheCLIHead(t *testing.T) {
+	heads := []provider.Head{
+		{ID: "claude", Provider: "anthropic", Source: "cli", CapScore: 95},
+		{ID: "env/anthropic", Provider: "anthropic", Source: "env", CapScore: 90},
+	}
+
+	ranked := ByCapScore(heads)
+
+	if len(ranked) != 2 {
+		t.Fatalf("ranked %d heads, want both: the CLI head and the API head are not interchangeable", len(ranked))
+	}
+	// The CLI head still ranks first, so ordinary routing and probe's Cortex
+	// are unchanged; only the head that was disappearing is back.
+	if ranked[0].ID != "claude" {
+		t.Errorf("ranked[0] = %s, want claude: the stronger head must still lead", ranked[0].ID)
+	}
+	if ranked[1].ID != "env/anthropic" {
+		t.Errorf("ranked[1] = %s, want env/anthropic", ranked[1].ID)
+	}
+}
+
+// The other direction of the same key: two heads a provider offers through one
+// executor are still one entry, or the key has become the ID and every dedupe
+// this package does is gone.
+func TestByCapScore_StillCollapsesOneProvidersHeadsOnOneExecutor(t *testing.T) {
+	heads := []provider.Head{
+		{ID: "env/openai", Provider: "openai", Source: "env", CapScore: 88},
+		{ID: "env/openai-alt", Provider: "openai", Source: "env", CapScore: 80},
+	}
+
+	ranked := ByCapScore(heads)
+
+	if len(ranked) != 1 {
+		t.Fatalf("ranked %d heads, want 1: one entry per provider per executor", len(ranked))
+	}
+	if ranked[0].ID != "env/openai" {
+		t.Errorf("kept %s, want the higher-scoring env/openai", ranked[0].ID)
+	}
+}
+
+// And the provider half carries its own weight: two vendors reached through the
+// same executor are two heads, not one. Without this the key could be the
+// source alone and every API provider on the machine would collapse into one.
+func TestByCapScore_KeepsTwoProvidersReachedTheSameWay(t *testing.T) {
+	heads := []provider.Head{
+		{ID: "env/anthropic", Provider: "anthropic", Source: "env", CapScore: 90},
+		{ID: "env/cohere", Provider: "cohere", Source: "env", CapScore: 80},
+	}
+
+	ranked := ByCapScore(heads)
+
+	if len(ranked) != 2 {
+		t.Fatalf("ranked %d heads, want both: two vendors are not one head", len(ranked))
 	}
 }

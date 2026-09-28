@@ -406,7 +406,9 @@ func TestCheckAndRecordDispatch_ClassifiesOncePerDispatchNotPerCandidate(t *test
 
 	const nCandidates = 5
 	for i := 0; i < nCandidates; i++ {
-		if _, err := CheckAndRecordDispatch("agent", fmt.Sprintf("head-%d", i), "", prompt, nil); err != nil {
+		if _, err := CheckAndRecordDispatch(Dispatch{
+			Agent: "agent", HeadID: fmt.Sprintf("head-%d", i), Content: prompt,
+		}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -418,7 +420,9 @@ func TestCheckAndRecordDispatch_ClassifiesOncePerDispatchNotPerCandidate(t *test
 	detectCalls, injCalls = 0, 0
 	class := policy.Classify(prompt)
 	for i := 0; i < nCandidates; i++ {
-		if _, err := CheckAndRecordDispatch("agent", fmt.Sprintf("head-%d", i), "", prompt, &class); err != nil {
+		if _, err := CheckAndRecordDispatch(Dispatch{
+			Agent: "agent", HeadID: fmt.Sprintf("head-%d", i), Content: prompt, Class: &class,
+		}); err != nil {
 			t.Fatal(err)
 		}
 	}

@@ -49,7 +49,8 @@
       {
         "guid": "open-collective",
         "type": "payment-provider",
-        "description": "Open Collective, hosted by Open Source Collective, not yet created. Reserved slug: opencollective.com/hyctl."
+        "address": "https://opencollective.com/hyctl",
+        "description": "Open Collective, hosted by Open Source Collective. One-time or recurring, with transparent public ledger of how the money is spent."
       }
     ],
     "plans": [
@@ -61,7 +62,7 @@
         "amount": 0,
         "currency": "USD",
         "frequency": "monthly",
-        "channels": ["github-sponsors"]
+        "channels": ["github-sponsors", "open-collective"]
       }
     ]
   }

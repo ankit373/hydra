@@ -11,7 +11,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/ankit373/hydra/internal/editor"
 	"github.com/ankit373/hydra/internal/runlog"
@@ -584,5 +586,98 @@ func TestThreadEdit_ApplyConflictThroughTheUI(t *testing.T) {
 	}
 	if bout, _ := ckGit(repo, "", "branch", "--list", branch); strings.TrimSpace(bout) == "" {
 		t.Error("the branch was deleted despite the conflict")
+	}
+}
+
+// Three threads cutting worktrees at once is the cockpit's normal case, and
+// `git worktree add` takes repository-level locks, so they contend. On a
+// loaded CI runner one lost and its thread never settled (#775). Six here
+// rather than three, so the test fails without the lock rather than only
+// sometimes.
+func TestCreateWorktree_ConcurrentCutsAllSucceed(t *testing.T) {
+	repo := threadRepo(t)
+
+	const n = 6
+	var wg sync.WaitGroup
+	errs := make([]error, n)
+	wts := make([]*ckWorktree, n)
+	for i := range n {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			wts[i], errs[i] = ckCreateWorktree(repo, i+1)
+		}()
+	}
+	wg.Wait()
+
+	for i, err := range errs {
+		if err != nil {
+			t.Errorf("thread %d could not cut a worktree: %v", i+1, err)
+		}
+	}
+	// Distinct checkouts, not one shared directory: the isolation is the point.
+	seen := map[string]bool{}
+	for _, wt := range wts {
+		if wt == nil {
+			continue
+		}
+		if seen[wt.dir] {
+			t.Errorf("two threads were handed the same worktree %s", wt.dir)
+		}
+		seen[wt.dir] = true
+		if wt.base == "" {
+			t.Errorf("worktree %s recorded no base commit, so its diff has no left side", wt.tag)
+		}
+		_ = ckDiscardWorktree(wt)
+	}
+}
+
+// git leads `worktree add` with a progress line and puts the failure under it,
+// so reporting the first line named the progress message and lost the reason.
+func TestCkGitFailure_ReportsTheReasonNotTheProgress(t *testing.T) {
+	out := "Preparing worktree (new branch 'hydra/task-t3-abc')\n" +
+		"fatal: '/tmp/x' already exists\n"
+	if got, want := ckGitFailure(out), "fatal: '/tmp/x' already exists"; got != want {
+		t.Errorf("ckGitFailure = %q, want %q", got, want)
+	}
+	if got := ckGitFailure("   \n\n  "); got != "no output" {
+		t.Errorf("ckGitFailure on empty output = %q, want a stated absence", got)
+	}
+	if got, want := ckGitFailure("fatal: single line"), "fatal: single line"; got != want {
+		t.Errorf("ckGitFailure = %q, want %q", got, want)
+	}
+}
+
+// The deterministic half: `worktree add` must run under the repo lock. The
+// concurrent test above only reproduces the race at high fan-out and under
+// load, so on its own it would pass with the lock removed and prove nothing.
+//
+// The race it guards is real and was observed here at n=24: `git worktree add`
+// walks all of .git/worktrees to validate existing entries, so one add reads a
+// half-written entry another is still creating and dies with
+// "failed to read .git/worktrees/<other tag>/commondir".
+func TestCreateWorktree_TakesTheRepoLock(t *testing.T) {
+	repo := threadRepo(t)
+
+	ckRepoLock.Lock()
+	done := make(chan *ckWorktree, 1)
+	go func() {
+		wt, err := ckCreateWorktree(repo, 1)
+		if err != nil {
+			t.Errorf("creating a worktree once unblocked: %v", err)
+		}
+		done <- wt
+	}()
+
+	select {
+	case <-done:
+		t.Fatal("a worktree was cut while the repo lock was held, so concurrent " +
+			"threads still race each other's .git/worktrees entries")
+	case <-time.After(250 * time.Millisecond):
+	}
+
+	ckRepoLock.Unlock()
+	if wt := <-done; wt != nil {
+		_ = ckDiscardWorktree(wt)
 	}
 }

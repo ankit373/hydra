@@ -29,14 +29,21 @@ const loginPathTimeout = 3 * time.Second
 // Guarded on the PATH already being bare, because asking a shell costs about a
 // second and a process started from a terminal already has the answer.
 func Adopt() {
+	ctx, cancel := context.WithTimeout(context.Background(), loginPathTimeout)
+	defer cancel()
+	adopt(ctx)
+}
+
+// adopt is Adopt on the caller's deadline. A test asserts the merge through an
+// unbounded one, because forking any shell can outlast a fixed budget on a
+// loaded machine and the timeout then reads as the bug being looked for (#816).
+func adopt(ctx context.Context) {
 	if runtime.GOOS == "windows" {
 		return // PATH comes from the registry, not a shell profile
 	}
 	if !looksBare(os.Getenv("PATH")) {
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), loginPathTimeout)
-	defer cancel()
 	if merged := mergePath(os.Getenv("PATH"), loginPath(ctx)); merged != "" {
 		os.Setenv("PATH", merged)
 	}

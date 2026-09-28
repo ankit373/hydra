@@ -4,7 +4,6 @@ package tui
 
 import (
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -26,7 +25,7 @@ func wizardHeads() *probe.Result {
 		{ID: "claude", Name: "Claude Code", Provider: "anthropic", CapScore: 95},
 		{ID: "gemini", Name: "Gemini CLI", Provider: "google", CapScore: 82},
 		{ID: "cody", Name: "Cody", Provider: "sourcegraph", CapScore: 75},
-		{ID: "qwen", Name: "Qwen 7B", Provider: "ollama", CapScore: 60, LocalOnly: true},
+		{ID: "qwen", Name: "Qwen 7B", Provider: "local", CapScore: 60, LocalOnly: true},
 	}}
 }
 
@@ -72,6 +71,10 @@ func TestInitWizard_FullWalkWritesALoadableConfig(t *testing.T) {
 	m, _ = send(m, "enter")
 	// Payload capture: cursor 0 is "no".
 	m, _ = send(m, "enter")
+	// Embedding capture: cursor 0 is "no".
+	m, _ = send(m, "enter")
+	// Answer cache: cursor 0 is "no".
+	m, _ = send(m, "enter")
 	// Skills: confirm and save.
 	m, cmd := send(m, "enter")
 
@@ -98,15 +101,10 @@ func TestInitWizard_FullWalkWritesALoadableConfig(t *testing.T) {
 		t.Errorf("pii policy = %q, want local-only, the user chose it and every "+
 			"PII dispatch depends on it", cfg.Policies["pii"].Action)
 	}
-	// The Cortex is the orchestrator; it must not also be listed as a delegate
-	// tier, or work routes back to the model that is doing the routing.
-	for _, tier := range cfg.Tiers {
-		for _, h := range tier.Heads {
-			if h == cfg.Cortex {
-				t.Errorf("the Cortex %q is also in tier %q", h, tier.Name)
-			}
-		}
-	}
+	// The wizard used to write a [[tiers]] head list, and had to keep the
+	// Cortex out of it so work did not route back to the router. There is no
+	// such list any more: tier 1 is the orchestrator's own tier, named `core`
+	// in routing.yaml, so the exclusion is expressed by the enum table (#782).
 }
 
 // The done screen must not have a stray whitespace-only line between "ready"
@@ -117,7 +115,7 @@ func TestInitWizard_DoneScreenHasNoStrayWhitespaceLine(t *testing.T) {
 	testutil.NewSandbox(t)
 
 	m := tea.Model(NewInitModel(wizardHeads()))
-	m, _ = send(m, "enter", "enter", "enter", "enter", "enter")
+	m, _ = send(m, "enter", "enter", "enter", "enter", "enter", "enter", "enter")
 
 	im := m.(InitModel)
 	if im.err != nil {
@@ -141,6 +139,8 @@ func TestInitWizard_DecliningLocalOnlyWritesNoPIIPolicy(t *testing.T) {
 	m, _ = send(m, "enter")         // tiers
 	m, _ = send(m, "down", "enter") // privacy: cursor 1 = no
 	m, _ = send(m, "enter")         // capture: cursor 0 = no
+	m, _ = send(m, "enter")         // embed: cursor 0 = no
+	m, _ = send(m, "enter")         // cache: cursor 0 = no
 	_, _ = send(m, "enter")         // skills → save; the config is the assertion
 
 	cfg, err := config.Load()
@@ -224,7 +224,7 @@ func TestInitWizard_EveryStepRenders(t *testing.T) {
 
 	m := tea.Model(NewInitModel(wizardHeads()))
 	seen := map[step]string{}
-	for i := 0; i < 5; i++ {
+	for i := 0; i < 6; i++ {
 		im := m.(InitModel)
 		view := im.View()
 		if strings.TrimSpace(view) == "" {
@@ -236,8 +236,8 @@ func TestInitWizard_EveryStepRenders(t *testing.T) {
 		seen[im.step] = view
 		m, _ = send(m, "enter")
 	}
-	if len(seen) != 5 {
-		t.Errorf("reached %d distinct steps, want all 5", len(seen))
+	if len(seen) != 6 {
+		t.Errorf("reached %d distinct steps, want all 6", len(seen))
 	}
 	// The head list must actually name the discovered heads, or the user is
 	// choosing blind.
@@ -255,48 +255,29 @@ func TestInitWizard_EveryStepRenders(t *testing.T) {
 	}
 }
 
-// buildTiers is what decides where every future dispatch goes. Its bands must
-// place each head exactly once, and never include the Cortex.
-func TestBuildTiers_AssignsEachHeadOnceAndExcludesTheCortex(t *testing.T) {
-	heads := wizardHeads().Heads
-	cortex := &heads[0] // claude, 95
+// The tier screen is what the user reads before confirming, so every head
+// discovery found must appear on it against the tier it will actually route
+// at. A head shown nowhere is a head the user believes is unavailable.
+//
+// It used to render buildTiers' CapScore bands, a third routing table that
+// disagreed with routing.yaml about what every tier name meant (#782).
+func TestInitWizard_TierScreenShowsEveryHeadAgainstItsRoutingTier(t *testing.T) {
+	testutil.NewSandbox(t)
 
-	tiers := buildTiers(heads, cortex)
+	m := tea.Model(NewInitModel(wizardHeads()))
+	m, _ = send(m, "enter") // pick the first cortex, land on the tier screen
+	view := m.View()
 
-	seen := map[string]string{}
-	for _, tier := range tiers {
-		if len(tier.Heads) == 0 {
-			t.Errorf("tier %q is empty and should not have been written", tier.Name)
-		}
-		for _, id := range tier.Heads {
-			if prev, dup := seen[id]; dup {
-				t.Errorf("%s appears in both %q and %q", id, prev, tier.Name)
-			}
-			seen[id] = tier.Name
+	for _, h := range wizardHeads().Heads {
+		if !strings.Contains(view, h.Name) {
+			t.Errorf("the tier screen does not show discovered head %q:\n%s", h.Name, view)
 		}
 	}
-	if _, present := seen["claude"]; present {
-		t.Error("the Cortex was assigned a delegate tier; work would route back to " +
-			"the model doing the routing")
-	}
-	for _, id := range []string{"gemini", "cody", "qwen"} {
-		if _, present := seen[id]; !present {
-			t.Errorf("%s was discovered but assigned no tier, so it can never be routed to", id)
+	// And it is labelled with the words --tier accepts, not a band name.
+	for _, name := range []string{"core", "local"} {
+		if !strings.Contains(view, name) {
+			t.Errorf("the tier screen does not name --tier %s:\n%s", name, view)
 		}
-	}
-	// Bands are capability-ordered, so a stronger head must not land in a
-	// cheaper tier than a weaker one.
-	if seen["gemini"] == seen["qwen"] {
-		t.Errorf("an 82-score head and a 60-score head landed in the same tier %q",
-			seen["gemini"])
-	}
-
-	// With no cortex chosen every head is available.
-	if got := buildTiers(heads, nil); len(got) == 0 {
-		t.Error("buildTiers with no cortex produced no tiers")
-	}
-	if got := buildTiers(nil, cortex); len(got) != 0 {
-		t.Errorf("buildTiers with no heads produced %v", got)
 	}
 }
 
@@ -337,72 +318,6 @@ func TestClamp(t *testing.T) {
 	}
 }
 
-// exportToRoutingYAML is written back into the operator's own registry file. It
-// must replace its previous block rather than appending a new one every run,
-// and must never touch the hand-written part above it.
-func TestExportToRoutingYAML_ReplacesItsOwnBlockAndKeepsTheRest(t *testing.T) {
-	s := testutil.NewSandbox(t)
-
-	regDir := filepath.Join(s.HydraHome, "registry")
-	if err := os.MkdirAll(regDir, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	path := filepath.Join(regDir, "routing.yaml")
-	handWritten := "version: \"1.0\"\n# an operator's own comment\nenums:\n  SIMPLE: 8\n"
-	if err := os.WriteFile(path, []byte(handWritten), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	heads := wizardHeads().Heads
-	cortex := &heads[0]
-	tiers := buildTiers(heads, cortex)
-
-	if err := exportToRoutingYAML(tiers, cortex); err != nil {
-		t.Fatal(err)
-	}
-	first, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(first), "an operator's own comment") {
-		t.Errorf("the operator's own content was destroyed:\n%s", first)
-	}
-	if !strings.Contains(string(first), "discovered_heads:") {
-		t.Errorf("no discovered block was written:\n%s", first)
-	}
-	if !strings.Contains(string(first), "cortex: claude") {
-		t.Errorf("the block does not name the chosen cortex:\n%s", first)
-	}
-
-	// A second run must replace the block, not stack another one.
-	if err := exportToRoutingYAML(tiers, cortex); err != nil {
-		t.Fatal(err)
-	}
-	second, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if n := strings.Count(string(second), "discovered_heads:"); n != 1 {
-		t.Errorf("routing.yaml holds %d discovered blocks after two runs; every "+
-			"`hyctl init` would append another", n)
-	}
-	if !strings.Contains(string(second), "an operator's own comment") {
-		t.Error("the second run destroyed the operator's content")
-	}
-}
-
-// An install layout with no routing.yaml on disk is the normal case, the
-// registry is embedded in the binary. Skipping silently is correct; failing
-// would make `hyctl init` error on every installed build.
-func TestExportToRoutingYAML_NoFileOnDiskIsNotAnError(t *testing.T) {
-	testutil.NewSandbox(t)
-
-	if err := exportToRoutingYAML(nil, nil); err != nil {
-		t.Errorf("exportToRoutingYAML errored with no on-disk routing.yaml: %v, "+
-			"that is every installed binary (#238)", err)
-	}
-}
-
 // A save that cannot write must surface on the done screen rather than showing
 // a success the user will act on.
 func TestInitWizard_SaveFailureIsSurfaced(t *testing.T) {
@@ -418,7 +333,7 @@ func TestInitWizard_SaveFailureIsSurfaced(t *testing.T) {
 	}
 
 	m := tea.Model(NewInitModel(wizardHeads()))
-	m, _ = send(m, "enter", "enter", "enter", "enter", "enter")
+	m, _ = send(m, "enter", "enter", "enter", "enter", "enter", "enter", "enter")
 
 	im := m.(InitModel)
 	if im.err == nil {
@@ -436,7 +351,7 @@ func TestInitWizard_PayloadCaptureIsOffUnlessChosen(t *testing.T) {
 	testutil.NewSandbox(t)
 
 	m := tea.Model(NewInitModel(wizardHeads()))
-	_, _ = send(m, "enter", "enter", "enter", "enter", "enter") // straight through
+	_, _ = send(m, "enter", "enter", "enter", "enter", "enter", "enter", "enter") // straight through
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -456,6 +371,8 @@ func TestInitWizard_PayloadCaptureIsOnWhenChosen(t *testing.T) {
 	m, _ = send(m, "enter")         // tiers
 	m, _ = send(m, "enter")         // privacy
 	m, _ = send(m, "down", "enter") // capture: cursor 1 = yes
+	m, _ = send(m, "enter")         // embed: cursor 0 = no
+	m, _ = send(m, "enter")         // cache: cursor 0 = no
 	_, _ = send(m, "enter")         // skills → save
 
 	cfg, err := config.Load()
@@ -476,9 +393,126 @@ func TestInitWizard_CaptureStepExplainsWhatIsStored(t *testing.T) {
 	m, _ = send(m, "enter", "enter", "enter") // land on the capture step
 
 	view := m.(InitModel).View()
-	for _, want := range []string{"prompts and responses", "sampled", "redacted"} {
+	for _, want := range []string{"prompts and responses", "budget", "redacted", "secret detector"} {
 		if !strings.Contains(view, want) {
 			t.Errorf("the capture step never mentions %q:\n%s", want, view)
 		}
+	}
+	// The store stopped sampling in #728. A wizard describing the old
+	// behaviour is worse than one describing none.
+	if strings.Contains(view, "sampled") {
+		t.Errorf("the capture step still claims payloads are sampled:\n%s", view)
+	}
+}
+
+func TestInitWizard_EmbeddingCaptureIsOffUnlessChosen(t *testing.T) {
+	testutil.NewSandbox(t)
+
+	m := tea.Model(NewInitModel(wizardHeads()))
+	_, _ = send(m, "enter", "enter", "enter", "enter", "enter", "enter", "enter") // straight through
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("the wizard wrote no loadable config: %v", err)
+	}
+	if cfg.CaptureEmbeddings {
+		t.Error("pressing enter through the wizard opted into embedding capture")
+	}
+}
+
+func TestInitWizard_EmbeddingCaptureIsOnWhenChosen(t *testing.T) {
+	testutil.NewSandbox(t)
+
+	m := tea.Model(NewInitModel(wizardHeads()))
+	m, _ = send(m, "enter")         // cortex
+	m, _ = send(m, "enter")         // tiers
+	m, _ = send(m, "enter")         // privacy
+	m, _ = send(m, "enter")         // capture: cursor 0 = no
+	m, _ = send(m, "down", "enter") // embed: cursor 1 = yes
+	m, _ = send(m, "enter")         // cache: cursor 0 = no
+	_, _ = send(m, "enter")         // skills → save
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("the wizard wrote no loadable config: %v", err)
+	}
+	if !cfg.CaptureEmbeddings {
+		t.Error("the user selected embedding capture and it was not saved")
+	}
+	// The two decisions are independent; choosing one must not set the other.
+	if cfg.CapturePayloads {
+		t.Error("choosing embedding capture also turned on payload capture")
+	}
+}
+
+// The step has to say where the text goes, or the user is consenting to
+// something they were not told about.
+func TestInitWizard_EmbedStepSaysNothingLeavesTheMachine(t *testing.T) {
+	testutil.NewSandbox(t)
+
+	m := tea.Model(NewInitModel(wizardHeads()))
+	m, _ = send(m, "enter", "enter", "enter", "enter")
+	view := m.(InitModel).View()
+
+	for _, want := range []string{"vector", "Nothing leaves the machine", "redacted", "Ollama"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("the embedding step does not mention %q:\n%s", want, view)
+		}
+	}
+}
+
+// The cache is the one wizard answer that changes what comes back, so the step
+// has to say so before someone presses enter through it.
+func TestInitWizard_CacheStepSaysItChangesTheAnswer(t *testing.T) {
+	testutil.NewSandbox(t)
+
+	m := tea.Model(NewInitModel(wizardHeads()))
+	m, _ = send(m, "enter", "enter", "enter", "enter", "enter")
+	view := m.(InitModel).View()
+
+	for _, want := range []string{"changes what you get back", "word for word", "personal"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("the cache step does not mention %q:\n%s", want, view)
+		}
+	}
+}
+
+// Off unless chosen, like the two capture steps, and for a stronger reason.
+func TestInitWizard_CacheIsOffUnlessChosen(t *testing.T) {
+	testutil.NewSandbox(t)
+
+	m := tea.Model(NewInitModel(wizardHeads()))
+	_, _ = send(m, "enter", "enter", "enter", "enter", "enter", "enter", "enter")
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("the wizard wrote no loadable config: %v", err)
+	}
+	if cfg.CacheAnswers {
+		t.Error("pressing enter through the wizard turned the answer cache on")
+	}
+}
+
+func TestInitWizard_CacheIsOnWhenChosen(t *testing.T) {
+	testutil.NewSandbox(t)
+
+	m := tea.Model(NewInitModel(wizardHeads()))
+	m, _ = send(m, "enter")         // cortex
+	m, _ = send(m, "enter")         // tiers
+	m, _ = send(m, "enter")         // privacy
+	m, _ = send(m, "enter")         // capture: cursor 0 = no
+	m, _ = send(m, "enter")         // embed: cursor 0 = no
+	m, _ = send(m, "down", "enter") // cache: cursor 1 = yes
+	_, _ = send(m, "enter")         // skills → save
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("the wizard wrote no loadable config: %v", err)
+	}
+	if !cfg.CacheAnswers {
+		t.Error("the user selected the answer cache and it was not saved")
+	}
+	if cfg.CapturePayloads || cfg.CaptureEmbeddings {
+		t.Error("choosing the cache turned on a capture the user declined")
 	}
 }

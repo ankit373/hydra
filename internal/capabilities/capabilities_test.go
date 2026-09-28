@@ -150,16 +150,16 @@ func TestSource_DistinguishesUserFromBuiltin(t *testing.T) {
 	}
 }
 
-func TestSourceOllama_MatchesFamilyPatternsAsBuiltin(t *testing.T) {
+func TestSourceFamily_MatchesFamilyPatternsAsBuiltin(t *testing.T) {
 	db, err := Load("")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := db.SourceOllama("qwen2.5-coder:7b"); got != "builtin" {
-		t.Errorf("SourceOllama(known family) = %q, want builtin", got)
+	if got := db.sourceFamily("qwen2.5-coder:7b"); got != "builtin" {
+		t.Errorf("sourceFamily(known family) = %q, want builtin", got)
 	}
-	if got := db.SourceOllama("some-totally-unrecognized-model:1b"); got != "" {
-		t.Errorf("SourceOllama(unrecognized) = %q, want empty", got)
+	if got := db.sourceFamily("some-totally-unrecognized-model:1b"); got != "" {
+		t.Errorf("sourceFamily(unrecognized) = %q, want empty", got)
 	}
 }
 

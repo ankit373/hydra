@@ -35,10 +35,10 @@ func TestDefaultOverlayPath_PrefersHydraHomeOverHome(t *testing.T) {
 	}
 }
 
-// ScoreOllama maps a local model name to a capability score. Local model names
+// scoreFamily maps a local model name to a capability score. Local model names
 // carry a tag ("qwen3:8b"), and an unknown model must still get a usable score
 // rather than 0, a 0 would sort it below everything and never be routed to.
-func TestScoreOllama_AlwaysReturnsAUsableScore(t *testing.T) {
+func TestScoreFamily_AlwaysReturnsAUsableScore(t *testing.T) {
 	db, err := Load("")
 	if err != nil {
 		t.Fatal(err)
@@ -47,13 +47,13 @@ func TestScoreOllama_AlwaysReturnsAUsableScore(t *testing.T) {
 		"qwen3:8b", "qwen2.5-coder:7b", "llama3.2:3b",
 		"totally-unknown-model:99b", "", "weird/name:tag",
 	} {
-		got := db.ScoreOllama(name)
+		got := db.scoreFamily(name)
 		if got <= 0 {
-			t.Errorf("ScoreOllama(%q) = %d; a zero score sorts below every head and "+
+			t.Errorf("scoreFamily(%q) = %d; a zero score sorts below every head and "+
 				"the model could never be routed to", name, got)
 		}
 		if got > 100 {
-			t.Errorf("ScoreOllama(%q) = %d, above the 0-100 scale", name, got)
+			t.Errorf("scoreFamily(%q) = %d, above the 0-100 scale", name, got)
 		}
 	}
 }

@@ -115,6 +115,17 @@ type Entry struct {
 	DurationMS int64
 	Confidence float64
 	Detail     string
+
+	// Span identity, tokens and level are carried through rather than used to
+	// key nodes: this is a supervision tree, where a head's selection and its
+	// execution deliberately collapse into one node. A waterfall keyed on
+	// SpanID is a different reconstruction over the same events.
+	SpanID       string
+	ParentSpanID string
+	Level        runlog.Level
+	InputTokens  int
+	OutputTokens int
+	TTFTMs       int64
 }
 
 // Timeline is the run's events in order, for a chronological view.
@@ -147,6 +158,18 @@ func Reconstruct(events []runlog.Event) (*Tree, *Timeline) {
 	return t, tl
 }
 
+// isTaskSpan reports the event that declares a task's own span and nothing
+// else. Keyed on the absence of an agent and a head rather than on the span id,
+// so tree stays ignorant of span identity, which is what keeps it a separate
+// reading from the waterfall.
+func isTaskSpan(e runlog.Event) bool {
+	switch e.Kind {
+	case runlog.KindTaskStarted, runlog.KindTaskFinished:
+		return e.Agent == "" && e.Head == "" && e.SpanID != ""
+	}
+	return false
+}
+
 // Apply folds one event into t and returns it, so calls can be chained. A nil
 // tree is created on demand. Unknown or malformed events are counted in
 // Skipped rather than dropped silently or panicking, a live UI must survive a
@@ -165,6 +188,13 @@ func Apply(t *Tree, e runlog.Event) *Tree {
 	// is legitimate metadata, would otherwise fall through nodeID's TaskID
 	// branch and materialise a phantom root labelled with a raw id (#204).
 	if e.Kind == runlog.KindRunStarted || e.Kind == runlog.KindRunFinished {
+		return t
+	}
+	// A task span carries no agent and no head: it exists so a waterfall has a
+	// parent to nest under, and says nothing about ownership. Rendering it here
+	// would materialise a root labelled with a raw task id, which is the same
+	// phantom the run-level skip above exists to avoid (#864).
+	if isTaskSpan(e) {
 		return t
 	}
 

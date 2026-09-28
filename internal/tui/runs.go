@@ -79,7 +79,10 @@ func ckRunFromEvents(id string, events []runlog.Event, live bool) ckRun {
 			end = t
 		}
 		switch e.Kind {
-		case runlog.KindRunStarted, runlog.KindTaskStarted:
+		case runlog.KindRunStarted:
+			// Only here. task_started's Detail is the routing enum, not a
+			// description, and reading it as one listed a workflow under
+			// "GRUNT" (#910). A run that declared no subject says so.
 			if r.task == "" && e.Detail != "" {
 				r.task = e.Detail
 			}

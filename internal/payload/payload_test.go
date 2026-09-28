@@ -5,6 +5,7 @@ package payload
 import (
 	"errors"
 	"fmt"
+	"github.com/ankit373/hydra/internal/config"
 	"os"
 	"path/filepath"
 	"strings"
@@ -136,7 +137,7 @@ func TestPutRedactsSecretsBeforeWriting(t *testing.T) {
 	}
 
 	// The bytes on disk are the real test, Get could be redacting on read.
-	raw, err := os.ReadFile(packPath(s.dir))
+	raw, err := os.ReadFile(packPath(s.dir, 1))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -554,4 +555,46 @@ func readEntry(t *testing.T, dir, hash string) Entry {
 	}
 	t.Fatalf("no index entry for %s", hash)
 	return Entry{}
+}
+
+// A configured rate outside (0,1] must fall back to the default rather than
+// silently disabling capture the user explicitly turned on.
+func TestKeepRate_FallsBackRatherThanKeepingNothing(t *testing.T) {
+	for _, c := range []struct {
+		in   float64
+		want float64
+	}{
+		{0, DefaultKeepRate},
+		{-1, DefaultKeepRate},
+		{2, DefaultKeepRate},
+		{0.25, 0.25},
+		{1, 1},
+	} {
+		if got := KeepRate(&config.Config{PayloadKeepRate: c.in}); got != c.want {
+			t.Errorf("KeepRate(%v) = %v, want %v", c.in, got, c.want)
+		}
+	}
+	if got := KeepRate(nil); got != DefaultKeepRate {
+		t.Errorf("KeepRate(nil) = %v, want the default", got)
+	}
+}
+
+// The default must keep everything: a byte budget is what bounds the store now,
+// and a trace you can open one time in ten is not the detail this is for.
+func TestKeepRate_DefaultKeepsEverything(t *testing.T) {
+	if DefaultKeepRate != 1.0 {
+		t.Fatalf("DefaultKeepRate = %v, want 1.0", DefaultKeepRate)
+	}
+}
+
+func TestBudget_ResolvesFromConfig(t *testing.T) {
+	if got := Budget(&config.Config{PayloadBudgetMB: 64}); got != 64<<20 {
+		t.Errorf("Budget(64MB) = %d, want %d", got, 64<<20)
+	}
+	if got := Budget(nil); got != DefaultBudgetBytes {
+		t.Errorf("Budget(nil) = %d, want the default", got)
+	}
+	if got := Budget(&config.Config{PayloadBudgetMB: 0}); got != DefaultBudgetBytes {
+		t.Errorf("Budget(0) = %d, want the default", got)
+	}
 }

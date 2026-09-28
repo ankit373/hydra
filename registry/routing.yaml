@@ -7,6 +7,10 @@
 # Example: change GRUNT from 10 to 9 → boilerplate now goes to Flash Low not Qwen
 #
 # Keys map to tier numbers defined in models.yaml
+#
+# The router reads this file. A copy at $HYDRA_HOME/registry/routing.yaml wins
+# over the one in the binary, and must list every key below: a partial override
+# is refused rather than silently falling back for the keys it omits.
 # ─────────────────────────────────────────────────────────────────────────────
 
 version: "1.0"

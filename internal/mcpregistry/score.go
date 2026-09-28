@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/ankit373/hydra/internal/osv"
 )
 
 // Confidence states how much evidence backs a score. "Insufficient" is a
@@ -200,15 +202,6 @@ var osvEcosystem = map[string]string{
 
 var osvQueryURL = "https://api.osv.dev/v1/query"
 
-type osvVuln struct {
-	ID      string `json:"id"`
-	Summary string `json:"summary"`
-}
-
-type osvResponse struct {
-	Vulns []osvVuln `json:"vulns"`
-}
-
 // knownBadSignal cross-references a package against OSV.dev's advisory
 // database, the highest-value signal per the design doc's evidence: OX
 // Security found 9 of 11 registries accept a known-malicious clone with zero
@@ -219,38 +212,18 @@ func knownBadSignal(ctx context.Context, pkg Package) Signal {
 		return Signal{Name: "known-vulnerability match", Available: false}
 	}
 
-	body, err := json.Marshal(map[string]any{
-		"package": map[string]string{"name": pkg.Identifier, "ecosystem": eco},
-	})
+	// No version: a registry entry names a package, not the build someone is
+	// running, so the question here is whether the package has a record at all.
+	vulns, err := osv.QueryAt(ctx, osvQueryURL, eco, pkg.Identifier, "")
 	if err != nil {
 		return Signal{Name: "known-vulnerability match", Available: false}
 	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, osvQueryURL, strings.NewReader(string(body)))
-	if err != nil {
-		return Signal{Name: "known-vulnerability match", Available: false}
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		return Signal{Name: "known-vulnerability match", Available: false}
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return Signal{Name: "known-vulnerability match", Available: false}
-	}
-
-	var out osvResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		return Signal{Name: "known-vulnerability match", Available: false}
-	}
-	if len(out.Vulns) == 0 {
+	if len(vulns) == 0 {
 		return Signal{Name: "known-vulnerability match", Detail: "no known advisories", Impact: 0, Available: true}
 	}
 	return Signal{
 		Name:      "known-vulnerability match",
-		Detail:    fmt.Sprintf("%d known advisory/advisories, e.g. %s", len(out.Vulns), out.Vulns[0].ID),
+		Detail:    fmt.Sprintf("%d known advisory/advisories, e.g. %s", len(vulns), vulns[0].ID),
 		Impact:    -100,
 		Available: true,
 	}

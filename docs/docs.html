@@ -236,7 +236,7 @@ pre .c{color:var(--faint);} pre .fl{color:var(--aqua);} pre .k{color:var(--viole
 .chip{font-family:var(--mono);font-size:11px;color:var(--dim);border:1px solid var(--line);border-radius:20px;padding:5px 11px;}
 
 /* tables */
-.ladder{width:100%;border-collapse:collapse;margin-top:14px;font-size:14px;}
+.ladder{width:100%;border-collapse:collapse;margin-top:14px;font-size:14px;display:block;overflow-x:auto;}
 .ladder th,.ladder td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);}
 .ladder th{font-family:var(--mono);font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--faint);font-weight:500;}
 .ladder td.k{font-family:var(--mono);color:var(--violet);}
@@ -515,9 +515,14 @@ MODE                 <span class="tf">│</span>                                
       <div class="sub"><div class="lbl">How it works</div>
         <p><b>Chat</b> executes: the route line names the tier, model and strategy the router picked and why, then the proof strip reports what the run planned, edited and verified. <span class="fx">shift+tab</span> cycles the modes, Auto (plan → edit → run your tests → fix → repeat), Plan, Edit, Ask, and <span class="fx">ctrl+o</span> overrides where the next task runs without changing what it does. <b>Models</b> is the discovered estate by provider, each head at its routing tier, with a server's children greyed when the server itself is down. <b>Audit</b> carries the calibration scorecard, the hash-chained log's integrity, the guardrails actually in force, and anything waiting on a human. <b>Agents</b>, <b>Activity</b> and <b>Usage</b> cover work in flight, per-run traces, and where the money went. <span class="fx">?</span> lists every key, rendered from the keymap itself so it cannot drift.</p>
       </div>
+      <div class="sub"><div class="lbl">Streaming</div>
+        <p>An answer appears <b>as it arrives</b> rather than all at once when the task finishes, so a slow head and a stuck one no longer look the same. The frame repaints five times a second, which is also what coalesces the stream: deltas land every ~20ms and the render never runs per delta.</p>
+        <p>When a head gives up part-way through, its partial output <b>collapses to one dim line</b> naming the head and the reason, so it cannot be mistaken for the answer, and <span class="fx">e</span> expands it again. The text is kept, not re-fetched. Only plain routing streams: a swarm has several heads answering at once and consensus picks by judge after N replies, so neither has a single stream to show.</p>
+      </div>
       <div class="sub"><div class="lbl">Keys &amp; usage</div>
         <pre>hyctl tui
-<span class="c"># tab cycles views · shift+tab modes · ctrl+o routing · ? all keys · :q quit</span>
+<span class="c"># tab cycles views · shift+tab modes · ctrl+o routing · e expands a</span>
+<span class="c"># collapsed partial · ? all keys · :q quit</span>
 hyctl tui <span class="fl">--snapshot</span> <span class="fl">--view</span> 0..5   <span class="c"># render one static frame</span></pre>
       </div>
     </section>
@@ -609,7 +614,7 @@ cd desktop &amp;&amp; wails build                <span class="c"># → desktop/b
       <div class="chan-flow">
         <div class="chan"><span class="cnt">13+</span><h4>PATH scan</h4><div class="how">executables on $PATH</div><p>Finds installed coding agents &amp; CLIs, Claude Code, Codex, Cursor, Gemini CLI, Copilot and more.</p></div>
         <div class="chan"><span class="cnt">14</span><h4>Env vars</h4><div class="how">provider API keys</div><p>Detects keys for the major API providers and registers each as a routable head.</p></div>
-        <div class="chan"><span class="cnt">2</span><h4>Port scan</h4><div class="how">localhost servers</div><p>Queries Ollama (11434) and LM Studio (1234) and enumerates every installed local model.</p></div>
+        <div class="chan"><span class="cnt">2</span><h4>Port scan</h4><div class="how">localhost servers</div><p>Queries Ollama (11434), LM Studio (1234), a LiteLLM proxy (4000) and a llama.cpp server (8080), and enumerates every model each one serves.</p></div>
       </div>
     </section>
 
@@ -643,6 +648,9 @@ cd desktop &amp;&amp; wails build                <span class="c"># → desktop/b
       </div>
       <div class="sub"><div class="lbl">Add one</div><pre>export ANTHROPIC_API_KEY=sk-…      <span class="c"># then:</span>
 hyctl probe                        <span class="c"># it shows up as a scored head</span></pre></div>
+      <div class="sub"><div class="lbl">Route <i>within</i> OpenRouter</div><p>A key alone gives one head routing to one model. Hydra already prices and scores OpenRouter's whole catalogue, so naming models turns each into its own head the router chooses between. Admission is explicit: enumerating hundreds would bury this list. Naming nothing changes nothing.</p><pre><span class="c"># ~/.hydra/config.toml</span>
+[openrouter]
+models = ["anthropic/claude-sonnet-4.5", "google/gemini-2.5-pro"]</pre><p><span class="fx">hyctl probe</span> then lists one head per model and says how much of the catalogue is enabled ("2 of 423"). A name the catalogue does not hold is shown as not routable with the reason, never dropped.</p></div>
     </section>
 
     <section class="doc" id="local">
@@ -651,6 +659,8 @@ hyctl probe                        <span class="c"># it shows up as a scored hea
       <div class="intg-grid">
         <div class="intg"><div class="nm"><span class="glyph" style="background:#111">Ol</span>Ollama</div><div class="meta">port 11434 · <span class="tier">simple-local · T8-T10</span></div><div class="desc">Every installed model enumerated individually (Qwen, Llama, Phi…).</div></div>
         <div class="intg"><div class="nm"><span class="glyph" style="background:#8b5cf6">LM</span>LM Studio</div><div class="meta">port 1234 · <span class="tier">simple-local</span></div><div class="desc">Local server; models discovered and routed.</div></div>
+        <div class="intg"><div class="nm"><span class="glyph" style="background:#0ea5e9">Li</span>LiteLLM</div><div class="meta">port 4000 · <span class="tier">per-model tier</span></div><div class="desc">One head per model the proxy fronts. Local only where the upstream itself is local, so a proxy forwarding to OpenAI is never priced or governed as local.</div></div>
+        <div class="intg"><div class="nm"><span class="glyph" style="background:#22c55e">Lc</span>llama.cpp</div><div class="meta">port 8080 · <span class="tier">simple-local · T10</span></div><div class="desc">One head per loaded model, and the server is identified by its own <span class="fx">build_info</span> rather than assumed from the port, so an unrelated service on 8080 is never offered to the router.</div></div>
       </div>
     </section>
 
@@ -663,14 +673,14 @@ hyctl probe                        <span class="c"># it shows up as a scored hea
 
     <section class="doc" id="probe">
       <h2><span class="cmd">hyctl probe</span> <span class="tagline">discover every head</span></h2>
-      <p class="sum">Runs the three discovery channels concurrently and lists every head with its CapScore and status.</p>
+      <p class="sum">Runs the three discovery channels concurrently and lists every head with its CapScore and status. For a local model it also shows the <b>quantization actually loaded</b>, because the same model id at Q4_K_M and at Q8_0 is not the same head: it differs in accuracy, VRAM and tokens/sec. <code>--json</code> also carries the model's architectural context ceiling, which is what caps the window the budget governor holds a local head to.</p>
       <div class="sub"><div class="lbl">Usage</div><pre>hyctl probe</pre></div>
     </section>
 
     <section class="doc" id="status">
       <h2><span class="cmd">hyctl status</span> <span class="tagline">live state</span></h2>
-      <p class="sum">Heads, budget bars, and the <b>rate-aware</b> governor.</p>
-      <div class="sub"><div class="lbl">How it works</div><p>Models context usage as a drifting process and estimates the <b>first-passage probability</b> of crossing the ceiling before the task ends, escalating <i>before</i> a threshold is hit.</p></div>
+      <p class="sum">The heads that <b>can actually run</b>, budget bars, and the <b>rate-aware</b> governor.</p>
+      <div class="sub"><div class="lbl">How it works</div><p>Head list comes from live discovery, grouped by the tier each head would route at, so it cannot drift from the router; anything discovery found but nothing can drive is counted, not listed. The governor models context usage as a drifting process and estimates the <b>first-passage probability</b> of crossing the ceiling before the task ends, escalating <i>before</i> a threshold is hit.</p></div>
       <div class="sub"><div class="lbl">Usage</div><pre>hyctl status</pre></div>
       <a class="more" href="#governor">How the governor decides →</a>
     </section>
@@ -688,10 +698,16 @@ hyctl dispatch <span class="fl">--enum</span> SIMPLE <span class="s">"write a Us
 hyctl dispatch <span class="fl">--dry-run</span> <span class="s">"add pagination"</span>
 hyctl dispatch <span class="fl">--local</span> <span class="s">"write unit tests"</span></pre>
       </div>
+      <div class="sub"><div class="lbl">Streaming</div>
+        <p>On a terminal the answer is drawn <b>as it arrives</b>: a spinner covers the wait before the first token, then tokens append, then the token counts, elapsed time and measured <b>TTFT</b> print as a footer, since none of those numbers exist until the call returns. Measured on a local 7B: 435 deltas spread over 9.9s of a 10.0s call, where before there was nothing on screen for the whole ten seconds.</p>
+        <p>Piped output <b>never streams</b> and is byte-identical to before, so scripts are unaffected; <span class="fx">--no-stream</span> asks for the same buffered rendering on a terminal. When a head fails part-way through, its partial is <b>collapsed off the screen</b> and replaced by one line naming the head and the reason, because a partial left on screen reads as part of the answer. Nothing is erased once it has scrolled past the top of the window.</p>
+        <p>A fan-out has no single stream to show, so <span class="fx">--swarm</span> and <span class="fx">--confidence</span> draw a <b>live panel</b> instead: every head that was selected, with its state, elapsed time, tokens and the cost as it accrues. A confidence run adds the running log-odds against the threshold it has to cross, so an ensemble that stops after two heads says why it stopped. The panel is erased when the run ends, and the result printed after it is unchanged.</p>
+      </div>
       <div class="sub"><div class="lbl">Key flags</div>
         <div class="pill-row">
           <span class="mp"><b>--enum</b> / <b>--tier</b></span><span class="mp"><b>--dry-run</b></span><span class="mp"><b>--local</b></span>
           <span class="mp"><b>--file</b> raise bar by blast radius</span><span class="mp"><b>--a2a</b> handoff.json</span><span class="mp"><b>--system</b></span>
+          <span class="mp"><b>--no-stream</b></span>
         </div>
       </div>
     </section>
@@ -736,7 +752,7 @@ hyctl dispatch <span class="fl">--local</span> <span class="s">"write unit tests
       <div class="sub"><div class="lbl">How it works</div><p>A Beta-Bernoulli posterior over sensitivity/specificity → a per-vote LLR and a <b>diagnostic power D</b> (KL divergence, nats). A coin-flip source has D≈0 and is ignored. The defect-cost model prices a wrong answer and sets the required confidence.</p></div>
       <div class="sub"><div class="lbl">Subcommands</div>
         <pre>hyctl trust calibration      <span class="c"># per-source se / sp / D</span>
-hyctl trust record <span class="fl">--source</span> model:claude <span class="fl">--domain</span> go <span class="fl">--said-correct</span> <span class="fl">--outcome</span> correct
+hyctl trust record <span class="fl">--source</span> ollama/qwen3:4b <span class="fl">--domain</span> go <span class="fl">--said-correct</span> <span class="fl">--outcome</span> correct  <span class="c"># a head ID from `hyctl probe`</span>
 hyctl trust defect <span class="fl">--pii</span> <span class="fl">--production</span>
 hyctl trust stats   <span class="c"># samples saved vs fixed-N</span>
 hyctl trust explain &lt;hash&gt;   <span class="c"># the LLR ledger for a run</span>

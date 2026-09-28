@@ -25,7 +25,7 @@ func TestSelectHeads_ParkedHeadIsNotACandidate(t *testing.T) {
 	d := routingDispatcher()
 	d.health = parked(t, "expert", "agy not found")
 
-	for _, h := range d.selectHeads("2", false) {
+	for _, h := range d.selectHeads("2", false, "") {
 		if h.ID == "expert" {
 			t.Fatal("a parked head was offered as a candidate")
 		}
@@ -43,7 +43,7 @@ func TestSelectHeads_ParkedHeadReturnsOnceItsCooldownElapses(t *testing.T) {
 	d.health.Fail("expert", "agy not found", health.Fatal, time.Now().Add(-24*time.Hour))
 
 	found := false
-	for _, h := range d.selectHeads("2", false) {
+	for _, h := range d.selectHeads("2", false, "") {
 		if h.ID == "expert" {
 			found = true
 		}

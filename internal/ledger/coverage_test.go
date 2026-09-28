@@ -5,6 +5,7 @@ package ledger
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -51,10 +52,11 @@ func TestDefaultPaths_PreferHydraHomeOverHome(t *testing.T) {
 	}
 }
 
-// A missing policy is default-allow: Hydra records everything but blocks
-// nothing until an operator writes rules. That is a deliberate posture, so it
-// must be exactly what an absent file produces.
-func TestLoadPolicy_MissingFileIsDefaultAllow(t *testing.T) {
+// A missing policy yields DefaultPolicy, not an empty one. Only hyctl init ever
+// wrote the file, so every install predating #722 had no rules at all and the
+// one unambiguous deny in the system could not fire (#836). The default stays
+// Allow, which is a separate and still-deliberate posture.
+func TestLoadPolicy_MissingFileYieldsTheShippedDefault(t *testing.T) {
 	p, err := LoadPolicy(filepath.Join(t.TempDir(), "absent.json"))
 	if err != nil {
 		t.Fatalf("a missing policy errored: %v", err)
@@ -62,8 +64,24 @@ func TestLoadPolicy_MissingFileIsDefaultAllow(t *testing.T) {
 	if p.Default != Allow {
 		t.Errorf("Default = %q, want Allow", p.Default)
 	}
-	if len(p.Rules) != 0 {
-		t.Errorf("a missing policy produced %d rules", len(p.Rules))
+	if !reflect.DeepEqual(p, DefaultPolicy()) {
+		t.Errorf("a missing policy produced %+v, want DefaultPolicy() %+v", p, DefaultPolicy())
+	}
+}
+
+// The outcome the above exists for, stated as behaviour rather than as a struct
+// comparison: a quarantined server is refused on a machine that has never run
+// hyctl init. A count of rules would pass with the wrong three.
+func TestLoadPolicy_MissingFileStillRefusesAQuarantinedServer(t *testing.T) {
+	p, err := LoadPolicy(filepath.Join(t.TempDir(), "absent.json"))
+	if err != nil {
+		t.Fatalf("a missing policy errored: %v", err)
+	}
+	if d, _ := p.Decide("agent", "tool", "resource", Exec, classQuarantined); d != Deny {
+		t.Errorf("quarantined server through a missing policy = %q, want Deny", d)
+	}
+	if d, _ := p.Decide("agent", "tool", "resource", Exec, ""); d != Allow {
+		t.Errorf("unclassified access through a missing policy = %q, want Allow", d)
 	}
 }
 

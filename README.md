@@ -35,9 +35,9 @@ You have Claude Code for complex problems, Codex for code generation, Ollama run
 
 **Hydra is the control plane that sits in front of all of it.**
 
-It discovers every AI model on your machine, assigns each a capability score, and routes tasks not just to the cheapest one but to a *target confidence of correctness*, enforcing PII policy so sensitive data never leaves your machine, and logging every dispatch with token counts and cost, without any manual configuration.
+It discovers every AI model on your machine, assigns each a capability score, and routes tasks not just to the cheapest one but to a *target confidence of correctness*, enforcing an egress gate so a file like `.env` or `~/.aws/credentials` is refused to any model that leaves your machine, and logging every dispatch with token counts and cost, without any manual configuration.
 
-**Confidence routing** samples models adaptively (SPRT) and stops the moment you're sure enough, using per-model calibration built from real outcomes (see **Confidence Routing** under [Features](#features)). Because cheap or local models handle the tasks that don't need a frontier model, this typically cuts LLM spend 70-85% along the way.
+**Confidence routing** samples models adaptively (multi-hypothesis SPRT) and stops the moment you're sure enough, using per-model calibration built from real outcomes (see **Confidence Routing** under [Features](#features)). Because cheap or local models handle the tasks that don't need a frontier model, this typically cuts LLM spend 70-85% along the way.
 
 ```bash
 brew install ankit373/hydra/hyctl && hyctl init
@@ -78,7 +78,7 @@ Hydra discovers and routes to all of these automatically, with no plugins and no
 ```mermaid
 flowchart TD
     A["<b>hyctl dispatch</b><br/>--local · --swarm · --confidence 0.95"] --> B
-    B["<b>Policy Engine</b><br/>PII detection · cost ceiling · local-only<br/><i>blocks before any network call</i>"] --> C
+    B["<b>Policy Engine + Egress Gate</b><br/>path-classified secrets · PII · cost ceiling<br/><i>reroutes local, or refuses, before any network call</i>"] --> C
     C["<b>Router</b><br/>CapScore → tier → fallback chain<br/><i>~1.1 µs/dispatch</i>"]
 
     C -->|single| E["best available head<br/>+ fallback chain"]
@@ -218,13 +218,73 @@ $ hyctl probe
     anthropic           Anthropic (API)     score:95  env    ✓ key found
 ```
 
+The score each head is listed under is the one it was **ranked** on: the catalogue's
+number updated by what that head has actually got right on this machine, drawn from the
+same calibration record `hyctl trust calibration` reports. A model that keeps being wrong
+sinks below one the catalogue rates higher, and where that happened the table says what it
+was adjusted from and on how many judged answers:
+
+```
+  Head                        Quant     Score  Declared      Src    Provider
+  ──────────────────────────────────────────────────────────────────────────
+  Qwen2.5-Coder:7b (Ollama)   Q4_K_M    38     66 (n=30)     port   local
+```
+
+Below twenty judged answers nothing moves at all, so a fresh install ranks exactly as it
+always did. There is no per-quantization penalty table: a 2-bit model is outranked once it
+has been measured, never because a hardcoded number said it should be.
+
+A dispatch that knows its domain goes further and ranks on what each head got right at
+**that kind of work**, so a model strong at Go and weak at SQL stops being routed both as
+though it were one model:
+
+```
+$ hyctl dispatch --dry-run --enum EXPERT --domain ts "add pagination"
+  Primary  →  Claude Sonnet 4.6 (Thinking)  (score 88, registry)  → 93 on 40 judged, 40 in ts
+
+$ hyctl dispatch --dry-run --enum EXPERT --domain rust "add pagination"
+  Primary  →  OpenAI Codex  (score 88, cli)  → 92 on 40 judged, 0 in rust
+```
+
+`--file foo.go` derives the same domain, so no flag is needed. Evidence from a head's other
+domains still counts, since one thin in a domain should borrow from its own record rather
+than be judged on three runs, but only up to a bound: without one, a head measured
+everywhere *except* here outranked a head measured here, and naming a domain changed
+nothing. The `0 in rust` above is that borrowing being honest about itself.
+
 Scanning happens across three channels simultaneously:
 
 | Channel | What it finds |
 |---------|---------------|
 | **PATH scan** | 13+ CLI tools: Claude Code, Codex, Cursor, Kiro, Windsurf, Gemini, Copilot, Cody, Amp, Continue, Ollama binary |
-| **Port scan** | Ollama (11434), LM Studio (1234); queries each server and lists every installed model individually |
+| **Port scan** | Ollama (11434), LM Studio (1234), LiteLLM (4000), llama.cpp (8080); queries each server and lists every installed model individually. Relocate one with `OLLAMA_HOST`, `HYDRA_LMSTUDIO_HOST`, `LITELLM_PROXY_URL` or `LLAMA_ARG_HOST`/`LLAMA_ARG_PORT` |
 | **Env vars** | 14 API providers: Anthropic, OpenAI, Google, xAI, Groq, Together, Fireworks, Mistral, DeepSeek, Bedrock, Azure, Perplexity, Cohere, Replicate |
+
+### 📥 Get a Model Without Leaving hyctl
+
+```
+$ hyctl models pull hf.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF
+  pulling 74a4da8c9fdb  491.4 MB / 491.4 MB (100%)
+  ✓ pulled hf.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF
+    routable as ollama/hf.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF:latest
+```
+
+The ref is whatever your local server resolves: an Ollama library name
+(`qwen3:8b`) or a **HuggingFace GGUF repo**. The head id is read back from the
+server rather than guessed, because Ollama renames a HuggingFace ref.
+
+A model bigger than your machine can run is refused from the size the server
+reports on the first chunk, seconds in rather than an hour later:
+
+```
+$ hyctl models pull hf.co/unsloth/Llama-3.3-70B-Instruct-GGUF
+Error: model is larger than this machine can run: 42.5 GB to download against 3.0 GB usable.
+  Pick a smaller quantization (Q4_K_M rather than Q8_0 or F16), or pass --force if this
+  machine has more headroom than it reports
+```
+
+This is the only command that downloads weights, and nothing does it as a side
+effect of anything else.
 
 ### 🧠 Hardware-Aware Local Model Selection
 
@@ -252,11 +312,19 @@ When you have Ollama, Hydra picks the best model for your actual available memor
   ✓ Qwen2.5-Coder 7B     7B   uses ~5GB  · 11.2GB left free
 ```
 
-### 🔒 PII-Aware Routing (Enforced, Not Conventional)
+### 🔒 PII-Aware Routing
 
-Enable local-only policy in `hyctl init` and any prompt containing sensitive data is blocked from leaving your machine, at the dispatch layer, before any network call is made.
+Enable local-only policy in `hyctl init` and a prompt matching a PII detector is routed to a local head rather than a network one, at the dispatch layer, before any API call is made.
 
-Detected patterns: Social Security Numbers, credit card numbers, email addresses, API keys and tokens, IP addresses, private key material.
+Detected patterns: Social Security Numbers, credit card numbers, phone numbers, IBANs, email addresses, API keys and tokens, IP addresses, private key material.
+
+**What this is not.** Detection is a denylist over the prompt string, so it can only stop what somebody wrote a pattern for. That is why the egress gate below classifies by path instead, and why `hyctl security` withholds its coverage score entirely while the access policy still defaults to allow.
+
+Coverage is measured rather than claimed. Against the [presidio-research][pr] synthetic set, some detector fires on 18.7% of the 1,387 texts that carry PII: 100% of emails, SSNs and IBANs, 93% of cards and IP addresses, and 69% of phone numbers. The gap is names, street addresses and organisations, 1,509 spans with no pattern to write, which is what a trained NER model exists for. Phone numbers are recognised by a country code, a parenthesised area code, the 3-3-4 grouping or a trunk zero; a bare run of digits is refused for the same reason nine bare digits are not read as an SSN. Re-run the figures with `go test ./internal/policy -run TestPII_Recall -v`.
+
+[pr]: https://github.com/microsoft/presidio-research
+
+`hyctl policy ner --head <id>` measures whether a head can read the half no pattern reaches. It asks 470 labelled texts and reports recall and false positives separately, because each alone is trivially passed. Measured on this machine, a 7B scored 0.87 recall at 0.00 false positives, while a 0.5B scored 0.86 recall and said yes to **94%** of the negatives: it clears a recall bar by answering yes to nearly everything, which is exactly why one number cannot decide this. Both are judged on the 95% interval rather than the point estimate, so a head is eligible only when the sample is large enough to say so. Decoding is pinned greedy, or the same head measures differently every run. An answer that is neither yes nor no is counted apart and never read as a no. **Nothing routes on this yet**, by design: it is the measurement that would earn it.
 
 ```bash
 $ hyctl dispatch "process payment for card 4111-1111-1111-1111"
@@ -266,6 +334,101 @@ $ hyctl dispatch "process payment for card 4111-1111-1111-1111"
 
   Dispatching → ollama/qwen3:8b  [local, no API call made]
 ```
+
+### 🚪 Egress Gate
+
+A detector can only stop what somebody wrote a pattern for. The egress gate classifies a file by **where it is**, not what is inside it, which closes a whole category whether or not its contents look like anything:
+
+```bash
+$ hyctl edit deploy/.env "rotate the database password"
+
+  🔒 secret content (deploy/.env), routing to a local head only
+  Dispatching → ollama/qwen3:8b  [local, nothing left this machine]
+```
+
+With no local head running, the default refuses rather than falling back to one that reaches the network:
+
+```
+no dispatchable heads: content classified secret (deploy/.env) and no local head
+is routable. Start one (`ollama serve`), or set egress.strict = false in
+config.toml to allow it out
+```
+
+The rules live in `registry/sensitivity.yaml`, embedded in the binary and overridable at `$HYDRA_HOME/registry/sensitivity.yaml` without a rebuild. They cover env files, private keys, cloud and cluster credentials, tfstate, SSH and package-manager config, and `~/.hydra` itself, with an `allow` list so a committed `.env.example` is not treated as a secret. Turn the floor off with:
+
+```toml
+[egress]
+  strict = false   # default true; a config with no [egress] section is strict
+```
+
+**What it guarantees.** No file matching a rule reaches a head that leaves the machine, errors deny rather than allow, and a payload that declares no provenance is refused, so a new code path that forgets the gate breaks loudly instead of leaking quietly. Every decision is recorded in the ledger with the rule that produced it.
+
+**Where the boundary is.** CLI-agent heads are agents in their own right with their own filesystem access. Hydra guarantees what *it* sends; it cannot control what `agy` or `codex` independently decides to read once handed a task. The guarantee is total only when the work runs on a local head, which is exactly what the gate reroutes to.
+
+**What it records.** Every dispatch writes its provenance to the ledger: what the payload was assembled from, how it classified, and whether the head it reached leaves the machine. That is what `hyctl security trifecta` reads:
+
+```
+  LETHAL TRIFECTA  2 dispatch(es) had all three legs and were not stopped
+  over 7 dispatch(es) with recorded provenance
+
+  private data         4 dispatch(es), read local files or environment
+      deploy/.env                                  2
+      internal/auth/token.go                       2
+  untrusted content    4 dispatch(es), ingested content Hydra did not author
+      head                                         4
+  external comms       6 dispatch(es), reached a head that leaves the machine
+      openai/gpt-5                                 5
+```
+
+Any one of the three is fine; all three at once is what turns a poisoned input into exfiltration with no software vulnerability involved. The headline is **exposure**, not presence: a trifecta the gate refused is reported as contained, because a dashboard that flags a working control teaches people to ignore it.
+
+### 🧱 Least-Privilege Heads
+
+Every head Hydra spawns used to inherit your whole environment, so an `agy` subprocess held `AWS_SECRET_ACCESS_KEY`, every other provider's API key, and `SSH_AUTH_SOCK` for the duration of the call. Now a head gets the base set (PATH, HOME, locale, proxy), **its own provider's credential**, and its own tool configuration. Nothing else crosses.
+
+The allowlist cannot be complete, since every CLI agent reads its own settings and they change. If a head needs a variable Hydra does not know about:
+
+```bash
+export HYDRA_HEAD_ENV=SOME_AGENT_TOKEN,SOME_OTHER_VAR
+```
+
+Head subprocesses are also bounded so a grandchild holding the pipe open cannot hang a call on a process that already exited.
+
+One related fix ships with it: local model weights are fingerprinted by digest alongside head binaries, so a swapped model behind a familiar name is detected the same way a replaced agent binary is, which matters because Ollama pulls unsigned weights from a public registry.
+
+**Not included.** Repo-supplied validator and oracle commands still run unconfined. Go's `os/exec` has no per-child rlimit support, and faking one through `sh -c 'ulimit ...'` would re-tokenize argv, which `internal/oracle` deliberately avoids. Real containment there needs a platform sandbox (`sandbox-exec`, seccomp) and is tracked separately.
+
+**Scoping the agents themselves.** That covers what a head *holds*. What an agent may *reach* is the access policy at `~/.hydra/mcp_policy.json`, and Hydra ships no scoping rules there on purpose: which agent may write where is a decision about your repository, and a blanket deny gets uninstalled rather than tuned. `hyctl security` tells you who is running unscoped:
+
+```
+  Least privilege   3 agent(s) unscoped
+    no policy rule names these agents, so they run under the default while
+    changing state: hydra-swarm (720 state-changing), hydra-dispatch (127)
+```
+
+A rule narrows by agent, resource, action, or any combination. First match wins, so put the specific rules above the general ones:
+
+```json
+{
+  "default": "allow",
+  "rules": [
+    {"agent": "hydra-swarm", "resource": "registry/**", "action": "write",
+     "decision": "deny", "framework": "owasp:llm03"},
+    {"agent": "hydra-swarm", "resource": "**/*_test.go", "action": "write",
+     "decision": "ask"},
+    {"classification": "mcp-quarantined", "decision": "deny"}
+  ]
+}
+```
+
+`deny` refuses and records it. `ask` parks the task under `hyctl ask` instead, which is the right verdict when you want a human in the loop rather than a refusal; it stops dispatch before any executor runs and never falls through to a cheaper head. Check a rule fires before trusting it, then read back what the policy is actually doing:
+
+```bash
+hyctl mcp check fs --agent hydra-swarm --resource registry/routing.yaml --action write
+hyctl security --why     # per-rule hit counts, rules that never matched, rules unreachable
+```
+
+A rule that has never matched is reported as such, and one an earlier rule always shadows is reported as unreachable, so a policy that reads strict and does nothing shows up as exactly that.
 
 ### 💰 Full Cost Visibility
 
@@ -315,6 +478,29 @@ hyctl dispatch --dry-run "write a SQL migration"
 hyctl dispatch --local "write unit tests for this function"
 ```
 
+### 📺 Output as It Arrives
+
+A dispatch renders while the model writes it, on every surface: the CLI, the `hyctl tui` cockpit,
+the desktop app, and a swarm fan-out. Seven executor paths stream natively, the OpenAI-compatible
+wire shape (and Azure, which shares it), Anthropic, Gemini, Cohere, Bedrock over its binary event
+stream, Ollama, and the agy CLI. Replicate is the one that does not: its prediction API polls, so
+there is nothing to read incrementally.
+
+A head that cannot stream is not a second code path. `executor.Stream` delivers its whole output as
+one delta, so a surface is written once and the two kinds cannot drift apart in how they render.
+
+When the router falls back mid-answer, the abandoned partial does not stay on screen pretending to
+be the answer. It collapses to one line naming the head, roughly how much it wrote and why it
+stopped, and expands if you want to read it:
+
+```
+⤺ abandoned  openrouter/gpt after ~212 chars: 429 rate limited
+    hyctl trace view run-7f2a --span 9c1d4e02
+```
+
+That command is only offered when payload capture is on. Without it the span exists but stores no
+text, and pointing you at an empty page would be worse than saying nothing.
+
 ### 🐝 Swarm Dispatch
 
 Fan a single prompt out to multiple heads at once, then keep the best answer:
@@ -360,6 +546,90 @@ assertions rather than measurements, defect cost is **per-occurrence and not
 annualised**, a file the dependency graph does not index is **unknown** and never
 "low-risk", and the attestation is **unsigned** because Hydra has no key management.
 
+**The servers it routes to are checked, not taken on trust.** Hydra discovers local model
+servers, ranks them and sends real work to them, so their configuration is part of its own
+posture. Two checks say so rather than assuming it:
+
+```
+Local server exposure      1 exposed
+  ollama 0.9.9 (http://localhost:11435) answers on 192.168.1.15. That address is not
+  loopback, so the server is serving more than this machine, and neither Ollama nor
+  vLLM requires authentication by default
+
+Local server advisories    9 unfixed upstream
+  no upgrade answers these, so the mitigation is not reaching them: CVE-2024-12055,
+  CVE-2024-8063, CVE-2025-0312, and 6 more
+```
+
+Ollama ships with no authentication and prints no warning when bound to `0.0.0.0`, and a
+model server reachable from the network is the one thing that falsifies local-first outright.
+The probe compares the same identity endpoint discovery already uses, between loopback and
+this machine's own addresses, so nothing goes on the wire and an unrelated listener on the
+same port is not mistaken for the model server.
+
+`--advisories` asks OSV about the versions found, and is off by default because it is the only
+part of the report that leaves the machine. Advisories **with** a fix are separated from
+advisories **without** one: upgrading answers the first and cannot answer the second, and a
+fully current Ollama carries nine of the second kind, so a single count would read the same on
+a patched server as on an abandoned one. Both checks state what a negative result does not
+prove: a host firewall that drops the probe is indistinguishable from a server that is not
+listening, and a lookup that failed is unchecked rather than clean.
+
+**Its own state directory is checked too.** The report has always said the head-binary
+baseline is forgeable by anything that can write `~/.hydra`, and nothing checked whether
+anything can:
+
+```
+State directory reach      3 readable by others
+  /Users/you/.hydra is 0755; /Users/you/.hydra/logs is 0755 ... The files themselves
+  are not readable, so this leaks the listing rather than the contents
+```
+
+Writable is the finding, because `head_binaries.json` is the record that says no head
+binary changed and `mcp_ledger.jsonl.chainhash` is the anchor that says nothing was
+removed from the ledger, and both are plain files. Readable is reported separately and
+more quietly, since it exposes the listing rather than the contents. `hyctl security`
+never changes a permission: it is a read, and a command that silently chmods your
+directory while you asked it a question is a surprise.
+
+**The boundary the numbers cannot state.** A CLI-agent head (claude, agy, codex,
+cursor) is itself an agent, with its own filesystem and network access, in a process
+Hydra does not control. Everything scored above is what Hydra *sends and records*;
+what such a head independently reads and ships is outside it. Only a local-only run
+keeps the whole task on this machine. The default view says so in words, because no
+coverage percentage can.
+
+Scored against the **2026** edition (`OWASP-GenAI-LLM-Top-10-2026-v1.0`, published
+4 August 2026). Seven of the ten moved: Excessive Agency rose 06 to 03, Improper
+Output Handling fell 05 to 10, and System Prompt Leakage was replaced by the broader
+LLM08 Hidden Context Exposure.
+
+Category IDs are qualified by their OWASP **edition**, in `--json`, in `--csv` and on
+every persisted score entry. Only LLM01 and LLM02 keep their number between editions,
+so gap age is never computed across two of them: a reordering restarts that clock
+rather than reporting one category's history under another's name. Upgrading to a
+build that changes edition therefore resets every gap age to zero once, by design;
+the alternative is dating one category's history under another's name.
+
+**Two taxonomies, because they answer different questions.** The OWASP LLM Top 10 governs what a model *says*. The [OWASP Top 10 for Agentic Applications](https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/) (ASI01-ASI10) governs what a system *does*, and an orchestrator with fallback chains, swarm fan-out, tool access and cross-run memory is squarely the second. Both are scored, side by side:
+
+```
+  OWASP Agentic Top-10 coverage  50%  (5/10, 4 partial)
+  ────────────────────────────────────────────────
+    ASI01  Agent Goal Hijack                partial
+    ASI02  Tool Misuse and Exploitation     configured
+    ASI03  Identity and Privilege Abuse     enforced
+    ASI04  Agentic Supply Chain             configured
+    ASI05  Unexpected Code Execution        partial
+    ASI06  Memory and Context Poisoning     partial
+    ASI07  Insecure Inter-Agent Communicat… partial
+    ASI08  Cascading Failures               gap
+    ASI09  Human-Agent Trust Exploitation   configured
+    ASI10  Rogue Agents                     configured
+```
+
+Every status is read from live state, not asserted. `ASI02` tracks the policy default, so a fail-open policy reports `partial` and an absent one reports `gap`. `ASI08` reports `gap` without a `graph.json`, because blast radius you cannot compute is not blast radius you have bounded. `ASI10` drops to `gap` the moment the ledger chain breaks, since the record that would show an agent acting outside policy is precisely the thing that just became untrustworthy. And `partial` never counts toward the percentage.
+
 ### 🧩 MCP Server Trust Registry (`hyctl mcp registry`)
 
 The ledger above records what an agent *did*. This scores whether the MCP server it
@@ -403,26 +673,47 @@ hyctl dispatch --confidence 0.95 "is this migration safe to run in prod?"
 has sensitivity = specificity = 0.5, so its verdict contributes `ln(0.5/0.5) = 0`
 however emphatically it agrees. With no calibrated source for the domain the
 estimate cannot move at all, so Hydra refuses the run rather than sampling every
-head to arrive back at 50%, and tells you which domains do carry evidence:
+head to arrive back at 50%, and tells you what does carry evidence:
 
 ```
 $ hyctl dispatch --confidence 0.9 --domain go "is this safe?"
-Error: nothing here can judge "go" yet, so --confidence would sample every head,
-move the estimate nowhere and hand back 50%.
+Error: no head this run would sample has been scored in domain "go", so
+--confidence would sample every head, move the estimate nowhere and hand back 50%.
 
-  Domains with evidence: gotest, trust-bench
-  Record an outcome:     hyctl trust record --source model:<id> --domain go --said-correct --outcome correct
+  Scored in "go":  verifier:go
+  ...but none of them is among the heads this run selects.
+  Other domains with evidence: gotest, trust-bench
+  Record an outcome:     hyctl trust record --source <head-id> --domain go --said-correct --outcome correct
 ```
+
+The distinction matters: a domain nothing has ever scored and a domain scored
+only by a source this run would not sample need different fixes.
 
 It leans on **per-source calibration** you build from real outcomes, each model/verifier earns a measured sensitivity, specificity, and *diagnostic power* `D`. A coin-flip source (`D≈0`) contributes nothing; a proven one lets a single vote go a long way.
 
+Recording only your own answers is not enough to calibrate: a model that produced
+an answer always "said correct", which fills TP and FP and leaves TN on its bare
+prior, so specificity is never measured and `LLR = ln(se/(1-sp))` stays under
+`ln 2 = 0.693` nats, against the `2.944` a 95% target needs. The dissenters are
+what fix it. `hyctl trust outcome` replays a past ensemble run's ledger once its
+answer is known, so a head that disagreed with an answer that turned out wrong
+finally earns the true negative that specificity can only come from.
+
 ```bash
-hyctl trust record --source model:claude-sonnet --domain go --said-correct --outcome correct
-hyctl trust calibration          # per-source se / sp / D table
+hyctl trust outcome <task_hash> --outcome incorrect   # train every source that voted in a run
+hyctl trust record --source ollama/qwen3:4b --domain go --said-correct --outcome correct
+hyctl trust calibration          # per-source se / sp / D table (neg=0 flags an unusable cell)
 hyctl trust defect --pii --production   # modeled $ cost of shipping a wrong answer
 hyctl trust stats                # samples saved vs fixed-N, achieved vs target confidence
 hyctl trust explain <task_hash>  # the full LLR ledger for a past run: why it stopped
+hyctl trust reliability          # is the stated confidence honest? Brier / ECE / diagram
 ```
+
+Every confidence run ends by printing its own `task_hash` and the `trust explain`
+command for it, so the ledger above is one copy-paste away rather than something
+to go looking for. `trust stats` says outright when achieved confidence has never
+left the 50% prior, which means the runs paid for heads without learning
+anything, rather than leaving that to be inferred from a savings figure.
 
 **Blast-radius aware.** Point Hydra at a dependency graph (`graph.json` from [Graphify](https://github.com/safishamsi/graphify) or any tree-sitter indexer) and the confidence bar scales with how much code an edit could break, a fix to a hub everything imports demands far more certainty than a leaf helper:
 
@@ -536,14 +827,14 @@ The wizard scans your machine, ranks every model it finds, walks you through pic
 # Discovery & state
 hyctl init                              # first-run wizard
 hyctl probe                             # scan and display all available models
-hyctl status                            # live system state (heads, budget bars, burn-rate risk)
+hyctl status                            # live state: heads that can run, budget bars, burn-rate risk
 hyctl tui                               # interactive cockpit, six views (see below), `?` for shortcuts
 hyctl version                           # version, commit, build info
 hyctl upgrade                           # self-update via install.sh (curl installs only; brew installs: `brew upgrade hyctl`)
 
 # Model registry (add a new model at runtime: no rebuild)
-hyctl models list                       # built-in + your models, by capability score
-hyctl models add kimi-k3 --provider moonshot --cap-score 85   # upsert into your overlay
+hyctl models list                       # known models, marked with what can actually route now
+hyctl models add kimi-k3 --provider moonshot --cap-score 85   # record a score (not a head)
 hyctl models remove kimi-k3             # remove one of your additions
 hyctl models sync                       # import the OpenRouter catalog (provisional scores)
 
@@ -553,6 +844,11 @@ hyctl dispatch --dry-run "..." # preview routing without executing
 hyctl dispatch --local "..."   # local models only, no API calls
 hyctl dispatch --swarm --swarm-mode best "..."   # fan out to many heads, judge best
 hyctl dispatch --confidence 0.95 "..."  # SPRT: sample until this P(correct) is reached
+
+# Serve the router to anything that speaks OpenAI
+hyctl serve                             # OpenAI-compatible endpoint, loopback only
+#   the `model` field is the routing instruction: `hydra`, `hydra/hard`, `hydra/t4`, or a head id.
+#   streams as server-sent events, and passes tool calls through on every dialect it speaks.
 
 # Tasks waiting on you
 # A ledger policy can answer `ask` instead of allow or deny. Dispatch then stops
@@ -568,10 +864,13 @@ hyctl pricing list                      # live $/1M-token rates (OpenRouter + fa
 
 # Trust Control Plane
 hyctl trust calibration                 # per-source sensitivity / specificity / D
-hyctl trust record ...                  # feed an outcome to train calibration
+hyctl trust record ...                  # feed one source's outcome to train calibration
+hyctl trust outcome <task_hash> ...     # train every voter in a past run from its verified answer
 hyctl trust defect ...                  # modeled cost of shipping a wrong answer
 hyctl trust stats                       # samples saved, achieved vs target confidence
 hyctl trust explain <task_hash>         # the LLR ledger for a past SPRT run
+hyctl trust reliability                 # when it says 90%, is it right 90% of the time
+hyctl edit --file path/to/f.go "..."            # apply, then validate what was written: the verdict that counts
 hyctl trust benchmark                   # measured SPRT numbers (samples saved, accuracy)
 hyctl graph blast <file>                # a file's blast radius + the confidence it demands
 hyctl graph parallel <files...>         # optimal number of parallel agents (Law 4)
@@ -579,6 +878,19 @@ hyctl context entropy <file|->          # signal density + useful tokens + compa
 
 # Verification & accountability
 hyctl oracle verify go test ./... --source verifier:go-test  # verifier as evidence + its LLR
+hyctl eval stats                        # the verified corpus: size and pass rate by domain
+hyctl eval readiness                    # per enum, whether the corpus can yet fit a routing choice
+hyctl eval list --failed                # the examples the oracle rejected
+hyctl eval training                     # vectors per embedding model, whether a classifier could be fitted
+hyctl eval classify                     # does similarity to past work predict whether an enum passes
+# A rule can then route on it: corpus.known / corpus.pass_rate / corpus.support in
+# registry/signals.yaml, derived only when a rule names one.
+
+# The standalone verifier: fill the corpus with no router and no Hydra config.
+# Ships in the same archive as hyctl, and reads no ~/.hydra at all.
+hyverify --candidate internal/auth/token.go --task "rotate signing key" --enum MODERATE
+hyverify --candidate out.go --task "..." -- go test ./...   # name the judge yourself
+hyverify --candidate x.go --task "..." --embed-model nomic-embed-text  # so it trains a classifier
 hyctl mcp check <tool> --agent A --resource R --action write  # gate + record an access
 hyctl mcp check <tool> --content "$DATA" --action network      # PII auto-classified; policy can deny egress
 hyctl mcp check <tool> --params '{"amount":500}'               # bind a hash of the params to the decision
@@ -595,13 +907,31 @@ hyctl mcp registry list                 # audited servers by trust score
 hyctl mcp registry clear <server>       # recover a server quarantined in error
 hyctl security                          # what the agents did, and can the record be trusted
 hyctl security --why                    # the full programme: register, coverage, policy, exposure
+hyctl security trifecta                 # private data + untrusted content + egress: which dispatches had all three
+hyctl security --advisories             # ask OSV about the local model server versions found
 hyctl security --attest                 # checkable attestation: posture + evidence + digest
 
 # Editing & batch
 hyctl edit --file ... --prompt "..."    # scoped, validated, rollback-safe file edit
 hyctl review ...                        # code review / approve / reject / QA
 hyctl parallel ...                      # fan independent tasks across heads
+hyctl workflow run --step A --step B    # multi-step task, each step routed on its own
+hyctl workflow resume <id>              # continue a killed workflow from where it stopped
+
+# Reviewing a diff
+hyctl vet                               # review the working diff, each file routed to its own head
+hyctl vet --confidence 0.9              # sample each file with as many heads as its blast radius warrants
+hyctl vet --json                        # exits 3 on a blocking finding, so a script can gate on it
+# vet wants a chat head. An agentic CLI narrates the step it would take next rather
+# than returning findings, and those files read as unreviewed, not clean (#1049).
 ```
+
+The corpus behind `hyctl eval` is the one thing Hydra keeps verbatim and forever, because it is the
+only data a router can be improved against. It is your own code and prompts, so it stays in
+`~/.hydra/evalset/`, nothing that prunes logs can reach it, and there is no upload path. A test
+enforces that, rather than a comment promising it: no Hydra package that can reach the corpus
+imports anything able to open a socket or exec, and the third-party packages it rests on are
+pinned by name, so a new dependency is a decision rather than a side effect.
 
 ### The Cockpit (`hyctl tui`)
 
@@ -653,22 +983,55 @@ Everything shown is measured from the machine's real logs, a figure that cannot 
 
 ```toml
 cortex = "claude"
-
-[[tiers]]
-name    = "expert"
-heads   = ["claude", "codex"]
-
-[[tiers]]
-name    = "simple"
-heads   = ["ollama/qwen3:8b"]
-
-[[tiers]]
-name    = "local"
-heads   = ["ollama/phi4-mini"]
+skills = ["code-gen", "review", "benchmark"]
 
 [policies.pii]
 action  = "local-only"
 ```
+
+### Tier names are enum names
+
+`--tier` takes a number 1-10 or a name, and a name is just the lowercase of a
+routing enum: `--tier simple`, `--enum SIMPLE` and `--tier 8` are one
+instruction. `--tier local` is the one alias, a legacy name for `grunt`, the
+free local floor. Retune any of them by editing `routing_map` in
+`registry/routing.yaml` (or a copy at `$HYDRA_HOME/registry/routing.yaml`) and
+both flags follow.
+
+That holds on a fan-out too. `--enum` reached the swarm and stopped there, so
+`--enum SIMPLE --swarm` fanned out over the top heads by capability, which on a
+machine with a frontier head is the most expensive five available and the exact
+opposite of what SIMPLE asks for.
+
+```bash
+hyctl status            # every name, the tier it resolves to, and what serves it
+hyctl dispatch --dry-run --tier simple "add a DTO"
+hyctl dispatch --dry-run --swarm --enum SIMPLE "add a DTO"   # the same heads
+```
+
+Older configs carry a `[[tiers]]` block that assigned heads to those names by
+CapScore band. It is ignored, not rejected: the bands were a second routing
+table and they disagreed with the enum about what every name meant, so
+`--tier simple` billed a paid remote head where `--enum SIMPLE` ran a free
+local one, or the reverse, depending on what `hyctl init` happened to discover.
+Re-run `hyctl init` to drop the block.
+
+### Routing between individual OpenRouter models
+
+By default an `OPENROUTER_API_KEY` gives you one head, routing to one model
+(`OPENROUTER_MODEL`, or a built-in default). Hydra already prices and scores
+OpenRouter's whole catalogue, so naming models turns each into its own head
+that the router can choose between on cost and capability:
+
+```toml
+[openrouter]
+models = ["anthropic/claude-sonnet-4.5", "google/gemini-2.5-pro"]
+```
+
+`hyctl probe` then lists one head per model and says how much of the catalogue
+is enabled ("2 of 423"). A name the catalogue does not have is shown as not
+routable with the reason, rather than quietly dropped. Naming nothing changes
+nothing: the single key-derived head is exactly as before.
 
 ---
 
@@ -765,17 +1128,24 @@ hydra/
 │   ├── ope/                     # Off-policy estimation + counterfactual policy evaluation with intervals
 │   ├── otlp/                    # Dispatch log → OpenTelemetry spans (OTLP/HTTP, nothing sent by default)
 │   ├── sketch/                  # Mergeable relative-error quantile sketch (bounded memory)
+│   ├── embed/                   # Vectors from an embedding model already on the machine
+│   ├── retrieve/                # Hybrid recall: BM25 ⊕ vectors, fused on rank, not on score
 │   ├── rollup/                  # Per-day aggregates: calls, tokens, spend, latency sketch
-│   ├── evalset/                 # Oracle-verified labelled examples: kept verbatim, never pruned
+│   ├── evalset/                 # Oracle-verified labelled examples: verbatim, never pruned, never uploaded
 │   ├── budget/                  # Token-budget governor: 6 static pressure modes + rate-aware first-passage risk on claude_pct
-│   ├── rank/                    # Deduplication + CapScore ranking
+│   ├── modelpull/               # Fetch a model into the local Ollama server (library or HuggingFace GGUF ref)
+│   ├── rank/                    # Deduplication + ranking: CapScore updated by verified outcomes
 │   ├── editor/                  # Scoped, validated, rollback-safe file edits
 │   ├── parallel/                # Independent multi-task fan-out
 │   ├── review/                  # Code review / approve / reject / QA
 │   ├── util/                    # Shared utilities (bounded Accumulator, 33 MB cap)
 │   ├── sysinfo/                 # Hardware detection + 7-day memory history
-│   ├── payload/                 # Opt-in prompt/response store: packed, dictionary-compressed, redacted
-│   ├── runlog/                  # Per-run event log (~/.hydra/logs/runs/) + liveness heartbeat + edit snapshots
+│   ├── payload/                 # Opt-in prompt/response store: chunked, packed, redacted,
+│   │                            #   bounded by a byte budget that evicts oldest packs
+│   ├── waterfall/               # A run as nested spans on a timeline, with each one's
+│   │                            #   verdicts (hyctl trace view, hyctl trace score)
+│   ├── runlog/                  # Per-run span log (~/.hydra/logs/runs/): identity, parent, level,
+│   │                            #   tokens, TTFT, metadata + liveness heartbeat + edit snapshots
 │   │                            # Old runs seal into compressed monthly segments (logs/seg/)
 │   ├── tree/                    # Reconstructs a run: supervision tree + timeline, framework-free
 │   ├── runid/                   # Run/task identity: correlates every log a run produces
@@ -800,7 +1170,9 @@ hydra/
 
 A native window over the same engine, opening on **Chat**: ask for work, and each reply says which
 model answered, at which tier, and what it cost, with the run's timeline narrated live rather than
-after the fact. The composer's model picker groups models by **token pool**, so it shows when a
+after the fact. The reply grows as the model writes it, and when the router falls back, the
+abandoned partial fades to a one-line summary naming the head and why it stopped, expandable to
+read what it had written. The composer's model picker groups models by **token pool**, so it shows when a
 choice spends a quota another model shares (Opus and Sonnet draw from the same one). A companion
 pane beside the thread carries the active head, this run's confidence, per-model measured accuracy
 from the calibration record, and the files the run changed.
@@ -831,7 +1203,7 @@ curl -fsSL https://raw.githubusercontent.com/ankit373/hydra/main/install-app.sh 
 It resolves the newest release (the asset names embed their version, so GitHub's `/latest/download/`
 shortcut cannot address them), verifies the download against the published `.sha256`, installs the
 `.app` to `/Applications`, or the binary to `~/.local/share/hydra` with a `~/.local/bin` symlink on
-Linux, and clears the macOS quarantine flag so the first launch works. `HYDRA_VERSION=v1.4.2` pins
+Linux, and clears the macOS quarantine flag so the first launch works. `HYDRA_VERSION=v1.5.0` pins
 a release; `HYDRA_APP_DIR` changes where it lands.
 
 **Or take the artifact directly**, from the

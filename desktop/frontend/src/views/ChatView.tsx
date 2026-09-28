@@ -1,5 +1,21 @@
 import { useEffect, useRef, useState } from 'react'
-import { AnswerQuestion, Chat, DeclineQuestion, GetDashboard, GetSession, NewRunID } from '../bindings'
+import {
+  AnswerQuestion,
+  Chat,
+  DeclineQuestion,
+  GetDashboard,
+  GetSession,
+  NewRunID,
+  onChatStream,
+} from '../bindings'
+import {
+  abandoned,
+  applyStreamEvent,
+  emptyStream,
+  liveText,
+  type Attempt,
+  type LiveStream,
+} from '../chatStream'
 import type { ChatReply, GovernorPanel, Session as SessionData } from '../types'
 import { ms, usdExact } from '../format'
 import { Timeline } from './Session'
@@ -63,9 +79,17 @@ export function ChatView({
   // guarantees at most one, so this doesn't need to be keyed by turn index.
   const [liveSession, setLiveSession] = useState<SessionData | null>(null)
   const [governor, setGovernor] = useState<GovernorPanel | undefined>()
+  // The dispatch in flight, as it arrives. Null between turns, which is also
+  // what makes a late event from a finished run a no-op.
+  const [live, setLive] = useState<LiveStream | null>(null)
   const logRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // Subscribed once, not per dispatch: a listener torn down and rebuilt around
+  // each send has a window where deltas land with nobody holding them. The
+  // reducer ignores an event whose run is not the one on screen.
+  useEffect(() => onChatStream((ev) => setLive((s) => (s ? applyStreamEvent(s, ev) : s))), [])
 
   // A dispatch keeps running even if the window closes mid-poll; the interval
   // itself must not outlive the component.
@@ -175,6 +199,7 @@ export function ChatView({
     // dispatch finishes, but the run's log exists from the moment it starts.
     const runId = await NewRunID()
     setTurns((t) => [...t, { prompt: p, runId }])
+    setLive(emptyStream(runId))
     watchRun(runId)
     try {
       const reply = await Chat(p, '', runId, '', head)
@@ -191,6 +216,9 @@ export function ChatView({
     } finally {
       stopPolling()
       setLiveSession(null)
+      // The finished turn renders from reply.output, so the live copy is
+      // dropped rather than left to render the same text twice.
+      setLive(null)
       setBusy(false)
     }
   }
@@ -219,6 +247,9 @@ export function ChatView({
     } finally {
       stopPolling()
       setLiveSession(null)
+      // The finished turn renders from reply.output, so the live copy is
+      // dropped rather than left to render the same text twice.
+      setLive(null)
       setBusy(false)
     }
   }
@@ -243,6 +274,9 @@ export function ChatView({
     } finally {
       stopPolling()
       setLiveSession(null)
+      // The finished turn renders from reply.output, so the live copy is
+      // dropped rather than left to render the same text twice.
+      setLive(null)
       setBusy(false)
     }
   }
@@ -307,7 +341,31 @@ export function ChatView({
             <p className="turn__you">{t.prompt}</p>
             {!t.reply && (
               <>
-                <p className="turn__wait">{liveSession?.found ? 'working…' : 'routing…'}</p>
+                {i === turns.length - 1 &&
+                  abandoned(live).map((a, n) => (
+                    <AbandonedAttempt key={n} attempt={a} runId={t.runId} />
+                  ))}
+                {/* The placeholder is what there is to say until the first
+                    token. Once text is arriving it is the answer that says
+                    something is happening, and both at once reads as a stall. */}
+                {!(i === turns.length - 1 && liveText(live)) && (
+                  <p className="turn__wait">{liveSession?.found ? 'working…' : 'routing…'}</p>
+                )}
+                {i === turns.length - 1 && liveText(live) && (
+                  <p className="turn__out turn__out--live">
+                    {liveText(live)}
+                    <span className="turn__caret" aria-hidden="true" />
+                  </p>
+                )}
+                {/* An event went missing, so what is on screen is not the whole
+                    answer. Said plainly rather than shown as if complete; the
+                    reply that follows carries the real output. */}
+                {i === turns.length - 1 && live?.gap && (
+                  <p className="turn__wait">
+                    Some output did not reach the window. The full answer appears when the run
+                    finishes.
+                  </p>
+                )}
                 {/* Same event stream Session's Timeline renders after the fact
                     (runlog.Append writes each event as it happens), shown
                     live here instead of making "what is it doing" a click
@@ -533,4 +591,47 @@ function Waiting({
       </div>
     </div>
   )
+}
+
+/**
+ * A head that streamed and then failed. Collapsed to one line and expandable,
+ * matching the CLI's "⤺ abandoned <head> after ~N chars: <reason>" so the two
+ * surfaces do not disagree about what a fallback looks like.
+ *
+ * <details> rather than a useState toggle: it is a disclosure, and the native
+ * element is keyboard-reachable and announced without rebuilding any of that.
+ */
+function AbandonedAttempt({ attempt, runId }: { attempt: Attempt; runId: string }) {
+  const chars = attempt.text.length
+  const summary = (
+    <>
+      <span className="abandoned__ico" aria-hidden="true">
+        &#10554;
+      </span>{' '}
+      abandoned <b>{attempt.head}</b>
+      {chars > 0 && ` after ~${chars} chars`}
+      {attempt.abandonedReason ? `: ${firstLine(attempt.abandonedReason)}` : ''}
+    </>
+  )
+  // Nothing to expand when it failed before writing anything.
+  if (chars === 0) {
+    return <p className="abandoned">{summary}</p>
+  }
+  return (
+    <details className="abandoned">
+      <summary>{summary}</summary>
+      <p className="abandoned__partial">{attempt.text}</p>
+      {/* Only where payload capture was on: the span exists either way, but
+          without it there is no text stored, so this would send someone to an
+          empty page. Same guard the CLI renderer uses. */}
+      {attempt.recoverable && attempt.spanID && (
+        <code className="abandoned__trace">{`hyctl trace view ${runId} --span ${attempt.spanID}`}</code>
+      )}
+    </details>
+  )
+}
+
+function firstLine(s: string): string {
+  const i = s.indexOf('\n')
+  return i === -1 ? s : s.slice(0, i)
 }

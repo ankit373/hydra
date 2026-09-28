@@ -44,15 +44,44 @@ jobs:
           echo "version=${RC_TAG}" >> "$GITHUB_OUTPUT"
           echo "tag=${RC_TAG}" >> "$GITHUB_OUTPUT"
           echo "sha=${SHA}" >> "$GITHUB_OUTPUT"
+          # GoReleaser's {{ .Version }} is the semver without the leading v, so
+          # the archive filenames need this form and not the tag (#759).
+          echo "semver=${RC_TAG#v}" >> "$GITHUB_OUTPUT"
+
+      # GoReleaser resolves GORELEASER_CURRENT_TAG and reads that tag's
+      # contents, which --skip=validate does not skip (#821). Annotated so the
+      # tag carries its own message; a lightweight one reads the commit's.
+      #
+      # A tag object carries a tagger, and the runner has no git identity: the
+      # OS fallback derives an empty name there. -c rather than `git config`,
+      # so it stays out of the other steps that run git (#824).
+      - name: Create the tag GoReleaser reads
+        run: |
+          git -c user.name="github-actions[bot]" \
+              -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+              tag -a "${{ steps.ver.outputs.tag }}" -m "RC ${{ steps.ver.outputs.sha }}"
 
       - name: Build RC binaries
         uses: goreleaser/goreleaser-action@v7
         with:
-          version: latest
-          args: release --snapshot --clean --skip=publish,sign,sbom
+          # Exact, not latest or ~> v2: 2.17.1 and 2.18.1 disagree on whether a
+          # missing tag is fatal, which killed 24 edge builds unnoticed (#821).
+          version: "2.18.2"
+          # --snapshot made GoReleaser compute its own 0.0.0-SNAPSHOT version
+          # and ignore the tag, so every RC shipped CLI archives that could not
+          # say which release they stood for (#705). It was also swallowing the
+          # missing-tag error, which is why dropping it broke the build; the tag
+          # above is what addresses that, not --skip=validate, which only skips
+          # the git *state* checks (#821).
+          args: release --clean --skip=publish,sign,sbom,validate
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GORELEASER_CURRENT_TAG: ${{ steps.ver.outputs.version }}
+
+      # gh release create refuses a tag that exists locally but not on the
+      # remote, so the build-only tag goes before it creates the real one.
+      - name: Drop the local build tag
+        run: git tag -d "${{ steps.ver.outputs.tag }}"
 
       - name: Publish RC release
         run: |
@@ -70,7 +99,7 @@ jobs:
           **Install RC build**
           \`\`\`bash
           # macOS (Apple Silicon)
-          curl -L https://github.com/ankit373/hydra/releases/download/${{ steps.ver.outputs.tag }}/hydra_${{ steps.ver.outputs.version }}_darwin_arm64.tar.gz | tar xz
+          curl -L https://github.com/ankit373/hydra/releases/download/${{ steps.ver.outputs.tag }}/hydra_${{ steps.ver.outputs.semver }}_darwin_arm64.tar.gz | tar xz
           sudo mv hyctl /usr/local/bin/
           \`\`\`
           EOF

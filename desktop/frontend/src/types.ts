@@ -322,7 +322,10 @@ export interface InstallResult {
   error?: string
 }
 
-export type CoverageStatus = 'enforced' | 'configured' | 'gap' | 'n/a'
+/** 'partial' is a mechanism that is detective rather than preventive. It never
+ *  counts as covered: a control whose own implementation documents it as
+ *  evadable is evidence for an audit trail, not a defence. */
+export type CoverageStatus = 'enforced' | 'configured' | 'partial' | 'gap' | 'n/a'
 
 export interface Category {
   id: string
@@ -341,6 +344,24 @@ export interface Coverage {
   applicable: number
   /** Enforced + Configured. */
   covered: number
+  /** Detective only, deliberately not counted toward percentCovered. */
+  partial: number
+  percentCovered: number
+  /** The OWASP edition every id above belongs to. Only LLM01 and LLM02 keep
+   *  their number between editions, so an id alone does not identify a
+   *  category across two of them. */
+  edition: string
+}
+
+/** Posture against the OWASP Top 10 for Agentic Applications (ASI01-ASI10).
+ *  The LLM list governs what a model says, this governs what a system does,
+ *  and an orchestrator is squarely the second. Same shape as Coverage, kept a
+ *  separate type so the two tables can never be rendered as one score. */
+export interface AgenticCoverage {
+  categories: Category[]
+  applicable: number
+  covered: number
+  partial: number
   percentCovered: number
 }
 
@@ -397,6 +418,9 @@ export interface SecurityReport {
   byHead: HeadRisk[]
   checks: Check[]
   coverage: Coverage
+  /** Posture against the agentic taxonomy, scored beside the LLM one rather
+   *  than instead of it: they answer different questions. */
+  agentic: AgenticCoverage
   /** Hard override: false means the ledger chain was tampered with, the
    *  coverage percentage above cannot be trusted regardless of its value. */
   integrityIntact: boolean
@@ -441,6 +465,25 @@ export interface SecurityReport {
   privilege?: AgentPrivilege[]
   /** AI bill of materials: the model estate, with provenance. */
   bom?: BOMEntry[]
+  /** What the egress gate can and cannot reach, so every number above it is
+   *  read with its scope attached. */
+  boundary: SecurityBoundary
+}
+
+/**
+ * The limit of what the egress gate enforces. It sees the request Hydra
+ * composes; it cannot see inside a CLI-agent head, which is a separate program
+ * that reads files and reaches the network on its own account.
+ */
+export interface SecurityBoundary {
+  /** Heads Hydra builds the request for, so the gate sees every byte. */
+  governed: string[]
+  /** Separate programs handed a prompt. Hydra guarantees what it passes them
+   *  and nothing about what they do next. */
+  opaque: string[]
+  /** The opaque heads declared local-only: a claim about that program rather
+   *  than something Hydra verifies, so it narrows the hole without closing it. */
+  opaqueLocalOnly: string[]
 }
 
 /** What was true, under which rules, over which evidence. */
@@ -571,13 +614,16 @@ export interface Posture {
   checked: string[]
 }
 
+/** How far a correlated attack sequence got. */
+export type Stage = 'injection' | 'recon' | 'escalation' | 'audit-tampering' | 'succeeded'
+
 export interface Incident {
   id: string
   actor: string
   agent?: string
   start: string
   end: string
-  stages: string[]
+  stages: Stage[]
   /** OWASP Risk Rating factors, kept separate so severity can be argued with. */
   likelihood: number
   impact: number
@@ -593,13 +639,24 @@ export interface FrameworkRef {
   curated: boolean
 }
 
+/** What kind of thing the risk is about, which is what groups the register. */
+export type RiskClass =
+  | 'exposure'
+  | 'incident'
+  | 'control'
+  | 'policy'
+  | 'supply-chain'
+  | 'coverage'
+  | 'evidence'
+export type RiskStatus = 'open' | 'accepted' | 'mitigated'
+
 export interface Risk {
   id: string
-  class: string
+  class: RiskClass
   title: string
   detail: string
   severity: Severity
-  status: string
+  status: RiskStatus
   firstSeen?: string
   ageDays: number
   dueInDays: number
@@ -709,19 +766,43 @@ export interface Threats {
   byAction?: SecurityCount[]
 }
 
+export type LedgerAction = 'read' | 'write' | 'exec' | 'network'
+export type Decision = 'allow' | 'deny' | 'ask'
+
+/** What a dispatch's payload was assembled from and where it went. */
+export interface EventProvenance {
+  /** Provenance kinds carried: user, file, head, mcp, web, env. */
+  sources?: string[]
+  /** The files and heads the payload was assembled from. */
+  origins?: string[]
+  /** public | internal | secret. */
+  sensitivity?: string
+  /** Where it went. 'local' never left the machine, 'remote' did. */
+  sink?: string
+}
+
 /** One raw ledger row, the evidence behind a finding. */
 export interface LedgerEvent {
   ts: string
   agent: string
   tool: string
   resource: string
-  action: string
-  decision: string
+  action: LedgerAction
+  decision: Decision
   reason?: string
+  /** Binds the decision to the exact parameters it was made for. */
+  parameters_hash?: string
   classification?: string
   pii_types?: string[]
   flagged?: boolean
   flag_reason?: string
+  /** The local hash chain. Both empty means unchained, not tampered. */
+  prev_hash?: string
+  hash?: string
+  /** The deployment-identity breadcrumb in effect when this was recorded. */
+  config?: string
+  /** Set on dispatch events only. */
+  provenance?: EventProvenance
 }
 
 /** One model that was tried and did not answer. */

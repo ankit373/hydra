@@ -18,6 +18,14 @@
 #   *_present   not null/empty    file_present: true
 #   (no suffix) implicit _eq      in_playbook: true
 #
+# A numeric comparison never matches a field the task did not supply. enum_tier,
+# file_lines and file_count are absent when non-positive (a real tier is 1-10, a
+# real file has a line, a real file set has a file), so `enum_tier_lte: 3` does
+# not fire on an untiered task and `file_lines_lt: 50` does not fire on a
+# dispatch with no file. prompt_length and context_pct are the exception, 0 is a
+# real value for both. A misspelled or non-numeric field name matches nothing
+# rather than everything, so `enum_teir_lte: 3` is inert, not universal (#848).
+#
 # Output flags (consumed by edit.sh / parallel.sh / future tools):
 #
 #   ── Edit format ──────────────────────────────────────────────
@@ -138,6 +146,9 @@ rules:
       validate_strict: true
 
   # ── Context-pressure adjustments ───────────────────────────────────────────
+  # Both of these are inert today: nothing populates context_pct, so neither has
+  # ever fired. Kept rather than deleted because the number exists (the claude_pct
+  # governor measures it) and the rules are what it would drive (#854).
 
   - name: high_context_skip_rubber_duck
     when:

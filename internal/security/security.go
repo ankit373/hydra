@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/ledger"
 	"github.com/ankit373/hydra/internal/provider"
 	"github.com/ankit373/hydra/internal/trust"
@@ -49,6 +50,12 @@ type Report struct {
 
 	// Coverage is Hydra's posture against the OWASP LLM Top 10, the score.
 	Coverage Coverage `json:"coverage"`
+	// Agentic is the posture against the OWASP Top 10 for Agentic
+	// Applications (ASI01-ASI10). The LLM list governs what a model says,
+	// this governs what a system does, and Hydra is squarely the second.
+	// Scoring only the first left seven of the ten risks that actually
+	// describe an orchestrator unassessed.
+	Agentic AgenticCoverage `json:"agentic"`
 	// IntegrityIntact is false when VerifyChain found tampering, a hard
 	// override on Coverage's own percentage, since a tampered ledger means
 	// none of the other evidence in this report can be trusted (mirrors SSL
@@ -87,6 +94,10 @@ type Report struct {
 	Privilege []AgentPrivilege `json:"privilege,omitempty"`
 	// BOM is the model estate: provenance, locality, and what is actually used.
 	BOM []BOMEntry `json:"bom,omitempty"`
+	// Boundary is what the egress gate can and cannot reach, so every other
+	// number here is read with its scope attached rather than as a guarantee
+	// over a CLI-agent head Hydra cannot see inside.
+	Boundary Boundary `json:"boundary"`
 	// Register is the governed view: every finding above as one kind of
 	// object, rated, aged against an SLA, priced and mapped to frameworks.
 	Register RiskRegister `json:"register"`
@@ -153,7 +164,12 @@ type Action struct {
 // heads is the currently-discovered head list (e.g. probe.Run's result),
 // passed in rather than probed here, so this package stays free of any
 // network/subprocess dependency and is testable on plain data.
-func Build(heads []provider.Head) (*Report, error) {
+func Build(heads []provider.Head) (*Report, error) { return BuildWith(heads, nil) }
+
+// BuildWith is Build with the result of a local-server scan, which is network
+// work and so belongs to the caller, the same reasoning that keeps heads out of
+// here. A nil scan renders as "not scanned", never as a pass (#923).
+func BuildWith(heads []provider.Head, servers []LocalServer) (*Report, error) {
 	events, err := ledger.Load(ledger.DefaultPath())
 	if err != nil {
 		return nil, err
@@ -174,18 +190,18 @@ func Build(heads []provider.Head) (*Report, error) {
 	chainRes := ledger.VerifyChainEvents(events, ledger.DefaultPath())
 	r.IntegrityIntact = chainRes.Intact
 
-	// Loaded once, shared by AssessEvidence and computeCoverage's LLM09 check
+	// Loaded once, shared by AssessEvidence and computeCoverage's misinformation check
 	// (both used to independently call trust.LoadRuns on the same file). A
 	// scan failure partway through (a corrupted trust.jsonl) can hand back a
 	// non-nil, partially-populated slice alongside the error, treated as no
-	// runs at all, matching the "any load error means Gap" invariant LLM09's
+	// runs at all, matching the "any load error means Gap" invariant that check's
 	// check relies on, rather than silently reporting Configured off of
 	// truncated/corrupt data.
 	runs, runsErr := trust.LoadRuns(trust.DefaultLogPath())
 	if runsErr != nil {
 		runs = nil
 	}
-	// Ditto: shared by the check below and LLM10's coverage category, instead
+	// Ditto: shared by the check below and the unbounded-consumption category, instead
 	// of each re-scanning events for the same cost-ceiling-denial predicate.
 	costCeilingDenials := countCostCeilingDenials(events)
 
@@ -200,9 +216,11 @@ func Build(heads []provider.Head) (*Report, error) {
 	r.Incidents = CorrelateIncidents(events, r.Blast)
 	r.Privilege = ReviewPrivilege(events, pol)
 	r.BOM = BuildBOM(heads, events, r.SupplyChain)
+	r.Boundary = AssessBoundary(heads)
 	r.Events, r.Truncated = evidenceTail(events)
 
 	r.Checks = []Check{
+		boundaryCheck(r.Boundary),
 		chainCheck(chainRes),
 		costCeilingCheck(costCeilingDenials),
 		provenanceCheck(heads),
@@ -216,10 +234,14 @@ func Build(heads []provider.Head) (*Report, error) {
 		incidentCheck(r.Incidents),
 		privilegeCheck(r.Privilege),
 		bomCheck(r.BOM),
+		localServerCheck(localHeads(heads), servers),
+		advisoryCheck(servers),
+		stateDirCheck(config.Dir()),
 	}
 	r.RiskHistory = ledger.ByDayRisk(events)
 
 	r.Coverage = computeCoverage(pol, r.SupplyChain, runs, costCeilingDenials)
+	r.Agentic = computeAgentic(pol, r.SupplyChain, r.IntegrityIntact)
 
 	historyPath := DefaultScoreHistoryPath()
 	prior := loadScoreHistory(historyPath)
@@ -445,14 +467,14 @@ func priorityRank(p ActionPriority) int {
 }
 
 // costCeilingReason reports whether e was a --max-cost refusal, the one
-// substring check shared by the cost-ceiling Check and the LLM10 detector,
+// substring check shared by the cost-ceiling Check and the unbounded-consumption detector,
 // so the two can never disagree about what counts.
 func costCeilingReason(e ledger.Event) bool {
 	return e.Decision == ledger.Deny && strings.Contains(e.Reason, "cost ceiling")
 }
 
 // countCostCeilingDenials is shared by costCeilingCheck and
-// llm10UnboundedConsumption, both used to independently scan the identical
+// unboundedConsumptionCategory, both used to independently scan the identical
 // events slice testing the same predicate; Build now scans once and passes
 // the count to both.
 func countCostCeilingDenials(events []ledger.Event) int {

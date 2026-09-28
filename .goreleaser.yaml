@@ -34,6 +34,26 @@ builds:
     # so Windows-on-ARM installs 404'd (#262). The target builds and vets clean,
     # and ci.yml's cross-compile job now guards that for all six targets.
 
+  # The standalone verifier. It is the tool for repos that have *not* adopted
+  # Hydra, so requiring a Go toolchain and a clone to get it contradicts its
+  # only purpose. Same six targets, or it is missing exactly where hyctl is not.
+  - id: hyverify
+    main: ./cmd/hyverify
+    binary: hyverify
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+    goos:
+      - darwin
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+
 # ── Archives ──────────────────────────────────────────────────────────────────
 
 archives:

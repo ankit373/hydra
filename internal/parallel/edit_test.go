@@ -5,6 +5,7 @@ package parallel
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/dispatch"
+	"github.com/ankit373/hydra/internal/editor"
 	"github.com/ankit373/hydra/internal/ledger"
 	"github.com/ankit373/hydra/internal/runlog"
 	"github.com/ankit373/hydra/internal/testutil"
@@ -501,8 +503,8 @@ func TestEdit_PassingValidationKeepsTheEdit(t *testing.T) {
 	if got.Status != "ok" {
 		t.Fatalf("result = %+v", got)
 	}
-	if !got.ValidatorPassed {
-		t.Error("ValidatorPassed = false on a passing validator")
+	if got.ValidatorPassed == nil || !*got.ValidatorPassed {
+		t.Errorf("ValidatorPassed = %v, want a recorded pass", got.ValidatorPassed)
 	}
 	if raw, _ := os.ReadFile(file); !strings.Contains(string(raw), "validated content") {
 		t.Errorf("the edit was rolled back despite passing: %q", raw)
@@ -634,22 +636,25 @@ func TestRunValidate_DoesNotFragmentPathsWithSpaces(t *testing.T) {
 	if err := os.WriteFile(spaced, []byte("x"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if rc := runValidate("/bin/test -f {file}", spaced); rc != 0 {
-		t.Errorf("exit %d, the path was fragmented at its spaces", rc)
+	if rc, err := runValidate(context.Background(), "/bin/test -f {file}", spaced); rc != 0 || err != nil {
+		t.Errorf("exit %d (err %v), the path was fragmented at its spaces", rc, err)
 	}
 
-	if rc := runValidate("/usr/bin/false", "ignored"); rc == 0 {
-		t.Error("a failing validator reported success")
+	if rc, err := runValidate(context.Background(), "/usr/bin/false", "ignored"); rc == 0 || err != nil {
+		t.Errorf("a failing validator reported rc %d, err %v, want non-zero and no error", rc, err)
 	}
-	// A template naming a binary that does not exist is a failure, not a pass:
-	// treating "could not run the check" as "the check passed" is how an
-	// unvalidated edit ships.
-	if rc := runValidate("definitely-not-installed-anywhere", "x"); rc == 0 {
-		t.Error("a missing validator binary was treated as a pass")
+	// A template naming a binary that does not exist is still not a pass: the
+	// caller rolls back on the error, so an unvalidated edit does not ship. It
+	// is not a verdict either, which is the part that changed, because blaming
+	// the head for a missing binary put confident false evidence in the corpus
+	// and the calibration (#998).
+	rc, err := runValidate(context.Background(), "definitely-not-installed-anywhere", "x")
+	if !errors.Is(err, editor.ErrValidatorUnavailable) {
+		t.Errorf("a missing validator binary gave rc %d, err %v, want ErrValidatorUnavailable", rc, err)
 	}
 	// An empty template means no validator is configured, which is a pass.
-	if rc := runValidate("", "x"); rc != 0 {
-		t.Errorf("an empty template returned %d, want 0 (no validator configured)", rc)
+	if rc, err := runValidate(context.Background(), "", "x"); rc != 0 || err != nil {
+		t.Errorf("an empty template returned %d, %v, want 0 and no error (no validator configured)", rc, err)
 	}
 }
 
@@ -1041,5 +1046,139 @@ func TestPersistResults_RoundTripsThroughDisk(t *testing.T) {
 	// successes, since a failed edit may still have touched the file.
 	if got[0]["status"] != "ok" || got[1]["status"] != "fail" {
 		t.Errorf("statuses did not round-trip: %v", got)
+	}
+}
+
+// writePolicyApply writes a policy.yaml whose single always-matching rule
+// applies whatever fields the caller names, so a test can trip one cap without
+// tripping the others.
+func writePolicyApply(t *testing.T, apply string) {
+	t.Helper()
+	dir := filepath.Join(os.Getenv("HYDRA_HOME"), "registry")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	body := "version: \"1.0\"\nrules:\n  - name: test_caps\n    when:\n      always: true\n    apply:\n" + apply
+	if err := os.WriteFile(filepath.Join(dir, "policy.yaml"), []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// max_cost_usd was declared in policy.yaml and read by nothing, so an operator
+// reading a $2 ceiling had none. The enforcement already existed in dispatch's
+// preflight; the policy's number simply never reached it (#424).
+func TestEdit_CostCeilingRefusesTheHeadBeforeItRuns(t *testing.T) {
+	repo := editSandbox(t, marked("package main\n"))
+	// A ceiling no head can be under, so the refusal is the policy's and not
+	// a pricing accident.
+	writePolicyApply(t, "      max_cost_usd: 0.0000000001\n")
+
+	file := filepath.Join(repo, "a.go")
+	if err := os.WriteFile(file, []byte("package main\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	original, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got := runEdit(t, Task{
+		Label: "cost", Enum: "MODERATE", File: file,
+		Prompt: "grow this file", Validate: boolPtr(false),
+	})
+
+	if got.Status != "fail" {
+		t.Fatalf("result = %+v, want a failure: the policy's ceiling was not applied", got)
+	}
+	if !strings.Contains(got.Error, "route_failed") || !strings.Contains(got.Error, "exceeds limit") {
+		t.Errorf("Error = %q, want the cost ceiling's own refusal", got.Error)
+	}
+	raw, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(raw) != string(original) {
+		t.Errorf("the file was written despite the ceiling refusing the head:\n%q", raw)
+	}
+}
+
+// max_wall_seconds likewise. Both caps are declared here, so this asserts the
+// pair does not let an edit through; which one refuses is a race and is
+// deliberately not asserted. The deadline's own wiring is tested by
+// TestPolicyDeadline_AppliesMaxWallSeconds, because a test that sets both caps
+// passes even with the deadline deleted, which is how the first version of
+// this let a surviving mutant through.
+func TestEdit_WallClockLimitDeadlinesTheDispatch(t *testing.T) {
+	repo := editSandbox(t, marked("package main\n"))
+	writePolicyApply(t, "      max_wall_seconds: 1\n      max_cost_usd: 0.0000000001\n")
+
+	file := filepath.Join(repo, "a.go")
+	if err := os.WriteFile(file, []byte("package main\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got := runEdit(t, Task{
+		Label: "wall", Enum: "MODERATE", File: file,
+		Prompt: "grow this file", Validate: boolPtr(false),
+	})
+
+	// Either cap may win the race; what must not happen is the edit landing
+	// with both declared. The message has to name which one refused, or the
+	// operator cannot tell a policy refusal from a broken head.
+	if got.Status != "fail" {
+		t.Fatalf("result = %+v, want a failure with both caps set to the unmeetable", got)
+	}
+	if !strings.Contains(got.Error, "max_wall_seconds_exceeded") && !strings.Contains(got.Error, "exceeds limit") {
+		t.Errorf("Error = %q, want it to name the cap that refused", got.Error)
+	}
+}
+
+// And with no caps declared, an edit must still work: a policy.yaml that says
+// nothing must not become a policy that refuses everything.
+//
+// The file is deliberately large and the change small. A one-line file grown
+// to three lines is a 150% diff and trips the *default* 90% cap, which is
+// correct behaviour and not what this test is about.
+func TestEdit_NoCapsDeclaredStillEdits(t *testing.T) {
+	body := "package main\n\nfunc main() {\n"
+	for i := 0; i < 20; i++ {
+		body += "\tprintln(\"line\")\n"
+	}
+	body += "}\n"
+	repo := editSandbox(t, marked(body+"\n// one added line\n"))
+	writePolicyApply(t, "      atomic: true\n")
+
+	file := filepath.Join(repo, "a.go")
+	if err := os.WriteFile(file, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got := runEdit(t, Task{
+		Label: "nocaps", Enum: "MODERATE", File: file,
+		Prompt: "grow this file", Validate: boolPtr(false),
+	})
+
+	if got.Status != "ok" {
+		t.Fatalf("result = %+v, want ok: no cap was declared, so nothing should refuse", got)
+	}
+}
+
+// The same claim hyctl edit was making: this path hardcoded ValidatorPassed on
+// success, so a file type with no validator was reported exactly like one that
+// had passed (#998).
+func TestParallelEdit_AnExtensionWithNoValidatorReportsNoVerdict(t *testing.T) {
+	repo := editSandbox(t, marked("notes"))
+
+	file := filepath.Join(repo, "a.txt")
+	if err := os.WriteFile(file, []byte("notes\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got := runEdit(t, Task{Label: "ok", Enum: "MODERATE", File: file, Prompt: "x"})
+	if got.Status != "ok" {
+		t.Fatalf("result = %+v", got)
+	}
+	if got.ValidatorPassed != nil {
+		t.Errorf("ValidatorPassed = %v, want nil: no validator ran", *got.ValidatorPassed)
 	}
 }
