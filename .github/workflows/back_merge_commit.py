@@ -31,21 +31,34 @@ def call(url, payload=None, method=None):
             "Content-Type": "application/json",
         },
     )
-    with urllib.request.urlopen(req) as r:
-        return json.loads(r.read() or b"{}")
+    try:
+        with urllib.request.urlopen(req) as r:
+            return json.loads(r.read() or b"{}")
+    except urllib.error.HTTPError as e:
+        # The status alone does not say which of several conditions fired; GitHub
+        # puts that in the body, and without it a 422 is unreadable from the log.
+        e.body = (e.read() or b"").decode(errors="replace")
+        print(f"{method or 'GET'} {url} -> {e.code}: {e.body}", file=sys.stderr)
+        raise
 
 
 def main():
     base = run("git", "rev-parse", "origin/develop").strip()
 
-    # Point the branch at develop, so the signed commit below is the only thing
-    # on it. Deleting first keeps this correct when the ref has drifted.
+    # Point the branch at develop, so the signed commit below is the only thing on
+    # it. Update-then-create rather than delete-then-create: GitHub answers a
+    # DELETE for a missing ref with 422 "Reference does not exist", never 404, so
+    # the first version died whenever the branch had been auto-deleted by its own
+    # merge, and fell back to the unsigned push this script exists to avoid. PATCH
+    # answers 422 the same way, so the fallback is on the condition, not the code.
     try:
-        call(f"{API}/repos/{REPO}/git/refs/heads/{BRANCH}", method="DELETE")
+        call(f"{API}/repos/{REPO}/git/refs/heads/{BRANCH}",
+             {"sha": base, "force": True}, method="PATCH")
     except urllib.error.HTTPError as e:
-        if e.code != 404:
+        if e.code not in (404, 422):
             raise
-    call(f"{API}/repos/{REPO}/git/refs", {"ref": f"refs/heads/{BRANCH}", "sha": base})
+        call(f"{API}/repos/{REPO}/git/refs",
+             {"ref": f"refs/heads/{BRANCH}", "sha": base})
 
     # Whatever the cherry-pick actually produced, so a hotfix's files ride along
     # rather than only the release manifest.
