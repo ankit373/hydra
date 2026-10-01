@@ -88,9 +88,14 @@ def main():
         return 0
 
     subject = run("git", "log", "-1", "--format=%s").strip()
+    # The trailer is what the next run reads to find where to resume. Without it a
+    # run that never merged loses its commits: the range is computed per push, so
+    # the next push starts after them and nothing ever carries them.
+    synced = os.environ.get("BACK_MERGE_SOURCE") or run("git", "rev-parse", "HEAD").strip()
     body = ("Automated GitFlow back-merge, replayed onto develop as one commit so "
             "GitHub signs it. A git-pushed runner commit is unsigned, and develop "
-            "requires signatures with no admin bypass.")
+            "requires signatures with no admin bypass."
+            f"\n\nBack-merge-source: {synced}")
     res = call(f"{API}/graphql", {
         "query": """
         mutation($input: CreateCommitOnBranchInput!) {

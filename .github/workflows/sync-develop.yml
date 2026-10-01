@@ -56,6 +56,23 @@ jobs:
           BEFORE="${{ github.event.before }}"
           AFTER="${{ github.event.after }}"
 
+          # Resume from the last sync that is still pending, not from this push.
+          # The range is per push, so a run whose branch never merged leaves its
+          # commits behind for ever: the next push starts after them. An unmerged
+          # back-merge branch is itself the record that this happened, and the
+          # commit on it names the main SHA it carried. Once that branch merges
+          # and goes away, github.event.before is right again.
+          if git fetch origin chore/back-merge-main 2>/dev/null \
+             && ! git diff --quiet origin/develop..FETCH_HEAD; then
+            PENDING=$(git log -1 --format=%B FETCH_HEAD \
+              | sed -n 's/^Back-merge-source: *//p' | head -1)
+            if [ -n "$PENDING" ] && git cat-file -e "$PENDING^{commit}" 2>/dev/null \
+               && git merge-base --is-ancestor "$PENDING" "$AFTER"; then
+              echo "A back-merge is still pending at $PENDING; resuming from there."
+              BEFORE="$PENDING"
+            fi
+          fi
+
           # A real 'before' only exists for an ordinary push to an existing
           # branch. Force-pushes are disabled on main by branch protection, so
           # in practice this fallback only covers the branch's original
@@ -116,7 +133,8 @@ jobs:
           # whoever pushes it, and develop requires signatures with no admin
           # bypass, so stacking a signed commit on top still leaves the unsigned
           # one in the PR and the merge is refused (#1079).
-          if python3 .github/workflows/back_merge_commit.py; then
+          if BACK_MERGE_SOURCE="${{ github.event.after }}" \
+             python3 .github/workflows/back_merge_commit.py; then
             :
           else
             echo "::warning title=Signed back-merge failed::Falling back to a plain push; the PR will need the manual path below."
