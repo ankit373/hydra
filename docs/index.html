@@ -525,6 +525,18 @@ table.cmp tbody tr:last-child td,table.cmp tbody tr:last-child th{border-bottom:
    with no cap they ran ~192 characters a line, and --faint is 3.26:1, under AA. */
 .cmp-note{font-size:13.5px;line-height:1.75;color:var(--dim);margin-top:16px;max-width:62ch;}
 .cmp-note code,.cmp-note .mono{font-family:var(--mono);font-size:.94em;}
+/* The deep detail stays in the DOM, so crawlers and llms.txt readers still get
+   it, but it no longer costs every visitor three screens of scrolling. */
+.more{margin-top:18px;max-width:62ch;border:1px solid var(--line);border-radius:12px;
+  background:rgba(10,12,24,.45);}
+.more>summary{cursor:pointer;list-style:none;padding:13px 16px;font-family:var(--mono);
+  font-size:11.5px;letter-spacing:.06em;color:var(--aqua);display:flex;gap:10px;align-items:baseline;}
+.more>summary::-webkit-details-marker{display:none;}
+.more>summary::before{content:"+";color:var(--violet);width:10px;flex:none;}
+.more[open]>summary::before{content:"\2013";}
+.more>summary:hover{color:var(--cyan);}
+.more-body{padding:0 16px 15px;}
+.more-body .cmp-note:first-child{margin-top:0;}
 .cmp-note b{color:var(--aqua);}
 .cmp-note a{color:var(--dim);text-decoration:underline;text-underline-offset:2px;
   text-decoration-color:var(--line-2);}
@@ -805,10 +817,15 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
 
   <p class="lede" style="margin-top:26px">“4 denied, 2 flagged” and “injection → recon → escalation → an attempt on the audit trail” are the same rows read twice. Only the second one is an incident. Severity is <b>OWASP Risk Rating</b> (likelihood × impact), never a blended score.</p>
 
-  <p class="cmp-note"><b>hyctl security --why</b> opens the whole programme underneath: a risk register on an SLA clock, crosswalked to OWASP LLM / NIST AI RMF / ISO 42001 / MITRE ATLAS / SOC 2 · OWASP LLM Top-10 coverage · a policy audit that finds rules which can <em>never</em> fire · PII exposure resolved against real heads, so a local model is not reported as a leak · control effectiveness, where a control that is configured but never applied reads as <b>inert</b> rather than as protection · head-binary integrity · edit blast radius.</p>
+    <details class="more">
+    <summary>How the verdict is computed, and what it refuses to claim</summary>
+    <div class="more-body">
+<p class="cmp-note"><b>hyctl security --why</b> opens the whole programme underneath: a risk register on an SLA clock, crosswalked to OWASP LLM / NIST AI RMF / ISO 42001 / MITRE ATLAS / SOC 2 · OWASP LLM Top-10 coverage · a policy audit that finds rules which can <em>never</em> fire · PII exposure resolved against real heads, so a local model is not reported as a leak · control effectiveness, where a control that is configured but never applied reads as <b>inert</b> rather than as protection · head-binary integrity · edit blast radius.</p>
   <p class="cmp-note">And the limit no percentage can state, printed in words on the default view: a CLI-agent head is itself an agent, in a process Hydra does not control. The score covers what Hydra <em>sends and records</em>, not what such a head independently reads and ships. Only a local-only run keeps the whole task on your machine.</p>
 
   <p class="cmp-note"><b>Honest about its own limits.</b> Framework mappings are marked <em>curated</em> assertions, not measurements. Defect cost is per-occurrence, not annualised. A file the dependency graph does not index is <em>unknown</em>, never “low-risk”. The attestation is unsigned, because Hydra has no key management and a signature without one is theatre.</p>
+    </div>
+  </details>
 
   <p class="lede" style="margin-top:34px">That covers the agents. The other half is the machine they run on: Hydra discovers local model servers, ranks them and sends real work to them, so <b>their</b> configuration is part of its posture too. It checks them rather than assuming.</p>
 
@@ -830,11 +847,16 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
 
   <p class="lede" style="margin-top:26px">Ollama ships with <b>no authentication</b> and prints no warning when bound to <code>0.0.0.0</code>. A model server answering the network is the one thing that falsifies local-first outright, and nothing was looking. The probe compares the same identity endpoint discovery already uses, between loopback and this machine's own addresses, so nothing goes on the wire and an unrelated listener on the same port is not mistaken for the model server.</p>
 
-  <p class="cmp-note"><b>A fix you don't have is not the same as no fix at all.</b> Advisories are split on it, because a fully current Ollama still carries nine with no fix upstream: one combined count would read identically on a patched server and an abandoned one, and a number that fires when you have already done everything available to you is a number people learn to ignore. Fixable ones name the version to upgrade to. Unfixed ones say plainly that no upgrade answers them and point at the mitigation that exists, which is not reaching the server.</p>
+    <details class="more">
+    <summary>What the machine scan proves, and what it cannot</summary>
+    <div class="more-body">
+<p class="cmp-note"><b>A fix you don't have is not the same as no fix at all.</b> Advisories are split on it, because a fully current Ollama still carries nine with no fix upstream: one combined count would read identically on a patched server and an abandoned one, and a number that fires when you have already done everything available to you is a number people learn to ignore. Fixable ones name the version to upgrade to. Unfixed ones say plainly that no upgrade answers them and point at the mitigation that exists, which is not reaching the server.</p>
 
   <p class="cmp-note"><b>The negative result is the weaker one, and says so.</b> A host firewall that drops the probe looks exactly like a server that is not listening, so <em>loopback only</em> is reported as weaker evidence than <em>exposed</em>. A machine with no non-loopback address ruled nothing out. A lookup that failed is unchecked, never clean. The advisory query is the only part of the whole report that leaves your machine, so it is off unless you ask for it.</p>
 
   <p class="cmp-note"><b>Including its own state directory.</b> The report had always said the head-binary baseline is forgeable by anything able to write <code>~/.hydra</code>, and nothing read a permission bit. Writable is the finding, since that is where the integrity baseline and the ledger's chain anchor live as plain files; readable is reported separately, since it exposes the listing and not the contents. It repairs nothing: the report is a read.</p>
+    </div>
+  </details>
 
   <p class="lede" style="margin-top:26px">The ledger records what an agent did. <b>hyctl mcp registry</b> scores whether the MCP server it was talking to was ever safe to trust in the first place, every existing MCP directory answers “does this exist”, none answer “is it safe to run with my credentials right now”, and star counts are actively misleading (the most-starred servers score worst on quality in independent research). <code>audit</code> resolves what's installed against the official registry and scores it; every trust state drops back to <em>provisional</em> on a version bump, the direct fix for a server that ships clean for months then turns malicious in one release.</p>
 </section>
