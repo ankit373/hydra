@@ -6,6 +6,17 @@ Format: [Semantic Versioning](https://semver.org). Entries from v1.0.1 onward ar
 
 ---
 
+## [1.5.1](https://github.com/ankit373/hydra/compare/v1.5.0...v1.5.1) (2026-10-01)
+
+
+### Bug Fixes
+
+* **ci:** resume a back-merge that never landed, instead of losing its commits ([#1093](https://github.com/ankit373/hydra/issues/1093)) ([9e24c67](https://github.com/ankit373/hydra/commit/9e24c677fdd3e0b0eee621caddd1b9bcf6a6d03b))
+* **ci:** sign the back-merge commit, and stop printing a remedy that does not work ([#1082](https://github.com/ankit373/hydra/issues/1082)) ([b68f6b9](https://github.com/ankit373/hydra/commit/b68f6b90641381fd0bd8e5be675e37e2a2caa6de))
+* **ci:** the signed back-merge never ran — DELETE answers 422, not 404, for a missing ref ([#1090](https://github.com/ankit373/hydra/issues/1090)) ([db474fd](https://github.com/ankit373/hydra/commit/db474fdea921a214f22436ef56dbce45dcc2eece))
+* **site:** pack the FAQ, align the blog column, and give two posts figures ([#1076](https://github.com/ankit373/hydra/issues/1076)) ([6eb87ce](https://github.com/ankit373/hydra/commit/6eb87cef5d1ce2f5ddc93a708475a91ca8990bd9))
+* **site:** stop the checklist rendering one character wide, and cap the measure ([#1080](https://github.com/ankit373/hydra/issues/1080)) ([8929369](https://github.com/ankit373/hydra/commit/89293698cbf8992f41d84d13b8ce94940b1c3c85))
+
 ## [1.5.0](https://github.com/ankit373/hydra/compare/v1.4.2...v1.5.0) (2026-09-28)
 
 
