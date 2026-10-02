@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { Agent, Fleet as FleetData, Run } from '../types'
 import { ms, pct, usdExact } from '../format'
 import { RunGraph } from './RunGraph'
+import { PageHeader } from './PageHeader'
 
 export function Fleet({
   data,
@@ -16,10 +17,7 @@ export function Fleet({
 }) {
   return (
     <>
-      <header className="view__head">
-        <h1 className="view__title">Activity</h1>
-        <p className="view__sub">{activitySummary(data)}</p>
-      </header>
+      <PageHeader title="Activity" subtitle={activitySummary(data)} />
 
       {!data.hasRuns ? (
         <div className="empty">

@@ -25,6 +25,7 @@ import {
 } from '../format'
 import { ArcGauge, Sparkline, SpendTrend, TrustArc } from './DashboardCharts'
 import { useCountUp, useReveal } from '../reveal'
+import { PageHeader } from './PageHeader'
 
 /**
  * `data` is null until App.tsx's first `GetDashboard()` resolves, the
@@ -75,10 +76,10 @@ function HudChrome() {
 
 function DashboardHeader() {
   return (
-    <header className="view__head">
-      <h1 className="view__title view__title--brand">Usage</h1>
-      <p className="view__sub">What you spent, how much context budget is left, and which models earned their answers.</p>
-    </header>
+    <PageHeader
+      title="Usage"
+      subtitle="What you spent, how much context budget is left, and which models earned their answers."
+    />
   )
 }
 
