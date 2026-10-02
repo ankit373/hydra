@@ -324,6 +324,10 @@ export function ChatView({
   // Clearing the transcript is not "delete the runs": every turn's run log
   // outlives it and stays reachable from the sidebar and from Activity.
   const newThread = () => {
+    // The in-flight run keeps going on its own context (#533) and stays
+    // reachable from Activity, but nothing on screen reads it any more, so
+    // its 2s poll has to stop or it ticks for the life of the window.
+    stopPolling()
     setTurns([])
     setPrompt('')
     setLive(null)

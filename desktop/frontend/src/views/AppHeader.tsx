@@ -1,4 +1,5 @@
 import { HydraMark } from '../brand'
+import { UpdateNotice } from './UpdateNotice'
 import { usd } from '../format'
 
 export interface NavItem {
@@ -72,6 +73,9 @@ export function AppHeader({
       </nav>
 
       <div className="apphead__status">
+        {/* Chrome, not content: it used to sit in the rail footer, and after
+            the rail went it rendered loose above the view (#1060). */}
+        <UpdateNotice />
         <button className="apphead__stat" onClick={onHeads} title="What this machine can route to">
           <span
             className={

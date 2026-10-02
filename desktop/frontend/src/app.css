@@ -1256,30 +1256,6 @@ body {
 
 /* ── Fleet ─────────────────────────────────────────────────────────────── */
 
-.rail__live {
-  margin-left: auto;
-  font-family: var(--hy-font-mono);
-  font-size: 10px;
-  background: var(--hy-aqua);
-  color: var(--hy-bg);
-  border-radius: 999px;
-  padding: 1px 6px;
-  font-weight: 700;
-}
-
-/* Amber, not aqua: aqua means "running by itself", this means "stopped, and
-   only you can clear it". Different states must not read alike. */
-.rail__wait {
-  margin-left: auto;
-  font-family: var(--hy-font-mono);
-  font-size: 10px;
-  background: var(--hy-mid);
-  color: #1A1204;
-  border-radius: 999px;
-  padding: 1px 6px;
-  font-weight: 700;
-  box-shadow: 0 0 12px color-mix(in srgb, var(--hy-mid) 55%, transparent);
-}
 
 .runs { display: flex; flex-direction: column; gap: 11px; }
 
@@ -1985,10 +1961,10 @@ body {
 
 
 /* ── Update notice ─────────────────────────────────────────────────────── */
-/* Lives in .rail__foot, next to the version string. Renders nothing at all
-   when up to date, so it adds no weight to the common case. */
+/* Sits in .apphead__status. Renders nothing at all when up to date, so it
+   adds no weight to the common case. */
 
-.update-notice { margin-top: 6px; }
+.update-notice { display: flex; align-items: center; --wails-draggable: no-drag; }
 
 .update-notice__badge {
   appearance: none;
@@ -2750,3 +2726,8 @@ body {
 }
 .chatv__starter:hover { border-color: var(--hy-aqua); color: var(--hy-aqua); }
 .chatv__starter:focus-visible { outline: 2px solid var(--hy-aqua); outline-offset: 2px; }
+
+/* Banners sit above the view in both layouts, and .main--chat carries no
+   padding of its own, so the inset has to come from here. */
+.banners { padding: 18px 30px 0; }
+.main:not(.main--chat) > .banners { padding: 0; }

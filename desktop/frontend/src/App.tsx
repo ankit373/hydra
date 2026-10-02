@@ -27,7 +27,6 @@ import { Security as SecurityView } from "./views/Security";
 import { Models } from "./views/Models";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { ChatView } from "./views/ChatView";
-import { UpdateNotice } from "./views/UpdateNotice";
 import { SetupBanner } from "./views/SetupBanner";
 import { AppHeader } from "./views/AppHeader";
 import { AppFooter } from "./views/AppFooter";
@@ -305,9 +304,13 @@ export default function App() {
         {/* Non-blocking: it sits above whichever view is open rather than
             replacing it, and renders nothing at all once hyctl is found. */}
         {hyctlStatus && !hyctlStatus.found && (
-          <SetupBanner status={hyctlStatus} onChanged={setHyctlStatus} />
+          // Padded by its own wrapper: .main--chat has no padding of its own,
+          // so an unwrapped banner sat flush against the window edge with its
+          // accent bar clipped.
+          <div className="banners">
+            <SetupBanner status={hyctlStatus} onChanged={setHyctlStatus} />
+          </div>
         )}
-        <UpdateNotice />
 
         {/* An error replaces the body but never the shell, a broken read
             should not look like a crashed app. */}
