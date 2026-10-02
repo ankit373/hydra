@@ -10,7 +10,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ankit373/hydra/internal/cache"
-	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/dispatch"
 )
 
@@ -35,9 +34,9 @@ requiring the two prompts to ask about exactly the same things.
 Refusals are prompts the similarity alone would have served and that gate
 stopped. That number is the evidence the gate is worth having.`,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			cfg, err := config.Load()
+			cfg, err := reportConfig()
 			if err != nil {
-				cfg = &config.Config{}
+				return err
 			}
 			st, present := cache.StoredStats(cache.Dir())
 

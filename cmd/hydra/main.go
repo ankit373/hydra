@@ -1894,9 +1894,9 @@ replaced before it is written.`,
 			// answer is knowable anyway: no config means capture was never
 			// opted into. Reporting a missing file instead would be an error
 			// about Hydra's plumbing in place of the answer asked for.
-			cfg, err := config.Load()
+			cfg, err := reportConfig()
 			if err != nil {
-				cfg = &config.Config{}
+				return err
 			}
 			store, err := payload.Open(payload.Dir())
 			if err != nil {

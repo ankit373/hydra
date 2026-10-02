@@ -11,7 +11,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/probe"
 	"github.com/ankit373/hydra/internal/retrieve"
 )
@@ -37,9 +36,9 @@ Capture is off unless it was chosen at ` + "`hyctl init`" + ` or set with
 capture_embeddings in config.toml. Results name the span, so
 ` + "`hyctl trace view --span <id>`" + ` is what shows the run behind one.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := config.Load()
+			cfg, err := reportConfig()
 			if err != nil {
-				cfg = &config.Config{}
+				return err
 			}
 			if !retrieve.Enabled(cfg) {
 				fmt.Println("Capture is off, so there is nothing to search.")
