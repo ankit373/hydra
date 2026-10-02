@@ -889,7 +889,10 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 			// Parks the head so the rest of this run, and the next one, skip
 			// it. A missing binary or an unknown model opens the breaker at
 			// once; anything that might not recur gets a second chance first.
-			d.health.Fail(h.ID, truncate(err.Error(), 120), health.Classify(err), time.Now())
+			// A rate limit is neither, and carries the wait the server asked
+			// for, which is a better number than ours (#1096).
+			stated, _ := health.StatedWait(err)
+			d.health.FailFor(h.ID, truncate(err.Error(), 120), health.Classify(err), time.Now(), stated)
 			// A failed candidate is part of the run's shape: it is why the
 			// fallback chain advanced, and nothing else records it.
 			_ = rl.Append(runlog.Event{
