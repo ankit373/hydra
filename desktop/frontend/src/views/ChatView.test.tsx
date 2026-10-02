@@ -62,8 +62,35 @@ function emptySession(overrides: Partial<SessionData> = {}): SessionData {
   }
 }
 
-function renderDock(onOpenRun: (runID: string) => void = noop, runs: Run[] | null = []) {
-  return render(<ChatView onOpenRun={onOpenRun} focusSignal={0} runs={runs} />)
+function run(over: Partial<Run> = {}): Run {
+  return {
+    id: 'run-1',
+    live: false,
+    waiting: false,
+    startedAt: new Date().toISOString(),
+    elapsedMs: 1000,
+    costUsd: 0,
+    confidence: 0,
+    agents: [],
+    running: 0,
+    ok: 1,
+    failed: 0,
+    pending: 0,
+    allCount: 1,
+    skipped: 0,
+    goal: 'a task',
+    ...over,
+  }
+}
+
+function renderDock(
+  onOpenRun: (runID: string) => void = noop,
+  runs: Run[] | null = [],
+  runsError: string | null = null,
+) {
+  return render(
+    <ChatView onOpenRun={onOpenRun} focusSignal={0} runs={runs} runsError={runsError} />,
+  )
 }
 
 beforeEach(() => {
@@ -551,5 +578,29 @@ describe('a streaming dispatch', () => {
 
     expect(await screen.findByText('mine')).toBeInTheDocument()
     expect(screen.queryByText('mine theirs')).not.toBeInTheDocument()
+  })
+})
+
+describe('the run sidebar when the run log cannot be read', () => {
+  // Null meant both "the first read has not answered" and "the read failed",
+  // so a dead backend left the sidebar saying "Reading run logs…" for ever
+  // (#1100).
+  it('says it is reading while the first read is still out', () => {
+    renderDock(noop, null)
+    expect(screen.getByText('Reading run logs…')).toBeInTheDocument()
+  })
+
+  it('says it could not read once the read has failed', () => {
+    renderDock(noop, null, 'read /logs/runs: input/output error')
+    expect(screen.getByText(/Couldn't read the run log/)).toBeInTheDocument()
+    expect(screen.queryByText('Reading run logs…')).not.toBeInTheDocument()
+  })
+
+  // The polls keep the last good list on purpose; a failed tick must not empty
+  // a sidebar that was right.
+  it('keeps the runs it already has rather than reporting the failure over them', () => {
+    renderDock(noop, [run({ id: 'run-7', goal: 'rotate the signing key' })], 'input/output error')
+    expect(screen.getByText(/rotate the signing key/)).toBeInTheDocument()
+    expect(screen.queryByText(/Couldn't read the run log/)).not.toBeInTheDocument()
   })
 })

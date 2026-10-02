@@ -264,3 +264,41 @@ describe('reachable now, as opposed to declared', () => {
     expect(await screen.findByText('Reachable now')).toBeInTheDocument()
   })
 })
+
+describe('a failed read', () => {
+  // The defect: `if (!reg) return null`. A rejected GetModels left reg null for
+  // ever, so Models rendered an empty body. Measured at 0 characters of text in
+  // a real browser against a backend that would not answer (#1100).
+  it('says what could not be read instead of rendering nothing', async () => {
+    mockModels.mockRejectedValue(new Error('registry/models.yaml: yaml: line 42: bad mapping'))
+    const { container } = render(<Models heads={panel()} />)
+
+    expect(await screen.findByText(/Couldn't read the model registry/)).toBeInTheDocument()
+    // The view is still named, so a failure does not lose where you are.
+    expect(screen.getByRole('heading', { name: 'Models' })).toBeInTheDocument()
+    // And the error itself survives, because it is the part that says what to fix.
+    expect(container.textContent).toMatch(/yaml: line 42/)
+  })
+
+  it('re-reads when the retry is pressed, and renders the catalog it gets', async () => {
+    mockModels.mockRejectedValueOnce(new Error('input/output error'))
+    render(<Models heads={panel()} />)
+    await screen.findByText(/Couldn't read the model registry/)
+
+    mockModels.mockResolvedValue(registry())
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+
+    expect(await screen.findByText('Claude Sonnet (Thinking)')).toBeInTheDocument()
+    expect(screen.queryByText(/Couldn't read/)).not.toBeInTheDocument()
+  })
+
+  // A failing calibration read must not take the catalog down with it: it only
+  // decorates the scorecard, and the models are still worth listing.
+  it('still lists the models when only the calibration read fails', async () => {
+    mockDash.mockRejectedValue(new Error('read cost.jsonl: input/output error'))
+    render(<Models heads={panel()} />)
+
+    expect(await screen.findByText('Claude Sonnet (Thinking)')).toBeInTheDocument()
+    expect(screen.queryByText(/Couldn't read/)).not.toBeInTheDocument()
+  })
+})

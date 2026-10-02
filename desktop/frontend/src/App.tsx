@@ -30,6 +30,7 @@ import { ChatView } from "./views/ChatView";
 import { SetupBanner } from "./views/SetupBanner";
 import { AppHeader } from "./views/AppHeader";
 import { AppFooter } from "./views/AppFooter";
+import { ErrorState } from "./views/ErrorState";
 import { CommandPalette, type Command } from "./views/CommandPalette";
 import { HydraSpinner } from "./brand";
 
@@ -68,6 +69,20 @@ const NAV = [
 /** Session is reached by opening one from Activity, never from the nav. */
 type ViewID = (typeof NAV)[number]["id"] | "session";
 
+/** What each view reads, named as the thing on disk, so a failure says which
+ *  read failed rather than only that one did. */
+const READS: Record<ViewID, string> = {
+  chat: "the run log",
+  models: "the model registry",
+  activity: "the run log",
+  usage: "the spend log",
+  session: "this run's log",
+  audit: "the security report",
+};
+
+const titleFor = (v: ViewID) => NAV.find((n) => n.id === v)?.label ?? "Run";
+const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
+
 export default function App() {
   const [view, setView] = useState<ViewID>("chat");
   const [runID, setRunID] = useState<string>("");
@@ -82,6 +97,10 @@ export default function App() {
   const [version, setVersion] = useState<Version | null>(null);
   const [heads, setHeads] = useState<HeadPanel | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // A failed read and a read still in flight are different states, and both
+  // used to render as null. "probing…" was what a dead backend looked like.
+  const [headsError, setHeadsError] = useState<string | null>(null);
+  const [fleetError, setFleetError] = useState<string | null>(null);
   const [hyctlStatus, setHyctlStatus] = useState<HyctlStatus | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
 
@@ -107,7 +126,7 @@ export default function App() {
       else if (which === "usage") setDashboard(await GetDashboard());
       setError(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(msg(e));
     }
   }, []);
 
@@ -153,10 +172,13 @@ export default function App() {
       }
       if (view !== "activity") {
         void GetFleet()
-          .then(setFleet)
-          .catch(() => {
-            /* Same: a failed read must not empty a list that was correct. */
-          });
+          .then((f) => {
+            setFleet(f);
+            setFleetError(null);
+          })
+          // Same again: a failed read must not empty a list that was correct,
+          // but Chat's sidebar has to stop saying it is still reading.
+          .catch((e) => setFleetError(msg(e)));
       }
     };
     tick();
@@ -169,10 +191,13 @@ export default function App() {
   useEffect(() => {
     const tick = () =>
       void GetHeads()
-        .then(setHeads)
-        .catch(() => {
-          /* Same: keep the last count rather than reporting zero heads. */
-        });
+        .then((h) => {
+          setHeads(h);
+          setHeadsError(null);
+        })
+        // The last count is still kept rather than reported as zero heads;
+        // what is recorded is that the probe is no longer answering.
+        .catch((e) => setHeadsError(msg(e)));
     tick();
     const t = setInterval(tick, HEADS_MS);
     return () => clearInterval(t);
@@ -295,6 +320,7 @@ export default function App() {
         onSelect={selectNav}
         onSearch={() => setPaletteOpen(true)}
         routable={heads ? heads.routable : null}
+        headsError={headsError}
         todayUsd={dashboard ? dashboard.spend.todayUsd : null}
         onHeads={() => setView("models")}
         onSpend={() => setView("usage")}
@@ -314,13 +340,21 @@ export default function App() {
 
         {/* An error replaces the body but never the shell, a broken read
             should not look like a crashed app. */}
-        {error && <div className="error">{error}</div>}
+        {error && (
+          <ErrorState
+            title={titleFor(view)}
+            what={READS[view]}
+            detail={error}
+            onRetry={() => void load(view, runID)}
+          />
+        )}
         {!error && view === "chat" && (
           <ErrorBoundary label="Chat">
             <ChatView
               onOpenRun={openSession}
               focusSignal={chatFocusSignal}
               runs={fleet?.runs ?? null}
+              runsError={fleetError}
             />
           </ErrorBoundary>
         )}
@@ -375,6 +409,7 @@ export default function App() {
         routable={heads ? heads.routable : null}
         total={heads ? heads.heads.length : null}
         local={heads ? heads.heads.filter((h) => h.localOnly).length : null}
+        headsError={headsError}
         todayUsd={dashboard ? dashboard.spend.todayUsd : null}
         calls={dashboard ? dashboard.spend.todayCalls : null}
         mode={dashboard?.governor.known ? dashboard.governor.effectiveMode : ""}
