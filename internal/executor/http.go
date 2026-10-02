@@ -886,7 +886,12 @@ func joinCohereBlocks(blocks []struct {
 
 func httpStatusError(headID string, resp *http.Response) error {
 	b, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-	return fmt.Errorf("http exec %s: status %d, %s", headID, resp.StatusCode, string(b))
+	return &StatusError{
+		HeadID:     headID,
+		Code:       resp.StatusCode,
+		Body:       string(b),
+		RetryAfter: parseRetryAfter(resp.Header.Get("Retry-After"), time.Now()),
+	}
 }
 
 // modelFor prefers the model the discovering provider named, which is what
