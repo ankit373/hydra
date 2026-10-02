@@ -4,11 +4,13 @@
 package config
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 
 	"github.com/BurntSushi/toml"
@@ -224,8 +226,18 @@ func Load() (*Config, error) {
 }
 
 // Save writes cfg to the config file atomically (temp file + rename).
+//
+// What the struct does not declare is carried over rather than deleted.
+// config.toml is a file people hand-edit, and an older `hyctl init` wrote
+// `[[tiers]]` blocks this struct deliberately leaves undecoded, so encoding it
+// over the whole file silently dropped them. Nothing noticed while the wizard
+// was the only writer and always wrote a fresh file (#1103).
 func Save(cfg *Config) error {
 	if err := os.MkdirAll(Dir(), 0o700); err != nil {
+		return err
+	}
+	body, err := render(cfg)
+	if err != nil {
 		return err
 	}
 	tmp, err := os.CreateTemp(Dir(), ".config-*.toml")
@@ -233,7 +245,7 @@ func Save(cfg *Config) error {
 		return fmt.Errorf("config save: %w", err)
 	}
 	tmpName := tmp.Name()
-	if err := toml.NewEncoder(tmp).Encode(cfg); err != nil {
+	if _, err := tmp.Write(body); err != nil {
 		tmp.Close()
 		os.Remove(tmpName)
 		return err
@@ -251,4 +263,77 @@ func Save(cfg *Config) error {
 		return fmt.Errorf("config save: %w", err)
 	}
 	return nil
+}
+
+// render encodes cfg, then puts back the sections of the file on disk that cfg
+// could not have held.
+func render(cfg *Config) ([]byte, error) {
+	var buf bytes.Buffer
+	if err := toml.NewEncoder(&buf).Encode(cfg); err != nil {
+		return nil, err
+	}
+	var doc map[string]any
+	if _, err := toml.Decode(buf.String(), &doc); err != nil {
+		return nil, err
+	}
+	dropEmpty(doc, cfg)
+	for k, v := range carried(Path()) {
+		if _, ours := doc[k]; !ours {
+			doc[k] = v
+		}
+	}
+	var out bytes.Buffer
+	if err := toml.NewEncoder(&out).Encode(doc); err != nil {
+		return nil, err
+	}
+	return out.Bytes(), nil
+}
+
+// dropEmpty removes the keys `omitempty` should have. toml honours it for
+// strings, bools, maps and structs but not for numeric zeros, so every save
+// wrote six `= 0` lines. Zero already means "the built-in default" for each of
+// them, so an explicit zero states nothing the absence did not. Read off the
+// struct tags rather than a list, which would need updating by hand.
+func dropEmpty(doc map[string]any, cfg *Config) {
+	v := reflect.ValueOf(*cfg)
+	for i := 0; i < v.NumField(); i++ {
+		name, opts, _ := strings.Cut(v.Type().Field(i).Tag.Get("toml"), ",")
+		if name != "" && strings.Contains(opts, "omitempty") && v.Field(i).IsZero() {
+			delete(doc, name)
+		}
+	}
+}
+
+// carried returns the top-level sections of the file at path that Config does
+// not declare. Undecoded() is the question asked, so a key is preserved because
+// the struct could not read it, never because it is on a list.
+//
+// An unreadable or absent file carries nothing: Save is also how a first config
+// is written, and refusing there would make the wizard unable to run at all.
+func carried(path string) map[string]any {
+	var probe Config
+	md, err := toml.DecodeFile(path, &probe)
+	if err != nil {
+		return nil
+	}
+	roots := map[string]bool{}
+	for _, k := range md.Undecoded() {
+		if len(k) > 0 {
+			roots[k[0]] = true
+		}
+	}
+	if len(roots) == 0 {
+		return nil
+	}
+	var raw map[string]any
+	if _, err := toml.DecodeFile(path, &raw); err != nil {
+		return nil
+	}
+	out := make(map[string]any, len(roots))
+	for k := range roots {
+		if v, ok := raw[k]; ok {
+			out[k] = v
+		}
+	}
+	return out
 }
