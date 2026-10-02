@@ -3,6 +3,7 @@ import { GetDashboard, GetModels } from '../bindings'
 import type { CalibrationRow, Head, HeadPanel, Model, ModelRegistry } from '../types'
 import { contextWindow, sourceLabel, usdExact } from '../format'
 import { PageHeader } from './PageHeader'
+import { Tabs } from './Tabs'
 
 /** Retrospective, like the other reference views. Mirrors App's DASHBOARD_MS. */
 const SLOW_MS = 5000
@@ -179,26 +180,18 @@ export function Models({ heads }: { heads: HeadPanel | null }) {
         }
       />
 
-      <div className="tabs" role="tablist">
-        {(
-          [
-            ['all', 'All'],
-            ['routable', 'Routable'],
-            ['local', 'Local'],
-            ['off', 'Unreachable'],
-          ] as [Tab, string][]
-        ).map(([id, text]) => (
-          <button
-            key={id}
-            role="tab"
-            className="tabs__tab"
-            aria-selected={tab === id}
-            onClick={() => setTab(id)}
-          >
-            {text} <span className="tabs__n">{counts[id]}</span>
-          </button>
-        ))}
-      </div>
+      <Tabs
+        label="Filter models by reachability"
+        panelID="models-list"
+        current={tab}
+        onSelect={setTab}
+        tabs={[
+          { id: 'all', label: 'All', count: counts.all },
+          { id: 'routable', label: 'Routable', count: counts.routable },
+          { id: 'local', label: 'Local', count: counts.local },
+          { id: 'off', label: 'Unreachable', count: counts.off },
+        ]}
+      />
 
       <div className="catalog">
         <aside className="filters" aria-label="Filters">
@@ -225,7 +218,7 @@ export function Models({ heads }: { heads: HeadPanel | null }) {
           </div>
         </aside>
 
-        <div className="catalog__list">
+        <div className="catalog__list" id="models-list" role="tabpanel">
           {shown.length === 0 && (
             <p className="catalog__empty">
               No model matches. {q && <>Try clearing the search.</>}
