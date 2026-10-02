@@ -130,31 +130,34 @@ a:hover{text-decoration:underline;}
 .nav-item i{width:5px;height:5px;border-radius:50%;background:currentColor;opacity:.5;font-style:normal;}
 .pane{padding:18px 20px;position:relative;}
 
-/* Each pane fades in on its own slice of one 30s loop. Five views, 6s each,
-   a slot is 20% of the loop, which is why the percentages below are not the
-   25%-slot ones this had when there were four. */
-.view{position:absolute;inset:18px 20px;opacity:0;animation:cycle 30s infinite;}
+/* Each pane fades in on its own slice of one 36s loop. Six views, 6s each, so a
+   slot is 16.667% and every percentage below is derived from that. A view added
+   without its own delay inherits 0s and renders on top of the first one, which
+   is what the sixth did (#1108): the slot count is load-bearing, not decorative. */
+.view{position:absolute;inset:18px 20px;opacity:0;animation:cycle 36s infinite;}
 .view:nth-child(1){animation-delay:0s;}
 .view:nth-child(2){animation-delay:6s;}
 .view:nth-child(3){animation-delay:12s;}
 .view:nth-child(4){animation-delay:18s;}
 .view:nth-child(5){animation-delay:24s;}
+.view:nth-child(6){animation-delay:30s;}
 @keyframes cycle{
-  0%,1%    {opacity:0;transform:translateY(6px);}
-  2.5%,18% {opacity:1;transform:none;}
-  20%,100% {opacity:0;transform:translateY(-4px);}
+  0%,0.8%     {opacity:0;transform:translateY(6px);}
+  2.1%,15%    {opacity:1;transform:none;}
+  16.7%,100%  {opacity:0;transform:translateY(-4px);}
 }
-/* The sidebar highlight tracks the same 30s clock. */
-.nav-item{animation:navlit 30s infinite;}
+/* The sidebar highlight tracks the same 36s clock. */
+.nav-item{animation:navlit 36s infinite;}
 .nav-item:nth-of-type(1){animation-delay:0s;}
 .nav-item:nth-of-type(2){animation-delay:6s;}
 .nav-item:nth-of-type(3){animation-delay:12s;}
 .nav-item:nth-of-type(4){animation-delay:18s;}
 .nav-item:nth-of-type(5){animation-delay:24s;}
+.nav-item:nth-of-type(6){animation-delay:30s;}
 @keyframes navlit{
-  0%,1%    {background:transparent;color:var(--dim);}
-  2.5%,18% {background:rgba(0,230,195,.10);color:var(--aqua);}
-  20%,100% {background:transparent;color:var(--dim);}
+  0%,0.8%     {background:transparent;color:var(--dim);}
+  2.1%,15%    {background:rgba(0,230,195,.10);color:var(--aqua);}
+  16.7%,100%  {background:transparent;color:var(--dim);}
 }
 /* Once nav.js confirms click handling is wired, it swaps the autoplay loop
    above for direct control: exactly one view/nav-item active, no timer. */
@@ -162,12 +165,15 @@ a:hover{text-decoration:underline;}
 .win-body.js-active .view.active{opacity:1;}
 .win-body.js-active .nav-item{animation:none;}
 .win-body.js-active .nav-item.active{background:rgba(0,230,195,.10);color:var(--aqua);}
-/* Anyone who has asked the OS to stop moving things gets a static first view. */
+/* Anyone who has asked the OS to stop moving things gets a static first view,
+   but only until nav.js takes over. Unscoped, it kept the first view at
+   opacity 1 under whichever one was clicked, so with reduced motion set every
+   click rendered two views on top of each other. */
 @media(prefers-reduced-motion:reduce){
   .view,.nav-item{animation:none;}
   .view{opacity:0;}
-  .view:nth-child(1){opacity:1;}
-  .nav-item:nth-of-type(1){background:rgba(0,230,195,.10);color:var(--aqua);}
+  .win-body:not(.js-active) .view:nth-child(1){opacity:1;}
+  .win-body:not(.js-active) .nav-item:nth-of-type(1){background:rgba(0,230,195,.10);color:var(--aqua);}
 }
 
 /* Chat view: thread on the left, the glanceable companion pane on the right,
@@ -328,6 +334,7 @@ footer a{color:var(--dim);}
           <button type="button" class="nav-item"><i></i>Activity</button>
           <button type="button" class="nav-item"><i></i>Usage</button>
           <button type="button" class="nav-item"><i></i>Audit</button>
+          <button type="button" class="nav-item"><i></i>Settings</button>
         </div>
 
         <div class="pane">
@@ -439,6 +446,18 @@ footer a{color:var(--dim);}
             <div style="margin-top:12px;font-family:var(--mono);font-size:10px;color:var(--faint)">
               EVERY DECISION IS APPEND-ONLY AND HASH-CHAINED · NOTHING LEAVES THE MACHINE</div>
           </div>
+
+          <!-- 6 · Settings -->
+          <div class="view">
+            <div class="vhead">Settings</div>
+            <div class="vsub">what this machine is set to do, and the only screen that writes</div>
+            <div class="row"><span style="flex:1">Route anything with PII to a local head</span><span class="pill ok">on</span></div>
+            <div class="row"><span style="flex:1">Refuse rather than send, when nothing local is routable</span><span class="pill ok">on</span></div>
+            <div class="row"><span style="flex:1">Keep prompt and response text</span><span style="color:var(--dim)">off</span></div>
+            <div class="row"><span style="flex:1">Serve an answer from a matching earlier question</span><span style="color:var(--dim)">off</span></div>
+            <div style="margin-top:12px;font-family:var(--mono);font-size:10px;color:var(--faint)">
+              EACH SWITCH SAYS WHAT IT COSTS · WRITES ~/.HYDRA/CONFIG.TOML, NOTHING ELSE</div>
+          </div>
         </div>
       </div>
     </div>
@@ -449,16 +468,17 @@ footer a{color:var(--dim);}
   </div>
 </section>
 
-<!-- ══ THE FIVE VIEWS ══════════════════════════════════════════════════ -->
+<!-- ══ THE VIEWS ═══════════════════════════════════════════════════════ -->
 <section class="blk wrap" id="views">
-  <div class="klabel"><span>What's in it</span><b>five views, one question each</b></div>
+  <div class="klabel"><span>What's in it</span><b>six views, one question each</b></div>
   <h2>Each screen answers something you'd otherwise <span class="grad">grep the logs for</span>.</h2>
   <p>
-    The app is a reader, not a second brain. Everything it shows comes from the
-    JSONL files <span class="mono">hyctl</span> already writes to
-    <span class="mono">~/.hydra</span>, so the numbers on screen are the same
-    ones <span class="mono">hyctl cost</span> and <span class="mono">hyctl stats</span>
-    print, by construction.
+    Five of them read and one writes. Everything shown comes from the JSONL files
+    <span class="mono">hyctl</span> already writes to <span class="mono">~/.hydra</span>,
+    so the numbers on screen are the same ones <span class="mono">hyctl cost</span> and
+    <span class="mono">hyctl stats</span> print, by construction. Settings is the
+    exception, and the only file it touches is
+    <span class="mono">config.toml</span>.
   </p>
 
   <div class="grid4">
@@ -505,6 +525,17 @@ footer a{color:var(--dim);}
         run, marking what changed <i>within</i> a modified line, not just which
         lines moved, and lets you accept or undo the change on disk. Clicking a
         file in the graph opens it there.</p>
+    </div>
+    <div class="feat">
+      <div class="tag">Settings</div>
+      <h3>What this machine is set to do</h3>
+      <p>The switches that decide where work may go and what gets kept: PII routed
+        to a local head, refusing rather than sending when nothing local is
+        routable, whether prompt text and vectors are stored at all, and whether
+        an answer may come from a previous run. Each one says what it costs rather
+        than only what it is named, because every one of them is off by default for
+        a reason. A config it cannot parse is reported, never rendered as defaults
+        and never saved over.</p>
     </div>
     <div class="feat">
       <div class="tag">Audit</div>

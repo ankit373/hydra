@@ -25,6 +25,7 @@ import { Fleet } from "./views/Fleet";
 import { Session } from "./views/Session";
 import { Security as SecurityView } from "./views/Security";
 import { Models } from "./views/Models";
+import { Settings } from "./views/Settings";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { ChatView } from "./views/ChatView";
 import { SetupBanner } from "./views/SetupBanner";
@@ -64,6 +65,7 @@ const NAV = [
   { id: "activity", label: "Activity" },
   { id: "usage", label: "Usage" },
   { id: "audit", label: "Audit" },
+  { id: "settings", label: "Settings" },
 ] as const;
 
 /** Session is reached by opening one from Activity, never from the nav. */
@@ -78,6 +80,7 @@ const READS: Record<ViewID, string> = {
   usage: "the spend log",
   session: "this run's log",
   audit: "the security report",
+  settings: "the config",
 };
 
 const titleFor = (v: ViewID) => NAV.find((n) => n.id === v)?.label ?? "Run";
@@ -135,7 +138,7 @@ export default function App() {
   useEffect(() => {
     // Chat and Models drive their own reads, so there is nothing to tick here
     // for them.
-    if (view === "chat" || view === "models") return;
+    if (view === "chat" || view === "models" || view === "settings") return;
     void load(view, runID);
     const every = view === "usage" || view === "audit" ? DASHBOARD_MS : LIVE_MS;
     const t = setInterval(() => void load(view, runID), every);
@@ -361,6 +364,11 @@ export default function App() {
         {!error && view === "models" && (
           <ErrorBoundary label="Models">
             <Models heads={heads} />
+          </ErrorBoundary>
+        )}
+        {!error && view === "settings" && (
+          <ErrorBoundary label="Settings">
+            <Settings />
           </ErrorBoundary>
         )}
         {!error && view === "usage" && (

@@ -71,6 +71,17 @@ const API = {
       { id: 'claude-sonnet-4.5', name: 'Claude Sonnet 4.5', tier: 4, provider: 'anthropic', pool: 'anthropic', complexityMin: 60, complexityMax: 85, speed: 'medium', accuracy: 'high', contextWindow: 200000, enabled: true }] },
     { name: 'local', shared: false, observedCalls: 1904, observedCostUsd: 0, observedTokens: 4_100_000, models: [
       { id: 'qwen3:8b', name: 'Qwen3 8B', tier: 10, provider: 'ollama', pool: 'local', complexityMin: 0, complexityMax: 55, speed: 'fast', accuracy: 'medium', contextWindow: 32768, enabled: true }] }] }),
+  GetSettings: () => delay((window as any).__SET ?? ((window as any).__SET = {
+    path: '/Users/a/.hydra/config.toml', readable: true, exists: true,
+    cortex: 'anthropic/claude-sonnet-4.5', skills: ['code-gen', 'review'],
+    piiLocalOnly: true, strictEgress: true,
+    capturePayloads: false, payloadBudgetMb: 0,
+    captureEmbeddings: true, embedModel: '', embedBudgetMb: 256,
+    cacheAnswers: true, cacheThreshold: 0.95, cacheBudgetMb: 128,
+    exploreRate: 0.05,
+    openRouterModels: ['anthropic/claude-sonnet-4.5', 'google/gemini-2.5-pro'],
+  })),
+  SaveSettings: (s: any) => delay(((window as any).__SET = { ...s, error: '' })),
   GetSecurity: () => (window as any).__SEC(),
 }
 
@@ -94,6 +105,13 @@ const nothing = {
   GetMCPServers: () => delay({ scanned: false, synced: '', servers: [] }),
   GetPendingQuestions: () => delay({ questions: [] }),
   CheckHyctl: () => delay({ found: false, path: '', version: '', supported: false }),
+  GetSettings: () => delay({
+    path: '/Users/a/.hydra/config.toml', readable: true, exists: false,
+    cortex: '', skills: [], piiLocalOnly: false, strictEgress: true,
+    capturePayloads: false, payloadBudgetMb: 0, captureEmbeddings: false,
+    embedModel: '', embedBudgetMb: 0, cacheAnswers: false, cacheThreshold: 0,
+    cacheBudgetMb: 0, exploreRate: 0, openRouterModels: [],
+  }),
   GetModels: () => delay({ found: true, pools: [
     { name: 'anthropic', shared: true, observedCalls: 0, observedCostUsd: 0, observedTokens: 0, models: [
       { id: 'claude-sonnet-4.5', name: 'Claude Sonnet 4.5', tier: 4, provider: 'anthropic', pool: 'anthropic', complexityMin: 60, complexityMax: 85, speed: 'medium', accuracy: 'high', contextWindow: 200000, enabled: true }] }] }),
@@ -111,6 +129,14 @@ const broken = {
   GetSecurity: refused('open /Users/a/.hydra/head_binaries.json: permission denied'),
   GetPendingQuestions: refused('read /Users/a/.hydra/logs/pending: input/output error'),
   GetVersion: refused('exec: "hyctl": executable file not found in $PATH'),
+  GetSettings: () => delay({
+    path: '/Users/a/.hydra/config.toml', readable: false, exists: true,
+    error: 'config /Users/a/.hydra/config.toml is not readable: toml: line 5 (last key "cache_threshold"): expected value but found "oops" instead',
+    cortex: '', skills: [], piiLocalOnly: false, strictEgress: true,
+    capturePayloads: false, payloadBudgetMb: 0, captureEmbeddings: false,
+    embedModel: '', embedBudgetMb: 0, cacheAnswers: false, cacheThreshold: 0,
+    cacheBudgetMb: 0, exploreRate: 0, openRouterModels: [],
+  }),
   CheckHyctl: () => delay({ found: false, path: '', version: '', supported: false }),
 }
 
