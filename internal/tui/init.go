@@ -4,6 +4,7 @@
 package tui
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -345,19 +346,38 @@ func (m InitModel) viewDone(b *strings.Builder) {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+// save overlays the wizard's five answers onto whatever config is already
+// there. It used to build a fresh Config, so re-running the wizard to change
+// the Cortex also discarded the OpenRouter allowlist, the egress setting, the
+// explore rate, the embedding model and every budget and threshold, none of
+// which it asks about (#1103).
 func (m InitModel) save() error {
-	cfg := &config.Config{
-		Cortex: m.cortex.ID,
-		Skills: m.skills,
+	cfg, err := config.Load()
+	switch {
+	case errors.Is(err, config.ErrNotFound):
+		cfg = &config.Config{}
+	case err != nil:
+		// A file that is there and does not parse is the one case where writing
+		// destroys the evidence, which is #1030's lesson in the other direction.
+		return fmt.Errorf("refusing to overwrite %s: %w", config.Path(), err)
 	}
-	if m.localOnly {
-		cfg.Policies = map[string]config.Policy{
-			"pii": {Action: "local-only"},
-		}
-	}
+
+	cfg.Cortex = m.cortex.ID
+	cfg.Skills = m.skills
 	cfg.CapturePayloads = m.capture
 	cfg.CaptureEmbeddings = m.embed
 	cfg.CacheAnswers = m.cache
+
+	if m.localOnly {
+		if cfg.Policies == nil {
+			cfg.Policies = map[string]config.Policy{}
+		}
+		cfg.Policies["pii"] = config.Policy{Action: "local-only"}
+	} else if cfg.Policies["pii"].Action == "local-only" {
+		// Only the rule this question owns. A pii policy saying something else
+		// was set by hand and answering "no" here is not a request to delete it.
+		delete(cfg.Policies, "pii")
+	}
 	return config.Save(cfg)
 }
 
