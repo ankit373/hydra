@@ -21,6 +21,7 @@ import type {
   ReviewOutcome,
   QuestionQueue,
   SecurityReport,
+  Settings,
   Session,
   UpdateStatus,
   UpgradeResult,
@@ -54,6 +55,8 @@ interface WailsGo {
       InstallHyctl(): Promise<InstallResult>
       GetSecurity(): Promise<SecurityReport>
       GetModels(): Promise<ModelRegistry>
+      GetSettings(): Promise<Settings>
+      SaveSettings(s: Settings): Promise<Settings>
     }
   }
 }
@@ -128,3 +131,5 @@ export const CheckHyctl = (): Promise<HyctlStatus> => backend().CheckHyctl()
 export const InstallHyctl = (): Promise<InstallResult> => backend().InstallHyctl()
 export const GetSecurity = (): Promise<SecurityReport> => backend().GetSecurity()
 export const GetModels = (): Promise<ModelRegistry> => backend().GetModels()
+export const GetSettings = (): Promise<Settings> => backend().GetSettings()
+export const SaveSettings = (s: Settings): Promise<Settings> => backend().SaveSettings(s)

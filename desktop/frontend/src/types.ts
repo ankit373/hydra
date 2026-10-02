@@ -894,3 +894,32 @@ export interface ModelRegistry {
   error?: string
   pools: Pool[]
 }
+
+/** The config the app may change. A narrow slice of config.Config: the switches
+ *  internal/config argues should be decided rather than inherited. */
+export interface Settings {
+  path: string
+  /** False when a config exists and does not parse, where rendering defaults
+   *  would invite saving over the only record of what was meant. */
+  readable: boolean
+  error?: string
+  /** Separates "never configured" from "configured", which otherwise read the
+   *  same once both render as defaults. */
+  exists: boolean
+  cortex: string
+  skills: string[]
+  piiLocalOnly: boolean
+  strictEgress: boolean
+  capturePayloads: boolean
+  payloadBudgetMb: number
+  captureEmbeddings: boolean
+  embedModel: string
+  embedBudgetMb: number
+  cacheAnswers: boolean
+  cacheThreshold: number
+  cacheBudgetMb: number
+  exploreRate: number
+  /** Read-only here: editing an allowlist needs the catalogue in front of you,
+   *  which is the Models view's job. */
+  openRouterModels: string[]
+}

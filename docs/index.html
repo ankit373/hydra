@@ -79,7 +79,7 @@
       "hyctl serve, an OpenAI-compatible endpoint in front of the router, so any tool that speaks OpenAI routes through Hydra: the model field is the routing instruction (hydra, hydra/hard, hydra/t4, or a head id), and tool calling is passed through on every chat dialect it speaks, not just the OpenAI one, so agent loops work. It streams: stream: true is answered as server-sent events, and a fallback after output has already gone out ends the stream rather than appending a second head's answer to an abandoned partial",
       "hyctl serve binds loopback and refuses an off-loopback bind with no token, rather than warning, because the endpoint spends money and reads your code",
       "Interactive TUI cockpit (hyctl tui), chat, route work, and watch spend live",
-      "Desktop app (Wails v2) for macOS, Windows and Linux, chat-first, with a pool-aware model picker and a routing pane, plus Models, Activity, Usage and Audit views",
+      "Desktop app (Wails v2) for macOS, Windows and Linux, chat-first, with a pool-aware model picker and a routing pane, plus Models, Activity, Usage, Audit and Settings views",
       "Per-run span log, identity, parent, level, tokens and time-to-first-token, at 35 bytes a span on disk",
       "hyctl trace view, a run as a waterfall of nested spans, drilling into what each one asked and answered",
       "hyctl trace score, oracle and human verdicts attached to the span they judge, so a trace says whether the answer was right and not only what it cost",
@@ -987,7 +987,7 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
     Everything above is the CLI. The same control plane has a desktop app that
     opens on a chat: ask for work, and every reply says which model answered, at
     which tier, and what it cost, beside a pane showing what the router knows.
-    Models, Activity, Usage and Audit sit behind it, over the logs
+    Models, Activity, Usage, Audit and Settings sit behind it, over the logs
     <code>hyctl</code> already writes. No account, no server, nothing leaves the
     machine.
   </p>

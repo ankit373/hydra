@@ -39,6 +39,7 @@ func wireRoots() []any {
 		DiffLine{}, ReviewOutcome{}, MCPServer{}, MCPPanel{}, MCPSyncResult{},
 		Head{}, HeadPanel{}, Span{}, Diff{}, Session{}, ChatReply{},
 		PendingQuestion{}, QuestionQueue{}, HyctlStatus{}, InstallResult{},
+		Settings{},
 	}
 }
 
