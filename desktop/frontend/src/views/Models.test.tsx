@@ -1,13 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { Models, reachClass, reachText } from './Models'
-import { GetDashboard, GetHeads, GetModels } from '../bindings'
-import type { CalibrationRow, Model, ModelRegistry } from '../types'
+import { GetDashboard, GetModels } from '../bindings'
+import type { CalibrationRow, Head, HeadPanel, Model, ModelRegistry } from '../types'
 
-vi.mock('../bindings', () => ({ GetModels: vi.fn(), GetDashboard: vi.fn(), GetHeads: vi.fn() }))
+vi.mock('../bindings', () => ({ GetModels: vi.fn(), GetDashboard: vi.fn() }))
 const mockModels = vi.mocked(GetModels)
 const mockDash = vi.mocked(GetDashboard)
-const mockHeads = vi.mocked(GetHeads)
+
+/** Heads reach the view as a prop now: it used to call probe.Run on a 5s tick. */
+function panel(heads: Head[] = []): HeadPanel {
+  return { heads, routable: heads.filter((h) => h.routable).length }
+}
 
 function model(over: Partial<Model> = {}): Model {
   return {
@@ -50,7 +54,6 @@ function cal(over: Partial<CalibrationRow> = {}): CalibrationRow {
 beforeEach(() => {
   mockModels.mockResolvedValue(registry())
   mockDash.mockResolvedValue({ calibration: [] } as never)
-  mockHeads.mockResolvedValue({ heads: [], routable: 0 })
 })
 afterEach(() => {
   cleanup()
@@ -58,11 +61,13 @@ afterEach(() => {
 })
 
 describe('the model list', () => {
-  it('groups by shared quota and says when a quota is shared', async () => {
-    render(<Models />)
+  it('names the quota a model spends and says when that quota is shared', async () => {
+    render(<Models heads={panel()} />)
     // agy_claude -> "Claude"; the raw pool key is config, not a label.
-    expect(await screen.findByText('Claude')).toBeInTheDocument()
-    expect(screen.getByText('shared quota')).toBeInTheDocument()
+    const spend = await screen.findAllByTitle(/not a reading of the provider/i)
+    expect(spend[0].textContent).toMatch(/Claude/)
+    // Once per model in the pool: the fact is about the row, not a group header.
+    expect(screen.getAllByText('shared quota')).toHaveLength(2)
   })
 
   it('does not claim a quota is shared when it has one member', async () => {
@@ -80,7 +85,7 @@ describe('the model list', () => {
         ],
       }),
     )
-    render(<Models />)
+    render(<Models heads={panel()} />)
     // Twice by design: the list row, and the scorecard for the selected model.
     expect(await screen.findAllByText('Qwen')).toHaveLength(2)
     // Flagged shared, but with nothing to contend against, so saying so would mislead.
@@ -90,8 +95,8 @@ describe('the model list', () => {
   // Observed spend is Hydra's own log, not a provider balance. The wording and
   // the tooltip both have to stop short of implying otherwise.
   it('labels pool spend as logged, never as remaining quota', async () => {
-    render(<Models />)
-    const spend = await screen.findByTitle(/not a reading of the provider/i)
+    render(<Models heads={panel()} />)
+    const spend = (await screen.findAllByTitle(/not a reading of the provider/i))[0]
     expect(spend.textContent).toMatch(/12 requests/)
     expect(spend.textContent).toMatch(/logged/)
   })
@@ -112,8 +117,8 @@ describe('the model list', () => {
         ],
       }),
     )
-    render(<Models />)
-    const spend = await screen.findByTitle(/not a reading of the provider/i)
+    render(<Models heads={panel()} />)
+    const spend = (await screen.findAllByTitle(/not a reading of the provider/i))[0]
     expect(spend.textContent).toMatch(/9 requests/)
     expect(spend.textContent).toMatch(/no cost/)
     expect(spend.textContent).not.toMatch(/logged/)
@@ -134,7 +139,7 @@ describe('the model list', () => {
         ],
       }),
     )
-    render(<Models />)
+    render(<Models heads={panel()} />)
     expect(await screen.findAllByText('Claude Sonnet (Thinking)')).toHaveLength(2)
     // Stated once, on the reachability line, which also gives the reason. It
     // used to be said twice, a separate badge plus that line.
@@ -142,15 +147,25 @@ describe('the model list', () => {
   })
 })
 
+/**
+ * The list sorts cheapest tier first, so the default selection is whichever
+ * model that is. Every scorecard assertion below is about one named model's
+ * record, so it opens that model rather than trusting the ordering.
+ */
+async function openScorecard(name: string) {
+  fireEvent.click(await screen.findByText(name))
+}
+
 describe('the scorecard never states a score it cannot support', () => {
   it('says nothing is measured rather than showing a zero', async () => {
-    render(<Models />)
+    render(<Models heads={panel()} />)
     expect(await screen.findByText(/absence of evidence, not a low score/i)).toBeInTheDocument()
   })
 
   it('always prints the outcome count beside the evidence weight', async () => {
     mockDash.mockResolvedValue({ calibration: [cal()] } as never)
-    render(<Models />)
+    render(<Models heads={panel()} />)
+    await openScorecard('Claude Sonnet (Thinking)')
     expect(await screen.findByText('1.42')).toBeInTheDocument()
     expect(screen.getByText(/62 outcomes/)).toBeInTheDocument()
   })
@@ -158,7 +173,8 @@ describe('the scorecard never states a score it cannot support', () => {
   // The trap from #593: a high D on a handful of samples is not a measurement.
   it('flags a strong-looking score built on too few outcomes', async () => {
     mockDash.mockResolvedValue({ calibration: [cal({ d: 2.41, n: 4 })] } as never)
-    render(<Models />)
+    render(<Models heads={panel()} />)
+    await openScorecard('Claude Sonnet (Thinking)')
     const score = await screen.findByText('2.41')
     expect(screen.getByText(/too few to trust/i)).toBeInTheDocument()
     // Muted, not green: it must not read as a finding.
@@ -168,13 +184,15 @@ describe('the scorecard never states a score it cannot support', () => {
 
   it('grades a genuinely strong record as strong', async () => {
     mockDash.mockResolvedValue({ calibration: [cal({ d: 1.42, n: 62 })] } as never)
-    render(<Models />)
+    render(<Models heads={panel()} />)
+    await openScorecard('Claude Sonnet (Thinking)')
     expect((await screen.findByText('1.42')).className).toMatch(/--strong/)
   })
 
   it('grades a weak record as weak even with plenty of outcomes', async () => {
     mockDash.mockResolvedValue({ calibration: [cal({ d: 0.28, n: 40 })] } as never)
-    render(<Models />)
+    render(<Models heads={panel()} />)
+    await openScorecard('Claude Sonnet (Thinking)')
     expect((await screen.findByText('0.28')).className).toMatch(/--weak/)
   })
 })
@@ -182,7 +200,7 @@ describe('the scorecard never states a score it cannot support', () => {
 describe('when the registry cannot be read', () => {
   it('says it could not look, rather than showing an empty list as fact', async () => {
     mockModels.mockResolvedValue({ found: false, error: 'malformed models.yaml', pools: [] })
-    render(<Models />)
+    render(<Models heads={panel()} />)
     expect(await screen.findByText(/Couldn't read the model registry/i)).toBeInTheDocument()
     expect(screen.getByText(/malformed models.yaml/)).toBeInTheDocument()
   })
@@ -190,7 +208,7 @@ describe('when the registry cannot be read', () => {
   it('renders nothing at all before the first read resolves', async () => {
     let release: (r: ModelRegistry) => void = () => {}
     mockModels.mockReturnValue(new Promise<ModelRegistry>((r) => (release = r)))
-    const { container } = render(<Models />)
+    const { container } = render(<Models heads={panel()} />)
     expect(container).toBeEmptyDOMElement()
     release(registry())
     await waitFor(() => expect(container).not.toBeEmptyDOMElement())
@@ -207,6 +225,15 @@ describe('reachable now, as opposed to declared', () => {
   it('is unknown before the probe answers, rather than guessing a dot', () => {
     expect(reachClass(model_, null)).toBe('unknown')
     expect(reachText(model_, null)).toBe('checking…')
+  })
+
+  it('renders the unknown dot, not an off one, before the probe answers', async () => {
+    render(<Models heads={null} />)
+    const dots = await screen.findAllByTitle('checking…')
+    for (const d of dots) {
+      expect(d.className).toMatch(/--unknown/)
+      expect(d.className).not.toMatch(/--off/)
+    }
   })
 
   it('is live only when a probed head for it is routable', () => {
@@ -233,8 +260,7 @@ describe('reachable now, as opposed to declared', () => {
   })
 
   it('reports reachability in the scorecard', async () => {
-    mockHeads.mockResolvedValue({ heads: [], routable: 0 })
-    render(<Models />)
+      render(<Models heads={panel()} />)
     expect(await screen.findByText('Reachable now')).toBeInTheDocument()
   })
 })

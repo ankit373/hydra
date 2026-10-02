@@ -13,9 +13,9 @@ const RECHECK_MS = 60 * 60 * 1000
 type Phase = 'idle' | 'upgrading' | 'done' | 'failed'
 
 /**
- * Lives in the rail footer next to the version string. Renders nothing when
- * already current, the common case, so there is zero visual noise until an
- * update actually exists.
+ * Lives in the header's status cluster, beside the head count and spend.
+ * Renders nothing when already current, the common case, so there is zero
+ * visual noise until an update actually exists.
  *
  * "Upgrade now" runs install-app.sh as a subprocess (same script the docs
  * point a user at for a fresh install) rather than replacing this running

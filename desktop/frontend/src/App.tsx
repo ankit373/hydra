@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   CheckHyctl,
   GetDashboard,
   GetEdits,
   GetFleet,
+  GetHeads,
   GetPendingQuestions,
   GetSecurity,
   GetSession,
@@ -13,6 +14,7 @@ import type {
   Dashboard as DashboardData,
   Edit,
   Fleet as FleetData,
+  HeadPanel,
   HyctlStatus,
   SecurityReport,
   Session as SessionData,
@@ -25,9 +27,11 @@ import { Security as SecurityView } from "./views/Security";
 import { Models } from "./views/Models";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { ChatView } from "./views/ChatView";
-import { UpdateNotice } from "./views/UpdateNotice";
 import { SetupBanner } from "./views/SetupBanner";
-import { HydraMark, HydraSpinner } from "./brand";
+import { AppHeader } from "./views/AppHeader";
+import { AppFooter } from "./views/AppFooter";
+import { CommandPalette, type Command } from "./views/CommandPalette";
+import { HydraSpinner } from "./brand";
 
 /** Dashboard is retrospective, a slow refresh is enough and costs nothing. */
 const DASHBOARD_MS = 5000;
@@ -39,27 +43,29 @@ const DASHBOARD_MS = 5000;
  */
 const LIVE_MS = 2000;
 
-// Chat first, and default: the app's job is to get work dispatched, and every
-// other view is retrospective (#520). Glyphs keep the rail narrow enough that
-// chat gets the width; label still ships as the tooltip and accessible name.
+/** The footer's spend, when Usage is not the open view and not already polling it. */
+const CHROME_MS = 15000;
+
+/** Heads come from probe.Run, which scans the machine, so the chrome asks rarely. */
+const HEADS_MS = 60000;
+
 /**
  * Industry vocabulary, from the signed-off design: Chat, Models, Activity,
  * Usage, Audit. The old labels were Hydra's internal names (dispatch, fleet,
  * governor), which is why the released build read as jargon.
  *
- * Agents is deliberately absent until it has real content: its headline group
- * is "waiting on you", which needs the pending-question path (#583). A nav
- * item that is always empty is exactly the hollowness this replaces.
+ * Labels, not glyphs. The rail shipped five unlabelled characters
+ * (✎ ⌘ ≡ ▫ ⛨) whose meaning was carried entirely by a tooltip (#1060).
  */
 const NAV = [
-  { id: "chat", label: "Chat", glyph: "\u270E", ready: true },
-  { id: "models", label: "Models", glyph: "\u2318", ready: true },
-  { id: "activity", label: "Activity", glyph: "\u2261", ready: true },
-  { id: "usage", label: "Usage", glyph: "\u25EB", ready: true },
-  { id: "audit", label: "Audit", glyph: "\u26E8", ready: true },
+  { id: "chat", label: "Chat" },
+  { id: "models", label: "Models" },
+  { id: "activity", label: "Activity" },
+  { id: "usage", label: "Usage" },
+  { id: "audit", label: "Audit" },
 ] as const;
 
-/** Session is reached by opening one from Activity, never from the rail. */
+/** Session is reached by opening one from Activity, never from the nav. */
 type ViewID = (typeof NAV)[number]["id"] | "session";
 
 export default function App() {
@@ -74,8 +80,10 @@ export default function App() {
   const [edits, setEdits] = useState<Edit[] | null>(null);
   const [security, setSecurity] = useState<SecurityReport | null>(null);
   const [version, setVersion] = useState<Version | null>(null);
+  const [heads, setHeads] = useState<HeadPanel | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [hyctlStatus, setHyctlStatus] = useState<HyctlStatus | null>(null);
+  const [paletteOpen, setPaletteOpen] = useState(false);
 
   // Fleet's empty state sends people here to start a task (#422). A counter
   // rather than a boolean so asking twice still moves the caret back to the
@@ -129,6 +137,47 @@ export default function App() {
     return () => clearInterval(t);
   }, []);
 
+  // The footer's spend, and the run list Chat's sidebar and the palette read.
+  // Each is skipped while the view that owns it is open and already polling it
+  // faster, so neither file is read twice on one tick. Polling fleet here is
+  // also what finally makes the Activity badge count live runs from anywhere:
+  // it only ever updated while Activity was the open view.
+  useEffect(() => {
+    const tick = () => {
+      if (view !== "usage") {
+        void GetDashboard()
+          .then(setDashboard)
+          .catch(() => {
+            /* Chrome, not content: a failed read keeps the last known figure. */
+          });
+      }
+      if (view !== "activity") {
+        void GetFleet()
+          .then(setFleet)
+          .catch(() => {
+            /* Same: a failed read must not empty a list that was correct. */
+          });
+      }
+    };
+    tick();
+    const t = setInterval(tick, CHROME_MS);
+    return () => clearInterval(t);
+  }, [view]);
+
+  // Heads drive the header's routable count and the footer. probe.Run scans
+  // the machine, so this ticks an order of magnitude slower than the rest.
+  useEffect(() => {
+    const tick = () =>
+      void GetHeads()
+        .then(setHeads)
+        .catch(() => {
+          /* Same: keep the last count rather than reporting zero heads. */
+        });
+    tick();
+    const t = setInterval(tick, HEADS_MS);
+    return () => clearInterval(t);
+  }, []);
+
   useEffect(() => {
     GetVersion()
       .then(setVersion)
@@ -172,10 +221,59 @@ export default function App() {
     setView("session");
   }, []);
 
-  // Session is reachable by drilling in from Fleet; selecting it with no run
-  // chosen opens the most recent one, which is what "Session" means with no
-  // further qualification.
-  const selectNav = useCallback((id: ViewID) => setView(id), []);
+  const selectNav = useCallback((id: string) => setView(id as ViewID), []);
+
+  // ⌘K anywhere. Bound on the window rather than a field so it works from a
+  // view that has focus in a textarea, which is where Chat leaves it.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setPaletteOpen((o) => !o);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  const commands = useMemo<Command[]>(() => {
+    const out: Command[] = NAV.map((n) => ({
+      id: `view:${n.id}`,
+      label: n.label,
+      group: "Go to",
+      run: () => setView(n.id),
+    }));
+    for (const r of fleet?.runs ?? []) {
+      out.push({
+        id: `run:${r.id}`,
+        label: r.goal || r.id,
+        group: "Recent runs",
+        hint: r.live ? "running" : r.id,
+        run: () => openSession(r.id),
+      });
+    }
+    for (const h of heads?.heads ?? []) {
+      out.push({
+        id: `head:${h.id}`,
+        label: h.id,
+        group: "Heads",
+        hint: h.routable ? `tier ${h.tier}` : "unroutable",
+        run: () => setView("models"),
+      });
+    }
+    return out;
+  }, [fleet, heads, openSession]);
+
+  const nav = useMemo(
+    () =>
+      NAV.map((n) => ({
+        ...n,
+        badge:
+          n.id === "chat" ? waiting : n.id === "activity" ? (fleet?.liveCount ?? 0) : 0,
+        live: n.id === "activity",
+      })),
+    [waiting, fleet],
+  );
 
   // Dashboard handles its own loading state (a skeleton, not this fallback
   // text) so its first-load window can look like the rest of the view
@@ -185,52 +283,33 @@ export default function App() {
     (view === "session" && (!session || !edits)) ||
     (view === "audit" && !security);
 
+  // Session is a drill-in from Activity, so the nav keeps Activity lit rather
+  // than lighting nothing at all.
+  const navCurrent = view === "session" ? "activity" : view;
+
   return (
     <div className="shell">
-      <nav className="rail rail--icons" aria-label="Views">
-        <HydraMark className="rail__mark" />
-        <div className="rail__nav">
-          {NAV.map((n) => (
-            <button
-              key={n.id}
-              className="rail__item"
-              aria-current={view === n.id ? "page" : undefined}
-              aria-label={n.label}
-              title={n.label}
-              disabled={!n.ready}
-              onClick={() => n.ready && selectNav(n.id)}
-            >
-              <span aria-hidden="true">{n.glyph}</span>
-              {n.id === "activity" && (fleet?.liveCount ?? 0) > 0 && (
-                <span className="rail__live">{fleet?.liveCount}</span>
-              )}
-              {n.id === "chat" && waiting > 0 && (
-                <span
-                  className="rail__wait"
-                  title={`${waiting} ${waiting === 1 ? "task" : "tasks"} waiting on you`}
-                >
-                  {waiting}
-                </span>
-              )}
-            </button>
-          ))}
-        </div>
-        <div className="rail__foot">
-          <UpdateNotice />
-          <span
-            className="rail__ver"
-            title={version ? `${version.version} · ${version.commit}` : ""}
-          >
-            {version ? version.version : ""}
-          </span>
-        </div>
-      </nav>
+      <AppHeader
+        nav={nav}
+        current={navCurrent}
+        onSelect={selectNav}
+        onSearch={() => setPaletteOpen(true)}
+        routable={heads ? heads.routable : null}
+        todayUsd={dashboard ? dashboard.spend.todayUsd : null}
+        onHeads={() => setView("models")}
+        onSpend={() => setView("usage")}
+      />
 
       <main className={view === "chat" ? "main main--chat" : "main"}>
         {/* Non-blocking: it sits above whichever view is open rather than
             replacing it, and renders nothing at all once hyctl is found. */}
         {hyctlStatus && !hyctlStatus.found && (
-          <SetupBanner status={hyctlStatus} onChanged={setHyctlStatus} />
+          // Padded by its own wrapper: .main--chat has no padding of its own,
+          // so an unwrapped banner sat flush against the window edge with its
+          // accent bar clipped.
+          <div className="banners">
+            <SetupBanner status={hyctlStatus} onChanged={setHyctlStatus} />
+          </div>
         )}
 
         {/* An error replaces the body but never the shell, a broken read
@@ -238,12 +317,16 @@ export default function App() {
         {error && <div className="error">{error}</div>}
         {!error && view === "chat" && (
           <ErrorBoundary label="Chat">
-            <ChatView onOpenRun={openSession} focusSignal={chatFocusSignal} />
+            <ChatView
+              onOpenRun={openSession}
+              focusSignal={chatFocusSignal}
+              runs={fleet?.runs ?? null}
+            />
           </ErrorBoundary>
         )}
         {!error && view === "models" && (
           <ErrorBoundary label="Models">
-            <Models />
+            <Models heads={heads} />
           </ErrorBoundary>
         )}
         {!error && view === "usage" && (
@@ -286,6 +369,22 @@ export default function App() {
           </div>
         )}
       </main>
+
+      <AppFooter
+        version={version}
+        routable={heads ? heads.routable : null}
+        total={heads ? heads.heads.length : null}
+        local={heads ? heads.heads.filter((h) => h.localOnly).length : null}
+        todayUsd={dashboard ? dashboard.spend.todayUsd : null}
+        calls={dashboard ? dashboard.spend.todayCalls : null}
+        mode={dashboard?.governor.known ? dashboard.governor.effectiveMode : ""}
+      />
+
+      <CommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        commands={commands}
+      />
     </div>
   );
 }

@@ -12,7 +12,7 @@ import {
   NewRunID,
   onChatStream,
 } from '../bindings'
-import type { ChatReply, Session as SessionData } from '../types'
+import type { ChatReply, Run, Session as SessionData } from '../types'
 import type { ChatStreamEvent } from '../chatStream'
 
 // ChatView talks to the Go backend only through these bindings, mocking the
@@ -62,8 +62,8 @@ function emptySession(overrides: Partial<SessionData> = {}): SessionData {
   }
 }
 
-function renderDock(onOpenRun: (runID: string) => void = noop) {
-  return render(<ChatView onOpenRun={onOpenRun} focusSignal={0} />)
+function renderDock(onOpenRun: (runID: string) => void = noop, runs: Run[] | null = []) {
+  return render(<ChatView onOpenRun={onOpenRun} focusSignal={0} runs={runs} />)
 }
 
 beforeEach(() => {
@@ -189,7 +189,10 @@ describe('recovery after the view closes (#533)', () => {
     unmount()
     renderDock()
 
-    expect(await screen.findByText('remember me')).toBeInTheDocument()
+    // Twice by design: the breadcrumb names the thread, the transcript is the
+    // turn. Asserted on the transcript, which is what recovery is about.
+    const restored = await screen.findAllByText('remember me')
+    expect(restored.map((e) => e.className)).toContain('turn__you')
     expect(screen.getByText('the answer')).toBeInTheDocument()
   })
 
@@ -208,7 +211,9 @@ describe('recovery after the view closes (#533)', () => {
 
     renderDock()
 
-    expect(await screen.findByText('still going')).toBeInTheDocument()
+    expect(
+      (await screen.findAllByText('still going')).map((e) => e.className),
+    ).toContain('turn__you')
     expect(await screen.findByText('working…')).toBeInTheDocument()
     expect(screen.getByText('head selected')).toBeInTheDocument()
     await waitFor(() => expect(screen.getByPlaceholderText('working…')).toBeDisabled())

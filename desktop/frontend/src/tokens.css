@@ -4,6 +4,23 @@
    Change a brand value HERE, nowhere else. Kills the duplicated hardcoded
    colors called out in REDESIGN_SCOPE.md Phase 0.
    ──────────────────────────────────────────────────────────────────────── */
+/* The app shipped no fonts at all: tokens.css named these two and nothing
+   loaded them, so every released build rendered in the OS default sans. */
+@font-face {
+  font-family: "Space Grotesk";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("/fonts/SpaceGrotesk.woff2") format("woff2");
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("/fonts/JetBrainsMono.woff2") format("woff2");
+}
+
 :root {
   /* ── Surfaces ── */
   --hy-bg:        #06070F;              /* base, near-black, faint blue-violet bias */
@@ -42,6 +59,14 @@
   /* ── Type ── */
   --hy-font-display: "Space Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif;
   --hy-font-mono:    "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+
+  /* ── Chrome metrics ── */
+  --hy-head-h:    52px;
+  --hy-foot-h:    28px;
+  /* The macOS traffic lights float over the content under
+     mac.TitleBarHiddenInset(), so the header reserves their width. */
+  --hy-traffic-w: 78px;
 
   /* ── Radii ── */
   --hy-radius-sm: 8px;

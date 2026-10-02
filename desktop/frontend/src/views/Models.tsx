@@ -1,25 +1,49 @@
 import { useEffect, useMemo, useState } from 'react'
-import { GetDashboard, GetHeads, GetModels } from '../bindings'
-import type { CalibrationRow, Head, Model, ModelRegistry, Pool } from '../types'
-import { sourceLabel, usdExact } from '../format'
+import { GetDashboard, GetModels } from '../bindings'
+import type { CalibrationRow, Head, HeadPanel, Model, ModelRegistry } from '../types'
+import { contextWindow, sourceLabel, usdExact } from '../format'
+import { PageHeader } from './PageHeader'
 
 /** Retrospective, like the other reference views. Mirrors App's DASHBOARD_MS. */
 const SLOW_MS = 5000
 
+type Tab = 'all' | 'routable' | 'local' | 'off'
+type Sort = 'tier' | 'name' | 'used' | 'context'
+
+/** A registry model joined to the head that can actually drive it. */
+interface Row {
+  model: Model
+  pool: string
+  /** True only when the quota has something to contend against: a one-member
+   *  pool is flagged shared in models.yaml and saying so would mislead. */
+  shared: boolean
+  head?: Head
+  reach: 'on' | 'off' | 'unknown'
+  /** Why it is or is not reachable, in words. Derived once, because the dot's
+   *  tooltip and the scorecard's line must never disagree. */
+  reachText: string
+  calls: number
+  costUsd: number
+}
+
 /**
  * What this machine can route to, and how well each one has actually done.
  *
- * The registry has shipped since #553 and until now fed nothing but the
- * composer's picker, so the app could route to twelve models and show you none
- * of them. Grouped by shared quota rather than by vendor, because the quota is
- * what a choice actually spends.
+ * Laid out as a catalog (filters · list · record) rather than a bare grouped
+ * list, which is the shape every model directory in the field has converged
+ * on and the shape this data was already rich enough to fill (#1060).
+ *
+ * `heads` is a prop rather than its own read: the view used to call GetHeads
+ * on a 5s tick, and GetHeads is probe.Run, a full machine scan.
  */
-export function Models() {
+export function Models({ heads }: { heads: HeadPanel | null }) {
   const [reg, setReg] = useState<ModelRegistry | null>(null)
   const [cal, setCal] = useState<CalibrationRow[]>([])
   const [selected, setSelected] = useState<string>('')
-  // What is actually reachable, as opposed to what models.yaml declares.
-  const [heads, setHeads] = useState<Head[] | null>(null)
+  const [q, setQ] = useState('')
+  const [tab, setTab] = useState<Tab>('all')
+  const [sort, setSort] = useState<Sort>('tier')
+  const [providers, setProviders] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     const load = () => {
@@ -27,24 +51,89 @@ export function Models() {
       void GetDashboard()
         .then((d) => setCal(d.calibration ?? []))
         .catch(() => {})
-      void GetHeads()
-        .then((p) => setHeads(p.heads))
-        .catch(() => {})
     }
     load()
     const t = setInterval(load, SLOW_MS)
     return () => clearInterval(t)
   }, [])
 
-  const all = useMemo(() => reg?.pools.flatMap((p) => p.models) ?? [], [reg])
-  const current = all.find((m) => m.id === selected) ?? all[0]
+  const rows = useMemo<Row[]>(() => {
+    const hs = heads?.heads ?? null
+    return (reg?.pools ?? []).flatMap((p) =>
+      p.models.map((m) => {
+        const head = hs?.find((h) => h.id === m.id)
+        // Observed spend is recorded per pool, not per model, so it is
+        // attributed to the pool and shown as the pool's, never split.
+        return {
+          model: m,
+          pool: p.name,
+          shared: p.shared && p.models.length > 1,
+          head,
+          reach: reachClass(m, hs),
+          reachText: reachText(m, hs),
+          calls: p.observedCalls,
+          costUsd: p.observedCostUsd,
+        } as Row
+      }),
+    )
+  }, [reg, heads])
+
+  const counts = useMemo(
+    () => ({
+      all: rows.length,
+      routable: rows.filter((r) => r.reach === 'on').length,
+      local: rows.filter((r) => r.head?.localOnly).length,
+      off: rows.filter((r) => r.reach === 'off').length,
+    }),
+    [rows],
+  )
+
+  const allProviders = useMemo(
+    () => [...new Set(rows.map((r) => r.model.provider).filter(Boolean))].sort(),
+    [rows],
+  )
+
+  const shown = useMemo(() => {
+    const needle = q.trim().toLowerCase()
+    const out = rows.filter((r) => {
+      if (tab === 'routable' && r.reach !== 'on') return false
+      if (tab === 'local' && !r.head?.localOnly) return false
+      if (tab === 'off' && r.reach !== 'off') return false
+      if (providers.size > 0 && !providers.has(r.model.provider)) return false
+      if (!needle) return true
+      return (
+        r.model.id.toLowerCase().includes(needle) ||
+        (r.model.name || '').toLowerCase().includes(needle) ||
+        r.model.provider.toLowerCase().includes(needle)
+      )
+    })
+    const by: Record<Sort, (a: Row, b: Row) => number> = {
+      // Tier is a price band and ties are common, so every comparator falls
+      // through to the id: a non-total order re-shuffles on each render.
+      tier: (a, b) => a.model.tier - b.model.tier || a.model.id.localeCompare(b.model.id),
+      name: (a, b) => label(a.model).localeCompare(label(b.model)),
+      used: (a, b) => b.calls - a.calls || a.model.id.localeCompare(b.model.id),
+      context: (a, b) =>
+        b.model.contextWindow - a.model.contextWindow || a.model.id.localeCompare(b.model.id),
+    }
+    return [...out].sort(by[sort])
+  }, [rows, q, tab, sort, providers])
+
+  const current = shown.find((r) => r.model.id === selected) ?? shown[0]
+
+  const toggleProvider = (p: string) =>
+    setProviders((s) => {
+      const next = new Set(s)
+      next.has(p) ? next.delete(p) : next.add(p)
+      return next
+    })
 
   if (!reg) return null
 
   if (!reg.found) {
     return (
       <>
-        <Head />
+        <PageHeader title="Models" subtitle="What this machine can route to." />
         <div className="empty">
           <p className="empty__title">Couldn't read the model registry</p>
           <p>{reg.error || 'models.yaml could not be parsed.'}</p>
@@ -55,78 +144,144 @@ export function Models() {
 
   return (
     <>
-      <Head />
-      <div className="models">
-        <div className="models__tree">
-          {reg.pools.map((p) => (
-            <PoolGroup
-              key={p.name}
-              pool={p}
-              heads={heads}
-              selected={current?.id ?? ''}
-              onSelect={setSelected}
+      <PageHeader
+        title="Models"
+        subtitle="What this machine can route to, and how well each one has actually done."
+        provenance={
+          heads
+            ? `${heads.routable} of ${heads.heads.length} discovered heads routable · declared by models.yaml, reachability by probe`
+            : 'probing the machine for reachable heads…'
+        }
+        toolbar={
+          <>
+            <input
+              className="tb__search"
+              value={q}
+              placeholder="Search models…"
+              aria-label="Search models"
+              onChange={(e) => setQ(e.target.value)}
+            />
+            <select
+              className="tb__select"
+              value={sort}
+              aria-label="Sort by"
+              onChange={(e) => setSort(e.target.value as Sort)}
+            >
+              <option value="tier">Cheapest tier first</option>
+              <option value="name">Name</option>
+              <option value="used">Most used</option>
+              <option value="context">Largest context</option>
+            </select>
+            <span className="tb__count">
+              {shown.length} of {rows.length}
+            </span>
+          </>
+        }
+      />
+
+      <div className="tabs" role="tablist">
+        {(
+          [
+            ['all', 'All'],
+            ['routable', 'Routable'],
+            ['local', 'Local'],
+            ['off', 'Unreachable'],
+          ] as [Tab, string][]
+        ).map(([id, text]) => (
+          <button
+            key={id}
+            role="tab"
+            className="tabs__tab"
+            aria-selected={tab === id}
+            onClick={() => setTab(id)}
+          >
+            {text} <span className="tabs__n">{counts[id]}</span>
+          </button>
+        ))}
+      </div>
+
+      <div className="catalog">
+        <aside className="filters" aria-label="Filters">
+          <div className="filters__group">
+            <div className="filters__title">Provider</div>
+            {allProviders.map((p) => (
+              <label key={p} className="filters__check">
+                <input
+                  type="checkbox"
+                  checked={providers.has(p)}
+                  onChange={() => toggleProvider(p)}
+                />
+                <span>{p}</span>
+                <span className="filters__n">
+                  {rows.filter((r) => r.model.provider === p).length}
+                </span>
+              </label>
+            ))}
+            {providers.size > 0 && (
+              <button className="filters__clear" onClick={() => setProviders(new Set())}>
+                Clear
+              </button>
+            )}
+          </div>
+        </aside>
+
+        <div className="catalog__list">
+          {shown.length === 0 && (
+            <p className="catalog__empty">
+              No model matches. {q && <>Try clearing the search.</>}
+            </p>
+          )}
+          {shown.map((r) => (
+            <ModelRow
+              key={r.model.id}
+              row={r}
+              active={current?.model.id === r.model.id}
+              onSelect={() => setSelected(r.model.id)}
             />
           ))}
         </div>
-        {current && <Scorecard model={current} cal={cal} heads={heads} />}
+
+        {current && <Scorecard row={current} cal={cal} />}
       </div>
     </>
   )
 }
 
-function Head() {
+/** One catalog row: identity, what it is for, and what it costs. */
+function ModelRow({ row, active, onSelect }: { row: Row; active: boolean; onSelect: () => void }) {
+  const { model: m, head } = row
   return (
-    <header className="view__head">
-      <h1 className="view__title">Models</h1>
-      <p className="view__sub">What this machine can route to, grouped by the quota each one spends.</p>
-    </header>
-  )
-}
-
-function PoolGroup({
-  pool,
-  heads,
-  selected,
-  onSelect,
-}: {
-  pool: Pool
-  heads: Head[] | null
-  selected: string
-  onSelect: (id: string) => void
-}) {
-  return (
-    <section className="pool-g">
-      <div className="pool-g__head">
-        <span className="pool-g__name">{poolLabel(pool.name)}</span>
-        {pool.shared && pool.models.length > 1 && <span className="pool-g__shared">shared quota</span>}
-        {pool.observedCalls > 0 && (
+    <button className="mcard" aria-current={active ? 'true' : undefined} onClick={onSelect}>
+      <span className="mcard__top">
+        <span className={`mcard__dot mcard__dot--${row.reach}`} title={row.reachText} />
+        <span className="mcard__name">{label(m)}</span>
+        {head?.localOnly && <span className="tag tag--local">local</span>}
+        {row.shared && <span className="tag tag--shared">shared quota</span>}
+        {row.reach === 'off' && <span className="tag tag--off">unreachable</span>}
+        <span className="mcard__spacer" />
+        <span className="mcard__tier">T{m.tier}</span>
+        <span className={`mcard__price mcard__price--${priceBand(m.tier)}`}>
+          {priceMark(m.tier)}
+        </span>
+      </span>
+      <span className="mcard__id">{m.id}</span>
+      <span className="mcard__meta">
+        <span>{m.provider}</span>
+        <span>{m.contextWindow > 0 ? `${contextWindow(m.contextWindow)} context` : 'context unknown'}</span>
+        <span>complexity {complexity(m)}</span>
+        {m.speed && <span>{m.speed.replace(/_/g, ' ')}</span>}
+        {row.calls > 0 && (
           <span
-            className="pool-g__spend"
+            className="mcard__used"
             title="What Hydra logged against this quota. Not a reading of the provider's remaining balance."
           >
-            {pool.observedCalls} requests &middot;{' '}
-            {pool.observedCostUsd > 0 ? `${usdExact(pool.observedCostUsd)} logged` : 'no cost'}
+            {poolLabel(row.pool)} &middot; {row.calls} requests &middot;{' '}
+            {/* usdExact renders 0 as an em-dash, which would read "— logged". */}
+            {row.costUsd > 0 ? `${usdExact(row.costUsd)} logged` : 'no cost'}
           </span>
         )}
-      </div>
-      {pool.models.map((m) => (
-        <button
-          key={m.id}
-          className="mrow"
-          aria-current={m.id === selected ? 'true' : undefined}
-          onClick={() => onSelect(m.id)}
-        >
-          <span
-            className={`mrow__dot mrow__dot--${reachClass(m, heads)}`}
-            title={reachText(m, heads)}
-          />
-          <span className="mrow__name">{m.name || m.id}</span>
-          <span className="mrow__tier">T{m.tier}</span>
-          <span className="mrow__band">{complexity(m)}</span>
-          <span className={`mrow__cost mrow__cost--${priceBand(m.tier)}`}>{priceMark(m.tier)}</span>
-        </button>
-      ))}
-    </section>
+      </span>
+    </button>
   )
 }
 
@@ -135,23 +290,26 @@ function PoolGroup({
  * below it is what was measured, and it never shows a score without the
  * sample count that decides whether the score means anything (#593).
  */
-function Scorecard({ model, cal, heads }: { model: Model; cal: CalibrationRow[]; heads: Head[] | null }) {
+function Scorecard({ row, cal }: { row: Row; cal: CalibrationRow[] }) {
+  const { model } = row
   const rows = cal.filter((r) => matches(r.source, model))
 
   return (
     <aside className="scard">
-      <div className="scard__name">{model.name || model.id}</div>
+      <div className="scard__name">{label(model)}</div>
       <div className="scard__sub">
         {model.provider} &middot; tier <span className="scard__hl">T{model.tier}</span>
       </div>
 
       <div className="scard__rule" />
       {/* First, because it decides whether anything below is actionable. */}
-      <Line k="Reachable now" v={reachText(model, heads)} />
+      <Line k="Reachable now" v={row.reachText} />
       <Line k="Handles complexity" v={complexity(model)} />
       <Line k="Speed" v={model.speed ? model.speed.replace(/_/g, ' ') : '—'} />
       <Line k="Accuracy claimed" v={model.accuracy ? model.accuracy.replace(/_/g, ' ') : '—'} />
-      <Line k="Context window" v={model.contextWindow > 0 ? `${Math.round(model.contextWindow / 1000)}k` : '—'} />
+      <Line k="Context window" v={contextWindow(model.contextWindow)} />
+      <Line k="Quota" v={poolLabel(row.pool)} />
+      {row.costUsd > 0 && <Line k="Logged on quota" v={usdExact(row.costUsd)} />}
 
       <div className="scard__rule" />
       <div className="scard__lbl">Measured record</div>
@@ -185,6 +343,10 @@ function Line({ k, v }: { k: string; v: string }) {
       <span className="scard__v">{v}</span>
     </div>
   )
+}
+
+function label(m: Model): string {
+  return m.name || m.id
 }
 
 function complexity(m: Model): string {
@@ -241,22 +403,18 @@ export function poolLabel(name: string): string {
  *
  * The dot used to come from models.yaml's `enabled` flag, which CLAUDE.md
  * calls an install-specific default, so a head with no API key, or an Ollama
- * model whose server is down, rendered as on. The view's own subtitle says
- * "what this machine can route to", which the registry alone cannot support.
+ * model whose server is down, rendered as on.
  *
- * The agy provider emits one head per *enabled* tier keyed by the same id, so
- * a registry model with no matching head is either switched off or was not
- * discovered, and those need different fixes, so they are not merged.
+ * A null head list is "nothing has looked yet", which is not the same as
+ * "nothing matched": a dot either way before the first probe would be a guess.
  */
 function headFor(m: Model, heads: Head[] | null): Head | undefined {
   return heads?.find((h) => h.id === m.id)
 }
 
 export function reachClass(m: Model, heads: Head[] | null): 'on' | 'off' | 'unknown' {
-  if (!heads) return 'unknown' // not probed yet; a dot either way would be a guess
-  const h = headFor(m, heads)
-  if (!h) return 'off'
-  return h.routable ? 'on' : 'off'
+  if (!heads) return 'unknown'
+  return headFor(m, heads)?.routable ? 'on' : 'off'
 }
 
 export function reachText(m: Model, heads: Head[] | null): string {
