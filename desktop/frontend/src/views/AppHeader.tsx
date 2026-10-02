@@ -19,6 +19,9 @@ interface Props {
   /** Null until the first probe answers, so "no heads" never renders as a fact
    *  before anything has looked. */
   routable: number | null
+  /** Why the last probe did not answer. A failure is not a probe still in
+   *  flight, and null meant both. */
+  headsError: string | null
   todayUsd: number | null
   onHeads: () => void
   onSpend: () => void
@@ -35,6 +38,7 @@ export function AppHeader({
   onSelect,
   onSearch,
   routable,
+  headsError,
   todayUsd,
   onHeads,
   onSpend,
@@ -76,19 +80,30 @@ export function AppHeader({
         {/* Chrome, not content: it used to sit in the rail footer, and after
             the rail went it rendered loose above the view (#1060). */}
         <UpdateNotice />
-        <button className="apphead__stat" onClick={onHeads} title="What this machine can route to">
+        <button
+          className="apphead__stat"
+          onClick={onHeads}
+          title={headsError || 'What this machine can route to'}
+        >
           <span
             className={
-              routable === null
-                ? 'apphead__dot apphead__dot--unknown'
-                : routable > 0
+              routable !== null
+                ? routable > 0
                   ? 'apphead__dot apphead__dot--ok'
                   : 'apphead__dot apphead__dot--none'
+                : headsError
+                  ? 'apphead__dot apphead__dot--none'
+                  : 'apphead__dot apphead__dot--unknown'
             }
             aria-hidden="true"
           />
-          {/* An unread probe is not zero heads: one is "nothing looked yet". */}
-          {routable === null ? 'probing…' : `${routable} routable`}
+          {/* Three states, not two: an unread probe is not zero heads, and a
+              probe that failed is not one still running. */}
+          {routable !== null
+            ? `${routable} routable`
+            : headsError
+              ? 'probe failed'
+              : 'probing…'}
         </button>
         <button className="apphead__stat" onClick={onSpend} title="What you spent today">
           {todayUsd === null ? '—' : usd(todayUsd)}

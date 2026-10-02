@@ -74,11 +74,15 @@ export function ChatView({
   onOpenRun,
   focusSignal,
   runs,
+  runsError,
 }: {
   onOpenRun: (runID: string) => void
   focusSignal: number
   /** Recent runs for the sidebar. Null until the first fleet read answers. */
   runs: Run[] | null
+  /** Why that read did not answer, so the sidebar stops claiming it is still
+   *  reading something it has already given up on. */
+  runsError?: string | null
 }) {
   const [prompt, setPrompt] = useState('')
   // Empty means auto-route. The model's own id, not its tier: a tier cannot
@@ -346,7 +350,7 @@ export function ChatView({
 
   return (
     <div className="chatv-shell">
-      <ChatSidebar runs={runs} onOpen={onOpenRun} onNew={newThread} />
+      <ChatSidebar runs={runs} runsError={runsError} onOpen={onOpenRun} onNew={newThread} />
 
       <section className={turns.length === 0 ? 'chatv chatv--empty' : 'chatv'}>
       <header className="chatv__head">
@@ -536,10 +540,12 @@ export function ChatView({
  */
 function ChatSidebar({
   runs,
+  runsError,
   onOpen,
   onNew,
 }: {
   runs: Run[] | null
+  runsError?: string | null
   onOpen: (id: string) => void
   onNew: () => void
 }) {
@@ -561,7 +567,12 @@ function ChatSidebar({
       )}
 
       <div className="chatside__grp">Recent</div>
-      {runs === null && <p className="chatside__note">Reading run logs…</p>}
+      {/* A read that failed is not one still in flight, and both were null. */}
+      {runs === null && (
+        <p className="chatside__note" title={runsError ?? ''}>
+          {runsError ? "Couldn't read the run log." : 'Reading run logs…'}
+        </p>
+      )}
       {runs !== null && done.length === 0 && (
         <p className="chatside__note">Nothing yet. Ask something and it shows up here.</p>
       )}

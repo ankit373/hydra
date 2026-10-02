@@ -5,6 +5,8 @@ interface Props {
   version: Version | null
   /** Null while the first probe is still running. */
   routable: number | null
+  /** Set once a probe has failed, which is not the same as one still running. */
+  headsError: string | null
   total: number | null
   local: number | null
   todayUsd: number | null
@@ -17,7 +19,16 @@ interface Props {
  * reason, so the footer costs no extra call; it just stops those facts being
  * three clicks away.
  */
-export function AppFooter({ version, routable, total, local, todayUsd, calls, mode }: Props) {
+export function AppFooter({
+  version,
+  routable,
+  headsError,
+  total,
+  local,
+  todayUsd,
+  calls,
+  mode,
+}: Props) {
   return (
     <footer className="appfoot">
       <span className="appfoot__item appfoot__item--ver" title={version?.commit ?? ''}>
@@ -29,7 +40,7 @@ export function AppFooter({ version, routable, total, local, todayUsd, calls, mo
 
       <span className="appfoot__item">
         {routable === null || total === null ? (
-          'probing heads…'
+          <span title={headsError ?? ''}>{headsError ? 'probe failed' : 'probing heads…'}</span>
         ) : (
           <>
             <strong>{routable}</strong> of {total} heads routable

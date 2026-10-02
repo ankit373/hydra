@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { GetDashboard, GetModels } from '../bindings'
 import type { CalibrationRow, Head, HeadPanel, Model, ModelRegistry } from '../types'
 import { contextWindow, sourceLabel, usdExact } from '../format'
 import { PageHeader } from './PageHeader'
 import { Tabs } from './Tabs'
+import { ErrorState } from './ErrorState'
 
 /** Retrospective, like the other reference views. Mirrors App's DASHBOARD_MS. */
 const SLOW_MS = 5000
@@ -39,6 +40,9 @@ interface Row {
  */
 export function Models({ heads }: { heads: HeadPanel | null }) {
   const [reg, setReg] = useState<ModelRegistry | null>(null)
+  // The view used to return null on a failed read, so a dead backend rendered
+  // an empty body: no header, no error, nothing at all (#1100).
+  const [regError, setRegError] = useState<string | null>(null)
   const [cal, setCal] = useState<CalibrationRow[]>([])
   const [selected, setSelected] = useState<string>('')
   const [q, setQ] = useState('')
@@ -46,17 +50,25 @@ export function Models({ heads }: { heads: HeadPanel | null }) {
   const [sort, setSort] = useState<Sort>('tier')
   const [providers, setProviders] = useState<Set<string>>(new Set())
 
+  const load = useCallback(() => {
+    void GetModels()
+      .then((r) => {
+        setReg(r)
+        setRegError(null)
+      })
+      .catch((e) => setRegError(e instanceof Error ? e.message : String(e)))
+    // Calibration only decorates the scorecard, so its failure is not the
+    // view's: the catalog is still worth rendering without it.
+    void GetDashboard()
+      .then((d) => setCal(d.calibration ?? []))
+      .catch(() => {})
+  }, [])
+
   useEffect(() => {
-    const load = () => {
-      void GetModels().then(setReg).catch(() => {})
-      void GetDashboard()
-        .then((d) => setCal(d.calibration ?? []))
-        .catch(() => {})
-    }
     load()
     const t = setInterval(load, SLOW_MS)
     return () => clearInterval(t)
-  }, [])
+  }, [load])
 
   const rows = useMemo<Row[]>(() => {
     const hs = heads?.heads ?? null
@@ -128,6 +140,17 @@ export function Models({ heads }: { heads: HeadPanel | null }) {
       next.has(p) ? next.delete(p) : next.add(p)
       return next
     })
+
+  if (regError && !reg) {
+    return (
+      <ErrorState
+        title="Models"
+        what="the model registry"
+        detail={regError}
+        onRetry={load}
+      />
+    )
+  }
 
   if (!reg) return null
 

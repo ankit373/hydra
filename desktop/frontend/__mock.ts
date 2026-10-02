@@ -73,6 +73,48 @@ const API = {
       { id: 'qwen3:8b', name: 'Qwen3 8B', tier: 10, provider: 'ollama', pool: 'local', complexityMin: 0, complexityMax: 55, speed: 'fast', accuracy: 'medium', contextWindow: 32768, enabled: true }] }] }),
   GetSecurity: () => (window as any).__SEC(),
 }
-;(window as any).go = { api: { API } }
+
+// Three machines, not one. The healthy mock above is the case the design was
+// drawn against; a first run and a backend that will not answer are the two
+// the app had never been rendered in. `?state=fresh` / `?state=broken`.
+const state = new URLSearchParams(location.search).get('state') ?? 'healthy'
+
+const nothing = {
+  GetDashboard: () => delay({
+    hasData: false,
+    spend: { todayUsd: 0, allTimeUsd: 0, todayCalls: 0, totalCalls: 0, tokensActualPct: 0 },
+    governor: { known: false, pct: 0, mode: '', effectiveMode: '', burnRatePct: 0, risk: 0, observations: 0, horizonObs: 0 },
+    trust: { runs: 0, meanSamples: 0, fixedSwarmN: 0, samplesSavedPct: 0, autoClearedPct: 0, meanTargetConf: 0, meanFinalConf: 0, totalCostUsd: 0 },
+    byModel: [], byTier: [], byDay: [], recent: [], calibration: [],
+  }),
+  GetFleet: () => delay({ hasRuns: false, liveCount: 0, waitingCount: 0, groupThreshold: 8, runs: [] }),
+  GetSession: () => delay({ runId: '', live: false, found: false, goal: '', nonLinear: false, skipped: 0, agents: [], edges: [], timeline: [] }),
+  GetEdits: () => delay([]),
+  GetHeads: () => delay({ routable: 0, heads: [] }),
+  GetMCPServers: () => delay({ scanned: false, synced: '', servers: [] }),
+  GetPendingQuestions: () => delay({ questions: [] }),
+  CheckHyctl: () => delay({ found: false, path: '', version: '', supported: false }),
+  GetModels: () => delay({ found: true, pools: [
+    { name: 'anthropic', shared: true, observedCalls: 0, observedCostUsd: 0, observedTokens: 0, models: [
+      { id: 'claude-sonnet-4.5', name: 'Claude Sonnet 4.5', tier: 4, provider: 'anthropic', pool: 'anthropic', complexityMin: 60, complexityMax: 85, speed: 'medium', accuracy: 'high', contextWindow: 200000, enabled: true }] }] }),
+}
+
+const refused = (what: string) => () => Promise.reject(new Error(what))
+const broken = {
+  GetDashboard: refused('read /Users/a/.hydra/logs/cost.jsonl: input/output error'),
+  GetFleet: refused('read /Users/a/.hydra/logs/runs: input/output error'),
+  GetSession: refused('read /Users/a/.hydra/logs/runs/run-108.jsonl: input/output error'),
+  GetEdits: refused('read /Users/a/.hydra/logs/last_edit.json: input/output error'),
+  GetHeads: refused('probe: dial tcp 127.0.0.1:11434: connect: connection refused'),
+  GetModels: refused('registry/models.yaml: yaml: line 42: mapping values are not allowed in this context'),
+  GetMCPServers: refused('open /Users/a/.hydra/mcp_ledger.jsonl: permission denied'),
+  GetSecurity: refused('open /Users/a/.hydra/head_binaries.json: permission denied'),
+  GetPendingQuestions: refused('read /Users/a/.hydra/logs/pending: input/output error'),
+  GetVersion: refused('exec: "hyctl": executable file not found in $PATH'),
+  CheckHyctl: () => delay({ found: false, path: '', version: '', supported: false }),
+}
+
+const overlay = state === 'fresh' ? nothing : state === 'broken' ? broken : {}
+;(window as any).go = { api: { API: { ...API, ...overlay } } }
 ;(window as any).runtime = { EventsOn: () => () => {}, EventsOff: () => {}, EventsEmit: () => {} }
 export {}

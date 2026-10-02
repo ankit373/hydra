@@ -1142,6 +1142,8 @@ body {
 .empty__cta:focus-visible { outline: 2px solid var(--hy-ink); outline-offset: 2px; }
 .empty__alt { font-size: 12px; opacity: .75; }
 
+/* An inline note that one section could not be read, used by Session and the
+   Audit panels. A whole view's failure is `.failure` below. */
 .error {
   border: 1px solid var(--hy-expensive);
   border-radius: var(--hy-radius);
@@ -1150,6 +1152,45 @@ body {
   font-family: var(--hy-font-mono);
   font-size: 12px;
 }
+
+/* A failed read. The raw error is kept, because it is the one thing that says
+   what to fix, but it is no longer the whole of what renders (#1100). */
+.failure {
+  border: 1px solid var(--hy-line);
+  border-left: 3px solid var(--hy-expensive);
+  border-radius: var(--hy-radius);
+  background: var(--hy-panel);
+  padding: 22px 24px;
+  /* The content is a sentence and one line of mono. Stretched to a 1900px
+     window it reads as a fragment of a page rather than a card. */
+  max-width: 760px;
+}
+.failure__title { color: var(--hy-ink); font-size: 15px; margin: 0 0 12px; }
+.failure__detail {
+  font-family: var(--hy-font-mono);
+  font-size: 12px;
+  color: var(--hy-dim);
+  background: var(--hy-bg-2);
+  border: 1px solid var(--hy-line);
+  border-radius: var(--hy-radius-sm);
+  padding: 10px 12px;
+  margin: 0 0 14px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.failure__retry {
+  appearance: none;
+  border: 1px solid var(--hy-line);
+  border-radius: var(--hy-radius-sm);
+  background: transparent;
+  color: var(--hy-ink);
+  font: inherit;
+  font-size: 12.5px;
+  padding: 7px 15px;
+  cursor: pointer;
+}
+.failure__retry:hover { border-color: var(--hy-line-2); background: rgba(255, 255, 255, .03); }
+.failure__retry:focus-visible { outline: 2px solid var(--hy-aqua); outline-offset: 1px; }
 
 /* ── Scope note (#725): what the score above is a statement about ────── */
 
@@ -2472,9 +2513,18 @@ body {
   font-family: var(--hy-font-mono); font-size: 9.5px; letter-spacing: .09em;
   text-transform: uppercase; color: var(--hy-faint);
 }
-.scard__line { display: flex; align-items: baseline; gap: 10px; font-size: 12px; }
+/* Six of these rows hold a short measurement ("200K", "medium") and one holds
+   a sentence, the reachability reason. Measured: that one wrapped mid-row and
+   the other six did not, so the row lets a long value take its own line rather
+   than ragging against the label (#1100). */
+.scard__line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; font-size: 12px; }
 .scard__k { color: var(--hy-dim); }
-.scard__v { margin-left: auto; font-family: var(--hy-font-mono); font-size: 11.5px; }
+.scard__v {
+  margin-left: auto;
+  font-family: var(--hy-font-mono);
+  font-size: 11.5px;
+  text-align: right;
+}
 .scard__none { margin: 2px 0 0; font-size: 11.5px; color: var(--hy-dim); line-height: 1.5; }
 
 .scard__cal { display: flex; flex-direction: column; gap: 1px; padding: 5px 0; border-bottom: 1px solid var(--hy-line); }
