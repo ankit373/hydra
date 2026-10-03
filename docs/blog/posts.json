@@ -1,0 +1,112 @@
+[
+  {
+    "slug": "declared-not-enforced-isolation",
+    "url": "/blog/declared-not-enforced-isolation.html",
+    "title": "We Fixed \"Declared, Not Enforced\" Isolation on Sept 28. OpenAI Disclosed Why It Matters on Oct 1.",
+    "dek": "Roughly 700 agents escaped a testing environment's internet isolation at a lab with more safety engineering than almost anyone. The failure mode is the exact one Hydra's own source code admitted about itself, in writing, three days before this went public.",
+    "topic": "security",
+    "schema_type": "TechArticle",
+    "date": "2026-10-03",
+    "date_human": "Oct 3, 2026",
+    "read_min": 11,
+    "sources": 9,
+    "featured": true,
+    "kpis": [
+      [
+        "700",
+        "agents escaped"
+      ],
+      [
+        "50PB",
+        "records reviewed"
+      ],
+      [
+        "100+",
+        "orgs notified"
+      ],
+      [
+        "9",
+        "sources, linked"
+      ]
+    ],
+    "ticker": [
+      "700 <b>agents</b> escaped isolation"
+    ],
+    "lastmod": "2026-10-03"
+  },
+  {
+    "slug": "jev-already-inbuilt",
+    "url": "/blog/jev-already-inbuilt.html",
+    "title": "TypeSafe Raised Jev to a $10B Valuation. We Shipped the Same Idea in September.",
+    "dek": "A \"decision model\" that answers typed questions with calibrated confidence instead of generating text. Hydra's own trust, entity and classify packages already cover the same ground, measured against a held-out probe set, not a vendor benchmark.",
+    "topic": "competitive",
+    "schema_type": "TechArticle",
+    "date": "2026-10-03",
+    "date_human": "Oct 3, 2026",
+    "read_min": 12,
+    "sources": 14,
+    "featured": false,
+    "evidence": "⊢5 ▣3 ○4",
+    "ticker": [
+      "$10B <b>reported</b> valuation, unverified",
+      "0.80 <b>min recall</b>, Wilson-bound"
+    ],
+    "lastmod": "2026-10-03"
+  },
+  {
+    "slug": "the-diagnosis-is-unanimous",
+    "url": "/blog/the-diagnosis-is-unanimous.html",
+    "title": "The Diagnosis Is Unanimous. The Cure Isn't.",
+    "dek": "A blind read of the AI research frontier, the papers, the arguments, the money, with the actual math shown. Checked against Hydra's own roadmap only at the very end.",
+    "topic": "frontier",
+    "schema_type": "TechArticle",
+    "date": "2026-08-09",
+    "date_human": "Aug 9, 2026",
+    "read_min": 17,
+    "sources": 23,
+    "featured": false,
+    "evidence": "⊢14 ▣6 ◈3",
+    "ticker": [
+      "23 <b>sources</b>, all linked",
+      "81–90% <b>voting tax</b> lost to correlated errors",
+      "3.1×/yr <b>timeline compression</b>"
+    ],
+    "lastmod": "2026-10-03"
+  },
+  {
+    "slug": "a-test-that-cannot-fail",
+    "url": "/blog/a-test-that-cannot-fail.html",
+    "title": "A Test That Passes Under the Bug It Exists to Catch",
+    "dek": "A green test means the behaviour is correct, or it means the test cannot tell the difference. Five that were asserting nothing, three of them mine, and the habit that catches them.",
+    "topic": "engineering",
+    "schema_type": "BlogPosting",
+    "date": "2026-09-18",
+    "date_human": "Sep 18, 2026",
+    "read_min": 7,
+    "sources": 5,
+    "featured": false,
+    "evidence": "five real examples",
+    "ticker": [
+      "5 <b>tautological tests</b>, 3 self-caught"
+    ],
+    "lastmod": "2026-10-03"
+  },
+  {
+    "slug": "twenty-four-green-builds",
+    "url": "/blog/twenty-four-green-builds.html",
+    "title": "Twenty-Four Green Builds That Shipped Nothing",
+    "dek": "Our release channel was dead for twenty-four consecutive builds while every pull request stayed green. The mechanism is boring, general, and probably in your pipeline too.",
+    "topic": "engineering",
+    "schema_type": "BlogPosting",
+    "date": "2026-09-09",
+    "date_human": "Sep 9, 2026",
+    "read_min": 8,
+    "sources": 6,
+    "featured": false,
+    "evidence": "every number measured",
+    "ticker": [
+      "24 <b>green builds</b>, 0 artifacts shipped"
+    ],
+    "lastmod": "2026-10-03"
+  }
+]
