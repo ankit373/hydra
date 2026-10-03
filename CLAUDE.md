@@ -110,8 +110,12 @@ registry/               ← Routing data, compiled into the binary via `go:embed
                           OpenRouter's catalog, so it is load-bearing, not just an offline fallback.
   signals.yaml          ← Routing signals and rules. Named, typed facts about a dispatch
                           (PII detectors, injection marker, blast radius, keyword sets,
-                          whether trust has evidence, and what the verified corpus
-                          measured about work like this) combined by priority-ordered rules
+                          whether trust has evidence, what the verified corpus
+                          measured about work like this, the prompt's dominant script and
+                          language, its shape as counts of questions/list items/code
+                          fences/ordered steps, the conversation's turns and whether it is
+                          already in a tool loop, and estimated prompt tokens)
+                          combined by priority-ordered rules
                           into an action: pin a tier/enum, force local-only, raise the
                           confidence bar, or refuse. Ships EMPTY, so routing is unchanged
                           until someone writes a rule, and `cmd/hydra` has a test asserting
@@ -123,7 +127,15 @@ registry/               ← Routing data, compiled into the binary via `go:embed
                           fired on every dispatch with no `--file`, the #848 defect in a
                           second package. The `corpus.*` signals are derived only when a
                           rule names one, because each costs an embedding call and a pass
-                          over the eval set (#1020).
+                          over the eval set (#1020). The heuristic families need no model:
+                          `language.script` counts letters per script with ties broken by
+                          name, so one prompt cannot script two ways across runs, and
+                          `language.code` is **absent** for Latin script rather than guessed,
+                          since telling English from French needs a threshold nobody measured
+                          and #1041 is what an unmeasured one costs. `conversation.*` is
+                          absent on a single-shot dispatch, which is not a conversation of
+                          length zero, while `structure.*` is always present because a count
+                          of zero questions is a reading (#1110).
   policy.yaml           ← File-policy rules. Three of its fields take effect, in both
                           `hyctl edit` and `hyctl parallel`: diff_size_cap_pct rolls an
                           over-large edit back, max_cost_usd refuses a head before it runs,

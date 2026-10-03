@@ -485,7 +485,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 	// Evaluated once, here or by the caller, never per fallback candidate.
 	dec := opts.Decision
 	if dec == nil {
-		computed := d.Decide(ctx, prompt, opts.Domain, nil)
+		computed := d.Decide(ctx, prompt, opts.Domain, nil, opts.Messages)
 		dec = &computed
 	}
 	if err := applyDecision(*dec, &opts); err != nil {

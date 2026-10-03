@@ -884,7 +884,10 @@ hyctl eval list --failed                # the examples the oracle rejected
 hyctl eval training                     # vectors per embedding model, whether a classifier could be fitted
 hyctl eval classify                     # does similarity to past work predict whether an enum passes
 # A rule can then route on it: corpus.known / corpus.pass_rate / corpus.support in
-# registry/signals.yaml, derived only when a rule names one.
+# registry/signals.yaml, derived only when a rule names one. Alongside them,
+# signals that need no model at all: language.script and (where the script
+# decides it) language.code, structure.questions / .list_items / .code_fences /
+# .ordered_steps, conversation.turns / .tool_loop, and context.prompt_tokens.
 
 # The standalone verifier: fill the corpus with no router and no Hydra config.
 # Ships in the same archive as hyctl, and reads no ~/.hydra at all.

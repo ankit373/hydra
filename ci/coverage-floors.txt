@@ -110,7 +110,7 @@ floor internal/runlog               85
 floor internal/sandbox              77
 floor internal/security             85
 floor internal/shellpath            84
-floor internal/signals              90
+floor internal/signals              92
 floor internal/serve                 88
 floor internal/sketch               91
 floor internal/swarm                89

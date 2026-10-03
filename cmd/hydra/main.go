@@ -1028,7 +1028,7 @@ func cmdDispatch() *cobra.Command {
 			// Evaluated once for this dispatch, whichever of the plain, swarm
 			// and SPRT paths runs, and handed to Dispatch so no candidate
 			// re-derives it.
-			ruleDecision := d.Decide(ctx, prompt, domain, blastRadius)
+			ruleDecision := d.Decide(ctx, prompt, domain, blastRadius, nil)
 			if ruleDecision.Action.Type == signals.ActionBlock {
 				return &dispatch.ErrBlocked{Rule: ruleDecision.Rule, Reason: ruleDecision.Action.Reason}
 			}
