@@ -337,17 +337,33 @@ func reviewFile(ctx context.Context, r Router, spec *Spec, path string, opts Run
 		diff, out.Truncated = cut, true
 	}
 
-	ans, err := r.Review(ctx, buildPrompt(spec, group, path, diff, out.Truncated), trust.DomainForFile(path), path)
+	domain := trust.DomainForFile(path)
+	prompt := buildPrompt(spec, group, path, diff, out.Truncated)
+	ans, err := r.Review(ctx, prompt, domain, path)
 	if err != nil {
 		out.Err = err.Error()
 		out.Fatal = errors.Is(err, ErrCannotSample)
 		return out, nil
 	}
+
+	found, discarded, parsed := parseFindings(ans.Output, path, ans.Head)
+	if !parsed {
+		// A reply with no parseable findings at all is narration, not a
+		// malformed answer: an agentic CLI given a single-shot review prompt
+		// reliably opens by describing a tool step it cannot take. Worth
+		// exactly one stricter re-ask, never a second, so a head that truly
+		// cannot do this is reported honestly rather than paid for again (#1049).
+		if retry, rerr := r.Review(ctx, prompt+"\n\n"+narrationContract, domain, path); rerr == nil {
+			rfound, rdiscarded, rparsed := parseFindings(retry.Output, path, retry.Head)
+			ans = mergeRetry(ans, retry)
+			found, discarded, parsed = rfound, rdiscarded, rparsed
+		}
+	}
+
 	out.Head, out.Tier, out.CostUSD = ans.Head, ans.Tier, ans.CostUSD
 	out.Bar, out.Confidence, out.Samples = ans.Bar, ans.Confidence, ans.Samples
 	out.TaskHash = ans.TaskHash
 
-	found, discarded, parsed := parseFindings(ans.Output, path, ans.Head)
 	if !parsed {
 		// Unreadable is not the same answer as clean, and rendering it as clean
 		// is how a reviewer reports a pass it never performed.
@@ -357,6 +373,17 @@ func reviewFile(ctx context.Context, r Router, spec *Spec, path string, opts Run
 	countAgreement(found, ans.Votes, path)
 	out.Findings, out.Discarded = len(found), discarded
 	return out, found
+}
+
+// mergeRetry answers with the retry's content, since it is the one that
+// parsed, or the clearer failure when it did not, but both dispatches really
+// spent, so both costs and token counts carry forward rather than the first
+// attempt's spend vanishing from the report.
+func mergeRetry(first, retry Answer) Answer {
+	retry.CostUSD += first.CostUSD
+	retry.InputTokens += first.InputTokens
+	retry.OutputTokens += first.OutputTokens
+	return retry
 }
 
 // countAgreement records, per finding, how many of the sampled Heads made the
@@ -414,6 +441,12 @@ Each element is:
 An empty array means you found no defect, which is a normal and common answer.
 Report only defects in this file, and nothing gofmt, go vet, a linter or the
 compiler already decides.`
+
+// narrationContract is appended on the one retry a narrated reply earns.
+const narrationContract = `Your last reply described what you were about to do rather than
+answering. There is no tool to call and no further turn here, only this one reply.
+
+` + outputContract
 
 func buildPrompt(spec *Spec, g Group, path, diff string, truncated bool) string {
 	var b strings.Builder
