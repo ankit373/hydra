@@ -280,6 +280,23 @@ jobs:
         working-directory: desktop/frontend
         run: npm test
 
+      # jsdom has no layout, so `npm test` cannot see any of the below. Three
+      # defects shipped in one day that only a browser could catch, one of them
+      # a regression against a width an earlier PR had verified by hand (#1127).
+      - name: Cache the browser
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('desktop/frontend/package-lock.json') }}
+
+      - name: Install Chromium
+        working-directory: desktop/frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Layout check
+        working-directory: desktop/frontend
+        run: npm run layout
+
       # The production bundle must build, not merely typecheck, `wails build`
       # runs this exact command before it compiles any Go.
       - name: Build
