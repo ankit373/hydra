@@ -239,6 +239,9 @@ sup.cite a{color:var(--aqua);}
   background:rgba(224,169,58,.06);font-size:13.5px;color:var(--dim);}
 .flagbox b{color:var(--mid);}
 
+.paper-head{display:none;}
+button.pdf-btn{font:inherit;background:none;cursor:pointer;}
+
 /* footer, matches first-principles.html */
 footer{border-top:1px solid var(--line);margin-top:20px;padding:44px 0 56px;}
 .foot{display:flex;flex-wrap:wrap;gap:24px;align-items:center;justify-content:space-between;max-width:var(--maxw);margin:0 auto;padding:0 24px;}
@@ -248,9 +251,61 @@ footer{border-top:1px solid var(--line);margin-top:20px;padding:44px 0 56px;}
 .foot p{color:var(--faint);font-size:13px;margin:6px 0 0;}
 .foot nav{display:flex;flex-wrap:wrap;gap:20px;font-family:var(--mono);font-size:12.5px;}
 .foot nav a{color:var(--dim);}.foot nav a:hover{color:var(--aqua);}
+
+/* print-as-research-paper: inlined last (not a separate stylesheet) so it
+   wins the cascade on plain source order, never on an !important arms race
+   against this file's own screen rules. */
+@media print {
+  @page{size:A4;margin:20mm 18mm 22mm;}
+  :root{color-scheme:light;
+    --bg:#fff;--bg2:#fff;--panel:#f6f6f8;--line:#d8d8e2;--line-2:#b9b9ca;
+    --ink:#131320;--dim:#44445a;--faint:#6b6b80;
+    --cyan:#0a6b76;--aqua:#0a6b76;--violet:#5b3fae;--magenta:#9c2d7a;
+    --cheap:#1e7a46;--mid:#8a5a00;--exp:#9c1d2e;}
+  html,body{background:#fff !important;color:var(--ink) !important;font-size:11.5pt;}
+  *{-webkit-print-color-adjust:exact;print-color-adjust:exact;box-shadow:none !important;text-shadow:none !important;filter:none !important;}
+  .topbar,button.pdf-btn,.pdf-btn{display:none !important;}
+  a{color:inherit;text-decoration:underline;text-decoration-color:var(--line-2);}
+  .wrap,article,main{max-width:none !important;}
+  article{padding:0 !important;}
+  .pillar{border-top:1px solid var(--line) !important;padding:16pt 0 !important;}
+  .pillar.first{border-top:none !important;}
+  h1,h2,h3{font-family:Georgia,"Times New Roman",serif !important;color:#000 !important;}
+  .grad{-webkit-text-fill-color:#000 !important;background:none !important;color:#000 !important;}
+  p,li,blockquote{font-family:Georgia,"Times New Roman",serif !important;orphans:3;widows:3;}
+  .mono,.kicker,.eyebrow,code{font-family:"Courier New",monospace !important;}
+  .hero{padding-top:0 !important;max-width:none !important;}
+  .hero::before{display:none !important;}
+  .hero>*{max-width:none !important;}
+  .paper-head{display:flex !important;justify-content:space-between;align-items:baseline;gap:12pt;
+    border-bottom:2pt solid #000;padding-bottom:8pt;margin-bottom:20pt;font-family:"Courier New",monospace;
+    font-size:8.5pt;letter-spacing:.04em;text-transform:uppercase;color:#000;}
+  .eyebrow{color:#000 !important;font-weight:700;}
+  .byline,.meta{color:#333 !important;}
+  .legend{display:none !important;}
+  .eq,.work,.callout,.flagbox,.statpair .box,.slopecard,.refs li{break-inside:avoid;border-color:#999 !important;background:#fafafa !important;}
+  .callout{background:#eef5f1 !important;border-color:#1e7a46 !important;}
+  .flagbox{background:#fdf6ea !important;border-color:#8a5a00 !important;}
+  .divtrack{background:#e4e4ea !important;}
+  .divtrack .fill.pos{background:var(--cheap) !important;}
+  .divtrack .fill.neg{background:var(--exp) !important;}
+  .barchart .col .b.a{background:#c9c3ec !important;}
+  .barchart .col .b.b{background:var(--aqua) !important;}
+  sup.cite a,.refs a{color:#000 !important;text-decoration:none;}
+  footer{border-top:1px solid #999;margin-top:24pt;padding:16pt 0 0 !important;}
+  .foot{max-width:none !important;}
+  .foot .mark{-webkit-text-fill-color:#000 !important;background:none !important;color:#000 !important;}
+  @page{@bottom-center{content:"Hydra Research \2014  page " counter(page) " of " counter(pages);
+    font-family:"Courier New",monospace;font-size:8pt;color:#555;}}
+}
 </style>
 </head>
 <body>
+
+<div class="paper-head" style="display:none">
+  <span>Hydra Research</span>
+  <span>hydra.uvansa.com/blog/the-diagnosis-is-unanimous.html &middot; Aug 9, 2026</span>
+</div>
 
 <div class="topbar" id="topbar">
   <a class="mark" href="/">HYDRA</a>
@@ -263,6 +318,7 @@ footer{border-top:1px solid var(--line);margin-top:20px;padding:44px 0 56px;}
     <a href="#money">Money</a>
     <a href="#check">The check</a>
   </nav>
+  <button class="ghost pdf-btn" type="button" onclick="window.print()" title="Download this post as a formatted PDF">⬇ PDF</button>
   <a class="ghost" href="/blog/">All posts</a>
 </div>
 
