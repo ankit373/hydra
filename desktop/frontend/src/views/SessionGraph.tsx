@@ -1,10 +1,14 @@
 import { useMemo } from 'react'
 import type { Agent, Session } from '../types'
 import { layoutDag } from '../dagreLayout'
+import { graphLabel } from './graphLabel'
 
 // Sugiyama/dagre layout mechanics live in dagreLayout.ts, shared with Fleet's
 // inline run graph, see that file for why dagre over a force-directed layout.
-const NODE_W = 168
+// 180, not 168: the label starts at x=11 and the longest LABEL_MAX string
+// measures 158px, so 168 left it 1px over its own border with no right
+// padding at all while having 11px on the left. 11 + 158 + 11 = 180.
+const NODE_W = 180
 const NODE_H = 46
 // Wider than RunGraph's LABEL_MAX (12): this node has more room, but a full
 // file path (an edit-target node's label) still needs truncating to fit it.
@@ -89,14 +93,6 @@ export function SessionGraph({
   )
 }
 
-function shortLabel(s: string): string {
-  if (s.length <= LABEL_MAX) return s
-  // File paths: the filename at the end is the meaningful part, so truncate
-  // from the start, clipping the end instead hides it (#461).
-  if (s.includes('/')) return `…${s.slice(-(LABEL_MAX - 1))}`
-  return `${s.slice(0, LABEL_MAX - 1)}…`
-}
-
 // A node with none of these signals never went through a run lifecycle, an
 // edit-target node, say, so it isn't "pending" (still to run); it's an
 // artifact the run touched. Reusing 'pending' reads as stuck forever (#462).
@@ -123,14 +119,15 @@ function layout(session: Session) {
       id: p.id,
       x: p.x,
       y: p.y,
-      label: shortLabel(a.model || a.head || a.id),
+      label: graphLabel(a.model || a.head || a.id, LABEL_MAX),
       // Verifiable facts first, tier, state, duration, rather than narration.
       sub: [a.tier > 0 ? `T${a.tier}` : null, a.state, a.durationMs > 0 ? `${a.durationMs}ms` : null]
         .filter(Boolean)
         .join(' · '),
       state,
-      // An artifact node's own id IS the file path (see shortLabel's
-      // truncate-from-the-start case, which exists specifically for this).
+      // An artifact node's own id IS the file path. graphLabel needs no
+      // branch for that: it keeps the tail either way, and the `/` sniff that
+      // used to pick the branch matched every model id too (#1120).
       file: state === 'artifact' ? a.id : undefined,
     })
   }

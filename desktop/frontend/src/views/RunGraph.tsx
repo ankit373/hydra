@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import type { Agent } from '../types'
 import { layoutDag } from '../dagreLayout'
+import { graphLabel } from './graphLabel'
 
 // Deliberately smaller than SessionGraph's NODE_W/H (168x46): Fleet shows one
 // of these per run, several runs per screen, so a node here carries only a
@@ -78,8 +79,7 @@ export function RunGraph({
 }
 
 function shortLabel(a: Agent): string {
-  const s = a.model || a.head || a.id
-  return s.length > LABEL_MAX ? `${s.slice(0, LABEL_MAX - 1)}…` : s
+  return graphLabel(a.model || a.head || a.id, LABEL_MAX)
 }
 
 // A node with none of these signals never went through a run lifecycle, an

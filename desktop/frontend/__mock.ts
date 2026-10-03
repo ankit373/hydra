@@ -7,10 +7,22 @@ const bd = (key: string, calls: number, cost: number) => ({
   costUsd: cost, wallMs: calls * 2400,
 })
 
+// Mixed providers on purpose: a fan-out where every node is the same head
+// cannot show whether the graph's labels tell two heads apart (#1120).
+const FANOUT = [
+  'anthropic/claude-sonnet-4.5',
+  'anthropic/claude-opus-4.6',
+  'google/gemini-2.5-pro',
+  'ollama/qwen3:8b',
+  'openrouter/meta-llama/llama-3.3-70b-instruct',
+]
+
 const agents = (n: number, head: string) =>
   Array.from({ length: n }, (_, i) => ({
     id: `a${i}`, parent: i === 0 ? undefined : 'a0', depth: i === 0 ? 0 : 1,
-    head, model: head, tier: 4 + (i % 3), state: i === 0 ? 'ok' : i === 1 ? 'running' : 'ok',
+    head: i === 0 ? head : FANOUT[i % FANOUT.length],
+    model: i === 0 ? head : FANOUT[i % FANOUT.length],
+    tier: 4 + (i % 3), state: i === 0 ? 'ok' : i === 1 ? 'running' : 'ok',
     costUsd: 0.004 * (i + 1), confidence: 0.82 + i * 0.03, durationMs: 1200 + i * 800,
     detail: i === 0 ? 'accepted' : 'agreed · LLR +1.2 → Λ 1.2',
   }))
