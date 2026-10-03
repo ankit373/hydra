@@ -1552,7 +1552,13 @@ body {
 
 /* ── Session graph ─────────────────────────────────────────────────────── */
 
+/* fit-content, not the default block width: the SVG is sized by the layout, so
+   a block-level frame around it stretched to the card. Measured on Activity, a
+   1344px bordered panel around a 336px drawing, 87% of it empty. max-width
+   keeps a wide graph inside the card, where overflow still scrolls it. */
 .graph {
+  width: fit-content;
+  max-width: 100%;
   margin-top: 16px;
   background: var(--hy-panel);
   border: 1px solid var(--hy-line);
@@ -2792,6 +2798,11 @@ body {
   /* min-width floored it at 120px even with the label hidden, which is most
      of what it was still costing. */
   .apphead__search { flex: 0 0 auto; min-width: 0; padding: 0 9px; }
+  /* The nav is the header's largest item and does not shrink: six labels at
+     11px of side padding measure 435px. Adding Settings to the nav took the
+     header 4px past an 820px viewport, which is below MinWidth but reachable
+     by zooming. 6px back per side is 60px across the strip. */
+  .apphead__tab { padding-left: 6px; padding-right: 6px; gap: 4px; }
 }
 
 /* ── Settings ──────────────────────────────────────────────────────────── */
