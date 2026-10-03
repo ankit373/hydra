@@ -1027,8 +1027,11 @@ func cmdDispatch() *cobra.Command {
 
 			// Evaluated once for this dispatch, whichever of the plain, swarm
 			// and SPRT paths runs, and handed to Dispatch so no candidate
-			// re-derives it.
-			ruleDecision := d.Decide(ctx, prompt, domain, blastRadius, nil)
+			// re-derives it. hyctl dispatch pins no head before routing runs,
+			// unlike hyctl serve's model field, so budget.effective_context and
+			// latency.p95_ms read absent here; there is nothing dishonest to
+			// report.
+			ruleDecision := d.Decide(ctx, prompt, domain, blastRadius, nil, "")
 			if ruleDecision.Action.Type == signals.ActionBlock {
 				return &dispatch.ErrBlocked{Rule: ruleDecision.Rule, Reason: ruleDecision.Action.Reason}
 			}
