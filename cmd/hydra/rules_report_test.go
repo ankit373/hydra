@@ -92,3 +92,48 @@ func TestDescribeAction(t *testing.T) {
 		}
 	}
 }
+
+// A string signal must render. Until #1110 there were no string signals, so the
+// missing switch arm cost nothing; the first rule to read one printed an
+// explanation that omitted the signal it fired on (#1117).
+func TestPrintRuleDecision_VerboseRendersStringSignals(t *testing.T) {
+	var b bytes.Buffer
+	printRuleDecision(&b, signals.Decision{
+		Rule:   "non-latin stays local",
+		Action: signals.Action{Type: signals.ActionRoute, LocalOnly: true},
+		Signals: signals.Set{
+			signals.SigLanguageScript:      "han",
+			signals.SigLanguageCode:        "zh",
+			signals.SigContextPromptTokens: float64(4),
+		},
+	}, true)
+
+	out := b.String()
+	for _, want := range []string{`language.script="han"`, `language.code="zh"`} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %s from the explanation: %q", want, out)
+		}
+	}
+}
+
+// The assertion the suite did not make: a signal the rule actually read has to
+// appear. Listing four signals the rule ignored while dropping the one it
+// matched on is what #1117 shipped.
+func TestPrintRuleDecision_ShowsTheSignalTheRuleMatchedOn(t *testing.T) {
+	var b bytes.Buffer
+	printRuleDecision(&b, signals.Decision{
+		Rule:   "non-latin stays local",
+		Action: signals.Action{Type: signals.ActionRoute, LocalOnly: true},
+		Signals: signals.Set{
+			signals.SigLanguageScript:        "han",
+			signals.SigStructureQuestions:    float64(0),
+			signals.SigStructureListItems:    float64(0),
+			signals.SigStructureCodeFences:   float64(0),
+			signals.SigStructureOrderedSteps: false,
+		},
+	}, true)
+
+	if out := b.String(); !strings.Contains(out, "language.script") {
+		t.Fatalf("the explanation names every signal except the one that fired the rule: %q", out)
+	}
+}

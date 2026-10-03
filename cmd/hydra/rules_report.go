@@ -18,7 +18,8 @@ import (
 // is where a loaded-but-unmatched rule set is visible.
 //
 // Only the true signals: the full set is every PII detector on every dry run,
-// which buries the line that matters.
+// which buries the line that matters. A string is always rendered, because it
+// is absent when unknown, so unlike a false bool its presence is a reading.
 func printRuleDecision(w io.Writer, d signals.Decision, verbose bool) {
 	if d.Rule == "" {
 		return
@@ -37,6 +38,9 @@ func printRuleDecision(w io.Writer, d signals.Decision, verbose bool) {
 			}
 		case float64:
 			on = append(on, fmt.Sprintf("%s=%g", name, t))
+		case string:
+			// Quoted, or a value with spaces or an empty one reads as no value.
+			on = append(on, fmt.Sprintf("%s=%q", name, t))
 		}
 	}
 	sort.Strings(on)
