@@ -59,6 +59,10 @@ const HEADS_MS = 60000;
  * Labels, not glyphs. The rail shipped five unlabelled characters
  * (✎ ⌘ ≡ ▫ ⛨) whose meaning was carried entirely by a tooltip (#1060).
  */
+// Six items measure 435px of header at the default padding, and the header
+// stops fitting an 820px viewport at seven. 980 is main.go's MinWidth, but
+// zooming narrows the CSS viewport below it, so app.css gives the tabs back
+// their side padding under 900. A seventh item needs that re-measured (#1122).
 const NAV = [
   { id: "chat", label: "Chat" },
   { id: "models", label: "Models" },
