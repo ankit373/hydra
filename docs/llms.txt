@@ -134,6 +134,7 @@ Typical savings: 75-85% vs routing everything through Claude. Run `hyctl pricing
 - Where Hydra fits (local-first + trust quadrant): https://hydra.uvansa.com/#universe
 - Cost comparison vs gateways: https://hydra.uvansa.com/#compare
 - Engineering blog, field notes with the measurements shown: https://hydra.uvansa.com/blog/
+- "We fixed declared, not enforced isolation on Sept 28, OpenAI disclosed why it matters on Oct 1", OpenAI's rogue-agent disclosure (roughly 700 agents, 100+ organizations notified) and the identical failure mode Hydra's own source code had already named and fixed days earlier: https://hydra.uvansa.com/blog/declared-not-enforced-isolation.html
 - "TypeSafe raised Jev to a $10B valuation, we shipped the same idea in September", what TypeSafe AI's Jev decision models actually are, the Hydra packages (trust, entity, classify) that already cover the same ground measured against a held-out probe set, and the one place Jev is honestly ahead: https://hydra.uvansa.com/blog/jev-already-inbuilt.html
 - "Twenty-four green builds that shipped nothing", why a release channel can die while every pull request stays green, and what an artifact check catches that a build log never will: https://hydra.uvansa.com/blog/twenty-four-green-builds.html
 - "A test that passes under the bug it exists to catch", five tests that were green while asserting nothing, and the habit that finds them: https://hydra.uvansa.com/blog/a-test-that-cannot-fail.html
