@@ -2606,8 +2606,15 @@ body {
 
 /* ── Tab strip ─────────────────────────────────────────────────────────── */
 
+/* wrap, because this strip does not always fit. Audit's Detailed view has
+   eleven tabs: at a 900px viewport `Attestation` sat past the container with
+   overflow visible and no scroll, so it was simply unreachable, and at 820 so
+   was `Evidence`. Wrapping over scrolling: a scrolling strip needs an
+   affordance to be discoverable, a wrapped one hides nothing. Every strip is
+   one row at 980, main.go's MinWidth, so nothing moves there (#1125). */
 .tabs {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 4px;
   border-bottom: 1px solid var(--hy-line);
