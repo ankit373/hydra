@@ -128,6 +128,42 @@ func TestCollect_BlastRadiusAbsentIsNotZero(t *testing.T) {
 	}
 }
 
+// No pinned head is the normal case for a plain hyctl dispatch, and must read
+// as absent rather than a window of nothing.
+func TestCollect_EffectiveContextAbsentIsNotZero(t *testing.T) {
+	if _, ok := Collect(Input{Prompt: "x"}, nil)[SigBudgetEffectiveContext]; ok {
+		t.Error("no pinned head must leave the signal absent")
+	}
+	zero := 0
+	vals := Collect(Input{Prompt: "x", EffectiveContext: &zero}, nil)
+	v, ok := vals[SigBudgetEffectiveContext]
+	if !ok || v != float64(0) {
+		t.Errorf("a measured zero must be present as 0, got %v %v", v, ok)
+	}
+	big := 32768
+	if got := Collect(Input{Prompt: "x", EffectiveContext: &big}, nil)[SigBudgetEffectiveContext]; got != float64(32768) {
+		t.Errorf("got %v", got)
+	}
+}
+
+// No rollup history is the normal case on a fresh machine, and must read as
+// absent rather than a latency of zero.
+func TestCollect_LatencyP95AbsentIsNotZero(t *testing.T) {
+	if _, ok := Collect(Input{Prompt: "x"}, nil)[SigLatencyP95MS]; ok {
+		t.Error("no rollup history must leave the signal absent")
+	}
+	zero := 0.0
+	vals := Collect(Input{Prompt: "x", LatencyP95MS: &zero}, nil)
+	v, ok := vals[SigLatencyP95MS]
+	if !ok || v != 0.0 {
+		t.Errorf("a measured zero must be present as 0, got %v %v", v, ok)
+	}
+	slow := 9000.0
+	if got := Collect(Input{Prompt: "x", LatencyP95MS: &slow}, nil)[SigLatencyP95MS]; got != 9000.0 {
+		t.Errorf("got %v", got)
+	}
+}
+
 func TestCollect_CalibratedAbsentIsNotFalse(t *testing.T) {
 	if _, ok := Collect(Input{Prompt: "x"}, nil)[SigTrustCalibrated]; ok {
 		t.Error("an unreadable calibration store must leave the signal absent")
@@ -146,6 +182,8 @@ func TestSchemaFor_IncludesKeywordsAndFixedSignals(t *testing.T) {
 		SigInjection:                KindBool,
 		SigBlastRadius:              KindNumber,
 		SigTrustCalibrated:          KindBool,
+		SigBudgetEffectiveContext:   KindNumber,
+		SigLatencyP95MS:             KindNumber,
 		KeywordSignal("production"): KindBool,
 	} {
 		got, ok := sc[name]
