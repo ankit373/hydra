@@ -108,9 +108,40 @@ b{color:var(--ink);}
   margin-bottom:16px;}
 .hero h1{font-size:clamp(30px,5.4vw,50px);line-height:1.08;letter-spacing:-.5px;font-weight:750;}
 .hero .sub{font-size:clamp(15.5px,2vw,19px);color:var(--dim);margin:22px auto 0;}
-.byline{margin-top:26px;padding-top:18px;border-top:1px solid var(--line);display:flex;gap:14px;
-  font-family:var(--mono);font-size:12.5px;color:var(--faint);flex-wrap:wrap;}
-.byline .sep{opacity:.5;}
+.byline{margin-top:26px;padding-top:0;border-top:none;display:flex;gap:10px;
+  font-family:var(--mono);font-size:11.5px;color:var(--dim);flex-wrap:wrap;}
+.byline span:not(.sep){border:1px solid var(--line);border-radius:10px;padding:7px 12px;background:rgba(10,12,24,.4);}
+.byline .sep{display:none;}
+
+/* scroll progress, a thin gradient bar pinned above everything including the topbar */
+#progressBar{position:fixed;top:0;left:0;height:3px;width:0%;z-index:100;
+  background:linear-gradient(90deg,var(--cyan),var(--violet),var(--magenta));
+  box-shadow:0 0 10px rgba(139,92,246,.5);}
+
+/* side section rail: fills the gap between 860px, where the topbar nav
+   already hides, and whatever width actually has room beside a 1080px
+   content column without overlapping it */
+.rail{position:fixed;right:22px;top:50%;transform:translateY(-50%);z-index:55;
+  display:none;flex-direction:column;gap:18px;}
+@media(min-width:1150px){.rail{display:flex;}}
+.rail a{position:relative;width:10px;height:10px;border-radius:50%;border:2px solid var(--line-2);
+  background:var(--bg2);transition:.2s;}
+.rail a:hover,.rail a.active{border-color:var(--aqua);background:var(--aqua);box-shadow:0 0 10px var(--aqua);}
+.rail a .lbl{position:absolute;right:22px;top:50%;transform:translateY(-50%);white-space:nowrap;
+  font-family:var(--mono);font-size:11px;color:var(--dim);background:rgba(10,12,24,.92);
+  border:1px solid var(--line);border-radius:6px;padding:4px 9px;opacity:0;pointer-events:none;transition:.15s;}
+.rail a:hover .lbl{opacity:1;}
+
+/* next-in-series: internal links between posts, before the site footer */
+.series{margin:0 0 20px;padding:44px 0;border-top:1px solid var(--line);}
+.series .lbl2{font-family:var(--mono);font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--aqua);margin-bottom:18px;}
+.series-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:var(--prose);margin:0 auto;padding:0 24px;}
+@media(max-width:620px){.series-grid{grid-template-columns:1fr;}}
+.series-card{display:block;padding:18px 20px;border:1px solid var(--line);border-radius:14px;
+  background:rgba(14,15,28,.5);transition:.18s;}
+.series-card:hover{border-color:var(--aqua);transform:translateY(-2px);}
+.series-card .sk{font-family:var(--mono);font-size:10.5px;color:var(--faint);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;}
+.series-card .st{font-size:15px;font-weight:700;line-height:1.35;font-family:"Space Grotesk",var(--sans);}
 
 /* legend of source-confidence tags */
 .legend{display:flex;flex-wrap:wrap;gap:10px;margin:26px auto 0;}
@@ -264,7 +295,7 @@ footer{border-top:1px solid var(--line);margin-top:20px;padding:44px 0 56px;}
     --cheap:#1e7a46;--mid:#8a5a00;--exp:#9c1d2e;}
   html,body{background:#fff !important;color:var(--ink) !important;font-size:11.5pt;}
   *{-webkit-print-color-adjust:exact;print-color-adjust:exact;box-shadow:none !important;text-shadow:none !important;filter:none !important;}
-  .topbar,button.pdf-btn,.pdf-btn{display:none !important;}
+  .topbar,button.pdf-btn,.pdf-btn,#progressBar,.rail,.series{display:none !important;}
   a{color:inherit;text-decoration:underline;text-decoration-color:var(--line-2);}
   .wrap,article,main{max-width:none !important;}
   article{padding:0 !important;}
@@ -301,6 +332,16 @@ footer{border-top:1px solid var(--line);margin-top:20px;padding:44px 0 56px;}
 </style>
 </head>
 <body>
+
+<div id="progressBar"></div>
+
+<nav class="rail" id="rail">
+  <a href="#consensus" data-sec="consensus"><span class="lbl">Consensus</span></a>
+  <a href="#split" data-sec="split"><span class="lbl">The split</span></a>
+  <a href="#reliability" data-sec="reliability"><span class="lbl">Reliability</span></a>
+  <a href="#money" data-sec="money"><span class="lbl">Money</span></a>
+  <a href="#check" data-sec="check"><span class="lbl">The check</span></a>
+</nav>
 
 <div class="paper-head" style="display:none">
   <span>Hydra Research</span>
@@ -613,6 +654,19 @@ footer{border-top:1px solid var(--line);margin-top:20px;padding:44px 0 56px;}
 </article>
 </main>
 
+<div class="series">
+  <div class="series-grid">
+    <a class="series-card" href="/blog/declared-not-enforced-isolation.html">
+      <div class="sk">also in this series · security research</div>
+      <div class="st">We Fixed "Declared, Not Enforced" Isolation on Sept 28. OpenAI Disclosed Why It Matters on Oct 1.</div>
+    </a>
+    <a class="series-card" href="/blog/a-test-that-cannot-fail.html">
+      <div class="sk">also in this series · engineering</div>
+      <div class="st">A Test That Passes Under the Bug It Exists to Catch</div>
+    </a>
+  </div>
+</div>
+
 <footer>
   <div class="foot">
     <div>
@@ -628,6 +682,39 @@ footer{border-top:1px solid var(--line);margin-top:20px;padding:44px 0 56px;}
     </nav>
   </div>
 </footer>
+
+<script>
+(function(){
+  var bar = document.getElementById('progressBar');
+  function onScroll(){
+    var h = document.documentElement;
+    var scrolled = h.scrollTop || document.body.scrollTop;
+    var height = h.scrollHeight - h.clientHeight;
+    bar.style.width = (height > 0 ? (scrolled / height) * 100 : 0) + '%';
+  }
+  window.addEventListener('scroll', onScroll, {passive:true});
+  onScroll();
+
+  var rail = document.getElementById('rail');
+  if (rail) {
+    var links = rail.querySelectorAll('a');
+    var sections = Array.prototype.map.call(links, function(a){
+      return document.getElementById(a.getAttribute('data-sec'));
+    });
+    var io = new IntersectionObserver(function(entries){
+      entries.forEach(function(entry){
+        var idx = sections.indexOf(entry.target);
+        if (idx === -1) return;
+        if (entry.isIntersecting) {
+          links.forEach(function(a){ a.classList.remove('active'); });
+          links[idx].classList.add('active');
+        }
+      });
+    }, {rootMargin:'-40% 0px -50% 0px'});
+    sections.forEach(function(s){ if (s) io.observe(s); });
+  }
+})();
+</script>
 
 </body>
 </html>
