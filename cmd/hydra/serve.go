@@ -258,8 +258,19 @@ func cmdServe() *cobra.Command {
 }
 
 func printServeBanner(w io.Writer, addr, enum string, hasToken, localOnly bool, heads []provider.Head) {
+	// Over the heads this server can actually reach. Counting all 16 on a
+	// --local endpoint advertised ten that no request could ever route to
+	// (#1147).
+	reachable := 0
 	withTools := 0
 	for _, h := range heads {
+		if localOnly && !h.LocalOnly {
+			continue
+		}
+		if executor.Unroutable(h) != "" {
+			continue
+		}
+		reachable++
 		if executor.CanUseTools(h) {
 			withTools++
 		}
@@ -277,9 +288,16 @@ func printServeBanner(w io.Writer, addr, enum string, hasToken, localOnly bool, 
 	if localOnly {
 		fmt.Fprintf(w, "  heads             local only\n")
 	}
-	// Tool calls are what an agent loop needs and most dialects cannot carry
-	// them yet, so this is the honest answer to "will my agent work here".
-	fmt.Fprintf(w, "  tool calling      %d of %d Heads can carry tools\n", withTools, len(heads))
+	// "can be sent tools", which is a property of the dialect, not a promise
+	// that the model will answer with a structured call: measured here, Ollama
+	// reports tool support for every local model while Qwen2.5-Coder writes its
+	// calls as message text. Saying which claim this is, because an agent
+	// author reads this line as "my loop will work" (#1147).
+	fmt.Fprintf(w, "  tool calling      %d of %d reachable Heads accept tool definitions\n", withTools, reachable)
+	if withTools > 0 {
+		fmt.Fprintf(w, "                    %s\n", dimStyle.Render(
+			"a call written as message text is recovered; whether a model emits one is the model's"))
+	}
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, dimStyle.Render("  ctrl-c to stop"))
 	fmt.Fprintln(w)

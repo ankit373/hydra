@@ -3,8 +3,10 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/ankit373/hydra/internal/dispatch"
@@ -94,5 +96,37 @@ func TestPinHead_SeparatesUnknownFromUnusable(t *testing.T) {
 		if errors.Is(e, dispatch.ErrNoHeads) {
 			t.Errorf("%v already is ErrNoHeads; the wrapper is what must carry both", e)
 		}
+	}
+}
+
+// The banner is what an agent author reads to decide whether their loop will
+// work here, so its denominator has to be heads this server can actually
+// reach. Before #1147 it counted all 16 on a --local endpoint, ten of which
+// no request could route to, and the embedding-only head among them.
+func TestServeBanner_CountsOnlyReachableHeads(t *testing.T) {
+	heads := []provider.Head{
+		{ID: "ollama/chat", Provider: "ollama", Source: "port",
+			Endpoint: "http://127.0.0.1:11434/v1", LocalOnly: true},
+		{ID: "ollama/embed", Provider: "ollama", Source: "port",
+			Endpoint: "http://127.0.0.1:11434/v1", LocalOnly: true,
+			Meta: map[string]string{"embedding_only": "true"}},
+		{ID: "cloud/one", Provider: "anthropic", Source: "registry", Executable: "/usr/bin/agy"},
+	}
+
+	var local, all bytes.Buffer
+	printServeBanner(&local, "127.0.0.1:1", "STANDARD", false, true, heads)
+	printServeBanner(&all, "127.0.0.1:1", "STANDARD", false, false, heads)
+
+	// --local: only the one routable local chat head is reachable.
+	if !strings.Contains(local.String(), "of 1 reachable") {
+		t.Errorf("--local did not drop the unreachable heads:\n%s", local.String())
+	}
+	// Without it, the cloud head joins; the embedding-only one never does.
+	if !strings.Contains(all.String(), "of 2 reachable") {
+		t.Errorf("the embedding-only head was counted as reachable:\n%s", all.String())
+	}
+	// And the line must not read as a promise about the model.
+	if !strings.Contains(local.String(), "accept tool definitions") {
+		t.Errorf("the banner states a capability it cannot know:\n%s", local.String())
 	}
 }
