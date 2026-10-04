@@ -225,3 +225,10 @@ func (t *toolCallStream) done() []ToolCall {
 	}
 	return t.calls
 }
+
+// toolCallID mints the id an OpenAI client needs to send a result back, for the
+// dialects that issue none of their own. Derived from the call's name and its
+// position so one answer reads the same twice, which a random id would not.
+func toolCallID(name string, nth int) string {
+	return fmt.Sprintf("call_%s_%d", name, nth)
+}
