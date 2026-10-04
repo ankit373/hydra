@@ -113,7 +113,9 @@ func Edit(ctx context.Context, req Request) (*Result, error) {
 	// ── Snapshot ──────────────────────────────────────────────────────────────
 	origContent, origExisted := readFile(req.File)
 
-	// Non-git workspaces: create .hydra-bak on FIRST edit only so rollback has baseline.
+	// Non-git workspaces: .hydra-bak on the FIRST edit only. It is internal/review's
+	// diff baseline, "what this file looked like before Hydra touched it", and is
+	// deliberately NOT what rollback restores: that is this edit's own snapshot.
 	backup := req.File + ".hydra-bak"
 	createdBackup := false
 	if resolved.GitRoot == "" && origExisted && !fileExists(backup) {
@@ -234,7 +236,10 @@ func Edit(ctx context.Context, req Request) (*Result, error) {
 			if errors.Is(verr, ErrValidatorUnavailable) {
 				// Not the head's fault and not a verdict, so nothing is
 				// recorded: validatorPassed stays nil and says so.
-				rollback(req.File, origContent, origExisted, resolved.GitRoot, backup)
+				rollback(req.File, origContent, origExisted)
+				// Only a backup THIS edit created: one an earlier edit wrote is
+				// internal/review's baseline and outlives a failed attempt.
+				cleanupBackup()
 				return &Result{
 					Status: "fail", File: req.File, Workspace: wsName,
 					GitRoot: resolved.GitRoot, Enum: req.Enum, Head: dispResult.Head.ID,
@@ -244,7 +249,10 @@ func Edit(ctx context.Context, req Request) (*Result, error) {
 			if verr != nil {
 				// Interrupted, so nothing was learned about this head. Recording
 				// it would teach the calibrator that a Ctrl+C is broken code.
-				rollback(req.File, origContent, origExisted, resolved.GitRoot, backup)
+				rollback(req.File, origContent, origExisted)
+				// Only a backup THIS edit created: one an earlier edit wrote is
+				// internal/review's baseline and outlives a failed attempt.
+				cleanupBackup()
 				return nil, fmt.Errorf("validating %s: %w", req.File, verr)
 			}
 			validatorPassed = boolp(vrc == 0)
@@ -258,7 +266,10 @@ func Edit(ctx context.Context, req Request) (*Result, error) {
 				Passed: vrc == 0, Detail: firstLine(vout),
 			})
 			if vrc != 0 {
-				rollback(req.File, origContent, origExisted, resolved.GitRoot, backup)
+				rollback(req.File, origContent, origExisted)
+				// Only a backup THIS edit created: one an earlier edit wrote is
+				// internal/review's baseline and outlives a failed attempt.
+				cleanupBackup()
 				return &Result{
 					Status:          "fail",
 					File:            req.File,
@@ -283,7 +294,10 @@ func Edit(ctx context.Context, req Request) (*Result, error) {
 	// as an applied one.
 	if origExisted {
 		if why, over := fp.DiffExceeded(added, removed, strings.Count(origContent, "\n")+1); over {
-			rollback(req.File, origContent, origExisted, resolved.GitRoot, backup)
+			rollback(req.File, origContent, origExisted)
+			// Only a backup THIS edit created: one an earlier edit wrote is
+			// internal/review's baseline and outlives a failed attempt.
+			cleanupBackup()
 			return &Result{
 				Status: "fail", File: req.File, Workspace: wsName,
 				GitRoot: resolved.GitRoot, Enum: req.Enum, Head: dispResult.Head.ID,
@@ -632,24 +646,26 @@ func stripOuterFence(s string) string {
 	return strings.Join(lines[start:end+1], "\n")
 }
 
-// rollback restores the file to its original state via git, backup, or in-memory.
-func rollback(file, origContent string, origExisted bool, gitRoot, backup string) {
-	if gitRoot != "" {
-		if out, err := exec.Command("git", "-C", gitRoot, "ls-files", "--error-unmatch", file).CombinedOutput(); err == nil {
-			_ = out
-			_, _ = exec.Command("git", "-C", gitRoot, "checkout", "--", file).Output()
-			return
-		}
-	}
-	if fileExists(backup) {
-		_ = os.Rename(backup, file)
-		return
-	}
+// rollback puts back exactly what was on disk before this edit, which is the
+// only thing a rollback may mean.
+//
+// It used to ask git or a .hydra-bak instead, and both answer a different
+// question. `git checkout -- <file>` restores HEAD, so a developer's
+// uncommitted work in that file was destroyed and the edit still reported
+// "rolled_back": true. The backup is written on the *first* edit only, so once
+// a second edit has been accepted it restores the file to before the first and
+// loses the accepted one too. The correct bytes were a parameter the whole
+// time.
+func rollback(file, origContent string, origExisted bool) {
 	if !origExisted {
 		_ = os.Remove(file)
 		return
 	}
-	_ = os.WriteFile(file, []byte(origContent), 0o644)
+	mode := os.FileMode(0o644)
+	if fi, err := os.Stat(file); err == nil {
+		mode = fi.Mode().Perm()
+	}
+	_ = os.WriteFile(file, []byte(origContent), mode)
 }
 
 // runValidatorCmd executes a validator template safely.

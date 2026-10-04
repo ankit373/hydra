@@ -5,6 +5,7 @@ package editor
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -158,16 +159,19 @@ func TestRollback_RemovesAFileThatDidNotExistBefore(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rollback(file, "", false, "", filepath.Join(dir, "new.go.hydra-bak"))
+	rollback(file, "", false)
 
 	if fileExists(file) {
 		t.Error("a file created by the edit survived rollback")
 	}
 }
 
-// A backup, when present, is the source of truth, it is the exact bytes from
-// before the edit.
-func TestRollback_RestoresFromTheBackupAndConsumesIt(t *testing.T) {
+// This edit's own snapshot is the source of truth, never the .hydra-bak beside
+// it. The backup is written on the FIRST edit only, so once a second edit has
+// been accepted it describes the file from before the first, and restoring it
+// would throw the accepted one away. It belongs to internal/review, which wants
+// exactly that older baseline to diff against (#1150).
+func TestRollback_PrefersThisEditsSnapshotOverAStaleBackup(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "f.go")
 	backup := file + ".hydra-bak"
@@ -175,33 +179,35 @@ func TestRollback_RestoresFromTheBackupAndConsumesIt(t *testing.T) {
 	if err := os.WriteFile(file, []byte("BROKEN"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(backup, []byte("ORIGINAL"), 0o600); err != nil {
+	// What the file looked like before the FIRST edit, two edits ago.
+	if err := os.WriteFile(backup, []byte("TWO EDITS AGO"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
-	rollback(file, "ignored because a backup exists", true, "", backup)
+	rollback(file, "ACCEPTED BY THE PREVIOUS EDIT", true)
 
 	got, err := os.ReadFile(file)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(got) != "ORIGINAL" {
-		t.Errorf("file = %q after rollback, want the backup's contents", got)
+	if string(got) != "ACCEPTED BY THE PREVIOUS EDIT" {
+		t.Errorf("file = %q after rollback, want this edit's snapshot; a stale "+
+			"backup discards every edit accepted since it was written", got)
 	}
-	if fileExists(backup) {
-		t.Error("the backup was left behind after being consumed")
+	if !fileExists(backup) {
+		t.Error("rollback consumed internal/review's diff baseline")
 	}
 }
 
-// With no backup and no git, the in-memory original is the last resort.
-func TestRollback_FallsBackToTheInMemoryOriginal(t *testing.T) {
+// The snapshot is the only source, so this is the path, not a last resort.
+func TestRollback_RestoresTheInMemoryOriginal(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "f.go")
 	if err := os.WriteFile(file, []byte("BROKEN"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	rollback(file, "ORIGINAL", true, "", filepath.Join(dir, "nope.hydra-bak"))
+	rollback(file, "ORIGINAL", true)
 
 	got, err := os.ReadFile(file)
 	if err != nil {
@@ -261,5 +267,54 @@ func TestRunValidatorCmd_PathWithSpacesStaysOneArgument(t *testing.T) {
 func TestRunValidatorCmd_EmptyTemplateIsANoOp(t *testing.T) {
 	if out, code, err := runValidatorCmd(context.Background(), "", "/tmp/x"); code != 0 || out != "" || err != nil {
 		t.Errorf("empty template gave (%q, %d, %v), want a clean no-op", out, code, err)
+	}
+}
+
+// The defect this contract exists for. `git checkout -- <file>` restores HEAD,
+// which is a different question from "what did this edit overwrite": a
+// developer's uncommitted work in that file was destroyed and the edit still
+// reported "rolled_back": true. The correct bytes were a parameter the whole
+// time (#1150).
+func TestRollback_DoesNotDiscardUncommittedWork(t *testing.T) {
+	repo := t.TempDir()
+	git := func(args ...string) {
+		t.Helper()
+		c := exec.Command("git", append([]string{"-C", repo}, args...)...)
+		c.Env = append(os.Environ(),
+			"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@example.com",
+			"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@example.com")
+		if out, err := c.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v (%s)", args, err, out)
+		}
+	}
+	git("init", "-q")
+	git("config", "core.autocrlf", "false")
+
+	file := filepath.Join(repo, "a.go")
+	if err := os.WriteFile(file, []byte("package main\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	git("add", "a.go")
+	git("commit", "-qm", "init")
+
+	// What the developer had on disk when the edit began: committed content
+	// plus work they had not committed yet.
+	precious := "package main\n\nfunc NotCommittedYet() string { return \"hours of work\" }\n"
+	if err := os.WriteFile(file, []byte(precious), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// The edit overwrites it, then fails validation and rolls back.
+	if err := os.WriteFile(file, []byte("this does not compile\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rollback(file, precious, true)
+
+	got, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != precious {
+		t.Errorf("rollback destroyed uncommitted work.\n got: %q\nwant: %q", got, precious)
 	}
 }
