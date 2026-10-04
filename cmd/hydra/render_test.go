@@ -158,6 +158,7 @@ func TestLogTrustRun_WritesAReadableRecord(t *testing.T) {
 			{Head: provider.Head{ID: "a"}}, // same head twice
 			{Head: provider.Head{ID: "b"}},
 		},
+		SpanID: "deadbeefcafe0001",
 		Trust: &trust.Result{Confidence: 0.93, Samples: 3, SpentUSD: 0.01,
 			Decision: trust.DecisionAccept},
 	}
@@ -171,6 +172,11 @@ func TestLogTrustRun_WritesAReadableRecord(t *testing.T) {
 	var got map[string]any
 	if err := json.Unmarshal([]byte(strings.TrimSpace(strings.Split(string(raw), "\n")[0])), &got); err != nil {
 		t.Fatalf("the logged run is not valid JSON: %v\n%s", err, raw)
+	}
+	// Without the span id a verdict has no key to find this run by, and the
+	// loop that trains the dissenters is closed by hand or not at all (#1144).
+	if got["span_id"] != "deadbeefcafe0001" {
+		t.Errorf("span_id = %v, want the ensemble root span the verdict arrives on", got["span_id"])
 	}
 	if got["domain"] != "default" {
 		t.Errorf("domain = %v, want it defaulted rather than logged empty", got["domain"])

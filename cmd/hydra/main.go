@@ -2196,6 +2196,10 @@ func cmdOracle() *cobra.Command {
 					fmt.Printf("  %s\n", dimStyle.Render("span score: "+sErr.Error()))
 				} else {
 					fmt.Printf("  %s\n", dimStyle.Render("scored span "+scoreSpan))
+					// The exact id, never the caller's prefix: the run log was
+					// written under one span and a prefix resolves to it only
+					// by luck.
+					replayTrustRun(spanEv.SpanID, v.Passed)
 				}
 			}
 
@@ -4113,7 +4117,48 @@ func logTrustRun(r *swarm.SPRTResult, prompt, domain string) {
 		Decision:   r.Trust.Decision.String(),
 		Ledger:     r.Trust.Ledger,
 		Hypotheses: r.Trust.Hypotheses,
+		SpanID:     r.SpanID,
 	})
+}
+
+// replayTrustRun trains every head that voted, once a verdict from outside the
+// run lands on its span. Nothing is trained from the ensemble's own answer,
+// which would be circular; an oracle ran a real command. This is the only path
+// that can produce a true negative, so without it specificity never leaves its
+// prior and `--confidence` refuses for want of evidence (#771, #1142, #1144).
+func replayTrustRun(spanID string, passed bool) {
+	if spanID == "" {
+		return
+	}
+	done, err := trust.IsApplied(trust.AppliedPath(), spanID)
+	if err != nil || done {
+		return
+	}
+	runs, err := trust.LoadRuns(trust.DefaultLogPath())
+	if err != nil {
+		return
+	}
+	run, ok := trust.FindRunBySpan(runs, spanID)
+	if !ok {
+		return
+	}
+	cal, err := trust.New(trust.DefaultPath())
+	if err != nil {
+		return
+	}
+	outcome := trust.OutcomeIncorrect
+	if passed {
+		outcome = trust.OutcomeCorrect
+	}
+	n, err := trust.ApplyRunOutcome(cal, run.Domain, run.Ledger, outcome)
+	if err != nil || n == 0 {
+		return
+	}
+	if err := trust.MarkApplied(trust.AppliedPath(), spanID); err != nil {
+		return
+	}
+	fmt.Printf("  %s\n", dimStyle.Render(fmt.Sprintf(
+		"trained %d source(s) from the ensemble under this span (%s)", n, run.TaskHash)))
 }
 
 func anyEstimated(attempts []swarm.Attempt) bool {
@@ -5217,6 +5262,13 @@ func cmdTrustOutcome() *cobra.Command {
 				if len(r.Ledger) == 0 {
 					return fmt.Errorf("run %s has no ledger, nothing to train from", r.TaskHash)
 				}
+				// One ledger is one body of evidence, so replaying it a second
+				// time counts every vote twice. A run with no span predates the
+				// marker and keeps the old behaviour (#1144).
+				if done, aErr := trust.IsApplied(trust.AppliedPath(), r.SpanID); aErr == nil && done {
+					return fmt.Errorf("run %s has already been trained from (span %s); "+
+						"replaying it would count every vote twice", r.TaskHash, r.SpanID)
+				}
 				cal, err := trust.New(trust.DefaultPath())
 				if err != nil {
 					return err
@@ -5224,6 +5276,9 @@ func cmdTrustOutcome() *cobra.Command {
 				n, err := trust.ApplyRunOutcome(cal, r.Domain, r.Ledger, o)
 				if err != nil {
 					return err
+				}
+				if r.SpanID != "" {
+					_ = trust.MarkApplied(trust.AppliedPath(), r.SpanID)
 				}
 				fmt.Printf("\n  run %s  ·  domain %s  ·  outcome %s\n", r.TaskHash, r.Domain, outcome)
 				fmt.Printf("  recorded %d of %d ledger entries\n\n", n, len(r.Ledger))
