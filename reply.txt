@@ -1,5 +1,0 @@
-<<<HYDRA_FILE_START>>>
-package main
-
-func Broken( {
-<<<HYDRA_FILE_END>>>

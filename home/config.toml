@@ -1,3 +1,0 @@
-cortex = "ollama/Qwen2.5-Coder:7b"
-skills = []
-capture_payloads = true
