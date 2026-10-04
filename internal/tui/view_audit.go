@@ -34,8 +34,8 @@ type ckAudit struct {
 	mcpCounts   map[mcpregistry.LifecycleState]int
 	provisional []string
 
-	allowedToday, deniedToday, flaggedToday int
-	denyReason                              string
+	allowedToday, deniedToday, askedToday, flaggedToday int
+	denyReason                                          string
 
 	items   []ckAuditItem
 	builtAt time.Time
@@ -95,6 +95,8 @@ func ckAuditFrom(report *security.Report, events []ledger.Event, scorecard []tru
 			if a.denyReason == "" && e.Reason != "" {
 				a.denyReason = e.Reason
 			}
+		case ledger.Ask:
+			a.askedToday++
 		}
 		if e.Flagged {
 			a.flaggedToday++
@@ -350,13 +352,14 @@ func (m Cockpit) auditLogTile() string {
 		ckDimS.Render(fmt.Sprintf(" · %d event%s, %d chained", ev.Events, plural(ev.Events), ev.ChainedEvents)) + "\n")
 	b.WriteString(" " + ckDimS.Render(ckCell("today", 9)) +
 		ckCheapS.Render(fmt.Sprintf("%d allowed", a.allowedToday)) + ckDimS.Render(" · ") +
-		ckExpS.Render(fmt.Sprintf("%d denied", a.deniedToday)) + "\n")
+		ckExpS.Render(fmt.Sprintf("%d denied", a.deniedToday)) + ckDimS.Render(" · ") +
+		ckMidS.Render(fmt.Sprintf("%d ask", a.askedToday)) + "\n")
 	if a.deniedToday > 0 && a.denyReason != "" {
 		b.WriteString("          " + ckFaintS.Render(truncate(ckSafe(a.denyReason), 36)) + "\n")
 	}
 	if l := a.report.Ledger; l.Total > 0 {
 		b.WriteString(" " + ckDimS.Render(ckCell("all-time", 9)) +
-			ckSegmentedBar(20, []int{l.Allowed, l.Denied}, []lipgloss.Style{ckCheapS, ckExpS}) +
+			ckSegmentedBar(20, []int{l.Allowed, l.Denied, l.Asked}, []lipgloss.Style{ckCheapS, ckExpS, ckMidS}) +
 			ckDimS.Render(fmt.Sprintf(" %d", l.Total)))
 	}
 	return b.String()

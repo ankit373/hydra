@@ -595,7 +595,8 @@ type Policy struct {
 func (p Policy) Decide(agent, tool, resource string, action Action, classification string) (Decision, string) {
 	for i, r := range p.Rules {
 		if r.matches(agent, tool, resource, action, classification) {
-			return r.Decision, fmt.Sprintf("rule %d (%s %s/%s)", i, r.Decision, ruleOr(r.Tool), ruleOr(r.Resource))
+			return r.Decision, fmt.Sprintf("rule %d (%s %s/%s%s)", i, r.Decision,
+				ruleOr(r.Tool), ruleOr(r.Resource), ClassificationSuffix(r.Classification))
 		}
 	}
 	def := p.Default
@@ -631,6 +632,16 @@ func ruleOr(s string) string {
 		return "*"
 	}
 	return s
+}
+
+// ClassificationSuffix renders a rule's classification scope as " [pii]", and
+// nothing when the rule matches any classification. One derivation, so a
+// recorded reason and the policy audit cannot disagree about a rule's reach.
+func ClassificationSuffix(classification string) string {
+	if classification == "" {
+		return ""
+	}
+	return " [" + classification + "]"
 }
 
 // DefaultPolicyPath is where the access policy lives (~/.hydra/mcp_policy.json).
@@ -913,9 +924,13 @@ func CheckAndRecordDispatch(d Dispatch) (Decision, error) {
 
 // Summary is the aggregate accountability report.
 type Summary struct {
-	Total   int            `json:"total"`
-	Allowed int            `json:"allowed"`
-	Denied  int            `json:"denied"`
+	Total   int `json:"total"`
+	Allowed int `json:"allowed"`
+	Denied  int `json:"denied"`
+	// Asked counts the Ask verdict: permission withheld pending a human.
+	// Counted because Total - Allowed - Denied read as unexplained, and the
+	// events it hid are the ones somebody is waiting on (#1169).
+	Asked   int            `json:"asked"`
 	Flagged int            `json:"flagged"`
 	ByAgent map[string]int `json:"by_agent"`
 	ByTool  map[string]int `json:"by_tool"`
@@ -931,6 +946,8 @@ func Summarize(events []Event) Summary {
 			s.Allowed++
 		case Deny:
 			s.Denied++
+		case Ask:
+			s.Asked++
 		}
 		if e.Flagged {
 			s.Flagged++
@@ -941,14 +958,17 @@ func Summarize(events []Event) Summary {
 	return s
 }
 
-// Filter returns events matching a non-empty agent and/or only denials.
-func Filter(events []Event, agent string, deniedOnly bool) []Event {
+// Filter returns events matching a non-empty agent and/or only those whose
+// decision withheld permission. Withheld is Deny and Ask both: each stopped
+// the access, and the operator asking what Hydra stopped needs the pending
+// ones most, since they are the ones waiting on them (#1169).
+func Filter(events []Event, agent string, withheldOnly bool) []Event {
 	var out []Event
 	for _, e := range events {
 		if agent != "" && e.Agent != agent {
 			continue
 		}
-		if deniedOnly && e.Decision != Deny {
+		if withheldOnly && e.Decision != Deny && e.Decision != Ask {
 			continue
 		}
 		out = append(out, e)

@@ -421,7 +421,7 @@ A rule narrows by agent, resource, action, or any combination. First match wins,
 }
 ```
 
-`deny` refuses and records it. `ask` parks the task under `hyctl ask` instead, which is the right verdict when you want a human in the loop rather than a refusal; it stops dispatch before any executor runs and never falls through to a cheaper head. Check a rule fires before trusting it, then read back what the policy is actually doing:
+`deny` refuses and records it. `ask` parks the task under `hyctl ask` instead, which is the right verdict when you want a human in the loop rather than a refusal; it stops dispatch before any executor runs and never falls through to a cheaper head. `hyctl mcp check` exits 3 on a deny and 4 on an ask, so a script can tell a refusal from a question, and 0 only ever means the access was allowed. Check a rule fires before trusting it, then read back what the policy is actually doing:
 
 ```bash
 hyctl mcp check fs --agent hydra-swarm --resource registry/routing.yaml --action write
@@ -895,13 +895,13 @@ hyverify --candidate internal/auth/token.go --task "rotate signing key" --enum M
 hyverify --candidate out.go --task "..." -- go test ./...   # name the judge yourself
 hyverify --candidate x.go --task "..." --embed-model nomic-embed-text  # so it trains a classifier
 hyverify --version                                          # which build wrote a corpus row
-hyctl mcp check <tool> --agent A --resource R --action write  # gate + record an access
+hyctl mcp check <tool> --agent A --resource R --action write  # 0 allow, 3 deny, 4 ask
 hyctl mcp check <tool> --content "$DATA" --action network      # PII auto-classified; policy can deny egress
 hyctl mcp check <tool> --params '{"amount":500}'               # bind a hash of the params to the decision
 hyctl mcp verify <tool> --resource R --params '{"amount":500}' # prove executed params == approved params
 hyctl mcp verify-chain                  # confirm the ledger's hash chain hasn't been tampered with
-hyctl mcp log --denied                  # what got blocked
-hyctl mcp report                        # allowed/denied by agent and tool
+hyctl mcp log --denied                  # what was withheld: denied and ask alike
+hyctl mcp report                        # allowed/denied/ask by agent and tool
 hyctl mcp registry sync                 # pull the official MCP registry into a local cache
 hyctl mcp registry scan                 # list MCP servers installed on this machine (identity only)
 hyctl mcp registry audit                # resolve + score installed servers, advance lifecycle state

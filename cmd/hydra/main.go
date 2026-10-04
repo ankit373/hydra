@@ -2243,7 +2243,10 @@ func cmdMCP() *cobra.Command {
 	check := &cobra.Command{
 		Use:   "check <tool>",
 		Short: "Evaluate the policy for a tool/resource access and record it",
-		Args:  cobra.ExactArgs(1),
+		Long: "Evaluate the policy for a tool/resource access and record it.\n\n" +
+			"Exit codes: 0 allow, 3 deny, 4 ask. Ask is permission withheld pending a\n" +
+			"human, not a refusal, so it gets its own code rather than reading as either.",
+		Args: cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			pol, err := ledger.LoadPolicy(policyPath)
 			if err != nil {
@@ -2293,8 +2296,14 @@ func cmdMCP() *cobra.Command {
 			if checkErr != nil {
 				fmt.Fprintf(os.Stderr, "  ledger error: %v\n", checkErr)
 			}
-			if decision == ledger.Deny {
-				os.Exit(3) // non-zero so callers can gate on it
+			// Gate on "not Allow", as ledger.Check's own doc requires: Ask
+			// withholds permission too, and exiting 0 made it indistinguishable
+			// from approval to the script this exit code exists for (#1160).
+			if decision != ledger.Allow {
+				if decision == ledger.Ask {
+					os.Exit(4) // waiting on a human, see `hyctl ask`
+				}
+				os.Exit(3)
 			}
 			return checkErr
 		},
@@ -2352,7 +2361,7 @@ func cmdMCP() *cobra.Command {
 	record.Flags().StringVar(&recTool, "tool", "", "tool")
 	record.Flags().StringVar(&recResource, "resource", "", "resource")
 	record.Flags().StringVar(&recAction, "action", "read", "read|write|exec|network")
-	record.Flags().StringVar(&recDecision, "decision", "allow", "allow|deny")
+	record.Flags().StringVar(&recDecision, "decision", "allow", "allow|deny|ask")
 	record.Flags().StringVar(&recParams, "params", "", "JSON object of invocation parameters; hashed and bound to the recorded event")
 	record.Flags().StringVar(&recClassification, "classification", "", "data-sensitivity tag (e.g. pii)")
 
@@ -2398,9 +2407,9 @@ func cmdMCP() *cobra.Command {
 			// compose it here so a broken chain refuses the approval instead of
 			// silently trusting it (#500). Approvals that predate hash-chaining
 			// (Hash == "") were never protected either way, so leave them as-is.
+			var chain ledger.ChainResult
 			if approval.Hash != "" {
-				chain, err := ledger.VerifyChain(ledger.DefaultPath())
-				if err != nil {
+				if chain, err = ledger.VerifyChain(ledger.DefaultPath()); err != nil {
 					return err
 				}
 				if !chain.Intact {
@@ -2425,6 +2434,17 @@ func cmdMCP() *cobra.Command {
 				os.Exit(3) // non-zero so callers can gate on it
 			}
 			fmt.Printf("  MATCH  parameters match the approval for %s\n", target)
+			// The walk proves no event was edited; the anchor is what proves none
+			// was deleted from the end. Without one this MATCH is weaker than one
+			// verified against a provably complete log, and said so nowhere (#1169).
+			switch {
+			case chain.AnchorMissing:
+				fmt.Println("         caveat: the ledger chain anchor is missing, so deletion from " +
+					"the end cannot be ruled out. Run `hyctl mcp verify-chain`.")
+			case chain.AnchorStale:
+				fmt.Println("         caveat: the ledger chain anchor is stale, it names an earlier " +
+					"event than the last one. Run `hyctl mcp verify-chain`.")
+			}
 			return nil
 		},
 	}
@@ -2435,7 +2455,7 @@ func cmdMCP() *cobra.Command {
 
 	// log: list events, optionally filtered.
 	var logAgent string
-	var logDenied bool
+	var logWithheld bool
 	logCmd := &cobra.Command{
 		Use:   "log",
 		Short: "List ledger events (newest last)",
@@ -2444,7 +2464,7 @@ func cmdMCP() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			events = ledger.Filter(events, logAgent, logDenied)
+			events = ledger.Filter(events, logAgent, logWithheld)
 			if len(events) == 0 {
 				fmt.Println("  (no matching ledger events)")
 				return nil
@@ -2455,6 +2475,11 @@ func cmdMCP() *cobra.Command {
 				line := fmt.Sprintf("  %s  %-6s  %-12s %s -> %s %s", e.TS, strings.ToUpper(string(e.Decision)),
 					util.SafeTerminal(e.Agent), util.SafeTerminal(e.Tool), util.SafeTerminal(e.Resource),
 					dimStyle.Render(string(e.Action)))
+				// Without this a pii-classified network egress rendered
+				// byte-identically to an ordinary allow (#1169).
+				if e.Classification != "" {
+					line += dimStyle.Render(fmt.Sprintf("  [%s]", util.SafeTerminal(e.Classification)))
+				}
 				if e.Flagged {
 					line += dimStyle.Render(fmt.Sprintf("  [flagged: %s]", util.SafeTerminal(e.FlagReason)))
 				}
@@ -2464,7 +2489,7 @@ func cmdMCP() *cobra.Command {
 		},
 	}
 	logCmd.Flags().StringVar(&logAgent, "agent", "", "filter to one agent")
-	logCmd.Flags().BoolVar(&logDenied, "denied", false, "only show denied accesses")
+	logCmd.Flags().BoolVar(&logWithheld, "denied", false, "only show withheld accesses (deny and ask)")
 
 	// report: aggregate summary.
 	var repJSON bool
@@ -2480,7 +2505,8 @@ func cmdMCP() *cobra.Command {
 			if repJSON {
 				return json.NewEncoder(os.Stdout).Encode(s)
 			}
-			fmt.Printf("\n  ledger events   %d  (%d allowed · %d denied · %d flagged)\n", s.Total, s.Allowed, s.Denied, s.Flagged)
+			fmt.Printf("\n  ledger events   %d  (%d allowed · %d denied · %d ask · %d flagged)\n",
+				s.Total, s.Allowed, s.Denied, s.Asked, s.Flagged)
 			if len(s.ByAgent) > 0 {
 				fmt.Println("  by agent:")
 				for _, kc := range ledger.SortedCounts(s.ByAgent) {
@@ -2945,8 +2971,9 @@ func printSecurityReport(r *security.Report, why bool) {
 	if !r.HasData {
 		fmt.Println(dimStyle.Render("  no ledger events yet, nothing has dispatched through hyctl on this machine"))
 	} else {
-		fmt.Printf("  %s  %d  (%d allowed · %d denied · %d flagged)\n",
-			cortexStyle.Render("ledger events"), r.Ledger.Total, r.Ledger.Allowed, r.Ledger.Denied, r.Ledger.Flagged)
+		fmt.Printf("  %s  %d  (%d allowed · %d denied · %d ask · %d flagged)\n",
+			cortexStyle.Render("ledger events"), r.Ledger.Total, r.Ledger.Allowed,
+			r.Ledger.Denied, r.Ledger.Asked, r.Ledger.Flagged)
 	}
 
 	if len(r.ByHead) > 0 {
@@ -3048,8 +3075,10 @@ func printEvidenceState(r *security.Report) {
 	case ev.AnchorMissing:
 		chain = warnStyle.Render("unanchored, truncation would not be detected")
 	}
-	fmt.Printf("  %s  %d blocked · %d flagged\n",
-		cortexStyle.Render("activity"), r.Ledger.Denied, r.Ledger.Flagged)
+	// "N blocked" alone answered "what did Hydra stop today" with half the
+	// number, and the half it dropped is the half waiting on the reader.
+	fmt.Printf("  %s  %d blocked · %d awaiting approval · %d flagged\n",
+		cortexStyle.Render("activity"), r.Ledger.Denied, r.Ledger.Asked, r.Ledger.Flagged)
 	fmt.Printf("  %s  %d event(s), %d hash-chained, %s\n",
 		cortexStyle.Render("evidence"), ev.Events, ev.ChainedEvents, chain)
 }
@@ -3246,7 +3275,7 @@ func printPolicyAudit(r *security.Report) {
 		fmt.Println(dimStyle.Render("    no rules defined, nothing is scoped"))
 		return
 	}
-	fmt.Printf("    %-4s %-30s %-7s %6s  %s\n", "#", "RULE", "DECIDES", "HITS", "")
+	fmt.Printf("    %-4s %-38s %-7s %6s  %s\n", "#", "RULE", "DECIDES", "HITS", "")
 	for _, rule := range a.Rules {
 		note := ""
 		switch {
@@ -3255,7 +3284,7 @@ func printPolicyAudit(r *security.Report) {
 		case rule.Dead:
 			note = dimStyle.Render("never matched")
 		}
-		fmt.Printf("    %-4d %-30.30s %-7s %6d  %s\n",
+		fmt.Printf("    %-4d %-38.38s %-7s %6d  %s\n",
 			rule.Index, util.SafeTerminal(rule.Summary), rule.Decision, rule.Hits, note)
 	}
 	fmt.Println(dimStyle.Render(fmt.Sprintf("    %d access(es) fell through to the %s default", a.DefaultHits, a.Default)))

@@ -685,6 +685,57 @@ func TestFilter(t *testing.T) {
 	}
 }
 
+// Ask withholds permission exactly as Deny does, and was counted nowhere: a
+// ledger of 3 allow, 2 deny and 2 ask reported 7 events and 3+2, with nothing
+// naming the missing two, which are the ones waiting on a human (#1169).
+func TestSummarizeAndFilter_CountAsk(t *testing.T) {
+	events := []Event{
+		{Agent: "a", Tool: "fs", Decision: Allow},
+		{Agent: "a", Tool: "fs", Decision: Deny},
+		{Agent: "a", Tool: "net", Decision: Ask},
+		{Agent: "b", Tool: "net", Decision: Ask},
+	}
+
+	s := Summarize(events)
+	if s.Asked != 2 {
+		t.Errorf("Summarize().Asked = %d, want 2", s.Asked)
+	}
+	if s.Allowed+s.Denied+s.Asked != s.Total {
+		t.Errorf("allowed+denied+asked = %d but Total = %d, the report does not add up",
+			s.Allowed+s.Denied+s.Asked, s.Total)
+	}
+
+	withheld := Filter(events, "", true)
+	if len(withheld) != 3 {
+		t.Fatalf("Filter(withheld) = %d events, want 3 (1 deny + 2 ask)", len(withheld))
+	}
+	for _, e := range withheld {
+		if e.Decision == Allow {
+			t.Errorf("Filter(withheld) returned an allowed event: %+v", e)
+		}
+	}
+}
+
+// A rule scoped to one classification must not record a reason that reads as
+// universal: "rule 0 (deny */*)" is exactly what a rule matching everything
+// would say, and the audit renders that string (#1169).
+func TestDecide_ReasonNamesTheClassificationScope(t *testing.T) {
+	scoped := Policy{Rules: []Rule{{Classification: "pii", Action: Network, Decision: Deny}}}
+	universal := Policy{Rules: []Rule{{Action: Network, Decision: Deny}}}
+
+	_, scopedReason := scoped.Decide("a", "net", "/api", Network, "pii")
+	_, universalReason := universal.Decide("a", "net", "/api", Network, "")
+	if scopedReason == universalReason {
+		t.Fatalf("a pii-scoped deny and a universal one both recorded %q", scopedReason)
+	}
+	if !strings.Contains(scopedReason, "pii") {
+		t.Errorf("reason = %q, does not name the classification it is scoped to", scopedReason)
+	}
+	if ClassificationSuffix("") != "" {
+		t.Errorf("an unscoped rule gained a suffix: %q", ClassificationSuffix(""))
+	}
+}
+
 func TestVerifyChain_RoundTripIsIntact(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "mcp_ledger.jsonl")
 	for i := 0; i < 5; i++ {
