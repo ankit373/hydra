@@ -113,7 +113,7 @@ func TestFalseHitRate(t *testing.T) {
 		served, exact := 0, 0
 		for i, d := range docs {
 			q := Normalize(p.fn(d))
-			if Key(q) == Key(d) {
+			if Key(Query{Prompt: q}) == Key(Query{Prompt: d}) {
 				exact++
 				served++
 				continue

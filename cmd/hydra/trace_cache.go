@@ -96,8 +96,13 @@ stopped. That number is the evidence the gate is worth having.`,
 // reader is the one who gets to decide whether that matters here.
 func cacheLabel(hit *cache.Hit) string {
 	how := fmt.Sprintf("%.1f%% similar", hit.Similarity*100)
-	if hit.Exact {
+	switch {
+	case hit.Exact:
 		how = "same prompt"
+	case !hit.Measured:
+		// No embedder here, so the content gate served it alone. Rendering the
+		// unset similarity read as the cache answering an unrelated prompt.
+		how = "same question (no similarity measured)"
 	}
 	saved := ""
 	if hit.CostUSD > 0 {

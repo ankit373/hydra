@@ -592,7 +592,10 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 	// served one costs nothing at all. The outcome is carried to the dry run
 	// as well, so a preview that would be answered from the cache says so
 	// instead of naming a head that would never run (#167).
-	cached, consulted := d.fromCache(ctx, prompt, opts, class)
+	// No --tier is "" here, which Atoi reads as 0: no strength was asked for,
+	// so there is no bar to hold a stored answer to (cache.atLeastAsStrong).
+	wantTier, _ := strconv.Atoi(tier)
+	cached, consulted := d.fromCache(ctx, prompt, opts, class, wantTier)
 	if consulted && !opts.DryRun {
 		d.recordLookup(cached)
 	}

@@ -5,6 +5,7 @@ package cache
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"strings"
 
 	"github.com/ankit373/hydra/internal/policy"
@@ -23,12 +24,44 @@ func Normalize(prompt string) string {
 	return strings.Join(strings.Fields(redacted), " ")
 }
 
-// Key is a normalized prompt's content address. An exact key match is the only
-// hit this package can make with certainty, and is the reason the cache is
-// worth having at all.
-func Key(normalized string) string {
-	sum := sha256.Sum256([]byte(normalized))
-	return hex.EncodeToString(sum[:])
+// Query is a question and everything about the asking that decides what a
+// correct answer to it would be. One type for the lookup and for the stored
+// entry, so the key cannot be derived one way on write and another on read.
+type Query struct {
+	Prompt string
+	// System framed the question, so two system prompts are two questions: a
+	// run told "the secret code is BRAVO" was served ALPHA's answer (#1154).
+	System string
+	// MaxTokens is the ceiling the answer was produced under. A cap constrains
+	// the answer, so one produced under a small cap is not the answer to the
+	// same question asked under a large one (#1155).
+	MaxTokens int
+	// Tier is how strong a head this wants, or produced it, lower being
+	// stronger. Deliberately not in the key: serving down is defensible and
+	// only serving up has to be refused, which Lookup decides (#1156).
+	Tier int
+}
+
+// Answer is this query's storable entry. One construction, so the fields the
+// key is derived from on write are the ones the lookup set.
+func (q Query) Answer(response string) Entry {
+	return Entry{
+		Prompt: q.Prompt, System: q.System, MaxTokens: q.MaxTokens,
+		Tier: q.Tier, Response: response,
+	}
+}
+
+// Key is a query's content address: everything that has to match exactly
+// before a stored answer may be served. Normalization happens here, so no
+// caller can key a raw prompt against a normalized one (#888).
+//
+// Length-prefixed rather than separated, since any separator byte is one a
+// prompt may itself contain and two fields would then address one entry.
+func Key(q Query) string {
+	prompt, system := Normalize(q.Prompt), Normalize(q.System)
+	h := sha256.New()
+	fmt.Fprintf(h, "%d:%s%d:%s%d", len(prompt), prompt, len(system), system, q.MaxTokens)
+	return hex.EncodeToString(h.Sum(nil))
 }
 
 // stopwords are the English function words a prompt can differ in without

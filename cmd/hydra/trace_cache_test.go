@@ -101,8 +101,8 @@ func seedCache(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	st.Record(st.Lookup("rotate the signing key", nil, cache.DefaultThreshold))
-	st.Record(st.Lookup("something else entirely", nil, cache.DefaultThreshold))
+	st.Record(st.Lookup(cache.Query{Prompt: "rotate the signing key"}, nil, cache.DefaultThreshold))
+	st.Record(st.Lookup(cache.Query{Prompt: "something else entirely"}, nil, cache.DefaultThreshold))
 }
 
 // The label is what tells a reader the answer was not produced just now, so it
@@ -120,10 +120,20 @@ func TestCacheLabel_SaysHowItMatchedAndHowOld(t *testing.T) {
 
 	near := cacheLabel(&cache.Hit{
 		Entry:      cache.Entry{Head: "h1", TS: time.Now()},
-		Similarity: 0.9712,
+		Similarity: 0.9712, Measured: true,
 	})
 	if !strings.Contains(near, "97.1% similar") {
 		t.Errorf("a near match does not report its similarity: %s", near)
+	}
+
+	// With no embedder the content gate serves alone, and there is no cosine
+	// to report. "0.0% similar" read as an answer to an unrelated prompt.
+	unmeasured := cacheLabel(&cache.Hit{Entry: cache.Entry{Head: "h1", TS: time.Now()}})
+	if strings.Contains(unmeasured, "0.0% similar") {
+		t.Errorf("a hit nothing measured claimed a similarity: %s", unmeasured)
+	}
+	if !strings.Contains(unmeasured, "no similarity measured") {
+		t.Errorf("the label does not name the gate that served it: %s", unmeasured)
 	}
 	// Nothing was spent producing a free head's answer, so nothing is claimed
 	// saved by reusing it.
