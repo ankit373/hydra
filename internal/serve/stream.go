@@ -154,7 +154,7 @@ func (s *streamer) begin(head, model string) {
 		return
 	}
 	s.open = true
-	s.model = firstNonEmpty(model, head, s.asked)
+	s.model = firstNonEmpty(head, model, s.asked) // id, not display name (#1145)
 
 	h := s.w.Header()
 	h.Set("Content-Type", "text/event-stream")
