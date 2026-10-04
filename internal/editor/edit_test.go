@@ -544,24 +544,29 @@ func TestReadFile_DistinguishesEmptyFromMissing(t *testing.T) {
 }
 
 func TestRollback_RestoresFromEachSource(t *testing.T) {
-	t.Run("from the backup", func(t *testing.T) {
+	// The backup is not rollback's to read or to delete. It is written on the
+	// FIRST edit only, so it describes the file from before that one; restoring
+	// it would discard every edit accepted since. Edit removes it on failure
+	// when it was the edit that created it, and internal/review keeps it
+	// otherwise as its diff baseline (#1150).
+	t.Run("the snapshot wins over a stale backup, which is left alone", func(t *testing.T) {
 		dir := t.TempDir()
 		file := filepath.Join(dir, "a.txt")
 		backup := file + ".hydra-bak"
-		if err := os.WriteFile(backup, []byte("original\n"), 0o600); err != nil {
+		if err := os.WriteFile(backup, []byte("two edits ago\n"), 0o600); err != nil {
 			t.Fatal(err)
 		}
 		if err := os.WriteFile(file, []byte("bad\n"), 0o600); err != nil {
 			t.Fatal(err)
 		}
 
-		rollback(file, "original\n", true, "", backup)
+		rollback(file, "original\n", true)
 
 		if raw, _ := os.ReadFile(file); string(raw) != "original\n" {
-			t.Errorf("file = %q after rollback", raw)
+			t.Errorf("file = %q after rollback, want this edit's snapshot", raw)
 		}
-		if _, err := os.Stat(backup); err == nil {
-			t.Error("the backup survived, so the next edit sees a stale baseline")
+		if _, err := os.Stat(backup); err != nil {
+			t.Error("rollback consumed internal/review's diff baseline")
 		}
 	})
 
@@ -571,7 +576,7 @@ func TestRollback_RestoresFromEachSource(t *testing.T) {
 		if err := os.WriteFile(file, []byte("bad\n"), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		rollback(file, "", false, "", file+".hydra-bak")
+		rollback(file, "", false)
 		if _, err := os.Stat(file); err == nil {
 			t.Error("a file the edit created was left behind")
 		}
@@ -583,7 +588,7 @@ func TestRollback_RestoresFromEachSource(t *testing.T) {
 		if err := os.WriteFile(file, []byte("bad\n"), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		rollback(file, "original\n", true, "", file+".hydra-bak")
+		rollback(file, "original\n", true)
 		if raw, _ := os.ReadFile(file); string(raw) != "original\n" {
 			t.Errorf("file = %q, want the snapshot restored", raw)
 		}
@@ -825,7 +830,7 @@ func TestRollback_UsesGitInARepository(t *testing.T) {
 	if err := os.WriteFile(file, []byte("a bad edit\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	rollback(file, original, true, repo, file+".hydra-bak")
+	rollback(file, original, true)
 
 	raw, err := os.ReadFile(file)
 	if err != nil {
@@ -840,7 +845,7 @@ func TestRollback_UsesGitInARepository(t *testing.T) {
 	if err := os.WriteFile(untracked, []byte("created by the edit\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	rollback(untracked, "", false, repo, untracked+".hydra-bak")
+	rollback(untracked, "", false)
 	if _, err := os.Stat(untracked); err == nil {
 		t.Error("an untracked file the edit created survived the rollback")
 	}
