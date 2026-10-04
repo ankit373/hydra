@@ -1,0 +1,3 @@
+cortex = "ollama/stubmodel:1b"
+skills = []
+capture_payloads = true

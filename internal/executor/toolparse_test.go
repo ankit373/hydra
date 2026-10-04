@@ -145,9 +145,14 @@ func TestRecoverToolCalls_Refuses(t *testing.T) {
 // a head that structures its calls, which is a routing decision.
 func TestRecoverToolCalls_CannotTellACallFromAQuotedOne(t *testing.T) {
 	// Captured from: "Show me an example of the JSON for calling get_weather.
-	// Do not actually call it."
+	// Do not actually call it." The model answered with exactly the bytes it
+	// sends to make the call.
 	quoted := `{"name": "get_weather", "arguments": {"city": "New York"}}`
 	if _, ok := RecoverToolCalls(quoted, offered("get_weather")); !ok {
-		t.Skip("the parser grew a way to tell these apart; update this limit")
+		t.Error("this input is no longer recovered, so the documented limit has " +
+			"moved: update the comment on RecoverToolCalls and this test rather " +
+			"than deleting either")
 	}
+	// Asserted rather than skipped on purpose. A skip hides a limit; pinning it
+	// means anyone who does find a way to tell the two apart has to say so.
 }
