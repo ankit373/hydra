@@ -24,6 +24,13 @@ import (
 // resolve answers 400 rather than reading as Hydra having failed.
 var ErrBadRequest = errors.New("bad request")
 
+// ErrNotFound marks a model the client named that does not exist here, which
+// OpenAI answers 404 with code model_not_found. Separate from ErrBadRequest
+// because the remedies differ, and separate from a 5xx because 5xx is in the
+// SDKs' default retry class: a client that picked a bad model would otherwise
+// retry it twice before showing the user an upstream failure (#1145).
+var ErrNotFound = errors.New("not found")
+
 // hydraModel is the routing prefix the model field uses.
 const hydraModel = "hydra"
 
@@ -173,11 +180,7 @@ func chat(w http.ResponseWriter, req *http.Request, r Router) {
 
 	ans, err := r.Chat(req.Context(), request(in, route, nil))
 	if err != nil {
-		status := http.StatusBadGateway
-		if errors.Is(err, ErrBadRequest) {
-			status = http.StatusBadRequest
-		}
-		writeError(w, status, err.Error())
+		writeError(w, statusFor(err), err.Error())
 		return
 	}
 
@@ -185,7 +188,12 @@ func chat(w http.ResponseWriter, req *http.Request, r Router) {
 		"id":      "chatcmpl-" + randomID(),
 		"object":  "chat.completion",
 		"created": time.Now().Unix(),
-		"model":   firstNonEmpty(ans.Model, ans.Head, in.Model),
+		// The head *id*, not its display name: this value is what a client
+		// echoes back on the next turn and what it groups logs by, so it has
+		// to be something /v1/models advertises and parseRoute resolves.
+		// "Qwen2.5-Coder:7b (Ollama)" is neither, and round-tripped to a
+		// 502 (#1145).
+		"model": firstNonEmpty(ans.Head, ans.Model, in.Model),
 		"choices": []map[string]any{{
 			"index": 0,
 			"message": executor.Message{
@@ -219,11 +227,7 @@ func streamChat(w http.ResponseWriter, req *http.Request, r Router, in chatReque
 	case err != nil && !st.started():
 		// Nothing has reached the client, so an error is still a real status
 		// code rather than a 200 carrying bad news.
-		status := http.StatusBadGateway
-		if errors.Is(err, ErrBadRequest) {
-			status = http.StatusBadRequest
-		}
-		writeError(w, status, err.Error())
+		writeError(w, statusFor(err), err.Error())
 	case err != nil:
 		st.fail(err.Error())
 	default:
@@ -318,6 +322,21 @@ func writeError(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, map[string]any{
 		"error": map[string]any{"message": msg, "type": errorType(status)},
 	})
+}
+
+// statusFor grades a router failure. Only a head that actually failed is a
+// 5xx; a model the client named that does not exist, or cannot be used here,
+// is the client's own mistake and must not land in a retry class, since the
+// OpenAI SDKs retry 5xx by default and that retry can never succeed (#1145).
+func statusFor(err error) int {
+	switch {
+	case errors.Is(err, ErrNotFound):
+		return http.StatusNotFound
+	case errors.Is(err, ErrBadRequest):
+		return http.StatusBadRequest
+	default:
+		return http.StatusBadGateway
+	}
 }
 
 func errorType(status int) string {

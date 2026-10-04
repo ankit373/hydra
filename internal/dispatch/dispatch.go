@@ -49,6 +49,27 @@ import (
 // into a GUI caller that has no terminal to point at (#452).
 var ErrNoHeads = errors.New("no dispatchable heads")
 
+// ErrHeadUnknown and ErrHeadUnusable separate the two ways a *named* head
+// fails from the general "nothing was available". A caller that picked the
+// head is owed a different answer from one whose fallback chain ran out, and
+// over an API the difference is whether retrying can ever work: an unknown id
+// is 404 and an unusable one 400, where exhaustion really is a 5xx. Both wrap
+// ErrNoHeads as well, so every existing errors.Is keeps its meaning.
+var (
+	ErrHeadUnknown  = errors.New("unknown head")
+	ErrHeadUnusable = errors.New("head cannot be used")
+)
+
+// headErr carries that kind without touching the message, which is what the
+// operator reads and is already the right words (#676).
+type headErr struct {
+	kind error
+	msg  error
+}
+
+func (e headErr) Error() string   { return e.msg.Error() }
+func (e headErr) Unwrap() []error { return []error{e.msg, e.kind} }
+
 // Options controls dispatch behaviour.
 type Options struct {
 	TierHint  string // tier name from config, e.g. "standard"
@@ -1264,19 +1285,20 @@ func (d *Dispatcher) pinHead(id string, localOnly bool) (provider.Head, error) {
 			continue
 		}
 		if localOnly && !h.LocalOnly {
-			return provider.Head{}, fmt.Errorf(
+			return provider.Head{}, headErr{ErrHeadUnusable, fmt.Errorf(
 				"%w: %s is not a local head, and this run is local-only "+
 					"(policy or --local); choose a local model or lift the restriction",
-				ErrNoHeads, h.Name)
+				ErrNoHeads, h.Name)}
 		}
 		if why := executor.Unroutable(h); why != "" {
-			return provider.Head{}, fmt.Errorf("%w: %s cannot be run: %s", ErrNoHeads, h.Name, why)
+			return provider.Head{}, headErr{ErrHeadUnusable,
+				fmt.Errorf("%w: %s cannot be run: %s", ErrNoHeads, h.Name, why)}
 		}
 		return h, nil
 	}
-	return provider.Head{}, fmt.Errorf(
+	return provider.Head{}, headErr{ErrHeadUnknown, fmt.Errorf(
 		"%w: no discovered head with id %q; run `hyctl probe` to see what this machine has",
-		ErrNoHeads, id)
+		ErrNoHeads, id)}
 }
 
 // selectHeads returns heads to try, in order of preference.

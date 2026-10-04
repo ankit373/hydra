@@ -96,8 +96,26 @@ func callerError(err error) error {
 	if errors.Is(err, executor.ErrUnaskable) {
 		return fmt.Errorf("%w: %w", serve.ErrBadRequest, err)
 	}
+	// A head the client named is the client's choice, so its failure is a 4xx
+	// and must stay out of the SDKs' 5xx retry class. The message is already
+	// the right words and is kept exactly (#1145).
+	switch {
+	case errors.Is(err, dispatch.ErrHeadUnknown):
+		return gradedError{serve.ErrNotFound, err}
+	case errors.Is(err, dispatch.ErrHeadUnusable):
+		return gradedError{serve.ErrBadRequest, err}
+	}
 	return err
 }
+
+// gradedError attaches a status grade without changing what the caller reads.
+type gradedError struct {
+	grade error
+	msg   error
+}
+
+func (e gradedError) Error() string   { return e.msg.Error() }
+func (e gradedError) Unwrap() []error { return []error{e.msg, e.grade} }
 
 // Models advertises the routing keys alongside the discovered heads, so any
 // OpenAI client's model picker becomes Hydra's routing UI.
@@ -106,7 +124,19 @@ func (r serveRouter) Models() []serve.Model {
 	for _, name := range dispatch.TierNames() {
 		out = append(out, serve.Model{ID: "hydra/" + name, Object: "model", OwnedBy: "hydra"})
 	}
-	for _, h := range r.d.Heads() {
+	return append(out, advertisable(r.d.Heads())...)
+}
+
+// advertisable is the heads a picker may offer. A picker that lists what the
+// router refuses is a broken picker: an embedding-only head has no completion
+// API at all, so choosing it could only ever fail. `hyctl probe` is where a
+// discovered-but-unroutable head belongs, with its reason (#1145).
+func advertisable(heads []provider.Head) []serve.Model {
+	var out []serve.Model
+	for _, h := range heads {
+		if executor.Unroutable(h) != "" {
+			continue
+		}
 		out = append(out, serve.Model{ID: h.ID, Object: "model", OwnedBy: h.Provider})
 	}
 	return out
