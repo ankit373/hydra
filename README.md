@@ -920,6 +920,8 @@ hyctl edit --file ... --prompt "..."    # scoped, validated, rollback-safe file 
 hyctl review ...                        # code review / approve / reject / QA
 hyctl parallel ...                      # fan independent tasks across heads
 hyctl workflow run --step A --step B    # multi-step task, each step routed on its own
+hyctl workflow run --dry-run ...        # each step's routing chain and ceiling, nothing run
+hyctl workflow run --local --max-cost 0.05 ...   # per-step caps, on top of policy.yaml's
 hyctl workflow resume <id>              # continue a killed workflow from where it stopped
 
 # Reviewing a diff

@@ -11,9 +11,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 
+	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/dispatch"
+	"github.com/ankit373/hydra/internal/policy"
 	"github.com/ankit373/hydra/internal/rank"
 	"github.com/ankit373/hydra/internal/runid"
 	"github.com/ankit373/hydra/internal/runlog"
@@ -24,29 +27,83 @@ import (
 // package deliberately does not depend on dispatch, so its runner is testable
 // without a model; this is the one place the two meet.
 type dispatchRouter struct {
-	d      *dispatch.Dispatcher
-	runID  string
-	system string
+	d          *dispatch.Dispatcher
+	runID      string
+	system     string
+	localOnly  bool
+	maxCostSet bool
+	maxCost    float64
+
+	// Injected so a test asserts the options a step really dispatches with.
+	// Asserting on the builder alone leaves the call site free to rebuild them
+	// by hand, which is the defect and not a variant of it (#996).
+	dispatchFn func(context.Context, string, dispatch.Options) (*dispatch.Result, error)
 }
 
-func (r dispatchRouter) Route(ctx context.Context, prompt, enum string) (workflow.StepResult, error) {
+// routerFor is the one reading of what a run dispatches under: its stored
+// settings, which is what makes a resume continue the workflow it loaded
+// rather than start a differently-configured one (#1168).
+func routerFor(d *dispatch.Dispatcher, w workflow.Workflow) dispatchRouter {
+	r := dispatchRouter{d: d, runID: w.RunID, system: w.System, localOnly: w.LocalOnly}
+	if w.MaxCostUSD != nil {
+		r.maxCostSet, r.maxCost = true, *w.MaxCostUSD
+	}
+	return r
+}
+
+// options is the dispatch one step runs as, with the policy that bounds it.
+//
+// A step is a dispatch and carries a dispatch's caps: #838 gave hyctl dispatch
+// a ceiling for being "the command that actually spends the money", and a
+// workflow spends it once per step with no guard at all (#1161).
+func (r dispatchRouter) options(prompt, enum string) (dispatch.Options, policy.FilePolicy, error) {
 	tier := ""
 	if enum != "" {
 		// A garbage enum must not fall through to unrestricted auto-routing,
 		// the #501 rule, which applies to every caller of the map.
 		if !dispatch.IsKnownEnum(enum) {
-			return workflow.StepResult{}, fmt.Errorf("unknown enum %q for this step", enum)
+			return dispatch.Options{}, policy.FilePolicy{}, fmt.Errorf("unknown enum %q for this step", enum)
 		}
 		tier = dispatch.EnumToTier(enum)
 	}
-	res, err := r.d.Dispatch(ctx, prompt, dispatch.Options{
-		TierHint: tier,
-		Enum:     enum,
-		System:   r.system,
-		RunID:    r.runID,
-		TaskID:   runid.New(),
+	enumTier, _ := dispatch.ResolveTier(tier)
+	fp := policy.ForFile(config.ScriptHome(), policy.Spec{
+		Prompt: prompt, PromptLength: len(prompt), EnumTier: enumTier,
 	})
+	ceiling, ceilingFrom := costCeiling(fp, r.maxCostSet, r.maxCost)
+	return dispatch.Options{
+		TierHint:      tier,
+		Enum:          enum,
+		System:        r.system,
+		LocalOnly:     r.localOnly,
+		RunID:         r.runID,
+		TaskID:        runid.New(),
+		MaxCostUSD:    ceiling,
+		MaxCostSource: ceilingFrom,
+		MaxMemoryMB:   fp.MaxMemoryMB,
+		MaxCPUSeconds: fp.MaxCPUSeconds,
+	}, fp, nil
+}
+
+func (r dispatchRouter) Route(ctx context.Context, prompt, enum string) (workflow.StepResult, error) {
+	opts, fp, err := r.options(prompt, enum)
 	if err != nil {
+		return workflow.StepResult{}, err
+	}
+	ctx, cancel := fp.Deadline(ctx)
+	defer cancel()
+
+	run := r.dispatchFn
+	if run == nil {
+		run = r.d.Dispatch
+	}
+	res, err := run(ctx, prompt, opts)
+	if err != nil {
+		// A deadline is the policy refusing rather than the head failing, and
+		// the two want different answers from whoever reads the step.
+		if fp.Bounded(ctx) {
+			return workflow.StepResult{}, errors.New(fp.WallExceeded())
+		}
 		return workflow.StepResult{}, err
 	}
 	out := workflow.StepResult{
@@ -67,7 +124,9 @@ func cmdWorkflow() *cobra.Command {
 		Short: "Run a multi-step task, each step routed on its own",
 		Long: "A workflow is an ordered list of steps. Each is dispatched separately, so\n" +
 			"triage can run on a cheap head and the fix on a strong one, and state is\n" +
-			"written before every step so a killed run resumes where it stopped.",
+			"written before every step so a killed run resumes where it stopped.\n\n" +
+			"Every step carries a dispatch's own caps, policy.yaml's max_cost_usd and\n" +
+			"max_wall_seconds, and every prior step's output, each fenced.",
 	}
 	cmd.AddCommand(cmdWorkflowRun(), cmdWorkflowList(), cmdWorkflowShow(), cmdWorkflowResume(), cmdWorkflowRemove())
 	return cmd
@@ -77,6 +136,8 @@ func cmdWorkflowRun() *cobra.Command {
 	var steps []string
 	var enums []string
 	var task, id, system string
+	var localOnly, dryRun bool
+	var maxCost float64
 
 	cmd := &cobra.Command{
 		Use:   "run",
@@ -109,6 +170,8 @@ func cmdWorkflowRun() *cobra.Command {
 			}
 			if id == "" {
 				id = runid.New()
+			} else if err := refuseStoredID(id); err != nil {
+				return err
 			}
 			if task == "" {
 				task = built[0].Prompt
@@ -118,7 +181,16 @@ func cmdWorkflowRun() *cobra.Command {
 				return err
 			}
 			w.RunID = w.ID
-			return runWorkflow(cmd.Context(), w, system)
+			// Stored on the record, so a resume continues the workflow under
+			// what it started with rather than under nothing (#1168).
+			w.System, w.LocalOnly = system, localOnly
+			if cmd.Flags().Changed("max-cost") {
+				w.MaxCostUSD = &maxCost
+			}
+			if dryRun {
+				return dryRunWorkflow(cmd.Context(), w)
+			}
+			return runWorkflow(cmd.Context(), w)
 		},
 	}
 	cmd.Flags().StringArrayVar(&steps, "step", nil, "a step's prompt; repeat, in order")
@@ -126,11 +198,32 @@ func cmdWorkflowRun() *cobra.Command {
 	cmd.Flags().StringVar(&task, "task", "", "what the whole workflow is for (default: the first step)")
 	cmd.Flags().StringVar(&id, "id", "", "workflow id (default: generated)")
 	cmd.Flags().StringVar(&system, "system", "", "system prompt applied to every step")
+	cmd.Flags().BoolVar(&localOnly, "local", false, "force local-only heads for every step")
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "print each step's routing chain and run nothing")
+	cmd.Flags().Float64Var(&maxCost, "max-cost", 0,
+		"per-step cost ceiling in USD; overrides policy.yaml max_cost_usd, 0 lifts it")
 	return cmd
+}
+
+// refuseStoredID is what `run --id` says about an id already stored: it
+// overwrote the record and corrupted the trace of whatever was using it
+// (#1168), and on a live one it started a second runner (#1162).
+func refuseStoredID(id string) error {
+	stored, err := workflow.Exists(id)
+	if err != nil || !stored {
+		return err
+	}
+	if w, lerr := workflow.Load(id); lerr == nil && w.Observed() == workflow.Running {
+		return fmt.Errorf("workflow %s is already running; `hyctl workflow resume %s` continues it", id, id)
+	}
+	return fmt.Errorf("workflow %s already exists; continue it with `hyctl workflow resume %s`, or replace it with `hyctl workflow rm %s`",
+		id, id, id)
 }
 
 func cmdWorkflowResume() *cobra.Command {
 	var system string
+	var localOnly bool
+	var maxCost float64
 	cmd := &cobra.Command{
 		Use:   "resume <id>",
 		Short: "Continue a workflow from its first incomplete step",
@@ -140,19 +233,94 @@ func cmdWorkflowResume() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			// The stored settings are what the workflow started under; a flag
+			// given here overrides one. Resume read neither, so a run started
+			// with --system carried none from the resume on (#1168).
+			if cmd.Flags().Changed("system") {
+				w.System = system
+			}
+			if cmd.Flags().Changed("local") {
+				w.LocalOnly = localOnly
+			}
+			if cmd.Flags().Changed("max-cost") {
+				w.MaxCostUSD = &maxCost
+			}
+			// First, so nothing below writes to a record another process owns,
+			// and so a refused resume opens no dispatcher and declares no run.
+			// workflow.Run claims the heartbeat exclusively as the backstop,
+			// which closes the gap between this read and acting on it (#1162).
+			if w.Observed() == workflow.Running {
+				return fmt.Errorf("%w: %s is being run by another process; wait for it to finish, or resume once its heartbeat has stopped",
+					workflow.ErrAlreadyRunning, w.ID)
+			}
 			if _, ok := w.Next(); !ok {
+				// Nothing is left, so the record is finished whatever status
+				// the last writer stored. Left alone it read `interrupted` for
+				// ever and only `rm` cleared it (#1168).
+				if w.Status != workflow.Done {
+					w.Status = workflow.Done
+					if err := workflow.Save(w); err != nil {
+						return err
+					}
+				}
 				fmt.Printf("  %s\n", dimStyle.Render("nothing left to run; every step is done"))
 				return nil
 			}
-			return runWorkflow(cmd.Context(), w, system)
+			return runWorkflow(cmd.Context(), w)
 		},
 	}
-	cmd.Flags().StringVar(&system, "system", "", "system prompt applied to every step")
+	cmd.Flags().StringVar(&system, "system", "", "system prompt applied to every step (default: what it started with)")
+	cmd.Flags().BoolVar(&localOnly, "local", false, "force local-only heads (default: what it started with)")
+	cmd.Flags().Float64Var(&maxCost, "max-cost", 0, "per-step cost ceiling in USD (default: what it started with)")
 	return cmd
 }
 
+// dryRunWorkflow prints the chain each step would route to and runs nothing.
+// Nothing is stored either: a preview that saved a record would leave behind a
+// workflow nobody started.
+//
+// A later step is previewed on its own prompt, since the prior output it would
+// carry does not exist yet.
+func dryRunWorkflow(ctx context.Context, w workflow.Workflow) error {
+	d, err := dispatch.New(ctx)
+	if err != nil {
+		return err
+	}
+	defer d.Close()
+	fmt.Printf("\n  %s %s\n", cortexStyle.Render("▶ WORKFLOW · dry run"), w.ID)
+	fmt.Printf("  %s\n\n", dimStyle.Render(w.Task))
+
+	r := routerFor(d, w)
+	for _, s := range w.Steps {
+		hint := s.Enum
+		if hint == "" {
+			hint = "auto"
+		}
+		fmt.Printf("  %s %s %s\n",
+			dimStyle.Render(fmt.Sprintf("[%d/%d]", s.N, len(w.Steps))), s.Title, dimStyle.Render("· "+hint))
+		opts, _, err := r.options(s.Prompt, s.Enum)
+		if err != nil {
+			return err
+		}
+		opts.DryRun = true
+		res, err := d.Dispatch(ctx, s.Prompt, opts)
+		if err != nil {
+			return err
+		}
+		if opts.MaxCostUSD > 0 {
+			fmt.Printf("      %s\n", dimStyle.Render(fmt.Sprintf("ceiling $%.4f (%s)", opts.MaxCostUSD, opts.MaxCostSource)))
+		}
+		fmt.Printf("      %s %s (score %d, %s)\n", cortexStyle.Render("→"), res.Head.Name, res.Head.CapScore, res.Head.Source)
+		for j, f := range res.Fallbacks {
+			fmt.Println(dimStyle.Render(fmt.Sprintf("        %d. %-28s score %d  %s", j+1, f.Name, f.CapScore, f.Source)))
+		}
+	}
+	fmt.Println()
+	return nil
+}
+
 // runWorkflow executes and renders one workflow.
-func runWorkflow(ctx context.Context, w workflow.Workflow, system string) error {
+func runWorkflow(ctx context.Context, w workflow.Workflow) error {
 	d, err := dispatch.New(ctx)
 	if err != nil {
 		return err
@@ -168,7 +336,7 @@ func runWorkflow(ctx context.Context, w workflow.Workflow, system string) error 
 	runlog.DeclareRun(w.RunID, taskID, w.Task)
 	defer runlog.FinishRun(w.RunID, taskID)
 
-	r := dispatchRouter{d: d, runID: w.RunID, system: system}
+	r := routerFor(d, w)
 	// Progress is printed from the saver rather than a separate hook: Run
 	// already saves the moment a step goes Running, which is exactly the
 	// transition worth announcing, so a long workflow does not go quiet.
@@ -190,11 +358,59 @@ func runWorkflow(ctx context.Context, w workflow.Workflow, system string) error 
 		return workflow.Save(x)
 	}
 	done, err := workflow.Run(ctx, w, r, save)
+	if errors.Is(err, workflow.ErrAlreadyRunning) {
+		// Nothing ran, so there is no table to print and no progress to claim.
+		return err
+	}
 	printWorkflow(done)
 	if err != nil {
 		return err
 	}
 	return nil
+}
+
+// padCell pads s to n display cells, and rpadCell right-aligns in them.
+//
+// fmt's %-10s counts an ANSI escape as width, so every styled cell pushed the
+// columns after it left on a colour terminal (#1168). lipgloss.Width is the
+// same measurement internal/tui's own pad uses.
+func padCell(s string, n int) string {
+	if w := lipgloss.Width(s); w < n {
+		return s + strings.Repeat(" ", n-w)
+	}
+	return s
+}
+
+func rpadCell(s string, n int) string {
+	if w := lipgloss.Width(s); w < n {
+		return strings.Repeat(" ", n-w) + s
+	}
+	return s
+}
+
+// workflowHeader and workflowRow are one definition of the step table's
+// columns, so a row cannot drift from the header it sits under.
+func workflowHeader() string {
+	return "  " + padCell("#", 3) + " " + padCell("STEP", 28) + " " + padCell("STATUS", 10) +
+		" " + padCell("TIER", 5) + " " + padCell("HEAD", 18) + " " + rpadCell("TIME", 8)
+}
+
+// Cells arrive already styled and already truncated: measuring is ANSI-aware,
+// cutting is not, and a half-cut escape corrupts the frame.
+func workflowRow(n int, title, status, tier, head, took string) string {
+	return "  " + padCell(fmt.Sprintf("%d", n), 3) + " " + padCell(title, 28) + " " + padCell(status, 10) +
+		" " + padCell(tier, 5) + " " + padCell(head, 18) + " " + rpadCell(took, 8)
+}
+
+// The same pairing for `hyctl workflow list`, whose STATUS column is styled too.
+func workflowListHeader() string {
+	return "  " + padCell("ID", 22) + " " + padCell("STATUS", 10) + " " + padCell("STEPS", 8) +
+		" " + rpadCell("COST", 9) + "  TASK"
+}
+
+func workflowListRow(id, status, steps, cost, task string) string {
+	return "  " + padCell(id, 22) + " " + padCell(status, 10) + " " + padCell(steps, 8) +
+		" " + rpadCell(cost, 9) + "  " + task
 }
 
 func printWorkflow(w workflow.Workflow) {
@@ -206,12 +422,12 @@ func printWorkflow(w workflow.Workflow) {
 	// TIER has its own column: appended to HEAD it was the first thing the
 	// 18-char truncation cut, and which tier answered is the most informative
 	// part of the row.
-	fmt.Printf("  %-3s %-28s %-10s %-5s %-18s %8s\n", "#", "STEP", "STATUS", "TIER", "HEAD", "TIME")
+	fmt.Println(workflowHeader())
 	fmt.Println(sep)
 	for _, s := range w.Steps {
-		head := s.Model
-		if head == "" {
-			head = dimStyle.Render("—")
+		head := dimStyle.Render("—")
+		if s.Model != "" {
+			head = truncLabel(s.Model, 18)
 		}
 		took := dimStyle.Render("—")
 		if s.DurationMS > 0 {
@@ -221,8 +437,8 @@ func printWorkflow(w workflow.Workflow) {
 		if s.Tier > 0 {
 			tier = fmt.Sprintf("T%d", s.Tier)
 		}
-		fmt.Printf("  %-3d %-28.28s %-10s %-5s %-18.18s %8s\n",
-			s.N, s.Title, statusLabel(workflow.ObservedStep(s.Status, observed)), tier, truncLabel(head, 18), took)
+		fmt.Println(workflowRow(s.N, truncLabel(s.Title, 28),
+			statusLabel(workflow.ObservedStep(s.Status, observed)), tier, head, took))
 		if s.Err != "" {
 			fmt.Printf("      %s\n", warnStyle.Render("↳ "+oneLine(s.Err)))
 		}
@@ -295,15 +511,14 @@ func cmdWorkflowList() *cobra.Command {
 			}
 			sep := dimStyle.Render("  " + strings.Repeat("─", 66))
 			fmt.Println()
-			fmt.Printf("  %-22s %-10s %-8s %9s  %s\n", "ID", "STATUS", "STEPS", "COST", "TASK")
+			fmt.Println(workflowListHeader())
 			fmt.Println(sep)
 			for _, w := range list {
 				done, total := w.Progress()
-				fmt.Printf("  %-22.22s %-10s %-8s %9s  %-.30s\n",
-					w.ID, statusLabel(w.Observed()),
+				fmt.Println(workflowListRow(truncLabel(w.ID, 22), statusLabel(w.Observed()),
 					fmt.Sprintf("%d/%d", done, total),
 					fmt.Sprintf("$%.4f", w.CostUSD()),
-					oneLine(w.Task))
+					truncLabel(oneLine(w.Task), 30)))
 			}
 			fmt.Println()
 			return nil

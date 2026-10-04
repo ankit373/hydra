@@ -851,10 +851,17 @@ func truncLabel(s string, n int) string {
 // An explicit --max-cost still wins, including --max-cost 0, which is how a
 // policy ceiling is lifted for one run: hence flagSet rather than a zero check.
 func resolveCostCeiling(hydraHome string, flagSet bool, flagVal float64, spec policy.Spec) (float64, string) {
+	return costCeiling(policy.ForFile(hydraHome, spec), flagSet, flagVal)
+}
+
+// costCeiling is the same choice over an already-decided policy, for a caller
+// that needs the deadline off the same FilePolicy and must not evaluate
+// policy.yaml twice to get both.
+func costCeiling(fp policy.FilePolicy, flagSet bool, flagVal float64) (float64, string) {
 	if flagSet {
 		return flagVal, "--max-cost"
 	}
-	return policy.ForFile(hydraHome, spec).MaxCostUSD, "policy.yaml max_cost_usd"
+	return fp.MaxCostUSD, "policy.yaml max_cost_usd"
 }
 
 func cmdDispatch() *cobra.Command {
