@@ -110,7 +110,7 @@ func TestLookup_RefusesAPossessiveSwapWithNoEmbedderAtAll(t *testing.T) {
 	s := open(t)
 	put(t, s, "review my changes", "here is the review")
 
-	out := s.Lookup("review your changes", nil, DefaultThreshold)
+	out := s.Lookup(Query{Prompt: "review your changes"}, nil, DefaultThreshold)
 	if out.Found {
 		t.Fatalf("served %q for a different question, the answer to someone else's", out.Hit.Response)
 	}
@@ -121,7 +121,7 @@ func TestLookup_RefusesAPossessiveSwapWithNoEmbedderAtAll(t *testing.T) {
 	}
 
 	// The exact question still works, or the gate is refusing everything.
-	if out := s.Lookup("review my changes", nil, DefaultThreshold); !out.Found {
+	if out := s.Lookup(Query{Prompt: "review my changes"}, nil, DefaultThreshold); !out.Found {
 		t.Error("the stored question itself stopped being served")
 	}
 }
@@ -134,7 +134,7 @@ func TestLookup_RefusesAPossessiveSwapTheVectorCallsIdentical(t *testing.T) {
 	if err := s.PutVec(Entry{Prompt: "review my changes", Response: "here is the review", Head: "h1"}, vec); err != nil {
 		t.Fatal(err)
 	}
-	if out := s.Lookup("review your changes", vec, DefaultThreshold); out.Found {
+	if out := s.Lookup(Query{Prompt: "review your changes"}, vec, DefaultThreshold); out.Found {
 		t.Errorf("a cosine of 1 let a possessive swap through: %q", out.Hit.Response)
 	}
 }

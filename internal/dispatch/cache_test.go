@@ -12,6 +12,7 @@ import (
 
 	"github.com/ankit373/hydra/internal/cache"
 	"github.com/ankit373/hydra/internal/config"
+	"github.com/ankit373/hydra/internal/executor"
 	"github.com/ankit373/hydra/internal/policy"
 	"github.com/ankit373/hydra/internal/provider"
 	"github.com/ankit373/hydra/internal/testutil"
@@ -381,5 +382,88 @@ func TestDispatch_CountsMissesButNotRefusedDispatches(t *testing.T) {
 	st, _ := cache.StoredStats(cache.Dir())
 	if st.Hits != 1 || st.Misses != 1 {
 		t.Errorf("hits=%d misses=%d, want one of each", st.Hits, st.Misses)
+	}
+}
+
+// --system is part of what was asked, proved the way the audit proved it: a
+// system prompt that carries the answer. Under BRAVO the cache handed back
+// ALPHA's answer, because neither the key nor the gates had ever seen one.
+func TestDispatch_ADifferentSystemPromptIsNotServedFromCache(t *testing.T) {
+	s := testutil.NewSandbox(t)
+	d := cachingDispatcher(t, s)
+
+	const q = "what is the secret code"
+	if _, err := d.Dispatch(context.Background(), q, Options{System: "the secret code is ALPHA"}); err != nil {
+		t.Fatal(err)
+	}
+	bravo, err := d.Dispatch(context.Background(), q, Options{System: "the secret code is BRAVO"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bravo.Cache != nil {
+		t.Errorf("a second system prompt was answered from the first's entry: %+v", bravo.Cache)
+	}
+	alpha, err := d.Dispatch(context.Background(), q, Options{System: "the secret code is ALPHA"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if alpha.Cache == nil {
+		t.Error("the system prompt that produced the answer ran a head again")
+	}
+}
+
+// Response.Truncated is a repo invariant every executor sets, and the cache
+// dropped it: the fragment became the permanent answer to that question and
+// every later caller was told it finished normally.
+func TestRemember_DoesNotStoreATruncatedAnswer(t *testing.T) {
+	s := testutil.NewSandbox(t)
+	d := cachingDispatcher(t, s)
+	st, _ := d.answerCache()
+
+	const task = "list every routing enum"
+	r := &Result{
+		Output:   "SIMPLE, MOD",
+		Head:     provider.Head{ID: "h1", Name: "h1", CapScore: 90},
+		Response: &executor.Response{Output: "SIMPLE, MOD", Truncated: true},
+	}
+	d.remember(context.Background(), task, Options{}, &policy.Classification{}, r, 0)
+	if n := st.Stat().Entries; n != 0 {
+		t.Errorf("%d entries after a capped answer, want 0", n)
+	}
+
+	// The control: the same answer uncapped is exactly what the cache is for,
+	// so the refusal has to be about the flag and nothing else.
+	r.Response.Truncated = false
+	d.remember(context.Background(), task, Options{}, &policy.Classification{}, r, 0)
+	if n := st.Stat().Entries; n != 1 {
+		t.Errorf("%d entries after a complete answer, want 1", n)
+	}
+}
+
+// CLAUDE.md step 4 is: if the answer is wrong, dispatch again at a lower tier
+// number. With the cache in front of that, the stronger head never ran.
+func TestDispatch_DoesNotServeAWeakerTiersAnswerToAnEscalation(t *testing.T) {
+	s := testutil.NewSandbox(t)
+	d := cachingDispatcher(t, s) // one head, CapScore 90, so tier 2
+
+	const q = "is this migration safe for prod"
+	if _, err := d.Dispatch(context.Background(), q, Options{}); err != nil {
+		t.Fatal(err)
+	}
+	up, err := d.Dispatch(context.Background(), q, Options{TierHint: "1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if up.Cache != nil {
+		t.Errorf("the escalation was answered from the weaker tier's entry: %+v", up.Cache)
+	}
+	// Serving down stays allowed: a stronger head's answer is at least as
+	// good as the one a cheaper request would have got.
+	down, err := d.Dispatch(context.Background(), q, Options{TierHint: "8"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if down.Cache == nil {
+		t.Error("a cheaper request ran a head rather than reusing a stronger one's answer")
 	}
 }
