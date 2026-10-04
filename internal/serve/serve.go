@@ -4,9 +4,7 @@ package serve
 
 import (
 	"context"
-	"crypto/rand"
 	"crypto/subtle"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,6 +16,7 @@ import (
 	"time"
 
 	"github.com/ankit373/hydra/internal/executor"
+	"github.com/ankit373/hydra/internal/runid"
 )
 
 // ErrBadRequest marks a caller's mistake, so a routing key the router cannot
@@ -33,6 +32,11 @@ var ErrNotFound = errors.New("not found")
 
 // hydraModel is the routing prefix the model field uses.
 const hydraModel = "hydra"
+
+// RequestIDHeader carries the identifier this request is traceable by. The
+// convention OpenAI and the common gateways already set, so a client that logs
+// response headers needs no Hydra-specific code to keep the thread (#1149).
+const RequestIDHeader = "X-Request-Id"
 
 // maxBody bounds one request. An agent loop's prompt grows with every tool
 // result, so this is generous, but unbounded is a memory exhaustion away.
@@ -53,6 +57,11 @@ type Request struct {
 	ToolChoice json.RawMessage
 	MaxTokens  int
 	Route      Route
+
+	// RequestID is what this request is traceable by. serve mints it and the
+	// router adopts it as the run id, so the value a client is handed back is
+	// one `hyctl trace view` resolves rather than an unrelated random (#1149).
+	RequestID string
 
 	// OnEvent is set only when the client asked for a stream. A router that
 	// ignores it still answers correctly: its whole output then arrives when
@@ -173,19 +182,26 @@ func chat(w http.ResponseWriter, req *http.Request, r Router) {
 		return
 	}
 
+	// Before anything is written, so it is on an error response too: a client
+	// that got a 502 is exactly the one that needs to find the trace.
+	id := runid.New()
+	w.Header().Set(RequestIDHeader, id)
+
 	if in.Stream {
-		streamChat(w, req, r, in, route)
+		streamChat(w, req, r, in, route, id)
 		return
 	}
 
-	ans, err := r.Chat(req.Context(), request(in, route, nil))
+	ans, err := r.Chat(req.Context(), request(in, route, id, nil))
 	if err != nil {
 		writeError(w, statusFor(err), err.Error())
 		return
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"id":      "chatcmpl-" + randomID(),
+		// The same value as the header, and a run id, so a client that logged
+		// only the body can still run `hyctl trace view <id>` (#1149).
+		"id":      id,
 		"object":  "chat.completion",
 		"created": time.Now().Unix(),
 		// The head *id*, not its display name: this value is what a client
@@ -212,12 +228,12 @@ func chat(w http.ResponseWriter, req *http.Request, r Router) {
 }
 
 // streamChat answers as server-sent events.
-func streamChat(w http.ResponseWriter, req *http.Request, r Router, in chatRequest, route Route) {
+func streamChat(w http.ResponseWriter, req *http.Request, r Router, in chatRequest, route Route, id string) {
 	ctx, cancel := context.WithCancel(req.Context())
 	defer cancel()
 
-	st := newStreamer(w, in.Model)
-	ans, err := r.Chat(ctx, request(in, route, func(e Event) { st.event(e, cancel) }))
+	st := newStreamer(w, in.Model, id)
+	ans, err := r.Chat(ctx, request(in, route, id, func(e Event) { st.event(e, cancel) }))
 	st.done = true
 
 	switch {
@@ -237,13 +253,14 @@ func streamChat(w http.ResponseWriter, req *http.Request, r Router, in chatReque
 
 // request is the one derivation of what the router is asked, so the streamed
 // and buffered paths cannot come to disagree about it.
-func request(in chatRequest, route Route, on func(Event)) Request {
+func request(in chatRequest, route Route, id string, on func(Event)) Request {
 	return Request{
 		Messages:   in.Messages,
 		Tools:      in.Tools,
 		ToolChoice: in.ToolChoice,
 		MaxTokens:  firstPositive(in.MaxCompletionTokens, in.MaxTokens),
 		Route:      route,
+		RequestID:  id,
 		OnEvent:    on,
 	}
 }
@@ -348,14 +365,6 @@ func errorType(status int) string {
 	default:
 		return "invalid_request_error"
 	}
-}
-
-func randomID() string {
-	var b [12]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return strconv.FormatInt(time.Now().UnixNano(), 16)
-	}
-	return hex.EncodeToString(b[:])
 }
 
 func cutPrefixFold(s, prefix string) (string, bool) {
