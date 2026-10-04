@@ -135,8 +135,11 @@ func TestServeRouter_CarriesTheAnswerHeadAndTokensBack(t *testing.T) {
 	}
 	defer d.Close()
 
-	ans, err := serveRouter{d: d, runID: "run-1", defaultEnum: "MODERATE"}.
-		Chat(ctx, serve.Request{Messages: []executor.Message{{Role: "user", Content: "hi"}}})
+	ans, err := serveRouter{d: d, defaultEnum: "MODERATE"}.
+		Chat(ctx, serve.Request{
+			RequestID: "run-1",
+			Messages:  []executor.Message{{Role: "user", Content: "hi"}},
+		})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -163,10 +166,11 @@ func TestServeRouter_ARoutingFailureIsAnError(t *testing.T) {
 	}
 	defer d.Close()
 
-	_, err = serveRouter{d: d, runID: "run-2", defaultEnum: "MODERATE"}.
+	_, err = serveRouter{d: d, defaultEnum: "MODERATE"}.
 		Chat(ctx, serve.Request{
-			Messages: []executor.Message{{Role: "user", Content: "hi"}},
-			Route:    serve.Route{Enum: "NOT_A_KEY"},
+			RequestID: "run-2",
+			Messages:  []executor.Message{{Role: "user", Content: "hi"}},
+			Route:     serve.Route{Enum: "NOT_A_KEY"},
 		})
 	if err == nil {
 		t.Fatal("an unknown routing key produced an answer")

@@ -61,8 +61,8 @@ type streamer struct {
 	done    bool // Chat has returned; a late event writes nothing
 }
 
-func newStreamer(w http.ResponseWriter, asked string) *streamer {
-	return &streamer{w: w, id: "chatcmpl-" + randomID(), asked: asked}
+func newStreamer(w http.ResponseWriter, asked, id string) *streamer {
+	return &streamer{w: w, id: id, asked: asked}
 }
 
 // event folds one router event into the stream. cancel stops the dispatch when

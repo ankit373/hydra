@@ -17,6 +17,7 @@ import (
 	"github.com/ankit373/hydra/internal/executor"
 	"github.com/ankit373/hydra/internal/provider"
 	"github.com/ankit373/hydra/internal/runid"
+	"github.com/ankit373/hydra/internal/runlog"
 	"github.com/ankit373/hydra/internal/serve"
 )
 
@@ -25,7 +26,6 @@ import (
 // meet, the same seam internal/workflow and internal/vet use.
 type serveRouter struct {
 	d           *dispatch.Dispatcher
-	runID       string
 	defaultEnum string
 	localOnly   bool
 }
@@ -36,7 +36,16 @@ func (r serveRouter) Chat(ctx context.Context, req serve.Request) (serve.Answer,
 		return serve.Answer{}, err
 	}
 
-	res, err := r.d.Dispatch(ctx, flattenConversation(req.Messages), dispatch.Options{
+	// One run per request. A server's unit of work is the request, not the
+	// process: one run per session gave a long-lived server a single
+	// ever-growing run, and `hyctl trace view` with no argument showed that
+	// instead of the last request (#1149).
+	prompt := flattenConversation(req.Messages)
+	taskID := runid.New()
+	runlog.DeclareRun(req.RequestID, taskID, prompt)
+	defer runlog.FinishRun(req.RequestID, taskID)
+
+	res, err := r.d.Dispatch(ctx, prompt, dispatch.Options{
 		TierHint:   tier,
 		Enum:       enum,
 		Head:       head,
@@ -46,8 +55,8 @@ func (r serveRouter) Chat(ctx context.Context, req serve.Request) (serve.Answer,
 		Tools:      req.Tools,
 		ToolChoice: req.ToolChoice,
 		OnStream:   streamEvents(req.OnEvent),
-		RunID:      r.runID,
-		TaskID:     runid.New(),
+		RunID:      req.RequestID,
+		TaskID:     taskID,
 	})
 	if err != nil {
 		return serve.Answer{}, callerError(err)
@@ -243,7 +252,7 @@ func cmdServe() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			r := serveRouter{d: d, runID: runid.New(), defaultEnum: enum, localOnly: localOnly}
+			r := serveRouter{d: d, defaultEnum: enum, localOnly: localOnly}
 			printServeBanner(os.Stdout, ln.Addr().String(), enum, token != "", localOnly, d.Heads())
 			return serve.Serve(ctx, ln, serve.Handler(r, token))
 		},
