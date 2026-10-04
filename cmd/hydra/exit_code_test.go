@@ -3,6 +3,7 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -126,14 +127,59 @@ func TestExitCodes_MissingConfigFails(t *testing.T) {
 	}
 }
 
-// The MCP gate's denial code is what a caller branches on to stop an agent
-// touching a file. A denial that exits 0 is a gate that does not gate.
-func TestExitCodes_MCPDenialIsNonZero(t *testing.T) {
-	code, out := exitCode(t, "mcp", "check", "--action", "read",
-		"--resource", "/etc/shadow", "--agent", "test")
-	if code == 0 {
-		t.Errorf("an MCP check exited 0; callers gate on the code:\n%s", out)
+// The MCP gate's exit code is what a caller branches on to stop an agent
+// touching a file, and `ask` withholds permission exactly as `deny` does.
+//
+// This asserts the *recorded decision* as well as the code, because the version
+// it replaces passed no <tool> argument: Cobra's ExactArgs(1) rejected the call
+// with exit 1 before the gate ran, so the test was green on an argument-count
+// error and stayed green with os.Exit deleted outright (#1160).
+func TestExitCodes_MCPWithheldAccessIsNonZero(t *testing.T) {
+	requireHyctl(t)
+	for _, tc := range []struct {
+		decision string
+		wantCode int
+	}{{"deny", 3}, {"ask", 4}} {
+		t.Run(tc.decision, func(t *testing.T) {
+			s := testutil.NewSandbox(t)
+			rule := `{"default":"allow","rules":[{"resource":"/etc/shadow","decision":"` +
+				tc.decision + `"}]}`
+			if err := os.WriteFile(filepath.Join(s.HydraHome, "mcp_policy.json"),
+				[]byte(rule), 0o600); err != nil {
+				t.Fatal(err)
+			}
+
+			code, out := runBinary(t, s, "mcp", "check", "fs", "--action", "read",
+				"--resource", "/etc/shadow", "--agent", "test")
+			if code != tc.wantCode {
+				t.Errorf("`mcp check` against a %q rule exited %d, want %d; a caller "+
+					"gating on the code cannot tell this from approval:\n%s",
+					tc.decision, code, tc.wantCode, out)
+			}
+			if got := lastLedgerDecision(t, s); got != tc.decision {
+				t.Errorf("the ledger recorded decision %q, want %q: the gate never ran, "+
+					"so the exit code above says nothing about it", got, tc.decision)
+			}
+		})
 	}
+}
+
+// lastLedgerDecision reads the decision off the newest ledger event, which is
+// how this file tells "the gate ran and refused" from "the command failed".
+func lastLedgerDecision(t *testing.T, s *testutil.Sandbox) string {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join(s.HydraHome, "mcp_ledger.jsonl"))
+	if err != nil {
+		t.Fatalf("no ledger was written, so nothing was gated: %v", err)
+	}
+	lines := strings.Split(strings.TrimRight(string(raw), "\n"), "\n")
+	var evt struct {
+		Decision string `json:"decision"`
+	}
+	if err := json.Unmarshal([]byte(lines[len(lines)-1]), &evt); err != nil {
+		t.Fatal(err)
+	}
+	return evt.Decision
 }
 
 // stdout must stay parseable: a banner or a warning belongs on stderr, or it

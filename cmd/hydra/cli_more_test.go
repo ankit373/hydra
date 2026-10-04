@@ -170,6 +170,82 @@ func TestCLI_MCPVerify_DetectsTamperedParametersHash(t *testing.T) {
 	}
 }
 
+// An approval verified against a ledger with no chain anchor is weaker than
+// one verified against a provably complete log, and `verify` printed a bare
+// MATCH for both. `verify-chain` warned; the command composed with it did not,
+// which is the one state #500's composition left uncovered (#1169).
+func TestCLI_MCPVerify_NamesAMissingChainAnchor(t *testing.T) {
+	s := populated(t)
+
+	params := `{"path":"/etc/hosts","mode":"read"}`
+	if code, out := runBinary(t, s, "mcp", "record",
+		"--tool", "fs.read", "--action", "read", "--decision", "allow",
+		"--resource", "/etc/hosts", "--agent", "test-agent",
+		"--params", params); code != 0 {
+		t.Fatalf("`hyctl mcp record` exited %d:\n%s", code, out)
+	}
+	// Removing the sidecar is exactly what deleting the tail of the log would
+	// also do; the surviving events still verify against each other.
+	if err := os.Remove(filepath.Join(s.HydraHome, "mcp_ledger.jsonl.chainhash")); err != nil {
+		t.Fatal(err)
+	}
+
+	code, out := runBinary(t, s, "mcp", "verify", "fs.read",
+		"--resource", "/etc/hosts", "--params", params)
+	if code != 0 {
+		t.Fatalf("verify exited %d, the parameters do match:\n%s", code, out)
+	}
+	if !strings.Contains(out, "MATCH") {
+		t.Fatalf("verify did not report MATCH:\n%s", out)
+	}
+	if !strings.Contains(out, "anchor") {
+		t.Errorf("verify printed a bare MATCH over an unanchored ledger, identical to one "+
+			"verified against a complete log:\n%s", out)
+	}
+}
+
+// `--denied` answers "what did Hydra stop", and an ASK stopped it too; the
+// classification it was evaluated under reached no reader at all, so a
+// pii-classified egress rendered byte-identically to an ordinary allow (#1169).
+func TestCLI_MCPLog_ShowsWithheldAskAndItsClassification(t *testing.T) {
+	s := populated(t)
+
+	for _, args := range [][]string{
+		{"mcp", "record", "--tool", "net.post", "--action", "network", "--decision", "ask",
+			"--resource", "/api/send", "--agent", "swarm", "--classification", "pii"},
+		{"mcp", "record", "--tool", "fs.read", "--action", "read", "--decision", "allow",
+			"--resource", "/etc/hosts", "--agent", "swarm"},
+	} {
+		if code, out := runBinary(t, s, args...); code != 0 {
+			t.Fatalf("`hyctl mcp record` exited %d:\n%s", code, out)
+		}
+	}
+
+	code, out := runBinary(t, s, "mcp", "log", "--denied")
+	if code != 0 {
+		t.Fatalf("`hyctl mcp log --denied` exited %d:\n%s", code, out)
+	}
+	if !strings.Contains(out, "net.post") {
+		t.Errorf("the withheld ASK event is absent from --denied, which is the flag an "+
+			"operator uses to ask what was stopped:\n%s", out)
+	}
+	if strings.Contains(out, "fs.read") {
+		t.Errorf("--denied listed an allowed event:\n%s", out)
+	}
+	if !strings.Contains(out, "pii") {
+		t.Errorf("the event's classification reached no reader:\n%s", out)
+	}
+
+	// And the aggregate accounts for it rather than leaving Total unexplained.
+	code, out = runBinary(t, s, "mcp", "report")
+	if code != 0 {
+		t.Fatalf("`hyctl mcp report` exited %d:\n%s", code, out)
+	}
+	if !strings.Contains(out, "1 ask") {
+		t.Errorf("the report's event breakdown does not account for the ask:\n%s", out)
+	}
+}
+
 // Malformed input to the ledger must be refused before anything is written. A
 // half-recorded event is worse than none: it reads as an approval.
 func TestCLI_MCPRecord_RefusesMalformedInput(t *testing.T) {
