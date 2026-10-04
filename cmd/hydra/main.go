@@ -5108,25 +5108,27 @@ func cmdTrustCalibration() *cobra.Command {
 			}
 			fmt.Printf("\n  %-28s %-16s %6s %6s %7s %7s %8s\n", "Source", "Domain", "n", "neg", "se", "sp", "D(nats)")
 			fmt.Println("  " + strings.Repeat("─", 87))
-			pinned := 0
+			mute := 0
 			for _, s := range stats {
-				if s.Neg == 0 {
-					pinned++
+				mark := ""
+				if !s.Discriminating {
+					mute++
+					mark = " ·"
 				}
-				fmt.Printf("  %-28.28s %-16s %6.0f %6.0f %7.3f %7.3f %8.3f\n",
-					s.Source, truncLabel(s.Domain, 16), s.N, s.Neg, s.Se, s.Sp, s.D)
+				fmt.Printf("  %-28.28s %-16s %6.0f %6.0f %7.3f %7.3f %8.3f%s\n",
+					s.Source, truncLabel(s.Domain, 16), s.N, s.Neg, s.Se, s.Sp, s.D, mark)
 			}
-			// With no negative verdicts TN keeps its bare prior, so sp can never
-			// rise above 0.5 and LLR(agree) = ln(se/(1-sp)) stays under ln2.
-			// More positives never lift it, so such a cell has to be told apart
-			// from one that is merely thin.
-			if pinned > 0 {
+			// A source that has only ever answered one way has not discriminated,
+			// so it carries no information whatever its accuracy and its LLR is 0.
+			// The rates still print, because they are what the counts say; they
+			// are a shape rather than a reading, which is what the mark means.
+			if mute > 0 {
 				fmt.Printf("\n  %s\n", warnStyle.Render(fmt.Sprintf(
-					"%d of %d cells have no negative verdicts (neg=0): with no measured specificity, sp "+
-						"cannot exceed 0.5 and LLR stays under %.3f nats there however many positives "+
-						"arrive. Negatives come from ensemble runs whose answer was verified; attach one "+
-						"with `hyctl trust outcome`.",
-					pinned, len(stats), math.Ln2)))
+					"· %d of %d cells have verdicts in one direction only, so they contribute 0 nats and "+
+						"the se/sp beside them describe the prior, not the source. Evidence in both "+
+						"directions comes from an ensemble run whose answer was later verified; attach "+
+						"one with `hyctl trust outcome <task_hash>`.",
+					mute, len(stats))))
 			}
 			// A family whose members have converged on effectively one vote is a
 			// coordination risk the se/sp table above cannot show, two "sources"
