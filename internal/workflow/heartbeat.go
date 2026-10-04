@@ -33,21 +33,28 @@ func beatPath(id string) (string, error) {
 	return strings.TrimSuffix(path, ".json") + ".alive", nil
 }
 
-// heartbeat touches the run's beat file until the returned stop is called,
-// which also removes it. Safe to call stop more than once.
-func heartbeat(id string) func() {
+// heartbeat claims the run's beat file and touches it until the returned stop
+// is called, which also removes it. Safe to call stop more than once.
+//
+// The claim is exclusive, which is what refuses a second runner: reading a
+// status and then acting on it lets two resumes in the same instant both pass
+// the read and double-dispatch every remaining step (#1162).
+func heartbeat(id string) (func(), error) {
 	path, err := beatPath(id)
 	if err != nil {
-		return func() {}
+		// Unsaveable anyway; Save is what reports a malformed id.
+		return func() {}, nil
 	}
 	// The store directory is created by the first Save, which happens *after*
 	// Run starts beating, so without this the first touch lands in a directory
 	// that does not exist yet and the run reads as interrupted until the first
 	// tick, seconds later.
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return func() {}
+		return func() {}, nil
 	}
-	touch(path)
+	if err := takeBeat(path); err != nil {
+		return nil, err
+	}
 
 	done := make(chan struct{})
 	go func() {
@@ -69,7 +76,35 @@ func heartbeat(id string) func() {
 			close(done)
 			_ = os.Remove(path)
 		})
+	}, nil
+}
+
+// takeBeat creates the beat file exclusively, taking over one whose writer has
+// stopped beating. A beat still fresh belongs to a runner that is alive, and a
+// second runner over it would dispatch every remaining step again (#1162).
+func takeBeat(path string) error {
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	if err == nil {
+		return f.Close()
 	}
+	if !os.IsExist(err) {
+		// A beat that cannot be written makes a live run read as interrupted,
+		// the safe direction; it must not stop work, as in touch below.
+		return nil
+	}
+	if freshBeat(path) {
+		return ErrAlreadyRunning
+	}
+	// Stale: that writer is gone. Take it over, and concede if another runner
+	// won the same race.
+	_ = os.Remove(path)
+	if f, err = os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600); err != nil {
+		if os.IsExist(err) {
+			return ErrAlreadyRunning
+		}
+		return nil
+	}
+	return f.Close()
 }
 
 // touch updates the mtime, creating the file the first time. Both failures are
@@ -92,6 +127,10 @@ func alive(id string) bool {
 	if err != nil {
 		return false
 	}
+	return freshBeat(path)
+}
+
+func freshBeat(path string) bool {
 	fi, err := os.Stat(path)
 	if err != nil {
 		return false

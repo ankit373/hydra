@@ -40,7 +40,10 @@ func TestObserved_ALiveHeartbeatIsStillRunning(t *testing.T) {
 	testutil.NewSandbox(t)
 	w := runningWorkflow(t, "live")
 
-	stop := heartbeat(w.ID)
+	stop, err := heartbeat(w.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if got := w.Observed(); got != Running {
 		t.Errorf("Observed() = %q while the heartbeat is being written, want %q", got, Running)
 	}
@@ -219,7 +222,10 @@ func TestObservedStep(t *testing.T) {
 func TestHeartbeat_BeatsBeforeAnythingHasBeenSaved(t *testing.T) {
 	testutil.NewSandbox(t)
 
-	stop := heartbeat("fresh")
+	stop, err := heartbeat("fresh")
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer stop()
 
 	if !alive("fresh") {
