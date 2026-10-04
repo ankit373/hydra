@@ -14,6 +14,11 @@ import (
 
 const defaultMaxHeads = 5
 
+// errNoExecutableHeads is the machine having nothing that can run, which is
+// dispatch's own condition: wrapped so a caller can tell it from a failure
+// about one task, since it repeats identically for every task (#1152).
+var errNoExecutableHeads = fmt.Errorf("%w: swarm: no executable heads found", dispatch.ErrNoHeads)
+
 // HeadSelector picks which Heads to fire for a given swarm run.
 // Implementations are composable: a filter wraps a base selector.
 type HeadSelector interface {
@@ -74,7 +79,7 @@ func (s *TierSelector) Select(all []provider.Head, opts Options) ([]provider.Hea
 		}
 	}
 	if len(candidates) == 0 {
-		return nil, fmt.Errorf("swarm: no executable heads found")
+		return nil, errNoExecutableHeads
 	}
 	sort.Slice(candidates, func(i, j int) bool { return candidates[i].CapScore < candidates[j].CapScore })
 	return applyFiltersAndCap(candidates, opts), nil
@@ -132,7 +137,7 @@ func (s *CapScoreSelector) Select(all []provider.Head, opts Options) ([]provider
 		}
 	}
 	if len(candidates) == 0 {
-		return nil, fmt.Errorf("swarm: no executable heads found")
+		return nil, errNoExecutableHeads
 	}
 
 	sort.Slice(candidates, func(i, j int) bool {

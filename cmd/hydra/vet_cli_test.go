@@ -8,10 +8,12 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/dispatch"
 	"github.com/ankit373/hydra/internal/graph"
 	"github.com/ankit373/hydra/internal/swarm"
@@ -43,6 +45,61 @@ func TestRenderVet_BothRenderingsGateTheSame(t *testing.T) {
 		if buf.Len() == 0 {
 			t.Errorf("json=%v rendered nothing", jsonOut)
 		}
+	}
+}
+
+// Reviewing nothing is not a pass. The only non-zero exit was "a blocking
+// finding was reported", so `hyctl vet || exit 1` read a run where every file
+// failed as clean, in both renderings (#1152).
+func TestRenderVet_NothingReviewedIsNotAPass(t *testing.T) {
+	failed := &vet.Result{
+		Spec: &vet.Spec{Mode: "workspace"},
+		Files: []vet.FileOutcome{
+			{File: "a.go", Err: "no dispatchable heads"},
+			{File: "b.go", Err: "no dispatchable heads"},
+		},
+	}
+	for _, jsonOut := range []bool{false, true} {
+		var buf bytes.Buffer
+		code, err := renderVet(&buf, failed, jsonOut)
+		if err != nil {
+			t.Fatalf("json=%v: %v", jsonOut, err)
+		}
+		if code == 0 {
+			t.Errorf("json=%v exited 0 having reviewed nothing: a CI gate reads that as clean", jsonOut)
+		}
+		// Distinct from 3, or a gate cannot tell "a defect was found" from
+		// "the review never happened".
+		if code != exitNothingReviewed {
+			t.Errorf("json=%v exited %d, want %d", jsonOut, code, exitNothingReviewed)
+		}
+	}
+
+	// The reader of the table needs it too: "0 blocking" beside "0/2 reviewed"
+	// is what gets taken for a pass.
+	var table bytes.Buffer
+	if _, err := renderVet(&table, failed, false); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(table.String(), "nothing was reviewed") {
+		t.Errorf("the table does not say the review did not happen:\n%s", table.String())
+	}
+}
+
+// A partly-failed review still found something, and must gate on the finding
+// rather than on the files that failed.
+func TestRenderVet_APartialReviewStillGatesOnItsFindings(t *testing.T) {
+	partial := &vet.Result{
+		Spec:     &vet.Spec{Mode: "workspace"},
+		Findings: []vet.Finding{{File: "a.go", Severity: vet.Blocking, Title: "boom", Head: "h"}},
+		Files: []vet.FileOutcome{
+			{File: "a.go", Head: "h", Findings: 1},
+			{File: "b.go", Err: "no diff"},
+		},
+	}
+	var buf bytes.Buffer
+	if code, _ := renderVet(&buf, partial, true); code != exitBlocking {
+		t.Errorf("exited %d, want %d: one file failing must not mask the other's finding", code, exitBlocking)
 	}
 }
 
@@ -272,6 +329,66 @@ func TestSeverityLabel_CarriesEitherWord(t *testing.T) {
 	}
 }
 
+// A CI gate reads stdout and the exit code, and both were wrong at once: the
+// confidence banner made --json unparseable (#1158) and a run where every file
+// failed exited 0 (#1152). Driven as a real binary, because the command calls
+// os.Exit and in-process that takes the test binary with it.
+func TestVet_NothingReviewedExitsNonZeroWithCleanJSON(t *testing.T) {
+	s := testutil.NewSandbox(t)
+	if err := config.Save(&config.Config{Cortex: "none"}); err != nil {
+		t.Fatal(err)
+	}
+	// One document answers both delegate calls, since a Spec carries groups
+	// too. The file is never reviewed: the sandbox's PATH holds no git.
+	s.FakeBinary(t, "ocr", testutil.EchoScript(
+		`{"schema_version":"1","mode":"workspace","reviewable_files":[{"path":"a.go"}],`+
+			`"groups":[{"group_id":1,"pattern":"**/*.go","files":["a.go"],"rule":"the go rules"}]}`))
+
+	code, stdout, stderr := runBinarySplit(t, s, "vet", "--local", "--json", "--confidence", "0.9")
+	if code != exitNothingReviewed {
+		t.Fatalf("exit %d, want %d: a gate reads a totally failed review as clean\nstdout: %s\nstderr: %s",
+			code, exitNothingReviewed, stdout, stderr)
+	}
+	var res vet.Result
+	if err := json.Unmarshal([]byte(stdout), &res); err != nil {
+		t.Fatalf("stdout is not one JSON document, so jq and json.load both fail: %v\n%s", err, stdout)
+	}
+	if len(res.Files) != 1 || res.Files[0].Err == "" {
+		t.Errorf("the JSON does not account for the file that failed: %+v", res.Files)
+	}
+	// Suppressing the banner would hide the #251 warning, so it has to be on
+	// the human's channel rather than gone.
+	if !strings.Contains(stderr, "confidence:") {
+		t.Errorf("the confidence banner was not written anywhere:\n%s", stderr)
+	}
+}
+
+// runBinarySplit is runBinary with the two streams kept apart, which is the
+// whole question here: a machine consumer reads stdout alone.
+func runBinarySplit(t *testing.T, s *testutil.Sandbox, args ...string) (code int, stdout, stderr string) {
+	t.Helper()
+	requireHyctl(t)
+
+	cmd := exec.Command(hyctlBin, args...)
+	cmd.Env = append(os.Environ(),
+		"HOME="+s.Home,
+		"USERPROFILE="+s.Home,
+		"HYDRA_HOME="+s.HydraHome,
+		"HYDRA_NO_UPDATE_CHECK=1",
+		"PATH="+s.BinDir,
+	)
+	var out, errOut bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &out, &errOut
+	if err := cmd.Run(); err != nil {
+		var ee *exec.ExitError
+		if !errors.As(err, &ee) {
+			t.Fatalf("could not run hyctl: %v", err)
+		}
+		code = ee.ExitCode()
+	}
+	return code, out.String(), errOut.String()
+}
+
 // A garbage enum must be refused before anything is resolved or dispatched, or
 // it falls through to unrestricted auto-routing (#501).
 func TestCmdVet_GarbageEnumIsRefusedBeforeAnythingRuns(t *testing.T) {
@@ -312,6 +429,127 @@ func TestVetRouter_CarriesTheHeadTierAndCostBack(t *testing.T) {
 	}
 	if ans.Tier <= 0 {
 		t.Errorf("tier = %d, so the report cannot say what answered", ans.Tier)
+	}
+}
+
+// A machine with no routable head refuses every file identically, and that is
+// a fact about the machine rather than about any file. Unwrapped, the whole
+// refusal was printed once per file (#1152).
+func TestVetRouter_NoRoutableHeadStopsTheWholeRun(t *testing.T) {
+	testutil.NewSandbox(t) // no fake binary: nothing is routable
+	if err := config.Save(&config.Config{Cortex: "none"}); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx := context.Background()
+	d, err := dispatch.New(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+
+	// Both paths: the ensemble has the same condition and had the same defect.
+	routers := map[string]vetRouter{
+		"single dispatch": {d: d, runID: "run-1", enum: "MODERATE",
+			tier: dispatch.EnumToTier("MODERATE"), local: true},
+		"ensemble": {d: d, runID: "run-1", sw: swarm.New(d, d.Heads(), d),
+			floor: 0.7, local: true},
+	}
+	for name, r := range routers {
+		_, err := r.Review(ctx, "review this", "go", "a.go")
+		if err == nil {
+			t.Fatalf("%s: a machine with no routable head produced an answer", name)
+		}
+		if !errors.Is(err, vet.ErrNoHeads) {
+			t.Fatalf("%s: the refusal is not marked as stopping the run, so every file pays it verbatim: %v", name, err)
+		}
+		// It must stay readable through the wrap: the reason is what the user acts on.
+		if !strings.Contains(err.Error(), "heads") {
+			t.Errorf("%s: the cause was lost in the wrap: %v", name, err)
+		}
+	}
+}
+
+// The flag's whole job is refusing a Head before it spends. It reached the
+// ensemble and never the single-dispatch path, which is the one that runs by
+// default, so on that path it was inert (#1166).
+func TestVetRouter_MaxCostReachesTheSingleDispatchPath(t *testing.T) {
+	dispatchable(t, "[]")
+
+	ctx := context.Background()
+	d, err := dispatch.New(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+
+	r := vetRouter{d: d, runID: "run-1", enum: "MODERATE",
+		tier: dispatch.EnumToTier("MODERATE"), maxCost: 0.0000001}
+	// A prompt with real length, so the char-count/4 estimate prices above the
+	// ceiling rather than rounding to zero.
+	_, err = r.Review(ctx, strings.Repeat("x", 4000), "go", "a.go")
+	if err == nil {
+		t.Fatal("the head ran with an estimate far above the stated ceiling")
+	}
+	if !strings.Contains(err.Error(), "--max-cost") {
+		t.Errorf("the refusal does not name the ceiling the user set: %v", err)
+	}
+}
+
+// A cost refusal and a Head that answered badly are different facts. The
+// ensemble's empty answer rendered as the second, so the report blamed a Head
+// for a ceiling (#1166).
+func TestReviewEnsemble_ACostRefusalDoesNotReadAsABadReply(t *testing.T) {
+	t.Setenv("HYDRA_HOME", t.TempDir())
+
+	r := vetRouter{maxCost: 0.01, sw: fakeSPRT{res: &swarm.SPRTResult{
+		Trust: &trust.Result{}, // nothing sampled: the ceiling refused the first candidate
+	}}}
+	_, err := r.reviewEnsemble(context.Background(), "prompt", "go", "a.go")
+	if err == nil {
+		t.Fatal("a run that sampled nothing came back as an answer, which renders as an unreadable reply")
+	}
+	if !strings.Contains(err.Error(), "cost ceiling") {
+		t.Errorf("the refusal does not say the ceiling refused it: %v", err)
+	}
+}
+
+// Two files sharing a long prefix must not render as the same string, or a
+// finding's line number cannot be attributed to a file. Asserted on the table
+// rather than on the helper, since a helper nothing calls still passes (#1166).
+func TestPrintVet_TellsTwoLongPathsApart(t *testing.T) {
+	// They share more than the column's width, which is what made the hard cut
+	// render them as one string.
+	a := "internal/services/authentication/providers/oidc/token.go"
+	b := "internal/services/authentication/providers/oidc/refresh.go"
+	var buf bytes.Buffer
+	printVet(&buf, &vet.Result{
+		Spec:  &vet.Spec{Mode: "workspace"},
+		Files: []vet.FileOutcome{{File: a, Head: "h"}, {File: b, Head: "h"}},
+	})
+
+	var rendered []string
+	for _, line := range strings.Split(buf.String(), "\n") {
+		if strings.Contains(line, "providers") || strings.Contains(line, "…") {
+			rendered = append(rendered, line)
+		}
+	}
+	if len(rendered) != 2 {
+		t.Fatalf("expected both files on their own line, got %d:\n%s", len(rendered), buf.String())
+	}
+	if rendered[0] == rendered[1] {
+		t.Fatalf("two different files render identically: %q", rendered[0])
+	}
+	if !strings.Contains(rendered[0], "…") {
+		t.Errorf("the cut is silent, so a truncated path reads as the whole one: %q", rendered[0])
+	}
+
+	// A path that fits is untouched, and the cut never exceeds the column.
+	if short := "a.go"; truncPath(short, 46) != short {
+		t.Errorf("a path that fits was altered: %q", truncPath(short, 46))
+	}
+	if n := len([]rune(truncPath(a, 46))); n > 46 {
+		t.Errorf("truncated to %d runes, over the 46 the column holds", n)
 	}
 }
 
@@ -409,23 +647,42 @@ func TestPrintVet_ShortOfBarIsVisible(t *testing.T) {
 	}
 }
 
-// The run-stopping reason is printed once, in the summary, not blamed on each
-// file in turn.
-func TestPrintVet_ARunStoppingReasonIsSaidOnce(t *testing.T) {
+// A stopping reason is printed once, in the summary, not blamed on each file
+// in turn.
+func TestPrintVet_AStoppingReasonIsSaidOnce(t *testing.T) {
 	var buf bytes.Buffer
 	printVet(&buf, &vet.Result{
 		Spec: &vet.Spec{Mode: "workspace"},
 		Files: []vet.FileOutcome{
-			{File: "a.go", Err: "cannot review any file: nothing is calibrated", Fatal: true},
-			{File: "b.go", Err: "cannot review any file: nothing is calibrated", Fatal: true},
+			{File: "a.go", Err: "cannot review any file in this domain: nothing is calibrated", Fatal: true},
+			{File: "b.go", Err: "cannot review any file in this domain: nothing is calibrated", Fatal: true},
 		},
 	})
 	out := buf.String()
 	if n := strings.Count(out, "nothing is calibrated"); n != 1 {
 		t.Errorf("the reason appears %d times, want 1:\n%s", n, out)
 	}
-	if !strings.Contains(out, "the run stopped") {
-		t.Errorf("the summary does not say the run stopped:\n%s", out)
+	if !strings.Contains(out, "the review stopped") {
+		t.Errorf("the summary does not say the review stopped:\n%s", out)
+	}
+}
+
+// Two domains that refuse for different reasons are two conditions. Showing
+// one of them beside the other's files is a wrong answer, not a shorter one.
+func TestPrintVet_EachDistinctStoppingReasonIsShown(t *testing.T) {
+	var buf bytes.Buffer
+	printVet(&buf, &vet.Result{
+		Spec: &vet.Spec{Mode: "workspace"},
+		Files: []vet.FileOutcome{
+			{File: "a.go", Err: `cannot review any file in this domain: nothing measured in "go"`, Fatal: true},
+			{File: "b.js", Err: `cannot review any file in this domain: nothing measured in "js"`, Fatal: true},
+		},
+	})
+	out := buf.String()
+	for _, want := range []string{`measured in "go"`, `measured in "js"`} {
+		if !strings.Contains(out, want) {
+			t.Errorf("the report hides the %q refusal behind the other one:\n%s", want, out)
+		}
 	}
 }
 

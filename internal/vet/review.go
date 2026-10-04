@@ -10,7 +10,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"sync/atomic"
 
 	"github.com/ankit373/hydra/internal/trust"
 )
@@ -136,8 +135,8 @@ type FileOutcome struct {
 	Samples    int     `json:"samples,omitempty"`
 	TaskHash   string  `json:"task_hash,omitempty"`
 
-	// Fatal marks a failure that would repeat for every other file too, so a
-	// report says it once instead of blaming each file in turn.
+	// Fatal marks a failure that would repeat for every other file in the same
+	// scope, so a report says it once instead of blaming each file in turn.
 	Fatal bool `json:"-"`
 }
 
@@ -179,15 +178,23 @@ func (r *Result) BlockingCount() int {
 	return n
 }
 
-// CannotSample reports the failure that stopped the whole run, if one did, so a
-// caller can print it once with what to do about it.
-func (r *Result) CannotSample() string {
+// Stopped lists the refusals that stopped a domain or the whole run, each one
+// once, so a caller prints a reason rather than repeating it per file.
+//
+// A list rather than a single string because a refusal is scoped to the domain
+// it names: with js calibrated and go not, the two refusals are different
+// conditions and showing one of them beside the other's files is a wrong
+// answer, not a shorter one (#1157).
+func (r *Result) Stopped() []string {
+	seen := map[string]bool{}
+	var why []string
 	for _, f := range r.Files {
-		if f.Fatal {
-			return f.Err
+		if f.Fatal && f.Err != "" && !seen[f.Err] {
+			seen[f.Err] = true
+			why = append(why, f.Err)
 		}
 	}
-	return ""
+	return why
 }
 
 // Trainable lists the files whose ensemble runs were recorded, so a caller can
@@ -229,10 +236,43 @@ func (r *Result) Reviewed() int {
 	return n
 }
 
-// ErrCannotSample marks a router failure that will repeat identically for every
-// file, so Run stops rather than paying the same refusal once per file and
-// reporting it as though each file had its own problem.
-var ErrCannotSample = errors.New("cannot review any file")
+// ErrCannotSample marks a router refusal that will repeat for every file in
+// the same domain, so Run stops that domain rather than paying the refusal once
+// per file and reporting it as though each file had its own problem.
+//
+// Scoped to the domain because trust is keyed per domain: with js calibrated
+// and go not, a Go file's refusal says nothing about the JavaScript files the
+// ensemble could have reviewed (#1157).
+var ErrCannotSample = errors.New("cannot review any file in this domain")
+
+// ErrNoHeads is the refusal that is not about the domain at all: nothing on
+// this machine can run the review, so no file in the run can be reviewed and
+// the reason is said once (#1152).
+var ErrNoHeads = errors.New("no Head can run this review")
+
+// stop is how widely a refusal applies, which is the whole of #1157: a domain
+// and a run are different scopes and treating the first as the second drops
+// files nothing ever reviewed.
+type stop uint8
+
+const (
+	stopNone stop = iota
+	stopDomain
+	stopRun
+)
+
+// scopeOf reads a router error's scope. Anything unrecognised stops nothing:
+// one head falling over leaves the other files reviewable.
+func scopeOf(err error) stop {
+	switch {
+	case errors.Is(err, ErrNoHeads):
+		return stopRun
+	case errors.Is(err, ErrCannotSample):
+		return stopDomain
+	default:
+		return stopNone
+	}
+}
 
 // RunOptions bounds a run. Zero means the default.
 type RunOptions struct {
@@ -259,10 +299,11 @@ func Run(ctx context.Context, r Router, spec *Spec, opts RunOptions) (*Result, e
 	}
 
 	var (
-		mu    sync.Mutex
-		wg    sync.WaitGroup
-		fatal atomic.Bool
-		sem   = make(chan struct{}, opts.Concurrency)
+		mu  sync.Mutex
+		wg  sync.WaitGroup
+		sem = make(chan struct{}, opts.Concurrency)
+		// Domain → the refusal that stopped it; "" keys a run-wide one.
+		halted = map[string]string{}
 	)
 	for _, f := range spec.Reviewable {
 		wg.Add(1)
@@ -277,14 +318,31 @@ func Run(ctx context.Context, r Router, spec *Spec, opts RunOptions) (*Result, e
 				mu.Unlock()
 				return
 			}
-			if fatal.Load() {
+			domain := trust.DomainForFile(path)
+
+			mu.Lock()
+			why, skip := halted[""]
+			if !skip {
+				why, skip = halted[domain]
+			}
+			if skip {
+				// Reported, not dropped: a file missing from the list is one
+				// the denominator claims was never in scope (#1157).
+				res.Files = append(res.Files, FileOutcome{File: path, Err: why, Fatal: true})
+			}
+			mu.Unlock()
+			if skip {
 				return
 			}
-			out, found := reviewFile(ctx, r, spec, path, opts)
-			if out.Fatal {
-				fatal.Store(true)
-			}
+
+			out, found, scope := reviewFile(ctx, r, spec, path, domain, opts)
 			mu.Lock()
+			switch scope {
+			case stopRun:
+				halted[""] = out.Err
+			case stopDomain:
+				halted[domain] = out.Err
+			}
 			res.Files = append(res.Files, out)
 			res.Findings = append(res.Findings, found...)
 			res.CostUSD += out.CostUSD
@@ -309,7 +367,7 @@ func Run(ctx context.Context, r Router, spec *Spec, opts RunOptions) (*Result, e
 	return res, nil
 }
 
-func reviewFile(ctx context.Context, r Router, spec *Spec, path string, opts RunOptions) (FileOutcome, []Finding) {
+func reviewFile(ctx context.Context, r Router, spec *Spec, path, domain string, opts RunOptions) (FileOutcome, []Finding, stop) {
 	out := FileOutcome{File: path}
 
 	group, ok := spec.RuleFor(path)
@@ -317,17 +375,17 @@ func reviewFile(ctx context.Context, r Router, spec *Spec, path string, opts Run
 		// Reviewing it anyway would be a head answering from whatever it
 		// happens to believe, which is the thing the rule packs replace.
 		out.Err = "no rule resolved for this path"
-		return out, nil
+		return out, nil, stopNone
 	}
 
 	diff, err := spec.Diff(ctx, path)
 	if err != nil {
 		out.Err = err.Error()
-		return out, nil
+		return out, nil, stopNone
 	}
 	if strings.TrimSpace(diff) == "" {
 		out.Err = "no diff"
-		return out, nil
+		return out, nil, stopNone
 	}
 	if len(diff) > opts.MaxDiffBytes {
 		cut := diff[:opts.MaxDiffBytes]
@@ -337,11 +395,11 @@ func reviewFile(ctx context.Context, r Router, spec *Spec, path string, opts Run
 		diff, out.Truncated = cut, true
 	}
 
-	ans, err := r.Review(ctx, buildPrompt(spec, group, path, diff, out.Truncated), trust.DomainForFile(path), path)
+	ans, err := r.Review(ctx, buildPrompt(spec, group, path, diff, out.Truncated), domain, path)
 	if err != nil {
-		out.Err = err.Error()
-		out.Fatal = errors.Is(err, ErrCannotSample)
-		return out, nil
+		scope := scopeOf(err)
+		out.Err, out.Fatal = err.Error(), scope != stopNone
+		return out, nil, scope
 	}
 	out.Head, out.Tier, out.CostUSD = ans.Head, ans.Tier, ans.CostUSD
 	out.Bar, out.Confidence, out.Samples = ans.Bar, ans.Confidence, ans.Samples
@@ -352,11 +410,11 @@ func reviewFile(ctx context.Context, r Router, spec *Spec, path string, opts Run
 		// Unreadable is not the same answer as clean, and rendering it as clean
 		// is how a reviewer reports a pass it never performed.
 		out.Unparsed, out.Raw = true, ans.Output
-		return out, nil
+		return out, nil, stopNone
 	}
 	countAgreement(found, ans.Votes, path)
 	out.Findings, out.Discarded = len(found), discarded
-	return out, found
+	return out, found, stopNone
 }
 
 // countAgreement records, per finding, how many of the sampled Heads made the

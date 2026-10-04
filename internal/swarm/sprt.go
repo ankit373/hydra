@@ -55,7 +55,10 @@ func (s *Swarm) RunSPRT(ctx context.Context, prompt string, opts Options) (*SPRT
 		return nil, err
 	}
 	if len(selected) == 0 {
-		return nil, fmt.Errorf("swarm sprt: no heads available")
+		// Wrapped so a caller can tell "this machine has no head" from a
+		// failure about one task: it is the same condition dispatch reports,
+		// and it repeats identically for every task (#1152).
+		return nil, fmt.Errorf("%w: swarm sprt: no heads available", dispatch.ErrNoHeads)
 	}
 	opts.progress.emit(Progress{Kind: ProgressSelected, Heads: selected})
 

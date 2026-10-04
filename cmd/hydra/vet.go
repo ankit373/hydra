@@ -92,13 +92,22 @@ func (r vetRouter) reviewEnsemble(ctx context.Context, prompt, domain, file stri
 		Domain:        domain,
 	})
 	if err != nil {
-		// An uncalibrated domain refuses identically for every file, so it is
-		// marked as fatal and reported once rather than blamed on each file.
+		// An uncalibrated domain refuses identically for every file in that
+		// domain, so it is marked as fatal and reported once rather than
+		// blamed on each file. Calibration is keyed per domain, so the refusal
+		// says nothing about the other domains in the diff (#1157).
 		var ne *trust.NoEvidenceError
 		if errors.As(err, &ne) {
 			return vet.Answer{}, fmt.Errorf("%w: %s", vet.ErrCannotSample, noEvidenceAdvice(ne))
 		}
-		return vet.Answer{}, err
+		return vet.Answer{}, scopeRouterErr(err)
+	}
+
+	// Nothing was sampled: the ceiling refused the first candidate, or every
+	// selected Head failed. An empty answer renders as a Head that replied
+	// unreadably, which blames the Head for the ceiling (#1166).
+	if res.Trust == nil || res.Trust.Samples == 0 {
+		return vet.Answer{}, errors.New(noSampleReason(r.maxCost, len(res.Attempts)))
 	}
 
 	// The ledger of who voted is what makes this run trainable later, and it is
@@ -106,11 +115,8 @@ func (r vetRouter) reviewEnsemble(ctx context.Context, prompt, domain, file stri
 	// a review that consulted four Heads teaches nothing about any of them.
 	logTrustRun(res, prompt, domain)
 
-	a := vet.Answer{Bar: bar, TaskHash: trust.TaskHash(prompt)}
-	if res.Trust != nil {
-		a.Output = res.Trust.Candidate
-		a.Confidence, a.Samples, a.CostUSD = res.Trust.Confidence, res.Trust.Samples, res.Trust.SpentUSD
-	}
+	a := vet.Answer{Bar: bar, TaskHash: trust.TaskHash(prompt), Output: res.Trust.Candidate}
+	a.Confidence, a.Samples, a.CostUSD = res.Trust.Confidence, res.Trust.Samples, res.Trust.SpentUSD
 	// The winner names the head whose answer was accepted; Samples says how
 	// many were consulted to get there.
 	for _, at := range res.Attempts {
@@ -155,9 +161,13 @@ func (r vetRouter) Review(ctx context.Context, prompt, domain, resource string) 
 		Resource: resource,
 		RunID:    r.runID,
 		TaskID:   runid.New(),
+		// The ceiling reached the ensemble and never this path, which is the
+		// one that runs by default, so --max-cost was inert on it (#1166).
+		MaxCostUSD:    r.maxCost,
+		MaxCostSource: "--max-cost",
 	})
 	if err != nil {
-		return vet.Answer{}, err
+		return vet.Answer{}, scopeRouterErr(err)
 	}
 	a := vet.Answer{
 		Output: res.Output,
@@ -170,6 +180,26 @@ func (r vetRouter) Review(ctx context.Context, prompt, domain, resource string) 
 		a.CostUSD = r.d.EstimateCost(a.Tier, a.InputTokens, a.OutputTokens)
 	}
 	return a, nil
+}
+
+// scopeRouterErr marks a refusal that is about the machine rather than the
+// file. With no routable head every file refuses identically, and that is
+// exactly what vet.ErrNoHeads stops being paid once per file (#1152).
+func scopeRouterErr(err error) error {
+	if errors.Is(err, dispatch.ErrNoHeads) {
+		return fmt.Errorf("%w: %s", vet.ErrNoHeads, err)
+	}
+	return err
+}
+
+// noSampleReason says why an ensemble produced no answer at all. A cost
+// refusal and a Head that answered badly are different facts about different
+// things, and the empty answer used to render as the second (#1166).
+func noSampleReason(maxCost float64, attempts int) string {
+	if attempts == 0 && maxCost > 0 {
+		return fmt.Sprintf("no Head ran: the $%.4f cost ceiling refused every candidate before it was sampled", maxCost)
+	}
+	return fmt.Sprintf("no Head answered: %d attempt(s), none usable", attempts)
 }
 
 func cmdVet() *cobra.Command {
@@ -193,7 +223,8 @@ func cmdVet() *cobra.Command {
 			"with no model and no spend. Hydra routes each file to a Head, so cost, policy,\n" +
 			"fallback and per-domain calibration all apply the way they do to any dispatch.\n\n" +
 			"With no flags it reads the workspace: staged, unstaged and untracked together.\n" +
-			"Exits 3 when a blocking finding is reported, so a script can gate on it.",
+			"Exits 3 when a blocking finding is reported and 4 when no file was reviewed\n" +
+			"at all, so a script can gate on either.",
 		Example: "  hyctl vet\n" +
 			"  hyctl vet --from develop --to HEAD\n" +
 			"  hyctl vet --commit 2504ec2\n" +
@@ -232,6 +263,7 @@ func cmdVet() *cobra.Command {
 
 			router := vetRouter{
 				d: d, runID: runid.New(), enum: logEnum, tier: hint, local: localOnly,
+				maxCost: maxCost,
 			}
 			if confidence > 0 {
 				if confidence >= 1 {
@@ -242,8 +274,10 @@ func cmdVet() *cobra.Command {
 					return fmt.Errorf("graph %s: %w", graphPath, gerr)
 				}
 				router.sw = swarm.New(d, d.Heads(), d)
-				router.floor, router.graph, router.graphPath, router.maxCost = confidence, g, graphPath, maxCost
-				printVetBar(os.Stdout, g, graphPath, confidence)
+				router.floor, router.graph, router.graphPath = confidence, g, graphPath
+				// To stderr: on stdout this banner preceded the JSON document
+				// and every parser on the other end failed (#1158).
+				printVetBar(os.Stderr, g, graphPath, confidence)
 			}
 
 			res, err := vet.Run(ctx, router, spec, vet.RunOptions{Concurrency: concurrency})
@@ -276,7 +310,7 @@ func cmdVet() *cobra.Command {
 	f.Float64Var(&confidence, "confidence", 0,
 		"sample several Heads per file until this confidence is reached; the file's blast radius raises it (0 = one Head per file)")
 	f.StringVar(&graphPath, "graph", "graph.json", "dependency graph that sets each file's blast radius")
-	f.Float64Var(&maxCost, "max-cost", 0, "ceiling in USD for the whole run (0 = no limit)")
+	f.Float64Var(&maxCost, "max-cost", 0, "refuse a Head whose estimated cost for a file exceeds this, in USD (0 = no limit)")
 	f.IntVar(&concurrency, "concurrency", 4, "files reviewed at once")
 	return cmd
 }
@@ -295,6 +329,14 @@ func resolveVetRouting(enum, tier string) (hint, logEnum string, err error) {
 	return dispatch.EnumToTier(enum), enum, nil
 }
 
+// Exit codes a script gates on. exitNothingReviewed is separate from
+// exitBlocking because the two say opposite things about the diff: one is "a
+// defect was reported", the other is "no file was read at all".
+const (
+	exitBlocking        = 3
+	exitNothingReviewed = 4
+)
+
 // renderVet writes the result and answers with the process exit code, so the
 // exit code cannot depend on which rendering ran. --json returning before the
 // check is what let a gate pass on a blocking finding.
@@ -306,8 +348,14 @@ func renderVet(w io.Writer, res *vet.Result, jsonOut bool) (int, error) {
 	} else {
 		printVet(w, res)
 	}
+	// Reviewing nothing is not a pass, and exiting 0 on it is the one wrong
+	// answer a review gate must never give: `hyctl vet || exit 1` read a run
+	// where every file failed as clean (#1152).
+	if len(res.Files) > 0 && res.Reviewed() == 0 {
+		return exitNothingReviewed, nil
+	}
 	if res.BlockingCount() > 0 {
-		return 3, nil // non-zero so callers can gate on it
+		return exitBlocking, nil
 	}
 	return 0, nil
 }
@@ -415,7 +463,7 @@ func printVet(w io.Writer, r *vet.Result) {
 		if out.Tier > 0 {
 			tier = fmt.Sprintf("T%d", out.Tier)
 		}
-		fmt.Fprintf(w, "  %-46.46s %s %s\n", out.File, dimStyle.Render(truncLabel(head, 20)), dimStyle.Render(tier))
+		fmt.Fprintf(w, "  %-46s %s %s\n", truncPath(out.File, 46), dimStyle.Render(truncLabel(head, 20)), dimStyle.Render(tier))
 
 		if out.Bar.Set() {
 			fmt.Fprintf(w, "        %s\n", barLine(out))
@@ -425,7 +473,7 @@ func printVet(w io.Writer, r *vet.Result) {
 		case out.Fatal:
 			// The summary carries the reason once; repeating it per file reads
 			// as each file having its own problem.
-			fmt.Fprintf(w, "        %s\n", dimStyle.Render("not reviewed: the run stopped, see below"))
+			fmt.Fprintf(w, "        %s\n", dimStyle.Render("not reviewed: the review stopped, see below"))
 		case out.Err != "":
 			fmt.Fprintf(w, "        %s\n", dimStyle.Render("not reviewed: "+out.Err))
 		case out.Unparsed:
@@ -454,8 +502,13 @@ func printVet(w io.Writer, r *vet.Result) {
 		fmt.Fprintln(w)
 	}
 
-	if why := r.CannotSample(); why != "" {
-		fmt.Fprintf(w, "  %s\n", blockingStyle.Render("the run stopped: "+why))
+	// One line per distinct refusal: a domain's refusal and the run's are
+	// different conditions, and showing one of them beside the other's files
+	// is a wrong answer rather than a shorter one (#1157).
+	if stopped := r.Stopped(); len(stopped) > 0 {
+		for _, why := range stopped {
+			fmt.Fprintf(w, "  %s\n", blockingStyle.Render("the review stopped: "+why))
+		}
 		fmt.Fprintln(w)
 	}
 	if trainable := r.Trainable(); len(trainable) > 0 {
@@ -479,6 +532,12 @@ func printVet(w io.Writer, r *vet.Result) {
 	if short := r.ShortOfBar(); short > 0 {
 		fmt.Fprintf(w, "  %s\n", nonBlockingStyle.Render(fmt.Sprintf(
 			"%d file(s) never reached the confidence their blast radius asked for; their findings stand, the confidence does not", short)))
+	}
+	// Said in the table too, not only in the exit code: "0 blocking" beside
+	// "0/6 reviewed" is what a reader takes for a pass (#1152).
+	if len(r.Files) > 0 && r.Reviewed() == 0 {
+		fmt.Fprintf(w, "  %s\n", blockingStyle.Render(
+			fmt.Sprintf("nothing was reviewed, so this is not a pass; exit code %d", exitNothingReviewed)))
 	}
 	blocking := r.BlockingCount()
 	fmt.Fprintf(w, "  %d blocking %s %d non-blocking %s %d/%d file(s) reviewed %s $%.4f\n",
@@ -508,6 +567,17 @@ func agreementLabel(f vet.Finding) string {
 		return dimStyle.Render(label)
 	}
 	return label
+}
+
+// truncPath keeps a path's tail, which is the part that tells two files apart;
+// the head is the part they share. truncLabel cuts the other way, which is
+// right for a head id and renders two different files identically here (#1166).
+func truncPath(s string, n int) string {
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return "…" + string(r[len(r)-(n-1):])
 }
 
 func loneFindings(r *vet.Result) int {
