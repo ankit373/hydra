@@ -4582,7 +4582,11 @@ func cmdCost() *cobra.Command {
 		RunE: func(_ *cobra.Command, args []string) error {
 			n := 10
 			if len(args) > 0 {
-				fmt.Sscanf(args[0], "%d", &n)
+				parsed, err := strconv.Atoi(args[0])
+				if err != nil {
+					return fmt.Errorf("cost tail: %q is not a number of rows", args[0])
+				}
+				n = parsed
 			}
 			rows, err := cost.Tail(n)
 			if err != nil {

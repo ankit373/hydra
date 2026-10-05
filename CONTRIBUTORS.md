@@ -6,3 +6,4 @@ contributed. Add yourself in the same pull request as your first contribution.
 | Name | GitHub | Signed |
 |---|---|---|
 | Ankit Jha | [@ankit373](https://github.com/ankit373) | 2026-09-19 |
+| Daniel Bae | [@MrBeldum](https://github.com/MrBeldum) | 2026-10-05 |
