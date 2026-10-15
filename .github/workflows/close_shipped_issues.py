@@ -15,6 +15,11 @@ import time
 REPO = os.environ["REPO"]
 TAG = os.environ["TAG"]
 DRY_RUN = os.environ.get("DRY_RUN", "") == "true"
+# A release sweep that resolves nothing has almost certainly resolved the wrong
+# history: v1.4.0 and v1.5.0 each closed zero and read green, stranding 89
+# issues. A manual backfill resolving nothing is ordinary, so only the release
+# pipeline is strict (#1140).
+STRICT = os.environ.get("STRICT", "") == "true"
 OWNER, NAME = REPO.split("/")
 
 # The keyword set GitHub itself honours. Anchored on a word boundary so "for #517"
@@ -115,6 +120,13 @@ def main():
 
     if failures:
         sys.exit("Failed to close:\n  " + "\n  ".join(failures))
+
+    if STRICT and not DRY_RUN and not targets:
+        sys.exit(
+            "This release closed no issues. Every release carries some, so the "
+            "sweep has resolved a history that is not this release's: check that "
+            "release/%s exists and that an earlier release branch bounds it." % TAG
+        )
 
 
 if __name__ == "__main__":
