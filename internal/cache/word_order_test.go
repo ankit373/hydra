@@ -105,7 +105,7 @@ func TestLookup_AReversedQuestionIsRefusedEvenAtCosineOne(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	out := s.Lookup("merge main into develop", vec, DefaultThreshold)
+	out := s.Lookup(Query{Prompt: "merge main into develop"}, vec, DefaultThreshold)
 	if out.Found {
 		t.Errorf("served %q for the reversed question; this is the wrong-answer failure the package exists to avoid", out.Hit.Response)
 	}
@@ -115,7 +115,7 @@ func TestLookup_AReversedQuestionIsRefusedEvenAtCosineOne(t *testing.T) {
 
 	// The same store must still serve a genuine restatement, or the fix has
 	// turned the cache into a hash map.
-	if out := s.Lookup("please can you merge develop into main for me", vec, DefaultThreshold); !out.Found {
+	if out := s.Lookup(Query{Prompt: "please can you merge develop into main for me"}, vec, DefaultThreshold); !out.Found {
 		t.Error("a filler-word restatement was refused")
 	}
 }
@@ -136,7 +136,7 @@ func TestLookup_StillCountsARefusalTheDenseHalfWouldHaveServed(t *testing.T) {
 
 	// Same vector, so cosine is 1.0 and would serve; different content word, so
 	// the token gate must not.
-	out := s.Lookup("rotate the signing certificate", vec, DefaultThreshold)
+	out := s.Lookup(Query{Prompt: "rotate the signing certificate"}, vec, DefaultThreshold)
 	if out.Found {
 		t.Fatalf("served a different question at cosine 1.0: %q", out.Hit.Response)
 	}
@@ -157,7 +157,7 @@ func TestLookup_ADenseDisagreementIsARefusalNotAMiss(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	out := s.Lookup("please rotate the signing key", []float32{0, 1, 0}, DefaultThreshold)
+	out := s.Lookup(Query{Prompt: "please rotate the signing key"}, []float32{0, 1, 0}, DefaultThreshold)
 	if out.Found {
 		t.Error("served a candidate the dense half rejected")
 	}
@@ -177,7 +177,7 @@ func TestLookup_NoCandidateAtAllIsAMiss(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	out := s.Lookup("what is the capital of France", []float32{0, 1, 0}, DefaultThreshold)
+	out := s.Lookup(Query{Prompt: "what is the capital of France"}, []float32{0, 1, 0}, DefaultThreshold)
 	if out.Found || out.Refused {
 		t.Errorf("Found=%v Refused=%v, want a plain miss", out.Found, out.Refused)
 	}
@@ -197,7 +197,7 @@ func TestLookup_APromptOfPureFunctionWordsMatchesNothing(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, q := range []string{"how do i", "what is it", "can you"} {
-		if out := s.Lookup(q, nil, DefaultThreshold); out.Found {
+		if out := s.Lookup(Query{Prompt: q}, nil, DefaultThreshold); out.Found {
 			t.Errorf("%q was served %q", q, out.Hit.Response)
 		}
 	}
@@ -257,7 +257,7 @@ func TestLookup_TheFloorServesRestatementsWithNoEmbedder(t *testing.T) {
 			if keptWords {
 				unchanged++
 			}
-			out := s.Lookup(q, nil, DefaultThreshold)
+			out := s.Lookup(Query{Prompt: q}, nil, DefaultThreshold)
 			hit := out.Found && out.Hit.Response == fmt.Sprintf("answer %d", i)
 			if hit {
 				served++

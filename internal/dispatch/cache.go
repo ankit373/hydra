@@ -4,6 +4,7 @@ package dispatch
 
 import (
 	"context"
+	"errors"
 	"log"
 
 	"github.com/ankit373/hydra/internal/cache"
@@ -12,6 +13,7 @@ import (
 	"github.com/ankit373/hydra/internal/executor"
 	"github.com/ankit373/hydra/internal/policy"
 	"github.com/ankit373/hydra/internal/provider"
+	"github.com/ankit373/hydra/internal/rank"
 	"github.com/ankit373/hydra/internal/runid"
 	"github.com/ankit373/hydra/internal/runlog"
 )
@@ -47,7 +49,7 @@ func (d *Dispatcher) answerCache() (*cache.Store, embed.Embedder) {
 // separates a miss from a dispatch the cache was never allowed to answer. Only
 // the first belongs in a hit rate; counting the second would blame the cache
 // for the PII rule.
-func (d *Dispatcher) fromCache(ctx context.Context, prompt string, opts Options, class *policy.Classification) (cache.Outcome, bool) {
+func (d *Dispatcher) fromCache(ctx context.Context, prompt string, opts Options, class *policy.Classification, tier int) (cache.Outcome, bool) {
 	st, emb := d.answerCache()
 	if st == nil {
 		return cache.Outcome{}, false
@@ -62,7 +64,14 @@ func (d *Dispatcher) fromCache(ctx context.Context, prompt string, opts Options,
 			vec = v
 		}
 	}
-	return st.Lookup(prompt, vec, cache.Threshold(d.cfg, opts.Enum)), true
+	return st.Lookup(cacheQuery(prompt, opts, tier), vec, cache.Threshold(d.cfg, opts.Enum)), true
+}
+
+// cacheQuery is the one reading of what this dispatch is asking, so the lookup
+// and the store cannot disagree about which question an answer answers. tier is
+// what the run wants on the way in, and what actually answered on the way out.
+func cacheQuery(prompt string, opts Options, tier int) cache.Query {
+	return cache.Query{Prompt: prompt, System: opts.System, MaxTokens: opts.MaxTokens, Tier: tier}
 }
 
 // recordLookup folds a consulted lookup into the tallies. Misses included, or
@@ -145,18 +154,23 @@ func (d *Dispatcher) remember(ctx context.Context, prompt string, opts Options, 
 		return
 	}
 
-	e := cache.Entry{
-		Prompt: prompt, Response: r.Output,
-		Head: r.Head.ID, Model: r.Response.Model,
-		Enum: opts.Enum, Domain: routingDomain(opts), CostUSD: costUSD,
-	}
+	// The head's own tier, not the one the run asked for: a fallback to a
+	// weaker head is what actually produced this, and recording the request
+	// would let that answer be served to a later escalation (#1156).
+	e := cacheQuery(prompt, opts, rank.UITier(r.Head)).Answer(r.Output)
+	e.Truncated = r.Response.Truncated
+	e.Head, e.Model = r.Head.ID, r.Response.Model
+	e.Enum, e.Domain, e.CostUSD = opts.Enum, routingDomain(opts), costUSD
+
 	var vec []float32
 	if emb != nil && emb.Available() {
 		if v, err := emb.Embed(ctx, cache.Normalize(prompt)); err == nil {
 			vec = v
 		}
 	}
-	if err := st.PutVec(e, vec); err != nil {
+	if err := st.PutVec(e, vec); err != nil && !errors.Is(err, cache.ErrTruncated) {
+		// A capped answer refused is the cache working, so it is not warned
+		// about; anything else means a write that was meant to happen did not.
 		log.Printf("⚠️  answer not cached: %v", err)
 	}
 }
