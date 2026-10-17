@@ -31,11 +31,9 @@ defaults:
     merge_method: squash
     batch_size: 1
     # Body kept: the release PR's Release-As footer must reach release-please.
-    commit_message_template: |
-      {{ title }} (#{{ number }})
-
-      {{ body }}
-
+    commit_message_format:
+      title: pr-title
+      body: pr-body
 queue_rules:
   # release-please's own PR: CHANGELOG + manifest only, so it merges without the CI matrix.
   - name: release-please
@@ -59,8 +57,6 @@ queue_rules:
               - title~=^(feat|fix)\(release\)
               - body~=(?m)^Release-As:\s*\d+\.\d+\.\d+\s*$
     merge_conditions: *ci
-    allow_inplace_checks: false
-
   - name: release
     queue_conditions:
       - base~=^release/v
