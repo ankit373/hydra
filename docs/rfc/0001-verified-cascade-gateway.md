@@ -7,9 +7,11 @@
 
 ## 1. Summary
 
-Hydra is an inference gateway with OpenAI- and Anthropic-compatible endpoints.
+Hydra is an inference gateway for any model from any provider: hosted APIs, local servers, CLI agents and task-specific models. It sends each task to the model *measured* as most capable for that task class, verifies the output, and escalates when the verification fails.
 
-- **Escalation, not prediction.** For each request it calls models cheapest-first and runs verifiers on their outputs. It stops at the first answer whose posterior probability of being correct, for that task class, crosses a target set by the caller. It does not try to predict up front which model will do best.
+- **Measured capability, not brand or size.** The model for a request is the one with the highest posterior pass rate for that task class on verified outcomes. That is often not the largest model: a specialised extractor or classifier can beat a frontier model on its own task.
+- **Verified, not assumed.** Verifiers run on the output. Hydra stops at the first answer whose posterior probability of being correct crosses the caller's target. Otherwise it escalates to the next-best model for that task class.
+- **Cost is a choice, not the default.** Callers set an objective (§5.0). `quality` is the default; `cost` and `balanced` trade capability for spend explicitly.
 - **Learned from outcomes.** The posterior comes from a sensitivity/specificity matrix per (source, task class). The matrix is learned from verified outcomes, and its output is combined in a Wald sequential probability ratio test (SPRT).
 - **Same binary everywhere.** One Go binary runs as a CLI, a sidecar, a self-hosted multi-tenant gateway, or the data plane of a managed control plane.
 
@@ -21,7 +23,7 @@ There is one-line category name for each product compared here:
 | Jev / ScaleDown `/v1/scaledown` | "Decisions API": label selection as a service | At decode time |
 | Not Diamond, RouteLLM, OpenRouter Auto | Learned predictor that picks one model per prompt | Before the call |
 | LiteLLM, Portkey, Cloudflare/Vercel AI Gateway | Proxy with static fallback chains, keys and budgets | Before the call (rules), after it only on HTTP error |
-| **Hydra** | **Verifier-gated model cascade with calibrated sequential stopping** | **After each call, on evidence about the output** |
+| **Hydra** | **Selection by measured capability per task class, verifier-gated escalation, calibrated sequential stopping** | **Before the call, from measured pass rates; after it, from evidence about the output** |
 
 Hydra's job is to pick the model from the outside. It does not train or serve models. CDMs, GLiNER, local models and frontier models are all just *sources* that it calibrates and calls.
 
@@ -75,7 +77,7 @@ Every mechanism below already exists in the code. The repositioning generalises 
 | Pass-rate prediction | `internal/classify/classify.go` | kNN (k = 10, at least 3 neighbours per enum) over evalset embeddings, giving a Laplace-smoothed pass rate per routing enum. |
 | Counterfactual evaluation | `internal/ope/` | Self-normalised inverse-propensity estimator over sampled logs, used to score "always tier N", "always local", "cheapest head measured competent" and similar policies without running them. |
 | Output calibration | `internal/reliability/` | Brier score with the Murphy decomposition (reliability − resolution + uncertainty), ECE and MCE, over pairs of (stated P(correct), recorded verdict). It refuses to report below `MinObservations`. |
-| Cheapest competent head | `internal/rank` (`Cheapest`), `internal/dispatch` (`constrain`) | With no tier pinned, the head chosen is the cheapest whose posterior in-domain competence clears `trust.RequiredConfidence`, among heads with at least `MinCommitments` in-domain observations. |
+| Measured competence per domain | `internal/rank` (`EffectiveScoreIn`, `SortMeasured`, `Cheapest`), `internal/dispatch` (`constrain`) | Beta posterior of each head's in-domain pass rate, with its prior from the catalogue score and other domains, bounded at `MinCommitments` pseudo-observations. `SortMeasured` ranks on it. **Today** `constrain` then picks the *cheapest* head that clears `trust.RequiredConfidence`; §5.0 makes that one objective among three. |
 | Grounding check | `internal/ground/` | Flags an answer that states a number, path, flag or symbol found nowhere in the prompt's fenced context. Its verdict reaches SPRT through `oracle.LLR`. |
 | Gateway plumbing | `internal/serve`, `executor`, `cache`, `policy`, `egress`, `otlp` | OpenAI-compatible serving with streaming and tools. Native executors for OpenAI-compatible, Anthropic, Gemini, Cohere, Bedrock, Azure and CLI heads. Exact plus gated near-match cache, PII redaction, egress gate, OpenTelemetry export. |
 
@@ -99,6 +101,26 @@ The Go package `internal/trust` keeps its name for now; renaming it is churn wit
 
 ## 5. Design changes
 
+### 5.0 Routing objective: capability first
+
+Today both selection paths are cost-first. `dispatch.constrain` picks the cheapest head over the competence bar, and SPRT samples in order of evidence per dollar (`evidencePerCost`). That answers "what is the cheapest acceptable answer", not "what is the best model for this". The objective becomes explicit, per route or per request (`X-Hydra-Objective`):
+
+| Objective | First source | Escalation order | Use when |
+|---|---|---|---|
+| `quality` (default) | argmax P̂(pass \| head, task class) | descending P̂(pass), ties broken by latency, then price | correctness matters more than spend |
+| `balanced` | argmax P̂(pass) − λ·cost, with λ set per route in $/point of pass rate | same utility | there is a known cost of being wrong (`DefectCostUSD`): λ = 1 / DefectCostUSD |
+| `cost` | cheapest head with P̂(pass) ≥ target (today's `constrain`) | ascending price among eligible heads | high volume, low stakes |
+
+**P̂(pass) comes from three sources, in order of how specific they are:**
+1. `rank.EffectiveScoreIn` for (head, task class) when the head has `MinCommitments` observations there.
+2. `classify.PredictPass` over the k nearest verified examples when the task class is resolved by embedding.
+3. The catalogue capability score as a prior (`internal/capabilities`), marked `unmeasured` in the response so it never passes for a measurement.
+
+**Changes:**
+- `trust.Run`'s `sampleOrder` takes the objective. Under `quality` it orders by discrimination D (how much evidence a source's verdict carries) and P̂(pass), not D per dollar.
+- `ope` gets an `ArgmaxMeasured` policy, so `quality`, `balanced` and `cost` can be compared from the same logs before any of them is made the default for a route.
+- Exploration (`explore_rate`) stays the way unmeasured heads earn observations. Under `quality` that is the only path for a new or small model to prove it beats a larger one on a task class.
+
 ### 5.1 Make it provider-neutral (fixes 2.1)
 
 1. **Replace `claude_pct` with provider-neutral quotas.**
@@ -116,7 +138,13 @@ The Go package `internal/trust` keeps its name for now; renaming it is churn wit
    - `Dispatcher.claudeMode` becomes `quotaMode`, with the same downgrade logic, keyed by scope.
    - Migrate `claude_pct` in `state.json` to `Quota{Scope: "session:<id>", ContextFrac: ...}`.
 2. **CLI agents are one executor kind among the others.** Claude Code, Codex and Gemini CLI are `executor/cli.go` sources. They are not the default entry point.
-3. **Client-neutral ingress.** Add `/v1/messages` (Anthropic) and `/v1/responses` (OpenAI Responses) next to `/v1/chat/completions`. Claude Code, Codex, Cursor and any SDK app become clients through `*_BASE_URL`, with no special casing.
+3. **Client-neutral ingress.** Hydra accepts the wire formats clients already speak. That is a compatibility detail, not the product: the model behind any of them can come from any provider.
+   - Chat Completions (exists)
+   - Messages (new)
+   - Responses (new)
+   - Gemini `generateContent` (new)
+
+   Any tool or SDK reaches Hydra by pointing its base URL at it, with no special casing.
 
 ### 5.2 Make it domain-neutral (fixes 2.2)
 
@@ -198,6 +226,8 @@ X-Hydra-Decision:     accept | budget_exhausted | no_evidence
 X-Hydra-Sources:      ollama/qwen3:8b, verifier:jsonschema
 X-Hydra-Cost-USD:     0.00031
 X-Hydra-Escalations:  0
+X-Hydra-Objective:    quality
+X-Hydra-P-Pass-Basis: measured | neighbours | catalogue_prior
 ```
 
 Non-streaming responses also carry the same data as `hydra` metadata in the body.
@@ -206,6 +236,203 @@ Non-streaming responses also carry the same data as `hydra` metadata in the body
 - **`verify_then_stream`** (default for non-chat classes): buffer, verify, then stream.
 - **`stream_unverified`**: stream source 1, verify afterwards, report through headers/trailer and `/v1/feedback`.
 - **`stream_final_only`**: stream only once a source is accepted.
+
+### 5.5 Context compression
+
+Full research, failure catalogue, economics and design: [`0001-appendix-compression.md`](0001-appendix-compression.md).
+
+Compression is a transform on a source's input. Its effect on P(pass) is measured per (task class, strategy, ratio). It is never enabled because a paper or vendor reported a ratio.
+
+**Why the bar is high.** No published work tests instruction retention, negation or number fidelity under compression. What is published is damaging:
+- Token-level deletion corrupts numbers and identifiers (LLMLingua's own demos).
+- It collapses agent action grammar (AGORA: 17 of 17 setups).
+- It can be steered by untrusted input to strip guardrails (COMA: 44–63% success).
+
+Hydra therefore never ships token-level deletion.
+
+**Strategy ladder, safest first:**
+
+| Rung | Transform | Default |
+|---|---|---|
+| 1a/1b | Exact dedup; whitespace outside code and indentation | On, after a shadow period |
+| 1c | Stale tool output → retrieval handle + `hydra_fetch` tool (observation masking: ~−50% cost at equal SWE-bench solve rate) | Per class, after A/B |
+| 2 | Deterministic tool-output compaction (logs, JSON, listings) | Per class, after A/B |
+| 3 | Query-aware sentence extraction (BM25 + RRF, `internal/retrieve`) on the uncached tail | RAG classes, after A/B |
+| 4 | Abstractive summary of old history | Off; never default |
+
+**Invariants:**
+- **Protected spans are byte-identical:**
+  - system and developer messages
+  - the latest user turn
+  - tool schemas and arguments, and the last K tool results
+  - numbers with units, identifiers, quoted strings and code fences
+  - any sentence containing a negator or modal
+  - anything a verifier checks
+- **Every removal is reversible.** The original goes to a session-scoped vault and the head can fetch it. If the vault fails, nothing is removed.
+- **A pre-send coverage check runs on every compressed request.** If any check fails, the original is sent instead.
+  - Protected spans are present, in order.
+  - Every sentence containing a query atom is kept or handled.
+  - No new number or identifier appears.
+  - No sentence lost a negator.
+  - The injection scan is re-run on the compressed text.
+- **Escalation after a failed verification resends uncompressed.** Verifiers judge against the original.
+- **The cached prefix is never edited.** At current cache prices, re-compressing a cached prefix only pays above 92–98% removal. History folded once is memoised and becomes the new byte-stable prefix.
+
+**Quality gate,** per (class, strategy, ratio bucket):
+1. **Shadow:** log the plan, send the original.
+2. **Offline:** paired A/B on a replay corpus.
+3. **Online:** randomised at `compress.explore_rate`, with propensities logged for `internal/ope`.
+4. **Promote** only if the one-sided 95% lower bound on Δpass is above −δ, where δ = 0.01, or 0.005 for extraction and classification.
+5. **Roll back automatically** if the SPRT on discordant pairs accepts harm, or the coverage-failure or fetch rate doubles.
+
+A compressed attempt calibrates under `<head>+c:<strategy>@<bucket>`, sharing the head's `Family`.
+
+**Response contract** (extends §5.4):
+- `X-Hydra-Compress`: `off | shadow | applied | fallback`
+- `-Strategy`, `-Ratio`, `-Removed`, `-Coverage` and `-Basis`
+- `hydra.compression` in the body lists every removed span with its handle and sha256.
+
+**Prerequisites.** Cache plumbing first:
+- `cache_control` on the Anthropic executor and `prompt_cache_key` on OpenAI
+- cache read/write token counts in `executor.Response`; today `anthropicUsage` reads none
+- cache rates in `pricing.ModelPrice`
+- content-part messages, since `executor.Message.Content` is a string
+- a replay store of (request, verifier) pairs, since `evalset` keeps no prompts
+
+**Off when:**
+- the class has no measured result
+- the uncached tail is under 4k tokens
+- the cost model says it doesn't pay
+- the class is creative, translation, legal or medical
+- the head can't use tools
+- the client already compacts
+- the route streams unverified
+
+### 5.6 Task-specific models
+
+Full design: [`0001-appendix-task-models.md`](0001-appendix-task-models.md).
+
+Task-specific models (ScaleDown Classify/Extract, GLiNER-family encoders, NLI and fine-tuned classifiers, rerankers) are sources like any other: calibrated per (source, task class), selected by measured P̂(pass), and escalated past on failure.
+
+**Why per class.** Published results point both ways:
+- GLiNER2 matches GPT-4o on zero-shot NER (0.590 vs 0.599 F1 on CrossNER).
+- It loses on fine-grained classification (0.70 vs 0.78 on Banking77).
+- Fine-tuned small models beat zero-shot LLMs outright.
+
+So no rule can replace per-class measurement.
+
+**Design:**
+- **Typed ingress:**
+  - `/v1/classify` and `/v1/extract`, Hydra-native, with per-field evidence in the response.
+  - `/v1/rerank` (Cohere shape) and `/v1/embeddings` (OpenAI shape).
+  - Chat completions with `response_format: json_schema`, but only together with an explicit `X-Hydra-Task`.
+  - `/v1/decisions` once that API leaves beta.
+- **Embeddings are never cascaded.**
+- **`internal/task`** defines typed `Request`/`Result` and adapters per wire dialect: ScaleDown, Jev, TEI, Cohere rerank, a local GLiNER HTTP sidecar, and `llm-structured` for any chat head. A head declares `Caps` in `registry/task_models.yaml`.
+- **Normalisation:**
+  - Answers decompose into claims, one per label or field, compared by exact equality after deterministic canonicalisation.
+  - `trust.RunClaims` runs SPRT per claim key at α/k.
+  - A head's native softmax only selects a calibration cell. It is never evidence on its own.
+- **Verifiers:** `jsonschema`, `label_set`, `span_in_source`, `field_checks`, cross-family `agreement`, and per-field `/v1/feedback`.
+- **Earning observations.** Under-observed cheap heads run as shadow co-votes. They do not change the served answer and are trained once outcomes arrive.
+- **Licences are a routing constraint.** Non-commercial checkpoints are ineligible unless a route sets `allow_noncommercial`.
+
+### 5.7 Agents and multi-step workflows
+
+Full design: [`0001-appendix-agents.md`](0001-appendix-agents.md).
+
+Hydra stays a gateway. It executes no client tools and orchestrates no workflows; it becomes trajectory-aware at the one point it sits on.
+
+1. **Sessions.**
+   - The session id comes from, in order: `X-Hydra-Session`, client-native headers (`x-claude-code-session-id`), Responses `previous_response_id`, or a rolling hash of the append-only history.
+   - Each request is typed from its shape alone: `plan`, `act`, `act_forced`, `interpret`, `single`.
+   - Calibration keys become `<task class>/<step type>` and `<task class>/session`.
+2. **Routing per session first, per step by exception.**
+   - The incumbent model is chosen at session start by argmax P̂(session success). This is the only place exploration happens.
+   - The incumbent changes only when:
+     - a step verifier fails, in which case Hydra escalates inside the same request;
+     - at a turn boundary, a measured gain exceeds the cost of re-reading the prefix uncached plus an inconsistency margin;
+     - the head fails, and failover goes only to heads that can read the session's reasoning state.
+   - Per-step moves are allowed only under `balanced`/`cost` objectives, and are judged on live runs, never on log replay.
+3. **Step verifiers are sources.**
+   - `toolcall.schema`, `toolcall.grounded`, `loop`, `progress` and `final.claims` are each calibrated.
+   - Ground truth arrives on two clocks: the next request's tool result, and `/v1/feedback {session_id}`.
+   - `trust.ApplyTrajectoryOutcome` trains only what an outcome can attribute.
+4. **Session budget.**
+   - `Quota{Scope: "session:<id>"}` with `MaxUSD`, `MaxSteps`, `MaxToolCallsPerTool` and `MaxWall`.
+   - A hard stop returns 403 `hydra_session_limit`, never 429 or 5xx, which SDKs would retry.
+5. **Safety.**
+   - A per-key `ledger` filters the tool list, frozen per session, and checks every emitted call.
+   - Tool results become an `egress.Source`.
+   - When private data, untrusted content and an exfiltration-capable tool are all present in a session, calls to that tool need approval.
+   - Irreversible calls park in `pending`.
+6. **API.**
+   - `/v1/messages` and `/v1/responses` are lossless: tool-call ids, parallel calls, argument deltas, thinking/reasoning items and `cache_control` all pass through.
+   - Chat Completions gains content-part arrays.
+   - For Claude Code, Hydra routes among Claude models and hosts only.
+7. **Durable workflows: integrate, do not build.**
+   - Temporal is the reference; Restate is the single-binary alternative.
+   - Hydra adds `Idempotency-Key`, byte-exact replay, approvals as signals, and session id = workflow id.
+   - `internal/workflow` stays the CLI's linear runner.
+
+**Evaluation.**
+- Suites: τ²-bench (pass^k), BFCL v4 multi-turn, Terminal-Bench 2.0, TwinRouterBench, MCPMark, AgentDojo, and a SWE-bench Verified subset reported only as paired differences.
+- **Default rule:** sticky routing becomes a class's default only if it is non-inferior to frontier end to end, within a 2-point margin, and has a lower cost per success.
+
+### 5.8 Pricing and open-core split
+
+Full analysis: [`0001-appendix-pricing.md`](0001-appendix-pricing.md).
+
+**Principle.** Everything a single developer or a single self-hosted team needs is open. What only an organisation needs is paid.
+
+**Licence.**
+- Relicense the core from MIT to Apache-2.0, for the patent grant. The CLA permits it.
+- Then switch from the CLA to the DCO, and publish `STEWARDSHIP.md`:
+  - no open feature ever moves to paid
+  - no limits in the open core
+  - sync and telemetry stay opt-in
+- Paid code lives in a separate repo. An `ee/` directory appears only on demand.
+- Rejected: BSL/FSL, ELv2, AGPL.
+
+| Open (Apache-2.0) | Paid |
+|---|---|
+| Calibration, SPRT, all objectives | Hosted control plane for `managed` mode |
+| Every verifier and pack, `/v1/feedback`, response contract | Cross-org pooled-calibration network (free to contributors; read-only and private cohorts on Enterprise) |
+| `ope`, `reliability`, the §7 harness | SAML, SCIM, enforced SSO, custom RBAC |
+| Storage incl. Postgres, tenancy, keys, quotas | Audit export, retention, legal hold |
+| Hierarchical calibration within a deployment | Multi-region control plane |
+| OIDC with built-in roles, local audit log, Docker, Helm, single-region HA | SLA, DPA, named support |
+
+**Billed unit and tiers.**
+- **Unit:** one cascaded request, counted once however many escalations it used. BYOK only, with no fee on tokens.
+
+| Tier | Price |
+|---|---|
+| Self-hosted | $0 |
+| Cloud Free | 50k requests/mo |
+| Team | $99/mo including 500k requests, then $10 per 100k |
+| Enterprise | from $2,000/mo |
+
+**Savings-share.** An Enterprise option, offered only after §7 numbers exist: about 15% of the measured saving against a pinned baseline model, on these terms:
+- both sides priced at the same day's list prices
+- a per-class quality gate via `ope.Evaluate`
+- a shadow sample of at least 5% sent to the baseline model
+- a task class with ESS < 10 bills zero
+- the customer can recompute the invoice
+
+**Pooled network.**
+- Opt-in and counts-only.
+- A cell is published only with at least 5 contributors.
+- Each contributor's weight is capped.
+- Custom task classes never leave the deployment.
+
+**Sequencing.**
+1. Charge nothing, ship §8 and the §7 benchmarks.
+2. Paid design partners.
+3. Hosted Free and Team tiers.
+4. Enterprise on demand.
+
+No hosted data plane holds provider keys until there is a second maintainer.
 
 ## 6. What we are not building
 
@@ -218,14 +445,15 @@ Non-streaming responses also carry the same data as `hydra` metadata in the body
 
 Nothing in §1 goes on the README until this harness publishes numbers.
 
-**Metrics, per task class:**
+**Metrics, per task class and per objective:**
+- **Pass rate against always-frontier.** This is the headline metric under `quality`.
 - **Cost per accepted answer.**
 - **Accepted-answer error rate against target α**, plus Brier, ECE and resolution from `internal/reliability`. This is the number that makes "P ≥ 0.95" mean something.
 - **Escalation rate** and the mean number of sources consulted.
 - **Added latency** at p50 and p95 over a single direct call.
 
 **Baselines:**
-- always-frontier
+- always-frontier, the bar for `quality`: Hydra must match or beat its pass rate per task class
 - always-cheapest
 - a static fallback chain on HTTP error
 - a threshold router on the cheapest model's own log-prob or self-reported confidence
