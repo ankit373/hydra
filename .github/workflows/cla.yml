@@ -27,6 +27,7 @@ jobs:
         env:
           BODY: ${{ github.event.pull_request.body }}
           AUTHOR: ${{ github.event.pull_request.user.login }}
+          OWNER: ${{ github.repository_owner }}
           HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           GH_TOKEN: ${{ github.token }}
@@ -37,10 +38,17 @@ jobs:
           # Quoted: unquoted, [bot] is a character class, not literal
           # brackets, so this matched nothing and blocked every bot PR.
           case "$AUTHOR" in
-            'dependabot[bot]'|'github-actions[bot]'|'release-please[bot]')
+            'dependabot[bot]'|'github-actions[bot]'|'release-please[bot]'|'mergify[bot]')
               echo "::notice::$AUTHOR is a bot acting for this repo; CLA does not apply."
               exit 0 ;;
           esac
+
+          # The owner holds the copyright the CLA licenses to; there is no one
+          # to grant it to.
+          if [ "$AUTHOR" = "$OWNER" ]; then
+            echo "::notice::$AUTHOR owns this repo; CLA does not apply."
+            exit 0
+          fi
 
           ticked=0
           # Any ticked box whose text mentions the CLA. Matching the whole
