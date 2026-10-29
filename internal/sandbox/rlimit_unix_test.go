@@ -94,9 +94,14 @@ func TestRlimitExecHelperProcess(t *testing.T) {
 // ever calling RunRlimitExec from the test binary's own process.
 func TestRunRlimitExec(t *testing.T) {
 	cmd := exec.Command(os.Args[0], "-test.run=^TestRlimitExecHelperProcess$")
+	// RLIMIT_AS applies to the helper itself, a Go test binary, before it
+	// execs: any ceiling below its own address space (hundreds of MB plain,
+	// terabytes of shadow under -race) makes its next mmap a fatal runtime
+	// OOM. 1 PiB still drives the Setrlimit call but sits above the 128 TiB
+	// user address space, so it can never bite.
 	cmd.Env = append(os.Environ(),
 		"HYDRA_TEST_RLIMIT_HELPER=1",
-		"HYDRA_RLIMIT_MEM_MB=64",
+		"HYDRA_RLIMIT_MEM_MB=1073741824",
 		"HYDRA_RLIMIT_CPU_SECONDS=5",
 	)
 	out, err := cmd.CombinedOutput()
