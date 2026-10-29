@@ -62,6 +62,7 @@ jobs:
           # back-merge branch is itself the record that this happened, and the
           # commit on it names the main SHA it carried. Once that branch merges
           # and goes away, github.event.before is right again.
+          PENDING_TIP=""
           if git fetch origin chore/back-merge-main 2>/dev/null \
              && ! git diff --quiet origin/develop..FETCH_HEAD; then
             PENDING=$(git log -1 --format=%B FETCH_HEAD \
@@ -70,6 +71,7 @@ jobs:
                && git merge-base --is-ancestor "$PENDING" "$AFTER"; then
               echo "A back-merge is still pending at $PENDING; resuming from there."
               BEFORE="$PENDING"
+              PENDING_TIP=$(git rev-parse FETCH_HEAD)
             fi
           fi
 
@@ -94,7 +96,14 @@ jobs:
             fi
 
             git checkout -B chore/back-merge-main origin/develop
-            if ! git cherry-pick --empty=drop "$BEFORE..$AFTER"; then
+            # Resuming starts the range after the pending sync's commits, and
+            # develop does not have them yet, so replay that branch first.
+            # Without this, a later commit touching the same files conflicts
+            # with their absence (.mergify.yml, #1187/#1189). Two separate
+            # picks: one cherry-pick of two ranges is a single rev-list.
+            if ! { [ -z "$PENDING_TIP" ] \
+                   || git cherry-pick --empty=drop "$(git merge-base origin/develop "$PENDING_TIP")..$PENDING_TIP"; } \
+               || ! git cherry-pick --empty=drop "$BEFORE..$AFTER"; then
               # Record *which* files conflicted before aborting throws the
               # state away, "there was a conflict" is not actionable on its
               # own.
