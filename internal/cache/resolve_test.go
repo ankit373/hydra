@@ -83,6 +83,7 @@ func TestServable_RefusesWithAReason(t *testing.T) {
 		{"injection marker", Request{Injection: true}, "injection"},
 		{"pinned head", Request{Pinned: true}, "pinned"},
 		{"caller opted out", Request{NoCache: true}, "fresh answer"},
+		{"tool-bearing request", Request{Tools: true}, "tools"},
 	}
 	for _, c := range cases {
 		ok, reason := Servable(c.req)
