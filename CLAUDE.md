@@ -764,8 +764,20 @@ computed off the wrong base (#215).
 that token start no workflow, so a trigger-based sweep would never fire at all.
 
 `main` carries only one squash commit per release, so its own log names just the release PRs.
-The workflow follows each one's `refs/pull/<n>/head` into the develop lineage that actually
-shipped, and reads the trailing `(#n)` off every commit subject there.
+`.github/workflows/shipped_lineage.sh` follows each one's `refs/pull/<n>/head` into the develop
+lineage that actually shipped, and reads the trailing `(#n)` off every commit subject there.
+
+**A carry release has no such lineage.** `main` and `develop` both squash-merge, so a real merge
+collides add/add on ~500 files; v1.4.0 and v1.5.0 instead landed a commit whose *tree* is the
+release branch's and whose *parent* is main's tip. That ships the code and discards the history,
+so the walk above found only earlier releases' PRs and each release closed **zero** issues while
+reading green. 89 stranded before anyone noticed (#1140). The script now also walks
+`release/vX.Y.Z`, **bounded by the previous release branch**, because unbounded that branch
+reaches back through every earlier release and would close their still-open issues as shipped by
+this one: on v1.5.0, 455 numbers unbounded against 159 since v1.4.2. No release branch, or none
+earlier to bound it, and only the `refs/pull` walk is used, so an ordinary release is unchanged.
+A release sweep that closes nothing now **fails**, since that is what read green twice; a manual
+backfill closing nothing stays green, because re-running is meant to be a no-op.
 
 **That `(#n)` is not always a PR.** GitHub's squash default appends the PR number, but the
 Quick Start below prescribes `(#${ISSUE})` in the commit subject, and both conventions are in
@@ -981,7 +993,10 @@ internal/update/update.go     ← startup update checker (24h cache)
                                        publish.yml and close-shipped-issues.yml
 .github/workflows/close-shipped-issues.yml ← closes the issues a release shipped, read back
                                        from "Closes #n" in each PR body (#217). Its resolver
-                                       is close_shipped_issues.py beside it.
+                                       is close_shipped_issues.py beside it, and the lineage it
+                                       reads comes from shipped_lineage.sh, a script rather than
+                                       inline YAML so cmd/hydra/shipped_lineage_test.go can test
+                                       it against a real carry-shaped history (#1140).
 .github/workflows/sync-develop.yml   ← fires on main push → back-merge PR (main → develop).
                                        FAILS loudly on conflict, and also when the PR it opened
                                        cannot merge (#670). Either way a red run means develop
