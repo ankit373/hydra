@@ -1,0 +1,223 @@
+# Merge queue for hydra: every PR lands through here, never via the merge button.
+# develop/release PRs merge on green; main only on a maintainer's @mergifyio queue.
+
+shared:
+  # main and release/v* require no checks in GitHub, so the queue requires them.
+  ci: &ci
+    - check-success=Go build & test (ubuntu-latest)
+    - check-success=Go build & test (macos-latest)
+    - check-success=Go build & test (windows-latest)
+    - check-success=Desktop backend (ubuntu-latest)
+    - check-success=Desktop backend (macos-latest)
+    - check-success=Desktop backend (windows-latest)
+    - check-success=Desktop app build / linux/amd64
+    - check-success=Cross-compile (6 targets)
+    - check-success=Shellcheck
+    - check-success=PowerShell lint
+    - check-success=TypeScript typecheck
+    - check-success=YAML validation
+    - check-success=Secret scan
+
+  # release-please derives the bump and changelog from this, so it gates the queue.
+  conventional: &conventional 'title~=^(feat|fix|perf|refactor|chore|docs|test|ci|style|build|revert)(\([^)]+\))?!?: \S'
+
+merge_queue:
+  queue_controls_comment: false
+  # One PR at a time: the CI matrix is the expensive part, and volume is low.
+  max_parallel_checks: 1
+
+defaults:
+  queue_rule:
+    merge_method: squash
+    batch_size: 1
+    # Body kept: the release PR's Release-As footer must reach release-please.
+    commit_message_template: |
+      {{ title }} (#{{ number }})
+
+      {{ body }}
+
+queue_rules:
+  # release-please's own PR: CHANGELOG + manifest only, so it merges without the CI matrix.
+  - name: release-please
+    queue_conditions:
+      - base=main
+      - head~=^release-please--
+      - -files~=^(?!(CHANGELOG\.md|\.release-please-manifest\.json)$)
+    merge_conditions: []
+
+  # Promotion to main. Tested in a draft PR, never by pushing to release/v*,
+  # which forbids merge commits and whose approval a push would dismiss.
+  - name: promote
+    queue_conditions:
+      - base=main
+      - head~=^(release/v\d+\.\d+\.\d+|hotfix/.+)$
+      - "#approved-reviews-by>=1"
+      - -draft
+      - or:
+          - head~=^hotfix/
+          - and:
+              - title~=^(feat|fix)\(release\)
+              - body~=(?m)^Release-As:\s*\d+\.\d+\.\d+\s*$
+    merge_conditions: *ci
+    allow_inplace_checks: false
+
+  - name: release
+    queue_conditions:
+      - base~=^release/v
+      - -draft
+      - *conventional
+    merge_conditions: *ci
+    # merge, not rebase: a Mergify rebase is an unsigned git push (#1079).
+    update_method: merge
+
+  # develop's 13 required checks are injected from branch protection.
+  - name: develop
+    queue_conditions:
+      - base=develop
+      - -draft
+      - *conventional
+    update_method: merge
+
+pull_request_rules:
+  - name: Auto-queue maintainer and bot PRs into develop and release/v*
+    conditions:
+      - base~=^(develop|release/v.+)$
+      - -draft
+      - label!=hold
+      - or:
+          - author=ankit373
+          - author=dependabot[bot]
+          # chore/back-merge-main joins once the release bot opens it; until then its
+          # checks never start and it would stall develop's queue indefinitely.
+    actions:
+      queue:
+
+  - name: Approve and queue release-please's PR
+    conditions:
+      - base=main
+      - head~=^release-please--
+      - -files~=^(?!(CHANGELOG\.md|\.release-please-manifest\.json)$)
+    actions:
+      review:
+        type: APPROVE
+        message: Generated release diff only (CHANGELOG + manifest).
+      queue:
+
+  # Hygiene bots, modelled on vLLM's: they comment and label, they never block.
+  - name: Conventional title missing
+    conditions:
+      - -closed
+      - -draft
+      - '-title~=^(feat|fix|perf|refactor|chore|docs|test|ci|style|build|revert)(\([^)]+\))?!?: \S'
+    actions:
+      comment:
+        message: |
+          @{{author}}, the title must be a conventional commit, e.g. `fix(dispatch): nil panic on empty prompt`.
+          The squash commit takes it verbatim and release-please reads it, so the queue will not take this PR until it is.
+
+  - name: Closes keyword missing
+    conditions:
+      - base=develop
+      - -closed
+      - -draft
+      - -author~=\[bot\]$
+      - -head=chore/back-merge-main
+      - -body~=(?i)\b(close[sd]?|fix(e[sd])?|resolve[sd]?) #\d+
+    actions:
+      comment:
+        message: |
+          @{{author}}, add `Closes #<issue>` to the description. On develop it does not close anything at merge;
+          close-shipped-issues.yml reads it back at release time, so without it the issue stays open for ever (#217).
+
+  - name: CLA not signed
+    conditions:
+      - check-failure=Contributor has signed
+      - -closed
+    actions:
+      comment:
+        message: |
+          @{{author}}, the CLA check failed: tick the CLA box in the description and add yourself to
+          CONTRIBUTORS.md in this PR. [CLA.md](https://github.com/ankit373/hydra/blob/main/CLA.md) explains why it is a CLA and not a DCO.
+
+  - name: Release PR missing Release-As footer
+    conditions:
+      - base=main
+      - head~=^release/v
+      - -closed
+      - -body~=(?m)^Release-As:\s*\d+\.\d+\.\d+\s*$
+    actions:
+      comment:
+        message: |
+          This release PR has no `Release-As: X.Y.Z` footer. Without it the squash leaves release-please nothing
+          to bump and no release is made, silently (v1.1.0, #219). The queue will not take it until it has one.
+
+  - name: Conflict, needs rebase
+    conditions:
+      - conflict
+      - -closed
+    actions:
+      label:
+        add: [needs-rebase]
+      comment:
+        message: |
+          @{{author}}, this conflicts with `{{base}}`. Rebase on it and force-push your branch; the queue skips it until then.
+
+  - name: Conflict resolved
+    conditions:
+      - -conflict
+      - -closed
+    actions:
+      label:
+        remove: [needs-rebase]
+
+  - name: label-desktop
+    conditions: [-closed, files~=^desktop/]
+    actions: {label: {add: [desktop]}}
+
+  - name: label-registry
+    conditions: [-closed, files~=^registry/]
+    actions: {label: {add: [registry]}}
+
+  - name: label-ci-build
+    conditions:
+      - -closed
+      - or:
+          - files~=^\.github/
+          - files~=^ci/
+          - files~=^scripts/
+          - files~=^(npm|pip)/
+          - files~=^install(-app)?\.(sh|ps1)$
+          - files=.goreleaser.yaml
+          - files=.mergify.yml
+    actions: {label: {add: [ci/build]}}
+
+  - name: label-docs
+    conditions:
+      - -closed
+      - or:
+          - files~=^docs/
+          - files~=^[A-Z]+\.md$
+    actions: {label: {add: [documentation]}}
+
+  - name: label-dependencies
+    conditions:
+      - -closed
+      - or:
+          - files~=(^|/)go\.(mod|sum)$
+          - files~=(^|/)package(-lock)?\.json$
+    actions: {label: {add: [dependencies]}}
+
+  - name: label-release
+    conditions:
+      - -closed
+      - or:
+          - head~=^release/v
+          - head~=^release-please--
+          - head~=^hotfix/
+    actions: {label: {add: [release]}}
+
+# The comment is the ship button: only the maintainer can queue anything by hand.
+commands_restrictions:
+  queue:
+    conditions:
+      - sender=ankit373
