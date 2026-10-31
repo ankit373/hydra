@@ -72,3 +72,34 @@ func TestDefectCost_HigherRiskCostsMore(t *testing.T) {
 		t.Errorf("risky task (%.1f) should cost more than safe task (%.1f)", risky, safe)
 	}
 }
+
+// NormalizeBlastRadius is what a caller displaying BlastRadius alongside a
+// derived cost/confidence must call too, or --blast <= 0 shows a raw value
+// that does not match what CostUSD/RequiredConfidence actually used (#501).
+func TestNormalizeBlastRadius(t *testing.T) {
+	tests := []struct {
+		in   float64
+		want float64
+	}{
+		{0, 1}, {-5, 1}, {-0.0001, 1},
+		{1, 1}, {2.5, 2.5}, {100, 100},
+	}
+	for _, tt := range tests {
+		if got := NormalizeBlastRadius(tt.in); got != tt.want {
+			t.Errorf("NormalizeBlastRadius(%v) = %v, want %v", tt.in, got, tt.want)
+		}
+	}
+}
+
+// CostUSD must be computed from the exact same clamp NormalizeBlastRadius
+// exposes, or the two can silently drift apart.
+func TestCostUSD_UsesNormalizeBlastRadius(t *testing.T) {
+	dm := NewDefectModel()
+	for _, blast := range []float64{0, -3, 4} {
+		got := dm.CostUSD(Task{BlastRadius: blast})
+		want := dm.W.Base * NormalizeBlastRadius(blast)
+		if got != want {
+			t.Errorf("CostUSD(blast=%v) = %v, want %v (Base × NormalizeBlastRadius)", blast, got, want)
+		}
+	}
+}

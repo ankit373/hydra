@@ -79,7 +79,7 @@ func fetchAndSave() (*priceCache, error) {
 		Models:    models,
 	}
 
-	// Non-fatal if we can't persist — return the data regardless.
+	// Non-fatal if we can't persist, return the data regardless.
 	_ = writeCache(c)
 	return c, nil
 }

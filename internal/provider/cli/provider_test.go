@@ -13,7 +13,7 @@ import (
 // Discovery's whole job is answering "what is installed on this machine", so it
 // is the layer most likely to answer with the *developer's* machine. Every test
 // here runs inside a sandbox with an empty PATH, so what it finds is exactly
-// what the test planted — on Linux, macOS and Windows alike.
+// what the test planted, on Linux, macOS and Windows alike.
 
 func TestDiscover_EmptyPathFindsNothing(t *testing.T) {
 	testutil.NewSandbox(t)
@@ -51,7 +51,7 @@ func TestDiscover_FindsPlantedBinaryOnEveryOS(t *testing.T) {
 		t.Errorf("Source = %q, want %q", h.Source, "cli")
 	}
 	if h.Executable == "" {
-		t.Error("Executable is empty — the head cannot be run")
+		t.Error("Executable is empty, the head cannot be run")
 	}
 	if !h.AuthReady {
 		t.Error("AuthReady = false; a CLI agent on PATH carries its own auth")
@@ -59,7 +59,7 @@ func TestDiscover_FindsPlantedBinaryOnEveryOS(t *testing.T) {
 }
 
 // A discovered head must carry whether its capability entry is embedded or
-// user-added (Meta["model_source"]) — the "managed vs. discovered" split a
+// user-added (Meta["model_source"]), the "managed vs. discovered" split a
 // security dashboard reports on, otherwise invisible once discovery discards
 // the capabilities.Entry it came from.
 func TestDiscover_StampsModelSource(t *testing.T) {
@@ -74,7 +74,7 @@ func TestDiscover_StampsModelSource(t *testing.T) {
 		t.Fatalf("got %d heads, want 1: %+v", len(heads), heads)
 	}
 	if got := heads[0].Meta["model_source"]; got != "builtin" {
-		t.Errorf("Meta[model_source] = %q, want builtin — claude is in the embedded catalog", got)
+		t.Errorf("Meta[model_source] = %q, want builtin, claude is in the embedded catalog", got)
 	}
 }
 
@@ -94,7 +94,7 @@ func TestDiscover_LocalOnlyMatchesTheTable(t *testing.T) {
 				t.Fatalf("got %d heads, want 1", len(heads))
 			}
 			if heads[0].LocalOnly != c.local {
-				t.Errorf("LocalOnly = %v, want %v — %q is declared local=%v in knownCLIs",
+				t.Errorf("LocalOnly = %v, want %v, %q is declared local=%v in knownCLIs",
 					heads[0].LocalOnly, c.local, c.binary, c.local)
 			}
 		})
@@ -137,7 +137,7 @@ func TestKnownCLIs_EntriesAreWellFormed(t *testing.T) {
 			t.Errorf("%q has no providerID; pricing and capability lookups key off it", c.binary)
 		}
 		if seen[c.binary] {
-			t.Errorf("%q listed twice — it would be discovered as two identical heads", c.binary)
+			t.Errorf("%q listed twice, it would be discovered as two identical heads", c.binary)
 		}
 		seen[c.binary] = true
 		if runtime.GOOS == "windows" {

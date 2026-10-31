@@ -6,8 +6,8 @@ import "strings"
 
 // SplitLines splits already-in-memory text into lines.
 //
-// It exists because bufio.Scanner refuses any token longer than its buffer —
-// 64 KiB by default — and reports that by simply stopping. Code that scans a
+// It exists because bufio.Scanner refuses any token longer than its buffer,
+// 64 KiB by default, and reports that by simply stopping. Code that scans a
 // string and ignores Err() therefore sees a *silently truncated* result, which
 // is how a >64 KiB line could erase the file being edited (#168). Raising the
 // buffer only moves the cliff; splitting a string that is already in memory

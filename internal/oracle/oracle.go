@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 
-// Package oracle turns deterministic verifiers — test runners, compilers,
-// linters — into first-class evidence sources for the Trust Control Plane. A
+// Package oracle turns deterministic verifiers, test runners, compilers,
+// linters, into first-class evidence sources for the Trust Control Plane. A
 // passing suite is far stronger evidence of correctness than any single model's
 // opinion, so a calibrated oracle contributes a large log-likelihood ratio to
 // the SPRT ensemble (SPEC §4: "verifiers as sources too").
@@ -14,7 +14,27 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/ankit373/hydra/internal/sandbox"
 	"github.com/ankit373/hydra/internal/trust"
+	"github.com/ankit373/hydra/internal/util"
+)
+
+const (
+	// outputCap bounds the verifier's combined stdout+stderr capture. This is
+	// diagnostic output for the Detail field, not a primary answer, so it gets
+	// the smaller "stderr-like" cap used elsewhere (cli.go, agy.go) rather than
+	// the default unbounded-answer size.
+	outputCap = 64 << 10
+
+	// detailMaxLen bounds what firstLine ever returns, independent of the
+	// Accumulator's cap, a single newline-free line can otherwise still be
+	// outputCap bytes and flood the terminal.
+	detailMaxLen = 4 << 10
+
+	// maxArgvBytes is a conservative, cross-platform-safe guard against the OS
+	// argv limit (ARG_MAX). Real limits vary (Linux ~2MB, macOS ~256KB-1MB
+	// per historical defaults); this stays well under all of them.
+	maxArgvBytes = 256 << 10
 )
 
 // defaultWriteTemp materializes the candidate to a temp file for {file} oracles.
@@ -51,12 +71,27 @@ type Oracle interface {
 
 // CommandOracle runs an external command as the verifier. Exit code 0 is a pass;
 // any non-zero exit is a fail. The candidate answer is written to a temp file
-// and substituted for {file}; the raw answer is substituted for {answer}.
+// verbatim for {file}; {answer} gets the same content with a trailing
+// newline trimmed, a file-write artifact (echo, any editor), not part of
+// the answer a verifier is comparing against.
 type CommandOracle struct {
-	// Template is the command, e.g. "go test ./..." or "tsc --noEmit {file}".
+	// Args is the command argv, verbatim, e.g. []string{"sh", "-c", "exit 1"}.
+	// Each element is substituted in place for {file}/{answer} and passed to
+	// exec.Command as-is, never re-tokenized, so an element containing
+	// whitespace survives intact. Preferred whenever real argv is available
+	// (e.g. parsed CLI args); takes precedence over Template.
+	Args []string
+	// Template is the command as one string, e.g. "go test ./..." or
+	// "tsc --noEmit {file}", split on whitespace. Only used when Args is
+	// empty. Joining real argv into a Template and letting it re-split is
+	// what corrupted any argument containing a space (#444), a caller
+	// holding argv must use Args instead.
 	Template string
 	// Source is the calibration key for this oracle, e.g. "verifier:go-test".
 	Source string
+	// Dir is the command's working directory; empty inherits the process CWD.
+	// Set when the verified change lives elsewhere, e.g. a task's git worktree.
+	Dir string
 	// writeTemp allows tests to stub file materialization; nil uses the real one.
 	writeTemp func(content string) (path string, cleanup func(), err error)
 }
@@ -77,28 +112,64 @@ func (o *CommandOracle) Verify(ctx context.Context, candidate string, _ trust.Ta
 		// an oracle is a high-D evidence source, so LLR lets its verdict
 		// outweigh several models' votes. A template that was blank, or lost in
 		// config, therefore produced *confident false evidence* that the
-		// candidate was correct — and did it silently, since nothing else in
+		// candidate was correct, and did it silently, since nothing else in
 		// the chain can tell an unconfigured oracle from a satisfied one.
 		return Verdict{}, fmt.Errorf("oracle %s: empty command template", o.Source)
 	}
-	cmd := exec.CommandContext(ctx, parts[0], parts[1:]...)
-	out, runErr := cmd.CombinedOutput()
+	if err := checkArgvSize(parts, candidate); err != nil {
+		return Verdict{}, err
+	}
+	// A verifier is `go test ./...` or a linter: it spawns a tree, and without
+	// this a cancelled run leaves the compile jobs behind (#738).
+	cmd := sandbox.Harden(exec.CommandContext(ctx, parts[0], parts[1:]...))
+	cmd.Dir = o.Dir
+	// Both streams share one bounded Accumulator, matching CombinedOutput's
+	// interleaving, but capped, unlike the bytes.Buffer it replaces.
+	out := util.NewAccumulator(outputCap)
+	cmd.Stdout = out
+	cmd.Stderr = out
+	runErr := cmd.Run()
 	if runErr != nil {
+		// A killed verifier exits non-zero like a failing one. It did not
+		// fail, it never finished, and an oracle carries enough LLR that
+		// recording that as a fail is confident false evidence, the same trap
+		// the empty-template case above guards (#738).
+		if ctx.Err() != nil {
+			return Verdict{}, fmt.Errorf("oracle %s: %w", o.Source, ctx.Err())
+		}
 		if _, ok := runErr.(*exec.ExitError); ok {
-			return Verdict{Passed: false, Detail: firstLine(string(out))}, nil
+			return Verdict{Passed: false, Detail: firstLine(out.String())}, nil
 		}
 		return Verdict{}, runErr // couldn't launch the verifier at all
 	}
 	return Verdict{Passed: true}, nil
 }
 
-// buildArgs splits the template into argv, substituting {answer} inline and
-// materializing {file} to a temp path. Both substitute as exactly one atomic
-// argv element via splitTemplate — never re-split by whitespace inside the
-// substituted value, so a candidate answer containing whitespace or flag-like
-// tokens cannot inject extra argv entries into whatever binary the template
-// names (CWE-88 argument injection).
+// checkArgvSize rejects an argv too large to exec before the OS gets a chance
+// to fail with a raw "fork/exec: argument list too long". Only {answer}
+// substitution can grow argv this large; {file} always substitutes a short path.
+func checkArgvSize(parts []string, candidate string) error {
+	total := 0
+	for _, p := range parts {
+		total += len(p)
+	}
+	if total > maxArgvBytes {
+		return fmt.Errorf("candidate too large to pass via {answer} (%d bytes), use {file} instead", len(candidate))
+	}
+	return nil
+}
+
+// buildArgs builds the argv to execute. When Args holds real argv it is used
+// verbatim (see buildArgsFromArgv, #444); otherwise it splits Template into
+// argv, substituting {answer} inline and materializing {file} to a temp path.
+// Both substitute as exactly one atomic argv element, never re-split by
+// whitespace inside the substituted value, so a candidate answer containing
+// whitespace or flag-like tokens cannot inject extra argv entries into
+// whatever binary is named (CWE-88 argument injection).
 func (o *CommandOracle) buildArgs(candidate string) (parts []string, cleanup func(), err error) {
+	if len(o.Args) > 0 {
+		return o.buildArgsFromArgv(candidate)
+	}
 	tmpl := o.Template
 	var filePath string
 	if strings.Contains(tmpl, "{file}") {
@@ -113,7 +184,47 @@ func (o *CommandOracle) buildArgs(candidate string) (parts []string, cleanup fun
 		cleanup = cl
 		filePath = path
 	}
-	return splitTemplate(tmpl, candidate, filePath), cleanup, nil
+	return splitTemplate(tmpl, answerFor(candidate), filePath), cleanup, nil
+}
+
+// answerFor is what fills an {answer} slot: the candidate with a trailing
+// newline trimmed. {file} materialization uses the raw candidate untouched,
+// a verifier reading the file itself (compiler, linter) must see the exact
+// bytes the candidate was.
+func answerFor(candidate string) string {
+	return strings.TrimRight(candidate, "\r\n")
+}
+
+// buildArgsFromArgv substitutes {answer}/{file} inside each Args element in
+// place, with no whitespace re-tokenization: an argv element containing
+// spaces (e.g. a shell -c script) reaches exec.Command exactly as given.
+// Joining such argv into a Template string and re-splitting it on whitespace
+// is what silently corrupted arguments containing spaces (#444).
+func (o *CommandOracle) buildArgsFromArgv(candidate string) (parts []string, cleanup func(), err error) {
+	var filePath string
+	for _, a := range o.Args {
+		if !strings.Contains(a, "{file}") {
+			continue
+		}
+		writer := o.writeTemp
+		if writer == nil {
+			writer = defaultWriteTemp
+		}
+		path, cl, werr := writer(candidate)
+		if werr != nil {
+			return nil, nil, werr
+		}
+		cleanup = cl
+		filePath = path
+		break
+	}
+	parts = make([]string, len(o.Args))
+	for i, a := range o.Args {
+		a = strings.ReplaceAll(a, "{answer}", answerFor(candidate))
+		a = strings.ReplaceAll(a, "{file}", filePath)
+		parts[i] = a
+	}
+	return parts, cleanup, nil
 }
 
 // splitTemplate tokenizes tmpl into argv. Each {answer}/{file} placeholder
@@ -144,15 +255,60 @@ func splitTemplate(tmpl, answer, file string) []string {
 // LLR maps a verdict to the calibrated log-likelihood-ratio contribution of this
 // oracle, exactly as any evidence source: a pass is "says correct", a fail is
 // "says incorrect". A verifier calibrated to high sensitivity/specificity yields
-// a large-magnitude contribution — dominating a single model's vote.
+// a large-magnitude contribution, dominating a single model's vote.
 func LLR(cal *trust.Calibrator, source, domain string, v Verdict) float64 {
 	return cal.LLR(source, domain, v.Passed)
+}
+
+// Measured reports whether this source has the recorded history to state an
+// evidence strength at all, and says what is missing when it does not.
+//
+// LLR always returns a number, because the Beta priors always yield one. That
+// number is a statement about a source nobody has observed, and it reads
+// exactly like a measured one. Two cases have to be told apart from a real
+// measurement:
+//
+//   - no observations at all, where the answer is the prior
+//   - observations but no negative, where specificity cannot exceed 0.5 and
+//     the LLR stays under ln 2 however many positives arrive. That is #771's
+//     defect, and it looks like evidence accumulating when it is not.
+//
+// A caller that reports strength should print what this returns instead of a
+// number when it is false, the way internal/mcpregistry renders a category it
+// could not evaluate.
+func Measured(cal *trust.Calibrator, source, domain string) (bool, string) {
+	if cal == nil {
+		return false, "no calibration store"
+	}
+	// Through trust.Domain, because the store writes under it. Comparing the
+	// caller's raw value against a normalized one is the half-normalized key
+	// again: an unspecified domain is filed as "default" and looked up as "",
+	// so a source with a full history reads as never observed (#888).
+	want := trust.Domain(domain)
+	for _, st := range cal.Report() {
+		if st.Source != source || st.Domain != want {
+			continue
+		}
+		if st.N == 0 {
+			break
+		}
+		if st.Neg == 0 {
+			return false, fmt.Sprintf(
+				"%.0f observations but no negative: specificity cannot exceed 0.5 and the evidence "+
+					"stays under ln 2 however many more arrive", st.N)
+		}
+		return true, ""
+	}
+	return false, "nothing recorded for this source yet"
 }
 
 func firstLine(s string) string {
 	s = strings.TrimSpace(s)
 	if i := strings.IndexByte(s, '\n'); i >= 0 {
-		return s[:i]
+		s = s[:i]
+	}
+	if len(s) > detailMaxLen {
+		return s[:detailMaxLen] + "...(truncated)"
 	}
 	return s
 }

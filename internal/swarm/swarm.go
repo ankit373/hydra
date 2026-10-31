@@ -9,8 +9,10 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/ankit373/hydra/internal/a2a"
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/dispatch"
+	"github.com/ankit373/hydra/internal/policy"
 	"github.com/ankit373/hydra/internal/provider"
 	"github.com/ankit373/hydra/internal/trust"
 )
@@ -23,7 +25,7 @@ const (
 	ModeBest SwarmMode = "best" // fire all; LLM judge (with CapScore fallback) picks winner
 	ModeAll  SwarmMode = "all"  // fire all; return ranked by CapScore, no judge
 	// ModeSPRT labels cost rows from RunSPRT's adaptive optimal-stopping ensemble.
-	// It is a cost-log label, not a value Options.Mode ever takes — RunSPRT is
+	// It is a cost-log label, not a value Options.Mode ever takes, RunSPRT is
 	// entered via Options.Confidence, not via Mode.
 	ModeSPRT SwarmMode = "sprt"
 )
@@ -32,11 +34,15 @@ const (
 type Options struct {
 	Mode SwarmMode
 
-	// Head selection — at most one of TierHint / HeadIDs should be set.
-	// When both are empty, CapScoreSelector picks the top-N available heads.
+	// Head selection, at most one of TierHint / HeadIDs should be set.
+	// With none of these and no Enum, CapScoreSelector picks the top-N heads.
 	TierHint    string
 	HeadIDs     []string // explicit head IDs; bypasses tier
 	MinCapScore int      // exclude heads below this score (0 = no filter)
+
+	// Enum is the routing enum key (--enum) that chose the tier. It selects
+	// heads when TierHint is empty, see Options.tier.
+	Enum string
 
 	// Execution constraints.
 	MaxHeads       int           // hard cap on fan-out (0 → defaultMaxHeads = 5)
@@ -48,6 +54,14 @@ type Options struct {
 	System    string
 	MaxTokens int
 
+	// A2AFile is a path to an A2A handoff JSON file (--a2a): its structured
+	// context is prepended to the prompt before any head fires. Mirrors the
+	// fail-loudly contract dispatch.Options.A2AFile gives plain dispatch, a
+	// missing or malformed file fails Plan/Run/RunSPRT instead of silently
+	// dropping the handoff, which is what happened before this field existed
+	// at all (#530).
+	A2AFile string
+
 	// Judge (ModeBest only).
 	JudgeTierHint string        // "" → use config.Cortex head
 	JudgeTimeout  time.Duration // 0 → 30 s
@@ -58,10 +72,27 @@ type Options struct {
 
 	// RunID/TaskID group this swarm's attempt rows with the invocation and the
 	// logical task they belong to. Every head racing or voting on one prompt is
-	// working the same task, so they share a TaskID — that is what lets a reader
+	// working the same task, so they share a TaskID, that is what lets a reader
 	// tell "5 heads on one task" from "5 separate tasks" (#181).
 	RunID  string
 	TaskID string
+
+	// OnProgress reports the run as it happens: the heads selected, each one
+	// starting and finishing, and on the SPRT path how far the evidence has
+	// moved Λ. Nil leaves the run byte-identical, nothing else reads it.
+	OnProgress func(Progress)
+
+	// progress is OnProgress wrapped so concurrent heads cannot interleave in
+	// it. Run/RunSPRT fill it in, like Classification below; Options is copied
+	// by value, so it has to be a pointer to survive the copy.
+	progress *progressSink
+
+	// Classification is prompt's already-computed PII/injection verdict
+	// (policy.Classify), cmdDispatch computes this once and passes it here so
+	// Run/RunSPRT resolve it once, before firing any head, instead of every
+	// concurrent executeHead call re-scanning the same prompt. Nil means "not
+	// computed yet"; Run/RunSPRT derive and fill it in before dispatching.
+	Classification *policy.Classification
 }
 
 // SwarmResult is the complete outcome of a swarm dispatch.
@@ -93,20 +124,43 @@ type Swarm struct {
 	d       *dispatch.Dispatcher
 	heads   []provider.Head
 	pricing PricingReader
+	// askJudge overrides how the equivalence judge dispatches, set only by
+	// tests so the options it sends are observable. See dispatchFunc.
+	askJudge dispatchFunc
+}
+
+// ask is the equivalence judge's dispatch, the real one unless a test replaced it.
+func (s *Swarm) ask() dispatchFunc {
+	if s.askJudge != nil {
+		return s.askJudge
+	}
+	return dispatchWith(s.d)
 }
 
 // New constructs a Swarm.
 // heads is the already-probed set of live heads (from probe.Run or Dispatcher.Heads).
-// pricing may be nil — cost estimation and pre-flight guard will be skipped.
+// pricing may be nil, cost estimation and pre-flight guard will be skipped.
 func New(d *dispatch.Dispatcher, heads []provider.Head, pricing PricingReader) *Swarm {
 	return &Swarm{d: d, heads: heads, pricing: pricing}
+}
+
+// validateMode rejects any SwarmMode Run does not know how to execute. Plan
+// calls this too, so a `--dry-run` reports a plan only for a mode Run would
+// actually accept, instead of previewing a run that Run then refuses (#453).
+func validateMode(m SwarmMode) error {
+	switch m {
+	case ModeRace, ModeBest, ModeAll:
+		return nil
+	default:
+		return fmt.Errorf("swarm: unknown mode %q", m)
+	}
 }
 
 // Plan reports what Run or RunSPRT would do without executing anything: which
 // heads would be engaged, and what one round of fan-out is estimated to cost.
 //
 // It exists so --dry-run can mean the same thing in every mode. It used to mean
-// nothing in swarm and SPRT modes — the flag was read only by the single-dispatch
+// nothing in swarm and SPRT modes, the flag was read only by the single-dispatch
 // path, which both ensemble branches returned before reaching, so a dry run
 // fired a paid ensemble (#167).
 //
@@ -114,11 +168,21 @@ func New(d *dispatch.Dispatcher, heads []provider.Head, pricing PricingReader) *
 // selector against the same options; a plan that picked different heads from the
 // run it describes would be worse than no plan.
 func (s *Swarm) Plan(prompt string, opts Options) (heads []provider.Head, estUSD float64, err error) {
-	cfg, err := config.Load()
-	if err != nil {
-		return nil, 0, fmt.Errorf("swarm: config load: %w", err)
+	if opts.Mode == "" {
+		opts.Mode = ModeBest
 	}
-	selected, err := resolveSelector(opts, cfg).Select(s.heads, opts)
+	if err := validateMode(opts.Mode); err != nil {
+		return nil, 0, err
+	}
+
+	if err := validateSwarmTiers(opts); err != nil {
+		return nil, 0, err
+	}
+	prompt, err = injectA2A(prompt, opts)
+	if err != nil {
+		return nil, 0, err
+	}
+	selected, err := resolveSelector(opts).Select(s.heads, opts)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -134,20 +198,42 @@ func (s *Swarm) Run(ctx context.Context, prompt string, opts Options) (*SwarmRes
 	if opts.Mode == "" {
 		opts.Mode = ModeBest
 	}
+	if err := validateMode(opts.Mode); err != nil {
+		return nil, err
+	}
 
 	cfg, err := config.Load()
 	if err != nil {
 		return nil, fmt.Errorf("swarm: config load: %w", err)
 	}
+	// An invalid --tier/--swarm-judge-tier must fail here, before any heads
+	// are fired or judged, never silently widen to CapScoreSelector's top-N
+	// fan-out (#501).
+	if err := validateSwarmTiers(opts); err != nil {
+		return nil, err
+	}
+	prompt, err = injectA2A(prompt, opts)
+	if err != nil {
+		return nil, err
+	}
 
 	// 1. Head selection.
-	selector := resolveSelector(opts, cfg)
+	opts.progress = &progressSink{fn: opts.OnProgress}
+	selector := resolveSelector(opts)
 	selected, err := selector.Select(s.heads, opts)
 	if err != nil {
 		return nil, err
 	}
 	if len(selected) == 0 {
 		return nil, fmt.Errorf("swarm: no heads available for the requested configuration")
+	}
+	opts.progress.emit(Progress{Kind: ProgressSelected, Heads: selected})
+
+	// Classify once, before any head fires, every concurrent executeHead call
+	// below reuses this instead of each re-scanning the same prompt (#522).
+	if opts.Classification == nil {
+		c := policy.Classify(prompt)
+		opts.Classification = &c
 	}
 
 	// 2. Pre-flight cost guard.
@@ -162,19 +248,14 @@ func (s *Swarm) Run(ctx context.Context, prompt string, opts Options) (*SwarmRes
 
 	switch opts.Mode {
 	case ModeRace:
-		attempts = runRace(ctx, selected, prompt, opts)
+		attempts = runRace(ctx, selected, prompt, opts, s.pricing)
 	case ModeBest, ModeAll:
-		attempts = runAll(ctx, selected, prompt, opts)
-	default:
-		return nil, fmt.Errorf("swarm: unknown mode %q", opts.Mode)
+		attempts = runAll(ctx, selected, prompt, opts, s.pricing)
 	}
 
 	wallDuration := time.Since(startedAt)
 
-	// 4. Enrich cost on each attempt.
-	enrichCosts(attempts, s.pricing)
-
-	// 5. Determine winner + verdict.
+	// 4. Determine winner + verdict.
 	result := &SwarmResult{
 		Mode:         opts.Mode,
 		Prompt:       prompt,
@@ -195,7 +276,7 @@ func (s *Swarm) Run(ctx context.Context, prompt string, opts Options) (*SwarmRes
 			winner.Rank = 1
 			result.Winner = winner
 		} else {
-			// Judge completely failed — fall back to CapScore winner.
+			// Judge completely failed, fall back to CapScore winner.
 			result.Winner = capScoreWinner(attempts)
 		}
 	case ModeAll:
@@ -209,12 +290,12 @@ func (s *Swarm) Run(ctx context.Context, prompt string, opts Options) (*SwarmRes
 		}
 	}
 
-	// 6. Sum total cost.
+	// 5. Sum total cost.
 	for _, a := range attempts {
 		result.TotalCostUSD += a.EstCostUSD
 	}
 
-	// 7. Log to cost.jsonl.
+	// 6. Log to cost.jsonl.
 	logAttempts(result.Attempts, result.Mode, opts, truncate(prompt, 80))
 	logRunEvents(result.Attempts, result.Mode, opts)
 
@@ -223,13 +304,54 @@ func (s *Swarm) Run(ctx context.Context, prompt string, opts Options) (*SwarmRes
 
 // ── private helpers ───────────────────────────────────────────────────────────
 
+// tier is what head selection routes on: --tier when given, else the tier
+// --enum resolves to, as a single dispatch resolves the two. Every reader goes
+// through here, or the enum on the cost row is one that did not route (#832).
+func (o Options) tier() string {
+	if o.TierHint != "" {
+		return o.TierHint
+	}
+	return dispatch.EnumToTier(o.Enum)
+}
+
+// validateSwarmTiers rejects an invalid TierHint or JudgeTierHint before any
+// selection or judging happens, using the identical rule dispatch.Dispatch
+// applies. Run, RunSPRT and Plan all call this so --tier/--swarm-judge-tier
+// fail the same way regardless of mode (#501).
+func validateSwarmTiers(opts Options) error {
+	if err := dispatch.ValidateTierHint(opts.tier()); err != nil {
+		return fmt.Errorf("swarm: %w", err)
+	}
+	if err := dispatch.ValidateTierHint(opts.JudgeTierHint); err != nil {
+		return fmt.Errorf("swarm: judge tier: %w", err)
+	}
+	return nil
+}
+
+// injectA2A prepends opts.A2AFile's handoff context to prompt when set, using
+// the identical fail-loudly contract dispatch.Dispatch applies to --a2a. Plan,
+// Run and RunSPRT all call this so a bad handoff file is rejected the same way
+// regardless of mode, before this, swarm.Options had no A2AFile field at all,
+// so --a2a was silently dropped the moment --swarm or --confidence was
+// combined with it (#530).
+func injectA2A(prompt string, opts Options) (string, error) {
+	if opts.A2AFile == "" {
+		return prompt, nil
+	}
+	injected, err := a2a.Inject(opts.A2AFile, prompt)
+	if err != nil {
+		return prompt, fmt.Errorf("swarm: --a2a %s: %w", opts.A2AFile, err)
+	}
+	return injected, nil
+}
+
 func buildJudge(d *dispatch.Dispatcher, opts Options, cfg *config.Config) Judge {
 	tierHint := opts.JudgeTierHint
 	if tierHint == "" {
 		// Default to the configured Cortex head's tier (tier 1).
 		tierHint = "1"
 	}
-	llm := newLLMJudge(d, tierHint, opts.JudgeTimeout)
+	llm := newLLMJudge(d, tierHint, opts)
 	cap_ := &CapScoreJudge{}
 	fallback := newCompositeJudge(llm, cap_)
 
@@ -240,13 +362,10 @@ func buildJudge(d *dispatch.Dispatcher, opts Options, cfg *config.Config) Judge 
 	return newCompositeJudge(newCalibratedJudge(cal, domain, nil), fallback)
 }
 
-// loadCalibrationFor degrades to (nil, domain) on a load error — callers
+// loadCalibrationFor degrades to (nil, domain) on a load error, callers
 // treat nil as "no calibration data" and fall back rather than fail.
 func loadCalibrationFor(opts Options) (*trust.Calibrator, string) {
-	domain := opts.Domain
-	if domain == "" {
-		domain = "default"
-	}
+	domain := trust.Domain(opts.Domain)
 	cal, err := trust.New(trust.DefaultPath())
 	if err != nil {
 		return nil, domain

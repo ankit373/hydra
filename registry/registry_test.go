@@ -12,11 +12,11 @@ import (
 
 // An embedded file that fails to parse is worse than a missing one: the binary
 // would ship rules nothing can read, and every consumer would silently fall
-// back to its own defaults — which is the failure #238 was about.
+// back to its own defaults, which is the failure #238 was about.
 func TestEmbedded_EveryFileParsesAndIsNotEmpty(t *testing.T) {
 	names := Names()
 	if len(names) == 0 {
-		t.Fatal("no files embedded — go:embed matched nothing")
+		t.Fatal("no files embedded, go:embed matched nothing")
 	}
 	for _, name := range names {
 		t.Run(name, func(t *testing.T) {

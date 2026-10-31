@@ -75,7 +75,7 @@ func TestSaveEdit_RefusesOversizedContent(t *testing.T) {
 	}
 }
 
-// Exactly at the cap must still store — an off-by-one here silently drops
+// Exactly at the cap must still store, an off-by-one here silently drops
 // legitimate snapshots.
 func TestSaveEdit_AcceptsExactlyTheCap(t *testing.T) {
 	editSandbox(t)
@@ -97,7 +97,7 @@ func TestLoadEdit_MissingIsItsOwnError(t *testing.T) {
 	}
 }
 
-// A half-written pair — after was lost — must not read as an empty file, which
+// A half-written pair, after was lost, must not read as an empty file, which
 // would render as "everything deleted".
 func TestLoadEdit_PartialPairIsMissing(t *testing.T) {
 	home := editSandbox(t)
@@ -109,7 +109,7 @@ func TestLoadEdit_PartialPairIsMissing(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, _, err := LoadEdit("run-1", "001"); !errors.Is(err, ErrNoSnapshot) {
-		t.Errorf("err = %v, want ErrNoSnapshot — a lost half must not read as an empty file", err)
+		t.Errorf("err = %v, want ErrNoSnapshot, a lost half must not read as an empty file", err)
 	}
 }
 
@@ -118,7 +118,7 @@ func TestLoadEdit_PartialPairIsMissing(t *testing.T) {
 //
 // The mechanism differs by platform and the test follows it rather than
 // skipping (#273). On Unix the guarantee is the 0600 mode SaveEdit sets. On
-// Windows a FileMode only toggles the read-only attribute — 0600 becomes 0666 —
+// Windows a FileMode only toggles the read-only attribute, 0600 becomes 0666,
 // so the mode proves nothing there, and the actual protection is the ACL on the
 // user's profile directory. Asserting containment under the home directory is
 // what makes that guarantee non-vacuous: it is exactly the property that would

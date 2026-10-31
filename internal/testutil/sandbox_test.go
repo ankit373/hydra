@@ -18,7 +18,7 @@ import (
 
 // The sandbox exists to make a test's result independent of the machine it runs
 // on. If a credential the developer exported survives into the test, discovery
-// reports their machine instead of the fixture — and the test passes or fails by
+// reports their machine instead of the fixture, and the test passes or fails by
 // accident.
 func TestSandbox_ClearsProviderCredentials(t *testing.T) {
 	t.Setenv("ANTHROPIC_API_KEY", "sk-should-not-survive")
@@ -130,7 +130,7 @@ func TestAPIKeyVars_CoversEnvProvider(t *testing.T) {
 	})
 
 	if len(found) == 0 {
-		t.Fatalf("parsed no env vars out of %s — this guard has stopped guarding "+
+		t.Fatalf("parsed no env vars out of %s, this guard has stopped guarding "+
 			"(knownKeys renamed or restructured?)", src)
 	}
 
@@ -140,18 +140,18 @@ func TestAPIKeyVars_CoversEnvProvider(t *testing.T) {
 	}
 	for v := range found {
 		if !listed[v] {
-			t.Errorf("%s is read by the env provider but missing from APIKeyVars — "+
+			t.Errorf("%s is read by the env provider but missing from APIKeyVars, "+
 				"a developer with it exported would have it leak into every sandboxed test", v)
 		}
 	}
 	for v := range listed {
 		if !found[v] {
-			t.Errorf("APIKeyVars lists %s but the env provider no longer reads it — drop it", v)
+			t.Errorf("APIKeyVars lists %s but the env provider no longer reads it, drop it", v)
 		}
 	}
 }
 
-// FakeBinary must produce something exec.LookPath accepts on the host OS —
+// FakeBinary must produce something exec.LookPath accepts on the host OS,
 // on Windows that means a .bat, which is exactly the kind of difference a
 // discovery contract should exercise rather than skip.
 func TestFakeBinary_IsExecutableOnThisOS(t *testing.T) {
@@ -171,7 +171,7 @@ func TestFakeBinary_IsExecutableOnThisOS(t *testing.T) {
 }
 
 // The Windows branch of EchoScript is what the marker-based edit tests depend
-// on, and it cannot be exercised from a Unix runner — so the escaping it
+// on, and it cannot be exercised from a Unix runner, so the escaping it
 // applies is tested directly. Getting it wrong is not a rendering nit: an
 // unescaped "<" makes cmd.exe fail the whole script with "<< was unexpected at
 // this time", and the fake head exits 255 with no output.
@@ -218,7 +218,7 @@ func TestEchoScript_ProducesAScriptForThisPlatform(t *testing.T) {
 	if !strings.Contains(got, reply) {
 		t.Errorf("the reply was altered:\n%s", got)
 	}
-	// /bin/cat by absolute path — NewSandbox empties $PATH, so a bare `cat`
+	// /bin/cat by absolute path, NewSandbox empties $PATH, so a bare `cat`
 	// exits 127.
 	if !strings.Contains(got, "/bin/cat") {
 		t.Errorf("cat is not named by absolute path:\n%s", got)

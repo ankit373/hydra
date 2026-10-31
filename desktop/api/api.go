@@ -7,11 +7,11 @@
 //
 // It imports nothing from Wails. Every method is an ordinary Go function over
 // ordinary structs, so the whole backend is unit-testable with no webview in
-// the loop — `desktop/main.go` is the only file that knows Wails exists.
+// the loop, `desktop/main.go` is the only file that knows Wails exists.
 //
 // It never recomputes a number Hydra already computes. Dashboard totals come
-// from cost.Summary, cost.ByModel, and cost.GroupBy — the same calls `hyctl
-// cost` and `hyctl stats` make — so the GUI and the CLI cannot drift into
+// from cost.Summary, cost.ByModel, and cost.GroupBy, the same calls `hyctl
+// cost` and `hyctl stats` make, so the GUI and the CLI cannot drift into
 // disagreeing about the same file. A test asserts exactly that.
 package api
 
@@ -26,7 +26,14 @@ import (
 // concurrently from the frontend.
 type API struct {
 	ctx context.Context
+	// emit is set once at startup, before the frontend can call anything, so
+	// it needs no lock despite every other method being call-concurrent.
+	emit Emit
 }
+
+// SetEmit supplies the function that pushes events to the frontend. Taking a
+// plain func is what keeps Wails out of this package.
+func (a *API) SetEmit(e Emit) { a.emit = e }
 
 // New returns an API ready to bind.
 func New() *API { return &API{} }

@@ -10,9 +10,18 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/ankit373/hydra/internal/config"
 )
 
-// scoreEntry is one line of ~/.hydra/security_score.jsonl — one hyctl
+// LLMEdition is the OWASP LLM Top-10 edition the category IDs in this build
+// mean. Only LLM01 and LLM02 are stable across editions, so a bare "LLM06"
+// names Excessive Agency in 2025 and something else in 2026. Bumping this is
+// what makes gap age restart instead of silently re-dating a different
+// category's history (#748).
+const LLMEdition = "2026"
+
+// scoreEntry is one line of ~/.hydra/security_score.jsonl, one hyctl
 // security run's coverage snapshot.
 type scoreEntry struct {
 	TS             string   `json:"ts"`
@@ -20,10 +29,23 @@ type scoreEntry struct {
 	Applicable     int      `json:"applicable"`
 	Covered        int      `json:"covered"`
 	Gaps           []string `json:"gaps"`
+
+	// Edition qualifies Gaps. Absent means 2025: every row written before
+	// this field existed was scored against that ordering.
+	Edition string `json:"edition,omitempty"`
+}
+
+// edition is Edition with the pre-field default applied, so a caller never
+// has to remember which absence means what.
+func (e scoreEntry) edition() string {
+	if e.Edition == "" {
+		return "2025"
+	}
+	return e.Edition
 }
 
 // Trend compares the current run's coverage against the very first recorded
-// run — "since you started tracking" rather than an arbitrary lookback
+// run, "since you started tracking" rather than an arbitrary lookback
 // window, so it needs no calendar-boundary logic and is never misleading
 // about how far apart the two points actually are.
 type Trend struct {
@@ -33,14 +55,29 @@ type Trend struct {
 	FirstTS   string  `json:"firstTs"`
 }
 
+// HistoryPoint is one persisted coverage snapshot, exposed raw so a chart can
+// show the real series instead of the single collapsed delta Trend reports.
+type HistoryPoint struct {
+	TS             string  `json:"ts"`
+	PercentCovered float64 `json:"percentCovered"`
+}
+
+// toHistoryPoints strips scoreEntry down to what a chart needs.
+func toHistoryPoints(entries []scoreEntry) []HistoryPoint {
+	out := make([]HistoryPoint, 0, len(entries))
+	for _, e := range entries {
+		out = append(out, HistoryPoint{TS: e.TS, PercentCovered: e.PercentCovered})
+	}
+	return out
+}
+
 // DefaultScoreHistoryPath is where the coverage trend is persisted.
 func DefaultScoreHistoryPath() string {
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".hydra", "security_score.jsonl")
+	return filepath.Join(config.Dir(), "security_score.jsonl")
 }
 
 // loadScoreHistory reads all entries; a missing file yields none.
-// Unparseable lines are skipped — a corrupt trend log must never fail
+// Unparseable lines are skipped, a corrupt trend log must never fail
 // `hyctl security` itself.
 func loadScoreHistory(path string) []scoreEntry {
 	f, err := os.Open(path)
@@ -65,7 +102,7 @@ func loadScoreHistory(path string) []scoreEntry {
 	return out
 }
 
-// appendScoreHistory records this run's coverage, best-effort — a failure to
+// appendScoreHistory records this run's coverage, best-effort, a failure to
 // persist the trend must never fail the report it would have fed.
 func appendScoreHistory(path string, cov Coverage) {
 	gaps := make([]string, 0)
@@ -80,6 +117,7 @@ func appendScoreHistory(path string, cov Coverage) {
 		Applicable:     cov.Applicable,
 		Covered:        cov.Covered,
 		Gaps:           gaps,
+		Edition:        LLMEdition,
 	}
 	raw, err := json.Marshal(entry)
 	if err != nil {
@@ -97,7 +135,7 @@ func appendScoreHistory(path string, cov Coverage) {
 }
 
 // buildTrend compares cov against the earliest entry read *before* this run
-// was recorded — prior must be captured before appendScoreHistory runs, or
+// was recorded, prior must be captured before appendScoreHistory runs, or
 // the "first" run would compare against itself.
 func buildTrend(prior []scoreEntry, cov Coverage) Trend {
 	if len(prior) == 0 {

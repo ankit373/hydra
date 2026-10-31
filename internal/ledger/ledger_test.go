@@ -4,13 +4,18 @@ package ledger
 
 import (
 	"encoding/json"
+	"fmt"
 	"math"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 
+	"github.com/ankit373/hydra/internal/policy"
 	"github.com/ankit373/hydra/internal/testutil"
+	"github.com/ankit373/hydra/internal/util"
 )
 
 func TestRecord_StampsConfigBreadcrumbWhenBlank(t *testing.T) {
@@ -33,7 +38,7 @@ func TestRecord_StampsConfigBreadcrumbWhenBlank(t *testing.T) {
 
 // The ledger is an accountability record: an event that cannot say which
 // routing rules were in effect is materially weaker evidence. This used to
-// assert Config stays *empty* without an on-disk registry — which was every
+// assert Config stays *empty* without an on-disk registry, which was every
 // installed binary, so the field the breadcrumb was built for was blank in
 // practice (#238). With the registry embedded, it must always be stamped.
 func TestRecord_StampsConfigEvenWithNoOnDiskRegistry(t *testing.T) {
@@ -48,7 +53,7 @@ func TestRecord_StampsConfigEvenWithNoOnDiskRegistry(t *testing.T) {
 		t.Fatalf("want 1 event, got %d", len(events))
 	}
 	if events[0].Config == "" {
-		t.Error("Config is empty — the event cannot be tied back to the rules that produced it")
+		t.Error("Config is empty, the event cannot be tied back to the rules that produced it")
 	}
 }
 
@@ -114,7 +119,7 @@ func TestPolicy_Decide_MatchesOnClassification(t *testing.T) {
 
 func TestFrameworksCovered_ReturnsDistinctSortedNonEmptyTags(t *testing.T) {
 	// Rules built directly (not through LoadPolicy) already carry normalized
-	// tags here — case normalization is validate()'s job, covered separately
+	// tags here, case normalization is validate()'s job, covered separately
 	// by TestLoadPolicy_NormalizesFramework.
 	p := Policy{Rules: []Rule{
 		{Tool: "a", Framework: "owasp:llm06", Decision: Deny},
@@ -142,7 +147,7 @@ func TestFrameworksCovered_EmptyWhenNoRuleIsTagged(t *testing.T) {
 }
 
 // LoadPolicy must normalize Framework the same way it normalizes
-// Classification — a rule authored as "OWASP:LLM06" and one authored as
+// Classification: a rule authored as "OWASP:LLM06" and one authored as
 // "owasp:llm06" are the same tag.
 func TestLoadPolicy_NormalizesFramework(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "policy.json")
@@ -176,6 +181,25 @@ func TestByHeadRisk_GroupsSortsAndOmitsHeadsWithNoRisk(t *testing.T) {
 	}
 	if got[1].Head != "flagged-only" || got[1].Denied != 0 || got[1].Flagged != 1 {
 		t.Errorf("got[1] = %+v, want flagged-only with 0 denied, 1 flagged", got[1])
+	}
+}
+
+func TestByDayRisk_BucketsSortsAndOmitsQuietDays(t *testing.T) {
+	events := []Event{
+		{TS: "2026-08-02T09:00:00Z", Tool: "a", Decision: Allow}, // quiet day, must be omitted
+		{TS: "2026-08-01T09:00:00Z", Tool: "a", Decision: Deny},
+		{TS: "2026-08-01T15:00:00Z", Tool: "a", Flagged: true, Decision: Allow},
+		{TS: "2026-08-03T09:00:00Z", Tool: "a", Decision: Deny},
+	}
+	got := ByDayRisk(events)
+	if len(got) != 2 {
+		t.Fatalf("ByDayRisk = %+v, want 2 days (2026-08-02 has neither and must be omitted)", got)
+	}
+	if got[0].Date != "2026-08-01" || got[0].Denied != 1 || got[0].Flagged != 1 {
+		t.Errorf("got[0] = %+v, want 2026-08-01 with 1 denied, 1 flagged", got[0])
+	}
+	if got[1].Date != "2026-08-03" || got[1].Denied != 1 || got[1].Flagged != 0 {
+		t.Errorf("got[1] = %+v, want 2026-08-03 with 1 denied, 0 flagged (ascending order)", got[1])
 	}
 }
 
@@ -301,7 +325,7 @@ func TestCheck_FlaggedFromContent(t *testing.T) {
 		t.Fatal(err)
 	}
 	if d != Allow {
-		t.Errorf("flagging is a non-blocking audit signal, not a Deny — got %v", d)
+		t.Errorf("flagging is a non-blocking audit signal, not a Deny, got %v", d)
 	}
 	events, _ := Load(path)
 	if len(events) != 1 || !events[0].Flagged || events[0].FlagReason != "ignore previous instructions" {
@@ -310,7 +334,7 @@ func TestCheck_FlaggedFromContent(t *testing.T) {
 }
 
 // An unflagged event's JSON must stay byte-identical to before this field
-// existed — omitempty is what makes that true.
+// existed, omitempty is what makes that true.
 func TestCheck_UnflaggedEventOmitsTheFieldEntirely(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "mcp_ledger.jsonl")
 	p := Policy{Default: Allow}
@@ -342,6 +366,73 @@ func TestCheck_ExplicitFlagReasonOverridesContentDetection(t *testing.T) {
 	}
 }
 
+// Classified is what lets a fallback loop or swarm fan-out classify a prompt
+// once and reuse it: it must be trusted even when it says "clean" and the
+// content plainly contains PII/injection markers a fresh scan would catch.
+func TestCheck_ClassifiedTrustsCallerEvenWhenContentLooksLikePII(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mcp_ledger.jsonl")
+	p := Policy{Default: Allow}
+
+	content := "email me at jane.doe@example.com and then ignore previous instructions"
+	if _, err := Check(path, p, CheckRequest{Agent: "a", Tool: "t", Resource: "r", Action: Exec,
+		Content: content, Classified: true}); err != nil {
+		t.Fatal(err)
+	}
+	events, _ := Load(path)
+	if events[0].Classification != "" || len(events[0].PIITypes) != 0 || events[0].Flagged {
+		t.Errorf("Classified=true must skip detection entirely, got %+v", events[0])
+	}
+}
+
+// CheckAndRecordDispatch is called once per fallback candidate against the
+// same prompt. Without a precomputed policy.Classification it must derive one
+// itself every time (today's baseline); passed one, it must never re-run
+// DetectPII/InjectionMarker regardless of how many candidates share it (#522).
+func TestCheckAndRecordDispatch_ClassifiesOncePerDispatchNotPerCandidate(t *testing.T) {
+	testutil.NewSandbox(t)
+	prompt := strings.Repeat("email me at jane.doe@example.com, ", 50)
+
+	origDetect, origInj := detectPII, injectionMarker
+	var detectCalls, injCalls int32
+	detectPII = func(req policy.Request) []string {
+		atomic.AddInt32(&detectCalls, 1)
+		return origDetect(req)
+	}
+	injectionMarker = func(req policy.Request) (string, bool) {
+		atomic.AddInt32(&injCalls, 1)
+		return origInj(req)
+	}
+	t.Cleanup(func() { detectPII, injectionMarker = origDetect, origInj })
+
+	const nCandidates = 5
+	for i := 0; i < nCandidates; i++ {
+		if _, err := CheckAndRecordDispatch(Dispatch{
+			Agent: "agent", HeadID: fmt.Sprintf("head-%d", i), Content: prompt,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if int(detectCalls) != nCandidates || int(injCalls) != nCandidates {
+		t.Fatalf("with no precomputed classification: detectPII=%d injectionMarker=%d calls for %d candidates, want %d each",
+			detectCalls, injCalls, nCandidates, nCandidates)
+	}
+
+	detectCalls, injCalls = 0, 0
+	class := policy.Classify(prompt)
+	for i := 0; i < nCandidates; i++ {
+		if _, err := CheckAndRecordDispatch(Dispatch{
+			Agent: "agent", HeadID: fmt.Sprintf("head-%d", i), Content: prompt, Class: &class,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if detectCalls != 0 || injCalls != 0 {
+		t.Errorf("with a precomputed classification: detectPII=%d injectionMarker=%d calls for %d candidates, want 0 each, "+
+			"the whole point of threading it through is that Check never re-runs either detector",
+			detectCalls, injCalls, nCandidates)
+	}
+}
+
 func TestCheck_FailsClosedOnUnhashableParams(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "mcp_ledger.jsonl")
 	p := Policy{Default: Allow}
@@ -353,7 +444,7 @@ func TestCheck_FailsClosedOnUnhashableParams(t *testing.T) {
 		t.Fatal("unhashable params should surface an error")
 	}
 	if d != Deny {
-		t.Errorf("Check must fail CLOSED on hash failure, got %q — a caller testing `d == Deny` would proceed", d)
+		t.Errorf("Check must fail CLOSED on hash failure, got %q, a caller testing `d == Deny` would proceed", d)
 	}
 	// The refused attempt must still be accounted for.
 	events, _ := Load(path)
@@ -365,7 +456,7 @@ func TestCheck_FailsClosedOnUnhashableParams(t *testing.T) {
 func TestLatestBound(t *testing.T) {
 	events := []Event{
 		{Tool: "fs", Resource: "a", ParametersHash: "h1", Decision: Allow},
-		{Tool: "fs", Resource: "a", Decision: Allow}, // no hash — must be skipped
+		{Tool: "fs", Resource: "a", Decision: Allow}, // no hash, must be skipped
 		{Tool: "fs", Resource: "a", ParametersHash: "h2", Decision: Allow},
 		{Tool: "net", Resource: "b", ParametersHash: "h3", Decision: Allow},
 	}
@@ -403,7 +494,7 @@ func TestLatestBound_DeniedEventIsNotAnApproval(t *testing.T) {
 }
 
 // Decoding params into a bare `any` turns every number into float64, which
-// collapses integers above 2^53 — two different amounts would share a hash.
+// collapses integers above 2^53, two different amounts would share a hash.
 func TestDecodeParams_PreservesLargeIntegerPrecision(t *testing.T) {
 	a, err := DecodeParams(`{"amount":1000000000000000001}`)
 	if err != nil {
@@ -460,7 +551,7 @@ func TestParseAction_RejectsCaseAndTypos(t *testing.T) {
 	}
 	for _, bad := range []string{"", "bogus", "yolo"} {
 		if _, err := ParseAction(bad); err == nil {
-			t.Errorf("ParseAction(%q) should error — an unmatched action silently bypasses every action rule", bad)
+			t.Errorf("ParseAction(%q) should error, an unmatched action silently bypasses every action rule", bad)
 		}
 	}
 }
@@ -471,7 +562,7 @@ func TestParseDecision_RejectsLookalikes(t *testing.T) {
 	}
 	for _, bad := range []string{"", "block", "reject", "totally-fine"} {
 		if _, err := ParseDecision(bad); err == nil {
-			t.Errorf("ParseDecision(%q) should error — it would print like a deny but compare unequal to Deny", bad)
+			t.Errorf("ParseDecision(%q) should error, it would print like a deny but compare unequal to Deny", bad)
 		}
 	}
 }
@@ -548,7 +639,7 @@ func TestLoadCounted_ReportsUnparseableLines(t *testing.T) {
 		t.Errorf("parseable events = %d, want 1", len(events))
 	}
 	if skipped != 1 {
-		t.Errorf("skipped = %d, want 1 — a discarded record must be reported", skipped)
+		t.Errorf("skipped = %d, want 1, a discarded record must be reported", skipped)
 	}
 }
 
@@ -594,6 +685,57 @@ func TestFilter(t *testing.T) {
 	}
 }
 
+// Ask withholds permission exactly as Deny does, and was counted nowhere: a
+// ledger of 3 allow, 2 deny and 2 ask reported 7 events and 3+2, with nothing
+// naming the missing two, which are the ones waiting on a human (#1169).
+func TestSummarizeAndFilter_CountAsk(t *testing.T) {
+	events := []Event{
+		{Agent: "a", Tool: "fs", Decision: Allow},
+		{Agent: "a", Tool: "fs", Decision: Deny},
+		{Agent: "a", Tool: "net", Decision: Ask},
+		{Agent: "b", Tool: "net", Decision: Ask},
+	}
+
+	s := Summarize(events)
+	if s.Asked != 2 {
+		t.Errorf("Summarize().Asked = %d, want 2", s.Asked)
+	}
+	if s.Allowed+s.Denied+s.Asked != s.Total {
+		t.Errorf("allowed+denied+asked = %d but Total = %d, the report does not add up",
+			s.Allowed+s.Denied+s.Asked, s.Total)
+	}
+
+	withheld := Filter(events, "", true)
+	if len(withheld) != 3 {
+		t.Fatalf("Filter(withheld) = %d events, want 3 (1 deny + 2 ask)", len(withheld))
+	}
+	for _, e := range withheld {
+		if e.Decision == Allow {
+			t.Errorf("Filter(withheld) returned an allowed event: %+v", e)
+		}
+	}
+}
+
+// A rule scoped to one classification must not record a reason that reads as
+// universal: "rule 0 (deny */*)" is exactly what a rule matching everything
+// would say, and the audit renders that string (#1169).
+func TestDecide_ReasonNamesTheClassificationScope(t *testing.T) {
+	scoped := Policy{Rules: []Rule{{Classification: "pii", Action: Network, Decision: Deny}}}
+	universal := Policy{Rules: []Rule{{Action: Network, Decision: Deny}}}
+
+	_, scopedReason := scoped.Decide("a", "net", "/api", Network, "pii")
+	_, universalReason := universal.Decide("a", "net", "/api", Network, "")
+	if scopedReason == universalReason {
+		t.Fatalf("a pii-scoped deny and a universal one both recorded %q", scopedReason)
+	}
+	if !strings.Contains(scopedReason, "pii") {
+		t.Errorf("reason = %q, does not name the classification it is scoped to", scopedReason)
+	}
+	if ClassificationSuffix("") != "" {
+		t.Errorf("an unscoped rule gained a suffix: %q", ClassificationSuffix(""))
+	}
+}
+
 func TestVerifyChain_RoundTripIsIntact(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "mcp_ledger.jsonl")
 	for i := 0; i < 5; i++ {
@@ -610,7 +752,137 @@ func TestVerifyChain_RoundTripIsIntact(t *testing.T) {
 	}
 }
 
-// Editing a line after the fact must be detectable — the entire point of a
+// Deleting the TAIL of the ledger leaves every surviving PrevHash link valid,
+// so walking the chain cannot see it, and for a while this returned "intact"
+// on a log that had just had its most recent records removed, which is
+// precisely what someone covering their tracks deletes. The sidecar anchor is
+// the only witness.
+func TestVerifyChain_DetectsTailTruncation(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mcp_ledger.jsonl")
+	for i := 0; i < 5; i++ {
+		if err := Record(path, Event{Agent: "a", Tool: "t", Decision: Allow}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	keepFirstLines(t, path, 3) // drop the last two events
+
+	res, err := VerifyChain(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Truncated {
+		t.Errorf("ChainResult = %+v, want Truncated, the anchor names a removed event", res)
+	}
+	if res.Intact {
+		t.Error("a truncated ledger reported Intact")
+	}
+}
+
+// An anchor that lags the log means a best-effort writeChainHash did not land.
+// Nothing was removed, so this must not be reported as tampering, a security
+// tool that cries wolf over its own dropped write gets ignored.
+func TestVerifyChain_StaleAnchorIsNotTampering(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mcp_ledger.jsonl")
+	for i := 0; i < 3; i++ {
+		if err := Record(path, Event{Agent: "a", Tool: "t", Decision: Allow}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Rewind the anchor to the first event: every event is still present.
+	events, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := writeChainHash(chainHashPath(path), events[0].Hash); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := VerifyChain(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.AnchorStale {
+		t.Errorf("ChainResult = %+v, want AnchorStale", res)
+	}
+	if res.Truncated || !res.Intact {
+		t.Error("a lagging anchor was reported as tampering; nothing was deleted")
+	}
+}
+
+// Deleting the anchor along with the events must not buy back an all-clear.
+func TestVerifyChain_MissingAnchorIsNotAnAllClear(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mcp_ledger.jsonl")
+	for i := 0; i < 3; i++ {
+		if err := Record(path, Event{Agent: "a", Tool: "t", Decision: Allow}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Remove(chainHashPath(path)); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := VerifyChain(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.AnchorMissing {
+		t.Errorf("ChainResult = %+v, want AnchorMissing so the caller cannot read it as verified", res)
+	}
+}
+
+// The ledger must never persist the content it was given to scan. That has
+// always been true structurally, Event has no content field, but nothing
+// asserted it, so a future refactor could start logging prompt bodies (and
+// therefore the very secrets the scan exists to detect) without a single test
+// going red.
+func TestCheck_NeverPersistsRawContent(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mcp_ledger.jsonl")
+	const secret = "AKIAIOSFODNN7EXAMPLE"
+	const marker = "ignore previous instructions"
+	content := "here is my key " + secret + " and also: " + marker
+
+	if _, err := Check(path, Policy{Default: Allow}, CheckRequest{
+		Agent: "a", Tool: "t", Resource: "/r", Action: Read, Content: content,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), secret) {
+		t.Error("the ledger persisted the secret it was scanning for")
+	}
+	if strings.Contains(string(raw), "here is my key") {
+		t.Error("the ledger persisted raw scanned content")
+	}
+	// The derived labels are what may be stored, and must be.
+	if !strings.Contains(string(raw), "aws access key id") {
+		t.Error("the detector name was not recorded, so the detection is unreportable")
+	}
+	if !strings.Contains(string(raw), marker) {
+		t.Error("the matched injection marker was not recorded")
+	}
+}
+
+func keepFirstLines(t *testing.T, path string, n int) {
+	t.Helper()
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimRight(string(raw), "\n"), "\n")
+	if len(lines) < n {
+		t.Fatalf("ledger has %d lines, cannot keep %d", len(lines), n)
+	}
+	out := strings.Join(lines[:n], "\n") + "\n"
+	if err := os.WriteFile(path, []byte(out), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Editing a line after the fact must be detectable, the entire point of a
 // hash chain over a plain append-only file.
 func TestVerifyChain_DetectsATamperedLine(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "mcp_ledger.jsonl")
@@ -650,7 +922,7 @@ func TestVerifyChain_DetectsATamperedLine(t *testing.T) {
 	}
 }
 
-// A ledger written before this feature has no Hash on any event — that must
+// A ledger written before this feature has no Hash on any event, that must
 // report as fully unchained, not as a broken chain.
 func TestVerifyChain_PreExistingLedgerIsUnchainedNotBroken(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "mcp_ledger.jsonl")
@@ -680,7 +952,7 @@ func TestVerifyChain_PreExistingLedgerIsUnchainedNotBroken(t *testing.T) {
 }
 
 // A ledger that mixes pre-feature (unchained) events with new (chained) ones
-// — the real-world shape every existing installation will have — must verify
+// , the real-world shape every existing installation will have, must verify
 // the chained tail without complaining about the unchained head.
 func TestVerifyChain_MixedUnchainedThenChainedIsIntact(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "mcp_ledger.jsonl")
@@ -703,5 +975,364 @@ func TestVerifyChain_MixedUnchainedThenChainedIsIntact(t *testing.T) {
 	}
 	if !res.Intact || res.Chained != 3 || res.Unchained != 1 {
 		t.Errorf("ChainResult = %+v, want intact with 3 chained, 1 unchained", res)
+	}
+}
+
+// A swarm dispatch fans Record calls across goroutines against the same
+// ledger. Unserialized, two calls can read the same PrevHash and both append
+// a link claiming it, forking the chain (#443).
+func TestRecord_ConcurrentCallsDoNotForkTheChain(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mcp_ledger.jsonl")
+	const n = 20
+
+	var wg sync.WaitGroup
+	errs := make([]error, n)
+	for i := 0; i < n; i++ {
+		i := i
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			errs[i] = Record(path, Event{Agent: "a", Tool: "t", Decision: Allow})
+		}()
+	}
+	wg.Wait()
+
+	for i, err := range errs {
+		if err != nil {
+			t.Fatalf("Record[%d]: %v", i, err)
+		}
+	}
+
+	res, err := VerifyChain(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Intact {
+		t.Errorf("ChainResult = %+v, want Intact after %d concurrent Record calls", res, n)
+	}
+	if res.Chained != n {
+		t.Errorf("Chained = %d, want %d", res.Chained, n)
+	}
+}
+
+// Agent/Tool/Resource are supplied by whatever's on the other end of an MCP
+// call, a local tool or a misbehaving agent, and every consumer (`mcp log`,
+// `mcp report`, the TUI Security view) prints them verbatim. A raw ESC[2K CR
+// in one of these fields erases the line it prints on and can forge a
+// verdict. Sanitising once at Record makes every consumer safe by
+// construction instead of each one needing its own escape-stripping (#500).
+func TestRecord_SanitizesFreeTextFieldsAtIngest(t *testing.T) {
+	cases := []struct {
+		name  string
+		event Event
+	}{
+		{"escape + carriage return forges a verdict line", Event{
+			Agent: "auditor", Tool: "evil\x1b[2K\rFAKE OK", Resource: "/x", Decision: Allow,
+		}},
+		{"control chars in agent", Event{
+			Agent: "att\x1b[31macker", Tool: "t", Resource: "/x", Decision: Allow,
+		}},
+		{"control chars in resource", Event{
+			Agent: "a", Tool: "t", Resource: "/x\x1b[2K\rspoofed", Decision: Allow,
+		}},
+		{"ordinary text is left alone", Event{
+			Agent: "auditor", Tool: "fs.read", Resource: "/etc/hosts", Decision: Allow,
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "mcp_ledger.jsonl")
+			if err := Record(path, tc.event); err != nil {
+				t.Fatal(err)
+			}
+			events, err := Load(path)
+			if err != nil || len(events) != 1 {
+				t.Fatalf("Load = %d events, err %v", len(events), err)
+			}
+			got := events[0]
+			for _, field := range []struct {
+				name, want, got string
+			}{
+				{"Agent", util.SafeTerminal(tc.event.Agent), got.Agent},
+				{"Tool", util.SafeTerminal(tc.event.Tool), got.Tool},
+				{"Resource", util.SafeTerminal(tc.event.Resource), got.Resource},
+			} {
+				if field.got != field.want {
+					t.Errorf("%s = %q, want %q (util.SafeTerminal of the input)", field.name, field.got, field.want)
+				}
+				for _, r := range field.got {
+					if r < 0x20 || r == 0x7f || (r >= 0x80 && r <= 0x9f) {
+						t.Errorf("%s = %q still carries a raw control byte after Record", field.name, field.got)
+					}
+				}
+			}
+		})
+	}
+}
+
+// Ask is a real verdict a policy file can carry, so it has to survive parsing
+// and normalisation the same way allow/deny do (#580).
+func TestParseDecision_AcceptsAskAndNormalisesCase(t *testing.T) {
+	for _, in := range []string{"ask", "ASK", " Ask "} {
+		got, err := ParseDecision(in)
+		if err != nil {
+			t.Fatalf("ParseDecision(%q) errored: %v", in, err)
+		}
+		if got != Ask {
+			t.Errorf("ParseDecision(%q) = %q, want %q", in, got, Ask)
+		}
+	}
+	if _, err := ParseDecision("maybe"); err == nil {
+		t.Error("an unknown decision was accepted; rules gate on the exact value")
+	}
+}
+
+// The whole point of Ask is that it is NOT approval. LatestBound is what finds
+// the approval a later execution is verified against, and it admits Allow only.
+// If that ever loosened, an unanswered question would become consent.
+func TestLatestBound_AskIsNotAnApproval(t *testing.T) {
+	hash, err := HashParams(map[string]any{"file": "/etc/hosts"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	events := []Event{{
+		Agent: "a", Tool: "read_file", Resource: "/etc/hosts", Action: Read,
+		Decision: Ask, ParametersHash: hash,
+	}}
+
+	if _, ok := LatestBound(events, "read_file", "/etc/hosts"); ok {
+		t.Fatal("an Ask event was returned as the binding approval, a pending question read as consent")
+	}
+
+	// Control: the same event as an Allow is found, so the test is proving the
+	// decision filter and not something incidental about the fixture.
+	events[0].Decision = Allow
+	if _, ok := LatestBound(events, "read_file", "/etc/hosts"); !ok {
+		t.Fatal("an Allow event was not found; the fixture is wrong, not the filter")
+	}
+}
+
+// Ask must never come out of a failure path. Unhashable params still deny, so a
+// policy or plumbing bug cannot degrade into an interactive prompt.
+func TestCheck_UnhashableParamsStillDeniesNeverAsks(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "ledger.jsonl")
+
+	// A channel cannot be marshalled, so HashParams fails.
+	got, err := Check(path, Policy{Default: Ask}, CheckRequest{
+		Agent: "a", Tool: "t", Resource: "r", Action: Read,
+		Params: map[string]any{"bad": make(chan int)},
+	})
+	if err == nil {
+		t.Fatal("expected an error for unhashable params")
+	}
+	if got != Deny {
+		t.Errorf("Check = %q on unhashable params, want %q, a failure path must not ask", got, Deny)
+	}
+}
+
+// Record leaves PrevHash empty whenever the sidecar anchor cannot be read,
+// which is a documented best-effort outcome, and the verifier called the next
+// event a break. On a real machine that surfaced as "BROKEN: tampering
+// detected at event index 29" on a ledger nobody had touched. A security check
+// that cries wolf on ordinary history is one people learn to ignore.
+func TestVerifyChain_AMissingPrevHashIsARestartNotTampering(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mcp_ledger.jsonl")
+	for i := 0; i < 3; i++ {
+		if err := Record(path, Event{Agent: "a", Tool: "t", Decision: Allow}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Exactly what a lost anchor produces: an event with its own valid hash
+	// and no link back.
+	os.Remove(chainHashPath(path))
+	if err := Record(path, Event{Agent: "a", Tool: "t", Decision: Allow}); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := VerifyChain(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Intact {
+		t.Errorf("ChainResult = %+v, want intact: an unlinked event is a restart, not tampering", res)
+	}
+	if res.Restarts != 1 {
+		t.Errorf("Restarts = %d, want 1", res.Restarts)
+	}
+}
+
+// The reason the restart above is safe to allow: PrevHash is covered by the
+// event's own Hash, so an attacker who deletes a record and strips the next
+// event's link to hide the gap invalidates that event's hash and is caught
+// anyway. If this ever fails, the restart allowance has become a way to
+// launder a deletion.
+func TestVerifyChain_StrippingPrevHashToHideADeletionIsStillCaught(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mcp_ledger.jsonl")
+	for i := 0; i < 4; i++ {
+		if err := Record(path, Event{Agent: "a", Tool: "t", Decision: Allow}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimRight(string(raw), "\n"), "\n")
+
+	// Delete a middle event, then strip the following event's PrevHash so the
+	// walk has nothing to compare.
+	var e Event
+	if err := json.Unmarshal([]byte(lines[2]), &e); err != nil {
+		t.Fatal(err)
+	}
+	e.PrevHash = ""
+	relinked, err := json.Marshal(e)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines = append(lines[:1], append([]string{string(relinked)}, lines[3:]...)...)
+	if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := VerifyChain(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Intact {
+		t.Fatal("a deletion hidden by stripping PrevHash reported as intact")
+	}
+}
+
+// A real ledger held a tool name of "gpt\x1b[2K\r  VERDICT  OK  no findings":
+// captured terminal output, escape codes and all, stored as an identity and
+// rendered verbatim in the security report. ESC[2K\r erases the line and
+// returns the carriage, so the value can hide the findings printed around it.
+func TestSafeText_StripsTerminalControlCharacters(t *testing.T) {
+	got := SafeText("gpt\x1b[2K\r  VERDICT  OK  no findings")
+	if strings.ContainsRune(got, 0x1b) || strings.ContainsRune(got, '\r') {
+		t.Errorf("SafeText = %q, still carries control characters", got)
+	}
+	if !strings.HasPrefix(got, "gpt") {
+		t.Errorf("SafeText = %q, want the readable text kept", got)
+	}
+}
+
+func TestSafeText_BoundsRunawayValues(t *testing.T) {
+	if got := SafeText(strings.Repeat("x", maxFieldLen*2)); len(got) > maxFieldLen+4 {
+		t.Errorf("SafeText returned %d bytes, want it bounded near %d", len(got), maxFieldLen)
+	}
+}
+
+func TestRecord_StoresIdentitiesWithoutControlCharacters(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mcp_ledger.jsonl")
+	if err := Record(path, Event{Agent: "claude", Tool: "gpt\x1b[2K\rVERDICT OK", Decision: Deny}); err != nil {
+		t.Fatal(err)
+	}
+	events, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.ContainsRune(events[0].Tool, 0x1b) {
+		t.Errorf("Tool = %q, an escape sequence was stored verbatim", events[0].Tool)
+	}
+	// Sanitizing must happen before the hash, or every sanitized event reads
+	// as tampered.
+	res, err := VerifyChain(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Intact {
+		t.Errorf("ChainResult = %+v, want intact: sanitizing must precede hashing", res)
+	}
+}
+
+// The events already on disk cannot be rewritten, so the risk table cleans
+// them as it renders.
+func TestByHeadRisk_CleansIdentitiesFromExistingHistory(t *testing.T) {
+	got := ByHeadRisk([]Event{{Tool: "gpt\x1b[2K\rVERDICT OK", Decision: Deny}})
+	if len(got) != 1 {
+		t.Fatalf("ByHeadRisk returned %d rows, want 1", len(got))
+	}
+	if strings.ContainsRune(got[0].Head, 0x1b) {
+		t.Errorf("Head = %q, rendered an escape sequence from stored history", got[0].Head)
+	}
+}
+
+// Two concurrent appends that both read the anchor before either wrote it
+// link to the same predecessor. Nothing was removed or altered, and a real
+// ledger carries exactly this shape twice, from hydra-swarm inside one second,
+// written before Record took a lock. It reported as "the log was modified
+// after recording".
+func TestVerifyChain_AConcurrentForkIsNotTampering(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mcp_ledger.jsonl")
+	for i := 0; i < 3; i++ {
+		if err := Record(path, Event{Agent: "a", Tool: "t", Decision: Allow}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// A fourth event linking to the second, as a lost race would produce.
+	events, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	forked := Event{Agent: "a", Tool: "concurrent", Decision: Allow, PrevHash: events[1].Hash}
+	forked.Hash = hashEvent(forked)
+	appendEvent(t, path, forked)
+
+	res, err := VerifyChain(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Intact {
+		t.Errorf("ChainResult = %+v, want intact: a fork is a lost race, not an edit", res)
+	}
+	if res.Forks != 1 {
+		t.Errorf("Forks = %d, want 1", res.Forks)
+	}
+}
+
+// The fork allowance turns on the referenced event still being present. A
+// deletion removes it, so the link points at nothing and must still break.
+func TestVerifyChain_DeletingAMiddleRecordIsStillCaught(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mcp_ledger.jsonl")
+	for i := 0; i < 4; i++ {
+		if err := Record(path, Event{Agent: "a", Tool: "t", Decision: Allow}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimRight(string(raw), "\n"), "\n")
+	lines = append(lines[:1], lines[2:]...) // drop one from the middle, touch nothing else
+	if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := VerifyChain(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Intact {
+		t.Fatal("deleting a record from the middle reported as intact")
+	}
+}
+
+func appendEvent(t *testing.T, path string, e Event) {
+	t.Helper()
+	raw, err := json.Marshal(e)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	if _, err := f.Write(append(raw, '\n')); err != nil {
+		t.Fatal(err)
 	}
 }

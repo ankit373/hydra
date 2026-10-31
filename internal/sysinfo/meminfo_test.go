@@ -11,7 +11,7 @@ import (
 
 // A real /proc/meminfo head, verbatim. Parsing is tested against this fixture
 // rather than the host's memory so the test is deterministic and runs on every
-// OS — the previous implementation shelled out to grep and could only be
+// OS: the previous implementation shelled out to grep and could only be
 // exercised on Linux, with a machine-dependent answer.
 const meminfoFixture = `MemTotal:       16007748 kB
 MemFree:         1234567 kB
@@ -43,7 +43,7 @@ func TestParseMeminfo_ReadsTheFieldsWeUse(t *testing.T) {
 }
 
 // Unitless fields must not be read as memory. HugePages_Total: 0 parses as a
-// number but is a count, not kB — treating it as memory would be silent
+// number but is a count, not kB, treating it as memory would be silent
 // nonsense if it were ever added to the fields we read.
 func TestParseMeminfo_SkipsUnitlessFields(t *testing.T) {
 	got := parseMeminfo(meminfoFixture)
@@ -82,7 +82,7 @@ func TestParseMeminfo_GarbageIsIgnoredNotFatal(t *testing.T) {
 	}
 }
 
-// The readers must return 0 — not a fabricated number — when the file cannot be
+// The readers must return 0, not a fabricated number, when the file cannot be
 // read. linuxRAM used to return a hardcoded 8, which flowed into model-fit
 // recommendations as though someone had measured it (#261, same class as #258).
 func TestLinuxReaders_UnreadableFileYieldsZeroNotAGuess(t *testing.T) {

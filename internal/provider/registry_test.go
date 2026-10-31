@@ -114,12 +114,12 @@ func TestRegistry_ConcurrentAddAndAllAreSafe(t *testing.T) {
 	wg.Wait()
 
 	if got := len(r.all()); got != n {
-		t.Errorf("got %d providers after %d concurrent adds — a write was lost", got, n)
+		t.Errorf("got %d providers after %d concurrent adds, a write was lost", got, n)
 	}
 }
 
 // The global registry is what probe.Run reads. Every provider package registers
-// from init(), so by the time any test runs they must all be present — a
+// from init(), so by the time any test runs they must all be present, a
 // missing one is a head class that can never be discovered.
 func TestGlobalRegistry_IsPopulatedByInit(t *testing.T) {
 	// Only the packages this test binary imports will have registered, so this

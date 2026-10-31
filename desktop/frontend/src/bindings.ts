@@ -3,8 +3,8 @@
 // Wails writes frontend/wailsjs/go/api/API.js at build time. That directory is a
 // build artefact and is gitignored, so importing it directly would break both
 // `npm run typecheck` on a clean checkout and any future browser-based test
-// harness. Reading the methods off `window.go` at call time — the same object
-// the generated module wraps — keeps the source tree self-contained.
+// harness. Reading the methods off `window.go` at call time, the same object
+// the generated module wraps, keeps the source tree self-contained.
 
 import type {
   ChatReply,
@@ -14,11 +14,20 @@ import type {
   Fleet,
   HyctlStatus,
   InstallResult,
+  MCPPanel,
+  MCPSyncResult,
+  HeadPanel,
+  ModelRegistry,
+  ReviewOutcome,
+  QuestionQueue,
+  SecurityReport,
+  Settings,
   Session,
   UpdateStatus,
   UpgradeResult,
   Version,
 } from './types'
+import { CHAT_STREAM_EVENT, type ChatStreamEvent } from './chatStream'
 
 interface WailsGo {
   api: {
@@ -27,14 +36,27 @@ interface WailsGo {
       GetFleet(): Promise<Fleet>
       GetSession(runID: string): Promise<Session>
       GetEdits(runID: string): Promise<Edit[]>
-      Chat(prompt: string, enumKey: string): Promise<ChatReply>
+      Chat(prompt: string, enumKey: string, runID: string, tier: string, head: string): Promise<ChatReply>
+      ApproveEdit(file: string): Promise<ReviewOutcome>
+      RejectEdit(file: string): Promise<ReviewOutcome>
+      GetMCPServers(): Promise<MCPPanel>
+      SyncMCPRegistry(): Promise<MCPSyncResult>
+      GetHeads(): Promise<HeadPanel>
+      GetPendingQuestions(): Promise<QuestionQueue>
+      AnswerQuestion(taskID: string, answer: string): Promise<ChatReply>
+      DeclineQuestion(taskID: string, reason: string): Promise<void>
       ChatEnums(): Promise<string[]>
+      NewRunID(): Promise<string>
       GetDiff(runID: string, ref: string, file: string): Promise<Diff>
       GetVersion(): Promise<Version>
       GetUpdateStatus(): Promise<UpdateStatus>
       TriggerUpgrade(): Promise<UpgradeResult>
       CheckHyctl(): Promise<HyctlStatus>
       InstallHyctl(): Promise<InstallResult>
+      GetSecurity(): Promise<SecurityReport>
+      GetModels(): Promise<ModelRegistry>
+      GetSettings(): Promise<Settings>
+      SaveSettings(s: Settings): Promise<Settings>
     }
   }
 }
@@ -42,13 +64,30 @@ interface WailsGo {
 declare global {
   interface Window {
     go?: WailsGo
+    runtime?: {
+      EventsOn(name: string, cb: (...data: unknown[]) => void): () => void
+    }
   }
+}
+
+/**
+ * Subscribe to a dispatch's stream events, returning the unsubscribe.
+ *
+ * Read off `window.runtime` at call time for the same reason the methods are:
+ * the generated module is a gitignored build artefact. A missing runtime is not
+ * an error here, unlike a missing backend, `vite` alone renders a chat that
+ * cannot stream, which is the pre-#799 behaviour and not a broken window.
+ */
+export function onChatStream(cb: (ev: ChatStreamEvent) => void): () => void {
+  const rt = window.runtime
+  if (!rt?.EventsOn) return () => {}
+  return rt.EventsOn(CHAT_STREAM_EVENT, (...data: unknown[]) => cb(data[0] as ChatStreamEvent))
 }
 
 function backend() {
   const go = window.go
   if (!go?.api?.API) {
-    throw new Error('Wails backend not available — run `wails dev` rather than `vite` alone')
+    throw new Error('Wails backend not available, run `wails dev` rather than `vite` alone')
   }
   return go.api.API
 }
@@ -59,11 +98,38 @@ export const GetSession = (runID: string): Promise<Session> => backend().GetSess
 export const GetEdits = (runID: string): Promise<Edit[]> => backend().GetEdits(runID)
 export const GetDiff = (runID: string, ref: string, file: string): Promise<Diff> =>
   backend().GetDiff(runID, ref, file)
-export const Chat = (prompt: string, enumKey: string): Promise<ChatReply> =>
-  backend().Chat(prompt, enumKey)
+export const Chat = (
+  prompt: string,
+  enumKey: string,
+  runID: string,
+  tier: string,
+  head: string,
+): Promise<ChatReply> => backend().Chat(prompt, enumKey, runID, tier, head)
+
+export const ApproveEdit = (file: string): Promise<ReviewOutcome> => backend().ApproveEdit(file)
+
+export const RejectEdit = (file: string): Promise<ReviewOutcome> => backend().RejectEdit(file)
+
+export const GetMCPServers = (): Promise<MCPPanel> => backend().GetMCPServers()
+
+export const SyncMCPRegistry = (): Promise<MCPSyncResult> => backend().SyncMCPRegistry()
+export const GetHeads = (): Promise<HeadPanel> => backend().GetHeads()
+
+export const GetPendingQuestions = (): Promise<QuestionQueue> => backend().GetPendingQuestions()
+
+export const AnswerQuestion = (taskID: string, answer: string): Promise<ChatReply> =>
+  backend().AnswerQuestion(taskID, answer)
+
+export const DeclineQuestion = (taskID: string, reason: string): Promise<void> =>
+  backend().DeclineQuestion(taskID, reason)
 export const ChatEnums = (): Promise<string[]> => backend().ChatEnums()
+export const NewRunID = (): Promise<string> => backend().NewRunID()
 export const GetVersion = (): Promise<Version> => backend().GetVersion()
 export const GetUpdateStatus = (): Promise<UpdateStatus> => backend().GetUpdateStatus()
 export const TriggerUpgrade = (): Promise<UpgradeResult> => backend().TriggerUpgrade()
 export const CheckHyctl = (): Promise<HyctlStatus> => backend().CheckHyctl()
 export const InstallHyctl = (): Promise<InstallResult> => backend().InstallHyctl()
+export const GetSecurity = (): Promise<SecurityReport> => backend().GetSecurity()
+export const GetModels = (): Promise<ModelRegistry> => backend().GetModels()
+export const GetSettings = (): Promise<Settings> => backend().GetSettings()
+export const SaveSettings = (s: Settings): Promise<Settings> => backend().SaveSettings(s)

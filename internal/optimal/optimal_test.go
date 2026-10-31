@@ -32,7 +32,7 @@ func TestAgents_MatchesLaw4(t *testing.T) {
 	}
 
 	// Independent work has a real (>1) speedup; heavy coupling drives the
-	// absolute S(n*) below 1 — the model correctly says "don't parallelize this."
+	// absolute S(n*) below 1, the model correctly says "don't parallelize this."
 	if _, s := Agents(0.2, 0.02); s <= 1 {
 		t.Errorf("independent speedup = %v, want > 1", s)
 	}
@@ -46,10 +46,10 @@ func TestAgents_IsOptimum(t *testing.T) {
 	s, k := 0.2, 0.05
 	n, peak := Agents(s, k)
 	if lower := Speedup(s, k, float64(n-1)); n > 1 && lower > peak {
-		t.Errorf("S(n*-1)=%v > S(n*)=%v — not optimal", lower, peak)
+		t.Errorf("S(n*-1)=%v > S(n*)=%v, not optimal", lower, peak)
 	}
 	if higher := Speedup(s, k, float64(n+1)); higher > peak {
-		t.Errorf("S(n*+1)=%v > S(n*)=%v — not optimal", higher, peak)
+		t.Errorf("S(n*+1)=%v > S(n*)=%v, not optimal", higher, peak)
 	}
 }
 
@@ -84,10 +84,10 @@ func TestAgents_ZeroK(t *testing.T) {
 }
 
 // Falsification invariant (see findings §2): the Amdahl+coordination model has a
-// hard ceiling S(n) ≤ n for every valid (s ≥ 0, k ≥ 0) — it structurally cannot
+// hard ceiling S(n) ≤ n for every valid (s ≥ 0, k ≥ 0), it structurally cannot
 // produce superlinear speedup. The real benchmark measured S = 2.33 at n=2 and
 // 9.3 at n=4 (superlinear, from per-agent context dilution), so no (s, k) can fit
-// that data — a clean refutation of this model for embarrassingly-parallel,
+// that data, a clean refutation of this model for embarrassingly-parallel,
 // context-bound agent work, not a tuning miss. Guarding the ceiling here keeps the
 // falsification honest and reproducible.
 func TestSpeedup_CeilingIsN_NeverSuperlinear(t *testing.T) {
@@ -95,7 +95,7 @@ func TestSpeedup_CeilingIsN_NeverSuperlinear(t *testing.T) {
 		for k := 0.0; k <= 1.0+1e-9; k += 0.05 {
 			for _, n := range []float64{1, 2, 3, 4, 6, 8, 16, 32} {
 				if got := Speedup(s, k, n); got > n+1e-9 {
-					t.Fatalf("Speedup(s=%.2f, k=%.2f, n=%.0f) = %.4f exceeds n — "+
+					t.Fatalf("Speedup(s=%.2f, k=%.2f, n=%.0f) = %.4f exceeds n, "+
 						"model must be incapable of superlinear speedup", s, k, n, got)
 				}
 			}

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ankit373/hydra/internal/pricing"
 	"github.com/ankit373/hydra/internal/provider"
 )
 
@@ -47,7 +48,7 @@ func TestOpenRouter_SupportsGatesOnKey(t *testing.T) {
 }
 
 // An env head has no Executable, so routing it to CLIExecutor guarantees a
-// failed exec — the #75 regression, re-asserted for the new provider.
+// failed exec, the #75 regression, re-asserted for the new provider.
 func TestOpenRouter_RoutesToHTTPExecutor(t *testing.T) {
 	if _, ok := For(openRouterHead()).(*HTTPExecutor); !ok {
 		t.Fatalf("For(env/openrouter) = %T, want *HTTPExecutor", For(openRouterHead()))
@@ -79,11 +80,11 @@ func TestOpenRouter_ModelIsOverridable(t *testing.T) {
 	clearProviderKeys(t)
 
 	if got := defaultModelFor("openrouter"); got == "" {
-		t.Fatal("defaultModelFor(openrouter) is empty — SupportsHTTP would reject the head")
+		t.Fatal("defaultModelFor(openrouter) is empty, SupportsHTTP would reject the head")
 	}
 	// OpenRouter model IDs are vendor-prefixed; a bare name is a wrong default.
 	if got := defaultModelFor("openrouter"); !strings.Contains(got, "/") {
-		t.Errorf("default model %q is not vendor-prefixed — OpenRouter IDs look like \"anthropic/claude-…\"", got)
+		t.Errorf("default model %q is not vendor-prefixed, OpenRouter IDs look like \"anthropic/claude-…\"", got)
 	}
 
 	t.Setenv("OPENROUTER_MODEL", "meta-llama/llama-4-scout")
@@ -98,7 +99,7 @@ func TestOpenRouter_ModelIsOverridable(t *testing.T) {
 	}
 }
 
-// Adding a provider means touching five separate tables — env.knownKeys,
+// Adding a provider means touching five separate tables, env.knownKeys,
 // openAICompatConfigFor, defaultModelFor, apiKeyFor, and capabilities. #200
 // existed because OpenRouter was in none of them while pricing depended on it.
 // This asserts the tables agree, so the next provider added to one but not the
@@ -124,7 +125,7 @@ func TestEveryOpenAICompatProviderIsFullyWired(t *testing.T) {
 	for _, p := range compat {
 		t.Run(p.id, func(t *testing.T) {
 			if got := defaultModelFor(p.id); got == "" {
-				t.Errorf("defaultModelFor(%q) is empty — SupportsHTTP will always reject this provider", p.id)
+				t.Errorf("defaultModelFor(%q) is empty, SupportsHTTP will always reject this provider", p.id)
 			}
 
 			h := provider.Head{ID: "env/" + p.id, Source: "env", Provider: p.id}
@@ -149,5 +150,35 @@ func TestEveryOpenAICompatProviderIsFullyWired(t *testing.T) {
 				t.Errorf("%q Authorization = %q, want %q", p.id, cfg.Headers["Authorization"], "Bearer test-key")
 			}
 		})
+	}
+}
+
+// The default was `anthropic/claude-sonnet-4-5`, which OpenRouter has never
+// held: it spells that model with a dot. The test above passed it happily,
+// because non-empty and vendor-prefixed is exactly what a plausible wrong id
+// looks like, so the head read as routable and failed at the point of use
+// (#755).
+//
+// This asserts against the catalogue OpenRouter itself publishes, read from
+// the pricing cache this machine already keeps. With no cache it asserts
+// nothing: a network call in the test suite would be flaky and would reach
+// out on every run, which is worse than a guard that fires wherever pricing
+// has been fetched, including every developer machine.
+func TestOpenRouter_DefaultModelExistsInTheCatalogue(t *testing.T) {
+	catalogue := pricing.Load().Models()
+	if len(catalogue) == 0 {
+		t.Log("no pricing cache on this machine, so the catalogue cannot be checked here")
+		return
+	}
+
+	known := make(map[string]bool, len(catalogue))
+	for _, id := range catalogue {
+		known[strings.ToLower(id)] = true
+	}
+	got := strings.ToLower(defaultModelFor("openrouter"))
+	if !known[got] {
+		t.Errorf("defaultModelFor(openrouter) = %q, which is not one of the %d models "+
+			"OpenRouter publishes; a dispatch to env/openrouter with no OPENROUTER_MODEL "+
+			"set would send an id that does not exist", got, len(catalogue))
 	}
 }

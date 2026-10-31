@@ -3,13 +3,13 @@
 // Command hydradesk is Hydra's desktop app.
 //
 // It lives in this module rather than its own repo because it binds directly to
-// internal/cost, internal/trust, and internal/budget — Go's internal rule means
+// internal/cost, internal/trust, and internal/budget, Go's internal rule means
 // only code inside this module tree can import them, so a separate repo would
 // force those packages public first.
 //
 // This file is the only one that knows Wails exists. Everything it binds lives
 // in desktop/api, which imports no UI framework and is unit-tested without a
-// webview — so CI checks the backend with `./api/...` and never needs
+// webview, so CI checks the backend with `./api/...` and never needs
 // libwebkit2gtk on a Linux runner.
 //
 // It carries no build tag. One did exclude it, but `wails build` generates
@@ -18,6 +18,7 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"log"
 
@@ -25,14 +26,29 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
 	"github.com/wailsapp/wails/v2/pkg/options/mac"
+	"github.com/wailsapp/wails/v2/pkg/runtime"
 
 	"github.com/ankit373/hydra/desktop/api"
+	"github.com/ankit373/hydra/internal/shellpath"
+
+	// Self-registering discovery plugins. Without these, provider.All() is
+	// empty and every chat dispatch reports zero heads, no matter what is
+	// actually installed on the machine (#495), cmd/hydra/main.go imports
+	// the same four for the same reason.
+	_ "github.com/ankit373/hydra/internal/provider/agy"
+	_ "github.com/ankit373/hydra/internal/provider/cli"
+	_ "github.com/ankit373/hydra/internal/provider/env"
+	_ "github.com/ankit373/hydra/internal/provider/port"
 )
 
 //go:embed all:frontend/dist
 var assets embed.FS
 
 func main() {
+	// Before anything discovers heads. launchd starts this process with a PATH
+	// that contains no CLI head at all (#689).
+	shellpath.Adopt()
+
 	a := api.New()
 
 	err := wails.Run(&options.App{
@@ -51,8 +67,15 @@ func main() {
 		Mac: &mac.Options{
 			TitleBar: mac.TitleBarHiddenInset(),
 		},
-		OnStartup: a.Startup,
-		Bind:      []any{a},
+		OnStartup: func(ctx context.Context) {
+			a.Startup(ctx)
+			// Wails stays in this file. The API takes a plain function, so the
+			// backend is still unit-tested with no webview in the loop.
+			a.SetEmit(func(name string, payload any) {
+				runtime.EventsEmit(ctx, name, payload)
+			})
+		},
+		Bind: []any{a},
 	})
 	if err != nil {
 		log.Fatalf("hydradesk: %v", err)

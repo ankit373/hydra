@@ -30,7 +30,7 @@ func TestLogRun_StampsConfigBreadcrumbWhenBlank(t *testing.T) {
 
 // A trust run's confidence is only interpretable against the routing rules that
 // produced it. This used to assert Config stays *empty* without an on-disk
-// registry — which was every installed binary (#238). With the registry
+// registry, which was every installed binary (#238). With the registry
 // embedded, it must always be stamped.
 func TestLogRun_StampsConfigEvenWithNoOnDiskRegistry(t *testing.T) {
 	t.Setenv("HYDRA_HOME", t.TempDir()) // no registry/ present
@@ -44,7 +44,7 @@ func TestLogRun_StampsConfigEvenWithNoOnDiskRegistry(t *testing.T) {
 		t.Fatalf("want 1 run, got %d", len(runs))
 	}
 	if runs[0].Config == "" {
-		t.Error("Config is empty — the run cannot be tied back to the rules that produced it")
+		t.Error("Config is empty, the run cannot be tied back to the rules that produced it")
 	}
 }
 

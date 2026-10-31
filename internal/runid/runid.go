@@ -3,7 +3,7 @@
 // Package runid mints the identifiers that correlate a single logical unit of
 // work across Hydra's logs.
 //
-// Two levels exist. A *run* is one user-facing invocation — `hyctl dispatch`,
+// Two levels exist. A *run* is one user-facing invocation, `hyctl dispatch`,
 // one `hyctl parallel` batch, one swarm. A *task* is one logical piece of work
 // inside it; a run has one task in the simple case and several in a parallel
 // batch. Every attempt a swarm or SPRT ensemble makes on the same task shares
@@ -24,7 +24,7 @@ import (
 )
 
 // Env vars an external orchestrator can set to group Hydra invocations it
-// spawns into one run. Read as a fallback only — an explicit value always wins,
+// spawns into one run. Read as a fallback only, an explicit value always wins,
 // because env is process-global and cannot distinguish concurrent runs inside a
 // single long-lived host process.
 const (
@@ -35,7 +35,7 @@ const (
 // randBytes is the width of New's random suffix.
 //
 // The timestamp only resolves to the second, so every ID minted inside the same
-// second collides unless the suffix separates them — and a parallel batch or a
+// second collides unless the suffix separates them, and a parallel batch or a
 // swarm mints many in one second by design. At the original 3 bytes the
 // birthday bound gave 0.7% for 500 IDs and 52% for 5000, which is not a
 // theoretical risk: it silently merged two unrelated runs' rows in cost.jsonl,
@@ -53,7 +53,7 @@ func New() string {
 }
 
 // ResolveRun returns the run ID to log: an explicit value, else HYDRA_RUN_ID,
-// else a fresh one. It never returns empty — before this existed every log row
+// else a fresh one. It never returns empty, before this existed every log row
 // carried run_id:"" and nothing could be correlated (#181).
 func ResolveRun(explicit string) string { return resolve(explicit, EnvRunID) }
 

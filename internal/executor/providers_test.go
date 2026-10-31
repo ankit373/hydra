@@ -5,13 +5,13 @@ package executor
 import (
 	"context"
 	"encoding/json"
+	"github.com/ankit373/hydra/internal/awsconf"
 	"github.com/ankit373/hydra/internal/config"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -22,7 +22,7 @@ import (
 
 // Each provider adapter builds a request in that vendor's wire format and picks
 // the answer back out of that vendor's response shape. Both halves are pure
-// convention — a wrong header name is a 401 the user reads as "my key is bad",
+// convention, a wrong header name is a 401 the user reads as "my key is bad",
 // and a wrong response field is an empty string that Hydra reports as a
 // successful, empty answer. Nothing but a test catches the second one.
 //
@@ -111,7 +111,7 @@ func TestExecuteAnthropic_WireFormatAndParsing(t *testing.T) {
 			got.body["system"])
 	}
 	if got.body["max_tokens"] != float64(256) {
-		t.Errorf("max_tokens = %v, want 256 — Anthropic requires it", got.body["max_tokens"])
+		t.Errorf("max_tokens = %v, want 256, Anthropic requires it", got.body["max_tokens"])
 	}
 	if got.body["model"] != "claude-test-1" {
 		t.Errorf("model = %v, want the env override", got.body["model"])
@@ -191,7 +191,7 @@ func TestExecuteGemini_WireFormatAndParsing(t *testing.T) {
 }
 
 // Gemini returns 200 with no candidates when the prompt is filtered. That is
-// not a successful empty answer — reporting it as one would log a paid call
+// not a successful empty answer, reporting it as one would log a paid call
 // that produced nothing and hand the caller "".
 func TestExecuteGemini_NoCandidatesIsAnError(t *testing.T) {
 	s := testutil.NewSandbox(t)
@@ -254,14 +254,14 @@ func TestExecuteAzure_BuildsTheDeploymentURL(t *testing.T) {
 	}
 
 	if strings.Contains(got.path, "//") {
-		t.Errorf("path = %q — the endpoint's trailing slash was not trimmed", got.path)
+		t.Errorf("path = %q, the endpoint's trailing slash was not trimmed", got.path)
 	}
 	if !strings.Contains(got.rawPath, "my%20deployment") {
 		t.Errorf("wire path = %q, want the deployment name escaped; a space would "+
 			"otherwise break the route", got.rawPath)
 	}
 	if !strings.Contains(got.query, "api-version=") {
-		t.Errorf("query = %q, want an api-version — Azure rejects the call without one", got.query)
+		t.Errorf("query = %q, want an api-version, Azure rejects the call without one", got.query)
 	}
 	if k := got.headers.Get("api-key"); k != "az-test" {
 		t.Errorf("api-key = %q; Azure does not use Authorization", k)
@@ -287,24 +287,34 @@ func TestExecuteAzure_EmptyChoicesIsAnError(t *testing.T) {
 
 // Bedrock is the only provider that signs rather than sending a bearer token.
 // An unsigned request is a 403 the user cannot diagnose from Hydra's output.
-func TestExecuteBedrock_SignsTheRequest(t *testing.T) {
+func TestExecuteBedrock_AddressesConverseAndSignsIt(t *testing.T) {
 	s := testutil.NewSandbox(t)
 	s.SetKey(t, "AWS_ACCESS_KEY_ID", "AKIDEXAMPLE")
 	s.SetKey(t, "AWS_SECRET_ACCESS_KEY", "secret")
 	t.Setenv("AWS_REGION", "eu-west-1")
+	t.Setenv("BEDROCK_MODEL_ID", "anthropic.claude-3-5-sonnet-20241022-v2:0")
 
-	srv, got := serve(t, 200, okChatBody)
+	srv, got := serve(t, 200, `{"output":{"message":{"role":"assistant","content":[
+		{"text":"first block"},{"text":"second block"}]}},
+		"stopReason":"end_turn","usage":{"inputTokens":41,"outputTokens":17,"totalTokens":58}}`)
 
 	resp, err := redirect(srv).Execute(context.Background(), Request{
-		Prompt: "hello", Head: head("bedrock"),
+		Prompt: "hello", System: "be terse", MaxTokens: 256, Head: head("bedrock"),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 
+	// The OpenAI-compatible endpoint lives under /openai/v1 and serves only the
+	// few models whose card lists it. Converse serves every model (#866).
+	wantPath := "/model/anthropic.claude-3-5-sonnet-20241022-v2:0/converse"
+	if got.path != wantPath {
+		t.Errorf("path = %q, want %q", got.path, wantPath)
+	}
 	if !strings.Contains(got.host, "eu-west-1") {
 		t.Errorf("host = %q, want the configured region", got.host)
 	}
+
 	auth := got.headers.Get("Authorization")
 	if !strings.HasPrefix(auth, "AWS4-HMAC-SHA256 ") {
 		t.Fatalf("Authorization = %q, want a SigV4 signature", auth)
@@ -319,8 +329,36 @@ func TestExecuteBedrock_SignsTheRequest(t *testing.T) {
 	if got.headers.Get("X-Amz-Content-Sha256") == "" {
 		t.Error("no X-Amz-Content-Sha256; the service cannot verify the payload")
 	}
-	if resp.Output != "hello from the stub" {
-		t.Errorf("Output = %q", resp.Output)
+
+	// Converse takes content blocks, a system list and inferenceConfig, not an
+	// OpenAI messages array.
+	msgs, _ := got.body["messages"].([]interface{})
+	if len(msgs) != 1 {
+		t.Fatalf("messages = %v, want one user turn", got.body["messages"])
+	}
+	first, _ := msgs[0].(map[string]interface{})
+	blocks, _ := first["content"].([]interface{})
+	if len(blocks) != 1 {
+		t.Fatalf("content = %v, want one text block", first["content"])
+	}
+	if block, _ := blocks[0].(map[string]interface{}); block["text"] != "hello" {
+		t.Errorf("content block = %v, want the prompt under text", blocks[0])
+	}
+	if got.body["system"] == nil {
+		t.Error("system missing, so the system prompt was dropped")
+	}
+	if cfg, _ := got.body["inferenceConfig"].(map[string]interface{}); cfg == nil || cfg["maxTokens"] != float64(256) {
+		t.Errorf("inferenceConfig = %v, want maxTokens 256", got.body["inferenceConfig"])
+	}
+
+	if resp.Output != "first block\nsecond block" {
+		t.Errorf("Output = %q, want both content blocks joined", resp.Output)
+	}
+	if resp.InputTokens != 41 || resp.OutputTokens != 17 {
+		t.Errorf("counts = %d/%d, want 41/17 from usage", resp.InputTokens, resp.OutputTokens)
+	}
+	if resp.TokensEstimated {
+		t.Error("TokensEstimated = true, but Converse reported both counts")
 	}
 }
 
@@ -336,7 +374,7 @@ func TestExecuteReplicate_PollsUntilTheAnswerExists(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls++
 		if r.Method == http.MethodPost {
-			// The poll URL must be on Replicate's own host — the executor
+			// The poll URL must be on Replicate's own host, the executor
 			// refuses anything else, which is what stops a hostile response
 			// redirecting the authenticated poll somewhere arbitrary.
 			_, _ = w.Write([]byte(`{"status":"processing","urls":{"get":"https://api.replicate.com/v1/predictions/abc"}}`))
@@ -471,7 +509,7 @@ func TestSupportsHTTP_RequiresEveryProvidersOwnSettings(t *testing.T) {
 		})
 	}
 
-	// Azure needs three settings, so any one missing must disqualify it — this
+	// Azure needs three settings, so any one missing must disqualify it, this
 	// is where a partial config silently produces a broken URL.
 	for _, missing := range []string{"AZURE_OPENAI_API_KEY", "AZURE_OPENAI_ENDPOINT", "AZURE_OPENAI_DEPLOYMENT"} {
 		t.Run("azure without "+missing, func(t *testing.T) {
@@ -507,10 +545,11 @@ func TestAzureAPIVersion_DefaultsButIsOverridable(t *testing.T) {
 }
 
 // Region and credential lookups accept the standard AWS variable names, in the
-// order the AWS SDKs themselves resolve them.
+// order the AWS SDKs themselves resolve them. The shared-file half of that
+// resolution is internal/awsconf's own tests; this is the executor's view.
 func TestAWSEnvLookups(t *testing.T) {
 	testutil.NewSandbox(t)
-	if bedrockRegion() != "" || awsAccessKeyID() != "" || awsSecretAccessKey() != "" || awsSessionToken() != "" {
+	if c := awsconf.Resolve(); bedrockRegion() != "" || c.Usable() || c.SessionToken != "" {
 		t.Fatal("the sandbox did not clear the AWS environment")
 	}
 
@@ -524,8 +563,8 @@ func TestAWSEnvLookups(t *testing.T) {
 	}
 
 	t.Setenv("AWS_SESSION_TOKEN", "tok")
-	if got := awsSessionToken(); got != "tok" {
-		t.Errorf("awsSessionToken() = %q", got)
+	if got := awsconf.Resolve().SessionToken; got != "tok" {
+		t.Errorf("SessionToken = %q", got)
 	}
 }
 
@@ -539,7 +578,7 @@ func TestDefaultModelFor_EnvOverridesAndReplicateHasNoDefault(t *testing.T) {
 		t.Error("anthropic has no default model")
 	}
 	if got := defaultModelFor("replicate"); got != "" {
-		t.Errorf("defaultModelFor(replicate) = %q; there is no sensible default — "+
+		t.Errorf("defaultModelFor(replicate) = %q; there is no sensible default, "+
 			"the model is what the user is paying to run", got)
 	}
 	if got := defaultModelFor("not-a-provider"); got != "" {
@@ -578,7 +617,7 @@ func TestStringifyAny_HandlesEveryReplicateOutputShape(t *testing.T) {
 		})
 	}
 	// An object falls back to JSON rather than Go's %v, which would emit
-	// map[k:v] — not something a user or a downstream parser can use.
+	// map[k:v], not something a user or a downstream parser can use.
 	if got := stringifyAny(map[string]any{"k": "v"}); !strings.Contains(got, `"k"`) {
 		t.Errorf("stringifyAny(map) = %q, want JSON", got)
 	}
@@ -640,7 +679,7 @@ func TestModelPinVars_CoversDefaultModelFor(t *testing.T) {
 				t.Setenv(env, "")
 				if changed && !scrubbed[env] {
 					t.Errorf("%s changes defaultModelFor(%s) but testutil.ModelPinVars "+
-						"does not clear it — a developer with it exported gets different "+
+						"does not clear it, a developer with it exported gets different "+
 						"test results", env, p)
 				}
 			}
@@ -660,7 +699,7 @@ func TestModelPinVars_CoversDefaultModelFor(t *testing.T) {
 }
 
 // Every adapter decodes its vendor's response shape. A 200 with a body that
-// does not parse must be an error, not an empty successful answer — each
+// does not parse must be an error, not an empty successful answer, each
 // adapter has its own decode call, so each needs its own case.
 func TestEveryProvider_UnparsableBodyIsAnError(t *testing.T) {
 	providers := []string{"anthropic", "google", "cohere", "azure", "bedrock", "replicate", "openai"}
@@ -694,74 +733,22 @@ func TestEveryProvider_UnparsableBodyIsAnError(t *testing.T) {
 	}
 }
 
-// The agy settings swap writes a sentinel before it mutates anything. If that
-// write fails there is no recovery record, so the swap must not proceed — a
-// mutation with no sentinel is exactly the state SIGKILL recovery cannot undo.
-func TestSwapAgyModel_UnwritableDirectoryDoesNotMutate(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("windows does not enforce a read-only directory mode for the owner")
-	}
-	if os.Geteuid() == 0 {
-		t.Skip("root ignores directory permissions")
-	}
-	testutil.NewSandbox(t)
-
-	path := agySitesPath()
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	original := `{"model":"the-users-model","theme":"dark"}`
-	if err := os.WriteFile(path, []byte(original), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	// Read-only directory: the file can still be read, but no sentinel or temp
-	// file can be created beside it.
-	if err := os.Chmod(filepath.Dir(path), 0o500); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Chmod(filepath.Dir(path), 0o700) })
-
-	if _, err := swapAgyModel(path, "hydras-model"); err == nil {
-		t.Fatal("swapAgyModel reported success with no sentinel written")
-	}
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(raw) != original {
-		t.Errorf("settings.json was mutated without a recovery record: %q", raw)
-	}
-}
-
-// restoreAgyModel and recoverAgySwap are best-effort by design: they must not
-// panic or corrupt the file when it has become unreadable or unparsable
-// underneath them.
-func TestRestoreAndRecover_AreBestEffortOnBadInput(t *testing.T) {
+// recoverAgySwap is best-effort by design: it must not panic or corrupt the
+// file when it has become unreadable underneath it, and it must not conjure a
+// settings.json that was never there.
+func TestRecoverAgySwap_IsBestEffortOnBadInput(t *testing.T) {
 	testutil.NewSandbox(t)
 
 	dir := t.TempDir()
 	missing := filepath.Join(dir, "absent.json")
-	// Neither may create a file that was not there.
-	restoreAgyModel(missing, "m")
+	// With no sentinel, recovery must not create a file that wasn't there.
 	recoverAgySwap(missing)
 	if _, err := os.Stat(missing); err == nil {
 		t.Error("a settings.json was created from nothing")
 	}
 
-	// Unparsable settings: restore must leave it exactly as it found it rather
-	// than replacing config it cannot interpret.
-	corrupt := filepath.Join(dir, "corrupt.json")
-	body := "{ hand-edited and broken"
-	if err := os.WriteFile(corrupt, []byte(body), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	restoreAgyModel(corrupt, "m")
-	if raw, _ := os.ReadFile(corrupt); string(raw) != body {
-		t.Errorf("restore rewrote an unparsable settings.json: %q", raw)
-	}
-
 	// A sentinel with no settings file beside it: recovery writes the sentinel
-	// back, which is the whole point — the settings file was lost mid-swap.
+	// back, which is the whole point, the settings file was lost mid-swap.
 	lost := filepath.Join(dir, "lost.json")
 	if err := os.WriteFile(lost+agyOrigSuffix, []byte(`{"model":"restored"}`), 0o600); err != nil {
 		t.Fatal(err)
@@ -781,7 +768,11 @@ func TestRestoreAndRecover_AreBestEffortOnBadInput(t *testing.T) {
 func TestWriteAuthRequired_UnwritableLogDirIsSilent(t *testing.T) {
 	testutil.NewSandbox(t)
 
-	// ~/.hydra is a regular file, so logs/ cannot be created.
+	// Dir() is a regular file, so logs/ cannot be created. The sandbox
+	// pre-creates it as an empty directory, so remove that first.
+	if err := os.RemoveAll(config.Dir()); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(config.Dir(), []byte("not a dir"), 0o600); err != nil {
 		t.Fatal(err)
 	}

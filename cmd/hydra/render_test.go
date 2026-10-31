@@ -49,7 +49,7 @@ func TestPrintSwarmResult_ShowsEveryAttemptAndMarksTheWinner(t *testing.T) {
 
 	for _, want := range []string{"strong", "weak", "broken", "slow"} {
 		if !strings.Contains(out, want) {
-			t.Errorf("the report omits head %q — the user paid for it:\n%s", want, out)
+			t.Errorf("the report omits head %q, the user paid for it:\n%s", want, out)
 		}
 	}
 	if !strings.Contains(out, "the winning answer") {
@@ -67,6 +67,39 @@ func TestPrintSwarmResult_ShowsEveryAttemptAndMarksTheWinner(t *testing.T) {
 	}
 	if got := captureStdout(t, func() { printSwarmResult(empty) }); strings.TrimSpace(got) == "" {
 		t.Error("a fully-failed swarm printed nothing")
+	}
+}
+
+// A judge fallback must say why the LLM judge was skipped, CompositeJudge
+// already carries the reason on JudgeMeta.FallbackReason, but the printer
+// discarded it, leaving a runtime judge failure indistinguishable from a
+// healthy run (#501).
+func TestPrintSwarmResult_ShowsWhyTheJudgeFellBack(t *testing.T) {
+	testutil.NewSandbox(t)
+
+	winner := swarm.Attempt{
+		Head: provider.Head{ID: "strong", Name: "strong"}, Status: swarm.StatusOK,
+		Output: "the winning answer", Rank: 1,
+	}
+	res := &swarm.SwarmResult{
+		Mode:     swarm.ModeBest,
+		Prompt:   "the question",
+		Attempts: []swarm.Attempt{winner},
+		Winner:   &winner,
+		Verdict: &swarm.JudgeVerdict{
+			WinnerIndex: 0,
+			Reason:      "ranked by capability score",
+			Meta:        swarm.JudgeMeta{UsedFallback: true, FallbackReason: "judge dispatch: connection refused"},
+		},
+	}
+
+	out := captureStdout(t, func() { printSwarmResult(res) })
+	if !strings.Contains(out, "cap-score fallback") {
+		t.Errorf("the fallback is not labelled:\n%s", out)
+	}
+	if !strings.Contains(out, "connection refused") {
+		t.Errorf("the fallback reason is not shown, so a real judge failure looks identical "+
+			"to a healthy run:\n%s", out)
 	}
 }
 
@@ -125,6 +158,7 @@ func TestLogTrustRun_WritesAReadableRecord(t *testing.T) {
 			{Head: provider.Head{ID: "a"}}, // same head twice
 			{Head: provider.Head{ID: "b"}},
 		},
+		SpanID: "deadbeefcafe0001",
 		Trust: &trust.Result{Confidence: 0.93, Samples: 3, SpentUSD: 0.01,
 			Decision: trust.DecisionAccept},
 	}
@@ -138,6 +172,11 @@ func TestLogTrustRun_WritesAReadableRecord(t *testing.T) {
 	var got map[string]any
 	if err := json.Unmarshal([]byte(strings.TrimSpace(strings.Split(string(raw), "\n")[0])), &got); err != nil {
 		t.Fatalf("the logged run is not valid JSON: %v\n%s", err, raw)
+	}
+	// Without the span id a verdict has no key to find this run by, and the
+	// loop that trains the dissenters is closed by hand or not at all (#1144).
+	if got["span_id"] != "deadbeefcafe0001" {
+		t.Errorf("span_id = %v, want the ensemble root span the verdict arrives on", got["span_id"])
 	}
 	if got["domain"] != "default" {
 		t.Errorf("domain = %v, want it defaulted rather than logged empty", got["domain"])
@@ -275,7 +314,7 @@ func TestCLI_CostAndStatsAgainstRealRows(t *testing.T) {
 	}
 }
 
-// relativeTime is the trend line's human-facing duration — a bad format
+// relativeTime is the trend line's human-facing duration, a bad format
 // string here would silently misreport how stale the comparison point is.
 func TestRelativeTime(t *testing.T) {
 	cases := []struct {

@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "hyctl"
 version = "1.0.1"
-description = "Hydra (hyctl) — local-first, multi-vendor AI control plane. Routes each task to the cheapest model on your machine that clears your target confidence."
+description = "Hydra (hyctl), local-first, multi-vendor AI control plane. Routes each task to the cheapest model on your machine that clears your target confidence."
 readme = "README.md"
 requires-python = ">=3.8"
 license = { text = "MIT" }

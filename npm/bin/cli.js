@@ -14,7 +14,7 @@ const result = spawnSync(bin, process.argv.slice(2), { stdio: 'inherit' });
 if (result.error) {
   if (result.error.code === 'ENOENT') {
     console.error(
-      'hyctl: binary not found — reinstall with `npm rebuild hyctl` or install from ' +
+      'hyctl: binary not found, reinstall with `npm rebuild hyctl` or install from ' +
         'https://github.com/ankit373/hydra/releases'
     );
   } else {

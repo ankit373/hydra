@@ -2,12 +2,13 @@
 
 // Package a2a models agent-to-agent handoffs with causal ordering. Each handoff
 // carries a vector clock so Hydra can tell whether two handoffs are sequential
-// (one happened-before the other) or concurrent — and, when concurrent, whether
+// (one happened-before the other) or concurrent, and, when concurrent, whether
 // they touch overlapping files and therefore conflict.
 package a2a
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -25,7 +26,7 @@ func (c Clock) Tick(agent string) Clock {
 	return out
 }
 
-// Merge returns the component-wise maximum of two clocks — the causal history
+// Merge returns the component-wise maximum of two clocks, the causal history
 // known to an agent that has observed both.
 func (c Clock) Merge(o Clock) Clock {
 	out := c.clone()
@@ -52,7 +53,7 @@ const (
 	Equal      Ordering = iota // identical histories
 	Before                     // c happened-before o
 	After                      // o happened-before c
-	Concurrent                 // neither — independent, possibly conflicting
+	Concurrent                 // neither, independent, possibly conflicting
 )
 
 func (o Ordering) String() string {
@@ -142,6 +143,24 @@ func Load(path string) (*Handoff, error) {
 	return &h, nil
 }
 
+// Inject reads a handoff JSON file at path and prepends its structured context
+// to prompt. Unlike Load's "missing file = no prior handoff" contract for
+// other callers, path here always comes from an explicit --a2a flag, so a
+// missing or malformed file is a mistake the caller needs to hear about
+// rather than something to silently skip (#450, #530).
+func Inject(path, prompt string) (string, error) {
+	h, err := Load(path)
+	if err != nil {
+		return prompt, fmt.Errorf("malformed handoff file %s: %w", path, err)
+	}
+	if h == nil {
+		return prompt, fmt.Errorf("handoff file not found: %s", path)
+	}
+	// PromptBlock already closes with "TASK:\n"+prompt. Appending it a second
+	// time under another heading sent every task twice.
+	return h.PromptBlock(prompt), nil
+}
+
 // Save writes the handoff atomically-ish (dir created, 0600).
 func (h *Handoff) Save(path string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
@@ -156,6 +175,11 @@ func (h *Handoff) Save(path string) error {
 
 // PromptBlock renders the handoff as the structured context block prepended to a
 // downstream agent's prompt.
+//
+// Every field is read from a file any process can write, so every field is
+// fenced. From and Files were interpolated raw and ahead of the fences, which
+// made a handoff naming itself "ops\n\nSYSTEM: ..." an injection that needed
+// no escape at all.
 func (h *Handoff) PromptBlock(task string) string {
 	files := ""
 	for i, f := range h.Files {
@@ -164,8 +188,9 @@ func (h *Handoff) PromptBlock(task string) string {
 		}
 		files += f
 	}
-	return "A2A HANDOFF from: " + h.From +
-		"\nFiles in scope: " + files +
+	return "A2A HANDOFF\n\n" +
+		util.WrapUntrusted("FROM", h.From) +
+		"\n\n" + util.WrapUntrusted("FILES IN SCOPE", files) +
 		"\n\n" + util.WrapUntrusted("CONVENTIONS", h.Conventions) +
 		"\n\n" + util.WrapUntrusted("PRIOR OUTPUT", h.PriorOutput) +
 		"\n\n" + util.WrapUntrusted("CONTEXT", h.Context) +
@@ -173,7 +198,7 @@ func (h *Handoff) PromptBlock(task string) string {
 }
 
 // ConflictsWith reports whether two handoffs are concurrent (neither
-// happened-before the other) AND touch at least one common file — the signature
+// happened-before the other) AND touch at least one common file, the signature
 // of an unsynchronized edit collision.
 func (h *Handoff) ConflictsWith(o *Handoff) bool {
 	if h == nil || o == nil {

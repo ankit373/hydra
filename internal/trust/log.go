@@ -15,27 +15,47 @@ import (
 	"github.com/ankit373/hydra/internal/config"
 )
 
-// RunLog is one persisted SPRT run — the data the "By The Numbers" page
+// RunLog is one persisted SPRT run, the data the "By The Numbers" page
 // graduates from [MODEL] to [MEASURED], and what `hyctl trust stats/explain` read.
 type RunLog struct {
-	TS         string     `json:"ts"`
-	TaskHash   string     `json:"task_hash"`
-	Domain     string     `json:"domain"`
-	TargetConf float64    `json:"target_conf"`
-	FinalConf  float64    `json:"final_conf"`
-	Samples    int        `json:"samples"`
-	Models     []string   `json:"models"`
-	CostUSD    float64    `json:"cost_usd"`
-	CostSource string     `json:"cost_source"` // from cost.SourceLabels
-	Decision   string     `json:"decision"`    // accept | stopped_on_budget
-	Ledger     []Evidence `json:"ledger,omitempty"`
-	Config     string     `json:"config,omitempty"` // deployment-identity breadcrumb (config.Breadcrumb)
+	TS         string       `json:"ts"`
+	TaskHash   string       `json:"task_hash"`
+	Domain     string       `json:"domain"`
+	TargetConf float64      `json:"target_conf"`
+	FinalConf  float64      `json:"final_conf"`
+	Samples    int          `json:"samples"`
+	Models     []string     `json:"models"`
+	CostUSD    float64      `json:"cost_usd"`
+	CostSource string       `json:"cost_source"` // from cost.SourceLabels
+	Decision   string       `json:"decision"`    // accept | stopped_on_budget
+	Ledger     []Evidence   `json:"ledger,omitempty"`
+	Hypotheses []Hypothesis `json:"hypotheses,omitempty"`
+	Config     string       `json:"config,omitempty"` // deployment-identity breadcrumb (config.Breadcrumb)
+
+	// SpanID is the ensemble's root span, the join a verdict arrives on.
+	// Verdicts land on spans (`hyctl trace score --span`, `hyctl oracle verify
+	// --span`) and this log kept only the task hash, so the two sides of the
+	// loop had no key and a human had to carry the hash between commands (#1144).
+	SpanID string `json:"span_id,omitempty"`
+}
+
+// FindRunBySpan is the newest run recorded under an exact span id. Newest
+// because a span id derives from the task id, which a caller may reuse.
+func FindRunBySpan(runs []RunLog, spanID string) (RunLog, bool) {
+	if spanID == "" {
+		return RunLog{}, false
+	}
+	for i := len(runs) - 1; i >= 0; i-- {
+		if runs[i].SpanID == spanID {
+			return runs[i], true
+		}
+	}
+	return RunLog{}, false
 }
 
 // DefaultLogPath is where SPRT runs are persisted (~/.hydra/trust.jsonl).
 func DefaultLogPath() string {
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".hydra", "trust.jsonl")
+	return filepath.Join(config.Dir(), "trust.jsonl")
 }
 
 // TaskHash is a short stable identifier for a prompt, used to correlate a run

@@ -36,7 +36,7 @@ assignees: ''
 
 ## Relevant logs
 
-<!-- Paste relevant lines from ~/.hydra/logs/dispatch.log — redact any sensitive prompts or API responses. -->
+<!-- Paste relevant lines from ~/.hydra/logs/dispatch.log, redact any sensitive prompts or API responses. -->
 
 ```
 paste logs here
@@ -44,4 +44,4 @@ paste logs here
 
 ## Additional context
 
-<!-- Anything else that might help — screenshots, config snippets, etc. -->
+<!-- Anything else that might help, screenshots, config snippets, etc. -->

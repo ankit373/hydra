@@ -81,7 +81,7 @@ func TestEffectiveVRAM_PriorityOrder(t *testing.T) {
 // The OS buffer and the 85%-of-total ceiling are the two guards against
 // recommending a model that pushes the machine into swap.
 func TestEffectiveVRAM_ClampsAtBothEnds(t *testing.T) {
-	// Free memory below the OS buffer must floor at 0, never go negative — a
+	// Free memory below the OS buffer must floor at 0, never go negative, a
 	// negative budget compares as "smaller than every model", which happens to
 	// be right, but the number is then printed to the user.
 	tight := Specs{TotalRAMGB: 16, FreeRAMGB: 0.5}
@@ -165,7 +165,7 @@ func TestSummaryAndMemoryNote_EveryBranch(t *testing.T) {
 }
 
 // PressureWarning gates whether the user is told to close apps. An unknown
-// reading must produce the "cannot size local models" message, not silence —
+// reading must produce the "cannot size local models" message, not silence,
 // silence reads as "everything is fine".
 func TestPressureWarning_EveryLevel(t *testing.T) {
 	tests := []struct {
@@ -244,7 +244,7 @@ func TestOllamaRecommendations_RankAndExplain(t *testing.T) {
 		}
 	}
 	if firstFit == nil {
-		t.Fatal("nothing fits in 10.5GB usable — the 3GB models should")
+		t.Fatal("nothing fits in 10.5GB usable, the 3GB models should")
 	}
 	if !strings.Contains(firstFit.Reason, "unified memory") {
 		t.Errorf("Apple Silicon reason = %q, want it to name unified memory", firstFit.Reason)
@@ -270,7 +270,7 @@ func TestOllamaRecommendations_ReasonNamesWhereTheMemoryIs(t *testing.T) {
 	if r := cpu.BestOllamaModel().Reason; !strings.Contains(r, "CPU inference") {
 		t.Errorf("CPU reason = %q, want it to say CPU inference", r)
 	}
-	// Enough for a small model, but flagged high — the reason must still carry
+	// Enough for a small model, but flagged high, the reason must still carry
 	// the swap warning rather than reading as a clean fit.
 	tight := Specs{TotalRAMGB: 16, FreeRAMGB: 4.6, MemPressure: PressureHigh}
 	if r := tight.BestOllamaModel().Reason; !strings.Contains(r, "may swap") {
@@ -312,7 +312,7 @@ func TestHistory_RateLimitedAppendAndParse(t *testing.T) {
 		t.Fatalf("no history was written: %v", err)
 	}
 
-	// A second call inside the sample interval must not append — Detect() runs
+	// A second call inside the sample interval must not append, Detect() runs
 	// on every command, and an unbounded append would grow without limit.
 	recordSample(&Specs{TotalRAMGB: 32, FreeRAMGB: 99})
 	second, err := os.ReadFile(path)
@@ -357,7 +357,7 @@ func TestLoadHistory_StatsAndReliabilityThreshold(t *testing.T) {
 		`{"ts":"` + now.Add(-48*time.Hour).Format(time.RFC3339Nano) + `","total_gb":32,"free_gb":12}`,
 		`not json at all`,
 		`{"ts":"` + now.Add(-24*time.Hour).Format(time.RFC3339Nano) + `","total_gb":32,"free_gb":16}`,
-		// Older than historyDays — must be dropped, not averaged in.
+		// Older than historyDays, must be dropped, not averaged in.
 		`{"ts":"` + now.AddDate(0, 0, -30).Format(time.RFC3339Nano) + `","total_gb":32,"free_gb":0.1}`,
 	}
 	path := filepath.Join(dir, historyFile)
@@ -373,7 +373,7 @@ func TestLoadHistory_StatsAndReliabilityThreshold(t *testing.T) {
 		t.Errorf("Samples = %d, want 3 (corrupt line skipped, 30-day-old sample dropped)", h.Samples)
 	}
 	if h.MinFreeGB != 8 || h.MaxFreeGB != 16 {
-		t.Errorf("range = [%v, %v], want [8, 16] — the stale 0.1 sample leaked in",
+		t.Errorf("range = [%v, %v], want [8, 16], the stale 0.1 sample leaked in",
 			h.MinFreeGB, h.MaxFreeGB)
 	}
 	if h.AvgFreeGB != 12 {
@@ -411,7 +411,7 @@ func TestLoadHistory_TooFewSamplesIsNotReliable(t *testing.T) {
 	// And an unreliable history must not be used as the estimate.
 	s := Specs{TotalRAMGB: 32, FreeRAMGB: 20, History: h}
 	if got, want := s.EffectiveVRAMGB(), 20-osMinBufferGB; got != want {
-		t.Errorf("EffectiveVRAMGB() = %v, want the snapshot-based %v — an unreliable "+
+		t.Errorf("EffectiveVRAMGB() = %v, want the snapshot-based %v, an unreliable "+
 			"history was used", got, want)
 	}
 }
@@ -485,7 +485,7 @@ func TestParseSPDisplays(t *testing.T) {
 		wantVRAM: 1.5,
 		wantName: "Intel Iris Plus",
 	}, {
-		// Apple Silicon has no VRAM line at all — unified memory. The name is
+		// Apple Silicon has no VRAM line at all, unified memory. The name is
 		// still worth reporting; the size must be 0, not a guess.
 		name: "apple silicon reports a name but no vram",
 		out: `      Chipset Model: Apple M3 Max
@@ -567,8 +567,8 @@ func TestParseNvidiaSMI(t *testing.T) {
 	}
 }
 
-// Every hardware probe shells out. With the tool missing they must report 0 —
-// "unreadable" — and never a fabricated default, which is the #258/#261 defect
+// Every hardware probe shells out. With the tool missing they must report 0,
+// "unreadable", and never a fabricated default, which is the #258/#261 defect
 // class. An empty PATH is the portable way to make every one of them fail.
 func TestProbes_MissingToolReportsUnreadableNotADefault(t *testing.T) {
 	t.Setenv("PATH", "")
@@ -598,7 +598,7 @@ func TestProbes_MissingToolReportsUnreadableNotADefault(t *testing.T) {
 	}
 }
 
-// Detect must not fabricate hardware when every probe fails — the machine is
+// Detect must not fabricate hardware when every probe fails, the machine is
 // then reported as unknown, which is what stops a 0GB budget being presented as
 // a measurement (#258).
 func TestDetect_WithNoProbesAvailableReportsUnknown(t *testing.T) {
@@ -612,7 +612,7 @@ func TestDetect_WithNoProbesAvailableReportsUnknown(t *testing.T) {
 		t.Cleanup(func() { meminfoPath = orig })
 	}
 	if runtime.GOOS == "windows" {
-		t.Skip("windows reads memory through the kernel, not a subprocess — " +
+		t.Skip("windows reads memory through the kernel, not a subprocess, " +
 			"there is no way to make it fail from here")
 	}
 

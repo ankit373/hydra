@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ankit373/hydra/internal/pending"
 	"github.com/ankit373/hydra/internal/runlog"
 )
 
@@ -59,7 +60,7 @@ func TestGetFleet_EmptyStateIsHonest(t *testing.T) {
 		t.Errorf("expected no runs, got %d (%d live)", len(f.Runs), f.LiveCount)
 	}
 	if f.GroupThreshold != GroupThreshold {
-		t.Errorf("GroupThreshold = %d, want %d — the view must not hardcode its own", f.GroupThreshold, GroupThreshold)
+		t.Errorf("GroupThreshold = %d, want %d, the view must not hardcode its own", f.GroupThreshold, GroupThreshold)
 	}
 }
 
@@ -159,7 +160,7 @@ func TestGetFleet_StaleHeartbeatIsNotLive(t *testing.T) {
 		t.Fatal(err)
 	}
 	if f.LiveCount != 0 {
-		t.Errorf("LiveCount = %d, want 0 — a stale marker is a dead process", f.LiveCount)
+		t.Errorf("LiveCount = %d, want 0, a stale marker is a dead process", f.LiveCount)
 	}
 	if r := runByID(f, "20260802T100000Z-stale"); r == nil || r.Live {
 		t.Error("run with a stale heartbeat is still marked live")
@@ -215,7 +216,7 @@ func TestGetFleet_FinishedRunElapsedStopsAtLastEvent(t *testing.T) {
 		t.Fatal("run missing")
 	}
 	if r.ElapsedMS < 4_000 || r.ElapsedMS > 6_000 {
-		t.Errorf("ElapsedMS = %d, want ~5000 — a finished run must not keep accruing", r.ElapsedMS)
+		t.Errorf("ElapsedMS = %d, want ~5000, a finished run must not keep accruing", r.ElapsedMS)
 	}
 }
 
@@ -238,7 +239,7 @@ func TestGetFleet_LiveRunElapsedRunsToNow(t *testing.T) {
 		t.Fatal("live run missing or not live")
 	}
 	if r.ElapsedMS < 29_000 {
-		t.Errorf("ElapsedMS = %d, want ~30000 — a live run is measured to now", r.ElapsedMS)
+		t.Errorf("ElapsedMS = %d, want ~30000, a live run is measured to now", r.ElapsedMS)
 	}
 }
 
@@ -250,7 +251,7 @@ func TestGetFleet_MalformedLinesAreSurfacedNotHidden(t *testing.T) {
 	writeRun(t, "20260802T100000Z-partial",
 		runlog.Event{Kind: runlog.KindHeadSelected, Head: "h"},
 	)
-	// An event attributable to no node — nodeID returns "".
+	// An event attributable to no node, nodeID returns "".
 	writeRun(t, "20260802T100000Z-partial",
 		runlog.Event{Kind: runlog.KindEdit},
 	)
@@ -274,6 +275,92 @@ func TestGetFleet_MalformedLinesAreSurfacedNotHidden(t *testing.T) {
 	}
 }
 
+// A finished, non-live run with zero agents and no error carries no
+// information, before #390, --dry-run wrote exactly this shape to the
+// runlog. Once real machines accumulate enough of these (sorted
+// live-first-then-newest, so they outrank real history), Fleet looks empty
+// even though HasRuns is technically true. #390 stopped writing new ones;
+// this is the other half, don't surface the ones already on disk either.
+func TestGetFleet_ZeroAgentGhostRunsAreFilteredOut(t *testing.T) {
+	sandbox(t)
+
+	writeRun(t, "20260802T090000Z-ghost",
+		runlog.Event{Kind: runlog.KindRunStarted},
+		runlog.Event{Kind: runlog.KindRunFinished},
+	)
+	writeRun(t, "20260802T100000Z-real",
+		runlog.Event{Kind: runlog.KindHeadSelected, Head: "h"},
+		runlog.Event{Kind: runlog.KindDispatchFinished, Head: "h", Status: "ok"},
+	)
+
+	f, err := New().GetFleet()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r := runByID(f, "20260802T090000Z-ghost"); r != nil {
+		t.Error("a finished, zero-agent, error-free run was not filtered out")
+	}
+	if r := runByID(f, "20260802T100000Z-real"); r == nil {
+		t.Error("the real run was dropped along with the ghost")
+	}
+	if len(f.Runs) != 1 {
+		t.Errorf("len(Runs) = %d, want 1 (ghost filtered, real kept)", len(f.Runs))
+	}
+}
+
+// A machine whose only history is dry-run ghosts must still get the honest
+// "no runs yet" empty state, not a blank list with no explanation, the
+// exact failure this filter would otherwise reintroduce.
+func TestGetFleet_AllGhostRunsStillShowHonestEmptyState(t *testing.T) {
+	sandbox(t)
+
+	writeRun(t, "20260802T090000Z-ghost1",
+		runlog.Event{Kind: runlog.KindRunStarted},
+		runlog.Event{Kind: runlog.KindRunFinished},
+	)
+	writeRun(t, "20260802T100000Z-ghost2",
+		runlog.Event{Kind: runlog.KindRunStarted},
+		runlog.Event{Kind: runlog.KindRunFinished},
+	)
+
+	f, err := New().GetFleet()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f.HasRuns {
+		t.Error("HasRuns = true with every run filtered out, the view would render a blank list with no explanation")
+	}
+	if len(f.Runs) != 0 {
+		t.Errorf("len(Runs) = %d, want 0", len(f.Runs))
+	}
+}
+
+// A live run must never be filtered even with zero agents so far, it may
+// not have picked a head yet, and it is the one the user opened the app to
+// watch. A run with a read error must never be filtered either, the error
+// itself is the information (see TestGetFleet_MalformedLinesAreSurfacedNotHidden
+// for the read-error case; this covers the live case).
+func TestGetFleet_LiveZeroAgentRunIsNeverFiltered(t *testing.T) {
+	sandbox(t)
+
+	writeRun(t, "20260802T100000Z-justStarted",
+		runlog.Event{Kind: runlog.KindRunStarted},
+	)
+	markLive(t, "20260802T100000Z-justStarted")
+
+	f, err := New().GetFleet()
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := runByID(f, "20260802T100000Z-justStarted")
+	if r == nil {
+		t.Fatal("a live run with zero agents so far was filtered out")
+	}
+	if !r.Live {
+		t.Error("run is not marked live")
+	}
+}
+
 // Reading the fleet holds no state and must be safe to poll from several places
 // at once, as the frontend does.
 func TestGetFleet_ConcurrentCallsAreSafe(t *testing.T) {
@@ -292,5 +379,178 @@ func TestGetFleet_ConcurrentCallsAreSafe(t *testing.T) {
 		if err := <-done; err != nil {
 			t.Errorf("concurrent GetFleet: %v", err)
 		}
+	}
+}
+
+// A list of runs identified only by timestamp id is a list of timestamps. The
+// prompt is recorded on the run-started event, but tree.Reconstruct drops
+// run-level events, so it never reached the view until this read (#603).
+func TestGetFleet_CarriesWhatTheRunWasAskedToDo(t *testing.T) {
+	sandbox(t)
+	const id = "20260903T120000Z-goaltest"
+	writeRun(t, id,
+		runlog.Event{Kind: runlog.KindRunStarted, TaskID: "t1", Detail: "add pagination to /users"},
+		runlog.Event{Kind: runlog.KindHeadSelected, TaskID: "t1", Head: "h", Tier: 6},
+		runlog.Event{Kind: runlog.KindRunFinished, TaskID: "t1"},
+	)
+
+	f, err := New().GetFleet()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := findRun(t, f, id).Goal; got != "add pagination to /users" {
+		t.Errorf("Goal = %q, want the run-started detail", got)
+	}
+}
+
+// An external orchestrator can supply a run id and never a prompt. That is an
+// absent goal, not an error, and must not be fabricated from another event.
+func TestGetFleet_NoPromptLeavesTheGoalEmpty(t *testing.T) {
+	sandbox(t)
+	const id = "20260903T120001Z-nogoal"
+	writeRun(t, id,
+		runlog.Event{Kind: runlog.KindRunStarted, TaskID: "t1"},
+		runlog.Event{Kind: runlog.KindHeadSelected, TaskID: "t1", Head: "h", Tier: 6,
+			Detail: "candidate 1 of 2"},
+	)
+
+	f, err := New().GetFleet()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := findRun(t, f, id).Goal; got != "" {
+		t.Errorf("Goal = %q, want empty, a head_selected detail is not the goal", got)
+	}
+}
+
+// One run, one goal: the first statement of it is what was actually requested.
+func TestGetFleet_FirstGoalWinsOverALaterRunStarted(t *testing.T) {
+	sandbox(t)
+	const id = "20260903T120002Z-twogoals"
+	writeRun(t, id,
+		runlog.Event{Kind: runlog.KindRunStarted, TaskID: "t1", Detail: "the real request"},
+		runlog.Event{Kind: runlog.KindHeadSelected, TaskID: "t1", Head: "h", Tier: 6},
+		// A second writer sharing the run appends its own run_started (runlog's
+		// own docs note several writers share one run).
+		runlog.Event{Kind: runlog.KindRunStarted, TaskID: "t2", Detail: "a second writer's idea"},
+	)
+
+	f, err := New().GetFleet()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := findRun(t, f, id).Goal; got != "the real request" {
+		t.Errorf("Goal = %q, want the first run_started detail", got)
+	}
+}
+
+func findRun(t *testing.T, f *Fleet, id string) Run {
+	t.Helper()
+	for _, r := range f.Runs {
+		if r.ID == id {
+			return r
+		}
+	}
+	t.Fatalf("run %q not in fleet of %d", id, len(f.Runs))
+	return Run{}
+}
+
+// A run parked on a question is the one entry in Activity that cannot progress
+// without a person, so it must be visible and it must sort first (#583).
+func TestGetFleet_ParkedRunIsVisibleAndFirst(t *testing.T) {
+	sandbox(t)
+
+	// An ordinary finished run, newer than the parked one.
+	writeRun(t, "20260904T120000Z-done",
+		runlog.Event{Kind: runlog.KindRunStarted, TaskID: "t", Detail: "ship the thing"},
+		runlog.Event{Kind: runlog.KindHeadSelected, TaskID: "t", Head: "h1", Model: "H1", Tier: 3},
+		runlog.Event{Kind: runlog.KindRunFinished, TaskID: "t"},
+	)
+	// The parked run: a question was asked and nothing ran.
+	writeRun(t, "20260904T100000Z-park",
+		runlog.Event{Kind: runlog.KindRunStarted, TaskID: "p", Detail: "rotate the signing key"},
+		runlog.Event{Kind: runlog.KindQuestionAsked, TaskID: "p", Head: "gated", Detail: "Allow gated?"},
+	)
+	if err := pending.Save(pending.Question{
+		TaskID: "p", RunID: "20260904T100000Z-park",
+		Question: "Allow gated?", Prompt: "rotate the signing key", Head: "gated",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	f, err := New().GetFleet()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f.WaitingCount != 1 {
+		t.Errorf("WaitingCount = %d, want 1", f.WaitingCount)
+	}
+	if len(f.Runs) != 2 {
+		t.Fatalf("want both runs, got %d: %+v", len(f.Runs), f.Runs)
+	}
+	// Older, but it outranks a finished run because only a person can clear it.
+	if !f.Runs[0].Waiting || f.Runs[0].ID != "20260904T100000Z-park" {
+		t.Errorf("the parked run should sort first, got %+v", f.Runs[0])
+	}
+	if f.Runs[1].Waiting {
+		t.Error("the finished run is marked waiting")
+	}
+}
+
+// The empty-run filter drops a finished run with no agents and no error, which
+// is exactly the shape of a parked run: nothing executed, so no agents, and no
+// error because nothing failed. Without the exemption the one run that needs a
+// person is the one that disappears.
+func TestGetFleet_ParkedRunSurvivesTheEmptyRunFilter(t *testing.T) {
+	sandbox(t)
+
+	writeRun(t, "20260904T100000Z-park",
+		runlog.Event{Kind: runlog.KindRunStarted, TaskID: "p", Detail: "rotate the signing key"},
+	)
+	if err := pending.Save(pending.Question{
+		TaskID: "p", RunID: "20260904T100000Z-park",
+		Question: "Allow gated?", Prompt: "rotate", Head: "gated",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	f, err := New().GetFleet()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(f.Runs) != 1 {
+		t.Fatalf("the parked run was filtered out of Activity: %+v", f.Runs)
+	}
+	if !f.Runs[0].Waiting {
+		t.Error("the surviving run is not marked waiting")
+	}
+	if !f.HasRuns {
+		t.Error("HasRuns is false with a parked run present")
+	}
+}
+
+// A question that was asked and since answered must not leave the run pinned
+// to the top forever. The run log records the asking but never the answering,
+// so only the consumed file distinguishes the two.
+func TestGetFleet_AnsweredRunIsNoLongerWaiting(t *testing.T) {
+	sandbox(t)
+
+	writeRun(t, "20260904T100000Z-was",
+		runlog.Event{Kind: runlog.KindRunStarted, TaskID: "p", Detail: "rotate the signing key"},
+		runlog.Event{Kind: runlog.KindQuestionAsked, TaskID: "p", Head: "gated", Detail: "Allow gated?"},
+		runlog.Event{Kind: runlog.KindHeadSelected, TaskID: "p", Head: "gated", Model: "Gated", Tier: 3},
+		runlog.Event{Kind: runlog.KindRunFinished, TaskID: "p"},
+	)
+	// No pending file: the question was answered and the file consumed.
+
+	f, err := New().GetFleet()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f.WaitingCount != 0 {
+		t.Errorf("WaitingCount = %d, want 0, the question was answered", f.WaitingCount)
+	}
+	if len(f.Runs) == 1 && f.Runs[0].Waiting {
+		t.Error("a run whose question was answered still reads as waiting")
 	}
 }

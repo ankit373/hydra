@@ -13,7 +13,7 @@ import (
 )
 
 // benchDispatcher returns a Dispatcher pre-loaded with a realistic head list
-// and tier config. No real API keys or file I/O needed — this is the pure
+// and tier config. No real API keys or file I/O needed, this is the pure
 // routing path (policy eval + claudeMode + selectHeads).
 func benchDispatcher() *Dispatcher {
 	heads := []provider.Head{
@@ -25,17 +25,8 @@ func benchDispatcher() *Dispatcher {
 		{ID: "qwen-local", Name: "qwen3:8b", Provider: "local", CapScore: 10, LocalOnly: true, AuthReady: true},
 	}
 
-	cfg := &config.Config{
-		Tiers: []config.Tier{
-			{Name: "1", Heads: []string{"claude-core"}},
-			{Name: "7", Heads: []string{"gemini-pro"}},
-			{Name: "8", Heads: []string{"gemini-flash-high"}},
-			{Name: "10", Heads: []string{"qwen-local"}},
-		},
-	}
-
 	return &Dispatcher{
-		cfg:     cfg,
+		cfg:     &config.Config{},
 		heads:   heads,
 		policy:  policy.New(policy.DefaultRules(false)),
 		pricing: pricing.Load(),
@@ -43,13 +34,13 @@ func benchDispatcher() *Dispatcher {
 	}
 }
 
-// BenchmarkSelectHeads_NoTier measures head selection with no tier hint —
+// BenchmarkSelectHeads_NoTier measures head selection with no tier hint,
 // every live head filtered and returned in score order.
 func BenchmarkSelectHeads_NoTier(b *testing.B) {
 	d := benchDispatcher()
 	b.ResetTimer()
 	for range b.N {
-		_ = d.selectHeads("", false)
+		_ = d.selectHeads("", false, "")
 	}
 }
 
@@ -58,12 +49,12 @@ func BenchmarkSelectHeads_Tier(b *testing.B) {
 	d := benchDispatcher()
 	b.ResetTimer()
 	for range b.N {
-		_ = d.selectHeads("7", false)
+		_ = d.selectHeads("7", false, "")
 	}
 }
 
 // BenchmarkClaudeMode measures the budget pressure check (reads state.json if
-// present; falls back to 0 on missing file — same cold-start path as prod).
+// present; falls back to 0 on missing file, same cold-start path as prod).
 func BenchmarkClaudeMode(b *testing.B) {
 	d := benchDispatcher()
 	b.ResetTimer()
@@ -84,7 +75,7 @@ func BenchmarkRoutingPath(b *testing.B) {
 		req := policy.Request{Prompt: prompt, TierHint: tier}
 		action := d.policy.Evaluate(req)
 		if !action.Deny {
-			_ = d.selectHeads(tier, false)
+			_ = d.selectHeads(tier, false, "")
 		}
 	}
 }

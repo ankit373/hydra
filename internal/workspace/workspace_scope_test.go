@@ -18,7 +18,7 @@ import (
 
 // Check is the security boundary: it decides whether Hydra may write to a file
 // at all. It had 0% coverage. Everything below builds paths with filepath.Join
-// and t.TempDir so the tests are platform-native — which is the point, since
+// and t.TempDir so the tests are platform-native, which is the point, since
 // this package compares paths with string operations.
 
 // scopeRegistry builds a registry rooted at a real temp directory, so path
@@ -60,7 +60,7 @@ func TestCheck_RejectsAFileOutsideEveryWorkspace(t *testing.T) {
 }
 
 // A sibling directory whose name merely starts with the root's name must not be
-// treated as inside it — the classic prefix-matching escape.
+// treated as inside it, the classic prefix-matching escape.
 func TestCheck_RejectsASiblingWithTheRootAsANamePrefix(t *testing.T) {
 	testutil.NewSandbox(t)
 	root := t.TempDir()
@@ -71,7 +71,7 @@ func TestCheck_RejectsASiblingWithTheRootAsANamePrefix(t *testing.T) {
 	// e.g. /tmp/T123 is the root; /tmp/T123-evil must not be inside it.
 	sibling := filepath.Clean(root) + "-evil"
 	if _, err := r.Check(filepath.Join(sibling, "x.go")); err == nil {
-		t.Errorf("%s was accepted as inside %s — prefix matching, not path containment",
+		t.Errorf("%s was accepted as inside %s, prefix matching, not path containment",
 			filepath.Join(sibling, "x.go"), root)
 	}
 }
@@ -145,7 +145,7 @@ func TestCheck_RelativePathsAreRefused(t *testing.T) {
 }
 
 // HYDRA_WORKSPACE pins the workspace. It must still refuse a path outside that
-// workspace's root — an override that widened scope would be a way around the
+// workspace's root, an override that widened scope would be a way around the
 // whole boundary.
 func TestCheck_WorkspaceOverrideCannotWidenScope(t *testing.T) {
 	s := testutil.NewSandbox(t)
@@ -203,7 +203,12 @@ func TestResolve_GitModes(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if got.GitRoot != tc.wantRoot {
+			// sameDir, not string equality: GitRoot is now the root as the
+			// filesystem sees it, and a macOS temp dir is a /var symlink.
+			if tc.wantRoot == "" && got.GitRoot != "" {
+				t.Errorf("git=%s → GitRoot %q, want none", tc.mode, got.GitRoot)
+			}
+			if tc.wantRoot != "" && !sameDir(t, got.GitRoot, tc.wantRoot) {
 				t.Errorf("git=%s → GitRoot %q, want %q", tc.mode, got.GitRoot, tc.wantRoot)
 			}
 			if got.Workspace != "ws" || got.Root != filepath.Clean(root) {
@@ -228,7 +233,7 @@ func TestResolve_RefusesRelativeAndUnknownPaths(t *testing.T) {
 // ── GitRoot ───────────────────────────────────────────────────────────────────
 
 // GitRoot walks up looking for .git. It must terminate at the filesystem root
-// on every platform — a loop that only stops at "/" never stops on Windows,
+// on every platform, a loop that only stops at "/" never stops on Windows,
 // where the root is "C:\".
 func TestGitRoot_TerminatesAndFindsTheRepo(t *testing.T) {
 	testutil.NewSandbox(t)
@@ -273,7 +278,7 @@ func TestGitRoot_ReturnsEmptyWhenThereIsNoRepoAbove(t *testing.T) {
 			t.Errorf("GitRoot returned %q, which does not contain %q", got, dir)
 		}
 	case <-timeoutAfterSeconds(10):
-		t.Fatalf("GitRoot did not terminate on %s/%s — the walk-up loop has no "+
+		t.Fatalf("GitRoot did not terminate on %s/%s, the walk-up loop has no "+
 			"filesystem-root stop condition for this platform", runtime.GOOS, runtime.GOARCH)
 	}
 }
@@ -288,9 +293,9 @@ func TestValidatorFor(t *testing.T) {
 	}
 	// A leading dot is accepted, since callers hand it filepath.Ext output.
 	if got := r.ValidatorFor(".go"); got != "gofmt -l {file}" {
-		t.Errorf("ValidatorFor(.go) = %q — a leading dot must be tolerated", got)
+		t.Errorf("ValidatorFor(.go) = %q, a leading dot must be tolerated", got)
 	}
-	// Explicit null means "no validator", distinct from "unknown extension" —
+	// Explicit null means "no validator", distinct from "unknown extension",
 	// both return "", and both must be safe.
 	if got := r.ValidatorFor("ts"); got != "" {
 		t.Errorf("ValidatorFor(ts) = %q, want empty (explicitly null)", got)
@@ -303,7 +308,7 @@ func TestValidatorFor(t *testing.T) {
 func TestHasAnyValidator(t *testing.T) {
 	r, _ := scopeRegistry(t, []string{"**"}, nil)
 	if !r.HasAnyValidator() {
-		t.Error("HasAnyValidator() = false, want true — \"go\" has a real (non-null) command")
+		t.Error("HasAnyValidator() = false, want true, \"go\" has a real (non-null) command")
 	}
 
 	allNull := &Registry{validators: map[string]string{"ts": "", "tsx": ""}}
@@ -323,7 +328,7 @@ func TestHasAnyValidator(t *testing.T) {
 // brew/npm/pip install actually runs with (#238).
 //
 // It must also not fail because an *entry* is unusable. The embedded registry
-// ships POSIX roots, and filepath.IsAbs("/Users/x") is false on Windows — which
+// ships POSIX roots, and filepath.IsAbs("/Users/x") is false on Windows, which
 // made Load error outright there, killing the whole scope layer before it
 // looked at a single path (#297). One bad entry must narrow what Hydra can
 // touch, never disable it.
@@ -332,7 +337,7 @@ func TestLoad_FallsBackToTheEmbeddedRegistryOnEveryPlatform(t *testing.T) {
 
 	r, err := Load("")
 	if err != nil {
-		t.Fatalf("Load with no on-disk registry failed on %s: %v — this is what every "+
+		t.Fatalf("Load with no on-disk registry failed on %s: %v, this is what every "+
 			"installed binary does", runtime.GOOS, err)
 	}
 	// Whatever survives must be usable.
@@ -341,7 +346,7 @@ func TestLoad_FallsBackToTheEmbeddedRegistryOnEveryPlatform(t *testing.T) {
 			t.Errorf("workspace %q kept a non-absolute root %q", ws.Name, ws.Root)
 		}
 		if len(ws.AllowedGlobs) == 0 {
-			t.Errorf("workspace %q allows nothing — it can never be used", ws.Name)
+			t.Errorf("workspace %q allows nothing, it can never be used", ws.Name)
 		}
 	}
 	// Whatever was dropped must say why, or a user cannot tell "nothing
@@ -352,7 +357,7 @@ func TestLoad_FallsBackToTheEmbeddedRegistryOnEveryPlatform(t *testing.T) {
 		}
 	}
 	// The embedded registry declares no workspaces, so anything present here is
-	// the synthesized fallback — never a machine-specific entry compiled into
+	// the synthesized fallback, never a machine-specific entry compiled into
 	// the binary (#297).
 	for _, ws := range r.workspaces {
 		if ws.Name != DefaultWorkspaceName {
@@ -366,7 +371,7 @@ func TestLoad_FallsBackToTheEmbeddedRegistryOnEveryPlatform(t *testing.T) {
 	t.Logf("%s: %d workspaces usable, %d skipped", runtime.GOOS, len(r.workspaces), len(r.Skipped()))
 }
 
-// A root that is not absolute for this platform is skipped, not fatal — and a
+// A root that is not absolute for this platform is skipped, not fatal, and a
 // skipped workspace fails closed: paths that would have resolved to it are
 // refused rather than silently allowed.
 func TestLoad_UnusableRootIsSkippedAndFailsClosed(t *testing.T) {
@@ -482,7 +487,7 @@ func TestLoad_FallsBackToTheCurrentRepository(t *testing.T) {
 		t.Errorf("fallback name = %q, want %q so it is identifiable as not user-configured",
 			ws.Name, DefaultWorkspaceName)
 	}
-	// It must be the repo root, resolved — macOS hands out /var symlinks for
+	// It must be the repo root, resolved, macOS hands out /var symlinks for
 	// temp dirs, so compare resolved forms.
 	if !sameDir(t, ws.Root, repo) {
 		t.Errorf("fallback root = %q, want the git root %q", ws.Root, repo)
@@ -507,7 +512,7 @@ func TestLoad_NoFallbackOutsideAGitRepository(t *testing.T) {
 	}
 	for _, ws := range r.workspaces {
 		if ws.Name == DefaultWorkspaceName {
-			t.Errorf("synthesized a workspace at %q outside any git repository — "+
+			t.Errorf("synthesized a workspace at %q outside any git repository, "+
 				"a bare cwd could be / or $HOME", ws.Root)
 		}
 	}
@@ -580,7 +585,7 @@ func TestLoad_ConfiguredRegistryIsNeverWidened(t *testing.T) {
 	}
 	for _, ws := range r.workspaces {
 		if ws.Name == DefaultWorkspaceName {
-			t.Fatal("the fallback was added alongside a configured workspace — " +
+			t.Fatal("the fallback was added alongside a configured workspace, " +
 				"a configured registry must never be widened")
 		}
 	}
@@ -611,7 +616,7 @@ func TestEmbeddedRegistry_ShipsNoMachineSpecificRoots(t *testing.T) {
 		t.Fatal(err)
 	}
 	for name, e := range rf.Workspaces {
-		t.Errorf("embedded registry defines workspace %q with root %q — this ships to "+
+		t.Errorf("embedded registry defines workspace %q with root %q, this ships to "+
 			"every user of every install", name, e.Root)
 	}
 }
@@ -634,7 +639,7 @@ func chdir(t *testing.T, dir string) {
 	t.Cleanup(func() { _ = os.Chdir(prev) })
 }
 
-// sameDir compares two directories after resolving symlinks — macOS temp dirs
+// sameDir compares two directories after resolving symlinks, macOS temp dirs
 // are /var/… symlinks to /private/var/….
 func sameDir(t *testing.T, a, b string) bool {
 	t.Helper()
@@ -647,4 +652,54 @@ func sameDir(t *testing.T, a, b string) bool {
 		rb = b
 	}
 	return filepath.Clean(ra) == filepath.Clean(rb)
+}
+
+// CheckRooted scopes a path against a synthesized root, the escape hatch for
+// Hydra-managed worktrees, which live outside every registered workspace. It
+// must keep the default deny globs and refuse anything outside the root.
+func TestCheckRooted_ContainsAndStillDenies(t *testing.T) {
+	root := t.TempDir()
+
+	if ws, err := CheckRooted(root, filepath.Join(root, "pkg", "main.go")); err != nil || ws == "" {
+		t.Errorf("a file under the root was refused: ws=%q err=%v", ws, err)
+	}
+	if _, err := CheckRooted(root, filepath.Join(root, ".env")); err == nil {
+		t.Error("a denied glob was allowed under a rooted check")
+	}
+	if _, err := CheckRooted(root, filepath.Join(t.TempDir(), "outside.go")); err == nil {
+		t.Error("a file outside the root was allowed")
+	}
+	if _, err := CheckRooted(root, filepath.Join(root, "..", "escape.go")); err == nil {
+		t.Error("a ..-escape from the root was allowed")
+	}
+	if _, err := CheckRooted("relative", filepath.Join(root, "a.go")); err == nil {
+		t.Error("a relative root was accepted")
+	}
+}
+
+// TestValidatorFor above builds its own map, so it proves the lookup and says
+// nothing about what ships. Nothing else asserted the embedded registry either,
+// and `go` had no entry in it at all: `hyctl edit` on a Go file ran no
+// validator, reported validator_passed anyway, and filed no corpus example,
+// in the language Hydra itself is written in (#998).
+func TestLoad_TheShippedRegistryValidatesTheLanguagesItClaimsTo(t *testing.T) {
+	testutil.NewSandbox(t)
+
+	// An empty HYDRA_HOME has no registry/ override, so Load falls back to the
+	// copy compiled into the binary, which is what every install actually runs.
+	r, err := Load(t.TempDir())
+	if err != nil {
+		t.Fatalf("the embedded workspace.yaml did not load: %v", err)
+	}
+
+	for _, ext := range []string{"go", "js", "py", "sh", "json"} {
+		if got := r.ValidatorFor(ext); got == "" {
+			t.Errorf("ValidatorFor(%q) is empty: the shipped registry validates nothing for it", ext)
+		}
+	}
+	// ts and tsx are explicitly null, the editor has its own tsc path for them,
+	// so an empty answer there is the configured one rather than a gap.
+	if got := r.ValidatorFor("ts"); got != "" {
+		t.Errorf("ValidatorFor(ts) = %q, want empty: it is declared null on purpose", got)
+	}
 }

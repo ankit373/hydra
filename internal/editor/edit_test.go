@@ -13,13 +13,14 @@ import (
 	"testing"
 
 	"github.com/ankit373/hydra/internal/config"
+	"github.com/ankit373/hydra/internal/evalset"
 	"github.com/ankit373/hydra/internal/ledger"
 	"github.com/ankit373/hydra/internal/runlog"
 	"github.com/ankit373/hydra/internal/testutil"
 	"github.com/ankit373/hydra/internal/trust"
 
 	// Providers register themselves in init(), and this package does not import
-	// them — without these blanks provider.All() is empty in the test binary and
+	// them, without these blanks provider.All() is empty in the test binary and
 	// every dispatch finds no heads. cmd/hydra imports the same set.
 	_ "github.com/ankit373/hydra/internal/provider/cli"
 )
@@ -29,7 +30,7 @@ import (
 // the difference between an edit and a lost file.
 
 // editSandbox gives a hermetic environment with a config, a workspace rooted at
-// a temp repo, and a fake head on PATH that replies with the given body — so a
+// a temp repo, and a fake head on PATH that replies with the given body, so a
 // real end-to-end edit runs with no network and no API key.
 func editSandbox(t *testing.T, reply string) string {
 	t.Helper()
@@ -48,7 +49,7 @@ func editSandbox(t *testing.T, reply string) string {
 	repo := t.TempDir()
 	// A .git directory that is not a repository: workspace resolution roots
 	// here, but git commands fail, so the .hydra-bak backup is what protects
-	// the file — the path a non-git user is on.
+	// the file, the path a non-git user is on.
 	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -139,7 +140,7 @@ func TestEdit_WritesTheContentAndRecordsTheEdit(t *testing.T) {
 	}
 }
 
-// A ledger rule keyed on a file glob must block an edit to a matching path —
+// A ledger rule keyed on a file glob must block an edit to a matching path,
 // the concrete "excessive agency" containment: a head may be trusted in
 // general but still denied write access to a specific subtree.
 func TestEdit_LedgerResourceRuleBlocksAMatchingFile(t *testing.T) {
@@ -161,7 +162,7 @@ func TestEdit_LedgerResourceRuleBlocksAMatchingFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	if res.Status != "fail" {
-		t.Errorf("status = %q, want fail — the resource rule should have blocked this edit", res.Status)
+		t.Errorf("status = %q, want fail, the resource rule should have blocked this edit", res.Status)
 	}
 
 	allowed := filepath.Join(repo, "main.go")
@@ -172,7 +173,7 @@ func TestEdit_LedgerResourceRuleBlocksAMatchingFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	if res.Status != "ok" {
-		t.Errorf("status = %q, want ok — a non-matching path must not be blocked: %q", res.Status, res.Error)
+		t.Errorf("status = %q, want ok, a non-matching path must not be blocked: %q", res.Status, res.Error)
 	}
 }
 
@@ -235,10 +236,17 @@ func TestEdit_EmptyReplacementLeavesTheFileUntouched(t *testing.T) {
 	if raw, _ := os.ReadFile(file); string(raw) != original {
 		t.Errorf("the file was modified despite the refusal: %q", raw)
 	}
-	// The backup this edit created must not be left behind — a stale one is a
+	// The backup this edit created must not be left behind, a stale one is a
 	// wrong baseline for the next edit and for `hyctl review`.
 	if _, err := os.Stat(file + ".hydra-bak"); err == nil {
 		t.Error("a backup survived a refused edit")
+	}
+	// Scope resolution ran and succeeded well before the empty-replacement
+	// check, failResult used to zero Workspace/GitRoot regardless, making a
+	// downstream failure indistinguishable from "scope was never resolved"
+	// (#464).
+	if res.Workspace == "" {
+		t.Error("Workspace is empty on a failure that happened after scope resolution succeeded")
 	}
 }
 
@@ -270,6 +278,55 @@ func TestEdit_RefusesBeforeDispatching(t *testing.T) {
 				t.Errorf("Error = %q, want it to mention %q", res.Error, tt.wantErr)
 			}
 		})
+	}
+}
+
+// Root scopes an edit to a Hydra-managed worktree that lives outside every
+// registered workspace (#598), accepted under the root, still refused for
+// denied globs and for paths outside it.
+func TestEdit_RootScopesAHydraWorktree(t *testing.T) {
+	editSandbox(t, marked("package wt"))
+	wt := t.TempDir() // stands in for ~/.hydra/worktrees/t1-xxxx
+
+	file := filepath.Join(wt, "a.go")
+	if err := os.WriteFile(file, []byte("package old\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	res, err := Edit(context.Background(), Request{
+		File: file, Enum: "MODERATE", Prompt: "x", Root: wt,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Status != "ok" || res.Workspace != "hydra-worktree" {
+		t.Fatalf("rooted edit: status=%q ws=%q err=%q", res.Status, res.Workspace, res.Error)
+	}
+	if raw, _ := os.ReadFile(file); string(raw) != "package wt\n" {
+		t.Errorf("the rooted edit did not land: %q", raw)
+	}
+
+	env := filepath.Join(wt, ".env")
+	if err := os.WriteFile(env, []byte("SECRET=1\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	res, err = Edit(context.Background(), Request{File: env, Enum: "MODERATE", Prompt: "x", Root: wt})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Status != "fail" || !strings.Contains(res.Error, "scope_rejected") {
+		t.Errorf("a denied glob under Root was not refused: %+v", res)
+	}
+
+	outside := filepath.Join(t.TempDir(), "b.go")
+	if err := os.WriteFile(outside, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	res, err = Edit(context.Background(), Request{File: outside, Enum: "MODERATE", Prompt: "x", Root: wt})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Status != "fail" || !strings.Contains(res.Error, "scope_rejected") {
+		t.Errorf("a file outside Root was not refused: %+v", res)
 	}
 }
 
@@ -323,7 +380,7 @@ func TestEdit_PassingValidationKeepsTheEdit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Status != "ok" || !res.ValidatorPassed {
+	if res.Status != "ok" || res.ValidatorPassed == nil || !*res.ValidatorPassed {
 		t.Fatalf("result = %+v", res)
 	}
 	if raw, _ := os.ReadFile(file); !strings.Contains(string(raw), "validated") {
@@ -334,7 +391,7 @@ func TestEdit_PassingValidationKeepsTheEdit(t *testing.T) {
 	}
 }
 
-// A validator's exit code is real ground truth — it must reach calibration
+// A validator's exit code is real ground truth, it must reach calibration
 // automatically, both when it passes and when it fails, without a human
 // ever running `hyctl trust record`.
 func TestEdit_ValidationOutcomeReachesCalibration(t *testing.T) {
@@ -377,7 +434,7 @@ func TestEdit_ValidationOutcomeReachesCalibration(t *testing.T) {
 }
 
 // The backup is a verbatim copy of the user's source sitting beside it until
-// the edit is approved. It must not be world-readable — the same defect #273
+// the edit is approved. It must not be world-readable, the same defect #273
 // fixed for the run log's edit snapshots.
 //
 // It is only created for a non-git workspace: with a git root, git itself holds
@@ -441,7 +498,7 @@ func TestAtomicWrite_PreservesModeAndLeavesNoTempFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	if info.Mode().Perm() != 0o755 {
-		t.Errorf("mode = %v after the edit, want 0755 — the script is no longer "+
+		t.Errorf("mode = %v after the edit, want 0755, the script is no longer "+
 			"executable", info.Mode().Perm())
 	}
 
@@ -487,24 +544,29 @@ func TestReadFile_DistinguishesEmptyFromMissing(t *testing.T) {
 }
 
 func TestRollback_RestoresFromEachSource(t *testing.T) {
-	t.Run("from the backup", func(t *testing.T) {
+	// The backup is not rollback's to read or to delete. It is written on the
+	// FIRST edit only, so it describes the file from before that one; restoring
+	// it would discard every edit accepted since. Edit removes it on failure
+	// when it was the edit that created it, and internal/review keeps it
+	// otherwise as its diff baseline (#1150).
+	t.Run("the snapshot wins over a stale backup, which is left alone", func(t *testing.T) {
 		dir := t.TempDir()
 		file := filepath.Join(dir, "a.txt")
 		backup := file + ".hydra-bak"
-		if err := os.WriteFile(backup, []byte("original\n"), 0o600); err != nil {
+		if err := os.WriteFile(backup, []byte("two edits ago\n"), 0o600); err != nil {
 			t.Fatal(err)
 		}
 		if err := os.WriteFile(file, []byte("bad\n"), 0o600); err != nil {
 			t.Fatal(err)
 		}
 
-		rollback(file, "original\n", true, "", backup)
+		rollback(file, "original\n", true)
 
 		if raw, _ := os.ReadFile(file); string(raw) != "original\n" {
-			t.Errorf("file = %q after rollback", raw)
+			t.Errorf("file = %q after rollback, want this edit's snapshot", raw)
 		}
-		if _, err := os.Stat(backup); err == nil {
-			t.Error("the backup survived, so the next edit sees a stale baseline")
+		if _, err := os.Stat(backup); err != nil {
+			t.Error("rollback consumed internal/review's diff baseline")
 		}
 	})
 
@@ -514,7 +576,7 @@ func TestRollback_RestoresFromEachSource(t *testing.T) {
 		if err := os.WriteFile(file, []byte("bad\n"), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		rollback(file, "", false, "", file+".hydra-bak")
+		rollback(file, "", false)
 		if _, err := os.Stat(file); err == nil {
 			t.Error("a file the edit created was left behind")
 		}
@@ -526,7 +588,7 @@ func TestRollback_RestoresFromEachSource(t *testing.T) {
 		if err := os.WriteFile(file, []byte("bad\n"), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		rollback(file, "original\n", true, "", file+".hydra-bak")
+		rollback(file, "original\n", true)
 		if raw, _ := os.ReadFile(file); string(raw) != "original\n" {
 			t.Errorf("file = %q, want the snapshot restored", raw)
 		}
@@ -536,7 +598,7 @@ func TestRollback_RestoresFromEachSource(t *testing.T) {
 func TestTSCTemplate_OnlyWhenTSCIsInstalled(t *testing.T) {
 	root := t.TempDir()
 	if got := tscTemplate(root); got != "" {
-		t.Errorf("tscTemplate = %q with no node_modules, want empty — naming a "+
+		t.Errorf("tscTemplate = %q with no node_modules, want empty, naming a "+
 			"binary that is not there fails every TypeScript edit at validation "+
 			"and rolls back a correct change", got)
 	}
@@ -573,7 +635,7 @@ func TestDiffStats_CountsFromTheBackupWhenGitIsUnavailable(t *testing.T) {
 
 	added, removed := diffStats(file, "one\n", "", backup, true)
 	if added != 2 || removed != 0 {
-		t.Errorf("diffStats = (%d, %d), want (2, 0) — counted from the edit script, "+
+		t.Errorf("diffStats = (%d, %d), want (2, 0), counted from the edit script, "+
 			"not by re-parsing diff(1) (#260)", added, removed)
 	}
 }
@@ -646,7 +708,7 @@ func TestAtomicWrite_OverwritesAndPreservesContent(t *testing.T) {
 	}
 
 	// Content with no trailing newline, embedded NULs and CRLF must round-trip
-	// byte for byte — atomicWrite is not a text transform.
+	// byte for byte, atomicWrite is not a text transform.
 	tricky := "no newline at end\r\nwith crlf\x00and a nul"
 	if err := atomicWrite(path, tricky); err != nil {
 		t.Fatal(err)
@@ -706,7 +768,7 @@ func TestStripOuterFence_InnerFencesSurvive(t *testing.T) {
 
 // A rename that cannot complete must leave no temp file. Windows refuses a
 // rename onto a file another process has open, so this is a real collision
-// path, not a hypothetical one — and every collision leaving a .hydra-tmp.*
+// path, not a hypothetical one, and every collision leaving a .hydra-tmp.*
 // behind litters the user's source tree.
 func TestAtomicWrite_FailedRenameLeavesNoTempFile(t *testing.T) {
 	dir := t.TempDir()
@@ -768,7 +830,7 @@ func TestRollback_UsesGitInARepository(t *testing.T) {
 	if err := os.WriteFile(file, []byte("a bad edit\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	rollback(file, original, true, repo, file+".hydra-bak")
+	rollback(file, original, true)
 
 	raw, err := os.ReadFile(file)
 	if err != nil {
@@ -783,13 +845,13 @@ func TestRollback_UsesGitInARepository(t *testing.T) {
 	if err := os.WriteFile(untracked, []byte("created by the edit\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	rollback(untracked, "", false, repo, untracked+".hydra-bak")
+	rollback(untracked, "", false)
 	if _, err := os.Stat(untracked); err == nil {
 		t.Error("an untracked file the edit created survived the rollback")
 	}
 }
 
-// A model that ignored the instruction entirely — no markers, no content —
+// A model that ignored the instruction entirely, no markers, no content,
 // against a file that does not exist yet is a different failure from an empty
 // replacement: there is nothing to preserve, and the file must not be created.
 func TestEdit_MarkerParseFailedOnANewFile(t *testing.T) {
@@ -806,7 +868,7 @@ func TestEdit_MarkerParseFailedOnANewFile(t *testing.T) {
 		t.Fatalf("status = %q, want fail", res.Status)
 	}
 	if res.Error != "marker_parse_failed" {
-		t.Errorf("Error = %q, want marker_parse_failed — an empty_replacement "+
+		t.Errorf("Error = %q, want marker_parse_failed, an empty_replacement "+
 			"would imply there was content to lose", res.Error)
 	}
 	if _, statErr := os.Stat(file); statErr == nil {
@@ -836,7 +898,7 @@ func TestEdit_TerminatorLeakageIsRefused(t *testing.T) {
 }
 
 // A write that cannot land must be reported as write_failed and must not
-// consume the backup — the file is unchanged, so its baseline still applies.
+// consume the backup, the file is unchanged, so its baseline still applies.
 func TestEdit_UnwritableTargetIsReportedNotSilent(t *testing.T) {
 	repo := editSandbox(t, marked("new content"))
 
@@ -889,6 +951,11 @@ func TestWriteLastEdit_UnwritableLogDirIsAnError(t *testing.T) {
 	testutil.NewSandbox(t)
 
 	// ~/.hydra is a regular file, so logs/ cannot be created.
+	// The sandbox pre-creates config.Dir() as an empty directory, so it must
+	// be removed before a file can occupy that path instead.
+	if err := os.RemoveAll(config.Dir()); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(config.Dir(), []byte("not a dir"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -903,6 +970,11 @@ func TestLogEdit_IsBestEffort(t *testing.T) {
 	testutil.NewSandbox(t)
 
 	// Nothing to write into, and nothing may panic or block.
+	// The sandbox pre-creates config.Dir() as an empty directory, so it must
+	// be removed before a file can occupy that path instead.
+	if err := os.RemoveAll(config.Dir()); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(config.Dir(), []byte("not a dir"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -947,4 +1019,81 @@ func TestDiffStats_UsesGitInARepository(t *testing.T) {
 	if added != 2 || removed != 0 {
 		t.Errorf("diffStats = (%d, %d), want (2, 0) from git's own numstat", added, removed)
 	}
+}
+
+// An extension the registry has no validator for must not report a pass: before
+// #998 validatorPassed was initialised true and never touched, so "nothing ran"
+// and "ran and passed" rendered identically.
+func TestEdit_AnExtensionWithNoValidatorReportsNoVerdict(t *testing.T) {
+	repo := editSandbox(t, marked("some notes"))
+	writeWorkspaceYAML(t, repo, "") // no validators block at all
+
+	file := filepath.Join(repo, "a.txt")
+	if err := os.WriteFile(file, []byte("notes\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := Edit(context.Background(), Request{
+		File: file, Enum: "MODERATE", Prompt: "x", Validate: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Status != "ok" {
+		t.Fatalf("result = %+v", res)
+	}
+	if res.ValidatorPassed != nil {
+		t.Errorf("ValidatorPassed = %v, want nil: no validator ran", *res.ValidatorPassed)
+	}
+}
+
+// A validator that cannot start is not the file's fault. CombinedOutput has
+// nothing in that case, so the reason lived only in the exec error and the user
+// was told "validation_failed: " with no cause. Reachable for Go for the first
+// time now that Go has a validator at all (#998).
+func TestEdit_AMissingValidatorBinaryNamesItself(t *testing.T) {
+	repo := editSandbox(t, marked("package main\n"))
+	// No fake gofmt on the sandbox PATH, so the shipped template cannot start.
+
+	file := filepath.Join(repo, "a.go")
+	if err := os.WriteFile(file, []byte("package main\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := Edit(context.Background(), Request{
+		File: file, Enum: "MODERATE", Prompt: "x", Validate: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Status != "fail" {
+		t.Fatalf("result = %+v, want a failure", res)
+	}
+	if !strings.Contains(res.Error, "gofmt") {
+		t.Errorf("Error = %q, want the missing binary named", res.Error)
+	}
+	// Not a verdict about the head, so no verdict is recorded. Filing one said
+	// this head produced code that fails to parse, on the evidence of a binary
+	// that is not installed.
+	if res.ValidatorPassed != nil {
+		t.Errorf("ValidatorPassed = %v, want nil: nothing judged the answer", *res.ValidatorPassed)
+	}
+	if n := countExamples(t); n != 0 {
+		t.Errorf("filed %d corpus examples, want none: the validator never ran", n)
+	}
+}
+
+// countExamples reads the sandbox's eval set, which is empty unless an edit
+// filed something.
+func countExamples(t *testing.T) int {
+	t.Helper()
+	raw, err := os.ReadFile(evalset.DefaultPath())
+	if err != nil {
+		return 0
+	}
+	body := strings.TrimSpace(string(raw))
+	if body == "" {
+		return 0
+	}
+	return len(strings.Split(body, "\n"))
 }

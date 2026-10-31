@@ -27,7 +27,7 @@ var executorFor = executor.For
 
 // effectiveTimeout returns the per-head deadline to apply: the caller's explicit
 // Options.PerHeadTimeout when positive, otherwise defaultPerHeadTimeout. Swarm
-// never runs a head unbounded — a zero value means "use the default", not "no
+// never runs a head unbounded, a zero value means "use the default", not "no
 // limit".
 func effectiveTimeout(opts Options) time.Duration {
 	if opts.PerHeadTimeout > 0 {
@@ -37,19 +37,50 @@ func effectiveTimeout(opts Options) time.Duration {
 }
 
 // executeHead runs one head and returns a completed Attempt.
-// Never returns an error — all failures are captured in Attempt.Status/Err.
-func executeHead(ctx context.Context, h provider.Head, prompt string, opts Options) Attempt {
-	a := Attempt{
+// Never returns an error, all failures are captured in Attempt.Status/Err.
+//
+// The finish is reported from a defer, so a head that never reached its
+// executor, a ledger denial, reports as finished too; a surface that showed it
+// starting must never be left rendering it as still running.
+func executeHead(ctx context.Context, h provider.Head, prompt string, opts Options, pr PricingReader) (a Attempt) {
+	opts.progress.emit(Progress{Kind: ProgressStarted, Head: h})
+	defer func() {
+		a.EstCostUSD = attemptCost(a, pr)
+		opts.progress.emit(Progress{Kind: ProgressFinished, Head: h, Attempt: a})
+	}()
+
+	a = Attempt{
 		Head:      h,
 		Status:    StatusRunning,
 		StartedAt: time.Now(),
 	}
 
-	if decision, err := ledger.CheckAndRecordDispatch("hydra-swarm", h.ID, "", prompt); err == nil && decision == ledger.Deny {
+	// Proceeds only on an explicit Allow, see the same gate in dispatch.go for
+	// why `== Deny` is not sufficient now that Ask also withholds permission.
+	//
+	// Fails closed the same way on error: a policy-check failure must deny, not
+	// silently let the head run because the decision couldn't be computed.
+	// opts.Classification is resolved once by Run/RunSPRT before any head fires,
+	// so concurrent calls here reuse it instead of each re-scanning prompt (#522).
+	check := ledger.Dispatch{
+		Agent: "hydra-swarm", HeadID: h.ID, Content: prompt, Class: opts.Classification,
+	}
+	if decision, err := ledger.CheckAndRecordDispatch(check); err != nil || decision != ledger.Allow {
 		a.FinishedAt = time.Now()
 		a.Duration = a.FinishedAt.Sub(a.StartedAt)
 		a.Status = StatusFailed
-		a.Err = fmt.Errorf("denied by ledger policy: head %s", h.ID)
+		switch {
+		case err != nil:
+			a.Err = fmt.Errorf("ledger policy check failed: %w: head %s", err, h.ID)
+		// Reporting an Ask as "denied" describes the wrong policy. The head is
+		// skipped either way, a fan-out cannot hold a subprocess open waiting
+		// on a human, but the operator who wrote "ask" should be told the
+		// question went unasked, not that their rule refused the head.
+		case decision == ledger.Ask:
+			a.Err = fmt.Errorf("waiting on a human decision, so skipped in fan-out: head %s", h.ID)
+		default:
+			a.Err = fmt.Errorf("denied by ledger policy: head %s", h.ID)
+		}
 		return a
 	}
 
@@ -84,8 +115,8 @@ func executeHead(ctx context.Context, h provider.Head, prompt string, opts Optio
 
 // runRace fires all heads concurrently and returns as soon as the first
 // StatusOK attempt arrives. All other goroutines are canceled and drained
-// before returning — no goroutine leaks, no zombie subprocesses.
-func runRace(ctx context.Context, heads []provider.Head, prompt string, opts Options) []Attempt {
+// before returning, no goroutine leaks, no zombie subprocesses.
+func runRace(ctx context.Context, heads []provider.Head, prompt string, opts Options, pr PricingReader) []Attempt {
 	raceCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -99,7 +130,7 @@ func runRace(ctx context.Context, heads []provider.Head, prompt string, opts Opt
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			a := executeHead(raceCtx, h, prompt, opts)
+			a := executeHead(raceCtx, h, prompt, opts, pr)
 
 			mu.Lock()
 			defer mu.Unlock()
@@ -129,9 +160,9 @@ func runRace(ctx context.Context, heads []provider.Head, prompt string, opts Opt
 
 // runAll fires all heads concurrently and waits for every one to finish.
 // Used by both ModeAll (rank by CapScore) and ModeBest (feed to judge).
-// Uses sync.WaitGroup (not errgroup) — guarantees goroutine drain regardless
+// Uses sync.WaitGroup (not errgroup), guarantees goroutine drain regardless
 // of errors, preventing zombie agy subprocesses.
-func runAll(ctx context.Context, heads []provider.Head, prompt string, opts Options) []Attempt {
+func runAll(ctx context.Context, heads []provider.Head, prompt string, opts Options, pr PricingReader) []Attempt {
 	attempts := make([]Attempt, len(heads))
 	var mu sync.Mutex
 	var wg sync.WaitGroup
@@ -141,7 +172,7 @@ func runAll(ctx context.Context, heads []provider.Head, prompt string, opts Opti
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			a := executeHead(ctx, h, prompt, opts)
+			a := executeHead(ctx, h, prompt, opts, pr)
 			mu.Lock()
 			attempts[i] = a
 			mu.Unlock()

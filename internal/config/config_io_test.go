@@ -7,6 +7,7 @@
 package config_test
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -22,8 +23,23 @@ import (
 // write loses the user's whole setup, and Save is the only thing standing
 // between them and that.
 
-func TestDirAndPath_LiveUnderTheUsersHome(t *testing.T) {
+// Dir prefers $HYDRA_HOME over $HOME/.hydra (#442), the sandbox sets both to
+// distinct directories, so this only passes if HYDRA_HOME actually wins.
+func TestDirAndPath_PrefersHydraHomeOverUsersHome(t *testing.T) {
 	s := testutil.NewSandbox(t)
+
+	if got, want := Dir(), s.HydraHome; got != want {
+		t.Errorf("Dir() = %q, want $HYDRA_HOME %q", got, want)
+	}
+	if got, want := Path(), filepath.Join(s.HydraHome, "config.toml"); got != want {
+		t.Errorf("Path() = %q, want %q", got, want)
+	}
+}
+
+// With no $HYDRA_HOME at all, Dir falls back to $HOME/.hydra.
+func TestDirAndPath_FallBackToUsersHomeWithNoHydraHome(t *testing.T) {
+	s := testutil.NewSandbox(t)
+	t.Setenv("HYDRA_HOME", "")
 
 	if got, want := Dir(), filepath.Join(s.Home, ".hydra"); got != want {
 		t.Errorf("Dir() = %q, want %q", got, want)
@@ -54,9 +70,6 @@ func TestSaveLoad_RoundTripsEveryField(t *testing.T) {
 
 	want := &Config{
 		Cortex: "claude",
-		Tiers: []Tier{
-			{}, // zero value must survive too
-		},
 		Skills: []string{"review", "qa"},
 		Policies: map[string]Policy{
 			"pii":    {Action: "local-only"},
@@ -81,7 +94,7 @@ func TestSaveLoad_RoundTripsEveryField(t *testing.T) {
 		t.Fatalf("Policies = %v, want two entries", got.Policies)
 	}
 	if got.Policies["pii"].Action != "local-only" {
-		t.Errorf("pii policy = %q, want local-only — PII routing is enforced from this",
+		t.Errorf("pii policy = %q, want local-only, PII routing is enforced from this",
 			got.Policies["pii"].Action)
 	}
 }
@@ -106,23 +119,56 @@ func TestSaveLoad_EmptyConfigRoundTrips(t *testing.T) {
 func TestLoad_MissingFileIsAnError(t *testing.T) {
 	testutil.NewSandbox(t)
 
-	if _, err := Load(); err == nil {
-		t.Error("Load succeeded with no config file — callers use this to decide " +
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load succeeded with no config file, callers use this to decide " +
 			"whether to run the init wizard")
+	}
+	if !errors.Is(err, ErrNotFound) {
+		t.Errorf("an absent file must report ErrNotFound, got %v", err)
+	}
+	// The advice is only right here, so it is only printed here.
+	if !strings.Contains(err.Error(), "hyctl init") {
+		t.Errorf("the one case the wizard answers did not name it: %v", err)
+	}
+	if !strings.Contains(err.Error(), Path()) {
+		t.Errorf("the refusal must name where it looked: %v", err)
 	}
 }
 
-func TestLoad_MalformedTOMLIsAnError(t *testing.T) {
-	testutil.NewSandbox(t)
+// The #1030 defect: an unreadable file reported as an absent one sends the
+// reader to a wizard that overwrites the file holding the answer. Asserted on
+// the error identity and the text, because returning some error is what the
+// broken version did too.
+func TestLoad_MalformedTOMLIsNotReportedAsMissing(t *testing.T) {
+	for name, body := range map[string]string{
+		"syntax error": "cortex = \"unterminated",
+		"type error":   "cortex = \"stub\"\nskills = \"stub\"\n", // Skills is []string
+	} {
+		t.Run(name, func(t *testing.T) {
+			testutil.NewSandbox(t)
+			if err := os.MkdirAll(Dir(), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(Path(), []byte(body), 0o600); err != nil {
+				t.Fatal(err)
+			}
 
-	if err := os.MkdirAll(Dir(), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(Path(), []byte("cortex = \"unterminated"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := Load(); err == nil {
-		t.Error("malformed TOML loaded without error")
+			_, err := Load()
+			if err == nil {
+				t.Fatal("malformed TOML loaded without error")
+			}
+			if errors.Is(err, ErrNotFound) {
+				t.Errorf("a file that is there was reported as absent: %v", err)
+			}
+			if strings.Contains(err.Error(), "hyctl init") {
+				t.Errorf("advice that overwrites the evidence: %v", err)
+			}
+			// The decoder already says which line and key, so pass it through.
+			if !strings.Contains(err.Error(), "toml") {
+				t.Errorf("the decoder's own diagnosis was discarded: %v", err)
+			}
+		})
 	}
 }
 
@@ -177,7 +223,7 @@ func TestSave_ConfigIsNotWorldReadable(t *testing.T) {
 	if info.Mode().Perm()&0o077 != 0 {
 		t.Errorf("config.toml mode %v is group/other readable", info.Mode().Perm())
 	}
-	// The directory too — a readable dir leaks what exists even if files do not.
+	// The directory too, a readable dir leaks what exists even if files do not.
 	dinfo, err := os.Stat(Dir())
 	if err != nil {
 		t.Fatal(err)
@@ -225,7 +271,7 @@ func TestSave_ConcurrentWritesLeaveAValidConfig(t *testing.T) {
 	}
 }
 
-// ScriptHome honours HYDRA_HOME above everything else — it is how an operator
+// ScriptHome honours HYDRA_HOME above everything else, it is how an operator
 // points Hydra at a retuned registry without a rebuild.
 func TestScriptHome_PrefersHydraHome(t *testing.T) {
 	s := testutil.NewSandbox(t)

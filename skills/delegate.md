@@ -1,4 +1,4 @@
-# /delegate — Master Routing Skill
+# /delegate, Master Routing Skill
 
 Invoked when Claude Code needs to delegate a task to the right model tier.
 
@@ -41,7 +41,7 @@ FILES IN SCOPE:
 <list of @file references or inline snippets>
 
 TASK:
-<specific task — be precise>
+<specific task, be precise>
 
 OUTPUT FORMAT:
 TypeScript only. No markdown fences. Match existing style.

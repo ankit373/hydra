@@ -5,7 +5,10 @@
 package config_test
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/testutil"
@@ -14,7 +17,7 @@ import (
 
 func TestBreadcrumb_DeterministicForSameRegistry(t *testing.T) {
 	dir := t.TempDir()
-	testutil.WriteRegistry(t, dir, "routing: a", "models: b", "domains: c", "pricing: d")
+	testutil.WriteRegistry(t, dir, "routing: a", "models: b", "domains: c", "pricing: d", "signals: e")
 	t.Setenv("HYDRA_HOME", dir)
 
 	h1, err := config.Breadcrumb()
@@ -37,7 +40,7 @@ func TestBreadcrumb_DeterministicForSameRegistry(t *testing.T) {
 // long-running TUI must not keep serving a stale hash after a registry edit.
 func TestBreadcrumb_ChangesWhenAnyRegistryFileChanges(t *testing.T) {
 	dir := t.TempDir()
-	testutil.WriteRegistry(t, dir, "routing: a", "models: b", "domains: c", "pricing: d")
+	testutil.WriteRegistry(t, dir, "routing: a", "models: b", "domains: c", "pricing: d", "signals: e")
 	t.Setenv("HYDRA_HOME", dir)
 
 	before, err := config.Breadcrumb()
@@ -45,7 +48,7 @@ func TestBreadcrumb_ChangesWhenAnyRegistryFileChanges(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	testutil.WriteRegistry(t, dir, "routing: a-edited", "models: b", "domains: c", "pricing: d")
+	testutil.WriteRegistry(t, dir, "routing: a-edited", "models: b", "domains: c", "pricing: d", "signals: e")
 	after, err := config.Breadcrumb()
 	if err != nil {
 		t.Fatal(err)
@@ -57,10 +60,10 @@ func TestBreadcrumb_ChangesWhenAnyRegistryFileChanges(t *testing.T) {
 
 // Plain concatenation would be ambiguous: moving content across a file boundary
 // leaves the byte stream unchanged, so two materially different deployments
-// would share a fingerprint — exactly what the breadcrumb exists to prevent.
+// would share a fingerprint, exactly what the breadcrumb exists to prevent.
 func TestBreadcrumb_DistinguishesContentMovedAcrossFileBoundary(t *testing.T) {
 	dirA := t.TempDir()
-	testutil.WriteRegistry(t, dirA, "tier: 1\n", "model: x\n", "d: y\n", "p: z\n")
+	testutil.WriteRegistry(t, dirA, "tier: 1\n", "model: x\n", "d: y\n", "p: z\n", "s: w\n")
 	t.Setenv("HYDRA_HOME", dirA)
 	a, err := config.Breadcrumb()
 	if err != nil {
@@ -68,7 +71,7 @@ func TestBreadcrumb_DistinguishesContentMovedAcrossFileBoundary(t *testing.T) {
 	}
 
 	dirB := t.TempDir()
-	testutil.WriteRegistry(t, dirB, "tier: 1\nmodel: x\n", "", "d: y\n", "p: z\n")
+	testutil.WriteRegistry(t, dirB, "tier: 1\nmodel: x\n", "", "d: y\n", "p: z\n", "s: w\n")
 	t.Setenv("HYDRA_HOME", dirB)
 	b, err := config.Breadcrumb()
 	if err != nil {
@@ -82,14 +85,14 @@ func TestBreadcrumb_DistinguishesContentMovedAcrossFileBoundary(t *testing.T) {
 // pricing.yaml drives cost-based routing, so an edit must change the identity.
 func TestBreadcrumb_CoversPricing(t *testing.T) {
 	dir := t.TempDir()
-	testutil.WriteRegistry(t, dir, "routing: a", "models: b", "domains: c", "tier1: 0.001")
+	testutil.WriteRegistry(t, dir, "routing: a", "models: b", "domains: c", "tier1: 0.001", "signals: e")
 	t.Setenv("HYDRA_HOME", dir)
 	before, err := config.Breadcrumb()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	testutil.WriteRegistry(t, dir, "routing: a", "models: b", "domains: c", "tier1: 999.0")
+	testutil.WriteRegistry(t, dir, "routing: a", "models: b", "domains: c", "tier1: 999.0", "signals: e")
 	after, err := config.Breadcrumb()
 	if err != nil {
 		t.Fatal(err)
@@ -99,9 +102,47 @@ func TestBreadcrumb_CoversPricing(t *testing.T) {
 	}
 }
 
+// A fingerprint keyed only on (filename, mtime, size), without the registry
+// root itself, would let two different HYDRA_HOME directories whose files
+// happen to share mtime+size (plausible on filesystems with coarser mtime
+// resolution: NFS, some CI runners, tmpfs) collide on the identical cache
+// key, silently serving one home's hash to the other. Forcing matching sizes
+// AND mtimes here proves `home` itself is part of the key, rather than the
+// test passing only because real-world mtimes/sizes usually differ.
+func TestBreadcrumb_DifferentHomesDoNotCollideEvenWithMatchingFileStats(t *testing.T) {
+	dirA, dirB := t.TempDir(), t.TempDir()
+	testutil.WriteRegistry(t, dirA, "routing: AAA", "models: b", "domains: c", "pricing: d", "signals: e")
+	testutil.WriteRegistry(t, dirB, "routing: ZZZ", "models: b", "domains: c", "pricing: d", "signals: e")
+
+	fixed := time.Now()
+	for _, dir := range []string{dirA, dirB} {
+		for _, name := range config.BreadcrumbFiles {
+			if err := os.Chtimes(filepath.Join(dir, "registry", name), fixed, fixed); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+
+	t.Setenv("HYDRA_HOME", dirA)
+	a, err := config.Breadcrumb()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("HYDRA_HOME", dirB)
+	b, err := config.Breadcrumb()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if a == b {
+		t.Error("two different HYDRA_HOME directories with matching file stats produced the same fingerprint, the cache is not actually keyed on home")
+	}
+}
+
 // BreadcrumbFiles and the embedded set are maintained in different packages, so
 // adding a file to one without the other would make Breadcrumb error on every
-// installed binary again — silently, since callers stamp a blank fingerprint
+// installed binary again, silently, since callers stamp a blank fingerprint
 // rather than failing.
 func TestBreadcrumbFiles_AreAllEmbeddedInTheBinary(t *testing.T) {
 	for _, name := range config.BreadcrumbFiles {
@@ -111,7 +152,7 @@ func TestBreadcrumbFiles_AreAllEmbeddedInTheBinary(t *testing.T) {
 	}
 }
 
-// This used to assert an error for a missing registry — which was every
+// This used to assert an error for a missing registry, which was every
 // installed binary, so the fingerprint was absent from exactly the ledger,
 // trust and cost logs it exists to stamp (#238). The registry is embedded now,
 // so a machine with nothing on disk must still produce a stable fingerprint:

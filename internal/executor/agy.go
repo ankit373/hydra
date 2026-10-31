@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/ankit373/hydra/internal/config"
+	"github.com/ankit373/hydra/internal/sandbox"
 	"github.com/ankit373/hydra/internal/util"
 )
 
@@ -26,9 +27,14 @@ type AuthRequiredError struct {
 }
 
 func (e *AuthRequiredError) Error() string {
-	msg := fmt.Sprintf("auth required for agy model %q (pool %q)", e.ModelFlag, e.Pool)
+	// Names the command, not just the URL. agy authenticates interactively and
+	// a --print run cannot complete the handshake, so following the link alone
+	// ends with an OAuth code and nowhere to paste it, which is exactly what
+	// happened to the first person who hit this (#702).
+	msg := fmt.Sprintf("agy is not signed in for model %q (pool %q); run `agy` in a terminal once to sign in",
+		e.ModelFlag, e.Pool)
 	if e.AuthURL != "" {
-		msg += " — authenticate at: " + e.AuthURL
+		msg += ", or open " + e.AuthURL
 	}
 	return msg
 }
@@ -38,58 +44,99 @@ var authSignalRe = regexp.MustCompile(
 )
 var authURLRe = regexp.MustCompile(`https?://\S+`)
 
-// agyMu serializes all agy executions that mutate settings.json.
-// agy uses a single shared settings.json; concurrent swaps corrupt it.
-// Serialization eliminates the filesystem race at the cost of agy parallelism.
+// agyMu guards recoverAgySwap, the only settings.json touch left in Execute:
+// cleanup of a stale swap sentinel a pre-#522 Hydra binary may have left
+// behind after being killed mid swap. Model selection itself goes through
+// agy's own --model flag now (verified against the real CLI, see #522), so
+// concurrent calls no longer share any mutable file and cmd.Run(), the
+// actual tens-of-seconds subprocess work, runs outside this lock entirely.
 var agyMu sync.Mutex
 
-// AgyExecutor invokes `agy --print` with model selection via settings.json swap.
+// AgyExecutor invokes `agy --print` with model selection via the --model flag.
 // Ports all logic from dispatch/agy.sh natively in Go.
 type AgyExecutor struct{}
 
-func (e *AgyExecutor) Execute(ctx context.Context, req Request) (*Response, error) {
+// agyAuthLines is how much of stdout the auth detector may see. Never the whole
+// output: a model's answer can legitimately contain "please sign in", and
+// scanning all of it would turn an ordinary reply into an auth failure.
+const agyAuthLines = 3
+
+func agyAuthPrefix(out string) string {
+	parts := strings.SplitN(out, "\n", agyAuthLines+1)
+	return strings.Join(parts[:min(strings.Count(out, "\n")+1, agyAuthLines)], "\n")
+}
+
+// agyAuthError reports the auth failure both paths return, or nil. One copy, so
+// a streamed run and a buffered one cannot disagree about what counts as needing
+// a sign-in.
+func agyAuthError(stderrStr, outPrefix, pool, modelFlag string) error {
+	signal := stderrStr + "\n" + outPrefix
+	if !authSignalRe.MatchString(signal) {
+		return nil
+	}
+	authURL := authURLRe.FindString(signal)
+	writeAuthRequired(pool, modelFlag, authURL)
+	return &AuthRequiredError{ModelFlag: modelFlag, Pool: pool, AuthURL: authURL}
+}
+
+// agyCommand builds the subprocess both Execute and ExecuteStream run, so the
+// two cannot drift on the flags, the timeout or the environment. The caller
+// attaches stdout, since that is the only thing they differ on.
+func agyCommand(ctx context.Context, req Request) (*exec.Cmd, context.CancelFunc, string, error) {
 	modelFlag := req.Head.Meta["model_flag"]
 	if modelFlag == "" {
-		return nil, fmt.Errorf("agy executor: head %q has no model_flag in Meta", req.Head.ID)
+		return nil, nil, "", fmt.Errorf("agy executor: head %q has no model_flag in Meta", req.Head.ID)
 	}
 
-	// Serialize all agy invocations — settings.json is a single shared file.
-	// Concurrent swaps corrupt it, making swarm mode produce wrong models.
 	agyMu.Lock()
-	defer agyMu.Unlock()
-
-	settingsPath := agySitesPath()
-
-	// Recover from a prior SIGKILL that left settings.json in a swapped state.
-	recoverAgySwap(settingsPath)
-
-	originalModel, err := swapAgyModel(settingsPath, modelFlag)
-	if err != nil {
-		// Settings file might not exist yet — proceed without swapping.
-		originalModel = ""
-		settingsPath = ""
-	}
-	if settingsPath != "" {
-		defer restoreAgyModel(settingsPath, originalModel)
-	}
+	recoverAgySwap(agySitesPath())
+	agyMu.Unlock()
 
 	timeout := 300 * time.Second
 	if t := os.Getenv("AGY_TIMEOUT"); t != "" {
 		if d, err := time.ParseDuration(t); err == nil {
 			timeout = d
 		} else if d, err := time.ParseDuration(t + "s"); err == nil {
-			// Bare integer seconds (e.g. "300") — treat as seconds.
+			// Bare integer seconds (e.g. "300"), treat as seconds.
 			timeout = d
 		}
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
+
+	// The path discovery already resolved. Re-resolving it here is what let
+	// execution and Unroutable disagree, so a head that arrived without one is
+	// refused rather than quietly looked up again (#688).
+	bin := req.Head.Executable
+	if bin == "" {
+		cancel()
+		return nil, nil, "", fmt.Errorf("agy executor: head %q carries no resolved agy path", req.Head.ID)
+	}
+	cmd := sandbox.Harden(exec.CommandContext(ctx, bin, "--print", req.Prompt,
+		"--model", modelFlag, "--print-timeout", fmt.Sprintf("%ds", int(timeout.Seconds()))))
+	env, closeGate, err := gateIfLocalOnly(ctx, req.Head, headEnv(req.Head))
+	if err != nil {
+		cancel()
+		return nil, nil, "", err
+	}
+	cmd.Env = env
+	if err := sandbox.WithLimits(cmd, req.MaxMemoryMB, req.MaxCPUSeconds); err != nil {
+		cancel()
+		return nil, nil, "", err
+	}
+	return cmd, func() { cancel(); closeGate() }, modelFlag, nil
+}
+
+func (e *AgyExecutor) Execute(ctx context.Context, req Request) (*Response, error) {
+	cmd, cancel, modelFlag, err := agyCommand(ctx, req)
+	if err != nil {
+		return nil, err
+	}
 	defer cancel()
 
-	// stderr is only used for auth detection — cap it at 64 KB so a runaway
+	// stderr is only used for auth detection, cap it at 64 KB so a runaway
 	// process can't exhaust memory through error output.
 	stderr := util.NewAccumulator(64 << 10)
 	stdout := util.NewAccumulator(0)
-	cmd := exec.CommandContext(ctx, "agy", "--print", req.Prompt, "--print-timeout", fmt.Sprintf("%ds", int(timeout.Seconds())))
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 
@@ -100,42 +147,28 @@ func (e *AgyExecutor) Execute(ctx context.Context, req Request) (*Response, erro
 	stderrStr := stderr.String()
 	outStr := stdout.String()
 
-	// Auth detection: check stderr + first 3 lines of stdout only.
-	// Never scan full output — model responses may contain auth strings.
-	firstLines := strings.Join(strings.SplitN(outStr, "\n", 4)[:min(strings.Count(outStr, "\n")+1, 3)], "\n")
-	authSignal := stderrStr + "\n" + firstLines
-
-	if authSignalRe.MatchString(authSignal) {
-		authURL := ""
-		if m := authURLRe.FindString(authSignal); m != "" {
-			authURL = m
-		}
-		writeAuthRequired(req.Head.Meta["token_pool"], modelFlag, authURL)
-		return nil, &AuthRequiredError{
-			ModelFlag: modelFlag,
-			Pool:      req.Head.Meta["token_pool"],
-			AuthURL:   authURL,
-		}
+	if err := agyAuthError(stderrStr, agyAuthPrefix(outStr), req.Head.Meta["token_pool"], modelFlag); err != nil {
+		return nil, err
 	}
 
 	if runErr != nil {
-		return nil, fmt.Errorf("agy exec %s: %w — %s", req.Head.ID, runErr, strings.TrimSpace(stderrStr))
+		return nil, fmt.Errorf("agy exec %s: %w, %s", req.Head.ID, runErr, strings.TrimSpace(stderrStr))
 	}
 
 	output := strings.TrimSpace(outStr)
 
-	promptTokens := len(req.Prompt) / 4
-	responseTokens := len(output) / 4
+	promptTokens := EstimateTokens(req.Prompt)
+	responseTokens := EstimateTokens(output)
 	writeTokenSidecar(modelFlag, "agy", "estimate", promptTokens, responseTokens)
 
 	return &Response{
 		Output:       output,
-		Duration:     duration,
+		Duration:     measured(duration),
 		Model:        req.Head.ID,
 		InputTokens:  promptTokens,
 		OutputTokens: responseTokens,
 		Truncated:    stdout.Truncated(),
-		// agy does not report token usage — these are char/4 estimates.
+		// agy does not report token usage, these are char/4 estimates.
 		TokensEstimated: true,
 	}, nil
 }
@@ -146,74 +179,11 @@ func agySitesPath() string {
 	return filepath.Join(home, ".gemini", "antigravity-cli", "settings.json")
 }
 
-// agyOrigSuffix is the sentinel backup written before any settings.json swap.
-// If the process is SIGKILLed mid-swap, recoverAgySwap restores it on next run.
+// agyOrigSuffix is the sentinel a pre-#522 Hydra could leave behind if
+// SIGKILLed mid settings.json swap. Model selection no longer swaps
+// settings.json (see Execute), so nothing writes this sentinel anymore,
+// recoverAgySwap only cleans up a leftover from an older binary.
 const agyOrigSuffix = ".hydra-orig"
-
-// swapAgyModel writes modelFlag into settings.json and returns the original model.
-// It writes a sentinel backup first so recoverAgySwap() can undo a partial swap
-// caused by SIGKILL between os.Rename and the defer restoreAgyModel.
-func swapAgyModel(settingsPath, modelFlag string) (string, error) {
-	raw, err := os.ReadFile(settingsPath)
-	if err != nil {
-		return "", err
-	}
-	// Write sentinel before any mutation — must survive SIGKILL.
-	if err := os.WriteFile(settingsPath+agyOrigSuffix, raw, 0o600); err != nil {
-		return "", err
-	}
-	var m map[string]interface{}
-	if err := json.Unmarshal(raw, &m); err != nil {
-		_ = os.Remove(settingsPath + agyOrigSuffix)
-		return "", err
-	}
-	original, _ := m["model"].(string)
-	m["model"] = modelFlag
-	updated, err := json.MarshalIndent(m, "", "  ")
-	if err != nil {
-		_ = os.Remove(settingsPath + agyOrigSuffix)
-		return "", err
-	}
-	tmp := settingsPath + ".hydra-tmp"
-	if err := os.WriteFile(tmp, updated, 0o600); err != nil {
-		_ = os.Remove(settingsPath + agyOrigSuffix)
-		return "", err
-	}
-	if err := os.Rename(tmp, settingsPath); err != nil {
-		_ = os.Remove(settingsPath + agyOrigSuffix)
-		_ = os.Remove(tmp)
-		return "", err
-	}
-	return original, nil
-}
-
-// restoreAgyModel writes back the original model and removes the sentinel.
-func restoreAgyModel(settingsPath, originalModel string) {
-	raw, err := os.ReadFile(settingsPath)
-	if err != nil {
-		return
-	}
-	var m map[string]interface{}
-	if err := json.Unmarshal(raw, &m); err != nil {
-		return
-	}
-	if originalModel == "" {
-		delete(m, "model")
-	} else {
-		m["model"] = originalModel
-	}
-	updated, err := json.MarshalIndent(m, "", "  ")
-	if err != nil {
-		return
-	}
-	tmp := settingsPath + ".hydra-tmp"
-	if err := os.WriteFile(tmp, updated, 0o600); err != nil {
-		return
-	}
-	if err := os.Rename(tmp, settingsPath); err == nil {
-		_ = os.Remove(settingsPath + agyOrigSuffix)
-	}
-}
 
 // recoverAgySwap detects a stale sentinel left by a prior SIGKILL and restores
 // settings.json to its pre-swap state. No-ops when no sentinel exists.

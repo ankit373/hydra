@@ -4,10 +4,12 @@ package oracle
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
+	"time"
 
 	"github.com/ankit373/hydra/internal/trust"
 )
@@ -23,6 +25,25 @@ func TestCommandOracle_PassFail(t *testing.T) {
 	fail := &CommandOracle{Template: "false"}
 	if v, err := fail.Verify(ctx, "anything", trust.Task{}); err != nil || v.Passed {
 		t.Errorf("`false` should fail (not error): v=%+v err=%v", v, err)
+	}
+}
+
+// Dir must run the verifier in that directory, an isolated worktree's tests
+// must check the worktree's copy, not whatever the process CWD holds (#598).
+func TestCommandOracle_DirSetsTheWorkingDirectory(t *testing.T) {
+	ctx := context.Background()
+	mod := t.TempDir()
+	if err := os.WriteFile(filepath.Join(mod, "go.mod"), []byte("module oracledir\n\ngo 1.21\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// `go mod verify` exits 0 only inside a module, a portable dir-sensitive probe.
+	in := &CommandOracle{Template: "go mod verify", Dir: mod}
+	if v, err := in.Verify(ctx, "", trust.Task{}); err != nil || !v.Passed {
+		t.Errorf("inside the module: v=%+v err=%v", v, err)
+	}
+	out := &CommandOracle{Template: "go mod verify", Dir: t.TempDir()}
+	if v, err := out.Verify(ctx, "", trust.Task{}); err != nil || v.Passed {
+		t.Errorf("outside a module should fail, not error: v=%+v err=%v", v, err)
 	}
 }
 
@@ -71,7 +92,30 @@ func TestCommandOracle_LauncherErrorIsError(t *testing.T) {
 	}
 }
 
-// A calibrated verifier contributes a large-magnitude LLR — dominating a model.
+// A cancelled verifier exits non-zero exactly like a failing one, and this
+// used to report Passed:false. An oracle carries enough LLR to outweigh
+// several models, so Ctrl+C on a run would have written confident evidence
+// that the candidate was wrong (#738).
+func TestCommandOracle_CancelledIsNotAFailedVerdict(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	o := &CommandOracle{Args: []string{"sh", "-c", "sleep 30"}, Source: "verifier:slow"}
+
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		cancel()
+	}()
+
+	v, err := o.Verify(ctx, "x", trust.Task{})
+	if err == nil {
+		t.Fatalf("a cancelled verifier returned a verdict (%+v), want an error", v)
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("error %v does not unwrap to context.Canceled, so a caller cannot tell "+
+			"cancellation from a verifier that could not launch", err)
+	}
+}
+
+// A calibrated verifier contributes a large-magnitude LLR, dominating a model.
 func TestLLR_CalibratedVerifierDominates(t *testing.T) {
 	cal, _ := trust.New("")
 	// Train verifier:tests to near-perfect (se=sp≈0.99).
@@ -107,7 +151,7 @@ func TestLLR_CalibratedVerifierDominates(t *testing.T) {
 
 // defaultWriteTemp materialises the candidate for a {file} oracle. Its failure
 // paths matter because an oracle that cannot stage its input must report that,
-// not return a verdict — a verdict drawn from nothing is confident false
+// not return a verdict, a verdict drawn from nothing is confident false
 // evidence, and an oracle's LLR outweighs several models' votes.
 func TestDefaultWriteTemp(t *testing.T) {
 	path, cleanup, err := defaultWriteTemp("the candidate answer")

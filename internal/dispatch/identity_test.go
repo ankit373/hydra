@@ -44,7 +44,7 @@ func readLog(t *testing.T, home, name string) []map[string]any {
 func logResult() *Result {
 	return &Result{
 		Output: "ok",
-		Head:   provider.Head{ID: "h1", Name: "H1", Provider: "agy", Source: "registry", CapScore: 90},
+		Head:   provider.Head{ID: "h1", Name: "H1", Provider: "agy", Source: "registry", Executable: "/usr/bin/agy", CapScore: 90},
 		Response: &executor.Response{
 			Output:       "ok",
 			Model:        "m",
@@ -69,7 +69,7 @@ func TestLogDispatch_IdentityIsNeverEmpty(t *testing.T) {
 	t.Setenv("HYDRA_TASK_ID", "")
 
 	d := newTestDispatcher()
-	if err := d.logDispatch(logResult(), "a prompt", Options{}); err != nil {
+	if err := d.logDispatch(logResult(), "a prompt", Options{}, 1, "0102030405060708"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -79,7 +79,7 @@ func TestLogDispatch_IdentityIsNeverEmpty(t *testing.T) {
 			t.Fatalf("%s: got %d rows, want 1", name, len(rows))
 		}
 		if id, _ := rows[0]["run_id"].(string); id == "" {
-			t.Errorf("%s: run_id is empty — this is exactly the #181 bug", name)
+			t.Errorf("%s: run_id is empty, this is exactly the #181 bug", name)
 		}
 		if id, _ := rows[0]["task_id"].(string); id == "" {
 			t.Errorf("%s: task_id is empty", name)
@@ -87,7 +87,7 @@ func TestLogDispatch_IdentityIsNeverEmpty(t *testing.T) {
 	}
 }
 
-// dispatch.jsonl and cost.jsonl describe the same call, so they must agree —
+// dispatch.jsonl and cost.jsonl describe the same call, so they must agree,
 // otherwise a reader joining the two logs sees two different runs.
 func TestLogDispatch_BothLogsShareOneIdentity(t *testing.T) {
 	home := t.TempDir()
@@ -95,7 +95,7 @@ func TestLogDispatch_BothLogsShareOneIdentity(t *testing.T) {
 	t.Setenv("USERPROFILE", home)
 
 	d := newTestDispatcher()
-	if err := d.logDispatch(logResult(), "p", Options{RunID: "run-9", TaskID: "task-9"}); err != nil {
+	if err := d.logDispatch(logResult(), "p", Options{RunID: "run-9", TaskID: "task-9"}, 1, "0102030405060708"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -121,11 +121,14 @@ func TestLogDispatch_ExplicitBeatsEnv(t *testing.T) {
 	t.Setenv("HYDRA_RUN_ID", "env-run")
 
 	d := newTestDispatcher()
-	if err := d.logDispatch(logResult(), "p", Options{RunID: "explicit-run"}); err != nil {
+	if err := d.logDispatch(logResult(), "p", Options{RunID: "explicit-run"}, 1, "0102030405060708"); err != nil {
 		t.Fatal(err)
 	}
 	rows := readLog(t, home, "cost.jsonl")
-	if len(rows) != 1 || rows[0]["run_id"] != "explicit-run" {
+	if len(rows) != 1 {
+		t.Fatalf("cost.jsonl: got %d rows, want 1", len(rows))
+	}
+	if rows[0]["run_id"] != "explicit-run" {
 		t.Errorf("run_id = %v, want the explicit Options value to win over env", rows[0]["run_id"])
 	}
 }
@@ -139,11 +142,14 @@ func TestLogDispatch_EnvUsedWhenNoExplicit(t *testing.T) {
 	t.Setenv("HYDRA_RUN_ID", "orchestrator-run")
 
 	d := newTestDispatcher()
-	if err := d.logDispatch(logResult(), "p", Options{}); err != nil {
+	if err := d.logDispatch(logResult(), "p", Options{}, 1, "0102030405060708"); err != nil {
 		t.Fatal(err)
 	}
 	rows := readLog(t, home, "cost.jsonl")
-	if len(rows) != 1 || rows[0]["run_id"] != "orchestrator-run" {
+	if len(rows) != 1 {
+		t.Fatalf("cost.jsonl: got %d rows, want 1", len(rows))
+	}
+	if rows[0]["run_id"] != "orchestrator-run" {
 		t.Errorf("run_id = %v, want the env value", rows[0]["run_id"])
 	}
 }

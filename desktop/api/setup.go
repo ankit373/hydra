@@ -19,35 +19,43 @@ import (
 
 // installScriptURL is the same curl-installer documented at the repo root and
 // in the README. A var, not a const, so a test can point InstallHyctl at an
-// httptest server instead of GitHub — matching internal/update's releaseURL
+// httptest server instead of GitHub, matching internal/update's releaseURL
 // and internal/pricing's openRouterModelsURL.
 var installScriptURL = "https://raw.githubusercontent.com/ankit373/hydra/main/install.sh"
 
 // hyctlSearchDirs returns the fixed destinations to check when exec.LookPath
 // fails. A var, not a direct call, so a test can point it at a sandboxed
-// directory — the real /usr/local/bin must never be touched by a test.
+// directory, the real /usr/local/bin must never be touched by a test.
 var hyctlSearchDirs = defaultHyctlSearchDirs
 
 const (
 	// installFetchTimeout bounds downloading install.sh itself (a few KB).
 	installFetchTimeout = 15 * time.Second
-	// installRunTimeout bounds running it — it downloads a multi-MB archive
+	// installRunTimeout bounds running it, it downloads a multi-MB archive
 	// of its own, so it gets much longer than the fetch above.
 	installRunTimeout = 2 * time.Minute
-	// versionProbeTimeout bounds `hyctl --version`, a purely local call.
-	versionProbeTimeout = 3 * time.Second
 )
 
+// versionProbeTimeout bounds `hyctl --version`. Local, but 3s was too tight:
+// forking a process on a loaded machine blew it (#667). A var, not a const,
+// so a test can shrink it rather than sleep for ten seconds.
+var versionProbeTimeout = 10 * time.Second
+
 // HyctlStatus is whether hyctl is set up on this machine, for the first-run
-// banner (#383). A machine that already has hyctl working must see nothing —
-// Found is what the frontend branches on — so every field here is cheap to
+// banner (#383). A machine that already has hyctl working must see nothing,
+// Found is what the frontend branches on, so every field here is cheap to
 // compute: a PATH lookup, at most one local subprocess, no network.
 type HyctlStatus struct {
 	Found   bool   `json:"found"`
 	Path    string `json:"path,omitempty"`
 	Version string `json:"version,omitempty"`
 
-	// Supported is false on platforms InstallHyctl cannot drive (Windows —
+	// VersionError says why Version is empty when hyctl was found. Without it
+	// a probe that timed out and one that printed nothing are the same blank
+	// field, which is what made #667 hard to read.
+	VersionError string `json:"versionError,omitempty"`
+
+	// Supported is false on platforms InstallHyctl cannot drive (Windows,
 	// see its doc comment). The frontend uses this to decide between offering
 	// a one-click install and pointing at the manual instructions.
 	Supported bool `json:"supported"`
@@ -72,7 +80,7 @@ func (a *API) CheckHyctl() HyctlStatus {
 
 	st.Found = true
 	st.Path = path
-	st.Version = hyctlVersion(path)
+	st.Version, st.VersionError = hyctlVersion(path)
 	return st
 }
 
@@ -81,8 +89,12 @@ type InstallResult struct {
 	OK      bool   `json:"ok"`
 	Version string `json:"version,omitempty"`
 
+	// VersionError carries CheckHyctl's reason when the post-install probe
+	// could not read a version, the install still succeeded (#667).
+	VersionError string `json:"versionError,omitempty"`
+
 	// Log is the installer's combined stdout/stderr, capped by
-	// util.Accumulator. Returned on both success and failure — "it eventually
+	// util.Accumulator. Returned on both success and failure, "it eventually
 	// worked" tells the user nothing; the installer's own progress lines do.
 	Log string `json:"log"`
 
@@ -91,7 +103,7 @@ type InstallResult struct {
 
 // InstallHyctl runs the same curl-installer documented at the repo root
 // (install.sh) and in the README, rather than reimplementing platform/arch
-// detection and checksum verification a second time in Go — that logic
+// detection and checksum verification a second time in Go, that logic
 // already exists, is shellchecked in CI, and would drift the moment one copy
 // changed without the other.
 //
@@ -100,7 +112,7 @@ type InstallResult struct {
 // net/http (which validates the TLS certificate exactly as curl does) and
 // feeds the bytes to `sh` on stdin. That avoids building a shell command
 // string at all (there is no injection surface, since no user input reaches
-// the command line) and drops the assumption that curl is even installed —
+// the command line) and drops the assumption that curl is even installed,
 // which hyctl being absent says nothing about.
 //
 // Scope: macOS and Linux only. Windows ships install.ps1, a different
@@ -110,7 +122,7 @@ type InstallResult struct {
 // #383 rather than blocking this MVP on full platform parity.
 func (a *API) InstallHyctl() InstallResult {
 	if !installSupported(runtime.GOOS) {
-		return InstallResult{Error: "automatic setup is only available on macOS and Linux — " +
+		return InstallResult{Error: "automatic setup is only available on macOS and Linux, " +
 			"on Windows, run install.ps1 or `npm install -g hyctl` (see the README)"}
 	}
 
@@ -122,7 +134,7 @@ func (a *API) InstallHyctl() InstallResult {
 		return InstallResult{Error: fmt.Sprintf("could not download the installer: %v", err)}
 	}
 
-	out := util.NewAccumulator(1 << 20) // 1 MB — install.sh's own output is a few dozen lines
+	out := util.NewAccumulator(1 << 20) // 1 MB, install.sh's own output is a few dozen lines
 	// Absolute path, not "sh" resolved off $PATH: a GUI app launched from
 	// Finder/Dock/a desktop file can inherit a PATH too minimal to resolve
 	// even the shell (the same gap CheckHyctl's fallback exists for), and
@@ -136,7 +148,12 @@ func (a *API) InstallHyctl() InstallResult {
 	}
 
 	status := a.CheckHyctl()
-	return InstallResult{OK: status.Found, Version: status.Version, Log: out.String()}
+	return InstallResult{
+		OK:           status.Found,
+		Version:      status.Version,
+		VersionError: status.VersionError,
+		Log:          out.String(),
+	}
 }
 
 // fetchInstallScript downloads install.sh's current contents. Capped at 1 MB
@@ -196,7 +213,7 @@ func defaultHyctlSearchDirs() []string {
 //
 // On Windows this tries every name PATHEXT would resolve for a bare "hyctl":
 // install.ps1 produces hyctl.exe, but a real hyctl.exe binary is what this
-// checks for in production — the multi-name list exists so a fake, script-based
+// checks for in production, the multi-name list exists so a fake, script-based
 // stand-in (a .bat, the same trick internal/testutil.Sandbox.FakeBinary and
 // this package's own fakeHyctl test helper use to avoid compiling a real PE
 // binary in a test) resolves too, the same way exec.LookPath's PATHEXT search
@@ -217,18 +234,29 @@ func findHyctlInCommonDirs() (string, error) {
 	return "", fmt.Errorf("hyctl not found in common install locations")
 }
 
-// hyctlVersion runs `hyctl --version` and returns its first line — the
-// "  hydra vX.Y.Z" line versionText() in cmd/hydra/main.go prints — trimmed.
-// Empty on any error: the caller already knows Found=true, so a version that
-// could not be read is decoration lost, not a reason to report hyctl absent.
-func hyctlVersion(path string) string {
+// hyctlVersion runs `hyctl --version` and returns its first line, the
+// "  hydra vX.Y.Z" line versionText() in cmd/hydra/main.go prints, trimmed.
+//
+// The reason is returned alongside, because "hyctl printed no version" and
+// "the probe never finished" are different facts and an empty string told the
+// caller neither (#667). Still never fatal: the caller already knows
+// Found=true, so an unread version is decoration lost, not hyctl missing.
+func hyctlVersion(path string) (string, string) {
 	ctx, cancel := context.WithTimeout(context.Background(), versionProbeTimeout)
 	defer cancel()
 
 	out, err := exec.CommandContext(ctx, path, "--version").Output()
 	if err != nil {
-		return ""
+		// ctx, not err: a killed process reports "signal: killed", which says
+		// nothing about who killed it or why.
+		if ctx.Err() == context.DeadlineExceeded {
+			return "", fmt.Sprintf("%s did not respond within %s", path, versionProbeTimeout)
+		}
+		return "", fmt.Sprintf("could not run %s --version: %v", path, err)
 	}
 	line, _, _ := strings.Cut(strings.TrimSpace(string(out)), "\n")
-	return strings.TrimSpace(line)
+	if line = strings.TrimSpace(line); line == "" {
+		return "", fmt.Sprintf("%s --version printed nothing", path)
+	}
+	return line, ""
 }

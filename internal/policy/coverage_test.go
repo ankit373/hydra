@@ -16,7 +16,7 @@ import (
 // direction, so the tests assert what must be refused, not just what is allowed.
 
 // The PII rule is the one that keeps a prompt containing secrets off a cloud
-// head. It must fire when enabled and must not exist when disabled — a rule
+// head. It must fire when enabled and must not exist when disabled, a rule
 // that silently never matches is the same as no rule.
 func TestDefaultRules_PIIRuleIsPresentOnlyWhenEnabled(t *testing.T) {
 	if got := DefaultRules(false); len(got) != 0 {
@@ -31,7 +31,7 @@ func TestDefaultRules_PIIRuleIsPresentOnlyWhenEnabled(t *testing.T) {
 		t.Errorf("rule name = %q", rules[0].Name)
 	}
 	if !rules[0].Apply.LocalOnly {
-		t.Error("the PII rule does not set LocalOnly — a prompt with secrets could " +
+		t.Error("the PII rule does not set LocalOnly, a prompt with secrets could " +
 			"still be sent to a cloud head")
 	}
 }
@@ -51,12 +51,12 @@ func TestEngine_EvaluateReturnsTheFirstMatchWithItsReason(t *testing.T) {
 		t.Error("a later rule overrode the first match")
 	}
 	if got.Reason != "first" {
-		t.Errorf("Reason = %q, want the matching rule's name — without it the user "+
+		t.Errorf("Reason = %q, want the matching rule's name, without it the user "+
 			"cannot tell why a dispatch was constrained", got.Reason)
 	}
 }
 
-// No match is no restriction, not a deny — Hydra routes normally unless a rule
+// No match is no restriction, not a deny, Hydra routes normally unless a rule
 // says otherwise.
 func TestEngine_NoMatchIsNoRestriction(t *testing.T) {
 	e := New([]Rule{
@@ -84,7 +84,7 @@ func TestEngine_PIIPromptIsForcedLocal(t *testing.T) {
 		t.Error("a prompt containing an AWS-shaped key was not forced local")
 	}
 	if got := e.Evaluate(Request{Prompt: "write a function that adds two numbers"}); got.LocalOnly {
-		t.Error("an ordinary prompt was forced local — over-triggering pushes every " +
+		t.Error("an ordinary prompt was forced local, over-triggering pushes every " +
 			"task to the weakest head")
 	}
 }
@@ -96,7 +96,7 @@ func TestLoadFilePolicy_UsesTheEmbeddedRegistry(t *testing.T) {
 
 	e, err := LoadFilePolicy("")
 	if err != nil {
-		t.Fatalf("loading with no on-disk policy failed: %v — this is what every "+
+		t.Fatalf("loading with no on-disk policy failed: %v, this is what every "+
 			"installed binary does", err)
 	}
 	fp := e.Decide(Spec{File: "/repo/a.go", FileExtension: "go"})
@@ -118,13 +118,13 @@ func TestLoadFilePolicy_MalformedYAMLIsAnError(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := LoadFilePolicy(s.HydraHome); err == nil {
-		t.Error("a malformed policy.yaml loaded without error — edits would run " +
+		t.Error("a malformed policy.yaml loaded without error, edits would run " +
 			"under defaults the operator never chose")
 	}
 }
 
 // Defaults must be safe on their own, because they apply whenever no rule
-// matches — which is the common case.
+// matches, which is the common case.
 func TestDecide_DefaultsAreSafe(t *testing.T) {
 	e := &FilePolicyEngine{}
 	fp := e.Decide(Spec{File: "/x/y.go"})
@@ -139,10 +139,10 @@ func TestDecide_DefaultsAreSafe(t *testing.T) {
 		t.Error("the default does not track tokens; spend would go unrecorded")
 	}
 	if fp.DiffSizeCapPct <= 0 || fp.DiffSizeCapPct > 100 {
-		t.Errorf("default DiffSizeCapPct = %d, outside 1–100", fp.DiffSizeCapPct)
+		t.Errorf("default DiffSizeCapPct = %d, outside 1-100", fp.DiffSizeCapPct)
 	}
 	if fp.MaxWallSeconds <= 0 {
-		t.Errorf("default MaxWallSeconds = %d — an edit could run forever", fp.MaxWallSeconds)
+		t.Errorf("default MaxWallSeconds = %d, an edit could run forever", fp.MaxWallSeconds)
 	}
 }
 
@@ -265,7 +265,7 @@ func TestMatchCondition_EveryOperator(t *testing.T) {
 }
 
 // toFloat turns a YAML scalar into a number for comparisons. A non-numeric
-// value must degrade to 0 with a warning rather than panic — but the warning
+// value must degrade to 0 with a warning rather than panic, but the warning
 // matters, because 0 silently makes "file_lines_gt: many" match every file.
 func TestToFloat_EveryScalarShape(t *testing.T) {
 	cases := []struct {
@@ -304,7 +304,7 @@ func TestSpecField_KnownAndUnknownFields(t *testing.T) {
 	}
 	// An unknown field resolves to "" rather than nil, so it is indistinguishable
 	// from a present-but-empty one. That is fine for every operator except a
-	// literal equality against "": `when: {file_extensionn: ""}` — a typo — would
+	// literal equality against "": `when: {file_extensionn: ""}`, a typo, would
 	// match every spec. Narrow, but a policy rule that matches everything because
 	// of a misspelling is the wrong direction to fail in, so it is recorded here
 	// rather than left as folklore.

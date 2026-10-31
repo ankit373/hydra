@@ -3,6 +3,7 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,8 +16,8 @@ import (
 
 // Exit codes are a contract: `hyctl edit` returns 2 on a failed edit and the
 // MCP gate returns 3 on a denial, specifically so a shell script can branch on
-// them. They cannot be asserted in-process — os.Exit takes the test binary with
-// it — so these drive a real binary.
+// them. They cannot be asserted in-process, os.Exit takes the test binary with
+// it, so these drive a real binary.
 
 var hyctlBin string
 
@@ -42,12 +43,20 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-// exitCode runs the built binary in a fresh sandboxed HOME.
-func exitCode(t *testing.T, args ...string) (code int, output string) {
+// requireHyctl skips when TestMain could not build the binary, which is an
+// environment problem rather than a failure. One call site, so the suite's
+// skip budget counts this concern once (see covergate).
+func requireHyctl(t *testing.T) {
 	t.Helper()
 	if hyctlBin == "" {
 		t.Skip("hyctl could not be built in this environment")
 	}
+}
+
+// exitCode runs the built binary in a fresh sandboxed HOME.
+func exitCode(t *testing.T, args ...string) (code int, output string) {
+	t.Helper()
+	requireHyctl(t)
 	return runBinary(t, testutil.NewSandbox(t), args...)
 }
 
@@ -56,13 +65,11 @@ func exitCode(t *testing.T, args ...string) (code int, output string) {
 //
 // Any command that calls os.Exit has to be driven this way: in-process, the
 // exit takes the test binary down with it. `hyctl edit` returns 2, and the MCP
-// gate and the oracle return 3 — deliberately, so a shell script can branch on
-// the verdict — which means the exit code *is* the contract for those.
+// gate and the oracle return 3, deliberately, so a shell script can branch on
+// the verdict, which means the exit code *is* the contract for those.
 func runBinary(t *testing.T, s *testutil.Sandbox, args ...string) (code int, output string) {
 	t.Helper()
-	if hyctlBin == "" {
-		t.Skip("hyctl could not be built in this environment")
-	}
+	requireHyctl(t)
 
 	cmd := exec.Command(hyctlBin, args...)
 	cmd.Env = append(os.Environ(),
@@ -120,22 +127,65 @@ func TestExitCodes_MissingConfigFails(t *testing.T) {
 	}
 }
 
-// The MCP gate's denial code is what a caller branches on to stop an agent
-// touching a file. A denial that exits 0 is a gate that does not gate.
-func TestExitCodes_MCPDenialIsNonZero(t *testing.T) {
-	code, out := exitCode(t, "mcp", "check", "--action", "read",
-		"--resource", "/etc/shadow", "--agent", "test")
-	if code == 0 {
-		t.Errorf("an MCP check exited 0; callers gate on the code:\n%s", out)
+// The MCP gate's exit code is what a caller branches on to stop an agent
+// touching a file, and `ask` withholds permission exactly as `deny` does.
+//
+// This asserts the *recorded decision* as well as the code, because the version
+// it replaces passed no <tool> argument: Cobra's ExactArgs(1) rejected the call
+// with exit 1 before the gate ran, so the test was green on an argument-count
+// error and stayed green with os.Exit deleted outright (#1160).
+func TestExitCodes_MCPWithheldAccessIsNonZero(t *testing.T) {
+	requireHyctl(t)
+	for _, tc := range []struct {
+		decision string
+		wantCode int
+	}{{"deny", 3}, {"ask", 4}} {
+		t.Run(tc.decision, func(t *testing.T) {
+			s := testutil.NewSandbox(t)
+			rule := `{"default":"allow","rules":[{"resource":"/etc/shadow","decision":"` +
+				tc.decision + `"}]}`
+			if err := os.WriteFile(filepath.Join(s.HydraHome, "mcp_policy.json"),
+				[]byte(rule), 0o600); err != nil {
+				t.Fatal(err)
+			}
+
+			code, out := runBinary(t, s, "mcp", "check", "fs", "--action", "read",
+				"--resource", "/etc/shadow", "--agent", "test")
+			if code != tc.wantCode {
+				t.Errorf("`mcp check` against a %q rule exited %d, want %d; a caller "+
+					"gating on the code cannot tell this from approval:\n%s",
+					tc.decision, code, tc.wantCode, out)
+			}
+			if got := lastLedgerDecision(t, s); got != tc.decision {
+				t.Errorf("the ledger recorded decision %q, want %q: the gate never ran, "+
+					"so the exit code above says nothing about it", got, tc.decision)
+			}
+		})
 	}
+}
+
+// lastLedgerDecision reads the decision off the newest ledger event, which is
+// how this file tells "the gate ran and refused" from "the command failed".
+func lastLedgerDecision(t *testing.T, s *testutil.Sandbox) string {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join(s.HydraHome, "mcp_ledger.jsonl"))
+	if err != nil {
+		t.Fatalf("no ledger was written, so nothing was gated: %v", err)
+	}
+	lines := strings.Split(strings.TrimRight(string(raw), "\n"), "\n")
+	var evt struct {
+		Decision string `json:"decision"`
+	}
+	if err := json.Unmarshal([]byte(lines[len(lines)-1]), &evt); err != nil {
+		t.Fatal(err)
+	}
+	return evt.Decision
 }
 
 // stdout must stay parseable: a banner or a warning belongs on stderr, or it
 // lands in whatever is consuming the JSON.
 func TestExitCodes_JSONGoesToStdoutAlone(t *testing.T) {
-	if hyctlBin == "" {
-		t.Skip("hyctl could not be built in this environment")
-	}
+	requireHyctl(t)
 	s := testutil.NewSandbox(t)
 
 	cmd := exec.Command(hyctlBin, "models", "list", "--json")
@@ -152,7 +202,7 @@ func TestExitCodes_JSONGoesToStdoutAlone(t *testing.T) {
 		t.Fatal("nothing on stdout")
 	}
 	if trimmed[0] != '{' && trimmed[0] != '[' {
-		t.Errorf("stdout does not start with JSON — something else was printed to "+
+		t.Errorf("stdout does not start with JSON, something else was printed to "+
 			"it:\n%s", trimmed)
 	}
 }

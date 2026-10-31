@@ -14,7 +14,7 @@ type Head struct {
 	Source     string            // how it was found: "cli", "env", "port"
 	Executable string            // absolute path if CLI-sourced
 	Endpoint   string            // base URL if HTTP-sourced
-	CapScore   int               // 0–100 capability score; higher = smarter
+	CapScore   int               // 0-100 capability score; higher = smarter
 	LocalOnly  bool              // never routes over the network
 	AuthReady  bool              // immediately usable, no extra auth step required
 	Meta       map[string]string // extensible metadata; providers add what they need

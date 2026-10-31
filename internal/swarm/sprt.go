@@ -5,13 +5,15 @@ package swarm
 import (
 	"context"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
-	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/dispatch"
+	"github.com/ankit373/hydra/internal/policy"
 	"github.com/ankit373/hydra/internal/provider"
 	"github.com/ankit373/hydra/internal/rank"
+	"github.com/ankit373/hydra/internal/runid"
 	"github.com/ankit373/hydra/internal/trust"
 )
 
@@ -24,33 +26,57 @@ type SPRTResult struct {
 	Domain   string
 	Prompt   string
 	Target   float64 // requested target confidence
+
+	// Enum and Tier are the routing decision this run was made under, carried
+	// so a verdict on the answer can be filed against it. routing.yaml is
+	// editable, so the map in force when the heads ran is not recoverable later.
+	Enum string
+	Tier int
+
+	// SpanID is the root span this run was logged under, so a verdict landing
+	// on that span can find the evidence ledger that it trains (#1144).
+	SpanID string
 }
 
 // RunSPRT routes a prompt through the SPRT optimal-stopping ensemble: it samples
 // the selected heads adaptively, in most-diagnostic-per-dollar order, stopping as
 // soon as the calibrated confidence reaches opts.Confidence. It is the production
-// caller of trust.Run — the swarm executor is adapted to trust.Executor here.
+// caller of trust.Run, the swarm executor is adapted to trust.Executor here.
 func (s *Swarm) RunSPRT(ctx context.Context, prompt string, opts Options) (*SPRTResult, error) {
-	if opts.Confidence <= 0 || opts.Confidence >= 1 {
+	if math.IsNaN(opts.Confidence) || opts.Confidence <= 0 || opts.Confidence >= 1 {
 		return nil, fmt.Errorf("swarm sprt: confidence must be in (0,1), got %v", opts.Confidence)
 	}
-	cfg, err := config.Load()
+	if err := validateSwarmTiers(opts); err != nil {
+		return nil, err
+	}
+	prompt, err := injectA2A(prompt, opts)
 	if err != nil {
-		return nil, fmt.Errorf("swarm sprt: config load: %w", err)
+		return nil, err
 	}
 
-	selected, err := resolveSelector(opts, cfg).Select(s.heads, opts)
+	// Resolved once, here, because ResolveTask mints a fresh id when the caller
+	// named none: calling it again below would log the samples under one span
+	// and report another, which is the #1144 join broken in a new place.
+	opts.TaskID = runid.ResolveTask(opts.TaskID)
+
+	opts.progress = &progressSink{fn: opts.OnProgress}
+	selected, err := resolveSelector(opts).Select(s.heads, opts)
 	if err != nil {
 		return nil, err
 	}
 	if len(selected) == 0 {
 		return nil, fmt.Errorf("swarm sprt: no heads available")
 	}
+	opts.progress.emit(Progress{Kind: ProgressSelected, Heads: selected})
 
-	domain := opts.Domain
-	if domain == "" {
-		domain = "default"
+	// Classify once, before any head is sampled, every executeHead call the
+	// adapter makes below reuses this instead of each re-scanning prompt (#522).
+	if opts.Classification == nil {
+		c := policy.Classify(prompt)
+		opts.Classification = &c
 	}
+
+	domain := trust.Domain(opts.Domain)
 
 	cal, err := trust.New(trust.DefaultPath())
 	if err != nil {
@@ -73,7 +99,7 @@ func (s *Swarm) RunSPRT(ctx context.Context, prompt string, opts Options) (*SPRT
 	adapter := &sprtExecutor{swarm: s, prompt: prompt, opts: opts, byID: byID}
 
 	// Behavior-based agreement: two independently-correct answers that differ only
-	// in wording must count as agreement, not disagreement — the effect that capped
+	// in wording must count as agreement, not disagreement, the effect that capped
 	// real SPRT confidence at 32.9% (see the findings doc §3). nil when no
 	// dispatcher is available, in which case trust.Run keeps its textual default.
 	var equiv trust.AnswerEquivalence
@@ -81,10 +107,17 @@ func (s *Swarm) RunSPRT(ctx context.Context, prompt string, opts Options) (*SPRT
 		equiv = s.judgeEquivalence(ctx, prompt, opts)
 	}
 
+	// The running Λ and the threshold it is walking toward exist only inside
+	// trust.Run: a head finishing is not the same event as its answer being
+	// weighed, and only the second says why the ensemble has not stopped.
+	observe := func(e trust.Evidence, accept float64) {
+		opts.progress.emit(Progress{Kind: ProgressEvidence, Evidence: e, Threshold: accept})
+	}
+
 	res, err := trust.Run(ctx, trust.Task{Domain: domain}, sources, adapter, cal, trust.Target{
 		Confidence: opts.Confidence,
 		MaxCostUSD: opts.MaxEstCostUSD,
-	}, trust.WithEquivalence(equiv))
+	}, trust.WithEquivalence(equiv), trust.WithObserver(observe))
 	if err != nil {
 		return nil, err
 	}
@@ -99,7 +132,7 @@ func (s *Swarm) RunSPRT(ctx context.Context, prompt string, opts Options) (*SPRT
 
 	// Log the sampled heads to cost.jsonl, exactly as Run does for race/best/all.
 	// Without this the ensemble's per-head spend is invisible to `hyctl cost` and
-	// `hyctl stats` — only the aggregate trust.jsonl row survives (#175).
+	// `hyctl stats`, only the aggregate trust.jsonl row survives (#175).
 	logAttempts(adapter.attempts, ModeSPRT, opts, truncate(prompt, 80))
 
 	// Samples come from the LLR ledger, not from the attempt list: the ledger is
@@ -108,7 +141,14 @@ func (s *Swarm) RunSPRT(ctx context.Context, prompt string, opts Options) (*SPRT
 	// would record that N heads ran but not what their evidence did (#204).
 	logSamples(res.Ledger, adapter.attempts, opts)
 
-	return &SPRTResult{Trust: res, Attempts: adapter.attempts, Domain: domain, Prompt: prompt, Target: opts.Confidence}, nil
+	// validateSwarmTiers already rejected an unresolvable hint above, so this
+	// cannot fail; an empty hint resolves to 0, which is "unrouted", not tier 0.
+	tier, _ := dispatch.ResolveTier(opts.tier())
+	return &SPRTResult{
+		Trust: res, Attempts: adapter.attempts, Domain: domain, Prompt: prompt,
+		Target: opts.Confidence, Enum: opts.Enum, Tier: tier,
+		SpanID: SPRTSpanID(opts.TaskID),
+	}, nil
 }
 
 // sprtExecutor adapts the swarm's per-head execution to the trust.Executor
@@ -126,12 +166,9 @@ func (e *sprtExecutor) Execute(ctx context.Context, src trust.Source, _ trust.Ta
 	if !ok {
 		return trust.Answer{}, fmt.Errorf("sprt: unknown source %q", src.ID)
 	}
-	a := executeHead(ctx, h, e.prompt, e.opts)
-
-	// Price the attempt so cost logging and the budget guard see real numbers.
-	if e.swarm.pricing != nil && a.Status == StatusOK {
-		a.EstCostUSD = round6(e.swarm.pricing.EstimateCost(rank.UITier(h), a.InputTokens, a.OutputTokens))
-	}
+	// executeHead prices the attempt, so cost logging and the budget guard see
+	// the same number the panel already showed.
+	a := executeHead(ctx, h, e.prompt, e.opts, e.swarm.pricing)
 	a.FinishedAt = time.Now()
 	e.attempts = append(e.attempts, a)
 
@@ -155,14 +192,13 @@ func (s *Swarm) judgeEquivalence(ctx context.Context, prompt string, opts Option
 	}
 	return func(candidate, answer string) bool {
 		if trust.TextEquivalence(candidate, answer) {
-			return true // identical mod formatting — no need to spend a judge call
+			return true // identical mod formatting, no need to spend a judge call
 		}
 		jctx, cancel := context.WithTimeout(ctx, timeout)
 		defer cancel()
-		out, err := s.d.Dispatch(jctx, buildEquivalencePrompt(prompt, candidate, answer), dispatch.Options{
-			TierHint: opts.JudgeTierHint,
-			System:   "You compare two answers for equivalence. Reply with exactly one word: YES or NO.",
-		})
+		out, err := s.ask()(jctx, buildEquivalencePrompt(prompt, candidate, answer),
+			judgeOptions(opts, opts.JudgeTierHint,
+				"You compare two answers for equivalence. Reply with exactly one word: YES or NO."))
 		if err != nil {
 			return trust.TextEquivalence(candidate, answer) // degrade, never block
 		}
@@ -173,7 +209,7 @@ func (s *Swarm) judgeEquivalence(ctx context.Context, prompt string, opts Option
 // buildEquivalencePrompt asks whether two answers are equivalent solutions.
 func buildEquivalencePrompt(prompt, a, b string) string {
 	var sb strings.Builder
-	sb.WriteString("Two answers were given to the same task. Decide whether they are EQUIVALENT — ")
+	sb.WriteString("Two answers were given to the same task. Decide whether they are EQUIVALENT, ")
 	sb.WriteString("both correct/valid solutions that satisfy the task, even if they differ in ")
 	sb.WriteString("wording, identifiers, formatting, or style.\n\nTask:\n---\n")
 	sb.WriteString(prompt)
@@ -186,7 +222,7 @@ func buildEquivalencePrompt(prompt, a, b string) string {
 }
 
 // parseYesNo extracts a yes/no decision from a judge reply. Ambiguous or empty
-// replies are treated as NO — the conservative direction for a trust check, so a
+// replies are treated as NO, the conservative direction for a trust check, so a
 // confused judge never inflates agreement.
 func parseYesNo(s string) bool {
 	for _, f := range strings.Fields(strings.ToLower(s)) {

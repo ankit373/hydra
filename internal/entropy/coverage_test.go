@@ -35,7 +35,7 @@ func TestSignalDensity_StaysInRangeForEveryShape(t *testing.T) {
 				t.Errorf("SignalDensity = %v; the governor divides by this", got)
 			}
 			if got > 1 {
-				t.Errorf("SignalDensity = %v > 1 — that claims more useful tokens "+
+				t.Errorf("SignalDensity = %v > 1, that claims more useful tokens "+
 					"than there are characters", got)
 			}
 		})
@@ -53,7 +53,7 @@ func TestSignalDensity_RepetitiveTextScoresBelowVariedText(t *testing.T) {
 
 	lo, hi := SignalDensity(repetitive), SignalDensity(varied)
 	if lo >= hi {
-		t.Errorf("repetitive text scored %v and varied text %v — the metric does not "+
+		t.Errorf("repetitive text scored %v and varied text %v, the metric does not "+
 			"distinguish signal from repetition", lo, hi)
 	}
 }
@@ -63,7 +63,7 @@ func TestSignalDensity_RepetitiveTextScoresBelowVariedText(t *testing.T) {
 func TestSignalDensity_TinyInputsAreNotScoredAboveOne(t *testing.T) {
 	for _, s := range []string{"a", "ab", "abc", "abcd", "hello"} {
 		if got := SignalDensity(s); got > 1 {
-			t.Errorf("SignalDensity(%q) = %v > 1 — the gzip header overhead is not "+
+			t.Errorf("SignalDensity(%q) = %v > 1, the gzip header overhead is not "+
 				"being subtracted", s, got)
 		}
 	}

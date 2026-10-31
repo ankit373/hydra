@@ -5,6 +5,7 @@ package ledger
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -17,6 +18,9 @@ func TestDefaultPaths_AreDistinctAndUnderHydraDir(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
+	// A developer or CI runner with a stray $HYDRA_HOME already exported must
+	// not leak into this "no override" case (#442 was found exactly this way).
+	t.Setenv("HYDRA_HOME", "")
 
 	log, policy := DefaultPath(), DefaultPolicyPath()
 	if !strings.HasPrefix(log, filepath.Join(home, ".hydra")) {
@@ -31,10 +35,28 @@ func TestDefaultPaths_AreDistinctAndUnderHydraDir(t *testing.T) {
 	}
 }
 
-// A missing policy is default-allow: Hydra records everything but blocks
-// nothing until an operator writes rules. That is a deliberate posture, so it
-// must be exactly what an absent file produces.
-func TestLoadPolicy_MissingFileIsDefaultAllow(t *testing.T) {
+// $HYDRA_HOME must win over $HOME for the ledger, the whole point of #442 is
+// that this subsystem is exactly what silently ignored it before.
+func TestDefaultPaths_PreferHydraHomeOverHome(t *testing.T) {
+	home := t.TempDir()
+	hydraHome := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("HYDRA_HOME", hydraHome)
+
+	if got, want := DefaultPath(), filepath.Join(hydraHome, "mcp_ledger.jsonl"); got != want {
+		t.Errorf("DefaultPath() = %q, want %q ($HYDRA_HOME, not $HOME)", got, want)
+	}
+	if got, want := DefaultPolicyPath(), filepath.Join(hydraHome, "mcp_policy.json"); got != want {
+		t.Errorf("DefaultPolicyPath() = %q, want %q ($HYDRA_HOME, not $HOME)", got, want)
+	}
+}
+
+// A missing policy yields DefaultPolicy, not an empty one. Only hyctl init ever
+// wrote the file, so every install predating #722 had no rules at all and the
+// one unambiguous deny in the system could not fire (#836). The default stays
+// Allow, which is a separate and still-deliberate posture.
+func TestLoadPolicy_MissingFileYieldsTheShippedDefault(t *testing.T) {
 	p, err := LoadPolicy(filepath.Join(t.TempDir(), "absent.json"))
 	if err != nil {
 		t.Fatalf("a missing policy errored: %v", err)
@@ -42,8 +64,60 @@ func TestLoadPolicy_MissingFileIsDefaultAllow(t *testing.T) {
 	if p.Default != Allow {
 		t.Errorf("Default = %q, want Allow", p.Default)
 	}
-	if len(p.Rules) != 0 {
-		t.Errorf("a missing policy produced %d rules", len(p.Rules))
+	if !reflect.DeepEqual(p, DefaultPolicy()) {
+		t.Errorf("a missing policy produced %+v, want DefaultPolicy() %+v", p, DefaultPolicy())
+	}
+}
+
+// The outcome the above exists for, stated as behaviour rather than as a struct
+// comparison: a quarantined server is refused on a machine that has never run
+// hyctl init. A count of rules would pass with the wrong three.
+func TestLoadPolicy_MissingFileStillRefusesAQuarantinedServer(t *testing.T) {
+	p, err := LoadPolicy(filepath.Join(t.TempDir(), "absent.json"))
+	if err != nil {
+		t.Fatalf("a missing policy errored: %v", err)
+	}
+	if d, _ := p.Decide("agent", "tool", "resource", Exec, classQuarantined); d != Deny {
+		t.Errorf("quarantined server through a missing policy = %q, want Deny", d)
+	}
+	if d, _ := p.Decide("agent", "tool", "resource", Exec, ""); d != Allow {
+		t.Errorf("unclassified access through a missing policy = %q, want Allow", d)
+	}
+}
+
+// LoadPolicy caches its result per path (a dispatch fallback loop or swarm
+// fan-out calls it once per candidate head for the same content), but a real
+// edit to the file must never be masked by a stale cache entry, the whole
+// reason it keys on mtime+size instead of remembering the first read forever.
+func TestLoadPolicy_CacheInvalidatesOnRealEdit(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "policy.json")
+
+	if err := os.WriteFile(path, []byte(`{"default":"allow","rules":[]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	p1, err := LoadPolicy(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p1.Default != Allow {
+		t.Fatalf("first load Default = %q, want Allow", p1.Default)
+	}
+
+	// Deliberately a different size, so this can never collide with the first
+	// read's cache key regardless of filesystem mtime resolution.
+	body := `{"default":"deny","rules":[{"tool":"fs","resource":"/repo/*","action":"write","decision":"allow"}]}`
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	p2, err := LoadPolicy(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p2.Default != Deny {
+		t.Errorf("after editing the file, Default = %q, want Deny, the cache served a stale read", p2.Default)
+	}
+	if len(p2.Rules) != 1 {
+		t.Errorf("after editing the file, got %d rule(s), want 1, the cache served a stale read", len(p2.Rules))
 	}
 }
 
@@ -53,14 +127,14 @@ func TestLoadPolicy_MalformedJSONIsAnError(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := LoadPolicy(path); err == nil {
-		t.Error("a malformed policy loaded without error — the gate would run " +
+		t.Error("a malformed policy loaded without error, the gate would run " +
 			"with no rules and nobody would know")
 	}
 }
 
 // A policy is rejected whole rather than partially honoured. A rule whose
 // decision does not parse can never deny, so loading it would silently weaken
-// the gate — a default-deny posture written as "DENY" would void entirely.
+// the gate, a default-deny posture written as "DENY" would void entirely.
 func TestLoadPolicy_RejectsUnparseableRulesRatherThanWeakeningTheGate(t *testing.T) {
 	cases := []struct{ name, body string }{
 		{"bad default", `{"default":"maybe","rules":[]}`},
@@ -123,14 +197,14 @@ func TestHashDecodeVerifyParams_RoundTripAndTamperDetection(t *testing.T) {
 		t.Error("the same params did not verify against their own hash")
 	}
 
-	// Any change must fail verification — that is the whole point of binding.
+	// Any change must fail verification, that is the whole point of binding.
 	tampered := map[string]any{"path": "/etc/passwd", "mode": "write", "n": 3}
 	ok, err = VerifyParams(tampered, hash)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if ok {
-		t.Error("altered params verified against the original hash — the binding " +
+		t.Error("altered params verified against the original hash, the binding " +
 			"between what was approved and what ran is not tamper-evident")
 	}
 
@@ -197,7 +271,7 @@ func TestRecord_StampsATimestampWhenAbsent(t *testing.T) {
 }
 
 // globMatch backs resource rules. A pattern that cannot compile must not match
-// everything — that would turn a deny rule into a universal block or an allow
+// everything, that would turn a deny rule into a universal block or an allow
 // rule into a universal pass.
 func TestGlobMatch_Behaviour(t *testing.T) {
 	cases := []struct {
@@ -208,7 +282,7 @@ func TestGlobMatch_Behaviour(t *testing.T) {
 		{"/repo/*", "/repo/sub/a.go", false},
 		// Both of these are now the same dialect internal/workspace uses, on
 		// every platform. Before #310 this package used filepath.Match: no "**"
-		// at all, and a "\\" separator on Windows — so "/repo/*" matched one
+		// at all, and a "\\" separator on Windows, so "/repo/*" matched one
 		// level on Unix and arbitrarily deep on Windows, which the three-OS
 		// matrix caught.
 		{"/repo/**", "/repo/sub/a.go", true},
@@ -225,7 +299,7 @@ func TestGlobMatch_Behaviour(t *testing.T) {
 	}
 }
 
-// Load on a missing ledger is an empty history, not an error — nothing has been
+// Load on a missing ledger is an empty history, not an error, nothing has been
 // recorded yet on a fresh install.
 func TestLoad_MissingLedgerIsEmpty(t *testing.T) {
 	events, err := Load(filepath.Join(t.TempDir(), "absent.jsonl"))

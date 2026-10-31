@@ -21,6 +21,28 @@ type Request struct {
 	Head      provider.Head
 	MaxTokens int    // 0 = provider default
 	System    string // optional system prompt
+
+	// Temperature pins decoding. A pointer because 0 is the meaningful value,
+	// greedy and reproducible, so it cannot spell "provider default" the way
+	// MaxTokens does: a measurement that resamples is not one (#1041).
+	Temperature *float64
+
+	// Messages is a whole conversation, when the caller has one. It replaces
+	// Prompt and System for the executors that can carry it; Prompt is still
+	// set alongside, because token estimation and the logs describe a call by
+	// what was asked, not by how many turns preceded it.
+	Messages []Message
+
+	// Tools the head may call, and the caller's choice policy, passed through
+	// untouched. Only heads CanUseTools reports true for receive them.
+	Tools      []ToolDef
+	ToolChoice json.RawMessage
+
+	// MaxMemoryMB and MaxCPUSeconds cap a subprocess head via
+	// sandbox.WithLimits; meaningless for an HTTP head, which spends no local
+	// process for this to bound. 0 means no ceiling.
+	MaxMemoryMB   int
+	MaxCPUSeconds int
 }
 
 // Response is the result of a successful execution.
@@ -32,12 +54,47 @@ type Response struct {
 	Model        string
 	Truncated    bool // true when output exceeded the accumulator cap
 
+	// TTFT is time to first token, measured by the streaming paths from the
+	// first delta that carries something. Zero means unknown, never instant,
+	// so a consumer must not average it in as a measured zero: a plain
+	// Execute observes no first token and reports none.
+	TTFT time.Duration
+
+	// ToolCalls is the head asking to run one or more tools, and FinishReason
+	// is why it stopped ("stop", "tool_calls", "length"). A tool-calling answer
+	// usually has no Output at all, so an empty answer with calls present is a
+	// complete reply rather than a failed one.
+	ToolCalls    []ToolCall
+	FinishReason string
+
+	// ToolCallsRecovered: the calls were read out of the model's own text
+	// because its server reported none, so they are Hydra's reading rather
+	// than the provider's. Carried so a log can tell the two apart; nothing
+	// routes on it (#1147).
+	ToolCallsRecovered bool
+
 	// TokensEstimated is true when InputTokens/OutputTokens were derived by
 	// Hydra (e.g. agy's char/4 heuristic) rather than reported by the provider.
-	// HTTP and Ollama executors parse real usage and leave this false; the agy
+	// The HTTP executor parses real usage and leaves this false; the agy
 	// executor sets it true. Consumers must not present estimated tokens as
 	// measured spend.
 	TokensEstimated bool
+}
+
+// EstimateTokens approximates a token count from text length, for the CLI
+// heads that report no usage of their own.
+//
+// Never returns 0 for text that exists. len(s)/4 truncated a reply of "OK" to
+// zero tokens, so a call that answered was reported as producing nothing and
+// its cost rounded to $0.000 (#696).
+func EstimateTokens(s string) int {
+	if s == "" {
+		return 0
+	}
+	if n := len(s) / 4; n > 0 {
+		return n
+	}
+	return 1
 }
 
 // Executor runs a prompt and returns a response.
@@ -56,11 +113,34 @@ type Executor interface {
 // different questions, and only one function should answer the second.
 func Unroutable(h provider.Head) string {
 	switch {
+	case h.Meta["unroutable_reason"] != "":
+		// The discovering provider knows something this package does not, e.g.
+		// that a configured OpenRouter model is not in the catalogue (#752).
+		// Its message rather than a guess, so the reason stays where the
+		// knowledge is.
+		return h.Meta["unroutable_reason"]
+	case h.Meta["embedding_only"] == "true":
+		// Discovered and shown, never dispatched: it has no completion API,
+		// so every dispatch to it would fail (#532).
+		return "embeddings only, never routed"
 	case h.Source == "registry":
-		return "" // agy tiers — AgyExecutor handles them
+		// Every registry head is driven by AgyExecutor, which execs `agy`.
+		// Calling them routable without it turned one missing binary into a
+		// chain of eight identical failures per dispatch (#688).
+		if h.Executable == "" {
+			return "the agy CLI is not on PATH, so nothing can drive this head"
+		}
+		return ""
 	case h.Source == "port" || h.Source == "env" || h.Endpoint != "":
 		if SupportsHTTP(h) {
 			return ""
+		}
+		// SupportsHTTP folds several conditions into one bool, so the generic
+		// sentence names only the first of them. For Bedrock that sent someone
+		// hunting for a key that was sitting right there, when what was missing
+		// was the region: a wrong reason is worse than a vague one (#890).
+		if h.Provider == "bedrock" {
+			return bedrockUnroutableReason()
 		}
 		return "no API key or default model configured for " + h.Provider
 	}
@@ -71,11 +151,11 @@ func Unroutable(h provider.Head) string {
 		return ""
 	}
 	// ollama and llamafile are found on $PATH but driven over HTTP, so the
-	// binary alone is not routable — the port provider registers the real heads
+	// binary alone is not routable, the port provider registers the real heads
 	// once a server answers. Say that, rather than "no executor", because the
 	// user can act on it.
 	if h.LocalOnly {
-		return "binary only — start its local server (e.g. `ollama serve`) to route to its models"
+		return "binary only, start its local server (e.g. `ollama serve`) to route to its models"
 	}
 	return "no executor for provider " + h.Provider
 }
@@ -85,19 +165,21 @@ func Supports(h provider.Head) bool { return Unroutable(h) == "" }
 
 // For selects the correct Executor for a given Head.
 //   - registry source (agy tiers): AgyExecutor → native (execs the `agy` binary)
-//   - ollama source: OllamaExecutor → native /api/generate
 //   - env source / port source / explicit endpoint: HTTPExecutor → per-provider REST
 //   - everything else: CLIExecutor → subprocess
 //
-// env-key heads (Source=="env") carry no Executable — they are API providers
+// env-key heads (Source=="env") carry no Executable, they are API providers
 // (anthropic, openai, groq, …). HTTPExecutor.Execute dispatches on Head.Provider
 // and already has an adapter for each, so env heads route to HTTP, not CLI.
+//
+// Local model servers reach HTTPExecutor via their Endpoint, Ollama included:
+// it serves an OpenAI-compatible API and the port provider stamps the address
+// it was found at. A branch here for Ollama's native /api/generate matched
+// `Source`/`Provider` values no provider has ever produced, so the dialect
+// beside it could not be selected (#819).
 func For(h provider.Head) Executor {
 	if h.Source == "registry" {
 		return &AgyExecutor{}
-	}
-	if h.Source == "ollama" || h.Provider == "ollama" {
-		return &OllamaExecutor{}
 	}
 	if h.Source == "port" || h.Source == "env" || h.Endpoint != "" {
 		return &HTTPExecutor{}

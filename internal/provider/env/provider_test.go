@@ -10,7 +10,7 @@ import (
 )
 
 // Every test runs inside a sandbox that clears all provider credentials, so
-// what discovery reports is exactly what the test set — not whatever the
+// what discovery reports is exactly what the test set, not whatever the
 // developer happens to have exported. Without that, this file passes on a
 // laptop with no keys and fails on one with them.
 
@@ -42,7 +42,7 @@ func TestDiscover_OneKeyYieldsOneHead(t *testing.T) {
 		t.Errorf("Provider = %q, want %q", h.Provider, "anthropic")
 	}
 	if h.ID != "env/anthropic" {
-		t.Errorf("ID = %q, want %q — the env/ prefix is what keeps it distinct from the CLI head", h.ID, "env/anthropic")
+		t.Errorf("ID = %q, want %q, the env/ prefix is what keeps it distinct from the CLI head", h.ID, "env/anthropic")
 	}
 	if h.Source != "env" {
 		t.Errorf("Source = %q, want %q", h.Source, "env")
@@ -51,10 +51,10 @@ func TestDiscover_OneKeyYieldsOneHead(t *testing.T) {
 		t.Error("AuthReady = false, but a key was present")
 	}
 	if h.LocalOnly {
-		t.Error("LocalOnly = true for an API head — --local would route paid work as if it were free")
+		t.Error("LocalOnly = true for an API head, --local would route paid work as if it were free")
 	}
 	if got := h.Meta["model_source"]; got != "builtin" {
-		t.Errorf("Meta[model_source] = %q, want builtin — env/anthropic is in the embedded catalog", got)
+		t.Errorf("Meta[model_source] = %q, want builtin, env/anthropic is in the embedded catalog", got)
 	}
 }
 
@@ -79,7 +79,7 @@ func TestDiscover_AnyOfNeedsOnlyOneVar(t *testing.T) {
 
 // The AND case: a half-configured provider must not be advertised. A head with
 // an access key but no secret is discovered, dispatched to, and fails at the
-// point of use — the failure #248 was about, one layer earlier.
+// point of use, the failure #248 was about, one layer earlier.
 func TestDiscover_AndKeysNeedAllVars(t *testing.T) {
 	cases := []struct {
 		name string
@@ -132,10 +132,10 @@ func TestKnownKeys_EntriesAreWellFormed(t *testing.T) {
 			t.Errorf("entry with vars %v has no providerID", k.envVars)
 		}
 		if len(k.envVars) == 0 {
-			t.Errorf("provider %q has no env vars — it can never be detected", k.providerID)
+			t.Errorf("provider %q has no env vars, it can never be detected", k.providerID)
 		}
 		if seenProvider[k.providerID] {
-			t.Errorf("providerID %q listed twice — it would yield two heads with the same ID", k.providerID)
+			t.Errorf("providerID %q listed twice, it would yield two heads with the same ID", k.providerID)
 		}
 		seenProvider[k.providerID] = true
 		if len(k.envVars) > 1 && !k.anyOf {

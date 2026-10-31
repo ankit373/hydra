@@ -11,14 +11,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/provider"
 )
 
 // registryHead returns a head that executor.Supports() accepts (Source=="registry"),
 // so selector tests exercise real executability filtering without network.
 func registryHead(id, name string, cap int) provider.Head {
-	return provider.Head{ID: id, Name: name, Provider: "agy", Source: "registry", CapScore: cap}
+	return provider.Head{ID: id, Name: name, Provider: "agy", Source: "registry", Executable: "/usr/bin/agy", CapScore: cap}
 }
 
 // ── Attempt / SwarmResult ──────────────────────────────────────────────────────
@@ -158,17 +157,18 @@ func TestPreflightCost(t *testing.T) {
 	}
 }
 
-func TestEnrichCosts(t *testing.T) {
-	attempts := []Attempt{
-		{Head: registryHead("a", "A", 90), Status: StatusOK, InputTokens: 100, OutputTokens: 50},
-		{Head: registryHead("b", "B", 80), Status: StatusFailed},
+func TestAttemptCost(t *testing.T) {
+	ok := Attempt{Head: registryHead("a", "A", 90), Status: StatusOK, InputTokens: 100, OutputTokens: 50}
+	failed := Attempt{Head: registryHead("b", "B", 80), Status: StatusFailed}
+
+	if got := attemptCost(ok, fakePricing{per: 0.02}); got != 0.02 {
+		t.Errorf("OK attempt cost = %v, want 0.02", got)
 	}
-	enrichCosts(attempts, fakePricing{per: 0.02})
-	if attempts[0].EstCostUSD != 0.02 {
-		t.Errorf("OK attempt cost = %v, want 0.02", attempts[0].EstCostUSD)
+	if got := attemptCost(failed, fakePricing{per: 0.02}); got != 0 {
+		t.Errorf("failed attempt cost = %v, want 0", got)
 	}
-	if attempts[1].EstCostUSD != 0 {
-		t.Errorf("failed attempt cost = %v, want 0 (untouched)", attempts[1].EstCostUSD)
+	if got := attemptCost(ok, nil); got != 0 {
+		t.Errorf("unpriced swarm cost = %v, want 0", got)
 	}
 }
 
@@ -196,7 +196,7 @@ func TestIDSelector(t *testing.T) {
 	}
 }
 
-// An explicitly pinned list must survive the default cap — otherwise pinning
+// An explicitly pinned list must survive the default cap, otherwise pinning
 // heads to escape the top-N CapScore crowding silently gets trimmed back to N.
 func TestIDSelector_DefaultCapDoesNotTrimExplicitPins(t *testing.T) {
 	var all []provider.Head
@@ -212,7 +212,7 @@ func TestIDSelector_DefaultCapDoesNotTrimExplicitPins(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(got) != len(ids) {
-		t.Errorf("pinned %d heads, got %d — the default cap trimmed an explicit list", len(ids), len(got))
+		t.Errorf("pinned %d heads, got %d, the default cap trimmed an explicit list", len(ids), len(got))
 	}
 
 	// An explicit MaxHeads is a deliberate instruction and must still cap.
@@ -274,6 +274,118 @@ func TestCapScoreSelector_MaxHeadsCap(t *testing.T) {
 	}
 }
 
+// ── TierSelector ─────────────────────────────────────────────────────────────
+
+// A numeric --tier used to match no config tier name and always fall through
+// to CapScoreSelector's top-N fan-out, silently firing every head regardless
+// of the requested tier (#501). Numeric and named hints now reach the same
+// selector, because a name is just another way to write a number (#782).
+func TestResolveSelector_SendsEveryTierHintToTheTierSelector(t *testing.T) {
+	for _, hint := range []string{"6", "expert", "simple", "local"} {
+		if _, ok := resolveSelector(Options{TierHint: hint}).(*TierSelector); !ok {
+			t.Errorf("TierHint %q did not resolve to TierSelector", hint)
+		}
+	}
+	if _, ok := resolveSelector(Options{}).(*CapScoreSelector); !ok {
+		t.Error("no TierHint did not resolve to CapScoreSelector")
+	}
+}
+
+func TestTierSelector_MatchesDispatchSemantics(t *testing.T) {
+	all := []provider.Head{
+		registryHead("strongest", "Strongest", 100), // UITier 1
+		registryHead("mid", "Mid", 70),              // UITier 7
+		registryHead("weak", "Weak", 40),            // UITier 10
+	}
+
+	// Tier 7: excludes the tier-1 head, keeps mid + weaker as fallback,
+	// strongest-eligible first.
+	got, err := (&TierSelector{}).Select(all, Options{TierHint: "7"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) == 0 || got[0].ID != "mid" {
+		t.Errorf("tier 7 primary = %v, want \"mid\"", ids(got))
+	}
+	for _, h := range got {
+		if h.ID == "strongest" {
+			t.Error("tier 7 must not include the tier-1 head")
+		}
+	}
+
+	// Tier 1: everything qualifies, strongest first.
+	got, err = (&TierSelector{}).Select(all, Options{TierHint: "1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 3 || got[0].ID != "strongest" {
+		t.Errorf("tier 1 = %v, want strongest first", ids(got))
+	}
+}
+
+// Nothing matches the requested tier, degrade to the cheapest heads
+// available, never silently escalate to the strongest (most expensive) one.
+func TestTierSelector_DegradesToCheapestNeverStrongest(t *testing.T) {
+	all := []provider.Head{
+		registryHead("strongest", "Strongest", 100),
+		registryHead("expert", "Expert", 92),
+	}
+	got, err := (&TierSelector{}).Select(all, Options{TierHint: "10"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) == 0 {
+		t.Fatal("degrade path selected nothing")
+	}
+	if got[0].ID == "strongest" {
+		t.Errorf("fell back to the STRONGEST head %q, must degrade to the cheapest", got[0].ID)
+	}
+	if got[0].ID != "expert" {
+		t.Errorf("fallback primary = %q, want cheapest (\"expert\")", got[0].ID)
+	}
+}
+
+func ids(heads []provider.Head) []string {
+	out := make([]string, 0, len(heads))
+	for _, h := range heads {
+		out = append(out, h.ID)
+	}
+	return out
+}
+
+// ── validateSwarmTiers ────────────────────────────────────────────────────────
+
+// Run, RunSPRT and Plan all reject an invalid --tier/--swarm-judge-tier via
+// the identical rule dispatch.Dispatch applies, before this, an invalid
+// value under --swarm/--confidence fell straight through to CapScoreSelector
+// instead of erroring (#501).
+func TestValidateSwarmTiers(t *testing.T) {
+	valid := []Options{
+		{},
+		{TierHint: "6"},
+		{TierHint: "expert"},
+		{JudgeTierHint: "1"},
+		{TierHint: "6", JudgeTierHint: "expert"},
+	}
+	for _, opts := range valid {
+		if err := validateSwarmTiers(opts); err != nil {
+			t.Errorf("validateSwarmTiers(%+v) = %v, want nil", opts, err)
+		}
+	}
+
+	invalid := []Options{
+		{TierHint: "99"},
+		{TierHint: "not-a-real-tier"},
+		{JudgeTierHint: "99"},
+		{JudgeTierHint: "not-a-real-tier"},
+	}
+	for _, opts := range invalid {
+		if err := validateSwarmTiers(opts); err == nil {
+			t.Errorf("validateSwarmTiers(%+v) = nil, want an error", opts)
+		}
+	}
+}
+
 // estimateFanoutCost must report a cost even with no --swarm-max-cost limit.
 // preflightCost short-circuits to 0 when no limit is set, which is right for a
 // guard and wrong for the plan --dry-run prints (#167).
@@ -284,7 +396,7 @@ func TestEstimateFanoutCost_IndependentOfAnyLimit(t *testing.T) {
 	if got := estimateFanoutCost(heads, "some prompt", pr); got != 0.03 {
 		t.Errorf("estimateFanoutCost = %v, want 0.03", got)
 	}
-	// The guard reports nothing here — that difference is the whole point.
+	// The guard reports nothing here, that difference is the whole point.
 	if total, _ := preflightCost(heads, "some prompt", pr, 0); total != 0 {
 		t.Errorf("preflightCost with no limit = %v, want 0", total)
 	}
@@ -296,7 +408,7 @@ func TestEstimateFanoutCost_IndependentOfAnyLimit(t *testing.T) {
 // withTempConfig points config.Dir() at a throwaway home containing a minimal
 // config.toml. config.Load fails outright when the file is missing, so any test
 // touching the selection path is otherwise green only on a machine that happens
-// to have run `hyctl init` — which is exactly how this test passed locally and
+// to have run `hyctl init`, which is exactly how this test passed locally and
 // failed on a clean CI runner.
 func withTempConfig(t *testing.T) {
 	t.Helper()
@@ -325,12 +437,8 @@ func TestPlan_SelectsSameHeadsAsRunAndExecutesNothing(t *testing.T) {
 		t.Fatalf("Plan: %v", err)
 	}
 
-	// Same selector, same options — Plan must not diverge from the run path.
-	cfg, err := config.Load()
-	if err != nil {
-		t.Fatalf("config: %v", err)
-	}
-	want, err := resolveSelector(opts, cfg).Select(all, opts)
+	// Same selector, same options, Plan must not diverge from the run path.
+	want, err := resolveSelector(opts).Select(all, opts)
 	if err != nil {
 		t.Fatalf("selector: %v", err)
 	}
@@ -352,7 +460,7 @@ func TestPlan_SelectsSameHeadsAsRunAndExecutesNothing(t *testing.T) {
 
 // Plan must never report "here is your plan" with nothing in it. Two distinct
 // paths reach that state, so both are pinned: the selector rejecting an empty
-// roster outright, and a filter emptying a non-empty one — the latter returns
+// roster outright, and a filter emptying a non-empty one, the latter returns
 // (empty, nil), which is what Plan's own length check exists to catch.
 func TestPlan_EmptyResultIsAlwaysAnError(t *testing.T) {
 	// Without a config the error would come from config.Load instead, and these
@@ -380,4 +488,60 @@ func TestPlan_EmptyResultIsAlwaysAnError(t *testing.T) {
 			t.Fatal("every head filtered out should error, not yield an empty plan")
 		}
 	})
+}
+
+// #453: `--dry-run` used to print a full plan for a mode Run would reject
+// outright, because Plan never validated Mode at all. Plan must fail the same
+// way Run does, before it ever reports heads or cost as if the run were sound.
+func TestPlan_RejectsUnknownModeLikeRun(t *testing.T) {
+	withTempConfig(t)
+	all := []provider.Head{registryHead("h1", "H1", 90)}
+	s := New(nil, all, fakePricing{per: 0.01})
+
+	_, _, planErr := s.Plan("p", Options{Mode: "bogus"})
+	if planErr == nil {
+		t.Fatal("Plan accepted an unknown swarm mode")
+	}
+	_, runErr := s.Run(context.Background(), "p", Options{Mode: "bogus"})
+	if runErr == nil {
+		t.Fatal("Run accepted an unknown swarm mode")
+	}
+	if planErr.Error() != runErr.Error() {
+		t.Errorf("Plan and Run disagree on an unknown mode:\nPlan: %v\nRun:  %v", planErr, runErr)
+	}
+
+	// Every mode Run actually executes must still plan cleanly, including the
+	// zero value, which both Plan and Run default to ModeBest.
+	for _, mode := range []SwarmMode{ModeRace, ModeBest, ModeAll, ""} {
+		if _, _, err := s.Plan("p", Options{Mode: mode}); err != nil {
+			t.Errorf("Plan rejected valid mode %q: %v", mode, err)
+		}
+	}
+}
+
+// #530: swarm.Options had no A2AFile field at all, so --a2a was silently
+// dropped the instant --swarm or --confidence was combined with it, a bad
+// handoff file must be rejected by Plan (the --dry-run path), Run and
+// RunSPRT alike, exactly as it already was on plain dispatch.
+func TestPlanRunRunSPRT_RejectBadA2AFileIdentically(t *testing.T) {
+	withTempConfig(t)
+	all := []provider.Head{registryHead("h1", "H1", 90)}
+	s := New(nil, all, fakePricing{per: 0.01})
+	bad := filepath.Join(t.TempDir(), "missing.json")
+
+	if _, _, err := s.Plan("p", Options{A2AFile: bad}); err == nil {
+		t.Error("Plan accepted a nonexistent --a2a file")
+	} else if !strings.Contains(err.Error(), bad) {
+		t.Errorf("Plan error = %v, want it to name the offending path", err)
+	}
+	if _, err := s.Run(context.Background(), "p", Options{A2AFile: bad}); err == nil {
+		t.Error("Run accepted a nonexistent --a2a file")
+	} else if !strings.Contains(err.Error(), bad) {
+		t.Errorf("Run error = %v, want it to name the offending path", err)
+	}
+	if _, err := s.RunSPRT(context.Background(), "p", Options{A2AFile: bad, Confidence: 0.9}); err == nil {
+		t.Error("RunSPRT accepted a nonexistent --a2a file")
+	} else if !strings.Contains(err.Error(), bad) {
+		t.Errorf("RunSPRT error = %v, want it to name the offending path", err)
+	}
 }

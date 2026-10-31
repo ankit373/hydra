@@ -12,7 +12,7 @@ import (
 )
 
 // Example tests are a type this repo did not have. They are compiled, executed
-// and their output verified, and they render in godoc — so the documented
+// and their output verified, and they render in godoc, so the documented
 // behaviour of a security-relevant matcher cannot rot away from the real one.
 
 func ExampleMatch() {
@@ -87,7 +87,7 @@ func TestMatch_Semantics(t *testing.T) {
 
 // The dialect must not change by host. filepath.Match's separator is "\" on
 // Windows, which is exactly how the ledger's rules came to mean one thing on
-// Unix and another on Windows — a gate that widens on one platform.
+// Unix and another on Windows, a gate that widens on one platform.
 func TestMatch_IsIdenticalOnEveryPlatform(t *testing.T) {
 	// These are the cases where filepath.Match disagreed with itself across
 	// platforms. Asserting absolute answers here means the Windows leg of CI
@@ -103,7 +103,7 @@ func TestMatch_IsIdenticalOnEveryPlatform(t *testing.T) {
 	}
 	for _, tc := range cases {
 		if got := Match(tc.pattern, tc.path); got != tc.want {
-			t.Errorf("on %s: Match(%q, %q) = %v, want %v — the dialect has become "+
+			t.Errorf("on %s: Match(%q, %q) = %v, want %v, the dialect has become "+
 				"host-dependent", runtime.GOOS, tc.pattern, tc.path, got, tc.want)
 		}
 	}
@@ -132,14 +132,14 @@ func TestMatch_PathologicalPatternTerminates(t *testing.T) {
 			t.Error("a pattern ending in an unmatched segment reported a match")
 		}
 	case <-time.After(10 * time.Second):
-		t.Fatal("Match did not terminate — the memoization is gone and any config " +
+		t.Fatal("Match did not terminate, the memoization is gone and any config " +
 			"pattern can hang the gate that uses it")
 	}
 }
 
 // Allocation guards are another type this repo lacked. Match runs on every
 // scope check and every ledger decision, so an accidental allocation per
-// segment is a real cost — and a sudden jump means someone changed the
+// segment is a real cost, and a sudden jump means someone changed the
 // algorithm without noticing.
 func TestMatch_AllocationsStayBounded(t *testing.T) {
 	if testing.Short() {
@@ -157,7 +157,7 @@ func TestMatch_AllocationsStayBounded(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			got := testing.AllocsPerRun(200, func() { Match(tc.pattern, tc.path) })
 			if got > tc.max {
-				t.Errorf("Match allocated %.0f times, budget %.0f — matching runs on "+
+				t.Errorf("Match allocated %.0f times, budget %.0f, matching runs on "+
 					"every scope check and every ledger decision", got, tc.max)
 			}
 		})

@@ -29,7 +29,7 @@ func TestNew_NonEmptyAndUnique(t *testing.T) {
 	}
 }
 
-// The uniqueness test above is probabilistic — it would still pass at, say, 5
+// The uniqueness test above is probabilistic, it would still pass at, say, 5
 // bytes. This pins the entropy width itself so narrowing the suffix fails
 // loudly rather than turning New() flaky again.
 func TestNew_SuffixCarriesFullEntropy(t *testing.T) {
@@ -42,7 +42,7 @@ func TestNew_SuffixCarriesFullEntropy(t *testing.T) {
 	// itself would pass at any width and guard nothing.
 	const wantHexChars = 16 // 64 bits
 	if len(suffix) != wantHexChars {
-		t.Errorf("suffix %q is %d hex chars (%d bits), want %d (64 bits) — see #198",
+		t.Errorf("suffix %q is %d hex chars (%d bits), want %d (64 bits), see #198",
 			suffix, len(suffix), len(suffix)*4, wantHexChars)
 	}
 	if _, err := hex.DecodeString(suffix); err != nil {
@@ -62,7 +62,7 @@ func TestNew_SuffixIsNotConstant(t *testing.T) {
 	// 1000 draws over 256 values: seeing fewer than 200 distinct would mean the
 	// source is badly skewed. A uniform source yields ~254.
 	if len(firstBytes) < 200 {
-		t.Errorf("only %d distinct leading bytes in 1000 draws — suffix is not uniformly random", len(firstBytes))
+		t.Errorf("only %d distinct leading bytes in 1000 draws, suffix is not uniformly random", len(firstBytes))
 	}
 }
 

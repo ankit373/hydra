@@ -12,12 +12,12 @@ import (
 // ── Color palette ─────────────────────────────────────────────────────────────
 
 var (
-	cHead1  = lipgloss.Color("82")  // left head   — bright lime
-	cHead2  = lipgloss.Color("46")  // center head — vivid green
-	cHead3  = lipgloss.Color("77")  // right head  — medium green
+	cHead1  = lipgloss.Color("82")  // left head  , bright lime
+	cHead2  = lipgloss.Color("46")  // center head, vivid green
+	cHead3  = lipgloss.Color("77")  // right head , medium green
 	cNeck   = lipgloss.Color("34")  // necks joining body
-	cBody   = lipgloss.Color("22")  // body — dark green
-	cCortex = lipgloss.Color("205") // CORTEX label — magenta/pink
+	cBody   = lipgloss.Color("22")  // body, dark green
+	cCortex = lipgloss.Color("205") // CORTEX label, magenta/pink
 	cArrow  = lipgloss.Color("213") // arrow accent
 	cDim    = lipgloss.Color("240") // muted text
 	cWhite  = lipgloss.Color("255")
@@ -36,7 +36,7 @@ const headShape = `  .~~~~~.
   |     |
   |_____|   `
 
-// eye characters per head — subtle variation
+// eye characters per head, subtle variation
 var headEyes = [3][2]string{
 	{"o", "o"}, // left head
 	{"*", "*"}, // center head (brighter)
@@ -126,7 +126,7 @@ func renderTagline() string {
 	return lipgloss.NewStyle().
 		Foreground(cDim).
 		Italic(true).
-		Render("  Multi-model AI orchestration — one Cortex, many Heads")
+		Render("  Multi-model AI orchestration, one Cortex, many Heads")
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────

@@ -3,19 +3,19 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>First Principles — The Math Behind Hydra</title>
-  <meta name="description" content="The math behind Hydra's router — SPRT, calibration, percolation-κ, and optimal parallelism — with interactive, provable derivations you can check.">
+  <title>First Principles, The Math Behind Hydra</title>
+  <meta name="description" content="The math behind Hydra's router, SPRT, calibration, percolation-κ, and optimal parallelism, with interactive, provable derivations you can check.">
   <meta name="keywords" content="SPRT sequential probability ratio test, KL divergence calibration, Molloy-Reed percolation, Amdahl's law parallelism, LLM router math, confidence routing, Bayes decision theory, Hydra">
 
   <meta property="og:type" content="article">
   <meta property="og:url" content="https://hydra.uvansa.com/first-principles.html">
-  <meta property="og:title" content="First Principles — The Math Behind Hydra">
+  <meta property="og:title" content="First Principles, The Math Behind Hydra">
   <meta property="og:description" content="Every Hydra routing decision is a named result you can check. Interactive derivations: SPRT, calibration D, percolation κ, optimal parallelism.">
   <meta property="og:image" content="https://hydra.uvansa.com/logo.png">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:site" content="@ankit373">
-  <meta name="twitter:title" content="First Principles — The Math Behind Hydra">
-  <meta name="twitter:description" content="Wald's SPRT, KL-divergence calibration, Molloy–Reed percolation, Amdahl optimal parallelism — the proofs behind the router, made interactive.">
+  <meta name="twitter:title" content="First Principles, The Math Behind Hydra">
+  <meta name="twitter:description" content="Wald's SPRT, KL-divergence calibration, Molloy-Reed percolation, Amdahl optimal parallelism, the proofs behind the router, made interactive.">
   <meta name="twitter:image" content="https://hydra.uvansa.com/logo.png">
 
   <link rel="canonical" href="https://hydra.uvansa.com/first-principles.html">
@@ -26,8 +26,8 @@
   {
     "@context": "https://schema.org",
     "@type": "TechArticle",
-    "headline": "First Principles — The Math Behind Hydra",
-    "description": "The theorems and measurements behind Hydra's routing: Wald's sequential probability ratio test, calibration diagnostic power via KL divergence, Bayes defect-cost, Molloy–Reed percolation, Amdahl optimal parallelism, and context entropy.",
+    "headline": "First Principles, The Math Behind Hydra",
+    "description": "The theorems and measurements behind Hydra's routing: Wald's sequential probability ratio test, calibration diagnostic power via KL divergence, Bayes defect-cost, Molloy-Reed percolation, Amdahl optimal parallelism, and context entropy.",
     "url": "https://hydra.uvansa.com/first-principles.html",
     "image": "https://hydra.uvansa.com/logo.png",
     "datePublished": "2026-07-25",
@@ -53,7 +53,19 @@
   --maxw:1080px;
 }
 *{box-sizing:border-box;}
-html{scroll-behavior:smooth;}
+html{scroll-behavior:smooth;
+  /* Prose and chrome are not selectable; code and commands are, see below. */
+  user-select:none;-webkit-user-select:none;}
+
+/* Code and command examples stay selectable. docs.html carries 53 of them and
+   no copy button, so blocking selection there leaves no way to take a command
+   off the page. user-select inherits, so descendants follow. */
+pre,code{user-select:text;-webkit-user-select:text;}
+
+/* Except where a click already copies: dragging across one of those is the
+   accident the site-wide rule exists to prevent. Attribute specificity beats
+   the element selectors above. */
+[data-copy]{user-select:none;-webkit-user-select:none;}
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto;}}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.6;
   overflow-x:hidden;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;}
@@ -87,7 +99,7 @@ a{color:inherit;text-decoration:none;}
 @media(max-width:820px){.topbar nav{display:none;}}
 
 /* ── hero ────────────────────────────────────────────────────────────────── */
-.hero{position:relative;padding:74px 0 40px;text-align:center;overflow:hidden;}
+.hero{position:relative;padding-top:74px;padding-bottom:40px;text-align:center;overflow:hidden;}
 .hero::before{content:"";position:absolute;inset:-40% 0 auto;height:520px;z-index:0;
   background:radial-gradient(60% 60% at 50% 0%,rgba(139,92,246,.20),transparent 70%),
              radial-gradient(50% 50% at 78% 12%,rgba(232,82,200,.14),transparent 70%),
@@ -171,7 +183,7 @@ footer{border-top:1px solid var(--line);margin-top:40px;padding:44px 0 56px;}
   background:linear-gradient(90deg,var(--cyan),var(--violet) 55%,var(--magenta));
   -webkit-background-clip:text;background-clip:text;color:transparent;}
 .foot p{color:var(--faint);font-size:13px;margin:6px 0 0;}
-.foot nav{display:flex;gap:20px;font-family:var(--mono);font-size:12.5px;}
+.foot nav{display:flex;flex-wrap:wrap;gap:20px;font-family:var(--mono);font-size:12.5px;}
 .foot nav a{color:var(--dim);}.foot nav a:hover{color:var(--aqua);}
 
 .reveal{opacity:0;transform:translateY(18px);transition:opacity .6s ease,transform .6s ease;}
@@ -200,7 +212,7 @@ footer{border-top:1px solid var(--line);margin-top:40px;padding:44px 0 56px;}
 <header class="hero wrap">
   <div class="eyebrow">provable trust</div>
   <h1>The router doesn't guess.<br><span class="grad">It derives.</span></h1>
-  <p class="sub">Every routing decision Hydra makes is a <b>named result you can check</b> — a proven theorem it applies, or a quantity it measures. Not heuristics with a confident tone. Here are the six, each one interactive.</p>
+  <p class="sub">Every routing decision Hydra makes is a <b>named result you can check</b>: a proven theorem it applies, or a quantity it measures. Not heuristics with a confident tone. Here are the six, each one interactive.</p>
   <div class="legend">
     <span class="tag proven"><span class="g">⊢ proven</span> established theorem</span>
     <span class="tag measured"><span class="g">▣ measured</span> computed in-repo</span>
@@ -240,7 +252,7 @@ footer{border-top:1px solid var(--line);margin-top:40px;padding:44px 0 56px;}
       <figcaption class="vizcap">Interactive: the SPRT log-odds walk crossing the accept/reject boundaries.</figcaption>
     </figure>
 
-    <p class="analogy">A doctor ordering one test at a time and stopping the moment the diagnosis is certain — instead of always running the full panel.</p>
+    <p class="analogy">A doctor ordering one test at a time and stopping the moment the diagnosis is certain, instead of always running the full panel.</p>
     <div class="tags">
       <span class="tag proven"><span class="g">⊢ proven</span> Wald (1945), optimal E[N]</span>
       <span class="tag synthetic"><span class="g">◈ synthetic</span> −24% blended / −49% easy vs fixed-5 at ≥98% accuracy</span>
@@ -252,7 +264,7 @@ footer{border-top:1px solid var(--line);margin-top:40px;padding:44px 0 56px;}
   <section class="pillar reveal" id="calibration">
     <div class="head"><span class="idx">02</span><h2>Calibration</h2></div>
     <div class="kicker">diagnostic power · KL divergence</div>
-    <p class="lede">Each source earns a <b>sensitivity</b> <i>se</i> and <b>specificity</b> <i>sp</i> from real outcomes. Its worth is the expected evidence per vote — the KL divergence between the vote distributions under the two hypotheses, in <b>nats</b>. A coin-flip source scores <span class="accent">D = 0</span> and adds nothing however often it votes.</p>
+    <p class="lede">Each source earns a <b>sensitivity</b> <i>se</i> and <b>specificity</b> <i>sp</i> from real outcomes. Its worth is the expected evidence per vote, the KL divergence between the vote distributions under the two hypotheses, in <b>nats</b>. A coin-flip source scores <span class="accent">D = 0</span> and adds nothing however often it votes.</p>
 
     <div class="eq" aria-label="D equals se times ln se over one minus sp, plus one minus se times ln one minus se over sp">
       <i>D</i> <span class="op">=</span> <i>se</i> <span class="op">·</span> <span class="op">ln</span>
@@ -272,7 +284,7 @@ footer{border-top:1px solid var(--line);margin-top:40px;padding:44px 0 56px;}
         </label>
         <div class="readout">diagnostic power <b class="tnum" id="o-cal-d">1.76</b> nats</div>
       </div>
-      <figcaption class="vizcap">Interactive: vote distributions under both hypotheses — the gap between them is the diagnostic power D.</figcaption>
+      <figcaption class="vizcap">Interactive: vote distributions under both hypotheses, the gap between them is the diagnostic power D.</figcaption>
     </figure>
 
     <p class="analogy">A witness's credibility measured in nats. A coin-flip witness tells you nothing however many times they testify.</p>
@@ -305,7 +317,7 @@ footer{border-top:1px solid var(--line);margin-top:40px;padding:44px 0 56px;}
       <figcaption class="vizcap">Interactive: the required confidence rising as the defect cost grows.</figcaption>
     </figure>
 
-    <p class="analogy">You demand far more certainty before heart surgery than before a haircut — the bar scales with what a mistake costs.</p>
+    <p class="analogy">You demand far more certainty before heart surgery than before a haircut, the bar scales with what a mistake costs.</p>
     <div class="tags">
       <span class="tag proven"><span class="g">⊢ proven</span> Bayes decision theory</span>
       <span class="tag modeled"><span class="g">○ modeled</span> C<sub>defect</sub> is an estimate</span>
@@ -316,8 +328,8 @@ footer{border-top:1px solid var(--line);margin-top:40px;padding:44px 0 56px;}
   <!-- ═══ 4 · PERCOLATION ════════════════════════════════════════════════════ -->
   <section class="pillar reveal" id="percolation">
     <div class="head"><span class="idx">04</span><h2>Blast radius</h2></div>
-    <div class="kicker">Molloy–Reed percolation criterion</div>
-    <p class="lede">Treat the code as a graph with degree mean ⟨<i>k</i>⟩ and second moment ⟨<i>k</i><sup>2</sup>⟩. A <b>giant connected component</b> — a cascade-capable core where one change can ripple everywhere — exists precisely when <i>κ</i> ≥ 2. Files inside it get their confidence bar raised.</p>
+    <div class="kicker">Molloy-Reed percolation criterion</div>
+    <p class="lede">Treat the code as a graph with degree mean ⟨<i>k</i>⟩ and second moment ⟨<i>k</i><sup>2</sup>⟩. A <b>giant connected component</b>: a cascade-capable core where one change can ripple everywhere, exists precisely when <i>κ</i> ≥ 2. Files inside it get their confidence bar raised.</p>
 
     <div class="eq" aria-label="kappa equals mean of k squared over mean of k, greater than or equal to 2">
       <i>κ</i> <span class="op">=</span>
@@ -337,9 +349,9 @@ footer{border-top:1px solid var(--line);margin-top:40px;padding:44px 0 56px;}
       <figcaption class="vizcap">Interactive: a random dependency graph where the giant component appears as κ crosses 2.</figcaption>
     </figure>
 
-    <p class="analogy">The epidemic threshold R₀ — below it a change stays local; above it, one edit can infect the whole graph.</p>
+    <p class="analogy">The epidemic threshold R₀, below it a change stays local; above it, one edit can infect the whole graph.</p>
     <div class="tags">
-      <span class="tag proven"><span class="g">⊢ proven</span> Molloy–Reed (1995)</span>
+      <span class="tag proven"><span class="g">⊢ proven</span> Molloy-Reed (1995)</span>
       <span class="tag measured"><span class="g">▣ measured</span> computed from graph.json</span>
     </div>
     <div class="src"><span>source <a href="https://github.com/ankit373/hydra/tree/main/internal/graph">internal/graph</a></span><span><code>hyctl graph blast &lt;file&gt;</code></span></div>
@@ -386,7 +398,7 @@ footer{border-top:1px solid var(--line);margin-top:40px;padding:44px 0 56px;}
   <section class="pillar reveal" id="entropy">
     <div class="head"><span class="idx">06</span><h2>Context governor</h2></div>
     <div class="kicker">signal density, not length</div>
-    <p class="lede">A context window's value is its information density, not its token count. Hydra proxies the entropy rate with a compression ratio <i>ρ</i> and counts only the <b>useful</b> tokens. Highly compressible context (repetitive, stale) has low <i>ρ</i> — so Hydra compacts on <b>falling ρ</b>, not on raw length.</p>
+    <p class="lede">A context window's value is its information density, not its token count. Hydra proxies the entropy rate with a compression ratio <i>ρ</i> and counts only the <b>useful</b> tokens. Highly compressible context (repetitive, stale) has low <i>ρ</i>, so Hydra compacts on <b>falling ρ</b>, not on raw length.</p>
 
     <div class="eq" aria-label="rho equals size of gzip of C over size of C; useful tokens equals L times rho">
       <i>ρ</i> <span class="op">=</span>
@@ -427,7 +439,6 @@ footer{border-top:1px solid var(--line);margin-top:40px;padding:44px 0 56px;}
       <a href="/docs.html">Docs</a>
       <a href="/pricing.html">Pricing</a>
       <a href="https://github.com/ankit373/hydra">GitHub</a>
-      <a href="/llms.txt">llms.txt</a>
     </nav>
   </div>
 </footer>
@@ -577,7 +588,7 @@ footer{border-top:1px solid var(--line);margin-top:40px;padding:44px 0 56px;}
       ctx.strokeStyle='rgba(150,140,255,.12)'; ctx.beginPath(); ctx.moveTo(40+gw,padT-6); ctx.lineTo(40+gw,base); ctx.stroke();
       // D banner
       ctx.textAlign='left'; ctx.fillStyle=C.faint; ctx.font=mono(11);
-      ctx.fillText('the gap between these two shapes IS the evidence — D nats per vote', 40, padT-10);
+      ctx.fillText('the gap between these two shapes IS the evidence, D nats per vote', 40, padT-10);
     }
     seEl.addEventListener('input',draw); spEl.addEventListener('input',draw);
     addEventListener('resize',draw); draw();

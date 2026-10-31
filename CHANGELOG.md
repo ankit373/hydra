@@ -6,6 +6,40 @@ Format: [Semantic Versioning](https://semver.org). Entries from v1.0.1 onward ar
 
 ---
 
+## [1.5.0](https://github.com/ankit373/hydra/compare/v1.4.2...v1.5.0) (2026-09-28)
+
+
+### Features
+
+* **release:** v1.5.0 — streaming and tool calls on every dialect, hyctl serve, measured routing, hyctl vet, and the public blog ([#1057](https://github.com/ankit373/hydra/issues/1057)) ([ed35dee](https://github.com/ankit373/hydra/commit/ed35deef2c0c8172c48db62989dacae69ed66885)), closes [#1042](https://github.com/ankit373/hydra/issues/1042) [#1045](https://github.com/ankit373/hydra/issues/1045) [#1047](https://github.com/ankit373/hydra/issues/1047)
+
+## [1.4.2](https://github.com/ankit373/hydra/compare/v1.4.1...v1.4.2) (2026-09-07)
+
+
+### Bug Fixes
+
+* **release:** v1.4.2 - head health, PATH recovery, and the audit surface ([#706](https://github.com/ankit373/hydra/issues/706)) ([f827c45](https://github.com/ankit373/hydra/commit/f827c454e6a6bdfa5667eb65db173b1348009d8c))
+* **shellpath:** recover PATH on a Linux desktop launch ([#711](https://github.com/ankit373/hydra/issues/711)) ([94619ca](https://github.com/ankit373/hydra/commit/94619cad92c8646a6576e5b6dc421151ef4fe675))
+
+## [1.4.0](https://github.com/ankit373/hydra/compare/v1.3.1...v1.4.0) (2026-09-05)
+
+
+### Features
+
+* **release:** v1.4.0 — MCP server trust registry, security dashboard, chat-first desktop app ([#659](https://github.com/ankit373/hydra/issues/659)) ([59c49b2](https://github.com/ankit373/hydra/commit/59c49b2cff60b6aa347fc4977517eb34b17f4bba))
+
+## [1.3.1](https://github.com/ankit373/hydra/compare/v1.2.0...v1.3.1) (2026-08-20)
+
+
+### Features
+
+* **release:** v1.3.0 — ARM64 desktop builds, HUD Dashboard, Fleet fixes, security dashboard, calibration leaderboard, agent-tree fix ([#441](https://github.com/ankit373/hydra/issues/441)) ([4ad3d78](https://github.com/ankit373/hydra/commit/4ad3d7877eeb0df5f2e398d62cdc9426d9f11922))
+
+
+### Miscellaneous Chores
+
+* retrigger release-please as 1.3.1 ([65e4275](https://github.com/ankit373/hydra/commit/65e427542b64a3f428d0bfcddc35e7a1dc381488))
+
 ## [1.2.0](https://github.com/ankit373/hydra/compare/v1.2.0-rc.3...v1.2.0) (2026-08-07)
 
 

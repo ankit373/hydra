@@ -14,7 +14,7 @@ import (
 // APIKeyVars is every environment variable the env provider treats as evidence
 // of a usable head (internal/provider/env's knownKeys table). A test that does
 // not clear these discovers whatever the developer happens to have exported,
-// so the same test passes on a laptop with no keys and fails on one with them —
+// so the same test passes on a laptop with no keys and fails on one with them,
 // or worse, quietly routes a test dispatch to a real paid provider.
 //
 // Kept in sync with knownKeys by TestAPIKeyVars_CoversEnvProvider.
@@ -43,7 +43,7 @@ var APIKeyVars = []string{
 // provider should use, or how to reach it (executor.defaultModelFor's table,
 // plus Azure's endpoint/deployment/version and the AWS region).
 //
-// These are not credentials, so APIKeyVars did not cover them — and a
+// These are not credentials, so APIKeyVars did not cover them, and a
 // developer with ANTHROPIC_MODEL exported for day-to-day use had every test
 // that touches model resolution silently read their shell instead of the
 // default under test. The failure mode is the one the sandbox exists to
@@ -99,14 +99,34 @@ var tuningVars = []string{
 	"HYDRA_TOKEN_SIDECAR",
 	"HYDRA_WORKSPACE",
 	"AGY_TIMEOUT",
+	// Every variable naming where a locally discovered service listens. Each
+	// is pointed at a dead address below rather than cleared, see the note
+	// there: clearing falls back to the built-in default, which is exactly
+	// where a developer's real server is.
 	"OLLAMA_HOST",
+	"LITELLM_PROXY_URL",
+	"LLAMA_ARG_HOST",
+	"LLAMA_ARG_PORT",
+	"HYDRA_LMSTUDIO_HOST",
+}
+
+// deadAddressVars are the subset whose value is an address to dial.
+var deadAddressVars = map[string]string{
+	"OLLAMA_HOST":       "127.0.0.1:1",
+	"LITELLM_PROXY_URL": "http://127.0.0.1:1",
+	"LLAMA_ARG_HOST":    "127.0.0.1",
+	"LLAMA_ARG_PORT":    "1",
+	// LM Studio publishes no variable of its own, so this is Hydra's, added
+	// because it was the one service a sandbox could not point away from the
+	// developer's machine (#988).
+	"HYDRA_LMSTUDIO_HOST": "http://127.0.0.1:1",
 }
 
 // Blocking outbound HTTP has to happen at package load, not per test.
 //
 // net/http resolves the proxy environment exactly once per process
 // (transport.go's envProxyOnce). Setting HTTP_PROXY inside NewSandbox is
-// therefore a no-op for the rest of the run if anything resolved it first —
+// therefore a no-op for the rest of the run if anything resolved it first,
 // which is how a `hyctl pricing refresh` contract test reached OpenRouter for
 // real and reported "Cached pricing for 333 models". The block was documented
 // as a backstop against accidental egress and in that binary was not one at
@@ -114,7 +134,7 @@ var tuningVars = []string{
 //
 // This init runs before TestMain and before any test, so the one resolution
 // sees the dead proxy. Requests to localhost and loopback are never proxied by
-// Go regardless of NO_PROXY, so httptest servers still work — which is what
+// Go regardless of NO_PROXY, so httptest servers still work, which is what
 // makes this safe to apply to the whole binary rather than per test.
 //
 // It is still a backstop, not a boundary: a transport built with Proxy: nil
@@ -136,7 +156,7 @@ func init() {
 //
 // The point is that a contributor with no Ollama, no API keys and no agy on
 // their machine gets byte-identical results to CI, and to a maintainer whose
-// laptop has all three. Discovery is the layer where that matters most — it
+// laptop has all three. Discovery is the layer where that matters most, it
 // exists to report what is installed, so it is the layer most likely to report
 // the *developer's* machine instead of the test's fixture.
 //
@@ -194,15 +214,29 @@ func NewSandbox(t *testing.T) *Sandbox {
 		t.Setenv(v, "")
 	}
 	for _, v := range tuningVars {
-		if v == "HYDRA_HOME" {
+		switch v {
+		case "HYDRA_HOME":
 			continue // set above
+		}
+		// Clearing to "" falls back to the built-in default, which is
+		// indistinguishable from "no override" but not from "no server". A
+		// machine that actually runs one there gets a genuine local head CI
+		// never sees: not hypothetical, it broke TestCLI_Dispatch_
+		// LocalOnlyRefusesWhenNothingIsLocal on a real laptop with Ollama
+		// (#539) and again with a llama.cpp server on 8080 (#913). Point at a
+		// dead address, the same convention as the package init()'s proxy
+		// blackhole below, so port discovery fails deterministically
+		// everywhere.
+		if dead, ok := deadAddressVars[v]; ok {
+			t.Setenv(v, dead)
+			continue
 		}
 		t.Setenv(v, "")
 	}
 
 	// Re-asserted here so a test that sets its own proxy vars has them restored
 	// afterwards. The block that actually takes effect is the package init
-	// above — by the time this runs, net/http has usually already resolved the
+	// above, by the time this runs, net/http has usually already resolved the
 	// proxy environment for good.
 	t.Setenv("HTTP_PROXY", "127.0.0.1:1")
 	t.Setenv("HTTPS_PROXY", "127.0.0.1:1")
@@ -245,8 +279,8 @@ func (s *Sandbox) SetKey(t *testing.T, envVar, value string) {
 // the sandbox's $PATH.
 //
 // The alternative is t.Skip, and a skipped test is how a suite quietly stops
-// covering the thing it was written for: internal/review's git paths — the ones
-// that delete files — skipped on every machine because the sandbox had hidden
+// covering the thing it was written for: internal/review's git paths, the ones
+// that delete files, skipped on every machine because the sandbox had hidden
 // git. Naming the dependency keeps the test running and keeps the sandbox
 // hermetic in every other respect.
 //
@@ -275,7 +309,7 @@ func (s *Sandbox) AllowHostBinary(t *testing.T, name string) bool {
 	// (STATUS_DLL_NOT_FOUND).
 	//
 	// This exposes one directory rather than one file, so it is a slightly
-	// wider hole than the name suggests — but the alternative is a test that
+	// wider hole than the name suggests, but the alternative is a test that
 	// cannot run at all, and the sandbox's other guarantees (home, HYDRA_HOME,
 	// credentials) are untouched.
 	t.Setenv("PATH", filepath.Dir(real)+string(os.PathListSeparator)+os.Getenv("PATH"))

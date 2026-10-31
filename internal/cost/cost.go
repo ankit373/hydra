@@ -20,7 +20,7 @@ import (
 	"github.com/ankit373/hydra/internal/config"
 )
 
-// ErrNoLog reports that cost.jsonl does not exist — nothing has dispatched yet.
+// ErrNoLog reports that cost.jsonl does not exist, nothing has dispatched yet.
 // It is distinct from a read failure so a caller can tell "never ran" (render an
 // empty state) from "cannot read" (surface the error). Match it with errors.Is.
 var ErrNoLog = errors.New("no cost log")
@@ -31,6 +31,7 @@ type Row struct {
 	Tier           int     `json:"tier"`
 	Enum           string  `json:"enum"`
 	Model          string  `json:"model"`
+	Head           string  `json:"head,omitempty"`
 	Executor       string  `json:"executor"`
 	Pool           string  `json:"pool"`
 	PromptTokens   int     `json:"prompt_tokens"`
@@ -38,13 +39,32 @@ type Row struct {
 	EstCostUSD     float64 `json:"est_cost_usd"`
 	WallMS         int64   `json:"wall_ms"`
 	Source         string  `json:"source"`        // legacy, mirrors tokens_source
-	TokensSource   string  `json:"tokens_source"` // "actual" (provider) or "estimated" (agy char/4)
-	CostSource     string  `json:"cost_source"`   // always "estimated" — cost is derived, never billed
+	TokensSource   string  `json:"tokens_source"` // "actual" (provider) or "estimated" (char/4)
+	CostSource     string  `json:"cost_source"`   // always "estimated", cost is derived, never billed
 	TaskID         string  `json:"task_id"`
 	RunID          string  `json:"run_id"`
-	SwarmMode      string  `json:"swarm_mode"`
-	SwarmWinner    bool    `json:"swarm_winner"`
-	Config         string  `json:"config,omitempty"` // deployment-identity breadcrumb (config.Breadcrumb)
+
+	// SpanID is the run-log span this spend belongs to. Without it a cost row
+	// joins the trace only by task id, which cannot say which of several
+	// attempts on one task actually spent the money.
+	SpanID string `json:"span_id,omitempty"`
+
+	// Domain is the calibration domain the router ranked heads for. Written
+	// because routing reads it (#885) and nothing recorded it, which leaves
+	// any off-policy question about domain-aware routing unanswerable rather
+	// than merely uncertain. Absent on every row written before this.
+	Domain string `json:"domain,omitempty"`
+
+	SwarmMode   string `json:"swarm_mode"`
+	SwarmWinner bool   `json:"swarm_winner"`
+	Config      string `json:"config,omitempty"` // deployment-identity breadcrumb (config.Breadcrumb)
+
+	// ActProb is the probability the router chose this head; KeepProb the
+	// probability this row was retained by sampling. Never omitempty: an
+	// absent propensity is unusable and a zero one divides by zero, so both
+	// must be distinguishable from "not recorded". See internal/ope.
+	ActProb  float64 `json:"act_prob"`
+	KeepProb float64 `json:"keep_prob"`
 }
 
 // Totals is an aggregate summary.
@@ -78,11 +98,12 @@ type SummaryResult struct {
 
 // SourceLabels returns the cost.jsonl provenance labels for a token count that
 // was either reported by the provider (estimated=false) or estimated by Hydra
-// (estimated=true, e.g. agy's char/4). It is the single source of truth for
-// these labels so the dispatch and swarm log paths cannot drift.
+// (estimated=true: the CLI heads that report no usage, and any HTTP provider
+// that answered without one, #802). It is the single source of truth for these
+// labels so the dispatch and swarm log paths cannot drift.
 //   - tokensSource: "actual" | "estimated"
 //   - costSource:   always "estimated" (est_cost_usd is pricing × tokens, never billed)
-//   - legacySource: "real" | "estimate" — mirrors tokensSource for older readers
+//   - legacySource: "real" | "estimate", mirrors tokensSource for older readers
 func SourceLabels(estimated bool) (tokensSource, costSource, legacySource string) {
 	if estimated {
 		return "estimated", "estimated", "estimate"
@@ -121,13 +142,30 @@ func LoadAll() ([]Row, error) {
 	return loadRows(costLogPath())
 }
 
+// DefaultLogPath is where cost.jsonl lives. Exported so callers that aggregate
+// it (internal/rollup) name the same file this package reads.
+func DefaultLogPath() string { return costLogPath() }
+
+// LoadRows reads rows from an explicit path. Exported so callers that
+// aggregate the log (internal/rollup) can be tested against a fixture instead
+// of the real ~/.hydra.
+func LoadRows(path string) ([]Row, error) { return loadRows(path) }
+
 // Summary returns today + all-time totals and last 5 recent rows.
 func Summary() (*SummaryResult, error) {
 	all, err := LoadAll()
 	if err != nil {
 		return nil, err
 	}
+	return SummaryFromRows(all), nil
+}
 
+// SummaryFromRows computes the same result as Summary but from rows the
+// caller already loaded, callers that also need the raw rows (e.g. the
+// TUI's latency/savings panels, which call LoadAll for their own purposes)
+// should load once and derive both from that one slice instead of paying for
+// a second full read+parse of cost.jsonl.
+func SummaryFromRows(all []Row) *SummaryResult {
 	todayStr := time.Now().UTC().Format("2006-01-02")
 	var todayRows []Row
 	for _, r := range all {
@@ -136,7 +174,9 @@ func Summary() (*SummaryResult, error) {
 		}
 	}
 
-	recent := all
+	// A copy, not a subslice of all: reversing in place must never mutate the
+	// caller's own rows out from under it when all is shared/reused.
+	recent := append([]Row(nil), all...)
 	if len(recent) > 5 {
 		recent = recent[len(recent)-5:]
 	}
@@ -152,7 +192,7 @@ func Summary() (*SummaryResult, error) {
 		Recent:          recent,
 		ActualTokens:    actualTok,
 		EstimatedTokens: estTok,
-	}, nil
+	}
 }
 
 // Today returns today's per-tier breakdown.
@@ -181,6 +221,11 @@ func All() ([]GroupRow, error) {
 }
 
 // ByPool returns per-pool totals.
+// UnknownPoolKey is how ByPool groups a row whose model declared no token pool.
+// Exported because the desktop looked those rows up under its own literal and
+// found nothing; one constant is what stops the two drifting again (#681).
+const UnknownPoolKey = "unknown"
+
 func ByPool() ([]GroupRow, error) {
 	all, err := LoadAll()
 	if err != nil {
@@ -188,7 +233,7 @@ func ByPool() ([]GroupRow, error) {
 	}
 	return groupBy(all, func(r Row) string {
 		if r.Pool == "" {
-			return "unknown"
+			return UnknownPoolKey
 		}
 		return r.Pool
 	}), nil
@@ -241,9 +286,13 @@ func ByRun(runID string) (*ByRunResult, error) {
 }
 
 // Tail returns the last N rows, newest first, via a backward tail-seek rather
-// than loading the whole log.
+// than loading the whole log. n == 0 returns no rows, matching `tail -n 0`.
+// n < 0 returns everything, see #464 for tightening that UX separately.
 func Tail(n int) ([]Row, error) {
-	if n <= 0 {
+	if n == 0 {
+		return nil, nil
+	}
+	if n < 0 {
 		return LoadAll()
 	}
 	lines, err := tailLines(costLogPath(), n)
@@ -293,12 +342,17 @@ func JSON(since string) ([]Row, error) {
 	return out, nil
 }
 
-// FilterDays returns rows from the last n calendar days (UTC). n=0 returns all.
+// FilterDays returns rows from the last n calendar days (UTC), today included.
+// n=0 returns all.
+//
+// n-1 because the window counts today: subtracting n returned n+1 days, so
+// `--days 1` meant today and yesterday, and `hyctl stats` reported 34 calls for
+// "today" where `hyctl cost` reported 6 for the same log (#729).
 func FilterDays(rows []Row, n int) []Row {
 	if n <= 0 {
 		return rows
 	}
-	cutoff := time.Now().UTC().AddDate(0, 0, -n).Format("2006-01-02")
+	cutoff := time.Now().UTC().AddDate(0, 0, -(n - 1)).Format("2006-01-02")
 	var out []Row
 	for _, r := range rows {
 		if len(r.TS) >= 10 && r.TS[:10] >= cutoff {
@@ -308,14 +362,28 @@ func FilterDays(rows []Row, n int) []Row {
 	return out
 }
 
-// ByModel returns per-model totals sorted by cost descending.
+// ByModel returns per-head totals sorted by cost descending.
+//
+// Keyed on the canonical head (see CanonicalKey): Model is whatever that era's
+// writer called the head, and it changed three times, so one head landed in two
+// or three rows ("Claude Code" beside "claude") and no per-head total was its
+// spend. Names nothing on this machine declares are left as their own group
+// rather than guessed into one.
 func ByModel(rows []Row) []GroupRow {
-	return groupBy(rows, func(r Row) string {
-		if r.Model == "" {
-			return "unknown"
+	return groupBy(rows, CanonicalKey)
+}
+
+// Unattributed counts groups whose key names no head this machine declares,
+// which is what a row from a superseded naming era looks like. Rendered as a
+// footnote so a stale name reads as stale rather than as a separate head.
+func Unattributed(groups []GroupRow) (n int, calls int) {
+	for _, g := range groups {
+		if !Attributable(g.Key) {
+			n++
+			calls += g.Calls
 		}
-		return r.Model
-	})
+	}
+	return n, calls
 }
 
 // ByDay returns per-day totals sorted by date ascending.
@@ -386,15 +454,15 @@ func RenderSummary(r *SummaryResult) {
 	renderTotals(r.AllTime, "    ")
 	if tot := r.ActualTokens + r.EstimatedTokens; tot > 0 {
 		estPct := float64(r.EstimatedTokens) * 100 / float64(tot)
-		fmt.Printf("    token source   %.0f%% actual · %.0f%% estimated (agy char/4)\n",
+		fmt.Printf("    token source   %.0f%% actual · %.0f%% estimated (Hydra's char/4)\n",
 			100-estPct, estPct)
 	}
 	fmt.Println("    (cost is estimated: pricing × tokens, not billed)")
 	fmt.Println()
 	fmt.Println("  Recent (last 5):")
 	for _, row := range r.Recent {
-		fmt.Printf("  %s  %s/%d  %s — %d+%d tok, $%.6f, %dms\n",
-			row.TS, row.Enum, row.Tier, row.Model,
+		fmt.Printf("  %s  %s  %s, %d+%d tok, $%.6f, %dms\n",
+			row.TS, routeKey(row.Enum, row.Tier), row.Model,
 			row.PromptTokens, row.ResponseTokens, row.EstCostUSD, row.WallMS)
 	}
 	fmt.Println()
@@ -443,6 +511,13 @@ func RenderStatsTable(period string, rows []GroupRow) {
 		commaInt(totOut),
 		fmt.Sprintf("$%.3f", totCost),
 	)
+	// A row from a superseded naming era names a head nothing here declares.
+	// Said plainly, because silently merging it would misattribute spend and
+	// silently dropping it would understate the total.
+	if n, calls := Unattributed(rows); n > 0 {
+		fmt.Printf("\n  %d of these name a head this machine no longer declares (%d calls);\n"+
+			"  they are shown under the name they were logged with.\n", n, calls)
+	}
 	fmt.Println()
 }
 
@@ -496,14 +571,21 @@ func truncLabel(s string, max int) string {
 // RenderTail prints human-readable tail rows.
 func RenderTail(rows []Row) {
 	for _, r := range rows {
-		enum := r.Enum
-		if enum == "" {
-			enum = "?"
-		}
-		fmt.Printf("  %s  %s/%d  %s — %d+%d tok, $%.6f, %dms\n",
-			r.TS, enum, r.Tier, r.Model,
+		fmt.Printf("  %s  %s  %s, %d+%d tok, $%.6f, %dms\n",
+			r.TS, routeKey(r.Enum, r.Tier), r.Model,
 			r.PromptTokens, r.ResponseTokens, r.EstCostUSD, r.WallMS)
 	}
+}
+
+// routeKey says how a dispatch was routed: the enum that chose the tier, or
+// the tier itself when one was pinned. An absent enum is not unknown, a
+// --tier run has no routing key, and "%s/%d" over it printed a bare "/10" on
+// every row of a machine that routes that way (#794).
+func routeKey(enum string, tier int) string {
+	if enum == "" {
+		return fmt.Sprintf("tier %d", tier)
+	}
+	return fmt.Sprintf("%s/%d", enum, tier)
 }
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
@@ -516,7 +598,7 @@ func loadRows(path string) ([]Row, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("%w at %s — has anything dispatched yet?", ErrNoLog, path)
+			return nil, fmt.Errorf("%w at %s, has anything dispatched yet?", ErrNoLog, path)
 		}
 		return nil, err
 	}
@@ -548,7 +630,7 @@ func tailLines(path string, n int) ([]string, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("%w at %s — has anything dispatched yet?", ErrNoLog, path)
+			return nil, fmt.Errorf("%w at %s, has anything dispatched yet?", ErrNoLog, path)
 		}
 		return nil, err
 	}
@@ -589,13 +671,18 @@ func tailLines(path string, n int) ([]string, error) {
 
 func aggregate(rows []Row) Totals {
 	var t Totals
+	var totalWallMS int64
 	t.Calls = len(rows)
 	for _, r := range rows {
 		t.PromptTokens += r.PromptTokens
 		t.ResponseTokens += r.ResponseTokens
 		t.EstCostUSD += r.EstCostUSD
-		t.WallSeconds += r.WallMS / 1000
+		totalWallMS += r.WallMS
 	}
+	// Sum milliseconds first, then divide once: dividing per-row before summing
+	// truncates every sub-second call to 0, so a batch of fast calls reports
+	// "0s" total wall time regardless of real cumulative time.
+	t.WallSeconds = totalWallMS / 1000
 	// Round to 6 decimal places.
 	t.EstCostUSD = math.Round(t.EstCostUSD*1_000_000) / 1_000_000
 	return t
@@ -623,8 +710,14 @@ func groupBy(rows []Row, key func(Row) string) []GroupRow {
 		g.EstCostUSD = math.Round(g.EstCostUSD*1_000_000) / 1_000_000
 		result = append(result, *g)
 	}
+	// Ties (often several $0 rows) need a deterministic tiebreaker, result is
+	// built from a map, whose iteration order is randomized, so without one
+	// equal-cost rows visibly swapped position on every poll (#506).
 	sort.Slice(result, func(i, j int) bool {
-		return result[i].EstCostUSD > result[j].EstCostUSD
+		if result[i].EstCostUSD != result[j].EstCostUSD {
+			return result[i].EstCostUSD > result[j].EstCostUSD
+		}
+		return result[i].Key < result[j].Key
 	})
 	return result
 }

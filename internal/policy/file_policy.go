@@ -14,7 +14,7 @@ import (
 	"github.com/ankit373/hydra/registry"
 )
 
-// Spec is the input to the file policy evaluator — describes the task.
+// Spec is the input to the file policy evaluator, describes the task.
 // All fields are optional; missing fields don't satisfy any condition.
 type Spec struct {
 	File          string `json:"file"`
@@ -50,6 +50,8 @@ type FilePolicy struct {
 	DiffSizeCapPct      int      `yaml:"diff_size_cap_pct"`
 	MaxCostUSD          float64  `yaml:"max_cost_usd"`
 	MaxWallSeconds      int      `yaml:"max_wall_seconds"`
+	MaxMemoryMB         int      `yaml:"max_memory_mb"`
+	MaxCPUSeconds       int      `yaml:"max_cpu_seconds"`
 	UseRepoMap          bool     `yaml:"use_repo_map"`
 	DedupFileReads      bool     `yaml:"dedup_file_reads"`
 	PromptCache         bool     `yaml:"prompt_cache"`
@@ -74,7 +76,7 @@ type FilePolicyEngine struct {
 	pf policyFile
 }
 
-// LoadFilePolicy reads registry/policy.yaml — an on-disk copy under hydraHome
+// LoadFilePolicy reads registry/policy.yaml, an on-disk copy under hydraHome
 // if one exists, otherwise the copy embedded in the binary (#238).
 func LoadFilePolicy(hydraHome string) (*FilePolicyEngine, error) {
 	raw, err := registry.Read(hydraHome, "policy.yaml")
@@ -87,6 +89,12 @@ func LoadFilePolicy(hydraHome string) (*FilePolicyEngine, error) {
 	}
 	return &FilePolicyEngine{pf: pf}, nil
 }
+
+// RuleCount is how many rules policy.yaml declares. It exists so a security
+// audit can report the size of a ruleset without reaching into the parsed
+// file, the count is the difference between "no policy configured" and
+// "policy configured but not applied", which are opposite findings.
+func (e *FilePolicyEngine) RuleCount() int { return len(e.pf.Rules) }
 
 // Decide evaluates all rules against spec and returns the merged FilePolicy.
 func (e *FilePolicyEngine) Decide(spec Spec) FilePolicy {
@@ -132,10 +140,16 @@ func matchWhen(when map[string]interface{}, spec Spec) bool {
 	return true
 }
 
+// condSuffixes are the operator suffixes a `when` key may carry, longest-first
+// so `_lte` is not read as `_lt` with a stray e. Shared with DeadConditions,
+// which must split a key exactly the way this does or it reports the wrong
+// rules dead.
+var condSuffixes = []string{"_contains", "_present", "_lte", "_gte", "_lt", "_gt", "_ne", "_eq", "_in"}
+
 // matchCondition evaluates a single (key, value) condition against spec.
 func matchCondition(key string, val interface{}, spec Spec) bool {
 	var op, field string
-	for _, suffix := range []string{"_contains", "_present", "_lte", "_gte", "_lt", "_gt", "_ne", "_eq", "_in"} {
+	for _, suffix := range condSuffixes {
 		if strings.HasSuffix(key, suffix) {
 			op = strings.TrimPrefix(suffix, "_")
 			field = strings.TrimSuffix(key, suffix)
@@ -155,7 +169,15 @@ func matchCondition(key string, val interface{}, spec Spec) bool {
 	case "ne":
 		return fmt.Sprintf("%v", specVal) != fmt.Sprintf("%v", val)
 	case "gt", "lt", "gte", "lte":
-		sn := toFloat(specVal)
+		// Unknown satisfies no comparison. A field the spec never carried
+		// compares as 0 and matches every _lt and _lte rule written for the low
+		// end of the range, and so does a misspelled or non-numeric field name,
+		// which specField answers with "" (#848).
+		n, numeric := specVal.(int)
+		if !numeric || numericUnset(field, n) {
+			return false
+		}
+		sn := float64(n)
 		vn := toFloat(val)
 		switch op {
 		case "gt":
@@ -194,6 +216,21 @@ func matchCondition(key string, val interface{}, spec Spec) bool {
 		present := sv != "" && sv != "false" && sv != "0"
 		wantPresent := fmt.Sprintf("%v", val) == "true"
 		return present == wantPresent
+	}
+	return false
+}
+
+// numericUnset reports whether a numeric field was never supplied, so no
+// comparison against it can hold.
+//
+// A real tier is 1-10, a real file has at least one line, and a real file set
+// has at least one file, so a non-positive value in these three is absence
+// rather than a measurement. prompt_length and context_pct are deliberately
+// absent: 0 is a genuine value for both (an empty prompt, no context pressure).
+func numericUnset(field string, v int) bool {
+	switch field {
+	case "enum_tier", "file_lines", "file_count":
+		return v <= 0
 	}
 	return false
 }

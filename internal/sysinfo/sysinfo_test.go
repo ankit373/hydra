@@ -14,20 +14,20 @@ import (
 //
 // Before #258 there was no windows case in Detect's switch, so on Windows every
 // field kept its zero value and the package reported "0GB RAM · memory fully
-// occupied (0.0GB free)" with MemPressure = low — simultaneously claiming the
+// occupied (0.0GB free)" with MemPressure = low, simultaneously claiming the
 // machine was full and that it had plenty of headroom, from no reading at all.
 // This test runs on all three OSes in CI and would have caught that on day one.
 func TestDetect_ReadsThisMachinesMemory(t *testing.T) {
 	s := Detect()
 
 	if !s.HardwareKnown() {
-		t.Fatalf("Detect() on %s/%s reported unknown hardware — this platform has no working "+
+		t.Fatalf("Detect() on %s/%s reported unknown hardware, this platform has no working "+
 			"detection path, and every memory-derived number it produces is a placeholder.\n"+
 			"  Summary()   = %q\n  MemPressure = %v",
 			runtime.GOOS, runtime.GOARCH, s.Summary(), s.MemPressure)
 	}
 	if s.TotalRAMGB < 0.5 {
-		t.Errorf("TotalRAMGB = %.2f — no machine that can run this test has under 0.5GB", s.TotalRAMGB)
+		t.Errorf("TotalRAMGB = %.2f, no machine that can run this test has under 0.5GB", s.TotalRAMGB)
 	}
 	if s.FreeRAMGB > s.TotalRAMGB {
 		t.Errorf("FreeRAMGB (%.2f) exceeds TotalRAMGB (%.2f)", s.FreeRAMGB, s.TotalRAMGB)
@@ -56,13 +56,13 @@ func TestUndetectedHardware_IsReportedAsUnknown(t *testing.T) {
 
 	summary := s.Summary()
 	if strings.Contains(summary, "0GB") || strings.Contains(summary, "0.0GB") {
-		t.Errorf("Summary() = %q — prints a zero as though it were a measurement", summary)
+		t.Errorf("Summary() = %q, prints a zero as though it were a measurement", summary)
 	}
 	if !strings.Contains(strings.ToLower(summary), "unknown") {
 		t.Errorf("Summary() = %q, want it to say the hardware is unknown", summary)
 	}
 	if strings.Contains(strings.ToLower(summary), "fully occupied") {
-		t.Errorf("Summary() = %q — claims the machine is full, from no reading", summary)
+		t.Errorf("Summary() = %q, claims the machine is full, from no reading", summary)
 	}
 
 	if note := s.MemoryNote(); !strings.Contains(strings.ToLower(note), "unknown") &&
@@ -70,7 +70,7 @@ func TestUndetectedHardware_IsReportedAsUnknown(t *testing.T) {
 		t.Errorf("MemoryNote() = %q, want it to state that detection failed", note)
 	}
 	if w := s.PressureWarning(); w == "" {
-		t.Error("PressureWarning() is empty for unknown hardware — the user is told nothing")
+		t.Error("PressureWarning() is empty for unknown hardware, the user is told nothing")
 	}
 }
 
@@ -90,7 +90,7 @@ func TestUndetectedHardware_DoesNotRankModels(t *testing.T) {
 			t.Errorf("%s reported as fitting with no memory reading", r.Model)
 		}
 		if strings.Contains(strings.ToLower(r.Reason), "only 0.0gb") {
-			t.Errorf("%s reason = %q — states a measured 0GB budget", r.Model, r.Reason)
+			t.Errorf("%s reason = %q, states a measured 0GB budget", r.Model, r.Reason)
 		}
 		if !strings.Contains(strings.ToLower(r.Reason), "could not") &&
 			!strings.Contains(strings.ToLower(r.Reason), "unknown") {
@@ -101,14 +101,14 @@ func TestUndetectedHardware_DoesNotRankModels(t *testing.T) {
 	if best := s.BestOllamaModel(); best.Fits {
 		t.Error("BestOllamaModel() claims a fit with no memory reading")
 	} else if strings.Contains(best.Reason, "insufficient memory") {
-		t.Errorf("BestOllamaModel().Reason = %q — a hardware verdict from no hardware reading", best.Reason)
+		t.Errorf("BestOllamaModel().Reason = %q, a hardware verdict from no hardware reading", best.Reason)
 	}
 	if s.AnyLocalModelFits() {
 		t.Error("AnyLocalModelFits() = true with no memory reading")
 	}
 }
 
-// A detected machine must still rank normally — the guard above must not have
+// A detected machine must still rank normally, the guard above must not have
 // turned recommendations off for everyone.
 func TestKnownHardware_StillRanksModels(t *testing.T) {
 	s := &Specs{Arch: "amd64", OS: "linux", TotalRAMGB: 64, FreeRAMGB: 48}
@@ -121,7 +121,7 @@ func TestKnownHardware_StillRanksModels(t *testing.T) {
 		t.Error("MemPressure = unknown for a machine with 64GB")
 	}
 	if !s.AnyLocalModelFits() {
-		t.Error("nothing fits in 48GB free — the unknown-hardware guard is firing on known hardware")
+		t.Error("nothing fits in 48GB free, the unknown-hardware guard is firing on known hardware")
 	}
 	if best := s.BestOllamaModel(); !best.Fits {
 		t.Errorf("BestOllamaModel() = %+v, want a fit", best)
@@ -158,7 +158,7 @@ func TestPressure_ValuesAreStable(t *testing.T) {
 		want int
 	}{{PressureLow, 0}, {PressureModerate, 1}, {PressureHigh, 2}, {PressureUnknown, 3}} {
 		if int(tc.p) != tc.want {
-			t.Errorf("%v = %d, want %d — inserting a value renumbers the others", tc.p, int(tc.p), tc.want)
+			t.Errorf("%v = %d, want %d, inserting a value renumbers the others", tc.p, int(tc.p), tc.want)
 		}
 	}
 }

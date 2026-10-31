@@ -3,12 +3,27 @@ name: Sync develop with main
 # GitFlow "reverse merge" (a.k.a. back-merge): after anything lands on main
 # (a release version bump, a hotfix), those commits must flow BACK into develop
 # so develop never falls behind main. The direction is always **main → develop**
-# — main is the source of truth for released code; develop integrates on top.
+#, main is the source of truth for released code; develop integrates on top.
 #
-# develop is a protected branch (linear history, PR-only, no direct pushes), so
-# we cannot push a merge straight to it. Instead this opens a back-merge PR from
-# a branch that is (develop + main), which is then squash-merged to keep develop
-# linear. The job no-ops when develop already contains everything on main.
+# main and develop both require linear history, and the repo only allows
+# squash-merge, a deliberate policy (CLAUDE.md: "Squash and merge
+# everywhere"), not something this workflow should work around by relaxing.
+# But every squash on main collapses a whole branch into one commit with no
+# real parent link back into develop's history, so a full `git merge
+# origin/main` has to hunt for a common ancestor across that severed graph,
+# it lands on some ancient commit and reports add/add conflicts on
+# nearly every file either branch has independently touched since, even when
+# the content is already identical (#428). Once one back-merge fails this way,
+# the next push re-merges everything since the last success too, so failures
+# compound instead of staying scoped to what actually changed.
+#
+# Cherry-picking exactly what THIS push introduced (before..after) sidesteps
+# that: each commit's own parent is its diff base, not a shared-ancestor
+# search across the severed graph. It's also just automating what the hotfix
+# flow here already prescribes by hand ("cherry-pick back to develop").
+# --empty=drop skips any commit that turns out to be a no-op because develop
+# already has that content, the common case for most of a squashed release
+# commit, since the release branch was cut from develop to begin with.
 
 on:
   push:
@@ -31,26 +46,67 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Build back-merge branch (develop + main)
+      - name: Cherry-pick main's new commits onto develop
         id: prep
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git fetch origin main develop
 
-          # Start from develop and merge main IN — this keeps develop's own work
-          # and only adds what main has that develop lacks (release/hotfix commits).
-          git checkout -B chore/back-merge-main origin/develop
-          if ! git merge origin/main --no-edit; then
-            # Record *which* files conflicted before aborting throws the state
-            # away — "there was a conflict" is not actionable on its own.
-            git diff --name-only --diff-filter=U > /tmp/back-merge-conflicts.txt || true
-            git merge --abort
-            echo "conflict=true" >> "$GITHUB_OUTPUT"
-            exit 0
+          BEFORE="${{ github.event.before }}"
+          AFTER="${{ github.event.after }}"
+
+          # Resume from the last sync that is still pending, not from this push.
+          # The range is per push, so a run whose branch never merged leaves its
+          # commits behind for ever: the next push starts after them. An unmerged
+          # back-merge branch is itself the record that this happened, and the
+          # commit on it names the main SHA it carried. Once that branch merges
+          # and goes away, github.event.before is right again.
+          if git fetch origin chore/back-merge-main 2>/dev/null \
+             && ! git diff --quiet origin/develop..FETCH_HEAD; then
+            PENDING=$(git log -1 --format=%B FETCH_HEAD \
+              | sed -n 's/^Back-merge-source: *//p' | head -1)
+            if [ -n "$PENDING" ] && git cat-file -e "$PENDING^{commit}" 2>/dev/null \
+               && git merge-base --is-ancestor "$PENDING" "$AFTER"; then
+              echo "A back-merge is still pending at $PENDING; resuming from there."
+              BEFORE="$PENDING"
+            fi
           fi
 
-          # If the merge introduced nothing beyond develop, there is nothing to sync.
+          # A real 'before' only exists for an ordinary push to an existing
+          # branch. Force-pushes are disabled on main by branch protection, so
+          # in practice this fallback only covers the branch's original
+          # creation, but a full merge is still the right degraded behavior
+          # for it, since there is no "just this push" range to compute.
+          if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ] || ! git cat-file -e "$BEFORE" 2>/dev/null; then
+            echo "No usable 'before' SHA (first push or force-push), falling back to a full merge."
+            git checkout -B chore/back-merge-main origin/develop
+            if ! git merge origin/main --no-edit; then
+              git diff --name-only --diff-filter=U > /tmp/back-merge-conflicts.txt || true
+              git merge --abort
+              echo "conflict=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          else
+            if [ "$(git rev-list --count "$BEFORE..$AFTER")" -eq 0 ]; then
+              echo "nothing=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            git checkout -B chore/back-merge-main origin/develop
+            if ! git cherry-pick --empty=drop "$BEFORE..$AFTER"; then
+              # Record *which* files conflicted before aborting throws the
+              # state away, "there was a conflict" is not actionable on its
+              # own.
+              git diff --name-only --diff-filter=U > /tmp/back-merge-conflicts.txt || true
+              git cherry-pick --abort
+              echo "conflict=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+
+          # If every cherry-picked commit turned out to be a no-op (develop
+          # already had the content), there is nothing to sync.
           if git diff --quiet origin/develop..HEAD; then
             echo "nothing=true" >> "$GITHUB_OUTPUT"
           else
@@ -58,33 +114,120 @@ jobs:
           fi
 
       - name: Push branch + open/update PR
+        id: pr
         if: steps.prep.outputs.conflict != 'true' && steps.prep.outputs.nothing != 'true'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # BACK_MERGE_TOKEN, when set, is a PAT. It exists because GITHUB_TOKEN
+          # cannot produce a mergeable PR here, see the "can it merge" step.
+          GH_TOKEN: ${{ secrets.BACK_MERGE_TOKEN || secrets.GITHUB_TOKEN }}
+          HAVE_PAT: ${{ secrets.BACK_MERGE_TOKEN != '' && 'true' || 'false' }}
         run: |
-          git push -f origin chore/back-merge-main
+          if [ "$HAVE_PAT" = "true" ]; then
+            git remote set-url origin \
+              "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          fi
+          echo "have_pat=$HAVE_PAT" >> "$GITHUB_OUTPUT"
+
+          # Publish through createCommitOnBranch, which GitHub signs. A PAT does
+          # not help here: a commit pushed over git from a runner is unsigned
+          # whoever pushes it, and develop requires signatures with no admin
+          # bypass, so stacking a signed commit on top still leaves the unsigned
+          # one in the PR and the merge is refused (#1079).
+          if BACK_MERGE_SOURCE="${{ github.event.after }}" \
+             python3 .github/workflows/back_merge_commit.py; then
+            :
+          else
+            echo "::warning title=Signed back-merge failed::Falling back to a plain push; the PR will need the manual path below."
+            git push -f origin chore/back-merge-main
+            echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          fi
+
           # Create the PR if one isn't already open for this branch; otherwise the
           # force-push above already updated the existing PR.
           gh pr create \
             --base develop \
             --head chore/back-merge-main \
             --title "chore: back-merge main → develop" \
-            --body "Automated GitFlow back-merge: released commits on \`main\` flowing back into \`develop\`. **Squash-merge** to keep develop's linear history." \
+            --body "Automated GitFlow back-merge: released commits on \`main\` flowing back into \`develop\` via cherry-pick (#428). **Squash-merge** to keep develop's linear history." \
             2>/dev/null || echo "A back-merge PR is already open; it was updated by the force-push."
+
+      # Opening a PR is not syncing. Both of the reasons this PR cannot merge are
+      # invisible on the PR itself, one shows as "checks expected" that never
+      # arrive, the other as "the base branch policy prohibits the merge" while
+      # every check is green, so the job used to report success over a PR that
+      # would sit open forever (#670). Same principle as the conflict step below:
+      # a sync that silently does not sync is worse than no sync at all.
+      - name: Can this PR actually merge?
+        if: steps.pr.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HAVE_PAT: ${{ steps.pr.outputs.have_pat }}
+          HEAD_SHA: ${{ steps.pr.outputs.head }}
+        run: |
+          blocked=0
+
+          # 1. develop requires signed commits, and git-pushed bot commits are
+          #    unsigned. GitHub reports this as a base-branch-policy refusal,
+          #    naming neither signatures nor the offending commit.
+          unsigned=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${HEAD_SHA}" \
+            --jq 'if .commit.verification.verified then empty else .sha end' || echo "$HEAD_SHA")
+          if [ -n "$unsigned" ]; then
+            echo "::error title=Back-merge commit is unsigned::${unsigned} is not signed. develop has required_signatures with enforce_admins, so there is no bypass and no amount of signed commits on top helps."
+            blocked=1
+          fi
+
+          # 2. Events raised by GITHUB_TOKEN start no workflow runs, so the 13
+          #    required checks are "expected" and never report.
+          if [ "$HAVE_PAT" != "true" ]; then
+            echo "::error title=Back-merge checks will not run::This PR was opened with GITHUB_TOKEN, whose events trigger no workflows. Its required checks will never start."
+            blocked=1
+          fi
+
+          if [ "$blocked" -eq 0 ]; then
+            echo "Back-merge PR is mergeable on its own."
+            exit 0
+          fi
+
+          cat <<'EOF'
+          develop is now behind main and the PR above cannot merge itself.
+
+          To land it now, push one signed commit to the branch. That starts the
+          checks, which a GITHUB_TOKEN-opened PR can never start on its own:
+
+            git fetch origin chore/back-merge-main
+            git checkout -B backmerge origin/chore/back-merge-main
+            git commit -S --allow-empty -m "chore: trigger the back-merge checks"
+            git push origin HEAD:chore/back-merge-main
+
+          If the branch still carries an unsigned commit, that alone will NOT
+          make it mergeable, because the unsigned one stays in the PR. Carry the
+          same content on a branch of your own instead:
+
+            git checkout -B chore/sync-manifest origin/develop
+            git checkout origin/main -- .release-please-manifest.json CHANGELOG.md
+            git commit -S -m "chore(release): carry the version bump back to develop"
+            gh pr create --base develop --fill
+
+          To stop this recurring, add a BACK_MERGE_TOKEN secret, a PAT with repo
+          scope. Its events can start workflow runs, which is the half no change
+          to this workflow can fix: GITHUB_TOKEN is barred from triggering them
+          so that workflows cannot recurse.
+          EOF
+          exit 1
 
       - name: Nothing to sync
         if: steps.prep.outputs.nothing == 'true'
-        run: echo "develop already contains everything on main — no back-merge needed."
+        run: echo "develop already contains everything on main, no back-merge needed."
 
       # This step FAILS the job on purpose. It used to warn and exit 0, which
-      # made a back-merge that did not happen look identical to one that did —
+      # made a back-merge that did not happen look identical to one that did,
       # the v1.0.1 release's back-merge conflicted, reported green, and left
       # develop claiming 1.0.0 for eight days (#215). A sync that silently does
       # not sync is worse than no sync at all, because it is trusted.
-      - name: Conflict — manual back-merge required
+      - name: Conflict, manual back-merge required
         if: steps.prep.outputs.conflict == 'true'
         run: |
-          echo "::error title=Back-merge conflict::main → develop conflicts; develop is now behind main. Resolve manually — see the file list below."
+          echo "::error title=Back-merge conflict::main → develop conflicts; develop is now behind main. Resolve manually, see the file list below."
           echo "Conflicting files:"
           cat /tmp/back-merge-conflicts.txt 2>/dev/null || echo "  (list unavailable)"
           exit 1

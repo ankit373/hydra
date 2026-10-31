@@ -1,0 +1,60 @@
+# Runs the checks CI runs, before the commit rather than eight minutes after it.
+#
+# Deliberately the *same* tools and the same flags: a hook that disagrees with
+# CI is worse than no hook, because it teaches people that local green means
+# nothing. Anything slow (the race detector, the full suite, the desktop
+# module) is left to CI on purpose, so this stays fast enough to keep.
+#
+#   pip install pre-commit && pre-commit install
+#   pre-commit run --all-files      # first run, or after changing this file
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+      - id: check-merge-conflict
+      - id: check-yaml
+        # Workflow files use GitHub's `on:` key, which YAML 1.1 parses as the
+        # boolean true. Unsafe mode parses the document without resolving that.
+        args: [--unsafe]
+      - id: check-json
+      - id: mixed-line-ending
+        args: [--fix=lf]
+      - id: detect-private-key
+
+  - repo: local
+    hooks:
+      - id: gofmt
+        name: gofmt
+        entry: gofmt -l -w
+        language: system
+        types: [go]
+        # Never the desktop module's generated bindings: wails rewrites them.
+        exclude: ^desktop/frontend/wailsjs/
+
+      - id: go-vet
+        name: go vet ./...
+        entry: go vet ./...
+        language: system
+        types: [go]
+        pass_filenames: false
+
+      - id: go-build
+        name: go build ./...
+        entry: go build ./...
+        language: system
+        types: [go]
+        pass_filenames: false
+
+      # The one that has actually caught things: a test that compiles but was
+      # never run. Without -race and without the desktop module, both of which
+      # CI does, so this stays under a few seconds.
+      - id: go-test-short
+        name: go test ./... (no race)
+        entry: go test ./... -count=1
+        language: system
+        types: [go]
+        pass_filenames: false

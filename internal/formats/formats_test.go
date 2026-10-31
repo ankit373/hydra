@@ -4,6 +4,7 @@ package formats
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -17,6 +18,7 @@ import (
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/cost"
 	"github.com/ankit373/hydra/internal/graph"
+	"github.com/ankit373/hydra/internal/ope"
 	"github.com/ankit373/hydra/internal/runlog"
 	"github.com/ankit373/hydra/internal/testutil"
 	"github.com/ankit373/hydra/internal/trust"
@@ -60,8 +62,8 @@ func jsonFields(t *testing.T, v any) map[string]reflect.Kind {
 //
 // A subset check, not an exact match: adding a field is a compatible change and
 // must not need this test edited, while removing or retyping one breaks every
-// reader — `hyctl stats`, the desktop app, and whatever a user has piped into
-// jq — and must go red here first.
+// reader, `hyctl stats`, the desktop app, and whatever a user has piped into
+// jq, and must go red here first.
 func requireFields(t *testing.T, name string, v any, want map[string]reflect.Kind) {
 	t.Helper()
 
@@ -69,7 +71,7 @@ func requireFields(t *testing.T, name string, v any, want map[string]reflect.Kin
 	for field, kind := range want {
 		gotKind, present := got[field]
 		if !present {
-			t.Errorf("%s: field %q is gone. Every reader of this file breaks — "+
+			t.Errorf("%s: field %q is gone. Every reader of this file breaks, "+
 				"`hyctl stats`, the desktop app, and any jq pipeline a user wrote. "+
 				"If the rename is intended, migrate the readers in the same change.",
 				name, field)
@@ -92,7 +94,7 @@ func requireFields(t *testing.T, name string, v any, want map[string]reflect.Kin
 	if len(added) > 0 {
 		sort.Strings(added)
 		t.Logf("%s: new field(s) since this contract was written: %s "+
-			"(compatible — add them here when convenient)", name, strings.Join(added, ", "))
+			"(compatible, add them here when convenient)", name, strings.Join(added, ", "))
 	}
 }
 
@@ -119,7 +121,40 @@ func TestCostRow_Schema(t *testing.T) {
 		"swarm_mode":      reflect.String,
 		"swarm_winner":    reflect.Bool,
 		"config":          reflect.String,
+		"act_prob":        reflect.Float64,
+		"keep_prob":       reflect.Float64,
 	})
+}
+
+// A row written before #605 has no propensity, so both fields decode to 0.
+// Zero is not a probability: weighting by 1/0 is a divide by zero, so every
+// consumer must treat it as "unrecorded" and skip the row rather than assume
+// certainty. internal/ope.SelfNormalized is the reference for that handling.
+func TestCostRow_PrePropensityRowsDecodeToZero(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("testdata", "cost.v1.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var n int
+	for _, line := range strings.Split(strings.TrimRight(string(raw), "\n"), "\n") {
+		if line == "" {
+			continue
+		}
+		var r cost.Row
+		if err := json.Unmarshal([]byte(line), &r); err != nil {
+			t.Fatalf("pre-#605 row stopped parsing: %v", err)
+		}
+		if r.ActProb != 0 || r.KeepProb != 0 {
+			t.Errorf("expected 0 propensity on a pre-#605 row, got %v/%v", r.ActProb, r.KeepProb)
+		}
+		n++
+	}
+	if n == 0 {
+		t.Fatal("fixture is empty")
+	}
+	if _, _, err := ope.SelfNormalized([]ope.Sample{{Value: 1, Prob: 0}}); !errors.Is(err, ope.ErrNoUsableSamples) {
+		t.Errorf("a zero propensity must be unusable, got err=%v", err)
+	}
 }
 
 func TestTrustRunLog_Schema(t *testing.T) {
@@ -215,7 +250,7 @@ func TestCostLog_OlderFixturesStillParse(t *testing.T) {
 	}
 
 	// The oldest row predates run_id/task_id/swarm fields entirely. It must
-	// load with those zeroed rather than failing the whole file — one
+	// load with those zeroed rather than failing the whole file, one
 	// unparsable line would hide every row after it.
 	oldest := rows[0]
 	if oldest.Model != "claude-sonnet-4" || oldest.Tier != 2 {
@@ -228,7 +263,7 @@ func TestCostLog_OlderFixturesStillParse(t *testing.T) {
 		t.Errorf("run_id = %q on a row written before that field existed", oldest.RunID)
 	}
 
-	// A row from after the token-source split must keep its label — that label
+	// A row from after the token-source split must keep its label, that label
 	// is the whole reason an estimate is not reported as measured spend.
 	var sawEstimated bool
 	for _, r := range rows {
@@ -433,7 +468,7 @@ func TestRegistry_EmbeddedCopyIsReadableAndValid(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			raw, err := registry.Read(s.HydraHome, name)
 			if err != nil {
-				t.Fatalf("%s is not readable from the embedded registry — this is "+
+				t.Fatalf("%s is not readable from the embedded registry, this is "+
 					"every brew/npm/pip/curl install (#238): %v", name, err)
 			}
 			if len(raw) == 0 {
@@ -450,7 +485,7 @@ func TestRegistry_EmbeddedCopyIsReadableAndValid(t *testing.T) {
 	}
 }
 
-// An operator's on-disk copy must win over the embedded one — that is the whole
+// An operator's on-disk copy must win over the embedded one, that is the whole
 // point of $HYDRA_HOME/registry, and a silent fallback to embedded would mean
 // their retuned routing was ignored.
 func TestRegistry_OnDiskOverrideWinsOverEmbedded(t *testing.T) {
@@ -530,7 +565,7 @@ func TestRegistry_PricingCoversEveryTier(t *testing.T) {
 }
 
 // workspace.yaml ships embedded to every install, so it must not carry anyone's
-// absolute paths. It did — two roots from the maintainer's own machine, which
+// absolute paths. It did, two roots from the maintainer's own machine, which
 // meant a fresh install had no workspace that could ever match (#297).
 func TestRegistry_WorkspaceShipsNoAbsolutePaths(t *testing.T) {
 	s := testutil.NewSandbox(t)

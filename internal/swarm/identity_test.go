@@ -80,7 +80,7 @@ func TestLogAttempts_AllHeadsShareRunAndTaskID(t *testing.T) {
 	}
 }
 
-// With no explicit identity the rows must still be correlatable — the whole
+// With no explicit identity the rows must still be correlatable, the whole
 // point is that run_id/task_id are never empty again.
 func TestLogAttempts_DerivesIdentityWhenAbsent(t *testing.T) {
 	result := &SwarmResult{
@@ -110,7 +110,7 @@ func TestLogAttempts_DerivesIdentityWhenAbsent(t *testing.T) {
 }
 
 // An external orchestrator can group Hydra invocations via env, but an explicit
-// Options value must win — env is process-global and can't distinguish
+// Options value must win, env is process-global and can't distinguish
 // concurrent runs inside one host process.
 func TestLogAttempts_ExplicitOptionsBeatEnv(t *testing.T) {
 	home := t.TempDir()

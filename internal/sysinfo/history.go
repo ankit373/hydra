@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"sort"
 	"time"
+
+	"github.com/ankit373/hydra/internal/config"
 )
 
 const (
@@ -25,13 +27,9 @@ type memorySample struct {
 	WiredGB float64   `json:"wired_gb"`
 }
 
-// historyPath returns ~/.hydra/memory_history.jsonl, or "" if the home dir is unavailable.
+// historyPath returns $HYDRA_HOME (or ~/.hydra)/memory_history.jsonl.
 func historyPath() string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ""
-	}
-	return filepath.Join(home, ".hydra", historyFile)
+	return filepath.Join(config.Dir(), historyFile)
 }
 
 // recordSample appends the current reading to the history file if enough time
@@ -99,7 +97,7 @@ type HistoricalStats struct {
 	Samples   int
 	Days      int
 	AvgFreeGB float64
-	P75FreeGB float64 // 75th percentile — "typically this much is free"
+	P75FreeGB float64 // 75th percentile, "typically this much is free"
 	MinFreeGB float64
 	MaxFreeGB float64
 	Reliable  bool // true when we have enough samples to trust the average

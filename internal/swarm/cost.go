@@ -14,6 +14,7 @@ import (
 	"github.com/ankit373/hydra/internal/provider"
 	"github.com/ankit373/hydra/internal/rank"
 	"github.com/ankit373/hydra/internal/runid"
+	"github.com/ankit373/hydra/registry"
 )
 
 // PricingReader abstracts the per-tier cost lookup so swarm doesn't need to
@@ -55,25 +56,27 @@ func preflightCost(heads []provider.Head, prompt string, pr PricingReader, maxUS
 	return total, nil
 }
 
-// enrichCosts fills EstCostUSD on each attempt using real token counts.
-func enrichCosts(attempts []Attempt, pr PricingReader) {
-	if pr == nil {
-		return
+// attemptCost prices one finished attempt from its real token counts. The
+// single definition of what a swarm attempt cost: RunSPRT priced its own with
+// the same formula written out a second time, and every path now reports spend
+// as it accrues rather than only once the fan-out is over.
+//
+// Only a head that answered is charged for, and an unpriced swarm (pr nil) is
+// free by construction rather than unknown.
+func attemptCost(a Attempt, pr PricingReader) float64 {
+	if pr == nil || a.Status != StatusOK {
+		return 0
 	}
-	for i := range attempts {
-		if attempts[i].Status == StatusOK {
-			attempts[i].EstCostUSD = round6(pr.EstimateCost(rank.UITier(attempts[i].Head), attempts[i].InputTokens, attempts[i].OutputTokens))
-		}
-	}
+	return round6(pr.EstimateCost(rank.UITier(a.Head), a.InputTokens, a.OutputTokens))
 }
 
 // logAttempts writes one cost.jsonl entry per attempt that actually executed
-// (StatusOK or StatusFailed — not Pending/Canceled).
+// (StatusOK or StatusFailed, not Pending/Canceled).
 //
 // It takes the attempts and mode directly rather than a *SwarmResult so the SPRT
 // path can share it: RunSPRT produces attempts without ever building a
 // SwarmResult, and without this its ensemble spend never reached cost.jsonl at
-// all — only the aggregate trust.jsonl row (#175).
+// all, only the aggregate trust.jsonl row (#175).
 //
 // Every attempt shares the run's identity: heads racing or voting on one prompt
 // are all working the same logical task, so they carry the same TaskID. That is
@@ -98,14 +101,15 @@ func logAttempts(attempts []Attempt, mode SwarmMode, opts Options, promptPreview
 		if a.Status == StatusPending || a.Status == StatusCanceled {
 			continue
 		}
-		// Shared with the dispatch log path — see cost.SourceLabels.
+		// Shared with the dispatch log path, see cost.SourceLabels.
 		tokensSource, costSrc, legacySource := cost.SourceLabels(a.TokensEstimated)
 		entry := map[string]any{
 			"ts":              a.FinishedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
 			"tier":            rank.UITier(a.Head),
 			"model":           a.Head.Name,
+			"head":            a.Head.ID,
 			"executor":        a.Head.Provider,
-			"pool":            a.Head.Meta["token_pool"],
+			"pool":            headPool(a.Head),
 			"prompt_tokens":   a.InputTokens,
 			"response_tokens": a.OutputTokens,
 			"est_cost_usd":    a.EstCostUSD,
@@ -113,11 +117,17 @@ func logAttempts(attempts []Attempt, mode SwarmMode, opts Options, promptPreview
 			"tokens_source":   tokensSource,
 			"cost_source":     costSrc,
 			"source":          legacySource,
+			"enum":            opts.Enum,
 			"swarm_mode":      string(mode),
 			"swarm_winner":    a.Status == StatusOK && a.Rank == 1,
 			"task_id":         taskID,
 			"run_id":          runID,
+			"span_id":         attemptSpan(taskID, fanOutAgent(mode), a.Head.ID),
 			"prompt_preview":  promptPreview,
+			// 1 for both: a swarm runs the heads it fans out to rather than
+			// drawing one, so every attempt logged here was certain to appear.
+			"act_prob":  1.0,
+			"keep_prob": 1.0,
 		}
 		if breadcrumb != "" { // match the omitempty on cost.Row.Config
 			entry["config"] = breadcrumb
@@ -129,4 +139,13 @@ func logAttempts(attempts []Attempt, mode SwarmMode, opts Options, promptPreview
 
 func round6(f float64) float64 {
 	return math.Round(f*1_000_000) / 1_000_000
+}
+
+// headPool mirrors dispatch's: provider metadata when present, else the
+// registry, since only the agy provider ever attached it (#681).
+func headPool(h provider.Head) string {
+	if p := h.Meta["token_pool"]; p != "" {
+		return p
+	}
+	return registry.TokenPoolFor(config.ScriptHome(), h.ID)
 }

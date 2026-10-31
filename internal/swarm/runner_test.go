@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -16,7 +17,7 @@ import (
 	"github.com/ankit373/hydra/internal/testutil"
 )
 
-// countingExecutor always succeeds and counts how many times it actually ran —
+// countingExecutor always succeeds and counts how many times it actually ran,
 // so a test can prove a denied head's executor was never invoked, not merely
 // that its output was discarded.
 type countingExecutor struct{ calls *int }
@@ -41,7 +42,7 @@ func writeLedgerPolicy(t *testing.T, p ledger.Policy) {
 	}
 }
 
-// A ledger deny rule must stop executeHead before it ever calls the executor —
+// A ledger deny rule must stop executeHead before it ever calls the executor,
 // gating, not just logging after the fact.
 func TestExecuteHead_LedgerDenyBlocksExecution(t *testing.T) {
 	testutil.NewSandbox(t)
@@ -49,7 +50,7 @@ func TestExecuteHead_LedgerDenyBlocksExecution(t *testing.T) {
 	calls := 0
 	withStubExecutor(t, countingExecutor{&calls})
 
-	a := executeHead(context.Background(), registryHead("denied", "Denied", 90), "p", Options{})
+	a := executeHead(context.Background(), registryHead("denied", "Denied", 90), "p", Options{}, nil)
 	if a.Status != StatusFailed {
 		t.Errorf("Status = %q, want %q for a denied head", a.Status, StatusFailed)
 	}
@@ -64,7 +65,7 @@ func TestExecuteHead_DefaultLedgerPolicyAllowsExecution(t *testing.T) {
 	calls := 0
 	withStubExecutor(t, countingExecutor{&calls})
 
-	a := executeHead(context.Background(), registryHead("h1", "H1", 90), "p", Options{})
+	a := executeHead(context.Background(), registryHead("h1", "H1", 90), "p", Options{}, nil)
 	if a.Status != StatusOK {
 		t.Errorf("Status = %q, want %q", a.Status, StatusOK)
 	}
@@ -82,7 +83,7 @@ func TestEffectiveTimeout(t *testing.T) {
 	}
 	// Regression guard: swarm must never run a head unbounded.
 	if effectiveTimeout(Options{}) <= 0 {
-		t.Fatal("default per-head timeout must be positive — heads must never run unbounded")
+		t.Fatal("default per-head timeout must be positive, heads must never run unbounded")
 	}
 }
 
@@ -103,14 +104,35 @@ func withStubExecutor(t *testing.T, e executor.Executor) {
 	t.Cleanup(func() { executorFor = orig })
 }
 
-// A hung head must degrade to a clean StatusTimeout — not block wg.Wait forever.
+// capturingExecutor records the prompt every head actually ran with, so a test
+// can prove content (like an injected A2A handoff) reached execution instead
+// of only checking that Run/RunSPRT returned success.
+type capturingExecutor struct {
+	mu      sync.Mutex
+	prompts []string
+}
+
+func (c *capturingExecutor) Execute(_ context.Context, req executor.Request) (*executor.Response, error) {
+	c.mu.Lock()
+	c.prompts = append(c.prompts, req.Prompt)
+	c.mu.Unlock()
+	return &executor.Response{Output: "ok"}, nil
+}
+
+func (c *capturingExecutor) seen() []string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return append([]string(nil), c.prompts...)
+}
+
+// A hung head must degrade to a clean StatusTimeout, not block wg.Wait forever.
 func TestRunAll_BoundsHangingHead(t *testing.T) {
 	withStubExecutor(t, hangingExecutor{})
 	heads := []provider.Head{registryHead("a", "A", 90), registryHead("b", "B", 80)}
 
 	done := make(chan []Attempt, 1)
 	go func() {
-		done <- runAll(context.Background(), heads, "p", Options{PerHeadTimeout: 50 * time.Millisecond})
+		done <- runAll(context.Background(), heads, "p", Options{PerHeadTimeout: 50 * time.Millisecond}, nil)
 	}()
 
 	select {
@@ -124,7 +146,7 @@ func TestRunAll_BoundsHangingHead(t *testing.T) {
 			}
 		}
 	case <-time.After(5 * time.Second):
-		t.Fatal("runAll did not return within 5s — hung head was not bounded by the per-head timeout")
+		t.Fatal("runAll did not return within 5s, hung head was not bounded by the per-head timeout")
 	}
 }
 
@@ -135,13 +157,13 @@ func TestRunRace_BoundsHangingHeads(t *testing.T) {
 
 	done := make(chan []Attempt, 1)
 	go func() {
-		done <- runRace(context.Background(), heads, "p", Options{PerHeadTimeout: 50 * time.Millisecond})
+		done <- runRace(context.Background(), heads, "p", Options{PerHeadTimeout: 50 * time.Millisecond}, nil)
 	}()
 
 	select {
 	case <-done:
-		// Returned instead of hanging — that is the property under test.
+		// Returned instead of hanging, that is the property under test.
 	case <-time.After(5 * time.Second):
-		t.Fatal("runRace did not return within 5s — hung heads were not bounded")
+		t.Fatal("runRace did not return within 5s, hung heads were not bounded")
 	}
 }

@@ -100,8 +100,35 @@ func TestEntries_MarksSourceAndSorts(t *testing.T) {
 	}
 }
 
+// Entry is what a caller needs before overwriting an id, e.g. `models add`
+// warning it is about to shadow a curated built-in, since Score/Name/Source
+// each expose only one field of the record it would need to report on.
+func TestEntry_ReturnsTheFullRecordBuiltinAndUser(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "models.json")
+	if _, err := AddModel(path, Entry{ID: "kimi-k2", Name: "Kimi K2", Provider: "moonshot", CapScore: 82}); err != nil {
+		t.Fatal(err)
+	}
+
+	db, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	claude, ok := db.Entry("claude")
+	if !ok || claude.Provider != "anthropic" || claude.Source != "builtin" {
+		t.Errorf("Entry(claude) = %+v, ok=%v, want the built-in anthropic record", claude, ok)
+	}
+	kimi, ok := db.Entry("kimi-k2")
+	if !ok || kimi.Provider != "moonshot" || kimi.Source != "user" {
+		t.Errorf("Entry(kimi-k2) = %+v, ok=%v, want the user-added moonshot record", kimi, ok)
+	}
+	if _, ok := db.Entry("never-heard-of-it"); ok {
+		t.Error("Entry(unknown) reported found")
+	}
+}
+
 // Source is the "managed vs. discovered" signal a security dashboard reports
-// on — a user-added model must be distinguishable from an embedded one.
+// on, a user-added model must be distinguishable from an embedded one.
 func TestSource_DistinguishesUserFromBuiltin(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "models.json")
 	if _, err := AddModel(path, Entry{ID: "kimi-k2", Name: "Kimi K2", CapScore: 82}); err != nil {
@@ -123,16 +150,16 @@ func TestSource_DistinguishesUserFromBuiltin(t *testing.T) {
 	}
 }
 
-func TestSourceOllama_MatchesFamilyPatternsAsBuiltin(t *testing.T) {
+func TestSourceFamily_MatchesFamilyPatternsAsBuiltin(t *testing.T) {
 	db, err := Load("")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := db.SourceOllama("qwen2.5-coder:7b"); got != "builtin" {
-		t.Errorf("SourceOllama(known family) = %q, want builtin", got)
+	if got := db.sourceFamily("qwen2.5-coder:7b"); got != "builtin" {
+		t.Errorf("sourceFamily(known family) = %q, want builtin", got)
 	}
-	if got := db.SourceOllama("some-totally-unrecognized-model:1b"); got != "" {
-		t.Errorf("SourceOllama(unrecognized) = %q, want empty", got)
+	if got := db.sourceFamily("some-totally-unrecognized-model:1b"); got != "" {
+		t.Errorf("sourceFamily(unrecognized) = %q, want empty", got)
 	}
 }
 

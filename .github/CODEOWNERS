@@ -1,0 +1,27 @@
+# Review routing. GitHub requests these owners automatically, so a change to a
+# load-bearing area cannot merge without the person who owns it having seen it.
+#
+# One maintainer today, so every line names the same person. The file still
+# earns its place: it is the list that says which areas are load-bearing, and
+# it is already correct on the day a second maintainer arrives.
+
+*                           @ankit373
+
+# The router itself. A change here changes where every task goes.
+/internal/dispatch/         @ankit373
+/internal/trust/            @ankit373
+/registry/                  @ankit373
+
+# What leaves the machine, and what is allowed to.
+/internal/policy/           @ankit373
+/internal/egress/           @ankit373
+/internal/ledger/           @ankit373
+
+# The release pipeline. A silent break here ships nothing for weeks (#821).
+/.github/workflows/         @ankit373
+/.goreleaser.yaml           @ankit373
+
+# The terms contributions arrive under.
+/CLA.md                     @ankit373
+/LICENSE                    @ankit373
+/GOVERNANCE.md              @ankit373

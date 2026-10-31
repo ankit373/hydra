@@ -1,4 +1,4 @@
-# /escalate — Escalation & Fallback Skill
+# /escalate, Escalation & Fallback Skill
 
 Handles cases where a delegated output fails quality checks or a model returns ESCALATE.
 

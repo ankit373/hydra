@@ -4,9 +4,12 @@ package trust
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"math/rand"
+	"slices"
+	"strings"
 	"testing"
 )
 
@@ -124,7 +127,7 @@ func TestSPRT_SamplesHighestDFirst(t *testing.T) {
 }
 
 // Law 2 guard: an uninformative (coin-flip) source moves confidence essentially
-// nowhere — a fleet of them never reaches a decision and stays at σ(0)=0.5.
+// nowhere, a fleet of them never reaches a decision and stays at σ(0)=0.5.
 func TestSPRT_MiscalibratedSourceContributesNothing(t *testing.T) {
 	c, _ := New("")
 	calibrateSymmetric(c, "coin", "d", 0.5, 1000)
@@ -133,8 +136,11 @@ func TestSPRT_MiscalibratedSourceContributesNothing(t *testing.T) {
 	for i := range seq {
 		seq[i] = "A"
 	}
+	// Forced past the no-evidence refusal on purpose: the point here is what a
+	// measured coin contributes once it is running, and a caller routing real
+	// work is now refused before it can spend anything on one.
 	res, err := Run(context.Background(), Task{Domain: "d"}, nSources("coin", 20, 1),
-		&scriptExec{seq: seq}, c, Target{Confidence: 0.95})
+		&scriptExec{seq: seq}, c, Target{Confidence: 0.95}, AllowNoEvidence())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -154,7 +160,7 @@ func TestSPRT_BehavioralEquivalenceLiftsAgreement(t *testing.T) {
 	c, _ := New("")
 	calibrateSymmetric(c, "sim", "d", 0.9, 1000)
 
-	// Correct answers, worded differently — a textual check calls these "disagree".
+	// Correct answers, worded differently, a textual check calls these "disagree".
 	seq := func() []string {
 		return []string{"return a + b", "func sum(a,b int) int { return b+a }", "the sum: a plus b"}
 	}
@@ -184,7 +190,7 @@ func TestSPRT_BehavioralEquivalenceLiftsAgreement(t *testing.T) {
 	}
 }
 
-// A nil comparator (WithEquivalence(nil)) is ignored — the default is kept.
+// A nil comparator (WithEquivalence(nil)) is ignored, the default is kept.
 func TestSPRT_WithEquivalenceNilKeepsDefault(t *testing.T) {
 	c, _ := New("")
 	calibrateSymmetric(c, "sim", "d", 0.9, 1000)
@@ -208,7 +214,7 @@ func TestTextEquivalence(t *testing.T) {
 	}
 }
 
-// probExec answers `truth` with probability p, else `wrong` — a stochastic model.
+// probExec answers `truth` with probability p, else `wrong`, a stochastic model.
 type probExec struct {
 	truth, wrong string
 	p            float64
@@ -256,7 +262,7 @@ func TestSPRT_Law3_SamplesAndAccuracy(t *testing.T) {
 		blendedMean, 100*(1-blendedMean/fixedSwarm), blendedAcc)
 
 	// NOTE: these land above the Manifesto's *continuous* E[N] ([MODEL]: easy
-	// 1.33, blended 2.48) because evidence arrives in quantized ~2.19-nat steps —
+	// 1.33, blended 2.48) because evidence arrives in quantized ~2.19-nat steps,
 	// a single vote is below the accept threshold A=ln(19)=2.94, so an easy task
 	// needs ≥2 corroborating votes. That is faithful discrete SPRT, not a defect.
 
@@ -268,7 +274,7 @@ func TestSPRT_Law3_SamplesAndAccuracy(t *testing.T) {
 	if blendedMean >= fixedSwarm {
 		t.Errorf("blended mean samples = %.3f, want < %.0f (adaptive beats fixed)", blendedMean, fixedSwarm)
 	}
-	// SPRT spends more on harder tasks — that is the point, and fixed-N can't.
+	// SPRT spends more on harder tasks, that is the point, and fixed-N can't.
 	if hardMean <= easyMean {
 		t.Errorf("hard mean (%.3f) should exceed easy mean (%.3f)", hardMean, easyMean)
 	}
@@ -276,5 +282,79 @@ func TestSPRT_Law3_SamplesAndAccuracy(t *testing.T) {
 	if easyAcc < 0.95 || hardAcc < 0.95 || blendedAcc < 0.95 {
 		t.Errorf("accuracy below target: easy=%.4f hard=%.4f blended=%.4f, want ≥0.95",
 			easyAcc, hardAcc, blendedAcc)
+	}
+}
+
+// Observed live: --confidence on an uncalibrated domain sampled five heads,
+// every one agreed, every LLR was +0.000, and the run reported "stopped on
+// budget, confidence 50.0%" having spent $0.0095. The posterior cannot move
+// when no source carries evidence, so the only possible outcome is the prior,
+// reached by the most expensive path available.
+func TestSPRT_RefusesWhenNoSourceCarriesEvidence(t *testing.T) {
+	c, _ := New("")
+	seq := make([]string, 5)
+	for i := range seq {
+		seq[i] = "A"
+	}
+	_, err := Run(context.Background(), Task{Domain: "go"}, nSources("unknown", 5, 1),
+		&scriptExec{seq: seq}, c, Target{Confidence: 0.95})
+	if !errors.Is(err, ErrNoEvidence) {
+		t.Fatalf("err = %v, want ErrNoEvidence", err)
+	}
+	if !strings.Contains(err.Error(), "go") {
+		t.Errorf("err = %v, want it to name the domain", err)
+	}
+}
+
+// One calibrated source is enough to make the run worth paying for.
+func TestSPRT_RunsWhenOneSourceCarriesEvidence(t *testing.T) {
+	c, _ := New("")
+	calibrateSymmetric(c, "good", "go", 0.9, 100)
+	seq := make([]string, 6)
+	for i := range seq {
+		seq[i] = "A"
+	}
+	sources := append(nSources("coin", 3, 1), nSources("good", 3, 1)...)
+	if _, err := Run(context.Background(), Task{Domain: "go"}, sources,
+		&scriptExec{seq: seq}, c, Target{Confidence: 0.95}); err != nil {
+		t.Fatalf("Run refused a domain that has evidence: %v", err)
+	}
+}
+
+// The benchmark harness runs precisely to produce calibration that does not
+// exist yet, so it must be able to opt out.
+func TestSPRT_AllowNoEvidenceOptsOutOfTheRefusal(t *testing.T) {
+	c, _ := New("")
+	seq := []string{"A", "A"}
+	if _, err := Run(context.Background(), Task{Domain: "go"}, nSources("unknown", 2, 1),
+		&scriptExec{seq: seq}, c, Target{Confidence: 0.95}, AllowNoEvidence()); err != nil {
+		t.Fatalf("AllowNoEvidence did not lift the refusal: %v", err)
+	}
+}
+
+// The refusal has to carry the heads it refused, or the CLI telling the reader
+// which key to record against has nothing concrete to name and falls back to a
+// placeholder. That placeholder is what #785 left as a "model:" prefix the
+// router never reads (#835).
+func TestSPRT_RefusalNamesTheSourcesItWouldHaveSampled(t *testing.T) {
+	c, _ := New("")
+	sources := []Source{{ID: "ollama/qwen3:4b"}, {ID: "agy/claude-sonnet"}}
+
+	_, err := Run(context.Background(), Task{Domain: "go"}, sources,
+		&scriptExec{seq: []string{"A", "A"}}, c, Target{Confidence: 0.95})
+
+	var noEv *NoEvidenceError
+	if !errors.As(err, &noEv) {
+		t.Fatalf("err = %v (%T), want a *NoEvidenceError a caller can read the sources off", err, err)
+	}
+	if !errors.Is(err, ErrNoEvidence) {
+		t.Errorf("err = %v no longer matches ErrNoEvidence, which every caller branches on", err)
+	}
+	if noEv.Domain != "go" {
+		t.Errorf("Domain = %q, want %q", noEv.Domain, "go")
+	}
+	want := []string{"agy/claude-sonnet", "ollama/qwen3:4b"} // sorted, for a stable message
+	if !slices.Equal(noEv.Sources, want) {
+		t.Errorf("Sources = %v, want %v", noEv.Sources, want)
 	}
 }

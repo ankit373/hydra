@@ -36,9 +36,9 @@ func snapshotPath(jsonlPath string) string {
 	return jsonlPath + ".snapshot"
 }
 
-// loadSnapshot never errors — missing/corrupt/stale-offset just means "no
-// usable checkpoint," so load() falls back to a full replay.
-func loadSnapshot(path string, jsonlSize int64) (store map[calibKey]*confusion, offset int64, ok bool) {
+// loadSnapshot never errors, missing/corrupt/out-of-bounds/misaligned offset
+// just means "no usable checkpoint," so load() falls back to a full replay.
+func loadSnapshot(path string, jsonl *os.File, jsonlSize int64) (store map[calibKey]*confusion, offset int64, ok bool) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, 0, false
@@ -50,9 +50,29 @@ func loadSnapshot(path string, jsonlSize int64) (store map[calibKey]*confusion, 
 	if snap.Schema != snapshotSchema || snap.Offset < 0 || snap.Offset > jsonlSize {
 		return nil, 0, false
 	}
+	// A valid checkpoint must land exactly on a line boundary; otherwise
+	// load() would seek mid-line and silently drop the split record.
+	if snap.Offset > 0 {
+		var b [1]byte
+		if _, err := jsonl.ReadAt(b[:], snap.Offset-1); err != nil || b[0] != '\n' {
+			return nil, 0, false
+		}
+	}
 	store = make(map[calibKey]*confusion, len(snap.Entries))
 	for _, e := range snap.Entries {
-		store[calibKey{e.Source, e.Domain}] = &confusion{TP: e.TP, FP: e.FP, TN: e.TN, FN: e.FN}
+		// A checkpoint written before #888 holds "" rows that the delta on top
+		// of it now writes as "default", so restoring verbatim splits one
+		// history in two. Real counts are added: each entry carries the prior.
+		key := keyFor(e.Source, e.Domain)
+		conf := store[key]
+		if conf == nil {
+			conf = newConfusion()
+			store[key] = conf
+		}
+		conf.TP += e.TP - laplacePrior
+		conf.FP += e.FP - laplacePrior
+		conf.TN += e.TN - laplacePrior
+		conf.FN += e.FN - laplacePrior
 	}
 	return store, snap.Offset, true
 }

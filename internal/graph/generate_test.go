@@ -83,7 +83,7 @@ func TestGenerateGo_ExcludeSkipsMatchingPrefixes(t *testing.T) {
 	}
 }
 
-// GenerateGo's whole purpose is feeding internal/graph.Load — its output must
+// GenerateGo's whole purpose is feeding internal/graph.Load, its output must
 // actually be loadable, not merely well-formed JSON.
 func TestGenerateGo_OutputRoundTripsThroughLoad(t *testing.T) {
 	dir := writeGoModule(t)

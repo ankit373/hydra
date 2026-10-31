@@ -3,6 +3,7 @@
 package editor
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -30,7 +31,7 @@ func TestExtractContent(t *testing.T) {
 	}
 }
 
-// The file's own on-disk content rides into this prompt unsanitized — it must
+// The file's own on-disk content rides into this prompt unsanitized, it must
 // be explicitly framed as data, not an instruction, so a file containing text
 // that reads like a command can't hijack the edit (the indirect-injection
 // shape: untrusted content steering a downstream model).
@@ -95,11 +96,11 @@ func TestRunValidatorCmd(t *testing.T) {
 	}
 	absent := filepath.Join(dir, "absent.txt")
 
-	if _, rc := runValidatorCmd("test -f {file}", present); rc != 0 {
-		t.Errorf("validator on existing file: rc = %d, want 0", rc)
+	if _, rc, err := runValidatorCmd(context.Background(), "test -f {file}", present); rc != 0 || err != nil {
+		t.Errorf("validator on existing file: rc = %d, err = %v, want 0 and no error", rc, err)
 	}
-	if _, rc := runValidatorCmd("test -f {file}", absent); rc == 0 {
-		t.Errorf("validator on missing file: rc = 0, want non-zero")
+	if _, rc, err := runValidatorCmd(context.Background(), "test -f {file}", absent); rc == 0 || err != nil {
+		t.Errorf("validator on missing file: rc = %d, err = %v, want non-zero and no error", rc, err)
 	}
 }
 

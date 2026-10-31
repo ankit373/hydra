@@ -49,7 +49,7 @@ func TestByModel_Groups(t *testing.T) {
 	if len(groups) != 2 {
 		t.Fatalf("expected 2 model groups, got %d", len(groups))
 	}
-	// Sorted by cost descending — claude first.
+	// Sorted by cost descending, claude first.
 	if groups[0].Key != "claude" {
 		t.Fatalf("expected claude first (highest cost), got %s", groups[0].Key)
 	}
@@ -165,6 +165,42 @@ func TestTokensEstimated_Precedence(t *testing.T) {
 	}
 }
 
+// Equal-cost groups (commonly several $0 rows) must sort in a fixed order,
+// otherwise the dashboard's "by model"/"by tier" rows reorder on every ~5s
+// poll with no underlying data change, since groups is built from a map whose
+// iteration order is randomized (#506).
+func TestGroupBy_StableTiebreakOnEqualCost(t *testing.T) {
+	rows := []Row{
+		makeRow("zebra", 1, 0, 0, 0, 0, "", false),
+		makeRow("apple", 1, 0, 0, 0, 0, "", false),
+		makeRow("mango", 1, 0, 0, 0, 0, "", false),
+		makeRow("kiwi", 1, 0, 0, 5, 0, "", false), // only non-zero cost, must sort first
+	}
+	var first []string
+	for i := 0; i < 20; i++ {
+		groups := GroupBy(rows, func(r Row) string { return r.Model })
+		got := make([]string, len(groups))
+		for j, g := range groups {
+			got[j] = g.Key
+		}
+		if first == nil {
+			first = got
+		} else {
+			for j := range got {
+				if got[j] != first[j] {
+					t.Fatalf("ordering changed between calls: %v then %v", first, got)
+				}
+			}
+		}
+	}
+	want := []string{"kiwi", "apple", "mango", "zebra"}
+	for i := range want {
+		if first[i] != want[i] {
+			t.Fatalf("order = %v, want %v (cost desc, then key ascending)", first, want)
+		}
+	}
+}
+
 func TestGroupBy_Exported(t *testing.T) {
 	rows := []Row{
 		makeRow("a", 1, 0, 0, 0.5, 0, "", false),
@@ -178,5 +214,37 @@ func TestGroupBy_Exported(t *testing.T) {
 	// tier-1 has cost 0.7, tier-2 has 0.3 → tier-1 first
 	if groups[0].Key != "tier-1" {
 		t.Fatalf("expected tier-1 first (highest cost), got %s", groups[0].Key)
+	}
+}
+
+// The two writers disagreed about what "model" meant: dispatch logged the
+// head id, swarm logged the display name. One head landed in two rows and
+// every per-head total was understated (#696).
+func TestByModel_OneHeadIsOneRowAcrossBothWriters(t *testing.T) {
+	rows := []Row{
+		{Head: "claude", Model: "claude", EstCostUSD: 0.01},
+		{Head: "claude", Model: "Claude Code", EstCostUSD: 0.02},
+	}
+	got := ByModel(rows)
+	if len(got) != 1 {
+		t.Fatalf("ByModel returned %d groups, want 1: %+v", len(got), got)
+	}
+	if got[0].Key != "claude" {
+		t.Errorf("Key = %q, want the stable head id", got[0].Key)
+	}
+	if got[0].Calls != 2 {
+		t.Errorf("Calls = %d, want 2", got[0].Calls)
+	}
+}
+
+// Rows written before the head field existed must still group somewhere
+// sensible rather than collapsing into one "unknown" bucket.
+func TestByModel_FallsBackToModelForOlderRows(t *testing.T) {
+	got := ByModel([]Row{
+		{Model: "Claude Code", EstCostUSD: 0.01},
+		{Model: "Qwen2.5-Coder:7b", EstCostUSD: 0.02},
+	})
+	if len(got) != 2 {
+		t.Fatalf("ByModel returned %d groups, want 2", len(got))
 	}
 }

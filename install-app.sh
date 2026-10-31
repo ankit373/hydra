@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
-# Hydra Desktop — standalone app installer
+# Hydra Desktop, standalone app installer
 #
 #   curl -fsSL https://raw.githubusercontent.com/ankit373/hydra/main/install-app.sh | sh
 #
@@ -8,7 +8,7 @@
 #
 # The release assets embed their version in the filename
 # (hydra-desktop_v1.2.0_darwin_universal.zip), so GitHub's /latest/download/
-# shortcut cannot address them — the tag has to be resolved first. That is most
+# shortcut cannot address them, the tag has to be resolved first. That is most
 # of what this script is for.
 #
 # Environment overrides:
@@ -51,7 +51,7 @@ esac
 
 case "$os" in
   Darwin)
-    # macOS ships as a universal binary — one archive for Apple Silicon and Intel.
+    # macOS ships as a universal binary, one archive for Apple Silicon and Intel.
     PLATFORM="darwin_universal"
     EXT="zip"
     ;;
@@ -60,7 +60,7 @@ case "$os" in
     EXT="tar.gz"
     ;;
   MINGW*|MSYS*|CYGWIN*)
-    die "on Windows, download the .zip from ${BASE}/latest and unzip it — \
+    die "on Windows, download the .zip from ${BASE}/latest and unzip it, \
 this script needs a POSIX shell"
     ;;
   *)
@@ -81,7 +81,7 @@ else
   TAG="$(printf '%s' "$LATEST" \
     | sed -n -E 's/.*"tag_name" *: *"([^"]+)".*/\1/p' \
     | head -n 1)"
-  [ "${TAG:-}" != "" ] || die "could not determine latest release — set HYDRA_VERSION=vX.Y.Z"
+  [ "${TAG:-}" != "" ] || die "could not determine latest release, set HYDRA_VERSION=vX.Y.Z"
 fi
 
 ARCHIVE="hydra-desktop_${TAG}_${PLATFORM}.${EXT}"
@@ -107,7 +107,7 @@ if ! $DLO "$TMP/$ARCHIVE" "$URL"; then
   case "$PLATFORM" in
     *_arm64) die "linux/arm64 desktop builds start after v1.2.0 (#263). Pick a \
 newer release, or use the CLI, which has shipped for arm64 all along." ;;
-    *)       die "the desktop app first shipped in v1.1.0 — older tags have no \
+    *)       die "the desktop app first shipped in v1.1.0, older tags have no \
 build. Try without HYDRA_VERSION to take the newest release." ;;
   esac
 fi
@@ -123,16 +123,16 @@ if $DLO "$TMP/expected.sha256" "$SUM_URL" 2>/dev/null; then
     SHA="$(shasum -a 256 "$TMP/$ARCHIVE" | awk '{print $1}')"
   else
     SHA=""
-    warn "no sha256 tool found — skipping checksum verification"
+    warn "no sha256 tool found, skipping checksum verification"
   fi
   if [ "${SHA:-}" != "" ]; then
     EXPECTED="$(awk '{print $1}' "$TMP/expected.sha256")"
     [ "${EXPECTED:-}" != "" ] || die "published .sha256 for ${ARCHIVE} is empty"
-    [ "$SHA" = "$EXPECTED" ] || die "checksum mismatch — refusing to install (expected ${EXPECTED}, got ${SHA})"
+    [ "$SHA" = "$EXPECTED" ] || die "checksum mismatch, refusing to install (expected ${EXPECTED}, got ${SHA})"
     info "Checksum: verified"
   fi
 else
-  warn "no .sha256 published for ${ARCHIVE} — skipping verification"
+  warn "no .sha256 published for ${ARCHIVE}, skipping verification"
 fi
 
 # ── Extract ────────────────────────────────────────────────────────────────────
@@ -155,7 +155,7 @@ if [ "$os" = "Darwin" ]; then
   if [ ! -w "$DEST" ]; then
     DEST="$HOME/Applications"
     mkdir -p "$DEST"
-    warn "/Applications is not writable — installing to ${DEST}"
+    warn "/Applications is not writable, installing to ${DEST}"
   fi
   NAME="$(basename "$APP")"
   rm -rf "${DEST:?}/${NAME}"
@@ -170,7 +170,7 @@ if [ "$os" = "Darwin" ]; then
   fi
   info "Installed: ${DEST}/${NAME}"
   echo ""
-  echo "Done — open it from Launchpad, or:  open \"${DEST}/${NAME}\""
+  echo "Done, open it from Launchpad, or:  open \"${DEST}/${NAME}\""
 else
   BIN="$(find "$TMP/out" -maxdepth 2 -type f -perm -u+x -print -quit)"
   [ -n "${BIN:-}" ] || die "no executable inside ${ARCHIVE}"
@@ -189,7 +189,7 @@ else
     *) warn "add ${LINKDIR} to your PATH:  export PATH=\"\$PATH:${LINKDIR}\"" ;;
   esac
   echo ""
-  echo "Done — run:  hydra-desktop"
+  echo "Done, run:  hydra-desktop"
 fi
 
 # ── Point at the CLI if it is missing ──────────────────────────────────────────

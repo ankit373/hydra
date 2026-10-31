@@ -28,18 +28,21 @@ type installOption struct {
 // to recommend the right Ollama model.
 func buildInstallOptions(specs *sysinfo.Specs) []installOption {
 	best := specs.BestOllamaModel()
-	ollamaPost := fmt.Sprintf("Then run: ollama pull %s", best.Model)
+	// hyctl's own command, not another tool's: the wizard has an opinion about
+	// which model suits this machine, and handing that opinion to a different
+	// binary to act on is where the install flow used to end (#896).
+	ollamaPost := fmt.Sprintf("Then run: hyctl models pull %s", best.Model)
 	ollamaDesc := "Local, free, no API key."
 	if specs.AnyLocalModelFits() {
 		ollamaDesc = fmt.Sprintf("Local, free, no API key. Best for your machine: %s", best.DisplayName)
 	} else {
-		ollamaDesc = "Local, free — but memory may be too tight. See model list for details."
+		ollamaDesc = "Local, free, but memory may be too tight. See model list for details."
 	}
 
 	return []installOption{
 		{
 			name:        "Claude Code",
-			description: "Best overall. Anthropic's official CLI — needs an account.",
+			description: "Best overall. Anthropic's official CLI, needs an account.",
 			local:       false,
 			installCmd:  "npm install -g @anthropic-ai/claude-code",
 			postInstall: "Then run: claude login",
@@ -72,7 +75,7 @@ func buildInstallOptions(specs *sysinfo.Specs) []installOption {
 //
 // The Windows branch is not a guess: ollama.com/download/windows documents
 // `irm https://ollama.com/install.ps1 | iex` and offers no winget package, so
-// the command is PowerShell and must be run by PowerShell — which is why
+// the command is PowerShell and must be run by PowerShell, which is why
 // runInstallCmd dispatches on the shell rather than assuming cmd.exe.
 //
 // Before #259 this returned the POSIX curl pipeline on every non-darwin OS,
@@ -209,7 +212,7 @@ func (m InstallModel) confirm() (tea.Model, tea.Cmd) {
 		m.chosenModel = m.models[m.cursor]
 		// Update the post-install command to use chosen model
 		updated := *m.selected
-		updated.postInstall = "Then run: ollama pull " + m.chosenModel.Model
+		updated.postInstall = "Then run: hyctl models pull " + m.chosenModel.Model
 		m.selected = &updated
 		m.step = installStepConfirm
 		m.cursor = 0
@@ -239,7 +242,7 @@ func runInstallCmd(cmd string) tea.Cmd {
 		out, err := c.CombinedOutput()
 		if err != nil {
 			// The shell's own output is the only thing that explains *why* an
-			// install failed. Discarding it — as this did — left the user with
+			// install failed. Discarding it, as this did, left the user with
 			// a bare exit status and nothing to act on.
 			if msg := lastMeaningfulLine(string(out)); msg != "" {
 				return installDoneMsg{err: fmt.Errorf("%s: %s", err, msg)}
@@ -273,7 +276,7 @@ var (
 
 func (m InstallModel) View() string {
 	var b strings.Builder
-	b.WriteString(sTitle.Render("  Hydra — No AI models found") + "\n\n")
+	b.WriteString(sTitle.Render("  Hydra, No AI models found") + "\n\n")
 
 	switch m.step {
 	case installStepPick:
@@ -310,7 +313,7 @@ func (m InstallModel) View() string {
 			b.WriteString(warnStyle.Render("  ⚠  "+w) + "\n")
 		}
 		b.WriteString("\n")
-		b.WriteString(sPrompt.Render("  Choose an Ollama model — shows memory it will use:\n\n"))
+		b.WriteString(sPrompt.Render("  Choose an Ollama model, shows memory it will use:\n\n"))
 
 		for i, rec := range m.models {
 			var nameStyle, costStyle lipgloss.Style
@@ -334,15 +337,15 @@ func (m InstallModel) View() string {
 		}
 		b.WriteString(sDim.Render("\n  ✓ fits · ✗ too large · memory cost = RAM it will occupy\n"))
 
-		// Nothing fits locally — redirect to cloud options
+		// Nothing fits locally, redirect to cloud options
 		if !m.specs.AnyLocalModelFits() {
 			b.WriteString("\n")
 			b.WriteString(warnStyle.Render("  No local model fits your current memory.\n"))
 			b.WriteString(sDim.Render("  Recommended alternatives (free tiers available):\n\n"))
 			cloudAlts := []struct{ name, note string }{
-				{"Claude Code", "Free tier via claude.ai — run: npm install -g @anthropic-ai/claude-code"},
-				{"OpenAI Codex", "Free tier — run: npm install -g @openai/codex"},
-				{"Cursor", "Free tier IDE with built-in AI — download at cursor.com"},
+				{"Claude Code", "Free tier via claude.ai, run: npm install -g @anthropic-ai/claude-code"},
+				{"OpenAI Codex", "Free tier, run: npm install -g @openai/codex"},
+				{"Cursor", "Free tier IDE with built-in AI, download at cursor.com"},
 			}
 			for _, alt := range cloudAlts {
 				b.WriteString(fitsStyle.Render("  ✓ "+alt.name) + "\n")
@@ -376,7 +379,7 @@ func (m InstallModel) View() string {
 		}
 
 	case installStepRunning:
-		b.WriteString(warnStyle.Render("  Installing — this may take a minute...") + "\n")
+		b.WriteString(warnStyle.Render("  Installing, this may take a minute...") + "\n")
 
 	case installStepDone:
 		if m.err {

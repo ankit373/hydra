@@ -20,8 +20,8 @@
 // # Reconstruct and Apply
 //
 // Reconstruct rebuilds everything from scratch; Apply folds a single event into
-// an existing tree. They are equivalent by construction — Reconstruct is Apply
-// in a loop — and a property test pins that. Both exist because their callers
+// an existing tree. They are equivalent by construction, Reconstruct is Apply
+// in a loop, and a property test pins that. Both exist because their callers
 // differ: a terminal redrawing a handful of nodes each tick can afford a full
 // rebuild, while a long-running desktop session accumulating thousands of
 // events needs to fold only what is new.
@@ -43,7 +43,7 @@ const (
 	StateFailed  State = "failed"
 )
 
-// Handoff is one A2A context transfer — an edge in the collaboration overlay,
+// Handoff is one A2A context transfer, an edge in the collaboration overlay,
 // never an ownership edge.
 type Handoff struct {
 	To     string
@@ -72,7 +72,7 @@ type Node struct {
 
 	// Children are ownership edges, in the order they first appeared.
 	Children []string
-	// Handoffs are the A2A overlay — kept separate from Children on purpose.
+	// Handoffs are the A2A overlay, kept separate from Children on purpose.
 	Handoffs []Handoff
 
 	// Detail is a short human string (an error, a note). Never bulk content.
@@ -84,6 +84,11 @@ type Tree struct {
 	RunID string
 	Roots []string
 	Nodes map[string]*Node
+
+	// byTaskID indexes nodes by task, parallel to Nodes indexing by node ID.
+	// It lets an event with no identity of its own (e.g. KindEdit) find the
+	// node already tracking its task in O(1) instead of scanning Order (#523).
+	byTaskID map[string]*Node
 
 	// Order is node-creation order, so a renderer can lay nodes out stably
 	// rather than at the mercy of map iteration.
@@ -110,6 +115,17 @@ type Entry struct {
 	DurationMS int64
 	Confidence float64
 	Detail     string
+
+	// Span identity, tokens and level are carried through rather than used to
+	// key nodes: this is a supervision tree, where a head's selection and its
+	// execution deliberately collapse into one node. A waterfall keyed on
+	// SpanID is a different reconstruction over the same events.
+	SpanID       string
+	ParentSpanID string
+	Level        runlog.Level
+	InputTokens  int
+	OutputTokens int
+	TTFTMs       int64
 }
 
 // Timeline is the run's events in order, for a chronological view.
@@ -120,11 +136,11 @@ type Timeline struct {
 
 // NewTree returns an empty tree ready for Apply.
 func NewTree(runID string) *Tree {
-	return &Tree{RunID: runID, Nodes: map[string]*Node{}}
+	return &Tree{RunID: runID, Nodes: map[string]*Node{}, byTaskID: map[string]*Node{}}
 }
 
 // Reconstruct builds a tree and timeline from a run's events. Events are taken
-// in the order given — runlog.Load returns them in append order, which is the
+// in the order given, runlog.Load returns them in append order, which is the
 // authoritative ordering (wall-clock timestamps can tie or invert between
 // concurrent goroutines).
 func Reconstruct(events []runlog.Event) (*Tree, *Timeline) {
@@ -142,9 +158,21 @@ func Reconstruct(events []runlog.Event) (*Tree, *Timeline) {
 	return t, tl
 }
 
+// isTaskSpan reports the event that declares a task's own span and nothing
+// else. Keyed on the absence of an agent and a head rather than on the span id,
+// so tree stays ignorant of span identity, which is what keeps it a separate
+// reading from the waterfall.
+func isTaskSpan(e runlog.Event) bool {
+	switch e.Kind {
+	case runlog.KindTaskStarted, runlog.KindTaskFinished:
+		return e.Agent == "" && e.Head == "" && e.SpanID != ""
+	}
+	return false
+}
+
 // Apply folds one event into t and returns it, so calls can be chained. A nil
 // tree is created on demand. Unknown or malformed events are counted in
-// Skipped rather than dropped silently or panicking — a live UI must survive a
+// Skipped rather than dropped silently or panicking, a live UI must survive a
 // log written by a newer Hydra than itself.
 func Apply(t *Tree, e runlog.Event) *Tree {
 	if t == nil {
@@ -156,10 +184,17 @@ func Apply(t *Tree, e runlog.Event) *Tree {
 
 	// Run-level events describe the invocation, not a node in it, so they are
 	// timeline-only. This is keyed on the kind rather than on whether nodeID
-	// happened to come back empty: a run_started that carries a TaskID — which
-	// is legitimate metadata — would otherwise fall through nodeID's TaskID
+	// happened to come back empty: a run_started that carries a TaskID, which
+	// is legitimate metadata, would otherwise fall through nodeID's TaskID
 	// branch and materialise a phantom root labelled with a raw id (#204).
 	if e.Kind == runlog.KindRunStarted || e.Kind == runlog.KindRunFinished {
+		return t
+	}
+	// A task span carries no agent and no head: it exists so a waterfall has a
+	// parent to nest under, and says nothing about ownership. Rendering it here
+	// would materialise a root labelled with a raw task id, which is the same
+	// phantom the run-level skip above exists to avoid (#864).
+	if isTaskSpan(e) {
 		return t
 	}
 
@@ -169,9 +204,27 @@ func Apply(t *Tree, e runlog.Event) *Tree {
 		return t
 	}
 
-	n := t.node(id)
+	// An event with no identity of its own, Agent and Head both empty, e.g.
+	// a KindEdit, which records which file changed, not who changed it, has
+	// nodeID fall back to the raw TaskID. Minting a node under that key would
+	// split one task across two disconnected nodes the moment anything else
+	// (head_selected, dispatch_finished) already claimed it under the real
+	// agent/head identity (#434). Attribute it to that existing node instead.
+	var n *Node
+	if e.Agent == "" && e.Head == "" && e.TaskID != "" {
+		n = t.byTaskID[e.TaskID]
+	}
+	if n == nil {
+		n = t.node(id)
+	}
 	if e.TaskID != "" {
 		n.TaskID = e.TaskID
+		// First claim wins, mirroring the file's existing "first owner wins"
+		// rule for Parent (see link()), and matching the creation-order
+		// first-match the old linear scan returned when two nodes shared a task.
+		if _, ok := t.byTaskID[e.TaskID]; !ok {
+			t.byTaskID[e.TaskID] = n
+		}
 	}
 	if e.Head != "" {
 		n.Head = e.Head
@@ -216,7 +269,7 @@ func Apply(t *Tree, e runlog.Event) *Tree {
 			n.Detail = e.Detail
 		}
 	case runlog.KindHandoff:
-		// Collaboration edge, not ownership — this is why Handoffs is a
+		// Collaboration edge, not ownership, this is why Handoffs is a
 		// separate field from Children.
 		if e.Ref != "" || e.Detail != "" {
 			n.Handoffs = append(n.Handoffs, Handoff{
@@ -341,7 +394,7 @@ func entryOf(e runlog.Event) Entry {
 type Row struct {
 	Node  *Node
 	Depth int
-	Last  bool // last child of its parent — for box-drawing glyphs
+	Last  bool // last child of its parent, for box-drawing glyphs
 }
 
 // Rows flattens the ownership tree depth-first in creation order. Cycles cannot

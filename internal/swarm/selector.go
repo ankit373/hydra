@@ -6,9 +6,10 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/ankit373/hydra/internal/config"
+	"github.com/ankit373/hydra/internal/dispatch"
 	"github.com/ankit373/hydra/internal/executor"
 	"github.com/ankit373/hydra/internal/provider"
+	"github.com/ankit373/hydra/internal/rank"
 )
 
 const defaultMaxHeads = 5
@@ -20,45 +21,62 @@ type HeadSelector interface {
 }
 
 // resolveSelector picks the right HeadSelector from Options.
-// Priority: explicit HeadIDs > TierHint > top-N by CapScore.
-func resolveSelector(opts Options, cfg *config.Config) HeadSelector {
+// Priority: explicit HeadIDs > a tier, from TierHint (numeric or named) or from
+// the Enum that chose it > top-N by CapScore.
+//
+// Numeric and named hints go to the same selector because dispatch.ResolveTier
+// interprets both. Splitting them sent a name to a selector that filtered
+// cfg.Tiers' head list instead, so one --tier value picked a different head set
+// here than in a plain dispatch (#782).
+func resolveSelector(opts Options) HeadSelector {
 	if len(opts.HeadIDs) > 0 {
 		return &IDSelector{}
 	}
-	if opts.TierHint != "" {
-		return &TierSelector{cfg: cfg}
+	if opts.tier() != "" {
+		return &TierSelector{}
 	}
 	return &CapScoreSelector{}
 }
 
 // ── TierSelector ─────────────────────────────────────────────────────────────
 
-// TierSelector filters to heads assigned to a named tier in config.
-// Falls back to CapScoreSelector when the tier has no live heads.
-type TierSelector struct{ cfg *config.Config }
+// TierSelector filters to heads at or below the requested capability tier
+// (rank.UITier), mirroring dispatch.selectHeads so a --tier restricts
+// --swarm/--confidence the same way it restricts a plain dispatch. Before this
+// existed a numeric TierHint matched no config tier name and always fell
+// through to CapScoreSelector's top-N fan-out, silently ignoring the requested
+// tier (#501).
+type TierSelector struct{}
 
 func (s *TierSelector) Select(all []provider.Head, opts Options) ([]provider.Head, error) {
-	tierIDs := map[string]bool{}
-	for _, t := range s.cfg.Tiers {
-		if t.Name == opts.TierHint {
-			for _, id := range t.Heads {
-				tierIDs[id] = true
-			}
-		}
+	want, err := dispatch.ResolveTier(opts.tier())
+	if err != nil {
+		return nil, fmt.Errorf("swarm: %w", err)
 	}
 
 	var candidates []provider.Head
 	for _, h := range all {
-		if executable(h) && tierIDs[h.ID] {
+		if executable(h) && rank.UITier(h) >= want {
 			candidates = append(candidates, h)
 		}
 	}
-
-	if len(candidates) == 0 {
-		// Tier has no live heads — fall back to capability score ranking.
-		return (&CapScoreSelector{}).Select(all, opts)
+	if len(candidates) > 0 {
+		sort.Slice(candidates, func(i, j int) bool { return candidates[i].CapScore > candidates[j].CapScore })
+		return applyFiltersAndCap(candidates, opts), nil
 	}
 
+	// Nothing at or below the requested tier, degrade to the cheapest
+	// executable heads available, never the most expensive (matches
+	// dispatch.selectHeads' own degrade path).
+	for _, h := range all {
+		if executable(h) {
+			candidates = append(candidates, h)
+		}
+	}
+	if len(candidates) == 0 {
+		return nil, fmt.Errorf("swarm: no executable heads found")
+	}
+	sort.Slice(candidates, func(i, j int) bool { return candidates[i].CapScore < candidates[j].CapScore })
 	return applyFiltersAndCap(candidates, opts), nil
 }
 
@@ -101,8 +119,9 @@ func (s *IDSelector) Select(all []provider.Head, opts Options) ([]provider.Head,
 // ── CapScoreSelector ─────────────────────────────────────────────────────────
 
 // CapScoreSelector picks the top-N executable heads ranked by CapScore descending.
-// Used as default when neither HeadIDs nor TierHint is set, and as fallback
-// when a TierSelector finds no live heads.
+// Used when neither HeadIDs nor TierHint is set. A TierSelector that finds
+// nothing degrades to the cheapest heads itself rather than delegating here,
+// which would have escalated a cheap request to the strongest heads.
 type CapScoreSelector struct{}
 
 func (s *CapScoreSelector) Select(all []provider.Head, opts Options) ([]provider.Head, error) {
@@ -134,7 +153,7 @@ func applyFiltersAndCap(heads []provider.Head, opts Options) []provider.Head {
 	maxHeads := opts.MaxHeads
 	if maxHeads <= 0 {
 		// An explicit HeadIDs list is the caller's stated intent, so the
-		// *default* cap must not silently trim it — pinning 7 heads and
+		// *default* cap must not silently trim it, pinning 7 heads and
 		// receiving 5 is exactly the source-diversity problem --swarm-heads
 		// exists to solve. An explicitly set MaxHeads still applies.
 		if len(opts.HeadIDs) > 0 {

@@ -72,7 +72,7 @@ func TestSkipIntro_IsNotBuriedUnderTheTopbar(t *testing.T) {
 
 	barH, ok := cssPx(t, src, ".topbar", "height")
 	if !ok {
-		t.Fatal("could not read .topbar height — the topbar was restructured and this guard " +
+		t.Fatal("could not read .topbar height, the topbar was restructured and this guard " +
 			"is no longer measuring what it thinks it is")
 	}
 	barZ, ok := cssInt(t, src, ".topbar", "z-index")
@@ -94,8 +94,8 @@ func TestSkipIntro_IsNotBuriedUnderTheTopbar(t *testing.T) {
 		return // deliberately floated above the bar; clickable either way
 	}
 	if skipTop < barH {
-		t.Errorf("skip-intro sits at top:%dpx, inside .topbar's 0–%dpx band, at z-index %d "+
-			"vs the bar's %d — the bar paints over it and swallows the click.\n"+
+		t.Errorf("skip-intro sits at top:%dpx, inside .topbar's 0-%dpx band, at z-index %d "+
+			"vs the bar's %d, the bar paints over it and swallows the click.\n"+
 			"Move it below the bar (top >= %dpx) or raise it above z-index %d.",
 			skipTop, barH, skipZ, barZ, barH, barZ)
 	}
@@ -126,8 +126,8 @@ func TestSkipIntro_MobileOverrideAlsoClearsTheTopbar(t *testing.T) {
 		t.Fatalf("unparsable mobile top %q", pm[1])
 	}
 	if top < barH {
-		t.Errorf("mobile .skip-intro top:%dpx is inside .topbar's 0–%dpx band. Only the bar's "+
-			"nav is hidden under 720px — the bar keeps its height.", top, barH)
+		t.Errorf("mobile .skip-intro top:%dpx is inside .topbar's 0-%dpx band. Only the bar's "+
+			"nav is hidden under 720px, the bar keeps its height.", top, barH)
 	}
 }
 
@@ -155,7 +155,7 @@ func TestDocs_EveryInPageAnchorResolves(t *testing.T) {
 			}
 			seen[frag] = true
 			if !ids[frag] {
-				t.Errorf("%s: href=\"#%s\" has no matching id — the link does nothing", page, frag)
+				t.Errorf("%s: href=\"#%s\" has no matching id, the link does nothing", page, frag)
 			}
 		}
 		if len(seen) == 0 {

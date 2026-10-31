@@ -10,7 +10,7 @@ import (
 
 // TestSplitLines_MatchesScanLines pins the semantics to bufio.ScanLines for
 // every input where a Scanner still works, so SplitLines is a safe drop-in.
-// Above the Scanner's limit the two intentionally differ — that is the bug.
+// Above the Scanner's limit the two intentionally differ, that is the bug.
 func TestSplitLines_MatchesScanLines(t *testing.T) {
 	cases := map[string]string{
 		"empty":            "",

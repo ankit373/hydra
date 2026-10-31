@@ -1,6 +1,6 @@
 # hyctl
 
-**Hydra** — a local-first, multi-vendor AI control plane. This npm package installs the prebuilt `hyctl` binary for your platform.
+**Hydra**, a local-first, multi-vendor AI control plane. This npm package installs the prebuilt `hyctl` binary for your platform.
 
 ```bash
 npm install -g hyctl

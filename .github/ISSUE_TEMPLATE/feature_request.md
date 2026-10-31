@@ -20,4 +20,4 @@ assignees: ''
 
 ## Additional context
 
-<!-- Links, screenshots, related issues, prior art — anything helpful. -->
+<!-- Links, screenshots, related issues, prior art, anything helpful. -->

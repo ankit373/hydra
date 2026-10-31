@@ -4,21 +4,24 @@ package swarm
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/ankit373/hydra/internal/a2a"
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/cost"
 	"github.com/ankit373/hydra/internal/dispatch"
 	"github.com/ankit373/hydra/internal/provider"
 	"github.com/ankit373/hydra/internal/testutil"
+	"github.com/ankit373/hydra/internal/trust"
 )
 
 // Run fans one prompt out to N heads and charges the user for all of them. Its
 // contract is that every head's answer is accounted for, exactly one winner is
-// reported, and the spend is logged — none of which was covered.
+// reported, and the spend is logged, none of which was covered.
 
 // swarmHead builds a head backed by a fake CLI binary that prints reply.
 func swarmHead(t *testing.T, s *testutil.Sandbox, id string, capScore int, reply string) provider.Head {
@@ -96,6 +99,48 @@ func TestRun_ModeAllRunsEveryHeadAndRanksThem(t *testing.T) {
 	}
 }
 
+// writeHandoffFile writes a minimal valid A2A handoff to a fresh temp file
+// and returns its path, for tests exercising Options.A2AFile.
+func writeHandoffFile(t *testing.T) string {
+	t.Helper()
+	h := a2a.Handoff{From: "agent-1", Task: "earlier task", PriorOutput: "prior output"}
+	raw, err := json.Marshal(h)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "handoff.json")
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+// #530: a valid --a2a file must actually reach the heads Run fires, not just
+// pass validation, swarm.Options carrying an A2AFile field is only half the
+// fix if the injected content never makes it into the executed prompt.
+func TestRun_A2AFileInjectsHandoffIntoPrompt(t *testing.T) {
+	withTempConfig(t)
+	capturing := &capturingExecutor{}
+	withStubExecutor(t, capturing)
+
+	s := New(nil, []provider.Head{registryHead("h1", "H1", 90)}, fakePricing{per: 0.01})
+	if _, err := s.Run(context.Background(), "new instruction", Options{
+		Mode: ModeAll, A2AFile: writeHandoffFile(t),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	seen := capturing.seen()
+	if len(seen) != 1 {
+		t.Fatalf("executor ran %d times, want 1", len(seen))
+	}
+	for _, want := range []string{"agent-1", "prior output", "new instruction"} {
+		if !strings.Contains(seen[0], want) {
+			t.Errorf("executed prompt is missing %q:\n%s", want, seen[0])
+		}
+	}
+}
+
 // Race returns the first answer and marks it. The losers still ran and still
 // cost money, so they must still appear in the attempt list.
 func TestRun_ModeRaceReportsOneWinnerAndKeepsTheLosers(t *testing.T) {
@@ -162,7 +207,7 @@ func TestRun_OneFailingHeadDoesNotFailTheSwarm(t *testing.T) {
 		t.Fatalf("one failing head failed the whole swarm: %v", err)
 	}
 	if len(res.Attempts) != 2 {
-		t.Fatalf("got %d attempts, want both recorded — a failed head is part of "+
+		t.Fatalf("got %d attempts, want both recorded, a failed head is part of "+
 			"what the run did", len(res.Attempts))
 	}
 	if res.Winner == nil || res.Winner.Head.ID != "working" {
@@ -219,7 +264,7 @@ func TestRun_LogsEveryAttemptToTheCostLog(t *testing.T) {
 	var winners int
 	for _, r := range rows {
 		if r.SwarmMode != string(ModeAll) {
-			t.Errorf("row mode = %q, want %q — `hyctl stats` groups on this",
+			t.Errorf("row mode = %q, want %q, `hyctl stats` groups on this",
 				r.SwarmMode, ModeAll)
 		}
 		if r.SwarmWinner {
@@ -282,7 +327,7 @@ func TestRun_CostGuardRefusesBeforeFiring(t *testing.T) {
 	}
 }
 
-// Plan is what --dry-run reports. It must name the same heads Run would fire —
+// Plan is what --dry-run reports. It must name the same heads Run would fire,
 // a plan that describes a different run than the one it precedes is worse than
 // no plan (#167).
 func TestPlan_MatchesWhatRunWouldFire(t *testing.T) {
@@ -379,6 +424,7 @@ func TestRunSPRT_AgreeingHeadsReachTheTargetAndRecordTheirAttempts(t *testing.T)
 		swarmHead(t, s, "b", 85, "the same answer"),
 		swarmHead(t, s, "c", 80, "the same answer"),
 	)
+	seedCalibration(t, "go", "a", "b", "c")
 
 	res, err := sw.RunSPRT(context.Background(), "q", Options{Confidence: 0.75, Domain: "go"})
 	if err != nil {
@@ -397,7 +443,7 @@ func TestRunSPRT_AgreeingHeadsReachTheTargetAndRecordTheirAttempts(t *testing.T)
 		t.Errorf("Target = %v, want the requested 0.75", res.Target)
 	}
 	if res.Domain != "go" {
-		t.Errorf("Domain = %q, want the requested one — calibration is per-domain", res.Domain)
+		t.Errorf("Domain = %q, want the requested one, calibration is per-domain", res.Domain)
 	}
 	if res.Prompt != "q" {
 		t.Errorf("Prompt = %q", res.Prompt)
@@ -414,9 +460,41 @@ func TestRunSPRT_AgreeingHeadsReachTheTargetAndRecordTheirAttempts(t *testing.T)
 
 // A domain is required for calibration lookup; an empty one must default rather
 // than being written to the ledger as the empty-string domain.
+// seedCalibration gives the named sources measurable diagnostic power in a
+// domain, so RunSPRT is not refused for having no evidence to work with. A
+// sandbox starts with an empty calibration store, and a real install that has
+// never recorded an outcome is in the same position, which is the case #698
+// made refuse rather than spend.
+func seedCalibration(t *testing.T, domain string, sources ...string) {
+	t.Helper()
+	// DefaultPath resolves against HOME at call time, so calling this before
+	// the sandbox is in place writes to the developer's real calibration
+	// store. That happened while writing these tests, and 64 rows of fixture
+	// had to be removed by hand.
+	path := trust.DefaultPath()
+	if !strings.HasPrefix(path, os.TempDir()) && !strings.Contains(path, t.TempDir()[:8]) {
+		t.Fatalf("seedCalibration would write to %s, outside a sandbox; call it after the sandbox is set up", path)
+	}
+	cal, err := trust.New(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, src := range sources {
+		for i := 0; i < 8; i++ {
+			if err := cal.Update(src, domain, true, trust.OutcomeCorrect); err != nil {
+				t.Fatal(err)
+			}
+			if err := cal.Update(src, domain, false, trust.OutcomeIncorrect); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+}
+
 func TestRunSPRT_EmptyDomainDefaults(t *testing.T) {
 	s := swarmSandbox(t)
 	sw := newSwarm(t, swarmHead(t, s, "a", 90, "answer"))
+	seedCalibration(t, "default", "a")
 
 	res, err := sw.RunSPRT(context.Background(), "q", Options{Confidence: 0.6})
 	if err != nil {
@@ -424,6 +502,39 @@ func TestRunSPRT_EmptyDomainDefaults(t *testing.T) {
 	}
 	if res.Domain == "" {
 		t.Error("Domain is empty; calibration would be recorded against no domain at all")
+	}
+}
+
+// #530: RunSPRT must honor --a2a exactly like Run does, the handoff's
+// context has to reach every sampled head's prompt, not just pass Options
+// validation.
+func TestRunSPRT_A2AFileInjectsHandoffIntoPrompt(t *testing.T) {
+	withTempConfig(t)
+	capturing := &capturingExecutor{}
+	withStubExecutor(t, capturing)
+	seedCalibration(t, "default", "h1")
+
+	s := New(nil, []provider.Head{registryHead("h1", "H1", 90)}, fakePricing{per: 0.01})
+	res, err := s.RunSPRT(context.Background(), "new instruction", Options{
+		Confidence: 0.6, A2AFile: writeHandoffFile(t),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	seen := capturing.seen()
+	if len(seen) == 0 {
+		t.Fatal("no prompts were executed")
+	}
+	for _, p := range seen {
+		for _, want := range []string{"agent-1", "prior output", "new instruction"} {
+			if !strings.Contains(p, want) {
+				t.Errorf("executed prompt is missing %q:\n%s", want, p)
+			}
+		}
+	}
+	if !strings.Contains(res.Prompt, "prior output") {
+		t.Errorf("SPRTResult.Prompt = %q, want it to reflect the injected handoff", res.Prompt)
 	}
 }
 
@@ -436,5 +547,52 @@ func TestRunSPRT_AllHeadsFailingDoesNotProduceAConfidentAnswer(t *testing.T) {
 	res, err := sw.RunSPRT(context.Background(), "q", Options{Confidence: 0.9})
 	if err == nil && res != nil && res.Trust != nil && res.Trust.Confidence >= 0.9 {
 		t.Errorf("reported %.2f confidence with every head failed", res.Trust.Confidence)
+	}
+}
+
+// The verdict on an answer is filed against the routing decision that produced
+// it, and routing.yaml is editable, so the map in force when the heads ran is
+// not recoverable afterwards. The result has to carry it (#969).
+func TestRunSPRT_CarriesTheRoutingDecisionItRanUnder(t *testing.T) {
+	s := swarmSandbox(t)
+	sw := newSwarm(t,
+		swarmHead(t, s, "a", 90, "same"),
+		swarmHead(t, s, "b", 85, "same"),
+	)
+	seedCalibration(t, "go", "a", "b")
+
+	// --enum resolves to a tier number; an example carrying the key but not the
+	// tier it meant cannot be read back once routing.yaml changes.
+	res, err := sw.RunSPRT(context.Background(), "q", Options{
+		Confidence: 0.75, Domain: "go", Enum: "SIMPLE",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Enum != "SIMPLE" {
+		t.Errorf("Enum = %q, want SIMPLE", res.Enum)
+	}
+	if res.Tier != 8 {
+		t.Errorf("Tier = %d, want 8, the tier SIMPLE resolves to", res.Tier)
+	}
+
+	// An explicit --tier is the same instruction by a different name.
+	res, err = sw.RunSPRT(context.Background(), "q", Options{
+		Confidence: 0.75, Domain: "go", TierHint: "2",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Tier != 2 {
+		t.Errorf("Tier = %d, want the pinned 2", res.Tier)
+	}
+
+	// Neither given is unrouted, which must read as unknown rather than tier 0.
+	res, err = sw.RunSPRT(context.Background(), "q", Options{Confidence: 0.75, Domain: "go"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Tier != 0 || res.Enum != "" {
+		t.Errorf("unrouted run = (%q, %d), want empty and 0", res.Enum, res.Tier)
 	}
 }

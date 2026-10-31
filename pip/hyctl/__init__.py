@@ -1,4 +1,4 @@
-"""hyctl — Python launcher for the Hydra CLI.
+"""hyctl, Python launcher for the Hydra CLI.
 
 Pure-Python wrapper: on first run it downloads the prebuilt `hyctl` binary
 matching this package's version from the GitHub release, verifies its
@@ -59,7 +59,7 @@ def _verify(archive: bytes, name: str) -> None:
     try:
         sums = _fetch(f"{BASE}/checksums.txt").decode("utf-8")
     except Exception:
-        sys.stderr.write("hyctl: checksums.txt unavailable — skipping verification\n")
+        sys.stderr.write("hyctl: checksums.txt unavailable, skipping verification\n")
         return
     for line in sums.splitlines():
         if line.strip().endswith(name):
@@ -69,11 +69,11 @@ def _verify(archive: bytes, name: str) -> None:
                 _die(f"checksum mismatch (expected {expected}, got {actual})")
             return
     # checksums.txt downloaded but does not list this archive. That is a broken
-    # release, not a reason to install unverified — and the realistic cause is
+    # release, not a reason to install unverified, and the realistic cause is
     # drift: the name is constructed here from goreleaser's template, so if the
     # template changes, verification would otherwise stop happening for every
     # user on every install while installs kept succeeding (#241).
-    _die(f"{name} is not listed in checksums.txt — refusing to install unverified")
+    _die(f"{name} is not listed in checksums.txt, refusing to install unverified")
 
 
 def _ensure_binary() -> Path:
@@ -89,7 +89,7 @@ def _ensure_binary() -> Path:
     try:
         blob = _fetch(f"{BASE}/{archive_name}")
     except Exception as e:  # noqa: BLE001
-        _die(f"download failed — {e}")
+        _die(f"download failed, {e}")
 
     _verify(blob, archive_name)
 

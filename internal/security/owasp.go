@@ -4,8 +4,12 @@ package security
 
 import (
 	"fmt"
+	"slices"
+	"time"
 
 	"github.com/ankit373/hydra/internal/config"
+	"github.com/ankit373/hydra/internal/egress"
+	"github.com/ankit373/hydra/internal/embed"
 	"github.com/ankit373/hydra/internal/ledger"
 	"github.com/ankit373/hydra/internal/trust"
 	"github.com/ankit373/hydra/internal/workspace"
@@ -15,87 +19,170 @@ import (
 type CoverageStatus string
 
 const (
-	// Enforced: the mechanism is automatic — no configuration needed.
+	// Enforced: the mechanism is automatic, no configuration needed.
 	Enforced CoverageStatus = "enforced"
 	// Configured: the mechanism exists and is actually set up/used on this install.
 	Configured CoverageStatus = "configured"
+	// Partial: a mechanism exists but is detective or advisory, never
+	// preventive. It does not count as covered. A control whose own
+	// implementation documents it as evadable is evidence for an audit
+	// trail, not a defense, and reporting it as Enforced misleads the
+	// operator at exactly the moment they decide whether to trust the run.
+	Partial CoverageStatus = "partial"
 	// Gap: nothing addresses this category today.
 	Gap CoverageStatus = "gap"
 	// NotApplicable: this category does not apply to an orchestrator that
-	// routes prompts rather than trains models — excluded from scoring.
+	// routes prompts rather than trains models, excluded from scoring.
 	NotApplicable CoverageStatus = "n/a"
 )
 
 // Category is one OWASP LLM Top-10 entry and Hydra's real, evidence-backed
-// status against it — never a guess, always traceable to an actual mechanism.
+// status against it, never a guess, always traceable to an actual mechanism.
 type Category struct {
 	ID     string         `json:"id"`
 	Name   string         `json:"name"`
 	Status CoverageStatus `json:"status"`
 	Detail string         `json:"detail"`
+
+	// GapSince/GapAgeDays are set only when Status is Gap, from the score
+	// history Build already persists, the earliest recorded run where this
+	// category was already a gap. A brand-new gap (no matching history) gets
+	// age 0: this run is the first evidence of it.
+	GapSince   string `json:"gapSince,omitempty"`
+	GapAgeDays int    `json:"gapAgeDays,omitempty"`
 }
 
 // Coverage is Hydra's posture against the OWASP LLM Top 10: a percentage of
 // *applicable* categories with a live mechanism, never a blended score and
-// never presented as "you are X% secure" — always "X% of the OWASP LLM Top
+// never presented as "you are X% secure", always "X% of the OWASP LLM Top
 // 10 has a live mechanism".
 type Coverage struct {
 	Categories     []Category `json:"categories"`
 	Applicable     int        `json:"applicable"` // categories excluding N/A
 	Covered        int        `json:"covered"`    // Enforced + Configured
+	Partial        int        `json:"partial"`    // detective only, deliberately not covered
 	PercentCovered float64    `json:"percentCovered"`
+
+	// Edition qualifies every ID above. Only LLM01 and LLM02 keep their
+	// number across editions, so a consumer pinning on "LLM06" needs to know
+	// which list it read to notice when the entry underneath it changes (#748).
+	Edition string `json:"edition"`
 }
 
 // computeCoverage classifies all 10 OWASP LLM Top-10 categories against
-// Hydra's real, currently-observable state. pol and events are what Build
-// already loaded — passed in rather than reloaded here.
-func computeCoverage(pol ledger.Policy, events []ledger.Event) Coverage {
+// Hydra's real, currently-observable state. pol, runs, and costCeilingDenials
+// are what Build already loaded/computed, passed in rather than rederived
+// here (AssessEvidence needs the identical trust runs, and costCeilingCheck
+// needs the identical cost-ceiling-denial count, so Build computes each once
+// for both consumers).
+func computeCoverage(pol ledger.Policy, sc SupplyChain, runs []trust.RunLog, costCeilingDenials int) Coverage {
 	cats := []Category{
-		{ID: "LLM01", Name: "Prompt Injection", Status: Enforced,
-			Detail: "untrusted content is framed as data (a2a/editor/parallel) and scanned for injection markers automatically"},
-		{ID: "LLM02", Name: "Sensitive Information Disclosure", Status: Enforced,
-			Detail: "PII detection forces local-only routing automatically"},
-		{ID: "LLM03", Name: "Supply Chain", Status: Gap,
-			Detail: "no provider/binary integrity verification exists yet"},
-		{ID: "LLM04", Name: "Data and Model Poisoning", Status: NotApplicable,
-			Detail: "Hydra routes prompts to models — it does not train or fine-tune any"},
-		llm05OutputHandling(),
-		llm06ExcessiveAgency(pol),
-		{ID: "LLM07", Name: "System Prompt Leakage", Status: Gap,
-			Detail: "no protection exists for --system content today"},
-		{ID: "LLM08", Name: "Vector and Embedding Weaknesses", Status: NotApplicable,
-			Detail: "Hydra has no RAG pipeline or vector store of its own"},
-		llm09Misinformation(),
-		llm10UnboundedConsumption(events),
+		{ID: "LLM01", Name: "Prompt Injection", Status: Partial,
+			Detail: "every point where model output re-enters a prompt is fenced as data with a content-derived " +
+				"nonce (a2a, parallel, the swarm judge, workflow steps), and a head's answer comes back " +
+				"classified; but the injection-marker scan is an 11-phrase keyword heuristic that leaves an " +
+				"audit trail rather than preventing an attack, and a fence is an instruction a model may ignore"},
+		sensitiveInfoCategory(),
+		excessiveAgencyCategory(pol),
+		supplyChainCategory(sc),
+		{ID: "LLM05", Name: "Data and Model Poisoning", Status: NotApplicable,
+			Detail: "Hydra routes prompts to models, it does not train or fine-tune any"},
+		unboundedConsumptionCategory(costCeilingDenials),
+		misinformationCategory(runs),
+		{ID: "LLM08", Name: "Hidden Context Exposure", Status: Partial,
+			Detail: "--system text and the a2a handoff are declared to the egress gate on the way in, and a " +
+				"response repeating either back is recorded as a finding naming the head; but the echo check " +
+				"is verbatim over a 96-character window, so a paraphrased or summarised disclosure is not " +
+				"caught, and it reports rather than refuses, since the answer is already the caller's"},
+		vectorCategory(),
+		outputHandlingCategory(),
 	}
 
-	var applicable, covered int
+	applicable, covered, partial, pct := tally(cats)
+	return Coverage{Categories: cats, Applicable: applicable, Covered: covered,
+		Partial: partial, PercentCovered: pct, Edition: LLMEdition}
+}
+
+// tally counts categories into the numbers both Top-10 scores report. One
+// copy: computeCoverage and computeAgentic ran this identical loop twice.
+//
+// Every declared CoverageStatus is named below, Gap included even though it
+// feeds no counter, so the switch reads as the exhaustive thing it has to be.
+// A status added to the enum and not here is scored as applicable and
+// reported nowhere, which is the shape of the bug in #753.
+func tally(cats []Category) (applicable, covered, partial int, pct float64) {
 	for _, c := range cats {
-		if c.Status == NotApplicable {
-			continue
+		switch c.Status {
+		case NotApplicable:
+			continue // excluded from the denominator, not just from the numerator
+		case Enforced, Configured:
+			covered++
+		case Partial:
+			partial++
+		case Gap:
 		}
 		applicable++
-		if c.Status == Enforced || c.Status == Configured {
-			covered++
-		}
 	}
-	pct := 0.0
 	if applicable > 0 {
 		pct = 100 * float64(covered) / float64(applicable)
 	}
-	return Coverage{Categories: cats, Applicable: applicable, Covered: covered, PercentCovered: pct}
+	return applicable, covered, partial, pct
 }
 
-// llm05OutputHandling: Hydra ships default workspace validators (js, py,
-// yaml, sh, ...) that run after every edit and roll back on failure — so
+// sensitiveInfoCategory reads the egress gate's real state rather than asserting
+// one. Content detection alone is a denylist that can only stop what someone
+// wrote a pattern for, which is why this reports Enforced only once the path
+// rules are loaded and the strict floor is on: together those are what make
+// "a local config cannot reach a head that leaves the machine" a property of
+// the code rather than a hope about the detectors.
+func sensitiveInfoCategory() Category {
+	c := Category{ID: "LLM02", Name: "Sensitive Information Disclosure"}
+
+	rules, err := egress.LoadRules(config.ScriptHome())
+	if err != nil {
+		c.Status = Partial
+		c.Detail = "the egress gate has no sensitivity rules loaded (" + err.Error() +
+			"), so only prompt-string PII detection stands between a local config and a head that leaves the machine"
+		return c
+	}
+	cfg, _ := config.Load() // a config that will not load is the default one, which is strict
+	if !cfg.StrictEgress() {
+		c.Status = Configured
+		c.Detail = fmt.Sprintf("%d path rules classify files by location, but egress.strict is off, so a secret "+
+			"payload with no routable local head still leaves the machine", len(rules.Secret))
+		return c
+	}
+	c.Status = Enforced
+	c.Detail = fmt.Sprintf("%d path rules classify files by location regardless of content, and a secret payload "+
+		"with no routable local head is refused rather than sent", len(rules.Secret))
+	return c
+}
+
+// Detection, not provenance, and the baseline is a plain file, so this is
+// Configured once binaries are tracked, never Enforced. See supplychain.go.
+func supplyChainCategory(sc SupplyChain) Category {
+	c := Category{ID: "LLM04", Name: "Supply Chain"}
+	if len(sc.Binaries) == 0 {
+		c.Status = Gap
+		c.Detail = "nothing is being fingerprinted, so a replaced agent binary or swapped model would go unnoticed"
+		return c
+	}
+	c.Status = Configured
+	c.Detail = fmt.Sprintf("%d artifact(s) fingerprinted, head binaries and local model weights; a replacement is "+
+		"detected, though origin is not verified and the stored baseline is not itself tamper-evident", len(sc.Binaries))
+	return c
+}
+
+// outputHandlingCategory: Hydra ships default workspace validators (js, py,
+// yaml, sh, ...) that run after every edit and roll back on failure, so
 // this is Enforced whenever the loaded registry has any validator at all,
 // Gap only if a custom workspace.yaml stripped every one of them.
-func llm05OutputHandling() Category {
-	c := Category{ID: "LLM05", Name: "Improper Output Handling"}
+func outputHandlingCategory() Category {
+	c := Category{ID: "LLM10", Name: "Improper Output Handling"}
 	reg, err := workspace.Load(config.ScriptHome())
 	if err != nil || !reg.HasAnyValidator() {
 		c.Status = Gap
-		c.Detail = "no workspace validator is configured — hyctl edit/parallel would accept unvalidated model output"
+		c.Detail = "no workspace validator is configured, hyctl edit/parallel would accept unvalidated model output"
 		return c
 	}
 	c.Status = Enforced
@@ -103,29 +190,37 @@ func llm05OutputHandling() Category {
 	return c
 }
 
-// llm06ExcessiveAgency: Configured when at least one ledger rule scopes
-// access by resource (real least-privilege), Gap otherwise — this is a
-// per-install choice, not something Hydra can ship a default for.
-func llm06ExcessiveAgency(pol ledger.Policy) Category {
-	c := Category{ID: "LLM06", Name: "Excessive Agency"}
+// excessiveAgencyCategory: Configured when at least one ledger rule narrows
+// what an agent may reach, by resource or by agent. Gap otherwise, this is a
+// per-install choice, not something Hydra can ship a default for: a blanket
+// deny gets uninstalled rather than tuned, and the shipped secret-path rules
+// that were proposed instead are already covered at the egress boundary (#837).
+//
+// Agent counts alongside Resource because the least-privilege check beside this
+// one reports unscoped *agents*, and the two disagreeing about what least
+// privilege means is how an operator does the work and sees nothing move.
+func excessiveAgencyCategory(pol ledger.Policy) Category {
+	c := Category{ID: "LLM03", Name: "Excessive Agency"}
 	for _, r := range pol.Rules {
-		if r.Resource != "" {
+		if r.Resource != "" || r.Agent != "" {
 			c.Status = Configured
-			c.Detail = "at least one ledger rule scopes access by resource (least-privilege)"
+			c.Detail = "at least one ledger rule narrows what an agent may reach (least-privilege)"
 			return c
 		}
 	}
 	c.Status = Gap
-	c.Detail = "no ledger rule scopes access by resource — any allowed head can touch any file"
+	c.Detail = "no ledger rule scopes access by resource or agent, so any allowed head can " +
+		"touch any file; scope the agents that change state in " + ledger.DefaultPolicyPath() +
+		", e.g. {\"agent\":\"hydra-swarm\",\"resource\":\"registry/**\",\"action\":\"write\"," +
+		"\"decision\":\"deny\"}"
 	return c
 }
 
-// llm09Misinformation: the SPRT confidence ensemble is Hydra's real mitigation
-// for hallucinated/wrong answers — Configured once it's actually been used.
-func llm09Misinformation() Category {
-	c := Category{ID: "LLM09", Name: "Misinformation"}
-	runs, err := trust.LoadRuns(trust.DefaultLogPath())
-	if err != nil || len(runs) == 0 {
+// misinformationCategory: the SPRT confidence ensemble is Hydra's real mitigation
+// for hallucinated/wrong answers, Configured once it's actually been used.
+func misinformationCategory(runs []trust.RunLog) Category {
+	c := Category{ID: "LLM07", Name: "Misinformation"}
+	if len(runs) == 0 {
 		c.Status = Gap
 		c.Detail = "the SPRT confidence ensemble (hyctl dispatch --confidence) has never been used"
 		return c
@@ -135,19 +230,126 @@ func llm09Misinformation() Category {
 	return c
 }
 
-// llm10UnboundedConsumption: Configured once a --max-cost ceiling has
-// actually refused a dispatch — the ledger is the only durable record that
+// unboundedConsumptionCategory: Configured once a --max-cost ceiling has
+// actually refused a dispatch, the ledger is the only durable record that
 // the guard was ever exercised.
-func llm10UnboundedConsumption(events []ledger.Event) Category {
-	c := Category{ID: "LLM10", Name: "Unbounded Consumption"}
-	for _, e := range events {
-		if costCeilingReason(e) {
-			c.Status = Configured
-			c.Detail = "a --max-cost ceiling has refused at least one dispatch"
-			return c
-		}
+func unboundedConsumptionCategory(costCeilingDenials int) Category {
+	c := Category{ID: "LLM06", Name: "Unbounded Consumption"}
+	if costCeilingDenials > 0 {
+		c.Status = Configured
+		c.Detail = "a --max-cost ceiling has refused at least one dispatch"
+		return c
 	}
 	c.Status = Gap
-	c.Detail = "no dispatch has ever been refused for exceeding a cost ceiling — set one with --max-cost"
+	c.Detail = "no dispatch has ever been refused for exceeding a cost ceiling, set one with --max-cost"
 	return c
+}
+
+// firstGapSeen scans history once and indexes, per category ID, the index of
+// the earliest entry naming it as a gap, history is oldest-first, so the
+// first entry recording an ID wins and later ones are skipped. It does not
+// parse timestamps: that cost belongs at lookup time, scoped to the fixed,
+// small set of categories actually being annotated, not to every one of
+// potentially hundreds of thousands of history entries regardless of
+// whether anything ever looks them up.
+//
+// Entries from another LLM edition are skipped rather than matched. The IDs
+// are only stable for LLM01 and LLM02, so an unqualified match would report
+// one category's gap age under another category's name, wrong and invisible,
+// in the field a reader trusts to say how long something has been broken
+// (#748).
+func firstGapSeen(history []scoreEntry) map[string]int {
+	out := make(map[string]int, 8)
+	for i, h := range history {
+		if h.edition() != LLMEdition {
+			continue
+		}
+		for _, id := range h.Gaps {
+			if _, ok := out[id]; ok {
+				continue
+			}
+			out[id] = i
+		}
+	}
+	return out
+}
+
+// firstParseableGapSince is the fallback for the one case the index above
+// can't resolve on its own: the earliest entry naming id as a gap has a
+// corrupt TS. It mirrors the pre-#524 scan's behavior of skipping a bad
+// timestamp and continuing to look for the next-oldest match, scoped to
+// this single category rather than re-scanning history for every category,
+// since a malformed timestamp is not the common case.
+func firstParseableGapSince(history []scoreEntry, id string) (string, time.Time, bool) {
+	for _, h := range history {
+		if h.edition() != LLMEdition {
+			continue // same cross-edition rule as firstGapSeen (#748)
+		}
+		if !slices.Contains(h.Gaps, id) {
+			continue
+		}
+		if ts, err := time.Parse(time.RFC3339, h.TS); err == nil {
+			return h.TS, ts, true
+		}
+	}
+	return "", time.Time{}, false
+}
+
+// annotateGapAge fills in GapSince/GapAgeDays for every currently-Gap
+// category, using score history that Build already loads and persists
+// (security_score.jsonl, since #396), no new logging, just reading data
+// that already exists. history must be oldest-first, which
+// loadScoreHistory/appendScoreHistory already guarantee (the log is
+// append-only).
+//
+// firstGapSeen does one pass over history to index every category's
+// earliest gap sighting; this then does one pass over cats (bounded by the
+// fixed OWASP LLM Top-10 list) to look values up, linear in history size,
+// where the previous nested scan (categories × history × gaps-per-entry)
+// was worse than linear.
+func annotateGapAge(cats []Category, history []scoreEntry, now time.Time) []Category {
+	firstIdx := firstGapSeen(history)
+	out := make([]Category, len(cats))
+	copy(out, cats)
+	for i, c := range out {
+		if c.Status != Gap {
+			continue
+		}
+		idx, ok := firstIdx[c.ID]
+		if !ok {
+			continue
+		}
+		tsStr := history[idx].TS
+		ts, err := time.Parse(time.RFC3339, tsStr)
+		if err != nil {
+			// The indexed entry's own timestamp is corrupt, fall back to a
+			// linear scan for this one category only.
+			tsStr, ts, ok = firstParseableGapSince(history, c.ID)
+			if !ok {
+				continue
+			}
+		}
+		out[i].GapSince = tsStr
+		out[i].GapAgeDays = int(now.Sub(ts).Hours() / 24)
+	}
+	return out
+}
+
+// vectorCategory reports LLM09 from the store on disk rather than from a
+// constant. It read "Hydra has no RAG pipeline or vector store of its own"
+// unconditionally, which stopped being true the moment one shipped (#904).
+func vectorCategory() Category {
+	st, ok := embed.StoredStats(embed.Dir())
+	if !ok || st.Count == 0 {
+		return Category{ID: "LLM09", Name: "Vector and Embedding Weaknesses", Status: NotApplicable,
+			Detail: "no vectors are stored: embedding capture is opt-in and nothing has been written"}
+	}
+	return Category{ID: "LLM09", Name: "Vector and Embedding Weaknesses", Status: Partial,
+		Detail: fmt.Sprintf("%d vectors from %s are stored; text is redacted before it is embedded, "+
+			"the model and dimension are part of the store's key so two vector spaces cannot be "+
+			"compared, and the store is byte-bounded and evicts oldest-first. Not covered: an "+
+			"embedding is invertible to approximate text, and nothing retrieves from the store yet, "+
+			"so there is no retrieval-side poisoning control to assess",
+			st.Count, st.Model),
+	}
 }

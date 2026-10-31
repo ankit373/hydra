@@ -60,6 +60,16 @@ func TestScoreHistory_UnparseableLinesAreSkippedNotFatal(t *testing.T) {
 	}
 }
 
+func TestToHistoryPoints_StripsToTSAndPercent(t *testing.T) {
+	entries := []scoreEntry{
+		{TS: "2026-01-01T00:00:00Z", PercentCovered: 25, Applicable: 8, Covered: 2, Gaps: []string{"LLM03"}},
+	}
+	got := toHistoryPoints(entries)
+	if len(got) != 1 || got[0].TS != "2026-01-01T00:00:00Z" || got[0].PercentCovered != 25 {
+		t.Errorf("toHistoryPoints = %+v, want one point stripped to TS/PercentCovered", got)
+	}
+}
+
 func writeRaw(t *testing.T, path, content string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {

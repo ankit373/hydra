@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/diff"
@@ -27,9 +28,13 @@ type FileEntry struct {
 	File      string `json:"file"`
 	Workspace string `json:"workspace"`
 	GitRoot   string `json:"git_root"`
-	Added     int    `json:"lines_added"`
-	Removed   int    `json:"lines_removed"`
-	Status    string `json:"status"` // modified | new | unchanged | no_baseline | missing
+	// Head is who wrote it. Hydra recorded this all along and no review surface
+	// showed it, so the reviewer deciding whether to approve could not see
+	// which head produced the change (#1032).
+	Head    string `json:"head,omitempty"`
+	Added   int    `json:"lines_added"`
+	Removed int    `json:"lines_removed"`
+	Status  string `json:"status"` // modified | new | unchanged | no_baseline | missing
 }
 
 // SummaryResult is the JSON output of Summary.
@@ -94,6 +99,7 @@ func Summary(files []string) (*SummaryResult, error) {
 			File:      f,
 			Workspace: ws,
 			GitRoot:   resolved.GitRoot,
+			Head:      headIDForFile(f),
 			Added:     added,
 			Removed:   removed,
 			Status:    status,
@@ -122,6 +128,16 @@ func Diff(file string) (string, error) {
 	}
 
 	if gitUsable(resolved.GitRoot) {
+		// git diff on a pathspec it doesn't track exits 0 with empty output,
+		// identical to a real "no changes" result. Distinguish them before
+		// asking git, the same guard the backup branch below applies (#260).
+		tracked := exec.Command("git", "-C", resolved.GitRoot, "ls-files", "--error-unmatch", file).Run() == nil
+		if !tracked {
+			if fileExists(file) {
+				return "", fmt.Errorf("no diff available for %s (untracked by git, no baseline to compare against)", file)
+			}
+			return "", fmt.Errorf("no diff available for %s (not tracked by git and the file does not exist)", file)
+		}
 		out, err := exec.Command("git", "-C", resolved.GitRoot, "diff", "--", file).Output()
 		if err != nil {
 			return "", fmt.Errorf("git diff failed: %w", err)
@@ -133,7 +149,7 @@ func Diff(file string) (string, error) {
 	if fileExists(backup) {
 		// Both reads must succeed. This used to shell out to diff(1) and
 		// discard the error, so a missing binary or an unreadable file
-		// produced ("", nil) — a blank diff a reviewer would read as "no
+		// produced ("", nil), a blank diff a reviewer would read as "no
 		// changes" and approve (#260).
 		before, err := os.ReadFile(backup)
 		if err != nil {
@@ -158,6 +174,11 @@ func Approve(file string) (*ApproveResult, error) {
 	}
 	if err := scopeCheck(file); err != nil {
 		return nil, err
+	}
+	// scopeCheck only proves the path is glob-legal; it never stats the file,
+	// so approving a nonexistent path used to still report "approved" (#449).
+	if !fileExists(file) {
+		return nil, fmt.Errorf("cannot approve %s: file does not exist", file)
 	}
 
 	reg, _ := workspace.Load(config.ScriptHome())
@@ -203,8 +224,8 @@ func Reject(file string) (*RejectResult, error) {
 			result = &RejectResult{Status: "rejected", File: file, Method: "git_checkout"}
 		} else {
 			// Only a clean exit status of 1 means "this path is not tracked". Any
-			// other failure — git missing, .git present but not a repository, a
-			// permissions error — means we do not know, and deleting a file we
+			// other failure, git missing, .git present but not a repository, a
+			// permissions error, means we do not know, and deleting a file we
 			// cannot prove is disposable is unrecoverable data loss. Before this,
 			// every one of those took the branch below and removed the file.
 			var exitErr *exec.ExitError
@@ -262,6 +283,7 @@ CONCERNS <bullet list of issues>`, file, diffText)
 	if err != nil {
 		return nil, fmt.Errorf("dispatcher init: %w", err)
 	}
+	defer d.Close()
 	result, err := d.Dispatch(ctx, qaPrompt, dispatch.Options{
 		TierHint: strconv.Itoa(tier),
 	})
@@ -284,7 +306,7 @@ CONCERNS <bullet list of issues>`, file, diffText)
 // workspace.GitRoot only stats for a ".git" entry, so it happily reports a root
 // for a stray marker, a broken checkout, or a machine with no git installed.
 // Every caller here then ran a git command and read its failure as a fact about
-// the file rather than about git — which, in Reject, meant deleting it.
+// the file rather than about git, which, in Reject, meant deleting it.
 func gitUsable(root string) bool {
 	if root == "" {
 		return false
@@ -383,11 +405,65 @@ func filesFromLogs() []string {
 	return files
 }
 
-// headIDForLastEdit returns the head that produced file's last edit, or ""
-// if last_edit.json's own file doesn't match — its single slot can only
-// answer for whichever file was edited most recently.
-func headIDForLastEdit(file string) string {
-	raw, err := os.ReadFile(filepath.Join(config.Dir(), "logs", "last_edit.json"))
+// headIDForFile returns the head that produced file's last edit, from both edit
+// logs. last_edit.json has a single slot and `hyctl parallel` never writes it,
+// so reading only that one credited no head to every file a batch touched, and
+// a human's approve or reject trained nothing (#1032).
+//
+// Newest log first: one file can appear in both, and the run that wrote it last
+// is the one whose head produced what is on disk. Each reader matches on the
+// path, so a file in neither yields "" rather than someone else's head.
+func headIDForFile(file string) string {
+	logDir := filepath.Join(config.Dir(), "logs")
+	batch := filepath.Join(logDir, "last_parallel.json")
+	single := filepath.Join(logDir, "last_edit.json")
+
+	readers := []func() string{
+		func() string { return headFromBatchLog(batch, file) },
+		func() string { return headFromEditLog(single, file) },
+	}
+	if modTime(single).After(modTime(batch)) {
+		readers[0], readers[1] = readers[1], readers[0]
+	}
+	for _, read := range readers {
+		if id := read(); id != "" {
+			return id
+		}
+	}
+	return ""
+}
+
+func modTime(path string) time.Time {
+	info, err := os.Stat(path)
+	if err != nil {
+		return time.Time{}
+	}
+	return info.ModTime()
+}
+
+func headFromBatchLog(path, file string) string {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	var rows []struct {
+		Mode string `json:"mode"`
+		File string `json:"file"`
+		Head string `json:"head"`
+	}
+	if json.Unmarshal(raw, &rows) != nil {
+		return ""
+	}
+	for _, r := range rows {
+		if r.Mode == "edit" && r.File == file {
+			return r.Head
+		}
+	}
+	return ""
+}
+
+func headFromEditLog(path, file string) string {
+	raw, err := os.ReadFile(path)
 	if err != nil {
 		return ""
 	}
@@ -404,7 +480,7 @@ func headIDForLastEdit(file string) string {
 // recordReviewOutcome is a best-effort calibration observation: a human's
 // approve/reject is stronger ground truth than editor's own syntax-check.
 func recordReviewOutcome(file string, correct bool) {
-	headID := headIDForLastEdit(file)
+	headID := headIDForFile(file)
 	if headID == "" {
 		return
 	}
@@ -416,6 +492,5 @@ func recordReviewOutcome(file string, correct bool) {
 	if correct {
 		outcome = trust.OutcomeCorrect
 	}
-	domain := strings.TrimPrefix(filepath.Ext(file), ".")
-	_ = cal.Update(headID, domain, true, outcome)
+	_ = cal.Update(headID, trust.DomainForFile(file), true, outcome)
 }

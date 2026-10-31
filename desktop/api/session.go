@@ -19,11 +19,16 @@ type Session struct {
 	Found bool   `json:"found"`
 	Error string `json:"error,omitempty"`
 
+	// Goal is what this run was asked to do, in the requester's words. Same
+	// read as Fleet's: tree.Reconstruct discards run-level events, so a view
+	// titled only by run id has no way to say what the run was for.
+	Goal string `json:"goal,omitempty"`
+
 	Timeline []TimelineEntry `json:"timeline"`
 	Agents   []Agent         `json:"agents"`
 	Edges    []Edge          `json:"edges"`
 
-	// NonLinear reports whether this run has structure a list cannot show —
+	// NonLinear reports whether this run has structure a list cannot show,
 	// a fan-out or an A2A cross-edge. The Graph tab is offered only then;
 	// drawing a graph of a straight line is worse than drawing a list.
 	NonLinear bool `json:"nonLinear"`
@@ -49,7 +54,7 @@ type TimelineEntry struct {
 	Confidence float64 `json:"confidence"`
 
 	// Detail is the run log's short human string. For an SPRT sample #205
-	// writes the verifiable part here — "agreed · LLR +1.203 → Λ 1.203" — which
+	// writes the verifiable part here, "agreed · LLR +1.203 → Λ 1.203", which
 	// is deliberately what the row leads with rather than narrated intent.
 	Detail string `json:"detail,omitempty"`
 }
@@ -91,11 +96,12 @@ func (a *API) GetSession(runID string) (*Session, error) {
 		return s, nil
 	}
 	s.Found = true
+	s.Goal = runGoal(events)
 
 	t, tl := tree.Reconstruct(events)
 	s.Skipped = t.Skipped
 
-	// Entries in file order. runlog's own doc says Seq "is not the sort key" —
+	// Entries in file order. runlog's own doc says Seq "is not the sort key",
 	// several writers share one run and each counts from 1, so re-sorting by it
 	// puts a run's end before a handoff that happened first (#205).
 	for _, e := range tl.Entries {
@@ -120,6 +126,17 @@ func (a *API) GetSession(runID string) (*Session, error) {
 			Detail:     n.Detail,
 		})
 		for _, h := range n.Handoffs {
+			// An A2A handoff always crosses runs, the target picks it up in a
+			// later, separate `hyctl dispatch` invocation with its own run_id,
+			// so it can never resolve to a node in *this* run's tree. Every
+			// successful dispatch writes one of these unconditionally (as
+			// bookkeeping for a possible future --a2a chain), so treating it as
+			// a same-run edge made ordinary, single-head runs non-linear 100%
+			// of the time (#485). Only a same-run-resolvable target is real
+			// graph structure.
+			if _, ok := t.Nodes[h.To]; !ok {
+				continue
+			}
 			s.Edges = append(s.Edges, Edge{
 				From: n.ID, To: h.To, TS: formatTS(h.TS), Detail: h.Detail,
 			})
@@ -148,7 +165,7 @@ func isNonLinear(t *tree.Tree, edges int) bool {
 	return false
 }
 
-// formatTS renders a timestamp for display, or empty when there is none —
+// formatTS renders a timestamp for display, or empty when there is none,
 // never a zero-time string, which reads as a real measurement from year 1.
 func formatTS(ts time.Time) string {
 	if ts.IsZero() {

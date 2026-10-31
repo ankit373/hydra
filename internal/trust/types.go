@@ -11,7 +11,7 @@ package trust
 type Outcome int
 
 const (
-	// OutcomeUnknown means no ground truth is available yet — it never trains.
+	// OutcomeUnknown means no ground truth is available yet, it never trains.
 	OutcomeUnknown Outcome = iota
 	// OutcomeCorrect: tests passed / user approved / not reverted within N days.
 	OutcomeCorrect
@@ -40,7 +40,7 @@ type Task struct {
 	BlastRadius float64
 	// Irreversible: the change cannot be cheaply undone (data migration, deploy).
 	Irreversible bool
-	// TouchesPII: the task handles personal data — a wrong answer is a leak risk.
+	// TouchesPII: the task handles personal data, a wrong answer is a leak risk.
 	TouchesPII bool
 	// Production: the change targets a production surface, not a scratch/dev one.
 	Production bool

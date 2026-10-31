@@ -127,7 +127,7 @@ func TestResolveLatest_CachesForTwentyFourHours(t *testing.T) {
 		t.Errorf("resolveLatest() = %q from cache", got)
 	}
 	if *calls != 1 {
-		t.Errorf("made %d calls with a warm cache — every command would hit GitHub", *calls)
+		t.Errorf("made %d calls with a warm cache, every command would hit GitHub", *calls)
 	}
 
 	// A cache older than the TTL is refetched.
@@ -233,7 +233,7 @@ func TestDoCheck_RefusesBeforeTouchingTheNetwork(t *testing.T) {
 		t.Cleanup(func() { build.Version = orig })
 
 		if got := doCheck(); got != "" {
-			t.Errorf("doCheck() = %q with stdout piped — the banner would land in "+
+			t.Errorf("doCheck() = %q with stdout piped, the banner would land in "+
 				"whatever is parsing the output", got)
 		}
 		if *calls != 0 {
@@ -274,7 +274,7 @@ func TestCheckIgnoringTTY_SkipsTheTTYGate(t *testing.T) {
 	t.Cleanup(func() { build.Version = orig })
 
 	if got := doCheck(); got != "" {
-		t.Fatalf("doCheck() = %q, want empty under go test (no TTY) — precondition for this test", got)
+		t.Fatalf("doCheck() = %q, want empty under go test (no TTY), precondition for this test", got)
 	}
 	if got := CheckIgnoringTTY(); got != "v9.9.9" {
 		t.Errorf("CheckIgnoringTTY() = %q, want v9.9.9 despite no TTY", got)
@@ -284,7 +284,7 @@ func TestCheckIgnoringTTY_SkipsTheTTYGate(t *testing.T) {
 	}
 }
 
-// The env-var and dev-build gates still apply — only the TTY check is skipped.
+// The env-var and dev-build gates still apply, only the TTY check is skipped.
 func TestCheckIgnoringTTY_StillRefusesBeforeTouchingTheNetwork(t *testing.T) {
 	tests := []struct {
 		name string
@@ -338,7 +338,7 @@ func TestCheckIgnoringTTY_NoUpdateWhenCurrent(t *testing.T) {
 }
 
 // Unlike Check, CheckIgnoringTTY must not freeze its answer for the life of
-// the process via sync.Once — the desktop app is long-running and expected to
+// the process via sync.Once, the desktop app is long-running and expected to
 // poll it. The on-disk cache in resolveLatest is what bounds the network
 // calls, not an in-process memo.
 func TestCheckIgnoringTTY_DoesNotMemoiseInProcess(t *testing.T) {

@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: MIT
 
 // Package dispatch routes a prompt through policy evaluation, head selection,
-// and execution — with automatic fallback on failure.
+// and execution, with automatic fallback on failure.
 package dispatch
 
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -19,18 +20,55 @@ import (
 
 	"github.com/ankit373/hydra/internal/a2a"
 	"github.com/ankit373/hydra/internal/budget"
+	"github.com/ankit373/hydra/internal/cache"
+	"github.com/ankit373/hydra/internal/classify"
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/cost"
+	"github.com/ankit373/hydra/internal/egress"
+	"github.com/ankit373/hydra/internal/embed"
 	"github.com/ankit373/hydra/internal/executor"
+	"github.com/ankit373/hydra/internal/health"
 	"github.com/ankit373/hydra/internal/ledger"
+	"github.com/ankit373/hydra/internal/pending"
 	"github.com/ankit373/hydra/internal/policy"
 	"github.com/ankit373/hydra/internal/pricing"
 	"github.com/ankit373/hydra/internal/probe"
 	"github.com/ankit373/hydra/internal/provider"
 	"github.com/ankit373/hydra/internal/rank"
+	"github.com/ankit373/hydra/internal/retrieve"
 	"github.com/ankit373/hydra/internal/runid"
 	"github.com/ankit373/hydra/internal/runlog"
+	"github.com/ankit373/hydra/internal/signals"
+	"github.com/ankit373/hydra/internal/trust"
+	"github.com/ankit373/hydra/registry"
 )
+
+// ErrNoHeads marks a dispatch with no head to run, discovered or routable.
+// Callers match it with errors.Is instead of the formatted message, so a
+// CLI-flavored string (backtick-quoted `hyctl probe`, etc.) never has to leak
+// into a GUI caller that has no terminal to point at (#452).
+var ErrNoHeads = errors.New("no dispatchable heads")
+
+// ErrHeadUnknown and ErrHeadUnusable separate the two ways a *named* head
+// fails from the general "nothing was available". A caller that picked the
+// head is owed a different answer from one whose fallback chain ran out, and
+// over an API the difference is whether retrying can ever work: an unknown id
+// is 404 and an unusable one 400, where exhaustion really is a 5xx. Both wrap
+// ErrNoHeads as well, so every existing errors.Is keeps its meaning.
+var (
+	ErrHeadUnknown  = errors.New("unknown head")
+	ErrHeadUnusable = errors.New("head cannot be used")
+)
+
+// headErr carries that kind without touching the message, which is what the
+// operator reads and is already the right words (#676).
+type headErr struct {
+	kind error
+	msg  error
+}
+
+func (e headErr) Error() string   { return e.msg.Error() }
+func (e headErr) Unwrap() []error { return []error{e.msg, e.kind} }
 
 // Options controls dispatch behaviour.
 type Options struct {
@@ -42,25 +80,91 @@ type Options struct {
 	A2AFile   string // path to A2A handoff JSON; prepends structured context to prompt
 	Enum      string // enum key (e.g. "SIMPLE") for cost logging
 
-	// Resource is the file (or other resource) this dispatch acts on, if any —
+	// Resource is the file (or other resource) this dispatch acts on, if any,
 	// e.g. the path editor.Edit is about to write. Passed to the ledger so a
 	// policy rule can express least-privilege file scoping ("deny writes under
 	// internal/auth/**"), not just per-head rules. Empty means no resource
 	// concept applies (e.g. a plain text dispatch with no target file).
 	Resource string
 
+	// Domain is the calibration domain this dispatch routes for, the same key
+	// internal/trust records outcomes under. It reorders the candidate heads
+	// onto the one measured best at this kind of work. Empty, and with no
+	// Resource to derive one from, leaves the pooled probe ranking standing.
+	Domain string
+
+	// Messages is a whole conversation, when the caller has one, and Tools the
+	// functions a head may call. Both exist for `hyctl serve`: an agent loop
+	// sends its tool results back as further turns, which Prompt cannot carry.
+	Messages   []executor.Message
+	Tools      []executor.ToolDef
+	ToolChoice json.RawMessage
+
+	// Provenance carries parts of the payload whose origin only the caller
+	// knows, e.g. the file whose content hyctl edit embedded in the prompt.
+	// Dispatch classifies these alongside the ones it derives itself; leaving
+	// content out of it is what the egress gate's fail-closed rules catch.
+	Provenance []egress.Part
+
 	// MaxCostUSD refuses a candidate whose estimated cost exceeds it before
-	// executing — the same preflight guard swarm.Options.MaxEstCostUSD already
+	// executing, the same preflight guard swarm.Options.MaxEstCostUSD already
 	// gives fan-out mode, extended to ordinary dispatch. 0 = no limit.
 	MaxCostUSD float64
+	// MaxCostSource names where that ceiling came from, so a refusal says
+	// which of the flag and the policy file to change. Empty reads as the flag.
+	MaxCostSource string
+
+	// MaxMemoryMB and MaxCPUSeconds cap a dispatched subprocess's address
+	// space and CPU time, from policy.yaml's max_memory_mb/max_cpu_seconds.
+	// 0 means no ceiling, same spelling MaxCostUSD already uses. Applied by
+	// sandbox.WithLimits inside the executor, not here: this only carries the
+	// numbers from policy to the process that will actually run.
+	MaxMemoryMB   int
+	MaxCPUSeconds int
 
 	// RunID groups every log row produced by one user-facing invocation;
 	// TaskID groups the rows for one logical task inside it. Empty means
-	// "derive one" (see runid.ResolveRun/ResolveTask) — pass them explicitly
+	// "derive one" (see runid.ResolveRun/ResolveTask), pass them explicitly
 	// when several dispatches belong to the same run, as a parallel batch or a
 	// swarm does, otherwise each call is its own run.
 	RunID  string
 	TaskID string
+
+	// Decision is the routing rules' verdict, computed once by the caller.
+	// Nil means this dispatch computes it itself, which is right for callers
+	// that have no --confidence to apply and no blast radius to supply.
+	Decision *signals.Decision
+
+	// NoCache refuses to answer this dispatch from an earlier one, and refuses
+	// to store its answer for a later one. For a caller whose prompt only
+	// looks repeatable: a swarm judge weighing two candidate answers is asking
+	// about those answers, not about the question they answer.
+	NoCache bool
+
+	// AnsweredHead is the head a human has already approved for this task, set
+	// only by Resume. An Ask verdict counts as approval for that head alone,
+	// approving one head must never authorize a different one, or a resume
+	// silently re-routes to a head the human was never shown.
+	AnsweredHead string
+
+	// Head pins one head by ID. A person choosing a model is asking for that
+	// model, so it is never substituted: if it cannot run, Dispatch says why
+	// instead of quietly answering from a different one. Before this the
+	// desktop picker could only ask for a tier, so choosing a T1 head let the
+	// chain walk down to the T10 local model with nothing said (#676).
+	Head string
+
+	// Classification is prompt's already-computed PII/injection verdict
+	// (policy.Classify), cmdDispatch computes this once for its own
+	// defect-cost/local-only decisions and passes it here so Dispatch and
+	// every fallback candidate's ledger check reuse it instead of re-scanning
+	// prompt once per candidate. Nil means "not computed yet; derive it here."
+	Classification *policy.Classification
+
+	// OnStream receives output as it arrives, and the attempt boundaries that
+	// say which head produced it. Nil means no incremental delivery, which
+	// takes the plain Execute path and behaves exactly as before.
+	OnStream OnStream
 }
 
 // Result is the outcome of a successful dispatch.
@@ -69,7 +173,149 @@ type Result struct {
 	Head      provider.Head
 	Fallbacks []provider.Head // remaining candidates after the selected head
 	Retries   int
+
+	// Attempts is every candidate that was tried and did not answer, in the
+	// order tried. Retries counts them; this says which and why. Without it a
+	// caller can only report who answered, so a fallback to a weaker head
+	// looks identical to routing there in the first place (#676).
+	Attempts []Attempt
+
+	// OutputProvenance is Output classified, with the head that produced it.
+	// Hydra already treats a head's answer as untrusted data when the *next
+	// model* will read it (a2a fences PriorOutput), and as trusted instruction
+	// when a human's agent will, which is backwards: the orchestrator is the
+	// one with write access. Callers get the provenance rather than a bare
+	// string so they can decide (#740).
+	OutputProvenance egress.Part
+
+	// Domain is the calibration domain the candidates were ranked for, and
+	// Scores why each ranks where it does. Both empty when nothing narrowed
+	// the ranking, which is when the pooled probe order stands unchanged.
+	// Populated on the --dry-run preview, whose whole job is to explain a
+	// choice before it costs anything.
+	Domain string
+	Scores map[string]rank.Score
+
+	// Requirement is the confidence of correctness this task needed, and is
+	// set only when the cost constraint was the thing that ordered the
+	// candidates. Zero means it did not run, never that nothing was demanded.
+	Requirement float64
+
+	// Cache is the stored answer this result was served from, nil when a head
+	// actually ran. Callers label it rather than passing it off as fresh work:
+	// an answer nobody just produced is a different thing from one somebody
+	// did, however identical the text.
+	Cache *cache.Hit
+
 	*executor.Response
+}
+
+// Attempt is one candidate that did not answer, and the reason.
+type Attempt struct {
+	Head   string
+	Model  string
+	Tier   int
+	Reason string
+}
+
+// ParkedError reports a task stopped before the executor ran because the
+// ledger policy asked for a human decision. It is not a failure: the task is
+// durable and resumable, which is what distinguishes it from a denial.
+type ParkedError struct {
+	TaskID   string
+	Head     string
+	Question string
+}
+
+func (e *ParkedError) Error() string {
+	return fmt.Sprintf("task %s is waiting on an answer: %s", e.TaskID, e.Question)
+}
+
+// askText is the question a human actually sees. The ledger's own reason
+// ("rule 3 (ask claude/**)") names the rule that fired, which answers a
+// different question than the one being asked.
+func askText(h provider.Head, resource string, class *policy.Classification) string {
+	name := h.Name
+	if name == "" {
+		name = h.ID
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "Allow %s to run this task?", name)
+	if resource != "" {
+		fmt.Fprintf(&b, " It would act on %s.", resource)
+	}
+	if class != nil {
+		if class.PII {
+			b.WriteString(" The prompt contains personal data.")
+		}
+		if class.FlagReason != "" {
+			fmt.Fprintf(&b, " Flagged: %s.", class.FlagReason)
+		}
+	}
+	return b.String()
+}
+
+// Resume answers a parked task and dispatches it.
+//
+// The stored prompt is reused rather than rebuilt: the head list, policy and
+// budget can all move between question and answer, and the task that runs must
+// be the task the human agreed to.
+func (d *Dispatcher) Resume(ctx context.Context, taskID, answer string) (*Result, error) {
+	if strings.TrimSpace(answer) == "" {
+		return nil, errors.New("an empty answer is not an answer: the task stays parked")
+	}
+	q, err := pending.Load(taskID)
+	if err != nil {
+		return nil, err
+	}
+	// Consumed before dispatching, so the file is the idempotency token: a
+	// second answer for the same task finds nothing to resume rather than
+	// running the work twice.
+	if err := pending.Delete(taskID); err != nil {
+		return nil, err
+	}
+	prompt := fmt.Sprintf("%s\n\nYou asked: %s\nThe user answered: %s", q.Prompt, q.Question, answer)
+	return d.Dispatch(ctx, prompt, Options{
+		TierHint: q.TierHint, LocalOnly: q.LocalOnly, MaxTokens: q.MaxTokens,
+		System: q.System, Enum: q.Enum, Resource: q.Resource,
+		RunID: q.RunID, TaskID: q.TaskID,
+		AnsweredHead: q.Head,
+		// A2A context is already inside q.Prompt, Dispatch injected it before
+		// the gate parked the task, so naming the file again would double it.
+	})
+}
+
+// Decline refuses a parked task without running it.
+//
+// Free-text answers cannot carry a refusal reliably: folding "no, don't" into
+// the prompt still dispatches and leaves it to the head to notice. A refusal
+// has to be a separate path that never reaches an executor.
+//
+// Not a Dispatcher method: refusing touches only the pending store, the ledger
+// and the run log, so requiring a resolved config and a probed head list would
+// mean a machine with no working config could park a task and then not be
+// allowed to decline it.
+func Decline(taskID, reason string) error {
+	q, err := pending.Load(taskID)
+	if err != nil {
+		return err
+	}
+	if err := pending.Delete(taskID); err != nil {
+		return err
+	}
+	if reason == "" {
+		reason = "no reason given"
+	}
+	_ = ledger.Record(ledger.DefaultPath(), ledger.Event{
+		Agent: "hydra-dispatch", Tool: q.Head, Resource: q.Resource,
+		Action: ledger.Exec, Decision: ledger.Deny,
+		Reason: "declined by user: " + reason,
+	})
+	_ = runlog.New(q.RunID).Append(runlog.Event{
+		Kind: runlog.KindTaskFinished, TaskID: q.TaskID,
+		Head: q.Head, Status: "declined", Detail: "declined by user: " + reason,
+	})
+	return nil
 }
 
 // stateMu protects concurrent read-modify-write on state.json across goroutines.
@@ -81,84 +327,330 @@ type Dispatcher struct {
 	heads   []provider.Head
 	policy  *policy.Engine
 	pricing *pricing.DB
-	budget  *budget.Registry
+	// price is what a nominal call to each head costs, derived from pricing
+	// once rather than per candidate. Nil when nothing can price a head, which
+	// leaves the cost constraint out of the ordering entirely.
+	price  rank.Price
+	budget *budget.Registry
+	health *health.Store
+	// cal reorders candidates onto the head measured best at the task's
+	// domain. Nil when the store will not load, which leaves the pooled probe
+	// order: a ranking basis that degrades has to degrade to the previous one.
+	cal *trust.Calibrator
+
+	// rules turns signals into a routing action. Nil is a valid engine that
+	// always falls through, which is what a machine with no rules file gets.
+	rules *signals.Engine
+
+	// recall indexes and vectorises prompts off the dispatch path. Built at
+	// most once, by recorder(), and drained by Close.
+	recallOnce sync.Once
+	recall     *retrieve.Recorder
+
+	// answers serves a dispatch from an earlier one when the cache is on, with
+	// answerEmb embedding prompts for the near-match path. Both nil when it is
+	// off, which is the default and the whole off switch.
+	cacheOnce sync.Once
+	answers   *cache.Store
+	answerEmb embed.Embedder
+
+	// corpusEmb embeds a task for the verified-example corpus. Its own rather
+	// than answerEmb, which exists only while the answer cache is open:
+	// recording what a verdict judged is a different decision from caching an
+	// answer, and someone who turned on neither should still get the first.
+	corpusOnce sync.Once
+	corpusEmb  embed.Embedder
+
+	// corpusData is the embedded eval set, loaded at most once and only when a
+	// rule reads a corpus signal.
+	corpusLoad sync.Once
+	corpusData *classify.Corpus
 }
 
 // Heads returns the probed head list for external callers (e.g. swarm).
 func (d *Dispatcher) Heads() []provider.Head { return d.heads }
+
+// Embedder resolves the machine's embedding model once, for a caller that
+// needs a vector rather than an answer. Never nil; with no model on the machine
+// it reports itself unavailable, so callers keep one code path.
+func (d *Dispatcher) Embedder() embed.Embedder {
+	d.corpusOnce.Do(func() { d.corpusEmb = embed.Resolve(d.heads, d.cfg.EmbedModel) })
+	return d.corpusEmb
+}
+
+// PIILocalOnly reports whether the configured pii policy forces local-only
+// routing. Exported so callers that bypass Dispatch, the SPRT/swarm branches
+// in cmd/hydra's cmdDispatch, can still enforce it instead of acting only on
+// --local, which was config-blind on that path (#500).
+func (d *Dispatcher) PIILocalOnly() bool { return piiLocalOnly(d.cfg) }
+
+// CapturesPayloads reports whether prompt and response text is being stored.
+// A surface that collapses an abandoned partial away needs it: without capture
+// the span still opens but holds no text, so offering to go and read it would
+// send someone to an empty page.
+func (d *Dispatcher) CapturesPayloads() bool {
+	return d.cfg != nil && d.cfg.CapturePayloads
+}
 
 // EstimateCost exposes per-tier cost estimation for external callers.
 func (d *Dispatcher) EstimateCost(tier, inputTokens, outputTokens int) float64 {
 	return d.estimateCost(tier, inputTokens, outputTokens)
 }
 
-// New builds a Dispatcher from the saved config and a fresh machine probe.
+// probeCacheTTL bounds how long a machine probe is reused across calls to New
+// within one process. New is called once per CLI invocation, but also once per
+// task inside a parallel batch and once per view inside a TUI snapshot, with
+// no cache each of those redoes the same ~13 exec.LookPath calls and two
+// network liveness checks. A short TTL collapses those into one real probe
+// without leaving a long-running TUI session blind to a server that started
+// or stopped mid-session.
+const probeCacheTTL = 3 * time.Second
+
+var (
+	probeCacheMu     sync.Mutex
+	probeCacheResult *probe.Result
+	probeCacheAt     time.Time
+	probeCacheEnv    string
+)
+
+// probeEnvFingerprint is HOME+PATH, the two environment variables that change
+// what a probe discovers (CLI binaries on PATH; agy/models overlay under
+// HOME). Any change invalidates the cache immediately regardless of TTL,
+// without this, a cached result from one HOME (e.g. a test's temp dir with
+// its own stub binaries) would be silently reused after HOME changes.
+func probeEnvFingerprint() string {
+	return os.Getenv("HOME") + "\x00" + os.Getenv("PATH")
+}
+
+// cachedProbe returns probe.Run's result, reusing it for probeCacheTTL as long
+// as the environment it depends on hasn't changed.
+func cachedProbe(ctx context.Context) *probe.Result {
+	probeCacheMu.Lock()
+	defer probeCacheMu.Unlock()
+	env := probeEnvFingerprint()
+	if probeCacheResult != nil && env == probeCacheEnv && time.Since(probeCacheAt) < probeCacheTTL {
+		return probeCacheResult
+	}
+	probeCacheResult = probe.Run(ctx)
+	probeCacheAt = time.Now()
+	probeCacheEnv = env
+	return probeCacheResult
+}
+
+// PIILocalOnly reports whether cfg's pii policy forces local-only routing,
+// the config-level check for callers with no Dispatcher yet (the TUI's route
+// badge), so the rule is never restated (#597).
+func PIILocalOnly(cfg *config.Config) bool { return piiLocalOnly(cfg) }
+
+// piiLocalOnly reports whether cfg's pii policy forces local-only routing.
+func piiLocalOnly(cfg *config.Config) bool {
+	p, ok := cfg.Policies["pii"]
+	return ok && p.Action == "local-only"
+}
+
+// New builds a Dispatcher from the saved config and a (possibly cached) machine probe.
 func New(ctx context.Context) (*Dispatcher, error) {
+	// config.Load already distinguishes an absent file from an unreadable one,
+	// and replacing its error lost that: a type error in config.toml reported as
+	// "no hydra config" and sent the reader to a wizard that overwrites it.
 	cfg, err := config.Load()
 	if err != nil {
-		return nil, fmt.Errorf("no hydra config — run: hyctl init")
+		return nil, err
+	}
+	// Before any probing or routing: an unusable routing.yaml stops the
+	// dispatch rather than being papered over with the shipped rule (#720).
+	if err := RoutingError(); err != nil {
+		return nil, err
 	}
 
-	result := probe.Run(ctx)
-
-	localOnly := false
-	if p, ok := cfg.Policies["pii"]; ok && p.Action == "local-only" {
-		localOnly = true
+	rules, err := loadRules(config.ScriptHome())
+	if err != nil {
+		return nil, err
 	}
 
-	budgetReg := budget.NewRegistry(budget.LoadWindows(config.ScriptHome()))
+	result := cachedProbe(ctx)
+	localOnly := piiLocalOnly(cfg)
 
+	// Seeded from the discovered heads, not from models.yaml alone: Record is
+	// called with a head id, and those only partly overlap the registry's own
+	// ids, so a local head used to miss and be budgeted at 200000 (#764).
+	budgetReg := budget.NewRegistry(budget.WindowsForHeads(config.ScriptHome(), result.Heads))
+
+	// A store that will not load must not stop a dispatch, but it must not do
+	// it quietly either: routing would fall back to the pooled order with
+	// nothing saying the domain evidence was skipped.
+	cal, err := trust.New(trust.DefaultPath())
+	if err != nil {
+		log.Printf("⚠️  calibration unreadable (%v), routing on the pooled ranking", err)
+		cal = nil
+	}
+
+	prices := pricing.Load()
 	return &Dispatcher{
 		cfg:     cfg,
 		heads:   result.Heads,
 		policy:  policy.New(policy.DefaultRules(localOnly)),
-		pricing: pricing.Load(),
+		pricing: prices,
+		price:   headPrice(prices),
 		budget:  budgetReg,
+		health:  health.Open(health.DefaultPath()),
+		cal:     cal,
+		rules:   rules,
 	}, nil
 }
 
 // Dispatch routes prompt through policy + tier selection + execution with fallback.
 func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) (*Result, error) {
-	// Resolve the hint to a capability number BEFORE the governor runs. A named
-	// config tier ("expert") is otherwise opaque to claudeMode's Atoi, which
-	// left the whole token-preservation table inert for every non-numeric hint
-	// (#165).
-	hint := d.resolveTierHint(opts.TierHint)
+	// Rules first: a block refuses before anything is validated, probed or
+	// spent, and a route has to land before the tier hint is resolved below.
+	// Evaluated once, here or by the caller, never per fallback candidate.
+	dec := opts.Decision
+	if dec == nil {
+		computed := d.Decide(ctx, prompt, opts.Domain, nil, opts.Messages)
+		dec = &computed
+	}
+	if err := applyDecision(*dec, &opts); err != nil {
+		return nil, err
+	}
 
-	// Apply claude% preservation — may downgrade tier or abort.
+	if err := ValidateTierHint(opts.TierHint); err != nil {
+		return nil, err
+	}
+	// Written once per dispatch rather than per outcome. Breaker state is a
+	// cache of what was observed, so a lost update costs one retry, never work.
+	defer func() { _ = d.health.Flush() }()
+
+	// Resolve the hint to a capability number BEFORE the governor runs. A named
+	// tier ("expert") is otherwise opaque to claudeMode's Atoi, which left the
+	// whole token-preservation table inert for every non-numeric hint (#165).
+	// A hint that is invalid on its face, an unknown name or an out-of-range
+	// number, is rejected here, before routability ever enters the picture, so
+	// the error blames the actual cause (#451, #454).
+	hint, err := resolveTierHint(opts.TierHint)
+	if err != nil {
+		return nil, err
+	}
+
+	// Apply claude% preservation, may downgrade tier or abort.
 	tier, mode, pct := d.claudeMode(hint)
 	switch mode {
 	case "emergency":
-		log.Printf("🚨 EMERGENCY: Claude at %d%% — routing to local tier only. Start a new session.", pct)
+		log.Printf("🚨 EMERGENCY: Claude at %d%%, routing to local tier only. Start a new session.", pct)
 		tier = "10"
 		opts.LocalOnly = true
 	case "critical":
-		log.Printf("🔴 CRITICAL: Claude at %d%% — downgrading tier by 2. Run /compact NOW.", pct)
+		log.Printf("🔴 CRITICAL: Claude at %d%%, downgrading tier by 2. Run /compact NOW.", pct)
 	case "warning":
-		log.Printf("🟠 WARNING: Claude at %d%% — downgrading tier by 1. Run /compact now.", pct)
+		log.Printf("🟠 WARNING: Claude at %d%%, downgrading tier by 1. Run /compact now.", pct)
 	case "caution":
-		log.Printf("🟡 CAUTION: Claude at %d%% — Run /compact immediately.", pct)
+		log.Printf("🟡 CAUTION: Claude at %d%%, Run /compact immediately.", pct)
 	case "compact":
-		log.Printf("ℹ️  Claude at %d%% — Consider running /compact.", pct)
+		log.Printf("ℹ️  Claude at %d%%, Consider running /compact.", pct)
 	}
 
-	// Inject A2A handoff context into prompt if provided.
+	// Inject A2A handoff context into prompt if provided. --a2a names a file the
+	// user explicitly asked for, so a read/parse failure must fail the dispatch
+	// rather than silently running without the handoff context (#450).
+	// handoffText is what Inject prepended, kept so recordContextEcho can tell
+	// whether a head repeated it back. Taken as the difference rather than by
+	// re-reading the file, which would parse it a second time to reconstruct
+	// something this call already produced (#872).
+	var handoffText string
 	if opts.A2AFile != "" {
-		injected, err := injectA2A(opts.A2AFile, prompt)
-		if err == nil {
-			prompt = injected
+		injected, err := a2a.Inject(opts.A2AFile, prompt)
+		if err != nil {
+			return nil, fmt.Errorf("--a2a %s: %w", opts.A2AFile, err)
 		}
+		handoffText = strings.TrimSuffix(injected, prompt)
+		prompt = injected
 	}
 
-	req := policy.Request{Prompt: prompt, TierHint: tier}
+	// Before selection, the cache and any spend: a conversation no head can be
+	// asked is the caller's own payload, and walking the chain only pays every
+	// head to say the same thing while the breaker parks healthy ones.
+	if err := executor.CheckAskable(opts.Messages); err != nil {
+		return nil, err
+	}
+
+	// Classify once and reuse for both the policy engine below and every
+	// fallback candidate's ledger check, DetectPII/InjectionMarker are pure
+	// functions of prompt, so re-running them per candidate repeats the same
+	// answer at the same cost (#522).
+	class := opts.Classification
+	if class == nil {
+		c := policy.Classify(prompt)
+		class = &c
+	}
+	req := policy.Request{Prompt: prompt, TierHint: tier, PII: &class.PII}
 	action := d.policy.Evaluate(req)
 
 	if action.Deny {
 		return nil, fmt.Errorf("dispatch denied by policy: %s", action.Reason)
 	}
 
+	// After the policy, before any head: a denied prompt stays denied, and a
+	// served one costs nothing at all. The outcome is carried to the dry run
+	// as well, so a preview that would be answered from the cache says so
+	// instead of naming a head that would never run (#167).
+	cached, consulted := d.fromCache(ctx, prompt, opts, class)
+	if consulted && !opts.DryRun {
+		d.recordLookup(cached)
+	}
+	if cached.Found && !opts.DryRun {
+		return d.serveCached(opts, cached), nil
+	}
+
 	localOnly := action.LocalOnly || opts.LocalOnly
-	candidates := d.selectHeads(tier, localOnly)
+
+	// Classify where every span of the outgoing payload came from, before head
+	// selection, so a secret payload prefers a local head rather than being
+	// refused at the gate further down. Failing to classify routes nothing:
+	// an unavailable gate is not a reason to send the payload anyway.
+	parts, rules, err := d.provenance(prompt, opts)
+	if err != nil {
+		return nil, fmt.Errorf("egress classification unavailable, refusing to route: %w", err)
+	}
+	strict := d.cfg.StrictEgress()
+	secretOrigins := egress.Origins(parts)
+	rerouted := false
+	if len(secretOrigins) > 0 && !localOnly {
+		localOnly, rerouted = true, true
+	}
+
+	domain := routingDomain(opts)
+	candidates := d.selectHeads(tier, localOnly, domain)
+
+	// The reroute failed: the content is secret and nothing local can run it.
+	// Strict refuses; otherwise the payload leaves, and the user is told in
+	// those words rather than left to infer it from the head name.
+	if len(candidates) == 0 && rerouted {
+		if strict {
+			return nil, fmt.Errorf(
+				"%w: content classified secret (%s) and no local head is routable. "+
+					"Start one (`ollama serve`), or set egress.strict = false in config.toml to allow it out",
+				ErrNoHeads, strings.Join(secretOrigins, ", "))
+		}
+		log.Printf("⚠️  egress.strict is off: secret content (%s) is going to a head that leaves this machine",
+			strings.Join(secretOrigins, ", "))
+		localOnly, rerouted = action.LocalOnly || opts.LocalOnly, false
+		candidates = d.selectHeads(tier, localOnly, domain)
+	}
+	if rerouted && len(candidates) > 0 {
+		log.Printf("🔒 secret content (%s), routing to a local head only",
+			strings.Join(secretOrigins, ", "))
+	}
+
+	if opts.Head != "" {
+		// A pinned head is the whole candidate list, so there is nothing to
+		// fall back to and no way to answer from a model the user did not ask
+		// for. Pinned but unroutable is an error with a reason, not a
+		// substitution.
+		pinned, err := d.pinHead(opts.Head, localOnly)
+		if err != nil {
+			return nil, err
+		}
+		candidates = []provider.Head{pinned}
+	}
 	if len(candidates) == 0 {
 		// Report the effective localOnly (policy may have forced it), not just
 		// the caller's flag, or a PII-forced local-only run points the user at
@@ -168,49 +660,194 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		// the user looks, sees the head, and learns nothing (#248). Name the
 		// blocked heads and why instead.
 		if blocked := d.blockedHeads(localOnly); blocked != "" {
-			return nil, fmt.Errorf("no routable heads for tier %q (localOnly=%v).\n%s",
-				tier, localOnly, blocked)
+			return nil, fmt.Errorf("%w: no routable heads for %s (localOnly=%v).\n%s",
+				ErrNoHeads, tierClause(tier), localOnly, blocked)
 		}
-		return nil, fmt.Errorf("no available heads for tier %q (localOnly=%v); "+
-			"check `hyctl probe` and the tier names in your config", tier, localOnly)
+		return nil, fmt.Errorf("%w: no available heads for %s (localOnly=%v); "+
+			"check `hyctl probe` and the tier names in your config",
+			ErrNoHeads, tierClause(tier), localOnly)
 	}
+
+	// With no tier pinned, prefer the cheapest head this machine has measured
+	// competent at this domain over the strongest one it has. A pinned tier is
+	// an instruction and is left exactly as it was resolved: one word must not
+	// route two ways (#782).
+	var requirement float64
+	var scores map[string]rank.Score
+	if tier == "" && opts.Head == "" {
+		candidates, scores, requirement = d.constrain(candidates, domain, requirementFor(class))
+	} else if opts.DryRun {
+		scores = d.explain(candidates, domain)
+	}
+
+	// Reorders candidates so the head to try first is at index 0 and reports
+	// the probability it was chosen. At the default ExploreRate of 0 this is
+	// the identity and actProb is 1.
+	candidates, actProb := d.pick(candidates, opts)
 
 	if opts.DryRun {
-		return &Result{Head: candidates[0], Fallbacks: candidates[1:]}, nil
+		// Why this order, not just what it is: a reordering the user cannot
+		// see the evidence for is indistinguishable from an arbitrary one.
+		r := &Result{
+			Head: candidates[0], Fallbacks: candidates[1:],
+			Domain: domain, Scores: scores, Requirement: requirement,
+		}
+		if cached.Found {
+			// Named, not served: a dry run runs nothing, including the cache,
+			// so nothing is counted and no answer is handed back.
+			r.Cache = &cached.Hit
+		}
+		return r, nil
 	}
 
-	// The run log records the shape of the run — which head was picked, when,
-	// and how it ended — none of which the cost/dispatch outcome rows capture.
+	// The run log records the shape of the run, which head was picked, when,
+	// and how it ended, none of which the cost/dispatch outcome rows capture.
 	// Observability must never fail the work, so every append error is ignored.
 	rl := runlog.New(runid.ResolveRun(opts.RunID))
 	taskID := runid.ResolveTask(opts.TaskID)
+	// Every candidate attempt hangs off the task's span, derived rather than
+	// minted so swarm and parallel agree on the same parent without passing it.
+	taskSpan := runlog.SpanIDFor(taskID)
+	// And declared, or it is a parent nothing writes: waterfall promotes a span
+	// whose parent no event declared to a root, so every attempt read as an
+	// unrelated dispatch and no run had a tree at all (#864).
+	_ = rl.Append(runlog.Event{
+		Kind: runlog.KindTaskStarted, TaskID: taskID, SpanID: taskSpan,
+		Detail: opts.Enum,
+	})
 
 	var lastErr error
+	var attempts []Attempt
 	for i, h := range candidates {
+		// Computed once per candidate instead of once per use below (event
+		// logging, cost estimation): rank.UITier re-derives the same int for
+		// the identical head every time it's called.
+		tier := rank.UITier(h)
+		// One span per attempt. Two attempts on one head are then distinct,
+		// which the old head-derived identity could not express.
+		span := runlog.NewSpanID()
 		_ = rl.Append(runlog.Event{
 			Kind: runlog.KindHeadSelected, TaskID: taskID,
-			Head: h.ID, Model: h.Name, Tier: rank.UITier(h),
+			SpanID: span, ParentSpanID: taskSpan,
+			Head: h.ID, Model: h.Name, Tier: tier,
 			Detail: fmt.Sprintf("candidate %d of %d", i+1, len(candidates)),
+			Meta:   map[string]any{"attempt": i + 1, "candidates": len(candidates)},
 		})
-		if decision, lerr := ledger.CheckAndRecordDispatch("hydra-dispatch", h.ID, opts.Resource, prompt); lerr == nil && decision == ledger.Deny {
-			lastErr = fmt.Errorf("denied by ledger policy: head %s", h.ID)
+		// Proceeds only on an explicit Allow. Testing `== Deny` instead would
+		// let any other verdict through, which stopped being safe the moment
+		// Deny was not the only one that withholds permission, a pending
+		// ledger.Ask would have read as approval (#580).
+		//
+		// Fails closed the same way on error: a policy-check failure (unreadable
+		// policy file, ledger write failure) must deny, not silently let the
+		// candidate through just because the decision couldn't be computed.
+		// CheckAndRecordDispatch's LoadPolicy is itself mtime-cached, so trying
+		// every candidate against the same prompt no longer re-reads and
+		// re-parses the identical policy file from disk once per candidate.
+		decision, lerr := ledger.CheckAndRecordDispatch(ledger.Dispatch{
+			Agent: "hydra-dispatch", HeadID: h.ID, Resource: opts.Resource,
+			Content: prompt, Class: class,
+			Provenance: provenanceRecord(parts, h),
+		})
+		refuse := func(detail string) {
+			lastErr = fmt.Errorf("%s: head %s", detail, h.ID)
+			attempts = append(attempts, Attempt{Head: h.ID, Model: h.Name, Tier: tier, Reason: detail})
 			_ = rl.Append(runlog.Event{
 				Kind: runlog.KindError, TaskID: taskID,
-				Head: h.ID, Model: h.Name, Tier: rank.UITier(h),
-				Status: "denied", Detail: "denied by ledger policy",
+				SpanID: span, ParentSpanID: taskSpan, Level: runlog.LevelError,
+				Head: h.ID, Model: h.Name, Tier: tier,
+				Status: "denied", Detail: detail,
 			})
+		}
+		// A head that cannot carry tool definitions is skipped rather than sent
+		// the request without them: a stripped tool array is not a degraded
+		// answer, it is an agent loop that never terminates, with every round
+		// looking like the model simply declining to act.
+		if len(opts.Tools) > 0 && !executor.CanUseTools(h) {
+			refuse("cannot carry tool definitions")
+			continue
+		}
+		// The egress gate, deliberately independent of the ledger's decision:
+		// the ledger answers who may act, this answers where content may go.
+		// The reroute above should already have made this unreachable for a
+		// secret payload, so reaching it means something bypassed routing (a
+		// pinned head, an unclassified part) and it refuses.
+		sink := egress.Sink{Kind: egress.SinkRemote, Head: h.ID}
+		if h.LocalOnly {
+			sink.Kind = egress.SinkLocal
+		}
+		if v := egress.Guard(parts, sink, strict); v.Decision != egress.Allow {
+			refuse("egress denied: " + v.Reason)
+			_ = ledger.Record(ledger.DefaultPath(), ledger.Event{
+				Agent: "hydra-dispatch", Tool: h.ID, Resource: opts.Resource,
+				Action: ledger.Exec, Decision: ledger.Deny, Reason: v.Reason,
+			})
+			continue
+		}
+
+		// Approval is per head. An Ask answered for one head must not authorize
+		// a different one, or a resume silently re-routes to a head the human
+		// was never shown.
+		approved := decision == ledger.Allow || (decision == ledger.Ask && opts.AnsweredHead == h.ID)
+		switch {
+		case lerr != nil:
+			// Fails closed: a policy-check failure (unreadable policy file,
+			// ledger write failure) must deny, not let the candidate through
+			// just because the decision could not be computed.
+			refuse("ledger policy check failed: " + lerr.Error())
+			continue
+
+		// An Ask is not a denial, and must not fall through to the next
+		// candidate the way one does. Continuing would skip the head that
+		// needs permission and run a cheaper one instead, routing around the
+		// question rather than asking it.
+		case decision == ledger.Ask && !approved:
+			q := pending.Question{
+				TaskID: taskID, RunID: rl.RunID(),
+				Question: askText(h, opts.Resource, class),
+				Prompt:   prompt, Head: h.ID, Resource: opts.Resource,
+				Enum: opts.Enum, TierHint: opts.TierHint, System: opts.System,
+				LocalOnly: localOnly, MaxTokens: opts.MaxTokens,
+			}
+			// A question that cannot be stored has not been asked, so this
+			// fails the dispatch rather than proceeding unapproved.
+			if sErr := pending.Save(q); sErr != nil {
+				return nil, fmt.Errorf("cannot park task %s waiting on an answer: %w", taskID, sErr)
+			}
+			_ = rl.Append(runlog.Event{
+				Kind: runlog.KindQuestionAsked, TaskID: taskID,
+				SpanID: span, ParentSpanID: taskSpan, Level: runlog.LevelWarn,
+				Head: h.ID, Model: h.Name, Tier: tier,
+				Status: "waiting", Detail: q.Question,
+			})
+			return nil, &ParkedError{TaskID: taskID, Head: h.ID, Question: q.Question}
+
+		case !approved:
+			refuse("denied by ledger policy")
 			continue
 		}
 		if opts.MaxCostUSD > 0 {
 			estInputTokens := len(prompt) / 4
-			estCost := d.estimateCost(rank.UITier(h), estInputTokens, estInputTokens/2)
+			estCost := d.estimateCost(tier, estInputTokens, estInputTokens/2)
 			if estCost > opts.MaxCostUSD {
-				lastErr = fmt.Errorf("estimated cost $%.4f for head %s exceeds limit $%.4f", estCost, h.ID, opts.MaxCostUSD)
+				// Named only when the caller said where the ceiling came from.
+				// Defaulting to a source would mean printing "--max-cost" at an
+				// edit whose ceiling came out of policy.yaml.
+				where := ""
+				if opts.MaxCostSource != "" {
+					where = " set by " + opts.MaxCostSource
+				}
+				lastErr = fmt.Errorf("estimated cost $%.4f for head %s exceeds limit $%.4f%s",
+					estCost, h.ID, opts.MaxCostUSD, where)
 				_ = rl.Append(runlog.Event{
 					Kind: runlog.KindError, TaskID: taskID,
-					Head: h.ID, Model: h.Name, Tier: rank.UITier(h),
+					SpanID: span, ParentSpanID: taskSpan, Level: runlog.LevelError,
+					Head: h.ID, Model: h.Name, Tier: tier,
 					Status: "denied", Detail: "exceeds cost ceiling",
+					Meta: map[string]any{"est_cost_usd": estCost, "limit_usd": opts.MaxCostUSD},
 				})
+				attempts = append(attempts, Attempt{Head: h.ID, Model: h.Name, Tier: tier,
+					Reason: fmt.Sprintf("estimated $%.4f exceeds the $%.4f ceiling", estCost, opts.MaxCostUSD)})
 				// Shares the ledger's accountability trail with policy denials
 				// (Reason distinguishes them) so `hyctl security` has one place
 				// to find every kind of refused access, cost or policy.
@@ -223,47 +860,124 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		}
 		started := time.Now()
 		exec := executor.For(h)
-		resp, err := exec.Execute(ctx, executor.Request{
-			Prompt:    prompt,
-			Head:      h,
-			MaxTokens: opts.MaxTokens,
-			System:    opts.System,
-		})
+		emit := func(kind StreamKind, text, reason string) {
+			if opts.OnStream == nil {
+				return
+			}
+			opts.OnStream(StreamEvent{
+				Kind: kind, Head: h, Tier: tier,
+				Text: text, Reason: reason, SpanID: span,
+			})
+		}
+		// Announced before the executor runs, not after: prefill on a local 7B
+		// took 4.2s in measurement, and that whole wait is before any token
+		// exists for a surface to render.
+		emit(StreamAttemptStarted, "", "")
+		var onDelta executor.OnDelta
+		if opts.OnStream != nil {
+			onDelta = func(d string) { emit(StreamDelta, d, "") }
+		}
+		resp, err := executor.Stream(ctx, exec, executor.Request{
+			Prompt:        prompt,
+			Head:          h,
+			MaxTokens:     opts.MaxTokens,
+			System:        opts.System,
+			Messages:      opts.Messages,
+			Tools:         opts.Tools,
+			ToolChoice:    opts.ToolChoice,
+			MaxMemoryMB:   opts.MaxMemoryMB,
+			MaxCPUSeconds: opts.MaxCPUSeconds,
+		}, onDelta)
 		if err != nil {
 			lastErr = err
+			// Before the chain advances, so a surface can retract this head's
+			// partial output before the next head's tokens interleave with it.
+			emit(StreamAttemptFailed, "", err.Error())
+			// A request no head can be asked is not this head failing, so the
+			// chain stops here. Advancing it spends on every remaining head to
+			// be told the same thing, and the breaker below would park healthy
+			// heads over the caller's own payload.
+			if errors.Is(err, executor.ErrUnaskable) {
+				_ = rl.Append(runlog.Event{
+					Kind: runlog.KindError, TaskID: taskID,
+					SpanID: span, ParentSpanID: taskSpan, Level: runlog.LevelError,
+					Head: h.ID, Model: h.Name, Tier: tier,
+					Status: "refused", DurationMS: time.Since(started).Milliseconds(),
+					Detail: truncate(err.Error(), 200),
+				})
+				return nil, err
+			}
+			// Parks the head so the rest of this run, and the next one, skip
+			// it. A missing binary or an unknown model opens the breaker at
+			// once; anything that might not recur gets a second chance first.
+			// A rate limit is neither, and carries the wait the server asked
+			// for, which is a better number than ours (#1096).
+			stated, _ := health.StatedWait(err)
+			d.health.FailFor(h.ID, truncate(err.Error(), 120), health.Classify(err), time.Now(), stated)
 			// A failed candidate is part of the run's shape: it is why the
 			// fallback chain advanced, and nothing else records it.
 			_ = rl.Append(runlog.Event{
 				Kind: runlog.KindError, TaskID: taskID,
-				Head: h.ID, Model: h.Name, Tier: rank.UITier(h),
+				SpanID: span, ParentSpanID: taskSpan, Level: runlog.LevelError,
+				Head: h.ID, Model: h.Name, Tier: tier,
 				Status: "failed", DurationMS: time.Since(started).Milliseconds(),
 				Detail: truncate(err.Error(), 200),
 			})
+			attempts = append(attempts, Attempt{Head: h.ID, Model: h.Name, Tier: tier,
+				Reason: truncate(err.Error(), 200)})
 			continue
 		}
-		r := &Result{Output: resp.Output, Head: h, Retries: i, Response: resp}
+		d.health.Pass(h.ID)
+		r := &Result{Output: resp.Output, Head: h, Retries: i, Attempts: attempts, Response: resp}
+		r.OutputProvenance = rules.ClassifyPart(egress.Part{
+			Content: resp.Output, Source: egress.SourceHead, Origin: h.ID,
+		})
+		recordOutputFinding(r.OutputProvenance, h)
+		recordContextEcho(resp.Output, hiddenContextFor(opts, handoffText), h)
+		inRef, outRef := d.capturePayloads(prompt, opts, resp)
+		d.captureRecall(span, prompt)
+		d.remember(ctx, prompt, opts, class, r, d.estimateCost(tier, resp.InputTokens, resp.OutputTokens))
 		_ = rl.Append(runlog.Event{
 			Kind: runlog.KindDispatchFinished, TaskID: taskID,
-			Head: h.ID, Model: resp.Model, Tier: rank.UITier(h), Status: "ok",
-			CostUSD:    d.estimateCost(rank.UITier(h), resp.InputTokens, resp.OutputTokens),
-			DurationMS: resp.Duration.Milliseconds(),
+			SpanID: span, ParentSpanID: taskSpan,
+			InputRef: inRef, OutputRef: outRef,
+			Head: h.ID, Model: resp.Model, Tier: tier, Status: "ok",
+			CostUSD:      d.estimateCost(tier, resp.InputTokens, resp.OutputTokens),
+			DurationMS:   resp.Duration.Milliseconds(),
+			InputTokens:  resp.InputTokens,
+			OutputTokens: resp.OutputTokens,
+			TTFTMs:       resp.TTFT.Milliseconds(),
+			Meta:         dispatchMeta(opts, resp),
 		})
-		_ = d.logDispatch(r, prompt, opts)
-		if from, err := d.writeHandoff(r, prompt); err == nil {
+		_ = d.logDispatch(r, prompt, opts, actProb, span)
+		if from, err := d.writeHandoff(r, prompt, opts); err == nil {
 			// last_handoff.json keeps only the newest. Appending the handoff
 			// here is what makes a *chain* of them reconstructable, which is
 			// the stated purpose of KindHandoff and did not happen before #204.
 			_ = rl.Append(runlog.Event{
 				Kind: runlog.KindHandoff, TaskID: taskID,
+				SpanID: span, ParentSpanID: taskSpan,
 				Agent: h.ID, Head: h.ID, Model: h.Name,
 				Ref: from, Detail: "context handed to " + from,
 			})
 		}
 		d.recordBudget(r)
 		d.syncStateJSON(r)
+		_ = rl.Append(runlog.Event{
+			Kind: runlog.KindTaskFinished, TaskID: taskID, SpanID: taskSpan,
+			Head: h.ID, Model: resp.Model, Tier: tier, Status: "ok",
+		})
 		return r, nil
 	}
 
+	// Closed on the way out too, or the span stays open and its bar ends at
+	// whichever attempt happened to log last. A parked task is deliberately not
+	// closed here: it is waiting on a human, not finished.
+	_ = rl.Append(runlog.Event{
+		Kind: runlog.KindTaskFinished, TaskID: taskID, SpanID: taskSpan,
+		Level: runlog.LevelError, Status: "failed",
+		Detail: fmt.Sprintf("all %d heads failed", len(candidates)),
+	})
 	return nil, fmt.Errorf("all heads failed (tried %d): %w", len(candidates), lastErr)
 }
 
@@ -271,7 +985,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 // mode string, and raw percentage. The mode is rate-aware: a fast burn (high
 // first-passage risk toward the 80% line) escalates the mode above its static
 // level band, so the tier downgrades earlier. With no history the effective mode
-// equals ModeFor(pct) — identical to the prior behavior.
+// equals ModeFor(pct), identical to the prior behavior.
 func (d *Dispatcher) claudeMode(tierHint string) (tier string, mode string, pct int) {
 	pct = readClaudePct()
 	_, risk := budget.RiskFromHistory(readClaudePctHistory())
@@ -291,8 +1005,11 @@ func (d *Dispatcher) claudeMode(tierHint string) (tier string, mode string, pct 
 	case "warning":
 		t++
 	}
-	if t > 10 {
-		t = 10
+	// Only escalation overflow reaches this, resolveTierHint already rejects
+	// any raw hint outside 1-10, so this clamps e.g. 9+2=11, never user input
+	// silently getting relabelled as "10" (#454).
+	if t > maxTier {
+		t = maxTier
 	}
 	return strconv.Itoa(t), mode, pct
 }
@@ -353,83 +1070,187 @@ func asIntSlice(v any) []int {
 	return out
 }
 
-// injectA2A reads a handoff JSON file and prepends a structured block to the prompt.
-func injectA2A(path, prompt string) (string, error) {
-	h, err := a2a.Load(path)
-	if err != nil {
-		return prompt, fmt.Errorf("a2a: %w", err)
+// handoffFiles is the file set a handoff records, so the next agent's
+// a2a.ConflictsWith has something to overlap. Empty before this: every
+// persisted handoff carried no files, and ConflictsWith could not return true
+// for any of them whatever the clocks said, which `hyctl security` reported as
+// an inert control (#425).
+//
+// The resource this dispatch acts on is the whole set today, and it is the
+// file a collision is actually about, the path `hyctl edit` is writing.
+// `dispatch --file` reaches this through SaveHandoff instead: naming a file
+// selects the SPRT ensemble, which does not come through Dispatch at all and
+// so wrote no handoff until #766.
+func handoffFiles(opts Options) []string {
+	if f := strings.TrimSpace(opts.Resource); f != "" {
+		return []string{f}
 	}
-	if h == nil {
-		return prompt, nil // no handoff → prompt unchanged
-	}
-	return h.PromptBlock(prompt) + "\n\nADDITIONAL INSTRUCTION:\n" + prompt, nil
+	return nil
 }
 
 // writeHandoff saves last_handoff.json after a successful dispatch, advancing
 // the vector clock so downstream agents inherit this dispatch's causal history.
 // It returns the handoff's From identity so the caller can record the edge.
-func (d *Dispatcher) writeHandoff(r *Result, prompt string) (string, error) {
-	handoffPath := filepath.Join(config.Dir(), "logs", "last_handoff.json")
-
-	// Inherit the prior handoff's clock (if any) and tick for this agent.
-	var base a2a.Clock
-	if prior, err := a2a.Load(handoffPath); err == nil && prior != nil {
-		base = prior.Clock
-	}
-	from := fmt.Sprintf("hydra-tier-%d", rank.UITier(r.Head))
-
-	h := a2a.Handoff{
-		From:        from,
-		Model:       r.Head.Name,
-		Task:        prompt,
-		PriorOutput: r.Response.Output,
-		Clock:       base.Tick(from),
-	}
-	return from, h.Save(handoffPath)
+func (d *Dispatcher) writeHandoff(r *Result, prompt string, opts Options) (string, error) {
+	// The clock is keyed on the head's own identity, not its tier bucket:
+	// every LocalOnly head shares tier 10, so two different local models
+	// would otherwise tick the same "hydra-tier-10" key and become
+	// indistinguishable under Clock.Compare (#503). "From" keeps the
+	// tier-bucket string, it is display text, not a clock key.
+	return SaveHandoff(HandoffRecord{
+		From:   fmt.Sprintf("hydra-tier-%d", rank.UITier(r.Head)),
+		Model:  r.Head.Name,
+		Task:   prompt,
+		Files:  handoffFiles(opts),
+		Output: r.Response.Output,
+		Agents: []string{r.Head.ID},
+	})
 }
 
-// resolveTierHint normalizes a tier hint to a capability number ("1".."10").
+// HandoffRecord is what a completed piece of work hands the next agent.
+type HandoffRecord struct {
+	From   string   // display identity, e.g. "hydra-tier-10"
+	Model  string   // display name of what answered
+	Task   string   // the prompt
+	Files  []string // what the work was about, for a2a.ConflictsWith
+	Output string   // what came back
+	Agents []string // clock keys: every head that actually ran
+}
+
+// SaveHandoff writes last_handoff.json, inheriting the prior clock and ticking
+// once per agent. It returns the From identity so a caller can record the edge.
 //
-// An empty hint stays empty. A numeric hint passes through. A named config
-// tier resolves to the strongest capability tier among its live heads, so the
-// budget governor can reason about — and downgrade — named tiers too. An
-// unrecognized name is returned unchanged so selectHeads yields nothing and
-// the caller can report the bad hint instead of silently widening.
-func (d *Dispatcher) resolveTierHint(hint string) string {
+// One tick per head, not one for the run, because the clock's actor is a head:
+// a fan-out that consulted three heads is three events, and saying so is what
+// keeps a later dispatch to one of them correctly ordered after the ensemble.
+//
+// The alternatives are worse rather than merely different. A single synthetic
+// ensemble key makes two independent fan-outs tick the same counter, so their
+// clocks come out *identical* and Compare reports Equal, which is the one
+// answer that cannot be right for two runs that never saw each other. Keying
+// on the accepted head is undefined for SPRT, whose Candidate is an answer and
+// not a source, and where several heads may support it, so the key would come
+// down to a tie-break, the coin-flip class of #765. Ticking every head grows
+// the *counters*, not the key set, which stays bounded by the machine's head
+// inventory exactly as the single-dispatch path already is (#766).
+//
+// The hole this leaves is the one the single-dispatch path already has: two
+// concurrent runs over the identical head set read as Equal rather than
+// Concurrent. SPRT stops early, so two runs rarely sample the same set, but
+// when they do a conflict is missed.
+func SaveHandoff(rec HandoffRecord) (string, error) {
+	path := filepath.Join(config.Dir(), "logs", "last_handoff.json")
+
+	var clock a2a.Clock
+	if prior, err := a2a.Load(path); err == nil && prior != nil {
+		clock = prior.Clock
+	}
+	for _, agent := range rec.Agents {
+		if agent != "" {
+			clock = clock.Tick(agent)
+		}
+	}
+
+	h := a2a.Handoff{
+		From:        rec.From,
+		Model:       rec.Model,
+		Task:        rec.Task,
+		Files:       rec.Files,
+		PriorOutput: rec.Output,
+		Clock:       clock,
+	}
+	return rec.From, h.Save(path)
+}
+
+// minTier and maxTier bound the numeric --tier flag: rank.UITier never
+// produces a value outside this range, so nothing above or below it could
+// ever be routable (#454).
+const (
+	minTier = 1
+	maxTier = 10
+)
+
+// ValidateTierHint rejects a --tier value that cannot resolve to anything: a
+// numeric value outside [minTier,maxTier], or a name that is not a routing
+// enum key. It is resolveTierHint's error alone, so a hint the router will
+// later resolve can never be refused here, or vice versa.
+//
+// Plain dispatch, --swarm and --confidence (SPRT) all call this before
+// selecting heads, so an invalid --tier/--swarm-judge-tier value fails the
+// same way in every mode instead of silently widening to a broader, pricier
+// selection (#501).
+func ValidateTierHint(hint string) error {
+	_, err := resolveTierHint(hint)
+	return err
+}
+
+// resolveTierHint normalizes a tier hint to a capability number ("1".."10"),
+// and reports the two ways a hint can be invalid on its face:
+//   - numeric but outside [minTier,maxTier], e.g. "0" and "15" both silently
+//     behaved as "no tier" or got clamped to 10 with no indication anything
+//     was wrong (#454).
+//   - named but not a routing enum key, a typo rather than a routability
+//     problem, so the caller must not blame the head pool for it (#451).
+//
+// A name resolves through routing.yaml, the table --enum reads, which is what
+// makes `--tier simple`, `--enum SIMPLE` and `--tier 8` one instruction. It
+// used to read cfg.Tiers, whose CapScore bands had no relation to the tier
+// numbers, so the same word routed to a paid head one way and a free one the
+// other (#782).
+func resolveTierHint(hint string) (string, error) {
+	n, err := ResolveTier(hint)
+	if err != nil || n == 0 {
+		return "", err
+	}
+	return strconv.Itoa(n), nil
+}
+
+// ResolveTier turns a --tier value, numeric or named, into a tier number, and
+// is the only place either shape is interpreted. An empty hint means "no tier
+// requested" and yields 0.
+//
+// Exported because swarm selects its own heads: when it resolved names its own
+// way, one --tier value picked a different head set in a swarm than in a plain
+// dispatch (#782).
+func ResolveTier(hint string) (int, error) {
 	if hint == "" {
-		return ""
+		return 0, nil
 	}
-	if _, err := strconv.Atoi(hint); err == nil {
-		return hint
+	if n, err := strconv.Atoi(hint); err == nil {
+		if n < minTier || n > maxTier {
+			return 0, fmt.Errorf("tier %d is out of range, valid tiers are %d-%d", n, minTier, maxTier)
+		}
+		return n, nil
 	}
-	for _, t := range d.cfg.Tiers {
-		if t.Name != hint {
-			continue
-		}
-		ids := make(map[string]bool, len(t.Heads))
-		for _, id := range t.Heads {
-			ids[id] = true
-		}
-		strongest := 0
-		for _, h := range d.heads {
-			if !ids[h.ID] {
-				continue
-			}
-			if n := rank.UITier(h); strongest == 0 || n < strongest {
-				strongest = n
-			}
-		}
-		if strongest > 0 {
-			return strconv.Itoa(strongest)
-		}
-		return hint // named tier has no live heads; let the caller report it
+	if n, ok := ResolveTierName(hint); ok {
+		return n, nil
 	}
-	return hint
+	return 0, fmt.Errorf("unknown tier %q, accepted names are %s", hint, tierNameList())
+}
+
+// tierNameList formats the accepted names for the "unknown tier" error, so the
+// user sees what they could have typed instead of just what they got wrong.
+func tierNameList() string {
+	names := TierNames()
+	if len(names) == 0 {
+		return "(routing.yaml is unreadable, so no name resolves)"
+	}
+	return strings.Join(names, ", ")
+}
+
+// tierClause phrases the tier for a no-heads error. An empty tier (no hint
+// given at all, e.g. the desktop dock's "auto-route" default) would
+// otherwise print as tier "", a confusing artifact, not a routing outcome.
+func tierClause(tier string) string {
+	if tier == "" {
+		return "no tier hint given"
+	}
+	return fmt.Sprintf("tier %q", tier)
 }
 
 // blockedHeads describes discovered heads that were excluded because no
 // executor can drive them, formatted for an error message. Returns "" when
-// nothing was excluded for that reason — in which case the real problem is the
+// nothing was excluded for that reason, in which case the real problem is the
 // tier or the config, and the caller says so instead.
 //
 // Respects localOnly so a PII-forced local run does not list cloud heads the
@@ -442,12 +1263,42 @@ func (d *Dispatcher) blockedHeads(localOnly bool) string {
 		}
 		if why := executor.Unroutable(h); why != "" {
 			fmt.Fprintf(&b, "  %s (%s): %s\n", h.Name, h.Provider, why)
+			continue
+		}
+		if why, parked := d.health.Blocked(h.ID, time.Now()); parked {
+			fmt.Fprintf(&b, "  %s (%s): %s\n", h.Name, h.Provider, why)
 		}
 	}
 	if b.Len() == 0 {
 		return ""
 	}
 	return "Discovered, but not routable:\n" + b.String()
+}
+
+// pinHead resolves Options.Head to one discovered head, or explains why it
+// cannot be used. Every failure names the head the caller asked for, because
+// the caller is a person who picked it from a list and is owed an answer
+// about that model rather than a different one (#676).
+func (d *Dispatcher) pinHead(id string, localOnly bool) (provider.Head, error) {
+	for _, h := range d.heads {
+		if h.ID != id {
+			continue
+		}
+		if localOnly && !h.LocalOnly {
+			return provider.Head{}, headErr{ErrHeadUnusable, fmt.Errorf(
+				"%w: %s is not a local head, and this run is local-only "+
+					"(policy or --local); choose a local model or lift the restriction",
+				ErrNoHeads, h.Name)}
+		}
+		if why := executor.Unroutable(h); why != "" {
+			return provider.Head{}, headErr{ErrHeadUnusable,
+				fmt.Errorf("%w: %s cannot be run: %s", ErrNoHeads, h.Name, why)}
+		}
+		return h, nil
+	}
+	return provider.Head{}, headErr{ErrHeadUnknown, fmt.Errorf(
+		"%w: no discovered head with id %q; run `hyctl probe` to see what this machine has",
+		ErrNoHeads, id)}
 }
 
 // selectHeads returns heads to try, in order of preference.
@@ -462,13 +1313,98 @@ func (d *Dispatcher) blockedHeads(localOnly bool) string {
 // Numeric hints must NOT be resolved through config tier names: config tiers
 // are named (expert/complex/…) while enums resolve to "1".."10", so an exact
 // name match can never succeed and the old fall-through silently returned the
-// single most expensive head — the exact inverse of cost routing (#165).
+// single most expensive head, the exact inverse of cost routing (#165).
 //
+// provenanceRecord is the audit shape of a payload about to reach h: what it
+// was assembled from, and whether that head leaves the machine.
+//
+// Recorded per candidate rather than per dispatch on purpose. The sink is the
+// half that changes between candidates, and a fallback from a local head to a
+// remote one is exactly the transition an auditor needs to see.
+func provenanceRecord(parts []egress.Part, h provider.Head) *ledger.EventProvenance {
+	s := egress.Summarize(parts)
+	sink := string(egress.SinkRemote)
+	if h.LocalOnly {
+		sink = string(egress.SinkLocal)
+	}
+	return &ledger.EventProvenance{
+		Sources: s.Sources, Origins: s.Origins,
+		Sensitivity: s.Sensitivity, Sink: sink,
+	}
+}
+
+// provenance describes where every span of the outgoing payload came from.
+//
+// Provenance is what the gate decides on, so anything reaching an executor has
+// to appear here. A caller that knows more than dispatch can (hyctl edit knows
+// the file whose content it embedded) passes its own parts in opts.Provenance
+// and they are classified the same way.
+// recordOutputFinding notes a head that just emitted something credential-
+// shaped. Not a gate: the answer is already the caller's, and refusing to
+// return it would lose work over a heuristic. It is an audit trail, so the
+// question "which model leaked a key into a diff" has an answer.
+//
+// Deliberately not classified "pii": Exposures reads that to mean "sensitive
+// data was *sent* to this head", and filing an inbound finding there would
+// print a remote head's own leak as if Hydra had leaked to it.
+func recordOutputFinding(p egress.Part, h provider.Head) {
+	if p.Sens < egress.Secret {
+		return
+	}
+	_ = ledger.Record(ledger.DefaultPath(), ledger.Event{
+		Agent: "hydra-dispatch", Tool: h.ID, Action: ledger.Read,
+		Resource: "response", Decision: ledger.Allow,
+		Classification: classHeadOutput, PIITypes: p.Reasons,
+		Reason: "the response carries credential-shaped content; it was returned unmodified",
+	})
+}
+
+// classHeadOutput marks a finding about what a head returned, as distinct from
+// what was sent to one.
+const classHeadOutput = "head-output-secret"
+
+func (d *Dispatcher) provenance(prompt string, opts Options) ([]egress.Part, *egress.Rules, error) {
+	rules, err := egress.LoadRules(config.ScriptHome())
+	if err != nil {
+		return nil, nil, err
+	}
+	var parts []egress.Part
+	add := func(content string, src egress.Source, origin string) {
+		if strings.TrimSpace(content) == "" && origin == "" {
+			return
+		}
+		parts = append(parts, rules.ClassifyPart(egress.Part{
+			Content: content, Source: src, Origin: origin,
+		}))
+	}
+
+	// The prompt and --system are SourceUser, so ClassifyPart leaves them to
+	// the configurable pii policy rather than re-deciding them here. They are
+	// still declared, because a payload with no provenance is refused.
+	add(prompt, egress.SourceUser, "")
+	add(opts.System, egress.SourceUser, "--system")
+	// The named resource is the file whose content the caller embedded in the
+	// prompt: hyctl edit's target, a parallel task's context file.
+	add("", egress.SourceFile, opts.Resource)
+	add("", egress.SourceFile, opts.A2AFile)
+
+	for _, p := range opts.Provenance {
+		parts = append(parts, rules.ClassifyPart(p))
+	}
+	return parts, rules, nil
+}
+
 // A hint that matches nothing returns no candidates; the caller reports that
 // rather than silently widening to every head.
-func (d *Dispatcher) selectHeads(tierHint string, localOnly bool) []provider.Head {
+func (d *Dispatcher) selectHeads(tierHint string, localOnly bool, domain string) []provider.Head {
+	now := time.Now()
 	filter := func(h provider.Head) bool {
 		if !executor.Supports(h) {
+			return false
+		}
+		// Dropped from the candidate list rather than tried and skipped: a
+		// head the breaker has parked must not be routed to at all (#688).
+		if _, parked := d.health.Blocked(h.ID, now); parked {
 			return false
 		}
 		if localOnly && !h.LocalOnly {
@@ -477,7 +1413,7 @@ func (d *Dispatcher) selectHeads(tierHint string, localOnly bool) []provider.Hea
 		return true
 	}
 
-	// No tier specified — use every live head, best score first.
+	// No tier specified, use every live head, best score first.
 	if tierHint == "" {
 		var all []provider.Head
 		for _, h := range d.heads {
@@ -485,57 +1421,175 @@ func (d *Dispatcher) selectHeads(tierHint string, localOnly bool) []provider.Hea
 				all = append(all, h)
 			}
 		}
-		return all
+		return d.rerankFor(all, domain)
 	}
 
-	// Numeric hint → select by capability tier, independent of config naming.
-	if want, err := strconv.Atoi(tierHint); err == nil {
-		var candidates []provider.Head
-		for _, h := range d.heads {
-			// d.heads is pre-sorted by CapScore (probe.Run → rank.ByCapScore),
-			// so "at or below the requested strength" yields the strongest
-			// eligible head first and weaker ones as the fallback chain.
-			if filter(h) && rank.UITier(h) >= want {
-				candidates = append(candidates, h)
-			}
-		}
-		if len(candidates) > 0 {
-			return candidates
-		}
-		// Nothing is that cheap. Degrade to the cheapest heads available —
-		// ascending capability, so the fallback is the least expensive option
-		// rather than the most. Silently escalating to the strongest head is
-		// what made tier routing worthless in the first place (#165).
-		for _, h := range d.heads {
-			if filter(h) {
-				candidates = append(candidates, h)
-			}
-		}
-		if len(candidates) > 0 {
-			slices.Reverse(candidates) // pre-sorted strongest-first → cheapest-first
-			log.Printf("⚠️  no head at tier %d or cheaper — falling back to the cheapest available (%s)",
-				want, candidates[0].ID)
-		}
-		return candidates
-	}
-
-	// Named tier → heads assigned to it in config.
-	tierIDs := map[string]bool{}
-	for _, t := range d.cfg.Tiers {
-		if t.Name == tierHint {
-			for _, id := range t.Heads {
-				tierIDs[id] = true
-			}
-		}
+	// Every hint that reaches here is a number: resolveTierHint turns a name
+	// into one through routing.yaml before the governor runs, so there is no
+	// second, name-shaped selection path to disagree with this one (#782).
+	want, err := strconv.Atoi(tierHint)
+	if err != nil {
+		return nil
 	}
 
 	var candidates []provider.Head
 	for _, h := range d.heads {
-		if filter(h) && tierIDs[h.ID] {
+		// d.heads is pre-sorted by CapScore (probe.Run → rank.ByCapScore),
+		// so "at or below the requested strength" yields the strongest
+		// eligible head first and weaker ones as the fallback chain.
+		if filter(h) && rank.UITier(h) >= want {
 			candidates = append(candidates, h)
 		}
 	}
+	if len(candidates) > 0 {
+		return d.rerankFor(candidates, domain)
+	}
+	// Nothing is that cheap. Degrade to the cheapest heads available,
+	// ascending capability, so the fallback is the least expensive option
+	// rather than the most. Silently escalating to the strongest head is
+	// what made tier routing worthless in the first place (#165).
+	for _, h := range d.heads {
+		if filter(h) {
+			candidates = append(candidates, h)
+		}
+	}
+	if len(candidates) > 0 {
+		slices.Reverse(candidates) // pre-sorted strongest-first → cheapest-first
+		log.Printf("⚠️  no head at tier %d or cheaper, falling back to the cheapest available (%s)",
+			want, candidates[0].ID)
+	}
 	return candidates
+}
+
+// rerankFor reorders candidates onto the head measured best at this domain.
+//
+// Deliberately not applied to the degrade path below, which reverses into
+// cheapest-first because nothing was cheap enough: that order answers "what
+// can I afford", and re-sorting it on quality would quietly turn a cost
+// fallback into an escalation, the defect #165 was about.
+//
+// An empty domain, no calibrator or a single candidate leaves the list exactly
+// as the pooled probe ranking had it.
+func (d *Dispatcher) rerankFor(candidates []provider.Head, domain string) []provider.Head {
+	if domain == "" || d.cal == nil || len(candidates) < 2 {
+		return candidates
+	}
+	ranked, _ := rank.SortMeasured(candidates, d.domainMeasurement(domain))
+	return ranked
+}
+
+// constrain orders the candidates onto the cheapest head measured competent in
+// this domain, and returns both the evidence it ordered on and the requirement
+// it actually applied, so the dry run explains the order it got rather than
+// recomputing one or naming a bar that decided nothing.
+//
+// Degrades to the measured ranking, which is to say to today's behaviour, on
+// every input it is missing: no domain to measure against, no calibration
+// store, no pricing to compare costs with, or no head with enough in-domain
+// evidence to be judged at all. The last is the common case on a fresh
+// machine, and is why this changes nothing until something has been measured.
+func (d *Dispatcher) constrain(candidates []provider.Head, domain string, requirement float64) ([]provider.Head, map[string]rank.Score, float64) {
+	scores := d.explain(candidates, domain)
+	if scores == nil || d.price == nil || requirement <= 0 {
+		return candidates, scores, 0
+	}
+	ordered, annotated := rank.Cheapest(candidates, scores, d.price, requirement)
+	return ordered, annotated, requirement
+}
+
+// Constrained reports the head an unpinned dispatch for this domain would run,
+// and whether there was any candidate at all. Not a second reading of the
+// routing decision: the same candidate list through the same ordering, so a
+// counterfactual cannot describe a policy the router does not implement.
+//
+// At the baseline requirement, because the caller asking this is reading a log
+// row and a log row does not record whether that prompt carried personal data.
+func (d *Dispatcher) Constrained(domain string) (provider.Head, bool) {
+	candidates := d.selectHeads("", false, domain)
+	if len(candidates) == 0 {
+		return provider.Head{}, false
+	}
+	ordered, _, _ := d.constrain(candidates, domain, requirementFor(nil))
+	return ordered[0], true
+}
+
+// nominalTokens prices one comparable call per head. The real prompt is the
+// same for every candidate, so its length cancels out of the ordering and only
+// each head's rate survives; a constant keeps the comparison from moving with
+// the prompt.
+const nominalTokens = 1000
+
+// headPrice is what a nominal call to each head costs, and whether that is
+// known at all. Nothing is assumed free: pricing.EstimateCost answers 0 both
+// for a local head and for a broken pricing file, and reading the second as
+// the first would make an unpriceable head the cheapest thing on the machine.
+func headPrice(db *pricing.DB) rank.Price {
+	if db == nil {
+		return nil
+	}
+	return func(h provider.Head) (float64, bool) {
+		tier := rank.UITier(h)
+		model := h.Meta["model"]
+		_, modelKnown := db.ModelPrice(model)
+		_, tierKnown := db.TierPrice(tier)
+		if !modelKnown && !tierKnown {
+			return 0, false
+		}
+		return db.CostForModel(model, tier, nominalTokens, nominalTokens/2), true
+	}
+}
+
+// requirementFor is how sure this dispatch has to be, from the same defect
+// model `hyctl dispatch --confidence` and `hyctl trust defect` read.
+//
+// Personal data is the only risk factor weighed here, and not for want of the
+// others: a blast radius or a production flag raises the target above zero in
+// cmdDispatch, which is what sends the task to the SPRT ensemble instead, so
+// no dispatch carrying one ever reaches this path. Taking a Task here would be
+// a parameter nothing could set.
+func requirementFor(class *policy.Classification) float64 {
+	var t trust.Task
+	if class != nil {
+		t.TouchesPII = class.PII
+	}
+	return trust.NewDefectModel().RequiredConfidence(t)
+}
+
+// explain reports why each candidate ranks where it does, from the same lookup
+// the ordering used. Nil when nothing measured them, so a caller renders the
+// declared score rather than a table of zeroes.
+func (d *Dispatcher) explain(candidates []provider.Head, domain string) map[string]rank.Score {
+	if domain == "" || d.cal == nil {
+		return nil
+	}
+	return rank.Scores(candidates, d.domainMeasurement(domain))
+}
+
+// domainMeasurement reads both levels the estimator needs: what this head has
+// done everywhere, and what it has done in this domain.
+func (d *Dispatcher) domainMeasurement(domain string) rank.Lookup {
+	return func(headID string) rank.Measurement {
+		correct, total := d.cal.Commitments(headID)
+		inCorrect, inTotal := d.cal.CommitmentsIn(headID, domain)
+		return rank.Measurement{
+			Correct: correct, Total: total,
+			InDomainCorrect: inCorrect, InDomainTotal: inTotal,
+		}
+	}
+}
+
+// routingDomain is the calibration domain a dispatch routes for: what the
+// caller named, else the one derived from the file it acts on, the same
+// derivation hyctl edit and hyctl review record their outcomes under (#785).
+// Empty means nothing narrows the ranking and the pooled order stands.
+func routingDomain(opts Options) string {
+	if d := strings.TrimSpace(opts.Domain); d != "" {
+		return d
+	}
+	if f := strings.TrimSpace(opts.Resource); f != "" {
+		return trust.DomainForFile(f)
+	}
+	return ""
 }
 
 // recordBudget updates the budget registry with this call's token usage.
@@ -543,7 +1597,7 @@ func (d *Dispatcher) recordBudget(r *Result) {
 	if d.budget == nil || r.Response.InputTokens == 0 {
 		return
 	}
-	// Estimated tokens (agy char/4) must not be booked as measured usage.
+	// Tokens Hydra estimated must not be booked as measured usage.
 	source := "real"
 	if r.Response.TokensEstimated {
 		source = "estimate"
@@ -552,7 +1606,7 @@ func (d *Dispatcher) recordBudget(r *Result) {
 }
 
 // syncStateJSON updates ~/.hydra/logs/state.json after a successful dispatch so
-// the governor readouts reflect it — `hyctl status`, the cockpit's dashboard,
+// the governor readouts reflect it, `hyctl status`, the cockpit's dashboard,
 // and the desktop app all read that file.
 func (d *Dispatcher) syncStateJSON(r *Result) {
 	stateMu.Lock()
@@ -579,11 +1633,17 @@ func (d *Dispatcher) syncStateJSON(r *Result) {
 			asIntSlice(existing["claude_pct_history"]), pct, budget.MaxPctHistory)
 	}
 
-	// Persist per-model budget snapshots so the TUI and status command can read them.
+	// Persist per-model budget snapshots so the TUI and status command can read
+	// them. Merge into whatever is already on disk instead of replacing it, each
+	// `hyctl` invocation is a fresh process, so d.budget only knows about models
+	// dispatched to in this run, and overwriting would erase every other model's
+	// entry (#502).
 	if d.budget != nil {
-		snaps := d.budget.All()
-		budgetMap := map[string]any{}
-		for _, s := range snaps {
+		budgetMap, ok := existing["budget"].(map[string]any)
+		if !ok {
+			budgetMap = map[string]any{}
+		}
+		for _, s := range d.budget.All() {
 			budgetMap[s.ModelID] = map[string]any{
 				"pct":        s.Pct,
 				"used":       s.Used,
@@ -610,7 +1670,7 @@ func (d *Dispatcher) syncStateJSON(r *Result) {
 }
 
 // logDispatch writes to dispatch.jsonl and cost.jsonl.
-func (d *Dispatcher) logDispatch(r *Result, prompt string, opts Options) error {
+func (d *Dispatcher) logDispatch(r *Result, prompt string, opts Options, actProb float64, span string) error {
 	tier := rank.UITier(r.Head)
 	wallMs := r.Response.Duration.Milliseconds()
 	estCost := d.estimateCost(tier, r.Response.InputTokens, r.Response.OutputTokens)
@@ -636,6 +1696,12 @@ func (d *Dispatcher) logDispatch(r *Result, prompt string, opts Options) error {
 		"prompt_preview": truncate(prompt, 80),
 		"task_id":        taskID,
 		"run_id":         runID,
+		// keep_prob is 1: nothing samples these rows yet. Written anyway so a
+		// reader never has to guess whether an absent field means "certain" or
+		// "unrecorded" (#605).
+		"act_prob":  actProb,
+		"keep_prob": 1.0,
+		"span_id":   span,
 	}
 	if err := appendJSONL(filepath.Join(logDir, "dispatch.jsonl"), dispatchEntry); err != nil {
 		return err
@@ -645,7 +1711,7 @@ func (d *Dispatcher) logDispatch(r *Result, prompt string, opts Options) error {
 	if r.Response.InputTokens > 0 || r.Response.OutputTokens > 0 {
 		// Provenance labels come from cost.SourceLabels so dispatch and swarm
 		// stay in lock-step: tokens_source reflects whether the provider
-		// reported usage or Hydra estimated it (agy char/4); cost_source is
+		// reported usage or Hydra estimated it (char/4); cost_source is
 		// always "estimated" (est_cost_usd is pricing × tokens, never billed);
 		// the legacy `source` field mirrors tokens_source for older readers.
 		tokensSource, costSource, legacySource := cost.SourceLabels(r.Response.TokensEstimated)
@@ -655,8 +1721,9 @@ func (d *Dispatcher) logDispatch(r *Result, prompt string, opts Options) error {
 			"tier":            tier,
 			"enum":            opts.Enum,
 			"model":           r.Response.Model,
+			"head":            r.Head.ID,
 			"executor":        r.Head.Provider,
-			"pool":            r.Head.Meta["token_pool"],
+			"pool":            headPool(r.Head),
 			"prompt_tokens":   r.Response.InputTokens,
 			"response_tokens": r.Response.OutputTokens,
 			"est_cost_usd":    estCost,
@@ -666,9 +1733,17 @@ func (d *Dispatcher) logDispatch(r *Result, prompt string, opts Options) error {
 			"source":          legacySource,
 			"task_id":         taskID,
 			"run_id":          runID,
+			"act_prob":        actProb,
+			"keep_prob":       1.0,
+			"span_id":         span,
 		}
 		if breadcrumb != "" { // match the omitempty on cost.Row.Config
 			costEntry["config"] = breadcrumb
+		}
+		// The key the candidates were ranked on, from the one derivation that
+		// produced it, so a row cannot name a domain the routing did not use.
+		if dom := routingDomain(opts); dom != "" {
+			costEntry["domain"] = dom
 		}
 		_ = appendJSONL(filepath.Join(logDir, "cost.jsonl"), costEntry)
 	}
@@ -698,6 +1773,32 @@ func (d *Dispatcher) estimateCost(tier, inputTokens, outputTokens int) float64 {
 	return d.pricing.EstimateCost(tier, inputTokens, outputTokens)
 }
 
+// dispatchMeta is the model-parameter side of a span: what was requested and
+// how trustworthy the numbers coming back are. Only non-default values are
+// carried, an event line stays small by not restating the defaults.
+func dispatchMeta(opts Options, resp *executor.Response) map[string]any {
+	m := map[string]any{}
+	if opts.MaxTokens > 0 {
+		m["max_tokens"] = opts.MaxTokens
+	}
+	if opts.System != "" {
+		m["system"] = true
+	}
+	if opts.Enum != "" {
+		m["enum"] = opts.Enum
+	}
+	if resp.TokensEstimated {
+		m["tokens_estimated"] = true
+	}
+	if resp.Truncated {
+		m["truncated"] = true
+	}
+	if len(m) == 0 {
+		return nil
+	}
+	return m
+}
+
 func truncate(s string, n int) string {
 	if len(s) <= n {
 		return s
@@ -705,43 +1806,66 @@ func truncate(s string, n int) string {
 	return s[:n] + "…"
 }
 
+// enumTiers reads the map from registry/routing.yaml, the file whose own header
+// has always claimed to define it. It used to be a Go literal here, so the
+// on-disk override every other registry file honours did nothing for the one
+// file named after routing (#720).
+func enumTiers() (map[string]int, error) {
+	return registry.EnumTiers(config.ScriptHome())
+}
+
+// RoutingError reports an unusable routing.yaml. New returns it, so no surface
+// routes on a map it could not load, and a bad override is refused rather than
+// quietly reverting to the shipped rule.
+func RoutingError() error {
+	_, err := enumTiers()
+	return err
+}
+
 // EnumToTier maps a routing enum key (e.g. "SIMPLE") to a tier number string.
-// Single source of truth — editor and parallel both delegate here.
+// An unrecognized key returns "", the same value as an empty enum, which is
+// why a caller that must reject a typo instead of silently routing
+// unrestricted checks IsKnownEnum first (#501).
 func EnumToTier(enum string) string {
-	const (
-		GRUNT     = "10"
-		TRIVIAL   = "9"
-		SIMPLE    = "8"
-		STANDARD  = "7"
-		MODERATE  = "6"
-		COMPLEX   = "5"
-		HARD      = "4"
-		VERY_HARD = "3"
-		EXPERT    = "2"
-		CORE      = "1"
-	)
-	switch enum {
-	case "GRUNT":
-		return GRUNT
-	case "TRIVIAL":
-		return TRIVIAL
-	case "SIMPLE":
-		return SIMPLE
-	case "STANDARD":
-		return STANDARD
-	case "MODERATE":
-		return MODERATE
-	case "COMPLEX":
-		return COMPLEX
-	case "HARD":
-		return HARD
-	case "VERY_HARD":
-		return VERY_HARD
-	case "EXPERT":
-		return EXPERT
-	case "CORE":
-		return CORE
-	default:
+	tiers, err := enumTiers()
+	if err != nil {
 		return ""
 	}
+	if n, ok := tiers[enum]; ok {
+		return strconv.Itoa(n)
+	}
+	return ""
+}
+
+// IsKnownEnum reports whether enum is a recognized routing enum key.
+// EnumToTier's "" result is ambiguous between "no enum given" and
+// "unrecognized key", this is how a caller tells the two apart.
+func IsKnownEnum(enum string) bool {
+	tiers, err := enumTiers()
+	if err != nil {
+		return false
+	}
+	_, ok := tiers[enum]
+	return ok
+}
+
+// EnumKeys lists the routing keys weakest head first, for a picker that must
+// not offer a key the router does not understand.
+func EnumKeys() []string {
+	keys, err := registry.EnumKeys(config.ScriptHome())
+	if err != nil {
+		return nil
+	}
+	return keys
+}
+
+// headPool is the token pool a cost row should be filed under. Provider
+// metadata wins when present; otherwise the registry is asked, because only
+// the agy provider ever set that metadata and every other provider's rows were
+// landing with no pool at all (#681).
+func headPool(h provider.Head) string {
+	if p := h.Meta["token_pool"]; p != "" {
+		return p
+	}
+	return registry.TokenPoolFor(config.ScriptHome(), h.ID)
 }

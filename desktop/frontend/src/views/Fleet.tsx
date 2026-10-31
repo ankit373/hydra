@@ -2,30 +2,58 @@ import { useState } from 'react'
 import type { Agent, Fleet as FleetData, Run } from '../types'
 import { ms, pct, usdExact } from '../format'
 import { RunGraph } from './RunGraph'
+import { PageHeader } from './PageHeader'
 
-export function Fleet({ data, onOpen }: { data: FleetData; onOpen: (runID: string) => void }) {
+export function Fleet({
+  data,
+  onOpen,
+  onOpenFile,
+  onStartTask,
+}: {
+  data: FleetData
+  onOpen: (runID: string) => void
+  onOpenFile: (runID: string, file: string) => void
+  onStartTask: () => void
+}) {
   return (
     <>
-      <header className="view__head">
-        <h1 className="view__title">Fleet</h1>
-        <p className="view__sub">
-          {data.liveCount > 0
-            ? `${data.liveCount} run${data.liveCount === 1 ? '' : 's'} in flight`
-            : 'Nothing running right now.'}
-        </p>
-      </header>
+      <PageHeader title="Activity" subtitle={activitySummary(data)} />
 
       {!data.hasRuns ? (
         <div className="empty">
-          <p className="empty__title">No runs yet</p>
-          <p>
-            Run <code>hyctl dispatch --enum SIMPLE "…"</code> and it appears here while it works.
+          <p className="empty__title">Nothing has run yet</p>
+          <p>Ask for something in Chat, or run it from a terminal instead:</p>
+          <button className="empty__cta" onClick={onStartTask}>
+            Start a task
+          </button>
+          <p className="empty__alt">
+            <code>hyctl dispatch --enum SIMPLE "…"</code>
           </p>
         </div>
       ) : (
         <div className="runs">
-          {data.runs.map((r) => (
-            <RunCard key={r.id} run={r} groupThreshold={data.groupThreshold} onOpen={onOpen} />
+          {groupRuns(data.runs).map((g) => (
+            <div className="rgroup" key={g.id}>
+              {/* Headed only when there is more than one group to tell apart.
+                  A lone "Done" heading over every run a machine has ever made
+                  labels nothing. */}
+              {g.headed && (
+                <div className={`rgroup__head rgroup__head--${g.id}`}>
+                  <span className="rgroup__lbl">{g.label}</span>
+                  <span className="rgroup__n">{g.runs.length}</span>
+                  {g.note && <span className="rgroup__note">{g.note}</span>}
+                </div>
+              )}
+              {g.runs.map((r) => (
+                <RunCard
+                  key={r.id}
+                  run={r}
+                  groupThreshold={data.groupThreshold}
+                  onOpen={onOpen}
+                  onOpenFile={onOpenFile}
+                />
+              ))}
+            </div>
           ))}
         </div>
       )}
@@ -37,14 +65,16 @@ function RunCard({
   run,
   groupThreshold,
   onOpen,
+  onOpenFile,
 }: {
   run: Run
   groupThreshold: number
   onOpen: (runID: string) => void
+  onOpenFile: (runID: string, file: string) => void
 }) {
   // Past the threshold a node-link graph is a hairball, not a picture (mirrors
   // Airflow's separate Grid view for large DAGs), so it collapses to a state
-  // heatmap until asked to expand. A live run starts expanded — it is the one
+  // heatmap until asked to expand. A live run starts expanded, it is the one
   // you opened the app to watch.
   const large = run.allCount > groupThreshold
   const [expanded, setExpanded] = useState(!large)
@@ -53,8 +83,13 @@ function RunCard({
     <section className={`run ${run.live ? 'run--live' : ''}`}>
       <header className="run__head">
         <span className={`run__dot ${run.live ? 'run__dot--live' : ''}`} />
-        <button className="run__id run__id--link" onClick={() => onOpen(run.id)}>
-          {run.id}
+        <button className="run__open" onClick={() => onOpen(run.id)}>
+          {/* A run with no recorded prompt falls back to its id, which is all
+              it has. Saying "untitled" would hide the one handle that works. */}
+          <span className={run.goal ? 'run__goal' : 'run__goal run__goal--id'}>
+            {run.goal || run.id}
+          </span>
+          {run.goal && <span className="run__id">{run.id}</span>}
         </button>
         <span className="run__meta">
           {ms(run.elapsedMs)} · {usdExact(run.costUsd)}
@@ -85,7 +120,9 @@ function RunCard({
           {/* Below the threshold: a single agent needs no graph, and 2..N draw
               the same dagre DAG SessionGraph uses, just smaller. At/above the
               threshold the toggle above reveals a heatmap grid instead. */}
-          {!large && <RunShape agents={run.agents} />}
+          {!large && (
+            <RunShape agents={run.agents} onOpenFile={(file) => onOpenFile(run.id, file)} />
+          )}
           {large && expanded && run.agents.length > 0 && <AgentGrid agents={run.agents} />}
         </>
       )}
@@ -94,9 +131,15 @@ function RunCard({
 }
 
 /** The 0/1/2..N shape for a run below GroupThreshold. */
-function RunShape({ agents }: { agents: Agent[] }) {
+function RunShape({
+  agents,
+  onOpenFile,
+}: {
+  agents: Agent[]
+  onOpenFile: (file: string) => void
+}) {
   if (agents.length === 0) return null
-  // A single node is trivially linear — the same reasoning Session.tsx uses
+  // A single node is trivially linear, the same reasoning Session.tsx uses
   // to decide nonLinear (isNonLinear is false whenever there's nothing to
   // branch from). Drawing a graph of one box is worse than a line of text.
   if (agents.length === 1) {
@@ -106,7 +149,7 @@ function RunShape({ agents }: { agents: Agent[] }) {
       </ul>
     )
   }
-  return <RunGraph agents={agents} />
+  return <RunGraph agents={agents} onOpenFile={onOpenFile} />
 }
 
 function StateBar({ run }: { run: Run }) {
@@ -146,7 +189,7 @@ function AgentRow({ agent }: { agent: Agent }) {
 }
 
 /**
- * At/above GroupThreshold a node-link graph is a hairball, not a picture —
+ * At/above GroupThreshold a node-link graph is a hairball, not a picture,
  * Airflow ships a separate Grid view for exactly this reason instead of
  * scaling its Graph view. One chip per agent, colored by state, grouped by
  * depth: "mostly green with a cluster of red" has to read in under a second.
@@ -190,4 +233,67 @@ function chipTitle(a: Agent): string {
   ]
     .filter(Boolean)
     .join(' · ')
+}
+
+/**
+ * Activity grouped by what you would do about it, rather than by time alone.
+ *
+ * A flat newest-first list gives a parked run, a live one and a month-old
+ * success the same weight, so nothing reads as needing attention. The order is
+ * by who has to act: you, then the machine, then nobody.
+ *
+ * There is deliberately no "has a deliverable" group yet. Nothing in a run
+ * records an artifact, a PR url, a file, a report, so a group for it would
+ * be permanently empty or, worse, guessed at.
+ */
+type RunGroup = {
+  id: 'waiting' | 'running' | 'attention' | 'done'
+  label: string
+  note?: string
+  runs: Run[]
+  headed: boolean
+}
+
+export function groupRuns(runs: Run[]): RunGroup[] {
+  const waiting: Run[] = []
+  const running: Run[] = []
+  const attention: Run[] = []
+  const done: Run[] = []
+
+  for (const r of runs) {
+    // Order matters: a parked run is also not live, and a live run may already
+    // have a failed agent while still working. First match wins.
+    if (r.waiting) waiting.push(r)
+    else if (r.live) running.push(r)
+    else if (r.failed > 0) attention.push(r)
+    else done.push(r)
+  }
+
+  const all: RunGroup[] = [
+    { id: 'waiting', label: 'Waiting on you', note: 'stopped until you answer', runs: waiting, headed: true },
+    { id: 'running', label: 'Running now', runs: running, headed: true },
+    { id: 'attention', label: 'Something failed', runs: attention, headed: true },
+    { id: 'done', label: 'Done', runs: done, headed: true },
+  ]
+  const groups = all.filter((g) => g.runs.length > 0)
+
+  // One group is not a grouping.
+  if (groups.length < 2) return groups.map((g) => ({ ...g, headed: false }))
+  return groups
+}
+
+/** Leads with whatever needs a person, and says plainly when nothing does. */
+export function activitySummary(data: FleetData): string {
+  const w = data.waitingCount
+  const l = data.liveCount
+  if (w > 0 && l > 0) {
+    return `${w} waiting on you · ${l} still running`
+  }
+  if (w > 0) {
+    return `${w} ${w === 1 ? 'request needs' : 'requests need'} an answer from you`
+  }
+  if (l > 0) {
+    return `${l} request${l === 1 ? '' : 's'} running now`
+  }
+  return 'Nothing needs you. Every request this machine has handled, newest first.'
 }

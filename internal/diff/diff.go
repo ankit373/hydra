@@ -3,7 +3,7 @@
 // Package diff produces unified diffs in-process.
 //
 // Hydra used to shell out to diff(1) for this. That binary does not exist on a
-// stock Windows install, and every call site discarded the error — so the diff
+// stock Windows install, and every call site discarded the error, so the diff
 // came back as an empty string with a nil error, which is indistinguishable
 // from "this file has no changes". Three of the four call sites then *counted*
 // lines in that output to report added/removed, so a modified file was reported
@@ -24,7 +24,7 @@ const ContextLines = 3
 
 // maxCells caps the LCS table. Beyond it the quadratic table would cost more
 // memory than a review diff is worth, so the file is reported as wholly
-// replaced — honest, and still correct as a diff, just not minimal.
+// replaced, honest, and still correct as a diff, just not minimal.
 const maxCells = 4 << 20
 
 type opKind int
@@ -41,7 +41,7 @@ type op struct {
 }
 
 // Unified returns a unified diff of old → new. An empty result means the two
-// are identical — callers must treat that as "no changes", which is now a
+// are identical, callers must treat that as "no changes", which is now a
 // distinct outcome from an error.
 func Unified(oldName, newName string, old, new []byte) string {
 	ops := diffOps(splitLines(string(old)), splitLines(string(new)))
@@ -70,7 +70,7 @@ func Unified(oldName, newName string, old, new []byte) string {
 }
 
 // Stats counts changed lines. It is derived from the same ops as Unified, so
-// the two can never disagree — the previous implementations re-parsed diff(1)'s
+// the two can never disagree, the previous implementations re-parsed diff(1)'s
 // text in three separate places and could.
 func Stats(old, new []byte) (added, removed int) {
 	for _, o := range diffOps(splitLines(string(old)), splitLines(string(new))) {

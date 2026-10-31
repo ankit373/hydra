@@ -5,6 +5,8 @@ package parallel
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,18 +16,20 @@ import (
 
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/dispatch"
+	"github.com/ankit373/hydra/internal/editor"
 	"github.com/ankit373/hydra/internal/ledger"
+	"github.com/ankit373/hydra/internal/runlog"
 	"github.com/ankit373/hydra/internal/testutil"
 
 	// Providers register themselves in init(), and this package does not import
-	// them — so without these blanks provider.All() is empty in the test binary
+	// them, so without these blanks provider.All() is empty in the test binary
 	// and every dispatch finds no heads at all. cmd/hydra imports the same set.
 	_ "github.com/ankit373/hydra/internal/provider/cli"
 )
 
 // The edit path is the only thing in Hydra that writes to the user's source
-// files from a model's output. Every guard on it — scope, marker parsing,
-// atomic write, validation, rollback — is the difference between an edit and a
+// files from a model's output. Every guard on it, scope, marker parsing,
+// atomic write, validation, rollback, is the difference between an edit and a
 // corrupted file, and none of them was covered.
 
 // editSandbox gives a hermetic environment with a config, a workspace rooted at
@@ -41,7 +45,7 @@ func editSandbox(t *testing.T, reply string) (repo string) {
 
 	// The head is discovered from $PATH by the cli provider. `cody` is used
 	// rather than `claude` because its capability score puts it at UITier 6, so
-	// enum MODERATE routes to it — a tier-1 head is *stronger* than any enum an
+	// enum MODERATE routes to it, a tier-1 head is *stronger* than any enum an
 	// edit task is allowed to ask for, and selection would find nothing.
 	s.FakeBinary(t, "cody", testutil.EchoScript(reply))
 
@@ -131,7 +135,7 @@ func TestEdit_WritesTheModelsContentAndReportsTheDiff(t *testing.T) {
 }
 
 // A ledger rule keyed on a file glob must block runEditTask against a
-// matching path — mirrors editor.Edit's own resource-scoping test, since
+// matching path, mirrors editor.Edit's own resource-scoping test, since
 // parallel.runEditTask duplicates that flow.
 func TestEdit_LedgerResourceRuleBlocksAMatchingFile(t *testing.T) {
 	repo := editSandbox(t, marked("package main\n\nfunc main() {}"))
@@ -147,7 +151,7 @@ func TestEdit_LedgerResourceRuleBlocksAMatchingFile(t *testing.T) {
 
 	got := runEdit(t, Task{Label: "edit", Enum: "MODERATE", File: blocked, Prompt: "add a helper", Validate: boolPtr(false)})
 	if got.Status != "fail" {
-		t.Errorf("status = %q, want fail — the resource rule should have blocked this edit", got.Status)
+		t.Errorf("status = %q, want fail, the resource rule should have blocked this edit", got.Status)
 	}
 
 	allowed := filepath.Join(repo, "main.go")
@@ -156,7 +160,7 @@ func TestEdit_LedgerResourceRuleBlocksAMatchingFile(t *testing.T) {
 	}
 	got = runEdit(t, Task{Label: "edit", Enum: "MODERATE", File: allowed, Prompt: "add an empty main", Validate: boolPtr(false)})
 	if got.Status != "ok" {
-		t.Errorf("status = %q, want ok — a non-matching path must not be blocked: %q", got.Status, got.Error)
+		t.Errorf("status = %q, want ok, a non-matching path must not be blocked: %q", got.Status, got.Error)
 	}
 }
 
@@ -172,6 +176,70 @@ func writeLedgerPolicy(t *testing.T, p ledger.Policy) {
 	}
 	if err := os.WriteFile(path, raw, 0o600); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// A batch's edit task must leave the same KindEdit run-log trail a standalone
+// `hyctl edit` leaves for the same change (#531), the agent-tree view,
+// blast.go's recent-edit signal, and the desktop live-code panel all key off
+// it, and runEditTask used to write the file but never emit the event.
+func TestEdit_EmitsAKindEditRunLogEvent(t *testing.T) {
+	repo := editSandbox(t, marked("package main\n\nfunc main() {}"))
+	file := filepath.Join(repo, "main.go")
+	if err := os.WriteFile(file, []byte("package main\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	results, err := Run(context.Background(), []Task{{
+		Label: "edit main", Enum: "MODERATE", File: file,
+		Prompt: "add an empty main", Validate: boolPtr(false),
+	}}, Options{RunID: "run-parallel-edit"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got EditResult
+	if err := json.Unmarshal(results[0].raw, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != "ok" {
+		t.Fatalf("status = %q, error %q", got.Status, got.Error)
+	}
+
+	events, err := runlog.Load("run-parallel-edit")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var edit *runlog.Event
+	for i := range events {
+		if events[i].Kind == runlog.KindEdit {
+			edit = &events[i]
+			break
+		}
+	}
+	if edit == nil {
+		t.Fatalf("no KindEdit event in the run log: %+v", events)
+	}
+	if edit.File != file {
+		t.Errorf("edit.File = %q, want the file path %q, the same field hyctl edit keys the "+
+			"agent-tree node on", edit.File, file)
+	}
+	if edit.Ref == "" {
+		t.Error("the edit event carries no snapshot ref, so the diff cannot be rendered")
+	}
+	wantDetail := fmt.Sprintf("+%d/-%d", got.LinesAdded, got.LinesRemoved)
+	if edit.Detail != wantDetail {
+		t.Errorf("edit.Detail = %q, want %q, the same +N/-M format hyctl edit produces", edit.Detail, wantDetail)
+	}
+
+	before, after, err := runlog.LoadEdit("run-parallel-edit", edit.Ref)
+	if err != nil {
+		t.Fatalf("the snapshot the ref points at could not be loaded: %v", err)
+	}
+	if string(before) != "package main\n" {
+		t.Errorf("before snapshot = %q, want the file's original content", before)
+	}
+	if !strings.Contains(string(after), "func main() {}") {
+		t.Errorf("after snapshot = %q, want the model's content", after)
 	}
 }
 
@@ -211,7 +279,7 @@ func TestEdit_EmptyReplacementIsRefusedAndTheFileIsUntouched(t *testing.T) {
 	})
 
 	if got.Status != "fail" {
-		t.Fatalf("status = %q, want fail — an empty replacement was accepted", got.Status)
+		t.Fatalf("status = %q, want fail, an empty replacement was accepted", got.Status)
 	}
 	if got.Error != "empty_replacement" {
 		t.Errorf("Error = %q, want empty_replacement", got.Error)
@@ -351,6 +419,73 @@ func TestEdit_FailedValidationRollsTheFileBack(t *testing.T) {
 	}
 }
 
+// The file-policy engine's Decide result was previously discarded outright
+// (`_ = eng.Decide(...)`), so a declared diff_size_cap_pct never rejected
+// anything. A cap this low must now reject and roll back a real edit.
+func TestEdit_DiffSizeCapExceededRollsTheFileBack(t *testing.T) {
+	repo := editSandbox(t, marked("package main\n\nfunc main() {\n\tprintln(\"hello\")\n}\n"))
+	writePolicyYAML(t, 1) // 1% cap, any real growth trips it
+
+	file := filepath.Join(repo, "a.go")
+	original := "package main\n"
+	if err := os.WriteFile(file, []byte(original), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got := runEdit(t, Task{
+		Label: "cap", Enum: "MODERATE", File: file,
+		Prompt: "grow this file", Validate: boolPtr(false),
+	})
+
+	if got.Status != "fail" || !strings.Contains(got.Error, "diff_size_cap_exceeded") {
+		t.Fatalf("result = %+v, want a diff_size_cap_exceeded failure", got)
+	}
+	if !got.RolledBack {
+		t.Error("RolledBack = false; the caller cannot tell whether the file changed")
+	}
+	raw, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(raw) != original {
+		t.Errorf("the file was left changed despite exceeding the cap:\n%q", raw)
+	}
+	if _, err := os.Stat(file + ".hydra-bak"); err == nil {
+		t.Error("the backup survived the rollback, so the next edit sees a stale baseline")
+	}
+}
+
+// A generous cap must not reject an edit that easily fits within it, the cap
+// is a ceiling, not a trigger on every change. Uses a file large enough that a
+// one-line addition stays well under the default 90% cap; a tiny file would
+// trip even a legitimate small edit (which is exactly why policy.yaml itself
+// raises the cap to 200% for files under 50 lines).
+func TestEdit_DiffWithinCapIsAccepted(t *testing.T) {
+	original := "package main\n" + strings.Repeat("// filler line\n", 20)
+	repo := editSandbox(t, marked(original+"func main() {}\n"))
+	writePolicyYAML(t, 90) // the shipped default
+
+	file := filepath.Join(repo, "a.go")
+	if err := os.WriteFile(file, []byte(original), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got := runEdit(t, Task{
+		Label: "ok", Enum: "MODERATE", File: file,
+		Prompt: "add main", Validate: boolPtr(false),
+	})
+	if got.Status != "ok" {
+		t.Fatalf("result = %+v, want ok", got)
+	}
+	raw, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), "func main() {}") {
+		t.Errorf("file = %q, want the model's content", raw)
+	}
+}
+
 // A validator that passes leaves the edit in place.
 func TestEdit_PassingValidationKeepsTheEdit(t *testing.T) {
 	if runtime.GOOS == "windows" {
@@ -368,8 +503,8 @@ func TestEdit_PassingValidationKeepsTheEdit(t *testing.T) {
 	if got.Status != "ok" {
 		t.Fatalf("result = %+v", got)
 	}
-	if !got.ValidatorPassed {
-		t.Error("ValidatorPassed = false on a passing validator")
+	if got.ValidatorPassed == nil || !*got.ValidatorPassed {
+		t.Errorf("ValidatorPassed = %v, want a recorded pass", got.ValidatorPassed)
 	}
 	if raw, _ := os.ReadFile(file); !strings.Contains(string(raw), "validated content") {
 		t.Errorf("the edit was rolled back despite passing: %q", raw)
@@ -429,7 +564,7 @@ func TestTextTask_ReturnsTheAnswerAndReadsItsContextFile(t *testing.T) {
 		t.Errorf("Output = %q", got.Output)
 	}
 
-	// A context file that does not exist must not fail the task — the prompt
+	// A context file that does not exist must not fail the task, the prompt
 	// simply goes without it.
 	results, err = Run(context.Background(), []Task{{
 		Label: "ask", Enum: "MODERATE", Prompt: "question",
@@ -447,7 +582,7 @@ func TestTextTask_ReturnsTheAnswerAndReadsItsContextFile(t *testing.T) {
 }
 
 // A task whose dispatch fails must be reported as a failed task, not as a
-// failed batch — the other tasks in the fan-out still ran.
+// failed batch, the other tasks in the fan-out still ran.
 func TestRun_OneFailingTaskDoesNotFailTheBatch(t *testing.T) {
 	repo := editSandbox(t, marked("fine"))
 
@@ -501,22 +636,25 @@ func TestRunValidate_DoesNotFragmentPathsWithSpaces(t *testing.T) {
 	if err := os.WriteFile(spaced, []byte("x"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if rc := runValidate("/bin/test -f {file}", spaced); rc != 0 {
-		t.Errorf("exit %d — the path was fragmented at its spaces", rc)
+	if rc, err := runValidate(context.Background(), "/bin/test -f {file}", spaced); rc != 0 || err != nil {
+		t.Errorf("exit %d (err %v), the path was fragmented at its spaces", rc, err)
 	}
 
-	if rc := runValidate("/usr/bin/false", "ignored"); rc == 0 {
-		t.Error("a failing validator reported success")
+	if rc, err := runValidate(context.Background(), "/usr/bin/false", "ignored"); rc == 0 || err != nil {
+		t.Errorf("a failing validator reported rc %d, err %v, want non-zero and no error", rc, err)
 	}
-	// A template naming a binary that does not exist is a failure, not a pass:
-	// treating "could not run the check" as "the check passed" is how an
-	// unvalidated edit ships.
-	if rc := runValidate("definitely-not-installed-anywhere", "x"); rc == 0 {
-		t.Error("a missing validator binary was treated as a pass")
+	// A template naming a binary that does not exist is still not a pass: the
+	// caller rolls back on the error, so an unvalidated edit does not ship. It
+	// is not a verdict either, which is the part that changed, because blaming
+	// the head for a missing binary put confident false evidence in the corpus
+	// and the calibration (#998).
+	rc, err := runValidate(context.Background(), "definitely-not-installed-anywhere", "x")
+	if !errors.Is(err, editor.ErrValidatorUnavailable) {
+		t.Errorf("a missing validator binary gave rc %d, err %v, want ErrValidatorUnavailable", rc, err)
 	}
 	// An empty template means no validator is configured, which is a pass.
-	if rc := runValidate("", "x"); rc != 0 {
-		t.Errorf("an empty template returned %d, want 0 (no validator configured)", rc)
+	if rc, err := runValidate(context.Background(), "", "x"); rc != 0 || err != nil {
+		t.Errorf("an empty template returned %d, %v, want 0 and no error (no validator configured)", rc, err)
 	}
 }
 
@@ -540,7 +678,7 @@ func TestReadFileAndFileExists(t *testing.T) {
 	if !fileExists(path) {
 		t.Error("fileExists = false for a file that exists")
 	}
-	// An empty file exists — distinguishing it from a missing one is what
+	// An empty file exists, distinguishing it from a missing one is what
 	// decides "create" versus "modify" in the edit prompt.
 	empty := filepath.Join(dir, "empty.txt")
 	if err := os.WriteFile(empty, nil, 0o600); err != nil {
@@ -575,7 +713,7 @@ func TestDiffStats_CountsFromTheBackupWhenGitIsUnavailable(t *testing.T) {
 
 	added, removed := diffStats(file, "one\n", "", backup, true)
 	if added != 2 || removed != 0 {
-		t.Errorf("diffStats = (%d, %d), want (2, 0) — counted from the backup, not "+
+		t.Errorf("diffStats = (%d, %d), want (2, 0), counted from the backup, not "+
 			"by re-parsing diff(1) (#260)", added, removed)
 	}
 
@@ -661,6 +799,21 @@ func writeWorkspaceYAML(t *testing.T, root, goValidator string) {
 	}
 }
 
+// writePolicyYAML points $HYDRA_HOME's registry at a policy.yaml with one
+// always-matching rule, so a test can force a specific diff_size_cap_pct
+// regardless of the file it edits.
+func writePolicyYAML(t *testing.T, capPct int) {
+	t.Helper()
+	dir := filepath.Join(os.Getenv("HYDRA_HOME"), "registry")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	body := fmt.Sprintf("version: \"1.0\"\nrules:\n  - name: test_cap\n    when:\n      always: true\n    apply:\n      diff_size_cap_pct: %d\n", capPct)
+	if err := os.WriteFile(filepath.Join(dir, "policy.yaml"), []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // Replaces the two single-case tests that were in parallel_test.go: these are
 // strict supersets of them, and two partial tests of one function is how a
 // shape goes uncovered while looking covered.
@@ -738,7 +891,7 @@ func TestStripOuterFence(t *testing.T) {
 	}
 }
 
-// tscTemplate is only offered when the workspace actually has tsc installed —
+// tscTemplate is only offered when the workspace actually has tsc installed,
 // naming a binary that is not there would fail every TypeScript edit at the
 // validation step and roll back a correct change.
 func TestTSCTemplate_OnlyWhenTSCIsInstalled(t *testing.T) {
@@ -772,7 +925,7 @@ func TestTSCTemplate_OnlyWhenTSCIsInstalled(t *testing.T) {
 		t.Errorf("tscTemplate = %q, want it to use the project's tsconfig.json", got)
 	}
 	if strings.Contains(got, "{file}") {
-		t.Errorf("tscTemplate = %q — a project-wide check takes no file argument", got)
+		t.Errorf("tscTemplate = %q, a project-wide check takes no file argument", got)
 	}
 }
 
@@ -782,7 +935,11 @@ func TestTSCTemplate_OnlyWhenTSCIsInstalled(t *testing.T) {
 func TestPersistResults_UnwritableLogDirIsReportedNotFatal(t *testing.T) {
 	testutil.NewSandbox(t)
 
-	// ~/.hydra is a regular file, so logs/ cannot be created.
+	// Dir() is a regular file, so logs/ cannot be created. The sandbox
+	// pre-creates it as an empty directory, so remove that first.
+	if err := os.RemoveAll(config.Dir()); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(config.Dir(), []byte("not a dir"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -850,7 +1007,7 @@ func TestRollbackAndDiffStats_UseGitInARepository(t *testing.T) {
 	}
 
 	// And its line count comes from the file itself, since git has no baseline
-	// for it — reporting 0/0 would read as "nothing changed".
+	// for it, reporting 0/0 would read as "nothing changed".
 	fresh := filepath.Join(repo, "fresh.go")
 	if err := os.WriteFile(fresh, []byte("a\nb\nc\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -861,7 +1018,7 @@ func TestRollbackAndDiffStats_UseGitInARepository(t *testing.T) {
 }
 
 // persistResults writes the batch for `hyctl review` to read. A batch whose
-// results cannot be persisted must say so — the edits are already on disk, and
+// results cannot be persisted must say so, the edits are already on disk, and
 // the user needs to know they cannot see what changed.
 func TestPersistResults_RoundTripsThroughDisk(t *testing.T) {
 	testutil.NewSandbox(t)
@@ -889,5 +1046,139 @@ func TestPersistResults_RoundTripsThroughDisk(t *testing.T) {
 	// successes, since a failed edit may still have touched the file.
 	if got[0]["status"] != "ok" || got[1]["status"] != "fail" {
 		t.Errorf("statuses did not round-trip: %v", got)
+	}
+}
+
+// writePolicyApply writes a policy.yaml whose single always-matching rule
+// applies whatever fields the caller names, so a test can trip one cap without
+// tripping the others.
+func writePolicyApply(t *testing.T, apply string) {
+	t.Helper()
+	dir := filepath.Join(os.Getenv("HYDRA_HOME"), "registry")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	body := "version: \"1.0\"\nrules:\n  - name: test_caps\n    when:\n      always: true\n    apply:\n" + apply
+	if err := os.WriteFile(filepath.Join(dir, "policy.yaml"), []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// max_cost_usd was declared in policy.yaml and read by nothing, so an operator
+// reading a $2 ceiling had none. The enforcement already existed in dispatch's
+// preflight; the policy's number simply never reached it (#424).
+func TestEdit_CostCeilingRefusesTheHeadBeforeItRuns(t *testing.T) {
+	repo := editSandbox(t, marked("package main\n"))
+	// A ceiling no head can be under, so the refusal is the policy's and not
+	// a pricing accident.
+	writePolicyApply(t, "      max_cost_usd: 0.0000000001\n")
+
+	file := filepath.Join(repo, "a.go")
+	if err := os.WriteFile(file, []byte("package main\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	original, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got := runEdit(t, Task{
+		Label: "cost", Enum: "MODERATE", File: file,
+		Prompt: "grow this file", Validate: boolPtr(false),
+	})
+
+	if got.Status != "fail" {
+		t.Fatalf("result = %+v, want a failure: the policy's ceiling was not applied", got)
+	}
+	if !strings.Contains(got.Error, "route_failed") || !strings.Contains(got.Error, "exceeds limit") {
+		t.Errorf("Error = %q, want the cost ceiling's own refusal", got.Error)
+	}
+	raw, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(raw) != string(original) {
+		t.Errorf("the file was written despite the ceiling refusing the head:\n%q", raw)
+	}
+}
+
+// max_wall_seconds likewise. Both caps are declared here, so this asserts the
+// pair does not let an edit through; which one refuses is a race and is
+// deliberately not asserted. The deadline's own wiring is tested by
+// TestPolicyDeadline_AppliesMaxWallSeconds, because a test that sets both caps
+// passes even with the deadline deleted, which is how the first version of
+// this let a surviving mutant through.
+func TestEdit_WallClockLimitDeadlinesTheDispatch(t *testing.T) {
+	repo := editSandbox(t, marked("package main\n"))
+	writePolicyApply(t, "      max_wall_seconds: 1\n      max_cost_usd: 0.0000000001\n")
+
+	file := filepath.Join(repo, "a.go")
+	if err := os.WriteFile(file, []byte("package main\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got := runEdit(t, Task{
+		Label: "wall", Enum: "MODERATE", File: file,
+		Prompt: "grow this file", Validate: boolPtr(false),
+	})
+
+	// Either cap may win the race; what must not happen is the edit landing
+	// with both declared. The message has to name which one refused, or the
+	// operator cannot tell a policy refusal from a broken head.
+	if got.Status != "fail" {
+		t.Fatalf("result = %+v, want a failure with both caps set to the unmeetable", got)
+	}
+	if !strings.Contains(got.Error, "max_wall_seconds_exceeded") && !strings.Contains(got.Error, "exceeds limit") {
+		t.Errorf("Error = %q, want it to name the cap that refused", got.Error)
+	}
+}
+
+// And with no caps declared, an edit must still work: a policy.yaml that says
+// nothing must not become a policy that refuses everything.
+//
+// The file is deliberately large and the change small. A one-line file grown
+// to three lines is a 150% diff and trips the *default* 90% cap, which is
+// correct behaviour and not what this test is about.
+func TestEdit_NoCapsDeclaredStillEdits(t *testing.T) {
+	body := "package main\n\nfunc main() {\n"
+	for i := 0; i < 20; i++ {
+		body += "\tprintln(\"line\")\n"
+	}
+	body += "}\n"
+	repo := editSandbox(t, marked(body+"\n// one added line\n"))
+	writePolicyApply(t, "      atomic: true\n")
+
+	file := filepath.Join(repo, "a.go")
+	if err := os.WriteFile(file, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got := runEdit(t, Task{
+		Label: "nocaps", Enum: "MODERATE", File: file,
+		Prompt: "grow this file", Validate: boolPtr(false),
+	})
+
+	if got.Status != "ok" {
+		t.Fatalf("result = %+v, want ok: no cap was declared, so nothing should refuse", got)
+	}
+}
+
+// The same claim hyctl edit was making: this path hardcoded ValidatorPassed on
+// success, so a file type with no validator was reported exactly like one that
+// had passed (#998).
+func TestParallelEdit_AnExtensionWithNoValidatorReportsNoVerdict(t *testing.T) {
+	repo := editSandbox(t, marked("notes"))
+
+	file := filepath.Join(repo, "a.txt")
+	if err := os.WriteFile(file, []byte("notes\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got := runEdit(t, Task{Label: "ok", Enum: "MODERATE", File: file, Prompt: "x"})
+	if got.Status != "ok" {
+		t.Fatalf("result = %+v", got)
+	}
+	if got.ValidatorPassed != nil {
+		t.Errorf("ValidatorPassed = %v, want nil: no validator ran", *got.ValidatorPassed)
 	}
 }

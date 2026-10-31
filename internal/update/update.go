@@ -44,7 +44,7 @@ var (
 )
 
 // Check returns the latest version if an update is available, empty otherwise.
-// Safe to call multiple times — the network fetch runs at most once per process.
+// Safe to call multiple times, the network fetch runs at most once per process.
 func Check() string {
 	checkOnce.Do(func() { checkResult = doCheck() })
 	return checkResult
@@ -75,7 +75,7 @@ func doCheck() string {
 // CheckIgnoringTTY runs the same opt-out and dev-build gates as doCheck, plus
 // the shared 24h-cached GitHub fetch and semver compare, but skips both the
 // TTY check and the CI check. It exists for callers with no controlling
-// terminal to gate on — the desktop app has no stdout at all, so doCheck (and
+// terminal to gate on, the desktop app has no stdout at all, so doCheck (and
 // therefore Check) would always silently return "" for it. The CI gate exists
 // in doCheck to keep hyctl's own CLI banner quiet inside automated scripts;
 // that reasoning doesn't transfer to a GUI app checking for its own update,
@@ -156,7 +156,7 @@ func fetchLatest() string {
 // semverGT reports whether a > b, following SemVer 2.0.0 precedence.
 //
 // The pre-release identifier is part of the comparison, not something to
-// discard. Stripping it — as this did — made every release equal to its own
+// discard. Stripping it, as this did, made every release equal to its own
 // pre-releases, so semverGT("v1.1.0", "v1.1.0-rc.9") was false and a user
 // running rc.9 was never told the final v1.1.0 existed. rc-to-rc updates were
 // invisible for the same reason.

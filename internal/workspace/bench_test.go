@@ -9,7 +9,7 @@ import (
 )
 
 // Benchmarks here are regression guards, not tuning targets. matchGlob runs on
-// every scope check, and its failure mode was not "slow" — it was "never
+// every scope check, and its failure mode was not "slow", it was "never
 // returns" (see the memoization note in matchSegments). A benchmark that stops
 // completing is the signal.
 
@@ -56,11 +56,11 @@ func TestMatchGlob_PathologicalInputIsNotExponential(t *testing.T) {
 		select {
 		case <-done:
 			if d := time.Since(start); d > 2*time.Second {
-				t.Errorf("%d segments / %d '**' took %v — matching is superlinear again",
+				t.Errorf("%d segments / %d '**' took %v, matching is superlinear again",
 					tc.segments, tc.stars, d)
 			}
 		case <-time.After(10 * time.Second):
-			t.Fatalf("%d segments / %d '**' did not terminate — matchSegments has lost "+
+			t.Fatalf("%d segments / %d '**' did not terminate, matchSegments has lost "+
 				"its memoization and a workspace.yaml pattern can hang every scope check",
 				tc.segments, tc.stars)
 		}

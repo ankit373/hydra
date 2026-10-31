@@ -6,7 +6,7 @@
 // Those files are a public API the moment a second consumer exists, and there
 // are already several: `hyctl cost`, `hyctl stats` and `hyctl trust` read them,
 // the desktop app reads them, and users script against them with jq. A field
-// rename in cost.jsonl silently breaks all three, and nothing else notices —
+// rename in cost.jsonl silently breaks all three, and nothing else notices,
 // the writer and the reader are usually the same struct, so a rename compiles
 // and round-trips happily while every file already on disk stops parsing.
 //

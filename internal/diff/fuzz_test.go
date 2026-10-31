@@ -9,7 +9,7 @@ import (
 )
 
 // Fuzzing, rather than more table cases, because the input here is a model's
-// output and a user's source — neither of which the table author gets to choose.
+// output and a user's source, neither of which the table author gets to choose.
 // The table tests assert that the diff is *right* for shapes we thought of;
 // these assert it never crashes, hangs, or lies for shapes we did not.
 //
@@ -38,7 +38,7 @@ func fuzzSeeds(f *testing.F) {
 }
 
 // The property that matters: applying our own diff to old must reproduce new,
-// for *any* pair of inputs. A diff that is merely well-formed is not enough —
+// for *any* pair of inputs. A diff that is merely well-formed is not enough,
 // it is written over the user's file.
 func FuzzUnified_RoundTrips(f *testing.F) {
 	fuzzSeeds(f)
@@ -54,7 +54,7 @@ func FuzzUnified_RoundTrips(f *testing.F) {
 
 		wantLines := splitLines(newS)
 		if u == "" {
-			// Empty means identical — so it had better be identical.
+			// Empty means identical, so it had better be identical.
 			if !sameLines(splitLines(oldS), wantLines) {
 				t.Fatalf("empty diff for differing inputs\n old=%q\n new=%q", oldS, newS)
 			}
@@ -93,7 +93,7 @@ func FuzzStats_AgreesWithUnified(f *testing.F) {
 				added, removed, uAdd, uRem, oldS, newS)
 		}
 		// Identical inputs must report no change, and differing inputs must
-		// report some — a silent 0/0 for a modified file is #260's symptom.
+		// report some, a silent 0/0 for a modified file is #260's symptom.
 		same := sameLines(splitLines(oldS), splitLines(newS))
 		if same && (added != 0 || removed != 0) {
 			t.Fatalf("identical inputs reported +%d/-%d", added, removed)
@@ -161,7 +161,7 @@ func fmtSscanHunk(header string, wantOld, wantNew *int) (int, error) {
 //
 // Not strings.Join: an empty file yields nil and a file holding one blank line
 // yields [""], and joining collapses both to "". Those are different files, and
-// Stats correctly reports +1 for one becoming the other — the first version of
+// Stats correctly reports +1 for one becoming the other, the first version of
 // this check called them equal and failed the fuzzer on correct behaviour.
 // Found by FuzzStats_AgreesWithUnified with old="", new="\n".
 func sameLines(a, b []string) bool {

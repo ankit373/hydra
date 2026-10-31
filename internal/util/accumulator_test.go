@@ -32,9 +32,9 @@ func TestAccumulator_Normal(t *testing.T) {
 func TestAccumulator_Truncation(t *testing.T) {
 	a := NewAccumulator(10)
 
-	// Write 8 bytes — fits.
+	// Write 8 bytes, fits.
 	_, _ = a.Write([]byte("12345678"))
-	// Write 6 more — should truncate after 2.
+	// Write 6 more, should truncate after 2.
 	_, _ = a.Write([]byte("AAAAAA"))
 
 	if !a.Truncated() {
@@ -57,7 +57,7 @@ func TestAccumulator_Truncation(t *testing.T) {
 func TestAccumulator_ExactFill(t *testing.T) {
 	a := NewAccumulator(5)
 	_, _ = a.Write([]byte("12345"))
-	// Exactly at cap — no truncation yet.
+	// Exactly at cap, no truncation yet.
 	if a.Truncated() {
 		t.Fatal("should not truncate at exact cap")
 	}
@@ -102,7 +102,7 @@ func TestAccumulator_ImplementsWriter(t *testing.T) {
 func TestAccumulator_ConcurrentWrites(t *testing.T) {
 	// Goroutine-safety: 50 goroutines each writing 100 bytes concurrently.
 	// Must not race (run with -race), total must equal 50*100 = 5000.
-	a := NewAccumulator(1 << 20) // 1 MB — large enough to not truncate
+	a := NewAccumulator(1 << 20) // 1 MB, large enough to not truncate
 	var wg sync.WaitGroup
 	for i := range 50 {
 		i := i
@@ -122,7 +122,7 @@ func TestAccumulator_ConcurrentWrites(t *testing.T) {
 }
 
 func TestAccumulator_ConcurrentTruncation(t *testing.T) {
-	// Many goroutines writing into a tiny cap — only one must set the marker.
+	// Many goroutines writing into a tiny cap, only one must set the marker.
 	a := NewAccumulator(10)
 	var wg sync.WaitGroup
 	for range 20 {

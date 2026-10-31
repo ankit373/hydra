@@ -44,7 +44,7 @@ func TestLoad_MalformedJSONIsAnError(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := Load(path); err == nil {
-		t.Error("malformed graph.json loaded without error — it would be " +
+		t.Error("malformed graph.json loaded without error, it would be " +
 			"indistinguishable from a codebase with no dependencies")
 	}
 }
@@ -75,7 +75,7 @@ func TestLoad_ReadsNodesAndEdges(t *testing.T) {
 		t.Errorf("DependentCount(a) = %d, want 1", got)
 	}
 	if got := g.DependentCount("b"); got != 0 {
-		t.Errorf("DependentCount(b) = %d, want 0 — nothing depends on a leaf", got)
+		t.Errorf("DependentCount(b) = %d, want 0, nothing depends on a leaf", got)
 	}
 }
 
@@ -125,7 +125,7 @@ func TestPercolationFactor_SubcriticalGraphNeverLifts(t *testing.T) {
 }
 
 // Nodes and edges may name things the other does not. Neither may panic, and
-// an edge endpoint with no node declaration must still count toward degree —
+// an edge endpoint with no node declaration must still count toward degree,
 // otherwise κ is computed over a graph that is not the one on disk.
 func TestFromDoc_HandlesUndeclaredEndpointsAndIsolatedNodes(t *testing.T) {
 	g := fromDoc(Doc{
@@ -168,7 +168,7 @@ func TestCoupling_BoundsAndDegenerateInputs(t *testing.T) {
 	same := g.Coupling([]string{"shared.go", "shared.go"})
 	disjoint := g.Coupling([]string{"a.go", "b.go"})
 	if same < disjoint {
-		t.Errorf("identical files coupled %v, less than disjoint files at %v — "+
+		t.Errorf("identical files coupled %v, less than disjoint files at %v, "+
 			"parallelism advice would be inverted", same, disjoint)
 	}
 	for _, c := range []float64{same, disjoint} {
@@ -178,7 +178,7 @@ func TestCoupling_BoundsAndDegenerateInputs(t *testing.T) {
 	}
 }
 
-// A file the graph does not know yields the neutral blast radius — and the
+// A file the graph does not know yields the neutral blast radius, and the
 // caller can tell that apart with Knows, which is the #251 distinction.
 func TestBlastRadiusForFile_UnknownFileIsNeutralButKnowable(t *testing.T) {
 	g := fromDoc(Doc{Nodes: []Node{{ID: "a", File: "a.go"}}})
@@ -187,7 +187,7 @@ func TestBlastRadiusForFile_UnknownFileIsNeutralButKnowable(t *testing.T) {
 		t.Errorf("unknown file blast radius = %v, want 1.0", got)
 	}
 	if g.Knows("unknown.go") {
-		t.Error("Knows returned true for an unknown file — a caller could not tell " +
+		t.Error("Knows returned true for an unknown file, a caller could not tell " +
 			"the 1.0 default from a measured leaf")
 	}
 	if !g.Knows("a.go") {

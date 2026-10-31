@@ -8,20 +8,21 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 )
 
 // MaxSnapshotBytes caps one side of one edit snapshot.
 //
 // A snapshot store must not be able to fill a disk because a model was pointed
-// at a 200 MB file. Above the cap the edit is still logged — losing the *event*
-// would hide that a change happened at all — but its content is not stored and
+// at a 200 MB file. Above the cap the edit is still logged, losing the *event*
+// would hide that a change happened at all, but its content is not stored and
 // the ref resolves to "too large", which a reader can render honestly.
 const MaxSnapshotBytes = 4 << 20 // 4 MiB
 
 // ErrSnapshotTooLarge reports content above MaxSnapshotBytes.
 var ErrSnapshotTooLarge = errors.New("runlog: edit snapshot exceeds the size cap")
 
-// ErrNoSnapshot reports a ref with no stored content — pruned, never written,
+// ErrNoSnapshot reports a ref with no stored content, pruned, never written,
 // or refused for size. Distinct from a read failure so a caller can say "diff
 // unavailable" rather than "cannot read disk".
 var ErrNoSnapshot = errors.New("runlog: no snapshot for this ref")
@@ -51,13 +52,39 @@ func SaveEdit(runID, ref string, before, after []byte) error {
 	//
 	// Enforced on Unix only. On Windows a FileMode toggles nothing but the
 	// read-only attribute, so this lands as 0666 and the MkdirAll above is a
-	// no-op — the protection there is the ACL on the user's profile directory,
+	// no-op, the protection there is the ACL on the user's profile directory,
 	// which is why these live under Dir() and not a temp path (#273). Stated
 	// rather than assumed: the mode is not a guarantee on every platform.
 	if err := os.WriteFile(filepath.Join(dir, ref+".before"), before, 0o600); err != nil {
 		return err
 	}
 	return os.WriteFile(filepath.Join(dir, ref+".after"), after, 0o600)
+}
+
+// editSeq numbers snapshots across the process so two edits sharing one run
+// cannot overwrite each other's before/after content.
+var editSeq atomic.Uint64
+
+// LogEdit records one applied edit as a KindEdit event: content saved via
+// SaveEdit and referenced by Ref, Detail formatted as "+N/-M". Shared by every
+// edit path (hyctl edit, hyctl parallel) so they log one event shape (#531).
+//
+// Best-effort: a successful edit must not be reported as failed because its
+// observability record could not be written.
+func LogEdit(runID, taskID, file string, before, after []byte, added, removed int) {
+	ref := fmt.Sprintf("%06d", editSeq.Add(1))
+	detail := fmt.Sprintf("+%d/-%d", added, removed)
+	if err := SaveEdit(runID, ref, before, after); err != nil {
+		ref = ""
+		detail += " · snapshot unavailable"
+	}
+	_ = New(runID).Append(Event{
+		Kind:   KindEdit,
+		TaskID: taskID,
+		File:   file,
+		Ref:    ref,
+		Detail: detail,
+	})
 }
 
 // LoadEdit returns a stored edit's before/after content.
@@ -85,7 +112,7 @@ func LoadEdit(runID, ref string) (before, after []byte, err error) {
 
 // validRef rejects anything that could address a file outside the run's own
 // edits directory. Refs come from event data, which a reader must treat as
-// untrusted — a run log can be written by anything sharing the run id.
+// untrusted, a run log can be written by anything sharing the run id.
 func validRef(ref string) error {
 	if ref == "" {
 		return fmt.Errorf("runlog: empty edit ref")

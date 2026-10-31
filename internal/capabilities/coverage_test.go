@@ -13,6 +13,7 @@ func TestDefaultOverlayPath_IsUnderTheUsersHydraDir(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
+	t.Setenv("HYDRA_HOME", "")
 
 	want := filepath.Join(home, ".hydra", "models.json")
 	if got := DefaultOverlayPath(); got != want {
@@ -20,10 +21,24 @@ func TestDefaultOverlayPath_IsUnderTheUsersHydraDir(t *testing.T) {
 	}
 }
 
-// ScoreOllama maps a local model name to a capability score. Local model names
+// $HYDRA_HOME must win over $HOME (#442).
+func TestDefaultOverlayPath_PrefersHydraHomeOverHome(t *testing.T) {
+	home := t.TempDir()
+	hydraHome := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("HYDRA_HOME", hydraHome)
+
+	want := filepath.Join(hydraHome, "models.json")
+	if got := DefaultOverlayPath(); got != want {
+		t.Errorf("DefaultOverlayPath() = %q, want %q ($HYDRA_HOME, not $HOME)", got, want)
+	}
+}
+
+// scoreFamily maps a local model name to a capability score. Local model names
 // carry a tag ("qwen3:8b"), and an unknown model must still get a usable score
-// rather than 0 — a 0 would sort it below everything and never be routed to.
-func TestScoreOllama_AlwaysReturnsAUsableScore(t *testing.T) {
+// rather than 0, a 0 would sort it below everything and never be routed to.
+func TestScoreFamily_AlwaysReturnsAUsableScore(t *testing.T) {
 	db, err := Load("")
 	if err != nil {
 		t.Fatal(err)
@@ -32,13 +47,13 @@ func TestScoreOllama_AlwaysReturnsAUsableScore(t *testing.T) {
 		"qwen3:8b", "qwen2.5-coder:7b", "llama3.2:3b",
 		"totally-unknown-model:99b", "", "weird/name:tag",
 	} {
-		got := db.ScoreOllama(name)
+		got := db.scoreFamily(name)
 		if got <= 0 {
-			t.Errorf("ScoreOllama(%q) = %d; a zero score sorts below every head and "+
+			t.Errorf("scoreFamily(%q) = %d; a zero score sorts below every head and "+
 				"the model could never be routed to", name, got)
 		}
 		if got > 100 {
-			t.Errorf("ScoreOllama(%q) = %d, above the 0–100 scale", name, got)
+			t.Errorf("scoreFamily(%q) = %d, above the 0-100 scale", name, got)
 		}
 	}
 }
@@ -63,7 +78,7 @@ func TestName_FallsBackToTheID(t *testing.T) {
 }
 
 // The overlay is how `hyctl models add` works without a rebuild. A missing file
-// is an empty overlay, not an error — that is the state before the first add.
+// is an empty overlay, not an error, that is the state before the first add.
 func TestLoadOverlay_MissingFileIsEmpty(t *testing.T) {
 	entries, err := LoadOverlay(filepath.Join(t.TempDir(), "absent.json"))
 	if err != nil {
@@ -80,7 +95,7 @@ func TestLoadOverlay_MalformedJSONIsAnError(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := LoadOverlay(path); err == nil {
-		t.Error("a malformed overlay loaded without error — the user's added models " +
+		t.Error("a malformed overlay loaded without error, the user's added models " +
 			"would silently vanish")
 	}
 }
@@ -194,14 +209,14 @@ func TestLoad_OverlayWinsOverEmbedded(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got := db.Score("claude"); got != 42 {
-		t.Errorf("Score(claude) = %d, want the overlay's 42 — an operator's retune "+
+		t.Errorf("Score(claude) = %d, want the overlay's 42, an operator's retune "+
 			"must beat the compiled-in default", got)
 	}
 	if got := db.Name("claude"); got != "My Claude" {
 		t.Errorf("Name(claude) = %q, want the overlay's label", got)
 	}
 	if got := db.Score("brand-new"); got != 77 {
-		t.Errorf("Score(brand-new) = %d, want 77 — a model added at runtime must be "+
+		t.Errorf("Score(brand-new) = %d, want 77, a model added at runtime must be "+
 			"usable without a rebuild", got)
 	}
 }
@@ -215,6 +230,53 @@ func TestLoad_MalformedOverlayIsAnError(t *testing.T) {
 	if _, err := Load(path); err == nil {
 		t.Error("a malformed overlay loaded silently; the user would never learn " +
 			"their added models are being ignored")
+	}
+}
+
+// Load caches its result per overlay path, keyed on mtime+size, but an error
+// must never be cached past a fix. mtime alone would usually change on a
+// rewrite anyway, which would mask this bug by accident (a fresh mtime is a
+// fresh cache key regardless of whether errors are cached), os.Chtimes
+// forces the second write to share the first write's exact mtime, and the
+// replacement is deliberately the same byte length too ("{broken" and
+// "[]     " are both 7 bytes, trailing whitespace after a JSON value is
+// valid), so the fingerprint is provably identical across both calls and the
+// only thing that can make the second Load succeed is NOT caching the error.
+func TestLoad_ErrorIsNotCachedPastAFix(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "models.json")
+
+	if err := os.WriteFile(path, []byte("{broken"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(path); err == nil {
+		t.Fatal("malformed overlay loaded without error, the fixture is wrong")
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstModTime := info.ModTime()
+
+	fixed := []byte("[]     ") // valid empty JSON array + trailing whitespace, same 7 bytes
+	if len(fixed) != len("{broken") {
+		t.Fatalf("test fixture bug: replacement is %d bytes, want %d", len(fixed), len("{broken"))
+	}
+	if err := os.WriteFile(path, fixed, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(path, firstModTime, firstModTime); err != nil {
+		t.Fatal(err)
+	}
+	if info, err := os.Stat(path); err != nil || info.ModTime() != firstModTime {
+		t.Fatalf("test fixture bug: mtime did not stick (got %v, want %v)", info.ModTime(), firstModTime)
+	}
+
+	db, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load still errors after the overlay was fixed (same mtime+size as the broken write): %v, a stale cached error is masking the fix", err)
+	}
+	if db == nil {
+		t.Fatal("Load returned a nil DB after the overlay was fixed, a stale cached error entry is masking the fix")
 	}
 }
 

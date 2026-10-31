@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Hydra (hyctl) — standalone binary installer for Windows.
+  Hydra (hyctl), standalone binary installer for Windows.
 
 .DESCRIPTION
   Downloads the prebuilt hyctl.exe for your architecture from the latest GitHub
@@ -16,7 +16,7 @@
   Also settable as $env:HYDRA_VERSION.
 
 .PARAMETER BinDir
-  Install directory. Defaults to $env:LOCALAPPDATA\Programs\hyctl — a
+  Install directory. Defaults to $env:LOCALAPPDATA\Programs\hyctl, a
   per-user location, so no elevation is needed.
   Also settable as $env:HYDRA_BIN.
 
@@ -66,7 +66,7 @@ Write-Host 'Hydra installer (hyctl)'
 # ── Detect architecture ───────────────────────────────────────────────────────
 # PROCESSOR_ARCHITECTURE reports the *process* architecture. A 32-bit
 # PowerShell on 64-bit Windows reports x86 and sets PROCESSOR_ARCHITEW6432 to
-# the real one, so that takes precedence — otherwise a perfectly capable
+# the real one, so that takes precedence, otherwise a perfectly capable
 # machine would be told it is unsupported.
 $rawArch = $env:PROCESSOR_ARCHITEW6432
 if ([string]::IsNullOrEmpty($rawArch)) { $rawArch = $env:PROCESSOR_ARCHITECTURE }
@@ -87,7 +87,7 @@ if ([string]::IsNullOrEmpty($Version)) {
             -Headers @{ 'User-Agent' = 'hyctl-installer' }
         $Tag = $release.tag_name
     } catch {
-        Stop-WithError "could not determine latest release — set `$env:HYDRA_VERSION=vX.Y.Z ($($_.Exception.Message))"
+        Stop-WithError "could not determine latest release, set `$env:HYDRA_VERSION=vX.Y.Z ($($_.Exception.Message))"
     }
 } else {
     $Tag = $Version
@@ -136,18 +136,18 @@ try {
     try {
         $sums = (Invoke-WebRequest -Uri $SumsUrl -UseBasicParsing).Content
     } catch {
-        Write-Warn "checksums.txt not published for $Tag — skipping verification"
+        Write-Warn "checksums.txt not published for $Tag, skipping verification"
     }
 
     if ($null -ne $sums) {
         $line = $sums -split "`n" | Where-Object { $_.Trim().EndsWith($Archive) } | Select-Object -First 1
         if (-not $line) {
-            Stop-WithError "$Archive is not listed in checksums.txt — refusing to install unverified"
+            Stop-WithError "$Archive is not listed in checksums.txt, refusing to install unverified"
         }
         $expected = ($line.Trim() -split '\s+')[0]
         $actual = (Get-FileHash -Path $ArchivePath -Algorithm SHA256).Hash.ToLower()
         if ($expected.ToLower() -ne $actual) {
-            Stop-WithError "checksum mismatch — refusing to install (expected $expected, got $actual)"
+            Stop-WithError "checksum mismatch, refusing to install (expected $expected, got $actual)"
         }
         Write-Info 'Checksum: verified'
     }
@@ -175,7 +175,7 @@ try {
 
     # ── PATH ──────────────────────────────────────────────────────────────────
     # The user's PATH is persistent state, so it is only extended when hyctl's
-    # directory is genuinely absent, and only at User scope — never Machine,
+    # directory is genuinely absent, and only at User scope, never Machine,
     # which would need elevation and affect everyone on the box.
     $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
     if ($null -eq $userPath) { $userPath = '' }
@@ -189,12 +189,12 @@ try {
             Write-Info "Added to your user PATH: $BinDir"
             Write-Warn 'Open a new terminal for the PATH change to take effect.'
         } catch {
-            Write-Warn "could not update PATH automatically — add it yourself: $BinDir"
+            Write-Warn "could not update PATH automatically, add it yourself: $BinDir"
         }
     }
 
     Write-Host ''
-    Write-Host "Done — hyctl $Tag installed. Run:  hyctl init"
+    Write-Host "Done, hyctl $Tag installed. Run:  hyctl init"
 } finally {
     Remove-Item -Path $Tmp -Recurse -Force -ErrorAction SilentlyContinue
 }

@@ -11,6 +11,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os/exec"
 
 	"gopkg.in/yaml.v3"
 
@@ -38,7 +39,7 @@ func (p *Provider) ID() string { return "agy" }
 func (p *Provider) Discover(_ context.Context) ([]provider.Head, error) {
 	// An on-disk registry wins; otherwise the copy embedded in the binary is
 	// used. Before #238 this read disk only and returned nothing when it was
-	// missing, which is every installed binary — so agy, a first-class head,
+	// missing, which is every installed binary, so agy, a first-class head,
 	// was silently undiscoverable for anyone who did not clone the repo.
 	data, err := registry.Read(config.ScriptHome(), "models.yaml")
 	if err != nil {
@@ -57,9 +58,15 @@ func (p *Provider) Discover(_ context.Context) ([]provider.Head, error) {
 		} `yaml:"models"`
 	}
 	if err := yaml.Unmarshal(data, &reg); err != nil {
-		log.Printf("agy provider: malformed models.yaml: %v — no agy heads available", err)
+		log.Printf("agy provider: malformed models.yaml: %v, no agy heads available", err)
 		return nil, nil
 	}
+
+	// Resolved once, not per head: every model here is executed through the
+	// same binary. Left empty when it is missing, so the heads are still listed
+	// and every one of them reads as unroutable with a reason, rather than
+	// looking healthy and failing eight times per dispatch (#688).
+	agyPath, _ := exec.LookPath("agy")
 
 	var heads []provider.Head
 	for _, m := range reg.Models {
@@ -67,11 +74,12 @@ func (p *Provider) Discover(_ context.Context) ([]provider.Head, error) {
 			continue
 		}
 		heads = append(heads, provider.Head{
-			ID:       m.ID,
-			Name:     m.Name,
-			Provider: "antigravity",
-			Source:   "registry",
-			CapScore: tierScore(m.Tier),
+			ID:         m.ID,
+			Name:       m.Name,
+			Provider:   "antigravity",
+			Source:     "registry",
+			Executable: agyPath,
+			CapScore:   tierScore(m.Tier),
 			Meta: map[string]string{
 				"model_flag": m.ModelFlag,
 				"token_pool": m.TokenPool,

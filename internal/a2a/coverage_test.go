@@ -3,13 +3,15 @@
 package a2a
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
 // Ordering.String labels causal relationships in handoff output. "concurrent"
-// is the one that matters — it is what tells a reader two agents may have
+// is the one that matters, it is what tells a reader two agents may have
 // raced, so an unlabelled value hides the exact case worth noticing.
 func TestOrdering_StringCoversEveryValue(t *testing.T) {
 	want := map[Ordering]string{
@@ -35,7 +37,7 @@ func TestOrdering_StringCoversEveryValue(t *testing.T) {
 	}
 }
 
-// A missing handoff is "no handoff yet", not an error — the first dispatch of a
+// A missing handoff is "no handoff yet", not an error, the first dispatch of a
 // session has none, and treating that as a failure would break every cold start.
 func TestLoad_MissingFileIsNilNilNotAnError(t *testing.T) {
 	h, err := Load(filepath.Join(t.TempDir(), "never-written.json"))
@@ -44,6 +46,52 @@ func TestLoad_MissingFileIsNilNilNotAnError(t *testing.T) {
 	}
 	if h != nil {
 		t.Errorf("a missing handoff returned %+v", h)
+	}
+}
+
+// Inject's handoff context must reach the prompt when the file is valid, and a
+// missing or corrupt handoff file must fail loudly (#450, #530) rather than
+// letting a caller (dispatch, swarm, RunSPRT) silently proceed without it.
+func TestInject(t *testing.T) {
+	dir := t.TempDir()
+
+	h := Handoff{From: "agent-1", Task: "earlier task", PriorOutput: "earlier output"}
+	raw, err := json.Marshal(h)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "handoff.json")
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := Inject(path, "new instruction")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"agent-1", "earlier output", "new instruction"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("injected prompt is missing %q:\n%s", want, got)
+		}
+	}
+
+	// PromptBlock already closes with the task. Inject used to append it a
+	// second time under "ADDITIONAL INSTRUCTION", sending every task twice.
+	if n := strings.Count(got, "new instruction"); n != 1 {
+		t.Errorf("task appears %d times, want 1:\n%s", n, got)
+	}
+
+	// --a2a always names a file the caller explicitly asked for, so a missing
+	// file must be an error, not silently treated as "no handoff".
+	if _, err := Inject(filepath.Join(dir, "absent.json"), "unchanged"); err == nil {
+		t.Error("a missing handoff file did not produce an error")
+	}
+
+	if err := os.WriteFile(path, []byte("{truncated"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Inject(path, "unchanged"); err == nil {
+		t.Error("a malformed handoff file did not produce an error")
 	}
 }
 
@@ -58,7 +106,7 @@ func TestLoad_MalformedJSONIsAnError(t *testing.T) {
 }
 
 // A handoff carries the prior agent's context and file list. An unwritable
-// destination must surface, not be swallowed — the next agent would otherwise
+// destination must surface, not be swallowed, the next agent would otherwise
 // run with no context and no indication why.
 func TestSave_UnwritableDestinationIsAnError(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "nope", "deeper")
@@ -140,7 +188,7 @@ func TestConflictsWith_RequiresBothConcurrencyAndFileOverlap(t *testing.T) {
 	}
 }
 
-// A nil counterpart must not panic — Load returns nil for a first run, and
+// A nil counterpart must not panic, Load returns nil for a first run, and
 // callers pass that straight through.
 func TestConflictsWith_NilIsNotAConflict(t *testing.T) {
 	h := &Handoff{From: "a", Files: []string{"/x.go"}, Clock: Clock{"a": 1}}

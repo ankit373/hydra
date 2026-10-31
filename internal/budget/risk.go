@@ -8,13 +8,18 @@ import "math"
 // quantity: it only climbs as the context window fills. Modelling it as a
 // drift-diffusion process on the utilisation fraction x ∈ [0,1] lets the
 // governor act on the *rate* of burn (and its noise), not just the current
-// level — a session climbing fast at 55% is riskier than one parked at 74%,
+// level, a session climbing fast at 55% is riskier than one parked at 74%,
 // which the static band table (ModeFor) cannot see. The 80% emergency line is
 // an absorbing barrier; each recorded claude_pct observation is one step.
 const (
 	emergencyFrac = 0.80 // absorbing barrier b (matches ModeEmergency at 80%)
-	riskHorizon   = 3.0  // look-ahead in observations ("within the next ~3 claude_pct updates")
 	MaxPctHistory = 12   // bounded claude_pct series kept in state.json
+
+	// RiskHorizon is the look-ahead RiskFromHistory computes over, in
+	// observations ("within the next ~3 claude_pct updates"), not wall-clock
+	// time and not chat turns. Exported so a UI can state the horizon it is
+	// reporting instead of restating the number and drifting from it.
+	RiskHorizon = 3.0
 
 	// Risk floors: a high probability of hitting the 80% barrier within the
 	// horizon imposes a minimum mode regardless of the current level, so a fast
@@ -63,10 +68,18 @@ func RiskFromHistory(hist []int) (burnRatePct, risk float64) {
 	for _, d := range deltas {
 		ss += (d - mu) * (d - mu)
 	}
-	sigma := math.Sqrt(ss / float64(n)) // population stddev of increments
+	// Sample stddev (Bessel's correction, n-1): this governor always runs at
+	// small n (MaxPctHistory=12 caps n at 11), where population variance (÷n)
+	// systematically understates volatility. With n==1 there is no way to
+	// estimate spread from a single delta, so sigma stays 0 (ss is trivially 0
+	// there too, no divide-by-zero, no behavior change from before at n==1).
+	var sigma float64
+	if n > 1 {
+		sigma = math.Sqrt(ss / float64(n-1))
+	}
 
 	x := float64(hist[len(hist)-1]) / 100
-	risk = FirstPassageProb(emergencyFrac-x, mu, sigma, riskHorizon)
+	risk = FirstPassageProb(emergencyFrac-x, mu, sigma, RiskHorizon)
 	return mu * 100, risk
 }
 
@@ -144,7 +157,7 @@ func riskFloor(risk float64) Mode {
 
 // EffectiveMode combines the level band ModeFor(pct) with the rate-driven risk
 // floor: the governor acts on whichever is more urgent. With risk 0 (flat or
-// unknown history) it is exactly ModeFor(pct) — backward compatible.
+// unknown history) it is exactly ModeFor(pct), backward compatible.
 func EffectiveMode(pct int, risk float64) Mode {
 	band := ModeFor(pct)
 	if f := riskFloor(risk); f > band {

@@ -4,6 +4,7 @@ package trust
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"sort"
@@ -21,7 +22,7 @@ type Target struct {
 // provider.Head so the trust package stays a low-level dependency; callers
 // (swarm/dispatch) adapt their heads to this in Phase 2b.
 type Source struct {
-	ID         string // calibration key, e.g. "model:claude-sonnet"
+	ID         string // calibration key: the head's own ID, e.g. "ollama/qwen3:4b"
 	Family     string // base-model family, for the correlation discount ("" = independent)
 	EstCostUSD float64
 }
@@ -42,9 +43,10 @@ type Executor interface {
 type Decision int
 
 const (
-	// DecisionAccept: Λ crossed the accept threshold A at the target confidence.
+	// DecisionAccept: some answer's Λ crossed the accept threshold A at the
+	// target confidence.
 	DecisionAccept Decision = iota
-	// DecisionStoppedOnBudget: ran out of budget/heads before reaching A — the
+	// DecisionStoppedOnBudget: ran out of budget/heads before reaching A, the
 	// residual uncertainty is where a human oracle (review) should be spent.
 	DecisionStoppedOnBudget
 )
@@ -56,7 +58,7 @@ func (d Decision) String() string {
 	return "stopped_on_budget"
 }
 
-// Evidence is one entry in the LLR ledger — a single source's calibrated
+// Evidence is one entry in the LLR ledger, a single source's calibrated
 // contribution to the running log-odds that the candidate is correct.
 type Evidence struct {
 	Source      string  `json:"source"`
@@ -66,7 +68,7 @@ type Evidence struct {
 	LambdaAfter float64 `json:"lambda_after"`
 	CostUSD     float64 `json:"cost_usd"`
 
-	// ConfidenceAfter is σ(LambdaAfter) — the running P(correct) once this
+	// ConfidenceAfter is σ(LambdaAfter), the running P(correct) once this
 	// source had been weighed. Stored rather than left for readers to derive:
 	// the ledger is a public JSON type written to trust.jsonl and read by the
 	// run log, and a second copy of the sigmoid in each reader is a third place
@@ -74,24 +76,51 @@ type Evidence struct {
 	ConfidenceAfter float64 `json:"confidence_after"`
 }
 
-// Result is the outcome of Run.
-type Result struct {
-	Candidate  string     `json:"candidate"`
-	Confidence float64    `json:"confidence"` // σ(Λ)
-	Decision   Decision   `json:"decision"`
-	Lambda     float64    `json:"lambda"`
-	SpentUSD   float64    `json:"spent_usd"`
-	Samples    int        `json:"samples"`
-	Ledger     []Evidence `json:"ledger"`
+// Hypothesis is one candidate answer under test, with the evidence for it.
+// Every distinct answer is tracked for the whole run, so nothing has to be
+// discarded when the leader changes.
+type Hypothesis struct {
+	Answer     string  `json:"answer"`
+	Lambda     float64 `json:"lambda"`     // log-odds this answer is the correct one
+	Confidence float64 `json:"confidence"` // σ(Lambda)
+	Votes      int     `json:"votes"`      // sources whose answer matched it
 }
 
-// Run executes the sequential probability ratio test: it samples sources in
-// decreasing evidence-per-dollar order, accumulating the calibrated
-// log-likelihood ratio Λ that the current candidate answer is correct, and
-// stops as soon as Λ crosses the Wald accept threshold A (target confidence) or
-// runs out of budget. A source that disagrees with the candidate pushes Λ down;
-// if Λ crosses the reject threshold B the run pivots to that source's answer
-// (destructive interference collapses to the better branch).
+// Result is the outcome of Run. Confidence and Lambda describe the leading
+// hypothesis; Hypotheses carries every one that was under test.
+type Result struct {
+	Candidate  string       `json:"candidate"`
+	Confidence float64      `json:"confidence"` // σ(Λ) of the leader
+	Decision   Decision     `json:"decision"`
+	Lambda     float64      `json:"lambda"`
+	SpentUSD   float64      `json:"spent_usd"`
+	Samples    int          `json:"samples"`
+	Ledger     []Evidence   `json:"ledger"`
+	Hypotheses []Hypothesis `json:"hypotheses,omitempty"`
+}
+
+// Run executes a multi-hypothesis sequential probability ratio test: it samples
+// sources in decreasing evidence-per-dollar order and accumulates, for every
+// distinct answer seen, the calibrated log-odds Λ_c that *that* answer is the
+// correct one. It stops as soon as some answer's Λ_c crosses the Wald accept
+// threshold A, or when budget or heads run out.
+//
+// Each source is evidence about every hypothesis, not only whichever answer
+// happened to be current: a source whose answer matches c contributes
+// LLR(agree) to c and LLR(disagree) to all the others. Nothing is discarded
+// when the leader changes, and the hypothesis under test never moves, so
+// Wald's error bound applies to a fixed comparison the way it is derived
+// (#778). The previous binary form re-seeded Λ on a pivot, which both threw
+// away the evidence gathered so far and continued against thresholds derived
+// for the hypothesis it had just abandoned.
+//
+// Λ_c is the log-odds of "c is correct" against "c is incorrect", so σ(Λ_c) is
+// that answer's probability of correctness and needs no normalizing across
+// hypotheses. It also means two answers' confidences can sum past 1: they are
+// each measured against their own negation rather than against each other,
+// which is as far as a sensitivity/specificity parameterization reaches. A
+// generator likelihood that makes them mutually exclusive needs the answer
+// model in #771's follow-up, not a normalization here.
 func Run(ctx context.Context, task Task, sources []Source, exec Executor, cal *Calibrator, t Target, opts ...RunOption) (*Result, error) {
 	if len(sources) == 0 {
 		return nil, fmt.Errorf("sprt: no sources provided")
@@ -100,23 +129,29 @@ func Run(ctx context.Context, task Task, sources []Source, exec Executor, cal *C
 	for _, o := range opts {
 		o(&cfg)
 	}
+	// One verdict per pair for the whole run. Everything below asks the same
+	// question more than once, and a judge-backed comparator is an LLM call.
+	cfg.equiv = memoizeEquivalence(cfg.equiv)
 	alpha := 1 - t.Confidence
 	if alpha <= 0 || alpha >= 1 {
 		return nil, fmt.Errorf("sprt: confidence must be in (0,1), got %v", t.Confidence)
 	}
-	// Symmetric Wald thresholds (α = β for v1).
+	// An uncalibrated source has se=sp=0.5, so its verdict contributes exactly
+	// ln(0.5/0.5)=0 nats however emphatically it agrees. With no calibrated
+	// source for this domain no hypothesis can move, so the run samples every
+	// head, reaches no threshold, exhausts its budget and reports the prior
+	// back as its answer. Observed live: five heads agreed unanimously, every
+	// LLR +0.000, "stopped_on_budget", confidence 50.0%, $0.0095 spent to learn
+	// nothing (#698). Refusing costs the user nothing they would have got.
+	if !cfg.allowUncalibrated && !anyEvidence(cal, sources, task.Domain) {
+		return nil, &NoEvidenceError{Domain: task.Domain, Sources: sourceIDs(sources)}
+	}
 	A := math.Log((1 - alpha) / alpha)
-	B := -A
 
-	// Sample most-evidence-per-dollar first.
-	order := append([]Source(nil), sources...)
-	sort.SliceStable(order, func(i, j int) bool {
-		return evidencePerCost(cal, order[i], task.Domain) > evidencePerCost(cal, order[j], task.Domain)
-	})
+	order := sampleOrder(sources, cal, task.Domain)
 
 	res := &Result{Decision: DecisionStoppedOnBudget}
-	var lambda float64
-	candidate := ""
+	var votes []vote
 	familySeen := map[string]bool{}
 	var seenIDs, seenFamilies, seenTexts []string
 
@@ -127,7 +162,7 @@ func Run(ctx context.Context, task Task, sources []Source, exec Executor, cal *C
 		}
 		ans, err := exec.Execute(ctx, src, task)
 		if err != nil {
-			continue // a dead head is not evidence — skip it
+			continue // a dead head is not evidence, skip it
 		}
 		if ans.CostUSD > 0 {
 			cost = ans.CostUSD
@@ -138,45 +173,117 @@ func Run(ctx context.Context, task Task, sources []Source, exec Executor, cal *C
 		seenFamilies = append(seenFamilies, src.Family)
 		seenTexts = append(seenTexts, ans.Text)
 
-		if candidate == "" {
-			candidate = ans.Text // first answer seeds the candidate
-		}
-		agreed := cfg.equiv(candidate, ans.Text)
-
-		llr := cal.LLR(src.ID, task.Domain, agreed)
+		// A repeat vote from a family that has already spoken is discounted by
+		// its measured excess agreement, not counted as fresh confirmation.
+		weight := 1.0
 		if src.Family != "" && familySeen[src.Family] {
-			llr *= FamilyDiscount(DefaultCoAgreementPath(), src.Family)
+			weight = FamilyDiscount(DefaultCoAgreementPath(), src.Family)
 		}
 		familySeen[src.Family] = true
 
-		lambda += llr
+		votes = append(votes, vote{src: src, text: ans.Text, weight: weight})
+		hyps := scoreHypotheses(votes, cal, task.Domain, cfg.equiv)
+		lead := hyps[0]
+
+		agreed := cfg.equiv(lead.Answer, ans.Text)
 		res.Ledger = append(res.Ledger, Evidence{
-			Source: src.ID, Agreed: agreed, LLR: llr,
-			Candidate: candidate, LambdaAfter: lambda, CostUSD: cost,
-			ConfidenceAfter: sigmoid(lambda),
+			Source:          src.ID,
+			Agreed:          agreed,
+			LLR:             weight * cal.LLR(src.ID, task.Domain, agreed),
+			Candidate:       lead.Answer,
+			LambdaAfter:     lead.Lambda,
+			CostUSD:         cost,
+			ConfidenceAfter: lead.Confidence,
 		})
 
-		if lambda >= A {
+		res.Hypotheses = hyps
+		res.Candidate = lead.Answer
+		res.Lambda = lead.Lambda
+		res.Confidence = lead.Confidence
+
+		if cfg.observe != nil {
+			cfg.observe(res.Ledger[len(res.Ledger)-1], A)
+		}
+
+		if lead.Lambda >= A {
 			res.Decision = DecisionAccept
 			break
-		}
-		if lambda <= B {
-			// The weight of evidence says the candidate is wrong. Collapse to the
-			// disagreeing answer and re-seed Λ with this source asserting it.
-			candidate = ans.Text
-			lambda = cal.LLR(src.ID, task.Domain, true)
-			// The pivoting source's own vote now supports the new candidate.
-			res.Ledger[len(res.Ledger)-1].Candidate = candidate
-			res.Ledger[len(res.Ledger)-1].LambdaAfter = lambda
 		}
 	}
 
 	RecordCoAgreement(DefaultCoAgreementPath(), task.Domain, seenIDs, seenFamilies, seenTexts, cfg.equiv)
-
-	res.Candidate = candidate
-	res.Lambda = lambda
-	res.Confidence = sigmoid(lambda)
 	return res, nil
+}
+
+// vote is one source's answer, with the correlation weight its contribution
+// carries. Kept for the whole run because every hypothesis is scored against
+// every vote, including votes cast before that hypothesis existed.
+type vote struct {
+	src    Source
+	text   string
+	weight float64
+}
+
+// scoreHypotheses scores every distinct answer against all votes so far,
+// strongest first. Λ_c sums LLR(agree) over the votes matching c and
+// LLR(disagree) over the rest, which is the log-odds that c is the correct
+// answer. Recomputing from all votes each sample is O(votes × answers) on a
+// handful of heads, and is what lets a hypothesis benefit from evidence
+// gathered before anyone proposed it.
+func scoreHypotheses(votes []vote, cal *Calibrator, domain string, equiv AnswerEquivalence) []Hypothesis {
+	var hyps []Hypothesis
+	for _, v := range votes {
+		seen := false
+		for _, h := range hyps {
+			if equiv(h.Answer, v.text) {
+				seen = true
+				break
+			}
+		}
+		if !seen {
+			hyps = append(hyps, Hypothesis{Answer: v.text})
+		}
+	}
+	for i := range hyps {
+		var lambda float64
+		votesFor := 0
+		for _, v := range votes {
+			match := equiv(hyps[i].Answer, v.text)
+			if match {
+				votesFor++
+			}
+			lambda += v.weight * cal.LLR(v.src.ID, domain, match)
+		}
+		hyps[i].Lambda = lambda
+		hyps[i].Confidence = sigmoid(lambda)
+		hyps[i].Votes = votesFor
+	}
+	// Ties break on the earlier-proposed answer, so a run is reproducible.
+	sort.SliceStable(hyps, func(i, j int) bool { return hyps[i].Lambda > hyps[j].Lambda })
+	return hyps
+}
+
+// sampleOrder ranks sources most-evidence-per-dollar first. The score is
+// computed once per source (decorate-sort-undecorate), not inside the
+// comparator: evidencePerCost takes the calibrator's lock and does two log()
+// calls, so recomputing it per comparison turns an O(n) computation into
+// O(n log n) lock acquisitions, real cost when Run is called thousands of
+// times in a benchmark against a calibration that never changes mid-run.
+func sampleOrder(sources []Source, cal *Calibrator, domain string) []Source {
+	type scored struct {
+		src   Source
+		score float64
+	}
+	decorated := make([]scored, len(sources))
+	for i, src := range sources {
+		decorated[i] = scored{src: src, score: evidencePerCost(cal, src, domain)}
+	}
+	sort.SliceStable(decorated, func(i, j int) bool { return decorated[i].score > decorated[j].score })
+	order := make([]Source, len(decorated))
+	for i, d := range decorated {
+		order[i] = d.src
+	}
+	return order
 }
 
 // evidencePerCost ranks sources by diagnostic power per dollar. Zero-cost
@@ -192,20 +299,76 @@ func evidencePerCost(cal *Calibrator, src Source, domain string) float64 {
 // AnswerEquivalence decides whether a source's answer counts as agreeing with the
 // current candidate for the purpose of accumulating correctness evidence.
 //
-// The v1 default (TextEquivalence) compares normalized text — which miscounts two
+// The v1 default (TextEquivalence) compares normalized text, which miscounts two
 // independently-correct answers that differ only in wording (variable names,
 // println vs. fmt.Println) as *disagreement*, pushing Λ the wrong way. In the real
 // benchmark this capped achieved confidence at 32.9% even though both sources were
 // oracle-verified correct (see TRUST_CONTROL_PLANE_BENCHMARK_FINDINGS.md §3).
-// Callers that can compare *behavior* — an oracle verdict in a benchmark, an LLM
-// judge in production — inject a semantic comparator via WithEquivalence.
+// Callers that can compare *behavior*, an oracle verdict in a benchmark, an LLM
+// judge in production, inject a semantic comparator via WithEquivalence.
 type AnswerEquivalence func(candidate, answer string) bool
 
 // RunOption configures an SPRT run without changing Run's core signature.
 type RunOption func(*runConfig)
 
 type runConfig struct {
-	equiv AnswerEquivalence
+	equiv             AnswerEquivalence
+	allowUncalibrated bool
+	observe           Observer
+}
+
+// AllowNoEvidence runs the ensemble even when no source can move the
+// posterior. For the benchmark harness, which runs precisely to produce the
+// calibration that does not exist yet, and for tests asserting that an
+// uninformative source contributes nothing. A caller routing real work wants
+// the refusal.
+func AllowNoEvidence() RunOption {
+	return func(c *runConfig) { c.allowUncalibrated = true }
+}
+
+// ErrNoEvidence is returned when no source carries diagnostic power for the
+// task's domain, either because none is calibrated there or because every one
+// of them is measured as uninformative. Either way no verdict can move the
+// posterior, so the run could only burn its budget and hand back the prior.
+var ErrNoEvidence = errors.New("no source carries evidence")
+
+// NoEvidenceError carries the sources the refused run would have sampled, so a
+// caller telling the user which key to record against can name one the router
+// actually looks up rather than a placeholder shape it never reads (#835).
+type NoEvidenceError struct {
+	Domain  string
+	Sources []string // head IDs, as `hyctl probe` prints them
+}
+
+func (e *NoEvidenceError) Error() string {
+	return fmt.Sprintf("%s in domain %q", ErrNoEvidence, e.Domain)
+}
+
+func (e *NoEvidenceError) Unwrap() error { return ErrNoEvidence }
+
+func sourceIDs(sources []Source) []string {
+	ids := make([]string, 0, len(sources))
+	for _, s := range sources {
+		ids = append(ids, s.ID)
+	}
+	sort.Strings(ids)
+	return ids
+}
+
+// minD is the diagnostic power below which a source is treated as carrying no
+// evidence. Calibration is stored as float rates, so an exactly-uninformative
+// source lands near zero rather than on it.
+const minD = 1e-9
+
+// anyEvidence reports whether at least one source can contribute to the
+// posterior in this domain.
+func anyEvidence(cal *Calibrator, sources []Source, domain string) bool {
+	for _, s := range sources {
+		if cal.D(s.ID, domain) > minD {
+			return true
+		}
+	}
+	return false
 }
 
 // WithEquivalence overrides how answer agreement is decided (default:
@@ -218,9 +381,67 @@ func WithEquivalence(fn AnswerEquivalence) RunOption {
 	}
 }
 
+// Observer watches the run as it happens: called once per sampled source, with
+// the ledger entry just recorded and the Wald accept threshold Λ has to cross.
+// The threshold is passed rather than left to be recomputed, or a surface
+// showing progress toward it derives it from α a second time.
+type Observer func(e Evidence, accept float64)
+
+// WithObserver reports each piece of evidence as it is weighed, so a caller can
+// show why the run has not stopped yet. Called from Run's own goroutine,
+// between samples, so it must not block for long. A nil observer is ignored.
+func WithObserver(fn Observer) RunOption {
+	return func(c *runConfig) {
+		if fn != nil {
+			c.observe = fn
+		}
+	}
+}
+
+// memoizeEquivalence answers each pair once per run.
+//
+// scoreHypotheses re-asks per hypothesis per vote on every sample, and the
+// ledger asks a third time for the entry it writes, so a comparator that is not
+// a pure function answers the same question several ways in one run. A
+// judge-backed one is exactly that: an LLM. Measured before this, a three-head
+// review counted a head's vote toward the accepted answer and recorded the same
+// head as having dissented from it, which `hyctl trust outcome` then trained on;
+// ten judge calls for three samples, and four votes attributed across two
+// hypotheses from three of them (#997).
+//
+// Reflexive and symmetric, because equivalence is both by definition. Today's
+// callers all ask in (hypothesis, vote) order, so the symmetry saves no calls
+// yet; it is here so a caller asking the other way round cannot be told
+// something different, which is the failure this function exists to stop.
+//
+// Run's sample loop is sequential, and so is RecordCoAgreement after it, so the
+// map needs no lock.
+func memoizeEquivalence(eq AnswerEquivalence) AnswerEquivalence {
+	type pair struct{ a, b string }
+	seen := make(map[pair]bool)
+	return func(candidate, answer string) bool {
+		if candidate == answer {
+			// Reflexive, so never worth asking. scoreHypotheses compares every
+			// hypothesis against every vote, which includes the vote that
+			// proposed it.
+			return true
+		}
+		k := pair{candidate, answer}
+		if candidate > answer {
+			k = pair{answer, candidate}
+		}
+		if v, ok := seen[k]; ok {
+			return v
+		}
+		v := eq(candidate, answer)
+		seen[k] = v
+		return v
+	}
+}
+
 // TextEquivalence is the v1 default agreement check: case-insensitive with
 // collapsed whitespace. It removes trivial-formatting false disagreements but is
-// NOT semantic — two behaviorally-equivalent answers with different identifiers
+// NOT semantic, two behaviorally-equivalent answers with different identifiers
 // still register as disagreement. Supply WithEquivalence for behavior-based
 // comparison.
 func TextEquivalence(candidate, answer string) bool {

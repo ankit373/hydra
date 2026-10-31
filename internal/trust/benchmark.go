@@ -42,7 +42,7 @@ func (e *benchExec) Execute(_ context.Context, src Source, _ Task) (Answer, erro
 
 // Benchmark runs the real SPRT ensemble (Run) over synthetic sources of known
 // reliability and measures samples-vs-fixed-N and accuracy. It is the [MEASURED]
-// counterpart to the Manifesto's [MODEL] Law 3 numbers — deterministic for a
+// counterpart to the Manifesto's [MODEL] Law 3 numbers, deterministic for a
 // given seed. Easy tasks use 90%-reliable sources; hard tasks 74%.
 func Benchmark(trials int, seed int64) BenchmarkResult {
 	if trials <= 0 {

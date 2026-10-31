@@ -18,7 +18,7 @@ type UpdateStatus struct {
 }
 
 // GetUpdateStatus checks for a newer release the same way hyctl's own startup
-// banner does — internal/update's 24h-cached GitHub fetch and semver compare —
+// banner does, internal/update's 24h-cached GitHub fetch and semver compare,
 // but through update.CheckIgnoringTTY rather than update.Check: the desktop
 // app has no stdout for the CLI's TTY gate to test, so Check would always
 // silently answer "no update" here.
@@ -42,17 +42,17 @@ type UpgradeResult struct {
 	Output string `json:"output"`
 }
 
-// TriggerUpgrade runs install-app.sh — the script already documented (in its
+// TriggerUpgrade runs install-app.sh, the script already documented (in its
 // own header) as "resolves the newest release... and never goes stale", i.e.
 // the correct way to install *or* upgrade the desktop app. It downloads the
 // latest release, verifies its checksum, replaces the .app bundle on disk,
-// and clears the Gatekeeper quarantine flag — exactly what a user running the
+// and clears the Gatekeeper quarantine flag, exactly what a user running the
 // documented curl one-liner by hand would get.
 //
 // This is deliberately not a silent self-updater. The app ships unsigned (see
 // .github/workflows/desktop-build.yml), so having a running process download
 // a new binary and swap out its own executable is exactly the class of
-// mechanism code-signing/notarization exists to make safe — it is easy to get
+// mechanism code-signing/notarization exists to make safe, it is easy to get
 // working on one machine and then fail, or get flagged by Gatekeeper, on a
 // user's. Shelling out to the same installer a user would run by hand
 // replaces the bundle *on disk*, not the pages already mapped into this

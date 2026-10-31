@@ -73,13 +73,13 @@ func TestApply_HandoffIsOverlayNotOwnership(t *testing.T) {
 
 	a := tr.Nodes["a"]
 	if len(a.Children) != 0 {
-		t.Errorf("handoff created ownership children %v — it must be overlay only", a.Children)
+		t.Errorf("handoff created ownership children %v, it must be overlay only", a.Children)
 	}
 	if len(a.Handoffs) != 1 || a.Handoffs[0].To != "b" {
 		t.Fatalf("handoff overlay = %+v, want one edge to b", a.Handoffs)
 	}
 	if tr.Nodes["b"].Parent != "" {
-		t.Errorf("handoff re-parented b to %q — ownership must be untouched", tr.Nodes["b"].Parent)
+		t.Errorf("handoff re-parented b to %q, ownership must be untouched", tr.Nodes["b"].Parent)
 	}
 	// Both remain roots: neither owns the other.
 	if len(tr.Roots) != 2 {
@@ -88,7 +88,7 @@ func TestApply_HandoffIsOverlayNotOwnership(t *testing.T) {
 }
 
 // Ownership is single by definition. A second claim is a collaboration
-// relationship, not a re-parenting — otherwise the "tree" silently becomes a
+// relationship, not a re-parenting, otherwise the "tree" silently becomes a
 // graph and drill-down breaks.
 func TestApply_NodeKeepsFirstOwner(t *testing.T) {
 	events := []runlog.Event{
@@ -174,7 +174,7 @@ func TestApply_UnknownKindDoesNotPanic(t *testing.T) {
 	}
 }
 
-// Events that belong to no node are counted, not silently dropped — a partial
+// Events that belong to no node are counted, not silently dropped, a partial
 // run must not render as a complete one.
 func TestApply_UnattributableEventsAreCounted(t *testing.T) {
 	tr := NewTree("run-x")
@@ -262,7 +262,7 @@ func TestRows_OrphansAreStillShown(t *testing.T) {
 		}
 	}
 	if !sawOrphan {
-		t.Error("an unreachable node vanished from Rows — work would be hidden")
+		t.Error("an unreachable node vanished from Rows, work would be hidden")
 	}
 }
 
@@ -290,8 +290,8 @@ func TestTree_Aggregates(t *testing.T) {
 	}
 }
 
-// One run legitimately has several writers — the CLI logs the run's lifecycle
-// while dispatch logs the routing inside it — so seq values interleave and
+// One run legitimately has several writers, the CLI logs the run's lifecycle
+// while dispatch logs the routing inside it, so seq values interleave and
 // repeat across them. runlog's own doc says seq "is not the sort key"; file
 // order is. A timeline that re-sorted by seq would put a run's end before a
 // handoff that happened first (#204).
@@ -317,7 +317,7 @@ func TestTimeline_PreservesFileOrderAcrossWriters(t *testing.T) {
 	}
 	for i := range want {
 		if i >= len(kinds) || kinds[i] != want[i] {
-			t.Fatalf("timeline order = %v, want %v — sorting by seq reorders across writers", kinds, want)
+			t.Fatalf("timeline order = %v, want %v, sorting by seq reorders across writers", kinds, want)
 		}
 	}
 }
@@ -351,7 +351,7 @@ func TestReconstruct_FromRealDispatchShape(t *testing.T) {
 }
 
 // A run-level event describes the invocation, not a node in it. It carries a
-// TaskID as legitimate metadata, and nodeID falls back to TaskID — so without an
+// TaskID as legitimate metadata, and nodeID falls back to TaskID, so without an
 // explicit kind check the run's own start would appear in the tree as a node
 // named after a raw timestamp id (#204).
 func TestApply_RunLevelEventsNeverCreateNodes(t *testing.T) {
@@ -377,11 +377,43 @@ func TestApply_RunLevelEventsNeverCreateNodes(t *testing.T) {
 	if tr.Skipped != 0 {
 		t.Errorf("Skipped = %d; run-level events are expected, not malformed", tr.Skipped)
 	}
-	// They must still appear on the timeline — that is where a run's start and
+	// They must still appear on the timeline, that is where a run's start and
 	// end belong.
 	if len(tl.Entries) != len(events) {
-		t.Errorf("%d timeline entries, want %d — run-level events belong on the timeline",
+		t.Errorf("%d timeline entries, want %d, run-level events belong on the timeline",
 			len(tl.Entries), len(events))
+	}
+}
+
+// A KindEdit event carries no identity of its own, it records which file
+// changed, not who changed it, so nodeID falls back to TaskID. Before #434,
+// Agent held the edited file path instead (a since-removed overload), which
+// took priority over that TaskID fallback and split the run into two
+// disconnected nodes: the real agent, and a phantom one named after the file,
+// stuck at StatePending forever since nothing else ever touched it.
+func TestApply_EditEventJoinsItsTasksNodeNotAPhantomOne(t *testing.T) {
+	events := []runlog.Event{
+		{V: 1, Seq: 1, RunID: "r", TaskID: "task-abc", Kind: runlog.KindHeadSelected, Head: "flash-med"},
+		{V: 1, Seq: 2, RunID: "r", TaskID: "task-abc", Kind: runlog.KindDispatchFinished,
+			Head: "flash-med", Status: "ok"},
+		{V: 1, Seq: 3, RunID: "r", TaskID: "task-abc", Kind: runlog.KindEdit,
+			File: "/private/tmp/scratch/greet.py", Ref: "000001", Detail: "+2/-0"},
+	}
+	tr, _ := Reconstruct(events)
+
+	if len(tr.Nodes) != 1 {
+		t.Fatalf("got %d nodes, want 1, the edit must join flash-med, not mint its own: %+v",
+			len(tr.Nodes), tr.Nodes)
+	}
+	n := tr.Nodes["flash-med"]
+	if n == nil {
+		t.Fatal("no node keyed by the real head \"flash-med\"")
+	}
+	if n.State != StateOK {
+		t.Errorf("state = %q, want ok, the edit event must not downgrade a finished node", n.State)
+	}
+	if n.Detail != "+2/-0" {
+		t.Errorf("detail = %q, want the edit's line counts", n.Detail)
 	}
 }
 
@@ -402,7 +434,7 @@ func TestTimeline_RunLevelEntriesNameNoNode(t *testing.T) {
 			if e.NodeID != "" {
 				t.Errorf("%s names node %q; run-level events belong to no node", e.Kind, e.NodeID)
 			}
-			// The task id is still carried — it is real metadata, just not a node.
+			// The task id is still carried, it is real metadata, just not a node.
 			if e.TaskID != "task-abc" {
 				t.Errorf("%s dropped its TaskID", e.Kind)
 			}
@@ -414,5 +446,89 @@ func TestTimeline_RunLevelEntriesNameNoNode(t *testing.T) {
 				t.Errorf("%s names node %q, which the tree does not have", e.Kind, e.NodeID)
 			}
 		}
+	}
+}
+
+// editOnlyEvents builds n KindEdit events, each its own distinct task with no
+// Agent/Head, the shape that made nodeByTaskID's linear scan over Order pay
+// O(n) per event, O(n^2) for the run (#523).
+func editOnlyEvents(n int) []runlog.Event {
+	events := make([]runlog.Event, n)
+	for i := range events {
+		events[i] = runlog.Event{
+			V: runlog.SchemaVersion, Seq: uint64(i + 1), RunID: "run-edits",
+			TS: time.Now().UTC().Format(time.RFC3339Nano), Kind: runlog.KindEdit,
+			TaskID: fmt.Sprintf("task-%d", i), File: "/scratch/f.py", Detail: "+1/-0",
+		}
+	}
+	return events
+}
+
+// A run of many distinct edit-only tasks must still reconstruct into one node
+// per task, correctly attributed, the byTaskID index changes the lookup's
+// cost, not its result.
+func TestReconstruct_ManyDistinctEditTasks(t *testing.T) {
+	const n = 5000
+	events := editOnlyEvents(n)
+
+	tr, tl := Reconstruct(events)
+
+	if len(tr.Nodes) != n {
+		t.Fatalf("got %d nodes, want %d, one per distinct edit-only task", len(tr.Nodes), n)
+	}
+	if len(tr.Order) != n {
+		t.Fatalf("Order has %d entries, want %d", len(tr.Order), n)
+	}
+	if len(tr.Roots) != n {
+		t.Fatalf("Roots has %d entries, want %d, no Parent was ever set", len(tr.Roots), n)
+	}
+	if len(tl.Entries) != n {
+		t.Fatalf("timeline has %d entries, want %d", len(tl.Entries), n)
+	}
+	if tr.Skipped != 0 {
+		t.Errorf("Skipped = %d, want 0", tr.Skipped)
+	}
+	for i := 0; i < n; i++ {
+		id := fmt.Sprintf("task-%d", i)
+		node := tr.Nodes[id]
+		if node == nil {
+			t.Fatalf("no node for %s", id)
+		}
+		if node.TaskID != id {
+			t.Errorf("node %s TaskID = %q, want %q", id, node.TaskID, id)
+		}
+		// node() seeds a fresh node at StatePending, and KindEdit's own
+		// "if n.State == \"\"" guard never fires on it, so it stays pending.
+		if node.State != StatePending {
+			t.Errorf("node %s state = %q, want pending", id, node.State)
+		}
+		if node.Detail != "+1/-0" {
+			t.Errorf("node %s detail = %q, want the edit's line counts", id, node.Detail)
+		}
+	}
+
+	// Folding one at a time must agree with the bulk reconstruction (the same
+	// invariant TestApply_EqualsReconstruct pins for smaller, mixed-kind runs).
+	folded := NewTree(events[0].RunID)
+	for _, e := range events {
+		folded = Apply(folded, e)
+	}
+	if len(folded.Nodes) != len(tr.Nodes) {
+		t.Fatalf("folded %d nodes, bulk %d", len(folded.Nodes), len(tr.Nodes))
+	}
+}
+
+// BenchmarkReconstruct tracks the cost of folding a run of distinct edit-only
+// tasks. Before the byTaskID index (#523), ns/op per event grew with n
+// (O(n^2) total); after it, ns/op per event should stay roughly flat.
+func BenchmarkReconstruct(b *testing.B) {
+	for _, n := range []int{2000, 8000, 32000} {
+		events := editOnlyEvents(n)
+		b.Run(fmt.Sprintf("n=%d", n), func(b *testing.B) {
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				Reconstruct(events)
+			}
+		})
 	}
 }

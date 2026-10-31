@@ -20,15 +20,26 @@ type ModelPrice struct {
 
 // TierPrice holds per-million-token rates for one tier (from pricing.yaml).
 type TierPrice struct {
+	ID               string  `yaml:"id"`
 	InputPerMillion  float64 `yaml:"input_per_million"`
 	OutputPerMillion float64 `yaml:"output_per_million"`
+}
+
+// TierEntry is one tier's fallback pricing, identified by its registry id
+// (e.g. "claude-core") rather than a tier number, the form callers that
+// merge it alongside OpenRouter model rows want.
+type TierEntry struct {
+	Tier             int
+	ID               string
+	InputPerMillion  float64
+	OutputPerMillion float64
 }
 
 // DB is the live pricing store. Load it once at startup with Load().
 //
 // Concurrency: DB is read-only after Load() returns. No fields are written
 // after construction, so all methods are safe for concurrent reads. Do NOT
-// store a *DB and mutate it — if you need a refresh, call Load() again.
+// store a *DB and mutate it, if you need a refresh, call Load() again.
 type DB struct {
 	// model name (lowercase) → price; populated from cache or OpenRouter fetch
 	models map[string]ModelPrice
@@ -41,20 +52,20 @@ type DB struct {
 // stale (>24h). On first run with no cache, a background fetch is kicked off
 // and tier-based pricing is used until the cache is warm.
 //
-// Never returns nil — worst case returns a DB with only tier data.
+// Never returns nil, worst case returns a DB with only tier data.
 func Load() *DB {
 	db := &DB{
 		models: make(map[string]ModelPrice),
 		tiers:  make(map[int]TierPrice),
 	}
 
-	// Tier fallback is always loaded first — it's always available locally.
+	// Tier fallback is always loaded first, it's always available locally.
 	if tp, err := loadFallbackTiers(); err == nil {
 		db.tiers = tp
 	} else {
 		// pricing.yaml is missing. EstimateCost will return 0 for unknown tiers.
-		// This poisons cost.jsonl — warn loudly so the operator notices.
-		log.Printf("hydra/pricing: WARNING — could not load registry/pricing.yaml: %v. All tier cost estimates will be $0.00.", err)
+		// This poisons cost.jsonl, warn loudly so the operator notices.
+		log.Printf("hydra/pricing: WARNING, could not load registry/pricing.yaml: %v. All tier cost estimates will be $0.00.", err)
 	}
 
 	// Overlay live model-specific prices from cache.
@@ -63,7 +74,7 @@ func Load() *DB {
 			db.models[strings.ToLower(k)] = v
 		}
 		if isCacheStale(cache) {
-			// Stale but usable — refresh in background, don't block caller.
+			// Stale but usable, refresh in background, don't block caller.
 			go func() {
 				if err := refreshCache(); err != nil {
 					log.Printf("hydra/pricing: background refresh failed: %v", err)
@@ -71,7 +82,7 @@ func Load() *DB {
 			}()
 		}
 	} else {
-		// No valid cache — kick off background fetch; use tier pricing until warm.
+		// No valid cache, kick off background fetch; use tier pricing until warm.
 		go func() {
 			if err := refreshCache(); err != nil {
 				log.Printf("hydra/pricing: initial background fetch failed: %v", err)
@@ -103,12 +114,12 @@ func (db *DB) CostForModel(modelName string, tier, inputTokens, outputTokens int
 
 // EstimateCost returns the estimated USD cost using tier-based pricing.
 // Implements the swarm.PricingReader interface.
-// Returns 0 if neither the requested tier nor tier 10 exist in pricing.yaml —
+// Returns 0 if neither the requested tier nor tier 10 exist in pricing.yaml,
 // callers should treat 0 as "pricing unavailable" not "free".
 func (db *DB) EstimateCost(tier, inputTokens, outputTokens int) float64 {
 	tp, ok := db.tiers[tier]
 	if !ok {
-		// Requested tier not in pricing.yaml — fall back to tier 10 (local/cheapest).
+		// Requested tier not in pricing.yaml, fall back to tier 10 (local/cheapest).
 		// If tier 10 is also missing (broken install), zero is returned.
 		tp = db.tiers[10]
 	}
@@ -141,6 +152,23 @@ func (db *DB) TierPrice(tier int) (TierPrice, bool) {
 // Returns false when pricing.yaml was missing or unreadable.
 func (db *DB) HasTiers() bool {
 	return len(db.tiers) > 0
+}
+
+// TierEntries returns every tier-based fallback price, sorted by tier number.
+// This is what prices the CLI-agent heads (claude-core, opus-thinking, …) that
+// never appear in OpenRouter's catalog, `pricing list` merges this in
+// alongside Models() so those heads are visible at all (#505).
+func (db *DB) TierEntries() []TierEntry {
+	out := make([]TierEntry, 0, len(db.tiers))
+	for tier, tp := range db.tiers {
+		if tp.ID == "" {
+			continue
+		}
+		out = append(out, TierEntry{Tier: tier, ID: tp.ID,
+			InputPerMillion: tp.InputPerMillion, OutputPerMillion: tp.OutputPerMillion})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Tier < out[j].Tier })
+	return out
 }
 
 func cost(inputPerM, outputPerM float64, inputTokens, outputTokens int) float64 {

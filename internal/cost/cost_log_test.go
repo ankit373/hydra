@@ -13,19 +13,20 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/testutil"
 )
 
 // cost.jsonl is Hydra's spend record. It is append-only, written by concurrent
-// goroutines, and read by hyctl cost/stats and the desktop app — so it is a
+// goroutines, and read by hyctl cost/stats and the desktop app, so it is a
 // format contract as much as a data structure, and a parse that silently drops
 // rows understates what the user has spent.
 
-// fixture writes a cost log under the sandbox's HOME and returns its path.
+// fixture writes a cost log under the sandbox's $HYDRA_HOME and returns its path.
 func fixture(t *testing.T, lines ...string) string {
 	t.Helper()
-	s := testutil.NewSandbox(t)
-	dir := filepath.Join(s.Home, ".hydra", "logs")
+	testutil.NewSandbox(t)
+	dir := filepath.Join(config.Dir(), "logs")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -49,7 +50,7 @@ func row(t *testing.T, r Row) string {
 	return string(b)
 }
 
-// "Never dispatched" and "cannot read the log" are different states — the first
+// "Never dispatched" and "cannot read the log" are different states, the first
 // renders an empty summary, the second is an error the user must see. Collapsing
 // them would report "$0.00 spent" for an unreadable log.
 func TestLoadAll_MissingLogIsErrNoLogNotAnEmptyResult(t *testing.T) {
@@ -193,7 +194,7 @@ func TestByTaskAndByRun_FilterExactly(t *testing.T) {
 	}
 }
 
-// Tail returns the last N, newest first — deliberately, so a terminal reader
+// Tail returns the last N, newest first, deliberately, so a terminal reader
 // sees the most recent dispatch at the top without scrolling. Asserted rather
 // than assumed: I expected chronological order and was wrong.
 func TestTail_TakesTheMostRecentNewestFirst(t *testing.T) {
@@ -228,7 +229,7 @@ func TestTail_TakesTheMostRecentNewestFirst(t *testing.T) {
 // ── golden output ────────────────────────────────────────────────────────────
 
 // capture redirects stdout for the duration of fn. The Render* functions print
-// rather than return, and their output is the product — a user reads it to
+// rather than return, and their output is the product, a user reads it to
 // decide whether Hydra is saving them money.
 func capture(t *testing.T, fn func()) string {
 	t.Helper()
@@ -284,7 +285,7 @@ func TestRenderTable_Golden(t *testing.T) {
 func TestRenderTable_EmptyIsAnEmptyState(t *testing.T) {
 	out := capture(t, func() { RenderTable("By model", nil) })
 	if strings.TrimSpace(out) == "" {
-		t.Error("an empty table printed nothing at all — the user cannot tell it ran")
+		t.Error("an empty table printed nothing at all, the user cannot tell it ran")
 	}
 }
 
@@ -298,7 +299,7 @@ func TestRenderSwarmStats_Golden(t *testing.T) {
 	testutil.Golden(t, "render_swarm_stats", out, s.Home, s.HydraHome)
 }
 
-// Zero spend must render as $0.00, never as an empty field — and a sub-cent
+// Zero spend must render as $0.00, never as an empty field, and a sub-cent
 // total must not truncate to zero, which would tell the user a paid call was
 // free.
 func TestRenderSummary_SubCentSpendIsNotShownAsZero(t *testing.T) {
@@ -371,7 +372,7 @@ func TestTodayAndAll_GroupByTier(t *testing.T) {
 	if len(todayRows) != 2 {
 		t.Fatalf("Today() = %+v, want tiers 3 and 8 only (tier 1 is 10 days old)", todayRows)
 	}
-	// Sorted by spend descending — the expensive tier is what the user must see.
+	// Sorted by spend descending, the expensive tier is what the user must see.
 	if todayRows[0].Key != "8" {
 		t.Errorf("Today()[0].Key = %q, want the costliest tier 8 first: %+v",
 			todayRows[0].Key, todayRows)
@@ -451,7 +452,7 @@ func TestFilterDays_Windows(t *testing.T) {
 }
 
 // SwarmStats only counts swarm rows, and reports the winner rate as a fraction
-// — a rate above 1 would render as "150%".
+// , a rate above 1 would render as "150%".
 func TestSwarmStats_CountsOnlySwarmRowsAndBoundsTheRate(t *testing.T) {
 	rows := []Row{
 		{SwarmMode: "best", SwarmWinner: true, WallMS: 1000, EstCostUSD: 0.1},
@@ -465,7 +466,7 @@ func TestSwarmStats_CountsOnlySwarmRowsAndBoundsTheRate(t *testing.T) {
 		t.Errorf("Runs = %d, want the 3 swarm rows only", got.Runs)
 	}
 	if got.WinnerRate < 0 || got.WinnerRate > 1 {
-		t.Errorf("WinnerRate = %v, outside [0,1] — it renders as a percentage", got.WinnerRate)
+		t.Errorf("WinnerRate = %v, outside [0,1], it renders as a percentage", got.WinnerRate)
 	}
 	if got.TotalCost > 1.0 {
 		t.Errorf("TotalCost = %v; the non-swarm row was included", got.TotalCost)
@@ -496,7 +497,7 @@ func TestByRunAndByTask_ScopeToOneIDAndErrorWhenAbsent(t *testing.T) {
 		t.Fatal(err)
 	}
 	if res.Totals.Calls != 2 {
-		t.Errorf("ByRun(run-a).Calls = %d, want 2 — run-b leaked in", res.Totals.Calls)
+		t.Errorf("ByRun(run-a).Calls = %d, want 2, run-b leaked in", res.Totals.Calls)
 	}
 	if res.Totals.EstCostUSD > 1.0 {
 		t.Errorf("ByRun(run-a) cost = %v; run-b's $9 was counted", res.Totals.EstCostUSD)
@@ -514,7 +515,7 @@ func TestByRunAndByTask_ScopeToOneIDAndErrorWhenAbsent(t *testing.T) {
 	}
 
 	if _, err := ByRun("nope"); err == nil {
-		t.Error("ByRun on an unknown run returned no error — a typo'd run id would " +
+		t.Error("ByRun on an unknown run returned no error, a typo'd run id would " +
 			"report $0.00 spent")
 	}
 	if _, err := ByTask("nope"); err == nil {
@@ -549,7 +550,7 @@ func TestByModelAndByDay_KeyOnModelAndCalendarDay(t *testing.T) {
 	if len(days) != 3 {
 		t.Fatalf("ByDay() = %+v, want two calendar days plus \"unknown\"", days)
 	}
-	// Ascending by date, unlike every other grouping — a chart drawn from this
+	// Ascending by date, unlike every other grouping, a chart drawn from this
 	// reads left-to-right in time.
 	for i := 1; i < len(days); i++ {
 		if days[i-1].Key > days[i].Key {
@@ -578,7 +579,7 @@ func TestTail_NewestFirstAndClamped(t *testing.T) {
 		t.Errorf("Tail(2) = %+v, want newest first", two)
 	}
 
-	for _, n := range []int{0, -1, 999} {
+	for _, n := range []int{-1, 999} {
 		all, err := Tail(n)
 		if err != nil {
 			t.Fatal(err)
@@ -586,6 +587,23 @@ func TestTail_NewestFirstAndClamped(t *testing.T) {
 		if len(all) != 3 {
 			t.Errorf("Tail(%d) returned %d rows, want all 3 clamped", n, len(all))
 		}
+	}
+}
+
+// Tail(0) must mean "no rows", matching the `tail -n 0` convention, the
+// previous behavior returned everything, identical to Tail(999999) (#455).
+func TestTail_ZeroReturnsNoRows(t *testing.T) {
+	fixture(t,
+		row(t, Row{TS: "2026-08-01T00:00:00Z", Model: "a", PromptTokens: 1}),
+		row(t, Row{TS: "2026-08-02T00:00:00Z", Model: "b", PromptTokens: 1}),
+	)
+
+	got, err := Tail(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 0 {
+		t.Errorf("Tail(0) returned %d rows, want 0", len(got))
 	}
 }
 
@@ -612,7 +630,7 @@ func TestTailLines_CorrectAcrossChunkBoundaries(t *testing.T) {
 		}
 		wantModel := fmt.Sprintf("m%d-%s", want, pad)
 		if r.Model != wantModel {
-			t.Errorf("line %d: Model = %q, want %q — tailLines must be exact across chunk boundaries", i, r.Model, wantModel)
+			t.Errorf("line %d: Model = %q, want %q, tailLines must be exact across chunk boundaries", i, r.Model, wantModel)
 		}
 	}
 }
@@ -645,12 +663,44 @@ func TestRenderers_HandleEmptyLongLabelsAndLargeNumbers(t *testing.T) {
 		t.Errorf("no total row:\n%s", out)
 	}
 
-	// A row with no enum must still print something — "?" — rather than a gap
-	// that reads as a missing column.
+	// A --tier dispatch has no enum, so the field is not unknown and "?" was
+	// the wrong answer as surely as the bare "/3" the summary printed. Both
+	// render the same thing now, through routeKey.
 	tail := capture(t, func() {
 		RenderTail([]Row{{TS: "2026-08-01T00:00:00Z", Tier: 3, Model: "m", WallMS: 12}})
 	})
-	if !strings.Contains(tail, "?/3") {
-		t.Errorf("a row with no enum did not render a placeholder:\n%s", tail)
+	if !strings.Contains(tail, "tier 3") {
+		t.Errorf("a row with no enum does not say how it was routed:\n%s", tail)
+	}
+	if strings.Contains(tail, "/3") {
+		t.Errorf("a row with no enum still renders a routing key it does not have:\n%s", tail)
+	}
+}
+
+// One renderer forgot the placeholder the other had, which is how `hyctl cost`
+// came to print a bare "/10" on every row of a --tier-routed machine (#794).
+// Both call routeKey now, and this is what says so.
+func TestRouteKey_SaysHowARowWasRouted(t *testing.T) {
+	for _, c := range []struct {
+		enum string
+		tier int
+		want string
+	}{
+		{"STANDARD", 8, "STANDARD/8"},
+		{"", 10, "tier 10"},
+	} {
+		if got := routeKey(c.enum, c.tier); got != c.want {
+			t.Errorf("routeKey(%q, %d) = %q, want %q", c.enum, c.tier, got, c.want)
+		}
+	}
+
+	row := Row{TS: "2026-08-01T00:00:00Z", Tier: 10, Model: "m"}
+	summary := capture(t, func() {
+		RenderSummary(&SummaryResult{Recent: []Row{row}})
+	})
+	tail := capture(t, func() { RenderTail([]Row{row}) })
+	if !strings.Contains(summary, "tier 10") || !strings.Contains(tail, "tier 10") {
+		t.Errorf("the two renderers disagree about an enum-less row:\nsummary: %s\ntail: %s",
+			summary, tail)
 	}
 }

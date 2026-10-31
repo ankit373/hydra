@@ -80,7 +80,7 @@ func TestParseProfile_IgnoresMalformedLinesRatherThanCounting(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got["internal/a"] != 0 {
-		t.Errorf("internal/a = %.1f%%, want 0 — the malformed line must not count "+
+		t.Errorf("internal/a = %.1f%%, want 0, the malformed line must not count "+
 			"as covered", got["internal/a"])
 	}
 
@@ -183,6 +183,40 @@ func TestCheck_AFloorWithNoMeasurementFails(t *testing.T) {
 	}
 }
 
+// The mirror of the case above, and the one that actually happens: a package
+// with tests and no floor. Passing it is how seven arrived unratcheted (#805).
+func TestCheck_AMeasuredPackageWithNoFloorFails(t *testing.T) {
+	dir := t.TempDir()
+	profile := filepath.Join(dir, "cover.out")
+	writeFile(t, profile, "mode: set\ngithub.com/ankit373/hydra/internal/new/x.go:1.1,2.2 10 1\n")
+
+	cfg := &Config{Floors: map[string]float64{}, NoTests: map[string]string{}, SkipBudget: 100}
+	problems, _, err := check(cfg, profile, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(problems) != 1 {
+		t.Fatalf("got %d problems, want 1: %v", len(problems), problems)
+	}
+	// Naming the package and the file is what makes the failure actionable,
+	// since the fix is one line and the reader has to know which.
+	for _, want := range []string{"internal/new", "coverage-floors.txt"} {
+		if !strings.Contains(problems[0], want) {
+			t.Errorf("the message does not mention %q: %s", want, problems[0])
+		}
+	}
+
+	// Given a floor, the same profile passes.
+	cfg.Floors["internal/new"] = 90
+	problems, _, err = check(cfg, profile, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(problems) != 0 {
+		t.Fatalf("a floored package was still reported: %v", problems)
+	}
+}
+
 // A package with no test files must fail unless allow-listed, and a stale
 // allow-list entry must fail too.
 func TestCheck_ZeroTestPackages(t *testing.T) {
@@ -252,7 +286,7 @@ func TestCheck_SkipBudgetAndReasons(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Three real skips, within budget — but one has no reason.
+	// Three real skips, within budget, but one has no reason.
 	if len(problems) != 1 {
 		t.Fatalf("got %v, want only the reasonless skip reported", problems)
 	}
@@ -331,10 +365,10 @@ func TestCheckedInConfig_IsValid(t *testing.T) {
 	}
 	for pkg, floor := range cfg.Floors {
 		if floor < 0 || floor > 100 {
-			t.Errorf("%s has a floor of %v, outside 0–100", pkg, floor)
+			t.Errorf("%s has a floor of %v, outside 0-100", pkg, floor)
 		}
 	}
-	// A package cannot both have a floor and be allow-listed as untested — one
+	// A package cannot both have a floor and be allow-listed as untested, one
 	// of the two is wrong, and the gate would enforce the weaker.
 	for pkg := range cfg.NoTests {
 		if _, hasFloor := cfg.Floors[pkg]; hasFloor {

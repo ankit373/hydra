@@ -27,7 +27,7 @@ func TestIsHomebrewInstall(t *testing.T) {
 	}
 }
 
-// A Homebrew install must not run install.sh at all — that would overwrite
+// A Homebrew install must not run install.sh at all, that would overwrite
 // Homebrew's symlink with a bare binary and desync `brew`'s bookkeeping.
 // `brew upgrade hyctl` is pointed at instead, printed rather than run since
 // hyctl has no business invoking `brew` on the user's behalf.
@@ -71,7 +71,7 @@ func TestRunUpgrade_NonHomebrewRunsTheScript(t *testing.T) {
 	}
 }
 
-// A failing installer's exit status must propagate — a silent failure here
+// A failing installer's exit status must propagate, a silent failure here
 // would make `hyctl upgrade` exit 0 having installed nothing.
 func TestRunUpgrade_ScriptFailurePropagates(t *testing.T) {
 	origExe := executablePath
@@ -89,7 +89,7 @@ func TestRunUpgrade_ScriptFailurePropagates(t *testing.T) {
 }
 
 // `hyctl upgrade` must be reachable through the real command tree, with help
-// text that does not panic — the same contract every other subcommand meets
+// text that does not panic, the same contract every other subcommand meets
 // (see naming_test.go / cli_contract_test.go).
 func TestCLI_UpgradeHasHelp(t *testing.T) {
 	cliSandbox(t)

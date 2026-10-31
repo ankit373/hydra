@@ -15,7 +15,7 @@ import (
 // AWS SigV4 request signing had 0% coverage. It is the highest-consequence code
 // in this package: get it wrong and every Bedrock call fails with a 403 that
 // says nothing useful, and the failure mode of getting it *subtly* wrong is
-// worse — a signature that works today and breaks on a header change.
+// worse, a signature that works today and breaks on a header change.
 //
 // Tested against known-answer vectors rather than by re-deriving the algorithm
 // in the test, which would only prove the code agrees with itself. The vectors
@@ -60,7 +60,7 @@ func TestSHA256Hex_MatchesKnownAnswer(t *testing.T) {
 	if got := sha256Hex([]byte{}); got != emptySHA256 {
 		t.Errorf("sha256Hex(empty) = %s, want %s", got, emptySHA256)
 	}
-	// Different input must give a different digest — guards against a stub that
+	// Different input must give a different digest, guards against a stub that
 	// always returns the same thing.
 	if sha256Hex([]byte("a")) == emptySHA256 {
 		t.Error("sha256Hex is not actually hashing its input")
@@ -80,7 +80,7 @@ func TestAWSSigningKey_DependsOnEveryInput(t *testing.T) {
 	}
 	for what, got := range variants {
 		if bytes.Equal(base, got) {
-			t.Errorf("changing %s did not change the signing key — it is not part of the derivation", what)
+			t.Errorf("changing %s did not change the signing key, it is not part of the derivation", what)
 		}
 	}
 }
@@ -132,7 +132,7 @@ func TestSignAWSRequest_SignedHeadersMatchWhatIsSent(t *testing.T) {
 			continue // host comes from the URL, not the header map
 		}
 		if req.Header.Get(h) == "" {
-			t.Errorf("SignedHeaders declares %q but the request does not send it — "+
+			t.Errorf("SignedHeaders declares %q but the request does not send it, "+
 				"AWS will compute a different canonical request and reject this with a 403", h)
 		}
 	}
@@ -160,7 +160,7 @@ func TestSignAWSRequest_SignedHeadersAreLowercaseAndSorted(t *testing.T) {
 					withToken, hs[i-1], h, signed)
 			}
 		}
-		// The session token must be signed when present and absent when not —
+		// The session token must be signed when present and absent when not,
 		// signing a header you do not send, or sending one you did not sign,
 		// both produce a 403.
 		hasTokenHeader := strings.Contains(signed, "x-amz-security-token")
@@ -190,7 +190,7 @@ func TestSignAWSRequest_PayloadHashCoversTheRealBody(t *testing.T) {
 }
 
 // The secret must never leave the process. The Authorization header carries the
-// access key ID and a derived signature — never the secret itself.
+// access key ID and a derived signature, never the secret itself.
 func TestSignAWSRequest_NeverLeaksTheSecret(t *testing.T) {
 	req := signedRequest(t, []byte(`{"a":1}`), true)
 
@@ -281,7 +281,7 @@ func TestSignAWSRequest_RefusesWithoutCredentials(t *testing.T) {
 }
 
 // canonicalHeaders builds half of the string-to-sign. Its output must end every
-// line with \n and never contain a stray value — SigV4 is byte-exact.
+// line with \n and never contain a stray value, SigV4 is byte-exact.
 func TestCanonicalHeaders_ShapeIsByteExact(t *testing.T) {
 	req, err := http.NewRequest(http.MethodPost, "https://host.example.com/p", nil)
 	if err != nil {
@@ -300,7 +300,7 @@ func TestCanonicalHeaders_ShapeIsByteExact(t *testing.T) {
 			t.Errorf("canonical header line %q has no colon", line)
 		}
 		if strings.HasSuffix(line, " ") || strings.Contains(line, ": ") {
-			t.Errorf("canonical header line %q has untrimmed whitespace — SigV4 is byte-exact", line)
+			t.Errorf("canonical header line %q has untrimmed whitespace, SigV4 is byte-exact", line)
 		}
 	}
 	// host must come from the URL, not from a Host header that Go does not
