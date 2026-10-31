@@ -115,8 +115,10 @@ func (e *HTTPExecutor) streamOpenAILike(ctx context.Context, req Request, onDelt
 	var gotModel, finish string
 	var inTok, outTok int
 	var tools toolCallStream
+	var recovered []ToolCall
+	hold := newTextCallHold(req.Tools)
 
-	sink, start, err := e.sseStream(ctx, req.Head.ID, httpReq, onDelta, func(payload string, sink *deltaSink) error {
+	readChunk := func(payload string, sink *deltaSink) error {
 		var chunk openAIChatChunk
 		if err := json.Unmarshal([]byte(payload), &chunk); err != nil {
 			return fmt.Errorf("decode chunk: %w", err)
@@ -128,8 +130,9 @@ func (e *HTTPExecutor) streamOpenAILike(ctx context.Context, req Request, onDelt
 			inTok, outTok = chunk.Usage.PromptTokens, chunk.Usage.CompletionTokens
 		}
 		for _, c := range chunk.Choices {
-			sink.write(c.Delta.Content)
+			hold.write(c.Delta.Content, sink)
 			for _, frag := range c.Delta.ToolCalls {
+				hold.structured(sink)
 				tools.add(frag)
 				sink.noteStructured()
 			}
@@ -138,6 +141,13 @@ func (e *HTTPExecutor) streamOpenAILike(ctx context.Context, req Request, onDelt
 			}
 		}
 		return nil
+	}
+
+	sink, start, err := e.streamRequest(ctx, req.Head.ID, httpReq, onDelta, func(body io.Reader, sink *deltaSink) error {
+		err := scanSSE(body, func(payload string) error { return readChunk(payload, sink) })
+		// Settled here, or streamRequest reads an answer still held as empty.
+		recovered = hold.finish(sink, err == nil && ctx.Err() == nil)
+		return err
 	})
 	if err != nil {
 		return nil, err
@@ -151,6 +161,11 @@ func (e *HTTPExecutor) streamOpenAILike(ctx context.Context, req Request, onDelt
 	answer.TTFT = sink.firstTokenAt()
 	answer.ToolCalls = tools.done()
 	answer.FinishReason = finish
+	// The buffered path's recovery, on the streamed half it missed (#1147, #1223).
+	if len(answer.ToolCalls) == 0 && recovered != nil {
+		answer.ToolCalls, answer.ToolCallsRecovered = recovered, true
+		answer.FinishReason = "tool_calls"
+	}
 	return answer, nil
 }
 
