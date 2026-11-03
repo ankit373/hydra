@@ -2404,7 +2404,7 @@ func cmdMCP() *cobra.Command {
 			}
 			approval, ok := ledger.LatestBound(events, tool, verResource)
 			if !ok {
-				return fmt.Errorf("no allowed, parameter-bound ledger event for %s/%s, nothing to verify against", tool, verResource)
+				return fmt.Errorf("no allowed, parameter-bound ledger event for %s -> %s, nothing to verify against", tool, verResource)
 			}
 
 			// A parameters_hash read straight off disk proves nothing if the
@@ -2434,7 +2434,7 @@ func cmdMCP() *cobra.Command {
 			// Name the matched approval explicitly: the hash covers the
 			// parameters only, so the operator must be able to see which
 			// tool/resource the approval was actually recorded for.
-			target := fmt.Sprintf("%s/%s at %s", approval.Tool, approval.Resource, approval.TS)
+			target := fmt.Sprintf("%s -> %s at %s", approval.Tool, approval.Resource, approval.TS)
 			if !match {
 				fmt.Printf("  %s  parameters do NOT match the approval for %s\n",
 					strings.ToUpper(string(ledger.Deny)), target)
@@ -2656,22 +2656,19 @@ func cmdMCPRegistry() *cobra.Command {
 				if e.Score != nil {
 					fmt.Printf("             score %-20s state %-12s confidence %s\n",
 						mcpregistry.FormatScore(*e.Score), e.LifecycleState, mcpregistry.FormatConfidence(e.Score.Confidence))
-					for _, cat := range []struct {
-						name string
-						cs   mcpregistry.CategoryScore
-					}{
-						{"security", e.Score.SecurityImplementation},
-						{"repo health", e.Score.RepositoryHealth},
-						{"operational", e.Score.OperationalSecurity},
-						{"community", e.Score.CommunityGovernance},
-					} {
-						for _, sig := range cat.cs.Signals {
-							if sig.Available && sig.Detail != "" {
-								fmt.Printf("               %-11s %s\n", cat.name, dimStyle.Render(sig.Detail))
+					// Unavailable signals and unchecked categories print too: without them
+					// a score standing on the neutral baseline reads as evidenced (#1170).
+					for _, cat := range e.Score.Categories() {
+						for _, sig := range cat.Signals {
+							if sig.Detail != "" {
+								fmt.Printf("               %-11s %s\n", cat.Name, dimStyle.Render(sig.Detail))
 							}
 						}
+						if !cat.Evaluated() {
+							fmt.Printf("               %-11s %s\n", cat.Name, warnStyle.Render("not checked, scored at the neutral baseline"))
+						}
 					}
-				} else if e.NearestMatch != "" {
+				} else if e.NearestMatch != "" && mcpregistry.IsNearMiss(e.Package, e.NearestDist) {
 					fmt.Printf("             %s\n", dimStyle.Render(fmt.Sprintf("nearest known identifier: %q (%d edits away), verify this isn't a typosquat", e.NearestMatch, e.NearestDist)))
 				}
 			}
@@ -2758,11 +2755,17 @@ func cmdMCPRegistry() *cobra.Command {
 				return json.NewEncoder(os.Stdout).Encode(entries)
 			}
 			if len(entries) == 0 {
+				// Audit only scores servers it resolved, and nothing resolves before a sync.
+				if !mcpregistry.Synced() {
+					fmt.Println("  no audited servers yet, the registry was never synced: run " +
+						"`hyctl mcp registry sync`, then `hyctl mcp registry audit`")
+					return nil
+				}
 				fmt.Println("  no audited servers yet, run `hyctl mcp registry audit` first")
 				return nil
 			}
-			fmt.Printf("\n  %-40s %-12s %6s  %s\n", "SERVER", "STATE", "SCORE", "CONFIDENCE")
-			fmt.Println("  " + strings.Repeat("─", 78))
+			fmt.Printf("\n  %-40s %-12s %6s  %-12s %s\n", "SERVER", "STATE", "SCORE", "CONFIDENCE", "CHECKED")
+			fmt.Println("  " + strings.Repeat("─", 86))
 			for _, e := range entries {
 				state := string(e.LifecycleState)
 				switch e.LifecycleState {
@@ -2771,8 +2774,15 @@ func cmdMCPRegistry() *cobra.Command {
 				case mcpregistry.StateFlagged, mcpregistry.StateQuarantined, mcpregistry.StateDelisted:
 					state = warnStyle.Render(state)
 				}
-				fmt.Printf("  %-40.40s %-12s %6s  %s\n", e.Name, state,
-					mcpregistry.FormatScore(e.Score), mcpregistry.FormatConfidence(e.Score.Confidence))
+				checked := 0
+				cats := e.Score.Categories()
+				for _, c := range cats {
+					if c.Evaluated() {
+						checked++
+					}
+				}
+				fmt.Printf("  %-40.40s %-12s %6s  %-12s %d of %d\n", e.Name, state,
+					mcpregistry.FormatScore(e.Score), mcpregistry.FormatConfidence(e.Score.Confidence), checked, len(cats))
 			}
 			fmt.Println()
 			return nil
