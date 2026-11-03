@@ -87,26 +87,6 @@ func (q Question) Outcomes() []Option {
 	return q.Options
 }
 
-// Top is the index of the most probable outcome; a tie goes to the earlier one.
-func (a Answer) Top() int {
-	top := 0
-	for i, p := range a.Probabilities {
-		if p > a.Probabilities[top] {
-			top = i
-		}
-	}
-	return top
-}
-
-// Level is a score answer's probability-weighted mean level, which can fall between levels.
-func (a Answer) Level() float64 {
-	level := 0.0
-	for i, p := range a.Probabilities {
-		level += float64(i) * p
-	}
-	return level
-}
-
 // Validate refuses a request some supported dialect would reject, before any source is paid.
 func (r Request) Validate() error {
 	if len(r.Questions) == 0 {

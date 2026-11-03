@@ -145,13 +145,13 @@ func (a decisionsAnswer) answer(q Question) (Answer, error) {
 	if q.Kind == Predicate {
 		return predicateAnswer(a.Probability)
 	}
-	keyed := make(map[string]float64, len(a.Probabilities))
-	for _, o := range a.Probabilities {
+	keyed := make([]keyedProb, len(a.Probabilities))
+	for i, o := range a.Probabilities {
 		key, err := outcomeKey(q.Kind, o.Value)
 		if err != nil {
 			return Answer{}, err
 		}
-		keyed[key] = o.Probability
+		keyed[i] = keyedProb{key: key, p: o.Probability}
 	}
 	keys := names(q.Options)
 	if q.Kind == Score {

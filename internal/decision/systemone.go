@@ -3,6 +3,7 @@
 package decision
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -57,10 +58,36 @@ type systemOneResponse struct {
 }
 
 type systemOneAnswer struct {
-	Type          string             `json:"type"`
-	Noul          *float64           `json:"noul,omitempty"`
-	Confidence    *float64           `json:"confidence,omitempty"`
-	Probabilities map[string]float64 `json:"probabilities,omitempty"`
+	Type          string                 `json:"type"`
+	Noul          *float64               `json:"noul,omitempty"`
+	Confidence    *float64               `json:"confidence,omitempty"`
+	Probabilities systemOneProbabilities `json:"probabilities,omitempty"`
+}
+
+// systemOneProbabilities keeps every key a reply sent, where a map would let a repeat overwrite.
+type systemOneProbabilities []keyedProb
+
+func (s *systemOneProbabilities) UnmarshalJSON(b []byte) error {
+	if string(b) == "null" {
+		return nil
+	}
+	dec := json.NewDecoder(bytes.NewReader(b))
+	if t, err := dec.Token(); err != nil || t != json.Delim('{') {
+		return fmt.Errorf("probabilities %s are not an object", b)
+	}
+	for dec.More() {
+		t, err := dec.Token()
+		if err != nil {
+			return err
+		}
+		var p float64
+		if err = dec.Decode(&p); err != nil {
+			return fmt.Errorf("probability for %v: %w", t, err)
+		}
+		// Inside an object the decoder only yields a string where a key belongs.
+		*s = append(*s, keyedProb{key: t.(string), p: p})
+	}
+	return nil
 }
 
 type systemOneUsage struct {

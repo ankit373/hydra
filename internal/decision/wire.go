@@ -17,15 +17,29 @@ func optionText(o Option) string {
 	return o.Name + ": " + o.Description
 }
 
+// keyedProb is one reported probability, keyed by the outcome it was reported for.
+type keyedProb struct {
+	key string
+	p   float64
+}
+
 // aligned orders a keyed distribution by keys, refusing one that names a
-// different set of outcomes than were asked about.
-func aligned(probs map[string]float64, keys []string) ([]float64, error) {
-	if len(probs) != len(keys) {
-		return nil, fmt.Errorf("answered %d outcomes for %d asked", len(probs), len(keys))
+// different set of outcomes than were asked about, or names one twice.
+func aligned(probs []keyedProb, keys []string) ([]float64, error) {
+	byKey := make(map[string]float64, len(probs))
+	for _, kp := range probs {
+		// A repeat would overwrite, hiding mass that Check must see.
+		if _, seen := byKey[kp.key]; seen {
+			return nil, fmt.Errorf("gave %q more than one probability", kp.key)
+		}
+		byKey[kp.key] = kp.p
+	}
+	if len(byKey) != len(keys) {
+		return nil, fmt.Errorf("answered %d outcomes for %d asked", len(byKey), len(keys))
 	}
 	out := make([]float64, len(keys))
 	for i, k := range keys {
-		p, ok := probs[k]
+		p, ok := byKey[k]
 		if !ok {
 			return nil, fmt.Errorf("gave no probability for %q", k)
 		}
