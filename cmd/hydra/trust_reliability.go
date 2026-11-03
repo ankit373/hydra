@@ -57,8 +57,11 @@ func readReliabilityLog(source string) (reliabilityLog, error) {
 				tally.Unscored++
 				continue
 			}
-			obs := reliability.Observation{Predicted: e.Confidence, Correct: passed}
-			tally.Observations = append(tally.Observations, obs)
+			tally.Observations = append(tally.Observations, reliability.Observation{
+				Predicted: e.Confidence,
+				Correct:   passed,
+				Ref:       fmt.Sprintf("run %s span %s", id, e.SpanID),
+			})
 		}
 	}
 	return rec, nil
@@ -112,10 +115,7 @@ applies to them on your own work. Every source is listed side by side per domain
 			if err != nil {
 				return err
 			}
-			sources, err := reliability.EvaluateSources(rec.sources, bins)
-			if err != nil {
-				return err
-			}
+			sources := reliability.EvaluateSources(rec.sources, bins)
 			if source != "" {
 				return reportSource(source, sources, jsonOut)
 			}
@@ -124,7 +124,8 @@ applies to them on your own work. Every source is listed side by side per domain
 	}
 	cmd.Flags().IntVar(&bins, "bins", reliability.DefaultBins, "number of equal-width confidence bins")
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "machine-readable JSON output")
-	cmd.Flags().StringVar(&source, "source", "", "report one decision source (a head id) per domain")
+	cmd.Flags().StringVar(&source, "source", "",
+		"report one decision source (a head id) per domain (needs #1297)")
 	return cmd
 }
 
@@ -172,8 +173,8 @@ func reportSource(source string, sources []reliability.SourceReport, jsonOut boo
 	return nil
 }
 
-// renderSources prints one row per source and domain. A row under the floor
-// says how many verdicts it still needs, never a number it cannot back.
+// renderSources prints one row per source and domain. A row under the floor or
+// with an unusable record says why, never a number it cannot back.
 func renderSources(sources []reliability.SourceReport) {
 	if len(sources) == 0 {
 		return
@@ -183,6 +184,10 @@ func renderSources(sources []reliability.SourceReport) {
 	fmt.Println("  " + strings.Repeat("─", 84))
 	for _, s := range sources {
 		lead := fmt.Sprintf("  %-28s %-10s %8d %8d", s.Source, s.Domain, s.Scored, s.Unscored)
+		if s.Err != "" {
+			fmt.Printf("%s  %s\n", lead, warnStyle.Render(s.Err))
+			continue
+		}
 		if s.Report == nil {
 			note := fmt.Sprintf("not enough verdicts yet, %d more needed", s.Need)
 			fmt.Printf("%s  %s\n", lead, dimStyle.Render(note))

@@ -352,7 +352,7 @@ hyctl trust calibration ; hyctl trust record --source ollama/qwen3:4b --domain g
 hyctl trust outcome <task_hash> --outcome incorrect
 # Is the confidence number itself honest? Reads run-log verdicts, needs `hyctl trace score` first
 hyctl trust reliability ; hyctl trust reliability --json
-# The same audit for every decision source, per domain, against verdicts on your own work
+# The same audit for every decision source, per domain, against verdicts on your own work (needs #1297)
 hyctl trust reliability --source <head> ; hyctl trust reliability --source <head> --json
 # Close the loop in one command: verify the answer, score the span, train every voter
 # Verify an answer by applying it: `hyctl edit` validates the file it just wrote.
