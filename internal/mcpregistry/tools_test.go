@@ -164,6 +164,23 @@ func TestLoadToolSnapshot_ToolWithNoNameIsAnError(t *testing.T) {
 	}
 }
 
+// A repeated name would let a clean tool replace a poisoned one before any check ran.
+func TestLoadToolSnapshot_RepeatedNameIsAnError(t *testing.T) {
+	snapshots := map[string]string{
+		"same name":           `{"tools":[{"name":"fetch"},{"name":"fetch"}]}`,
+		"same after cleaning": `{"tools":[{"name":"fetch\u0001"},{"name":"fetch\u0002"}]}`,
+	}
+	for name, snapshot := range snapshots {
+		t.Run(name, func(t *testing.T) {
+			withTempHydraHome(t)
+			writeJSON(t, ToolsSnapshotPath("fetch"), snapshot)
+			if _, err := loadToolSnapshot("fetch"); err == nil {
+				t.Error("a snapshot naming one tool twice must not load")
+			}
+		})
+	}
+}
+
 func TestLoadToolSnapshot_ControlCharactersInANameNeverReachTheTerminal(t *testing.T) {
 	withTempHydraHome(t)
 	const snapshot = `{"tools":[{"name":"evil\u001b[2K\rfetch","description":"Fetch."}]}`

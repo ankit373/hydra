@@ -86,6 +86,10 @@ func loadToolSnapshot(server string) (map[string]Tool, error) {
 		if t.Name == "" {
 			return nil, fmt.Errorf("tools snapshot %s: a tool has no name", path)
 		}
+		// A second tool under one name would replace the first, hiding it from every check.
+		if _, dup := tools[t.Name]; dup {
+			return nil, fmt.Errorf("tools snapshot %s: tool %q appears twice", path, t.Name)
+		}
 		tools[t.Name] = t
 	}
 	return tools, nil
