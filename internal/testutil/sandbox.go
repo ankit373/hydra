@@ -108,6 +108,14 @@ var tuningVars = []string{
 	"LLAMA_ARG_HOST",
 	"LLAMA_ARG_PORT",
 	"HYDRA_LMSTUDIO_HOST",
+	"HYDRA_SGLANG_HOST",
+}
+
+// decisionVars are a decision API's key and model. Kept apart from APIKeyVars,
+// which mirrors the chat heads' env provider exactly.
+var decisionVars = []string{
+	"TYPESAFE_API_KEY",
+	"TYPESAFE_DEFAULT_MODEL",
 }
 
 // deadAddressVars are the subset whose value is an address to dial.
@@ -120,6 +128,7 @@ var deadAddressVars = map[string]string{
 	// because it was the one service a sandbox could not point away from the
 	// developer's machine (#988).
 	"HYDRA_LMSTUDIO_HOST": "http://127.0.0.1:1",
+	"HYDRA_SGLANG_HOST":   "http://127.0.0.1:1",
 }
 
 // Blocking outbound HTTP has to happen at package load, not per test.
@@ -211,6 +220,9 @@ func NewSandbox(t *testing.T) *Sandbox {
 		t.Setenv(v, "")
 	}
 	for _, v := range ModelPinVars {
+		t.Setenv(v, "")
+	}
+	for _, v := range decisionVars {
 		t.Setenv(v, "")
 	}
 	for _, v := range tuningVars {
