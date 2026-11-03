@@ -90,12 +90,13 @@ func findSpan(events []Event, spanID string) (Event, bool) {
 // recorded without reimplementing that resolution.
 func Span(events []Event, spanID string) (Event, bool) { return findSpan(events, spanID) }
 
-// Scores returns the verdicts recorded against a span, in append order.
-func Scores(events []Event, spanID string) []Score {
-	var out []Score
+// ScoresBySpan indexes a run's verdicts by span id, each in append order. One
+// pass for the whole run, so joining every span to its verdict stays linear.
+func ScoresBySpan(events []Event) map[string][]Score {
+	out := map[string][]Score{}
 	for _, e := range events {
-		if e.Kind == KindScore && e.SpanID == spanID && e.Score != nil {
-			out = append(out, *e.Score)
+		if e.Kind == KindScore && e.Score != nil {
+			out[e.SpanID] = append(out[e.SpanID], *e.Score)
 		}
 	}
 	return out

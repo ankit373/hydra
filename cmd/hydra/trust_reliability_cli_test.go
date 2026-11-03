@@ -171,3 +171,165 @@ func abs(f float64) float64 {
 	}
 	return f
 }
+
+// seedDecisions writes count decision answers from source in domain, each
+// stating stated and right at rate actual. Through the real Append and
+// AppendScore, standing in for the decision head until it writes these itself.
+func seedDecisions(t *testing.T, rng *rand.Rand, source, domain string, stated, actual float64, count int) {
+	t.Helper()
+	// Hashed, because a head id like ollama/qwen3:4b is not a file name.
+	runID := "run-decide-" + runlog.SpanIDFor(source+"\x00"+domain)
+	rl := runlog.New(runID)
+	for i := 0; i < count; i++ {
+		spanID := runlog.NewSpanID()
+		if err := rl.Append(runlog.Event{
+			Kind: runlog.KindDecision, TaskID: "t", SpanID: spanID,
+			Head: source, Domain: domain, Confidence: stated,
+		}); err != nil {
+			t.Fatal(err)
+		}
+		value := 0.0
+		if rng.Float64() < actual {
+			value = 1
+		}
+		if err := runlog.AppendScore(runID, spanID, runlog.Score{
+			Name: "label", Value: value, Source: "human",
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// sourcesJSON runs the command with args and decodes the sources it reports.
+func sourcesJSON(t *testing.T, args ...string) []reliability.SourceReport {
+	t.Helper()
+	out, _, err := run(t, append([]string{"trust", "reliability", "--json"}, args...)...)
+	if err != nil {
+		t.Fatalf("trust reliability --json: %v", err)
+	}
+	var got struct {
+		Sources []reliability.SourceReport `json:"sources"`
+	}
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("output is not JSON: %v\n%s", err, out)
+	}
+	return got.Sources
+}
+
+// The point of the audit: with no --source every source is listed beside the
+// others, and the one whose numbers do not hold up reads worse.
+func TestCLI_TrustReliabilityListsEverySourceSideBySide(t *testing.T) {
+	cliSandbox(t)
+	rng := rand.New(rand.NewSource(23))
+	seedDecisions(t, rng, "ollama/honest", "go", 0.7, 0.7, 200)
+	seedDecisions(t, rng, "boastful", "go", 0.95, 0.6, 200)
+
+	out, _, err := run(t, "trust", "reliability")
+	if err != nil {
+		t.Fatalf("trust reliability: %v", err)
+	}
+	for _, want := range []string{
+		"DECISION SOURCE",
+		"ollama/honest",
+		"boastful",
+		"GAP",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("render is missing %q:\n%s", want, out)
+		}
+	}
+
+	ece := map[string]float64{}
+	for _, sr := range sourcesJSON(t) {
+		if sr.Report == nil {
+			t.Fatalf("%s in %s has no report on %d verdicts", sr.Source, sr.Domain, sr.Scored)
+		}
+		ece[sr.Source] = sr.Report.ECE
+	}
+	if ece["boastful"] <= ece["ollama/honest"] {
+		t.Errorf("overconfident ECE %.4f is not worse than calibrated %.4f", ece["boastful"], ece["ollama/honest"])
+	}
+}
+
+// --source keeps one head and splits it by domain, since a source can be
+// honest on one kind of work and not another.
+func TestCLI_TrustReliabilitySourceReportsPerDomain(t *testing.T) {
+	cliSandbox(t)
+	rng := rand.New(rand.NewSource(29))
+	seedDecisions(t, rng, "a", "go", 0.8, 0.8, 30)
+	seedDecisions(t, rng, "a", "py", 0.8, 0.8, 30)
+	seedDecisions(t, rng, "b", "go", 0.8, 0.8, 30)
+
+	got := sourcesJSON(t, "--source", "a")
+	want := []reliability.Key{
+		{Source: "a", Domain: "go"},
+		{Source: "a", Domain: "py"},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("got %d rows, want %d: %+v", len(got), len(want), got)
+	}
+	for i, sr := range got {
+		if sr.Key != want[i] {
+			t.Errorf("row %d = %+v, want %+v", i, sr.Key, want[i])
+		}
+	}
+}
+
+// Below the floor a source gets the count it still needs, never a number.
+func TestCLI_TrustReliabilitySourceRefusesBelowTheFloor(t *testing.T) {
+	cliSandbox(t)
+	seedDecisions(t, rand.New(rand.NewSource(31)), "a", "go", 0.9, 0.9, 5)
+
+	out, _, err := run(t, "trust", "reliability", "--source", "a")
+	if err != nil {
+		t.Fatalf("trust reliability --source: %v", err)
+	}
+	need := fmt.Sprintf("not enough verdicts yet, %d more needed", reliability.MinObservations-5)
+	if !strings.Contains(out, need) {
+		t.Errorf("refusal does not say how many verdicts it needs:\n%s", out)
+	}
+
+	got := sourcesJSON(t, "--source", "a")
+	if len(got) != 1 || got[0].Report != nil || got[0].Need != reliability.MinObservations-5 {
+		t.Errorf("JSON refusal = %+v, want no report and need %d", got, reliability.MinObservations-5)
+	}
+}
+
+// A source with nothing recorded says so rather than printing an empty table.
+func TestCLI_TrustReliabilityUnknownSourceSaysSo(t *testing.T) {
+	cliSandbox(t)
+
+	out, _, err := run(t, "trust", "reliability", "--source", "nobody")
+	if err != nil {
+		t.Fatalf("trust reliability --source: %v", err)
+	}
+	if !strings.Contains(out, "No decision answers recorded from nobody") {
+		t.Errorf("does not say the source has no record:\n%s", out)
+	}
+}
+
+// Hydra's own report and the sources must not count each other's spans.
+func TestCLI_TrustReliabilityKeepsHydraAndSourcesApart(t *testing.T) {
+	cliSandbox(t)
+	rng := rand.New(rand.NewSource(37))
+	seedScoredRuns(t, rng, 0.8, 0.8, 25, true)
+	seedDecisions(t, rng, "a", "go", 0.8, 0.8, 30)
+
+	out, _, err := run(t, "trust", "reliability", "--json")
+	if err != nil {
+		t.Fatalf("trust reliability --json: %v", err)
+	}
+	var rep struct {
+		reliability.Report
+		Sources []reliability.SourceReport `json:"sources"`
+	}
+	if err := json.Unmarshal([]byte(out), &rep); err != nil {
+		t.Fatalf("output is not JSON: %v\n%s", err, out)
+	}
+	if rep.N != 25 {
+		t.Errorf("hydra n = %d, want 25", rep.N)
+	}
+	if len(rep.Sources) != 1 || rep.Sources[0].Scored != 30 {
+		t.Errorf("sources = %+v, want one source with 30 verdicts", rep.Sources)
+	}
+}
