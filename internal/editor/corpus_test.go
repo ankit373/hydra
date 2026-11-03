@@ -48,7 +48,7 @@ func editCorpus(t *testing.T) []evalset.Example {
 // is ground truth about the candidate. That is the corpus entry the router is
 // fitted on, and nothing was filing it (#986).
 func TestEdit_FilesTheVerifiedExample(t *testing.T) {
-	repo := editSandbox(t, marked("package main // GOOD\n"))
+	repo := editSandbox(t, marked("package main\n", "package main // GOOD\n"))
 	writeWorkspaceYAML(t, repo, validatorCheckingContent(t, "GOOD"))
 
 	file := filepath.Join(repo, "a.go")
@@ -91,7 +91,7 @@ func TestEdit_FilesTheVerifiedExample(t *testing.T) {
 // rank one head against another. It has to be filed before the rollback, which
 // is what discards the content the verdict is about.
 func TestEdit_FilesTheRejectedExampleBeforeRollingBack(t *testing.T) {
-	repo := editSandbox(t, marked("package main // BAD\n"))
+	repo := editSandbox(t, marked("package main\n", "package main // BAD\n"))
 	writeWorkspaceYAML(t, repo, validatorCheckingContent(t, "GOOD"))
 
 	file := filepath.Join(repo, "a.go")
@@ -129,7 +129,7 @@ func TestEdit_FilesTheRejectedExampleBeforeRollingBack(t *testing.T) {
 // Nothing ran, so nothing was learned. validatorPassed is initialised true and
 // stays true here, which is exactly the mislabelling #982 removed elsewhere.
 func TestEdit_NoConfiguredValidatorFilesNothing(t *testing.T) {
-	repo := editSandbox(t, marked("package main\n"))
+	repo := editSandbox(t, marked("package main\n", "package main\n"))
 	writeWorkspaceYAML(t, repo, "") // a workspace, but no validator for .go
 
 	file := filepath.Join(repo, "a.go")
@@ -152,7 +152,7 @@ func TestEdit_NoConfiguredValidatorFilesNothing(t *testing.T) {
 
 // --validate=false is the same argument by a different route.
 func TestEdit_ValidationDisabledFilesNothing(t *testing.T) {
-	repo := editSandbox(t, marked("package main // GOOD\n"))
+	repo := editSandbox(t, marked("package main\n", "package main // GOOD\n"))
 	writeWorkspaceYAML(t, repo, validatorCheckingContent(t, "GOOD"))
 
 	file := filepath.Join(repo, "a.go")

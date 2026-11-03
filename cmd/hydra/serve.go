@@ -209,6 +209,7 @@ func cmdServe() *cobra.Command {
 	var (
 		addr, token, enum string
 		localOnly         bool
+		confidence        float64
 	)
 
 	cmd := &cobra.Command{
@@ -217,6 +218,9 @@ func cmdServe() *cobra.Command {
 		Long: "Serves POST /v1/chat/completions and GET /v1/models, so any tool that speaks\n" +
 			"OpenAI routes through Hydra: policy, fallback, per-domain calibration and spend\n" +
 			"logging all apply the way they do to `hyctl dispatch`.\n\n" +
+			"POST /v1/decisions and /v1/systemone take typed questions in either wire format and\n" +
+			"ask the decision sources in order: one when its answer clears --confidence, more\n" +
+			"through the SPRT when not. X-Hydra-Decision-Sources and -Confidence say which.\n\n" +
 			"The model field is the routing instruction. `hydra` takes the default enum,\n" +
 			"`hydra/hard` or `hydra/t4` pin an enum or a tier, and a head id pins that head.\n\n" +
 			"`stream: true` is answered as server-sent events. A fallback before any output is\n" +
@@ -252,9 +256,13 @@ func cmdServe() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			decider, err := newDecisionRouter(ctx, confidence, localOnly)
+			if err != nil {
+				return err
+			}
 			r := serveRouter{d: d, defaultEnum: enum, localOnly: localOnly}
 			printServeBanner(os.Stdout, ln.Addr().String(), enum, token != "", localOnly, d.Heads())
-			return serve.Serve(ctx, ln, serve.Handler(r, token))
+			return serve.Serve(ctx, ln, serve.Handler(r, decider, token))
 		},
 	}
 
@@ -263,6 +271,7 @@ func cmdServe() *cobra.Command {
 	f.StringVar(&token, "token", "", "bearer token required of every request (or HYDRA_SERVE_TOKEN)")
 	f.StringVar(&enum, "enum", "STANDARD", "routing enum for a request that names no key")
 	f.BoolVar(&localOnly, "local", false, "local Heads only, no API calls")
+	f.Float64Var(&confidence, "confidence", 0.95, "stop asking decision sources once an answer is this sure")
 	return cmd
 }
 

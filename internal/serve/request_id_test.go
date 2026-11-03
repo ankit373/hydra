@@ -16,7 +16,7 @@ func chatOnce(t *testing.T, r Router, body string) *http.Response {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(body))
 	w := httptest.NewRecorder()
-	Handler(r, "").ServeHTTP(w, req)
+	Handler(r, nil, "").ServeHTTP(w, req)
 	return w.Result()
 }
 

@@ -49,6 +49,8 @@ floor internal/config               84
 floor internal/cache                85
 floor internal/classify             82
 floor internal/cost                 91
+floor internal/decide               96
+floor internal/decision             93
 floor internal/diff                 92
 floor internal/dispatch             89
 floor internal/editor               86

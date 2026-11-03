@@ -78,11 +78,25 @@ func (d *Dispatcher) recordLookup(out cache.Outcome) {
 // rule applied on one side only lets a prompt into the store that can never be
 // served from it, or worse, the other way around.
 func admission(opts Options, class *policy.Classification) cache.Request {
-	req := cache.Request{Pinned: opts.Head != "", NoCache: opts.NoCache}
+	req := cache.Request{Pinned: opts.Head != "", NoCache: opts.NoCache, Tools: carriesTools(opts)}
 	if class != nil {
 		req.PII, req.Injection = class.PII, class.FlagReason != ""
 	}
 	return req
+}
+
+// carriesTools reports tool definitions, a tool result, or an assistant turn
+// that called one: anything the cache key does not see.
+func carriesTools(opts Options) bool {
+	if len(opts.Tools) > 0 {
+		return true
+	}
+	for _, m := range opts.Messages {
+		if m.Role == "tool" || m.ToolCallID != "" || len(m.ToolCalls) > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // cacheResult is a hit dressed as a dispatch outcome, with the head that

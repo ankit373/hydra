@@ -641,7 +641,7 @@ servers score worst on quality in independent research).
 ```
 hyctl mcp registry sync       # pull the official MCP registry into a local cache
 hyctl mcp registry scan       # find servers installed across Claude Code/Desktop, Cursor, Windsurf, VS Code
-hyctl mcp registry audit      # resolve + score them, advance lifecycle state
+hyctl mcp registry audit      # resolve + score them, advance lifecycle state, check tool descriptions
 hyctl mcp registry backtest   # prove the pipeline still catches real incidents (postmark-mcp, CVE-2025-6514)
 ```
 
@@ -655,7 +655,15 @@ Scoring follows the CSA MCP Selection Scorecard's four categories, automating a
 taxonomy the MCP Security Working Group already endorsed, not inventing a competing
 one. Every version bump drops a server's trust state back to **provisional** until it
 re-earns it, detected via a content-hash diff of the manifest, the direct fix for a
-server that ships clean for months, then turns malicious in one release. `scan` never
+server that ships clean for months, then turns malicious in one release. A server can
+also keep its version and rewrite what its tools say, so each tool's name, description
+and input schema is hashed too, and any change is its own trip back to provisional, with
+the before and after printed by `audit`. Descriptions are also checked for text written
+for the model rather than the user (directions about other tools, requests to read files
+or send data, hidden characters, padding), each reported with its exact span and never
+quarantining on its own. Both need the server's `tools/list` result saved at
+`$HYDRA_HOME/mcp_tools/<server>.json`: `audit` never starts a server to ask, and says
+"not checked" for any server without one. `scan` never
 reads env-var or secret values from client configs, only server identity. Feeds back
 into the ledger: a flagged or quarantined server auto-classifies its own tool calls,
 by the same mechanism that auto-detects PII from content, so a policy rule can gate on it
@@ -870,7 +878,7 @@ hyctl trust defect ...                  # modeled cost of shipping a wrong answe
 hyctl trust stats                       # samples saved, achieved vs target confidence
 hyctl trust explain <task_hash>         # the LLR ledger for a past SPRT run
 hyctl trust reliability                 # when it says 90%, is it right 90% of the time
-hyctl edit --file path/to/f.go "..."            # apply, then validate what was written: the verdict that counts
+hyctl edit --file /abs/path/f.go --enum SIMPLE --prompt "..."  # apply, then validate what was written: the verdict that counts
 hyctl trust benchmark                   # measured SPRT numbers (samples saved, accuracy)
 hyctl graph blast <file>                # a file's blast radius + the confidence it demands
 hyctl graph parallel <files...>         # optimal number of parallel agents (Law 4)
@@ -916,13 +924,14 @@ hyctl security --advisories             # ask OSV about the local model server v
 hyctl security --attest                 # checkable attestation: posture + evidence + digest
 
 # Editing & batch
-hyctl edit --file ... --prompt "..."    # scoped, validated, rollback-safe file edit
+hyctl edit --file ... --enum ... --prompt "..."  # scoped, validated, rollback-safe file edit
 hyctl review ...                        # code review / approve / reject / QA
 hyctl parallel ...                      # fan independent tasks across heads
 hyctl workflow run --step A --step B    # multi-step task, each step routed on its own
 hyctl workflow run --dry-run ...        # each step's routing chain and ceiling, nothing run
 hyctl workflow run --local --max-cost 0.05 ...   # per-step caps, on top of policy.yaml's
 hyctl workflow resume <id>              # continue a killed workflow from where it stopped
+hyctl workflow show <id>                # each step's head, tier, cost and output
 
 # Reviewing a diff
 hyctl vet                               # review the working diff, each file routed to its own head

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -363,6 +364,10 @@ func runWorkflow(ctx context.Context, w workflow.Workflow) error {
 		return err
 	}
 	printWorkflow(done)
+	if last := lastOutput(done); last != "" {
+		fmt.Println(last)
+		fmt.Println()
+	}
 	if err != nil {
 		return err
 	}
@@ -388,18 +393,28 @@ func rpadCell(s string, n int) string {
 	return s
 }
 
-// workflowHeader and workflowRow are one definition of the step table's
-// columns, so a row cannot drift from the header it sits under.
+// workflowLine is the step table's one column definition, so a row cannot
+// drift from the header it sits under.
+func workflowLine(n, title, status, tier, head, took, cost string) string {
+	return "  " + strings.Join([]string{
+		padCell(n, 3),
+		padCell(title, 28),
+		padCell(status, 10),
+		padCell(tier, 5),
+		padCell(head, 18),
+		rpadCell(took, 8),
+		rpadCell(cost, 9),
+	}, " ")
+}
+
 func workflowHeader() string {
-	return "  " + padCell("#", 3) + " " + padCell("STEP", 28) + " " + padCell("STATUS", 10) +
-		" " + padCell("TIER", 5) + " " + padCell("HEAD", 18) + " " + rpadCell("TIME", 8)
+	return workflowLine("#", "STEP", "STATUS", "TIER", "HEAD", "TIME", "COST")
 }
 
 // Cells arrive already styled and already truncated: measuring is ANSI-aware,
 // cutting is not, and a half-cut escape corrupts the frame.
-func workflowRow(n int, title, status, tier, head, took string) string {
-	return "  " + padCell(fmt.Sprintf("%d", n), 3) + " " + padCell(title, 28) + " " + padCell(status, 10) +
-		" " + padCell(tier, 5) + " " + padCell(head, 18) + " " + rpadCell(took, 8)
+func workflowRow(n int, title, status, tier, head, took, cost string) string {
+	return workflowLine(strconv.Itoa(n), title, status, tier, head, took, cost)
 }
 
 // The same pairing for `hyctl workflow list`, whose STATUS column is styled too.
@@ -417,7 +432,8 @@ func printWorkflow(w workflow.Workflow) {
 	// Resolved once: a run recorded as running whose process is gone is
 	// interrupted, and its in-flight step is not running either (#898).
 	observed := w.Observed()
-	sep := dimStyle.Render("  " + strings.Repeat("─", 66))
+	width := lipgloss.Width(workflowHeader()) - 2
+	sep := dimStyle.Render("  " + strings.Repeat("─", width))
 	fmt.Println(sep)
 	// TIER has its own column: appended to HEAD it was the first thing the
 	// 18-char truncation cut, and which tier answered is the most informative
@@ -437,8 +453,13 @@ func printWorkflow(w workflow.Workflow) {
 		if s.Tier > 0 {
 			tier = fmt.Sprintf("T%d", s.Tier)
 		}
+		// Only a step that answered has a cost row to agree with (#1177).
+		spent := "—"
+		if s.Status == workflow.Done {
+			spent = fmt.Sprintf("$%.4f", s.CostUSD)
+		}
 		fmt.Println(workflowRow(s.N, truncLabel(s.Title, 28),
-			statusLabel(workflow.ObservedStep(s.Status, observed)), tier, head, took))
+			statusLabel(workflow.ObservedStep(s.Status, observed)), tier, head, took, spent))
 		if s.Err != "" {
 			fmt.Printf("      %s\n", warnStyle.Render("↳ "+oneLine(s.Err)))
 		}
@@ -451,10 +472,20 @@ func printWorkflow(w workflow.Workflow) {
 		fmt.Printf("  %s\n\n", warnStyle.Render(
 			"the process running this is gone; continue it with `hyctl workflow resume "+w.ID+"`"))
 	}
+}
 
-	if last := lastOutput(w); last != "" {
-		fmt.Println(last)
-		fmt.Println()
+// printStepOutputs prints every completed step's output under its step, head,
+// tier and cost: a run that went wrong at step 2 of 4 must be readable (#1177).
+func printStepOutputs(w workflow.Workflow) {
+	for _, s := range w.Steps {
+		if s.Status != workflow.Done || s.Output == "" {
+			continue
+		}
+		head := fmt.Sprintf("── step %d · %s", s.N, truncLabel(s.Title, 40))
+		meta := fmt.Sprintf("%s · T%d · $%.4f", s.Model, s.Tier, s.CostUSD)
+		fmt.Printf("  %s\n", cortexStyle.Render(head))
+		fmt.Printf("  %s\n\n", dimStyle.Render(meta))
+		fmt.Printf("%s\n\n", s.Output)
 	}
 }
 
@@ -532,7 +563,7 @@ func cmdWorkflowShow() *cobra.Command {
 	var jsonOut bool
 	cmd := &cobra.Command{
 		Use:   "show <id>",
-		Short: "Show one workflow's steps, heads and cost",
+		Short: "Show one workflow's steps, heads, per-step cost and every step's output",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			w, err := workflow.Load(args[0])
@@ -546,6 +577,7 @@ func cmdWorkflowShow() *cobra.Command {
 				dimStyle.Render(createdAge(w.Created)))
 			fmt.Printf("  %s\n\n", dimStyle.Render(w.Task))
 			printWorkflow(w)
+			printStepOutputs(w)
 			return nil
 		},
 	}

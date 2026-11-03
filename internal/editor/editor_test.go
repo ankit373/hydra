@@ -10,21 +10,24 @@ import (
 	"testing"
 )
 
+// tm are the markers for an arbitrary file, for tests that only parse answers.
+var tm = markersFor("package p\n")
+
 func TestExtractContent(t *testing.T) {
-	body := markerStart + "\nhello\nworld\n" + markerEnd
+	body := tm.start + "\nhello\nworld\n" + tm.end
 	tests := []struct {
 		name string
 		in   string
 		want string
 	}{
 		{"both markers", "prose\n" + body + "\ntrailing", "hello\nworld"},
-		{"end only", "hello\nworld\n" + markerEnd + "\njunk", "hello\nworld"},
-		{"start only", "prose\n" + markerStart + "\nhello\nworld", "hello\nworld"},
+		{"end only", "hello\nworld\n" + tm.end + "\njunk", "hello\nworld"},
+		{"start only", "prose\n" + tm.start + "\nhello\nworld", "hello\nworld"},
 		{"neither", "just some text", ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := extractContent(tt.in); got != tt.want {
+			if got := extractContent(tt.in, tm); got != tt.want {
 				t.Errorf("extractContent() = %q, want %q", got, tt.want)
 			}
 		})
@@ -53,6 +56,7 @@ func TestStripOuterFence(t *testing.T) {
 		{"fenced bare", "```\nx := 1\n```", "x := 1"},
 		{"no fence", "x := 1", "x := 1"},
 		{"open fence only", "```go\nx := 1", "x := 1"},
+		{"empty fence", "```\n```", ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -130,8 +134,8 @@ func TestDiffStats_InMemory(t *testing.T) {
 func TestExtractBetween_LineBeyondScannerLimit(t *testing.T) {
 	for _, n := range []int{1000, 65000, 70000, 1 << 20} {
 		long := strings.Repeat("x", n)
-		raw := markerStart + "\n" + long + "\n" + markerEnd + "\n"
-		got := extractBetween(raw)
+		raw := tm.start + "\n" + long + "\n" + tm.end + "\n"
+		got := extractBetween(raw, tm)
 		if got != long {
 			t.Errorf("line of %d chars: extracted %d chars, want %d", n, len(got), n)
 		}
@@ -141,9 +145,9 @@ func TestExtractBetween_LineBeyondScannerLimit(t *testing.T) {
 // A long line among ordinary ones must not disturb the surrounding lines.
 func TestExtractBetween_LongLineAmongShort(t *testing.T) {
 	long := strings.Repeat("y", 200000)
-	raw := markerStart + "\nfirst\n" + long + "\nlast\n" + markerEnd + "\ntrailing junk\n"
+	raw := tm.start + "\nfirst\n" + long + "\nlast\n" + tm.end + "\ntrailing junk\n"
 	want := "first\n" + long + "\nlast"
-	if got := extractBetween(raw); got != want {
+	if got := extractBetween(raw, tm); got != want {
 		t.Errorf("got %d chars, want %d", len(got), len(want))
 	}
 }
