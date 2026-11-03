@@ -59,7 +59,13 @@ func free(provider.Head, decision.Request) float64 { return 0 }
 
 // router asks ids in order, at no cost, for a 0.95 target.
 func router(ask *fakeAsker, cal *trust.Calibrator, ids ...string) Router {
-	return Router{Heads: heads(ids...), Price: free, Ask: ask, Cal: cal, Target: trust.Target{Confidence: 0.95}}
+	return Router{
+		Heads:  heads(ids...),
+		Price:  free,
+		Ask:    ask,
+		Cal:    cal,
+		Target: trust.Target{Confidence: 0.95},
+	}
 }
 
 func newCal(t *testing.T) *trust.Calibrator {
@@ -178,6 +184,113 @@ func TestDecide_BudgetSkipsASourceItCannotAfford(t *testing.T) {
 	}
 	if !reflect.DeepEqual(ask.asked, []string{"cheap"}) {
 		t.Errorf("asked %v, want only the source within budget", ask.asked)
+	}
+}
+
+// b is ranked first and is past the budget, so the SPRT samples nothing and a's answer stands.
+func TestDecide_SPRTThatSamplesNothingReturnsTheFirstAnswer(t *testing.T) {
+	testutil.NewSandbox(t)
+	cal := newCal(t)
+	calibrate(t, cal, "b", 8)
+	ask := &fakeAsker{answers: map[string]decision.Result{
+		"a": answered(0.4, 0.6),
+		"b": answered(0.4, 0.6),
+	}}
+	price := func(h provider.Head, _ decision.Request) float64 {
+		if h.ID == "b" {
+			return 0.5
+		}
+		return 0
+	}
+	r := router(ask, cal, "a", "b")
+	r.Price, r.Target.MaxCostUSD = price, 0.1
+
+	out, err := r.Decide(context.Background(), Call{Request: tone, RunID: "run-unsampled"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out.Result.Answers) != 1 || out.Confidence != 0.6 {
+		t.Errorf("returned %+v at %v, want a's answer at its stated 0.6", out.Result, out.Confidence)
+	}
+}
+
+// a is paid before the SPRT starts, so the SPRT gets only what is left: b, not b and c.
+func TestDecide_FirstAnswerCountsAgainstTheBudget(t *testing.T) {
+	testutil.NewSandbox(t)
+	cal := newCal(t)
+	calibrate(t, cal, "b", 8)
+	calibrate(t, cal, "c", 8)
+	ask := &fakeAsker{answers: map[string]decision.Result{
+		"a": answered(0.4, 0.6),
+		"b": answered(0.4, 0.6),
+		"c": answered(0.4, 0.6),
+	}}
+	r := router(ask, cal, "a", "b", "c")
+	r.Price = func(provider.Head, decision.Request) float64 { return 0.25 }
+	r.Target.MaxCostUSD = 0.5
+
+	if _, err := r.Decide(context.Background(), Call{Request: tone, RunID: "run-ceiling"}); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		"a",
+		"b",
+	}
+	if !reflect.DeepEqual(ask.asked, want) {
+		t.Errorf("asked %v, want %v: three calls would spend $0.75 of $0.50", ask.asked, want)
+	}
+}
+
+// When the first answer used the whole ceiling, a free source can still be asked.
+func TestDecide_SpentCeilingStillAsksFreeSources(t *testing.T) {
+	testutil.NewSandbox(t)
+	cal := newCal(t)
+	calibrate(t, cal, "b", 8)
+	calibrate(t, cal, "c", 8)
+	ask := &fakeAsker{answers: map[string]decision.Result{
+		"a": answered(0.4, 0.6),
+		"b": answered(0.4, 0.6),
+		"c": answered(0.4, 0.6),
+	}}
+	price := func(h provider.Head, _ decision.Request) float64 {
+		if h.ID == "b" {
+			return 0
+		}
+		return 0.25
+	}
+	r := router(ask, cal, "a", "b", "c")
+	r.Price, r.Target.MaxCostUSD = price, 0.25
+
+	if _, err := r.Decide(context.Background(), Call{Request: tone, RunID: "run-spent"}); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		"a",
+		"b",
+	}
+	if !reflect.DeepEqual(ask.asked, want) {
+		t.Errorf("asked %v, want %v: c is paid and nothing is left", ask.asked, want)
+	}
+}
+
+// A source that failed is not asked again when the SPRT reaches it.
+func TestDecide_FailedSourceIsAskedOnce(t *testing.T) {
+	testutil.NewSandbox(t)
+	cal := newCal(t)
+	calibrate(t, cal, "dead", 8)
+	calibrate(t, cal, "b", 8)
+	ask := &fakeAsker{answers: map[string]decision.Result{"b": answered(0.4, 0.6)}}
+	r := router(ask, cal, "dead", "b")
+
+	if _, err := r.Decide(context.Background(), Call{Request: tone, RunID: "run-dead"}); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		"dead",
+		"b",
+	}
+	if !reflect.DeepEqual(ask.asked, want) {
+		t.Errorf("asked %v, want %v", ask.asked, want)
 	}
 }
 

@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/ankit373/hydra/internal/decision"
@@ -61,6 +62,7 @@ func (r Router) Decide(ctx context.Context, c Call) (Outcome, error) {
 		router:  r,
 		call:    c,
 		results: map[string]decision.Result{},
+		failed:  map[string]error{},
 		byKey:   map[string]decision.Result{},
 		heads:   make(map[string]provider.Head, len(r.Heads)),
 	}
@@ -69,7 +71,7 @@ func (r Router) Decide(ctx context.Context, c Call) (Outcome, error) {
 		sources[i] = trust.Source{ID: h.ID, Family: h.Provider, EstCostUSD: r.Price(h, c.Request)}
 		asked.heads[h.ID] = h
 	}
-	first, err := asked.first(ctx, sources)
+	paid, first, err := asked.first(ctx, sources)
 	if err != nil {
 		return Outcome{}, err
 	}
@@ -79,7 +81,8 @@ func (r Router) Decide(ctx context.Context, c Call) (Outcome, error) {
 		return alone, nil
 	}
 
-	res, err := trust.Run(ctx, trust.Task{Domain: c.Domain}, sources, asked, r.Cal, r.Target,
+	rest, target := afterFirst(sources, paid, r.Target)
+	res, err := trust.Run(ctx, trust.Task{Domain: c.Domain}, rest, asked, r.Cal, target,
 		trust.WithEquivalence(sameAnswer))
 	// With nothing calibrated no further answer can move the posterior, so asking would only spend.
 	if errors.Is(err, trust.ErrNoEvidence) {
@@ -88,7 +91,34 @@ func (r Router) Decide(ctx context.Context, c Call) (Outcome, error) {
 	if err != nil {
 		return Outcome{}, err
 	}
-	return Outcome{Result: asked.byKey[res.Candidate], Asked: asked.order, Confidence: res.Confidence}, nil
+	// The SPRT stops before any sample when the source it ranks first is past the budget.
+	accepted, ok := asked.byKey[res.Candidate]
+	if res.Samples == 0 || !ok {
+		return alone, nil
+	}
+	return Outcome{Result: accepted, Asked: asked.order, Confidence: res.Confidence}, nil
+}
+
+// afterFirst prices the SPRT's run once paid has answered: its answer costs nothing
+// more, and the ceiling shrinks by what it cost.
+func afterFirst(sources []trust.Source, paid trust.Source, t trust.Target) ([]trust.Source, trust.Target) {
+	rest := make([]trust.Source, len(sources))
+	for i, s := range sources {
+		if s.ID == paid.ID {
+			s.EstCostUSD = 0
+		}
+		rest[i] = s
+	}
+	if t.MaxCostUSD <= 0 {
+		return rest, t
+	}
+	t.MaxCostUSD -= paid.EstCostUSD
+	if t.MaxCostUSD > 0 {
+		return rest, t
+	}
+	// Nothing is left to spend, and a ceiling of 0 means none, so only free sources stay.
+	t.MaxCostUSD = 0
+	return slices.DeleteFunc(rest, func(s trust.Source) bool { return s.EstCostUSD > 0 }), t
 }
 
 // sameAnswer is exact: answers are keys built from option names, which differ
@@ -119,14 +149,16 @@ type askLog struct {
 	router  Router
 	call    Call
 	results map[string]decision.Result
+	// failed keeps each error, so a source that failed once is not paid to fail again.
+	failed map[string]error
 	// byKey is the first result giving each answer, which is what an accepted answer returns.
 	byKey map[string]decision.Result
 	heads map[string]provider.Head
 	order []string
 }
 
-// first asks sources in order until one within budget answers.
-func (l *askLog) first(ctx context.Context, sources []trust.Source) (decision.Result, error) {
+// first asks sources in order until one within budget answers, and returns which one did.
+func (l *askLog) first(ctx context.Context, sources []trust.Source) (trust.Source, decision.Result, error) {
 	budget := l.router.Target.MaxCostUSD
 	var errs []error
 	for _, s := range sources {
@@ -135,14 +167,15 @@ func (l *askLog) first(ctx context.Context, sources []trust.Source) (decision.Re
 		}
 		res, err := l.ask(ctx, l.heads[s.ID])
 		if err == nil {
-			return res, nil
+			return s, res, nil
 		}
 		errs = append(errs, err)
 	}
-	if len(errs) == 0 {
-		return decision.Result{}, fmt.Errorf("%w: none is configured within budget", ErrNoSource)
+	err := fmt.Errorf("%w: none is configured within budget", ErrNoSource)
+	if len(errs) > 0 {
+		err = fmt.Errorf("%w: %w", ErrNoSource, errors.Join(errs...))
 	}
-	return decision.Result{}, fmt.Errorf("%w: %w", ErrNoSource, errors.Join(errs...))
+	return trust.Source{}, decision.Result{}, err
 }
 
 // Execute is the SPRT's view of a source: its answer as the key under test.
@@ -158,8 +191,12 @@ func (l *askLog) ask(ctx context.Context, h provider.Head) (decision.Result, err
 	if res, ok := l.results[h.ID]; ok {
 		return res, nil
 	}
+	if err, ok := l.failed[h.ID]; ok {
+		return decision.Result{}, err
+	}
 	res, err := l.router.Ask.Execute(ctx, h, l.call.Request)
 	if err != nil {
+		l.failed[h.ID] = err
 		return decision.Result{}, err
 	}
 	l.results[h.ID] = res
