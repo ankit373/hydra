@@ -125,7 +125,7 @@ applies to them on your own work. Every source is listed side by side per domain
 	cmd.Flags().IntVar(&bins, "bins", reliability.DefaultBins, "number of equal-width confidence bins")
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "machine-readable JSON output")
 	cmd.Flags().StringVar(&source, "source", "",
-		"report one decision source (a head id) per domain (needs #1297)")
+		"report one decision source (a head id) per domain")
 	return cmd
 }
 
