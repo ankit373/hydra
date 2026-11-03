@@ -27,6 +27,9 @@ jobs:
         env:
           BODY: ${{ github.event.pull_request.body }}
           AUTHOR: ${{ github.event.pull_request.user.login }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
 
@@ -46,8 +49,13 @@ jobs:
             ticked=1
           fi
 
+          # The roster is read from the PR head, as data only: first-timers add
+          # their own row in this PR, and the base copy can never contain it.
+          # Nothing from the head is checked out or run.
+          roster="$(gh api -H 'Accept: application/vnd.github.raw' \
+            "repos/$HEAD_REPO/contents/CONTRIBUTORS.md?ref=$HEAD_SHA" || true)"
           listed=0
-          if grep -qiF "/$AUTHOR)" CONTRIBUTORS.md || grep -qiE "\b$AUTHOR\b" CONTRIBUTORS.md; then
+          if printf '%s' "$roster" | grep -qiF "(https://github.com/$AUTHOR)"; then
             listed=1
           fi
 

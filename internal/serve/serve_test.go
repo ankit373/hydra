@@ -125,7 +125,7 @@ func post(t *testing.T, r Router, token, auth, body string) *httptest.ResponseRe
 		req.Header.Set("Authorization", auth)
 	}
 	w := httptest.NewRecorder()
-	Handler(r, token).ServeHTTP(w, req)
+	Handler(r, nil, token).ServeHTTP(w, req)
 	return w
 }
 
@@ -250,7 +250,7 @@ func TestHandler_TokenGuardsEveryEndpoint(t *testing.T) {
 	// The listing is as gated as the completion: it enumerates this machine.
 	req := httptest.NewRequest(http.MethodGet, "/v1/models", nil)
 	w := httptest.NewRecorder()
-	Handler(s, "secret").ServeHTTP(w, req)
+	Handler(s, nil, "secret").ServeHTTP(w, req)
 	if w.Code != http.StatusUnauthorized {
 		t.Errorf("/v1/models unauthenticated: status %d, want 401", w.Code)
 	}
@@ -259,7 +259,7 @@ func TestHandler_TokenGuardsEveryEndpoint(t *testing.T) {
 func TestModels_ListsInTheShapeAClientReads(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/v1/models", nil)
 	w := httptest.NewRecorder()
-	Handler(&stubRouter{}, "").ServeHTTP(w, req)
+	Handler(&stubRouter{}, nil, "").ServeHTTP(w, req)
 
 	var out struct {
 		Object string  `json:"object"`
@@ -276,7 +276,7 @@ func TestModels_ListsInTheShapeAClientReads(t *testing.T) {
 func TestHandler_WrongMethodsAreRefused(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/v1/chat/completions", nil)
 	w := httptest.NewRecorder()
-	Handler(&stubRouter{}, "").ServeHTTP(w, req)
+	Handler(&stubRouter{}, nil, "").ServeHTTP(w, req)
 	if w.Code != http.StatusMethodNotAllowed {
 		t.Errorf("GET on completions: status %d, want 405", w.Code)
 	}
@@ -299,7 +299,7 @@ func TestServe_StopsWhenTheContextIsDone(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
-	go func() { done <- Serve(ctx, ln, Handler(&stubRouter{}, "")) }()
+	go func() { done <- Serve(ctx, ln, Handler(&stubRouter{}, nil, "")) }()
 	cancel()
 	if err := <-done; err != nil {
 		t.Fatalf("shutdown returned %v", err)

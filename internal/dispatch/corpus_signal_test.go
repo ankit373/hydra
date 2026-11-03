@@ -106,7 +106,7 @@ rules:
 // removed from the probe path.
 func TestDecide_NoRuleAsksSoNothingIsEmbedded(t *testing.T) {
 	d, emb := dispatcherWithRules(t, "version: 1\nrules: []\n", vectorCorpus(t, 60, false))
-	dec := d.Decide(context.Background(), "rotate the signing key", "go", nil)
+	dec := d.Decide(context.Background(), "rotate the signing key", "go", nil, nil)
 	if dec.Fired() {
 		t.Errorf("an empty rules file fired: %+v", dec)
 	}
@@ -119,7 +119,7 @@ func TestDecide_NoRuleAsksSoNothingIsEmbedded(t *testing.T) {
 // buys nothing.
 func TestDecide_ARuleAskingGetsTheCorpusEvidence(t *testing.T) {
 	d, emb := dispatcherWithRules(t, ruleReadingCorpus, vectorCorpus(t, 60, false))
-	dec := d.Decide(context.Background(), "rotate the signing key", "go", nil)
+	dec := d.Decide(context.Background(), "rotate the signing key", "go", nil, nil)
 	if n := emb.count(); n != 1 {
 		t.Fatalf("embedded %d times, want exactly 1", n)
 	}
@@ -132,7 +132,7 @@ func TestDecide_ARuleAskingGetsTheCorpusEvidence(t *testing.T) {
 // failing work, or the signal is a constant wearing a threshold.
 func TestDecide_PassingCorpusDoesNotFireTheFailureRule(t *testing.T) {
 	d, _ := dispatcherWithRules(t, ruleReadingCorpus, vectorCorpus(t, 60, true))
-	if dec := d.Decide(context.Background(), "rotate the signing key", "go", nil); dec.Fired() {
+	if dec := d.Decide(context.Background(), "rotate the signing key", "go", nil, nil); dec.Fired() {
 		t.Errorf("a corpus of passes fired the failure rule: %+v", dec)
 	}
 }
@@ -141,7 +141,7 @@ func TestDecide_PassingCorpusDoesNotFireTheFailureRule(t *testing.T) {
 // a missing corpus that read as zero would fire exactly this rule.
 func TestDecide_NoCorpusLeavesTheSignalAbsent(t *testing.T) {
 	d, emb := dispatcherWithRules(t, ruleReadingCorpus, nil)
-	if dec := d.Decide(context.Background(), "rotate the signing key", "go", nil); dec.Fired() {
+	if dec := d.Decide(context.Background(), "rotate the signing key", "go", nil, nil); dec.Fired() {
 		t.Errorf("an absent corpus read as a zero pass rate: %+v", dec)
 	}
 	if n := emb.count(); n != 0 {
@@ -160,7 +160,7 @@ rules:
     action: {type: route, tier: "4"}
 `
 	d, _ := dispatcherWithRules(t, rule, nil)
-	dec := d.Decide(context.Background(), "rotate the signing key", "go", nil)
+	dec := d.Decide(context.Background(), "rotate the signing key", "go", nil, nil)
 	if !dec.Fired() {
 		t.Errorf("asked with no corpus did not report corpus.known false: %+v", dec)
 	}
@@ -196,7 +196,7 @@ func TestCorpusEvidence_UnavailableEmbedderIsAbsentNotAnError(t *testing.T) {
 		if rate, support := d.corpusEvidence(context.Background(), "anything"); rate != nil || support != nil {
 			t.Errorf("%T produced evidence: rate=%v support=%v", emb, rate, support)
 		}
-		if dec := d.Decide(context.Background(), "anything", "go", nil); dec.Fired() {
+		if dec := d.Decide(context.Background(), "anything", "go", nil, nil); dec.Fired() {
 			t.Errorf("%T still fired the rule: %+v", emb, dec)
 		}
 	}

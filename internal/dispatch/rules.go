@@ -10,6 +10,7 @@ import (
 	"github.com/ankit373/hydra/internal/cache"
 	"github.com/ankit373/hydra/internal/classify"
 	"github.com/ankit373/hydra/internal/evalset"
+	"github.com/ankit373/hydra/internal/executor"
 	"github.com/ankit373/hydra/internal/signals"
 	"github.com/ankit373/hydra/internal/trust"
 	"github.com/ankit373/hydra/registry"
@@ -59,8 +60,19 @@ func loadRules(home string) (*signals.Engine, error) {
 // blastRadius is the caller's, because the caller is the one that already
 // loaded the code graph for --file; nil leaves the signal absent rather than
 // zero, and zero dependents is a real reading.
-func (d *Dispatcher) Decide(ctx context.Context, prompt, domain string, blastRadius *int) signals.Decision {
+// msgs is the conversation when the caller has one, which today is `hyctl
+// serve`. Nil leaves the conversation signals absent, because a single-shot
+// dispatch is not a conversation of length zero (#1021).
+func (d *Dispatcher) Decide(ctx context.Context, prompt, domain string, blastRadius *int, msgs []executor.Message) signals.Decision {
 	in := signals.Input{Prompt: prompt, BlastRadius: blastRadius}
+	// Always derivable from the prompt, so the caller is not asked for it, and
+	// executor.EstimateTokens stays the only estimator in the tree.
+	tokens := executor.EstimateTokens(prompt)
+	in.PromptTokens = &tokens
+	if msgs != nil {
+		turns, loop := conversationShape(msgs)
+		in.Turns, in.ToolLoop = &turns, &loop
+	}
 	if d == nil {
 		return (*signals.Engine)(nil).Evaluate(in)
 	}
@@ -75,6 +87,21 @@ func (d *Dispatcher) Decide(ctx context.Context, prompt, domain string, blastRad
 		in.CorpusPassRate, in.CorpusSupport = d.corpusEvidence(ctx, prompt)
 	}
 	return d.rules.Evaluate(in)
+}
+
+// conversationShape reads the two facts vLLM SR's `conversation` family routes
+// on. A turn is a user message, the usual meaning; a tool loop is any tool
+// result or tool call already in the history.
+func conversationShape(msgs []executor.Message) (turns int, toolLoop bool) {
+	for _, m := range msgs {
+		if strings.EqualFold(m.Role, "user") {
+			turns++
+		}
+		if strings.EqualFold(m.Role, "tool") || len(m.ToolCalls) > 0 {
+			toolLoop = true
+		}
+	}
+	return turns, toolLoop
 }
 
 // corpusEvidence asks internal/classify what the verified examples say about

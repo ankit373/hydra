@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/ankit373/hydra/internal/build"
 	"github.com/ankit373/hydra/internal/cache"
 	"github.com/ankit373/hydra/internal/embed"
 	"github.com/ankit373/hydra/internal/evalset"
@@ -53,6 +54,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		head       = fs.String("head", "", "model that produced the candidate")
 		out        = fs.String("out", DefaultOut, "corpus to append to")
 		embedModel = fs.String("embed-model", "", "embedding model to vectorise the task with (off unless named)")
+		version    = fs.Bool("version", false, "print the build and exit")
 	)
 	fs.Usage = func() {
 		fmt.Fprintf(stderr, "hyverify --candidate <file> [flags] [-- <command>...]\n\n"+
@@ -64,6 +66,13 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 	if err := fs.Parse(args); err != nil {
 		return exitNoVerdict
+	}
+	// Before the candidate check: this binary is used by repos that never adopt
+	// Hydra and so have no hyctl to ask, and asking it what it is must not
+	// require a file to verify (#1058).
+	if *version {
+		fmt.Fprint(stdout, build.Text("hyverify"))
+		return exitPass
 	}
 	if strings.TrimSpace(*candidate) == "" {
 		fs.Usage()

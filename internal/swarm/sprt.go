@@ -13,6 +13,7 @@ import (
 	"github.com/ankit373/hydra/internal/policy"
 	"github.com/ankit373/hydra/internal/provider"
 	"github.com/ankit373/hydra/internal/rank"
+	"github.com/ankit373/hydra/internal/runid"
 	"github.com/ankit373/hydra/internal/trust"
 )
 
@@ -31,6 +32,10 @@ type SPRTResult struct {
 	// editable, so the map in force when the heads ran is not recoverable later.
 	Enum string
 	Tier int
+
+	// SpanID is the root span this run was logged under, so a verdict landing
+	// on that span can find the evidence ledger that it trains (#1144).
+	SpanID string
 }
 
 // RunSPRT routes a prompt through the SPRT optimal-stopping ensemble: it samples
@@ -48,6 +53,11 @@ func (s *Swarm) RunSPRT(ctx context.Context, prompt string, opts Options) (*SPRT
 	if err != nil {
 		return nil, err
 	}
+
+	// Resolved once, here, because ResolveTask mints a fresh id when the caller
+	// named none: calling it again below would log the samples under one span
+	// and report another, which is the #1144 join broken in a new place.
+	opts.TaskID = runid.ResolveTask(opts.TaskID)
 
 	opts.progress = &progressSink{fn: opts.OnProgress}
 	selected, err := resolveSelector(opts).Select(s.heads, opts)
@@ -137,6 +147,7 @@ func (s *Swarm) RunSPRT(ctx context.Context, prompt string, opts Options) (*SPRT
 	return &SPRTResult{
 		Trust: res, Attempts: adapter.attempts, Domain: domain, Prompt: prompt,
 		Target: opts.Confidence, Enum: opts.Enum, Tier: tier,
+		SpanID: SPRTSpanID(opts.TaskID),
 	}, nil
 }
 

@@ -421,7 +421,7 @@ A rule narrows by agent, resource, action, or any combination. First match wins,
 }
 ```
 
-`deny` refuses and records it. `ask` parks the task under `hyctl ask` instead, which is the right verdict when you want a human in the loop rather than a refusal; it stops dispatch before any executor runs and never falls through to a cheaper head. Check a rule fires before trusting it, then read back what the policy is actually doing:
+`deny` refuses and records it. `ask` parks the task under `hyctl ask` instead, which is the right verdict when you want a human in the loop rather than a refusal; it stops dispatch before any executor runs and never falls through to a cheaper head. `hyctl mcp check` exits 3 on a deny and 4 on an ask, so a script can tell a refusal from a question, and 0 only ever means the access was allowed. Check a rule fires before trusting it, then read back what the policy is actually doing:
 
 ```bash
 hyctl mcp check fs --agent hydra-swarm --resource registry/routing.yaml --action write
@@ -641,7 +641,7 @@ servers score worst on quality in independent research).
 ```
 hyctl mcp registry sync       # pull the official MCP registry into a local cache
 hyctl mcp registry scan       # find servers installed across Claude Code/Desktop, Cursor, Windsurf, VS Code
-hyctl mcp registry audit      # resolve + score them, advance lifecycle state
+hyctl mcp registry audit      # resolve + score them, advance lifecycle state, check tool descriptions
 hyctl mcp registry backtest   # prove the pipeline still catches real incidents (postmark-mcp, CVE-2025-6514)
 ```
 
@@ -655,7 +655,15 @@ Scoring follows the CSA MCP Selection Scorecard's four categories, automating a
 taxonomy the MCP Security Working Group already endorsed, not inventing a competing
 one. Every version bump drops a server's trust state back to **provisional** until it
 re-earns it, detected via a content-hash diff of the manifest, the direct fix for a
-server that ships clean for months, then turns malicious in one release. `scan` never
+server that ships clean for months, then turns malicious in one release. A server can
+also keep its version and rewrite what its tools say, so each tool's name, description
+and input schema is hashed too, and any change is its own trip back to provisional, with
+the before and after printed by `audit`. Descriptions are also checked for text written
+for the model rather than the user (directions about other tools, requests to read files
+or send data, hidden characters, padding), each reported with its exact span and never
+quarantining on its own. Both need the server's `tools/list` result saved at
+`$HYDRA_HOME/mcp_tools/<server>.json`: `audit` never starts a server to ask, and says
+"not checked" for any server without one. `scan` never
 reads env-var or secret values from client configs, only server identity. Feeds back
 into the ledger: a flagged or quarantined server auto-classifies its own tool calls,
 by the same mechanism that auto-detects PII from content, so a policy rule can gate on it
@@ -870,7 +878,7 @@ hyctl trust defect ...                  # modeled cost of shipping a wrong answe
 hyctl trust stats                       # samples saved, achieved vs target confidence
 hyctl trust explain <task_hash>         # the LLR ledger for a past SPRT run
 hyctl trust reliability                 # when it says 90%, is it right 90% of the time
-hyctl edit --file path/to/f.go "..."            # apply, then validate what was written: the verdict that counts
+hyctl edit --file /abs/path/f.go --enum SIMPLE --prompt "..."  # apply, then validate what was written: the verdict that counts
 hyctl trust benchmark                   # measured SPRT numbers (samples saved, accuracy)
 hyctl graph blast <file>                # a file's blast radius + the confidence it demands
 hyctl graph parallel <files...>         # optimal number of parallel agents (Law 4)
@@ -884,20 +892,24 @@ hyctl eval list --failed                # the examples the oracle rejected
 hyctl eval training                     # vectors per embedding model, whether a classifier could be fitted
 hyctl eval classify                     # does similarity to past work predict whether an enum passes
 # A rule can then route on it: corpus.known / corpus.pass_rate / corpus.support in
-# registry/signals.yaml, derived only when a rule names one.
+# registry/signals.yaml, derived only when a rule names one. Alongside them,
+# signals that need no model at all: language.script and (where the script
+# decides it) language.code, structure.questions / .list_items / .code_fences /
+# .ordered_steps, conversation.turns / .tool_loop, and context.prompt_tokens.
 
 # The standalone verifier: fill the corpus with no router and no Hydra config.
 # Ships in the same archive as hyctl, and reads no ~/.hydra at all.
 hyverify --candidate internal/auth/token.go --task "rotate signing key" --enum MODERATE
 hyverify --candidate out.go --task "..." -- go test ./...   # name the judge yourself
 hyverify --candidate x.go --task "..." --embed-model nomic-embed-text  # so it trains a classifier
-hyctl mcp check <tool> --agent A --resource R --action write  # gate + record an access
+hyverify --version                                          # which build wrote a corpus row
+hyctl mcp check <tool> --agent A --resource R --action write  # 0 allow, 3 deny, 4 ask
 hyctl mcp check <tool> --content "$DATA" --action network      # PII auto-classified; policy can deny egress
 hyctl mcp check <tool> --params '{"amount":500}'               # bind a hash of the params to the decision
 hyctl mcp verify <tool> --resource R --params '{"amount":500}' # prove executed params == approved params
 hyctl mcp verify-chain                  # confirm the ledger's hash chain hasn't been tampered with
-hyctl mcp log --denied                  # what got blocked
-hyctl mcp report                        # allowed/denied by agent and tool
+hyctl mcp log --denied                  # what was withheld: denied and ask alike
+hyctl mcp report                        # allowed/denied/ask by agent and tool
 hyctl mcp registry sync                 # pull the official MCP registry into a local cache
 hyctl mcp registry scan                 # list MCP servers installed on this machine (identity only)
 hyctl mcp registry audit                # resolve + score installed servers, advance lifecycle state
@@ -912,18 +924,19 @@ hyctl security --advisories             # ask OSV about the local model server v
 hyctl security --attest                 # checkable attestation: posture + evidence + digest
 
 # Editing & batch
-hyctl edit --file ... --prompt "..."    # scoped, validated, rollback-safe file edit
+hyctl edit --file ... --enum ... --prompt "..."  # scoped, validated, rollback-safe file edit
 hyctl review ...                        # code review / approve / reject / QA
 hyctl parallel ...                      # fan independent tasks across heads
 hyctl workflow run --step A --step B    # multi-step task, each step routed on its own
+hyctl workflow run --dry-run ...        # each step's routing chain and ceiling, nothing run
+hyctl workflow run --local --max-cost 0.05 ...   # per-step caps, on top of policy.yaml's
 hyctl workflow resume <id>              # continue a killed workflow from where it stopped
+hyctl workflow show <id>                # each step's head, tier, cost and output
 
 # Reviewing a diff
 hyctl vet                               # review the working diff, each file routed to its own head
 hyctl vet --confidence 0.9              # sample each file with as many heads as its blast radius warrants
 hyctl vet --json                        # exits 3 on a blocking finding, so a script can gate on it
-# vet wants a chat head. An agentic CLI narrates the step it would take next rather
-# than returning findings, and those files read as unreviewed, not clean (#1049).
 ```
 
 The corpus behind `hyctl eval` is the one thing Hydra keeps verbatim and forever, because it is the
@@ -1203,7 +1216,7 @@ curl -fsSL https://raw.githubusercontent.com/ankit373/hydra/main/install-app.sh 
 It resolves the newest release (the asset names embed their version, so GitHub's `/latest/download/`
 shortcut cannot address them), verifies the download against the published `.sha256`, installs the
 `.app` to `/Applications`, or the binary to `~/.local/share/hydra` with a `~/.local/bin` symlink on
-Linux, and clears the macOS quarantine flag so the first launch works. `HYDRA_VERSION=v1.5.0` pins
+Linux, and clears the macOS quarantine flag so the first launch works. `HYDRA_VERSION=v1.6.0` pins
 a release; `HYDRA_APP_DIR` changes where it lands.
 
 **Or take the artifact directly**, from the

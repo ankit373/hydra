@@ -17,6 +17,7 @@ import (
 	"github.com/ankit373/hydra/internal/executor"
 	"github.com/ankit373/hydra/internal/provider"
 	"github.com/ankit373/hydra/internal/runid"
+	"github.com/ankit373/hydra/internal/runlog"
 	"github.com/ankit373/hydra/internal/serve"
 )
 
@@ -25,7 +26,6 @@ import (
 // meet, the same seam internal/workflow and internal/vet use.
 type serveRouter struct {
 	d           *dispatch.Dispatcher
-	runID       string
 	defaultEnum string
 	localOnly   bool
 }
@@ -36,7 +36,16 @@ func (r serveRouter) Chat(ctx context.Context, req serve.Request) (serve.Answer,
 		return serve.Answer{}, err
 	}
 
-	res, err := r.d.Dispatch(ctx, flattenConversation(req.Messages), dispatch.Options{
+	// One run per request. A server's unit of work is the request, not the
+	// process: one run per session gave a long-lived server a single
+	// ever-growing run, and `hyctl trace view` with no argument showed that
+	// instead of the last request (#1149).
+	prompt := flattenConversation(req.Messages)
+	taskID := runid.New()
+	runlog.DeclareRun(req.RequestID, taskID, prompt)
+	defer runlog.FinishRun(req.RequestID, taskID)
+
+	res, err := r.d.Dispatch(ctx, prompt, dispatch.Options{
 		TierHint:   tier,
 		Enum:       enum,
 		Head:       head,
@@ -46,8 +55,8 @@ func (r serveRouter) Chat(ctx context.Context, req serve.Request) (serve.Answer,
 		Tools:      req.Tools,
 		ToolChoice: req.ToolChoice,
 		OnStream:   streamEvents(req.OnEvent),
-		RunID:      r.runID,
-		TaskID:     runid.New(),
+		RunID:      req.RequestID,
+		TaskID:     taskID,
 	})
 	if err != nil {
 		return serve.Answer{}, callerError(err)
@@ -96,8 +105,26 @@ func callerError(err error) error {
 	if errors.Is(err, executor.ErrUnaskable) {
 		return fmt.Errorf("%w: %w", serve.ErrBadRequest, err)
 	}
+	// A head the client named is the client's choice, so its failure is a 4xx
+	// and must stay out of the SDKs' 5xx retry class. The message is already
+	// the right words and is kept exactly (#1145).
+	switch {
+	case errors.Is(err, dispatch.ErrHeadUnknown):
+		return gradedError{serve.ErrNotFound, err}
+	case errors.Is(err, dispatch.ErrHeadUnusable):
+		return gradedError{serve.ErrBadRequest, err}
+	}
 	return err
 }
+
+// gradedError attaches a status grade without changing what the caller reads.
+type gradedError struct {
+	grade error
+	msg   error
+}
+
+func (e gradedError) Error() string   { return e.msg.Error() }
+func (e gradedError) Unwrap() []error { return []error{e.msg, e.grade} }
 
 // Models advertises the routing keys alongside the discovered heads, so any
 // OpenAI client's model picker becomes Hydra's routing UI.
@@ -106,7 +133,19 @@ func (r serveRouter) Models() []serve.Model {
 	for _, name := range dispatch.TierNames() {
 		out = append(out, serve.Model{ID: "hydra/" + name, Object: "model", OwnedBy: "hydra"})
 	}
-	for _, h := range r.d.Heads() {
+	return append(out, advertisable(r.d.Heads())...)
+}
+
+// advertisable is the heads a picker may offer. A picker that lists what the
+// router refuses is a broken picker: an embedding-only head has no completion
+// API at all, so choosing it could only ever fail. `hyctl probe` is where a
+// discovered-but-unroutable head belongs, with its reason (#1145).
+func advertisable(heads []provider.Head) []serve.Model {
+	var out []serve.Model
+	for _, h := range heads {
+		if executor.Unroutable(h) != "" {
+			continue
+		}
 		out = append(out, serve.Model{ID: h.ID, Object: "model", OwnedBy: h.Provider})
 	}
 	return out
@@ -170,6 +209,7 @@ func cmdServe() *cobra.Command {
 	var (
 		addr, token, enum string
 		localOnly         bool
+		confidence        float64
 	)
 
 	cmd := &cobra.Command{
@@ -178,6 +218,9 @@ func cmdServe() *cobra.Command {
 		Long: "Serves POST /v1/chat/completions and GET /v1/models, so any tool that speaks\n" +
 			"OpenAI routes through Hydra: policy, fallback, per-domain calibration and spend\n" +
 			"logging all apply the way they do to `hyctl dispatch`.\n\n" +
+			"POST /v1/decisions and /v1/systemone take typed questions in either wire format and\n" +
+			"ask the decision sources in order: one when its answer clears --confidence, more\n" +
+			"through the SPRT when not. X-Hydra-Decision-Sources and -Confidence say which.\n\n" +
 			"The model field is the routing instruction. `hydra` takes the default enum,\n" +
 			"`hydra/hard` or `hydra/t4` pin an enum or a tier, and a head id pins that head.\n\n" +
 			"`stream: true` is answered as server-sent events. A fallback before any output is\n" +
@@ -213,9 +256,13 @@ func cmdServe() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			r := serveRouter{d: d, runID: runid.New(), defaultEnum: enum, localOnly: localOnly}
+			decider, err := newDecisionRouter(ctx, confidence, localOnly)
+			if err != nil {
+				return err
+			}
+			r := serveRouter{d: d, defaultEnum: enum, localOnly: localOnly}
 			printServeBanner(os.Stdout, ln.Addr().String(), enum, token != "", localOnly, d.Heads())
-			return serve.Serve(ctx, ln, serve.Handler(r, token))
+			return serve.Serve(ctx, ln, serve.Handler(r, decider, token))
 		},
 	}
 
@@ -224,12 +271,24 @@ func cmdServe() *cobra.Command {
 	f.StringVar(&token, "token", "", "bearer token required of every request (or HYDRA_SERVE_TOKEN)")
 	f.StringVar(&enum, "enum", "STANDARD", "routing enum for a request that names no key")
 	f.BoolVar(&localOnly, "local", false, "local Heads only, no API calls")
+	f.Float64Var(&confidence, "confidence", 0.95, "stop asking decision sources once an answer is this sure")
 	return cmd
 }
 
 func printServeBanner(w io.Writer, addr, enum string, hasToken, localOnly bool, heads []provider.Head) {
+	// Over the heads this server can actually reach. Counting all 16 on a
+	// --local endpoint advertised ten that no request could ever route to
+	// (#1147).
+	reachable := 0
 	withTools := 0
 	for _, h := range heads {
+		if localOnly && !h.LocalOnly {
+			continue
+		}
+		if executor.Unroutable(h) != "" {
+			continue
+		}
+		reachable++
 		if executor.CanUseTools(h) {
 			withTools++
 		}
@@ -247,9 +306,16 @@ func printServeBanner(w io.Writer, addr, enum string, hasToken, localOnly bool, 
 	if localOnly {
 		fmt.Fprintf(w, "  heads             local only\n")
 	}
-	// Tool calls are what an agent loop needs and most dialects cannot carry
-	// them yet, so this is the honest answer to "will my agent work here".
-	fmt.Fprintf(w, "  tool calling      %d of %d Heads can carry tools\n", withTools, len(heads))
+	// "can be sent tools", which is a property of the dialect, not a promise
+	// that the model will answer with a structured call: measured here, Ollama
+	// reports tool support for every local model while Qwen2.5-Coder writes its
+	// calls as message text. Saying which claim this is, because an agent
+	// author reads this line as "my loop will work" (#1147).
+	fmt.Fprintf(w, "  tool calling      %d of %d reachable Heads accept tool definitions\n", withTools, reachable)
+	if withTools > 0 {
+		fmt.Fprintf(w, "                    %s\n", dimStyle.Render(
+			"a call written as message text is recovered; whether a model emits one is the model's"))
+	}
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, dimStyle.Render("  ctrl-c to stop"))
 	fmt.Fprintln(w)

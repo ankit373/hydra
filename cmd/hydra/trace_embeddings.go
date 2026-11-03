@@ -38,9 +38,9 @@ key: changing it invalidates the store rather than mixing two vector spaces.`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			// No config means capture was never opted into, which is the answer,
 			// not a plumbing error to report in place of it.
-			cfg, err := config.Load()
+			cfg, err := reportConfig()
 			if err != nil {
-				cfg = &config.Config{}
+				return err
 			}
 
 			ctx, cancel := context.WithTimeout(cmd.Context(), 5*time.Second)

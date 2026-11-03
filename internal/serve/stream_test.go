@@ -54,7 +54,7 @@ func stream(t *testing.T, r Router, body string) *flushRecorder {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(body))
 	w := &flushRecorder{ResponseRecorder: httptest.NewRecorder()}
-	Handler(r, "").ServeHTTP(w, req)
+	Handler(r, nil, "").ServeHTTP(w, req)
 	return w
 }
 
@@ -151,13 +151,16 @@ func TestStream_SpeaksTheChunkProtocol(t *testing.T) {
 		t.Errorf("the last chunk's finish_reason is %v, want stop", last["finish_reason"])
 	}
 	// Every chunk of one answer carries one id, which is how a client groups
-	// them, and the head that answered rather than the key the client asked for.
+	// them, and the head that answered rather than the key the client asked
+	// for. Specifically the head's *id* ("h1"), not its display name ("m1"):
+	// a client echoes this value back and groups its logs by it, so it has to
+	// be something /v1/models advertises and parseRoute resolves (#1145).
 	for _, f := range fs {
 		if f["id"] != fs[0]["id"] {
 			t.Fatalf("the id changed mid-stream: %v then %v", fs[0]["id"], f["id"])
 		}
-		if f["model"] != "m1" {
-			t.Errorf("model = %v, want the head that answered", f["model"])
+		if f["model"] != "h1" {
+			t.Errorf("model = %v, want the answering head's id h1", f["model"])
 		}
 	}
 }
@@ -369,7 +372,7 @@ func TestStream_ADisconnectedClientCancelsTheDispatch(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions",
 		strings.NewReader(streamTurn)).WithContext(ctx)
 	r := &streamRouter{answer: Answer{Output: "x"}}
-	Handler(r, "").ServeHTTP(&flushRecorder{ResponseRecorder: httptest.NewRecorder()}, req)
+	Handler(r, nil, "").ServeHTTP(&flushRecorder{ResponseRecorder: httptest.NewRecorder()}, req)
 
 	if !r.cancelled {
 		t.Error("the router's context outlived the client")

@@ -49,6 +49,27 @@ import (
 // into a GUI caller that has no terminal to point at (#452).
 var ErrNoHeads = errors.New("no dispatchable heads")
 
+// ErrHeadUnknown and ErrHeadUnusable separate the two ways a *named* head
+// fails from the general "nothing was available". A caller that picked the
+// head is owed a different answer from one whose fallback chain ran out, and
+// over an API the difference is whether retrying can ever work: an unknown id
+// is 404 and an unusable one 400, where exhaustion really is a 5xx. Both wrap
+// ErrNoHeads as well, so every existing errors.Is keeps its meaning.
+var (
+	ErrHeadUnknown  = errors.New("unknown head")
+	ErrHeadUnusable = errors.New("head cannot be used")
+)
+
+// headErr carries that kind without touching the message, which is what the
+// operator reads and is already the right words (#676).
+type headErr struct {
+	kind error
+	msg  error
+}
+
+func (e headErr) Error() string   { return e.msg.Error() }
+func (e headErr) Unwrap() []error { return []error{e.msg, e.kind} }
+
 // Options controls dispatch behaviour.
 type Options struct {
 	TierHint  string // tier name from config, e.g. "standard"
@@ -92,6 +113,14 @@ type Options struct {
 	// MaxCostSource names where that ceiling came from, so a refusal says
 	// which of the flag and the policy file to change. Empty reads as the flag.
 	MaxCostSource string
+
+	// MaxMemoryMB and MaxCPUSeconds cap a dispatched subprocess's address
+	// space and CPU time, from policy.yaml's max_memory_mb/max_cpu_seconds.
+	// 0 means no ceiling, same spelling MaxCostUSD already uses. Applied by
+	// sandbox.WithLimits inside the executor, not here: this only carries the
+	// numbers from policy to the process that will actually run.
+	MaxMemoryMB   int
+	MaxCPUSeconds int
 
 	// RunID groups every log row produced by one user-facing invocation;
 	// TaskID groups the rows for one logical task inside it. Empty means
@@ -477,7 +506,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 	// Evaluated once, here or by the caller, never per fallback candidate.
 	dec := opts.Decision
 	if dec == nil {
-		computed := d.Decide(ctx, prompt, opts.Domain, nil)
+		computed := d.Decide(ctx, prompt, opts.Domain, nil, opts.Messages)
 		dec = &computed
 	}
 	if err := applyDecision(*dec, &opts); err != nil {
@@ -849,13 +878,15 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 			onDelta = func(d string) { emit(StreamDelta, d, "") }
 		}
 		resp, err := executor.Stream(ctx, exec, executor.Request{
-			Prompt:     prompt,
-			Head:       h,
-			MaxTokens:  opts.MaxTokens,
-			System:     opts.System,
-			Messages:   opts.Messages,
-			Tools:      opts.Tools,
-			ToolChoice: opts.ToolChoice,
+			Prompt:        prompt,
+			Head:          h,
+			MaxTokens:     opts.MaxTokens,
+			System:        opts.System,
+			Messages:      opts.Messages,
+			Tools:         opts.Tools,
+			ToolChoice:    opts.ToolChoice,
+			MaxMemoryMB:   opts.MaxMemoryMB,
+			MaxCPUSeconds: opts.MaxCPUSeconds,
 		}, onDelta)
 		if err != nil {
 			lastErr = err
@@ -879,7 +910,10 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 			// Parks the head so the rest of this run, and the next one, skip
 			// it. A missing binary or an unknown model opens the breaker at
 			// once; anything that might not recur gets a second chance first.
-			d.health.Fail(h.ID, truncate(err.Error(), 120), health.Classify(err), time.Now())
+			// A rate limit is neither, and carries the wait the server asked
+			// for, which is a better number than ours (#1096).
+			stated, _ := health.StatedWait(err)
+			d.health.FailFor(h.ID, truncate(err.Error(), 120), health.Classify(err), time.Now(), stated)
 			// A failed candidate is part of the run's shape: it is why the
 			// fallback chain advanced, and nothing else records it.
 			_ = rl.Append(runlog.Event{
@@ -1251,19 +1285,20 @@ func (d *Dispatcher) pinHead(id string, localOnly bool) (provider.Head, error) {
 			continue
 		}
 		if localOnly && !h.LocalOnly {
-			return provider.Head{}, fmt.Errorf(
+			return provider.Head{}, headErr{ErrHeadUnusable, fmt.Errorf(
 				"%w: %s is not a local head, and this run is local-only "+
 					"(policy or --local); choose a local model or lift the restriction",
-				ErrNoHeads, h.Name)
+				ErrNoHeads, h.Name)}
 		}
 		if why := executor.Unroutable(h); why != "" {
-			return provider.Head{}, fmt.Errorf("%w: %s cannot be run: %s", ErrNoHeads, h.Name, why)
+			return provider.Head{}, headErr{ErrHeadUnusable,
+				fmt.Errorf("%w: %s cannot be run: %s", ErrNoHeads, h.Name, why)}
 		}
 		return h, nil
 	}
-	return provider.Head{}, fmt.Errorf(
+	return provider.Head{}, headErr{ErrHeadUnknown, fmt.Errorf(
 		"%w: no discovered head with id %q; run `hyctl probe` to see what this machine has",
-		ErrNoHeads, id)
+		ErrNoHeads, id)}
 }
 
 // selectHeads returns heads to try, in order of preference.
