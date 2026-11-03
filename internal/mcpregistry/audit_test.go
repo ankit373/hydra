@@ -346,3 +346,92 @@ func TestAudit_FindingsNeverQuarantine(t *testing.T) {
 		t.Errorf("want findings and a provisional server, got %+v", got)
 	}
 }
+
+// fetchConfig is a client config that installs mcp-server-fetch under name.
+func fetchConfig(name string) string {
+	return `{"mcpServers": {"` + name + `": {"command":"uvx","args":["mcp-server-fetch"]}}}`
+}
+
+// seedFetchRegistry installs the given client configs and syncs a registry that resolves
+// mcp-server-fetch, returning the registry name its lifecycle state is kept under.
+func seedFetchRegistry(t *testing.T, configs map[string]string) string {
+	t.Helper()
+	withTempHydraHome(t)
+	withStubbedScoringDeps(t)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	for rel, body := range configs {
+		writeJSON(t, filepath.Join(home, rel), body)
+	}
+	srv := ServerRecord{
+		Name:     "io.github.modelcontextprotocol/fetch",
+		Version:  "1.0.0",
+		Packages: []Package{{RegistryType: "pypi", Identifier: "mcp-server-fetch"}},
+	}
+	cache := &registryCache{FetchedAt: time.Now().UTC(), Servers: []ServerRecord{srv}}
+	if err := writeCache(cache); err != nil {
+		t.Fatal(err)
+	}
+	return srv.Name
+}
+
+// markTrusted promotes a server's saved state, standing in for a finished cooldown.
+func markTrusted(t *testing.T, registryName string) {
+	t.Helper()
+	states, err := LoadStates()
+	if err != nil {
+		t.Fatal(err)
+	}
+	st := states[registryName]
+	st.State = StateTrusted
+	states[registryName] = st
+	if err := SaveStates(states); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAudit_UnchangedToolWithASchemaStaysTrusted(t *testing.T) {
+	registryName := seedFetchRegistry(t, map[string]string{
+		".cursor/mcp.json": fetchConfig("fetch"),
+	})
+	const schema = `{"type":"object","properties":{"url":{"type":"string"}},"required":["url"]}`
+	const snapshot = `{"tools":[{"name":"fetch","description":"Fetch.","inputSchema":` + schema + `}]}`
+	writeJSON(t, ToolsSnapshotPath("fetch"), snapshot)
+	if _, err := Audit(context.Background(), ""); err != nil {
+		t.Fatal(err)
+	}
+	markTrusted(t, registryName)
+
+	rpt, err := Audit(context.Background(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := rpt.Entries[0]; got.LifecycleState != StateTrusted || got.ToolDrift != nil {
+		t.Errorf("state = %q, drift = %+v; want trusted with no drift", got.LifecycleState, got.ToolDrift)
+	}
+}
+
+func TestAudit_OnePackageUnderTwoNamesAdvancesOncePerRun(t *testing.T) {
+	registryName := seedFetchRegistry(t, map[string]string{
+		".cursor/mcp.json":                  fetchConfig("fetch"),
+		".codeium/windsurf/mcp_config.json": fetchConfig("web"),
+	})
+	writeJSON(t, ToolsSnapshotPath("fetch"), `{"tools":[{"name":"fetch","description":"Fetch."}]}`)
+	writeJSON(t, ToolsSnapshotPath("web"), `{"tools":[{"name":"fetch","description":"Fetch a page."}]}`)
+	if _, err := Audit(context.Background(), ""); err != nil {
+		t.Fatal(err)
+	}
+	markTrusted(t, registryName)
+
+	rpt, err := Audit(context.Background(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, got := range rpt.Entries {
+		if got.LifecycleState != StateTrusted || got.ToolDrift != nil {
+			t.Errorf("%s: state = %q, drift = %+v; want trusted, two snapshots of one server are not a drift",
+				got.Name, got.LifecycleState, got.ToolDrift)
+		}
+	}
+}

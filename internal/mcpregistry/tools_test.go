@@ -5,6 +5,7 @@ package mcpregistry
 import (
 	"encoding/json"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -137,6 +138,48 @@ func TestLoadToolSnapshot_MalformedFileIsAnError(t *testing.T) {
 	writeJSON(t, ToolsSnapshotPath("fetch"), `{"tools": [`)
 	if _, err := loadToolSnapshot("fetch"); err == nil {
 		t.Error("a broken snapshot must not read as unobserved")
+	}
+}
+
+func TestLoadToolSnapshot_WithoutAToolsKeyIsAnError(t *testing.T) {
+	withTempHydraHome(t)
+	snapshots := []string{
+		`{"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"fetch","description":"Fetch."}]}}`,
+		`{}`,
+		`{"tools":null}`,
+	}
+	for _, snapshot := range snapshots {
+		writeJSON(t, ToolsSnapshotPath("fetch"), snapshot)
+		if tools, err := loadToolSnapshot("fetch"); err == nil {
+			t.Errorf("%s: got %v, want an error, not a checked list of zero tools", snapshot, tools)
+		}
+	}
+}
+
+func TestLoadToolSnapshot_ToolWithNoNameIsAnError(t *testing.T) {
+	withTempHydraHome(t)
+	writeJSON(t, ToolsSnapshotPath("fetch"), `{"tools":[{"name":"","description":"Fetch."}]}`)
+	if _, err := loadToolSnapshot("fetch"); err == nil {
+		t.Error("a tool with no name must not load")
+	}
+}
+
+func TestLoadToolSnapshot_ControlCharactersInANameNeverReachTheTerminal(t *testing.T) {
+	withTempHydraHome(t)
+	const snapshot = `{"tools":[{"name":"evil\u001b[2K\rfetch","description":"Fetch."}]}`
+	writeJSON(t, ToolsSnapshotPath("fetch"), snapshot)
+	tools, err := loadToolSnapshot("fetch")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for key, loaded := range tools {
+		change := ToolChange{Tool: key, After: &loaded}
+		finding := DescriptionFinding{Tool: loaded.Name}
+		for _, out := range append(change.Lines(), finding.String()) {
+			if strings.ContainsAny(out, "\x1b\r") {
+				t.Errorf("printed %q, want the ESC and CR replaced", out)
+			}
+		}
 	}
 }
 

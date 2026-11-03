@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/ankit373/hydra/internal/config"
+	"github.com/ankit373/hydra/internal/util"
 )
 
 // Tool is one entry of an MCP server's tools/list result: the text and schema
@@ -22,6 +23,20 @@ type Tool struct {
 	Name        string          `json:"name"`
 	Description string          `json:"description"`
 	InputSchema json.RawMessage `json:"inputSchema,omitempty"`
+}
+
+// UnmarshalJSON is the one place a tool enters from disk, a snapshot or the saved state.
+// The indented state file must hash the same as a compact snapshot, and names reach the terminal.
+func (t *Tool) UnmarshalJSON(raw []byte) error {
+	type plain Tool
+	var p plain
+	if err := json.Unmarshal(raw, &p); err != nil {
+		return err
+	}
+	p.Name = util.SafeTerminal(p.Name)
+	p.InputSchema = canonicalSchema(p.InputSchema)
+	*t = Tool(p)
+	return nil
 }
 
 // ToolHash fingerprints everything the model reads about one tool, so a rewritten
@@ -56,15 +71,21 @@ func loadToolSnapshot(server string) (map[string]Tool, error) {
 	if err != nil {
 		return nil, err
 	}
+	// A pointer, so a saved JSON-RPC response with no top-level list is an error, not zero tools.
 	var result struct {
-		Tools []Tool `json:"tools"`
+		Tools *[]Tool `json:"tools"`
 	}
 	if err = json.Unmarshal(raw, &result); err != nil {
 		return nil, fmt.Errorf("tools snapshot %s: %w", path, err)
 	}
-	tools := make(map[string]Tool, len(result.Tools))
-	for _, t := range result.Tools {
-		t.InputSchema = canonicalSchema(t.InputSchema)
+	if result.Tools == nil {
+		return nil, fmt.Errorf(`tools snapshot %s: no "tools" list, want {"tools": [...]}`, path)
+	}
+	tools := make(map[string]Tool, len(*result.Tools))
+	for _, t := range *result.Tools {
+		if t.Name == "" {
+			return nil, fmt.Errorf("tools snapshot %s: a tool has no name", path)
+		}
 		tools[t.Name] = t
 	}
 	return tools, nil

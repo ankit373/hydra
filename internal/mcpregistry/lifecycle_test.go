@@ -89,6 +89,19 @@ func TestAdvance_TrustedDropsToProvisionalOnVersionBump(t *testing.T) {
 	}
 }
 
+func TestAdvance_VersionBumpInProvisionalRestartsTheCooldown(t *testing.T) {
+	now := time.Now()
+	prev := ServerState{
+		State:          StateProvisional,
+		ManifestHash:   ManifestHash(srvV("x", "1.0.0")),
+		StateChangedAt: now.Add(-provisionalCooldown + time.Hour),
+	}
+	next := Advance(&prev, srvV("x", "1.0.1"), cleanScore(), nil, now)
+	if next.State != StateProvisional || !next.StateChangedAt.Equal(now) {
+		t.Errorf("State = %q at %v, want provisional, clock restarted", next.State, next.StateChangedAt)
+	}
+}
+
 func TestAdvance_TrustedUnchangedStaysTrusted(t *testing.T) {
 	srv := srvV("x", "1.0.0")
 	prev := ServerState{State: StateTrusted, ManifestHash: ManifestHash(srv), StateChangedAt: time.Now().Add(-30 * 24 * time.Hour)}

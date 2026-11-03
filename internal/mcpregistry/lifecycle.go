@@ -163,9 +163,9 @@ func Advance(
 		// StateNew never persists (Advance always assigns Provisional or
 		// Quarantined on first sight) but is handled here defensively.
 	}
-	// A tool change restarts the cooldown even inside provisional: the new text has
-	// to hold for the whole period before it is trusted.
-	if next.State != prev.State || (toolsChanged && next.State == StateProvisional) {
+	// Any change restarts the cooldown even inside provisional: the new version or
+	// tool text has to hold for the whole period before it is trusted.
+	if next.State != prev.State || (!unchanged && next.State == StateProvisional) {
 		next.StateChangedAt = now
 	}
 	next.ManifestHash = hash
