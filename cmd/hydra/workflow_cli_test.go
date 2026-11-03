@@ -3,6 +3,7 @@
 package main
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -182,6 +183,49 @@ func TestWorkflowShow_AndJSON(t *testing.T) {
 	}
 	if !strings.Contains(jsonOut, `"id":"wf1"`) || !strings.Contains(jsonOut, `"enum":"EXPERT"`) {
 		t.Errorf("--json did not emit the workflow:\n%s", jsonOut)
+	}
+}
+
+// show is the audit surface: every step's output, head, tier and cost, not
+// only the last answer and the total (#1177).
+func TestWorkflowShow_EveryStepsOutputAndCost(t *testing.T) {
+	testutil.NewSandbox(t)
+	w := storedWorkflow(t, "wf1")
+	w.Steps[1].Status = workflow.Done
+	w.Steps[1].Output = "the fix is a retry"
+	w.Steps[1].Model = "claude-sonnet"
+	w.Steps[1].Tier = 3
+	w.Steps[1].CostUSD = 0.0345
+	if err := workflow.Save(w); err != nil {
+		t.Fatal(err)
+	}
+
+	out, _, err := run(t, "workflow", "show", "wf1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	out = stripANSICodes(out)
+	for _, want := range []string{
+		"TestFoo is flaky", "the fix is a retry", // every output, not only the last
+		"$0.0012", "$0.0345", "$0.0357", // each step's cost and the total
+		"Qwen2.5-Coder:7b (Ollama) · T10", "claude-sonnet · T3",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("show is missing %q:\n%s", want, out)
+		}
+	}
+
+	// --json is the same record, so it carries every field the view shows.
+	raw, _, err := run(t, "workflow", "show", "wf1", "--json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got workflow.Workflow
+	if err := json.Unmarshal([]byte(raw), &got); err != nil {
+		t.Fatal(err)
+	}
+	if s := got.Steps[0]; s.Output != "TestFoo is flaky" || s.CostUSD != 0.0012 || s.Tier != 10 || s.Model == "" {
+		t.Errorf("--json step 1 lost a field: %+v", s)
 	}
 }
 
