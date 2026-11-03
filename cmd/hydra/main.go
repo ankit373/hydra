@@ -97,6 +97,10 @@ func main() {
 	updateCh := update.CheckAsync()
 
 	if err := rootCmd().ExecuteContext(ctx); err != nil {
+		var status exitStatus
+		if errors.As(err, &status) {
+			os.Exit(int(status))
+		}
 		if ctx.Err() != nil {
 			// 130 is the shell's convention for "killed by SIGINT", and exit
 			// codes are a contract here (see exit_code_test.go).
@@ -896,19 +900,12 @@ func cmdDispatch() *cobra.Command {
 		Short: "Route a prompt to the best available Head",
 		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// Checked before the enum name: IsKnownEnum reports false when the
-			// routing table could not be loaded at all, so a broken routing.yaml
-			// otherwise came back as "unknown --enum SIMPLE", blaming a valid key
-			// for a file problem (#720).
-			if err := dispatch.RoutingError(); err != nil {
-				return err
-			}
 			// An unrecognized --enum must fail here, before anything routes: its
 			// zero value is byte-identical to "no enum given" everywhere else in
 			// this function, so a typo silently routed to the single strongest
 			// (most expensive) head instead of being reported (#501).
-			if enumKey != "" && !dispatch.IsKnownEnum(enumKey) {
-				return fmt.Errorf("unknown --enum %q: not a recognized routing enum key", enumKey)
+			if err := knownEnum(enumKey); err != nil {
+				return err
 			}
 			// A dispatch writes nothing to disk, so the workspace verifier it
 			// used to run judged the working tree and never saw the answer: the
@@ -920,7 +917,7 @@ func cmdDispatch() *cobra.Command {
 			if verifyRun {
 				return fmt.Errorf("--verify cannot judge a dispatch: the answer is never written to " +
 					"disk, so the verifier checks the repository as it already was.\n" +
-					"  To verify an answer, apply it: `hyctl edit --file <path> \"<instruction>\"` " +
+					"  To verify an answer, apply it: `hyctl edit --file <absolute-path> --enum <ENUM> --prompt \"<instruction>\"` " +
 					"validates the file it just wrote.\n" +
 					"  To verify one you have applied yourself: " +
 					"`hyctl oracle verify --candidate <file> -- <command>`")
@@ -1389,8 +1386,9 @@ improved against.`,
 			if err != nil {
 				return err
 			}
+			corpusSize := len(all)
 			if failedOnly {
-				var f []evalset.Example
+				f := []evalset.Example{}
 				for _, e := range all {
 					if !e.Passed {
 						f = append(f, e)
@@ -1411,7 +1409,11 @@ improved against.`,
 				return nil
 			}
 			if len(all) == 0 {
-				fmt.Println("No verified examples yet. Run `hyctl oracle verify --candidate <file> ...` to record one.")
+				// Only an empty corpus gets the hint: --failed over all passes
+				// has nothing to show, which is not "no examples yet" (#1171).
+				if corpusSize == 0 {
+					fmt.Println("No verified examples yet. Run `hyctl oracle verify --candidate <file> ...` to record one.")
+				}
 				return nil
 			}
 			for _, e := range all {
@@ -4335,19 +4337,46 @@ func statusIcon(s swarm.HeadStatus) string {
 
 // ── edit ──────────────────────────────────────────────────────────────────────
 
+// exitStatus is an error that only sets the exit code. Returning it rather than
+// calling os.Exit lets a command's defers run first (#1171).
+type exitStatus int
+
+func (s exitStatus) Error() string { return fmt.Sprintf("exit status %d", int(s)) }
+
+// knownEnum refuses a routing key the router does not understand, before any
+// head runs. RoutingError first, so a broken routing.yaml is not blamed on the key (#720).
+func knownEnum(enum string) error {
+	if err := dispatch.RoutingError(); err != nil {
+		return err
+	}
+	if enum != "" && !dispatch.IsKnownEnum(enum) {
+		return fmt.Errorf("unknown --enum %q: not a recognized routing enum key", enum)
+	}
+	return nil
+}
+
 func cmdEdit() *cobra.Command {
 	var (
 		file       string
 		enum       string
 		prompt     string
 		noValidate bool
+		localOnly  bool
 	)
 
 	cmd := &cobra.Command{
 		Use:   "edit",
 		Short: "Atomic, validated, rollback-safe file edit via a Hydra Head",
+		Example: `  hyctl edit --file "$PWD/internal/foo.go" --enum MODERATE --prompt "add a nil check"
+  hyctl edit --file "$PWD/main.go" --enum SIMPLE --prompt "rename x to count" --local`,
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			ctx := cmd.Context()
+			// A typo used to fall through to an unrestricted route, the most
+			// expensive head on the machine (#1163).
+			if err := knownEnum(enum); err != nil {
+				return err
+			}
 
 			// Resolve rather than mint, so HYDRA_RUN_ID groups an edit with the
 			// invocation that spawned it (#204, #211).
@@ -4361,12 +4390,13 @@ func cmdEdit() *cobra.Command {
 			defer runlog.FinishRun(runID, taskID)
 
 			result, err := editor.Edit(ctx, editor.Request{
-				File:     file,
-				Enum:     enum,
-				Prompt:   prompt,
-				Validate: !noValidate,
-				RunID:    runID,
-				TaskID:   taskID,
+				File:      file,
+				Enum:      enum,
+				Prompt:    prompt,
+				Validate:  !noValidate,
+				RunID:     runID,
+				TaskID:    taskID,
+				LocalOnly: localOnly,
 			})
 			if err != nil {
 				return err
@@ -4374,7 +4404,7 @@ func cmdEdit() *cobra.Command {
 			raw, _ := json.MarshalIndent(result, "", "  ")
 			fmt.Println(string(raw))
 			if result.Status != "ok" {
-				os.Exit(2)
+				return exitStatus(2)
 			}
 			return nil
 		},
@@ -4384,6 +4414,7 @@ func cmdEdit() *cobra.Command {
 	cmd.Flags().StringVar(&enum, "enum", "", "routing enum key, e.g. SIMPLE (required)")
 	cmd.Flags().StringVar(&prompt, "prompt", "", "edit instruction (required)")
 	cmd.Flags().BoolVar(&noValidate, "no-validate", false, "skip extension validator")
+	cmd.Flags().BoolVar(&localOnly, "local", false, "local Heads only, no API calls")
 	_ = cmd.MarkFlagRequired("file")
 	_ = cmd.MarkFlagRequired("enum")
 	_ = cmd.MarkFlagRequired("prompt")
@@ -4500,6 +4531,11 @@ func cmdParallel() *cobra.Command {
 			if err := json.Unmarshal(raw, &tasks); err != nil {
 				return fmt.Errorf("invalid JSON in %s: %w", tasksFile, err)
 			}
+			for _, t := range tasks {
+				if err := knownEnum(t.Enum); err != nil {
+					return fmt.Errorf("task %q: %w", t.Label, err)
+				}
+			}
 
 			ctx := cmd.Context()
 			// A fan-out is one run of N tasks, so the run says how many and
@@ -4521,7 +4557,7 @@ func cmdParallel() *cobra.Command {
 			for _, r := range results {
 				var s struct{ Status string }
 				if json.Unmarshal(r.Raw(), &s) == nil && s.Status == "fail" {
-					os.Exit(1)
+					return exitStatus(1)
 				}
 			}
 			return nil

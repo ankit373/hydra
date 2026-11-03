@@ -17,9 +17,9 @@ import (
 	"github.com/ankit373/hydra/internal/testutil"
 )
 
-// The commands that call os.Exit do so only on their *failure* paths, `hyctl
-// edit` exits 2 when the edit fails, the MCP gate exits 3 on a deny, the oracle
-// exits 1 on a failing verdict, `parallel` exits 1 when a task fails. Their
+// The commands with a contracted exit code set it only on their *failure* paths,
+// `hyctl edit` exits 2 when the edit fails, the MCP gate exits 3 on a deny, the
+// oracle exits 1 on a failing verdict, `parallel` exits 1 when a task fails. Their
 // success paths are the larger bodies and run cleanly in process, so this drives
 // those: a real dispatch through a fake head planted on $PATH, with no network
 // and no API key.
@@ -453,7 +453,7 @@ func TestCLI_Dispatch_SwarmBillsEveryHead(t *testing.T) {
 // ── edit, executed for real ───────────────────────────────────────────────────
 
 func TestCLI_Edit_SucceedsAndRecordsTheEdit(t *testing.T) {
-	_, repo := dispatchable(t, marked("package main\n\nfunc main() {}"))
+	_, repo := dispatchable(t, editAnswer("package main\n", "package main\n\nfunc main() {}"))
 
 	file := filepath.Join(repo, "main.go")
 	if err := os.WriteFile(file, []byte("package main\n"), 0o644); err != nil {

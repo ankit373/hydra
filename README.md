@@ -870,7 +870,7 @@ hyctl trust defect ...                  # modeled cost of shipping a wrong answe
 hyctl trust stats                       # samples saved, achieved vs target confidence
 hyctl trust explain <task_hash>         # the LLR ledger for a past SPRT run
 hyctl trust reliability                 # when it says 90%, is it right 90% of the time
-hyctl edit --file path/to/f.go "..."            # apply, then validate what was written: the verdict that counts
+hyctl edit --file /abs/path/f.go --enum SIMPLE --prompt "..."  # apply, then validate what was written: the verdict that counts
 hyctl trust benchmark                   # measured SPRT numbers (samples saved, accuracy)
 hyctl graph blast <file>                # a file's blast radius + the confidence it demands
 hyctl graph parallel <files...>         # optimal number of parallel agents (Law 4)
@@ -916,7 +916,7 @@ hyctl security --advisories             # ask OSV about the local model server v
 hyctl security --attest                 # checkable attestation: posture + evidence + digest
 
 # Editing & batch
-hyctl edit --file ... --prompt "..."    # scoped, validated, rollback-safe file edit
+hyctl edit --file ... --enum ... --prompt "..."  # scoped, validated, rollback-safe file edit
 hyctl review ...                        # code review / approve / reject / QA
 hyctl parallel ...                      # fan independent tasks across heads
 hyctl workflow run --step A --step B    # multi-step task, each step routed on its own
