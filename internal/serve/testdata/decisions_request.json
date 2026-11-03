@@ -1,0 +1,52 @@
+{
+  "model": "gpt-6-luna",
+  "input": "I was charged twice for my order.",
+  "questions": [
+    {
+      "type": "choice",
+      "name": "department",
+      "instructions": "Which department should handle this complaint?",
+      "choices": [
+        {
+          "value": "billing",
+          "description": "Payments, invoices, and refunds."
+        },
+        {
+          "value": "technical",
+          "description": "Problems using the product."
+        },
+        {
+          "value": "shipping",
+          "description": "Delivery and tracking."
+        },
+        {
+          "value": "other",
+          "description": "Requests outside these categories."
+        }
+      ]
+    },
+    {
+      "type": "score",
+      "name": "severity",
+      "instructions": "How severe is the problem?",
+      "levels": [
+        {
+          "label": "Cosmetic",
+          "description": "Appearance only; no lost functionality."
+        },
+        {
+          "label": "Workaround available",
+          "description": "A task fails, but another way works."
+        },
+        {
+          "label": "Fully blocked",
+          "description": "A task fails with no workaround."
+        }
+      ]
+    },
+    {
+      "type": "predicate",
+      "instructions": "Does the customer ask for a refund?"
+    }
+  ]
+}

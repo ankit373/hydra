@@ -57,7 +57,10 @@ internal/workflow/      ← Ordered multi-step tasks, each step routed on its ow
                           read as `running` for ever until `Observed()` resolved it against a live
                           beat (#898). `hyctl workflow`.
 internal/serve/         ← OpenAI-compatible endpoint in front of the router, so any tool that
-                          speaks OpenAI routes through Hydra. `hyctl serve`.
+                          speaks OpenAI routes through Hydra. `hyctl serve`. Also
+                          `POST /v1/decisions` and `/v1/systemone`, each answered in its own shape.
+internal/decide/        ← Routes one decision: the first source answers alone when it clears the
+                          target, otherwise the SPRT asks on. Logs a `KindDecision` span per answer.
 internal/pending/       ← Tasks parked on a ledger `ask` verdict (logs/pending/<task-id>.json). `hyctl ask`.
 internal/mcpregistry/   ← MCP server trust registry: sync official registry, scan installed servers,
                           score (CSA-shaped categories), version-bump trust automaton, backtest against
@@ -391,6 +394,8 @@ hyctl vet --local --json                   # local Heads only, machine-readable
 # `hydra`, `hydra/<enum>`, `hydra/t<N>`, or a head id. Loopback unless --token.
 hyctl serve ; hyctl serve --enum SIMPLE --local
 hyctl serve --addr 0.0.0.0:8788 --token "$HYDRA_SERVE_TOKEN"
+# Typed decisions on the same server; X-Hydra-Domain picks the calibration domain
+hyctl serve --confidence 0.9   # POST /v1/decisions or /v1/systemone
 OCR_LLM_URL=http://127.0.0.1:8787/v1 OCR_LLM_MODEL=hydra ocr review   # any OpenAI client
 
 # Tasks parked waiting on a human (ledger `ask` verdict)

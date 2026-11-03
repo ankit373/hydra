@@ -95,8 +95,8 @@ type Router interface {
 }
 
 // Handler is the OpenAI-compatible surface: the two endpoints every client
-// touches, and nothing else.
-func Handler(r Router, token string) http.Handler {
+// touches, plus the two decision endpoints d answers.
+func Handler(r Router, d Decider, token string) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v1/models", guard(token, func(w http.ResponseWriter, req *http.Request) {
 		if req.Method != http.MethodGet {
@@ -112,6 +112,8 @@ func Handler(r Router, token string) http.Handler {
 		}
 		chat(w, req, r)
 	}))
+	mux.HandleFunc("/v1/decisions", guard(token, decisions(d, decisionsShape)))
+	mux.HandleFunc("/v1/systemone", guard(token, decisions(d, systemOneShape)))
 	return mux
 }
 
@@ -156,19 +158,27 @@ type chatRequest struct {
 	ToolChoice json.RawMessage    `json:"tool_choice"`
 }
 
-func chat(w http.ResponseWriter, req *http.Request, r Router) {
+// readBody reads one request within maxBody, saying why when it cannot.
+func readBody(req *http.Request) ([]byte, int, error) {
 	raw, err := io.ReadAll(io.LimitReader(req.Body, maxBody+1))
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "could not read the request body")
-		return
+		return nil, http.StatusBadRequest, errors.New("could not read the request body")
 	}
 	if len(raw) > maxBody {
-		writeError(w, http.StatusRequestEntityTooLarge, fmt.Sprintf("request exceeds %d bytes", maxBody))
+		return nil, http.StatusRequestEntityTooLarge, fmt.Errorf("request exceeds %d bytes", maxBody)
+	}
+	return raw, http.StatusOK, nil
+}
+
+func chat(w http.ResponseWriter, req *http.Request, r Router) {
+	raw, status, err := readBody(req)
+	if err != nil {
+		writeError(w, status, err.Error())
 		return
 	}
 
 	var in chatRequest
-	if err := json.Unmarshal(raw, &in); err != nil {
+	if err = json.Unmarshal(raw, &in); err != nil {
 		writeError(w, http.StatusBadRequest, "could not parse the request as JSON: "+err.Error())
 		return
 	}
