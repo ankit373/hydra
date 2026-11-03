@@ -175,3 +175,33 @@ func TestParseDecisionsResponse_ARefusalIsAnError(t *testing.T) {
 		t.Errorf("err = %v, want the refusal reported", err)
 	}
 }
+
+// Structured state is kept as text, and a noul's true and false descriptions survive the trip.
+func TestParseSystemOneRequest_KeepsWhatAPredicateCannotCarryAsText(t *testing.T) {
+	body := []byte(`{
+  "model": "jev-latest",
+  "state": {"subject": "Duplicate charge", "message": "Please help."},
+  "questions": {
+    "spam": {
+      "type": "noul",
+      "instructions": "Is this message spam?",
+      "criteria": {"true": "Unsolicited advertising", "false": "A legitimate conversation"}
+    }
+  }
+}`)
+	r, err := ParseSystemOneRequest(body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := `{"subject":"Duplicate charge","message":"Please help."}`; r.Input != want {
+		t.Errorf("Input = %q, want the state as compact JSON %q", r.Input, want)
+	}
+	want := strings.Join([]string{
+		"Is this message spam?",
+		"True means: Unsolicited advertising",
+		"False means: A legitimate conversation",
+	}, "\n\n")
+	if q := r.Questions[0]; q.Name != "spam" || q.Kind != Predicate || q.Instructions != want {
+		t.Errorf("question = %+v, want the criteria folded into the instructions", q)
+	}
+}
