@@ -12,7 +12,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/payload"
 	"github.com/ankit373/hydra/internal/runlog"
 	"github.com/ankit373/hydra/internal/waterfall"
@@ -369,18 +368,23 @@ func renderSpanText(s *waterfall.Span, indent string) {
 	}
 }
 
-// unavailableReason distinguishes the three ways text can be missing. Collapsing
-// them into one empty box is what makes an observability tool untrustworthy:
-// "nothing here" and "you turned this off" are not the same answer.
+// unavailableReason distinguishes the ways text can be missing. Collapsing them
+// into one empty box is what makes an observability tool untrustworthy:
+// "nothing here" and "you turned this off" are not the same answer, and nor is
+// "the config that would say is unreadable", which used to render as the second
+// and advise setting a key the file may already carry (#1106).
 func unavailableReason(ref string) string {
-	if ref == "" {
-		cfg, err := config.Load()
-		if err != nil || !cfg.CapturePayloads {
-			return "payload capture is off; turn it on with capture_payloads = true"
-		}
-		return "not stored for this span"
+	if ref != "" {
+		return ""
 	}
-	return ""
+	cfg, err := reportConfig()
+	if err != nil {
+		return "payload capture is unknown: " + err.Error()
+	}
+	if !cfg.CapturePayloads {
+		return "payload capture is off; turn it on with capture_payloads = true"
+	}
+	return "not stored for this span"
 }
 
 func loadSegments(ref string) ([]payload.Segment, string) {

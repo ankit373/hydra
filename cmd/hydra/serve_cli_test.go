@@ -87,16 +87,30 @@ func TestFlattenConversation_CarriesEveryTurnPastThePolicyGate(t *testing.T) {
 // "N of M can carry tools" is the honest answer to "will my agent work here",
 // since most dialects cannot carry them yet.
 func TestPrintServeBanner_SaysHowManyHeadsCanCarryTools(t *testing.T) {
-	var buf bytes.Buffer
-	printServeBanner(&buf, "127.0.0.1:8787", "STANDARD", false, true, []provider.Head{
-		{ID: "ollama/a", Provider: "local", Source: "port", Endpoint: "http://127.0.0.1:11434"},
+	// LocalOnly is what the port provider really stamps on a discovered local
+	// head, and what pinHead reads to refuse one on a --local run. Without it
+	// this fixture was a "local" head the router itself would not route to, so
+	// the count it asserted could not happen (#1147).
+	heads := []provider.Head{
+		{ID: "ollama/a", Provider: "local", Source: "port",
+			Endpoint: "http://127.0.0.1:11434", LocalOnly: true},
 		{ID: "claude", Provider: "anthropic", Source: "cli"},
-	})
-	out := buf.String()
-	for _, want := range []string{"127.0.0.1:8787", "STANDARD", "1 of 2", "local only", "loopback only"} {
+	}
+
+	var local bytes.Buffer
+	printServeBanner(&local, "127.0.0.1:8787", "STANDARD", false, true, heads)
+	out := local.String()
+	// Under --local the cloud head is not reachable, so it is not counted.
+	for _, want := range []string{"127.0.0.1:8787", "STANDARD", "1 of 1", "local only", "loopback only"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("the banner is missing %q:\n%s", want, out)
 		}
+	}
+
+	var all bytes.Buffer
+	printServeBanner(&all, "127.0.0.1:8787", "STANDARD", false, false, heads)
+	if !strings.Contains(all.String(), "1 of 2") {
+		t.Errorf("without --local both heads are reachable:\n%s", all.String())
 	}
 }
 
@@ -121,8 +135,11 @@ func TestServeRouter_CarriesTheAnswerHeadAndTokensBack(t *testing.T) {
 	}
 	defer d.Close()
 
-	ans, err := serveRouter{d: d, runID: "run-1", defaultEnum: "MODERATE"}.
-		Chat(ctx, serve.Request{Messages: []executor.Message{{Role: "user", Content: "hi"}}})
+	ans, err := serveRouter{d: d, defaultEnum: "MODERATE"}.
+		Chat(ctx, serve.Request{
+			RequestID: "run-1",
+			Messages:  []executor.Message{{Role: "user", Content: "hi"}},
+		})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -149,10 +166,11 @@ func TestServeRouter_ARoutingFailureIsAnError(t *testing.T) {
 	}
 	defer d.Close()
 
-	_, err = serveRouter{d: d, runID: "run-2", defaultEnum: "MODERATE"}.
+	_, err = serveRouter{d: d, defaultEnum: "MODERATE"}.
 		Chat(ctx, serve.Request{
-			Messages: []executor.Message{{Role: "user", Content: "hi"}},
-			Route:    serve.Route{Enum: "NOT_A_KEY"},
+			RequestID: "run-2",
+			Messages:  []executor.Message{{Role: "user", Content: "hi"}},
+			Route:     serve.Route{Enum: "NOT_A_KEY"},
 		})
 	if err == nil {
 		t.Fatal("an unknown routing key produced an answer")

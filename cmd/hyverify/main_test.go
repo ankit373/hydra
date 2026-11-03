@@ -454,3 +454,25 @@ func TestEmbedTask_RefusesWithoutEmbedding(t *testing.T) {
 		t.Errorf("an unreachable server produced %v/%q", vec, model)
 	}
 }
+
+// The binary ships to repos that never adopt Hydra, so it has no hyctl beside
+// it to ask what version is running. It must answer with no candidate and
+// without touching a corpus (#1058).
+func TestRun_VersionNeedsNoCandidate(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"--version"}, &stdout, &stderr); code != exitPass {
+		t.Fatalf("exit %d, want %d; stderr=%q", code, exitPass, stderr.String())
+	}
+	got := stdout.String()
+	if !strings.Contains(got, "hyverify") {
+		t.Errorf("the output does not name the binary: %q", got)
+	}
+	if !strings.Contains(got, "commit:") || !strings.Contains(got, "by:") {
+		t.Errorf("the output is not the build stamp: %q", got)
+	}
+	// It must not have reported the usage block, which is what an unknown flag
+	// did before this existed.
+	if stderr.Len() != 0 {
+		t.Errorf("--version wrote to stderr: %q", stderr.String())
+	}
+}

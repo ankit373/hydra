@@ -43,32 +43,12 @@ jobs:
         with:
           fetch-depth: 0
 
-      # main carries one squash commit per release, so its own log names only the
-      # release PRs. Their refs/pull/N/head is the develop lineage that shipped,
-      # the individual feature PRs live there, and nowhere on main.
+      # The lineage lives in a script so it can be tested against a real git
+      # history rather than asserted as workflow text (cmd/hydra/shipped_lineage_test.go).
       - name: Collect the PRs in this release
         env:
           TAG: ${{ inputs.tag }}
-        run: |
-          set -euo pipefail
-          git rev-parse -q --verify "refs/tags/${TAG}^{commit}" >/dev/null \
-            || { echo "::error::Tag ${TAG} does not exist."; exit 1; }
-          subjects_to_prs() { sed -nE 's/.*\(#([0-9]+)\)[[:space:]]*$/\1/p'; }
-
-          git log --format='%s' "refs/tags/${TAG}" | subjects_to_prs | sort -un > release_prs.txt
-          echo "Release PRs on main: $(tr '\n' ' ' < release_prs.txt)"
-
-          cp release_prs.txt shipped_prs.txt
-          while read -r pr; do
-            if git fetch --quiet --no-tags origin "refs/pull/${pr}/head:refs/shipped/${pr}" 2>/dev/null; then
-              git log --format='%s' "refs/shipped/${pr}" | subjects_to_prs >> shipped_prs.txt
-            else
-              echo "::warning::refs/pull/${pr}/head is unavailable, skipping its lineage."
-            fi
-          done < release_prs.txt
-
-          sort -un -o shipped_prs.txt shipped_prs.txt
-          echo "Shipped PRs: $(wc -l < shipped_prs.txt)"
+        run: .github/workflows/shipped_lineage.sh "${TAG}"
 
       - name: Close their issues
         env:
@@ -76,4 +56,8 @@ jobs:
           REPO: ${{ github.repository }}
           TAG: ${{ inputs.tag }}
           DRY_RUN: ${{ inputs.dry_run }}
+          # A release that resolves nothing is the anomaly, and two in a row read
+          # green while 89 issues stranded. A manual backfill resolving nothing is
+          # ordinary, since re-running is documented as a no-op (#1140).
+          STRICT: ${{ github.event_name != 'workflow_dispatch' }}
         run: python3 .github/workflows/close_shipped_issues.py

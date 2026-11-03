@@ -257,10 +257,8 @@ func TestCLI_DryRunExecutesNothing(t *testing.T) {
 // Commands that write to files must refuse a relative path before doing
 // anything, and say which it was.
 //
-// Only the ones that return an error are driven in-process: `hyctl edit` calls
-// os.Exit(2) on a failed edit, deliberately, so callers can gate on it, which
-// would take the test binary down with it. Exit codes are asserted against a
-// real subprocess below.
+// Only the ones that return an error are driven here: `hyctl edit` reports a
+// relative path in its JSON result and exits 2, which exit_code_test.go asserts.
 func TestCLI_FileCommandsRefuseUnsafePaths(t *testing.T) {
 	cliSandbox(t)
 

@@ -64,6 +64,10 @@ type Request struct {
 	// are asking about two particular answers rather than about the question
 	// those answers are to.
 	NoCache bool
+	// Tools is a request offering tools or replaying tool turns. The key
+	// covers neither, and a hit carries no calls, so one agent loop would be
+	// served another's text (#1222).
+	Tools bool
 }
 
 // Servable reports whether this dispatch may be answered from the cache, and
@@ -86,6 +90,8 @@ func Servable(r Request) (bool, string) {
 		return false, "the prompt carries an injection marker"
 	case r.Pinned:
 		return false, "a head was pinned, and a stored answer may have come from another"
+	case r.Tools:
+		return false, "tools"
 	}
 	return true, ""
 }

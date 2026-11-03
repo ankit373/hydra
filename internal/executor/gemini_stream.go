@@ -102,7 +102,7 @@ func (e *HTTPExecutor) streamGemini(ctx context.Context, req Request, onDelta On
 			// two calls at index 0 would fold into one.
 			name := p.FunctionCall.Name
 			tools.add(ToolCall{
-				Index: len(tools.calls), ID: geminiCallID(name, len(tools.calls)), Type: "function",
+				Index: len(tools.calls), ID: toolCallID(name, len(tools.calls)), Type: "function",
 				Function: ToolCallFunction{Name: name, Arguments: toolArguments(p.FunctionCall.Args)},
 			})
 			sink.noteStructured()

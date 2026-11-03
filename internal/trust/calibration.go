@@ -55,11 +55,27 @@ func (c *confusion) observations() float64 {
 	return (c.TP + c.FP + c.TN + c.FN) - 4*laplacePrior
 }
 
-// negatives counts real "said incorrect" verdicts. At zero, sp is still its
-// prior and LLR cannot exceed ln2 however many positives arrive (#771), so it
-// is the number that says whether a cell is usable rather than merely populated.
+// negatives counts real "said incorrect" verdicts, positives the "said correct"
+// ones. A source that has only ever rendered one of the two has not
+// discriminated between anything, so neither rate is a reading of it.
 func (c *confusion) negatives() float64 {
 	return (c.TN + c.FN) - 2*laplacePrior
+}
+
+func (c *confusion) positives() float64 {
+	return (c.TP + c.FP) - 2*laplacePrior
+}
+
+// discriminating reports whether this source has ever answered both ways. A
+// constant predictor carries no information whatever its accuracy, so its LLR
+// is 0 by definition, and the smoothed rates must not be allowed to say
+// otherwise: with no negative verdict TN keeps the bare prior while FP grows,
+// so sp = prior/(prior+FP) *falls* and ln(se/(1−sp)) goes negative past FP≈7.
+// A head whose own edits failed then counted as evidence against any answer it
+// agreed with (#1142). The surrounding comments said sp was "pinned" at 0.5;
+// only this makes that true.
+func (c *confusion) discriminating() bool {
+	return c.positives() > 0 && c.negatives() > 0
 }
 
 // Stat is one row of a calibration report, the human/JSON-facing view.
@@ -67,10 +83,14 @@ type Stat struct {
 	Source string  `json:"source"`
 	Domain string  `json:"domain"`
 	N      float64 `json:"n"`   // real observations (excludes prior)
-	Neg    float64 `json:"neg"` // of those, "said incorrect" verdicts; 0 pins sp
-	Se     float64 `json:"se"`  // sensitivity
-	Sp     float64 `json:"sp"`  // specificity
-	D      float64 `json:"d"`   // diagnostic power (nats), expected |LLR|
+	Neg    float64 `json:"neg"` // of those, "said incorrect" verdicts
+	Se     float64 `json:"se"`  // sensitivity, as smoothed; a reading only when Discriminating
+	Sp     float64 `json:"sp"`  // specificity, likewise
+	D      float64 `json:"d"`   // diagnostic power (nats), expected |LLR|; 0 unless Discriminating
+	// Discriminating: this source has answered both ways, so se/sp describe it.
+	// Where it is false the rates are the prior deformed by one-sided counts,
+	// which is a shape, not a measurement (#1142).
+	Discriminating bool `json:"discriminating"`
 }
 
 // Calibrator maintains an online confusion posterior per (source, domain) and
@@ -237,6 +257,9 @@ func (c *Calibrator) append(r record) error {
 //
 // An uncalibrated / coin-flip source (se+sp≈1) yields LLR≈0.
 func (c *Calibrator) LLR(source, domain string, saidCorrect bool) float64 {
+	if !c.discriminating(source, domain) {
+		return 0
+	}
 	se, sp := c.rates(source, domain)
 	if saidCorrect {
 		return math.Log(se / (1 - sp))
@@ -244,11 +267,24 @@ func (c *Calibrator) LLR(source, domain string, saidCorrect bool) float64 {
 	return math.Log((1 - se) / sp)
 }
 
+// discriminating reports whether this cell has observations in both verdict
+// directions. An unknown source has not, so it reads false and contributes
+// nothing, which is what the uninformative prior already intended.
+func (c *Calibrator) discriminating(source, domain string) bool {
+	c.mu.RLock()
+	conf := c.store[keyFor(source, domain)]
+	c.mu.RUnlock()
+	return conf != nil && conf.discriminating()
+}
+
 // D is the diagnostic power of a source (nats): the expected LLR of its verdict
 // given a truly-correct item, i.e. KL(Bern(se) ‖ Bern(1−sp)). It is ≥0 always,
 // and 0 exactly when se+sp=1 (the source carries no information, Law 2). Use it
 // to order which source to sample next (most evidence first).
 func (c *Calibrator) D(source, domain string) float64 {
+	if !c.discriminating(source, domain) {
+		return 0
+	}
 	se, sp := c.rates(source, domain)
 	return se*math.Log(se/(1-sp)) + (1-se)*math.Log((1-se)/sp)
 }
@@ -284,14 +320,22 @@ func (c *Calibrator) Report() []Stat {
 	stats := make([]Stat, 0, len(c.store))
 	for k, conf := range c.store {
 		se, sp := clamp01(conf.se()), clamp01(conf.sp())
+		// D through the same gate LLR reads, not a second derivation of it:
+		// a row that reported diagnostic power the router would not spend is
+		// the disagreement #1142 is about.
+		d := 0.0
+		if conf.discriminating() {
+			d = se*math.Log(se/(1-sp)) + (1-se)*math.Log((1-se)/sp)
+		}
 		stats = append(stats, Stat{
-			Source: k.source,
-			Domain: k.domain,
-			N:      conf.observations(),
-			Neg:    conf.negatives(),
-			Se:     se,
-			Sp:     sp,
-			D:      se*math.Log(se/(1-sp)) + (1-se)*math.Log((1-se)/sp),
+			Source:         k.source,
+			Domain:         k.domain,
+			N:              conf.observations(),
+			Neg:            conf.negatives(),
+			Se:             se,
+			Sp:             sp,
+			D:              d,
+			Discriminating: conf.discriminating(),
 		})
 	}
 	c.mu.RUnlock()

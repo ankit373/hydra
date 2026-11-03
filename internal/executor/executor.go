@@ -37,6 +37,12 @@ type Request struct {
 	// untouched. Only heads CanUseTools reports true for receive them.
 	Tools      []ToolDef
 	ToolChoice json.RawMessage
+
+	// MaxMemoryMB and MaxCPUSeconds cap a subprocess head via
+	// sandbox.WithLimits; meaningless for an HTTP head, which spends no local
+	// process for this to bound. 0 means no ceiling.
+	MaxMemoryMB   int
+	MaxCPUSeconds int
 }
 
 // Response is the result of a successful execution.
@@ -60,6 +66,12 @@ type Response struct {
 	// complete reply rather than a failed one.
 	ToolCalls    []ToolCall
 	FinishReason string
+
+	// ToolCallsRecovered: the calls were read out of the model's own text
+	// because its server reported none, so they are Hydra's reading rather
+	// than the provider's. Carried so a log can tell the two apart; nothing
+	// routes on it (#1147).
+	ToolCallsRecovered bool
 
 	// TokensEstimated is true when InputTokens/OutputTokens were derived by
 	// Hydra (e.g. agy's char/4 heuristic) rather than reported by the provider.

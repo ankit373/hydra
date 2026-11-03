@@ -3,10 +3,12 @@
 package main
 
 import (
+	"go/ast"
 	"go/parser"
 	"go/token"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -156,4 +158,93 @@ func TestDist_TapFormulaInstallsEveryBinary(t *testing.T) {
 				"installs it, so `brew install hyctl` does not put it on PATH", b.Binary)
 		}
 	}
+}
+
+// Every shipped binary carries the version stamps, or it cannot say what it is.
+// hyverify shipped in v1.5.0 with only `-s -w`, so `hyverify --version` would
+// have read "dev" from a real release archive, and the one binary aimed at
+// repos with no hyctl beside it was the one that could not be identified.
+func TestDist_EveryBuildIsVersionStamped(t *testing.T) {
+	var doc struct {
+		Builds []struct {
+			ID      string   `yaml:"id"`
+			Main    string   `yaml:"main"`
+			Ldflags []string `yaml:"ldflags"`
+		} `yaml:"builds"`
+	}
+	if err := yaml.Unmarshal([]byte(repoFile(t, ".goreleaser.yaml")), &doc); err != nil {
+		t.Fatalf("parsing .goreleaser.yaml: %v", err)
+	}
+	if len(doc.Builds) < 2 {
+		t.Fatalf("found %d builds, so this guard is not comparing anything", len(doc.Builds))
+	}
+
+	// Read off the package rather than written down here, so a new field in
+	// internal/build is stamped or named, never silently unset.
+	for _, want := range []string{"Version", "Commit", "Date", "BuiltBy"} {
+		sym := "github.com/ankit373/hydra/internal/build." + want
+		for _, b := range doc.Builds {
+			if !slices.ContainsFunc(b.Ldflags, func(f string) bool {
+				return strings.Contains(f, sym+"=")
+			}) {
+				t.Errorf("build %q (%s) does not stamp %s, so the binary reports "+
+					"its fallback value out of a real release archive", b.ID, b.Main, sym)
+			}
+		}
+	}
+}
+
+// And the guard above is checking the fields the package actually declares. Read
+// from the AST rather than the text, because gofmt aligns the `=` and a check
+// for "Commit = " silently passes on "Commit  = ".
+func TestDist_StampedFieldsAreTheOnesBuildDeclares(t *testing.T) {
+	declared := buildVars(t)
+	for _, want := range []string{"Version", "Commit", "Date", "BuiltBy"} {
+		if !slices.Contains(declared, want) {
+			t.Errorf("internal/build declares %v and not %s, so "+
+				"TestDist_EveryBuildIsVersionStamped checks a symbol that does not exist",
+				declared, want)
+		}
+	}
+	// The other direction: a new stamp nobody added to the ldflags would ship
+	// unset, which is exactly how hyverify shipped.
+	for _, got := range declared {
+		if !slices.Contains([]string{"Version", "Commit", "Date", "BuiltBy"}, got) {
+			t.Errorf("internal/build declares %s and no build stamps it; add it to "+
+				"every ldflags block and to the list above, or it reports its "+
+				"fallback out of a real archive", got)
+		}
+	}
+}
+
+// buildVars returns the exported package-level var names in internal/build.
+func buildVars(t *testing.T) []string {
+	t.Helper()
+	path := filepath.Join("..", "..", "internal", "build", "build.go")
+	f, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+	if err != nil {
+		t.Fatalf("parsing %s: %v", path, err)
+	}
+	var out []string
+	for _, d := range f.Decls {
+		gen, ok := d.(*ast.GenDecl)
+		if !ok || gen.Tok != token.VAR {
+			continue
+		}
+		for _, spec := range gen.Specs {
+			vs, ok := spec.(*ast.ValueSpec)
+			if !ok {
+				continue
+			}
+			for _, n := range vs.Names {
+				if n.IsExported() {
+					out = append(out, n.Name)
+				}
+			}
+		}
+	}
+	if len(out) == 0 {
+		t.Fatal("internal/build declares no exported vars, so this guard has stopped guarding")
+	}
+	return out
 }

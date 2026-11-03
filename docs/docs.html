@@ -731,7 +731,7 @@ hyctl dispatch <span class="fl">--local</span> <span class="s">"write unit tests
     <section class="doc" id="edit">
       <h2><span class="cmd">hyctl edit</span> <span class="tagline">safe file edits</span></h2>
       <p class="sum">Scoped, validated, <b>rollback-safe</b> single-file edit through a head.</p>
-      <div class="sub"><div class="lbl">Usage</div><pre>hyctl edit <span class="fl">--file</span> internal/foo.go <span class="fl">--prompt</span> <span class="s">"add a nil check"</span></pre></div>
+      <div class="sub"><div class="lbl">Usage</div><pre>hyctl edit <span class="fl">--file</span> "$PWD/internal/foo.go" <span class="fl">--enum</span> MODERATE <span class="fl">--prompt</span> <span class="s">"add a nil check"</span></pre></div>
     </section>
     <section class="doc" id="review">
       <h2><span class="cmd">hyctl review</span> <span class="tagline">code review</span></h2>
