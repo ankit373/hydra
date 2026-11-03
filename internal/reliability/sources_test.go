@@ -3,7 +3,6 @@
 package reliability
 
 import (
-	"errors"
 	"math/rand"
 	"strings"
 	"testing"
@@ -19,10 +18,7 @@ func TestEvaluateSources_OverconfidentReadsWorseThanCalibrated(t *testing.T) {
 		honest:   {Observations: forecaster(rng, 400, 0.7, 0.7)},
 		boastful: {Observations: forecaster(rng, 400, 0.95, 0.6)},
 	}
-	got, err := EvaluateSources(tallies, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
+	got := EvaluateSources(tallies, 0)
 	reports := map[Key]*Report{}
 	for _, sr := range got {
 		reports[sr.Key] = sr.Report
@@ -42,10 +38,7 @@ func TestEvaluateSources_RefusesBelowTheFloorWithTheCountNeeded(t *testing.T) {
 	tallies := map[Key]*Tally{
 		{Source: "s", Domain: "go"}: {Observations: forecaster(rng, 7, 0.9, 0.9), Unscored: 4},
 	}
-	got, err := EvaluateSources(tallies, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
+	got := EvaluateSources(tallies, 0)
 	sr := got[0]
 	if sr.Report != nil {
 		t.Errorf("reported a number on %d verdicts: %+v", sr.Scored, sr.Report)
@@ -66,10 +59,7 @@ func TestEvaluateSources_OrdersByDomainThenSource(t *testing.T) {
 		{Source: "a", Domain: "py"}: {},
 		{Source: "a", Domain: "go"}: {},
 	}
-	got, err := EvaluateSources(tallies, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
+	got := EvaluateSources(tallies, 0)
 	want := []Key{
 		{Source: "a", Domain: "go"},
 		{Source: "b", Domain: "go"},
@@ -82,18 +72,28 @@ func TestEvaluateSources_OrdersByDomainThenSource(t *testing.T) {
 	}
 }
 
-// A stated value that is not a probability is a broken writer, and the error
-// has to say whose record it is in.
-func TestEvaluateSources_NamesTheSourceOfABadProbability(t *testing.T) {
-	obs := forecaster(rand.New(rand.NewSource(1)), MinObservations, 0.5, 0.5)
-	obs[0].Predicted = 1.5
-	tallies := map[Key]*Tally{{Source: "broken", Domain: "go"}: {Observations: obs}}
-
-	_, err := EvaluateSources(tallies, 0)
-	if err == nil || errors.Is(err, ErrTooFew) {
-		t.Fatalf("err = %v, want a refusal of the bad probability", err)
+// A stated value that is not a probability is a broken writer. It goes on that
+// key's row, naming where it was recorded, and every other key still reports.
+func TestEvaluateSources_KeepsABadProbabilityOnItsOwnRow(t *testing.T) {
+	rng := rand.New(rand.NewSource(1))
+	bad := forecaster(rng, MinObservations, 0.5, 0.5)
+	bad[3].Predicted = 1.5
+	bad[3].Ref = "run r1 span s1"
+	broken := Key{Source: "broken", Domain: "go"}
+	fine := Key{Source: "fine", Domain: "go"}
+	tallies := map[Key]*Tally{
+		broken: {Observations: bad},
+		fine:   {Observations: forecaster(rng, MinObservations, 0.5, 0.5)},
 	}
-	if !strings.Contains(err.Error(), "broken") || !strings.Contains(err.Error(), "go") {
-		t.Errorf("error does not name the source and domain: %v", err)
+
+	rows := map[Key]SourceReport{}
+	for _, sr := range EvaluateSources(tallies, 0) {
+		rows[sr.Key] = sr
+	}
+	if got := rows[broken]; got.Report != nil || !strings.Contains(got.Err, "run r1 span s1") {
+		t.Errorf("broken row = %+v, want no report and an error naming run r1 span s1", got)
+	}
+	if got := rows[fine]; got.Report == nil || got.Err != "" {
+		t.Errorf("fine row = %+v, want a report beside the broken one", got)
 	}
 }

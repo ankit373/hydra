@@ -4,7 +4,6 @@ package reliability
 
 import (
 	"errors"
-	"fmt"
 	"sort"
 )
 
@@ -22,19 +21,20 @@ type Tally struct {
 	Unscored     int
 }
 
-// SourceReport is one key's verdict. Report is nil below MinObservations, and
-// Need is then how many more verdicts it takes to get one.
+// SourceReport is one key's verdict. Report is nil below MinObservations, with
+// Need the verdicts still missing, or when the record is unusable, with Err why.
 type SourceReport struct {
 	Key
 	Scored   int     `json:"scored"`
 	Unscored int     `json:"unscored"`
 	Need     int     `json:"need,omitempty"`
+	Err      string  `json:"error,omitempty"`
 	Report   *Report `json:"report,omitempty"`
 }
 
-// EvaluateSources scores every key on its own. Ordered by domain and then
-// source, so the sources answering the same kind of work sit side by side.
-func EvaluateSources(tallies map[Key]*Tally, bins int) ([]SourceReport, error) {
+// EvaluateSources scores every key on its own, so one broken source cannot hide
+// the rest. Ordered by domain then source, so like work sits side by side.
+func EvaluateSources(tallies map[Key]*Tally, bins int) []SourceReport {
 	out := make([]SourceReport, 0, len(tallies))
 	for key, tally := range tallies {
 		sr := SourceReport{Key: key, Scored: len(tally.Observations), Unscored: tally.Unscored}
@@ -43,7 +43,7 @@ func EvaluateSources(tallies map[Key]*Tally, bins int) ([]SourceReport, error) {
 		case errors.Is(err, ErrTooFew):
 			sr.Need = MinObservations - sr.Scored
 		case err != nil:
-			return nil, fmt.Errorf("%s in domain %s: %w", key.Source, key.Domain, err)
+			sr.Err = err.Error()
 		default:
 			sr.Report = &rep
 		}
@@ -55,5 +55,5 @@ func EvaluateSources(tallies map[Key]*Tally, bins int) ([]SourceReport, error) {
 		}
 		return out[i].Source < out[j].Source
 	})
-	return out, nil
+	return out
 }

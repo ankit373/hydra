@@ -178,26 +178,35 @@ func abs(f float64) float64 {
 func seedDecisions(t *testing.T, rng *rand.Rand, source, domain string, stated, actual float64, count int) {
 	t.Helper()
 	// Hashed, because a head id like ollama/qwen3:4b is not a file name.
-	runID := "run-decide-" + runlog.SpanIDFor(source+"\x00"+domain)
-	rl := runlog.New(runID)
+	rl := runlog.New("run-decide-" + runlog.SpanIDFor(source+"\x00"+domain))
 	for i := 0; i < count; i++ {
-		spanID := runlog.NewSpanID()
-		if err := rl.Append(runlog.Event{
-			Kind: runlog.KindDecision, TaskID: "t", SpanID: spanID,
-			Head: source, Domain: domain, Confidence: stated,
-		}); err != nil {
-			t.Fatal(err)
-		}
-		value := 0.0
-		if rng.Float64() < actual {
-			value = 1
-		}
-		if err := runlog.AppendScore(runID, spanID, runlog.Score{
-			Name: "label", Value: value, Source: "human",
-		}); err != nil {
-			t.Fatal(err)
-		}
+		seedDecision(t, rl, source, domain, stated, rng.Float64() < actual)
 	}
+}
+
+// seedDecision writes one decision answer to rl with its verdict, and returns
+// the answer's span id.
+func seedDecision(
+	t *testing.T, rl *runlog.Logger, source, domain string, stated float64, correct bool,
+) string {
+	t.Helper()
+	spanID := runlog.NewSpanID()
+	if err := rl.Append(runlog.Event{
+		Kind: runlog.KindDecision, TaskID: "t", SpanID: spanID,
+		Head: source, Domain: domain, Confidence: stated,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	value := 0.0
+	if correct {
+		value = 1
+	}
+	if err := runlog.AppendScore(rl.RunID(), spanID, runlog.Score{
+		Name: "label", Value: value, Source: "human",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return spanID
 }
 
 // sourcesJSON runs the command with args and decodes the sources it reports.
@@ -331,5 +340,43 @@ func TestCLI_TrustReliabilityKeepsHydraAndSourcesApart(t *testing.T) {
 	}
 	if len(rep.Sources) != 1 || rep.Sources[0].Scored != 30 {
 		t.Errorf("sources = %+v, want one source with 30 verdicts", rep.Sources)
+	}
+}
+
+// One source writing a value that is not a probability must not take Hydra's
+// report or any other source down with it, and its row has to say where to look.
+func TestCLI_TrustReliabilityBadProbabilityStaysOnItsOwnRow(t *testing.T) {
+	cliSandbox(t)
+	rng := rand.New(rand.NewSource(41))
+	seedScoredRuns(t, rng, 0.8, 0.8, 25, true)
+	seedDecisions(t, rng, "broken", "go", 0.8, 0.8, reliability.MinObservations-1)
+	seedDecisions(t, rng, "fine", "go", 0.8, 0.8, reliability.MinObservations)
+	rl := runlog.New("run-decide-bad")
+	badSpan := seedDecision(t, rl, "broken", "go", 1.5, true)
+
+	out, _, err := run(t, "trust", "reliability")
+	if err != nil {
+		t.Fatalf("one bad probability failed the whole report: %v", err)
+	}
+	for _, want := range []string{
+		"brier",
+		"run-decide-bad",
+		badSpan,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("render is missing %q:\n%s", want, out)
+		}
+	}
+
+	rows := map[string]reliability.SourceReport{}
+	for _, sr := range sourcesJSON(t) {
+		rows[sr.Source] = sr
+	}
+	broken := rows["broken"]
+	if broken.Report != nil || !strings.Contains(broken.Err, badSpan) {
+		t.Errorf("broken row = %+v, want no report and an error naming span %s", broken, badSpan)
+	}
+	if rows["fine"].Report == nil {
+		t.Errorf("a healthy source lost its report beside a broken one: %+v", rows["fine"])
 	}
 }
