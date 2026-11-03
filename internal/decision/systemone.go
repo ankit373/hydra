@@ -3,6 +3,7 @@
 package decision
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -58,13 +59,63 @@ type systemOneResponse struct {
 }
 
 type systemOneAnswer struct {
-	Type          string             `json:"type"`
-	Noul          *float64           `json:"noul,omitempty"`
-	Choice        string             `json:"choice,omitempty"`
-	Score         *float64           `json:"score,omitempty"`
-	Confidence    *float64           `json:"confidence,omitempty"`
-	Legend        map[string]string  `json:"legend,omitempty"`
-	Probabilities map[string]float64 `json:"probabilities,omitempty"`
+	Type          string                 `json:"type"`
+	Noul          *float64               `json:"noul,omitempty"`
+	Choice        string                 `json:"choice,omitempty"`
+	Score         *float64               `json:"score,omitempty"`
+	Confidence    *float64               `json:"confidence,omitempty"`
+	Legend        map[string]string      `json:"legend,omitempty"`
+	Probabilities systemOneProbabilities `json:"probabilities,omitempty"`
+}
+
+// systemOneProbabilities keeps every key a reply sent, where a map would let a repeat overwrite.
+type systemOneProbabilities []keyedProb
+
+func (s *systemOneProbabilities) UnmarshalJSON(b []byte) error {
+	if string(b) == "null" {
+		return nil
+	}
+	dec := json.NewDecoder(bytes.NewReader(b))
+	if t, err := dec.Token(); err != nil || t != json.Delim('{') {
+		return fmt.Errorf("probabilities %s are not an object", b)
+	}
+	for dec.More() {
+		t, err := dec.Token()
+		if err != nil {
+			return err
+		}
+		var p float64
+		if err = dec.Decode(&p); err != nil {
+			return fmt.Errorf("probability for %v: %w", t, err)
+		}
+		// Inside an object the decoder only yields a string where a key belongs.
+		*s = append(*s, keyedProb{key: t.(string), p: p})
+	}
+	return nil
+}
+
+// MarshalJSON writes the object back in the order it was built, which keeps a reply stable.
+func (s systemOneProbabilities) MarshalJSON() ([]byte, error) {
+	var b bytes.Buffer
+	b.WriteByte('{')
+	for i, kp := range s {
+		if i > 0 {
+			b.WriteByte(',')
+		}
+		key, err := json.Marshal(kp.key)
+		if err != nil {
+			return nil, err
+		}
+		p, err := json.Marshal(kp.p)
+		if err != nil {
+			return nil, err
+		}
+		b.Write(key)
+		b.WriteByte(':')
+		b.Write(p)
+	}
+	b.WriteByte('}')
+	return b.Bytes(), nil
 }
 
 type systemOneUsage struct {
@@ -327,11 +378,11 @@ func systemOneAnswerFor(q Question, a Answer) systemOneAnswer {
 		return out
 	}
 	out.Confidence = &a.Confidence
-	out.Probabilities = make(map[string]float64, len(q.Options))
+	out.Probabilities = make(systemOneProbabilities, len(q.Options))
 	if q.Kind == Choice {
 		out.Choice = q.Options[a.Top()].Name
 		for i, o := range q.Options {
-			out.Probabilities[o.Name] = a.Probabilities[i]
+			out.Probabilities[i] = keyedProb{key: o.Name, p: a.Probabilities[i]}
 		}
 		return out
 	}
@@ -341,7 +392,7 @@ func systemOneAnswerFor(q Question, a Answer) systemOneAnswer {
 	for i, o := range q.Options {
 		key := strconv.Itoa(i)
 		out.Legend[key] = optionText(o)
-		out.Probabilities[key] = a.Probabilities[i]
+		out.Probabilities[i] = keyedProb{key: key, p: a.Probabilities[i]}
 	}
 	return out
 }

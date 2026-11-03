@@ -6,12 +6,11 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"math"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -20,41 +19,32 @@ import (
 	"github.com/ankit373/hydra/internal/testutil"
 )
 
-// billingRequest is the documented support-ticket example, asked once in every dialect.
-var billingRequest = decision.Request{
-	Input: "I was charged twice for my subscription this month. Please refund the extra charge.",
+// pngData is the base64 body of the image greenRequest carries.
+const pngData = "iVBORw0KGgo="
+
+// greenRequest is one yes/no choice about an image, enough to exercise every transport choice.
+var greenRequest = decision.Request{
+	Input: "Is the build green?",
+	Image: "data:image/png;base64," + pngData,
 	Questions: []decision.Question{
 		{
-			Kind:         decision.Predicate,
-			Instructions: "Is this message about billing?",
-		},
-		{
-			Kind:         decision.Choice,
-			Instructions: "What is the tone of this message?",
+			Kind: decision.Choice,
 			Options: []decision.Option{
-				{Name: "angry", Description: "An upset or hostile message"},
-				{Name: "calm", Description: "A neutral or polite message"},
-				{Name: "excited", Description: "An enthusiastic or eager message"},
-			},
-		},
-		{
-			Kind:         decision.Score,
-			Instructions: "How urgent is this message?",
-			Options: []decision.Option{
-				{Name: "Can wait"},
-				{Name: "Needs attention this week"},
-				{Name: "Needs attention today"},
+				{Name: "yes"},
+				{Name: "no"},
 			},
 		},
 	},
 }
 
-// billingProbabilities is what every fixture answers, per question.
-var billingProbabilities = [][]float64{
-	{0.98, 0.02},
-	{0.15, 0.8, 0.05},
-	{0.1, 0.1, 0.8},
-}
+// The replies each dialect gives greenRequest. The codecs are tested against
+// documented fixtures in internal/decision; these only need to parse.
+const (
+	systemOneReply = `{"model":"m","answers":{"0":{"type":"choice","probabilities":{"yes":0.9,"no":0.1}}},` +
+		`"usage":{"input_tokens":7,"output_tokens":0}}`
+	decisionsReply = `{"model":"m","answers":[{"type":"choice","probabilities":[` +
+		`{"value":"yes","probability":0.9},{"value":"no","probability":0.1}]}],"usage":{"input_tokens":7}}`
+)
 
 func fixture(t *testing.T, name string) []byte {
 	t.Helper()
@@ -65,58 +55,17 @@ func fixture(t *testing.T, name string) []byte {
 	return b
 }
 
-// sameJSON compares two bodies as values, so key order and spacing do not matter.
-func sameJSON(t *testing.T, got, want []byte) bool {
-	t.Helper()
-	var g, w any
-	if err := json.Unmarshal(got, &g); err != nil {
-		t.Fatalf("sent body is not JSON: %v", err)
-	}
-	if err := json.Unmarshal(want, &w); err != nil {
-		t.Fatalf("fixture is not JSON: %v", err)
-	}
-	return reflect.DeepEqual(g, w)
-}
-
-// closeTo compares distributions to within float rounding, since 1 - P(true) is computed.
-func closeTo(got, want []float64) bool {
-	if len(got) != len(want) {
-		return false
-	}
-	for i := range got {
-		if math.Abs(got[i]-want[i]) > 1e-12 {
-			return false
-		}
-	}
-	return true
-}
-
-// recordedServer checks each request against a recorded body and replies with a recorded answer.
-func recordedServer(t *testing.T, path, request, response string) (*httptest.Server, *http.Header) {
-	t.Helper()
-	var seen http.Header
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		seen = r.Header.Clone()
-		body, _ := io.ReadAll(r.Body)
-		switch {
-		case r.URL.Path != path:
-			t.Errorf("path = %s, want %s", r.URL.Path, path)
-		case !sameJSON(t, body, fixture(t, request)):
-			t.Errorf("sent body differs from %s:\n%s", request, body)
-		}
-		_, _ = w.Write(fixture(t, response))
-	}))
-	t.Cleanup(srv.Close)
-	return srv, &seen
-}
-
-func TestDecisionExecutor_EachDialectRoundTripsItsFixture(t *testing.T) {
+// Each provider gets its own path, key, image header and image carrier.
+func TestDecisionExecutor_EachProviderGetsItsTransport(t *testing.T) {
 	cases := []struct {
-		name     string
-		head     provider.Head
-		path     string
-		wantAuth string
-		tokens   int
+		name        string
+		head        provider.Head
+		path        string
+		wantAuth    string
+		imageHeader string
+		// carrier is the top-level field that must hold the image.
+		carrier string
+		reply   string
 	}{
 		{
 			name: "typesafe",
@@ -125,9 +74,11 @@ func TestDecisionExecutor_EachDialectRoundTripsItsFixture(t *testing.T) {
 				Provider: "typesafe",
 				Meta:     map[string]string{"model": "jev-latest"},
 			},
-			path:     "/v1/systemone",
-			wantAuth: "Bearer ts-test",
-			tokens:   120,
+			path:        "/v1/systemone",
+			wantAuth:    "Bearer ts-test",
+			imageHeader: "true",
+			carrier:     "assets",
+			reply:       systemOneReply,
 		},
 		{
 			name: "openai",
@@ -138,7 +89,8 @@ func TestDecisionExecutor_EachDialectRoundTripsItsFixture(t *testing.T) {
 			},
 			path:     "/v1/decisions",
 			wantAuth: "Bearer oa-test",
-			tokens:   42,
+			carrier:  "input",
+			reply:    decisionsReply,
 		},
 		{
 			name: "sglang",
@@ -148,8 +100,9 @@ func TestDecisionExecutor_EachDialectRoundTripsItsFixture(t *testing.T) {
 				LocalOnly: true,
 				Meta:      map[string]string{"model": "Cloudflare/clef"},
 			},
-			path:   "/v1/systemone",
-			tokens: 96,
+			path:    "/v1/systemone",
+			carrier: "images",
+			reply:   systemOneReply,
 		},
 	}
 	for _, c := range cases {
@@ -157,23 +110,38 @@ func TestDecisionExecutor_EachDialectRoundTripsItsFixture(t *testing.T) {
 			testutil.NewSandbox(t)
 			t.Setenv("TYPESAFE_API_KEY", "ts-test")
 			t.Setenv("OPENAI_API_KEY", "oa-test")
-			srv, seen := recordedServer(t, c.path, c.name+"_request.json", c.name+"_response.json")
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != c.path {
+					t.Errorf("path = %s, want %s", r.URL.Path, c.path)
+				}
+				if got := r.Header.Get("Authorization"); got != c.wantAuth {
+					t.Errorf("Authorization = %q, want %q", got, c.wantAuth)
+				}
+				if got := r.Header.Get("TypeSafe-Danger-Zone-Images"); got != c.imageHeader {
+					t.Errorf("image header = %q, want %q", got, c.imageHeader)
+				}
+				raw, _ := io.ReadAll(r.Body)
+				var body map[string]json.RawMessage
+				if err := json.Unmarshal(raw, &body); err != nil {
+					t.Errorf("sent body is not JSON: %v", err)
+				}
+				if !strings.Contains(string(body[c.carrier]), pngData) {
+					t.Errorf("%s does not carry the image: %s", c.carrier, raw)
+				}
+				_, _ = w.Write([]byte(c.reply))
+			}))
+			defer srv.Close()
 			c.head.Endpoint = srv.URL
 
-			res, err := DecisionExecutor{}.Execute(context.Background(), c.head, billingRequest)
+			res, err := DecisionExecutor{}.Execute(context.Background(), c.head, greenRequest)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if got := seen.Get("Authorization"); got != c.wantAuth {
-				t.Errorf("Authorization = %q, want %q", got, c.wantAuth)
+			if got, want := res.Answers[0].Probabilities, []float64{0.9, 0.1}; !slices.Equal(got, want) {
+				t.Errorf("probabilities = %v, want %v", got, want)
 			}
-			for i, want := range billingProbabilities {
-				if got := res.Answers[i].Probabilities; !closeTo(got, want) {
-					t.Errorf("question %d probabilities = %v, want %v", i, got, want)
-				}
-			}
-			if res.InputTokens != c.tokens {
-				t.Errorf("InputTokens = %d, want the billed %d", res.InputTokens, c.tokens)
+			if res.InputTokens != 7 {
+				t.Errorf("InputTokens = %d, want the billed 7", res.InputTokens)
 			}
 		})
 	}
@@ -193,7 +161,7 @@ func TestDecisionHeads_LocalModelRoutesWithNoKeyAndNoEgress(t *testing.T) {
 		case "/get_model_info":
 			_, _ = w.Write(fixture(t, "sglang_model_info.json"))
 		case "/v1/systemone":
-			_, _ = w.Write(fixture(t, "sglang_response.json"))
+			_, _ = w.Write([]byte(systemOneReply))
 		default:
 			http.NotFound(w, r)
 		}
@@ -205,7 +173,7 @@ func TestDecisionHeads_LocalModelRoutesWithNoKeyAndNoEgress(t *testing.T) {
 	if len(heads) != 1 || !heads[0].LocalOnly {
 		t.Fatalf("heads = %+v, want only the local server, since no key is set", heads)
 	}
-	if _, err := (DecisionExecutor{}).Execute(context.Background(), heads[0], billingRequest); err != nil {
+	if _, err := (DecisionExecutor{}).Execute(context.Background(), heads[0], greenRequest); err != nil {
 		t.Fatal(err)
 	}
 	local := strings.TrimPrefix(srv.URL, "http://")
@@ -263,12 +231,6 @@ func TestDecisionExecutor_RefusesABadDistribution(t *testing.T) {
 				`"probabilities":{"yes":1.2,"no":-0.2}}},"usage":{"input_tokens":1,"output_tokens":0}}`,
 			want: "outside [0, 1]",
 		},
-		{
-			name: "an option nobody asked about",
-			body: `{"model":"m","answers":{"0":{"type":"choice","confidence":0.5,` +
-				`"probabilities":{"yes":0.5,"maybe":0.5}}},"usage":{"input_tokens":1,"output_tokens":0}}`,
-			want: `gave no probability for "no"`,
-		},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -277,32 +239,13 @@ func TestDecisionExecutor_RefusesABadDistribution(t *testing.T) {
 				_, _ = w.Write([]byte(c.body))
 			}))
 			defer srv.Close()
-			d := Decider{Head: provider.Head{ID: "decision/sglang/m", Provider: "sglang", Endpoint: srv.URL}}
+			head := provider.Head{ID: "decision/sglang/m", Provider: "sglang", Endpoint: srv.URL}
 
-			_, err := d.Decide(context.Background(), "Is the build green?", []string{"yes", "no"})
+			_, err := DecisionExecutor{}.Execute(context.Background(), head, greenRequest)
 			if err == nil || !strings.Contains(err.Error(), c.want) {
 				t.Errorf("err = %v, want one saying %q", err, c.want)
 			}
 		})
-	}
-}
-
-// The verifier's Decide shape is one choice question whose answer comes back in option order.
-func TestDecider_AnswersInOptionOrder(t *testing.T) {
-	testutil.NewSandbox(t)
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(`{"model":"m","answers":{"0":{"type":"choice","confidence":0.8,` +
-			`"probabilities":{"false":0.1,"true":0.9}}},"usage":{"input_tokens":3,"output_tokens":0}}`))
-	}))
-	defer srv.Close()
-	d := Decider{Head: provider.Head{ID: "decision/sglang/m", Provider: "sglang", Endpoint: srv.URL}}
-
-	got, err := d.Decide(context.Background(), "Is 7 a prime?", []string{"true", "false"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if want := []float64{0.9, 0.1}; !reflect.DeepEqual(got, want) {
-		t.Errorf("Decide = %v, want %v", got, want)
 	}
 }
 

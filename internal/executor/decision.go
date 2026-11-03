@@ -58,20 +58,11 @@ var decisionDialects = map[string]decisionDialect{
 }
 
 // DecisionExecutor asks a decision head typed questions over HTTP.
-type DecisionExecutor struct {
-	client *http.Client
-}
-
-func (e DecisionExecutor) httpClient() *http.Client {
-	if e.client != nil {
-		return e.client
-	}
-	return http.DefaultClient
-}
+type DecisionExecutor struct{}
 
 // Execute asks h every question in r. A distribution that does not sum to 1 is
 // refused rather than normalised, since a malformed answer is a broken head, not evidence.
-func (e DecisionExecutor) Execute(
+func (DecisionExecutor) Execute(
 	ctx context.Context, h provider.Head, r decision.Request,
 ) (decision.Result, error) {
 	fail := func(err error) (decision.Result, error) {
@@ -102,7 +93,7 @@ func (e DecisionExecutor) Execute(
 		req.Header.Set(dialect.imageHeader, "true")
 	}
 
-	resp, err := e.httpClient().Do(req)
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return fail(err)
 	}
@@ -122,24 +113,4 @@ func (e DecisionExecutor) Execute(
 		return fail(fmt.Errorf("%w; refused rather than normalised", err))
 	}
 	return res, nil
-}
-
-// Decider asks one decision head a single choice question. Its Decide is the
-// question-and-options shape a verifier asks through.
-type Decider struct {
-	Head provider.Head
-	Exec DecisionExecutor
-}
-
-// Decide returns one probability per option, in the order the options were given.
-func (d Decider) Decide(ctx context.Context, question string, options []string) ([]float64, error) {
-	q := decision.Question{Kind: decision.Choice, Instructions: question}
-	for _, o := range options {
-		q.Options = append(q.Options, decision.Option{Name: o})
-	}
-	res, err := d.Exec.Execute(ctx, d.Head, decision.Request{Questions: []decision.Question{q}})
-	if err != nil {
-		return nil, err
-	}
-	return res.Answers[0].Probabilities, nil
 }
