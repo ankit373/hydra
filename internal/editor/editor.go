@@ -625,7 +625,8 @@ func extractContent(raw string, m markers) string {
 // soleFencedBlock returns raw when it is exactly one fenced block. Inner fences
 // make the outer pair ambiguous, so that answer is refused rather than guessed.
 func soleFencedBlock(raw string) string {
-	lines := strings.Split(strings.TrimSpace(raw), "\n")
+	// SplitLines drops \r, as the marker path does, so a CRLF reply is not written as CRLF.
+	lines := util.SplitLines(strings.TrimSpace(raw))
 	if len(lines) < 2 {
 		return ""
 	}

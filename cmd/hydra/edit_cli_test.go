@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -186,7 +187,8 @@ func TestDocs_EveryHyctlEditInvocationRuns(t *testing.T) {
 				continue
 			}
 			file, _ := c.Flags().GetString("file")
-			absolute := filepath.IsAbs(file) || strings.HasPrefix(file, "$PWD/")
+			// The docs show POSIX shell paths, so "/abs" is absolute on every OS.
+			absolute := path.IsAbs(file) || strings.HasPrefix(file, "$PWD/")
 			if !placeholder.MatchString(file) && !absolute {
 				t.Errorf("%s: `hyctl edit %s` names a relative --file, which edit refuses", name, line)
 			}

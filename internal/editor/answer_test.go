@@ -77,6 +77,7 @@ func TestSoleFencedBlock(t *testing.T) {
 		// Taken: exactly one block, whitespace around it ignored.
 		{"one block", "```go\nx := 1\n```", "```go\nx := 1\n```"},
 		{"surrounding whitespace", "\n```\nx\n```\n\n", "```\nx\n```"},
+		{"crlf", "```\r\nx\r\n```", "```\nx\n```"},
 
 		// Refused: anything else.
 		{"prose before", "Here it is:\n```\nx\n```", ""},
@@ -93,15 +94,20 @@ func TestSoleFencedBlock(t *testing.T) {
 	}
 }
 
-// internal/parallel/parallel.go holds both literal markers. Echoed back
-// unchanged, it used to be cut at the end marker and reported ok (#1165).
+// A file holding the literal markers, echoed back unchanged, used to be cut at
+// the end marker and reported ok (#1165).
 func TestEdit_AFileContainingTheMarkersRoundTrips(t *testing.T) {
-	original := readBack(t, filepath.Join("..", "parallel", "parallel.go"))
-	for _, literal := range []string{"<<<HYDRA_FILE_START>>>", "<<<HYDRA_FILE_END>>>"} {
-		if !strings.Contains(original, literal) {
-			t.Fatalf("parallel.go no longer holds %s; point this test at a file that does", literal)
-		}
-	}
+	original := strings.Join([]string{
+		"package parallel",
+		"",
+		"const (",
+		"	markerStart = \"<<<HYDRA_FILE_START>>>\"",
+		"	markerEnd   = \"<<<HYDRA_FILE_END>>>\"",
+		")",
+		"",
+		"func after() {}",
+		"",
+	}, "\n")
 
 	echoed := strings.TrimSuffix(original, "\n")
 	repo := editSandbox(t, marked(original, echoed))
