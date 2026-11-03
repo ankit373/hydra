@@ -58,7 +58,9 @@ internal/serve/         ← OpenAI-compatible endpoint in front of the router, s
 internal/pending/       ← Tasks parked on a ledger `ask` verdict (logs/pending/<task-id>.json). `hyctl ask`.
 internal/mcpregistry/   ← MCP server trust registry: sync official registry, scan installed servers,
                           score (CSA-shaped categories), version-bump trust automaton, backtest against
-                          known incidents. `hyctl mcp registry`.
+                          known incidents. Tool-description drift and model-aimed text checks read a
+                          saved tools/list at $HYDRA_HOME/mcp_tools/<server>.json, never a live server
+                          (#1303). `hyctl mcp registry`.
 internal/oracle/        ← Verification oracles (tests/compile/lint) as calibrated evidence sources. `hyctl oracle`.
 internal/vet/           ← Review a diff: open-code-review resolves the files and rules, the router
                           picks a Head per file. `hyctl vet`.

@@ -641,7 +641,7 @@ servers score worst on quality in independent research).
 ```
 hyctl mcp registry sync       # pull the official MCP registry into a local cache
 hyctl mcp registry scan       # find servers installed across Claude Code/Desktop, Cursor, Windsurf, VS Code
-hyctl mcp registry audit      # resolve + score them, advance lifecycle state
+hyctl mcp registry audit      # resolve + score them, advance lifecycle state, check tool descriptions
 hyctl mcp registry backtest   # prove the pipeline still catches real incidents (postmark-mcp, CVE-2025-6514)
 ```
 
@@ -655,7 +655,15 @@ Scoring follows the CSA MCP Selection Scorecard's four categories, automating a
 taxonomy the MCP Security Working Group already endorsed, not inventing a competing
 one. Every version bump drops a server's trust state back to **provisional** until it
 re-earns it, detected via a content-hash diff of the manifest, the direct fix for a
-server that ships clean for months, then turns malicious in one release. `scan` never
+server that ships clean for months, then turns malicious in one release. A server can
+also keep its version and rewrite what its tools say, so each tool's name, description
+and input schema is hashed too, and any change is its own trip back to provisional, with
+the before and after printed by `audit`. Descriptions are also checked for text written
+for the model rather than the user (directions about other tools, requests to read files
+or send data, hidden characters, padding), each reported with its exact span and never
+quarantining on its own. Both need the server's `tools/list` result saved at
+`$HYDRA_HOME/mcp_tools/<server>.json`: `audit` never starts a server to ask, and says
+"not checked" for any server without one. `scan` never
 reads env-var or secret values from client configs, only server identity. Feeds back
 into the ledger: a flagged or quarantined server auto-classifies its own tool calls,
 by the same mechanism that auto-detects PII from content, so a policy rule can gate on it
