@@ -348,7 +348,7 @@ hyctl trust reliability ; hyctl trust reliability --json
 # Verify an answer by applying it: `hyctl edit` validates the file it just wrote.
 # `hyctl dispatch --verify` is refused, a dispatch writes nothing, so its verifier
 # would judge the repository rather than the answer (#982).
-hyctl edit --file internal/auth/token.go "rotate signing key"
+hyctl edit --file "$PWD/internal/auth/token.go" --enum MODERATE --prompt "rotate signing key"
 hyctl trust defect --pii --production ; hyctl trust stats ; hyctl trust explain <task_hash>
 
 # Add a model at runtime (no rebuild), merges into ~/.hydra/models.json overlay

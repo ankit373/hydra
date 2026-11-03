@@ -99,6 +99,12 @@ func fetchPage(ctx context.Context, url string) (*serverListResponse, error) {
 	return &out, nil
 }
 
+// Synced reports whether `hyctl mcp registry sync` has written a cache.
+func Synced() bool {
+	_, err := os.Stat(cachePath())
+	return err == nil
+}
+
 // LoadCache reads the local sync cache. Returns an error wrapping
 // os.ErrNotExist-checkable state when sync has never run.
 func loadCache() (*registryCache, error) {

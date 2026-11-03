@@ -24,7 +24,7 @@ import (
 // an interrupted run is a head writing broken code, which is a confident lie
 // about a model, written from a keystroke.
 func TestEdit_CancelledValidatorIsNotRecordedAsAFailedValidation(t *testing.T) {
-	repo := editSandbox(t, marked("package main\n\nfunc main() {}\n"))
+	repo := editSandbox(t, marked("package main\n", "package main\n\nfunc main() {}\n"))
 	tmpl, fifo := testutil.HangingValidator(t)
 	writeWorkspaceYAML(t, repo, tmpl)
 	stalled := testutil.HeadAnswered(t, "cody")

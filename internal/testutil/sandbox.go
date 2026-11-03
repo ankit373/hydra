@@ -348,14 +348,20 @@ func EchoScript(reply string) string {
 }
 
 // escapeBatch quotes the characters cmd.exe interprets before echo sees them.
-// The caret must be escaped first, or it would double-escape everything after.
+// Inside double quotes cmd prints a caret literally, so only % is escaped there.
 func escapeBatch(s string) string {
-	return strings.NewReplacer(
-		"^", "^^",
-		"<", "^<",
-		">", "^>",
-		"&", "^&",
-		"|", "^|",
-		"%", "%%",
-	).Replace(s)
+	var b strings.Builder
+	quoted := false
+	for _, r := range s {
+		switch {
+		case r == '"':
+			quoted = !quoted
+		case r == '%':
+			b.WriteRune('%')
+		case !quoted && strings.ContainsRune("^<>&|", r):
+			b.WriteRune('^')
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
 }
