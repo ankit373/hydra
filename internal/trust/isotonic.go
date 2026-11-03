@@ -100,7 +100,8 @@ func pav(points []tally) []block {
 		for len(stack) > 1 {
 			top := stack[len(stack)-1]
 			prev := stack[len(stack)-2]
-			if prev.rate() <= top.rate() {
+			// Ties pool too: each smoothed block of one would cap a perfect run at 2/3.
+			if prev.rate() < top.rate() {
 				break
 			}
 			stack = stack[:len(stack)-1]

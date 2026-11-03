@@ -209,6 +209,22 @@ func TestCorrection_LLRExcludesTheBaseRate(t *testing.T) {
 	}
 }
 
+// A perfect source stating a different value each time must not count against itself.
+func TestFitCorrection_PoolsEqualRates(t *testing.T) {
+	obs := make([]reliability.Observation, 0, 200)
+	for i := range 200 {
+		stated := 0.9 + 0.1*float64(i)/200
+		obs = append(obs, reliability.Observation{Predicted: stated, Correct: true})
+	}
+	c, err := fitCorrection(obs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := c.llr(0.99); got < 0 {
+		t.Errorf("llr(0.99) = %v for a source right 200 of 200, want >= 0", got)
+	}
+}
+
 func TestCorrections_UnfittedSourceCarriesNoEvidence(t *testing.T) {
 	var cs corrections
 	for _, stated := range []float64{0.5, 0.99, 1} {
