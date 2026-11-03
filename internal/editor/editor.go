@@ -28,10 +28,18 @@ import (
 	"github.com/ankit373/hydra/internal/workspace"
 )
 
-const (
-	markerStart = "<<<HYDRA_FILE_START>>>"
-	markerEnd   = "<<<HYDRA_FILE_END>>>"
-)
+// newFileBlock stands in for the content of a file that does not exist yet.
+const newFileBlock = "<empty, file does not exist yet>"
+
+// markers delimit the answer. Each carries a nonce derived from the file's
+// content, so a file containing a marker cannot end its own answer (#1165).
+type markers struct{ start, end string }
+
+func markersFor(current string) markers {
+	nonce := util.FenceNonce(current)
+	tag := func(kind string) string { return "<<<HYDRA_FILE_" + kind + " " + nonce + ">>>" }
+	return markers{start: tag("START"), end: tag("END")}
+}
 
 // Request is the input to Edit.
 type Request struct {
@@ -163,8 +171,9 @@ func Edit(ctx context.Context, req Request) (*Result, error) {
 	}
 	currentBlock := origContent
 	if !origExisted {
-		currentBlock = "<empty, file does not exist yet>"
+		currentBlock = newFileBlock
 	}
+	m := markersFor(currentBlock)
 
 	editPrompt := buildEditPrompt(req.File, ctxNote, req.Prompt, currentBlock)
 
@@ -197,25 +206,31 @@ func Edit(ctx context.Context, req Request) (*Result, error) {
 	}
 
 	// ── Parse response ────────────────────────────────────────────────────────
-	newContent := extractContent(dispResult.Output)
-	newContent = stripOuterFence(newContent)
+	// A head answered, so every failure from here names it: a rejected answer
+	// is an observation about that head (#1171).
+	headFail := func(msg string) *Result {
+		r := failResult(req, wsName, resolved.GitRoot, msg)
+		r.Head = dispResult.Head.ID
+		return r
+	}
+	newContent := stripOuterFence(extractContent(dispResult.Output, m))
 
-	if strings.Contains(newContent, markerStart) || strings.Contains(newContent, markerEnd) {
+	if strings.Contains(newContent, m.start) || strings.Contains(newContent, m.end) {
 		cleanupBackup()
-		return failResult(req, wsName, resolved.GitRoot, "marker_leakage"), nil
+		return headFail("marker_leakage"), nil
 	}
 	if newContent == "" {
 		cleanupBackup()
 		if origExisted {
-			return failResult(req, wsName, resolved.GitRoot, "empty_replacement"), nil
+			return headFail("empty_replacement"), nil
 		}
-		return failResult(req, wsName, resolved.GitRoot, "marker_parse_failed"), nil
+		return headFail("marker_parse_failed"), nil
 	}
 
 	// ── Atomic write ──────────────────────────────────────────────────────────
 	if err := atomicWrite(req.File, newContent+"\n"); err != nil {
 		cleanupBackup()
-		return failResult(req, wsName, resolved.GitRoot, "write_failed: "+err.Error()), nil
+		return headFail("write_failed: " + err.Error()), nil
 	}
 
 	// ── Validate ──────────────────────────────────────────────────────────────
@@ -432,6 +447,7 @@ func embedTask(ctx context.Context, emb embed.Embedder, task string) ([]float32,
 // too, so the model was told to write between the same markers it was reading
 // between.
 func buildEditPrompt(file, ctxNote, instruction, currentBlock string) string {
+	m := markersFor(currentBlock)
 	return fmt.Sprintf(`You are editing a single file. Output ONLY the new file content between the
 markers. No prose. No explanations. No code fences (no `+"```"+`).
 
@@ -456,8 +472,8 @@ snippet) between these exact markers and nothing else:
 		ctxNote,
 		instruction,
 		util.WrapUntrusted(file, currentBlock),
-		markerStart,
-		markerEnd,
+		m.start,
+		m.end,
 	)
 }
 
@@ -576,21 +592,21 @@ func fileExt(path string) string {
 	return ""
 }
 
-// extractContent gets text between HYDRA_FILE_START and HYDRA_FILE_END.
-// Falls back to lenient extraction when a marker is missing.
-func extractContent(raw string) string {
-	hasStart := strings.Contains(raw, markerStart)
-	hasEnd := strings.Contains(raw, markerEnd)
+// extractContent gets the text between the answer markers, leniently when one
+// is missing. With neither, a reply that is one fenced block is the file (#1164).
+func extractContent(raw string, m markers) string {
+	hasStart := strings.Contains(raw, m.start)
+	hasEnd := strings.Contains(raw, m.end)
 
 	switch {
 	case hasStart && hasEnd:
-		return extractBetween(raw)
+		return extractBetween(raw, m)
 	case hasEnd && !hasStart:
 		// Everything before END
 		lines := strings.Split(raw, "\n")
 		var out []string
 		for _, l := range lines {
-			if strings.Contains(l, markerEnd) {
+			if strings.Contains(l, m.end) {
 				break
 			}
 			out = append(out, l)
@@ -598,15 +614,35 @@ func extractContent(raw string) string {
 		return strings.Join(out, "\n")
 	case hasStart && !hasEnd:
 		// Everything after START
-		parts := strings.SplitN(raw, markerStart, 2)
+		parts := strings.SplitN(raw, m.start, 2)
 		if len(parts) == 2 {
 			return strings.TrimPrefix(parts[1], "\n")
 		}
 	}
-	return ""
+	return soleFencedBlock(raw)
 }
 
-func extractBetween(raw string) string {
+// soleFencedBlock returns raw when it is exactly one fenced block. Inner fences
+// make the outer pair ambiguous, so that answer is refused rather than guessed.
+func soleFencedBlock(raw string) string {
+	// SplitLines drops \r, as the marker path does, so a CRLF reply is not written as CRLF.
+	lines := util.SplitLines(strings.TrimSpace(raw))
+	if len(lines) < 2 {
+		return ""
+	}
+	first, last := lines[0], lines[len(lines)-1]
+	if !strings.HasPrefix(first, "```") || last != "```" {
+		return ""
+	}
+	for _, l := range lines[1 : len(lines)-1] {
+		if strings.HasPrefix(l, "```") {
+			return ""
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
+func extractBetween(raw string, m markers) string {
 	// util.SplitLines, not bufio.Scanner: a Scanner stops at a token longer than
 	// its buffer and only says so via Err(), so a single >64 KiB line, minified
 	// JS, a data URI, one-line JSON, used to yield an empty extraction that was
@@ -615,11 +651,11 @@ func extractBetween(raw string) string {
 	inside := false
 	printed := false
 	for _, line := range util.SplitLines(raw) {
-		if !printed && strings.Contains(line, markerStart) {
+		if !printed && strings.Contains(line, m.start) {
 			inside = true
 			continue
 		}
-		if inside && strings.Contains(line, markerEnd) {
+		if inside && strings.Contains(line, m.end) {
 			printed = true
 			break
 		}
@@ -640,7 +676,7 @@ func stripOuterFence(s string) string {
 	if strings.HasPrefix(lines[0], "```") {
 		start = 1
 	}
-	if end > start && lines[end] == "```" {
+	if end >= start && lines[end] == "```" {
 		end--
 	}
 	return strings.Join(lines[start:end+1], "\n")
