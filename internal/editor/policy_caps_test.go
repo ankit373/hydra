@@ -38,7 +38,7 @@ func writePolicyApply(t *testing.T, apply string) {
 // The cap exists to stop a wholesale rewrite, so the file has to come back.
 func TestEdit_DiffSizeCapRollsBackAnOversizedEdit(t *testing.T) {
 	original := "package main\n\nfunc a() {}\nfunc b() {}\nfunc c() {}\nfunc d() {}\n"
-	repo := editSandbox(t, marked("package main\n\nfunc z() {}\n"))
+	repo := editSandbox(t, marked(original, "package main\n\nfunc z() {}\n"))
 	writePolicyApply(t, "      diff_size_cap_pct: 10\n")
 
 	file := filepath.Join(repo, "main.go")
@@ -77,7 +77,7 @@ func TestEdit_DiffSizeCapRollsBackAnOversizedEdit(t *testing.T) {
 // A generous cap must not refuse a legitimate edit, or the fix trades one
 // broken command for another.
 func TestEdit_DiffSizeCapAllowsAnOrdinaryEdit(t *testing.T) {
-	repo := editSandbox(t, marked("package main\n\nfunc main() {}\n"))
+	repo := editSandbox(t, marked("package main\n", "package main\n\nfunc main() {}\n"))
 	writePolicyApply(t, "      diff_size_cap_pct: 900\n")
 
 	file := filepath.Join(repo, "main.go")
@@ -100,7 +100,7 @@ func TestEdit_DiffSizeCapAllowsAnOrdinaryEdit(t *testing.T) {
 // 100% change by construction, so a cap below that would make `hyctl edit`
 // unable to create files at all.
 func TestEdit_DiffSizeCapDoesNotApplyToANewFile(t *testing.T) {
-	repo := editSandbox(t, marked("package main\n\nfunc main() {}\n"))
+	repo := editSandbox(t, marked(newFileBlock, "package main\n\nfunc main() {}\n"))
 	writePolicyApply(t, "      diff_size_cap_pct: 1\n")
 
 	res, err := Edit(context.Background(), Request{
@@ -126,7 +126,7 @@ func TestEdit_CostCeilingRefusesBeforeTheFileIsTouched(t *testing.T) {
 	// cannot be what refuses and only the ceiling can.
 	original := "package main\n\nfunc a() {}\nfunc b() {}\nfunc c() {}\n" +
 		"func d() {}\nfunc e() {}\nfunc f() {}\nfunc g() {}\nfunc h() {}\n"
-	repo := editSandbox(t, marked(original+"func i() {}\n"))
+	repo := editSandbox(t, marked(original, original+"func i() {}\n"))
 	// A ceiling no head can be under, so the refusal is the policy's and not
 	// a pricing accident.
 	writePolicyApply(t, "      max_cost_usd: 0.0000000001\n")
@@ -182,7 +182,7 @@ func TestEdit_CostCeilingRefusesBeforeTheFileIsTouched(t *testing.T) {
 // deadline fire more surely.
 func TestEdit_WallClockCapRefusesAndRestoresTheFile(t *testing.T) {
 	original := "package main\n"
-	repo := editSandbox(t, marked("package main\n\nfunc main() {}\n"))
+	repo := editSandbox(t, marked(original, "package main\n\nfunc main() {}\n"))
 	slowHead(t, 5)
 	writePolicyApply(t, "      max_wall_seconds: 1\n")
 

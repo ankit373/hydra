@@ -19,7 +19,7 @@ import (
 // thing invoked, with the flag it declares, and that a non-zero exit rolls back
 // (#998).
 func TestEdit_AGoFileIsValidatedByTheShippedRegistry(t *testing.T) {
-	repo := editSandbox(t, marked("package main\n\nfunc Broken( {\n"))
+	repo := editSandbox(t, marked("package main\n", "package main\n\nfunc Broken( {\n"))
 	args := filepath.Join(t.TempDir(), "args")
 	fakeOnPath(t, "gofmt", "#!/bin/sh\nprintf '%s ' \"$@\" > "+args+"\nexit 2\n")
 

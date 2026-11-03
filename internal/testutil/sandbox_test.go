@@ -183,10 +183,13 @@ func TestEscapeBatch_QuotesEveryCmdMetacharacter(t *testing.T) {
 		"100%":                   "100%%",
 		"plain text":             "plain text",
 		"":                       "",
-		// The caret is escaped first, so an existing one is not doubled by a
-		// later replacement.
+		// An existing caret is escaped once, not again by a later character.
 		"a ^ b": "a ^^ b",
 		"^<":    "^^^<",
+		// Inside quotes cmd prints carets literally, so only % is escaped.
+		`x = "<<<END>>>"`: `x = "<<<END>>>"`,
+		`"a & b" & c`:     `"a & b" ^& c`,
+		`"50%"`:           `"50%%"`,
 	}
 	for in, want := range tests {
 		if got := escapeBatch(in); got != want {

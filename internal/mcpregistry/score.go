@@ -264,7 +264,7 @@ func typosquatSignal(srv ServerRecord, corpus []ServerRecord) Signal {
 					continue
 				}
 				d := levenshtein(pkg.Identifier, otherPkg.Identifier)
-				if d > 0 && d <= 2 && d < len(pkg.Identifier)/3+1 {
+				if IsNearMiss(pkg.Identifier, d) {
 					return Signal{
 						Name:      "near-duplicate identifier",
 						Detail:    fmt.Sprintf("%q is %d edit(s) from %q, published under a different namespace (%s), verify this isn't a typosquat", pkg.Identifier, d, otherPkg.Identifier, publisherNamespace(other.Name)),
@@ -304,6 +304,12 @@ func publisherNamespace(name string) string {
 		return name[:i]
 	}
 	return name
+}
+
+// IsNearMiss reports whether an identifier dist edits from ident is close
+// enough to read as a typosquat. One threshold for scoring and rendering.
+func IsNearMiss(ident string, dist int) bool {
+	return dist > 0 && dist <= 2 && dist < len(ident)/3+1
 }
 
 // NearestIdentifier finds the closest package identifier in corpus to
@@ -512,6 +518,39 @@ func registryPresenceSignal() Signal {
 		Detail:    "publisher identity verified by the official registry (context, not evidence of safety)",
 		Available: false,
 	}
+}
+
+// NamedCategory is one score category with its display name.
+type NamedCategory struct {
+	Name string
+	CategoryScore
+}
+
+// Categories lists the four categories in weight order, for rendering.
+func (s Score) Categories() []NamedCategory {
+	return []NamedCategory{
+		{"security", s.SecurityImplementation},
+		{"repo health", s.RepositoryHealth},
+		{"operational", s.OperationalSecurity},
+		{"community", s.CommunityGovernance},
+	}
+}
+
+// Evaluated reports whether any signal in the category was computed. An
+// unevaluated one stands on the neutral baseline, not on evidence.
+func (c CategoryScore) Evaluated() bool {
+	return c.Confidence != "" && c.Confidence != ConfidenceInsufficient
+}
+
+// CheckedCategories counts the categories that stand on evidence.
+func (s Score) CheckedCategories() (checked, total int) {
+	cats := s.Categories()
+	for _, c := range cats {
+		if c.Evaluated() {
+			checked++
+		}
+	}
+	return checked, len(cats)
 }
 
 // FormatConfidence renders a Confidence for CLI output.

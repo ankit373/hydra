@@ -18,6 +18,9 @@ shared:
     - check-success=YAML validation
     - check-success=Secret scan
 
+  # Not in develop's branch protection, so the queues require it (bots pass it).
+  cla: &cla check-success=Contributor has signed
+
   # release-please derives the bump and changelog from this, so it gates the queue.
   conventional: &conventional 'title~=^(feat|fix|perf|refactor|chore|docs|test|ci|style|build|revert)(\([^)]+\))?!?: \S'
 
@@ -30,11 +33,10 @@ defaults:
   queue_rule:
     merge_method: squash
     batch_size: 1
-    # Body kept: the release PR's Release-As footer must reach release-please.
-    commit_message_template: |
-      {{ title }} (#{{ number }})
-
-      {{ body }}
+    # "title (#n)" feeds close-shipped-issues; the body carries the Release-As footer.
+    commit_message_format:
+      title: pr-title
+      body: pr-body
 
 queue_rules:
   # release-please's own PR: CHANGELOG + manifest only, so it merges without the CI matrix.
@@ -45,13 +47,14 @@ queue_rules:
       - -files~=^(?!(CHANGELOG\.md|\.release-please-manifest\.json)$)
     merge_conditions: []
 
-  # Promotion to main. Tested in a draft PR, never by pushing to release/v*,
-  # which forbids merge commits and whose approval a push would dismiss.
+  # Promotion to main from a hand-built carry (commit-tree: release tree, main
+  # parent); a release/vX PR itself conflicts on ~500 paths since both squash.
   - name: promote
     queue_conditions:
       - base=main
-      - head~=^(release/v\d+\.\d+\.\d+|hotfix/.+)$
+      - head~=^(release/v\d+\.\d+\.\d+-to-main|hotfix/.+)$
       - "#approved-reviews-by>=1"
+      - author=ankit373
       - -draft
       - or:
           - head~=^hotfix/
@@ -59,14 +62,15 @@ queue_rules:
               - title~=^(feat|fix)\(release\)
               - body~=(?m)^Release-As:\s*\d+\.\d+\.\d+\s*$
     merge_conditions: *ci
-    allow_inplace_checks: false
 
   - name: release
     queue_conditions:
       - base~=^release/v
       - -draft
       - *conventional
-    merge_conditions: *ci
+    merge_conditions:
+      - and: *ci
+      - *cla
     # merge, not rebase: a Mergify rebase is an unsigned git push (#1079).
     update_method: merge
 
@@ -76,19 +80,18 @@ queue_rules:
       - base=develop
       - -draft
       - *conventional
+    merge_conditions:
+      - *cla
     update_method: merge
 
 pull_request_rules:
-  - name: Auto-queue maintainer and bot PRs into develop and release/v*
+  # Opt-in, like vLLM's `ready`: matching on author alone would queue every stale open PR.
+  - name: Queue PRs labelled ready
     conditions:
       - base~=^(develop|release/v.+)$
       - -draft
+      - label=ready
       - label!=hold
-      - or:
-          - author=ankit373
-          - author=dependabot[bot]
-          # chore/back-merge-main joins once the release bot opens it; until then its
-          # checks never start and it would stall develop's queue indefinitely.
     actions:
       queue:
 
@@ -102,6 +105,24 @@ pull_request_rules:
         type: APPROVE
         message: Generated release diff only (CHANGELOG + manifest).
       queue:
+
+  # main needs one review and the maintainer cannot approve their own PR, so the
+  # queue would never take a promotion. Queuing it stays restricted to them.
+  - name: Approve the maintainer's promotion to main
+    conditions:
+      - base=main
+      - author=ankit373
+      - -draft
+      - head~=^(release/v\d+\.\d+\.\d+-to-main|hotfix/.+)$
+      - or:
+          - head~=^hotfix/
+          - and:
+              - title~=^(feat|fix)\(release\)
+              - body~=(?m)^Release-As:\s*\d+\.\d+\.\d+\s*$
+    actions:
+      review:
+        type: APPROVE
+        message: Maintainer's promotion; it ships only when they comment @mergifyio queue.
 
   # Hygiene bots, modelled on vLLM's: they comment and label, they never block.
   - name: Conventional title missing
@@ -142,7 +163,7 @@ pull_request_rules:
   - name: Release PR missing Release-As footer
     conditions:
       - base=main
-      - head~=^release/v
+      - head~=^release/v.+-to-main$
       - -closed
       - -body~=(?m)^Release-As:\s*\d+\.\d+\.\d+\s*$
     actions:

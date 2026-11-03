@@ -29,6 +29,7 @@ var ErrTooFew = errors.New("reliability: too few scored observations")
 type Observation struct {
 	Predicted float64 // stated probability of correctness, in [0,1]
 	Correct   bool    // ground truth, from an oracle or a human
+	Ref       string  // where it was recorded, so an error can point there; optional
 }
 
 // Bin is one column of the reliability diagram.
@@ -94,7 +95,11 @@ func Evaluate(obs []Observation, bins int) (Report, error) {
 	}
 	for i, o := range obs {
 		if math.IsNaN(o.Predicted) || o.Predicted < 0 || o.Predicted > 1 {
-			return Report{}, fmt.Errorf("reliability: observation %d predicted %v, not a probability", i, o.Predicted)
+			ref := o.Ref
+			if ref == "" {
+				ref = fmt.Sprintf("observation %d", i)
+			}
+			return Report{}, fmt.Errorf("reliability: %s predicted %v, not a probability", ref, o.Predicted)
 		}
 	}
 

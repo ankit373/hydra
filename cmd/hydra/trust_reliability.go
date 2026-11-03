@@ -11,50 +11,86 @@ import (
 
 	"github.com/ankit373/hydra/internal/reliability"
 	"github.com/ankit373/hydra/internal/runlog"
+	"github.com/ankit373/hydra/internal/trust"
 	"github.com/spf13/cobra"
 )
+
+// calibrationSlack is how far the average stated probability may sit from the
+// observed rate before a report calls it over- or underconfident.
+const calibrationSlack = 0.05
 
 // The diagram's bars share trace_view's barWidth on purpose, so a reliability
 // bar and a timeline bar printed in the same terminal are the same width.
 
-// reliabilityObservations pairs each confidence-routed run's stated confidence
-// with whatever later judged it.
+// reliabilityLog is what the report joins out of the run log: Hydra's own
+// confidence-routed runs, and every decision source's answers by domain.
+type reliabilityLog struct {
+	hydra   reliability.Tally
+	sources map[reliability.Key]*reliability.Tally
+}
+
+// readReliabilityLog pairs each stated probability with whatever later judged
+// its span. source, when set, keeps only that head's decision answers.
 //
 // Both halves were already recorded and nothing joined them: swarm writes the
-// SPRT run's final confidence on its root span, and `hyctl trace score` (or an
-// oracle) appends a verdict to that same span. unscored is returned so the
-// command can say how much of the log is waiting on a verdict rather than
-// silently reporting on a subset.
-func reliabilityObservations() (obs []reliability.Observation, unscored int, err error) {
+// SPRT run's final confidence on its root span, a decision source's answer is
+// its own span, and `hyctl trace score` (or an oracle) appends a verdict to it.
+func readReliabilityLog(source string) (reliabilityLog, error) {
+	rec := reliabilityLog{sources: map[reliability.Key]*reliability.Tally{}}
 	runs, err := runlog.Runs()
 	if err != nil {
-		return nil, 0, err
+		return rec, err
 	}
 	for _, id := range runs {
 		events, lerr := runlog.Load(id)
 		if lerr != nil {
 			continue // a single unreadable run must not sink the report
 		}
+		verdicts := runlog.ScoresBySpan(events)
 		for _, e := range events {
-			// Confidence is omitempty, so a non-zero value is what marks a
-			// task as confidence-routed; every other task finishes without one.
-			if e.Kind != runlog.KindTaskFinished || e.Confidence <= 0 || e.SpanID == "" {
+			tally := rec.tallyFor(e, source)
+			if tally == nil {
 				continue
 			}
-			passed, known := runlog.Verdict(runlog.Scores(events, e.SpanID))
+			passed, known := runlog.Verdict(verdicts[e.SpanID])
 			if !known {
-				unscored++
+				tally.Unscored++
 				continue
 			}
-			obs = append(obs, reliability.Observation{Predicted: e.Confidence, Correct: passed})
+			tally.Observations = append(tally.Observations, reliability.Observation{
+				Predicted: e.Confidence,
+				Correct:   passed,
+				Ref:       fmt.Sprintf("run %s span %s", id, e.SpanID),
+			})
 		}
 	}
-	return obs, unscored, nil
+	return rec, nil
+}
+
+// tallyFor is where an event's stated probability is counted, or nil when it
+// states none this report reads.
+func (l *reliabilityLog) tallyFor(e runlog.Event, source string) *reliability.Tally {
+	switch {
+	case e.SpanID == "":
+		return nil
+	// Confidence is omitempty, so a non-zero value is what marks a task as
+	// confidence-routed; every other task finishes without one.
+	case e.Kind == runlog.KindTaskFinished && e.Confidence > 0:
+		return &l.hydra
+	case e.Kind == runlog.KindDecision && (source == "" || e.Head == source):
+		key := reliability.Key{Source: e.Head, Domain: trust.Domain(e.Domain)}
+		if l.sources[key] == nil {
+			l.sources[key] = &reliability.Tally{}
+		}
+		return l.sources[key]
+	}
+	return nil
 }
 
 func cmdTrustReliability() *cobra.Command {
 	var bins int
 	var jsonOut bool
+	var source string
 	cmd := &cobra.Command{
 		Use:   "reliability",
 		Short: "Is a stated confidence honest? Brier, ECE and a reliability diagram",
@@ -69,37 +105,104 @@ run stated with the verdict, so it needs verdicts: record them with
 Brier decomposes as reliability - resolution + uncertainty. Reliability is the
 miscalibration and lower is better; resolution is how much the confidences
 actually discriminate and higher is better. A router that always states the base
-rate is perfectly reliable and completely useless, which is why both are shown.`,
+rate is perfectly reliable and completely useless, which is why both are shown.
+
+Decision sources state a probability with every answer, and the same question
+applies to them on your own work. Every source is listed side by side per domain;
+--source <head> reports that one alone, with its full decomposition in --json.`,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			obs, unscored, err := reliabilityObservations()
+			rec, err := readReliabilityLog(source)
 			if err != nil {
 				return err
 			}
-			rep, err := reliability.Evaluate(obs, bins)
-			if err != nil {
-				if jsonOut {
-					return json.NewEncoder(os.Stdout).Encode(map[string]any{
-						"scored": len(obs), "unscored": unscored, "error": err.Error(),
-					})
-				}
-				fmt.Printf("\n  %d scored run(s), %d awaiting a verdict.\n", len(obs), unscored)
-				fmt.Printf("  %v.\n\n  Attach verdicts with `hyctl trace score <run-id> --span <id> --name tests --value 1`,\n"+
-					"  then this reports whether the confidence Hydra stated held up.\n\n", err)
-				return nil
+			sources := reliability.EvaluateSources(rec.sources, bins)
+			if source != "" {
+				return reportSource(source, sources, jsonOut)
 			}
-			if jsonOut {
-				return json.NewEncoder(os.Stdout).Encode(struct {
-					reliability.Report
-					Unscored int `json:"unscored"`
-				}{rep, unscored})
-			}
-			renderReliability(rep, unscored)
-			return nil
+			return reportHydra(rec.hydra, sources, bins, jsonOut)
 		},
 	}
 	cmd.Flags().IntVar(&bins, "bins", reliability.DefaultBins, "number of equal-width confidence bins")
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "machine-readable JSON output")
+	cmd.Flags().StringVar(&source, "source", "",
+		"report one decision source (a head id) per domain (needs #1297)")
 	return cmd
+}
+
+// reportHydra reports Hydra's own stated confidence, then every decision source
+// beside it.
+func reportHydra(own reliability.Tally, sources []reliability.SourceReport, bins int, jsonOut bool) error {
+	scored, unscored := len(own.Observations), own.Unscored
+	rep, err := reliability.Evaluate(own.Observations, bins)
+	if err != nil {
+		if jsonOut {
+			return json.NewEncoder(os.Stdout).Encode(map[string]any{
+				"scored": scored, "unscored": unscored, "error": err.Error(), "sources": sources,
+			})
+		}
+		fmt.Printf("\n  %d scored run(s), %d awaiting a verdict.\n", scored, unscored)
+		fmt.Printf("  %v.\n\n", err)
+		fmt.Println("  Attach verdicts with `hyctl trace score <run-id> --span <id> --name tests --value 1`,")
+		fmt.Println("  then this reports whether the confidence Hydra stated held up.")
+		fmt.Println()
+		renderSources(sources)
+		return nil
+	}
+	if jsonOut {
+		return json.NewEncoder(os.Stdout).Encode(struct {
+			reliability.Report
+			Unscored int                        `json:"unscored"`
+			Sources  []reliability.SourceReport `json:"sources"`
+		}{rep, unscored, sources})
+	}
+	renderReliability(rep, unscored)
+	renderSources(sources)
+	return nil
+}
+
+// reportSource reports one decision source, a row per domain it answered in.
+func reportSource(source string, sources []reliability.SourceReport, jsonOut bool) error {
+	if jsonOut {
+		return json.NewEncoder(os.Stdout).Encode(map[string]any{"sources": sources})
+	}
+	if len(sources) == 0 {
+		fmt.Printf("\n  No decision answers recorded from %s.\n\n", source)
+		return nil
+	}
+	renderSources(sources)
+	return nil
+}
+
+// renderSources prints one row per source and domain. A row under the floor or
+// with an unusable record says why, never a number it cannot back.
+func renderSources(sources []reliability.SourceReport) {
+	if len(sources) == 0 {
+		return
+	}
+	fmt.Printf("  %-28s %-10s %8s %8s %8s %8s %7s\n",
+		"DECISION SOURCE", "DOMAIN", "VERDICTS", "AWAITING", "ECE", "BRIER", "GAP")
+	fmt.Println("  " + strings.Repeat("─", 84))
+	for _, s := range sources {
+		lead := fmt.Sprintf("  %-28s %-10s %8d %8d", s.Source, s.Domain, s.Scored, s.Unscored)
+		if s.Err != "" {
+			fmt.Printf("%s  %s\n", lead, warnStyle.Render(s.Err))
+			continue
+		}
+		if s.Report == nil {
+			note := fmt.Sprintf("not enough verdicts yet, %d more needed", s.Need)
+			fmt.Printf("%s  %s\n", lead, dimStyle.Render(note))
+			continue
+		}
+		gap := s.Report.SignedGap()
+		style := okStyle
+		if math.Abs(gap) > calibrationSlack {
+			style = warnStyle
+		}
+		fmt.Printf("%s %8.4f %8.4f %s\n", lead, s.Report.ECE, s.Report.Brier,
+			style.Render(fmt.Sprintf("%+7.1f", gap*100)))
+	}
+	legend := "GAP is stated minus observed, in points: positive is overconfident"
+	fmt.Printf("\n  %s\n\n", dimStyle.Render(legend))
 }
 
 func renderReliability(rep reliability.Report, unscored int) {
@@ -144,10 +247,10 @@ func renderReliability(rep reliability.Report, unscored int) {
 	fmt.Printf("  ECE %.4f   worst bin %.4f\n", rep.ECE, rep.MCE)
 
 	verdict := okStyle.Render("confidences track outcomes")
-	if gap := rep.SignedGap(); gap > 0.05 {
+	if gap := rep.SignedGap(); gap > calibrationSlack {
 		verdict = warnStyle.Render(fmt.Sprintf(
 			"overconfident by %.1f points on average: a stated confidence is worth less than it says", gap*100))
-	} else if gap < -0.05 {
+	} else if gap < -calibrationSlack {
 		verdict = warnStyle.Render(fmt.Sprintf(
 			"underconfident by %.1f points on average: runs are sampling more than they need to", -gap*100))
 	}
