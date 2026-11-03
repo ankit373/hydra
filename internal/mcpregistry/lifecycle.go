@@ -46,6 +46,10 @@ type ServerState struct {
 	FirstSeenAt    time.Time      `json:"first_seen_at"`
 	StateChangedAt time.Time      `json:"state_changed_at"`
 	LastScore      Score          `json:"last_score"`
+	// Tools is nil until a tools/list snapshot has been seen; an empty map is a
+	// server observed listing no tools.
+	Tools     map[string]Tool `json:"tools"`
+	ToolDrift *ToolDrift      `json:"tool_drift,omitempty"`
 }
 
 // ManifestHash fingerprints the parts of a server record that matter for
@@ -90,9 +94,11 @@ func severeSecuritySignal(s Score) bool {
 }
 
 // Advance computes a server's next lifecycle state. prev is nil the first
-// time a server is seen. now is passed in rather than read from time.Now()
-// so transition logic is deterministically testable.
-func Advance(prev *ServerState, srv ServerRecord, score Score, now time.Time) ServerState {
+// time a server is seen. tools is nil when no tools/list snapshot was read
+// this run. now is passed in so transition logic is deterministically testable.
+func Advance(
+	prev *ServerState, srv ServerRecord, score Score, tools map[string]Tool, now time.Time,
+) ServerState {
 	hash := ManifestHash(srv)
 	quarantineTriggered := severeSecuritySignal(score)
 
@@ -101,7 +107,14 @@ func Advance(prev *ServerState, srv ServerRecord, score Score, now time.Time) Se
 		if quarantineTriggered {
 			state = StateQuarantined
 		}
-		return ServerState{State: state, ManifestHash: hash, FirstSeenAt: now, StateChangedAt: now, LastScore: score}
+		return ServerState{
+			State:          state,
+			ManifestHash:   hash,
+			FirstSeenAt:    now,
+			StateChangedAt: now,
+			LastScore:      score,
+			Tools:          tools,
+		}
 	}
 
 	next := *prev
@@ -109,10 +122,24 @@ func Advance(prev *ServerState, srv ServerRecord, score Score, now time.Time) Se
 	// leaving it to each call site meant one that forgot would carry a stale
 	// score into the public directory.
 	next.LastScore = score
+	var toolChanges []ToolChange
+	// An unobserved run keeps the last list, and a first list is a baseline, not a change.
+	if tools != nil {
+		if prev.Tools != nil {
+			toolChanges = DiffTools(prev.Tools, tools)
+		}
+		next.Tools = tools
+	}
+	toolsChanged := len(toolChanges) > 0
+	if toolsChanged {
+		next.ToolDrift = &ToolDrift{At: now, Changes: toolChanges}
+	}
+	unchanged := hash == prev.ManifestHash && !toolsChanged
+	cooledDown := now.Sub(prev.StateChangedAt) >= provisionalCooldown
 	switch prev.State {
 	case StateTrusted:
 		switch {
-		case hash != prev.ManifestHash:
+		case !unchanged:
 			next.State = StateProvisional
 		case quarantineTriggered:
 			next.State = StateFlagged
@@ -121,8 +148,9 @@ func Advance(prev *ServerState, srv ServerRecord, score Score, now time.Time) Se
 		switch {
 		case quarantineTriggered:
 			next.State = StateQuarantined
-		case hash == prev.ManifestHash && now.Sub(prev.StateChangedAt) >= provisionalCooldown:
+		case unchanged && cooledDown:
 			next.State = StateTrusted
+			next.ToolDrift = nil
 		}
 	case StateFlagged:
 		if !quarantineTriggered {
@@ -135,7 +163,9 @@ func Advance(prev *ServerState, srv ServerRecord, score Score, now time.Time) Se
 		// StateNew never persists (Advance always assigns Provisional or
 		// Quarantined on first sight) but is handled here defensively.
 	}
-	if next.State != prev.State {
+	// Any change restarts the cooldown even inside provisional: the new version or
+	// tool text has to hold for the whole period before it is trusted.
+	if next.State != prev.State || (!unchanged && next.State == StateProvisional) {
 		next.StateChangedAt = now
 	}
 	next.ManifestHash = hash
