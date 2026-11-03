@@ -253,7 +253,8 @@ func TestWorkflowRun_DryRunStoresNothing(t *testing.T) {
 func TestWorkflowRow_AlignsWhenCellsAreStyled(t *testing.T) {
 	const green, reset = "\x1b[32m", "\x1b[0m"
 	header := workflowHeader()
-	row := stripANSICodes(workflowRow(1, "triage", green+"done"+reset, "T10", green+"qwen3:8b"+reset, "5.8s", "$0.0012"))
+	row := stripANSICodes(workflowRow(1, "triage", green+"done"+reset, "T10",
+		green+"qwen3:8b"+reset, "5.8s", "$0.0012"))
 
 	for _, c := range []struct{ head, cell string }{
 		{"STATUS", "done"}, {"TIER", "T10"}, {"HEAD", "qwen3:8b"},
@@ -265,7 +266,9 @@ func TestWorkflowRow_AlignsWhenCellsAreStyled(t *testing.T) {
 	}
 
 	// COST is right-aligned, so it ends where its header does.
-	if want, got := strings.Index(header, "COST")+len("COST"), strings.Index(row, "$0.0012")+len("$0.0012"); want != got {
+	want := strings.Index(header, "COST") + len("COST")
+	got := strings.Index(row, "$0.0012") + len("$0.0012")
+	if want != got {
 		t.Errorf("COST column ends at %d in the header and %d in the row:\n%s\n%s", want, got, header, row)
 	}
 

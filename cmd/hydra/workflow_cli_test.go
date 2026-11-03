@@ -205,11 +205,19 @@ func TestWorkflowShow_EveryStepsOutputAndCost(t *testing.T) {
 		t.Fatal(err)
 	}
 	out = stripANSICodes(out)
-	for _, want := range []string{
-		"TestFoo is flaky", "the fix is a retry", // every output, not only the last
-		"$0.0012", "$0.0345", "$0.0357", // each step's cost and the total
-		"Qwen2.5-Coder:7b (Ollama) · T10", "claude-sonnet · T3",
-	} {
+	wants := []string{
+		// Every step's output, not only the last.
+		"TestFoo is flaky",
+		"the fix is a retry",
+		// Each step's cost, then the total.
+		"$0.0012",
+		"$0.0345",
+		"$0.0357",
+		// Each step's head and tier.
+		"Qwen2.5-Coder:7b (Ollama) · T10",
+		"claude-sonnet · T3",
+	}
+	for _, want := range wants {
 		if !strings.Contains(out, want) {
 			t.Errorf("show is missing %q:\n%s", want, out)
 		}
@@ -224,7 +232,8 @@ func TestWorkflowShow_EveryStepsOutputAndCost(t *testing.T) {
 	if err := json.Unmarshal([]byte(raw), &got); err != nil {
 		t.Fatal(err)
 	}
-	if s := got.Steps[0]; s.Output != "TestFoo is flaky" || s.CostUSD != 0.0012 || s.Tier != 10 || s.Model == "" {
+	s := got.Steps[0]
+	if s.Output != "TestFoo is flaky" || s.CostUSD != 0.0012 || s.Tier != 10 || s.Model == "" {
 		t.Errorf("--json step 1 lost a field: %+v", s)
 	}
 }
