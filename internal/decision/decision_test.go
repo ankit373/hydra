@@ -7,7 +7,6 @@ import (
 	"math"
 	"os"
 	"path/filepath"
-	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -78,6 +77,21 @@ func TestValidate(t *testing.T) {
 	}
 	if err := (Request{}).Validate(); err == nil {
 		t.Error("a request with no questions validated")
+	}
+}
+
+func TestAnswer_TopAndLevel(t *testing.T) {
+	a := Answer{Probabilities: []float64{0.1, 0.1, 0.8}}
+	if got := a.Top(); got != 2 {
+		t.Errorf("Top = %d, want 2", got)
+	}
+	// The documented score example: 0.1, 0.1, 0.8 over levels 0..2 is 1.7.
+	if got := a.Level(); math.Abs(got-1.7) > 1e-12 {
+		t.Errorf("Level = %v, want 1.7", got)
+	}
+	tie := Answer{Probabilities: []float64{0.5, 0.5}}
+	if got := tie.Top(); got != 0 {
+		t.Errorf("Top on a tie = %d, want the earlier option", got)
 	}
 }
 
@@ -164,6 +178,36 @@ func TestParseDecisionsResponse_ARefusalIsAnError(t *testing.T) {
 	}
 }
 
+// Structured state is kept as text, and a noul's true and false descriptions survive the trip.
+func TestParseSystemOneRequest_KeepsWhatAPredicateCannotCarryAsText(t *testing.T) {
+	body := []byte(`{
+  "model": "jev-latest",
+  "state": {"subject": "Duplicate charge", "message": "Please help."},
+  "questions": {
+    "spam": {
+      "type": "noul",
+      "instructions": "Is this message spam?",
+      "criteria": {"true": "Unsolicited advertising", "false": "A legitimate conversation"}
+    }
+  }
+}`)
+	r, err := ParseSystemOneRequest(body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := `{"subject":"Duplicate charge","message":"Please help."}`; r.Input != want {
+		t.Errorf("Input = %q, want the state as compact JSON %q", r.Input, want)
+	}
+	want := strings.Join([]string{
+		"Is this message spam?",
+		"True means: Unsolicited advertising",
+		"False means: A legitimate conversation",
+	}, "\n\n")
+	if q := r.Questions[0]; q.Name != "spam" || q.Kind != Predicate || q.Instructions != want {
+		t.Errorf("question = %+v, want the criteria folded into the instructions", q)
+	}
+}
+
 // billingRequest is the documented support-ticket example, asked once in every dialect.
 var billingRequest = Request{
 	Input: "I was charged twice for my subscription this month. Please refund the extra charge.",
@@ -219,7 +263,40 @@ func sameJSON(t *testing.T, got, want []byte) bool {
 	if err := json.Unmarshal(want, &w); err != nil {
 		t.Fatalf("fixture is not JSON: %v", err)
 	}
-	return reflect.DeepEqual(g, w)
+	return near(g, w)
+}
+
+// near is equality on decoded JSON with numbers within float rounding, since a
+// computed score level writes 1.7 as 1.7000000000000002.
+func near(got, want any) bool {
+	switch w := want.(type) {
+	case float64:
+		g, ok := got.(float64)
+		return ok && math.Abs(g-w) <= 1e-12
+	case map[string]any:
+		g, ok := got.(map[string]any)
+		if !ok || len(g) != len(w) {
+			return false
+		}
+		for k, wv := range w {
+			if gv, found := g[k]; !found || !near(gv, wv) {
+				return false
+			}
+		}
+		return true
+	case []any:
+		g, ok := got.([]any)
+		if !ok || len(g) != len(w) {
+			return false
+		}
+		for i := range w {
+			if !near(g[i], w[i]) {
+				return false
+			}
+		}
+		return true
+	}
+	return got == want
 }
 
 // closeTo compares distributions to within float rounding, since 1 - P(true) is computed.

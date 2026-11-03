@@ -3,11 +3,34 @@
 package decision
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
 	"strings"
 )
+
+// errImageNotRouted refuses an image on the serving side, where routing one is not built yet.
+var errImageNotRouted = errors.New("images are not routed yet; send text only")
+
+// textOf reads a field the wire allows as a string or as structured JSON. Structure
+// is kept as compact JSON text, since a routed question carries text only.
+func textOf(raw json.RawMessage) (string, error) {
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
+		return "", nil
+	}
+	var s string
+	if json.Unmarshal(raw, &s) == nil {
+		return s, nil
+	}
+	var compact bytes.Buffer
+	if err := json.Compact(&compact, raw); err != nil {
+		return "", err
+	}
+	return compact.String(), nil
+}
 
 // optionText is an option as one line of text, for a dialect that has no separate description.
 func optionText(o Option) string {
