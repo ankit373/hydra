@@ -34,10 +34,21 @@ type threshold struct {
 }
 
 // heldOutRun is one Run, on the same sources and calibration, checked afterwards. It must
-// reach confidence 0.99 or run out of sources, so every grid cutoff's stop was seen.
+// reach the top cutoff or run out of sources, so every grid cutoff's stop was seen.
 type heldOutRun struct {
-	ledger  []Evidence
-	correct map[string]bool // candidate -> verified correct; a missing one counts as wrong
+	ledger    []Evidence
+	correct   map[string]bool // candidate -> verified correct; a missing one counts as wrong
+	exhausted bool            // every source was asked
+}
+
+// complete reports whether the run saw every cutoff on the grid. One stopped at a lower
+// bound, such as Wald's at 0.95, would count as never stopping at every cutoff above it.
+func (r heldOutRun) complete() bool {
+	if r.exhausted {
+		return true
+	}
+	top := logit(float64(thresholdGrid-1) / thresholdGrid)
+	return len(r.ledger) > 0 && r.ledger[len(r.ledger)-1].LambdaAfter >= top
 }
 
 // stop replays Run's own test, Λ >= logit(accept), and reports whether the first
@@ -64,6 +75,12 @@ func chooseThreshold(heldOut []heldOutRun, target, confidence float64) (threshol
 	}
 	if confidence <= 0 || confidence >= 1 {
 		return threshold{}, fmt.Errorf("trust: confidence must be in (0,1), got %v", confidence)
+	}
+
+	for i, r := range heldOut {
+		if !r.complete() {
+			return threshold{}, fmt.Errorf("trust: held-out run %d stopped short of the top cutoff", i)
+		}
 	}
 
 	level := (1 - confidence) / (thresholdGrid - lowestStep)

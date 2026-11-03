@@ -37,7 +37,8 @@ func simulatedRun(rng *rand.Rand) heldOutRun {
 			break
 		}
 	}
-	return heldOutRun{ledger: ledger, correct: map[string]bool{"A": aRight, "B": !aRight}}
+	correct := map[string]bool{"A": aRight, "B": !aRight}
+	return heldOutRun{ledger: ledger, correct: correct, exhausted: true}
 }
 
 func simulatedRuns(rng *rand.Rand, n int) []heldOutRun {
@@ -52,7 +53,7 @@ func simulatedRuns(rng *rand.Rand, n int) []heldOutRun {
 func sameRun(n int, correct map[string]bool, ledger ...Evidence) []heldOutRun {
 	runs := make([]heldOutRun, n)
 	for i := range runs {
-		runs[i] = heldOutRun{ledger: ledger, correct: correct}
+		runs[i] = heldOutRun{ledger: ledger, correct: correct, exhausted: true}
 	}
 	return runs
 }
@@ -104,6 +105,17 @@ func TestChooseThreshold_BelowFloorIsRefused(t *testing.T) {
 }
 
 // A leader that is a coin flip at every confidence has no cutoff that clears a 10% error rate.
+// A run that stopped at a lower bound never saw the higher cutoffs, so it cannot judge them.
+func TestChooseThreshold_RefusesARunStoppedShort(t *testing.T) {
+	runs := sameRun(reliability.MinObservations, map[string]bool{"A": true},
+		Evidence{Candidate: "A", LambdaAfter: logit(0.95)},
+	)
+	runs[3].exhausted = false
+	if _, err := chooseThreshold(runs, 0.1, 0.9); err == nil {
+		t.Error("a run stopped at 0.95 must not judge the cutoffs above it")
+	}
+}
+
 func TestChooseThreshold_UnreachableTarget(t *testing.T) {
 	rng := rand.New(rand.NewSource(14))
 	runs := make([]heldOutRun, 2000)
