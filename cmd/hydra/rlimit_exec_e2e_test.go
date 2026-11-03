@@ -11,8 +11,11 @@ package main
 import (
 	"context"
 	"os/exec"
+	"syscall"
 	"testing"
 	"time"
+
+	"github.com/ankit373/hydra/internal/testutil"
 )
 
 // buildHyctl compiles the real binary once per test run: the point of this
@@ -48,24 +51,46 @@ func TestRlimitExecE2E_PassthroughRunsTheRealTarget(t *testing.T) {
 // rewrites an exec.Cmd correctly.
 func TestRlimitExecE2E_KernelKillsARunawayProcess(t *testing.T) {
 	bin := buildHyctl(t)
-	cmd := exec.Command(bin, "__rlimit-exec", "--", "/bin/sh", "-c", "i=0; while true; do i=$((i+1)); done")
+	// Assert on CPU time, the clock the ceiling counts: load stretches wall time
+	// without changing what is under test. The deadline only stops a hang.
+	ctx := context.Background()
+	deadline, hasDeadline := t.Deadline()
+	if hasDeadline {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithDeadline(ctx, deadline.Add(-testutil.DeadlineMargin))
+		defer cancel()
+	}
+	runaway := "i=0; while true; do i=$((i+1)); done"
+	cmd := exec.CommandContext(ctx, bin, "__rlimit-exec", "--", "/bin/sh", "-c", runaway)
 	cmd.Env = append(cmd.Environ(), "HYDRA_RLIMIT_CPU_SECONDS=1")
 
-	start := time.Now()
 	err := cmd.Run()
-	elapsed := time.Since(start)
-
 	if err == nil {
 		t.Fatal("expected the runaway process to be killed, it exited cleanly instead")
 	}
-	// A generous ceiling: RLIMIT_CPU counts CPU time, not wall clock, but a
-	// process this tight in a loop consumes it at roughly 1:1, and giving
-	// real CI runners room for scheduling noise beats a flake that looks
-	// like a real regression.
-	if elapsed > 10*time.Second {
-		t.Errorf("process ran for %s, want it killed near the 1s CPU ceiling", elapsed)
+	if cmd.ProcessState == nil {
+		t.Fatalf("the process never started: %v", err)
 	}
-	t.Logf("killed after %s: %v", elapsed, err)
+	cpu := cmd.ProcessState.UserTime() + cmd.ProcessState.SystemTime()
+	// Past the test deadline, CPU used says whether the ceiling failed or the box was too busy.
+	if ctx.Err() != nil {
+		if cpu < time.Second {
+			t.Fatalf("the test deadline came first: the process got only %s of CPU, short of the 1s ceiling", cpu)
+		}
+		t.Fatalf("the process used %s of CPU and was still running: the 1s ceiling was never enforced", cpu)
+	}
+
+	ws, isWaitStatus := cmd.ProcessState.Sys().(syscall.WaitStatus)
+	signaled := isWaitStatus && ws.Signaled()
+	byCeiling := signaled && (ws.Signal() == syscall.SIGXCPU || ws.Signal() == syscall.SIGKILL)
+	if !byCeiling {
+		t.Fatalf("process ended with %v, want SIGXCPU or SIGKILL from the CPU ceiling", err)
+	}
+	// Kernels check the limit on their own schedule: darwin measured 1.3s to 1.8s.
+	if cpu > 3*time.Second {
+		t.Errorf("process used %s of CPU, want it killed near the 1s ceiling", cpu)
+	}
+	t.Logf("killed after %s of CPU: %v", cpu, err)
 }
 
 // Negative control for the test above: the identical command, with no
