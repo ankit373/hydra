@@ -7,7 +7,6 @@ import (
 	"math"
 	"os"
 	"path/filepath"
-	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -264,7 +263,40 @@ func sameJSON(t *testing.T, got, want []byte) bool {
 	if err := json.Unmarshal(want, &w); err != nil {
 		t.Fatalf("fixture is not JSON: %v", err)
 	}
-	return reflect.DeepEqual(g, w)
+	return near(g, w)
+}
+
+// near is equality on decoded JSON with numbers within float rounding, since a
+// computed score level writes 1.7 as 1.7000000000000002.
+func near(got, want any) bool {
+	switch w := want.(type) {
+	case float64:
+		g, ok := got.(float64)
+		return ok && math.Abs(g-w) <= 1e-12
+	case map[string]any:
+		g, ok := got.(map[string]any)
+		if !ok || len(g) != len(w) {
+			return false
+		}
+		for k, wv := range w {
+			if gv, found := g[k]; !found || !near(gv, wv) {
+				return false
+			}
+		}
+		return true
+	case []any:
+		g, ok := got.([]any)
+		if !ok || len(g) != len(w) {
+			return false
+		}
+		for i := range w {
+			if !near(g[i], w[i]) {
+				return false
+			}
+		}
+		return true
+	}
+	return got == want
 }
 
 // closeTo compares distributions to within float rounding, since 1 - P(true) is computed.

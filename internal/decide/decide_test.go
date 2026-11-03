@@ -294,6 +294,47 @@ func TestDecide_FailedSourceIsAskedOnce(t *testing.T) {
 	}
 }
 
+// Option names differing only in case are different answers, which trust's
+// case-folding default would merge into one agreement.
+func TestDecide_AnswersDifferingInCaseDisagree(t *testing.T) {
+	testutil.NewSandbox(t)
+	cal := newCal(t)
+	calibrate(t, cal, "a", 8)
+	calibrate(t, cal, "b", 8)
+	calibrate(t, cal, "c", 8)
+	cased := decision.Request{
+		Questions: []decision.Question{{
+			Kind: decision.Choice,
+			Options: []decision.Option{
+				{Name: "Calm"},
+				{Name: "calm"},
+			},
+		}},
+	}
+	ask := &fakeAsker{answers: map[string]decision.Result{
+		"a": answered(0.4, 0.6),
+		"b": answered(0.9, 0.1),
+		"c": answered(0.9, 0.1),
+	}}
+	r := router(ask, cal, "a", "b", "c")
+
+	out, err := r.Decide(context.Background(), Call{Request: cased, RunID: "run-cased"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		"a",
+		"b",
+		"c",
+	}
+	if !reflect.DeepEqual(ask.asked, want) {
+		t.Errorf("asked %v, want %v: b dissents from a, so c is needed", ask.asked, want)
+	}
+	if got := out.Result.Answers[0].Probabilities; !reflect.DeepEqual(got, []float64{0.9, 0.1}) {
+		t.Errorf("returned %v, want b's answer, which c agreed with", got)
+	}
+}
+
 func TestDecide_NoSourceIsAnError(t *testing.T) {
 	testutil.NewSandbox(t)
 	r := router(&fakeAsker{}, newCal(t), "a")
