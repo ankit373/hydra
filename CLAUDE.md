@@ -40,7 +40,9 @@ internal/executor/      ← Native executors: agy, HTTP (API providers and local
 internal/provider/      ← Discovery: cli / env (API keys, plus the OpenRouter model allowlist) / port / agy.
 internal/awsconf/       ← AWS credentials and region: environment, then ~/.aws/credentials and ~/.aws/config.
 internal/swarm/         ← Fan-out (race/best/all + judge) + SPRT adapter (swarm→trust).
-internal/trust/         ← Trust Control Plane: calibration (LLR/D) + defect-cost + SPRT ensemble.
+internal/trust/         ← Trust Control Plane: calibration (LLR/D) + defect-cost + SPRT ensemble,
+                          a monotone correction of each source's stated probability, and an
+                          accept threshold chosen on held-out verdicts. Both off below the floor.
 internal/graph/         ← Code dependency graph (graph.json) → blast radius + coupling k + percolation κ (Molloy-Reed).
 internal/a2a/           ← Causal agent handoffs: vector clocks + concurrent-edit conflict detection.
 internal/optimal/       ← Optimal parallel-agent count n*=√((1-s)/k) (Amdahl+coordination, Law 4).
