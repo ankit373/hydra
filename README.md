@@ -923,6 +923,7 @@ hyctl workflow run --step A --step B    # multi-step task, each step routed on i
 hyctl workflow run --dry-run ...        # each step's routing chain and ceiling, nothing run
 hyctl workflow run --local --max-cost 0.05 ...   # per-step caps, on top of policy.yaml's
 hyctl workflow resume <id>              # continue a killed workflow from where it stopped
+hyctl workflow show <id>                # each step's head, tier, cost and output
 
 # Reviewing a diff
 hyctl vet                               # review the working diff, each file routed to its own head
