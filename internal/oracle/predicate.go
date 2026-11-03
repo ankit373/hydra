@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/ankit373/hydra/internal/trust"
+	"github.com/ankit373/hydra/internal/util"
 )
 
 const (
@@ -56,7 +57,10 @@ func (o *PredicateOracle) Verify(ctx context.Context, candidate string, _ trust.
 	if o.Decider == nil {
 		return Verdict{}, fmt.Errorf("oracle %s: no decision source configured", o.Source)
 	}
-	question := strings.ReplaceAll(o.Template, "{answer}", answerFor(candidate))
+	// The candidate is the thing being judged; unfenced, it could argue its own verdict.
+	// The fence gets its own lines, since a delimiter only counts at the start of one.
+	answer := "\n" + util.WrapUntrusted("ANSWER", answerFor(candidate)) + "\n"
+	question := strings.ReplaceAll(o.Template, "{answer}", answer)
 	options := []string{optionTrue, optionFalse}
 	probs, err := o.Decider.Decide(ctx, question, options)
 	if err != nil {
