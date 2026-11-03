@@ -626,7 +626,11 @@ func extractContent(raw string, m markers) string {
 // make the outer pair ambiguous, so that answer is refused rather than guessed.
 func soleFencedBlock(raw string) string {
 	lines := strings.Split(strings.TrimSpace(raw), "\n")
-	if len(lines) < 2 || !strings.HasPrefix(lines[0], "```") || lines[len(lines)-1] != "```" {
+	if len(lines) < 2 {
+		return ""
+	}
+	first, last := lines[0], lines[len(lines)-1]
+	if !strings.HasPrefix(first, "```") || last != "```" {
 		return ""
 	}
 	for _, l := range lines[1 : len(lines)-1] {
