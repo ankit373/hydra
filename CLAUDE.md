@@ -37,6 +37,11 @@ cmd/hyverify/           ← A second binary, the standalone verifier: run the co
                           tool's contract is that it needs no services (#1026).
 internal/dispatch/      ← Tier routing + fallback + policy + cost logging (the router).
 internal/executor/      ← Native executors: agy, HTTP (API providers and local servers), CLI subprocess.
+                          Plus decision heads (`DecisionHeads`, `DecisionExecutor`): typed questions
+                          answered with a probability per outcome, over System One, OpenAI's
+                          Decisions API, or a local SGLang server found by `/get_model_info` (#1297).
+internal/decision/      ← What a decision source is asked and answers, both wire codecs, and `Check`,
+                          the one test that refuses a distribution off 1 by more than 1e-6.
 internal/provider/      ← Discovery: cli / env (API keys, plus the OpenRouter model allowlist) / port / agy.
 internal/awsconf/       ← AWS credentials and region: environment, then ~/.aws/credentials and ~/.aws/config.
 internal/swarm/         ← Fan-out (race/best/all + judge) + SPRT adapter (swarm→trust).
