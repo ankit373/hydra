@@ -36,8 +36,9 @@ const newFileBlock = "<empty, file does not exist yet>"
 type markers struct{ start, end string }
 
 func markersFor(current string) markers {
-	n := util.FenceNonce(current)
-	return markers{start: "<<<HYDRA_FILE_START " + n + ">>>", end: "<<<HYDRA_FILE_END " + n + ">>>"}
+	nonce := util.FenceNonce(current)
+	tag := func(kind string) string { return "<<<HYDRA_FILE_" + kind + " " + nonce + ">>>" }
+	return markers{start: tag("START"), end: tag("END")}
 }
 
 // Request is the input to Edit.

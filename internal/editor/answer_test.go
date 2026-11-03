@@ -10,8 +10,18 @@ import (
 	"testing"
 )
 
-// Most models fence a file by default and drop the markers. The fence stripper
-// only ever saw the empty marker extraction, so a right answer was discarded (#1164).
+// readBack returns what is on disk at file, failing the test if it cannot.
+func readBack(t *testing.T, file string) string {
+	t.Helper()
+	raw, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(raw)
+}
+
+// Most models fence a file and drop the markers. That reply was turned into ""
+// before the fence stripper saw it, so a right answer was discarded (#1164).
 func TestEdit_AFencedAnswerWithNoMarkersIsWritten(t *testing.T) {
 	repo := editSandbox(t, "```go\npackage main\n\nfunc main() {}\n```")
 	file := filepath.Join(repo, "main.go")
@@ -19,21 +29,22 @@ func TestEdit_AFencedAnswerWithNoMarkersIsWritten(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	res, err := Edit(context.Background(), Request{File: file, Enum: "MODERATE", Prompt: "add main"})
+	req := Request{File: file, Enum: "MODERATE", Prompt: "add main"}
+	res, err := Edit(context.Background(), req)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if res.Status != "ok" {
 		t.Fatalf("status = %q, error %q: a fenced answer was discarded", res.Status, res.Error)
 	}
-	raw, _ := os.ReadFile(file)
-	if string(raw) != "package main\n\nfunc main() {}\n" {
-		t.Errorf("file = %q, want the fenced content without the fence", raw)
+	got := readBack(t, file)
+	if got != "package main\n\nfunc main() {}\n" {
+		t.Errorf("file = %q, want the fenced content without the fence", got)
 	}
 }
 
-// A fence with nothing in it is still nothing, and the failure names the head
-// that produced it, so a rejected answer is an observation (#1164, #1171).
+// An empty fence is still empty. The failure names the head that produced it,
+// so the rejected answer is an observation (#1164, #1171).
 func TestEdit_AnEmptyFencedAnswerIsAnEmptyReplacement(t *testing.T) {
 	repo := editSandbox(t, "```\n```")
 	file := filepath.Join(repo, "keep.go")
@@ -42,7 +53,8 @@ func TestEdit_AnEmptyFencedAnswerIsAnEmptyReplacement(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	res, err := Edit(context.Background(), Request{File: file, Enum: "MODERATE", Prompt: "x"})
+	req := Request{File: file, Enum: "MODERATE", Prompt: "x"}
+	res, err := Edit(context.Background(), req)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,17 +64,21 @@ func TestEdit_AnEmptyFencedAnswerIsAnEmptyReplacement(t *testing.T) {
 	if res.Head == "" {
 		t.Error("the failure names no head, so the rejected answer trains nothing")
 	}
-	if raw, _ := os.ReadFile(file); string(raw) != original {
-		t.Errorf("the file was modified: %q", raw)
+	got := readBack(t, file)
+	if got != original {
+		t.Errorf("the file was modified: %q", got)
 	}
 }
 
-// Inner fences make the outer pair ambiguous, so a markerless answer holding
-// several blocks is refused rather than cut at a guess.
+// Inner fences or prose make the outer pair ambiguous, so the reply is refused
+// rather than cut at a guess.
 func TestSoleFencedBlock(t *testing.T) {
 	tests := []struct{ name, in, want string }{
+		// Taken: exactly one block, whitespace around it ignored.
 		{"one block", "```go\nx := 1\n```", "```go\nx := 1\n```"},
 		{"surrounding whitespace", "\n```\nx\n```\n\n", "```\nx\n```"},
+
+		// Refused: anything else.
 		{"prose before", "Here it is:\n```\nx\n```", ""},
 		{"inner fence", "```md\n```sh\nls\n```\n```", ""},
 		{"unclosed", "```go\nx := 1", ""},
@@ -77,32 +93,33 @@ func TestSoleFencedBlock(t *testing.T) {
 	}
 }
 
-// internal/parallel/parallel.go holds the literal end marker. Echoed back
-// unchanged, it used to be cut at that line and reported ok (#1165).
+// internal/parallel/parallel.go holds both literal markers. Echoed back
+// unchanged, it used to be cut at the end marker and reported ok (#1165).
 func TestEdit_AFileContainingTheMarkersRoundTrips(t *testing.T) {
-	src, err := os.ReadFile(filepath.Join("..", "parallel", "parallel.go"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	original := string(src)
-	if !strings.Contains(original, "<<<HYDRA_FILE_END>>>") || !strings.Contains(original, "<<<HYDRA_FILE_START>>>") {
-		t.Fatal("parallel.go no longer holds the markers; point this test at another file that does")
+	original := readBack(t, filepath.Join("..", "parallel", "parallel.go"))
+	for _, literal := range []string{"<<<HYDRA_FILE_START>>>", "<<<HYDRA_FILE_END>>>"} {
+		if !strings.Contains(original, literal) {
+			t.Fatalf("parallel.go no longer holds %s; point this test at a file that does", literal)
+		}
 	}
 
-	repo := editSandbox(t, marked(original, strings.TrimSuffix(original, "\n")))
+	echoed := strings.TrimSuffix(original, "\n")
+	repo := editSandbox(t, marked(original, echoed))
 	file := filepath.Join(repo, "parallel.go")
-	if err := os.WriteFile(file, src, 0o644); err != nil {
+	if err := os.WriteFile(file, []byte(original), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	res, err := Edit(context.Background(), Request{File: file, Enum: "MODERATE", Prompt: "no change"})
+	req := Request{File: file, Enum: "MODERATE", Prompt: "no change"}
+	res, err := Edit(context.Background(), req)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if res.Status != "ok" {
 		t.Fatalf("status = %q, error %q", res.Status, res.Error)
 	}
-	if raw, _ := os.ReadFile(file); string(raw) != original {
-		t.Errorf("the file did not round-trip: %d bytes in, %d bytes out", len(original), len(raw))
+	got := readBack(t, file)
+	if got != original {
+		t.Errorf("the file did not round-trip: %d bytes in, %d bytes out", len(original), len(got))
 	}
 }

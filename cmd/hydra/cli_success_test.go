@@ -453,7 +453,7 @@ func TestCLI_Dispatch_SwarmBillsEveryHead(t *testing.T) {
 // ── edit, executed for real ───────────────────────────────────────────────────
 
 func TestCLI_Edit_SucceedsAndRecordsTheEdit(t *testing.T) {
-	_, repo := dispatchable(t, editAnswer("package main\n", "package main\n\nfunc main() {}"))
+	_, repo := dispatchable(t, "```go\npackage main\n\nfunc main() {}\n```")
 
 	file := filepath.Join(repo, "main.go")
 	if err := os.WriteFile(file, []byte("package main\n"), 0o644); err != nil {

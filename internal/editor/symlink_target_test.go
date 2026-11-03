@@ -18,7 +18,8 @@ import (
 // a symlink on Windows needs a privilege a runner does not hold.
 
 func TestEdit_WritesThroughASymlinkToTheFileItNames(t *testing.T) {
-	repo := editSandbox(t, marked("package main\n", "package main\n\nfunc greet() string { return \"hello\" }"))
+	answer := "package main\n\nfunc greet() string { return \"hello\" }"
+	repo := editSandbox(t, marked("package main\n", answer))
 
 	if err := os.MkdirAll(filepath.Join(repo, "shared"), 0o700); err != nil {
 		t.Fatal(err)

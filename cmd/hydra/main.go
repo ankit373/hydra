@@ -917,7 +917,8 @@ func cmdDispatch() *cobra.Command {
 			if verifyRun {
 				return fmt.Errorf("--verify cannot judge a dispatch: the answer is never written to " +
 					"disk, so the verifier checks the repository as it already was.\n" +
-					"  To verify an answer, apply it: `hyctl edit --file <absolute-path> --enum <ENUM> --prompt \"<instruction>\"` " +
+					"  To verify an answer, apply it: " +
+					"`hyctl edit --file <path> --enum <enum> --prompt \"<instruction>\"` " +
 					"validates the file it just wrote.\n" +
 					"  To verify one you have applied yourself: " +
 					"`hyctl oracle verify --candidate <file> -- <command>`")
@@ -1412,7 +1413,8 @@ improved against.`,
 				// Only an empty corpus gets the hint: --failed over all passes
 				// has nothing to show, which is not "no examples yet" (#1171).
 				if corpusSize == 0 {
-					fmt.Println("No verified examples yet. Run `hyctl oracle verify --candidate <file> ...` to record one.")
+					fmt.Println("No verified examples yet. " +
+						"Run `hyctl oracle verify --candidate <file> ...` to record one.")
 				}
 				return nil
 			}
