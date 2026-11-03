@@ -466,3 +466,23 @@ func cfgDir(t *testing.T) string {
 }
 
 var _ = testutil.NewSandbox // keep the import meaningful if cases are trimmed
+
+// `check` and `log` render tool -> resource (#464); verify ran them together
+// as fs.read//etc/hosts (#1170).
+func TestCLI_MCPVerify_SeparatesToolFromResource(t *testing.T) {
+	s := populated(t)
+	params := `{"path":"/etc/hosts"}`
+	if code, out := runBinary(t, s, "mcp", "record",
+		"--tool", "fs.read", "--action", "read", "--decision", "allow",
+		"--resource", "/etc/hosts", "--agent", "test-agent",
+		"--params", params); code != 0 {
+		t.Fatalf("`hyctl mcp record` exited %d:\n%s", code, out)
+	}
+	code, out := runBinary(t, s, "mcp", "verify", "fs.read", "--resource", "/etc/hosts", "--params", params)
+	if code != 0 {
+		t.Fatalf("verify exited %d:\n%s", code, out)
+	}
+	if !strings.Contains(out, "fs.read -> /etc/hosts") {
+		t.Errorf("verify did not render tool -> resource:\n%s", out)
+	}
+}

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 )
 
@@ -198,5 +199,39 @@ func TestScanClaudeCode_DifferentCwdSkipsProjectServers(t *testing.T) {
 	out := scanClaudeCode(filepath.Join(home, "other-project"))
 	if len(out) != 0 {
 		t.Errorf("expected 0 entries for an unrelated cwd, got %+v", out)
+	}
+}
+
+// Scan ranges config maps, so without a sort the same machine listed its
+// servers in a different order run to run and a scan diff showed phantom changes (#1170).
+func TestScan_OrderIsStableAcrossRuns(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	servers := map[string]clientServerConfig{}
+	for _, n := range []string{"grafana", "cloudflare", "chrome-mcp", "posthog", "google-sheets", "azure", "slack", "jira"} {
+		servers[n] = clientServerConfig{Command: "npx", Args: []string{n}}
+	}
+	raw, err := json.Marshal(claudeCodeConfig{MCPServers: servers})
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeJSON(t, filepath.Join(home, ".claude.json"), string(raw))
+
+	names := func() []string {
+		var out []string
+		for _, s := range Scan("") {
+			out = append(out, s.Name)
+		}
+		return out
+	}
+	first := names()
+	if !slices.IsSorted(first) {
+		t.Fatalf("scan order is not sorted by name: %v", first)
+	}
+	for i := 0; i < 20; i++ {
+		if got := names(); !slices.Equal(got, first) {
+			t.Fatalf("run %d listed %v, run 0 listed %v", i+1, got, first)
+		}
 	}
 }
