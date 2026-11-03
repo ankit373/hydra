@@ -1761,7 +1761,20 @@ func TestCLI_MCPRegistryList_NamesSyncWhenNeverSynced(t *testing.T) {
 func TestCLI_MCPRegistryList_ShowsCheckedCategoryCount(t *testing.T) {
 	populated(t)
 	seed(t, "mcp_registry_state.json", `{
-		"io.github.x/thin": {"state":"provisional","manifest_hash":"a","first_seen_at":"2026-01-01T00:00:00Z","state_changed_at":"2026-01-01T00:00:00Z","last_score":{"security_implementation":{"value":70,"confidence":"low"},"repository_health":{"confidence":"insufficient_evidence"},"operational_security":{"confidence":"insufficient_evidence"},"community_governance":{"confidence":"insufficient_evidence"},"overall":70,"confidence":"low"}}
+		"io.github.x/thin": {
+			"state": "provisional",
+			"manifest_hash": "a",
+			"first_seen_at": "2026-01-01T00:00:00Z",
+			"state_changed_at": "2026-01-01T00:00:00Z",
+			"last_score": {
+				"security_implementation": {"value": 70, "confidence": "low"},
+				"repository_health": {"confidence": "insufficient_evidence"},
+				"operational_security": {"confidence": "insufficient_evidence"},
+				"community_governance": {"confidence": "insufficient_evidence"},
+				"overall": 70,
+				"confidence": "low"
+			}
+		}
 	}`)
 	out, cobraOut, err := run(t, "mcp", "registry", "list")
 	if err != nil {

@@ -2656,20 +2656,21 @@ func cmdMCPRegistry() *cobra.Command {
 				if e.Score != nil {
 					fmt.Printf("             score %-20s state %-12s confidence %s\n",
 						mcpregistry.FormatScore(*e.Score), e.LifecycleState, mcpregistry.FormatConfidence(e.Score.Confidence))
-					// Unavailable signals and unchecked categories print too: without them
-					// a score standing on the neutral baseline reads as evidenced (#1170).
+					// Unchecked categories print too, or a neutral baseline reads as evidence (#1170).
 					for _, cat := range e.Score.Categories() {
 						for _, sig := range cat.Signals {
 							if sig.Detail != "" {
-								fmt.Printf("               %-11s %s\n", cat.Name, dimStyle.Render(sig.Detail))
+								printAuditDetail(cat.Name, dimStyle.Render(sig.Detail))
 							}
 						}
 						if !cat.Evaluated() {
-							fmt.Printf("               %-11s %s\n", cat.Name, warnStyle.Render("not checked, scored at the neutral baseline"))
+							printAuditDetail(cat.Name, warnStyle.Render("not checked, scored at the neutral baseline"))
 						}
 					}
 				} else if e.NearestMatch != "" && mcpregistry.IsNearMiss(e.Package, e.NearestDist) {
-					fmt.Printf("             %s\n", dimStyle.Render(fmt.Sprintf("nearest known identifier: %q (%d edits away), verify this isn't a typosquat", e.NearestMatch, e.NearestDist)))
+					note := fmt.Sprintf("nearest known identifier: %q (%d edits away), verify this isn't a typosquat",
+						e.NearestMatch, e.NearestDist)
+					fmt.Printf("             %s\n", dimStyle.Render(note))
 				}
 			}
 			return nil
@@ -2755,17 +2756,17 @@ func cmdMCPRegistry() *cobra.Command {
 				return json.NewEncoder(os.Stdout).Encode(entries)
 			}
 			if len(entries) == 0 {
-				// Audit only scores servers it resolved, and nothing resolves before a sync.
+				// Nothing resolves before a sync, so audit alone would still list nothing.
+				next := "`hyctl mcp registry audit`"
 				if !mcpregistry.Synced() {
-					fmt.Println("  no audited servers yet, the registry was never synced: run " +
-						"`hyctl mcp registry sync`, then `hyctl mcp registry audit`")
-					return nil
+					next = "`hyctl mcp registry sync`, then " + next
 				}
-				fmt.Println("  no audited servers yet, run `hyctl mcp registry audit` first")
+				fmt.Printf("  no audited servers yet, run %s first\n", next)
 				return nil
 			}
-			fmt.Printf("\n  %-40s %-12s %6s  %-12s %s\n", "SERVER", "STATE", "SCORE", "CONFIDENCE", "CHECKED")
-			fmt.Println("  " + strings.Repeat("─", 86))
+			header := fmt.Sprintf("%-40s %-12s %6s  %-12s %s", "SERVER", "STATE", "SCORE", "CONFIDENCE", "CHECKED")
+			fmt.Printf("\n  %s\n", header)
+			fmt.Println("  " + strings.Repeat("─", len(header)))
 			for _, e := range entries {
 				state := string(e.LifecycleState)
 				switch e.LifecycleState {
@@ -2774,15 +2775,11 @@ func cmdMCPRegistry() *cobra.Command {
 				case mcpregistry.StateFlagged, mcpregistry.StateQuarantined, mcpregistry.StateDelisted:
 					state = warnStyle.Render(state)
 				}
-				checked := 0
-				cats := e.Score.Categories()
-				for _, c := range cats {
-					if c.Evaluated() {
-						checked++
-					}
-				}
+				checked, total := e.Score.CheckedCategories()
 				fmt.Printf("  %-40.40s %-12s %6s  %-12s %d of %d\n", e.Name, state,
-					mcpregistry.FormatScore(e.Score), mcpregistry.FormatConfidence(e.Score.Confidence), checked, len(cats))
+					mcpregistry.FormatScore(e.Score),
+					mcpregistry.FormatConfidence(e.Score.Confidence),
+					checked, total)
 			}
 			fmt.Println()
 			return nil
@@ -5558,4 +5555,9 @@ func humanAge(d time.Duration) string {
 	default:
 		return fmt.Sprintf("%dd ago", int(d.Hours()/24))
 	}
+}
+
+// printAuditDetail prints one evidence line under an audited server.
+func printAuditDetail(category, detail string) {
+	fmt.Printf("               %-11s %s\n", category, detail)
 }

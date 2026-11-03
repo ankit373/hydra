@@ -542,6 +542,17 @@ func (c CategoryScore) Evaluated() bool {
 	return c.Confidence != "" && c.Confidence != ConfidenceInsufficient
 }
 
+// CheckedCategories counts the categories that stand on evidence.
+func (s Score) CheckedCategories() (checked, total int) {
+	cats := s.Categories()
+	for _, c := range cats {
+		if c.Evaluated() {
+			checked++
+		}
+	}
+	return checked, len(cats)
+}
+
 // FormatConfidence renders a Confidence for CLI output.
 func FormatConfidence(c Confidence) string {
 	return strings.ReplaceAll(string(c), "_", " ")
