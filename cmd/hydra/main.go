@@ -2629,6 +2629,9 @@ func cmdMCPRegistry() *cobra.Command {
 	audit := &cobra.Command{
 		Use:   "audit",
 		Short: "Resolve installed MCP servers against the synced registry and score them",
+		Long: "Tool descriptions are checked only for a server with a saved tools/list result at\n" +
+			"$HYDRA_HOME/mcp_tools/<server>.json, shaped {\"tools\": [...]}. Audit never starts a\n" +
+			"server to ask for one. A changed tool sends a trusted server back to provisional.",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			cwd, _ := os.Getwd()
 			rpt, err := mcpregistry.Audit(cmd.Context(), cwd)
@@ -2672,6 +2675,7 @@ func cmdMCPRegistry() *cobra.Command {
 						e.NearestMatch, e.NearestDist)
 					fmt.Printf("             %s\n", dimStyle.Render(note))
 				}
+				printToolReport(e)
 			}
 			return nil
 		},
@@ -5560,4 +5564,26 @@ func humanAge(d time.Duration) string {
 // printAuditDetail prints one evidence line under an audited server.
 func printAuditDetail(category, detail string) {
 	fmt.Printf("               %-11s %s\n", category, detail)
+}
+
+// printToolReport shows what a server's tool descriptions say, or that nothing was read (#1303).
+func printToolReport(e mcpregistry.AuditEntry) {
+	if !e.ToolsChecked {
+		missing := "not checked, no tools/list snapshot at " + mcpregistry.ToolsSnapshotPath(e.Name)
+		printAuditDetail("tools", warnStyle.Render(missing))
+		return
+	}
+	for _, f := range e.ToolFindings {
+		printAuditDetail("tools", warnStyle.Render(f.String()))
+	}
+	if e.ToolDrift == nil {
+		return
+	}
+	changedAt := e.ToolDrift.At.Format(time.DateOnly)
+	printAuditDetail("tool drift", warnStyle.Render("tools changed on "+changedAt))
+	for _, c := range e.ToolDrift.Changes {
+		for _, line := range c.Lines() {
+			printAuditDetail("", dimStyle.Render(line))
+		}
+	}
 }

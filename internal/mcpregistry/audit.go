@@ -35,6 +35,10 @@ type AuditEntry struct {
 	NearestDist    int            `json:"nearest_distance,omitempty"` // edit distance to NearestMatch, -1 if not computed
 	Score          *Score         `json:"score,omitempty"`
 	LifecycleState LifecycleState `json:"lifecycle_state,omitempty"`
+	// ToolsChecked is false when no tools/list snapshot exists, so silence is never read as clean.
+	ToolsChecked bool                 `json:"tools_checked"`
+	ToolFindings []DescriptionFinding `json:"tool_findings,omitempty"`
+	ToolDrift    *ToolDrift           `json:"tool_drift,omitempty"`
 }
 
 // AuditReport is the result of `hyctl mcp registry audit`.
@@ -81,6 +85,14 @@ func Audit(ctx context.Context, cwd string) (*AuditReport, error) {
 
 	for _, s := range installed {
 		entry := AuditEntry{InstalledServer: s, Status: StatusUnresolved, NearestDist: -1}
+		tools, toolsErr := loadToolSnapshot(s.Name)
+		if toolsErr != nil {
+			return nil, toolsErr
+		}
+		if tools != nil {
+			entry.ToolsChecked = true
+			entry.ToolFindings = CheckDescriptions(tools)
+		}
 		if !s.Remote && s.Package != "" {
 			if match, ok := index[s.Package]; ok {
 				entry.Status = StatusVerified
@@ -94,10 +106,11 @@ func Audit(ctx context.Context, cwd string) (*AuditReport, error) {
 				if hadPrev {
 					prevPtr = &prev
 				}
-				next := Advance(prevPtr, match, score, now)
+				next := Advance(prevPtr, match, score, tools, now)
 				states[match.Name] = next
 				statesChanged = true
 				entry.LifecycleState = next.State
+				entry.ToolDrift = next.ToolDrift
 			} else if corpus != nil {
 				nearest, dist := NearestIdentifier(s.Package, corpus)
 				entry.NearestMatch, entry.NearestDist = nearest, dist
