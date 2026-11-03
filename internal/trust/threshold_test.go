@@ -14,75 +14,138 @@ import (
 	"github.com/ankit373/hydra/internal/reliability"
 )
 
-// honestSource states p and is right at rate p.
-func honestSource(rng *rand.Rand, n int) []reliability.Observation {
-	obs := make([]reliability.Observation, n)
-	for i := range obs {
-		stated := rng.Float64()
-		obs[i] = reliability.Observation{Predicted: stated, Correct: rng.Float64() < stated}
+// simulatedRun votes for the right answer 80% of the time, A being right 60% of the
+// time. Each vote moves the leader's log-odds by logit(0.8), and it stops at 0.99.
+func simulatedRun(rng *rand.Rand) heldOutRun {
+	aRight := rng.Float64() < 0.6
+	step := logit(0.8)
+	var lambda float64
+	var ledger []Evidence
+	for range 8 {
+		if (rng.Float64() < 0.8) == aRight {
+			lambda += step
+		} else {
+			lambda -= step
+		}
+		lead := "A"
+		if lambda < 0 {
+			lead = "B"
+		}
+		leadLambda := math.Abs(lambda)
+		ledger = append(ledger, Evidence{Candidate: lead, LambdaAfter: leadLambda})
+		if leadLambda >= logit(0.99) {
+			break
+		}
 	}
-	return obs
+	return heldOutRun{ledger: ledger, correct: map[string]bool{"A": aRight, "B": !aRight}}
 }
 
-// The chosen cutoff must keep the accepted error rate under target on data it never saw.
-func TestChooseThreshold_HoldsTargetOnFreshData(t *testing.T) {
+func simulatedRuns(rng *rand.Rand, n int) []heldOutRun {
+	runs := make([]heldOutRun, n)
+	for i := range runs {
+		runs[i] = simulatedRun(rng)
+	}
+	return runs
+}
+
+// sameRun repeats one ledger n times, each judged by the same verdicts.
+func sameRun(n int, correct map[string]bool, ledger ...Evidence) []heldOutRun {
+	runs := make([]heldOutRun, n)
+	for i := range runs {
+		runs[i] = heldOutRun{ledger: ledger, correct: correct}
+	}
+	return runs
+}
+
+// The chosen cutoff must keep the accepted error rate under target on runs it never saw.
+func TestChooseThreshold_HoldsTargetOnFreshRuns(t *testing.T) {
 	rng := rand.New(rand.NewSource(11))
-	th, err := ChooseThreshold(honestSource(rng, 10000), 0.1, 0.9)
+	th, err := chooseThreshold(simulatedRuns(rng, 5000), 0.1, 0.9)
 	if err != nil {
 		t.Fatal(err)
 	}
 	accepted, wrong := 0, 0
-	for _, o := range honestSource(rng, 100000) {
-		if o.Predicted < th.Accept {
+	for _, r := range simulatedRuns(rng, 50000) {
+		correct, stopped := r.stop(th.accept)
+		if !stopped {
 			continue
 		}
 		accepted++
-		if !o.Correct {
+		if !correct {
 			wrong++
 		}
 	}
 	rate := float64(wrong) / float64(accepted)
-	if rate > th.Target {
-		t.Errorf("fresh error rate %.4f at accept %.2f, want <= %.2f", rate, th.Accept, th.Target)
+	if rate > th.target {
+		t.Errorf("fresh error rate %.4f at accept %.2f, want <= %.2f", rate, th.accept, th.target)
 	}
 }
 
 func TestChooseThreshold_ReportsTargetConfidenceAndSplit(t *testing.T) {
 	rng := rand.New(rand.NewSource(12))
-	th, err := ChooseThreshold(honestSource(rng, 10000), 0.1, 0.9)
+	th, err := chooseThreshold(simulatedRuns(rng, 5000), 0.1, 0.9)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if th.Target != 0.1 || th.Confidence != 0.9 || th.Split != 10000 {
-		t.Errorf("threshold = %+v, want target 0.1, confidence 0.9, split 10000", th)
+	if th.target != 0.1 || th.confidence != 0.9 || th.split != 5000 {
+		t.Errorf("threshold = %+v, want target 0.1, confidence 0.9, split 5000", th)
 	}
-	if th.Accepted == 0 || th.Errors > th.Accepted {
-		t.Errorf("threshold = %+v, want a non-empty accepted set with errors inside it", th)
+	if th.accepted == 0 || th.wrong > th.accepted {
+		t.Errorf("threshold = %+v, want a non-empty accepted set with wrong answers inside it", th)
 	}
 }
 
 func TestChooseThreshold_BelowFloorIsRefused(t *testing.T) {
 	rng := rand.New(rand.NewSource(13))
-	_, err := ChooseThreshold(honestSource(rng, reliability.MinObservations-1), 0.1, 0.9)
+	_, err := chooseThreshold(simulatedRuns(rng, reliability.MinObservations-1), 0.1, 0.9)
 	if !errors.Is(err, reliability.ErrTooFew) {
 		t.Fatalf("err = %v, want ErrTooFew", err)
 	}
 }
 
-// A coin flip at every stated value has no cutoff that clears a 10% error rate.
+// A leader that is a coin flip at every confidence has no cutoff that clears a 10% error rate.
 func TestChooseThreshold_UnreachableTarget(t *testing.T) {
 	rng := rand.New(rand.NewSource(14))
-	obs := make([]reliability.Observation, 2000)
-	for i := range obs {
-		obs[i] = reliability.Observation{Predicted: rng.Float64(), Correct: rng.Intn(2) == 0}
+	runs := make([]heldOutRun, 2000)
+	for i := range runs {
+		ledger := []Evidence{
+			{Candidate: "A", LambdaAfter: logit(0.995)},
+		}
+		runs[i] = heldOutRun{ledger: ledger, correct: map[string]bool{"A": rng.Intn(2) == 0}}
 	}
-	if _, err := ChooseThreshold(obs, 0.1, 0.9); !errors.Is(err, ErrNoThreshold) {
-		t.Fatalf("err = %v, want ErrNoThreshold", err)
+	if _, err := chooseThreshold(runs, 0.1, 0.9); !errors.Is(err, errNoThreshold) {
+		t.Fatalf("err = %v, want errNoThreshold", err)
+	}
+}
+
+// Leaders that never pass even odds give no cutoff, not one that accepts on no evidence.
+func TestChooseThreshold_NeverAtOrBelowEvenOdds(t *testing.T) {
+	correct := map[string]bool{"A": true}
+	runs := sameRun(1000, correct, Evidence{Candidate: "A", LambdaAfter: logit(0.3)})
+	th, err := chooseThreshold(runs, 0.1, 0.95)
+	if !errors.Is(err, errNoThreshold) {
+		t.Fatalf("threshold = %+v, err = %v, want errNoThreshold", th, err)
+	}
+}
+
+// The verdict that counts is the leader's where Run would stop, not where the run ended.
+func TestChooseThreshold_JudgesTheLeaderWhereRunStops(t *testing.T) {
+	correct := map[string]bool{"B": true}
+	runs := sameRun(1000, correct,
+		Evidence{Candidate: "A", LambdaAfter: logit(0.9)},
+		Evidence{Candidate: "B", LambdaAfter: logit(0.99)},
+	)
+	th, err := chooseThreshold(runs, 0.1, 0.95)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if th.accept <= 0.9 {
+		t.Errorf("accept = %.2f, want above 0.9, where every run stops on the wrong answer", th.accept)
 	}
 }
 
 func TestChooseThreshold_RefusesBadArguments(t *testing.T) {
-	obs := honestSource(rand.New(rand.NewSource(15)), 100)
+	runs := simulatedRuns(rand.New(rand.NewSource(15)), 100)
 	tests := []struct {
 		name               string
 		target, confidence float64
@@ -94,7 +157,7 @@ func TestChooseThreshold_RefusesBadArguments(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			if _, err := ChooseThreshold(obs, tc.target, tc.confidence); err == nil {
+			if _, err := chooseThreshold(runs, tc.target, tc.confidence); err == nil {
 				t.Fatal("accepted")
 			}
 		})
@@ -128,11 +191,11 @@ func TestRun_AcceptThresholdMovesTheStop(t *testing.T) {
 	wantSamples := int(math.Ceil(logit(0.8) / L))
 
 	exec := &scriptExec{seq: []string{"A", "A", "A", "A", "A"}}
-	th := Threshold{Accept: 0.8}
+	th := threshold{accept: 0.8}
 	sources := nSources("sim", 5, 1)
 	target := Target{Confidence: 0.95}
 	ctx := context.Background()
-	res, err := Run(ctx, Task{Domain: "d"}, sources, exec, c, target, WithAcceptThreshold(th))
+	res, err := Run(ctx, Task{Domain: "d"}, sources, exec, c, target, withAcceptThreshold(th))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -141,10 +204,32 @@ func TestRun_AcceptThresholdMovesTheStop(t *testing.T) {
 	}
 }
 
+// Λ starts at 0, so a cutoff at or below even odds must not accept before any evidence.
+func TestRun_CutoffAtOrBelowEvenOddsIsIgnored(t *testing.T) {
+	for _, accept := range []float64{0.3, 0.5} {
+		c, _ := New("")
+		exec := &scriptExec{seq: []string{"A", "A", "A"}}
+		sources := nSources("uncalibrated", 3, 0)
+		target := Target{Confidence: 0.95}
+		opts := []RunOption{
+			AllowNoEvidence(),
+			withAcceptThreshold(threshold{accept: accept}),
+		}
+		res, err := Run(context.Background(), Task{Domain: "d"}, sources, exec, c, target, opts...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if res.Decision != DecisionStoppedOnBudget || res.Samples != 3 {
+			t.Errorf("accept %v: decision %v after %d samples, want stopped_on_budget after 3",
+				accept, res.Decision, res.Samples)
+		}
+	}
+}
+
 // With no verdicts, routing is byte-identical to a run that never heard of
 // thresholds, and that run still stops where Wald's bound says it should.
 func TestRun_NoDataRoutesByteIdentical(t *testing.T) {
-	th, chooseErr := ChooseThreshold(nil, 0.05, 0.9)
+	th, chooseErr := chooseThreshold(nil, 0.05, 0.9)
 	if !errors.Is(chooseErr, reliability.ErrTooFew) {
 		t.Fatalf("err = %v, want ErrTooFew", chooseErr)
 	}
@@ -165,7 +250,7 @@ func TestRun_NoDataRoutesByteIdentical(t *testing.T) {
 		return res, raw
 	}
 	plain, before := run()
-	_, after := run(WithAcceptThreshold(th))
+	_, after := run(withAcceptThreshold(th))
 	if !bytes.Equal(before, after) {
 		t.Errorf("no-data threshold changed the run:\nbefore %s\nafter  %s", before, after)
 	}

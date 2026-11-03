@@ -4,7 +4,6 @@ package trust
 
 import (
 	"fmt"
-	"math"
 	"slices"
 	"sort"
 	"sync"
@@ -12,142 +11,142 @@ import (
 	"github.com/ankit373/hydra/internal/reliability"
 )
 
-// Correction maps a source's stated probability to the accuracy it was measured
-// to have. The zero value is the identity, which is all a source below the floor gets.
-type Correction struct {
-	from []float64 // lowest stated probability in each block, ascending
-	to   []float64 // that block's fitted accuracy, nondecreasing
+// correction maps a source's stated probability to the accuracy it was measured
+// to have. Build one with fitCorrection; there is no identity value.
+type correction struct {
+	from  []float64 // lowest stated probability in each block, ascending
+	to    []float64 // that block's smoothed accuracy, nondecreasing, inside (0,1)
+	prior float64   // log-odds of the source's smoothed accuracy over all its verdicts
 }
 
-// FitCorrection fits a nondecreasing step function from stated probability to
+// tally is a run of verdicts: how many there were and how many were right.
+type tally struct {
+	hits, n float64
+}
+
+// rate is the rule of succession's estimate, (k+1)/(n+2), so a few verdicts that
+// went all one way stay finite evidence instead of a certainty.
+func (t tally) rate() float64 { return (t.hits + 1) / (t.n + 2) }
+
+// fitCorrection fits a nondecreasing step function from stated probability to
 // observed accuracy. Sorting is O(n log n); pooling adjacent violators is O(n).
-func FitCorrection(obs []reliability.Observation) (Correction, error) {
+func fitCorrection(obs []reliability.Observation) (correction, error) {
 	if len(obs) < reliability.MinObservations {
 		need := reliability.MinObservations
-		return Correction{}, fmt.Errorf("%w: have %d, need %d", reliability.ErrTooFew, len(obs), need)
+		return correction{}, fmt.Errorf("%w: have %d, need %d", reliability.ErrTooFew, len(obs), need)
 	}
 	if err := checkProbabilities(obs); err != nil {
-		return Correction{}, err
+		return correction{}, err
 	}
 	sorted := slices.Clone(obs)
 	slices.SortFunc(sorted, func(a, b reliability.Observation) int {
 		return compareFloat(a.Predicted, b.Predicted)
 	})
 
-	// Equal stated values pool into one weighted point first, so Apply stays a function.
-	var stated, accuracy, weight []float64
+	// Equal stated values pool into one tally first, so apply stays a function.
+	var stated []float64
+	var points []tally
+	var total tally
 	for _, o := range sorted {
 		hit := 0.0
 		if o.Correct {
 			hit = 1
 		}
+		total.hits += hit
+		total.n++
 		last := len(stated) - 1
 		if last >= 0 && stated[last] == o.Predicted {
-			accuracy[last] += hit
-			weight[last]++
+			points[last].hits += hit
+			points[last].n++
 			continue
 		}
 		stated = append(stated, o.Predicted)
-		accuracy = append(accuracy, hit)
-		weight = append(weight, 1)
-	}
-	for i := range accuracy {
-		accuracy[i] /= weight[i]
+		points = append(points, tally{hits: hit, n: 1})
 	}
 
-	// n verdicts cannot support a rate past the rule of succession's, so a block
-	// that went 0 or 1 does not become unbounded evidence.
-	n := float64(len(obs))
-	lo, hi := 1/(n+2), (n+1)/(n+2)
-	var c Correction
-	for i, v := range pav(accuracy, weight) {
-		bounded := math.Min(math.Max(v, lo), hi)
-		if len(c.to) > 0 && bounded == c.to[len(c.to)-1] {
-			continue
-		}
-		c.from = append(c.from, stated[i])
-		c.to = append(c.to, bounded)
+	c := correction{prior: logit(total.rate())}
+	for _, b := range pav(points) {
+		c.from = append(c.from, stated[b.first])
+		c.to = append(c.to, b.rate())
 	}
 	return c, nil
 }
 
-// Apply returns the corrected probability. A stated value below the first block
+// apply returns the corrected probability. A stated value below the first block
 // takes that block's accuracy, since nothing lower was ever observed.
-func (c Correction) Apply(stated float64) float64 {
-	if len(c.from) == 0 {
-		return stated
-	}
+func (c correction) apply(stated float64) float64 {
 	next := sort.Search(len(c.from), func(i int) bool { return c.from[i] > stated })
 	return c.to[max(next-1, 0)]
 }
 
-// pav returns the weighted least-squares nondecreasing fit to y. Each point is
-// pushed once and merged away at most once, so the pass is O(n).
-func pav(y, w []float64) []float64 {
-	type block struct {
-		sum, weight float64
-		size        int
-	}
-	stack := make([]block, 0, len(y))
-	for i := range y {
-		stack = append(stack, block{sum: w[i] * y[i], weight: w[i], size: 1})
+// llr is the likelihood ratio (nats) of the stated value: the corrected log-odds
+// less the source's base rate, so summing it over sources counts no prior.
+func (c correction) llr(stated float64) float64 {
+	return logit(c.apply(stated)) - c.prior
+}
+
+// block is a run of adjacent points pooled together, starting at index first.
+type block struct {
+	tally
+	first int
+}
+
+// pav pools adjacent points until each block's own rate is nondecreasing. Each
+// point is pushed once and merged away at most once, so the pass is O(n).
+func pav(points []tally) []block {
+	stack := make([]block, 0, len(points))
+	for i, p := range points {
+		stack = append(stack, block{tally: p, first: i})
 		for len(stack) > 1 {
 			top := stack[len(stack)-1]
 			prev := stack[len(stack)-2]
-			if prev.sum/prev.weight <= top.sum/top.weight {
+			if prev.rate() <= top.rate() {
 				break
 			}
 			stack = stack[:len(stack)-1]
-			stack[len(stack)-1] = block{
-				sum:    prev.sum + top.sum,
-				weight: prev.weight + top.weight,
-				size:   prev.size + top.size,
-			}
+			stack[len(stack)-1].hits += top.hits
+			stack[len(stack)-1].n += top.n
 		}
 	}
-	fit := make([]float64, 0, len(y))
-	for _, b := range stack {
-		mean := b.sum / b.weight
-		for range b.size {
-			fit = append(fit, mean)
-		}
-	}
-	return fit
+	return stack
 }
 
-// Corrections holds one Correction per (source, domain), keyed the way the
+// corrections holds one correction per (source, domain), keyed the way the
 // calibration store is. Safe for concurrent use.
-type Corrections struct {
+type corrections struct {
 	mu    sync.RWMutex
-	byKey map[calibKey]Correction
+	byKey map[calibKey]correction
 }
 
-// Fit refits one (source, domain) from all its verdicts so far. Below the floor
-// the cell keeps what it had, which starts as the identity.
-func (cs *Corrections) Fit(source, domain string, obs []reliability.Observation) error {
-	c, err := FitCorrection(obs)
+// fit refits one (source, domain) from all its verdicts so far. Below the floor
+// the cell keeps what it had, which starts as nothing.
+func (cs *corrections) fit(source, domain string, obs []reliability.Observation) error {
+	c, err := fitCorrection(obs)
 	if err != nil {
 		return err
 	}
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
 	if cs.byKey == nil {
-		cs.byKey = map[calibKey]Correction{}
+		cs.byKey = map[calibKey]correction{}
 	}
 	cs.byKey[keyFor(source, domain)] = c
 	return nil
 }
 
-// LLR is the evidence (nats) a stated probability carries for the answer being
-// correct, after this source's correction. A value that is not a probability carries none.
-func (cs *Corrections) LLR(source, domain string, stated float64) float64 {
+// llr is the evidence (nats) a stated probability carries for the answer being
+// correct. An unfitted source or a value that is not a probability carries none.
+func (cs *corrections) llr(source, domain string, stated float64) float64 {
 	if !isProbability(stated) {
 		return 0
 	}
 	cs.mu.RLock()
-	c := cs.byKey[keyFor(source, domain)]
+	c, ok := cs.byKey[keyFor(source, domain)]
 	cs.mu.RUnlock()
-	return logit(clamp01(c.Apply(stated)))
+	if !ok {
+		return 0
+	}
+	return c.llr(stated)
 }
 
 // checkProbabilities refuses rather than clamps, as reliability.Evaluate does: a

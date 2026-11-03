@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"slices"
 
 	"github.com/ankit373/hydra/internal/reliability"
 )
@@ -15,67 +14,87 @@ import (
 // before any data is seen, which is what lets one union bound cover every point on it.
 const thresholdGrid = 100
 
-// ErrNoThreshold reports that no threshold on the grid meets the target at the
-// stated confidence, so the caller keeps the bound it already has.
-var ErrNoThreshold = errors.New("trust: no accept threshold meets the target")
+// lowestStep is the smallest grid step tried. Λ starts at 0, so a cutoff at or below
+// even odds would let Run accept on no evidence at all.
+const lowestStep = thresholdGrid/2 + 1
 
-// Threshold is an accept threshold chosen on held-out verdicts, with what it
-// was asked for and what it was chosen on. The zero value means none was chosen.
-type Threshold struct {
-	Accept     float64 `json:"accept"`     // accept an answer stated at or above this
-	Target     float64 `json:"target"`     // bound on the error rate among accepted answers
-	Confidence float64 `json:"confidence"` // probability that bound holds
-	Split      int     `json:"split"`      // held-out pairs it was chosen on
-	Accepted   int     `json:"accepted"`   // of those, how many it accepts
-	Errors     int     `json:"errors"`     // and how many of those were wrong
+// errNoThreshold reports that no threshold on the grid meets the target at the
+// stated confidence, so the caller keeps the bound it already has.
+var errNoThreshold = errors.New("trust: no accept threshold meets the target")
+
+// threshold is an accept threshold chosen on held-out runs, with what it was
+// asked for and what it was chosen on. The zero value means none was chosen.
+type threshold struct {
+	accept     float64 // stop once the leader's confidence reaches this
+	target     float64 // bound on the error rate among accepted runs
+	confidence float64 // probability that bound holds
+	split      int     // held-out runs it was chosen on
+	accepted   int     // of those, how many it accepts
+	wrong      int     // and how many of those stopped on a wrong answer
 }
 
-// ChooseThreshold returns the lowest grid threshold whose accepted error rate an exact binomial
-// test puts under target. Each test runs at (1-confidence)/thresholdGrid, so all passes hold at once.
-func ChooseThreshold(heldOut []reliability.Observation, target, confidence float64) (Threshold, error) {
+// heldOutRun is one Run, on the same sources and calibration, checked afterwards. It must
+// reach confidence 0.99 or run out of sources, so every grid cutoff's stop was seen.
+type heldOutRun struct {
+	ledger  []Evidence
+	correct map[string]bool // candidate -> verified correct; a missing one counts as wrong
+}
+
+// stop replays Run's own test, Λ >= logit(accept), and reports whether the first
+// leader to pass it was right, or false if the run never got there.
+func (r heldOutRun) stop(accept float64) (correct, stopped bool) {
+	bound := logit(accept)
+	for _, e := range r.ledger {
+		if e.LambdaAfter >= bound {
+			return r.correct[e.Candidate], true
+		}
+	}
+	return false, false
+}
+
+// chooseThreshold returns the lowest grid cutoff whose accepted error rate an exact binomial
+// test puts under target, each at (1-confidence)/tests. O(grid * ledger entries) overall.
+func chooseThreshold(heldOut []heldOutRun, target, confidence float64) (threshold, error) {
 	if len(heldOut) < reliability.MinObservations {
 		need := reliability.MinObservations
-		return Threshold{}, fmt.Errorf("%w: have %d, need %d", reliability.ErrTooFew, len(heldOut), need)
+		return threshold{}, fmt.Errorf("%w: have %d, need %d", reliability.ErrTooFew, len(heldOut), need)
 	}
 	if target <= 0 || target >= 1 {
-		return Threshold{}, fmt.Errorf("trust: target error rate must be in (0,1), got %v", target)
+		return threshold{}, fmt.Errorf("trust: target error rate must be in (0,1), got %v", target)
 	}
 	if confidence <= 0 || confidence >= 1 {
-		return Threshold{}, fmt.Errorf("trust: confidence must be in (0,1), got %v", confidence)
+		return threshold{}, fmt.Errorf("trust: confidence must be in (0,1), got %v", confidence)
 	}
-	if err := checkProbabilities(heldOut); err != nil {
-		return Threshold{}, err
-	}
-	sorted := slices.Clone(heldOut)
-	slices.SortFunc(sorted, func(a, b reliability.Observation) int {
-		return compareFloat(b.Predicted, a.Predicted)
-	})
 
-	level := (1 - confidence) / thresholdGrid
-	var chosen Threshold
-	accepted, errs := 0, 0
-	for step := thresholdGrid - 1; step >= 1; step-- {
+	level := (1 - confidence) / (thresholdGrid - lowestStep)
+	var chosen threshold
+	for step := thresholdGrid - 1; step >= lowestStep; step-- {
 		accept := float64(step) / thresholdGrid
-		for accepted < len(sorted) && sorted[accepted].Predicted >= accept {
-			if !sorted[accepted].Correct {
-				errs++
+		accepted, wrong := 0, 0
+		for _, r := range heldOut {
+			correct, stopped := r.stop(accept)
+			if !stopped {
+				continue
 			}
 			accepted++
+			if !correct {
+				wrong++
+			}
 		}
-		if binomialCDF(errs, accepted, target) > level {
+		if binomialCDF(wrong, accepted, target) > level {
 			continue
 		}
-		chosen = Threshold{
-			Accept:     accept,
-			Target:     target,
-			Confidence: confidence,
-			Split:      len(heldOut),
-			Accepted:   accepted,
-			Errors:     errs,
+		chosen = threshold{
+			accept:     accept,
+			target:     target,
+			confidence: confidence,
+			split:      len(heldOut),
+			accepted:   accepted,
+			wrong:      wrong,
 		}
 	}
-	if chosen.Accept == 0 {
-		return Threshold{}, ErrNoThreshold
+	if chosen.accept == 0 {
+		return threshold{}, errNoThreshold
 	}
 	return chosen, nil
 }

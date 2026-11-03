@@ -147,7 +147,8 @@ func Run(ctx context.Context, task Task, sources []Source, exec Executor, cal *C
 		return nil, &NoEvidenceError{Domain: task.Domain, Sources: sourceIDs(sources)}
 	}
 	A := math.Log((1 - alpha) / alpha)
-	if cfg.accept > 0 {
+	// At or below even odds the cutoff would accept with no evidence, since Λ starts at 0.
+	if cfg.accept > 0.5 {
 		A = logit(cfg.accept)
 	}
 
@@ -330,10 +331,10 @@ func AllowNoEvidence() RunOption {
 	return func(c *runConfig) { c.allowUncalibrated = true }
 }
 
-// WithAcceptThreshold accepts once the leader's confidence reaches th.Accept, a
-// cutoff chosen on held-out verdicts, instead of Wald's bound. The zero Threshold changes nothing.
-func WithAcceptThreshold(th Threshold) RunOption {
-	return func(c *runConfig) { c.accept = th.Accept }
+// withAcceptThreshold stops once the leader's confidence reaches th.accept instead of
+// Wald's bound. The zero threshold, which is what no data gives, changes nothing.
+func withAcceptThreshold(th threshold) RunOption {
+	return func(c *runConfig) { c.accept = th.accept }
 }
 
 // ErrNoEvidence is returned when no source carries diagnostic power for the
