@@ -6,13 +6,13 @@
 // A cache that guesses returns a confident answer to a question nobody asked,
 // which is the one failure mode none of the surrounding machinery can catch:
 // every other routing decision degrades to a worse head, this one degrades to
-// the wrong answer. So an exact match on the normalized prompt is the only
-// thing served without an argument, and every near match has to pass both a
-// measured similarity and the content-token gate in match.go.
+// the wrong answer. So what is served has to be the same question, prompt,
+// system prompt and output cap alike, answered by a head at least as strong as
+// this run wants; a near match passes the gates in match.go on top of that.
 package cache
 
 import (
-	"bytes"
+	"bufio"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -48,6 +48,11 @@ const MaxResponseBytes = 256 << 10
 // a later hit return an empty answer as though the head had produced it.
 var ErrNoResponse = errors.New("cache: an entry needs a response")
 
+// ErrTruncated rejects an answer the executor reported as capped. Storing a
+// fragment makes it the permanent answer to that question, and every later
+// caller is told it finished normally (#1155).
+var ErrTruncated = errors.New("cache: a truncated answer is not an answer")
+
 // Entry is one answer, and enough about how it was produced to say so when it
 // is served.
 type Entry struct {
@@ -58,6 +63,19 @@ type Entry struct {
 	Model    string `json:"model,omitempty"`
 	Enum     string `json:"enum,omitempty"`
 	Domain   string `json:"domain,omitempty"`
+	// System is the system prompt that framed the question, normalized. In the
+	// key, and recorded so answers.jsonl says which instructions produced an
+	// answer rather than leaving an operator to guess (#1154).
+	System string `json:"system,omitempty"`
+	// MaxTokens is the cap the answer was produced under and Tier how strong
+	// the head that produced it was. Stored rather than re-derived: routing.yaml
+	// is editable and the head is long gone by the time this is read.
+	MaxTokens int `json:"max_tokens,omitempty"`
+	Tier      int `json:"tier,omitempty"`
+	// Truncated is the executor's report that output was capped. Never
+	// persisted, because Put refuses such an entry: a fragment replayed later
+	// is read as a whole answer and told it finished normally (#1155).
+	Truncated bool `json:"-"`
 	// CostUSD is what producing this answer cost. A hit avoids approximately
 	// that, which is the only defensible reading of "spend avoided": what the
 	// same work cost last time, not a guess at what it would cost now.
@@ -69,14 +87,24 @@ type Entry struct {
 	Vec string `json:"vec,omitempty"`
 }
 
+// query is what this entry is an answer to, the one adapter between a stored
+// row and the key derivation both directions share.
+func (e Entry) query() Query {
+	return Query{Prompt: e.Prompt, System: e.System, MaxTokens: e.MaxTokens, Tier: e.Tier}
+}
+
 // Hit is a served answer and the evidence for serving it.
 type Hit struct {
 	Entry
 	// Similarity is 1 for an exact match on the normalized prompt, and the
 	// measured cosine otherwise.
 	Similarity float64
-	Exact      bool
-	Age        time.Duration
+	// Measured says whether Similarity is a reading at all. On a machine with
+	// no embedder the content gate serves alone, and reporting that as "0.0%
+	// similar" read as the cache answering an unrelated prompt (#1167).
+	Measured bool
+	Exact    bool
+	Age      time.Duration
 }
 
 // Stats is what the store has done, persisted so a report reads a machine's
@@ -90,10 +118,10 @@ type Stats struct {
 	Misses  int64 `json:"misses"`
 	// Refused counts prompts the cache declined rather than simply did not
 	// hold: the same content words in another order, one a similarity alone
-	// would have served, or one whose words matched and whose measured
-	// similarity did not. Each is a gate doing its job, which is why they are
-	// reported rather than folded into misses; a prompt nothing resembled is a
-	// miss.
+	// would have served, one whose words matched and whose measured similarity
+	// did not, and one whose answer came from a weaker tier than this run
+	// asked for. Each is a gate doing its job, which is why they are reported
+	// rather than folded into misses; a prompt nothing resembled is a miss.
 	Refused    int64      `json:"refused"`
 	Evicted    int64      `json:"evicted"`
 	AvoidedUSD float64    `json:"avoided_usd"`
@@ -157,24 +185,51 @@ func (s *Store) SetBudget(b int64) {
 }
 
 func (s *Store) load() error {
-	raw, err := os.ReadFile(entriesPath(s.dir))
+	f, err := os.Open(entriesPath(s.dir))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil
 		}
 		return err
 	}
-	dec := json.NewDecoder(bytes.NewReader(raw))
+	defer f.Close()
+	// Read line by line rather than decoding a stream: a decoder cannot resync
+	// after a bad token, so one corrupt line discarded every entry after it
+	// while the comment above OpenDir promised it was skipped (#1167).
+	r := bufio.NewReader(f)
 	for {
-		var e Entry
-		if err := dec.Decode(&e); err != nil {
-			break
+		line, err := r.ReadBytes('\n')
+		s.loadLine(line)
+		if err != nil {
+			return nil
 		}
-		if e.Key == "" || e.Response == "" {
-			continue
-		}
-		s.addLoaded(e)
 	}
+}
+
+// loadLine adds one stored answer, skipping anything it cannot vouch for.
+// A key that is not the one this version derives was written under another
+// scheme, and nothing here can say what question it answers (#1154).
+func (s *Store) loadLine(line []byte) {
+	var e Entry
+	if err := json.Unmarshal(line, &e); err != nil {
+		return
+	}
+	if e.Response == "" || e.Key != Key(e.query()) {
+		return
+	}
+	s.addLoaded(e)
+}
+
+// reloadLocked rebuilds the store from disk, which is the authority while the
+// file lock is held: every writer rewrites the whole file under it, so a
+// process holding a stale copy would erase another's answers (#1167).
+func (s *Store) reloadLocked() error {
+	s.entries, s.vecs, s.terms, s.bytes = nil, nil, nil, 0
+	s.byKey = map[string]int{}
+	if err := s.load(); err != nil {
+		return err
+	}
+	s.stats = readCounters(s.dir)
 	return nil
 }
 
@@ -212,8 +267,11 @@ func (s *Store) Put(e Entry) error {
 	if len(e.Response) > MaxResponseBytes {
 		return fmt.Errorf("cache: response is %d bytes, over the %d limit", len(e.Response), MaxResponseBytes)
 	}
-	e.Prompt = Normalize(e.Prompt)
-	e.Key = Key(e.Prompt)
+	if e.Truncated {
+		return ErrTruncated
+	}
+	e.Prompt, e.System = Normalize(e.Prompt), Normalize(e.System)
+	e.Key = Key(e.query())
 	if e.TS.IsZero() {
 		e.TS = time.Now().UTC()
 	}
@@ -226,6 +284,9 @@ func (s *Store) Put(e Entry) error {
 	}
 	defer lock.Unlock()
 
+	if err := s.reloadLocked(); err != nil {
+		return err
+	}
 	s.addLoaded(e)
 	if err := s.evictLocked(); err != nil {
 		return err
@@ -293,17 +354,20 @@ type Outcome struct {
 
 // Lookup answers from the store, or reports that it would not.
 //
-// An exact match on the normalized prompt is served unconditionally: it is the
-// same question, byte for byte, once whitespace and case-insensitive framing
-// are gone. A near match has to clear both the similarity threshold and the
-// content-token gate.
-func (s *Store) Lookup(prompt string, vec []float32, threshold float64) Outcome {
-	norm := Normalize(prompt)
+// An exact key match is the same question byte for byte, prompt, system prompt
+// and cap alike, and is served on one condition: the stored answer came from a
+// head at least as strong as this one wants. A near match has to clear the
+// similarity threshold and the content-token gate as well.
+func (s *Store) Lookup(q Query, vec []float32, threshold float64) Outcome {
+	q.Prompt, q.System = Normalize(q.Prompt), Normalize(q.System)
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if i, ok := s.byKey[Key(norm)]; ok {
+	if i, ok := s.byKey[Key(q)]; ok {
+		if !atLeastAsStrong(s.entries[i].Tier, q.Tier) {
+			return Outcome{Refused: true}
+		}
 		return Outcome{Hit: s.hitLocked(i, 1, true), Found: true}
 	}
 
@@ -313,30 +377,54 @@ func (s *Store) Lookup(prompt string, vec []float32, threshold float64) Outcome 
 	// measured over 79,800 pairs that must all be refused, the token gate
 	// refuses every one on its own and cosine alone refuses all but one, so
 	// requiring a vector bought no refusal and cost 8% of restatements (#1015).
-	terms := content(norm)
-	best := s.sameQuestionLocked(terms, norm)
+	terms := content(q.Prompt)
+	best := s.sameQuestionLocked(terms, q)
 	if best < 0 {
 		// Nothing asks the same thing, so say which kind of nothing it is. The
 		// same words in another order is the gate refusing, and answering that
 		// needs no model, which matters because the dense test below cannot
 		// run at all without a vector (#1025).
-		if s.sameWordsLocked(terms) {
+		if s.sameWordsLocked(terms, q) {
 			return Outcome{Refused: true}
 		}
-		if i, _ := s.nearestLocked(vec, threshold); i >= 0 {
+		if i, _ := s.nearestLocked(vec, threshold, q); i >= 0 {
 			return Outcome{Refused: true}
 		}
 		return Outcome{}
 	}
+	if !atLeastAsStrong(s.entries[best].Tier, q.Tier) {
+		return Outcome{Refused: true}
+	}
 
-	sim := 0.0
+	sim, measured := 0.0, false
 	if len(vec) > 0 && len(s.vecs[best]) > 0 {
-		sim = embed.Cosine(s.vecs[best], vec)
+		sim, measured = embed.Cosine(s.vecs[best], vec), true
 		if sim < threshold {
 			return Outcome{Refused: true}
 		}
 	}
-	return Outcome{Hit: s.hitLocked(best, sim, false), Found: true}
+	hit := s.hitLocked(best, sim, false)
+	hit.Measured = measured
+	return Outcome{Hit: hit, Found: true}
+}
+
+// inScopeLocked reports whether an entry answers the question this query
+// asked. A different system prompt or a different cap is a different question,
+// so an entry outside them is not held rather than refused (#1154, #1155).
+func (s *Store) inScopeLocked(i int, q Query) bool {
+	return s.entries[i].System == q.System && s.entries[i].MaxTokens == q.MaxTokens
+}
+
+// atLeastAsStrong reports whether an entry's head was at least as strong as
+// the one this query wants. Serving down is defensible; serving up defeats the
+// escalation workflow, where `--tier 2` after a weak answer must run a head.
+//
+// An unrecorded tier cannot be shown to clear a stated bar (#1156).
+func atLeastAsStrong(entry, want int) bool {
+	if want <= 0 {
+		return true
+	}
+	return entry > 0 && entry <= want
 }
 
 // sameQuestionLocked is the first stored entry asking the same thing, or -1.
@@ -356,7 +444,7 @@ func (s *Store) Lookup(prompt string, vec []float32, threshold float64) Outcome 
 // sameWordsLocked reports whether any entry asks with exactly these content
 // words in some other order, which is the reversal gate refusing rather than
 // the store not holding the answer. Repeats count, as they do in sameQuestion.
-func (s *Store) sameWordsLocked(terms []string) bool {
+func (s *Store) sameWordsLocked(terms []string, q Query) bool {
 	if len(terms) == 0 {
 		return false
 	}
@@ -365,7 +453,7 @@ func (s *Store) sameWordsLocked(terms []string) bool {
 		want[t]++
 	}
 	for i := range s.terms {
-		if matchesCounts(want, s.terms[i]) {
+		if s.inScopeLocked(i, q) && matchesCounts(want, s.terms[i]) {
 			return true
 		}
 	}
@@ -392,13 +480,13 @@ func matchesCounts(want map[string]int, terms []string) bool {
 	return left == 0
 }
 
-func (s *Store) sameQuestionLocked(terms []string, norm string) int {
+func (s *Store) sameQuestionLocked(terms []string, q Query) int {
 	for i := range s.terms {
 		// Referents are read off the stored prompt rather than kept in a
 		// slice beside terms, for the reason nearestLocked gives about maps:
 		// a second structure to hold in step with eviction is a second way to
 		// be wrong, and the scan is already linear (#1035).
-		if sameQuestion(terms, s.terms[i]) && sameReferents(norm, s.entries[i].Prompt) {
+		if s.inScopeLocked(i, q) && sameQuestion(terms, s.terms[i]) && sameReferents(q.Prompt, s.entries[i].Prompt) {
 			return i
 		}
 	}
@@ -410,6 +498,13 @@ func (s *Store) sameQuestionLocked(terms []string, norm string) int {
 func (s *Store) Record(o Outcome) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// Read-modify-write under the same lock the entries take: a process that
+	// held a stale copy used to overwrite another's tallies. Without the lock
+	// the update is still applied, since a report must never fail work (#1167).
+	if lock, err := util.Lock(util.LockPath(entriesPath(s.dir))); err == nil {
+		defer lock.Unlock()
+		s.stats = readCounters(s.dir)
+	}
 	switch {
 	case o.Found:
 		s.stats.Hits++
@@ -431,13 +526,13 @@ func (s *Store) Record(o Outcome) {
 // nearestLocked is the closest stored vector at or above threshold, or -1.
 // Exhaustive because the entry count is bounded: an approximate index would
 // add a second way to be wrong for a scan that costs microseconds.
-func (s *Store) nearestLocked(vec []float32, threshold float64) (int, float64) {
+func (s *Store) nearestLocked(vec []float32, threshold float64, q Query) (int, float64) {
 	if len(vec) == 0 || threshold <= 0 {
 		return -1, 0
 	}
 	best, bestSim := -1, threshold
 	for i, stored := range s.vecs {
-		if len(stored) != len(vec) {
+		if len(stored) != len(vec) || !s.inScopeLocked(i, q) {
 			continue
 		}
 		if sim := embed.Cosine(stored, vec); sim >= bestSim {
@@ -456,7 +551,7 @@ func (s *Store) nearestLocked(vec []float32, threshold float64) (int, float64) {
 
 func (s *Store) hitLocked(i int, sim float64, exact bool) Hit {
 	e := s.entries[i]
-	return Hit{Entry: e, Similarity: sim, Exact: exact, Age: time.Since(e.TS)}
+	return Hit{Entry: e, Similarity: sim, Measured: exact, Exact: exact, Age: time.Since(e.TS)}
 }
 
 // Stat is what the store holds and what it has done.
@@ -543,5 +638,5 @@ func writeCounters(dir string, c counters) error {
 // entryBytes is what an entry costs on disk, near enough for a budget: the
 // text plus the encoded vector, which is everything that scales with it.
 func entryBytes(e Entry) int64 {
-	return int64(len(e.Prompt) + len(e.Response) + len(e.Vec) + len(e.Head) + len(e.Model) + 64)
+	return int64(len(e.Prompt) + len(e.System) + len(e.Response) + len(e.Vec) + len(e.Head) + len(e.Model) + 64)
 }
