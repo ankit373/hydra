@@ -44,6 +44,9 @@ queue_rules:
     queue_conditions:
       - base=main
       - head~=^release-please--
+      # A fork can name a branch anything, so the bot and the repo are what identify release-please.
+      - author=github-actions[bot]
+      - -from-fork
       - -files~=^(?!(CHANGELOG\.md|\.release-please-manifest\.json)$)
     merge_conditions: []
 
@@ -99,6 +102,9 @@ pull_request_rules:
     conditions:
       - base=main
       - head~=^release-please--
+      # A fork can name a branch anything, so the bot and the repo are what identify release-please.
+      - author=github-actions[bot]
+      - -from-fork
       - -files~=^(?!(CHANGELOG\.md|\.release-please-manifest\.json)$)
     actions:
       review:
