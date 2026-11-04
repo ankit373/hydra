@@ -38,26 +38,40 @@
   </url>
   <url>
     <loc>https://hydra.uvansa.com/blog/</loc>
-    <lastmod>2026-10-02</lastmod>
+    <lastmod>2026-10-03</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
+  <!-- GENERATED:BLOG-URLS -->
+  <url>
+    <loc>https://hydra.uvansa.com/blog/declared-not-enforced-isolation.html</loc>
+    <lastmod>2026-10-03</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://hydra.uvansa.com/blog/jev-already-inbuilt.html</loc>
+    <lastmod>2026-10-03</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
   <url>
     <loc>https://hydra.uvansa.com/blog/a-test-that-cannot-fail.html</loc>
-    <lastmod>2026-10-02</lastmod>
+    <lastmod>2026-10-03</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
     <loc>https://hydra.uvansa.com/blog/twenty-four-green-builds.html</loc>
-    <lastmod>2026-10-02</lastmod>
+    <lastmod>2026-10-03</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
     <loc>https://hydra.uvansa.com/blog/the-diagnosis-is-unanimous.html</loc>
-    <lastmod>2026-10-02</lastmod>
+    <lastmod>2026-10-03</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
+  <!-- /GENERATED:BLOG-URLS -->
 </urlset>
