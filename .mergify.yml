@@ -44,6 +44,9 @@ queue_rules:
     queue_conditions:
       - base=main
       - head~=^release-please--
+      # A fork can name a branch anything, so the bot and the repo are what identify release-please.
+      - author=github-actions[bot]
+      - -from-fork
       - -files~=^(?!(CHANGELOG\.md|\.release-please-manifest\.json)$)
     merge_conditions: []
 
@@ -63,14 +66,14 @@ queue_rules:
               - body~=(?m)^Release-As:\s*\d+\.\d+\.\d+\s*$
     merge_conditions: *ci
 
+  # CLA is a queue condition: merge_conditions run on Mergify's draft, which mergify[bot] authors (#1319).
   - name: release
     queue_conditions:
       - base~=^release/v
       - -draft
       - *conventional
-    merge_conditions:
-      - and: *ci
       - *cla
+    merge_conditions: *ci
     # merge, not rebase: a Mergify rebase is an unsigned git push (#1079).
     update_method: merge
 
@@ -80,8 +83,8 @@ queue_rules:
       - base=develop
       - -draft
       - *conventional
-    merge_conditions:
       - *cla
+    merge_conditions: []
     update_method: merge
 
 pull_request_rules:
@@ -99,6 +102,9 @@ pull_request_rules:
     conditions:
       - base=main
       - head~=^release-please--
+      # A fork can name a branch anything, so the bot and the repo are what identify release-please.
+      - author=github-actions[bot]
+      - -from-fork
       - -files~=^(?!(CHANGELOG\.md|\.release-please-manifest\.json)$)
     actions:
       review:
