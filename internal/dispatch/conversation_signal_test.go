@@ -59,7 +59,7 @@ func TestConversationShape(t *testing.T) {
 // stay absent rather than reporting a conversation of zero turns (#1021).
 func TestDecide_SingleShotLeavesConversationAbsent(t *testing.T) {
 	var d *Dispatcher
-	dec := d.Decide(t.Context(), "rotate the signing key", "go", nil, nil)
+	dec := d.Decide(t.Context(), "rotate the signing key", "go", nil, nil, "")
 	if dec.Fired() {
 		t.Fatalf("a nil dispatcher with no rules fired: %+v", dec)
 	}

@@ -7,10 +7,12 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/ankit373/hydra/internal/budget"
 	"github.com/ankit373/hydra/internal/cache"
 	"github.com/ankit373/hydra/internal/classify"
 	"github.com/ankit373/hydra/internal/evalset"
 	"github.com/ankit373/hydra/internal/executor"
+	"github.com/ankit373/hydra/internal/provider"
 	"github.com/ankit373/hydra/internal/signals"
 	"github.com/ankit373/hydra/internal/trust"
 	"github.com/ankit373/hydra/registry"
@@ -63,7 +65,17 @@ func loadRules(home string) (*signals.Engine, error) {
 // msgs is the conversation when the caller has one, which today is `hyctl
 // serve`. Nil leaves the conversation signals absent, because a single-shot
 // dispatch is not a conversation of length zero (#1021).
-func (d *Dispatcher) Decide(ctx context.Context, prompt, domain string, blastRadius *int, msgs []executor.Message) signals.Decision {
+//
+// headID is Options.Head: a person or client pinned one head before routing
+// ever runs (hyctl serve, the desktop picker), which is the one moment a
+// per-head fact can be read without yet deciding which head gets the task.
+// Deriving it from whichever head selectHeads later picks would be circular,
+// since that pick itself can depend on this decision, which is also why
+// context.window_pct (see heuristic.go) stays absent rather than being read
+// the same way: this signal is only ever a fact about the pin, never about
+// the eventual candidate list. Empty leaves both budget.effective_context and
+// latency.p95_ms absent, same as no --file leaves graph.blast_radius absent.
+func (d *Dispatcher) Decide(ctx context.Context, prompt, domain string, blastRadius *int, msgs []executor.Message, headID string) signals.Decision {
 	in := signals.Input{Prompt: prompt, BlastRadius: blastRadius}
 	// Always derivable from the prompt, so the caller is not asked for it, and
 	// executor.EstimateTokens stays the only estimator in the tree.
@@ -80,6 +92,16 @@ func (d *Dispatcher) Decide(ctx context.Context, prompt, domain string, blastRad
 		cal := d.calibratedIn(domain)
 		in.Calibrated = &cal
 	}
+	if headID != "" {
+		if h, ok := d.findHead(headID); ok {
+			if eff, ok := budget.EffectiveContext(h); ok {
+				in.EffectiveContext = &eff
+			}
+			if p95, ok := d.latencyP95(h); ok {
+				in.LatencyP95MS = &p95
+			}
+		}
+	}
 	// Only when a rule asks. The lookup costs an embedding call and a pass over
 	// the corpus, and #750 removed a per-dispatch HTTP call for good reason; an
 	// empty signals.yaml must still route byte-identically.
@@ -87,6 +109,20 @@ func (d *Dispatcher) Decide(ctx context.Context, prompt, domain string, blastRad
 		in.CorpusPassRate, in.CorpusSupport = d.corpusEvidence(ctx, prompt)
 	}
 	return d.rules.Evaluate(in)
+}
+
+// findHead looks up a discovered head by id. Unlike pinHead it answers no
+// question about routability or local-only: those gate whether a dispatch may
+// use a head, this only reports what Hydra knows about one that is already
+// pinned, so a head that cannot run still gets an honest (absent) reading
+// rather than an error that would abort the whole dispatch over a signal.
+func (d *Dispatcher) findHead(id string) (provider.Head, bool) {
+	for _, h := range d.heads {
+		if h.ID == id {
+			return h, true
+		}
+	}
+	return provider.Head{}, false
 }
 
 // conversationShape reads the two facts vLLM SR's `conversation` family routes
