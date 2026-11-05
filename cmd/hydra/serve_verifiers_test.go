@@ -15,10 +15,13 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/ankit373/hydra/internal/config"
+	"github.com/ankit373/hydra/internal/decide"
 	"github.com/ankit373/hydra/internal/dispatch"
 	"github.com/ankit373/hydra/internal/executor"
+	"github.com/ankit373/hydra/internal/provider"
 	"github.com/ankit373/hydra/internal/rank"
 	"github.com/ankit373/hydra/internal/serve"
 	"github.com/ankit373/hydra/internal/testutil"
@@ -111,8 +114,8 @@ func TestServeRouter_OnlyAVerifiedClassEscalates(t *testing.T) {
 	}
 }
 
-// cascadeFixture is a sandboxed server whose LM Studio stub answers each model
-// from answers, with calls counted per model, and both heads measured in class.
+// cascadeFixture is a sandboxed server whose LiteLLM stub answers each model
+// from answers, with calls counted per model, every head measured in class.
 type cascadeFixture struct {
 	mu    sync.Mutex
 	calls map[string]int
@@ -128,11 +131,12 @@ func newCascadeFixture(t *testing.T, answers map[string]string, verifierMeasured
 	t.Helper()
 	testutil.NewSandbox(t)
 	f := &cascadeFixture{calls: map[string]int{}}
-	// Sorted, so the measured order (each next model one point weaker) is fixed.
+	// Sorted, so each next model is both dearer and measured stronger: the cost
+	// objective runs the first, and escalation climbs to the rest in order.
 	names := slices.Sorted(maps.Keys(answers))
-	var models []map[string]string
+	var models []map[string]any
 	for _, m := range names {
-		models = append(models, map[string]string{"id": m})
+		models = append(models, map[string]any{"model_name": m, "model_info": map[string]string{"litellm_provider": "openai"}})
 	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -151,8 +155,19 @@ func newCascadeFixture(t *testing.T, answers map[string]string, verifierMeasured
 			body.Model, answers[body.Model])
 	}))
 	t.Cleanup(srv.Close)
-	t.Setenv("HYDRA_LMSTUDIO_HOST", srv.URL)
+	t.Setenv("LITELLM_PROXY_URL", srv.URL)
 	if err := config.Save(&config.Config{Cortex: "cody"}); err != nil {
+		t.Fatal(err)
+	}
+	prices := map[string]any{}
+	for i, m := range names {
+		prices[m] = map[string]float64{"input_per_mtok": float64(i + 1), "output_per_mtok": float64(i + 1)}
+	}
+	raw, err := json.Marshal(map[string]any{"fetched_at": time.Now().UTC(), "source": "test", "models": prices})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(config.Dir(), "pricing_cache.json"), raw, 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -161,10 +176,9 @@ func newCascadeFixture(t *testing.T, answers map[string]string, verifierMeasured
 	if err != nil {
 		t.Fatal(err)
 	}
-	rate := 23
-	for _, m := range names {
-		recordN(t, cal, "lmstudio/"+m, rate, 25)
-		rate--
+	// Out of 400, so every head clears the cost constraint's bar whatever it declares.
+	for i, m := range names {
+		recordN(t, cal, "litellm/"+m, []int{380, 390, 395, 400}[i], 400)
 	}
 	if verifierMeasured {
 		for i := range 20 {
@@ -189,7 +203,7 @@ func newCascadeFixture(t *testing.T, answers map[string]string, verifierMeasured
 	if err != nil {
 		t.Fatal(err)
 	}
-	return f, serveRouter{d: d, objective: "quality", verifiers: verifiers, confidence: 0.95, maxEscalations: 2, cal: shared}
+	return f, serveRouter{d: d, objective: rank.Cost, verifiers: verifiers, confidence: 0.95, maxEscalations: 2, cal: shared}
 }
 
 func recordN(t *testing.T, cal *trust.Calibrator, source string, correct, total int) {
@@ -241,12 +255,12 @@ func costRowsByHead(t *testing.T) map[string]int {
 	return out
 }
 
-// The serve path end to end with no network: the measured-first head answers
-// off the label set, the verifier fails it, and the next head's label is served.
+// The serve path end to end with no network: the cheapest competent head answers
+// off the label set, the verifier fails it, and the stronger head's label is served.
 func TestServe_ClassificationCascadeEndToEnd(t *testing.T) {
 	f, r := newCascadeFixture(t, map[string]string{"first": "not a label", "second": "Card Arrival"}, true)
 	ans := chatClass(t, r, "run-e2e")
-	if ans.Output != "Card Arrival" || ans.Head != "lmstudio/second" {
+	if ans.Output != "Card Arrival" || ans.Head != "litellm/second" {
 		t.Errorf("served %q from %s, want the second head's label", ans.Output, ans.Head)
 	}
 	if f.called("first") != 1 || f.called("second") != 1 {
@@ -255,7 +269,7 @@ func TestServe_ClassificationCascadeEndToEnd(t *testing.T) {
 	if ans.InputTokens != 20 || ans.OutputTokens != 4 {
 		t.Errorf("usage %d/%d, want both calls summed (20/4)", ans.InputTokens, ans.OutputTokens)
 	}
-	if rows := costRowsByHead(t); rows["lmstudio/first"] != 1 || rows["lmstudio/second"] != 1 {
+	if rows := costRowsByHead(t); rows["litellm/first"] != 1 || rows["litellm/second"] != 1 {
 		t.Errorf("cost rows %v, want one per paid call", rows)
 	}
 	if entries, _ := os.ReadDir(filepath.Join(config.Dir(), "cache")); len(entries) != 0 {
@@ -266,7 +280,7 @@ func TestServe_ClassificationCascadeEndToEnd(t *testing.T) {
 // An uncalibrated verifier is decide's no-evidence rule: one head, its answer served.
 func TestServe_AnUncalibratedVerifierAsksOneHead(t *testing.T) {
 	f, r := newCascadeFixture(t, map[string]string{"first": "not a label", "second": "Card Arrival"}, false)
-	if ans := chatClass(t, r, "run-uncal"); ans.Head != "lmstudio/first" || f.called("second") != 0 {
+	if ans := chatClass(t, r, "run-uncal"); ans.Head != "litellm/first" || f.called("second") != 0 {
 		t.Errorf("served %s and asked second %d times; want first alone", ans.Head, f.called("second"))
 	}
 }
@@ -287,8 +301,9 @@ func TestServe_MaxEscalationsCapsCost(t *testing.T) {
 			if paid != maxEsc+1 {
 				t.Errorf("--max-escalations %d paid for %d calls, want %d", maxEsc, paid, maxEsc+1)
 			}
-			if ans.Head != "lmstudio/a" {
-				t.Errorf("served %s; with every answer failing, the first (most confident) stands", ans.Head)
+			// Priors climb with the measurement, so the strongest asked is the most confident.
+			if want := []string{"litellm/a", "litellm/b", "litellm/c"}[maxEsc]; ans.Head != want {
+				t.Errorf("served %s; with every answer failing, the most confident asked, %s, stands", ans.Head, want)
 			}
 		})
 	}
@@ -366,5 +381,41 @@ func TestServeVerifiers_LabelsBesideConfig(t *testing.T) {
 	t.Chdir(t.TempDir())
 	if _, err := serveVerifiers([]config.ServeVerifier{{Class: cascadeTestClass, Kind: "match", ID: "t", Labels: "t.labels"}}); err != nil {
 		t.Fatalf("a labels file beside config.toml did not load: %v", err)
+	}
+}
+
+// A catalogue prior of 96 against --confidence 0.95 is not evidence: with no
+// measured verifier the answer is served unaccepted, never Accepted.
+func TestEscalation_ThePriorAloneNeverAccepts(t *testing.T) {
+	cal, err := trust.New("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	verifiers, err := serveVerifiers([]config.ServeVerifier{{Class: cascadeTestClass, Kind: "match", ID: "t", Pattern: "ok"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := serveRouter{objective: rank.Quality, verifiers: verifiers, confidence: 0.95, maxEscalations: 2, cal: cal}
+	req := serve.Request{TaskClass: cascadeTestClass}
+	opts, ev, err := r.options(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	esc := r.escalationFor(ev, req, &opts)
+	res := &dispatch.Result{Output: "ok", Objective: rank.Quality, Head: provider.Head{ID: "h"},
+		Scores: map[string]rank.Score{"h": {Declared: 96, Effective: 96}}}
+	opts.Escalate(context.Background(), res)
+	if d := esc.cascade.Outcome().Decision; d == decide.Accepted {
+		t.Errorf("a prior of 0.96 alone was %q", d)
+	}
+}
+
+// Under quality the measured strongest runs first, so no head is measured to
+// beat it and a rejected answer stands rather than being escalated downhill.
+func TestServe_QualityNeverEscalatesDownhill(t *testing.T) {
+	f, r := newCascadeFixture(t, map[string]string{"first": "Card Arrival", "second": "not a label"}, true)
+	r.objective = rank.Quality
+	if ans := chatClass(t, r, "run-quality"); ans.Head != "litellm/second" || f.called("first") != 0 {
+		t.Errorf("served %s and asked first %d times; want second alone", ans.Head, f.called("first"))
 	}
 }

@@ -20,7 +20,57 @@ import (
 	"github.com/ankit373/hydra/internal/rank"
 	"github.com/ankit373/hydra/internal/runlog"
 	"github.com/ankit373/hydra/internal/testutil"
+	"github.com/ankit373/hydra/internal/trust"
 )
+
+const climbClass = "classification.climb"
+
+// climbing is one head of a climbingDispatcher: its in-class record out of 100 and its price.
+type climbing struct {
+	head    provider.Head
+	correct int
+	usd     float64
+}
+
+// climbingDispatcher measures each head in climbClass and prices it, so the cost
+// constraint runs the cheapest competent head first and escalation has a measured order.
+func climbingDispatcher(t *testing.T, hs ...climbing) *Dispatcher {
+	t.Helper()
+	cal, err := trust.New("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	prices := map[string]float64{}
+	var heads []provider.Head
+	for _, c := range hs {
+		heads = append(heads, c.head)
+		prices[c.head.ID] = c.usd
+		if c.correct >= 0 {
+			record(t, cal, c.head.ID, climbClass, c.correct, 100)
+		}
+	}
+	d := liveDispatcher(heads...)
+	d.cal = cal
+	d.price = func(h provider.Head) (float64, bool) { usd, ok := prices[h.ID]; return usd, ok }
+	return d
+}
+
+// judgedHeads escalates past every answer and returns the heads it was shown, in order.
+func judgedHeads(t *testing.T, d *Dispatcher) []string {
+	t.Helper()
+	var judged []string
+	_, err := d.Dispatch(context.Background(), "hi", Options{
+		Domain: climbClass,
+		Escalate: func(_ context.Context, r *Result) (bool, string) {
+			judged = append(judged, r.Head.ID)
+			return true, "rejected"
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return judged
+}
 
 // answeringHead is an OpenAI-shaped head that always says answer and reports usage.
 func answeringHead(t *testing.T, id, answer string, capScore int) provider.Head {
@@ -127,12 +177,14 @@ func TestOneCostValue_RowRunlogAndResultAgree(t *testing.T) {
 // so it is never cached for the next caller.
 func TestEscalate_EscalatedAnswerIsCostedNotCached(t *testing.T) {
 	testutil.NewSandbox(t)
-	d := liveDispatcher(answeringHead(t, "h1", "first", 95), answeringHead(t, "h2", "second", 90))
+	d := climbingDispatcher(t,
+		climbing{answeringHead(t, "h1", "first", 90), 92, 0.01}, climbing{answeringHead(t, "h2", "second", 90), 98, 0.02})
 	d.cfg = &config.Config{CacheAnswers: true}
 	const prompt = "rotate the signing key"
 
 	// Every answer is escalated past, so none of them may reach the cache.
 	res, err := d.Dispatch(context.Background(), prompt, Options{
+		Domain:   climbClass,
 		Escalate: func(context.Context, *Result) (bool, string) { return true, "rejected" },
 	})
 	if err != nil {
@@ -164,10 +216,11 @@ func TestEscalate_EscalatedAnswerIsCostedNotCached(t *testing.T) {
 // answers for the hook's owner to choose from, not a failure.
 func TestEscalate_ExhaustedReturnsLastAnswerNotError(t *testing.T) {
 	testutil.NewSandbox(t)
-	d := liveDispatcher(answeringHead(t, "h1", "first", 95), answeringHead(t, "h2", "second", 90))
+	d := climbingDispatcher(t,
+		climbing{answeringHead(t, "h1", "first", 90), 92, 0.01}, climbing{answeringHead(t, "h2", "second", 90), 98, 0.02})
 	judged := 0
 	res, err := d.Dispatch(context.Background(), "hi", Options{
-		RunID: "run-exhausted", TaskID: "task-exhausted",
+		RunID: "run-exhausted", TaskID: "task-exhausted", Domain: climbClass,
 		Escalate: func(context.Context, *Result) (bool, string) { judged++; return true, "rejected" },
 	})
 	if err != nil || res == nil || res.Output != "second" {
@@ -190,15 +243,15 @@ func TestEscalate_ExhaustedReturnsLastAnswerNotError(t *testing.T) {
 // so a head that fits the whole ceiling but not the remainder is never asked.
 func TestEscalate_FurtherHeadsFitTheRemainingCeiling(t *testing.T) {
 	testutil.NewSandbox(t)
-	h1, h2 := answeringHead(t, "h1", "first", 95), answeringHead(t, "h2", "second", 90)
+	h1, h2 := answeringHead(t, "h1", "first", 90), answeringHead(t, "h2", "second", 90)
 	h1.Meta = map[string]string{"model": "test/priced"}
 	h2.Meta = h1.Meta
-	d := liveDispatcher(h1, h2)
+	d := climbingDispatcher(t, climbing{h1, 92, 0.01}, climbing{h2, 98, 0.02})
 	d.pricing = pricedModel(t, "test/priced", 2, 4)
 	// 4000 chars estimate 1000 in and 500 out, $0.004 a call, which the stub also bills.
 	res, err := d.Dispatch(context.Background(), strings.Repeat("x", 4000), Options{
-		MaxCostUSD: 0.006,
-		Escalate:   func(context.Context, *Result) (bool, string) { return true, "rejected" },
+		MaxCostUSD: 0.006, Domain: climbClass,
+		Escalate: func(context.Context, *Result) (bool, string) { return true, "rejected" },
 	})
 	if err != nil || res.Output != "first" {
 		t.Fatalf("Dispatch = %v, %v; want the first answer standing", res, err)
@@ -207,5 +260,31 @@ func TestEscalate_FurtherHeadsFitTheRemainingCeiling(t *testing.T) {
 		if r["head"] == "h2" {
 			t.Fatal("h2 was paid $0.004 with $0.002 of the $0.006 ceiling left")
 		}
+	}
+}
+
+// Escalation climbs by in-class measurement, not by the price order the first
+// head was chosen on: h3 is cheaper than h2 but measured stronger, so it comes last.
+func TestEscalate_ClimbsByInClassMeasurement(t *testing.T) {
+	testutil.NewSandbox(t)
+	d := climbingDispatcher(t,
+		climbing{answeringHead(t, "h1", "a", 90), 92, 0.01},
+		climbing{answeringHead(t, "h2", "b", 90), 96, 0.03},
+		climbing{answeringHead(t, "h3", "c", 90), 100, 0.02})
+	if got := judgedHeads(t, d); strings.Join(got, ",") != "h1,h2,h3" {
+		t.Errorf("escalation asked %v, want h1,h2,h3: each step the weakest head measured to beat the last", got)
+	}
+}
+
+// A head measured weaker, or with no in-class record however high its declared
+// score, is never escalated to: the rejected answer stands.
+func TestEscalate_NeverToAWeakerOrUnmeasuredHead(t *testing.T) {
+	testutil.NewSandbox(t)
+	d := climbingDispatcher(t,
+		climbing{answeringHead(t, "h1", "a", 90), 96, 0.01},
+		climbing{answeringHead(t, "weaker", "b", 90), 92, 0.02},
+		climbing{answeringHead(t, "unmeasured", "c", 99), -1, 0.03})
+	if got := judgedHeads(t, d); strings.Join(got, ",") != "h1" {
+		t.Errorf("escalation asked %v, want h1 alone", got)
 	}
 }

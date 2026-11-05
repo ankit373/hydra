@@ -841,10 +841,26 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 	// escalatedUSD is what the answers passed over cost; a further head is
 	// asked only within what they left of the ceiling.
 	var escalatedUSD float64
+	// asked is every head escalated past, whose families a tie-break avoids.
+	var asked []provider.Head
+	if opts.Escalate != nil {
+		// Escalation swaps its next head into place, so it reorders a copy.
+		candidates = slices.Clone(candidates)
+	}
 	// Refusals the request itself caused, against heads actually sent, so a
 	// run that sent nothing can say it was the request and not the heads.
 	var tooWarm, overCost, sent int
 	for i, h := range candidates {
+		// Past a rejected answer only a head measured in this class to beat it is
+		// asked, whatever the objective ordered; with none, the answers held stand.
+		if last != nil {
+			j, ok := rank.Escalation(candidates[i:], scores, last.Head, asked)
+			if !ok {
+				break
+			}
+			candidates[i], candidates[i+j] = candidates[i+j], candidates[i]
+			h = candidates[i]
+		}
 		// Computed once per candidate instead of once per use below (event
 		// logging, cost estimation): rank.UITier re-derives the same int for
 		// the identical head every time it's called.
@@ -1106,7 +1122,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		if opts.Escalate != nil {
 			if next, reason := opts.Escalate(ctx, r); next {
 				attempts = append(attempts, Attempt{Head: h.ID, Model: h.Name, Tier: tier, Reason: "escalated: " + reason})
-				last, escalatedUSD = r, escalatedUSD+r.CostUSD
+				last, escalatedUSD, asked = r, escalatedUSD+r.CostUSD, append(asked, h)
 				continue
 			}
 		}

@@ -41,6 +41,9 @@ type Cascade struct {
 	Cal            *trust.Calibrator
 	Domain         string
 	Verifiers      []Verifier
+	// NeedsVerdict refuses to accept on the prior alone, however sure it is;
+	// the answer is then served unaccepted unless a verifier's verdict counted.
+	NeedsVerdict bool
 
 	confidences []float64
 	spent       float64
@@ -60,7 +63,7 @@ const pPassFloor = 0.01
 func (c *Cascade) Judge(ctx context.Context, a Answer) (next bool, reason string) {
 	p := min(max(a.PPass, pPassFloor), 1-pPassFloor)
 	logOdds := math.Log(p / (1 - p))
-	measured := false
+	measured, counted := false, 0
 	for _, v := range c.Verifiers {
 		// An unmeasured verifier's LLR is the Beta prior's, which reads like evidence and is not.
 		if ok, _ := oracle.Measured(c.Cal, v.Source, c.Domain); !ok {
@@ -72,19 +75,22 @@ func (c *Cascade) Judge(ctx context.Context, a Answer) (next bool, reason string
 			continue
 		}
 		logOdds += oracle.LLR(c.Cal, v.Source, c.Domain, verdict)
+		counted++
 	}
 	conf := 1 / (1 + math.Exp(-logOdds))
 	c.confidences = append(c.confidences, conf)
 	c.spent += a.CostUSD
 
 	switch {
-	case conf >= c.Target.Confidence:
+	case conf >= c.Target.Confidence && (counted > 0 || !c.NeedsVerdict):
 		c.decision = Accepted
 	// decide.Router's rule: with nothing calibrated no further answer can move the posterior.
 	case !measured:
 		c.decision = NoEvidence
 	case len(c.confidences) > c.MaxEscalations || (c.Target.MaxCostUSD > 0 && c.spent >= c.Target.MaxCostUSD):
 		c.decision = BudgetExhausted
+	case conf >= c.Target.Confidence:
+		return true, "no verifier verdict counted"
 	default:
 		return true, fmt.Sprintf("P(correct) %.3f < %.2f", conf, c.Target.Confidence)
 	}

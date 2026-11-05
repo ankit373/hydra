@@ -354,8 +354,9 @@ func cmdServe() *cobra.Command {
 			"an explicit --enum pins `hydra` instead. `hydra/standard` is the pre-E1 route,\n" +
 			"`hydra/hard` or `hydra/t4` pin an enum or a tier, and a head id pins that head.\n\n" +
 			"A task class with [[serve.verifiers]] in config.toml has each buffered answer on an\n" +
-			"objective route checked: until one is --confidence sure, the next head is asked, at\n" +
-			"most --max-escalations more, within the request's or policy.yaml's cost ceiling.\n\n" +
+			"objective route checked: until a verifier makes one --confidence sure, a head measured\n" +
+			"in that class to beat the last is asked, at most --max-escalations more, within the\n" +
+			"request's or policy.yaml's cost ceiling. With none measured better, the answer stands.\n\n" +
 			"`stream: true` is answered as server-sent events. A fallback before any output is\n" +
 			"invisible; one after it ends the stream, because SSE cannot take back a partial and\n" +
 			"appending the next head's answer to it would compose a reply no head ever gave.\n\n" +

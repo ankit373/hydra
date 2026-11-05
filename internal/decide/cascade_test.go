@@ -85,6 +85,32 @@ func TestCascade_Judge(t *testing.T) {
 	}
 }
 
+// A prior past the target accepts only once a verifier's verdict counted, when the caller needs one.
+func TestCascade_NeedsVerdict(t *testing.T) {
+	testutil.NewSandbox(t)
+	measured := newCal(t)
+	measuredVerifier(t, measured, "verifier:match:t")
+	for _, tc := range []struct {
+		name string
+		cal  *trust.Calibrator
+		v    verdicts
+		want Decision
+	}{
+		{"unmeasured verifier", newCal(t), verdicts{pass: true}, NoEvidence},
+		{"the verifier could not run", measured, verdicts{err: errors.New("boom")}, ""},
+		{"a passing verdict", measured, verdicts{pass: true}, Accepted},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := cascade(tc.cal, tc.v, 2, 0)
+			c.NeedsVerdict = true
+			c.Judge(context.Background(), Answer{Text: "x", PPass: 0.99})
+			if c.decision != tc.want {
+				t.Errorf("a 0.99 prior decided %q, want %q", c.decision, tc.want)
+			}
+		})
+	}
+}
+
 func TestCascade_OutcomeServesTheRightStep(t *testing.T) {
 	for _, tc := range []struct {
 		name     string

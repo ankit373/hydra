@@ -118,6 +118,8 @@ func (r serveRouter) escalationFor(ev *serve.Evidence, req serve.Request, opts *
 		Cal:            r.cal,
 		Domain:         ev.TaskClass,
 		Verifiers:      r.verifiers[ev.TaskClass],
+		// A head's score is a prior, often a catalogue guess: only a verdict accepts.
+		NeedsVerdict: true,
 	}}
 	// An answer escalated past, or served unaccepted, must never be cached.
 	opts.Escalate, opts.NoCache = e.judge, true
