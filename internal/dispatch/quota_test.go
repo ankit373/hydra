@@ -85,7 +85,7 @@ func TestQuotaMode_GoldenLegacyStateRoutesAsBefore(t *testing.T) {
 func TestQuotaMode_EmergencyStillForcesLocal(t *testing.T) {
 	const pct = 85
 	for _, hasLocal := range []bool{true, false} {
-		t.Run(fmt.Sprintf("local head=%v", hasLocal), func(t *testing.T) {
+		t.Run(fmt.Sprintf("local head %v", hasLocal), func(t *testing.T) {
 			s := testutil.NewSandbox(t)
 			writeStatePct(t, pct, nil)
 			heads := []provider.Head{echoHead(t, s, "away", 95)}
