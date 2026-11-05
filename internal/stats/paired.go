@@ -94,7 +94,7 @@ func tangoZ(d Discordant, theta float64) (float64, error) {
 		return 0, nil
 	}
 	qa := 2 * n
-	qb := -b - c + (2*n-b+c)*theta
+	qb := -b - c + float64((2*n-b+c)*theta)
 	qc := -c * theta * (1 - theta)
 	// qb² − 4·qa·qc rewritten as a square plus a non-negative term: the subtraction cancelled
 	// to ~0 on real rows, and FMA on arm64 but not amd64 moved z in the 8th digit.
@@ -107,7 +107,7 @@ func tangoZ(d Discordant, theta float64) (float64, error) {
 	} else {
 		p21 = 2 * qc / (-qb - math.Sqrt(disc))
 	}
-	v := n * (2*p21 + theta - theta*theta)
+	v := n * (2*p21 + theta - float64(theta*theta))
 	if !(v > 0) {
 		return 0, fmt.Errorf("stats: Tango's restricted MLE is degenerate at B=%d C=%d θ₀=%v", d.B, d.C, theta)
 	}
