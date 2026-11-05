@@ -186,6 +186,10 @@ registry/               ← Routing data, compiled into the binary via `go:embed
                           run (#838). The rest are declared and read by
                           nothing. `hyctl security` reports which, derived rather than hardcoded.
   workspace.yaml        ← workspace roots + validators.
+design/                 ← The one design-token source (DTCG) for the website, desktop app and TUI.
+                          `cd design && npm ci && npm run build` regenerates docs/assets/tokens.css,
+                          desktop/frontend/src/tokens.generated.css and internal/tui/tokens_gen.go;
+                          never hand-edit those. Roles and rules: DESIGN.md.
 logs/                   ← Dispatch log + state.json (claude_pct, claude_pct_history).
 ```
 
