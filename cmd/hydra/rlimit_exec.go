@@ -18,6 +18,9 @@ func cmdRlimitExec() *cobra.Command {
 		Use:    sandbox.RlimitExecArg,
 		Short:  "Internal: apply resource limits, then exec the real command",
 		Hidden: true,
+		// Empty on purpose: it execs a head straight away and reads no key, so
+		// the root's hook would only open the keychain for nothing.
+		PersistentPreRun: func(*cobra.Command, []string) {},
 		RunE: func(_ *cobra.Command, args []string) error {
 			return sandbox.RunRlimitExec(args)
 		},
