@@ -38,13 +38,19 @@ def tango(n, b, c, theta):
 
 print("# Tango z, p = 1 - Phi(z), theta0 = -margin")
 for n, b, c, m in [(200, 6, 8, 0.02), (1500, 40, 45, 0.02), (100, 10, 2, 0.02), (100, 10, 2, 0.0),
-                   (44, 0, 1, 0.1), (30, 0, 1, 0.1), (80, 0, 2, 0.1), (100, 0, 0, 0.02)]:
+                   (44, 0, 1, 0.1), (30, 0, 1, 0.1), (80, 0, 2, 0.1), (100, 0, 0, 0.02),
+                   # B = 0 cases where the discriminant rounds just below zero in float64
+                   (21, 0, 2, 0.05), (42, 0, 4, 0.05), (55, 0, 10, 0.1), (63, 0, 6, 0.05),
+                   (77, 0, 14, 0.1)]:
     z, p = tango(n, b, c, -m)
     print(f"N={n} B={b} C={c} margin={m} z={z!r} p={p!r}")
 
 print("# Clopper-Pearson one-sided upper, beta.ppf(1 - alpha, k + 1, n - k)")
 for k, n in [(0, 100), (3, 50), (35, 500), (64, 910), (1, 1000)]:
     print(f"k={k} n={n} upper={beta.ppf(0.95, k + 1, n - k)!r}")
+for alpha in (0.7, 0.9):  # alpha >= 0.5 puts the bound below k/n
+    for k, n in [(3, 50), (35, 500), (0, 100)]:
+        print(f"alpha={alpha} k={k} n={n} upper={beta.ppf(1 - alpha, k + 1, n - k)!r}")
 print(f"k=0 n=100 closed form 1 - 0.05**(1/100) = {1 - 0.05 ** (1 / 100)!r}")
 
 

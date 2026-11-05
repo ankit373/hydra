@@ -55,11 +55,16 @@ func TestMcNemarExact_Golden(t *testing.T) {
 		{40, 45, 0.7422871340580498, 0.664645490413214},
 		{600, 500, 0.0014097724957182138, 0.0028195449914364293}, // 2^1100 overflows a float64
 		{0, 0, 1, 1}, // all concordant: no evidence either way
+		{0, 60, 1, 2 * math.Pow(2, -60)},
+		{60, 0, math.Pow(2, -60), 2 * math.Pow(2, -60)},
 	}
 	for _, c := range cases {
 		one, two := McNemarExact(Discordant{N: 2000, B: c.b, C: c.c})
 		near(t, "one-sided", one, c.one, exact)
 		near(t, "two-sided", two, c.two, exact)
+		if one > 1 || two > 1 {
+			t.Errorf("B=%d C=%d: p-values %v, %v exceed 1", c.b, c.c, one, two)
+		}
 	}
 }
 
@@ -74,6 +79,14 @@ func TestTangoNI_Golden(t *testing.T) {
 		{Discordant{100, 10, 2}, 0.02, 2.7454601989185186, 0.0030213048301711565},
 		// All concordant: q21 = margin and v = N(margin − margin²), so z = 2/1.4.
 		{Discordant{100, 0, 0}, 0.02, 2 / 1.4, 0.07656372550983474},
+		// The discriminant is exactly 0 here and rounds below it, which gave NaN before the clamp.
+		{Discordant{21, 0, 2}, 0.05, -0.9511897312113418, 0.8292459648586155},
+		{Discordant{42, 0, 4}, 0.05, -1.3451854182690983, 0.9107173180177863},
+		{Discordant{55, 0, 10}, 0.1, -2.0225995873897262, 0.9784427766084624},
+		{Discordant{63, 0, 6}, 0.05, -1.6475089420958278, 0.9502732601258456},
+		{Discordant{77, 0, 14}, 0.1, -2.393172105652397, 0.9916482980764193},
+		// All concordant at margin 0: the data sit on H0, so no evidence either way.
+		{Discordant{100, 0, 0}, 0, 0, 0.5},
 	}
 	for _, c := range cases {
 		z, p, err := TangoNI(c.d, c.margin)
@@ -154,7 +167,7 @@ func TestTango_PublishedWorkedExamples(t *testing.T) {
 
 func TestTangoLowerBound_InvertsTheTest(t *testing.T) {
 	crit := NormalQuantile(0.95)
-	for _, d := range []Discordant{{200, 6, 8}, {1500, 40, 45}, {100, 10, 2}, {100, 0, 0}, {44, 0, 1}} {
+	for _, d := range []Discordant{{200, 6, 8}, {1500, 40, 45}, {100, 10, 2}, {100, 0, 0}, {44, 0, 1}, {21, 0, 2}, {77, 0, 14}} {
 		var prev float64 = -2
 		for _, alpha := range []float64{0.01, 0.05, 0.1} {
 			lb, err := TangoLowerBound(d, alpha)
@@ -197,7 +210,6 @@ func TestTango_RefusesWhatItCannotAnswer(t *testing.T) {
 		{Discordant{100, 1, 1}, -0.1}, // margin outside [0, 1)
 		{Discordant{100, 1, 1}, 1},
 		{Discordant{100, 1, 1}, math.NaN()},
-		{Discordant{100, 0, 0}, 0}, // all concordant at θ₀ = 0: zero variance, z would be 0/0
 	}
 	for _, c := range bad {
 		if _, _, err := TangoNI(c.d, c.margin); err == nil {

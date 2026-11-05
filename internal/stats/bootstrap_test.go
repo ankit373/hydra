@@ -9,9 +9,18 @@ import (
 	"testing"
 )
 
+func resample(t *testing.T, n, resamples int, seed uint64, stat func([]int) (float64, bool)) Bootstrap {
+	t.Helper()
+	b, err := Resample(n, resamples, seed, stat)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
+}
+
 func TestResample_DegenerateSampleHasNoSpread(t *testing.T) {
 	d := []float64{0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3}
-	b := Resample(len(d), 1000, 1, PairedMeanDiff(d))
+	b := resample(t, len(d), 1000, 1, PairedMeanDiff(d))
 	for _, q := range []float64{0, 0.05, 0.5, 0.95, 1} {
 		if got := b.Quantile(q); got != 0.3 {
 			t.Errorf("Quantile(%v) = %v, want 0.3 exactly", q, got)
@@ -21,9 +30,9 @@ func TestResample_DegenerateSampleHasNoSpread(t *testing.T) {
 
 func TestResample_IsDeterministicInTheSeed(t *testing.T) {
 	d := []float64{1, 0, -1, 0, 0, 1, 1, 0, -1, 0, 1, 0}
-	a := Resample(len(d), 500, 42, PairedMeanDiff(d))
-	b := Resample(len(d), 500, 42, PairedMeanDiff(d))
-	c := Resample(len(d), 500, 43, PairedMeanDiff(d))
+	a := resample(t, len(d), 500, 42, PairedMeanDiff(d))
+	b := resample(t, len(d), 500, 42, PairedMeanDiff(d))
+	c := resample(t, len(d), 500, 43, PairedMeanDiff(d))
 	if !slices.Equal(a.Values, b.Values) {
 		t.Error("one seed gave two samples")
 	}
@@ -42,7 +51,7 @@ func TestResample_RegressionFixture(t *testing.T) {
 		1, 0, 0, -1, 0, 1, 1, 0, 0, 0, -1, 0, 1, 0, 0, 0, 1, -1, 0, 0, 0, 0, 1, 0, 0,
 		0, -1, 0, 0, 1, 0, 0, 0, 0, 1, 0, -1, -1, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, -1, 0,
 	}
-	b := Resample(len(d), 10000, 7, PairedMeanDiff(d))
+	b := resample(t, len(d), 10000, 7, PairedMeanDiff(d))
 	near(t, "Quantile(0.05)", b.Quantile(0.05), -0.08, exact)
 	if b.Dropped != 0 || len(b.Values) != 10000 {
 		t.Errorf("kept %d, dropped %d", len(b.Values), b.Dropped)
@@ -70,7 +79,7 @@ func TestResample_PairedLowerBoundMatchesTheNormalApproximation(t *testing.T) {
 		ss += (v - mean) * (v - mean)
 	}
 	sd := math.Sqrt(ss / float64(len(d)-1))
-	b := Resample(len(d), 10000, 3, PairedMeanDiff(d))
+	b := resample(t, len(d), 10000, 3, PairedMeanDiff(d))
 	near(t, "bootstrap LB", b.Quantile(0.05), mean-NormalQuantile(0.95)*sd/math.Sqrt(float64(len(d))), 0.002)
 }
 
@@ -78,30 +87,81 @@ func TestResample_DropsAndCountsUndefinedResamples(t *testing.T) {
 	cost := []float64{1, 1, 1, 1, 1, 1, 1, 1}
 	accA := []bool{true, false, false, false, false, false, false, false}
 	accR := []bool{true, true, true, true, true, true, true, true}
-	b := Resample(len(cost), 2000, 5, CostPerAcceptedDiff(cost, cost, accA, accR))
+	stat, err := CostPerAcceptedDiff(cost, cost, accA, accR)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := resample(t, len(cost), 2000, 5, stat)
 	if b.Dropped == 0 || len(b.Values)+b.Dropped != 2000 {
 		t.Errorf("kept %d, dropped %d of 2000", len(b.Values), b.Dropped)
 	}
-	empty := Resample(0, 10, 1, PairedMeanDiff(nil))
+	empty := resample(t, 0, 10, 1, PairedMeanDiff(nil))
 	if empty.Dropped != 10 || empty.Quantile(0.5) != 0 {
 		t.Errorf("an empty sample gave %+v", empty)
 	}
 }
 
+func TestQuantile_ReadsTheFloorRank(t *testing.T) {
+	b := Bootstrap{Values: []float64{10, 20, 30, 40, 50}}
+	for q, want := range map[float64]float64{0: 10, 0.24: 10, 0.25: 20, 0.74: 30, 0.99: 40, 1: 50, -1: 10, 2: 50} {
+		if got := b.Quantile(q); got != want {
+			t.Errorf("Quantile(%v) = %v, want %v", q, got, want)
+		}
+	}
+}
+
 func TestStatistics_OnTheIdentityResample(t *testing.T) {
 	all := []int{0, 1, 2}
-	v, ok := CostPerAcceptedDiff([]float64{1, 2, 3}, []float64{2, 2, 2},
-		[]bool{true, false, true}, []bool{true, true, true})(all)
+	cpa, err := CostPerAcceptedDiff([]float64{1, 2, 3}, []float64{2, 2, 2},
+		[]bool{true, false, true}, []bool{true, true, true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	v, ok := cpa(all)
 	if !ok {
 		t.Fatal("undefined")
 	}
 	near(t, "cost per accepted diff", v, 6.0/2-6.0/3, exact)
-	v, ok = WeightedMean([]float64{1, 4, 10}, []float64{1, 2, 0})(all)
+
+	wm, err := WeightedMean([]float64{1, 4, 10}, []float64{1, 2, 0})
+	if err != nil {
+		t.Fatal(err)
+	}
+	v, ok = wm(all)
 	if !ok {
 		t.Fatal("undefined")
 	}
 	near(t, "weighted mean", v, 3, exact)
-	if _, ok := WeightedMean([]float64{1, 4}, []float64{0, 0})([]int{0, 1}); ok {
+	whole, err := WeightedMeanAll([]float64{1, 4, 10}, []float64{1, 2, 0})
+	if err != nil || whole != v {
+		t.Errorf("WeightedMeanAll = %v, %v; want %v from the identity resample", whole, err, v)
+	}
+
+	zero, _ := WeightedMean([]float64{1, 4}, []float64{0, 0})
+	if _, ok := zero([]int{0, 1}); ok {
 		t.Error("a zero total weight gave a mean")
+	}
+	if _, err := WeightedMeanAll([]float64{1, 4}, []float64{0, 0}); err == nil {
+		t.Error("WeightedMeanAll gave a mean for a zero total weight")
+	}
+}
+
+func TestBootstrap_RefusesRatherThanPanics(t *testing.T) {
+	for _, c := range []struct{ n, resamples int }{{5, 0}, {5, -1}, {-1, 10}} {
+		if _, err := Resample(c.n, c.resamples, 1, PairedMeanDiff(nil)); err == nil {
+			t.Errorf("Resample(%d, %d) answered", c.n, c.resamples)
+		}
+	}
+	if _, err := WeightedMean([]float64{1, 2}, []float64{1}); err == nil {
+		t.Error("WeightedMean paired slices of different lengths")
+	}
+	if _, err := WeightedMeanAll([]float64{1}, []float64{1, 2}); err == nil {
+		t.Error("WeightedMeanAll paired slices of different lengths")
+	}
+	c, b := []float64{1, 2}, []bool{true, true}
+	for i, args := range [][4]int{{1, 2, 2, 2}, {2, 1, 2, 2}, {2, 2, 1, 2}, {2, 2, 2, 1}} {
+		if _, err := CostPerAcceptedDiff(c[:args[0]], c[:args[1]], b[:args[2]], b[:args[3]]); err == nil {
+			t.Errorf("case %d: CostPerAcceptedDiff paired slices of different lengths", i)
+		}
 	}
 }

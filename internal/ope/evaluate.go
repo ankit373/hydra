@@ -169,12 +169,13 @@ func Evaluate(samples []CounterfactualSample, opts Options) (Estimate, error) {
 			ErrInsufficientSupport, est.ESS, minESS, est.Supporting)
 	}
 
-	all := make([]int, len(values))
-	for i := range all {
-		all[i] = i
+	var err error
+	if est.Mean, err = stats.WeightedMeanAll(values, weights); err != nil {
+		return est, err
 	}
-	est.Mean, _ = stats.WeightedMean(values, weights)(all)
-	est.Lo, est.Hi = bootstrapInterval(values, weights, level, resamples, opts.Seed)
+	if est.Lo, est.Hi, err = bootstrapInterval(values, weights, level, resamples, opts.Seed); err != nil {
+		return est, err
+	}
 	est.Method = "self-normalized IPS, percentile bootstrap"
 	if math.IsInf(clip, 1) {
 		est.Method += ", weights unclipped"
@@ -201,8 +202,15 @@ func effectiveSampleSize(weights []float64) float64 {
 // bootstrapInterval resamples rows with replacement and returns the percentile
 // interval of the weighted mean. Seeded: the same log must produce the same
 // interval twice, or a reader cannot tell a changed estimate from a rerun.
-func bootstrapInterval(values, weights []float64, level float64, resamples int, seed uint64) (lo, hi float64) {
-	b := stats.Resample(len(values), resamples, seed, stats.WeightedMean(values, weights))
+func bootstrapInterval(values, weights []float64, level float64, resamples int, seed uint64) (lo, hi float64, err error) {
+	mean, err := stats.WeightedMean(values, weights)
+	if err != nil {
+		return 0, 0, err
+	}
+	b, err := stats.Resample(len(values), resamples, seed, mean)
+	if err != nil {
+		return 0, 0, err
+	}
 	tail := (1 - level) / 2
-	return b.Quantile(tail), b.Quantile(1 - tail)
+	return b.Quantile(tail), b.Quantile(1 - tail), nil
 }

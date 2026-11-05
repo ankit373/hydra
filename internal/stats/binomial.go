@@ -7,22 +7,34 @@ import (
 	"math"
 )
 
-// binomCDF is P(X ≤ k) for X ~ Binomial(n, p), 0 < p < 1, summed in log space
-// because 2^n and C(n, i) overflow a float64 long before n reaches a suite's size.
-func binomCDF(k, n int, p float64) float64 {
-	lp, lq := math.Log(p), math.Log1p(-p)
+// logChoose is ln C(n, i) for i = 0..k, kept so a bisection over p pays for it once.
+func logChoose(k, n int) []float64 {
 	lgn, _ := math.Lgamma(float64(n + 1))
-	var sum float64
-	for i := 0; i <= k; i++ {
+	lc := make([]float64, k+1)
+	for i := range lc {
 		lgi, _ := math.Lgamma(float64(i + 1))
 		lgr, _ := math.Lgamma(float64(n - i + 1))
-		sum += math.Exp(lgn - lgi - lgr + float64(i)*lp + float64(n-i)*lq)
+		lc[i] = lgn - lgi - lgr
 	}
-	return sum
+	return lc
 }
 
+// cdf sums P(X ≤ len(lc)−1) in log space, because 2^n and C(n, i) overflow a
+// float64 long before n reaches a suite's size. Rounding can pass 1, so it is clamped.
+func cdf(lc []float64, n int, p float64) float64 {
+	lp, lq := math.Log(p), math.Log1p(-p)
+	var sum float64
+	for i, c := range lc {
+		sum += math.Exp(c + float64(i)*lp + float64(n-i)*lq)
+	}
+	return math.Min(sum, 1)
+}
+
+// BinomialCDF is P(X ≤ k) for X ~ Binomial(n, p), 0 < p < 1.
+func BinomialCDF(k, n int, p float64) float64 { return cdf(logChoose(k, n), n, p) }
+
 // ClopperPearsonUpper is the exact one-sided upper bound on a binomial rate: the p
-// at which P(X ≤ k) = alpha, bisected to adjacent floats. k == n gives 1.
+// at which P(X ≤ k) = alpha, bisected on (0, 1) to adjacent floats. k == n gives 1.
 func ClopperPearsonUpper(k, n int, alpha float64) (float64, error) {
 	if n <= 0 || k < 0 || k > n {
 		return 0, fmt.Errorf("stats: Clopper–Pearson needs 0 ≤ k ≤ n and n > 0, got k=%d n=%d", k, n)
@@ -33,13 +45,14 @@ func ClopperPearsonUpper(k, n int, alpha float64) (float64, error) {
 	if k == n {
 		return 1, nil
 	}
-	lo, hi := float64(k)/float64(n), 1.0
+	lc := logChoose(k, n)
+	lo, hi := 0.0, 1.0
 	for {
 		mid := lo + (hi-lo)/2
 		if mid <= lo || mid >= hi {
 			return hi, nil
 		}
-		if binomCDF(k, n, mid) > alpha {
+		if cdf(lc, n, mid) > alpha {
 			lo = mid
 		} else {
 			hi = mid

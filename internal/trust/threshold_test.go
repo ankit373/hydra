@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/ankit373/hydra/internal/reliability"
+	"github.com/ankit373/hydra/internal/stats"
 )
 
 // simulatedRun votes for the right answer 80% of the time, A being right 60% of the
@@ -189,8 +190,8 @@ func TestBinomialCDF_KnownValues(t *testing.T) {
 		{k: 5, n: 5, p: 0.7, want: 1},
 	}
 	for _, tc := range tests {
-		if got := binomialCDF(tc.k, tc.n, tc.p); math.Abs(got-tc.want) > 1e-12 {
-			t.Errorf("binomialCDF(%d, %d, %v) = %v, want %v", tc.k, tc.n, tc.p, got, tc.want)
+		if got := stats.BinomialCDF(tc.k, tc.n, tc.p); math.Abs(got-tc.want) > 1e-12 {
+			t.Errorf("stats.BinomialCDF(%d, %d, %v) = %v, want %v", tc.k, tc.n, tc.p, got, tc.want)
 		}
 	}
 }

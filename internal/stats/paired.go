@@ -40,7 +40,7 @@ func PairedDiscordant(a, r []bool) (Discordant, []float64, error) {
 }
 
 // TangoNI is Tango's (1998) score test for paired proportions, H0: Δ ≤ −margin.
-// It returns the score z and the one-sided p = 1 − Φ(z).
+// It returns the score z and the one-sided p = 1 − Φ(z); all-concordant data at margin 0 give 0, ½.
 func TangoNI(d Discordant, margin float64) (z, p float64, err error) {
 	if !(margin >= 0 && margin < 1) {
 		return 0, 0, fmt.Errorf("stats: Tango margin %v is outside [0, 1)", margin)
@@ -58,15 +58,22 @@ func tangoZ(d Discordant, theta float64) (float64, error) {
 		return 0, errors.New("stats: Tango needs at least one paired item")
 	}
 	n, b, c := float64(d.N), float64(d.B), float64(d.C)
+	num := b - c - n*theta
+	if num == 0 {
+		// The data sit exactly on H0. At B = C = 0, θ₀ = 0 the variance is 0 too, and
+		// that 0/0 is no evidence either way, which is z = 0 rather than an error.
+		return 0, nil
+	}
 	qa := 2 * n
 	qb := -b - c + (2*n-b+c)*theta
 	qc := -c * theta * (1 - theta)
-	p21 := (-qb + math.Sqrt(qb*qb-4*qa*qc)) / (2 * qa)
+	// The discriminant is never negative in exact arithmetic; rounding can push it below 0.
+	p21 := (-qb + math.Sqrt(math.Max(0, qb*qb-4*qa*qc))) / (2 * qa)
 	v := n * (2*p21 + theta - theta*theta)
 	if !(v > 0) {
 		return 0, fmt.Errorf("stats: Tango's restricted MLE is degenerate at B=%d C=%d θ₀=%v", d.B, d.C, theta)
 	}
-	return (b - c - n*theta) / math.Sqrt(v), nil
+	return num / math.Sqrt(v), nil
 }
 
 // TangoLowerBound inverts TangoNI: the smallest −margin the test does not reject
@@ -102,8 +109,8 @@ func McNemarExact(d Discordant) (oneSided, twoSided float64) {
 	if m == 0 {
 		return 1, 1
 	}
-	upper := binomCDF(d.C, m, 0.5) // P(X ≥ B) = P(X ≤ C) by symmetry at ½
-	lower := binomCDF(d.B, m, 0.5)
+	upper := BinomialCDF(d.C, m, 0.5) // P(X ≥ B) = P(X ≤ C) by symmetry at ½, clamped to 1
+	lower := BinomialCDF(d.B, m, 0.5)
 	return upper, math.Min(1, 2*math.Min(upper, lower))
 }
 

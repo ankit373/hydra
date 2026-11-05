@@ -28,6 +28,38 @@ func TestClopperPearsonUpper_Golden(t *testing.T) {
 		near(t, "upper", got, c.want, exact)
 	}
 	near(t, "k=0 closed form", 1-math.Pow(0.05, 1.0/100), 0.029513049607039932, exact)
+
+	// α ≥ ½ puts the bound below k/n, so the search must start at 0, not at k/n.
+	high := []struct {
+		alpha float64
+		k, n  int
+		want  float64
+	}{
+		{0.7, 3, 50, 0.055412788159043706},
+		{0.7, 35, 500, 0.065416110641767},
+		{0.7, 0, 100, 0.003560396144387363},
+		{0.9, 3, 50, 0.03534768016845918},
+		{0.9, 35, 500, 0.05748997789637211},
+		{0.9, 0, 100, 0.001053050309545618},
+	}
+	for _, c := range high {
+		got, err := ClopperPearsonUpper(c.k, c.n, c.alpha)
+		if err != nil {
+			t.Fatal(err)
+		}
+		near(t, "upper at high α", got, c.want, exact)
+	}
+}
+
+// Rounding can sum the whole distribution past 1; a probability never is.
+func TestBinomialCDF_NeverExceedsOne(t *testing.T) {
+	for _, n := range []int{60, 500, 1100} {
+		for _, p := range []float64{0.1, 0.5, 0.9} {
+			if got := BinomialCDF(n, n, p); got > 1 || got < 1-1e-12 {
+				t.Errorf("P(X ≤ %d) at n=%d p=%v = %.17g", n, n, p, got)
+			}
+		}
+	}
 }
 
 func TestClopperPearsonUpper_RefusesWhatItCannotAnswer(t *testing.T) {

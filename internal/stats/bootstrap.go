@@ -5,6 +5,8 @@
 package stats
 
 import (
+	"errors"
+	"fmt"
 	"math/rand/v2"
 	"sort"
 )
@@ -16,8 +18,8 @@ type Bootstrap struct {
 	Dropped int
 }
 
-// Quantile reads Values at q by nearest rank, which assumes nothing about the
-// shape of a distribution that is not normal anyway. An empty sample reads 0.
+// Quantile reads Values[⌊q·(len−1)⌋], clamped to the slice: nearest rank rounded
+// down, which assumes nothing about the distribution's shape. An empty sample reads 0.
 func (b Bootstrap) Quantile(q float64) float64 {
 	if len(b.Values) == 0 {
 		return 0
@@ -35,7 +37,10 @@ func (b Bootstrap) Quantile(q float64) float64 {
 // Resample draws n indices with replacement, resamples times, and returns the
 // sorted values of stat; ok=false drops that resample. Seeded so one input gives
 // one interval twice. idx is reused between calls, so stat must not keep it.
-func Resample(n, resamples int, seed uint64, stat func(idx []int) (v float64, ok bool)) Bootstrap {
+func Resample(n, resamples int, seed uint64, stat func(idx []int) (v float64, ok bool)) (Bootstrap, error) {
+	if n < 0 || resamples < 1 {
+		return Bootstrap{}, fmt.Errorf("stats: cannot resample %d items %d times", n, resamples)
+	}
 	rng := rand.New(rand.NewPCG(seed, 0x9E3779B97F4A7C15))
 	idx := make([]int, n)
 	b := Bootstrap{Values: make([]float64, 0, resamples)}
@@ -50,22 +55,55 @@ func Resample(n, resamples int, seed uint64, stat func(idx []int) (v float64, ok
 		}
 	}
 	sort.Float64s(b.Values)
-	return b
+	return b, nil
+}
+
+// weighted accumulates Σwv and Σw in one place, so the resampled and the whole-sample
+// means add in the same order and ope's estimates stay bit-identical.
+type weighted struct{ num, den float64 }
+
+func (s *weighted) add(v, w float64) {
+	s.num += v * w
+	s.den += w
+}
+
+func sameLength(a, b int) error {
+	if a != b {
+		return fmt.Errorf("stats: paired slices differ in length, %d against %d", a, b)
+	}
+	return nil
 }
 
 // WeightedMean is the self-normalised estimate Σwv/Σw over idx, undefined when Σw = 0.
-func WeightedMean(values, weights []float64) func(idx []int) (float64, bool) {
+func WeightedMean(values, weights []float64) (func(idx []int) (float64, bool), error) {
+	if err := sameLength(len(values), len(weights)); err != nil {
+		return nil, err
+	}
 	return func(idx []int) (float64, bool) {
-		var num, den float64
+		var s weighted
 		for _, j := range idx {
-			num += values[j] * weights[j]
-			den += weights[j]
+			s.add(values[j], weights[j])
 		}
-		if den > 0 {
-			return num / den, true
+		if s.den > 0 {
+			return s.num / s.den, true
 		}
 		return 0, false
+	}, nil
+}
+
+// WeightedMeanAll is WeightedMean over every item, without building an index.
+func WeightedMeanAll(values, weights []float64) (float64, error) {
+	if err := sameLength(len(values), len(weights)); err != nil {
+		return 0, err
 	}
+	var s weighted
+	for j := range values {
+		s.add(values[j], weights[j])
+	}
+	if !(s.den > 0) {
+		return 0, errors.New("stats: the weights sum to zero, so the weighted mean is undefined")
+	}
+	return s.num / s.den, nil
 }
 
 // PairedMeanDiff is the mean of the paired differences d over idx (H1's Δpass).
@@ -84,7 +122,12 @@ func PairedMeanDiff(d []float64) func(idx []int) (float64, bool) {
 
 // CostPerAcceptedDiff is Σcost_A/Σacc_A − Σcost_R/Σacc_R over the same items (H3).
 // A resample in which either arm accepted nothing has no cost per accepted answer.
-func CostPerAcceptedDiff(costA, costR []float64, accA, accR []bool) func(idx []int) (float64, bool) {
+func CostPerAcceptedDiff(costA, costR []float64, accA, accR []bool) (func(idx []int) (float64, bool), error) {
+	for _, n := range []int{len(costR), len(accA), len(accR)} {
+		if err := sameLength(len(costA), n); err != nil {
+			return nil, err
+		}
+	}
 	return func(idx []int) (float64, bool) {
 		var cA, cR float64
 		var nA, nR int
@@ -102,5 +145,5 @@ func CostPerAcceptedDiff(costA, costR []float64, accA, accR []bool) func(idx []i
 			return 0, false
 		}
 		return cA/float64(nA) - cR/float64(nR), true
-	}
+	}, nil
 }
