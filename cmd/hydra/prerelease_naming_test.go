@@ -6,6 +6,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
 // The RC and edge channels both shipped CLI archives stamped
@@ -254,6 +256,47 @@ func TestReleaseWorkflowsPinGoReleaserExactly(t *testing.T) {
 			t.Errorf("%s pins GoReleaser as %q. Name an exact version: with `latest`, upstream "+
 				"decides what builds the release, and it does not announce a behaviour change "+
 				"on the way in.", name, found[0])
+		}
+	}
+}
+
+// A carry branch shares the release/v prefix, so a loose filter published a junk
+// pre-release for every promotion to main (#1317).
+func TestRCWorkflow_SkipsCarryBranches(t *testing.T) {
+	var wf struct {
+		On struct {
+			Push struct {
+				Branches []string `yaml:"branches"`
+			} `yaml:"push"`
+		} `yaml:"on"`
+	}
+	if err := yaml.Unmarshal([]byte(workflowFile(t, "rc.yml")), &wf); err != nil {
+		t.Fatal(err)
+	}
+	filters := wf.On.Push.Branches
+	if len(filters) != 1 {
+		t.Fatalf("rc.yml push branches = %q, want one version-shaped filter", filters)
+	}
+
+	// GitHub's filter syntax, for the two constructs it uses here: a literal dot
+	// and a one-or-more digit class. Anything else fails the translation loudly.
+	quoted := regexp.QuoteMeta(filters[0])
+	pattern := strings.ReplaceAll(quoted, `\[0-9\]\+`, `[0-9]+`)
+	if strings.ContainsAny(strings.ReplaceAll(pattern, `[0-9]+`, ""), "*?[]") {
+		t.Fatalf("filter %q uses glob syntax this test does not translate", filters[0])
+	}
+	re := regexp.MustCompile("^" + pattern + "$")
+
+	cases := map[string]bool{
+		"release/v1.6.0":         true,
+		"release/v10.12.3":       true,
+		"release/v1.6.0-to-main": false,
+		"release/v1.6":           false,
+		"release/vnext":          false,
+	}
+	for branch, want := range cases {
+		if got := re.MatchString(branch); got != want {
+			t.Errorf("rc.yml filter %q on %s = %v, want %v", filters[0], branch, got, want)
 		}
 	}
 }

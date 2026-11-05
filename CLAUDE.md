@@ -995,7 +995,7 @@ internal/build/build.go       ← version vars set by ldflags at build time
 internal/update/update.go     ← startup update checker (24h cache)
 .github/workflows/release.yml ← fires on tag push → goreleaser
 .github/workflows/edge.yml    ← fires on develop push → edge build
-.github/workflows/rc.yml      ← fires on release/v* push → RC pre-release. Both build from a
+.github/workflows/rc.yml      ← fires on a release/vX.Y.Z push (not a carry branch) → RC pre-release. Both build from a
                                 branch, so they must tag HEAD themselves, see below.
 .github/workflows/publish.yml ← fans a release out to brew/npm/pip
                                 All three pin GoReleaser to an exact version, guarded by
