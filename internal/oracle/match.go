@@ -16,9 +16,12 @@ import (
 // detailAnswerBytes bounds how much of a failing answer a match Detail quotes.
 const detailAnswerBytes = 80
 
-// labelWrappers are what a model puts around a label: quotes, curly quotes, markdown
-// emphasis, '_' and the '*' and U+2022 bullets. Never '-', which can be part of the label.
-const labelWrappers = "\"'`\u201c\u201d\u2018\u2019*_\u2022"
+// labelWrappers are what a model puts around a label: quotes, curly quotes, '_' and the U+2022
+// bullet. Never '-' or a lone '*', which can be the label; '*' strips only as a matched pair.
+const labelWrappers = "\"'`\u201c\u201d\u2018\u2019_\u2022"
+
+// unicodeDashes are the hyphens, dashes and minus sign a model writes for an ASCII '-'.
+const unicodeDashes = "\u2010\u2011\u2012\u2013\u2014\u2015\u2212"
 
 // MatchOracle passes an answer that is one of a closed label set, or matches a pattern.
 type MatchOracle struct {
@@ -96,13 +99,21 @@ func matchDetail(check, candidate string) string {
 	return truncate(check, detailMaxLen-len(": ")-len(quoted)-len(truncMarker)) + ": " + quoted
 }
 
-// NormaliseLabel lowercases (labels are ASCII per the design), drops format runes, strips edge
-// whitespace, labelWrappers and trailing dots to a fixed point, and folds interior runs of space or
-// '_' to one '_'. '-' is always significant: "- " is no bullet, as it reads the same as a sign.
+// NormaliseLabel lowercases, drops format runes, maps unicodeDashes to '-', strips edge whitespace,
+// labelWrappers, a '*' pair and trailing dots to a fixed point, then folds interior space or '_' runs
+// to one '_'. '-' and a lone '*' are significant: "- " is no bullet, since it reads as a sign.
 func NormaliseLabel(s string) string {
-	s = dropFormat(strings.ToLower(s))
+	s = strings.Map(func(r rune) rune {
+		if strings.ContainsRune(unicodeDashes, r) {
+			return '-'
+		}
+		return r
+	}, dropFormat(strings.ToLower(s)))
 	for {
 		t := strings.TrimSuffix(strings.TrimFunc(s, isLabelEdge), ".")
+		if len(t) >= 2 && t[0] == '*' && t[len(t)-1] == '*' {
+			t = t[1 : len(t)-1]
+		}
 		if t == s {
 			break
 		}

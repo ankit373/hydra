@@ -32,7 +32,14 @@ var normaliseRows = []struct{ in, want string }{
 	{"**Card Arrival**", "card_arrival"},
 	{"*card_arrival*", "card_arrival"},
 	{"__card_arrival__", "card_arrival"},
-	{"* card_arrival", "card_arrival"},
+	{"* card_arrival", "*_card_arrival"},
+	{"*", "*"},
+	{"A*", "a*"},
+	{"*a", "*a"},
+	{"_*a*_", "a"},
+	{"card\u2011arrival", "card-arrival"},
+	{"\u22121", "-1"},
+	{"\u2014", "-"},
 	{"\u2022 card_arrival", "card_arrival"},
 	{"- card_arrival", "-_card_arrival"},
 	{"-card_arrival", "-card_arrival"},
@@ -94,6 +101,10 @@ func TestMatchOracle_Verify(t *testing.T) {
 	plusMinus := mustMatch(t, "plusminus", []string{"+", "-"}, "")
 	three := mustMatch(t, "three", []string{"3"}, "")
 	halves := mustMatch(t, "halves", []string{"-.5", ".5"}, "")
+	starred := mustMatch(t, "starred", []string{"A*", "A", "B"}, "")
+	starB := mustMatch(t, "starb", []string{"A*", "B"}, "")
+	ops := mustMatch(t, "ops", []string{"+", "-", "*", "/"}, "")
+	hyphen := mustMatch(t, "hyphen", []string{"card-arrival"}, "")
 	unsigned := mustMatch(t, "unsigned", []string{"0", "1"}, "")
 	digits := mustMatch(t, "digits", nil, `\d+`)
 	version := mustMatch(t, "version", nil, `v\d+\.`)
@@ -122,6 +133,12 @@ func TestMatchOracle_Verify(t *testing.T) {
 		{"a dash bullet is not stripped", three, "- 3", false, `not one of 1 labels: "- 3"`},
 		{"a signed fraction keeps its sign", halves, "-.5", true, ""},
 		{"an unsigned fraction", halves, ".5", true, ""},
+		{"a trailing star is part of a label", starred, "A*", true, ""},
+		{"A is not A*", starB, "A", false, `not one of 2 labels: "A"`},
+		{"a lone star is a label", ops, "*", true, ""},
+		{"a star pair is emphasis", labels, "**card_arrival**", true, ""},
+		{"a Unicode hyphen is '-'", hyphen, "card\u2011arrival", true, ""},
+		{"a Unicode minus is '-'", signs, "\u22121", true, ""},
 		{"a format rune inside a sign", signs, "-\u200b1", true, ""},
 		{"pattern hit", digits, " 42\n", true, ""},
 		{"pattern hit inside Unicode space", digits, "\u00a0\v42\f\u3000", true, ""},
