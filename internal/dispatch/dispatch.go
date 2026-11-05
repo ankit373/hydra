@@ -787,7 +787,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 	// Reorders candidates so the head to try first is at index 0 and reports
 	// the probability it was chosen. At the default ExploreRate of 0 this is
 	// the identity and actProb is 1.
-	candidates, actProb := d.pick(candidates, opts, tier)
+	candidates, actProb := d.pick(candidates, opts)
 
 	if opts.DryRun {
 		// Why this order, not just what it is: a reordering the user cannot

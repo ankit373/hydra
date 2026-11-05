@@ -3,7 +3,9 @@
 package dispatch
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"math"
 	"sync"
 	"testing"
@@ -20,19 +22,36 @@ func exploreHeads(n int) []provider.Head {
 	return heads
 }
 
-// pinnedTier is the tier these picks are made inside; exploring needs one.
-const pinnedTier = "7"
-
-// Unpinned candidates span every tier, so a draw could escalate cost; an
-// objective route is never explored, whatever the rate.
-func TestPick_AnUnpinnedRouteNeverExplores(t *testing.T) {
+// An objective route spans every tier, so a draw could escalate cost: it is
+// never explored, whatever the rate.
+func TestPick_AnObjectiveRouteNeverExplores(t *testing.T) {
 	d := exploreDispatcher(1)
 	in := exploreHeads(5)
 	for i := range 200 {
-		got, p := d.pick(in, Options{Objective: "quality"}, "")
+		got, p := d.pick(in, Options{Objective: "quality"})
 		if p != 1 || got[0].ID != in[0].ID {
-			t.Fatalf("pick %d on an unpinned route ran %s with act_prob %v; want %s at 1", i, got[0].ID, p, in[0].ID)
+			t.Fatalf("pick %d on an objective route ran %s with act_prob %v; want %s at 1", i, got[0].ID, p, in[0].ID)
 		}
+	}
+}
+
+// Plain `hyctl dispatch` names no tier and no objective, and must explore
+// exactly as it did before E1 when explore_rate is set.
+func TestDispatch_AnUnpinnedCLIDispatchStillExplores(t *testing.T) {
+	d := objectiveDispatcher(t)
+	d.cfg.ExploreRate, d.rng = 1, newExploreRand(42)
+	ran := map[string]int{}
+	for i := range 40 {
+		res, err := d.Dispatch(context.Background(), "hi", Options{
+			Domain: objectiveClass, RunID: "run-e", TaskID: fmt.Sprintf("task-e%d", i),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		ran[res.Head.ID]++
+	}
+	if len(ran) != 2 {
+		t.Errorf("40 unpinned CLI dispatches at explore_rate 1 ran only %v; develop explores across both heads", ran)
 	}
 }
 
@@ -46,7 +65,7 @@ func TestPickDefaultRateIsPureArgmax(t *testing.T) {
 	d := exploreDispatcher(0)
 	in := exploreHeads(5)
 	for i := 0; i < 500; i++ {
-		got, p := d.pick(in, Options{}, pinnedTier)
+		got, p := d.pick(in, Options{})
 		if p != 1 {
 			t.Fatalf("act_prob = %v, want 1 at ExploreRate 0", p)
 		}
@@ -60,7 +79,7 @@ func TestPickDefaultRateIsPureArgmax(t *testing.T) {
 
 // A zero-valued Dispatcher must not panic or explore.
 func TestPickNilConfig(t *testing.T) {
-	got, p := (&Dispatcher{}).pick(exploreHeads(3), Options{}, pinnedTier)
+	got, p := (&Dispatcher{}).pick(exploreHeads(3), Options{})
 	if p != 1 || len(got) != 3 {
 		t.Fatalf("nil cfg: got prob %v, %d heads; want 1, 3", p, len(got))
 	}
@@ -84,7 +103,7 @@ func TestPickGuardsForceCertainty(t *testing.T) {
 			d := exploreDispatcher(tc.rate)
 			in := exploreHeads(tc.heads)
 			for i := 0; i < 200; i++ {
-				got, p := d.pick(in, tc.opts, pinnedTier)
+				got, p := d.pick(in, tc.opts)
 				if p != 1 {
 					t.Fatalf("act_prob = %v, want 1", p)
 				}
@@ -106,7 +125,7 @@ func TestPickReportsItsOwnDistribution(t *testing.T) {
 			counts := make([]int, n)
 			const trials = 20000
 			for i := 0; i < trials; i++ {
-				got, p := d.pick(in, Options{}, pinnedTier)
+				got, p := d.pick(in, Options{})
 				idx := -1
 				for j := range in {
 					if in[j].ID == got[0].ID {
@@ -150,7 +169,7 @@ func TestPickPreservesCandidateSet(t *testing.T) {
 	d := exploreDispatcher(1)
 	in := exploreHeads(6)
 	for i := 0; i < 2000; i++ {
-		got, _ := d.pick(in, Options{}, pinnedTier)
+		got, _ := d.pick(in, Options{})
 		seen := map[string]int{}
 		for _, h := range got {
 			seen[h.ID]++
@@ -227,7 +246,7 @@ func TestPickNaNRateFailsClosed(t *testing.T) {
 	d := exploreDispatcher(nan)
 	in := exploreHeads(4)
 	for i := 0; i < 200; i++ {
-		got, p := d.pick(in, Options{}, pinnedTier)
+		got, p := d.pick(in, Options{})
 		if math.IsNaN(p) || p != 1 {
 			t.Fatalf("act_prob = %v, want exactly 1", p)
 		}
@@ -253,7 +272,7 @@ func TestPick_SameSeedSameDraws(t *testing.T) {
 		d := &Dispatcher{cfg: &config.Config{ExploreRate: 0.5}, rng: newExploreRand(42)}
 		var firsts []string
 		for range 200 {
-			got, _ := d.pick(exploreHeads(5), Options{}, pinnedTier)
+			got, _ := d.pick(exploreHeads(5), Options{})
 			firsts = append(firsts, got[0].ID)
 		}
 		return firsts
@@ -275,7 +294,7 @@ func TestPick_SeededRNGIsSafeUnderConcurrentDispatch(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for range 100 {
-				d.pick(exploreHeads(5), Options{}, pinnedTier)
+				d.pick(exploreHeads(5), Options{})
 			}
 		}()
 	}

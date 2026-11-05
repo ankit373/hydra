@@ -19,9 +19,9 @@ import (
 //
 // The returned slice is candidates reordered so the chosen head is first; the
 // rest keep their ranking order and remain the fallback chain.
-func (d *Dispatcher) pick(candidates []provider.Head, opts Options, tier string) ([]provider.Head, float64) {
+func (d *Dispatcher) pick(candidates []provider.Head, opts Options) ([]provider.Head, float64) {
 	eps := d.exploreRate()
-	if !explorable(candidates, opts, tier, eps) {
+	if !explorable(candidates, opts, eps) {
 		return candidates, 1
 	}
 	n := float64(len(candidates))
@@ -62,15 +62,14 @@ func SelectionProb(i, n int, eps float64) float64 {
 	return eps / float64(n)
 }
 
-// explorable reports whether this dispatch may deviate from argmax: only on a
-// pinned tier, whose candidates are that tier or cheaper, so exploring never
-// escalates cost. The ledger check still runs per candidate in the loop.
-func explorable(candidates []provider.Head, opts Options, tier string, eps float64) bool {
+// explorable reports whether this dispatch may deviate from argmax. The ledger
+// check still runs per candidate in the loop, so no draw walks past a policy gate.
+func explorable(candidates []provider.Head, opts Options, eps float64) bool {
 	switch {
 	case !(eps > 0 && eps <= 1): // positive test so NaN lands here too
 		return false
-	case tier == "":
-		return false // unpinned candidates span every tier, the dearest included
+	case opts.Objective != "":
+		return false // an objective route spans every tier, so a draw could escalate cost
 	case len(candidates) < 2:
 		return false
 	case opts.DryRun:
