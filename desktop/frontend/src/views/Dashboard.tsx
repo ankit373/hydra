@@ -78,7 +78,7 @@ function DashboardHeader() {
   return (
     <PageHeader
       title="Usage"
-      subtitle="What you spent, how much context budget is left, and which models earned their answers."
+      subtitle="What you spent, how much context the agent session that drives Hydra has left, and which models earned their answers."
     />
   )
 }
@@ -249,10 +249,11 @@ function TrustCard({ data }: { data: DashboardData }) {
   if (trust.runs === 0) {
     return (
       <div className="card">
-        <div className="card__label">Consensus checks</div>
+        <div className="card__label">Checked answers</div>
         <div className="card__value card__value--unknown">none yet</div>
         <div className="card__note">
-          Asking several models the same question, and stopping once they agree. Try{' '}
+          Hydra can check an answer by asking more models until it is sure enough, then stop.
+          Try{' '}
           <code>hyctl dispatch --confidence 0.95</code>
         </div>
       </div>
@@ -260,7 +261,7 @@ function TrustCard({ data }: { data: DashboardData }) {
   }
   return (
     <div className="card">
-      <div className="card__label">Consensus checks</div>
+      <div className="card__label">Checked answers</div>
       <TrustCompare trust={trust} revealed={revealed} />
       <div className="card__note">{consensusNote(trust)}</div>
     </div>
@@ -288,8 +289,8 @@ function TrustCompare({ trust, revealed }: { trust: TrustPanel; revealed: boolea
       </div>
       <div className={`trust-cmp__delta ${saved ? 'trust-cmp__delta--good' : 'trust-cmp__delta--bad'}`}>
         {saved
-          ? `${pct(trust.samplesSavedPct)} fewer samples than a fixed swarm`
-          : `${pct(Math.abs(trust.samplesSavedPct))} more samples than a fixed swarm`}
+          ? `${pct(trust.samplesSavedPct)} fewer models asked than a fixed panel`
+          : `${pct(Math.abs(trust.samplesSavedPct))} more models asked than a fixed panel`}
       </div>
     </div>
   )
@@ -314,7 +315,7 @@ function Breakdowns({
       )}
       <div className="grid-2">
         <RankedBars title="By model · click a row for detail" rows={data.byModel} onSelect={onSelectModel} />
-        <RankedBars title="By tier" rows={data.byTier} />
+        <RankedBars title="By routing level (1 = most capable)" rows={data.byTier} />
       </div>
       <RecentTable rows={data.recent} onOpenRun={onOpenRun} />
     </>
@@ -401,9 +402,10 @@ export function CalibrationLeaderboard({ rows }: { rows: CalibrationRow[] }) {
       <section>
         <h2 className="section__title">Which models earned their answers</h2>
         <div className="empty" style={{ marginTop: 0 }}>
-          <p className="empty__title">No calibration recorded yet</p>
+          <p className="empty__title">No checked answers yet</p>
           <p>
-            Feed outcomes with <code>hyctl trust record</code> and this fills in.
+            This fills in as answers are checked. You can also record outcomes with{' '}
+            <code>hyctl trust record</code>.
           </p>
         </div>
       </section>
@@ -587,8 +589,8 @@ export function RecentTable({
             <tr>
               <th>Time</th>
               <th>Model</th>
-              <th className="num">Tier</th>
-              <th className="num">Wall</th>
+              <th className="num">Level</th>
+              <th className="num">Time taken</th>
               <th className="num">Cost</th>
               <th></th>
             </tr>
@@ -637,8 +639,9 @@ function EmptyState() {
   return (
     <div className="empty" style={{ marginTop: 26 }}>
       <p className="empty__title">No requests yet</p>
-      <p>
-        Run <code>hyctl dispatch --enum SIMPLE "…"</code> and this fills in.
+      <p>Ask something in Chat and it will appear here.</p>
+      <p className="empty__alt">
+        From a terminal: <code>hyctl dispatch "…"</code>
       </p>
     </div>
   )
