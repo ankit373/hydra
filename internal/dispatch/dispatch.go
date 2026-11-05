@@ -370,6 +370,42 @@ type Dispatcher struct {
 // Heads returns the probed head list for external callers (e.g. swarm).
 func (d *Dispatcher) Heads() []provider.Head { return d.heads }
 
+// RestrictHeads keeps only the named heads, in their existing (CapScore) order. It refuses
+// an id that discovery did not find, or found unroutable, naming it and the reason.
+// No ids leaves the inventory as discovered.
+func (d *Dispatcher) RestrictHeads(ids []string) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	byID := make(map[string]provider.Head, len(d.heads))
+	for _, h := range d.heads {
+		byID[h.ID] = h
+	}
+	want := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		if want[id] {
+			return fmt.Errorf("head %q is listed twice", id)
+		}
+		h, ok := byID[id]
+		if !ok {
+			return fmt.Errorf("no discovered head with id %q; run `hyctl probe` to see what this machine has", id)
+		}
+		if why := executor.Unroutable(h); why != "" {
+			return fmt.Errorf("head %q cannot be routed: %s", id, why)
+		}
+		want[id] = true
+	}
+	// A new slice: d.heads may be the probe cache's own, shared across New calls.
+	kept := make([]provider.Head, 0, len(ids))
+	for _, h := range d.heads {
+		if want[h.ID] {
+			kept = append(kept, h)
+		}
+	}
+	d.heads = kept
+	return nil
+}
+
 // Embedder resolves the machine's embedding model once, for a caller that
 // needs a vector rather than an answer. Never nil; with no model on the machine
 // it reports itself unavailable, so callers keep one code path.

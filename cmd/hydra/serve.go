@@ -13,6 +13,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/dispatch"
 	"github.com/ankit373/hydra/internal/executor"
 	"github.com/ankit373/hydra/internal/provider"
@@ -210,6 +211,7 @@ func cmdServe() *cobra.Command {
 		addr, token, enum string
 		localOnly         bool
 		confidence        float64
+		heads             []string
 	)
 
 	cmd := &cobra.Command{
@@ -231,7 +233,8 @@ func cmdServe() *cobra.Command {
 			"other people's model servers.",
 		Example: "  hyctl serve\n" +
 			"  hyctl serve --enum SIMPLE --local\n" +
-			"  hyctl serve --addr 0.0.0.0:8788 --token \"$HYDRA_SERVE_TOKEN\"\n\n" +
+			"  hyctl serve --addr 0.0.0.0:8788 --token \"$HYDRA_SERVE_TOKEN\"\n" +
+			"  hyctl serve --heads ollama/qwen3:8b,env/openai\n\n" +
 			"  # point open-code-review at it\n" +
 			"  OCR_LLM_URL=http://127.0.0.1:8787/v1 OCR_LLM_MODEL=hydra ocr review",
 		RunE: func(c *cobra.Command, _ []string) error {
@@ -251,6 +254,9 @@ func cmdServe() *cobra.Command {
 				return fmt.Errorf("dispatcher init: %w", err)
 			}
 			defer d.Close()
+			if err := restrictServeHeads(d, heads); err != nil {
+				return err
+			}
 
 			ln, err := serve.Listen(addr, token)
 			if err != nil {
@@ -272,7 +278,26 @@ func cmdServe() *cobra.Command {
 	f.StringVar(&enum, "enum", "STANDARD", "routing enum for a request that names no key")
 	f.BoolVar(&localOnly, "local", false, "local Heads only, no API calls")
 	f.Float64Var(&confidence, "confidence", 0.95, "stop asking decision sources once an answer is this sure")
+	f.StringSliceVar(&heads, "heads", nil, "route among only these head ids (default [serve] heads in config.toml, else all); "+
+		"an embedding model is routable by no list, so with one set the answer cache and recall have none")
 	return cmd
+}
+
+// restrictServeHeads applies the allowlist before the server binds, so a typo is a
+// startup error rather than a server quietly routing to heads the operator excluded.
+func restrictServeHeads(d *dispatch.Dispatcher, flagHeads []string) error {
+	ids := flagHeads
+	if len(ids) == 0 {
+		cfg, err := config.Load()
+		if err != nil {
+			return err
+		}
+		ids = cfg.Serve.Heads
+	}
+	if err := d.RestrictHeads(ids); err != nil {
+		return fmt.Errorf("head allowlist: %w", err)
+	}
+	return nil
 }
 
 func printServeBanner(w io.Writer, addr, enum string, hasToken, localOnly bool, heads []provider.Head) {
