@@ -88,6 +88,7 @@ func TestServeRouter_OnlyAVerifiedClassEscalates(t *testing.T) {
 		{"a class with no verifier", serve.Request{TaskClass: "classification.other"}, false},
 		{"a stream", serve.Request{TaskClass: cascadeTestClass, OnEvent: func(serve.Event) {}}, false},
 		{"a pinned tier", serve.Request{TaskClass: cascadeTestClass, Route: serve.Route{Enum: "standard"}}, false},
+		{"tool calls", serve.Request{TaskClass: cascadeTestClass, Tools: []executor.ToolDef{{Type: "function"}}}, false},
 		{"a verified class", serve.Request{TaskClass: cascadeTestClass}, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -350,5 +351,20 @@ func TestEscalation_FreezesWhenTheGovernorRouted(t *testing.T) {
 		if next, _ := opts.Escalate(context.Background(), res); next != tc.want || esc.served() != res {
 			t.Errorf("objective %q: escalate=%v, want %v", tc.objective, next, tc.want)
 		}
+	}
+}
+
+// A relative labels path is config.toml's neighbour, wherever the server started.
+func TestServeVerifiers_LabelsBesideConfig(t *testing.T) {
+	testutil.NewSandbox(t)
+	if err := os.MkdirAll(config.Dir(), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(config.Dir(), "t.labels"), []byte("card_arrival\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(t.TempDir())
+	if _, err := serveVerifiers([]config.ServeVerifier{{Class: cascadeTestClass, Kind: "match", ID: "t", Labels: "t.labels"}}); err != nil {
+		t.Fatalf("a labels file beside config.toml did not load: %v", err)
 	}
 }

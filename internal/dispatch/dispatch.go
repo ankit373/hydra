@@ -838,6 +838,9 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 	// last is the newest answer the Escalate hook passed over, which stands
 	// when no candidate is left to ask; the hook's owner chooses what to serve.
 	var last *Result
+	// escalatedUSD is what the answers passed over cost; a further head is
+	// asked only within what they left of the ceiling.
+	var escalatedUSD float64
 	// Refusals the request itself caused, against heads actually sent, so a
 	// run that sent nothing can say it was the request and not the heads.
 	var tooWarm, overCost, sent int
@@ -919,6 +922,12 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		// a different one, or a resume silently re-routes to a head the human
 		// was never shown.
 		approved := decision == ledger.Allow || (decision == ledger.Ask && opts.AnsweredHead == h.ID)
+		// An escalation already holds a paid answer: it stops here rather than
+		// park that answer, or route around the question to a head that needs none.
+		if lerr == nil && decision == ledger.Ask && !approved && last != nil {
+			refuse("needs approval, so the escalation stops here")
+			break
+		}
 		switch {
 		case lerr != nil:
 			// Fails closed: a policy-check failure (unreadable policy file,
@@ -962,7 +971,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		if opts.MaxCostUSD > 0 {
 			estInputTokens := len(prompt) / 4
 			estCost := CallCost(d.pricing, h, estInputTokens, estInputTokens/2)
-			if estCost > opts.MaxCostUSD {
+			if limit := opts.MaxCostUSD - escalatedUSD; estCost > limit {
 				// Named only when the caller said where the ceiling came from.
 				// Defaulting to a source would mean printing "--max-cost" at an
 				// edit whose ceiling came out of policy.yaml.
@@ -971,22 +980,22 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 					where = " set by " + opts.MaxCostSource
 				}
 				lastErr = fmt.Errorf("estimated cost $%.4f for head %s exceeds limit $%.4f%s",
-					estCost, h.ID, opts.MaxCostUSD, where)
+					estCost, h.ID, limit, where)
 				_ = rl.Append(runlog.Event{
 					Kind: runlog.KindError, TaskID: taskID,
 					SpanID: span, ParentSpanID: taskSpan, Level: runlog.LevelError,
 					Head: h.ID, Model: h.Name, Tier: tier,
 					Status: "denied", Detail: "exceeds cost ceiling",
-					Meta: map[string]any{"est_cost_usd": estCost, "limit_usd": opts.MaxCostUSD},
+					Meta: map[string]any{"est_cost_usd": estCost, "limit_usd": limit},
 				})
 				attempts = append(attempts, Attempt{Head: h.ID, Model: h.Name, Tier: tier,
-					Reason: fmt.Sprintf("estimated $%.4f exceeds the $%.4f ceiling", estCost, opts.MaxCostUSD)})
+					Reason: fmt.Sprintf("estimated $%.4f exceeds the $%.4f ceiling", estCost, limit)})
 				// Shares the ledger's accountability trail with policy denials
 				// (Reason distinguishes them) so `hyctl security` has one place
 				// to find every kind of refused access, cost or policy.
 				_ = ledger.Record(ledger.DefaultPath(), ledger.Event{
 					Agent: "hydra-dispatch", Tool: h.ID, Decision: ledger.Deny,
-					Reason: fmt.Sprintf("exceeds cost ceiling: estimated $%.4f > limit $%.4f", estCost, opts.MaxCostUSD),
+					Reason: fmt.Sprintf("exceeds cost ceiling: estimated $%.4f > limit $%.4f", estCost, limit),
 				})
 				overCost++
 				continue
@@ -1041,6 +1050,10 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 					Status: "refused", DurationMS: time.Since(started).Milliseconds(),
 					Detail: truncate(err.Error(), 200),
 				})
+				// Every later head would be told the same, so a paid answer stands.
+				if last != nil {
+					break
+				}
 				return nil, err
 			}
 			// Parks the head so the rest of this run, and the next one, skip
@@ -1093,7 +1106,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		if opts.Escalate != nil {
 			if next, reason := opts.Escalate(ctx, r); next {
 				attempts = append(attempts, Attempt{Head: h.ID, Model: h.Name, Tier: tier, Reason: "escalated: " + reason})
-				last = r
+				last, escalatedUSD = r, escalatedUSD+r.CostUSD
 				continue
 			}
 		}

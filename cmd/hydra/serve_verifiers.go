@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/ankit373/hydra/internal/config"
@@ -50,7 +51,7 @@ func serveVerifier(e config.ServeVerifier) (string, decide.Verifier, error) {
 	}
 	var labels []string
 	if e.Labels != "" {
-		if labels, err = readLabels(e.Labels); err != nil {
+		if labels, err = readLabels(configRelative(e.Labels)); err != nil {
 			return "", decide.Verifier{}, err
 		}
 	}
@@ -59,6 +60,15 @@ func serveVerifier(e config.ServeVerifier) (string, decide.Verifier, error) {
 		return "", decide.Verifier{}, err
 	}
 	return class, decide.Verifier{Source: o.Source, Oracle: o}, nil
+}
+
+// configRelative reads a relative path as config.toml's neighbour, not the
+// server's working directory, which differs under launchd or another shell.
+func configRelative(path string) string {
+	if filepath.IsAbs(path) {
+		return path
+	}
+	return filepath.Join(config.Dir(), path)
 }
 
 // readLabels is one label per line; blank lines and '#' comments are skipped.
@@ -90,14 +100,20 @@ type escalation struct {
 	results []*dispatch.Result
 }
 
-// escalationFor is set up only for a buffered request ordered by an objective whose
-// class has a verifier; every other request dispatches exactly as before.
+// escalationFor is set up only for a buffered, tool-free request ordered by an objective
+// whose class has a verifier; every other request dispatches exactly as before.
+// A tool call has no text a verifier could read.
 func (r serveRouter) escalationFor(ev *serve.Evidence, req serve.Request, opts *dispatch.Options) *escalation {
-	if ev == nil || req.OnEvent != nil || opts.Objective == "" || len(r.verifiers[ev.TaskClass]) == 0 {
+	if ev == nil || req.OnEvent != nil || len(req.Tools) > 0 || opts.Objective == "" || len(r.verifiers[ev.TaskClass]) == 0 {
 		return nil
 	}
+	// The whole cascade, its first head included, spends within one ceiling:
+	// dispatch asks each further head only within what the earlier ones left.
+	if opts.MaxCostUSD <= 0 {
+		opts.MaxCostUSD, opts.MaxCostSource = servePolicyCeiling()
+	}
 	e := &escalation{cascade: &decide.Cascade{
-		Target:         trust.Target{Confidence: r.confidence, MaxCostUSD: cascadeCeiling(opts.MaxCostUSD)},
+		Target:         trust.Target{Confidence: r.confidence, MaxCostUSD: opts.MaxCostUSD},
 		MaxEscalations: r.maxEscalations,
 		Cal:            r.cal,
 		Domain:         ev.TaskClass,
@@ -122,14 +138,4 @@ func (e *escalation) judge(ctx context.Context, res *dispatch.Result) (bool, str
 // served is the answer the cascade chose, which need not be the last one asked.
 func (e *escalation) served() *dispatch.Result {
 	return e.results[e.cascade.Outcome().Index]
-}
-
-// cascadeCeiling bounds what one request may spend across its escalations: the
-// request's own ceiling, else policy.yaml's, since escalating is what multiplies spend.
-func cascadeCeiling(requestUSD float64) float64 {
-	if requestUSD > 0 {
-		return requestUSD
-	}
-	usd, _ := servePolicyCeiling()
-	return usd
 }

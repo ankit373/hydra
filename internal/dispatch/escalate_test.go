@@ -185,3 +185,27 @@ func TestEscalate_ExhaustedReturnsLastAnswerNotError(t *testing.T) {
 		t.Errorf("the task closed as %s/%s, want task_finished ok: it was answered", last.Kind, last.Status)
 	}
 }
+
+// An escalation spends from what the answers it passed over left of the ceiling,
+// so a head that fits the whole ceiling but not the remainder is never asked.
+func TestEscalate_FurtherHeadsFitTheRemainingCeiling(t *testing.T) {
+	testutil.NewSandbox(t)
+	h1, h2 := answeringHead(t, "h1", "first", 95), answeringHead(t, "h2", "second", 90)
+	h1.Meta = map[string]string{"model": "test/priced"}
+	h2.Meta = h1.Meta
+	d := liveDispatcher(h1, h2)
+	d.pricing = pricedModel(t, "test/priced", 2, 4)
+	// 4000 chars estimate 1000 in and 500 out, $0.004 a call, which the stub also bills.
+	res, err := d.Dispatch(context.Background(), strings.Repeat("x", 4000), Options{
+		MaxCostUSD: 0.006,
+		Escalate:   func(context.Context, *Result) (bool, string) { return true, "rejected" },
+	})
+	if err != nil || res.Output != "first" {
+		t.Fatalf("Dispatch = %v, %v; want the first answer standing", res, err)
+	}
+	for _, r := range costRows(t) {
+		if r["head"] == "h2" {
+			t.Fatal("h2 was paid $0.004 with $0.002 of the $0.006 ceiling left")
+		}
+	}
+}

@@ -150,7 +150,7 @@ type ServeVerifier struct {
 	Class   string `toml:"class"`
 	Kind    string `toml:"kind"`
 	ID      string `toml:"id"`
-	Labels  string `toml:"labels,omitempty"` // a file, one label per line, '#' comments
+	Labels  string `toml:"labels,omitempty"` // a file beside config.toml unless absolute, one label per line
 	Pattern string `toml:"pattern,omitempty"`
 }
 
