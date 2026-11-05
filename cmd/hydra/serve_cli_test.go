@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -432,8 +434,9 @@ func TestServeRouter_ResolvesTheClassAndItsBasis(t *testing.T) {
 		{"header wins", route, serve.Request{TaskClass: "a.b"}, &serve.Evidence{TaskClass: "a.b", TaskClassBasis: "header"}},
 		{"route default", route, serve.Request{}, &serve.Evidence{TaskClass: route, TaskClassBasis: "route"}},
 		{"nothing named", "", serve.Request{}, nil},
-		{"pinned route, header", route, serve.Request{TaskClass: "a.b", Route: serve.Route{Tier: "4"}}, &serve.Evidence{TaskClass: "a.b", TaskClassBasis: "header"}},
+		{"pinned tier, header", route, serve.Request{TaskClass: "a.b", Route: serve.Route{Tier: "4"}}, &serve.Evidence{TaskClass: "a.b", TaskClassBasis: "header"}},
 		{"pinned head, no header", route, serve.Request{Route: serve.Route{Head: "h1"}}, nil},
+		{"pinned head, header", route, serve.Request{TaskClass: "a.b", Route: serve.Route{Head: "h1"}}, nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			opts, ev, err := serveRouter{defaultEnum: "STANDARD", defaultClass: tc.defaultClass}.options(tc.req)
@@ -449,6 +452,11 @@ func TestServeRouter_ResolvesTheClassAndItsBasis(t *testing.T) {
 			}
 			if opts.Domain != want {
 				t.Errorf("Domain = %q, want %q: evidence must name exactly the class routed on", opts.Domain, want)
+			}
+			// The cache key does not cover the class, so a class-routed request
+			// must neither read nor fill it; an unclassed one keeps it as before.
+			if opts.NoCache != (want != "") {
+				t.Errorf("NoCache = %v with Domain %q, want it set exactly when a class routes", opts.NoCache, want)
 			}
 		})
 	}
@@ -488,12 +496,13 @@ func TestServeRouter_MaxCostOnlyLowersTheCeiling(t *testing.T) {
 		from                 string
 	}{
 		{0, 0, 0, ""},
+		{0.05, 0, 0, ""},
 		{0, 0.25, 0.25, serve.MaxCostHeader},
 		{0.05, 0.25, 0.05, "policy.yaml max_cost_usd"},
 		{0.05, 0.01, 0.01, serve.MaxCostHeader},
 	} {
-		r := serveRouter{defaultEnum: "STANDARD", policyCeiling: tc.policy, policyCeilingFrom: "policy.yaml max_cost_usd"}
-		opts, _, err := r.options(serve.Request{MaxCostUSD: tc.header})
+		t.Setenv("HYDRA_HOME", policyHome(t, fmt.Sprintf("version: \"1.0\"\ndefaults:\n  max_cost_usd: %v\n", tc.policy)))
+		opts, _, err := serveRouter{defaultEnum: "STANDARD"}.options(serve.Request{MaxCostUSD: tc.header})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -501,6 +510,54 @@ func TestServeRouter_MaxCostOnlyLowersTheCeiling(t *testing.T) {
 			t.Errorf("policy ceiling %v, header %v gave MaxCostUSD %v (from %q), want %v (from %q)",
 				tc.policy, tc.header, opts.MaxCostUSD, opts.MaxCostSource, tc.want, tc.from)
 		}
+	}
+}
+
+// The ceiling is read per request: an operator lowering max_cost_usd on a
+// running server must not have to restart it for the new limit to hold.
+func TestServeRouter_APolicyEditAppliesWithoutARestart(t *testing.T) {
+	home := policyHome(t, "version: \"1.0\"\ndefaults:\n  max_cost_usd: 0.05\n")
+	t.Setenv("HYDRA_HOME", home)
+	r := serveRouter{defaultEnum: "STANDARD"}
+	before, _, err := r.options(serve.Request{MaxCostUSD: 0.25})
+	if err != nil {
+		t.Fatal(err)
+	}
+	edited := "version: \"1.0\"\ndefaults:\n  max_cost_usd: 0.02\n"
+	if err := os.WriteFile(filepath.Join(home, "registry", "policy.yaml"), []byte(edited), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	after, _, err := r.options(serve.Request{MaxCostUSD: 0.25})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if before.MaxCostUSD != 0.05 || after.MaxCostUSD != 0.02 {
+		t.Errorf("ceiling %v before the edit and %v after, want 0.05 then 0.02", before.MaxCostUSD, after.MaxCostUSD)
+	}
+}
+
+// When the policy, not the client, set the ceiling every head exceeded, the
+// limit is the operator's and the request is not at fault: no 400.
+func TestServeRouter_APolicyCeilingRefusingEveryHeadIsNotTheClients(t *testing.T) {
+	s, _ := dispatchable(t, "unused")
+	ctx := context.Background()
+	d, err := dispatch.New(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+	tiny := "version: \"1.0\"\ndefaults:\n  max_cost_usd: 0.000000000001\n"
+	if err := os.WriteFile(filepath.Join(s.HydraHome, "registry", "policy.yaml"), []byte(tiny), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = serveRouter{d: d, defaultEnum: "MODERATE"}.Chat(ctx, serve.Request{
+		RequestID:  "run-policy-cost",
+		Messages:   []executor.Message{{Role: "user", Content: "hi"}},
+		MaxCostUSD: 0.25,
+	})
+	if err == nil || errors.Is(err, serve.ErrBadRequest) || !errors.Is(err, dispatch.ErrOverCostCeiling) {
+		t.Errorf("every head over the policy's ceiling gave %v, want an ungraded ErrOverCostCeiling (a 502)", err)
 	}
 }
 

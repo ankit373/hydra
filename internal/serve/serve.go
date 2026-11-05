@@ -163,10 +163,11 @@ type chatRequest struct {
 	StreamOptions       *struct {
 		IncludeUsage bool `json:"include_usage"`
 	} `json:"stream_options"`
-	Tools       []executor.ToolDef `json:"tools"`
-	ToolChoice  json.RawMessage    `json:"tool_choice"`
-	Temperature *float64           `json:"temperature"`
-	Metadata    json.RawMessage    `json:"metadata"`
+	Tools      []executor.ToolDef `json:"tools"`
+	ToolChoice json.RawMessage    `json:"tool_choice"`
+	// Raw until the class header opts in: serve ignored it before E1, so an
+	// unreadable value must not fail a request that never asked for it.
+	Temperature json.RawMessage `json:"temperature"`
 }
 
 // readBody reads one request within maxBody, saying why when it cannot.
@@ -257,22 +258,23 @@ func parseTarget(h http.Header, in chatRequest) (Request, error) {
 	if err != nil {
 		return Request{}, err
 	}
-	// Metadata was ignored before it could carry a class, so a shape we cannot
-	// read is still ignored rather than refused.
-	var metadata map[string]any
-	_ = json.Unmarshal(in.Metadata, &metadata)
-	class, err := explicitClass(h, metadata)
+	class, err := explicitClass(h)
 	if err != nil {
-		return Request{}, err
-	}
-	if err = checkTemperature(in.Temperature); err != nil {
 		return Request{}, err
 	}
 	ceiling, err := maxCost(h)
 	if err != nil {
 		return Request{}, err
 	}
-	return Request{Route: route, TaskClass: class, MaxCostUSD: ceiling}, nil
+	out := Request{Route: route, TaskClass: class, MaxCostUSD: ceiling}
+	// Temperature is opt-in with the class header: serve ignored it before E1,
+	// and a client that never asked for the new contract must not get a 400.
+	if class != "" {
+		if out.Temperature, err = temperature(in.Temperature); err != nil {
+			return Request{}, err
+		}
+	}
+	return out, nil
 }
 
 // streamChat answers as server-sent events.
@@ -306,7 +308,6 @@ func request(in chatRequest, base Request, on func(Event)) Request {
 	base.Tools = in.Tools
 	base.ToolChoice = in.ToolChoice
 	base.MaxTokens = firstPositive(in.MaxCompletionTokens, in.MaxTokens)
-	base.Temperature = in.Temperature
 	base.OnEvent = on
 	return base
 }

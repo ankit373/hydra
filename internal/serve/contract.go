@@ -3,7 +3,7 @@
 package serve
 
 import (
-	"errors"
+	"encoding/json"
 	"fmt"
 	"math"
 	"net/http"
@@ -46,31 +46,23 @@ func writeEvidence(w http.ResponseWriter, body map[string]any, ev *Evidence) {
 	body["hydra"] = ev
 }
 
-// explicitClass is the class the client named, if any. Every value it sent
-// must agree, since quietly picking one would route on a class it did not mean.
-func explicitClass(h http.Header, metadata map[string]any) (string, error) {
-	type said struct{ from, value string }
-	var all []said
+// explicitClass is the class the client named in TaskClassHeader, if any.
+// Every value it sent must agree, since quietly picking one would route on a
+// class it did not mean.
+func explicitClass(h http.Header) (string, error) {
+	var class string
 	for _, v := range h.Values(TaskClassHeader) {
-		all = append(all, said{TaskClassHeader, v})
-	}
-	// Metadata is the client's own free-form map; only a string here is a class.
-	if v, ok := metadata["task_class"].(string); ok {
-		all = append(all, said{"metadata.task_class", v})
-	}
-	var class, from string
-	for _, s := range all {
-		if strings.TrimSpace(s.value) == "" {
+		if strings.TrimSpace(v) == "" {
 			continue
 		}
-		c, err := trust.TaskClass(s.value)
+		c, err := trust.TaskClass(v)
 		if err != nil {
-			return "", fmt.Errorf("%s: %w", s.from, err)
+			return "", fmt.Errorf("%s: %w", TaskClassHeader, err)
 		}
 		if class != "" && c != class {
-			return "", fmt.Errorf("%s says %q but %s says %q; send one class", from, class, s.from, c)
+			return "", fmt.Errorf("%s was sent as both %q and %q; send one class", TaskClassHeader, class, c)
 		}
-		class, from = c, s.from
+		class = c
 	}
 	return class, nil
 }
@@ -96,11 +88,16 @@ func maxCost(h http.Header) (float64, error) {
 	return ceiling, nil
 }
 
-// checkTemperature uses OpenAI's own range, so a value a provider would refuse
-// is refused here before any head is paid for.
-func checkTemperature(t *float64) error {
-	if t != nil && !(*t >= 0 && *t <= 2) {
-		return errors.New("temperature must be between 0 and 2")
+// temperature reads the body's temperature in OpenAI's own range, so a value a
+// provider would refuse is refused before any head is paid for. Absent or null
+// is nil, the provider default.
+func temperature(raw json.RawMessage) (*float64, error) {
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil, nil
 	}
-	return nil
+	var t float64
+	if err := json.Unmarshal(raw, &t); err != nil || !(t >= 0 && t <= 2) {
+		return nil, fmt.Errorf("temperature must be a number between 0 and 2; got %s", raw)
+	}
+	return &t, nil
 }

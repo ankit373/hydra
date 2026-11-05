@@ -23,33 +23,25 @@ func postWith(t *testing.T, r Router, header http.Header, body string) *httptest
 	return w
 }
 
-func withMetadata(class string) string {
-	return `{"model":"hydra","metadata":{"task_class":"` + class + `"},"messages":[{"role":"user","content":"hi"}]}`
-}
-
-func TestExplicitClass_HeaderAndMetadata(t *testing.T) {
+func TestExplicitClass_Header(t *testing.T) {
 	const want = "classification.banking77"
 	hdr := func(vs ...string) http.Header { return http.Header{TaskClassHeader: vs} }
 	for _, tc := range []struct {
 		name   string
 		header http.Header
-		body   string
 		class  string
 		status int
 	}{
-		{"none", nil, oneTurn, "", http.StatusOK},
-		{"header", hdr("Classification.Banking77"), oneTurn, want, http.StatusOK},
-		{"metadata", nil, withMetadata(want), want, http.StatusOK},
-		{"header and metadata agree", hdr(want), withMetadata("CLASSIFICATION.banking77"), want, http.StatusOK},
-		{"repeated header agrees", hdr(want, want), oneTurn, want, http.StatusOK},
-		{"repeated header disagrees", hdr(want, "classification.clinc150"), oneTurn, "", http.StatusBadRequest},
-		{"header and metadata disagree", hdr(want), withMetadata("classification.clinc150"), "", http.StatusBadRequest},
-		{"no dot", hdr("go"), oneTurn, "", http.StatusBadRequest},
-		{"slash", nil, withMetadata("classify/banking77"), "", http.StatusBadRequest},
+		{"none", nil, "", http.StatusOK},
+		{"header", hdr("Classification.Banking77"), want, http.StatusOK},
+		{"repeated header agrees", hdr(want, "CLASSIFICATION.banking77"), want, http.StatusOK},
+		{"repeated header disagrees", hdr(want, "classification.clinc150"), "", http.StatusBadRequest},
+		{"no dot", hdr("go"), "", http.StatusBadRequest},
+		{"slash", hdr("classify/banking77"), "", http.StatusBadRequest},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			s := &stubRouter{answer: Answer{Output: "ok"}}
-			w := postWith(t, s, tc.header, tc.body)
+			w := postWith(t, s, tc.header, oneTurn)
 			if w.Code != tc.status {
 				t.Fatalf("status %d, want %d: %s", w.Code, tc.status, w.Body.String())
 			}
@@ -62,28 +54,20 @@ func TestExplicitClass_HeaderAndMetadata(t *testing.T) {
 
 // A refusal has to name both values, or the client cannot tell which to drop.
 func TestExplicitClass_DisagreementNamesBoth(t *testing.T) {
-	for _, tc := range []struct {
-		header http.Header
-		body   string
-	}{
-		{http.Header{TaskClassHeader: {"a.one"}}, withMetadata("a.two")},
-		{http.Header{TaskClassHeader: {"a.one", "a.two"}}, oneTurn},
-	} {
-		w := postWith(t, &stubRouter{}, tc.header, tc.body)
-		if msg := w.Body.String(); w.Code != http.StatusBadRequest || !strings.Contains(msg, "a.one") || !strings.Contains(msg, "a.two") {
-			t.Errorf("status %d, the refusal does not name both classes: %s", w.Code, msg)
-		}
+	w := postWith(t, &stubRouter{}, http.Header{TaskClassHeader: {"a.one", "a.two"}}, oneTurn)
+	if msg := w.Body.String(); w.Code != http.StatusBadRequest || !strings.Contains(msg, "a.one") || !strings.Contains(msg, "a.two") {
+		t.Errorf("status %d, the refusal does not name both classes: %s", w.Code, msg)
 	}
 }
 
-// Clients already send metadata of their own, and before E1 serve ignored it,
-// so only a string task_class is read and nothing else in it can refuse.
-func TestChat_ForeignMetadataStillParses(t *testing.T) {
+// Clients already send metadata of their own, and serve has never read it: at
+// checkpoint A the class comes from the header alone, so metadata is inert.
+func TestChat_MetadataIsInert(t *testing.T) {
 	for _, md := range []string{
+		`{"task_class":"support"}`,
+		`{"task_class":"classification.banking77"}`,
 		`{"tags":["a","b"],"user_id":42}`,
-		`{"task_class":7}`,
 		`["not","an","object"]`,
-		`null`,
 	} {
 		s := &stubRouter{answer: Answer{Output: "ok"}}
 		w := postWith(t, s, nil, `{"model":"hydra","metadata":`+md+`,"messages":[{"role":"user","content":"hi"}]}`)
@@ -146,17 +130,20 @@ func TestStream_EchoesTheClassInItsHeaders(t *testing.T) {
 	}
 }
 
+// With the class header, the temperature is validated and forwarded.
 func TestChat_TemperatureRange(t *testing.T) {
 	for _, tc := range []struct {
 		temp   string // the raw JSON value, empty for absent
 		status int
 	}{
 		{"", http.StatusOK},
+		{"null", http.StatusOK},
 		{"0", http.StatusOK},
 		{"2", http.StatusOK},
 		{"0.7", http.StatusOK},
 		{"-0.1", http.StatusBadRequest},
 		{"2.1", http.StatusBadRequest},
+		{"2.5", http.StatusBadRequest},
 		{`"NaN"`, http.StatusBadRequest},
 	} {
 		body := oneTurn
@@ -164,7 +151,7 @@ func TestChat_TemperatureRange(t *testing.T) {
 			body = `{"model":"hydra","temperature":` + tc.temp + `,"messages":[{"role":"user","content":"hi"}]}`
 		}
 		s := &stubRouter{}
-		w := postWith(t, s, nil, body)
+		w := postWith(t, s, http.Header{TaskClassHeader: {"a.b"}}, body)
 		if w.Code != tc.status {
 			t.Errorf("temperature %s: status %d, want %d", tc.temp, w.Code, tc.status)
 			continue
@@ -173,11 +160,25 @@ func TestChat_TemperatureRange(t *testing.T) {
 			continue
 		}
 		got := s.got.Temperature
-		if tc.temp == "" && got != nil {
+		absent := tc.temp == "" || tc.temp == "null"
+		if absent && got != nil {
 			t.Errorf("no temperature sent, router asked for %v", *got)
 		}
-		if tc.temp != "" && (got == nil || formatFloat(*got) != tc.temp) {
+		if !absent && (got == nil || formatFloat(*got) != tc.temp) {
 			t.Errorf("temperature %s did not reach the router: %v", tc.temp, got)
+		}
+	}
+}
+
+// G7d. Without the class header a client has not opted into E1, and serve
+// ignores its temperature exactly as before: no 400, nothing forwarded.
+func TestChat_TemperatureWithoutTheClassHeaderIsIgnored(t *testing.T) {
+	for _, temp := range []string{"2.5", "0.7", `"NaN"`} {
+		s := &stubRouter{answer: Answer{Output: "ok"}}
+		w := postWith(t, s, nil, `{"model":"hydra","temperature":`+temp+`,"messages":[{"role":"user","content":"hi"}]}`)
+		if w.Code != http.StatusOK || s.got.Temperature != nil {
+			t.Errorf("temperature %s without %s: status %d, forwarded a temperature: %v; want 200 and nothing forwarded",
+				temp, TaskClassHeader, w.Code, s.got.Temperature != nil)
 		}
 	}
 }

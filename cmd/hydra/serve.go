@@ -31,11 +31,7 @@ type serveRouter struct {
 	// defaultClass is --task-class, the class an unpinned request naming none
 	// routes for. Empty leaves such a request routing exactly as before E1.
 	defaultClass string
-	// policyCeiling and its source are policy.yaml's max_cost_usd, which a
-	// client's MaxCostHeader may lower but never raise; 0 means none.
-	policyCeiling     float64
-	policyCeilingFrom string
-	localOnly         bool
+	localOnly    bool
 }
 
 func (r serveRouter) Chat(ctx context.Context, req serve.Request) (serve.Answer, error) {
@@ -96,34 +92,37 @@ func (r serveRouter) options(req serve.Request) (dispatch.Options, *serve.Eviden
 		OnStream:    streamEvents(req.OnEvent),
 		RunID:       req.RequestID,
 	}
-	opts.MaxCostUSD, opts.MaxCostSource = r.ceiling(req.MaxCostUSD)
+	opts.MaxCostUSD, opts.MaxCostSource = requestCeiling(req.MaxCostUSD)
 
-	// A class is reported only where it routes. A request naming none, on a
-	// pinned route or with no --task-class, routes exactly as before E1.
+	// A class is reported only where it routes. A pinned head is the client's
+	// choice of model, so a class can neither reorder nor be claimed for it.
 	var ev *serve.Evidence
 	switch {
+	case req.Route.Head != "":
 	case req.TaskClass != "":
 		ev = &serve.Evidence{TaskClass: req.TaskClass, TaskClassBasis: "header"}
 	case r.defaultClass != "" && req.Route == (serve.Route{}):
 		ev = &serve.Evidence{TaskClass: r.defaultClass, TaskClassBasis: "route"}
 	}
 	if ev != nil {
-		opts.Domain = ev.TaskClass
+		// The cache key does not cover the class, so a class-routed answer
+		// must neither be served from nor stored for an unclassed request.
+		opts.Domain, opts.NoCache = ev.TaskClass, true
 	}
 	return opts, ev, nil
 }
 
-// ceiling is the smaller of the client's and the policy's. A request that set
-// none keeps the no-ceiling it had before E1, so the header can only lower.
-func (r serveRouter) ceiling(client float64) (float64, string) {
-	switch {
-	case client <= 0:
+// requestCeiling is the lower of the client's and the policy's, read per request
+// so a policy edit applies without a restart. A request that set none keeps
+// the no-ceiling it had before E1, so the header can only lower.
+func requestCeiling(client float64) (float64, string) {
+	if client <= 0 {
 		return 0, ""
-	case r.policyCeiling > 0 && r.policyCeiling < client:
-		return r.policyCeiling, r.policyCeilingFrom
-	default:
-		return client, serve.MaxCostHeader
 	}
+	if policyUSD, from := servePolicyCeiling(); policyUSD > 0 && policyUSD < client {
+		return policyUSD, from
+	}
+	return client, serve.MaxCostHeader
 }
 
 // streamEvents adapts the router's events to the endpoint's, and is nil when
@@ -329,7 +328,6 @@ func cmdServe() *cobra.Command {
 				return err
 			}
 			r := serveRouter{d: d, defaultEnum: enum, defaultClass: defaultClass, localOnly: localOnly}
-			r.policyCeiling, r.policyCeilingFrom = servePolicyCeiling()
 			printServeBanner(os.Stdout, ln.Addr().String(), enum, token != "", localOnly, d.Heads(), decider.unlisted)
 			return serve.Serve(ctx, ln, serve.Handler(r, decider, token))
 		},

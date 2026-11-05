@@ -279,14 +279,22 @@ func (d *Dispatcher) Resume(ctx context.Context, taskID, answer string) (*Result
 		return nil, err
 	}
 	prompt := fmt.Sprintf("%s\n\nYou asked: %s\nThe user answered: %s", q.Prompt, q.Question, answer)
-	return d.Dispatch(ctx, prompt, Options{
+	return d.Dispatch(ctx, prompt, resumeOptions(q))
+}
+
+// resumeOptions is what a parked task is dispatched with once answered: what
+// it was parked under, with approval for the one head the human was shown.
+func resumeOptions(q pending.Question) Options {
+	return Options{
 		TierHint: q.TierHint, LocalOnly: q.LocalOnly, MaxTokens: q.MaxTokens,
 		System: q.System, Enum: q.Enum, Resource: q.Resource,
+		Domain: q.Domain, Temperature: q.Temperature, NoCache: q.NoCache,
+		MaxCostUSD: q.MaxCostUSD, MaxCostSource: q.MaxCostSource,
 		RunID: q.RunID, TaskID: q.TaskID,
 		AnsweredHead: q.Head,
 		// A2A context is already inside q.Prompt, Dispatch injected it before
 		// the gate parked the task, so naming the file again would double it.
-	})
+	}
 }
 
 // Decline refuses a parked task without running it.
@@ -788,9 +796,9 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 
 	var lastErr error
 	var attempts []Attempt
-	// Refusals the request itself caused, counted so that when they are all
-	// there were, the caller is told it was the request and not the heads.
-	var tooWarm, overCost int
+	// Refusals the request itself caused, against heads actually sent, so a
+	// run that sent nothing can say it was the request and not the heads.
+	var tooWarm, overCost, sent int
 	for i, h := range candidates {
 		// Computed once per candidate instead of once per use below (event
 		// logging, cost estimation): rank.UITier re-derives the same int for
@@ -888,6 +896,9 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 				Prompt:   prompt, Head: h.ID, Resource: opts.Resource,
 				Enum: opts.Enum, TierHint: opts.TierHint, System: opts.System,
 				LocalOnly: localOnly, MaxTokens: opts.MaxTokens,
+				Domain: opts.Domain, Temperature: opts.Temperature,
+				MaxCostUSD: opts.MaxCostUSD, MaxCostSource: opts.MaxCostSource,
+				NoCache: opts.NoCache,
 			}
 			// A question that cannot be stored has not been asked, so this
 			// fails the dispatch rather than proceeding unapproved.
@@ -939,6 +950,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 				continue
 			}
 		}
+		sent++
 		started := time.Now()
 		exec := executor.For(h)
 		emit := func(kind StreamKind, text, reason string) {
@@ -1064,19 +1076,16 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 	case tooWarm == n && n > 0:
 		return nil, fmt.Errorf("%w: temperature %g is above what every candidate head accepts",
 			executor.ErrUnaskable, *opts.Temperature)
-	case tooWarm > 0 && tooWarm+overCost == n:
-		return nil, fmt.Errorf("%w: temperature %g is above what %d of %d candidate heads accept, "+
-			"and the rest exceed the cost ceiling", executor.ErrUnaskable, *opts.Temperature, tooWarm, n)
-	case overCost == n && n > 0:
+	case sent == 0 && overCost > 0:
 		lastErr = overCeiling{lastErr}
 	}
 	return nil, fmt.Errorf("all heads failed (tried %d): %w", len(candidates), lastErr)
 }
 
-// ErrOverCostCeiling marks a dispatch whose every candidate was refused by
-// its cost ceiling, which says something about the ceiling and nothing about
-// the heads.
-var ErrOverCostCeiling = errors.New("every candidate exceeds the cost ceiling")
+// ErrOverCostCeiling marks a dispatch that sent nothing and whose ceiling
+// refused at least one head that could otherwise have run: the ceiling, not a
+// head, is why there is no answer.
+var ErrOverCostCeiling = errors.New("no head was sent the request, and the cost ceiling refused at least one")
 
 // overCeiling grades an error as ErrOverCostCeiling without changing what it
 // says, so the CLI's message stays exactly what it was.

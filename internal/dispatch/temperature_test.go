@@ -17,6 +17,7 @@ import (
 	"github.com/ankit373/hydra/internal/executor"
 	"github.com/ankit373/hydra/internal/health"
 	"github.com/ankit373/hydra/internal/provider"
+	"github.com/ankit373/hydra/internal/testutil"
 )
 
 // G7. A served temperature has no echo header, so the provider body is the
@@ -100,17 +101,46 @@ func TestDispatch_TemperatureNoHeadAcceptsIsUnaskable(t *testing.T) {
 	}
 }
 
-// Some heads cannot take the temperature and the rest exceed the ceiling: all
-// the request's doing, so still unaskable rather than a head failure.
-func TestDispatch_TemperatureAndCeilingTogetherAreUnaskable(t *testing.T) {
+// Some heads cannot take the temperature and the rest exceed the ceiling: the
+// ceiling is why nothing ran, so it is graded as the ceiling's, and serve then
+// decides by the ceiling's source whether that is the client's 400.
+func TestDispatch_TemperatureAndCeilingTogetherAreTheCeilings(t *testing.T) {
 	wide := provider.Head{ID: "wire", Name: "wire", Provider: "openai", Source: "env", Endpoint: "http://127.0.0.1:1", AuthReady: true, CapScore: 90}
 	d := streamDispatcher(t, cappedHead(t), wide)
 	warm := 1.5
 	_, err := d.Dispatch(context.Background(), strings.Repeat("x", 400), Options{
 		Temperature: &warm, MaxCostUSD: 1e-12, RunID: "run-mix", TaskID: "task-mix",
 	})
-	if !errors.Is(err, executor.ErrUnaskable) || !strings.Contains(fmt.Sprint(err), "cost ceiling") {
-		t.Errorf("got %v, want ErrUnaskable naming both the temperature and the ceiling", err)
+	if !errors.Is(err, ErrOverCostCeiling) || errors.Is(err, executor.ErrUnaskable) {
+		t.Errorf("got %v, want ErrOverCostCeiling and not ErrUnaskable", err)
+	}
+}
+
+// A head skipped for tools sits beside heads over the ceiling: nothing was
+// sent, and the ceiling refused at least one head that could have run.
+func TestDispatch_ToolsSkipAndCeilingTogetherAreTheCeilings(t *testing.T) {
+	s := testutil.NewSandbox(t)
+	noTools := echoHead(t, s, "cli-head", 99)
+	wide := provider.Head{ID: "wire", Name: "wire", Provider: "openai", Source: "env", Endpoint: "http://127.0.0.1:1", AuthReady: true, CapScore: 90}
+	d := streamDispatcher(t, noTools, wide)
+	tools := []executor.ToolDef{{Type: "function", Function: executor.ToolFunction{Name: "read_file"}}}
+	_, err := d.Dispatch(context.Background(), strings.Repeat("x", 400), Options{
+		Tools: tools, MaxCostUSD: 1e-12, MaxCostSource: "X-Hydra-Max-Cost-USD", RunID: "run-tools", TaskID: "task-tools",
+	})
+	if !errors.Is(err, ErrOverCostCeiling) {
+		t.Errorf("got %v, want ErrOverCostCeiling", err)
+	}
+}
+
+// A head that was actually sent and failed is a head failure, whatever the
+// ceiling did to the others.
+func TestDispatch_ASentHeadFailingIsNotTheCeilings(t *testing.T) {
+	cheap := provider.Head{ID: "local", Name: "local", Provider: "ollama", Source: "port", Endpoint: "http://127.0.0.1:1", AuthReady: true, CapScore: 50, LocalOnly: true}
+	wide := provider.Head{ID: "wire", Name: "wire", Provider: "openai", Source: "env", Endpoint: "http://127.0.0.1:1", AuthReady: true, CapScore: 90}
+	d := streamDispatcher(t, wide, cheap)
+	_, err := d.Dispatch(context.Background(), strings.Repeat("x", 400), Options{MaxCostUSD: 1e-12, RunID: "run-sent", TaskID: "task-sent"})
+	if err == nil || errors.Is(err, ErrOverCostCeiling) || !strings.Contains(err.Error(), "127.0.0.1:1") {
+		t.Errorf("got %v, want the sent head's failure, not graded as the ceiling's", err)
 	}
 }
 
