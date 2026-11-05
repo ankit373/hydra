@@ -335,14 +335,14 @@ body:where(.article){font-size:var(--hy-font-size-base);line-height:1.65;}
 :where(.article) .flagbox b{color:var(--hy-color-cost-mid);}
 
 /* ── motion ───────────────────────────────────────────────────────────── */
-.reveal{opacity:0;transform:translateY(var(--hy-space-4));
+/* Hidden only once script is known to run, so a page without it never stays blank. */
+.js .reveal{opacity:0;transform:translateY(var(--hy-space-4));
   transition:opacity var(--hy-motion-duration-slow) var(--hy-motion-easing-emphasized),
     transform var(--hy-motion-duration-slow) var(--hy-motion-easing-emphasized);}
-.reveal.in{opacity:1;transform:none;}
-.no-js .reveal{opacity:1;transform:none;}
+.js .reveal.in{opacity:1;transform:none;}
 @media(prefers-reduced-motion:reduce){
   html{scroll-behavior:auto;}
   *,*::before,*::after{animation-duration:1ms!important;animation-iteration-count:1!important;
     transition-duration:1ms!important;}
-  .reveal{opacity:1;transform:none;}
+  .js .reveal{opacity:1;transform:none;}
 }
