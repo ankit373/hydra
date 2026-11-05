@@ -401,11 +401,6 @@ figure.viz{margin:var(--hy-space-6) 0 var(--hy-space-2);}
            cyan:tok('accent-strong'),aqua:tok('accent-default'),violet:tok('accent-secondary'),magenta:tok('brand-end'),
            cheap:tok('cost-low'),mid:tok('cost-mid'),exp:tok('cost-high')};
 
-  // reveal on scroll
-  if ('IntersectionObserver' in window && !REDUCED){
-    var io = new IntersectionObserver(function(es){ es.forEach(function(e){ if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target);} }); }, {threshold:.12});
-    document.querySelectorAll('.reveal').forEach(function(el){ io.observe(el); });
-  } else { document.querySelectorAll('.reveal').forEach(function(el){ el.classList.add('in'); }); }
 
   // retina fit; returns {ctx,w,h}
   function fit(canvas){

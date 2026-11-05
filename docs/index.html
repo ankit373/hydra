@@ -1728,16 +1728,6 @@ function svg(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attr
   });
 })();
 
-/* ══════════════════════════════════════════════════════════════════════════
-   6 · scroll reveal + nav + copy buttons
-   ══════════════════════════════════════════════════════════════════════════*/
-(function chrome(){
-  // reveal sections
-  $all('.reveal').forEach(function(el){
-    onVisible(el,function(vis,io){if(vis){el.classList.add('in');if(io)io.disconnect();}},{threshold:0.12});
-  });
-})();
-
 })();
 </script>
 </body>

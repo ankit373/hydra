@@ -137,3 +137,20 @@ test('nothing in the home hero covers its text', async ({ page }) => {
     expect(hits, `at ${width}px`).toEqual([])
   }
 })
+
+// Without script nothing may hide: the nav wraps instead of folding, and no section waits to fade in.
+test.describe('without JavaScript', () => {
+  test.use({ javaScriptEnabled: false })
+  for (const path of PAGES) {
+    test(`${path} is readable and navigable at 390px`, async ({ page }) => {
+      await page.setViewportSize(PHONE)
+      await page.goto(path)
+      await expect(page.locator('#site-nav a[href$="docs.html"]')).toBeVisible()
+      const hidden = await page.evaluate(() => [...document.querySelectorAll('.reveal')]
+        .filter((e) => getComputedStyle(e).opacity === '0').map((e) => e.id || e.className))
+      expect(hidden).toEqual([])
+      const r = await page.evaluate(() => [document.documentElement.scrollWidth, document.documentElement.clientWidth])
+      expect(r[0]).toBeLessThanOrEqual(r[1])
+    })
+  }
+})

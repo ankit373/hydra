@@ -104,6 +104,8 @@ main{display:block;}
   .site-header .site-logo{margin-right:auto;}
   .site-nav{order:5;flex-basis:100%;flex-wrap:wrap;margin-left:0;column-gap:var(--hy-space-4);
     padding-bottom:var(--hy-space-2);}
+  /* Without script the links wrap onto more rows; a header that tall must not stay pinned over the page. */
+  html:not(.js) .site-header{position:relative;}
   /* First in tab order so the links it opens come next; drawn right of the call to action. */
   .js .nav-toggle{display:inline-flex;order:2;}
   .js .site-nav{display:none;position:absolute;top:100%;left:0;right:0;flex-direction:column;

@@ -5,15 +5,12 @@
   var root = document.documentElement;
   root.classList.add('js');
   var reduce = window.matchMedia('(prefers-reduced-motion: reduce)');
+  // Safari before 14 has only addListener on a MediaQueryList.
+  function onChange(mq, fn) { if (mq.addEventListener) mq.addEventListener('change', fn); else mq.addListener(fn); }
 
+  // Present from load: many screen readers ignore a live region added at the moment it speaks.
   var live;
   function announce(msg) {
-    if (!live) {
-      live = document.createElement('div');
-      live.className = 'visually-hidden';
-      live.setAttribute('role', 'status');
-      document.body.appendChild(live);
-    }
     live.textContent = '';
     setTimeout(function () { live.textContent = msg; }, 50);
   }
@@ -45,6 +42,7 @@
     }
     document.addEventListener('visibilitychange', kick);
     window.addEventListener('resize', function () { drewStill = false; kick(); });
+    onChange(reduce, function () { drewStill = false; kick(); });
     kick();
   }
 
@@ -55,16 +53,35 @@
     }
     return legacyCopy(text);
   }
+  // Selecting the textarea moves focus, so focus goes back to the button afterwards.
   function legacyCopy(text) {
-    var ta = document.createElement('textarea');
+    var back = document.activeElement, ta = document.createElement('textarea'), ok = false;
     ta.value = text; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.opacity = '0';
     document.body.appendChild(ta); ta.select();
-    var ok;
-    try { ok = document.execCommand('copy'); } finally { document.body.removeChild(ta); }
+    try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+    document.body.removeChild(ta);
+    if (back && back.focus) back.focus();
     return ok ? Promise.resolve() : Promise.reject(new Error('copy refused'));
   }
 
+  // Sections fade in as they scroll into view; the page never depends on a page script for it.
+  function reveal() {
+    var els = document.querySelectorAll('.reveal');
+    if (!('IntersectionObserver' in window) || reduce.matches) {
+      for (var i = 0; i < els.length; i++) els[i].classList.add('in');
+      return;
+    }
+    var io = new IntersectionObserver(function (es) {
+      es.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
+    }, { threshold: 0.12 });
+    for (var j = 0; j < els.length; j++) io.observe(els[j]);
+  }
+
   function wire() {
+    live = document.createElement('div');
+    live.className = 'visually-hidden';
+    live.setAttribute('role', 'status');
+    document.body.appendChild(live);
     var header = document.querySelector('.site-header');
     var btn = header && header.querySelector('.nav-toggle');
     if (btn) {
@@ -102,7 +119,7 @@
   // Canvas and SVG drawing read the same tokens CSS does, by role name ('accent-default').
   // Resolved once per role, since canvases ask inside their per-frame loops.
   var resolved = {};
-  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function () { resolved = {}; });
+  onChange(window.matchMedia('(prefers-color-scheme: dark)'), function () { resolved = {}; });
   function color(role) {
     if (!(role in resolved)) resolved[role] = getComputedStyle(root).getPropertyValue('--hy-color-' + role).trim();
     return resolved[role];
@@ -128,10 +145,11 @@
   function recheck() { clearTimeout(scrollTimer); scrollTimer = setTimeout(focusScrollers, 150); }
   window.addEventListener('resize', recheck);
   document.addEventListener('click', recheck);
+  document.addEventListener('keyup', recheck);
   document.addEventListener('toggle', recheck, true);
 
   window.Hydra = { loop: loop, color: color, rgb: rgb, rgba: rgba };
-  function init() { wire(); focusScrollers(); }
+  function init() { wire(); reveal(); focusScrollers(); }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
 })();
