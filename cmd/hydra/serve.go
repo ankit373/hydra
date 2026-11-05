@@ -266,7 +266,7 @@ func cmdServe() *cobra.Command {
 				return err
 			}
 			r := serveRouter{d: d, defaultEnum: enum, localOnly: localOnly}
-			printServeBanner(os.Stdout, ln.Addr().String(), enum, token != "", localOnly, d.Heads(), decider.unlisted)
+			printServeBanner(stdout, ln.Addr().String(), enum, token != "", localOnly, d.Heads(), decider.unlisted)
 			return serve.Serve(ctx, ln, serve.Handler(r, decider, token))
 		},
 	}

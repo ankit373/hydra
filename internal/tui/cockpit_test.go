@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/provider"
@@ -24,19 +24,19 @@ import (
 
 func typed(m Cockpit, s string) Cockpit {
 	for _, r := range s {
-		next, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		next, _ := m.Update(key(string(r)))
 		m = next.(Cockpit)
 	}
 	return m
 }
 
 func enter(m Cockpit) (Cockpit, tea.Cmd) {
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	next, cmd := m.Update(key("enter"))
 	return next.(Cockpit), cmd
 }
 
-func press(m Cockpit, k tea.KeyType) Cockpit {
-	next, _ := m.Update(tea.KeyMsg{Type: k})
+func press(m Cockpit, k string) Cockpit {
+	next, _ := m.Update(key(k))
 	return next.(Cockpit)
 }
 
@@ -166,7 +166,7 @@ func TestEveryView_LayoutInvariantsAtEverySize(t *testing.T) {
 			t.Run(fmt.Sprintf("view%d_%dx%d", view, sz.w, sz.h), func(t *testing.T) {
 				m := base.jump(view)
 				m.w, m.h, m.ready = sz.w, sz.h, true
-				out := m.View()
+				out := m.View().Content
 				lines := strings.Split(out, "\n")
 				// Exactly h: a short body must be padded, or the status bar
 				// renders in the middle of the terminal (#630).
@@ -200,7 +200,7 @@ func TestEveryView_LayoutInvariantsAtEverySize(t *testing.T) {
 		for _, sz := range sizes {
 			g := open(base)
 			g.w, g.h, g.ready = sz.w, sz.h, true
-			lines := strings.Split(g.View(), "\n")
+			lines := strings.Split(g.View().Content, "\n")
 			if len(lines) != sz.h {
 				t.Errorf("%s at %dx%d renders %d lines, want %d", name, sz.w, sz.h, len(lines), sz.h)
 			}
@@ -220,7 +220,7 @@ func TestEveryView_LayoutInvariantsAtEverySize(t *testing.T) {
 // something rather than a blank terminal.
 func TestView_RendersBeforeFirstResize(t *testing.T) {
 	fresh := Cockpit{}
-	if strings.TrimSpace(fresh.View()) == "" {
+	if strings.TrimSpace(fresh.View().Content) == "" {
 		t.Error("the cockpit renders nothing before its first resize")
 	}
 }
@@ -232,7 +232,7 @@ func TestTabCycle_VisitsEveryViewInRange(t *testing.T) {
 	m := testCockpit()
 	seen := map[int]bool{}
 	for i := 0; i < ckViewCount()*2; i++ {
-		m = press(m, tea.KeyTab)
+		m = press(m, "tab")
 		if !ckValidView(m.view) {
 			t.Fatalf("after %d tabs view = %d", i+1, m.view)
 		}

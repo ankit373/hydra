@@ -4,9 +4,10 @@ package tui
 
 import (
 	"fmt"
+	"image/color"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 )
 
 // ── Color palette ─────────────────────────────────────────────────────────────
@@ -43,7 +44,7 @@ var headEyes = [3][2]string{
 	{"o", "o"}, // right head
 }
 
-var headColors = []lipgloss.Color{cHead1, cHead2, cHead3}
+var headColors = []color.Color{cHead1, cHead2, cHead3}
 
 func renderHead(idx int) string {
 	eyes := headEyes[idx]

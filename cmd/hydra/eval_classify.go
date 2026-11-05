@@ -31,15 +31,15 @@ func classifyRefusal(err error) error {
 
 func printClassifyResult(res classify.Result) {
 	r := res.Report
-	fmt.Printf("corpus      %d embedded examples in %s\n", res.Corpus, res.Model)
-	fmt.Printf("coverage    %.0f%%  (%d answered, %d refused)\n",
+	fmt.Fprintf(stdout, "corpus      %d embedded examples in %s\n", res.Corpus, res.Model)
+	fmt.Fprintf(stdout, "coverage    %.0f%%  (%d answered, %d refused)\n",
 		res.Coverage()*100, res.Answered, res.Refused)
-	fmt.Printf("brier       %.4f  (base rate %.3f)\n", r.Brier, r.BaseRate)
-	fmt.Printf("resolution  %.4f  %s\n", r.Resolution, dimStyle.Render(resolutionNote(res)))
-	fmt.Printf("reliability %.4f  %s\n", r.Reliability,
+	fmt.Fprintf(stdout, "brier       %.4f  (base rate %.3f)\n", r.Brier, r.BaseRate)
+	fmt.Fprintf(stdout, "resolution  %.4f  %s\n", r.Resolution, dimStyle.Render(resolutionNote(res)))
+	fmt.Fprintf(stdout, "reliability %.4f  %s\n", r.Reliability,
 		dimStyle.Render("how far the stated rates are from the observed ones, lower is better"))
-	fmt.Printf("ece         %.4f  (worst bin %.4f)\n", r.ECE, r.MCE)
-	fmt.Printf("\n%s\n", dimStyle.Render(
+	fmt.Fprintf(stdout, "ece         %.4f  (worst bin %.4f)\n", r.ECE, r.MCE)
+	fmt.Fprintf(stdout, "\n%s\n", dimStyle.Render(
 		"resolution is the number that matters: an estimator restating the corpus average is "+
 			"perfectly calibrated and no use to a router"))
 }

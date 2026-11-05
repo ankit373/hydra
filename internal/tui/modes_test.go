@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 // shift+tab cycles the basic modes in order and never lands on an advanced one.
@@ -15,14 +15,14 @@ func TestModes_ShiftTabCyclesBasicsOnly(t *testing.T) {
 	m.mode = "ask"
 	want := []string{"edit", "plan", "auto", "ask"}
 	for _, w := range want {
-		m = press(m, tea.KeyShiftTab)
+		m = press(m, "shift+tab")
 		if m.mode != w {
 			t.Fatalf("shift+tab left mode %q, want %q", m.mode, w)
 		}
 	}
 	// From an advanced mode the cycle returns to the first basic.
 	m.mode = "careful"
-	m = press(m, tea.KeyShiftTab)
+	m = press(m, "shift+tab")
 	if m.mode != "ask" {
 		t.Errorf("shift+tab from careful = %q, want ask", m.mode)
 	}
@@ -40,7 +40,7 @@ func TestModes_PickerOpensSelectsAndCloses(t *testing.T) {
 	if ckModes[m.modeSel].name != "auto" {
 		t.Errorf("the picker did not open on the current mode: %s", ckModes[m.modeSel].name)
 	}
-	m = press(m, tea.KeyEsc)
+	m = press(m, "esc")
 	if m.modePick || m.mode != "auto" {
 		t.Fatal("esc did not close the picker unchanged")
 	}
@@ -76,8 +76,8 @@ func TestModes_PickerOpensSelectsAndCloses(t *testing.T) {
 // as a single message and every modal dropped it (#597).
 func TestKeys_CoalescedRunesReplayIndividually(t *testing.T) {
 	m := testCockpit()
-	m = press(m, tea.KeyCtrlO)
-	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("jj")})
+	m = press(m, "ctrl+o")
+	next, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyExtended, Text: "jj"})
 	m = next.(Cockpit)
 	if m.ovSel != 2 {
 		t.Fatalf("a coalesced jj moved the selection to %d, want 2", m.ovSel)
@@ -88,13 +88,13 @@ func TestKeys_CoalescedRunesReplayIndividually(t *testing.T) {
 	}
 	// Typing coalesced into the input still types everything.
 	chat := testCockpit()
-	next, _ = chat.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("fix the bug")})
+	next, _ = chat.Update(tea.KeyPressMsg{Code: tea.KeyExtended, Text: "fix the bug"})
 	if got := next.(Cockpit).th().input; got != "fix the bug" {
 		t.Errorf("coalesced typing lost characters: %q", got)
 	}
 	// A bracketed paste is literal input, never a run of shortcuts, even when
 	// it starts with a command letter on an empty input.
-	next, _ = testCockpit().Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("make it so"), Paste: true})
+	next, _ = testCockpit().Update(tea.PasteMsg{Content: "make it so"})
 	pasted := next.(Cockpit)
 	if pasted.modePick || pasted.th().input != "make it so" {
 		t.Errorf("paste triggered commands: pick=%v input=%q", pasted.modePick, pasted.th().input)
@@ -109,12 +109,12 @@ func TestModes_PickerForgivesTyping(t *testing.T) {
 	if !m.modePick {
 		t.Fatal("picker did not open")
 	}
-	m = press(m, tea.KeyBackspace)
+	m = press(m, "backspace")
 	if m.modePick || m.th().input != "" {
 		t.Fatalf("backspace did not un-type the m: pick=%v input=%q", m.modePick, m.th().input)
 	}
 	m = typed(m, "m")
-	m = press(m, tea.KeySpace)
+	m = press(m, "space")
 	if m.modePick || m.th().input != "m " {
 		t.Fatalf("space did not type through: pick=%v input=%q", m.modePick, m.th().input)
 	}

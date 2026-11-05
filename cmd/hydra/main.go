@@ -23,8 +23,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 
@@ -104,17 +103,17 @@ func main() {
 		if ctx.Err() != nil {
 			// 130 is the shell's convention for "killed by SIGINT", and exit
 			// codes are a contract here (see exit_code_test.go).
-			fmt.Fprintln(os.Stderr, "  interrupted")
+			fmt.Fprintln(stderr, "  interrupted")
 			os.Exit(130)
 		}
-		fmt.Fprintln(os.Stderr, "Error:", err)
+		fmt.Fprintln(stderr, "Error:", err)
 		os.Exit(1)
 	}
 
 	select {
 	case latest := <-updateCh:
 		if latest != "" {
-			fmt.Fprintf(os.Stderr, "\n  %s  hyctl %s is available → brew upgrade hyctl\n",
+			fmt.Fprintf(stderr, "\n  %s  hyctl %s is available → brew upgrade hyctl\n",
 				lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Render("✦"),
 				latest,
 			)
@@ -172,7 +171,7 @@ func cmdVersion() *cobra.Command {
 		Use:   "version",
 		Short: "Print version, commit, and build info",
 		Run: func(_ *cobra.Command, _ []string) {
-			fmt.Print(versionText())
+			fmt.Fprint(stdout, versionText())
 			// Update notice is printed by main() after Execute returns.
 		},
 	}
@@ -262,11 +261,11 @@ func cmdTui() *cobra.Command {
 			}
 			if snapshot {
 				if viewSet {
-					fmt.Print(tui.CockpitSnapshotView(snapView))
+					fmt.Fprint(stdout, tui.CockpitSnapshotView(snapView))
 				} else {
-					fmt.Print(tui.CockpitSnapshot())
+					fmt.Fprint(stdout, tui.CockpitSnapshot())
 				}
-				fmt.Println()
+				fmt.Fprintln(stdout)
 				return nil
 			}
 			if err := requireTerminal("hyctl tui"); err != nil {
@@ -275,7 +274,7 @@ func cmdTui() *cobra.Command {
 			// Mouse support is for wheel scrolling; ctrl+s hands the mouse back
 			// to the terminal for selecting text.
 			defer tui.OwnTerminal()()
-			p := tea.NewProgram(tui.NewCockpit(), tea.WithAltScreen(), tea.WithMouseCellMotion())
+			p := tui.NewProgram(tui.NewCockpit())
 			_, err := p.Run()
 			return err
 		},
@@ -325,24 +324,24 @@ func runInit(ctx context.Context) error {
 	// blocking. Failing to write it is not fatal: init's job is to get the
 	// user running, and hyctl security reports the fail-open state loudly.
 	if created, err := ledger.EnsurePolicy(ledger.DefaultPolicyPath()); err != nil {
-		fmt.Println(warnStyle.Render("  could not write the access policy: " + err.Error()))
+		fmt.Fprintln(stdout, warnStyle.Render("  could not write the access policy: "+err.Error()))
 	} else if created {
-		fmt.Println(dimStyle.Render("  Wrote access policy to " + ledger.DefaultPolicyPath()))
+		fmt.Fprintln(stdout, dimStyle.Render("  Wrote access policy to "+ledger.DefaultPolicyPath()))
 	}
 
-	fmt.Println(dimStyle.Render("  Scanning your machine for AI models..."))
+	fmt.Fprintln(stdout, dimStyle.Render("  Scanning your machine for AI models..."))
 	result := probe.Run(ctx)
 	defer tui.OwnTerminal()()
 
 	if len(result.Heads) == 0 {
 		// Nothing found, guide the user through installing something.
-		p := tea.NewProgram(tui.NewInstallModel(), tea.WithAltScreen())
+		p := tui.NewProgram(tui.NewInstallModel())
 		_, err := p.Run()
 		return err
 	}
 
 	m := tui.NewInitModel(result)
-	p := tea.NewProgram(m, tea.WithAltScreen())
+	p := tui.NewProgram(m)
 	_, err := p.Run()
 	return err
 }
@@ -549,7 +548,7 @@ func cmdProbe() *cobra.Command {
 		Short: "Scan machine for available AI Heads",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if !jsonOut {
-				fmt.Println(dimStyle.Render("  Scanning..."))
+				fmt.Fprintln(stdout, dimStyle.Render("  Scanning..."))
 			}
 			result := probe.Run(cmd.Context())
 			cortexName := "none"
@@ -586,17 +585,17 @@ func cmdProbe() *cobra.Command {
 					"openrouter": map[string]int{"enabled": enabled, "catalogue": catalogue},
 				})
 			}
-			fmt.Println(tui.Splash(cortexName))
+			fmt.Fprintln(stdout, tui.Splash(cortexName))
 			// A provider that failed outright (e.g. a corrupted models.json
 			// overlay) doesn't even reach the unroutable-head accounting below,
 			// its heads never existed here, so without this it degrades to a
 			// silently smaller head list, contradicting probe's own "marks
 			// unroutable heads with the reason" promise (#248).
 			for _, w := range result.Warnings {
-				fmt.Printf("  %s %s\n", warnStyle.Render("⚠"), dimStyle.Render(w))
+				fmt.Fprintf(stdout, "  %s %s\n", warnStyle.Render("⚠"), dimStyle.Render(w))
 			}
 			if len(result.Heads) == 0 {
-				fmt.Println("  No models found.")
+				fmt.Fprintln(stdout, "  No models found.")
 				return nil
 			}
 			cols := probeColumns(result.Heads, result.Scores)
@@ -604,9 +603,9 @@ func cmdProbe() *cobra.Command {
 			rowOf := func(h provider.Head) string {
 				return probeRow(cols, func(c probeColumn) string { return c.cell(h) })
 			}
-			fmt.Println(header)
+			fmt.Fprintln(stdout, header)
 			// Derived, not a second constant to keep in sync with the widths.
-			fmt.Println("  " + strings.Repeat("─", len(strings.TrimSpace(header))))
+			fmt.Fprintln(stdout, "  "+strings.Repeat("─", len(strings.TrimSpace(header))))
 			// Discovery finding a head is not the same as Hydra being able to
 			// drive it. Listing both identically is what let `probe` advertise
 			// the Ollama binary that `dispatch --local` then refused (#248), so
@@ -625,19 +624,19 @@ func cmdProbe() *cobra.Command {
 				}
 				row := rowOf(h)
 				if why == "" {
-					fmt.Printf("%s%s\n", marker, row)
+					fmt.Fprintf(stdout, "%s%s\n", marker, row)
 					continue
 				}
-				fmt.Printf("%s%s\n", marker, dimStyle.Render(row))
-				fmt.Printf("    %s\n", dimStyle.Render("↳ "+why))
+				fmt.Fprintf(stdout, "%s%s\n", marker, dimStyle.Render(row))
+				fmt.Fprintf(stdout, "    %s\n", dimStyle.Render("↳ "+why))
 			}
 			if unroutable > 0 {
-				fmt.Printf("\n  %s\n", dimStyle.Render(fmt.Sprintf(
+				fmt.Fprintf(stdout, "\n  %s\n", dimStyle.Render(fmt.Sprintf(
 					"✗ = discovered but not routable (%d of %d), dispatch will skip these.",
 					unroutable, len(result.Heads))))
 			}
 			if enabled, catalogue := openRouterCounts(); enabled > 0 {
-				fmt.Printf("\n  %s\n", dimStyle.Render(
+				fmt.Fprintf(stdout, "\n  %s\n", dimStyle.Render(
 					openRouterNote(enabled, catalogue, config.Path())))
 			}
 			return nil
@@ -659,18 +658,18 @@ func cmdStatus() *cobra.Command {
 				return err
 			}
 
-			fmt.Println()
-			fmt.Printf("  %s  %s\n",
+			fmt.Fprintln(stdout)
+			fmt.Fprintf(stdout, "  %s  %s\n",
 				dimStyle.Render("Cortex :"),
 				cortexStyle.Render(cfg.Cortex),
 			)
-			fmt.Printf("  %s  %s\n",
+			fmt.Fprintf(stdout, "  %s  %s\n",
 				dimStyle.Render("Skills :"),
 				strings.Join(cfg.Skills, ", "),
 			)
 			if len(cfg.Policies) > 0 {
 				for name, p := range cfg.Policies {
-					fmt.Printf("  %s  %s → %s\n",
+					fmt.Fprintf(stdout, "  %s  %s → %s\n",
 						dimStyle.Render("Policy :"),
 						name, p.Action,
 					)
@@ -683,12 +682,12 @@ func cmdStatus() *cobra.Command {
 			hs, now := health.Open(health.DefaultPath()), time.Now()
 			reason := func(h provider.Head) string { return health.Reason(hs, h, now) }
 
-			fmt.Println()
+			fmt.Fprintln(stdout)
 			for _, w := range result.Warnings {
-				fmt.Printf("  %s %s\n", warnStyle.Render("⚠"), dimStyle.Render(w))
+				fmt.Fprintf(stdout, "  %s %s\n", warnStyle.Render("⚠"), dimStyle.Render(w))
 			}
-			fmt.Print(headTiers(result.Heads, reason))
-			fmt.Println()
+			fmt.Fprint(stdout, headTiers(result.Heads, reason))
+			fmt.Fprintln(stdout)
 
 			// Budget section, read from state.json (written by dispatcher).
 			names := make(map[string]string, len(result.Heads))
@@ -726,7 +725,7 @@ func printBudgetStatus(names map[string]string) {
 			line += "  " + dimStyle.Render(fmt.Sprintf("↑ burning +%.0f%%/step, %.0f%% risk of 80%%",
 				burnRate, risk*100))
 		}
-		fmt.Println(line)
+		fmt.Fprintln(stdout, line)
 	}
 
 	models := state.Budget()
@@ -734,10 +733,10 @@ func printBudgetStatus(names map[string]string) {
 		return
 	}
 
-	fmt.Println()
-	fmt.Println(dimStyle.Render("  " + strings.Repeat("─", 48)))
-	fmt.Printf("  %-20s  %6s  %8s  %s\n", "Model", "  Used", " Window", "Mode")
-	fmt.Println(dimStyle.Render("  " + strings.Repeat("─", 48)))
+	fmt.Fprintln(stdout)
+	fmt.Fprintln(stdout, dimStyle.Render("  "+strings.Repeat("─", 48)))
+	fmt.Fprintf(stdout, "  %-20s  %6s  %8s  %s\n", "Model", "  Used", " Window", "Mode")
+	fmt.Fprintln(stdout, dimStyle.Render("  "+strings.Repeat("─", 48)))
 	// Sorted on the label, because ranging the map reordered the table on every
 	// invocation, and ordering by an ID the table does not show reads as random.
 	type row struct {
@@ -767,14 +766,14 @@ func printBudgetStatus(names map[string]string) {
 		window := int(toFloat(snap["window"]))
 		mode, _ := snap["mode"].(string)
 		bar := budgetBar(pct)
-		fmt.Printf("  %-20s  %s %3d%%  %-8s  %s\n",
+		fmt.Fprintf(stdout, "  %-20s  %s %3d%%  %-8s  %s\n",
 			truncLabel(r.label, 20),
 			bar, pct,
 			tokenLabel(used, window),
 			budgetModeStyle(mode).Render(mode),
 		)
 	}
-	fmt.Println()
+	fmt.Fprintln(stdout)
 }
 
 func toFloat(v any) float64 {
@@ -1046,7 +1045,7 @@ func cmdDispatch() *cobra.Command {
 			// Before the dry-run branches below, all of which return: a rule
 			// that changed this dispatch has to be visible on every path, not
 			// only the plain one.
-			printRuleDecision(os.Stdout, ruleDecision, dryRun)
+			printRuleDecision(stdout, ruleDecision, dryRun)
 
 			if file != "" || irreversible || production || touchesPII {
 				radius := 1.0
@@ -1057,10 +1056,10 @@ func cmdDispatch() *cobra.Command {
 					// exactly like blast-radius-aware routing happened (#251). The
 					// bar itself is unchanged, only the claim about it.
 					if g.Empty() {
-						fmt.Printf("  %s\n", warnStyle.Render(
+						fmt.Fprintf(stdout, "  %s\n", warnStyle.Render(
 							"graph: no graph at "+graphPath+", radius 1.00 is a default, not a measurement"))
 					} else if !g.Knows(file) {
-						fmt.Printf("  %s\n", warnStyle.Render(
+						fmt.Fprintf(stdout, "  %s\n", warnStyle.Render(
 							"graph: "+file+" is not in the graph, radius 1.00 is a default, not a measurement"))
 					}
 				}
@@ -1072,7 +1071,7 @@ func cmdDispatch() *cobra.Command {
 					Production:   production,
 				}
 				derived := trust.NewDefectModel().RequiredConfidence(task)
-				fmt.Printf("  %s blast=%.2f irreversible=%v pii=%v prod=%v → demands confidence ≥ %.1f%%\n",
+				fmt.Fprintf(stdout, "  %s blast=%.2f irreversible=%v pii=%v prod=%v → demands confidence ≥ %.1f%%\n",
 					dimStyle.Render("defect:"), task.BlastRadius, irreversible, touchesPII, production, derived*100)
 				if derived > effectiveConf {
 					effectiveConf = derived
@@ -1246,7 +1245,7 @@ func cmdDispatch() *cobra.Command {
 			var sr *streamRenderer
 			if !dryRun && !noStream && isatty.IsTerminal(os.Stdout.Fd()) {
 				w, h := terminalSize()
-				sr = newStreamRenderer(os.Stdout, runID, w, h, d.CapturesPayloads())
+				sr = newStreamRenderer(stdout, runID, w, h, d.CapturesPayloads())
 				opts.OnStream = sr.Handle
 			}
 
@@ -1257,12 +1256,12 @@ func cmdDispatch() *cobra.Command {
 			// The question is not repeated in the returned error.
 			var parked *dispatch.ParkedError
 			if errors.As(err, &parked) {
-				fmt.Println()
-				fmt.Printf("  %s %s\n", warnStyle.Render("⏸ waiting on you"), dimStyle.Render(parked.Head))
-				fmt.Println(dimStyle.Render("  " + strings.Repeat("─", 56)))
-				fmt.Printf("\n  %s\n\n", parked.Question)
-				fmt.Printf("  %s\n", dimStyle.Render("answer:  hyctl ask answer "+parked.TaskID+" \"...\""))
-				fmt.Printf("  %s\n\n", dimStyle.Render("refuse:  hyctl ask decline "+parked.TaskID))
+				fmt.Fprintln(stdout)
+				fmt.Fprintf(stdout, "  %s %s\n", warnStyle.Render("⏸ waiting on you"), dimStyle.Render(parked.Head))
+				fmt.Fprintln(stdout, dimStyle.Render("  "+strings.Repeat("─", 56)))
+				fmt.Fprintf(stdout, "\n  %s\n\n", parked.Question)
+				fmt.Fprintf(stdout, "  %s\n", dimStyle.Render("answer:  hyctl ask answer "+parked.TaskID+" \"...\""))
+				fmt.Fprintf(stdout, "  %s\n\n", dimStyle.Render("refuse:  hyctl ask decline "+parked.TaskID))
 				return fmt.Errorf("task %s is waiting on an answer", parked.TaskID)
 			}
 			if err != nil {
@@ -1272,20 +1271,20 @@ func cmdDispatch() *cobra.Command {
 			if dryRun {
 				why := func(h provider.Head) string { return routingEvidence(result, h) }
 				if result.Cache != nil {
-					fmt.Printf("  %s %s\n", cortexStyle.Render("⚡ would come from cache:"),
+					fmt.Fprintf(stdout, "  %s %s\n", cortexStyle.Render("⚡ would come from cache:"),
 						dimStyle.Render(cacheLabel(result.Cache)))
 				}
 				if req := routingRequirement(result); req != "" {
-					fmt.Println(req)
+					fmt.Fprintln(stdout, req)
 				}
-				fmt.Printf("  %s  %s  (score %d, %s)%s\n",
+				fmt.Fprintf(stdout, "  %s  %s  (score %d, %s)%s\n",
 					cortexStyle.Render("Primary  →"),
 					result.Head.Name, result.Head.CapScore, result.Head.Source, why(result.Head))
 				if len(result.Fallbacks) > 0 {
-					fmt.Println(dimStyle.Render("  Fallback chain:"))
+					fmt.Fprintln(stdout, dimStyle.Render("  Fallback chain:"))
 					for i, f := range result.Fallbacks {
 						line := fmt.Sprintf("    %d. %-28s score %d  %s%s", i+1, f.Name, f.CapScore, f.Source, why(f))
-						fmt.Println(dimStyle.Render(line))
+						fmt.Fprintln(stdout, dimStyle.Render(line))
 					}
 				}
 				return nil
@@ -1311,17 +1310,17 @@ func cmdDispatch() *cobra.Command {
 				return nil
 			}
 
-			fmt.Println()
-			fmt.Printf("  %s %s  %s  %dms\n",
+			fmt.Fprintln(stdout)
+			fmt.Fprintf(stdout, "  %s %s  %s  %dms\n",
 				cortexStyle.Render("▶"),
 				dimStyle.Render(result.Head.Name),
 				dimStyle.Render(fmt.Sprintf("(%d→%d tokens)", result.InputTokens, result.OutputTokens)),
 				result.Duration.Milliseconds(),
 			)
-			fmt.Println(dimStyle.Render("  " + strings.Repeat("─", 56)))
-			fmt.Println()
-			fmt.Println(result.Output)
-			fmt.Println()
+			fmt.Fprintln(stdout, dimStyle.Render("  "+strings.Repeat("─", 56)))
+			fmt.Fprintln(stdout)
+			fmt.Fprintln(stdout, result.Output)
+			fmt.Fprintln(stdout)
 			printOutputWarning(result.OutputProvenance)
 			return nil
 		},
@@ -1403,14 +1402,14 @@ improved against.`,
 			}
 			if jsonOut {
 				raw, _ := json.MarshalIndent(all, "", "  ")
-				fmt.Println(string(raw))
+				fmt.Fprintln(stdout, string(raw))
 				return nil
 			}
 			if len(all) == 0 {
 				// Only an empty corpus gets the hint: --failed over all passes
 				// has nothing to show, which is not "no examples yet" (#1171).
 				if corpusSize == 0 {
-					fmt.Println("No verified examples yet. " +
+					fmt.Fprintln(stdout, "No verified examples yet. "+
 						"Run `hyctl oracle verify --candidate <file> ...` to record one.")
 				}
 				return nil
@@ -1424,7 +1423,7 @@ improved against.`,
 				if e.PII {
 					pii = " " + dimStyle.Render("[pii]")
 				}
-				fmt.Printf("  %s  %-14s %-22s %s%s\n", status, e.Domain, e.Source,
+				fmt.Fprintf(stdout, "  %s  %-14s %-22s %s%s\n", status, e.Domain, e.Source,
 					dimStyle.Render(e.CandidateHash[:8]), pii)
 			}
 			return nil
@@ -1445,19 +1444,19 @@ improved against.`,
 			st := evalset.Stats(all)
 			if jsonOut {
 				raw, _ := json.MarshalIndent(st, "", "  ")
-				fmt.Println(string(raw))
+				fmt.Fprintln(stdout, string(raw))
 				return nil
 			}
 			if len(st) == 0 {
-				fmt.Println("No verified examples yet.")
+				fmt.Fprintln(stdout, "No verified examples yet.")
 				return nil
 			}
-			fmt.Printf("%-20s %8s %8s %8s %10s %6s\n", "DOMAIN", "TOTAL", "PASSED", "FAILED", "PASS RATE", "PII")
+			fmt.Fprintf(stdout, "%-20s %8s %8s %8s %10s %6s\n", "DOMAIN", "TOTAL", "PASSED", "FAILED", "PASS RATE", "PII")
 			for _, s := range st {
-				fmt.Printf("%-20s %8d %8d %8d %9.1f%% %6d\n",
+				fmt.Fprintf(stdout, "%-20s %8d %8d %8d %9.1f%% %6d\n",
 					s.Domain, s.Total, s.Passed, s.Failed, s.PassRate*100, s.WithPII)
 			}
-			fmt.Printf("\n%s\n", dimStyle.Render(fmt.Sprintf("%d example%s at %s, never pruned", len(all), plural(len(all)), evalset.DefaultPath())))
+			fmt.Fprintf(stdout, "\n%s\n", dimStyle.Render(fmt.Sprintf("%d example%s at %s, never pruned", len(all), plural(len(all)), evalset.DefaultPath())))
 			return nil
 		},
 	}
@@ -1474,15 +1473,15 @@ improved against.`,
 			rd := evalset.Readiness(all)
 			if jsonOut {
 				raw, _ := json.MarshalIndent(rd, "", "  ")
-				fmt.Println(string(raw))
+				fmt.Fprintln(stdout, string(raw))
 				return nil
 			}
 			if len(rd) == 0 {
-				fmt.Printf("No verified examples yet. Attribute one with %s\n",
+				fmt.Fprintf(stdout, "No verified examples yet. Attribute one with %s\n",
 					dimStyle.Render("hyctl oracle verify --candidate <file> --enum SIMPLE -- <cmd>"))
 				return nil
 			}
-			fmt.Printf("%-14s %8s %10s %12s %7s  %s\n",
+			fmt.Fprintf(stdout, "%-14s %8s %10s %12s %7s  %s\n",
 				"ENUM", "TOTAL", "PASS RATE", "HEADS>="+strconv.Itoa(evalset.MinObservationsPerHead), "READY", "SHORTFALL")
 			for _, s := range rd {
 				ready, comparable, short := "no", strconv.Itoa(s.Comparable), ""
@@ -1501,13 +1500,13 @@ improved against.`,
 						short += fmt.Sprintf(" (%d name no head)", n)
 					}
 				}
-				fmt.Printf("%-14s %8d %9.1f%% %12s %7s  %s\n",
+				fmt.Fprintf(stdout, "%-14s %8d %9.1f%% %12s %7s  %s\n",
 					s.Enum, s.Total, s.PassRate*100, comparable, ready, dimStyle.Render(short))
 			}
-			fmt.Printf("\n%s\n", dimStyle.Render(fmt.Sprintf(
+			fmt.Fprintf(stdout, "\n%s\n", dimStyle.Render(fmt.Sprintf(
 				"a fitted routing choice needs %d examples on each of %d heads: below that it loses to the strongest head",
 				evalset.MinObservationsPerHead, evalset.MinComparableHeads)))
-			fmt.Printf("%s\n", dimStyle.Render(
+			fmt.Fprintf(stdout, "%s\n", dimStyle.Render(
 				"hyctl eval training asks the other question, whether a prompt classifier could be fitted"))
 			return nil
 		},
@@ -1525,16 +1524,16 @@ improved against.`,
 			tr := evalset.Trainable(all)
 			if jsonOut {
 				raw, _ := json.MarshalIndent(tr, "", "  ")
-				fmt.Println(string(raw))
+				fmt.Fprintln(stdout, string(raw))
 				return nil
 			}
 			if len(tr) == 0 {
-				fmt.Printf("No example carries an embedding. %s\n", dimStyle.Render(
+				fmt.Fprintf(stdout, "No example carries an embedding. %s\n", dimStyle.Render(
 					"one is recorded per validated edit, when an embedding model is on the machine"))
-				fmt.Printf("%s\n", dimStyle.Render("hyctl probe lists what was discovered"))
+				fmt.Fprintf(stdout, "%s\n", dimStyle.Render("hyctl probe lists what was discovered"))
 				return nil
 			}
-			fmt.Printf("%-34s %6s %8s %7s  %s\n", "EMBEDDING MODEL", "DIM", "VECTORS", "ENUMS", "")
+			fmt.Fprintf(stdout, "%-34s %6s %8s %7s  %s\n", "EMBEDDING MODEL", "DIM", "VECTORS", "ENUMS", "")
 			for _, s := range tr {
 				note := ""
 				switch {
@@ -1543,11 +1542,11 @@ improved against.`,
 				case !s.Separable:
 					note = "one enum only, nothing to choose between"
 				}
-				fmt.Printf("%-34s %6d %8d %7d  %s\n",
+				fmt.Fprintf(stdout, "%-34s %6d %8d %7d  %s\n",
 					s.Model, s.Dim, s.Total, len(s.PerEnum), dimStyle.Render(note))
 			}
 			if len(tr) > 1 {
-				fmt.Printf("\n%s\n", dimStyle.Render(
+				fmt.Fprintf(stdout, "\n%s\n", dimStyle.Render(
 					"two models are two corpora: a vector from one is not comparable to a vector from the other"))
 			}
 			return nil
@@ -1574,7 +1573,7 @@ improved against.`,
 			}
 			if jsonOut {
 				raw, _ := json.MarshalIndent(res, "", "  ")
-				fmt.Println(string(raw))
+				fmt.Fprintln(stdout, string(raw))
 				return nil
 			}
 			printClassifyResult(res)
@@ -1618,10 +1617,10 @@ holding ~30 KB of events can occupy 240 KB.`,
 				}
 				if jsonOut {
 					raw, _ := json.MarshalIndent(map[string]any{"would_seal": len(ids), "runs": ids}, "", "  ")
-					fmt.Println(string(raw))
+					fmt.Fprintln(stdout, string(raw))
 					return nil
 				}
-				fmt.Printf("Would seal %d run%s older than %s.\n", len(ids), plural(len(ids)), olderThan)
+				fmt.Fprintf(stdout, "Would seal %d run%s older than %s.\n", len(ids), plural(len(ids)), olderThan)
 				return nil
 			}
 			res, err := runlog.Seal(olderThan)
@@ -1630,16 +1629,16 @@ holding ~30 KB of events can occupy 240 KB.`,
 			}
 			if jsonOut {
 				raw, _ := json.MarshalIndent(res, "", "  ")
-				fmt.Println(string(raw))
+				fmt.Fprintln(stdout, string(raw))
 				return nil
 			}
 			if res.Runs == 0 {
-				fmt.Printf("Nothing to seal, no run logs older than %s.\n", olderThan)
+				fmt.Fprintf(stdout, "Nothing to seal, no run logs older than %s.\n", olderThan)
 				return nil
 			}
-			fmt.Printf("  sealed %d run%s (%d events) across %d month%s\n",
+			fmt.Fprintf(stdout, "  sealed %d run%s (%d events) across %d month%s\n",
 				res.Runs, plural(res.Runs), res.Events, res.Months, plural(res.Months))
-			fmt.Printf("  %s\n", dimStyle.Render(fmt.Sprintf(
+			fmt.Fprintf(stdout, "  %s\n", dimStyle.Render(fmt.Sprintf(
 				"%s on disk -> %s (%.1fx)", humanBytes(res.BytesBefore), humanBytes(res.BytesAfter),
 				ratioOf(res.BytesBefore, res.BytesAfter))))
 			return nil
@@ -1753,54 +1752,54 @@ explore_rate in config.toml above 0 is what creates that overlap.`,
 					out["rows_with_domain"] = withDomain
 				}
 				raw, _ := json.MarshalIndent(out, "", "  ")
-				fmt.Println(string(raw))
+				fmt.Fprintln(stdout, string(raw))
 				return nil
 			}
 
-			fmt.Printf("  Policy   %s\n", policy.Name())
-			fmt.Printf("  Log      %d dispatches across tiers %v\n", len(rows), ope.SortedTiers(tierSet))
+			fmt.Fprintf(stdout, "  Policy   %s\n", policy.Name())
+			fmt.Fprintf(stdout, "  Log      %d dispatches across tiers %v\n", len(rows), ope.SortedTiers(tierSet))
 			if constrained {
-				fmt.Printf("  Domain   %d of %d rows record one; the rest cannot be evaluated\n", withDomain, len(rows))
+				fmt.Fprintf(stdout, "  Domain   %d of %d rows record one; the rest cannot be evaluated\n", withDomain, len(rows))
 			}
 			if loggedErr == nil {
-				fmt.Printf("  Actual   $%.5f per dispatch under the policy that ran\n", logged)
+				fmt.Fprintf(stdout, "  Actual   $%.5f per dispatch under the policy that ran\n", logged)
 			}
-			fmt.Println()
+			fmt.Fprintln(stdout)
 			if evalErr != nil {
-				fmt.Printf("  %s\n", warnStyle.Render("No answer: "+evalErr.Error()))
+				fmt.Fprintf(stdout, "  %s\n", warnStyle.Render("No answer: "+evalErr.Error()))
 				// The two refusals have different remedies, and telling someone
 				// with a pre-propensity log to set explore_rate would send them
 				// after a setting that cannot fix rows already written.
 				if errors.Is(evalErr, ope.ErrNoPropensity) {
-					fmt.Printf("  %s\n", dimStyle.Render(
+					fmt.Fprintf(stdout, "  %s\n", dimStyle.Render(
 						"These dispatches were logged before Hydra recorded routing propensity. "+
 							"Rows written from now on carry it; nothing recovers it for old ones."))
 				} else if constrained && withDomain == 0 {
 					// A third remedy, and the one that applies to every log
 					// written before the domain was recorded. Sending someone
 					// after explore_rate here would not help at all.
-					fmt.Printf("  %s\n", dimStyle.Render(
+					fmt.Fprintf(stdout, "  %s\n", dimStyle.Render(
 						"None of these rows records the domain the router ranked on, so what this policy "+
 							"would have chosen for them is unknown. Rows written from now on carry it."))
 				} else {
-					fmt.Printf("  %s\n", dimStyle.Render(
+					fmt.Fprintf(stdout, "  %s\n", dimStyle.Render(
 						"The router is argmax by default, so heads it did not pick have probability 0 "+
 							"and no amount of logging answers this. Set explore_rate in config.toml above 0."))
 				}
 				return nil
 			}
-			fmt.Printf("  Estimate $%.5f per dispatch  [$%.5f, $%.5f] at %.0f%%\n",
+			fmt.Fprintf(stdout, "  Estimate $%.5f per dispatch  [$%.5f, $%.5f] at %.0f%%\n",
 				est.Mean, est.Lo, est.Hi, est.Level*100)
 			if loggedErr == nil && logged > 0 {
-				fmt.Printf("  %s\n", dimStyle.Render(fmt.Sprintf("%.1f%% of what actually ran", est.Mean/logged*100)))
+				fmt.Fprintf(stdout, "  %s\n", dimStyle.Render(fmt.Sprintf("%.1f%% of what actually ran", est.Mean/logged*100)))
 			}
-			fmt.Println()
-			fmt.Printf("  %s\n", dimStyle.Render(fmt.Sprintf(
+			fmt.Fprintln(stdout)
+			fmt.Fprintf(stdout, "  %s\n", dimStyle.Render(fmt.Sprintf(
 				"%d of %d rows support this policy · effective sample size %.1f · %d weights clipped",
 				est.Supporting, est.N, est.ESS, est.Clipped)))
-			fmt.Printf("  %s\n", dimStyle.Render(est.Method))
+			fmt.Fprintf(stdout, "  %s\n", dimStyle.Render(est.Method))
 			if est.Skipped > 0 {
-				fmt.Printf("  %s\n", dimStyle.Render(fmt.Sprintf(
+				fmt.Fprintf(stdout, "  %s\n", dimStyle.Render(fmt.Sprintf(
 					"%d rows skipped for an unusable propensity", est.Skipped)))
 			}
 			return nil
@@ -1871,11 +1870,11 @@ place for, are carried under hydra.* rather than dropped.`,
 					if err := os.WriteFile(outFile, body, 0o600); err != nil {
 						return err
 					}
-					fmt.Printf("  %d span%s written to %s\n", len(rows), plural(len(rows)), outFile)
-					fmt.Printf("  %s\n", dimStyle.Render("Nothing was sent. Pass --otlp <endpoint> to export."))
+					fmt.Fprintf(stdout, "  %d span%s written to %s\n", len(rows), plural(len(rows)), outFile)
+					fmt.Fprintf(stdout, "  %s\n", dimStyle.Render("Nothing was sent. Pass --otlp <endpoint> to export."))
 					return nil
 				}
-				fmt.Println(string(body))
+				fmt.Fprintln(stdout, string(body))
 				return nil
 			}
 			return postOTLP(endpoint, body, len(rows))
@@ -1918,38 +1917,38 @@ replaced before it is written.`,
 					"budget_bytes":    payload.Budget(cfg),
 					"stats":           st,
 				}, "", "  ")
-				fmt.Println(string(raw))
+				fmt.Fprintln(stdout, string(raw))
 				return nil
 			}
 			if !cfg.CapturePayloads {
-				fmt.Println("Payload capture is off. Hydra keeps the statistics either way;")
-				fmt.Println("turn capture on with capture_payloads = true in config.toml.")
+				fmt.Fprintln(stdout, "Payload capture is off. Hydra keeps the statistics either way;")
+				fmt.Fprintln(stdout, "turn capture on with capture_payloads = true in config.toml.")
 				if st.Blobs == 0 {
 					return nil
 				}
-				fmt.Println()
+				fmt.Fprintln(stdout)
 			}
 			if st.Blobs == 0 {
-				fmt.Println("No payloads stored.")
+				fmt.Fprintln(stdout, "No payloads stored.")
 				return nil
 			}
-			fmt.Printf("  %d payload%s over %d chunk%s in %d pack%s\n",
+			fmt.Fprintf(stdout, "  %d payload%s over %d chunk%s in %d pack%s\n",
 				st.Manifests, plural(st.Manifests),
 				st.Blobs-st.Manifests, plural(st.Blobs-st.Manifests),
 				st.Packs, plural(st.Packs))
 			// Compression and disk are separate numbers on purpose. A small
 			// store is dominated by the filesystem block it is charged, so one
 			// combined ratio reads as compression having made things bigger.
-			fmt.Printf("  %s of prompt text held in %s (%.1fx) · %s on disk\n",
+			fmt.Fprintf(stdout, "  %s of prompt text held in %s (%.1fx) · %s on disk\n",
 				humanBytes(st.LogicalBytes), humanBytes(st.PackBytes),
 				ratioOf(st.LogicalBytes, st.PackBytes), humanBytes(st.DiskBytes))
-			fmt.Printf("  %s\n", dimStyle.Render(fmt.Sprintf(
+			fmt.Fprintf(stdout, "  %s\n", dimStyle.Render(fmt.Sprintf(
 				"%s unique after chunking, so %s of it repeated across runs",
 				humanBytes(st.RawBytes), humanBytes(st.LogicalBytes-st.RawBytes))))
-			fmt.Printf("  %s\n", dimStyle.Render(fmt.Sprintf(
+			fmt.Fprintf(stdout, "  %s\n", dimStyle.Render(fmt.Sprintf(
 				"budget %s, oldest packs dropped past it · admitted at %.0f%%",
 				humanBytes(payload.Budget(cfg)), payload.KeepRate(cfg)*100)))
-			fmt.Printf("  %s\n", dimStyle.Render(fmt.Sprintf(
+			fmt.Fprintf(stdout, "  %s\n", dimStyle.Render(fmt.Sprintf(
 				"%d dictionary-compressed · %d contained redacted secrets", st.WithDict, st.WithPII)))
 			return nil
 		},
@@ -2040,7 +2039,7 @@ func postOTLP(endpoint string, body []byte, spans int) error {
 		snippet, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
 		return fmt.Errorf("otlp export to %s: %s: %s", endpoint, resp.Status, strings.TrimSpace(string(snippet)))
 	}
-	fmt.Printf("  %d span%s exported to %s\n", spans, plural(spans), endpoint)
+	fmt.Fprintf(stdout, "  %d span%s exported to %s\n", spans, plural(spans), endpoint)
 	return nil
 }
 
@@ -2182,9 +2181,9 @@ func cmdOracle() *cobra.Command {
 				case aerr != nil:
 					// Never fail a verification because its example could not
 					// be filed; report it so the loss is visible.
-					fmt.Printf("  %s\n", dimStyle.Render("eval set: "+aerr.Error()))
+					fmt.Fprintf(stdout, "  %s\n", dimStyle.Render("eval set: "+aerr.Error()))
 				case added:
-					fmt.Printf("  %s\n", dimStyle.Render("recorded to the eval set"))
+					fmt.Fprintf(stdout, "  %s\n", dimStyle.Render("recorded to the eval set"))
 				}
 			}
 
@@ -2201,9 +2200,9 @@ func cmdOracle() *cobra.Command {
 				}); sErr != nil {
 					// Reported, never fatal: the verification itself is the
 					// work, and losing its attribution must not fail it.
-					fmt.Printf("  %s\n", dimStyle.Render("span score: "+sErr.Error()))
+					fmt.Fprintf(stdout, "  %s\n", dimStyle.Render("span score: "+sErr.Error()))
 				} else {
-					fmt.Printf("  %s\n", dimStyle.Render("scored span "+scoreSpan))
+					fmt.Fprintf(stdout, "  %s\n", dimStyle.Render("scored span "+scoreSpan))
 					// The exact id, never the caller's prefix: the run log was
 					// written under one span and a prefix resolves to it only
 					// by luck.
@@ -2215,11 +2214,11 @@ func cmdOracle() *cobra.Command {
 			if !v.Passed {
 				status = "FAIL"
 			}
-			fmt.Printf("\n  %s  %s\n", status, dimStyle.Render(src))
+			fmt.Fprintf(stdout, "\n  %s  %s\n", status, dimStyle.Render(src))
 			if v.Detail != "" {
-				fmt.Printf("  %s\n", dimStyle.Render(v.Detail))
+				fmt.Fprintf(stdout, "  %s\n", dimStyle.Render(v.Detail))
 			}
-			fmt.Printf("  calibrated evidence  %+.3f nats\n\n", llr)
+			fmt.Fprintf(stdout, "  calibrated evidence  %+.3f nats\n\n", llr)
 			if !v.Passed {
 				os.Exit(1)
 			}
@@ -2298,11 +2297,11 @@ func cmdMCP() *cobra.Command {
 				// tool+"/"+resource used to read as one run-together path when
 				// resource was itself absolute (e.g. "shell//bin/rm -rf /"),
 				// "->" can't collide with path syntax the way "/" does (#464).
-				fmt.Printf("  %s  %s %s -> %s (%s)\n", strings.ToUpper(string(decision)),
+				fmt.Fprintf(stdout, "  %s  %s %s -> %s (%s)\n", strings.ToUpper(string(decision)),
 					chkAgent, args[0], chkResource, action)
 			}
 			if checkErr != nil {
-				fmt.Fprintf(os.Stderr, "  ledger error: %v\n", checkErr)
+				fmt.Fprintf(stderr, "  ledger error: %v\n", checkErr)
 			}
 			// Gate on "not Allow", as ledger.Check's own doc requires: Ask
 			// withholds permission too, and exiting 0 made it indistinguishable
@@ -2400,7 +2399,7 @@ func cmdMCP() *cobra.Command {
 				return err
 			}
 			if skipped > 0 {
-				fmt.Fprintf(os.Stderr, "  warning: %d unparseable ledger line(s) skipped, "+
+				fmt.Fprintf(stderr, "  warning: %d unparseable ledger line(s) skipped, "+
 					"verification may be against an older approval\n", skipped)
 			}
 			approval, ok := ledger.LatestBound(events, tool, verResource)
@@ -2421,7 +2420,7 @@ func cmdMCP() *cobra.Command {
 					return err
 				}
 				if !chain.Intact {
-					fmt.Printf("  %s  ledger hash chain is broken (event index %d), the recorded "+
+					fmt.Fprintf(stdout, "  %s  ledger hash chain is broken (event index %d), the recorded "+
 						"approval cannot be trusted; refusing to verify against it. Run `hyctl mcp verify-chain` for details.\n",
 						strings.ToUpper(string(ledger.Deny)), chain.BrokenAt)
 					os.Exit(3)
@@ -2437,20 +2436,20 @@ func cmdMCP() *cobra.Command {
 			// tool/resource the approval was actually recorded for.
 			target := fmt.Sprintf("%s -> %s at %s", approval.Tool, approval.Resource, approval.TS)
 			if !match {
-				fmt.Printf("  %s  parameters do NOT match the approval for %s\n",
+				fmt.Fprintf(stdout, "  %s  parameters do NOT match the approval for %s\n",
 					strings.ToUpper(string(ledger.Deny)), target)
 				os.Exit(3) // non-zero so callers can gate on it
 			}
-			fmt.Printf("  MATCH  parameters match the approval for %s\n", target)
+			fmt.Fprintf(stdout, "  MATCH  parameters match the approval for %s\n", target)
 			// The walk proves no event was edited; the anchor is what proves none
 			// was deleted from the end. Without one this MATCH is weaker than one
 			// verified against a provably complete log, and said so nowhere (#1169).
 			switch {
 			case chain.AnchorMissing:
-				fmt.Println("         caveat: the ledger chain anchor is missing, so deletion from " +
+				fmt.Fprintln(stdout, "         caveat: the ledger chain anchor is missing, so deletion from "+
 					"the end cannot be ruled out. Run `hyctl mcp verify-chain`.")
 			case chain.AnchorStale:
-				fmt.Println("         caveat: the ledger chain anchor is stale, it names an earlier " +
+				fmt.Fprintln(stdout, "         caveat: the ledger chain anchor is stale, it names an earlier "+
 					"event than the last one. Run `hyctl mcp verify-chain`.")
 			}
 			return nil
@@ -2474,7 +2473,7 @@ func cmdMCP() *cobra.Command {
 			}
 			events = ledger.Filter(events, logAgent, logWithheld)
 			if len(events) == 0 {
-				fmt.Println("  (no matching ledger events)")
+				fmt.Fprintln(stdout, "  (no matching ledger events)")
 				return nil
 			}
 			for _, e := range events {
@@ -2491,7 +2490,7 @@ func cmdMCP() *cobra.Command {
 				if e.Flagged {
 					line += dimStyle.Render(fmt.Sprintf("  [flagged: %s]", util.SafeTerminal(e.FlagReason)))
 				}
-				fmt.Println(line)
+				fmt.Fprintln(stdout, line)
 			}
 			return nil
 		},
@@ -2513,21 +2512,21 @@ func cmdMCP() *cobra.Command {
 			if repJSON {
 				return json.NewEncoder(os.Stdout).Encode(s)
 			}
-			fmt.Printf("\n  ledger events   %d  (%d allowed · %d denied · %d ask · %d flagged)\n",
+			fmt.Fprintf(stdout, "\n  ledger events   %d  (%d allowed · %d denied · %d ask · %d flagged)\n",
 				s.Total, s.Allowed, s.Denied, s.Asked, s.Flagged)
 			if len(s.ByAgent) > 0 {
-				fmt.Println("  by agent:")
+				fmt.Fprintln(stdout, "  by agent:")
 				for _, kc := range ledger.SortedCounts(s.ByAgent) {
-					fmt.Printf("    %-20s %d\n", kc.Key, kc.Count)
+					fmt.Fprintf(stdout, "    %-20s %d\n", kc.Key, kc.Count)
 				}
 			}
 			if len(s.ByTool) > 0 {
-				fmt.Println("  by tool:")
+				fmt.Fprintln(stdout, "  by tool:")
 				for _, kc := range ledger.SortedCounts(s.ByTool) {
-					fmt.Printf("    %-20s %d\n", kc.Key, kc.Count)
+					fmt.Fprintf(stdout, "    %-20s %d\n", kc.Key, kc.Count)
 				}
 			}
-			fmt.Println()
+			fmt.Fprintln(stdout)
 			return nil
 		},
 	}
@@ -2551,22 +2550,22 @@ func cmdMCP() *cobra.Command {
 			// surviving event verifies and the missing ones left no gap.
 			switch {
 			case res.Truncated:
-				fmt.Printf("  %s  ledger TRUNCATED, the chain anchor names an event that is no longer "+
+				fmt.Fprintf(stdout, "  %s  ledger TRUNCATED, the chain anchor names an event that is no longer "+
 					"in the log, so records were deleted from the end\n", strings.ToUpper(string(ledger.Deny)))
 				os.Exit(3)
 			case !res.Intact:
-				fmt.Printf("  %s  chain broken at event index %d, the ledger was modified after recording\n",
+				fmt.Fprintf(stdout, "  %s  chain broken at event index %d, the ledger was modified after recording\n",
 					strings.ToUpper(string(ledger.Deny)), res.BrokenAt)
 				os.Exit(3)
 			case res.AnchorMissing:
-				fmt.Printf("  %s  %d chained event(s) all verify, but the chain anchor (%s) is missing, "+
+				fmt.Fprintf(stdout, "  %s  %d chained event(s) all verify, but the chain anchor (%s) is missing, "+
 					"deletion from the end cannot be ruled out\n",
 					warnStyle.Render("WARN"), res.Chained, filepath.Base(ledger.DefaultPath())+".chainhash")
 			case res.AnchorStale:
-				fmt.Printf("  %s  chain intact, %d chained event(s); the anchor lags the log "+
+				fmt.Fprintf(stdout, "  %s  chain intact, %d chained event(s); the anchor lags the log "+
 					"(a dropped anchor write, not a deletion)\n", okStyle.Render("OK"), res.Chained)
 			default:
-				fmt.Printf("  %s  chain intact, %d chained event(s), %d unchained (pre-dates this feature)\n",
+				fmt.Fprintf(stdout, "  %s  chain intact, %d chained event(s), %d unchained (pre-dates this feature)\n",
 					okStyle.Render("OK"), res.Chained, res.Unchained)
 			}
 			return nil
@@ -2591,15 +2590,15 @@ func cmdMCPRegistry() *cobra.Command {
 		Use:   "sync",
 		Short: "Pull server metadata from the official MCP registry into a local cache",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			fmt.Println("  syncing the official MCP registry, thousands of servers, this can take a minute or two...")
+			fmt.Fprintln(stdout, "  syncing the official MCP registry, thousands of servers, this can take a minute or two...")
 			n, err := mcpregistry.Sync(cmd.Context(), func(page, soFar int) {
-				fmt.Printf("\r  page %-4d  %d servers so far...", page, soFar)
+				fmt.Fprintf(stdout, "\r  page %-4d  %d servers so far...", page, soFar)
 			})
-			fmt.Println()
+			fmt.Fprintln(stdout)
 			if err != nil {
 				return err
 			}
-			fmt.Printf("  synced %d servers from the official MCP registry\n", n)
+			fmt.Fprintf(stdout, "  synced %d servers from the official MCP registry\n", n)
 			return nil
 		},
 	}
@@ -2615,11 +2614,11 @@ func cmdMCPRegistry() *cobra.Command {
 				return json.NewEncoder(os.Stdout).Encode(installed)
 			}
 			if len(installed) == 0 {
-				fmt.Println("  no MCP servers found on this machine")
+				fmt.Fprintln(stdout, "  no MCP servers found on this machine")
 				return nil
 			}
 			for _, s := range installed {
-				fmt.Printf("  %-16s %-8s %s\n", s.Client, s.Scope, s.Name)
+				fmt.Fprintf(stdout, "  %-16s %-8s %s\n", s.Client, s.Scope, s.Name)
 			}
 			return nil
 		},
@@ -2643,10 +2642,10 @@ func cmdMCPRegistry() *cobra.Command {
 				return json.NewEncoder(os.Stdout).Encode(rpt)
 			}
 			if rpt.RegistrySync.IsZero() {
-				fmt.Println("  registry never synced, run `hyctl mcp registry sync` first for verification")
+				fmt.Fprintln(stdout, "  registry never synced, run `hyctl mcp registry sync` first for verification")
 			}
 			if len(rpt.Entries) == 0 {
-				fmt.Println("  no MCP servers found on this machine")
+				fmt.Fprintln(stdout, "  no MCP servers found on this machine")
 				return nil
 			}
 			for _, e := range rpt.Entries {
@@ -2656,9 +2655,9 @@ func cmdMCPRegistry() *cobra.Command {
 				} else {
 					status = warnStyle.Render(status)
 				}
-				fmt.Printf("  %-9s %-16s %-8s %s\n", status, e.Client, e.Scope, e.Name)
+				fmt.Fprintf(stdout, "  %-9s %-16s %-8s %s\n", status, e.Client, e.Scope, e.Name)
 				if e.Score != nil {
-					fmt.Printf("             score %-20s state %-12s confidence %s\n",
+					fmt.Fprintf(stdout, "             score %-20s state %-12s confidence %s\n",
 						mcpregistry.FormatScore(*e.Score), e.LifecycleState, mcpregistry.FormatConfidence(e.Score.Confidence))
 					// Unchecked categories print too, or a neutral baseline reads as evidence (#1170).
 					for _, cat := range e.Score.Categories() {
@@ -2674,7 +2673,7 @@ func cmdMCPRegistry() *cobra.Command {
 				} else if e.NearestMatch != "" && mcpregistry.IsNearMiss(e.Package, e.NearestDist) {
 					note := fmt.Sprintf("nearest known identifier: %q (%d edits away), verify this isn't a typosquat",
 						e.NearestMatch, e.NearestDist)
-					fmt.Printf("             %s\n", dimStyle.Render(note))
+					fmt.Fprintf(stdout, "             %s\n", dimStyle.Render(note))
 				}
 				printToolReport(e)
 			}
@@ -2695,7 +2694,7 @@ func cmdMCPRegistry() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Printf("  wrote %d server(s) to %s/index.html and %s/index.json\n", n, exportOut, exportOut)
+			fmt.Fprintf(stdout, "  wrote %d server(s) to %s/index.html and %s/index.json\n", n, exportOut, exportOut)
 			return nil
 		},
 	}
@@ -2716,33 +2715,33 @@ func cmdMCPRegistry() *cobra.Command {
 				return json.NewEncoder(os.Stdout).Encode(map[string]any{"known_incidents": known, "typosquat_pairs": typo})
 			}
 			allPassed := true
-			fmt.Println("  known-vulnerability match (live OSV.dev check):")
+			fmt.Fprintln(stdout, "  known-vulnerability match (live OSV.dev check):")
 			for _, r := range known {
 				status := okStyle.Render("CAUGHT")
 				if !r.Caught {
 					status = warnStyle.Render("MISSED")
 					allPassed = false
 				}
-				fmt.Printf("    %-8s %s\n", status, r.Incident.Name)
-				fmt.Printf("             %s\n", dimStyle.Render(r.Incident.Description))
+				fmt.Fprintf(stdout, "    %-8s %s\n", status, r.Incident.Name)
+				fmt.Fprintf(stdout, "             %s\n", dimStyle.Render(r.Incident.Description))
 				if r.Detail != "" {
-					fmt.Printf("             %s\n", dimStyle.Render(r.Detail))
+					fmt.Fprintf(stdout, "             %s\n", dimStyle.Render(r.Detail))
 				}
 			}
-			fmt.Println("  typosquat detector (constructed pairs, not a live-registry probe):")
+			fmt.Fprintln(stdout, "  typosquat detector (constructed pairs, not a live-registry probe):")
 			for _, r := range typo {
 				status := okStyle.Render("CAUGHT")
 				if !r.Detected {
 					status = warnStyle.Render("MISSED")
 					allPassed = false
 				}
-				fmt.Printf("    %-8s %s vs %s (%d edits)\n", status, r.Pair.Registered, r.Pair.Typosquat, r.Distance)
+				fmt.Fprintf(stdout, "    %-8s %s vs %s (%d edits)\n", status, r.Pair.Registered, r.Pair.Typosquat, r.Distance)
 			}
 			if !allPassed {
-				fmt.Println("\n  backtest FAILED, do not treat the pipeline as launch-ready")
+				fmt.Fprintln(stdout, "\n  backtest FAILED, do not treat the pipeline as launch-ready")
 				os.Exit(1)
 			}
-			fmt.Println("\n  backtest passed")
+			fmt.Fprintln(stdout, "\n  backtest passed")
 			return nil
 		},
 	}
@@ -2766,12 +2765,12 @@ func cmdMCPRegistry() *cobra.Command {
 				if !mcpregistry.Synced() {
 					next = "`hyctl mcp registry sync`, then " + next
 				}
-				fmt.Printf("  no audited servers yet, run %s first\n", next)
+				fmt.Fprintf(stdout, "  no audited servers yet, run %s first\n", next)
 				return nil
 			}
 			header := fmt.Sprintf("%-40s %-12s %6s  %-12s %s", "SERVER", "STATE", "SCORE", "CONFIDENCE", "CHECKED")
-			fmt.Printf("\n  %s\n", header)
-			fmt.Println("  " + strings.Repeat("─", len(header)))
+			fmt.Fprintf(stdout, "\n  %s\n", header)
+			fmt.Fprintln(stdout, "  "+strings.Repeat("─", len(header)))
 			for _, e := range entries {
 				state := string(e.LifecycleState)
 				switch e.LifecycleState {
@@ -2781,12 +2780,12 @@ func cmdMCPRegistry() *cobra.Command {
 					state = warnStyle.Render(state)
 				}
 				checked, total := e.Score.CheckedCategories()
-				fmt.Printf("  %-40.40s %-12s %6s  %-12s %d of %d\n", e.Name, state,
+				fmt.Fprintf(stdout, "  %-40.40s %-12s %6s  %-12s %d of %d\n", e.Name, state,
 					mcpregistry.FormatScore(e.Score),
 					mcpregistry.FormatConfidence(e.Score.Confidence),
 					checked, total)
 			}
-			fmt.Println()
+			fmt.Fprintln(stdout)
 			return nil
 		},
 	}
@@ -2808,7 +2807,7 @@ func cmdMCPRegistry() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Printf("  %s  %s -> %s\n", okStyle.Render("CLEARED"), args[0], state)
+			fmt.Fprintf(stdout, "  %s  %s -> %s\n", okStyle.Render("CLEARED"), args[0], state)
 			return nil
 		},
 	}
@@ -2845,7 +2844,7 @@ func cmdSecurity() *cobra.Command {
 			case attestOut:
 				return json.NewEncoder(os.Stdout).Encode(rep.Attestation)
 			case execOut:
-				fmt.Print(security.ExecutiveSummary(rep.Attestation))
+				fmt.Fprint(stdout, security.ExecutiveSummary(rep.Attestation))
 				return nil
 			case csvOut:
 				return securityCSV(os.Stdout, rep)
@@ -2891,13 +2890,13 @@ func cmdSecurityTrifecta() *cobra.Command {
 }
 
 func printTrifecta(t security.Trifecta) {
-	fmt.Println()
+	fmt.Fprintln(stdout)
 	if !t.HasData {
-		fmt.Println("  " + dimStyle.Render(
+		fmt.Fprintln(stdout, "  "+dimStyle.Render(
 			"No dispatch has recorded provenance yet. Run something through `hyctl dispatch` first;"))
-		fmt.Println("  " + dimStyle.Render(
+		fmt.Fprintln(stdout, "  "+dimStyle.Render(
 			"events written before the egress gate shipped carry none, and are not counted."))
-		fmt.Println()
+		fmt.Fprintln(stdout)
 		return
 	}
 
@@ -2906,23 +2905,23 @@ func printTrifecta(t security.Trifecta) {
 	// ignore the number.
 	switch {
 	case t.Exposed() > 0:
-		fmt.Printf("  %s  %s\n", cortexStyle.Render("LETHAL TRIFECTA"),
+		fmt.Fprintf(stdout, "  %s  %s\n", cortexStyle.Render("LETHAL TRIFECTA"),
 			warnStyle.Render(fmt.Sprintf("%d dispatch(es) had all three legs and were not stopped", t.Exposed())))
 	case t.AllThree > 0:
-		fmt.Printf("  %s  %s\n", cortexStyle.Render("LETHAL TRIFECTA"),
+		fmt.Fprintf(stdout, "  %s  %s\n", cortexStyle.Render("LETHAL TRIFECTA"),
 			okStyle.Render(fmt.Sprintf("%d dispatch(es) had all three legs, all refused", t.AllThree)))
 	default:
-		fmt.Printf("  %s  %s\n", cortexStyle.Render("LETHAL TRIFECTA"),
+		fmt.Fprintf(stdout, "  %s  %s\n", cortexStyle.Render("LETHAL TRIFECTA"),
 			okStyle.Render("no dispatch carried all three legs"))
 	}
-	fmt.Println(dimStyle.Render(fmt.Sprintf("  over %d dispatch(es) with recorded provenance", t.Evaluated)))
-	fmt.Println()
+	fmt.Fprintln(stdout, dimStyle.Render(fmt.Sprintf("  over %d dispatch(es) with recorded provenance", t.Evaluated)))
+	fmt.Fprintln(stdout)
 
 	leg := func(label, detail string, l security.TrifectaLeg) {
-		fmt.Printf("  %-20s %s\n", cortexStyle.Render(label),
+		fmt.Fprintf(stdout, "  %-20s %s\n", cortexStyle.Render(label),
 			dimStyle.Render(fmt.Sprintf("%d dispatch(es), %s", l.Dispatches, detail)))
 		for _, it := range l.Top {
-			fmt.Printf("      %-44s %s\n", truncateMiddle(it.Name, 44),
+			fmt.Fprintf(stdout, "      %-44s %s\n", truncateMiddle(it.Name, 44),
 				dimStyle.Render(fmt.Sprintf("%d", it.Count)))
 		}
 	}
@@ -2930,9 +2929,9 @@ func printTrifecta(t security.Trifecta) {
 	leg("untrusted content", "ingested content Hydra did not author", t.Untrusted)
 	leg("external comms", "reached a head that leaves the machine", t.External)
 
-	fmt.Println()
-	fmt.Println(dimStyle.Render("  " + t.Caveat))
-	fmt.Println()
+	fmt.Fprintln(stdout)
+	fmt.Fprintln(stdout, dimStyle.Render("  "+t.Caveat))
+	fmt.Fprintln(stdout)
 }
 
 // securityCSV emits the coverage table as one row per finding, the same
@@ -2965,49 +2964,49 @@ func securityCSV(w io.Writer, r *security.Report) error {
 // only under --why. Nine analyses printed unconditionally is an engineer's
 // dashboard, not an answer.
 func printSecurityReport(r *security.Report, why bool) {
-	fmt.Println()
+	fmt.Fprintln(stdout)
 	printVerdict(r)
 	printIncidents(r)
 	printEvidenceState(r)
 	printBoundary(r)
 
 	if !why {
-		fmt.Println()
-		fmt.Println(dimStyle.Render("  hyctl security --why    coverage, controls, policy, exposure, risk register"))
-		fmt.Println(dimStyle.Render("  hyctl security --json   machine-readable"))
-		fmt.Println()
+		fmt.Fprintln(stdout)
+		fmt.Fprintln(stdout, dimStyle.Render("  hyctl security --why    coverage, controls, policy, exposure, risk register"))
+		fmt.Fprintln(stdout, dimStyle.Render("  hyctl security --json   machine-readable"))
+		fmt.Fprintln(stdout)
 		return
 	}
 
 	printRegister(r)
 
-	fmt.Println()
-	fmt.Println(dimStyle.Render("  " + strings.Repeat("=", 48)))
-	fmt.Println(dimStyle.Render("  detail"))
+	fmt.Fprintln(stdout)
+	fmt.Fprintln(stdout, dimStyle.Render("  "+strings.Repeat("=", 48)))
+	fmt.Fprintln(stdout, dimStyle.Render("  detail"))
 	printCoverageHeadline(r)
 	printAgenticCoverage(r)
 
 	if !r.HasData {
-		fmt.Println(dimStyle.Render("  no ledger events yet, nothing has dispatched through hyctl on this machine"))
+		fmt.Fprintln(stdout, dimStyle.Render("  no ledger events yet, nothing has dispatched through hyctl on this machine"))
 	} else {
-		fmt.Printf("  %s  %d  (%d allowed · %d denied · %d ask · %d flagged)\n",
+		fmt.Fprintf(stdout, "  %s  %d  (%d allowed · %d denied · %d ask · %d flagged)\n",
 			cortexStyle.Render("ledger events"), r.Ledger.Total, r.Ledger.Allowed,
 			r.Ledger.Denied, r.Ledger.Asked, r.Ledger.Flagged)
 	}
 
 	if len(r.ByHead) > 0 {
-		fmt.Println()
-		fmt.Println(dimStyle.Render("  " + strings.Repeat("─", 48)))
-		fmt.Printf("  %-24s %8s %8s\n", "HEAD", "DENIED", "FLAGGED")
-		fmt.Println(dimStyle.Render("  " + strings.Repeat("─", 48)))
+		fmt.Fprintln(stdout)
+		fmt.Fprintln(stdout, dimStyle.Render("  "+strings.Repeat("─", 48)))
+		fmt.Fprintf(stdout, "  %-24s %8s %8s\n", "HEAD", "DENIED", "FLAGGED")
+		fmt.Fprintln(stdout, dimStyle.Render("  "+strings.Repeat("─", 48)))
 		for _, h := range r.ByHead {
-			fmt.Printf("  %-24.24s %8d %8d\n", util.SafeTerminal(h.Head), h.Denied, h.Flagged)
+			fmt.Fprintf(stdout, "  %-24.24s %8d %8d\n", util.SafeTerminal(h.Head), h.Denied, h.Flagged)
 		}
 	}
 
-	fmt.Println()
-	fmt.Println(dimStyle.Render("  " + strings.Repeat("─", 48)))
-	fmt.Println("  checks:")
+	fmt.Fprintln(stdout)
+	fmt.Fprintln(stdout, dimStyle.Render("  "+strings.Repeat("─", 48)))
+	fmt.Fprintln(stdout, "  checks:")
 	for _, c := range r.Checks {
 		status := c.Status
 		if strings.Contains(strings.ToLower(status), "broken") {
@@ -3015,8 +3014,8 @@ func printSecurityReport(r *security.Report, why bool) {
 		} else if status == "intact" || strings.HasSuffix(status, "refusal(s)") {
 			status = okStyle.Render(status)
 		}
-		fmt.Printf("    %-26s %s\n", c.Name, status)
-		fmt.Println(dimStyle.Render("      " + util.SafeTerminal(c.Detail)))
+		fmt.Fprintf(stdout, "    %-26s %s\n", c.Name, status)
+		fmt.Fprintln(stdout, dimStyle.Render("      "+util.SafeTerminal(c.Detail)))
 	}
 
 	printControls(r)
@@ -3025,19 +3024,19 @@ func printSecurityReport(r *security.Report, why bool) {
 	printThreats(r)
 
 	if len(r.Actions) > 0 {
-		fmt.Println()
-		fmt.Println(dimStyle.Render("  " + strings.Repeat("─", 48)))
-		fmt.Println(warnStyle.Render("  action queue (next hardening backlog, most urgent first):"))
+		fmt.Fprintln(stdout)
+		fmt.Fprintln(stdout, dimStyle.Render("  "+strings.Repeat("─", 48)))
+		fmt.Fprintln(stdout, warnStyle.Render("  action queue (next hardening backlog, most urgent first):"))
 		for _, a := range r.Actions {
 			age := ""
 			if a.AgeDays > 0 {
 				age = dimStyle.Render(fmt.Sprintf(" · %dd", a.AgeDays))
 			}
-			fmt.Printf("    %s %s%s, %s\n", actionPriorityTag(a.Priority),
+			fmt.Fprintf(stdout, "    %s %s%s, %s\n", actionPriorityTag(a.Priority),
 				util.SafeTerminal(a.Title), age, util.SafeTerminal(a.Detail))
 		}
 	}
-	fmt.Println()
+	fmt.Fprintln(stdout)
 }
 
 // printVerdict is the single line a CISO reads, plus the condition that
@@ -3051,34 +3050,34 @@ func printVerdict(r *security.Report) {
 	case security.VerdictAttention:
 		label = warnStyle.Render("ATTENTION")
 	}
-	fmt.Printf("  %s  %s\n", cortexStyle.Render("VERDICT"), label)
+	fmt.Fprintf(stdout, "  %s  %s\n", cortexStyle.Render("VERDICT"), label)
 	// The trigger quotes an incident narrative, which carries an attacker's
 	// own tool name, the one line on this screen most worth forging.
-	fmt.Println(dimStyle.Render("    " + util.SafeTerminal(p.Trigger)))
+	fmt.Fprintln(stdout, dimStyle.Render("    "+util.SafeTerminal(p.Trigger)))
 	// Stages of the incident the verdict quotes, so the shape of the attack
 	// rides with the sentence instead of being repeated under it.
 	if in, ok := citedIncident(r); ok {
-		fmt.Println(dimStyle.Render(fmt.Sprintf("    %s · %s → %s · %d event(s) · likelihood %d × impact %d",
+		fmt.Fprintln(stdout, dimStyle.Render(fmt.Sprintf("    %s · %s → %s · %d event(s) · likelihood %d × impact %d",
 			stagesText(in.Stages), shortTS(in.Start), shortTS(in.End), len(in.Events), in.Likelihood, in.Impact)))
 	}
 	if len(p.Because) > 1 {
-		fmt.Println(dimStyle.Render(fmt.Sprintf("    +%d more condition(s) below", len(p.Because)-1)))
+		fmt.Fprintln(stdout, dimStyle.Render(fmt.Sprintf("    +%d more condition(s) below", len(p.Because)-1)))
 	}
 	if p.Verdict == security.VerdictOK {
-		fmt.Println(dimStyle.Render("    checked: " + strings.Join(p.Checked, ", ")))
+		fmt.Fprintln(stdout, dimStyle.Render("    checked: "+strings.Join(p.Checked, ", ")))
 	}
 }
 
 // printEvidenceState is the second half of the developer's question: not just
 // what happened, but whether the record of it can be believed.
 func printEvidenceState(r *security.Report) {
-	fmt.Println()
+	fmt.Fprintln(stdout)
 	// "0 events, intact" over a log that has never been written reads as a
 	// clean bill of health. Nothing recorded is not the same as nothing wrong.
 	if !r.HasData {
-		fmt.Println(dimStyle.Render(
+		fmt.Fprintln(stdout, dimStyle.Render(
 			"  no ledger events yet, nothing has dispatched through hyctl on this machine,"))
-		fmt.Println(dimStyle.Render(
+		fmt.Fprintln(stdout, dimStyle.Render(
 			"  so there is no record to judge and this is not a clean result"))
 		return
 	}
@@ -3096,9 +3095,9 @@ func printEvidenceState(r *security.Report) {
 	}
 	// "N blocked" alone answered "what did Hydra stop today" with half the
 	// number, and the half it dropped is the half waiting on the reader.
-	fmt.Printf("  %s  %d blocked · %d awaiting approval · %d flagged\n",
+	fmt.Fprintf(stdout, "  %s  %d blocked · %d awaiting approval · %d flagged\n",
 		cortexStyle.Render("activity"), r.Ledger.Denied, r.Ledger.Asked, r.Ledger.Flagged)
-	fmt.Printf("  %s  %d event(s), %d hash-chained, %s\n",
+	fmt.Fprintf(stdout, "  %s  %d event(s), %d hash-chained, %s\n",
 		cortexStyle.Render("evidence"), ev.Events, ev.ChainedEvents, chain)
 }
 
@@ -3112,25 +3111,25 @@ func printBoundary(r *security.Report) {
 	// away has already read it, so a caveat that only appears sometimes is a
 	// caveat they will meet after they needed it (#803).
 	if len(b.Governed) == 0 && len(b.Opaque) == 0 {
-		fmt.Printf("  %s     no heads discovered, so what Hydra does not control here is unknown\n",
+		fmt.Fprintf(stdout, "  %s     no heads discovered, so what Hydra does not control here is unknown\n",
 			cortexStyle.Render("scope"))
-		fmt.Println(dimStyle.Render(
+		fmt.Fprintln(stdout, dimStyle.Render(
 			"            a CLI-agent head runs in a process Hydra does not control; run `hyctl probe`"))
 		return
 	}
 	if b.Total() {
-		fmt.Printf("  %s     every head takes a request Hydra composes, so the gate sees all of it\n",
+		fmt.Fprintf(stdout, "  %s     every head takes a request Hydra composes, so the gate sees all of it\n",
 			cortexStyle.Render("scope"))
-		fmt.Println(dimStyle.Render(
+		fmt.Fprintln(stdout, dimStyle.Render(
 			"            nothing here runs in a process Hydra does not control"))
 		return
 	}
-	fmt.Printf("  %s     %d of %d heads are separate programs (%s)\n",
+	fmt.Fprintf(stdout, "  %s     %d of %d heads are separate programs (%s)\n",
 		cortexStyle.Render("scope"), len(b.Opaque), len(b.Opaque)+len(b.Governed),
 		security.HeadList(b.Opaque))
-	fmt.Println(dimStyle.Render(
+	fmt.Fprintln(stdout, dimStyle.Render(
 		"            Hydra governs what it sends them, not what they read or send on their own;"))
-	fmt.Println(dimStyle.Render(
+	fmt.Fprintln(stdout, dimStyle.Render(
 		"            only a local-only run keeps the whole task on this machine"))
 }
 
@@ -3167,15 +3166,15 @@ func printIncidents(r *security.Report) {
 	if len(rest) == 0 {
 		return
 	}
-	fmt.Println()
-	fmt.Printf("  %s\n", cortexStyle.Render("other incidents"))
+	fmt.Fprintln(stdout)
+	fmt.Fprintf(stdout, "  %s\n", cortexStyle.Render("other incidents"))
 	for _, in := range security.TopIncidents(rest, 3) {
-		fmt.Printf("    %s %s\n", severityTag(in.Severity), util.SafeTerminal(in.Narrative))
-		fmt.Println(dimStyle.Render(fmt.Sprintf("      %s → %s · %d event(s) · likelihood %d × impact %d",
+		fmt.Fprintf(stdout, "    %s %s\n", severityTag(in.Severity), util.SafeTerminal(in.Narrative))
+		fmt.Fprintln(stdout, dimStyle.Render(fmt.Sprintf("      %s → %s · %d event(s) · likelihood %d × impact %d",
 			shortTS(in.Start), shortTS(in.End), len(in.Events), in.Likelihood, in.Impact)))
 	}
 	if n := len(rest); n > 3 {
-		fmt.Println(dimStyle.Render(fmt.Sprintf("    … %d more", n-3)))
+		fmt.Fprintln(stdout, dimStyle.Render(fmt.Sprintf("    … %d more", n-3)))
 	}
 }
 
@@ -3186,23 +3185,23 @@ func printRegister(r *security.Report) {
 	if len(reg.Risks) == 0 {
 		return
 	}
-	fmt.Println()
-	fmt.Printf("  %s   %s\n", cortexStyle.Render("risk register"),
+	fmt.Fprintln(stdout)
+	fmt.Fprintf(stdout, "  %s   %s\n", cortexStyle.Render("risk register"),
 		dimStyle.Render(fmt.Sprintf("Σ modelled defect cost $%.0f (per-occurrence, not annualised) · %d past SLA", reg.SumDefectCostUSD, reg.Breached)))
-	fmt.Printf("    %-10s %-42s %-9s %8s %12s\n", "ID", "RISK", "SEVERITY", "DUE", "COST/DEFECT")
+	fmt.Fprintf(stdout, "    %-10s %-42s %-9s %8s %12s\n", "ID", "RISK", "SEVERITY", "DUE", "COST/DEFECT")
 	for _, k := range topRisks(reg.Risks, 6) {
 		due := dimStyle.Render(fmt.Sprintf("%dd", k.DueInDays))
 		if k.Breached {
 			due = warnStyle.Render(fmt.Sprintf("%dd", k.DueInDays))
 		}
-		fmt.Printf("    %-10s %-42.42s %-9s %8s %12s\n",
+		fmt.Fprintf(stdout, "    %-10s %-42.42s %-9s %8s %12s\n",
 			k.ID, util.SafeTerminal(k.Title), severityTag(k.Severity), due, fmt.Sprintf("$%.0f", k.DefectCostUSD))
 		if len(k.Frameworks) > 0 {
-			fmt.Println(dimStyle.Render("               " + frameworksText(k.Frameworks)))
+			fmt.Fprintln(stdout, dimStyle.Render("               "+frameworksText(k.Frameworks)))
 		}
 	}
 	if n := len(reg.Risks); n > 6 {
-		fmt.Println(dimStyle.Render(fmt.Sprintf("    … %d more", n-6)))
+		fmt.Fprintln(stdout, dimStyle.Render(fmt.Sprintf("    … %d more", n-6)))
 	}
 }
 
@@ -3250,9 +3249,9 @@ func printControls(r *security.Report) {
 	if len(r.Controls) == 0 {
 		return
 	}
-	fmt.Println()
-	fmt.Println(dimStyle.Render("  " + strings.Repeat("─", 48)))
-	fmt.Printf("  %s\n", cortexStyle.Render("control effectiveness"))
+	fmt.Fprintln(stdout)
+	fmt.Fprintln(stdout, dimStyle.Render("  "+strings.Repeat("─", 48)))
+	fmt.Fprintf(stdout, "  %s\n", cortexStyle.Render("control effectiveness"))
 	for _, c := range r.Controls {
 		var tag string
 		switch c.Status() {
@@ -3271,8 +3270,8 @@ func printControls(r *security.Report) {
 		if !c.Verified {
 			src = dimStyle.Render(" [source-derived]")
 		}
-		fmt.Printf("    %s %s%s\n", tag, c.Name, src)
-		fmt.Println(dimStyle.Render("      " + util.SafeTerminal(c.Detail)))
+		fmt.Fprintf(stdout, "    %s %s%s\n", tag, c.Name, src)
+		fmt.Fprintln(stdout, dimStyle.Render("      "+util.SafeTerminal(c.Detail)))
 	}
 }
 
@@ -3280,21 +3279,21 @@ func printControls(r *security.Report) {
 // have, which never can, and whether the default lets everything through.
 func printPolicyAudit(r *security.Report) {
 	a := r.PolicyAudit
-	fmt.Println()
-	fmt.Println(dimStyle.Render("  " + strings.Repeat("─", 48)))
-	fmt.Printf("  %s\n", cortexStyle.Render("policy audit"))
+	fmt.Fprintln(stdout)
+	fmt.Fprintln(stdout, dimStyle.Render("  "+strings.Repeat("─", 48)))
+	fmt.Fprintf(stdout, "  %s\n", cortexStyle.Render("policy audit"))
 
 	posture := okStyle.Render("fail-closed (default deny)")
 	if a.FailOpen {
 		posture = warnStyle.Render("fail-open (default allow)")
 	}
-	fmt.Printf("    %-26s %s\n", "posture", posture)
+	fmt.Fprintf(stdout, "    %-26s %s\n", "posture", posture)
 
 	if len(a.Rules) == 0 {
-		fmt.Println(dimStyle.Render("    no rules defined, nothing is scoped"))
+		fmt.Fprintln(stdout, dimStyle.Render("    no rules defined, nothing is scoped"))
 		return
 	}
-	fmt.Printf("    %-4s %-38s %-7s %6s  %s\n", "#", "RULE", "DECIDES", "HITS", "")
+	fmt.Fprintf(stdout, "    %-4s %-38s %-7s %6s  %s\n", "#", "RULE", "DECIDES", "HITS", "")
 	for _, rule := range a.Rules {
 		note := ""
 		switch {
@@ -3303,10 +3302,10 @@ func printPolicyAudit(r *security.Report) {
 		case rule.Dead:
 			note = dimStyle.Render("never matched")
 		}
-		fmt.Printf("    %-4d %-38.38s %-7s %6d  %s\n",
+		fmt.Fprintf(stdout, "    %-4d %-38.38s %-7s %6d  %s\n",
 			rule.Index, util.SafeTerminal(rule.Summary), rule.Decision, rule.Hits, note)
 	}
-	fmt.Println(dimStyle.Render(fmt.Sprintf("    %d access(es) fell through to the %s default", a.DefaultHits, a.Default)))
+	fmt.Fprintln(stdout, dimStyle.Render(fmt.Sprintf("    %d access(es) fell through to the %s default", a.DefaultHits, a.Default)))
 }
 
 // printOutputWarning flags a response that carries credential-shaped content.
@@ -3317,7 +3316,7 @@ func printOutputWarning(p egress.Part) {
 	if p.Sens < egress.Secret {
 		return
 	}
-	fmt.Printf("  %s the response carries %s. Review before applying it.\n\n",
+	fmt.Fprintf(stdout, "  %s the response carries %s. Review before applying it.\n\n",
 		warnStyle.Render("⚠"), util.SafeTerminal(strings.Join(p.Reasons, ", ")))
 }
 
@@ -3327,9 +3326,9 @@ func printExposures(r *security.Report) {
 	if len(r.Exposures) == 0 {
 		return
 	}
-	fmt.Println()
-	fmt.Println(dimStyle.Render("  " + strings.Repeat("─", 48)))
-	fmt.Printf("  %s\n", cortexStyle.Render("sensitive data exposure"))
+	fmt.Fprintln(stdout)
+	fmt.Fprintln(stdout, dimStyle.Render("  "+strings.Repeat("─", 48)))
+	fmt.Fprintf(stdout, "  %s\n", cortexStyle.Render("sensitive data exposure"))
 	for _, e := range r.Exposures {
 		where := okStyle.Render("local")
 		switch {
@@ -3344,7 +3343,7 @@ func printExposures(r *security.Report) {
 		if types == "" {
 			types = "unclassified type"
 		}
-		fmt.Printf("    %-7s %-18.18s %-24.24s %s\n", where,
+		fmt.Fprintf(stdout, "    %-7s %-18.18s %-24.24s %s\n", where,
 			util.SafeTerminal(e.Head), util.SafeTerminal(e.Resource), dimStyle.Render(types))
 	}
 }
@@ -3357,9 +3356,9 @@ func printThreats(r *security.Report) {
 	if len(th.ByMarker) == 0 && len(th.ProbedResources) == 0 && len(th.ByAction) == 0 {
 		return
 	}
-	fmt.Println()
-	fmt.Println(dimStyle.Render("  " + strings.Repeat("─", 48)))
-	fmt.Printf("  %s\n", cortexStyle.Render("threat breakdown"))
+	fmt.Fprintln(stdout)
+	fmt.Fprintln(stdout, dimStyle.Render("  "+strings.Repeat("─", 48)))
+	fmt.Fprintf(stdout, "  %s\n", cortexStyle.Render("threat breakdown"))
 	printCountList("injection markers tried", th.ByMarker)
 	printCountList("resources probed (repeat denials)", th.ProbedResources)
 	printCountList("by action", th.ByAction)
@@ -3369,9 +3368,9 @@ func printCountList(title string, counts []security.Count) {
 	if len(counts) == 0 {
 		return
 	}
-	fmt.Printf("    %s\n", dimStyle.Render(title+":"))
+	fmt.Fprintf(stdout, "    %s\n", dimStyle.Render(title+":"))
 	for _, c := range counts {
-		fmt.Printf("      %-40.40s %d\n", util.SafeTerminal(c.Label), c.Count)
+		fmt.Fprintf(stdout, "      %-40.40s %d\n", util.SafeTerminal(c.Label), c.Count)
 	}
 }
 
@@ -3399,10 +3398,10 @@ func printAgenticCoverage(r *security.Report) {
 		return
 	}
 	summary := fmt.Sprintf("%.0f%%", a.PercentCovered)
-	fmt.Printf("  %s  %s  (%d/%d, %d partial)\n",
+	fmt.Fprintf(stdout, "  %s  %s  (%d/%d, %d partial)\n",
 		cortexStyle.Render("OWASP Agentic Top-10 coverage"), okStyle.Render(summary),
 		a.Covered, a.Applicable, a.Partial)
-	fmt.Println(dimStyle.Render("  " + strings.Repeat("─", 48)))
+	fmt.Fprintln(stdout, dimStyle.Render("  "+strings.Repeat("─", 48)))
 	for _, c := range a.Categories {
 		if c.Status == security.NotApplicable {
 			continue
@@ -3416,9 +3415,9 @@ func printAgenticCoverage(r *security.Report) {
 		case security.Gap:
 			label = warnStyle.Render(label)
 		}
-		fmt.Printf("    %-6s %-32s %s\n", c.ID, truncLabel(c.Name, 32), label)
+		fmt.Fprintf(stdout, "    %-6s %-32s %s\n", c.ID, truncLabel(c.Name, 32), label)
 	}
-	fmt.Println()
+	fmt.Fprintln(stdout)
 }
 
 // printCoverageHeadline is the KPI tile: coverage against the OWASP LLM Top
@@ -3428,9 +3427,9 @@ func printAgenticCoverage(r *security.Report) {
 // might have been tampered with.
 func printCoverageHeadline(r *security.Report) {
 	if !r.IntegrityIntact {
-		fmt.Printf("  %s  %s\n", cortexStyle.Render("OWASP LLM Top-10 coverage"),
+		fmt.Fprintf(stdout, "  %s  %s\n", cortexStyle.Render("OWASP LLM Top-10 coverage"),
 			warnStyle.Render("INTEGRITY COMPROMISED, ledger tampering detected, score withheld"))
-		fmt.Println()
+		fmt.Fprintln(stdout)
 		return
 	}
 	// A fail-open policy withholds the score for the same reason tampering
@@ -3438,17 +3437,17 @@ func printCoverageHeadline(r *security.Report) {
 	// path records and blocks nothing, so a coverage number describes
 	// mechanisms that are not actually in force.
 	if pa := r.PolicyAudit; pa.FailOpen {
-		fmt.Printf("  %s  %s\n", cortexStyle.Render("OWASP LLM Top-10 coverage"),
+		fmt.Fprintf(stdout, "  %s  %s\n", cortexStyle.Render("OWASP LLM Top-10 coverage"),
 			warnStyle.Render("NO DEFAULT-DENY POLICY, anything no rule names is allowed, score withheld"))
-		fmt.Println(dimStyle.Render(fmt.Sprintf(
+		fmt.Fprintln(stdout, dimStyle.Render(fmt.Sprintf(
 			"    %d rule(s) in force, default %q; %d of %d recorded accesses matched no rule",
 			len(pa.Rules), pa.Default, pa.DefaultHits, pa.Evaluated)))
-		fmt.Println()
+		fmt.Fprintln(stdout)
 		return
 	}
 	cov := r.Coverage
 	pct := fmt.Sprintf("%.0f%%", cov.PercentCovered)
-	fmt.Printf("  %s  %s  (%d/%d applicable categories)\n",
+	fmt.Fprintf(stdout, "  %s  %s  (%d/%d applicable categories)\n",
 		cortexStyle.Render("OWASP LLM Top-10 coverage"), okStyle.Render(pct), cov.Covered, cov.Applicable)
 	if r.Trend.Available {
 		arrow := "→"
@@ -3458,10 +3457,10 @@ func printCoverageHeadline(r *security.Report) {
 		} else if r.Trend.DeltaPct < 0 {
 			arrow, style = "↓", warnStyle
 		}
-		fmt.Println(style.Render(fmt.Sprintf("    %s %+.0f%% since %s (was %.0f%%)",
+		fmt.Fprintln(stdout, style.Render(fmt.Sprintf("    %s %+.0f%% since %s (was %.0f%%)",
 			arrow, r.Trend.DeltaPct, relativeTime(r.Trend.FirstTS), r.Trend.FirstPct)))
 	}
-	fmt.Println(dimStyle.Render("  " + strings.Repeat("─", 48)))
+	fmt.Fprintln(stdout, dimStyle.Render("  "+strings.Repeat("─", 48)))
 	for _, c := range cov.Categories {
 		if c.Status == security.NotApplicable {
 			continue
@@ -3478,9 +3477,9 @@ func printCoverageHeadline(r *security.Report) {
 				label += dimStyle.Render(fmt.Sprintf(" (%dd)", c.GapAgeDays))
 			}
 		}
-		fmt.Printf("    %-6s %-32s %s\n", c.ID, c.Name, label)
+		fmt.Fprintf(stdout, "    %-6s %-32s %s\n", c.ID, c.Name, label)
 	}
-	fmt.Println()
+	fmt.Fprintln(stdout)
 }
 
 // relativeTime renders an RFC3339 timestamp as a human-relative duration
@@ -3539,8 +3538,8 @@ func cmdModels() *cobra.Command {
 			if jsonOut {
 				return json.NewEncoder(os.Stdout).Encode(rows)
 			}
-			fmt.Printf("\n  %-26s %-14s %6s  %-8s %s\n", "ID", "PROVIDER", "SCORE", "SOURCE", "ROUTABLE")
-			fmt.Println("  " + strings.Repeat("─", 72))
+			fmt.Fprintf(stdout, "\n  %-26s %-14s %6s  %-8s %s\n", "ID", "PROVIDER", "SCORE", "SOURCE", "ROUTABLE")
+			fmt.Fprintln(stdout, "  "+strings.Repeat("─", 72))
 			var live int
 			for _, r := range rows {
 				src := dimStyle.Render(r.Source)
@@ -3552,14 +3551,14 @@ func cmdModels() *cobra.Command {
 					live++
 					routable = okStyle.Render("✓")
 				}
-				fmt.Printf("  %-26.26s %-14.14s %6d  %-8s %s\n",
+				fmt.Fprintf(stdout, "  %-26.26s %-14.14s %6d  %-8s %s\n",
 					r.ID, r.Provider, r.CapScore, src, routable)
 			}
-			fmt.Println("  " + strings.Repeat("─", 72))
-			fmt.Printf("  %s\n", dimStyle.Render(fmt.Sprintf(
+			fmt.Fprintln(stdout, "  "+strings.Repeat("─", 72))
+			fmt.Fprintf(stdout, "  %s\n", dimStyle.Render(fmt.Sprintf(
 				"%d of %d can be routed to right now; the rest are capability scores for "+
 					"models nothing here discovers. `hyctl probe` says why.", live, len(rows))))
-			fmt.Println()
+			fmt.Fprintln(stdout)
 			return nil
 		},
 	}
@@ -3595,10 +3594,10 @@ func cmdModels() *cobra.Command {
 			}
 			switch {
 			case overridesBuiltin:
-				fmt.Printf("  overriding built-in model %s (was: %s, score %d) → %s, score %d in %s\n",
+				fmt.Fprintf(stdout, "  overriding built-in model %s (was: %s, score %d) → %s, score %d in %s\n",
 					e.ID, prior.Provider, prior.CapScore, e.Provider, e.CapScore, overlay)
 			case replaced:
-				fmt.Printf("  updated %s (%s, score %d) → %s\n", e.ID, e.Provider, e.CapScore, overlay)
+				fmt.Fprintf(stdout, "  updated %s (%s, score %d) → %s\n", e.ID, e.Provider, e.CapScore, overlay)
 			default:
 				// Provider is optional, and interpolating an empty one rendered
 				// "recorded kimi-k4 (, score 70)".
@@ -3606,11 +3605,11 @@ func cmdModels() *cobra.Command {
 				if e.Provider != "" {
 					where = fmt.Sprintf("%s, score %d", e.Provider, e.CapScore)
 				}
-				fmt.Printf("  recorded %s (%s) → %s\n", e.ID, where, overlay)
+				fmt.Fprintf(stdout, "  recorded %s (%s) → %s\n", e.ID, where, overlay)
 			}
 			// "added" on its own read as "this model is now routable", which an
 			// overlay entry never makes it (#742).
-			fmt.Printf("  %s\n", dimStyle.Render(addedModelNote(e)))
+			fmt.Fprintf(stdout, "  %s\n", dimStyle.Render(addedModelNote(e)))
 			return nil
 		},
 	}
@@ -3630,7 +3629,7 @@ func cmdModels() *cobra.Command {
 			if !removed {
 				return fmt.Errorf("%q is not in your registry (built-ins can't be removed, only overridden)", args[0])
 			}
-			fmt.Printf("  removed %s\n", args[0])
+			fmt.Fprintf(stdout, "  removed %s\n", args[0])
 			return nil
 		},
 	}
@@ -3679,7 +3678,7 @@ func cmdModels() *cobra.Command {
 				}
 				e := capabilities.Entry{ID: id, Name: id, Provider: provider, CapScore: capabilities.HeuristicCapScore(id)}
 				if syncDry {
-					fmt.Printf("  + %-40.40s %-12.12s score %d\n", e.ID, e.Provider, e.CapScore)
+					fmt.Fprintf(stdout, "  + %-40.40s %-12.12s score %d\n", e.ID, e.Provider, e.CapScore)
 					added++
 					continue
 				}
@@ -3692,7 +3691,7 @@ func cmdModels() *cobra.Command {
 			if syncDry {
 				word = "would import"
 			}
-			fmt.Printf("\n  %s %d models (%d already known, skipped). capScores are provisional, refine with `hyctl models add`.\n\n", word, added, skipped)
+			fmt.Fprintf(stdout, "\n  %s %d models (%d already known, skipped). capScores are provisional, refine with `hyctl models add`.\n\n", word, added, skipped)
 			return nil
 		},
 	}
@@ -3733,13 +3732,13 @@ func cmdContext() *cobra.Command {
 					"useful_tokens": rec.Snap.UsefulTokens, "compact": rec.Compact, "reason": rec.Reason,
 				})
 			}
-			fmt.Printf("\n  tokens (est)     %d\n", rec.Snap.Tokens)
-			fmt.Printf("  signal density   %.1f%%\n", rec.Snap.Density*100)
-			fmt.Printf("  useful tokens    %.0f\n", rec.Snap.UsefulTokens)
+			fmt.Fprintf(stdout, "\n  tokens (est)     %d\n", rec.Snap.Tokens)
+			fmt.Fprintf(stdout, "  signal density   %.1f%%\n", rec.Snap.Density*100)
+			fmt.Fprintf(stdout, "  useful tokens    %.0f\n", rec.Snap.UsefulTokens)
 			if rec.Compact {
-				fmt.Printf("  %s %s\n\n", cortexStyle.Render("⚠ compact:"), rec.Reason)
+				fmt.Fprintf(stdout, "  %s %s\n\n", cortexStyle.Render("⚠ compact:"), rec.Reason)
 			} else {
-				fmt.Printf("  %s\n\n", dimStyle.Render("✓ "+rec.Reason))
+				fmt.Fprintf(stdout, "  %s\n\n", dimStyle.Render("✓ "+rec.Reason))
 			}
 			return nil
 		},
@@ -3789,11 +3788,11 @@ func cmdGraph() *cobra.Command {
 					"graph_loaded": loaded, "file_in_graph": known,
 				})
 			}
-			fmt.Printf("\n  %s\n", cortexStyle.Render(file))
+			fmt.Fprintf(stdout, "\n  %s\n", cortexStyle.Render(file))
 			if !loaded {
-				fmt.Printf("    %s\n", warnStyle.Render("no graph at "+graphPath+", nothing was analysed"))
+				fmt.Fprintf(stdout, "    %s\n", warnStyle.Render("no graph at "+graphPath+", nothing was analysed"))
 			} else if !known {
-				fmt.Printf("    %s\n", warnStyle.Render("not in the graph, check the path, or reindex"))
+				fmt.Fprintf(stdout, "    %s\n", warnStyle.Render("not in the graph, check the path, or reindex"))
 			}
 			measured := loaded && known
 			suffix := func() string {
@@ -3802,8 +3801,8 @@ func cmdGraph() *cobra.Command {
 				}
 				return "  " + dimStyle.Render("(default, not measured)")
 			}()
-			fmt.Printf("    transitive dependents  %d%s\n", deps, suffix)
-			fmt.Printf("    blast radius           %.2f×%s\n", radius, suffix)
+			fmt.Fprintf(stdout, "    transitive dependents  %d%s\n", deps, suffix)
+			fmt.Fprintf(stdout, "    blast radius           %.2f×%s\n", radius, suffix)
 			// κ is a property of the whole graph, so it stays meaningful for an
 			// unknown file, but with no graph at all it is 0.0, and rendering
 			// that as "edits stay local" is a safety claim from no data.
@@ -3813,17 +3812,17 @@ func cmdGraph() *cobra.Command {
 					if pFactor > 1.0 {
 						core = fmt.Sprintf("core (+%.0f%%)", (pFactor-1)*100)
 					}
-					fmt.Printf("    graph κ                %.2f  %s\n",
+					fmt.Fprintf(stdout, "    graph κ                %.2f  %s\n",
 						g.Kappa(), dimStyle.Render("supercritical, cascades possible; this file is "+core))
 				} else {
-					fmt.Printf("    graph κ                %.2f  %s\n",
+					fmt.Fprintf(stdout, "    graph κ                %.2f  %s\n",
 						g.Kappa(), dimStyle.Render("subcritical, edits stay local"))
 				}
 			}
-			fmt.Printf("    defect cost            $%.2f%s\n", dm.CostUSD(task), suffix)
-			fmt.Printf("    demands confidence     %.1f%%%s\n\n", dm.RequiredConfidence(task)*100, suffix)
+			fmt.Fprintf(stdout, "    defect cost            $%.2f%s\n", dm.CostUSD(task), suffix)
+			fmt.Fprintf(stdout, "    demands confidence     %.1f%%%s\n\n", dm.RequiredConfidence(task)*100, suffix)
 			if !measured {
-				fmt.Printf("  %s\n\n", dimStyle.Render(
+				fmt.Fprintf(stdout, "  %s\n\n", dimStyle.Render(
 					"A radius of 1.00× here means \"unknown\", not \"safe\", generate a graph to get a real bar."))
 			}
 			return nil
@@ -3862,28 +3861,28 @@ func cmdGraph() *cobra.Command {
 					"graph_loaded": loaded, "unknown_files": unknown,
 				})
 			}
-			fmt.Printf("\n  %s\n", cortexStyle.Render(fmt.Sprintf("%d file(s)", len(args))))
+			fmt.Fprintf(stdout, "\n  %s\n", cortexStyle.Render(fmt.Sprintf("%d file(s)", len(args))))
 			// Coupling silently treats an unmatched file as having no impact set,
 			// which biases k toward kMin (looks "safe to parallelize"), say so
 			// rather than let a default read as a measurement (#448).
 			if !loaded {
-				fmt.Printf("    %s\n", warnStyle.Render(
+				fmt.Fprintf(stdout, "    %s\n", warnStyle.Render(
 					"no graph at "+parGraph+", coordination cost k is a default, not a measurement"))
 			} else if len(unknown) > 0 {
-				fmt.Printf("    %s\n", warnStyle.Render(
+				fmt.Fprintf(stdout, "    %s\n", warnStyle.Render(
 					"not in the graph: "+strings.Join(unknown, ", ")+", their contribution to k is a default, not a measurement"))
 			}
 			suffix := ""
 			if !loaded || len(unknown) > 0 {
 				suffix = "  " + dimStyle.Render("(partially default)")
 			}
-			fmt.Printf("    coordination cost k    %.3f%s\n", k, suffix)
-			fmt.Printf("    optimal agents n*      %d\n", n)
-			fmt.Printf("    speedup S(n*)          %.2f×\n", speedup)
+			fmt.Fprintf(stdout, "    coordination cost k    %.3f%s\n", k, suffix)
+			fmt.Fprintf(stdout, "    optimal agents n*      %d\n", n)
+			fmt.Fprintf(stdout, "    speedup S(n*)          %.2f×\n", speedup)
 			if speedup < 1 {
-				fmt.Printf("    %s\n", dimStyle.Render("→ heavily coupled, parallelism doesn't pay; edit serially"))
+				fmt.Fprintf(stdout, "    %s\n", dimStyle.Render("→ heavily coupled, parallelism doesn't pay; edit serially"))
 			}
-			fmt.Println()
+			fmt.Fprintln(stdout)
 			return nil
 		},
 	}
@@ -3921,7 +3920,7 @@ func cmdGraph() *cobra.Command {
 			if err := os.WriteFile(genOut, raw, 0o644); err != nil {
 				return err
 			}
-			fmt.Printf("  %s %d nodes, %d edges → %s\n",
+			fmt.Fprintf(stdout, "  %s %d nodes, %d edges → %s\n",
 				cortexStyle.Render("graph:"), len(doc.Nodes), len(doc.Edges), genOut)
 			return nil
 		},
@@ -4036,43 +4035,43 @@ func printSPRTResult(r *swarm.SPRTResult) {
 	sep := dimStyle.Render("  " + strings.Repeat("─", 60))
 	t := r.Trust
 
-	fmt.Println()
-	fmt.Printf("  %s [%s]\n\n", cortexStyle.Render("▶ SPRT"), dimStyle.Render(r.Domain))
+	fmt.Fprintln(stdout)
+	fmt.Fprintf(stdout, "  %s [%s]\n\n", cortexStyle.Render("▶ SPRT"), dimStyle.Render(r.Domain))
 
-	fmt.Printf("  %-28s  %-9s  %8s  %10s\n", "SOURCE", "VERDICT", "LLR", "Λ AFTER")
-	fmt.Println(sep)
+	fmt.Fprintf(stdout, "  %-28s  %-9s  %8s  %10s\n", "SOURCE", "VERDICT", "LLR", "Λ AFTER")
+	fmt.Fprintln(stdout, sep)
 	for _, e := range t.Ledger {
 		verdict := "agree"
 		if !e.Agreed {
 			verdict = "disagree"
 		}
-		fmt.Printf("  %-28.28s  %-9s  %+8.3f  %+10.3f\n", e.Source, verdict, e.LLR, e.LambdaAfter)
+		fmt.Fprintf(stdout, "  %-28.28s  %-9s  %+8.3f  %+10.3f\n", e.Source, verdict, e.LLR, e.LambdaAfter)
 	}
-	fmt.Println(sep)
+	fmt.Fprintln(stdout, sep)
 	if note := ledgerNote(t.Ledger); note != "" {
-		fmt.Printf("  %s\n", dimStyle.Render(note))
+		fmt.Fprintf(stdout, "  %s\n", dimStyle.Render(note))
 	}
 
 	// The target and the stop reason, not just the number reached: without them
 	// a run that met its target and a run that gave up at the 50% prior render
 	// identically, and the second is the one worth knowing about (#732).
-	fmt.Printf("\n  %s %s  ·  target %.1f%% → achieved %.1f%%  ·  %d samples  ·  $%.4f\n",
+	fmt.Fprintf(stdout, "\n  %s %s  ·  target %.1f%% → achieved %.1f%%  ·  %d samples  ·  $%.4f\n",
 		dimStyle.Render("Decision →"),
 		cortexStyle.Render(t.Decision.String()),
 		r.Target*100, t.Confidence*100, t.Samples, t.SpentUSD,
 	)
 	if warn := sprtWarning(r); warn != "" {
-		fmt.Printf("  %s\n", warnStyle.Render(warn))
+		fmt.Fprintf(stdout, "  %s\n", warnStyle.Render(warn))
 	}
 	// The key `hyctl trust explain` takes. It was written to trust.jsonl and
 	// printed nowhere, so the best diagnostic in the tool was reachable only by
 	// grepping a log file.
-	fmt.Printf("  %s\n", dimStyle.Render(
+	fmt.Fprintf(stdout, "  %s\n", dimStyle.Render(
 		"why: hyctl trust explain "+trust.TaskHash(r.Prompt)))
-	fmt.Println()
+	fmt.Fprintln(stdout)
 	if t.Candidate != "" {
-		fmt.Println(t.Candidate)
-		fmt.Println()
+		fmt.Fprintln(stdout, t.Candidate)
+		fmt.Fprintln(stdout)
 	}
 }
 
@@ -4205,7 +4204,7 @@ func replayTrustRun(spanID string, passed bool) {
 	if err := trust.MarkApplied(trust.AppliedPath(), spanID); err != nil {
 		return
 	}
-	fmt.Printf("  %s\n", dimStyle.Render(fmt.Sprintf(
+	fmt.Fprintf(stdout, "  %s\n", dimStyle.Render(fmt.Sprintf(
 		"trained %d source(s) from the ensemble under this span (%s)", n, run.TaskHash)))
 }
 
@@ -4234,38 +4233,38 @@ func printEnsemblePlan(heads []provider.Head, estUSD, confidence float64, mode s
 		label = fmt.Sprintf("SPRT · target %.1f%%", confidence*100)
 	}
 
-	fmt.Println()
-	fmt.Printf("  %s [%s]\n\n", cortexStyle.Render("▶ DRY RUN"), dimStyle.Render(label))
-	fmt.Printf("  %-28s  %7s  %8s\n", "HEAD", "TIER", "SOURCE")
-	fmt.Println(sep)
+	fmt.Fprintln(stdout)
+	fmt.Fprintf(stdout, "  %s [%s]\n\n", cortexStyle.Render("▶ DRY RUN"), dimStyle.Render(label))
+	fmt.Fprintf(stdout, "  %-28s  %7s  %8s\n", "HEAD", "TIER", "SOURCE")
+	fmt.Fprintln(stdout, sep)
 	for _, h := range heads {
-		fmt.Printf("  %-28s  %7d  %8s\n", h.Name, rank.UITier(h), h.Source)
+		fmt.Fprintf(stdout, "  %-28s  %7d  %8s\n", h.Name, rank.UITier(h), h.Source)
 	}
-	fmt.Println(sep)
+	fmt.Fprintln(stdout, sep)
 
 	if confidence > 0 {
-		fmt.Printf("  %s\n", dimStyle.Render(fmt.Sprintf("at most %d heads queried; SPRT stops early once the target is met", len(heads))))
+		fmt.Fprintf(stdout, "  %s\n", dimStyle.Render(fmt.Sprintf("at most %d heads queried; SPRT stops early once the target is met", len(heads))))
 	}
-	fmt.Printf("  %s\n", dimStyle.Render(fmt.Sprintf("estimated cost for one round: $%.4f", estUSD)))
+	fmt.Fprintf(stdout, "  %s\n", dimStyle.Render(fmt.Sprintf("estimated cost for one round: $%.4f", estUSD)))
 	if maxCostUSD > 0 && estUSD > maxCostUSD {
-		fmt.Printf("  %s\n", warnStyle.Render(fmt.Sprintf("this exceeds --swarm-max-cost $%.4f and would be refused", maxCostUSD)))
+		fmt.Fprintf(stdout, "  %s\n", warnStyle.Render(fmt.Sprintf("this exceeds --swarm-max-cost $%.4f and would be refused", maxCostUSD)))
 	}
-	fmt.Printf("  %s\n\n", dimStyle.Render("nothing was executed"))
+	fmt.Fprintf(stdout, "  %s\n\n", dimStyle.Render("nothing was executed"))
 }
 
 func printSwarmResult(r *swarm.SwarmResult) {
 	sep := dimStyle.Render("  " + strings.Repeat("─", 60))
 
-	fmt.Println()
-	fmt.Printf("  %s [%s · %d heads]\n\n",
+	fmt.Fprintln(stdout)
+	fmt.Fprintf(stdout, "  %s [%s · %d heads]\n\n",
 		cortexStyle.Render("▶ SWARM"),
 		dimStyle.Render(string(r.Mode)),
 		len(r.Attempts),
 	)
 
 	// Attempt table header.
-	fmt.Printf("  %-28s  %-10s  %7s  %7s  %8s\n", "HEAD", "STATUS", "TIME", "SCORE", "COST")
-	fmt.Println(sep)
+	fmt.Fprintf(stdout, "  %-28s  %-10s  %7s  %7s  %8s\n", "HEAD", "STATUS", "TIME", "SCORE", "COST")
+	fmt.Fprintln(stdout, sep)
 
 	for i, a := range r.Attempts {
 		statusStr := statusIcon(a.Status) + " " + string(a.Status)
@@ -4285,12 +4284,12 @@ func printSwarmResult(r *swarm.SwarmResult) {
 		if a.Rank == 1 {
 			winnerMark = cortexStyle.Render("→ ")
 		}
-		fmt.Printf("%s%-28s  %-10s  %7s  %7s  %8s\n",
+		fmt.Fprintf(stdout, "%s%-28s  %-10s  %7s  %7s  %8s\n",
 			winnerMark, a.Head.Name, statusStr, timeStr, scoreStr, costStr,
 		)
 	}
 
-	fmt.Println(sep)
+	fmt.Fprintln(stdout, sep)
 
 	// Verdict line.
 	if r.Verdict != nil && r.Winner != nil {
@@ -4298,28 +4297,28 @@ func printSwarmResult(r *swarm.SwarmResult) {
 		if r.Verdict.Meta.UsedFallback {
 			judgeLabel = "cap-score fallback"
 		}
-		fmt.Printf("\n  %s %s  [%s, %dms]\n",
+		fmt.Fprintf(stdout, "\n  %s %s  [%s, %dms]\n",
 			dimStyle.Render("Winner →"),
 			cortexStyle.Render(r.Winner.Head.Name),
 			judgeLabel,
 			r.Verdict.Meta.Duration.Milliseconds(),
 		)
 		if r.Verdict.Reason != "" {
-			fmt.Printf("  %s\n", dimStyle.Render(`"`+r.Verdict.Reason+`"`))
+			fmt.Fprintf(stdout, "  %s\n", dimStyle.Render(`"`+r.Verdict.Reason+`"`))
 		}
 		// A fallback with no reason shown is indistinguishable from a healthy
 		// LLM judge run, surface why the primary judge was skipped (#501).
 		if r.Verdict.Meta.UsedFallback && r.Verdict.Meta.FallbackReason != "" {
-			fmt.Printf("  %s\n", warnStyle.Render("judge fallback: "+r.Verdict.Meta.FallbackReason))
+			fmt.Fprintf(stdout, "  %s\n", warnStyle.Render("judge fallback: "+r.Verdict.Meta.FallbackReason))
 		}
 	} else if r.Winner != nil {
-		fmt.Printf("\n  %s %s\n",
+		fmt.Fprintf(stdout, "\n  %s %s\n",
 			dimStyle.Render("Winner →"),
 			cortexStyle.Render(r.Winner.Head.Name),
 		)
 	}
 
-	fmt.Printf("\n  %s  total $%.4f  ·  wall %dms  ·  %d/%d succeeded\n\n",
+	fmt.Fprintf(stdout, "\n  %s  total $%.4f  ·  wall %dms  ·  %d/%d succeeded\n\n",
 		sep,
 		r.TotalCostUSD,
 		r.WallDuration.Milliseconds(),
@@ -4329,8 +4328,8 @@ func printSwarmResult(r *swarm.SwarmResult) {
 
 	// Winner output.
 	if r.Winner != nil && r.Winner.Output != "" {
-		fmt.Println(r.Winner.Output)
-		fmt.Println()
+		fmt.Fprintln(stdout, r.Winner.Output)
+		fmt.Fprintln(stdout)
 	}
 }
 
@@ -4412,7 +4411,7 @@ func cmdEdit() *cobra.Command {
 				return err
 			}
 			raw, _ := json.MarshalIndent(result, "", "  ")
-			fmt.Println(string(raw))
+			fmt.Fprintln(stdout, string(raw))
 			if result.Status != "ok" {
 				return exitStatus(2)
 			}
@@ -4449,7 +4448,7 @@ func cmdReview() *cobra.Command {
 				return err
 			}
 			raw, _ := json.MarshalIndent(result, "", "  ")
-			fmt.Println(string(raw))
+			fmt.Fprintln(stdout, string(raw))
 			return nil
 		},
 	}
@@ -4464,7 +4463,7 @@ func cmdReview() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Print(out)
+			fmt.Fprint(stdout, out)
 			return nil
 		},
 	}
@@ -4480,7 +4479,7 @@ func cmdReview() *cobra.Command {
 				return err
 			}
 			raw, _ := json.MarshalIndent(result, "", "  ")
-			fmt.Println(string(raw))
+			fmt.Fprintln(stdout, string(raw))
 			return nil
 		},
 	}
@@ -4496,7 +4495,7 @@ func cmdReview() *cobra.Command {
 				return err
 			}
 			raw, _ := json.MarshalIndent(result, "", "  ")
-			fmt.Println(string(raw))
+			fmt.Fprintln(stdout, string(raw))
 			return nil
 		},
 	}
@@ -4514,7 +4513,7 @@ func cmdReview() *cobra.Command {
 				return err
 			}
 			raw, _ := json.MarshalIndent(result, "", "  ")
-			fmt.Println(string(raw))
+			fmt.Fprintln(stdout, string(raw))
 			return nil
 		},
 	}
@@ -4561,7 +4560,7 @@ func cmdParallel() *cobra.Command {
 			}
 
 			out, _ := json.MarshalIndent(results, "", "  ")
-			fmt.Println(string(out))
+			fmt.Fprintln(stdout, string(out))
 
 			// Exit non-zero if any task failed.
 			for _, r := range results {
@@ -4586,7 +4585,7 @@ func cmdCost() *cobra.Command {
 
 	printJSON := func(v any) {
 		raw, _ := json.MarshalIndent(v, "", "  ")
-		fmt.Println(string(raw))
+		fmt.Fprintln(stdout, string(raw))
 	}
 
 	cmd := &cobra.Command{
@@ -4666,8 +4665,8 @@ func cmdCost() *cobra.Command {
 					printJSON(totals)
 					return nil
 				}
-				fmt.Printf("\n  Task %s\n", args[0])
-				fmt.Printf("    calls   %d\n    tok     %d+%d\n    cost    $%.6f\n    wall    %ds\n\n",
+				fmt.Fprintf(stdout, "\n  Task %s\n", args[0])
+				fmt.Fprintf(stdout, "    calls   %d\n    tok     %d+%d\n    cost    $%.6f\n    wall    %ds\n\n",
 					totals.Calls, totals.PromptTokens, totals.ResponseTokens,
 					totals.EstCostUSD, totals.WallSeconds)
 				return nil
@@ -4686,8 +4685,8 @@ func cmdCost() *cobra.Command {
 					printJSON(r)
 					return nil
 				}
-				fmt.Printf("\n  Run %s\n", args[0])
-				fmt.Printf("    calls   %d\n    cost    $%.6f\n    wall    %ds\n",
+				fmt.Fprintf(stdout, "\n  Run %s\n", args[0])
+				fmt.Fprintf(stdout, "    calls   %d\n    cost    $%.6f\n    wall    %ds\n",
 					r.Totals.Calls, r.Totals.EstCostUSD, r.Totals.WallSeconds)
 				cost.RenderTable("Per-tier", r.ByTier)
 				return nil
@@ -4805,16 +4804,16 @@ func rollupLatencyJSON(rows []rollup.Row) []latencyRow { return mergeByModel(row
 func renderLatency(rows []rollup.Row) {
 	merged := mergeByModel(rows)
 	if len(merged) == 0 {
-		fmt.Println("No dispatches recorded yet.")
+		fmt.Fprintln(stdout, "No dispatches recorded yet.")
 		return
 	}
-	fmt.Printf("%-28s %5s %8s %10s %10s %10s %9s\n", "MODEL", "TIER", "CALLS", "P50 ms", "P90 ms", "P99 ms", "EXPLORED")
+	fmt.Fprintf(stdout, "%-28s %5s %8s %10s %10s %10s %9s\n", "MODEL", "TIER", "CALLS", "P50 ms", "P90 ms", "P99 ms", "EXPLORED")
 	for _, r := range merged {
-		fmt.Printf("%-28s %5d %8d %10.0f %10.0f %10.0f %9d\n",
+		fmt.Fprintf(stdout, "%-28s %5d %8d %10.0f %10.0f %10.0f %9d\n",
 			truncateMiddle(r.Model, 28), r.Tier, r.Calls, r.P50Est, r.P90Est, r.P99Est, r.Explored)
 	}
 	if len(merged) > 0 {
-		fmt.Printf("\nPercentiles are sketch estimates, accurate to +/-%.1f%% relative.\n", merged[0].RelErr*100)
+		fmt.Fprintf(stdout, "\nPercentiles are sketch estimates, accurate to +/-%.1f%% relative.\n", merged[0].RelErr*100)
 	}
 }
 
@@ -4845,7 +4844,7 @@ func cmdStats() *cobra.Command {
 
 	printJSON := func(v any) {
 		raw, _ := json.MarshalIndent(v, "", "  ")
-		fmt.Println(string(raw))
+		fmt.Fprintln(stdout, string(raw))
 	}
 
 	cmd := &cobra.Command{
@@ -4994,12 +4993,12 @@ func cmdPricingRefresh() *cobra.Command {
 		Use:   "refresh",
 		Short: "Force-fetch latest pricing from OpenRouter and update local cache",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			fmt.Fprintln(os.Stderr, "Fetching pricing from OpenRouter…")
+			fmt.Fprintln(stderr, "Fetching pricing from OpenRouter…")
 			n, err := pricing.Refresh()
 			if err != nil {
 				return fmt.Errorf("pricing refresh: %w", err)
 			}
-			fmt.Fprintf(os.Stdout, "Cached pricing for %d models.\n", n)
+			fmt.Fprintf(stdout, "Cached pricing for %d models.\n", n)
 			return nil
 		},
 	}
@@ -5048,14 +5047,14 @@ func cmdPricingList() *cobra.Command {
 				return json.NewEncoder(os.Stdout).Encode(rows)
 			}
 
-			fmt.Fprintf(os.Stdout, "%-45s  %10s  %11s  %s\n", "Model", "In $/1M", "Out $/1M", "Source")
-			fmt.Fprintln(os.Stdout, strings.Repeat("─", 82))
+			fmt.Fprintf(stdout, "%-45s  %10s  %11s  %s\n", "Model", "In $/1M", "Out $/1M", "Source")
+			fmt.Fprintln(stdout, strings.Repeat("─", 82))
 			for _, r := range rows {
-				fmt.Fprintf(os.Stdout, "%-45s  %10.4f  %11.4f  %s\n",
+				fmt.Fprintf(stdout, "%-45s  %10.4f  %11.4f  %s\n",
 					r.Model, r.InputPerMillion, r.OutputPerMillion, r.Source)
 			}
 			if len(rows) == 0 {
-				fmt.Fprintln(os.Stdout, "(no models matched)")
+				fmt.Fprintln(stdout, "(no models matched)")
 			}
 			return nil
 		},
@@ -5088,18 +5087,18 @@ func cmdTrustBenchmark() *cobra.Command {
 			if jsonOut {
 				return json.NewEncoder(os.Stdout).Encode(r)
 			}
-			fmt.Printf("\n  Hydra Trust Benchmark, %d trials/case (vs fixed-%d swarm)\n", r.Trials, r.FixedN)
-			fmt.Println("  " + strings.Repeat("─", 62))
-			fmt.Printf("  %-18s %10s %10s %12s\n", "workload", "samples", "accuracy", "vs fixed-N")
+			fmt.Fprintf(stdout, "\n  Hydra Trust Benchmark, %d trials/case (vs fixed-%d swarm)\n", r.Trials, r.FixedN)
+			fmt.Fprintln(stdout, "  "+strings.Repeat("─", 62))
+			fmt.Fprintf(stdout, "  %-18s %10s %10s %12s\n", "workload", "samples", "accuracy", "vs fixed-N")
 			row := func(c trust.BenchCase) {
-				fmt.Printf("  %-18s %10.2f %9.1f%% %11.0f%%\n", c.Label, c.MeanSamples, c.Accuracy*100, c.SavedPct)
+				fmt.Fprintf(stdout, "  %-18s %10.2f %9.1f%% %11.0f%%\n", c.Label, c.MeanSamples, c.Accuracy*100, c.SavedPct)
 			}
 			for _, c := range r.Cases {
 				row(c)
 			}
-			fmt.Println("  " + strings.Repeat("─", 62))
+			fmt.Fprintln(stdout, "  "+strings.Repeat("─", 62))
 			row(r.Blended)
-			fmt.Println()
+			fmt.Fprintln(stdout)
 			return nil
 		},
 	}
@@ -5135,23 +5134,23 @@ func cmdTrustStats() *cobra.Command {
 				return json.NewEncoder(os.Stdout).Encode(s)
 			}
 			if s.Runs == 0 {
-				fmt.Println("\n  No SPRT runs yet. Try `hyctl dispatch --confidence 0.95 --prompt ...`.")
+				fmt.Fprintln(stdout, "\n  No SPRT runs yet. Try `hyctl dispatch --confidence 0.95 --prompt ...`.")
 				return nil
 			}
-			fmt.Printf("\n  Trust stats (%d runs)\n", s.Runs)
-			fmt.Println("  " + strings.Repeat("─", 52))
-			fmt.Printf("  mean samples        %.2f  (vs fixed-%d swarm)\n", s.MeanSamples, s.FixedSwarmN)
-			fmt.Printf("  samples saved       %.0f%%\n", s.SamplesSavedPct)
-			fmt.Printf("  auto-cleared        %.0f%%  (reached target without a human)\n", s.AutoClearedPct)
-			fmt.Printf("  confidence          target %.1f%% → achieved %.1f%%\n",
+			fmt.Fprintf(stdout, "\n  Trust stats (%d runs)\n", s.Runs)
+			fmt.Fprintln(stdout, "  "+strings.Repeat("─", 52))
+			fmt.Fprintf(stdout, "  mean samples        %.2f  (vs fixed-%d swarm)\n", s.MeanSamples, s.FixedSwarmN)
+			fmt.Fprintf(stdout, "  samples saved       %.0f%%\n", s.SamplesSavedPct)
+			fmt.Fprintf(stdout, "  auto-cleared        %.0f%%  (reached target without a human)\n", s.AutoClearedPct)
+			fmt.Fprintf(stdout, "  confidence          target %.1f%% → achieved %.1f%%\n",
 				s.MeanTargetConf*100, s.MeanFinalConf*100)
-			fmt.Printf("  total spend         $%.4f\n", s.TotalCostUSD)
+			fmt.Fprintf(stdout, "  total spend         $%.4f\n", s.TotalCostUSD)
 			// "samples saved 47%" reads as a win directly above a number saying
 			// nothing was learned. Said plainly rather than left to be inferred.
 			if warn := stalledConfidence(s.MeanFinalConf, s.AutoClearedPct); warn != "" {
-				fmt.Printf("\n  %s\n", warnStyle.Render(warn))
+				fmt.Fprintf(stdout, "\n  %s\n", warnStyle.Render(warn))
 			}
-			fmt.Println()
+			fmt.Fprintln(stdout)
 			return nil
 		},
 	}
@@ -5175,33 +5174,33 @@ func cmdTrustExplain() *cobra.Command {
 				if r.TaskHash != args[0] {
 					continue
 				}
-				fmt.Printf("\n  task %s  ·  domain %s  ·  %s\n", r.TaskHash, r.Domain, r.TS)
-				fmt.Printf("  target %.1f%% → achieved %.1f%%  ·  %d samples  ·  %s\n\n",
+				fmt.Fprintf(stdout, "\n  task %s  ·  domain %s  ·  %s\n", r.TaskHash, r.Domain, r.TS)
+				fmt.Fprintf(stdout, "  target %.1f%% → achieved %.1f%%  ·  %d samples  ·  %s\n\n",
 					r.TargetConf*100, r.FinalConf*100, r.Samples, r.Decision)
-				fmt.Printf("  %-28s  %-9s  %8s  %10s\n", "SOURCE", "VERDICT", "LLR", "Λ AFTER")
-				fmt.Println("  " + strings.Repeat("─", 60))
+				fmt.Fprintf(stdout, "  %-28s  %-9s  %8s  %10s\n", "SOURCE", "VERDICT", "LLR", "Λ AFTER")
+				fmt.Fprintln(stdout, "  "+strings.Repeat("─", 60))
 				for _, e := range r.Ledger {
 					verdict := "agree"
 					if !e.Agreed {
 						verdict = "disagree"
 					}
-					fmt.Printf("  %-28.28s  %-9s  %+8.3f  %+10.3f\n", e.Source, verdict, e.LLR, e.LambdaAfter)
+					fmt.Fprintf(stdout, "  %-28.28s  %-9s  %+8.3f  %+10.3f\n", e.Source, verdict, e.LLR, e.LambdaAfter)
 				}
 				if note := ledgerNote(r.Ledger); note != "" {
-					fmt.Printf("  %s\n", dimStyle.Render(note))
+					fmt.Fprintf(stdout, "  %s\n", dimStyle.Render(note))
 				}
 				// Every answer stays under test for the whole run, so the losing
 				// ones carry real evidence and are worth seeing (#778). Runs
 				// logged before that are ledger-only and print nothing here.
 				if len(r.Hypotheses) > 0 {
-					fmt.Printf("\n  %-40s  %6s  %10s  %s\n", "HYPOTHESIS", "VOTES", "Λ", "CONFIDENCE")
-					fmt.Println("  " + strings.Repeat("─", 74))
+					fmt.Fprintf(stdout, "\n  %-40s  %6s  %10s  %s\n", "HYPOTHESIS", "VOTES", "Λ", "CONFIDENCE")
+					fmt.Fprintln(stdout, "  "+strings.Repeat("─", 74))
 					for _, h := range r.Hypotheses {
-						fmt.Printf("  %-40.40s  %6d  %+10.3f  %9.1f%%\n",
+						fmt.Fprintf(stdout, "  %-40.40s  %6d  %+10.3f  %9.1f%%\n",
 							truncLabel(strings.Join(strings.Fields(h.Answer), " "), 40), h.Votes, h.Lambda, h.Confidence*100)
 					}
 				}
-				fmt.Println()
+				fmt.Fprintln(stdout)
 				return nil
 			}
 			return fmt.Errorf("no run found with task_hash %q", args[0])
@@ -5234,11 +5233,11 @@ func cmdTrustCalibration() *cobra.Command {
 				return json.NewEncoder(os.Stdout).Encode(stats)
 			}
 			if len(stats) == 0 {
-				fmt.Println("\n  No calibration recorded yet. Feed outcomes with `hyctl trust record`.")
+				fmt.Fprintln(stdout, "\n  No calibration recorded yet. Feed outcomes with `hyctl trust record`.")
 				return nil
 			}
-			fmt.Printf("\n  %-28s %-16s %6s %6s %7s %7s %8s\n", "Source", "Domain", "n", "neg", "se", "sp", "D(nats)")
-			fmt.Println("  " + strings.Repeat("─", 87))
+			fmt.Fprintf(stdout, "\n  %-28s %-16s %6s %6s %7s %7s %8s\n", "Source", "Domain", "n", "neg", "se", "sp", "D(nats)")
+			fmt.Fprintln(stdout, "  "+strings.Repeat("─", 87))
 			mute := 0
 			for _, s := range stats {
 				mark := ""
@@ -5246,7 +5245,7 @@ func cmdTrustCalibration() *cobra.Command {
 					mute++
 					mark = " ·"
 				}
-				fmt.Printf("  %-28.28s %-16s %6.0f %6.0f %7.3f %7.3f %8.3f%s\n",
+				fmt.Fprintf(stdout, "  %-28.28s %-16s %6.0f %6.0f %7.3f %7.3f %8.3f%s\n",
 					s.Source, truncLabel(s.Domain, 16), s.N, s.Neg, s.Se, s.Sp, s.D, mark)
 			}
 			// A source that has only ever answered one way has not discriminated,
@@ -5254,7 +5253,7 @@ func cmdTrustCalibration() *cobra.Command {
 			// The rates still print, because they are what the counts say; they
 			// are a shape rather than a reading, which is what the mark means.
 			if mute > 0 {
-				fmt.Printf("\n  %s\n", warnStyle.Render(fmt.Sprintf(
+				fmt.Fprintf(stdout, "\n  %s\n", warnStyle.Render(fmt.Sprintf(
 					"· %d of %d cells have verdicts in one direction only, so they contribute 0 nats and "+
 						"the se/sp beside them describe the prior, not the source. Evidence in both "+
 						"directions comes from an ensemble run whose answer was later verified; attach "+
@@ -5268,11 +5267,11 @@ func cmdTrustCalibration() *cobra.Command {
 			coupling := trust.AllFamilyCoupling(coPath)
 			for _, fam := range trust.KnownFamilies(coPath) {
 				if r := coupling[fam]; r.Warn {
-					fmt.Printf("\n  %s\n", warnStyle.Render(fmt.Sprintf(
+					fmt.Fprintf(stdout, "\n  %s\n", warnStyle.Render(fmt.Sprintf(
 						"false-consensus warning: %q's members measured J=%.2f, effectively one vote, not independent confirmation", fam, r.J)))
 				}
 			}
-			fmt.Println()
+			fmt.Fprintln(stdout)
 			return nil
 		},
 	}
@@ -5303,13 +5302,13 @@ func cmdTrustRecord() *cobra.Command {
 				return err
 			}
 			if reason, bad := trust.UnreadableSourceKey(source); bad {
-				fmt.Printf("  %s\n", warnStyle.Render(fmt.Sprintf(
+				fmt.Fprintf(stdout, "  %s\n", warnStyle.Render(fmt.Sprintf(
 					"source %q: %s. `hyctl probe` lists the IDs the router uses.", source, reason)))
 			}
 			if err := cal.Update(source, domain, saidCorrect, o); err != nil {
 				return err
 			}
-			fmt.Printf("  recorded: %s/%s said_correct=%v outcome=%s → D=%.3f nats\n",
+			fmt.Fprintf(stdout, "  recorded: %s/%s said_correct=%v outcome=%s → D=%.3f nats\n",
 				source, domain, saidCorrect, outcome, cal.D(source, domain))
 			return nil
 		},
@@ -5366,19 +5365,19 @@ func cmdTrustOutcome() *cobra.Command {
 				if r.SpanID != "" {
 					_ = trust.MarkApplied(trust.AppliedPath(), r.SpanID)
 				}
-				fmt.Printf("\n  run %s  ·  domain %s  ·  outcome %s\n", r.TaskHash, r.Domain, outcome)
-				fmt.Printf("  recorded %d of %d ledger entries\n\n", n, len(r.Ledger))
-				fmt.Printf("  %-28s %-9s %7s %7s %8s\n", "SOURCE", "VERDICT", "se", "sp", "D(nats)")
-				fmt.Println("  " + strings.Repeat("─", 64))
+				fmt.Fprintf(stdout, "\n  run %s  ·  domain %s  ·  outcome %s\n", r.TaskHash, r.Domain, outcome)
+				fmt.Fprintf(stdout, "  recorded %d of %d ledger entries\n\n", n, len(r.Ledger))
+				fmt.Fprintf(stdout, "  %-28s %-9s %7s %7s %8s\n", "SOURCE", "VERDICT", "se", "sp", "D(nats)")
+				fmt.Fprintln(stdout, "  "+strings.Repeat("─", 64))
 				for _, e := range r.Ledger {
 					verdict := "agree"
 					if !e.Agreed {
 						verdict = "disagree"
 					}
 					st := calibFor(cal, e.Source, r.Domain)
-					fmt.Printf("  %-28.28s %-9s %7.3f %7.3f %8.3f\n", e.Source, verdict, st.Se, st.Sp, st.D)
+					fmt.Fprintf(stdout, "  %-28.28s %-9s %7.3f %7.3f %8.3f\n", e.Source, verdict, st.Se, st.Sp, st.D)
 				}
-				fmt.Println()
+				fmt.Fprintln(stdout)
 				return nil
 			}
 			return fmt.Errorf("no run found with task_hash %q", args[0])
@@ -5457,9 +5456,9 @@ func cmdTrustDefect() *cobra.Command {
 					"defect_cost_usd": cost, "required_confidence": conf,
 				})
 			}
-			fmt.Printf("  defect cost ≈ $%.2f  (blast=%.2f [%s] irreversible=%v pii=%v prod=%v)\n",
+			fmt.Fprintf(stdout, "  defect cost ≈ $%.2f  (blast=%.2f [%s] irreversible=%v pii=%v prod=%v)\n",
 				cost, usedBlast, blastSource, irreversible, pii, production)
-			fmt.Printf("  → demands confidence ≥ %.1f%%  (use with: hyctl dispatch --confidence %.3f)\n",
+			fmt.Fprintf(stdout, "  → demands confidence ≥ %.1f%%  (use with: hyctl dispatch --confidence %.3f)\n",
 				conf*100, conf)
 			return nil
 		},
@@ -5510,7 +5509,7 @@ func cmdAsk() *cobra.Command {
 			// questions that are readable, or a parked task gets forgotten
 			// because a different one is corrupt.
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "  %s %v\n", warnStyle.Render("⚠"), err)
+				fmt.Fprintf(stderr, "  %s %v\n", warnStyle.Render("⚠"), err)
 			}
 			if jsonOut {
 				if qs == nil {
@@ -5519,18 +5518,18 @@ func cmdAsk() *cobra.Command {
 				return json.NewEncoder(os.Stdout).Encode(qs)
 			}
 			if len(qs) == 0 {
-				fmt.Printf("\n  %s\n\n", dimStyle.Render("nothing is waiting on you"))
+				fmt.Fprintf(stdout, "\n  %s\n\n", dimStyle.Render("nothing is waiting on you"))
 				return nil
 			}
-			fmt.Println()
+			fmt.Fprintln(stdout)
 			for _, q := range qs {
-				fmt.Printf("  %s  %s  %s\n",
+				fmt.Fprintf(stdout, "  %s  %s  %s\n",
 					cortexStyle.Render(q.TaskID),
 					dimStyle.Render(q.Head),
 					dimStyle.Render("asked "+humanAge(time.Since(q.AskedAt))))
-				fmt.Printf("    %s\n\n", q.Question)
+				fmt.Fprintf(stdout, "    %s\n\n", q.Question)
 			}
-			fmt.Printf("  %s\n\n", dimStyle.Render("answer with: hyctl ask answer <task-id> \"...\""))
+			fmt.Fprintf(stdout, "  %s\n\n", dimStyle.Render("answer with: hyctl ask answer <task-id> \"...\""))
 			return nil
 		},
 	}
@@ -5550,13 +5549,13 @@ func cmdAsk() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Println()
-			fmt.Printf("  %s %s  %dms\n",
+			fmt.Fprintln(stdout)
+			fmt.Fprintf(stdout, "  %s %s  %dms\n",
 				cortexStyle.Render("▶"),
 				dimStyle.Render(res.Head.Name),
 				res.Duration.Milliseconds())
-			fmt.Println(dimStyle.Render("  " + strings.Repeat("─", 56)))
-			fmt.Printf("\n%s\n\n", res.Output)
+			fmt.Fprintln(stdout, dimStyle.Render("  "+strings.Repeat("─", 56)))
+			fmt.Fprintf(stdout, "\n%s\n\n", res.Output)
 			return nil
 		},
 	}
@@ -5573,7 +5572,7 @@ func cmdAsk() *cobra.Command {
 			if err := dispatch.Decline(args[0], reason); err != nil {
 				return err
 			}
-			fmt.Printf("\n  %s %s\n\n", dimStyle.Render("declined"), args[0])
+			fmt.Fprintf(stdout, "\n  %s %s\n\n", dimStyle.Render("declined"), args[0])
 			return nil
 		},
 	}
@@ -5598,7 +5597,7 @@ func humanAge(d time.Duration) string {
 
 // printAuditDetail prints one evidence line under an audited server.
 func printAuditDetail(category, detail string) {
-	fmt.Printf("               %-11s %s\n", category, detail)
+	fmt.Fprintf(stdout, "               %-11s %s\n", category, detail)
 }
 
 // printToolReport shows what a server's tool descriptions say, or that nothing was read (#1303).

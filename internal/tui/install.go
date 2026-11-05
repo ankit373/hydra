@@ -8,8 +8,8 @@ import (
 	"runtime"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/ankit373/hydra/internal/sysinfo"
 )
@@ -153,7 +153,7 @@ func (m InstallModel) Init() tea.Cmd { return nil }
 
 func (m InstallModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		if m.step == installStepDone {
 			return m, tea.Quit // the outcome waits for a key (TUI-12)
 		}
@@ -168,7 +168,7 @@ func (m InstallModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "down", "j":
 			m.cursor = clamp(m.cursor+1, 0, m.maxCursor())
-		case "enter", " ":
+		case "enter", "space":
 			return m.confirm()
 		}
 	case installDoneMsg:
@@ -289,16 +289,14 @@ func lastMeaningfulLine(out string) string {
 
 // ── View ──────────────────────────────────────────────────────────────────────
 
-var (
-	warnStyle    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.AdaptiveColor{Dark: "214", Light: "94"})
-	successStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.AdaptiveColor{Dark: "82", Light: "22"})
-	codeStyle    = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Dark: "117", Light: "24"}).
-			Background(lipgloss.AdaptiveColor{Dark: "236", Light: "254"}).Padding(0, 1)
-	fitsStyle  = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Dark: "82", Light: "22"})
-	noFitStyle = sDim
-)
+// View draws the wizard on the alt screen.
+func (m InstallModel) View() tea.View {
+	v := tea.NewView(m.frame())
+	v.AltScreen = true
+	return v
+}
 
-func (m InstallModel) View() string {
+func (m InstallModel) frame() string {
 	var b strings.Builder
 	b.WriteString(sTitle.Render("  Hydra, No AI models found") + "\n\n")
 

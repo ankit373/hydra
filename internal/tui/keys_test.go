@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/ankit373/hydra/internal/cost"
 )
@@ -74,7 +74,7 @@ func TestGlossary_QuestionMarkSemantics(t *testing.T) {
 	if !chat.glossary {
 		t.Fatal("? on an empty chat input did not open the glossary")
 	}
-	chat = press(chat, tea.KeyEsc)
+	chat = press(chat, "esc")
 	if chat.glossary {
 		t.Fatal("esc did not close the glossary")
 	}
@@ -122,7 +122,7 @@ func TestInput_IsScopedToTheChatView(t *testing.T) {
 
 	m.view = ckViewUsage
 	m = typed(m, "x")
-	m = press(m, tea.KeyBackspace)
+	m = press(m, "backspace")
 	if m.th().input != "half a prompt" {
 		t.Errorf("input on a non-chat view = %q, want untouched", m.th().input)
 	}
@@ -148,14 +148,14 @@ func TestEsc_Semantics(t *testing.T) {
 	m.view = ckViewActivity
 	m.actDrill = true
 	m.glossary = true
-	m = press(m, tea.KeyEsc)
+	m = press(m, "esc")
 	if m.glossary {
 		t.Fatal("esc did not close the overlay first")
 	}
 	if !m.actDrill {
 		t.Fatal("esc closed the drill together with the overlay")
 	}
-	m = press(m, tea.KeyEsc)
+	m = press(m, "esc")
 	if m.actDrill {
 		t.Fatal("esc did not leave the drill")
 	}
@@ -163,7 +163,7 @@ func TestEsc_Semantics(t *testing.T) {
 	mm := testCockpit()
 	mm.view = ckViewModels
 	mm.modelFocus = true
-	mm = press(mm, tea.KeyEsc)
+	mm = press(mm, "esc")
 	if mm.modelFocus {
 		t.Error("esc did not leave the model detail focus")
 	}
@@ -171,7 +171,7 @@ func TestEsc_Semantics(t *testing.T) {
 	chat := testCockpit()
 	chat.view = ckViewChat
 	chat = typed(chat, "abc")
-	chat = press(chat, tea.KeyEsc)
+	chat = press(chat, "esc")
 	if chat.th().input != "" {
 		t.Errorf("esc did not clear the input: %q", chat.th().input)
 	}
@@ -205,7 +205,7 @@ func TestListSelection_MovesClampedAndStaysVisible(t *testing.T) {
 	// Selection 35 in a 20-row pane must be rendered (window follows).
 	m.actSel = 35
 	m.w, m.h, m.ready = 120, 24, true
-	if out := stripANSI(m.View()); !strings.Contains(out, "THE-SELECTED-O") {
+	if out := stripANSI(m.View().Content); !strings.Contains(out, "THE-SELECTED-O") {
 		t.Errorf("the selected row is not visible:\n%s", out)
 	}
 
@@ -231,20 +231,20 @@ func TestPageKeys_MoveSelectionAndOffsets(t *testing.T) {
 	m.view = ckViewActivity
 	m.w, m.h, m.ready = 100, 24, true
 
-	m = press(m, tea.KeyPgDown)
+	m = press(m, "pgdown")
 	if m.actSel == 0 {
 		t.Error("pgdn did not page the selection")
 	}
 	down := m.actSel
-	m = press(m, tea.KeyCtrlU)
+	m = press(m, "ctrl+u")
 	if m.actSel >= down {
 		t.Error("ctrl+u did not page the selection back up")
 	}
-	m = press(m, tea.KeyEnd)
+	m = press(m, "end")
 	if m.actSel != len(many)-1 {
 		t.Errorf("end left actSel = %d", m.actSel)
 	}
-	m = press(m, tea.KeyHome)
+	m = press(m, "home")
 	if m.actSel != 0 {
 		t.Errorf("home left actSel = %d", m.actSel)
 	}
@@ -254,17 +254,17 @@ func TestPageKeys_MoveSelectionAndOffsets(t *testing.T) {
 	u.view = ckViewUsage
 	u.w, u.h, u.ready = 100, 24, true
 	u.metrics.byModelToday = manyGroupRows(30)
-	u = press(u, tea.KeyPgDown)
+	u = press(u, "pgdown")
 	if u.usageOff == 0 {
 		t.Error("pgdn did not scroll the usage breakdown")
 	}
-	u = press(u, tea.KeyHome)
+	u = press(u, "home")
 	if u.usageOff != 0 {
 		t.Errorf("home left usageOff = %d", u.usageOff)
 	}
 
 	// The wheel scrolls too.
-	w, _ := u.Update(tea.MouseMsg{Button: tea.MouseButtonWheelDown, Action: tea.MouseActionPress})
+	w, _ := u.Update(tea.MouseWheelMsg{Button: tea.MouseWheelDown})
 	if w.(Cockpit).usageOff == 0 {
 		t.Error("the wheel did not scroll the usage breakdown")
 	}
@@ -280,7 +280,7 @@ func TestChatScrollback_NoYankAndEndReturnsToLive(t *testing.T) {
 		m.th().log = append(m.th().log, strings.Repeat("history ", 2)+"line")
 	}
 
-	m = press(m, tea.KeyPgUp)
+	m = press(m, "pgup")
 	if m.th().scroll == 0 {
 		t.Fatal("pgup did not enter scrollback")
 	}
@@ -289,22 +289,22 @@ func TestChatScrollback_NoYankAndEndReturnsToLive(t *testing.T) {
 	if m.th().scroll != anchored {
 		t.Error("an append moved the scrollback anchor")
 	}
-	if out := stripANSI(m.View()); strings.Contains(out, "NEW OUTPUT") {
+	if out := stripANSI(m.View().Content); strings.Contains(out, "NEW OUTPUT") {
 		t.Errorf("scrolled-up chat was yanked to the new output:\n%s", out)
 	} else if !strings.Contains(out, "below · end → live") {
 		t.Errorf("no new-output cue while scrolled up:\n%s", out)
 	}
 
-	m = press(m, tea.KeyEnd)
+	m = press(m, "end")
 	if m.th().scroll != 0 {
 		t.Error("end did not return to live")
 	}
-	if out := stripANSI(m.View()); !strings.Contains(out, "NEW OUTPUT") {
+	if out := stripANSI(m.View().Content); !strings.Contains(out, "NEW OUTPUT") {
 		t.Errorf("live view does not show the newest output:\n%s", out)
 	}
 
 	// Scroll up, then send a message: standard chat returns to live.
-	m = press(m, tea.KeyPgUp)
+	m = press(m, "pgup")
 	m = typed(m, "a new task")
 	m, _ = enter(m)
 	if m.th().scroll != 0 {
@@ -320,7 +320,7 @@ func TestChatWheel_ScrollsLog(t *testing.T) {
 	for i := 0; i < 80; i++ {
 		m.th().log = append(m.th().log, "line")
 	}
-	next, _ := m.Update(tea.MouseMsg{Button: tea.MouseButtonWheelUp, Action: tea.MouseActionPress})
+	next, _ := m.Update(tea.MouseWheelMsg{Button: tea.MouseWheelUp})
 	if next.(Cockpit).th().scroll == 0 {
 		t.Error("wheel up did not scroll the chat log")
 	}
@@ -340,7 +340,7 @@ func TestGlossary_ScrollsAndSwallowsKeys(t *testing.T) {
 	if m.glossOff == 0 {
 		t.Error("j did not scroll the glossary")
 	}
-	out := stripANSI(m.View())
+	out := stripANSI(m.View().Content)
 	if !strings.Contains(out, "↑") {
 		t.Errorf("a scrolled glossary shows no position cue:\n%s", out)
 	}
@@ -351,7 +351,7 @@ func TestGlossary_ScrollsAndSwallowsKeys(t *testing.T) {
 		t.Error("a key leaked through the glossary to the view below")
 	}
 	// tab still switches views (and closes the overlay).
-	m = press(m, tea.KeyTab)
+	m = press(m, "tab")
 	if m.glossary {
 		t.Error("tab did not close the glossary")
 	}
@@ -362,7 +362,7 @@ func TestCtrlC_Quits(t *testing.T) {
 	for _, v := range []int{ckViewChat, ckViewModels, ckViewAudit} {
 		m := testCockpit()
 		m.view = v
-		if _, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC}); cmd == nil {
+		if _, cmd := m.Update(key("ctrl+c")); cmd == nil {
 			t.Errorf("ctrl+c on view %d did not quit", v)
 		}
 	}
@@ -377,7 +377,7 @@ func TestAgentsEnter_JumpsToTrace(t *testing.T) {
 	if !live.live {
 		t.Fatal("fixture: first agent row is not the live run")
 	}
-	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	next, _ := m.Update(key("enter"))
 	m = next.(Cockpit)
 	if m.view != ckViewActivity {
 		t.Fatalf("enter left view = %d, want activity", m.view)
@@ -387,6 +387,30 @@ func TestAgentsEnter_JumpsToTrace(t *testing.T) {
 	}
 	if got := m.activityRuns()[m.actSel].id; got != live.id {
 		t.Errorf("selected run = %s, want %s", got, live.id)
+	}
+}
+
+// Keys as Bubble Tea v2 decodes them still do what they did in v1: alt is
+// read only by alt+1-9, a shifted letter is its text, and a paste is text
+// even when it spells a key's name.
+func TestKeys_V2DecodingKeepsV1Behaviour(t *testing.T) {
+	next, _ := testCockpit().Update(tea.KeyPressMsg{Code: 'j', Mod: tea.ModAlt})
+	if got := next.(Cockpit).th().input; got != "j" {
+		t.Errorf("alt+j typed %q, v1 typed j", got)
+	}
+	next, _ = testCockpit().Update(tea.KeyPressMsg{Code: 'j', Mod: tea.ModAlt | tea.ModShift})
+	if got := next.(Cockpit).th().input; got != "J" {
+		t.Errorf("alt+shift+j typed %q, v1 typed J", got)
+	}
+	next, _ = testCockpit().Update(tea.PasteMsg{Content: "enter"})
+	if p := next.(Cockpit); p.th().input != "enter" || p.th().exec != nil {
+		t.Errorf("a pasted \"enter\" acted as the key: input=%q", p.th().input)
+	}
+
+	lists := testCockpit().jump(ckViewModels)
+	next, _ = lists.Update(tea.KeyPressMsg{Code: 'g', ShiftedCode: 'G', Text: "G", Mod: tea.ModShift})
+	if got, want := next.(Cockpit).modelSel, len(lists.flatRows())-1; got != want || want < 1 {
+		t.Errorf("shift+g left the selection at %d, want the last row %d", got, want)
 	}
 }
 

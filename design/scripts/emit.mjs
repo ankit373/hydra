@@ -1,5 +1,5 @@
 // Copies the Terrazzo CSS to the website and the desktop app, and writes the
-// TUI's lipgloss roles from every token that carries a terminal mapping.
+// TUI's Lip Gloss v2 roles from every token that carries a terminal mapping.
 import fs from 'node:fs';
 import { MODES, read, walk, index, resolveHex } from './tokens.mjs';
 
@@ -30,11 +30,11 @@ for (const [path, t] of walk(themes.light)) {
   if (!term.dark) throw new Error(`${path} has a terminal mapping in light but not in dark`);
   const name = goName(path);
   if (term.light.ansi16 === 'default') {
-    vars += `\n// ${name} inherits the terminal's default foreground at every colour depth.\nvar ${name} lipgloss.TerminalColor = lipgloss.NoColor{}\n`;
+    vars += `\n// ${name} inherits the terminal's default foreground at every colour depth.\nvar ${name} color.Color = lipgloss.NoColor{}\n`;
     continue;
   }
-  const cc = (m) => `lipgloss.CompleteColor{TrueColor: "${resolveHex(tokens[m], path)}", ANSI256: "${term[m].ansi256}", ANSI: "${term[m].ansi16}"}`;
-  vars += `\nvar ${name} = lipgloss.CompleteAdaptiveColor{\n\tLight: ${cc('light')},\n\tDark:  ${cc('dark')},\n}\n`;
+  const cc = (m) => `tokDepths{TrueColor: "${resolveHex(tokens[m], path)}", ANSI256: "${term[m].ansi256}", ANSI: "${term[m].ansi16}"}`;
+  vars += `\nvar ${name} = tokColor{\n\tLight: ${cc('light')},\n\tDark:  ${cc('dark')},\n}\n`;
   // One floor per role in Go, so take the stricter theme's.
   const min = Math.max(...MODES.map((m) => tokens[m].get(path).$extensions?.['dev.hydra.contrast']?.min ?? 0));
   roles.push(`\t{"${path}", ${name}, ${min}},\n`);
@@ -46,12 +46,33 @@ const go = `// SPDX-License-Identifier: MIT
 
 package tui
 
-import "github.com/charmbracelet/lipgloss"
+import (
+	"image/color"
+
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/colorprofile"
+)
+
+// tokDepths is one theme's value at each colour depth a terminal can show.
+type tokDepths struct{ TrueColor, ANSI256, ANSI string }
+
+// tokColor is a role on light and dark backgrounds, each with its own pick
+// per depth rather than a downsampler's nearest match.
+type tokColor struct{ Light, Dark tokDepths }
+
+// at is the role's colour on a terminal of profile p; none below ANSI.
+func (c tokColor) at(p colorprofile.Profile, dark bool) color.Color {
+	pick := lipgloss.Complete(p)
+	depth := func(d tokDepths) color.Color {
+		return pick(lipgloss.Color(d.ANSI), lipgloss.Color(d.ANSI256), lipgloss.Color(d.TrueColor))
+	}
+	return lipgloss.LightDark(dark)(depth(c.Light), depth(c.Dark))
+}
 ${vars}
 // tokRoles is every generated role with its WCAG 2 floor (0 = decorative).
 var tokRoles = []struct {
 	path string
-	c    lipgloss.CompleteAdaptiveColor
+	c    tokColor
 	min  float64
 }{
 ${roles.join('')}}

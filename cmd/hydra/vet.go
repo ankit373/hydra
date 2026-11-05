@@ -12,7 +12,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 	"github.com/spf13/cobra"
 
 	"github.com/ankit373/hydra/internal/dispatch"
@@ -214,14 +214,14 @@ func cmdVet() *cobra.Command {
 			})
 			if err != nil {
 				if errors.Is(err, vet.ErrNoRuleSource) {
-					printNoRuleSource(os.Stdout)
+					printNoRuleSource(stdout)
 					os.Exit(2) // the reviewer is missing, which is setup, not a finding
 				}
 				return err
 			}
 
 			if dryRun || len(spec.Reviewable) == 0 {
-				return printVetPlan(os.Stdout, spec, jsonOut)
+				return printVetPlan(stdout, spec, jsonOut)
 			}
 
 			d, err := dispatch.New(ctx)
@@ -243,7 +243,7 @@ func cmdVet() *cobra.Command {
 				}
 				router.sw = swarm.New(d, d.Heads(), d)
 				router.floor, router.graph, router.graphPath, router.maxCost = confidence, g, graphPath, maxCost
-				printVetBar(os.Stdout, g, graphPath, confidence)
+				printVetBar(stdout, g, graphPath, confidence)
 			}
 
 			res, err := vet.Run(ctx, router, spec, vet.RunOptions{Concurrency: concurrency})
@@ -251,7 +251,7 @@ func cmdVet() *cobra.Command {
 				return err
 			}
 
-			code, err := renderVet(os.Stdout, res, jsonOut)
+			code, err := renderVet(stdout, res, jsonOut)
 			if err != nil {
 				return err
 			}

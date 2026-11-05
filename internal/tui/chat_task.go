@@ -16,8 +16,8 @@ import (
 	"strings"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/ankit373/hydra/internal/diff"
 	"github.com/ankit373/hydra/internal/policy"
@@ -817,16 +817,16 @@ func (m Cockpit) askUndo(th *ckThread, t *ckTask) Cockpit {
 // undoAskKey answers a pending /undo: a typed y does it, anything else keeps
 // the work. Keys other than y/n/enter still do their usual job, so typing is
 // never eaten; enter only closes the question, it never confirms it.
-func (m Cockpit) undoAskKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m Cockpit) undoAskKey(msg ckKey) (tea.Model, tea.Cmd) {
 	th := m.th()
 	ask := th.undoAsk
 	th.undoAsk = nil
 	m.flash = "kept, nothing changed"
-	if msg.Type == tea.KeyEnter {
+	if msg.name() == "enter" {
 		return m, nil
 	}
-	if msg.Type == tea.KeyRunes && len(msg.Runes) == 1 && !msg.Paste {
-		switch msg.Runes[0] {
+	if rs := msg.runes(); len(rs) == 1 && !msg.paste {
+		switch rs[0] {
 		case 'y', 'Y':
 			switch {
 			case th.exec != nil:

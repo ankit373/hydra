@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 var ckFileRe = regexp.MustCompile(`[\w/]+\.(go|ts|js|py|rs|java)`)
@@ -22,7 +22,7 @@ var ckFileRe = regexp.MustCompile(`[\w/]+\.(go|ts|js|py|rs|java)`)
 // chatKey handles keys while the chat view is active. Typing always wins on a
 // non-empty input; ?, m and e fire only from an empty one and never change a
 // file. Pending states are modal.
-func (m Cockpit) chatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m Cockpit) chatKey(msg ckKey) (tea.Model, tea.Cmd) {
 	t := m.th()
 	switch {
 	case m.modePick:
@@ -36,33 +36,34 @@ func (m Cockpit) chatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case t.undoAsk != nil:
 		return m.undoAskKey(msg)
 	}
-	switch msg.Type {
-	case tea.KeyShiftTab:
+	switch msg.name() {
+	case "shift+tab":
 		m.mode = ckNextBasicMode(m.mode)
 		m.flash = "mode → " + m.mode
 		return m, nil
-	case tea.KeyCtrlO:
+	case "ctrl+o":
 		m.ovOpen, m.ovSel, m.ovStage, m.ovConfSel = true, 0, 0, 0
 		return m, nil
-	case tea.KeyCtrlLeft:
+	case "ctrl+left":
 		return m.cycleThread(-1), nil
-	case tea.KeyCtrlRight:
+	case "ctrl+right":
 		return m.cycleThread(1), nil
-	case tea.KeyCtrlBackslash:
+	case "ctrl+\\":
 		return m.toggleSplit(), nil
-	case tea.KeyCtrlB:
+	case "ctrl+b":
 		return m.backgroundThread(), nil
-	case tea.KeyEnter:
+	case "enter":
 		return m.submit()
-	case tea.KeyBackspace:
+	case "backspace":
 		t.input = ckDropLastGrapheme(t.input)
-	case tea.KeySpace:
+	case "space":
 		t.input += " "
-	case tea.KeyRunes:
+	}
+	if rs := msg.runes(); rs != nil {
 		// Pasted text is literal input: a paste starting with ? m or e must
 		// type, not fire the letter commands.
-		if t.input == "" && len(msg.Runes) == 1 && !msg.Paste {
-			switch msg.Runes[0] {
+		if t.input == "" && len(rs) == 1 && !msg.paste {
+			switch rs[0] {
 			case '?':
 				m.glossary = true
 				return m, nil
@@ -78,19 +79,20 @@ func (m Cockpit) chatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				}
 			}
 		}
-		t.input += string(msg.Runes)
+		t.input += string(rs)
 	}
 	return m, nil
 }
 
 // confirmKey is careful mode's y/n gate; esc (handled globally) also declines.
-func (m Cockpit) confirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m Cockpit) confirmKey(msg ckKey) (tea.Model, tea.Cmd) {
 	t := m.th()
-	if msg.Type != tea.KeyRunes || len(msg.Runes) != 1 {
+	rs := msg.runes()
+	if len(rs) != 1 {
 		return m, nil
 	}
 	w := *t.confirm
-	switch msg.Runes[0] {
+	switch rs[0] {
 	case 'y', 'Y':
 		t.log = append(t.log, ckDimS.Render("  confirmed, writing"))
 		return m.resumeTask(t, w)
@@ -106,19 +108,17 @@ func (m Cockpit) confirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // planKey is plan mode's approval gate: enter/y/a run the plan, esc (global)
 // discards it. Everything else is swallowed while the question stands.
-func (m Cockpit) planKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m Cockpit) planKey(msg ckKey) (tea.Model, tea.Cmd) {
 	t := m.th()
-	switch msg.Type {
-	case tea.KeyEnter:
+	if msg.name() == "enter" {
 		t.log = append(t.log, ckDimS.Render("  plan approved, running"))
 		return m.resumeTask(t, *t.planWait)
-	case tea.KeyRunes:
-		if len(msg.Runes) == 1 {
-			switch msg.Runes[0] {
-			case 'y', 'Y', 'a', 'A':
-				t.log = append(t.log, ckDimS.Render("  plan approved, running"))
-				return m.resumeTask(t, *t.planWait)
-			}
+	}
+	if rs := msg.runes(); len(rs) == 1 {
+		switch rs[0] {
+		case 'y', 'Y', 'a', 'A':
+			t.log = append(t.log, ckDimS.Render("  plan approved, running"))
+			return m.resumeTask(t, *t.planWait)
 		}
 	}
 	return m, nil
@@ -379,7 +379,8 @@ func (m Cockpit) sidebar(h int) string {
 	}
 	lines = append(lines, foot...)
 
-	return lipgloss.NewStyle().Width(21).Height(h).
+	// Lip Gloss v2 counts the border inside Width: 21 cells plus the rule.
+	return lipgloss.NewStyle().Width(21 + 1).Height(h).
 		BorderStyle(lipgloss.NormalBorder()).BorderRight(true).BorderForeground(ckLineC).
 		Render(strings.Join(lines, "\n"))
 }
@@ -459,7 +460,7 @@ func (m Cockpit) inputBar(w int) string {
 	}
 	return lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).BorderForeground(ckAqua).
-		Padding(0, 1).Width(w - 2).
+		Padding(0, 1).Width(w). // border included, as Lip Gloss v2 counts it
 		Render(strings.Join(wrapped, "\n"))
 }
 
@@ -528,7 +529,8 @@ func (m Cockpit) codePanel(t *ckThread, w, h int) string {
 		rows = rows[:h]
 	}
 
-	return lipgloss.NewStyle().Width(inner).Height(h).
+	// Lip Gloss v2 counts the border inside Width: inner plus the rule.
+	return lipgloss.NewStyle().Width(inner + 1).Height(h).
 		BorderStyle(lipgloss.NormalBorder()).BorderLeft(true).BorderForeground(ckLineC).
 		PaddingLeft(1).Render(strings.Join(rows, "\n"))
 }

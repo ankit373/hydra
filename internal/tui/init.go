@@ -6,11 +6,12 @@ package tui
 import (
 	"errors"
 	"fmt"
+	"image/color"
 	"sort"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/dispatch"
@@ -24,14 +25,41 @@ import (
 
 // ANSI-256 pairs (dark terminal, light terminal), each at 4.5:1 or better on
 // its background; the light values replace ones that measured 1.4:1 on white.
+type wizPair struct{ dark, light string }
+
 var (
-	sTitle    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.AdaptiveColor{Dark: "205", Light: "162"})
-	sSelected = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.AdaptiveColor{Dark: "46", Light: "22"})
-	sDim      = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Dark: "245", Light: "240"})
-	sPrompt   = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Dark: "75", Light: "25"})
-	sError    = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Dark: "203", Light: "160"})
-	sHint     = lipgloss.NewStyle().Italic(true).Foreground(lipgloss.AdaptiveColor{Dark: "245", Light: "240"})
+	wizTitle    = wizPair{"205", "162"}
+	wizSelected = wizPair{"46", "22"}
+	wizDim      = wizPair{"245", "240"}
+	wizPrompt   = wizPair{"75", "25"}
+	wizError    = wizPair{"203", "160"}
+	wizWarn     = wizPair{"214", "94"}
+	wizSuccess  = wizPair{"82", "22"}
+	wizCode     = wizPair{"117", "24"}
+	wizCodeBg   = wizPair{"236", "254"}
+
+	sTitle, sSelected, sDim, sPrompt, sError, sHint           lipgloss.Style
+	warnStyle, successStyle, codeStyle, fitsStyle, noFitStyle lipgloss.Style
 )
+
+// setWizardTheme draws the init and install wizards for a dark or light
+// background; ckSetTheme calls it so the two never disagree.
+func setWizardTheme(dark bool) {
+	c := func(p wizPair) color.Color {
+		return ckDepth(lipgloss.LightDark(dark)(lipgloss.Color(p.light), lipgloss.Color(p.dark)))
+	}
+	sTitle = lipgloss.NewStyle().Bold(true).Foreground(c(wizTitle))
+	sSelected = lipgloss.NewStyle().Bold(true).Foreground(c(wizSelected))
+	sDim = lipgloss.NewStyle().Foreground(c(wizDim))
+	sPrompt = lipgloss.NewStyle().Foreground(c(wizPrompt))
+	sError = lipgloss.NewStyle().Foreground(c(wizError))
+	sHint = lipgloss.NewStyle().Italic(true).Foreground(c(wizDim))
+	warnStyle = lipgloss.NewStyle().Bold(true).Foreground(c(wizWarn))
+	successStyle = lipgloss.NewStyle().Bold(true).Foreground(c(wizSuccess))
+	codeStyle = lipgloss.NewStyle().Foreground(c(wizCode)).Background(c(wizCodeBg)).Padding(0, 1)
+	fitsStyle = lipgloss.NewStyle().Foreground(c(wizSuccess))
+	noFitStyle = sDim
+}
 
 // styleLines styles each line on its own and keeps the newlines outside
 // Render: lipgloss pads a multi-line block to its widest line, which pushed
@@ -91,7 +119,7 @@ func NewInitModel(result *probe.Result) InitModel {
 func (m InitModel) Init() tea.Cmd { return nil }
 
 func (m InitModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	key, ok := msg.(tea.KeyMsg)
+	key, ok := msg.(tea.KeyPressMsg)
 	if !ok {
 		return m, nil
 	}
@@ -119,7 +147,7 @@ func (m InitModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case "down", "j":
 		m.cursor = clamp(m.cursor+1, 0, m.maxCursor())
 
-	case "enter", " ":
+	case "enter", "space":
 		return m.confirm()
 	}
 
@@ -189,7 +217,14 @@ func (m InitModel) maxCursor() int {
 
 // ── View ──────────────────────────────────────────────────────────────────────
 
-func (m InitModel) View() string {
+// View draws the wizard on the alt screen.
+func (m InitModel) View() tea.View {
+	v := tea.NewView(m.frame())
+	v.AltScreen = true
+	return v
+}
+
+func (m InitModel) frame() string {
 	var b strings.Builder
 	b.WriteString(sTitle.Render("  Hydra, First Run Setup") + "\n\n")
 

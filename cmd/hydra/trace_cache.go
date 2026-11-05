@@ -48,40 +48,40 @@ stopped. That number is the evidence the gate is worth having.`,
 					"present":      present,
 					"stats":        st,
 				}, "", "  ")
-				fmt.Println(string(raw))
+				fmt.Fprintln(stdout, string(raw))
 				return nil
 			}
 
 			if !cache.Enabled(cfg) {
-				fmt.Println("The answer cache is off.")
-				fmt.Println("Turn it on with cache_answers = true in config.toml.")
+				fmt.Fprintln(stdout, "The answer cache is off.")
+				fmt.Fprintln(stdout, "Turn it on with cache_answers = true in config.toml.")
 				if present {
-					fmt.Printf("  %s\n", dimStyle.Render(fmt.Sprintf(
+					fmt.Fprintf(stdout, "  %s\n", dimStyle.Render(fmt.Sprintf(
 						"a store from an earlier run is still on disk: %d answer%s in %s",
 						st.Entries, plural(st.Entries), humanBytes(st.Bytes))))
 				}
 				return nil
 			}
 
-			fmt.Printf("  %d answer%s in %s · threshold %.2f · budget %s\n",
+			fmt.Fprintf(stdout, "  %d answer%s in %s · threshold %.2f · budget %s\n",
 				st.Entries, plural(st.Entries), humanBytes(st.Bytes),
 				cache.Threshold(cfg, ""), humanBytes(cache.Budget(cfg)))
 
 			asked := st.Hits + st.Misses
 			if asked == 0 {
-				fmt.Printf("  %s\n", dimStyle.Render("nothing has been looked up yet"))
+				fmt.Fprintf(stdout, "  %s\n", dimStyle.Render("nothing has been looked up yet"))
 				return nil
 			}
-			fmt.Printf("  %d of %d dispatches served (%.1f%%): %d exact, %d near\n",
+			fmt.Fprintf(stdout, "  %d of %d dispatches served (%.1f%%): %d exact, %d near\n",
 				st.Hits, asked, 100*float64(st.Hits)/float64(asked), st.Exact, st.Near)
-			fmt.Printf("  %s\n", dimStyle.Render(fmt.Sprintf(
+			fmt.Fprintf(stdout, "  %s\n", dimStyle.Render(fmt.Sprintf(
 				"$%.4f avoided, at what the same answers cost to produce", st.AvoidedUSD)))
 			// "by a gate" rather than "by the content gate": a near match can
 			// now be declined by either half, and naming one of them would
 			// misattribute the other's refusals (#1015).
-			fmt.Printf("  %d refused by a gate · %d evicted\n", st.Refused, st.Evicted)
+			fmt.Fprintf(stdout, "  %d refused by a gate · %d evicted\n", st.Refused, st.Evicted)
 			if st.Oldest != nil && st.Newest != nil {
-				fmt.Printf("  %s\n", dimStyle.Render(fmt.Sprintf(
+				fmt.Fprintf(stdout, "  %s\n", dimStyle.Render(fmt.Sprintf(
 					"oldest %s ago · newest %s ago", since(*st.Oldest), since(*st.Newest))))
 			}
 			return nil
@@ -111,10 +111,10 @@ func printCacheHit(r *dispatch.Result) {
 	if r.Cache == nil {
 		return
 	}
-	fmt.Println()
-	fmt.Printf("  %s %s\n", cortexStyle.Render("⚡ from cache"), dimStyle.Render(cacheLabel(r.Cache)))
-	fmt.Println(dimStyle.Render("  " + strings.Repeat("─", 56)))
-	fmt.Println()
-	fmt.Println(r.Output)
-	fmt.Println()
+	fmt.Fprintln(stdout)
+	fmt.Fprintf(stdout, "  %s %s\n", cortexStyle.Render("⚡ from cache"), dimStyle.Render(cacheLabel(r.Cache)))
+	fmt.Fprintln(stdout, dimStyle.Render("  "+strings.Repeat("─", 56)))
+	fmt.Fprintln(stdout)
+	fmt.Fprintln(stdout, r.Output)
+	fmt.Fprintln(stdout)
 }
