@@ -36,7 +36,7 @@ func withoutExecution(t *testing.T, dir string) []byte {
 	return out
 }
 
-// A run killed mid-call, torn mid-write and resumed reports a summary byte-identical,
+// A run stopped part-way, torn mid-write and resumed reports a summary byte-identical,
 // execution aside, to a run that was never interrupted (scope E7.1-6).
 func TestReport_AResumedRunSummarisesByteIdentically(t *testing.T) {
 	arms := []string{"frontier", "cheapest", "mid"}
@@ -70,13 +70,14 @@ func TestReport_AResumedRunSummarisesByteIdentically(t *testing.T) {
 	script(exec)
 	r := testRunner(t, 60, exec, arms...)
 	priced(r)
-	ctx, cancel := context.WithCancel(context.Background())
-	exec.before = func(head, prompt string) {
-		if head == "bench/openrouter/m-cheap" && prompt == "q041" {
-			cancel()
-		}
+	// Stopped part-way by the cap, then torn mid-write: an interruption that bills
+	// nothing extra. (A kill mid-call bills one more call, so its costs rightly differ.)
+	r.MaxUSD = co.Spent / 2
+	o, err := r.Execute(context.Background())
+	if !errors.Is(err, ErrBudget) {
+		t.Fatalf("first leg: %v", err)
 	}
-	o, _ := r.Execute(ctx)
+	r.MaxUSD = 100
 	path := filepath.Join(o.Dir, "items.jsonl")
 	f, _ := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0)
 	f.WriteString(`{"seq":3`)
@@ -90,7 +91,6 @@ func TestReport_AResumedRunSummarisesByteIdentically(t *testing.T) {
 	if after, _ := os.ReadFile(path); !bytes.Equal(before, after) {
 		t.Fatal("report changed items.jsonl")
 	}
-	exec.before = nil
 	if _, err := r.Execute(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -222,7 +222,7 @@ func TestSummarize_RefusesAnIntervalNoResampleDefines(t *testing.T) {
 }
 
 // A retryable row is spend, not a result: the pair is scored by its last scored row,
-// the arm's cost counts scored rows, and every dollar is still in the execution block.
+// and the arm is charged every row it was billed for, retried ones included.
 func TestSummarize_ScoresTheLastScoredRowAndKeepsAllSpend(t *testing.T) {
 	run := &Run{ID: "r", ItemIDs: []string{"a", "b"}, ArmOrder: []string{Frontier}, Seed: 1}
 	rows := []Result{
@@ -235,8 +235,8 @@ func TestSummarize_ScoresTheLastScoredRowAndKeepsAllSpend(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if a := s.Arms[Frontier]; a.N != 2 || a.Passed != 2 || a.Errors != 0 || a.CostUSD != 0.5 || s.Incomplete {
-		t.Fatalf("frontier %+v, want 2 scored passes costing their own rows", a)
+	if a := s.Arms[Frontier]; a.N != 2 || a.Passed != 2 || a.Errors != 0 || a.CostUSD != 1 || *a.CostPerAccepted != 0.5 || s.Incomplete {
+		t.Fatalf("frontier %+v, want 2 scored passes charged every row's spend", a)
 	}
 	if s.Execution.SpendUSD != 1 || s.Execution.SpendRows != 2 {
 		t.Fatalf("execution %+v, want every dollar and both spend-only rows", s.Execution)
@@ -253,7 +253,7 @@ func TestSummarize_ScoresTheLastScoredRowAndKeepsAllSpend(t *testing.T) {
 // oracle, no smoke sizing, and the table says so.
 func TestSummarize_AnIncompleteRunReportsCountsOnly(t *testing.T) {
 	exec := newFakeExec()
-	exec.set("bench/openrouter/m-cheap", "q004", reply{err: errors.New("timeout")})
+	exec.set("bench/openrouter/m-cheap", "q004", reply{err: netErr})
 	s := summarize(t, 10, exec, "smoke", "frontier", "cheapest")
 	if !s.Incomplete || s.Unscored != 1 || len(s.Paired) != 0 || s.Smoke != nil {
 		t.Fatalf("incomplete=%v unscored=%d paired=%d smoke=%v", s.Incomplete, s.Unscored, len(s.Paired), s.Smoke)
@@ -320,5 +320,45 @@ func TestReport_RefusesWhatItCannotRead(t *testing.T) {
 		`{"item_id":"nope","arm":"frontier","started":"`+time.Now().Format(time.RFC3339)+`"}`+"\n"), 0o644)
 	if _, err := Report(dir, state); err == nil {
 		t.Fatal("reported a row for an unscheduled item")
+	}
+}
+
+// A flaky arm pays for its retries: two arms with the same answers and the same
+// accepted count, one of which needed a billed retry, differ in cost per accepted.
+func TestSummarize_AFlakyArmCostsMorePerAccepted(t *testing.T) {
+	run := &Run{ID: "r", ItemIDs: []string{"a", "b"}, ArmOrder: []string{Frontier, "flaky"}, Seed: 1}
+	spend := func(item, arm string, usd float64) Result {
+		return Result{ItemID: item, Arm: arm, Attempt: Attempt{ErrKind: spendRow}, Retryable: true, CostUSD: usd}
+	}
+	rows := []Result{
+		spend("a", Frontier, 0.25), {ItemID: "a", Arm: Frontier, Passed: true},
+		spend("b", Frontier, 0.25), {ItemID: "b", Arm: Frontier, Passed: true},
+		spend("a", "flaky", 0.25), {ItemID: "a", Arm: "flaky", Passed: true},
+		spend("b", "flaky", 0.25), spend("b", "flaky", 0.25), {ItemID: "b", Arm: "flaky", Passed: true},
+	}
+	s, err := Summarize(run, rows)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, k := s.Arms[Frontier], s.Arms["flaky"]
+	if f.Accepted != k.Accepted || *f.CostPerAccepted != 0.25 || *k.CostPerAccepted != 0.375 {
+		t.Fatalf("frontier %v/accepted, flaky %v/accepted; want 0.25 and 0.375", *f.CostPerAccepted, *k.CostPerAccepted)
+	}
+	if ci := s.Paired["flaky-vs-frontier"].CostPerAccDiff; ci == nil || ci.Estimate != 0.125 {
+		t.Fatalf("paired cost difference %+v, want the retry's 0.125 per accepted", ci)
+	}
+}
+
+// With no arm paired against a frontier, nothing measured p_disc, so nothing sizes the
+// full run: a frontier-only smoke run included.
+func TestSmoke_RefusesAFrontierOnlyRun(t *testing.T) {
+	m := smoke(Summary{Arms: map[string]ArmSummary{Frontier: {N: 10}}, Paired: map[string]PairedStats{}}, 5000)
+	if m.RecommendedN != nil || m.RecommendedNRefused == "" {
+		t.Fatalf("a frontier-only run recommended %v", m.RecommendedN)
+	}
+	oracleOnly := smoke(Summary{Arms: map[string]ArmSummary{Frontier: {}},
+		Paired: map[string]PairedStats{OracleArm + "-vs-" + Frontier: {PDisc: 0.2}}}, 5000)
+	if oracleOnly.RecommendedN != nil {
+		t.Fatal("the oracle's p_disc counted as a measurement")
 	}
 }

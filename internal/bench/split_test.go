@@ -229,3 +229,23 @@ func TestLoad_RefusesAHandEditedSplit(t *testing.T) {
 		t.Error("a data file with a repeated id loaded")
 	}
 }
+
+// Text only Unicode normalisation could fold is refused by name, since the split key
+// would leave its two spellings free to straddle the splits.
+func TestLoad_RefusesTextThatNeedsUnicodeNormalisation(t *testing.T) {
+	rows := []Row{{"ok/1", "what's my balance", "x"}, {"mark/1", "café", "x"},
+		{"wide/1", "ｂalance", "x"}, {"lig/1", "ﬁle", "x"}, {"ok/2", "£10 fee… ’", "x"}}
+	good, _ := AssignSplits("stub", rows)
+	_, err := Load(stubSuite{rows}, Dataset{}, "", writeTSV(t, good))
+	if err == nil {
+		t.Fatal("loaded text with a combining mark, a fullwidth form and a ligature")
+	}
+	for _, id := range []string{"mark/1", "wide/1", "lig/1"} {
+		if !strings.Contains(err.Error(), id) {
+			t.Errorf("error does not name %s: %v", id, err)
+		}
+	}
+	if strings.Contains(err.Error(), "ok/") || !strings.Contains(err.Error(), "3 items") {
+		t.Errorf("error names the wrong items: %v", err)
+	}
+}

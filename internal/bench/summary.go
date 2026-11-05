@@ -177,12 +177,15 @@ func Summarize(run *Run, rows []Result) (Summary, error) {
 		order[id] = i
 	}
 	scored := map[pairKey]Result{}
+	pairSpend, armSpend := map[pairKey]float64{}, map[string]float64{}
 	var e Execution
 	for _, r := range rows {
 		if _, ok := order[r.ItemID]; !ok {
 			return Summary{}, fmt.Errorf("bench: a row names %s, which run %s did not schedule", r.ItemID, run.ID)
 		}
 		e.SpendUSD += r.CostUSD
+		pairSpend[pairKey{r.ItemID, r.Arm}] += r.CostUSD
+		armSpend[r.Arm] += r.CostUSD
 		if r.Retryable {
 			e.SpendRows++
 		} else {
@@ -196,6 +199,11 @@ func Summarize(run *Run, rows []Result) (Summary, error) {
 		}
 	}
 	e.WallSeconds = e.End.Sub(e.Start).Seconds()
+	// A scored pair costs everything billed for it, retries and earlier attempts included.
+	for k, r := range scored {
+		r.CostUSD = pairSpend[k]
+		scored[k] = r
+	}
 	s := Summary{Schema: summarySchema, RunID: run.ID, Tier: run.Tier, Breadcrumb: run.Crumb,
 		Arms: map[string]ArmSummary{}, Paired: map[string]PairedStats{}, Caveats: []string{contamination}, Execution: e}
 	for _, id := range run.ItemIDs {
@@ -212,13 +220,16 @@ func Summarize(run *Run, rows []Result) (Summary, error) {
 	}
 	if len(byArm) > 1 && !s.Incomplete {
 		byArm[OracleArm] = oracleRows(byArm)
+		for _, r := range byArm[OracleArm] {
+			armSpend[OracleArm] += r.CostUSD
+		}
 	}
 	for _, rs := range byArm {
 		sort.Slice(rs, func(i, j int) bool { return order[rs[i].ItemID] < order[rs[j].ItemID] })
 	}
 	s.Breadcrumb.ProviderModels = providerModels(byArm)
 	for arm, rs := range byArm {
-		a, err := summarizeArm(rs)
+		a, err := summarizeArm(rs, armSpend[arm])
 		if err != nil {
 			return Summary{}, err
 		}
@@ -268,12 +279,13 @@ func oracleRows(byArm map[string][]Result) []Result {
 	return out
 }
 
-func summarizeArm(rs []Result) (ArmSummary, error) {
-	a := ArmSummary{N: len(rs)}
+// summarizeArm scores rs, an arm's scored rows; spend is everything the arm was billed,
+// unscored and spend rows included, so a flaky arm's cost per accepted answer shows it.
+func summarizeArm(rs []Result, spend float64) (ArmSummary, error) {
+	a := ArmSummary{N: len(rs), CostUSD: spend}
 	var in, out []float64
 	lat := sketch.New(sketch.DefaultAlpha)
 	for _, r := range rs {
-		a.CostUSD += r.CostUSD
 		if r.Passed {
 			a.Passed++
 		}
@@ -409,10 +421,11 @@ func smoke(s Summary, testSplit int) *SmokeMeasurements {
 	m := &SmokeMeasurements{PDisc: map[string]float64{}, TokensIn: map[string]Moments{},
 		TokensOut: map[string]Moments{}, FormatFailRate: map[string]float64{}}
 	var worst float64
+	measured := false
 	for k, p := range s.Paired {
 		m.PDisc[k] = p.PDisc
 		if k != OracleArm+"-vs-"+Frontier { // the oracle is computed, not a candidate first source
-			worst = math.Max(worst, p.PDisc)
+			worst, measured = math.Max(worst, p.PDisc), true
 		}
 	}
 	for arm, a := range s.Arms {
@@ -424,8 +437,8 @@ func smoke(s Summary, testSplit int) *SmokeMeasurements {
 			m.FormatFailRate[arm] = float64(a.FormatFails) / float64(a.N)
 		}
 	}
-	if _, ok := s.Arms[Frontier]; !ok {
-		m.RecommendedNRefused = "no frontier arm ran, so no arm-vs-frontier p_disc was measured"
+	if !measured {
+		m.RecommendedNRefused = "no arm was paired with a frontier arm, so no p_disc was measured"
 		return m
 	}
 	n := min(max(1000, int(math.Ceil(6.18*worst/(margin*margin)))), testSplit)

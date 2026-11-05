@@ -52,6 +52,26 @@ func splitText(text string) string {
 	return strings.Join(strings.Fields(b.String()), " ")
 }
 
+// normalisable refuses text splitText cannot key without Unicode normalisation, which
+// would need golang.org/x/text: combining marks, fullwidth or halfwidth forms, and
+// compatibility ligatures. Two spellings of one utterance could otherwise straddle splits.
+func normalisable(suite string, rows []Row) error {
+	var bad []string
+	for _, r := range rows {
+		if strings.IndexFunc(r.Text, func(c rune) bool {
+			return unicode.Is(unicode.Mn, c) || (c >= 0xFF00 && c <= 0xFFEF) || (c >= 0xFB00 && c <= 0xFB4F)
+		}) >= 0 {
+			bad = append(bad, r.ID)
+		}
+	}
+	if len(bad) == 0 {
+		return nil
+	}
+	shown := bad[:min(len(bad), 10)]
+	return fmt.Errorf("bench: %s has %d items needing Unicode normalisation (combining marks, fullwidth forms or ligatures): %s",
+		suite, len(bad), strings.Join(shown, ", "))
+}
+
 // splitOf keys on the text, not the id, so a duplicate cannot leak from calibration into test.
 func splitOf(suite, text string) Split {
 	if hash64("split", suite, splitText(text))%1000 < calibrationBuckets {
@@ -150,6 +170,9 @@ func Load(s Suite, ds Dataset, dataDir, splitsPath string) ([]Item, error) {
 	byID := make(map[string]SplitRow, len(splits))
 	for _, r := range splits {
 		byID[r.ID] = r
+	}
+	if err := normalisable(s.Name(), rows); err != nil {
+		return nil, err
 	}
 	// The TSV is checked against the data, not trusted: a hand-edited split, rank or
 	// label, or two copies of one utterance in different splits, is refused here.

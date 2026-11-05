@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"sort"
 	"strings"
 	"testing"
@@ -52,13 +53,37 @@ func testRunner(t *testing.T, n int, exec *fakeExec, arms ...string) *Runner {
 		MaxUSD: 100, ResultsDir: t.TempDir(), StateDir: t.TempDir(), Now: stepClock(), Out: io.Discard}
 }
 
+// rowsOf is the result rows: one per answered pair, plus any retried ones.
 func rowsOf(t *testing.T, r *Runner, o Progress) []Result {
+	t.Helper()
+	var out []Result
+	for _, row := range allRowsOf(t, o) {
+		if row.ErrKind != spendRow {
+			out = append(out, row)
+		}
+	}
+	return out
+}
+
+// allRowsOf is every line, spend rows included: where the money is.
+func allRowsOf(t *testing.T, o Progress) []Result {
 	t.Helper()
 	rows, _, err := readResults(filepath.Join(o.Dir, "items.jsonl"), o.RunID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return rows
+}
+
+// spentOn sums the spend rows of one (item, arm).
+func spentOn(t *testing.T, o Progress, item, arm string) (sum float64, rows int) {
+	t.Helper()
+	for _, row := range allRowsOf(t, o) {
+		if row.ErrKind == spendRow && row.ItemID == item && row.Arm == arm {
+			sum, rows = sum+row.CostUSD, rows+1
+		}
+	}
+	return sum, rows
 }
 
 // canonical is the scored rows, without what legitimately differs between an
@@ -133,9 +158,11 @@ func TestExecute_WritesRunJSONFirstThenOneRowPerPair(t *testing.T) {
 		t.Fatalf("%d rows, %d written, %d calls; want 40 each", len(rows), o.Written, exec.calls.Load())
 	}
 	by := map[string]Result{}
-	var cost float64
 	for _, row := range rows {
 		by[row.Arm+"/"+row.ItemID] = row
+	}
+	var cost float64
+	for _, row := range allRowsOf(t, o) {
 		cost += row.CostUSD
 	}
 	if row := by["cheapest/test/001"]; row.Passed || row.Format || row.Score != 0 {
@@ -144,7 +171,7 @@ func TestExecute_WritesRunJSONFirstThenOneRowPerPair(t *testing.T) {
 	if row := by["cheapest/test/003"]; !row.Format {
 		t.Errorf("format row %+v", row)
 	}
-	if row := by["cheapest/test/005"]; row.ErrKind != "status:400" || row.Retryable || row.Passed || row.Calls[0].PriceRef != "reserved" || row.CostUSD == 0 {
+	if row := by["cheapest/test/005"]; row.ErrKind != "status:400" || row.Retryable || row.Passed || row.Calls[0].PriceRef != "reserved" || row.CostUSD != 0 {
 		t.Errorf("400 row %+v: want a scored failure, settled at its reservation", row)
 	}
 	if row := by["frontier/test/002"]; !row.Passed || row.Score != 1 || row.Calls[0].Model != "m-front" || row.Latency != time.Second {
@@ -152,6 +179,10 @@ func TestExecute_WritesRunJSONFirstThenOneRowPerPair(t *testing.T) {
 	}
 	if d := cost - o.Spent; d > 1e-12 || d < -1e-12 {
 		t.Errorf("rows sum to $%v, the budget says $%v", cost, o.Spent)
+	}
+	// The money is in spend rows, one per billed call; a result row adds none.
+	if sum, n := spentOn(t, o, "test/005", "cheapest"); n != 1 || sum == 0 {
+		t.Errorf("the 400 was not recorded at its ceiling: $%v in %d rows", sum, n)
 	}
 	// Running it again resolves to the same run and has nothing left to do.
 	again, err := r.Execute(context.Background())
@@ -204,14 +235,13 @@ func TestExecute_KilledRunResumesToTheSameResult(t *testing.T) {
 	}
 	// The call the kill interrupted may have been billed: it is kept, at its ceiling,
 	// and the pair it belonged to was asked again.
-	var kept []Result
+	if sum, n := spentOn(t, o2, "test/017", "mid"); n != 2 || sum != 0.004 {
+		t.Fatalf("test/017 on mid: $%v in %d spend rows, want the killed call and its retry", sum, n)
+	}
 	for _, row := range rowsOf(t, r, o2) {
 		if row.Retryable {
-			kept = append(kept, row)
+			t.Fatalf("a killed call left a result row: %+v", row)
 		}
-	}
-	if len(kept) != 1 || kept[0].ErrKind != "interrupted" || kept[0].ItemID != "test/017" || kept[0].CostUSD != 0.002 {
-		t.Fatalf("spend-only rows %+v, want the interrupted call at $0.002", kept)
 	}
 	if d := o2.Spent - (co.Spent + 0.002); d > 1e-12 || d < -1e-12 {
 		t.Fatalf("resumed run spent $%v, uninterrupted $%v plus the interrupted call", o2.Spent, co.Spent)
@@ -240,7 +270,7 @@ func TestExecute_KilledAfterABilledCallStaysUnderTheCap(t *testing.T) {
 		t.Fatalf("the cap should stop the run: %v", err)
 	}
 	var recorded float64
-	for _, row := range rowsOf(t, r, o) {
+	for _, row := range allRowsOf(t, o) {
 		recorded += row.CostUSD
 	}
 	billed := float64(exec.calls.Load()) * 0.002
@@ -295,10 +325,14 @@ func TestExecute_AGradeErrorKeepsTheBilledCall(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "grader broke") {
 		t.Fatalf("err = %v", err)
 	}
-	rows := rowsOf(t, r, o)
-	last := rows[len(rows)-1]
-	if last.ItemID != "test/002" || last.ErrKind != "grade" || !last.Retryable || last.CostUSD != 0.002 {
-		t.Fatalf("grade-error row %+v: want it kept for its spend", last)
+	// The grade failed after the call was billed: its spend row is there, no result is.
+	if sum, n := spentOn(t, o, "test/002", "frontier"); n != 1 || sum != 0.002 {
+		t.Fatalf("test/002: $%v in %d spend rows, want the billed call", sum, n)
+	}
+	for _, row := range rowsOf(t, r, o) {
+		if row.ItemID == "test/002" {
+			t.Fatalf("a result row for an ungraded answer: %+v", row)
+		}
 	}
 	r.Suite = fakeSuite{}
 	if o2, err := r.Execute(context.Background()); err != nil || o2.Written == 0 {
@@ -321,9 +355,9 @@ func TestExecute_APriceChangeResumesTheSameFrozenRun(t *testing.T) {
 	if err != nil || o2.RunID != o.RunID || o2.Written != 3 {
 		t.Fatalf("resume after a price change: %+v %v", o2, err)
 	}
-	for _, row := range rowsOf(t, r, o2) {
-		if row.CostUSD != 0.002 {
-			t.Fatalf("row priced at today's price, $%v", row.CostUSD)
+	for _, row := range allRowsOf(t, o2) {
+		if row.ErrKind == spendRow && row.CostUSD != 0.002 {
+			t.Fatalf("call priced at today's price, $%v", row.CostUSD)
 		}
 	}
 	var run Run
@@ -384,8 +418,11 @@ func TestExecute_ContractViolationsWriteTheRowAndAbort(t *testing.T) {
 			}
 			rows := rowsOf(t, r, o)
 			last := rows[len(rows)-1]
-			if last.ItemID != "test/004" || last.ErrKind != "contract" || !last.Retryable || last.CostUSD == 0 {
-				t.Fatalf("contract row %+v: want it written, retryable, with its spend", last)
+			if last.ItemID != "test/004" || last.ErrKind != "contract" || !last.Retryable {
+				t.Fatalf("contract row %+v: want it written and retryable", last)
+			}
+			if sum, _ := spentOn(t, o, "test/004", "frontier"); sum == 0 {
+				t.Fatal("the call that broke the contract was not recorded as spend")
 			}
 			// Fixed, the run resumes and retries the pair rather than counting it done.
 			exec.set("bench/openrouter/m-front", "q004", reply{answer: "yes"})
@@ -515,5 +552,79 @@ func TestExecute_AuthFailureStopsTheRunWithoutARow(t *testing.T) {
 	o, err := r.Execute(context.Background())
 	if err == nil || !strings.Contains(err.Error(), "refused the credentials") || o.Written != 0 || exec.calls.Load() != 1 {
 		t.Fatalf("403: %v after %d rows and %d calls; want one call, no row", err, o.Written, exec.calls.Load())
+	}
+}
+
+// A row whose attempt retried or fell back timed a backoff or a second model, not a
+// provider: its latency is marked invalid and kept out of the stats.
+func TestExecute_ARetriedAttemptHasNoValidLatency(t *testing.T) {
+	r := testRunner(t, 4, newFakeExec(), "static-fallback")
+	r.Run.Arms["static-fallback"] = ArmConfig{Kind: "direct", Models: testArmSpecs["static-fallback"], FaultRate: 1}
+	o, err := r.Execute(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, row := range rowsOf(t, r, o) {
+		if !row.LatencyInvalid || len(row.Calls) != 2 {
+			t.Fatalf("fell back but latency counted: %+v", row)
+		}
+	}
+	s, _ := Report(o.Dir, r.StateDir)
+	if lat := s.Arms["static-fallback"].LatencyMS; lat.Valid != 0 || lat.Skipped != 4 {
+		t.Fatalf("latency %+v, want every fallen-back row skipped", lat)
+	}
+}
+
+// A hard kill inside the retry loop, after a billed attempt and before anything else
+// runs, still leaves that attempt in items.jsonl, so the resumed budget covers it.
+func TestExecute_AHardKillMidRetryKeepsTheBilledAttempt(t *testing.T) {
+	exec := newFakeExec()
+	exec.set("bench/openrouter/m-front", "q001", reply{err: &executor.StatusError{Code: 500}})
+	r := testRunner(t, 3, exec, "frontier")
+	r.Sleep = func(context.Context, time.Duration) error {
+		runtime.Goexit() // the process dies: no error path, no further write
+		return nil
+	}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		r.Execute(context.Background())
+	}()
+	<-done
+	billed := exec.calls.Load()
+	var recorded float64
+	for _, row := range allRowsOf(t, Progress{RunID: r.Run.baseID(), Dir: filepath.Join(r.ResultsDir, r.Run.baseID())}) {
+		recorded += row.CostUSD
+	}
+	if billed == 0 || recorded < float64(billed)*0.002-1e-12 {
+		t.Fatalf("%d calls billed at $0.002, $%v recorded before the kill", billed, recorded)
+	}
+	r.Sleep = (&recordSleep{}).sleep
+	o, _ := r.Execute(context.Background())
+	if o.Spent < float64(exec.calls.Load())*0.002-1e-12 {
+		t.Fatalf("resumed budget $%v under $%v billed", o.Spent, float64(exec.calls.Load())*0.002)
+	}
+}
+
+// --rerun resumes the latest rerun while it is incomplete, and starts the next only
+// once it is done.
+func TestExecute_RerunResumesAnIncompleteRerun(t *testing.T) {
+	r := testRunner(t, 6, newFakeExec(), "frontier")
+	if _, err := r.Execute(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	r.Rerun, r.MaxUSD = true, 3*0.002+0.001
+	o, err := r.Execute(context.Background())
+	if !errors.Is(err, ErrBudget) || !strings.HasSuffix(o.RunID, "-r2") {
+		t.Fatalf("first rerun: %s %v", o.RunID, err)
+	}
+	r.MaxUSD = 1
+	o2, err := r.Execute(context.Background())
+	if err != nil || o2.RunID != o.RunID || o2.Written != 3 {
+		t.Fatalf("--rerun on an incomplete -r2 started %s (%v, %d rows)", o2.RunID, err, o2.Written)
+	}
+	o3, err := r.Execute(context.Background())
+	if err != nil || !strings.HasSuffix(o3.RunID, "-r3") || o3.Written != 6 {
+		t.Fatalf("--rerun after a complete -r2: %s %v", o3.RunID, err)
 	}
 }

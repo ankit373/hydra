@@ -16,10 +16,15 @@ hyctl bench table <run-id>                         # write bench/results/<run-id
   (item, arm) to `items.jsonl`. The run id hashes the config, the item ids and the data, but
   not prices or the cap. Prices are frozen into `run.json` on the first start, so a resumed
   run is priced exactly as it began.
-- `--max-usd` is checked before every call. Every billed call is recorded, including one
-  interrupted by a kill, so a resume cannot spend the cap twice. Exit 2 means the cap
-  stopped the run; exit 4 means the provider broke the contract mid-run.
-- A 429, 5xx or transport error is retried with backoff. If it still fails, the pair is
-  recorded as unscored, and the next `run` asks it again. A run with any pair still
-  unscored is reported as INCOMPLETE, with counts but no paired statistics.
+- `--max-usd` is checked before every call. Every call that may have been billed is
+  appended to `items.jsonl` as its own spend row the moment it returns, so even a hard
+  kill cannot make a resume spend the cap twice. Result rows list their calls but carry
+  no money. Exit 2 means the cap stopped the run; exit 4 means the provider broke the
+  contract mid-run.
+- A 429, 5xx or network error is retried with backoff. If it still fails, the pair is
+  recorded as unscored, and the next `run` asks it again. A local error (one that never
+  left the machine) fails the pair, costs nothing, and is not retried. A run with any
+  pair still unscored is reported as INCOMPLETE, with counts but no paired statistics.
+- `--rerun` resumes the latest `-r<k>` while it is incomplete, and starts the next one
+  only once it is done.
 - `smoke.toml` refuses to load until the Opus and Haiku Bedrock ids are pinned (Q4).

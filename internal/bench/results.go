@@ -17,6 +17,9 @@ const (
 	MaxLineBytes = 64 << 10
 )
 
+// spendRow is the ErrKind of a spend row: one billed call, Retryable, never a result.
+const spendRow = "spend"
+
 // Result is one line of items.jsonl: one (item, arm) pair, appended and fsynced.
 type Result struct {
 	Seq    int    `json:"seq"` // position in the deterministic schedule
@@ -28,7 +31,8 @@ type Result struct {
 	Score  float64 `json:"score"` // 1/0 for classification
 	Format bool    `json:"format_fail,omitempty"`
 	Detail string  `json:"detail,omitempty"`
-	// CostUSD is Σ Calls[].CostUSD, failed and errored calls included.
+	// CostUSD is money: only a spend row carries it, one per call that may have been
+	// billed, written as the call returns. A result row lists its calls and adds 0.
 	CostUSD float64   `json:"cost_usd"`
 	Started time.Time `json:"started"`
 	// LatencyInvalid marks a row whose call followed a gap over a minute: the machine slept.

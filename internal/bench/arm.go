@@ -6,7 +6,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"net"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -16,15 +19,16 @@ import (
 )
 
 // Arm answers one item. Call reserves each provider call's worst case on b before
-// making it. An error from Call stops the run, and the Attempt it returns alongside
-// still lists every call already made, so their spend is recorded; an item-level
-// failure is an Attempt with ErrKind set. WorstCaseUSD bounds one item, for --dry-run.
+// making it, and hands every call that may have been billed to spend the moment it
+// returns, before any retry, sleep or grade, so a hard kill loses no spend. An error
+// from Call stops the run; an item-level failure is an Attempt with ErrKind set.
+// WorstCaseUSD bounds one item, for --dry-run.
 type Arm interface {
 	Name() string
 	Config() ArmConfig
 	Preflight(ctx context.Context) error
 	WorstCaseUSD(req executor.Request) (float64, error)
-	Call(ctx context.Context, it Item, req executor.Request, b *Budget) (Attempt, error)
+	Call(ctx context.Context, it Item, req executor.Request, b *Budget, spend func(Call) error) (Attempt, error)
 }
 
 // retryBackoff is the wait before each retry of a transient failure on one model;
@@ -165,10 +169,10 @@ func (d *Direct) WorstCaseUSD(req executor.Request) (float64, error) {
 	return sum, nil
 }
 
-// Call retries a transient failure (transport, 429, 5xx) on the same model with
-// bounded backoff, then moves to the next model. A 4xx or a wrong answer never moves;
-// a 401 or 403 stops the run, since no item can succeed.
-func (d *Direct) Call(ctx context.Context, it Item, req executor.Request, b *Budget) (Attempt, error) {
+// Call retries a transient failure (network, 429, 5xx) on the same model with
+// bounded backoff, then moves to the next model. A 4xx, a local error or a wrong
+// answer never moves; a 401 or 403 stops the run, since no item can succeed.
+func (d *Direct) Call(ctx context.Context, it Item, req executor.Request, b *Budget, spend func(Call) error) (Attempt, error) {
 	att := Attempt{Decision: "accept"}
 	var err error
 	for i, h := range d.heads {
@@ -192,35 +196,27 @@ func (d *Direct) Call(ctx context.Context, it Item, req executor.Request, b *Bud
 			}
 			var resp *executor.Response
 			resp, err = d.exec(h).Execute(ctx, r)
-			if ctx.Err() != nil {
-				// Killed mid-call: the provider may have billed it, so it is recorded at its ceiling.
-				b.Settle(wc, wc)
-				att.Calls = append(att.Calls, Call{Head: h.ID, CostUSD: wc, PriceRef: "reserved"})
-				return att, ctx.Err()
-			}
-			if err == nil {
-				cost, cerr := d.prices.Cost(model, resp.InputTokens, resp.OutputTokens)
-				if cerr != nil {
-					b.Settle(wc, wc)
-					return att, cerr
+			c, perr := d.price(h, model, wc, resp, err, ctx.Err() != nil)
+			b.Settle(wc, c.CostUSD)
+			att.Calls = append(att.Calls, c)
+			if c.CostUSD > 0 {
+				if serr := spend(c); serr != nil {
+					return att, serr
 				}
-				b.Settle(wc, cost)
-				att.Calls = append(att.Calls, Call{Head: h.ID, Model: resp.Model, InputTokens: resp.InputTokens,
-					OutputTokens: resp.OutputTokens, TokensEstimated: resp.TokensEstimated, CostUSD: cost, PriceRef: d.prices[model].Ref})
+			}
+			switch {
+			case ctx.Err() != nil:
+				return att, ctx.Err()
+			case perr != nil:
+				return att, perr
+			case err == nil:
 				att.Answer, att.TTFT, att.ErrKind = resp.Output, resp.TTFT, ""
 				return att, nil
 			}
 			var se *executor.StatusError
 			if errors.As(err, &se) && (se.Code == http.StatusUnauthorized || se.Code == http.StatusForbidden) {
-				b.Settle(wc, 0)
 				return att, fmt.Errorf("bench: arm %s: %s refused the credentials: %w", d.name, h.ID, err)
 			}
-			billed, ref := wc, "reserved" // an errored call may have been billed: its ceiling
-			if errors.As(err, &se) && (se.Code == http.StatusTooManyRequests || se.Code == http.StatusServiceUnavailable) {
-				billed, ref = 0, "refused-unbilled" // turned away before any work
-			}
-			b.Settle(wc, billed)
-			att.Calls = append(att.Calls, Call{Head: h.ID, CostUSD: billed, PriceRef: ref})
 			if !transient(err) || try == len(retryBackoff) {
 				break
 			}
@@ -236,6 +232,33 @@ func (d *Direct) Call(ctx context.Context, it Item, req executor.Request, b *Bud
 	return att, nil
 }
 
+// price records one provider call. A call that may have been billed costs its ceiling
+// until the provider's own token counts price it; one turned away (429, 503, 401, 403)
+// or that never left the machine costs nothing. perr: answered, but unpriceable.
+func (d *Direct) price(h provider.Head, model string, wc float64, resp *executor.Response, err error, killed bool) (Call, error) {
+	var se *executor.StatusError
+	switch {
+	case killed:
+		return Call{Head: h.ID, CostUSD: wc, PriceRef: "reserved"}, nil
+	case err == nil:
+		c := Call{Head: h.ID, Model: resp.Model, InputTokens: resp.InputTokens, OutputTokens: resp.OutputTokens,
+			TokensEstimated: resp.TokensEstimated, PriceRef: d.prices[model].Ref}
+		cost, perr := d.prices.Cost(model, resp.InputTokens, resp.OutputTokens)
+		if perr != nil {
+			c.CostUSD, c.PriceRef = wc, "unpriced"
+			return c, perr
+		}
+		c.CostUSD = cost
+		return c, nil
+	case errors.As(err, &se) && slices.Contains([]int{http.StatusTooManyRequests, http.StatusServiceUnavailable,
+		http.StatusUnauthorized, http.StatusForbidden}, se.Code):
+		return Call{Head: h.ID, PriceRef: "refused-unbilled"}, nil
+	case se == nil && !network(err):
+		return Call{Head: h.ID, PriceRef: "local-error"}, nil
+	}
+	return Call{Head: h.ID, CostUSD: wc, PriceRef: "reserved"}, nil
+}
+
 // backoff is the fixed schedule, or the server's Retry-After when it named a longer
 // wait, never more than maxRetryAfter.
 func backoff(try int, err error) time.Duration {
@@ -249,18 +272,29 @@ func backoff(try int, err error) time.Duration {
 
 func errKind(err error) string {
 	var se *executor.StatusError
-	if errors.As(err, &se) {
+	switch {
+	case errors.As(err, &se):
 		return "status:" + strconv.Itoa(se.Code)
+	case network(err):
+		return "transport"
 	}
-	return "transport"
+	return "local"
 }
 
-// transient is a failure that says nothing about the item: a transport error, a 429
-// or a 5xx. Its row is unscored and the pair is asked again on resume.
+// network is a failure on the wire: a net.Error (timeouts, refused or reset
+// connections, DNS) or a connection cut mid-body.
+func network(err error) bool {
+	var ne net.Error
+	return errors.As(err, &ne) || errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, context.DeadlineExceeded)
+}
+
+// transient is a failure that says nothing about the item: a network error, a 429 or
+// a 5xx. Its row is unscored and the pair is asked again on resume. A local error, a
+// request that never left the machine, is not: it fails the row and is not retried.
 func transient(err error) bool {
 	var se *executor.StatusError
 	if errors.As(err, &se) {
 		return se.Code == http.StatusTooManyRequests || se.Code >= 500
 	}
-	return err != nil
+	return network(err)
 }

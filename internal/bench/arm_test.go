@@ -5,6 +5,7 @@ package bench
 import (
 	"context"
 	"errors"
+	"io"
 	"reflect"
 	"strings"
 	"testing"
@@ -38,7 +39,7 @@ func callOne(t *testing.T, d *Direct, id string) Attempt {
 	it := fakeItems(1)["test/000"]
 	it.ID = id
 	req, _ := fakeSuite{}.Prompt(it)
-	att, err := d.Call(context.Background(), it, req, NewBudget(100, 0))
+	att, err := d.Call(context.Background(), it, req, NewBudget(100, 0), noSpend)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,7 +56,7 @@ func TestStaticFallback_MovesOnlyOnTransport429And5xx(t *testing.T) {
 	}{
 		"503":       {&executor.StatusError{Code: 503}, true, ""},
 		"429":       {&executor.StatusError{Code: 429}, true, ""},
-		"transport": {errors.New("connection reset"), true, ""},
+		"transport": {netErr, true, ""},
 		"400":       {&executor.StatusError{Code: 400}, false, "status:400"},
 	} {
 		exec := newFakeExec()
@@ -123,7 +124,7 @@ func TestDirect_RetriesTransientFailuresAndPricesThemHonestly(t *testing.T) {
 
 	// A retry that succeeds is an answer, and only the errored attempts before it cost extra.
 	exec = newFakeExec()
-	exec.set("bench/openrouter/m-front", "q000", reply{err: errors.New("timeout")})
+	exec.set("bench/openrouter/m-front", "q000", reply{err: netErr})
 	d, _ = fallbackArm(t, exec, nil)
 	flaky := &flakyExec{inner: exec, fails: 1}
 	d.exec = flaky.For
@@ -138,7 +139,7 @@ func TestDirect_RetriesTransientFailuresAndPricesThemHonestly(t *testing.T) {
 	d, _ = fallbackArm(t, exec, nil)
 	it := fakeItems(1)["test/000"]
 	req, _ := fakeSuite{}.Prompt(it)
-	att, err := d.Call(context.Background(), it, req, NewBudget(2.5*0.002, 0))
+	att, err := d.Call(context.Background(), it, req, NewBudget(2.5*0.002, 0), noSpend)
 	if !errors.Is(err, ErrBudget) || len(att.Calls) != 2 || exec.calls.Load() != 2 {
 		t.Fatalf("budget for two calls allowed %d (err %v)", exec.calls.Load(), err)
 	}
@@ -155,7 +156,7 @@ func (f *flakyExec) For(h provider.Head) executor.Executor { return f }
 func (f *flakyExec) Execute(ctx context.Context, req executor.Request) (*executor.Response, error) {
 	if f.fails > 0 {
 		f.fails--
-		return nil, errors.New("timeout")
+		return nil, netErr
 	}
 	f.inner.set("bench/openrouter/m-front", "q000", reply{answer: "yes"})
 	return f.inner.Execute(ctx, req)
@@ -237,5 +238,50 @@ func TestParseModel(t *testing.T) {
 	h, m, _ := headFor("bedrock:amazon.nova-micro-v1:0")
 	if h.Provider != "bedrock" || h.Source != "env" || h.Meta["model"] != m || m != "amazon.nova-micro-v1:0" {
 		t.Fatalf("head %+v", h)
+	}
+}
+
+// An answer the snapshot cannot price still cost money: it is recorded at its
+// ceiling, marked unpriced, and handed to spend before the run stops.
+func TestDirect_AnUnpricedAnswerIsRecordedAtItsCeiling(t *testing.T) {
+	exec := newFakeExec()
+	d, _ := fallbackArm(t, exec, nil)
+	exec.before = func(string, string) { delete(d.prices, "m-front") } // lost while the call ran
+	it := fakeItems(1)["test/000"]
+	req, _ := fakeSuite{}.Prompt(it)
+	var spent []Call
+	att, err := d.Call(context.Background(), it, req, NewBudget(1, 0), func(c Call) error { spent = append(spent, c); return nil })
+	if err == nil || len(att.Calls) != 1 || att.Calls[0].PriceRef != "unpriced" || att.Calls[0].CostUSD == 0 {
+		t.Fatalf("err=%v calls=%+v", err, att.Calls)
+	}
+	if len(spent) != 1 || spent[0] != att.Calls[0] {
+		t.Fatalf("spend saw %+v", spent)
+	}
+}
+
+// A local error never left the machine: no retry, no fallback, no cost, and a
+// permanent failure rather than an unscored one.
+func TestDirect_ALocalErrorFailsTheRowWithoutRetry(t *testing.T) {
+	exec := newFakeExec()
+	exec.set("bench/openrouter/m-front", "*", reply{err: errors.New("http exec: marshal request: unsupported value")})
+	d, rs := fallbackArm(t, exec, nil)
+	att := callOne(t, d, "test/000")
+	if att.ErrKind != "local" || att.transient || len(att.Calls) != 1 || att.Calls[0].CostUSD != 0 || len(rs.waits) != 0 {
+		t.Fatalf("local error: %+v, waited %v", att, rs.waits)
+	}
+	if exec.count("bench/openrouter/m-mid") != 0 {
+		t.Fatal("a local error fell back to the next model")
+	}
+	for err, want := range map[error]bool{
+		netErr:                           true,
+		io.ErrUnexpectedEOF:              true,
+		context.DeadlineExceeded:         true,
+		errors.New("bad config"):         false,
+		&executor.StatusError{Code: 502}: true,
+		&executor.StatusError{Code: 404}: false,
+	} {
+		if transient(err) != want {
+			t.Errorf("transient(%v) = %v, want %v", err, !want, want)
+		}
 	}
 }

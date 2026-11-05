@@ -66,11 +66,9 @@ func (r *Runner) Execute(ctx context.Context) (Progress, error) {
 	base := r.Run.baseID()
 	id := base
 	if r.Rerun {
-		for k := 2; ; k++ {
-			id = base + "-r" + strconv.Itoa(k)
-			if _, err := os.Stat(filepath.Join(r.ResultsDir, id)); os.IsNotExist(err) {
-				break
-			}
+		var err error
+		if id, err = r.rerunID(base); err != nil {
+			return Progress{}, err
 		}
 	}
 	out := Progress{RunID: id, Dir: filepath.Join(r.ResultsDir, id)}
@@ -140,7 +138,7 @@ func (r *Runner) Execute(ctx context.Context) (Progress, error) {
 		if done[pairKey{p.Item.ID, p.Arm}] {
 			continue
 		}
-		row, err := r.one(ctx, arms[p.Arm], p, budget, models, last)
+		row, err := r.one(ctx, arms[p.Arm], p, budget, models, last, w)
 		out.Spent = budget.Spent()
 		if row == nil {
 			return out, err
@@ -156,6 +154,48 @@ func (r *Runner) Execute(ctx context.Context) (Progress, error) {
 	}
 	out.Spent = budget.Spent()
 	return out, nil
+}
+
+// rerunID is the latest -r<k> while it is incomplete, so --rerun resumes it like any
+// run; once it is complete, the next k.
+func (r *Runner) rerunID(base string) (string, error) {
+	k := 2
+	for {
+		if _, err := os.Stat(filepath.Join(r.ResultsDir, base+"-r"+strconv.Itoa(k+1))); err != nil {
+			break
+		}
+		k++
+	}
+	id := base + "-r" + strconv.Itoa(k)
+	dir := filepath.Join(r.ResultsDir, id)
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		return id, nil
+	}
+	done, err := complete(dir)
+	if err != nil || !done {
+		return id, err
+	}
+	return base + "-r" + strconv.Itoa(k+1), nil
+}
+
+// complete reports whether every scheduled (item, arm) pair of the run in dir has a
+// scored row.
+func complete(dir string) (bool, error) {
+	var run Run
+	if err := readJSON(filepath.Join(dir, "run.json"), &run); err != nil {
+		return false, nil // never got as far as run.json: resume it
+	}
+	rows, _, err := parseResults(filepath.Join(dir, "items.jsonl"), run.ID)
+	if err != nil {
+		return false, err
+	}
+	scored := map[pairKey]bool{}
+	for _, row := range rows {
+		if !row.Retryable {
+			scored[pairKey{row.ItemID, row.Arm}] = true
+		}
+	}
+	return len(scored) == len(run.ItemIDs)*len(run.ArmOrder), nil
 }
 
 // openRun writes run.json before the first call, or reads it back on resume and
@@ -179,29 +219,29 @@ func (r *Runner) openRun(id, base, path string) (*Run, error) {
 	return &run, writeJSON(path, &run)
 }
 
-// one makes a single (item, arm) call and returns its row. A row with an error is
-// written, then stops the run; a nil row means no call was made, so nothing was spent.
-// Every row that is not a scored result is Retryable: kept for its spend, asked again.
-func (r *Runner) one(ctx context.Context, arm Arm, p pair, budget *Budget, models map[string]string, last time.Time) (*Result, error) {
+// one makes a single (item, arm) call and returns its result row. Every call that may
+// have been billed is already in items.jsonl as its own spend row by then, so the
+// result row adds no money, and a nil row with an error has lost none.
+func (r *Runner) one(ctx context.Context, arm Arm, p pair, budget *Budget, models map[string]string,
+	last time.Time, w *resultsWriter) (*Result, error) {
 	req, err := r.Suite.Prompt(p.Item)
 	if err != nil {
 		return nil, err
 	}
 	started := r.Now()
-	att, err := arm.Call(ctx, p.Item, req, budget)
+	spend := func(c Call) error {
+		return w.write(&Result{Seq: p.Seq, ItemID: p.Item.ID, Split: p.Item.Split.String(), Arm: p.Arm,
+			Attempt: Attempt{Calls: []Call{c}, ErrKind: spendRow}, CostUSD: c.CostUSD, Started: started, Retryable: true})
+	}
+	att, err := arm.Call(ctx, p.Item, req, budget, spend)
+	if err != nil {
+		return nil, err
+	}
 	att.Latency = r.Now().Sub(started)
 	row := &Result{Seq: p.Seq, ItemID: p.Item.ID, Split: p.Item.Split.String(), Arm: p.Arm, Attempt: att, Started: started}
-	for _, c := range att.Calls {
-		row.CostUSD += c.CostUSD
-	}
-	row.LatencyInvalid = !last.IsZero() && started.Sub(last) > sleepGap
-	switch {
-	case err != nil && len(att.Calls) == 0:
-		return nil, err
-	case err != nil: // interrupted, out of budget, or refused after calls were billed
-		row.ErrKind, row.Retryable, row.Detail = "interrupted", true, err.Error()
-		return row, err
-	}
+	// Latency is the whole attempt; one that retried or fell back also timed a backoff
+	// or a second model, so it is not a provider latency and is kept out of the stats.
+	row.LatencyInvalid = (!last.IsZero() && started.Sub(last) > sleepGap) || len(att.Calls) > 1
 	if what := contract(p.Arm, att, req.MaxTokens, models); what != "" {
 		row.ErrKind, row.Retryable, row.Detail = "contract", true, what
 		return row, &ContractError{Arm: p.Arm, Item: p.Item.ID, What: what}
@@ -213,8 +253,7 @@ func (r *Runner) one(ctx context.Context, arm Arm, p pair, budget *Budget, model
 	}
 	g, err := r.Suite.Grade(ctx, p.Item, att.Answer)
 	if err != nil {
-		row.ErrKind, row.Retryable, row.Detail = "grade", true, err.Error()
-		return row, err
+		return nil, err
 	}
 	row.Passed, row.Format, row.Detail = g.Passed, g.Format, g.Detail
 	if g.Passed {

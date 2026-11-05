@@ -5,7 +5,9 @@ package bench
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -50,6 +52,12 @@ func fakeItems(n int) map[string]Item {
 	}
 	return out
 }
+
+// netErr is a failure on the wire, the kind a retry can cure.
+var netErr error = &net.OpError{Op: "read", Net: "tcp", Err: errors.New("connection reset by peer")}
+
+// noSpend drops spend records, for calling an arm outside a runner.
+func noSpend(Call) error { return nil }
 
 // reply is one scripted answer; a nil err with an empty answer is a real empty answer.
 type reply struct {
