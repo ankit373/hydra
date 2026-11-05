@@ -45,7 +45,13 @@ bench/                     committed: datasets.lock, DATASETS.md, splits/, confi
   `ope.bootstrapInterval` and `entity.wilson` rather than write second copies. Their
   production callers (`internal/ope`, `internal/entity`) would otherwise import a
   package under `bench`, and `bench` imports `net`. A neutral leaf package keeps the
-  dependency direction clean. It imports only `math`, `math/rand/v2` and `sort`.
+  dependency direction clean. It imports only the standard library: `errors`, `fmt`,
+  `math`, `math/rand/v2` and `sort`.
+- **What #1327 lifted.** `ope`'s bootstrap and weighted mean, `entity`'s Wilson,
+  `budget`'s `normCDF` (now `stats.NormalCDF`) and `trust`'s `binomialCDF` (now
+  `stats.BinomialCDF`) all call `stats`, so each has one implementation. `ope` and
+  `trust` give bit-identical results to before (checked with `Float64bits` over 5,000 and
+  40,000 random inputs, on arm64 and amd64).
 - **Why arms are not a sub-package.** There are three arm kinds (direct, served,
   computed), and all of them need `Item`, `Attempt` and the price snapshot. A sub-package
   would export those types just to cross a boundary.
@@ -209,7 +215,13 @@ executor.Executor`, so its tests need no provider.
 ### 1.4 Statistics (`internal/stats`)
 
 Everything here is deterministic given its inputs and seed. Paired inputs are aligned by
-item id before they reach this package.
+item id before they reach this package. *This is the API shipped in #1327; "As shipped"
+at the end lists what changed from the first draft.*
+
+**Invalid input is refused, never answered.** Every public entry point that can be given
+an impossible input returns an error: impossible counts (including `B + C` overflowing an
+`int`, which is why the check is `C ≤ N − B`), a non-finite or non-positive z, p outside
+[0, 1], α outside its range, or mismatched slice lengths. None panics or returns NaN.
 
 ```go
 package stats
@@ -220,7 +232,9 @@ type Discordant struct {
 	B int // A passed, R failed
 	C int // A failed, R passed
 }
-func (d Discordant) Delta() float64 // (B − C) / N
+
+// Delta is the paired difference in pass rates (B − C)/N. Impossible counts, or N = 0, are an error.
+func (d Discordant) Delta() (float64, error)
 
 // PairedDiscordant aligns two pass vectors. It is an error if their lengths differ.
 func PairedDiscordant(a, r []bool) (Discordant, []float64, error) // d_i ∈ {−1,0,1}
@@ -231,55 +245,80 @@ type Bootstrap struct {
 	Values  []float64
 	Dropped int
 }
-func (b Bootstrap) Quantile(q float64) float64 // nearest rank, as ope.percentile does today
 
-// Resample draws n indices with replacement, `resamples` times, from
-// rand.NewPCG(seed, 0x9E3779B97F4A7C15), the stream ope uses today. It returns
-// the sorted values of stat. ok=false drops that resample.
-func Resample(n, resamples int, seed uint64, stat func(idx []int) (v float64, ok bool)) Bootstrap
+// Quantile reads Values[⌊q·(len−1)⌋], clamped to the slice: nearest rank rounded down,
+// as ope's percentile did. An empty sample reads 0.
+func (b Bootstrap) Quantile(q float64) float64
 
-// WeightedMean is ope's existing estimator, rewritten over Resample.
-// ope.bootstrapInterval becomes WeightedMean(...).Quantile(tail), Quantile(1−tail).
-func WeightedMean(values, weights []float64) func(idx []int) (float64, bool)
+// Stat is a statistic over resampled item indices. It carries the length of the data
+// it was built on, so Resample cannot draw an index the data does not have. Only this
+// package's constructors build one; a zero Stat is refused by Resample.
+type Stat struct { /* n int; eval func(idx []int) (float64, bool) */ }
+
+// Resample draws stat's n indices with replacement, `resamples` times, from
+// rand.NewPCG(seed, 0x9E3779B97F4A7C15), the stream ope used. It returns the sorted
+// values; an undefined resample is dropped and counted. resamples < 1 is an error.
+func Resample(stat Stat, resamples int, seed uint64) (Bootstrap, error)
+
+// WeightedMean is ope's estimator Σwv/Σw as a Stat, undefined in a resample where Σw = 0.
+// ope.bootstrapInterval is now Resample(WeightedMean(...)) read at Quantile(tail), Quantile(1−tail).
+func WeightedMean(values, weights []float64) (Stat, error)
+
+// WeightedMeanAll is WeightedMean over every item; Σw = 0 is an error. ope.Evaluate's point estimate.
+func WeightedMeanAll(values, weights []float64) (float64, error)
 
 // PairedMeanDiff is the H1 statistic: the mean of d over the resampled items.
-func PairedMeanDiff(d []float64) func(idx []int) (float64, bool)
+func PairedMeanDiff(d []float64) Stat
 
 // CostPerAcceptedDiff is the H3 statistic: Σcost_A/Σacc_A − Σcost_R/Σacc_R over the
-// same resampled items. ok=false when either arm has no accepted answer in the resample.
-func CostPerAcceptedDiff(costA, costR []float64, accA, accR []bool) func(idx []int) (float64, bool)
+// same resampled items. A resample in which either arm accepted nothing is undefined.
+func CostPerAcceptedDiff(costA, costR []float64, accA, accR []bool) (Stat, error)
 
 // TangoNI is Tango's (1998) score test for paired proportions. H0: Δ ≤ −margin.
-// It returns the score z and the one-sided p = 1 − Φ(z). It is an error if N = 0,
-// margin ∉ [0,1), or the restricted MLE is undefined.
+// It returns the score z and the one-sided p = 1 − Φ(z). It is an error if the counts are
+// impossible, N = 0, margin ∉ [0,1), or the restricted MLE is degenerate. All-concordant
+// data (B = C = 0) at margin 0 give z = 0, p = ½: the data sit on H0, no evidence either way.
 func TangoNI(d Discordant, margin float64) (z, p float64, err error)
 
 // TangoLowerBound inverts TangoNI. It returns the smallest −margin that the test
-// does not reject at alpha, found by bisection to 1e-12 on (−1, Delta()].
+// does not reject at alpha ∈ (0, ½), found by bisection to 1e-12 on (−1, Delta()].
 func TangoLowerBound(d Discordant, alpha float64) (float64, error)
 
 // McNemarExact is the conditional binomial test on B of B+C at p = ½.
-// OneSided is P(X ≥ B), the "A beats R" direction. TwoSided = min(1, 2·min tail).
-func McNemarExact(d Discordant) (oneSided, twoSided float64)
+// oneSided is P(X ≥ B), the "A beats R" direction; twoSided = min(1, 2·min tail).
+// It reads only B and C, so N is not required. B or C < 0, or B + C overflowing, is an
+// error. No discordant pair gives 1, 1.
+func McNemarExact(d Discordant) (oneSided, twoSided float64, err error)
 
-// ClopperPearsonUpper is the exact one-sided upper bound on a binomial rate. k == n gives 1.
+// BinomialCDF is P(X ≤ k) for X ~ Binomial(n, p), summed in log space. n < 0 or p ∉ [0,1]
+// is an error; the edges (k < 0, k ≥ n, p = 0, p = 1) are answered exactly. trust's
+// accept-threshold search and McNemarExact both call it.
+func BinomialCDF(k, n int, p float64) (float64, error)
+
+// ClopperPearsonUpper is the exact one-sided upper bound on a binomial rate, bisected on
+// (0, 1) to adjacent floats, valid for any α ∈ (0, 1) including α ≥ ½. k == n gives 1.
 func ClopperPearsonUpper(k, n int, alpha float64) (float64, error)
-func ClopperPearsonLower(k, n int, alpha float64) (float64, error)
 
-// Wilson is lifted from internal/entity (wilson, measure.go:96). entity then calls
-// Wilson(k, n, 1.959964).
-func Wilson(k, n int, z float64) (lo, hi float64)
+// Wilson is the score interval, lifted from internal/entity (wilson, measure.go:96).
+// It is an error unless 0 ≤ k ≤ n and z is finite and > 0; n = 0 is the whole range [0, 1].
+// entity calls Wilson(k, n, 1.959964) and reads an error as no evidence, [0, 1].
+func Wilson(k, n int, z float64) (lo, hi float64, err error)
 
 // Trials is one task's repeated attempts, for pass^k (checkpoint B, τ²-bench).
 type Trials struct{ N, C int }
 
 // PassHatK is τ-bench's pass^k = mean over tasks of C(c,k)/C(n,k). It is an
-// error if any task has N < k. The ratio is computed as a product, so it never overflows.
+// error if there are no tasks, k < 1, a task has C ∉ [0, N], or N < k. The ratio is
+// computed as a product of (c−i)/(n−i), so it never overflows.
 func PassHatK(tasks []Trials, k int) (float64, error)
 
-func NormalCDF(x float64) float64      // 0.5·(1+erf(x/√2))
+func NormalCDF(x float64) float64      // 0.5·erfc(−x/√2), so a far tail keeps its precision
 func NormalQuantile(p float64) float64 // √2·math.Erfinv(2p−1)
 ```
+
+There is **no `ClopperPearsonLower`**. Nothing in A needs a lower Clopper–Pearson bound
+(H2 uses the upper bound on the error rate), so it was not added; CLAUDE.md's
+"exported symbols must be used" rule applies.
 
 **Tango's statistic, as implemented.** First is the arm and second is the reference.
 Write n₁₂ = B, n₂₁ = C and θ₀ = −margin. Then:
@@ -290,6 +329,24 @@ Write n₁₂ = B, n₂₁ = C and θ₀ = −margin. Then:
 - z = (B − C − Nθ₀) / √(N·(2p̃₂₁ + θ₀ − θ₀²))
 
 At θ₀ = 0 this reduces exactly to McNemar's z = (B − C)/√(B + C). That identity is a test.
+
+**What the shipped code does beyond the textbook form (#1327):**
+
+- **Data on H0.** When the numerator B − C − Nθ₀ is exactly 0, z = 0 is returned
+  directly. At B = C = 0, θ₀ = 0 the variance is 0 too, and that 0/0 is no evidence either
+  way, so TangoNI returns z = 0, p = ½ rather than an error.
+- **FMA-safe discriminant.** B̃² − 4AC̃ is computed as s² + 4·B·C·(1 − θ₀²), with
+  s = (C − B) + (2N − B − C)·θ₀: a square plus a non-negative term. The subtraction form
+  cancelled to about 0 on real rows, could round below 0 (a NaN before the rewrite), and
+  fused multiply-add on arm64 but not amd64 moved z in the eighth digit. Each product is
+  wrapped in an explicit `float64(…)` conversion, which Go's spec says forbids fusing, so
+  arm64 and amd64 give the same bits.
+- **Stable root.** p̃₂₁ takes the quadratic root that avoids subtracting two near-equal
+  numbers, chosen by the sign of B̃: (−B̃ + √disc)/2A when B̃ ≤ 0, else 2C̃/(−B̃ − √disc).
+- **Degenerate variance** (v ≤ 0 anywhere else) is an error naming B, C and θ₀.
+- **The search range.** `tangoZ` is evaluated over the whole of (−1, 1), so
+  `TangoLowerBound` can cross zero when the arm is ahead. z is 0 at `Delta()`, so the upper
+  end never rejects.
 
 **Cost accounting (`internal/bench`, `cost.go`):**
 
@@ -433,10 +490,11 @@ is still **not** committed: the scope says so, and the lockfile is enough to rep
   `sha256("split\x00" ‖ suite ‖ "\x00" ‖ canon(text))`, **not** from the id. Two copies of
   the same utterance therefore always land in the same split, so a calibration copy cannot
   leak an answer into the test split. `canon` is `oracle.NormaliseLabel` (E1 §1.4,
-  PR 0): the same function the grader and the served verifier use (§3.1). It folds
-  more than exact text does (case, quotes, a trailing `.`, runs of space or `-`), so the
-  duplicate counts below were found on exact text and PR 2 recomputes them under
-  `NormaliseLabel`; the committed TSV is authoritative.
+  PR 0, #1328): the same function the grader and the served verifier use (§3.1). It folds
+  more than exact text does (case, edge quotes and backticks, trailing dots, a matched `*`
+  pair, Cf runes, Unicode dashes to `-`, and runs of whitespace or `_` to one `_`; never
+  `-`), so the duplicate counts below were found on exact text and PR 2 recomputes them
+  under `NormaliseLabel`; the committed TSV is authoritative.
 - **Bucket.** Let `bucket` be the first 8 bytes of the split hash, mod 1000.
   `bucket < 300` gives calibration and the rest gives test, a 30/70 split (scope §2.1).
   Upstream train/val/test is ignored, because no arm trains (scope §1.3).
@@ -490,9 +548,22 @@ is still **not** committed: the scope says so, and the lockfile is enough to rep
   - **Format** = the suite's own `oracle.NewMatch("<suite>", Labels(), "")` fails the
     answer, which is exactly the verdict the served `verifier:match:<suite>` reaches.
   - Correctness and the serve-side "is this a valid label" check therefore share one
-    normaliser. `NormaliseLabel` lowercases, trims space, quotes, backticks and a trailing
-    `.`, and folds runs of space or `-` to `_` (E1 §1.4). Nothing else is lenient, and
-    E7 does not define its own.
+    normaliser, `NormaliseLabel` as shipped in #1328 (E1 §1.4 has the full contract). It
+    lowercases; drops Unicode format (Cf) runes; maps Unicode dashes (U+2010–U+2015,
+    U+2212) to `-`; strips, to a fixed point, edge whitespace, quotes, curly quotes,
+    backticks, `_`, the `•` bullet (the only bullet), trailing dots and a **matched** pair
+    of `*`; and folds interior runs of whitespace or `_` to one `_`. **`-` is always
+    significant**: it is never folded to `_` or stripped as a bullet, so `card-arrival`
+    and `Card-Arrival.` normalise to `card-arrival`, not `card_arrival`, and fail as
+    `format`. A lone `*` is significant too. Nothing else is lenient, and E7 does not
+    define its own.
+  - Gold and answer go through the same function, so a significant `-` costs a correct
+    answer nothing: a label spelled with `_` matches only an answer spelled with `_` (or
+    spaces), and a model that hyphenates a snake_case label is graded `format`, which is
+    the honest reading of an answer outside the label set.
+  - `NewMatch` refuses a label set in which two labels normalise to the same key, or a
+    label normalises to empty. The suite builds its full-label-set `MatchOracle` once at
+    load, so a collision is a load error naming both labels, never a silent merge.
   - An answer that is not in the label set is a `format` fail. It is counted separately
     in `summary.json` (`format_fail_rate`), so verbosity cannot hide as wrongness.
   - An empty answer fails (the INTEGRITY rule; it is a test).
@@ -585,7 +656,7 @@ type Served struct {
    - No `registry/` override, so the embedded registry is used and `config.Breadcrumb()`
      names it.
    - No `logs/state.json`, so `claude_pct` reads 0 and the emergency `LocalOnly` of
-     `claudeMode` (`quotaMode` after #1207; E1 scope C12) cannot fire.
+     `claudeMode` (`quotaMode` after #1207, shipped in #1330; E1 scope C12) cannot fire.
    - The answer cache stays off explicitly. E1 sets `NoCache` only on requests that carry
      a verifier cascade (E1 §1.4), so `cache_answers = false` is what covers the rest.
      One cached answer served for another item would be one arm answering with another
@@ -599,9 +670,19 @@ type Served struct {
    closing. It then runs `os.Executable() serve --addr 127.0.0.1:<port>`, and retries with
    a new port up to three times if the bind loses the race. Serve's banner is never
    parsed.
-   - The flags: `--task-class <class>`, `--heads <ids>` (#1325), `--confidence <target>`
-     and `--max-escalations <k>` from this arm's config (fixed before any run, §6.2), and
-     `--enum` left unset, so objective routing applies.
+   - The flags: `--task-class <class>`, `--heads <ids>` (#1325, shipped in #1329),
+     `--confidence <target>` and `--max-escalations <k>` from this arm's config (fixed
+     before any run, §6.2), and `--enum` left unset, so objective routing applies. The
+     home's `config.toml` writes no `[serve] heads`; the flag is the one spelling the
+     harness uses, and it would override the config list anyway.
+   - **What `--heads` does, as shipped (E1 §1.6).** The router chooses, falls back to and
+     advertises only the listed heads; a cache hit from an unlisted head is a miss; a
+     pinned unlisted head is refused. Embedding lookups still see the full discovery,
+     which costs nothing here because the cache and capture are off. `/v1/decisions` has
+     no sources once any list is set, which the harness does not use. An unknown,
+     duplicate or unroutable id, or a list with no routable head, makes serve exit
+     before binding with `head allowlist: <reason>`; the harness reports that as the arm
+     refused for E1-D5, naming the reason, and makes no call.
    - The environment: `HYDRA_HOME=home`, `HYDRA_NO_UPDATE_CHECK=1`, and
      `BEDROCK_MODEL_ID=<the configured Bedrock router model>`. The parent's `PATH` and its
      provider keys pass through; keys are never logged.
@@ -686,7 +767,7 @@ type MissingDependency struct {
 | E1-D2 | task class reaches routing | #1208 | `hyctl serve --help` lists `--task-class` | `X-Hydra-Task-Class` equals the class, and its basis is `header` |
 | E1-D3 | evidence headers | #1210 | none for free | `-Sources`, `-Decision`, `-P-Correct`, `-Cost-USD`, `-Escalations` and `-P-Pass-Basis` are all present |
 | E1-D4 | `temperature` and `X-Hydra-Max-Cost-USD` passthrough | #1208 (E1 PR 2, with D2) | the D2 probe: both land in the same PR, so `--task-class` in `--help` implies them | none on the wire (E1 adds no temperature echo); E1's G7 is the proof, and the breadcrumb records the value sent |
-| E1-D5 | head allowlist, so CLI agents are excluded | #1325 (`hyctl serve --heads`, E1 §1.6) | `hyctl serve --help` lists `--heads`; then `GET /v1/models` lists only `heads` plus routing ids | `X-Hydra-Sources` ⊆ `heads` ∪ {`verifier:match:<suite>`} on every item; otherwise exit 4 |
+| E1-D5 | head allowlist, so CLI agents are excluded | #1325 (`hyctl serve --heads`, E1 §1.6; shipped in #1329) | `hyctl serve --help` lists `--heads`; serve starts (it exits before binding on a bad id); then `GET /v1/models` lists only `heads` plus routing ids | `X-Hydra-Sources` ⊆ `heads` ∪ {`verifier:match:<suite>`} on every item; otherwise exit 4 |
 | E1-D6 | `match` verifier in the route config, and per-arm cascade flags | #1209 | `hyctl serve --help` lists `--max-escalations` (the verifier itself is a `[[serve.verifiers]]` config entry, which `--help` cannot show) | the sources include `verifier:match:<suite>` |
 
 - **Refuse or skip.** A missing dependency **refuses** the arm (exit 3, named in the
@@ -1135,40 +1216,54 @@ type SmokeMeasurements struct {
 
 ### 7.1 Statistics golden tests (`internal/stats`)
 
-- **Where the numbers come from.** There is no scipy on this machine. The values below
-  were computed in exact rational arithmetic (`fractions`, `math.comb`) or by closed form.
-  The generating script is committed as `internal/stats/testdata/gold.py` and is run
-  **by hand**, never in CI.
-- **scipy cross-check.** PR 1 re-confirms each value with `scipy.stats.binomtest`,
-  `scipy.stats.beta.ppf` and `statsmodels`' `mcnemar(exact=True)` in a throwaway venv, and
-  pastes the output into the PR body.
-- **Tolerance.** 1e-12 for exact values, 1e-9 for iterative ones.
+*As shipped in #1327* (tests in `internal/stats/{binomial,bootstrap,paired}_test.go`).
+
+- **Where the numbers come from.** The generating script is committed as
+  `internal/stats/testdata/gold.py` (scipy 1.18.1, statsmodels 0.15.0, mpmath 1.4.1) and is
+  run **by hand**, never in CI. McNemar is exact `Fraction` sums, matching
+  `scipy.stats.binomtest` and statsmodels' `mcnemar(exact=True)`; Clopper–Pearson is
+  `beta.ppf`, including α ≥ ½; the normal quantiles are mpmath at 40 digits; the Tango
+  design cases were checked against a `brentq` restricted-MLE solve.
+- **Tolerance.** 1e-12 for exact values, 1e-9 for iterative ones; published values are
+  compared at the precision they were printed to.
 
 | Function | Case | Expected | Source |
 |---|---|---|---|
 | `McNemarExact` | B = 10, C = 2 | one-sided 79/4096 = **0.019287109375**; two-sided **0.03857421875** | exact binomial; = `binomtest(2, 12, 0.5)` |
-| `McNemarExact` | B = 6, C = 8 | two-sided **0.79052734375** | exact |
+| `McNemarExact` | B = 6, C = 8 | one-sided **0.78802490234375**; two-sided **0.79052734375** | exact |
+| `McNemarExact` | B = 600, C = 500 | two-sided **0.0028195449914364293** | log-space sum; 2^1100 overflows a float64 |
 | `McNemarExact` | B = C = 0 | 1, 1 | definition |
+| `McNemarExact` | B = 9, C = 3, **N unset** (`TestMcNemarExact_NeedsNoN`) | one-sided 299/4096; two-sided **0.14599609375** | it reads only B and C |
 | `TangoNI` | B = 6, C = 8, N = 200, δ = 0.02 | z = **0.5264247260767538**, p = **0.29929656985372144** | closed form (§1.4) |
 | `TangoNI` | B = 40, C = 45, N = 1500, δ = 0.02 | z = **2.6057938891628436**, p = **0.004583080034926135** | closed form |
 | `TangoNI` | B = 10, C = 2, N = 100, δ = 0.02 | z = **2.7454601989185186**, p = **0.0030213048301711565** | closed form |
-| `TangoNI` | B = 10, C = 2, N = 100, δ = 0 | z = (B−C)/√(B+C) = **2.3094010767585034** | identity with McNemar's z |
-| `TangoNI` | Tango (1998), *Stat Med* 17:891, worked example | the paper's printed z and CI | **to transcribe in PR 1** (the paper was not reachable from here); if it cannot be obtained, the test cites Liu et al. (2002) instead |
-| `TangoLowerBound` | each case above | `TangoNI(d, −LB)` has p = α to 1e-9, and the bound is monotone in α | inversion property |
+| `TangoNI` | B = C = 0, N = 100, δ = 0.02 | z = 2/1.4, p = **0.07656372550983474** | p̃₂₁ = δ, v = N(δ − δ²) |
+| `TangoNI` | B = C = 0, N = 100, **δ = 0** | z = **0**, p = **0.5** | the data sit on H0: no evidence either way |
+| `TangoNI` | B = 0 with C ∈ {2, 4, 6, 10, 14} (five rows) | pinned z and p | the discriminant is exactly 0 and rounds below it in the subtraction form, which gave NaN before the rewrite |
+| `TangoNI` | B = 10, C = 2, N = 100, δ = 0 | z = (B−C)/√(B+C) = **2.3094010767585034** | identity with McNemar's z (also over two more tables) |
+| `TangoNI`, `TangoLowerBound` | Tango (1998), *Stat Med* 17:891: §6.1 (N = 44, B = 0, C = 1, Δ = 0.1), all nine rows of Table I, and §6.2 (N = 32, B = 9, C = 3) | the paper's printed Z and interval limits | transcribed from the paper, compared at its printed precision |
+| `TangoLowerBound` | each case above | `TangoNI(d, −LB)` has p = α to 1e-9, and the bound is monotone in α; all items lost gives −1 | inversion property |
 | `ClopperPearsonUpper` | k = 0, n = 100, α = .05 | **0.029513049607039932** = 1 − 0.05^{1/100} | closed form |
 | `ClopperPearsonUpper` | k = 3, n = 50 | **0.1478371763641812** | bisection on the exact CDF |
 | `ClopperPearsonUpper` | k = 35, n = 500 | **0.09174006190473744** | same |
 | `ClopperPearsonUpper` | k = 64, n = 910 (H2's sized n) | **0.08588608387949787** | same |
 | `ClopperPearsonUpper` | k = n | 1 | definition |
+| `ClopperPearsonUpper` | α = 0.7 and 0.9 on three (k, n) | pinned to `beta.ppf` | α ≥ ½ puts the bound below k/n |
+| `BinomialCDF` | known values, the edges, never above 1; n < 0 or p ∉ [0, 1] | error on the invalid rows | trust's old `binomialCDF` tests, moved here |
 | `Wilson` | k = 81, n = 263, z = 1.959964 | (**0.25528851948901576**, **0.3662095774580194**) | closed form; the entity tests keep passing after the lift |
 | `PassHatK` | n = 4, c = {4, 3, 2, 0}, k = 2 | **5/12** | τ-bench definition |
 | `PassHatK` | same, k = 1 | **9/16** (= pass@1) | |
-| `PassHatK` | N < k | error | |
+| `PassHatK` | no tasks, k < 1, C ∉ [0, N], or N < k | error | |
 | `Resample` + `PairedMeanDiff` | all d_i = 0.3 | every quantile = 0.3 exactly | degenerate |
-| `Resample` + `PairedMeanDiff` | 2,000 d_i drawn with a known p_disc, Δ | LB within 0.002 of Δ̂ − 1.645·σ̂/√n | normal approximation, a property test |
+| `Resample` + `PairedMeanDiff` | 2,000 d_i drawn with p_disc = 0.10, Δ = −0.01 | LB within 0.002 of Δ̂ − 1.645·σ̂/√n | normal approximation, a property test |
 | `Resample` | same seed twice / a different seed | identical / different | determinism |
-| `Resample` | regression fixture: 50 hand-written d_i, seed 7, 10,000 resamples | Quantile(0.05) pinned to 1e-12 | recorded from the first implementation (scope §6, E7.1-4: "bootstrap bound under a fixed seed") |
-| `ope.Evaluate` | its existing tests | unchanged | proves the lift changed nothing |
+| `Resample` | regression fixture: 50 hand-written d_i, seed 7, 10,000 resamples | Quantile(0.05) = **−0.08**, pinned to 1e-12 | recorded from the first implementation (scope §6, E7.1-4: "bootstrap bound under a fixed seed") |
+| `Resample` + `CostPerAcceptedDiff` | an arm that accepts one item in eight | `Dropped` > 0 and kept + dropped = resamples | undefined resamples are counted, not zeroed |
+| `Resample` and the `Stat` constructors | a zero `Stat`, `resamples < 1`, mismatched slice lengths | error, never a panic | `TestBootstrap_RefusesRatherThanPanics` |
+| `Resample` | a spy `Stat` over 2 items | every draw has 2 indices, each in [0, 2) | `TestResample_DrawsOnlyWithinTheStatsOwnData` |
+| `Quantile` | {10, 20, 30, 40, 50} at q = 0, 0.24, 0.25, 0.74, 0.99, 1, −1, 2 | 10, 10, 20, 30, 40, 50, 10, 50 | floor rank, clamped |
+| impossible counts | negative B or C, B + C > N, N < 0, B + C overflowing `int` | error from `TangoNI`, `TangoLowerBound` and `McNemarExact` | `TestPairedTests_RefuseImpossibleCounts` |
+| `ope.Evaluate`, `trust` accept threshold | their existing tests | unchanged, and bit-identical on 5,000 / 40,000 random inputs (arm64 and amd64) | proves the lift changed nothing |
 
 ### 7.2 Suites and splits
 
@@ -1187,15 +1282,20 @@ type SmokeMeasurements struct {
 - **Grader:**
   - An empty answer fails.
   - A label outside the set is `format`.
-  - `" Card_Arrival "`, `"card arrival"` and `"Card-Arrival."` pass for `card_arrival`
-    (they normalise to it, E1 `TestNormaliseLabel`), but `card_arrival because…` and
-    `card_arrivals` fail, as `format`.
+  - `" Card_Arrival "`, `"card arrival"`, `"Card Arrival."`, `` "`card_arrival`" ``,
+    `"**Card Arrival**"` and `"• card_arrival"` pass for `card_arrival` (they normalise to
+    it, E1 `TestNormaliseLabel` as shipped in #1328).
+  - `"Card-Arrival."` and `"card-arrival"` **fail** for `card_arrival`, as `format`: `-` is
+    significant and they normalise to `card-arrival`. So do `card_arrival because…` and
+    `card_arrivals`.
+  - A label set in which two labels normalise to the same key is refused when the suite
+    builds its `MatchOracle` (§3.1).
   - **`TestBench_NoSecondNormaliser`** asserts that `internal/bench` contains no
     normaliser of its own (scope §6, E7.2-4). A `go/parser` scan finds no call to
     `strings.ToLower`, `strings.EqualFold` or `unicode.ToLower` in any
     `internal/bench/...` non-test file; grading and the split key call
-    `oracle.NormaliseLabel`. E1's G19 (`TestMatchOracle_SameNormaliserAsE7Pass`) is the
-    other half: the served verifier applies that same function.
+    `oracle.NormaliseLabel`. E1's G19 (`TestMatchOracle_VerifyAgreesWithNormaliseLabel`,
+    shipped in #1328 under that name) is the other half: the served verifier applies that same function.
 
 ### 7.3 Arms with fake executors
 
@@ -1283,8 +1383,8 @@ happens in PR 3, the first PR that ships `hyctl bench run`.
 
 | # | Branch | Title | Body | Depends on | Spend |
 |---|---|---|---|---|---|
-| 0 | `feature/1209-match-verifier` | `feat(oracle): match verifier with one label normaliser` | Part of #1209. **The same PR as E1 §6 PR 0.** Adds `internal/oracle/match.go` (`MatchOracle`, `NewMatch`, `NormaliseLabel`, as E1 §1.4 defines them) and `match_test.go`. Wires nothing into dispatch or config. No new dependency (§9 R6). | none | $0 |
-| 1 | `feature/1198-stats` | `feat(stats): paired bootstrap, Tango, McNemar, Clopper–Pearson and pass^k` | Part of #1198. New `internal/stats`. `ope.bootstrapInterval` and `entity.wilson` are rewritten onto it, with no behaviour change: their tests stay byte-identical. Adds a coverage floor. | none | $0 |
+| 0 | `feature/1209-match-verifier` | `feat(oracle): a match verifier for label answers` (opened as #1328) | Part of #1209. **The same PR as E1 §6 PR 0.** Adds `internal/oracle/match.go` (`MatchOracle`, `NewMatch`, `NormaliseLabel`, as E1 §1.4 defines them) and `match_test.go`, and gives `internal/oracle/oracle.go` one rune-safe truncation policy. Wires nothing into dispatch or config. No new dependency (§9 R6). | none | $0 |
+| 1 | `feature/1198-stats-package` | `feat(stats): shared statistics for the benchmark harness` (opened as #1327) | Part of #1198. New `internal/stats` (§1.4). `ope`'s bootstrap and weighted mean, `entity.wilson`, `budget`'s `normCDF` and `trust`'s `binomialCDF` are rewritten onto it, with no behaviour change: `ope` and `trust` are bit-identical on random inputs, and their existing tests pass unchanged (trust's `binomialCDF` tests move to `stats`). Adds a coverage floor (95) and the CLAUDE.md package-map line. | none | $0 |
 | 2 | `feature/1199-bench-suites` | `feat(bench): pinned dataset fetch, Banking77 and CLINC150 loaders, committed splits` | Closes #1199, narrowed to Banking77 and CLINC150 at checkpoint A (Q6, settled). Adds `internal/bench` (Item, Suite, the lockfile, fetch, splits), `internal/bench/suites`, `bench/datasets.lock`, `DATASETS.md`, `splits/*.tsv` and `configs/smoke.ids`, plus `hyctl bench fetch`. | 0 | $0 |
 | 3 | `feature/1198-bench-runner` | `feat(bench): resumable runner with budget cap and direct arms` | Part of #1198. Adds Arm, Attempt, Result, Run, the schedule, resume, Budget, PriceSnapshot, the breadcrumb, the direct arms (frontier, cheapest, mid, static-fallback with fault injection) and `hyctl bench run`, plus the docs-site CLI entries. | 2 | $0 |
 | 4 | `feature/1198-bench-report` | `feat(bench): summary, hypothesis verdicts, report and table` | Part of #1198, Part of #1219. Adds `summary.json`, `checkpoint.json`, the verdict rules in §5.4, and `hyctl bench report` and `table`, which write files only and never the README. | 1, 3 | $0 |
@@ -1310,14 +1410,18 @@ PR 0 here is E1's PR 0; it merges once and both plans list it.
 **Commit size.** None of these PRs touches `internal/dispatch` or `internal/serve`. The
 harness reaches serve only over HTTP and the `os.Executable()` probe, so E7 cannot
 conflict with E1's hotspot files (E1 §6). The edits outside `internal/bench`,
-`internal/stats`, `bench/` and `cmd/hydra/bench.go` are: `internal/oracle/match.go` (PR 0,
-shared with E1), `internal/ope` and `internal/entity` (PR 1, the lifts), `internal/pricing`
+`internal/stats`, `bench/` and `cmd/hydra/bench.go` are: `internal/oracle/match.go` and
+`oracle.go` (PR 0, shared with E1), `internal/ope`, `internal/entity`, `internal/budget/risk.go`
+and `internal/trust/threshold.go` with its test (PR 1, the lifts, plus a CLAUDE.md line), `internal/pricing`
 (PR 3, `FetchedAt`), `internal/trust` (PR 6, `RecordOutcome`), `cmd/hydra/main.go` (one
 `AddCommand` line, and the `trust.RecordOutcome` call in `cmdTrustRecord`) and
 `ci/coverage-floors.txt`. `RecordOutcome` goes in a new file, `internal/trust/record.go`,
-so it does not touch E1 PR 2's `domain.go`. The one file both plans edit is
+so it does not touch E1 PR 2's `domain.go`. The files both plans edit are
 `cmd/hydra/main.go`, where E1 PR 1 changes `printBudgetStatus` and E7 PR 6 changes
-`cmdTrustRecord`: disjoint regions, a textual conflict at most.
+`cmdTrustRecord`, and `CLAUDE.md`, where E7 PR 1 (#1327) adds the `internal/stats`
+directory line and E1 PR 1 (#1330) rewrites the `internal/budget` row: disjoint regions, a
+textual conflict at most. In `internal/budget` the two touch different files (`risk.go`
+against `quota.go`).
 
 ## 9. Risks and blocking questions
 
@@ -1330,7 +1434,7 @@ so it does not touch E1 PR 2's `domain.go`. The one file both plans edit is
 | R3 | **H3's cost may be under-counted for served arms.** | The harness joins `cost.jsonl` on `run_id`. E1 #1209 guarantees a cost row for every **escalated** answer (E1 §1.4, guard G15). A **transport-failed** attempt writes no row; the provider usually bills nothing for it, but that is not established. | A checked served request whose `X-Hydra-Cost-USD` differs from the harness value by more than max($0.000001, 1%) is flagged (`header_cost_mismatch`, §1.4). Any flag makes H3 `inconclusive` with that reason. Tier-priced `env/bedrock` requests cannot be checked and are counted in `header_cost_unchecked`. |
 | R4 | **Hydra may route `cost` on wrong prices for Bedrock.** | `pricing.DB` misses Bedrock ids and falls back to tier pricing (K4). `constrain` and `rank.Cheapest` read `headPrice`, which E1 #1209 bases on `CallCost`, so `env/bedrock` is ordered on its tier price. | Out of E7's scope, but it decides H3. The harness prices from its own snapshot, so the *measurement* is right even when the routing is not. Reported to E1 as a finding: a Bedrock price map, or `[prices]` in the config. |
 | R5 | **API nondeterminism and silent model updates.** | Scope §7. | Pinned ids. A reported model id change aborts the run. ABAB rotation. The ≤ 1-discordant determinism gate runs in PR 8 and again before the full run. |
-| R6 | **No Unicode normalisation (resolved).** | E1's `NormaliseLabel` lowercases and trims; it does no NFC, and `golang.org/x/text` stays an indirect dependency. | Every A label is ASCII snake_case. NFC maps a non-ASCII string to a non-ASCII string, so it could never turn an answer into a valid label: such an answer is graded `format` either way. PR 0 adds no dependency. |
+| R6 | **No Unicode normalisation (resolved).** | E1's `NormaliseLabel` (#1328) does no NFC, and `golang.org/x/text` stays an indirect dependency. It handles the Unicode a model actually emits around an ASCII label with the standard library alone: it drops format (Cf) runes such as a BOM or zero-width space, maps the Unicode dashes U+2010–U+2015 and U+2212 to `-`, strips curly quotes and the `•` bullet, and treats Unicode whitespace as whitespace. | Every A label is ASCII snake_case. NFC maps a non-ASCII string to a non-ASCII string, so it could never turn an answer into a valid label: such an answer is graded `format` either way. PR 0 adds no dependency. |
 | R7 | **The threshold arm (T8) is not built.** | E1 freezes T8 as "not run" at A. | Deferred to B. Design note: log-probs are unavailable on Bedrock, so it uses self-report, with τ tuned on calibration-split folds seeded from `run.Seed`. |
 | R8 | **Pricing snapshot timestamp.** | `pricing.DB` does not expose `fetched_at`, which lives in `pricing_cache.json`, and `Load()` may refresh in the background. | PR 3 adds `func (db *DB) FetchedAt() time.Time`, read once. The snapshot is frozen into `run.json`, and a background refresh cannot change a running run. |
 | R9 | **Under-counted billing for the hydra arms before #1210.** | No evidence headers exist yet. | E1-D3 is a hard preflight requirement, so served arms do not run without evidence. |
@@ -1352,8 +1456,9 @@ Q1–Q3 and Q5–Q8 are settled. Q4 is still open; it blocks only spending (PR 5
    header; E1's G7 proves the value reaches the wire (§3.4 E1-D4).
 3. **Q3, a head allowlist for `hyctl serve`. Settled.** New ticket #1325,
    `hyctl serve --heads a,b`, an independent E1 PR (E1 §1.6, §6 PR 6). The router may
-   choose and fall back only within the list. It is an E7 dependency (E1-D5); there is no
-   `[serve] heads` config spelling in A.
+   choose and fall back only within the list. It is an E7 dependency (E1-D5). *As
+   shipped in #1329, `[serve] heads` in `config.toml` is also accepted, and `--heads`
+   overrides it; the harness passes the flag (§3.3).*
 4. **Q4, Bedrock access (blocks PR 5). Open, a run prerequisite.**
    - Fix the credentials (R2); today they fail with `UnrecognizedClientException`.
    - Confirm the pinned Bedrock ids, inference profiles included, for the strongest Opus,
@@ -1432,3 +1537,42 @@ Cross-checked against `0001-design-E1.md`. Changes to this document:
 
 Not changed: `internal/stats` stays a new neutral leaf package. E1 defines no package by
 that name and none exists in the tree.
+
+## As shipped (2026-11-05)
+
+Four PRs this design depends on are open against `develop`: #1327 (E7 PR 1, `internal/stats`), #1328 (E7/E1 PR 0, the `match` verifier), #1329 (E1 PR 6, `hyctl serve --heads`) and #1330 (E1 PR 1, quotas). The sections above now describe their code. This list records where that code departs from the first draft of this design, and which PR made each change. The Reconciliation above is left as it was written.
+
+**#1327, `feat(stats): shared statistics for the benchmark harness` (PR 1, Part of #1198):**
+
+1. **`Stat` replaces the bare closure.** `WeightedMean`, `PairedMeanDiff` and `CostPerAcceptedDiff` return a `Stat`, which carries the length of the data it was built on. `Resample(stat Stat, resamples int, seed uint64) (Bootstrap, error)` draws that many indices, so it cannot index outside the data; the draft's `Resample(n, resamples, seed, stat)` let a caller pass a wrong `n`. A zero `Stat` or `resamples < 1` is an error (§1.4).
+2. **Error returns were added** to `McNemarExact` (`(oneSided, twoSided, err)`), `Wilson` (`(lo, hi, err)`), `Discordant.Delta` (`(float64, error)`), `WeightedMean` and `CostPerAcceptedDiff` (mismatched lengths), and the new `BinomialCDF` (`(float64, error)`). Every public entry point refuses impossible counts (including `int` overflow), a non-finite or non-positive z, and p outside [0, 1], rather than panicking or returning NaN (§1.4).
+3. **No `ClopperPearsonLower`.** Nothing in A calls it, so it was not added (§1.4).
+4. **McNemar needs no N.** `McNemarExact` validates only B, C ≥ 0 and reads only B and C (`TestMcNemarExact_NeedsNoN`) (§1.4, §7.1).
+5. **Tango with B = C = 0 at margin 0 gives z = 0, p = 0.5.** The data sit exactly on H0, so the 0/0 variance is read as no evidence, not an error (§1.4, §7.1).
+6. **The Tango discriminant is FMA-safe.** It is computed as a square plus a non-negative term, with explicit `float64` conversions so arm64 and amd64 agree bit for bit; the subtraction form could round below 0 and gave NaN on five regression tables. The quadratic root is chosen by the sign of B̃ to avoid cancellation (§1.4, §7.1).
+7. **New exports** beyond the draft: `BinomialCDF` (lifted from `trust`), `WeightedMeanAll` (`ope`'s point estimate) and `Stat`. `NormalCDF` is `0.5·erfc(−x/√2)` (lifted from `budget`'s `normCDF`) rather than `0.5·(1+erf(x/√2))`, which keeps a far tail's precision (§1.1, §1.4).
+8. **The lifts are wider than planned:** `budget`'s `normCDF` and `trust`'s `binomialCDF` moved too, not only `ope.bootstrapInterval` and `entity.wilson`. `ope` and `trust` were checked bit-identical with `Float64bits` over 5,000 and 40,000 random inputs on arm64 and amd64 (§1.1, §8).
+9. **The golden values were confirmed with scipy 1.18.1, statsmodels 0.15.0 and mpmath 1.4.1** in `testdata/gold.py`, and the Tango (1998) values were transcribed: §6.1, all nine rows of Table I, and §6.2. The draft had no scipy and left the paper "to transcribe in PR 1" (§7.1).
+10. **`Quantile` reads `Values[⌊q·(len−1)⌋]`, clamped**, and an empty sample reads 0 (§1.4).
+11. **Branch and title:** `feature/1198-stats-package`, `feat(stats): shared statistics for the benchmark harness` (§8).
+12. Known follow-up: `Resample` returns an empty `Values` (so `Quantile` reads 0) when every resample is undefined. The harness PR that first calls `CostPerAcceptedDiff` (PR 4) must refuse that case; H3's "either arm accepted nothing" row (§5.4) already makes it inconclusive.
+
+**#1328, `feat(oracle): a match verifier for label answers` (PR 0, Part of #1209):**
+
+1. **`-` is always significant**, so `card-arrival` ≠ `card_arrival`. The draft normaliser folded `-` to `_`. The §7.2 grader row now expects `"Card-Arrival."` to **fail** as `format` (it normalises to `card-arrival`), and §2.3's split key no longer merges hyphenated and underscored text (§2.3, §3.1, §7.2).
+2. **`*` is stripped only as a matched pair**; a lone `*` is part of the label (§3.1).
+3. **`•` is the only bullet** stripped (§3.1).
+4. **Cf runes are dropped** and **Unicode dashes become `-`** (U+2010–U+2015, U+2212), with no new dependency (§3.1, R6).
+5. **Pattern mode is anchored**, applies only `TrimSpace` and Cf removal to the answer, and also compiles the raw pattern so it cannot escape the anchors. E7 does not use pattern mode at A (§3.1; E1 §1.4).
+6. **Colliding or empty labels are refused** by `NewMatch`, so a suite's full-label-set `MatchOracle` fails to build rather than merging two labels (§3.1, §7.2).
+7. **G19 was renamed** to `TestMatchOracle_VerifyAgreesWithNormaliseLabel` (§7.2).
+8. **Title:** `feat(oracle): a match verifier for label answers`, and it also touches `internal/oracle/oracle.go` (§8).
+
+**#1329, `feat(serve): a head allowlist so hyctl serve routes among named heads only` (E1 PR 6, Closes #1325):**
+
+1. **`[serve] heads`** is accepted in `config.toml`, and `--heads` overrides it. The draft (Q3) said there was no config spelling. The harness still passes the flag (§3.3, Q3).
+2. **A bad list stops serve before it binds**, with `head allowlist: <reason>`; the harness reports the arm refused for E1-D5 (§3.3, §3.4).
+3. **`/v1/decisions` is restricted** (it has no sources once any list is set), **embedding lookups use the full discovered set**, **cache hits from excluded heads are misses**, and the **`pii` local-only policy is not treated as local-only for every request**. None of these changes what a served arm does, since the cache and capture are off and the harness never calls `/v1/decisions` (§3.3).
+4. `RestrictHeads(ids, localOnly)` takes a second argument; under `--local` the list must hold a routable local head. The harness does not pass `--local` (E1 §1.6).
+
+**#1330 (E1 PR 1, quotas)** changes nothing E7 depends on. The fresh home has no `state.json`, so the quota reads as absent and the emergency `LocalOnly` cannot fire, exactly as §3.3 assumed for `claudeMode`. It ignores a `quotas` key at checkpoint A (#1326), and `hyctl status` keeps printing `Claude  :`. Its only overlap with E7 is textual: `CLAUDE.md` and `cmd/hydra/main.go` (§8).

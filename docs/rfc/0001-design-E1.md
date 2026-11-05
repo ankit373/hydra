@@ -30,63 +30,80 @@ Line numbers below are at that commit.
 
 ### 1.1 #1207-A Quota (provider-neutral governor)
 
+*Updated to the code shipped in #1330 (checkpoint A only, "Part of #1207"); the follow-ups are #1326. See "As shipped" at the end for what changed from the first draft.*
+
 **New file `internal/budget/quota.go`:**
 
 ```go
 // SessionClaudeCode is the scope the orchestrator protocol's legacy key feeds.
 const SessionClaudeCode = "session:claude-code"
 
-// Quota is one scope's pressure. A has session scopes only; LimitUSD/LimitTokens arrive with E2.
+// Quota is one scope's pressure. Session scopes only for now; limits in USD or
+// tokens arrive with the cost ledger that would enforce them. No JSON tags: nothing
+// reads or writes a Quota as JSON at checkpoint A.
 type Quota struct {
-	Scope       string  `json:"-"`
-	ContextFrac float64 `json:"context_frac"`      // 0..1
-	History     []int   `json:"history,omitempty"` // percent points, newest last, ≤ MaxPctHistory
+	Scope       string
+	ContextFrac float64 // 0..1
+	History     []int   // percent points, newest last, ≤ MaxPctHistory
 }
 
-func (q Quota) Pct() int                           // round(ContextFrac*100), clamped to 0..100
-func (q Quota) Mode() Mode                         // EffectiveMode(q.Pct(), risk of History)
-func (q Quota) Burn() (ratePct, risk float64)      // RiskFromHistory(q.History), for `hyctl status`
+func (q Quota) Pct() int                      // int(math.Round(ContextFrac*100)); the clamp is on the read, below
+func (q Quota) Mode() Mode                    // EffectiveMode(q.Pct(), risk of History)
+func (q Quota) Burn() (ratePct, risk float64) // RiskFromHistory(q.History), for `hyctl status`
 
-// Quotas reads every quota in a state.json body: the `quotas` key, then the legacy
-// alias, which wins for SessionClaudeCode. Sorted by Scope. Malformed JSON yields nil.
-func Quotas(state []byte) []Quota
+// State is state.json decoded once, for the governor and `hyctl status` alike.
+type State struct {
+	Quotas []Quota // only the claude_pct alias at checkpoint A
+	budget json.RawMessage
+}
 
-// Governing is the most urgent quota (highest Mode, ties by Scope), ok=false when none.
-func Governing(qs []Quota) (Quota, bool)
+// Budget is the per-model snapshot table, decoded on demand because dispatch never reads it.
+// A null entry stays an empty row, as it always rendered; a non-object entry is skipped.
+func (s State) Budget() map[string]map[string]any
 
-// LegacySessionQuota derives SessionClaudeCode from claude_pct and claude_pct_history.
-// It and MirrorLegacyHistory are the only Go outside tests that name the legacy keys.
-func LegacySessionQuota(state map[string]any) (Quota, bool)
+// ParseState reads a state.json body. A field of the wrong type reads as absent rather
+// than failing the file; malformed JSON yields the zero State. The `quotas` key is ignored.
+func ParseState(raw []byte) State
 
-// MirrorLegacyHistory appends claude_pct to claude_pct_history, moved verbatim
-// from syncStateJSON (dispatch.go:1627-1634) so the legacy readers keep working.
+// Governing is the most urgent quota (highest Mode, ties by Scope) and its mode,
+// ok=false when there are none.
+func Governing(qs []Quota) (q Quota, mode Mode, ok bool)
+
+// MirrorLegacyHistory appends the orchestrator's level to its bounded history,
+// so the rate-aware governor and the frozen legacy readers see the trajectory.
 func MirrorLegacyHistory(state map[string]any)
 ```
 
-`MaxPctHistory`, `RiskFromHistory` and `EffectiveMode` in `risk.go` are reused unchanged. `RiskFromHistory` already takes a series (`risk.go:54`), so `risk.go` needs no edit. `Window`, `LimitUSD` and `LimitTokens` from RFC §5.1 are **not** added. Nothing in A would read them, and E2 adds them along with their enforcement.
+The alias is unexported: `legacySessionQuota(pct, history any)` derives `SessionClaudeCode` on every read, `parseHistory` reads the series and `legacyLevel` reads one percentage. The legacy key names are unexported constants in this file, so `quota.go` is the only non-test Go outside the frozen readers that names them.
+
+`MaxPctHistory`, `AppendPctHistory`, `RiskFromHistory` and `EffectiveMode` in `risk.go` are reused unchanged. #1330 does not edit `risk.go` (#1327 changes only its `normCDF`, to `stats.NormalCDF`). `Window`, `LimitUSD` and `LimitTokens` from RFC §5.1 are **not** added. Nothing in A would read them, and E2 adds them along with their enforcement.
 
 **Changed: `internal/dispatch/dispatch.go`:**
 
-- **`:535-547`.** `d.claudeMode(hint)` becomes `tier, q, mode := d.quotaMode(hint)`. The switch is on `budget.Mode` constants rather than strings. The log lines name `q.Scope` instead of "Claude" (for example `🚨 EMERGENCY: session:claude-code at 81%`). The downgrade logic is identical:
+- **`:535-547`.** `d.claudeMode(hint)` becomes `tier, q, mode := d.quotaMode(hint)`. The switch is on `budget.Mode` constants rather than strings. The downgrade logic is identical:
   - emergency: tier 10 and `LocalOnly`;
   - critical: +2;
   - warning: +1.
-- **`:984-1047`.** `claudeMode`, `readClaudePct` and `readClaudePctHistory` are deleted. `quotaMode(tierHint string) (string, budget.Quota, budget.Mode)` reads `state.json` once (today it reads it twice), then calls `budget.Quotas` and `budget.Governing`. The `Atoi`/clamp body is kept as it is.
+
+  The log lines move into `governorLog(q, mode, fromTier, toTier)` and keep develop's wording verbatim (`🚨 EMERGENCY: Claude at %d%%, routing to local tier only. Start a new session.` and so on), because `session:claude-code` is the only scope at checkpoint A. **One deliberate difference:** critical and warning claim "downgrading tier by N" only when the tier actually moved; otherwise they print `🔴 CRITICAL: Claude at N%. Run /compact NOW.` (or the warning equivalent).
+- **`:984-1047`.** `claudeMode`, `readClaudePct` and `readClaudePctHistory` are deleted. `quotaMode(tierHint string) (string, budget.Quota, budget.Mode)` reads `state.json` once (develop read it twice), then calls `budget.ParseState` and `budget.Governing`. No quota at all is `ModeNormal`. The `Atoi`/clamp body is kept as it is.
 - **`:1627-1634`.** This becomes `budget.MirrorLegacyHistory(existing)`. The comment loses the legacy key name.
-- **`asInt`/`asIntSlice` (`:1050-1082`).** They move to `budget`, since `MirrorLegacyHistory` is their only caller once `syncStateJSON` is changed. Moving them avoids keeping a second copy.
+- **`asInt`/`asIntSlice` (`:1050-1082`).** They are deleted, not moved. `budget`'s `legacyLevel` and `parseHistory` replace them, and read stricter: a non-integer level is unset, and one non-integer history point makes the whole history unknown, where `asInt` truncated a fraction and read a `null` point as 0.
 
-**Changed: `cmd/hydra/main.go`.** In `printBudgetStatus` (`:701-732`), the `ClaudePct*` fields go. The function prints one line per `budget.Quotas(raw)`: `  <scope>  <bar> <pct>%  <mode>  [↑ burning …]`. The existing per-model table below it is unchanged. `budgetBar` (`:796`) keeps its comment but loses the key name.
+**Changed: `cmd/hydra/main.go`.** In `printBudgetStatus` (`:701-732`), the `ClaudePct*` fields go and `budget.ParseState(raw)` is called once. The function prints one line per quota with `Pct() > 0`, **in develop's format**: `  Claude  :  <bar>  <pct>%  <mode>` plus the burn note when the rate-aware mode is above the static band. The label stays `Claude` at checkpoint A (it is the only scope); printing `<scope>` waits for a second scope. The per-model table below it reads `state.Budget()` and is otherwise unchanged; a `null` model entry still prints as a row of zeros.
 
-**Data flow.** `state.json` → `budget.Quotas` (alias + `quotas` key) → `Governing` → `quotaMode` → tier downgrade / `LocalOnly`. The writer side is unchanged: the orchestrator still writes `claude_pct` by `jq`, and `syncStateJSON` still mirrors its history.
+**Data flow.** `state.json` → `budget.ParseState` (the `claude_pct` alias only) → `Governing` → `quotaMode` → tier downgrade / `LocalOnly`. The writer side is unchanged: the orchestrator still writes `claude_pct` by `jq`, and `syncStateJSON` still mirrors its history.
 
 **Error cases:**
 
-- **A missing `state.json`** yields no quotas, so mode is `normal`. This is today's `readClaudePct() == 0`.
-- **Malformed JSON** yields no quotas. This is today's behaviour, unchanged.
-- **A negative or over-100 `claude_pct`.** `Pct()` clamps it to 0..100. `budgetBar` already guards negatives, and the clamp makes that a property of the type.
-- **A `quotas` entry with a non-numeric `context_frac`.** That entry is skipped. The other entries are kept.
+- **A missing `state.json`** yields no quotas, so mode is `normal`. This is develop's `readClaudePct() == 0`.
+- **Malformed JSON** yields no quotas. This is develop's behaviour, unchanged.
+- **A negative, over-100 or huge `claude_pct`.** `legacyLevel` clamps it to 0..100 **before** the int conversion, so `1e19` reads as 100 rather than wrapping.
+- **A non-integer `claude_pct`** (`79.6`, or a string) reads as unset, so there is no quota. develop decoded the key into an `int`, which refused a fraction, and dispatch, the TUI and the desktop app must keep agreeing.
+- **A non-integer or `null` history point** makes the history unknown (nil), so the static band governs alone. develop read such a point as 0, which faked a burst of burn.
+- **A `quotas` key** is ignored entirely at checkpoint A. Nothing writes it, and reading it safely needs validation, timestamps and expiry, which are #1326 (E2).
 
-**T1 effect.** The non-test Go under `internal/dispatch`, `internal/serve` and `cmd/hydra` holds 0 occurrences of `claude_pct`/`claudeMode`. `internal/budget` holds the only ones. The frozen TUI and desktop app still read the legacy key, which stays mirrored (RFC §6, scope C11).
+**T1 effect.** Outside `internal/budget` and the frozen TUI (`internal/tui`) and desktop app (`desktop/api`), no non-test Go in the repository holds a `claude_pct` string literal or a `claudeMode` identifier; G2 scans the whole tree, not only `internal/dispatch`, `internal/serve` and `cmd/hydra`. The frozen readers still read the legacy key, which stays mirrored (RFC §6, scope C11).
 
 ### 1.2 #1208-A Task class (resolver + basis), temperature and max-cost passthrough
 
@@ -228,31 +245,48 @@ The clamp keeps the logit finite for a catalogue score of 100 or 0.
 
 ### 1.4 #1209-A `match` verifier, one cost value, verifier-gated escalation
 
-**New file `internal/oracle/match.go`:**
+**New file `internal/oracle/match.go`** (shipped in #1328, PR 0):
 
 ```go
 // MatchOracle passes an answer that is one of a closed label set, or matches a pattern.
 type MatchOracle struct {
 	Source  string              // "verifier:match:<id>"
 	labels  map[string]struct{} // normalised
-	pattern *regexp.Regexp
+	pattern *regexp.Regexp      // anchored, so the whole answer must match
 }
 
 // NewMatch builds from exactly one of labels (non-empty) or pattern (compiles); else errors.
 func NewMatch(id string, labels []string, pattern string) (*MatchOracle, error)
 
-// Verify: labels → NormaliseLabel(candidate) ∈ set; pattern → MatchString(TrimSpace(candidate)).
-// Never errors on content: an empty answer is a failing verdict, not an oracle fault.
-func (o *MatchOracle) Verify(ctx context.Context, candidate string, _ trust.Task) (Verdict, error)
+// Verify: labels → NormaliseLabel(candidate) ∈ set; pattern → the whole answer, without format
+// runes and edge whitespace and otherwise not rewritten, matches. Empty always fails.
+func (o *MatchOracle) Verify(_ context.Context, candidate string, _ trust.Task) (Verdict, error)
 
-// NormaliseLabel lowercases, trims space, quotes, backticks and a trailing '.', and folds
-// runs of space or '-' to '_'. E7 scores Pass with this same function, so there is no second copy.
+// NormaliseLabel lowercases, drops format runes, maps Unicode dashes to '-', strips edge whitespace,
+// wrappers, a '*' pair and trailing dots to a fixed point, then folds interior space or '_' runs
+// to one '_'. '-' and a lone '*' are significant. E7 scores Pass with this same function.
 func NormaliseLabel(s string) string
 ```
 
-`Detail` on a fail is `not one of N labels: "<first 80 bytes>"`. The `verifier:<kind>:<id>` key needs no exemption work, because `trust.UnreadableSourceKey` already passes `verifier:` (`domain.go:58-59`).
+**`NormaliseLabel`, the contract E7 grades with:**
 
-**New in `internal/config/config.go`** (route config):
+1. Lowercase.
+2. Drop every Unicode format rune (category Cf: BOM, zero-width space, and so on), wherever it is.
+3. Map the Unicode dashes U+2010–U+2015 and the minus sign U+2212 to ASCII `-`.
+4. Repeat until nothing changes: strip edge whitespace and the wrappers `"` `'` `` ` `` `“` `”` `‘` `’` `_` and the bullet `•` (U+2022, the only bullet), then one trailing `.`, then one **matched** pair of `*` around the whole string.
+5. Fold every interior run of whitespace or `_` to a single `_`.
+
+**`-` is always significant.** It is never folded and never stripped as a bullet, so `card-arrival` ≠ `card_arrival`, and `A-`, `-1` and `- 3` (→ `-_3`) keep their sign. A lone `*` is significant too (`A*` → `a*`, `* x` → `*_x`); only a matched pair is emphasis (`**Card Arrival**` → `card_arrival`). The function is idempotent, so normalising the gold label and the answer can never disagree with normalising either twice.
+
+Examples: `"Card Arrival."`, `` `card_arrival` ``, `“Card Arrival”`, `• card_arrival`, `card​_arrival` → `card_arrival`; `card-arrival` and `Card-Arrival.` → `card-arrival`; `−1` (U+2212) → `-1`.
+
+**Pattern mode** is anchored as `^(?:p)$`, so the whole answer must match. The answer is only `strings.TrimSpace`d after its Cf runes are dropped; it is not lowercased or otherwise rewritten. An empty answer fails before the regex sees it, since `.*` matches the empty string. `NewMatch` compiles the **raw** pattern first and then the wrapped one: `a)|(.*` is unbalanced alone but balances inside `^(?:…)$`, so it would escape the anchors, and a pattern nested one level below the parser's limit fails only once wrapped. Both failures are errors, never a panic.
+
+**`NewMatch` refuses at construction:** both labels and a pattern, or neither; an empty label set; a label that normalises to empty (it would let an empty or all-punctuation answer pass); two labels that normalise to the same key (naming both, since one answer would satisfy either); and a pattern that fails either compile.
+
+`Detail` on a fail is `not one of N labels: "<first 80 bytes>"` (or `does not match <pattern>: "…"`). The quoted head of the answer is always kept, with the truncation marker outside the quotes; the check description is what gets cut to fit. `oracle.go` gained one rune-safe truncation policy (`truncate`/`clip`, also used by `firstLine`). The `verifier:<kind>:<id>` key needs no exemption work, because `trust.UnreadableSourceKey` already passes `verifier:` (`domain.go:58-59`).
+
+**New in `internal/config/config.go`** (route config). `Serve` and `Config.Serve` already exist, added by #1325 (#1329) with `Heads` (§1.6); PR 4 adds `Verifiers` beside it:
 
 ```go
 // ServeVerifier attaches one check to one task class on `hyctl serve`.
@@ -265,10 +299,11 @@ type ServeVerifier struct {
 }
 
 type Serve struct {
-	Verifiers []ServeVerifier `toml:"verifiers,omitempty"`
+	Heads     []string        `toml:"heads,omitempty"`     // shipped in #1329 (§1.6)
+	Verifiers []ServeVerifier `toml:"verifiers,omitempty"` // PR 4
 }
 
-// Config gains:
+// Config already has (since #1329):
 Serve Serve `toml:"serve,omitempty"`
 ```
 
@@ -454,7 +489,7 @@ E7 starts one `hyctl serve` per served arm, so `--confidence` and `--max-escalat
 
 | Case | Result |
 |---|---|
-| A verifier config with an unknown `kind`, a bad class grammar, both or neither of `labels`/`pattern`, an unreadable or empty labels file, a regex compile error, or a duplicate `(class, id)` | a startup error naming the entry index; nothing binds |
+| A verifier config with an unknown `kind`, a bad class grammar, both or neither of `labels`/`pattern`, an unreadable or empty labels file, a label that normalises to empty, two labels that normalise to the same key, a regex compile error (raw or anchored), or a duplicate `(class, id)` | a startup error naming the entry index; nothing binds |
 | A verifier errors on one answer | `Check.Err`, LLR 0, and the request continues |
 | Every candidate failed before any answer | today's 502 |
 | The cascade stops on `BudgetExhausted` | 200 with the best step and `X-Hydra-Decision: budget_exhausted`. This is not an error: the client reads the decision. |
@@ -568,25 +603,53 @@ This ticket was added in the 2026-11-05 reconciliation with E7 (E7 §3.4, E1-D5)
 
 **Why.** E7 must keep CLI-agent heads (Claude Code, Codex, Antigravity) out of every arm (E7 scope §5.2). They are found with `exec.LookPath`, and `shellpath.Adopt` re-adds the login shell's `PATH`, so stripping `PATH` does not remove them (E7 K5). It is also what makes a deployment's head set explicit.
 
+*Updated to the code shipped in #1329 ("Closes #1325", branch `feature/1325-serve-head-allowlist`). See "As shipped" at the end for what changed from the first draft.*
+
 **Changed: `internal/dispatch/dispatch.go`.**
 
 ```go
-// RestrictHeads keeps only the named heads, in their existing (CapScore) order. It refuses
-// an id that discovery did not find, or found unroutable, naming it and the reason.
-func (d *Dispatcher) RestrictHeads(ids []string) error
+// ServeHeads is config.toml's `[serve] heads`, read from the config New already loaded.
+func (d *Dispatcher) ServeHeads() []string
+
+// Allows reports whether head id may answer here: any head, unless RestrictHeads set a list.
+func (d *Dispatcher) Allows(id string) bool
+
+// RestrictHeads routes among only the named heads, in CapScore order; embedding lookups keep
+// the whole discovery. It refuses an unknown, repeated or unroutable id (an embedding-only one
+// may be listed), or a list with no routable head, or no local one under localOnly.
+func (d *Dispatcher) RestrictHeads(ids []string, localOnly bool) error
 ```
 
-It filters `d.heads` (`:327`) once at startup. Every reader goes through `d.heads` or `Heads()` (`:371`): selection and fallback (`:1419-1451`), `blockedHeads` (`:1260`), `/v1/models` (`advertisable`, `serve.go:136`) and the banner. So the router can neither choose nor fall back outside the list. The embedding lookups (`cache.go:35`, `capture_recall.go:22`, `:377`) also read `d.heads`, so an embedding head left off the list is unavailable to them. E7 runs with the cache and capture off, so that costs it nothing; the flag's help says so.
+- **Input.** Each id is whitespace-trimmed and blanks are dropped; a list with no ids left restricts nothing.
+- **What it narrows.** It replaces `d.heads` (`:327`) once at startup with a new slice of the listed heads, in discovery (CapScore) order, keeps the full discovery in `d.discovered`, and records the list in `d.allowed`. Every routing reader goes through `d.heads` or `Heads()` (`:371`): selection and fallback (`:1419-1451`), `blockedHeads` (`:1260`), `/v1/models` (`advertisable`, `serve.go:136`) and the banner. So the router can neither choose, fall back to, nor advertise a head outside the list.
+- **`localOnly` is `--local` only.** Under `--local` the list must hold at least one routable local head. The `pii` policy's `local-only` action is **not** treated as local-only for every request: it binds only prompts classified as PII, so a hosted-only list is accepted under it.
+- **Pinned heads.** A pinned head id that `Allows` refuses gets `ErrNoHeads` with `` %q is outside this server's `hyctl serve --heads` allowlist ``, so the error names the allowlist instead of reading as an unknown head.
+- **Answer cache.** `fromCache` checks `Allows(hit.Head)`. A hit produced by a head off the list is treated as a **miss**, because it is an answer this server may not give.
+- **Embedding lookups use the full discovered set.** The cache's embedder (`cache.go:35`), the corpus embedder (`:377`) and recall (`capture_recall.go:22`, `retrieve.Open`) resolve through `embedHeads()`, which returns `d.discovered` when a list is set. An embedding head, including an untagged `embed_model` head, therefore stays usable without becoming routable. `embed.Resolve` reaches only local endpoints, as on develop.
 
-**Changed: `cmd/hydra/serve.go`.** `cmdServe` gains `--heads a,b`. When it is set, `RestrictHeads` runs right after `dispatch.New`, and a refusal is a startup error before binding. When it is unset, behaviour is unchanged. There is no config-file spelling in A.
+**Changed: `internal/config/config.go`.** `Config` gains `` Serve Serve `toml:"serve,omitempty"` ``, with `` Serve.Heads []string `toml:"heads,omitempty"` ``, so the list can live in `config.toml` as `[serve] heads = [...]`. (#1209's `Verifiers` joins the same struct, §1.4.)
 
-**Error cases:**
+**Changed: `cmd/hydra/serve.go`.** `cmdServe` gains `--heads a,b` (a string slice). `restrictServeHeads` runs right after `dispatch.New` and before the decision router is built and the server binds:
 
-- An unknown id, or a duplicated one → startup error naming it.
-- An unroutable id → startup error with its `unroutable_reason`.
-- A pinned head id outside the list → today's unknown-head refusal, because the head no longer exists for this server.
+- the flag, when given (`c.Flags().Changed("heads")`), replaces `[serve] heads` for this run, and `--heads ""` clears it;
+- otherwise `[serve] heads` from `config.toml` applies;
+- a refusal is the startup error `head allowlist: <reason>`, before binding.
 
-`/v1/decisions` is not restricted. Decision heads are a separate inventory (`executor.DecisionHeads`).
+When neither is set, behaviour is unchanged.
+
+**`/v1/decisions` is restricted too.** `newDecisionRouter(ctx, confidence, localOnly, d.Allows)` drops every decision source the allowlist does not allow. Decision ids come from a separate inventory (`executor.DecisionHeads`) and are never dispatch head ids, so with any list set `/v1/decisions` has no sources. The banner then prints `decisions  none: --heads names no decision source, so /v1/decisions has none (N dropped)`; it reports an emptied endpoint, not a partly filtered one.
+
+**Error cases (all startup errors before binding, naming the id):**
+
+- An unknown id → `` no discovered head with id "x"; run `hyctl probe` to see what this machine has ``.
+- A duplicated id (after trimming) → `head "b" is listed twice`.
+- An unroutable id → `head "x" cannot be routed: <unroutable_reason>`. An embedding-only head may be listed.
+- A list with no routable head (for example only an embedding head) → `no listed head can be routed`.
+- `--local` with no routable local head in the list → `no listed head is a routable local head, and this server is local-only (--local)`.
+
+A refused list leaves the inventory unchanged.
+
+**Known follow-up (#1329).** When the cache's best hit came from an excluded head, the lookup is a miss even if a listed head's entry would also have matched. That loses a possible hit and leaks nothing.
 
 ## 2. Request path end to end (`hyctl serve`, `model:"hydra"`)
 
@@ -700,7 +763,7 @@ client ── POST /v1/chat/completions  {model:"hydra", temperature:0, messages
 | Hook E7 needs | Where it lands | What the harness does |
 |---|---|---|
 | **Temperature and max-cost passthrough** (E7 §1.4: "serve passes no temperature"; E7 Q2) | #1208-A (PR 2), both: `chatRequest.Temperature` → `serve.Request` → `dispatch.Options.Temperature` → `executor.Request.Temperature`, and `X-Hydra-Max-Cost-USD` → `Options.MaxCostUSD` (and, from #1209, the cascade's `Target.MaxCostUSD`), which can only lower the policy ceiling (§1.2). The HTTP dialects already send the temperature. There is no echo header; G7 is what proves the temperature reaches the wire. | Send `"temperature": 0`, recorded in the breadcrumb as sent. That holds for every HTTP head; CLI/agy heads ignore it and are kept out by `--heads` (#1325). Send `X-Hydra-Max-Cost-USD` set to what the run's `--max-usd` budget has left. |
-| **Head allowlist** (E7 K5, E1-D5; E7 Q3) | #1325 (§1.6, PR 6): `hyctl serve --heads a,b`. | Start each served arm's `hyctl serve` with `--heads` set to the arm's router heads. `/v1/models` then lists only those heads plus the routing ids. |
+| **Head allowlist** (E7 K5, E1-D5; E7 Q3) | #1325 (§1.6, PR 6, shipped as #1329): `hyctl serve --heads a,b`, or `[serve] heads` in `config.toml`. | Start each served arm's `hyctl serve` with `--heads` set to the arm's router heads (the flag overrides any `[serve] heads`). `/v1/models` then lists only those heads plus the routing ids. An unknown, duplicate or unroutable id fails serve at startup, which the harness reports as a refused arm. |
 | **Objective header** (E7: "serve reads no objective header") | #1206-A: `X-Hydra-Objective: quality\|cost`, echoed. An unknown value → 400. | Arms `hydra-quality` and `hydra-cost` send the header. `hydra-balanced` does not exist in A (scope §2a). |
 | **Seedable exploration RNG** (E7: "`dispatch/explore.go` uses an unseeded global RNG") | #1206-A: `config.toml explore_seed = <uint64>`, a mutex-guarded PCG on the `Dispatcher`. 0 means unseeded (today). | Write `explore_rate = 0` (pure argmax) into the fresh `HYDRA_HOME/config.toml`. This is enough for A, because every exploration-free run is already deterministic. `explore_seed` is for a run that deliberately explores. Its draws repeat only when requests are sequential (§7 R6). |
 | **Deterministic ordering** | #1206-A: `rank.Strongest` is a total order (Effective, price, ID). `constrain`/`Cheapest` already is (`cheaperFirst`, `constraint.go:70-79`). `SortMeasured`'s `rankLess` ends on ID (`rank.go:85`). | Isolation is already in E7 §1.5. In addition: (a) fill calibration **before** starting `hyctl serve`, because the `Dispatcher` and the cascade load calibration once at start (`dispatch.go:482`), so a restarted serve (resume) reads the same file again (E7 §4.2); (b) record `X-Hydra-Sources` per item, because the breaker can park a head mid-run after a 429 and change the order for the following items (§7 R5). |
@@ -728,9 +791,8 @@ This section follows scope §5. Nothing on disk is rewritten.
 
 **`~/.hydra/logs/state.json` (#1207-A)**
 
-- **Read alias, not migration.** `budget.LegacySessionQuota` derives `Quota{Scope:"session:claude-code", ContextFrac: claude_pct/100, History: claude_pct_history}` on every read. It is a pure function of the file, so it is idempotent by construction. The next `jq '.claude_pct = 52'` from the orchestrator protocol is picked up with no migration step.
-- **New quotas.** They live under `quotas: {"<scope>": {"context_frac": f, "history": [...]}}`. In A, nothing writes this key; it is read so that E2's writers and `hyctl quota set` need no reader change.
-- **Precedence.** The alias wins for `session:claude-code` even if `quotas` also names it, because the legacy key is what the protocol still writes. Other scopes come from `quotas`.
+- **Read alias, not migration.** `budget.ParseState` derives `Quota{Scope:"session:claude-code", ContextFrac: claude_pct/100, History: claude_pct_history}` on every read, through the unexported `legacySessionQuota`. It is a pure function of the file, so it is idempotent by construction. The next `jq '.claude_pct = 52'` from the orchestrator protocol is picked up with no migration step. `claude_pct` and each history point are read as integers only, as develop's `int` decode read them (§1.1 error cases).
+- **No `quotas` key at A.** `ParseState` ignores a `quotas` key entirely, so `session:claude-code` always comes from the alias and no other scope exists yet. Reading it safely needs validation, timestamps and expiry, so the reader moved to #1326 (E2).
 - **Writer.** `syncStateJSON` keeps mirroring `claude_pct_history` through `budget.MirrorLegacyHistory`. It never deletes the legacy keys, so an older `hyctl`, the frozen TUI (`internal/tui/cockpit.go:257`) and the desktop app (`desktop/api/dashboard.go:212`) keep reading them.
 - **Downgrade.** The governing quota's `Mode` drives `quotaMode` with the same thresholds and the same tier arithmetic as `claudeMode`. A golden old file yields identical mode and tier (test G1, §5).
 - **Retirement** of the alias happens when `CLAUDE.md`'s protocol writes through a `hyctl quota set`. That is a follow-up, not E1.
@@ -778,26 +840,35 @@ This section follows scope §5. Nothing on disk is rewritten.
 
 ### 5.1 #1207-A `internal/budget/quota_test.go`, `internal/dispatch/quota_test.go`
 
+*As shipped in #1330.*
+
 **Table-driven tests:**
 
-- **`TestQuotas_ReadsEveryShape`.** Rows:
+- **`TestParseState_ReadsEveryShape`.** Rows:
   - no file;
   - malformed JSON;
   - legacy keys only;
-  - `quotas` only;
-  - both keys, alias wins for `session:claude-code`, other scope from `quotas`;
   - a negative `claude_pct` (clamped to 0);
   - `claude_pct = 140` (clamped to 100);
-  - a non-numeric `context_frac` (that entry skipped).
+  - a string `claude_pct` (absent);
+  - a fractional `claude_pct` such as `79.6` (unset, as develop's `int` decode left it);
+  - `claude_pct = 1e19` (clamped before conversion).
+- **`TestParseState_NonNumericHistoryIsNoHistory`.** `[60,null,62]`, `[60,"x",62]`, `[60,61.5,62]` and a string history each give no history and mode `compact` at 62.
+- **`TestParseState_IgnoresTheQuotasKey`.** A `quotas` key, alone or beside `claude_pct`, adds no quota and does not override the alias (#1326 reads it).
+- **`TestParseState_Budget`.** A `null` model entry stays an empty row; a non-object entry is skipped.
 - **`TestGoverning_PicksTheMostUrgent`.** Ties are broken by scope.
+- **`TestMirrorLegacyHistory`.**
 - **`TestQuotaMode_DowngradesLikeClaudeMode`.** It runs per mode × tier hint (`""`, `"3"`, `"9"`, `"10"`), covering the +1, +2 and →10 cases and the clamp at 10.
+- **`TestQuotaMode_FastBurnEscalatesAboveTheStaticBand`.**
+- **`TestGovernorLog_KeepsDevelopsWording`** pins every governor log line to develop's text, and **`TestGovernorLog_ClaimsADowngradeOnlyWhenTheTierMoved`** pins the one deliberate difference.
+- **`cmd/hydra`:** `TestPrintBudgetStatus_KeepsDevelopsSessionLine` (`  Claude  :  █████░░░░░  52%  compact`, and no line at 0%) and `TestPrintBudgetStatus_NullModelEntryIsAZeroRow`.
 
-**Race test.** `TestSyncStateJSON_ConcurrentMirrorKeepsHistoryBounded` runs 16 goroutines of `syncStateJSON` over one `state.json`. The history length must stay ≤ `MaxPctHistory`.
+**Sync test.** `TestSyncStateJSON_InProcessSyncsNeverRollTheLevelBack` runs 32 writers × 16 rounds that share `stateMu` with `syncStateJSON`, and asserts no sync writes back a stale level. It fails 20 times out of 20 without `stateMu`. It covers in-process concurrency only; cross-process writes (`jq`, a second `hyctl`) are #1326.
 
 | Guard | Breaks | Prints |
 |---|---|---|
-| **G1** `TestQuotaMode_GoldenLegacyStateRoutesAsBefore` | the alias and the old governor disagree on a real pre-E1 `state.json` (testdata) | `legacy state.json: claudeMode gave mode=%s tier=%s, quotaMode gives mode=%s tier=%s` |
-| **G2** `TestT1_NoLegacyKeyOutsideBudget` (in `internal/budget`, walking `../dispatch`, `../serve`, `../../cmd/hydra` non-test `.go`) | someone reintroduces `claude_pct`/`claudeMode` into the provider-neutral path (T1) | `%s:%d names %q; only internal/budget may read the legacy key (RFC 0001 T1)` |
+| **G1** `TestQuotaMode_GoldenLegacyStateRoutesAsBefore` (testdata `state_pre_e1_steady.json`, `state_pre_e1_burning.json`) | the alias and the old governor disagree on a real pre-E1 `state.json` | `legacy state.json: claudeMode gave mode=%s tier=%s, quotaMode gives mode=%s tier=%s` |
+| **G2** `TestT1_NoLegacyKeyOutsideBudget` (in `internal/budget`, a `go/ast` walk of every non-test `.go` file from the repo root; comments are ignored; `internal/budget`, `internal/tui` and `desktop/api` are allow-listed; it fails if it scanned fewer than 100 files) | someone reintroduces a `claude_pct` string literal or a `claudeMode` identifier outside the alias and the frozen readers (T1) | `%s names %q; only internal/budget may read the legacy key (RFC 0001 T1)` |
 | **G3** `TestQuotaMode_EmergencyStillForcesLocal` | the emergency branch loses `LocalOnly`, which is what protects a session at 80% | `quota at %d%% (emergency) dispatched to non-local head %s` |
 
 ### 5.2 #1208-A `internal/trust/domain_test.go`, `internal/serve/class_test.go`, `cmd/hydra/serve_cli_test.go`
@@ -850,14 +921,21 @@ This section follows scope §5. Nothing on disk is rewritten.
 
 **Table-driven tests:**
 
-`match_test.go` (`TestNormaliseLabel`, `TestMatchOracle_Verify`, `TestNewMatch_RefusesBadConfig`, G19) lands with `match.go` in PR 0; the rest lands in PR 4.
+`match_test.go` (`TestNormaliseLabel`, `TestNormaliseLabel_Idempotent`, `TestMatchOracle_Verify`, `TestNewMatch_RefusesBadConfig`, G19 and `ExampleNormaliseLabel`) shipped with `match.go` in PR 0 (#1328); the rest lands in PR 4.
 
-- **`TestNormaliseLabel`.** Rows: `"Card Arrival."` → `card_arrival`, `` `card_arrival` ``, quotes, `card-arrival`, inner runs, and empty.
+- **`TestNormaliseLabel`.** Rows include:
+  - `"Card Arrival."`, `` `card_arrival` ``, `"Card_Arrival"`, curly quotes, `**Card Arrival**`, `__card_arrival__`, `• card_arrival`, Unicode whitespace and zero-width runes → `card_arrival`;
+  - `card-arrival` → `card-arrival` (a `-` is never folded to `_`), `card‑arrival` (U+2011) → `card-arrival`, `−1` (U+2212) → `-1`;
+  - `- card_arrival` → `-_card_arrival`, `A-` → `a-`, `-1.` → `-1`, `- 3` → `-_3` (a leading `-` is a sign, not a bullet);
+  - `*` → `*`, `A*` → `a*`, `* card_arrival` → `*_card_arrival` (only a matched `*` pair strips);
+  - `x..` and `x. .` → `x`; empty and `` "". `` → empty.
+- **`TestNormaliseLabel_Idempotent`.** Normalising any row's output again changes nothing.
 - **`TestMatchOracle_Verify`.** Rows:
-  - label hit and miss;
-  - pattern hit and miss;
-  - empty answer → fail, not an error.
-- **`TestNewMatch_RefusesBadConfig`.** Both of labels and pattern, neither, an empty label set, and a bad regex.
+  - label hit and miss, including a sign set `{-1, 0, 1}` and a grade set `{A, A-, B+}`;
+  - pattern hit and miss, anchored (`maybe 42 or 7` fails `\d+`);
+  - empty answer → fail, not an error;
+  - a failing Detail always quotes the head of the answer.
+- **`TestNewMatch_RefusesBadConfig`.** Both of labels and pattern, neither, an empty label set, a label that normalises to empty, two labels that normalise to the same key, a bad regex, a pattern that balances only inside the anchors (`a)|(.*`), and a pattern that fails only once wrapped (nesting depth).
 - **`TestServeVerifiers_Validate`.** An unknown kind, bad grammar, an unreadable file, and a duplicate.
 - **`TestCascade_Judge`.** Rows (P̂, verifier measured?, verdict, target, spent, ceiling, max) → (next, decision):
   - accept on the first;
@@ -878,7 +956,7 @@ This section follows scope §5. Nothing on disk is rewritten.
 | **G16** `TestEscalate_ExhaustedReturnsLastAnswerNotError` | all-rejected turns into a 502 with the answer discarded | `every candidate answered and was escalated; Dispatch returned err=%v, want the last answer` |
 | **G17** `TestCascade_UncalibratedVerifierCannotEscalate` | an unmeasured verifier spends on further heads (decide's no-evidence rule lost) | `no measured verifier, yet the cascade asked %d sources` |
 | **G18** `TestCascade_SameRuleAsDecideRouter` (one table fed to both `decide.Router` and `decide.Cascade`) | the two endpoints come to stop on different rules | `Router decided %s, Cascade decided %s for the same evidence` |
-| **G19** `TestMatchOracle_SameNormaliserAsE7Pass` (asserts `NormaliseLabel` is what `MatchOracle` applies, via an exported example test) | a bench-only normaliser diverges from the served verifier | `MatchOracle accepted %q but NormaliseLabel(%q)=%q is not in the set` |
+| **G19** `TestMatchOracle_VerifyAgreesWithNormaliseLabel` (shipped in #1328 under this name; for each of a list of answers, `Verify` passes exactly when `NormaliseLabel(answer)` is in the normalised set, so it is neither more nor less lenient; `ExampleNormaliseLabel` documents the same contract) | a bench-only normaliser diverges from the served verifier | `MatchOracle accepted %q but NormaliseLabel(%q)=%q is not in the set` (and `MatchOracle refused %q but …`) |
 
 ### 5.5 #1210-A `internal/serve/contract_test.go`, `internal/serve/decisions_test.go`, `internal/decide/cascade_test.go`
 
@@ -937,32 +1015,38 @@ Local heads price at $0, so a second fixture uses an `openai`-shaped stub head w
 
 ### 5.7 #1325 `internal/dispatch/restrict_test.go`, `cmd/hydra/serve_cli_test.go`
 
-- **`TestRestrictHeads`.** Rows: a known subset keeps order; an unknown id, a duplicate and an unroutable head are each refused, naming the id.
+*As shipped in #1329.* The tests are in `internal/dispatch/restrict_test.go`, `cmd/hydra/serve_cli_test.go` and `cmd/hydra/serve_decisions_test.go`.
+
+- **`TestRestrictHeads`.** Rows: no list and a blank-only list keep the inventory; a known subset keeps discovery order; whitespace around an id is trimmed; an embedding head may be listed; a local head under `--local`; a hosted-only list under the `pii` local-only policy is accepted (it binds only PII prompts). Refused, naming the id or the reason: an unknown id, a duplicate, an unroutable head, a list of only an embedding head, and no local head under `--local`. A refused list leaves the inventory unnarrowed.
+- **`TestRestrictHeads_KeepsTheEmbedder`** and **`TestRestrictHeads_KeepsAnUntaggedEmbedModel`.** Embedding lookups still resolve against the full discovery.
+- **`TestPinHead_OutsideTheAllowlistSaysSo`.** The pin error names the allowlist.
+- **`TestServeHeads_AnUnknownIdStopsStartup`** (flag and `[serve] heads` both) and **`TestServeHeads_AnEmptyFlagClearsTheConfigList`.**
+- **`TestNewDecisionRouter_TheAllowlistDropsUnlistedSources`** and **`TestPrintServeBanner_WarnsWhenTheAllowlistDropsDecisionSources`.**
 
 | Guard | Breaks | Prints |
 |---|---|---|
-| **G24** `TestServeHeads_NoHeadOutsideTheList` (three `httptest` heads, `--heads` names two, the first two fail with 503) | the router chooses or falls back to a head the operator excluded, or `/v1/models` advertises it | `--heads %v, yet %s was %s` |
+| **G24** `TestServeHeads_NoHeadOutsideTheList` (`--heads` names two heads that both answer 503; the excluded head is live and also has a cache entry seeded for the same prompt) | the router chooses or falls back to a head the operator excluded, `/v1/models` advertises it, or the cache serves its answer | `--heads %v, yet %s was %s` (`advertised by /v1/models`, `what answered model …`, `sent a request …`) |
 
 ## 6. PR plan
 
-Every PR targets `develop` and squash-merges only on all-`SUCCESS` CI. **Only the final PR of a ticket says `Closes #n`; an earlier PR of the same ticket says `Part of #n`** (`close-shipped-issues.yml` closes every `Closes #n` at release, so an early `Closes` would close an unfinished ticket). #1209 has two PRs (0 and 4); every other ticket has one. In this order:
+Every PR targets `develop` and squash-merges only on all-`SUCCESS` CI. **Only the final PR of a ticket says `Closes #n`; an earlier PR of the same ticket says `Part of #n`** (`close-shipped-issues.yml` closes every `Closes #n` at release, so an early `Closes` would close an unfinished ticket). #1209 has two PRs (0 and 4), and #1207's PR 1 covers checkpoint A only (its remainder is #1326); every other ticket has one. In this order:
 
 | # | Branch | Title | Body | Depends on | Touches |
 |---|---|---|---|---|---|
-| 0 | `feature/1209-match-verifier` | `feat(oracle): match verifier with one label normaliser` | Part of #1209. `MatchOracle`, `NewMatch`, `NormaliseLabel` and their tests only; wires nothing into dispatch or config. Lands first so E7 imports it (E7 Q1). No new dependency. | — | `internal/oracle/match.go` (new), `internal/oracle/match_test.go` (new) |
-| 1 | `feature/1207-provider-neutral-quota` | `feat(budget): provider-neutral quotas with a claude_pct read alias` | Closes #1207 | — | `internal/budget/quota.go` (new), `internal/dispatch/dispatch.go` (535-547, 984-1082, 1627-1634), `cmd/hydra/main.go` (701-732, 796-803) |
+| 0 | `feature/1209-match-verifier` | `feat(oracle): a match verifier for label answers` (opened as #1328) | Part of #1209. `MatchOracle`, `NewMatch`, `NormaliseLabel` and their tests only; wires nothing into dispatch or config. Lands first so E7 imports it (E7 Q1). No new dependency. | — | `internal/oracle/match.go` (new), `internal/oracle/match_test.go` (new), `internal/oracle/oracle.go` (one rune-safe `truncate`/`clip`, also used by `firstLine`) |
+| 1 | `feature/1207-provider-neutral-quota` | `refactor(budget,dispatch): a provider-neutral Quota replaces claude_pct in routing` (opened as #1330) | Part of #1207 (checkpoint A only). The remaining #1207 work (history reset after `/compact`, level timestamps and expiry, cross-process `state.json` writes, history units, reading the `quotas` key) is tracked in #1326 (E2); whichever PR finishes #1207 carries the `Closes`. | — | `internal/budget/quota.go` (new), `internal/dispatch/dispatch.go` (535-547, 984-1082, 1627-1634), `cmd/hydra/main.go` (701-732, 796-803), `CLAUDE.md` (the budget row), tests and `internal/dispatch/testdata/state_pre_e1_*.json` |
 | 2 | `feature/1208-task-class-resolver` | `feat(serve): task class by header, metadata or route default, and temperature and max-cost passthrough` | Closes #1208 | — (parallel with 1) | `internal/trust/domain.go`, `internal/serve/serve.go` (`chatRequest`, `Request`, `chat`, `request`), `internal/serve/contract.go` (new, task-class and max-cost headers only), `cmd/hydra/serve.go` (`serveRouter`, `Chat`, `--task-class`), `internal/dispatch/dispatch.go` (`Options`, `:880` literal) |
 | 3 | `feature/1206-routing-objective` | `feat(serve)!: route model "hydra" by objective, quality by default` (`BREAKING CHANGE:` footer naming `hydra/standard` and `--enum`) | Closes #1206 | 2 | `internal/rank/constraint.go`, `internal/dispatch/dispatch.go` (`Options`, 677-697, success `Result`), `internal/dispatch/explore.go`, `internal/config/config.go` (`explore_seed`), `internal/serve/serve.go`, `cmd/hydra/serve.go` (`routeToDispatch`, flags, banner) |
 | 4 | `feature/1209-match-verifier-escalation` | `feat(dispatch): verifier-gated escalation on the serve path, one cost value` | Closes #1209 (notes the `est_cost_usd` model-price fix) | 0, 3 | `internal/config/config.go` (`Serve`), `internal/decide/cascade.go` (new), `internal/dispatch/dispatch.go` (`CallCost`, `headPrice`, `Result.CostUSD`, `Options.Escalate`, 930-981, `logDispatch` 1676), `internal/dispatch/cache.go` caller, `cmd/hydra/vet.go:170`, `cmd/hydra/workflow.go:117`, `cmd/hydra/serve.go` (incl. the max-cost/policy minimum), `cmd/hydra/serve_decisions.go` (shared calibrator) |
 | 5 | `feature/1210-response-contract` | `feat(serve): evidence headers, hydra body metadata and a trust run per request` | Closes #1210 | 4 | `internal/serve/contract.go`, `internal/serve/serve.go` (`Answer`, `chat`), `internal/serve/decisions.go` (16-23, 70, 81-82), `internal/decide/decide.go` (`Outcome.Decision`), `internal/decide/cascade.go` (`Ledger`), `cmd/hydra/serve.go`, and a filed follow-up issue for removing the legacy decision headers |
-| 6 | `feature/1325-serve-heads` | `feat(serve): --heads restricts the router to named heads` | Closes #1325 | — (independent) | `internal/dispatch/dispatch.go` (`RestrictHeads`), `cmd/hydra/serve.go` (`--heads`, startup) |
+| 6 | `feature/1325-serve-head-allowlist` | `feat(serve): a head allowlist so hyctl serve routes among named heads only` (opened as #1329) | Closes #1325 | — (independent) | `internal/dispatch/dispatch.go` (`RestrictHeads`, `Allows`, `ServeHeads`, `embedHeads`, the pin check), `internal/dispatch/cache.go` (excluded-head hits are misses; embedder from the full discovery), `internal/dispatch/capture_recall.go`, `internal/config/config.go` (`Serve.Heads`), `cmd/hydra/serve.go` (`--heads`, startup, banner), `cmd/hydra/serve_decisions.go` (decision sources filtered) |
 
 **Why this order.**
 
 - PRs 2→5 all edit `cmd/hydra/serve.go` and `internal/serve/serve.go`, so they are strictly sequential to keep conflicts out of review.
 - PR 0 is pure `internal/oracle` and merges first, so E7's PR 2 (suites and grader) can import `NormaliseLabel` without waiting for PR 4.
 - PR 1 touches disjoint regions of `dispatch.go` and can merge at any point.
-- PR 6 (#1325) depends on nothing. It touches `cmdServe`'s flag block and adds one method to `dispatch.go`, so its conflicts with PRs 2–5 are textual; whichever lands second rebases.
+- PR 6 (#1325) depends on nothing. It touches `cmdServe`'s flag block, `printServeBanner`'s signature, the `Serve` config struct and `dispatch/cache.go`, so its conflicts with PRs 2–5 are textual; whichever lands second rebases. PR 4 adds `Verifiers` to the `Serve` struct PR 6 created.
 - PR 3 needs PR 2's `Domain` on the serve path, or `quality` would rank on the pooled order.
 - PR 4 needs PR 3's order to escalate along.
 - PR 5 needs PR 4's outcome to report.
@@ -985,7 +1069,7 @@ Every PR targets `develop` and squash-merges only on all-`SUCCESS` CI. **Only th
 | # | Risk | Effect | Mitigation |
 |---|---|---|---|
 | R1 | **`match` checks that the answer is a valid label, not the right one.** On intent suites most wrong answers are still valid labels, so P(pass \| wrong) ≈ 1, sp is low, and LLR(pass) ≈ 0 once calibrated. | The posterior stays ≈ P̂. If every head's P̂ is under the target, every request escalates to `--max-escalations`, which can triple the cost arm's spend and fail T4 for a reason that is not routing. **So at checkpoint A any `quality` gain comes from per-class measured competence on the calibration split, not from verification.** | (1) E7's run config fixes `--confidence` and `--max-escalations` **per served arm** before any run, and `run.json` freezes them. (2) The smoke tier reports each served arm's escalation rate; if any exceeds **20%**, the full run is blocked pending review (E7 §6.4). (3) **Hypothesis caveat for H1 and H3**, written into #1213 and into every A `summary.json`: "`match` checks label validity, not correctness; a pass or fail of H1/H3 at A measures routing on calibrated per-class competence, not verifier-gated escalation." H6 reports the verifier's measured D (scope §4). The design does not special-case it: a weak verifier earning little evidence is the calibration working (RFC §5.2.3). |
-| R2 | **Quota emergency still forces `LocalOnly` on serve** (scope C12). | A stale `claude_pct ≥ 80` on a dev machine turns a run local-only. | E7 runs in a fresh `HYDRA_HOME` (E7 §1.5). The log line now names the scope that fired. G3 keeps the behaviour deliberate. Scoping session quotas to their own session is E5's work. |
+| R2 | **Quota emergency still forces `LocalOnly` on serve** (scope C12). | A stale `claude_pct ≥ 80` on a dev machine turns a run local-only. | E7 runs in a fresh `HYDRA_HOME` (E7 §1.5). The log line keeps develop's wording (`Claude at N%`), since `session:claude-code` is the only scope at A (#1330). G3 keeps the behaviour deliberate. Scoping session quotas to their own session is E5's work; level expiry is #1326. |
 | R3 | **Only heads that name a model (`Meta["model"]`: OpenRouter allowlist, LiteLLM, llama.cpp) are priced per model.** Bedrock, OpenAI, Anthropic and other key-derived heads are one head per key, priced by tier (`env/provider.go:101`; no `Meta["model"]`). | `X-Hydra-Cost-USD` for those heads is a tier price, and a key-derived provider offers the router one model, not several. | **Bedrock yields one router head**, `env/bedrock`, whose model is `BEDROCK_MODEL_ID`. The full tier's multi-model Hydra arms therefore require the OpenRouter allowlist (`[openrouter] models`). That is a **run prerequisite, not a code change**: no `[bedrock] models` allowlist is planned in E1. Smoke stage 1 (direct Bedrock calls only) can run once AWS credentials work; on 2026-11-05 they fail with `UnrecognizedClientException` (E7 R2). E7 records each call's price row (`price_ref`), and the cost cross-check skips tier-priced `env/bedrock` rows (§3). |
 | R4 | CLI and agy heads ignore `Temperature`. | A served answer from one is unpinned. | They are excluded from every E7 arm (E7 scope §5.2), enforced by `hyctl serve --heads` (#1325, §1.6). A refusal rule like the tools one (`dispatch.go:762-768`) would be a behaviour change for every CLI user with no A consumer. |
 | R5 | **The breaker parks a head after a 429/5xx** (`health`, #1111). | Later items route differently within one run. | The harness records `X-Hydra-Sources` per item. E7's determinism gate (identical rerun, \|Δpass\| ≤ 0.5 pt) catches a material drift. |
@@ -1018,3 +1102,45 @@ Cross-checked against `0001-design-E7.md`. Changes to this document:
 7. **Bedrock** (R3): one router head from `BEDROCK_MODEL_ID`; the full tier needs the OpenRouter allowlist; smoke stage 1 needs working AWS credentials. Recorded as run prerequisites, not code.
 8. **§3 harness table**: added rows for the head allowlist, cache off (E1 sets `NoCache` only with `Escalate`, so E7 writes `cache_answers = false`), per-arm cascade parameters, and the calibration-reload-on-restart note; removed the `threshold` arm from the direct arms (not in A); format fails come from the full-label-set `MatchOracle`; the verifier's calibration verdict is the full-label-set one; E7's `trust.RecordOutcome` extraction is noted.
 9. **Name alignment** now also lists the decision vocabulary (`accept`/`budget_exhausted`/`no_evidence`), and the E7 design is marked as using the E1 names.
+
+## As shipped (2026-11-05)
+
+Three E1 PRs are open against `develop`: #1328 (PR 0), #1330 (PR 1) and #1329 (PR 6). The sections above now describe their code. This list records where that code departs from the first draft of this design, and which PR made each change. The Reconciliation above is left as it was written.
+
+**#1328, `feat(oracle): a match verifier for label answers` (PR 0, Part of #1209):**
+
+1. **`-` is always significant.** The draft folded runs of space **or `-`** to `_`. The shipped `NormaliseLabel` never folds or strips `-`, so `card-arrival` ≠ `card_arrival`, and `A-`, `-1` and `- 3` keep their sign (§1.4). Only whitespace and `_` runs fold to `_`.
+2. **`*` is stripped only as a matched pair** around the whole string (`**Card Arrival**` → `card_arrival`); a lone `*` is part of the label (`A*` → `a*`).
+3. **`•` (U+2022) is the only bullet** stripped from the edges. A leading `- ` is a sign, not a bullet.
+4. **Cf runes are dropped** anywhere in the answer (BOM, zero-width space), in both label and pattern mode.
+5. **Unicode dashes become `-`**: U+2010–U+2015 and the minus sign U+2212.
+6. **Edge stripping repeats to a fixed point**, over quotes, curly quotes, backticks, `_`, `•`, trailing dots and a `*` pair, so the function is idempotent.
+7. **Pattern mode is anchored** (`^(?:p)$`) and only `TrimSpace` plus Cf removal is applied to the answer. `NewMatch` also compiles the raw pattern, so `a)|(.*` cannot escape the anchors, and a wrap that fails to compile is an error, never a panic.
+8. **Colliding or empty labels are refused** by `NewMatch`: two labels that normalise to the same key, or a label that normalises to empty (§1.4, and the `[[serve.verifiers]]` startup errors).
+9. **G19 was renamed** from `TestMatchOracle_SameNormaliserAsE7Pass` to `TestMatchOracle_VerifyAgreesWithNormaliseLabel`, and `ExampleNormaliseLabel` is a separate example test (§5.4).
+10. **`internal/oracle/oracle.go` is also touched**, for one rune-safe truncation policy (`truncate`/`clip`, used by `firstLine` too). `CommandOracle` details can be up to 3 bytes shorter.
+11. Known follow-up: `-*1*` (a sign outside an emphasis pair) normalises to `-*1` and does not match `-1`.
+
+**#1330, `refactor(budget,dispatch): a provider-neutral Quota replaces claude_pct in routing` (PR 1, Part of #1207, checkpoint A only):**
+
+1. **The API is `ParseState(raw) State` and `Governing(qs) (Quota, Mode, bool)`**, not `Quotas(state) []Quota` and `Governing(qs) (Quota, bool)`. `State.Budget()` decodes the per-model table on demand for `hyctl status` (§1.1).
+2. **The `quotas` key is ignored at checkpoint A.** Reading it, and the `quotas`/alias precedence, moved to #1326 (E2), which adds validation, timestamps and expiry (§1.1, §4). `TestParseState_IgnoresTheQuotasKey` replaces the draft's `quotas` rows.
+3. **`claude_pct` is read as an integer only**, in parity with develop's `int` decode: a fraction or a string is unset, and the clamp to 0..100 runs before the int conversion. One non-integer history point makes the history unknown rather than 0 (§1.1).
+4. **develop's wording is kept.** `hyctl status` still prints `Claude  :`, and the governor log lines are develop's (`Claude at N%`), not `<scope> at N%`. The one deliberate change: "downgrading tier" is claimed only when the tier moved (§1.1, R2).
+5. **`LegacySessionQuota` is not exported**, and `asInt`/`asIntSlice` were deleted rather than moved; `legacyLevel` and `parseHistory` in `quota.go` replace them. `Quota` has no JSON tags, and `Pct()` rounds without clamping (the clamp is on the read).
+6. **G2 scans the whole tree** with `go/ast` (string literals and the `claudeMode` identifier, comments ignored), allow-listing `internal/budget`, `internal/tui` and `desktop/api`, rather than walking three directories (§5.1).
+7. **The race test** is `TestSyncStateJSON_InProcessSyncsNeverRollTheLevelBack`, which covers in-process writers only; cross-process `state.json` races are #1326 (§5.1).
+8. **Body and title.** "Part of #1207", not "Closes #1207", and the title is a `refactor(budget,dispatch)` (§6).
+
+**#1329, `feat(serve): a head allowlist so hyctl serve routes among named heads only` (PR 6, Closes #1325):**
+
+1. **`RestrictHeads(ids, localOnly)`** takes a second argument. Under `--local` the list must keep a routable local head (§1.6).
+2. **The `pii` policy is not local-only for all.** Its `local-only` action binds only PII prompts, so a hosted-only list is accepted under it; only `--local` makes `localOnly` true (§1.6).
+3. **`[serve] heads` was added** as the config spelling. `--heads` overrides it for one run, and `--heads ""` clears it. The draft said there was no config spelling in A (§1.6).
+4. **`/v1/decisions` is restricted.** The draft left it unrestricted. Decision ids are never dispatch heads, so with any list set it has no sources, and the banner says so when that happens (§1.6).
+5. **Embedding lookups use the full discovered set** (`embedHeads()`), including an untagged `embed_model` head. The draft made an unlisted embedding head unavailable to them (§1.6).
+6. **Cache hits from excluded heads are treated as misses**, and a pinned head off the list gets an error naming the allowlist rather than the generic unknown-head refusal (§1.6).
+7. **Also refused:** a list with no routable head (for example only an embedding head); an embedding-only head may itself be listed (§1.6).
+8. **Branch** `feature/1325-serve-head-allowlist`, not `feature/1325-serve-heads`, and the PR touches `cache.go`, `capture_recall.go`, `config.go` and `serve_decisions.go` as well (§6).
+
+**#1327 (E7 PR 1, `internal/stats`)** changes no E1 interface. It replaces `budget`'s private `normCDF` with `stats.NormalCDF` in `risk.go`, which #1330 does not touch, so the two do not conflict.

@@ -18,7 +18,7 @@ checkpoint B (§5).
 |---|---|---|
 | Calibration error of stated P(correct) | `reliability.Evaluate([]Observation, bins)`: Brier, Murphy decomposition, ECE, MCE; refuses below `MinObservations` | Nothing. The harness builds `Observation{Predicted, Correct, Ref}` per accepted answer. |
 | Per-source se/sp report | `reliability.EvaluateSources` | Nothing. Used for verifier se/sp (H6). |
-| Bootstrap with a fixed seed | `ope.bootstrapInterval` (unexported, weighted percentile, seeded) | A *paired* bootstrap over item-level differences. Lift the resampler into a shared helper rather than write a second one (CLAUDE.md: no duplicate logic). |
+| Bootstrap with a fixed seed | `ope.bootstrapInterval` (unexported, weighted percentile, seeded) | A *paired* bootstrap over item-level differences. Lift the resampler into a shared helper rather than write a second one (CLAUDE.md: no duplicate logic). *Done in #1327: the shared helper is `internal/stats` (`Resample` over a `Stat`), and `ope` calls it.* |
 | Counterfactual policy value from logs | `ope.Evaluate` (SNIPS + bootstrap, ESS gate) | Not used to score arms. Arms run live. `ope` stays for comparing objectives from production logs (§5.0 `ArgmaxMeasured`). |
 | Labelled verdicts | `evalset.Example` (task, candidate, `Passed`, enum/head, vector) | The harness writes no evalset rows. Benchmark items are public data, and mixing them into a user's corpus would let `classify` fit on them. Results go only to `bench/results/`. |
 | kNN pass prediction (H4) | `classify.Load`, `Corpus.Near`, `PredictPass` | A corpus built from the *calibration* split only, in a temp dir. |
@@ -86,6 +86,10 @@ type Suite interface {
 - **Verifier.**
   - *classify:* the label after canonicalisation (casefold, NFC, strip) is exactly
     equal to gold. A label outside the label set is a fail, never a near-miss.
+    *As shipped in #1328, the canonicaliser is `oracle.NormaliseLabel`: lowercase, drop
+    Cf runes, Unicode dashes to `-`, strip edge quotes, backticks, `_`, the `•` bullet,
+    trailing dots and a matched `*` pair, fold whitespace/`_` runs to `_`. It does no NFC
+    (E7 design R6), and `-` stays significant, so `card-arrival` ≠ `card_arrival`.*
     CLINC's OOS counts as a label (`oos`); abstention is scored separately (§4).
   - *extract:* the answer must parse against the suite's JSON schema (a parse failure
     is a fail). Then field exact match after the task-models canonicalisers
@@ -157,7 +161,10 @@ includes it):
 ### 1.6 Paired statistics
 
 All comparisons are paired by item against `frontier` unless stated. One implementation
-in `internal/bench/stats.go`, tested against hand-computed fixtures to 1e-9.
+in `internal/bench/stats.go`, tested against hand-computed fixtures to 1e-9. *As shipped
+in #1327, that implementation is the neutral leaf package `internal/stats` (E7 design
+§1.4), shared with `ope`, `entity`, `budget` and `trust`, with golden values from
+scipy, statsmodels, mpmath and Tango (1998).*
 
 - **Δpass (H1, H3, H14, H15).**
   - Per item, `d_i = pass_arm − pass_frontier ∈ {−1, 0, 1}`.
@@ -174,7 +181,8 @@ in `internal/bench/stats.go`, tested against hand-computed fixtures to 1e-9.
   of the ratio difference, 10k resamples. "CI excludes 0" is two-sided 95%.
 - **Accepted-answer error vs α (H2).** Among accepted answers, the error rate with a
   one-sided 95% Clopper–Pearson upper bound. Lift `entity.wilson` beside it rather
-  than add a third interval. ECE and Brier come from `reliability.Evaluate`, 10 bins,
+  than add a third interval. *Done in #1327: `stats.ClopperPearsonUpper` and
+  `stats.Wilson`, which `entity` now calls.* ECE and Brier come from `reliability.Evaluate`, 10 bins,
   reported with n.
 - **Escalation rate and mean sources consulted.** Per arm, with Wilson intervals.
 - **Added latency.** Per item, `t_hydra − t_direct`, with calls interleaved ABAB on
