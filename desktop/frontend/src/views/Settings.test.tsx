@@ -4,7 +4,14 @@ import { Settings } from './Settings'
 import { GetSettings, SaveSettings } from '../bindings'
 import type { Settings as SettingsData } from '../types'
 
-vi.mock('../bindings', () => ({ GetSettings: vi.fn(), SaveSettings: vi.fn() }))
+vi.mock('../bindings', () => ({
+  GetSettings: vi.fn(),
+  SaveSettings: vi.fn(),
+  // Providers and the command-line section have their own tests; here they
+  // only need to answer.
+  GetProviderKeys: vi.fn(() => Promise.resolve({ keys: [], store: 'the macOS Keychain' })),
+  CheckHyctl: vi.fn(() => Promise.resolve({ found: false, supported: true })),
+}))
 const mockGet = vi.mocked(GetSettings)
 const mockSave = vi.mocked(SaveSettings)
 

@@ -510,6 +510,14 @@ func cachedProbe(ctx context.Context) *probe.Result {
 	return probeCacheResult
 }
 
+// ForgetProbe drops the cached probe. A key saved in the desktop app changes
+// what discovery finds without touching HOME or PATH, which the cache keys on.
+func ForgetProbe() {
+	probeCacheMu.Lock()
+	defer probeCacheMu.Unlock()
+	probeCacheResult = nil
+}
+
 // PIILocalOnly reports whether cfg's pii policy forces local-only routing,
 // the config-level check for callers with no Dispatcher yet (the TUI's route
 // badge), so the rule is never restated (#597).
