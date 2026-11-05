@@ -114,8 +114,8 @@ func TestServeBanner_CountsOnlyReachableHeads(t *testing.T) {
 	}
 
 	var local, all bytes.Buffer
-	printServeBanner(&local, "127.0.0.1:1", "STANDARD", false, true, heads)
-	printServeBanner(&all, "127.0.0.1:1", "STANDARD", false, false, heads)
+	printServeBanner(&local, "127.0.0.1:1", "STANDARD", false, true, heads, 0)
+	printServeBanner(&all, "127.0.0.1:1", "STANDARD", false, false, heads, 0)
 
 	// --local: only the one routable local chat head is reachable.
 	if !strings.Contains(local.String(), "of 1 reachable") {

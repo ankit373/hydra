@@ -210,6 +210,7 @@ func cmdServe() *cobra.Command {
 		addr, token, enum string
 		localOnly         bool
 		confidence        float64
+		heads             []string
 	)
 
 	cmd := &cobra.Command{
@@ -231,7 +232,8 @@ func cmdServe() *cobra.Command {
 			"other people's model servers.",
 		Example: "  hyctl serve\n" +
 			"  hyctl serve --enum SIMPLE --local\n" +
-			"  hyctl serve --addr 0.0.0.0:8788 --token \"$HYDRA_SERVE_TOKEN\"\n\n" +
+			"  hyctl serve --addr 0.0.0.0:8788 --token \"$HYDRA_SERVE_TOKEN\"\n" +
+			"  hyctl serve --heads ollama/qwen3:8b,env/openai\n\n" +
 			"  # point open-code-review at it\n" +
 			"  OCR_LLM_URL=http://127.0.0.1:8787/v1 OCR_LLM_MODEL=hydra ocr review",
 		RunE: func(c *cobra.Command, _ []string) error {
@@ -251,17 +253,20 @@ func cmdServe() *cobra.Command {
 				return fmt.Errorf("dispatcher init: %w", err)
 			}
 			defer d.Close()
+			if err := restrictServeHeads(d, heads, c.Flags().Changed("heads"), localOnly); err != nil {
+				return err
+			}
 
 			ln, err := serve.Listen(addr, token)
 			if err != nil {
 				return err
 			}
-			decider, err := newDecisionRouter(ctx, confidence, localOnly)
+			decider, err := newDecisionRouter(ctx, confidence, localOnly, d.Allows)
 			if err != nil {
 				return err
 			}
 			r := serveRouter{d: d, defaultEnum: enum, localOnly: localOnly}
-			printServeBanner(os.Stdout, ln.Addr().String(), enum, token != "", localOnly, d.Heads())
+			printServeBanner(os.Stdout, ln.Addr().String(), enum, token != "", localOnly, d.Heads(), decider.unlisted)
 			return serve.Serve(ctx, ln, serve.Handler(r, decider, token))
 		},
 	}
@@ -272,10 +277,26 @@ func cmdServe() *cobra.Command {
 	f.StringVar(&enum, "enum", "STANDARD", "routing enum for a request that names no key")
 	f.BoolVar(&localOnly, "local", false, "local Heads only, no API calls")
 	f.Float64Var(&confidence, "confidence", 0.95, "stop asking decision sources once an answer is this sure")
+	f.StringSliceVar(&heads, "heads", nil, "route among only these head ids (default [serve] heads in config.toml; "+
+		"--heads \"\" clears it). Embedding models stay available to the cache and recall, listed or not; "+
+		"decision sources are not heads it can name, so with a list set /v1/decisions has none")
 	return cmd
 }
 
-func printServeBanner(w io.Writer, addr, enum string, hasToken, localOnly bool, heads []provider.Head) {
+// restrictServeHeads applies the allowlist before the server binds, so a typo is a
+// startup error rather than a server quietly routing to heads the operator excluded.
+func restrictServeHeads(d *dispatch.Dispatcher, flagHeads []string, flagSet, localOnly bool) error {
+	ids := d.ServeHeads()
+	if flagSet {
+		ids = flagHeads
+	}
+	if err := d.RestrictHeads(ids, localOnly); err != nil {
+		return fmt.Errorf("head allowlist: %w", err)
+	}
+	return nil
+}
+
+func printServeBanner(w io.Writer, addr, enum string, hasToken, localOnly bool, heads []provider.Head, unlistedDecisions int) {
 	// Over the heads this server can actually reach. Counting all 16 on a
 	// --local endpoint advertised ten that no request could ever route to
 	// (#1147).
@@ -305,6 +326,10 @@ func printServeBanner(w io.Writer, addr, enum string, hasToken, localOnly bool, 
 	fmt.Fprintf(w, "  auth              %s\n", auth)
 	if localOnly {
 		fmt.Fprintf(w, "  heads             local only\n")
+	}
+	if unlistedDecisions > 0 {
+		fmt.Fprintf(w, "  decisions         none: --heads names no decision source, so /v1/decisions has none (%d dropped)\n",
+			unlistedDecisions)
 	}
 	// "can be sent tools", which is a property of the dialect, not a promise
 	// that the model will answer with a structured call: measured here, Ollama

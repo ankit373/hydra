@@ -127,6 +127,14 @@ type Config struct {
 	CacheBudgetMB int `toml:"cache_budget_mb,omitempty"`
 
 	OpenRouter OpenRouter `toml:"openrouter,omitempty"`
+	Serve      Serve      `toml:"serve,omitempty"`
+}
+
+// Serve configures `hyctl serve`.
+type Serve struct {
+	// Heads is the allowlist the server routes among; empty means every discovered head.
+	// `--heads` replaces it for one run.
+	Heads []string `toml:"heads,omitempty"`
 }
 
 // OpenRouterModels is the configured allowlist, or nothing.
