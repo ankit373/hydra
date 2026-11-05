@@ -118,14 +118,14 @@ export function Settings() {
         note="Both of these are about where work can go, not how much it costs."
       >
         <Toggle
-          label="Route anything with PII to a local head"
-          detail="When the detector fires, only heads that run on this machine may see the content."
+          label="Send anything with personal data to a local model"
+          detail="When personal data is detected, only models running on this machine see the content."
           on={draft.piiLocalOnly}
           onChange={(v) => set('piiLocalOnly', v)}
         />
         <Toggle
-          label="Refuse rather than send, when nothing local is routable"
-          detail="With this off, a secret payload goes to a head that reaches the network instead of failing. Absent means on, which is the safe reading of a setting nobody chose."
+          label="Refuse rather than send, when no local model is ready"
+          detail="With this off, a secret payload goes to a model over the network instead of being refused. If you never set it, it counts as on."
           on={draft.strictEgress}
           onChange={(v) => set('strictEgress', v)}
         />
@@ -151,8 +151,8 @@ export function Settings() {
           />
         )}
         <Toggle
-          label="Keep a vector per dispatch"
-          detail="An embedding is not plaintext, but inversion attacks recover approximate text from one, so it is its own decision rather than part of the one above."
+          label="Keep a vector per request"
+          detail="A vector is not plain text, but approximate text can be recovered from it, so it is a separate choice from the one above."
           on={draft.captureEmbeddings}
           onChange={(v) => set('captureEmbeddings', v)}
         />
@@ -207,23 +207,23 @@ export function Settings() {
 
       <Group
         title="Routing"
-        note="Changing the Cortex means picking from the heads this machine discovered, which is what `hyctl init` is for."
+        note="To change the main model, run hyctl init and pick from the models this machine found."
       >
         <Num
-          label="How often to try a head other than the best one"
+          label="How often to try a model other than the best one"
           step={0.01}
-          hint="Between 0 and 1. 0 is pure argmax and changes nothing. Without some exploration, questions about what another head would have done are unidentifiable rather than merely noisy, so `hyctl trace evaluate` refuses them."
+          hint="Between 0 and 1. At 0 Hydra always uses the best model. A small value lets Hydra learn how other models would have done, which hyctl trace evaluate needs."
           value={draft.exploreRate}
           onChange={(v) => set('exploreRate', v)}
         />
-        <Read label="Cortex" value={data.cortex || '—'} />
+        <Read label="Main model" value={data.cortex || '—'} />
         <Read label="Skills" value={data.skills?.join(', ') || '—'} />
         <Read
           label="OpenRouter models"
           value={
             data.openRouterModels?.length
               ? data.openRouterModels.join(', ')
-              : 'none named, so the key routes as one head'
+              : 'none named, so the key counts as one model'
           }
         />
       </Group>

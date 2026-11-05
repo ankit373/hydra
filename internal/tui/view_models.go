@@ -308,7 +308,7 @@ func (m Cockpit) modelDetail(w int) string {
 	g, mr := m.selectedModel()
 	box := ckBoxS
 	if m.modelFocus {
-		box = box.BorderForeground(ckAqua)
+		box = ckFocusBox(box)
 	}
 	if g == nil {
 		return box.Render(ckLabelS.Render("MODEL") + "\n\n " + ckFaintS.Render("nothing selected"))
@@ -358,7 +358,7 @@ func (m Cockpit) modelDetail(w int) string {
 	case mr.embed:
 		lines = append(lines, "", " "+ckFaintS.Render("embeddings only, never routed"))
 	case !mr.up:
-		lines = append(lines, "", " "+ckExpS.Render("not routable"), " "+ckFaintS.Render(truncate(mr.reason, 38)))
+		lines = append(lines, "", " "+ckExpS.Render("not routable"), " "+ckFaintS.Render(truncate(ckSafe(mr.reason), 38)))
 	}
 	if m.modelFocus {
 		lines = append(lines, kv("id", mr.id), " "+ckFaintS.Render("esc back to the list"))

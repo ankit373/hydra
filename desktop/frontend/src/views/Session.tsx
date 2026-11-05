@@ -136,7 +136,7 @@ export function Timeline({ entries }: { entries: TimelineEntry[] }) {
 /** The right-hand facts, with separators only between present values. */
 function meta(e: TimelineEntry): string {
   const parts: string[] = []
-  if (e.confidence > 0) parts.push(pct(e.confidence * 100, 1))
+  if (e.confidence > 0) parts.push(`${pct(e.confidence * 100, 1)} likely correct`)
   if (e.durationMs > 0) parts.push(ms(e.durationMs))
   if (e.costUsd > 0) parts.push(usdExact(e.costUsd))
   return parts.join(' · ')

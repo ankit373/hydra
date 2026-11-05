@@ -87,7 +87,7 @@ export function SessionGraph({
         })}
       </svg>
       <p className="graph__legend">
-        solid = ownership · dashed = A2A handoff
+        Solid line: one step started the next. Dashed line: work handed from one model to another.
       </p>
     </div>
   )

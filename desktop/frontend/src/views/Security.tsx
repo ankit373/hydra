@@ -28,7 +28,7 @@ import type {
   Threats,
   Trend,
 } from '../types'
-import { clockTime, coverageBand, costBand, toSecurityCSV } from '../format'
+import { clockTime, coverageBand, costBand, toSecurityCSV, usdWhole } from '../format'
 import { MCPServers } from './MCPServers'
 import { PageHeader } from './PageHeader'
 import { Tabs } from './Tabs'
@@ -51,10 +51,10 @@ function findCheckStatus(checks: Check[], name: string): string | undefined {
 // 'partial' was dropped here and the donut's slices quietly stopped summing to
 // the category count (#753).
 const COVERAGE_SLICES: Record<CoverageStatus, Omit<DonutSegment, 'value'> | null> = {
-  enforced: { label: 'Enforced', colorVar: 'var(--hy-cheap)' },
-  configured: { label: 'Configured', colorVar: 'var(--hy-aqua)' },
-  partial: { label: 'Partial', colorVar: 'var(--hy-mid)' },
-  gap: { label: 'Gap', colorVar: 'var(--hy-expensive)' },
+  enforced: { label: 'Enforced', colorVar: 'var(--hy-color-status-success)' },
+  configured: { label: 'Configured', colorVar: 'var(--hy-color-accent-default)' },
+  partial: { label: 'Partial', colorVar: 'var(--hy-color-status-warning)' },
+  gap: { label: 'Gap', colorVar: 'var(--hy-color-status-danger)' },
   'n/a': null,
 }
 
@@ -75,9 +75,9 @@ function coverageSegments(categories: Category[]): DonutSegment[] {
 // separately instead of drawn into the same pie.
 function ledgerSegments(ledger: LedgerPanel): DonutSegment[] {
   return [
-    { label: 'Allowed', value: ledger.allowed, colorVar: 'var(--hy-cheap)' },
-    { label: 'Denied', value: ledger.denied, colorVar: 'var(--hy-expensive)' },
-    { label: 'Ask', value: ledger.asked, colorVar: 'var(--hy-mid)' },
+    { label: 'Allowed', value: ledger.allowed, colorVar: 'var(--hy-color-status-success)' },
+    { label: 'Denied', value: ledger.denied, colorVar: 'var(--hy-color-status-danger)' },
+    { label: 'Ask', value: ledger.asked, colorVar: 'var(--hy-color-status-warning)' },
   ]
 }
 
@@ -85,9 +85,9 @@ function actionSegments(actions: Action[]): DonutSegment[] {
   const counts = { now: 0, soon: 0, watch: 0 }
   for (const a of actions) counts[a.priority]++
   return [
-    { label: 'Now', value: counts.now, colorVar: 'var(--hy-expensive)' },
-    { label: 'Soon', value: counts.soon, colorVar: 'var(--hy-mid)' },
-    { label: 'Watch', value: counts.watch, colorVar: 'var(--hy-dim)' },
+    { label: 'Now', value: counts.now, colorVar: 'var(--hy-color-status-danger)' },
+    { label: 'Soon', value: counts.soon, colorVar: 'var(--hy-color-status-warning)' },
+    { label: 'Watch', value: counts.watch, colorVar: 'var(--hy-color-text-muted)' },
   ]
 }
 
@@ -159,7 +159,7 @@ function ScopeNote({ boundary }: { boundary?: SecurityBoundary }) {
       <div className="scope">
         <span className="scope__label">Scope</span>
         <span>
-          Every head takes a request Hydra composes, so the gate sees everything that leaves
+          Every model takes a request Hydra composes, so the gate sees everything that leaves
           this machine.
         </span>
       </div>
@@ -171,7 +171,7 @@ function ScopeNote({ boundary }: { boundary?: SecurityBoundary }) {
     <div className="scope scope--partial">
       <span className="scope__label">Scope</span>
       <span>
-        {opaque.length} of {opaque.length + governed.length} heads are separate programs (
+        {opaque.length} of {opaque.length + governed.length} models are separate programs (
         {headList(opaque)}). Hydra guarantees what it sends them, not what they read or send
         on their own account.
         {local.length > 0 && (
@@ -278,7 +278,7 @@ function RegisterTable({ register }: { register: RiskRegister }) {
     <section>
       <h2 className="section__title">Risk register</h2>
       <p className="card__note">
-        Σ modelled defect cost ${register.sumDefectCostUsd.toFixed(0)}, per-occurrence, not
+        Σ modelled defect cost {usdWhole(register.sumDefectCostUsd)}, per-occurrence, not
         annualised{register.breached > 0 ? ` · ${register.breached} past remediation SLA` : ''}.
         Framework mappings are curated assertions, not measurements.
       </p>
@@ -299,7 +299,7 @@ function RegisterTable({ register }: { register: RiskRegister }) {
                 </td>
                 <td><span className={`sec-cat__status ${sevClass(k.severity)}`}>{k.severity}</span></td>
                 <td className={`num ${k.breached ? 'cost--expensive' : ''}`}>{k.dueInDays}d</td>
-                <td className="num">${k.defectCostUsd.toFixed(0)}</td>
+                <td className="num">{usdWhole(k.defectCostUsd)}</td>
                 <td className="card__note">
                   {(k.frameworks ?? []).map((f) => `${f.framework} ${f.control}`).join(' · ')}
                 </td>
@@ -414,7 +414,7 @@ function ActionCards({ actions }: { actions: Action[] }) {
   if (actions.length === 0) {
     return (
       <p className="card__note">
-        Nothing to act on, every applicable category is covered and no head is flagged.
+        Nothing to act on. Every applicable category is covered and no model is flagged.
       </p>
     )
   }
@@ -579,7 +579,7 @@ function PrivilegeView({ rows }: { rows: AgentPrivilege[] }) {
 // says what is live and what leaves the machine.
 function BOMView({ entries }: { entries: BOMEntry[] }) {
   if (entries.length === 0) {
-    return <p className="card__note">No heads discovered, run <code>hyctl probe</code>.</p>
+    return <p className="card__note">No models found yet. Run <code>hyctl probe</code> to look for them.</p>
   }
   const remote = entries.filter((b) => !b.local).length
   const runtime = entries.filter((b) => b.origin === 'user').length
@@ -587,14 +587,14 @@ function BOMView({ entries }: { entries: BOMEntry[] }) {
     <section>
       <h2 className="section__title">Model estate (AI-BOM)</h2>
       <p className="card__note">
-        {entries.length} head(s) · {remote} route off-machine
+        {entries.length} model(s) · {remote} off this machine
         {runtime > 0 ? ` · ${runtime} added at runtime rather than from the curated catalog` : ''}
       </p>
       <div className="table__wrap">
         <table className="table">
           <thead>
             <tr>
-              <th>Head</th><th>Provider</th><th>Source</th><th>Origin</th>
+              <th>Model</th><th>Provider</th><th>Source</th><th>Origin</th>
               <th>Egress</th><th>Live</th><th>Fingerprint</th>
             </tr>
           </thead>
@@ -809,25 +809,25 @@ function SupplyChainView({ supply }: { supply: SupplyChain }) {
   if (bins.length === 0) {
     return (
       <section>
-        <h2 className="section__title">Head binaries</h2>
-        <p className="card__note">No CLI-sourced head was discovered, so there is no local binary to fingerprint.</p>
+        <h2 className="section__title">Model binaries</h2>
+        <p className="card__note">No command-line model was found, so there is no local binary to fingerprint.</p>
       </section>
     )
   }
   return (
     <section>
-      <h2 className="section__title">Head binaries</h2>
+      <h2 className="section__title">Model binaries</h2>
       {supply.changed > 0 && (
         <div className="error">
-          {supply.changed} head binary(ies) changed since last seen. An upgrade and a swap look
-          identical here, confirm which it was.
+          {supply.changed} model binary(ies) changed since last seen. An upgrade and a swap look
+          identical here, so confirm which it was.
         </div>
       )}
       <div className="table__wrap">
         <table className="table">
           <thead>
             <tr>
-              <th>Head</th>
+              <th>Model</th>
               <th>State</th>
               <th>Fingerprint</th>
               <th>Path</th>
@@ -861,8 +861,8 @@ function ConfidenceEvidenceView({ evidence }: { evidence: EvidenceQuality }) {
   if (!evidence || evidence.runs === 0) {
     return (
       <section>
-        <h2 className="section__title">Confidence evidence</h2>
-        <p className="card__note">No confidence run has been recorded, so no confidence has been claimed.</p>
+        <h2 className="section__title">Evidence behind checked answers</h2>
+        <p className="card__note">No answer has been checked yet, so no likelihood of being correct has been claimed.</p>
       </section>
     )
   }
@@ -871,7 +871,7 @@ function ConfidenceEvidenceView({ evidence }: { evidence: EvidenceQuality }) {
   const uncal = evidence.uncalibratedSources ?? []
   return (
     <section>
-      <h2 className="section__title">Confidence evidence</h2>
+      <h2 className="section__title">Evidence behind checked answers</h2>
       {families.length === 0 && weak.length === 0 && (
         <p className="card__note">
           {evidence.runs} run(s); no correlated families and no source measured as undiagnostic.
@@ -879,10 +879,10 @@ function ConfidenceEvidenceView({ evidence }: { evidence: EvidenceQuality }) {
       )}
       {families.map((f) => (
         <div className="sec-action sec-action--now" key={f.family}>
-          <div className="sec-action__title">{f.family} heads vote as one</div>
+          <div className="sec-action__title">{f.family} models vote as one</div>
           <div className="sec-action__detail">
-            they agree {(f.coupling * 100).toFixed(0)}% beyond chance, so an ensemble of them reports
-            more confidence than it earned
+            they agree {(f.coupling * 100).toFixed(0)}% beyond chance, so a check that asks several of
+            them reports more certainty than it earned
           </div>
         </div>
       ))}
@@ -1038,7 +1038,7 @@ function ExposureView({ exposures }: { exposures: Exposure[] }) {
           <thead>
             <tr>
               <th>Destination</th>
-              <th>Head</th>
+              <th>Model</th>
               <th>Resource</th>
               <th>Detected</th>
               <th>Agent</th>
@@ -1143,7 +1143,7 @@ function EvidenceView({ events, truncated }: { events: LedgerEvent[]; truncated:
               <th>Time</th>
               <th>Decision</th>
               <th>Action</th>
-              <th>Head</th>
+              <th>Model</th>
               <th>Resource</th>
               <th>Why</th>
             </tr>
@@ -1231,7 +1231,7 @@ function ByHead({ rows }: { rows: HeadRisk[] }) {
   if (rows.length === 0) {
     return (
       <section>
-        <h2 className="section__title">Per-head risk</h2>
+        <h2 className="section__title">Per-model risk</h2>
         <p className="card__note">Nothing denied or flagged yet.</p>
       </section>
     )
@@ -1239,7 +1239,7 @@ function ByHead({ rows }: { rows: HeadRisk[] }) {
   const max = Math.max(...rows.map((r) => r.denied + r.flagged))
   return (
     <section>
-      <h2 className="section__title">Per-head risk</h2>
+      <h2 className="section__title">Per-model risk</h2>
       <div className="table__wrap">
         <div className="rank">
           {rows.map((r) => {

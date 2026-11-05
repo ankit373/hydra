@@ -73,7 +73,7 @@ export function MCPServers() {
                 <th>Server</th>
                 <th>Where it is configured</th>
                 <th>Launched by</th>
-                <th>Trust</th>
+                <th>Status</th>
                 <th>Score</th>
               </tr>
             </thead>

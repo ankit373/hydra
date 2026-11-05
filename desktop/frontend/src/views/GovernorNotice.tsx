@@ -55,7 +55,7 @@ export function GovernorNotice({
           <h3 className="gn__h" id="gnTitle">
             {band === 'emergency'
               ? 'Context is effectively full'
-              : 'Running out of orchestrator context'}
+              : 'The agent session that drives Hydra is running out of context'}
           </h3>
 
           {hasRate ? (
@@ -64,8 +64,7 @@ export function GovernorNotice({
               ceiling is about <b>{headroom} update{headroom === 1 ? '' : 's'}</b> away
               {g.risk > 0 && (
                 <>
-                  {' '}
-                 , a <b>{pctText(g.risk)}</b> chance of reaching it within the next{' '}
+                  , with a <b>{pctText(g.risk)}</b> chance of reaching it within the next{' '}
                   {g.horizonObs} update{g.horizonObs === 1 ? '' : 's'}
                 </>
               )}
@@ -86,8 +85,8 @@ export function GovernorNotice({
           </div>
 
           <p className="gn__note">
-            Past 80% Hydra routes to local heads only. Running <code>/compact</code> in the
-            orchestrator session is what actually clears it.
+            Past 80% Hydra uses local models only. Compacting the agent session that drives
+            Hydra (for example <code>/compact</code>) is what actually clears it.
           </p>
 
           {g.effectiveMode !== g.mode && (
