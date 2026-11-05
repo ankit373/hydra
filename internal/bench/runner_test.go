@@ -48,12 +48,8 @@ func testRunner(t *testing.T, n int, exec *fakeExec, arms ...string) *Runner {
 	run := Run{Track: "core", Suite: "fake", Tier: "fixture", Seed: 1, Arms: cfgs, ArmOrder: arms, ItemIDs: ids,
 		Prices: testPrices("m-front", "m-cheap", "m-mid"),
 		Crumb:  Breadcrumb{SplitSHA256: "split", DataSHA256: map[string]string{"f": "h"}}}
-	armMap, err := BuildArms(run, exec.For)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return &Runner{Run: run, Suite: fakeSuite{}, Items: items, Arms: armMap, MaxUSD: 100,
-		ResultsDir: t.TempDir(), StateDir: t.TempDir(), Now: stepClock(), Out: io.Discard}
+	return &Runner{Run: run, Suite: fakeSuite{}, Items: items, Exec: exec.For, Sleep: (&recordSleep{}).sleep,
+		MaxUSD: 100, ResultsDir: t.TempDir(), StateDir: t.TempDir(), Now: stepClock(), Out: io.Discard}
 }
 
 func rowsOf(t *testing.T, r *Runner, o Progress) []Result {
@@ -65,12 +61,15 @@ func rowsOf(t *testing.T, r *Runner, o Progress) []Result {
 	return rows
 }
 
-// canonical drops what legitimately differs between an interrupted run and an
-// uninterrupted one (when each call started) and orders rows by schedule.
+// canonical is the scored rows, without what legitimately differs between an
+// interrupted run and an uninterrupted one: when each call started, and spend-only rows.
 func canonical(rows []Result) []Result {
-	out := append([]Result(nil), rows...)
-	for i := range out {
-		out[i].Started = time.Time{}
+	var out []Result
+	for _, r := range rows {
+		if !r.Retryable {
+			r.Started = time.Time{}
+			out = append(out, r)
+		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Seq < out[j].Seq })
 	return out
@@ -114,9 +113,9 @@ func TestSchedule_SeedOrdersItemsAndArmsRotate(t *testing.T) {
 
 func TestExecute_WritesRunJSONFirstThenOneRowPerPair(t *testing.T) {
 	exec := newFakeExec()
-	exec.set("bench/openrouter/m-cheap", "q001", reply{answer: "yes"})          // wrong
-	exec.set("bench/openrouter/m-cheap", "q003", reply{answer: "maybe so"})     // format
-	exec.set("bench/openrouter/m-cheap", "q005", reply{err: errors.New("eof")}) // transport
+	exec.set("bench/openrouter/m-cheap", "q001", reply{answer: "yes"})                         // wrong
+	exec.set("bench/openrouter/m-cheap", "q003", reply{answer: "maybe so"})                    // format
+	exec.set("bench/openrouter/m-cheap", "q005", reply{err: &executor.StatusError{Code: 400}}) // a final refusal
 	r := testRunner(t, 20, exec, "frontier", "cheapest")
 	o, err := r.Execute(context.Background())
 	if err != nil {
@@ -145,8 +144,8 @@ func TestExecute_WritesRunJSONFirstThenOneRowPerPair(t *testing.T) {
 	if row := by["cheapest/test/003"]; !row.Format {
 		t.Errorf("format row %+v", row)
 	}
-	if row := by["cheapest/test/005"]; row.ErrKind != "transport" || row.Passed || row.Calls[0].PriceRef != "reserved" || row.CostUSD == 0 {
-		t.Errorf("transport row %+v: want failed, settled at its reservation", row)
+	if row := by["cheapest/test/005"]; row.ErrKind != "status:400" || row.Retryable || row.Passed || row.Calls[0].PriceRef != "reserved" || row.CostUSD == 0 {
+		t.Errorf("400 row %+v: want a scored failure, settled at its reservation", row)
 	}
 	if row := by["frontier/test/002"]; !row.Passed || row.Score != 1 || row.Calls[0].Model != "m-front" || row.Latency != time.Second {
 		t.Errorf("pass row %+v", row)
@@ -203,8 +202,134 @@ func TestExecute_KilledRunResumesToTheSameResult(t *testing.T) {
 	if len(got) != 180 || !reflect.DeepEqual(got, want) {
 		t.Fatalf("resumed rows differ from an uninterrupted run (%d vs %d rows)", len(got), len(want))
 	}
-	if d := o2.Spent - co.Spent; d > 1e-12 || d < -1e-12 {
-		t.Fatalf("resumed run spent $%v, uninterrupted $%v", o2.Spent, co.Spent)
+	// The call the kill interrupted may have been billed: it is kept, at its ceiling,
+	// and the pair it belonged to was asked again.
+	var kept []Result
+	for _, row := range rowsOf(t, r, o2) {
+		if row.Retryable {
+			kept = append(kept, row)
+		}
+	}
+	if len(kept) != 1 || kept[0].ErrKind != "interrupted" || kept[0].ItemID != "test/017" || kept[0].CostUSD != 0.002 {
+		t.Fatalf("spend-only rows %+v, want the interrupted call at $0.002", kept)
+	}
+	if d := o2.Spent - (co.Spent + 0.002); d > 1e-12 || d < -1e-12 {
+		t.Fatalf("resumed run spent $%v, uninterrupted $%v plus the interrupted call", o2.Spent, co.Spent)
+	}
+}
+
+// A kill after a billed call never loses its spend, so across any number of resumes
+// the recorded spend covers every call made and stays under --max-usd.
+func TestExecute_KilledAfterABilledCallStaysUnderTheCap(t *testing.T) {
+	exec := newFakeExec()
+	r := testRunner(t, 10, exec, "frontier")
+	r.MaxUSD = 6*0.002 + 0.001
+	for _, kill := range []string{"q002", "q007"} {
+		ctx, cancel := context.WithCancel(context.Background())
+		exec.before = func(_, prompt string) {
+			if prompt == kill {
+				cancel()
+			}
+		}
+		r.Execute(ctx)
+		cancel()
+	}
+	exec.before = nil
+	o, err := r.Execute(context.Background())
+	if !errors.Is(err, ErrBudget) {
+		t.Fatalf("the cap should stop the run: %v", err)
+	}
+	var recorded float64
+	for _, row := range rowsOf(t, r, o) {
+		recorded += row.CostUSD
+	}
+	billed := float64(exec.calls.Load()) * 0.002
+	if recorded < billed-1e-12 || recorded > r.MaxUSD || billed > r.MaxUSD {
+		t.Fatalf("recorded $%v for $%v billed in %d calls under a $%v cap", recorded, billed, exec.calls.Load(), r.MaxUSD)
+	}
+}
+
+// A transient failure that outlives every retry is unscored: its row keeps its spend,
+// is not a result, and the next invocation asks the pair again.
+func TestExecute_TransientFailureIsUnscoredAndAskedAgain(t *testing.T) {
+	exec := newFakeExec()
+	exec.set("bench/openrouter/m-front", "q003", reply{err: &executor.StatusError{Code: 503}})
+	r := testRunner(t, 6, exec, "frontier")
+	o, err := r.Execute(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var row Result
+	for _, x := range rowsOf(t, r, o) {
+		if x.ItemID == "test/003" {
+			row = x
+		}
+	}
+	if !row.Retryable || row.ErrKind != "status:503" || row.Passed || row.CostUSD != 0 || len(row.Calls) != 1+len(retryBackoff) {
+		t.Fatalf("503 row %+v: want unscored, free, after every retry", row)
+	}
+	exec.set("bench/openrouter/m-front", "q003", reply{answer: "no"})
+	o2, err := r.Execute(context.Background())
+	if err != nil || o2.Written != 1 {
+		t.Fatalf("resume re-asked %d pairs (%v), want the one unscored", o2.Written, err)
+	}
+}
+
+// gradeFails is fakeSuite with a grader that breaks on one item.
+type gradeFails struct {
+	fakeSuite
+	id string
+}
+
+func (g gradeFails) Grade(ctx context.Context, it Item, answer string) (Grade, error) {
+	if it.ID == g.id {
+		return Grade{}, errors.New("grader broke")
+	}
+	return g.fakeSuite.Grade(ctx, it, answer)
+}
+
+func TestExecute_AGradeErrorKeepsTheBilledCall(t *testing.T) {
+	r := testRunner(t, 4, newFakeExec(), "frontier")
+	r.Suite = gradeFails{id: "test/002"}
+	o, err := r.Execute(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "grader broke") {
+		t.Fatalf("err = %v", err)
+	}
+	rows := rowsOf(t, r, o)
+	last := rows[len(rows)-1]
+	if last.ItemID != "test/002" || last.ErrKind != "grade" || !last.Retryable || last.CostUSD != 0.002 {
+		t.Fatalf("grade-error row %+v: want it kept for its spend", last)
+	}
+	r.Suite = fakeSuite{}
+	if o2, err := r.Execute(context.Background()); err != nil || o2.Written == 0 {
+		t.Fatalf("resume: %+v %v", o2, err)
+	}
+}
+
+// Prices are frozen into run.json on the first start: a pricing-cache change resumes
+// the same run, priced as it began.
+func TestExecute_APriceChangeResumesTheSameFrozenRun(t *testing.T) {
+	exec := newFakeExec()
+	r := testRunner(t, 6, exec, "frontier")
+	r.MaxUSD = 3*0.002 + 0.001
+	o, _ := r.Execute(context.Background())
+	p := r.Run.Prices["m-front"]
+	p.InPerM *= 10
+	r.Run.Prices["m-front"] = p
+	r.MaxUSD = 1
+	o2, err := r.Execute(context.Background())
+	if err != nil || o2.RunID != o.RunID || o2.Written != 3 {
+		t.Fatalf("resume after a price change: %+v %v", o2, err)
+	}
+	for _, row := range rowsOf(t, r, o2) {
+		if row.CostUSD != 0.002 {
+			t.Fatalf("row priced at today's price, $%v", row.CostUSD)
+		}
+	}
+	var run Run
+	readJSON(filepath.Join(o.Dir, "run.json"), &run)
+	if run.Prices["m-front"].InPerM != 1000 {
+		t.Fatalf("run.json prices moved: %+v", run.Prices["m-front"])
 	}
 }
 

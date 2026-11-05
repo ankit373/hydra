@@ -11,15 +11,17 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/ankit373/hydra/internal/executor"
 	"github.com/ankit373/hydra/internal/stats"
 )
 
-// withoutTiming is summary.json with its timing block, the one part allowed to
+// withoutExecution is summary.json with its execution block, the one part allowed to
 // differ between an interrupted run and an uninterrupted one, removed.
-func withoutTiming(t *testing.T, dir string) []byte {
+func withoutExecution(t *testing.T, dir string) []byte {
 	t.Helper()
 	b, err := os.ReadFile(filepath.Join(dir, "summary.json"))
 	if err != nil {
@@ -29,13 +31,13 @@ func withoutTiming(t *testing.T, dir string) []byte {
 	if err := json.Unmarshal(b, &m); err != nil {
 		t.Fatal(err)
 	}
-	delete(m, "timing")
+	delete(m, "execution")
 	out, _ := json.Marshal(m)
 	return out
 }
 
 // A run killed mid-call, torn mid-write and resumed reports a summary byte-identical,
-// timing aside, to a run that was never interrupted (scope E7.1-6).
+// execution aside, to a run that was never interrupted (scope E7.1-6).
 func TestReport_AResumedRunSummarisesByteIdentically(t *testing.T) {
 	arms := []string{"frontier", "cheapest", "mid"}
 	// Enough discordance, on both sides, that a bootstrap over rows in another order
@@ -55,11 +57,6 @@ func TestReport_AResumedRunSummarisesByteIdentically(t *testing.T) {
 	// Output is priced on the cheap model, so its cost varies by item.
 	priced := func(r *Runner) {
 		r.Run.Prices["m-cheap"] = Price{Model: "m-cheap", Ref: "ref/m-cheap", InPerM: 1000, OutPerM: 500, Source: "openrouter"}
-		arms, err := BuildArms(r.Run, r.Arms["frontier"].(*Direct).exec)
-		if err != nil {
-			t.Fatal(err)
-		}
-		r.Arms = arms
 	}
 	cleanExec := newFakeExec()
 	script(cleanExec)
@@ -80,31 +77,71 @@ func TestReport_AResumedRunSummarisesByteIdentically(t *testing.T) {
 		}
 	}
 	o, _ := r.Execute(ctx)
-	f, _ := os.OpenFile(filepath.Join(o.Dir, "items.jsonl"), os.O_APPEND|os.O_WRONLY, 0)
+	path := filepath.Join(o.Dir, "items.jsonl")
+	f, _ := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0)
 	f.WriteString(`{"seq":3`)
 	f.Close()
-	if _, err := Report(o.Dir); err == nil || !strings.Contains(err.Error(), "partial line") {
-		t.Fatalf("reported a torn run: %v", err)
+	// Reporting a killed run reads it as it stands, incomplete, and changes nothing.
+	before, _ := os.ReadFile(path)
+	s, err := Report(o.Dir, r.StateDir)
+	if err != nil || !s.Incomplete || s.Execution.TornBytes != 8 || len(s.Paired) != 0 {
+		t.Fatalf("report of a torn run: %+v, %v", s, err)
+	}
+	if after, _ := os.ReadFile(path); !bytes.Equal(before, after) {
+		t.Fatal("report changed items.jsonl")
 	}
 	exec.before = nil
 	if _, err := r.Execute(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Report(co.Dir); err != nil {
+	if _, err := Report(co.Dir, clean.StateDir); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Report(o.Dir); err != nil {
+	if _, err := Report(o.Dir, r.StateDir); err != nil {
 		t.Fatal(err)
 	}
-	if a, b := withoutTiming(t, co.Dir), withoutTiming(t, o.Dir); !bytes.Equal(a, b) {
+	if a, b := withoutExecution(t, co.Dir), withoutExecution(t, o.Dir); !bytes.Equal(a, b) {
 		t.Fatalf("summaries differ:\n%s\n%s", a, b)
 	}
-	// Reporting the same files twice is byte-identical, timing included.
+	// Reporting the same files twice is byte-identical, execution included.
 	first, _ := os.ReadFile(filepath.Join(o.Dir, "summary.json"))
-	Report(o.Dir)
+	Report(o.Dir, r.StateDir)
 	second, _ := os.ReadFile(filepath.Join(o.Dir, "summary.json"))
 	if !bytes.Equal(first, second) {
 		t.Fatal("report twice gave two summaries")
+	}
+}
+
+// report waits for run.lock, so one started while the run appends sees every row the
+// run writes and loses none of them.
+func TestReport_ConcurrentWithARunLosesNoRow(t *testing.T) {
+	exec := newFakeExec()
+	r := testRunner(t, 30, exec, "frontier", "cheapest")
+	started := make(chan struct{})
+	var once sync.Once
+	exec.before = func(string, string) {
+		once.Do(func() { close(started) })
+		time.Sleep(time.Millisecond)
+	}
+	done := make(chan Progress)
+	go func() {
+		o, _ := r.Execute(context.Background())
+		done <- o
+	}()
+	<-started
+	dir := filepath.Join(r.ResultsDir, r.Run.baseID())
+	reported := make(chan Summary)
+	go func() {
+		s, err := Report(dir, r.StateDir)
+		if err != nil {
+			t.Error(err)
+		}
+		reported <- s
+	}()
+	o := <-done
+	s := <-reported
+	if o.Written != 60 || len(rowsOf(t, r, o)) != 60 || s.Incomplete || s.Arms["frontier"].N != 30 {
+		t.Fatalf("wrote %d, file has %d, report saw incomplete=%v n=%d", o.Written, len(rowsOf(t, r, o)), s.Incomplete, s.Arms["frontier"].N)
 	}
 }
 
@@ -116,7 +153,7 @@ func summarize(t *testing.T, n int, exec *fakeExec, tier string, arms ...string)
 	if err != nil {
 		t.Fatal(err)
 	}
-	s, err := Report(o.Dir)
+	s, err := Report(o.Dir, r.StateDir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -156,16 +193,16 @@ func TestSummarize_ArmsPairsAndTheOracle(t *testing.T) {
 	if got := s.Breadcrumb.ProviderModels["cheapest"]; len(got) != 1 || got[0] != "m-cheap" {
 		t.Fatalf("provider models %v", s.Breadcrumb.ProviderModels)
 	}
-	if len(s.Caveats) == 0 || s.Smoke != nil || len(s.Verdicts) != 0 {
-		t.Fatalf("a fixture run carries caveats only: %+v %+v %+v", s.Caveats, s.Smoke, s.Verdicts)
+	if len(s.Caveats) == 0 || s.Smoke != nil || s.Incomplete {
+		t.Fatalf("a complete fixture run carries caveats only: %+v %+v", s.Caveats, s.Smoke)
 	}
 }
 
 // An interval the data cannot support is refused, never reported as 0: here the
-// cheapest arm errored on every item, so it accepted nothing.
+// cheapest arm was refused on every item, so it accepted nothing.
 func TestSummarize_RefusesAnIntervalNoResampleDefines(t *testing.T) {
 	exec := newFakeExec()
-	exec.set("bench/openrouter/m-cheap", "*", reply{err: errors.New("down")})
+	exec.set("bench/openrouter/m-cheap", "*", reply{err: &executor.StatusError{Code: 400}})
 	s := summarize(t, 8, exec, "fixture", "frontier", "cheapest")
 	ps := s.Paired["cheapest-vs-frontier"]
 	if ps.CostPerAccDiff != nil || len(ps.Refused) == 0 || s.Arms["cheapest"].CostPerAccepted != nil {
@@ -184,26 +221,48 @@ func TestSummarize_RefusesAnIntervalNoResampleDefines(t *testing.T) {
 	}
 }
 
-// Retried rows: the summary keeps the last row per pair and counts every row's spend.
-func TestSummarize_KeepsTheLastRetriedRowAndAllItsSpend(t *testing.T) {
-	run := &Run{ID: "r", ItemIDs: []string{"a", "b"}, Seed: 1}
+// A retryable row is spend, not a result: the pair is scored by its last scored row,
+// the arm's cost counts scored rows, and every dollar is still in the execution block.
+func TestSummarize_ScoresTheLastScoredRowAndKeepsAllSpend(t *testing.T) {
+	run := &Run{ID: "r", ItemIDs: []string{"a", "b"}, ArmOrder: []string{Frontier}, Seed: 1}
 	rows := []Result{
 		{ItemID: "a", Arm: Frontier, Attempt: Attempt{ErrKind: "contract"}, Retryable: true, CostUSD: 0.5},
 		{ItemID: "b", Arm: Frontier, Passed: true, CostUSD: 0.25},
 		{ItemID: "a", Arm: Frontier, Passed: true, CostUSD: 0.25},
+		{ItemID: "a", Arm: Frontier, Attempt: Attempt{ErrKind: "status:503"}, Retryable: true},
 	}
 	s, err := Summarize(run, rows)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if a := s.Arms[Frontier]; a.N != 2 || a.Passed != 2 || a.Errors != 0 || a.CostUSD != 1 {
-		t.Fatalf("frontier %+v, want 2 passes costing all three rows", a)
+	if a := s.Arms[Frontier]; a.N != 2 || a.Passed != 2 || a.Errors != 0 || a.CostUSD != 0.5 || s.Incomplete {
+		t.Fatalf("frontier %+v, want 2 scored passes costing their own rows", a)
+	}
+	if s.Execution.SpendUSD != 1 || s.Execution.SpendRows != 2 {
+		t.Fatalf("execution %+v, want every dollar and both spend-only rows", s.Execution)
 	}
 	if _, ok := s.Arms[OracleArm]; ok {
 		t.Fatal("an oracle over one arm is that arm")
 	}
 	if _, err := Summarize(run, []Result{{ItemID: "z", Arm: Frontier}}); err == nil {
 		t.Fatal("a row for an unscheduled item was summarised")
+	}
+}
+
+// A run missing any scored pair is incomplete: counts, no paired statistics, no
+// oracle, no smoke sizing, and the table says so.
+func TestSummarize_AnIncompleteRunReportsCountsOnly(t *testing.T) {
+	exec := newFakeExec()
+	exec.set("bench/openrouter/m-cheap", "q004", reply{err: errors.New("timeout")})
+	s := summarize(t, 10, exec, "smoke", "frontier", "cheapest")
+	if !s.Incomplete || s.Unscored != 1 || len(s.Paired) != 0 || s.Smoke != nil {
+		t.Fatalf("incomplete=%v unscored=%d paired=%d smoke=%v", s.Incomplete, s.Unscored, len(s.Paired), s.Smoke)
+	}
+	if _, ok := s.Arms[OracleArm]; ok || s.Arms["cheapest"].N != 9 || s.Arms[Frontier].N != 10 {
+		t.Fatalf("arms %+v", s.Arms)
+	}
+	if !strings.Contains(Table([]Summary{s}), "INCOMPLETE (1 unscored)") {
+		t.Fatal("the table did not mark an incomplete run")
 	}
 }
 
@@ -217,28 +276,37 @@ func TestSummarize_SmokeSizesTheFullTier(t *testing.T) {
 	if m == nil || m.PDisc["cheapest-vs-frontier"] != 0.25 || m.FormatFailRate["cheapest"] != 0.25 {
 		t.Fatalf("smoke %+v", m)
 	}
-	if want := 3863; m.RecommendedN != want { // ⌈6.18 · 0.25 / 0.0004⌉
-		t.Fatalf("recommended n %d, want %d", m.RecommendedN, want)
+	// ⌈6.18 · 0.25 / 0.0004⌉, from cheapest; the oracle's own p_disc is not a candidate.
+	if m.RecommendedN == nil || *m.RecommendedN != 3863 {
+		t.Fatalf("recommended n %v, want 3863", m.RecommendedN)
 	}
 	if _, ok := m.TokensIn[OracleArm]; ok {
 		t.Fatal("the computed oracle has no tokens of its own")
 	}
-	if smoke(Summary{}, 700).RecommendedN != 700 {
+	withFrontier := Summary{Arms: map[string]ArmSummary{Frontier: {}}, Paired: map[string]PairedStats{
+		"oracle-vs-frontier": {PDisc: 0.5}, "cheap-vs-frontier": {PDisc: 0.01}}}
+	if n := smoke(withFrontier, 5000).RecommendedN; n == nil || *n != 1000 {
+		t.Fatalf("the oracle's p_disc sized the run: %v", n)
+	}
+	withFrontier.Paired["cheap-vs-frontier"] = PairedStats{PDisc: 0.25}
+	if n := smoke(withFrontier, 700).RecommendedN; *n != 700 {
 		t.Fatal("the recommendation exceeded the test split")
 	}
-	if smoke(Summary{}, 5000).RecommendedN != 1000 {
-		t.Fatal("the recommendation fell under 1000")
+	none := smoke(Summary{Arms: map[string]ArmSummary{"cheapest": {N: 3}}}, 5000)
+	if none.RecommendedN != nil || none.RecommendedNRefused == "" || none.FormatFailRate["cheapest"] != 0 {
+		t.Fatalf("no frontier arm ran, yet: %+v", none)
 	}
 }
 
 func TestReport_RefusesWhatItCannotRead(t *testing.T) {
-	if _, err := Report(t.TempDir()); err == nil {
+	state := t.TempDir()
+	if _, err := Report(t.TempDir(), state); err == nil {
 		t.Fatal("reported a directory with no run.json")
 	}
 	dir := t.TempDir()
 	writeJSON(filepath.Join(dir, "run.json"), &Run{ID: "x"})
 	os.WriteFile(filepath.Join(dir, "items.jsonl"), []byte(`{"schema":"other","run_id":"x"}`+"\n"), 0o644)
-	if _, err := Report(dir); err == nil {
+	if _, err := Report(dir, state); err == nil {
 		t.Fatal("reported an unknown items schema")
 	}
 	writeJSON(filepath.Join(dir, "s.json"), &Summary{Schema: "hydra.bench.summary/0"})
@@ -248,10 +316,9 @@ func TestReport_RefusesWhatItCannotRead(t *testing.T) {
 	if _, err := ReadSummary(filepath.Join(dir, "none.json")); err == nil {
 		t.Fatal("read a missing summary")
 	}
-	writeJSON(filepath.Join(dir, "items.jsonl"), nil)
 	os.WriteFile(filepath.Join(dir, "items.jsonl"), []byte(`{"schema":"hydra.bench.items/1","run_id":"x"}`+"\n"+
 		`{"item_id":"nope","arm":"frontier","started":"`+time.Now().Format(time.RFC3339)+`"}`+"\n"), 0o644)
-	if _, err := Report(dir); err == nil {
+	if _, err := Report(dir, state); err == nil {
 		t.Fatal("reported a row for an unscheduled item")
 	}
 }

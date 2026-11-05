@@ -50,7 +50,7 @@ func TestAssignSplits_NoIDOrCanonicalTextInBothSplits(t *testing.T) {
 	}
 	where := map[string]Split{}
 	for i, r := range split {
-		c := canon(rows[i].Text)
+		c := splitText(rows[i].Text)
 		if r.Split == SplitExcluded {
 			if !strings.HasPrefix(r.ID, "x/") {
 				t.Fatalf("%s excluded with agreeing labels", r.ID)
@@ -176,11 +176,56 @@ func TestLoad_JoinsAndRefusesEveryMismatch(t *testing.T) {
 	}
 }
 
-// canon must stay the grader's normaliser, not a lookalike.
-func TestCanon_IsNormaliseLabel(t *testing.T) {
-	for _, s := range []string{" Card-Arrival. ", "hey  what's\tup", "**x**"} {
-		if canon(s) != oracle.NormaliseLabel(s) {
-			t.Fatalf("canon(%q) drifted from oracle.NormaliseLabel", s)
+// splitText is a leakage key, not a grader: case, apostrophes, punctuation and
+// Unicode spacing never separate two copies of one utterance.
+func TestSplitText_FoldsWhatALeakAcrossSplitsWouldHideBehind(t *testing.T) {
+	for a, b := range map[string]string{
+		"what's my balance?":       "whats my balance",
+		"What\u2019s  my BALANCE":  "whats my balance",
+		"top-up failed\u00a0again": "top up failed again",
+		"£10 fee…":                 "10 fee",
+	} {
+		if splitText(a) != splitText(b) {
+			t.Errorf("splitText(%q) = %q, splitText(%q) = %q", a, splitText(a), b, splitText(b))
 		}
+		if splitOf("s", a) != splitOf("s", b) {
+			t.Errorf("%q and %q landed in different splits", a, b)
+		}
+	}
+	if splitText("card arrival") == splitText("card arrived") {
+		t.Fatal("two different utterances share a key")
+	}
+	// Labels are still compared with the grader's normaliser, never this key.
+	if oracle.NormaliseLabel("card-arrival") == oracle.NormaliseLabel("card arrival") {
+		t.Fatal("the label normaliser now folds '-', which grading must not")
+	}
+}
+
+// A hand-edited TSV is refused: a flipped split, and two copies of one utterance
+// moved apart, both disagree with what the data gives.
+func TestLoad_RefusesAHandEditedSplit(t *testing.T) {
+	rows := []Row{{"a", "What's up?", "x"}, {"b", "whats up", "x"}, {"c", "bye", "x"}}
+	good, _ := AssignSplits("stub", rows)
+	if good[0].Split != good[1].Split {
+		t.Fatal("copies of one utterance were assigned apart")
+	}
+	if _, err := Load(stubSuite{rows}, Dataset{}, "", writeTSV(t, good)); err != nil {
+		t.Fatal(err)
+	}
+	flip := func(s Split) Split {
+		if s == SplitTest {
+			return SplitCalibration
+		}
+		return SplitTest
+	}
+	for name, i := range map[string]int{"flipped bye": 2, "copies moved apart": 1} {
+		edited := append([]SplitRow(nil), good...)
+		edited[i].Split = flip(edited[i].Split)
+		if _, err := Load(stubSuite{rows}, Dataset{}, "", writeTSV(t, edited)); err == nil || !strings.Contains(err.Error(), "the data gives") {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	if _, err := Load(stubSuite{append(rows, rows[0])}, Dataset{}, "", writeTSV(t, append(good, good[0]))); err == nil {
+		t.Error("a data file with a repeated id loaded")
 	}
 }

@@ -103,6 +103,7 @@ cheapest = "bedrock:amazon.nova-micro-v1:0"
 		}, time.Date(2026, 11, 5, 0, 0, 0, 0, time.UTC)
 	})
 	swap(t, &benchHost, func() bench.HostInfo { return bench.HostInfo{OS: "test", Arch: "test", CPUs: 1} })
+	swap(t, &benchSleep, func(context.Context, time.Duration) error { return nil })
 	tick := time.Date(2026, 11, 6, 0, 0, 0, 0, time.UTC)
 	swap(t, &benchNow, func() time.Time { tick = tick.Add(time.Second); return tick })
 	results = filepath.Join(benchDir, "results")
@@ -176,7 +177,7 @@ func TestBenchRun_ExitCodes(t *testing.T) {
 	args, exec, _ = benchFixture(t, "1.0")
 	exec.err = errors.New("boom")
 	if _, _, err := run(t, append(args, "--limit", "1", "--seed", "3", "--max-usd", "0.5")...); err != nil {
-		t.Fatalf("transport errors are results, not run failures: %v", err)
+		t.Fatalf("a transport error leaves the pair unscored, not the run failed: %v", err)
 	}
 	if _, _, err := run(t, append(args, "--config", filepath.Join(t.TempDir(), "none.toml"))...); err == nil {
 		t.Fatal("ran with no config")

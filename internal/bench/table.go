@@ -14,7 +14,7 @@ const tableHeader = "| Suite | Arm | n | Pass % (95% CI) | Δ vs frontier, pts (
 	"|---|---|---|---|---|---|---|---|\n"
 
 // Table renders summaries as one markdown row per (suite, arm). It reads only what
-// the summaries hold; verdicts are copied verbatim, never recomputed or rounded into a pass.
+// the summaries hold, and never rounds an interval into a pass.
 func Table(sums []Summary) string {
 	var b strings.Builder
 	b.WriteString(tableHeader)
@@ -28,10 +28,6 @@ func Table(sums []Summary) string {
 				priced = p.FetchedAt
 			}
 		}
-		verdict := map[string]string{}
-		for _, v := range s.Verdicts {
-			verdict[v.Arm] = v.Hypothesis + " " + string(v.Outcome)
-		}
 		for _, arm := range armOrder(s.Arms) {
 			a := s.Arms[arm]
 			delta := "—"
@@ -42,14 +38,16 @@ func Table(sums []Summary) string {
 			if a.CostPerAccepted != nil {
 				cost = strconv.FormatFloat(*a.CostPerAccepted, 'g', 5, 64)
 			}
-			v := verdict[arm]
+			// No hypothesis verdict exists until served arms do (PR 6); the column says
+			// why a row could not be one even then.
+			v := "—"
 			switch {
+			case s.Incomplete:
+				v = fmt.Sprintf("INCOMPLETE (%d unscored)", s.Unscored)
 			case s.Breadcrumb.LicenceVerified == "":
 				v = "unpublishable (licence)"
 			case s.Tier == "smoke":
 				v = "not a verdict (smoke)"
-			case v == "":
-				v = "—"
 			}
 			fmt.Fprintf(&b, "| %s | %s | %d | %.1f (%.1f–%.1f) | %s | %s | — | %s |\n", s.Breadcrumb.Suite, arm, a.N,
 				100*a.PassRate, 100*a.PassWilson[0], 100*a.PassWilson[1], delta, cost, v)

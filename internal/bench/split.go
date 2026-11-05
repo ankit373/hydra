@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/ankit373/hydra/internal/oracle"
 )
@@ -35,13 +36,25 @@ func hash64(parts ...string) uint64 {
 	return binary.BigEndian.Uint64(s[:8])
 }
 
-// canon is the one normaliser the grader and the served verifier use, so two copies
-// of an utterance that grade alike also land in the same split.
-func canon(text string) string { return oracle.NormaliseLabel(text) }
+// splitText keys an utterance for leakage, not grading: the label normaliser keeps
+// punctuation that labels need, so "what's my balance?" and "whats my balance" differed.
+func splitText(text string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(text) {
+		switch {
+		case strings.ContainsRune("'’ʼ`", r): // "what's" is "whats"
+		case unicode.IsLetter(r) || unicode.IsDigit(r):
+			b.WriteRune(r)
+		default: // punctuation, symbols, any Unicode space: a word break
+			b.WriteByte(' ')
+		}
+	}
+	return strings.Join(strings.Fields(b.String()), " ")
+}
 
 // splitOf keys on the text, not the id, so a duplicate cannot leak from calibration into test.
 func splitOf(suite, text string) Split {
-	if hash64("split", suite, canon(text))%1000 < calibrationBuckets {
+	if hash64("split", suite, splitText(text))%1000 < calibrationBuckets {
 		return SplitCalibration
 	}
 	return SplitTest
@@ -60,7 +73,7 @@ func AssignSplits(suite string, rows []Row) ([]SplitRow, error) {
 			return nil, fmt.Errorf("bench: %s has id %s twice", suite, r.ID)
 		}
 		seen[r.ID] = true
-		c := canon(r.Text)
+		c := splitText(r.Text)
 		if labels[c] == nil {
 			labels[c] = map[string]bool{}
 		}
@@ -69,7 +82,7 @@ func AssignSplits(suite string, rows []Row) ([]SplitRow, error) {
 	out := make([]SplitRow, len(rows))
 	for i, r := range rows {
 		s := splitOf(suite, r.Text)
-		if len(labels[canon(r.Text)]) > 1 {
+		if len(labels[splitText(r.Text)]) > 1 {
 			s = SplitExcluded
 		}
 		out[i] = SplitRow{ID: r.ID, Split: s, Rank: Rank(suite, r.ID), Label: r.Label}
@@ -138,18 +151,22 @@ func Load(s Suite, ds Dataset, dataDir, splitsPath string) ([]Item, error) {
 	for _, r := range splits {
 		byID[r.ID] = r
 	}
+	// The TSV is checked against the data, not trusted: a hand-edited split, rank or
+	// label, or two copies of one utterance in different splits, is refused here.
+	want, err := AssignSplits(s.Name(), rows)
+	if err != nil {
+		return nil, err
+	}
 	items := make([]Item, len(rows))
 	for i, r := range rows {
 		sr, ok := byID[r.ID]
-		switch {
-		case !ok:
+		if !ok {
 			return nil, fmt.Errorf("bench: %s id %s is missing from %s", s.Name(), r.ID, splitsPath)
-		case sr.Label != r.Label:
-			return nil, fmt.Errorf("bench: %s id %s is %q in the data and %q in %s", s.Name(), r.ID, r.Label, sr.Label, splitsPath)
-		case sr.Rank != Rank(s.Name(), r.ID):
-			return nil, fmt.Errorf("bench: %s id %s has a rank the hash does not give", s.Name(), r.ID)
 		}
-		delete(byID, r.ID)
+		if sr != want[i] {
+			return nil, fmt.Errorf("bench: %s line for %s is %v/%d/%q, the data gives %v/%d/%q",
+				splitsPath, r.ID, sr.Split, sr.Rank, sr.Label, want[i].Split, want[i].Rank, want[i].Label)
+		}
 		in, _ := json.Marshal(struct {
 			Text string `json:"text"`
 		}{r.Text})

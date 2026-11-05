@@ -62,26 +62,17 @@ type HostInfo struct {
 	MemPressure string  `json:"mem_pressure"`
 }
 
-// cfg8 hashes the run's inputs. max_usd is left out, so raising the cap resumes the
-// same run; so is a price's fetch time, so a cache refresh that changed no price does too.
+// cfg8 hashes what the run asks, not what it costs today: prices are frozen into
+// run.json on the first start and read back on resume, and the cap is not hashed either.
 func (r *Run) cfg8() string {
-	type price struct {
-		Model, Ref, Source string
-		In, Out            float64
-	}
-	prices := map[string]price{}
-	for k, p := range r.Prices {
-		prices[k] = price{p.Model, p.Ref, p.Source, p.InPerM, p.OutPerM}
-	}
 	b, _ := json.Marshal(struct {
 		Track, Suite, Tier string
 		Seed               uint64
 		Arms               map[string]ArmConfig
 		Order, Items       []string
-		Prices             map[string]price
 		Split              string
 		Data               map[string]string
-	}{r.Track, r.Suite, r.Tier, r.Seed, r.Arms, r.ArmOrder, r.ItemIDs, prices, r.Crumb.SplitSHA256, r.Crumb.DataSHA256})
+	}{r.Track, r.Suite, r.Tier, r.Seed, r.Arms, r.ArmOrder, r.ItemIDs, r.Crumb.SplitSHA256, r.Crumb.DataSHA256})
 	s := sha256.Sum256(b)
 	return hex.EncodeToString(s[:4])
 }

@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -29,6 +30,7 @@ var (
 	benchFetcher = bench.DefaultFetcher
 	benchExec    = executor.For
 	benchNow     = time.Now
+	benchSleep   func(context.Context, time.Duration) error // nil: real backoff
 	benchPrices  = func() (bench.PriceLookup, time.Time) {
 		db := pricing.Load()
 		return db.ModelPrice, db.FetchedAt()
@@ -59,7 +61,7 @@ func cmdBenchReport() *cobra.Command {
 			"Verdicts are computed only for a full-tier run.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			s, err := bench.Report(filepath.Join(resultsDir, args[0]))
+			s, err := bench.Report(filepath.Join(resultsDir, args[0]), benchStateDir())
 			if err != nil {
 				return err
 			}
@@ -235,18 +237,18 @@ func cmdBenchRun() *cobra.Command {
 				if err != nil {
 					return err
 				}
-				armMap, err := bench.BuildArms(run, benchExec)
-				if err != nil {
-					return err
-				}
 				if dryRun {
+					armMap, err := bench.BuildArms(run, benchExec, nil)
+					if err != nil {
+						return err
+					}
 					if err := printDryRun(out, s, run, byID, armMap); err != nil {
 						return err
 					}
 					continue
 				}
-				r := bench.Runner{Run: run, Suite: s, Items: byID, Arms: armMap, MaxUSD: cfg.MaxUSD, Rerun: rerun,
-					ResultsDir: resultsDir, StateDir: filepath.Join(config.Dir(), "bench", "runs"), Now: benchNow, Out: out}
+				r := bench.Runner{Run: run, Suite: s, Items: byID, Exec: benchExec, Sleep: benchSleep, MaxUSD: cfg.MaxUSD,
+					Rerun: rerun, ResultsDir: resultsDir, StateDir: benchStateDir(), Now: benchNow, Out: out}
 				o, err := r.Execute(cmd.Context())
 				if o.RunID != "" {
 					fmt.Fprintf(out, "  %s: %d rows written, $%.6f spent of $%.2f\n", o.RunID, o.Written, o.Spent, cfg.MaxUSD)
@@ -305,3 +307,6 @@ func printDryRun(out io.Writer, s bench.Suite, run bench.Run,
 		len(run.ItemIDs)*len(run.ArmOrder), worst)
 	return nil
 }
+
+// benchStateDir holds each run's lock and state, outside the repository.
+func benchStateDir() string { return filepath.Join(config.Dir(), "bench", "runs") }

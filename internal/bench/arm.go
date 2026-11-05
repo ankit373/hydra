@@ -15,16 +15,23 @@ import (
 	"github.com/ankit373/hydra/internal/provider"
 )
 
-// Arm answers one item. WorstCaseUSD bounds a call before it is made, so the budget
-// can refuse it; Call returns what the provider reported. An error from Call stops
-// the run: an item-level failure is an Attempt with ErrKind set, and counts.
+// Arm answers one item. Call reserves each provider call's worst case on b before
+// making it. An error from Call stops the run, and the Attempt it returns alongside
+// still lists every call already made, so their spend is recorded; an item-level
+// failure is an Attempt with ErrKind set. WorstCaseUSD bounds one item, for --dry-run.
 type Arm interface {
 	Name() string
 	Config() ArmConfig
 	Preflight(ctx context.Context) error
 	WorstCaseUSD(req executor.Request) (float64, error)
-	Call(ctx context.Context, it Item, req executor.Request) (Attempt, error)
+	Call(ctx context.Context, it Item, req executor.Request, b *Budget) (Attempt, error)
 }
+
+// retryBackoff is the wait before each retry of a transient failure on one model;
+// a Retry-After the server stated replaces it, up to maxRetryAfter.
+var retryBackoff = []time.Duration{time.Second, 2 * time.Second, 4 * time.Second}
+
+const maxRetryAfter = time.Minute
 
 // ArmConfig is what run.json freezes about an arm.
 type ArmConfig struct {
@@ -40,7 +47,9 @@ type Attempt struct {
 	Decision string        `json:"decision"` // direct arms: "accept"
 	Latency  time.Duration `json:"latency_ns"`
 	TTFT     time.Duration `json:"ttft_ns,omitempty"`  // 0 = unknown, never instant
-	ErrKind  string        `json:"err_kind,omitempty"` // "transport" | "status:<code>" | "contract" | ""
+	ErrKind  string        `json:"err_kind,omitempty"` // "transport" | "status:<code>" | "contract" | "interrupted" | "grade" | ""
+	// transient: the last error was transport, 429 or 5xx, so the row is unscored.
+	transient bool
 }
 
 // Call is one provider call, priced by the harness from the snapshot.
@@ -108,13 +117,15 @@ type Direct struct {
 	exec   func(provider.Head) executor.Executor
 	prices PriceSnapshot
 	faults *FaultPlan
+	sleep  func(context.Context, time.Duration) error
 }
 
-func NewDirect(name string, cfg ArmConfig, prices PriceSnapshot, exec func(provider.Head) executor.Executor, faults *FaultPlan) (*Direct, error) {
+func NewDirect(name string, cfg ArmConfig, prices PriceSnapshot, exec func(provider.Head) executor.Executor,
+	faults *FaultPlan, sleep func(context.Context, time.Duration) error) (*Direct, error) {
 	if len(cfg.Models) == 0 {
 		return nil, fmt.Errorf("bench: arm %s has no model", name)
 	}
-	d := &Direct{name: name, cfg: cfg, exec: exec, prices: prices, faults: faults}
+	d := &Direct{name: name, cfg: cfg, exec: exec, prices: prices, faults: faults, sleep: sleep}
 	for _, spec := range cfg.Models {
 		h, model, err := headFor(spec)
 		if err != nil {
@@ -141,7 +152,7 @@ func (d *Direct) Preflight(context.Context) error {
 	return nil
 }
 
-// WorstCaseUSD reserves every model in the list, since any of them may be called.
+// WorstCaseUSD is every model in the list, each retried as often as it can be.
 func (d *Direct) WorstCaseUSD(req executor.Request) (float64, error) {
 	var sum float64
 	for _, m := range d.models {
@@ -149,34 +160,51 @@ func (d *Direct) WorstCaseUSD(req executor.Request) (float64, error) {
 		if err != nil {
 			return 0, err
 		}
-		sum += c
+		sum += c * float64(1+len(retryBackoff))
 	}
 	return sum, nil
 }
 
-// Call moves to the next model only on a transport error, a 429 or a 5xx. A 4xx or a
-// wrong answer never moves; a 401 or 403 stops the run, since no item can succeed.
-func (d *Direct) Call(ctx context.Context, it Item, req executor.Request) (Attempt, error) {
+// Call retries a transient failure (transport, 429, 5xx) on the same model with
+// bounded backoff, then moves to the next model. A 4xx or a wrong answer never moves;
+// a 401 or 403 stops the run, since no item can succeed.
+func (d *Direct) Call(ctx context.Context, it Item, req executor.Request, b *Budget) (Attempt, error) {
 	att := Attempt{Decision: "accept"}
+	var err error
 	for i, h := range d.heads {
 		model := d.models[i]
-		var err error
-		if code := d.faults.code(it.ID); i == 0 && code != 0 {
-			err = &executor.StatusError{HeadID: h.ID, Code: code}
-			att.Calls = append(att.Calls, Call{Head: h.ID, PriceRef: "injected-fault"})
-		} else {
-			r := req
-			r.Head = h
+		r := req
+		r.Head = h
+		wc, werr := d.prices.worstCase(model, r)
+		if werr != nil {
+			return att, werr
+		}
+		for try := 0; ; try++ {
+			if code := d.faults.code(it.ID); i == 0 && code != 0 {
+				// An injected fault never reaches the provider, costs nothing, and is
+				// not retried: it stands for a model that is down.
+				err = &executor.StatusError{HeadID: h.ID, Code: code}
+				att.Calls = append(att.Calls, Call{Head: h.ID, PriceRef: "injected-fault"})
+				break
+			}
+			if rerr := b.Reserve(wc); rerr != nil {
+				return att, rerr
+			}
 			var resp *executor.Response
 			resp, err = d.exec(h).Execute(ctx, r)
 			if ctx.Err() != nil {
-				return Attempt{}, ctx.Err() // killed mid-call: no row, so a resume asks again
+				// Killed mid-call: the provider may have billed it, so it is recorded at its ceiling.
+				b.Settle(wc, wc)
+				att.Calls = append(att.Calls, Call{Head: h.ID, CostUSD: wc, PriceRef: "reserved"})
+				return att, ctx.Err()
 			}
 			if err == nil {
 				cost, cerr := d.prices.Cost(model, resp.InputTokens, resp.OutputTokens)
 				if cerr != nil {
-					return Attempt{}, cerr
+					b.Settle(wc, wc)
+					return att, cerr
 				}
+				b.Settle(wc, cost)
 				att.Calls = append(att.Calls, Call{Head: h.ID, Model: resp.Model, InputTokens: resp.InputTokens,
 					OutputTokens: resp.OutputTokens, TokensEstimated: resp.TokensEstimated, CostUSD: cost, PriceRef: d.prices[model].Ref})
 				att.Answer, att.TTFT, att.ErrKind = resp.Output, resp.TTFT, ""
@@ -184,18 +212,39 @@ func (d *Direct) Call(ctx context.Context, it Item, req executor.Request) (Attem
 			}
 			var se *executor.StatusError
 			if errors.As(err, &se) && (se.Code == http.StatusUnauthorized || se.Code == http.StatusForbidden) {
-				return Attempt{}, fmt.Errorf("bench: arm %s: %s refused the credentials: %w", d.name, h.ID, err)
+				b.Settle(wc, 0)
+				return att, fmt.Errorf("bench: arm %s: %s refused the credentials: %w", d.name, h.ID, err)
 			}
-			// The provider may have billed a call that errored, so it settles at its ceiling.
-			wc, _ := d.prices.worstCase(model, r)
-			att.Calls = append(att.Calls, Call{Head: h.ID, CostUSD: wc, PriceRef: "reserved"})
+			billed, ref := wc, "reserved" // an errored call may have been billed: its ceiling
+			if errors.As(err, &se) && (se.Code == http.StatusTooManyRequests || se.Code == http.StatusServiceUnavailable) {
+				billed, ref = 0, "refused-unbilled" // turned away before any work
+			}
+			b.Settle(wc, billed)
+			att.Calls = append(att.Calls, Call{Head: h.ID, CostUSD: billed, PriceRef: ref})
+			if !transient(err) || try == len(retryBackoff) {
+				break
+			}
+			if serr := d.sleep(ctx, backoff(try, err)); serr != nil {
+				return att, serr
+			}
 		}
-		att.ErrKind = errKind(err)
-		if !fallsBack(err) {
+		if !transient(err) {
 			break
 		}
 	}
+	att.ErrKind, att.transient = errKind(err), transient(err)
 	return att, nil
+}
+
+// backoff is the fixed schedule, or the server's Retry-After when it named a longer
+// wait, never more than maxRetryAfter.
+func backoff(try int, err error) time.Duration {
+	d := retryBackoff[try]
+	var se *executor.StatusError
+	if errors.As(err, &se) && se.RetryAfter > d {
+		d = min(se.RetryAfter, maxRetryAfter)
+	}
+	return d
 }
 
 func errKind(err error) string {
@@ -206,10 +255,12 @@ func errKind(err error) string {
 	return "transport"
 }
 
-func fallsBack(err error) bool {
+// transient is a failure that says nothing about the item: a transport error, a 429
+// or a 5xx. Its row is unscored and the pair is asked again on resume.
+func transient(err error) bool {
 	var se *executor.StatusError
 	if errors.As(err, &se) {
 		return se.Code == http.StatusTooManyRequests || se.Code >= 500
 	}
-	return true
+	return err != nil
 }

@@ -45,10 +45,23 @@ type itemsHeader struct {
 // pairKey identifies one (item, arm) cell.
 type pairKey struct{ item, arm string }
 
-// readResults reads items.jsonl back. A partial last line is a write the kill
-// interrupted: it is truncated away and its size reported. Anything malformed before
-// it is corruption and refused, as is a pair recorded twice.
+// readResults is the runner's read, under run.lock: a partial last line is a write a
+// kill interrupted, and it is truncated away so the next append starts on a line.
 func readResults(path, runID string) (rows []Result, dropped int, err error) {
+	rows, dropped, err = parseResults(path, runID)
+	if err == nil && dropped > 0 {
+		st, serr := os.Stat(path)
+		if serr != nil {
+			return nil, 0, serr
+		}
+		err = os.Truncate(path, st.Size()-int64(dropped))
+	}
+	return rows, dropped, err
+}
+
+// parseResults reads items.jsonl without changing it: a partial last line is left on
+// disk and ignored. Anything malformed before it is corruption, as is a pair recorded twice.
+func parseResults(path, runID string) (rows []Result, torn int, err error) {
 	b, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
 		return nil, 0, nil
@@ -57,16 +70,12 @@ func readResults(path, runID string) (rows []Result, dropped int, err error) {
 		return nil, 0, err
 	}
 	if end := bytes.LastIndexByte(b, '\n') + 1; end < len(b) {
-		dropped = len(b) - end
-		if err := os.Truncate(path, int64(end)); err != nil {
-			return nil, 0, err
-		}
-		b = b[:end]
+		torn, b = len(b)-end, b[:end]
+	}
+	if len(b) == 0 {
+		return nil, torn, nil
 	}
 	lines := bytes.Split(bytes.TrimSuffix(b, []byte("\n")), []byte("\n"))
-	if len(b) == 0 {
-		return nil, dropped, nil
-	}
 	var h itemsHeader
 	if err := json.Unmarshal(lines[0], &h); err != nil || h.Schema != itemsSchema || h.RunID != runID {
 		return nil, 0, fmt.Errorf("bench: %s does not start with the %s header for %s", path, itemsSchema, runID)
@@ -86,7 +95,7 @@ func readResults(path, runID string) (rows []Result, dropped int, err error) {
 		done[k] = !r.Retryable
 		rows = append(rows, r)
 	}
-	return rows, dropped, nil
+	return rows, torn, nil
 }
 
 // resultsWriter appends one row per write(2), then fsyncs, so a kill leaves at most

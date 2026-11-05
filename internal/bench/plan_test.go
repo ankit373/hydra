@@ -69,33 +69,38 @@ func TestPlan_FreezesItemsArmsPricesAndABreadcrumb(t *testing.T) {
 		}
 	}
 
-	arms, err := BuildArms(run, newFakeExec().For)
+	arms, err := BuildArms(run, newFakeExec().For, nil)
 	if err != nil || len(arms) != 3 || arms[StaticFallback].(*Direct).faults == nil || arms["frontier"].(*Direct).faults != nil {
 		t.Fatalf("BuildArms = %v, %v; want a fault plan on static-fallback only", arms, err)
 	}
 	run.Arms["frontier"] = ArmConfig{Models: []string{"openrouter:unpriced"}}
-	if _, err := BuildArms(run, newFakeExec().For); err == nil {
+	if _, err := BuildArms(run, newFakeExec().For, nil); err == nil {
 		t.Fatal("built an arm whose model has no price")
 	}
 }
 
-// cfg8 ignores the cap and a price's fetch time, and nothing else that matters.
+// cfg8 hashes what the run asks: neither the cap nor any price moves the id, since
+// prices are frozen in run.json; an item, arm or seed does.
 func TestCfg8_WhatChangesTheRun(t *testing.T) {
 	base := Run{Track: "core", Suite: "s", Tier: "smoke", Seed: 1, ItemIDs: []string{"a"}, Prices: testPrices("m")}
 	same := base
 	same.MaxUSDHistory = []float64{9}
 	same.Prices = testPrices("m")
 	p := same.Prices["m"]
-	p.FetchedAt = p.FetchedAt.AddDate(0, 0, 1)
+	p.InPerM, p.FetchedAt = p.InPerM*2, p.FetchedAt.AddDate(0, 0, 1)
 	same.Prices["m"] = p
 	if same.cfg8() != base.cfg8() {
-		t.Fatal("the cap or a fetch time changed the run id")
+		t.Fatal("the cap or a price changed the run id")
 	}
-	diff := base
-	diff.Prices = testPrices("m")
-	p.InPerM++
-	diff.Prices["m"] = p
-	if diff.cfg8() == base.cfg8() {
-		t.Fatal("a changed price kept the run id")
+	for name, edit := range map[string]func(*Run){
+		"items": func(r *Run) { r.ItemIDs = []string{"b"} },
+		"seed":  func(r *Run) { r.Seed = 2 },
+		"arms":  func(r *Run) { r.ArmOrder = []string{"x"} },
+	} {
+		diff := base
+		edit(&diff)
+		if diff.cfg8() == base.cfg8() {
+			t.Errorf("changed %s kept the run id", name)
+		}
 	}
 }

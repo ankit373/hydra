@@ -5,20 +5,32 @@ package bench
 import (
 	"context"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ankit373/hydra/internal/executor"
+	"github.com/ankit373/hydra/internal/provider"
 )
 
-func fallbackArm(t *testing.T, exec *fakeExec, faults *FaultPlan) *Direct {
+// recordSleep is a backoff that never waits and remembers what it was asked to.
+type recordSleep struct{ waits []time.Duration }
+
+func (r *recordSleep) sleep(_ context.Context, d time.Duration) error {
+	r.waits = append(r.waits, d)
+	return nil
+}
+
+func fallbackArm(t *testing.T, exec *fakeExec, faults *FaultPlan) (*Direct, *recordSleep) {
 	t.Helper()
+	rs := &recordSleep{}
 	d, err := NewDirect(StaticFallback, ArmConfig{Kind: "direct", Models: testArmSpecs[StaticFallback]},
-		testPrices("m-front", "m-mid"), exec.For, faults)
+		testPrices("m-front", "m-mid"), exec.For, faults, rs.sleep)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return d
+	return d, rs
 }
 
 func callOne(t *testing.T, d *Direct, id string) Attempt {
@@ -26,15 +38,15 @@ func callOne(t *testing.T, d *Direct, id string) Attempt {
 	it := fakeItems(1)["test/000"]
 	it.ID = id
 	req, _ := fakeSuite{}.Prompt(it)
-	att, err := d.Call(context.Background(), it, req)
+	att, err := d.Call(context.Background(), it, req, NewBudget(100, 0))
 	if err != nil {
 		t.Fatal(err)
 	}
 	return att
 }
 
-// static-fallback moves on a transport error, a 429 or a 5xx, never on a 4xx or a
-// wrong answer: the LiteLLM/Portkey shape, nothing cleverer.
+// static-fallback retries a transport error, a 429 or a 5xx on the same model, then
+// moves; never on a 4xx or a wrong answer: the LiteLLM/Portkey shape, nothing cleverer.
 func TestStaticFallback_MovesOnlyOnTransport429And5xx(t *testing.T) {
 	for name, c := range map[string]struct {
 		err   error
@@ -48,25 +60,105 @@ func TestStaticFallback_MovesOnlyOnTransport429And5xx(t *testing.T) {
 	} {
 		exec := newFakeExec()
 		exec.set("bench/openrouter/m-front", "*", reply{err: c.err})
-		att := callOne(t, fallbackArm(t, exec, nil), "test/000")
+		d, _ := fallbackArm(t, exec, nil)
+		att := callOne(t, d, "test/000")
 		if moved := exec.count("bench/openrouter/m-mid") == 1; moved != c.moves || att.ErrKind != c.kind {
 			t.Errorf("%s: moved=%v kind=%q, want moved=%v kind=%q", name, moved, att.ErrKind, c.moves, c.kind)
 		}
-		if c.moves && (len(att.Calls) != 2 || att.Calls[0].PriceRef != "reserved" || att.Answer != "yes") {
-			t.Errorf("%s: calls %+v answer %q", name, att.Calls, att.Answer)
+		want := 1 // a 400 is final
+		if c.moves {
+			want = 1 + len(retryBackoff)
+		}
+		if exec.count("bench/openrouter/m-front") != want || (c.moves && att.Answer != "yes") || att.transient {
+			t.Errorf("%s: %d calls on the first model, want %d; answer %q", name, exec.count("bench/openrouter/m-front"), want, att.Answer)
 		}
 	}
 	exec := newFakeExec()
 	exec.set("bench/openrouter/m-front", "*", reply{answer: "no"}) // wrong, but an answer
-	if att := callOne(t, fallbackArm(t, exec, nil), "test/000"); exec.count("bench/openrouter/m-mid") != 0 || att.Answer != "no" {
+	d, _ := fallbackArm(t, exec, nil)
+	if att := callOne(t, d, "test/000"); exec.count("bench/openrouter/m-mid") != 0 || att.Answer != "no" {
 		t.Fatal("a wrong answer moved to the next model")
 	}
 	exec = newFakeExec()
 	exec.set("bench/openrouter/m-front", "*", reply{err: &executor.StatusError{Code: 502}})
 	exec.set("bench/openrouter/m-mid", "*", reply{err: &executor.StatusError{Code: 503}})
-	if att := callOne(t, fallbackArm(t, exec, nil), "test/000"); att.ErrKind != "status:503" || len(att.Calls) != 2 {
+	d, _ = fallbackArm(t, exec, nil)
+	if att := callOne(t, d, "test/000"); att.ErrKind != "status:503" || len(att.Calls) != 2*(1+len(retryBackoff)) || !att.transient {
 		t.Fatalf("both failing: %+v", att)
 	}
+}
+
+// A transient failure is retried on a bounded schedule, honouring a longer
+// Retry-After up to a cap; a 429 or 503 was turned away unbilled and costs nothing,
+// while a 500 or a transport error may have been billed and costs its ceiling.
+func TestDirect_RetriesTransientFailuresAndPricesThemHonestly(t *testing.T) {
+	exec := newFakeExec()
+	exec.set("bench/openrouter/m-front", "*", reply{err: &executor.StatusError{Code: 429, RetryAfter: 3 * time.Second}})
+	d, rs := fallbackArm(t, exec, nil)
+	d.heads, d.models = d.heads[:1], d.models[:1]
+	att := callOne(t, d, "test/000")
+	if want := []time.Duration{3 * time.Second, 3 * time.Second, 4 * time.Second}; !reflect.DeepEqual(rs.waits, want) {
+		t.Fatalf("waited %v, want %v (Retry-After where longer than the schedule)", rs.waits, want)
+	}
+	if !att.transient || att.ErrKind != "status:429" || len(att.Calls) != 4 {
+		t.Fatalf("attempt %+v", att)
+	}
+	for _, c := range att.Calls {
+		if c.CostUSD != 0 || c.PriceRef != "refused-unbilled" {
+			t.Fatalf("a 429 was charged: %+v", c)
+		}
+	}
+	if got := backoff(0, &executor.StatusError{Code: 429, RetryAfter: time.Hour}); got != maxRetryAfter {
+		t.Fatalf("a Retry-After of an hour waited %v", got)
+	}
+
+	exec = newFakeExec()
+	exec.set("bench/openrouter/m-front", "*", reply{err: &executor.StatusError{Code: 500}})
+	d, _ = fallbackArm(t, exec, nil)
+	d.heads, d.models = d.heads[:1], d.models[:1]
+	att = callOne(t, d, "test/000")
+	if att.Calls[0].CostUSD == 0 || att.Calls[0].PriceRef != "reserved" {
+		t.Fatalf("a 500 may have been billed, so it costs its ceiling: %+v", att.Calls[0])
+	}
+
+	// A retry that succeeds is an answer, and only the errored attempts before it cost extra.
+	exec = newFakeExec()
+	exec.set("bench/openrouter/m-front", "q000", reply{err: errors.New("timeout")})
+	d, _ = fallbackArm(t, exec, nil)
+	flaky := &flakyExec{inner: exec, fails: 1}
+	d.exec = flaky.For
+	att = callOne(t, d, "test/000")
+	if att.ErrKind != "" || att.Answer != "yes" || len(att.Calls) != 2 {
+		t.Fatalf("a retried success: %+v", att)
+	}
+
+	// The budget is checked before every retry, not once per item.
+	exec = newFakeExec()
+	exec.set("bench/openrouter/m-front", "*", reply{err: &executor.StatusError{Code: 500}})
+	d, _ = fallbackArm(t, exec, nil)
+	it := fakeItems(1)["test/000"]
+	req, _ := fakeSuite{}.Prompt(it)
+	att, err := d.Call(context.Background(), it, req, NewBudget(2.5*0.002, 0))
+	if !errors.Is(err, ErrBudget) || len(att.Calls) != 2 || exec.calls.Load() != 2 {
+		t.Fatalf("budget for two calls allowed %d (err %v)", exec.calls.Load(), err)
+	}
+}
+
+// flakyExec fails its first n calls with a timeout, then defers to inner.
+type flakyExec struct {
+	inner *fakeExec
+	fails int
+}
+
+func (f *flakyExec) For(h provider.Head) executor.Executor { return f }
+
+func (f *flakyExec) Execute(ctx context.Context, req executor.Request) (*executor.Response, error) {
+	if f.fails > 0 {
+		f.fails--
+		return nil, errors.New("timeout")
+	}
+	f.inner.set("bench/openrouter/m-front", "q000", reply{answer: "yes"})
+	return f.inner.Execute(ctx, req)
 }
 
 // An injected fault never reaches the provider, so it costs nothing and the next
@@ -74,7 +166,8 @@ func TestStaticFallback_MovesOnlyOnTransport429And5xx(t *testing.T) {
 func TestStaticFallback_InjectedFaultMakesNoCall(t *testing.T) {
 	exec := newFakeExec()
 	plan := &FaultPlan{Rate: 1, Seed: 1}
-	att := callOne(t, fallbackArm(t, exec, plan), "test/000")
+	d, _ := fallbackArm(t, exec, plan)
+	att := callOne(t, d, "test/000")
 	if exec.count("bench/openrouter/m-front") != 0 || exec.count("bench/openrouter/m-mid") != 1 {
 		t.Fatalf("calls front=%d mid=%d, want 0 and 1", exec.count("bench/openrouter/m-front"), exec.count("bench/openrouter/m-mid"))
 	}
@@ -104,22 +197,22 @@ func TestStaticFallback_InjectedFaultMakesNoCall(t *testing.T) {
 }
 
 func TestDirect_WorstCaseCoversEveryModelAndRefusesUnpriced(t *testing.T) {
-	d := fallbackArm(t, newFakeExec(), nil)
+	d, _ := fallbackArm(t, newFakeExec(), nil)
 	req := executor.Request{Prompt: "abcdef", MaxTokens: 32}
 	wc, err := d.WorstCaseUSD(req)
-	if err != nil || wc != 2*3*1000/1e6 {
-		t.Fatalf("worst case = %v, %v; want two models × 3 tokens", wc, err)
+	if err != nil || wc != 2*4*3*1000/1e6 {
+		t.Fatalf("worst case = %v, %v; want two models × four attempts × 3 tokens", wc, err)
 	}
 	if d.Name() != StaticFallback || len(d.Config().Models) != 2 {
 		t.Fatalf("name/config %s %v", d.Name(), d.Config())
 	}
-	if _, err := NewDirect("x", ArmConfig{Models: []string{"openrouter:unpriced"}}, testPrices("m"), nil, nil); err == nil {
+	if _, err := NewDirect("x", ArmConfig{Models: []string{"openrouter:unpriced"}}, testPrices("m"), nil, nil, nil); err == nil {
 		t.Fatal("an arm with an unpriced model was built")
 	}
-	if _, err := NewDirect("x", ArmConfig{}, testPrices("m"), nil, nil); err == nil {
+	if _, err := NewDirect("x", ArmConfig{}, testPrices("m"), nil, nil, nil); err == nil {
 		t.Fatal("an arm with no model was built")
 	}
-	if _, err := NewDirect("x", ArmConfig{Models: []string{"bedrock:<id>"}}, testPrices("m"), nil, nil); err == nil {
+	if _, err := NewDirect("x", ArmConfig{Models: []string{"bedrock:<id>"}}, testPrices("m"), nil, nil, nil); err == nil {
 		t.Fatal("an unpinned model was built")
 	}
 	d.prices = PriceSnapshot{}

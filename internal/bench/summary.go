@@ -5,12 +5,14 @@ package bench
 import (
 	"fmt"
 	"math"
+	"os"
 	"path/filepath"
 	"sort"
 	"time"
 
 	"github.com/ankit373/hydra/internal/sketch"
 	"github.com/ankit373/hydra/internal/stats"
+	"github.com/ankit373/hydra/internal/util"
 )
 
 const (
@@ -31,22 +33,25 @@ const contamination = "both suites have been public since 2019–2020 and are li
 	"paired differences are the claim, absolute rates are context"
 
 // Summary is summary.json: a pure function of run.json and items.jsonl. Only
-// Timing differs between an interrupted run and an uninterrupted one.
+// Execution differs between an interrupted run and an uninterrupted one.
 type Summary struct {
-	Schema     string                 `json:"schema"`
-	RunID      string                 `json:"run_id"`
-	Tier       string                 `json:"tier"`
-	Breadcrumb Breadcrumb             `json:"breadcrumb"`
+	Schema     string     `json:"schema"`
+	RunID      string     `json:"run_id"`
+	Tier       string     `json:"tier"`
+	Breadcrumb Breadcrumb `json:"breadcrumb"`
+	// Incomplete: some scheduled (item, arm) pair has no scored row yet. Counts are
+	// reported; paired statistics and smoke measurements are not.
+	Incomplete bool                   `json:"incomplete"`
+	Unscored   int                    `json:"unscored_pairs"`
 	Arms       map[string]ArmSummary  `json:"arms"`
 	Paired     map[string]PairedStats `json:"paired"` // "<arm>-vs-frontier"
-	Verdicts   []Verdict              `json:"verdicts"`
 	Smoke      *SmokeMeasurements     `json:"smoke,omitempty"`
 	Caveats    []string               `json:"caveats"`
-	Timing     Timing                 `json:"timing"`
+	Execution  Execution              `json:"execution"`
 }
 
-// ArmSummary is one arm over the items it answered. A direct arm accepts every item
-// it answered without an error; cost per accepted counts failed calls too.
+// ArmSummary is one arm over its scored rows. A direct arm accepts every item it
+// answered without an error; a transient failure is unscored and asked again.
 type ArmSummary struct {
 	N               int          `json:"n"`
 	Passed          int          `json:"passed"`
@@ -106,32 +111,45 @@ type SmokeMeasurements struct {
 	TokensIn       map[string]Moments `json:"tokens_in"`
 	TokensOut      map[string]Moments `json:"tokens_out"`
 	FormatFailRate map[string]float64 `json:"format_fail_rate"`
-	// RecommendedN is max(1000, ⌈6.18·p_disc/δ²⌉) at the largest p_disc, capped at the
-	// test split: a number for a person to accept, never applied automatically.
-	RecommendedN int `json:"recommended_n"`
+	// RecommendedN is max(1000, ⌈6.18·p_disc/δ²⌉) at the largest arm-vs-frontier p_disc,
+	// capped at the test split: a number for a person to accept, never applied.
+	// Nil, with the reason, when no frontier arm ran.
+	RecommendedN        *int   `json:"recommended_n"`
+	RecommendedNRefused string `json:"recommended_n_refused,omitempty"`
 }
 
-// Timing is excluded from the resume byte-identity test.
-type Timing struct {
+// Execution is how the run went, not what it measured: when it ran, and every dollar
+// billed, retried and interrupted calls included. Excluded from the resume identity test.
+type Execution struct {
 	Start       time.Time `json:"start"`
 	End         time.Time `json:"end"`
 	WallSeconds float64   `json:"wall_seconds"`
+	SpendUSD    float64   `json:"spend_usd"`       // Σ every row's cost_usd
+	SpendRows   int       `json:"spend_only_rows"` // unscored rows kept for their spend
+	TornBytes   int       `json:"torn_tail_bytes,omitempty"`
 }
 
-// Report recomputes summary.json from the run directory and writes it.
-func Report(dir string) (Summary, error) {
+// Report recomputes summary.json and writes nothing else: items.jsonl is only read,
+// and only once the run's lock is free, so a live run is never read mid-append.
+func Report(dir, stateDir string) (Summary, error) {
 	var run Run
 	if err := readJSON(filepath.Join(dir, "run.json"), &run); err != nil {
 		return Summary{}, fmt.Errorf("bench: %s: %w", dir, err)
 	}
-	rows, dropped, err := readResults(filepath.Join(dir, "items.jsonl"), run.ID)
+	if err := os.MkdirAll(filepath.Join(stateDir, run.ID), 0o755); err != nil {
+		return Summary{}, err
+	}
+	lk, err := util.Lock(filepath.Join(stateDir, run.ID, "run.lock"))
 	if err != nil {
 		return Summary{}, err
 	}
-	if dropped > 0 {
-		return Summary{}, fmt.Errorf("bench: %s ends in a partial line; resume the run before reporting it", dir)
+	defer lk.Unlock()
+	rows, torn, err := parseResults(filepath.Join(dir, "items.jsonl"), run.ID)
+	if err != nil {
+		return Summary{}, err
 	}
 	s, err := Summarize(&run, rows)
+	s.Execution.TornBytes = torn
 	if err != nil {
 		return Summary{}, err
 	}
@@ -150,62 +168,69 @@ func ReadSummary(path string) (Summary, error) {
 	return s, nil
 }
 
-// Summarize keeps the last row per (item, arm), adds up the cost of every row, and
-// orders rows by (rank, arm) before any statistic, so the output is deterministic.
+// Summarize scores each (item, arm) by its last scored row; a retryable row is spend
+// only. Rows are ordered by (rank, arm) before any statistic, so the output is
+// deterministic, and a run missing any scored pair is incomplete: counts, no pairs.
 func Summarize(run *Run, rows []Result) (Summary, error) {
 	order := map[string]int{}
 	for i, id := range run.ItemIDs {
 		order[id] = i
 	}
-	last := map[pairKey]Result{}
-	spent := map[string]float64{}
-	var t Timing
+	scored := map[pairKey]Result{}
+	var e Execution
 	for _, r := range rows {
 		if _, ok := order[r.ItemID]; !ok {
 			return Summary{}, fmt.Errorf("bench: a row names %s, which run %s did not schedule", r.ItemID, run.ID)
 		}
-		last[pairKey{r.ItemID, r.Arm}] = r
-		spent[r.Arm] += r.CostUSD
-		if t.Start.IsZero() || r.Started.Before(t.Start) {
-			t.Start = r.Started
+		e.SpendUSD += r.CostUSD
+		if r.Retryable {
+			e.SpendRows++
+		} else {
+			scored[pairKey{r.ItemID, r.Arm}] = r
 		}
-		if end := r.Started.Add(r.Latency); end.After(t.End) {
-			t.End = end
+		if e.Start.IsZero() || r.Started.Before(e.Start) {
+			e.Start = r.Started
+		}
+		if end := r.Started.Add(r.Latency); end.After(e.End) {
+			e.End = end
 		}
 	}
-	t.WallSeconds = t.End.Sub(t.Start).Seconds()
+	e.WallSeconds = e.End.Sub(e.Start).Seconds()
+	s := Summary{Schema: summarySchema, RunID: run.ID, Tier: run.Tier, Breadcrumb: run.Crumb,
+		Arms: map[string]ArmSummary{}, Paired: map[string]PairedStats{}, Caveats: []string{contamination}, Execution: e}
+	for _, id := range run.ItemIDs {
+		for _, arm := range run.ArmOrder {
+			if _, ok := scored[pairKey{id, arm}]; !ok {
+				s.Unscored++
+			}
+		}
+	}
+	s.Incomplete = s.Unscored > 0
 	byArm := map[string][]Result{}
-	for _, r := range last {
+	for _, r := range scored {
 		byArm[r.Arm] = append(byArm[r.Arm], r)
 	}
-	if len(byArm) > 1 {
+	if len(byArm) > 1 && !s.Incomplete {
 		byArm[OracleArm] = oracleRows(byArm)
-		for _, r := range byArm[OracleArm] {
-			spent[OracleArm] += r.CostUSD
-		}
 	}
 	for _, rs := range byArm {
 		sort.Slice(rs, func(i, j int) bool { return order[rs[i].ItemID] < order[rs[j].ItemID] })
 	}
-	s := Summary{Schema: summarySchema, RunID: run.ID, Tier: run.Tier, Breadcrumb: run.Crumb,
-		Arms: map[string]ArmSummary{}, Paired: map[string]PairedStats{}, Verdicts: []Verdict{},
-		Caveats: []string{contamination}, Timing: t}
 	s.Breadcrumb.ProviderModels = providerModels(byArm)
 	for arm, rs := range byArm {
-		a, err := summarizeArm(rs, spent[arm])
+		a, err := summarizeArm(rs)
 		if err != nil {
 			return Summary{}, err
 		}
 		s.Arms[arm] = a
-		if arm != Frontier && len(byArm[Frontier]) > 0 {
+		if arm != Frontier && len(byArm[Frontier]) > 0 && !s.Incomplete {
 			s.Paired[arm+"-vs-"+Frontier] = paired(rs, byArm[Frontier], run.Seed)
 		}
 	}
-	switch run.Tier {
-	case "smoke":
+	if s.Incomplete {
+		s.Caveats = append(s.Caveats, fmt.Sprintf("incomplete: %d scheduled pairs have no scored row; resume the run", s.Unscored))
+	} else if run.Tier == "smoke" {
 		s.Smoke = smoke(s, run.TestSplitSize)
-	case "full":
-		s.Verdicts = append(s.Verdicts, verdicts(run, s)...)
 	}
 	return s, nil
 }
@@ -243,11 +268,12 @@ func oracleRows(byArm map[string][]Result) []Result {
 	return out
 }
 
-func summarizeArm(rs []Result, spent float64) (ArmSummary, error) {
-	a := ArmSummary{N: len(rs), CostUSD: spent}
+func summarizeArm(rs []Result) (ArmSummary, error) {
+	a := ArmSummary{N: len(rs)}
 	var in, out []float64
 	lat := sketch.New(sketch.DefaultAlpha)
 	for _, r := range rs {
+		a.CostUSD += r.CostUSD
 		if r.Passed {
 			a.Passed++
 		}
@@ -280,7 +306,7 @@ func summarizeArm(rs []Result, spent float64) (ArmSummary, error) {
 	}
 	a.PassWilson = [2]float64{lo, hi}
 	if a.Accepted > 0 {
-		c := spent / float64(a.Accepted)
+		c := a.CostUSD / float64(a.Accepted)
 		a.CostPerAccepted = &c
 	}
 	a.TokensIn, a.TokensOut = moments(in), moments(out)
@@ -385,7 +411,9 @@ func smoke(s Summary, testSplit int) *SmokeMeasurements {
 	var worst float64
 	for k, p := range s.Paired {
 		m.PDisc[k] = p.PDisc
-		worst = math.Max(worst, p.PDisc)
+		if k != OracleArm+"-vs-"+Frontier { // the oracle is computed, not a candidate first source
+			worst = math.Max(worst, p.PDisc)
+		}
 	}
 	for arm, a := range s.Arms {
 		if arm == OracleArm {
@@ -396,7 +424,11 @@ func smoke(s Summary, testSplit int) *SmokeMeasurements {
 			m.FormatFailRate[arm] = float64(a.FormatFails) / float64(a.N)
 		}
 	}
-	n := int(math.Ceil(6.18 * worst / (margin * margin)))
-	m.RecommendedN = min(max(1000, n), testSplit)
+	if _, ok := s.Arms[Frontier]; !ok {
+		m.RecommendedNRefused = "no frontier arm ran, so no arm-vs-frontier p_disc was measured"
+		return m
+	}
+	n := min(max(1000, int(math.Ceil(6.18*worst/(margin*margin)))), testSplit)
+	m.RecommendedN = &n
 	return m
 }

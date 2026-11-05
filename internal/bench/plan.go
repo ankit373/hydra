@@ -3,7 +3,9 @@
 package bench
 
 import (
+	"context"
 	"fmt"
+	"time"
 
 	"github.com/ankit373/hydra/internal/build"
 	"github.com/ankit373/hydra/internal/executor"
@@ -72,16 +74,19 @@ func Plan(c *Config, s Suite, ds Dataset, splitsPath string, all []Item, nTest i
 	return run, byID, nil
 }
 
-// BuildArms makes each arm in run from its frozen config. Only static-fallback carries
-// a fault plan, keyed on the run's seed.
-func BuildArms(run Run, exec func(provider.Head) executor.Executor) (map[string]Arm, error) {
+// BuildArms makes each arm in run from its frozen config and prices. Only
+// static-fallback carries a fault plan, keyed on the run's seed. A nil sleep is real time.
+func BuildArms(run Run, exec func(provider.Head) executor.Executor, sleep func(context.Context, time.Duration) error) (map[string]Arm, error) {
+	if sleep == nil {
+		sleep = sleepCtx
+	}
 	out := map[string]Arm{}
 	for name, ac := range run.Arms {
 		var faults *FaultPlan
 		if ac.FaultRate > 0 {
 			faults = &FaultPlan{Rate: ac.FaultRate, Seed: run.Seed}
 		}
-		d, err := NewDirect(name, ac, run.Prices, exec, faults)
+		d, err := NewDirect(name, ac, run.Prices, exec, faults, sleep)
 		if err != nil {
 			return nil, err
 		}

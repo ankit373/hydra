@@ -45,9 +45,12 @@ func TestTable_SmokeAndUnverifiedLicenceAreNeverVerdicts(t *testing.T) {
 	if got := Table([]Summary{tableSummary("full", "")}); strings.Count(got, "unpublishable (licence)") != 4 {
 		t.Fatalf("unverified rows:\n%s", got)
 	}
-	s := tableSummary("full", "y")
-	s.Verdicts = []Verdict{{Hypothesis: "H1", Arm: "cheapest", Outcome: Inconclusive}}
-	if got := Table([]Summary{s}); !strings.Contains(got, "| H1 inconclusive |") {
-		t.Fatalf("verdict not copied verbatim:\n%s", got)
+	// Incomplete outranks both: it is the first thing a reader must know.
+	s := tableSummary("smoke", "")
+	s.Incomplete, s.Unscored = true, 3
+	if got := Table([]Summary{s}); strings.Count(got, "INCOMPLETE (3 unscored)") != 4 {
+		t.Fatalf("incomplete rows:\n%s", got)
 	}
 }
+
+func f64(v float64) *float64 { return &v }

@@ -13,6 +13,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ankit373/hydra/internal/executor"
+	"github.com/ankit373/hydra/internal/provider"
 	"github.com/ankit373/hydra/internal/util"
 )
 
@@ -32,10 +34,13 @@ func (e *ContractError) Error() string {
 
 // Runner executes one suite's run. Now and Out are seams; nothing here reads a real clock.
 type Runner struct {
-	Run        Run // inputs filled in; ID and MaxUSDHistory are derived
-	Suite      Suite
-	Items      map[string]Item // by id, every id Run.ItemIDs names
-	Arms       map[string]Arm
+	Run   Run // inputs filled in; ID and MaxUSDHistory are derived
+	Suite Suite
+	Items map[string]Item // by id, every id Run.ItemIDs names
+	// Exec and Sleep build the arms from the run as frozen in run.json, so a resumed
+	// run is priced by the snapshot it started with, never by today's prices.
+	Exec       func(provider.Head) executor.Executor
+	Sleep      func(context.Context, time.Duration) error
 	MaxUSD     float64
 	Rerun      bool
 	ResultsDir string // committed: bench/results
@@ -57,11 +62,6 @@ type Progress struct {
 func (r *Runner) Execute(ctx context.Context) (Progress, error) {
 	if !(r.MaxUSD > 0) {
 		return Progress{}, errors.New("bench: a run needs --max-usd or max_usd above 0")
-	}
-	for _, name := range r.Run.ArmOrder {
-		if err := r.Arms[name].Preflight(ctx); err != nil {
-			return Progress{}, err
-		}
 	}
 	base := r.Run.baseID()
 	id := base
@@ -90,6 +90,15 @@ func (r *Runner) Execute(ctx context.Context) (Progress, error) {
 	run, err := r.openRun(id, base, filepath.Join(out.Dir, "run.json"))
 	if err != nil {
 		return out, err
+	}
+	arms, err := BuildArms(*run, r.Exec, r.Sleep)
+	if err != nil {
+		return out, err
+	}
+	for _, name := range run.ArmOrder {
+		if err := arms[name].Preflight(ctx); err != nil {
+			return out, err
+		}
 	}
 	itemsPath := filepath.Join(out.Dir, "items.jsonl")
 	rows, dropped, err := readResults(itemsPath, id)
@@ -131,7 +140,7 @@ func (r *Runner) Execute(ctx context.Context) (Progress, error) {
 		if done[pairKey{p.Item.ID, p.Arm}] {
 			continue
 		}
-		row, err := r.one(ctx, run, p, budget, models, last)
+		row, err := r.one(ctx, arms[p.Arm], p, budget, models, last)
 		out.Spent = budget.Spent()
 		if row == nil {
 			return out, err
@@ -170,47 +179,46 @@ func (r *Runner) openRun(id, base, path string) (*Run, error) {
 	return &run, writeJSON(path, &run)
 }
 
-// one makes a single (item, arm) call. A nil row means nothing was spent or nothing
-// can be recorded; a row with an error is written and then stops the run.
-func (r *Runner) one(ctx context.Context, run *Run, p pair, budget *Budget, models map[string]string, last time.Time) (*Result, error) {
-	arm := r.Arms[p.Arm]
+// one makes a single (item, arm) call and returns its row. A row with an error is
+// written, then stops the run; a nil row means no call was made, so nothing was spent.
+// Every row that is not a scored result is Retryable: kept for its spend, asked again.
+func (r *Runner) one(ctx context.Context, arm Arm, p pair, budget *Budget, models map[string]string, last time.Time) (*Result, error) {
 	req, err := r.Suite.Prompt(p.Item)
 	if err != nil {
 		return nil, err
 	}
-	wc, err := arm.WorstCaseUSD(req)
-	if err != nil {
-		return nil, err
-	}
-	if err := budget.Reserve(wc); err != nil {
-		return nil, err
-	}
 	started := r.Now()
-	att, err := arm.Call(ctx, p.Item, req)
-	if err != nil {
-		budget.Settle(wc, 0) // no row is written, so a resume asks again
-		return nil, err
-	}
+	att, err := arm.Call(ctx, p.Item, req, budget)
 	att.Latency = r.Now().Sub(started)
 	row := &Result{Seq: p.Seq, ItemID: p.Item.ID, Split: p.Item.Split.String(), Arm: p.Arm, Attempt: att, Started: started}
 	for _, c := range att.Calls {
 		row.CostUSD += c.CostUSD
 	}
-	budget.Settle(wc, row.CostUSD)
 	row.LatencyInvalid = !last.IsZero() && started.Sub(last) > sleepGap
+	switch {
+	case err != nil && len(att.Calls) == 0:
+		return nil, err
+	case err != nil: // interrupted, out of budget, or refused after calls were billed
+		row.ErrKind, row.Retryable, row.Detail = "interrupted", true, err.Error()
+		return row, err
+	}
 	if what := contract(p.Arm, att, req.MaxTokens, models); what != "" {
 		row.ErrKind, row.Retryable, row.Detail = "contract", true, what
 		return row, &ContractError{Arm: p.Arm, Item: p.Item.ID, What: what}
 	}
-	if att.ErrKind == "" {
-		g, err := r.Suite.Grade(ctx, p.Item, att.Answer)
-		if err != nil {
-			return nil, err
-		}
-		row.Passed, row.Format, row.Detail = g.Passed, g.Format, g.Detail
-		if g.Passed {
-			row.Score = 1
-		}
+	if att.ErrKind != "" {
+		// A transient failure every retry and model shared says nothing about the item.
+		row.Retryable = att.transient
+		return row, nil
+	}
+	g, err := r.Suite.Grade(ctx, p.Item, att.Answer)
+	if err != nil {
+		row.ErrKind, row.Retryable, row.Detail = "grade", true, err.Error()
+		return row, err
+	}
+	row.Passed, row.Format, row.Detail = g.Passed, g.Format, g.Detail
+	if g.Passed {
+		row.Score = 1
 	}
 	return row, nil
 }
