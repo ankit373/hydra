@@ -342,8 +342,8 @@ jobs:
           fi
 
   # The website in a real browser: axe finds zero violations on every page at
-  # phone and desktop width in both colour schemes, nothing scrolls sideways
-  # from 320 to 1440px, no text sits under 12px, and no page logs an error (#1344).
+  # phone and desktop width, nothing scrolls sideways from 320 to 1440px, no
+  # text sits under 12px, and no page logs an error (#1344).
   site:
     name: Website accessibility
     runs-on: ubuntu-latest
