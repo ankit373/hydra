@@ -106,10 +106,9 @@ func TestQuotaMode_EmergencyStillForcesLocal(t *testing.T) {
 	}
 }
 
-// Concurrent dispatches read-modify-write state.json while the orchestrator
-// writes its level. A sync that wrote back a stale read would roll the level
-// back and leave a history whose newest point is not the level on disk.
-func TestSyncStateJSON_ConcurrentMirrorNeverRollsTheLevelBack(t *testing.T) {
+// In-process only: goroutines sharing stateMu must never write back a stale
+// read and roll the level back. Another process (jq, a second hyctl) is not covered.
+func TestSyncStateJSON_InProcessSyncsNeverRollTheLevelBack(t *testing.T) {
 	testutil.NewSandbox(t)
 	writeStatePct(t, 10, nil)
 	path := filepath.Join(config.Dir(), "logs", "state.json")
@@ -158,8 +157,8 @@ func TestSyncStateJSON_ConcurrentMirrorNeverRollsTheLevelBack(t *testing.T) {
 func TestGovernorLog_AdvisesOnlyTheClaudeCodeSession(t *testing.T) {
 	for _, mode := range []budget.Mode{budget.ModeCompact, budget.ModeCaution, budget.ModeWarning,
 		budget.ModeCritical, budget.ModeEmergency} {
-		claude := governorLog(budget.Quota{Scope: budget.SessionClaudeCode, ContextFrac: 0.8}, mode)
-		other := governorLog(budget.Quota{Scope: "session:codex", ContextFrac: 0.8}, mode)
+		claude := governorLog(budget.Quota{Scope: budget.SessionClaudeCode, ContextFrac: 0.8}, mode, "3", "3")
+		other := governorLog(budget.Quota{Scope: "session:codex", ContextFrac: 0.8}, mode, "3", "3")
 		if !strings.Contains(claude, "session:claude-code at 80%") ||
 			!(strings.Contains(claude, "/compact") || strings.Contains(claude, "new session")) {
 			t.Errorf("%s for claude-code = %q, want the scope, level and its remedy", mode, claude)
@@ -169,8 +168,22 @@ func TestGovernorLog_AdvisesOnlyTheClaudeCodeSession(t *testing.T) {
 			t.Errorf("%s for another scope = %q, want the scope and level with no Claude Code advice", mode, other)
 		}
 	}
-	if got := governorLog(budget.Quota{Scope: budget.SessionClaudeCode}, budget.ModeNormal); got != "" {
+	if got := governorLog(budget.Quota{Scope: budget.SessionClaudeCode}, budget.ModeNormal, "3", "3"); got != "" {
 		t.Errorf("normal mode logged %q, want nothing", got)
+	}
+}
+
+// A downgrade is claimed only when the tier moved: an unpinned dispatch (hint
+// "") or one already at the floor has nothing to downgrade.
+func TestGovernorLog_ClaimsADowngradeOnlyWhenTheTierMoved(t *testing.T) {
+	q := budget.Quota{Scope: budget.SessionClaudeCode, ContextFrac: 0.77}
+	for _, tc := range []struct{ from, to string }{{"", ""}, {"10", "10"}} {
+		if got := governorLog(q, budget.ModeCritical, tc.from, tc.to); strings.Contains(got, "downgrading") {
+			t.Errorf("tier %q → %q logged %q, which claims a downgrade that did not happen", tc.from, tc.to, got)
+		}
+	}
+	if got := governorLog(q, budget.ModeCritical, "3", "5"); !strings.Contains(got, "downgrading tier 3 → 5") {
+		t.Errorf("tier 3 → 5 logged %q, want the downgrade it made", got)
 	}
 }
 

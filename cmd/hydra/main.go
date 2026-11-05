@@ -732,7 +732,8 @@ func printBudgetStatus(names map[string]string) {
 		fmt.Println(line)
 	}
 
-	if len(state.Budget) == 0 {
+	models := state.Budget()
+	if len(models) == 0 {
 		return
 	}
 
@@ -746,8 +747,8 @@ func printBudgetStatus(names map[string]string) {
 		label string
 		id    string
 	}
-	rows := make([]row, 0, len(state.Budget))
-	for id := range state.Budget {
+	rows := make([]row, 0, len(models))
+	for id := range models {
 		// Discovery's display name where it has one, so this table names a head
 		// the way `probe` and the tier table above do (#714).
 		label := id
@@ -763,7 +764,7 @@ func printBudgetStatus(names map[string]string) {
 		return rows[i].id < rows[j].id
 	})
 	for _, r := range rows {
-		snap := state.Budget[r.id]
+		snap := models[r.id]
 		pct := int(toFloat(snap["pct"]))
 		used := int(toFloat(snap["used"]))
 		window := int(toFloat(snap["window"]))

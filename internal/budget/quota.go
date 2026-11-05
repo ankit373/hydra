@@ -4,8 +4,10 @@ package budget
 
 import (
 	"encoding/json"
+	"log"
 	"math"
 	"sort"
+	"sync"
 )
 
 // SessionClaudeCode is the scope the orchestrator protocol's legacy key feeds.
@@ -42,8 +44,23 @@ func (q Quota) Burn() (ratePct, risk float64) {
 
 // State is state.json decoded once, for the governor and `hyctl status` alike.
 type State struct {
-	Quotas []Quota                   // sorted by Scope
-	Budget map[string]map[string]any // per-model snapshots, keyed by head ID
+	Quotas []Quota // sorted by Scope
+	budget json.RawMessage
+}
+
+// Budget is the per-model snapshot table keyed by head ID, decoded on demand
+// because the dispatch path never reads it. A non-object entry is skipped.
+func (s State) Budget() map[string]map[string]any {
+	var entries map[string]json.RawMessage
+	_ = json.Unmarshal(s.budget, &entries)
+	out := map[string]map[string]any{}
+	for id, raw := range entries {
+		var snap map[string]any
+		if json.Unmarshal(raw, &snap) == nil && snap != nil {
+			out[id] = snap
+		}
+	}
+	return out
 }
 
 // ParseState reads a state.json body. A field of the wrong type reads as
@@ -58,8 +75,7 @@ func ParseState(raw []byte) State {
 	if json.Unmarshal(raw, &w) != nil {
 		return State{}
 	}
-	var s State
-	_ = json.Unmarshal(w.Budget, &s.Budget)
+	s := State{budget: w.Budget}
 
 	var entries map[string]json.RawMessage
 	_ = json.Unmarshal(w.Quotas, &entries)
@@ -69,11 +85,10 @@ func ParseState(raw []byte) State {
 			byScope[scope] = q
 		}
 	}
-	// The alias fills the scope only when no explicit quota names it.
-	if _, explicit := byScope[SessionClaudeCode]; !explicit {
-		if q, ok := legacySessionQuota(w.Pct, w.History); ok {
-			byScope[SessionClaudeCode] = q
-		}
+	// The alias wins: the orchestrator rewrites claude_pct every turn, while
+	// nothing writes quotas yet, so an entry there for this scope is the staler.
+	if q, ok := legacySessionQuota(w.Pct, w.History); ok {
+		byScope[SessionClaudeCode] = q
 	}
 	for _, q := range byScope {
 		s.Quotas = append(s.Quotas, q)
@@ -82,18 +97,29 @@ func ParseState(raw []byte) State {
 	return s
 }
 
-// parseQuota rejects a fraction outside 0..1: a percent written there by
-// mistake must not read as an emergency.
+// parseQuota fails closed: a fraction above 1 (often a percent written by
+// mistake) clamps to a full context, with a warning, rather than reading as calm.
 func parseQuota(scope string, raw json.RawMessage) (Quota, bool) {
 	var e struct {
 		ContextFrac *float64 `json:"context_frac"`
 		History     any      `json:"history"`
 	}
-	if json.Unmarshal(raw, &e) != nil || e.ContextFrac == nil || *e.ContextFrac < 0 || *e.ContextFrac > 1 {
+	if json.Unmarshal(raw, &e) != nil || e.ContextFrac == nil || *e.ContextFrac < 0 {
 		return Quota{}, false
 	}
-	return Quota{Scope: scope, ContextFrac: *e.ContextFrac, History: parseHistory(e.History)}, true
+	frac := *e.ContextFrac
+	if frac > 1 {
+		if _, seen := warnedOverFull.LoadOrStore(scope, true); !seen {
+			log.Printf("⚠ quota %s has context_frac %v, above 1; treating it as full", scope, frac)
+		}
+		frac = 1
+	}
+	return Quota{Scope: scope, ContextFrac: frac, History: parseHistory(e.History)}, true
 }
+
+// warnedOverFull holds the scopes already warned about: state.json is read on
+// every dispatch, and the warning needs saying once per process, not per read.
+var warnedOverFull sync.Map
 
 // legacySessionQuota derives SessionClaudeCode from claude_pct and its history
 // on every read, so the next `jq` write needs no migration step.
@@ -109,19 +135,16 @@ func legacySessionQuota(pct, history any) (Quota, bool) {
 	}, true
 }
 
-// Governing is the most urgent quota (highest Mode, ties by Scope), ok=false
-// when there are none.
-func Governing(qs []Quota) (Quota, bool) {
-	var best Quota
-	var bestMode Mode
-	found := false
-	for _, q := range qs {
-		m := q.Mode()
-		if !found || m > bestMode || (m == bestMode && q.Scope < best.Scope) {
-			best, bestMode, found = q, m, true
+// Governing is the most urgent quota (highest Mode, ties by Scope) and its
+// mode, ok=false when there are none.
+func Governing(qs []Quota) (q Quota, mode Mode, ok bool) {
+	for _, c := range qs {
+		m := c.Mode()
+		if !ok || m > mode || (m == mode && c.Scope < q.Scope) {
+			q, mode, ok = c, m, true
 		}
 	}
-	return best, found
+	return q, mode, ok
 }
 
 // MirrorLegacyHistory appends the orchestrator's level to its bounded history,

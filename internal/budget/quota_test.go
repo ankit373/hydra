@@ -3,10 +3,13 @@
 package budget
 
 import (
+	"bytes"
 	"go/ast"
 	"go/parser"
 	"go/token"
 	"io/fs"
+	"log"
+	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -29,9 +32,9 @@ func TestParseState_ReadsEveryShape(t *testing.T) {
 		{"alias fills claude-code, quotas the rest",
 			`{"claude_pct":70,"quotas":{"session:codex":{"context_frac":0.4}}}`,
 			[]Quota{{Scope: SessionClaudeCode, ContextFrac: 0.70}, {Scope: "session:codex", ContextFrac: 0.4}}},
-		{"an explicit claude-code quota wins over the alias",
+		{"the alias wins over a quotas entry for claude-code",
 			`{"claude_pct":70,"quotas":{"session:claude-code":{"context_frac":0.1}}}`,
-			[]Quota{{Scope: SessionClaudeCode, ContextFrac: 0.1}}},
+			[]Quota{{Scope: SessionClaudeCode, ContextFrac: 0.7}}},
 		{"negative claude_pct clamps to 0", `{"claude_pct":-5}`,
 			[]Quota{{Scope: SessionClaudeCode, ContextFrac: 0}}},
 		{"claude_pct over 100 clamps to 100", `{"claude_pct":140}`,
@@ -40,8 +43,8 @@ func TestParseState_ReadsEveryShape(t *testing.T) {
 		{"non-numeric context_frac skips only that entry",
 			`{"quotas":{"session:a":{"context_frac":"high"},"session:b":{"context_frac":0.2}}}`,
 			[]Quota{{Scope: "session:b", ContextFrac: 0.2}}},
-		{"a percent written as a fraction is invalid, not an emergency",
-			`{"quotas":{"session:a":{"context_frac":40},"session:b":{"context_frac":-0.1}}}`, nil},
+		{"a negative or missing context_frac skips the entry",
+			`{"quotas":{"session:a":{"history":[10]},"session:b":{"context_frac":-0.1}}}`, nil},
 		{"a malformed quotas key leaves the alias", `{"claude_pct":30,"quotas":"x"}`,
 			[]Quota{{Scope: SessionClaudeCode, ContextFrac: 0.3}}},
 	} {
@@ -65,18 +68,46 @@ func TestParseState_NonNumericHistoryIsNoHistory(t *testing.T) {
 	}
 }
 
-func TestParseState_ReadsTheBudgetTable(t *testing.T) {
-	s := ParseState([]byte(`{"budget":{"m":{"pct":40}}}`))
-	if s.Budget["m"]["pct"] != float64(40) {
-		t.Errorf("Budget = %v, want m at 40", s.Budget)
+// A fraction above 1 is usually a percent in the wrong field. Reading it as
+// calm would be the unsafe mistake, so it fails closed and says so, once.
+func TestParseState_OverFullFractionFailsClosedWithOneWarning(t *testing.T) {
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
+	t.Cleanup(func() { log.SetOutput(os.Stderr) })
+
+	for _, tc := range []struct {
+		scope string
+		frac  string
+	}{{"session:overfull-40", "40"}, {"session:overfull-1.04", "1.04"}} {
+		buf.Reset()
+		state := []byte(`{"quotas":{"` + tc.scope + `":{"context_frac":` + tc.frac + `}}}`)
+		for range 3 {
+			qs := ParseState(state).Quotas
+			if len(qs) != 1 || qs[0].ContextFrac != 1 || qs[0].Mode() != ModeEmergency {
+				t.Errorf("context_frac %s: got %+v, want it clamped to 1 and governing as emergency", tc.frac, qs)
+			}
+		}
+		if n := strings.Count(buf.String(), tc.scope+" has context_frac "+tc.frac); n != 1 {
+			t.Errorf("context_frac %s warned %d times over three reads, want once naming the scope and value:\n%s",
+				tc.frac, n, buf.String())
+		}
 	}
-	if s := ParseState([]byte(`{"claude_pct":30,"budget":"x"}`)); s.Budget != nil || len(s.Quotas) != 1 {
+}
+
+// The table is decoded only on demand; a non-object entry is skipped rather
+// than rendered as an empty row, and a malformed table costs nothing else.
+func TestParseState_Budget(t *testing.T) {
+	got := ParseState([]byte(`{"budget":{"m":{"pct":40},"bad":"x","gone":null}}`)).Budget()
+	if len(got) != 1 || got["m"]["pct"] != float64(40) {
+		t.Errorf("Budget() = %v, want only m at 40", got)
+	}
+	if s := ParseState([]byte(`{"claude_pct":30,"budget":"x"}`)); len(s.Budget()) != 0 || len(s.Quotas) != 1 {
 		t.Errorf("a malformed budget key cost the quotas or read as a table: %+v", s)
 	}
 }
 
 func TestGoverning_PicksTheMostUrgent(t *testing.T) {
-	if _, ok := Governing(nil); ok {
+	if _, _, ok := Governing(nil); ok {
 		t.Error("Governing(nil) reported a quota; none means normal, not a zero-value scope")
 	}
 	qs := []Quota{
@@ -84,12 +115,12 @@ func TestGoverning_PicksTheMostUrgent(t *testing.T) {
 		{Scope: "session:b", ContextFrac: 0.77},
 		{Scope: "session:c", ContextFrac: 0.72},
 	}
-	if q, _ := Governing(qs); q.Scope != "session:b" {
-		t.Errorf("Governing = %s, want session:b, the critical one", q.Scope)
+	if q, mode, _ := Governing(qs); q.Scope != "session:b" || mode != ModeCritical {
+		t.Errorf("Governing = %s (%s), want session:b, the critical one", q.Scope, mode)
 	}
 	// Equal modes tie on scope, so the same file always names the same quota.
 	tied := []Quota{{Scope: "session:z", ContextFrac: 0.76}, {Scope: "session:m", ContextFrac: 0.78}}
-	if q, _ := Governing(tied); q.Scope != "session:m" {
+	if q, _, _ := Governing(tied); q.Scope != "session:m" {
 		t.Errorf("Governing on a tie = %s, want session:m, the first by scope", q.Scope)
 	}
 }

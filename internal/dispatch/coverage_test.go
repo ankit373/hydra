@@ -828,10 +828,6 @@ func TestDispatcher_PIILocalOnly(t *testing.T) {
 // writeStatePct seeds logs/state.json with a claude_pct and optional history.
 func writeStatePct(t *testing.T, pct int, history []int) {
 	t.Helper()
-	dir := filepath.Join(config.Dir(), "logs")
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		t.Fatal(err)
-	}
 	m := map[string]any{"claude_pct": pct}
 	if history != nil {
 		m["claude_pct_history"] = history
@@ -840,9 +836,7 @@ func writeStatePct(t *testing.T, pct int, history []int) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "state.json"), raw, 0o600); err != nil {
-		t.Fatal(err)
-	}
+	writeStateRaw(t, raw)
 }
 
 // The budget governor is what enforces the 70/75/80% ceiling on every
