@@ -186,6 +186,9 @@ function SpendCard({ data }: { data: DashboardData }) {
   )
 }
 
+// Context-budget bands are states, so they take the status roles.
+const GOV_STATUS = { normal: 'success', warning: 'warning', critical: 'danger' } as const
+
 function GovernorCard({ data }: { data: DashboardData }) {
   const { governor } = data
   const revealed = useReveal(governor.known)
@@ -209,7 +212,7 @@ function GovernorCard({ data }: { data: DashboardData }) {
       <div className="arc-wrap">
         <ArcGauge
           fraction={Math.min(governor.pct, 100) / 100}
-          color={`var(--hy-gov-${band})`}
+          color={`var(--hy-color-status-${GOV_STATUS[band]})`}
           centerValue={`${Math.round(displayPct)}%`}
           centerLabel={governor.effectiveMode || governor.mode}
           revealed={revealed}
