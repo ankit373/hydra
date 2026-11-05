@@ -4,10 +4,7 @@ package budget
 
 import (
 	"encoding/json"
-	"log"
 	"math"
-	"sort"
-	"sync"
 )
 
 // SessionClaudeCode is the scope the orchestrator protocol's legacy key feeds.
@@ -44,7 +41,7 @@ func (q Quota) Burn() (ratePct, risk float64) {
 
 // State is state.json decoded once, for the governor and `hyctl status` alike.
 type State struct {
-	Quotas []Quota // sorted by Scope
+	Quotas []Quota // only the claude_pct alias at checkpoint A
 	budget json.RawMessage
 }
 
@@ -69,57 +66,17 @@ func ParseState(raw []byte) State {
 	var w struct {
 		Pct     any             `json:"claude_pct"`
 		History any             `json:"claude_pct_history"`
-		Quotas  json.RawMessage `json:"quotas"`
 		Budget  json.RawMessage `json:"budget"`
 	}
 	if json.Unmarshal(raw, &w) != nil {
 		return State{}
 	}
 	s := State{budget: w.Budget}
-
-	var entries map[string]json.RawMessage
-	_ = json.Unmarshal(w.Quotas, &entries)
-	byScope := map[string]Quota{}
-	for scope, raw := range entries {
-		if q, ok := parseQuota(scope, raw); ok {
-			byScope[scope] = q
-		}
-	}
-	// The alias wins: the orchestrator rewrites claude_pct every turn, while
-	// nothing writes quotas yet, so an entry there for this scope is the staler.
 	if q, ok := legacySessionQuota(w.Pct, w.History); ok {
-		byScope[SessionClaudeCode] = q
+		s.Quotas = []Quota{q}
 	}
-	for _, q := range byScope {
-		s.Quotas = append(s.Quotas, q)
-	}
-	sort.Slice(s.Quotas, func(i, j int) bool { return s.Quotas[i].Scope < s.Quotas[j].Scope })
 	return s
 }
-
-// parseQuota fails closed: a fraction above 1 (often a percent written by
-// mistake) clamps to a full context, with a warning, rather than reading as calm.
-func parseQuota(scope string, raw json.RawMessage) (Quota, bool) {
-	var e struct {
-		ContextFrac *float64 `json:"context_frac"`
-		History     any      `json:"history"`
-	}
-	if json.Unmarshal(raw, &e) != nil || e.ContextFrac == nil || *e.ContextFrac < 0 {
-		return Quota{}, false
-	}
-	frac := *e.ContextFrac
-	if frac > 1 {
-		if _, seen := warnedOverFull.LoadOrStore(scope, true); !seen {
-			log.Printf("⚠ quota %s has context_frac %v, above 1; treating it as full", scope, frac)
-		}
-		frac = 1
-	}
-	return Quota{Scope: scope, ContextFrac: frac, History: parseHistory(e.History)}, true
-}
-
-// warnedOverFull holds the scopes already warned about: state.json is read on
-// every dispatch, and the warning needs saying once per process, not per read.
-var warnedOverFull sync.Map
 
 // legacySessionQuota derives SessionClaudeCode from claude_pct and its history
 // on every read, so the next `jq` write needs no migration step.

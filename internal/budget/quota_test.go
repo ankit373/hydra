@@ -3,13 +3,10 @@
 package budget
 
 import (
-	"bytes"
 	"go/ast"
 	"go/parser"
 	"go/token"
 	"io/fs"
-	"log"
-	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -27,26 +24,11 @@ func TestParseState_ReadsEveryShape(t *testing.T) {
 		{"malformed JSON", "{truncated", nil},
 		{"legacy keys only", `{"claude_pct":52,"claude_pct_history":[40,52]}`,
 			[]Quota{{Scope: SessionClaudeCode, ContextFrac: 0.52, History: []int{40, 52}}}},
-		{"quotas only", `{"quotas":{"session:codex":{"context_frac":0.3,"history":[20,30]}}}`,
-			[]Quota{{Scope: "session:codex", ContextFrac: 0.3, History: []int{20, 30}}}},
-		{"alias fills claude-code, quotas the rest",
-			`{"claude_pct":70,"quotas":{"session:codex":{"context_frac":0.4}}}`,
-			[]Quota{{Scope: SessionClaudeCode, ContextFrac: 0.70}, {Scope: "session:codex", ContextFrac: 0.4}}},
-		{"the alias wins over a quotas entry for claude-code",
-			`{"claude_pct":70,"quotas":{"session:claude-code":{"context_frac":0.1}}}`,
-			[]Quota{{Scope: SessionClaudeCode, ContextFrac: 0.7}}},
 		{"negative claude_pct clamps to 0", `{"claude_pct":-5}`,
 			[]Quota{{Scope: SessionClaudeCode, ContextFrac: 0}}},
 		{"claude_pct over 100 clamps to 100", `{"claude_pct":140}`,
 			[]Quota{{Scope: SessionClaudeCode, ContextFrac: 1}}},
 		{"string claude_pct is absent", `{"claude_pct":"fifty"}`, nil},
-		{"non-numeric context_frac skips only that entry",
-			`{"quotas":{"session:a":{"context_frac":"high"},"session:b":{"context_frac":0.2}}}`,
-			[]Quota{{Scope: "session:b", ContextFrac: 0.2}}},
-		{"a negative or missing context_frac skips the entry",
-			`{"quotas":{"session:a":{"history":[10]},"session:b":{"context_frac":-0.1}}}`, nil},
-		{"a malformed quotas key leaves the alias", `{"claude_pct":30,"quotas":"x"}`,
-			[]Quota{{Scope: SessionClaudeCode, ContextFrac: 0.3}}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got := ParseState([]byte(tc.state)).Quotas
@@ -68,29 +50,17 @@ func TestParseState_NonNumericHistoryIsNoHistory(t *testing.T) {
 	}
 }
 
-// A fraction above 1 is usually a percent in the wrong field. Reading it as
-// calm would be the unsafe mistake, so it fails closed and says so, once.
-func TestParseState_OverFullFractionFailsClosedWithOneWarning(t *testing.T) {
-	var buf bytes.Buffer
-	log.SetOutput(&buf)
-	t.Cleanup(func() { log.SetOutput(os.Stderr) })
-
-	for _, tc := range []struct {
-		scope string
-		frac  string
-	}{{"session:overfull-40", "40"}, {"session:overfull-1.04", "1.04"}} {
-		buf.Reset()
-		state := []byte(`{"quotas":{"` + tc.scope + `":{"context_frac":` + tc.frac + `}}}`)
-		for range 3 {
-			qs := ParseState(state).Quotas
-			if len(qs) != 1 || qs[0].ContextFrac != 1 || qs[0].Mode() != ModeEmergency {
-				t.Errorf("context_frac %s: got %+v, want it clamped to 1 and governing as emergency", tc.frac, qs)
-			}
-		}
-		if n := strings.Count(buf.String(), tc.scope+" has context_frac "+tc.frac); n != 1 {
-			t.Errorf("context_frac %s warned %d times over three reads, want once naming the scope and value:\n%s",
-				tc.frac, n, buf.String())
-		}
+// Nothing writes the quotas key at checkpoint A; reading it safely needs
+// validation and timestamps, which is #1326 (E2). Until then it is ignored.
+func TestParseState_IgnoresTheQuotasKey(t *testing.T) {
+	got := ParseState([]byte(`{"claude_pct":30,"quotas":{"session:claude-code":{"context_frac":0.9},` +
+		`"session:codex":{"context_frac":40}}}`)).Quotas
+	want := []Quota{{Scope: SessionClaudeCode, ContextFrac: 0.3}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("Quotas = %+v, want only the claude_pct alias %+v", got, want)
+	}
+	if got := ParseState([]byte(`{"quotas":{"session:codex":{"context_frac":0.95}}}`)).Quotas; got != nil {
+		t.Errorf("a quotas key alone produced %+v, want no quota", got)
 	}
 }
 

@@ -710,18 +710,13 @@ func printBudgetStatus(names map[string]string) {
 
 	// One line per quota with a level, each with its rate-aware mode: a fast
 	// burn escalates above the static level band before it crosses a line.
-	var shown []budget.Quota
-	width := 0
 	for _, q := range state.Quotas {
-		if q.Pct() > 0 {
-			shown = append(shown, q)
-			width = max(width, len(q.Scope))
-		}
-	}
-	for _, q := range shown {
 		pct, eff := q.Pct(), q.Mode()
+		if pct <= 0 {
+			continue
+		}
 		line := fmt.Sprintf("  %s  %s %3d%%  %s",
-			dimStyle.Render(fmt.Sprintf("%-*s", width, q.Scope)),
+			dimStyle.Render(q.Scope),
 			budgetBar(pct), pct, budgetModeStyle(eff.String()).Render(eff.String()),
 		)
 		if eff > budget.ModeFor(pct) {
