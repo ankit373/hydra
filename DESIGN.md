@@ -179,6 +179,6 @@ Terminal roles, worst case against the terminal backgrounds above:
 Each of these is scheduled in the design revamp and listed so nobody mistakes it for the pattern to copy:
 
 - **Light theme on the web and in the desktop app (Phase 4).** The values exist; both surfaces pin `data-theme="dark"`.
-- **Website stylesheets (Phase 3).** Pages alias their own `--ink`, `--aqua` and similar variables to the roles, but still carry literal colours, per-page font stacks and their own type sizes.
+- **Website stylesheets (Phase 3).** Pages keep their own variable names (`--ink`, `--aqua` and the like), mapped onto the roles once in `docs/assets/page-aliases.css`, and still carry literal colours, per-page font stacks and their own type sizes.
 - **Desktop alpha and shadow literals, and the logo SVG (Phases 6 and 7).** `app.css` keeps neutral scrims, shadows and white washes; `brand.tsx` keeps its gradient stops; the radii are 8/14/22px rather than the token scale.
 - **TUI wizards, splash and CLI colours (Phase 8).** `init.go`, `install.go`, `splash.go` and `cmd/hydra` still use their own ANSI-256 values.
