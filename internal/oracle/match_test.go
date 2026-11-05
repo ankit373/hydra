@@ -35,8 +35,15 @@ var normaliseRows = []struct{ in, want string }{
 	{"* card_arrival", "card_arrival"},
 	{"\u2022 card_arrival", "card_arrival"},
 	{"- x", "x"},
+	{"-card_arrival", "card_arrival"},
+	{"card_arrival -", "card_arrival"},
 	{"-1", "-1"},
 	{"-1.", "-1"},
+	{"- 1", "-1"},
+	{"\"-1\"", "-1"},
+	{"- -1", "-1"},
+	{"-_-", ""},
+	{" - ", ""},
 	{"'x.'.", "x"},
 	{"x..", "x"},
 	{"x. .", "x"},
@@ -102,6 +109,7 @@ func TestMatchOracle_Verify(t *testing.T) {
 		{"a sign is part of the value", unsigned, "-1", false, `not one of 2 labels: "-1"`},
 		{"pattern hit", digits, " 42\n", true, ""},
 		{"pattern hit inside Unicode space", digits, "\u00a0\v42\f\u3000", true, ""},
+		{"pattern hit inside invisible format runes", digits, "\ufeff42\u200b", true, ""},
 		{"pattern sees the dot it asks for", version, "v1.", true, ""},
 		{"pattern sees the quotes it asks for", quoted, "'abc'", true, ""},
 		{"pattern does not strip backticks", digits, "`42`", false, "does not match ^(?:\\d+)$: \"`42`\""},
@@ -111,9 +119,9 @@ func TestMatchOracle_Verify(t *testing.T) {
 		{"empty answer, labels", labels, "", false, `not one of 2 labels: ""`},
 		{"empty answer, pattern", anything, "  \n", false, `does not match ^(?:.*)$: "  \n"`},
 		{"detail quotes 80 bytes", labels, strings.Repeat("x", 200), false,
-			fmt.Sprintf("not one of 2 labels: %q", strings.Repeat("x", 80)+"...(truncated)")},
+			fmt.Sprintf("not one of 2 labels: %q...(truncated)", strings.Repeat("x", 80))},
 		{"detail cuts on a rune boundary", labels, strings.Repeat("x", 79) + "é", false,
-			fmt.Sprintf("not one of 2 labels: %q", strings.Repeat("x", 79)+"...(truncated)")},
+			fmt.Sprintf("not one of 2 labels: %q...(truncated)", strings.Repeat("x", 79))},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			v, err := tc.o.Verify(context.Background(), tc.candidate, trust.Task{})
@@ -133,9 +141,10 @@ func TestMatchOracle_Verify(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(v.Detail) > detailMaxLen+len("...(truncated)") || !strings.HasSuffix(v.Detail, "...(truncated)") {
-		t.Errorf("a %d-byte pattern gave a %d-byte Detail, want at most %d and a truncation marker",
-			2*detailMaxLen, len(v.Detail), detailMaxLen)
+	// The pattern is what gets cut; the answer a reader acts on is always kept, quoted.
+	if len(v.Detail) > detailMaxLen || !strings.HasSuffix(v.Detail, `...(truncated): "b"`) {
+		t.Errorf("a %d-byte pattern gave a %d-byte Detail ending %q, want at most %d ending in the cut pattern and the answer",
+			2*detailMaxLen, len(v.Detail), v.Detail[max(0, len(v.Detail)-40):], detailMaxLen)
 	}
 	if labels.Source != "verifier:match:banking77" {
 		t.Errorf("Source = %q, want the verifier:match:<id> calibration key", labels.Source)
@@ -157,6 +166,9 @@ func TestNewMatch_RefusesBadConfig(t *testing.T) {
 			`labels "card_arrival" and "Card Arrival" both normalise to "card_arrival"`},
 		{"bad regex", nil, "(", "missing closing )"},
 		{"pattern escapes its anchors", nil, `a)|(.*`, "unexpected )"},
+		{"labels only separators", []string{"card_arrival", "-_-"}, "", "empty once normalised"},
+		// 999 levels compile bare; the anchoring group is the thousandth.
+		{"anchoring nests too deeply", nil, strings.Repeat("(", 999) + "a" + strings.Repeat(")", 999), "nest"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			o, err := NewMatch("x", tc.labels, tc.pattern)

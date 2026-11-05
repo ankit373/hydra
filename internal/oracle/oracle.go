@@ -311,15 +311,26 @@ func firstLine(s string) string {
 	return truncate(s, detailMaxLen)
 }
 
-// truncate is the package's one cut for diagnostic text: at most n bytes, never half a
-// rune (a valid rune starts within UTFMax-1 bytes of any cut), and marked when cut.
+// truncMarker follows any diagnostic text this package had to cut.
+const truncMarker = "...(truncated)"
+
+// truncate is the package's one cut for diagnostic text, marked when it cuts.
 func truncate(s string, n int) string {
+	if c, cut := clip(s, n); cut {
+		return c + truncMarker
+	}
+	return s
+}
+
+// clip keeps at most n bytes and never half a rune: a valid rune starts within
+// UTFMax-1 bytes of any cut. It reports whether anything was cut.
+func clip(s string, n int) (string, bool) {
 	if len(s) <= n {
-		return s
+		return s, false
 	}
 	cut := n
 	for cut > n-(utf8.UTFMax-1) && cut > 0 && !utf8.RuneStart(s[cut]) {
 		cut--
 	}
-	return s[:cut] + "...(truncated)"
+	return s[:cut], true
 }
