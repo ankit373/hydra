@@ -10,6 +10,7 @@ import (
 	"math"
 	"sort"
 	"strings"
+	"time"
 )
 
 // ModelPrice holds per-million-token rates for one model.
@@ -45,6 +46,8 @@ type DB struct {
 	models map[string]ModelPrice
 	// tier (1-10) → price; populated from pricing.yaml fallback
 	tiers map[int]TierPrice
+	// fetchedAt is when the cached model prices were fetched, zero when none were.
+	fetchedAt time.Time
 }
 
 // Load builds a DB: loads tier fallback immediately, then overlays live model
@@ -70,6 +73,7 @@ func Load() *DB {
 
 	// Overlay live model-specific prices from cache.
 	if cache, err := readCache(); err == nil {
+		db.fetchedAt = cache.FetchedAt
 		for k, v := range cache.Models {
 			db.models[strings.ToLower(k)] = v
 		}
@@ -125,6 +129,10 @@ func (db *DB) EstimateCost(tier, inputTokens, outputTokens int) float64 {
 	}
 	return round6(cost(tp.InputPerMillion, tp.OutputPerMillion, inputTokens, outputTokens))
 }
+
+// FetchedAt is when the model prices this DB holds were fetched, read once at Load
+// so a background refresh cannot change what a benchmark run recorded. Zero: none.
+func (db *DB) FetchedAt() time.Time { return db.fetchedAt }
 
 // Models returns all model names in the live pricing data, sorted alphabetically.
 func (db *DB) Models() []string {

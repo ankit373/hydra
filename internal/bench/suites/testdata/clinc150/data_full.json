@@ -1,0 +1,6 @@
+{"train": [["what is on my to do list", "todo_list"], ["hey what's up", "greeting"], ["set an alarm", "alarm"]],
+ "val": [["what is on my to do list", "reminder"], ["Hey what's up.", "greeting"]],
+ "test": [["wake me at six", "alarm"]],
+ "oos_train": [["how tall is a giraffe", "oos"]],
+ "oos_val": [["sing me a song", "oos"]],
+ "oos_test": [["what is the capital of mars", "oos"]]}
