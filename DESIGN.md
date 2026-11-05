@@ -84,7 +84,7 @@ Names are purpose, never hue. CSS variables are `--hy-` plus the token path with
 | `focus.ring` | the 2px focus ring at a 2px offset | |
 | `brand.start` / `mid` / `end` | the logo mark and wordmark gradient only | anything else |
 
-`cost.*` aliases the status hues today so nothing changes visually; it moves to its own sequential palette with the charts in Phase 4. The chart series follow the dataviz reference order (blue, orange, aqua, yellow, magenta, green, violet, red) and pass its palette validator against both themes; in light mode series 3, 4 and 5 are under 3:1, so charts using them need direct labels or a table view.
+`cost.*` aliases the status hues today so nothing changes visually; it moves to its own sequential palette with the charts in Phase 4. The chart series follow the dataviz reference order (blue, orange, aqua, yellow, magenta, green, violet, red) and pass its palette validator against both themes' base surface. In light mode series 3, 4 and 5 are under 3:1 on the base surface, and series 2 also drops under 3:1 on the card and overlay surfaces, so light charts need direct labels or a table view. Dark series all clear 3:1. The chart tokens have no floor in the build yet; they get one when the charts move onto them in Phase 4.
 
 | Series | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
 |---|---|---|---|---|---|---|---|---|
@@ -111,7 +111,7 @@ These live in `base.tokens.json` and are the same in both themes. They are gener
 The TUI never paints a background, so it cannot know the exact colour behind its text. Terminal roles are therefore checked against three common terminal backgrounds: `#1e1e1e` for dark, and `#ffffff` and Solarized Light `#fdf6e3` for light. lipgloss picks the light or dark value from background detection, overridable with `HYDRA_THEME=light|dark`.
 
 - **Truecolor:** the token's own value.
-- **ANSI-256:** the closest colour by ΔE2000 *among those that meet the role's floor on every terminal background*. Plain nearest-match is what turned body text unreadable at 256 colours (TUI-03).
+- **ANSI-256:** the closest colour by ΔE2000 *among those that meet the role's floor on every terminal background* and stay within 30° of the role's hue (neutral roles may take a grey). Plain nearest-match is what turned body text unreadable at 256 colours (TUI-03). Roles in one family (`text.*`, `accent.*`) take different indices where an in-hue one exists. One exception: on light terminals at 256 colours, index 23 is the only teal that clears 4.5:1 on both white and Solarized Light, so `accent.default` and `accent.strong` share it. Bold and position still tell them apart.
 - **ANSI-16:** a fixed slot per role, so the user's own terminal palette applies.
 - **Body text** has no colour at all and uses the terminal's default foreground.
 - **NO_COLOR and selection:** selection and focus use reverse video plus a glyph (`[name]` for the active tab, a heavy border for the focused pane), so nothing is told apart by colour alone.
@@ -162,7 +162,7 @@ Terminal roles, worst case against the terminal backgrounds above:
 | `border.default` | 8 / 8 | 146 (4.9, 1.96:1) | 236 (12.8, 1.26:1) | 1.77 / 1.27 |
 | `text.default` | default fg | default fg | default fg | default fg |
 | `text.muted` | 8 / 7 | 60 (4.6, 5.61:1) | 146 (3.7, 7.89:1) | 6.69 / 7.96 |
-| `text.subtle` | 8 / 8 | 60 (3.2, 5.61:1) | 103 (2.4, 4.85:1) | 5.06 / 4.82 |
+| `text.subtle` | 8 / 8 | 61 (7.5, 5.20:1) | 103 (2.4, 4.85:1) | 5.06 / 4.82 |
 | `accent.default` | 6 / 6 | 23 (10.6, 6.95:1) | 43 (4.1, 9.00:1) | 5.01 / 10.41 |
 | `accent.strong` | 6 / 6 | 23 (5.7, 6.95:1) | 51 (5.9, 13.30:1) | 6.96 / 11.62 |
 | `accent.secondary` | 5 / 5 | 62 (7.5, 4.74:1) | 141 (2.5, 6.14:1) | 5.02 / 6.12 |

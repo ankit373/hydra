@@ -103,6 +103,11 @@ func TestPalette_TextRolesMeetAAOnLightAndDark(t *testing.T) {
 			t.Errorf("text role %s has floor %.1f, want 4.5", path, floors[path])
 		}
 	}
+	// Dim and faint must stay apart at 256 colours, or the label hierarchy
+	// flattens on macOS Terminal's default profile.
+	if tokTextMuted.Light.ANSI256 == tokTextSubtle.Light.ANSI256 || tokTextMuted.Dark.ANSI256 == tokTextSubtle.Dark.ANSI256 {
+		t.Errorf("text.muted and text.subtle share an ANSI-256 index: %v %v", tokTextMuted, tokTextSubtle)
+	}
 	text := map[string]lipgloss.CompleteAdaptiveColor{
 		"aqua": ckAqua, "cyan": ckCyan, "violet": ckViolet, "magenta": ckMagenta, "dim": ckDimc, "faint": ckFaint,
 		"cheap": ckCheap, "mid": ckMid, "exp": ckExp,

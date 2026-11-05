@@ -20,7 +20,7 @@ var tokTextMuted = lipgloss.CompleteAdaptiveColor{
 }
 
 var tokTextSubtle = lipgloss.CompleteAdaptiveColor{
-	Light: lipgloss.CompleteColor{TrueColor: "#62678d", ANSI256: "60", ANSI: "8"},
+	Light: lipgloss.CompleteColor{TrueColor: "#62678d", ANSI256: "61", ANSI: "8"},
 	Dark:  lipgloss.CompleteColor{TrueColor: "#8288ad", ANSI256: "103", ANSI: "8"},
 }
 
@@ -85,6 +85,6 @@ var tokRoles = []struct {
 	{"color.status.warning", tokStatusWarning, 4.5},
 	{"color.status.danger", tokStatusDanger, 4.5},
 	{"color.brand.start", tokBrandStart, 4.5},
-	{"color.brand.mid", tokBrandMid, 0},
+	{"color.brand.mid", tokBrandMid, 3},
 	{"color.brand.end", tokBrandEnd, 4.5},
 }

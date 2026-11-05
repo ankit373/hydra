@@ -63,20 +63,32 @@ const ansi = [];
 for (let i = 0; i < 216; i++) ansi.push([16 + i, [lv[Math.floor(i / 36)], lv[Math.floor(i / 6) % 6], lv[i % 6]]]);
 for (let i = 0; i < 24; i++) ansi.push([232 + i, Array(3).fill(8 + i * 10)]);
 const ansiHex = (rgb) => '#' + rgb.map((x) => x.toString(16).padStart(2, '0')).join('');
+// hueGap is the OKLCH hue distance in degrees from role a to candidate b. A
+// role on the neutral scale may take any grey; a hue role may never turn grey.
+function hueGap(a, b, neutral) {
+  const [, , ha] = a.to('oklch').coords, [, cb, hb] = b.to('oklch').coords;
+  if (cb < 0.08 && neutral) return 0;
+  if (cb < 0.04) return 180;
+  const d = Math.abs(ha - hb) % 360;
+  return Math.min(d, 360 - d);
+}
 
-// nearest256 is the closest index by ΔE2000 among those meeting the floor on
-// every terminal background; plain nearest-match is what broke TUI-03.
-function nearest256(h, refs, min) {
+// nearest256 is the closest in-hue index by ΔE2000 that meets the floor on
+// every terminal background (plain nearest-match broke TUI-03). It avoids an
+// index a sibling role took, but shares one rather than leave the role's hue.
+function nearest256(h, refs, min, taken, neutral) {
   const c = new ColorJS(h);
-  let best;
-  for (const [i, rgb] of ansi) {
-    const x = ansiHex(rgb);
-    if (min && refs.some((b) => wcag(x, b) < min)) continue;
-    const d = c.deltaE(new ColorJS(x), '2000');
-    if (!best || d < best.d) best = { i, d, x };
+  for (const avoid of [taken, new Set()]) {
+    let best;
+    for (const [i, rgb] of ansi) {
+      const x = ansiHex(rgb);
+      if (avoid.has(i) || hueGap(c, new ColorJS(x), neutral) > 30 || (min && refs.some((b) => wcag(x, b) < min))) continue;
+      const d = c.deltaE(new ColorJS(x), '2000');
+      if (!best || d < best.d) best = { i, d, x };
+    }
+    if (best) return best;
   }
-  if (!best) throw new Error(`no ANSI-256 colour reaches ${min}:1 for ${h}`);
-  return best;
+  throw new Error(`no in-hue ANSI-256 colour reaches ${min}:1 for ${h}`);
 }
 
 const failures = [];
@@ -84,6 +96,7 @@ const report = {};
 for (const mode of MODES) {
   const tokens = index(primitives, base, themes[mode]);
   const hexOf = (p) => resolveHex(tokens, p);
+  const taken = {};
   for (const [path, t] of walk(themes[mode])) {
     const floor = t.$extensions?.['dev.hydra.contrast'];
     const term = t.$extensions?.['dev.hydra.terminal'];
@@ -97,14 +110,16 @@ for (const mode of MODES) {
     if (!term || term.ansi16 === 'default') continue;
     const refs = TERMINAL_BG[mode];
     for (const b of refs) if (floor?.min && wcag(h, b) < floor.min) failures.push(`${mode} ${path} ${h} is ${wcag(h, b).toFixed(2)}:1 on terminal ${b}`);
-    const pick = nearest256(h, refs, floor?.min);
+    const family = (taken[path.split('.').slice(0, 2).join('.')] ??= new Set());
+    const pick = nearest256(h, refs, floor?.min, family, t.$extensions['dev.hydra.leonardo']?.scale === 'neutral');
+    family.add(pick.i);
     term.ansi256 = String(pick.i);
     row[mode].ansi256 = pick;
     row[mode].term = Math.min(...refs.map((b) => wcag(h, b)));
   }
 }
-for (const mode of MODES) write(`themes/${mode}.tokens.json`, themes[mode]);
 if (failures.length) { console.error(failures.join('\n')); process.exit(1); }
+for (const mode of MODES) write(`themes/${mode}.tokens.json`, themes[mode]);
 
 const f = (n) => n.toFixed(2);
 let md = '| Role | Light | on base / worst surface | APCA Lc | Dark | on base / worst surface | APCA Lc |\n|---|---|---|---|---|---|---|\n';

@@ -531,6 +531,9 @@
           "dev.hydra.terminal": {
             "ansi16": 5,
             "ansi256": "99"
+          },
+          "dev.hydra.contrast": {
+            "min": 3
           }
         }
       },
