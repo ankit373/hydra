@@ -594,7 +594,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 	defer func() { _ = d.health.Flush() }()
 
 	// Resolve the hint to a capability number BEFORE the governor runs. A named
-	// tier ("expert") is otherwise opaque to claudeMode's Atoi, which left the
+	// tier ("expert") is otherwise opaque to quotaMode's Atoi, which left the
 	// whole token-preservation table inert for every non-numeric hint (#165).
 	// A hint that is invalid on its face, an unknown name or an out-of-range
 	// number, is rejected here, before routability ever enters the picture, so
@@ -604,21 +604,14 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		return nil, err
 	}
 
-	// Apply claude% preservation, may downgrade tier or abort.
-	tier, mode, pct := d.claudeMode(hint)
-	switch mode {
-	case "emergency":
-		log.Printf("🚨 EMERGENCY: Claude at %d%%, routing to local tier only. Start a new session.", pct)
+	// Apply quota preservation, may downgrade tier or abort.
+	tier, q, mode := d.quotaMode(hint)
+	if mode == budget.ModeEmergency {
 		tier = "10"
 		opts.LocalOnly = true
-	case "critical":
-		log.Printf("🔴 CRITICAL: Claude at %d%%, downgrading tier by 2. Run /compact NOW.", pct)
-	case "warning":
-		log.Printf("🟠 WARNING: Claude at %d%%, downgrading tier by 1. Run /compact now.", pct)
-	case "caution":
-		log.Printf("🟡 CAUTION: Claude at %d%%, Run /compact immediately.", pct)
-	case "compact":
-		log.Printf("ℹ️  Claude at %d%%, Consider running /compact.", pct)
+	}
+	if line := governorLog(q, mode, hint, tier); line != "" {
+		log.Print(line)
 	}
 
 	// Inject A2A handoff context into prompt if provided. --a2a names a file the
@@ -1054,28 +1047,24 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 	return nil, fmt.Errorf("all heads failed (tried %d): %w", len(candidates), lastErr)
 }
 
-// claudeMode reads claude_pct from state.json and returns the (possibly downgraded) tier,
-// mode string, and raw percentage. The mode is rate-aware: a fast burn (high
-// first-passage risk toward the 80% line) escalates the mode above its static
-// level band, so the tier downgrades earlier. With no history the effective mode
-// equals ModeFor(pct), identical to the prior behavior.
-func (d *Dispatcher) claudeMode(tierHint string) (tier string, mode string, pct int) {
-	pct = readClaudePct()
-	_, risk := budget.RiskFromHistory(readClaudePctHistory())
-	mode = budget.EffectiveMode(pct, risk).String()
-	tier = tierHint
+// quotaMode reads state.json once and returns the (possibly downgraded) tier,
+// the governing quota and its mode. The mode is rate-aware, so a fast burn
+// downgrades before the static band would; no quota at all is ModeNormal.
+func (d *Dispatcher) quotaMode(tierHint string) (string, budget.Quota, budget.Mode) {
+	raw, _ := os.ReadFile(filepath.Join(config.Dir(), "logs", "state.json"))
+	q, mode, _ := budget.Governing(budget.ParseState(raw).Quotas)
 
 	// Convert tier hint to int so we can downgrade numerically.
 	t, err := strconv.Atoi(tierHint)
 	if err != nil {
-		return tier, mode, pct
+		return tierHint, q, mode
 	}
 	switch mode {
-	case "critical":
+	case budget.ModeCritical:
 		t += 2
-	case "emergency":
+	case budget.ModeEmergency:
 		t = 10
-	case "warning":
+	case budget.ModeWarning:
 		t++
 	}
 	// Only escalation overflow reaches this, resolveTierHint already rejects
@@ -1084,63 +1073,32 @@ func (d *Dispatcher) claudeMode(tierHint string) (tier string, mode string, pct 
 	if t > maxTier {
 		t = maxTier
 	}
-	return strconv.Itoa(t), mode, pct
+	return strconv.Itoa(t), q, mode
 }
 
-func readClaudePct() int {
-	statePath := filepath.Join(config.Dir(), "logs", "state.json")
-	raw, err := os.ReadFile(statePath)
-	if err != nil {
-		return 0
+// governorLog keeps the wording users already know; session:claude-code is the
+// only scope at checkpoint A. A downgrade is claimed only when the tier moved.
+func governorLog(q budget.Quota, mode budget.Mode, fromTier, toTier string) string {
+	moved := fromTier != toTier
+	switch mode {
+	case budget.ModeEmergency:
+		return fmt.Sprintf("🚨 EMERGENCY: Claude at %d%%, routing to local tier only. Start a new session.", q.Pct())
+	case budget.ModeCritical:
+		if moved {
+			return fmt.Sprintf("🔴 CRITICAL: Claude at %d%%, downgrading tier by 2. Run /compact NOW.", q.Pct())
+		}
+		return fmt.Sprintf("🔴 CRITICAL: Claude at %d%%. Run /compact NOW.", q.Pct())
+	case budget.ModeWarning:
+		if moved {
+			return fmt.Sprintf("🟠 WARNING: Claude at %d%%, downgrading tier by 1. Run /compact now.", q.Pct())
+		}
+		return fmt.Sprintf("🟠 WARNING: Claude at %d%%. Run /compact now.", q.Pct())
+	case budget.ModeCaution:
+		return fmt.Sprintf("🟡 CAUTION: Claude at %d%%, Run /compact immediately.", q.Pct())
+	case budget.ModeCompact:
+		return fmt.Sprintf("ℹ️  Claude at %d%%, Consider running /compact.", q.Pct())
 	}
-	var s struct {
-		ClaudePct int `json:"claude_pct"`
-	}
-	if err := json.Unmarshal(raw, &s); err != nil {
-		return 0
-	}
-	return s.ClaudePct
-}
-
-// readClaudePctHistory reads the bounded claude_pct trajectory from state.json.
-// A missing file or field yields nil, so callers get no rate signal.
-func readClaudePctHistory() []int {
-	statePath := filepath.Join(config.Dir(), "logs", "state.json")
-	raw, err := os.ReadFile(statePath)
-	if err != nil {
-		return nil
-	}
-	var s struct {
-		History []int `json:"claude_pct_history"`
-	}
-	if err := json.Unmarshal(raw, &s); err != nil {
-		return nil
-	}
-	return s.History
-}
-
-// asInt coerces a value decoded from JSON (numbers arrive as float64) to an int.
-func asInt(v any) int {
-	switch x := v.(type) {
-	case float64:
-		return int(x)
-	case int:
-		return x
-	}
-	return 0
-}
-
-// asIntSlice coerces a JSON-decoded array (elements arrive as float64) to []int.
-func asIntSlice(v any) []int {
-	raw, ok := v.([]any)
-	if !ok {
-		return nil
-	}
-	out := make([]int, 0, len(raw))
-	for _, e := range raw {
-		out = append(out, asInt(e))
-	}
-	return out
+	return ""
 }
 
 // handoffFiles is the file set a handoff records, so the next agent's
@@ -1701,14 +1659,9 @@ func (d *Dispatcher) syncStateJSON(r *Result) {
 	existing["last_status"] = "ok"
 	existing["last_tier"] = rank.UITier(r.Head)
 
-	// Append the current orchestrator claude_pct (written by the orchestrator,
-	// e.g. `jq '.claude_pct = 52'`) to a bounded history, so `hyctl status` can
-	// compute a rate-aware first-passage risk from the session trajectory rather
-	// than reacting only to the instantaneous level.
-	if pct := asInt(existing["claude_pct"]); pct > 0 {
-		existing["claude_pct_history"] = budget.AppendPctHistory(
-			asIntSlice(existing["claude_pct_history"]), pct, budget.MaxPctHistory)
-	}
+	// Mirror the orchestrator's session level into its bounded history, so
+	// `hyctl status` and the governor see the trajectory, not only the level.
+	budget.MirrorLegacyHistory(existing)
 
 	// Persist per-model budget snapshots so the TUI and status command can read
 	// them. Merge into whatever is already on disk instead of replacing it, each
