@@ -15,7 +15,7 @@ export default defineConfig({
       filename: 'tokens.css',
       legacyHex: true,
       // Leonardo key colours are inputs to the generator, not styles.
-      exclude: ['neutral', 'aqua', 'violet', 'green', 'amber', 'red', 'blue'].map((s) => `palette.${s}.**`),
+      exclude: ['neutral', 'aqua', 'cyan', 'violet', 'green', 'amber', 'red', 'blue'].map((s) => `palette.${s}.**`),
       variableName: (token) => `--hy-${token.id.replaceAll('.', '-')}`,
       permutations: [
         { input: { theme: 'light' }, prepare: (c) => `:root {\n  ${c}\n}\n` },

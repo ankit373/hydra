@@ -254,24 +254,24 @@
         }
       },
       "strong": {
-        "$description": "Emphasis: headings in data views, inline code.",
+        "$description": "Emphasis in a second, bluer teal: headings in data views, inline code.",
         "$value": {
           "colorSpace": "srgb",
           "components": [
             0,
-            0.3765,
-            0.3255
+            0.4314,
+            0.4706
           ],
-          "hex": "#006053"
+          "hex": "#006e78"
         },
         "$extensions": {
           "dev.hydra.leonardo": {
-            "scale": "aqua",
-            "ratio": 7
+            "scale": "cyan",
+            "ratio": 5.6
           },
           "dev.hydra.terminal": {
             "ansi16": 6,
-            "ansi256": "23"
+            "ansi256": "24"
           },
           "dev.hydra.contrast": {
             "min": 4.5

@@ -26,11 +26,11 @@ var tokTextSubtle = lipgloss.CompleteAdaptiveColor{
 
 var tokAccentDefault = lipgloss.CompleteAdaptiveColor{
 	Light: lipgloss.CompleteColor{TrueColor: "#007867", ANSI256: "23", ANSI: "6"},
-	Dark:  lipgloss.CompleteColor{TrueColor: "#01e6c4", ANSI256: "43", ANSI: "6"},
+	Dark:  lipgloss.CompleteColor{TrueColor: "#00e6c3", ANSI256: "43", ANSI: "6"},
 }
 
 var tokAccentStrong = lipgloss.CompleteAdaptiveColor{
-	Light: lipgloss.CompleteColor{TrueColor: "#006053", ANSI256: "23", ANSI: "6"},
+	Light: lipgloss.CompleteColor{TrueColor: "#006e78", ANSI256: "24", ANSI: "6"},
 	Dark:  lipgloss.CompleteColor{TrueColor: "#2af0e0", ANSI256: "51", ANSI: "6"},
 }
 

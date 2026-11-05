@@ -76,7 +76,7 @@ Names are purpose, never hue. CSS variables are `--hy-` plus the token path with
 | `text.subtle` | metadata and hints | anything the user must read to act |
 | `text.inverse` | text on a saturated fill (an accent or status background) | text on a surface |
 | `accent.default` | links, primary actions, live values, selection, the focus ring | decoration |
-| `accent.strong` | emphasis: headings in data views, inline code | actions (use `accent.default`) |
+| `accent.strong` | emphasis in a second, bluer teal: headings in data views, inline code | actions (use `accent.default`) |
 | `accent.secondary` | tags and series that need a second hue | actions |
 | `status.success` / `warning` / `danger` / `info` | the state of something, always with a glyph or word | cost, or a chart series |
 | `cost.low` / `mid` / `high` | price and spend bands, which are data | states |
@@ -111,7 +111,7 @@ These live in `base.tokens.json` and are the same in both themes. They are gener
 The TUI never paints a background, so it cannot know the exact colour behind its text. Terminal roles are therefore checked against three common terminal backgrounds: `#1e1e1e` for dark, and `#ffffff` and Solarized Light `#fdf6e3` for light. lipgloss picks the light or dark value from background detection, overridable with `HYDRA_THEME=light|dark`.
 
 - **Truecolor:** the token's own value.
-- **ANSI-256:** the closest colour by ΔE2000 *among those that meet the role's floor on every terminal background* and stay within 30° of the role's hue (neutral roles may take a grey). Plain nearest-match is what turned body text unreadable at 256 colours (TUI-03). Roles in one family (`text.*`, `accent.*`) take different indices where an in-hue one exists. One exception: on light terminals at 256 colours, index 23 is the only teal that clears 4.5:1 on both white and Solarized Light, so `accent.default` and `accent.strong` share it. Bold and position still tell them apart.
+- **ANSI-256:** the closest colour by ΔE2000 *among those that meet the role's floor on every terminal background* and stay within 40° of the role's OKLCH hue (neutral roles may take a grey). Plain nearest-match is what turned body text unreadable at 256 colours (TUI-03). Roles in one family (`text.*`, `accent.*`) take different indices, so the hierarchy survives at 256 colours; if no in-hue index were left, a role would share one rather than change hue.
 - **ANSI-16:** a fixed slot per role, so the user's own terminal palette applies.
 - **Body text** has no colour at all and uses the terminal's default foreground.
 - **NO_COLOR and selection:** selection and focus use reverse video plus a glyph (`[name]` for the active tab, a heavy border for the focused pane), so nothing is told apart by colour alone.
@@ -144,8 +144,8 @@ WCAG 2 ratios are against `surface.base`, and against the lowest-contrast surfac
 | `text.default` | `#1d2036` | 15.08 / 13.37 | 99 | `#e7e9f4` | 16.61 / 15.35 | 94 |
 | `text.muted` | `#505578` | 6.80 / 6.02 | 81 | `#acb2d0` | 9.60 / 8.87 | 61 |
 | `text.subtle` | `#62678d` | 5.15 / 4.56 | 73 | `#8288ad` | 5.81 / 5.37 | 39 |
-| `accent.default` | `#007867` | 5.10 / 4.52 | 72 | `#01e6c4` | 12.55 / 11.60 | 77 |
-| `accent.strong` | `#006053` | 7.07 / 6.27 | 81 | `#2af0e0` | 14.01 / 12.94 | 83 |
+| `accent.default` | `#007867` | 5.10 / 4.52 | 72 | `#00e6c3` | 12.54 / 11.59 | 77 |
+| `accent.strong` | `#006e78` | 5.65 / 5.01 | 75 | `#2af0e0` | 14.01 / 12.94 | 83 |
 | `accent.secondary` | `#764ddd` | 5.11 / 4.53 | 72 | `#a68bfb` | 7.38 / 6.81 | 49 |
 | `status.success` | `#187947` | 5.12 / 4.54 | 73 | `#3fd98a` | 11.01 / 10.17 | 69 |
 | `status.warning` | `#8e6112` | 5.11 / 4.53 | 73 | `#e0a93b` | 9.48 / 8.76 | 61 |
@@ -163,8 +163,8 @@ Terminal roles, worst case against the terminal backgrounds above:
 | `text.default` | default fg | default fg | default fg | default fg |
 | `text.muted` | 8 / 7 | 60 (4.6, 5.61:1) | 146 (3.7, 7.89:1) | 6.69 / 7.96 |
 | `text.subtle` | 8 / 8 | 61 (7.5, 5.20:1) | 103 (2.4, 4.85:1) | 5.06 / 4.82 |
-| `accent.default` | 6 / 6 | 23 (10.6, 6.95:1) | 43 (4.1, 9.00:1) | 5.01 / 10.41 |
-| `accent.strong` | 6 / 6 | 23 (5.7, 6.95:1) | 51 (5.9, 13.30:1) | 6.96 / 11.62 |
+| `accent.default` | 6 / 6 | 23 (10.6, 6.95:1) | 43 (4.0, 9.00:1) | 5.01 / 10.40 |
+| `accent.strong` | 6 / 6 | 24 (12.5, 6.52:1) | 51 (5.9, 13.30:1) | 5.56 / 11.62 |
 | `accent.secondary` | 5 / 5 | 62 (7.5, 4.74:1) | 141 (2.5, 6.14:1) | 5.02 / 6.12 |
 | `status.success` | 2 / 2 | 22 (12.4, 7.38:1) | 42 (1.8, 8.79:1) | 5.04 / 9.13 |
 | `status.warning` | 3 / 3 | 94 (2.7, 5.31:1) | 179 (4.9, 8.09:1) | 5.03 / 7.87 |

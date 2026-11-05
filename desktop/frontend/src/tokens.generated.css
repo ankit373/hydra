@@ -6,7 +6,7 @@
 :root {
   --hy-color-accent-default: #007867;
   --hy-color-accent-secondary: #764ddd;
-  --hy-color-accent-strong: #006053;
+  --hy-color-accent-strong: #006e78;
   --hy-color-border-default: #b6bad5;
   --hy-color-border-strong: #7e83a9;
   --hy-color-border-subtle: #d4d7e8;
@@ -83,7 +83,7 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --hy-color-accent-default: #01e6c4;
+    --hy-color-accent-default: #00e6c3;
     --hy-color-accent-secondary: #a68bfb;
     --hy-color-accent-strong: #2af0e0;
     --hy-color-border-default: #2b2f49;
@@ -120,7 +120,7 @@
 }
 
 :root[data-theme="dark"] {
-  --hy-color-accent-default: #01e6c4;
+  --hy-color-accent-default: #00e6c3;
   --hy-color-accent-secondary: #a68bfb;
   --hy-color-accent-strong: #2af0e0;
   --hy-color-border-default: #2b2f49;

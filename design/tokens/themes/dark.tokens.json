@@ -233,11 +233,11 @@
         "$value": {
           "colorSpace": "srgb",
           "components": [
-            0.0039,
+            0,
             0.902,
-            0.7686
+            0.7647
           ],
-          "hex": "#01e6c4"
+          "hex": "#00e6c3"
         },
         "$extensions": {
           "dev.hydra.leonardo": {
@@ -254,7 +254,7 @@
         }
       },
       "strong": {
-        "$description": "Emphasis: headings in data views, inline code.",
+        "$description": "Emphasis in a second, bluer teal: headings in data views, inline code.",
         "$value": {
           "colorSpace": "srgb",
           "components": [
@@ -266,7 +266,7 @@
         },
         "$extensions": {
           "dev.hydra.leonardo": {
-            "scale": "aqua",
+            "scale": "cyan",
             "ratio": 14
           },
           "dev.hydra.terminal": {

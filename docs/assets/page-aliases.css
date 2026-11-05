@@ -1,0 +1,21 @@
+/* The website's own variable names, mapped once onto the generated token roles
+   in tokens.css. Every page links this after tokens.css; the shared stylesheet
+   in Phase 3 replaces both the names and this file. */
+:root {
+  --bg: var(--hy-color-surface-base);
+  --bg2: var(--hy-color-surface-raised);
+  /* Translucent on purpose: cards blur the starfield behind them. */
+  --panel: color-mix(in srgb, var(--hy-color-surface-card) 62%, transparent);
+  --line: var(--hy-color-border-subtle);
+  --line-2: var(--hy-color-border-default);
+  --ink: var(--hy-color-text-default);
+  --dim: var(--hy-color-text-muted);
+  --faint: var(--hy-color-text-subtle);
+  --cyan: var(--hy-color-accent-strong);
+  --aqua: var(--hy-color-accent-default);
+  --violet: var(--hy-color-accent-secondary);
+  --magenta: var(--hy-color-brand-end);
+  --cheap: var(--hy-color-cost-low);
+  --mid: var(--hy-color-cost-mid);
+  --exp: var(--hy-color-cost-high);
+}

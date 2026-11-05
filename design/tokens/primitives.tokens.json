@@ -60,9 +60,6 @@
       }
     },
     "aqua": {
-      "300": {
-        "$value": "{palette.brand.cyan}"
-      },
       "400": {
         "$value": {
           "colorSpace": "srgb",
@@ -83,6 +80,25 @@
             0.2588
           ],
           "hex": "#004d42"
+        }
+      }
+    },
+    "cyan": {
+      "300": {
+        "$value": "{palette.brand.cyan}"
+      },
+      "700": {
+        "$value": "{palette.brand.cyan-deep}"
+      },
+      "900": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.0,
+            0.2314,
+            0.251
+          ],
+          "hex": "#003b40"
         }
       }
     },

@@ -182,15 +182,24 @@ func ckWordmark(s string) string {
 // the tokens' deeper light-theme stops on light backgrounds.
 func ckLerpHex(t float64) lipgloss.AdaptiveColor {
 	return lipgloss.AdaptiveColor{
-		Dark:  ckLerp3(t, ckHexRGB(tokBrandStart.Dark), ckHexRGB(tokBrandMid.Dark), ckHexRGB(tokBrandEnd.Dark)),
-		Light: ckLerp3(t, ckHexRGB(tokBrandStart.Light), ckHexRGB(tokBrandMid.Light), ckHexRGB(tokBrandEnd.Light)),
+		Dark:  ckLerp3(t, ckBrandDark[0], ckBrandDark[1], ckBrandDark[2]),
+		Light: ckLerp3(t, ckBrandLight[0], ckBrandLight[1], ckBrandLight[2]),
 	}
 }
 
-// ckHexRGB reads a generated "#rrggbb" truecolor value; the build guarantees it.
+// The wordmark's stops, parsed once: ckWordmark asks for them per rune per frame.
+var (
+	ckBrandDark  = [3][3]int{ckHexRGB(tokBrandStart.Dark), ckHexRGB(tokBrandMid.Dark), ckHexRGB(tokBrandEnd.Dark)}
+	ckBrandLight = [3][3]int{ckHexRGB(tokBrandStart.Light), ckHexRGB(tokBrandMid.Light), ckHexRGB(tokBrandEnd.Light)}
+)
+
+// ckHexRGB reads a generated "#rrggbb" truecolor value. A malformed one is a
+// broken token build, so it stops the program rather than painting black.
 func ckHexRGB(c lipgloss.CompleteColor) [3]int {
 	var v [3]int
-	fmt.Sscanf(c.TrueColor, "#%02x%02x%02x", &v[0], &v[1], &v[2])
+	if _, err := fmt.Sscanf(c.TrueColor, "#%02x%02x%02x", &v[0], &v[1], &v[2]); err != nil {
+		panic(fmt.Sprintf("tui: generated brand colour %q: %v", c.TrueColor, err))
+	}
 	return v
 }
 

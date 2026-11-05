@@ -328,8 +328,18 @@ jobs:
         working-directory: design
         run: npm run build
 
+      # status, not diff: a generated file the rebuild created but nobody
+      # committed is untracked, and `git diff` would pass it.
       - name: Generated files match the token source
-        run: git diff --exit-code -- design DESIGN.md docs/assets/tokens.css desktop/frontend/src/tokens.generated.css internal/tui/tokens_gen.go
+        run: |
+          paths="design DESIGN.md docs/assets/tokens.css desktop/frontend/src/tokens.generated.css internal/tui/tokens_gen.go"
+          drift=$(git status --porcelain -- $paths)
+          if [ -n "$drift" ]; then
+            echo "Generated files are out of date; run: cd design && npm ci && npm run build"
+            echo "$drift"
+            git diff -- $paths
+            exit 1
+          fi
 
   # Every target Hydra ships (and windows/arm64, which it should, see #262)
   # compiles and vets clean today. Nothing guarded that, so a Unix-only syscall

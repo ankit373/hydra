@@ -1,9 +1,9 @@
 // Copies the Terrazzo CSS to the website and the desktop app, and writes the
 // TUI's lipgloss roles from every token that carries a terminal mapping.
 import fs from 'node:fs';
+import { MODES, read, walk, index, resolveHex } from './tokens.mjs';
 
 const at = (p) => new URL(p, import.meta.url);
-const read = (p) => JSON.parse(fs.readFileSync(at(`../tokens/${p}`)));
 
 // Terrazzo copies an alias target's $description onto the alias, which
 // mislabels them, so descriptions stay in the token source only.
@@ -16,32 +16,28 @@ for (const out of ['../../docs/assets/tokens.css', '../../desktop/frontend/src/t
   fs.writeFileSync(at(out), css);
 }
 
-function* walk(node, path = []) {
-  if (node && typeof node === 'object' && '$value' in node) { yield [path.join('.'), node]; return; }
-  for (const [k, v] of Object.entries(node ?? {})) if (!k.startsWith('$')) yield* walk(v, [...path, k]);
-}
 const primitives = read('primitives.tokens.json');
-const tokens = Object.fromEntries(['light', 'dark'].map((m) => [m, new Map([...walk(primitives), ...walk(read(`themes/${m}.tokens.json`))])]));
-const hex = (m, path) => {
-  const v = tokens[m].get(path).$value;
-  return typeof v === 'string' ? hex(m, v.slice(1, -1)) : v.hex;
-};
+const base = read('base.tokens.json');
+const themes = Object.fromEntries(MODES.map((m) => [m, read(`themes/${m}.tokens.json`)]));
+const tokens = Object.fromEntries(MODES.map((m) => [m, index(primitives, base, themes[m])]));
 
 const goName = (path) => 'tok' + path.replace(/^color\./, '').split(/[.-]/).map((s) => s[0].toUpperCase() + s.slice(1)).join('');
 let vars = '';
 const roles = [];
-for (const [path, t] of tokens.light) {
-  const lt = t.$extensions?.['dev.hydra.terminal'];
-  if (!lt) continue;
+for (const [path, t] of walk(themes.light)) {
+  const term = Object.fromEntries(MODES.map((m) => [m, tokens[m].get(path)?.$extensions?.['dev.hydra.terminal']]));
+  if (!term.light) continue;
+  if (!term.dark) throw new Error(`${path} has a terminal mapping in light but not in dark`);
   const name = goName(path);
-  if (lt.ansi16 === 'default') {
+  if (term.light.ansi16 === 'default') {
     vars += `\n// ${name} inherits the terminal's default foreground at every colour depth.\nvar ${name} lipgloss.TerminalColor = lipgloss.NoColor{}\n`;
     continue;
   }
-  const dt = tokens.dark.get(path).$extensions['dev.hydra.terminal'];
-  const cc = (m, x) => `lipgloss.CompleteColor{TrueColor: "${hex(m, path)}", ANSI256: "${x.ansi256}", ANSI: "${x.ansi16}"}`;
-  vars += `\nvar ${name} = lipgloss.CompleteAdaptiveColor{\n\tLight: ${cc('light', lt)},\n\tDark:  ${cc('dark', dt)},\n}\n`;
-  roles.push(`\t{"${path}", ${name}, ${t.$extensions['dev.hydra.contrast']?.min ?? 0}},\n`);
+  const cc = (m) => `lipgloss.CompleteColor{TrueColor: "${resolveHex(tokens[m], path)}", ANSI256: "${term[m].ansi256}", ANSI: "${term[m].ansi16}"}`;
+  vars += `\nvar ${name} = lipgloss.CompleteAdaptiveColor{\n\tLight: ${cc('light')},\n\tDark:  ${cc('dark')},\n}\n`;
+  // One floor per role in Go, so take the stricter theme's.
+  const min = Math.max(...MODES.map((m) => tokens[m].get(path).$extensions?.['dev.hydra.contrast']?.min ?? 0));
+  roles.push(`\t{"${path}", ${name}, ${min}},\n`);
 }
 
 const go = `// SPDX-License-Identifier: MIT

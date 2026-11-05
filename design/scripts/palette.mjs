@@ -4,11 +4,8 @@
 import fs from 'node:fs';
 import { Theme, Color, BackgroundColor } from '@adobe/leonardo-contrast-colors';
 import ColorJS from 'colorjs.io';
+import { MODES, read, write, walk, index, resolveHex } from './tokens.mjs';
 
-const root = new URL('../tokens/', import.meta.url);
-const read = (p) => JSON.parse(fs.readFileSync(new URL(p, root)));
-const write = (p, o) => fs.writeFileSync(new URL(p, root), JSON.stringify(o, null, 2) + '\n');
-const MODES = ['light', 'dark'];
 const SURFACES = ['color.surface.base', 'color.surface.raised', 'color.surface.card', 'color.surface.overlay'];
 // The TUI never paints a background, so terminal roles are checked against
 // common terminal defaults: VS Code dark, plain white and Solarized Light.
@@ -18,18 +15,6 @@ const primitives = read('primitives.tokens.json');
 const base = read('base.tokens.json');
 const themes = Object.fromEntries(MODES.map((m) => [m, read(`themes/${m}.tokens.json`)]));
 
-// walk yields [path, token] for every node carrying a $value.
-function* walk(node, path = []) {
-  if (node && typeof node === 'object' && '$value' in node) { yield [path.join('.'), node]; return; }
-  for (const [k, v] of Object.entries(node ?? {})) if (!k.startsWith('$')) yield* walk(v, [...path, k]);
-}
-const index = (...docs) => new Map(docs.flatMap((d) => [...walk(d)]));
-function resolveHex(tokens, path, seen = new Set()) {
-  const t = tokens.get(path);
-  if (!t || seen.has(path)) throw new Error(`unresolvable colour reference ${path}`);
-  if (typeof t.$value === 'string') return resolveHex(tokens, t.$value.slice(1, -1), seen.add(path));
-  return t.$value.hex;
-}
 const colour = (h) => ({ colorSpace: 'srgb', components: [1, 3, 5].map((i) => +(parseInt(h.slice(i, i + 2), 16) / 255).toFixed(4)), hex: h });
 const wcag = (a, b) => new ColorJS(a).contrast(new ColorJS(b), 'WCAG21');
 const apca = (fg, bg) => Math.abs(new ColorJS(bg).contrast(new ColorJS(fg), 'APCA'));
@@ -68,6 +53,8 @@ const ansiHex = (rgb) => '#' + rgb.map((x) => x.toString(16).padStart(2, '0')).j
 function hueGap(a, b, neutral) {
   const [, , ha] = a.to('oklch').coords, [, cb, hb] = b.to('oklch').coords;
   if (cb < 0.08 && neutral) return 0;
+  // colorjs reports a grey's hue as NaN, which would compare false and pass.
+  if (Number.isNaN(ha)) return cb < 0.04 ? 0 : 180;
   if (cb < 0.04) return 180;
   const d = Math.abs(ha - hb) % 360;
   return Math.min(d, 360 - d);
@@ -82,7 +69,7 @@ function nearest256(h, refs, min, taken, neutral) {
     let best;
     for (const [i, rgb] of ansi) {
       const x = ansiHex(rgb);
-      if (avoid.has(i) || hueGap(c, new ColorJS(x), neutral) > 30 || (min && refs.some((b) => wcag(x, b) < min))) continue;
+      if (avoid.has(i) || hueGap(c, new ColorJS(x), neutral) > 40 || (min && refs.some((b) => wcag(x, b) < min))) continue;
       const d = c.deltaE(new ColorJS(x), '2000');
       if (!best || d < best.d) best = { i, d, x };
     }
