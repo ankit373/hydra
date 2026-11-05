@@ -87,12 +87,23 @@ func explicitClass(h http.Header) (string, error) {
 }
 
 // objective reads ObjectiveHeader; empty means the client left it to the route.
+// Every value sent must parse and agree, as with the class.
 func objective(h http.Header) (rank.Objective, error) {
-	o, err := rank.ParseObjective(h.Get(ObjectiveHeader))
-	if err != nil {
-		return "", fmt.Errorf("%s: %w", ObjectiveHeader, err)
+	var obj rank.Objective
+	for _, v := range h.Values(ObjectiveHeader) {
+		o, err := rank.ParseObjective(v)
+		if err != nil {
+			return "", fmt.Errorf("%s: %w", ObjectiveHeader, err)
+		}
+		if o == "" {
+			continue
+		}
+		if obj != "" && o != obj {
+			return "", fmt.Errorf("%s was sent as both %q and %q; send one objective", ObjectiveHeader, obj, o)
+		}
+		obj = o
 	}
-	return o, nil
+	return obj, nil
 }
 
 // maxCost reads MaxCostHeader; 0 means the client sent none. Zero is refused

@@ -69,7 +69,10 @@ func (r serveRouter) Chat(ctx context.Context, req serve.Request) (serve.Answer,
 		return serve.Answer{}, callerError(err)
 	}
 
-	ans := serve.Answer{Output: res.Output, Head: res.Head.ID, Model: res.Head.Name, Evidence: withBasis(ev, res)}
+	ans := serve.Answer{Output: res.Output, Head: res.Head.ID, Model: res.Head.Name, Evidence: ev}
+	if req.OnEvent == nil {
+		ans.Evidence = withObjective(ev, res)
+	}
 	if res.Response != nil {
 		ans.ToolCalls = res.Response.ToolCalls
 		ans.FinishReason = res.Response.FinishReason
@@ -78,18 +81,31 @@ func (r serveRouter) Chat(ctx context.Context, req serve.Request) (serve.Answer,
 	return ans, nil
 }
 
-// withBasis adds the answering head's P(pass) basis to a copy of ev: a stream
-// already holds ev, and a cached answer was ranked by nothing.
-func withBasis(ev *serve.Evidence, res *dispatch.Result) *serve.Evidence {
-	if ev == nil || res.Cache != nil {
+// withObjective reports the objective and the answering head's P(pass) basis,
+// only when the objective is what ordered the candidates. A stream's headers
+// leave before that is known, so it reports the class alone.
+func withObjective(ev *serve.Evidence, res *dispatch.Result) *serve.Evidence {
+	if res.Objective == "" {
 		return ev
 	}
-	out := *ev
-	out.PPassBasis = "catalogue_prior"
-	if res.Scores[res.Head.ID].Measured() {
-		out.PPassBasis = "measured"
+	var out serve.Evidence
+	if ev != nil {
+		out = *ev
 	}
+	out.Objective, out.PPassBasis = string(res.Objective), passBasis(res.Scores[res.Head.ID])
 	return &out
+}
+
+// passBasis says what P(pass) rests on: this class's own record, evidence
+// borrowed from other classes, or the catalogue's score alone.
+func passBasis(sc rank.Score) string {
+	switch {
+	case sc.Measured():
+		return "measured"
+	case sc.N > 0:
+		return "borrowed"
+	}
+	return "catalogue_prior"
 }
 
 // options is the one translation of a served request into what the router is
@@ -121,7 +137,7 @@ func (r serveRouter) options(req serve.Request) (dispatch.Options, *serve.Eviden
 	case req.Route.Head != "":
 	case req.TaskClass != "":
 		ev = &serve.Evidence{TaskClass: req.TaskClass, TaskClassBasis: "header"}
-	case r.defaultClass != "" && req.Route == (serve.Route{}):
+	case r.defaultClass != "" && (req.Route == (serve.Route{}) || isServedDefault(req.Route, enum)):
 		ev = &serve.Evidence{TaskClass: r.defaultClass, TaskClassBasis: "route"}
 	}
 	if ev != nil {
@@ -129,17 +145,19 @@ func (r serveRouter) options(req serve.Request) (dispatch.Options, *serve.Eviden
 		// must neither be served from nor stored for an unclassed request.
 		opts.Domain, opts.NoCache = ev.TaskClass, true
 	}
-	// Only an unpinned route is ordered by an objective, so only it echoes one.
+	// Only an unpinned route is ordered by an objective. The cache key does not
+	// cover one, so a client choosing it neither reads nor fills the cache.
 	if tier == "" && head == "" {
 		opts.Objective = cmp.Or(req.Objective, r.objective)
-	}
-	if opts.Objective != "" {
-		if ev == nil {
-			ev = &serve.Evidence{}
-		}
-		ev.Objective = string(opts.Objective)
+		opts.NoCache = opts.NoCache || req.Objective != ""
 	}
 	return opts, ev, nil
+}
+
+// isServedDefault is hydra/standard, the pre-E1 `hydra`, which keeps the
+// --task-class that route had.
+func isServedDefault(rt serve.Route, enum string) bool {
+	return rt.Enum != "" && enum == dispatch.ServedDefaultEnum
 }
 
 // requestCeiling is the lower of the client's and the policy's, read per request
@@ -378,7 +396,7 @@ func cmdServe() *cobra.Command {
 	f := cmd.Flags()
 	f.StringVar(&addr, "addr", "127.0.0.1:8787", "address to bind")
 	f.StringVar(&token, "token", "", "bearer token required of every request (or HYDRA_SERVE_TOKEN)")
-	f.StringVar(&enum, "enum", "STANDARD", "pin `hydra` to this routing enum; applies only when passed")
+	f.StringVar(&enum, "enum", dispatch.ServedDefaultEnum, "pin `hydra` to this routing enum; applies only when passed")
 	f.StringVar(&obj, "objective", string(rank.Quality), "what `hydra` optimises when no --enum pins it: quality or cost")
 	f.StringVar(&taskClass, "task-class", "", "dotted task class for a request that names none, e.g. classification.banking77")
 	f.BoolVar(&localOnly, "local", false, "local Heads only, no API calls")
