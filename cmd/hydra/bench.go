@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"runtime"
 	"slices"
@@ -44,7 +45,74 @@ func cmdBench() *cobra.Command {
 		Use:   "bench",
 		Short: "Benchmark harness: pinned datasets, committed splits, scored arms",
 	}
-	cmd.AddCommand(cmdBenchFetch(), cmdBenchRun())
+	cmd.AddCommand(cmdBenchFetch(), cmdBenchRun(), cmdBenchReport(), cmdBenchTable())
+	return cmd
+}
+
+func cmdBenchReport() *cobra.Command {
+	var resultsDir string
+	var jsonOut bool
+	cmd := &cobra.Command{
+		Use:   "report <run-id>",
+		Short: "Recompute summary.json from a run's run.json and items.jsonl, and print it",
+		Long: "Pure: the same files give a byte-identical summary.json every time. No network.\n" +
+			"Verdicts are computed only for a full-tier run.",
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			s, err := bench.Report(filepath.Join(resultsDir, args[0]))
+			if err != nil {
+				return err
+			}
+			if jsonOut {
+				b, err := os.ReadFile(filepath.Join(resultsDir, args[0], "summary.json"))
+				if err != nil {
+					return err
+				}
+				_, err = cmd.OutOrStdout().Write(b)
+				return err
+			}
+			fmt.Fprint(cmd.OutOrStdout(), bench.Table([]bench.Summary{s}))
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&resultsDir, "results", "bench/results", "where run directories are")
+	cmd.Flags().BoolVar(&jsonOut, "json", false, "print summary.json rather than the table")
+	return cmd
+}
+
+func cmdBenchTable() *cobra.Command {
+	var resultsDir, outPath string
+	cmd := &cobra.Command{
+		Use:   "table <run-id>...",
+		Short: "Write the markdown results table from summary.json files only",
+		Long: "Reads each run's summary.json and nothing else, and writes one row per (suite, arm)\n" +
+			"to --out (default bench/results/<run-id>/table.md for one run). A smoke run is never\n" +
+			"a verdict, and a suite whose licence is not verified is marked unpublishable.",
+		Args: cobra.MinimumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if outPath == "" {
+				if len(args) > 1 {
+					return errors.New("bench: name --out when tabling more than one run")
+				}
+				outPath = filepath.Join(resultsDir, args[0], "table.md")
+			}
+			var sums []bench.Summary
+			for _, id := range args {
+				s, err := bench.ReadSummary(filepath.Join(resultsDir, id, "summary.json"))
+				if err != nil {
+					return err
+				}
+				sums = append(sums, s)
+			}
+			if err := os.WriteFile(outPath, []byte(bench.Table(sums)), 0o644); err != nil {
+				return err
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "  wrote %s\n", outPath)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&resultsDir, "results", "bench/results", "where run directories are")
+	cmd.Flags().StringVar(&outPath, "out", "", "the markdown file to write")
 	return cmd
 }
 

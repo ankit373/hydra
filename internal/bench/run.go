@@ -23,29 +23,33 @@ type Run struct {
 	MaxUSDHistory []float64            `json:"max_usd_history"` // every cap the run was given, oldest first
 	Arms          map[string]ArmConfig `json:"arms"`
 	ArmOrder      []string             `json:"arm_order"`
-	ItemIDs       []string             `json:"item_ids"` // the scheduled test items, in rank order
+	ItemIDs       []string             `json:"item_ids"`        // the scheduled test items, in rank order
+	TestSplitSize int                  `json:"test_split_size"` // the ceiling on any recommended n
 	Prices        PriceSnapshot        `json:"prices"`
 	Crumb         Breadcrumb           `json:"breadcrumb"`
 }
 
 // Breadcrumb is what a reader needs to reproduce or distrust a number.
 type Breadcrumb struct {
-	HarnessVersion string               `json:"harness_version"`
-	GitSHA         string               `json:"git_sha"`
-	Dirty          bool                 `json:"dirty"`
-	Config         string               `json:"config"` // config.Breadcrumb() of each served home; "" for direct-only
-	Suite          string               `json:"suite"`
-	SuiteRevision  string               `json:"suite_revision"`
-	DataSHA256     map[string]string    `json:"data_sha256"` // re-hashed at load
-	SplitSHA256    string               `json:"split_sha256"`
-	Seed           uint64               `json:"seed"`
-	Arms           map[string]ArmConfig `json:"arms"`
-	Prices         PriceSnapshot        `json:"prices"`
-	ProviderModels map[string][]string  `json:"provider_models,omitempty"` // per arm, read off the rows by report
-	Temperature    float64              `json:"temperature"`               // the value sent
-	CalibSHA256    string               `json:"calib_sha256,omitempty"`
-	Host           HostInfo             `json:"host"`
-	ModelCutoffs   map[string]string    `json:"model_cutoffs"` // stated training cutoffs, for contamination
+	HarnessVersion string `json:"harness_version"`
+	GitSHA         string `json:"git_sha"`
+	Dirty          bool   `json:"dirty"`
+	Config         string `json:"config"` // config.Breadcrumb() of each served home; "" for direct-only
+	Suite          string `json:"suite"`
+	SuiteRevision  string `json:"suite_revision"`
+	Licence        string `json:"licence"`
+	// LicenceVerified is empty when nobody checked; `hyctl bench table` will not publish such a suite.
+	LicenceVerified string               `json:"licence_verified,omitempty"`
+	DataSHA256      map[string]string    `json:"data_sha256"` // re-hashed at load
+	SplitSHA256     string               `json:"split_sha256"`
+	Seed            uint64               `json:"seed"`
+	Arms            map[string]ArmConfig `json:"arms"`
+	Prices          PriceSnapshot        `json:"prices"`
+	ProviderModels  map[string][]string  `json:"provider_models,omitempty"` // per arm, read off the rows by report
+	Temperature     float64              `json:"temperature"`               // the value sent
+	CalibSHA256     string               `json:"calib_sha256,omitempty"`
+	Host            HostInfo             `json:"host"`
+	ModelCutoffs    map[string]string    `json:"model_cutoffs"` // stated training cutoffs, for contamination
 }
 
 // HostInfo is the machine at the start of the run; latency on a loaded one is noise.

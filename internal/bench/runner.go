@@ -44,8 +44,8 @@ type Runner struct {
 	Out        io.Writer
 }
 
-// Outcome is what a finished or stopped run reports.
-type Outcome struct {
+// Progress is what a finished or stopped run reports.
+type Progress struct {
 	RunID   string
 	Dir     string
 	Written int // rows this invocation wrote
@@ -54,13 +54,13 @@ type Outcome struct {
 
 // Execute runs every scheduled pair not already recorded. The same inputs resolve to
 // the same run id, so running it again resumes; --rerun starts -r2, -r3, ...
-func (r *Runner) Execute(ctx context.Context) (Outcome, error) {
+func (r *Runner) Execute(ctx context.Context) (Progress, error) {
 	if !(r.MaxUSD > 0) {
-		return Outcome{}, errors.New("bench: a run needs --max-usd or max_usd above 0")
+		return Progress{}, errors.New("bench: a run needs --max-usd or max_usd above 0")
 	}
 	for _, name := range r.Run.ArmOrder {
 		if err := r.Arms[name].Preflight(ctx); err != nil {
-			return Outcome{}, err
+			return Progress{}, err
 		}
 	}
 	base := r.Run.baseID()
@@ -73,7 +73,7 @@ func (r *Runner) Execute(ctx context.Context) (Outcome, error) {
 			}
 		}
 	}
-	out := Outcome{RunID: id, Dir: filepath.Join(r.ResultsDir, id)}
+	out := Progress{RunID: id, Dir: filepath.Join(r.ResultsDir, id)}
 	if err := os.MkdirAll(out.Dir, 0o755); err != nil {
 		return out, err
 	}

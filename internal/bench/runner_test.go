@@ -56,7 +56,7 @@ func testRunner(t *testing.T, n int, exec *fakeExec, arms ...string) *Runner {
 		ResultsDir: t.TempDir(), StateDir: t.TempDir(), Now: stepClock(), Out: io.Discard}
 }
 
-func rowsOf(t *testing.T, r *Runner, o Outcome) []Result {
+func rowsOf(t *testing.T, r *Runner, o Progress) []Result {
 	t.Helper()
 	rows, _, err := readResults(filepath.Join(o.Dir, "items.jsonl"), o.RunID)
 	if err != nil {

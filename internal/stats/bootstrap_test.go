@@ -122,6 +122,16 @@ func TestStatistics_OnTheIdentityResample(t *testing.T) {
 		t.Fatal("undefined")
 	}
 	near(t, "cost per accepted diff", v, 6.0/2-6.0/3, exact)
+	if whole, ok := cpa.All(); !ok || whole != v {
+		t.Errorf("All = %v, %v; want %v from the identity resample", whole, ok, v)
+	}
+	none, _ := CostPerAcceptedDiff([]float64{1}, []float64{1}, []bool{false}, []bool{true})
+	if _, ok := none.All(); ok {
+		t.Error("All gave a cost per accepted answer for an arm that accepted nothing")
+	}
+	if _, ok := (Stat{}).All(); ok {
+		t.Error("All evaluated a statistic no constructor built")
+	}
 
 	wm, err := WeightedMean([]float64{1, 4, 10}, []float64{1, 2, 0})
 	if err != nil {

@@ -63,7 +63,7 @@ func benchFixture(t *testing.T, maxUSD string) (args []string, exec *benchAnswer
 		t.Fatal(err)
 	}
 	var lock strings.Builder
-	fmt.Fprintf(&lock, "[banking77]\nrevision = %q\nlicence = \"x\"\n", ds.Revision)
+	fmt.Fprintf(&lock, "[banking77]\nrevision = %q\nlicence = \"x\"\nlicence_verified = \"fixture, 2026-11-05\"\n", ds.Revision)
 	for _, f := range ds.Files {
 		fmt.Fprintf(&lock, "[[banking77.file]]\nname = %q\nurl = %q\nsha256 = %q\n", f.Name, f.URL, f.SHA256)
 	}

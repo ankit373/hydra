@@ -64,9 +64,10 @@ func Plan(c *Config, s Suite, ds Dataset, splitsPath string, all []Item, nTest i
 		sha = build.Commit
 	}
 	run := Run{Track: c.Track, Suite: s.Name(), Tier: c.Tier, Seed: c.Seed, Arms: chosen, ArmOrder: order,
-		ItemIDs: ids, Prices: used}
+		ItemIDs: ids, TestSplitSize: len(FirstByRank(all, SplitTest, len(all))), Prices: used}
 	run.Crumb = Breadcrumb{HarnessVersion: build.Version, GitSHA: sha, Dirty: dirty, Suite: s.Name(),
-		SuiteRevision: ds.Revision, DataSHA256: ds.Hashes(), SplitSHA256: split, Seed: c.Seed, Arms: chosen,
+		SuiteRevision: ds.Revision, Licence: ds.Licence, LicenceVerified: ds.LicenceVerified, DataSHA256: ds.Hashes(),
+		SplitSHA256: split, Seed: c.Seed, Arms: chosen,
 		Prices: used, Temperature: *req.Temperature, Host: host, ModelCutoffs: cutoffs}
 	return run, byID, nil
 }
