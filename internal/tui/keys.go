@@ -25,9 +25,14 @@ type ckKey struct {
 func ckKeyOf(msg tea.KeyPressMsg) ckKey {
 	k := ckKey{Key: tea.Key(msg), alt: msg.Mod.Contains(tea.ModAlt)}
 	k.Mod &^= tea.ModAlt
-	if k.alt && k.Text == "" && k.Mod&^tea.ModShift == 0 && k.Code != tea.KeySpace && unicode.IsPrint(k.Code) {
-		k.Text = string(k.Code)
-		if k.Mod.Contains(tea.ModShift) {
+	locks := tea.ModCapsLock | tea.ModNumLock | tea.ModScrollLock
+	if k.alt && k.Text == "" && k.Mod&^(tea.ModShift|locks) == 0 && k.Code != tea.KeySpace && unicode.IsPrint(k.Code) {
+		switch {
+		case !k.Mod.Contains(tea.ModShift):
+			k.Text = string(k.Code)
+		case k.ShiftedCode != 0:
+			k.Text = string(k.ShiftedCode)
+		default:
 			k.Text = string(unicode.ToUpper(k.Code))
 		}
 	}

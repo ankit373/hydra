@@ -402,6 +402,14 @@ func TestKeys_V2DecodingKeepsV1Behaviour(t *testing.T) {
 	if got := next.(Cockpit).th().input; got != "J" {
 		t.Errorf("alt+shift+j typed %q, v1 typed J", got)
 	}
+	next, _ = testCockpit().Update(tea.KeyPressMsg{Code: 'j', Mod: tea.ModAlt | tea.ModNumLock | tea.ModCapsLock})
+	if got := next.(Cockpit).th().input; got != "j" {
+		t.Errorf("alt+j with lock keys on typed %q, v1 typed j", got)
+	}
+	next, _ = testCockpit().Update(tea.KeyPressMsg{Code: '1', ShiftedCode: '!', Mod: tea.ModAlt | tea.ModShift})
+	if got := next.(Cockpit).th().input; got != "!" {
+		t.Errorf("alt+shift+1 typed %q, v1 typed !", got)
+	}
 	next, _ = testCockpit().Update(tea.PasteMsg{Content: "enter"})
 	if p := next.(Cockpit); p.th().input != "enter" || p.th().exec != nil {
 		t.Errorf("a pasted \"enter\" acted as the key: input=%q", p.th().input)

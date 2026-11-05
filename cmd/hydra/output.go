@@ -9,7 +9,6 @@ import (
 	"os"
 	"strconv"
 
-	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/colorprofile"
 	xansi "github.com/charmbracelet/x/ansi"
 
@@ -29,7 +28,7 @@ var (
 type profileWriter struct{ f **os.File }
 
 func (w profileWriter) Write(b []byte) (int, error) {
-	p := lipgloss.Writer.Profile
+	p := tui.OutputProfile()
 	if p > colorprofile.ANSI {
 		return (&colorprofile.Writer{Forward: *w.f, Profile: p}).Write(b)
 	}
@@ -52,34 +51,56 @@ func rewriteSGR(b []byte, colour bool) []byte {
 		p.Reset()
 		seq, _, n, next := xansi.DecodeSequence(b, state, p)
 		b, state = b[n:], next
-		if !xansi.HasCsiPrefix(seq) || p.Command() != 'm' {
+		switch {
+		case !xansi.HasCsiPrefix(seq) || p.Command() != 'm':
 			out.Write(seq)
-			continue
+		case colour:
+			out.WriteString(basicColours(p.Params()))
 		}
-		if !colour {
-			continue
-		}
-		var st xansi.Style
-		params := p.Params()
-		for i := 0; i < len(params); i++ {
-			switch v := params[i].Param(0); v {
-			case 38, 48:
-				var c color.Color
-				if n := xansi.ReadStyleColor(params[i:], &c); n > 0 {
-					i += n - 1
-				}
-				switch {
-				case c == nil:
-				case v == 38:
-					st = st.ForegroundColor(tui.ANSI16(c))
-				default:
-					st = st.BackgroundColor(tui.ANSI16(c))
-				}
-			default:
-				st = append(st, strconv.Itoa(v))
-			}
-		}
-		out.WriteString(st.String())
 	}
 	return out.Bytes()
+}
+
+// basicColours rewrites one SGR's 256 and truecolor colours to basic ones and
+// keeps every other parameter as written, colon sub-parameters included.
+func basicColours(params xansi.Params) string {
+	var b bytes.Buffer
+	b.WriteString("\x1b[")
+	sep := ""
+	for i := 0; i < len(params); i++ {
+		b.WriteString(sep)
+		v := params[i].Param(0)
+		if v != 38 && v != 48 {
+			b.WriteString(strconv.Itoa(v))
+			if sep = ";"; params[i].HasMore() {
+				sep = ":"
+			}
+			continue
+		}
+		var c color.Color
+		if n := xansi.ReadStyleColor(params[i:], &c); n > 0 {
+			i += n - 1
+		}
+		if c == nil {
+			b.WriteString(strconv.Itoa(v)) // malformed: left for the terminal
+		} else {
+			b.WriteString(strconv.Itoa(basicSGR(tui.ANSI16(c), v == 48)))
+		}
+		sep = ";"
+	}
+	b.WriteString("m")
+	return b.String()
+}
+
+// basicSGR is the SGR code that draws basic colour c: 30-37 and 90-97 for
+// the foreground, 40-47 and 100-107 for the background.
+func basicSGR(c xansi.BasicColor, background bool) int {
+	n, code := int(c), 30
+	if n >= 8 {
+		n, code = n-8, 90
+	}
+	if background {
+		code += 10
+	}
+	return code + n
 }

@@ -197,8 +197,8 @@ func cmdUpgrade() *cobra.Command {
 			"would desync it from `brew`'s own bookkeeping. Run `brew upgrade " +
 			"hyctl` there instead, the same command the update banner already " +
 			"recommends.",
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runUpgrade(cmd.OutOrStdout())
+		RunE: func(*cobra.Command, []string) error {
+			return runUpgrade(stdout)
 		},
 	}
 }
@@ -2847,7 +2847,7 @@ func cmdSecurity() *cobra.Command {
 				fmt.Fprint(stdout, security.ExecutiveSummary(rep.Attestation))
 				return nil
 			case csvOut:
-				return securityCSV(os.Stdout, rep)
+				return securityCSV(stdout, rep)
 			default:
 				printSecurityReport(rep, whyOut)
 				return nil

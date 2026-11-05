@@ -21,19 +21,71 @@ import (
 // no colour drops SGR but keeps the move, 16 colours take v1's picks, and a
 // depth that shows the colour gets the bytes as written.
 func TestProfileWriter_DrawsWhatV1Drew(t *testing.T) {
-	in := "\x1b[2K\x1b[1;38;5;214mwarn\x1b[0m \x1b[48;5;236;38;2;0;112;122mcode\x1b[m"
+	in := "\x1b[2K\x1b[1;38;5;214mwarn\x1b[0m \x1b[48;5;236;38;2;0;112;122mcode\x1b[m \x1b[4:3;38;5;196mx\x1b[m"
 	was := lipgloss.Writer.Profile
 	t.Cleanup(func() { lipgloss.Writer.Profile = was })
 	for p, want := range map[colorprofile.Profile]string{
-		colorprofile.NoTTY:     "\x1b[2Kwarn code",
-		colorprofile.ASCII:     "\x1b[2Kwarn code",
-		colorprofile.ANSI:      "\x1b[2K\x1b[1;93mwarn\x1b[0m \x1b[40;94mcode\x1b[m",
+		colorprofile.NoTTY:     "\x1b[2Kwarn code x",
+		colorprofile.ASCII:     "\x1b[2Kwarn code x",
+		colorprofile.ANSI:      "\x1b[2K\x1b[1;93mwarn\x1b[0m \x1b[40;94mcode\x1b[m \x1b[4:3;91mx\x1b[m",
 		colorprofile.TrueColor: in,
 	} {
 		lipgloss.Writer.Profile = p
 		if got := captureStdout(t, func() { fmt.Fprint(stdout, in) }); got != want {
 			t.Errorf("at %v:\n got %q\nwant %q", p, got, want)
 		}
+	}
+}
+
+// Every line hyctl prints goes through stdout or stderr: a print that reaches
+// os.Stdout directly ignores NO_COLOR and puts colour codes in pipes, which
+// Lip Gloss v1 used to prevent at render time and v2 does not.
+func TestOutput_EveryPrintGoesThroughTheProfileWriter(t *testing.T) {
+	files, err := filepath.Glob("*.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fset := token.NewFileSet()
+	for _, name := range files {
+		if strings.HasSuffix(name, "_test.go") || name == "output.go" {
+			continue
+		}
+		f, err := parser.ParseFile(fset, name, nil, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// The stream itself is fine where no text is written to it: its Fd,
+		// and JSON, which escapes every control byte.
+		allowed := map[ast.Node]bool{}
+		ast.Inspect(f, func(n ast.Node) bool {
+			switch n := n.(type) {
+			case *ast.SelectorExpr:
+				if inner, ok := n.X.(*ast.SelectorExpr); ok && n.Sel.Name == "Fd" {
+					allowed[inner] = true
+				}
+				if id, ok := n.X.(*ast.Ident); ok && id.Name == "os" && (n.Sel.Name == "Stdout" || n.Sel.Name == "Stderr") && !allowed[n] {
+					t.Errorf("%s: os.%s written directly; print through stdout or stderr", fset.Position(n.Pos()), n.Sel.Name)
+				}
+			case *ast.CallExpr:
+				fun, _ := n.Fun.(*ast.SelectorExpr)
+				if fun == nil {
+					return true
+				}
+				pkg, _ := fun.X.(*ast.Ident)
+				switch {
+				case pkg != nil && pkg.Name == "json" && fun.Sel.Name == "NewEncoder":
+					for _, a := range n.Args {
+						allowed[a] = true
+					}
+				case pkg != nil && pkg.Name == "fmt" && strings.HasPrefix(fun.Sel.Name, "Print"):
+					t.Errorf("%s: fmt.%s writes to os.Stdout directly; use fmt.F%s(stdout, …)",
+						fset.Position(n.Pos()), fun.Sel.Name, strings.ToLower(fun.Sel.Name[:1])+fun.Sel.Name[1:])
+				case fun.Sel.Name == "OutOrStdout" || fun.Sel.Name == "OutOrStderr" || fun.Sel.Name == "ErrOrStderr":
+					t.Errorf("%s: %s is os.Stdout or os.Stderr unwrapped", fset.Position(n.Pos()), fun.Sel.Name)
+				}
+			}
+			return true
+		})
 	}
 }
 
