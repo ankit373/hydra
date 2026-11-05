@@ -563,7 +563,7 @@ func (e *HTTPExecutor) executeAzureOpenAI(ctx context.Context, req Request) (*Re
 }
 
 func (e *HTTPExecutor) executeBedrock(ctx context.Context, req Request) (*Response, error) {
-	model := defaultModelFor("bedrock")
+	model := modelFor(req.Head)
 	body, err := bedrockBody(req)
 	if err != nil {
 		return nil, err

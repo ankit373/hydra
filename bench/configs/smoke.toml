@@ -1,0 +1,27 @@
+# Smoke tier, stage S1: direct Bedrock arms only. Not a verdict (100 items is about
+# ±6 pts); it proves the pipeline with real billing and measures p_disc and tokens.
+# The served arms (S2) join once E1 lands. RFC 0001 design E7 §6.
+tier = "smoke"
+track = "core"
+suites = ["banking77", "clinc150"]
+n_test = 100
+seed = 1
+# Per suite run, so the two suites together stay under the tier's $5.
+max_usd = 2.5
+arms = ["frontier", "cheapest", "mid"]
+
+# Every id is pinned before a run; the two placeholders wait on Q4 (which Opus and
+# Haiku ids are enabled in the account's region). Until then the config refuses to load.
+[models]
+frontier = "bedrock:<strongest Opus id enabled in the account's region>"
+cheapest = "bedrock:amazon.nova-micro-v1:0"
+mid = "bedrock:<Claude Haiku 4.5 id>"
+
+# pricing.DB keys: Bedrock ids are not in it (K4). A [prices."<id>"] table with
+# in_per_mtok, out_per_mtok, source and date overrides a ref when Bedrock's list differs.
+[price_refs]
+"amazon.nova-micro-v1:0" = "amazon/nova-micro-v1"
+
+# Stated training cutoffs, recorded for contamination.
+[cutoffs]
+"amazon.nova-micro-v1:0" = "to confirm with Q4"
