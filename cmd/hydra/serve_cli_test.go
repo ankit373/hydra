@@ -23,6 +23,7 @@ import (
 	"github.com/ankit373/hydra/internal/dispatch"
 	"github.com/ankit373/hydra/internal/executor"
 	"github.com/ankit373/hydra/internal/provider"
+	"github.com/ankit373/hydra/internal/rank"
 	"github.com/ankit373/hydra/internal/serve"
 	"github.com/ankit373/hydra/internal/testutil"
 )
@@ -146,7 +147,7 @@ func TestServeRouter_CarriesTheAnswerHeadAndTokensBack(t *testing.T) {
 	}
 	defer d.Close()
 
-	ans, err := serveRouter{d: d, defaultEnum: "MODERATE"}.
+	ans, err := serveRouter{d: d, pinnedEnum: "MODERATE"}.
 		Chat(ctx, serve.Request{
 			RequestID: "run-1",
 			Messages:  []executor.Message{{Role: "user", Content: "hi"}},
@@ -180,7 +181,7 @@ func TestServeRouter_ARoutingFailureIsAnError(t *testing.T) {
 	}
 	defer d.Close()
 
-	_, err = serveRouter{d: d, defaultEnum: "MODERATE"}.
+	_, err = serveRouter{d: d, pinnedEnum: "MODERATE"}.
 		Chat(ctx, serve.Request{
 			RequestID: "run-2",
 			Messages:  []executor.Message{{Role: "user", Content: "hi"}},
@@ -324,7 +325,7 @@ func TestServeHeads_NoHeadOutsideTheList(t *testing.T) {
 	if err := restrictServeHeads(d, listed, true, false); err != nil {
 		t.Fatal(err)
 	}
-	srv := httptest.NewServer(serve.Handler(serveRouter{d: d, defaultEnum: "GRUNT"}, nil, ""))
+	srv := httptest.NewServer(serve.Handler(serveRouter{d: d, pinnedEnum: "GRUNT"}, nil, ""))
 	defer srv.Close()
 
 	resp, err := http.Get(srv.URL + "/v1/models")
@@ -439,7 +440,7 @@ func TestServeRouter_ResolvesTheClassAndItsBasis(t *testing.T) {
 		{"pinned head, header", route, serve.Request{TaskClass: "a.b", Route: serve.Route{Head: "h1"}}, nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			opts, ev, err := serveRouter{defaultEnum: "STANDARD", defaultClass: tc.defaultClass}.options(tc.req)
+			opts, ev, err := serveRouter{pinnedEnum: "STANDARD", defaultClass: tc.defaultClass}.options(tc.req)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -465,21 +466,151 @@ func TestServeRouter_ResolvesTheClassAndItsBasis(t *testing.T) {
 // G4. Decision 2 keeps the old pinned route reachable as hydra/standard; a
 // route default leaking into it would rerank what was a fixed tier.
 func TestServeRouter_HydraStandardRoutesAsBefore(t *testing.T) {
-	r := serveRouter{defaultEnum: "MODERATE", defaultClass: "classification.banking77"}
-	opts, _, err := r.options(serve.Request{Route: serve.Route{Enum: "STANDARD"}})
+	r := serveRouter{defaultClass: "classification.banking77", objective: rank.Quality}
+	opts, ev, err := r.options(serve.Request{Route: serve.Route{Enum: "STANDARD"}, Objective: rank.Cost})
 	if err != nil {
 		t.Fatal(err)
 	}
 	tier := dispatch.EnumToTier("STANDARD")
-	if opts.TierHint != tier || opts.Enum != "STANDARD" || opts.Domain != "" {
-		t.Errorf("hydra/standard built %+v, want TierHint=%q Enum=STANDARD Domain=\"\"", opts, tier)
+	if opts.TierHint != tier || opts.Enum != "STANDARD" || opts.Domain != "" || opts.Objective != "" || ev != nil {
+		t.Errorf("hydra/standard built %+v, want TierHint=%q Enum=STANDARD Domain=\"\" Objective=\"\"", opts, tier)
+	}
+}
+
+// G12. `hydra` is ordered by objective unless the operator passed --enum, which
+// is the per-server opt-out from the breaking change.
+func TestRouteToDispatch_HydraIsUnpinnedUnlessEnumSet(t *testing.T) {
+	standard := dispatch.EnumToTier("STANDARD")
+	for _, tc := range []struct {
+		model              string
+		route              serve.Route
+		flags              []string
+		wantTier, wantEnum string
+	}{
+		{"hydra", serve.Route{}, nil, "", ""},
+		{"hydra", serve.Route{}, []string{"--enum", "STANDARD"}, standard, "STANDARD"},
+		{"hydra", serve.Route{}, []string{"--enum", "SIMPLE"}, dispatch.EnumToTier("SIMPLE"), "SIMPLE"},
+		{"hydra/standard", serve.Route{Enum: "STANDARD"}, nil, standard, "STANDARD"},
+	} {
+		c := cmdServe()
+		if err := c.Flags().Parse(tc.flags); err != nil {
+			t.Fatal(err)
+		}
+		tier, enum, _, err := routeToDispatch(tc.route, pinnedEnumFrom(c))
+		if err != nil || tier != tc.wantTier || enum != tc.wantEnum {
+			t.Errorf("model %q with --enum changed=%v gave tier=%q enum=%q (%v)", tc.model, c.Flags().Changed("enum"), tier, enum, err)
+		}
+	}
+}
+
+// Only a route nothing pinned is ordered by an objective, so only it reports
+// one; the header overrides --objective there and is ignored everywhere else.
+func TestServeRouter_TheObjectiveOrdersOnlyAnUnpinnedRoute(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		pinned string
+		req    serve.Request
+		want   rank.Objective
+	}{
+		{"route default", "", serve.Request{}, rank.Quality},
+		{"header", "", serve.Request{Objective: rank.Cost}, rank.Cost},
+		{"--enum pins hydra", "STANDARD", serve.Request{Objective: rank.Cost}, ""},
+		{"pinned tier", "", serve.Request{Route: serve.Route{Tier: "4"}, Objective: rank.Cost}, ""},
+		{"pinned head", "", serve.Request{Route: serve.Route{Head: "h1"}, Objective: rank.Cost}, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			opts, ev, err := serveRouter{pinnedEnum: tc.pinned, objective: rank.Quality}.options(tc.req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			echoed := ""
+			if ev != nil {
+				echoed = ev.Objective
+			}
+			if opts.Objective != tc.want || echoed != string(tc.want) {
+				t.Errorf("Objective = %q echoed %q, want %q for both", opts.Objective, echoed, tc.want)
+			}
+			if opts.NoCache || opts.Domain != "" {
+				t.Errorf("an objective alone set Domain=%q NoCache=%v; only a class does", opts.Domain, opts.NoCache)
+			}
+		})
+	}
+}
+
+// G13. The basis header must never call a prior a measurement. The head is
+// measured elsewhere too, so its in-domain count is read at every n.
+func TestPPassBasis_MeasuredOnlyAtMinCommitments(t *testing.T) {
+	h := provider.Head{ID: "h", CapScore: 80}
+	for n, want := range map[int]string{rank.MinCommitments - 1: "catalogue_prior", rank.MinCommitments: "measured"} {
+		scores := rank.Scores([]provider.Head{h}, func(string) rank.Measurement {
+			return rank.Measurement{Correct: n + 30, Total: n + 30, InDomainCorrect: n, InDomainTotal: n}
+		})
+		ev := withBasis(&serve.Evidence{Objective: "quality"}, &dispatch.Result{Head: h, Scores: scores})
+		if ev.PPassBasis != want {
+			t.Errorf("%d in-domain observations reported basis %q", n, ev.PPassBasis)
+		}
+	}
+	// A cached answer was ranked by nothing, so it claims no basis at all.
+	if ev := withBasis(&serve.Evidence{}, &dispatch.Result{Head: h, Cache: &cache.Hit{}}); ev.PPassBasis != "" {
+		t.Errorf("a cached answer reported basis %q", ev.PPassBasis)
+	}
+}
+
+// End to end through the adapter: an unpinned request reports the objective
+// that ordered it and the answering head's basis, on a copy a stream never saw.
+func TestServeRouter_AnUnpinnedRequestReportsItsObjectiveAndBasis(t *testing.T) {
+	dispatchable(t, "the head's answer")
+	ctx := context.Background()
+	d, err := dispatch.New(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+
+	var announced *serve.Evidence
+	ans, err := serveRouter{d: d, objective: rank.Quality}.Chat(ctx, serve.Request{
+		RequestID: "run-obj",
+		Messages:  []executor.Message{{Role: "user", Content: "hi"}},
+		OnEvent: func(e serve.Event) {
+			if e.Kind == serve.EventEvidence {
+				announced = e.Evidence
+			}
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ans.Evidence == nil || *ans.Evidence != (serve.Evidence{Objective: "quality", PPassBasis: "catalogue_prior"}) {
+		t.Errorf("evidence %+v, want objective quality on a catalogue prior", ans.Evidence)
+	}
+	if announced == nil || announced.PPassBasis != "" {
+		t.Errorf("announced %+v before dispatch, want the objective and no basis yet", announced)
+	}
+}
+
+func TestCmdServe_BadObjectiveIsRefusedBeforeBinding(t *testing.T) {
+	testutil.NewSandbox(t)
+	for _, o := range []string{"balanced", ""} {
+		_, _, err := run(t, "serve", "--objective", o)
+		if err == nil || !strings.Contains(err.Error(), "--objective") {
+			t.Errorf("--objective %q was not refused at startup: %v", o, err)
+		}
+	}
+}
+
+func TestDefaultRouting_NamesTheOptOut(t *testing.T) {
+	if got := defaultRouting("", rank.Quality); !strings.Contains(got, "objective quality") || !strings.Contains(got, "hydra/standard") {
+		t.Errorf("unpinned banner reads %q", got)
+	}
+	if got := defaultRouting("SIMPLE", rank.Quality); got != "SIMPLE" {
+		t.Errorf("pinned banner reads %q, want the enum", got)
 	}
 }
 
 // G4b. A client that sends no class to a server with no --task-class must
 // route byte-identically to before E1, not into the shared "default" cell.
 func TestServeRouter_NoClassRoutesAsBefore(t *testing.T) {
-	opts, ev, err := serveRouter{defaultEnum: "STANDARD"}.options(serve.Request{})
+	opts, ev, err := serveRouter{pinnedEnum: "STANDARD"}.options(serve.Request{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -502,7 +633,7 @@ func TestServeRouter_MaxCostOnlyLowersTheCeiling(t *testing.T) {
 		{0.05, 0.01, 0.01, serve.MaxCostHeader},
 	} {
 		t.Setenv("HYDRA_HOME", policyHome(t, fmt.Sprintf("version: \"1.0\"\ndefaults:\n  max_cost_usd: %v\n", tc.policy)))
-		opts, _, err := serveRouter{defaultEnum: "STANDARD"}.options(serve.Request{MaxCostUSD: tc.header})
+		opts, _, err := serveRouter{pinnedEnum: "STANDARD"}.options(serve.Request{MaxCostUSD: tc.header})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -518,7 +649,7 @@ func TestServeRouter_MaxCostOnlyLowersTheCeiling(t *testing.T) {
 func TestServeRouter_APolicyEditAppliesWithoutARestart(t *testing.T) {
 	home := policyHome(t, "version: \"1.0\"\ndefaults:\n  max_cost_usd: 0.05\n")
 	t.Setenv("HYDRA_HOME", home)
-	r := serveRouter{defaultEnum: "STANDARD"}
+	r := serveRouter{pinnedEnum: "STANDARD"}
 	before, _, err := r.options(serve.Request{MaxCostUSD: 0.25})
 	if err != nil {
 		t.Fatal(err)
@@ -551,7 +682,7 @@ func TestServeRouter_APolicyCeilingRefusingEveryHeadIsNotTheClients(t *testing.T
 		t.Fatal(err)
 	}
 
-	_, err = serveRouter{d: d, defaultEnum: "MODERATE"}.Chat(ctx, serve.Request{
+	_, err = serveRouter{d: d, pinnedEnum: "MODERATE"}.Chat(ctx, serve.Request{
 		RequestID:  "run-policy-cost",
 		Messages:   []executor.Message{{Role: "user", Content: "hi"}},
 		MaxCostUSD: 0.25,
@@ -572,7 +703,7 @@ func TestServeRouter_TheClientsCeilingRefusingEveryHeadIsA4xx(t *testing.T) {
 	}
 	defer d.Close()
 
-	_, err = serveRouter{d: d, defaultEnum: "MODERATE"}.Chat(ctx, serve.Request{
+	_, err = serveRouter{d: d, pinnedEnum: "MODERATE"}.Chat(ctx, serve.Request{
 		RequestID:  "run-cost",
 		Messages:   []executor.Message{{Role: "user", Content: "hi"}},
 		MaxCostUSD: 1e-12,
@@ -597,7 +728,7 @@ func TestServeRouter_AnnouncesTheClassBeforeDispatching(t *testing.T) {
 	defer d.Close()
 
 	var first *serve.Event
-	_, err = serveRouter{d: d, defaultEnum: "MODERATE"}.Chat(ctx, serve.Request{
+	_, err = serveRouter{d: d, pinnedEnum: "MODERATE"}.Chat(ctx, serve.Request{
 		RequestID: "run-ev",
 		TaskClass: "a.b",
 		Messages:  []executor.Message{{Role: "user", Content: "hi"}},
@@ -620,7 +751,7 @@ func TestServeRouter_AnnouncesTheClassBeforeDispatching(t *testing.T) {
 func TestServeRouter_PassesTheTemperatureThrough(t *testing.T) {
 	zero := 0.0
 	for _, sent := range []*float64{nil, &zero} {
-		opts, _, err := serveRouter{defaultEnum: "STANDARD"}.options(serve.Request{Temperature: sent})
+		opts, _, err := serveRouter{pinnedEnum: "STANDARD"}.options(serve.Request{Temperature: sent})
 		if err != nil {
 			t.Fatal(err)
 		}

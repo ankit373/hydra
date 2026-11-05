@@ -5,6 +5,7 @@ package dispatch
 import (
 	"encoding/json"
 	"math"
+	"sync"
 	"testing"
 
 	"github.com/ankit373/hydra/internal/config"
@@ -228,4 +229,39 @@ func TestPickNaNRateFailsClosed(t *testing.T) {
 	if _, err := json.Marshal(map[string]any{"act_prob": SelectionProb(0, 4, nan)}); err != nil {
 		t.Errorf("propensity is not JSON-encodable: %v", err)
 	}
+}
+
+// G11. With a seed, a rerun explores exactly as the first run did.
+func TestPick_SameSeedSameDraws(t *testing.T) {
+	run := func() []string {
+		d := &Dispatcher{cfg: &config.Config{ExploreRate: 0.5}, rng: newExploreRand(42)}
+		var firsts []string
+		for range 200 {
+			got, _ := d.pick(exploreHeads(5), Options{})
+			firsts = append(firsts, got[0].ID)
+		}
+		return firsts
+	}
+	a, b := run(), run()
+	for i := range a {
+		if a[i] != b[i] {
+			t.Fatalf("seed 42 run 2 diverged at pick %d: %s vs %s", i, a[i], b[i])
+		}
+	}
+}
+
+// One Dispatcher serves concurrent requests, so its seeded source must be too.
+func TestPick_SeededRNGIsSafeUnderConcurrentDispatch(t *testing.T) {
+	d := &Dispatcher{cfg: &config.Config{ExploreRate: 0.5}, rng: newExploreRand(42)}
+	var wg sync.WaitGroup
+	for range 32 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for range 100 {
+				d.pick(exploreHeads(5), Options{})
+			}
+		}()
+	}
+	wg.Wait()
 }

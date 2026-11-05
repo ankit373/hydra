@@ -93,6 +93,10 @@ type Options struct {
 	// Resource to derive one from, leaves the pooled probe ranking standing.
 	Domain string
 
+	// Objective is what an unpinned dispatch optimises. Empty is the cost
+	// constraint, so a caller that names none routes exactly as before E1.
+	Objective rank.Objective
+
 	// Messages is a whole conversation, when the caller has one, and Tools the
 	// functions a head may call. Both exist for `hyctl serve`: an agent loop
 	// sends its tool results back as further turns, which Prompt cannot carry.
@@ -195,8 +199,6 @@ type Result struct {
 	// Domain is the calibration domain the candidates were ranked for, and
 	// Scores why each ranks where it does. Both empty when nothing narrowed
 	// the ranking, which is when the pooled probe order stands unchanged.
-	// Populated on the --dry-run preview, whose whole job is to explain a
-	// choice before it costs anything.
 	Domain string
 	Scores map[string]rank.Score
 
@@ -349,6 +351,9 @@ type Dispatcher struct {
 	// domain. Nil when the store will not load, which leaves the pooled probe
 	// order: a ranking basis that degrades has to degrade to the previous one.
 	cal *trust.Calibrator
+
+	// rng draws exploration; nil is the global source, which is today's.
+	rng *exploreRand
 
 	// rules turns signals into a routing action. Nil is a valid engine that
 	// always falls through, which is what a machine with no rules file gets.
@@ -580,6 +585,7 @@ func New(ctx context.Context) (*Dispatcher, error) {
 		budget:  budgetReg,
 		health:  health.Open(health.DefaultPath()),
 		cal:     cal,
+		rng:     newExploreRand(cfg.ExploreSeed),
 		rules:   rules,
 	}, nil
 }
@@ -746,16 +752,18 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 			ErrNoHeads, tierClause(tier), localOnly)
 	}
 
-	// With no tier pinned, prefer the cheapest head this machine has measured
-	// competent at this domain over the strongest one it has. A pinned tier is
-	// an instruction and is left exactly as it was resolved: one word must not
-	// route two ways (#782).
+	// With no tier pinned, the objective orders the candidates: the strongest
+	// measured head for quality, else the cheapest measured competent one. A
+	// pinned tier is an instruction and is left as resolved (#782).
 	var requirement float64
 	var scores map[string]rank.Score
-	if tier == "" && opts.Head == "" {
-		candidates, scores, requirement = d.constrain(candidates, domain, requirementFor(class))
-	} else if opts.DryRun {
+	switch {
+	case tier != "" || opts.Head != "":
 		scores = d.explain(candidates, domain)
+	case opts.Objective == rank.Quality:
+		candidates, scores = rank.Strongest(candidates, d.explain(candidates, domain), d.price)
+	default:
+		candidates, scores, requirement = d.constrain(candidates, domain, requirementFor(class))
 	}
 
 	// Reorders candidates so the head to try first is at index 0 and reports
@@ -1022,7 +1030,8 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 			continue
 		}
 		d.health.Pass(h.ID)
-		r := &Result{Output: resp.Output, Head: h, Retries: i, Attempts: attempts, Response: resp}
+		r := &Result{Output: resp.Output, Head: h, Retries: i, Attempts: attempts, Response: resp,
+			Domain: domain, Scores: scores}
 		r.OutputProvenance = rules.ClassifyPart(egress.Part{
 			Content: resp.Output, Source: egress.SourceHead, Origin: h.ID,
 		})

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/ankit373/hydra/internal/executor"
+	"github.com/ankit373/hydra/internal/rank"
 	"github.com/ankit373/hydra/internal/runid"
 )
 
@@ -65,6 +66,9 @@ type Request struct {
 	Temperature *float64
 	// MaxCostUSD is the client's ceiling for this request; 0 means none.
 	MaxCostUSD float64
+	// Objective is the one the client named, already validated; empty leaves
+	// it to the route's default.
+	Objective rank.Objective
 
 	// RequestID is what this request is traceable by. serve mints it and the
 	// router adopts it as the run id, so the value a client is handed back is
@@ -266,7 +270,11 @@ func parseTarget(h http.Header, in chatRequest) (Request, error) {
 	if err != nil {
 		return Request{}, err
 	}
-	out := Request{Route: route, TaskClass: class, MaxCostUSD: ceiling}
+	obj, err := objective(h)
+	if err != nil {
+		return Request{}, err
+	}
+	out := Request{Route: route, TaskClass: class, MaxCostUSD: ceiling, Objective: obj}
 	// Temperature is opt-in with the class header: serve ignored it before E1,
 	// and a client that never asked for the new contract must not get a 400.
 	if class != "" {

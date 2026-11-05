@@ -4,6 +4,7 @@ package dispatch
 
 import (
 	"math/rand/v2"
+	"sync"
 
 	"github.com/ankit373/hydra/internal/provider"
 )
@@ -25,10 +26,10 @@ func (d *Dispatcher) pick(candidates []provider.Head, opts Options) ([]provider.
 	}
 	n := float64(len(candidates))
 	greedyProb := 1 - eps + eps/n
-	if rand.Float64() >= eps {
+	if d.rng.float64() >= eps {
 		return candidates, greedyProb
 	}
-	i := rand.IntN(len(candidates))
+	i := d.rng.intN(len(candidates))
 	if i == 0 {
 		return candidates, greedyProb
 	}
@@ -86,4 +87,36 @@ func (d *Dispatcher) exploreRate() float64 {
 		return 0
 	}
 	return d.cfg.ExploreRate
+}
+
+// exploreRand is a seeded source behind a mutex, since one Dispatcher serves
+// concurrent requests. A nil one draws from the global source.
+type exploreRand struct {
+	mu  sync.Mutex
+	src *rand.Rand
+}
+
+func newExploreRand(seed uint64) *exploreRand {
+	if seed == 0 {
+		return nil
+	}
+	return &exploreRand{src: rand.New(rand.NewPCG(seed, seed))}
+}
+
+func (e *exploreRand) float64() float64 {
+	if e == nil {
+		return rand.Float64()
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.src.Float64()
+}
+
+func (e *exploreRand) intN(n int) int {
+	if e == nil {
+		return rand.IntN(n)
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.src.IntN(n)
 }
