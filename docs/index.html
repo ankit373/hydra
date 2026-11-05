@@ -236,419 +236,263 @@
   </script>
 
 <link rel="stylesheet" href="assets/tokens.css">
-<link rel="stylesheet" href="assets/page-aliases.css">
+<link rel="stylesheet" href="assets/site.css">
+<script src="assets/site.js"></script>
 <style>
-/* ============================================================================
-   HYDRA, flagship landing page. "Ten generations from now."
-   Local-first, multi-vendor AI control plane. Provider-neutral.
-   Locked design system:
-     Committed DARK world. Brand gradient cyan→violet→magenta (identity).
-     Aqua #00E6C3 = the ONE interaction accent. Cost ramp cheap→mid→exp.
-     System sans (display/reading) + mono (chrome/data/units). Tabular nums.
-     All motion @media(prefers-reduced-motion:reduce)-gated → static beauty.
-   Single self-contained file. No CDN, no web fonts, no libraries. Hand-rolled
-   canvas/SVG. Body never scrolls horizontally.
-   ========================================================================== */
-@font-face{font-family:"Space Grotesk";font-style:normal;font-weight:400 700;font-display:swap;
-  src:url("fonts/SpaceGrotesk.woff2") format("woff2");}
-@font-face{font-family:"JetBrains Mono";font-style:normal;font-weight:400 700;font-display:swap;
-  src:url("fonts/JetBrainsMono.woff2") format("woff2");}
-:root{
-  color-scheme:dark;
-  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,Roboto,Helvetica,Arial,sans-serif;
-  --mono:"JetBrains Mono",ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
-  --display:"Space Grotesk",system-ui,sans-serif;
-  --maxw:1200px;
-}
-*{box-sizing:border-box;}
-html{scroll-behavior:smooth;
-  /* Prose and chrome are not selectable; code and commands are, see below. */
-  user-select:none;-webkit-user-select:none;}
-
-/* Code and command examples stay selectable. docs.html carries 53 of them and
-   no copy button, so blocking selection there leaves no way to take a command
-   off the page. user-select inherits, so descendants follow. */
-pre,code{user-select:text;-webkit-user-select:text;}
-
-/* Except where a click already copies: dragging across one of those is the
-   accident the site-wide rule exists to prevent. Attribute specificity beats
-   the element selectors above. */
-[data-copy]{user-select:none;-webkit-user-select:none;}
-@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto;}}
-body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.55;
-  overflow-x:hidden;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;}
-.wrap{max-width:var(--maxw);margin:0 auto;padding:0 24px;}
-h1,h2,h3{margin:0;text-wrap:balance;}
-a{color:inherit;text-decoration:none;}
-::selection{background:rgba(0,230,195,.28);color:#fff;}
-:focus-visible{outline:2px solid var(--aqua);outline-offset:3px;border-radius:4px;}
-.mono{font-family:var(--mono);}
-.tnum{font-variant-numeric:tabular-nums;}
-.grad{background:linear-gradient(96deg,var(--cyan) 4%,#7FA8FF 40%,var(--hy-color-brand-mid) 66%,var(--magenta) 98%);
-  -webkit-background-clip:text;background-clip:text;color:transparent;}
-.accent{color:var(--aqua);}
-.cheap{color:var(--cheap);}.mid{color:var(--mid);}.exp{color:var(--exp);}
-.cy{color:var(--cyan);}.vi{color:var(--violet);}.mg{color:var(--magenta);}
-
-/* ── top nav ───────────────────────────────────────────────────────────── */
-.topbar{position:sticky;top:0;z-index:60;display:flex;align-items:center;gap:14px;height:52px;padding:0 24px;
-  font-family:var(--mono);font-size:12.5px;background:rgba(6,7,15,.55);backdrop-filter:blur(14px);
-  border-bottom:1px solid transparent;transition:border-color .3s,background .3s;}
-.topbar.scrolled{background:rgba(6,7,15,.82);border-bottom-color:var(--line);}
-.topbar .mark{font-weight:800;letter-spacing:1.5px;font-size:15px;
-  background:linear-gradient(90deg,var(--cyan),var(--hy-color-brand-mid) 55%,var(--magenta));
-  -webkit-background-clip:text;background-clip:text;color:transparent;
-  filter:drop-shadow(0 0 10px rgba(120,90,255,.4));}
-.topbar .pill{font-size:10.5px;color:var(--faint);border:1px solid var(--line);border-radius:20px;padding:2px 9px;}
-.topbar .grow{flex:1;}
-.topbar nav{display:flex;gap:20px;}
-/* nowrap, or a two-word link wraps inside a 52px bar and the row goes ragged
-   while the single-word links stay put. */
-.topbar nav a{color:var(--dim);transition:color .15s;white-space:nowrap;}
-.topbar nav a:hover{color:var(--aqua);}
-.topbar .ghost{border:1px solid var(--line-2);border-radius:6px;padding:5px 12px;color:var(--ink);transition:.15s;}
-.topbar .ghost:hover{border-color:var(--aqua);color:var(--aqua);}
-/* The bar needs 1098px on one line, so 720px left it visible and overflowing
-   from 721 to 890: at 768 the page scrolled 121px and ★ GitHub sat off-screen
-   entirely (#1017). Tightened it fits 1024 (956px needed), and 904 is the
-   narrowest it fits at all, so that is where it hides. */
-@media(max-width:1180px){
-  .topbar{gap:10px;padding:0 14px;}
-  .topbar nav{gap:12px;font-size:12px;}
-}
-@media(max-width:900px){.topbar nav{display:none;}}
 
 /* ── hero, hydra-hud: dive into the cortex ──────────────────────────────── */
 .hero-pin{position:relative;}
-.hero-sticky{position:sticky;top:0;height:100svh;min-height:600px;overflow:hidden;background:var(--bg);
+.hero-sticky{position:sticky;top:0;height:100svh;min-height:600px;overflow:hidden;background:var(--hy-color-surface-base);
   display:flex;flex-direction:column;justify-content:flex-end;cursor:grab;}
 .hero-sticky.drag{cursor:grabbing;}
 #stage{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:pan-y;}
 #scan{position:absolute;inset:0;pointer-events:none;opacity:.5;mix-blend-mode:overlay;z-index:1;
-  background:repeating-linear-gradient(0deg,rgba(255,255,255,.035) 0 1px,transparent 1px 3px);}
+  background:repeating-linear-gradient(0deg,color-mix(in srgb,var(--hy-color-text-default) 4%,transparent) 0 1px,transparent 1px 3px);}
 #vig{position:absolute;inset:0;pointer-events:none;z-index:1;
-  background:radial-gradient(circle at 50% 46%,transparent 50%,rgba(2,3,9,.72));}
-.hero-hud{position:absolute;inset:0;pointer-events:none;font-size:12px;letter-spacing:.5px;z-index:2;
-  opacity:1;transition:opacity .5s ease;}
+  background:radial-gradient(circle at 50% 46%,transparent 50%,color-mix(in srgb,var(--hy-color-surface-base) 72%,transparent));}
+.hero-hud{position:absolute;inset:0;pointer-events:none;font-size:var(--hy-font-size-xs);letter-spacing:.5px;z-index:2;
+  opacity:1;transition:opacity var(--hy-motion-duration-slow) ease;}
 .hero-sticky.released .hero-hud{opacity:0;}
-.hud-corner{position:absolute;width:26px;height:26px;border:1px solid rgba(150,140,255,.34);}
+.hud-corner{position:absolute;width:26px;height:26px;border:1px solid color-mix(in srgb,var(--hy-color-accent-secondary) 34%,transparent);}
 .hud-corner.tl{top:20px;left:20px;border-right:0;border-bottom:0;}
 .hud-corner.tr{top:20px;right:20px;border-left:0;border-bottom:0;}
 .hud-corner.bl{bottom:20px;left:20px;border-right:0;border-top:0;}
 .hud-corner.br{bottom:20px;right:20px;border-left:0;border-top:0;}
-.hud-meta{position:absolute;top:20px;right:24px;text-align:right;color:var(--dim);line-height:1.7;
-  text-transform:uppercase;letter-spacing:2px;font-size:10px;font-family:var(--mono);}
-.hud-meta b{color:var(--aqua);font-weight:500;}
-.hud-panel{position:absolute;border:1px solid var(--line);background:rgba(10,12,24,.55);
-  backdrop-filter:blur(3px);border-radius:8px;padding:12px 14px;font-family:var(--mono);}
-.hud-panel .ttl{color:var(--aqua);font-size:9.5px;letter-spacing:3px;text-transform:uppercase;margin-bottom:9px;
-  display:flex;justify-content:space-between;}
-.hud-panel .ttl .dot{color:var(--cheap);}
-#hudLog{left:24px;bottom:24px;width:min(400px,38vw);}
-#hudLog .line{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--dim);line-height:1.75;font-size:11px;}
-#hudLog .line .en{color:var(--ink);} #hudLog .line .hd{color:var(--cyan);} #hudLog .line .ok{color:var(--cheap);} #hudLog .line .c{color:var(--mid);}
-#hudTele{right:24px;bottom:24px;width:210px;}
-.hud-row{display:flex;justify-content:space-between;color:var(--dim);font-size:11px;margin:7px 0;}
-.hud-row b{color:var(--ink);font-weight:500;font-variant-numeric:tabular-nums;}
-.hud-bar{height:6px;border-radius:3px;background:rgba(255,255,255,.06);overflow:hidden;margin-top:3px;}
-.hud-bar>i{display:block;height:100%;background:linear-gradient(90deg,var(--aqua),var(--cyan));border-radius:3px;transition:width .5s;}
-.hud-mode{color:var(--cheap)!important;}
 .deep{position:absolute;left:50%;bottom:15%;transform:translateX(-50%);text-align:center;pointer-events:none;
-  opacity:0;transition:opacity .25s ease-out;width:min(460px,80vw);z-index:2;}
-.deep .dt{font-family:var(--display);font-weight:700;letter-spacing:3px;font-size:15px;transition:opacity .15s ease-out;
-  background:linear-gradient(90deg,var(--cyan),var(--hy-color-brand-mid),var(--magenta));-webkit-background-clip:text;background-clip:text;
-  color:transparent;margin-bottom:7px;}
-.deep .db{font-size:11px;color:var(--dim);letter-spacing:.5px;line-height:1.6;transition:opacity .15s ease-out;font-family:var(--mono);}
-/* top must clear .topbar (position:sticky, top:0, height:52px, z-index:60).
+  opacity:0;transition:opacity var(--hy-motion-duration-base) ease-out;width:min(460px,80vw);z-index:2;}
+.deep .dt{font-family:var(--site-display);font-weight:700;letter-spacing:3px;font-size:var(--hy-font-size-base);transition:opacity var(--hy-motion-duration-fast) ease-out;
+  background:linear-gradient(90deg,var(--hy-color-accent-strong),var(--hy-color-brand-mid),var(--hy-color-brand-end));-webkit-background-clip:text;background-clip:text;
+  color:transparent;margin-bottom:var(--hy-space-2);}
+.deep .db{font-size:var(--hy-font-size-xs);color:var(--hy-color-text-muted);letter-spacing:.5px;line-height:1.6;transition:opacity var(--hy-motion-duration-fast) ease-out;font-family:var(--hy-font-family-mono);}
+/* top must clear .site-header (position:sticky, top:0, 52px tall, z-index:60).
    At top:20px this pill sat entirely inside the bar's 0-52px band, and since
    .hero-pin creates no stacking context above z-index 60, the bar painted over
    it, background and backdrop-filter and all, so every click landed on the
    topbar and "skip intro" did nothing. Kept below the bar rather than raised
    above it: floating a hero control over the nav is the wrong fix. */
 .skip-intro{position:absolute;top:68px;left:50%;transform:translateX(-50%);z-index:3;pointer-events:auto;
-  font-family:var(--mono);font-size:10.5px;letter-spacing:2px;text-transform:uppercase;color:var(--faint);
-  border:1px solid var(--line);border-radius:20px;padding:6px 14px;transition:.15s;background:rgba(6,7,15,.4);}
-.skip-intro:hover{color:var(--aqua);border-color:var(--aqua);}
+  font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);letter-spacing:2px;text-transform:uppercase;color:var(--hy-color-text-subtle);
+  border:1px solid var(--hy-color-border-subtle);border-radius:20px;padding:var(--hy-space-1) var(--hy-space-3);transition:color var(--hy-motion-duration-fast),background-color var(--hy-motion-duration-fast),border-color var(--hy-motion-duration-fast),opacity var(--hy-motion-duration-fast),transform var(--hy-motion-duration-fast);background:color-mix(in srgb,var(--hy-color-surface-base) 40%,transparent);}
+.skip-intro:hover{color:var(--hy-color-accent-default);border-color:var(--hy-color-accent-default);}
 .hero-buffer{height:14vh;}
-@media(max-width:720px){#hudLog,#hudTele,.hud-meta{display:none;}
-  /* The topbar keeps its 52px height on mobile, only its nav is hidden, so
-     this still has to clear it. */
-  .skip-intro{top:64px;}}
-.hero-inner{position:relative;z-index:3;padding:0 24px 9vh;max-width:var(--maxw);margin:0 auto;width:100%;
-  text-align:center;pointer-events:none;transition:opacity .12s linear;}
-.eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:3.5px;text-transform:uppercase;color:var(--aqua);
-  margin-bottom:20px;opacity:.9;}
-.eyebrow span{color:var(--faint);}
-.wordmark{font-family:var(--display);font-weight:700;letter-spacing:.13em;line-height:.9;font-size:clamp(58px,14vw,168px);
-  background:linear-gradient(96deg,var(--cyan) 6%,#7FA8FF 40%,var(--hy-color-brand-mid) 66%,var(--magenta) 98%);
+.hero-inner{position:relative;z-index:3;padding:0 var(--hy-space-6) 9vh;max-width:var(--site-maxw);margin:0 auto;width:100%;
+  text-align:center;pointer-events:none;transition:opacity var(--hy-motion-duration-fast) linear;}
+.eyebrow span{color:var(--hy-color-text-subtle);}
+.wordmark{font-family:var(--site-display);font-weight:700;letter-spacing:.13em;line-height:.9;font-size:clamp(58px,14vw,168px);
+  background:var(--site-brand);
   -webkit-background-clip:text;background-clip:text;color:transparent;
-  filter:drop-shadow(0 0 34px rgba(90,120,255,.38)) drop-shadow(0 0 72px rgba(232,82,200,.2));}
-.tagline{font-family:var(--mono);font-size:clamp(13px,1.9vw,18px);letter-spacing:3px;text-transform:uppercase;
-  color:var(--dim);margin-top:14px;}
-.subline{font-size:clamp(15px,1.9vw,19px);color:var(--ink);max-width:60ch;margin:20px auto 0;opacity:.92;}
-.subline b{color:var(--aqua);font-weight:600;}
-.ctas{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;margin-top:30px;pointer-events:auto;align-items:center;}
-.install{display:inline-flex;align-items:center;gap:12px;font-family:var(--mono);font-size:14px;
-  background:rgba(10,12,26,.7);border:1px solid var(--line-2);border-radius:8px;padding:11px 14px;cursor:pointer;
-  transition:.16s;backdrop-filter:blur(8px);}
-.install:hover{border-color:var(--aqua);box-shadow:0 0 0 3px rgba(0,230,195,.1);}
-.install .dollar{color:var(--faint);}
-.install .cmd{color:var(--ink);}
-.install .cmd b{color:var(--aqua);font-weight:600;}
-.install .cp{font-size:11px;color:var(--faint);border-left:1px solid var(--line);padding-left:12px;transition:.15s;}
-.install:hover .cp{color:var(--aqua);}
-.install.copied .cp{color:var(--cheap);}
-.btn-ghost{font-family:var(--mono);font-size:13.5px;padding:12px 20px;border-radius:8px;cursor:pointer;
-  border:1px solid var(--line-2);color:var(--ink);background:rgba(20,22,44,.4);display:inline-flex;align-items:center;gap:8px;transition:.16s;}
-.btn-ghost:hover{border-color:var(--aqua);color:var(--aqua);transform:translateY(-1px);}
-.scrollhint{position:absolute;bottom:18px;left:50%;transform:translateX(-50%);z-index:3;font-family:var(--mono);
-  font-size:11px;letter-spacing:2px;color:var(--faint);text-transform:uppercase;animation:bob 2.6s ease-in-out infinite;
-  transition:opacity .12s linear;}
+  filter:drop-shadow(0 0 34px color-mix(in srgb,var(--hy-color-brand-mid) 38%,transparent)) drop-shadow(0 0 72px color-mix(in srgb,var(--hy-color-brand-end) 20%,transparent));}
+.tagline{font-family:var(--hy-font-family-mono);font-size:clamp(var(--hy-font-size-sm),1.9vw,var(--hy-font-size-lg));letter-spacing:3px;text-transform:uppercase;
+  color:var(--hy-color-text-muted);margin-top:var(--hy-space-3);}
+.subline{font-size:clamp(var(--hy-font-size-base),1.9vw,var(--hy-font-size-lg));color:var(--hy-color-text-default);max-width:60ch;margin:var(--hy-space-4) auto 0;opacity:.92;}
+.subline b{color:var(--hy-color-accent-default);font-weight:600;}
+.ctas{display:flex;gap:var(--hy-space-3);justify-content:center;flex-wrap:wrap;margin-top:var(--hy-space-8);pointer-events:auto;align-items:center;}
+.install{display:inline-flex;align-items:center;gap:var(--hy-space-3);font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-md);
+  background:color-mix(in srgb,var(--hy-color-surface-raised) 70%,transparent);border:1px solid var(--hy-color-border-default);border-radius:8px;padding:var(--hy-space-3) var(--hy-space-3);cursor:pointer;
+  transition:color var(--hy-motion-duration-fast),background-color var(--hy-motion-duration-fast),border-color var(--hy-motion-duration-fast),opacity var(--hy-motion-duration-fast),transform var(--hy-motion-duration-fast);backdrop-filter:blur(8px);}
+.install:hover{border-color:var(--hy-color-accent-default);box-shadow:0 0 0 3px color-mix(in srgb,var(--hy-color-accent-default) 10%,transparent);}
+.install .dollar{color:var(--hy-color-text-subtle);}
+.install .cmd{color:var(--hy-color-text-default);}
+.install .cmd b{color:var(--hy-color-accent-default);font-weight:600;}
+.install .cp{font-size:var(--hy-font-size-xs);color:var(--hy-color-text-subtle);border-left:1px solid var(--hy-color-border-subtle);padding-left:var(--hy-space-3);transition:color var(--hy-motion-duration-fast),background-color var(--hy-motion-duration-fast),border-color var(--hy-motion-duration-fast),opacity var(--hy-motion-duration-fast),transform var(--hy-motion-duration-fast);}
+.install:hover .cp{color:var(--hy-color-accent-default);}
+.install.copied .cp{color:var(--hy-color-cost-low);}
+.scrollhint{position:absolute;bottom:18px;left:50%;transform:translateX(-50%);z-index:3;font-family:var(--hy-font-family-mono);
+  font-size:var(--hy-font-size-xs);letter-spacing:2px;color:var(--hy-color-text-subtle);text-transform:uppercase;animation:bob 2.6s ease-in-out infinite;
+  transition:opacity var(--hy-motion-duration-fast) linear;}
 @keyframes bob{50%{transform:translate(-50%,7px);}}
 
 /* ── section scaffolding ───────────────────────────────────────────────── */
-section.blk{padding-top:96px;padding-bottom:96px;position:relative;}
-.klabel{font-family:var(--mono);font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--faint);
-  display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;
-  border-bottom:1px solid var(--line);padding-bottom:11px;margin-bottom:34px;}
-.klabel b{color:var(--aqua);font-weight:500;}
-h2.big{font-size:clamp(28px,4.4vw,46px);letter-spacing:-1px;font-weight:800;line-height:1.04;}
-.lede{color:var(--dim);font-size:clamp(15px,1.7vw,18px);max-width:59ch;margin-top:16px;}
-.lede b{color:var(--ink);font-weight:600;}
+section.blk{padding-top:var(--hy-space-24);padding-bottom:var(--hy-space-24);position:relative;}
+.klabel{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);letter-spacing:2px;text-transform:uppercase;color:var(--hy-color-text-subtle);
+  display:flex;justify-content:space-between;gap:var(--hy-space-4);flex-wrap:wrap;
+  border-bottom:1px solid var(--hy-color-border-subtle);padding-bottom:var(--hy-space-3);margin-bottom:var(--hy-space-8);}
+.klabel b{color:var(--hy-color-accent-default);font-weight:500;}
+h2.big{font-size:clamp(var(--hy-font-size-2xl),4.4vw,var(--hy-font-size-4xl));letter-spacing:-1px;font-weight:800;line-height:1.04;}
+.lede{color:var(--hy-color-text-muted);font-size:clamp(var(--hy-font-size-base),1.7vw,var(--hy-font-size-lg));max-width:59ch;margin-top:var(--hy-space-4);}
+.lede b{color:var(--hy-color-text-default);font-weight:600;}
 
 /* ── section 2 · universe / galaxy ─────────────────────────────────────── */
-.galaxy-frame{position:relative;margin-top:34px;border:1px solid var(--line-2);border-radius:16px;overflow:hidden;
-  background:radial-gradient(140% 100% at 72% 68%,rgba(0,230,195,.06),transparent 46%),linear-gradient(180deg,#080A16,var(--bg));
-  box-shadow:0 40px 120px rgba(0,0,0,.5),inset 0 0 100px rgba(60,50,140,.06);}
+.galaxy-frame{position:relative;margin-top:var(--hy-space-8);border:1px solid var(--hy-color-border-default);border-radius:16px;overflow:hidden;
+  background:radial-gradient(140% 100% at 72% 68%,color-mix(in srgb,var(--hy-color-accent-default) 6%,transparent),transparent 46%),linear-gradient(180deg,var(--hy-color-surface-raised),var(--hy-color-surface-base));
+  box-shadow:0 40px 120px color-mix(in srgb,var(--hy-color-surface-base) 50%,transparent),inset 0 0 100px color-mix(in srgb,var(--hy-color-brand-mid) 6%,transparent);}
 #galaxy{display:block;width:100%;height:clamp(420px,62vw,640px);touch-action:none;}
-.axislbl{position:absolute;font-family:var(--mono);font-size:10.5px;letter-spacing:2px;text-transform:uppercase;
-  color:var(--faint);pointer-events:none;z-index:2;white-space:nowrap;}
+.axislbl{position:absolute;font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);letter-spacing:2px;text-transform:uppercase;
+  color:var(--hy-color-text-subtle);pointer-events:none;z-index:2;white-space:nowrap;}
 .axislbl.left{left:16px;top:50%;transform:translateY(-50%) rotate(180deg);writing-mode:vertical-rl;}
 .axislbl.right{right:16px;top:50%;transform:translateY(-50%);writing-mode:vertical-rl;}
 .axislbl.top{top:14px;left:50%;transform:translateX(-50%);}
 .axislbl.bottom{bottom:14px;left:50%;transform:translateX(-50%);}
-.quadtag{position:absolute;top:15%;right:9%;z-index:3;font-family:var(--mono);font-size:11px;color:var(--aqua);
-  text-align:right;pointer-events:none;text-shadow:0 0 14px rgba(0,230,195,.5);max-width:180px;line-height:1.5;}
-.quadtag .em{color:var(--faint);text-transform:uppercase;letter-spacing:1.5px;font-size:9.5px;}
-.gtip{position:absolute;z-index:5;pointer-events:none;transform:translate(-50%,-142%);opacity:0;transition:opacity .12s;
-  font-family:var(--mono);font-size:12px;background:rgba(8,10,22,.94);border:1px solid var(--line-2);border-radius:8px;
-  padding:8px 11px;max-width:230px;box-shadow:0 12px 40px rgba(0,0,0,.6);}
+.quadtag{position:absolute;top:15%;right:9%;z-index:3;font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);color:var(--hy-color-accent-default);
+  text-align:right;pointer-events:none;text-shadow:0 0 14px color-mix(in srgb,var(--hy-color-accent-default) 50%,transparent);max-width:180px;line-height:1.5;}
+.quadtag .em{color:var(--hy-color-text-subtle);text-transform:uppercase;letter-spacing:1.5px;font-size:var(--hy-font-size-xs);}
+.gtip{position:absolute;z-index:5;pointer-events:none;transform:translate(-50%,-142%);opacity:0;transition:opacity var(--hy-motion-duration-fast);
+  font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);background:color-mix(in srgb,var(--hy-color-surface-raised) 94%,transparent);border:1px solid var(--hy-color-border-default);border-radius:8px;
+  padding:var(--hy-space-2) var(--hy-space-3);max-width:230px;box-shadow:0 12px 40px color-mix(in srgb,var(--hy-color-surface-base) 60%,transparent);}
 .gtip.show{opacity:1;}
-.gtip .nm{color:var(--ink);font-weight:600;}.gtip .cat{color:var(--faint);font-size:10px;text-transform:uppercase;letter-spacing:1px;}
-.gtip .tg{color:var(--dim);margin-top:4px;font-family:var(--sans);}
-.glegend{display:flex;flex-wrap:wrap;gap:8px 20px;margin-top:20px;font-family:var(--mono);font-size:12px;color:var(--dim);}
-.glegend span{display:inline-flex;align-items:center;gap:8px;}
+.gtip .nm{color:var(--hy-color-text-default);font-weight:600;}.gtip .cat{color:var(--hy-color-text-subtle);font-size:var(--hy-font-size-xs);text-transform:uppercase;letter-spacing:1px;}
+.gtip .tg{color:var(--hy-color-text-muted);margin-top:var(--hy-space-1);font-family:var(--hy-font-family-text);}
+.glegend{display:flex;flex-wrap:wrap;gap:var(--hy-space-2) var(--hy-space-4);margin-top:var(--hy-space-4);font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);color:var(--hy-color-text-muted);}
+.glegend span{display:inline-flex;align-items:center;gap:var(--hy-space-2);}
 .glegend i{width:9px;height:9px;border-radius:50%;box-shadow:0 0 10px currentColor;}
 
 /* ── section 3 · math charts ───────────────────────────────────────────── */
-.chartgrid{display:grid;gap:20px;margin-top:34px;grid-template-columns:1fr;}
+.chartgrid{display:grid;gap:var(--hy-space-4);margin-top:var(--hy-space-8);grid-template-columns:1fr;}
 @media(min-width:820px){.chartgrid{grid-template-columns:repeat(3,1fr);}}
-.chart{border:1px solid var(--line);border-radius:14px;padding:20px;background:var(--panel);backdrop-filter:blur(6px);
+.chart{border:1px solid var(--hy-color-border-subtle);border-radius:14px;padding:var(--hy-space-4);background:var(--hy-color-surface-card);backdrop-filter:blur(6px);
   display:flex;flex-direction:column;min-width:0;}
-.chart .ct{font-family:var(--mono);font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--aqua);margin-bottom:4px;}
-.chart h3{font-size:17px;font-weight:700;letter-spacing:-.3px;}
-.chart .cd{color:var(--dim);font-size:13px;margin-top:7px;line-height:1.5;min-height:56px;}
-.chart svg{width:100%;height:auto;display:block;margin-top:6px;overflow:visible;}
-.chart .foot{font-family:var(--mono);font-size:11px;color:var(--faint);margin-top:12px;border-top:1px solid var(--line);padding-top:10px;}
-.chart .foot b{color:var(--aqua);font-weight:500;}
+.chart .ct{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);letter-spacing:1.5px;text-transform:uppercase;color:var(--hy-color-accent-default);margin-bottom:var(--hy-space-1);}
+.chart h3{font-size:var(--hy-font-size-base);font-weight:700;letter-spacing:-.3px;}
+.chart .cd{color:var(--hy-color-text-muted);font-size:var(--hy-font-size-sm);margin-top:var(--hy-space-2);line-height:1.5;min-height:56px;}
+.chart svg{width:100%;height:auto;display:block;margin-top:var(--hy-space-1);overflow:visible;}
+.chart .foot{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);color:var(--hy-color-text-subtle);margin-top:var(--hy-space-3);border-top:1px solid var(--hy-color-border-subtle);padding-top:var(--hy-space-2);}
+.chart .foot b{color:var(--hy-color-accent-default);font-weight:500;}
 /* chart animation primitives */
 .draw{stroke-dasharray:1;stroke-dashoffset:1;}
 .chart.in .draw{transition:stroke-dashoffset 1.6s cubic-bezier(.4,0,.1,1);stroke-dashoffset:0;}
 .pop{opacity:0;transform:scale(.4);transform-box:fill-box;transform-origin:center;}
-.chart.in .pop{opacity:1;transform:scale(1);transition:opacity .5s ease,transform .5s cubic-bezier(.3,1.4,.5,1);}
+.chart.in .pop{opacity:1;transform:scale(1);transition:opacity var(--hy-motion-duration-slow) ease,transform var(--hy-motion-duration-slow) cubic-bezier(.3,1.4,.5,1);}
 @media(prefers-reduced-motion:reduce){
   .chart .draw{stroke-dashoffset:0!important;transition:none!important;}
   .chart .pop{opacity:1!important;transform:none!important;transition:none!important;}
 }
-.axisln{stroke:var(--line-2);stroke-width:1;}
-.gridln{stroke:rgba(150,140,255,.09);stroke-width:1;}
-.axtx{font-family:var(--mono);font-size:9px;fill:var(--faint);}
-.dotlbl{font-family:var(--mono);font-size:9.5px;fill:var(--dim);}
+.axisln{stroke:var(--hy-color-border-default);stroke-width:1;}
+.gridln{stroke:color-mix(in srgb,var(--hy-color-accent-secondary) 9%,transparent);stroke-width:1;}
+.axtx{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);fill:var(--hy-color-text-subtle);}
+.dotlbl{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);fill:var(--hy-color-text-muted);}
 /* percolation graph */
-.pg-edge{stroke:var(--line-2);stroke-width:1.4;transition:stroke .2s,stroke-width .2s,opacity .2s;opacity:.5;}
-.pg-node circle{transition:fill .2s,r .2s;cursor:pointer;}
-.pg-node text{font-family:var(--mono);font-size:8.5px;fill:var(--dim);pointer-events:none;}
-.pg-edge.hot{stroke:var(--aqua);stroke-width:2.2;opacity:1;filter:drop-shadow(0 0 4px rgba(0,230,195,.7));}
-.pg-node.hot circle{fill:var(--aqua)!important;}
-.pg-node.dep.hot circle{fill:rgba(0,230,195,.55)!important;}
-.pg-readout{font-family:var(--mono);font-size:10px;fill:var(--faint);}
-.pg-readout tspan.k{fill:var(--exp);}
+.pg-edge{stroke:var(--hy-color-border-default);stroke-width:1.4;transition:stroke var(--hy-motion-duration-base),stroke-width var(--hy-motion-duration-base),opacity var(--hy-motion-duration-base);opacity:.5;}
+.pg-node circle{transition:fill var(--hy-motion-duration-base),r var(--hy-motion-duration-base);cursor:pointer;}
+.pg-node text{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);fill:var(--hy-color-text-muted);pointer-events:none;}
+.pg-edge.hot{stroke:var(--hy-color-accent-default);stroke-width:2.2;opacity:1;filter:drop-shadow(0 0 4px color-mix(in srgb,var(--hy-color-accent-default) 70%,transparent));}
+.pg-node.hot circle{fill:var(--hy-color-accent-default)!important;}
+.pg-node.dep.hot circle{fill:color-mix(in srgb,var(--hy-color-accent-default) 55%,transparent)!important;}
+.pg-readout{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);fill:var(--hy-color-text-subtle);}
+.pg-readout tspan.k{fill:var(--hy-color-cost-high);}
 
 /* ── section 5 · crazy numbers bento ───────────────────────────────────── */
-.bento{display:grid;gap:18px;margin-top:34px;grid-template-columns:repeat(6,1fr);}
+.bento{display:grid;gap:var(--hy-space-4);margin-top:var(--hy-space-8);grid-template-columns:repeat(6,1fr);}
 @media(max-width:900px){.bento{grid-template-columns:repeat(2,1fr);}}
-.tile{border:1px solid var(--line);border-radius:16px;padding:24px;background:var(--panel);backdrop-filter:blur(6px);
+.tile{border:1px solid var(--hy-color-border-subtle);border-radius:16px;padding:var(--hy-space-6);background:var(--hy-color-surface-card);backdrop-filter:blur(6px);
   position:relative;overflow:hidden;min-width:0;display:flex;flex-direction:column;justify-content:space-between;}
 .tile::before{content:"";position:absolute;inset:0;pointer-events:none;opacity:.5;
-  background:radial-gradient(120% 90% at 100% 0,var(--gl,rgba(0,230,195,.09)),transparent 55%);}
+  background:radial-gradient(120% 90% at 100% 0,var(--gl,color-mix(in srgb,var(--hy-color-accent-default) 9%,transparent)),transparent 55%);}
 .tile.big{grid-column:span 3;}
 .tile.wide{grid-column:span 3;}
 .tile.med{grid-column:span 2;}
 @media(max-width:900px){.tile.big,.tile.wide{grid-column:span 2;}.tile.med{grid-column:span 2;}}
-.tile .num{font-family:var(--mono);font-weight:800;letter-spacing:-2px;line-height:1;
-  font-variant-numeric:tabular-nums;color:var(--ink);}
+.tile .num{font-family:var(--hy-font-family-mono);font-weight:800;letter-spacing:-2px;line-height:1;
+  font-variant-numeric:tabular-nums;color:var(--hy-color-text-default);}
 .tile.big .num,.tile.wide .num{font-size:clamp(52px,8vw,88px);}
-.tile.med .num{font-size:clamp(40px,6vw,64px);}
-.tile .num .u{font-size:.42em;color:var(--aqua);letter-spacing:0;margin-left:2px;}
-.tile .cap{font-family:var(--mono);font-size:12px;letter-spacing:1.5px;text-transform:uppercase;color:var(--aqua);margin-top:14px;}
-.tile .mech{color:var(--dim);font-size:13.5px;margin-top:9px;line-height:1.5;}
-.tile .mech code{font-family:var(--mono);font-size:12px;color:var(--ink);background:rgba(0,0,0,.4);padding:1px 6px;border-radius:4px;}
+.tile.med .num{font-size:clamp(var(--hy-font-size-3xl),6vw,64px);}
+.tile .num .u{font-size:.42em;color:var(--hy-color-accent-default);letter-spacing:0;margin-left:2px;}
+.tile .cap{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);letter-spacing:1.5px;text-transform:uppercase;color:var(--hy-color-accent-default);margin-top:var(--hy-space-3);}
+.tile .mech{color:var(--hy-color-text-muted);font-size:var(--hy-font-size-md);margin-top:var(--hy-space-2);line-height:1.5;}
+.tile .mech code{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);color:var(--hy-color-text-default);background:color-mix(in srgb,var(--hy-color-surface-base) 40%,transparent);padding:1px var(--hy-space-1);border-radius:4px;}
 
 /* ── section 6 · comparison ────────────────────────────────────────────── */
-.cmp-scroll-wrap{position:relative;margin-top:34px;}
-.cmp-scroll{overflow-x:auto;border:1px solid var(--line);border-radius:14px;-webkit-overflow-scrolling:touch;}
-.cmp-swipe-hint{display:none;font-family:var(--mono);font-size:11px;letter-spacing:.5px;color:var(--faint);margin:0 0 8px;}
+.cmp-scroll-wrap{position:relative;margin-top:var(--hy-space-8);}
+.cmp-scroll{overflow-x:auto;border:1px solid var(--hy-color-border-subtle);border-radius:14px;-webkit-overflow-scrolling:touch;}
+.cmp-swipe-hint{display:none;font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);letter-spacing:.5px;color:var(--hy-color-text-subtle);margin:0 0 var(--hy-space-2);}
 @media (max-width:700px){
   .cmp-swipe-hint{display:block;}
   .cmp-scroll-wrap::after{content:"";position:absolute;top:1px;right:1px;bottom:1px;width:28px;pointer-events:none;
-    background:linear-gradient(to right,transparent,var(--bg));border-radius:0 13px 13px 0;}
+    background:linear-gradient(to right,transparent,var(--hy-color-surface-base));border-radius:0 13px 13px 0;}
 }
-table.cmp{border-collapse:collapse;width:100%;min-width:820px;font-size:14px;}
-table.cmp th,table.cmp td{padding:16px 18px;text-align:left;border-bottom:1px solid var(--line);}
-table.cmp thead th{font-family:var(--mono);font-size:12px;letter-spacing:.5px;color:var(--dim);font-weight:600;
-  background:rgba(10,12,26,.6);position:sticky;top:0;}
-table.cmp tbody th{font-weight:600;color:var(--ink);font-size:14px;}
-table.cmp col.hydra,table.cmp .hydcol{background:rgba(0,230,195,.05);}
-table.cmp thead th.hydcol{color:var(--aqua);font-weight:800;
-  background:linear-gradient(180deg,rgba(0,230,195,.14),rgba(0,230,195,.05));}
-table.cmp td{text-align:center;font-family:var(--mono);}
-table.cmp td:first-child,table.cmp th[scope=row]{text-align:left;font-family:var(--sans);}
-.yes{color:var(--aqua);font-weight:700;}
-.hydcol .yes{text-shadow:0 0 12px rgba(0,230,195,.5);}
-.no{color:var(--faint);}
-.part{color:var(--mid);font-size:12px;}
+table.cmp{border-collapse:collapse;width:100%;min-width:820px;font-size:var(--hy-font-size-md);}
+table.cmp th,table.cmp td{padding:var(--hy-space-4) var(--hy-space-4);text-align:left;border-bottom:1px solid var(--hy-color-border-subtle);}
+table.cmp thead th{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);letter-spacing:.5px;color:var(--hy-color-text-muted);font-weight:600;
+  background:color-mix(in srgb,var(--hy-color-surface-raised) 60%,transparent);position:sticky;top:0;}
+table.cmp tbody th{font-weight:600;color:var(--hy-color-text-default);font-size:var(--hy-font-size-md);}
+table.cmp col.hydra,table.cmp .hydcol{background:color-mix(in srgb,var(--hy-color-accent-default) 5%,transparent);}
+table.cmp thead th.hydcol{color:var(--hy-color-accent-default);font-weight:800;
+  background:linear-gradient(180deg,color-mix(in srgb,var(--hy-color-accent-default) 14%,transparent),color-mix(in srgb,var(--hy-color-accent-default) 5%,transparent));}
+table.cmp td{text-align:center;font-family:var(--hy-font-family-mono);}
+table.cmp td:first-child,table.cmp th[scope=row]{text-align:left;font-family:var(--hy-font-family-text);}
+.yes{color:var(--hy-color-accent-default);font-weight:700;}
+.hydcol .yes{text-shadow:0 0 12px color-mix(in srgb,var(--hy-color-accent-default) 50%,transparent);}
+.no{color:var(--hy-color-text-subtle);}
+.part{color:var(--hy-color-cost-mid);font-size:var(--hy-font-size-xs);}
 table.cmp tbody tr:last-child td,table.cmp tbody tr:last-child th{border-bottom:none;}
 /* These carry prose, not code: nine of them, up to 527 characters. As 12px mono
    with no cap they ran ~192 characters a line, and --faint is 3.26:1, under AA. */
-.cmp-note{font-size:13.5px;line-height:1.75;color:var(--dim);margin-top:16px;max-width:62ch;}
-.cmp-note code,.cmp-note .mono{font-family:var(--mono);font-size:.94em;}
+.cmp-note{font-size:var(--hy-font-size-md);line-height:1.75;color:var(--hy-color-text-muted);margin-top:var(--hy-space-4);max-width:62ch;}
+.cmp-note code,.cmp-note .mono{font-family:var(--hy-font-family-mono);font-size:.94em;}
 /* The deep detail stays in the DOM, so crawlers and llms.txt readers still get
    it, but it no longer costs every visitor three screens of scrolling. */
-.more{margin-top:18px;max-width:62ch;border:1px solid var(--line);border-radius:12px;
-  background:rgba(10,12,24,.45);}
-.more>summary{cursor:pointer;list-style:none;padding:13px 16px;font-family:var(--mono);
-  font-size:11.5px;letter-spacing:.06em;color:var(--aqua);display:flex;gap:10px;align-items:baseline;}
+.more{margin-top:var(--hy-space-4);max-width:62ch;border:1px solid var(--hy-color-border-subtle);border-radius:12px;
+  background:color-mix(in srgb,var(--hy-color-surface-raised) 45%,transparent);}
+.more>summary{cursor:pointer;list-style:none;padding:var(--hy-space-3) var(--hy-space-4);font-family:var(--hy-font-family-mono);
+  font-size:var(--hy-font-size-xs);letter-spacing:.06em;color:var(--hy-color-accent-default);display:flex;gap:var(--hy-space-2);align-items:baseline;}
 .more>summary::-webkit-details-marker{display:none;}
-.more>summary::before{content:"+";color:var(--violet);width:10px;flex:none;}
+.more>summary::before{content:"+";color:var(--hy-color-accent-secondary);width:10px;flex:none;}
 .more[open]>summary::before{content:"\2013";}
-.more>summary:hover{color:var(--cyan);}
-.more-body{padding:0 16px 15px;}
+.more>summary:hover{color:var(--hy-color-accent-strong);}
+.more-body{padding:0 var(--hy-space-4) var(--hy-space-4);}
 .more-body .cmp-note:first-child{margin-top:0;}
-.cmp-note b{color:var(--aqua);}
-.cmp-note a{color:var(--dim);text-decoration:underline;text-underline-offset:2px;
-  text-decoration-color:var(--line-2);}
-.cmp-note a:hover{color:var(--aqua);text-decoration-color:var(--aqua);}
+.cmp-note b{color:var(--hy-color-accent-default);}
+.cmp-note a{color:var(--hy-color-text-muted);text-decoration:underline;text-underline-offset:2px;
+  text-decoration-color:var(--hy-color-border-default);}
+.cmp-note a:hover{color:var(--hy-color-accent-default);text-decoration-color:var(--hy-color-accent-default);}
 
 /* ── section 7 · getting started ───────────────────────────────────────── */
-.steps{display:grid;gap:18px;margin-top:34px;grid-template-columns:1fr;}
+.steps{display:grid;gap:var(--hy-space-4);margin-top:var(--hy-space-8);grid-template-columns:1fr;}
 @media(min-width:800px){.steps{grid-template-columns:repeat(3,1fr);}}
-.step{border:1px solid var(--line);border-radius:14px;padding:22px;background:var(--panel);position:relative;overflow:hidden;}
-.step .n{font-family:var(--mono);font-size:12px;color:var(--faint);letter-spacing:2px;}
-.step h3{font-size:17px;font-weight:700;margin-top:6px;}
-.step p{color:var(--dim);font-size:13.5px;margin:8px 0 14px;}
-.term{font-family:var(--mono);font-size:12.5px;background:#070912;border:1px solid var(--line);border-radius:9px;
-  padding:12px 14px;color:#c7d0e8;overflow-x:auto;}
-.term .p{color:var(--aqua);}.term .c{color:var(--faint);}.term .o{color:var(--dim);}
-.term .g{color:var(--cheap);}
-.term .e{color:var(--exp);font-weight:700;}
-.copyline{display:flex;align-items:center;gap:10px;justify-content:space-between;cursor:pointer;}
-.copyline .cp{font-size:10.5px;color:var(--faint);transition:.15s;flex-shrink:0;}
-.copyline:hover .cp{color:var(--aqua);}
-.copyline.copied .cp{color:var(--cheap);}
+.step{border:1px solid var(--hy-color-border-subtle);border-radius:14px;padding:var(--hy-space-6);background:var(--hy-color-surface-card);position:relative;overflow:hidden;}
+.step .n{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);color:var(--hy-color-text-subtle);letter-spacing:2px;}
+.step h3{font-size:var(--hy-font-size-base);font-weight:700;margin-top:var(--hy-space-1);}
+.step p{color:var(--hy-color-text-muted);font-size:var(--hy-font-size-md);margin:var(--hy-space-2) 0 var(--hy-space-3);}
 
 /* ── final CTA ─────────────────────────────────────────────────────────── */
-.cta{position:relative;text-align:center;padding:110px 24px;overflow:hidden;border-top:1px solid var(--line);}
+.cta{position:relative;text-align:center;padding:var(--hy-space-24) var(--hy-space-6);overflow:hidden;border-top:1px solid var(--hy-color-border-subtle);}
 .cta::before{content:"";position:absolute;inset:0;pointer-events:none;
-  background:radial-gradient(90% 130% at 50% 120%,rgba(0,230,195,.16),transparent 55%),
-    radial-gradient(70% 90% at 50% -20%,rgba(139,92,246,.16),transparent 55%);}
-.cta h2{position:relative;font-size:clamp(30px,5.5vw,58px);font-weight:800;letter-spacing:-1.4px;line-height:1.04;}
-.cta p{position:relative;color:var(--dim);font-size:clamp(15px,1.8vw,18px);margin:18px auto 0;max-width:52ch;}
-.cta .ctas{margin-top:34px;}
+  background:radial-gradient(90% 130% at 50% 120%,color-mix(in srgb,var(--hy-color-accent-default) 16%,transparent),transparent 55%),
+    radial-gradient(70% 90% at 50% -20%,color-mix(in srgb,var(--hy-color-brand-mid) 16%,transparent),transparent 55%);}
+.cta h2{position:relative;font-size:clamp(var(--hy-font-size-2xl),5.5vw,58px);font-weight:800;letter-spacing:-1.4px;line-height:1.04;}
+.cta p{position:relative;color:var(--hy-color-text-muted);font-size:clamp(var(--hy-font-size-base),1.8vw,var(--hy-font-size-lg));margin:var(--hy-space-4) auto 0;max-width:52ch;}
+.cta .ctas{margin-top:var(--hy-space-8);}
 
-/* ── footer ────────────────────────────────────────────────────────────── */
-footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mono);font-size:12.5px;}
-.foot-grid{display:grid;gap:34px 40px;grid-template-columns:2fr 1fr 1fr 1fr;padding:56px 0 28px;}
-@media(max-width:820px){.foot-grid{grid-template-columns:1fr 1fr;}}
-@media(max-width:520px){.foot-grid{grid-template-columns:1fr;}}
-.foot-grid .brand .mark{font-weight:800;font-size:20px;letter-spacing:1.5px;
-  background:linear-gradient(90deg,var(--cyan),var(--hy-color-brand-mid) 55%,var(--magenta));
-  -webkit-background-clip:text;background-clip:text;color:transparent;}
-.foot-grid .brand p{color:var(--faint);max-width:34ch;margin-top:12px;line-height:1.6;font-family:var(--sans);font-size:13px;}
-.foot-grid .col h4{color:var(--dim);font-size:11px;letter-spacing:1.5px;text-transform:uppercase;margin:0 0 14px;font-weight:600;}
-.foot-grid .col a{display:block;color:var(--faint);padding:4px 0;transition:color .15s;}
-.foot-grid .col a:hover{color:var(--aqua);}
-.foot-bottom{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;
-  border-top:1px solid var(--line);padding:20px 0 40px;color:var(--faint);}
-.foot-bottom .egg{color:var(--faint);}
-.foot-bottom .egg .cur{display:inline-block;width:8px;height:13px;background:var(--aqua);vertical-align:-2px;margin-left:2px;
-  animation:cblink 1.1s steps(1) infinite;}
-@keyframes cblink{50%{opacity:0;}}
-.foot-bottom .badges span{color:var(--faint);}
-.foot-bottom .badges b{color:var(--aqua);}
 
-/* ── scroll reveal ─────────────────────────────────────────────────────── */
-.reveal{opacity:0;transform:translateY(26px);transition:opacity .7s ease,transform .7s cubic-bezier(.2,.7,.2,1);}
-.reveal.in{opacity:1;transform:none;}
-@media(prefers-reduced-motion:reduce){
-  .reveal{opacity:1!important;transform:none!important;transition:none!important;}
-  .scrollhint,.foot-bottom .egg .cur{animation:none!important;}
-}
 /* ── desktop app tease (section 6b) ─────────────────────────────────────── */
-.app-tease{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:22px;
-  margin-top:28px;padding:22px 24px;border:1px solid var(--line);border-radius:12px;
-  background:linear-gradient(120deg,rgba(42,240,224,.05),rgba(232,82,200,.05));}
-.app-tease-views{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:16px;flex:1;}
-.app-tease-views span{display:flex;flex-direction:column;gap:3px;font-family:var(--mono);
-  font-size:11px;color:var(--faint);}
-.app-tease-views b{font-family:var(--display);font-size:14px;color:var(--ink);font-weight:600;}
-.app-tease-cta{display:inline-flex;align-items:center;gap:9px;padding:11px 20px;border-radius:8px;
-  font-family:var(--mono);font-size:13px;font-weight:700;color:var(--hy-color-text-inverse);
-  background:linear-gradient(90deg,var(--cyan),var(--hy-color-brand-mid));transition:.15s;white-space:nowrap;}
-.app-tease-cta:hover{filter:brightness(1.12);text-decoration:none;transform:translateY(-1px);}
+.app-tease{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:var(--hy-space-6);
+  margin-top:var(--hy-space-6);padding:var(--hy-space-6) var(--hy-space-6);border:1px solid var(--hy-color-border-subtle);border-radius:12px;
+  background:linear-gradient(120deg,color-mix(in srgb,var(--hy-color-accent-strong) 5%,transparent),color-mix(in srgb,var(--hy-color-brand-end) 5%,transparent));}
+.app-tease-views{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:var(--hy-space-4);flex:1;}
+.app-tease-views span{display:flex;flex-direction:column;gap:var(--hy-space-1);font-family:var(--hy-font-family-mono);
+  font-size:var(--hy-font-size-xs);color:var(--hy-color-text-subtle);}
+.app-tease-views b{font-family:var(--site-display);font-size:var(--hy-font-size-md);color:var(--hy-color-text-default);font-weight:600;}
 @media(max-width:640px){.app-tease{flex-direction:column;align-items:stretch;}
-  .app-tease-cta{justify-content:center;}}
+  .app-tease .btn{justify-content:center;}}
 
 </style>
 <script src="https://analytics.ahrefs.com/analytics.js" data-key="yRz83E87rXgYWlhmro5mIg" async></script>
 </head>
 <body>
 
-<!-- ══ TOP NAV ══════════════════════════════════════════════════════════════ -->
-<div class="topbar" id="topbar">
-  <span class="mark">HYDRA</span>
-  <span class="pill">v1.x · MIT</span>
-  <span class="grow"></span>
-  <nav>
-    <a href="#universe">Universe</a>
+<a class="skip-link" href="#main">Skip to content</a>
+<header class="site-header" id="topbar">
+  <a class="site-logo" href="/" aria-label="Hydra home">HYDRA</a>
+  <span class="site-tag">v1.x · MIT</span>
+  <nav class="site-nav" id="site-nav" aria-label="Main">
+    <a href="/#start">Get started</a>
     <a href="/docs.html">Docs</a>
+    <a href="/pricing.html">Pricing</a>
     <a href="/first-principles.html">First principles</a>
     <a href="/blog/">Blog</a>
-    <a href="/app.html">Desktop app</a>
-    <a href="#security">Security</a>
-    <a href="#compare">Compare</a>
-    <a href="#faq">FAQ</a>
-    <a href="/pricing.html">Pricing</a>
-    <a href="#start">Get started</a>
+    <a href="https://github.com/ankit373/hydra">GitHub</a>
   </nav>
-  <a class="ghost" href="https://github.com/ankit373/hydra">★ GitHub</a>
-</div>
+  <a class="btn btn-primary header-cta" href="/app.html">Desktop app</a>
+  <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav"><span class="nav-toggle-bars" aria-hidden="true"></span>Menu</button>
+</header>
 
+<main id="main">
 <!-- ══ 1 · HERO, hydra-hud: dive into the cortex ══════════════════════════ -->
 <div class="hero-pin" id="heroPin">
-  <header class="hero-sticky" id="heroSticky">
+  <div class="hero-sticky" id="heroSticky">
     <canvas id="stage" aria-label="Animated illustration with sample data: models from several providers connect to Hydra's router, which then demonstrates routing, answer checking, swarm requests, the budget governor and local-only policy"></canvas>
     <div id="scan" aria-hidden="true"></div><div id="vig" aria-hidden="true"></div>
     <div class="hero-hud" id="heroHud" aria-hidden="true">
       <div class="hud-corner tl"></div><div class="hud-corner tr"></div><div class="hud-corner bl"></div><div class="hud-corner br"></div>
-      <div class="hud-meta">provider-neutral &middot; sample data<br><b id="hudHeads">3</b> models found<br>uptime <b id="hudUp">00:00</b></div>
-      <div class="hud-panel" id="hudLog"><div class="ttl"><span>routing log</span><span class="dot">&#9679; sample</span></div><div id="hudLogBody"></div></div>
-      <div class="hud-panel" id="hudTele">
-        <div class="ttl"><span>telemetry</span><span class="dot" id="hudMstate">&#9679;</span></div>
-        <div class="hud-row"><span>P(correct)</span><b id="hudConf">0.94</b></div><div class="hud-bar"><i id="hudConfbar" style="width:94%"></i></div>
-        <div class="hud-row" style="margin-top:12px"><span>saved vs one top model</span><b id="hudSaved">$0.00</b></div>
-        <div class="hud-row"><span>routed local</span><b id="hudLocal">0%</b></div>
-        <div class="hud-row"><span>governor</span><b class="hud-mode" id="hudMode">NORMAL 34%</b></div>
-      </div>
       <div class="deep" id="hudDeep">
         <div class="dt" id="hudDeepTitle">INSIDE THE ROUTER</div>
         <div class="db" id="hudDeepBody">everything the router is doing, one capability at a time</div>
@@ -657,18 +501,18 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
     <a class="skip-intro" href="#universe">skip intro ↓</a>
     <div class="hero-inner" id="heroCopy">
       <div class="eyebrow">open source <span>·</span> any provider <span>·</span> answer checking</div>
-      <h1 class="wordmark">HYDRA<span style="position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;">: the gateway that picks the right model for each task and can check the answer</span></h1>
+      <h1 class="wordmark">HYDRA<span class="visually-hidden">: the gateway that picks the right model for each task and can check the answer</span></h1>
       <div class="tagline">Pick the model · check the answer</div>
       <p class="subline">Hydra sends each request to the model <b>best suited to the task</b>, and <b>can check the answer</b> and ask another model when the check fails. It works with hosted APIs, local models and CLI agents from any provider.</p>
       <div class="ctas">
-        <button class="install" data-copy="brew install ankit373/hydra/hyctl" aria-label="Copy install command">
+        <button class="install" data-copy="brew install ankit373/hydra/hyctl">
           <span class="dollar">$</span><span class="cmd">brew install <b>ankit373/hydra/hyctl</b></span><span class="cp">copy</span>
         </button>
-        <a class="btn-ghost" href="/app.html">Get the desktop app →</a>
+        <a class="btn btn-lg" href="/app.html">Get the desktop app →</a>
       </div>
     </div>
     <div class="scrollhint" id="scrollHint" aria-hidden="true">drag to orbit &middot; scroll to dive ↓</div>
-  </header>
+  </div>
   <div id="heroRelease" style="position:absolute;bottom:0;left:0;width:1px;height:1px;" aria-hidden="true"></div>
 </div>
 <div class="hero-buffer" aria-hidden="true"></div>
@@ -689,11 +533,11 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
     <div class="gtip" id="gtip"><span class="cat" id="gtipCat"></span><br><span class="nm" id="gtipNm"></span><div class="tg" id="gtipTg"></div></div>
   </div>
   <div class="glegend">
-    <span><i style="color:#7FA8FF"></i> Cloud gateways</span>
-    <span><i style="color:#8B5CF6"></i> Eval &amp; observability</span>
-    <span><i style="color:#E852C8"></i> Local runtimes</span>
-    <span><i style="color:#5a5f85"></i> Hosted models (destinations)</span>
-    <span><i style="color:#00E6C3"></i> Hydra</span>
+    <span><i style="color:var(--hy-color-chart-series-1)"></i> Cloud gateways</span>
+    <span><i style="color:var(--hy-color-brand-mid)"></i> Eval &amp; observability</span>
+    <span><i style="color:var(--hy-color-brand-end)"></i> Local runtimes</span>
+    <span><i style="color:var(--hy-color-text-subtle)"></i> Hosted models (destinations)</span>
+    <span><i style="color:var(--hy-color-accent-default)"></i> Hydra</span>
   </div>
 </section>
 
@@ -721,24 +565,24 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
         <line class="gridln" x1="40" y1="170" x2="326" y2="170"/>
         <!-- frontier (aqua) -->
         <path class="draw" id="paretoLine" d="M56,150 C110,70 180,52 250,46 C285,44 305,44 320,44"
-          fill="none" stroke="#00E6C3" stroke-width="2.4" stroke-linecap="round"
-          filter="drop-shadow(0 0 6px rgba(0,230,195,.55))"/>
+          fill="none" stroke="var(--hy-color-accent-default)" stroke-width="2.4" stroke-linecap="round"
+          filter="drop-shadow(0 0 6px color-mix(in srgb,var(--hy-color-accent-default) 55%,transparent))"/>
         <!-- competitor dots (below-right of frontier) -->
         <g class="dots">
-          <circle class="pop" cx="96"  cy="150" r="4.5" fill="#FF5A6E" style="transition-delay:.15s"/>
+          <circle class="pop" cx="96"  cy="150" r="4.5" fill="var(--hy-color-status-danger)" style="transition-delay:.15s"/>
           <text class="dotlbl pop" x="102" y="153" style="transition-delay:.2s">Haiku</text>
-          <circle class="pop" cx="150" cy="120" r="4.5" fill="#E0A93A" style="transition-delay:.25s"/>
+          <circle class="pop" cx="150" cy="120" r="4.5" fill="var(--hy-color-status-warning)" style="transition-delay:.25s"/>
           <text class="dotlbl pop" x="156" y="123" style="transition-delay:.3s">Flash</text>
-          <circle class="pop" cx="214" cy="96"  r="4.5" fill="#E0A93A" style="transition-delay:.35s"/>
+          <circle class="pop" cx="214" cy="96"  r="4.5" fill="var(--hy-color-status-warning)" style="transition-delay:.35s"/>
           <text class="dotlbl pop" x="220" y="99" style="transition-delay:.4s">GPT-class</text>
-          <circle class="pop" cx="286" cy="76"  r="4.5" fill="#8B5CF6" style="transition-delay:.45s"/>
+          <circle class="pop" cx="286" cy="76"  r="4.5" fill="var(--hy-color-brand-mid)" style="transition-delay:.45s"/>
           <text class="dotlbl pop" x="238" y="70" style="transition-delay:.5s">top model</text>
         </g>
         <!-- hyctl markers on the frontier -->
         <g class="dots">
-          <circle class="pop" cx="150" cy="66" r="5.5" fill="#00E6C3" style="transition-delay:.6s;filter:drop-shadow(0 0 5px #00E6C3)"/>
-          <circle class="pop" cx="250" cy="46" r="5.5" fill="#00E6C3" style="transition-delay:.7s;filter:drop-shadow(0 0 5px #00E6C3)"/>
-          <text class="dotlbl pop" x="120" y="42" fill="#00E6C3" style="transition-delay:.8s">Hydra routes here</text>
+          <circle class="pop" cx="150" cy="66" r="5.5" fill="var(--hy-color-accent-default)" style="transition-delay:.6s;filter:drop-shadow(0 0 5px var(--hy-color-accent-default))"/>
+          <circle class="pop" cx="250" cy="46" r="5.5" fill="var(--hy-color-accent-default)" style="transition-delay:.7s;filter:drop-shadow(0 0 5px var(--hy-color-accent-default))"/>
+          <text class="dotlbl pop" x="120" y="42" fill="var(--hy-color-accent-default)" style="transition-delay:.8s">Hydra routes here</text>
         </g>
       </svg>
       <div class="foot">Matching a top model's quality at <b>lower cost</b> is the published RouteLLM result; Hydra applies the idea per request.</div>
@@ -755,23 +599,23 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
         <text class="axtx" x="183" y="245" text-anchor="middle">models asked  →</text>
         <text class="axtx" x="12" y="120" text-anchor="middle" transform="rotate(-90 12 120)">P(correct)  →</text>
         <!-- target line 0.95 -->
-        <line class="gridln" x1="40" y1="54" x2="326" y2="54" stroke="#00E6C3" stroke-dasharray="5 5" opacity=".7"/>
-        <text class="axtx" x="322" y="48" text-anchor="end" fill="#00E6C3">target 0.95</text>
+        <line class="gridln" x1="40" y1="54" x2="326" y2="54" stroke="var(--hy-color-accent-default)" stroke-dasharray="5 5" opacity=".7"/>
+        <text class="axtx" x="322" y="48" text-anchor="end" fill="var(--hy-color-accent-default)">target 0.95</text>
         <!-- convergence curve climbing to target -->
         <path class="draw" id="sprtLine" d="M60,196 L110,170 L160,132 L210,88 L246,54"
-          fill="none" stroke="#8B5CF6" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"
-          filter="drop-shadow(0 0 5px rgba(139,92,246,.5))"/>
+          fill="none" stroke="var(--hy-color-brand-mid)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"
+          filter="drop-shadow(0 0 5px color-mix(in srgb,var(--hy-color-brand-mid) 50%,transparent))"/>
         <!-- sample dots -->
         <g class="dots">
-          <circle class="pop" cx="60"  cy="196" r="4" fill="#8B5CF6" style="transition-delay:.4s"/>
-          <circle class="pop" cx="110" cy="170" r="4" fill="#8B5CF6" style="transition-delay:.7s"/>
-          <circle class="pop" cx="160" cy="132" r="4" fill="#8B5CF6" style="transition-delay:1s"/>
-          <circle class="pop" cx="210" cy="88"  r="4" fill="#8B5CF6" style="transition-delay:1.3s"/>
+          <circle class="pop" cx="60"  cy="196" r="4" fill="var(--hy-color-brand-mid)" style="transition-delay:.4s"/>
+          <circle class="pop" cx="110" cy="170" r="4" fill="var(--hy-color-brand-mid)" style="transition-delay:.7s"/>
+          <circle class="pop" cx="160" cy="132" r="4" fill="var(--hy-color-brand-mid)" style="transition-delay:1s"/>
+          <circle class="pop" cx="210" cy="88"  r="4" fill="var(--hy-color-brand-mid)" style="transition-delay:1.3s"/>
         </g>
         <!-- accept marker -->
-        <circle class="pop" cx="246" cy="54" r="6.5" fill="#00E6C3" style="transition-delay:1.65s;filter:drop-shadow(0 0 7px #00E6C3)"/>
-        <text class="dotlbl pop" x="256" y="52" fill="#00E6C3" style="transition-delay:1.8s">accept ✔</text>
-        <text class="dotlbl pop" x="256" y="66" fill="#5a5f85" style="transition-delay:1.9s">stopped early</text>
+        <circle class="pop" cx="246" cy="54" r="6.5" fill="var(--hy-color-accent-default)" style="transition-delay:1.65s;filter:drop-shadow(0 0 7px var(--hy-color-accent-default))"/>
+        <text class="dotlbl pop" x="256" y="52" fill="var(--hy-color-accent-default)" style="transition-delay:1.8s">accept ✔</text>
+        <text class="dotlbl pop" x="256" y="66" fill="var(--hy-color-text-subtle)" style="transition-delay:1.9s">stopped early</text>
       </svg>
       <div class="foot"><b>Fewer calls, bar cleared</b>: a stated probability you can audit against outcomes.</div>
     </div>
@@ -789,8 +633,8 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
       <div class="foot"><b>High-κ ⇒ higher bar.</b> The required probability rises with the graph.</div>
     </div>
   </div>
-  <div style="text-align:center;margin-top:38px;">
-    <a class="btn-ghost" href="/first-principles.html">Derive it yourself: six interactive proofs on the First Principles page →</a>
+  <div style="text-align:center;margin-top:var(--hy-space-8);">
+    <a class="btn btn-lg" href="/first-principles.html">Derive it yourself: six interactive proofs on the First Principles page →</a>
   </div>
 </section>
 
@@ -800,8 +644,8 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
   <h2 class="big">You gave an agent access. <span class="grad">What did it do?</span></h2>
   <p class="lede">Every access an agent makes is recorded in a local, hash-chained ledger. <b>hyctl security</b> reads that log and answers the one question you actually have, not a wall of metrics.</p>
 
-  <div class="term" style="margin-top:22px;max-width:760px">
-    <div class="copyline" data-copy="hyctl security"><span><span class="p">$</span> hyctl security</span><span class="cp">copy</span></div>
+  <div class="term" style="margin-top:var(--hy-space-6);max-width:760px">
+    <div class="copyline"><code translate="no"><span class="p">$</span> hyctl security</code><button type="button" class="copy-btn" data-copy="hyctl security">copy</button></div>
     <div class="o"><span class="e">VERDICT  ACT NOW</span></div>
     <div class="o"><span class="c">  critical incident, gpt-4o: the same resource was denied</span></div>
     <div class="o"><span class="c">  repeatedly, then it escalated to an exec/network action,</span></div>
@@ -812,7 +656,7 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
     <div class="o">evidence  4 event(s), 4 hash-chained, <span class="g">intact</span></div>
   </div>
 
-  <p class="lede" style="margin-top:26px">“4 denied, 2 flagged” and “injection → recon → escalation → an attempt on the audit trail” are the same rows read twice. Only the second one is an incident. Severity is <b>OWASP Risk Rating</b> (likelihood × impact), never a blended score.</p>
+  <p class="lede" style="margin-top:var(--hy-space-6)">“4 denied, 2 flagged” and “injection → recon → escalation → an attempt on the audit trail” are the same rows read twice. Only the second one is an incident. Severity is <b>OWASP Risk Rating</b> (likelihood × impact), never a blended score.</p>
 
     <details class="more">
     <summary>How the verdict is computed, and what it refuses to claim</summary>
@@ -824,10 +668,10 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
     </div>
   </details>
 
-  <p class="lede" style="margin-top:34px">That covers the agents. The other half is the machine they run on: Hydra discovers local model servers, ranks them and sends real work to them, so <b>their</b> configuration is part of its posture too. It checks them rather than assuming.</p>
+  <p class="lede" style="margin-top:var(--hy-space-8)">That covers the agents. The other half is the machine they run on: Hydra discovers local model servers, ranks them and sends real work to them, so <b>their</b> configuration is part of its posture too. It checks them rather than assuming.</p>
 
-  <div class="term" style="margin-top:22px;max-width:760px">
-    <div class="copyline" data-copy="hyctl security --why --advisories"><span><span class="p">$</span> hyctl security --why --advisories</span><span class="cp">copy</span></div>
+  <div class="term" style="margin-top:var(--hy-space-6);max-width:760px">
+    <div class="copyline"><code translate="no"><span class="p">$</span> hyctl security --why --advisories</code><button type="button" class="copy-btn" data-copy="hyctl security --why --advisories">copy</button></div>
     <div class="o">Local server exposure      <span class="e">1 exposed</span></div>
     <div class="o"><span class="c">  ollama 0.9.9 (http://localhost:11435) answers on 192.168.1.15. That</span></div>
     <div class="o"><span class="c">  address is not loopback, so the server is serving more than this</span></div>
@@ -842,7 +686,7 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
     <div class="o"><span class="c">  rather than the contents</span></div>
   </div>
 
-  <p class="lede" style="margin-top:26px">Ollama ships with <b>no authentication</b> and prints no warning when bound to <code>0.0.0.0</code>. A model server answering the network is the one thing that falsifies local-first outright, and nothing was looking. The probe compares the same identity endpoint discovery already uses, between loopback and this machine's own addresses, so nothing goes on the wire and an unrelated listener on the same port is not mistaken for the model server.</p>
+  <p class="lede" style="margin-top:var(--hy-space-6)">Ollama ships with <b>no authentication</b> and prints no warning when bound to <code translate="no">0.0.0.0</code>. A model server answering the network is the one thing that falsifies local-first outright, and nothing was looking. The probe compares the same identity endpoint discovery already uses, between loopback and this machine's own addresses, so nothing goes on the wire and an unrelated listener on the same port is not mistaken for the model server.</p>
 
     <details class="more">
     <summary>What the machine scan proves, and what it cannot</summary>
@@ -851,11 +695,11 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
 
   <p class="cmp-note"><b>The negative result is the weaker one, and says so.</b> A host firewall that drops the probe looks exactly like a server that is not listening, so <em>loopback only</em> is reported as weaker evidence than <em>exposed</em>. A machine with no non-loopback address ruled nothing out. A lookup that failed is unchecked, never clean. The advisory query is the only part of the whole report that leaves your machine, so it is off unless you ask for it.</p>
 
-  <p class="cmp-note"><b>Including its own state directory.</b> The report had always said the CLI agent binary baseline is forgeable by anything able to write <code>~/.hydra</code>, and nothing read a permission bit. Writable is the finding, since that is where the integrity baseline and the ledger's chain anchor live as plain files; readable is reported separately, since it exposes the listing and not the contents. It repairs nothing: the report is a read.</p>
+  <p class="cmp-note"><b>Including its own state directory.</b> The report had always said the CLI agent binary baseline is forgeable by anything able to write <code translate="no">~/.hydra</code>, and nothing read a permission bit. Writable is the finding, since that is where the integrity baseline and the ledger's chain anchor live as plain files; readable is reported separately, since it exposes the listing and not the contents. It repairs nothing: the report is a read.</p>
     </div>
   </details>
 
-  <p class="lede" style="margin-top:26px">The ledger records what an agent did. <b>hyctl mcp registry</b> scores whether the MCP server it was talking to was ever safe to run in the first place. Every existing MCP directory answers “does this exist”; none answer “is it safe to run with my credentials right now”, and star counts are actively misleading (the most-starred servers score worst on quality in independent research). <code>audit</code> resolves what's installed against the official registry and scores it; every score drops back to <em>provisional</em> on a version bump, the direct fix for a server that ships clean for months then turns malicious in one release.</p>
+  <p class="lede" style="margin-top:var(--hy-space-6)">The ledger records what an agent did. <b>hyctl mcp registry</b> scores whether the MCP server it was talking to was ever safe to run in the first place. Every existing MCP directory answers “does this exist”; none answer “is it safe to run with my credentials right now”, and star counts are actively misleading (the most-starred servers score worst on quality in independent research). <code translate="no">audit</code> resolves what's installed against the official registry and scores it; every score drops back to <em>provisional</em> on a version bump, the direct fix for a server that ships clean for months then turns malicious in one release.</p>
 </section>
 
 <!-- ══ 5 · CRAZY NUMBERS ════════════════════════════════════════════════════ -->
@@ -865,35 +709,35 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
   <p class="lede">No savings percentage: what Hydra saves depends on your tasks and your models. Each number below is a property of the software you can verify, and <b>hyctl stats</b> and <b>hyctl trace evaluate</b> measure cost on your own work.</p>
 
   <div class="bento">
-    <div class="tile big" style="--gl:rgba(63,217,138,.12)">
+    <div class="tile big" style="--gl:color-mix(in srgb,var(--hy-color-status-success) 12%,transparent)">
       <div class="num tnum" data-to="0">0</div>
       <div>
         <div class="cap">accounts, servers or telemetry</div>
-        <div class="mech">Hydra runs on your machine. Spend logs, run logs and calibration stay in <code>~/.hydra</code>, and only the prompt goes to the model that answers it.</div>
+        <div class="mech">Hydra runs on your machine. Spend logs, run logs and calibration stay in <code translate="no">~/.hydra</code>, and only the prompt goes to the model that answers it.</div>
       </div>
     </div>
-    <div class="tile med" style="--gl:rgba(0,230,195,.12)">
+    <div class="tile med" style="--gl:color-mix(in srgb,var(--hy-color-accent-default) 12%,transparent)">
       <div class="num tnum" data-to="20">20</div>
       <div>
         <div class="cap">checked answers before a record counts</div>
         <div class="mech">Hydra routes on a model's record for a task type only after 20 checked answers there. Until then it says the record is unmeasured.</div>
       </div>
     </div>
-    <div class="tile med" style="--gl:rgba(139,92,246,.12)">
+    <div class="tile med" style="--gl:color-mix(in srgb,var(--hy-color-brand-mid) 12%,transparent)">
       <div class="num tnum" data-to="0.95" data-dec="2">0.95</div>
       <div>
         <div class="cap">example target P(correct)</div>
         <div class="mech">Your bar for a checked answer. Hydra stops asking models once the evidence clears it (SPRT).</div>
       </div>
     </div>
-    <div class="tile med" style="--gl:rgba(42,240,224,.12)">
+    <div class="tile med" style="--gl:color-mix(in srgb,var(--hy-color-accent-strong) 12%,transparent)">
       <div class="num tnum" data-to="1">1</div>
       <div>
         <div class="cap">binary, no daemon</div>
-        <div class="mech">One Go binary is the command line, the terminal cockpit and the OpenAI-compatible endpoint. Run <code>hyctl probe</code> to see the models it finds.</div>
+        <div class="mech">One Go binary is the command line, the terminal cockpit and the OpenAI-compatible endpoint. Run <code translate="no">hyctl probe</code> to see the models it finds.</div>
       </div>
     </div>
-    <div class="tile wide" style="--gl:rgba(232,82,200,.12)">
+    <div class="tile wide" style="--gl:color-mix(in srgb,var(--hy-color-brand-end) 12%,transparent)">
       <div class="num tnum" data-to="0">0</div>
       <div>
         <div class="cap">network calls to choose a model</div>
@@ -911,7 +755,7 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
 
   <div class="cmp-scroll-wrap">
   <p class="cmp-swipe-hint">swipe to compare →</p>
-  <div class="cmp-scroll">
+  <div class="cmp-scroll scroll-x" role="region" aria-label="Hydra compared with other gateways">
     <table class="cmp">
       <colgroup><col><col class="hyctl"><col><col><col><col></colgroup>
       <thead>
@@ -940,33 +784,33 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
     </table>
   </div>
   </div>
-  <p class="cmp-note"><b>Every row checked above ships today</b>: <code>hyctl dispatch --confidence</code>, <code>hyctl graph blast</code>, <code>hyctl mcp</code>, <code>hyctl mcp registry</code>. The cockpit (<code>hyctl tui</code>) runs the work you type and renders real runs from the per-run event log, and the desktop app ships as a download for macOS, Windows and Linux on both x86-64 and ARM64 with every release. It is not yet code-signed, so macOS needs right-click → Open on first launch.</p>
+  <p class="cmp-note"><b>Every row checked above ships today</b>: <code translate="no">hyctl dispatch --confidence</code>, <code translate="no">hyctl graph blast</code>, <code translate="no">hyctl mcp</code>, <code translate="no">hyctl mcp registry</code>. The cockpit (<code translate="no">hyctl tui</code>) runs the work you type and renders real runs from the per-run event log, and the desktop app ships as a download for macOS, Windows and Linux on both x86-64 and ARM64 with every release. It is not yet code-signed, so macOS needs right-click → Open on first launch.</p>
 </section>
 
 <!-- ══ 6a2 · STREAMING ══════════════════════════════════════════════════════ -->
 <section class="blk wrap reveal" id="streaming">
   <div class="klabel"><span>Streaming</span><b>every dialect, every surface</b></div>
   <h2 class="big">A slow answer and a broken one <span class="grad">look identical</span>.</h2>
-  <p style="max-width:59ch;color:var(--dim)">
+  <p style="max-width:59ch;color:var(--hy-color-text-muted)">
     Until they start arriving. Hydra renders an answer while the model is still
-    writing it: in the terminal, in the <code>hyctl tui</code> cockpit, in the
+    writing it: in the terminal, in the <code translate="no">hyctl tui</code> cockpit, in the
     desktop app, and across a swarm. Seven executor paths stream
     natively: the OpenAI-compatible wire shape and Azure, Anthropic, Gemini,
     Cohere, Bedrock over its binary event stream, Ollama, and the agy CLI.
   </p>
-  <p style="max-width:59ch;color:var(--dim)">
+  <p style="max-width:59ch;color:var(--hy-color-text-muted)">
     A model that <em>cannot</em> stream is not a second code path. Its whole
     output is delivered as one delta, so every surface is written once and the
     two kinds cannot drift apart in how they render.
   </p>
 
-  <div class="term" style="margin-top:20px;max-width:720px">
-    <div class="copyline" data-copy="hyctl dispatch &quot;summarise this contract in five bullet points&quot;"><span><span class="p">$</span> hyctl dispatch "summarise this contract…"</span><span class="cp">copy</span></div>
+  <div class="term" style="margin-top:var(--hy-space-4);max-width:720px">
+    <div class="copyline"><code translate="no"><span class="p">$</span> hyctl dispatch "summarise this contract…"</code><button type="button" class="copy-btn" data-copy="hyctl dispatch &quot;summarise this contract in five bullet points&quot;">copy</button></div>
     <div class="o"><span class="c">ollama/qwen3:8b</span> · writing…</div>
-    <div class="o" style="opacity:.62">⤺ abandoned <span class="c">openrouter/gpt</span> after ~212 chars: 429 rate limited</div>
-    <div class="o" style="opacity:.62">&nbsp;&nbsp;&nbsp;hyctl trace view run-7f2a --span 9c1d4e02</div>
+    <div class="o c">⤺ abandoned <span class="c">openrouter/gpt</span> after ~212 chars: 429 rate limited</div>
+    <div class="o c">&nbsp;&nbsp;&nbsp;hyctl trace view run-7f2a --span 9c1d4e02</div>
   </div>
-  <p class="cmp-note" style="margin-top:16px">
+  <p class="cmp-note" style="margin-top:var(--hy-space-4)">
     When the router falls back mid-answer, the abandoned partial does not sit
     there pretending to be the answer. It collapses to one line naming the model,
     roughly how much it wrote and why it stopped, and expands if you want to
@@ -980,12 +824,12 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
 <section class="blk wrap reveal" id="app">
   <div class="klabel"><span>Hydra Desktop</span><b>ships with every release</b></div>
   <h2 class="big">Prefer an <span class="grad">app</span> to a terminal?</h2>
-  <p style="max-width:59ch;color:var(--dim)">
+  <p style="max-width:59ch;color:var(--hy-color-text-muted)">
     Everything above is the command line. Hydra also has a desktop app that
     opens on a chat: ask anything, and every reply says which model answered and
     what it cost, beside a pane showing what the router knows.
     Models, Activity, Usage, Audit and Settings sit behind it, over the logs
-    <code>hyctl</code> already writes. No account, no server, nothing leaves the
+    <code translate="no">hyctl</code> already writes. No account, no server, nothing leaves the
     machine.
   </p>
 
@@ -996,15 +840,15 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
       <span><b>Usage</b>where the money went</span>
       <span><b>Audit</b>what the agents did</span>
     </div>
-    <a class="app-tease-cta" href="/app.html">
+    <a class="btn btn-primary btn-lg" href="/app.html">
       See the app <span aria-hidden="true">→</span>
     </a>
   </div>
-  <div class="term" style="margin-top:20px;max-width:720px">
-    <div class="copyline" data-copy="curl -fsSL https://raw.githubusercontent.com/ankit373/hydra/main/install-app.sh | sh"><span><span class="p">$</span> curl -fsSL …/install-app.sh | sh</span><span class="cp">copy</span></div>
+  <div class="term" style="margin-top:var(--hy-space-4);max-width:720px">
+    <div class="copyline"><code translate="no"><span class="p">$</span> curl -fsSL …/install-app.sh | sh</code><button type="button" class="copy-btn" data-copy="curl -fsSL https://raw.githubusercontent.com/ankit373/hydra/main/install-app.sh | sh">copy</button></div>
     <div class="o"><span class="g">✓</span> checksum verified · <span class="c">/Applications/Hydra.app</span></div>
   </div>
-  <p class="cmp-note" style="margin-top:16px">
+  <p class="cmp-note" style="margin-top:var(--hy-space-4)">
     macOS · Linux · Windows, attached to every GitHub release with a SHA-256
     checksum. Not yet code-signed, so macOS needs right-click → Open the first
     time. The install script clears that for you. ARM64 builds ship for both
@@ -1024,10 +868,10 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
       <h3>Get the binary</h3>
       <p>One Go binary. No daemon, no account, no cloud.</p>
       <div class="term">
-        <div class="copyline" data-copy="brew install ankit373/hydra/hyctl"><span><span class="p">$</span> brew install ankit373/hydra/hyctl</span><span class="cp">copy</span></div>
-        <div class="copyline" data-copy="npm install -g hyctl"><span><span class="p">$</span> npm install -g hyctl</span><span class="cp">copy</span></div>
-        <div class="copyline" data-copy="pip install hyctl"><span><span class="p">$</span> pip install hyctl</span><span class="cp">copy</span></div>
-        <div class="copyline" data-copy="curl -fsSL https://raw.githubusercontent.com/ankit373/hydra/main/install.sh | sh"><span><span class="p">$</span> curl -fsSL …/install.sh | sh</span><span class="cp">copy</span></div>
+        <div class="copyline"><code translate="no"><span class="p">$</span> brew install ankit373/hydra/hyctl</code><button type="button" class="copy-btn" data-copy="brew install ankit373/hydra/hyctl">copy</button></div>
+        <div class="copyline"><code translate="no"><span class="p">$</span> npm install -g hyctl</code><button type="button" class="copy-btn" data-copy="npm install -g hyctl">copy</button></div>
+        <div class="copyline"><code translate="no"><span class="p">$</span> pip install hyctl</code><button type="button" class="copy-btn" data-copy="pip install hyctl">copy</button></div>
+        <div class="copyline"><code translate="no"><span class="p">$</span> curl -fsSL …/install.sh | sh</code><button type="button" class="copy-btn" data-copy="curl -fsSL https://raw.githubusercontent.com/ankit373/hydra/main/install.sh | sh">copy</button></div>
         <div class="o"><span class="g">✓ hyctl 1.x</span> installed · or run once with <span class="g">npx hyctl</span></div>
       </div>
     </div>
@@ -1036,7 +880,7 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
       <h3>Scan your machine</h3>
       <p>Finds every model you can use: API keys, local servers and CLI agents. Each is ranked on what it has actually got right here, not just a catalogue score.</p>
       <div class="term">
-        <div class="copyline" data-copy="hyctl probe"><span><span class="p">$</span> hyctl probe</span><span class="cp">copy</span></div>
+        <div class="copyline"><code translate="no"><span class="p">$</span> hyctl probe</code><button type="button" class="copy-btn" data-copy="hyctl probe">copy</button></div>
         <div class="o"><span class="g">✓</span> 12 models · agy · gemini · openrouter</div>
         <div class="o"><span class="c">          ollama(qwen) · lmstudio · …</span></div>
       </div>
@@ -1046,7 +890,7 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
       <h3>Ask for something</h3>
       <p>Hydra picks the model best suited to the task, checks the answer against the target you set, and tells you what it cost.</p>
       <div class="term">
-        <div class="copyline" data-copy='hyctl dispatch --confidence 0.95 "draft a polite reply declining the meeting"'><span><span class="p">$</span> hyctl dispatch --confidence 0.95 …</span><span class="cp">copy</span></div>
+        <div class="copyline"><code translate="no"><span class="p">$</span> hyctl dispatch --confidence 0.95 …</code><button type="button" class="copy-btn" data-copy='hyctl dispatch --confidence 0.95 "draft a polite reply declining the meeting"'>copy</button></div>
         <div class="o"><span class="c">→ gemini-flash · ollama/qwen3 agree</span></div>
         <div class="o"><span class="g">✓ checked</span> · 96% likely correct · $0.0003</div>
       </div>
@@ -1055,18 +899,18 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
 </section>
 
 <style>
-.faq{margin-top:28px;max-width:820px;}
+.faq{margin-top:var(--hy-space-6);max-width:820px;}
 /* anywhere, not break-word: only anywhere lowers min-content, and a column box is
    sized from it, so one 64-char URL widened the whole page at phone widths (#939). */
 .faq-item{overflow-wrap:anywhere;}
-.faq-item+.faq-item{margin-top:22px;}
-.faq-item h3{margin:0 0 8px;font-size:17px;font-weight:700;letter-spacing:-.2px;}
-.faq-item p{margin:0;color:var(--dim);font-size:15px;line-height:1.7;}
+.faq-item+.faq-item{margin-top:var(--hy-space-6);}
+.faq-item h3{margin:0 0 var(--hy-space-2);font-size:var(--hy-font-size-base);font-weight:700;letter-spacing:-.2px;}
+.faq-item p{margin:0;color:var(--hy-color-text-muted);font-size:var(--hy-font-size-base);line-height:1.7;}
 /* Columns, not a 2-track grid: a grid row is as tall as its tallest answer, so
    every short one left a dead gap beside a long one. Columns pack by height. */
 @media(min-width:900px){
-  .faq{columns:2;column-gap:40px;max-width:none;}
-  .faq-item{break-inside:avoid;padding-bottom:26px;}
+  .faq{columns:2;column-gap:var(--hy-space-8);max-width:none;}
+  .faq-item{break-inside:avoid;padding-bottom:var(--hy-space-6);}
   .faq-item+.faq-item{margin-top:0;}
 }
 </style>
@@ -1123,46 +967,32 @@ footer{border-top:1px solid var(--line);background:#05060C;font-family:var(--mon
   <h2>The right model for each task.<br>The answer, <span class="grad">checked</span>.</h2>
   <p>Hydra works with any provider, runs on your own hardware, and keeps your spend logs and policy on your machine.</p>
   <div class="ctas">
-    <button class="install" data-copy="brew install ankit373/hydra/hyctl" aria-label="Copy install command">
+    <button class="install" data-copy="brew install ankit373/hydra/hyctl">
         <span class="dollar">$</span><span class="cmd">brew install <b>ankit373/hydra/hyctl</b></span><span class="cp">copy</span>
       </button>
-    <a class="btn-ghost" href="/app.html">Get the desktop app →</a>
+    <a class="btn btn-lg" href="/app.html">Get the desktop app →</a>
   </div>
 </section>
 
 <!-- ══ FOOTER ═══════════════════════════════════════════════════════════════ -->
-<footer>
+</main>
+
+<footer class="site-footer">
   <div class="wrap">
-    <div class="foot-grid">
-      <div class="brand">
-        <div class="mark">HYDRA</div>
-        <p>Hydra picks the model best suited to each task, and can check the answer before you rely on it. Open source, with no vendor privileged.</p>
-      </div>
-      <div class="col">
-        <h4>Product</h4>
-        <a href="#universe">Where Hydra fits</a>
-        <a href="#math">The math</a>
-        <a href="#security">Security</a>
-        <a href="#compare">Comparison</a>
-        <a href="/blog/">Blog</a>
-      </div>
-      <div class="col">
-        <h4>CLI</h4>
-        <a href="/docs.html#dispatch">dispatch</a>
-        <a href="/docs.html#probe">probe · status</a>
-        <a href="/docs.html#trust">trust · graph</a>
-        <a href="/docs.html#swarm">swarm · cost</a>
-      </div>
-      <div class="col">
-        <h4>Resources</h4>
-        <a href="/docs.html">Docs</a>
-        <a href="https://github.com/ankit373/hydra">GitHub ★</a>
-      </div>
+    <div>
+      <a class="site-logo" href="/" aria-label="Hydra home">HYDRA</a>
+      <p>Hydra picks the model best suited to each task, and can check the answer before you rely on it. Free and open source, MIT licensed.</p>
     </div>
-    <div class="foot-bottom">
-      <span class="badges"><b>MIT</b> · provider-neutral · runs offline · <span>Pick the model · check the answer</span></span>
-      <span class="egg">$ hyctl dispatch "ship it"<span class="cur"></span></span>
-    </div>
+    <nav aria-label="Footer">
+      <a href="/">Home</a>
+      <a href="/docs.html">Docs</a>
+      <a href="/app.html">Desktop app</a>
+      <a href="/pricing.html">Pricing</a>
+      <a href="/first-principles.html">First principles</a>
+      <a href="/blog/">Blog</a>
+      <a href="https://github.com/ankit373/hydra">GitHub</a>
+      <a href="/llms.txt">llms.txt</a>
+    </nav>
   </div>
 </footer>
 
@@ -1195,7 +1025,7 @@ function svg(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attr
   // Canvas colours read the generated tokens, so the drawing follows design/tokens.
   var T=getComputedStyle(document.documentElement);
   function tok(n){return T.getPropertyValue('--hy-color-'+n).trim();}
-  var C={cyan:tok('accent-strong'),violet:tok('brand-mid'),magenta:tok('brand-end'),aqua:tok('accent-default'),cheap:tok('cost-low'),mid:tok('cost-mid'),exp:tok('cost-high'),dim:'#6B73A0'};
+  var C={cyan:tok('accent-strong'),violet:tok('brand-mid'),magenta:tok('brand-end'),aqua:tok('accent-default'),cheap:tok('cost-low'),mid:tok('cost-mid'),exp:tok('cost-high'),dim:tok('text-subtle'),ink:tok('text-default'),muted:tok('text-muted'),edge:tok('border-strong')};
 
   // ── graph model ──────────────────────────────────────────────────────────
   var seed=20260726; function rnd(){seed=(seed*1664525+1013904223)>>>0;return seed/4294967296;}
@@ -1256,7 +1086,7 @@ function svg(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attr
     // crystalline head detail: assembles point by point, one vertex snapping in after another
     var prevP=nodes[relays[relays.length-1]].p;
     var T=vnorm(vsub(B,prevP)); var U=vnorm(vcross(T,[0,1,0])); if(Math.hypot(U[0],U[1],U[2])<0.2)U=[1,0,0]; var V=vnorm(vcross(U,T));
-    var hb=headBorn+90, hCol=mixHex(h.col,'#ffffff',0.32), STAG=95;
+    var hb=headBorn+90, hCol=mixHex(h.col,C.ink,0.32), STAG=95;
     var hL=N(pt(B,[[0.16,V],[0.05,T]]),hCol,1.4,'horn',null,null,hb+STAG*0);
     var hR=N(pt(B,[[-0.16,V],[0.05,T]]),hCol,1.4,'horn',null,null,hb+STAG*1);
     var sn=N(pt(B,[[0.24,T],[-0.02,V]]),hCol,1.2,'horn',null,null,hb+STAG*2);
@@ -1335,18 +1165,18 @@ function svg(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attr
     bands.forEach(function(b,i){var y=y0+i*22,on=i===lit;
       x.globalAlpha=a*(on?1:0.32);x.fillStyle=b.c;
       x.beginPath();if(x.roundRect)x.roundRect(x0,y,42,13,4);else x.rect(x0,y,42,13);x.fill();
-      x.globalAlpha=a*(on?0.95:0.55);x.fillStyle=on?'#EAFBFF':hexA('#9AA0C4',0.8);
-      x.font='9px "JetBrains Mono",monospace';x.textAlign='left';x.textBaseline='middle';
+      x.globalAlpha=a*(on?0.95:0.55);x.fillStyle=on?C.ink:hexA(C.muted,0.8);
+      x.font='12px "JetBrains Mono",monospace';x.textAlign='left';x.textBaseline='middle';
       x.fillText(b.lbl,x0+50,y+7);});
     x.globalAlpha=1;
   }
   function featTrust(cn,cR,a){
     var R=cR*4.4,conf=lastConf;
-    x.globalAlpha=a;x.strokeStyle=hexA('#3a3f6a',0.55);x.lineWidth=3;
+    x.globalAlpha=a;x.strokeStyle=hexA(C.edge,0.55);x.lineWidth=3;
     x.beginPath();x.arc(cn.sx,cn.sy,R,-1.5708,4.712);x.stroke();
     x.strokeStyle=hexA(C.aqua,0.95);x.lineWidth=3.4;
     x.beginPath();x.arc(cn.sx,cn.sy,R,-1.5708,-1.5708+6.2832*conf);x.stroke();
-    x.fillStyle='#EAFBFF';x.font='13px "JetBrains Mono",monospace';x.textAlign='center';x.textBaseline='middle';
+    x.fillStyle=C.ink;x.font='13px "JetBrains Mono",monospace';x.textAlign='center';x.textBaseline='middle';
     x.fillText((conf*100).toFixed(0)+'%',cn.sx,cn.sy-R-16);
     x.globalAlpha=1;x.textAlign='left';
   }
@@ -1360,7 +1190,7 @@ function svg(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attr
         var rr=cR*1.5+travelT*cR*3.6;
         var px=cn.sx+Math.cos(ang)*rr,py=cn.sy+Math.sin(ang)*rr*0.55;
         x.globalAlpha=a*Math.min(1,travelT*3);
-        x.fillStyle='#EAFBFF';
+        x.fillStyle=C.ink;
         x.beginPath();x.arc(px,py,3.2+holdT*1.6,0,6.2832);x.fill();
         if(holdT>0){
           x.globalAlpha=a*(1-holdT)*0.85;x.strokeStyle=hexA(C.aqua,0.9);x.lineWidth=1.6;
@@ -1377,7 +1207,7 @@ function svg(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attr
   }
   function featGovernor(cn,cR,a){
     var pct=govPct/100,col=govPct<50?C.cheap:govPct<75?C.mid:C.exp,R=cR*3.9;
-    x.globalAlpha=a;x.strokeStyle=hexA('#3a3f6a',0.55);x.lineWidth=4;
+    x.globalAlpha=a;x.strokeStyle=hexA(C.edge,0.55);x.lineWidth=4;
     x.beginPath();x.arc(cn.sx,cn.sy,R,2.356,7.925);x.stroke();
     x.strokeStyle=hexA(col,0.95);x.lineWidth=4.4;
     x.beginPath();x.arc(cn.sx,cn.sy,R,2.356,2.356+4.712*pct);x.stroke();
@@ -1389,7 +1219,7 @@ function svg(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attr
     var R=cR*3.2;
     x.globalAlpha=a;x.strokeStyle=hexA(C.cheap,0.85);x.lineWidth=2.2;
     x.beginPath();x.arc(cn.sx,cn.sy,R,0,6.2832);x.stroke();
-    x.fillStyle=hexA(C.cheap,0.95);x.font='10px "JetBrains Mono",monospace';x.textAlign='center';x.textBaseline='middle';
+    x.fillStyle=hexA(C.cheap,0.95);x.font='12px "JetBrains Mono",monospace';x.textAlign='center';x.textBaseline='middle';
     x.fillText('LOCAL-ONLY ✓',cn.sx,cn.sy+R+16);
     x.globalAlpha=1;x.textAlign='left';
   }
@@ -1531,7 +1361,7 @@ function svg(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attr
       if(idx2===CORTEX)R*=1+0.09*Math.sin(elapsed*0.0022);
       R=qR(R);
       // molten white-hot flash on arrival, cooling into the true color as it settles
-      var flashT=Math.min(1,grow*1.6); var fc=flashT<1?mixHex('#ffffff',n3.color,flashT):n3.color;
+      var flashT=Math.min(1,grow*1.6); var fc=flashT<1?mixHex(C.ink,n3.color,flashT):n3.color;
       var sp2=glow(fc,R*1.1);x.globalAlpha=Math.min(1,dep2)*alphaMul;x.drawImage(sp2,n3.sx-R*2.2,n3.sy-R*2.2,R*4.4,R*4.4);
       // crisp core
       var rgb=hx(fc),r0=rgb[0],g0=rgb[1],b0=rgb[2];
@@ -1569,7 +1399,7 @@ function svg(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attr
     // active-head reticle + callouts (only once the head has fully arrived)
     // the active head gets the full readout; everyone else gets a compact name-only tag so
     // the fleet stays legible once there are ten of them on screen at once
-    x.font='11px "JetBrains Mono",monospace';x.textBaseline='middle';
+    x.font='12px "JetBrains Mono",monospace';x.textBaseline='middle';
     if(fleetFade>0.05)HEADS.forEach(function(h,hi){var n4=nodes[h.headIdx];if(n4.age<REVEAL)return;var active=hi===activeHead;
       var ndep=Math.max(0.25,Math.min(1.3,(CAM+1.6)/(n4.depth+1.2))); var nR=n4.r*ndep;
       var align,lx2,ly2;
@@ -1586,20 +1416,20 @@ function svg(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attr
         else{var sgn=align==='left'?1:-1;x.moveTo(n4.sx+sgn*nR*1.6,n4.sy);x.lineTo(lx2-sgn*5,ly2);}
         x.stroke();
         var stat=(h.local?'LOCAL':h.cost+'/1k')+' · '+h.lat+'ms';
-        x.fillStyle='#EAFBFF';x.fillText(h.name.toUpperCase(),lx2,ly2-7);
-        x.fillStyle=hexA('#9AA0C4',0.9);x.fillText(stat,lx2,ly2+8);
+        x.fillStyle=C.ink;x.fillText(h.name.toUpperCase(),lx2,ly2-7);
+        x.fillStyle=hexA(C.muted,0.9);x.fillText(stat,lx2,ly2+8);
       } else {
         var tx=align==='left'?n4.sx+nR*1.5+6:align==='right'?n4.sx-nR*1.5-6:n4.sx;
         var ty=align==='center'?n4.sy-nR*1.5-8:n4.sy;
-        x.fillStyle=hexA(n4.color,0.65);x.font='9.5px "JetBrains Mono",monospace';
-        x.fillText(h.name.toUpperCase(),tx,ty);x.font='11px "JetBrains Mono",monospace';
+        x.fillStyle=hexA(n4.color,0.65);x.font='12px "JetBrains Mono",monospace';
+        x.fillText(h.name.toUpperCase(),tx,ty);x.font='12px "JetBrains Mono",monospace';
       }
     });
     // cortex label
     if(nodes[CORTEX].age>=0){var n5=nodes[CORTEX];var ndep2=Math.max(0.25,Math.min(1.3,(CAM+1.6)/(n5.depth+1.2)));var nR2=n5.r*ndep2;
      x.textAlign='left';x.fillStyle=hexA(C.aqua,0.95);x.font='12px "JetBrains Mono",monospace';
      x.fillText('ROUTER',n5.sx+nR2*2.4+8,n5.sy+2);
-     x.fillStyle=hexA('#9AA0C4',0.8);x.font='10px "JetBrains Mono",monospace';x.fillText('checks · SPRT',n5.sx+nR2*2.4+8,n5.sy+16);}
+     x.fillStyle=hexA(C.muted,0.8);x.font='12px "JetBrains Mono",monospace';x.fillText('checks · SPRT',n5.sx+nR2*2.4+8,n5.sy+16);}
     x.textAlign='left';
   }
   function hexA(h,a){var rgb=hx(h);return'rgba('+rgb[0]+','+rgb[1]+','+rgb[2]+','+a+')';}
@@ -1625,11 +1455,11 @@ function svg(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attr
   var ctx=cv.getContext('2d'), W=0,H=0,DPR=1, padX=64, padY=54;
   var tip=$('#gtip'),tipNm=$('#gtipNm'),tipCat=$('#gtipCat'),tipTg=$('#gtipTg');
   var CATS={
-    gateway:{col:[127,168,255],label:'Cloud gateway'},
-    eval:{col:[139,92,246],label:'Eval / observability'},
-    local:{col:[232,82,200],label:'Local runtime'},
-    frontier:{col:[110,116,150],label:'Hosted model'},
-    hyctl:{col:[0,230,195],label:'Verified cascade gateway'}
+    gateway:{col:Hydra.rgb('chart-series-1'),label:'Cloud gateway'},
+    eval:{col:Hydra.rgb('brand-mid'),label:'Eval / observability'},
+    local:{col:Hydra.rgb('brand-end'),label:'Local runtime'},
+    frontier:{col:Hydra.rgb('text-subtle'),label:'Hosted model'},
+    hyctl:{col:Hydra.rgb('accent-default'),label:'Verified cascade gateway'}
   };
   /* x: -1 hosted … +1 local-first ; y: -1 cost/latency … +1 checked answers */
   var STARS=[
@@ -1690,8 +1520,7 @@ function svg(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attr
   var mouse={x:-999,y:-999,on:false};
   cv.addEventListener('pointermove',function(e){var r=cv.getBoundingClientRect();mouse.x=e.clientX-r.left;mouse.y=e.clientY-r.top;mouse.on=true;});
   cv.addEventListener('pointerleave',function(){mouse.on=false;mouse.x=-999;mouse.y=-999;});
-  var t=0,running=true,hovered=null;
-  onVisible(cv.parentNode,function(vis){running=vis;});
+  var t=0,hovered=null;
   /* clamp a drifting coordinate so it can never cross out of its home quadrant.
      Corner clusters (|base|>0.06) are pinned to their side; central frontier
      destinations (near an axis) may wander a hair, that carries no quadrant meaning. */
@@ -1721,13 +1550,13 @@ function svg(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attr
     updatePositions();
     ctx.clearRect(0,0,W,H);
     // faint quadrant axes
-    ctx.strokeStyle='rgba(150,140,255,.12)';ctx.lineWidth=1;ctx.lineCap='butt';
+    ctx.strokeStyle=Hydra.rgba('accent-secondary',.12);ctx.lineWidth=1;ctx.lineCap='butt';
     ctx.beginPath();ctx.moveTo(mapX(0),padY-14);ctx.lineTo(mapX(0),H-padY+14);ctx.stroke();
     ctx.beginPath();ctx.moveTo(padX-14,mapY(0));ctx.lineTo(W-padX+14,mapY(0));ctx.stroke();
     // highlight the empty (top-right) quadrant with a soft aqua wash
     var hx=mapX(0),hy=mapY(0);
     var qg=ctx.createRadialGradient(mapX(0.6),mapY(0.6),0,mapX(0.6),mapY(0.6),Math.max(W,H)*0.42);
-    qg.addColorStop(0,'rgba(0,230,195,.10)');qg.addColorStop(1,'rgba(0,230,195,0)');
+    qg.addColorStop(0,Hydra.rgba('accent-default',.10));qg.addColorStop(1,Hydra.rgba('accent-default',0));
     ctx.fillStyle=qg;ctx.fillRect(hx,padY-14,W-padX-hx+14,hy-padY+14);
     // per-cluster proximity heat (0..1, eased), drives constellation + glow brightening
     for(var ci=0;ci<LINKCATS.length;ci++){
@@ -1768,10 +1597,10 @@ function svg(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attr
         // pulsing halo, the clear focal point
         var hr=(reduce?34:34+Math.sin(t*1.4)*6);
         var hg=ctx.createRadialGradient(s.px,s.py,0,s.px,s.py,hr);
-        hg.addColorStop(0,'rgba(0,230,195,.35)');hg.addColorStop(0.5,'rgba(0,230,195,.12)');hg.addColorStop(1,'rgba(0,230,195,0)');
+        hg.addColorStop(0,Hydra.rgba('accent-default',.35));hg.addColorStop(0.5,Hydra.rgba('accent-default',.12));hg.addColorStop(1,Hydra.rgba('accent-default',0));
         ctx.fillStyle=hg;ctx.beginPath();ctx.arc(s.px,s.py,hr,0,6.283);ctx.fill();
         // ring
-        ctx.strokeStyle='rgba(0,230,195,'+(0.5+0.3*Math.sin(t*1.4))+')';ctx.lineWidth=1.4;
+        ctx.strokeStyle=Hydra.rgba('accent-default',0.5+0.3*Math.sin(t*1.4));ctx.lineWidth=1.4;
         ctx.beginPath();ctx.arc(s.px,s.py,16,0,6.283);ctx.stroke();
       }
       var g2=ctx.createRadialGradient(s.px,s.py,0,s.px,s.py,rad*5);
@@ -1779,10 +1608,10 @@ function svg(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attr
       g2.addColorStop(0.4,'rgba('+col[0]+','+col[1]+','+col[2]+','+(0.35*tw)+')');
       g2.addColorStop(1,'rgba('+col[0]+','+col[1]+','+col[2]+',0)');
       ctx.fillStyle=g2;ctx.beginPath();ctx.arc(s.px,s.py,rad*5,0,6.283);ctx.fill();
-      ctx.fillStyle='rgba(255,255,255,'+(s.c==='frontier'?0.6:0.95)+')';ctx.beginPath();ctx.arc(s.px,s.py,Math.max(1,rad*0.62),0,6.283);ctx.fill();
+      ctx.fillStyle=Hydra.rgba('text-default',s.c==='frontier'?0.6:0.95);ctx.beginPath();ctx.arc(s.px,s.py,Math.max(1,rad*0.62),0,6.283);ctx.fill();
       // permanent hyctl label, drawn last, tracks its (barely-moving) star so it stays readable
       if(s.hydra){
-        ctx.font='700 14px ui-monospace,Menlo,monospace';ctx.fillStyle='rgba(0,230,195,.95)';ctx.textAlign='left';
+        ctx.font='700 14px ui-monospace,Menlo,monospace';ctx.fillStyle=Hydra.rgba('accent-default',.95);ctx.textAlign='left';
         ctx.fillText('HYDRA',s.px+22,s.py+5);
       }
     }
@@ -1795,8 +1624,7 @@ function svg(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attr
     t+=0.016;
   }
   resize();
-  if(reduce){draw();}
-  else{(function loop(){if(running)draw();requestAnimationFrame(loop);})();}
+  Hydra.loop(cv,draw);
 })();
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -1855,9 +1683,9 @@ function svg(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attr
     var g=svg('g',{class:'pg-node'+(n.hub?' hub':' dep')});
     g.setAttribute('data-id',n.id);
     var r=n.hub?11:5.5;
-    var fill=n.hub?(n.id==='token'?'#FF5A6E':'#3FD98A'):'rgba(150,140,255,.5)';
+    var fill=n.hub?Hydra.color(n.id==='token'?'status-danger':'status-success'):Hydra.rgba('accent-secondary',.5);
     var c=svg('circle',{cx:n.x,cy:n.y,r:r,fill:fill});
-    if(n.hub&&n.id==='token'&&!reduce)c.setAttribute('filter','drop-shadow(0 0 5px rgba(255,90,110,.7))');
+    if(n.hub&&n.id==='token'&&!reduce)c.setAttribute('filter','drop-shadow(0 0 5px '+Hydra.rgba('status-danger',.7)+')');
     g.appendChild(c);
     if(n.label){var tx=svg('text',{x:n.x,y:n.y-15,'text-anchor':'middle'});tx.textContent=n.label;g.appendChild(tx);}
     gN.appendChild(g);
@@ -1886,7 +1714,7 @@ function svg(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attr
     var t2=svg('tspan',{class:'k'});t2.textContent='κ='+n.k;
     var t3=svg('tspan',{});t3.textContent=' · '+n.deps+' dependents · bar → '+bar;
     ro.appendChild(t1);ro.appendChild(t2);ro.appendChild(t3);
-    ro.setAttribute('fill', n.id==='token'?'#E7E9F5':'#9aa0c4');
+    ro.setAttribute('fill', Hydra.color(n.id==='token'?'text-default':'text-muted'));
   }
   function clearHi(){
     $all('.pg-node',gN).forEach(function(g){g.classList.remove('hot');});
@@ -1929,28 +1757,6 @@ function svg(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attr
   // reveal sections
   $all('.reveal').forEach(function(el){
     onVisible(el,function(vis,io){if(vis){el.classList.add('in');if(io)io.disconnect();}},{threshold:0.12});
-  });
-  // nav scrolled state
-  var top=$('#topbar');
-  function onScroll(){if(top)top.classList.toggle('scrolled',window.scrollY>12);}
-  addEventListener('scroll',onScroll,{passive:true});onScroll();
-  // copy buttons
-  function copy(text,cb){
-    if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(text).then(cb,cb);}
-    else{try{var ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.opacity=0;
-      document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);}catch(e){}cb();}
-  }
-  $all('[data-copy]').forEach(function(el){
-    el.addEventListener('click',function(){
-      copy(el.getAttribute('data-copy'),function(){
-        el.classList.add('copied');
-        var cp=el.querySelector('.cp');var prev=cp?cp.textContent:'';
-        if(cp)cp.textContent='✓ copied';
-        setTimeout(function(){el.classList.remove('copied');if(cp)cp.textContent=prev;},1400);
-      });
-    });
-    if(el.tagName!=='BUTTON'){el.setAttribute('role','button');el.setAttribute('tabindex','0');
-      el.addEventListener('keydown',function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();el.click();}});}
   });
 })();
 

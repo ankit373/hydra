@@ -28,81 +28,56 @@
   </script>
 
 <link rel="stylesheet" href="../assets/tokens.css">
-<link rel="stylesheet" href="../assets/page-aliases.css">
+<link rel="stylesheet" href="../assets/site.css">
+<script src="../assets/site.js"></script>
 <style>
-:root{
-  color-scheme:dark;
-  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,Roboto,Helvetica,Arial,sans-serif;
-  --mono:"JetBrains Mono",ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
-  --maxw:900px;
-}
-@font-face{font-family:"Space Grotesk";font-style:normal;font-weight:400 700;font-display:swap;
-  src:url("/fonts/SpaceGrotesk.woff2") format("woff2");}
-@font-face{font-family:"JetBrains Mono";font-style:normal;font-weight:400 700;font-display:swap;
-  src:url("/fonts/JetBrainsMono.woff2") format("woff2");}
-*{box-sizing:border-box;}
-body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.6;
-  overflow-x:hidden;-webkit-font-smoothing:antialiased;}
-.wrap{max-width:var(--maxw);margin:0 auto;padding:0 24px;}
-h1,h2{margin:0;text-wrap:balance;font-family:"Space Grotesk",var(--sans);}
-a{color:inherit;text-decoration:none;}
-::selection{background:rgba(0,230,195,.28);color:#fff;}
-.mono{font-family:var(--mono);}
-.grad{background:linear-gradient(96deg,var(--cyan) 4%,#7FA8FF 40%,var(--hy-color-brand-mid) 66%,var(--magenta) 98%);
-  -webkit-background-clip:text;background-clip:text;color:transparent;}
+.wrap{max-width:900px;}
+h1,h2{font-family:var(--site-display);}
 
-.topbar{position:sticky;top:0;z-index:60;display:flex;align-items:center;gap:14px;height:52px;padding:0 24px;
-  font-family:var(--mono);font-size:12.5px;background:rgba(6,7,15,.7);backdrop-filter:blur(14px);
-  border-bottom:1px solid var(--line);}
-.topbar .mark{font-weight:800;letter-spacing:1.5px;font-size:15px;
-  background:linear-gradient(90deg,var(--cyan),var(--hy-color-brand-mid) 55%,var(--magenta));
-  -webkit-background-clip:text;background-clip:text;color:transparent;}
-.topbar .pill{font-size:10.5px;color:var(--faint);border:1px solid var(--line);border-radius:20px;padding:2px 9px;}
-.topbar .grow{flex:1;}
-.topbar .ghost{border:1px solid var(--line-2);border-radius:6px;padding:5px 12px;color:var(--ink);transition:.15s;}
-.topbar .ghost:hover{border-color:var(--aqua);color:var(--aqua);}
 
-.hero{padding-top:64px;padding-bottom:20px;}
-.eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--aqua);margin-bottom:16px;}
-.hero h1{font-size:clamp(32px,5.6vw,52px);line-height:1.06;letter-spacing:-.5px;font-weight:750;}
-.hero p{font-size:17px;color:var(--dim);max-width:600px;margin:18px 0 0;}
+.hero{padding-top:var(--hy-space-16);padding-bottom:var(--hy-space-4);}
+.eyebrow{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);letter-spacing:3px;text-transform:uppercase;color:var(--hy-color-accent-default);margin-bottom:var(--hy-space-4);}
+.hero h1{font-size:clamp(var(--hy-font-size-2xl),5.6vw,52px);line-height:1.06;letter-spacing:-.5px;font-weight:750;}
+.hero p{font-size:var(--hy-font-size-base);color:var(--hy-color-text-muted);max-width:600px;margin:var(--hy-space-4) 0 0;}
 
-.postlist{padding-top:36px;padding-bottom:80px;}
-.post{display:block;padding:28px 0;border-top:1px solid var(--line);transition:.15s;}
+.postlist{padding-top:var(--hy-space-8);padding-bottom:var(--hy-space-16);}
+.post{display:block;padding:var(--hy-space-6) 0;border-top:1px solid var(--hy-color-border-subtle);transition:color var(--hy-motion-duration-fast),background-color var(--hy-motion-duration-fast),border-color var(--hy-motion-duration-fast),opacity var(--hy-motion-duration-fast),transform var(--hy-motion-duration-fast);}
 .post:first-child{border-top:none;}
-.post:hover .title{color:var(--aqua);}
-.post .meta{font-family:var(--mono);font-size:11.5px;color:var(--faint);margin-bottom:10px;display:flex;flex-wrap:wrap;gap:4px 12px;}
+.post:hover .title{color:var(--hy-color-accent-default);}
+.post .meta{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);color:var(--hy-color-text-subtle);margin-bottom:var(--hy-space-2);display:flex;flex-wrap:wrap;gap:var(--hy-space-1) var(--hy-space-3);}
 .post .meta span{white-space:nowrap;}
-.post .title{font-size:clamp(20px,2.6vw,26px);font-weight:700;letter-spacing:-.2px;transition:color .15s;}
-.post .dek{color:var(--dim);font-size:15px;margin-top:10px;max-width:620px;}
-.post .read{margin-top:14px;font-family:var(--mono);font-size:12.5px;color:var(--aqua);display:flex;align-items:center;gap:6px;}
+.post .title{font-size:clamp(var(--hy-font-size-lg),2.6vw,var(--hy-font-size-2xl));font-weight:700;letter-spacing:-.2px;transition:color var(--hy-motion-duration-fast);}
+.post .dek{color:var(--hy-color-text-muted);font-size:var(--hy-font-size-base);margin-top:var(--hy-space-2);max-width:620px;}
+.post .read{margin-top:var(--hy-space-3);font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-sm);color:var(--hy-color-accent-default);display:flex;align-items:center;gap:var(--hy-space-1);}
 
-footer{border-top:1px solid var(--line);margin-top:20px;padding:44px 0 56px;}
-.foot{display:flex;flex-wrap:wrap;gap:24px;align-items:center;justify-content:space-between;max-width:var(--maxw);margin:0 auto;padding:0 24px;}
-.foot .mark{font-weight:800;font-size:20px;letter-spacing:1.5px;
-  background:linear-gradient(90deg,var(--cyan),var(--hy-color-brand-mid) 55%,var(--magenta));
-  -webkit-background-clip:text;background-clip:text;color:transparent;}
-.foot p{color:var(--faint);font-size:13px;margin:6px 0 0;}
-.foot nav{display:flex;flex-wrap:wrap;gap:20px;font-family:var(--mono);font-size:12.5px;}
-.foot nav a{color:var(--dim);}.foot nav a:hover{color:var(--aqua);}
 </style>
 </head>
 <body>
 
-<div class="topbar">
-  <a class="mark" href="/">HYDRA</a>
-  <span class="pill">blog</span>
-  <span class="grow"></span>
-  <a class="ghost" href="/">← home</a>
-</div>
+<a class="skip-link" href="#main">Skip to content</a>
+<header class="site-header" id="topbar">
+  <a class="site-logo" href="/" aria-label="Hydra home">HYDRA</a>
+  <span class="site-tag">blog</span>
+  <nav class="site-nav" id="site-nav" aria-label="Main">
+    <a href="/#start">Get started</a>
+    <a href="/docs.html">Docs</a>
+    <a href="/pricing.html">Pricing</a>
+    <a href="/first-principles.html">First principles</a>
+    <a href="/blog/" aria-current="page">Blog</a>
+    <a href="https://github.com/ankit373/hydra">GitHub</a>
+  </nav>
+  <a class="btn btn-primary header-cta" href="/app.html">Desktop app</a>
+  <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav"><span class="nav-toggle-bars" aria-hidden="true"></span>Menu</button>
+</header>
 
-<header class="hero wrap">
+<main id="main">
+<div class="hero wrap">
   <div class="eyebrow">research notes</div>
   <h1>Field notes from<br><span class="grad">building Hydra.</span></h1>
   <p>Where AI is actually heading, checked against real papers and our own roadmap, sources and math shown, not just conclusions.</p>
-</header>
+</div>
 
-<main class="wrap postlist">
+<div class="wrap postlist">
   <a class="post" href="/blog/a-test-that-cannot-fail.html">
     <div class="meta"><span>Sep 18, 2026</span><span>·</span><span>7 min</span><span>·</span><span>five real examples</span></div>
     <div class="title">A Test That Passes Under the Bug It Exists to Catch</div>
@@ -121,18 +96,22 @@ footer{border-top:1px solid var(--line);margin-top:20px;padding:44px 0 56px;}
     <p class="dek">A blind read of the AI research frontier, the papers, the arguments, the money, with the actual math shown. Checked against Hydra's own roadmap only at the very end.</p>
     <div class="read">Read the post →</div>
   </a>
+</div>
 </main>
 
-<footer>
-  <div class="foot">
+<footer class="site-footer">
+  <div class="wrap">
     <div>
-      <a class="mark" href="/">HYDRA</a>
-      <p>Hydra picks the model best suited to each task, and can check the answer before you rely on it.</p>
+      <a class="site-logo" href="/" aria-label="Hydra home">HYDRA</a>
+      <p>Hydra picks the model best suited to each task, and can check the answer before you rely on it. Free and open source, MIT licensed.</p>
     </div>
-    <nav>
+    <nav aria-label="Footer">
       <a href="/">Home</a>
       <a href="/docs.html">Docs</a>
+      <a href="/app.html">Desktop app</a>
+      <a href="/pricing.html">Pricing</a>
       <a href="/first-principles.html">First principles</a>
+      <a href="/blog/">Blog</a>
       <a href="https://github.com/ankit373/hydra">GitHub</a>
       <a href="/llms.txt">llms.txt</a>
     </nav>

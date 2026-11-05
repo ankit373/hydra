@@ -40,173 +40,111 @@
   </script>
 
 <link rel="stylesheet" href="assets/tokens.css">
-<link rel="stylesheet" href="assets/page-aliases.css">
+<link rel="stylesheet" href="assets/site.css">
+<script src="assets/site.js"></script>
 <style>
-:root{
-  color-scheme:dark;
-  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,Roboto,Helvetica,Arial,sans-serif;
-  --mono:ui-monospace,"JetBrains Mono","SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
-  --math:"Cambria Math","Latin Modern Math","STIX Two Math",Georgia,"Times New Roman",serif;
-  --maxw:1080px;
-}
-*{box-sizing:border-box;}
-html{scroll-behavior:smooth;
-  /* Prose and chrome are not selectable; code and commands are, see below. */
-  user-select:none;-webkit-user-select:none;}
-
-/* Code and command examples stay selectable. docs.html carries 53 of them and
-   no copy button, so blocking selection there leaves no way to take a command
-   off the page. user-select inherits, so descendants follow. */
-pre,code{user-select:text;-webkit-user-select:text;}
-
-/* Except where a click already copies: dragging across one of those is the
-   accident the site-wide rule exists to prevent. Attribute specificity beats
-   the element selectors above. */
-[data-copy]{user-select:none;-webkit-user-select:none;}
-@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto;}}
-body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.6;
-  overflow-x:hidden;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;}
-.wrap{max-width:var(--maxw);margin:0 auto;padding:0 24px;}
-h1,h2,h3{margin:0;text-wrap:balance;}
-a{color:inherit;text-decoration:none;}
-::selection{background:rgba(0,230,195,.28);color:#fff;}
-:focus-visible{outline:2px solid var(--aqua);outline-offset:3px;border-radius:4px;}
-.mono{font-family:var(--mono);}
-.tnum{font-variant-numeric:tabular-nums;}
-.grad{background:linear-gradient(96deg,var(--cyan) 4%,#7FA8FF 40%,var(--hy-color-brand-mid) 66%,var(--magenta) 98%);
-  -webkit-background-clip:text;background-clip:text;color:transparent;}
-.accent{color:var(--aqua);}.cy{color:var(--cyan);}.vi{color:var(--violet);}.mg{color:var(--magenta);}
-.cheap{color:var(--cheap);}.mid{color:var(--mid);}.exp{color:var(--exp);}
-
-/* ── top nav ─────────────────────────────────────────────────────────────── */
-.topbar{position:sticky;top:0;z-index:60;display:flex;align-items:center;gap:14px;height:52px;padding:0 24px;
-  font-family:var(--mono);font-size:12.5px;background:rgba(6,7,15,.7);backdrop-filter:blur(14px);
-  border-bottom:1px solid var(--line);}
-.topbar .mark{font-weight:800;letter-spacing:1.5px;font-size:15px;
-  background:linear-gradient(90deg,var(--cyan),var(--hy-color-brand-mid) 55%,var(--magenta));
-  -webkit-background-clip:text;background-clip:text;color:transparent;
-  filter:drop-shadow(0 0 10px rgba(120,90,255,.4));}
-.topbar .pill{font-size:10.5px;color:var(--faint);border:1px solid var(--line);border-radius:20px;padding:2px 9px;}
-.topbar .grow{flex:1;}
-.topbar nav{display:flex;gap:20px;}
-.topbar nav a{color:var(--dim);transition:color .15s;}
-.topbar nav a:hover{color:var(--aqua);}
-.topbar .ghost{border:1px solid var(--line-2);border-radius:6px;padding:5px 12px;color:var(--ink);transition:.15s;}
-.topbar .ghost:hover{border-color:var(--aqua);color:var(--aqua);}
-@media(max-width:820px){.topbar nav{display:none;}}
 
 /* ── hero ────────────────────────────────────────────────────────────────── */
-.hero{position:relative;padding-top:74px;padding-bottom:40px;text-align:center;overflow:hidden;}
+.hero{position:relative;padding-top:var(--hy-space-16);padding-bottom:var(--hy-space-8);text-align:center;overflow:hidden;}
 .hero::before{content:"";position:absolute;inset:-40% 0 auto;height:520px;z-index:0;
-  background:radial-gradient(60% 60% at 50% 0%,rgba(139,92,246,.20),transparent 70%),
-             radial-gradient(50% 50% at 78% 12%,rgba(232,82,200,.14),transparent 70%),
-             radial-gradient(46% 46% at 22% 16%,rgba(42,240,224,.13),transparent 70%);
+  background:radial-gradient(60% 60% at 50% 0%,color-mix(in srgb,var(--hy-color-brand-mid) 20%,transparent),transparent 70%),
+             radial-gradient(50% 50% at 78% 12%,color-mix(in srgb,var(--hy-color-brand-end) 14%,transparent),transparent 70%),
+             radial-gradient(46% 46% at 22% 16%,color-mix(in srgb,var(--hy-color-accent-strong) 13%,transparent),transparent 70%);
   filter:blur(6px);pointer-events:none;}
 .hero>*{position:relative;z-index:1;}
-.eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:3.5px;text-transform:uppercase;color:var(--aqua);
-  margin-bottom:16px;}
-.hero h1{font-size:clamp(38px,7vw,76px);line-height:1.02;letter-spacing:-1.5px;font-weight:800;}
-.hero .sub{font-size:clamp(15px,2vw,19px);color:var(--dim);max-width:60ch;margin:20px auto 0;}
-.hero .sub b{color:var(--ink);font-weight:600;}
+.eyebrow{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);letter-spacing:3.5px;text-transform:uppercase;color:var(--hy-color-accent-default);
+  margin-bottom:var(--hy-space-4);}
+.hero h1{font-size:clamp(var(--hy-font-size-3xl),7vw,76px);line-height:1.02;letter-spacing:-1.5px;font-weight:800;}
+.hero .sub{font-size:clamp(var(--hy-font-size-base),2vw,var(--hy-font-size-lg));color:var(--hy-color-text-muted);max-width:60ch;margin:var(--hy-space-4) auto 0;}
+.hero .sub b{color:var(--hy-color-text-default);font-weight:600;}
 
 /* honesty legend */
-.legend{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin:30px auto 0;max-width:760px;}
-.tag{font-family:var(--mono);font-size:11.5px;letter-spacing:.3px;padding:6px 12px;border-radius:20px;
-  border:1px solid var(--line);background:rgba(20,22,44,.5);display:inline-flex;gap:7px;align-items:center;}
+.legend{display:flex;flex-wrap:wrap;gap:var(--hy-space-2);justify-content:center;margin:var(--hy-space-8) auto 0;max-width:760px;}
+.tag{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);letter-spacing:.3px;padding:var(--hy-space-1) var(--hy-space-3);border-radius:20px;
+  border:1px solid var(--hy-color-border-subtle);background:color-mix(in srgb,var(--hy-color-surface-overlay) 50%,transparent);display:inline-flex;gap:var(--hy-space-2);align-items:center;}
 .tag .g{font-weight:700;}
-.tag.proven .g{color:var(--cyan);}.tag.measured .g{color:var(--cheap);}
-.tag.synthetic .g{color:var(--violet);}.tag.modeled .g{color:var(--mid);}
+.tag.proven .g{color:var(--hy-color-accent-strong);}.tag.measured .g{color:var(--hy-color-cost-low);}
+.tag.synthetic .g{color:var(--hy-color-accent-secondary);}.tag.modeled .g{color:var(--hy-color-cost-mid);}
 
 /* ── pillar section ──────────────────────────────────────────────────────── */
-.pillar{padding:56px 0;border-top:1px solid var(--line);}
-.pillar .head{display:flex;align-items:baseline;gap:16px;margin-bottom:8px;}
-.pillar .idx{font-family:var(--mono);font-size:13px;color:var(--faint);letter-spacing:2px;}
-.pillar h2{font-size:clamp(22px,3.4vw,34px);letter-spacing:-.5px;font-weight:750;}
-.pillar .kicker{font-family:var(--mono);font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--aqua);
-  margin-bottom:20px;}
-.pillar p.lede{color:var(--dim);font-size:15.5px;max-width:70ch;margin:0 0 22px;}
-.pillar p.lede b{color:var(--ink);font-weight:600;}
-.analogy{font-style:italic;color:var(--faint);font-size:14.5px;margin:18px 0 0;padding-left:14px;
-  border-left:2px solid var(--line-2);}
+.pillar{padding:var(--hy-space-12) 0;border-top:1px solid var(--hy-color-border-subtle);}
+.pillar .head{display:flex;align-items:baseline;gap:var(--hy-space-4);margin-bottom:var(--hy-space-2);}
+.pillar .idx{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-sm);color:var(--hy-color-text-subtle);letter-spacing:2px;}
+.pillar h2{font-size:clamp(var(--hy-font-size-xl),3.4vw,var(--hy-font-size-3xl));letter-spacing:-.5px;font-weight:750;}
+.pillar .kicker{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);letter-spacing:2px;text-transform:uppercase;color:var(--hy-color-accent-default);
+  margin-bottom:var(--hy-space-4);}
+.pillar p.lede{color:var(--hy-color-text-muted);font-size:var(--hy-font-size-base);max-width:70ch;margin:0 0 var(--hy-space-6);}
+.pillar p.lede b{color:var(--hy-color-text-default);font-weight:600;}
+.analogy{font-style:italic;color:var(--hy-color-text-subtle);font-size:var(--hy-font-size-md);margin:var(--hy-space-4) 0 0;padding-left:var(--hy-space-3);
+  border-left:2px solid var(--hy-color-border-default);}
 
 /* equation block */
-.eq{font-family:var(--math);font-size:clamp(19px,3vw,27px);color:var(--ink);text-align:center;
-  margin:8px 0 6px;padding:22px 18px;border:1px solid var(--line);border-radius:14px;
-  background:linear-gradient(180deg,rgba(20,22,44,.5),rgba(12,13,28,.5));
-  overflow-x:auto;filter:drop-shadow(0 0 22px rgba(120,90,255,.10));}
+.eq{font-family:var(--site-math);font-size:clamp(var(--hy-font-size-lg),3vw,var(--hy-font-size-2xl));color:var(--hy-color-text-default);text-align:center;
+  margin:var(--hy-space-2) 0 var(--hy-space-1);padding:var(--hy-space-6) var(--hy-space-4);border:1px solid var(--hy-color-border-subtle);border-radius:14px;
+  background:linear-gradient(180deg,color-mix(in srgb,var(--hy-color-surface-overlay) 50%,transparent),color-mix(in srgb,var(--hy-color-surface-card) 50%,transparent));
+  overflow-x:auto;filter:drop-shadow(0 0 22px color-mix(in srgb,var(--hy-color-brand-mid) 10%,transparent));}
 .eq i{font-style:italic;}
-.eq .op{color:var(--dim);font-family:var(--math);padding:0 .18em;}
-.eq .big{font-size:1.5em;line-height:.8;vertical-align:-.18em;color:var(--violet);}
+.eq .op{color:var(--hy-color-text-muted);font-family:var(--site-math);padding:0 .18em;}
+.eq .big{font-size:1.5em;line-height:.8;vertical-align:-.18em;color:var(--hy-color-accent-secondary);}
 .eq .frac{display:inline-flex;flex-direction:column;text-align:center;vertical-align:middle;margin:0 .14em;}
-.eq .frac .num{padding:0 .5em .06em;border-bottom:1.5px solid var(--line-2);}
+.eq .frac .num{padding:0 .5em .06em;border-bottom:1.5px solid var(--hy-color-border-default);}
 .eq .frac .den{padding:.06em .5em 0;}
 .eq .rt{border-top:1.5px solid currentColor;padding:.05em .3em 0;margin-left:-.05em;}
-.eq sub,.eq sup{font-size:.62em;}
-.eq .hl{color:var(--aqua);}.eq .cyv{color:var(--cyan);}.eq .mgv{color:var(--magenta);}
+.eq sub,.eq sup{font-size:max(.62em,var(--hy-font-size-xs));}
+.eq .hl{color:var(--hy-color-accent-default);}.eq .cyv{color:var(--hy-color-accent-strong);}.eq .mgv{color:var(--hy-color-brand-end);}
 
 /* interactive viz card */
-.viz{margin:24px 0 8px;border:1px solid var(--line);border-radius:16px;overflow:hidden;
-  background:rgba(10,12,24,.55);}
+.viz{margin:var(--hy-space-6) 0 var(--hy-space-2);border:1px solid var(--hy-color-border-subtle);border-radius:16px;overflow:hidden;
+  background:color-mix(in srgb,var(--hy-color-surface-raised) 55%,transparent);}
 .viz .canvas-wrap{position:relative;width:100%;}
 .viz canvas{display:block;width:100%;height:auto;}
-.viz .ctl{display:flex;flex-wrap:wrap;gap:18px 26px;align-items:center;padding:14px 18px;
-  border-top:1px solid var(--line);background:rgba(6,7,15,.5);font-family:var(--mono);font-size:12.5px;}
-.viz .ctl label{display:flex;flex-direction:column;gap:6px;color:var(--dim);min-width:150px;}
-.viz .ctl label .v{color:var(--aqua);font-weight:600;}
+.viz .ctl{display:flex;flex-wrap:wrap;gap:var(--hy-space-4) var(--hy-space-6);align-items:center;padding:var(--hy-space-3) var(--hy-space-4);
+  border-top:1px solid var(--hy-color-border-subtle);background:color-mix(in srgb,var(--hy-color-surface-base) 50%,transparent);font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-sm);}
+.viz .ctl label{display:flex;flex-direction:column;gap:var(--hy-space-1);color:var(--hy-color-text-muted);min-width:150px;}
+.viz .ctl label .v{color:var(--hy-color-accent-default);font-weight:600;}
 .viz .ctl input[type=range]{-webkit-appearance:none;appearance:none;height:4px;border-radius:4px;
-  background:linear-gradient(90deg,var(--cyan),var(--hy-color-brand-mid));outline:none;cursor:pointer;}
+  background:linear-gradient(90deg,var(--hy-color-accent-strong),var(--hy-color-brand-mid));cursor:pointer;}
 .viz .ctl input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:15px;height:15px;border-radius:50%;
-  background:var(--aqua);box-shadow:0 0 10px rgba(0,230,195,.7);cursor:pointer;}
+  background:var(--hy-color-accent-default);box-shadow:0 0 10px color-mix(in srgb,var(--hy-color-accent-default) 70%,transparent);cursor:pointer;}
 .viz .ctl input[type=range]::-moz-range-thumb{width:15px;height:15px;border:0;border-radius:50%;
-  background:var(--aqua);box-shadow:0 0 10px rgba(0,230,195,.7);cursor:pointer;}
-.viz .ctl button{font-family:var(--mono);font-size:12px;padding:8px 16px;border-radius:7px;cursor:pointer;
-  border:1px solid var(--line-2);color:var(--ink);background:rgba(20,22,44,.5);transition:.15s;}
-.viz .ctl button:hover{border-color:var(--aqua);color:var(--aqua);}
-.viz .readout{margin-left:auto;text-align:right;color:var(--faint);}
-.viz .readout b{color:var(--ink);font-size:15px;}
-figure.viz{margin:24px 0 8px;}
-.vizcap{font-family:var(--mono);font-size:11px;color:var(--faint);padding:9px 16px;border-top:1px solid var(--line);background:rgba(6,7,15,.4);}
+  background:var(--hy-color-accent-default);box-shadow:0 0 10px color-mix(in srgb,var(--hy-color-accent-default) 70%,transparent);cursor:pointer;}
+.viz .ctl button{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);padding:var(--hy-space-2) var(--hy-space-4);border-radius:7px;cursor:pointer;
+  border:1px solid var(--hy-color-border-default);color:var(--hy-color-text-default);background:color-mix(in srgb,var(--hy-color-surface-overlay) 50%,transparent);transition:color var(--hy-motion-duration-fast),background-color var(--hy-motion-duration-fast),border-color var(--hy-motion-duration-fast),opacity var(--hy-motion-duration-fast),transform var(--hy-motion-duration-fast);}
+.viz .ctl button:hover{border-color:var(--hy-color-accent-default);color:var(--hy-color-accent-default);}
+.viz .readout{margin-left:auto;text-align:right;color:var(--hy-color-text-subtle);}
+.viz .readout b{color:var(--hy-color-text-default);font-size:var(--hy-font-size-base);}
+figure.viz{margin:var(--hy-space-6) 0 var(--hy-space-2);}
+.vizcap{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);color:var(--hy-color-text-subtle);padding:var(--hy-space-2) var(--hy-space-4);border-top:1px solid var(--hy-color-border-subtle);background:color-mix(in srgb,var(--hy-color-surface-base) 40%,transparent);}
 
-.tags{display:flex;flex-wrap:wrap;gap:9px;margin-top:22px;}
-.src{display:flex;flex-wrap:wrap;gap:10px 22px;margin-top:14px;font-family:var(--mono);font-size:12.5px;color:var(--faint);}
-.src a{color:var(--dim);border-bottom:1px dashed var(--line-2);}
-.src a:hover{color:var(--aqua);border-color:var(--aqua);}
-.src code{color:var(--cyan);}
+.tags{display:flex;flex-wrap:wrap;gap:var(--hy-space-2);margin-top:var(--hy-space-6);}
+.src{display:flex;flex-wrap:wrap;gap:var(--hy-space-2) var(--hy-space-6);margin-top:var(--hy-space-3);font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-sm);color:var(--hy-color-text-subtle);}
+.src a{color:var(--hy-color-text-muted);border-bottom:1px dashed var(--hy-color-border-default);}
+.src a:hover{color:var(--hy-color-accent-default);border-color:var(--hy-color-accent-default);}
+.src code{color:var(--hy-color-accent-strong);}
 
-/* footer */
-footer{border-top:1px solid var(--line);margin-top:40px;padding:44px 0 56px;}
-.foot{display:flex;flex-wrap:wrap;gap:24px;align-items:center;justify-content:space-between;}
-.foot .mark{font-weight:800;font-size:20px;letter-spacing:1.5px;
-  background:linear-gradient(90deg,var(--cyan),var(--hy-color-brand-mid) 55%,var(--magenta));
-  -webkit-background-clip:text;background-clip:text;color:transparent;}
-.foot p{color:var(--faint);font-size:13px;margin:6px 0 0;}
-.foot nav{display:flex;flex-wrap:wrap;gap:20px;font-family:var(--mono);font-size:12.5px;}
-.foot nav a{color:var(--dim);}.foot nav a:hover{color:var(--aqua);}
-
-.reveal{opacity:0;transform:translateY(18px);transition:opacity .6s ease,transform .6s ease;}
-.reveal.in{opacity:1;transform:none;}
-@media(prefers-reduced-motion:reduce){.reveal{opacity:1;transform:none;transition:none;}}
 </style>
 <script src="https://analytics.ahrefs.com/analytics.js" data-key="yRz83E87rXgYWlhmro5mIg" async></script>
 </head>
 <body>
 
-<div class="topbar" id="topbar">
-  <a class="mark" href="/">HYDRA</a>
-  <span class="pill">first principles</span>
-  <span class="grow"></span>
-  <nav>
-    <a href="#sprt">SPRT</a>
-    <a href="#calibration">Calibration</a>
-    <a href="#defect">Defect cost</a>
-    <a href="#percolation">Percolation</a>
-    <a href="#parallelism">Parallelism</a>
-    <a href="#entropy">Entropy</a>
+<a class="skip-link" href="#main">Skip to content</a>
+<header class="site-header" id="topbar">
+  <a class="site-logo" href="/" aria-label="Hydra home">HYDRA</a>
+  <span class="site-tag">first principles</span>
+  <nav class="site-nav" id="site-nav" aria-label="Main">
+    <a href="/#start">Get started</a>
+    <a href="/docs.html">Docs</a>
+    <a href="/pricing.html">Pricing</a>
+    <a href="/first-principles.html" aria-current="page">First principles</a>
+    <a href="/blog/">Blog</a>
+    <a href="https://github.com/ankit373/hydra">GitHub</a>
   </nav>
-  <a class="ghost" href="/">← home</a>
-</div>
+  <a class="btn btn-primary header-cta" href="/app.html">Desktop app</a>
+  <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav"><span class="nav-toggle-bars" aria-hidden="true"></span>Menu</button>
+</header>
 
-<header class="hero wrap">
+<main id="main">
+<div class="hero wrap">
   <div class="eyebrow">the math, checkable</div>
   <h1>The router doesn't guess.<br><span class="grad">It derives.</span></h1>
   <p class="sub">Every routing decision Hydra makes is a <b>named result you can check</b>: a proven theorem it applies, or a quantity it measures. Not heuristics with a confident tone. Here are the six, each one interactive.</p>
@@ -216,9 +154,17 @@ footer{border-top:1px solid var(--line);margin-top:40px;padding:44px 0 56px;}
     <span class="tag synthetic"><span class="g">◈ synthetic</span> seeded benchmark</span>
     <span class="tag modeled"><span class="g">○ modeled</span> estimate / proxy</span>
   </div>
-</header>
+  <nav class="page-toc" aria-label="On this page">
+    <a href="#sprt">SPRT</a>
+    <a href="#calibration">Calibration</a>
+    <a href="#defect">Defect cost</a>
+    <a href="#percolation">Percolation</a>
+    <a href="#parallelism">Parallelism</a>
+    <a href="#entropy">Entropy</a>
+  </nav>
+</div>
 
-<main class="wrap">
+<div class="wrap">
 
   <!-- ═══ 1 · SPRT ═══════════════════════════════════════════════════════════ -->
   <section class="pillar reveal" id="sprt">
@@ -254,7 +200,7 @@ footer{border-top:1px solid var(--line);margin-top:40px;padding:44px 0 56px;}
       <span class="tag proven"><span class="g">⊢ proven</span> Wald (1945), optimal E[N]</span>
       <span class="tag synthetic"><span class="g">◈ synthetic</span> −24% blended / −49% easy vs fixed-5 at ≥98% accuracy</span>
     </div>
-    <div class="src"><span>source <a href="https://github.com/ankit373/hydra/tree/main/internal/trust">internal/trust</a></span><span>reproduce <code>hyctl trust benchmark</code></span></div>
+    <div class="src"><span>source <a href="https://github.com/ankit373/hydra/tree/main/internal/trust">internal/trust</a></span><span>reproduce <code translate="no">hyctl trust benchmark</code></span></div>
   </section>
 
   <!-- ═══ 2 · CALIBRATION ════════════════════════════════════════════════════ -->
@@ -289,7 +235,7 @@ footer{border-top:1px solid var(--line);margin-top:40px;padding:44px 0 56px;}
       <span class="tag proven"><span class="g">⊢ proven</span> information theory (KL divergence)</span>
       <span class="tag measured"><span class="g">▣ measured</span> 90% reliability → 1.76 nats (table test)</span>
     </div>
-    <div class="src"><span>source <a href="https://github.com/ankit373/hydra/tree/main/internal/trust">internal/trust</a></span><span><code>hyctl trust calibration</code></span></div>
+    <div class="src"><span>source <a href="https://github.com/ankit373/hydra/tree/main/internal/trust">internal/trust</a></span><span><code translate="no">hyctl trust calibration</code></span></div>
   </section>
 
   <!-- ═══ 3 · DEFECT COST ════════════════════════════════════════════════════ -->
@@ -319,7 +265,7 @@ footer{border-top:1px solid var(--line);margin-top:40px;padding:44px 0 56px;}
       <span class="tag proven"><span class="g">⊢ proven</span> Bayes decision theory</span>
       <span class="tag modeled"><span class="g">○ modeled</span> C<sub>defect</sub> is an estimate</span>
     </div>
-    <div class="src"><span>source <a href="https://github.com/ankit373/hydra/tree/main/internal/trust">internal/trust</a></span><span><code>hyctl trust defect --pii --production</code></span></div>
+    <div class="src"><span>source <a href="https://github.com/ankit373/hydra/tree/main/internal/trust">internal/trust</a></span><span><code translate="no">hyctl trust defect --pii --production</code></span></div>
   </section>
 
   <!-- ═══ 4 · PERCOLATION ════════════════════════════════════════════════════ -->
@@ -351,7 +297,7 @@ footer{border-top:1px solid var(--line);margin-top:40px;padding:44px 0 56px;}
       <span class="tag proven"><span class="g">⊢ proven</span> Molloy-Reed (1995)</span>
       <span class="tag measured"><span class="g">▣ measured</span> computed from graph.json</span>
     </div>
-    <div class="src"><span>source <a href="https://github.com/ankit373/hydra/tree/main/internal/graph">internal/graph</a></span><span><code>hyctl graph blast &lt;file&gt;</code></span></div>
+    <div class="src"><span>source <a href="https://github.com/ankit373/hydra/tree/main/internal/graph">internal/graph</a></span><span><code translate="no">hyctl graph blast &lt;file&gt;</code></span></div>
   </section>
 
   <!-- ═══ 5 · PARALLELISM ════════════════════════════════════════════════════ -->
@@ -388,7 +334,7 @@ footer{border-top:1px solid var(--line);margin-top:40px;padding:44px 0 56px;}
       <span class="tag proven"><span class="g">⊢ proven</span> Amdahl (1967) + coordination term</span>
       <span class="tag measured"><span class="g">▣ measured</span> k from graph coupling</span>
     </div>
-    <div class="src"><span>source <a href="https://github.com/ankit373/hydra/tree/main/internal/optimal">internal/optimal</a></span><span><code>hyctl graph parallel &lt;files…&gt;</code></span></div>
+    <div class="src"><span>source <a href="https://github.com/ankit373/hydra/tree/main/internal/optimal">internal/optimal</a></span><span><code translate="no">hyctl graph parallel &lt;files…&gt;</code></span></div>
   </section>
 
   <!-- ═══ 6 · ENTROPY ════════════════════════════════════════════════════════ -->
@@ -420,22 +366,27 @@ footer{border-top:1px solid var(--line);margin-top:40px;padding:44px 0 56px;}
       <span class="tag proven"><span class="g">⊢ proven</span> Shannon source-coding</span>
       <span class="tag modeled"><span class="g">○ modeled</span> gzip is a proxy, not a proof</span>
     </div>
-    <div class="src"><span>source <a href="https://github.com/ankit373/hydra/tree/main/internal/entropy">internal/entropy</a></span><span><code>hyctl context entropy &lt;file&gt;</code></span></div>
+    <div class="src"><span>source <a href="https://github.com/ankit373/hydra/tree/main/internal/entropy">internal/entropy</a></span><span><code translate="no">hyctl context entropy &lt;file&gt;</code></span></div>
   </section>
 
+</div>
 </main>
 
-<footer>
-  <div class="wrap foot">
+<footer class="site-footer">
+  <div class="wrap">
     <div>
-      <a class="mark" href="/">HYDRA</a>
-      <p>Hydra picks the model best suited to each task, and can check the answer before you rely on it.</p>
+      <a class="site-logo" href="/" aria-label="Hydra home">HYDRA</a>
+      <p>Hydra picks the model best suited to each task, and can check the answer before you rely on it. Free and open source, MIT licensed.</p>
     </div>
-    <nav>
+    <nav aria-label="Footer">
       <a href="/">Home</a>
       <a href="/docs.html">Docs</a>
+      <a href="/app.html">Desktop app</a>
       <a href="/pricing.html">Pricing</a>
+      <a href="/first-principles.html">First principles</a>
+      <a href="/blog/">Blog</a>
       <a href="https://github.com/ankit373/hydra">GitHub</a>
+      <a href="/llms.txt">llms.txt</a>
     </nav>
   </div>
 </footer>
@@ -451,9 +402,7 @@ footer{border-top:1px solid var(--line);margin-top:40px;padding:44px 0 56px;}
            cyan:tok('accent-strong'),aqua:tok('accent-default'),violet:tok('accent-secondary'),magenta:tok('brand-end'),
            cheap:tok('cost-low'),mid:tok('cost-mid'),exp:tok('cost-high')};
 
-  // topbar shade + reveal on scroll
-  var topbar = document.getElementById('topbar');
-  addEventListener('scroll', function(){ topbar.classList.toggle('scrolled', scrollY > 8); }, {passive:true});
+  // reveal on scroll
   if ('IntersectionObserver' in window && !REDUCED){
     var io = new IntersectionObserver(function(es){ es.forEach(function(e){ if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target);} }); }, {threshold:.12});
     document.querySelectorAll('.reveal').forEach(function(el){ io.observe(el); });
@@ -472,7 +421,7 @@ footer{border-top:1px solid var(--line);margin-top:40px;padding:44px 0 56px;}
   }
   function glow(ctx, col, blur){ ctx.shadowColor = col; ctx.shadowBlur = blur||0; }
   function noGlow(ctx){ ctx.shadowBlur = 0; }
-  function mono(px){ return px+'px ui-monospace, "SF Mono", Menlo, monospace'; }
+  function mono(px){ return Math.max(12,px)+'px ui-monospace, "SF Mono", Menlo, monospace'; }
 
   // ══ 1 · SPRT ═══════════════════════════════════════════════════════════════
   (function(){
@@ -503,7 +452,7 @@ footer{border-top:1px solid var(--line);margin-top:40px;padding:44px 0 56px;}
       function X(n){ return padL + (w-padL-padR)*(n/maxN); }
       function Y(v){ return padT + (h-padT-padB)*(1-(v-yMin)/(yMax-yMin)); }
       // zero line
-      ctx.strokeStyle='rgba(150,140,255,.14)'; ctx.lineWidth=1;
+      ctx.strokeStyle=Hydra.rgba('accent-secondary',.14); ctx.lineWidth=1;
       ctx.beginPath(); ctx.moveTo(padL,Y(0)); ctx.lineTo(w-padR,Y(0)); ctx.stroke();
       // boundaries
       function bound(v,col,lab){
@@ -575,9 +524,9 @@ footer{border-top:1px solid var(--line);margin-top:40px;padding:44px 0 56px;}
         ctx.fillText(g.lab, gx+gw/2, h-16);
         [['vote +',g.plus],['vote −',g.minus]].forEach(function(bar,bi){
           var x=gx+gw*0.25+bi*gw*0.4, bh=maxH*bar[1];
-          ctx.fillStyle='rgba(150,140,255,.10)'; ctx.fillRect(x-bw/2, base-maxH, bw, maxH);
+          ctx.fillStyle=Hydra.rgba('accent-secondary',.10); ctx.fillRect(x-bw/2, base-maxH, bw, maxH);
           var grad=ctx.createLinearGradient(0,base,0,base-bh);
-          grad.addColorStop(0,'rgba(20,22,44,.4)'); grad.addColorStop(1,g.col);
+          grad.addColorStop(0,Hydra.rgba('surface-overlay',.4)); grad.addColorStop(1,g.col);
           ctx.fillStyle=grad; glow(ctx,g.col,12); ctx.fillRect(x-bw/2, base-bh, bw, bh); noGlow(ctx);
           ctx.fillStyle=C.ink; ctx.font=mono(11); ctx.textAlign='center';
           ctx.fillText(bar[1].toFixed(2), x, base-bh-8);
@@ -585,7 +534,7 @@ footer{border-top:1px solid var(--line);margin-top:40px;padding:44px 0 56px;}
         });
       });
       // divider
-      ctx.strokeStyle='rgba(150,140,255,.12)'; ctx.beginPath(); ctx.moveTo(40+gw,padT-6); ctx.lineTo(40+gw,base); ctx.stroke();
+      ctx.strokeStyle=Hydra.rgba('accent-secondary',.12); ctx.beginPath(); ctx.moveTo(40+gw,padT-6); ctx.lineTo(40+gw,base); ctx.stroke();
       // D banner
       ctx.textAlign='left'; ctx.fillStyle=C.faint; ctx.font=mono(11);
       ctx.fillText('the gap between these two shapes IS the evidence, D nats per vote', 40, padT-10);
@@ -615,7 +564,7 @@ footer{border-top:1px solid var(--line);margin-top:40px;padding:44px 0 56px;}
       function X(tt){ return padL+(w-padL-padR)*(tt/100); }
       function Y(c){ return padT+(h-padT-padB)*(1-(c-0.5)/0.5); }
       // grid
-      ctx.strokeStyle='rgba(150,140,255,.10)'; ctx.lineWidth=1; ctx.font=mono(10); ctx.fillStyle=C.faint; ctx.textAlign='right';
+      ctx.strokeStyle=Hydra.rgba('accent-secondary',.10); ctx.lineWidth=1; ctx.font=mono(10); ctx.fillStyle=C.faint; ctx.textAlign='right';
       [0.5,0.75,0.9,0.99].forEach(function(c){ ctx.beginPath(); ctx.moveTo(padL,Y(c)); ctx.lineTo(w-padR,Y(c)); ctx.stroke(); ctx.fillText((c*100).toFixed(0)+'%',padL-8,Y(c)+3); });
       // curve
       var grad=ctx.createLinearGradient(padL,0,w-padR,0);
@@ -624,7 +573,7 @@ footer{border-top:1px solid var(--line);margin-top:40px;padding:44px 0 56px;}
       for(var tt=0;tt<=100;tt+=1){ var cc=Math.min(0.9995,Math.max(0.5,1-TAUv/cost(tt))); var x=X(tt),y=Y(cc); if(tt===0)ctx.moveTo(x,y); else ctx.lineTo(x,y);} ctx.stroke(); noGlow(ctx);
       // marker
       var mx=X(t), my=Y(cstar);
-      ctx.strokeStyle='rgba(0,230,195,.4)'; ctx.setLineDash([4,4]); ctx.beginPath(); ctx.moveTo(mx,my); ctx.lineTo(mx,h-padB); ctx.stroke(); ctx.setLineDash([]);
+      ctx.strokeStyle=Hydra.rgba('accent-default',.4); ctx.setLineDash([4,4]); ctx.beginPath(); ctx.moveTo(mx,my); ctx.lineTo(mx,h-padB); ctx.stroke(); ctx.setLineDash([]);
       ctx.fillStyle=C.aqua; glow(ctx,C.aqua,14); ctx.beginPath(); ctx.arc(mx,my,6,0,7); ctx.fill(); noGlow(ctx);
       ctx.fillStyle=C.faint; ctx.font=mono(10); ctx.textAlign='center'; ctx.fillText('cheap defect', X(6),h-8); ctx.fillText('catastrophic defect', X(92),h-8);
       ctx.textAlign='left'; ctx.fillStyle=C.faint; ctx.fillText('required P(correct)  c★', padL, padT-8);
@@ -676,19 +625,19 @@ footer{border-top:1px solid var(--line);margin-top:40px;padding:44px 0 56px;}
       edges.forEach(function(e){
         var inG = state.giant[e[0]]&&state.giant[e[1]];
         var pa=P(e[0]), pb=P(e[1]);
-        ctx.strokeStyle= inG? 'rgba(232,82,200,.55)' : 'rgba(150,140,255,.14)';
+        ctx.strokeStyle= inG? Hydra.rgba('brand-end',.55) : Hydra.rgba('accent-secondary',.14);
         ctx.lineWidth= inG?1.4:0.8; if(inG){glow(ctx,C.magenta,6);}
         ctx.beginPath(); ctx.moveTo(pa.x,pa.y); ctx.lineTo(pb.x,pb.y); ctx.stroke(); noGlow(ctx);
       });
       // nodes
       for(var i=0;i<N;i++){ var pt=P(i), inG=state.giant[i];
-        ctx.fillStyle= inG? C.magenta : 'rgba(120,120,160,.5)';
+        ctx.fillStyle= inG? C.magenta : Hydra.rgba('text-subtle',.5);
         if(inG){glow(ctx,C.magenta,10);}
         ctx.beginPath(); ctx.arc(pt.x,pt.y, inG?3.4:2.1, 0,7); ctx.fill(); noGlow(ctx);
       }
       // gauge on right
       var gx=w-150, gy0=40, gy1=h-40;
-      ctx.strokeStyle='rgba(150,140,255,.16)'; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(gx,gy0); ctx.lineTo(gx,gy1); ctx.stroke();
+      ctx.strokeStyle=Hydra.rgba('accent-secondary',.16); ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(gx,gy0); ctx.lineTo(gx,gy1); ctx.stroke();
       function GY(kap){ var t=Math.min(kap,5)/5; return gy1-(gy1-gy0)*t; }
       // threshold at kappa=2
       var ty=GY(2); ctx.strokeStyle=C.exp; ctx.setLineDash([5,5]); glow(ctx,C.exp,8);
@@ -727,7 +676,7 @@ footer{border-top:1px solid var(--line);margin-top:40px;padding:44px 0 56px;}
       function X(n){ return padL+(w-padL-padR)*((n-1)/(Nmax-1)); }
       function Y(v){ return padT+(h-padT-padB)*(1-v/yMax); }
       // grid
-      ctx.strokeStyle='rgba(150,140,255,.10)'; ctx.font=mono(10); ctx.fillStyle=C.faint; ctx.textAlign='right';
+      ctx.strokeStyle=Hydra.rgba('accent-secondary',.10); ctx.font=mono(10); ctx.fillStyle=C.faint; ctx.textAlign='right';
       for(var g=1;g<=Math.floor(yMax);g++){ ctx.beginPath(); ctx.moveTo(padL,Y(g)); ctx.lineTo(w-padR,Y(g)); ctx.stroke(); ctx.fillText('×'+g, padL-6, Y(g)+3); }
       ctx.textAlign='center';
       [1,6,12,18,24].forEach(function(n){ ctx.fillText(n, X(n), h-8); });
@@ -740,7 +689,7 @@ footer{border-top:1px solid var(--line);margin-top:40px;padding:44px 0 56px;}
       var first=true; for(var nn=1;nn<=Nmax;nn+=0.25){ var v=t1/T(nn,s,k),x=X(nn),y=Y(v); if(first){ctx.moveTo(x,y);first=false;} else ctx.lineTo(x,y);} ctx.stroke(); noGlow(ctx);
       // n* marker
       var nx=X(Math.min(nstar,Nmax)), ny=Y(peak);
-      ctx.strokeStyle='rgba(0,230,195,.45)'; ctx.setLineDash([4,4]); ctx.beginPath(); ctx.moveTo(nx,ny); ctx.lineTo(nx,h-padB); ctx.stroke(); ctx.setLineDash([]);
+      ctx.strokeStyle=Hydra.rgba('accent-default',.45); ctx.setLineDash([4,4]); ctx.beginPath(); ctx.moveTo(nx,ny); ctx.lineTo(nx,h-padB); ctx.stroke(); ctx.setLineDash([]);
       ctx.fillStyle=C.aqua; glow(ctx,C.aqua,15); ctx.beginPath(); ctx.arc(nx,ny,6,0,7); ctx.fill(); noGlow(ctx);
       ctx.fillStyle=C.aqua; ctx.font=mono(12); ctx.textAlign='center';
       ctx.fillText('n★ ≈ '+nstar.toFixed(1), nx, ny-12);
@@ -764,7 +713,7 @@ footer{border-top:1px solid var(--line);margin-top:40px;padding:44px 0 56px;}
       ctx.clearRect(0,0,w,h);
       var bx=padL, bw=w-padL-padR, by=padT+20, bh=h-padT-padB-20;
       // full window (faint)
-      ctx.fillStyle='rgba(150,140,255,.10)'; ctx.strokeStyle='rgba(150,140,255,.25)';
+      ctx.fillStyle=Hydra.rgba('accent-secondary',.10); ctx.strokeStyle=Hydra.rgba('accent-secondary',.25);
       ctx.fillRect(bx,by,bw,bh); ctx.strokeRect(bx,by,bw,bh);
       // useful portion
       var uw=bw*rho;
@@ -772,7 +721,7 @@ footer{border-top:1px solid var(--line);margin-top:40px;padding:44px 0 56px;}
       grad.addColorStop(0,C.cyan); grad.addColorStop(1,C.violet);
       ctx.fillStyle=grad; glow(ctx,C.violet,14); ctx.fillRect(bx,by,uw,bh); noGlow(ctx);
       // redundant (noise) hatch
-      ctx.fillStyle='rgba(255,90,110,.12)';
+      ctx.fillStyle=Hydra.rgba('status-danger',.12);
       ctx.fillRect(bx+uw,by,bw-uw,bh);
       // labels
       ctx.font=mono(12); ctx.textAlign='left'; ctx.fillStyle=C.ink;

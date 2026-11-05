@@ -39,93 +39,42 @@
   </script>
 
 <link rel="stylesheet" href="assets/tokens.css">
-<link rel="stylesheet" href="assets/page-aliases.css">
+<link rel="stylesheet" href="assets/site.css">
+<script src="assets/site.js"></script>
 <style>
-@font-face{font-family:"Space Grotesk";font-style:normal;font-weight:400 700;font-display:swap;
-  src:url("fonts/SpaceGrotesk.woff2") format("woff2");}
-@font-face{font-family:"JetBrains Mono";font-style:normal;font-weight:400 700;font-display:swap;
-  src:url("fonts/JetBrainsMono.woff2") format("woff2");}
 
-/* Colours come from assets/tokens.css, generated from design/tokens like the
-   desktop app's, so this page and the app cannot drift apart. */
-:root{
-  color-scheme:dark;
-  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,Roboto,Helvetica,Arial,sans-serif;
-  --mono:"JetBrains Mono",ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
-  --display:"Space Grotesk",system-ui,sans-serif;
-  --maxw:1200px;
-}
-*{box-sizing:border-box;}
-html{scroll-behavior:smooth;
-  /* Prose and chrome are not selectable; code and commands are, see below. */
-  user-select:none;-webkit-user-select:none;}
-
-/* Code and command examples stay selectable. docs.html carries 53 of them and
-   no copy button, so blocking selection there leaves no way to take a command
-   off the page. user-select inherits, so descendants follow. */
-pre,code{user-select:text;-webkit-user-select:text;}
-
-/* Except where a click already copies: dragging across one of those is the
-   accident the site-wide rule exists to prevent. Attribute specificity beats
-   the element selectors above. */
-[data-copy]{user-select:none;-webkit-user-select:none;}
-@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto;}}
-body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.55;
-  overflow-x:hidden;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;}
-.wrap{max-width:var(--maxw);margin:0 auto;padding:0 24px;}
-h1,h2,h3{margin:0;text-wrap:balance;}
-a{color:var(--aqua);text-decoration:none;}
-a:hover{text-decoration:underline;}
-.mono{font-family:var(--mono);}
-.grad{background:linear-gradient(90deg,var(--cyan),var(--hy-color-brand-mid),var(--magenta));
-  -webkit-background-clip:text;background-clip:text;color:transparent;}
-
-/* ── top bar ─────────────────────────────────────────────────────────── */
-.topbar{position:sticky;top:0;z-index:60;display:flex;align-items:center;justify-content:space-between;
-  gap:18px;padding:10px 24px;font-family:var(--mono);font-size:12.5px;
-  background:rgba(6,7,15,.55);backdrop-filter:blur(14px);border-bottom:1px solid var(--line);}
-.topbar nav{display:flex;gap:18px;flex-wrap:wrap;}
-.topbar a{color:var(--dim);}
-.topbar a:hover{color:var(--ink);text-decoration:none;}
-.topbar .brand{color:var(--ink);font-weight:700;letter-spacing:.5px;}
-.topbar .ghost{border:1px solid var(--line-2);border-radius:6px;padding:5px 12px;color:var(--ink);}
 
 /* ── hero ────────────────────────────────────────────────────────────── */
-.hero{padding:76px 0 44px;text-align:center;position:relative;overflow:hidden;}
+.hero{padding:var(--hy-space-16) 0 var(--hy-space-12);text-align:center;position:relative;overflow:hidden;}
 .hero::before{content:"";position:absolute;inset:-40% 20% auto;height:520px;
-  background:radial-gradient(closest-side,rgba(139,92,246,.20),transparent 70%);pointer-events:none;}
-.klabel{display:inline-flex;gap:8px;align-items:center;font-family:var(--mono);font-size:10.5px;
-  letter-spacing:2px;text-transform:uppercase;color:var(--faint);margin-bottom:18px;}
-.klabel b{color:var(--aqua);font-weight:600;}
-.hero h1{font-family:var(--display);font-size:clamp(34px,6vw,64px);line-height:1.04;letter-spacing:-1.5px;}
-.hero p.lede{max-width:640px;margin:20px auto 0;color:var(--dim);font-size:17px;}
-.cta{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:30px;}
-.btn{display:inline-flex;align-items:center;gap:8px;padding:11px 20px;border-radius:8px;
-  font-family:var(--mono);font-size:13px;border:1px solid var(--line-2);color:var(--ink);transition:.15s;}
-.btn:hover{border-color:var(--aqua);text-decoration:none;transform:translateY(-1px);}
-.btn.primary{background:linear-gradient(90deg,var(--cyan),var(--hy-color-brand-mid));border:none;color:var(--hy-color-text-inverse);font-weight:700;}
-.btn.primary:hover{filter:brightness(1.12);}
+  background:radial-gradient(closest-side,color-mix(in srgb,var(--hy-color-brand-mid) 20%,transparent),transparent 70%);pointer-events:none;}
+.klabel{display:inline-flex;gap:var(--hy-space-2);align-items:center;font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);
+  letter-spacing:2px;text-transform:uppercase;color:var(--hy-color-text-subtle);margin-bottom:var(--hy-space-4);}
+.klabel b{color:var(--hy-color-accent-default);font-weight:600;}
+.hero h1{font-family:var(--site-display);font-size:clamp(var(--hy-font-size-3xl),6vw,64px);line-height:1.04;letter-spacing:-1.5px;}
+.hero p.lede{max-width:640px;margin:var(--hy-space-4) auto 0;color:var(--hy-color-text-muted);font-size:var(--hy-font-size-base);}
+.cta{display:flex;gap:var(--hy-space-3);justify-content:center;flex-wrap:wrap;margin-top:var(--hy-space-8);}
 
 /* ── the app preview ─────────────────────────────────────────────────── */
-.stage{margin:52px auto 0;max-width:1000px;padding:0 24px;}
-.win{border:1px solid var(--line-2);border-radius:12px;overflow:hidden;background:var(--bg2);
-  box-shadow:0 40px 120px -30px rgba(139,92,246,.45), 0 0 0 1px rgba(255,255,255,.02) inset;}
-.win-bar{display:flex;align-items:center;gap:8px;padding:9px 14px;border-bottom:1px solid var(--line);
-  background:rgba(10,12,24,.9);}
-.dot{width:10px;height:10px;border-radius:50%;background:#2a2f4a;}
-.dot.r{background:var(--exp);}.dot.y{background:var(--mid);}.dot.g{background:var(--cheap);}
-.win-title{margin-left:10px;font-family:var(--mono);font-size:11px;color:var(--faint);}
+.stage{margin:var(--hy-space-12) auto 0;max-width:1000px;padding:0 var(--hy-space-6);}
+.win{border:1px solid var(--hy-color-border-default);border-radius:12px;overflow:hidden;background:var(--hy-color-surface-raised);
+  box-shadow:0 40px 120px -30px color-mix(in srgb,var(--hy-color-brand-mid) 45%,transparent), 0 0 0 1px color-mix(in srgb,var(--hy-color-text-default) 2%,transparent) inset;}
+.win-bar{display:flex;align-items:center;gap:var(--hy-space-2);padding:var(--hy-space-2) var(--hy-space-3);border-bottom:1px solid var(--hy-color-border-subtle);
+  background:color-mix(in srgb,var(--hy-color-surface-raised) 90%,transparent);}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--hy-color-border-default);}
+.dot.r{background:var(--hy-color-cost-high);}.dot.y{background:var(--hy-color-cost-mid);}.dot.g{background:var(--hy-color-cost-low);}
+.win-title{margin-left:var(--hy-space-2);font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);color:var(--hy-color-text-subtle);}
 .win-body{display:grid;grid-template-columns:132px 1fr;min-height:376px;}
-.side{border-right:1px solid var(--line);padding:14px 10px;background:rgba(6,7,15,.5);}
-.side .lbl{font-family:var(--mono);font-size:9.5px;letter-spacing:1.6px;color:var(--faint);
-  text-transform:uppercase;padding:0 8px 10px;}
-.nav-item{display:flex;align-items:center;gap:8px;width:100%;padding:7px 9px;border-radius:6px;
-  font:inherit;font-family:var(--mono);font-size:12px;color:var(--dim);margin-bottom:2px;
+.side{border-right:1px solid var(--hy-color-border-subtle);padding:var(--hy-space-3) var(--hy-space-2);background:color-mix(in srgb,var(--hy-color-surface-base) 50%,transparent);}
+.side .lbl{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);letter-spacing:1.6px;color:var(--hy-color-text-subtle);
+  text-transform:uppercase;padding:0 var(--hy-space-2) var(--hy-space-2);}
+.nav-item{display:flex;align-items:center;gap:var(--hy-space-2);width:100%;padding:var(--hy-space-2) var(--hy-space-2);border-radius:6px;
+  font:inherit;font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);color:var(--hy-color-text-muted);margin-bottom:2px;
   background:none;border:none;text-align:left;cursor:pointer;-webkit-appearance:none;appearance:none;}
-.nav-item:hover{background:var(--line);color:var(--ink);}
-.nav-item:focus-visible{outline:2px solid var(--aqua);outline-offset:1px;}
+.nav-item:hover{background:var(--hy-color-border-subtle);color:var(--hy-color-text-default);}
+.nav-item:focus-visible{outline:2px solid var(--hy-color-accent-default);outline-offset:1px;}
 .nav-item i{width:5px;height:5px;border-radius:50%;background:currentColor;opacity:.5;font-style:normal;}
-.pane{padding:18px 20px;position:relative;}
+.pane{padding:var(--hy-space-4) var(--hy-space-4);position:relative;}
 
 /* Each pane fades in on its own slice of one 36s loop. Six views, 6s each, so a
    slot is 16.667% and every percentage below is derived from that. A view added
@@ -152,16 +101,16 @@ a:hover{text-decoration:underline;}
 .nav-item:nth-of-type(5){animation-delay:24s;}
 .nav-item:nth-of-type(6){animation-delay:30s;}
 @keyframes navlit{
-  0%,0.8%     {background:transparent;color:var(--dim);}
-  2.1%,15%    {background:rgba(0,230,195,.10);color:var(--aqua);}
-  16.7%,100%  {background:transparent;color:var(--dim);}
+  0%,0.8%     {background:transparent;color:var(--hy-color-text-muted);}
+  2.1%,15%    {background:color-mix(in srgb,var(--hy-color-accent-default) 10%,transparent);color:var(--hy-color-accent-default);}
+  16.7%,100%  {background:transparent;color:var(--hy-color-text-muted);}
 }
 /* Once nav.js confirms click handling is wired, it swaps the autoplay loop
    above for direct control: exactly one view/nav-item active, no timer. */
 .win-body.js-active .view{animation:none;}
 .win-body.js-active .view.active{opacity:1;}
 .win-body.js-active .nav-item{animation:none;}
-.win-body.js-active .nav-item.active{background:rgba(0,230,195,.10);color:var(--aqua);}
+.win-body.js-active .nav-item.active{background:color-mix(in srgb,var(--hy-color-accent-default) 10%,transparent);color:var(--hy-color-accent-default);}
 /* Anyone who has asked the OS to stop moving things gets a static first view,
    but only until nav.js takes over. Unscoped, it kept the first view at
    opacity 1 under whichever one was clicked, so with reduced motion set every
@@ -170,108 +119,97 @@ a:hover{text-decoration:underline;}
   .view,.nav-item{animation:none;}
   .view{opacity:0;}
   .win-body:not(.js-active) .view:nth-child(1){opacity:1;}
-  .win-body:not(.js-active) .nav-item:nth-of-type(1){background:rgba(0,230,195,.10);color:var(--aqua);}
+  .win-body:not(.js-active) .nav-item:nth-of-type(1){background:color-mix(in srgb,var(--hy-color-accent-default) 10%,transparent);color:var(--hy-color-accent-default);}
 }
 
 /* Chat view: thread on the left, the glanceable companion pane on the right,
    the same split the app ships. */
-.chat-split{display:grid;grid-template-columns:1fr 150px;gap:14px;align-items:start;}
-.said{margin-left:auto;max-width:78%;background:var(--panel);border:1px solid var(--line);
-  border-radius:10px 10px 3px 10px;padding:7px 11px;font-size:12px;margin-bottom:9px;width:fit-content;}
-.prov{font-family:var(--mono);font-size:9.5px;color:var(--faint);display:flex;align-items:center;
-  gap:6px;margin-bottom:12px;}
-.composer{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:9px;
-  background:var(--panel);padding:8px 10px;font-size:11.5px;}
-.chip{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line);border-radius:999px;
-  padding:2px 8px;font-size:10px;color:var(--ink);white-space:nowrap;}
-.chip i{width:5px;height:5px;border-radius:50%;background:var(--aqua);font-style:normal;}
-.ckpane{border-left:1px solid var(--line);padding-left:12px;}
-.cklbl{font-family:var(--mono);font-size:8.5px;letter-spacing:.09em;color:var(--faint);margin-bottom:4px;}
-.ckrow{display:flex;justify-content:space-between;align-items:baseline;font-size:10.5px;}
+.chat-split{display:grid;grid-template-columns:1fr 150px;gap:var(--hy-space-3);align-items:start;}
+.said{margin-left:auto;max-width:78%;background:var(--hy-color-surface-card);border:1px solid var(--hy-color-border-subtle);
+  border-radius:10px 10px 3px 10px;padding:var(--hy-space-2) var(--hy-space-3);font-size:var(--hy-font-size-xs);margin-bottom:var(--hy-space-2);width:fit-content;}
+.prov{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);color:var(--hy-color-text-subtle);display:flex;align-items:center;
+  gap:var(--hy-space-1);margin-bottom:var(--hy-space-3);}
+.composer{display:flex;align-items:center;gap:var(--hy-space-2);border:1px solid var(--hy-color-border-subtle);border-radius:9px;
+  background:var(--hy-color-surface-card);padding:var(--hy-space-2) var(--hy-space-2);font-size:var(--hy-font-size-xs);}
+.chip{display:inline-flex;align-items:center;gap:var(--hy-space-1);border:1px solid var(--hy-color-border-subtle);border-radius:999px;
+  padding:2px var(--hy-space-2);font-size:var(--hy-font-size-xs);color:var(--hy-color-text-default);white-space:nowrap;}
+.chip i{width:5px;height:5px;border-radius:50%;background:var(--hy-color-accent-default);font-style:normal;}
+.ckpane{border-left:1px solid var(--hy-color-border-subtle);padding-left:var(--hy-space-3);}
+.cklbl{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);letter-spacing:.09em;color:var(--hy-color-text-subtle);margin-bottom:var(--hy-space-1);}
+.ckrow{display:flex;justify-content:space-between;align-items:baseline;font-size:var(--hy-font-size-xs);}
 /* Session's tab strip. */
-.tabs{display:flex;gap:4px;margin-bottom:10px;}
-.tab{font-family:var(--mono);font-size:10px;padding:3px 9px;border-radius:5px;
-  border:1px solid var(--line);color:var(--dim);}
-.tab.on{color:var(--aqua);border-color:var(--aqua);background:rgba(0,230,195,.08);}
+.tabs{display:flex;gap:var(--hy-space-1);margin-bottom:var(--hy-space-2);}
+.tab{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);padding:var(--hy-space-1) var(--hy-space-2);border-radius:5px;
+  border:1px solid var(--hy-color-border-subtle);color:var(--hy-color-text-muted);}
+.tab.on{color:var(--hy-color-accent-default);border-color:var(--hy-color-accent-default);background:color-mix(in srgb,var(--hy-color-accent-default) 8%,transparent);}
 
-.vhead{font-family:var(--display);font-size:15px;margin-bottom:2px;}
-.vsub{font-family:var(--mono);font-size:10.5px;color:var(--faint);margin-bottom:14px;}
-.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px;}
-.card{border:1px solid var(--line);border-radius:8px;padding:10px 12px;background:var(--panel);}
-.card .k{font-family:var(--mono);font-size:9.5px;color:var(--faint);text-transform:uppercase;letter-spacing:1.2px;}
-.card .v{font-family:var(--display);font-size:20px;margin-top:3px;}
-table.mini{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:11.5px;}
-table.mini th{text-align:left;color:var(--faint);font-weight:400;padding:5px 6px;
-  border-bottom:1px solid var(--line);text-transform:uppercase;font-size:9.5px;letter-spacing:1px;}
-table.mini td{padding:5px 6px;border-bottom:1px solid rgba(150,140,255,.07);color:var(--dim);}
-table.mini td.n{text-align:right;color:var(--ink);}
-.bar{height:5px;border-radius:3px;background:rgba(150,140,255,.14);overflow:hidden;}
+.vhead{font-family:var(--site-display);font-size:var(--hy-font-size-base);margin-bottom:2px;}
+.vsub{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);color:var(--hy-color-text-subtle);margin-bottom:var(--hy-space-3);}
+.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--hy-space-2);margin-bottom:var(--hy-space-4);}
+.card{border:1px solid var(--hy-color-border-subtle);border-radius:8px;padding:var(--hy-space-2) var(--hy-space-3);background:var(--hy-color-surface-card);}
+.card .k{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);color:var(--hy-color-text-subtle);text-transform:uppercase;letter-spacing:1.2px;}
+.card .v{font-family:var(--site-display);font-size:var(--hy-font-size-lg);margin-top:var(--hy-space-1);}
+table.mini{width:100%;border-collapse:collapse;font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);}
+table.mini th{text-align:left;color:var(--hy-color-text-subtle);font-weight:400;padding:var(--hy-space-1) var(--hy-space-1);
+  border-bottom:1px solid var(--hy-color-border-subtle);text-transform:uppercase;font-size:var(--hy-font-size-xs);letter-spacing:1px;}
+table.mini td{padding:var(--hy-space-1) var(--hy-space-1);border-bottom:1px solid color-mix(in srgb,var(--hy-color-accent-secondary) 7%,transparent);color:var(--hy-color-text-muted);}
+table.mini td.n{text-align:right;color:var(--hy-color-text-default);}
+.bar{height:5px;border-radius:3px;background:color-mix(in srgb,var(--hy-color-accent-secondary) 14%,transparent);overflow:hidden;}
 .bar i{display:block;height:100%;border-radius:3px;}
-.row{display:flex;align-items:center;gap:10px;padding:8px 6px;border-bottom:1px solid rgba(150,140,255,.07);
-  font-family:var(--mono);font-size:11.5px;}
-.pill{font-family:var(--mono);font-size:9.5px;padding:2px 7px;border-radius:99px;border:1px solid var(--line-2);color:var(--dim);}
-.pill.live{border-color:var(--aqua);color:var(--aqua);}
-.pill.ok{border-color:var(--cheap);color:var(--cheap);}
-.pill.fail{border-color:var(--exp);color:var(--exp);}
-.blink{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--aqua);
+.row{display:flex;align-items:center;gap:var(--hy-space-2);padding:var(--hy-space-2) var(--hy-space-1);border-bottom:1px solid color-mix(in srgb,var(--hy-color-accent-secondary) 7%,transparent);
+  font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);}
+.pill{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);padding:2px var(--hy-space-2);border-radius:99px;border:1px solid var(--hy-color-border-default);color:var(--hy-color-text-muted);}
+.pill.live{border-color:var(--hy-color-accent-default);color:var(--hy-color-accent-default);}
+.pill.ok{border-color:var(--hy-color-cost-low);color:var(--hy-color-cost-low);}
+.pill.fail{border-color:var(--hy-color-cost-high);color:var(--hy-color-cost-high);}
+.blink{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--hy-color-accent-default);
   animation:pulse 1.4s ease-in-out infinite;}
 @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.25;}}
 @media(prefers-reduced-motion:reduce){.blink{animation:none;}}
-.diff{font-family:var(--mono);font-size:11px;line-height:1.75;}
-.diff .add{color:var(--cheap);}
-.diff .del{color:var(--exp);}
-.diff .ctx{color:var(--faint);}
-.caption{text-align:center;font-family:var(--mono);font-size:11px;color:var(--faint);margin-top:14px;}
+.diff{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);line-height:1.75;}
+.diff .add{color:var(--hy-color-cost-low);}
+.diff .del{color:var(--hy-color-cost-high);}
+.diff .ctx{color:var(--hy-color-text-subtle);}
+.caption{text-align:center;font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);color:var(--hy-color-text-subtle);margin-top:var(--hy-space-3);}
 
 /* ── content blocks ──────────────────────────────────────────────────── */
-.blk{padding-top:74px;padding-bottom:74px;border-top:1px solid var(--line);}
-.blk h2{font-family:var(--display);font-size:clamp(24px,3.6vw,38px);letter-spacing:-.8px;margin-bottom:14px;}
-.blk p{color:var(--dim);max-width:760px;}
-.grid4{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;margin-top:32px;}
-.feat{border:1px solid var(--line);border-radius:10px;padding:20px;background:var(--panel);transition:.18s;}
-.feat:hover{border-color:var(--line-2);transform:translateY(-2px);}
-.feat h3{font-family:var(--display);font-size:17px;margin-bottom:8px;}
-.feat .tag{font-family:var(--mono);font-size:9.5px;letter-spacing:1.4px;text-transform:uppercase;
-  color:var(--aqua);margin-bottom:9px;}
-.feat p{font-size:14px;color:var(--dim);margin:0;}
+.blk{padding-top:var(--hy-space-16);padding-bottom:var(--hy-space-16);border-top:1px solid var(--hy-color-border-subtle);}
+.blk h2{font-family:var(--site-display);font-size:clamp(var(--hy-font-size-xl),3.6vw,var(--hy-font-size-3xl));letter-spacing:-.8px;margin-bottom:var(--hy-space-3);}
+.blk p{color:var(--hy-color-text-muted);max-width:760px;}
+.grid4{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:var(--hy-space-4);margin-top:var(--hy-space-8);}
+.feat{border:1px solid var(--hy-color-border-subtle);border-radius:10px;padding:var(--hy-space-4);background:var(--hy-color-surface-card);transition:color var(--hy-motion-duration-base),background-color var(--hy-motion-duration-base),border-color var(--hy-motion-duration-base),opacity var(--hy-motion-duration-base),transform var(--hy-motion-duration-base);}
+.feat:hover{border-color:var(--hy-color-border-default);transform:translateY(-2px);}
+.feat h3{font-family:var(--site-display);font-size:var(--hy-font-size-base);margin-bottom:var(--hy-space-2);}
+.feat .tag{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);letter-spacing:1.4px;text-transform:uppercase;
+  color:var(--hy-color-accent-default);margin-bottom:var(--hy-space-2);}
+.feat p{font-size:var(--hy-font-size-md);color:var(--hy-color-text-muted);margin:0;}
 /* ── install command ───────────────────────────────────────────────────── */
-.term{font-family:var(--mono);font-size:12.5px;background:#070912;border:1px solid var(--line);border-radius:9px;
-  padding:13px 15px;color:#c7d0e8;overflow-x:auto;}
-.term .p{color:var(--aqua);}.term .c{color:var(--faint);}.term .o{color:var(--dim);}
-.term .g{color:var(--cheap);}
-.copyline{display:flex;align-items:center;gap:14px;justify-content:space-between;cursor:pointer;}
-.copyline .cp{font-size:10.5px;color:var(--faint);transition:.15s;flex-shrink:0;}
-.copyline:hover .cp{color:var(--aqua);}
-.copyline.copied .cp{color:var(--cheap);}
 .term .o{margin-top:2px;}
 
 /* ── direct downloads ──────────────────────────────────────────────────── */
-.dl{margin-top:18px;border:1px solid var(--line);border-radius:11px;overflow:hidden;background:var(--panel);}
-.dl .row{display:grid;grid-template-columns:145px 1fr auto auto auto;gap:20px;align-items:center;
-  padding:13px 18px;border-top:1px solid var(--line);}
+.dl{margin-top:var(--hy-space-4);border:1px solid var(--hy-color-border-subtle);border-radius:11px;overflow:hidden;background:var(--hy-color-surface-card);}
+.dl .row{display:grid;grid-template-columns:145px 1fr auto auto auto;gap:var(--hy-space-4);align-items:center;
+  padding:var(--hy-space-3) var(--hy-space-4);border-top:1px solid var(--hy-color-border-subtle);}
 .dl .row:first-child{border-top:0;}
 .dl .row.off{opacity:.55;}
-.dl .os{font-family:var(--display);font-size:15px;}
-.dl .meta{font-family:var(--mono);font-size:11px;color:var(--faint);}
-.dl .sz{font-family:var(--mono);font-size:11px;color:var(--faint);text-align:right;}
-.dl .get{font-family:var(--mono);font-size:11.5px;border:1px solid var(--line-2);border-radius:7px;
-  padding:6px 14px;color:var(--aqua);white-space:nowrap;transition:.16s;}
-.dl .get:hover{background:var(--aqua);color:var(--hy-color-text-inverse);text-decoration:none;border-color:var(--aqua);}
-.dl .sum{font-family:var(--mono);font-size:10.5px;color:var(--faint);white-space:nowrap;}
-.dl .sum:hover{color:var(--aqua);}
+.dl .os{font-family:var(--site-display);font-size:var(--hy-font-size-base);}
+.dl .meta{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);color:var(--hy-color-text-subtle);}
+.dl .sz{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);color:var(--hy-color-text-subtle);text-align:right;}
+.dl .get{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);border:1px solid var(--hy-color-border-default);border-radius:7px;
+  padding:var(--hy-space-1) var(--hy-space-3);color:var(--hy-color-accent-default);white-space:nowrap;transition:color var(--hy-motion-duration-fast),background-color var(--hy-motion-duration-fast),border-color var(--hy-motion-duration-fast),opacity var(--hy-motion-duration-fast),transform var(--hy-motion-duration-fast);}
+.dl .get:hover{background:var(--hy-color-accent-default);color:var(--hy-color-text-inverse);text-decoration:none;border-color:var(--hy-color-accent-default);}
+.dl .sum{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);color:var(--hy-color-text-subtle);white-space:nowrap;}
+.dl .sum:hover{color:var(--hy-color-accent-default);}
 @media(max-width:760px){
-  .dl .row{grid-template-columns:1fr auto;gap:5px 14px;}
+  .dl .row{grid-template-columns:1fr auto;gap:var(--hy-space-1) var(--hy-space-3);}
   .dl .os{grid-column:1;grid-row:1;}
   .dl .meta{grid-column:1;grid-row:2;}
   .dl .sz{grid-column:1;grid-row:3;text-align:left;}
   .dl .get{grid-column:2;grid-row:1/3;align-self:center;}
   .dl .sum{grid-column:2;grid-row:3;text-align:right;}
 }
-.note{border-left:2px solid var(--line-2);padding:10px 0 10px 16px;margin-top:26px;color:var(--dim);font-size:14px;}
-.note b{color:var(--ink);}
-footer{border-top:1px solid var(--line);padding:34px 0 56px;color:var(--faint);
-  font-family:var(--mono);font-size:12px;}
-footer a{color:var(--dim);}
+.note{border-left:2px solid var(--hy-color-border-default);padding:var(--hy-space-2) 0 var(--hy-space-2) var(--hy-space-4);margin-top:var(--hy-space-6);color:var(--hy-color-text-muted);font-size:var(--hy-font-size-md);}
+.note b{color:var(--hy-color-text-default);}
 @media(max-width:720px){
   .win-body{grid-template-columns:1fr;}
   .side{display:none;}
@@ -284,17 +222,22 @@ footer a{color:var(--dim);}
 </head>
 <body>
 
-<div class="topbar">
-  <nav>
-    <a class="brand" href="/">HYDRA</a>
-    <a href="/#universe">Universe</a>
+<a class="skip-link" href="#main">Skip to content</a>
+<header class="site-header" id="topbar">
+  <a class="site-logo" href="/" aria-label="Hydra home">HYDRA</a>
+  <nav class="site-nav" id="site-nav" aria-label="Main">
+    <a href="/#start">Get started</a>
     <a href="/docs.html">Docs</a>
-    <a href="/app.html" style="color:var(--aqua)">Desktop app</a>
     <a href="/pricing.html">Pricing</a>
+    <a href="/first-principles.html">First principles</a>
+    <a href="/blog/">Blog</a>
     <a href="https://github.com/ankit373/hydra">GitHub</a>
   </nav>
-  <a class="ghost" href="#download">Download</a>
-</div>
+  <a class="btn btn-primary header-cta" href="#download">Download</a>
+  <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav"><span class="nav-toggle-bars" aria-hidden="true"></span>Menu</button>
+</header>
+
+<main id="main">
 
 <!-- ══ HERO ════════════════════════════════════════════════════════════ -->
 <section class="hero">
@@ -309,8 +252,8 @@ footer a{color:var(--dim);}
       is nothing to sign in to.
     </p>
     <div class="cta">
-      <a class="btn primary" href="#download">Download for your platform</a>
-      <a class="btn" href="#views">See the views</a>
+      <a class="btn btn-primary btn-lg" href="#download">Download for your platform</a>
+      <a class="btn btn-lg" href="#views">See the views</a>
     </div>
   </div>
 
@@ -343,30 +286,30 @@ footer a{color:var(--dim);}
             <div class="chat-split">
               <div>
                 <div class="said">summarise this contract in three bullets</div>
-                <div class="row" style="border:0;padding:2px 0 8px">
-                  <span style="flex:1;color:var(--dim)">24-month term, renews unless cancelled 60 days
+                <div class="row" style="border:0;padding:2px 0 var(--hy-space-2)">
+                  <span style="flex:1;color:var(--hy-color-text-muted)">24-month term, renews unless cancelled 60 days
                     before the end. Fees rise 3% a year. Either side may end it for breach.</span>
                 </div>
                 <div class="prov">
                   <span class="pill ok">done</span> claude-sonnet
-                  <span style="color:var(--line)">·</span> 2.9s
-                  <span style="color:var(--line)">·</span> $0.004
-                  <span style="color:var(--line)">·</span> <span style="color:var(--aqua)">session →</span>
+                  <span style="color:var(--hy-color-border-subtle)">·</span> 2.9s
+                  <span style="color:var(--hy-color-border-subtle)">·</span> $0.004
+                  <span style="color:var(--hy-color-border-subtle)">·</span> <span style="color:var(--hy-color-accent-default)">session →</span>
                 </div>
                 <div class="composer">
-                  <span style="flex:1;color:var(--faint)">Ask anything…</span>
+                  <span style="flex:1;color:var(--hy-color-text-subtle)">Ask anything…</span>
                   <span class="chip"><i></i>Auto-route</span>
                 </div>
               </div>
               <div class="ckpane">
                 <div class="cklbl">ACTIVE</div>
-                <div style="font-size:11.5px;margin-bottom:2px">claude-sonnet</div>
-                <div style="font-family:var(--mono);font-size:9.5px;color:var(--faint)">anthropic pool · 14 calls</div>
-                <div class="cklbl" style="margin-top:12px">MEASURED AT THIS</div>
-                <div class="ckrow"><span>claude-sonnet</span><span style="color:var(--cheap)">0.91</span></div>
-                <div style="font-family:var(--mono);font-size:9px;color:var(--faint)">summaries · 38 obs</div>
-                <div class="ckrow" style="margin-top:7px"><span>qwen2.5</span><span style="color:var(--mid)">0.31</span></div>
-                <div style="font-family:var(--mono);font-size:9px;color:var(--mid)">summaries · 5 obs · thin</div>
+                <div style="font-size:var(--hy-font-size-xs);margin-bottom:2px">claude-sonnet</div>
+                <div style="font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);color:var(--hy-color-text-subtle)">anthropic pool · 14 calls</div>
+                <div class="cklbl" style="margin-top:var(--hy-space-3)">MEASURED AT THIS</div>
+                <div class="ckrow"><span>claude-sonnet</span><span style="color:var(--hy-color-cost-low)">0.91</span></div>
+                <div style="font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);color:var(--hy-color-text-subtle)">summaries · 38 obs</div>
+                <div class="ckrow" style="margin-top:var(--hy-space-2)"><span>qwen2.5</span><span style="color:var(--hy-color-cost-mid)">0.31</span></div>
+                <div style="font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);color:var(--hy-color-cost-mid)">summaries · 5 obs · thin</div>
               </div>
             </div>
           </div>
@@ -377,12 +320,12 @@ footer a{color:var(--dim);}
             <div class="vsub">the models this machine can use, and whether each is ready now</div>
             <table class="mini">
               <tr><th>Model</th><th>Price</th><th>Reachable now</th><th style="text-align:right">Measured</th></tr>
-              <tr><td>claude-opus</td><td>$$$</td><td style="color:var(--cheap)">yes</td><td class="n">1.42 · 62 outcomes</td></tr>
-              <tr><td>claude-sonnet</td><td>$$</td><td style="color:var(--cheap)">yes</td><td class="n">0.91 · 38 outcomes</td></tr>
-              <tr><td>gemini-flash</td><td>$</td><td style="color:var(--dim)">no API key for google</td><td class="n" style="color:var(--faint)">not measured</td></tr>
-              <tr><td>qwen2.5-coder:7b</td><td>free</td><td style="color:var(--dim)">start ollama serve</td><td class="n">0.34 · 77 outcomes</td></tr>
+              <tr><td>claude-opus</td><td>$$$</td><td style="color:var(--hy-color-cost-low)">yes</td><td class="n">1.42 · 62 outcomes</td></tr>
+              <tr><td>claude-sonnet</td><td>$$</td><td style="color:var(--hy-color-cost-low)">yes</td><td class="n">0.91 · 38 outcomes</td></tr>
+              <tr><td>gemini-flash</td><td>$</td><td style="color:var(--hy-color-text-muted)">no API key for google</td><td class="n" style="color:var(--hy-color-text-subtle)">not measured</td></tr>
+              <tr><td>qwen2.5-coder:7b</td><td>free</td><td style="color:var(--hy-color-text-muted)">start ollama serve</td><td class="n">0.34 · 77 outcomes</td></tr>
             </table>
-            <div style="margin-top:12px;font-size:11px;color:var(--dim)">
+            <div style="margin-top:var(--hy-space-3);font-size:var(--hy-font-size-xs);color:var(--hy-color-text-muted)">
               The dot means reachable, not enabled in a config file. A score never
               appears without the number of outcomes behind it.
             </div>
@@ -392,24 +335,24 @@ footer a{color:var(--dim);}
           <div class="view">
             <div class="vhead">Activity</div>
             <div class="vsub">grouped by who has to act, not by time alone</div>
-            <div style="font-family:var(--mono);font-size:10px;color:#E0A93A;margin:2px 0 6px">
+            <div style="font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);color:var(--hy-color-status-warning);margin:2px 0 var(--hy-space-1)">
               WAITING ON YOU · 1</div>
             <div class="row"><span style="width:6px"></span><span style="flex:1">approve the refund reply</span>
-              <span class="pill">answer</span><span style="color:var(--dim)">gpt-5</span></div>
-            <div style="font-family:var(--mono);font-size:10px;color:var(--aqua);margin:10px 0 6px">
+              <span class="pill">answer</span><span style="color:var(--hy-color-text-muted)">gpt-5</span></div>
+            <div style="font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);color:var(--hy-color-accent-default);margin:var(--hy-space-2) 0 var(--hy-space-1)">
               RUNNING NOW · 1</div>
             <div class="row"><span class="blink"></span><span style="flex:1">summarise the Q3 report</span>
-              <span class="pill live">live</span><span style="color:var(--dim)">gemini-flash</span></div>
-            <div style="font-family:var(--mono);font-size:10px;color:#FF5A6E;margin:10px 0 6px">
+              <span class="pill live">live</span><span style="color:var(--hy-color-text-muted)">gemini-flash</span></div>
+            <div style="font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);color:var(--hy-color-status-danger);margin:var(--hy-space-2) 0 var(--hy-space-1)">
               SOMETHING FAILED · 1</div>
             <div class="row"><span style="width:6px"></span><span style="flex:1">extract the invoice fields</span>
-              <span class="pill fail">failed</span><span style="color:var(--dim)">claude-sonnet</span></div>
-            <div style="font-family:var(--mono);font-size:10px;color:var(--faint);margin:10px 0 6px">
+              <span class="pill fail">failed</span><span style="color:var(--hy-color-text-muted)">claude-sonnet</span></div>
+            <div style="font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);color:var(--hy-color-text-subtle);margin:var(--hy-space-2) 0 var(--hy-space-1)">
               DONE · 2</div>
             <div class="row"><span style="width:6px"></span><span style="flex:1">draft a reply to Sam</span>
-              <span class="pill ok">done</span><span style="color:var(--cheap)">local</span></div>
+              <span class="pill ok">done</span><span style="color:var(--hy-color-cost-low)">local</span></div>
             <div class="row"><span style="width:6px"></span><span style="flex:1">review the staged diff</span>
-              <span class="pill ok">done</span><span style="color:var(--dim)">deepseek</span></div>
+              <span class="pill ok">done</span><span style="color:var(--hy-color-text-muted)">deepseek</span></div>
           </div>
 
           <!-- 4 · Usage -->
@@ -418,14 +361,14 @@ footer a{color:var(--dim);}
             <div class="vsub">spend, grouped by model and day</div>
             <div class="cards">
               <div class="card"><div class="k">Calls today</div><div class="v">128</div></div>
-              <div class="card"><div class="k">Spend today</div><div class="v" style="color:var(--aqua)">$0.42</div></div>
-              <div class="card"><div class="k">Checked</div><div class="v" style="color:var(--cheap)">121</div></div>
+              <div class="card"><div class="k">Spend today</div><div class="v" style="color:var(--hy-color-accent-default)">$0.42</div></div>
+              <div class="card"><div class="k">Checked</div><div class="v" style="color:var(--hy-color-cost-low)">121</div></div>
             </div>
             <table class="mini">
               <tr><th>Model</th><th>Price</th><th style="text-align:right">Calls</th><th style="text-align:right">Cost</th></tr>
               <tr><td>claude-sonnet</td><td>$$</td><td class="n">14</td><td class="n">$0.31</td></tr>
               <tr><td>gemini-flash</td><td>$</td><td class="n">37</td><td class="n">$0.11</td></tr>
-              <tr><td>qwen2.5-coder:7b</td><td>free</td><td class="n">77</td><td class="n" style="color:var(--cheap)">free</td></tr>
+              <tr><td>qwen2.5-coder:7b</td><td>free</td><td class="n">77</td><td class="n" style="color:var(--hy-color-cost-low)">free</td></tr>
             </table>
           </div>
 
@@ -435,13 +378,13 @@ footer a{color:var(--dim);}
             <div class="vsub">what agents touched, and whether policy allowed it</div>
             <div class="cards">
               <div class="card"><div class="k">Allowed</div><div class="v">1,204</div></div>
-              <div class="card"><div class="k">Denied</div><div class="v" style="color:var(--exp)">7</div></div>
-              <div class="card"><div class="k">Flagged</div><div class="v" style="color:var(--mid)">2</div></div>
+              <div class="card"><div class="k">Denied</div><div class="v" style="color:var(--hy-color-cost-high)">7</div></div>
+              <div class="card"><div class="k">Flagged</div><div class="v" style="color:var(--hy-color-cost-mid)">2</div></div>
             </div>
             <div class="row"><span style="flex:1">Ledger chain intact</span><span class="pill ok">verified</span></div>
-            <div class="row"><span style="flex:1">OWASP LLM Top-10 coverage</span><span style="color:var(--dim)">8 / 10 rules</span></div>
-            <div class="row"><span style="flex:1">Prompt-injection markers seen</span><span style="color:var(--mid)">2 blocked</span></div>
-            <div style="margin-top:12px;font-family:var(--mono);font-size:10px;color:var(--faint)">
+            <div class="row"><span style="flex:1">OWASP LLM Top-10 coverage</span><span style="color:var(--hy-color-text-muted)">8 / 10 rules</span></div>
+            <div class="row"><span style="flex:1">Prompt-injection markers seen</span><span style="color:var(--hy-color-cost-mid)">2 blocked</span></div>
+            <div style="margin-top:var(--hy-space-3);font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);color:var(--hy-color-text-subtle)">
               EVERY DECISION IS APPEND-ONLY AND HASH-CHAINED · THE LOG STAYS ON THIS MACHINE</div>
           </div>
 
@@ -451,9 +394,9 @@ footer a{color:var(--dim);}
             <div class="vsub">what this machine is set to do, and the only screen that writes</div>
             <div class="row"><span style="flex:1">Send anything with PII only to a local model</span><span class="pill ok">on</span></div>
             <div class="row"><span style="flex:1">Refuse rather than send when no local model is ready</span><span class="pill ok">on</span></div>
-            <div class="row"><span style="flex:1">Keep prompt and response text</span><span style="color:var(--dim)">off</span></div>
-            <div class="row"><span style="flex:1">Serve an answer from a matching earlier question</span><span style="color:var(--dim)">off</span></div>
-            <div style="margin-top:12px;font-family:var(--mono);font-size:10px;color:var(--faint)">
+            <div class="row"><span style="flex:1">Keep prompt and response text</span><span style="color:var(--hy-color-text-muted)">off</span></div>
+            <div class="row"><span style="flex:1">Serve an answer from a matching earlier question</span><span style="color:var(--hy-color-text-muted)">off</span></div>
+            <div style="margin-top:var(--hy-space-3);font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);color:var(--hy-color-text-subtle)">
               EACH SWITCH SAYS WHAT IT COSTS · WRITES ~/.HYDRA/CONFIG.TOML, NOTHING ELSE</div>
           </div>
         </div>
@@ -604,21 +547,21 @@ footer a{color:var(--dim);}
     is written outside your applications directory.
   </p>
 
-  <div class="term" style="margin-top:22px;">
-    <div class="copyline" data-copy="curl -fsSL https://raw.githubusercontent.com/ankit373/hydra/main/install-app.sh | sh"><span><span class="p">$</span> curl -fsSL https://raw.githubusercontent.com/ankit373/hydra/main/install-app.sh | sh</span><span class="cp">copy</span></div>
+  <div class="term" style="margin-top:var(--hy-space-6);">
+    <div class="copyline"><code translate="no"><span class="p">$</span> curl -fsSL https://raw.githubusercontent.com/ankit373/hydra/main/install-app.sh | sh</code><button type="button" class="copy-btn" data-copy="curl -fsSL https://raw.githubusercontent.com/ankit373/hydra/main/install-app.sh | sh">copy</button></div>
     <div class="o">&nbsp;&nbsp;Release&nbsp;: <span class="g">v1.6.1</span></div>
     <div class="o">&nbsp;&nbsp;Target&nbsp;&nbsp;: darwin_universal</div>
     <div class="o">&nbsp;&nbsp;Checksum: <span class="g">verified</span></div>
     <div class="o">&nbsp;&nbsp;Installed: /Applications/Hydra.app</div>
   </div>
-  <p style="font-size:13.5px;color:var(--faint);margin-top:12px;">
+  <p style="font-size:var(--hy-font-size-md);color:var(--hy-color-text-subtle);margin-top:var(--hy-space-3);">
     Pin a version with <span class="mono">HYDRA_VERSION=v1.6.1</span>, or change where it
     lands with <span class="mono">HYDRA_APP_DIR=~/Applications</span>.
     <a href="https://github.com/ankit373/hydra/blob/main/install-app.sh">Read the script</a>
     before you pipe it to a shell. It is under 200 lines, and you should.
   </p>
 
-  <h3 style="font-family:var(--display);font-size:19px;margin-top:40px;">Or take the binary directly</h3>
+  <h3 style="font-family:var(--site-display);font-size:var(--hy-font-size-lg);margin-top:var(--hy-space-8);">Or take the binary directly</h3>
   <div class="dl">
     <div class="row">
       <div class="os">macOS</div>
@@ -657,7 +600,7 @@ footer a{color:var(--dim);}
     </div>
   </div>
   </div>
-  <p style="font-size:13px;color:var(--faint);margin-top:12px;font-family:var(--mono);">
+  <p style="font-size:var(--hy-font-size-sm);color:var(--hy-color-text-subtle);margin-top:var(--hy-space-3);font-family:var(--hy-font-family-mono);">
     links pinned to v1.6.1 · <a href="https://github.com/ankit373/hydra/releases">all releases</a> ·
     the command above always takes the newest
   </p>
@@ -679,41 +622,28 @@ footer a{color:var(--dim);}
   </div>
 </section>
 
-<footer>
+</main>
+
+<footer class="site-footer">
   <div class="wrap">
-    <a href="/">Hydra</a> · <a href="/docs.html">Docs</a> ·
-    <a href="/pricing.html">Pricing</a> ·
-    <a href="https://github.com/ankit373/hydra">GitHub</a> ·
-    MIT licensed · runs on your machine
+    <div>
+      <a class="site-logo" href="/" aria-label="Hydra home">HYDRA</a>
+      <p>Hydra picks the model best suited to each task, and can check the answer before you rely on it. Free and open source, MIT licensed.</p>
+    </div>
+    <nav aria-label="Footer">
+      <a href="/">Home</a>
+      <a href="/docs.html">Docs</a>
+      <a href="/app.html">Desktop app</a>
+      <a href="/pricing.html">Pricing</a>
+      <a href="/first-principles.html">First principles</a>
+      <a href="/blog/">Blog</a>
+      <a href="https://github.com/ankit373/hydra">GitHub</a>
+      <a href="/llms.txt">llms.txt</a>
+    </nav>
   </div>
 </footer>
 
 <script>
-// Copy-to-clipboard on the install command. Same behaviour as the landing page;
-// kept as its own copy because this page ships no other JS and pulling in a
-// shared bundle for eight lines would cost a request.
-(function(){
-  function copy(text,done){
-    if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(text).then(done,done);return;}
-    try{var ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.opacity=0;
-      document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);}catch(e){}
-    done();
-  }
-  Array.prototype.forEach.call(document.querySelectorAll('[data-copy]'),function(el){
-    el.setAttribute('role','button');el.setAttribute('tabindex','0');
-    function fire(){
-      copy(el.getAttribute('data-copy'),function(){
-        el.classList.add('copied');
-        var cp=el.querySelector('.cp'),prev=cp?cp.textContent:'';
-        if(cp)cp.textContent='✓ copied';
-        setTimeout(function(){el.classList.remove('copied');if(cp)cp.textContent=prev;},1400);
-      });
-    }
-    el.addEventListener('click',fire);
-    el.addEventListener('keydown',function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();fire();}});
-  });
-})();
-
 // The app preview sidebar: click a view name, see that view, matched by
 // position, since the nav-items and .view panes share the same markup order.
 (function(){
