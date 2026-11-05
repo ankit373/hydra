@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/ankit373/hydra/internal/rank"
 	"github.com/ankit373/hydra/internal/trust"
 )
 
@@ -20,20 +21,38 @@ const (
 	// MaxCostHeader is request only: a per-request cost ceiling a client may
 	// use to lower the operator's, never to raise it.
 	MaxCostHeader = "X-Hydra-Max-Cost-USD"
+	// ObjectiveHeader names what an unpinned route optimises, and echoes the
+	// objective that ordered the candidates.
+	ObjectiveHeader = "X-Hydra-Objective"
+	// BasisHeader says whether the answering head's P(pass) was measured in
+	// this class or is the catalogue's prior.
+	BasisHeader = "X-Hydra-P-Pass-Basis"
 )
 
 // Evidence is what the router concluded about a request; nil on an Answer
 // means it reported none.
 type Evidence struct {
-	TaskClass      string `json:"task_class"`
-	TaskClassBasis string `json:"task_class_basis"`
+	TaskClass      string `json:"task_class,omitempty"`
+	TaskClassBasis string `json:"task_class_basis,omitempty"`
+	// Objective is empty on a pinned route, where nothing was ordered by one.
+	Objective  string `json:"objective,omitempty"`
+	PPassBasis string `json:"p_pass_basis,omitempty"`
 }
 
 // setEvidenceHeaders is shared by the buffered and streamed replies, so the
-// two can never echo different classes.
+// two can never echo different values.
 func setEvidenceHeaders(h http.Header, ev *Evidence) {
-	if ev != nil {
-		h.Set(TaskClassHeader, ev.TaskClass)
+	if ev == nil {
+		return
+	}
+	setNonEmpty(h, TaskClassHeader, ev.TaskClass)
+	setNonEmpty(h, ObjectiveHeader, ev.Objective)
+	setNonEmpty(h, BasisHeader, ev.PPassBasis)
+}
+
+func setNonEmpty(h http.Header, name, v string) {
+	if v != "" {
+		h.Set(name, v)
 	}
 }
 
@@ -65,6 +84,26 @@ func explicitClass(h http.Header) (string, error) {
 		class = c
 	}
 	return class, nil
+}
+
+// objective reads ObjectiveHeader; empty means the client left it to the route.
+// Every value sent must parse and agree, as with the class.
+func objective(h http.Header) (rank.Objective, error) {
+	var obj rank.Objective
+	for _, v := range h.Values(ObjectiveHeader) {
+		o, err := rank.ParseObjective(v)
+		if err != nil {
+			return "", fmt.Errorf("%s: %w", ObjectiveHeader, err)
+		}
+		if o == "" {
+			continue
+		}
+		if obj != "" && o != obj {
+			return "", fmt.Errorf("%s was sent as both %q and %q; send one objective", ObjectiveHeader, obj, o)
+		}
+		obj = o
+	}
+	return obj, nil
 }
 
 // maxCost reads MaxCostHeader; 0 means the client sent none. Zero is refused

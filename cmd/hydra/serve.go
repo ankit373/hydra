@@ -3,6 +3,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -16,6 +17,7 @@ import (
 	"github.com/ankit373/hydra/internal/dispatch"
 	"github.com/ankit373/hydra/internal/executor"
 	"github.com/ankit373/hydra/internal/provider"
+	"github.com/ankit373/hydra/internal/rank"
 	"github.com/ankit373/hydra/internal/runid"
 	"github.com/ankit373/hydra/internal/runlog"
 	"github.com/ankit373/hydra/internal/serve"
@@ -26,8 +28,12 @@ import (
 // depend on dispatch, so it is testable without a model; this is where the two
 // meet, the same seam internal/workflow and internal/vet use.
 type serveRouter struct {
-	d           *dispatch.Dispatcher
-	defaultEnum string
+	d *dispatch.Dispatcher
+	// pinnedEnum is --enum when passed explicitly, which pins `hydra` to the
+	// pre-E1 route. Empty routes `hydra` by objective.
+	pinnedEnum string
+	// objective is --objective, what an unpinned request naming none optimises.
+	objective rank.Objective
 	// defaultClass is --task-class, the class an unpinned request naming none
 	// routes for. Empty leaves such a request routing exactly as before E1.
 	defaultClass string
@@ -64,6 +70,9 @@ func (r serveRouter) Chat(ctx context.Context, req serve.Request) (serve.Answer,
 	}
 
 	ans := serve.Answer{Output: res.Output, Head: res.Head.ID, Model: res.Head.Name, Evidence: ev}
+	if req.OnEvent == nil {
+		ans.Evidence = withObjective(ev, res)
+	}
 	if res.Response != nil {
 		ans.ToolCalls = res.Response.ToolCalls
 		ans.FinishReason = res.Response.FinishReason
@@ -72,10 +81,37 @@ func (r serveRouter) Chat(ctx context.Context, req serve.Request) (serve.Answer,
 	return ans, nil
 }
 
+// withObjective reports the objective and the answering head's P(pass) basis,
+// only when the objective is what ordered the candidates. A stream's headers
+// leave before that is known, so it reports the class alone.
+func withObjective(ev *serve.Evidence, res *dispatch.Result) *serve.Evidence {
+	if res.Objective == "" {
+		return ev
+	}
+	var out serve.Evidence
+	if ev != nil {
+		out = *ev
+	}
+	out.Objective, out.PPassBasis = string(res.Objective), passBasis(res.Scores[res.Head.ID])
+	return &out
+}
+
+// passBasis says what P(pass) rests on: this class's own record, evidence
+// borrowed from other classes, or the catalogue's score alone.
+func passBasis(sc rank.Score) string {
+	switch {
+	case sc.Measured():
+		return "measured"
+	case sc.N > 0:
+		return "borrowed"
+	}
+	return "catalogue_prior"
+}
+
 // options is the one translation of a served request into what the router is
 // asked, plus the class it routes for, nil when it routes for none.
 func (r serveRouter) options(req serve.Request) (dispatch.Options, *serve.Evidence, error) {
-	tier, enum, head, err := routeToDispatch(req.Route, r.defaultEnum)
+	tier, enum, head, err := routeToDispatch(req.Route, r.pinnedEnum)
 	if err != nil {
 		return dispatch.Options{}, nil, err
 	}
@@ -101,7 +137,7 @@ func (r serveRouter) options(req serve.Request) (dispatch.Options, *serve.Eviden
 	case req.Route.Head != "":
 	case req.TaskClass != "":
 		ev = &serve.Evidence{TaskClass: req.TaskClass, TaskClassBasis: "header"}
-	case r.defaultClass != "" && req.Route == (serve.Route{}):
+	case r.defaultClass != "" && (req.Route == (serve.Route{}) || isServedDefault(req.Route, enum)):
 		ev = &serve.Evidence{TaskClass: r.defaultClass, TaskClassBasis: "route"}
 	}
 	if ev != nil {
@@ -109,7 +145,19 @@ func (r serveRouter) options(req serve.Request) (dispatch.Options, *serve.Eviden
 		// must neither be served from nor stored for an unclassed request.
 		opts.Domain, opts.NoCache = ev.TaskClass, true
 	}
+	// Only an unpinned route is ordered by an objective. The cache key does not
+	// cover one, so a client choosing it neither reads nor fills the cache.
+	if tier == "" && head == "" {
+		opts.Objective = cmp.Or(req.Objective, r.objective)
+		opts.NoCache = opts.NoCache || req.Objective != ""
+	}
 	return opts, ev, nil
+}
+
+// isServedDefault is hydra/standard, the pre-E1 `hydra`, which keeps the
+// --task-class that route had.
+func isServedDefault(rt serve.Route, enum string) bool {
+	return rt.Enum != "" && enum == dispatch.ServedDefaultEnum
 }
 
 // requestCeiling is the lower of the client's and the policy's, read per request
@@ -206,7 +254,8 @@ func advertisable(heads []provider.Head) []serve.Model {
 }
 
 // routeToDispatch turns the client's routing key into what the router reads.
-func routeToDispatch(rt serve.Route, defaultEnum string) (tier, enum, head string, err error) {
+// An empty pinnedEnum leaves `hydra` unpinned, for the objective to order.
+func routeToDispatch(rt serve.Route, pinnedEnum string) (tier, enum, head string, err error) {
 	switch {
 	case rt.Head != "":
 		return "", "", rt.Head, nil
@@ -229,9 +278,10 @@ func routeToDispatch(rt serve.Route, defaultEnum string) (tier, enum, head strin
 		}
 		return strconv.Itoa(n), "", "", nil
 
-	default:
-		return dispatch.EnumToTier(defaultEnum), defaultEnum, "", nil
+	case pinnedEnum != "":
+		return dispatch.EnumToTier(pinnedEnum), pinnedEnum, "", nil
 	}
+	return "", "", "", nil
 }
 
 // flattenConversation renders every turn as the single prompt the router
@@ -262,7 +312,7 @@ func flattenConversation(msgs []executor.Message) string {
 func cmdServe() *cobra.Command {
 	var (
 		addr, token, enum string
-		taskClass         string
+		taskClass, obj    string
 		localOnly         bool
 		confidence        float64
 		heads             []string
@@ -277,7 +327,10 @@ func cmdServe() *cobra.Command {
 			"POST /v1/decisions and /v1/systemone take typed questions in either wire format and\n" +
 			"ask the decision sources in order: one when its answer clears --confidence, more\n" +
 			"through the SPRT when not. X-Hydra-Decision-Sources and -Confidence say which.\n\n" +
-			"The model field is the routing instruction. `hydra` takes the default enum,\n" +
+			"The model field is the routing instruction. `hydra` is routed by objective:\n" +
+			"quality runs the head measured strongest in the task class first, cost the cheapest\n" +
+			"one measured competent. X-Hydra-Objective overrides --objective per request, and\n" +
+			"an explicit --enum pins `hydra` instead. `hydra/standard` is the pre-E1 route,\n" +
 			"`hydra/hard` or `hydra/t4` pin an enum or a tier, and a head id pins that head.\n\n" +
 			"`stream: true` is answered as server-sent events. A fallback before any output is\n" +
 			"invisible; one after it ends the stream, because SSE cannot take back a partial and\n" +
@@ -302,9 +355,16 @@ func cmdServe() *cobra.Command {
 			if !dispatch.IsKnownEnum(enum) {
 				return fmt.Errorf("unknown enum %q", enum)
 			}
+			pinnedEnum := pinnedEnumFrom(c)
+			objective, err := rank.ParseObjective(obj)
+			if err == nil && objective == "" {
+				err = fmt.Errorf("give %s or %s", rank.Quality, rank.Cost)
+			}
+			if err != nil {
+				return fmt.Errorf("--objective: %w", err)
+			}
 			defaultClass := ""
 			if taskClass != "" {
-				var err error
 				if defaultClass, err = trust.TaskClass(taskClass); err != nil {
 					return fmt.Errorf("--task-class: %w", err)
 				}
@@ -327,8 +387,8 @@ func cmdServe() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			r := serveRouter{d: d, defaultEnum: enum, defaultClass: defaultClass, localOnly: localOnly}
-			printServeBanner(os.Stdout, ln.Addr().String(), enum, token != "", localOnly, d.Heads(), decider.unlisted)
+			r := serveRouter{d: d, pinnedEnum: pinnedEnum, objective: objective, defaultClass: defaultClass, localOnly: localOnly}
+			printServeBanner(os.Stdout, ln.Addr().String(), defaultRouting(pinnedEnum, objective), token != "", localOnly, d.Heads(), decider.unlisted)
 			return serve.Serve(ctx, ln, serve.Handler(r, decider, token))
 		},
 	}
@@ -336,7 +396,8 @@ func cmdServe() *cobra.Command {
 	f := cmd.Flags()
 	f.StringVar(&addr, "addr", "127.0.0.1:8787", "address to bind")
 	f.StringVar(&token, "token", "", "bearer token required of every request (or HYDRA_SERVE_TOKEN)")
-	f.StringVar(&enum, "enum", "STANDARD", "routing enum for a request that names no key")
+	f.StringVar(&enum, "enum", dispatch.ServedDefaultEnum, "pin `hydra` to this routing enum; applies only when passed")
+	f.StringVar(&obj, "objective", string(rank.Quality), "what `hydra` optimises when no --enum pins it: quality or cost")
 	f.StringVar(&taskClass, "task-class", "", "dotted task class for a request that names none, e.g. classification.banking77")
 	f.BoolVar(&localOnly, "local", false, "local Heads only, no API calls")
 	f.Float64Var(&confidence, "confidence", 0.95, "stop asking decision sources once an answer is this sure")
@@ -359,7 +420,25 @@ func restrictServeHeads(d *dispatch.Dispatcher, flagHeads []string, flagSet, loc
 	return nil
 }
 
-func printServeBanner(w io.Writer, addr, enum string, hasToken, localOnly bool, heads []provider.Head, unlistedDecisions int) {
+// pinnedEnumFrom is --enum only when passed: its default names no choice, and
+// `hydra` now routes by objective unless the operator opts out (#1206).
+func pinnedEnumFrom(c *cobra.Command) string {
+	if !c.Flags().Changed("enum") {
+		return ""
+	}
+	enum, _ := c.Flags().GetString("enum")
+	return enum
+}
+
+// defaultRouting is the banner's account of how `hydra` routes.
+func defaultRouting(pinnedEnum string, o rank.Objective) string {
+	if pinnedEnum != "" {
+		return pinnedEnum
+	}
+	return fmt.Sprintf("objective %s (hydra/standard pins the old route)", o)
+}
+
+func printServeBanner(w io.Writer, addr, routing string, hasToken, localOnly bool, heads []provider.Head, unlistedDecisions int) {
 	// Over the heads this server can actually reach. Counting all 16 on a
 	// --local endpoint advertised ten that no request could ever route to
 	// (#1147).
@@ -385,7 +464,7 @@ func printServeBanner(w io.Writer, addr, enum string, hasToken, localOnly bool, 
 	fmt.Fprintln(w)
 	fmt.Fprintf(w, "  %s  %s\n", cortexStyle.Render("hyctl serve"), dimStyle.Render("http://"+addr+"/v1"))
 	fmt.Fprintln(w)
-	fmt.Fprintf(w, "  default routing   %s\n", enum)
+	fmt.Fprintf(w, "  default routing   %s\n", routing)
 	fmt.Fprintf(w, "  auth              %s\n", auth)
 	if localOnly {
 		fmt.Fprintf(w, "  heads             local only\n")
