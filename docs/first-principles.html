@@ -3,19 +3,19 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>First Principles, The Math Behind Hydra</title>
-  <meta name="description" content="The math behind Hydra's router, SPRT, calibration, percolation-κ, and optimal parallelism, with interactive, provable derivations you can check.">
-  <meta name="keywords" content="SPRT sequential probability ratio test, KL divergence calibration, Molloy-Reed percolation, Amdahl's law parallelism, LLM router math, confidence routing, Bayes decision theory, Hydra">
+  <title>First principles: the math behind Hydra</title>
+  <meta name="description" content="The math behind how Hydra picks a model and checks the answer: SPRT, calibration, percolation-κ and optimal parallelism, with interactive derivations you can check.">
+  <meta name="keywords" content="SPRT sequential probability ratio test, KL divergence calibration, Molloy-Reed percolation, Amdahl's law parallelism, LLM router math, verified answers, Bayes decision theory, Hydra">
 
   <meta property="og:type" content="article">
   <meta property="og:url" content="https://hydra.uvansa.com/first-principles.html">
-  <meta property="og:title" content="First Principles, The Math Behind Hydra">
+  <meta property="og:title" content="First principles: the math behind Hydra">
   <meta property="og:description" content="Every Hydra routing decision is a named result you can check. Interactive derivations: SPRT, calibration D, percolation κ, optimal parallelism.">
   <meta property="og:image" content="https://hydra.uvansa.com/logo.png">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:site" content="@ankit373">
-  <meta name="twitter:title" content="First Principles, The Math Behind Hydra">
-  <meta name="twitter:description" content="Wald's SPRT, KL-divergence calibration, Molloy-Reed percolation, Amdahl optimal parallelism, the proofs behind the router, made interactive.">
+  <meta name="twitter:title" content="First principles: the math behind Hydra">
+  <meta name="twitter:description" content="Wald's SPRT, KL-divergence calibration, Molloy-Reed percolation, Amdahl optimal parallelism: the proofs behind the router, made interactive.">
   <meta name="twitter:image" content="https://hydra.uvansa.com/logo.png">
 
   <link rel="canonical" href="https://hydra.uvansa.com/first-principles.html">
@@ -26,7 +26,7 @@
   {
     "@context": "https://schema.org",
     "@type": "TechArticle",
-    "headline": "First Principles, The Math Behind Hydra",
+    "headline": "First principles: the math behind Hydra",
     "description": "The theorems and measurements behind Hydra's routing: Wald's sequential probability ratio test, calibration diagnostic power via KL divergence, Bayes defect-cost, Molloy-Reed percolation, Amdahl optimal parallelism, and context entropy.",
     "url": "https://hydra.uvansa.com/first-principles.html",
     "image": "https://hydra.uvansa.com/logo.png",
@@ -35,7 +35,7 @@
     "author": { "@type": "Person", "name": "Ankit Jha", "url": "https://github.com/ankit373" },
     "publisher": { "@type": "Organization", "name": "Hydra", "url": "https://hydra.uvansa.com/" },
     "about": ["Sequential analysis", "Information theory", "Percolation theory", "Parallel computing", "Bayesian decision theory"],
-    "keywords": "SPRT, KL divergence, Molloy-Reed, Amdahl's law, LLM routing, confidence routing"
+    "keywords": "SPRT, KL divergence, Molloy-Reed, Amdahl's law, LLM routing, verified answers"
   }
   </script>
 
@@ -210,7 +210,7 @@ footer{border-top:1px solid var(--line);margin-top:40px;padding:44px 0 56px;}
 </div>
 
 <header class="hero wrap">
-  <div class="eyebrow">provable trust</div>
+  <div class="eyebrow">the math, checkable</div>
   <h1>The router doesn't guess.<br><span class="grad">It derives.</span></h1>
   <p class="sub">Every routing decision Hydra makes is a <b>named result you can check</b>: a proven theorem it applies, or a quantity it measures. Not heuristics with a confident tone. Here are the six, each one interactive.</p>
   <div class="legend">
@@ -225,7 +225,7 @@ footer{border-top:1px solid var(--line);margin-top:40px;padding:44px 0 56px;}
 
   <!-- ═══ 1 · SPRT ═══════════════════════════════════════════════════════════ -->
   <section class="pillar reveal" id="sprt">
-    <div class="head"><span class="idx">01</span><h2>Confidence routing</h2></div>
+    <div class="head"><span class="idx">01</span><h2>Checking the answer</h2></div>
     <div class="kicker">Wald's sequential probability ratio test</div>
     <p class="lede">Instead of polling a fixed number of models, Hydra accumulates the <b>log-likelihood ratio</b> across votes and stops the instant the evidence is conclusive. Wald proved this minimizes the expected number of samples among <i>all</i> tests with the same error bounds.</p>
 
@@ -284,7 +284,7 @@ footer{border-top:1px solid var(--line);margin-top:40px;padding:44px 0 56px;}
         </label>
         <div class="readout">diagnostic power <b class="tnum" id="o-cal-d">1.76</b> nats</div>
       </div>
-      <figcaption class="vizcap">Interactive: vote distributions under both hypotheses, the gap between them is the diagnostic power D.</figcaption>
+      <figcaption class="vizcap">Interactive: vote distributions under both hypotheses. The gap between them is the diagnostic power D.</figcaption>
     </figure>
 
     <p class="analogy">A witness's credibility measured in nats. A coin-flip witness tells you nothing however many times they testify.</p>
@@ -299,7 +299,7 @@ footer{border-top:1px solid var(--line);margin-top:40px;padding:44px 0 56px;}
   <section class="pillar reveal" id="defect">
     <div class="head"><span class="idx">03</span><h2>When to stop</h2></div>
     <div class="kicker">the defect-cost bar · Bayes risk</div>
-    <p class="lede">Confidence isn't free and defects aren't equal. The expected loss of shipping an answer believed correct with confidence <i>c</i> is (1 − <i>c</i>)·<i>C</i><sub>defect</sub>; ship only when that clears a loss tolerance <i>τ</i>. A costlier defect ⟹ a higher bar ⟹ SPRT samples more before it stops.</p>
+    <p class="lede">Certainty isn't free and defects aren't equal. The expected loss of shipping an answer believed correct with probability <i>c</i> is (1 − <i>c</i>)·<i>C</i><sub>defect</sub>; ship only when that clears a loss tolerance <i>τ</i>. A costlier defect ⟹ a higher bar ⟹ SPRT samples more before it stops.</p>
 
     <div class="eq" aria-label="c star equals one minus tau over C defect">
       <i>c</i><sup>★</sup> <span class="op">=</span> 1 <span class="op">−</span>
@@ -307,14 +307,14 @@ footer{border-top:1px solid var(--line);margin-top:40px;padding:44px 0 56px;}
     </div>
 
     <figure class="viz">
-      <div class="canvas-wrap"><canvas id="c-defect" width="1040" height="300" role="img" aria-label="Required confidence rising as the defect cost grows"></canvas></div>
+      <div class="canvas-wrap"><canvas id="c-defect" width="1040" height="300" role="img" aria-label="Required probability of a correct answer rising as the defect cost grows"></canvas></div>
       <div class="ctl">
         <label>defect cost <i>C</i><sub>defect</sub> <span class="v" id="v-def-c">$126</span>
           <input type="range" id="s-def-c" min="0" max="100" step="1" value="40" aria-label="defect cost (log scale)">
         </label>
-        <div class="readout">required confidence <b class="tnum" id="o-def-cstar">96.0%</b> &nbsp;·&nbsp; ≈ <b class="tnum" id="o-def-n">2</b> samples</div>
+        <div class="readout">required P(correct) <b class="tnum" id="o-def-cstar">96.0%</b> &nbsp;·&nbsp; ≈ <b class="tnum" id="o-def-n">2</b> samples</div>
       </div>
-      <figcaption class="vizcap">Interactive: the required confidence rising as the defect cost grows.</figcaption>
+      <figcaption class="vizcap">Interactive: the required probability of a correct answer rising as the defect cost grows.</figcaption>
     </figure>
 
     <p class="analogy">You demand far more certainty before heart surgery than before a haircut, the bar scales with what a mistake costs.</p>
@@ -329,7 +329,7 @@ footer{border-top:1px solid var(--line);margin-top:40px;padding:44px 0 56px;}
   <section class="pillar reveal" id="percolation">
     <div class="head"><span class="idx">04</span><h2>Blast radius</h2></div>
     <div class="kicker">Molloy-Reed percolation criterion</div>
-    <p class="lede">Treat the code as a graph with degree mean ⟨<i>k</i>⟩ and second moment ⟨<i>k</i><sup>2</sup>⟩. A <b>giant connected component</b>: a cascade-capable core where one change can ripple everywhere, exists precisely when <i>κ</i> ≥ 2. Files inside it get their confidence bar raised.</p>
+    <p class="lede">Treat the code as a graph with degree mean ⟨<i>k</i>⟩ and second moment ⟨<i>k</i><sup>2</sup>⟩. A <b>giant connected component</b>: a cascade-capable core where one change can ripple everywhere, exists precisely when <i>κ</i> ≥ 2. Edits to files inside it must clear a higher bar.</p>
 
     <div class="eq" aria-label="kappa equals mean of k squared over mean of k, greater than or equal to 2">
       <i>κ</i> <span class="op">=</span>
@@ -432,7 +432,7 @@ footer{border-top:1px solid var(--line);margin-top:40px;padding:44px 0 56px;}
   <div class="wrap foot">
     <div>
       <a class="mark" href="/">HYDRA</a>
-      <p>The Trust Control Plane for AI development. Route to a confidence of correctness.</p>
+      <p>Hydra picks the model best suited to each task, checks the answer, and escalates when the check fails.</p>
     </div>
     <nav>
       <a href="/">Home</a>
@@ -627,7 +627,7 @@ footer{border-top:1px solid var(--line);margin-top:40px;padding:44px 0 56px;}
       ctx.strokeStyle='rgba(0,230,195,.4)'; ctx.setLineDash([4,4]); ctx.beginPath(); ctx.moveTo(mx,my); ctx.lineTo(mx,h-padB); ctx.stroke(); ctx.setLineDash([]);
       ctx.fillStyle=C.aqua; glow(ctx,C.aqua,14); ctx.beginPath(); ctx.arc(mx,my,6,0,7); ctx.fill(); noGlow(ctx);
       ctx.fillStyle=C.faint; ctx.font=mono(10); ctx.textAlign='center'; ctx.fillText('cheap defect', X(6),h-8); ctx.fillText('catastrophic defect', X(92),h-8);
-      ctx.textAlign='left'; ctx.fillStyle=C.faint; ctx.fillText('required confidence  c★', padL, padT-8);
+      ctx.textAlign='left'; ctx.fillStyle=C.faint; ctx.fillText('required P(correct)  c★', padL, padT-8);
     }
     cEl.addEventListener('input',draw); addEventListener('resize',draw); draw();
   })();
