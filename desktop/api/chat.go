@@ -7,6 +7,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/dispatch"
 	"github.com/ankit373/hydra/internal/rank"
 	"github.com/ankit373/hydra/internal/runid"
@@ -120,17 +121,6 @@ func (a *API) Chat(prompt, enum, runID, tier, head string) (*ChatReply, error) {
 		_ = rl.Append(runlog.Event{Kind: runlog.KindRunFinished, TaskID: taskID})
 	}()
 
-	d, err := dispatch.New(ctx)
-	if err != nil {
-		r.Error = err.Error()
-		return r, nil
-	}
-	if len(d.Heads()) == 0 {
-		r.Error = "No models found on this machine yet."
-		r.NeedsProbe = true
-		return r, nil
-	}
-
 	// An explicit tier outranks an inferred one: picking a model is a stronger
 	// statement than the complexity band a routing key implies. Left unvalidated
 	// here on purpose, dispatch's resolveTierHint already rejects anything
@@ -145,6 +135,21 @@ func (a *API) Chat(prompt, enum, runID, tier, head string) (*ChatReply, error) {
 			return r, nil
 		}
 		tierHint = dispatch.EnumToTier(enum)
+	}
+
+	if err := ensureConfig(); err != nil {
+		r.Error = err.Error()
+		return r, nil
+	}
+	d, err := dispatch.New(ctx)
+	if err != nil {
+		r.Error = err.Error()
+		return r, nil
+	}
+	if len(d.Heads()) == 0 {
+		r.Error = "No models found on this machine yet."
+		r.NeedsProbe = true
+		return r, nil
 	}
 
 	// Deltas go to the frontend as they arrive. The reply still carries the
@@ -181,6 +186,16 @@ func (a *API) Chat(prompt, enum, runID, tier, head string) (*ChatReply, error) {
 
 	fill(r, res)
 	return r, nil
+}
+
+// ensureConfig writes the defaults a never-configured machine already runs
+// on, which GetSettings shows, so the app needs no `hyctl init` first. A file
+// that exists and does not parse is left for dispatch.New to report (#1030).
+func ensureConfig() error {
+	if _, err := config.Load(); errors.Is(err, config.ErrNotFound) {
+		return config.Save(&config.Config{})
+	}
+	return nil
 }
 
 // fill copies a dispatch result onto a reply. Shared by Chat and
