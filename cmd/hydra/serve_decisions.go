@@ -57,6 +57,9 @@ func newDecisionRouter(ctx context.Context, confidence float64, localOnly bool, 
 			heads = append(heads, h)
 		}
 	}
+	if len(heads) > 0 {
+		unlisted = 0 // the banner reports an empty /v1/decisions, not a partial one
+	}
 	ceiling, _ := costCeiling(policy.ForFile(config.ScriptHome(), policy.Spec{}), false, 0)
 	return decisionRouter{router: decide.Router{
 		Heads:  heads,
