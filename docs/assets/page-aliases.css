@@ -19,3 +19,9 @@
   --mid: var(--hy-color-cost-mid);
   --exp: var(--hy-color-cost-high);
 }
+
+/* Without color-mix (Safari < 16.2, Chrome < 111) --panel would compute to
+   nothing and every card would go transparent; fall back to the opaque card. */
+@supports not (color: color-mix(in srgb, red 50%, transparent)) {
+  :root { --panel: var(--hy-color-surface-card); }
+}

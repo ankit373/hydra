@@ -32,6 +32,7 @@ design/scripts/emit.mjs       copies the CSS to its consumers and writes the lip
 | `docs/assets/tokens.css` | every website page links it |
 | `desktop/frontend/src/tokens.generated.css` | imported by `desktop/frontend/src/tokens.css` |
 | `internal/tui/tokens_gen.go` | `internal/tui/styles.go` and the wordmark gradient |
+| `desktop/window_gen.go` | the desktop app's native window background, painted before the first frame |
 
 Light values sit on `:root`. Dark values apply under `@media (prefers-color-scheme: dark)` scoped to `:root:not([data-theme="light"])`, and always under `:root[data-theme="dark"]`. The website and the desktop app pin `data-theme="dark"` until the light theme ships, so today they render dark everywhere.
 
@@ -111,7 +112,7 @@ These live in `base.tokens.json` and are the same in both themes. They are gener
 The TUI never paints a background, so it cannot know the exact colour behind its text. Terminal roles are therefore checked against three common terminal backgrounds: `#1e1e1e` for dark, and `#ffffff` and Solarized Light `#fdf6e3` for light. lipgloss picks the light or dark value from background detection, overridable with `HYDRA_THEME=light|dark`.
 
 - **Truecolor:** the token's own value.
-- **ANSI-256:** the closest colour by ΔE2000 *among those that meet the role's floor on every terminal background* and stay within 40° of the role's OKLCH hue (neutral roles may take a grey). Plain nearest-match is what turned body text unreadable at 256 colours (TUI-03). Roles in one family (`text.*`, `accent.*`) take different indices, so the hierarchy survives at 256 colours; if no in-hue index were left, a role would share one rather than change hue.
+- **ANSI-256:** the closest colour by ΔE2000 *among those that meet the role's floor on every terminal background* and stay within 40° of the role's OKLCH hue (neutral roles may take a grey). Plain nearest-match is what turned body text unreadable at 256 colours (TUI-03). Roles in one family (`text.*`, `accent.*`) take different indices, so the hierarchy survives at 256 colours; if no in-hue index is left, the build fails rather than share one or change hue.
 - **ANSI-16:** a fixed slot per role, so the user's own terminal palette applies.
 - **Body text** has no colour at all and uses the terminal's default foreground.
 - **NO_COLOR and selection:** selection and focus use reverse video plus a glyph (`[name]` for the active tab, a heavy border for the focused pane), so nothing is told apart by colour alone.

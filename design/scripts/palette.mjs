@@ -61,21 +61,18 @@ function hueGap(a, b, neutral) {
 }
 
 // nearest256 is the closest in-hue index by ΔE2000 that meets the floor on
-// every terminal background (plain nearest-match broke TUI-03). It avoids an
-// index a sibling role took, but shares one rather than leave the role's hue.
+// every terminal background (plain nearest-match broke TUI-03) and that no
+// sibling role took, so a family keeps its hierarchy at 256 colours.
 function nearest256(h, refs, min, taken, neutral) {
   const c = new ColorJS(h);
-  for (const avoid of [taken, new Set()]) {
-    let best;
-    for (const [i, rgb] of ansi) {
-      const x = ansiHex(rgb);
-      if (avoid.has(i) || hueGap(c, new ColorJS(x), neutral) > 40 || (min && refs.some((b) => wcag(x, b) < min))) continue;
-      const d = c.deltaE(new ColorJS(x), '2000');
-      if (!best || d < best.d) best = { i, d, x };
-    }
-    if (best) return best;
+  let best;
+  for (const [i, rgb] of ansi) {
+    const x = ansiHex(rgb);
+    if (taken.has(i) || hueGap(c, new ColorJS(x), neutral) > 40 || (min && refs.some((b) => wcag(x, b) < min))) continue;
+    const d = c.deltaE(new ColorJS(x), '2000');
+    if (!best || d < best.d) best = { i, d, x };
   }
-  throw new Error(`no in-hue ANSI-256 colour reaches ${min}:1 for ${h}`);
+  return best;
 }
 
 const failures = [];
@@ -99,12 +96,14 @@ for (const mode of MODES) {
     for (const b of refs) if (floor?.min && wcag(h, b) < floor.min) failures.push(`${mode} ${path} ${h} is ${wcag(h, b).toFixed(2)}:1 on terminal ${b}`);
     const family = (taken[path.split('.').slice(0, 2).join('.')] ??= new Set());
     const pick = nearest256(h, refs, floor?.min, family, t.$extensions['dev.hydra.leonardo']?.scale === 'neutral');
+    if (!pick) { failures.push(`${mode} ${path} ${h} has no in-hue ANSI-256 index a sibling has not taken that reaches ${floor?.min ?? 0}:1`); continue; }
     family.add(pick.i);
     term.ansi256 = String(pick.i);
     row[mode].ansi256 = pick;
     row[mode].term = Math.min(...refs.map((b) => wcag(h, b)));
   }
 }
+for (const [path, r] of Object.entries(report)) if (!r.light || !r.dark) failures.push(`${path} is checked in one theme only; declare it in both`);
 if (failures.length) { console.error(failures.join('\n')); process.exit(1); }
 for (const mode of MODES) write(`themes/${mode}.tokens.json`, themes[mode]);
 
@@ -124,6 +123,6 @@ for (const [path, r] of Object.entries(report)) {
 const designMd = new URL('../../DESIGN.md', import.meta.url);
 const START = '<!-- generated:contrast -->', END = '<!-- /generated:contrast -->';
 const doc = fs.readFileSync(designMd, 'utf8');
-const [head, rest] = doc.split(START);
-if (rest === undefined || !rest.includes(END)) throw new Error('DESIGN.md is missing the contrast markers');
-fs.writeFileSync(designMd, `${head}${START}\n${md}${END}${rest.split(END)[1]}`);
+const parts = doc.split(START), tail = parts[1]?.split(END);
+if (parts.length !== 2 || tail.length !== 2) throw new Error('DESIGN.md must hold each contrast marker exactly once');
+fs.writeFileSync(designMd, `${parts[0]}${START}\n${md}${END}${tail[1]}`);

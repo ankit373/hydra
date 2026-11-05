@@ -1192,7 +1192,10 @@ function svg(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attr
   var cv=$('#stage'); if(!cv) return;
   var x=cv.getContext('2d'), stage=$('#heroSticky'), heroPin=$('#heroPin');
   var heroCopy=$('#heroCopy'), scrollHint=$('#scrollHint');
-  var C={cyan:'#2AF0E0',violet:'#8B5CF6',magenta:'#E852C8',aqua:'#00E6C3',cheap:'#3FD98A',mid:'#E0A93A',exp:'#FF5A6E',dim:'#6B73A0'};
+  // Canvas colours read the generated tokens, so the drawing follows design/tokens.
+  var T=getComputedStyle(document.documentElement);
+  function tok(n){return T.getPropertyValue('--hy-color-'+n).trim();}
+  var C={cyan:tok('accent-strong'),violet:tok('brand-mid'),magenta:tok('brand-end'),aqua:tok('accent-default'),cheap:tok('cost-low'),mid:tok('cost-mid'),exp:tok('cost-high'),dim:'#6B73A0'};
 
   // ── graph model ──────────────────────────────────────────────────────────
   var seed=20260726; function rnd(){seed=(seed*1664525+1013904223)>>>0;return seed/4294967296;}

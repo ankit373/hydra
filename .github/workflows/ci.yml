@@ -332,7 +332,7 @@ jobs:
       # committed is untracked, and `git diff` would pass it.
       - name: Generated files match the token source
         run: |
-          paths="design DESIGN.md docs/assets/tokens.css desktop/frontend/src/tokens.generated.css internal/tui/tokens_gen.go"
+          paths="design DESIGN.md docs/assets/tokens.css desktop/frontend/src/tokens.generated.css desktop/window_gen.go internal/tui/tokens_gen.go"
           drift=$(git status --porcelain -- $paths)
           if [ -n "$drift" ]; then
             echo "Generated files are out of date; run: cd design && npm ci && npm run build"

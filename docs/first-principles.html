@@ -444,9 +444,12 @@ footer{border-top:1px solid var(--line);margin-top:40px;padding:44px 0 56px;}
 (function(){
   "use strict";
   var REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  var C = {bg:'#06070F',ink:'#E7E9F5',dim:'#9aa0c4',faint:'#5a5f85',
-           cyan:'#2AF0E0',aqua:'#00E6C3',violet:'#8B5CF6',magenta:'#E852C8',
-           cheap:'#3FD98A',mid:'#E0A93A',exp:'#FF5A6E'};
+  // Canvas colours read the generated tokens, so the drawing follows design/tokens.
+  var T=getComputedStyle(document.documentElement);
+  function tok(n){return T.getPropertyValue('--hy-color-'+n).trim();}
+  var C = {bg:tok('surface-base'),ink:tok('text-default'),dim:tok('text-muted'),faint:tok('text-subtle'),
+           cyan:tok('accent-strong'),aqua:tok('accent-default'),violet:tok('accent-secondary'),magenta:tok('brand-end'),
+           cheap:tok('cost-low'),mid:tok('cost-mid'),exp:tok('cost-high')};
 
   // topbar shade + reveal on scroll
   var topbar = document.getElementById('topbar');
