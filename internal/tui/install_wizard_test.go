@@ -152,8 +152,14 @@ func TestInstallWizard_DecliningRunsNothing(t *testing.T) {
 	if im.step == installStepRunning {
 		t.Error("declining started the install anyway")
 	}
-	if cmd == nil {
-		t.Error("declining did not quit")
+	if cmd != nil {
+		t.Error("declining quit before the commands could be read")
+	}
+	if v := stripANSI(im.View()); !strings.Contains(v, "Run these yourself") || !strings.Contains(v, im.selected.installCmd) {
+		t.Errorf("declining does not repeat the commands:\n%s", v)
+	}
+	if _, cmd = m.Update(key("enter")); cmd == nil {
+		t.Error("a key on the done screen did not quit")
 	}
 }
 
@@ -230,8 +236,11 @@ func TestInstallWizard_ReportsTheOutcome(t *testing.T) {
 	if !im.done || im.err {
 		t.Errorf("a successful install reported done=%v err=%v", im.done, im.err)
 	}
-	if cmd == nil {
-		t.Error("a finished install did not quit")
+	if cmd != nil {
+		t.Error("a finished install quit before its outcome could be read")
+	}
+	if _, cmd = m.Update(key("q")); cmd == nil {
+		t.Error("a key on the outcome did not quit")
 	}
 	if v := im.View(); strings.TrimSpace(v) == "" {
 		t.Error("the done screen renders nothing")
