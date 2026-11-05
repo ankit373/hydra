@@ -174,6 +174,11 @@ type Options struct {
 	// say which head produced it. Nil means no incremental delivery, which
 	// takes the plain Execute path and behaves exactly as before.
 	OnStream OnStream
+
+	// Escalate judges an answer before it is final. true moves on to the next
+	// candidate, and the answer is costed and logged but neither cached nor handed
+	// off. Nil keeps the first answer standing.
+	Escalate func(ctx context.Context, r *Result) (next bool, reason string)
 }
 
 // Result is the outcome of a successful dispatch.
@@ -211,6 +216,10 @@ type Result struct {
 	// set only when the cost constraint was the thing that ordered the
 	// candidates. Zero means it did not run, never that nothing was demanded.
 	Requirement float64
+
+	// CostUSD is this call's price, set once from CallCost: every cost row,
+	// runlog span and caller reads it rather than pricing the call again.
+	CostUSD float64
 
 	// Cache is the stored answer this result was served from, nil when a head
 	// actually ran. Callers label it rather than passing it off as fresh work:
@@ -488,9 +497,13 @@ func (d *Dispatcher) CapturesPayloads() bool {
 	return d.cfg != nil && d.cfg.CapturePayloads
 }
 
-// EstimateCost exposes per-tier cost estimation for external callers.
+// EstimateCost is swarm.PricingReader's tier price, which swarm keeps until
+// #1242 routes it through CallCost; nothing in this package reads it.
 func (d *Dispatcher) EstimateCost(tier, inputTokens, outputTokens int) float64 {
-	return d.estimateCost(tier, inputTokens, outputTokens)
+	if d.pricing == nil {
+		return 0
+	}
+	return d.pricing.EstimateCost(tier, inputTokens, outputTokens)
 }
 
 // probeCacheTTL bounds how long a machine probe is reused across calls to New
@@ -822,6 +835,9 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 
 	var lastErr error
 	var attempts []Attempt
+	// last is the newest answer the Escalate hook passed over, which stands
+	// when no candidate is left to ask; the hook's owner chooses what to serve.
+	var last *Result
 	// Refusals the request itself caused, against heads actually sent, so a
 	// run that sent nothing can say it was the request and not the heads.
 	var tooWarm, overCost, sent int
@@ -945,7 +961,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		}
 		if opts.MaxCostUSD > 0 {
 			estInputTokens := len(prompt) / 4
-			estCost := d.estimateCost(tier, estInputTokens, estInputTokens/2)
+			estCost := CallCost(d.pricing, h, estInputTokens, estInputTokens/2)
 			if estCost > opts.MaxCostUSD {
 				// Named only when the caller said where the ceiling came from.
 				// Defaulting to a source would mean printing "--max-cost" at an
@@ -1049,7 +1065,8 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		}
 		d.health.Pass(h.ID)
 		r := &Result{Output: resp.Output, Head: h, Retries: i, Attempts: attempts, Response: resp,
-			Domain: domain, Scores: scores, Objective: opts.Objective}
+			Domain: domain, Scores: scores, Objective: opts.Objective,
+			CostUSD: CallCost(d.pricing, h, resp.InputTokens, resp.OutputTokens)}
 		r.OutputProvenance = rules.ClassifyPart(egress.Part{
 			Content: resp.Output, Source: egress.SourceHead, Origin: h.ID,
 		})
@@ -1057,13 +1074,12 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		recordContextEcho(resp.Output, hiddenContextFor(opts, handoffText), h)
 		inRef, outRef := d.capturePayloads(prompt, opts, resp)
 		d.captureRecall(span, prompt)
-		d.remember(ctx, prompt, opts, class, r, d.estimateCost(tier, resp.InputTokens, resp.OutputTokens))
 		_ = rl.Append(runlog.Event{
 			Kind: runlog.KindDispatchFinished, TaskID: taskID,
 			SpanID: span, ParentSpanID: taskSpan,
 			InputRef: inRef, OutputRef: outRef,
 			Head: h.ID, Model: resp.Model, Tier: tier, Status: "ok",
-			CostUSD:      d.estimateCost(tier, resp.InputTokens, resp.OutputTokens),
+			CostUSD:      r.CostUSD,
 			DurationMS:   resp.Duration.Milliseconds(),
 			InputTokens:  resp.InputTokens,
 			OutputTokens: resp.OutputTokens,
@@ -1071,6 +1087,17 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 			Meta:         dispatchMeta(opts, resp),
 		})
 		_ = d.logDispatch(r, prompt, opts, actProb, span)
+		d.recordBudget(r)
+		// Paid for and logged above, so a rejected answer is still on the books;
+		// what it must not become is the cached or handed-off one.
+		if opts.Escalate != nil {
+			if next, reason := opts.Escalate(ctx, r); next {
+				attempts = append(attempts, Attempt{Head: h.ID, Model: h.Name, Tier: tier, Reason: "escalated: " + reason})
+				last = r
+				continue
+			}
+		}
+		d.remember(ctx, prompt, opts, class, r)
 		if from, err := d.writeHandoff(r, prompt, opts); err == nil {
 			// last_handoff.json keeps only the newest. Appending the handoff
 			// here is what makes a *chain* of them reconstructable, which is
@@ -1082,7 +1109,6 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 				Ref: from, Detail: "context handed to " + from,
 			})
 		}
-		d.recordBudget(r)
 		d.syncStateJSON(r)
 		_ = rl.Append(runlog.Event{
 			Kind: runlog.KindTaskFinished, TaskID: taskID, SpanID: taskSpan,
@@ -1091,6 +1117,13 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		return r, nil
 	}
 
+	if last != nil {
+		_ = rl.Append(runlog.Event{
+			Kind: runlog.KindTaskFinished, TaskID: taskID, SpanID: taskSpan,
+			Head: last.Head.ID, Model: last.Response.Model, Tier: rank.UITier(last.Head), Status: "ok",
+		})
+		return last, nil
+	}
 	// Closed on the way out too, or the span stays open and its bar ends at
 	// whichever attempt happened to log last. A parked task is deliberately not
 	// closed here: it is waiting on a human, not finished.
@@ -1644,7 +1677,7 @@ func headPrice(db *pricing.DB) rank.Price {
 		if !modelKnown && !tierKnown {
 			return 0, false
 		}
-		return db.CostForModel(model, tier, nominalTokens, nominalTokens/2), true
+		return CallCost(db, h, nominalTokens, nominalTokens/2), true
 	}
 }
 
@@ -1789,7 +1822,6 @@ func (d *Dispatcher) syncStateJSON(r *Result) {
 func (d *Dispatcher) logDispatch(r *Result, prompt string, opts Options, actProb float64, span string) error {
 	tier := rank.UITier(r.Head)
 	wallMs := r.Response.Duration.Milliseconds()
-	estCost := d.estimateCost(tier, r.Response.InputTokens, r.Response.OutputTokens)
 
 	logDir := filepath.Join(config.Dir(), "logs")
 	_ = os.MkdirAll(logDir, 0o700)
@@ -1845,7 +1877,7 @@ func (d *Dispatcher) logDispatch(r *Result, prompt string, opts Options, actProb
 			"pool":            headPool(r.Head),
 			"prompt_tokens":   r.Response.InputTokens,
 			"response_tokens": r.Response.OutputTokens,
-			"est_cost_usd":    estCost,
+			"est_cost_usd":    r.CostUSD,
 			"wall_ms":         wallMs,
 			"tokens_source":   tokensSource,
 			"cost_source":     costSource,
@@ -1888,12 +1920,13 @@ func appendJSONL(path string, entry map[string]any) error {
 	return err
 }
 
-// estimateCost returns $/call using the live pricing DB (OpenRouter + tier fallback).
-func (d *Dispatcher) estimateCost(tier, inputTokens, outputTokens int) float64 {
-	if d.pricing == nil {
+// CallCost prices one call to h: by its model when pricing knows it, else by its
+// tier. The one derivation, so the price the router ordered on is the one logged.
+func CallCost(db *pricing.DB, h provider.Head, inputTokens, outputTokens int) float64 {
+	if db == nil {
 		return 0
 	}
-	return d.pricing.EstimateCost(tier, inputTokens, outputTokens)
+	return db.CostForModel(h.Meta["model"], rank.UITier(h), inputTokens, outputTokens)
 }
 
 // dispatchMeta is the model-parameter side of a span: what was requested and

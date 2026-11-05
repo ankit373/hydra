@@ -9,11 +9,11 @@ import (
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/decide"
 	"github.com/ankit373/hydra/internal/decision"
+	"github.com/ankit373/hydra/internal/dispatch"
 	"github.com/ankit373/hydra/internal/executor"
 	"github.com/ankit373/hydra/internal/policy"
 	"github.com/ankit373/hydra/internal/pricing"
 	"github.com/ankit373/hydra/internal/provider"
-	"github.com/ankit373/hydra/internal/rank"
 	"github.com/ankit373/hydra/internal/runid"
 	"github.com/ankit373/hydra/internal/runlog"
 	"github.com/ankit373/hydra/internal/serve"
@@ -38,13 +38,10 @@ func (r decisionRouter) Decide(ctx context.Context, c decide.Call) (decide.Outco
 
 // newDecisionRouter builds the router over this machine's decision heads. --local keeps only
 // local ones, allows applies the serve allowlist, and policy.yaml's max_cost_usd is the budget.
-func newDecisionRouter(ctx context.Context, confidence float64, localOnly bool, allows func(id string) bool) (decisionRouter, error) {
+// cal is the server's one calibration store, shared with the chat cascade.
+func newDecisionRouter(ctx context.Context, confidence float64, localOnly bool, cal *trust.Calibrator, allows func(id string) bool) (decisionRouter, error) {
 	if !(confidence > 0 && confidence < 1) {
 		return decisionRouter{}, fmt.Errorf("--confidence must be in (0, 1), got %v", confidence)
-	}
-	cal, err := trust.New(trust.DefaultPath())
-	if err != nil {
-		return decisionRouter{}, fmt.Errorf("calibration load: %w", err)
 	}
 	var heads []provider.Head
 	unlisted := 0
@@ -79,6 +76,6 @@ func servePolicyCeiling() (float64, string) {
 // decisionPrice estimates one call from the input's size; decision sources bill input only.
 func decisionPrice(db *pricing.DB) func(provider.Head, decision.Request) float64 {
 	return func(h provider.Head, r decision.Request) float64 {
-		return db.CostForModel(h.Meta["model"], rank.UITier(h), executor.EstimateTokens(r.Input), 0)
+		return dispatch.CallCost(db, h, executor.EstimateTokens(r.Input), 0)
 	}
 }

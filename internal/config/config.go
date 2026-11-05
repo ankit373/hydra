@@ -138,6 +138,20 @@ type Serve struct {
 	// Heads is the allowlist the server routes among; empty means every discovered head.
 	// `--heads` replaces it for one run.
 	Heads []string `toml:"heads,omitempty"`
+
+	// Verifiers gate escalation: an answer for a class that fails its check is
+	// asked of the next head. A class with none is answered once, as before.
+	Verifiers []ServeVerifier `toml:"verifiers,omitempty"`
+}
+
+// ServeVerifier attaches one check to one task class. Exactly one of Labels and
+// Pattern is set; cmd/hydra validates it at startup, where the oracle is built.
+type ServeVerifier struct {
+	Class   string `toml:"class"`
+	Kind    string `toml:"kind"`
+	ID      string `toml:"id"`
+	Labels  string `toml:"labels,omitempty"` // a file, one label per line, '#' comments
+	Pattern string `toml:"pattern,omitempty"`
 }
 
 // OpenRouterModels is the configured allowlist, or nothing.
