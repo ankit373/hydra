@@ -161,8 +161,8 @@ func TestServeRouter_CarriesTheAnswerHeadAndTokensBack(t *testing.T) {
 	if ans.InputTokens == 0 && ans.OutputTokens == 0 {
 		t.Error("no tokens carried back, so the client's usage block reads as a free call")
 	}
-	if ans.Evidence == nil || *ans.Evidence != (serve.Evidence{TaskClass: "default", TaskClassBasis: "default"}) {
-		t.Errorf("evidence %+v, want the default class echoed with its basis", ans.Evidence)
+	if ans.Evidence != nil {
+		t.Errorf("evidence %+v for a request that routed on no class", ans.Evidence)
 	}
 }
 
@@ -419,33 +419,36 @@ func TestServeHeads_AnEmptyFlagClearsTheConfigList(t *testing.T) {
 	}
 }
 
-// The class resolves header, then --task-class, then default, and says which,
-// so a client can tell its own choice from the server's fallback.
+// A class is reported, and routed on, only where it is used: the client's own,
+// or --task-class on an unpinned route. Nothing is ever claimed as "default".
 func TestServeRouter_ResolvesTheClassAndItsBasis(t *testing.T) {
 	const route = "classification.banking77"
 	for _, tc := range []struct {
 		name         string
 		defaultClass string
 		req          serve.Request
-		want         serve.Evidence
-		domain       string
+		want         *serve.Evidence
 	}{
-		{"header wins", route, serve.Request{TaskClass: "a.b"}, serve.Evidence{TaskClass: "a.b", TaskClassBasis: "header"}, "a.b"},
-		{"route default", route, serve.Request{}, serve.Evidence{TaskClass: route, TaskClassBasis: "route"}, route},
-		{"nothing named", "", serve.Request{}, serve.Evidence{TaskClass: "default", TaskClassBasis: "default"}, "default"},
-		{"pinned route, header", route, serve.Request{TaskClass: "a.b", Route: serve.Route{Tier: "4"}}, serve.Evidence{TaskClass: "a.b", TaskClassBasis: "header"}, "a.b"},
-		{"pinned head, no header", route, serve.Request{Route: serve.Route{Head: "h1"}}, serve.Evidence{TaskClass: route, TaskClassBasis: "route"}, ""},
+		{"header wins", route, serve.Request{TaskClass: "a.b"}, &serve.Evidence{TaskClass: "a.b", TaskClassBasis: "header"}},
+		{"route default", route, serve.Request{}, &serve.Evidence{TaskClass: route, TaskClassBasis: "route"}},
+		{"nothing named", "", serve.Request{}, nil},
+		{"pinned route, header", route, serve.Request{TaskClass: "a.b", Route: serve.Route{Tier: "4"}}, &serve.Evidence{TaskClass: "a.b", TaskClassBasis: "header"}},
+		{"pinned head, no header", route, serve.Request{Route: serve.Route{Head: "h1"}}, nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			opts, ev, err := serveRouter{defaultEnum: "STANDARD", defaultClass: tc.defaultClass}.options(tc.req)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if ev != tc.want {
+			if (ev == nil) != (tc.want == nil) || (ev != nil && *ev != *tc.want) {
 				t.Errorf("evidence %+v, want %+v", ev, tc.want)
 			}
-			if opts.Domain != tc.domain {
-				t.Errorf("Domain = %q, want %q", opts.Domain, tc.domain)
+			want := ""
+			if tc.want != nil {
+				want = tc.want.TaskClass
+			}
+			if opts.Domain != want {
+				t.Errorf("Domain = %q, want %q: evidence must name exactly the class routed on", opts.Domain, want)
 			}
 		})
 	}
@@ -465,21 +468,93 @@ func TestServeRouter_HydraStandardRoutesAsBefore(t *testing.T) {
 	}
 }
 
-// G7b. At #1208 serve has no policy ceiling of its own, so the header is the
-// only one and must arrive as sent; #1209 adds the rows with a policy ceiling.
+// G4b. A client that sends no class to a server with no --task-class must
+// route byte-identically to before E1, not into the shared "default" cell.
+func TestServeRouter_NoClassRoutesAsBefore(t *testing.T) {
+	opts, ev, err := serveRouter{defaultEnum: "STANDARD"}.options(serve.Request{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if opts.Domain != "" || ev != nil {
+		t.Errorf("a request naming no class built Domain=%q evidence=%+v, want Domain=\"\" and no evidence", opts.Domain, ev)
+	}
+}
+
+// G7b. The client's header may lower the operator's ceiling and never raise
+// it, and a request without the header keeps the no-ceiling it had before E1.
 func TestServeRouter_MaxCostOnlyLowersTheCeiling(t *testing.T) {
-	const policy = 0.0
-	for _, tc := range []struct{ header, want float64 }{
-		{0, 0},
-		{0.25, 0.25},
+	for _, tc := range []struct {
+		policy, header, want float64
+		from                 string
+	}{
+		{0, 0, 0, ""},
+		{0, 0.25, 0.25, serve.MaxCostHeader},
+		{0.05, 0.25, 0.05, "policy.yaml max_cost_usd"},
+		{0.05, 0.01, 0.01, serve.MaxCostHeader},
 	} {
-		opts, _, err := serveRouter{defaultEnum: "STANDARD"}.options(serve.Request{MaxCostUSD: tc.header})
+		r := serveRouter{defaultEnum: "STANDARD", policyCeiling: tc.policy, policyCeilingFrom: "policy.yaml max_cost_usd"}
+		opts, _, err := r.options(serve.Request{MaxCostUSD: tc.header})
 		if err != nil {
 			t.Fatal(err)
 		}
-		if opts.MaxCostUSD != tc.want {
-			t.Errorf("policy ceiling %v, header %v gave MaxCostUSD %v, want %v", policy, tc.header, opts.MaxCostUSD, tc.want)
+		if opts.MaxCostUSD != tc.want || opts.MaxCostSource != tc.from {
+			t.Errorf("policy ceiling %v, header %v gave MaxCostUSD %v (from %q), want %v (from %q)",
+				tc.policy, tc.header, opts.MaxCostUSD, opts.MaxCostSource, tc.want, tc.from)
 		}
+	}
+}
+
+// A ceiling the client set that every head exceeds is its own request's limit:
+// a 4xx naming the header, never a 502 that the SDKs retry.
+func TestServeRouter_TheClientsCeilingRefusingEveryHeadIsA4xx(t *testing.T) {
+	dispatchable(t, "unused")
+	ctx := context.Background()
+	d, err := dispatch.New(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+
+	_, err = serveRouter{d: d, defaultEnum: "MODERATE"}.Chat(ctx, serve.Request{
+		RequestID:  "run-cost",
+		Messages:   []executor.Message{{Role: "user", Content: "hi"}},
+		MaxCostUSD: 1e-12,
+	})
+	if !errors.Is(err, serve.ErrBadRequest) {
+		t.Fatalf("every head over the client's ceiling was graded %v, want a 400", err)
+	}
+	if !strings.Contains(err.Error(), serve.MaxCostHeader) {
+		t.Errorf("the refusal does not name %s: %v", serve.MaxCostHeader, err)
+	}
+}
+
+// Without this the stream's headers have already left by the time Chat
+// returns, and a streamed reply could never echo its class.
+func TestServeRouter_AnnouncesTheClassBeforeDispatching(t *testing.T) {
+	dispatchable(t, "the head's answer")
+	ctx := context.Background()
+	d, err := dispatch.New(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+
+	var first *serve.Event
+	_, err = serveRouter{d: d, defaultEnum: "MODERATE"}.Chat(ctx, serve.Request{
+		RequestID: "run-ev",
+		TaskClass: "a.b",
+		Messages:  []executor.Message{{Role: "user", Content: "hi"}},
+		OnEvent: func(e serve.Event) {
+			if first == nil {
+				first = &e
+			}
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first == nil || first.Kind != serve.EventEvidence || first.Evidence == nil || first.Evidence.TaskClass != "a.b" {
+		t.Errorf("first event %+v, want the class before any output", first)
 	}
 }
 

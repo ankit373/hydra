@@ -166,7 +166,7 @@ type chatRequest struct {
 	Tools       []executor.ToolDef `json:"tools"`
 	ToolChoice  json.RawMessage    `json:"tool_choice"`
 	Temperature *float64           `json:"temperature"`
-	Metadata    map[string]string  `json:"metadata"`
+	Metadata    json.RawMessage    `json:"metadata"`
 }
 
 // readBody reads one request within maxBody, saying why when it cannot.
@@ -257,7 +257,11 @@ func parseTarget(h http.Header, in chatRequest) (Request, error) {
 	if err != nil {
 		return Request{}, err
 	}
-	class, err := explicitClass(h, in.Metadata)
+	// Metadata was ignored before it could carry a class, so a shape we cannot
+	// read is still ignored rather than refused.
+	var metadata map[string]any
+	_ = json.Unmarshal(in.Metadata, &metadata)
+	class, err := explicitClass(h, metadata)
 	if err != nil {
 		return Request{}, err
 	}

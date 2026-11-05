@@ -28,16 +28,24 @@ import (
 type serveRouter struct {
 	d           *dispatch.Dispatcher
 	defaultEnum string
-	// defaultClass is --task-class: the class a request that names none
-	// routes for. Empty falls through to trust.DefaultDomain.
+	// defaultClass is --task-class, the class an unpinned request naming none
+	// routes for. Empty leaves such a request routing exactly as before E1.
 	defaultClass string
-	localOnly    bool
+	// policyCeiling and its source are policy.yaml's max_cost_usd, which a
+	// client's MaxCostHeader may lower but never raise; 0 means none.
+	policyCeiling     float64
+	policyCeilingFrom string
+	localOnly         bool
 }
 
 func (r serveRouter) Chat(ctx context.Context, req serve.Request) (serve.Answer, error) {
 	opts, ev, err := r.options(req)
 	if err != nil {
 		return serve.Answer{}, err
+	}
+	// Before dispatch, because a stream's headers leave with its first frame.
+	if ev != nil && req.OnEvent != nil {
+		req.OnEvent(serve.Event{Kind: serve.EventEvidence, Evidence: ev})
 	}
 
 	// One run per request. A server's unit of work is the request, not the
@@ -51,10 +59,15 @@ func (r serveRouter) Chat(ctx context.Context, req serve.Request) (serve.Answer,
 
 	res, err := r.d.Dispatch(ctx, prompt, opts)
 	if err != nil {
+		// Every head over the client's own ceiling is the request's limit, not
+		// a failed head, so it must stay out of the 5xx retry class.
+		if errors.Is(err, dispatch.ErrOverCostCeiling) && opts.MaxCostSource == serve.MaxCostHeader {
+			return serve.Answer{}, gradedError{serve.ErrBadRequest, err}
+		}
 		return serve.Answer{}, callerError(err)
 	}
 
-	ans := serve.Answer{Output: res.Output, Head: res.Head.ID, Model: res.Head.Name, Evidence: &ev}
+	ans := serve.Answer{Output: res.Output, Head: res.Head.ID, Model: res.Head.Name, Evidence: ev}
 	if res.Response != nil {
 		ans.ToolCalls = res.Response.ToolCalls
 		ans.FinishReason = res.Response.FinishReason
@@ -64,20 +77,12 @@ func (r serveRouter) Chat(ctx context.Context, req serve.Request) (serve.Answer,
 }
 
 // options is the one translation of a served request into what the router is
-// asked, and the class it routes for with where that class came from.
-func (r serveRouter) options(req serve.Request) (dispatch.Options, serve.Evidence, error) {
+// asked, plus the class it routes for, nil when it routes for none.
+func (r serveRouter) options(req serve.Request) (dispatch.Options, *serve.Evidence, error) {
 	tier, enum, head, err := routeToDispatch(req.Route, r.defaultEnum)
 	if err != nil {
-		return dispatch.Options{}, serve.Evidence{}, err
+		return dispatch.Options{}, nil, err
 	}
-	class, basis := req.TaskClass, "header"
-	if class == "" && r.defaultClass != "" {
-		class, basis = r.defaultClass, "route"
-	}
-	if class == "" {
-		class, basis = trust.DefaultDomain, "default"
-	}
-
 	opts := dispatch.Options{
 		TierHint:    tier,
 		Enum:        enum,
@@ -85,19 +90,40 @@ func (r serveRouter) options(req serve.Request) (dispatch.Options, serve.Evidenc
 		LocalOnly:   r.localOnly,
 		MaxTokens:   req.MaxTokens,
 		Temperature: req.Temperature,
-		MaxCostUSD:  req.MaxCostUSD,
 		Messages:    req.Messages,
 		Tools:       req.Tools,
 		ToolChoice:  req.ToolChoice,
 		OnStream:    streamEvents(req.OnEvent),
 		RunID:       req.RequestID,
 	}
-	// A pinned route the client gave no class keeps routing exactly as before
-	// E1, so `hydra/standard` and a head id stay what they were.
-	if req.Route == (serve.Route{}) || basis == "header" {
-		opts.Domain = class
+	opts.MaxCostUSD, opts.MaxCostSource = r.ceiling(req.MaxCostUSD)
+
+	// A class is reported only where it routes. A request naming none, on a
+	// pinned route or with no --task-class, routes exactly as before E1.
+	var ev *serve.Evidence
+	switch {
+	case req.TaskClass != "":
+		ev = &serve.Evidence{TaskClass: req.TaskClass, TaskClassBasis: "header"}
+	case r.defaultClass != "" && req.Route == (serve.Route{}):
+		ev = &serve.Evidence{TaskClass: r.defaultClass, TaskClassBasis: "route"}
 	}
-	return opts, serve.Evidence{TaskClass: class, TaskClassBasis: basis}, nil
+	if ev != nil {
+		opts.Domain = ev.TaskClass
+	}
+	return opts, ev, nil
+}
+
+// ceiling is the smaller of the client's and the policy's. A request that set
+// none keeps the no-ceiling it had before E1, so the header can only lower.
+func (r serveRouter) ceiling(client float64) (float64, string) {
+	switch {
+	case client <= 0:
+		return 0, ""
+	case r.policyCeiling > 0 && r.policyCeiling < client:
+		return r.policyCeiling, r.policyCeilingFrom
+	default:
+		return client, serve.MaxCostHeader
+	}
 }
 
 // streamEvents adapts the router's events to the endpoint's, and is nil when
@@ -303,6 +329,7 @@ func cmdServe() *cobra.Command {
 				return err
 			}
 			r := serveRouter{d: d, defaultEnum: enum, defaultClass: defaultClass, localOnly: localOnly}
+			r.policyCeiling, r.policyCeilingFrom = servePolicyCeiling()
 			printServeBanner(os.Stdout, ln.Addr().String(), enum, token != "", localOnly, d.Heads(), decider.unlisted)
 			return serve.Serve(ctx, ln, serve.Handler(r, decider, token))
 		},

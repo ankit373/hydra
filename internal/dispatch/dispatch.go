@@ -788,6 +788,9 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 
 	var lastErr error
 	var attempts []Attempt
+	// Refusals the request itself caused, counted so that when they are all
+	// there were, the caller is told it was the request and not the heads.
+	var tooWarm, overCost int
 	for i, h := range candidates {
 		// Computed once per candidate instead of once per use below (event
 		// logging, cost estimation): rank.UITier re-derives the same int for
@@ -835,6 +838,13 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		// looking like the model simply declining to act.
 		if len(opts.Tools) > 0 && !executor.CanUseTools(h) {
 			refuse("cannot carry tool definitions")
+			continue
+		}
+		// Skipped like the tools case, never sent and failed: the provider would
+		// answer 400, and the breaker would park a healthy head over it.
+		if limit := executor.MaxTemperature(h); opts.Temperature != nil && *opts.Temperature > limit {
+			refuse(fmt.Sprintf("accepts a temperature of at most %g, not %g", limit, *opts.Temperature))
+			tooWarm++
 			continue
 		}
 		// The egress gate, deliberately independent of the ledger's decision:
@@ -925,6 +935,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 					Agent: "hydra-dispatch", Tool: h.ID, Decision: ledger.Deny,
 					Reason: fmt.Sprintf("exceeds cost ceiling: estimated $%.4f > limit $%.4f", estCost, opts.MaxCostUSD),
 				})
+				overCost++
 				continue
 			}
 		}
@@ -1049,8 +1060,30 @@ func (d *Dispatcher) Dispatch(ctx context.Context, prompt string, opts Options) 
 		Level: runlog.LevelError, Status: "failed",
 		Detail: fmt.Sprintf("all %d heads failed", len(candidates)),
 	})
+	switch n := len(candidates); {
+	case tooWarm == n && n > 0:
+		return nil, fmt.Errorf("%w: temperature %g is above what every candidate head accepts",
+			executor.ErrUnaskable, *opts.Temperature)
+	case tooWarm > 0 && tooWarm+overCost == n:
+		return nil, fmt.Errorf("%w: temperature %g is above what %d of %d candidate heads accept, "+
+			"and the rest exceed the cost ceiling", executor.ErrUnaskable, *opts.Temperature, tooWarm, n)
+	case overCost == n && n > 0:
+		lastErr = overCeiling{lastErr}
+	}
 	return nil, fmt.Errorf("all heads failed (tried %d): %w", len(candidates), lastErr)
 }
+
+// ErrOverCostCeiling marks a dispatch whose every candidate was refused by
+// its cost ceiling, which says something about the ceiling and nothing about
+// the heads.
+var ErrOverCostCeiling = errors.New("every candidate exceeds the cost ceiling")
+
+// overCeiling grades an error as ErrOverCostCeiling without changing what it
+// says, so the CLI's message stays exactly what it was.
+type overCeiling struct{ err error }
+
+func (e overCeiling) Error() string   { return e.err.Error() }
+func (e overCeiling) Unwrap() []error { return []error{e.err, ErrOverCostCeiling} }
 
 // quotaMode reads state.json once and returns the (possibly downgraded) tier,
 // the governing quota and its mode. The mode is rate-aware, so a fast burn

@@ -10,11 +10,13 @@ import (
 	"testing"
 )
 
-func postWith(t *testing.T, r Router, header map[string]string, body string) *httptest.ResponseRecorder {
+func postWith(t *testing.T, r Router, header http.Header, body string) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(body))
-	for k, v := range header {
-		req.Header.Set(k, v)
+	for k, vs := range header {
+		for _, v := range vs {
+			req.Header.Add(k, v)
+		}
 	}
 	w := httptest.NewRecorder()
 	Handler(r, nil, "").ServeHTTP(w, req)
@@ -25,23 +27,24 @@ func withMetadata(class string) string {
 	return `{"model":"hydra","metadata":{"task_class":"` + class + `"},"messages":[{"role":"user","content":"hi"}]}`
 }
 
-func TestExplicitClass_HeaderAliasMetadata(t *testing.T) {
+func TestExplicitClass_HeaderAndMetadata(t *testing.T) {
 	const want = "classification.banking77"
+	hdr := func(vs ...string) http.Header { return http.Header{TaskClassHeader: vs} }
 	for _, tc := range []struct {
 		name   string
-		header map[string]string
+		header http.Header
 		body   string
 		class  string
 		status int
 	}{
 		{"none", nil, oneTurn, "", http.StatusOK},
-		{"header", map[string]string{TaskClassHeader: "Classification.Banking77"}, oneTurn, want, http.StatusOK},
-		{"alias", map[string]string{DomainHeader: want}, oneTurn, want, http.StatusOK},
+		{"header", hdr("Classification.Banking77"), oneTurn, want, http.StatusOK},
 		{"metadata", nil, withMetadata(want), want, http.StatusOK},
-		{"header and metadata agree", map[string]string{TaskClassHeader: want}, withMetadata("CLASSIFICATION.banking77"), want, http.StatusOK},
-		{"header and alias disagree", map[string]string{TaskClassHeader: want, DomainHeader: "classification.clinc150"}, oneTurn, "", http.StatusBadRequest},
-		{"header and metadata disagree", map[string]string{TaskClassHeader: want}, withMetadata("classification.clinc150"), "", http.StatusBadRequest},
-		{"no dot", map[string]string{TaskClassHeader: "go"}, oneTurn, "", http.StatusBadRequest},
+		{"header and metadata agree", hdr(want), withMetadata("CLASSIFICATION.banking77"), want, http.StatusOK},
+		{"repeated header agrees", hdr(want, want), oneTurn, want, http.StatusOK},
+		{"repeated header disagrees", hdr(want, "classification.clinc150"), oneTurn, "", http.StatusBadRequest},
+		{"header and metadata disagree", hdr(want), withMetadata("classification.clinc150"), "", http.StatusBadRequest},
+		{"no dot", hdr("go"), oneTurn, "", http.StatusBadRequest},
 		{"slash", nil, withMetadata("classify/banking77"), "", http.StatusBadRequest},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -57,12 +60,47 @@ func TestExplicitClass_HeaderAliasMetadata(t *testing.T) {
 	}
 }
 
-// A refusal has to name both values, or the client cannot tell which of its
-// two spellings to drop.
+// A refusal has to name both values, or the client cannot tell which to drop.
 func TestExplicitClass_DisagreementNamesBoth(t *testing.T) {
-	w := postWith(t, &stubRouter{}, map[string]string{TaskClassHeader: "a.one"}, withMetadata("a.two"))
-	if msg := w.Body.String(); !strings.Contains(msg, "a.one") || !strings.Contains(msg, "a.two") {
-		t.Errorf("the refusal does not name both classes: %s", msg)
+	for _, tc := range []struct {
+		header http.Header
+		body   string
+	}{
+		{http.Header{TaskClassHeader: {"a.one"}}, withMetadata("a.two")},
+		{http.Header{TaskClassHeader: {"a.one", "a.two"}}, oneTurn},
+	} {
+		w := postWith(t, &stubRouter{}, tc.header, tc.body)
+		if msg := w.Body.String(); w.Code != http.StatusBadRequest || !strings.Contains(msg, "a.one") || !strings.Contains(msg, "a.two") {
+			t.Errorf("status %d, the refusal does not name both classes: %s", w.Code, msg)
+		}
+	}
+}
+
+// Clients already send metadata of their own, and before E1 serve ignored it,
+// so only a string task_class is read and nothing else in it can refuse.
+func TestChat_ForeignMetadataStillParses(t *testing.T) {
+	for _, md := range []string{
+		`{"tags":["a","b"],"user_id":42}`,
+		`{"task_class":7}`,
+		`["not","an","object"]`,
+		`null`,
+	} {
+		s := &stubRouter{answer: Answer{Output: "ok"}}
+		w := postWith(t, s, nil, `{"model":"hydra","metadata":`+md+`,"messages":[{"role":"user","content":"hi"}]}`)
+		if w.Code != http.StatusOK || s.got.TaskClass != "" {
+			t.Errorf("metadata %s: status %d, class %q; want 200 and no class", md, w.Code, s.got.TaskClass)
+		}
+	}
+}
+
+// X-Hydra-Domain stays a /v1/decisions header until #1210's rename. Chat never
+// read it, and a client still sending a bare domain like `support` must not
+// start getting a 400.
+func TestChat_IgnoresTheDecisionsDomainHeader(t *testing.T) {
+	s := &stubRouter{answer: Answer{Output: "ok"}}
+	w := postWith(t, s, http.Header{DomainHeader: {"support"}}, oneTurn)
+	if w.Code != http.StatusOK || s.got.TaskClass != "" {
+		t.Errorf("%s: support gave status %d, class %q; want 200 and no class", DomainHeader, w.Code, s.got.TaskClass)
 	}
 }
 
@@ -86,6 +124,25 @@ func TestChat_EchoesTheClassAndItsBasis(t *testing.T) {
 	w = postWith(t, &stubRouter{answer: Answer{Output: "ok"}}, nil, oneTurn)
 	if w.Header().Get(TaskClassHeader) != "" || strings.Contains(w.Body.String(), `"hydra":`) {
 		t.Errorf("evidence written for a router that reported none: %s", w.Body.String())
+	}
+}
+
+// A stream's headers leave with its first frame, so the class has to be known
+// by then. Result() is the header snapshot WriteHeader took, not the live map.
+func TestStream_EchoesTheClassInItsHeaders(t *testing.T) {
+	ev := &Evidence{TaskClass: "a.b", TaskClassBasis: "header"}
+	announced := &streamRouter{events: []Event{
+		{Kind: EventEvidence, Evidence: ev},
+		{Kind: EventDelta, Text: "hel", Head: "h1"},
+		{Kind: EventDelta, Text: "lo", Head: "h1"},
+	}, answer: Answer{Output: "hello", Head: "h1"}}
+	ignoring := &stubRouter{answer: Answer{Output: "hello", Evidence: ev}}
+
+	for name, r := range map[string]Router{"announced": announced, "answer only": ignoring} {
+		w := stream(t, r, streamTurn)
+		if got := w.Result().Header.Get(TaskClassHeader); got != "a.b" {
+			t.Errorf("%s: streamed %s = %q at the first flush, want a.b", name, TaskClassHeader, got)
+		}
 	}
 }
 
@@ -132,29 +189,37 @@ func formatFloat(f float64) string {
 
 func TestChat_MaxCostHeader(t *testing.T) {
 	for _, tc := range []struct {
-		header string
+		values []string
 		want   float64
 		status int
 	}{
-		{"", 0, http.StatusOK},
-		{"0.25", 0.25, http.StatusOK},
-		{"-1", 0, http.StatusBadRequest},
-		{"NaN", 0, http.StatusBadRequest},
-		{"Inf", 0, http.StatusBadRequest},
-		{"abc", 0, http.StatusBadRequest},
+		{nil, 0, http.StatusOK},
+		{[]string{"0.25"}, 0.25, http.StatusOK},
+		{[]string{"0.25", "0.25"}, 0.25, http.StatusOK},
+		{[]string{"0.25", "0.5"}, 0, http.StatusBadRequest},
+		{[]string{"0"}, 0, http.StatusBadRequest},
+		{[]string{"-1"}, 0, http.StatusBadRequest},
+		{[]string{"NaN"}, 0, http.StatusBadRequest},
+		{[]string{"Inf"}, 0, http.StatusBadRequest},
+		{[]string{"abc"}, 0, http.StatusBadRequest},
 	} {
-		h := map[string]string{}
-		if tc.header != "" {
-			h[MaxCostHeader] = tc.header
-		}
 		s := &stubRouter{}
-		w := postWith(t, s, h, oneTurn)
+		w := postWith(t, s, http.Header{MaxCostHeader: tc.values}, oneTurn)
 		if w.Code != tc.status {
-			t.Errorf("%s %q: status %d, want %d", MaxCostHeader, tc.header, w.Code, tc.status)
+			t.Errorf("%s %q: status %d, want %d", MaxCostHeader, tc.values, w.Code, tc.status)
 			continue
 		}
 		if tc.status == http.StatusOK && s.got.MaxCostUSD != tc.want {
-			t.Errorf("%s %q reached the router as %v, want %v", MaxCostHeader, tc.header, s.got.MaxCostUSD, tc.want)
+			t.Errorf("%s %q reached the router as %v, want %v", MaxCostHeader, tc.values, s.got.MaxCostUSD, tc.want)
 		}
+	}
+}
+
+// Two different ceilings on one request is ambiguity, and the refusal must
+// say which two so the client can find the duplicate.
+func TestChat_MaxCostDisagreementNamesBoth(t *testing.T) {
+	w := postWith(t, &stubRouter{}, http.Header{MaxCostHeader: {"0.25", "0.5"}}, oneTurn)
+	if msg := w.Body.String(); !strings.Contains(msg, "0.25") || !strings.Contains(msg, "0.5") {
+		t.Errorf("the refusal does not name both ceilings: %s", msg)
 	}
 }
