@@ -9,7 +9,6 @@ import (
 	"strconv"
 	"strings"
 	"unicode"
-	"unicode/utf8"
 
 	"github.com/ankit373/hydra/internal/trust"
 )
@@ -18,7 +17,7 @@ import (
 const detailAnswerBytes = 80
 
 // labelWrappers are what a model puts around a label: quotes, curly quotes, markdown
-// emphasis and bullets. Whitespace and invisible format runes are handled by isBlank.
+// emphasis, '_' and the '*' and U+2022 bullets. Never '-', which can be part of the label.
 const labelWrappers = "\"'`\u201c\u201d\u2018\u2019*_\u2022"
 
 // MatchOracle passes an answer that is one of a closed label set, or matches a pattern.
@@ -70,12 +69,12 @@ func NewMatch(id string, labels []string, pattern string) (*MatchOracle, error) 
 	return o, nil
 }
 
-// Verify: labels → NormaliseLabel(candidate) ∈ set; pattern → the whole answer, trimmed of edge
-// whitespace and invisible format runes and otherwise not rewritten, matches. Empty always fails.
+// Verify: labels → NormaliseLabel(candidate) ∈ set; pattern → the whole answer, without format
+// runes and edge whitespace and otherwise not rewritten, matches. Empty always fails.
 func (o *MatchOracle) Verify(_ context.Context, candidate string, _ trust.Task) (Verdict, error) {
 	if o.pattern != nil {
 		// `.*` matches the empty string, so an empty answer is refused before the regex sees it.
-		if answer := strings.TrimFunc(candidate, isBlank); answer != "" && o.pattern.MatchString(answer) {
+		if answer := strings.TrimSpace(dropFormat(candidate)); answer != "" && o.pattern.MatchString(answer) {
 			return Verdict{Passed: true}, nil
 		}
 		return Verdict{Detail: matchDetail("does not match "+o.pattern.String(), candidate)}, nil
@@ -97,36 +96,22 @@ func matchDetail(check, candidate string) string {
 	return truncate(check, detailMaxLen-len(": ")-len(quoted)-len(truncMarker)) + ": " + quoted
 }
 
-// NormaliseLabel lowercases (strings.ToLower; labels are ASCII per the design), strips edge
-// blanks, labelWrappers, '-', bullets and trailing dots to a fixed point, keeping a '-' that
-// signs a digit ("- 1" is "-1"), then folds interior runs of space, '-' or '_' to one '_'.
+// NormaliseLabel lowercases (labels are ASCII per the design), drops format runes, strips edge
+// whitespace, labelWrappers and trailing dots to a fixed point, and folds interior runs of space or
+// '_' to one '_'. '-' is always significant: "- " is no bullet, as it reads the same as a sign.
 func NormaliseLabel(s string) string {
-	s = strings.ToLower(s)
+	s = dropFormat(strings.ToLower(s))
 	for {
-		t := strings.TrimRightFunc(s, func(r rune) bool { return isLabelEdge(r) || r == '-' })
-		t = strings.TrimLeftFunc(strings.TrimSuffix(t, "."), isLabelEdge)
-		if rest, ok := strings.CutPrefix(t, "-"); ok {
-			rest = strings.TrimLeftFunc(rest, unicode.IsSpace)
-			if d, _ := utf8.DecodeRuneInString(rest); unicode.IsDigit(d) {
-				rest = "-" + rest
-			}
-			t = rest
-		}
+		t := strings.TrimSuffix(strings.TrimFunc(s, isLabelEdge), ".")
 		if t == s {
 			break
 		}
 		s = t
 	}
-	// A leading '-' survives the loop only before a digit, so it is a sign, not a separator.
-	sign, body := "", s
-	if strings.HasPrefix(s, "-") {
-		sign, body = "-", s[1:]
-	}
 	var b strings.Builder
-	b.WriteString(sign)
 	inRun := false
-	for _, r := range body {
-		if isSeparator(r) {
+	for _, r := range s {
+		if unicode.IsSpace(r) || r == '_' {
 			if !inRun {
 				b.WriteByte('_')
 			}
@@ -139,9 +124,15 @@ func NormaliseLabel(s string) string {
 	return b.String()
 }
 
-// isBlank is whitespace or an invisible format rune (BOM, zero-width space: category Cf).
-func isBlank(r rune) bool { return unicode.IsSpace(r) || unicode.Is(unicode.Cf, r) }
+// dropFormat removes invisible format runes (category Cf: BOM, zero-width space) wherever
+// they are, since no label or pattern answer means anything by them.
+func dropFormat(s string) string {
+	return strings.Map(func(r rune) rune {
+		if unicode.Is(unicode.Cf, r) {
+			return -1
+		}
+		return r
+	}, s)
+}
 
-func isLabelEdge(r rune) bool { return isBlank(r) || strings.ContainsRune(labelWrappers, r) }
-
-func isSeparator(r rune) bool { return unicode.IsSpace(r) || r == '-' || r == '_' }
+func isLabelEdge(r rune) bool { return unicode.IsSpace(r) || strings.ContainsRune(labelWrappers, r) }

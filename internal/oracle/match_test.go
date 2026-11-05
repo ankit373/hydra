@@ -19,8 +19,8 @@ var normaliseRows = []struct{ in, want string }{
 	{`"Card_Arrival"`, "card_arrival"},
 	{`'card arrival'.`, "card_arrival"},
 	{`"card_arrival".`, "card_arrival"},
-	{"card-arrival", "card_arrival"},
-	{"  card \t - -  arrival \n", "card_arrival"},
+	{"card-arrival", "card-arrival"},
+	{"  card \t _  arrival \n", "card_arrival"},
 	{"card_ arrival", "card_arrival"},
 	{"card _ arrival", "card_arrival"},
 	{"card_arrival ", "card_arrival"},
@@ -28,22 +28,25 @@ var normaliseRows = []struct{ in, want string }{
 	{"\u201cCard Arrival\u201d", "card_arrival"},
 	{"\u2018card_arrival\u2019", "card_arrival"},
 	{"\u200bcard_arrival\ufeff", "card_arrival"},
+	{"card\u200b_arrival", "card_arrival"},
 	{"**Card Arrival**", "card_arrival"},
 	{"*card_arrival*", "card_arrival"},
 	{"__card_arrival__", "card_arrival"},
-	{"- card_arrival", "card_arrival"},
 	{"* card_arrival", "card_arrival"},
 	{"\u2022 card_arrival", "card_arrival"},
-	{"- x", "x"},
-	{"-card_arrival", "card_arrival"},
-	{"card_arrival -", "card_arrival"},
+	{"- card_arrival", "-_card_arrival"},
+	{"-card_arrival", "-card_arrival"},
+	{"card_arrival -", "card_arrival_-"},
+	{"A-", "a-"},
+	{"-", "-"},
+	{"+", "+"},
 	{"-1", "-1"},
 	{"-1.", "-1"},
-	{"- 1", "-1"},
-	{"\"-1\"", "-1"},
-	{"- -1", "-1"},
-	{"-_-", ""},
-	{" - ", ""},
+	{"- 3", "-_3"},
+	{"-.5", "-.5"},
+	{".5", ".5"},
+	{"-\u200b1", "-1"},
+	{`"-1"`, "-1"},
 	{"'x.'.", "x"},
 	{"x..", "x"},
 	{"x. .", "x"},
@@ -86,6 +89,11 @@ func mustMatch(t *testing.T, id string, labels []string, pattern string) *MatchO
 func TestMatchOracle_Verify(t *testing.T) {
 	labels := mustMatch(t, "banking77", []string{"card_arrival", "Exchange Rate"}, "")
 	signs := mustMatch(t, "signs", []string{"-1", "0", "1"}, "")
+	grades := mustMatch(t, "grades", []string{"A", "A-", "B+"}, "")
+	ab := mustMatch(t, "ab", []string{"A", "B"}, "")
+	plusMinus := mustMatch(t, "plusminus", []string{"+", "-"}, "")
+	three := mustMatch(t, "three", []string{"3"}, "")
+	halves := mustMatch(t, "halves", []string{"-.5", ".5"}, "")
 	unsigned := mustMatch(t, "unsigned", []string{"0", "1"}, "")
 	digits := mustMatch(t, "digits", nil, `\d+`)
 	version := mustMatch(t, "version", nil, `v\d+\.`)
@@ -99,7 +107,8 @@ func TestMatchOracle_Verify(t *testing.T) {
 		pass      bool
 		detail    string
 	}{
-		{"label hit", labels, " Card-Arrival.\n", true, ""},
+		{"label hit", labels, " Card Arrival.\n", true, ""},
+		{"'-' is part of a label, not a space", labels, "card-arrival", false, `not one of 2 labels: "card-arrival"`},
 		{"label hit, set normalised too", labels, "exchange_rate", true, ""},
 		{"label hit in emphasis", labels, "**Card Arrival**", true, ""},
 		{"label miss", labels, "card_arrivals", false, `not one of 2 labels: "card_arrivals"`},
@@ -107,9 +116,17 @@ func TestMatchOracle_Verify(t *testing.T) {
 			`not one of 2 labels: "card_arrival because the card is late"`},
 		{"a negative label", signs, "-1", true, ""},
 		{"a sign is part of the value", unsigned, "-1", false, `not one of 2 labels: "-1"`},
+		{"A- is its own grade", grades, "A-", true, ""},
+		{"A- is not A", ab, "A-", false, `not one of 2 labels: "A-"`},
+		{"a lone minus is a label", plusMinus, "-", true, ""},
+		{"a dash bullet is not stripped", three, "- 3", false, `not one of 1 labels: "- 3"`},
+		{"a signed fraction keeps its sign", halves, "-.5", true, ""},
+		{"an unsigned fraction", halves, ".5", true, ""},
+		{"a format rune inside a sign", signs, "-\u200b1", true, ""},
 		{"pattern hit", digits, " 42\n", true, ""},
 		{"pattern hit inside Unicode space", digits, "\u00a0\v42\f\u3000", true, ""},
-		{"pattern hit inside invisible format runes", digits, "\ufeff42\u200b", true, ""},
+		{"pattern hit inside invisible format runes", digits, "\ufeff4\u200b2", true, ""},
+		{"format runes alone are empty", anything, "\u200b", false, `does not match ^(?:.*)$: "\u200b"`},
 		{"pattern sees the dot it asks for", version, "v1.", true, ""},
 		{"pattern sees the quotes it asks for", quoted, "'abc'", true, ""},
 		{"pattern does not strip backticks", digits, "`42`", false, "does not match ^(?:\\d+)$: \"`42`\""},
@@ -166,7 +183,7 @@ func TestNewMatch_RefusesBadConfig(t *testing.T) {
 			`labels "card_arrival" and "Card Arrival" both normalise to "card_arrival"`},
 		{"bad regex", nil, "(", "missing closing )"},
 		{"pattern escapes its anchors", nil, `a)|(.*`, "unexpected )"},
-		{"labels only separators", []string{"card_arrival", "-_-"}, "", "empty once normalised"},
+		{"labels only separators", []string{"card_arrival", " _ "}, "", "empty once normalised"},
 		// 999 levels compile bare; the anchoring group is the thousandth.
 		{"anchoring nests too deeply", nil, strings.Repeat("(", 999) + "a" + strings.Repeat(")", 999), "nest"},
 	} {
