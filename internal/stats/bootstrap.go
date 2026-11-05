@@ -41,15 +41,15 @@ type Stat struct {
 	eval func(idx []int) (float64, bool)
 }
 
-// Eval computes the statistic over idx; ok=false means it is undefined there.
-func (s Stat) Eval(idx []int) (v float64, ok bool) { return s.eval(idx) }
-
 // Resample draws stat's n indices with replacement, resamples times, and returns the
 // sorted values; undefined resamples are dropped. Seeded so one input gives one
 // interval twice. idx is reused between calls, so a Stat must not keep it.
 func Resample(stat Stat, resamples int, seed uint64) (Bootstrap, error) {
-	if stat.eval == nil || resamples < 1 {
-		return Bootstrap{}, fmt.Errorf("stats: cannot resample an unbuilt statistic or %d times", resamples)
+	if stat.eval == nil {
+		return Bootstrap{}, errors.New("stats: the statistic was not built by one of this package's constructors")
+	}
+	if resamples < 1 {
+		return Bootstrap{}, fmt.Errorf("stats: need at least one resample, got %d", resamples)
 	}
 	rng := rand.New(rand.NewPCG(seed, 0x9E3779B97F4A7C15))
 	idx := make([]int, stat.n)

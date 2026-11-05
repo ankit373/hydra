@@ -117,7 +117,7 @@ func TestStatistics_OnTheIdentityResample(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	v, ok := cpa.Eval(all)
+	v, ok := cpa.eval(all)
 	if !ok {
 		t.Fatal("undefined")
 	}
@@ -127,7 +127,7 @@ func TestStatistics_OnTheIdentityResample(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	v, ok = wm.Eval(all)
+	v, ok = wm.eval(all)
 	if !ok {
 		t.Fatal("undefined")
 	}
@@ -138,7 +138,7 @@ func TestStatistics_OnTheIdentityResample(t *testing.T) {
 	}
 
 	zero, _ := WeightedMean([]float64{1, 4}, []float64{0, 0})
-	if _, ok := zero.Eval([]int{0, 1}); ok {
+	if _, ok := zero.eval([]int{0, 1}); ok {
 		t.Error("a zero total weight gave a mean")
 	}
 	if _, err := WeightedMeanAll([]float64{1, 4}, []float64{0, 0}); err == nil {
@@ -182,7 +182,7 @@ func TestResample_DrawsOnlyWithinTheStatsOwnData(t *testing.T) {
 				t.Fatalf("drew index %d from 2 items", j)
 			}
 		}
-		return inner.Eval(idx)
+		return inner.eval(idx)
 	}}
 	if b := resample(t, spy, 200, 1); len(b.Values) != 200 {
 		t.Errorf("kept %d of 200", len(b.Values))

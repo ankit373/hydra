@@ -37,7 +37,16 @@ func TestPairedDiscordant_CountsAndDifferences(t *testing.T) {
 			t.Errorf("d[%d] = %v, want %v", i, diff[i], want[i])
 		}
 	}
-	near(t, "Delta", d.Delta(), 0.2, exact)
+	delta, err := d.Delta()
+	if err != nil {
+		t.Fatal(err)
+	}
+	near(t, "Delta", delta, 0.2, exact)
+	for _, bad := range []Discordant{{}, {10, 6, 5}, {10, -1, 0}} {
+		if _, err := bad.Delta(); err == nil {
+			t.Errorf("Delta answered %+v", bad)
+		}
+	}
 	if _, _, err := PairedDiscordant(a, r[:4]); err == nil {
 		t.Error("vectors of different lengths were paired")
 	}
@@ -229,19 +238,33 @@ func TestTango_RefusesWhatItCannotAnswer(t *testing.T) {
 	}
 }
 
-// Counts no paired comparison can produce are refused by every test, not answered.
+// Counts no paired comparison can produce are refused, not answered. The last case
+// overflows B + C to a negative int, which a check on the sum would let through.
 func TestPairedTests_RefuseImpossibleCounts(t *testing.T) {
-	for _, d := range []Discordant{{100, -2, 3}, {100, 3, -2}, {10, 6, 5}, {-1, 0, 0}} {
+	huge := math.MaxInt/2 + 1
+	for _, d := range []Discordant{{100, -2, 3}, {100, 3, -2}, {10, 6, 5}, {-1, 0, 0}, {math.MaxInt, huge, huge}} {
 		if _, _, err := TangoNI(d, 0.02); err == nil {
 			t.Errorf("TangoNI answered %+v", d)
 		}
 		if _, err := TangoLowerBound(d, 0.05); err == nil {
 			t.Errorf("TangoLowerBound answered %+v", d)
 		}
+	}
+	for _, d := range []Discordant{{100, -2, 3}, {100, 3, -2}, {0, math.MaxInt, 1}} {
 		if _, _, err := McNemarExact(d); err == nil {
 			t.Errorf("McNemarExact answered %+v", d)
 		}
 	}
+}
+
+// McNemar reads only the discordant pairs, so a caller need not know N.
+func TestMcNemarExact_NeedsNoN(t *testing.T) {
+	one, two, err := McNemarExact(Discordant{B: 9, C: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	near(t, "one-sided", one, 299.0/4096, exact) // gold.py: B=9 C=3
+	near(t, "two-sided", two, 0.14599609375, exact)
 }
 
 func TestNormal_Golden(t *testing.T) {

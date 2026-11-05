@@ -32,18 +32,21 @@ func cdf(lc []float64, n int, p float64) float64 {
 
 // BinomialCDF is P(X ≤ k) for X ~ Binomial(n, p). The edges are answered exactly
 // rather than through logs, where p = 0 or 1 would make 0·log 0 a NaN.
-func BinomialCDF(k, n int, p float64) float64 {
+func BinomialCDF(k, n int, p float64) (float64, error) {
+	if n < 0 || !(p >= 0 && p <= 1) {
+		return 0, fmt.Errorf("stats: no binomial has n=%d and p=%v", n, p)
+	}
 	switch {
 	case k < 0:
-		return 0
+		return 0, nil
 	case k >= n:
-		return 1
-	case p <= 0:
-		return 1
-	case p >= 1:
-		return 0
+		return 1, nil
+	case p == 0:
+		return 1, nil
+	case p == 1:
+		return 0, nil
 	}
-	return cdf(logChoose(k, n), n, p)
+	return cdf(logChoose(k, n), n, p), nil
 }
 
 // ClopperPearsonUpper is the exact one-sided upper bound on a binomial rate: the p
@@ -78,6 +81,9 @@ func ClopperPearsonUpper(k, n int, alpha float64) (float64, error) {
 func Wilson(k, n int, z float64) (lo, hi float64, err error) {
 	if n < 0 || k < 0 || k > n {
 		return 0, 0, fmt.Errorf("stats: Wilson needs 0 ≤ k ≤ n, got k=%d n=%d", k, n)
+	}
+	if !(z > 0) || math.IsInf(z, 1) {
+		return 0, 0, fmt.Errorf("stats: Wilson needs a finite z > 0, got %v", z)
 	}
 	if n == 0 {
 		return 0, 1, nil

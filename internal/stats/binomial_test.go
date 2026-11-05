@@ -51,6 +51,26 @@ func TestClopperPearsonUpper_Golden(t *testing.T) {
 	}
 }
 
+func binomialCDF(t *testing.T, k, n int, p float64) float64 {
+	t.Helper()
+	v, err := BinomialCDF(k, n, p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return v
+}
+
+func TestBinomialCDF_RefusesWhatIsNotABinomial(t *testing.T) {
+	for _, c := range []struct {
+		n int
+		p float64
+	}{{-1, 0.5}, {10, math.NaN()}, {10, -0.1}, {10, 1.1}, {10, math.Inf(1)}} {
+		if _, err := BinomialCDF(3, c.n, c.p); err == nil {
+			t.Errorf("BinomialCDF(3, %d, %v) answered", c.n, c.p)
+		}
+	}
+}
+
 // Moved from internal/trust, which now calls this one implementation.
 func TestBinomialCDF_KnownValues(t *testing.T) {
 	tests := []struct {
@@ -65,7 +85,7 @@ func TestBinomialCDF_KnownValues(t *testing.T) {
 		{k: 5, n: 5, p: 0.7, want: 1},
 	}
 	for _, tc := range tests {
-		if got := BinomialCDF(tc.k, tc.n, tc.p); math.Abs(got-tc.want) > 1e-12 {
+		if got := binomialCDF(t, tc.k, tc.n, tc.p); math.Abs(got-tc.want) > 1e-12 {
 			t.Errorf("BinomialCDF(%d, %d, %v) = %v, want %v", tc.k, tc.n, tc.p, got, tc.want)
 		}
 	}
@@ -84,7 +104,7 @@ func TestBinomialCDF_Edges(t *testing.T) {
 		{3, 10, 1, 0}, {9, 10, 1, 0},
 	}
 	for _, tc := range tests {
-		if got := BinomialCDF(tc.k, tc.n, tc.p); got != tc.want {
+		if got := binomialCDF(t, tc.k, tc.n, tc.p); got != tc.want {
 			t.Errorf("BinomialCDF(%d, %d, %v) = %v, want %v", tc.k, tc.n, tc.p, got, tc.want)
 		}
 	}
@@ -94,7 +114,7 @@ func TestBinomialCDF_Edges(t *testing.T) {
 func TestBinomialCDF_NeverExceedsOne(t *testing.T) {
 	for _, n := range []int{60, 500, 1100} {
 		for _, p := range []float64{0.1, 0.5, 0.9} {
-			if got := BinomialCDF(n, n, p); got > 1 || got < 1-1e-12 {
+			if got := binomialCDF(t, n, n, p); got > 1 || got < 1-1e-12 {
 				t.Errorf("P(X ≤ %d) at n=%d p=%v = %.17g", n, n, p, got)
 			}
 		}
@@ -133,6 +153,11 @@ func TestWilson_GoldenAndEdges(t *testing.T) {
 	for _, c := range [][2]int{{-1, 10}, {11, 10}, {0, -1}} {
 		if _, _, err := Wilson(c[0], c[1], 1.959964); err == nil {
 			t.Errorf("Wilson(%d, %d) answered", c[0], c[1])
+		}
+	}
+	for _, z := range []float64{-1.96, 0, math.NaN(), math.Inf(1), math.Inf(-1)} {
+		if _, _, err := Wilson(5, 10, z); err == nil {
+			t.Errorf("Wilson accepted z = %v", z)
 		}
 	}
 }

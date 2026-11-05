@@ -98,8 +98,8 @@ func chooseThreshold(heldOut []heldOutRun, target, confidence float64) (threshol
 				wrong++
 			}
 		}
-		if stats.BinomialCDF(wrong, accepted, target) > level {
-			continue
+		if p, err := stats.BinomialCDF(wrong, accepted, target); err != nil || p > level {
+			continue // a cutoff the test cannot vouch for is never chosen
 		}
 		chosen = threshold{
 			accept:     accept,

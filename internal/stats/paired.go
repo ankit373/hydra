@@ -18,7 +18,8 @@ type Discordant struct {
 // validate refuses counts no paired comparison can produce, which would otherwise
 // be answered as if they were data.
 func (d Discordant) validate() error {
-	if d.N < 0 || d.B < 0 || d.C < 0 || d.B+d.C > d.N {
+	// C ≤ N − B rather than B + C ≤ N, which can overflow.
+	if d.N < 0 || d.B < 0 || d.C < 0 || d.B > d.N || d.C > d.N-d.B {
 		return fmt.Errorf("stats: no paired comparison has N=%d with B=%d and C=%d", d.N, d.B, d.C)
 	}
 	return nil
@@ -35,8 +36,16 @@ func (d Discordant) tangoReady() error {
 	return nil
 }
 
-// Delta is the paired difference in pass rates. N = 0 has none, so callers check N.
-func (d Discordant) Delta() float64 { return float64(d.B-d.C) / float64(d.N) }
+// Delta is the paired difference in pass rates (B − C)/N. N = 0 has none.
+func (d Discordant) Delta() (float64, error) {
+	if err := d.validate(); err != nil {
+		return 0, err
+	}
+	if d.N == 0 {
+		return 0, errors.New("stats: no paired items, so no difference in pass rates")
+	}
+	return float64(d.B-d.C) / float64(d.N), nil
+}
 
 // PairedDiscordant aligns two pass vectors item by item and returns the counts
 // with each item's difference d_i ∈ {−1, 0, 1}.
@@ -105,8 +114,12 @@ func TangoLowerBound(d Discordant, alpha float64) (float64, error) {
 	if !(alpha > 0 && alpha < 0.5) {
 		return 0, fmt.Errorf("stats: alpha %v is outside (0, 0.5)", alpha)
 	}
+	hi, err := d.Delta()
+	if err != nil {
+		return 0, err
+	}
 	crit := NormalQuantile(1 - alpha)
-	lo, hi := -1.0, d.Delta()
+	lo := -1.0
 	for hi-lo > 1e-12 {
 		mid := lo + (hi-lo)/2
 		z, err := tangoZ(d, mid)
@@ -124,16 +137,20 @@ func TangoLowerBound(d Discordant, alpha float64) (float64, error) {
 
 // McNemarExact is the conditional binomial test on B of B+C at p = ½. oneSided is
 // P(X ≥ B), "A beats R"; twoSided is min(1, 2·min tail). No discordant pair gives 1, 1.
+// It reads only B and C, so N is not required.
 func McNemarExact(d Discordant) (oneSided, twoSided float64, err error) {
-	if err := d.validate(); err != nil {
-		return 0, 0, err
+	if d.B < 0 || d.C < 0 {
+		return 0, 0, fmt.Errorf("stats: McNemar needs B, C ≥ 0, got B=%d C=%d", d.B, d.C)
 	}
 	m := d.B + d.C
 	if m == 0 {
 		return 1, 1, nil
 	}
-	upper := BinomialCDF(d.C, m, 0.5) // P(X ≥ B) = P(X ≤ C) by symmetry at ½, clamped to 1
-	lower := BinomialCDF(d.B, m, 0.5)
+	upper, err := BinomialCDF(d.C, m, 0.5) // P(X ≥ B) = P(X ≤ C) by symmetry at ½
+	if err != nil {
+		return 0, 0, err // B + C overflowed int
+	}
+	lower, _ := BinomialCDF(d.B, m, 0.5) // m and p were accepted just above
 	return upper, math.Min(1, 2*math.Min(upper, lower)), nil
 }
 

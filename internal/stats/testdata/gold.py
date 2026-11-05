@@ -9,7 +9,7 @@ from scipy.stats import beta, binomtest, norm
 from statsmodels.stats.contingency_tables import mcnemar
 
 print("# McNemar exact: P(X >= B) and two-sided, X ~ Bin(B+C, 1/2)")
-for b, c in [(10, 2), (6, 8), (3, 9), (40, 45), (600, 500)]:
+for b, c in [(10, 2), (6, 8), (3, 9), (9, 3), (40, 45), (600, 500)]:
     m = b + c
     one = Fraction(sum(comb(m, i) for i in range(b, m + 1)), 2**m)
     two = binomtest(b, m, 0.5).pvalue
