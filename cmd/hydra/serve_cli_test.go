@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ankit373/hydra/internal/cache"
 	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/dispatch"
 	"github.com/ankit373/hydra/internal/executor"
@@ -290,15 +291,24 @@ func stubOllamaHeads(t *testing.T, fail ...string) func() []string {
 }
 
 // G24: with --heads set, the router can neither choose, fall back to, nor advertise a head
-// outside the list. The listed heads fail, so the excluded one is the only way to answer.
+// outside the list. The listed heads fail, so the excluded one, live or as a cached answer,
+// is the only way to answer.
 func TestServeHeads_NoHeadOutsideTheList(t *testing.T) {
 	testutil.NewSandbox(t)
-	if err := config.Save(&config.Config{}); err != nil {
+	if err := config.Save(&config.Config{CacheAnswers: true}); err != nil {
 		t.Fatal(err)
 	}
 	asked := stubOllamaHeads(t, "alpha:1b", "beta:1b")
 	listed := []string{"ollama/alpha:1b", "ollama/beta:1b"}
 	const excluded = "ollama/gamma:1b"
+	store, err := cache.OpenDir(cache.Dir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Put(cache.Entry{Prompt: flattenConversation([]executor.Message{{Role: "user", Content: "hi"}}),
+		Response: "cached from gamma", Head: excluded}); err != nil {
+		t.Fatal(err)
+	}
 
 	ctx := context.Background()
 	d, err := dispatch.New(ctx)
@@ -306,7 +316,7 @@ func TestServeHeads_NoHeadOutsideTheList(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer d.Close()
-	if err := restrictServeHeads(d, listed); err != nil {
+	if err := restrictServeHeads(d, listed, true, false); err != nil {
 		t.Fatal(err)
 	}
 	srv := httptest.NewServer(serve.Handler(serveRouter{d: d, defaultEnum: "GRUNT"}, nil, ""))
@@ -359,7 +369,7 @@ func TestServeHeads_NoHeadOutsideTheList(t *testing.T) {
 // refusal that never happens fails the test instead of serving for ever.
 func serveUntil(t *testing.T, args ...string) error {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	cmd := cmdServe()
 	cmd.SetArgs(append([]string{"--addr", "127.0.0.1:0"}, args...))
@@ -370,6 +380,7 @@ func serveUntil(t *testing.T, args ...string) error {
 }
 
 // Both spellings of the list refuse an id discovery did not find, before the server binds.
+// The ids carry a space after the comma, which is trimmed rather than made part of the id.
 func TestServeHeads_AnUnknownIdStopsStartup(t *testing.T) {
 	for _, spelling := range []string{"--heads", "[serve] heads"} {
 		t.Run(spelling, func(t *testing.T) {
@@ -378,17 +389,29 @@ func TestServeHeads_AnUnknownIdStopsStartup(t *testing.T) {
 			cfg := &config.Config{}
 			var args []string
 			if spelling == "--heads" {
-				args = []string{"--heads", "ollama/alpha:1b,ollama/nope"}
+				args = []string{"--heads", "ollama/alpha:1b, ollama/nope"}
 			} else {
-				cfg.Serve.Heads = []string{"ollama/nope"}
+				cfg.Serve.Heads = []string{"ollama/alpha:1b", " ollama/nope"}
 			}
 			if err := config.Save(cfg); err != nil {
 				t.Fatal(err)
 			}
 			err := serveUntil(t, args...)
 			if err == nil || !strings.Contains(err.Error(), `"ollama/nope"`) {
-				t.Errorf("%s naming an unknown head started a server: %v", spelling, err)
+				t.Errorf(`%s naming an unknown head: err = %v, want a startup refusal naming "ollama/nope"`, spelling, err)
 			}
 		})
+	}
+}
+
+// An explicit empty --heads clears the config list for one run, so the server starts.
+func TestServeHeads_AnEmptyFlagClearsTheConfigList(t *testing.T) {
+	testutil.NewSandbox(t)
+	stubOllamaHeads(t)
+	if err := config.Save(&config.Config{Serve: config.Serve{Heads: []string{"ollama/nope"}}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := serveUntil(t, "--heads", ""); err != nil {
+		t.Errorf(`--heads "" still applied [serve] heads: %v`, err)
 	}
 }

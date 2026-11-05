@@ -62,7 +62,12 @@ func (d *Dispatcher) fromCache(ctx context.Context, prompt string, opts Options,
 			vec = v
 		}
 	}
-	return st.Lookup(prompt, vec, cache.Threshold(d.cfg, opts.Enum)), true
+	out := st.Lookup(prompt, vec, cache.Threshold(d.cfg, opts.Enum))
+	if out.Found && !d.Allows(out.Hit.Head) {
+		// An answer from a head outside the serve allowlist is one this server may not give.
+		return cache.Outcome{}, true
+	}
+	return out, true
 }
 
 // recordLookup folds a consulted lookup into the tallies. Misses included, or

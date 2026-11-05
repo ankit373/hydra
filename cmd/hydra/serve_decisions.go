@@ -35,9 +35,9 @@ func (r decisionRouter) Decide(ctx context.Context, c decide.Call) (decide.Outco
 	return r.router.Decide(ctx, c)
 }
 
-// newDecisionRouter builds the router over this machine's decision heads. --local
-// keeps only local ones, and policy.yaml's max_cost_usd is the budget, as for a dispatch.
-func newDecisionRouter(ctx context.Context, confidence float64, localOnly bool) (decisionRouter, error) {
+// newDecisionRouter builds the router over this machine's decision heads. --local keeps only
+// local ones, allows applies the serve allowlist, and policy.yaml's max_cost_usd is the budget.
+func newDecisionRouter(ctx context.Context, confidence float64, localOnly bool, allows func(id string) bool) (decisionRouter, error) {
 	if !(confidence > 0 && confidence < 1) {
 		return decisionRouter{}, fmt.Errorf("--confidence must be in (0, 1), got %v", confidence)
 	}
@@ -47,7 +47,7 @@ func newDecisionRouter(ctx context.Context, confidence float64, localOnly bool) 
 	}
 	var heads []provider.Head
 	for _, h := range executor.DecisionHeads(ctx) {
-		if localOnly && !h.LocalOnly {
+		if (localOnly && !h.LocalOnly) || !allows(h.ID) {
 			continue
 		}
 		heads = append(heads, h)

@@ -13,7 +13,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/ankit373/hydra/internal/config"
 	"github.com/ankit373/hydra/internal/dispatch"
 	"github.com/ankit373/hydra/internal/executor"
 	"github.com/ankit373/hydra/internal/provider"
@@ -254,7 +253,7 @@ func cmdServe() *cobra.Command {
 				return fmt.Errorf("dispatcher init: %w", err)
 			}
 			defer d.Close()
-			if err := restrictServeHeads(d, heads); err != nil {
+			if err := restrictServeHeads(d, heads, c.Flags().Changed("heads"), localOnly); err != nil {
 				return err
 			}
 
@@ -262,7 +261,7 @@ func cmdServe() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			decider, err := newDecisionRouter(ctx, confidence, localOnly)
+			decider, err := newDecisionRouter(ctx, confidence, localOnly, d.Allows)
 			if err != nil {
 				return err
 			}
@@ -278,23 +277,20 @@ func cmdServe() *cobra.Command {
 	f.StringVar(&enum, "enum", "STANDARD", "routing enum for a request that names no key")
 	f.BoolVar(&localOnly, "local", false, "local Heads only, no API calls")
 	f.Float64Var(&confidence, "confidence", 0.95, "stop asking decision sources once an answer is this sure")
-	f.StringSliceVar(&heads, "heads", nil, "route among only these head ids (default [serve] heads in config.toml, else all); "+
-		"an embedding model is routable by no list, so with one set the answer cache and recall have none")
+	f.StringSliceVar(&heads, "heads", nil, "route among only these head ids (default [serve] heads in config.toml; "+
+		"--heads \"\" clears it). Embedding models stay available to the cache and recall, listed or not; "+
+		"decision sources are not heads it can name, so with a list set /v1/decisions has none")
 	return cmd
 }
 
 // restrictServeHeads applies the allowlist before the server binds, so a typo is a
 // startup error rather than a server quietly routing to heads the operator excluded.
-func restrictServeHeads(d *dispatch.Dispatcher, flagHeads []string) error {
-	ids := flagHeads
-	if len(ids) == 0 {
-		cfg, err := config.Load()
-		if err != nil {
-			return err
-		}
-		ids = cfg.Serve.Heads
+func restrictServeHeads(d *dispatch.Dispatcher, flagHeads []string, flagSet, localOnly bool) error {
+	ids := d.ServeHeads()
+	if flagSet {
+		ids = flagHeads
 	}
-	if err := d.RestrictHeads(ids); err != nil {
+	if err := d.RestrictHeads(ids, localOnly); err != nil {
 		return fmt.Errorf("head allowlist: %w", err)
 	}
 	return nil

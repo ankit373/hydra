@@ -365,24 +365,35 @@ type Dispatcher struct {
 	// rule reads a corpus signal.
 	corpusLoad sync.Once
 	corpusData *classify.Corpus
+
+	// allowed is `hyctl serve --heads`, nil when unset. Kept beside heads because a
+	// cached answer can name a head discovery no longer finds.
+	allowed map[string]bool
 }
 
 // Heads returns the probed head list for external callers (e.g. swarm).
 func (d *Dispatcher) Heads() []provider.Head { return d.heads }
 
-// RestrictHeads keeps only the named heads, in their existing (CapScore) order. It refuses
-// an id that discovery did not find, or found unroutable, naming it and the reason.
-// No ids leaves the inventory as discovered.
-func (d *Dispatcher) RestrictHeads(ids []string) error {
-	if len(ids) == 0 {
-		return nil
-	}
+// ServeHeads is config.toml's `[serve] heads`, read from the config New already loaded.
+func (d *Dispatcher) ServeHeads() []string { return d.cfg.Serve.Heads }
+
+// Allows reports whether head id may answer here: any head, unless RestrictHeads set a list.
+func (d *Dispatcher) Allows(id string) bool { return d.allowed == nil || d.allowed[id] }
+
+// RestrictHeads keeps only the named heads, in CapScore order, plus every embedding-only head,
+// which is never routed but feeds the cache and recall. It refuses an unknown, repeated or
+// unroutable id, or a list leaving nothing routable under localOnly or the pii policy.
+func (d *Dispatcher) RestrictHeads(ids []string, localOnly bool) error {
 	byID := make(map[string]provider.Head, len(d.heads))
 	for _, h := range d.heads {
 		byID[h.ID] = h
 	}
-	want := make(map[string]bool, len(ids))
+	want := map[string]bool{}
 	for _, id := range ids {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
 		if want[id] {
 			return fmt.Errorf("head %q is listed twice", id)
 		}
@@ -390,21 +401,40 @@ func (d *Dispatcher) RestrictHeads(ids []string) error {
 		if !ok {
 			return fmt.Errorf("no discovered head with id %q; run `hyctl probe` to see what this machine has", id)
 		}
-		if why := executor.Unroutable(h); why != "" {
+		if why := executor.Unroutable(h); why != "" && !embeddingOnly(h) {
 			return fmt.Errorf("head %q cannot be routed: %s", id, why)
 		}
 		want[id] = true
 	}
+	if len(want) == 0 {
+		return nil
+	}
 	// A new slice: d.heads may be the probe cache's own, shared across New calls.
-	kept := make([]provider.Head, 0, len(ids))
+	kept := make([]provider.Head, 0, len(want))
+	pii := piiLocalOnly(d.cfg)
+	routable := 0
 	for _, h := range d.heads {
-		if want[h.ID] {
-			kept = append(kept, h)
+		if !want[h.ID] && !embeddingOnly(h) {
+			continue
+		}
+		kept = append(kept, h)
+		if executor.Unroutable(h) == "" && (h.LocalOnly || !(localOnly || pii)) {
+			routable++
 		}
 	}
-	d.heads = kept
-	return nil
+	switch {
+	case routable > 0:
+		d.heads, d.allowed = kept, want
+		return nil
+	case localOnly:
+		return errors.New("no listed head is a routable local head, and this server is local-only (--local)")
+	case pii:
+		return errors.New("no listed head is a routable local head, and the pii policy is local-only")
+	}
+	return errors.New("no listed head can be routed")
 }
+
+func embeddingOnly(h provider.Head) bool { return h.Meta["embedding_only"] == "true" }
 
 // Embedder resolves the machine's embedding model once, for a caller that
 // needs a vector rather than an answer. Never nil; with no model on the machine
@@ -1316,6 +1346,10 @@ func (d *Dispatcher) blockedHeads(localOnly bool) string {
 // the caller is a person who picked it from a list and is owed an answer
 // about that model rather than a different one (#676).
 func (d *Dispatcher) pinHead(id string, localOnly bool) (provider.Head, error) {
+	if !d.Allows(id) {
+		return provider.Head{}, headErr{ErrHeadUnknown, fmt.Errorf(
+			"%w: %q is outside this server's `hyctl serve --heads` allowlist", ErrNoHeads, id)}
+	}
 	for _, h := range d.heads {
 		if h.ID != id {
 			continue
