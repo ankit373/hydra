@@ -1,20 +1,20 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Hydra Documentation, CLI, TUI, Trust &amp; Integrations</title>
-  <meta name="description" content="Hydra docs: the CLI, the TUI cockpit, integrations (Claude Code, Codex, Gemini, Ollama…), and every command, what it does, how it works, and how to use it.">
-  <meta name="keywords" content="Hydra docs, hyctl tui, hyctl dispatch, Claude Code integration, Codex, Ollama, LM Studio, LLM router documentation, provider-neutral AI orchestration">
+  <title>Hydra docs: CLI, desktop app, verification and integrations</title>
+  <meta name="description" content="Hydra docs: how Hydra picks the model best suited to each task and can check the answer. The CLI, the desktop app, the TUI, integrations with hosted, local and CLI models, and every command.">
+  <meta name="keywords" content="Hydra docs, hyctl, verified cascade gateway, LLM gateway, model routing, answer verification, OpenAI, Anthropic, Gemini, Ollama, provider-neutral">
 
   <meta property="og:type" content="article">
   <meta property="og:url" content="https://hydra.uvansa.com/docs.html">
-  <meta property="og:title" content="Documentation, Hydra">
-  <meta property="og:description" content="The CLI, the TUI cockpit, the app, and every integration, with visuals. Plus a full command reference.">
+  <meta property="og:title" content="Hydra documentation">
+  <meta property="og:description" content="How Hydra picks the model best suited to each task and can check the answer: the CLI, the app, every integration, and a full command reference.">
   <meta property="og:image" content="https://hydra.uvansa.com/logo.png">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Documentation, Hydra">
-  <meta name="twitter:description" content="The CLI, the TUI cockpit, the app, and every integration, with visuals.">
+  <meta name="twitter:title" content="Hydra documentation">
+  <meta name="twitter:description" content="How Hydra picks the model best suited to each task and can check the answer: the CLI, the app and every integration.">
   <meta name="twitter:image" content="https://hydra.uvansa.com/logo.png">
 
   <link rel="canonical" href="https://hydra.uvansa.com/docs.html">
@@ -26,7 +26,7 @@
     "@context": "https://schema.org",
     "@type": "TechArticle",
     "headline": "Hydra Documentation",
-    "description": "The CLI, the TUI cockpit, the desktop app, integrations, and a complete command reference for Hydra.",
+    "description": "How Hydra picks the model best suited to each task and can check the answer: the CLI, the TUI cockpit, the desktop app, integrations, and a complete command reference.",
     "image": "https://hydra.uvansa.com/logo.png",
     "url": "https://hydra.uvansa.com/docs.html",
     "datePublished": "2026-07-25",
@@ -36,148 +36,98 @@
   }
   </script>
 
+<link rel="stylesheet" href="assets/tokens.css">
+<link rel="stylesheet" href="assets/site.css">
+<script src="assets/site.js"></script>
 <style>
-@font-face{font-family:"Space Grotesk";font-style:normal;font-weight:400 700;font-display:swap;
-  src:url("fonts/SpaceGrotesk.woff2") format("woff2");}
-@font-face{font-family:"JetBrains Mono";font-style:normal;font-weight:400 700;font-display:swap;
-  src:url("fonts/JetBrainsMono.woff2") format("woff2");}
-:root{
-  color-scheme:dark;
-  --bg:#06070F;--bg2:#0A0C18;--panel:rgba(18,20,38,.62);
-  --line:rgba(150,140,255,.16);--line-2:rgba(150,140,255,.30);
-  --ink:#E7E9F5;--dim:#9aa0c4;--faint:#5a5f85;
-  --cyan:#2AF0E0;--aqua:#00E6C3;--violet:#8B5CF6;--magenta:#E852C8;
-  --cheap:#3FD98A;--mid:#E0A93A;--exp:#FF5A6E;
-  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,Roboto,Helvetica,Arial,sans-serif;
-  --mono:"JetBrains Mono",ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
-  --display:"Space Grotesk",system-ui,sans-serif;
-  --side:250px;
-}
-*{box-sizing:border-box;}
-html{scroll-behavior:smooth;
-  /* Prose and chrome are not selectable; code and commands are, see below. */
-  user-select:none;-webkit-user-select:none;}
-
-/* Code and command examples stay selectable. docs.html carries 53 of them and
-   no copy button, so blocking selection there leaves no way to take a command
-   off the page. user-select inherits, so descendants follow. */
-pre,code{user-select:text;-webkit-user-select:text;}
-
-/* Except where a click already copies: dragging across one of those is the
-   accident the site-wide rule exists to prevent. Attribute specificity beats
-   the element selectors above. */
-[data-copy]{user-select:none;-webkit-user-select:none;}
-@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto;}}
-body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.62;
-  -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;}
-a{color:inherit;text-decoration:none;}
-::selection{background:rgba(0,230,195,.28);color:#fff;}
-:focus-visible{outline:2px solid var(--aqua);outline-offset:3px;border-radius:4px;}
-.mono{font-family:var(--mono);}
-.grad{background:linear-gradient(96deg,var(--cyan) 4%,#7FA8FF 40%,var(--violet) 66%,var(--magenta) 98%);
-  -webkit-background-clip:text;background-clip:text;color:transparent;}
-
-/* top nav */
-.topbar{position:sticky;top:0;z-index:70;display:flex;align-items:center;gap:14px;height:52px;padding:0 24px;
-  font-family:var(--mono);font-size:12.5px;background:rgba(6,7,15,.82);backdrop-filter:blur(14px);border-bottom:1px solid var(--line);}
-.topbar .mark{font-weight:800;letter-spacing:1.5px;font-size:15px;
-  background:linear-gradient(90deg,var(--cyan),var(--violet) 55%,var(--magenta));
-  -webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 0 10px rgba(120,90,255,.4));}
-.topbar .pill{font-size:10.5px;color:var(--faint);border:1px solid var(--line);border-radius:20px;padding:2px 9px;}
-.topbar .grow{flex:1;}
-.topbar nav{display:flex;gap:20px;}
-.topbar nav a{color:var(--dim);transition:color .15s;}
-.topbar nav a:hover,.topbar nav a.here{color:var(--aqua);}
-@media(max-width:720px){.topbar nav{display:none;}}
-
 /* layout */
-.shell{max-width:1280px;margin:0 auto;display:grid;grid-template-columns:var(--side) 1fr;}
+.shell{max-width:1280px;margin:0 auto;display:grid;grid-template-columns:250px 1fr;}
 @media(max-width:960px){.shell{grid-template-columns:1fr;}}
-.side{position:sticky;top:52px;align-self:start;height:calc(100vh - 52px);overflow-y:auto;
-  padding:24px 14px 60px 24px;border-right:1px solid var(--line);}
-@media(max-width:960px){.side{position:static;height:auto;border-right:0;border-bottom:1px solid var(--line);}}
-.side-toggle{display:none;width:100%;text-align:left;background:rgba(150,140,255,.06);border:1px solid var(--line);
-  color:var(--ink);font-family:var(--mono);font-size:13px;padding:10px 14px;border-radius:9px;margin-bottom:14px;cursor:pointer;}
-.side-toggle .chev{float:right;transition:transform .15s;}
+.side{position:sticky;top:var(--site-header-h);align-self:start;height:calc(100vh - var(--site-header-h));overflow-y:auto;
+  padding:var(--hy-space-6) var(--hy-space-3) var(--hy-space-16) var(--hy-space-6);border-right:1px solid var(--hy-color-border-subtle);}
+@media(max-width:960px){.side{position:static;height:auto;border-right:0;border-bottom:1px solid var(--hy-color-border-subtle);}}
+.side-toggle{display:none;width:100%;text-align:left;background:color-mix(in srgb,var(--hy-color-accent-secondary) 6%,transparent);border:1px solid var(--hy-color-border-subtle);
+  color:var(--hy-color-text-default);font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-sm);padding:var(--hy-space-2) var(--hy-space-3);border-radius:9px;margin-bottom:var(--hy-space-3);cursor:pointer;}
+.side-toggle .chev{float:right;transition:transform var(--hy-motion-duration-fast);}
 .side-toggle[aria-expanded="true"] .chev{transform:rotate(180deg);}
 @media(max-width:960px){
   .side-toggle{display:block;}
   #toc{display:none;}
   .side.open #toc{display:block;}
 }
-.search{width:100%;font-family:var(--mono);font-size:13px;color:var(--ink);background:rgba(20,22,44,.6);
-  border:1px solid var(--line-2);border-radius:9px;padding:10px 12px;margin-bottom:18px;}
-.search::placeholder{color:var(--faint);}
-.search:focus{outline:none;border-color:var(--aqua);box-shadow:0 0 0 3px rgba(0,230,195,.12);}
-.side .grp{font-family:var(--mono);font-size:10.5px;letter-spacing:2px;text-transform:uppercase;color:var(--faint);margin:18px 0 7px;}
-.side a{display:block;color:var(--dim);font-size:13.5px;padding:4px 8px;border-radius:6px;border-left:2px solid transparent;transition:.13s;}
-.side a:hover{color:var(--ink);background:rgba(150,140,255,.06);}
-.side a.active{color:var(--aqua);border-left-color:var(--aqua);background:rgba(0,230,195,.06);}
-.side a code{font-family:var(--mono);font-size:12.5px;color:inherit;}
-.side .empty{color:var(--faint);font-size:12.5px;padding:8px;display:none;}
+.search{width:100%;border-color:var(--hy-color-border-strong)!important;font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-sm);color:var(--hy-color-text-default);background:color-mix(in srgb,var(--hy-color-surface-overlay) 60%,transparent);
+  border:1px solid var(--hy-color-border-default);border-radius:9px;padding:var(--hy-space-2) var(--hy-space-3);margin-bottom:var(--hy-space-4);}
+.search::placeholder{color:var(--hy-color-text-subtle);}
+.search:focus{border-color:var(--hy-color-accent-default);box-shadow:0 0 0 3px color-mix(in srgb,var(--hy-color-accent-default) 12%,transparent);}
+.side .grp{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);letter-spacing:2px;text-transform:uppercase;color:var(--hy-color-text-subtle);margin:var(--hy-space-4) 0 var(--hy-space-2);}
+.side a{display:block;color:var(--hy-color-text-muted);font-size:var(--hy-font-size-md);padding:var(--hy-space-1) var(--hy-space-2);border-radius:6px;border-left:2px solid transparent;transition:color var(--hy-motion-duration-fast),background-color var(--hy-motion-duration-fast),border-color var(--hy-motion-duration-fast),opacity var(--hy-motion-duration-fast),transform var(--hy-motion-duration-fast);}
+.side a:hover{color:var(--hy-color-text-default);background:color-mix(in srgb,var(--hy-color-accent-secondary) 6%,transparent);}
+.side a.active{color:var(--hy-color-accent-default);border-left-color:var(--hy-color-accent-default);background:color-mix(in srgb,var(--hy-color-accent-default) 6%,transparent);}
+.side a code{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-sm);color:inherit;}
+.side .empty{color:var(--hy-color-text-subtle);font-size:var(--hy-font-size-sm);padding:var(--hy-space-2);display:none;}
 
 /* content */
-.content{padding:38px 44px 100px;min-width:0;}
-@media(max-width:640px){.content{padding:30px 22px 80px;}}
-.content h1{font-size:clamp(32px,5vw,50px);letter-spacing:-1px;font-weight:800;margin:0 0 8px;text-wrap:balance;}
-.content .intro{color:var(--dim);font-size:16.5px;max-width:72ch;margin:0 0 8px;}
-.content .intro b{color:var(--ink);}
+.content{padding:var(--hy-space-8) var(--hy-space-12) var(--hy-space-24);min-width:0;}
+@media(max-width:640px){.content{padding:var(--hy-space-8) var(--hy-space-6) var(--hy-space-16);}}
+.content h1{font-size:clamp(var(--hy-font-size-2xl),5vw,50px);letter-spacing:-1px;font-weight:800;margin:0 0 var(--hy-space-2);text-wrap:balance;}
+.content .intro{color:var(--hy-color-text-muted);font-size:var(--hy-font-size-base);max-width:72ch;margin:0 0 var(--hy-space-2);}
+.content .intro b{color:var(--hy-color-text-default);}
 
-.doc{scroll-margin-top:64px;padding:34px 0;border-top:1px solid var(--line);}
+.doc{scroll-margin-top:64px;padding:var(--hy-space-8) 0;border-top:1px solid var(--hy-color-border-subtle);}
 .doc:first-of-type{border-top:0;}
-.doc h2{font-size:clamp(21px,3vw,30px);letter-spacing:-.4px;font-weight:760;display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;}
-.doc h2 .cmd{font-family:var(--mono);color:var(--cyan);}
-.doc h2 .tagline{font-size:14px;color:var(--faint);font-weight:400;font-family:var(--sans);}
-.badge{font-family:var(--mono);font-size:10.5px;letter-spacing:1px;text-transform:uppercase;padding:3px 9px;border-radius:20px;font-weight:600;}
-.badge.ship{color:var(--cheap);border:1px solid rgba(63,217,138,.4);background:rgba(63,217,138,.08);}
-.doc .sum{color:var(--dim);font-size:15.5px;margin:10px 0 0;max-width:76ch;}
-.doc .sum b{color:var(--ink);font-weight:600;}
-.sub{margin:18px 0 0;}
-.sub .lbl{font-family:var(--mono);font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--aqua);margin-bottom:7px;}
-.sub p{margin:0;color:var(--dim);font-size:15px;max-width:76ch;}
-.sub p b{color:var(--ink);font-weight:600;}
-.fx{font-family:var(--mono);color:var(--cyan);font-size:13.5px;background:rgba(42,240,224,.08);padding:1px 6px;border-radius:5px;}
-pre{margin:8px 0 0;background:rgba(10,12,24,.7);border:1px solid var(--line);border-radius:11px;padding:14px 16px;
-  overflow-x:auto;font-family:var(--mono);font-size:13px;line-height:1.7;color:var(--ink);}
-pre .c{color:var(--faint);} pre .fl{color:var(--aqua);} pre .k{color:var(--violet);} pre .s{color:var(--cheap);}
-.pill-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;}
-.mp{font-family:var(--mono);font-size:11.5px;color:var(--dim);border:1px solid var(--line);border-radius:6px;padding:4px 9px;background:rgba(20,22,44,.4);}
-.mp b{color:var(--aqua);font-weight:600;}
-.more{display:inline-flex;gap:7px;align-items:center;margin-top:14px;font-family:var(--mono);font-size:12.5px;color:var(--dim);border-bottom:1px dashed var(--line-2);}
-.more:hover{color:var(--aqua);border-color:var(--aqua);}
-.callout{margin-top:14px;border-left:2px solid var(--line-2);padding:2px 0 2px 14px;color:var(--faint);font-size:14px;font-style:italic;}
+.doc h2{font-size:clamp(var(--hy-font-size-xl),3vw,var(--hy-font-size-2xl));letter-spacing:-.4px;font-weight:760;display:flex;align-items:baseline;gap:var(--hy-space-3);flex-wrap:wrap;}
+.doc h2 .cmd{font-family:var(--hy-font-family-mono);color:var(--hy-color-accent-strong);}
+.doc h2 .tagline{font-size:var(--hy-font-size-md);color:var(--hy-color-text-subtle);font-weight:400;font-family:var(--hy-font-family-text);}
+.badge{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);letter-spacing:1px;text-transform:uppercase;padding:var(--hy-space-1) var(--hy-space-2);border-radius:20px;font-weight:600;}
+.badge.ship{color:var(--hy-color-cost-low);border:1px solid color-mix(in srgb,var(--hy-color-status-success) 40%,transparent);background:color-mix(in srgb,var(--hy-color-status-success) 8%,transparent);}
+.doc .sum{color:var(--hy-color-text-muted);font-size:var(--hy-font-size-base);margin:var(--hy-space-2) 0 0;max-width:76ch;}
+.doc .sum b{color:var(--hy-color-text-default);font-weight:600;}
+.sub{margin:var(--hy-space-4) 0 0;}
+.sub .lbl{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);letter-spacing:2px;text-transform:uppercase;color:var(--hy-color-accent-default);margin-bottom:var(--hy-space-2);}
+.sub p{margin:0;color:var(--hy-color-text-muted);font-size:var(--hy-font-size-base);max-width:76ch;}
+.sub p b{color:var(--hy-color-text-default);font-weight:600;}
+.fx{font-family:var(--hy-font-family-mono);color:var(--hy-color-accent-strong);font-size:var(--hy-font-size-md);background:color-mix(in srgb,var(--hy-color-accent-strong) 8%,transparent);padding:1px var(--hy-space-1);border-radius:5px;}
+pre{margin:var(--hy-space-2) 0 0;background:color-mix(in srgb,var(--hy-color-surface-raised) 70%,transparent);border:1px solid var(--hy-color-border-subtle);border-radius:11px;padding:var(--hy-space-3) var(--hy-space-4);
+  overflow-x:auto;font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-sm);line-height:1.7;color:var(--hy-color-text-default);}
+pre .c{color:var(--hy-color-text-subtle);} pre .fl{color:var(--hy-color-accent-default);} pre .k{color:var(--hy-color-accent-secondary);} pre .s{color:var(--hy-color-cost-low);}
+.pill-row{display:flex;flex-wrap:wrap;gap:var(--hy-space-2);margin-top:var(--hy-space-3);}
+.mp{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);color:var(--hy-color-text-muted);border:1px solid var(--hy-color-border-subtle);border-radius:6px;padding:var(--hy-space-1) var(--hy-space-2);background:color-mix(in srgb,var(--hy-color-surface-overlay) 40%,transparent);}
+.mp b{color:var(--hy-color-accent-default);font-weight:600;}
+.more{display:inline-flex;gap:var(--hy-space-2);align-items:center;margin-top:var(--hy-space-3);font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-sm);color:var(--hy-color-text-muted);border-bottom:1px dashed var(--hy-color-border-default);}
+.more:hover{color:var(--hy-color-accent-default);border-color:var(--hy-color-accent-default);}
+.callout{margin-top:var(--hy-space-3);border-left:2px solid var(--hy-color-border-default);padding:2px 0 2px var(--hy-space-3);color:var(--hy-color-text-subtle);font-size:var(--hy-font-size-md);font-style:italic;}
 
 /* terminal window (TUI renders) */
-.term{border:1px solid var(--line-2);border-radius:12px;overflow:hidden;background:#080a14;margin-top:14px;
-  box-shadow:0 22px 55px rgba(0,0,0,.5),0 0 40px rgba(120,90,255,.08);}
-.term .bar{display:flex;align-items:center;gap:7px;padding:9px 14px;background:rgba(20,22,40,.85);border-bottom:1px solid var(--line);}
-.term .bar i{width:11px;height:11px;border-radius:50%;display:inline-block;}
-.term .bar .d1{background:#ff5f57;}.term .bar .d2{background:#febc2e;}.term .bar .d3{background:#28c840;}
-.term .bar .ttl{margin-left:10px;font-family:var(--mono);font-size:11.5px;color:var(--faint);}
-.term pre{margin:0;border:0;border-radius:0;background:transparent;font-size:12.5px;line-height:1.62;overflow-x:auto;}
-.tg{color:var(--cheap);}.tc{color:var(--cyan);}.tv{color:var(--violet);}.ta{color:var(--aqua);}
-.td{color:var(--dim);}.tm{color:var(--magenta);}.tr{color:var(--exp);}.tf{color:var(--faint);}.ty{color:var(--mid);}
-.tabs{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap;}
-.tab{font-family:var(--mono);font-size:12px;color:var(--dim);border:1px solid var(--line);border-radius:8px;
-  padding:7px 14px;cursor:pointer;background:rgba(20,22,44,.4);transition:.14s;}
-.tab:hover{color:var(--ink);border-color:var(--line-2);}
-.tab.on{color:var(--aqua);border-color:var(--aqua);background:rgba(0,230,195,.08);}
+.termwin{border:1px solid var(--hy-color-border-default);border-radius:12px;overflow:hidden;background:var(--hy-color-surface-raised);margin-top:var(--hy-space-3);
+  box-shadow:0 22px 55px color-mix(in srgb,var(--hy-color-surface-base) 50%,transparent),0 0 40px color-mix(in srgb,var(--hy-color-brand-mid) 8%,transparent);}
+.termwin .bar{display:flex;align-items:center;gap:var(--hy-space-2);padding:var(--hy-space-2) var(--hy-space-3);background:color-mix(in srgb,var(--hy-color-surface-overlay) 85%,transparent);border-bottom:1px solid var(--hy-color-border-subtle);}
+.termwin .bar i{width:11px;height:11px;border-radius:50%;display:inline-block;}
+.termwin .bar .d1{background:var(--hy-color-status-danger);}.termwin .bar .d2{background:var(--hy-color-status-warning);}.termwin .bar .d3{background:var(--hy-color-status-success);}
+.termwin .bar .ttl{margin-left:var(--hy-space-2);font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);color:var(--hy-color-text-subtle);}
+.termwin pre{margin:0;border:0;border-radius:0;background:transparent;font-size:var(--hy-font-size-sm);line-height:1.62;overflow-x:auto;}
+.tg{color:var(--hy-color-cost-low);}.tc{color:var(--hy-color-accent-strong);}.tv{color:var(--hy-color-accent-secondary);}.ta{color:var(--hy-color-accent-default);}
+.td{color:var(--hy-color-text-muted);}.tm{color:var(--hy-color-brand-end);}.tr{color:var(--hy-color-cost-high);}.tf{color:var(--hy-color-text-subtle);}.ty{color:var(--hy-color-cost-mid);}
+.tabs{display:flex;gap:var(--hy-space-2);margin-top:var(--hy-space-4);flex-wrap:wrap;}
+.tab{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);color:var(--hy-color-text-muted);border:1px solid var(--hy-color-border-subtle);border-radius:8px;
+  padding:var(--hy-space-2) var(--hy-space-3);cursor:pointer;background:color-mix(in srgb,var(--hy-color-surface-overlay) 40%,transparent);transition:color var(--hy-motion-duration-fast),background-color var(--hy-motion-duration-fast),border-color var(--hy-motion-duration-fast),opacity var(--hy-motion-duration-fast),transform var(--hy-motion-duration-fast);}
+.tab:hover{color:var(--hy-color-text-default);border-color:var(--hy-color-border-default);}
+.tab.on{color:var(--hy-color-accent-default);border-color:var(--hy-color-accent-default);background:color-mix(in srgb,var(--hy-color-accent-default) 8%,transparent);}
 /* animated view swap (TUI tabs + app nav), crossfade + height morph + neon sweep */
-.panes{position:relative;transition:height .36s cubic-bezier(.4,0,.2,1);overflow:hidden;}
+.panes{position:relative;transition:height var(--hy-motion-duration-slow) cubic-bezier(.4,0,.2,1);overflow:hidden;}
 .pane{position:absolute;top:0;left:0;width:100%;opacity:0;transform:translateY(14px) scale(.985);filter:blur(3px);
-  pointer-events:none;transition:opacity .26s ease,transform .42s cubic-bezier(.2,.8,.2,1),filter .26s ease;}
+  pointer-events:none;transition:opacity var(--hy-motion-duration-base) ease,transform var(--hy-motion-duration-slow) cubic-bezier(.2,.8,.2,1),filter var(--hy-motion-duration-base) ease;}
 .pane.on{opacity:1;transform:none;filter:none;pointer-events:auto;}
 .pane::after{content:"";position:absolute;inset:0;pointer-events:none;border-radius:12px;opacity:0;
-  background:linear-gradient(105deg,transparent 38%,rgba(0,230,195,.16) 50%,transparent 62%);background-size:250% 100%;background-position:170% 0;}
+  background:linear-gradient(105deg,transparent 38%,color-mix(in srgb,var(--hy-color-accent-default) 16%,transparent) 50%,transparent 62%);background-size:250% 100%;background-position:170% 0;}
 .pane.sweep::after{animation:sweep .62s ease-out;}
 @keyframes sweep{0%{opacity:1;background-position:170% 0;}100%{opacity:0;background-position:-70% 0;}}
-.tab{transition:color .16s,border-color .16s,background .16s,transform .16s;}
+.tab{transition:color var(--hy-motion-duration-fast),border-color var(--hy-motion-duration-fast),background var(--hy-motion-duration-fast),transform var(--hy-motion-duration-fast);}
 .tab.on{transform:translateY(-1px);}
-.appnav .item{cursor:pointer;transition:background .16s,color .16s,border-color .16s;}
-.appcock{font-family:var(--mono);font-size:12.5px;}
-.appcock .crow{padding:5px 2px;color:var(--dim);border-bottom:1px solid rgba(150,140,255,.06);}
-.appcock .crow.you{color:var(--mid);}
-.apptree{font-size:12.5px;line-height:1.95;color:var(--dim);}
+.appnav .item{cursor:pointer;transition:background var(--hy-motion-duration-fast),color var(--hy-motion-duration-fast),border-color var(--hy-motion-duration-fast);}
+.appcock{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-sm);}
+.appcock .crow{padding:var(--hy-space-1) 2px;color:var(--hy-color-text-muted);border-bottom:1px solid color-mix(in srgb,var(--hy-color-accent-secondary) 6%,transparent);}
+.appcock .crow.you{color:var(--hy-color-cost-mid);}
+.apptree{font-size:var(--hy-font-size-sm);line-height:1.95;color:var(--hy-color-text-muted);}
 @media(prefers-reduced-motion:reduce){
   .panes{height:auto!important;transition:none;overflow:visible;}
   .pane{position:relative;display:none;opacity:1;transform:none;filter:none;transition:none;}
@@ -186,90 +136,90 @@ pre .c{color:var(--faint);} pre .fl{color:var(--aqua);} pre .k{color:var(--viole
 }
 /* copy-to-clipboard on command blocks */
 .codewrap{position:relative;}
-.copybtn{position:absolute;top:8px;right:8px;font-family:var(--mono);font-size:10.5px;letter-spacing:.4px;
-  color:var(--dim);background:rgba(16,18,34,.92);border:1px solid var(--line-2);border-radius:7px;padding:5px 10px;
-  cursor:pointer;opacity:0;transition:opacity .15s,color .15s,border-color .15s;z-index:2;}
+.copybtn{position:absolute;top:8px;right:8px;font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);letter-spacing:.4px;
+  color:var(--hy-color-text-muted);background:color-mix(in srgb,var(--hy-color-surface-overlay) 92%,transparent);border:1px solid var(--hy-color-border-default);border-radius:7px;padding:var(--hy-space-1) var(--hy-space-2);
+  cursor:pointer;opacity:0;transition:opacity var(--hy-motion-duration-fast),color var(--hy-motion-duration-fast),border-color var(--hy-motion-duration-fast);z-index:2;}
 .codewrap:hover .copybtn,.copybtn:focus-visible{opacity:1;}
-.copybtn:hover{color:var(--aqua);border-color:var(--aqua);}
-.copybtn.done{color:var(--cheap);border-color:rgba(63,217,138,.5);opacity:1;}
+.copybtn:hover{color:var(--hy-color-accent-default);border-color:var(--hy-color-accent-default);}
+.copybtn.done{color:var(--hy-color-cost-low);border-color:color-mix(in srgb,var(--hy-color-status-success) 50%,transparent);opacity:1;}
 @media(hover:none){.copybtn{opacity:.85;}}
 
 /* desktop app mockup */
-.appwin{border:1px solid var(--line-2);border-radius:14px;overflow:hidden;margin-top:14px;
-  background:linear-gradient(180deg,#0b0d1c,#080a14);box-shadow:0 26px 64px rgba(0,0,0,.55),0 0 44px rgba(120,90,255,.1);}
-.appwin .tb{display:flex;align-items:center;gap:7px;padding:10px 14px;background:rgba(18,20,38,.92);border-bottom:1px solid var(--line);}
+.appwin{border:1px solid var(--hy-color-border-default);border-radius:14px;overflow:hidden;margin-top:var(--hy-space-3);
+  background:linear-gradient(180deg,var(--hy-color-surface-card),var(--hy-color-surface-raised));box-shadow:0 26px 64px color-mix(in srgb,var(--hy-color-surface-base) 55%,transparent),0 0 44px color-mix(in srgb,var(--hy-color-brand-mid) 10%,transparent);}
+.appwin .tb{display:flex;align-items:center;gap:var(--hy-space-2);padding:var(--hy-space-2) var(--hy-space-3);background:color-mix(in srgb,var(--hy-color-surface-overlay) 92%,transparent);border-bottom:1px solid var(--hy-color-border-subtle);}
 .appwin .tb i{width:11px;height:11px;border-radius:50%;}
-.appwin .tb .ttl{margin-left:10px;font-family:var(--mono);font-size:11.5px;color:var(--faint);}
+.appwin .tb .ttl{margin-left:var(--hy-space-2);font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);color:var(--hy-color-text-subtle);}
 .appbody{display:grid;grid-template-columns:158px 1fr;min-height:260px;}
 @media(max-width:560px){.appbody{grid-template-columns:1fr;}.appnav{display:none;}}
-.appnav{border-right:1px solid var(--line);padding:14px 10px;font-family:var(--mono);font-size:12px;background:rgba(10,12,24,.5);}
-.appnav .item{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:8px;color:var(--dim);margin-bottom:3px;}
-.appnav .item.on{background:linear-gradient(90deg,rgba(0,230,195,.14),transparent);color:var(--aqua);border-left:2px solid var(--aqua);}
+.appnav{border-right:1px solid var(--hy-color-border-subtle);padding:var(--hy-space-3) var(--hy-space-2);font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);background:color-mix(in srgb,var(--hy-color-surface-raised) 50%,transparent);}
+.appnav .item{display:flex;align-items:center;gap:var(--hy-space-2);padding:var(--hy-space-2) var(--hy-space-2);border-radius:8px;color:var(--hy-color-text-muted);margin-bottom:var(--hy-space-1);}
+.appnav .item.on{background:linear-gradient(90deg,color-mix(in srgb,var(--hy-color-accent-default) 14%,transparent),transparent);color:var(--hy-color-accent-default);border-left:2px solid var(--hy-color-accent-default);}
 .appnav .dot{width:7px;height:7px;border-radius:50%;background:currentColor;box-shadow:0 0 8px currentColor;}
-.appview{padding:20px 22px;}
-.appview .ah{font-family:var(--mono);font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--faint);margin-bottom:12px;}
-.appcards{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;}
+.appview{padding:var(--hy-space-4) var(--hy-space-6);}
+.appview .ah{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);letter-spacing:1.5px;text-transform:uppercase;color:var(--hy-color-text-subtle);margin-bottom:var(--hy-space-3);}
+.appcards{display:grid;grid-template-columns:1fr 1fr 1fr;gap:var(--hy-space-3);}
 @media(max-width:640px){.appcards{grid-template-columns:1fr 1fr;}}
-.appcard{border:1px solid var(--line);border-radius:10px;padding:14px;background:rgba(20,22,44,.4);}
-.appcard .t{font-family:var(--mono);font-size:10.5px;color:var(--faint);text-transform:uppercase;letter-spacing:1px;}
-.appcard .v{font-size:22px;font-weight:800;letter-spacing:-.5px;margin-top:6px;}
-.spark{height:26px;margin-top:8px;font-family:var(--mono);letter-spacing:1px;font-size:13px;}
+.appcard{border:1px solid var(--hy-color-border-subtle);border-radius:10px;padding:var(--hy-space-3);background:color-mix(in srgb,var(--hy-color-surface-overlay) 40%,transparent);}
+.appcard .t{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);color:var(--hy-color-text-subtle);text-transform:uppercase;letter-spacing:1px;}
+.appcard .v{font-size:var(--hy-font-size-xl);font-weight:800;letter-spacing:-.5px;margin-top:var(--hy-space-1);}
+.spark{height:26px;margin-top:var(--hy-space-2);font-family:var(--hy-font-family-mono);letter-spacing:1px;font-size:var(--hy-font-size-sm);}
 
 /* integrations */
-.chan-flow{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-top:20px;}
+.chan-flow{display:grid;grid-template-columns:1fr 1fr 1fr;gap:var(--hy-space-3);margin-top:var(--hy-space-4);}
 @media(max-width:760px){.chan-flow{grid-template-columns:1fr;}}
-.chan{border:1px solid var(--line);border-radius:13px;padding:18px;background:rgba(10,12,24,.5);position:relative;}
-.chan h4{margin:0;font-size:15px;font-weight:700;}
-.chan .how{font-family:var(--mono);font-size:11.5px;color:var(--aqua);margin:6px 0 10px;}
-.chan p{margin:0;color:var(--dim);font-size:13.5px;}
-.chan .cnt{position:absolute;top:16px;right:16px;font-family:var(--mono);font-size:11px;color:var(--faint);}
-.intg-wrap{margin-top:26px;}
-.intg-wrap .h{font-family:var(--mono);font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--faint);margin:22px 0 10px;}
-.intg-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(184px,1fr));gap:12px;}
-.intg{border:1px solid var(--line);border-radius:11px;padding:14px 15px;background:rgba(20,22,44,.35);transition:.15s;}
-.intg:hover{border-color:var(--line-2);transform:translateY(-2px);}
-.intg .nm{font-weight:650;font-size:14.5px;display:flex;align-items:center;gap:8px;}
-.intg .glyph{width:22px;height:22px;border-radius:6px;display:grid;place-items:center;font-family:var(--mono);font-size:11px;font-weight:800;color:#06070F;flex:none;}
-.intg .meta{font-family:var(--mono);font-size:11px;color:var(--faint);margin-top:7px;}
-.intg .meta .tier{color:var(--cyan);}
-.intg .desc{color:var(--dim);font-size:12.5px;margin-top:6px;}
-.chip{font-family:var(--mono);font-size:11px;color:var(--dim);border:1px solid var(--line);border-radius:20px;padding:5px 11px;}
+.chan{border:1px solid var(--hy-color-border-subtle);border-radius:13px;padding:var(--hy-space-4);background:color-mix(in srgb,var(--hy-color-surface-raised) 50%,transparent);position:relative;}
+.chan h3{margin:0;font-size:var(--hy-font-size-base);font-weight:700;}
+.chan .how{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);color:var(--hy-color-accent-default);margin:var(--hy-space-1) 0 var(--hy-space-2);}
+.chan p{margin:0;color:var(--hy-color-text-muted);font-size:var(--hy-font-size-md);}
+.chan .cnt{position:absolute;top:16px;right:16px;font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);color:var(--hy-color-text-subtle);}
+.intg-wrap{margin-top:var(--hy-space-6);}
+.intg-wrap .h{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);letter-spacing:2px;text-transform:uppercase;color:var(--hy-color-text-subtle);margin:var(--hy-space-6) 0 var(--hy-space-2);}
+.intg-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(184px,1fr));gap:var(--hy-space-3);}
+.intg{border:1px solid var(--hy-color-border-subtle);border-radius:11px;padding:var(--hy-space-3) var(--hy-space-4);background:color-mix(in srgb,var(--hy-color-surface-overlay) 35%,transparent);transition:color var(--hy-motion-duration-fast),background-color var(--hy-motion-duration-fast),border-color var(--hy-motion-duration-fast),opacity var(--hy-motion-duration-fast),transform var(--hy-motion-duration-fast);}
+.intg:hover{border-color:var(--hy-color-border-default);transform:translateY(-2px);}
+.intg .nm{font-weight:650;font-size:var(--hy-font-size-md);display:flex;align-items:center;gap:var(--hy-space-2);}
+.intg .glyph{width:22px;height:22px;border-radius:6px;display:grid;place-items:center;font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);font-weight:800;color:var(--hy-color-accent-default);flex:none;
+  background:var(--hy-color-surface-overlay);border:1px solid var(--hy-color-border-strong);}
+.intg .meta{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);color:var(--hy-color-text-subtle);margin-top:var(--hy-space-2);}
+.intg .meta .tier{color:var(--hy-color-accent-strong);}
+.intg .desc{color:var(--hy-color-text-muted);font-size:var(--hy-font-size-sm);margin-top:var(--hy-space-1);}
+.chip{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);color:var(--hy-color-text-muted);border:1px solid var(--hy-color-border-subtle);border-radius:20px;padding:var(--hy-space-1) var(--hy-space-3);}
 
 /* tables */
-.ladder{width:100%;border-collapse:collapse;margin-top:14px;font-size:14px;display:block;overflow-x:auto;}
-.ladder th,.ladder td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);}
-.ladder th{font-family:var(--mono);font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--faint);font-weight:500;}
-.ladder td.k{font-family:var(--mono);color:var(--violet);}
-.ladder .sc{font-family:var(--mono);color:var(--cyan);}
+.ladder{width:100%;border-collapse:collapse;margin-top:var(--hy-space-3);font-size:var(--hy-font-size-md);display:block;overflow-x:auto;}
+.ladder th,.ladder td{text-align:left;padding:var(--hy-space-2) var(--hy-space-3);border-bottom:1px solid var(--hy-color-border-subtle);}
+.ladder th{font-family:var(--hy-font-family-mono);font-size:var(--hy-font-size-xs);letter-spacing:1px;text-transform:uppercase;color:var(--hy-color-text-subtle);font-weight:500;}
+.ladder td.k{font-family:var(--hy-font-family-mono);color:var(--hy-color-accent-secondary);}
+.ladder .sc{font-family:var(--hy-font-family-mono);color:var(--hy-color-accent-strong);}
 
-footer{border-top:1px solid var(--line);padding:36px 44px;color:var(--faint);font-size:13px;font-family:var(--mono);
-  display:flex;flex-wrap:wrap;gap:18px;justify-content:space-between;}
-footer a{color:var(--dim);} footer a:hover{color:var(--aqua);}
 
 /* corner widget, the original hero creature, relocated: always alive, just for flavor */
-.hydra-widget{position:fixed;top:66px;right:20px;width:128px;height:128px;z-index:50;
-  border:1px solid var(--line);border-radius:14px;overflow:hidden;background:rgba(8,10,20,.5);
-  backdrop-filter:blur(6px);box-shadow:0 12px 40px rgba(0,0,0,.4);}
+.hydra-widget{display:none;position:fixed;top:66px;right:20px;width:128px;height:128px;z-index:50;
+  border:1px solid var(--hy-color-border-subtle);border-radius:14px;overflow:hidden;background:color-mix(in srgb,var(--hy-color-surface-raised) 50%,transparent);
+  backdrop-filter:blur(6px);box-shadow:0 12px 40px color-mix(in srgb,var(--hy-color-surface-base) 40%,transparent);}
 .hydra-widget canvas{display:block;width:100%;height:100%;}
-@media(max-width:960px){.hydra-widget{display:none;}}
-@media(prefers-reduced-motion:reduce){.hydra-widget{opacity:.85;}}
+@media(min-width:1600px){.hydra-widget{display:block;}}
 </style>
 <script src="https://analytics.ahrefs.com/analytics.js" data-key="yRz83E87rXgYWlhmro5mIg" async></script>
 </head>
 <body>
 
-<div class="topbar">
-  <a class="mark" href="/">HYDRA</a>
-  <span class="pill">docs</span>
-  <span class="grow"></span>
-  <nav>
-    <a href="/docs.html" class="here">Docs</a>
-    <a href="/first-principles.html">First principles</a>
+<a class="skip-link" href="#main">Skip to content</a>
+<header class="site-header" id="topbar">
+  <a class="site-logo" href="/" aria-label="Hydra home">HYDRA</a>
+  <span class="site-tag">docs</span>
+  <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav"><span class="nav-toggle-bars" aria-hidden="true"></span>Menu</button>
+  <nav class="site-nav" id="site-nav" aria-label="Main">
+    <a href="/#start">Get started</a>
+    <a href="/docs.html" aria-current="page">Docs</a>
     <a href="/pricing.html">Pricing</a>
+    <a href="/first-principles.html">First principles</a>
+    <a href="/blog/">Blog</a>
     <a href="https://github.com/ankit373/hydra">GitHub</a>
   </nav>
-  <a class="pill" href="/">← home</a>
-</div>
+  <a class="btn btn-primary header-cta" href="/app.html">Desktop app</a>
+</header>
 
 <div class="hydra-widget" id="hydraWidget" aria-hidden="true">
   <canvas id="hydraWidgetCanvas"></canvas>
@@ -277,12 +227,12 @@ footer a{color:var(--dim);} footer a:hover{color:var(--aqua);}
 
 <div class="shell">
   <aside class="side">
-    <button type="button" id="sideToggle" class="side-toggle" aria-expanded="false" aria-controls="toc">Menu <span class="chev">▾</span></button>
-    <input id="q" class="search" type="search" placeholder="Search docs…  (press /)" aria-label="Search documentation">
-    <nav id="toc">
+    <button type="button" id="sideToggle" class="side-toggle" aria-expanded="false" aria-controls="toc">Contents <span class="chev" aria-hidden="true">▾</span></button>
+    <input id="q" class="search" type="search" placeholder="Search docs" aria-label="Search documentation" aria-keyshortcuts="/">
+    <nav id="toc" aria-label="Documentation">
       <div class="grp" data-grp>Start here</div>
       <a href="#overview">Overview</a>
-      <a href="#install"><code>install</code></a>
+      <a href="#install"><code translate="no">install</code></a>
 
       <div class="grp" data-grp>Surfaces</div>
       <a href="#cli">The CLI</a>
@@ -296,37 +246,37 @@ footer a{color:var(--dim);} footer a:hover{color:var(--aqua);}
       <a href="#local">Local runtimes</a>
 
       <div class="grp" data-grp>First run</div>
-      <a href="#init"><code>hyctl init</code></a>
-      <a href="#probe"><code>hyctl probe</code></a>
-      <a href="#status"><code>hyctl status</code></a>
+      <a href="#init"><code translate="no">hyctl init</code></a>
+      <a href="#probe"><code translate="no">hyctl probe</code></a>
+      <a href="#status"><code translate="no">hyctl status</code></a>
 
       <div class="grp" data-grp>Dispatch</div>
-      <a href="#dispatch"><code>hyctl dispatch</code></a>
-      <a href="#swarm"><code>--swarm</code></a>
-      <a href="#confidence"><code>--confidence</code></a>
-      <a href="#edit"><code>hyctl edit</code></a>
-      <a href="#review"><code>hyctl review</code></a>
-      <a href="#parallel"><code>hyctl parallel</code></a>
+      <a href="#dispatch"><code translate="no">hyctl dispatch</code></a>
+      <a href="#swarm"><code translate="no">--swarm</code></a>
+      <a href="#confidence"><code translate="no">--confidence</code></a>
+      <a href="#edit"><code translate="no">hyctl edit</code></a>
+      <a href="#review"><code translate="no">hyctl review</code></a>
+      <a href="#parallel"><code translate="no">hyctl parallel</code></a>
 
-      <div class="grp" data-grp>Trust &amp; graph</div>
-      <a href="#trust"><code>hyctl trust</code></a>
-      <a href="#graph-blast"><code>graph blast</code></a>
-      <a href="#graph-parallel"><code>graph parallel</code></a>
-      <a href="#context"><code>context entropy</code></a>
+      <div class="grp" data-grp>Verification &amp; graph</div>
+      <a href="#trust"><code translate="no">hyctl trust</code></a>
+      <a href="#graph-blast"><code translate="no">graph blast</code></a>
+      <a href="#graph-parallel"><code translate="no">graph parallel</code></a>
+      <a href="#context"><code translate="no">context entropy</code></a>
 
       <div class="grp" data-grp>Accountability</div>
-      <a href="#mcp"><code>hyctl mcp</code></a>
-      <a href="#mcp-registry"><code>mcp registry</code></a>
-      <a href="#oracle"><code>hyctl oracle</code></a>
+      <a href="#mcp"><code translate="no">hyctl mcp</code></a>
+      <a href="#mcp-registry"><code translate="no">mcp registry</code></a>
+      <a href="#oracle"><code translate="no">hyctl oracle</code></a>
 
       <div class="grp" data-grp>Cost &amp; registry</div>
-      <a href="#cost"><code>hyctl cost</code></a>
-      <a href="#stats"><code>hyctl stats</code></a>
-      <a href="#pricing"><code>hyctl pricing</code></a>
-      <a href="#models"><code>hyctl models</code></a>
+      <a href="#cost"><code translate="no">hyctl cost</code></a>
+      <a href="#stats"><code translate="no">hyctl stats</code></a>
+      <a href="#pricing"><code translate="no">hyctl pricing</code></a>
+      <a href="#models"><code translate="no">hyctl models</code></a>
 
       <div class="grp" data-grp>Concepts</div>
-      <a href="#tiers">Tiers &amp; CapScore</a>
+      <a href="#tiers">Routing levels &amp; CapScore</a>
       <a href="#governor">Budget governor</a>
       <a href="#policy">PII / local-only</a>
       <a href="#a2a">A2A handoffs</a>
@@ -335,24 +285,24 @@ footer a{color:var(--dim);} footer a:hover{color:var(--aqua);}
     </nav>
   </aside>
 
-  <main class="content">
+  <main class="content" id="main">
     <h1>Documentation</h1>
     <p class="intro">Hydra has three surfaces, a <b>CLI</b>, an interactive <b>TUI cockpit</b>, and a <b>desktop app</b>: sitting in front of every AI model on your machine. This covers all three, the tools it plugs into, and every command: <b>what it does, how it works, and how to use it</b>. The deep math lives on <a class="grad" href="/first-principles.html">First Principles</a>.</p>
 
     <!-- ══ OVERVIEW ══ -->
     <section class="doc" id="overview">
-      <h2>Overview <span class="tagline">discover → route → observe</span></h2>
-      <p class="sum">Hydra <b>discovers</b> every head on your machine, <b>routes</b> each task to the cheapest one that clears the bar (with automatic fallback), and <b>logs</b> every dispatch. One provider-neutral control plane; no single vendor is privileged.</p>
-      <div class="term">
+      <h2>Overview <span class="tagline">discover → route → check → observe</span></h2>
+      <p class="sum">Hydra picks the model best suited to each task, and can check the answer before you rely on it. It <b>discovers</b> every model you can reach (hosted APIs, local servers, CLI agents), <b>routes</b> each request to a model measured capable at that task type (today the lowest-cost one that clears the bar, with stronger models as the fallback chain), <b>checks</b> the answer with verifiers when you ask it to, and <b>logs</b> every request. No single vendor is privileged.</p>
+      <div class="termwin">
         <div class="bar"><i class="d1"></i><i class="d2"></i><i class="d3"></i><span class="ttl">the pipeline</span></div>
-<pre><span class="tf">   discover                 route                       execute + observe</span>
+<pre translate="no"><span class="tf">   discover                 route                       execute + observe</span>
 <span class="ta">┌───────────┐</span>   <span class="tv">┌────────────────┐</span>   <span class="tc">┌──────────────┐</span>
-<span class="ta">│ PATH scan │</span>─┐ <span class="tv">│ policy gate    │</span>   <span class="tc">│ CLI heads    │</span>  <span class="tf">claude·codex·cursor</span>
-<span class="ta">│ env keys  │</span>─┼▶<span class="tv">│ CapScore→tier  │</span>─▶ <span class="tc">│ API heads    │</span>  <span class="tf">openai·gemini·groq</span>
-<span class="ta">│ port scan │</span>─┘ <span class="tv">│ fallback chain │</span>   <span class="tc">│ local heads  │</span>  <span class="tf">ollama·lm studio</span>
+<span class="ta">│ PATH scan │</span>─┐ <span class="tv">│ policy gate    │</span>   <span class="tc">│ CLI agents   │</span>  <span class="tf">claude·codex·cursor</span>
+<span class="ta">│ env keys  │</span>─┼▶<span class="tv">│ capability rank│</span>─▶ <span class="tc">│ API models   │</span>  <span class="tf">openai·gemini·groq</span>
+<span class="ta">│ port scan │</span>─┘ <span class="tv">│ fallback chain │</span>   <span class="tc">│ local models │</span>  <span class="tf">ollama·lm studio</span>
 <span class="ta">└───────────┘</span>   <span class="tv">└────────────────┘</span>   <span class="tc">└──────────────┘</span>
                           <span class="tf">│</span>                        <span class="tf">│</span>
-                    <span class="tf">~1.1µs/decision</span>          <span class="tg">cost.jsonl · calibration · trust</span></pre>
+                    <span class="tf">~1.1µs/decision</span>          <span class="tg">cost.jsonl · calibration · verdicts</span></pre>
       </div>
     </section>
 
@@ -361,7 +311,7 @@ footer a{color:var(--dim);} footer a:hover{color:var(--aqua);}
       <h2><span class="cmd">install</span> <span class="tagline">one binary, no runtime</span></h2>
       <p class="sum">Pure Go, single static binary.</p>
       <div class="sub"><div class="lbl">Usage</div>
-        <pre><span class="c"># Homebrew (recommended)</span>
+        <pre translate="no"><span class="c"># Homebrew (recommended)</span>
 brew install ankit373/hydra/hyctl
 
 <span class="c"># npm  ·  or run once, no install:  npx hyctl</span>
@@ -382,10 +332,10 @@ go build -o hyctl ./cmd/hydra</pre>
     <!-- ══ CLI ══ -->
     <section class="doc" id="cli">
       <h2>The CLI <span class="badge ship">shipped</span> <span class="tagline">the whole interface</span></h2>
-      <p class="sum">Everything Hydra does runs through the single <span class="fx">hyctl</span> binary, dispatch, discovery, trust, graph, cost. Scriptable, CI-friendly, zero daemon.</p>
-      <div class="term">
+      <p class="sum">Everything Hydra does runs through the single <span class="fx">hyctl</span> binary: requests, discovery, verification, graph and cost. Scriptable, CI-friendly, zero daemon.</p>
+      <div class="termwin">
         <div class="bar"><i class="d1"></i><i class="d2"></i><i class="d3"></i><span class="ttl">hyctl dispatch --dry-run "add pagination"</span></div>
-<pre><span class="td">  prompt</span> <span class="ta">→</span> <span class="ta">STANDARD</span> <span class="ta">→</span> <span class="td">T5</span>
+<pre translate="no"><span class="td">  prompt</span> <span class="ta">→</span> <span class="ta">STANDARD</span> <span class="ta">→</span> <span class="td">T5</span>
   <span class="td">Primary:</span>   <span class="tc">gemini pro</span>   <span class="tf">score 82</span>
   <span class="td">Fallback:</span>  <span class="tc">openrouter</span>   <span class="tf">score 76  ← if primary rate-limits</span>
   <span class="td">Local:</span>     <span class="tg">ollama/qwen3</span> <span class="tf">← always available, $0</span>
@@ -405,9 +355,9 @@ go build -o hyctl ./cmd/hydra</pre>
 
       <div class="panes" id="tuiPanes">
       <div class="pane on" id="tui0">
-        <div class="term">
+        <div class="termwin">
           <div class="bar"><i class="d1"></i><i class="d2"></i><i class="d3"></i><span class="ttl">HYDRA ▸ chat</span></div>
-<pre> <span class="tv">HYDRA</span>  chat  agents  models  activity  usage  audit          session <span class="tg">$0.0000</span> · context <span class="tf">▱▱▱▱▱▱▱▱</span> 0%
+<pre translate="no"> <span class="tv">HYDRA</span>  chat  agents  models  activity  usage  audit          session <span class="tg">$0.0000</span> · context <span class="tf">▱▱▱▱▱▱▱▱</span> 0%
 <span class="tf">────────────────────────────────────────────────────────────────────────────────────────────────────</span>
 CONTEXT BUDGET       <span class="tf">│</span> 🐉 Hydra initialised · 15 models      <span class="tf">│</span> CODE · go
 <span class="tf">░░░░░░░░░░░░░░░</span>      <span class="tf">│</span> scanned · routing engine ready.       <span class="tf">│</span>   1 // paginated users endpoint
@@ -441,9 +391,9 @@ MODE                 <span class="tf">│</span>                                
       </div>
 
       <div class="pane" id="tui1">
-        <div class="term">
+        <div class="termwin">
           <div class="bar"><i class="d1"></i><i class="d2"></i><i class="d3"></i><span class="ttl">HYDRA ▸ models</span></div>
-<pre> <span class="tv">HYDRA</span>  chat  agents  models  activity  usage  audit          session <span class="tg">$0.0000</span> · context <span class="tf">▱▱▱▱▱▱▱▱</span> 0%
+<pre translate="no"> <span class="tv">HYDRA</span>  chat  agents  models  activity  usage  audit          session <span class="tg">$0.0000</span> · context <span class="tf">▱▱▱▱▱▱▱▱</span> 0%
 <span class="tf">────────────────────────────────────────────────────────────────────────────────────────────────────</span>
 <span class="tf">╭─────────────────────────────────────────────────────────────────╮</span> <span class="tf">╭─────────────────────────────╮</span>
 <span class="tf">│</span> MODELS · by provider/server                                     <span class="tf">│</span> <span class="tf">│</span> SERVER                      <span class="tf">│</span>
@@ -476,9 +426,9 @@ MODE                 <span class="tf">│</span>                                
       </div>
 
       <div class="pane" id="tui2">
-        <div class="term">
+        <div class="termwin">
           <div class="bar"><i class="d1"></i><i class="d2"></i><i class="d3"></i><span class="ttl">HYDRA ▸ audit</span></div>
-<pre> <span class="tv">HYDRA</span>  chat  agents  models  activity  usage  audit          session <span class="tg">$0.0000</span> · context <span class="tf">▱▱▱▱▱▱▱▱</span> 0%
+<pre translate="no"> <span class="tv">HYDRA</span>  chat  agents  models  activity  usage  audit          session <span class="tg">$0.0000</span> · context <span class="tf">▱▱▱▱▱▱▱▱</span> 0%
 <span class="tf">────────────────────────────────────────────────────────────────────────────────────────────────────</span>
 <span class="tf">╭─────────────────────────────────────────────────────────────────╮</span>
 <span class="tf">│</span> MODEL SCORECARD · calibration                                   <span class="tf">│</span>
@@ -513,14 +463,14 @@ MODE                 <span class="tf">│</span>                                
       </div>
 
       <div class="sub"><div class="lbl">How it works</div>
-        <p><b>Chat</b> executes: the route line names the tier, model and strategy the router picked and why, then the proof strip reports what the run planned, edited and verified. <span class="fx">shift+tab</span> cycles the modes, Auto (plan → edit → run your tests → fix → repeat), Plan, Edit, Ask, and <span class="fx">ctrl+o</span> overrides where the next task runs without changing what it does. <b>Models</b> is the discovered estate by provider, each head at its routing tier, with a server's children greyed when the server itself is down. <b>Audit</b> carries the calibration scorecard, the hash-chained log's integrity, the guardrails actually in force, and anything waiting on a human. <b>Agents</b>, <b>Activity</b> and <b>Usage</b> cover work in flight, per-run traces, and where the money went. <span class="fx">?</span> lists every key, rendered from the keymap itself so it cannot drift.</p>
+        <p><b>Chat</b> executes: the route line names the routing level, model and strategy the router picked and why, then the proof strip reports what the run planned, edited and verified. <span class="fx">shift+tab</span> cycles the modes, Auto (plan → edit → run your tests → fix → repeat), Plan, Edit, Ask, and <span class="fx">ctrl+o</span> overrides where the next task runs without changing what it does. <b>Models</b> is the discovered estate by provider, each model at its routing level, with a server's children greyed when the server itself is down. <b>Audit</b> carries the calibration scorecard, the hash-chained log's integrity, the guardrails actually in force, and anything waiting on a human. <b>Agents</b>, <b>Activity</b> and <b>Usage</b> cover work in flight, per-run traces, and where the money went. <span class="fx">?</span> lists every key, rendered from the keymap itself so it cannot drift.</p>
       </div>
       <div class="sub"><div class="lbl">Streaming</div>
-        <p>An answer appears <b>as it arrives</b> rather than all at once when the task finishes, so a slow head and a stuck one no longer look the same. The frame repaints five times a second, which is also what coalesces the stream: deltas land every ~20ms and the render never runs per delta.</p>
-        <p>When a head gives up part-way through, its partial output <b>collapses to one dim line</b> naming the head and the reason, so it cannot be mistaken for the answer, and <span class="fx">e</span> expands it again. The text is kept, not re-fetched. Only plain routing streams: a swarm has several heads answering at once and consensus picks by judge after N replies, so neither has a single stream to show.</p>
+        <p>An answer appears <b>as it arrives</b> rather than all at once when the task finishes, so a slow model and a stuck one no longer look the same. The frame repaints five times a second, which is also what coalesces the stream: deltas land every ~20ms and the render never runs per delta.</p>
+        <p>When a model gives up part-way through, its partial output <b>collapses to one dim line</b> naming the model and the reason, so it cannot be mistaken for the answer, and <span class="fx">e</span> expands it again. The text is kept, not re-fetched. Only plain routing streams: a swarm has several models answering at once and consensus picks by judge after N replies, so neither has a single stream to show.</p>
       </div>
       <div class="sub"><div class="lbl">Keys &amp; usage</div>
-        <pre>hyctl tui
+        <pre translate="no">hyctl tui
 <span class="c"># tab cycles views · shift+tab modes · ctrl+o routing · e expands a</span>
 <span class="c"># collapsed partial · ? all keys · :q quit</span>
 hyctl tui <span class="fl">--snapshot</span> <span class="fl">--view</span> 0..5   <span class="c"># render one static frame</span></pre>
@@ -532,7 +482,7 @@ hyctl tui <span class="fl">--snapshot</span> <span class="fl">--view</span> 0..5
       <h2>The desktop app <span class="badge ship">download</span> <span class="tagline">point-and-click cockpit</span></h2>
       <p class="sum">A native window over the same engine, Wails v2 + React, in <span class="fx">desktop/</span>. It opens on the chat, with the other views behind an icon rail. <b>Every release ships a build for macOS, Windows and Linux.</b> <b>Click the sidebar</b>: the views swap live.</p>
       <div class="appwin">
-        <div class="tb"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i><span class="ttl" id="appTitle">Hydra.app, Usage</span></div>
+        <div class="tb"><i style="background:var(--hy-color-status-danger)"></i><i style="background:var(--hy-color-status-warning)"></i><i style="background:var(--hy-color-status-success)"></i><span class="ttl" id="appTitle">Hydra · Usage</span></div>
         <div class="appbody">
           <div class="appnav" id="appNav" role="tablist">
             <div class="item on" data-av="av-dash" data-title="Usage" role="tab" tabindex="0"><span class="dot"></span>Usage</div>
@@ -545,49 +495,49 @@ hyctl tui <span class="fl">--snapshot</span> <span class="fl">--view</span> 0..5
               <div class="pane" id="av-cockpit">
                 <div class="ah">runs · live first</div>
                 <div class="appcock">
-                  <div class="crow"><span style="color:var(--aqua)">●</span> 20260802T190000Z-5e55… <span style="color:var(--faint)">4.7s · $0.0031 · 3 agents</span></div>
-                  <div class="crow"><span style="color:var(--faint)">&nbsp;&nbsp;&nbsp;2 running · 1 ok</span></div>
-                  <div class="crow"><span style="color:var(--faint)">○ 20260802T182210Z-ab41… &nbsp;1.3s · $0.0000 · 1 agent · ok</span></div>
-                  <div class="crow"><span style="color:var(--faint)">○ 20260802T175902Z-9d07… &nbsp;8.1s · $0.0142 · 5 agents · ok</span></div>
+                  <div class="crow"><span style="color:var(--hy-color-accent-default)">●</span> 20260802T190000Z-5e55… <span style="color:var(--hy-color-text-subtle)">4.7s · $0.0031 · 3 agents</span></div>
+                  <div class="crow"><span style="color:var(--hy-color-text-subtle)">&nbsp;&nbsp;&nbsp;2 running · 1 ok</span></div>
+                  <div class="crow"><span style="color:var(--hy-color-text-subtle)">○ 20260802T182210Z-ab41… &nbsp;1.3s · $0.0000 · 1 agent · ok</span></div>
+                  <div class="crow"><span style="color:var(--hy-color-text-subtle)">○ 20260802T175902Z-9d07… &nbsp;8.1s · $0.0142 · 5 agents · ok</span></div>
                 </div>
               </div>
               <div class="pane on" id="av-dash">
                 <div class="ah">fleet · this session</div>
                 <div class="appcards">
-                  <div class="appcard"><div class="t">saved vs frontier</div><div class="v" style="color:var(--cheap)">$6.03</div><div class="spark"><span style="color:var(--cheap)">▁▃▄▆▅▇█▇</span></div></div>
-                  <div class="appcard"><div class="t">local share</div><div class="v" style="color:var(--cyan)">85%</div><div class="spark"><span style="color:var(--cyan)">▂▄▃▅▆▆▇█</span></div></div>
-                  <div class="appcard"><div class="t">last confidence</div><div class="v" style="color:var(--violet)">0.98</div><div class="spark"><span style="color:var(--violet)">▅▆▆▇▇█▇█</span></div></div>
+                  <div class="appcard"><div class="t">saved vs frontier</div><div class="v" style="color:var(--hy-color-cost-low)">$6.03</div><div class="spark"><span style="color:var(--hy-color-cost-low)">▁▃▄▆▅▇█▇</span></div></div>
+                  <div class="appcard"><div class="t">local share</div><div class="v" style="color:var(--hy-color-accent-strong)">85%</div><div class="spark"><span style="color:var(--hy-color-accent-strong)">▂▄▃▅▆▆▇█</span></div></div>
+                  <div class="appcard"><div class="t">last confidence</div><div class="v" style="color:var(--hy-color-accent-secondary)">0.98</div><div class="spark"><span style="color:var(--hy-color-accent-secondary)">▅▆▆▇▇█▇█</span></div></div>
                 </div>
-                <div class="ah" style="margin-top:16px">governor · claude_pct</div>
-                <div class="spark" style="font-size:15px"><span style="color:var(--mid)">███████████░░░░░░░</span> <span style="color:var(--mid)">58%</span></div>
+                <div class="ah" style="margin-top:var(--hy-space-4)">governor · claude_pct</div>
+                <div class="spark" style="font-size:var(--hy-font-size-base)"><span style="color:var(--hy-color-cost-mid)">███████████░░░░░░░</span> <span style="color:var(--hy-color-cost-mid)">58%</span></div>
               </div>
               <div class="pane" id="av-tree">
                 <div class="ah">supervision tree</div>
                 <div class="apptree mono">
-                  <div><span style="color:var(--violet)">orchestrator</span> <span style="color:var(--faint)">T1 · cortex · you · 0.71</span></div>
-                  <div>├─ design <span style="color:var(--faint)">T3 · agy · claude · returned · 0.93</span></div>
-                  <div>├─ <span style="color:var(--aqua)">token-rotation</span> <span style="color:var(--faint)">T3 · agy · claude · running · 0.88</span></div>
-                  <div>│&nbsp;&nbsp;├─ worker-1 <span style="color:var(--faint)">T6 · gemini pro · 0.91</span></div>
-                  <div>│&nbsp;&nbsp;└─ worker-2 <span style="color:var(--faint)">T8 · gemini flash · 0.62</span></div>
-                  <div>└─ docs <span style="color:var(--faint)">T10 · qwen · local · 0.87</span></div>
-                  <div style="color:var(--faint)">&nbsp;&nbsp;&nbsp;┄▶ A2A token-rotation → tests</div>
+                  <div><span style="color:var(--hy-color-accent-secondary)">orchestrator</span> <span style="color:var(--hy-color-text-subtle)">main model · you · 0.71</span></div>
+                  <div>├─ design <span style="color:var(--hy-color-text-subtle)">T3 · agy · claude · returned · 0.93</span></div>
+                  <div>├─ <span style="color:var(--hy-color-accent-default)">token-rotation</span> <span style="color:var(--hy-color-text-subtle)">T3 · agy · claude · running · 0.88</span></div>
+                  <div>│&nbsp;&nbsp;├─ worker-1 <span style="color:var(--hy-color-text-subtle)">T6 · gemini pro · 0.91</span></div>
+                  <div>│&nbsp;&nbsp;└─ worker-2 <span style="color:var(--hy-color-text-subtle)">T8 · gemini flash · 0.62</span></div>
+                  <div>└─ docs <span style="color:var(--hy-color-text-subtle)">T10 · qwen · local · 0.87</span></div>
+                  <div style="color:var(--hy-color-text-subtle)">&nbsp;&nbsp;&nbsp;┄▶ A2A token-rotation → tests</div>
                 </div>
               </div>
               <div class="pane" id="av-code">
-                <div class="ah">internal/auth/token.go &nbsp;<span style="color:var(--cheap)">+2</span> <span style="color:var(--exp)">−1</span></div>
+                <div class="ah">internal/auth/token.go &nbsp;<span style="color:var(--hy-color-cost-low)">+2</span> <span style="color:var(--hy-color-cost-high)">−1</span></div>
                 <div class="apptree mono">
-                  <div><span style="color:var(--faint)">&nbsp;41&nbsp;&nbsp;41</span> &nbsp; func Rotate(k *Key) error {</div>
-                  <div style="background:rgba(255,90,110,.12)"><span style="color:var(--faint)">&nbsp;42&nbsp;&nbsp;&nbsp;&nbsp;</span> <span style="color:var(--exp)">−</span> return k.rotate()</div>
-                  <div style="background:rgba(63,217,138,.12)"><span style="color:var(--faint)">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;42</span> <span style="color:var(--cheap)">+</span> if err := k.validate(); err != nil {</div>
-                  <div style="background:rgba(63,217,138,.12)"><span style="color:var(--faint)">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;43</span> <span style="color:var(--cheap)">+</span> &nbsp;&nbsp;return err</div>
-                  <div><span style="color:var(--faint)">&nbsp;43&nbsp;&nbsp;44</span> &nbsp; }</div>
+                  <div><span style="color:var(--hy-color-text-subtle)">&nbsp;41&nbsp;&nbsp;41</span> &nbsp; func Rotate(k *Key) error {</div>
+                  <div style="background:color-mix(in srgb,var(--hy-color-status-danger) 12%,transparent)"><span style="color:var(--hy-color-text-subtle)">&nbsp;42&nbsp;&nbsp;&nbsp;&nbsp;</span> <span style="color:var(--hy-color-cost-high)">−</span> return k.rotate()</div>
+                  <div style="background:color-mix(in srgb,var(--hy-color-status-success) 12%,transparent)"><span style="color:var(--hy-color-text-subtle)">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;42</span> <span style="color:var(--hy-color-cost-low)">+</span> if err := k.validate(); err != nil {</div>
+                  <div style="background:color-mix(in srgb,var(--hy-color-status-success) 12%,transparent)"><span style="color:var(--hy-color-text-subtle)">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;43</span> <span style="color:var(--hy-color-cost-low)">+</span> &nbsp;&nbsp;return err</div>
+                  <div><span style="color:var(--hy-color-text-subtle)">&nbsp;43&nbsp;&nbsp;44</span> &nbsp; }</div>
                 </div>
               </div>
             </div>
           </div>
         </div>
       </div>
-      <div class="sub"><div class="lbl">Get it</div><pre><span class="c"># Download from the releases page:</span>
+      <div class="sub"><div class="lbl">Get it</div><pre translate="no"><span class="c"># Download from the releases page:</span>
 hydra-desktop_&lt;version&gt;_darwin_universal.zip   <span class="c"># macOS, Intel + Apple Silicon</span>
 hydra-desktop_&lt;version&gt;_windows_amd64.zip      <span class="c"># Windows</span>
 hydra-desktop_&lt;version&gt;_linux_amd64.tar.gz     <span class="c"># Linux</span>
@@ -610,98 +560,98 @@ cd desktop &amp;&amp; wails build                <span class="c"># → desktop/b
     <!-- ══ INTEGRATIONS ══ -->
     <section class="doc" id="integrations">
       <h2>How discovery works <span class="tagline">no plugins, no config</span></h2>
-      <p class="sum">Hydra finds every head on your machine across <b>three channels</b> in under two seconds, scores each with a CapScore, and routes across all of them. Provider-neutral: it routes <i>away</i> from expensive heads, never toward a favored vendor.</p>
+      <p class="sum">Hydra finds every model on your machine across <b>three channels</b> in under two seconds, scores each with a CapScore, and routes across all of them. Provider-neutral: it routes <i>away</i> from expensive models, never toward a favored vendor.</p>
       <div class="chan-flow">
-        <div class="chan"><span class="cnt">13+</span><h4>PATH scan</h4><div class="how">executables on $PATH</div><p>Finds installed coding agents &amp; CLIs, Claude Code, Codex, Cursor, Gemini CLI, Copilot and more.</p></div>
-        <div class="chan"><span class="cnt">14</span><h4>Env vars</h4><div class="how">provider API keys</div><p>Detects keys for the major API providers and registers each as a routable head.</p></div>
-        <div class="chan"><span class="cnt">2</span><h4>Port scan</h4><div class="how">localhost servers</div><p>Queries Ollama (11434), LM Studio (1234), a LiteLLM proxy (4000) and a llama.cpp server (8080), and enumerates every model each one serves.</p></div>
+        <div class="chan"><span class="cnt">13+</span><h3>PATH scan</h3><div class="how">executables on $PATH</div><p>Finds installed coding agents &amp; CLIs, Claude Code, Codex, Cursor, Gemini CLI, Copilot and more.</p></div>
+        <div class="chan"><span class="cnt">14</span><h3>Env vars</h3><div class="how">provider API keys</div><p>Detects keys for the major API providers and registers each as a routable model.</p></div>
+        <div class="chan"><span class="cnt">2</span><h3>Port scan</h3><div class="how">localhost servers</div><p>Queries Ollama (11434), LM Studio (1234), a LiteLLM proxy (4000) and a llama.cpp server (8080), and enumerates every model each one serves.</p></div>
       </div>
     </section>
 
     <section class="doc" id="agents">
       <h2>Coding agents &amp; CLIs <span class="tagline">discovered on $PATH</span></h2>
-      <p class="sum">Whatever agent you drive Hydra with becomes the <b>orchestrator</b>; the rest are interchangeable <b>heads</b>. Hydra shells out to each through its native executor.</p>
+      <p class="sum">Whatever agent you drive Hydra with becomes the <b>orchestrator</b>; the rest are interchangeable <b>sources</b> it can send work to. Hydra shells out to each through its native executor.</p>
       <div class="intg-grid">
-        <div class="intg"><div class="nm"><span class="glyph" style="background:#8b5cf6">C</span>Claude Code</div><div class="meta">cli · <span class="tier">expert · T1</span></div><div class="desc">Anthropic's agent, top reasoning tier.</div></div>
-        <div class="intg"><div class="nm"><span class="glyph" style="background:#00E6C3">A</span>Antigravity (agy)</div><div class="meta">cli · <span class="tier">expert · T1-T3</span></div><div class="desc">Claude-family tier registry; a first-class head.</div></div>
-        <div class="intg"><div class="nm"><span class="glyph" style="background:#412991">Cx</span>OpenAI Codex</div><div class="meta">cli · <span class="tier">complex · T2</span></div><div class="desc">Strong code generation.</div></div>
-        <div class="intg"><div class="nm"><span class="glyph" style="background:#111">Cu</span>Cursor</div><div class="meta">cli · <span class="tier">complex</span></div><div class="desc">IDE agent, routable from Hydra.</div></div>
-        <div class="intg"><div class="nm"><span class="glyph" style="background:#0ea5e9">W</span>Windsurf</div><div class="meta">cli · <span class="tier">complex</span></div><div class="desc">Agentic IDE.</div></div>
-        <div class="intg"><div class="nm"><span class="glyph" style="background:#4285F4">G</span>Gemini CLI</div><div class="meta">cli · <span class="tier">standard-complex</span></div><div class="desc">Google's coding CLI.</div></div>
-        <div class="intg"><div class="nm"><span class="glyph" style="background:#24292e">Co</span>GitHub Copilot</div><div class="meta">cli · <span class="tier">standard</span></div><div class="desc">Copilot in the terminal.</div></div>
-        <div class="intg"><div class="nm"><span class="glyph" style="background:#FF5543">Cy</span>Sourcegraph Cody</div><div class="meta">cli · <span class="tier">standard</span></div><div class="desc">Context-aware assistant.</div></div>
-        <div class="intg"><div class="nm"><span class="glyph" style="background:#10b981">Am</span>Amp</div><div class="meta">cli · <span class="tier">standard</span></div><div class="desc">Agentic coding tool.</div></div>
-        <div class="intg"><div class="nm"><span class="glyph" style="background:#6366f1">Ct</span>Continue</div><div class="meta">cli · <span class="tier">standard</span></div><div class="desc">Open-source assistant.</div></div>
-        <div class="intg"><div class="nm"><span class="glyph" style="background:#FF9900">K</span>Amazon Kiro</div><div class="meta">cli · <span class="tier">complex</span></div><div class="desc">AWS's agentic IDE.</div></div>
+        <div class="intg"><div class="nm"><span class="glyph" aria-hidden="true">C</span>Claude Code</div><div class="meta">cli · <span class="tier">expert</span></div><div class="desc">Anthropic's agent, top reasoning routing level.</div></div>
+        <div class="intg"><div class="nm"><span class="glyph" aria-hidden="true">A</span>Antigravity (agy)</div><div class="meta">cli · <span class="tier">expert</span></div><div class="desc">Claude-family model registry; a first-class model.</div></div>
+        <div class="intg"><div class="nm"><span class="glyph" aria-hidden="true">Cx</span>OpenAI Codex</div><div class="meta">cli · <span class="tier">complex</span></div><div class="desc">Strong code generation.</div></div>
+        <div class="intg"><div class="nm"><span class="glyph" aria-hidden="true">Cu</span>Cursor</div><div class="meta">cli · <span class="tier">complex</span></div><div class="desc">IDE agent, routable from Hydra.</div></div>
+        <div class="intg"><div class="nm"><span class="glyph" aria-hidden="true">W</span>Windsurf</div><div class="meta">cli · <span class="tier">complex</span></div><div class="desc">Agentic IDE.</div></div>
+        <div class="intg"><div class="nm"><span class="glyph" aria-hidden="true">G</span>Gemini CLI</div><div class="meta">cli · <span class="tier">standard-complex</span></div><div class="desc">Google's coding CLI.</div></div>
+        <div class="intg"><div class="nm"><span class="glyph" aria-hidden="true">Co</span>GitHub Copilot</div><div class="meta">cli · <span class="tier">standard</span></div><div class="desc">Copilot in the terminal.</div></div>
+        <div class="intg"><div class="nm"><span class="glyph" aria-hidden="true">Cy</span>Sourcegraph Cody</div><div class="meta">cli · <span class="tier">standard</span></div><div class="desc">Context-aware assistant.</div></div>
+        <div class="intg"><div class="nm"><span class="glyph" aria-hidden="true">Am</span>Amp</div><div class="meta">cli · <span class="tier">standard</span></div><div class="desc">Agentic coding tool.</div></div>
+        <div class="intg"><div class="nm"><span class="glyph" aria-hidden="true">Ct</span>Continue</div><div class="meta">cli · <span class="tier">standard</span></div><div class="desc">Open-source assistant.</div></div>
+        <div class="intg"><div class="nm"><span class="glyph" aria-hidden="true">K</span>Amazon Kiro</div><div class="meta">cli · <span class="tier">complex</span></div><div class="desc">AWS's agentic IDE.</div></div>
       </div>
-      <div class="callout">Hydra never does work itself that a cheaper head can handle, it delegates down the tier ladder and only escalates when quality demands it.</div>
+      <div class="callout">Hydra sends each request to a model measured capable at that task type, and moves to another model when that model fails, or when the answer fails its check (with a <code translate="no">--confidence</code> target, or the validator <code translate="no">hyctl edit</code> runs).</div>
     </section>
 
     <section class="doc" id="providers">
       <h2>API providers <span class="tagline">discovered from env keys</span></h2>
-      <p class="sum">Set a provider's API key and it becomes a routable head automatically, through the OpenAI-compatible or provider-native HTTP executor. No config file to touch.</p>
+      <p class="sum">Set a provider's API key and it becomes a routable model automatically, through the OpenAI-compatible or provider-native HTTP executor. No config file to touch.</p>
       <div class="pill-row">
         <span class="chip">Anthropic</span><span class="chip">OpenAI</span><span class="chip">OpenRouter</span><span class="chip">Google AI</span>
         <span class="chip">Groq</span><span class="chip">Together</span><span class="chip">Fireworks</span><span class="chip">Mistral</span>
         <span class="chip">DeepSeek</span><span class="chip">xAI · Grok</span><span class="chip">AWS Bedrock</span><span class="chip">Azure OpenAI</span>
         <span class="chip">Perplexity</span><span class="chip">Cohere</span><span class="chip">Replicate</span>
       </div>
-      <div class="sub"><div class="lbl">Add one</div><pre>export ANTHROPIC_API_KEY=sk-…      <span class="c"># then:</span>
-hyctl probe                        <span class="c"># it shows up as a scored head</span></pre></div>
-      <div class="sub"><div class="lbl">Route <i>within</i> OpenRouter</div><p>A key alone gives one head routing to one model. Hydra already prices and scores OpenRouter's whole catalogue, so naming models turns each into its own head the router chooses between. Admission is explicit: enumerating hundreds would bury this list. Naming nothing changes nothing.</p><pre><span class="c"># ~/.hydra/config.toml</span>
+      <div class="sub"><div class="lbl">Add one</div><pre translate="no">export ANTHROPIC_API_KEY=sk-…      <span class="c"># then:</span>
+hyctl probe                        <span class="c"># it shows up as a scored model</span></pre></div>
+      <div class="sub"><div class="lbl">Route <i>within</i> OpenRouter</div><p>A key alone gives one routing choice: a single model. Hydra already prices and scores OpenRouter's whole catalogue, so naming models turns each into its own routing choice the router chooses between. Admission is explicit: enumerating hundreds would bury this list. Naming nothing changes nothing.</p><pre translate="no"><span class="c"># ~/.hydra/config.toml</span>
 [openrouter]
-models = ["anthropic/claude-sonnet-4.5", "google/gemini-2.5-pro"]</pre><p><span class="fx">hyctl probe</span> then lists one head per model and says how much of the catalogue is enabled ("2 of 423"). A name the catalogue does not hold is shown as not routable with the reason, never dropped.</p></div>
+models = ["anthropic/claude-sonnet-4.5", "google/gemini-2.5-pro"]</pre><p><span class="fx">hyctl probe</span> then lists one entry per model and says how much of the catalogue is enabled ("2 of 423"). A name the catalogue does not hold is shown as not routable with the reason, never dropped.</p></div>
     </section>
 
     <section class="doc" id="local">
       <h2>Local runtimes <span class="tagline">the free floor</span></h2>
       <p class="sum">Local models are the <b>terminal fallback</b>: always available, always $0, and where PII-flagged prompts are pinned so sensitive data never leaves the machine.</p>
       <div class="intg-grid">
-        <div class="intg"><div class="nm"><span class="glyph" style="background:#111">Ol</span>Ollama</div><div class="meta">port 11434 · <span class="tier">simple-local · T8-T10</span></div><div class="desc">Every installed model enumerated individually (Qwen, Llama, Phi…).</div></div>
-        <div class="intg"><div class="nm"><span class="glyph" style="background:#8b5cf6">LM</span>LM Studio</div><div class="meta">port 1234 · <span class="tier">simple-local</span></div><div class="desc">Local server; models discovered and routed.</div></div>
-        <div class="intg"><div class="nm"><span class="glyph" style="background:#0ea5e9">Li</span>LiteLLM</div><div class="meta">port 4000 · <span class="tier">per-model tier</span></div><div class="desc">One head per model the proxy fronts. Local only where the upstream itself is local, so a proxy forwarding to OpenAI is never priced or governed as local.</div></div>
-        <div class="intg"><div class="nm"><span class="glyph" style="background:#22c55e">Lc</span>llama.cpp</div><div class="meta">port 8080 · <span class="tier">simple-local · T10</span></div><div class="desc">One head per loaded model, and the server is identified by its own <span class="fx">build_info</span> rather than assumed from the port, so an unrelated service on 8080 is never offered to the router.</div></div>
+        <div class="intg"><div class="nm"><span class="glyph" aria-hidden="true">Ol</span>Ollama</div><div class="meta">port 11434 · <span class="tier">simple-local</span></div><div class="desc">Every installed model enumerated individually (Qwen, Llama, Phi…).</div></div>
+        <div class="intg"><div class="nm"><span class="glyph" aria-hidden="true">LM</span>LM Studio</div><div class="meta">port 1234 · <span class="tier">simple-local</span></div><div class="desc">Local server; models discovered and routed.</div></div>
+        <div class="intg"><div class="nm"><span class="glyph" aria-hidden="true">Li</span>LiteLLM</div><div class="meta">port 4000 · <span class="tier">per-model</span></div><div class="desc">One entry per model the proxy fronts. Local only where the upstream itself is local, so a proxy forwarding to OpenAI is never priced or governed as local.</div></div>
+        <div class="intg"><div class="nm"><span class="glyph" aria-hidden="true">Lc</span>llama.cpp</div><div class="meta">port 8080 · <span class="tier">simple-local</span></div><div class="desc">One entry per loaded model, and the server is identified by its own <span class="fx">build_info</span> rather than assumed from the port, so an unrelated service on 8080 is never offered to the router.</div></div>
       </div>
     </section>
 
     <!-- ══ INIT ══ -->
     <section class="doc" id="init">
       <h2><span class="cmd">hyctl init</span> <span class="tagline">first-run wizard</span></h2>
-      <p class="sum">Scans your machine, ranks every model, and walks you through picking a <b>Cortex</b> (orchestrator), a local model calibrated to your real free RAM, and whether you handle sensitive data. Writes <span class="fx">~/.hydra/config.toml</span>.</p>
-      <div class="sub"><div class="lbl">Usage</div><pre>hyctl init</pre></div>
+      <p class="sum">Scans your machine, ranks every model, and walks you through picking your <b>main model</b> (the orchestrator), a local model calibrated to your real free RAM, and whether you handle sensitive data. Writes <span class="fx">~/.hydra/config.toml</span>.</p>
+      <div class="sub"><div class="lbl">Usage</div><pre translate="no">hyctl init</pre></div>
     </section>
 
     <section class="doc" id="probe">
-      <h2><span class="cmd">hyctl probe</span> <span class="tagline">discover every head</span></h2>
-      <p class="sum">Runs the three discovery channels concurrently and lists every head with its CapScore and status. For a local model it also shows the <b>quantization actually loaded</b>, because the same model id at Q4_K_M and at Q8_0 is not the same head: it differs in accuracy, VRAM and tokens/sec. <code>--json</code> also carries the model's architectural context ceiling, which is what caps the window the budget governor holds a local head to.</p>
-      <div class="sub"><div class="lbl">Usage</div><pre>hyctl probe</pre></div>
+      <h2><span class="cmd">hyctl probe</span> <span class="tagline">discover every model</span></h2>
+      <p class="sum">Runs the three discovery channels concurrently and lists every model with its CapScore and status. For a local model it also shows the <b>quantization actually loaded</b>, because the same model id at Q4_K_M and at Q8_0 is not the same model: it differs in accuracy, VRAM and tokens/sec. <code translate="no">--json</code> also carries the model's architectural context ceiling, which is what caps the window the budget governor holds a local model to.</p>
+      <div class="sub"><div class="lbl">Usage</div><pre translate="no">hyctl probe</pre></div>
     </section>
 
     <section class="doc" id="status">
       <h2><span class="cmd">hyctl status</span> <span class="tagline">live state</span></h2>
-      <p class="sum">The heads that <b>can actually run</b>, budget bars, and the <b>rate-aware</b> governor.</p>
-      <div class="sub"><div class="lbl">How it works</div><p>Head list comes from live discovery, grouped by the tier each head would route at, so it cannot drift from the router; anything discovery found but nothing can drive is counted, not listed. The governor models context usage as a drifting process and estimates the <b>first-passage probability</b> of crossing the ceiling before the task ends, escalating <i>before</i> a threshold is hit.</p></div>
-      <div class="sub"><div class="lbl">Usage</div><pre>hyctl status</pre></div>
+      <p class="sum">The models that <b>can actually run</b>, budget bars, and the <b>rate-aware</b> governor.</p>
+      <div class="sub"><div class="lbl">How it works</div><p>Model list comes from live discovery, grouped by the routing level each model would route at, so it cannot drift from the router; anything discovery found but nothing can drive is counted, not listed. The governor models context usage as a drifting process and estimates the <b>first-passage probability</b> of crossing the ceiling before the task ends, escalating <i>before</i> a threshold is hit.</p></div>
+      <div class="sub"><div class="lbl">Usage</div><pre translate="no">hyctl status</pre></div>
       <a class="more" href="#governor">How the governor decides →</a>
     </section>
 
     <!-- ══ DISPATCH ══ -->
     <section class="doc" id="dispatch">
       <h2><span class="cmd">hyctl dispatch</span> <span class="tagline">the router</span></h2>
-      <p class="sum">Routes a prompt to the <b>cheapest head that clears the bar</b>, with automatic fallback. The core command.</p>
+      <p class="sum">Sends a request to a model <b>measured capable at its task type</b>, with automatic fallback. Today that is the lowest-cost model that clears the bar. The core command.</p>
       <div class="sub"><div class="lbl">How it works</div>
-        <p>1 · classify → enum/tier · 2 · <b>policy gate</b> (PII can block before any network call) · 3 · select highest-CapScore available head at/under tier · 4 · execute · 5 · on failure fall down the chain to local Qwen · 6 · log tokens + cost. ~1.1µs of decision overhead.</p>
+        <p>1 · classify → enum/routing level · 2 · <b>policy gate</b> (PII can block before any network call) · 3 · select highest-CapScore available model at/under routing level · 4 · execute · 5 · on failure fall down the chain to local Qwen · 6 · log tokens + cost. ~1.1µs of decision overhead.</p>
       </div>
       <div class="sub"><div class="lbl">Usage</div>
-        <pre>hyctl dispatch <span class="s">"refactor auth to JWT refresh"</span>
+        <pre translate="no">hyctl dispatch <span class="s">"refactor auth to JWT refresh"</span>
 hyctl dispatch <span class="fl">--enum</span> SIMPLE <span class="s">"write a User DTO"</span>
 hyctl dispatch <span class="fl">--dry-run</span> <span class="s">"add pagination"</span>
 hyctl dispatch <span class="fl">--local</span> <span class="s">"write unit tests"</span></pre>
       </div>
       <div class="sub"><div class="lbl">Streaming</div>
         <p>On a terminal the answer is drawn <b>as it arrives</b>: a spinner covers the wait before the first token, then tokens append, then the token counts, elapsed time and measured <b>TTFT</b> print as a footer, since none of those numbers exist until the call returns. Measured on a local 7B: 435 deltas spread over 9.9s of a 10.0s call, where before there was nothing on screen for the whole ten seconds.</p>
-        <p>Piped output <b>never streams</b> and is byte-identical to before, so scripts are unaffected; <span class="fx">--no-stream</span> asks for the same buffered rendering on a terminal. When a head fails part-way through, its partial is <b>collapsed off the screen</b> and replaced by one line naming the head and the reason, because a partial left on screen reads as part of the answer. Nothing is erased once it has scrolled past the top of the window.</p>
-        <p>A fan-out has no single stream to show, so <span class="fx">--swarm</span> and <span class="fx">--confidence</span> draw a <b>live panel</b> instead: every head that was selected, with its state, elapsed time, tokens and the cost as it accrues. A confidence run adds the running log-odds against the threshold it has to cross, so an ensemble that stops after two heads says why it stopped. The panel is erased when the run ends, and the result printed after it is unchanged.</p>
+        <p>Piped output <b>never streams</b> and is byte-identical to before, so scripts are unaffected; <span class="fx">--no-stream</span> asks for the same buffered rendering on a terminal. When a model fails part-way through, its partial is <b>collapsed off the screen</b> and replaced by one line naming the model and the reason, because a partial left on screen reads as part of the answer. Nothing is erased once it has scrolled past the top of the window.</p>
+        <p>A fan-out has no single stream to show, so <span class="fx">--swarm</span> and <span class="fx">--confidence</span> draw a <b>live panel</b> instead: every model that was selected, with its state, elapsed time, tokens and the cost as it accrues. A confidence run adds the running log-odds against the threshold it has to cross, so an ensemble that stops after two models says why it stopped. The panel is erased when the run ends, and the result printed after it is unchanged.</p>
       </div>
       <div class="sub"><div class="lbl">Key flags</div>
         <div class="pill-row">
@@ -716,7 +666,7 @@ hyctl dispatch <span class="fl">--local</span> <span class="s">"write unit tests
       <h2><span class="cmd">dispatch --swarm</span> <span class="tagline">fan out, keep the best</span></h2>
       <p class="sum"><b>race</b> (first success), <b>best</b> (LLM judge), or <b>all</b> (ranked by CapScore), with a pre-flight cost guard.</p>
       <div class="sub"><div class="lbl">Usage</div>
-        <pre>hyctl dispatch <span class="fl">--swarm</span> <span class="fl">--swarm-mode</span> best <span class="s">"implement a rate limiter"</span>
+        <pre translate="no">hyctl dispatch <span class="fl">--swarm</span> <span class="fl">--swarm-mode</span> best <span class="s">"implement a rate limiter"</span>
   <span class="fl">--swarm-max-heads</span> 5  <span class="fl">--swarm-max-cost</span> 0.05  <span class="fl">--swarm-judge-tier</span> 1</pre></div>
     </section>
 
@@ -724,35 +674,35 @@ hyctl dispatch <span class="fl">--local</span> <span class="s">"write unit tests
       <h2><span class="cmd">dispatch --confidence</span> <span class="tagline">route to a P(correct)</span></h2>
       <p class="sum">Sample models <b>adaptively</b> until a target confidence is reached, then stop.</p>
       <div class="sub"><div class="lbl">How it works</div><p>An <b>SPRT</b> accumulates the calibrated log-likelihood ratio across votes and stops at the boundary implied by your target. <span class="fx">--file</span> raises the bar by blast radius.</p></div>
-      <div class="sub"><div class="lbl">Usage</div><pre>hyctl dispatch <span class="fl">--confidence</span> 0.95 <span class="s">"is this migration safe for prod?"</span></pre></div>
+      <div class="sub"><div class="lbl">Usage</div><pre translate="no">hyctl dispatch <span class="fl">--confidence</span> 0.95 <span class="s">"is this migration safe for prod?"</span></pre></div>
       <a class="more" href="/first-principles.html#sprt">See the SPRT walk derived →</a>
     </section>
 
     <section class="doc" id="edit">
       <h2><span class="cmd">hyctl edit</span> <span class="tagline">safe file edits</span></h2>
-      <p class="sum">Scoped, validated, <b>rollback-safe</b> single-file edit through a head.</p>
-      <div class="sub"><div class="lbl">Usage</div><pre>hyctl edit <span class="fl">--file</span> "$PWD/internal/foo.go" <span class="fl">--enum</span> MODERATE <span class="fl">--prompt</span> <span class="s">"add a nil check"</span></pre></div>
+      <p class="sum">Scoped, validated, <b>rollback-safe</b> single-file edit through a model.</p>
+      <div class="sub"><div class="lbl">Usage</div><pre translate="no">hyctl edit <span class="fl">--file</span> "$PWD/internal/foo.go" <span class="fl">--enum</span> MODERATE <span class="fl">--prompt</span> <span class="s">"add a nil check"</span></pre></div>
     </section>
     <section class="doc" id="review">
       <h2><span class="cmd">hyctl review</span> <span class="tagline">code review</span></h2>
       <p class="sum">Review / approve / reject / QA a change.</p>
-      <div class="sub"><div class="lbl">Usage</div><pre>hyctl review <span class="fl">--file</span> internal/foo.go</pre></div>
+      <div class="sub"><div class="lbl">Usage</div><pre translate="no">hyctl review <span class="fl">--file</span> internal/foo.go</pre></div>
     </section>
     <section class="doc" id="parallel">
       <h2><span class="cmd">hyctl parallel</span> <span class="tagline">fan independent tasks</span></h2>
-      <p class="sum">Fan a set of independent tasks across heads. Optimal count follows <span class="fx">n*=√((1−s)/k)</span>.</p>
-      <div class="sub"><div class="lbl">Usage</div><pre>hyctl parallel <span class="fl">--tasks</span> tasks.txt</pre></div>
+      <p class="sum">Fan a set of independent tasks across models. Optimal count follows <span class="fx">n*=√((1−s)/k)</span>.</p>
+      <div class="sub"><div class="lbl">Usage</div><pre translate="no">hyctl parallel <span class="fl">--tasks</span> tasks.txt</pre></div>
       <a class="more" href="#graph-parallel">graph parallel →</a>
     </section>
 
     <!-- ══ TRUST / GRAPH / CONTEXT ══ -->
     <section class="doc" id="trust">
-      <h2><span class="cmd">hyctl trust</span> <span class="tagline">the confidence layer</span></h2>
+      <h2><span class="cmd">hyctl trust</span> <span class="tagline">calibration and verification</span></h2>
       <p class="sum">Builds and inspects the calibration behind <span class="fx">--confidence</span>. Each source earns a measured reliability from real outcomes.</p>
       <div class="sub"><div class="lbl">How it works</div><p>A Beta-Bernoulli posterior over sensitivity/specificity → a per-vote LLR and a <b>diagnostic power D</b> (KL divergence, nats). A coin-flip source has D≈0 and is ignored. The defect-cost model prices a wrong answer and sets the required confidence.</p></div>
       <div class="sub"><div class="lbl">Subcommands</div>
-        <pre>hyctl trust calibration      <span class="c"># per-source se / sp / D</span>
-hyctl trust record <span class="fl">--source</span> ollama/qwen3:4b <span class="fl">--domain</span> go <span class="fl">--said-correct</span> <span class="fl">--outcome</span> correct  <span class="c"># a head ID from `hyctl probe`</span>
+        <pre translate="no">hyctl trust calibration      <span class="c"># per-source se / sp / D</span>
+hyctl trust record <span class="fl">--source</span> ollama/qwen3:4b <span class="fl">--domain</span> go <span class="fl">--said-correct</span> <span class="fl">--outcome</span> correct  <span class="c"># a model ID from `hyctl probe`</span>
 hyctl trust defect <span class="fl">--pii</span> <span class="fl">--production</span>
 hyctl trust stats   <span class="c"># samples saved vs fixed-N</span>
 hyctl trust explain &lt;hash&gt;   <span class="c"># the LLR ledger for a run</span>
@@ -765,7 +715,7 @@ hyctl trust benchmark        <span class="c"># measured SPRT numbers</span></pre
       <h2><span class="cmd">hyctl graph blast</span> <span class="tagline">how dangerous is this file?</span></h2>
       <p class="sum">Reports a file's blast radius and the confidence a change to it demands.</p>
       <div class="sub"><div class="lbl">How it works</div><p>From <span class="fx">graph.json</span> it counts transitive dependents and computes <span class="fx">κ = ⟨k²⟩/⟨k⟩</span> (Molloy-Reed). <b>κ ≥ 2</b> ⟹ cascade-capable core ⟹ higher confidence bar.</p></div>
-      <div class="sub"><div class="lbl">Usage</div><pre>hyctl graph blast internal/auth/token.go</pre></div>
+      <div class="sub"><div class="lbl">Usage</div><pre translate="no">hyctl graph blast internal/auth/token.go</pre></div>
       <a class="more" href="/first-principles.html#percolation">Drag the percolation threshold →</a>
     </section>
 
@@ -773,7 +723,7 @@ hyctl trust benchmark        <span class="c"># measured SPRT numbers</span></pre
       <h2><span class="cmd">hyctl graph parallel</span> <span class="tagline">how many agents?</span></h2>
       <p class="sum">Returns the optimal number of parallel agents for a set of files.</p>
       <div class="sub"><div class="lbl">How it works</div><p>Amdahl + coordination cost: minimizing <span class="fx">T(n)=s+(1−s)/n+kn</span> gives <span class="fx">n*=√((1−s)/k)</span>. Independent files → ~6; coupled → ~2.</p></div>
-      <div class="sub"><div class="lbl">Usage</div><pre>hyctl graph parallel internal/a.go internal/b.go</pre></div>
+      <div class="sub"><div class="lbl">Usage</div><pre translate="no">hyctl graph parallel internal/a.go internal/b.go</pre></div>
       <a class="more" href="/first-principles.html#parallelism">See the speedup curve →</a>
     </section>
 
@@ -781,7 +731,7 @@ hyctl trust benchmark        <span class="c"># measured SPRT numbers</span></pre
       <h2><span class="cmd">hyctl context entropy</span> <span class="tagline">signal, not length</span></h2>
       <p class="sum">Measures context density and tells you when to compact.</p>
       <div class="sub"><div class="lbl">How it works</div><p><span class="fx">ρ = |gzip(C)|/|C|</span> proxies the entropy rate; <span class="fx">useful = L·ρ</span>. Compact on falling ρ, not raw length.</p></div>
-      <div class="sub"><div class="lbl">Usage</div><pre>hyctl context entropy internal/foo.go
+      <div class="sub"><div class="lbl">Usage</div><pre translate="no">hyctl context entropy internal/foo.go
 cat notes.md | hyctl context entropy -</pre></div>
       <a class="more" href="/first-principles.html#entropy">See useful-tokens fall →</a>
     </section>
@@ -791,65 +741,65 @@ cat notes.md | hyctl context entropy -</pre></div>
       <h2><span class="cmd">hyctl mcp</span> <span class="tagline">accountability ledger</span></h2>
       <p class="sum">A local, append-only ledger that records, and can <b>gate</b>: what every agent touches.</p>
       <div class="sub"><div class="lbl">Subcommands</div>
-        <pre>hyctl mcp check &lt;tool&gt; <span class="fl">--agent</span> A <span class="fl">--resource</span> R <span class="fl">--action</span> write
+        <pre translate="no">hyctl mcp check &lt;tool&gt; <span class="fl">--agent</span> A <span class="fl">--resource</span> R <span class="fl">--action</span> write
 hyctl mcp log <span class="fl">--denied</span>     <span class="c"># what got blocked</span>
 hyctl mcp report          <span class="c"># allowed / denied by agent &amp; tool</span></pre></div>
     </section>
 
     <section class="doc" id="mcp-registry">
-      <h2><span class="cmd">hyctl mcp registry</span> <span class="tagline">trust score for the MCP servers on your machine</span></h2>
+      <h2><span class="cmd">hyctl mcp registry</span> <span class="tagline">safety score for the MCP servers on your machine</span></h2>
       <p class="sum">Every existing MCP directory answers "does this server exist", none answer "is it safe to run with my credentials right now," and star/download counts are actively misleading (the most-starred servers score worst on quality in independent research). This scores what's actually installed instead of indexing everything that exists.</p>
       <div class="sub"><div class="lbl">Subcommands</div>
-        <pre>hyctl mcp registry sync             <span class="c"># pull the official MCP registry into a local cache</span>
+        <pre translate="no">hyctl mcp registry sync             <span class="c"># pull the official MCP registry into a local cache</span>
 hyctl mcp registry scan             <span class="c"># list servers installed across Claude Code/Desktop, Cursor, Windsurf, VS Code</span>
 hyctl mcp registry audit            <span class="c"># resolve + score installed servers, update lifecycle state</span>
 hyctl mcp registry export <span class="fl">--out</span> DIR  <span class="c"># static index.html/index.json of audited servers</span>
 hyctl mcp registry backtest         <span class="c"># validate scoring against known real incidents (postmark-mcp, CVE-2025-6514)</span>
-hyctl mcp registry list             <span class="c"># audited servers by trust score</span>
+hyctl mcp registry list             <span class="c"># audited servers by safety score</span>
 hyctl mcp registry clear &lt;server&gt;   <span class="c"># recover a server quarantined in error</span></pre></div>
-      <p class="sum">Scoring is shaped around the CSA MCP Selection Scorecard's four categories (Security Implementation, Repository Health, Operational Security, Community &amp; Governance), automating a taxonomy the MCP Security Working Group already endorsed, not inventing a new one. Only a <em>confirmed</em> finding (a known advisory match) quarantines a server; a name-similarity heuristic lowers the score without condemning it, because quarantine has no automatic way out, <code>clear</code> is the manual recovery path. A category nothing could be checked in contributes a neutral baseline rather than being dropped from the average, so failing to reach GitHub can never <em>raise</em> a score, and a server nothing is known about reads "insufficient evidence" rather than a number. A server's trust state (new → provisional → trusted → flagged → quarantined) drops back to provisional on <b>every version bump</b>, detected via a content-hash diff of the manifest, the direct fix for the <code>postmark-mcp</code> rug-pull pattern (15 clean npm versions, then a malicious one). <code>scan</code> never reads env-var or secret values from client configs, only server identity.</p>
-      <p class="sum">Feeds back into the ledger: <code>hyctl mcp check</code> auto-classifies a tool call as <span class="fx">mcp-unverified</span>, <span class="fx">mcp-flagged</span>, or <span class="fx">mcp-quarantined</span> from a server's registry state, the same way PII is auto-detected from content, so a policy rule can gate on it automatically. Below that: <span class="fx">mcp-behavior-change</span>, a server whose ledger history has only ever shown one kind of access (read, say) suddenly performing another (network) is flagged from local history alone, no registry data or CVE required. A server's first-ever call is never flagged, there's nothing yet to compare it against.</p>
-      <p class="sum">The exported page (<code>export</code>) carries a disclaimer, this is a probabilistic signal from automated checks, not a guarantee of safety or a claim about a publisher's intent, and every row links a pre-filled dispute issue against this repo, since a public negative signal about a real project needs a correction path before it ships, not as an afterthought.</p>
+      <p class="sum">Scoring is shaped around the CSA MCP Selection Scorecard's four categories (Security Implementation, Repository Health, Operational Security, Community &amp; Governance), automating a taxonomy the MCP Security Working Group already endorsed, not inventing a new one. Only a <em>confirmed</em> finding (a known advisory match) quarantines a server; a name-similarity heuristic lowers the score without condemning it, because quarantine has no automatic way out, <code translate="no">clear</code> is the manual recovery path. A category nothing could be checked in contributes a neutral baseline rather than being dropped from the average, so failing to reach GitHub can never <em>raise</em> a score, and a server nothing is known about reads "insufficient evidence" rather than a number. A server's status (new → provisional → trusted → flagged → quarantined) drops back to provisional on <b>every version bump</b>, detected via a content-hash diff of the manifest, the direct fix for the <code translate="no">postmark-mcp</code> rug-pull pattern (15 clean npm versions, then a malicious one). <code translate="no">scan</code> never reads env-var or secret values from client configs, only server identity.</p>
+      <p class="sum">Feeds back into the ledger: <code translate="no">hyctl mcp check</code> auto-classifies a tool call as <span class="fx">mcp-unverified</span>, <span class="fx">mcp-flagged</span>, or <span class="fx">mcp-quarantined</span> from a server's registry state, the same way PII is auto-detected from content, so a policy rule can gate on it automatically. Below that: <span class="fx">mcp-behavior-change</span>, a server whose ledger history has only ever shown one kind of access (read, say) suddenly performing another (network) is flagged from local history alone, no registry data or CVE required. A server's first-ever call is never flagged, there's nothing yet to compare it against.</p>
+      <p class="sum">The exported page (<code translate="no">export</code>) carries a disclaimer, this is a probabilistic signal from automated checks, not a guarantee of safety or a claim about a publisher's intent, and every row links a pre-filled dispute issue against this repo, since a public negative signal about a real project needs a correction path before it ships, not as an afterthought.</p>
     </section>
 
     <section class="doc" id="oracle">
       <h2><span class="cmd">hyctl oracle verify</span> <span class="tagline">tests as evidence</span></h2>
       <p class="sum">Turns a verifier (tests/compile/lint) into a <b>high-D evidence source</b> whose verdict can outweigh a model's opinion.</p>
-      <div class="sub"><div class="lbl">Usage</div><pre>hyctl oracle verify go test ./... <span class="fl">--source</span> verifier:go-test</pre></div>
+      <div class="sub"><div class="lbl">Usage</div><pre translate="no">hyctl oracle verify go test ./... <span class="fl">--source</span> verifier:go-test</pre></div>
     </section>
 
     <!-- ══ COST / STATS / PRICING / MODELS ══ -->
     <section class="doc" id="cost">
       <h2><span class="cmd">hyctl cost</span> <span class="tagline">spend, honestly labeled</span></h2>
       <p class="sum">Reads <span class="fx">cost.jsonl</span>; <span class="fx">tokens_source</span> marks real-vs-estimated, <span class="fx">cost_source</span> is always <i>estimated</i>.</p>
-      <div class="sub"><div class="lbl">Usage</div><pre>hyctl cost</pre></div>
+      <div class="sub"><div class="lbl">Usage</div><pre translate="no">hyctl cost</pre></div>
     </section>
     <section class="doc" id="stats">
       <h2><span class="cmd">hyctl stats</span> <span class="tagline">rollup</span></h2>
-      <p class="sum">Cost rollup by <b>model, tier, and day</b>: your real savings.</p>
-      <div class="sub"><div class="lbl">Usage</div><pre>hyctl stats</pre></div>
+      <p class="sum">Cost rollup by <b>model, routing level, and day</b>: your real spend.</p>
+      <div class="sub"><div class="lbl">Usage</div><pre translate="no">hyctl stats</pre></div>
     </section>
     <section class="doc" id="pricing">
       <h2><span class="cmd">hyctl pricing</span> <span class="tagline">live rates</span></h2>
       <p class="sum">Live OpenRouter rates, cached 24h, with a static YAML fallback offline.</p>
-      <div class="sub"><div class="lbl">Usage</div><pre>hyctl pricing list [filter] [<span class="fl">--json</span>]
+      <div class="sub"><div class="lbl">Usage</div><pre translate="no">hyctl pricing list [filter] [<span class="fl">--json</span>]
 hyctl pricing refresh</pre></div>
     </section>
     <section class="doc" id="models">
       <h2><span class="cmd">hyctl models</span> <span class="tagline">runtime registry</span></h2>
       <p class="sum">Add a model at runtime, no rebuild. Merges into <span class="fx">~/.hydra/models.json</span>.</p>
       <div class="sub"><div class="lbl">Usage</div>
-        <pre>hyctl models list
+        <pre translate="no">hyctl models list
 hyctl models add kimi-k3 <span class="fl">--provider</span> moonshot <span class="fl">--cap-score</span> 85
 hyctl models sync   <span class="c"># import the OpenRouter catalog</span></pre></div>
     </section>
 
     <!-- ══ CONCEPTS ══ -->
     <section class="doc" id="tiers">
-      <h2>Tiers &amp; CapScore <span class="tagline">how routing decides</span></h2>
-      <p class="sum">Every head gets a <b>CapScore</b> (0-100); tasks route through named tiers by score. Lower tier number = stronger.</p>
+      <h2>Routing levels &amp; CapScore <span class="tagline">how routing decides</span></h2>
+      <p class="sum">Every model gets a <b>CapScore</b> (0-100); tasks route through named routing levels by score. Lower routing level number = stronger.</p>
       <table class="ladder">
-        <thead><tr><th>Tier</th><th>Score</th><th>Example heads</th></tr></thead>
+        <thead><tr><th>Routing level</th><th>Score</th><th>Example models</th></tr></thead>
         <tbody>
           <tr><td class="k">expert</td><td class="sc">90-100</td><td>Claude Opus, Claude Code</td></tr>
           <tr><td class="k">complex</td><td class="sc">80-89</td><td>Codex, GPT-class, Gemini Pro</td></tr>
@@ -862,14 +812,14 @@ hyctl models sync   <span class="c"># import the OpenRouter catalog</span></pre>
 
     <section class="doc" id="governor">
       <h2>Budget governor <span class="tagline">spend attention wisely</span></h2>
-      <p class="sum">Static <b>pressure bands</b> downgrade tiers as usage climbs; a <b>rate-aware first-passage</b> model escalates <i>before</i> a threshold is crossed. The terminal fallback is always the free local head.</p>
+      <p class="sum">Static <b>pressure bands</b> downgrade routing levels as usage climbs; a <b>rate-aware first-passage</b> model escalates <i>before</i> a threshold is crossed. The terminal fallback is always the free local model.</p>
       <table class="ladder">
         <thead><tr><th>claude_pct</th><th>Mode</th><th>Action</th></tr></thead>
         <tbody>
           <tr><td class="sc">0-49%</td><td class="k">normal</td><td>full orchestration</td></tr>
           <tr><td class="sc">50-64%</td><td class="k">compact</td><td>compact recommended</td></tr>
           <tr><td class="sc">65-69%</td><td class="k">caution</td><td>compact urgently</td></tr>
-          <tr><td class="sc">70-74%</td><td class="k">warning</td><td>downgrade one tier</td></tr>
+          <tr><td class="sc">70-74%</td><td class="k">warning</td><td>downgrade one routing level</td></tr>
           <tr><td class="sc">75-79%</td><td class="k">critical</td><td>routing only</td></tr>
           <tr><td class="sc">80%+</td><td class="k">emergency</td><td>route to local, warn</td></tr>
         </tbody>
@@ -879,7 +829,7 @@ hyctl models sync   <span class="c"># import the OpenRouter catalog</span></pre>
     <section class="doc" id="policy">
       <h2>PII / local-only <span class="tagline">enforced, not conventional</span></h2>
       <p class="sum">With local-only policy on, any prompt containing sensitive data is <b>blocked from leaving your machine</b> at the dispatch layer, before any network call.</p>
-      <div class="sub"><div class="lbl">Detected</div><p>SSNs, credit cards, emails, API keys/tokens, IPs, private-key material → re-routed to a local head.</p></div>
+      <div class="sub"><div class="lbl">Detected</div><p>SSNs, credit cards, emails, API keys/tokens, IPs, private-key material → re-routed to a local model.</p></div>
     </section>
 
     <section class="doc" id="a2a">
@@ -896,9 +846,23 @@ hyctl models sync   <span class="c"># import the OpenRouter catalog</span></pre>
   </main>
 </div>
 
-<footer>
-  <span>© Hydra, MIT. The Trust Control Plane for AI development.</span>
-  <span><a href="/">Home</a> · <a href="/first-principles.html">First principles</a> · <a href="/pricing.html">Pricing</a> · <a href="https://github.com/ankit373/hydra">GitHub</a></span>
+<footer class="site-footer">
+  <div class="wrap">
+    <div>
+      <a class="site-logo" href="/" aria-label="Hydra home">HYDRA</a>
+      <p>Hydra picks the model best suited to each task, and can check the answer before you rely on it. Free and open source, MIT licensed.</p>
+    </div>
+    <nav aria-label="Footer">
+      <a href="/">Home</a>
+      <a href="/docs.html">Docs</a>
+      <a href="/app.html">Desktop app</a>
+      <a href="/pricing.html">Pricing</a>
+      <a href="/first-principles.html">First principles</a>
+      <a href="/blog/">Blog</a>
+      <a href="https://github.com/ankit373/hydra">GitHub</a>
+      <a href="/llms.txt">llms.txt</a>
+    </nav>
+  </div>
 </footer>
 
 <script>
@@ -928,21 +892,12 @@ hyctl models sync   <span class="c"># import the OpenRouter catalog</span></pre>
 
   // ── copy-to-clipboard on command blocks (skip terminal renders) ──
   document.querySelectorAll('.content pre').forEach(function(pre){
-    if(pre.closest('.term')) return;                 // terminal output, not a command
+    if(pre.closest('.termwin')) return;                 // terminal output, not a command
     var wrap=document.createElement('div'); wrap.className='codewrap';
     pre.parentNode.insertBefore(wrap, pre); wrap.appendChild(pre);
     var btn=document.createElement('button'); btn.className='copybtn'; btn.type='button';
-    btn.textContent='copy'; btn.setAttribute('aria-label','Copy to clipboard'); wrap.appendChild(btn);
-    btn.addEventListener('click', function(){
-      var text=pre.innerText.replace(/\s+$/,'');
-      function done(){ btn.textContent='✓ copied'; btn.classList.add('done');
-        setTimeout(function(){ btn.textContent='copy'; btn.classList.remove('done'); }, 1500); }
-      function fallback(){ var ta=document.createElement('textarea'); ta.value=text;
-        ta.style.position='fixed'; ta.style.opacity='0'; document.body.appendChild(ta); ta.focus(); ta.select();
-        try{ document.execCommand('copy'); }catch(e){} document.body.removeChild(ta); done(); }
-      if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(text).then(done, fallback); }
-      else fallback();
-    });
+    btn.textContent='copy'; btn.setAttribute('aria-label','Copy the command');
+    btn.setAttribute('data-copy', pre.innerText.replace(/\s+$/,'')); wrap.appendChild(btn);
   });
 
   // ── animated view swap (shared by TUI tabs + app nav) ──
@@ -974,7 +929,7 @@ hyctl models sync   <span class="c"># import the OpenRouter catalog</span></pre>
       function activate(){
         appNav.querySelectorAll('.item').forEach(function(x){ x.classList.toggle('on', x===it); });
         swap(appPanes, it.getAttribute('data-av'));
-        if(appTitle) appTitle.textContent='Hydra.app, '+it.getAttribute('data-title');
+        if(appTitle) appTitle.textContent='Hydra · '+it.getAttribute('data-title');
       }
       it.addEventListener('click', activate);
       it.addEventListener('keydown', function(e){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); activate(); } });
@@ -1029,7 +984,8 @@ hyctl models sync   <span class="c"># import the OpenRouter catalog</span></pre>
     var N=[],E=[];
     function node(x,y,z,c,r){N.push({x:x,y:y,z:z,c:c,r:r||2.4,ph:Math.random()*6.283});return N.length-1;}
     function edge(a,b){E.push([a,b]);}
-    var CY=[70,240,224],BL=[127,168,255],VI=[150,110,246],MA=[232,90,200];
+    var CY=Hydra.rgb('accent-strong'),BL=Hydra.rgb('chart-series-1'),VI=Hydra.rgb('accent-secondary'),MA=Hydra.rgb('brand-end');
+    function mix(a,b,k){return [0,1,2].map(function(i){return Math.round(a[i]+(b[i]-a[i])*k);});}
     /* a volumetric dragon head: centre muzzle + mirrored left/right sides joined
        by width-rungs, so it reads as a real 3D skull from any angle. */
     function head(cx,cy,cz,yaw,mir,col){
@@ -1061,10 +1017,10 @@ hyctl models sync   <span class="c"># import the OpenRouter catalog</span></pre>
     var bC=head(0.00,0.72,0.10,-1.35,false,CY);
     var bL=head(-0.64,0.46,0.02, 0.35,true, MA);
     var bR=head(0.64,0.46,0.02, -0.35,false,VI);
-    var hub=node(0,0.30,0.03,[100,215,235],3.4),shL=node(-0.31,0.12,0.06,BL,2.7),shR=node(0.31,0.12,0.06,BL,2.7);
-    var mid=node(0,0.05,0.13,[130,150,240],2.7),mL=node(-0.25,-0.17,0.02,[155,120,242],2.5),mR=node(0.25,-0.17,0.02,[160,115,240],2.5);
-    var cM=node(0,-0.23,0.15,[165,110,238],2.7),lL=node(-0.15,-0.47,0.02,[195,95,224],2.3),lR=node(0.15,-0.47,0.02,[198,92,222],2.3);
-    var cL=node(0,-0.53,0.06,[210,86,214],2.5),tail=node(0,-0.98,0,[228,80,206],2.0);
+    var hub=node(0,0.30,0.03,mix(CY,BL,0.35),3.4),shL=node(-0.31,0.12,0.06,BL,2.7),shR=node(0.31,0.12,0.06,BL,2.7);
+    var mid=node(0,0.05,0.13,mix(BL,VI,0.3),2.7),mL=node(-0.25,-0.17,0.02,mix(BL,VI,0.65),2.5),mR=node(0.25,-0.17,0.02,mix(BL,VI,0.7),2.5);
+    var cM=node(0,-0.23,0.15,mix(VI,MA,0.2),2.7),lL=node(-0.15,-0.47,0.02,mix(VI,MA,0.5),2.3),lR=node(0.15,-0.47,0.02,mix(VI,MA,0.55),2.3);
+    var cL=node(0,-0.53,0.06,mix(VI,MA,0.75),2.5),tail=node(0,-0.98,0,MA,2.0);
     edge(bC,hub);edge(bL,shL);edge(bR,shR);edge(bC,shL);edge(bC,shR);
     edge(hub,shL);edge(hub,shR);edge(hub,mid);edge(shL,mid);edge(shR,mid);edge(shL,mL);edge(shR,mR);
     edge(mid,cM);edge(mL,cM);edge(mR,cM);edge(mL,mR);edge(mL,lL);edge(mR,lR);edge(cM,cL);edge(lL,cL);edge(lR,cL);edge(lL,lR);edge(cL,tail);edge(lL,tail);edge(lR,tail);
@@ -1082,7 +1038,7 @@ hyctl models sync   <span class="c"># import the OpenRouter catalog</span></pre>
       octx.setTransform(DPR,0,0,DPR,0,0);octx.clearRect(0,0,W,H);octx.globalCompositeOperation='lighter';
       for(var k=0;k<PART.length;k++){var pt=PART[k];if(!REDUCED){pt.y+=pt.vy;}if(pt.y>1.6)pt.y=-1.6;
         var q=proj(pt,ry*0.55,rx*0.55),sx=cx+q.x*R,sy=cy+q.y*R,a=Math.max(0,0.05+q.z*0.05);
-        octx.fillStyle='rgba(130,150,255,'+a+')';octx.beginPath();octx.arc(sx,sy,Math.max(0.4,pt.s*q.sc*1.2),0,6.283);octx.fill();}
+        octx.fillStyle=Hydra.rgba('accent-secondary',a);octx.beginPath();octx.arc(sx,sy,Math.max(0.4,pt.s*q.sc*1.2),0,6.283);octx.fill();}
       var PJ=N.map(function(n){var q=proj(n,ry,rx);return {sx:cx+q.x*R,sy:cy+q.y*R,z:q.z,sc:q.sc};});
       for(var i=0;i<E.length;i++){var a=PJ[E[i][0]],b=PJ[E[i][1]],ca=N[E[i][0]].c,cb=N[E[i][1]].c;
         var col=[(ca[0]+cb[0])/2,(ca[1]+cb[1])/2,(ca[2]+cb[2])/2],depth=(a.z+b.z)/2,al=0.34+depth*0.22;
@@ -1091,9 +1047,9 @@ hyctl models sync   <span class="c"># import the OpenRouter catalog</span></pre>
       for(var j=0;j<N.length;j++){var n=N[j],pp=PJ[j];var pulse=REDUCED?1:(0.7+0.3*Math.sin(t*2.2+n.ph));
         var rad=(n.r*pp.sc)*pulse*(Math.min(W,H)/600),col=n.c,br=0.5+pp.z*0.35;
         var rg=octx.createRadialGradient(pp.sx,pp.sy,0,pp.sx,pp.sy,rad*4.4);
-        rg.addColorStop(0,'rgba(255,255,255,'+(0.92*pulse)+')');rg.addColorStop(0.28,'rgba('+col[0]+','+col[1]+','+col[2]+','+(0.85*br)+')');rg.addColorStop(1,'rgba('+col[0]+','+col[1]+','+col[2]+',0)');
+        rg.addColorStop(0,Hydra.rgba('text-default',0.92*pulse));rg.addColorStop(0.28,'rgba('+col[0]+','+col[1]+','+col[2]+','+(0.85*br)+')');rg.addColorStop(1,'rgba('+col[0]+','+col[1]+','+col[2]+',0)');
         octx.fillStyle=rg;octx.beginPath();octx.arc(pp.sx,pp.sy,rad*4.4,0,6.283);octx.fill();
-        octx.fillStyle='rgba(255,255,255,'+(0.92*pulse)+')';octx.beginPath();octx.arc(pp.sx,pp.sy,Math.max(0.8,rad*0.7),0,6.283);octx.fill();}
+        octx.fillStyle=Hydra.rgba('text-default',0.92*pulse);octx.beginPath();octx.arc(pp.sx,pp.sy,Math.max(0.8,rad*0.7),0,6.283);octx.fill();}
     }
     function draw(){
       var cx=W/2,R=Math.min(W,H)*0.46;
@@ -1103,15 +1059,13 @@ hyctl models sync   <span class="c"># import the OpenRouter catalog</span></pre>
       var cy=H*0.42+bob,ry=rotY+curRY,rx=-0.12+curRX;
       renderScene(cx,cy,R,ry,rx);
       ctx.setTransform(DPR,0,0,DPR,0,0);ctx.globalCompositeOperation='source-over';ctx.clearRect(0,0,W,H);
-      var g=ctx.createRadialGradient(cx,cy,0,cx,cy,R*1.6);g.addColorStop(0,'rgba(80,90,200,0.14)');g.addColorStop(0.5,'rgba(150,60,180,0.05)');g.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+      var g=ctx.createRadialGradient(cx,cy,0,cx,cy,R*1.6);g.addColorStop(0,Hydra.rgba('brand-mid',0.14));g.addColorStop(0.5,Hydra.rgba('brand-end',0.05));g.addColorStop(1,'transparent');ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
       ctx.globalCompositeOperation='lighter';
       if(!REDUCED){ctx.filter='blur(10px)';ctx.globalAlpha=0.5;ctx.drawImage(off,0,0,W,H);ctx.filter='blur(4px)';ctx.globalAlpha=0.5;ctx.drawImage(off,0,0,W,H);}
       ctx.filter='none';ctx.globalAlpha=1;ctx.drawImage(off,0,0,W,H);
       ctx.globalCompositeOperation='source-over';t+=0.016;
     }
-    resize();
-    if(REDUCED){draw();}
-    else{(function loop(){draw();requestAnimationFrame(loop);})();}
+    Hydra.loop(wrap,function(){if(W!==cv.clientWidth||H!==cv.clientHeight)resize();draw();});
   })();
 })();
 </script>

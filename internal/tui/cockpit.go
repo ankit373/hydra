@@ -107,6 +107,7 @@ type Cockpit struct {
 	view     int // one of the ckView* constants
 	glossary bool
 	flash    string // transient status-bar note, replaced by the next action
+	mouseOff bool   // ctrl+s select mode: the terminal owns the mouse, no wheel
 
 	// chat (view 0), executes for real (#597) across parallel threads (#598).
 	// Per-task state (input, log, pipeline, code panel) lives on each thread;
@@ -303,6 +304,16 @@ func (m Cockpit) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, ckSpinTick(t.exec)
 			}
 		}
+	case ckEditorDoneMsg:
+		if msg.err != nil {
+			m.flash = "couldn't open the editor: " + msg.err.Error()
+		}
+		// Releasing the terminal for the editor turned mouse capture off and
+		// bubbletea v1 does not restore it, so ask again unless in select mode.
+		if !m.mouseOff {
+			return m, tea.EnableMouseCellMotion
+		}
+		return m, nil
 	case tea.MouseMsg:
 		switch tea.MouseEvent(msg).Button {
 		case tea.MouseButtonWheelUp:

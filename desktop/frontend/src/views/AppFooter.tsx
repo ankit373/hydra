@@ -40,10 +40,10 @@ export function AppFooter({
 
       <span className="appfoot__item">
         {routable === null || total === null ? (
-          <span title={headsError ?? ''}>{headsError ? 'probe failed' : 'probing heads…'}</span>
+          <span title={headsError ?? ''}>{headsError ? 'probe failed' : 'looking for models…'}</span>
         ) : (
           <>
-            <strong>{routable}</strong> of {total} heads routable
+            <strong>{routable}</strong> of {total} models ready
             {local !== null && local > 0 && <span className="appfoot__sub"> · {local} local</span>}
           </>
         )}

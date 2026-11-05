@@ -136,6 +136,7 @@ type InstallModel struct {
 	models      []sysinfo.ModelRecommendation // ollama model choices
 	chosenModel sysinfo.ModelRecommendation
 	err         bool
+	manual      bool // "I'll run it myself": the done screen repeats the commands
 	done        bool
 }
 
@@ -153,9 +154,14 @@ func (m InstallModel) Init() tea.Cmd { return nil }
 func (m InstallModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		if m.step == installStepDone {
+			return m, tea.Quit // the outcome waits for a key (TUI-12)
+		}
 		switch msg.String() {
 		case "ctrl+c", "q":
 			return m, tea.Quit
+		case "esc", "left", "h":
+			return m.back(), nil
 		case "up", "k":
 			if m.cursor > 0 {
 				m.cursor--
@@ -169,9 +175,23 @@ func (m InstallModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.step = installStepDone
 		m.err = msg.err != nil
 		m.done = true
-		return m, tea.Quit
 	}
 	return m, nil
+}
+
+// back returns to the previous choice. A running install cannot be backed out
+// of, and the first step has nothing behind it.
+func (m InstallModel) back() InstallModel {
+	switch m.step {
+	case installStepOllama:
+		m.step, m.cursor = installStepPick, 0
+	case installStepConfirm:
+		m.step, m.cursor = installStepPick, 0
+		if m.selected != nil && m.selected.isOllama() {
+			m.step = installStepOllama
+		}
+	}
+	return m
 }
 
 func (m InstallModel) maxCursor() int {
@@ -193,7 +213,7 @@ func (m InstallModel) confirm() (tea.Model, tea.Cmd) {
 		m.selected = &opt
 
 		// If Ollama selected, show hardware-aware model picker first
-		if opt.local && strings.Contains(opt.name, "Ollama") {
+		if opt.isOllama() {
 			m.step = installStepOllama
 			m.cursor = 0
 			// Set cursor to best fitting model
@@ -218,19 +238,22 @@ func (m InstallModel) confirm() (tea.Model, tea.Cmd) {
 		m.cursor = 0
 
 	case installStepConfirm:
-		if m.cursor == 1 { // "I'll do it myself"
-			m.done = true
-			return m, tea.Quit
-		}
 		if m.selected.installCmd == "" || m.selected.envKey != "" {
 			m.done = true
 			return m, tea.Quit
+		}
+		if m.cursor == 1 { // "I'll do it myself"
+			m.step, m.manual, m.done = installStepDone, true, true
+			return m, nil
 		}
 		m.step = installStepRunning
 		return m, runInstallCmd(m.selected.installCmd)
 	}
 	return m, nil
 }
+
+// isOllama is the option that leads to the model picker.
+func (o installOption) isOllama() bool { return o.local && strings.Contains(o.name, "Ollama") }
 
 func runInstallCmd(cmd string) tea.Cmd {
 	return func() tea.Msg {
@@ -267,11 +290,12 @@ func lastMeaningfulLine(out string) string {
 // ── View ──────────────────────────────────────────────────────────────────────
 
 var (
-	warnStyle    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("214"))
-	successStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("82"))
-	codeStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("117")).Background(lipgloss.Color("236")).Padding(0, 1)
-	fitsStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("82"))
-	noFitStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	warnStyle    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.AdaptiveColor{Dark: "214", Light: "94"})
+	successStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.AdaptiveColor{Dark: "82", Light: "22"})
+	codeStyle    = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Dark: "117", Light: "24"}).
+			Background(lipgloss.AdaptiveColor{Dark: "236", Light: "254"}).Padding(0, 1)
+	fitsStyle  = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Dark: "82", Light: "22"})
+	noFitStyle = sDim
 )
 
 func (m InstallModel) View() string {
@@ -281,7 +305,7 @@ func (m InstallModel) View() string {
 	switch m.step {
 	case installStepPick:
 		b.WriteString(warnStyle.Render("  Nothing detected on this machine.") + "\n")
-		b.WriteString(sDim.Render("  Hydra needs at least one model to work. What would you like to install?\n\n"))
+		b.WriteString(styleLines(sDim, "  Hydra needs at least one model to work. What would you like to install?\n\n"))
 		for i, opt := range m.options {
 			tag := ""
 			if opt.local {
@@ -301,19 +325,19 @@ func (m InstallModel) View() string {
 
 		// Show whether we're using historical data or just the current snapshot
 		if h := m.specs.History; h != nil && h.Reliable {
-			b.WriteString(sDim.Render(fmt.Sprintf(
+			b.WriteString(styleLines(sDim, fmt.Sprintf(
 				"  Based on %d samples over %d days · typical free: %.1fGB avg, %.1fGB p75\n",
 				h.Samples, h.Days, h.AvgFreeGB, h.P75FreeGB,
 			)))
 		} else {
-			b.WriteString(sDim.Render("  Using current snapshot (will improve with more usage history)\n"))
+			b.WriteString(styleLines(sDim, "  Using current snapshot (will improve with more usage history)\n"))
 		}
 
 		if w := m.specs.PressureWarning(); w != "" {
 			b.WriteString(warnStyle.Render("  ⚠  "+w) + "\n")
 		}
 		b.WriteString("\n")
-		b.WriteString(sPrompt.Render("  Choose an Ollama model, shows memory it will use:\n\n"))
+		b.WriteString(styleLines(sPrompt, "  Choose an Ollama model, shows memory it will use:\n\n"))
 
 		for i, rec := range m.models {
 			var nameStyle, costStyle lipgloss.Style
@@ -335,13 +359,13 @@ func (m InstallModel) View() string {
 				b.WriteString(nameStyle.Render("  "+icon+name) + "   " + costStyle.Render(cost) + "\n")
 			}
 		}
-		b.WriteString(sDim.Render("\n  ✓ fits · ✗ too large · memory cost = RAM it will occupy\n"))
+		b.WriteString(styleLines(sDim, "\n  ✓ fits · ✗ too large · memory cost = RAM it will occupy\n"))
 
 		// Nothing fits locally, redirect to cloud options
 		if !m.specs.AnyLocalModelFits() {
 			b.WriteString("\n")
-			b.WriteString(warnStyle.Render("  No local model fits your current memory.\n"))
-			b.WriteString(sDim.Render("  Recommended alternatives (free tiers available):\n\n"))
+			b.WriteString(styleLines(warnStyle, "  No local model fits your current memory.\n"))
+			b.WriteString(styleLines(sDim, "  Recommended alternatives (free tiers available):\n\n"))
 			cloudAlts := []struct{ name, note string }{
 				{"Claude Code", "Free tier via claude.ai, run: npm install -g @anthropic-ai/claude-code"},
 				{"OpenAI Codex", "Free tier, run: npm install -g @openai/codex"},
@@ -351,22 +375,22 @@ func (m InstallModel) View() string {
 				b.WriteString(fitsStyle.Render("  ✓ "+alt.name) + "\n")
 				b.WriteString(sDim.Render("    "+alt.note) + "\n")
 			}
-			b.WriteString(sDim.Render("\n  Press q to go back and choose one of these instead.\n"))
+			b.WriteString(styleLines(sDim, "\n  Press esc to go back and choose one of these instead.\n"))
 		}
 
 	case installStepConfirm:
 		opt := m.selected
 		b.WriteString(fmt.Sprintf("  Installing: %s\n\n", sSelected.Render(opt.name)))
 		if opt.envKey != "" || opt.installCmd == "" {
-			b.WriteString(sPrompt.Render("  Manual steps:\n"))
+			b.WriteString(styleLines(sPrompt, "  Manual steps:\n"))
 			b.WriteString("  " + codeStyle.Render(opt.postInstall) + "\n\n")
-			b.WriteString(sDim.Render("  After setting up, run: hyctl init\n"))
-			b.WriteString(sHint.Render("\n  Press enter to exit\n"))
+			b.WriteString(styleLines(sDim, "  After setting up, run: hyctl init\n"))
+			b.WriteString(styleLines(sHint, "\n  Press enter to exit\n"))
 			return b.String()
 		}
-		b.WriteString(sPrompt.Render("  Install command:\n"))
+		b.WriteString(styleLines(sPrompt, "  Install command:\n"))
 		b.WriteString("  " + codeStyle.Render(opt.installCmd) + "\n\n")
-		b.WriteString(sPrompt.Render("  After install:\n"))
+		b.WriteString(styleLines(sPrompt, "  After install:\n"))
 		b.WriteString("  " + codeStyle.Render(opt.postInstall) + "\n\n")
 
 		opts := []string{"  Run it now", "  I'll run it myself"}
@@ -382,18 +406,32 @@ func (m InstallModel) View() string {
 		b.WriteString(warnStyle.Render("  Installing, this may take a minute...") + "\n")
 
 	case installStepDone:
+		if m.manual {
+			b.WriteString(styleLines(sPrompt, "  Run these yourself:\n"))
+			b.WriteString("  " + codeStyle.Render(m.selected.installCmd) + "\n")
+			b.WriteString("  " + codeStyle.Render(m.selected.postInstall) + "\n\n")
+			b.WriteString(styleLines(sDim, "  Then run: hyctl init\n"))
+			break
+		}
 		if m.err {
-			b.WriteString(sError.Render("  Install failed.\n\n"))
-			b.WriteString(sDim.Render("  Try running the command manually, then: hyctl init\n"))
+			b.WriteString(styleLines(sError, "  Install failed.\n\n"))
+			b.WriteString(styleLines(sDim, "  Try running the command manually, then: hyctl init\n"))
 		} else {
-			b.WriteString(successStyle.Render("  Done!\n\n"))
+			b.WriteString(styleLines(successStyle, "  Done!\n\n"))
 			if m.selected != nil {
 				b.WriteString("  " + codeStyle.Render(m.selected.postInstall) + "\n\n")
 			}
-			b.WriteString(sDim.Render("  Then run: hyctl init\n"))
+			b.WriteString(styleLines(sDim, "  Then run: hyctl init\n"))
 		}
 	}
 
-	b.WriteString(sHint.Render("\n  ↑↓ navigate   enter select   q quit\n"))
+	hint := "\n  ↑↓ navigate   enter select   esc back   q quit\n"
+	switch m.step {
+	case installStepRunning:
+		hint = "\n  q quit\n"
+	case installStepDone:
+		hint = "\n  press any key to exit\n"
+	}
+	b.WriteString(styleLines(sHint, hint))
 	return b.String()
 }

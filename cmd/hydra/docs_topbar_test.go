@@ -3,34 +3,57 @@
 package main
 
 import (
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 	"testing"
 )
 
-// maxTopbarLinks is what the header fits on one line at its own breakpoint.
-// Measured: 11 nav links plus the ghost button need 904px, and the nav hides at
-// 900. A twelfth means re-measuring, not raising this number on faith.
-const maxTopbarLinks = 11
+// maxTopbarLinks: logo, six nav links and the call to action, measured at 845px
+// on the widest page (first-principles) against a 900px fold. A ninth link
+// means re-measuring, not raising this number on faith.
+const maxTopbarLinks = 8
 
-var topbarRe = regexp.MustCompile(`(?s)<div class="topbar"[^>]*>(.*?)</div>`)
+var topbarRe = regexp.MustCompile(`(?s)<header class="site-header"[^>]*>(.*?)</header>`)
 
-func topbarMarkup(t *testing.T) string {
+func topbarMarkup(t *testing.T, page string) string {
 	t.Helper()
-	m := topbarRe.FindStringSubmatch(repoFile(t, "docs", "index.html"))
+	m := topbarRe.FindStringSubmatch(repoFile(t, "docs", page))
 	if m == nil {
-		t.Fatal("docs/index.html has no .topbar block; this guard is reading the wrong thing")
+		t.Fatalf("docs/%s has no .site-header block; this guard is reading the wrong thing", page)
 	}
 	return m[1]
 }
 
+// docsPages is every page a visitor can land on, so a new page cannot skip the guards.
+func docsPages(t *testing.T) []string {
+	t.Helper()
+	var pages []string
+	for _, glob := range []string{"*.html", "blog/*.html"} {
+		ms, err := filepath.Glob(filepath.Join("..", "..", "docs", glob))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, m := range ms {
+			rel, _ := filepath.Rel(filepath.Join("..", "..", "docs"), m)
+			if strings.HasPrefix(filepath.Base(rel), "google") { // search-console verification stub
+				continue
+			}
+			pages = append(pages, filepath.ToSlash(rel))
+		}
+	}
+	if len(pages) < 9 {
+		t.Fatalf("found %d pages under docs/; the glob is wrong", len(pages))
+	}
+	return pages
+}
+
 // The header used to overflow the viewport from 721px to 890px, because the nav
-// grew to 11 links while the breakpoint that hides it stayed at 720. At 768 the
-// page scrolled 121px sideways and the GitHub button was off-screen (#1017).
-// The count is what regressed, so the count is what is guarded.
+// grew while the breakpoint that hides it stayed put (#1017). The count is what
+// regressed, so the count is what is guarded.
 func TestDocs_TopbarFitsItsBreakpoint(t *testing.T) {
-	links := strings.Count(topbarMarkup(t), "<a ")
+	links := strings.Count(topbarMarkup(t, "index.html"), "<a ")
 	if links > maxTopbarLinks {
 		t.Errorf("the header has %d links, more than the %d that fit at the 900px breakpoint.\n"+
 			"Re-measure the bar's width on one line and move the breakpoint, or drop a link. "+
@@ -38,13 +61,11 @@ func TestDocs_TopbarFitsItsBreakpoint(t *testing.T) {
 	}
 }
 
-// One href, one place in the header. GitHub was in the nav and on the ghost
-// button beside it, same URL about 4px apart, costing 65px of a bar that had
-// none to spare.
+// One href, one place in the header.
 func TestDocs_TopbarLinksEachDestinationOnce(t *testing.T) {
 	href := regexp.MustCompile(`href="([^"]+)"`)
 	seen := map[string]int{}
-	for _, m := range href.FindAllStringSubmatch(topbarMarkup(t), -1) {
+	for _, m := range href.FindAllStringSubmatch(topbarMarkup(t, "index.html"), -1) {
 		seen[m[1]]++
 	}
 	for url, n := range seen {
@@ -54,25 +75,47 @@ func TestDocs_TopbarLinksEachDestinationOnce(t *testing.T) {
 	}
 }
 
-// The nav must hide before it cannot fit, so the two breakpoints have to stay
-// in the order the fix put them in: tighten first, then hide.
-func TestDocs_TopbarHidesBeforeItOverflows(t *testing.T) {
-	css := repoFile(t, "docs", "index.html")
-	hide := regexp.MustCompile(`@media\(max-width:(\d+)px\)\{\.topbar nav\{display:none;\}\}`)
-	m := hide.FindStringSubmatch(css)
-	if m == nil {
-		t.Fatal("docs/index.html no longer hides .topbar nav at a max-width; #1017's fix is gone")
+// Six header variants were the finding (WEB-09): every page carries the same
+// navigation, so a visitor can reach every page from any page.
+func TestDocs_EveryPageSharesOneHeader(t *testing.T) {
+	nav := func(page string) string {
+		m := regexp.MustCompile(`(?s)<nav class="site-nav"[^>]*>(.*?)</nav>`).FindStringSubmatch(topbarMarkup(t, page))
+		if m == nil {
+			t.Fatalf("docs/%s: the header has no .site-nav", page)
+		}
+		return strings.Join(strings.Fields(strings.ReplaceAll(m[1], ` aria-current="page"`, "")), " ")
 	}
-	hideAt, err := strconv.Atoi(m[1])
+	want := nav("index.html")
+	for _, page := range docsPages(t) {
+		if got := nav(page); got != want {
+			t.Errorf("docs/%s has its own navigation:\n got %s\nwant %s", page, got, want)
+		}
+		src := repoFile(t, "docs", page)
+		for _, must := range []string{`class="skip-link" href="#main"`, `<main[^>]* id="main"`, `assets/site\.css"`, `class="site-footer"`} {
+			if !regexp.MustCompile(must).MatchString(src) {
+				t.Errorf("docs/%s is missing %s", page, must)
+			}
+		}
+	}
+}
+
+// The nav must fold before it cannot fit, and its links must not wrap inside the bar.
+func TestDocs_TopbarHidesBeforeItOverflows(t *testing.T) {
+	css := repoFile(t, "docs", "assets", "site.css")
+	fold := regexp.MustCompile(`@media\(max-width:(\d+)px\)\{[^@]*?\.js \.site-nav\{display:none;`)
+	m := fold.FindStringSubmatch(css)
+	if m == nil {
+		t.Fatal("site.css no longer folds .site-nav behind the menu at a max-width; #1017's fix is gone")
+	}
+	foldAt, err := strconv.Atoi(m[1])
 	if err != nil {
 		t.Fatal(err)
 	}
-	// 904px is the narrowest the tightened bar fits in, measured.
-	if hideAt < 900 {
-		t.Errorf("the nav hides at %dpx but does not fit below 904px, so it overflows in between",
-			hideAt)
+	// 845px is the widest bar on one line, measured on first-principles.
+	if foldAt < 845 {
+		t.Errorf("the nav folds at %dpx but needs 845px on one line, so it overflows in between", foldAt)
 	}
-	if !strings.Contains(css, ".topbar nav a{color:var(--dim);transition:color .15s;white-space:nowrap;}") {
-		t.Error("the nav links lost white-space:nowrap, so a two-word link wraps inside the 52px bar")
+	if !regexp.MustCompile(`\.site-nav a\{[^}]*white-space:nowrap`).MatchString(css) {
+		t.Error("the nav links lost white-space:nowrap, so a two-word link wraps inside the bar")
 	}
 }

@@ -1,17 +1,40 @@
 # Hydra, Orchestrator Instructions
-# Provider-neutral, local-first control plane. The orchestrator delegates; cheaper/local heads do the work.
+# Provider-neutral verified cascade gateway. The orchestrator delegates; cheaper/local heads do the work.
 
 ## What Hydra Is
-A **local-first, multi-vendor Trust Control Plane** shipped as a Go CLI (`hyctl`). It discovers
-every model on your machine (CLI agents, API keys, local servers), scores each, and routes tasks by
-complexity/cost with automatic fallback, enforcing policy (PII/local-only) and logging spend. It
-also routes to a target *confidence of correctness*: calibration (`internal/trust`) + an
-optimal-stopping SPRT ensemble (`hyctl dispatch --confidence`), graph-aware routing
-(`internal/graph`), causal A2A handoffs (`internal/a2a`), a context-entropy governor
-(`internal/entropy`), a local MCP accountability ledger (`internal/ledger`), and a pluggable
-verification-oracle interface (`internal/oracle`), all shipped, not roadmap. See the package map
-below, and the private planning docs (`ROADMAP_TRUST_CONTROL_PLANE.md`, `HYDRA_MANIFESTO.md`,
-`SPEC_TRUST_V1.md`) for the theory/math behind it.
+A **vendor-neutral verified cascade gateway** (RFC 0001, `docs/rfc/0001-verified-cascade-gateway.md`),
+shipped as one Go binary (`hyctl`) plus a desktop app. In plain words: **Hydra picks the model best
+suited to each task, and can check the answer before you rely on it.** Checking happens only with
+`--confidence`, with `hyctl edit`'s validator, or for a task type with a configured verifier where
+that is supported; a failed check moves to another model only when a better-measured one exists
+(ordinary fallback on a model *error* is separate and always on). Never write copy that says every
+answer is checked. It is for a general
+audience as well as developers: code is one task type among others (summarising, extracting,
+drafting, reviewing), and no vendor is the product's identity.
+
+Mechanically, it discovers every model it can reach (hosted APIs, local servers, CLI agents), ranks
+each on its measured record per task type, and routes with automatic fallback, enforcing policy
+(PII/local-only) and logging spend. Answers are checked against a target P(correct): per-source
+calibration (`internal/trust`) + an optimal-stopping SPRT ensemble (`hyctl dispatch --confidence`),
+verification oracles (`internal/oracle`), graph-aware routing for code (`internal/graph`), causal A2A
+handoffs (`internal/a2a`), a context-entropy governor (`internal/entropy`) and a local MCP
+accountability ledger (`internal/ledger`), all shipped, not roadmap. Not yet shipped: the RFC's
+`quality`/`balanced`/`cost` objective; today an unpinned request goes to the lowest-cost model
+measured competent at the task type. See the package map below, and the private planning docs
+(`ROADMAP_TRUST_CONTROL_PLANE.md`, `HYDRA_MANIFESTO.md`, `SPEC_TRUST_V1.md`) for the theory.
+
+**User-facing vocabulary (site, README, `docs/llms.txt`, desktop app, CLI help).** Use RFC 0001 §4,
+never the retired framing:
+- Never "Trust Control Plane", "provable trust", "One Cortex · Many Heads", unbenchmarked savings
+  percentages ("70–85%", "73% cheaper") or "saved vs all-Claude".
+- "heads" → "models" (expert text: "sources": models, CLI agents, verifiers); "cortex" → "main model";
+  "tier N" → "routing level" (1 = most capable) where a number must still show, never sold as a
+  concept, and dropped from default UI where the layout allows; "confidence" →
+  "P(correct)" / "likely correct"; "trust" → "calibration" / "checked"; "domain" → "task type";
+  "dispatch" (noun) → "request".
+- Command names, flags, config keys and Go identifiers keep their names (`hyctl trust`, `--tier`,
+  `--confidence`, `cortex =`, `provider.Head`); only prose changes.
+- Plain, specific, sentence case, full sentences. Vendors appear only as examples among several.
 
 Whatever model you drive Hydra with acts as the **orchestrator**; Antigravity (agy), API providers,
 and Ollama are interchangeable **heads**. No single vendor is privileged, the whole point is
@@ -45,7 +68,7 @@ internal/decision/      ← What a decision source is asked and answers, both wi
 internal/provider/      ← Discovery: cli / env (API keys, plus the OpenRouter model allowlist) / port / agy.
 internal/awsconf/       ← AWS credentials and region: environment, then ~/.aws/credentials and ~/.aws/config.
 internal/swarm/         ← Fan-out (race/best/all + judge) + SPRT adapter (swarm→trust).
-internal/trust/         ← Trust Control Plane: calibration (LLR/D) + defect-cost + SPRT ensemble,
+internal/trust/         ← Answer checking: calibration (LLR/D) + defect-cost + SPRT ensemble,
                           a monotone correction of each source's stated probability, and an
                           accept threshold chosen on held-out runs. Both off below the floor.
 internal/graph/         ← Code dependency graph (graph.json) → blast radius + coupling k + percolation κ (Molloy-Reed).
@@ -163,6 +186,10 @@ registry/               ← Routing data, compiled into the binary via `go:embed
                           run (#838). The rest are declared and read by
                           nothing. `hyctl security` reports which, derived rather than hardcoded.
   workspace.yaml        ← workspace roots + validators.
+design/                 ← The one design-token source (DTCG) for the website, desktop app and TUI.
+                          `cd design && npm ci && npm run build` regenerates docs/assets/tokens.css,
+                          desktop/frontend/src/tokens.generated.css, desktop/window_gen.go and internal/tui/tokens_gen.go;
+                          never hand-edit those. Roles and rules: DESIGN.md.
 logs/                   ← Dispatch log + state.json (claude_pct, claude_pct_history).
 ```
 
@@ -353,7 +380,7 @@ hyctl dispatch --confidence 0.90 --file internal/auth/token.go "rotate signing k
 hyctl graph parallel internal/a.go internal/b.go
 # A2A handoffs (last_handoff.json) now carry a vector clock for causal ordering.
 
-# Trust Control Plane: calibration, defect-cost, run stats, and the LLR ledger
+# Answer checking: calibration, defect-cost, run stats, and the LLR ledger
 hyctl trust calibration ; hyctl trust record --source ollama/qwen3:4b --domain go --said-correct --outcome correct
 # Train every source that voted in a past run, the only path that measures specificity (#771)
 hyctl trust outcome <task_hash> --outcome incorrect
@@ -1076,6 +1103,17 @@ docs/robots.txt    ← AI crawler rules (only change if bot policy changes)
 | New public page or anchor | `sitemap.xml` |
 | AI crawler policy change | `robots.txt` |
 
+### Styling and the accessibility check
+- Every page links `docs/assets/tokens.css` (generated) then `docs/assets/site.css`, the one shared
+  stylesheet: header with its phone menu, footer, buttons, code blocks, focus ring, skip link.
+  `docs/assets/site.js` runs the menu and copy buttons, and `Hydra.loop()` runs a canvas only while it
+  is on screen. A page's own `<style>` holds only what is that page's alone.
+- No colour or font-size literals: `cmd/hydra/docs_tokens_test.go` fails on a hex or `rgb()` colour
+  and on a px font size inside the scale. Use `var(--hy-…)`, or `Hydra.color('role')` in script.
+- `cd docs-check && npm ci && npx playwright install chromium && npx playwright test` runs axe on
+  every page at phone and desktop width, plus overflow, 12px-floor and console-error checks (CI job
+  `Website accessibility`). Both it and the Go guards find pages by globbing `docs/`.
+
 ### Rules
 - `llms.txt` must always reflect what `hyctl --help` and `hyctl stats` actually do, no aspirational features
 - `pricing.md` costs must match `hyctl pricing list` live output, never hardcode stale rates without noting the date
@@ -1125,7 +1163,7 @@ All Go source lives under `cmd/` and `internal/`. Key packages:
 | `internal/config` | Hydra config load/save (`~/.config/hydra/`); `Breadcrumb()`, SHA256 deployment-identity fingerprint over `registry/{routing,models,domains}.yaml`, auto-stamped into ledger/trust/cost log entries so they can be tied back to the exact routing rules in effect. It holds **no tier table**: a `[[tiers]]` block from an older `hyctl init` is left undecoded rather than rejected. Those CapScore bands (85/75/65/55/0) were a second routing table with no relation to the tier numbers, so `--tier simple` and `--enum SIMPLE` picked different heads, and which of the two cost money depended on what discovery happened to find (#782). |
 | `internal/capabilities` | Model capability scores: embedded `data.json` ⊕ runtime user overlay (`~/.hydra/models.json`) merged at discovery, so new models are added without a rebuild. `Score` reads that merged index; `ScoreLocal` is what every local model server's heads are scored by, and it reads the index **first**, falling back to the `ollamaFamilies` substring patterns. The local paths matched patterns only and never consulted the index, so the overlay reached every head except a local one: `hyctl models list` reported the user's number while `hyctl probe`, ranking and tiering used the pattern's, and the AI-BOM credited the curated catalog for a score the user chose. Keyed on the head id (`ollama/qwen3:8b`) and never also on the bare model name, since two spellings would disagree about whether the model was discovered; no built-in entry is shaped that way, so only the overlay can reach it (#989). Drives `hyctl models list\|add\|remove\|sync`. |
 | `internal/budget` | `EffectiveContext` is a window a server reported **allocating**, distinct from `ContextCeiling`'s architectural maximum: a ceiling can only lower a number, so a llama.cpp server started with `-c 32768` would still have been budgeted at the 4096 local default. A reported window replaces the default; a ceiling still bounds it (#913). Token-budget governor: static pressure bands (`ModeFor`) + a rate-aware first-passage-time model on the orchestrator's `claude_pct` session history (`RiskFromHistory`/`EffectiveMode`) that escalates before a threshold is crossed. `Quota` is one scope's pressure. At checkpoint A the only one is `session:claude-code`, which `ParseState` derives from `claude_pct` as a read alias on every read; a `quotas` key in `state.json` is ignored, since nothing writes it and reading it safely needs validation and timestamps (#1326, E2). `syncStateJSON` keeps mirroring the legacy history for the frozen TUI and desktop app. The most urgent quota (`Governing`) feeds `quotaMode` downgrades and `hyctl status` (#1207). |
-| `internal/trust` | Trust Control Plane confidence layer: per-source calibration (Beta-Bernoulli → LLR/D), defect-cost model + `RequiredConfidence`, and the multi-hypothesis SPRT optimal-stopping ensemble (`trust.Run`): every distinct answer is scored against every vote for the whole run, so the hypothesis under test never moves and Wald's bound applies to a fixed comparison. Λ_c is the log-odds that answer c is correct, measured against its own negation, so two answers' confidences can sum past 1; making them mutually exclusive needs a generator likelihood, not a normalization (#778). `memoizeEquivalence` gives the run one verdict per unordered pair: `scoreHypotheses` re-asks per hypothesis per vote on every sample and the ledger asks again for the entry it writes, so a judge-backed comparator, which is an LLM, answered the same question several ways in one run. Measured: a three-head review counted a head's vote toward the accepted answer and recorded that same head as having dissented from it, four votes were attributed across two hypotheses from three samples, and ten judge calls were made for three. `Evidence.Agreed` is what `hyctl trust outcome` replays, so the path #771 added to move specificity was being trained on the opposite verdict. Reflexive and symmetric, because equivalence is both, though no caller swaps the order today (#997). Drives `hyctl dispatch --confidence` and `hyctl trust calibration\|record\|outcome\|defect\|stats\|explain`. `ApplyRunOutcome` replays a finished run's ledger once ground truth lands, and is the only writer that can produce a TN: every other path records `saidCorrect=true` (a generator asserts its own answer), which leaves TN on its bare prior, so sp never rises above 0.5 and LLR stays under ln2 against the 2.944 nats a 95% target needs (#771). A vote cast before the leader changed is re-expressed against the answer that was actually verified, and one that only ruled out a superseded answer records nothing rather than being guessed at. `DomainForFile` is the single derivation of a calibration domain from a path: `editor` and `review` each derived it inline while `--confidence` read whatever `--domain` said, so a session filling the `go` cell was read against `default` and refused for want of evidence; a `--file` dispatch now resolves the domain those writers use unless `--domain` is explicit. `UnreadableSourceKey` flags a source key the ensemble can never look up, since the docs long showed a `model:` prefix the router never reads (#785). #785 built the detector and left the message that produces what it detects: the no-evidence refusal told the reader to record under `--source model:<id>`, the first prefix on that list, so following the only instruction on screen filled a cell nothing reads and earned the same refusal again. `NoEvidenceError` now carries the heads the run would have sampled, so the refusal names one the router actually looks up, and a guard asserts the printed key against the detector rather than against a string (#835). `Commitments` pools a source's said-correct row across domains, how many answers it backed and how many held up, which is what `internal/rank` reads: se and sp say how good a verdict is *as evidence*, and a router picking who should write the answer is asking the different question of when this head commits, how often is it right. Pooled because a *machine scan* has no task and so no domain (#815); `CommitmentsIn` is the same read narrowed to one, which is what a dispatch ranks on once it does know (#885). `keyFor` is the one derivation of a store key, for reads, writes and snapshot restores alike, so it cannot depend on which caller wrote it: `hyctl oracle verify` defaulted `--domain` to `""` while `hyctl dispatch` defaulted it to `"default"`, so the same unspecified domain made two cells and only one was ever read. Normalizing the write path alone made that worse rather than better, since `oracle verify` then filed under `default` and read back under `""`, reporting the bare prior on history it had just written. A checkpoint is the same split in a form that outlives the fix: `loadSnapshot` rebuilds the store without going through `apply`, so a pre-fix one restored its `""` rows verbatim while every later observation landed in `default`, and `saveSnapshot` re-persisted the dead cell for good. A restore folds them, adding real counts rather than stored ones because each entry already carries the Laplace prior (#888). |
+| `internal/trust` | Answer-checking layer: per-source calibration (Beta-Bernoulli → LLR/D), defect-cost model + `RequiredConfidence`, and the multi-hypothesis SPRT optimal-stopping ensemble (`trust.Run`): every distinct answer is scored against every vote for the whole run, so the hypothesis under test never moves and Wald's bound applies to a fixed comparison. Λ_c is the log-odds that answer c is correct, measured against its own negation, so two answers' confidences can sum past 1; making them mutually exclusive needs a generator likelihood, not a normalization (#778). `memoizeEquivalence` gives the run one verdict per unordered pair: `scoreHypotheses` re-asks per hypothesis per vote on every sample and the ledger asks again for the entry it writes, so a judge-backed comparator, which is an LLM, answered the same question several ways in one run. Measured: a three-head review counted a head's vote toward the accepted answer and recorded that same head as having dissented from it, four votes were attributed across two hypotheses from three samples, and ten judge calls were made for three. `Evidence.Agreed` is what `hyctl trust outcome` replays, so the path #771 added to move specificity was being trained on the opposite verdict. Reflexive and symmetric, because equivalence is both, though no caller swaps the order today (#997). Drives `hyctl dispatch --confidence` and `hyctl trust calibration\|record\|outcome\|defect\|stats\|explain`. `ApplyRunOutcome` replays a finished run's ledger once ground truth lands, and is the only writer that can produce a TN: every other path records `saidCorrect=true` (a generator asserts its own answer), which leaves TN on its bare prior, so sp never rises above 0.5 and LLR stays under ln2 against the 2.944 nats a 95% target needs (#771). A vote cast before the leader changed is re-expressed against the answer that was actually verified, and one that only ruled out a superseded answer records nothing rather than being guessed at. `DomainForFile` is the single derivation of a calibration domain from a path: `editor` and `review` each derived it inline while `--confidence` read whatever `--domain` said, so a session filling the `go` cell was read against `default` and refused for want of evidence; a `--file` dispatch now resolves the domain those writers use unless `--domain` is explicit. `UnreadableSourceKey` flags a source key the ensemble can never look up, since the docs long showed a `model:` prefix the router never reads (#785). #785 built the detector and left the message that produces what it detects: the no-evidence refusal told the reader to record under `--source model:<id>`, the first prefix on that list, so following the only instruction on screen filled a cell nothing reads and earned the same refusal again. `NoEvidenceError` now carries the heads the run would have sampled, so the refusal names one the router actually looks up, and a guard asserts the printed key against the detector rather than against a string (#835). `Commitments` pools a source's said-correct row across domains, how many answers it backed and how many held up, which is what `internal/rank` reads: se and sp say how good a verdict is *as evidence*, and a router picking who should write the answer is asking the different question of when this head commits, how often is it right. Pooled because a *machine scan* has no task and so no domain (#815); `CommitmentsIn` is the same read narrowed to one, which is what a dispatch ranks on once it does know (#885). `keyFor` is the one derivation of a store key, for reads, writes and snapshot restores alike, so it cannot depend on which caller wrote it: `hyctl oracle verify` defaulted `--domain` to `""` while `hyctl dispatch` defaulted it to `"default"`, so the same unspecified domain made two cells and only one was ever read. Normalizing the write path alone made that worse rather than better, since `oracle verify` then filed under `default` and read back under `""`, reporting the bare prior on history it had just written. A checkpoint is the same split in a form that outlives the fix: `loadSnapshot` rebuilds the store without going through `apply`, so a pre-fix one restored its `""` rows verbatim while every later observation landed in `default`, and `saveSnapshot` re-persisted the dead cell for good. A restore folds them, adding real counts rather than stored ones because each entry already carries the Laplace prior (#888). |
 | `internal/graph` | Code dependency graph (`graph.json`, Graphify or any tree-sitter indexer) → transitive-dependent blast radius + coupling `k` + Molloy-Reed percolation κ=⟨k²⟩/⟨k⟩ (κ≥2 ⟹ cascade-capable core; `PercolationFactor` lifts hub-core files). Drives `hyctl graph blast\|parallel` and `hyctl dispatch --file`. |
 | `internal/a2a` | Agent-to-agent handoffs with vector clocks: causal ordering (before/after/concurrent) + `ConflictsWith` (concurrent + overlapping files). Backs `last_handoff.json` and `--a2a`. `ConflictsWith` needs both halves, and until #425 dispatch wrote no file list at all, so it could never return true whatever the clocks said, which `hyctl security` reported as an inert control. The handoff now records `Options.Resource`, the file the dispatch acts on (what `hyctl edit` sets). A `--confidence`, `--swarm` or `--file` run reaches none of `Dispatcher.Dispatch`'s success branch, so it wrote no handoff at all and the chain had a hole exactly where the highest-stakes work was; `dispatch.SaveHandoff` is now the shared writer both paths use (#766). A fan-out ticks the clock **once per head that answered**, because the clock's actor is a head and three heads consulted is three events: a single synthetic ensemble key would make two independent fan-outs produce *identical* clocks, which `Compare` reads as Equal, and keying on the accepted head is undefined for SPRT, whose `Candidate` is an answer rather than a source. The key set stays bounded by the machine's head inventory; only the counters grow. The limit it keeps is the single-dispatch path's own: two concurrent runs over the identical head set read as Equal rather than Concurrent. |
 | `internal/optimal` | Optimal parallel-agent count `n*=√((1−s)/k)` and speedup (Amdahl + coordination, Manifesto Law 4). Drives `hyctl graph parallel`. |

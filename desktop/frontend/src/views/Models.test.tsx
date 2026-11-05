@@ -159,7 +159,7 @@ async function openScorecard(name: string) {
 describe('the scorecard never states a score it cannot support', () => {
   it('says nothing is measured rather than showing a zero', async () => {
     render(<Models heads={panel()} />)
-    expect(await screen.findByText(/absence of evidence, not a low score/i)).toBeInTheDocument()
+    expect(await screen.findByText(/no evidence, not a low score/i)).toBeInTheDocument()
   })
 
   it('always prints the outcome count beside the evidence weight', async () => {
@@ -176,7 +176,7 @@ describe('the scorecard never states a score it cannot support', () => {
     render(<Models heads={panel()} />)
     await openScorecard('Claude Sonnet (Thinking)')
     const score = await screen.findByText('2.41')
-    expect(screen.getByText(/too few to trust/i)).toBeInTheDocument()
+    expect(screen.getByText(/too few to rely on/i)).toBeInTheDocument()
     // Muted, not green: it must not read as a finding.
     expect(score.className).toMatch(/--thin/)
     expect(score.className).not.toMatch(/--strong/)

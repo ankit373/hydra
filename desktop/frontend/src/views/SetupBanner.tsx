@@ -47,7 +47,7 @@ export function SetupBanner({
     <div className="setup">
       <div className="setup__head">
         <span className="setup__title">
-          {result?.ok ? 'hyctl installed' : 'hyctl is not set up on this machine'}
+          {result?.ok ? 'Hydra is set up' : 'Finish setting up Hydra'}
         </span>
         <button className="setup__dismiss" onClick={() => setDismissed(true)} aria-label="Dismiss">
           ×
@@ -56,8 +56,8 @@ export function SetupBanner({
 
       {!result?.ok && (
         <p className="setup__body">
-          Hydra routes work to <code>hyctl</code>, but it isn't on this machine's PATH yet. Install
-          it and this message won't come back.
+          One more component, <code>hyctl</code>, is needed to run requests. Install it and this
+          message won't come back.
         </p>
       )}
 

@@ -86,7 +86,7 @@ describe('the leaderboard reads correctly on weak real data', () => {
 
   it('renders the empty state rather than an empty track', () => {
     render(<CalibrationLeaderboard rows={[]} />)
-    expect(screen.getByText('No calibration recorded yet')).toBeTruthy()
+    expect(screen.getByText('No checked answers yet')).toBeTruthy()
   })
 })
 

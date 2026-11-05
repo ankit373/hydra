@@ -13,6 +13,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/rivo/uniseg"
 
 	"github.com/ankit373/hydra/internal/util"
 )
@@ -21,6 +22,29 @@ import (
 // text cannot break row layout or terminal state. Apply before truncation:
 // cutting an escape in half corrupts the frame.
 func ckSafe(s string) string { return util.SafeTerminal(s) }
+
+// ckSafeText is ckSafe for multi-line text such as a streamed answer: line
+// breaks and tabs survive as layout, every other control rune (ESC included,
+// so no CSI or OSC sequence reaches the terminal) becomes U+FFFD.
+func ckSafeText(s string) string {
+	s = strings.ReplaceAll(strings.ReplaceAll(s, "\r\n", "\n"), "\t", "    ")
+	lines := strings.Split(s, "\n")
+	for i, l := range lines {
+		lines[i] = ckSafe(l)
+	}
+	return strings.Join(lines, "\n")
+}
+
+// ckDropLastGrapheme is backspace: it removes one user-perceived character,
+// so "é", "日" or a ZWJ emoji go whole instead of leaving invalid UTF-8.
+func ckDropLastGrapheme(s string) string {
+	last := 0
+	g := uniseg.NewGraphemes(s)
+	for g.Next() {
+		last, _ = g.Positions()
+	}
+	return s[:last]
+}
 
 // truncate bounds a label to n display cells, ANSI- and wide-rune-aware, with
 // an ellipsis marking the cut.
