@@ -151,7 +151,7 @@ func writeJSON(path string, v any) error {
 	if err != nil {
 		return err
 	}
-	if _, err := f.Write(append(b, '\n')); err == nil {
+	if _, err = f.Write(append(b, '\n')); err == nil {
 		err = f.Sync()
 	}
 	if cerr := f.Close(); err == nil {
